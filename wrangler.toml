@@ -4,7 +4,7 @@ compatibility_date = "2025-10-13"
 
 [vars]
 SUPABASE_URL = "https://zojgukxyyklcyjbyyqlz.supabase.co"
-ALLOWED_ORIGINS = "https://cloudtms.arthur-rai.co.uk"
+ALLOWED_ORIGINS = "https://cloudtms.arthur-rai.co.uk,https://kierarthur.github.io"
 COOKIE_SAME_SITE = "None"
 PRESIGN_EXPIRES_SECONDS = "600"
 UPLOAD_MAX_BYTES = "300000"
@@ -22,4 +22,5 @@ preview_id = "6b8fb70351db4cac91583a9cc6c2074b"
 
 [triggers]
 crons = ["*/5 * * * *"]
+
 
