@@ -305,15 +305,19 @@ function parseCookies(req) {
   return out;
 }
 
-// â”€â”€ Password hashing (PBKDF2-SHA256) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-async function pbkdf2Hash(password, iterations=210000) {
+// ── Password hashing (PBKDF2-SHA256) ─────────────────────────
+const MAX_PBKDF2_ITER = 100000; // Cloudflare limit
+
+async function pbkdf2Hash(password, iterations = 100000) {
+  const iters = Math.min(Number(iterations) || 100000, MAX_PBKDF2_ITER);
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), { name:'PBKDF2' }, false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name:'PBKDF2', hash:'SHA-256', salt, iterations }, key, 256);
+  const bits = await crypto.subtle.deriveBits({ name:'PBKDF2', hash:'SHA-256', salt, iterations: iters }, key, 256);
   const hashB64 = bufToBase64Url(bits);
   const saltB64 = bufToBase64Url(salt);
-  return `pbkdf2:sha256$${iterations}$${saltB64}$${hashB64}`;
+  return `pbkdf2:sha256$${iters}$${saltB64}$${hashB64}`;
 }
+
 async function pbkdf2Verify(password, stored) {
   // format: pbkdf2:sha256$ITER$SALT$HASH
   const m = /^pbkdf2:sha256\$(\d+)\$([A-Za-z0-9\-_]+)\$([A-Za-z0-9\-_]+)$/.exec(String(stored||''));
@@ -321,14 +325,23 @@ async function pbkdf2Verify(password, stored) {
   const iterations = parseInt(m[1],10);
   const salt = base64UrlToUint8(m[2]);
   const want = base64UrlToUint8(m[3]);
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), { name:'PBKDF2' }, false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name:'PBKDF2', hash:'SHA-256', salt, iterations }, key, want.byteLength*8);
-  const got = new Uint8Array(bits);
-  if (got.byteLength !== want.byteLength) return false;
-  // constant-time compare
-  let diff = 0;
-  for (let i=0;i<got.byteLength;i++) diff |= (got[i]^want[i]);
-  return diff === 0;
+  if (!Number.isFinite(iterations) || iterations <= 0 || iterations > MAX_PBKDF2_ITER) {
+    // Iteration count not supported on this platform → treat as mismatch (avoids 500)
+    console.warn('PBKDF2 iteration count not supported:', iterations);
+    return false;
+  }
+  try {
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), { name:'PBKDF2' }, false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits({ name:'PBKDF2', hash:'SHA-256', salt, iterations }, key, want.byteLength*8);
+    const got = new Uint8Array(bits);
+    if (got.byteLength !== want.byteLength) return false;
+    let diff = 0;
+    for (let i=0;i<got.byteLength;i++) diff |= (got[i]^want[i]);
+    return diff === 0;
+  } catch (e) {
+    console.warn('PBKDF2 verify failed:', e);
+    return false;
+  }
 }
 
 // â”€â”€ Supabase helpers for users / resets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
