@@ -1,0 +1,22 @@
+﻿# Cloudflare Workers / JS
+node_modules/
+.wrangler/
+dist/
+build/
+.cache/
+*.log
+npm-debug.log*
+
+# Local env files (keep an example, ignore real secrets)
+.env
+.env.*
+!.env.example
+
+# Editor / OS junk
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Misc
+*.local

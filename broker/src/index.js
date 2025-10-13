@@ -1,6 +1,5 @@
-```javascript
-/**
- * CloudTMS Broker (Cloudflare Worker) — Auth + Timesheets API (no Google Sheets)
+﻿/**
+ * CloudTMS Broker (Cloudflare Worker) â€” Auth + Timesheets API (no Google Sheets)
  *
  * Endpoints:
  *  - POST   /auth/login
@@ -253,9 +252,9 @@ function isPng(contentType) {
   return /^image\/png(?:;|$)/i.test(contentType || "");
 }
 
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // AUTH SECTION (login/forgot/reset/refresh/logout)
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 // ENV expected (Option A: Cloudflare Pages frontend + Worker API):
 // - SUPABASE_URL
@@ -306,7 +305,7 @@ function parseCookies(req) {
   return out;
 }
 
-// ── Password hashing (PBKDF2-SHA256) ─────────────────────────
+// â”€â”€ Password hashing (PBKDF2-SHA256) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function pbkdf2Hash(password, iterations=210000) {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), { name:'PBKDF2' }, false, ['deriveBits']);
@@ -332,7 +331,7 @@ async function pbkdf2Verify(password, stored) {
   return diff === 0;
 }
 
-// ── Supabase helpers for users / resets ──────────────────────
+// â”€â”€ Supabase helpers for users / resets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function sbAuthHeaders(env){
   const k = env.SUPABASE_SERVICE_ROLE_KEY;
   return { 'apikey': k, 'Authorization': `Bearer ${k}`, 'Content-Type': 'application/json' };
@@ -383,7 +382,7 @@ async function sbConsumeResetToken(env, token) {
   return { ok:true, user_id: row.user_id };
 }
 
-// ── Access/Refresh tokens (HMAC) ────────────────────────────
+// â”€â”€ Access/Refresh tokens (HMAC) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function accessTtl(env){ return parseInt(env.ACCESS_TTL_SECONDS || '900', 10) || 900; }          // 15m
 function refreshTtl(env){ return parseInt(env.REFRESH_TTL_SECONDS || '1209600', 10) || 1209600; } // 14d
 function resetTtl(env){ return parseInt(env.PASSWORD_RESET_TTL_SECONDS || '3600', 10) || 3600; }   // 60m
@@ -402,7 +401,7 @@ async function mintRefreshToken(env, { sid, sv }) {
   return { token, exp };
 }
 
-// KV session helpers (store sid → { user_id, sv, exp })
+// KV session helpers (store sid â†’ { user_id, sv, exp })
 async function kvPutSession(env, sid, data, ttlSec) {
   await env.SESSIONS.put(`sid:${sid}`, JSON.stringify(data), { expirationTtl: ttlSec });
 }
@@ -414,7 +413,7 @@ async function kvDelSession(env, sid) {
   await env.SESSIONS.delete(`sid:${sid}`);
 }
 
-// ── Auth handlers ───────────────────────────────────────────
+// â”€â”€ Auth handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function handleAuthLogin(env, req) {
   const pre = preflightIfNeeded(env, req); if (pre) return pre;
   const body = await parseJSONBody(req);
@@ -769,7 +768,7 @@ async function handleSubmit(env, req) {
   for (const k of required) if (!body[k]) return withCORS(env, req, badRequest(`Missing ${k}`));
 
   if (!isEligibleWindow(body.worked_end_iso)) {
-    return withCORS(env, req, new Response(JSON.stringify({ error: "Shift not in eligible window (must be ongoing or ended ≤ 4h)", code: "INELIGIBLE" }), { status: 422, headers: JSON_HEADERS }));
+    return withCORS(env, req, new Response(JSON.stringify({ error: "Shift not in eligible window (must be ongoing or ended â‰¤ 4h)", code: "INELIGIBLE" }), { status: 422, headers: JSON_HEADERS }));
   }
 
   const nurseHead = await r2Head(env, body.nurse_key);
@@ -1180,4 +1179,3 @@ export default {
   // No cron needed (Sheets disabled); keep for future if desired.
   async scheduled(controller, env, ctx) {}
 };
-```

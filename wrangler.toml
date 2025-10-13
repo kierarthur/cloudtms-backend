@@ -1,10 +1,8 @@
-name = "cloudtms"
+﻿name = "cloudtms"
 main = "broker/src/index.js"
 compatibility_date = "2025-10-13"
-workers_dev = true
 
 [vars]
-# --- plain text env vars (SAFE to commit) ---
 SUPABASE_URL = "https://zojgukxyyklcyjbyyqlz.supabase.co"
 ALLOWED_ORIGINS = "https://cloudtms.arthur-rai.co.uk"
 COOKIE_SAME_SITE = "None"
@@ -14,14 +12,14 @@ BREAK_EXPECTED_MINUTES = "60"
 UK_TZ_SKEW_MS = "180000"
 
 [[r2_buckets]]
-binding    = "R2"
-bucket_name = "timesheet-signatures"
+binding = "R2"
+bucket_name = "timesheets-signatures"
 
-# Use the IDs Wrangler printed:
 [[kv_namespaces]]
-binding    = "SESSIONS"
-id         = "3102e18c46b841d2b55918c1ae054491"   # <- cloudtms_sessions
-preview_id = "6b8fb70351db4cac91583a9cc6c2074b"   # <- cloudtms_sessions_preview
+binding = "SESSIONS"
+id = "3102e18c46b841d2b55918c1ae054491"
+preview_id = "6b8fb70351db4cac91583a9cc6c2074b"
 
 [triggers]
 crons = ["*/5 * * * *"]
+
