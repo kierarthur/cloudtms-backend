@@ -1,4 +1,4 @@
-﻿name = "cloudtms"
+name = "cloudtms"
 main = "broker/src/index.js"
 compatibility_date = "2025-10-13"
 
@@ -10,6 +10,8 @@ PRESIGN_EXPIRES_SECONDS = "600"
 UPLOAD_MAX_BYTES = "300000"
 BREAK_EXPECTED_MINUTES = "60"
 UK_TZ_SKEW_MS = "180000"
+TSFIN_MAX_BATCHES = "10"
+TSFIN_BATCH_SIZE = "50"
 
 [[r2_buckets]]
 binding = "R2"
@@ -22,5 +24,3 @@ preview_id = "6b8fb70351db4cac91583a9cc6c2074b"
 
 [triggers]
 crons = ["*/5 * * * *"]
-
-
