@@ -4226,28 +4226,42 @@ function roleFromRequestGrade(grade){
 }
 
 /** Utility: UK DST (BST) check; last Sunday of Mar to last Sunday of Oct */
-function isBSTLocal(ymd){
-  const [y,m,d] = ymd.split('-').map(Number);
-  const lastSunday = (year, month) => {
-    const dt = new Date(Date.UTC(year, month, 0)); // day 0 of next month = last day of this month
-    const dow = dt.getUTCDay();
-    dt.setUTCDate(dt.getUTCDate() - dow); // back to Sunday
-    return dt.getUTCDate();
-  };
-  const lastSunMar = lastSunday(y, 3); // March
-  const lastSunOct = lastSunday(y, 10); // October
-  const dt = new Date(Date.UTC(y, m-1, d));
-  const n = Date.UTC(y, m-1, d);
-  const bstStart = Date.UTC(y, 2, lastSunMar, 1); // 01:00 UTC
-  const bstEnd   = Date.UTC(y, 9, lastSunOct, 1); // 01:00 UTC
-  return n >= bstStart && n < bstEnd;
+function ukLocalToUtcISO(ymd, hhmm = "00:00") {
+  // ymd: "YYYY-MM-DD" (UK local date), hhmm: "HH:MM" (UK local clock time)
+  const [Y, Mo, D] = String(ymd || "").split("-").map(Number);
+  const [H, Mi]    = String(hhmm || "00:00").split(":").map(Number);
+  if (!Y || !Mo || !D || Number.isNaN(H) || Number.isNaN(Mi)) return null;
+
+  const offsetHours = isBSTLocalDate(Y, Mo, D) ? 1 : 0; // UK summer = UTC+1
+  const dt = new Date(Date.UTC(Y, Mo - 1, D, H - offsetHours, Mi, 0));
+  return dt.toISOString();
 }
 
-function ukLocalToUtcISO(ymd, hhmm){
-  const [H,M] = String(hhmm||'00:00').split(':').map(Number);
-  const offset = isBSTLocal(ymd) ? 1 : 0; // hours ahead of UTC
-  const dt = new Date(Date.UTC(...ymd.split('-').map((n,i)=> i===1?Number(n)-1:Number(n)), H - offset, M, 0));
-  return dt.toISOString();
+function isBSTLocalDate(Y, Mo, D) {
+  // Decide DST for that calendar date using a noon sentinel to avoid boundary weirdness.
+  const noonUtcGuess = Date.UTC(Y, Mo - 1, D, 12, 0, 0);
+  const start = bstStartUtc(Y); // last Sunday in March, 01:00 UTC
+  const end   = bstEndUtc(Y);   // last Sunday in October, 01:00 UTC
+  return noonUtcGuess >= start && noonUtcGuess < end;
+}
+
+function bstStartUtc(year) {
+  // Last Sunday in March at 01:00 UTC
+  const day = lastSundayUtc(year, 2); // March = 2 (0-indexed)
+  return Date.UTC(year, 2, day, 1, 0, 0);
+}
+
+function bstEndUtc(year) {
+  // Last Sunday in October at 01:00 UTC
+  const day = lastSundayUtc(year, 9); // October = 9 (0-indexed)
+  return Date.UTC(year, 9, day, 1, 0, 0);
+}
+
+function lastSundayUtc(year, monthIndex /* 0-11 */) {
+  // Date-of-month for the last Sunday of the given month (UTC).
+  const d = new Date(Date.UTC(year, monthIndex + 1, 0)); // last day of month
+  const dow = d.getUTCDay(); // 0 = Sun
+  return d.getUTCDate() - dow; // backtrack to Sunday
 }
 
 async function getStickyMappings(env, importId) {
@@ -7514,21 +7528,6 @@ async function handleCreateCreditNoteTsfin(env: any, req: Request, invoiceId: st
 // ---------------------------
 // Auth, CORS, JSON helpers stubs – remove these if you already have them globally
 // ---------------------------
-
-const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8' };
-function ok(data: any, headers: any = {}) { return new Response(JSON.stringify(data), { status: 200, headers: { ...JSON_HEADERS, ...headers } }); }
-function badRequest(msg: string, details?: any) { return new Response(JSON.stringify({ error: msg, details }), { status: 400, headers: JSON_HEADERS }); }
-function unauthorized(msg = 'Unauthorized') { return new Response(JSON.stringify({ error: msg }), { status: 401, headers: JSON_HEADERS }); }
-function notFound(msg = 'Not found') { return new Response(JSON.stringify({ error: msg }), { status: 404, headers: JSON_HEADERS }); }
-function unprocessable(msg = 'Unprocessable Entity') { return new Response(JSON.stringify({ error: msg }), { status: 422, headers: JSON_HEADERS }); }
-function serverError(msg = 'Internal Server Error') { return new Response(JSON.stringify({ error: msg }), { status: 500, headers: JSON_HEADERS }); }
-async function parseJSONBody(req: Request){ try { return await req.json(); } catch { return null; } }
-async function requireUser(env: any, req: Request, allowedRoles: string[] = []) { /*
-  NOTE: Replace with your existing `requireUser` from the main Worker. This stub allows this file
-  to be type-checked standalone. When merged, delete this and rely on your original implementation.
-  */
-  return { id: 'stub', role: 'admin' };
-}
 
 // ---------------------- Router ----------------------
 function matchPath(pathname, pattern) {
