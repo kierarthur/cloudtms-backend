@@ -45,8 +45,19 @@ const fmtDateGB = (iso) => {
   const d = new Date(iso);
   return new Intl.DateTimeFormat("en-GB", { timeZone: "UTC" }).format(d);
 };
-
-const pick = (o, k, d = undefined) => (o && o[k] != null ? o[k] : d);
+// KEEP ONLY THIS (unified helper)
+function pick(obj, keyOrKeys, defaults = undefined) {
+  // Single key form: pick(obj, 'key', defaultVal)
+  if (!Array.isArray(keyOrKeys)) {
+    return obj && obj[keyOrKeys] != null ? obj[keyOrKeys] : defaults;
+  }
+  // Multi-key form: pick(obj, ['a','b'], { a: 1 }) -> { a: valOr1, b: valOrUndefined }
+  const out = { ...(defaults || {}) };
+  for (const k of keyOrKeys) {
+    out[k] = obj && obj[k] != null ? obj[k] : (defaults ? defaults[k] : undefined);
+  }
+  return out;
+}
 
 const escapeHtml = (s = "") =>
   String(s)
@@ -5896,11 +5907,7 @@ function handleVersion() {
 // ---------------------------
 // Minimal helpers (reuse your base ones if present)
 // ---------------------------
-function pick(obj, keys, defaults = {}) {
-  const out = { ...defaults };
-  for (const k of keys) out[k] = obj?.[k] ?? defaults[k];
-  return out;
-}
+
 
 function asNumber(x, d = 0) {
   if (x === null || x === undefined) return d;
@@ -5910,9 +5917,7 @@ function asNumber(x, d = 0) {
 
 function round2(n) { return Math.round(n * 100) / 100; }
 
-function splitCsv(s) {
-  return String(s || '').split(',').map(x => x.trim()).filter(Boolean);
-}
+
 
 function ymd(iso) {
   const d = new Date(iso);
@@ -5959,17 +5964,10 @@ function toLocalParts(iso, tz) {
   return { ymd: ymdStr, hh, mm };
 }
 
-function minutesBetween(isoA, isoB) {
-  return Math.round((new Date(isoB).getTime() - new Date(isoA).getTime()) / 60000);
-}
-
 // ---------------------------
 // Supabase helpers (RPC + REST)
 // ---------------------------
-function sbHeaders(env) {
-  const key = env.SUPABASE_SERVICE_ROLE_KEY;
-  return { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' };
-}
+
 
 async function sbFetch(env, url, includeCount = false) {
   const res = await fetch(url, { headers: { ...sbHeaders(env), ...(includeCount ? { Prefer: 'count=exact' } : {}) } });
