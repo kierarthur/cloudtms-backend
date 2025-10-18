@@ -31,6 +31,6 @@ preview_id = "6b8fb70351db4cac91583a9cc6c2074b"
 [triggers]
 crons = ["*/5 * * * *"]
 
-[[browser]]
+[browser]
 binding = "BROWSER"
 
