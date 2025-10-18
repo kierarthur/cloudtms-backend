@@ -24,6 +24,9 @@ INVOICE_STATIONERY_BUCKET = "timesheets-signatures"
 # Use the PNG you uploaded (A4, full-bleed). Keep exact path/casing.
 INVOICE_STATIONERY_KEY = "Assets/Stationery/Letterhead/A4/Letterhead_v1@300dpi.png"
 
+# new for TS rendering
+TIMESHEET_TEMPLATE_KEY = "Assets/Stationery/Timesheet/Blank Timesheet.pdf"
+
 [[r2_buckets]]
 binding = "R2"
 bucket_name = "timesheets-signatures"
