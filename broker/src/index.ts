@@ -1388,16 +1388,7 @@ function sbHeaders(env) {
   const key = env.SUPABASE_SERVICE_ROLE_KEY;
   return { "apikey": key, "Authorization": `Bearer ${key}`, "Content-Type": "application/json" };
 }
-async function sbFetch(env, url, includeCount = false) {
-  const res = await fetch(url, { headers: { ...sbHeaders(env), ...(includeCount ? { Prefer: "count=exact" } : {}) } });
-  const text = await res.text();
-  let json = [];
-  try { json = text ? JSON.parse(text) : []; } catch { json = []; }
-  const countHeader = res.headers.get("content-range");
-  const total = countHeader && /\/(\d+)$/.exec(countHeader) ? parseInt(/\/(\d+)$/.exec(countHeader)[1], 10) : undefined;
-  if (!res.ok) throw new Error(`Supabase fetch failed ${res.status}: ${text}`);
-  return { rows: json, total };
-}
+
 async function sbUpsertTimesheet(env, row) {
   const url = `${env.SUPABASE_URL}/rest/v1/timesheets?on_conflict=booking_id,version`;
   const res = await fetch(url, {
@@ -2391,7 +2382,7 @@ async function handleSignGet(env, req, url) {
 // -------------------------------------------
 // SETTINGS (surface/save bank + VAT reg no.)
 // -------------------------------------------
-async function handleGetSettings(env: any, req: Request) {
+async function handleGetSettings(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized('Unauthorized');
 
@@ -2418,7 +2409,7 @@ async function handleGetSettings(env: any, req: Request) {
   }
 }
 
-async function handleUpdateSettings(env: any, req: Request) {
+async function handleUpdateSettings(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized('Unauthorized');
 
@@ -2432,7 +2423,7 @@ async function handleUpdateSettings(env: any, req: Request) {
     'vat_rate_pct','holiday_pay_pct','erni_pct','apply_holiday_to','apply_erni_to','margin_includes','effective_from',
     'bank_name','bank_sort_code','bank_account_number','vat_registration_number'
   ];
-  const payload: any = { updated_at: new Date().toISOString() };
+  const payload = { updated_at: new Date().toISOString() };
   for (const k of allowed) if (k in data) payload[k] = data[k];
 
   try {
@@ -2515,7 +2506,7 @@ async function handleListClients(env, req) {
   }
 }
 
-async function handleCreateClient(env: any, req: Request) {
+async function handleCreateClient(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
@@ -2574,7 +2565,10 @@ async function handleGetClient(env, req, clientId) {
 // --------------------------------------------------
 // UPDATE CLIENT (mark stale/enqueue on policy change)
 // --------------------------------------------------
-async function handleUpdateClient(env: any, req: Request, clientId: string) {
+// --------------------------------------------------
+// UPDATE CLIENT (mark stale/enqueue on policy change)
+// --------------------------------------------------
+async function handleUpdateClient(env, req, clientId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
@@ -2612,9 +2606,9 @@ async function handleUpdateClient(env: any, req: Request, clientId: string) {
       // Mark related current/uninvoiced TSFIN as stale & enqueue
       await fetch(
         `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-        `?client_id=eq.${encodeURIComponent(clientId)}` +
-        `&is_current=eq.true` +
-        `&locked_by_invoice_id=is.null`,
+          `?client_id=eq.${encodeURIComponent(clientId)}` +
+          `&is_current=eq.true` +
+          `&locked_by_invoice_id=is.null`,
         {
           method: "PATCH",
           headers: { ...sbHeaders(env), "Prefer": "return=minimal" },
@@ -2629,12 +2623,12 @@ async function handleUpdateClient(env: any, req: Request, clientId: string) {
       const { rows: tsfins } = await sbFetch(
         env,
         `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-        `?select=timesheet_id` +
-        `&client_id=eq.${encodeURIComponent(clientId)}` +
-        `&is_current=eq.true` +
-        `&locked_by_invoice_id=is.null`
+          `?select=timesheet_id` +
+          `&client_id=eq.${encodeURIComponent(clientId)}` +
+          `&is_current=eq.true` +
+          `&locked_by_invoice_id=is.null`
       );
-      const toEnqueue = (tsfins || []).map((r: any) => ({ timesheet_id: r.timesheet_id, reason: 'POLICY_CHANGED' }));
+      const toEnqueue = (tsfins || []).map(r => ({ timesheet_id: r.timesheet_id, reason: 'POLICY_CHANGED' }));
 
       if (toEnqueue.length) {
         await fetch(
@@ -2653,6 +2647,7 @@ async function handleUpdateClient(env: any, req: Request, clientId: string) {
     return withCORS(env, req, serverError("Failed to update client"));
   }
 }
+
 
 
 // ====================== CLIENT HOSPITALS ======================
@@ -2805,8 +2800,7 @@ async function handleListUmbrellas(env, req) {
     return withCORS(env, req, serverError("Failed to list umbrellas"));
   }
 }
-
-async function handleCreateUmbrella(env: any, req: Request) {
+async function handleCreateUmbrella(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
@@ -2830,8 +2824,7 @@ async function handleCreateUmbrella(env: any, req: Request) {
     return withCORS(env, req, serverError("Failed to create umbrella"));
   }
 }
-
-async function handleGetUmbrella(env: any, req: Request, umbrellaId: string) {
+async function handleGetUmbrella(env, req, umbrellaId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
@@ -2847,7 +2840,7 @@ async function handleGetUmbrella(env: any, req: Request, umbrellaId: string) {
   }
 }
 
-async function handleUpdateUmbrella(env: any, req: Request, umbrellaId: string) {
+async function handleUpdateUmbrella(env, req, umbrellaId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
@@ -2877,7 +2870,7 @@ async function handleUpdateUmbrella(env: any, req: Request, umbrellaId: string) 
     const umbrella = Array.isArray(json) ? json[0] : json;
 
     // 3) Detect pay-channel impacting changes
-    const watched = ['name','bank_name','sort_code','account_number'] as const;
+    const watched = ['name','bank_name','sort_code','account_number'];
     const changed = watched.some(k => umbrella?.[k] !== before?.[k]);
 
     if (changed) {
@@ -2885,22 +2878,22 @@ async function handleUpdateUmbrella(env: any, req: Request, umbrellaId: string) 
       const { rows: candidateRows } = await sbFetch(
         env,
         `${env.SUPABASE_URL}/rest/v1/candidates` +
-        `?select=id` +
-        `&umbrella_id=eq.${encodeURIComponent(umbrellaId)}` +
-        `&pay_method=eq.UMBRELLA`
+          `?select=id` +
+          `&umbrella_id=eq.${encodeURIComponent(umbrellaId)}` +
+          `&pay_method=eq.UMBRELLA`
       );
-      const candIds = (candidateRows || []).map((r: any) => r.id);
+      const candIds = (candidateRows || []).map(r => r.id);
       if (candIds.length) {
         const idsParam = candIds.map(encodeURIComponent).join(',');
         const { rows: tsfins } = await sbFetch(
           env,
           `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?select=timesheet_id` +
-          `&candidate_id=in.(${idsParam})` +
-          `&is_current=eq.true` +
-          `&locked_by_invoice_id=is.null`
+            `?select=timesheet_id` +
+            `&candidate_id=in.(${idsParam})` +
+            `&is_current=eq.true` +
+            `&locked_by_invoice_id=is.null`
         );
-        const toEnqueue = (tsfins || []).map((r: any) => ({ timesheet_id: r.timesheet_id, reason: 'CONTEXT_CHANGED' }));
+        const toEnqueue = (tsfins || []).map(r => ({ timesheet_id: r.timesheet_id, reason: 'CONTEXT_CHANGED' }));
         if (toEnqueue.length) {
           await fetch(
             `${env.SUPABASE_URL}/rest/v1/ts_financials_outbox?on_conflict=timesheet_id,reason`,
@@ -2961,7 +2954,7 @@ async function handleListCandidates(env, req) {
 // ------------------------------------------------------
 // CREATE CANDIDATE / CLIENT (accept mileage fields too)
 // ------------------------------------------------------
-async function handleCreateCandidate(env: any, req: Request) {
+async function handleCreateCandidate(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
@@ -2986,8 +2979,7 @@ async function handleCreateCandidate(env: any, req: Request) {
     return withCORS(env, req, serverError("Failed to create candidate"));
   }
 }
-
-async function handleGetCandidate(env: any, req: Request, candidateId: string) {
+async function handleGetCandidate(env, req, candidateId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
@@ -3001,7 +2993,7 @@ async function handleGetCandidate(env: any, req: Request, candidateId: string) {
     const candidate = rows[0];
 
     // If umbrella, fetch umbrella minimal fields
-    let umbrella: any = undefined;
+    let umbrella = undefined;
     if (candidate.pay_method === 'UMBRELLA' && candidate.umbrella_id) {
       const { rows: umbRows } = await sbFetch(
         env,
@@ -3025,7 +3017,7 @@ async function handleGetCandidate(env: any, req: Request, candidateId: string) {
 // -------------------------------------------------------
 // UPDATE CANDIDATE (enqueue non-invoiced TSFIN on change)
 // -------------------------------------------------------
-async function handleUpdateCandidate(env: any, req: Request, candidateId: string) {
+async function handleUpdateCandidate(env, req, candidateId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
@@ -3064,11 +3056,11 @@ async function handleUpdateCandidate(env: any, req: Request, candidateId: string
     const candidate = Array.isArray(json) ? json[0] : json;
 
     // 3) Change detection
-    const payMethodChanged   = (data.pay_method != null)   && data.pay_method !== before.pay_method;
-    const umbrellaChanged    = (data.umbrella_id !== undefined) && data.umbrella_id !== before.umbrella_id;
-    const mileagePayChanged  = (data.mileage_pay_rate != null) && Number(data.mileage_pay_rate) !== Number(before.mileage_pay_rate);
+    const payMethodChanged  = (data.pay_method != null) && data.pay_method !== before.pay_method;
+    const umbrellaChanged   = (data.umbrella_id !== undefined) && data.umbrella_id !== before.umbrella_id;
+    const mileagePayChanged = (data.mileage_pay_rate != null) && Number(data.mileage_pay_rate) !== Number(before.mileage_pay_rate);
 
-    const bankKeys = ['account_holder','bank_name','sort_code','account_number'] as const;
+    const bankKeys = ['account_holder','bank_name','sort_code','account_number'];
     const bankChanged = bankKeys.some(k => Object.prototype.hasOwnProperty.call(data, k) && data[k] !== before[k]);
 
     // 4) Enqueue recompute for non-invoiced, current TSFIN for this candidate
@@ -3076,12 +3068,12 @@ async function handleUpdateCandidate(env: any, req: Request, candidateId: string
       const { rows: tsfins } = await sbFetch(
         env,
         `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-        `?select=timesheet_id` +
-        `&candidate_id=eq.${encodeURIComponent(candidateId)}` +
-        `&is_current=eq.true` +
-        `&locked_by_invoice_id=is.null`
+          `?select=timesheet_id` +
+          `&candidate_id=eq.${encodeURIComponent(candidateId)}` +
+          `&is_current=eq.true` +
+          `&locked_by_invoice_id=is.null`
       );
-      const items: Array<{ timesheet_id: string, reason: string }> = [];
+      const items = [];
       for (const r of (tsfins || [])) {
         if (payMethodChanged || umbrellaChanged || bankChanged) {
           items.push({ timesheet_id: r.timesheet_id, reason: 'CONTEXT_CHANGED' });
@@ -4775,7 +4767,10 @@ async function handleHRValidate(env, req, importId) {
 // ------------------------
 // LIST INVOICES (light UI)
 // ------------------------
-async function handleListInvoices(env: any, req: Request) {
+// ------------------------
+// LIST INVOICES (light UI)
+// ------------------------
+async function handleListInvoices(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
@@ -4789,13 +4784,11 @@ async function handleListInvoices(env: any, req: Request) {
   if (statusFilter === "paid") filter = "&paid_at_utc=not.is.null";
   if (statusFilter === "unpaid") filter = "&paid_at_utc=is.null";
 
-  // Keep things light but include header snapshot for UI
-  const select =
-    [
-      'id','invoice_no','client_id','issued_at_utc','due_at_utc',
-      'status','subtotal_ex_vat','vat_amount','total_inc_vat',
-      'invoice_pdf_r2_key','header_snapshot_json'
-    ].join(',');
+  const select = [
+    'id','invoice_no','client_id','issued_at_utc','due_at_utc',
+    'status','subtotal_ex_vat','vat_amount','total_inc_vat',
+    'invoice_pdf_r2_key','header_snapshot_json'
+  ].join(',');
 
   const url = `${env.SUPABASE_URL}/rest/v1/invoices?select=${select}&order=issued_at_utc.desc&limit=${limit}&offset=${offset}${filter}`;
 
@@ -4864,7 +4857,10 @@ async function handleListInvoices(env: any, req: Request) {
 // -------------------
 // GET INVOICE (+meta)
 // -------------------
-async function handleGetInvoice(env: any, req: Request, invoiceId: string) {
+// -------------------
+// GET INVOICE (+meta)
+// -------------------
+async function handleGetInvoice(env, req, invoiceId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
@@ -4892,7 +4888,7 @@ async function handleGetInvoice(env: any, req: Request, invoiceId: string) {
         ].join(',')
     );
 
-    const items = lineRows.map((l: any) => ({
+    const items = lineRows.map(l => ({
       booking_id: l.booking_id ?? null,
       timesheet_id: l.timesheet_id ?? null,
       qty: { day: l.hours_day, night: l.hours_night, sat: l.hours_sat, sun: l.hours_sun, bh: l.hours_bh },
@@ -4905,7 +4901,7 @@ async function handleGetInvoice(env: any, req: Request, invoiceId: string) {
     // Optional correspondence
     const includeCorr = new URL(req.url).searchParams.get('include_correspondence');
     if (includeCorr) {
-      let correspondence: any[] = [];
+      let correspondence = [];
       try {
         const { rows: corrRows } = await sbFetch(
           env,
@@ -4917,8 +4913,8 @@ async function handleGetInvoice(env: any, req: Request, invoiceId: string) {
             `&order=ts_utc.desc`
         );
 
-        const mailIds = [...new Set((corrRows || []).map((r: any) => r.correlation_id).filter(Boolean))];
-        let mailMap: Record<string, any> = {};
+        const mailIds = [...new Set((corrRows || []).map(r => r.correlation_id).filter(Boolean))];
+        let mailMap = {};
         if (mailIds.length) {
           const { rows: mailRows } = await sbFetch(
             env,
@@ -4926,10 +4922,10 @@ async function handleGetInvoice(env: any, req: Request, invoiceId: string) {
               `?id=in.(${mailIds.map(encodeURIComponent).join(',')})` +
               `&select=id,to,cc,subject,status,created_at_utc,sent_at,failed_at,reference,provider_message_id`
           );
-          mailMap = Object.fromEntries((mailRows || []).map((m: any) => [m.id, m]));
+          mailMap = Object.fromEntries((mailRows || []).map(m => [m.id, m]));
         }
 
-        correspondence = (corrRows || []).map((ev: any) => ({
+        correspondence = (corrRows || []).map(ev => ({
           ts_utc: ev.ts_utc,
           action: ev.action,
           correlation_id: ev.correlation_id || null,
@@ -4952,15 +4948,18 @@ async function handleGetInvoice(env: any, req: Request, invoiceId: string) {
 
 
 
+
 // ----------------------
 // RENDER INVOICE (SNAP)
 // ----------------------
-async function handleInvoiceRender(env: any, req: Request, invoiceId: string) {
+// ----------------------
+// RENDER INVOICE (SNAP)
+// ----------------------
+async function handleInvoiceRender(env, req, invoiceId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
   try {
-    // Pull header snapshot + bare client join for name/email (optional)
     const { rows: invRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/invoices` +
@@ -4970,7 +4969,6 @@ async function handleInvoiceRender(env: any, req: Request, invoiceId: string) {
     if (!invRows?.length) return withCORS(env, req, notFound("Invoice not found"));
     const inv = invRows[0];
 
-    // Fetch lines with meta_json only (no live joins)
     const { rows: lineRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/invoice_lines` +
@@ -4988,7 +4986,7 @@ async function handleInvoiceRender(env: any, req: Request, invoiceId: string) {
         vat_amount: Number(inv.vat_amount || 0),
         total_inc_vat: Number(inv.total_inc_vat || 0)
       },
-      items: (lineRows || []).map((l: any) => ({
+      items: (lineRows || []).map(l => ({
         description: l.description,
         meta: l.meta_json ?? {},
         total_ex_vat: Number(l.total_charge_ex_vat || 0),
@@ -5029,7 +5027,6 @@ async function handleInvoiceRender(env: any, req: Request, invoiceId: string) {
       body: JSON.stringify({ invoice_pdf_r2_key: pdfKey })
     });
 
-    // Short-lived signed URL via token
     const exp = Math.floor(Date.now()/1000) + 300;
     const token = await createToken(env.UPLOAD_TOKEN_SECRET, { typ: "dl", key: pdfKey, exp });
     const downloadUrl = new URL(req.url);
@@ -5043,6 +5040,7 @@ async function handleInvoiceRender(env: any, req: Request, invoiceId: string) {
     return withCORS(env, req, serverError("Failed to render invoice"));
   }
 }
+
 
 async function handleInvoiceCredit(env, req, invoiceId) {
   const user = await requireUser(env, req, ['admin']);
@@ -5890,38 +5888,33 @@ function handleVersion() {
 // ---------------------------
 // Shared type mirrors
 // ---------------------------
-
-type TsFinReason = 'NEW_AUTHORISED'|'VERSION_ROTATED'|'REVOKED'|'RATE_CHANGED'|'POLICY_CHANGED'|'CONTEXT_CHANGED'|'MANUAL';
-
-type CandidateAssignment = 'UNASSIGNED'|'ASSIGNED';
-
-type ProcessingStatus = 'UNASSIGNED'|'CLIENT_UNRESOLVED'|'RATE_MISSING'|'PAY_CHANNEL_MISSING'|'READY_FOR_HR'|'READY_FOR_INVOICE';
-
-type PayMethod = 'PAYE'|'UMBRELLA';
+/** @typedef {'NEW_AUTHORISED'|'VERSION_ROTATED'|'REVOKED'|'RATE_CHANGED'|'POLICY_CHANGED'|'CONTEXT_CHANGED'|'MANUAL'} TsFinReason */
+/** @typedef {'UNASSIGNED'|'ASSIGNED'} CandidateAssignment */
+/** @typedef {'UNASSIGNED'|'CLIENT_UNRESOLVED'|'RATE_MISSING'|'PAY_CHANNEL_MISSING'|'READY_FOR_HR'|'READY_FOR_INVOICE'} ProcessingStatus */
+/** @typedef {'PAYE'|'UMBRELLA'} PayMethod */
 
 // ---------------------------
 // Minimal helpers (reuse your base ones if present)
 // ---------------------------
-
-function pick<T>(obj: any, keys: string[], defaults: Partial<Record<string, any>> = {}): T {
-  const out: any = { ...defaults };
+function pick(obj, keys, defaults = {}) {
+  const out = { ...defaults };
   for (const k of keys) out[k] = obj?.[k] ?? defaults[k];
-  return out as T;
+  return out;
 }
 
-function asNumber(x: any, d = 0): number {
+function asNumber(x, d = 0) {
   if (x === null || x === undefined) return d;
   const n = typeof x === 'number' ? x : Number(x);
   return Number.isFinite(n) ? n : d;
 }
 
-function round2(n: number) { return Math.round(n * 100) / 100; }
+function round2(n) { return Math.round(n * 100) / 100; }
 
-function splitCsv(s: string | null | undefined): string[] {
-  return String(s || '').split(',').map((x) => x.trim()).filter(Boolean);
+function splitCsv(s) {
+  return String(s || '').split(',').map(x => x.trim()).filter(Boolean);
 }
 
-function ymd(iso: string): string {
+function ymd(iso) {
   const d = new Date(iso);
   const y = d.getUTCFullYear();
   const m = String(d.getUTCMonth() + 1).padStart(2, '0');
@@ -5930,9 +5923,9 @@ function ymd(iso: string): string {
 }
 
 // --- Basic UK DST handling (same style as your base file) ---
-function isBSTLocal(ymdStr: string) {
+function isBSTLocal(ymdStr) {
   const [y, m, d] = ymdStr.split('-').map(Number);
-  const lastSunday = (year: number, month: number) => {
+  const lastSunday = (year, month) => {
     const dt = new Date(Date.UTC(year, month, 0));
     const dow = dt.getUTCDay();
     dt.setUTCDate(dt.getUTCDate() - dow);
@@ -5946,7 +5939,7 @@ function isBSTLocal(ymdStr: string) {
   return n >= bstStart && n < bstEnd;
 }
 
-function toLocalParts(iso: string, tz: string): { ymd: string; hh: number; mm: number } {
+function toLocalParts(iso, tz) {
   // For Europe/London only; treat other tz as UTC fallback.
   const inYmd = ymd(iso);
   const offset = (tz === 'Europe/London' && isBSTLocal(inYmd)) ? 1 : 0; // hours ahead of UTC
@@ -5956,40 +5949,45 @@ function toLocalParts(iso: string, tz: string): { ymd: string; hh: number; mm: n
   let y = d.getUTCFullYear();
   let m = d.getUTCMonth() + 1;
   let da = d.getUTCDate();
-  if (hh >= 24) { hh -= 24; const dt = new Date(Date.UTC(y, m - 1, da)); dt.setUTCDate(dt.getUTCDate() + 1); y = dt.getUTCFullYear(); m = dt.getUTCMonth() + 1; da = dt.getUTCDate(); }
+  if (hh >= 24) {
+    hh -= 24;
+    const dt = new Date(Date.UTC(y, m - 1, da));
+    dt.setUTCDate(dt.getUTCDate() + 1);
+    y = dt.getUTCFullYear(); m = dt.getUTCMonth() + 1; da = dt.getUTCDate();
+  }
   const ymdStr = `${y}-${String(m).padStart(2, '0')}-${String(da).padStart(2, '0')}`;
   return { ymd: ymdStr, hh, mm };
 }
 
-function minutesBetween(isoA: string, isoB: string) {
+function minutesBetween(isoA, isoB) {
   return Math.round((new Date(isoB).getTime() - new Date(isoA).getTime()) / 60000);
 }
 
 // ---------------------------
 // Supabase helpers (RPC + REST)
 // ---------------------------
-
-function sbHeaders(env: any) {
+function sbHeaders(env) {
   const key = env.SUPABASE_SERVICE_ROLE_KEY;
   return { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' };
 }
 
-async function sbFetch(env: any, url: string, includeCount = false) {
+async function sbFetch(env, url, includeCount = false) {
   const res = await fetch(url, { headers: { ...sbHeaders(env), ...(includeCount ? { Prefer: 'count=exact' } : {}) } });
   const text = await res.text();
-  let json: any = [];
+  let json = [];
   try { json = text ? JSON.parse(text) : []; } catch { json = []; }
   const countHeader = res.headers.get('content-range');
-  const total = countHeader && /\/(\d+)$/.exec(countHeader) ? parseInt(/\/(\d+)$/.exec(countHeader)![1], 10) : undefined;
+  const m = countHeader && /\/(\d+)$/.exec(countHeader);
+  const total = m ? parseInt(m[1], 10) : undefined;
   if (!res.ok) throw new Error(`Supabase fetch failed ${res.status}: ${text}`);
   return { rows: json, total };
 }
 
-async function sbRpc(env: any, fn: string, args: any) {
+async function sbRpc(env, fn, args) {
   const url = `${env.SUPABASE_URL}/rest/v1/rpc/${encodeURIComponent(fn)}`;
   const res = await fetch(url, { method: 'POST', headers: sbHeaders(env), body: JSON.stringify(args || {}) });
   const txt = await res.text();
-  let json: any;
+  let json;
   try { json = txt ? JSON.parse(txt) : null; } catch { json = null; }
   if (!res.ok) throw new Error(`RPC ${fn} failed ${res.status}: ${txt}`);
   return json;
@@ -5998,29 +5996,28 @@ async function sbRpc(env: any, fn: string, args: any) {
 // ---------------------------
 // Context loaders
 // ---------------------------
-
-async function loadCurrentTimesheet(env: any, timesheet_id: string) {
+async function loadCurrentTimesheet(env, timesheet_id) {
   const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${encodeURIComponent(timesheet_id)}&is_current=eq.true&select=*`);
   return rows[0] || null;
 }
 
-async function loadCandidate(env: any, key_norm: string | null) {
+async function loadCandidate(env, key_norm) {
   if (!key_norm) return null;
   const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/candidates?key_norm=eq.${encodeURIComponent(key_norm)}&active=eq.true&select=*`);
   return rows[0] || null;
 }
 
-async function resolveClientId(env: any, hospital_norm: string | null) {
+async function resolveClientId(env, hospital_norm) {
   if (!hospital_norm) return null;
   const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/client_hospitals?hospital_name_norm=eq.${encodeURIComponent(hospital_norm)}&select=client_id&limit=1`);
   return rows[0]?.client_id || null;
 }
 
-async function loadPolicy(env: any, client_id: string | null, workedDateYmd: string | null) {
+async function loadPolicy(env, client_id, workedDateYmd) {
   const { rows: defRows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=*`);
   const def = defRows[0] || {};
 
-  let cs: any = null;
+  let cs = null;
   if (client_id) {
     const w = workedDateYmd ? `&and=(or(effective_from.lte.${encodeURIComponent(workedDateYmd)},effective_from.is.null))` : '';
     const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/client_settings?client_id=eq.${encodeURIComponent(client_id)}&select=*&order=effective_from.desc,nullsLast=true&limit=1${w}`);
@@ -6046,20 +6043,18 @@ async function loadPolicy(env: any, client_id: string | null, workedDateYmd: str
 }
 
 // ---------------------------
-// Classification (minutes → five buckets) with precedence BH > Sun > Sat > Night > Day
+// Classification helpers
 // ---------------------------
-
-function hhmmToMin(hhmm: string) {
+function hhmmToMin(hhmm) {
   const [h, m] = (hhmm || '00:00:00').split(':').map((x) => parseInt(x, 10) || 0);
   return h * 60 + m;
 }
 
-function subtractBreak(segments: [string, string][], breakStartIso: string | null, breakEndIso: string | null, breakMin: number | null) {
+function subtractBreak(segments, breakStartIso, breakEndIso, breakMin) {
   if (breakStartIso && breakEndIso) {
-    // Clip each segment against [breakStart, breakEnd]
     const bs = new Date(breakStartIso).getTime();
     const be = new Date(breakEndIso).getTime();
-    const out: [string, string][] = [];
+    const out = [];
     for (const [a, b] of segments) {
       const A = new Date(a).getTime();
       const B = new Date(b).getTime();
@@ -6070,7 +6065,6 @@ function subtractBreak(segments: [string, string][], breakStartIso: string | nul
     return out;
   }
   if (!breakMin || breakMin <= 0) return segments;
-  // Remove breakMin from the middle of the (single) segment (fallback)
   if (!segments.length) return segments;
   let [a, b] = segments[0];
   const total = minutesBetween(a, b);
@@ -6081,31 +6075,26 @@ function subtractBreak(segments: [string, string][], breakStartIso: string | nul
   return [[a, mid], [midEnd, b]];
 }
 
-function classifyMinutes(env: any, policy: any, segments: [string, string][]) {
+function classifyMinutes(env, policy, segments) {
   const out = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
   const tz = policy.timezone_id || 'Europe/London';
   const dayStartMin = hhmmToMin(policy.day_start);
   const dayEndMin = hhmmToMin(policy.day_end);
-  const bhSet = new Set<string>(policy.bh_list || []);
+  const bhSet = new Set(policy.bh_list || []);
 
   for (const [isoA, isoB] of segments) {
-    // Iterate by local-day slices to apply precedence per day
     let cur = new Date(isoA);
     const end = new Date(isoB);
 
     while (cur < end) {
       const { ymd: curYmd, hh, mm } = toLocalParts(cur.toISOString(), tz);
-      const offsetMin = (tz === 'Europe/London' && isBSTLocal(curYmd)) ? 60 : 0; // informational only
-
-      // End of this local day (midnight local)
       const dayEnd = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth(), cur.getUTCDate() + 1));
       const sliceEnd = end < dayEnd ? end : dayEnd;
       const mins = minutesBetween(cur.toISOString(), sliceEnd.toISOString());
 
-      const dow = new Date(`${curYmd}T00:00:00Z`).getUTCDay(); // 0=Sun..6=Sat (using UTC midnight aligns with our ymd)
+      const dow = new Date(`${curYmd}T00:00:00Z`).getUTCDay(); // 0=Sun..6=Sat
       const curIsBh = bhSet.has(curYmd);
 
-      // Precedence: BH wins, then Sun/Sat, else split day vs night by window
       if (curIsBh) {
         out.bh += mins;
       } else if (dow === 0) {
@@ -6113,11 +6102,8 @@ function classifyMinutes(env: any, policy: any, segments: [string, string][]) {
       } else if (dow === 6) {
         out.sat += mins;
       } else {
-        // Weekday: split by day window
-        // Compute local minute-of-day for slice boundaries (approx: use start minute; assume slice within same day)
         const startLocalMin = hh * 60 + mm;
         const endLocalMin = startLocalMin + mins;
-        // Portion in [dayStart, dayEnd]
         const dayOverlap = Math.max(0, Math.min(endLocalMin, dayEndMin) - Math.max(startLocalMin, dayStartMin));
         const nightOverlap = mins - dayOverlap;
         out.day += dayOverlap;
@@ -6128,7 +6114,6 @@ function classifyMinutes(env: any, policy: any, segments: [string, string][]) {
     }
   }
 
-  // Round to hours
   return {
     hours_day: round2(out.day / 60),
     hours_night: round2(out.night / 60),
@@ -6139,17 +6124,15 @@ function classifyMinutes(env: any, policy: any, segments: [string, string][]) {
 }
 
 // ---------------------------
-// Rates resolution (candidate override -> client default). Most specific + latest.
+// Rates resolution
 // ---------------------------
-
-async function resolveRates(env: any, { candidate_id, client_id, role, band, dateYmd }: any) {
-  // 1) Candidate override (allow NULL-or-specific per dimension)
+async function resolveRates(env, { candidate_id, client_id, role, band, dateYmd }) {
   if (candidate_id) {
     let q1 = `${env.SUPABASE_URL}/rest/v1/rates_candidate_overrides?select=*` +
              `&candidate_id=eq.${encodeURIComponent(candidate_id)}` +
              `&order=client_id.nullslast,role.nullslast,band.nullslast,date_from.desc&limit=1`;
 
-    const andParts: string[] = [];
+    const andParts = [];
     if (client_id) andParts.push(`or(client_id.eq.${encodeURIComponent(client_id)},client_id.is.null)`);
     if (role) andParts.push(`or(role.eq.${encodeURIComponent(role)},role.is.null)`);
     if (band) andParts.push(`or(band.eq.${encodeURIComponent(band)},band.is.null)`);
@@ -6167,13 +6150,12 @@ async function resolveRates(env: any, { candidate_id, client_id, role, band, dat
     }
   }
 
-  // 2) Client default
   if (client_id) {
     let q2 = `${env.SUPABASE_URL}/rest/v1/rates_client_defaults?select=*` +
              `&client_id=eq.${encodeURIComponent(client_id)}` +
              `&order=role.nullslast,band.nullslast,date_from.desc&limit=1`;
 
-    const and2: string[] = [];
+    const and2 = [];
     if (role) and2.push(`or(role.eq.${encodeURIComponent(role)},role.is.null)`);
     if (band) and2.push(`or(band.eq.${encodeURIComponent(band)},band.is.null)`);
     if (dateYmd) { and2.push(`date_from=lte.${encodeURIComponent(dateYmd)}`); and2.push(`or(date_to.gte.${encodeURIComponent(dateYmd)},date_to.is.null)`); }
@@ -6193,9 +6175,8 @@ async function resolveRates(env: any, { candidate_id, client_id, role, band, dat
   return { source: { kind: 'NONE', id: null }, pay: null, charge: null };
 }
 
-function anyMissingRates(hours: any, pay: any, charge: any) {
-  // Require a charge rate for any non-zero hours. Pay may fall back to 0 only if explicitly allowed; we mark missing for safety.
-  const buckets: (keyof typeof hours)[] = ['day', 'night', 'sat', 'sun', 'bh'] as any;
+function anyMissingRates(hours, pay, charge) {
+  const buckets = ['day', 'night', 'sat', 'sun', 'bh'];
   for (const b of buckets) {
     if (hours[b] > 0) {
       if (!charge || charge[b] == null) return true;
@@ -6206,11 +6187,9 @@ function anyMissingRates(hours: any, pay: any, charge: any) {
 }
 
 // ---------------------------
-// Snapshot writer (guards invoice locks, flips current → false, inserts new)
+// Snapshot writer
 // ---------------------------
-
-async function writeSnapshot(env: any, snapshot: any) {
-  // Guard with tsfin_prepare_write; throws if locked
+async function writeSnapshot(env, snapshot) {
   await sbRpc(env, 'tsfin_prepare_write', { timesheet_id: snapshot.timesheet_id });
 
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets_financials`, {
@@ -6225,12 +6204,12 @@ async function writeSnapshot(env: any, snapshot: any) {
   const json = await res.json().catch(() => ([]));
   return Array.isArray(json) ? json[0] : json;
 }
-// ---------- helpers used by patch handlers ----------
-const toNum = (v: any) => (v === null || v === undefined ? null : Number(v));
-const nonneg = (n: any) => (n === null || n === undefined ? true : Number(n) >= 0);
-const nowIso = () => new Date().toISOString();
 
-async function fetchCurrentTsfin(env: any, timesheetId: string) {
+// ---------- helpers used by patch handlers ----------
+const toNum = (v) => (v === null || v === undefined ? null : Number(v));
+const nonneg = (n) => (n === null || n === undefined ? true : Number(n) >= 0);
+
+async function fetchCurrentTsfin(env, timesheetId) {
   const q =
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
     `?timesheet_id=eq.${encodeURIComponent(timesheetId)}` +
@@ -6246,7 +6225,7 @@ async function fetchCurrentTsfin(env: any, timesheetId: string) {
   return (rows || [])[0] || null;
 }
 
-async function enqueueManualTsfinRecalc(env: any, timesheetId: string) {
+async function enqueueManualTsfinRecalc(env, timesheetId) {
   const id = (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`).toString();
   const body = [{
     id,
@@ -6267,15 +6246,7 @@ async function enqueueManualTsfinRecalc(env: any, timesheetId: string) {
   );
 }
 
-async function insertAuditEvent(env: any, req: Request, args: {
-  object_type: string,
-  object_id_text: string | null,
-  action: string,
-  before_json: any,
-  after_json: any,
-  reason?: string | null
-}) {
-  // Best-effort actor/IP extraction; table should accept nulls.
+async function insertAuditEvent(env, req, args) {
   const user = await requireUser(env, req, ['admin']).catch(() => null);
   const ip = req.headers.get('CF-Connecting-IP') || req.headers.get('x-forwarded-for') || null;
   const ua = req.headers.get('user-agent') || null;
@@ -6304,35 +6275,12 @@ async function insertAuditEvent(env: any, req: Request, args: {
 }
 
 /**
- * Shared patcher. Accepts a partial payload targeting expenses/mileage/po fields.
- * Enforces "unlocked", evidence rules, sets is_stale, enqueues recompute, and audits.
+ * Shared patcher (JS)
  */
-async function patchTsfinCommon(
-  env: any,
-  req: Request,
-  timesheetId: string,
-  patch: {
-    reason?: string | null,
-    expenses?: {
-      pay_ex_vat?: number | null,
-      charge_ex_vat?: number | null,
-      description?: string | null,
-      evidence_r2_key?: string | null,
-    },
-    mileage?: {
-      pay_ex_vat?: number | null,
-      charge_ex_vat?: number | null,
-      evidence_r2_key?: string | null,
-      pay_rate?: number | null,
-      charge_rate?: number | null,
-    },
-    po?: { number?: string | null }
-  }
-) {
+async function patchTsfinCommon(env, req, timesheetId, patch) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
-  // Validate basic numeric constraints up-front
   if (patch.expenses) {
     const xp = patch.expenses;
     if (!nonneg(xp.pay_ex_vat) || !nonneg(xp.charge_ex_vat)) {
@@ -6346,12 +6294,10 @@ async function patchTsfinCommon(
     }
   }
 
-  // Load current snapshot (and guard invoice lock)
   const before = await fetchCurrentTsfin(env, timesheetId);
   if (!before) return notFound('TSFIN current row not found');
   if (before.locked_by_invoice_id) return conflict('Timesheet financials are locked by an invoice');
 
-  // Evidence rules (mirror DB CHECKs)
   if (patch.expenses && patch.expenses.charge_ex_vat != null) {
     const ch = Number(patch.expenses.charge_ex_vat);
     if (ch > 0 && !patch.expenses.evidence_r2_key && !before.expenses_evidence_r2_key) {
@@ -6365,8 +6311,7 @@ async function patchTsfinCommon(
     }
   }
 
-  // Prepare final payload for PostgREST PATCH.
-  const upd: any = {};
+  const upd = {};
 
   if (patch.expenses) {
     const xp = patch.expenses;
@@ -6376,28 +6321,22 @@ async function patchTsfinCommon(
     if (xp.evidence_r2_key !== undefined) upd.expenses_evidence_r2_key = xp.evidence_r2_key ?? null;
   }
 
-  // Mileage, including default rate fallback behavior:
   if (patch.mileage) {
     const ml = patch.mileage;
     if (ml.pay_ex_vat !== undefined)      upd.mileage_pay_ex_vat = toNum(ml.pay_ex_vat) ?? 0;
     if (ml.charge_ex_vat !== undefined)   upd.mileage_charge_ex_vat = toNum(ml.charge_ex_vat) ?? 0;
     if (ml.evidence_r2_key !== undefined) upd.mileage_evidence_r2_key = ml.evidence_r2_key ?? null;
 
-    // Explicit rate updates
     if (ml.pay_rate !== undefined)        upd.mileage_pay_rate = ml.pay_rate === null ? null : toNum(ml.pay_rate);
     if (ml.charge_rate !== undefined)     upd.mileage_charge_rate = ml.charge_rate === null ? null : toNum(ml.charge_rate);
 
-    // If either rate was omitted (undefined), mirror the Node behavior:
-    // set to existing value or fallback defaults (candidate/client).
     if (ml.pay_rate === undefined || ml.charge_rate === undefined) {
-      // Pull defaults only if needed
       const needPay = ml.pay_rate === undefined;
       const needChg = ml.charge_rate === undefined;
 
       if (needPay || needChg) {
-        // get candidate/client default rates
-        let candRate: number | null = null;
-        let clientRate: number | null = null;
+        let candRate = null;
+        let clientRate = null;
         try {
           if (needPay && before.candidate_id) {
             const { rows: candRows } = await sbFetch(
@@ -6429,17 +6368,14 @@ async function patchTsfinCommon(
     if (patch.po.number !== undefined) upd.po_number = patch.po.number ?? null;
   }
 
-  // If no actual fields to change, return unchanged (mirror Node behavior).
   const hasFieldChange = Object.keys(upd).length > 0;
   if (!hasFieldChange) {
     return ok({ updated: false, tsfin: before });
   }
 
-  // Always mark stale & bump updated_at
   upd.is_stale = true;
   upd.updated_at = nowIso();
 
-  // Apply update: limit to current & unlocked
   const url =
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
     `?timesheet_id=eq.${encodeURIComponent(timesheetId)}` +
@@ -6459,7 +6395,6 @@ async function patchTsfinCommon(
   const json = await res.json().catch(() => []);
   const after = Array.isArray(json) ? json[0] : json;
 
-  // Enqueue manual recompute + audit
   await enqueueManualTsfinRecalc(env, timesheetId).catch(() => {});
   await insertAuditEvent(env, req, {
     object_type: 'timesheets_financials',
@@ -6504,9 +6439,7 @@ async function patchTsfinCommon(
 }
 
 // -------------------- public handlers --------------------
-
-// PATCH /api/tsfin/:timesheet_id/expenses
-async function handleTsfinPatchExpenses(env: any, req: Request, timesheetId: string) {
+async function handleTsfinPatchExpenses(env, req, timesheetId) {
   const body = await parseJSONBody(req).catch(() => ({}));
   return withCORS(env, req, await patchTsfinCommon(env, req, timesheetId, {
     reason: body?.reason ?? null,
@@ -6519,8 +6452,7 @@ async function handleTsfinPatchExpenses(env: any, req: Request, timesheetId: str
   }));
 }
 
-// PATCH /api/tsfin/:timesheet_id/mileage
-async function handleTsfinPatchMileage(env: any, req: Request, timesheetId: string) {
+async function handleTsfinPatchMileage(env, req, timesheetId) {
   const body = await parseJSONBody(req).catch(() => ({}));
   return withCORS(env, req, await patchTsfinCommon(env, req, timesheetId, {
     reason: body?.reason ?? null,
@@ -6528,14 +6460,13 @@ async function handleTsfinPatchMileage(env: any, req: Request, timesheetId: stri
       pay_ex_vat: body?.pay_ex_vat,
       charge_ex_vat: body?.charge_ex_vat,
       evidence_r2_key: body?.evidence_r2_key,
-      pay_rate: body?.pay_rate,          // undefined ⇒ fallback behavior, null ⇒ explicit null
+      pay_rate: body?.pay_rate,
       charge_rate: body?.charge_rate,
     }
   }));
 }
 
-// PATCH /api/tsfin/:timesheet_id/po
-async function handleTsfinPatchPO(env: any, req: Request, timesheetId: string) {
+async function handleTsfinPatchPO(env, req, timesheetId) {
   const body = await parseJSONBody(req).catch(() => ({}));
   return withCORS(env, req, await patchTsfinCommon(env, req, timesheetId, {
     reason: body?.reason ?? null,
@@ -6544,41 +6475,25 @@ async function handleTsfinPatchPO(env: any, req: Request, timesheetId: string) {
 }
 
 // ---------------------------
-// Worker: dequeue → compute → store → ack
+// Pay channel resolution (pure)
 // ---------------------------
-// Helper: resolve effective pay channel (pure, no I/O)
-function resolveEffectivePayChannel(input: {
-  pay_method?: string | null,
-  candidate?: {
-    account_holder?: string | null,
-    bank_name?: string | null,
-    sort_code?: string | null,
-    account_number?: string | null,
-    umbrella_id?: string | null
-  },
-  umbrella?: {
-    name?: string | null,
-    bank_name?: string | null,
-    sort_code?: string | null,
-    account_number?: string | null
-  }
-}) {
+function resolveEffectivePayChannel(input) {
   const pm = (input.pay_method || '').toUpperCase();
   const cand = input.candidate || {};
   const umb = input.umbrella || {};
 
-  const trim = (v?: string | null) => (v ?? '').toString().trim() || null;
+  const trim = (v) => (v ?? '').toString().trim() || null;
 
   if (pm === 'PAYE') {
     const out = {
       pay_method: 'PAYE',
-      source: 'CANDIDATE' as const,
+      source: 'CANDIDATE',
       account_holder: trim(cand.account_holder),
       bank_name: trim(cand.bank_name),
       sort_code: trim(cand.sort_code),
       account_number: trim(cand.account_number)
     };
-    const missing: string[] = [];
+    const missing = [];
     if (!out.sort_code) missing.push('sort_code');
     if (!out.account_number) missing.push('account_number');
     return { ...out, ok: missing.length === 0, missing };
@@ -6587,13 +6502,13 @@ function resolveEffectivePayChannel(input: {
   if (pm === 'UMBRELLA') {
     const out = {
       pay_method: 'UMBRELLA',
-      source: 'UMBRELLA' as const,
+      source: 'UMBRELLA',
       account_holder: trim(umb.name) || null,
       bank_name: trim(umb.bank_name),
       sort_code: trim(umb.sort_code),
       account_number: trim(umb.account_number)
     };
-    const missing: string[] = [];
+    const missing = [];
     if (!trim(cand.umbrella_id)) missing.push('umbrella_id');
     if (!out.sort_code) missing.push('sort_code');
     if (!out.account_number) missing.push('account_number');
@@ -6602,7 +6517,7 @@ function resolveEffectivePayChannel(input: {
 
   return {
     pay_method: pm || null,
-    source: 'MISSING' as const,
+    source: 'MISSING',
     account_holder: null,
     bank_name: null,
     sort_code: null,
@@ -6612,8 +6527,11 @@ function resolveEffectivePayChannel(input: {
   };
 }
 
-async function runTsfinWorkerOnce(env: any, { limit = 50 } = {}) {
-  const lease: { id: string; timesheet_id: string; reason: TsFinReason }[] = await sbRpc(env, 'tsfin_dequeue_batch', { limit });
+// ---------------------------
+// Worker: dequeue → compute
+// ---------------------------
+async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
+  const lease = await sbRpc(env, 'tsfin_dequeue_batch', { limit });
   if (!Array.isArray(lease) || !lease.length) return { picked: 0, ok: 0, fail: 0 };
 
   let ok = 0, fail = 0;
@@ -6633,13 +6551,12 @@ async function runTsfinWorkerOnce(env: any, { limit = 50 } = {}) {
 
       const occupantKey = ts.occupant_key_norm || null;
       const candidate = await loadCandidate(env, occupantKey);
-      const candidate_assignment: CandidateAssignment = candidate ? 'ASSIGNED' : 'UNASSIGNED';
+      const candidate_assignment = candidate ? 'ASSIGNED' : 'UNASSIGNED';
 
       const client_id = await resolveClientId(env, ts.hospital_norm || null);
       const policy = await loadPolicy(env, client_id, ts.worked_start_iso ? ymd(ts.worked_start_iso) : null);
 
-      // Build working segments and subtract break
-      let segments: [string, string][] = [];
+      let segments = [];
       if (ts.worked_start_iso && ts.worked_end_iso) segments.push([ts.worked_start_iso, ts.worked_end_iso]);
       segments = subtractBreak(segments, ts.break_start_iso || null, ts.break_end_iso || null, ts.break_minutes || null);
 
@@ -6648,18 +6565,22 @@ async function runTsfinWorkerOnce(env: any, { limit = 50 } = {}) {
       const workedDate = ts.worked_start_iso ? toLocalParts(ts.worked_start_iso, policy.timezone_id).ymd : null;
       const rates = await resolveRates(env, { candidate_id: candidate?.id || null, client_id, role: ts.job_title_norm || null, band: ts.band || null, dateYmd: workedDate });
 
-      const missing = anyMissingRates({ day: hours.hours_day, night: hours.hours_night, sat: hours.hours_sat, sun: hours.hours_sun, bh: hours.hours_bh }, rates.pay, rates.charge);
+      const missing = anyMissingRates(
+        { day: hours.hours_day, night: hours.hours_night, sat: hours.hours_sat, sun: hours.hours_sun, bh: hours.hours_bh },
+        rates.pay,
+        rates.charge
+      );
 
-      // Determine pay channel requirement
-      const pay_method: PayMethod | null = (candidate?.pay_method === 'UMBRELLA') ? 'UMBRELLA' : (candidate?.pay_method === 'PAYE' ? 'PAYE' : (ts.pay_method || null));
-      let processing_status: ProcessingStatus = 'READY_FOR_HR';
+      const pay_method = (candidate?.pay_method === 'UMBRELLA') ? 'UMBRELLA'
+                         : (candidate?.pay_method === 'PAYE' ? 'PAYE' : (ts.pay_method || null));
+
+      let processing_status = 'READY_FOR_HR';
       if (!candidate) processing_status = 'UNASSIGNED';
       else if (!client_id) processing_status = 'CLIENT_UNRESOLVED';
       else if (missing) processing_status = 'RATE_MISSING';
       else if (pay_method === 'UMBRELLA' && !candidate?.umbrella_id) processing_status = 'PAY_CHANNEL_MISSING';
       else processing_status = 'READY_FOR_HR';
 
-      // Compute totals (guard against nulls)
       const pay = rates.pay || { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
       const charge = rates.charge || { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
       const total_pay_ex_vat = round2(
@@ -6679,12 +6600,10 @@ async function runTsfinWorkerOnce(env: any, { limit = 50 } = {}) {
       const margin_ex_vat = round2(total_charge_ex_vat - total_pay_ex_vat);
 
       const snapshot = {
-        // identity
         timesheet_id: item.timesheet_id,
         timesheet_version: ts.version || 1,
         basis: 'SELF_REPORTED',
 
-        // inputs
         occupant_key_norm: ts.occupant_key_norm || null,
         worked_start_iso: ts.worked_start_iso || null,
         worked_end_iso: ts.worked_end_iso || null,
@@ -6701,14 +6620,12 @@ async function runTsfinWorkerOnce(env: any, { limit = 50 } = {}) {
         policy_snapshot_json: policy,
         rate_source_refs_json: rates.source,
 
-        // buckets
         hours_day: hours.hours_day,
         hours_night: hours.hours_night,
         hours_sat: hours.hours_sat,
         hours_sun: hours.hours_sun,
         hours_bh: hours.hours_bh,
 
-        // rates
         pay_day: rates.pay?.day ?? null,
         pay_night: rates.pay?.night ?? null,
         pay_sat: rates.pay?.sat ?? null,
@@ -6720,13 +6637,11 @@ async function runTsfinWorkerOnce(env: any, { limit = 50 } = {}) {
         charge_sun: rates.charge?.sun ?? null,
         charge_bh: rates.charge?.bh ?? null,
 
-        // totals
         total_hours: round2(hours.hours_day + hours.hours_night + hours.hours_sat + hours.hours_sun + hours.hours_bh),
         total_pay_ex_vat,
         total_charge_ex_vat,
         margin_ex_vat,
 
-        // gating
         candidate_assignment,
         processing_status,
       };
@@ -6734,7 +6649,7 @@ async function runTsfinWorkerOnce(env: any, { limit = 50 } = {}) {
       await writeSnapshot(env, snapshot);
       await sbRpc(env, 'tsfin_work_success', { id: item.id });
       ok++;
-    } catch (e: any) {
+    } catch (e) {
       await sbRpc(env, 'tsfin_work_fail', { id: item.id, error_text: String(e?.message || e) });
       fail++;
     }
@@ -6744,10 +6659,9 @@ async function runTsfinWorkerOnce(env: any, { limit = 50 } = {}) {
 }
 
 // ---------------------------
-// API: Manual drain (admin)
+// API: Manual drain
 // ---------------------------
-
-async function handleTsfinDrain(env: any, req: Request) {
+async function handleTsfinDrain(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
   const body = await parseJSONBody(req).catch(() => null);
@@ -6757,27 +6671,22 @@ async function handleTsfinDrain(env: any, req: Request) {
 }
 
 // ---------------------------
-// API: Recompute (enqueue MANUAL) – accepts timesheet_id(s)
+// API: Recompute (enqueue)
 // ---------------------------
-
-async function handleTsfinRecompute(env: any, req: Request) {
+async function handleTsfinRecompute(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
   const body = await parseJSONBody(req).catch(() => null);
-  const ids: string[] = Array.isArray(body?.timesheet_ids) ? body.timesheet_ids.slice(0, 200) : [];
+  const ids = Array.isArray(body?.timesheet_ids) ? body.timesheet_ids.slice(0, 200) : [];
   if (!ids.length) return badRequest('timesheet_ids array required');
   for (const tsid of ids) await sbRpc(env, 'enqueue_ts_financials', { timesheet_id: tsid, reason: 'MANUAL' });
   return ok({ enqueued: ids.length });
 }
 
-// ---------------------------
-// API: Read current snapshots by timesheet_id or by client/date filters
-// ---------------------------
-
 // ----------------------------------------
 // GET TSFIN (include exp/mileage/PO fields)
 // ----------------------------------------
-async function handleTsfinFinancials(env: any, req: Request) {
+async function handleTsfinFinancials(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
@@ -6798,10 +6707,9 @@ async function handleTsfinFinancials(env: any, req: Request) {
 
   const { rows } = await sbFetch(env, url, false);
 
-  // Batch-resolve effective pay channel for each row
-  const candIds = Array.from(new Set((rows || []).map((r: any) => r.candidate_id).filter(Boolean)));
-  let candidatesById = new Map<string, any>();
-  let umbrellasById = new Map<string, any>();
+  const candIds = Array.from(new Set((rows || []).map((r) => r.candidate_id).filter(Boolean)));
+  let candidatesById = new Map();
+  let umbrellasById = new Map();
 
   if (candIds.length) {
     const candParam = candIds.map(encodeURIComponent).join(',');
@@ -6811,10 +6719,10 @@ async function handleTsfinFinancials(env: any, req: Request) {
       `?select=id,umbrella_id,account_holder,bank_name,sort_code,account_number` +
       `&id=in.(${candParam})`
     );
-    candidatesById = new Map((candRows || []).map((c: any) => [c.id, c]));
+    candidatesById = new Map((candRows || []).map((c) => [c.id, c]));
 
     const umbIds = Array.from(new Set((candRows || [])
-      .map((c: any) => c.umbrella_id)
+      .map((c) => c.umbrella_id)
       .filter(Boolean)));
     if (umbIds.length) {
       const umbParam = umbIds.map(encodeURIComponent).join(',');
@@ -6824,11 +6732,11 @@ async function handleTsfinFinancials(env: any, req: Request) {
         `?select=id,name,bank_name,sort_code,account_number` +
         `&id=in.(${umbParam})`
       );
-      umbrellasById = new Map((umbRows || []).map((u: any) => [u.id, u]));
+      umbrellasById = new Map((umbRows || []).map((u) => [u.id, u]));
     }
   }
 
-  const items = (rows || []).map((r: any) => {
+  const items = (rows || []).map((r) => {
     const cand = candidatesById.get(r.candidate_id);
     const umb  = cand?.umbrella_id ? umbrellasById.get(cand.umbrella_id) : undefined;
     const effective_pay_channel = resolveEffectivePayChannel({
@@ -6842,15 +6750,10 @@ async function handleTsfinFinancials(env: any, req: Request) {
   return ok({ items });
 }
 
-// ---------------------------
-// API: Mark READY_FOR_HR → READY_FOR_INVOICE (after HR validation OK)
-// ---------------------------
-
-// REPLACE the whole handler with this
 // ------------------------------------------------------
 // MARK READY (validate evidence rules before promotion)
 // ------------------------------------------------------
-async function handleTsfinMarkReady(env: any, req: Request) {
+async function handleTsfinMarkReady(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized('Unauthorized');
 
@@ -6872,12 +6775,12 @@ async function handleTsfinMarkReady(env: any, req: Request) {
     `&limit=10000`;
 
   const { rows: allVals } = await sbFetch(env, valUrl);
-  const latestById = new Map<string, any>();
+  const latestById = new Map();
   for (const v of allVals) if (!latestById.has(v.timesheet_id)) latestById.set(v.timesheet_id, v);
 
   const OK = new Set(['VALIDATION_OK','OVERRIDDEN']);
 
-  // 2) Load current/unlocked TSFIN snapshots (need candidate_id + pay_method for channel gating)
+  // 2) Load current/unlocked TSFIN snapshots
   const { rows: tsfinRows } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
@@ -6888,13 +6791,13 @@ async function handleTsfinMarkReady(env: any, req: Request) {
       `&locked_by_invoice_id=is.null`
   );
 
-  const eligibleIds: string[] = [];
-  const blocked: Array<{ id: string, reason: string }> = [];
+  const eligibleIds = [];
+  const blocked = [];
 
   // 2a) Fetch candidates (bank + umbrella link)
-  const candIds = Array.from(new Set((tsfinRows || []).map((r: any) => r.candidate_id).filter(Boolean)));
-  let candidatesById = new Map<string, any>();
-  let umbrellasById = new Map<string, any>();
+  const candIds = Array.from(new Set((tsfinRows || []).map((r) => r.candidate_id).filter(Boolean)));
+  let candidatesById = new Map();
+  let umbrellasById = new Map();
 
   if (candIds.length) {
     const candParam = candIds.map(encodeURIComponent).join(',');
@@ -6904,11 +6807,11 @@ async function handleTsfinMarkReady(env: any, req: Request) {
       `?select=id,umbrella_id,account_holder,bank_name,sort_code,account_number` +
       `&id=in.(${candParam})`
     );
-    candidatesById = new Map((candRows || []).map((c: any) => [c.id, c]));
+    candidatesById = new Map((candRows || []).map((c) => [c.id, c]));
 
-    // 2b) Fetch umbrellas used by those candidates (only those needed)
+    // 2b) Fetch umbrellas used by those candidates
     const umbIds = Array.from(new Set((candRows || [])
-      .map((c: any) => c.umbrella_id)
+      .map((c) => c.umbrella_id)
       .filter(Boolean)));
     if (umbIds.length) {
       const umbParam = umbIds.map(encodeURIComponent).join(',');
@@ -6918,7 +6821,7 @@ async function handleTsfinMarkReady(env: any, req: Request) {
         `?select=id,name,bank_name,sort_code,account_number` +
         `&id=in.(${umbParam})`
       );
-      umbrellasById = new Map((umbRows || []).map((u: any) => [u.id, u]));
+      umbrellasById = new Map((umbRows || []).map((u) => [u.id, u]));
     }
   }
 
@@ -6929,7 +6832,7 @@ async function handleTsfinMarkReady(env: any, req: Request) {
       continue;
     }
 
-    const row = (tsfinRows || []).find((r: any) => r.timesheet_id === id);
+    const row = (tsfinRows || []).find((r) => r.timesheet_id === id);
     if (!row) {
       blocked.push({ id, reason: 'tsfin_missing_or_locked' });
       continue;
@@ -6996,10 +6899,11 @@ async function handleTsfinMarkReady(env: any, req: Request) {
   const promoted = await res.json().catch(() => []);
   return ok({
     promoted_count: promoted.length,
-    promoted_ids: promoted.map((r: any) => r.timesheet_id),
+    promoted_ids: promoted.map((r) => r.timesheet_id),
     blocked_ids: blocked
   });
 }
+
 // ---------------------------
 // Finance Preview (replacement that uses snapshots)
 // ---------------------------
@@ -7007,12 +6911,15 @@ async function handleTsfinMarkReady(env: any, req: Request) {
 // ---------------------------------------
 // FINANCE PREVIEW (now adds exp/mileage)
 // ---------------------------------------
-async function handleFinancePreviewTsfin(env: any, req: Request) {
+// ---------------------------------------
+// FINANCE PREVIEW (now adds exp/mileage)
+// ---------------------------------------
+async function handleFinancePreviewTsfin(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
   const body = await parseJSONBody(req).catch(() => null);
-  const ids: string[] = Array.isArray(body?.timesheet_ids) ? [...new Set(body.timesheet_ids)].slice(0, 200) : [];
+  const ids = Array.isArray(body?.timesheet_ids) ? [...new Set(body.timesheet_ids)].slice(0, 200) : [];
   if (!ids.length) return badRequest('timesheet_ids array required');
 
   const { rows } = await sbFetch(
@@ -7031,24 +6938,23 @@ async function handleFinancePreviewTsfin(env: any, req: Request) {
   );
   if (!rows?.length) return notFound('No current snapshots');
 
-  // Fetch VAT context per client
-  const clientIds = [...new Set(rows.map((r: any) => r.client_id).filter(Boolean))];
-  const mapClientVat: Record<string, { vat_chargeable: boolean, vat_rate_pct: number }> = {};
+  // VAT context per client
+  const clientIds = [...new Set(rows.map((r) => r.client_id).filter(Boolean))];
+  const mapClientVat = {};
   if (clientIds.length) {
     const { rows: cRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/clients?select=id,vat_chargeable&id=in.(${clientIds.map(encodeURIComponent).join(',')})`
     );
-    const vatChargeableById: Record<string, boolean> = Object.fromEntries((cRows || []).map((c: any) => [c.id, !!c.vat_chargeable]));
+    const vatChargeableById = Object.fromEntries((cRows || []).map((c) => [c.id, !!c.vat_chargeable]));
     const { rows: def } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=vat_rate_pct`);
     const defaultVat = Number(def?.[0]?.vat_rate_pct ?? 20);
 
-    // latest client_settings per client
     const { rows: cs } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/client_settings?select=client_id,vat_rate_pct,effective_from&client_id=in.(${clientIds.map(encodeURIComponent).join(',')})&order=client_id.asc,effective_from.desc`
     );
-    const latest = new Map<string, number>();
+    const latest = new Map();
     for (const r of cs || []) if (!latest.has(r.client_id)) latest.set(r.client_id, Number(r.vat_rate_pct ?? defaultVat));
     for (const cid of clientIds) {
       const chargeable = vatChargeableById[cid] ?? true;
@@ -7100,13 +7006,11 @@ async function handleFinancePreviewTsfin(env: any, req: Request) {
   }
 
   // Final rounding
-  for (const k of Object.keys(agg.totals) as (keyof typeof agg['totals'])[]) {
-    // @ts-ignore
-    agg.totals[k] = round2(agg.totals[k]);
-  }
+  Object.keys(agg.totals).forEach((k) => { agg.totals[k] = round2(agg.totals[k]); });
 
   return ok(agg);
 }
+
 
 // ---------------------------
 // Invoices (TSFIN) – create from READY_FOR_INVOICE snapshots, lock them, build invoice_lines
@@ -7116,7 +7020,10 @@ async function handleFinancePreviewTsfin(env: any, req: Request) {
 // -----------------------------
 // CREATE INVOICE (TSFIN → INV)
 // -----------------------------
-async function handleCreateInvoiceTsfin(env: any, req: Request) {
+// -----------------------------
+// CREATE INVOICE (TSFIN → INV)
+// -----------------------------
+async function handleCreateInvoiceTsfin(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized('Unauthorized');
 
@@ -7125,12 +7032,12 @@ async function handleCreateInvoiceTsfin(env: any, req: Request) {
     return badRequest("timesheet_ids[] required");
   }
 
-  const timesheetIds: string[] = [...new Set(body.timesheet_ids)].filter(Boolean);
+  const timesheetIds = [...new Set(body.timesheet_ids)].filter(Boolean);
   if (timesheetIds.length === 0) return badRequest("No valid timesheet_ids");
 
   const inIds = timesheetIds.map(encodeURIComponent).join(',');
 
-  // 1) Load eligible TSFIN: current, READY_FOR_INVOICE, unlocked
+  // 1) Eligible snapshots
   const snapUrl =
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
     `?select=*` +
@@ -7144,14 +7051,14 @@ async function handleCreateInvoiceTsfin(env: any, req: Request) {
     return badRequest("No eligible timesheets (need READY_FOR_INVOICE & unlocked).");
   }
 
-  // Ensure exactly one client across the snapshots.
-  const clientIds = [...new Set(snaps.map((s: any) => s.client_id).filter(Boolean))];
+  // Must be single client
+  const clientIds = [...new Set(snaps.map((s) => s.client_id).filter(Boolean))];
   if (clientIds.length !== 1) {
     return badRequest(`Expected exactly one client across snapshots, found ${clientIds.length}.`);
   }
   const client_id = clientIds[0];
 
-  // 2) VAT inputs (defaults + client + latest client_settings)
+  // VAT + bank defaults
   const { rows: defRows } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=vat_rate_pct,bank_name,bank_sort_code,bank_account_number,vat_registration_number`
@@ -7175,27 +7082,22 @@ async function handleCreateInvoiceTsfin(env: any, req: Request) {
   );
   const cs = csRows?.[0] || null;
 
-  const vatRatePct: number = client.vat_chargeable === false
-    ? 0
-    : Number(cs?.vat_rate_pct ?? defaultVat);
+  const vatRatePct = client.vat_chargeable === false ? 0 : Number(cs?.vat_rate_pct ?? defaultVat);
 
-  // Also fetch base timesheet data for line meta (no joins at render time later)
+  // Base timesheet meta
   const { rows: tsRows } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
     `?select=timesheet_id,booking_id,week_ending_date,r2_auth_key,r2_nurse_key,reference_number` +
     `&timesheet_id=in.(${inIds})`
   );
-  const tsMetaMap: Record<string, any> = Object.fromEntries(
-    (tsRows || []).map((t: any) => [t.timesheet_id, t])
-  );
+  const tsMetaMap = Object.fromEntries((tsRows || []).map((t) => [t.timesheet_id, t]));
 
-  // 3) Create the invoice header (DRAFT)
+  // 3) Create header (DRAFT)
   const issuedAt = new Date().toISOString();
   const termsDays = Number(client.payment_terms_days ?? 30);
   const dueAt = new Date(Date.now() + termsDays * 86_400_000).toISOString();
 
-  // Build header snapshot JSON now (used for rendering later)
   const header_snapshot_json = {
     client_id,
     client_name: client.name,
@@ -7238,12 +7140,11 @@ async function handleCreateInvoiceTsfin(env: any, req: Request) {
   }
   const invoice = (await invIns.json())[0];
 
-  // 4) Build invoice_lines (HOURS + EXPENSES + MILEAGE if applicable)
+  // 4) Build lines
   let sumEx = 0, sumVat = 0, sumInc = 0;
-  const lines: any[] = [];
+  const lines = [];
 
   for (const s of snaps) {
-    // Per-timesheet hours line
     const h = {
       day: Number(s.hours_day || 0),
       night: Number(s.hours_night || 0),
@@ -7330,7 +7231,7 @@ async function handleCreateInvoiceTsfin(env: any, req: Request) {
       meta_json: hoursLineMeta
     });
 
-    // Expenses line (optional)
+    // Expenses
     const expCharge = Number(s.expenses_charge_ex_vat || 0);
     if (expCharge > 0) {
       const expPay = Number(s.expenses_pay_ex_vat || 0);
@@ -7377,7 +7278,7 @@ async function handleCreateInvoiceTsfin(env: any, req: Request) {
       });
     }
 
-    // Mileage line (optional)
+    // Mileage
     const milCharge = Number(s.mileage_charge_ex_vat || 0);
     if (milCharge > 0) {
       const milPay = Number(s.mileage_pay_ex_vat || 0);
@@ -7488,24 +7389,28 @@ async function handleCreateInvoiceTsfin(env: any, req: Request) {
 // ---------------------------
 // Credit note: create credit for an invoice and unlock associated snapshots
 // ---------------------------
-
-async function handleCreateCreditNoteTsfin(env: any, req: Request, invoiceId: string) {
+// ---------------------------
+// Credit note: create credit for an invoice and unlock associated snapshots
+// ---------------------------
+async function handleCreateCreditNoteTsfin(env, req, invoiceId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
-  // Create credit note header referencing original
   const { rows: invRows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${encodeURIComponent(invoiceId)}&select=*`);
   const inv = invRows[0]; if (!inv) return notFound('Invoice not found');
 
   const now = new Date().toISOString();
-  const cnRes = await fetch(`${env.SUPABASE_URL}/rest/v1/invoices`, { method: 'POST', headers: { ...sbHeaders(env), Prefer: 'return=representation' }, body: JSON.stringify({
-  client_id: inv.client_id,
-  type: 'CREDIT_NOTE',
-  status: 'ISSUED',
-  issued_at_utc: now,
-  original_invoice_id: inv.id
-})
- });
+  const cnRes = await fetch(`${env.SUPABASE_URL}/rest/v1/invoices`, {
+    method: 'POST',
+    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+    body: JSON.stringify({
+      client_id: inv.client_id,
+      type: 'CREDIT_NOTE',
+      status: 'ISSUED',
+      issued_at_utc: now,
+      original_invoice_id: inv.id
+    })
+  });
   if (!cnRes.ok) { const t = await cnRes.text(); return serverError(`Credit note create failed: ${t}`); }
   const cnJson = await cnRes.json().catch(() => ([]));
   const credit = Array.isArray(cnJson) ? cnJson[0] : cnJson;
@@ -7518,7 +7423,7 @@ async function handleCreateCreditNoteTsfin(env: any, req: Request, invoiceId: st
     const res = await fetch(url, { method: 'PATCH', headers: sbHeaders(env), body: JSON.stringify(body) });
     if (!res.ok) { const t = await res.text(); return serverError(`Unlock failed: ${t}`); }
 
-    // Optionally enqueue recompute for those timesheets
+    // Enqueue recompute for those timesheets
     for (const r of snaps) await sbRpc(env, 'enqueue_ts_financials', { timesheet_id: r.timesheet_id, reason: 'VERSION_ROTATED' });
   }
 
