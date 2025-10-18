@@ -1,0 +1,16 @@
+{
+  "name": "broker",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@cloudflare/puppeteer": "^1.0.4"
+  },
+  "type": "module"
+}

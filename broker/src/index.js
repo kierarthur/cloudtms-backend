@@ -32,6 +32,14 @@ const TEXT_PLAIN = { "content-type": "text/plain; charset=utf-8" };
 import puppeteer from "@cloudflare/puppeteer";
 
 // --- Helpers ---------------------------------------------------------------
+
+async function withBrowser(env, fn) {
+  const browser = await puppeteer.launch(env.BROWSER); // <-- BROWSER binding from wrangler.toml
+  try { return await fn(browser); }
+  finally { await browser.close(); }
+}
+
+
 const fmtGBP = (n) =>
   new Intl.NumberFormat("en-GB", {
     style: "currency",
@@ -4957,20 +4965,12 @@ async function handleGetInvoice(env, req, invoiceId) {
   }
 }
 
-
-
-
-// ----------------------
-// RENDER INVOICE (SNAP)
-// ----------------------
-// ----------------------
-// RENDER INVOICE (SNAP)
-// ----------------------
 async function handleInvoiceRender(env, req, invoiceId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
   try {
+    // 1) Load invoice + lines (totals + header snapshot)
     const { rows: invRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/invoices` +
@@ -4987,6 +4987,7 @@ async function handleInvoiceRender(env, req, invoiceId) {
       `&select=id,description,total_charge_ex_vat,vat_rate_pct,vat_amount,total_inc_vat,meta_json`
     );
 
+    // 2) Prepare payload for HTML builder
     const invoiceData = {
       header: inv.header_snapshot_json || {},
       invoice_no: inv.invoice_no || null,
@@ -4995,7 +4996,7 @@ async function handleInvoiceRender(env, req, invoiceId) {
       totals: {
         subtotal_ex_vat: Number(inv.subtotal_ex_vat || 0),
         vat_amount: Number(inv.vat_amount || 0),
-        total_inc_vat: Number(inv.total_inc_vat || 0)
+        total_inc_vat: Number(inv.total_inc_vat || 0),
       },
       items: (lineRows || []).map(l => ({
         description: l.description,
@@ -5003,42 +5004,37 @@ async function handleInvoiceRender(env, req, invoiceId) {
         total_ex_vat: Number(l.total_charge_ex_vat || 0),
         vat_rate_pct: Number(l.vat_rate_pct || 0),
         vat_amount: Number(l.vat_amount || 0),
-        total_inc_vat: Number(l.total_inc_vat || 0)
-      }))
+        total_inc_vat: Number(l.total_inc_vat || 0),
+      })),
     };
 
-    const map = JSON.parse(env.TSO_WEBHOOK_MAP || "{}");
-    const url = map["invoice_render"];
-    if (!url) return withCORS(env, req, serverError("Invoice render webhook not configured"));
-
-    const flowRes = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(invoiceData)
+    // 3) Build HTML & render to PDF with Workers Browser
+    const html = buildHTML(invoiceData);
+    const pdfU8 = await withBrowser(env, async (browser) => {
+      const page = await browser.newPage();
+      // Load HTML directly; wait for images (e.g., stationery PNG) to settle
+      await page.setContent(html, { waitUntil: 'networkidle0' });
+      await page.emulateMediaType('screen');
+      const pdfArrayBuffer = await page.pdf({
+        format: 'a4',
+        printBackground: true,
+        margin: { top: 0, right: 0, bottom: 0, left: 0 },
+      });
+      return new Uint8Array(pdfArrayBuffer);
     });
-    if (!flowRes.ok) {
-      const err = await flowRes.text();
-      return withCORS(env, req, serverError(`Render failed: ${err}`));
-    }
-    const flowJson = await flowRes.json().catch(() => ({}));
-    const pdfBase64 = flowJson.file || flowJson.pdf;
-    if (!pdfBase64) return withCORS(env, req, serverError("No PDF returned from renderer"));
 
-    // Store in R2
-    const bin = atob(pdfBase64);
-    const buffer = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) buffer[i] = bin.charCodeAt(i);
-
+    // 4) Store in R2 and update invoice row
     const pdfKey = `/docs-pdf/invoices/invoice_${invoiceId}.pdf`;
-    await r2Put(env, pdfKey, buffer, { httpMetadata: { contentType: "application/pdf" } });
+    await r2Put(env, pdfKey, pdfU8, { httpMetadata: { contentType: "application/pdf" } });
 
     await fetch(`${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${encodeURIComponent(invoiceId)}`, {
       method: "PATCH",
       headers: sbHeaders(env),
-      body: JSON.stringify({ invoice_pdf_r2_key: pdfKey })
+      body: JSON.stringify({ invoice_pdf_r2_key: pdfKey }),
     });
 
-    const exp = Math.floor(Date.now()/1000) + 300;
+    // 5) Return signed download URL (5 minutes)
+    const exp = Math.floor(Date.now() / 1000) + 300;
     const token = await createToken(env.UPLOAD_TOKEN_SECRET, { typ: "dl", key: pdfKey, exp });
     const downloadUrl = new URL(req.url);
     downloadUrl.pathname = "/api/files/download";
@@ -5047,7 +5043,7 @@ async function handleInvoiceRender(env, req, invoiceId) {
     downloadUrl.searchParams.set("token", token);
 
     return withCORS(env, req, ok({ pdf_url: downloadUrl.toString() }));
-  } catch {
+  } catch (e) {
     return withCORS(env, req, serverError("Failed to render invoice"));
   }
 }
