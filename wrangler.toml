@@ -1,5 +1,5 @@
 name = "cloudtms"
-main = "broker/src/index.js"   # ← switched from index.ts to index.js
+main = "broker/src/index.js"  
 compatibility_date = "2025-10-13"
 
 [vars]
@@ -21,7 +21,8 @@ PUBLIC_DOWNLOAD_BASE_URL = "https://cloudtms.arthur-rai.co.uk/api/files/download
 
 # === Invoicing stationery ===
 INVOICE_STATIONERY_BUCKET = "timesheets-signatures"
-INVOICE_STATIONERY_KEY = "Assets/Stationery/Letterhead/A4/Letterhead_v1.pdf"
+# Use the PNG you uploaded (A4, full-bleed). Keep exact path/casing.
+INVOICE_STATIONERY_KEY = "Assets/Stationery/Letterhead/A4/Letterhead_v1@300dpi.png"
 
 [[r2_buckets]]
 binding = "R2"
@@ -32,5 +33,9 @@ binding = "SESSIONS"
 id = "3102e18c46b841d2b55918c1ae054491"
 preview_id = "6b8fb70351db4cac91583a9cc6c2074b"
 
+# Enable Workers Browser Rendering
+[browser]
+binding = "BROWSER"
+
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["*/5 * * * *"]  # every 5 minutes
