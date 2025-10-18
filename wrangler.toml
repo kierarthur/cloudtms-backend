@@ -1,6 +1,8 @@
 name = "cloudtms"
 main = "broker/src/index.js"
 compatibility_date = "2025-10-13"
+compatibility_flags = ["nodejs_compat"]
+
 
 [vars]
 SUPABASE_URL = "https://zojgukxyyklcyjbyyqlz.supabase.co"
