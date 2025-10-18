@@ -32,6 +32,14 @@ const TEXT_PLAIN = { "content-type": "text/plain; charset=utf-8" };
 import puppeteer from "@cloudflare/puppeteer";
 
 // --- Helpers ---------------------------------------------------------------
+
+async function withBrowser(env, fn) {
+  const browser = await puppeteer.launch(env.BROWSER); // <-- BROWSER binding from wrangler.toml
+  try { return await fn(browser); }
+  finally { await browser.close(); }
+}
+
+
 const fmtGBP = (n) =>
   new Intl.NumberFormat("en-GB", {
     style: "currency",
@@ -81,6 +89,358 @@ function toBase64(u8) {
 }
 
 // --- HTML builder ----------------------------------------------------------
+// ====== PDF + TS RENDER HELPERS ======
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+
+// MM→points for A4 placement
+const MM_TO_PT = 72 / 25.4;
+const mmToPt = (mm) => mm * MM_TO_PT;
+
+// UK time formatting helpers
+const UK_TZ = 'Europe/London';
+const fmtUKDate = (d) => {
+  // accepts ISO string or YYYY-MM-DD
+  if (!d) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+    const [y, m, dd] = d.split('-').map(Number);
+    // dd/mm/yy
+    return `${String(dd).padStart(2,'0')}/${String(m).padStart(2,'0')}/${String(y % 100).padStart(2,'0')}`;
+  }
+  const dt = new Date(d);
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: UK_TZ, day: '2-digit', month: '2-digit', year: '2-digit' }).formatToParts(dt);
+  const day = parts.find(p => p.type === 'day')?.value ?? '01';
+  const mon = parts.find(p => p.type === 'month')?.value ?? '01';
+  const yr2 = parts.find(p => p.type === 'year')?.value ?? '00';
+  return `${day}/${mon}/${yr2}`;
+};
+const fmtUKTime = (d) => {
+  if (!d) return '';
+  const dt = new Date(d);
+  return new Intl.DateTimeFormat('en-GB', { timeZone: UK_TZ, hour: '2-digit', minute: '2-digit', hour12: false }).format(dt);
+};
+// Monday=0 … Sunday=6 based on UK-local start time
+const ukWeekdayIndexMon0 = (iso) => {
+  if (!iso) return 0;
+  const name = new Intl.DateTimeFormat('en-GB', { timeZone: UK_TZ, weekday: 'short' }).format(new Date(iso));
+  const map = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
+  return map[name] ?? 0;
+};
+
+// === R2 JSON convenience ===
+const TS_LAYOUT_R2_KEY = 'Assets/Stationery/Timesheet/layout.json';
+
+async function r2Put(env, key, bytesOrString, opts = {}) {
+  const bucket = env.R2_BUCKET || env.R2;
+  const body = (bytesOrString instanceof Uint8Array) ? bytesOrString : (typeof bytesOrString === 'string' ? bytesOrString : new Uint8Array());
+  return bucket.put(normalizeKey(key), body, opts);
+}
+
+async function r2GetJSON(env, key) {
+  const u8 = await r2GetBytes(env, key);
+  if (!u8) return null;
+  try { return JSON.parse(new TextDecoder().decode(u8)); }
+  catch { return null; }
+}
+
+async function r2PutJSON(env, key, obj, opts = {}) {
+  const json = JSON.stringify(obj, null, 2);
+  return r2Put(env, key, json, { httpMetadata: { contentType: 'application/json' }, ...opts });
+}
+
+// Minimal safe fallback (edit once via calibrator UI; persisted copy lives at TS_LAYOUT_R2_KEY)
+const TS_LAYOUT_FALLBACK = {
+  page: { width_mm: 210, height_mm: 297 },
+  rows: [
+    { date:{x_mm:22,y_mm:210}, start:{x_mm:60,y_mm:210}, finish:{x_mm:85,y_mm:210}, brkStart:{x_mm:110,y_mm:210}, brkEnd:{x_mm:130,y_mm:210}, role:{x_mm:155,y_mm:210} },
+    { date:{x_mm:22,y_mm:200}, start:{x_mm:60,y_mm:200}, finish:{x_mm:85,y_mm:200}, brkStart:{x_mm:110,y_mm:200}, brkEnd:{x_mm:130,y_mm:200}, role:{x_mm:155,y_mm:200} },
+    { date:{x_mm:22,y_mm:190}, start:{x_mm:60,y_mm:190}, finish:{x_mm:85,y_mm:190}, brkStart:{x_mm:110,y_mm:190}, brkEnd:{x_mm:130,y_mm:190}, role:{x_mm:155,y_mm:190} },
+    { date:{x_mm:22,y_mm:180}, start:{x_mm:60,y_mm:180}, finish:{x_mm:85,y_mm:180}, brkStart:{x_mm:110,y_mm:180}, brkEnd:{x_mm:130,y_mm:180}, role:{x_mm:155,y_mm:180} },
+    { date:{x_mm:22,y_mm:170}, start:{x_mm:60,y_mm:170}, finish:{x_mm:85,y_mm:170}, brkStart:{x_mm:110,y_mm:170}, brkEnd:{x_mm:130,y_mm:170}, role:{x_mm:155,y_mm:170} },
+    { date:{x_mm:22,y_mm:160}, start:{x_mm:60,y_mm:160}, finish:{x_mm:85,y_mm:160}, brkStart:{x_mm:110,y_mm:160}, brkEnd:{x_mm:130,y_mm:160}, role:{x_mm:155,y_mm:160} },
+    { date:{x_mm:22,y_mm:150}, start:{x_mm:60,y_mm:150}, finish:{x_mm:85,y_mm:150}, brkStart:{x_mm:110,y_mm:150}, brkEnd:{x_mm:130,y_mm:150}, role:{x_mm:155,y_mm:150} },
+  ],
+  fields: {
+    hospital:{x_mm:20,y_mm:270}, ward:{x_mm:110,y_mm:270},
+    candidate:{x_mm:20,y_mm:260}, job_title:{x_mm:110,y_mm:260}, band:{x_mm:180,y_mm:260},
+    booking_ref:{x_mm:20,y_mm:250}, week_ending:{x_mm:110,y_mm:250}, ts_number:{x_mm:180,y_mm:250},
+    nurse_sign_date:{x_mm:45,y_mm:85}, nurse_signature:{x_mm:20,y_mm:90,w_mm:60,h_mm:20},
+    auth_name:{x_mm:120,y_mm:85}, auth_job_title:{x_mm:120,y_mm:80}, auth_sign_date:{x_mm:165,y_mm:85},
+    auth_signature:{x_mm:120,y_mm:90,w_mm:60,h_mm:20},
+  },
+  text: { fontSize: 10 },
+  debug: { enabled: false, grid_mm: 5 },
+};
+
+function validateTsLayout(l) {
+  const e = (msg) => new Error(`Invalid timesheet layout: ${msg}`);
+  if (!l || typeof l !== 'object') throw e('missing object');
+  const { page, rows, fields } = l;
+  if (!page || typeof page.width_mm !== 'number' || typeof page.height_mm !== 'number') throw e('page dims required');
+  if (!Array.isArray(rows) || rows.length !== 7) throw e('rows must be length=7 (Mon..Sun)');
+  const needPoint = (o, n) => (o && typeof o.x_mm === 'number' && typeof o.y_mm === 'number') || (()=>{throw e(`row field ${n} missing x_mm/y_mm`)})();
+  rows.forEach((r, i) => {
+    needPoint(r.date, `rows[${i}].date`);
+    needPoint(r.start, `rows[${i}].start`);
+    needPoint(r.finish, `rows[${i}].finish`);
+    needPoint(r.brkStart, `rows[${i}].brkStart`);
+    needPoint(r.brkEnd, `rows[${i}].brkEnd`);
+    needPoint(r.role, `rows[${i}].role`);
+  });
+  const needBox = (o, n) => (o && typeof o.x_mm==='number' && typeof o.y_mm==='number' && typeof o.w_mm==='number' && typeof o.h_mm==='number' && o.w_mm>0 && o.h_mm>0) || (()=>{throw e(`field ${n} needs x/y/w/h (w/h>0)`)} )();
+  ['hospital','ward','candidate','job_title','band','booking_ref','week_ending','ts_number','nurse_sign_date','auth_name','auth_job_title','auth_sign_date'].forEach(k=>{
+    needPoint(fields[k], `fields.${k}`);
+  });
+  needBox(fields.nurse_signature, 'fields.nurse_signature');
+  needBox(fields.auth_signature, 'fields.auth_signature');
+  return l;
+}
+
+async function loadTsLayout(env) {
+  const fromR2 = await r2GetJSON(env, TS_LAYOUT_R2_KEY);
+  try { return validateTsLayout(fromR2 || TS_LAYOUT_FALLBACK); }
+  catch { return TS_LAYOUT_FALLBACK; }
+}
+
+// Draw an image inside a fixed box while preserving aspect ratio (no distortion).
+async function drawImageInBox(page, pdfDoc, bytesU8, box, contentType) {
+  if (!bytesU8 || bytesU8.length === 0) return;
+  let img;
+  if (contentType && /png/i.test(contentType)) {
+    img = await pdfDoc.embedPng(bytesU8);
+  } else {
+    // try JPG if not PNG
+    try { img = await pdfDoc.embedJpg(bytesU8); }
+    catch { img = await pdfDoc.embedPng(bytesU8); }
+  }
+  const { width, height } = img;
+  const boxW = mmToPt(box.w_mm);
+  const boxH = mmToPt(box.h_mm);
+  const scale = Math.min(boxW / width, boxH / height, 1); // never scale up
+  const drawW = width * scale;
+  const drawH = height * scale;
+  const x = mmToPt(box.x_mm) + (boxW - drawW) / 2;
+  const y = mmToPt(box.y_mm) + (boxH - drawH) / 2;
+  page.drawImage(img, { x, y, width: drawW, height: drawH });
+}
+
+// Basic R2 helpers
+const normalizeKey = (k) => (k || '').replace(/^\/+/, '');
+async function r2Exists(env, key) {
+  const bucket = env.R2_BUCKET || env.R2;
+  const obj = await bucket.head(normalizeKey(key)).catch(() => null);
+  return !!obj;
+}
+async function r2GetBytes(env, key) {
+  const bucket = env.R2_BUCKET || env.R2;
+  const obj = await bucket.get(normalizeKey(key));
+  if (!obj) return null;
+  const ab = await new Response(obj.body).arrayBuffer();
+  return new Uint8Array(ab);
+}
+
+// Signed public download URL (for stationery fetching inside invoice HTML)
+function presignR2Url(env, req, key, ttlSeconds = 300) {
+  const cleanKey = normalizeKey(key);
+  const exp = Math.floor(Date.now() / 1000) + (ttlSeconds | 0);
+  const tokenPayload = { typ: "dl", key: cleanKey, exp };
+  const token = createToken(env.UPLOAD_TOKEN_SECRET, tokenPayload);
+  const base = env.PUBLIC_DOWNLOAD_BASE_URL || new URL(new URL(req.url).origin + '/api/files/download').toString();
+  const u = new URL(base);
+  u.searchParams.set('key', cleanKey);
+  u.searchParams.set('token', token);
+  return u.toString();
+}
+
+// ===== Timesheet field layout (edit these mm coordinates once, keep forever) =====
+// A4: 210 × 297mm, origin at bottom-left (pdf-lib)
+// Fill in real coordinates with debug overlay once.
+const TS_FIELD_MAP = {
+  page: { width_mm: 210, height_mm: 297 },
+  // Row anchors for Mon..Sun (index 0..6). Replace with your exact positions.
+  rows: [
+    { // Monday
+      date: { x_mm: 22, y_mm: 210 },
+      start: { x_mm: 60, y_mm: 210 },
+      finish:{ x_mm: 85, y_mm: 210 },
+      brkStart:{ x_mm: 110, y_mm: 210 },
+      brkEnd:  { x_mm: 130, y_mm: 210 },
+      role:    { x_mm: 155, y_mm: 210 },
+    },
+    { date: { x_mm: 22, y_mm: 200 }, start:{ x_mm: 60, y_mm: 200 }, finish:{ x_mm:85, y_mm:200 }, brkStart:{ x_mm:110, y_mm:200 }, brkEnd:{ x_mm:130, y_mm:200 }, role:{ x_mm:155, y_mm:200 } },
+    { date: { x_mm: 22, y_mm: 190 }, start:{ x_mm: 60, y_mm: 190 }, finish:{ x_mm:85, y_mm:190 }, brkStart:{ x_mm:110, y_mm:190 }, brkEnd:{ x_mm:130, y_mm:190 }, role:{ x_mm:155, y_mm:190 } },
+    { date: { x_mm: 22, y_mm: 180 }, start:{ x_mm: 60, y_mm: 180 }, finish:{ x_mm:85, y_mm:180 }, brkStart:{ x_mm:110, y_mm:180 }, brkEnd:{ x_mm:130, y_mm:180 }, role:{ x_mm:155, y_mm:180 } },
+    { date: { x_mm: 22, y_mm: 170 }, start:{ x_mm: 60, y_mm: 170 }, finish:{ x_mm:85, y_mm:170 }, brkStart:{ x_mm:110, y_mm:170 }, brkEnd:{ x_mm:130, y_mm:170 }, role:{ x_mm:155, y_mm:170 } },
+    { date: { x_mm: 22, y_mm: 160 }, start:{ x_mm: 60, y_mm: 160 }, finish:{ x_mm:85, y_mm:160 }, brkStart:{ x_mm:110, y_mm:160 }, brkEnd:{ x_mm:130, y_mm:160 }, role:{ x_mm:155, y_mm:160 } },
+    { date: { x_mm: 22, y_mm: 150 }, start:{ x_mm: 60, y_mm: 150 }, finish:{ x_mm:85, y_mm:150 }, brkStart:{ x_mm:110, y_mm:150 }, brkEnd:{ x_mm:130, y_mm:150 }, role:{ x_mm:155, y_mm:150 } },
+  ],
+  fields: {
+    hospital:      { x_mm: 20,  y_mm: 270 },
+    ward:          { x_mm: 110, y_mm: 270 },
+    candidate:     { x_mm: 20,  y_mm: 260 },
+    job_title:     { x_mm: 110, y_mm: 260 },
+    band:          { x_mm: 180, y_mm: 260 },
+    booking_ref:   { x_mm: 20,  y_mm: 250 },
+    week_ending:   { x_mm: 110, y_mm: 250 },
+    ts_number:     { x_mm: 180, y_mm: 250 },
+
+    nurse_sign_date: { x_mm: 45,  y_mm: 85 },
+    nurse_signature: { x_mm: 20,  y_mm: 90, w_mm: 60, h_mm: 20 },
+
+    auth_name:       { x_mm: 120, y_mm: 85 },
+    auth_job_title:  { x_mm: 120, y_mm: 80 },
+    auth_sign_date:  { x_mm: 165, y_mm: 85 },
+    auth_signature:  { x_mm: 120, y_mm: 90, w_mm: 60, h_mm: 20 },
+  },
+  text: { fontSize: 10 },
+  debug: { enabled: false, grid_mm: 5 }, // flip enabled=true temporarily for calibration
+};
+
+// Draw debug grid + labels (dev-only)
+// Draw debug grid + labels (dev-only). Pass the runtime layout.
+function drawDebugOverlay(page, font, layout) {
+  if (!layout?.debug?.enabled) return;
+  const mmToPt = (mm) => mm * (72 / 25.4);
+  const light = rgb(0.8, 0.8, 0.8);
+  const wPt = mmToPt(layout.page.width_mm);
+  const hPt = mmToPt(layout.page.height_mm);
+  const step = mmToPt(layout.debug.grid_mm || 5);
+
+  for (let x = 0; x <= wPt; x += step) page.drawLine({ start: { x, y: 0 }, end: { x, y: hPt }, color: light, thickness: 0.3 });
+  for (let y = 0; y <= hPt; y += step) page.drawLine({ start: { x: 0, y }, end: { x: wPt, y }, color: light, thickness: 0.3 });
+
+  const label = (txt, mm) => page.drawText(txt, { x: mmToPt(mm.x_mm), y: mmToPt(mm.y_mm), size: 6, font, color: rgb(0.2, 0.2, 0.2) });
+  // Markers on row anchors
+  layout.rows.forEach((r, i) => {
+    label(`Row${i} date`, r.date); label(`Row${i} start`, r.start); label(`Row${i} finish`, r.finish);
+    label(`Row${i} brkStart`, r.brkStart); label(`Row${i} brkEnd`, r.brkEnd); label(`Row${i} role`, r.role);
+  });
+  // Field labels
+  Object.entries(layout.fields).forEach(([k, v]) => { if ('x_mm' in v) label(k, v); });
+
+  // Signature rectangles with size readout (so you can eyeball sizing)
+  const drawBox = (b, name) => {
+    const x = mmToPt(b.x_mm), y = mmToPt(b.y_mm), w = mmToPt(b.w_mm), h = mmToPt(b.h_mm);
+    page.drawRectangle({ x, y, width: w, height: h, borderColor: rgb(0.2,0.2,0.2), borderWidth: 0.5, color: undefined, opacity: 0.2 });
+    page.drawText(`${name} ${Math.round(b.w_mm)}×${Math.round(b.h_mm)}mm`, { x: x + 1, y: y + h + 2, size: 6, font, color: rgb(0.2,0.2,0.2) });
+  };
+  if (layout.fields.nurse_signature?.w_mm) drawBox(layout.fields.nurse_signature, 'nurse_signature');
+  if (layout.fields.auth_signature?.w_mm) drawBox(layout.fields.auth_signature, 'auth_signature');
+}
+
+// Numeric short ref rule
+function printableShortRef(s) {
+  if (typeof s !== 'string') return '';
+  const clean = s.trim();
+  if (!/^\d{1,10}$/.test(clean)) return '';
+  return clean;
+}
+
+// Render a single timesheet to PDF, save to R2 (idempotent), return the R2 key.
+// Render a single timesheet to PDF, save to R2 (idempotent), return the R2 key.
+async function renderTimesheetPDFAndSave(env, timesheetId) {
+  const bucket = env.R2_BUCKET || env.R2;
+  if (!bucket?.get || !bucket?.put) throw new Error('Storage not configured');
+
+  const outKey = normalizeKey(`docs-pdf/timesheets/ts_${timesheetId}.pdf`);
+  if (await r2Exists(env, outKey)) return outKey;
+
+  // Load runtime layout (R2 → fallback)
+  const layout = await loadTsLayout(env);
+
+  // Load TS row
+  const { rows: tsRows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${encodeURIComponent(timesheetId)}&select=*`);
+  const ts = tsRows?.[0];
+  if (!ts) throw new Error('Timesheet not found');
+
+  // Candidate display
+  const { rows: finRows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${encodeURIComponent(timesheetId)}&is_current=eq.true&select=candidate_id,band`);
+  const fin = finRows?.[0] || {};
+  let candidateName = ts.occupant_key_norm || '';
+  if (fin.candidate_id) {
+    const { rows: cRows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(fin.candidate_id)}&select=display_name,first_name,last_name`);
+    const c = cRows?.[0];
+    if (c) candidateName = c.display_name || [c.first_name, c.last_name].filter(Boolean).join(' ') || candidateName;
+  }
+
+  // Load template
+  const templateKey = normalizeKey(env.TIMESHEET_TEMPLATE_KEY || 'Assets/Stationery/Timesheet/Blank Timesheet.pdf');
+  const templateBytes = await r2GetBytes(env, templateKey);
+  if (!templateBytes) throw new Error('Timesheet template not found in R2');
+
+  const pdfDoc = await PDFDocument.load(templateBytes);
+  const page = pdfDoc.getPages()[0] || pdfDoc.addPage([mmToPt(layout.page.width_mm), mmToPt(layout.page.height_mm)]);
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const fz = layout.text?.fontSize || 10;
+  const drawText = (txt, mm, size = fz) => {
+    if (!txt) return;
+    page.drawText(String(txt), { x: mmToPt(mm.x_mm), y: mmToPt(mm.y_mm), size, font, color: rgb(0,0,0) });
+  };
+
+  // Header fields
+  drawText(ts.hospital_norm || '', layout.fields.hospital);
+  drawText(ts.ward_norm || '', layout.fields.ward);
+  drawText(candidateName || '', layout.fields.candidate);
+  drawText(ts.job_title_norm || '', layout.fields.job_title);
+  drawText(fin.band || '', layout.fields.band);
+  drawText(ts.booking_id || '', layout.fields.booking_ref);
+  drawText(fmtUKDate(ts.week_ending_date), layout.fields.week_ending);
+  drawText(printableShortRef(ts.reference_number || '') || '', layout.fields.ts_number);
+
+  // Day row (UK-local)
+  const rowIdx = typeof ts.worked_start_iso === 'string' ? ukWeekdayIndexMon0(ts.worked_start_iso) : 0;
+  const row = layout.rows[rowIdx] || layout.rows[0];
+
+  drawText(fmtUKDate(ts.worked_start_iso), row.date);
+  drawText(fmtUKTime(ts.worked_start_iso), row.start);
+  drawText(fmtUKTime(ts.worked_end_iso), row.finish);
+  if (ts.break_start_iso && ts.break_end_iso) {
+    drawText(fmtUKTime(ts.break_start_iso), row.brkStart);
+    drawText(fmtUKTime(ts.break_end_iso), row.brkEnd);
+  } else if (typeof ts.break_minutes === 'number') {
+    drawText(`${ts.break_minutes}m`, row.brkStart);
+  }
+  drawText(ts.job_title_norm || '', row.role);
+
+  // Signatures (fit=contain, never distort, never scale up)
+  if (ts.r2_nurse_key) {
+    const nk = normalizeKey(ts.r2_nurse_key);
+    const nurseObj = await (env.R2_BUCKET || env.R2).get(nk);
+    if (nurseObj) {
+      const nurseBytes = new Uint8Array(await new Response(nurseObj.body).arrayBuffer());
+      await drawImageInBox(page, pdfDoc, nurseBytes, layout.fields.nurse_signature, nurseObj.httpMetadata?.contentType || 'image/png');
+    }
+  }
+  if (ts.r2_auth_key) {
+    const ak = normalizeKey(ts.r2_auth_key);
+    const authObj = await (env.R2_BUCKET || env.R2).get(ak);
+    if (authObj) {
+      const authBytes = new Uint8Array(await new Response(authObj.body).arrayBuffer());
+      await drawImageInBox(page, pdfDoc, authBytes, layout.fields.auth_signature, authObj.httpMetadata?.contentType || 'image/png');
+    }
+  }
+
+  // Sign dates (UK-local)
+  if (ts.authorised_at_server) drawText(fmtUKDate(ts.authorised_at_server), layout.fields.auth_sign_date);
+  drawText(fmtUKDate(ts.worked_end_iso || ts.worked_start_iso), layout.fields.nurse_sign_date);
+
+  // Debug overlay (calibration-only)
+  drawDebugOverlay(page, font, layout);
+
+  const outBytes = await pdfDoc.save();
+  await (env.R2_BUCKET || env.R2).put(outKey, outBytes, { httpMetadata: { contentType: 'application/pdf' } });
+  return outKey;
+}
+
+// Ensure a TS PDF exists; return its key (render/snapshot if missing)
+async function ensureTimesheetPdf(env, timesheetId) {
+  const key = normalizeKey(`docs-pdf/timesheets/ts_${timesheetId}.pdf`);
+  if (await r2Exists(env, key)) return key;
+  return await renderTimesheetPDFAndSave(env, timesheetId);
+}
+
+
+
+
 function buildHTML(payload) {
   const {
     header = {},
@@ -334,7 +694,6 @@ function buildHTML(payload) {
 </body>
 </html>`;
 }
-
 
 
 /*
@@ -3683,19 +4042,28 @@ async function handleResolveRate(env, req) {
 async function handleFilesDownload(env, req) {
   try {
     const url = new URL(req.url);
-    const key = url.searchParams.get('key');
+    const keyParam = url.searchParams.get('key');
     const token = url.searchParams.get('token');
     const overrideName = url.searchParams.get('filename') || null;
 
-    if (!key || !token) {
+    if (!keyParam || !token) {
       return withCORS(env, req, badRequest("key and token are required"));
     }
 
-    // Basic key sanitisation + prefix allow-list
-    if (key.includes('..') || key.startsWith('/')) {
+    // Normalize the incoming key to a bare R2 key (no leading slash)
+    const key = keyParam.replace(/^\/+/, '');
+
+    // Basic key sanitisation + prefix allow-list (check after normalization)
+    if (key.includes('..')) {
       return withCORS(env, req, unauthorized());
     }
-    const ALLOWED_PREFIXES = ['invoices/', 'remittances/', 'paper_ts/', 'signatures/', 'docs/'];
+
+    // Add stationery & rendered-docs prefixes
+    const ALLOWED_PREFIXES = [
+      'invoices/', 'remittances/', 'paper_ts/', 'signatures/', 'docs/',
+      'docs-pdf/',                 // rendered PDFs (e.g. docs-pdf/invoices/…)
+      'Assets/', 'assets/'         // stationery & other assets (PNG letterhead lives here)
+    ];
     if (!ALLOWED_PREFIXES.some(p => key.startsWith(p))) {
       return withCORS(env, req, unauthorized());
     }
@@ -3713,8 +4081,9 @@ async function handleFilesDownload(env, req) {
       return withCORS(env, req, unauthorized());
     }
 
-    // Claims checks
-    if (!payload || payload.typ !== 'dl' || payload.key !== key) {
+    // Claims checks (normalize payload key as well)
+    const payloadKey = (payload && typeof payload.key === 'string') ? payload.key.replace(/^\/+/, '') : '';
+    if (!payload || payload.typ !== 'dl' || payloadKey !== key) {
       await writeAudit(env, null, 'FILE_DOWNLOAD_DENIED', { key, reason: 'claims_mismatch' }, { entity: 'r2', subject_id: key, req });
       return withCORS(env, req, unauthorized());
     }
@@ -3759,6 +4128,8 @@ async function handleFilesDownload(env, req) {
     return withCORS(env, req, serverError("Failed to download file"));
   }
 }
+
+
 
 // ====================== HEALTHROSTER ======================
 /**
@@ -4958,19 +5329,25 @@ async function handleGetInvoice(env, req, invoiceId) {
 }
 
 
-
-
-// ----------------------
-// RENDER INVOICE (SNAP)
-// ----------------------
-// ----------------------
-// RENDER INVOICE (SNAP)
-// ----------------------
+// === AMENDMENT inside broker/src/index.js ===
+// Replace your existing handleInvoiceRender with this version
 async function handleInvoiceRender(env, req, invoiceId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
+  function toMarginsObj(m) {
+    const dflt = { top: 32, right: 12, bottom: 20, left: 12 };
+    if (Array.isArray(m) && m.length === 4) {
+      return { top: Number(m[0] ?? dflt.top), right: Number(m[1] ?? dflt.right), bottom: Number(m[2] ?? dflt.bottom), left: Number(m[3] ?? dflt.left) };
+    }
+    if (m && typeof m === 'object') {
+      return { top: Number(m.top ?? dflt.top), right: Number(m.right ?? dflt.right), bottom: Number(m.bottom ?? dflt.bottom), left: Number(m.left ?? dflt.left) };
+    }
+    return dflt;
+  }
+
   try {
+    // 1) Load invoice + lines
     const { rows: invRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/invoices` +
@@ -4984,18 +5361,39 @@ async function handleInvoiceRender(env, req, invoiceId) {
       env,
       `${env.SUPABASE_URL}/rest/v1/invoice_lines` +
       `?invoice_id=eq.${encodeURIComponent(invoiceId)}` +
-      `&select=id,description,total_charge_ex_vat,vat_rate_pct,vat_amount,total_inc_vat,meta_json`
+      `&select=id,timesheet_id,paper_ts_r2_key,description,total_charge_ex_vat,vat_rate_pct,vat_amount,total_inc_vat,meta_json`
     );
 
+    // 2) Stationery resolution (auto-swap PDF→PNG), signed URL under header.*
+    const header = inv.header_snapshot_json || {};
+    let stationeryKey =
+      (typeof header.stationery_key === 'string' && header.stationery_key.trim()) ||
+      env.INVOICE_STATIONERY_KEY ||
+      'Assets/Stationery/Letterhead/A4/Letterhead_v1@300dpi.png';
+    if (/\.pdf$/i.test(stationeryKey)) {
+      stationeryKey = stationeryKey.replace(/\.pdf$/i, '@300dpi.png');
+    }
+    stationeryKey = normalizeKey(stationeryKey);
+
+    const stationeryUrl = presignR2Url(env, req, stationeryKey, Number(env.PRESIGN_EXPIRES_SECONDS || 600));
+    const marginsObj = toMarginsObj(header.stationery_margins_mm);
+    const hideBankFooter = header.hide_bank_footer === true;
+
+    // 3) Build payload for HTML builder
     const invoiceData = {
-      header: inv.header_snapshot_json || {},
+      header: {
+        ...header,
+        stationery_url: stationeryUrl,
+        stationery_margins_mm: marginsObj,
+        hide_bank_footer: hideBankFooter,
+      },
       invoice_no: inv.invoice_no || null,
       issued_at_utc: inv.issued_at_utc,
       due_at_utc: inv.due_at_utc,
       totals: {
         subtotal_ex_vat: Number(inv.subtotal_ex_vat || 0),
         vat_amount: Number(inv.vat_amount || 0),
-        total_inc_vat: Number(inv.total_inc_vat || 0)
+        total_inc_vat: Number(inv.total_inc_vat || 0),
       },
       items: (lineRows || []).map(l => ({
         description: l.description,
@@ -5003,54 +5401,85 @@ async function handleInvoiceRender(env, req, invoiceId) {
         total_ex_vat: Number(l.total_charge_ex_vat || 0),
         vat_rate_pct: Number(l.vat_rate_pct || 0),
         vat_amount: Number(l.vat_amount || 0),
-        total_inc_vat: Number(l.total_inc_vat || 0)
-      }))
+        total_inc_vat: Number(l.total_inc_vat || 0),
+      })),
     };
 
-    const map = JSON.parse(env.TSO_WEBHOOK_MAP || "{}");
-    const url = map["invoice_render"];
-    if (!url) return withCORS(env, req, serverError("Invoice render webhook not configured"));
-
-    const flowRes = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(invoiceData)
+    // 4) Build invoice HTML & render PDF in Workers Browser
+    const html = buildHTML(invoiceData);
+    const invoicePdfU8 = await withBrowser(env, async (browser) => {
+      const page = await browser.newPage();
+      await page.setContent(html, { waitUntil: 'networkidle0' });
+      await page.emulateMediaType('screen');
+      const pdfArrayBuffer = await page.pdf({
+        format: 'a4',
+        printBackground: true,
+        margin: { top: 0, right: 0, bottom: 0, left: 0 },
+      });
+      return new Uint8Array(pdfArrayBuffer);
     });
-    if (!flowRes.ok) {
-      const err = await flowRes.text();
-      return withCORS(env, req, serverError(`Render failed: ${err}`));
+
+    // 5) Ensure all timesheet PDFs exist; collect their bytes
+    const tsIds = [...new Set((lineRows || []).map(r => r.timesheet_id).filter(Boolean))];
+    const tsKeys = [];
+    for (const tsId of tsIds) {
+      const ensuredKey = await ensureTimesheetPdf(env, tsId);
+      tsKeys.push(ensuredKey);
+
+      // Update the line rows in case key was missing before
+      await fetch(`${env.SUPABASE_URL}/rest/v1/invoice_lines?invoice_id=eq.${encodeURIComponent(inv.id)}&timesheet_id=eq.${encodeURIComponent(tsId)}`, {
+        method: "PATCH",
+        headers: { ...sbHeaders(env), "Prefer": "return=minimal" },
+        body: JSON.stringify({ paper_ts_r2_key: ensuredKey })
+      });
     }
-    const flowJson = await flowRes.json().catch(() => ({}));
-    const pdfBase64 = flowJson.file || flowJson.pdf;
-    if (!pdfBase64) return withCORS(env, req, serverError("No PDF returned from renderer"));
 
-    // Store in R2
-    const bin = atob(pdfBase64);
-    const buffer = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) buffer[i] = bin.charCodeAt(i);
+    const tsBytesList = [];
+    for (const k of tsKeys) {
+      const bytes = await r2GetBytes(env, k);
+      if (bytes) tsBytesList.push(bytes);
+    }
 
-    const pdfKey = `/docs-pdf/invoices/invoice_${invoiceId}.pdf`;
-    await r2Put(env, pdfKey, buffer, { httpMetadata: { contentType: "application/pdf" } });
+    // 6) Merge: invoice pages first, then timesheets (single combined artifact)
+    const merged = await PDFDocument.create();
+    // add invoice
+    const invDoc = await PDFDocument.load(invoicePdfU8);
+    const invPages = await merged.copyPages(invDoc, invDoc.getPageIndices());
+    invPages.forEach(p => merged.addPage(p));
+    // add each TS
+    for (const tsBytes of tsBytesList) {
+      const tsDoc = await PDFDocument.load(tsBytes);
+      const pages = await merged.copyPages(tsDoc, tsDoc.getPageIndices());
+      pages.forEach(p => merged.addPage(p));
+    }
+    const combinedU8 = await merged.save();
+
+    // 7) Store combined in R2 and update invoice row
+    const pdfKey = normalizeKey(`docs-pdf/invoices/invoice_${invoiceId}.pdf`);
+    await r2Put(env, pdfKey, combinedU8, { httpMetadata: { contentType: "application/pdf" } });
 
     await fetch(`${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${encodeURIComponent(invoiceId)}`, {
       method: "PATCH",
       headers: sbHeaders(env),
-      body: JSON.stringify({ invoice_pdf_r2_key: pdfKey })
+      body: JSON.stringify({
+        invoice_pdf_r2_key: pdfKey,
+        paper_ts_r2_manifest: tsKeys, // good for audit & re-renders
+        updated_at: new Date().toISOString()
+      }),
     });
 
-    const exp = Math.floor(Date.now()/1000) + 300;
-    const token = await createToken(env.UPLOAD_TOKEN_SECRET, { typ: "dl", key: pdfKey, exp });
-    const downloadUrl = new URL(req.url);
-    downloadUrl.pathname = "/api/files/download";
-    downloadUrl.search = "";
+    // 8) Return signed URL to the combined PDF
+    const token = await createToken(env.UPLOAD_TOKEN_SECRET, { typ: "dl", key: pdfKey, exp: Math.floor(Date.now()/1000) + Number(env.PRESIGN_EXPIRES_SECONDS || 600) });
+    const downloadUrl = new URL(env.PUBLIC_DOWNLOAD_BASE_URL || new URL(new URL(req.url).origin + '/api/files/download').toString());
     downloadUrl.searchParams.set("key", pdfKey);
     downloadUrl.searchParams.set("token", token);
 
-    return withCORS(env, req, ok({ pdf_url: downloadUrl.toString() }));
-  } catch {
-    return withCORS(env, req, serverError("Failed to render invoice"));
+    return withCORS(env, req, ok({ pdf_url: downloadUrl.toString(), attached_timesheets: tsKeys.length }));
+  } catch (e) {
+    return withCORS(env, req, serverError("Failed to render invoice bundle"));
   }
 }
+
 
 
 async function handleInvoiceCredit(env, req, invoiceId) {
@@ -7021,6 +7450,8 @@ async function handleFinancePreviewTsfin(env, req) {
 // -----------------------------
 // CREATE INVOICE (TSFIN → INV)
 // -----------------------------
+// === AMENDMENT inside broker/src/index.js ===
+// Keep your existing handleCreateInvoiceTsfin; replace it fully with this version
 async function handleCreateInvoiceTsfin(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized('Unauthorized');
@@ -7091,6 +7522,27 @@ async function handleCreateInvoiceTsfin(env, req) {
   );
   const tsMetaMap = Object.fromEntries((tsRows || []).map((t) => [t.timesheet_id, t]));
 
+  // Stationery defaults (PNG)
+  let DEFAULT_STATIONERY_KEY =
+    env.INVOICE_STATIONERY_KEY ||
+    'Assets/Stationery/Letterhead/A4/Letterhead_v1@300dpi.png';
+  // If someone pointed env var at the PDF, swap to the PNG variant automatically
+  if (/\.pdf$/i.test(DEFAULT_STATIONERY_KEY)) {
+    DEFAULT_STATIONERY_KEY = DEFAULT_STATIONERY_KEY.replace(/\.pdf$/i, '@300dpi.png');
+  }
+  const DEFAULT_STATIONERY_MARGINS_MM = { top: 32, right: 12, bottom: 20, left: 12 };
+  const DEFAULT_HIDE_BANK_FOOTER = true;
+
+  // Optional: verify stationery asset exists (non-fatal)
+  try {
+    const exists = await r2Exists(env, DEFAULT_STATIONERY_KEY);
+    if (!exists) {
+      console.warn(`[handleCreateInvoiceTsfin] Stationery asset missing in R2: ${DEFAULT_STATIONERY_KEY}`);
+    }
+  } catch {
+    // ignore — non-fatal check
+  }
+
   // 3) Create header (DRAFT)
   const issuedAt = new Date().toISOString();
   const termsDays = Number(client.payment_terms_days ?? 30);
@@ -7106,6 +7558,12 @@ async function handleCreateInvoiceTsfin(env, req) {
     payment_terms_days: termsDays,
     issued_at_utc: issuedAt,
     due_at_utc: dueAt,
+
+    // === stationery snapshot ===
+    stationery_key: DEFAULT_STATIONERY_KEY,                     // R2 key for PNG
+    stationery_margins_mm: DEFAULT_STATIONERY_MARGINS_MM,       // {top,right,bottom,left} in mm
+    hide_bank_footer: DEFAULT_HIDE_BANK_FOOTER,                 // don’t duplicate footer text if artwork includes it
+
     bank: {
       name: defRows?.[0]?.bank_name ?? null,
       sort_code: defRows?.[0]?.bank_sort_code ?? null,
@@ -7365,23 +7823,58 @@ async function handleCreateInvoiceTsfin(env, req) {
   const lockRes = await fetch(lockUrl, {
     method: "PATCH",
     headers: { ...sbHeaders(env), "Prefer": "return=minimal" },
-    body: JSON.stringify({
-      locked_by_invoice_id: invoice.id,
-      locked_at_utc: new Date().toISOString()
-    })
+    body: JSON.stringify({ locked_by_invoice_id: invoice.id, locked_at_utc: new Date().toISOString() })
   });
   if (!lockRes.ok) {
     const t = await lockRes.text();
     return serverError(`Failed to lock snapshots: ${t}`);
   }
 
+  // Compute partial eligibility (for response diagnostics)
+  const eligibleTsIdSet = new Set(snaps.map(s => s.timesheet_id));
+  const skipped_timesheet_ids = timesheetIds.filter(id => !eligibleTsIdSet.has(id));
+
+  // 8) Ensure all TS PDFs exist and write keys back to invoice_lines
+  const uniqueTsIds = [...new Set(lines.map(l => l.timesheet_id).filter(Boolean))];
+
+  const concurrency = Math.max(1, Number(env.TIMESHEET_RENDER_CONCURRENCY || 4));
+  async function mapWithLimit(arr, limit, iterator) {
+    let idx = 0;
+    const results = new Array(arr.length);
+    const workers = Array.from({ length: Math.min(limit, arr.length) }, async () => {
+      while (true) {
+        const current = idx++;
+        if (current >= arr.length) break;
+        results[current] = await iterator(arr[current], current);
+      }
+    });
+    await Promise.all(workers);
+    return results;
+  }
+
+  await mapWithLimit(uniqueTsIds, concurrency, async (tsId) => {
+    const key = await ensureTimesheetPdf(env, tsId);
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/invoice_lines?invoice_id=eq.${encodeURIComponent(invoice.id)}&timesheet_id=eq.${encodeURIComponent(tsId)}`,
+      {
+        method: "PATCH",
+        headers: { ...sbHeaders(env), "Prefer": "return=minimal" },
+        body: JSON.stringify({ paper_ts_r2_key: key })
+      }
+    );
+    return key;
+  });
+
   return ok({
     invoice_id: invoice.id,
     client_id,
     lines: lines.length,
-    totals: { ex_vat: round2(sumEx), vat: round2(sumVat), inc_vat: round2(sumInc) }
+    totals: { ex_vat: round2(sumEx), vat: round2(sumVat), inc_vat: round2(sumInc) },
+    skipped_timesheet_ids
   });
 }
+
+
 
 
 // ---------------------------
@@ -7394,10 +7887,133 @@ async function handleCreateCreditNoteTsfin(env, req, invoiceId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
-  const { rows: invRows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${encodeURIComponent(invoiceId)}&select=*`);
-  const inv = invRows[0]; if (!inv) return notFound('Invoice not found');
+  // Load the original invoice we’re crediting
+  const { rows: invRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${encodeURIComponent(invoiceId)}&select=*`
+  );
+  const inv = invRows?.[0];
+  if (!inv) return notFound('Invoice not found');
 
+  // Pull any existing snapshot from the original invoice (preferred),
+  // and top-up with sane defaults where needed so the credit note is deterministic.
+  const baseHeader = inv.header_snapshot_json || {};
+
+  // Resolve stationery key (prefer snapshot → env → fallback), and auto-swap PDF → PNG
+  let stationeryKey =
+    (typeof baseHeader.stationery_key === 'string' && baseHeader.stationery_key.trim()) ||
+    env.INVOICE_STATIONERY_KEY ||
+    'Assets/Stationery/Letterhead/A4/Letterhead_v1@300dpi.png';
+  if (/\.pdf$/i.test(stationeryKey)) {
+    stationeryKey = stationeryKey.replace(/\.pdf$/i, '@300dpi.png');
+  }
+  stationeryKey = stationeryKey.replace(/^\/+/, ''); // normalize (no leading slash)
+
+  // Normalize margins (accept array [t,r,b,l] or object {top,right,bottom,left})
+  function toMarginsObj(m) {
+    const dflt = { top: 32, right: 12, bottom: 20, left: 12 };
+    if (Array.isArray(m) && m.length === 4) {
+      return {
+        top: Number(m[0] ?? dflt.top),
+        right: Number(m[1] ?? dflt.right),
+        bottom: Number(m[2] ?? dflt.bottom),
+        left: Number(m[3] ?? dflt.left),
+      };
+    }
+    if (m && typeof m === 'object') {
+      return {
+        top: Number(m.top ?? dflt.top),
+        right: Number(m.right ?? dflt.right),
+        bottom: Number(m.bottom ?? dflt.bottom),
+        left: Number(m.left ?? dflt.left),
+      };
+    }
+    return dflt;
+  }
+  const stationeryMarginsObj = toMarginsObj(baseHeader.stationery_margins_mm);
+  const hideBankFooter = baseHeader.hide_bank_footer === true || true; // default true
+
+  // Ensure we have bank + VAT details (prefer original snapshot; else settings)
+  let bank = baseHeader.bank || null;
+  let vatReg = baseHeader.vat_registration_number || null;
+
+  if (!bank || !vatReg) {
+    const { rows: defRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/settings_defaults` +
+        `?id=eq.1&select=bank_name,bank_sort_code,bank_account_number,vat_registration_number`
+    );
+    const def = defRows?.[0] || {};
+    bank = bank || {
+      name: def.bank_name ?? null,
+      sort_code: def.bank_sort_code ?? null,
+      account_number: def.bank_account_number ?? null,
+    };
+    vatReg = vatReg || def.vat_registration_number || null;
+  }
+
+  // Ensure client info exists (prefer snapshot; else fetch)
+  let clientName = baseHeader.client_name || null;
+  let clientAddr = baseHeader.client_invoice_address || null;
+  let clientEmail = baseHeader.client_primary_invoice_email || null;
+  let vatChargeable =
+    typeof baseHeader.vat_chargeable === 'boolean' ? baseHeader.vat_chargeable : true;
+  let termsDays =
+    typeof baseHeader.payment_terms_days === 'number'
+      ? baseHeader.payment_terms_days
+      : 30;
+  let appliedVatPct =
+    typeof baseHeader.applied_vat_rate_pct === 'number'
+      ? baseHeader.applied_vat_rate_pct
+      : 0;
+
+  if (!clientName || !clientAddr || clientEmail == null) {
+    const { rows: cliRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/clients` +
+        `?select=id,name,invoice_address,primary_invoice_email,vat_chargeable,payment_terms_days` +
+        `&id=eq.${encodeURIComponent(inv.client_id)}`
+    );
+    const cli = cliRows?.[0] || {};
+    clientName = clientName || cli.name || null;
+    clientAddr = clientAddr || cli.invoice_address || null;
+    clientEmail = clientEmail ?? cli.primary_invoice_email ?? null;
+    if (typeof cli.vat_chargeable === 'boolean') vatChargeable = cli.vat_chargeable;
+    if (typeof cli.payment_terms_days === 'number') termsDays = cli.payment_terms_days;
+  }
+
+  // Issue & (optional) due dates for the credit note
   const now = new Date().toISOString();
+  const dueAt = new Date(Date.now() + (termsDays || 0) * 86_400_000).toISOString();
+
+  // Build a snapshot for the credit note so future re-renders remain identical
+  const header_snapshot_json = {
+    client_id: inv.client_id,
+    client_name: clientName,
+    client_invoice_address: clientAddr,
+    client_primary_invoice_email: clientEmail,
+    vat_chargeable: !!vatChargeable,
+    applied_vat_rate_pct: Number(appliedVatPct || 0),
+    payment_terms_days: Number(termsDays || 0),
+    issued_at_utc: now,
+    due_at_utc: dueAt,
+
+    // Stationery snapshot (PNG key + margins + footer policy)
+    stationery_key: stationeryKey,
+    stationery_margins_mm: stationeryMarginsObj,
+    hide_bank_footer: !!hideBankFooter,
+
+    bank,
+    vat_registration_number: vatReg,
+
+    // Tag this snapshot as a credit note and reference the original invoice
+    meta: {
+      source: "CREDIT_NOTE",
+      original_invoice_id: inv.id
+    }
+  };
+
+  // Create the credit note row (snapshot included)
   const cnRes = await fetch(`${env.SUPABASE_URL}/rest/v1/invoices`, {
     method: 'POST',
     headers: { ...sbHeaders(env), Prefer: 'return=representation' },
@@ -7406,27 +8022,58 @@ async function handleCreateCreditNoteTsfin(env, req, invoiceId) {
       type: 'CREDIT_NOTE',
       status: 'ISSUED',
       issued_at_utc: now,
-      original_invoice_id: inv.id
+      original_invoice_id: inv.id,
+      header_snapshot_json
     })
   });
-  if (!cnRes.ok) { const t = await cnRes.text(); return serverError(`Credit note create failed: ${t}`); }
+  if (!cnRes.ok) {
+    const t = await cnRes.text();
+    return serverError(`Credit note create failed: ${t}`);
+  }
   const cnJson = await cnRes.json().catch(() => ([]));
   const credit = Array.isArray(cnJson) ? cnJson[0] : cnJson;
 
-  // Unlock snapshots
-  const { rows: snaps } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheets_financials?is_current=eq.true&locked_by_invoice_id=eq.${encodeURIComponent(invoiceId)}&select=timesheet_id`);
+  // Unlock snapshots that were locked by the original invoice
+  const { rows: snaps } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?is_current=eq.true&locked_by_invoice_id=eq.${encodeURIComponent(invoiceId)}` +
+      `&select=timesheet_id`
+  );
+
   if (snaps.length) {
-    const url = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?is_current=eq.true&locked_by_invoice_id=eq.${encodeURIComponent(invoiceId)}`;
-    const body = { locked_by_invoice_id: null, locked_at_utc: null, unlocked_by_credit_note_id: credit.id, is_stale: true, stale_reason: 'UNLOCKED_BY_CREDIT' };
-    const res = await fetch(url, { method: 'PATCH', headers: sbHeaders(env), body: JSON.stringify(body) });
-    if (!res.ok) { const t = await res.text(); return serverError(`Unlock failed: ${t}`); }
+    const url =
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?is_current=eq.true&locked_by_invoice_id=eq.${encodeURIComponent(invoiceId)}`;
+    const body = {
+      locked_by_invoice_id: null,
+      locked_at_utc: null,
+      unlocked_by_credit_note_id: credit.id,
+      is_stale: true,
+      stale_reason: 'UNLOCKED_BY_CREDIT'
+    };
+    const res = await fetch(url, {
+      method: 'PATCH',
+      headers: sbHeaders(env),
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) {
+      const t = await res.text();
+      return serverError(`Unlock failed: ${t}`);
+    }
 
     // Enqueue recompute for those timesheets
-    for (const r of snaps) await sbRpc(env, 'enqueue_ts_financials', { timesheet_id: r.timesheet_id, reason: 'VERSION_ROTATED' });
+    for (const r of snaps) {
+      await sbRpc(env, 'enqueue_ts_financials', {
+        timesheet_id: r.timesheet_id,
+        reason: 'VERSION_ROTATED'
+      });
+    }
   }
 
   return ok({ credit_note_id: credit.id, unlocked_snapshots: snaps.length });
 }
+
 
 // ---------------------------
 // Auth, CORS, JSON helpers stubs – remove these if you already have them globally
