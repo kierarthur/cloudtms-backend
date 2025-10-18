@@ -19,6 +19,10 @@ EMAIL_DRAIN_LIMIT_DEFAULT = "10"
 EMAIL_MAX_PAYLOAD_BYTES = "18874368"
 PUBLIC_DOWNLOAD_BASE_URL = "https://cloudtms.arthur-rai.co.uk/api/files/download"
 
+# === Invoicing stationery ===
+INVOICE_STATIONERY_BUCKET = "timesheets-signatures"
+INVOICE_STATIONERY_KEY = "Assets/Stationery/Letterhead/A4/Letterhead_v1.pdf"
+
 [[r2_buckets]]
 binding = "R2"
 bucket_name = "timesheets-signatures"
