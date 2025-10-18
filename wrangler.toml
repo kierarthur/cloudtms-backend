@@ -1,5 +1,5 @@
 name = "cloudtms"
-main = "broker/src/index.ts"   # ← was index.js
+main = "broker/src/index.js"   # ← switched from index.ts to index.js
 compatibility_date = "2025-10-13"
 
 [vars]
