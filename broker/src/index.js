@@ -131,9 +131,16 @@ const TS_LAYOUT_R2_KEY = 'Assets/Stationery/Timesheet/layout.json';
 
 async function r2Put(env, key, bytesOrString, opts = {}) {
   const bucket = env.R2_BUCKET || env.R2;
-  const body = (bytesOrString instanceof Uint8Array) ? bytesOrString : (typeof bytesOrString === 'string' ? bytesOrString : new Uint8Array());
-  return bucket.put(normalizeKey(key), body, opts);
+  const cleanKey = normalizeKey(key);
+  const body =
+    bytesOrString instanceof Uint8Array ? bytesOrString
+    : bytesOrString instanceof ArrayBuffer ? new Uint8Array(bytesOrString)
+    : typeof bytesOrString === 'string' ? bytesOrString
+    : new Uint8Array(); // fallback to empty
+
+  return bucket.put(cleanKey, body, opts);
 }
+
 
 async function r2GetJSON(env, key) {
   const u8 = await r2GetBytes(env, key);
@@ -1749,9 +1756,7 @@ async function r2Head(env, key) {
 async function r2Get(env, key) {
   try { return await env.R2.get(key); } catch { return null; }
 }
-async function r2Put(env, key, body, opts) {
-  return await env.R2.put(key, body, opts);
-}
+
 
 // ---------------------- Supabase REST ----------------------
 function sbHeaders(env) {
