@@ -445,8 +445,1778 @@ async function ensureTimesheetPdf(env, timesheetId) {
   return await renderTimesheetPDFAndSave(env, timesheetId);
 }
 
+//
+// NEW HANDLERS ONLY — per your request
+// Assumes shared helpers exist in your codebase: requireUser, withCORS, ok, badRequest, notFound, unauthorized, serverError, parseJSONBody, sbFetch, sbHeaders, writeAudit, sbRpc (optional).
+//
+
+// ───────────────────────────────────────────────────────────────────────────────
+// Shared local helpers (lightweight, self-contained)
+// ───────────────────────────────────────────────────────────────────────────────
+const enc = encodeURIComponent;
+const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+const csvEsc = (v) => {
+  if (v == null) return '';
+  const s = String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+const csvJoin = (cols) => cols.map(csvEsc).join(',');
+
+async function getDefaultSettings(env) {
+  const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=vat_rate_pct,holiday_pay_pct`);
+  return {
+    vat: Number(rows?.[0]?.vat_rate_pct ?? 20),
+    wtr: Number(rows?.[0]?.holiday_pay_pct ?? 12.07),
+  };
+}
+
+async function getClientHolidayPctMap(env, clientIds) {
+  if (!clientIds?.length) return {};
+  const url = `${env.SUPABASE_URL}/rest/v1/client_settings` +
+    `?select=client_id,holiday_pay_pct,apply_holiday_to,effective_from` +
+    `&client_id=in.(${clientIds.map(enc).join(',')})` +
+    `&order=client_id.asc,effective_from.desc`;
+  const { rows } = await sbFetch(env, url);
+  const map = {};
+  for (const r of rows || []) {
+    if (map[r.client_id]) continue; // first (latest) only
+    map[r.client_id] = {
+      pct: (r.holiday_pay_pct == null ? null : Number(r.holiday_pay_pct)),
+      applyTo: (r.apply_holiday_to || '').toUpperCase(), // PAYE_ONLY | ALL | NONE
+    };
+  }
+  return map;
+}
+
+function resolveWtrPctForRow(row, defaults, clientHolidayMap) {
+  // Prefer snapshot if present (already frozen)
+  if (row?.pay_wtr_rate_pct_snapshot != null && row?.pay_wtr_rate_pct_snapshot !== '')
+    return Number(row.pay_wtr_rate_pct_snapshot);
+
+  // Then prefer policy snapshot values
+  const pol = row?.policy_snapshot_json || {};
+  const polPct = pol.holiday_pay_pct;
+  const apply = String(pol.apply_holiday_to || '').toUpperCase();
+  if (apply === 'NONE') return 0;
+  if (polPct != null && isFinite(Number(polPct))) return Number(polPct);
+
+  // Else check client settings
+  const cs = clientHolidayMap[row.client_id];
+  if (cs) {
+    if (cs.applyTo === 'NONE') return 0;
+    if (isFinite(Number(cs.pct))) return Number(cs.pct);
+  }
+
+  // Fallback to defaults
+  return Number(defaults.wtr);
+}
+
+function deriveUmbrellaVatSnapshots(rowEx, hintRatePct, umbrellaVatChargeable) {
+  if (!umbrellaVatChargeable) {
+    return { rate: null, vat: 0, inc: rowEx };
+  }
+  const rate = Number(hintRatePct ?? 0);
+  const vat = round2(rowEx * (rate / 100));
+  const inc = round2(rowEx + vat);
+  return { rate, vat, inc };
+}
+
+// ───────────────────────────────────────────────────────────────────────────────
+// 1) PAYMENTS & REMITTANCES
+// ───────────────────────────────────────────────────────────────────────────────
+
+// ───────────────────────────────────────────────────────────────────────────────
+// PAYMENTS — CSV (authorised gate + 16-char payment reference cap)
+// ───────────────────────────────────────────────────────────────────────────────
+
+export async function handlePaymentsGenerateCsv(env, req) {
+  // ==== Local helpers (pure JS)
+  const enc = encodeURIComponent;
+  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+  const capRef = (s, max = 16) => (s ? String(s).slice(0, max) : '');
+  const csvEsc = (v) => {
+    const s = String(v ?? '');
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+
+  // ==== Admin auth
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  // ==== Body parsing
+  let body;
+  try {
+    body = await parseJSONBody(req);
+  } catch {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  // ==== Filters (all optional)
+  const from         = body?.week_ending_from || null; // YYYY-MM-DD
+  const to           = body?.week_ending_to   || null; // YYYY-MM-DD
+  const clientIds    = Array.isArray(body?.client_ids)    ? body.client_ids.filter(Boolean)    : [];
+  const candidateIds = Array.isArray(body?.candidate_ids) ? body.candidate_ids.filter(Boolean) : [];
+  const payMethod    = body?.pay_method ? String(body.pay_method).toUpperCase() : null; // 'PAYE'|'UMBRELLA'|null
+  const umbrellaIds  = Array.isArray(body?.umbrella_ids) ? body.umbrella_ids.filter(Boolean) : [];
+
+  // ==== Query TSFIN — only current, unpaid, not on hold, AUTHORISED timesheets
+  let url =
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+    `?select=` +
+    [
+      'id','timesheet_id','candidate_id','client_id','pay_method',
+      'total_pay_ex_vat','expenses_pay_ex_vat','mileage_pay_ex_vat',
+      'pay_wtr_rate_pct_snapshot','policy_snapshot_json',
+      'pay_vat_rate_pct_snapshot','pay_vat_amount_snapshot','pay_total_inc_vat_snapshot',
+      'paid_at_utc','pay_on_hold',
+      'timesheet:timesheets(week_ending_date,authorised_at_server)',
+    ].join(',') +
+    `&is_current=eq.true&paid_at_utc=is.null&pay_on_hold=eq.false` +
+    `&timesheet.authorised_at_server=not.is.null`;
+
+  if (from)                url += `&timesheet.week_ending_date=gte.${enc(from)}`;
+  if (to)                  url += `&timesheet.week_ending_date=lte.${enc(to)}`;
+  if (clientIds.length)    url += `&client_id=in.(${clientIds.map(enc).join(',')})`;
+  if (candidateIds.length) url += `&candidate_id=in.(${candidateIds.map(enc).join(',')})`;
+  if (payMethod)           url += `&pay_method=eq.${enc(payMethod)}`;
+
+  const { rows: tsRows } = await sbFetch(env, url, false);
+  if (!tsRows?.length) {
+    return withCORS(env, req, notFound('No eligible timesheets for payment.'));
+  }
+
+  // ==== Candidate and Umbrella lookups (for bank + method + VAT)
+  const candIds = [...new Set(tsRows.map(r => r.candidate_id).filter(Boolean))];
+  const { rows: candRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/candidates?select=id,display_name,first_name,last_name,email,account_holder,bank_name,sort_code,account_number,pay_method,umbrella_id&id=in.(${candIds.map(enc).join(',')})`
+  );
+  const mapCand = Object.fromEntries((candRows || []).map(c => [c.id, c]));
+
+  const umbIds = [...new Set((candRows || []).map(c => c.umbrella_id).filter(Boolean))];
+  const { rows: umbRows } = umbIds.length
+    ? await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/umbrellas?id=in.(${umbIds.map(enc).join(',')})&select=id,name,enabled,vat_chargeable,bank_name,sort_code,account_number`
+      )
+    : { rows: [] };
+  const mapUmb = Object.fromEntries((umbRows || []).map(u => [u.id, u]));
+
+  // ==== Optional umbrella filter + safety gates
+  const filtered = tsRows.filter(r => {
+    const cand = mapCand[r.candidate_id];
+    if (!cand) return false;
+    if (payMethod && String(cand.pay_method || '').toUpperCase() !== payMethod) return false;
+
+    if (umbrellaIds.length) {
+      const u = cand.umbrella_id;
+      if (!u || !umbrellaIds.includes(u)) return false;
+    }
+    // Umbrella enabled gate if pay_method=UMBRELLA
+    if (String(cand.pay_method || '').toUpperCase() === 'UMBRELLA') {
+      const umb = mapUmb[cand.umbrella_id];
+      if (!umb?.enabled) return false;
+    }
+    // Minimal bank info for PAYE
+    if (String(cand.pay_method || '').toUpperCase() === 'PAYE') {
+      if (!cand.sort_code || !cand.account_number || !cand.account_holder) return false;
+    }
+    // Authorised safety (embedded filter above handles most cases)
+    if (!r?.timesheet?.authorised_at_server) return false;
+
+    return true;
+  });
+
+  if (!filtered.length) {
+    return withCORS(env, req, notFound('No eligible timesheets after payment channel checks.'));
+  }
+
+  // ==== Defaults / client WTR
+  const clientIdSet = [...new Set(filtered.map(r => r.client_id).filter(Boolean))];
+  const defaults = await getDefaultSettings(env);
+  const clientHolidayMap = await getClientHolidayPctMap(env, clientIdSet);
+
+  // ==== Group by (candidate_id, week_ending_date)
+  const groups = new Map(); // key -> { candidate_id, week_ending_date, rows: [], pay_method }
+  for (const r of filtered) {
+    const we = r?.timesheet?.week_ending_date || null;
+    const key = `${r.candidate_id}__${we}`;
+    let g = groups.get(key);
+    if (!g) {
+      g = {
+        candidate_id: r.candidate_id,
+        week_ending_date: we,
+        rows: [],
+        pay_method: String(r.pay_method || '').toUpperCase()
+      };
+      groups.set(key, g);
+    }
+    g.rows.push(r);
+  }
+
+  // ==== CSV compose (Monzo format)
+  // Row 1 header MUST match the sample exactly.
+  const csvHeader = ['Payment reference','Payee name','Sort code','Bank account number','Bank account type','Amount'];
+  const csvRows = [csvHeader.map(csvEsc).join(',')];
+
+  const nowIso = new Date().toISOString();
+  const batchRef = `PAY:${nowIso.slice(0,10)}`; // used only for audit correlation
+
+  const affectedTsIds = [];
+  const patchQueue = [];
+
+  for (const g of groups.values()) {
+    const cand = mapCand[g.candidate_id];
+    const payMethodEff = String(cand?.pay_method || g.pay_method || '').toUpperCase();
+
+    // 1) Compute group amount
+    let sumEx = 0;
+    let sumInc = 0;
+    for (const r of g.rows) {
+      const payEx = Number(r.total_pay_ex_vat || 0);
+      const expEx = Number(r.expenses_pay_ex_vat || 0);
+      const milEx = Number(r.mileage_pay_ex_vat || 0);
+      const rowEx = round2(payEx + expEx + milEx);
+
+      if (payMethodEff === 'PAYE') {
+        // Ensure WTR snapshot if missing
+        const wtrPct = resolveWtrPctForRow(r, defaults, clientHolidayMap);
+        if (r.pay_wtr_rate_pct_snapshot == null) {
+          patchQueue.push({ id: r.id, body: { pay_wtr_rate_pct_snapshot: wtrPct } });
+        }
+        sumEx += rowEx;
+      } else {
+        // Umbrella — determine VAT snapshots/INC if umbrella VAT chargeable
+        const umb = mapUmb[cand?.umbrella_id];
+        const vatChargeable = !!umb?.vat_chargeable;
+        let rate   = r.pay_vat_rate_pct_snapshot;
+        let vatAmt = r.pay_vat_amount_snapshot;
+        let incAmt = r.pay_total_inc_vat_snapshot;
+
+        if (vatChargeable) {
+          if (incAmt == null || Number(incAmt) === 0) {
+            rate = (rate == null ? defaults.vat : Number(rate));
+            const derived = deriveUmbrellaVatSnapshots(rowEx, rate, true);
+            rate = derived.rate; vatAmt = derived.vat; incAmt = derived.inc;
+            patchQueue.push({
+              id: r.id,
+              body: {
+                pay_vat_rate_pct_snapshot: rate,
+                pay_vat_amount_snapshot: vatAmt,
+                pay_total_inc_vat_snapshot: incAmt
+              }
+            });
+          }
+          sumInc += Number(incAmt || 0);
+        } else {
+          // Not VAT chargeable — snapshots should be neutral
+          if ((r.pay_vat_amount_snapshot && Number(r.pay_vat_amount_snapshot) !== 0) ||
+              (r.pay_total_inc_vat_snapshot && Number(r.pay_total_inc_vat_snapshot) !== round2(rowEx))) {
+            patchQueue.push({
+              id: r.id,
+              body: {
+                pay_vat_rate_pct_snapshot: null,
+                pay_vat_amount_snapshot: 0,
+                pay_total_inc_vat_snapshot: rowEx
+              }
+            });
+          }
+          sumInc += rowEx;
+        }
+      }
+    }
+
+    const amount = (payMethodEff === 'PAYE') ? round2(sumEx) : round2(sumInc);
+
+    // 2) Determine payee + bank details + account type
+    let payeeName, sortCode, accountNumber, accountType;
+    if (payMethodEff === 'UMBRELLA') {
+      const umb = mapUmb[cand?.umbrella_id];
+      if (!umb?.enabled) continue; // safety
+      payeeName     = umb.name || 'Umbrella';
+      sortCode      = umb.sort_code || '';
+      accountNumber = umb.account_number || '';
+      accountType   = 'Business';
+    } else {
+      // PAYE
+      const first   = (cand?.first_name || '').trim();
+      const last    = (cand?.last_name  || '').trim();
+      const display = [first, last].filter(Boolean).join(' ').trim();
+      payeeName     = display || cand?.account_holder || cand?.display_name || 'Candidate';
+      sortCode      = cand?.sort_code || '';
+      accountNumber = cand?.account_number || '';
+      accountType   = 'Personal';
+    }
+
+    // 3) PAYMENT REFERENCE: Candidate "Surname Firstname", capped to 16 chars
+    const refLast  = (cand?.last_name  || '').trim();
+    const refFirst = (cand?.first_name || '').trim();
+    const lineRef  = capRef([refLast, refFirst].filter(Boolean).join(' ').trim(), 16);
+
+    // 4) CSV row
+    csvRows.push([
+      csvEsc(lineRef),
+      csvEsc(payeeName),
+      csvEsc(sortCode),
+      csvEsc(accountNumber),
+      csvEsc(accountType),
+      csvEsc(amount.toFixed(2)),
+    ].join(','));
+
+    // 5) Mark all rows in group as paid + store the actual reference used
+    for (const r of g.rows) {
+      affectedTsIds.push(r.timesheet_id);
+      patchQueue.push({
+        id: r.id,
+        body: {
+          paid_at_utc: nowIso,
+          paid_by_user_id: user.id || null,
+          payment_reference: lineRef
+        }
+      });
+    }
+  }
+
+  if (!affectedTsIds.length) {
+    return withCORS(env, req, notFound('Nothing to pay.'));
+  }
+
+  // ==== Apply patches
+  for (const p of patchQueue) {
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(p.id)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        body: JSON.stringify(p.body)
+      }
+    );
+  }
+
+  // ==== Audit
+  await writeAudit(
+    env,
+    user,
+    'PAY_CSV_GENERATED',
+    { batch_reference: batchRef, items: affectedTsIds.length, timesheets: affectedTsIds },
+    { entity: 'timesheet', subject_id: null, reason: 'PAYMENT', correlation_id: batchRef, req }
+  );
+
+  // ==== Return CSV file text + summary
+  const csv = csvRows.join('\n');
+  return withCORS(env, req, ok({
+    csv,
+    affected_timesheet_ids: affectedTsIds,
+    groups: groups.size,
+    batch_reference: batchRef
+  }));
+}
 
 
+
+export async function handleRemittancesSend(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let body;
+  try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  const ids = Array.isArray(body?.timesheet_ids) ? [...new Set(body.timesheet_ids)].filter(Boolean) : [];
+  const resend = body?.resend === true;
+  if (!ids.length) return withCORS(env, req, badRequest('timesheet_ids[] required'));
+
+  // Pull current snapshots for those timesheets
+  const url = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+    `?is_current=eq.true&timesheet_id=in.(${ids.map(enc).join(',')})&select=` + [
+      'id','timesheet_id','candidate_id','client_id',
+      'pay_method',
+      'hours_day','hours_night','hours_sat','hours_sun','hours_bh',
+      'pay_day','pay_night','pay_sat','pay_sun','pay_bh',
+      'total_hours','total_pay_ex_vat',
+      'expenses_pay_ex_vat','mileage_pay_ex_vat',
+      'pay_wtr_rate_pct_snapshot','policy_snapshot_json',
+      'pay_vat_rate_pct_snapshot','pay_vat_amount_snapshot','pay_total_inc_vat_snapshot',
+      'remittance_last_sent_at_utc','remittance_send_count',
+      'timesheet:timesheets(timesheet_id,booking_id,week_ending_date,hospital_norm,ward_norm,shift_label_norm)',
+      'client:clients(name)'
+    ].join(',');
+  const { rows: finRowsRaw } = await sbFetch(env, url, false);
+  if (!finRowsRaw?.length) return withCORS(env, req, notFound('No matching current timesheets.'));
+
+  const finRows = resend ? finRowsRaw : finRowsRaw.filter(r => !r.remittance_last_sent_at_utc && !r.remittance_send_count);
+  if (!finRows.length) return withCORS(env, req, ok({ queued: 0, skipped: finRowsRaw.length, reason: 'already_sent' }));
+
+  const candIds = [...new Set(finRows.map(r => r.candidate_id).filter(Boolean))];
+  const { rows: candRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/candidates?id=in.(${candIds.map(enc).join(',')})&select=id,email,display_name,first_name,last_name,pay_method,umbrella_id`
+  );
+  const mapCand = Object.fromEntries((candRows || []).map(c => [c.id, c]));
+
+  const umbIds = [...new Set((candRows || []).map(c => c.umbrella_id).filter(Boolean))];
+  const { rows: umbRows } = umbIds.length
+    ? await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/umbrellas?id=in.(${umbIds.map(enc).join(',')})&select=id,vat_chargeable`)
+    : { rows: [] };
+  const mapUmb = Object.fromEntries((umbRows || []).map(u => [u.id, u]));
+
+  // Period labels per candidate
+  const groups = new Map(); // candId -> rows[]
+  for (const r of finRows) {
+    const arr = groups.get(r.candidate_id) || [];
+    arr.push(r);
+    groups.set(r.candidate_id, arr);
+  }
+
+  const defaults = await getDefaultSettings(env);
+  const clientIdSet = [...new Set(finRows.map(r => r.client_id).filter(Boolean))];
+  const clientHolidayMap = await getClientHolidayPctMap(env, clientIdSet);
+
+  let totalQueued = 0;
+  const outboxIds = [];
+
+  for (const [candId, rows] of groups) {
+    const cand = mapCand[candId];
+    if (!cand) continue;
+    const toEmail = (cand.email || '').trim();
+    if (!toEmail) continue;
+
+    // Build period label from date range in rows
+    const dates = rows.map(r => r?.timesheet?.week_ending_date).filter(Boolean).sort();
+    const first = dates[0], last = dates[dates.length - 1];
+    const periodLabel = (first && last) ? (first === last ? `WE ${first}` : `WE ${first}–${last}`) : 'Selected timesheets';
+    const periodKey = (first && last) ? (first === last ? `${first}` : `${first}_${last}`) : 'selected';
+    const reference = `remit:candidate:${candId}:${periodKey}`;
+
+    // HTML rows
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
+    const fmt = (n) => (n == null ? '' : Number(n).toFixed(2));
+    const toNum = (v) => (v == null ? 0 : Number(v) || 0);
+
+    const hasPAYE = rows.some(r => String(r.pay_method || '').toUpperCase() === 'PAYE');
+    const hasUmb  = rows.some(r => String(r.pay_method || '').toUpperCase() === 'UMBRELLA');
+
+    let totalPayEx = 0, totalExpEx = 0, totalMilEx = 0, totalEx = 0;
+    let totalWtrBasic = 0, totalWtrElem = 0;
+    let totalVat = 0, totalInc = 0;
+
+    const rowsHtml = rows.map((r) => {
+      const ts = r.timesheet || {}; const cli = r.client || {};
+      const payMethod = String(r.pay_method || '').toUpperCase();
+      const payEx = toNum(r.total_pay_ex_vat);
+      const expEx = toNum(r.expenses_pay_ex_vat);
+      const milEx = toNum(r.mileage_pay_ex_vat);
+      const rowEx = round2(payEx + expEx + milEx);
+
+      totalPayEx += payEx; totalExpEx += expEx; totalMilEx += milEx; totalEx += rowEx;
+
+      // PAYE: informational WTR split
+      let wtrInfoHtml = '—';
+      if (payMethod === 'PAYE') {
+        const wtrPct = resolveWtrPctForRow(r, defaults, clientHolidayMap);
+        const base = (payEx > 0) ? (payEx / (1 + (wtrPct / 100))) : 0;
+        const wtr = payEx - base;
+        totalWtrBasic += base; totalWtrElem += wtr;
+        wtrInfoHtml = `${fmt(base)} basic + ${fmt(wtr)} WTR @ ${fmt(wtrPct)}%`;
+      }
+
+      // Umbrella VAT
+      let vatHtml = '';
+      let incHtml = '';
+      if (payMethod === 'UMBRELLA') {
+        const umb = mapUmb[cand.umbrella_id];
+        const vatChargeable = !!umb?.vat_chargeable;
+        let rate = r.pay_vat_rate_pct_snapshot;
+        let vatAmt = r.pay_vat_amount_snapshot;
+        let incAmt = r.pay_total_inc_vat_snapshot;
+
+        if (vatChargeable) {
+          if (!incAmt || Number(incAmt) === 0) {
+            rate = (rate == null ? defaults.vat : Number(rate));
+            const derived = deriveUmbrellaVatSnapshots(rowEx, rate, true);
+            rate = derived.rate; vatAmt = derived.vat; incAmt = derived.inc;
+          }
+          totalVat += Number(vatAmt || 0);
+          totalInc += Number(incAmt || 0);
+          vatHtml = `${fmt(vatAmt)}${(rate || rate === 0) ? ` @ ${fmt(rate)}%` : ''}`;
+          incHtml = `${fmt(incAmt)}`;
+        } else {
+          totalInc += rowEx;
+          vatHtml = '—';
+          incHtml = `${fmt(rowEx)}`;
+        }
+      }
+
+      return `
+        <tr>
+          <td>${esc(ts.week_ending_date || '')}</td>
+          <td>${esc(cli.name || '')}</td>
+          <td>${esc(ts.hospital_norm || '')}</td>
+          <td>${esc(ts.ward_norm || '')}</td>
+          <td>${esc(ts.shift_label_norm || '')}</td>
+          <td style="text-align:right">${fmt(r.hours_day)}</td>
+          <td style="text-align:right">${fmt(r.pay_day)}</td>
+          <td style="text-align:right">${fmt(r.hours_night)}</td>
+          <td style="text-align:right">${fmt(r.pay_night)}</td>
+          <td style="text-align:right">${fmt(r.hours_sat)}</td>
+          <td style="text-align:right">${fmt(r.pay_sat)}</td>
+          <td style="text-align:right">${fmt(r.hours_sun)}</td>
+          <td style="text-align:right">${fmt(r.pay_sun)}</td>
+          <td style="text-align:right">${fmt(r.hours_bh)}</td>
+          <td style="text-align:right">${fmt(r.pay_bh)}</td>
+          <td style="text-align:right">${fmt(payEx)}</td>
+          <td style="text-align:right">${fmt(expEx)}</td>
+          <td style="text-align:right">${fmt(milEx)}</td>
+          <td style="text-align:right"><strong>${fmt(rowEx)}</strong></td>
+          ${hasPAYE ? `<td style="text-align:right">${wtrInfoHtml}</td>` : ''}
+          ${hasUmb ? `<td style="text-align:right">${vatHtml}</td>` : ''}
+          ${hasUmb ? `<td style="text-align:right"><strong>${incHtml}</strong></td>` : ''}
+        </tr>`;
+    }).join('');
+
+    const extraPAYECol = hasPAYE ? '<th align="right">Basic + WTR (info)</th>' : '';
+    const extraUmbCols = hasUmb ? '<th align="right">VAT</th><th align="right">Total (inc VAT)</th>' : '';
+    const candName = cand.display_name || [cand.first_name, cand.last_name].filter(Boolean).join(' ') || 'Candidate';
+    const nowIso = new Date().toISOString();
+    const titleSuffix = hasUmb ? ' – Umbrella' : (hasPAYE ? ' – PAYE' : '');
+    const html = `
+      <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:14px;line-height:1.4">
+        <h2 style="margin:0 0 8px">Remittance Advice${titleSuffix}</h2>
+        <p style="margin:0 0 12px"><strong>${esc(candName)}</strong></p>
+        <p style="margin:0 0 12px">Period: ${esc(periodLabel)}</p>
+        <p style="margin:0 0 16px;color:#666">Generated: ${esc(nowIso)}</p>
+
+        <table width="100%" border="0" cellspacing="0" cellpadding="6" style="border-collapse:collapse">
+          <thead>
+            <tr style="background:#f5f5f5">
+              <th align="left">Week Ending</th>
+              <th align="left">Client</th>
+              <th align="left">Hospital</th>
+              <th align="left">Ward</th>
+              <th align="left">Shift</th>
+              <th align="right">Hrs Day</th>
+              <th align="right">Pay Day</th>
+              <th align="right">Hrs Night</th>
+              <th align="right">Pay Night</th>
+              <th align="right">Hrs Sat</th>
+              <th align="right">Pay Sat</th>
+              <th align="right">Hrs Sun</th>
+              <th align="right">Pay Sun</th>
+              <th align="right">Hrs BH</th>
+              <th align="right">Pay BH</th>
+              <th align="right">Pay (ex VAT)</th>
+              <th align="right">Expenses</th>
+              <th align="right">Mileage</th>
+              <th align="right">Total (ex VAT)</th>
+              ${extraPAYECol}
+              ${extraUmbCols}
+            </tr>
+          </thead>
+          <tbody>${rowsHtml}</tbody>
+          <tfoot>
+            <tr>
+              <td colspan="${hasPAYE ? 19 : 18}" align="right" style="padding-top:10px;border-top:1px solid #e5e5e5"><strong>Totals:</strong></td>
+              <td align="right" style="padding-top:10px;border-top:1px solid #e5e5e5"><strong>${round2(totalPayEx).toFixed(2)}</strong></td>
+              <td align="right" style="padding-top:10px;border-top:1px solid #e5e5e5"><strong>${round2(totalExpEx).toFixed(2)}</strong></td>
+              <td align="right" style="padding-top:10px;border-top:1px solid #e5e5e5"><strong>${round2(totalMilEx).toFixed(2)}</strong></td>
+              <td align="right" style="padding-top:10px;border-top:1px solid #e5e5e5"><strong>${round2(totalEx).toFixed(2)}</strong></td>
+              ${hasPAYE ? `<td align="right" style="padding-top:10px;border-top:1px solid #e5e5e5"><strong>${round2(totalWtrBasic).toFixed(2)} basic + ${round2(totalWtrElem).toFixed(2)} WTR</strong></td>` : ''}
+              ${hasUmb ? `<td align="right" style="padding-top:10px;border-top:1px solid #e5e5e5"><strong>${round2(totalVat).toFixed(2)}</strong></td>` : ''}
+              ${hasUmb ? `<td align="right" style="padding-top:10px;border-top:1px solid #e5e5e5"><strong>${round2(totalInc).toFixed(2)}</strong></td>` : ''}
+            </tr>
+          </tfoot>
+        </table>
+
+        ${hasPAYE ? `<p style="margin-top:12px;color:#666">Note: For PAYE, the pay rate is WTR-inclusive. The “Basic + WTR” split is informational only and is included in your payment.</p>` : ''}
+        ${hasUmb ? `<p style="margin-top:8px;color:#666">Note: For Umbrella assignments where VAT applies, totals show ex VAT and inc VAT amounts using the VAT rate captured at the time of payment/lock.</p>` : ''}
+      </div>`;
+
+    // Plain text
+    const tlines = [
+      `Remittance Advice${titleSuffix}`,
+      `${candName}`,
+      `Period: ${periodLabel}`,
+      `Generated: ${nowIso}`,
+      ''
+    ];
+    for (const r of rows) {
+      const ts = r.timesheet || {}; const cli = r.client || {};
+      const pm = String(r.pay_method || '').toUpperCase();
+      const payEx = Number(r.total_pay_ex_vat || 0);
+      const expEx = Number(r.expenses_pay_ex_vat || 0);
+      const milEx = Number(r.mileage_pay_ex_vat || 0);
+      const rowEx = round2(payEx + expEx + milEx);
+
+      tlines.push(`WE ${ts.week_ending_date || ''} — ${cli.name || ''} / ${ts.hospital_norm || ''} / ${ts.ward_norm || ''} / ${ts.shift_label_norm || ''}`);
+      tlines.push(`Day: ${fmt(r.hours_day)} @ ${fmt(r.pay_day)}, Night: ${fmt(r.hours_night)} @ ${fmt(r.pay_night)}, Sat: ${fmt(r.hours_sat)} @ ${fmt(r.pay_sat)}, Sun: ${fmt(r.hours_sun)} @ ${fmt(r.pay_sun)}, BH: ${fmt(r.hours_bh)} @ ${fmt(r.pay_bh)}`);
+      tlines.push(`Pay ex VAT: ${fmt(payEx)}  |  Expenses: ${fmt(expEx)}  |  Mileage: ${fmt(milEx)}  |  Total ex VAT: ${fmt(rowEx)}`);
+      if (pm === 'PAYE') {
+        const wtrPct = resolveWtrPctForRow(r, defaults, clientHolidayMap);
+        const base = (payEx > 0) ? (payEx / (1 + (wtrPct / 100))) : 0;
+        const wtr = payEx - base;
+        tlines.push(`(PAYE) Basic + WTR (info): ${fmt(base)} basic + ${fmt(wtr)} WTR @ ${fmt(wtrPct)}% (included)`);
+      } else if (pm === 'UMBRELLA') {
+        const umb = mapUmb[cand.umbrella_id];
+        const vatChargeable = !!umb?.vat_chargeable;
+        let rate = r.pay_vat_rate_pct_snapshot;
+        let vatAmt = r.pay_vat_amount_snapshot;
+        let incAmt = r.pay_total_inc_vat_snapshot;
+        if (vatChargeable && (!incAmt || Number(incAmt) === 0)) {
+          rate = (rate == null ? defaults.vat : Number(rate));
+          const derived = deriveUmbrellaVatSnapshots(rowEx, rate, true);
+          rate = derived.rate; vatAmt = derived.vat; incAmt = derived.inc;
+        }
+        if (vatChargeable) {
+          tlines.push(`(Umbrella) VAT: ${fmt(vatAmt)} @ ${fmt(rate)}%  |  Total inc VAT: ${fmt(incAmt)}`);
+        } else {
+          tlines.push(`(Umbrella) VAT: 0.00  |  Total inc VAT: ${fmt(rowEx)}`);
+        }
+      }
+      tlines.push('');
+    }
+    tlines.push(`Totals — Pay ex VAT: ${round2(totalPayEx).toFixed(2)}, Expenses: ${round2(totalExpEx).toFixed(2)}, Mileage: ${round2(totalMilEx).toFixed(2)}, Total ex VAT: ${round2(totalEx).toFixed(2)}`);
+    if (hasPAYE) tlines.push(`PAYE Basic + WTR (info totals): ${round2(totalWtrBasic).toFixed(2)} basic + ${round2(totalWtrElem).toFixed(2)} WTR`);
+    if (hasUmb)  tlines.push(`Umbrella VAT Total: ${round2(totalVat).toFixed(2)}  |  Total inc VAT: ${round2(totalInc).toFixed(2)}`);
+    const text = tlines.join('\n');
+
+    // Queue a single email per-candidate
+    const outRes = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
+      method: 'POST',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify({
+        type: 'REMITTANCE', to: toEmail, cc: null,
+        subject: `Remittance Advice – ${periodLabel}`,
+        body_html: html, body_text: text,
+        attachments: null,
+        status: 'QUEUED', reference,
+        created_by: user?.id || null,
+      })
+    });
+    if (!outRes.ok) continue;
+    const outJson = await outRes.json().catch(() => []);
+    const mail = Array.isArray(outJson) ? outJson[0] : outJson;
+    const mailId = mail?.id || null;
+    if (mailId) outboxIds.push(mailId);
+
+    // Audit (candidate)
+    await writeAudit(env, user, 'EMAIL_QUEUED', {
+      to: toEmail,
+      subject: `Remittance Advice – ${periodLabel}`,
+      period: { start: first || null, end: last || null },
+      mail_id: mailId,
+      timesheets: rows.map(r => r.timesheet_id)
+    }, { entity: 'candidate', subject_id: candId, reason: 'REMITTANCE', correlation_id: mailId, req });
+
+    // Audit (each timesheet) + update remittance counters
+    const nowIso = (new Date()).toISOString();
+    for (const r of rows) {
+      await writeAudit(env, user, 'EMAIL_QUEUED',
+        { to: toEmail, subject: `Remittance Advice – ${periodLabel}`, mail_id: mailId },
+        { entity: 'timesheet', subject_id: r.timesheet_id, reason: 'REMITTANCE', correlation_id: mailId, req });
+
+      const newCount = Number(r.remittance_send_count || 0) + 1;
+      await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(r.id)}`, {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        body: JSON.stringify({ remittance_last_sent_at_utc: nowIso, remittance_send_count: newCount })
+      });
+    }
+
+    totalQueued += 1;
+  }
+
+  return withCORS(env, req, ok({ queued: totalQueued, outbox_ids: outboxIds }));
+}
+
+// ───────────────────────────────────────────────────────────────────────────────
+// 2) TIMESHEETS — PAY STATE
+// ───────────────────────────────────────────────────────────────────────────────
+
+export async function handleTimesheetPayHold(env, req, timesheetId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let body;
+  try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+  const onHold = body?.on_hold === true;
+  const reason = (body?.reason || '').trim() || null;
+
+  // Update the current financial snapshot for the timesheet
+  const patch = onHold
+    ? { pay_on_hold: true, pay_on_hold_reason: reason, pay_on_hold_since_utc: new Date().toISOString() }
+    : { pay_on_hold: false, pay_on_hold_reason: null, pay_on_hold_since_utc: null };
+
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials?is_current=eq.true&timesheet_id=eq.${enc(timesheetId)}`,
+    { method: 'PATCH', headers: { ...sbHeaders(env), Prefer: 'return=representation' }, body: JSON.stringify(patch) }
+  );
+  if (!res.ok) {
+    const t = await res.text();
+    return withCORS(env, req, serverError(`Failed to update pay hold: ${t}`));
+  }
+  const json = await res.json().catch(() => []);
+  const row = Array.isArray(json) ? json[0] : json;
+
+  await writeAudit(env, user, onHold ? 'PAY_HOLD_SET' : 'PAY_HOLD_CLEARED', {
+    reason,
+  }, { entity: 'timesheet', subject_id: timesheetId, reason: 'PAYMENT', correlation_id: null, req });
+
+  return withCORS(env, req, ok({ updated: true, on_hold: onHold, row }));
+}
+
+export async function handleTimesheetMarkPaid(env, req, timesheetId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let body;
+  try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+  const paid = body?.paid === true;
+  const paymentRef = (body?.payment_reference || '').trim() || `MANUAL:${new Date().toISOString().slice(0,10)}`;
+
+  // Load current row
+  const { rows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials?is_current=eq.true&timesheet_id=eq.${enc(timesheetId)}` +
+    `&select=id,candidate_id,client_id,pay_method,total_pay_ex_vat,expenses_pay_ex_vat,mileage_pay_ex_vat,policy_snapshot_json,` +
+    `pay_wtr_rate_pct_snapshot,pay_vat_rate_pct_snapshot,pay_vat_amount_snapshot,pay_total_inc_vat_snapshot`
+  );
+  const row = rows?.[0];
+  if (!row) return withCORS(env, req, notFound('Timesheet financial snapshot not found'));
+
+  const patch = {};
+  if (paid) {
+    patch.paid_at_utc = new Date().toISOString();
+    patch.paid_by_user_id = user.id || null;
+    patch.payment_reference = paymentRef;
+
+    // Fill snapshots if missing (WTR for PAYE, VAT for Umbrella)
+    const defaults = await getDefaultSettings(env);
+    if (String(row.pay_method || '').toUpperCase() === 'PAYE') {
+      if (row.pay_wtr_rate_pct_snapshot == null) {
+        const clientMap = await getClientHolidayPctMap(env, [row.client_id].filter(Boolean));
+        patch.pay_wtr_rate_pct_snapshot = resolveWtrPctForRow(row, defaults, clientMap);
+      }
+    } else {
+      // Umbrella VAT
+      // Need umbrella VAT-chargeable. Fetch candidate -> umbrella
+      const { rows: cRows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(row.candidate_id)}&select=umbrella_id`);
+      const umbId = cRows?.[0]?.umbrella_id || null;
+      let vatChargeable = false;
+      if (umbId) {
+        const { rows: uRows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/umbrellas?id=eq.${enc(umbId)}&select=vat_chargeable`);
+        vatChargeable = !!uRows?.[0]?.vat_chargeable;
+      }
+      const payEx = Number(row.total_pay_ex_vat || 0);
+      const expEx = Number(row.expenses_pay_ex_vat || 0);
+      const milEx = Number(row.mileage_pay_ex_vat || 0);
+      const rowEx = round2(payEx + expEx + milEx);
+
+      if (vatChargeable) {
+        const rate = (row.pay_vat_rate_pct_snapshot == null) ? defaults.vat : Number(row.pay_vat_rate_pct_snapshot);
+        const derived = deriveUmbrellaVatSnapshots(rowEx, rate, true);
+        patch.pay_vat_rate_pct_snapshot = derived.rate;
+        patch.pay_vat_amount_snapshot = derived.vat;
+        patch.pay_total_inc_vat_snapshot = derived.inc;
+      } else {
+        patch.pay_vat_rate_pct_snapshot = null;
+        patch.pay_vat_amount_snapshot = 0;
+        patch.pay_total_inc_vat_snapshot = rowEx;
+      }
+    }
+  } else {
+    patch.paid_at_utc = null;
+    patch.paid_by_user_id = null;
+    patch.payment_reference = null;
+  }
+
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(row.id)}`,
+    { method: 'PATCH', headers: { ...sbHeaders(env), Prefer: 'return=representation' }, body: JSON.stringify(patch) }
+  );
+  if (!res.ok) {
+    const t = await res.text();
+    return withCORS(env, req, serverError(`Failed to update paid state: ${t}`));
+  }
+  const json = await res.json().catch(() => []);
+  const updated = Array.isArray(json) ? json[0] : json;
+
+  await writeAudit(env, user, paid ? 'MARK_PAID' : 'MARK_UNPAID', {
+    payment_reference: paymentRef
+  }, { entity: 'timesheet', subject_id: timesheetId, reason: 'PAYMENT', correlation_id: null, req });
+
+  // Optionally enqueue worker to re-evaluate eligibility on UNPAID
+  if (!paid) {
+    try {
+      await sbRpc(env, 'enqueue_ts_financials', { timesheet_id: timesheetId, reason: 'CONTEXT_CHANGED' });
+    } catch { /* noop */ }
+  }
+
+  return withCORS(env, req, ok({ updated }));
+}
+
+// ───────────────────────────────────────────────────────────────────────────────
+// 3) REPORTS (screen/print/CSV) — minimal but complete implementations
+// ───────────────────────────────────────────────────────────────────────────────
+
+// ───────────────────────────────────────────────────────────────────────────────
+// REPORTS — Timesheets (unchanged; already supports print/csv)
+// ───────────────────────────────────────────────────────────────────────────────
+
+export async function handleReportTimesheets(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const urlObj = new URL(req.url);
+  const q = (k) => urlObj.searchParams.get(k);
+  const qs = (k) => urlObj.searchParams.getAll(k);
+  const format = (q('format') || 'json').toLowerCase(); // 'json' | 'csv' | 'print'
+  const includeOnHold = (q('include_on_hold') === 'true');
+
+  const from = q('week_ending_from');
+  const to = q('week_ending_to');
+  const payMethod = q('pay_method') ? q('pay_method').toUpperCase() : null;
+  const clientIds = qs('client_id');
+  const candidateIds = qs('candidate_id');
+  const paid = q('paid'); // 'true' | 'false' | null
+  const invoiced = q('invoiced'); // 'true' | 'false' | null
+
+  let url = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+    `?select=` + [
+      'timesheet_id','candidate_id','client_id','pay_method','locked_by_invoice_id',
+      'total_pay_ex_vat','total_charge_ex_vat','margin_ex_vat',
+      'expenses_charge_ex_vat','mileage_charge_ex_vat',
+      'paid_at_utc','pay_on_hold',
+      'timesheet:timesheets(week_ending_date)',
+      'client:clients(name)',
+    ].join(',') +
+    `&is_current=eq.true`;
+
+  if (from) url += `&timesheet.week_ending_date=gte.${enc(from)}`;
+  if (to)   url += `&timesheet.week_ending_date=lte.${enc(to)}`;
+  if (payMethod) url += `&pay_method=eq.${enc(payMethod)}`;
+  if (clientIds.length) url += `&client_id=in.(${clientIds.map(enc).join(',')})`;
+  if (candidateIds.length) url += `&candidate_id=in.(${candidateIds.map(enc).join(',')})`;
+  if (!includeOnHold) url += `&pay_on_hold=eq.false`;
+  if (paid === 'true') url += `&paid_at_utc=not.is.null`;
+  if (paid === 'false') url += `&paid_at_utc=is.null`;
+  if (invoiced === 'true') url += `&locked_by_invoice_id=not.is.null`;
+  if (invoiced === 'false') url += `&locked_by_invoice_id=is.null`;
+
+  const { rows } = await sbFetch(env, url);
+  if (!rows?.length) return withCORS(env, req, ok({ rows: [], totals: {} }));
+
+  // Totals
+  const totals = rows.reduce((a, r) => {
+    a.pay_ex_vat += Number(r.total_pay_ex_vat || 0);
+    a.charge_ex_vat += Number(r.total_charge_ex_vat || 0);
+    a.margin_ex_vat += Number(r.margin_ex_vat || 0);
+    a.expenses_charge_ex_vat += Number(r.expenses_charge_ex_vat || 0);
+    a.mileage_charge_ex_vat += Number(r.mileage_charge_ex_vat || 0);
+    return a;
+  }, { pay_ex_vat:0, charge_ex_vat:0, margin_ex_vat:0, expenses_charge_ex_vat:0, mileage_charge_ex_vat:0 });
+  Object.keys(totals).forEach(k => totals[k] = round2(totals[k]));
+
+  if (format === 'csv') {
+    const header = ['WeekEnding','Client','PayMethod','Paid','Invoiced','PayExVAT','ChargeExVAT','MarginExVAT','ExpensesChargeExVAT','MileageChargeExVAT'];
+    const out = [csvJoin(header)];
+    for (const r of rows) {
+      out.push(csvJoin([
+        r?.timesheet?.week_ending_date || '',
+        r?.client?.name || '',
+        (r.pay_method || '').toUpperCase(),
+        r.paid_at_utc ? 'Y' : 'N',
+        r.locked_by_invoice_id ? 'Y' : 'N',
+        round2(r.total_pay_ex_vat).toFixed(2),
+        round2(r.total_charge_ex_vat).toFixed(2),
+        round2(r.margin_ex_vat).toFixed(2),
+        round2(r.expenses_charge_ex_vat).toFixed(2),
+        round2(r.mileage_charge_ex_vat).toFixed(2),
+      ]));
+    }
+    return withCORS(env, req, ok({ csv: out.join('\n'), totals, count: rows.length }));
+  }
+
+  if (format === 'print') {
+    const rowsHtml = rows.map(r => `
+      <tr>
+        <td>${r?.timesheet?.week_ending_date || ''}</td>
+        <td>${r?.client?.name || ''}</td>
+        <td>${(r.pay_method || '').toUpperCase()}</td>
+        <td>${r.paid_at_utc ? 'Y' : 'N'}</td>
+        <td>${r.locked_by_invoice_id ? 'Y' : 'N'}</td>
+        <td style="text-align:right">${round2(r.total_pay_ex_vat).toFixed(2)}</td>
+        <td style="text-align:right">${round2(r.total_charge_ex_vat).toFixed(2)}</td>
+        <td style="text-align:right">${round2(r.margin_ex_vat).toFixed(2)}</td>
+      </tr>`).join('');
+    const html = `
+      <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif">
+        <h3>Timesheets Report</h3>
+        <table width="100%" cellspacing="0" cellpadding="6" style="border-collapse:collapse">
+          <thead><tr style="background:#f5f5f5"><th>Week Ending</th><th>Client</th><th>Pay Method</th><th>Paid</th><th>Invoiced</th><th>Pay ex VAT</th><th>Charge ex VAT</th><th>Margin ex VAT</th></tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+        <p><strong>Totals —</strong> Pay ex VAT: ${totals.pay_ex_vat.toFixed(2)}, Charge ex VAT: ${totals.charge_ex_vat.toFixed(2)}, Margin ex VAT: ${totals.margin_ex_vat.toFixed(2)}</p>
+      </div>`;
+    return withCORS(env, req, ok({ html, totals, count: rows.length }));
+  }
+
+  return withCORS(env, req, ok({ rows, totals, count: rows.length }));
+}
+
+
+// ───────────────────────────────────────────────────────────────────────────────
+// REPORTS — Invoices (add print)
+// ───────────────────────────────────────────────────────────────────────────────
+
+export async function handleReportInvoices(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const urlObj = new URL(req.url);
+  const q = (k) => urlObj.searchParams.get(k);
+  const qs = (k) => urlObj.searchParams.getAll(k);
+  const format = (q('format') || 'json').toLowerCase();
+
+  const from = q('issued_from');
+  const to   = q('issued_to');
+  const status = q('status'); // DRAFT | ISSUED | ON_HOLD | PAID
+  const clientIds = qs('client_id');
+
+  let url = `${env.SUPABASE_URL}/rest/v1/invoices?select=id,client_id,type,status,issued_at_utc,subtotal_ex_vat,vat_amount,total_inc_vat,invoice_no&order=issued_at_utc.desc`;
+  if (from) url += `&issued_at_utc=gte.${enc(from)}`;
+  if (to)   url += `&issued_at_utc=lte.${enc(to)}`;
+  if (status) url += `&status=eq.${enc(status)}`;
+  if (clientIds.length) url += `&client_id=in.(${clientIds.map(enc).join(',')})`;
+
+  const { rows: invs } = await sbFetch(env, url);
+  if (!invs?.length) return withCORS(env, req, ok({ rows: [], totals: {} }));
+
+  // Get margin by summing invoice_lines.margin_ex_vat
+  const invIds = invs.map(i => i.id);
+  const { rows: lines } = await sbFetch(env,
+    `${env.SUPABASE_URL}/rest/v1/invoice_lines?select=invoice_id,margin_ex_vat&invoice_id=in.(${invIds.map(enc).join(',')})`
+  );
+  const marginByInv = {};
+  for (const ln of lines || []) {
+    marginByInv[ln.invoice_id] = round2((marginByInv[ln.invoice_id] || 0) + Number(ln.margin_ex_vat || 0));
+  }
+
+  const rows = invs.map(i => ({
+    ...i,
+    margin_ex_vat: marginByInv[i.id] || 0
+  }));
+
+  const totals = rows.reduce((a, r) => {
+    a.subtotal_ex_vat += Number(r.subtotal_ex_vat || 0);
+    a.vat_amount += Number(r.vat_amount || 0);
+    a.total_inc_vat += Number(r.total_inc_vat || 0);
+    a.margin_ex_vat += Number(r.margin_ex_vat || 0);
+    return a;
+  }, { subtotal_ex_vat:0, vat_amount:0, total_inc_vat:0, margin_ex_vat:0 });
+  Object.keys(totals).forEach(k => totals[k] = round2(totals[k]));
+
+  if (format === 'csv') {
+    const header = ['InvoiceNo','Status','IssuedAt','SubtotalExVAT','VAT','TotalIncVAT','MarginExVAT'];
+    const out = [csvJoin(header)];
+    for (const r of rows) {
+      out.push(csvJoin([
+        r.invoice_no || '',
+        r.status || '',
+        r.issued_at_utc || '',
+        round2(r.subtotal_ex_vat).toFixed(2),
+        round2(r.vat_amount).toFixed(2),
+        round2(r.total_inc_vat).toFixed(2),
+        round2(r.margin_ex_vat).toFixed(2)
+      ]));
+    }
+    return withCORS(env, req, ok({ csv: out.join('\n'), totals, count: rows.length }));
+  }
+
+  if (format === 'print') {
+    const rowsHtml = rows.map(r => `
+      <tr>
+        <td>${r.invoice_no || ''}</td>
+        <td>${r.status || ''}</td>
+        <td>${r.issued_at_utc || ''}</td>
+        <td style="text-align:right">${round2(r.subtotal_ex_vat).toFixed(2)}</td>
+        <td style="text-align:right">${round2(r.vat_amount).toFixed(2)}</td>
+        <td style="text-align:right">${round2(r.total_inc_vat).toFixed(2)}</td>
+        <td style="text-align:right">${round2(r.margin_ex_vat).toFixed(2)}</td>
+      </tr>`).join('');
+    const html = `
+      <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif">
+        <h3>Invoices Report</h3>
+        <table width="100%" cellspacing="0" cellpadding="6" style="border-collapse:collapse">
+          <thead><tr style="background:#f5f5f5">
+            <th>Invoice No</th><th>Status</th><th>Issued At</th>
+            <th>Subtotal ex VAT</th><th>VAT</th><th>Total inc VAT</th><th>Margin ex VAT</th>
+          </tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+        <p><strong>Totals —</strong> Subtotal: ${totals.subtotal_ex_vat.toFixed(2)}, VAT: ${totals.vat_amount.toFixed(2)}, Total: ${totals.total_inc_vat.toFixed(2)}, Margin: ${totals.margin_ex_vat.toFixed(2)}</p>
+      </div>`;
+    return withCORS(env, req, ok({ html, totals, count: rows.length }));
+  }
+
+  return withCORS(env, req, ok({ rows, totals, count: rows.length }));
+}
+
+
+// ───────────────────────────────────────────────────────────────────────────────
+// REPORTS — Candidates (add print)
+// ───────────────────────────────────────────────────────────────────────────────
+
+export async function handleReportCandidates(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const urlObj = new URL(req.url);
+  const q = (k) => urlObj.searchParams.get(k);
+  const qs = (k) => urlObj.searchParams.getAll(k);
+  const format = (q('format') || 'json').toLowerCase();
+
+  const from = q('week_ending_from');
+  const to   = q('week_ending_to');
+  const candidateIds = qs('candidate_id');
+
+  let url = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+    `?select=candidate_id,total_charge_ex_vat,total_pay_ex_vat,margin_ex_vat,timesheet:timesheets(week_ending_date)` +
+    `&is_current=eq.true`;
+  if (from) url += `&timesheet.week_ending_date=gte.${enc(from)}`;
+  if (to)   url += `&timesheet.week_ending_date=lte.${enc(to)}`;
+  if (candidateIds.length) url += `&candidate_id=in.(${candidateIds.map(enc).join(',')})`;
+
+  const { rows } = await sbFetch(env, url);
+  const agg = {};
+  for (const r of rows || []) {
+    if (!r.candidate_id) continue;
+    const a = (agg[r.candidate_id] ||= { candidate_id: r.candidate_id, charge_ex_vat:0, pay_ex_vat:0, margin_ex_vat:0 });
+    a.charge_ex_vat += Number(r.total_charge_ex_vat || 0);
+    a.pay_ex_vat += Number(r.total_pay_ex_vat || 0);
+    a.margin_ex_vat += Number(r.margin_ex_vat || 0);
+  }
+  const outRows = Object.values(agg).map((a) => ({
+    ...a,
+    charge_ex_vat: round2(a.charge_ex_vat),
+    pay_ex_vat: round2(a.pay_ex_vat),
+    margin_ex_vat: round2(a.margin_ex_vat)
+  }));
+
+  if (format === 'csv') {
+    const header = ['CandidateId','ChargeExVAT','PayExVAT','MarginExVAT'];
+    const out = [csvJoin(header)];
+    for (const r of outRows) out.push(csvJoin([r.candidate_id, r.charge_ex_vat.toFixed(2), r.pay_ex_vat.toFixed(2), r.margin_ex_vat.toFixed(2)]));
+    return withCORS(env, req, ok({ csv: out.join('\n'), count: outRows.length }));
+  }
+
+  if (format === 'print') {
+    const rowsHtml = outRows.map(r => `
+      <tr>
+        <td>${r.candidate_id}</td>
+        <td style="text-align:right">${r.charge_ex_vat.toFixed(2)}</td>
+        <td style="text-align:right">${r.pay_ex_vat.toFixed(2)}</td>
+        <td style="text-align:right">${r.margin_ex_vat.toFixed(2)}</td>
+      </tr>`).join('');
+    const html = `
+      <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif">
+        <h3>Candidates Report</h3>
+        <table width="100%" cellspacing="0" cellpadding="6" style="border-collapse:collapse">
+          <thead><tr style="background:#f5f5f5"><th>Candidate</th><th>Charge ex VAT</th><th>Pay ex VAT</th><th>Margin ex VAT</th></tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>`;
+    return withCORS(env, req, ok({ html, count: outRows.length }));
+  }
+
+  return withCORS(env, req, ok({ rows: outRows, count: outRows.length }));
+}
+
+
+// ───────────────────────────────────────────────────────────────────────────────
+// REPORTS — Clients (add print)
+// ───────────────────────────────────────────────────────────────────────────────
+
+export async function handleReportClients(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const urlObj = new URL(req.url);
+  const q = (k) => urlObj.searchParams.get(k);
+  const qs = (k) => urlObj.searchParams.getAll(k);
+  const format = (q('format') || 'json').toLowerCase();
+
+  const from = q('week_ending_from');
+  const to   = q('week_ending_to');
+  const clientIds = qs('client_id');
+
+  let url = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+    `?select=client_id,total_charge_ex_vat,total_pay_ex_vat,margin_ex_vat,timesheet:timesheets(week_ending_date)` +
+    `&is_current=eq.true`;
+  if (from) url += `&timesheet.week_ending_date=gte.${enc(from)}`;
+  if (to)   url += `&timesheet.week_ending_date=lte.${enc(to)}`;
+  if (clientIds.length) url += `&client_id=in.(${clientIds.map(enc).join(',')})`;
+
+  const { rows } = await sbFetch(env, url);
+  const agg = {};
+  for (const r of rows || []) {
+    if (!r.client_id) continue;
+    const a = (agg[r.client_id] ||= { client_id: r.client_id, charge_ex_vat:0, pay_ex_vat:0, margin_ex_vat:0 });
+    a.charge_ex_vat += Number(r.total_charge_ex_vat || 0);
+    a.pay_ex_vat += Number(r.total_pay_ex_vat || 0);
+    a.margin_ex_vat += Number(r.margin_ex_vat || 0);
+  }
+  const outRows = Object.values(agg).map((a) => ({
+    ...a,
+    charge_ex_vat: round2(a.charge_ex_vat),
+    pay_ex_vat: round2(a.pay_ex_vat),
+    margin_ex_vat: round2(a.margin_ex_vat)
+  }));
+
+  if (format === 'csv') {
+    const header = ['ClientId','ChargeExVAT','PayExVAT','MarginExVAT'];
+    const out = [csvJoin(header)];
+    for (const r of outRows) out.push(csvJoin([r.client_id, r.charge_ex_vat.toFixed(2), r.pay_ex_vat.toFixed(2), r.margin_ex_vat.toFixed(2)]));
+    return withCORS(env, req, ok({ csv: out.join('\n'), count: outRows.length }));
+  }
+
+  if (format === 'print') {
+    const rowsHtml = outRows.map(r => `
+      <tr>
+        <td>${r.client_id}</td>
+        <td style="text-align:right">${r.charge_ex_vat.toFixed(2)}</td>
+        <td style="text-align:right">${r.pay_ex_vat.toFixed(2)}</td>
+        <td style="text-align:right">${r.margin_ex_vat.toFixed(2)}</td>
+      </tr>`).join('');
+    const html = `
+      <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif">
+        <h3>Clients Report</h3>
+        <table width="100%" cellspacing="0" cellpadding="6" style="border-collapse:collapse">
+          <thead><tr style="background:#f5f5f5"><th>Client</th><th>Charge ex VAT</th><th>Pay ex VAT</th><th>Margin ex VAT</th></tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>`;
+    return withCORS(env, req, ok({ html, count: outRows.length }));
+  }
+
+  return withCORS(env, req, ok({ rows: outRows, count: outRows.length }));
+}
+
+
+// ───────────────────────────────────────────────────────────────────────────────
+// REPORTS — Umbrellas (add charge/margin + print)
+// ───────────────────────────────────────────────────────────────────────────────
+
+export async function handleReportUmbrellas(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const urlObj = new URL(req.url);
+  const q = (k) => urlObj.searchParams.get(k);
+  const format = (q('format') || 'json').toLowerCase();
+
+  // Pull candidate <- umbrella mapping (and names for display)
+  const { rows: candUmb } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/candidates?select=id,umbrella_id&umbrella_id=not.is.null`);
+  const mapCandUmb = Object.fromEntries((candUmb || []).map(c => [c.id, c.umbrella_id]));
+  const umbIds = [...new Set((candUmb || []).map(c => c.umbrella_id))];
+  if (!umbIds.length) return withCORS(env, req, ok({ rows: [], count: 0 }));
+
+  const { rows: umbMeta } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/umbrellas?id=in.(${umbIds.map(enc).join(',')})&select=id,name`);
+  const umbName = Object.fromEntries((umbMeta || []).map(u => [u.id, u.name || u.id]));
+
+  // Get ts-fin grouped for those candidates (include pay, charge, margin)
+  const { rows } = await sbFetch(env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials?select=candidate_id,total_pay_ex_vat,total_charge_ex_vat,margin_ex_vat` +
+    `&is_current=eq.true&candidate_id=in.(${Object.keys(mapCandUmb).map(enc).join(',')})`
+  );
+
+  const agg = {};
+  for (const r of rows || []) {
+    const umb = mapCandUmb[r.candidate_id];
+    const a = (agg[umb] ||= { umbrella_id: umb, umbrella_name: umbName[umb] || umb, pay_ex_vat: 0, charge_ex_vat: 0, margin_ex_vat: 0 });
+    a.pay_ex_vat += Number(r.total_pay_ex_vat || 0);
+    a.charge_ex_vat += Number(r.total_charge_ex_vat || 0);
+    a.margin_ex_vat += Number(r.margin_ex_vat || 0);
+  }
+  for (const k of Object.keys(agg)) {
+    agg[k].pay_ex_vat = round2(agg[k].pay_ex_vat);
+    agg[k].charge_ex_vat = round2(agg[k].charge_ex_vat);
+    agg[k].margin_ex_vat = round2(agg[k].margin_ex_vat);
+  }
+
+  const outRows = Object.values(agg);
+
+  if (format === 'csv') {
+    const header = ['UmbrellaId','UmbrellaName','PayExVAT','ChargeExVAT','MarginExVAT'];
+    const out = [csvJoin(header)];
+    for (const r of outRows) out.push(csvJoin([r.umbrella_id, r.umbrella_name, r.pay_ex_vat.toFixed(2), r.charge_ex_vat.toFixed(2), r.margin_ex_vat.toFixed(2)]));
+    return withCORS(env, req, ok({ csv: out.join('\n'), count: outRows.length }));
+  }
+
+  if (format === 'print') {
+    const rowsHtml = outRows.map(r => `
+      <tr>
+        <td>${r.umbrella_name}</td>
+        <td style="text-align:right">${r.pay_ex_vat.toFixed(2)}</td>
+        <td style="text-align:right">${r.charge_ex_vat.toFixed(2)}</td>
+        <td style="text-align:right">${r.margin_ex_vat.toFixed(2)}</td>
+      </tr>`).join('');
+    const html = `
+      <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif">
+        <h3>Umbrellas Report</h3>
+        <table width="100%" cellspacing="0" cellpadding="6" style="border-collapse:collapse">
+          <thead><tr style="background:#f5f5f5"><th>Umbrella</th><th>Pay ex VAT</th><th>Charge ex VAT</th><th>Margin ex VAT</th></tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>`;
+    return withCORS(env, req, ok({ html, count: outRows.length }));
+  }
+
+  return withCORS(env, req, ok({ rows: outRows, count: outRows.length }));
+}
+// ───────────────────────────────────────────────────────────────────────────────
+// 4) SEARCH (rich filters per section) — pragmatic implementations
+// ───────────────────────────────────────────────────────────────────────────────
+
+// ───────────────────────────────────────────────────────────────────────────────
+// SEARCH — Timesheets (richer filters + csv/print)
+// ───────────────────────────────────────────────────────────────────────────────
+
+export async function handleSearchTimesheets(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  const urlObj = new URL(req.url);
+  const q = (k) => urlObj.searchParams.get(k);
+  const page = Math.max(1, parseInt(q('page') || '1', 10));
+  const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
+
+  const format = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
+  const includeOnHold = q('include_on_hold') === 'true';
+  const paid = q('paid');         // 'true' | 'false' | null
+  const invoiced = q('invoiced'); // 'true' | 'false' | null
+
+  const weFrom = q('week_ending_from');
+  const weTo   = q('week_ending_to');
+  const clientId = q('client_id');
+  const candidateId = q('candidate_id');
+  const payMethod = q('pay_method') ? q('pay_method').toUpperCase() : null;
+
+  const orderBy = (q('order_by') || 'week_ending_date').toLowerCase(); // week_ending_date|margin|charge|pay
+  const orderDir = (q('order_dir') || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
+
+  let url = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+    `?select=timesheet_id,candidate_id,client_id,pay_method,` +
+    `total_charge_ex_vat,total_pay_ex_vat,margin_ex_vat,paid_at_utc,locked_by_invoice_id,pay_on_hold,` +
+    `timesheet:timesheets(week_ending_date),client:clients(name)` +
+    `&is_current=eq.true`;
+  if (weFrom) url += `&timesheet.week_ending_date=gte.${enc(weFrom)}`;
+  if (weTo)   url += `&timesheet.week_ending_date=lte.${enc(weTo)}`;
+  if (clientId) url += `&client_id=eq.${enc(clientId)}`;
+  if (candidateId) url += `&candidate_id=eq.${enc(candidateId)}`;
+  if (payMethod) url += `&pay_method=eq.${enc(payMethod)}`;
+  if (!includeOnHold) url += `&pay_on_hold=eq.false`;
+  if (paid === 'true') url += `&paid_at_utc=not.is.null`;
+  if (paid === 'false') url += `&paid_at_utc=is.null`;
+  if (invoiced === 'true') url += `&locked_by_invoice_id=not.is.null`;
+  if (invoiced === 'false') url += `&locked_by_invoice_id=is.null`;
+
+  const orderMap = {
+    week_ending_date: 'timesheet.week_ending_date',
+    margin: 'margin_ex_vat',
+    charge: 'total_charge_ex_vat',
+    pay: 'total_pay_ex_vat',
+  };
+  const orderCol = orderMap[orderBy] || orderMap.week_ending_date;
+  url += `&order=${enc(orderCol)}.${orderDir}&limit=${pageSize}&offset=${(page-1)*pageSize}`;
+
+  const { rows } = await sbFetch(env, url);
+
+  if (format === 'csv') {
+    const header = ['WeekEnding','Client','PayMethod','OnHold','Paid','Invoiced','PayExVAT','ChargeExVAT','MarginExVAT'];
+    const out = [csvJoin(header)];
+    for (const r of rows || []) {
+      out.push(csvJoin([
+        r?.timesheet?.week_ending_date || '',
+        r?.client?.name || '',
+        (r.pay_method || '').toUpperCase(),
+        r.pay_on_hold ? 'Y' : 'N',
+        r.paid_at_utc ? 'Y' : 'N',
+        r.locked_by_invoice_id ? 'Y' : 'N',
+        round2(r.total_pay_ex_vat || 0).toFixed(2),
+        round2(r.total_charge_ex_vat || 0).toFixed(2),
+        round2(r.margin_ex_vat || 0).toFixed(2),
+      ]));
+    }
+    return withCORS(env, req, ok({ csv: out.join('\n'), count: rows?.length || 0, page, page_size: pageSize }));
+  }
+
+  if (format === 'print') {
+    const rowsHtml = (rows || []).map(r => `
+      <tr>
+        <td>${r?.timesheet?.week_ending_date || ''}</td>
+        <td>${r?.client?.name || ''}</td>
+        <td>${(r.pay_method || '').toUpperCase()}</td>
+        <td>${r.pay_on_hold ? 'Y' : 'N'}</td>
+        <td>${r.paid_at_utc ? 'Y' : 'N'}</td>
+        <td>${r.locked_by_invoice_id ? 'Y' : 'N'}</td>
+        <td style="text-align:right">${round2(r.total_pay_ex_vat || 0).toFixed(2)}</td>
+        <td style="text-align:right">${round2(r.total_charge_ex_vat || 0).toFixed(2)}</td>
+        <td style="text-align:right">${round2(r.margin_ex_vat || 0).toFixed(2)}</td>
+      </tr>`).join('');
+    const html = `
+      <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif">
+        <h3>Timesheets — Search Results</h3>
+        <table width="100%" cellspacing="0" cellpadding="6" style="border-collapse:collapse">
+          <thead><tr style="background:#f5f5f5">
+            <th>Week Ending</th><th>Client</th><th>Pay Method</th>
+            <th>On Hold</th><th>Paid</th><th>Invoiced</th>
+            <th>Pay ex VAT</th><th>Charge ex VAT</th><th>Margin ex VAT</th>
+          </tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>`;
+    return withCORS(env, req, ok({ html, count: rows?.length || 0, page, page_size: pageSize }));
+  }
+
+  return withCORS(env, req, ok({ rows, page, page_size: pageSize, count: rows?.length || 0 }));
+}
+
+
+// ───────────────────────────────────────────────────────────────────────────────
+// SEARCH — Invoices (richer filters + csv/print)
+// ───────────────────────────────────────────────────────────────────────────────
+
+export async function handleSearchInvoices(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  const urlObj = new URL(req.url);
+  const q = (k) => urlObj.searchParams.get(k);
+  const page = Math.max(1, parseInt(q('page') || '1', 10));
+  const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
+
+  const format = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
+  const status = q('status'); // DRAFT|ISSUED|ON_HOLD|PAID
+  const clientId = q('client_id');
+  const invNo = q('invoice_no');
+  const invQ = q('q'); // partial search on invoice_no
+  const issuedFrom = q('issued_from');
+  const issuedTo   = q('issued_to');
+
+  const orderBy = (q('order_by') || 'issued_at_utc').toLowerCase();
+  const orderDir = (q('order_dir') || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
+
+  let url = `${env.SUPABASE_URL}/rest/v1/invoices?select=id,invoice_no,client_id,status,issued_at_utc,total_inc_vat,subtotal_ex_vat,vat_amount&limit=${pageSize}&offset=${(page-1)*pageSize}`;
+  // filters
+  if (status) url += `&status=eq.${enc(status)}`;
+  if (clientId) url += `&client_id=eq.${enc(clientId)}`;
+  if (invNo) url += `&invoice_no=eq.${enc(invNo)}`;
+  if (invQ) url += `&invoice_no=ilike.*${enc(invQ)}*`;
+  if (issuedFrom) url += `&issued_at_utc=gte.${enc(issuedFrom)}`;
+  if (issuedTo)   url += `&issued_at_utc=lte.${enc(issuedTo)}`;
+
+  const orderAllowed = new Set(['issued_at_utc','invoice_no','total_inc_vat','subtotal_ex_vat']);
+  url += `&order=${orderAllowed.has(orderBy) ? enc(orderBy) : 'issued_at_utc'}.${orderDir}`;
+
+  const { rows } = await sbFetch(env, url);
+
+  if (format === 'csv') {
+    const header = ['InvoiceNo','Status','IssuedAt','SubtotalExVAT','VAT','TotalIncVAT'];
+    const out = [csvJoin(header)];
+    for (const r of rows || []) {
+      out.push(csvJoin([
+        r.invoice_no || '',
+        r.status || '',
+        r.issued_at_utc || '',
+        round2(r.subtotal_ex_vat || 0).toFixed(2),
+        round2(r.vat_amount || 0).toFixed(2),
+        round2(r.total_inc_vat || 0).toFixed(2),
+      ]));
+    }
+    return withCORS(env, req, ok({ csv: out.join('\n'), count: rows?.length || 0, page, page_size: pageSize }));
+  }
+
+  if (format === 'print') {
+    const rowsHtml = (rows || []).map(r => `
+      <tr>
+        <td>${r.invoice_no || ''}</td>
+        <td>${r.status || ''}</td>
+        <td>${r.issued_at_utc || ''}</td>
+        <td style="text-align:right">${round2(r.subtotal_ex_vat || 0).toFixed(2)}</td>
+        <td style="text-align:right">${round2(r.vat_amount || 0).toFixed(2)}</td>
+        <td style="text-align:right">${round2(r.total_inc_vat || 0).toFixed(2)}</td>
+      </tr>`).join('');
+    const html = `
+      <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif">
+        <h3>Invoices — Search Results</h3>
+        <table width="100%" cellspacing="0" cellpadding="6" style="border-collapse:collapse">
+          <thead><tr style="background:#f5f5f5">
+            <th>Invoice No</th><th>Status</th><th>Issued At</th>
+            <th>Subtotal ex VAT</th><th>VAT</th><th>Total inc VAT</th>
+          </tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>`;
+    return withCORS(env, req, ok({ html, count: rows?.length || 0, page, page_size: pageSize }));
+  }
+
+  return withCORS(env, req, ok({ rows, page, page_size: pageSize, count: rows?.length || 0 }));
+}
+
+
+// ───────────────────────────────────────────────────────────────────────────────
+// SEARCH — Candidates (richer filters + csv/print)
+// ───────────────────────────────────────────────────────────────────────────────
+
+export async function handleSearchCandidates(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  const urlObj = new URL(req.url);
+  const q = (k) => urlObj.searchParams.get(k);
+  const page = Math.max(1, parseInt(q('page') || '1', 10));
+  const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
+  const format = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
+
+  const text = q('q'); // display_name partial
+  const payMethod = q('pay_method') ? q('pay_method').toUpperCase() : null; // PAYE|UMBRELLA
+  const active = q('active'); // 'true'|'false'|null
+
+  let url = `${env.SUPABASE_URL}/rest/v1/candidates?select=id,display_name,first_name,last_name,email,pay_method,active&order=display_name.asc` +
+    `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
+  if (text) url += `&display_name=ilike.*${enc(text)}*`;
+  if (payMethod) url += `&pay_method=eq.${enc(payMethod)}`;
+  if (active === 'true') url += `&active=eq.true`;
+  if (active === 'false') url += `&active=eq.false`;
+
+  const { rows } = await sbFetch(env, url);
+
+  if (format === 'csv') {
+    const header = ['CandidateId','DisplayName','Email','PayMethod','Active'];
+    const out = [csvJoin(header)];
+    for (const r of rows || []) {
+      out.push(csvJoin([
+        r.id,
+        r.display_name || [r.first_name, r.last_name].filter(Boolean).join(' '),
+        r.email || '',
+        (r.pay_method || '').toUpperCase(),
+        r.active ? 'Y' : 'N'
+      ]));
+    }
+    return withCORS(env, req, ok({ csv: out.join('\n'), count: rows?.length || 0, page, page_size: pageSize }));
+  }
+
+  if (format === 'print') {
+    const rowsHtml = (rows || []).map(r => `
+      <tr>
+        <td>${r.display_name || [r.first_name, r.last_name].filter(Boolean).join(' ')}</td>
+        <td>${r.email || ''}</td>
+        <td>${(r.pay_method || '').toUpperCase()}</td>
+        <td>${r.active ? 'Y' : 'N'}</td>
+      </tr>`).join('');
+    const html = `
+      <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif">
+        <h3>Candidates — Search Results</h3>
+        <table width="100%" cellspacing="0" cellpadding="6" style="border-collapse:collapse">
+          <thead><tr style="background:#f5f5f5">
+            <th>Candidate</th><th>Email</th><th>Pay Method</th><th>Active</th>
+          </tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>`;
+    return withCORS(env, req, ok({ html, count: rows?.length || 0, page, page_size: pageSize }));
+  }
+
+  return withCORS(env, req, ok({ rows, page, page_size: pageSize, count: rows?.length || 0 }));
+}
+
+
+// ───────────────────────────────────────────────────────────────────────────────
+// SEARCH — Clients (richer filters + csv/print)
+// ───────────────────────────────────────────────────────────────────────────────
+
+export async function handleSearchClients(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  const urlObj = new URL(req.url);
+  const q = (k) => urlObj.searchParams.get(k);
+  const page = Math.max(1, parseInt(q('page') || '1', 10));
+  const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
+  const format = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
+
+  const text = q('q'); // name partial
+  const vatChargeable = q('vat_chargeable'); // 'true'|'false'|null
+
+  let url = `${env.SUPABASE_URL}/rest/v1/clients?select=id,name,vat_chargeable,payment_terms_days&order=name.asc` +
+    `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
+  if (text) url += `&name=ilike.*${enc(text)}*`;
+  if (vatChargeable === 'true') url += `&vat_chargeable=eq.true`;
+  if (vatChargeable === 'false') url += `&vat_chargeable=eq.false`;
+
+  const { rows } = await sbFetch(env, url);
+
+  if (format === 'csv') {
+    const header = ['ClientId','Name','VATChargeable','PaymentTermsDays'];
+    const out = [csvJoin(header)];
+    for (const r of rows || []) {
+      out.push(csvJoin([
+        r.id, r.name || '', r.vat_chargeable ? 'Y' : 'N', Number(r.payment_terms_days ?? '')
+      ]));
+    }
+    return withCORS(env, req, ok({ csv: out.join('\n'), count: rows?.length || 0, page, page_size: pageSize }));
+  }
+
+  if (format === 'print') {
+    const rowsHtml = (rows || []).map(r => `
+      <tr>
+        <td>${r.name || ''}</td>
+        <td>${r.vat_chargeable ? 'Y' : 'N'}</td>
+        <td>${Number(r.payment_terms_days ?? '')}</td>
+      </tr>`).join('');
+    const html = `
+      <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif">
+        <h3>Clients — Search Results</h3>
+        <table width="100%" cellspacing="0" cellpadding="6" style="border-collapse:collapse">
+          <thead><tr style="background:#f5f5f5">
+            <th>Name</th><th>VAT Chargeable</th><th>Payment Terms (days)</th>
+          </tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>`;
+    return withCORS(env, req, ok({ html, count: rows?.length || 0, page, page_size: pageSize }));
+  }
+
+  return withCORS(env, req, ok({ rows, page, page_size: pageSize, count: rows?.length || 0 }));
+}
+
+
+// ───────────────────────────────────────────────────────────────────────────────
+// SEARCH — Umbrellas (richer filters + csv/print)
+// ───────────────────────────────────────────────────────────────────────────────
+
+export async function handleSearchUmbrellas(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  const urlObj = new URL(req.url);
+  const q = (k) => urlObj.searchParams.get(k);
+  const page = Math.max(1, parseInt(q('page') || '1', 10));
+  const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
+  const format = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
+
+  const text = q('q'); // name partial
+  const enabled = q('enabled'); // 'true'|'false'|null
+  const vatChargeable = q('vat_chargeable'); // 'true'|'false'|null
+
+  let url = `${env.SUPABASE_URL}/rest/v1/umbrellas?select=id,name,vat_chargeable,enabled&order=name.asc` +
+    `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
+  if (text) url += `&name=ilike.*${enc(text)}*`;
+  if (enabled === 'true') url += `&enabled=eq.true`;
+  if (enabled === 'false') url += `&enabled=eq.false`;
+  if (vatChargeable === 'true') url += `&vat_chargeable=eq.true`;
+  if (vatChargeable === 'false') url += `&vat_chargeable=eq.false`;
+
+  const { rows } = await sbFetch(env, url);
+
+  if (format === 'csv') {
+    const header = ['UmbrellaId','Name','Enabled','VATChargeable'];
+    const out = [csvJoin(header)];
+    for (const r of rows || []) {
+      out.push(csvJoin([r.id, r.name || '', r.enabled ? 'Y' : 'N', r.vat_chargeable ? 'Y' : 'N']));
+    }
+    return withCORS(env, req, ok({ csv: out.join('\n'), count: rows?.length || 0, page, page_size: pageSize }));
+  }
+
+  if (format === 'print') {
+    const rowsHtml = (rows || []).map(r => `
+      <tr>
+        <td>${r.name || ''}</td>
+        <td>${r.enabled ? 'Y' : 'N'}</td>
+        <td>${r.vat_chargeable ? 'Y' : 'N'}</td>
+      </tr>`).join('');
+    const html = `
+      <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif">
+        <h3>Umbrellas — Search Results</h3>
+        <table width="100%" cellspacing="0" cellpadding="6" style="border-collapse:collapse">
+          <thead><tr style="background:#f5f5f5">
+            <th>Name</th><th>Enabled</th><th>VAT Chargeable</th>
+          </tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>`;
+    return withCORS(env, req, ok({ html, count: rows?.length || 0, page, page_size: pageSize }));
+  }
+
+  return withCORS(env, req, ok({ rows, page, page_size: pageSize, count: rows?.length || 0 }));
+}
+
+// ───────────────────────────────────────────────────────────────────────────────
+// REPORT PRESETS — Create / List / Update / Delete
+// Table: report_presets (id, user_id, section, name, filters_json, is_default, is_shared, created_at, updated_at)
+// ───────────────────────────────────────────────────────────────────────────────
+
+export async function handleReportPresetsList(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const urlObj = new URL(req.url);
+  const q = (k) => urlObj.searchParams.get(k);
+  const page = Math.max(1, parseInt(q('page') || '1', 10));
+  const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
+  const section = q('section');                 // optional: filter to a section
+  const text = q('q');                          // optional name search
+  const includeShared = q('include_shared') === 'true';
+  const orderBy = (q('order_by') || 'created_at').toLowerCase(); // created_at|name|updated_at
+  const orderDir = (q('order_dir') || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
+
+  // 1) Fetch my presets
+  let urlMine = `${env.SUPABASE_URL}/rest/v1/report_presets?select=id,user_id,section,name,filters_json,is_default,is_shared,created_at,updated_at` +
+    `&user_id=eq.${enc(user.id)}`;
+  if (section) urlMine += `&section=eq.${enc(section)}`;
+  if (text) urlMine += `&name=ilike.*${enc(text)}*`;
+  const orderAllowed = new Set(['created_at','name','updated_at']);
+  urlMine += `&order=${orderAllowed.has(orderBy) ? enc(orderBy) : 'created_at'}.${orderDir}` +
+             `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
+
+  const { rows: mine = [] } = await sbFetch(env, urlMine);
+
+  // 2) Optionally fetch shared presets (not owned by user, but visible)
+  let shared = [];
+  if (includeShared) {
+    let urlShared = `${env.SUPABASE_URL}/rest/v1/report_presets?select=id,user_id,section,name,filters_json,is_default,is_shared,created_at,updated_at` +
+      `&is_shared=eq.true`;
+    if (section) urlShared += `&section=eq.${enc(section)}`;
+    if (text) urlShared += `&name=ilike.*${enc(text)}*`;
+    urlShared += `&order=${orderAllowed.has(orderBy) ? enc(orderBy) : 'created_at'}.${orderDir}` +
+                 `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
+    const { rows } = await sbFetch(env, urlShared);
+    shared = rows || [];
+  }
+
+  // Note: We do not attempt to de-duplicate (IDs are unique anyway).
+  return withCORS(env, req, ok({
+    rows: mine.concat(shared),
+    page, page_size: pageSize,
+    count: (mine?.length || 0) + (shared?.length || 0)
+  }));
+}
+
+export async function handleReportPresetsCreate(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let body;
+  try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  const section = (body?.section || '').trim();
+  const name = (body?.name || '').trim();
+  const filters = body?.filters || {};
+  const isDefault = !!body?.is_default;
+  const isShared = !!body?.is_shared; // keep false unless you genuinely want global visibility
+
+  if (!section) return withCORS(env, req, badRequest('section is required'));
+  if (!name) return withCORS(env, req, badRequest('name is required'));
+  if (typeof filters !== 'object') return withCORS(env, req, badRequest('filters must be an object'));
+
+  // If setting as default, clear any previous defaults for this user + section
+  if (isDefault) {
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/report_presets?user_id=eq.${enc(user.id)}&section=eq.${enc(section)}&is_default=eq.true`,
+      { method: 'PATCH', headers: { ...sbHeaders(env), Prefer: 'return=minimal' }, body: JSON.stringify({ is_default: false }) }
+    );
+  }
+
+  // Create
+  const { rows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/report_presets`,
+    true, // representation
+    {
+      method: 'POST',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify({
+        user_id: user.id,
+        section,
+        name,
+        filters_json: filters,
+        is_default: isDefault,
+        is_shared: isShared
+      })
+    }
+  );
+
+  return withCORS(env, req, ok({ row: rows?.[0] || null }));
+}
+
+export async function handleReportPresetsUpdate(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const urlObj = new URL(req.url);
+  const presetId = urlObj.searchParams.get('id'); // allow ?id=... OR body.id
+
+  let body;
+  try { body = await parseJSONBody(req); } catch { body = {}; }
+  const id = presetId || body?.id;
+  if (!id) return withCORS(env, req, badRequest('id is required'));
+
+  // Fetch to validate ownership OR allow updating shared if you want special rules
+  const { rows: existingRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/report_presets?select=id,user_id,section,is_default&id=eq.${enc(id)}`
+  );
+  const existing = existingRows?.[0];
+  if (!existing) return withCORS(env, req, notFound('Preset not found'));
+  if (existing.user_id !== user.id) {
+    // If you want to let admins edit shared/global presets, add branch here.
+    return withCORS(env, req, unauthorized());
+  }
+
+  const patch = {};
+  if (typeof body.name === 'string') patch.name = body.name.trim();
+  if (typeof body.section === 'string') patch.section = body.section.trim();
+  if (body.filters && typeof body.filters === 'object') patch.filters_json = body.filters;
+  if (typeof body.is_shared === 'boolean') patch.is_shared = body.is_shared;
+  if (typeof body.is_default === 'boolean') patch.is_default = body.is_default;
+
+  // If becoming default, clear others for (user, section)
+  if (patch.is_default === true) {
+    const sectionEff = patch.section || existing.section;
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/report_presets?user_id=eq.${enc(user.id)}&section=eq.${enc(sectionEff)}&is_default=eq.true&id=neq.${enc(id)}`,
+      { method: 'PATCH', headers: { ...sbHeaders(env), Prefer: 'return=minimal' }, body: JSON.stringify({ is_default: false }) }
+    );
+  }
+
+  const { rows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/report_presets?id=eq.${enc(id)}`,
+    true,
+    { method: 'PATCH', headers: { ...sbHeaders(env), Prefer: 'return=representation' }, body: JSON.stringify(patch) }
+  );
+
+  return withCORS(env, req, ok({ row: rows?.[0] || null }));
+}
+
+export async function handleReportPresetsDelete(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const urlObj = new URL(req.url);
+  const id = urlObj.searchParams.get('id');
+  if (!id) return withCORS(env, req, badRequest('id is required'));
+
+  // Ownership check
+  const { rows: existingRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/report_presets?select=id,user_id&id=eq.${enc(id)}`
+  );
+  const existing = existingRows?.[0];
+  if (!existing) return withCORS(env, req, notFound('Preset not found'));
+  if (existing.user_id !== user.id) return withCORS(env, req, unauthorized());
+
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/report_presets?id=eq.${enc(id)}`,
+    { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
+  );
+
+  return withCORS(env, req, ok({ deleted_id: id }));
+}
 
 function buildHTML(payload) {
   const {
@@ -868,6 +2638,8 @@ function normalizeEmailPayload(raw) {
 
   return { to, cc, bcc, replyTo, subject: raw.subject, html, text, attachments, reference: raw.reference };
 }
+
+
 
 function validateEmailPayload(p) {
   if (!Array.isArray(p.to) || p.to.length === 0) return 'Missing recipient(s)';
@@ -1357,13 +3129,24 @@ export async function handleRemittanceEmailForCandidate(env, req) {
     return withCORS(env, req, badRequest('Provide either timesheet_ids[] OR { candidate_id, period_start, period_end }'));
   }
 
+  // helpers
+  const nowIso = new Date().toISOString();
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
+  const fmt = (n) => (n == null ? '' : Number(n).toFixed(2));
+  const toNum = (v) => (v == null ? 0 : Number(v) || 0);
+
   try {
+    // 1) Pull current ts-fin snapshots (+ joined timesheet + client) with the new fields we need
     let url = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
               `?select=` + [
-                'timesheet_id','candidate_id','client_id',
+                'id','timesheet_id','candidate_id','client_id','pay_method',
                 'hours_day','hours_night','hours_sat','hours_sun','hours_bh',
                 'pay_day','pay_night','pay_sat','pay_sun','pay_bh',
                 'total_hours','total_pay_ex_vat',
+                'expenses_pay_ex_vat','mileage_pay_ex_vat',
+                'pay_wtr_rate_pct_snapshot','policy_snapshot_json',
+                'pay_vat_rate_pct_snapshot','pay_vat_amount_snapshot','pay_total_inc_vat_snapshot',
+                'remittance_send_count',
                 'timesheet:timesheets(timesheet_id,booking_id,week_ending_date,hospital_norm,ward_norm,shift_label_norm)',
                 'client:clients(name)'
               ].join(',') +
@@ -1386,8 +3169,12 @@ export async function handleRemittanceEmailForCandidate(env, req) {
     if (candIds.length !== 1) return withCORS(env, req, badRequest('Selection spans multiple candidates; send one remittance per candidate.'));
     const candId = candIds[0];
 
-    const { rows: candRows } = await sbFetch(env,
-      `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(candId)}&select=id,email,display_name,first_name,last_name`, false);
+    // Candidate details
+    const { rows: candRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(candId)}&select=id,email,display_name,first_name,last_name`,
+      false
+    );
     if (!candRows?.length) return withCORS(env, req, notFound('Candidate not found'));
 
     const cand = candRows[0];
@@ -1412,11 +3199,94 @@ export async function handleRemittanceEmailForCandidate(env, req) {
 
     const reference = `remit:candidate:${candId}:${periodKey}`;
 
-    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
-    const fmt = (n) => (n == null ? '' : Number(n).toFixed(2));
+    // Determine if selection is PAYE and/or UMBRELLA (in theory a candidate is one channel, but be robust)
+    const hasPAYE = finRows.some((r) => String(r.pay_method || '').toUpperCase() === 'PAYE');
+    const hasUmbrella = finRows.some((r) => String(r.pay_method || '').toUpperCase() === 'UMBRELLA');
+
+    // Load defaults (for WTR fallback)
+    let defaultWTR = 0;
+    {
+      const { rows: defRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=holiday_pay_pct`
+      );
+      defaultWTR = Number(defRows?.[0]?.holiday_pay_pct ?? 0);
+    }
+
+    // WTR helper — prefer snapshot, else policy, else default
+    function resolveWtrPct(row) {
+      const snap = row?.pay_wtr_rate_pct_snapshot;
+      if (snap !== null && snap !== undefined && Number.isFinite(Number(snap))) return Number(snap);
+      const pol = row?.policy_snapshot_json || {};
+      let pct = Number(pol.holiday_pay_pct ?? NaN);
+      const applyTo = String(pol.apply_holiday_to || '').toUpperCase();
+      if (applyTo === 'NONE') return 0;
+      // If explicitly scoped to PAYE or ALL, use; otherwise fallback
+      if (!Number.isFinite(pct)) return defaultWTR;
+      return pct;
+    }
+
+    // 2) Build table rows with:
+    // - Per band hours/rates (as before)
+    // - PAYE: Basic/WTR informational split (included in pay) using WTR%
+    // - UMBRELLA: VAT & inc-VAT using snapshot (or derived from rate if snapshot missing)
+    let totalPayEx = 0, totalExpEx = 0, totalMilEx = 0, totalEx = 0;
+    let totalWtrBasic = 0, totalWtrElem = 0;
+    let totalVat = 0, totalInc = 0;
 
     const rowsHtml = finRows.map((r) => {
       const ts = r.timesheet || {}; const cli = r.client || {};
+      const payMethod = String(r.pay_method || '').toUpperCase();
+
+      // Ex-VAT components
+      const payEx = toNum(r.total_pay_ex_vat);
+      const expEx = toNum(r.expenses_pay_ex_vat);
+      const milEx = toNum(r.mileage_pay_ex_vat);
+      let rowEx = payEx + expEx + milEx;
+
+      totalPayEx += payEx;
+      totalExpEx += expEx;
+      totalMilEx += milEx;
+      totalEx += rowEx;
+
+      // PAYE WTR split (informational)
+      let wtrInfoHtml = '—';
+      if (payMethod === 'PAYE') {
+        const wtrPct = resolveWtrPct(r);
+        const base = rowEx > 0 ? (payEx / (1 + (wtrPct / 100))) : 0; // split only the hourly pay portion
+        const wtr = payEx - base;
+        totalWtrBasic += base;
+        totalWtrElem += wtr;
+        wtrInfoHtml = `${fmt(base)} basic + ${fmt(wtr)} WTR @ ${fmt(wtrPct)}%`;
+      }
+
+      // Umbrella VAT (from snapshot if present)
+      let vatHtml = '';
+      let incHtml = '';
+      if (payMethod === 'UMBRELLA') {
+        let vatAmt = toNum(r.pay_vat_amount_snapshot);
+        let incAmt = toNum(r.pay_total_inc_vat_snapshot);
+        const rate = r.pay_vat_rate_pct_snapshot == null ? null : Number(r.pay_vat_rate_pct_snapshot);
+
+        // If snapshot absent, derive from ex + rate (if available)
+        if (!incAmt && rate && rate > 0) {
+          vatAmt = (rowEx * rate) / 100;
+          incAmt = rowEx + vatAmt;
+        }
+        // Prefer snapshot-consistent ex for display where possible
+        if (incAmt && vatAmt) {
+          // Recompute rowEx for display consistency
+          const snapshotEx = incAmt - vatAmt;
+          if (snapshotEx > 0) rowEx = snapshotEx;
+        }
+
+        totalVat += vatAmt;
+        totalInc += incAmt;
+
+        vatHtml = `${fmt(vatAmt)}${(rate || rate === 0) ? ` @ ${fmt(rate)}%` : ''}`;
+        incHtml = `${fmt(incAmt)}`;
+      }
+
       return `
         <tr>
           <td>${esc(ts.week_ending_date || '')}</td>
@@ -1424,6 +3294,7 @@ export async function handleRemittanceEmailForCandidate(env, req) {
           <td>${esc(ts.hospital_norm || '')}</td>
           <td>${esc(ts.ward_norm || '')}</td>
           <td>${esc(ts.shift_label_norm || '')}</td>
+
           <td style="text-align:right">${fmt(r.hours_day)}</td>
           <td style="text-align:right">${fmt(r.pay_day)}</td>
           <td style="text-align:right">${fmt(r.hours_night)}</td>
@@ -1434,17 +3305,34 @@ export async function handleRemittanceEmailForCandidate(env, req) {
           <td style="text-align:right">${fmt(r.pay_sun)}</td>
           <td style="text-align:right">${fmt(r.hours_bh)}</td>
           <td style="text-align:right">${fmt(r.pay_bh)}</td>
-          <td style="text-align:right"><strong>${fmt(r.total_pay_ex_vat)}</strong></td>
+
+          <td style="text-align:right">${fmt(payEx)}</td>
+          <td style="text-align:right">${fmt(expEx)}</td>
+          <td style="text-align:right">${fmt(milEx)}</td>
+          <td style="text-align:right"><strong>${fmt(rowEx)}</strong></td>
+
+          ${hasPAYE ? `<td style="text-align:right">${wtrInfoHtml}</td>` : ''}
+
+          ${hasUmbrella ? `<td style="text-align:right">${vatHtml || '—'}</td>` : ''}
+          ${hasUmbrella ? `<td style="text-align:right"><strong>${incHtml || '—'}</strong></td>` : ''}
         </tr>`;
     }).join('');
 
-    const grandTotal = finRows.reduce((a, r) => a + Number(r.total_pay_ex_vat || 0), 0);
+    // 3) Build HTML (header adapts to PAYE/Umbrella columns)
+    const extraPAYECol = hasPAYE ? '<th align="right">Basic + WTR (info)</th>' : '';
+    const extraUmbCols = hasUmbrella
+      ? '<th align="right">VAT</th><th align="right">Total (inc VAT)</th>'
+      : '';
+
+    const periodTitleSuffix = hasUmbrella ? ' – Umbrella' : (hasPAYE ? ' – PAYE' : '');
 
     const html = `
       <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:14px;line-height:1.4">
-        <h2 style="margin:0 0 8px">Remittance Advice</h2>
+        <h2 style="margin:0 0 8px">Remittance Advice${periodTitleSuffix}</h2>
         <p style="margin:0 0 12px"><strong>${esc(candName)}</strong></p>
-        <p style="margin:0 0 16px">Period: ${esc(periodLabel)}</p>
+        <p style="margin:0 0 12px">Period: ${esc(periodLabel)}</p>
+        <p style="margin:0 0 16px;color:#666">Generated: ${esc(nowIso)}</p>
+
         <table width="100%" border="0" cellspacing="0" cellpadding="6" style="border-collapse:collapse">
           <thead>
             <tr style="background:#f5f5f5">
@@ -1453,6 +3341,7 @@ export async function handleRemittanceEmailForCandidate(env, req) {
               <th align="left">Hospital</th>
               <th align="left">Ward</th>
               <th align="left">Shift</th>
+
               <th align="right">Hrs Day</th>
               <th align="right">Pay Day</th>
               <th align="right">Hrs Night</th>
@@ -1463,39 +3352,80 @@ export async function handleRemittanceEmailForCandidate(env, req) {
               <th align="right">Pay Sun</th>
               <th align="right">Hrs BH</th>
               <th align="right">Pay BH</th>
+
+              <th align="right">Pay (ex VAT)</th>
+              <th align="right">Expenses</th>
+              <th align="right">Mileage</th>
               <th align="right">Total (ex VAT)</th>
+
+              ${extraPAYECol}
+              ${extraUmbCols}
             </tr>
           </thead>
           <tbody>${rowsHtml}</tbody>
           <tfoot>
             <tr>
-              <td colspan="15" align="right" style="padding-top:10px;border-top:1px solid #e5e5e5"><strong>Grand Total:</strong></td>
-              <td align="right" style="padding-top:10px;border-top:1px solid #e5e5e5"><strong>${fmt(grandTotal)}</strong></td>
+              <td colspan="${hasPAYE ? 19 : 18}${hasUmbrella ? '' : ''}" align="right" style="padding-top:10px;border-top:1px solid #e5e5e5"><strong>Totals:</strong></td>
+              <td align="right" style="padding-top:10px;border-top:1px solid #e5e5e5"><strong>${fmt(totalPayEx)}</strong></td>
+              <td align="right" style="padding-top:10px;border-top:1px solid #e5e5e5"><strong>${fmt(totalExpEx)}</strong></td>
+              <td align="right" style="padding-top:10px;border-top:1px solid #e5e5e5"><strong>${fmt(totalMilEx)}</strong></td>
+              <td align="right" style="padding-top:10px;border-top:1px solid #e5e5e5"><strong>${fmt(totalEx)}</strong></td>
+
+              ${hasPAYE ? `<td align="right" style="padding-top:10px;border-top:1px solid #e5e5e5"><strong>${fmt(totalWtrBasic)} basic + ${fmt(totalWtrElem)} WTR</strong></td>` : ''}
+
+              ${hasUmbrella ? `<td align="right" style="padding-top:10px;border-top:1px solid #e5e5e5"><strong>${fmt(totalVat)}</strong></td>` : ''}
+              ${hasUmbrella ? `<td align="right" style="padding-top:10px;border-top:1px solid #e5e5e5"><strong>${fmt(totalInc)}</strong></td>` : ''}
             </tr>
           </tfoot>
         </table>
-        <p style="margin-top:16px;color:#666">Note: This remittance reflects pay-exclusive amounts based on authorised timesheets.</p>
+
+        ${hasPAYE ? `<p style="margin-top:12px;color:#666">Note: For PAYE, the pay rate is WTR-inclusive. The “Basic + WTR” split is informational only and is included in your payment.</p>` : ''}
+        ${hasUmbrella ? `<p style="margin-top:8px;color:#666">Note: For Umbrella assignments where VAT applies, totals show ex VAT and inc VAT amounts using the VAT rate captured at the time of payment/lock.</p>` : ''}
       </div>`;
 
-    const text = [
-      'Remittance Advice', `${candName}`, `Period: ${periodLabel}`, '',
-      ...finRows.map((r) => {
-        const ts = r.timesheet || {}; const cli = r.client || {};
-        return [
-          `WE ${ts.week_ending_date || ''} — ${cli.name || ''} / ${ts.hospital_norm || ''} / ${ts.ward_norm || ''} / ${ts.shift_label_norm || ''}`,
-          `Day: ${fmt(r.hours_day)} @ ${fmt(r.pay_day)}`,
-          `Night: ${fmt(r.hours_night)} @ ${fmt(r.pay_night)}`,
-          `Sat: ${fmt(r.hours_sat)} @ ${fmt(r.pay_sat)}`,
-          `Sun: ${fmt(r.hours_sun)} @ ${fmt(r.pay_sun)}`,
-          `BH: ${fmt(r.hours_bh)} @ ${fmt(r.pay_bh)}`,
-          `Total (ex VAT): ${fmt(r.total_pay_ex_vat)}`,
-          ''
-        ].join('\n');
-      }),
-      `Grand Total (ex VAT): ${fmt(grandTotal)}`
-    ].join('\n');
+    // 4) Plain-text version (short, but with the new info)
+    const textLines = [];
+    textLines.push(`Remittance Advice${periodTitleSuffix}`);
+    textLines.push(`${candName}`);
+    textLines.push(`Period: ${periodLabel}`);
+    textLines.push(`Generated: ${nowIso}`);
+    textLines.push('');
 
-    // Queue email in mail_outbox
+    for (const r of finRows) {
+      const ts = r.timesheet || {}; const cli = r.client || {};
+      const pm = String(r.pay_method || '').toUpperCase();
+
+      const payEx = toNum(r.total_pay_ex_vat);
+      const expEx = toNum(r.expenses_pay_ex_vat);
+      const milEx = toNum(r.mileage_pay_ex_vat);
+      const rowEx = payEx + expEx + milEx;
+
+      textLines.push(`WE ${ts.week_ending_date || ''} — ${cli.name || ''} / ${ts.hospital_norm || ''} / ${ts.ward_norm || ''} / ${ts.shift_label_norm || ''}`);
+      textLines.push(`Day: ${fmt(r.hours_day)} @ ${fmt(r.pay_day)}, Night: ${fmt(r.hours_night)} @ ${fmt(r.pay_night)}, Sat: ${fmt(r.hours_sat)} @ ${fmt(r.pay_sat)}, Sun: ${fmt(r.hours_sun)} @ ${fmt(r.pay_sun)}, BH: ${fmt(r.hours_bh)} @ ${fmt(r.pay_bh)}`);
+      textLines.push(`Pay ex VAT: ${fmt(payEx)}  |  Expenses: ${fmt(expEx)}  |  Mileage: ${fmt(milEx)}  |  Total ex VAT: ${fmt(rowEx)}`);
+
+      if (pm === 'PAYE') {
+        const wtrPct = resolveWtrPct(r);
+        const base = payEx / (1 + (wtrPct / 100));
+        const wtr = payEx - base;
+        textLines.push(`(PAYE) Basic + WTR (info): ${fmt(base)} basic + ${fmt(wtr)} WTR @ ${fmt(wtrPct)}% (included)`);
+      } else if (pm === 'UMBRELLA') {
+        const vatAmt = toNum(r.pay_vat_amount_snapshot);
+        const incAmt = toNum(r.pay_total_inc_vat_snapshot);
+        const rate = r.pay_vat_rate_pct_snapshot == null ? null : Number(r.pay_vat_rate_pct_snapshot);
+        const vatStr = rate || rate === 0 ? `VAT: ${fmt(vatAmt)} @ ${fmt(rate)}%  |  Total inc VAT: ${fmt(incAmt)}` : `VAT: ${fmt(vatAmt)}  |  Total inc VAT: ${fmt(incAmt)}`;
+        textLines.push(`(Umbrella) ${vatStr}`);
+      }
+      textLines.push('');
+    }
+
+    textLines.push(`Totals — Pay ex VAT: ${fmt(totalPayEx)}, Expenses: ${fmt(totalExpEx)}, Mileage: ${fmt(totalMilEx)}, Total ex VAT: ${fmt(totalEx)}`);
+    if (hasPAYE) textLines.push(`PAYE Basic + WTR (info totals): ${fmt(totalWtrBasic)} basic + ${fmt(totalWtrElem)} WTR`);
+    if (hasUmbrella) textLines.push(`Umbrella VAT Total: ${fmt(totalVat)}  |  Total inc VAT: ${fmt(totalInc)}`);
+
+    const text = textLines.join('\n');
+
+    // 5) Queue email in mail_outbox
     const outRes = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
       method: 'POST',
       headers: { ...sbHeaders(env), Prefer: 'return=representation' },
@@ -1518,16 +3448,41 @@ export async function handleRemittanceEmailForCandidate(env, req) {
     const mail = Array.isArray(outJson) ? outJson[0] : outJson;
     const mailId = mail?.id || null;
 
-    await writeAudit(env, user, 'EMAIL_QUEUED', {
-      to: toEmail,
-      subject: `Remittance Advice – ${periodLabel}`,
-      period: { start: startDate || dates[0] || null, end: endDate || dates[dates.length - 1] || null },
-      mail_id: mailId,
-      timesheets: finRows.map((r) => r.timesheet_id)
-    }, { entity: 'candidate', subject_id: candId, reason: 'REMITTANCE', correlation_id: mailId, req });
-
+    // 6) Audit logs
+    await writeAudit(
+      env, user, 'EMAIL_QUEUED',
+      {
+        to: toEmail,
+        subject: `Remittance Advice – ${periodLabel}`,
+        period: { start: startDate || dates[0] || null, end: endDate || dates[dates.length - 1] || null },
+        mail_id: mailId,
+        timesheets: finRows.map((r) => r.timesheet_id)
+      },
+      { entity: 'candidate', subject_id: candId, reason: 'REMITTANCE', correlation_id: mailId, req }
+    );
     for (const r of finRows) {
-      await writeAudit(env, user, 'EMAIL_QUEUED', { to: toEmail, subject: `Remittance Advice – ${periodLabel}`, mail_id: mailId }, { entity: 'timesheet', subject_id: r.timesheet_id, reason: 'REMITTANCE', correlation_id: mailId, req });
+      await writeAudit(
+        env, user, 'EMAIL_QUEUED',
+        { to: toEmail, subject: `Remittance Advice – ${periodLabel}`, mail_id: mailId },
+        { entity: 'timesheet', subject_id: r.timesheet_id, reason: 'REMITTANCE', correlation_id: mailId, req }
+      );
+    }
+
+    // 7) Update remittance counters on the snapshots (timestamp + increment count)
+    //    Do per-row patch to safely increment the counter value we just read.
+    for (const r of finRows) {
+      const newCount = (Number(r.remittance_send_count || 0) + 1);
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(r.id)}`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+          body: JSON.stringify({
+            remittance_last_sent_at_utc: nowIso,
+            remittance_send_count: newCount
+          })
+        }
+      );
     }
 
     return withCORS(env, req, ok({ queued: true, mail_id: mailId, items: finRows.length }));
@@ -1535,6 +3490,7 @@ export async function handleRemittanceEmailForCandidate(env, req) {
     return withCORS(env, req, serverError('Failed to build/queue remittance email'));
   }
 }
+
 
 export async function handleInvoiceEmail(env, req, invoiceId) {
   const user = await requireUser(env, req, ['admin']);
@@ -2783,7 +4739,6 @@ async function handleGetSettings(env, req) {
     return withCORS(env, req, serverError("Failed to fetch settings_defaults"));
   }
 }
-
 async function handleUpdateSettings(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized('Unauthorized');
@@ -2791,12 +4746,14 @@ async function handleUpdateSettings(env, req) {
   const data = await parseJSONBody(req);
   if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
 
-  // Only allow known fields (but keep flexible)
+  // Allow new validation flags
   const allowed = [
     'timezone_id','day_start','day_end','night_start','night_end',
     'bh_source','bh_list','bh_feed_url',
     'vat_rate_pct','holiday_pay_pct','erni_pct','apply_holiday_to','apply_erni_to','margin_includes','effective_from',
-    'bank_name','bank_sort_code','bank_account_number','vat_registration_number'
+    'bank_name','bank_sort_code','bank_account_number','vat_registration_number',
+    // NEW
+    'hr_validation_required','ts_reference_required'
   ];
   const payload = { updated_at: new Date().toISOString() };
   for (const k of allowed) if (k in data) payload[k] = data[k];
@@ -2880,7 +4837,6 @@ async function handleListClients(env, req) {
     return withCORS(env, req, serverError("Failed to list clients"));
   }
 }
-
 async function handleCreateClient(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
@@ -2888,20 +4844,50 @@ async function handleCreateClient(env, req) {
   const data = await parseJSONBody(req);
   if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
 
-  // mileage_charge_rate and ts_queries_email are accepted by DB; other fields are passed through
   try {
-    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/clients`, {
+    // Create client first
+    const clientRes = await fetch(`${env.SUPABASE_URL}/rest/v1/clients`, {
       method: "POST",
       headers: { ...sbHeaders(env), "Prefer": "return=representation" },
       body: JSON.stringify({ ...data, created_at: new Date().toISOString() })
     });
-    if (!res.ok) {
-      const err = await res.text();
+    if (!clientRes.ok) {
+      const err = await clientRes.text();
       return withCORS(env, req, badRequest(`Client creation failed: ${err}`));
     }
-    const json = await res.json().catch(() => ({}));
-    const client = Array.isArray(json) ? json[0] : json;
-    return withCORS(env, req, ok({ client }));
+    const clientJson = await clientRes.json().catch(() => ({}));
+    const client = Array.isArray(clientJson) ? clientJson[0] : clientJson;
+
+    // Optionally seed client_settings with new validation flags if provided
+    const csInput = {
+      ...(typeof data.client_settings === 'object' ? data.client_settings : {}),
+    };
+    if ('hr_validation_required' in data) csInput.hr_validation_required = !!data.hr_validation_required;
+    if ('ts_reference_required' in data) csInput.ts_reference_required = !!data.ts_reference_required;
+
+    let client_settings;
+    if (Object.keys(csInput).length) {
+      const csPayload = {
+        client_id: client.id,
+        ...csInput,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      const csRes = await fetch(`${env.SUPABASE_URL}/rest/v1/client_settings`, {
+        method: "POST",
+        headers: { ...sbHeaders(env), "Prefer": "return=representation" },
+        body: JSON.stringify(csPayload)
+      });
+      if (!csRes.ok) {
+        const err = await csRes.text();
+        // don't fail client creation if settings insert fails; return warning
+        return withCORS(env, req, ok({ client, warning: `Client created but client_settings insert failed: ${err}` }));
+      }
+      const csJson = await csRes.json().catch(() => ({}));
+      client_settings = Array.isArray(csJson) ? csJson[0] : csJson;
+    }
+
+    return withCORS(env, req, ok({ client, client_settings }));
   } catch {
     return withCORS(env, req, serverError("Failed to create client"));
   }
@@ -2926,16 +4912,32 @@ async function handleGetClient(env, req, clientId) {
   if (!user) return unauthorized();
 
   try {
+    // Client
     const { rows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(clientId)}`
     );
     if (!rows.length) return withCORS(env, req, notFound("Client not found"));
-    return withCORS(env, req, ok({ client: rows[0] }));
+    const client = rows[0];
+
+    // Latest client_settings (include validation flags)
+    const { rows: csRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/client_settings` +
+      `?client_id=eq.${encodeURIComponent(clientId)}` +
+      `&select=id,client_id,vat_rate_pct,holiday_pay_pct,erni_pct,apply_holiday_to,apply_erni_to,margin_includes,effective_from,` +
+      `timezone_id,day_start,day_end,night_start,night_end,bh_source,bh_list,bh_feed_url,` +
+      `hr_validation_required,ts_reference_required,created_at,updated_at` +
+      `&order=effective_from.desc,created_at.desc&limit=1`
+    );
+    const client_settings = csRows?.[0] || null;
+
+    return withCORS(env, req, ok({ client, client_settings }));
   } catch {
     return withCORS(env, req, serverError("Failed to fetch client"));
   }
 }
+
 
 // --------------------------------------------------
 // UPDATE CLIENT (mark stale/enqueue on policy change)
@@ -2951,19 +4953,43 @@ async function handleUpdateClient(env, req, clientId) {
   if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
 
   try {
-    // Load existing for comparison (policy/mileage fields only; ts_queries_email is updated pass-through)
-    const { rows: beforeRows } = await sbFetch(
+    // --- Load existing client + latest client_settings for comparison
+    const { rows: beforeClientRows } = await sbFetch(
       env,
-      `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(clientId)}&select=vat_chargeable,payment_terms_days,mileage_charge_rate,ts_queries_email`
+      `${env.SUPABASE_URL}/rest/v1/clients` +
+      `?id=eq.${encodeURIComponent(clientId)}` +
+      `&select=vat_chargeable,payment_terms_days,mileage_charge_rate,ts_queries_email`
     );
-    const before = beforeRows?.[0] || {};
+    const beforeClient = beforeClientRows?.[0] || {};
 
-    const url = `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(clientId)}`;
-    const res = await fetch(url, {
-      method: "PATCH",
-      headers: { ...sbHeaders(env), "Prefer": "return=representation" },
-      body: JSON.stringify({ ...data, updated_at: new Date().toISOString() })
-    });
+    const { rows: beforeCsRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/client_settings` +
+      `?client_id=eq.${encodeURIComponent(clientId)}` +
+      `&select=id,hr_validation_required,ts_reference_required,effective_from,created_at` +
+      `&order=effective_from.desc,created_at.desc&limit=1`
+    );
+    const beforeCs = beforeCsRows?.[0] || null;
+
+    // --- Split incoming payload between clients and client_settings
+    const csInput = {
+      ...(typeof data.client_settings === 'object' ? data.client_settings : {})
+    };
+    if ('hr_validation_required' in data) csInput.hr_validation_required = !!data.hr_validation_required;
+    if ('ts_reference_required' in data) csInput.ts_reference_required = !!data.ts_reference_required;
+
+    const { hr_validation_required, ts_reference_required, client_settings, ...clientPatchRaw } = data;
+    const clientPatch = { ...clientPatchRaw, updated_at: new Date().toISOString() };
+
+    // --- Update clients table (only if anything other than updated_at is being set)
+    const res = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(clientId)}`,
+      {
+        method: "PATCH",
+        headers: { ...sbHeaders(env), "Prefer": "return=representation" },
+        body: JSON.stringify(clientPatch)
+      }
+    );
     if (!res.ok) {
       const err = await res.text();
       return withCORS(env, req, badRequest(`Update failed: ${err}`));
@@ -2971,14 +4997,69 @@ async function handleUpdateClient(env, req, clientId) {
     const json = await res.json().catch(() => ({}));
     const client = Array.isArray(json) ? json[0] : json;
 
-    const policyChanged =
-      (data.vat_chargeable != null && !!data.vat_chargeable !== !!before.vat_chargeable) ||
-      (data.payment_terms_days != null && Number(data.payment_terms_days) !== Number(before.payment_terms_days));
-    const mileageChargeChanged =
-      (data.mileage_charge_rate != null && Number(data.mileage_charge_rate) !== Number(before.mileage_charge_rate));
+    // --- Upsert/patch client_settings if provided
+    let csChanged = false;
+    let client_settings_updated = null;
+    if (Object.keys(csInput).length) {
+      const desired = {
+        ...(beforeCs || { client_id: clientId }),
+        ...csInput
+      };
+      const hasBefore = !!beforeCs?.id;
 
-    if (policyChanged || mileageChargeChanged) {
-      // Mark related current/uninvoiced TSFIN as stale & enqueue
+      // Detect change in toggles
+      const beforeHr = !!(beforeCs?.hr_validation_required ?? false);
+      const beforeRef = !!(beforeCs?.ts_reference_required ?? false);
+      const nextHr = !!(desired.hr_validation_required ?? false);
+      const nextRef = !!(desired.ts_reference_required ?? false);
+      csChanged = (beforeHr !== nextHr) || (beforeRef !== nextRef);
+
+      if (hasBefore) {
+        // Patch the latest row
+        const csRes = await fetch(
+          `${env.SUPABASE_URL}/rest/v1/client_settings?id=eq.${encodeURIComponent(beforeCs.id)}`,
+          {
+            method: "PATCH",
+            headers: { ...sbHeaders(env), "Prefer": "return=representation" },
+            body: JSON.stringify({ ...csInput, updated_at: new Date().toISOString() })
+          }
+        );
+        if (!csRes.ok) {
+          const err = await csRes.text();
+          return withCORS(env, req, badRequest(`Client settings update failed: ${err}`));
+        }
+        const csJson = await csRes.json().catch(() => ({}));
+        client_settings_updated = Array.isArray(csJson) ? csJson[0] : csJson;
+      } else {
+        // Insert fresh row
+        const csRes = await fetch(`${env.SUPABASE_URL}/rest/v1/client_settings`, {
+          method: "POST",
+          headers: { ...sbHeaders(env), "Prefer": "return=representation" },
+          body: JSON.stringify({
+            client_id: clientId,
+            ...csInput,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+        });
+        if (!csRes.ok) {
+          const err = await csRes.text();
+          return withCORS(env, req, badRequest(`Client settings insert failed: ${err}`));
+        }
+        const csJson = await csRes.json().catch(() => ({}));
+        client_settings_updated = Array.isArray(csJson) ? csJson[0] : csJson;
+      }
+    }
+
+    // --- Change detection for clients table
+    const policyChanged =
+      (data.vat_chargeable != null && !!data.vat_chargeable !== !!beforeClient.vat_chargeable) ||
+      (data.payment_terms_days != null && Number(data.payment_terms_days) !== Number(beforeClient.payment_terms_days));
+    const mileageChargeChanged =
+      (data.mileage_charge_rate != null && Number(data.mileage_charge_rate) !== Number(beforeClient.mileage_charge_rate));
+
+    // If any client-level policy OR client_settings validation flags changed, mark stale & enqueue recompute
+    if (policyChanged || mileageChargeChanged || csChanged) {
       await fetch(
         `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
           `?client_id=eq.${encodeURIComponent(clientId)}` +
@@ -3004,7 +5085,6 @@ async function handleUpdateClient(env, req, clientId) {
           `&locked_by_invoice_id=is.null`
       );
       const toEnqueue = (tsfins || []).map(r => ({ timesheet_id: r.timesheet_id, reason: 'POLICY_CHANGED' }));
-
       if (toEnqueue.length) {
         await fetch(
           `${env.SUPABASE_URL}/rest/v1/ts_financials_outbox?on_conflict=timesheet_id,reason`,
@@ -3017,11 +5097,12 @@ async function handleUpdateClient(env, req, clientId) {
       }
     }
 
-    return withCORS(env, req, ok({ client }));
+    return withCORS(env, req, ok({ client, client_settings: client_settings_updated || beforeCs || null }));
   } catch {
     return withCORS(env, req, serverError("Failed to update client"));
   }
 }
+
 
 
 
@@ -6967,6 +9048,7 @@ async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
   if (!Array.isArray(lease) || !lease.length) return { picked: 0, ok: 0, fail: 0 };
 
   let ok = 0, fail = 0;
+
   for (const item of lease) {
     try {
       const ts = await loadCurrentTimesheet(env, item.timesheet_id);
@@ -6976,6 +9058,7 @@ async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
         ok++; continue;
       }
 
+      // Must be authorised to proceed with financials
       if (!ts.authorised_at_server) {
         await sbRpc(env, 'tsfin_work_success', { id: item.id });
         ok++; continue;
@@ -6986,35 +9069,49 @@ async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
       const candidate_assignment = candidate ? 'ASSIGNED' : 'UNASSIGNED';
 
       const client_id = await resolveClientId(env, ts.hospital_norm || null);
-      const policy = await loadPolicy(env, client_id, ts.worked_start_iso ? ymd(ts.worked_start_iso) : null);
+      const workedDateYmd = ts.worked_start_iso ? toLocalParts(ts.worked_start_iso, null).ymd : null;
+      const policy = await loadPolicy(env, client_id, workedDateYmd); // includes time bands + rates like vat, holiday pct etc.
 
+      // Build minutes -> hour buckets and subtract breaks
       let segments = [];
       if (ts.worked_start_iso && ts.worked_end_iso) segments.push([ts.worked_start_iso, ts.worked_end_iso]);
       segments = subtractBreak(segments, ts.break_start_iso || null, ts.break_end_iso || null, ts.break_minutes || null);
 
       const hours = classifyMinutes(env, policy, segments);
 
-      const workedDate = ts.worked_start_iso ? toLocalParts(ts.worked_start_iso, policy.timezone_id).ymd : null;
-      const rates = await resolveRates(env, { candidate_id: candidate?.id || null, client_id, role: ts.job_title_norm || null, band: ts.band || null, dateYmd: workedDate });
+      // Resolve pay/charge rates
+      const rates = await resolveRates(env, {
+        candidate_id: candidate?.id || null,
+        client_id,
+        role: ts.job_title_norm || null,
+        band: ts.band || null,
+        dateYmd: workedDateYmd
+      });
 
-      const missing = anyMissingRates(
+      const missingRates = anyMissingRates(
         { day: hours.hours_day, night: hours.hours_night, sat: hours.hours_sat, sun: hours.hours_sun, bh: hours.hours_bh },
         rates.pay,
         rates.charge
       );
 
-      const pay_method = (candidate?.pay_method === 'UMBRELLA') ? 'UMBRELLA'
-                         : (candidate?.pay_method === 'PAYE' ? 'PAYE' : (ts.pay_method || null));
+      // PAY method: default from candidate with fallback (kept for compatibility)
+      const pay_method =
+        (candidate?.pay_method === 'UMBRELLA') ? 'UMBRELLA' :
+        (candidate?.pay_method === 'PAYE') ? 'PAYE' :
+        (ts.pay_method || null);
 
+      // Processing status logic (unchanged semantics, but tightened)
       let processing_status = 'READY_FOR_HR';
       if (!candidate) processing_status = 'UNASSIGNED';
       else if (!client_id) processing_status = 'CLIENT_UNRESOLVED';
-      else if (missing) processing_status = 'RATE_MISSING';
+      else if (missingRates) processing_status = 'RATE_MISSING';
       else if (pay_method === 'UMBRELLA' && !candidate?.umbrella_id) processing_status = 'PAY_CHANNEL_MISSING';
-      else processing_status = 'READY_FOR_HR';
+      else processing_status = 'READY_FOR_HR'; // keep existing external contract
 
+      // Totals
       const pay = rates.pay || { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
       const charge = rates.charge || { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
+
       const total_pay_ex_vat = round2(
         hours.hours_day * asNumber(pay.day) +
         hours.hours_night * asNumber(pay.night) +
@@ -7022,6 +9119,7 @@ async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
         hours.hours_sun * asNumber(pay.sun) +
         hours.hours_bh * asNumber(pay.bh)
       );
+
       const total_charge_ex_vat = round2(
         hours.hours_day * asNumber(charge.day) +
         hours.hours_night * asNumber(charge.night) +
@@ -7029,7 +9127,19 @@ async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
         hours.hours_sun * asNumber(charge.sun) +
         hours.hours_bh * asNumber(charge.bh)
       );
+
       const margin_ex_vat = round2(total_charge_ex_vat - total_pay_ex_vat);
+
+      // Determine “payment-eligibility lite” for WTR snapshot timing:
+      const channelOK =
+        (pay_method === 'PAYE' && hasPayeBank(candidate)) ||
+        (pay_method === 'UMBRELLA' && !!candidate?.umbrella_id);
+
+      const paymentReadyLite = !!(channelOK && !missingRates); // ts is authorised earlier
+
+      // WTR snapshot rule: set for PAYE when effectively payment-ready; margin unchanged
+      const pay_wtr_rate_pct_snapshot =
+        (pay_method === 'PAYE' && paymentReadyLite) ? asNumber(policy?.holiday_pay_pct) ?? null : null;
 
       const snapshot = {
         timesheet_id: item.timesheet_id,
@@ -7074,13 +9184,16 @@ async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
         total_charge_ex_vat,
         margin_ex_vat,
 
+        // NEW: persisted hints/state
+        pay_wtr_rate_pct_snapshot, // may be null; only set for PAYE when ready-lite
         candidate_assignment,
-        processing_status,
+        processing_status
       };
 
       await writeSnapshot(env, snapshot);
       await sbRpc(env, 'tsfin_work_success', { id: item.id });
       ok++;
+
     } catch (e) {
       await sbRpc(env, 'tsfin_work_fail', { id: item.id, error_text: String(e?.message || e) });
       fail++;
@@ -7089,6 +9202,13 @@ async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
 
   return { picked: lease.length, ok, fail };
 }
+
+// helpers used above
+function hasPayeBank(c) {
+  if (!c) return false;
+  return !!(c.account_number && c.sort_code); // minimal signal; holder/bank_name optional
+}
+
 
 // ---------------------------
 // API: Manual drain
@@ -7185,6 +9305,11 @@ async function handleTsfinFinancials(env, req) {
 // ------------------------------------------------------
 // MARK READY (validate evidence rules before promotion)
 // ------------------------------------------------------
+// ------------------------------------------------------
+// MARK READY (validate rules before promotion; supports
+// settings_defaults.hr_validation_required and
+// settings_defaults.ts_reference_required)
+// ------------------------------------------------------
 async function handleTsfinMarkReady(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized('Unauthorized');
@@ -7198,21 +9323,45 @@ async function handleTsfinMarkReady(env, req) {
 
   const idsParam = ids.map(encodeURIComponent).join(',');
 
-  // 1) Latest validation per TS
-  const valUrl =
-    `${env.SUPABASE_URL}/rest/v1/timesheet_validations` +
-    `?select=timesheet_id,status,updated_at` +
-    `&timesheet_id=in.(${idsParam})` +
-    `&order=timesheet_id.asc,updated_at.desc` +
-    `&limit=10000`;
+  // Load feature flags from defaults (fallbacks chosen to preserve existing behavior)
+  // - hr_validation_required defaults to true (old behavior gated on validation)
+  // - ts_reference_required defaults to false (new optional gating)
+  let hrRequired = true;
+  let tsRefRequired = false;
+  try {
+    const { rows: defRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=hr_validation_required,ts_reference_required`
+    );
+    if (defRows && defRows[0]) {
+      if (typeof defRows[0].hr_validation_required === 'boolean') {
+        hrRequired = defRows[0].hr_validation_required;
+      }
+      if (typeof defRows[0].ts_reference_required === 'boolean') {
+        tsRefRequired = defRows[0].ts_reference_required;
+      }
+    }
+  } catch {
+    // if settings lookup fails, proceed with defaults above
+  }
 
-  const { rows: allVals } = await sbFetch(env, valUrl);
-  const latestById = new Map();
-  for (const v of allVals) if (!latestById.has(v.timesheet_id)) latestById.set(v.timesheet_id, v);
+  // Optional: Latest validation per TS (only if HR validation is required)
+  let latestById = new Map();
+  if (hrRequired) {
+    const valUrl =
+      `${env.SUPABASE_URL}/rest/v1/timesheet_validations` +
+      `?select=timesheet_id,status,updated_at` +
+      `&timesheet_id=in.(${idsParam})` +
+      `&order=timesheet_id.asc,updated_at.desc` +
+      `&limit=10000`;
 
-  const OK = new Set(['VALIDATION_OK','OVERRIDDEN']);
+    const { rows: allVals } = await sbFetch(env, valUrl);
+    for (const v of allVals || []) {
+      if (!latestById.has(v.timesheet_id)) latestById.set(v.timesheet_id, v);
+    }
+  }
 
-  // 2) Load current/unlocked TSFIN snapshots
+  // Current/unlocked TSFIN snapshots we might promote
   const { rows: tsfinRows } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
@@ -7223,10 +9372,24 @@ async function handleTsfinMarkReady(env, req) {
       `&locked_by_invoice_id=is.null`
   );
 
+  // (If required) load timesheet reference numbers for gating
+  let tsMetaMap = new Map();
+  if (tsRefRequired) {
+    const { rows: tsRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?select=timesheet_id,reference_number` +
+        `&timesheet_id=in.(${idsParam})`
+    );
+    for (const t of tsRows || []) {
+      tsMetaMap.set(t.timesheet_id, t);
+    }
+  }
+
   const eligibleIds = [];
   const blocked = [];
 
-  // 2a) Fetch candidates (bank + umbrella link)
+  // Candidate → umbrella lookups for pay-channel gating
   const candIds = Array.from(new Set((tsfinRows || []).map((r) => r.candidate_id).filter(Boolean)));
   let candidatesById = new Map();
   let umbrellasById = new Map();
@@ -7241,7 +9404,6 @@ async function handleTsfinMarkReady(env, req) {
     );
     candidatesById = new Map((candRows || []).map((c) => [c.id, c]));
 
-    // 2b) Fetch umbrellas used by those candidates
     const umbIds = Array.from(new Set((candRows || [])
       .map((c) => c.umbrella_id)
       .filter(Boolean)));
@@ -7257,13 +9419,9 @@ async function handleTsfinMarkReady(env, req) {
     }
   }
 
-  for (const id of ids) {
-    const v = latestById.get(id);
-    if (!v || !OK.has(v.status)) {
-      blocked.push({ id, reason: 'validation_not_ok' });
-      continue;
-    }
+  const OK = new Set(['VALIDATION_OK','OVERRIDDEN']);
 
+  for (const id of ids) {
     const row = (tsfinRows || []).find((r) => r.timesheet_id === id);
     if (!row) {
       blocked.push({ id, reason: 'tsfin_missing_or_locked' });
@@ -7274,7 +9432,16 @@ async function handleTsfinMarkReady(env, req) {
       continue;
     }
 
-    // Evidence rules: if charge>0 → evidence required
+    // 1) HR Validation gating (if required)
+    if (hrRequired) {
+      const v = latestById.get(id);
+      if (!v || !OK.has(v.status)) {
+        blocked.push({ id, reason: 'validation_not_ok' });
+        continue;
+      }
+    }
+
+    // 2) Evidence rules: if charge>0 → evidence required
     const expChg = Number(row.expenses_charge_ex_vat || 0);
     const milChg = Number(row.mileage_charge_ex_vat || 0);
     if (expChg > 0 && !row.expenses_evidence_r2_key) {
@@ -7286,7 +9453,7 @@ async function handleTsfinMarkReady(env, req) {
       continue;
     }
 
-    // Pay-channel gating
+    // 3) Pay-channel gating
     const cand = candidatesById.get(row.candidate_id);
     const umb  = cand?.umbrella_id ? umbrellasById.get(cand.umbrella_id) : undefined;
     const channel = resolveEffectivePayChannel({
@@ -7299,14 +9466,25 @@ async function handleTsfinMarkReady(env, req) {
       continue;
     }
 
+    // 4) Timesheet reference gating (if required)
+    if (tsRefRequired) {
+      const tsMeta = tsMetaMap.get(id);
+      const ref = (tsMeta?.reference_number || '').toString().trim();
+      if (!ref) {
+        blocked.push({ id, reason: 'reference_missing' });
+        continue;
+      }
+    }
+
+    // Passed all gates
     eligibleIds.push(id);
   }
 
   if (!eligibleIds.length) {
-    return badRequest("No timesheets are eligible to mark READY_FOR_INVOICE (validation/evidence/pay-channel rules failed).");
+    return badRequest("No timesheets are eligible to mark READY_FOR_INVOICE (validation/evidence/pay-channel/reference rules failed).");
   }
 
-  // 3) Promote
+  // Promote READY_FOR_HR → READY_FOR_INVOICE for just the eligible set
   const updUrl =
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
     `?timesheet_id=in.(${eligibleIds.map(encodeURIComponent).join(',')})` +
@@ -7358,7 +9536,7 @@ async function handleFinancePreviewTsfin(env, req) {
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
       `?is_current=eq.true&timesheet_id=in.(${ids.map(encodeURIComponent).join(',')})` +
-      `&select=timesheet_id,client_id,` +
+      `&select=timesheet_id,client_id,pay_method,policy_snapshot_json,pay_wtr_rate_pct_snapshot,` +
       [
         'hours_day','hours_night','hours_sat','hours_sun','hours_bh',
         'pay_day','pay_night','pay_sat','pay_sun','pay_bh',
@@ -7373,14 +9551,25 @@ async function handleFinancePreviewTsfin(env, req) {
   // VAT context per client
   const clientIds = [...new Set(rows.map((r) => r.client_id).filter(Boolean))];
   const mapClientVat = {};
+  let defaultVat = 20;
+  let defaultWtr = 0;
+
+  // Pull defaults once (VAT and WTR)
+  {
+    const { rows: def } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=vat_rate_pct,holiday_pay_pct`
+    );
+    defaultVat = Number(def?.[0]?.vat_rate_pct ?? 20);
+    defaultWtr = Number(def?.[0]?.holiday_pay_pct ?? 0);
+  }
+
   if (clientIds.length) {
     const { rows: cRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/clients?select=id,vat_chargeable&id=in.(${clientIds.map(encodeURIComponent).join(',')})`
     );
     const vatChargeableById = Object.fromEntries((cRows || []).map((c) => [c.id, !!c.vat_chargeable]));
-    const { rows: def } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=vat_rate_pct`);
-    const defaultVat = Number(def?.[0]?.vat_rate_pct ?? 20);
 
     const { rows: cs } = await sbFetch(
       env,
@@ -7406,8 +9595,21 @@ async function handleFinancePreviewTsfin(env, req) {
       subtotal_ex_vat: 0,
       vat_amount: 0,
       total_inc_vat: 0
+    },
+    // New: PAYE WTR informational split across the selection
+    paye_wtr: {
+      timesheets: 0,
+      hours_total: 0,
+      pay_inclusive_ex_vat: 0,
+      basic_ex_wtr_ex_vat: 0,
+      wtr_element_ex_vat: 0,
+      effective_rate_pct_weighted: 0
     }
   };
+
+  // Trackers for weighted WTR%
+  let wtrWeightedNum = 0;
+  let wtrWeightedDen = 0;
 
   for (const r of rows) {
     const h = { day: +r.hours_day || 0, night: +r.hours_night || 0, sat: +r.hours_sat || 0, sun: +r.hours_sun || 0, bh: +r.hours_bh || 0 };
@@ -7420,7 +9622,7 @@ async function handleFinancePreviewTsfin(env, req) {
     const expChg = Number(r.expenses_charge_ex_vat || 0);
     const milChg = Number(r.mileage_charge_ex_vat || 0);
 
-    const vatCtx = mapClientVat[r.client_id] || { vat_chargeable: true, vat_rate_pct: 20 };
+    const vatCtx = mapClientVat[r.client_id] || { vat_chargeable: true, vat_rate_pct: defaultVat };
     const lineEx = round2(chgTotal + expChg + milChg);
     const lineVat = round2(lineEx * (vatCtx.vat_rate_pct / 100));
     const lineInc = round2(lineEx + lineVat);
@@ -7435,10 +9637,49 @@ async function handleFinancePreviewTsfin(env, req) {
     agg.totals.subtotal_ex_vat += lineEx;
     agg.totals.vat_amount += lineVat;
     agg.totals.total_inc_vat += lineInc;
+
+    // ---- PAYE WTR informational split (does not affect margin) ----
+    if ((r.pay_method || '').toUpperCase() === 'PAYE') {
+      // Prefer the snapshot if present; else derive from policy; else fall back to default
+      let wtrPct = (r.pay_wtr_rate_pct_snapshot == null) ? null : Number(r.pay_wtr_rate_pct_snapshot);
+      if (wtrPct == null || !Number.isFinite(wtrPct)) {
+        const pol = r.policy_snapshot_json || {};
+        let polPct = Number(pol.holiday_pay_pct ?? NaN);
+        const applyTo = String(pol.apply_holiday_to || '').toUpperCase();
+        // If policy explicitly disables WTR, treat as zero
+        if (applyTo === 'NONE') polPct = 0;
+        // Only apply PAYE or ALL; otherwise zero
+        if (applyTo && !['PAYE_ONLY', 'ALL', 'NONE'].includes(applyTo)) {
+          // unknown -> leave as-is
+        }
+        wtrPct = Number.isFinite(polPct) ? polPct : defaultWtr;
+      }
+
+      const baseExWtr = payTotal / (1 + (wtrPct / 100));
+      const wtrElem = payTotal - baseExWtr;
+
+      agg.paye_wtr.timesheets += 1;
+      agg.paye_wtr.hours_total += (+r.total_hours || (h.day+h.night+h.sat+h.sun+h.bh));
+      agg.paye_wtr.pay_inclusive_ex_vat += payTotal;
+      agg.paye_wtr.basic_ex_wtr_ex_vat += baseExWtr;
+      agg.paye_wtr.wtr_element_ex_vat += wtrElem;
+
+      if (payTotal > 0 && Number.isFinite(wtrPct)) {
+        wtrWeightedNum += (wtrPct * payTotal);
+        wtrWeightedDen += payTotal;
+      }
+    }
   }
 
   // Final rounding
   Object.keys(agg.totals).forEach((k) => { agg.totals[k] = round2(agg.totals[k]); });
+
+  // Round WTR aggregates and compute weighted effective WTR%
+  agg.paye_wtr.pay_inclusive_ex_vat = round2(agg.paye_wtr.pay_inclusive_ex_vat);
+  agg.paye_wtr.basic_ex_wtr_ex_vat = round2(agg.paye_wtr.basic_ex_wtr_ex_vat);
+  agg.paye_wtr.wtr_element_ex_vat = round2(agg.paye_wtr.wtr_element_ex_vat);
+  agg.paye_wtr.hours_total = round2(agg.paye_wtr.hours_total);
+  agg.paye_wtr.effective_rate_pct_weighted = round2(wtrWeightedDen > 0 ? (wtrWeightedNum / wtrWeightedDen) : 0);
 
   return ok(agg);
 }
@@ -7457,6 +9698,10 @@ async function handleFinancePreviewTsfin(env, req) {
 // -----------------------------
 // === AMENDMENT inside broker/src/index.js ===
 // Keep your existing handleCreateInvoiceTsfin; replace it fully with this version
+// -----------------------------
+// CREATE INVOICE (TSFIN → INV)
+// Adds ts reference number into meta for hours lines
+// -----------------------------
 async function handleCreateInvoiceTsfin(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized('Unauthorized');
@@ -7518,7 +9763,7 @@ async function handleCreateInvoiceTsfin(env, req) {
 
   const vatRatePct = client.vat_chargeable === false ? 0 : Number(cs?.vat_rate_pct ?? defaultVat);
 
-  // Base timesheet meta
+  // Base timesheet meta (now also grab reference_number for meta)
   const { rows: tsRows } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -7531,21 +9776,19 @@ async function handleCreateInvoiceTsfin(env, req) {
   let DEFAULT_STATIONERY_KEY =
     env.INVOICE_STATIONERY_KEY ||
     'Assets/Stationery/Letterhead/A4/Letterhead_v1@300dpi.png';
-  // If someone pointed env var at the PDF, swap to the PNG variant automatically
   if (/\.pdf$/i.test(DEFAULT_STATIONERY_KEY)) {
     DEFAULT_STATIONERY_KEY = DEFAULT_STATIONERY_KEY.replace(/\.pdf$/i, '@300dpi.png');
   }
   const DEFAULT_STATIONERY_MARGINS_MM = { top: 32, right: 12, bottom: 20, left: 12 };
   const DEFAULT_HIDE_BANK_FOOTER = true;
 
-  // Optional: verify stationery asset exists (non-fatal)
   try {
     const exists = await r2Exists(env, DEFAULT_STATIONERY_KEY);
     if (!exists) {
       console.warn(`[handleCreateInvoiceTsfin] Stationery asset missing in R2: ${DEFAULT_STATIONERY_KEY}`);
     }
   } catch {
-    // ignore — non-fatal check
+    // non-fatal
   }
 
   // 3) Create header (DRAFT)
@@ -7564,10 +9807,10 @@ async function handleCreateInvoiceTsfin(env, req) {
     issued_at_utc: issuedAt,
     due_at_utc: dueAt,
 
-    // === stationery snapshot ===
-    stationery_key: DEFAULT_STATIONERY_KEY,                     // R2 key for PNG
-    stationery_margins_mm: DEFAULT_STATIONERY_MARGINS_MM,       // {top,right,bottom,left} in mm
-    hide_bank_footer: DEFAULT_HIDE_BANK_FOOTER,                 // don’t duplicate footer text if artwork includes it
+    // stationery snapshot
+    stationery_key: DEFAULT_STATIONERY_KEY,
+    stationery_margins_mm: DEFAULT_STATIONERY_MARGINS_MM,
+    hide_bank_footer: DEFAULT_HIDE_BANK_FOOTER,
 
     bank: {
       name: defRows?.[0]?.bank_name ?? null,
@@ -7657,6 +9900,7 @@ async function handleCreateInvoiceTsfin(env, req) {
       timesheet_version: s.timesheet_version,
       booking_id: tsMeta.booking_id ?? null,
       week_ending_date_local: tsMeta.week_ending_date ?? null,
+      ts_reference_number: (tsMeta.reference_number ?? null),
       po_number: s.po_number ?? null,
       evidence: {
         r2_auth_key: tsMeta.r2_auth_key ?? null,
@@ -7833,6 +10077,92 @@ async function handleCreateInvoiceTsfin(env, req) {
   if (!lockRes.ok) {
     const t = await lockRes.text();
     return serverError(`Failed to lock snapshots: ${t}`);
+  }
+
+  // 7b) Back-fill candidate (umbrella) VAT snapshots at lock time (first action wins semantics)
+  try {
+    // Focus only on UM BRELLA items with a candidate
+    const umbSnaps = snaps.filter(s => s.pay_method === 'UMBRELLA' && s.candidate_id);
+
+    if (umbSnaps.length) {
+      // Load candidates -> umbrellas
+      const candIds = [...new Set(umbSnaps.map(s => s.candidate_id))].map(encodeURIComponent).join(',');
+      const { rows: candRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/candidates?select=id,umbrella_id&id=in.(${candIds})`
+      );
+      const candMap = Object.fromEntries((candRows || []).map(c => [c.id, c]));
+      const umbrellaIds = [...new Set((candRows || []).map(c => c.umbrella_id).filter(Boolean))];
+      let umbMap = {};
+      if (umbrellaIds.length) {
+        const umbIn = umbrellaIds.map(encodeURIComponent).join(',');
+        const { rows: umbRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/umbrellas?select=id,enabled,vat_chargeable&id=in.(${umbIn})`
+        );
+        umbMap = Object.fromEntries((umbRows || []).map(u => [u.id, u]));
+      }
+
+      // Patch each row individually with its snapshot if not already set by earlier PAY
+      for (const s of umbSnaps) {
+        // Skip if already set (earlier PAY path may have set it)
+        const already =
+          (s.pay_vat_rate_pct_snapshot != null) ||
+          Number(s.pay_vat_amount_snapshot || 0) > 0 ||
+          Number(s.pay_total_inc_vat_snapshot || 0) > 0;
+        if (already) continue;
+
+        const cand = candMap[s.candidate_id];
+        if (!cand?.umbrella_id) continue; // no umbrella to snapshot against
+
+        const umb = umbMap[cand.umbrella_id];
+        // If umbrella not found, or disabled, or not VAT-chargeable, set neutral values (rate null, amount 0, total = ex)
+        if (!umb || umb.enabled === false || umb.vat_chargeable === false) {
+          const neutralPayload = {
+            pay_vat_rate_pct_snapshot: null,
+            pay_vat_amount_snapshot: 0,
+            pay_total_inc_vat_snapshot: Number(s.total_pay_ex_vat || 0)
+          };
+          await fetch(
+            `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${encodeURIComponent(s.timesheet_id)}&is_current=eq.true`,
+            {
+              method: "PATCH",
+              headers: { ...sbHeaders(env), "Prefer": "return=minimal" },
+              body: JSON.stringify(neutralPayload)
+            }
+          );
+          continue;
+        }
+
+        // VAT rate for pay-side snapshot: use policy snapshot if present, else default
+        const payVatPct =
+          (s.policy_snapshot_json && s.policy_snapshot_json.vat_rate_pct != null)
+            ? Number(s.policy_snapshot_json.vat_rate_pct)
+            : defaultVat;
+
+        const base = Number(s.total_pay_ex_vat || 0);
+        const vatAmt = round2(base * (Number(payVatPct) || 0) / 100);
+        const totalInc = round2(base + vatAmt);
+
+        const payload = {
+          pay_vat_rate_pct_snapshot: Number(payVatPct),
+          pay_vat_amount_snapshot: vatAmt,
+          pay_total_inc_vat_snapshot: totalInc
+        };
+
+        await fetch(
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${encodeURIComponent(s.timesheet_id)}&is_current=eq.true`,
+          {
+            method: "PATCH",
+            headers: { ...sbHeaders(env), "Prefer": "return=minimal" },
+            body: JSON.stringify(payload)
+          }
+        );
+      }
+    }
+  } catch (e) {
+    // Non-fatal: do not block invoice creation if pay-side VAT snapshotting fails
+    console.warn(`[handleCreateInvoiceTsfin] umbrella VAT snapshot fill failed: ${String(e?.message || e)}`);
   }
 
   // Compute partial eligibility (for response diagnostics)
@@ -8096,7 +10426,6 @@ function matchPath(pathname, pattern) {
   }
   return params;
 }
-
 export default {
   async fetch(req, env) {
     const pre = preflightIfNeeded(env, req);
@@ -8106,19 +10435,19 @@ export default {
     const p = url.pathname;
 
     try {
-      // Auth routes
+      // ====================== AUTH ======================
       if (req.method === 'POST' && p === '/auth/login')   return withCORS(env, req, await handleAuthLogin(env, req));
       if (req.method === 'POST' && p === '/auth/refresh') return withCORS(env, req, await handleAuthRefresh(env, req));
       if (req.method === 'POST' && p === '/auth/logout')  return withCORS(env, req, await handleAuthLogout(env, req));
       if (req.method === 'POST' && p === '/auth/forgot')  return withCORS(env, req, await handleAuthForgot(env, req));
       if (req.method === 'POST' && p === '/auth/reset')   return withCORS(env, req, await handleAuthReset(env, req));
 
-      // Health
+      // ====================== HEALTH ======================
       if (req.method === "GET" && p === "/healthz") return handleHealth(env);
       if (req.method === "GET" && p === "/readyz")  return handleReady(env);
       if (req.method === "GET" && p === "/version") return handleVersion();
 
-      // Core write flow (public/mobile)
+      // ====================== PUBLIC (mobile) WRITE FLOW ======================
       if (req.method === "POST" && p === "/timesheets/presign")           return handlePresign(env, req);
       if (req.method === "PUT"  && p === "/upload")                        return handleUpload(env, req, url);
       if (req.method === "POST" && p === "/timesheets/submit")             return handleSubmit(env, req);
@@ -8151,31 +10480,39 @@ export default {
       // Clients
       if (req.method === 'GET' && p === '/api/clients')                    return handleListClients(env, req);
       if (req.method === 'POST' && p === '/api/clients')                   return handleCreateClient(env, req);
-      const client = matchPath(p, '/api/clients/:id');
-      if (client && req.method === 'GET')                                  return handleGetClient(env, req, client.id);
-      if (client && req.method === 'PUT')                                  return handleUpdateClient(env, req, client.id);
+      {
+        const client = matchPath(p, '/api/clients/:id');
+        if (client && req.method === 'GET')                                return handleGetClient(env, req, client.id);
+        if (client && req.method === 'PUT')                                return handleUpdateClient(env, req, client.id);
+      }
 
       // Client Hospitals
-      const chList = matchPath(p, '/api/clients/:client_id/hospitals');
-      if (chList && req.method === 'GET')                                  return handleListHospitals(env, req, chList.client_id);
-      if (chList && req.method === 'POST')                                 return handleCreateHospital(env, req, chList.client_id);
-      const chOne = matchPath(p, '/api/clients/:client_id/hospitals/:hospital_id');
-      if (chOne && req.method === 'GET')                                   return handleGetHospital(env, req, chOne.client_id, chOne.hospital_id);
-      if (chOne && req.method === 'PUT')                                   return handleUpdateHospital(env, req, chOne.client_id, chOne.hospital_id);
+      {
+        const chList = matchPath(p, '/api/clients/:client_id/hospitals');
+        if (chList && req.method === 'GET')                                 return handleListHospitals(env, req, chList.client_id);
+        if (chList && req.method === 'POST')                                return handleCreateHospital(env, req, chList.client_id);
+        const chOne = matchPath(p, '/api/clients/:client_id/hospitals/:hospital_id');
+        if (chOne && req.method === 'GET')                                  return handleGetHospital(env, req, chOne.client_id, chOne.hospital_id);
+        if (chOne && req.method === 'PUT')                                  return handleUpdateHospital(env, req, chOne.client_id, chOne.hospital_id);
+      }
 
       // Umbrellas
       if (req.method === 'GET' && p === '/api/umbrellas')                  return handleListUmbrellas(env, req);
       if (req.method === 'POST' && p === '/api/umbrellas')                 return handleCreateUmbrella(env, req);
-      const umb = matchPath(p, '/api/umbrellas/:umbrella_id');
-      if (umb && req.method === 'GET')                                     return handleGetUmbrella(env, req, umb.umbrella_id);
-      if (umb && req.method === 'PUT')                                     return handleUpdateUmbrella(env, req, umb.umbrella_id);
+      {
+        const umb = matchPath(p, '/api/umbrellas/:umbrella_id');
+        if (umb && req.method === 'GET')                                   return handleGetUmbrella(env, req, umb.umbrella_id);
+        if (umb && req.method === 'PUT')                                   return handleUpdateUmbrella(env, req, umb.umbrella_id);
+      }
 
       // Candidates
       if (req.method === 'GET' && p === '/api/candidates')                 return handleListCandidates(env, req);
       if (req.method === 'POST' && p === '/api/candidates')                return handleCreateCandidate(env, req);
-      const cand = matchPath(p, '/api/candidates/:candidate_id');
-      if (cand && req.method === 'GET')                                    return handleGetCandidate(env, req, cand.candidate_id);
-      if (cand && req.method === 'PUT')                                    return handleUpdateCandidate(env, req, cand.candidate_id);
+      {
+        const cand = matchPath(p, '/api/candidates/:candidate_id');
+        if (cand && req.method === 'GET')                                  return handleGetCandidate(env, req, cand.candidate_id);
+        if (cand && req.method === 'PUT')                                  return handleUpdateCandidate(env, req, cand.candidate_id);
+      }
 
       // Rates
       if (req.method === 'GET' && p === '/api/rates/client-defaults')      return handleListClientRates(env, req);
@@ -8184,29 +10521,31 @@ export default {
       if (req.method === 'GET' && p === '/api/rates/client-overrides')     return handleListOverridesByClient(env, req); // expects client_id query param
       if (req.method === 'POST' && p === '/api/rates/candidate-overrides') return handleCreateOverride(env, req);
       if (req.method === 'POST' && p === '/api/rates/resolve-preview')     return handleResolveRate(env, req);
-      // Targeted UPDATE + DELETE for candidate overrides by path param
       {
         const cov = matchPath(p, '/api/rates/candidate-overrides/:candidate_id');
-        if (cov && req.method === 'PATCH') {
-          return handleUpdateOverride(env, req, cov.candidate_id);
-        }
-        if (cov && req.method === 'DELETE') {
-          return handleDeleteOverride(env, req, cov.candidate_id);
-        }
+        if (cov && req.method === 'PATCH')                                 return handleUpdateOverride(env, req, cov.candidate_id);
+        if (cov && req.method === 'DELETE')                                return handleDeleteOverride(env, req, cov.candidate_id);
       }
-      // Add alias path to match the spec (keeps existing /api/rates/client-overrides too)
       if (req.method === 'GET' && p === '/api/rates/candidate-overrides/by-client') {
         return handleListOverridesByClient(env, req); // expects ?client_id=...
       }
 
       // HealthRoster
       if (req.method === 'POST' && p === '/api/healthroster/import')       return handleHRImport(env, req);
-      const hrRows = matchPath(p, '/api/healthroster/:import_id/rows');
-      if (hrRows && req.method === 'GET')                                   return handleHRRows(env, req, hrRows.import_id);
-      const hrMap = matchPath(p, '/api/healthroster/:import_id/mapping');
-      if (hrMap && (req.method === 'GET' || req.method === 'POST'))         return handleHRMapping(env, req, hrMap.import_id);
-      const hrVal = matchPath(p, '/api/healthroster/:import_id/validate');
-      if (hrVal && req.method === 'POST')                                   return handleHRValidate(env, req, hrVal.import_id);
+      {
+        const hrRows = matchPath(p, '/api/healthroster/:import_id/rows');
+        if (hrRows && req.method === 'GET')                                 return handleHRRows(env, req, hrRows.import_id);
+      }
+      {
+        const hrMap = matchPath(p, '/api/healthroster/:import_id/mapping');
+        if (hrMap && (req.method === 'GET' || req.method === 'POST'))       return handleHRMapping(env, req, hrMap.import_id);
+      }
+      {
+        const hrVal = matchPath(p, '/api/healthroster/:import_id/validate');
+        if (hrVal && req.method === 'POST')                                 return handleHRValidate(env, req, hrVal.import_id);
+      }
+      // NEW: queue a TSO failure email (Power Automate)
+      if (req.method === 'POST' && p === '/api/hr/tso-failure-email')       return handleQueueTsoFailureEmail(env, req);
 
       // Timesheets finance preview
       if (req.method === 'POST' && p === '/api/timesheets/finance-preview') return handleFinancePreviewTsfin(env, req);
@@ -8220,73 +10559,119 @@ export default {
       // === TSFIN editing (UI-driven)
       {
         const tsfinOne = matchPath(p, '/api/tsfin/:timesheet_id');
-        if (tsfinOne && req.method === 'PATCH') {
-          return handleTsfinPatch(env, req, tsfinOne.timesheet_id);
-        }
+        if (tsfinOne && req.method === 'PATCH')                             return handleTsfinPatch(env, req, tsfinOne.timesheet_id);
 
         const tsfinExp = matchPath(p, '/api/tsfin/:timesheet_id/expenses');
-        if (tsfinExp && req.method === 'PATCH') {
-          return handleTsfinPatchExpenses(env, req, tsfinExp.timesheet_id);
-        }
+        if (tsfinExp && req.method === 'PATCH')                             return handleTsfinPatchExpenses(env, req, tsfinExp.timesheet_id);
 
         const tsfinMil = matchPath(p, '/api/tsfin/:timesheet_id/mileage');
-        if (tsfinMil && req.method === 'PATCH') {
-          return handleTsfinPatchMileage(env, req, tsfinMil.timesheet_id);
-        }
+        if (tsfinMil && req.method === 'PATCH')                             return handleTsfinPatchMileage(env, req, tsfinMil.timesheet_id);
 
         const tsfinPO = matchPath(p, '/api/tsfin/:timesheet_id/po');
-        if (tsfinPO && req.method === 'PATCH') {
-          return handleTsfinPatchPO(env, req, tsfinPO.timesheet_id);
-        }
+        if (tsfinPO && req.method === 'PATCH')                              return handleTsfinPatchPO(env, req, tsfinPO.timesheet_id);
+      }
+
+      // NEW: Timesheets – pay state
+      {
+        const payHold = matchPath(p, '/api/timesheets/:id/pay-hold');
+        if (payHold && req.method === 'PATCH')                              return handleTimesheetPayHold(env, req, payHold.id);
+
+        const markPaid = matchPath(p, '/api/timesheets/:id/mark-paid');
+        if (markPaid && req.method === 'PATCH')                             return handleTimesheetMarkPaid(env, req, markPaid.id);
       }
 
       // Invoices
       if (req.method === 'GET'  && p === '/api/invoices')                   return handleListInvoices(env, req);
       if (req.method === 'POST' && p === '/api/invoices')                   return handleCreateInvoiceTsfin(env, req);
 
-      const inv = matchPath(p, '/api/invoices/:invoice_id');
-      if (inv && req.method === 'GET')                                      return handleGetInvoice(env, req, inv.invoice_id);
+      {
+        const inv = matchPath(p, '/api/invoices/:invoice_id');
+        if (inv && req.method === 'GET')                                    return handleGetInvoice(env, req, inv.invoice_id);
+      }
 
       // Existing: render by invoice ID (uses stored header/items/totals)
-      const invRender = matchPath(p, '/api/invoices/:invoice_id/render');
-      if (invRender && req.method === 'POST')                               return handleInvoiceRender(env, req, invRender.invoice_id);
+      {
+        const invRender = matchPath(p, '/api/invoices/:invoice_id/render');
+        if (invRender && req.method === 'POST')                             return handleInvoiceRender(env, req, invRender.invoice_id);
+      }
 
       // NEW: render directly from posted payload (preview / ad-hoc)
       if (req.method === 'POST' && p === '/api/invoices/render')            return handleInvoiceRenderFromPayload(env, req);
 
-      const invEmail = matchPath(p, '/api/invoices/:invoice_id/email');
-      if (invEmail && req.method === 'POST')                                return handleInvoiceEmail(env, req, invEmail.invoice_id);
+      {
+        const invEmail = matchPath(p, '/api/invoices/:invoice_id/email');
+        if (invEmail && req.method === 'POST')                              return handleInvoiceEmail(env, req, invEmail.invoice_id);
+      }
 
-      const invCredit = matchPath(p, '/api/invoices/:invoice_id/credit-note');
-      if (invCredit && req.method === 'POST')                               return handleCreateCreditNoteTsfin(env, req, invCredit.invoice_id);
+      {
+        const invCredit = matchPath(p, '/api/invoices/:invoice_id/credit-note');
+        if (invCredit && req.method === 'POST')                             return handleCreateCreditNoteTsfin(env, req, invCredit.invoice_id);
+      }
 
-      const invPaid = matchPath(p, '/api/invoices/:invoice_id/mark-paid');
-      if (invPaid && req.method === 'POST')                                 return handleInvoiceMarkPaid(env, req, invPaid.invoice_id);
+      {
+        const invPaid = matchPath(p, '/api/invoices/:invoice_id/mark-paid');
+        if (invPaid && req.method === 'POST')                               return handleInvoiceMarkPaid(env, req, invPaid.invoice_id);
+      }
 
-      const invUnpay = matchPath(p, '/api/invoices/:invoice_id/unpay');
-      if (invUnpay && req.method === 'POST')                                return handleInvoiceMarkUnpaid(env, req, invUnpay.invoice_id);
+      {
+        const invUnpay = matchPath(p, '/api/invoices/:invoice_id/unpay');
+        if (invUnpay && req.method === 'POST')                              return handleInvoiceMarkUnpaid(env, req, invUnpay.invoice_id);
+      }
 
-      // Remittances — new composer/queue (one email per candidate)
+      // Remittances — existing single-candidate composer
       if (req.method === 'POST' && p === '/api/remittances/email-for-candidate') {
         return handleRemittanceEmailForCandidate(env, req);
       }
+      // NEW: bulk remittance send (list-driven)
+      if (req.method === 'POST' && p === '/api/remittances/send')           return handleRemittancesSend(env, req);
+
+      // ====================== SEARCH (exportable) ======================
+      if (req.method === 'GET' && p === '/api/search/timesheets')           return handleSearchTimesheets(env, req);
+      if (req.method === 'GET' && p === '/api/search/invoices')             return handleSearchInvoices(env, req);
+      if (req.method === 'GET' && p === '/api/search/candidates')           return handleSearchCandidates(env, req);
+      if (req.method === 'GET' && p === '/api/search/clients')              return handleSearchClients(env, req);
+      if (req.method === 'GET' && p === '/api/search/umbrellas')            return handleSearchUmbrellas(env, req);
+
+      // ====================== REPORTS (json/csv/print) ======================
+      if (req.method === 'GET' && p === '/api/reports/timesheets')          return handleReportTimesheets(env, req);
+      if (req.method === 'GET' && p === '/api/reports/invoices')            return handleReportInvoices(env, req);
+      if (req.method === 'GET' && p === '/api/reports/candidates')          return handleReportCandidates(env, req);
+      if (req.method === 'GET' && p === '/api/reports/clients')             return handleReportClients(env, req);
+      if (req.method === 'GET' && p === '/api/reports/umbrellas')           return handleReportUmbrellas(env, req);
+
+      // ====================== PAYMENTS (Bank CSV) ======================
+      if (req.method === 'POST' && p === '/api/payments/generate-csv')      return handlePaymentsGenerateCsv(env, req);
+
+      // ====================== REPORT PRESETS (CRUD) ======================
+      if (req.method === 'POST' && p === '/api/report-presets')             return handleReportPresetsCreate(env, req);
+      if (req.method === 'GET'  && p === '/api/report-presets')             return handleReportPresetsList(env, req);
+      {
+        const rp = matchPath(p, '/api/report-presets/:preset_id');
+        if (rp && req.method === 'PATCH')                                   return handleReportPresetsUpdate(env, req, rp.preset_id);
+        if (rp && req.method === 'DELETE')                                  return handleReportPresetsDelete(env, req, rp.preset_id);
+      }
 
       // ====================== EMAIL (OUTBOX, SEND, TSO) ======================
-
       // List outbox
       if (req.method === 'GET'  && p === '/api/email/outbox')               return handleListOutbox(env, req);
       // Get one outbox item (canonical)
-      const outOne = matchPath(p, '/api/email/outbox/:id');
-      if (outOne && req.method === 'GET')                                   return handleGetOutboxItem(env, req, outOne.id);
+      {
+        const outOne = matchPath(p, '/api/email/outbox/:id');
+        if (outOne && req.method === 'GET')                                 return handleGetOutboxItem(env, req, outOne.id);
+      }
       // Back-compat alias to fetch single outbox item
-      const outbox = matchPath(p, '/api/outbox/:mail_id');
-      if (outbox && req.method === 'GET')                                   return handleGetOutboxItem(env, req, outbox.mail_id);
+      {
+        const outbox = matchPath(p, '/api/outbox/:mail_id');
+        if (outbox && req.method === 'GET')                                 return handleGetOutboxItem(env, req, outbox.mail_id);
+      }
 
       // Drain outbox queue
       if (req.method === 'POST' && p === '/api/email/outbox/drain')         return handleOutboxDrain(env, req);
       // Retry a failed item
-      const outRetry = matchPath(p, '/api/email/outbox/:id/retry');
-      if (outRetry && req.method === 'POST')                                return handleOutboxRetry(env, req, outRetry.id);
+      {
+        const outRetry = matchPath(p, '/api/email/outbox/:id/retry');
+        if (outRetry && req.method === 'POST')                              return handleOutboxRetry(env, req, outRetry.id);
+      }
 
       // Provider callbacks / manual marks
       if (req.method === 'POST' && p === '/api/email/outbox/mark-sent')     return handleOutboxMarkSent(env, req);
@@ -8299,17 +10684,21 @@ export default {
 
       // ====================== RELATED (generic) ======================
       // Counts for an entity (place before the generic list matcher)
-      const relCounts = matchPath(p, '/api/related/:entity/:id/counts');
-      if (relCounts && req.method === 'GET') {
-        return handleRelatedCounts(env, req, relCounts.entity, relCounts.id);
+      {
+        const relCounts = matchPath(p, '/api/related/:entity/:id/counts');
+        if (relCounts && req.method === 'GET') {
+          return handleRelatedCounts(env, req, relCounts.entity, relCounts.id);
+        }
       }
       // List a related type for an entity (newest-first, with limit/offset)
-      const relList = matchPath(p, '/api/related/:entity/:id/:type');
-      if (relList && req.method === 'GET') {
-        return handleRelatedList(env, req, relList.entity, relList.id, relList.type);
+      {
+        const relList = matchPath(p, '/api/related/:entity/:id/:type');
+        if (relList && req.method === 'GET') {
+          return handleRelatedList(env, req, relList.entity, relList.id, relList.type);
+        }
       }
 
-      // Files (R2, signed)
+      // ====================== FILES (R2, signed) ======================
       if (req.method === 'POST' && p === '/api/files/presign-upload')       return handleFilePresignUpload(env, req);
       if (req.method === 'PUT'  && p === '/api/files/upload')               return handleFileUpload(env, req, url);
       if (req.method === 'POST' && p === '/api/files/presign-download')     return handleFilePresignDownload(env, req);
@@ -8340,3 +10729,6 @@ export default {
     ctx.waitUntil(drainEmailOutboxOnce(env, { limit: emailBatchLimit }));
   }
 }
+
+
+
