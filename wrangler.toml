@@ -1,6 +1,7 @@
 name = "cloudtms"
 main = "broker/src/index.js"  
 compatibility_date = "2025-10-13"
+compatibility_flags = ["nodejs_compat"]
 
 [vars]
 SUPABASE_URL = "https://zojgukxyyklcyjbyyqlz.supabase.co"
@@ -14,7 +15,6 @@ TSFIN_MAX_BATCHES = "10"
 TSFIN_BATCH_SIZE = "50"
 
 # === Email / Outbox broker ===
-POWER_AUTOMATE_EMAIL_WEBHOOK_URL = "https://defaultba10833977be4042a72b025b785d1f.21.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/26270a54fbb941ad80f4f1efcc2ce016/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=JHeTB1I-IBZY04eprseJR8L1O6O5nGqFE6UWAbufLbU"
 EMAIL_DRAIN_LIMIT_DEFAULT = "10"
 EMAIL_MAX_PAYLOAD_BYTES = "18874368"
 PUBLIC_DOWNLOAD_BASE_URL = "https://cloudtms.arthur-rai.co.uk/api/files/download"
