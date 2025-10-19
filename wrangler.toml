@@ -1,5 +1,5 @@
 name = "cloudtms"
-main = "broker/src/index.js"  
+main = "broker/src/index.js"
 compatibility_date = "2025-10-13"
 compatibility_flags = ["nodejs_compat"]
 
@@ -24,7 +24,7 @@ INVOICE_STATIONERY_BUCKET = "timesheets-signatures"
 # Use the PNG you uploaded (A4, full-bleed). Keep exact path/casing.
 INVOICE_STATIONERY_KEY = "Assets/Stationery/Letterhead/A4/Letterhead_v1@300dpi.png"
 
-# new for TS rendering
+# New for TS rendering
 TIMESHEET_TEMPLATE_KEY = "Assets/Stationery/Timesheet/Blank Timesheet.pdf"
 
 [[r2_buckets]]
@@ -42,3 +42,18 @@ binding = "BROWSER"
 
 [triggers]
 crons = ["*/5 * * * *"]  # every 5 minutes
+
+# =========================
+# Workers Logs (Observability)
+# =========================
+# Dev/preview: log EVERYTHING with CF's invocation logs
+[observability.logs]
+enabled = true
+invocation_logs = true
+head_sampling_rate = 1     # 100% while debugging
+
+# Production: still on, but sample to reduce noise; bump to 1.0 when chasing a bug
+[env.production.observability.logs]
+enabled = true
+invocation_logs = true
+head_sampling_rate = 0.25  # 25% to start; adjust as needed
