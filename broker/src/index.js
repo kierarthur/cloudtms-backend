@@ -453,7 +453,7 @@ async function ensureTimesheetPdf(env, timesheetId) {
 // ───────────────────────────────────────────────────────────────────────────────
 // Shared local helpers (lightweight, self-contained)
 // ───────────────────────────────────────────────────────────────────────────────
-const enc = encodeURIComponent;
+
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const csvEsc = (v) => {
   if (v == null) return '';
@@ -1107,7 +1107,6 @@ export async function handleRemittancesSend(env, req) {
     }, { entity: 'candidate', subject_id: candId, reason: 'REMITTANCE', correlation_id: mailId, req });
 
     // Audit (each timesheet) + update remittance counters
-    const nowIso = (new Date()).toISOString();
     for (const r of rows) {
       await writeAudit(env, user, 'EMAIL_QUEUED',
         { to: toEmail, subject: `Remittance Advice – ${periodLabel}`, mail_id: mailId },
@@ -8429,8 +8428,6 @@ function asNumber(x, d = 0) {
   const n = typeof x === 'number' ? x : Number(x);
   return Number.isFinite(n) ? n : d;
 }
-
-function round2(n) { return Math.round(n * 100) / 100; }
 
 
 
