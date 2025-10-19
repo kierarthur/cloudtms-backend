@@ -25,6 +25,7 @@
  *  - GET    /version
  */
 
+
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 const TEXT_PLAIN = { "content-type": "text/plain; charset=utf-8" };
 
