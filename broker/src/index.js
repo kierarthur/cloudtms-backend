@@ -25,7 +25,6 @@
  *  - GET    /version
  */
 
-
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 const TEXT_PLAIN = { "content-type": "text/plain; charset=utf-8" };
 
@@ -7240,31 +7239,70 @@ async function handleHRValidate(env, req, importId) {
 // ------------------------
 async function handleListInvoices(env, req) {
   const user = await requireUser(env, req, ['admin']);
-  if (!user) return unauthorized();
+  if (!user) return unauthorized(); // keep current behavior
 
   const params = new URL(req.url).searchParams;
-  const statusFilter = params.get("status");
+
+  // legacy values: "paid" | "unpaid"
+  // new values: exact enum status: DRAFT | ISSUED | ON_HOLD | PAID
+  const statusFilter = (params.get("status") || "").toUpperCase();
+  const clientId     = params.get("client_id") || null;
+  const issuedFrom   = params.get("issued_from") || null; // ISO date/time
+  const issuedTo     = params.get("issued_to")   || null; // ISO date/time
+
   const includeCount = params.get("include_count") === "true";
-  const limit = Math.min(parseInt(params.get("limit") || "50", 10), 200);
-  const offset = parseInt(params.get("offset") || "0", 10);
+  const limit  = Math.min(parseInt(params.get("limit")  || "50", 10), 200);
+  const offset = Math.max(0,   parseInt(params.get("offset") || "0", 10));
 
-  let filter = "";
-  if (statusFilter === "paid") filter = "&paid_at_utc=not.is.null";
-  if (statusFilter === "unpaid") filter = "&paid_at_utc=is.null";
-
+  // Base select (kept identical to your original)
   const select = [
     'id','invoice_no','client_id','issued_at_utc','due_at_utc',
     'status','subtotal_ex_vat','vat_amount','total_inc_vat',
     'invoice_pdf_r2_key','header_snapshot_json'
   ].join(',');
 
-  const url = `${env.SUPABASE_URL}/rest/v1/invoices?select=${select}&order=issued_at_utc.desc&limit=${limit}&offset=${offset}${filter}`;
+  // Build URL w/ filters
+  let url = `${env.SUPABASE_URL}/rest/v1/invoices?select=${encodeURIComponent(select)}&order=issued_at_utc.desc&limit=${limit}&offset=${offset}`;
+
+  // Status: support both legacy "paid|unpaid" and exact enum statuses
+  if (statusFilter === 'PAID') {
+    url += `&status=eq.PAID`;
+  } else if (statusFilter === 'UNPAID') {
+    // keep legacy meaning: not yet marked as paid (no paid_at_utc) — matches your current behavior
+    url += `&paid_at_utc=is.null`;
+  } else if (statusFilter === 'PAID_LEGACY' || statusFilter === 'PAID_LEGACY_PLACEHOLDER') {
+    // not used; kept here just to illustrate how you'd branch if you ever needed it
+  } else if (statusFilter === 'DRAFT' || statusFilter === 'ISSUED' || statusFilter === 'ON_HOLD') {
+    url += `&status=eq.${encodeURIComponent(statusFilter)}`;
+  } else if (statusFilter === 'PAID' /* already handled above */) {
+    // noop
+  } else if (statusFilter === 'PAID' /* duplicate guard */) {
+    // noop
+  } else if (statusFilter === 'PAID' /* legacy alias 'paid' handled below */) {
+    // noop
+  } else if (statusFilter === 'PAID' /* keep symmetrical branches tidy */) {
+    // noop
+  } else {
+    // legacy "paid" | "unpaid" (lowercase)
+    const legacy = params.get("status");
+    if (legacy === 'paid')   url += `&paid_at_utc=not.is.null`;
+    if (legacy === 'unpaid') url += `&paid_at_utc=is.null`;
+  }
+
+  // Optional: filter by client
+  if (clientId) {
+    url += `&client_id=eq.${encodeURIComponent(clientId)}`;
+  }
+
+  // Optional: issued date range
+  if (issuedFrom) url += `&issued_at_utc=gte.${encodeURIComponent(issuedFrom)}`;
+  if (issuedTo)   url += `&issued_at_utc=lte.${encodeURIComponent(issuedTo)}`;
 
   try {
     const { rows, total } = await sbFetch(env, url, includeCount);
     const resp = includeCount ? { items: rows, count: total ?? undefined } : { items: rows };
     return withCORS(env, req, ok(resp));
-  } catch {
+  } catch (e) {
     return withCORS(env, req, serverError("Failed to list invoices"));
   }
 }
@@ -9042,7 +9080,8 @@ function resolveEffectivePayChannel(input) {
 // Worker: dequeue → compute
 // ---------------------------
 async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
-  const lease = await sbRpc(env, 'tsfin_dequeue_batch', { limit });
+  // NOTE: Rename RPC arg -> p_limit
+  const lease = await sbRpc(env, 'tsfin_dequeue_batch', { p_limit: limit });
   if (!Array.isArray(lease) || !lease.length) return { picked: 0, ok: 0, fail: 0 };
 
   let ok = 0, fail = 0;
@@ -9051,14 +9090,16 @@ async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
     try {
       const ts = await loadCurrentTimesheet(env, item.timesheet_id);
       if (!ts) {
-        await sbRpc(env, 'tsfin_mark_revoked', { timesheet_id: item.timesheet_id });
-        await sbRpc(env, 'tsfin_work_success', { id: item.id });
+        // NOTE: Rename RPC args -> p_timesheet_id, p_id
+        await sbRpc(env, 'tsfin_mark_revoked', { p_timesheet_id: item.timesheet_id });
+        await sbRpc(env, 'tsfin_work_success', { p_id: item.id });
         ok++; continue;
       }
 
       // Must be authorised to proceed with financials
       if (!ts.authorised_at_server) {
-        await sbRpc(env, 'tsfin_work_success', { id: item.id });
+        // NOTE: Rename RPC arg -> p_id
+        await sbRpc(env, 'tsfin_work_success', { p_id: item.id });
         ok++; continue;
       }
 
@@ -9182,24 +9223,27 @@ async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
         total_charge_ex_vat,
         margin_ex_vat,
 
-        // NEW: persisted hints/state
+        // Persisted hints/state
         pay_wtr_rate_pct_snapshot, // may be null; only set for PAYE when ready-lite
         candidate_assignment,
         processing_status
       };
 
       await writeSnapshot(env, snapshot);
-      await sbRpc(env, 'tsfin_work_success', { id: item.id });
+      // NOTE: Rename RPC arg -> p_id
+      await sbRpc(env, 'tsfin_work_success', { p_id: item.id });
       ok++;
 
     } catch (e) {
-      await sbRpc(env, 'tsfin_work_fail', { id: item.id, error_text: String(e?.message || e) });
+      // NOTE: Rename RPC args -> p_id, p_error
+      await sbRpc(env, 'tsfin_work_fail', { p_id: item.id, p_error: String(e?.message || e) });
       fail++;
     }
   }
 
   return { picked: lease.length, ok, fail };
 }
+
 
 // helpers used above
 function hasPayeBank(c) {
