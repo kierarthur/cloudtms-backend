@@ -1864,66 +1864,7 @@ export async function handleSearchInvoices(env, req) {
 // SEARCH — Candidates (richer filters + csv/print)
 // ───────────────────────────────────────────────────────────────────────────────
 
-export async function handleSearchCandidates(env, req) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-  const urlObj = new URL(req.url);
-  const q = (k) => urlObj.searchParams.get(k);
-  const page = Math.max(1, parseInt(q('page') || '1', 10));
-  const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
-  const format = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
 
-  const text = q('q'); // display_name partial
-  const payMethod = q('pay_method') ? q('pay_method').toUpperCase() : null; // PAYE|UMBRELLA
-  const active = q('active'); // 'true'|'false'|null
-
-  let url = `${env.SUPABASE_URL}/rest/v1/candidates?select=id,display_name,first_name,last_name,email,pay_method,active&order=display_name.asc` +
-    `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
-  if (text) url += `&display_name=ilike.*${enc(text)}*`;
-  if (payMethod) url += `&pay_method=eq.${enc(payMethod)}`;
-  if (active === 'true') url += `&active=eq.true`;
-  if (active === 'false') url += `&active=eq.false`;
-
-  const { rows } = await sbFetch(env, url);
-
-  if (format === 'csv') {
-    const header = ['CandidateId','DisplayName','Email','PayMethod','Active'];
-    const out = [csvJoin(header)];
-    for (const r of rows || []) {
-      out.push(csvJoin([
-        r.id,
-        r.display_name || [r.first_name, r.last_name].filter(Boolean).join(' '),
-        r.email || '',
-        (r.pay_method || '').toUpperCase(),
-        r.active ? 'Y' : 'N'
-      ]));
-    }
-    return withCORS(env, req, ok({ csv: out.join('\n'), count: rows?.length || 0, page, page_size: pageSize }));
-  }
-
-  if (format === 'print') {
-    const rowsHtml = (rows || []).map(r => `
-      <tr>
-        <td>${r.display_name || [r.first_name, r.last_name].filter(Boolean).join(' ')}</td>
-        <td>${r.email || ''}</td>
-        <td>${(r.pay_method || '').toUpperCase()}</td>
-        <td>${r.active ? 'Y' : 'N'}</td>
-      </tr>`).join('');
-    const html = `
-      <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif">
-        <h3>Candidates — Search Results</h3>
-        <table width="100%" cellspacing="0" cellpadding="6" style="border-collapse:collapse">
-          <thead><tr style="background:#f5f5f5">
-            <th>Candidate</th><th>Email</th><th>Pay Method</th><th>Active</th>
-          </tr></thead>
-          <tbody>${rowsHtml}</tbody>
-        </table>
-      </div>`;
-    return withCORS(env, req, ok({ html, count: rows?.length || 0, page, page_size: pageSize }));
-  }
-
-  return withCORS(env, req, ok({ rows, page, page_size: pageSize, count: rows?.length || 0 }));
-}
 
 
 // ───────────────────────────────────────────────────────────────────────────────
@@ -5394,166 +5335,10 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
  *     security:
  *       - bearerAuth: []
  */
-async function handleListCandidates(env, req) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return unauthorized();
 
-  try {
-    const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/candidates?select=*`);
-    return withCORS(env, req, ok({ items: rows }));
-  } catch {
-    return withCORS(env, req, serverError("Failed to list candidates"));
-  }
-}
 
-// ------------------------------------------------------
-// CREATE CANDIDATE / CLIENT (accept mileage fields too)
-// ------------------------------------------------------
-async function handleCreateCandidate(env, req) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return unauthorized();
 
-  const data = await parseJSONBody(req);
-  if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
 
-  // mileage_pay_rate is accepted by DB; other fields are passed through
-  try {
-    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/candidates`, {
-      method: "POST",
-      headers: { ...sbHeaders(env), "Prefer": "return=representation" },
-      body: JSON.stringify({ ...data, created_at: new Date().toISOString() })
-    });
-    if (!res.ok) {
-      const err = await res.text();
-      return withCORS(env, req, badRequest(`Candidate creation failed: ${err}`));
-    }
-    const json = await res.json().catch(() => ({}));
-    const candidate = Array.isArray(json) ? json[0] : json;
-    return withCORS(env, req, ok({ candidate }));
-  } catch {
-    return withCORS(env, req, serverError("Failed to create candidate"));
-  }
-}
-async function handleGetCandidate(env, req, candidateId) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return unauthorized();
-
-  try {
-    // Fetch candidate
-    const { rows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(candidateId)}&select=*`
-    );
-    if (!rows.length) return withCORS(env, req, notFound("Candidate not found"));
-    const candidate = rows[0];
-
-    // If umbrella, fetch umbrella minimal fields
-    let umbrella = undefined;
-    if (candidate.pay_method === 'UMBRELLA' && candidate.umbrella_id) {
-      const { rows: umbRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/umbrellas?id=eq.${encodeURIComponent(candidate.umbrella_id)}&select=id,name,bank_name,sort_code,account_number`
-      );
-      umbrella = umbRows?.[0];
-    }
-
-    const effective_pay_channel = resolveEffectivePayChannel({
-      pay_method: candidate.pay_method,
-      candidate,
-      umbrella
-    });
-
-    return withCORS(env, req, ok({ candidate, effective_pay_channel }));
-  } catch {
-    return withCORS(env, req, serverError("Failed to fetch candidate"));
-  }
-}
-
-// -------------------------------------------------------
-// UPDATE CANDIDATE (enqueue non-invoiced TSFIN on change)
-// -------------------------------------------------------
-async function handleUpdateCandidate(env, req, candidateId) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return unauthorized();
-
-  const data = await parseJSONBody(req);
-  if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
-
-  try {
-    // 1) Load current candidate to detect changes
-    const sel = [
-      'pay_method',
-      'mileage_pay_rate',
-      'umbrella_id',
-      'account_holder',
-      'bank_name',
-      'sort_code',
-      'account_number'
-    ].join(',');
-    const { rows: beforeRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(candidateId)}&select=${sel}`
-    );
-    const before = beforeRows?.[0] || {};
-
-    // 2) Update
-    const url = `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(candidateId)}`;
-    const res = await fetch(url, {
-      method: "PATCH",
-      headers: { ...sbHeaders(env), "Prefer": "return=representation" },
-      body: JSON.stringify({ ...data, updated_at: new Date().toISOString() })
-    });
-    if (!res.ok) {
-      const err = await res.text();
-      return withCORS(env, req, badRequest(`Candidate update failed: ${err}`));
-    }
-    const json = await res.json().catch(() => ({}));
-    const candidate = Array.isArray(json) ? json[0] : json;
-
-    // 3) Change detection
-    const payMethodChanged  = (data.pay_method != null) && data.pay_method !== before.pay_method;
-    const umbrellaChanged   = (data.umbrella_id !== undefined) && data.umbrella_id !== before.umbrella_id;
-    const mileagePayChanged = (data.mileage_pay_rate != null) && Number(data.mileage_pay_rate) !== Number(before.mileage_pay_rate);
-
-    const bankKeys = ['account_holder','bank_name','sort_code','account_number'];
-    const bankChanged = bankKeys.some(k => Object.prototype.hasOwnProperty.call(data, k) && data[k] !== before[k]);
-
-    // 4) Enqueue recompute for non-invoiced, current TSFIN for this candidate
-    if (payMethodChanged || umbrellaChanged || bankChanged || mileagePayChanged) {
-      const { rows: tsfins } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?select=timesheet_id` +
-          `&candidate_id=eq.${encodeURIComponent(candidateId)}` +
-          `&is_current=eq.true` +
-          `&locked_by_invoice_id=is.null`
-      );
-      const items = [];
-      for (const r of (tsfins || [])) {
-        if (payMethodChanged || umbrellaChanged || bankChanged) {
-          items.push({ timesheet_id: r.timesheet_id, reason: 'CONTEXT_CHANGED' });
-        }
-        if (mileagePayChanged) {
-          items.push({ timesheet_id: r.timesheet_id, reason: 'RATE_CHANGED' });
-        }
-      }
-      if (items.length) {
-        await fetch(
-          `${env.SUPABASE_URL}/rest/v1/ts_financials_outbox?on_conflict=timesheet_id,reason`,
-          {
-            method: "POST",
-            headers: { ...sbHeaders(env), "Prefer": "resolution=ignore-duplicates" },
-            body: JSON.stringify(items)
-          }
-        );
-      }
-    }
-
-    return withCORS(env, req, ok({ candidate }));
-  } catch {
-    return withCORS(env, req, serverError("Failed to update candidate"));
-  }
-}
 
 // ====================== RATES (FIVE-WAY) ======================
 /**
@@ -5658,6 +5443,277 @@ async function handleUpdateCandidate(env, req, candidateId) {
 // Client defaults: list with optional role/band + active_on filters,
 // and correct NULL/default semantics. Supports pagination.
 // ─────────────────────────────────────────────────────────────────────────────
+
+export async function handleSearchCandidates(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const urlObj = new URL(req.url);
+  const q = (k) => urlObj.searchParams.get(k);
+  const page = Math.max(1, parseInt(q('page') || '1', 10));
+  const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
+  const format = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
+
+  // --- NEW: support JSON inside q= for roles_any (and optional roles_all)
+  const rawQ = q('q'); // can be plain string or JSON string: {"roles_any":["RMN","HCA"],"text":"ann"}
+  let text = null;     // display_name partial
+  let rolesAny = [];   // array of codes → OR across these
+  let rolesAll = [];   // optional future: AND across these
+
+  if (rawQ) {
+    try {
+      const parsed = JSON.parse(rawQ);
+      if (parsed && typeof parsed === 'object') {
+        if (Array.isArray(parsed.roles_any)) {
+          rolesAny = parsed.roles_any.filter(v => typeof v === 'string' && v.trim()).map(v => v.trim());
+        }
+        if (Array.isArray(parsed.roles_all)) {
+          rolesAll = parsed.roles_all.filter(v => typeof v === 'string' && v.trim()).map(v => v.trim());
+        }
+        // Accept either "text" or "display_name" as the free-text term
+        if (typeof parsed.text === 'string') text = parsed.text.trim();
+        else if (typeof parsed.display_name === 'string') text = parsed.display_name.trim();
+        else if (typeof parsed.q === 'string') text = parsed.q.trim();
+      } else {
+        text = String(rawQ || '').trim();
+      }
+    } catch {
+      // Not JSON: treat as plain text search
+      text = String(rawQ || '').trim();
+    }
+  }
+
+  const payMethod = q('pay_method') ? q('pay_method').toUpperCase() : null; // PAYE|UMBRELLA
+  const active = q('active'); // 'true'|'false'|null
+
+  let url =
+    `${env.SUPABASE_URL}/rest/v1/candidates?select=id,display_name,first_name,last_name,email,pay_method,active&order=display_name.asc` +
+    `&limit=${pageSize}&offset=${(page - 1) * pageSize}`;
+
+  if (text) url += `&display_name=ilike.*${enc(text)}*`;
+  if (payMethod) url += `&pay_method=eq.${enc(payMethod)}`;
+  if (active === 'true') url += `&active=eq.true`;
+  if (active === 'false') url += `&active=eq.false`;
+
+  // --- NEW: roles_all (AND semantics) → repeat the filter param to AND
+  // translates to: roles @> '[{"code":"X"}]' AND roles @> '[{"code":"Y"}]'
+  if (rolesAll.length) {
+    for (const code of rolesAll) {
+      const val = JSON.stringify([{ code }]); // [{"code":"RMN"}]
+      url += `&roles=cs.${enc(val)}`;
+    }
+  }
+
+  // --- NEW: roles_any (OR semantics) → use PostgREST or=(...)
+  // translates to: or=(roles=cs.[{"code":"RMN"}],roles=cs.[{"code":"HCA"}],...)
+  if (rolesAny.length) {
+    const parts = rolesAny.map((code) => {
+      const val = enc(JSON.stringify([{ code }])); // [{"code":"HCA"}] (encoded)
+      return `roles=cs.${val}`;
+    });
+    url += `&or=(${parts.join(',')})`;
+  }
+
+  const { rows } = await sbFetch(env, url);
+
+  if (format === 'csv') {
+    const header = ['CandidateId', 'DisplayName', 'Email', 'PayMethod', 'Active'];
+    const out = [csvJoin(header)];
+    for (const r of rows || []) {
+      out.push(csvJoin([
+        r.id,
+        r.display_name || [r.first_name, r.last_name].filter(Boolean).join(' '),
+        r.email || '',
+        (r.pay_method || '').toUpperCase(),
+        r.active ? 'Y' : 'N'
+      ]));
+    }
+    return withCORS(env, req, ok({ csv: out.join('\n'), count: rows?.length || 0, page, page_size: pageSize }));
+  }
+
+  if (format === 'print') {
+    const rowsHtml = (rows || []).map(r => `
+      <tr>
+        <td>${r.display_name || [r.first_name, r.last_name].filter(Boolean).join(' ')}</td>
+        <td>${r.email || ''}</td>
+        <td>${(r.pay_method || '').toUpperCase()}</td>
+        <td>${r.active ? 'Y' : 'N'}</td>
+      </tr>`).join('');
+    const html = `
+      <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif">
+        <h3>Candidates — Search Results</h3>
+        <table width="100%" cellspacing="0" cellpadding="6" style="border-collapse:collapse">
+          <thead><tr style="background:#f5f5f5">
+            <th>Candidate</th><th>Email</th><th>Pay Method</th><th>Active</th>
+          </tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>`;
+    return withCORS(env, req, ok({ html, count: rows?.length || 0, page, page_size: pageSize }));
+  }
+
+  return withCORS(env, req, ok({ rows, page, page_size: pageSize, count: rows?.length || 0 }));
+}
+
+export async function handleListCandidates(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return unauthorized();
+
+  try {
+    const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/candidates?select=*`);
+    return withCORS(env, req, ok({ items: rows }));
+  } catch {
+    return withCORS(env, req, serverError("Failed to list candidates"));
+  }
+}
+
+export async function handleCreateCandidate(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return unauthorized();
+
+  const data = await parseJSONBody(req);
+  if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
+
+  // mileage_pay_rate is accepted by DB; other fields are passed through
+  try {
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/candidates`, {
+      method: "POST",
+      headers: { ...sbHeaders(env), "Prefer": "return=representation" },
+      body: JSON.stringify({ ...data, created_at: new Date().toISOString() })
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      return withCORS(env, req, badRequest(`Candidate creation failed: ${err}`));
+    }
+    const json = await res.json().catch(() => ({}));
+    const candidate = Array.isArray(json) ? json[0] : json;
+    return withCORS(env, req, ok({ candidate }));
+  } catch {
+    return withCORS(env, req, serverError("Failed to create candidate"));
+  }
+}
+
+export async function handleGetCandidate(env, req, candidateId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return unauthorized();
+
+  try {
+    // Fetch candidate
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(candidateId)}&select=*`
+    );
+    if (!rows.length) return withCORS(env, req, notFound("Candidate not found"));
+    const candidate = rows[0];
+
+    // If umbrella, fetch umbrella minimal fields
+    let umbrella = undefined;
+    if (candidate.pay_method === 'UMBRELLA' && candidate.umbrella_id) {
+      const { rows: umbRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/umbrellas?id=eq.${encodeURIComponent(candidate.umbrella_id)}&select=id,name,bank_name,sort_code,account_number`
+      );
+      umbrella = umbRows?.[0];
+    }
+
+    const effective_pay_channel = resolveEffectivePayChannel({
+      pay_method: candidate.pay_method,
+      candidate,
+      umbrella
+    });
+
+    return withCORS(env, req, ok({ candidate, effective_pay_channel }));
+  } catch {
+    return withCORS(env, req, serverError("Failed to fetch candidate"));
+  }
+}
+
+export async function handleUpdateCandidate(env, req, candidateId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return unauthorized();
+
+  const data = await parseJSONBody(req);
+  if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
+
+  try {
+    // 1) Load current candidate to detect changes
+    const sel = [
+      'pay_method',
+      'mileage_pay_rate',
+      'umbrella_id',
+      'account_holder',
+      'bank_name',
+      'sort_code',
+      'account_number'
+    ].join(',');
+    const { rows: beforeRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(candidateId)}&select=${sel}`
+    );
+    const before = beforeRows?.[0] || {};
+
+    // 2) Update
+    const url = `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(candidateId)}`;
+    const res = await fetch(url, {
+      method: "PATCH",
+      headers: { ...sbHeaders(env), "Prefer": "return=representation" },
+      body: JSON.stringify({ ...data, updated_at: new Date().toISOString() })
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      return withCORS(env, req, badRequest(`Candidate update failed: ${err}`));
+    }
+    const json = await res.json().catch(() => ({}));
+    const candidate = Array.isArray(json) ? json[0] : json;
+
+    // 3) Change detection
+    const payMethodChanged  = (data.pay_method != null) && data.pay_method !== before.pay_method;
+    const umbrellaChanged   = (data.umbrella_id !== undefined) && data.umbrella_id !== before.umbrella_id;
+    const mileagePayChanged = (data.mileage_pay_rate != null) && Number(data.mileage_pay_rate) !== Number(before.mileage_pay_rate);
+
+    const bankKeys = ['account_holder','bank_name','sort_code','account_number'];
+    const bankChanged = bankKeys.some(k => Object.prototype.hasOwnProperty.call(data, k) && data[k] !== before[k]);
+
+    // 4) Enqueue recompute for non-invoiced, current TSFIN for this candidate
+    if (payMethodChanged || umbrellaChanged || bankChanged || mileagePayChanged) {
+      const { rows: tsfins } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?select=timesheet_id` +
+          `&candidate_id=eq.${encodeURIComponent(candidateId)}` +
+          `&is_current=eq.true` +
+          `&locked_by_invoice_id=is.null`
+      );
+      const items = [];
+      for (const r of (tsfins || [])) {
+        if (payMethodChanged || umbrellaChanged || bankChanged) {
+          items.push({ timesheet_id: r.timesheet_id, reason: 'CONTEXT_CHANGED' });
+        }
+        if (mileagePayChanged) {
+          items.push({ timesheet_id: r.timesheet_id, reason: 'RATE_CHANGED' });
+        }
+      }
+      if (items.length) {
+        await fetch(
+          `${env.SUPABASE_URL}/rest/v1/ts_financials_outbox?on_conflict=timesheet_id,reason`,
+          {
+            method: "POST",
+            headers: { ...sbHeaders(env), "Prefer": "resolution=ignore-duplicates" },
+            body: JSON.stringify(items)
+          }
+        );
+      }
+    }
+
+    return withCORS(env, req, ok({ candidate }));
+  } catch {
+    return withCORS(env, req, serverError("Failed to update candidate"));
+  }
+}
+
+
+
+
 async function handleListClientRates(env, req, clientId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -10670,7 +10726,10 @@ export default {
       // ====================== SEARCH (exportable) ======================
       if (req.method === 'GET' && p === '/api/search/timesheets')           return handleSearchTimesheets(env, req);
       if (req.method === 'GET' && p === '/api/search/invoices')             return handleSearchInvoices(env, req);
+
+      // Revised logic: /api/search/candidates supports JSON q= with roles_any (OR) and roles_all (AND)
       if (req.method === 'GET' && p === '/api/search/candidates')           return handleSearchCandidates(env, req);
+
       if (req.method === 'GET' && p === '/api/search/clients')              return handleSearchClients(env, req);
       if (req.method === 'GET' && p === '/api/search/umbrellas')            return handleSearchUmbrellas(env, req);
 
@@ -10771,6 +10830,5 @@ export default {
     ctx.waitUntil(drainEmailOutboxOnce(env, { limit: emailBatchLimit }));
   }
 }
-
 
 
