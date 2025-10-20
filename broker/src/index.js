@@ -5712,24 +5712,22 @@ export async function handleUpdateCandidate(env, req, candidateId) {
 }
 
 
-
-
 async function handleListClientRates(env, req, clientId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
-  const sp   = new URL(req.url).searchParams;
-  const cid  = clientId || sp.get("client_id");
-  const role = sp.get("role");     // single value; if UI needs multi, extend to CSV/array handling
-  const band = sp.get("band");
-  const on   = sp.get("active_on"); // YYYY-MM-DD (or ISO)
+  const sp    = new URL(req.url).searchParams;
+  const cid   = clientId || sp.get("client_id");        // ← now optional
+  const role  = sp.get("role");                         // single value
+  const band  = sp.get("band");
+  const on    = sp.get("active_on");                    // YYYY-MM-DD (or ISO)
   const limit  = Math.min(Math.max(parseInt(sp.get('limit')  || '100', 10) || 100, 1), 500);
   const offset = Math.max(parseInt(sp.get('offset') || '0',   10) || 0, 0);
 
-  if (!cid) return withCORS(env, req, badRequest("client_id required"));
-
   try {
-    let q = `${env.SUPABASE_URL}/rest/v1/rates_client_defaults?select=*&client_id=eq.${encodeURIComponent(cid)}`;
+    // Base: select from all client defaults; add client filter only if cid provided
+    let q = `${env.SUPABASE_URL}/rest/v1/rates_client_defaults?select=*`;
+    if (cid) q += `&client_id=eq.${encodeURIComponent(cid)}`;
 
     const andParts = [];
     // Treat provided role/band as "specific or default" (include NULL)
@@ -5741,14 +5739,17 @@ async function handleListClientRates(env, req, clientId) {
     }
     if (andParts.length) q += `&and=(${andParts.join(',')})`;
 
+    // Order + pagination
     q += `&order=date_from.desc,role.nullslast,band.nullslast&limit=${limit}&offset=${offset}`;
 
     const { rows } = await sbFetch(env, q);
     return withCORS(env, req, ok({ items: rows }));
-  } catch {
+  } catch (e) {
     return withCORS(env, req, serverError("Failed to fetch client default rates"));
   }
 }
+
+
 
 async function handleUpsertClientRate(env, req, clientId) {
   const user = await requireUser(env, req, ['admin']);
