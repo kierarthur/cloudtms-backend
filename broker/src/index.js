@@ -7991,41 +7991,92 @@ async function handleRelatedList(env, req, entity, id) {
 
   const url = new URL(req.url);
   const type = (matchPath(url.pathname, '/api/related/:entity/:id/:type') || {}).type;
-  const limit = Math.max(1, Math.min(100, parseInt(url.searchParams.get('limit') || '20', 10)));
+  const limit  = Math.max(1, Math.min(100, parseInt(url.searchParams.get('limit')  || '20', 10)));
   const offset = Math.max(0, parseInt(url.searchParams.get('offset') || '0', 10));
 
-  const okList = (items, total = undefined) => withCORS(env, req, ok({ items, ...(typeof total === 'number' ? { total } : {}) }));
+  const okList = (items, total = undefined) =>
+    withCORS(env, req, ok({ items, ...(typeof total === 'number' ? { total } : {}) }));
+
+  // Helpers for week-ending (Sunday) computation without touching timesheets table
+  const MS_DAY = 24 * 60 * 60 * 1000;
+  const toISODate = (d) => {
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+  const parseDate = (s) => {
+    // Accept 'YYYY-MM-DD' or ISO-like; return Date (UTC midnight for date-only)
+    if (!s) return null;
+    // If it's exactly YYYY-MM-DD, build UTC date at midnight
+    const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) return new Date(Date.UTC(+m[1], +m[2]-1, +m[3]));
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  };
+  const computeWeekEndingSunday = (baseStr) => {
+    const d = parseDate(baseStr);
+    if (!d) return null;
+    const dow = d.getUTCDay(); // 0=Sun
+    const add = (7 - dow) % 7; // if already Sunday (0), add 0
+    const sunday = new Date(d.getTime() + add * MS_DAY);
+    return toISODate(sunday);
+  };
+  const computeWEFromRow = (r) => {
+    // Priority: use existing week_ending_date if present, else any reasonable base date, else null
+    const base =
+      r.week_ending_date ||
+      r.worked_date ||
+      r.worked_from_date ||
+      r.shift_date ||
+      r.created_at_utc ||
+      r.created_at ||
+      null;
+    const we = computeWeekEndingSunday(base);
+    return we || null;
+  };
 
   try {
     // -------- CANDIDATE --------
     if (entity === 'candidate') {
       if (type === 'timesheets') {
-        // Current timesheets for candidate (from tsfin) + basic timesheet summary
-        const base = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?candidate_id=eq.${encodeURIComponent(id)}&is_current=eq.true`;
-        const sel  = `select=timesheet:timesheets(timesheet_id,booking_id,week_ending_date),processing_status,total_pay_ex_vat,total_hours,client_id`;
-        const ord  = `order=timesheet.week_ending_date.desc`;
-        const rng  = `&limit=${limit}&offset=${offset}`;
-        const res  = await sbFetch(env, `${base}&${sel}&${ord}${rng}`, { preferExactCount: true });
-        // Normalize output
-        const items = (res.rows || []).map(r => ({
-          timesheet_id: r.timesheet?.timesheet_id || r.timesheet_id,
-          booking_id:   r.timesheet?.booking_id || null,
-          week_ending_date: r.timesheet?.week_ending_date || null,
+        // Only use timesheets_financials; compute week ending in Worker
+        const finQ = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?candidate_id=eq.${encodeURIComponent(id)}` +
+          `&is_current=eq.true` +
+          `&select=*`;
+        const fin = await sbFetch(env, finQ, { preferExactCount: true });
+        const finRows = fin.rows || [];
+        const total = typeof fin.count === 'number' ? fin.count : finRows.length;
+
+        if (!finRows.length) return okList([], total);
+
+        const mapped = finRows.map(r => ({
+          timesheet_id:     r.timesheet_id,
+          week_ending_date: computeWEFromRow(r),
           processing_status: r.processing_status,
           total_pay_ex_vat:  r.total_pay_ex_vat,
           total_hours:       r.total_hours,
           client_id:         r.client_id || null,
         }));
-        return okList(items, typeof res.count === 'number' ? res.count : undefined);
+
+        // Sort by computed week ending desc, then page
+        mapped.sort((a, b) => {
+          const ax = a.week_ending_date || '';
+          const bx = b.week_ending_date || '';
+          return ax < bx ? 1 : ax > bx ? -1 : 0;
+        });
+
+        const page = mapped.slice(offset, offset + limit);
+        return okList(page, total);
       }
 
       if (type === 'invoices') {
-        // Distinct invoice ids from tsfin, then fetch invoice summaries
+        // Distinct invoice ids from tsfin, then fetch invoice summaries (unchanged)
         const finq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?candidate_id=eq.${encodeURIComponent(id)}&is_current=eq.true&locked_by_invoice_id=not.is.null&select=locked_by_invoice_id`;
         const fin = await sbFetch(env, finq);
         const invIds = [...new Set((fin.rows || []).map(r => r.locked_by_invoice_id).filter(Boolean))];
 
-        // Page the final list (apply pagination after distinct)
         const pageIds = invIds.slice(offset, offset + limit);
         if (pageIds.length === 0) return okList([], invIds.length);
 
@@ -8123,22 +8174,35 @@ async function handleRelatedList(env, req, entity, id) {
     // -------- INVOICE --------
     if (entity === 'invoice') {
       if (type === 'timesheets') {
-        const base = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?locked_by_invoice_id=eq.${encodeURIComponent(id)}&is_current=eq.true`;
-        const sel  = `select=timesheet:timesheets(timesheet_id,booking_id,week_ending_date),processing_status,total_pay_ex_vat,total_hours,candidate_id,client_id`;
-        const ord  = `order=timesheet.week_ending_date.desc`;
-        const rng  = `&limit=${limit}&offset=${offset}`;
-        const res  = await sbFetch(env, `${base}&${sel}&${ord}${rng}`, { preferExactCount: true });
-        const items = (res.rows || []).map(r => ({
-          timesheet_id: r.timesheet?.timesheet_id || r.timesheet_id,
-          booking_id:   r.timesheet?.booking_id || null,
-          week_ending_date: r.timesheet?.week_ending_date || null,
+        // Use only timesheets_financials; compute week ending here; no booking_id
+        const finQ = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?locked_by_invoice_id=eq.${encodeURIComponent(id)}` +
+          `&is_current=eq.true` +
+          `&select=*`;
+        const fin = await sbFetch(env, finQ, { preferExactCount: true });
+        const finRows = fin.rows || [];
+        const total = typeof fin.count === 'number' ? fin.count : finRows.length;
+
+        if (!finRows.length) return okList([], total);
+
+        const mapped = finRows.map(r => ({
+          timesheet_id:     r.timesheet_id,
+          week_ending_date: computeWEFromRow(r),
           processing_status: r.processing_status,
           total_pay_ex_vat:  r.total_pay_ex_vat,
           total_hours:       r.total_hours,
           candidate_id:      r.candidate_id || null,
           client_id:         r.client_id || null,
         }));
-        return okList(items, typeof res.count === 'number' ? res.count : undefined);
+
+        mapped.sort((a, b) => {
+          const ax = a.week_ending_date || '';
+          const bx = b.week_ending_date || '';
+          return ax < bx ? 1 : ax > bx ? -1 : 0;
+        });
+
+        const page = mapped.slice(offset, offset + limit);
+        return okList(page, total);
       }
 
       if (type === 'candidates') {
@@ -8156,14 +8220,12 @@ async function handleRelatedList(env, req, entity, id) {
       }
 
       if (type === 'correspondence') {
-        // Audit trail for the invoice; enrich with mail_outbox by correlation_id (mail_id)
         const audq = `${env.SUPABASE_URL}/rest/v1/audit_events?object_type=eq.invoice&object_id_text=eq.${encodeURIComponent(id)}&action=in.(EMAIL_QUEUED,EMAIL_SENT)&select=id,action,ts_utc,correlation_id&order=ts_utc.desc`;
         const aud = await sbFetch(env, audq);
         const mailIds = [...new Set((aud.rows || []).map(r => r.correlation_id).filter(Boolean))];
         const total = mailIds.length;
         const pageIds = mailIds.slice(offset, offset + limit);
         if (!pageIds.length) {
-          // Return just audit rows if no paged mail records
           const items = (aud.rows || []).map(a => ({ audit_id: a.id, action: a.action, ts_utc: a.ts_utc, mail_id: a.correlation_id || null }));
           return okList(items, total);
         }
@@ -8171,7 +8233,6 @@ async function handleRelatedList(env, req, entity, id) {
         const mq = `${env.SUPABASE_URL}/rest/v1/mail_outbox?id=in.(${pageIds.map(encodeURIComponent).join(',')})&select=id,to,subject,status,created_at_utc,sent_at,reference&order=created_at_utc.desc`;
         const mr = await sbFetch(env, mq);
         const mById = new Map((mr.rows || []).map(m => [m.id, m]));
-        // Compose items in mail order (newest first)
         const items = pageIds.map(mid => {
           const m = mById.get(mid);
           return m ? {
@@ -8188,6 +8249,7 @@ async function handleRelatedList(env, req, entity, id) {
     // -------- REMITTANCE (mail_outbox row) --------
     if (entity === 'remittance') {
       if (type === 'timesheets') {
+        // Get timesheet_ids from audit trail, then fetch current tsfin rows and compute week ending
         const audq = `${env.SUPABASE_URL}/rest/v1/audit_events?correlation_id=eq.${encodeURIComponent(id)}&reason=eq.REMITTANCE&object_type=eq.timesheet&select=object_id_text,ts_utc&order=ts_utc.desc`;
         const aud = await sbFetch(env, audq);
         const tsIds = [...new Set((aud.rows || []).map(r => r.object_id_text).filter(Boolean))];
@@ -8195,13 +8257,18 @@ async function handleRelatedList(env, req, entity, id) {
         const pageIds = tsIds.slice(offset, offset + limit);
         if (!pageIds.length) return okList([], total);
 
-        const tsq = `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=in.(${pageIds.map(encodeURIComponent).join(',')})&select=timesheet_id,booking_id,week_ending_date&order=week_ending_date.desc`;
-        const tsr = await sbFetch(env, tsq);
-        const items = (tsr.rows || []).map(t => ({
-          timesheet_id: t.timesheet_id,
-          booking_id: t.booking_id,
-          week_ending_date: t.week_ending_date,
-        }));
+        const tsfinQ = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=in.(${pageIds.map(encodeURIComponent).join(',')})` +
+          `&is_current=eq.true&select=*`;
+        const tsfinR = await sbFetch(env, tsfinQ);
+        const items = (tsfinR.rows || []).map(r => ({
+          timesheet_id:     r.timesheet_id,
+          week_ending_date: computeWEFromRow(r),
+        })).sort((a,b) => {
+          const ax = a.week_ending_date || '';
+          const bx = b.week_ending_date || '';
+          return ax < bx ? 1 : ax > bx ? -1 : 0;
+        });
         return okList(items, total);
       }
 
@@ -8215,7 +8282,6 @@ async function handleRelatedList(env, req, entity, id) {
           const mq = `${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${encodeURIComponent(id)}&select=reference&limit=1`;
           const mr = await sbFetch(env, mq);
           const ref = (mr.rows || [])[0]?.reference || '';
-          // pattern remit:candidate:{uuid}:{...}
           const m = ref.match(/^remit:candidate:([0-9a-fA-F-]{36}):/);
           if (m) candId = m[1];
         }
