@@ -5779,471 +5779,6 @@ export async function handleUpdateCandidate(env, req, candidateId) {
 }
 
 
-async function handleListClientRates(env, req, clientId) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  const sp    = new URL(req.url).searchParams;
-  const cid   = clientId || sp.get("client_id");        // ← now optional
-  const role  = sp.get("role");                         // single value
-  const band  = sp.get("band");
-  const on    = sp.get("active_on");                    // YYYY-MM-DD (or ISO)
-  const limit  = Math.min(Math.max(parseInt(sp.get('limit')  || '100', 10) || 100, 1), 500);
-  const offset = Math.max(parseInt(sp.get('offset') || '0',   10) || 0, 0);
-
-  try {
-    // Base: select from all client defaults; add client filter only if cid provided
-    let q = `${env.SUPABASE_URL}/rest/v1/rates_client_defaults?select=*`;
-    if (cid) q += `&client_id=eq.${encodeURIComponent(cid)}`;
-
-    const andParts = [];
-    // Treat provided role/band as "specific or default" (include NULL)
-    if (role) andParts.push(`or(role.eq.${encodeURIComponent(role)},role.is.null)`);
-    if (band) andParts.push(`or(band.eq.${encodeURIComponent(band)},band.is.null)`);
-    if (on) {
-      andParts.push(`date_from=lte.${encodeURIComponent(on)}`);
-      andParts.push(`or(date_to.gte.${encodeURIComponent(on)},date_to.is.null)`);
-    }
-    if (andParts.length) q += `&and=(${andParts.join(',')})`;
-
-    // Order + pagination
-    q += `&order=date_from.desc,role.nullslast,band.nullslast&limit=${limit}&offset=${offset}`;
-
-    const { rows } = await sbFetch(env, q);
-    return withCORS(env, req, ok({ items: rows }));
-  } catch (e) {
-    return withCORS(env, req, serverError("Failed to fetch client default rates"));
-  }
-}
-
-
-
-async function handleUpsertClientRate(env, req, clientId) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return unauthorized();
-
-  const body = await parseJSONBody(req);
-  if (!body) return withCORS(env, req, badRequest("Invalid JSON"));
-
-  const record = {
-    ...body,
-    client_id: body.client_id || clientId
-  };
-  if (!record.client_id) return withCORS(env, req, badRequest("client_id required"));
-
-  // Uniqueness upsert basis: client_id + role + band + date_from
-  const role = record.role || null;
-  const band = record.band || null;
-  const dateFrom = record.date_from || null;
-
-  try {
-    const { rows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/rates_client_defaults?client_id=eq.${encodeURIComponent(record.client_id)}${role ? `&role=eq.${encodeURIComponent(role)}` : ""}${band ? `&band=eq.${encodeURIComponent(band)}` : ""}${dateFrom ? `&date_from=eq.${encodeURIComponent(dateFrom)}` : ""}&select=id`
-    );
-
-    let result;
-    if (rows.length) {
-      const url = `${env.SUPABASE_URL}/rest/v1/rates_client_defaults?id=eq.${encodeURIComponent(rows[0].id)}`;
-      const res = await fetch(url, {
-        method: "PATCH",
-        headers: { ...sbHeaders(env), "Prefer": "return=representation" },
-        body: JSON.stringify({ ...record, updated_at: new Date().toISOString() })
-      });
-      if (!res.ok) {
-        const err = await res.text();
-        return withCORS(env, req, badRequest(`Rate update failed: ${err}`));
-      }
-      const json = await res.json().catch(() => ({}));
-      result = Array.isArray(json) ? json[0] : json;
-    } else {
-      const res = await fetch(`${env.SUPABASE_URL}/rest/v1/rates_client_defaults`, {
-        method: "POST",
-        headers: { ...sbHeaders(env), "Prefer": "return=representation" },
-        body: JSON.stringify({ ...record, created_at: new Date().toISOString() })
-      });
-      if (!res.ok) {
-        const err = await res.text();
-        return withCORS(env, req, badRequest(`Rate insert failed: ${err}`));
-      }
-      const json = await res.json().catch(() => ({}));
-      result = Array.isArray(json) ? json[0] : json;
-    }
-    return withCORS(env, req, ok({ rate: result }));
-  } catch {
-    return withCORS(env, req, serverError("Failed to upsert client rate"));
-  }
-}
-// ─────────────────────────────────────────────────────────────────────────────
-// Rates: list candidate overrides by client
-// ─────────────────────────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────────
-// Overrides: list by CLIENT with optional role/band + active_on filters,
-// correct NULL/default semantics, pagination, and candidate join.
-// ─────────────────────────────────────────────────────────────────────────────
-async function handleListOverridesByClient(env, req, clientId) {
-  const user = await requireUser(env, req, ["admin"]);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  const sp   = new URL(req.url).searchParams;
-  const cid  = clientId || sp.get("client_id");
-  const role = sp.get("role");
-  const band = sp.get("band");
-  const on   = sp.get("active_on");
-  const limit  = Math.min(Math.max(parseInt(sp.get('limit')  || '100', 10) || 100, 1), 500);
-  const offset = Math.max(parseInt(sp.get('offset') || '0',   10) || 0, 0);
-
-  if (!cid) return withCORS(env, req, badRequest("client_id required"));
-
-  try {
-    let q = `${env.SUPABASE_URL}/rest/v1/rates_candidate_overrides` +
-            `?select=*,candidate:candidates(id,display_name)`; // display_name exists on candidates
-
-    // Base constraint: overrides tied to this client OR default (NULL) only?
-    // For listing "by client", we typically want rows where client_id equals this client.
-    // If you also want defaults that might apply to all clients, extend with an OR group.
-    q += `&client_id=eq.${encodeURIComponent(cid)}`;
-
-    const andParts = [];
-    if (role) andParts.push(`or(role.eq.${encodeURIComponent(role)},role.is.null)`);
-    if (band) andParts.push(`or(band.eq.${encodeURIComponent(band)},band.is.null)`);
-    if (on) {
-      andParts.push(`date_from=lte.${encodeURIComponent(on)}`);
-      andParts.push(`or(date_to.gte.${encodeURIComponent(on)},date_to.is.null)`);
-    }
-    if (andParts.length) q += `&and=(${andParts.join(',')})`;
-
-    q += `&order=date_from.desc,client_id.nullslast,role.nullslast,band.nullslast&limit=${limit}&offset=${offset}`;
-
-    const { rows } = await sbFetch(env, q);
-
-    const items = rows.map(r => ({
-      ...r,
-      candidate_name: r.candidate ? r.candidate.display_name : null
-    }));
-
-    return withCORS(env, req, ok({ items }));
-  } catch {
-    return withCORS(env, req, serverError("Failed to fetch candidate overrides for client"));
-  }
-}
-// ─────────────────────────────────────────────────────────────────────────────
-// Overrides: list by CANDIDATE with optional role/band + active_on filters,
-// correct NULL/default semantics, pagination, and client join.
-// ─────────────────────────────────────────────────────────────────────────────
-async function handleListOverridesByCandidate(env, req, candidateId) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  const sp    = new URL(req.url).searchParams;
-  const cand  = candidateId || sp.get("candidate_id");
-  const role  = sp.get("role");
-  const band  = sp.get("band");
-  const on    = sp.get("active_on");
-  const limit  = Math.min(Math.max(parseInt(sp.get('limit')  || '100', 10) || 100, 1), 500);
-  const offset = Math.max(parseInt(sp.get('offset') || '0',   10) || 0, 0);
-
-  if (!cand) return withCORS(env, req, badRequest("candidate_id required"));
-
-  try {
-    let q = `${env.SUPABASE_URL}/rest/v1/rates_candidate_overrides?select=*,client:clients(id,name)`;
-    q += `&candidate_id=eq.${encodeURIComponent(cand)}`;
-
-    const andParts = [];
-    if (role) andParts.push(`or(role.eq.${encodeURIComponent(role)},role.is.null)`);
-    if (band) andParts.push(`or(band.eq.${encodeURIComponent(band)},band.is.null)`);
-    if (on) {
-      andParts.push(`date_from=lte.${encodeURIComponent(on)}`);
-      andParts.push(`or(date_to.gte.${encodeURIComponent(on)},date_to.is.null)`);
-    }
-    if (andParts.length) q += `&and=(${andParts.join(',')})`;
-
-    q += `&order=date_from.desc,client_id.nullslast,role.nullslast,band.nullslast&limit=${limit}&offset=${offset}`;
-
-    const { rows } = await sbFetch(env, q);
-
-    const items = rows.map(r => ({
-      ...r,
-      client_name: r.client ? r.client.name : null
-    }));
-
-    return withCORS(env, req, ok({ items }));
-  } catch {
-    return withCORS(env, req, serverError("Failed to fetch overrides for candidate"));
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Rates: create a candidate override
-// ─────────────────────────────────────────────────────────────────────────────
-async function handleCreateOverride(env, req, candidateId, clientIdParam = null) {
-  const user = await requireUser(env, req, ["admin"]);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  const data = await parseJSONBody(req);
-  if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
-
-  const candidate_id = candidateId || data.candidate_id;
-  if (!candidate_id) return withCORS(env, req, badRequest("candidate_id required"));
-
-  // (Light validation; keep strict rules in DB where possible)
-  const record = {
-    candidate_id,
-    client_id: clientIdParam || data.client_id || null,
-    role: data.role || null,
-    band: data.band || null,
-    date_from: data.date_from || null,
-    date_to: data.date_to || null,
-    pay_day: data.pay_day,
-    pay_night: data.pay_night,
-    pay_sat: data.pay_sat,
-    pay_sun: data.pay_sun,
-    pay_bh: data.pay_bh,
-    created_at: new Date().toISOString(),
-  };
-
-  try {
-    const res = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/rates_candidate_overrides`,
-      {
-        method: "POST",
-        headers: { ...sbHeaders(env), Prefer: "return=representation" },
-        body: JSON.stringify(record),
-      }
-    );
-
-    if (!res.ok) {
-      const err = await res.text();
-      return withCORS(env, req, badRequest(`Override creation failed: ${err}`));
-    }
-
-    const json = await res.json().catch(() => ({}));
-    const override = Array.isArray(json) ? json[0] : json;
-    return withCORS(env, req, ok({ override }));
-  } catch {
-    return withCORS(env, req, serverError("Failed to create override"));
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Overrides: UPDATE with safe targeting. Supports targeting NULL/default for
-// client/role/band by passing the literal "null" in those parameters.
-// Requires at least one discriminator beyond candidate_id to avoid broad patch.
-// ─────────────────────────────────────────────────────────────────────────────
-async function handleUpdateOverride(env, req, candidateId, clientId) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  const data = await parseJSONBody(req);
-  if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
-
-  const sp = new URL(req.url).searchParams;
-  // Allow route params to be complemented/overridden by query params
-  const cand = candidateId || sp.get("candidate_id");
-  const cid  = (clientId !== undefined && clientId !== null) ? clientId : sp.get("client_id");
-  const role = sp.get("role");
-  const band = sp.get("band");
-
-  if (!cand) return withCORS(env, req, badRequest("candidate_id required"));
-
-  // Guard: require at least one discriminator in addition to candidate_id
-  if (!cid && !role && !band) {
-    return withCORS(env, req, badRequest("Provide at least one of client_id, role, or band to target an override"));
-  }
-
-  try {
-    let url = `${env.SUPABASE_URL}/rest/v1/rates_candidate_overrides?candidate_id=eq.${encodeURIComponent(cand)}`;
-
-    // Target specific or NULL/default rows explicitly
-    if (cid !== undefined && cid !== null) {
-      if (String(cid).toLowerCase() === 'null') url += `&client_id=is.null`;
-      else url += `&client_id=eq.${encodeURIComponent(cid)}`;
-    }
-    if (role) {
-      if (String(role).toLowerCase() === 'null') url += `&role=is.null`;
-      else url += `&role=eq.${encodeURIComponent(role)}`;
-    }
-    if (band) {
-      if (String(band).toLowerCase() === 'null') url += `&band=is.null`;
-      else url += `&band=eq.${encodeURIComponent(band)}`;
-    }
-
-    const res = await fetch(url, {
-      method: "PATCH",
-      headers: { ...sbHeaders(env), "Prefer": "return=representation" },
-      body: JSON.stringify({ ...data })
-    });
-
-    if (!res.ok) {
-      const err = await res.text();
-      return withCORS(env, req, badRequest(`Override update failed: ${err}`));
-    }
-
-    const json = await res.json().catch(() => []);
-    if (Array.isArray(json) && !json.length) {
-      return withCORS(env, req, notFound("Override not found"));
-    }
-    const override = Array.isArray(json) ? json[0] : json;
-    return withCORS(env, req, ok({ override }));
-  } catch {
-    return withCORS(env, req, serverError("Failed to update override"));
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Overrides: DELETE with safe targeting. Supports targeting NULL/default for
-// client/role/band via literal "null". Requires at least one discriminator
-// beyond candidate_id to avoid broad deletes.
-// ─────────────────────────────────────────────────────────────────────────────
-async function handleDeleteOverride(env, req, candidateId, clientId) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  const sp = new URL(req.url).searchParams;
-  const cand = candidateId || sp.get("candidate_id");
-  const cid  = (clientId !== undefined && clientId !== null) ? clientId : sp.get("client_id");
-  const role = sp.get("role");
-  const band = sp.get("band");
-
-  if (!cand) return withCORS(env, req, badRequest("candidate_id required"));
-
-  // Guard to prevent mass-delete
-  if (!cid && !role && !band) {
-    return withCORS(env, req, badRequest("Provide at least one of client_id, role, or band to target an override for delete"));
-  }
-
-  try {
-    let url = `${env.SUPABASE_URL}/rest/v1/rates_candidate_overrides?candidate_id=eq.${encodeURIComponent(cand)}`;
-
-    if (cid !== undefined && cid !== null) {
-      if (String(cid).toLowerCase() === 'null') url += `&client_id=is.null`;
-      else url += `&client_id=eq.${encodeURIComponent(cid)}`;
-    }
-    if (role) {
-      if (String(role).toLowerCase() === 'null') url += `&role=is.null`;
-      else url += `&role=eq.${encodeURIComponent(role)}`;
-    }
-    if (band) {
-      if (String(band).toLowerCase() === 'null') url += `&band=is.null`;
-      else url += `&band=eq.${encodeURIComponent(band)}`;
-    }
-
-    const res = await fetch(url, { method: "DELETE", headers: sbHeaders(env) });
-    if (!res.ok) {
-      const err = await res.text();
-      return withCORS(env, req, badRequest(`Override delete failed: ${err}`));
-    }
-    return withCORS(env, req, ok({ ok: true }));
-  } catch {
-    return withCORS(env, req, serverError("Failed to delete override"));
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Rates: resolve one effective rate with correct NULL/default semantics,
-// date-window filtering, and deterministic tie-break ordering
-// ─────────────────────────────────────────────────────────────────────────────
-async function handleResolveRate(env, req) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  const payload = req.method === "GET"
-    ? Object.fromEntries(new URL(req.url).searchParams)
-    : await parseJSONBody(req);
-
-  const client_id    = payload.client_id;
-  const candidate_id = payload.candidate_id;
-  const role         = payload.role || null;
-  const band         = payload.band || null;
-  const date         = payload.date || payload.on || null;
-
-  if (!client_id || !candidate_id) {
-    return withCORS(env, req, badRequest("client_id and candidate_id are required"));
-  }
-
-  try {
-    // ── 1) Candidate override (most specific). Allow NULL-or-specific for each dimension,
-    //     apply date window if provided, and tie-break by specificity + latest date_from.
-    {
-      let q = `${env.SUPABASE_URL}/rest/v1/rates_candidate_overrides?select=*&candidate_id=eq.${encodeURIComponent(candidate_id)}`;
-
-      const andParts = [];
-      if (client_id) andParts.push(`or(client_id.eq.${encodeURIComponent(client_id)},client_id.is.null)`);
-      if (role)      andParts.push(`or(role.eq.${encodeURIComponent(role)},role.is.null)`);
-      if (band)      andParts.push(`or(band.eq.${encodeURIComponent(band)},band.is.null)`);
-      if (date) {
-        andParts.push(`date_from=lte.${encodeURIComponent(date)}`);
-        andParts.push(`or(date_to.gte.${encodeURIComponent(date)},date_to.is.null)`);
-      }
-      if (andParts.length) q += `&and=(${andParts.join(',')})`;
-
-      // Most specific first, then most recent starting window
-      q += `&order=client_id.nullslast,role.nullslast,band.nullslast,date_from.desc&limit=1`;
-
-      const { rows: candRows } = await sbFetch(env, q);
-      const activeCand = candRows && candRows[0];
-
-      if (activeCand) {
-        return withCORS(env, req, ok({
-          source: "candidate_override",
-          pay: {
-            day:   activeCand.pay_day,
-            night: activeCand.pay_night,
-            sat:   activeCand.pay_sat,
-            sun:   activeCand.pay_sun,
-            bh:    activeCand.pay_bh
-          }
-        }));
-      }
-    }
-
-    // ── 2) Client defaults (charge + optional default pay). Allow NULL-or-specific role/band,
-    //       apply date window if provided, and tie-break by specificity + latest date_from.
-    {
-      let q = `${env.SUPABASE_URL}/rest/v1/rates_client_defaults?select=*&client_id=eq.${encodeURIComponent(client_id)}`;
-
-      const andParts = [];
-      if (role) andParts.push(`or(role.eq.${encodeURIComponent(role)},role.is.null)`);
-      if (band) andParts.push(`or(band.eq.${encodeURIComponent(band)},band.is.null)`);
-      if (date) {
-        andParts.push(`date_from=lte.${encodeURIComponent(date)}`);
-        andParts.push(`or(date_to.gte.${encodeURIComponent(date)},date_to.is.null)`);
-      }
-      if (andParts.length) q += `&and=(${andParts.join(',')})`;
-
-      q += `&order=role.nullslast,band.nullslast,date_from.desc&limit=1`;
-
-      const { rows: defRows } = await sbFetch(env, q);
-      const activeDef = defRows && defRows[0];
-
-      if (activeDef) {
-        return withCORS(env, req, ok({
-          source: "client_defaults",
-          charge: {
-            day:   activeDef.charge_day,
-            night: activeDef.charge_night,
-            sat:   activeDef.charge_sat,
-            sun:   activeDef.charge_sun,
-            bh:    activeDef.charge_bh
-          },
-          pay: (activeDef.pay_day != null) ? {
-            day:   activeDef.pay_day,
-            night: activeDef.pay_night,
-            sat:   activeDef.pay_sat,
-            sun:   activeDef.pay_sun,
-            bh:    activeDef.pay_bh
-          } : null
-        }));
-      }
-    }
-
-    return withCORS(env, req, notFound("No applicable rate found"));
-  } catch {
-    return withCORS(env, req, serverError("Failed to resolve rates"));
-  }
-}
-
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Files: secure download via short-lived token
 // GET /api/files/download?key=...&token=...[&filename=...]
@@ -8000,6 +7535,679 @@ async function handleRelatedCounts(env, req, entity, id) {
     return withCORS(env, req, serverError("Failed to load related counts"));
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rates: list client defaults (now supports optional rate_type filter)
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleListClientRates(env, req, clientId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const sp     = new URL(req.url).searchParams;
+  const cid    = clientId || sp.get("client_id");        // ← still optional
+  const role   = sp.get("role");                         // single value
+  const band   = sp.get("band");
+  const on     = sp.get("active_on");                    // YYYY-MM-DD (or ISO)
+  const rateType = sp.get("rate_type");                  // "PAYE" | "UMBRELLA" (optional)
+  const limit   = Math.min(Math.max(parseInt(sp.get('limit')  || '100', 10) || 100, 1), 500);
+  const offset  = Math.max(parseInt(sp.get('offset') || '0',   10) || 0, 0);
+
+  try {
+    let q = `${env.SUPABASE_URL}/rest/v1/rates_client_defaults?select=*`;
+    if (cid) q += `&client_id=eq.${encodeURIComponent(cid)}`;
+    if (rateType) q += `&rate_type=eq.${encodeURIComponent(rateType)}`;
+
+    const andParts = [];
+    // Treat provided role/band as "specific or default" (include NULL)
+    if (role) andParts.push(`or(role.eq.${encodeURIComponent(role)},role.is.null)`);
+    if (band) andParts.push(`or(band.eq.${encodeURIComponent(band)},band.is.null)`);
+    if (on) {
+      andParts.push(`date_from=lte.${encodeURIComponent(on)}`);
+      andParts.push(`or(date_to.gte.${encodeURIComponent(on)},date_to.is.null)`);
+    }
+    if (andParts.length) q += `&and=(${andParts.join(',')})`;
+
+    q += `&order=date_from.desc,role.nullslast,band.nullslast&limit=${limit}&offset=${offset}`;
+
+    const { rows } = await sbFetch(env, q);
+    return withCORS(env, req, ok({ items: rows }));
+  } catch (e) {
+    return withCORS(env, req, serverError("Failed to fetch client default rates"));
+  }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rates: upsert client default (now requires rate_type; uniqueness includes it)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rates: upsert client default (require rate_type; enqueue RATE_CHANGED by rate_type)
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleUpsertClientRate(env, req, clientId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return unauthorized();
+
+  const body = await parseJSONBody(req);
+  if (!body) return withCORS(env, req, badRequest("Invalid JSON"));
+
+  const record = {
+    ...body,
+    client_id: body.client_id || clientId
+  };
+  if (!record.client_id) return withCORS(env, req, badRequest("client_id required"));
+
+  const rate_type = (record.rate_type || '').toUpperCase();
+  if (rate_type !== 'PAYE' && rate_type !== 'UMBRELLA') {
+    return withCORS(env, req, badRequest("rate_type must be 'PAYE' or 'UMBRELLA'"));
+  }
+
+  // Uniqueness upsert basis: client_id + role + band + date_from + rate_type
+  const role     = (record.role ?? null);
+  const band     = (record.band ?? null);
+  const dateFrom = (record.date_from ?? null);
+
+  try {
+    let q = `${env.SUPABASE_URL}/rest/v1/rates_client_defaults` +
+            `?client_id=eq.${encodeURIComponent(record.client_id)}` +
+            `&rate_type=eq.${encodeURIComponent(rate_type)}`;
+
+    // IMPORTANT: when role/band/date_from are NULL in the record, target NULL explicitly
+    q += (role === null)     ? `&role=is.null`           : `&role=eq.${encodeURIComponent(role)}`;
+    q += (band === null)     ? `&band=is.null`           : `&band=eq.${encodeURIComponent(band)}`;
+    q += (dateFrom === null) ? `&date_from=is.null`      : `&date_from=eq.${encodeURIComponent(dateFrom)}`;
+    q += `&select=id`;
+
+    const { rows } = await sbFetch(env, q);
+
+    let result;
+    if (rows.length) {
+      const url = `${env.SUPABASE_URL}/rest/v1/rates_client_defaults?id=eq.${encodeURIComponent(rows[0].id)}`;
+      const res = await fetch(url, {
+        method: "PATCH",
+        headers: { ...sbHeaders(env), "Prefer": "return=representation" },
+        body: JSON.stringify({ ...record, rate_type, updated_at: new Date().toISOString() })
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        return withCORS(env, req, badRequest(`Rate update failed: ${err}`));
+      }
+      const json = await res.json().catch(() => ({}));
+      result = Array.isArray(json) ? json[0] : json;
+    } else {
+      const res = await fetch(`${env.SUPABASE_URL}/rest/v1/rates_client_defaults`, {
+        method: "POST",
+        headers: { ...sbHeaders(env), "Prefer": "return=representation" },
+        body: JSON.stringify({ ...record, rate_type, created_at: new Date().toISOString() })
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        return withCORS(env, req, badRequest(`Rate insert failed: ${err}`));
+      }
+      const json = await res.json().catch(() => ({}));
+      result = Array.isArray(json) ? json[0] : json;
+    }
+
+    // === Enqueue recompute for affected TSFIN (client + rate_type; current & unlocked)
+    try {
+      const urlList =
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?select=timesheet_id` +
+        `&client_id=eq.${encodeURIComponent(record.client_id)}` +
+        `&pay_method=eq.${encodeURIComponent(rate_type)}` +
+        `&is_current=eq.true` +
+        `&locked_by_invoice_id=is.null`;
+      const { rows: tsfins } = await sbFetch(env, urlList);
+
+      if (tsfins && tsfins.length) {
+        const now = nowIso();
+        const items = tsfins.map(r => ({
+          timesheet_id: r.timesheet_id,
+          reason: 'RATE_CHANGED',
+          attempt_count: 0,
+          next_attempt_at: now,
+          last_error: null,
+          created_at: now,
+        }));
+        await fetch(
+          `${env.SUPABASE_URL}/rest/v1/ts_financials_outbox?on_conflict=timesheet_id,reason`,
+          {
+            method: "POST",
+            headers: { ...sbHeaders(env), "Prefer": "resolution=ignore-duplicates" },
+            body: JSON.stringify(items)
+          }
+        );
+      }
+    } catch (_) {
+      // non-fatal for the API response
+    }
+
+    return withCORS(env, req, ok({ rate: result }));
+  } catch {
+    return withCORS(env, req, serverError("Failed to upsert client rate"));
+  }
+}
+
+
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Overrides: list by CLIENT (now supports optional rate_type filter)
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleListOverridesByClient(env, req, clientId) {
+  const user = await requireUser(env, req, ["admin"]);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const sp      = new URL(req.url).searchParams;
+  const cid     = clientId || sp.get("client_id");
+  const role    = sp.get("role");
+  const band    = sp.get("band");
+  const on      = sp.get("active_on");
+  const rateType = sp.get("rate_type"); // optional filter
+  const limit   = Math.min(Math.max(parseInt(sp.get('limit')  || '100', 10) || 100, 1), 500);
+  const offset  = Math.max(parseInt(sp.get('offset') || '0',   10) || 0, 0);
+
+  if (!cid) return withCORS(env, req, badRequest("client_id required"));
+
+  try {
+    let q = `${env.SUPABASE_URL}/rest/v1/rates_candidate_overrides` +
+            `?select=*,candidate:candidates(id,display_name)` +
+            `&client_id=eq.${encodeURIComponent(cid)}`;
+
+    if (rateType) q += `&rate_type=eq.${encodeURIComponent(rateType)}`;
+
+    const andParts = [];
+    if (role) andParts.push(`or(role.eq.${encodeURIComponent(role)},role.is.null)`);
+    if (band) andParts.push(`or(band.eq.${encodeURIComponent(band)},band.is.null)`);
+    if (on) {
+      andParts.push(`date_from=lte.${encodeURIComponent(on)}`);
+      andParts.push(`or(date_to.gte.${encodeURIComponent(on)},date_to.is.null)`);
+    }
+    if (andParts.length) q += `&and=(${andParts.join(',')})`;
+
+    q += `&order=date_from.desc,client_id.nullslast,role.nullslast,band.nullslast&limit=${limit}&offset=${offset}`;
+
+    const { rows } = await sbFetch(env, q);
+
+    const items = rows.map(r => ({
+      ...r,
+      candidate_name: r.candidate ? r.candidate.display_name : null
+    }));
+
+    return withCORS(env, req, ok({ items }));
+  } catch {
+    return withCORS(env, req, serverError("Failed to fetch candidate overrides for client"));
+  }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Overrides: list by CANDIDATE (now supports optional rate_type filter)
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleListOverridesByCandidate(env, req, candidateId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const sp       = new URL(req.url).searchParams;
+  const cand     = candidateId || sp.get("candidate_id");
+  const role     = sp.get("role");
+  const band     = sp.get("band");
+  const on       = sp.get("active_on");
+  const rateType = sp.get("rate_type"); // optional filter
+  const limit    = Math.min(Math.max(parseInt(sp.get('limit')  || '100', 10) || 100, 1), 500);
+  const offset   = Math.max(parseInt(sp.get('offset') || '0',   10) || 0, 0);
+
+  if (!cand) return withCORS(env, req, badRequest("candidate_id required"));
+
+  try {
+    let q = `${env.SUPABASE_URL}/rest/v1/rates_candidate_overrides?select=*,client:clients(id,name)`;
+    q += `&candidate_id=eq.${encodeURIComponent(cand)}`;
+    if (rateType) q += `&rate_type=eq.${encodeURIComponent(rateType)}`;
+
+    const andParts = [];
+    if (role) andParts.push(`or(role.eq.${encodeURIComponent(role)},role.is.null)`);
+    if (band) andParts.push(`or(band.eq.${encodeURIComponent(band)},band.is.null)`);
+    if (on) {
+      andParts.push(`date_from=lte.${encodeURIComponent(on)}`);
+      andParts.push(`or(date_to.gte.${encodeURIComponent(on)},date_to.is.null)`);
+    }
+    if (andParts.length) q += `&and=(${andParts.join(',')})`;
+
+    q += `&order=date_from.desc,client_id.nullslast,role.nullslast,band.nullslast&limit=${limit}&offset=${offset}`;
+
+    const { rows } = await sbFetch(env, q);
+
+    const items = rows.map(r => ({
+      ...r,
+      client_name: r.client ? r.client.name : null
+    }));
+
+    return withCORS(env, req, ok({ items }));
+  } catch {
+    return withCORS(env, req, serverError("Failed to fetch overrides for candidate"));
+  }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Overrides: CREATE (now requires rate_type)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Overrides: CREATE (require rate_type; enqueue RATE_CHANGED for candidate scope)
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleCreateOverride(env, req, candidateId, clientIdParam = null) {
+  const user = await requireUser(env, req, ["admin"]);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const data = await parseJSONBody(req);
+  if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
+
+  const candidate_id = candidateId || data.candidate_id;
+  if (!candidate_id) return withCORS(env, req, badRequest("candidate_id required"));
+
+  const rate_type = (data.rate_type || '').toUpperCase();
+  if (rate_type !== 'PAYE' && rate_type !== 'UMBRELLA') {
+    return withCORS(env, req, badRequest("rate_type must be 'PAYE' or 'UMBRELLA'"));
+  }
+
+  const record = {
+    candidate_id,
+    client_id: clientIdParam || data.client_id || null,
+    role: data.role || null,
+    band: data.band || null,
+    date_from: data.date_from || null,
+    date_to: data.date_to || null,
+    rate_type,
+    pay_day: data.pay_day,
+    pay_night: data.pay_night,
+    pay_sat: data.pay_sat,
+    pay_sun: data.pay_sun,
+    pay_bh: data.pay_bh,
+    created_at: new Date().toISOString(),
+  };
+
+  try {
+    const res = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/rates_candidate_overrides`,
+      {
+        method: "POST",
+        headers: { ...sbHeaders(env), Prefer: "return=representation" },
+        body: JSON.stringify(record),
+      }
+    );
+
+    if (!res.ok) {
+      const err = await res.text();
+      return withCORS(env, req, badRequest(`Override creation failed: ${err}`));
+    }
+
+    const json = await res.json().catch(() => ({}));
+    const override = Array.isArray(json) ? json[0] : json;
+
+    // === Enqueue recompute for this candidate (and optional client), scoped by rate_type
+    try {
+      let q =
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?select=timesheet_id` +
+        `&candidate_id=eq.${encodeURIComponent(candidate_id)}` +
+        `&pay_method=eq.${encodeURIComponent(rate_type)}` +
+        `&is_current=eq.true` +
+        `&locked_by_invoice_id=is.null`;
+      if (record.client_id) q += `&client_id=eq.${encodeURIComponent(record.client_id)}`;
+      const { rows: tsfins } = await sbFetch(env, q);
+
+      if (tsfins && tsfins.length) {
+        const items = tsfins.map(r => ({
+          timesheet_id: r.timesheet_id,
+          reason: 'RATE_CHANGED',
+          attempt_count: 0,
+          next_attempt_at: nowIso(),
+          last_error: null,
+          created_at: nowIso(),
+        }));
+        await fetch(
+          `${env.SUPABASE_URL}/rest/v1/ts_financials_outbox?on_conflict=timesheet_id,reason`,
+          {
+            method: "POST",
+            headers: { ...sbHeaders(env), "Prefer": "resolution=ignore-duplicates" },
+            body: JSON.stringify(items)
+          }
+        );
+      }
+    } catch (_) {
+      // non-fatal
+    }
+
+    return withCORS(env, req, ok({ override }));
+  } catch {
+    return withCORS(env, req, serverError("Failed to create override"));
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Overrides: UPDATE (targeting now supports rate_type in the WHERE side)
+// Enqueue: RATE_CHANGED for current, unlocked TSFIN scoped by rate_type (if given)
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleUpdateOverride(env, req, candidateId, clientId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const data = await parseJSONBody(req);
+  if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
+
+  const sp   = new URL(req.url).searchParams;
+  const cand = candidateId || sp.get("candidate_id");
+  const cid  = (clientId !== undefined && clientId !== null) ? clientId : sp.get("client_id");
+  const role = sp.get("role");
+  const band = sp.get("band");
+  const rateTypeFilter = sp.get("rate_type"); // WHERE-side filter (optional)
+
+  if (!cand) return withCORS(env, req, badRequest("candidate_id required"));
+
+  // Guard: require at least one discriminator in addition to candidate_id
+  if (!cid && !role && !band && !rateTypeFilter) {
+    return withCORS(env, req, badRequest("Provide at least one of client_id, role, band, or rate_type to target an override"));
+  }
+
+  // Validate any provided payload rate_type (but only if present).
+  if (data.rate_type) {
+    const rt = String(data.rate_type).toUpperCase();
+    if (rt !== 'PAYE' && rt !== 'UMBRELLA') {
+      return withCORS(env, req, badRequest("rate_type must be 'PAYE' or 'UMBRELLA'"));
+    }
+  }
+
+  try {
+    let url = `${env.SUPABASE_URL}/rest/v1/rates_candidate_overrides?candidate_id=eq.${encodeURIComponent(cand)}`;
+
+    if (cid !== undefined && cid !== null) {
+      if (String(cid).toLowerCase() === 'null') url += `&client_id=is.null`;
+      else url += `&client_id=eq.${encodeURIComponent(cid)}`;
+    }
+    if (role) {
+      if (String(role).toLowerCase() === 'null') url += `&role=is.null`;
+      else url += `&role=eq.${encodeURIComponent(role)}`;
+    }
+    if (band) {
+      if (String(band).toLowerCase() === 'null') url += `&band=is.null`;
+      else url += `&band=eq.${encodeURIComponent(band)}`;
+    }
+    if (rateTypeFilter) {
+      url += `&rate_type=eq.${encodeURIComponent(rateTypeFilter)}`;
+    }
+
+    const res = await fetch(url, {
+      method: "PATCH",
+      headers: { ...sbHeaders(env), "Prefer": "return=representation" },
+      body: JSON.stringify({ ...data })
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      return withCORS(env, req, badRequest(`Override update failed: ${err}`));
+    }
+
+    const json = await res.json().catch(() => []);
+    if (Array.isArray(json) && !json.length) {
+      return withCORS(env, req, notFound("Override not found"));
+    }
+    const override = Array.isArray(json) ? json[0] : json;
+
+    // ── Enqueue recompute for affected TSFIN (current & unlocked), scoped by rate_type if available
+    try {
+      const enqRateType =
+        (rateTypeFilter && rateTypeFilter.toUpperCase()) ||
+        (data.rate_type && String(data.rate_type).toUpperCase()) ||
+        null;
+
+      let qTsfin = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+                   `?select=timesheet_id` +
+                   `&candidate_id=eq.${encodeURIComponent(cand)}` +
+                   `&is_current=eq.true` +
+                   `&locked_by_invoice_id=is.null`;
+      if (enqRateType) qTsfin += `&pay_method=eq.${encodeURIComponent(enqRateType)}`;
+
+      const { rows: tsfins } = await sbFetch(env, qTsfin);
+      const toEnqueue = (tsfins || []).map(r => ({ timesheet_id: r.timesheet_id, reason: 'RATE_CHANGED' }));
+      if (toEnqueue.length) {
+        await fetch(`${env.SUPABASE_URL}/rest/v1/ts_financials_outbox?on_conflict=timesheet_id,reason`, {
+          method: "POST",
+          headers: { ...sbHeaders(env), "Prefer": "resolution=ignore-duplicates" },
+          body: JSON.stringify(toEnqueue)
+        });
+      }
+    } catch (_) { /* best-effort enqueue; ignore enqueue failures here */ }
+
+    return withCORS(env, req, ok({ override }));
+  } catch {
+    return withCORS(env, req, serverError("Failed to update override"));
+  }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Overrides: DELETE (targeting now supports rate_type in the WHERE side)
+// Enqueue: RATE_CHANGED for current, unlocked TSFIN scoped by rate_type (if given)
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleDeleteOverride(env, req, candidateId, clientId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const sp   = new URL(req.url).searchParams;
+  const cand = candidateId || sp.get("candidate_id");
+  const cid  = (clientId !== undefined && clientId !== null) ? clientId : sp.get("client_id");
+  const role = sp.get("role");
+  const band = sp.get("band");
+  const rateTypeFilter = sp.get("rate_type"); // WHERE-side filter (optional)
+
+  if (!cand) return withCORS(env, req, badRequest("candidate_id required"));
+
+  // Guard to prevent mass-delete
+  if (!cid && !role && !band && !rateTypeFilter) {
+    return withCORS(env, req, badRequest("Provide at least one of client_id, role, band, or rate_type to target an override for delete"));
+  }
+
+  try {
+    let url = `${env.SUPABASE_URL}/rest/v1/rates_candidate_overrides?candidate_id=eq.${encodeURIComponent(cand)}`;
+
+    if (cid !== undefined && cid !== null) {
+      if (String(cid).toLowerCase() === 'null') url += `&client_id=is.null`;
+      else url += `&client_id=eq.${encodeURIComponent(cid)}`;
+    }
+    if (role) {
+      if (String(role).toLowerCase() === 'null') url += `&role=is.null`;
+      else url += `&role=eq.${encodeURIComponent(role)}`;
+    }
+    if (band) {
+      if (String(band).toLowerCase() === 'null') url += `&band=is.null`;
+      else url += `&band=eq.${encodeURIComponent(band)}`;
+    }
+    if (rateTypeFilter) {
+      url += `&rate_type=eq.${encodeURIComponent(rateTypeFilter)}`;
+    }
+
+    const res = await fetch(url, { method: "DELETE", headers: sbHeaders(env) });
+    if (!res.ok) {
+      const err = await res.text();
+      return withCORS(env, req, badRequest(`Override delete failed: ${err}`));
+    }
+
+    // ── Enqueue recompute for affected TSFIN (current & unlocked), scoped by rate_type if available
+    try {
+      const enqRateType = rateTypeFilter ? rateTypeFilter.toUpperCase() : null;
+
+      let qTsfin = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+                   `?select=timesheet_id` +
+                   `&candidate_id=eq.${encodeURIComponent(cand)}` +
+                   `&is_current=eq.true` +
+                   `&locked_by_invoice_id=is.null`;
+      if (enqRateType) qTsfin += `&pay_method=eq.${encodeURIComponent(enqRateType)}`;
+
+      const { rows: tsfins } = await sbFetch(env, qTsfin);
+      const toEnqueue = (tsfins || []).map(r => ({ timesheet_id: r.timesheet_id, reason: 'RATE_CHANGED' }));
+      if (toEnqueue.length) {
+        await fetch(`${env.SUPABASE_URL}/rest/v1/ts_financials_outbox?on_conflict=timesheet_id,reason`, {
+          method: "POST",
+          headers: { ...sbHeaders(env), "Prefer": "resolution=ignore-duplicates" },
+          body: JSON.stringify(toEnqueue)
+        });
+      }
+    } catch (_) { /* best-effort enqueue; ignore enqueue failures here */ }
+
+    return withCORS(env, req, ok({ ok: true }));
+  } catch {
+    return withCORS(env, req, serverError("Failed to delete override"));
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rates: resolve-preview (now derives rate_type from candidate.pay_method
+// if not provided; PAY from override/def filtered by rate_type; CHARGE
+// from client defaults without rate_type filtering)
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleResolveRate(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const payload = req.method === "GET"
+    ? Object.fromEntries(new URL(req.url).searchParams)
+    : await parseJSONBody(req);
+
+  const client_id    = payload.client_id;
+  const candidate_id = payload.candidate_id;
+  const role         = payload.role || null;
+  const band         = payload.band || null;
+  const date         = payload.date || payload.on || null;
+
+  if (!client_id || !candidate_id) {
+    return withCORS(env, req, badRequest("client_id and candidate_id are required"));
+  }
+
+  // Determine effective rate_type
+  let rate_type = (payload.rate_type || '').toUpperCase();
+  if (rate_type !== 'PAYE' && rate_type !== 'UMBRELLA') {
+    try {
+      const { rows: cand } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(candidate_id)}&select=pay_method&limit=1`
+      );
+      const pm = (cand && cand[0] && (cand[0].pay_method || '')).toUpperCase();
+      rate_type = (pm === 'PAYE' || pm === 'UMBRELLA') ? pm : 'UMBRELLA';
+    } catch {
+      rate_type = 'UMBRELLA';
+    }
+  }
+
+  try {
+    // 1) Candidate override PAY (filter by rate_type)
+    {
+      let q = `${env.SUPABASE_URL}/rest/v1/rates_candidate_overrides?select=*` +
+              `&candidate_id=eq.${encodeURIComponent(candidate_id)}` +
+              `&rate_type=eq.${encodeURIComponent(rate_type)}`;
+
+      const andParts = [];
+      if (client_id) andParts.push(`or(client_id.eq.${encodeURIComponent(client_id)},client_id.is.null)`);
+      if (role)      andParts.push(`or(role.eq.${encodeURIComponent(role)},role.is.null)`);
+      if (band)      andParts.push(`or(band.eq.${encodeURIComponent(band)},band.is.null)`);
+      if (date) {
+        andParts.push(`date_from=lte.${encodeURIComponent(date)}`);
+        andParts.push(`or(date_to.gte.${encodeURIComponent(date)},date_to.is.null)`);
+      }
+      if (andParts.length) q += `&and=(${andParts.join(',')})`;
+
+      q += `&order=client_id.nullslast,role.nullslast,band.nullslast,date_from.desc&limit=1`;
+
+      const { rows: candRows } = await sbFetch(env, q);
+      const activeCand = candRows && candRows[0];
+
+      if (activeCand) {
+        return withCORS(env, req, ok({
+          source: "candidate_override",
+          rate_type,
+          pay: {
+            day:   activeCand.pay_day,
+            night: activeCand.pay_night,
+            sat:   activeCand.pay_sat,
+            sun:   activeCand.pay_sun,
+            bh:    activeCand.pay_bh
+          }
+        }));
+      }
+    }
+
+    // 2) Client defaults
+    //    2a) PAY from client defaults filtered by rate_type
+    let activeDefPay = null;
+    {
+      let q = `${env.SUPABASE_URL}/rest/v1/rates_client_defaults?select=*` +
+              `&client_id=eq.${encodeURIComponent(client_id)}` +
+              `&rate_type=eq.${encodeURIComponent(rate_type)}`;
+
+      const andParts = [];
+      if (role) andParts.push(`or(role.eq.${encodeURIComponent(role)},role.is.null)`);
+      if (band) andParts.push(`or(band.eq.${encodeURIComponent(band)},band.is.null)`);
+      if (date) {
+        andParts.push(`date_from=lte.${encodeURIComponent(date)}`);
+        andParts.push(`or(date_to.gte.${encodeURIComponent(date)},date_to.is.null)`);
+      }
+      if (andParts.length) q += `&and=(${andParts.join(',')})`;
+
+      q += `&order=role.nullslast,band.nullslast,date_from.desc&limit=1`;
+
+      const { rows: defRows } = await sbFetch(env, q);
+      activeDefPay = defRows && defRows[0];
+    }
+
+    //    2b) CHARGE from client defaults WITHOUT rate_type filter (shared)
+    let activeDefCharge = null;
+    {
+      let q = `${env.SUPABASE_URL}/rest/v1/rates_client_defaults?select=*` +
+              `&client_id=eq.${encodeURIComponent(client_id)}`;
+
+      const andParts = [];
+      if (role) andParts.push(`or(role.eq.${encodeURIComponent(role)},role.is.null)`);
+      if (band) andParts.push(`or(band.eq.${encodeURIComponent(band)},band.is.null)`);
+      if (date) {
+        andParts.push(`date_from=lte.${encodeURIComponent(date)}`);
+        andParts.push(`or(date_to.gte.${encodeURIComponent(date)},date_to.is.null)`);
+      }
+      if (andParts.length) q += `&and=(${andParts.join(',')})`;
+
+      q += `&order=role.nullslast,band.nullslast,date_from.desc&limit=1`;
+
+      const { rows: defRowsCharge } = await sbFetch(env, q);
+      activeDefCharge = defRowsCharge && defRowsCharge[0];
+    }
+
+    if (activeDefPay || activeDefCharge) {
+      return withCORS(env, req, ok({
+        source: "client_defaults",
+        rate_type,
+        charge: activeDefCharge ? {
+          day:   activeDefCharge.charge_day,
+          night: activeDefCharge.charge_night,
+          sat:   activeDefCharge.charge_sat,
+          sun:   activeDefCharge.charge_sun,
+          bh:    activeDefCharge.charge_bh
+        } : null,
+        pay: (activeDefPay && activeDefPay.pay_day != null) ? {
+          day:   activeDefPay.pay_day,
+          night: activeDefPay.pay_night,
+          sat:   activeDefPay.pay_sat,
+          sun:   activeDefPay.pay_sun,
+          bh:    activeDefPay.pay_bh
+        } : null
+      }));
+    }
+
+    return withCORS(env, req, notFound("No applicable rate found"));
+  } catch {
+    return withCORS(env, req, serverError("Failed to resolve rates"));
+  }
+}
+
+
 // ====================== RELATED: LIST (generic) ======================
 /**
  * @openapi
@@ -8865,53 +9073,108 @@ function classifyMinutes(env, policy, segments) {
 // ---------------------------
 // Rates resolution
 // ---------------------------
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Internal resolution used by worker (now derives rate_type from candidate,
+// filters PAY by rate_type; selects CHARGE without rate_type)
+// ─────────────────────────────────────────────────────────────────────────────
 async function resolveRates(env, { candidate_id, client_id, role, band, dateYmd }) {
+  // Determine effective rate_type from candidate if available
+  let rate_type = null;
   if (candidate_id) {
+    try {
+      const { rows: cand } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(candidate_id)}&select=pay_method&limit=1`
+      );
+      const pm = (cand && cand[0] && (cand[0].pay_method || '')).toUpperCase();
+      rate_type = (pm === 'PAYE' || pm === 'UMBRELLA') ? pm : 'UMBRELLA';
+    } catch {
+      rate_type = 'UMBRELLA';
+    }
+  }
+
+  // 1) Candidate override PAY (with rate_type)
+  if (candidate_id && rate_type) {
     let q1 = `${env.SUPABASE_URL}/rest/v1/rates_candidate_overrides?select=*` +
              `&candidate_id=eq.${encodeURIComponent(candidate_id)}` +
+             `&rate_type=eq.${encodeURIComponent(rate_type)}` +
              `&order=client_id.nullslast,role.nullslast,band.nullslast,date_from.desc&limit=1`;
 
     const andParts = [];
     if (client_id) andParts.push(`or(client_id.eq.${encodeURIComponent(client_id)},client_id.is.null)`);
     if (role) andParts.push(`or(role.eq.${encodeURIComponent(role)},role.is.null)`);
     if (band) andParts.push(`or(band.eq.${encodeURIComponent(band)},band.is.null)`);
-    if (dateYmd) { andParts.push(`date_from=lte.${encodeURIComponent(dateYmd)}`); andParts.push(`or(date_to.gte.${encodeURIComponent(dateYmd)},date_to.is.null)`); }
+    if (dateYmd) {
+      andParts.push(`date_from=lte.${encodeURIComponent(dateYmd)}`);
+      andParts.push(`or(date_to.gte.${encodeURIComponent(dateYmd)},date_to.is.null)`);
+    }
     if (andParts.length) q1 += `&and=(${andParts.join(',')})`;
 
     const { rows: cand } = await sbFetch(env, q1);
-    if (cand[0]) {
+    if (cand && cand[0]) {
       const r = cand[0];
       return {
-        source: { kind: 'CANDIDATE_OVERRIDE', id: r.id },
+        source: { kind: 'CANDIDATE_OVERRIDE', id: r.id, rate_type },
         pay: { day: r.pay_day, night: r.pay_night, sat: r.pay_sat, sun: r.pay_sun, bh: r.pay_bh },
-        charge: null,
+        charge: null, // charge will be taken from client defaults separately if needed
       };
     }
   }
 
+  // 2) Client defaults: PAY (with rate_type) and CHARGE (without rate_type)
+  let defPay = null;
+  if (client_id && rate_type) {
+    let q2pay = `${env.SUPABASE_URL}/rest/v1/rates_client_defaults?select=*` +
+                `&client_id=eq.${encodeURIComponent(client_id)}` +
+                `&rate_type=eq.${encodeURIComponent(rate_type)}` +
+                `&order=role.nullslast,band.nullslast,date_from.desc&limit=1`;
+
+    const and2p = [];
+    if (role) and2p.push(`or(role.eq.${encodeURIComponent(role)},role.is.null)`);
+    if (band) and2p.push(`or(band.eq.${encodeURIComponent(band)},band.is.null)`);
+    if (dateYmd) {
+      and2p.push(`date_from=lte.${encodeURIComponent(dateYmd)}`);
+      and2p.push(`or(date_to.gte.${encodeURIComponent(dateYmd)},date_to.is.null)`);
+    }
+    if (and2p.length) q2pay += `&and=(${and2p.join(',')})`;
+
+    const { rows: defP } = await sbFetch(env, q2pay);
+    defPay = defP && defP[0];
+  }
+
+  let defCharge = null;
   if (client_id) {
-    let q2 = `${env.SUPABASE_URL}/rest/v1/rates_client_defaults?select=*` +
-             `&client_id=eq.${encodeURIComponent(client_id)}` +
-             `&order=role.nullslast,band.nullslast,date_from.desc&limit=1`;
+    let q2chg = `${env.SUPABASE_URL}/rest/v1/rates_client_defaults?select=*` +
+                `&client_id=eq.${encodeURIComponent(client_id)}` +
+                `&order=role.nullslast,band.nullslast,date_from.desc&limit=1`;
 
-    const and2 = [];
-    if (role) and2.push(`or(role.eq.${encodeURIComponent(role)},role.is.null)`);
-    if (band) and2.push(`or(band.eq.${encodeURIComponent(band)},band.is.null)`);
-    if (dateYmd) { and2.push(`date_from=lte.${encodeURIComponent(dateYmd)}`); and2.push(`or(date_to.gte.${encodeURIComponent(dateYmd)},date_to.is.null)`); }
-    if (and2.length) q2 += `&and=(${and2.join(',')})`;
-
-    const { rows: def } = await sbFetch(env, q2);
-    if (def[0]) {
-      const r = def[0];
-      return {
-        source: { kind: 'CLIENT_DEFAULT', id: r.id },
-        pay: r.pay_day != null ? { day: r.pay_day, night: r.pay_night, sat: r.pay_sat, sun: r.pay_sun, bh: r.pay_bh } : null,
-        charge: { day: r.charge_day, night: r.charge_night, sat: r.charge_sat, sun: r.charge_sun, bh: r.charge_bh },
-      };
+    const and2c = [];
+    if (role) and2c.push(`or(role.eq.${encodeURIComponent(role)},role.is.null)`);
+    if (band) and2c.push(`or(band.eq.${encodeURIComponent(band)},band.is.null)`);
+    if (dateYmd) {
+      and2c.push(`date_from=lte.${encodeURIComponent(dateYmd)}`);
+      and2c.push(`or(date_to.gte.${encodeURIComponent(dateYmd)},date_to.is.null)`);
     }
+    if (and2c.length) q2chg += `&and=(${and2c.join(',')})`;
+
+    const { rows: defC } = await sbFetch(env, q2chg);
+    defCharge = defC && defC[0];
   }
 
-  return { source: { kind: 'NONE', id: null }, pay: null, charge: null };
+  if (defPay || defCharge) {
+    return {
+      source: { kind: 'CLIENT_DEFAULT', id: (defPay || defCharge)?.id || null, rate_type: rate_type || null },
+      pay: (defPay && defPay.pay_day != null) ? {
+        day: defPay.pay_day, night: defPay.pay_night, sat: defPay.pay_sat, sun: defPay.pay_sun, bh: defPay.pay_bh
+      } : null,
+      charge: defCharge ? {
+        day: defCharge.charge_day, night: defCharge.charge_night, sat: defCharge.charge_sat, sun: defCharge.charge_sun, bh: defCharge.charge_bh
+      } : null,
+    };
+  }
+
+  return { source: { kind: 'NONE', id: null, rate_type: rate_type || null }, pay: null, charge: null };
 }
 
 function anyMissingRates(hours, pay, charge) {
@@ -9269,6 +9532,9 @@ function resolveEffectivePayChannel(input) {
 // ---------------------------
 // Worker: dequeue → compute
 // ---------------------------
+// ---------------------------
+// Worker: dequeue → compute
+// ---------------------------
 async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
   // NOTE: Rename RPC arg -> p_limit
   const lease = await sbRpc(env, 'tsfin_dequeue_batch', { p_limit: limit });
@@ -9308,7 +9574,7 @@ async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
 
       const hours = classifyMinutes(env, policy, segments);
 
-      // Resolve pay/charge rates
+      // Resolve pay/charge rates (PAY filtered by rate_type=pay_method; CHARGE shared)
       const rates = await resolveRates(env, {
         candidate_id: candidate?.id || null,
         client_id,
@@ -9433,7 +9699,6 @@ async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
 
   return { picked: lease.length, ok, fail };
 }
-
 
 // helpers used above
 function hasPayeBank(c) {
@@ -10719,17 +10984,17 @@ export default {
       }
 
       // Client Hospitals
-{
-  const chList = matchPath(p, '/api/clients/:client_id/hospitals');
-  if (chList && req.method === 'GET')    return handleListHospitals(env, req, chList.client_id);
-  if (chList && req.method === 'POST')   return handleCreateHospital(env, req, chList.client_id);
+      {
+        const chList = matchPath(p, '/api/clients/:client_id/hospitals');
+        if (chList && req.method === 'GET')    return handleListHospitals(env, req, chList.client_id);
+        if (chList && req.method === 'POST')   return handleCreateHospital(env, req, chList.client_id);
 
-  const chOne = matchPath(p, '/api/clients/:client_id/hospitals/:hospital_id');
-  if (chOne && req.method === 'GET')     return handleGetHospital(env, req, chOne.client_id, chOne.hospital_id);
-  if (chOne && (req.method === 'PATCH' || req.method === 'PUT'))
-                                         return handleUpdateHospital(env, req, chOne.client_id, chOne.hospital_id);
-  if (chOne && req.method === 'DELETE')  return handleDeleteHospital(env, req, chOne.client_id, chOne.hospital_id);
-}
+        const chOne = matchPath(p, '/api/clients/:client_id/hospitals/:hospital_id');
+        if (chOne && req.method === 'GET')     return handleGetHospital(env, req, chOne.client_id, chOne.hospital_id);
+        if (chOne && (req.method === 'PATCH' || req.method === 'PUT'))
+                                               return handleUpdateHospital(env, req, chOne.client_id, chOne.hospital_id);
+        if (chOne && req.method === 'DELETE')  return handleDeleteHospital(env, req, chOne.client_id, chOne.hospital_id);
+      }
 
       // Umbrellas
       if (req.method === 'GET' && p === '/api/umbrellas')                  return handleListUmbrellas(env, req);
@@ -10752,10 +11017,15 @@ export default {
       // Rates
       if (req.method === 'GET' && p === '/api/rates/client-defaults')      return handleListClientRates(env, req);
       if (req.method === 'POST' && p === '/api/rates/client-defaults')     return handleUpsertClientRate(env, req);
+
       if (req.method === 'GET' && p === '/api/rates/candidate-overrides')  return handleListOverridesByCandidate(env, req);
       if (req.method === 'GET' && p === '/api/rates/client-overrides')     return handleListOverridesByClient(env, req); // expects client_id query param
       if (req.method === 'POST' && p === '/api/rates/candidate-overrides') return handleCreateOverride(env, req);
+
+      // NEW: support GET as well as POST for resolve-preview
+      if (req.method === 'GET'  && p === '/api/rates/resolve-preview')     return handleResolveRate(env, req);
       if (req.method === 'POST' && p === '/api/rates/resolve-preview')     return handleResolveRate(env, req);
+
       {
         const cov = matchPath(p, '/api/rates/candidate-overrides/:candidate_id');
         if (cov && req.method === 'PATCH')                                 return handleUpdateOverride(env, req, cov.candidate_id);
