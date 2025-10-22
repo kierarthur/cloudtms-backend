@@ -5066,8 +5066,13 @@ async function handleUpdateClient(env, req, clientId) {
  *     tags: [Client Hospitals]
  *     security:
  *       - bearerAuth: []
- *   put:
+ *   patch:
  *     summary: Update client hospital
+ *     tags: [Client Hospitals]
+ *     security:
+ *       - bearerAuth: []
+ *   delete:
+ *     summary: Delete client hospital
  *     tags: [Client Hospitals]
  *     security:
  *       - bearerAuth: []
@@ -5141,21 +5146,83 @@ async function handleUpdateHospital(env, req, clientId, hospitalId) {
   if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
 
   try {
-    const url = `${env.SUPABASE_URL}/rest/v1/client_hospitals?id=eq.${encodeURIComponent(hospitalId)}&client_id=eq.${encodeURIComponent(clientId)}`;
+    // Build safe patch: normalise name, tidy empties, block immutable fields
+    const patch = { ...data };
+
+    // Normalise hospital_name_norm if caller sent alternate keys
+    if (typeof patch.hospital_name_norm === 'undefined' && (data.name || data.hospital)) {
+      patch.hospital_name_norm = data.name || data.hospital;
+    }
+
+    // Treat empty string as null for optional fields
+    if ('ward_hint' in patch && (patch.ward_hint === '' || patch.ward_hint == null)) {
+      patch.ward_hint = null;
+    }
+
+    // Prevent updates to immutable/owner fields
+    delete patch.id;
+    delete patch.client_id;
+    delete patch.created_at;
+
+    patch.updated_at = new Date().toISOString();
+
+    const url = `${env.SUPABASE_URL}/rest/v1/client_hospitals` +
+                `?id=eq.${encodeURIComponent(hospitalId)}` +
+                `&client_id=eq.${encodeURIComponent(clientId)}`;
+
     const res = await fetch(url, {
       method: "PATCH",
       headers: { ...sbHeaders(env), "Prefer": "return=representation" },
-      body: JSON.stringify({ ...data, updated_at: new Date().toISOString() })
+      body: JSON.stringify(patch)
     });
+
     if (!res.ok) {
       const err = await res.text();
       return withCORS(env, req, badRequest(`Hospital update failed: ${err}`));
     }
-    const json = await res.json().catch(() => ({}));
+
+    const json = await res.json().catch(() => []);
     const hospital = Array.isArray(json) ? json[0] : json;
+
+    if (!hospital) {
+      return withCORS(env, req, notFound("Hospital not found"));
+    }
+
     return withCORS(env, req, ok({ hospital }));
   } catch {
     return withCORS(env, req, serverError("Failed to update client hospital"));
+  }
+}
+
+
+async function handleDeleteHospital(env, req, clientId, hospitalId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return unauthorized();
+
+  try {
+    const url = `${env.SUPABASE_URL}/rest/v1/client_hospitals` +
+      `?id=eq.${encodeURIComponent(hospitalId)}` +
+      `&client_id=eq.${encodeURIComponent(clientId)}`;
+
+    const res = await fetch(url, {
+      method: "DELETE",
+      headers: { ...sbHeaders(env), "Prefer": "return=representation" }
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      return withCORS(env, req, badRequest(`Hospital delete failed: ${err}`));
+    }
+
+    // With Prefer:return=representation PostgREST returns the deleted row(s)
+    const json = await res.json().catch(() => []);
+    if (!Array.isArray(json) || json.length === 0) {
+      return withCORS(env, req, notFound("Hospital not found"));
+    }
+
+    return withCORS(env, req, ok({ deleted: true, hospital: json[0] }));
+  } catch {
+    return withCORS(env, req, serverError("Failed to delete client hospital"));
   }
 }
 
@@ -10652,14 +10719,17 @@ export default {
       }
 
       // Client Hospitals
-      {
-        const chList = matchPath(p, '/api/clients/:client_id/hospitals');
-        if (chList && req.method === 'GET')                                 return handleListHospitals(env, req, chList.client_id);
-        if (chList && req.method === 'POST')                                return handleCreateHospital(env, req, chList.client_id);
-        const chOne = matchPath(p, '/api/clients/:client_id/hospitals/:hospital_id');
-        if (chOne && req.method === 'GET')                                  return handleGetHospital(env, req, chOne.client_id, chOne.hospital_id);
-        if (chOne && req.method === 'PUT')                                  return handleUpdateHospital(env, req, chOne.client_id, chOne.hospital_id);
-      }
+{
+  const chList = matchPath(p, '/api/clients/:client_id/hospitals');
+  if (chList && req.method === 'GET')    return handleListHospitals(env, req, chList.client_id);
+  if (chList && req.method === 'POST')   return handleCreateHospital(env, req, chList.client_id);
+
+  const chOne = matchPath(p, '/api/clients/:client_id/hospitals/:hospital_id');
+  if (chOne && req.method === 'GET')     return handleGetHospital(env, req, chOne.client_id, chOne.hospital_id);
+  if (chOne && (req.method === 'PATCH' || req.method === 'PUT'))
+                                         return handleUpdateHospital(env, req, chOne.client_id, chOne.hospital_id);
+  if (chOne && req.method === 'DELETE')  return handleDeleteHospital(env, req, chOne.client_id, chOne.hospital_id);
+}
 
       // Umbrellas
       if (req.method === 'GET' && p === '/api/umbrellas')                  return handleListUmbrellas(env, req);
@@ -10897,5 +10967,4 @@ export default {
     ctx.waitUntil(drainEmailOutboxOnce(env, { limit: emailBatchLimit }));
   }
 }
-
 
