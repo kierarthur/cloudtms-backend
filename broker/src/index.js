@@ -1682,40 +1682,73 @@ export async function handleReportUmbrellas(env, req) {
 export async function handleSearchTimesheets(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+
   const urlObj = new URL(req.url);
   const q = (k) => urlObj.searchParams.get(k);
+  const qa = (k) => urlObj.searchParams.getAll(k); // for repeated params (e.g., status)
   const page = Math.max(1, parseInt(q('page') || '1', 10));
   const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
 
   const format = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
-  const includeOnHold = q('include_on_hold') === 'true';
-  const paid = q('paid');         // 'true' | 'false' | null
-  const invoiced = q('invoiced'); // 'true' | 'false' | null
 
-  const weFrom = q('week_ending_from');
-  const weTo   = q('week_ending_to');
-  const clientId = q('client_id');
+  // Existing booleans
+  const includeOnHold = q('include_on_hold') === 'true';
+  const paid      = q('paid');         // 'true' | 'false' | null
+  const invoiced  = q('invoiced');     // 'true' | 'false' | null
+
+  // Existing range filters
+  const weFrom    = q('week_ending_from');
+  const weTo      = q('week_ending_to');
+  const clientId  = q('client_id');
   const candidateId = q('candidate_id');
   const payMethod = q('pay_method') ? q('pay_method').toUpperCase() : null;
+
+  // NEW filters to match FE
+  const bookingId = q('booking_id');
+  const occKey    = q('occupant_key_norm');
+  const hospital  = q('hospital_norm');
+  const workedFrom = q('worked_from');
+  const workedTo   = q('worked_to');
+  const createdFrom = q('created_from');
+  const createdTo   = q('created_to');
+  const statuses    = qa('status'); // repeated: status=A&status=B
 
   const orderBy = (q('order_by') || 'week_ending_date').toLowerCase(); // week_ending_date|margin|charge|pay
   const orderDir = (q('order_dir') || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
 
+  // Base select: join needed timesheet bits for filter/sort on week_ending_date & status/hospital/occupant
   let url = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
     `?select=timesheet_id,candidate_id,client_id,pay_method,` +
-    `total_charge_ex_vat,total_pay_ex_vat,margin_ex_vat,paid_at_utc,locked_by_invoice_id,pay_on_hold,` +
-    `timesheet:timesheets(week_ending_date),client:clients(name)` +
+    `total_charge_ex_vat,total_pay_ex_vat,margin_ex_vat,paid_at_utc,locked_by_invoice_id,pay_on_hold,created_at,` +
+    `timesheet:timesheets(week_ending_date,status,booking_id,occupant_key_norm,hospital_norm),` +
+    `client:clients(name)` +
     `&is_current=eq.true`;
+
+  // Existing filters
   if (weFrom) url += `&timesheet.week_ending_date=gte.${enc(weFrom)}`;
   if (weTo)   url += `&timesheet.week_ending_date=lte.${enc(weTo)}`;
-  if (clientId) url += `&client_id=eq.${enc(clientId)}`;
+  if (clientId)    url += `&client_id=eq.${enc(clientId)}`;
   if (candidateId) url += `&candidate_id=eq.${enc(candidateId)}`;
-  if (payMethod) url += `&pay_method=eq.${enc(payMethod)}`;
+  if (payMethod)   url += `&pay_method=eq.${enc(payMethod)}`;
   if (!includeOnHold) url += `&pay_on_hold=eq.false`;
-  if (paid === 'true') url += `&paid_at_utc=not.is.null`;
+  if (paid === 'true')  url += `&paid_at_utc=not.is.null`;
   if (paid === 'false') url += `&paid_at_utc=is.null`;
-  if (invoiced === 'true') url += `&locked_by_invoice_id=not.is.null`;
+  if (invoiced === 'true')  url += `&locked_by_invoice_id=not.is.null`;
   if (invoiced === 'false') url += `&locked_by_invoice_id=is.null`;
+
+  // NEW: extra filters aligned with FE buildSearchQS()
+  if (bookingId) url += `&timesheet.booking_id=eq.${enc(bookingId)}`;
+  if (occKey)    url += `&timesheet.occupant_key_norm=eq.${enc(occKey)}`;
+  if (hospital)  url += `&timesheet.hospital_norm=eq.${enc(hospital)}`;
+  if (workedFrom) url += `&worked_start_iso=gte.${enc(workedFrom)}`;
+  if (workedTo)   url += `&worked_end_iso=lte.${enc(workedTo)}`;
+  if (createdFrom) url += `&created_at=gte.${enc(createdFrom)}`;
+  if (createdTo)   url += `&created_at=lte.${enc(createdTo)}`;
+  if (Array.isArray(statuses) && statuses.length) {
+    // PostgREST in() — for enums, unquoted tokens are fine: in.(RECEIVED,STORED)
+    const inList = statuses.map(s => String(s).toUpperCase().replace(/[(),]/g,'')).join(',');
+    url += `&timesheet.status=in.(${inList})`;
+  }
 
   const orderMap = {
     week_ending_date: 'timesheet.week_ending_date',
@@ -1779,51 +1812,71 @@ export async function handleSearchTimesheets(env, req) {
 }
 
 
+
 // ───────────────────────────────────────────────────────────────────────────────
 // SEARCH — Invoices (richer filters + csv/print)
 // ───────────────────────────────────────────────────────────────────────────────
-
 export async function handleSearchInvoices(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+
   const urlObj = new URL(req.url);
-  const q = (k) => urlObj.searchParams.get(k);
+  const q  = (k) => urlObj.searchParams.get(k);
+  const qa = (k) => urlObj.searchParams.getAll(k);
   const page = Math.max(1, parseInt(q('page') || '1', 10));
   const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
 
   const format = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
-  const status = q('status'); // DRAFT|ISSUED|ON_HOLD|PAID
-  const clientId = q('client_id');
-  const invNo = q('invoice_no');
-  const invQ = q('q'); // partial search on invoice_no
+
+  // Filters (now accepting arrays and extra ranges)
+  const statuses  = qa('status');             // repeated
+  const clientId  = q('client_id');
+  const invNo     = q('invoice_no');
+  const invQ      = q('q');                   // partial match on invoice_no
   const issuedFrom = q('issued_from');
   const issuedTo   = q('issued_to');
+  const dueFrom    = q('due_from');
+  const dueTo      = q('due_to');
+  const createdFrom = q('created_from');
+  const createdTo   = q('created_to');
 
   const orderBy = (q('order_by') || 'issued_at_utc').toLowerCase();
   const orderDir = (q('order_dir') || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
+  const orderAllowed = new Set(['issued_at_utc','invoice_no','total_inc_vat','subtotal_ex_vat','created_at']);
 
-  let url = `${env.SUPABASE_URL}/rest/v1/invoices?select=id,invoice_no,client_id,status,issued_at_utc,total_inc_vat,subtotal_ex_vat,vat_amount&limit=${pageSize}&offset=${(page-1)*pageSize}`;
-  // filters
-  if (status) url += `&status=eq.${enc(status)}`;
+  let url = `${env.SUPABASE_URL}/rest/v1/invoices` +
+    `?select=id,invoice_no,client_id,status,issued_at_utc,due_at_utc,created_at,total_inc_vat,subtotal_ex_vat,vat_amount` +
+    `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
+
+  // Apply filters
+  if (Array.isArray(statuses) && statuses.length) {
+    const inList = statuses.map(s => String(s).toUpperCase().replace(/[(),]/g,'')).join(',');
+    url += `&status=in.(${inList})`;
+  }
   if (clientId) url += `&client_id=eq.${enc(clientId)}`;
-  if (invNo) url += `&invoice_no=eq.${enc(invNo)}`;
-  if (invQ) url += `&invoice_no=ilike.*${enc(invQ)}*`;
+  if (invNo)    url += `&invoice_no=eq.${enc(invNo)}`;
+  if (invQ)     url += `&invoice_no=ilike.*${enc(invQ)}*`;
   if (issuedFrom) url += `&issued_at_utc=gte.${enc(issuedFrom)}`;
   if (issuedTo)   url += `&issued_at_utc=lte.${enc(issuedTo)}`;
+  if (dueFrom)    url += `&due_at_utc=gte.${enc(dueFrom)}`;
+  if (dueTo)      url += `&due_at_utc=lte.${enc(dueTo)}`;
+  if (createdFrom) url += `&created_at=gte.${enc(createdFrom)}`;
+  if (createdTo)   url += `&created_at=lte.${enc(createdTo)}`;
 
-  const orderAllowed = new Set(['issued_at_utc','invoice_no','total_inc_vat','subtotal_ex_vat']);
   url += `&order=${orderAllowed.has(orderBy) ? enc(orderBy) : 'issued_at_utc'}.${orderDir}`;
 
   const { rows } = await sbFetch(env, url);
 
   if (format === 'csv') {
-    const header = ['InvoiceNo','Status','IssuedAt','SubtotalExVAT','VAT','TotalIncVAT'];
+    const header = ['InvoiceNo','Status','IssuedAt','DueAt','CreatedAt','SubtotalExVAT','VAT','TotalIncVAT'];
     const out = [csvJoin(header)];
     for (const r of rows || []) {
       out.push(csvJoin([
         r.invoice_no || '',
         r.status || '',
         r.issued_at_utc || '',
+        r.due_at_utc || '',
+        r.created_at || '',
         round2(r.subtotal_ex_vat || 0).toFixed(2),
         round2(r.vat_amount || 0).toFixed(2),
         round2(r.total_inc_vat || 0).toFixed(2),
@@ -1838,6 +1891,8 @@ export async function handleSearchInvoices(env, req) {
         <td>${r.invoice_no || ''}</td>
         <td>${r.status || ''}</td>
         <td>${r.issued_at_utc || ''}</td>
+        <td>${r.due_at_utc || ''}</td>
+        <td>${r.created_at || ''}</td>
         <td style="text-align:right">${round2(r.subtotal_ex_vat || 0).toFixed(2)}</td>
         <td style="text-align:right">${round2(r.vat_amount || 0).toFixed(2)}</td>
         <td style="text-align:right">${round2(r.total_inc_vat || 0).toFixed(2)}</td>
@@ -1847,7 +1902,7 @@ export async function handleSearchInvoices(env, req) {
         <h3>Invoices — Search Results</h3>
         <table width="100%" cellspacing="0" cellpadding="6" style="border-collapse:collapse">
           <thead><tr style="background:#f5f5f5">
-            <th>Invoice No</th><th>Status</th><th>Issued At</th>
+            <th>Invoice No</th><th>Status</th><th>Issued At</th><th>Due At</th><th>Created At</th>
             <th>Subtotal ex VAT</th><th>VAT</th><th>Total inc VAT</th>
           </tr></thead>
           <tbody>${rowsHtml}</tbody>
@@ -1870,33 +1925,48 @@ export async function handleSearchInvoices(env, req) {
 // ───────────────────────────────────────────────────────────────────────────────
 // SEARCH — Clients (richer filters + csv/print)
 // ───────────────────────────────────────────────────────────────────────────────
-
 export async function handleSearchClients(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+
   const urlObj = new URL(req.url);
   const q = (k) => urlObj.searchParams.get(k);
   const page = Math.max(1, parseInt(q('page') || '1', 10));
   const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
   const format = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
 
+  // Filters expanded to match FE
   const text = q('q'); // name partial
+  const cliRef = q('cli_ref');
+  const primaryEmail = q('primary_invoice_email');
+  const apPhone = q('ap_phone');
   const vatChargeable = q('vat_chargeable'); // 'true'|'false'|null
+  const createdFrom = q('created_from');
+  const createdTo   = q('created_to');
 
-  let url = `${env.SUPABASE_URL}/rest/v1/clients?select=id,name,vat_chargeable,payment_terms_days&order=name.asc` +
-    `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
-  if (text) url += `&name=ilike.*${enc(text)}*`;
-  if (vatChargeable === 'true') url += `&vat_chargeable=eq.true`;
+  let url = `${env.SUPABASE_URL}/rest/v1/clients` +
+            `?select=id,name,vat_chargeable,payment_terms_days,primary_invoice_email,ap_phone,cli_ref,created_at` +
+            `&order=name.asc` +
+            `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
+
+  if (text)        url += `&name=ilike.*${enc(text)}*`;
+  if (cliRef)      url += `&cli_ref=ilike.*${enc(cliRef)}*`;
+  if (primaryEmail) url += `&primary_invoice_email=ilike.*${enc(primaryEmail)}*`;
+  if (apPhone)     url += `&ap_phone=ilike.*${enc(apPhone)}*`;
+  if (vatChargeable === 'true')  url += `&vat_chargeable=eq.true`;
   if (vatChargeable === 'false') url += `&vat_chargeable=eq.false`;
+  if (createdFrom) url += `&created_at=gte.${enc(createdFrom)}`;
+  if (createdTo)   url += `&created_at=lte.${enc(createdTo)}`;
 
   const { rows } = await sbFetch(env, url);
 
   if (format === 'csv') {
-    const header = ['ClientId','Name','VATChargeable','PaymentTermsDays'];
+    const header = ['ClientId','Name','VATChargeable','PaymentTermsDays','PrimaryInvoiceEmail','APPhone','CliRef','CreatedAt'];
     const out = [csvJoin(header)];
     for (const r of rows || []) {
       out.push(csvJoin([
-        r.id, r.name || '', r.vat_chargeable ? 'Y' : 'N', Number(r.payment_terms_days ?? '')
+        r.id, r.name || '', r.vat_chargeable ? 'Y' : 'N', Number(r.payment_terms_days ?? ''),
+        r.primary_invoice_email || '', r.ap_phone || '', r.cli_ref || '', r.created_at || ''
       ]));
     }
     return withCORS(env, req, ok({ csv: out.join('\n'), count: rows?.length || 0, page, page_size: pageSize }));
@@ -1908,6 +1978,10 @@ export async function handleSearchClients(env, req) {
         <td>${r.name || ''}</td>
         <td>${r.vat_chargeable ? 'Y' : 'N'}</td>
         <td>${Number(r.payment_terms_days ?? '')}</td>
+        <td>${r.primary_invoice_email || ''}</td>
+        <td>${r.ap_phone || ''}</td>
+        <td>${r.cli_ref || ''}</td>
+        <td>${r.created_at || ''}</td>
       </tr>`).join('');
     const html = `
       <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif">
@@ -1915,6 +1989,7 @@ export async function handleSearchClients(env, req) {
         <table width="100%" cellspacing="0" cellpadding="6" style="border-collapse:collapse">
           <thead><tr style="background:#f5f5f5">
             <th>Name</th><th>VAT Chargeable</th><th>Payment Terms (days)</th>
+            <th>Primary Invoice Email</th><th>A/P Phone</th><th>Client Ref</th><th>Created At</th>
           </tr></thead>
           <tbody>${rowsHtml}</tbody>
         </table>
@@ -1929,35 +2004,52 @@ export async function handleSearchClients(env, req) {
 // ───────────────────────────────────────────────────────────────────────────────
 // SEARCH — Umbrellas (richer filters + csv/print)
 // ───────────────────────────────────────────────────────────────────────────────
-
 export async function handleSearchUmbrellas(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+
   const urlObj = new URL(req.url);
   const q = (k) => urlObj.searchParams.get(k);
   const page = Math.max(1, parseInt(q('page') || '1', 10));
   const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
   const format = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
 
-  const text = q('q'); // name partial
-  const enabled = q('enabled'); // 'true'|'false'|null
+  // Expanded filters to match FE
+  const text         = q('q'); // name partial
+  const bankName     = q('bank_name');
+  const sortCode     = q('sort_code');
+  const accountNo    = q('account_number');
+  const enabled      = q('enabled');        // 'true'|'false'|null
   const vatChargeable = q('vat_chargeable'); // 'true'|'false'|null
+  const createdFrom  = q('created_from');
+  const createdTo    = q('created_to');
 
-  let url = `${env.SUPABASE_URL}/rest/v1/umbrellas?select=id,name,vat_chargeable,enabled&order=name.asc` +
-    `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
-  if (text) url += `&name=ilike.*${enc(text)}*`;
-  if (enabled === 'true') url += `&enabled=eq.true`;
+  let url = `${env.SUPABASE_URL}/rest/v1/umbrellas` +
+            `?select=id,name,vat_chargeable,enabled,bank_name,sort_code,account_number,created_at` +
+            `&order=name.asc` +
+            `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
+
+  if (text)      url += `&name=ilike.*${enc(text)}*`;
+  if (bankName)  url += `&bank_name=ilike.*${enc(bankName)}*`;
+  if (sortCode)  url += `&sort_code=ilike.*${enc(sortCode)}*`;
+  if (accountNo) url += `&account_number=ilike.*${enc(accountNo)}*`;
+  if (enabled === 'true')  url += `&enabled=eq.true`;
   if (enabled === 'false') url += `&enabled=eq.false`;
-  if (vatChargeable === 'true') url += `&vat_chargeable=eq.true`;
+  if (vatChargeable === 'true')  url += `&vat_chargeable=eq.true`;
   if (vatChargeable === 'false') url += `&vat_chargeable=eq.false`;
+  if (createdFrom) url += `&created_at=gte.${enc(createdFrom)}`;
+  if (createdTo)   url += `&created_at=lte.${enc(createdTo)}`;
 
   const { rows } = await sbFetch(env, url);
 
   if (format === 'csv') {
-    const header = ['UmbrellaId','Name','Enabled','VATChargeable'];
+    const header = ['UmbrellaId','Name','Enabled','VATChargeable','Bank','SortCode','AccountNumber','CreatedAt'];
     const out = [csvJoin(header)];
     for (const r of rows || []) {
-      out.push(csvJoin([r.id, r.name || '', r.enabled ? 'Y' : 'N', r.vat_chargeable ? 'Y' : 'N']));
+      out.push(csvJoin([
+        r.id, r.name || '', r.enabled ? 'Y' : 'N', r.vat_chargeable ? 'Y' : 'N',
+        r.bank_name || '', r.sort_code || '', r.account_number || '', r.created_at || ''
+      ]));
     }
     return withCORS(env, req, ok({ csv: out.join('\n'), count: rows?.length || 0, page, page_size: pageSize }));
   }
@@ -1968,6 +2060,10 @@ export async function handleSearchUmbrellas(env, req) {
         <td>${r.name || ''}</td>
         <td>${r.enabled ? 'Y' : 'N'}</td>
         <td>${r.vat_chargeable ? 'Y' : 'N'}</td>
+        <td>${r.bank_name || ''}</td>
+        <td>${r.sort_code || ''}</td>
+        <td>${r.account_number || ''}</td>
+        <td>${r.created_at || ''}</td>
       </tr>`).join('');
     const html = `
       <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif">
@@ -1975,6 +2071,7 @@ export async function handleSearchUmbrellas(env, req) {
         <table width="100%" cellspacing="0" cellpadding="6" style="border-collapse:collapse">
           <thead><tr style="background:#f5f5f5">
             <th>Name</th><th>Enabled</th><th>VAT Chargeable</th>
+            <th>Bank</th><th>Sort code</th><th>Account number</th><th>Created At</th>
           </tr></thead>
           <tbody>${rowsHtml}</tbody>
         </table>
