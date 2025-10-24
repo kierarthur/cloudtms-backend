@@ -2121,7 +2121,8 @@ export async function handleReportPresetsList(env, req) {
   if (includeShared) {
     let urlShared = `${env.SUPABASE_URL}/rest/v1/report_presets` +
       `?select=id,user_id,section,kind,name,filters_json,is_default,is_shared,created_at,updated_at` +
-      `&is_shared=eq.true`;
+      `&is_shared=eq.true` +
+      `&user_id=neq.${enc(user.id)}`; // 🔧 exclude my own shared presets to avoid duplicates
     if (section) urlShared += `&section=eq.${enc(section)}`;
     if (kind)    urlShared += `&kind=eq.${enc(kind)}`;
     if (text)    urlShared += `&name=ilike.*${enc(text)}*`;
@@ -5634,34 +5635,45 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
 // Client defaults: list with optional role/band + active_on filters,
 // and correct NULL/default semantics. Supports pagination.
 // ─────────────────────────────────────────────────────────────────────────────
-
 export async function handleSearchCandidates(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
   const urlObj = new URL(req.url);
-  const q = (k) => urlObj.searchParams.get(k);
-  const page = Math.max(1, parseInt(q('page') || '1', 10));
+  const q  = (k) => urlObj.searchParams.get(k);
+  const qa = (k) => urlObj.searchParams.getAll(k); // for repeated params e.g. roles_any
+
+  const page     = Math.max(1, parseInt(q('page') || '1', 10));
   const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
-  const format = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
+  const format   = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
 
-  // --- NEW: support JSON inside q= for roles_any (and optional roles_all)
-  const rawQ = q('q'); // can be plain string or JSON string: {"roles_any":["RMN","HCA"],"text":"ann"}
-  let text = null;     // display_name partial
-  let rolesAny = [];   // array of codes → OR across these
-  let rolesAll = [];   // optional future: AND across these
+  // ---------- Named filters (from FE) ----------
+  const firstName  = q('first_name');
+  const lastName   = q('last_name');
+  const email      = q('email');
+  const phone      = q('phone');
+  const payMethod  = q('pay_method') ? q('pay_method').toUpperCase() : null; // PAYE|UMBRELLA
+  const active     = q('active'); // 'true'|'false'|null
+  const createdFrom = q('created_from');
+  const createdTo   = q('created_to');
 
+  // roles_any / roles_all as REPEATED params
+  let rolesAny = qa('roles_any').filter(Boolean).map(s => s.trim()).filter(Boolean);
+  let rolesAll = qa('roles_all').filter(Boolean).map(s => s.trim()).filter(Boolean);
+
+  // ---------- Back-compat: support JSON inside q= for roles_any/roles_all and optional text ----------
+  const rawQ = q('q'); // may be JSON: {"roles_any":["RMN","HCA"], "roles_all":["RMN"], "text":"ann"}
+  let text = null;     // display_name partial or free-text
   if (rawQ) {
     try {
       const parsed = JSON.parse(rawQ);
       if (parsed && typeof parsed === 'object') {
         if (Array.isArray(parsed.roles_any)) {
-          rolesAny = parsed.roles_any.filter(v => typeof v === 'string' && v.trim()).map(v => v.trim());
+          rolesAny = rolesAny.concat(parsed.roles_any.filter(v => typeof v === 'string' && v.trim()).map(v => v.trim()));
         }
         if (Array.isArray(parsed.roles_all)) {
-          rolesAll = parsed.roles_all.filter(v => typeof v === 'string' && v.trim()).map(v => v.trim());
+          rolesAll = rolesAll.concat(parsed.roles_all.filter(v => typeof v === 'string' && v.trim()).map(v => v.trim()));
         }
-        // Accept either "text" or "display_name" as the free-text term
         if (typeof parsed.text === 'string') text = parsed.text.trim();
         else if (typeof parsed.display_name === 'string') text = parsed.display_name.trim();
         else if (typeof parsed.q === 'string') text = parsed.q.trim();
@@ -5669,25 +5681,40 @@ export async function handleSearchCandidates(env, req) {
         text = String(rawQ || '').trim();
       }
     } catch {
-      // Not JSON: treat as plain text search
       text = String(rawQ || '').trim();
     }
   }
 
-  const payMethod = q('pay_method') ? q('pay_method').toUpperCase() : null; // PAYE|UMBRELLA
-  const active = q('active'); // 'true'|'false'|null
+  // De-duplicate roles arrays after merging sources
+  rolesAny = Array.from(new Set(rolesAny));
+  rolesAll = Array.from(new Set(rolesAll));
 
+  // ---------- Build PostgREST URL ----------
   let url =
-    `${env.SUPABASE_URL}/rest/v1/candidates?select=id,display_name,first_name,last_name,email,pay_method,active&order=display_name.asc` +
+    `${env.SUPABASE_URL}/rest/v1/candidates` +
+    `?select=id,display_name,first_name,last_name,email,phone,pay_method,active,created_at` +
+    `&order=display_name.asc` +
     `&limit=${pageSize}&offset=${(page - 1) * pageSize}`;
 
+  // Free-text: by default apply to display_name; named fields (first_name etc.) are handled below
   if (text) url += `&display_name=ilike.*${enc(text)}*`;
-  if (payMethod) url += `&pay_method=eq.${enc(payMethod)}`;
-  if (active === 'true') url += `&active=eq.true`;
+
+  // Named partials
+  if (firstName) url += `&first_name=ilike.*${enc(firstName)}*`;
+  if (lastName)  url += `&last_name=ilike.*${enc(lastName)}*`;
+  if (email)     url += `&email=ilike.*${enc(email)}*`;
+  if (phone)     url += `&phone=ilike.*${enc(phone)}*`;
+
+  // Exact-ish enumerations / booleans
+  if (payMethod)    url += `&pay_method=eq.${enc(payMethod)}`;   // PAYE|UMBRELLA
+  if (active === 'true')  url += `&active=eq.true`;
   if (active === 'false') url += `&active=eq.false`;
 
-  // --- NEW: roles_all (AND semantics) → repeat the filter param to AND
-  // translates to: roles @> '[{"code":"X"}]' AND roles @> '[{"code":"Y"}]'
+  // Created range
+  if (createdFrom) url += `&created_at=gte.${enc(createdFrom)}`;
+  if (createdTo)   url += `&created_at=lte.${enc(createdTo)}`;
+
+  // roles_all (AND semantics) — repeat cs filter (roles @> '[{"code":"X"}]') for each code
   if (rolesAll.length) {
     for (const code of rolesAll) {
       const val = JSON.stringify([{ code }]); // [{"code":"RMN"}]
@@ -5695,11 +5722,10 @@ export async function handleSearchCandidates(env, req) {
     }
   }
 
-  // --- NEW: roles_any (OR semantics) → use PostgREST or=(...)
-  // translates to: or=(roles=cs.[{"code":"RMN"}],roles=cs.[{"code":"HCA"}],...)
+  // roles_any (OR semantics) — or=(roles.cs.[{"code":"RMN"}],roles.cs.[{"code":"HCA"}],...)
   if (rolesAny.length) {
-    const parts = rolesAny.map((code) => {
-      const val = enc(JSON.stringify([{ code }])); // [{"code":"HCA"}] (encoded)
+    const parts = rolesAny.map(code => {
+      const val = enc(JSON.stringify([{ code }])); // encode [{"code":"HCA"}]
       return `roles=cs.${val}`;
     });
     url += `&or=(${parts.join(',')})`;
@@ -5708,15 +5734,17 @@ export async function handleSearchCandidates(env, req) {
   const { rows } = await sbFetch(env, url);
 
   if (format === 'csv') {
-    const header = ['CandidateId', 'DisplayName', 'Email', 'PayMethod', 'Active'];
+    const header = ['CandidateId','DisplayName','Email','Phone','PayMethod','Active','CreatedAt'];
     const out = [csvJoin(header)];
     for (const r of rows || []) {
       out.push(csvJoin([
         r.id,
         r.display_name || [r.first_name, r.last_name].filter(Boolean).join(' '),
         r.email || '',
+        r.phone || '',
         (r.pay_method || '').toUpperCase(),
-        r.active ? 'Y' : 'N'
+        r.active ? 'Y' : 'N',
+        r.created_at || ''
       ]));
     }
     return withCORS(env, req, ok({ csv: out.join('\n'), count: rows?.length || 0, page, page_size: pageSize }));
@@ -5727,15 +5755,17 @@ export async function handleSearchCandidates(env, req) {
       <tr>
         <td>${r.display_name || [r.first_name, r.last_name].filter(Boolean).join(' ')}</td>
         <td>${r.email || ''}</td>
+        <td>${r.phone || ''}</td>
         <td>${(r.pay_method || '').toUpperCase()}</td>
         <td>${r.active ? 'Y' : 'N'}</td>
+        <td>${r.created_at || ''}</td>
       </tr>`).join('');
     const html = `
       <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif">
         <h3>Candidates — Search Results</h3>
         <table width="100%" cellspacing="0" cellpadding="6" style="border-collapse:collapse">
           <thead><tr style="background:#f5f5f5">
-            <th>Candidate</th><th>Email</th><th>Pay Method</th><th>Active</th>
+            <th>Candidate</th><th>Email</th><th>Phone</th><th>Pay Method</th><th>Active</th><th>Created At</th>
           </tr></thead>
           <tbody>${rowsHtml}</tbody>
         </table>
