@@ -9412,17 +9412,58 @@ function toLocalParts(iso, tz) {
 // Supabase helpers (RPC + REST)
 // ---------------------------
 
+// === REPLACE: sbFetch (supports GET + POST/PATCH/DELETE + optional exact count)
+async function sbFetch(env, url, third, fourth) {
+  // Back-compat:
+  //  sbFetch(env, url)                  -> simple GET
+  //  sbFetch(env, url, true)            -> GET with Prefer: count=exact
+  //  sbFetch(env, url, { ...init })     -> custom fetch init (method/headers/body)
+  //  sbFetch(env, url, true, { ...init }) -> exact count + custom init
 
-async function sbFetch(env, url, includeCount = false) {
-  const res = await fetch(url, { headers: { ...sbHeaders(env), ...(includeCount ? { Prefer: 'count=exact' } : {}) } });
+  let includeCount = false;
+  let init = {};
+
+  if (typeof third === 'boolean') {
+    includeCount = third;
+  } else if (third && typeof third === 'object') {
+    // treat as fetch init; allow { preferExactCount:true } too
+    const { preferExactCount, ...rest } = third;
+    if (typeof preferExactCount === 'boolean') includeCount = preferExactCount;
+    init = { ...rest };
+  }
+
+  if (fourth && typeof fourth === 'object') {
+    init = { ...init, ...fourth };
+  }
+
+  // Merge headers; respect any explicit Prefer the caller set (e.g. return=representation)
+  const callerPrefer = init.headers && (init.headers.Prefer || init.headers['Prefer']);
+  const headers = {
+    ...sbHeaders(env),
+    ...(callerPrefer ? {} : (includeCount ? { Prefer: 'count=exact' } : {})),
+    ...(init.headers || {})
+  };
+
+  const res = await fetch(url, { ...init, headers });
   const text = await res.text();
-  let json = [];
-  try { json = text ? JSON.parse(text) : []; } catch { json = []; }
-  const countHeader = res.headers.get('content-range');
-  const m = countHeader && /\/(\d+)$/.exec(countHeader);
-  const total = m ? parseInt(m[1], 10) : undefined;
+
+  let json;
+  try { json = text ? JSON.parse(text) : null; } catch { json = null; }
+
   if (!res.ok) throw new Error(`Supabase fetch failed ${res.status}: ${text}`);
-  return { rows: json, total };
+
+  // Normalise to { rows, total } like before
+  let rows;
+  if (Array.isArray(json)) rows = json;
+  else if (json === null) rows = [];
+  else if (typeof json === 'object' && Array.isArray(json.rows)) rows = json.rows;
+  else rows = [json]; // fall back to single-object → [obj]
+
+  const cr = res.headers.get('content-range');
+  const m = cr && /\/(\d+)$/.exec(cr);
+  const total = m ? parseInt(m[1], 10) : undefined;
+
+  return { rows, total };
 }
 
 async function sbRpc(env, fn, args) {
