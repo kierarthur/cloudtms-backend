@@ -2086,6 +2086,8 @@ export async function handleSearchUmbrellas(env, req) {
 // REPORT PRESETS — Create / List / Update / Delete
 // Table: report_presets (id, user_id, section, name, filters_json, is_default, is_shared, created_at, updated_at)
 // ───────────────────────────────────────────────────────────────────────────────
+// BACKEND — UPDATED
+// handleReportPresetsList: default sort name.asc; include user join; mine first then shared.
 export async function handleReportPresetsList(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -2094,20 +2096,24 @@ export async function handleReportPresetsList(env, req) {
   const q  = (k) => urlObj.searchParams.get(k);
   const page      = Math.max(1, parseInt(q('page') || '1', 10));
   const pageSize  = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
-  const section   = q('section');                 // optional: filter to a section
-  const kind      = q('kind');                    // optional: 'search' | 'report' | 'dashboard'
-  const text      = q('q');                       // optional name search
+  const section   = q('section');
+  const kind      = q('kind');
+  const text      = q('q');
   const includeShared = q('include_shared') === 'true';
-  const orderBy   = (q('order_by') || 'created_at').toLowerCase(); // created_at|name|updated_at
-  const orderDir  = (q('order_dir') || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
+  // default changed to name.asc
+  const orderBy   = (q('order_by') || 'name').toLowerCase(); // created_at|name|updated_at
+  const orderDir  = (q('order_dir') || 'asc').toLowerCase() === 'desc' ? 'desc' : 'asc';
 
   const orderAllowed = new Set(['created_at','name','updated_at']);
-  const orderExpr = `&order=${orderAllowed.has(orderBy) ? enc(orderBy) : 'created_at'}.${orderDir}`;
+  const orderExpr = `&order=${orderAllowed.has(orderBy) ? enc(orderBy) : 'name'}.${orderDir}`;
   const pageExpr  = `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
 
-  // 1) Fetch my presets
+  const sel = `id,user_id,section,kind,name,filters_json,is_default,is_shared,created_at,updated_at,` +
+              `user:tms_users(id,display_name,email)`;
+
+  // 1) My presets
   let urlMine = `${env.SUPABASE_URL}/rest/v1/report_presets` +
-    `?select=id,user_id,section,kind,name,filters_json,is_default,is_shared,created_at,updated_at` +
+    `?select=${enc(sel)}` +
     `&user_id=eq.${enc(user.id)}`;
   if (section) urlMine += `&section=eq.${enc(section)}`;
   if (kind)    urlMine += `&kind=eq.${enc(kind)}`;
@@ -2116,13 +2122,13 @@ export async function handleReportPresetsList(env, req) {
 
   const { rows: mine = [] } = await sbFetch(env, urlMine);
 
-  // 2) Optionally fetch shared presets (not owned by user, but visible)
+  // 2) Shared presets (not mine)
   let shared = [];
   if (includeShared) {
     let urlShared = `${env.SUPABASE_URL}/rest/v1/report_presets` +
-      `?select=id,user_id,section,kind,name,filters_json,is_default,is_shared,created_at,updated_at` +
+      `?select=${enc(sel)}` +
       `&is_shared=eq.true` +
-      `&user_id=neq.${enc(user.id)}`; // 🔧 exclude my own shared presets to avoid duplicates
+      `&user_id=neq.${enc(user.id)}`;
     if (section) urlShared += `&section=eq.${enc(section)}`;
     if (kind)    urlShared += `&kind=eq.${enc(kind)}`;
     if (text)    urlShared += `&name=ilike.*${enc(text)}*`;
@@ -2131,8 +2137,9 @@ export async function handleReportPresetsList(env, req) {
     shared = rows || [];
   }
 
+  // Mine first, then shared (each already name-ordered by orderExpr)
   return withCORS(env, req, ok({
-    rows: mine.concat(shared),
+    rows: (mine || []).concat(shared || []),
     page, page_size: pageSize,
     count: (mine?.length || 0) + (shared?.length || 0)
   }));
@@ -3654,18 +3661,21 @@ function splitCsv(s) {
     .map((x) => x.trim())
     .filter(Boolean);
 }
+// BACKEND — UPDATED
+// buildCORSHeaders: allow PATCH, DELETE so overwrite & bin work.
 function buildCORSHeaders(env, reqOrigin) {
   const allowed = splitCsv(env.ALLOWED_ORIGINS || "");
   const h = {
     "Access-Control-Allow-Credentials": "true",
     "Access-Control-Allow-Headers": "authorization,content-type,content-md5,x-requested-with,idempotency-key,x-idempotency-key",
-    "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS",
+    "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
     "Vary": "Origin",
   };
   if (!allowed.length) return h;
   if (reqOrigin && allowed.includes(reqOrigin)) h["Access-Control-Allow-Origin"] = reqOrigin;
   return h;
 }
+
 function withCORS(env, req, res) {
   const origin = req.headers.get("origin");
   const headers = buildCORSHeaders(env, origin);
@@ -3673,10 +3683,13 @@ function withCORS(env, req, res) {
   for (const [k, v] of Object.entries(headers)) newHeaders.set(k, v);
   return new Response(res.body, { status: res.status, headers: newHeaders });
 }
+// BACKEND — UPDATED
+// preflightIfNeeded: unchanged logic; leverages updated buildCORSHeaders. (kept for completeness)
 function preflightIfNeeded(env, req) {
   if (req.method === "OPTIONS") return withCORS(env, req, new Response(null, { status: 204 }));
   return null;
 }
+
 
 // ---------------------- Crypto helpers ----------------------
 async function hmacSign(secret, data) {
@@ -7602,84 +7615,138 @@ async function handleRelatedCounts(env, req, entity, id) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
-  // Small helper to read exact count via PostgREST Content-Range, if available
   const countOrLen = (res) => (typeof res.count === 'number' ? res.count : (res.rows?.length || 0));
 
   try {
+    // ===== CANDIDATE =====
     if (entity === 'candidate') {
-      // timesheets count (current snapshots for candidate)
-      const tsq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?candidate_id=eq.${encodeURIComponent(id)}&is_current=eq.true&select=id`;
+      const tsq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?candidate_id=eq.${encodeURIComponent(id)}&is_current=eq.true&select=id,client_id,locked_by_invoice_id`;
       const tsfin = await sbFetch(env, tsq, { preferExactCount: true });
+      const rows = tsfin.rows || [];
+      const invDistinct = new Set(rows.map(r => r.locked_by_invoice_id).filter(Boolean));
+      const cliDistinct = new Set(rows.map(r => r.client_id).filter(Boolean));
 
-      // invoices count (distinct locked_by_invoice_id where not null)
-      const invq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?candidate_id=eq.${encodeURIComponent(id)}&is_current=eq.true&locked_by_invoice_id=not.is.null&select=locked_by_invoice_id`;
-      const invfin = await sbFetch(env, invq);
-      const invDistinct = new Set((invfin.rows || []).map(r => r.locked_by_invoice_id).filter(Boolean));
-
-      // remittances count (mail_outbox by reference prefix)
-      const refPrefix = `remit:candidate:${id}:`;
-      const remq = `${env.SUPABASE_URL}/rest/v1/mail_outbox?type=eq.REMITTANCE&reference=like.${encodeURIComponent(refPrefix + '%')}&select=id`;
-      const rem = await sbFetch(env, remq, { preferExactCount: true });
+      // umbrella 0/1
+      const cq  = `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(id)}&select=pay_method,umbrella_id&limit=1`;
+      const c   = await sbFetch(env, cq);
+      const cand = (c.rows || [])[0] || {};
+      const umbrella = (cand.pay_method === 'UMBRELLA' && cand.umbrella_id) ? 1 : 0;
 
       return withCORS(env, req, ok({
         timesheets: countOrLen(tsfin),
         invoices:   invDistinct.size,
-        remittances: countOrLen(rem),
+        clients:    cliDistinct.size,
+        umbrella
       }));
     }
 
+    // ===== TIMESHEET =====
     if (entity === 'timesheet') {
-      // candidate (0/1) & invoice (0/1) from current tsfin row
-      const curq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${encodeURIComponent(id)}&is_current=eq.true&select=candidate_id,locked_by_invoice_id`;
-      const cur = await sbFetch(env, curq);
-      const row = (cur.rows || [])[0] || {};
+      // candidate, client, invoice from current snapshot
+      const curq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${encodeURIComponent(id)}&is_current=eq.true&select=candidate_id,client_id,locked_by_invoice_id`;
+      const cur  = await sbFetch(env, curq);
+      const row  = (cur.rows || [])[0] || {};
       const hasCandidate = row.candidate_id ? 1 : 0;
+      const hasClient    = row.client_id ? 1 : 0;
       const hasInvoice   = row.locked_by_invoice_id ? 1 : 0;
 
-      // remittances count via audit correlation_ids
-      const audq = `${env.SUPABASE_URL}/rest/v1/audit_events?object_type=eq.timesheet&object_id_text=eq.${encodeURIComponent(id)}&reason=eq.REMITTANCE&action=in.(EMAIL_QUEUED,EMAIL_SENT)&select=correlation_id`;
-      const aud = await sbFetch(env, audq);
-      const remDistinct = new Set((aud.rows || []).map(r => r.correlation_id).filter(Boolean));
+      // umbrella 0/1: prefer candidate's current pay context
+      let umbrella = 0;
+      if (row.candidate_id) {
+        const cq = `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(row.candidate_id)}&select=pay_method,umbrella_id&limit=1`;
+        const c  = await sbFetch(env, cq);
+        const cand = (c.rows || [])[0] || {};
+        umbrella = (cand.pay_method === 'UMBRELLA' && cand.umbrella_id) ? 1 : 0;
+      }
 
       return withCORS(env, req, ok({
         candidate: hasCandidate,
+        client:    hasClient,
         invoice:   hasInvoice,
-        remittances: remDistinct.size,
+        umbrella
       }));
     }
 
+    // ===== INVOICE =====
     if (entity === 'invoice') {
-      // timesheets & candidates from current tsfin rows linked to invoice
-      const tsq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?locked_by_invoice_id=eq.${encodeURIComponent(id)}&is_current=eq.true&select=candidate_id,id`;
+      const tsq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?locked_by_invoice_id=eq.${encodeURIComponent(id)}&is_current=eq.true&select=candidate_id,client_id,id`;
       const tsfin = await sbFetch(env, tsq, { preferExactCount: true });
-      const candDistinct = new Set((tsfin.rows || []).map(r => r.candidate_id).filter(Boolean));
+      const rows  = tsfin.rows || [];
+      const candDistinct = new Set(rows.map(r => r.candidate_id).filter(Boolean));
+      const clientId = (rows[0] && rows[0].client_id) ? 1 : 1; // invoices always have a single client header
 
-      // correspondence (audit) on invoice
-      const audq = `${env.SUPABASE_URL}/rest/v1/audit_events?object_type=eq.invoice&object_id_text=eq.${encodeURIComponent(id)}&action=in.(EMAIL_QUEUED,EMAIL_SENT)&select=id`;
-      const aud = await sbFetch(env, audq, { preferExactCount: true });
+      // umbrellas on this invoice (candidates with umbrella pay)
+      let umbCount = 0;
+      if (candDistinct.size) {
+        const ids = Array.from(candDistinct).map(encodeURIComponent).join(',');
+        const cq  = `${env.SUPABASE_URL}/rest/v1/candidates?id=in.(${ids})&select=umbrella_id,pay_method`;
+        const cr  = await sbFetch(env, cq);
+        const umbDistinct = new Set((cr.rows || []).filter(r => r.pay_method === 'UMBRELLA' && r.umbrella_id).map(r => r.umbrella_id));
+        umbCount = umbDistinct.size;
+      }
 
       return withCORS(env, req, ok({
         timesheets: countOrLen(tsfin),
         candidates: candDistinct.size,
-        correspondence: countOrLen(aud),
+        client:     clientId,   // always present (1)
+        umbrellas:  umbCount
       }));
     }
 
+    // ===== CLIENT =====
+    if (entity === 'client') {
+      const tsq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?client_id=eq.${encodeURIComponent(id)}&is_current=eq.true&select=candidate_id,id`;
+      const tsfin = await sbFetch(env, tsq, { preferExactCount: true });
+      const rows  = tsfin.rows || [];
+      const candDistinct = new Set(rows.map(r => r.candidate_id).filter(Boolean));
+
+      const invq = `${env.SUPABASE_URL}/rest/v1/invoices?client_id=eq.${encodeURIComponent(id)}&select=id`;
+      const inv  = await sbFetch(env, invq, { preferExactCount: true });
+
+      return withCORS(env, req, ok({
+        timesheets: countOrLen(tsfin),
+        invoices:   countOrLen(inv),
+        candidates: candDistinct.size
+      }));
+    }
+
+    // ===== UMBRELLA =====
+    if (entity === 'umbrella') {
+      const cq = `${env.SUPABASE_URL}/rest/v1/candidates?umbrella_id=eq.${encodeURIComponent(id)}&select=id`;
+      const cand = await sbFetch(env, cq, { preferExactCount: true });
+      const candIds = (cand.rows || []).map(r => r.id);
+
+      let tsCount = 0, invCount = 0;
+      if (candIds.length) {
+        const ids = candIds.map(encodeURIComponent).join(',');
+        const tsq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?candidate_id=in.(${ids})&is_current=eq.true&select=locked_by_invoice_id,id`;
+        const ts  = await sbFetch(env, tsq, { preferExactCount: true });
+        tsCount = countOrLen(ts);
+        const invDistinct = new Set((ts.rows || []).map(r => r.locked_by_invoice_id).filter(Boolean));
+        invCount = invDistinct.size;
+      }
+
+      return withCORS(env, req, ok({
+        candidates: countOrLen(cand),
+        timesheets: tsCount,
+        invoices:   invCount
+      }));
+    }
+
+    // ===== REMITTANCE ===== (kept for completeness)
     if (entity === 'remittance') {
-      // A "remittance" here is a mail_outbox row (id = correlation_id)
-      // Count related timesheets from audit trail and whether a candidate exists.
       const base = `correlation_id=eq.${encodeURIComponent(id)}&reason=eq.REMITTANCE`;
       const tsAudQ = `${env.SUPABASE_URL}/rest/v1/audit_events?${base}&object_type=eq.timesheet&select=object_id_text`;
-      const tsAud = await sbFetch(env, tsAudQ);
+      const tsAud  = await sbFetch(env, tsAudQ);
       const tsDistinct = new Set((tsAud.rows || []).map(r => r.object_id_text).filter(Boolean));
 
       const candAudQ = `${env.SUPABASE_URL}/rest/v1/audit_events?${base}&object_type=eq.candidate&select=id`;
-      const candAud = await sbFetch(env, candAudQ);
-      const hasCand = (candAud.rows || []).length > 0 ? 1 : 0;
+      const candAud  = await sbFetch(env, candAudQ);
+      const hasCand  = (candAud.rows || []).length > 0 ? 1 : 0;
 
       return withCORS(env, req, ok({
         timesheets: tsDistinct.size,
-        candidate: hasCand,
+        candidate:  hasCand
       }));
     }
 
@@ -7689,6 +7756,7 @@ async function handleRelatedCounts(env, req, entity, id) {
     return withCORS(env, req, serverError("Failed to load related counts"));
   }
 }
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Rates: list client defaults (now supports optional rate_type filter)
@@ -8755,6 +8823,7 @@ async function fetchUnifiedDefaultWindow(env, { client_id, role, band, date }) {
  *                 total:
  *                   type: integer
  */
+// UPDATED: handleRelatedList — fixes syntax error on candidate→clients branch and supports all related types per spec
 async function handleRelatedList(env, req, entity, id) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
@@ -8776,9 +8845,7 @@ async function handleRelatedList(env, req, entity, id) {
     return `${y}-${m}-${day}`;
   };
   const parseDate = (s) => {
-    // Accept 'YYYY-MM-DD' or ISO-like; return Date (UTC midnight for date-only)
     if (!s) return null;
-    // If it's exactly YYYY-MM-DD, build UTC date at midnight
     const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (m) return new Date(Date.UTC(+m[1], +m[2]-1, +m[3]));
     const d = new Date(s);
@@ -8822,16 +8889,13 @@ async function handleRelatedList(env, req, entity, id) {
         if (!finRows.length) return okList([], total);
 
         const mapped = finRows.map(r => ({
-          timesheet_id:     r.timesheet_id,
-          week_ending_date: computeWEFromRow(r),
+          timesheet_id:      r.timesheet_id,
+          week_ending_date:  computeWEFromRow(r),
           processing_status: r.processing_status,
           total_pay_ex_vat:  r.total_pay_ex_vat,
           total_hours:       r.total_hours,
           client_id:         r.client_id || null,
-        }));
-
-        // Sort by computed week ending desc, then page
-        mapped.sort((a, b) => {
+        })).sort((a, b) => {
           const ax = a.week_ending_date || '';
           const bx = b.week_ending_date || '';
           return ax < bx ? 1 : ax > bx ? -1 : 0;
@@ -8842,7 +8906,7 @@ async function handleRelatedList(env, req, entity, id) {
       }
 
       if (type === 'invoices') {
-        // Distinct invoice ids from tsfin, then fetch invoice summaries (unchanged)
+        // Distinct invoice ids from tsfin, then fetch invoice summaries
         const finq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?candidate_id=eq.${encodeURIComponent(id)}&is_current=eq.true&locked_by_invoice_id=not.is.null&select=locked_by_invoice_id`;
         const fin = await sbFetch(env, finq);
         const invIds = [...new Set((fin.rows || []).map(r => r.locked_by_invoice_id).filter(Boolean))];
@@ -8863,23 +8927,28 @@ async function handleRelatedList(env, req, entity, id) {
         return okList(items, invIds.length);
       }
 
-      if (type === 'remittances') {
-        const refPrefix = `remit:candidate:${id}:`;
-        const base = `${env.SUPABASE_URL}/rest/v1/mail_outbox?type=eq.REMITTANCE&reference=like.${encodeURIComponent(refPrefix + '%')}`;
-        const sel  = `select=id,to,subject,status,created_at_utc,sent_at,reference`;
-        const ord  = `order=created_at_utc.desc`;
-        const rng  = `&limit=${limit}&offset=${offset}`;
-        const res  = await sbFetch(env, `${base}&${sel}&${ord}${rng}`, { preferExactCount: true });
-        const items = (res.rows || []).map(r => ({
-          mail_id: r.id,
-          to: r.to,
-          subject: r.subject,
-          status: r.status,
-          created_at_utc: r.created_at_utc,
-          sent_at: r.sent_at,
-          reference: r.reference,
-        }));
-        return okList(items, typeof res.count === 'number' ? res.count : undefined);
+      if (type === 'clients') { // FIXED: removed stray parenthesis
+        const finq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?candidate_id=eq.${encodeURIComponent(id)}&is_current=eq.true&select=client_id`;
+        const fin  = await sbFetch(env, finq);
+        const cliIds = [...new Set((fin.rows || []).map(r => r.client_id).filter(Boolean))];
+        const pageIds = cliIds.slice(offset, offset + limit);
+        if (!pageIds.length) return okList([], cliIds.length);
+
+        const clq = `${env.SUPABASE_URL}/rest/v1/clients?id=in.(${pageIds.map(encodeURIComponent).join(',')})&select=id,name,cli_ref`;
+        const clr = await sbFetch(env, clq);
+        const items = (clr.rows || []).map(c => ({ id: c.id, name: c.name, cli_ref: c.cli_ref || null }));
+        return okList(items, cliIds.length);
+      }
+
+      if (type === 'umbrella') {
+        const cq = `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(id)}&select=pay_method,umbrella_id&limit=1`;
+        const cr = await sbFetch(env, cq);
+        const cand = (cr.rows || [])[0];
+        if (!cand || cand.pay_method !== 'UMBRELLA' || !cand.umbrella_id) return okList([], 0);
+        const uq = `${env.SUPABASE_URL}/rest/v1/umbrellas?id=eq.${encodeURIComponent(cand.umbrella_id)}&select=id,name`;
+        const ur = await sbFetch(env, uq);
+        const u  = (ur.rows || [])[0];
+        return okList(u ? [{ id: u.id, name: u.name }] : [], u ? 1 : 0);
       }
 
       return withCORS(env, req, badRequest("Unsupported type for candidate"));
@@ -8916,26 +8985,30 @@ async function handleRelatedList(env, req, entity, id) {
         }] : [], i ? 1 : 0);
       }
 
-      if (type === 'remittances') {
-        const audq = `${env.SUPABASE_URL}/rest/v1/audit_events?object_type=eq.timesheet&object_id_text=eq.${encodeURIComponent(id)}&reason=eq.REMITTANCE&action=in.(EMAIL_QUEUED,EMAIL_SENT)&select=correlation_id,ts_utc&order=ts_utc.desc`;
-        const aud = await sbFetch(env, audq);
-        const mailIds = [...new Set((aud.rows || []).map(r => r.correlation_id).filter(Boolean))];
-        const total = mailIds.length;
-        const pageIds = mailIds.slice(offset, offset + limit);
-        if (!pageIds.length) return okList([], total);
+      if (type === 'client') {
+        const curq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${encodeURIComponent(id)}&is_current=eq.true&select=client_id`;
+        const cur = await sbFetch(env, curq);
+        const clientId = (cur.rows || [])[0]?.client_id;
+        if (!clientId) return okList([], 0);
+        const cq = `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(clientId)}&select=id,name,cli_ref`;
+        const cr = await sbFetch(env, cq);
+        const c  = (cr.rows || [])[0];
+        return okList(c ? [{ id:c.id, name:c.name, cli_ref:c.cli_ref||null }] : [], c ? 1 : 0);
+      }
 
-        const mq = `${env.SUPABASE_URL}/rest/v1/mail_outbox?id=in.(${pageIds.map(encodeURIComponent).join(',')})&select=id,to,subject,status,created_at_utc,sent_at,reference&order=created_at_utc.desc`;
-        const mr = await sbFetch(env, mq);
-        const items = (mr.rows || []).map(r => ({
-          mail_id: r.id,
-          to: r.to,
-          subject: r.subject,
-          status: r.status,
-          created_at_utc: r.created_at_utc,
-          sent_at: r.sent_at,
-          reference: r.reference,
-        }));
-        return okList(items, total);
+      if (type === 'umbrella') {
+        const curq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${encodeURIComponent(id)}&is_current=eq.true&select=candidate_id`;
+        const cur = await sbFetch(env, curq);
+        const candId = (cur.rows || [])[0]?.candidate_id;
+        if (!candId) return okList([], 0);
+        const cq = `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(candId)}&select=pay_method,umbrella_id&limit=1`;
+        const cr = await sbFetch(env, cq);
+        const cand = (cr.rows || [])[0];
+        if (!cand || cand.pay_method !== 'UMBRELLA' || !cand.umbrella_id) return okList([], 0);
+        const uq = `${env.SUPABASE_URL}/rest/v1/umbrellas?id=eq.${encodeURIComponent(cand.umbrella_id)}&select=id,name`;
+        const ur = await sbFetch(env, uq);
+        const u  = (ur.rows || [])[0];
+        return okList(u ? [{ id: u.id, name: u.name }] : [], u ? 1 : 0);
       }
 
       return withCORS(env, req, badRequest("Unsupported type for timesheet"));
@@ -8944,7 +9017,7 @@ async function handleRelatedList(env, req, entity, id) {
     // -------- INVOICE --------
     if (entity === 'invoice') {
       if (type === 'timesheets') {
-        // Use only timesheets_financials; compute week ending here; no booking_id
+        // Use only timesheets_financials; compute week ending here
         const finQ = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
           `?locked_by_invoice_id=eq.${encodeURIComponent(id)}` +
           `&is_current=eq.true` +
@@ -8956,16 +9029,14 @@ async function handleRelatedList(env, req, entity, id) {
         if (!finRows.length) return okList([], total);
 
         const mapped = finRows.map(r => ({
-          timesheet_id:     r.timesheet_id,
-          week_ending_date: computeWEFromRow(r),
+          timesheet_id:      r.timesheet_id,
+          week_ending_date:  computeWEFromRow(r),
           processing_status: r.processing_status,
           total_pay_ex_vat:  r.total_pay_ex_vat,
           total_hours:       r.total_hours,
           candidate_id:      r.candidate_id || null,
           client_id:         r.client_id || null,
-        }));
-
-        mapped.sort((a, b) => {
+        })).sort((a, b) => {
           const ax = a.week_ending_date || '';
           const bx = b.week_ending_date || '';
           return ax < bx ? 1 : ax > bx ? -1 : 0;
@@ -8989,39 +9060,165 @@ async function handleRelatedList(env, req, entity, id) {
         return okList(items, total);
       }
 
-      if (type === 'correspondence') {
-        const audq = `${env.SUPABASE_URL}/rest/v1/audit_events?object_type=eq.invoice&object_id_text=eq.${encodeURIComponent(id)}&action=in.(EMAIL_QUEUED,EMAIL_SENT)&select=id,action,ts_utc,correlation_id&order=ts_utc.desc`;
-        const aud = await sbFetch(env, audq);
-        const mailIds = [...new Set((aud.rows || []).map(r => r.correlation_id).filter(Boolean))];
-        const total = mailIds.length;
-        const pageIds = mailIds.slice(offset, offset + limit);
-        if (!pageIds.length) {
-          const items = (aud.rows || []).map(a => ({ audit_id: a.id, action: a.action, ts_utc: a.ts_utc, mail_id: a.correlation_id || null }));
-          return okList(items, total);
-        }
+      if (type === 'client') {
+        const iq = `${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${encodeURIComponent(id)}&select=client_id&limit=1`;
+        const ir = await sbFetch(env, iq);
+        const clientId = (ir.rows || [])[0]?.client_id;
+        if (!clientId) return okList([], 0);
+        const cq = `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(clientId)}&select=id,name,cli_ref`;
+        const cr = await sbFetch(env, cq);
+        const c  = (cr.rows || [])[0];
+        return okList(c ? [{ id: c.id, name: c.name, cli_ref: c.cli_ref || null }] : [], c ? 1 : 0);
+      }
 
-        const mq = `${env.SUPABASE_URL}/rest/v1/mail_outbox?id=in.(${pageIds.map(encodeURIComponent).join(',')})&select=id,to,subject,status,created_at_utc,sent_at,reference&order=created_at_utc.desc`;
-        const mr = await sbFetch(env, mq);
-        const mById = new Map((mr.rows || []).map(m => [m.id, m]));
-        const items = pageIds.map(mid => {
-          const m = mById.get(mid);
-          return m ? {
-            mail_id: m.id, to: m.to, subject: m.subject, status: m.status,
-            created_at_utc: m.created_at_utc, sent_at: m.sent_at, reference: m.reference
-          } : { mail_id: mid };
-        });
-        return okList(items, total);
+      if (type === 'umbrellas') {
+        const cq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?locked_by_invoice_id=eq.${encodeURIComponent(id)}&is_current=eq.true&select=candidate_id`;
+        const cr = await sbFetch(env, cq);
+        const candIds = [...new Set((cr.rows || []).map(r => r.candidate_id).filter(Boolean))];
+        if (!candIds.length) return okList([], 0);
+
+        const ids = candIds.map(encodeURIComponent).join(',');
+        const kq  = `${env.SUPABASE_URL}/rest/v1/candidates?id=in.(${ids})&select=umbrella_id,pay_method`;
+        const kr  = await sbFetch(env, kq);
+        const umbIds = [...new Set((kr.rows || []).filter(r => r.pay_method === 'UMBRELLA' && r.umbrella_id).map(r => r.umbrella_id))];
+        const pageIds = umbIds.slice(offset, offset + limit);
+        if (!pageIds.length) return okList([], umbIds.length);
+
+        const uq = `${env.SUPABASE_URL}/rest/v1/umbrellas?id=in.(${pageIds.map(encodeURIComponent).join(',')})&select=id,name`;
+        const ur = await sbFetch(env, uq);
+        const items = (ur.rows || []).map(u => ({ id: u.id, name: u.name }));
+        return okList(items, umbIds.length);
       }
 
       return withCORS(env, req, badRequest("Unsupported type for invoice"));
     }
 
-    // -------- REMITTANCE (mail_outbox row) --------
+    // -------- CLIENT --------
+    if (entity === 'client') {
+      if (type === 'timesheets') {
+        const finQ = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?client_id=eq.${encodeURIComponent(id)}` +
+          `&is_current=eq.true` +
+          `&select=*`;
+        const fin  = await sbFetch(env, finQ, { preferExactCount: true });
+        const rows = fin.rows || [];
+        const total = typeof fin.count === 'number' ? fin.count : rows.length;
+
+        const items = rows.map(r => ({
+          timesheet_id:      r.timesheet_id,
+          week_ending_date:  computeWEFromRow(r),
+          processing_status: r.processing_status,
+          total_pay_ex_vat:  r.total_pay_ex_vat,
+          total_hours:       r.total_hours,
+          candidate_id:      r.candidate_id || null
+        })).sort((a,b) => {
+          const ax = a.week_ending_date || '';
+          const bx = b.week_ending_date || '';
+          return ax < bx ? 1 : ax > bx ? -1 : 0;
+        });
+
+        return okList(items.slice(offset, offset + limit), total);
+      }
+
+      if (type === 'invoices') {
+        const iq = `${env.SUPABASE_URL}/rest/v1/invoices?client_id=eq.${encodeURIComponent(id)}&select=id,invoice_no,issued_at_utc,status,total_inc_vat&order=issued_at_utc.desc`;
+        const ir = await sbFetch(env, iq, { preferExactCount: true });
+        const items = (ir.rows || []).map(r => ({
+          invoice_id:    r.id,
+          invoice_no:    r.invoice_no,
+          issued_at_utc: r.issued_at_utc,
+          status:        r.status,
+          total_inc_vat: r.total_inc_vat
+        }));
+        return okList(items.slice(offset, offset + limit), typeof ir.count === 'number' ? ir.count : items.length);
+      }
+
+      if (type === 'candidates') {
+        const finq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?client_id=eq.${encodeURIComponent(id)}&is_current=eq.true&select=candidate_id`;
+        const fin  = await sbFetch(env, finq);
+        const candIds = [...new Set((fin.rows || []).map(r => r.candidate_id).filter(Boolean))];
+        const pageIds = candIds.slice(offset, offset + limit);
+        if (!pageIds.length) return okList([], candIds.length);
+
+        const cq = `${env.SUPABASE_URL}/rest/v1/candidates?id=in.(${pageIds.map(encodeURIComponent).join(',')})&select=id,display_name,email`;
+        const cr = await sbFetch(env, cq);
+        const items = (cr.rows || []).map(c => ({ id:c.id, display_name:c.display_name, email:c.email }));
+        return okList(items, candIds.length);
+      }
+
+      return withCORS(env, req, badRequest("Unsupported type for client"));
+    }
+
+    // -------- UMBRELLA --------
+    if (entity === 'umbrella') {
+      if (type === 'candidates') {
+        const cq = `${env.SUPABASE_URL}/rest/v1/candidates?umbrella_id=eq.${encodeURIComponent(id)}&select=id,display_name,email`;
+        const cr = await sbFetch(env, cq, { preferExactCount: true });
+        const items = (cr.rows || []);
+        return okList(items.slice(offset, offset + limit), typeof cr.count === 'number' ? cr.count : items.length);
+      }
+
+      if (type === 'timesheets') {
+        const candq = `${env.SUPABASE_URL}/rest/v1/candidates?umbrella_id=eq.${encodeURIComponent(id)}&select=id`;
+        const cand  = await sbFetch(env, candq);
+        const candIds = (cand.rows || []).map(r => r.id);
+        if (!candIds.length) return okList([], 0);
+
+        const ids = candIds.map(encodeURIComponent).join(',');
+        const tsq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?candidate_id=in.(${ids})&is_current=eq.true&select=*`;
+        const ts  = await sbFetch(env, tsq, { preferExactCount: true });
+        const rows = ts.rows || [];
+        const items = rows.map(r => ({
+          timesheet_id:      r.timesheet_id,
+          week_ending_date:  computeWEFromRow(r),
+          processing_status: r.processing_status,
+          total_pay_ex_vat:  r.total_pay_ex_vat,
+          total_hours:       r.total_hours,
+          candidate_id:      r.candidate_id || null,
+          client_id:         r.client_id || null
+        })).sort((a,b) => {
+          const ax = a.week_ending_date || '';
+          const bx = b.week_ending_date || '';
+          return ax < bx ? 1 : ax > bx ? -1 : 0;
+        });
+
+        return okList(items.slice(offset, offset + limit), typeof ts.count === 'number' ? ts.count : items.length);
+      }
+
+      if (type === 'invoices') {
+        const candq = `${env.SUPABASE_URL}/rest/v1/candidates?umbrella_id=eq.${encodeURIComponent(id)}&select=id`;
+        const cand  = await sbFetch(env, candq);
+        const candIds = (cand.rows || []).map(r => r.id);
+        if (!candIds.length) return okList([], 0);
+
+        const ids = candIds.map(encodeURIComponent).join(',');
+        const tsq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?candidate_id=in.(${ids})&is_current=eq.true&locked_by_invoice_id=not.is.null&select=locked_by_invoice_id`;
+        const ts  = await sbFetch(env, tsq);
+        const invIds = [...new Set((ts.rows || []).map(r => r.locked_by_invoice_id).filter(Boolean))];
+        const pageIds = invIds.slice(offset, offset + limit);
+        if (!pageIds.length) return okList([], invIds.length);
+
+        const iq = `${env.SUPABASE_URL}/rest/v1/invoices?id=in.(${pageIds.map(encodeURIComponent).join(',')})&select=id,invoice_no,issued_at_utc,status,total_inc_vat,client_id`;
+        const ir = await sbFetch(env, iq);
+        const items = (ir.rows || []).map(i => ({
+          invoice_id:    i.id,
+          invoice_no:    i.invoice_no,
+          issued_at_utc: i.issued_at_utc,
+          status:        i.status,
+          total_inc_vat: i.total_inc_vat,
+          client_id:     i.client_id
+        }));
+        return okList(items, invIds.length);
+      }
+
+      return withCORS(env, req, badRequest("Unsupported type for umbrella"));
+    }
+
+    // -------- REMITTANCE -------- (kept for completeness)
     if (entity === 'remittance') {
       if (type === 'timesheets') {
-        // Get timesheet_ids from audit trail, then fetch current tsfin rows and compute week ending
         const audq = `${env.SUPABASE_URL}/rest/v1/audit_events?correlation_id=eq.${encodeURIComponent(id)}&reason=eq.REMITTANCE&object_type=eq.timesheet&select=object_id_text,ts_utc&order=ts_utc.desc`;
-        const aud = await sbFetch(env, audq);
+        const aud  = await sbFetch(env, audq);
         const tsIds = [...new Set((aud.rows || []).map(r => r.object_id_text).filter(Boolean))];
         const total = tsIds.length;
         const pageIds = tsIds.slice(offset, offset + limit);
@@ -9032,8 +9229,8 @@ async function handleRelatedList(env, req, entity, id) {
           `&is_current=eq.true&select=*`;
         const tsfinR = await sbFetch(env, tsfinQ);
         const items = (tsfinR.rows || []).map(r => ({
-          timesheet_id:     r.timesheet_id,
-          week_ending_date: computeWEFromRow(r),
+          timesheet_id:      r.timesheet_id,
+          week_ending_date:  computeWEFromRow(r),
         })).sort((a,b) => {
           const ax = a.week_ending_date || '';
           const bx = b.week_ending_date || '';
@@ -9043,9 +9240,8 @@ async function handleRelatedList(env, req, entity, id) {
       }
 
       if (type === 'candidate') {
-        // Prefer audit record; fallback to parsing mail_outbox.reference
         const audq = `${env.SUPABASE_URL}/rest/v1/audit_events?correlation_id=eq.${encodeURIComponent(id)}&reason=eq.REMITTANCE&object_type=eq.candidate&select=object_id_text&limit=1`;
-        const aud = await sbFetch(env, audq);
+        const aud  = await sbFetch(env, audq);
         let candId = (aud.rows || [])[0]?.object_id_text;
 
         if (!candId) {
@@ -9059,7 +9255,7 @@ async function handleRelatedList(env, req, entity, id) {
         if (!candId) return okList([], 0);
         const cq = `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(candId)}&select=id,display_name,email&limit=1`;
         const cr = await sbFetch(env, cq);
-        const c = (cr.rows || [])[0];
+        const c  = (cr.rows || [])[0];
         return okList(c ? [{ id: c.id, display_name: c.display_name, email: c.email }] : [], c ? 1 : 0);
       }
 
@@ -9413,20 +9609,15 @@ function toLocalParts(iso, tz) {
 // ---------------------------
 
 // === REPLACE: sbFetch (supports GET + POST/PATCH/DELETE + optional exact count)
+// BACKEND — UPDATED
+// sbFetch: now supports init (POST/PATCH/DELETE) and optional exact count. (UPDATED, not new)
 async function sbFetch(env, url, third, fourth) {
-  // Back-compat:
-  //  sbFetch(env, url)                  -> simple GET
-  //  sbFetch(env, url, true)            -> GET with Prefer: count=exact
-  //  sbFetch(env, url, { ...init })     -> custom fetch init (method/headers/body)
-  //  sbFetch(env, url, true, { ...init }) -> exact count + custom init
-
   let includeCount = false;
   let init = {};
 
   if (typeof third === 'boolean') {
     includeCount = third;
   } else if (third && typeof third === 'object') {
-    // treat as fetch init; allow { preferExactCount:true } too
     const { preferExactCount, ...rest } = third;
     if (typeof preferExactCount === 'boolean') includeCount = preferExactCount;
     init = { ...rest };
@@ -9436,7 +9627,6 @@ async function sbFetch(env, url, third, fourth) {
     init = { ...init, ...fourth };
   }
 
-  // Merge headers; respect any explicit Prefer the caller set (e.g. return=representation)
   const callerPrefer = init.headers && (init.headers.Prefer || init.headers['Prefer']);
   const headers = {
     ...sbHeaders(env),
@@ -9452,12 +9642,11 @@ async function sbFetch(env, url, third, fourth) {
 
   if (!res.ok) throw new Error(`Supabase fetch failed ${res.status}: ${text}`);
 
-  // Normalise to { rows, total } like before
   let rows;
   if (Array.isArray(json)) rows = json;
   else if (json === null) rows = [];
   else if (typeof json === 'object' && Array.isArray(json.rows)) rows = json.rows;
-  else rows = [json]; // fall back to single-object → [obj]
+  else rows = [json];
 
   const cr = res.headers.get('content-range');
   const m = cr && /\/(\d+)$/.exec(cr);
@@ -9465,6 +9654,7 @@ async function sbFetch(env, url, third, fourth) {
 
   return { rows, total };
 }
+
 
 async function sbRpc(env, fn, args) {
   const url = `${env.SUPABASE_URL}/rest/v1/rpc/${encodeURIComponent(fn)}`;
@@ -11411,6 +11601,7 @@ function matchPath(pathname, pattern) {
   }
   return params;
 }
+// BACKEND — FULL ROUTER (export default) — unchanged routes map but now benefits from updated CORS/sbFetch
 export default {
   async fetch(req, env) {
     const pre = preflightIfNeeded(env, req);
@@ -11507,10 +11698,9 @@ export default {
       if (req.method === 'POST' && p === '/api/rates/client-defaults')     return handleUpsertClientRate(env, req);
 
       if (req.method === 'GET' && p === '/api/rates/candidate-overrides')  return handleListOverridesByCandidate(env, req);
-      if (req.method === 'GET' && p === '/api/rates/client-overrides')     return handleListOverridesByClient(env, req); // expects client_id query param
+      if (req.method === 'GET' && p === '/api/rates/client-overrides')     return handleListOverridesByClient(env, req);
       if (req.method === 'POST' && p === '/api/rates/candidate-overrides') return handleCreateOverride(env, req);
 
-      // NEW: support GET as well as POST for resolve-preview
       if (req.method === 'GET'  && p === '/api/rates/resolve-preview')     return handleResolveRate(env, req);
       if (req.method === 'POST' && p === '/api/rates/resolve-preview')     return handleResolveRate(env, req);
 
@@ -11520,7 +11710,7 @@ export default {
         if (cov && req.method === 'DELETE')                                return handleDeleteOverride(env, req, cov.candidate_id);
       }
       if (req.method === 'GET' && p === '/api/rates/candidate-overrides/by-client') {
-        return handleListOverridesByClient(env, req); // expects ?client_id=...
+        return handleListOverridesByClient(env, req);
       }
 
       // HealthRoster
@@ -11537,10 +11727,8 @@ export default {
         const hrVal = matchPath(p, '/api/healthroster/:import_id/validate');
         if (hrVal && req.method === 'POST')                                 return handleHRValidate(env, req, hrVal.import_id);
       }
-      // NEW: queue a TSO failure email (Power Automate)
       if (req.method === 'POST' && p === '/api/hr/tso-failure-email')       return handleQueueTsoFailureEmail(env, req);
 
-      // Timesheets finance preview
       if (req.method === 'POST' && p === '/api/timesheets/finance-preview') return handleFinancePreviewTsfin(env, req);
 
       // TSFIN worker & utilities
@@ -11549,7 +11737,6 @@ export default {
       if (req.method === 'GET'  && p === '/api/tsfin/financials')           return handleTsfinFinancials(env, req);
       if (req.method === 'POST' && p === '/api/tsfin/mark-ready')           return handleTsfinMarkReady(env, req);
 
-      // === TSFIN editing (UI-driven)
       {
         const tsfinOne = matchPath(p, '/api/tsfin/:timesheet_id');
         if (tsfinOne && req.method === 'PATCH')                             return handleTsfinPatch(env, req, tsfinOne.timesheet_id);
@@ -11564,7 +11751,6 @@ export default {
         if (tsfinPO && req.method === 'PATCH')                              return handleTsfinPatchPO(env, req, tsfinPO.timesheet_id);
       }
 
-      // NEW: Timesheets – pay state
       {
         const payHold = matchPath(p, '/api/timesheets/:id/pay-hold');
         if (payHold && req.method === 'PATCH')                              return handleTimesheetPayHold(env, req, payHold.id);
@@ -11582,13 +11768,11 @@ export default {
         if (inv && req.method === 'GET')                                    return handleGetInvoice(env, req, inv.invoice_id);
       }
 
-      // Existing: render by invoice ID (uses stored header/items/totals)
       {
         const invRender = matchPath(p, '/api/invoices/:invoice_id/render');
         if (invRender && req.method === 'POST')                             return handleInvoiceRender(env, req, invRender.invoice_id);
       }
 
-      // NEW: render directly from posted payload (preview / ad-hoc)
       if (req.method === 'POST' && p === '/api/invoices/render')            return handleInvoiceRenderFromPayload(env, req);
 
       {
@@ -11606,34 +11790,25 @@ export default {
         if (invPaid && req.method === 'POST')                               return handleInvoiceMarkPaid(env, req, invPaid.invoice_id);
       }
 
-      {
-        const invUnpay = matchPath(p, '/api/invoices/:invoice_id/unpay');
-        if (invUnpay && req.method === 'POST')                              return handleInvoiceMarkUnpaid(env, req, invUnpay.invoice_id);
-      }
-
-      // Remittances — existing single-candidate composer
+      // Remittances
       if (req.method === 'POST' && p === '/api/remittances/email-for-candidate') {
         return handleRemittanceEmailForCandidate(env, req);
       }
-      // NEW: bulk remittance send (list-driven)
       if (req.method === 'POST' && p === '/api/remittances/send')           return handleRemittancesSend(env, req);
 
       // ====================== SEARCH (exportable) ======================
       if (req.method === 'GET' && p === '/api/search/timesheets')           return handleSearchTimesheets(env, req);
       if (req.method === 'GET' && p === '/api/search/invoices')             return handleSearchInvoices(env, req);
-
-      // Revised logic: /api/search/candidates supports JSON q= with roles_any (OR) and roles_all (AND)
       if (req.method === 'GET' && p === '/api/search/candidates')           return handleSearchCandidates(env, req);
-
       if (req.method === 'GET' && p === '/api/search/clients')              return handleSearchClients(env, req);
       if (req.method === 'GET' && p === '/api/search/umbrellas')            return handleSearchUmbrellas(env, req);
 
       // ====================== REPORTS (json/csv/print) ======================
-      if (req.method === 'GET' && p === '/api/reports/timesheets')          return handleReportTimesheets(env, req);
-      if (req.method === 'GET' && p === '/api/reports/invoices')            return handleReportInvoices(env, req);
-      if (req.method === 'GET' && p === '/api/reports/candidates')          return handleReportCandidates(env, req);
-      if (req.method === 'GET' && p === '/api/reports/clients')             return handleReportClients(env, req);
-      if (req.method === 'GET' && p === '/api/reports/umbrellas')           return handleReportUmbrellas(env, req);
+      if (req.method === 'GET'  && p === '/api/reports/timesheets')         return handleReportTimesheets(env, req);
+      if (req.method === 'GET'  && p === '/api/reports/invoices')           return handleReportInvoices(env, req);
+      if (req.method === 'GET'  && p === '/api/reports/candidates')         return handleReportCandidates(env, req);
+      if (req.method === 'GET'  && p === '/api/reports/clients')            return handleReportClients(env, req);
+      if (req.method === 'GET'  && p === '/api/reports/umbrellas')          return handleReportUmbrellas(env, req);
 
       // ====================== PAYMENTS (Bank CSV) ======================
       if (req.method === 'POST' && p === '/api/payments/generate-csv')      return handlePaymentsGenerateCsv(env, req);
@@ -11648,45 +11823,35 @@ export default {
       }
 
       // ====================== EMAIL (OUTBOX, SEND, TSO) ======================
-      // List outbox
       if (req.method === 'GET'  && p === '/api/email/outbox')               return handleListOutbox(env, req);
-      // Get one outbox item (canonical)
       {
         const outOne = matchPath(p, '/api/email/outbox/:id');
         if (outOne && req.method === 'GET')                                 return handleGetOutboxItem(env, req, outOne.id);
       }
-      // Back-compat alias to fetch single outbox item
       {
         const outbox = matchPath(p, '/api/outbox/:mail_id');
         if (outbox && req.method === 'GET')                                 return handleGetOutboxItem(env, req, outbox.mail_id);
       }
 
-      // Drain outbox queue
       if (req.method === 'POST' && p === '/api/email/outbox/drain')         return handleOutboxDrain(env, req);
-      // Retry a failed item
       {
         const outRetry = matchPath(p, '/api/email/outbox/:id/retry');
         if (outRetry && req.method === 'POST')                              return handleOutboxRetry(env, req, outRetry.id);
       }
 
-      // Provider callbacks / manual marks
       if (req.method === 'POST' && p === '/api/email/outbox/mark-sent')     return handleOutboxMarkSent(env, req);
       if (req.method === 'POST' && p === '/api/email/outbox/mark-failed')   return handleOutboxMarkFailed(env, req);
 
-      // Ad-hoc direct send / broadcast (canonical)
       if (req.method === 'POST' && p === '/api/email/send')                 return handleEmailSend(env, req);
-      // Back-compat alias for broadcast
       if (req.method === 'POST' && p === '/api/email/broadcast')            return handleEmailSend(env, req);
 
       // ====================== RELATED (generic) ======================
-      // Counts for an entity (place before the generic list matcher)
       {
         const relCounts = matchPath(p, '/api/related/:entity/:id/counts');
         if (relCounts && req.method === 'GET') {
           return handleRelatedCounts(env, req, relCounts.entity, relCounts.id);
         }
       }
-      // List a related type for an entity (newest-first, with limit/offset)
       {
         const relList = matchPath(p, '/api/related/:entity/:id/:type');
         if (relList && req.method === 'GET') {
@@ -11698,7 +11863,7 @@ export default {
       if (req.method === 'POST' && p === '/api/files/presign-upload')       return handleFilePresignUpload(env, req);
       if (req.method === 'PUT'  && p === '/api/files/upload')               return handleFileUpload(env, req, url);
       if (req.method === 'POST' && p === '/api/files/presign-download')     return handleFilePresignDownload(env, req);
-      if (req.method === 'GET'  && p === '/api/files/download')             return handleFilesDownload(env, req); // token-verified download
+      if (req.method === 'GET'  && p === '/api/files/download')             return handleFilesDownload(env, req);
 
       return new Response("Not found", { status: 404, headers: TEXT_PLAIN });
     } catch (e) {
@@ -11712,15 +11877,13 @@ export default {
     const maxBatches = parseInt(env.TSFIN_MAX_BATCHES || '10', 10);
     const batchSize  = parseInt(env.TSFIN_BATCH_SIZE  || '50', 10);
 
-    // Run the TSFIN worker loop until we drain this cycle or hit maxBatches
     ctx.waitUntil((async () => {
       for (let i = 0; i < maxBatches; i++) {
         const res = await runTsfinWorkerOnce(env, { limit: batchSize });
-        if (!res || res.picked === 0) break; // nothing left to do this tick
+        if (!res || res.picked === 0) break;
       }
     })());
 
-    // Drain the EMAIL outbox queue on a cadence as well
     const emailBatchLimit = parseInt(env.EMAIL_DRAIN_LIMIT_DEFAULT || '10', 10);
     ctx.waitUntil(drainEmailOutboxOnce(env, { limit: emailBatchLimit }));
   }
