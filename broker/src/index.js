@@ -4915,6 +4915,7 @@ async function handleListClients(env, req) {
     return withCORS(env, req, serverError("Failed to list clients"));
   }
 }
+
 async function handleCreateClient(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
@@ -4923,11 +4924,14 @@ async function handleCreateClient(env, req) {
   if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
 
   try {
-    // Create client first
+    // Strip any accidental client reference fields (immutable/minted by DB)
+    const { cli_ref, cli_num, ...clean } = data || {};
+
+    // Create client first (DB trigger will mint CLI-00001, etc)
     const clientRes = await fetch(`${env.SUPABASE_URL}/rest/v1/clients`, {
       method: "POST",
       headers: { ...sbHeaders(env), "Prefer": "return=representation" },
-      body: JSON.stringify({ ...data, created_at: new Date().toISOString() })
+      body: JSON.stringify({ ...clean, created_at: new Date().toISOString() })
     });
     if (!clientRes.ok) {
       const err = await clientRes.text();
@@ -4938,10 +4942,10 @@ async function handleCreateClient(env, req) {
 
     // Optionally seed client_settings with new validation flags if provided
     const csInput = {
-      ...(typeof data.client_settings === 'object' ? data.client_settings : {}),
+      ...(typeof clean.client_settings === 'object' ? clean.client_settings : {}),
     };
-    if ('hr_validation_required' in data) csInput.hr_validation_required = !!data.hr_validation_required;
-    if ('ts_reference_required' in data) csInput.ts_reference_required = !!data.ts_reference_required;
+    if ('hr_validation_required' in clean) csInput.hr_validation_required = !!clean.hr_validation_required;
+    if ('ts_reference_required' in clean) csInput.ts_reference_required = !!clean.ts_reference_required;
 
     let client_settings;
     if (Object.keys(csInput).length) {
@@ -4970,6 +4974,8 @@ async function handleCreateClient(env, req) {
     return withCORS(env, req, serverError("Failed to create client"));
   }
 }
+
+
 
 /**
  * @openapi
@@ -5027,8 +5033,11 @@ async function handleUpdateClient(env, req, clientId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
-  const data = await parseJSONBody(req);
-  if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
+  const raw = await parseJSONBody(req);
+  if (!raw) return withCORS(env, req, badRequest("Invalid JSON"));
+
+  // Strip any accidental CLI fields (immutable/minted by DB)
+  const { cli_ref, cli_num, ...data } = raw;
 
   try {
     // --- Load existing client + latest client_settings for comparison
@@ -5059,7 +5068,7 @@ async function handleUpdateClient(env, req, clientId) {
     const { hr_validation_required, ts_reference_required, client_settings, ...clientPatchRaw } = data;
     const clientPatch = { ...clientPatchRaw, updated_at: new Date().toISOString() };
 
-    // --- Update clients table (only if anything other than updated_at is being set)
+    // --- Update clients table
     const res = await fetch(
       `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(clientId)}`,
       {
@@ -5085,7 +5094,6 @@ async function handleUpdateClient(env, req, clientId) {
       };
       const hasBefore = !!beforeCs?.id;
 
-      // Detect change in toggles
       const beforeHr = !!(beforeCs?.hr_validation_required ?? false);
       const beforeRef = !!(beforeCs?.ts_reference_required ?? false);
       const nextHr = !!(desired.hr_validation_required ?? false);
@@ -5093,7 +5101,6 @@ async function handleUpdateClient(env, req, clientId) {
       csChanged = (beforeHr !== nextHr) || (beforeRef !== nextRef);
 
       if (hasBefore) {
-        // Patch the latest row
         const csRes = await fetch(
           `${env.SUPABASE_URL}/rest/v1/client_settings?id=eq.${encodeURIComponent(beforeCs.id)}`,
           {
@@ -5109,7 +5116,6 @@ async function handleUpdateClient(env, req, clientId) {
         const csJson = await csRes.json().catch(() => ({}));
         client_settings_updated = Array.isArray(csJson) ? csJson[0] : csJson;
       } else {
-        // Insert fresh row
         const csRes = await fetch(`${env.SUPABASE_URL}/rest/v1/client_settings`, {
           method: "POST",
           headers: { ...sbHeaders(env), "Prefer": "return=representation" },
@@ -5136,7 +5142,6 @@ async function handleUpdateClient(env, req, clientId) {
     const mileageChargeChanged =
       (data.mileage_charge_rate != null && Number(data.mileage_charge_rate) !== Number(beforeClient.mileage_charge_rate));
 
-    // If any client-level policy OR client_settings validation flags changed, mark stale & enqueue recompute
     if (policyChanged || mileageChargeChanged || csChanged) {
       await fetch(
         `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
@@ -5180,7 +5185,6 @@ async function handleUpdateClient(env, req, clientId) {
     return withCORS(env, req, serverError("Failed to update client"));
   }
 }
-
 
 
 
@@ -5862,12 +5866,16 @@ export async function handleGetCandidate(env, req, candidateId) {
   }
 }
 
+
 export async function handleUpdateCandidate(env, req, candidateId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
-  const data = await parseJSONBody(req);
-  if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
+  const raw = await parseJSONBody(req);
+  if (!raw) return withCORS(env, req, badRequest("Invalid JSON"));
+
+  // Strip any accidental CCR fields (immutable/minted by DB)
+  const { tms_ref, ccr_num, ...data } = raw;
 
   try {
     // 1) Load current candidate to detect changes
@@ -5944,7 +5952,6 @@ export async function handleUpdateCandidate(env, req, candidateId) {
     return withCORS(env, req, serverError("Failed to update candidate"));
   }
 }
-
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Files: secure download via short-lived token
