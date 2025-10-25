@@ -5805,14 +5805,17 @@ export async function handleListCandidates(env, req) {
   }
 }
 
+// ================== BROKER: handleCreateCandidate (UPDATED to strip CCR fields) ==================
 export async function handleCreateCandidate(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
-  const data = await parseJSONBody(req);
-  if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
+  const dataRaw = await parseJSONBody(req);
+  if (!dataRaw) return withCORS(env, req, badRequest("Invalid JSON"));
 
-  // mileage_pay_rate is accepted by DB; other fields are passed through
+  // Strip any accidental CCR fields (immutable/minted by DB)
+  const { tms_ref, ccr_num, ...data } = dataRaw;
+
   try {
     const res = await fetch(`${env.SUPABASE_URL}/rest/v1/candidates`, {
       method: "POST",
