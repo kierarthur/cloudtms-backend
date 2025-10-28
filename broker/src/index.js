@@ -4893,7 +4893,7 @@ async function handleUpdateSettings(env, req) {
  */
 async function handleListClients(env, req) {
   const user = await requireUser(env, req, ['admin']);
-  if (!user) return unauthorized();
+  if (!user) return withCORS(env, req, unauthorized());
 
   const url = new URL(`${env.SUPABASE_URL}/rest/v1/clients`);
   // Include all columns so ts_queries_email is returned
@@ -4915,10 +4915,9 @@ async function handleListClients(env, req) {
     return withCORS(env, req, serverError("Failed to list clients"));
   }
 }
-
 async function handleCreateClient(env, req) {
   const user = await requireUser(env, req, ['admin']);
-  if (!user) return unauthorized();
+  if (!user) return withCORS(env, req, unauthorized());
 
   const data = await parseJSONBody(req);
   if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
@@ -4993,7 +4992,7 @@ async function handleCreateClient(env, req) {
  */
 async function handleGetClient(env, req, clientId) {
   const user = await requireUser(env, req, ['admin']);
-  if (!user) return unauthorized();
+  if (!user) return withCORS(env, req, unauthorized());
 
   try {
     // Client
@@ -5031,7 +5030,7 @@ async function handleGetClient(env, req, clientId) {
 // --------------------------------------------------
 async function handleUpdateClient(env, req, clientId) {
   const user = await requireUser(env, req, ['admin']);
-  if (!user) return unauthorized();
+  if (!user) return withCORS(env, req, unauthorized());
 
   const raw = await parseJSONBody(req);
   if (!raw) return withCORS(env, req, badRequest("Invalid JSON"));
@@ -5045,15 +5044,16 @@ async function handleUpdateClient(env, req, clientId) {
       env,
       `${env.SUPABASE_URL}/rest/v1/clients` +
       `?id=eq.${encodeURIComponent(clientId)}` +
-      `&select=vat_chargeable,payment_terms_days,mileage_charge_rate,ts_queries_email`
+      `&select=id,name,invoice_address,primary_invoice_email,ap_phone,vat_chargeable,payment_terms_days,mileage_charge_rate,ts_queries_email,updated_at`
     );
-    const beforeClient = beforeClientRows?.[0] || {};
+    if (!beforeClientRows?.length) return withCORS(env, req, notFound("Client not found"));
+    const beforeClient = beforeClientRows[0];
 
     const { rows: beforeCsRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/client_settings` +
       `?client_id=eq.${encodeURIComponent(clientId)}` +
-      `&select=id,hr_validation_required,ts_reference_required,effective_from,created_at` +
+      `&select=id,hr_validation_required,ts_reference_required,effective_from,timezone_id,day_start,day_end,night_start,night_end,bh_source,bh_list,bh_feed_url,created_at,updated_at` +
       `&order=effective_from.desc,created_at.desc&limit=1`
     );
     const beforeCs = beforeCsRows?.[0] || null;
@@ -5066,23 +5066,40 @@ async function handleUpdateClient(env, req, clientId) {
     if ('ts_reference_required' in data) csInput.ts_reference_required = !!data.ts_reference_required;
 
     const { hr_validation_required, ts_reference_required, client_settings, ...clientPatchRaw } = data;
-    const clientPatch = { ...clientPatchRaw, updated_at: new Date().toISOString() };
 
-    // --- Update clients table
-    const res = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(clientId)}`,
-      {
-        method: "PATCH",
-        headers: { ...sbHeaders(env), "Prefer": "return=representation" },
-        body: JSON.stringify(clientPatch)
-      }
-    );
-    if (!res.ok) {
-      const err = await res.text();
-      return withCORS(env, req, badRequest(`Update failed: ${err}`));
+    // Remove empty strings to avoid overwriting with ''
+    const clientPatch = {};
+    for (const [k,v] of Object.entries(clientPatchRaw)) {
+      if (v === '' || v === undefined) continue;
+      clientPatch[k] = v;
     }
-    const json = await res.json().catch(() => ({}));
-    const client = Array.isArray(json) ? json[0] : json;
+
+    // --- Decide whether clients table actually needs a PATCH
+    const clientKeysToChange = Object.keys(clientPatch).filter(k => {
+      return JSON.stringify(clientPatch[k]) !== JSON.stringify(beforeClient[k]);
+    });
+
+    let client = beforeClient;
+
+    if (clientKeysToChange.length) {
+      // Only now add updated_at to avoid triggering constraints on no-op updates
+      clientPatch.updated_at = new Date().toISOString();
+
+      const res = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(clientId)}`,
+        {
+          method: "PATCH",
+          headers: { ...sbHeaders(env), "Prefer": "return=representation" },
+          body: JSON.stringify(clientPatch)
+        }
+      );
+      if (!res.ok) {
+        const err = await res.text();
+        return withCORS(env, req, badRequest(`Update failed: ${err}`));
+      }
+      const json = await res.json().catch(() => ({}));
+      client = Array.isArray(json) ? json[0] : json;
+    }
 
     // --- Upsert/patch client_settings if provided
     let csChanged = false;
@@ -5135,7 +5152,7 @@ async function handleUpdateClient(env, req, clientId) {
       }
     }
 
-    // --- Change detection for clients table
+    // --- Change detection for timesheet financials staleness
     const policyChanged =
       (data.vat_chargeable != null && !!data.vat_chargeable !== !!beforeClient.vat_chargeable) ||
       (data.payment_terms_days != null && Number(data.payment_terms_days) !== Number(beforeClient.payment_terms_days));
@@ -5185,7 +5202,6 @@ async function handleUpdateClient(env, req, clientId) {
     return withCORS(env, req, serverError("Failed to update client"));
   }
 }
-
 
 
 // ====================== CLIENT HOSPITALS ======================
