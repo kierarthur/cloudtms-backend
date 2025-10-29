@@ -7789,57 +7789,47 @@ async function handleRelatedCounts(env, req, entity, id) {
 // Supports: client_id, role, band, active_on, limit, offset, only_enabled
 // - only_enabled=true → adds disabled_at_utc=is.null to the query
 // ─────────────────────────────────────────────────────────────────────────────
+
+
 async function handleListClientRates(env, req, clientId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
   const sp         = new URL(req.url).searchParams;
-  const cid        = clientId || sp.get("client_id");        // optional: allow cross-client listing
-  const role       = sp.get("role");                         // exact match (role is NOT NULL)
-  const bandRaw    = sp.get("band");                         // exact match; treat ''/null as band IS NULL
-  const on         = sp.get("active_on");                    // YYYY-MM-DD (or ISO)
-  const onlyEnabled= sp.get("only_enabled") === 'true';      // when true, exclude disabled rows
+  const cid        = clientId || sp.get("client_id");
+  const role       = sp.get("role");
+  const bandRaw    = sp.get("band");
+  const on         = sp.get("active_on");
+  const onlyEnabled= sp.get("only_enabled") === 'true';
 
   const limit   = Math.min(Math.max(parseInt(sp.get('limit')  || '100', 10) || 100, 1), 500);
   const offset  = Math.max(parseInt(sp.get('offset') || '0',   10) || 0, 0);
 
   try {
-    // Unified defaults: one row per window (paye_*, umb_*, charge_*). No rate_type filtering.
     let q = `${env.SUPABASE_URL}/rest/v1/rates_client_defaults?select=*`;
 
     if (cid)  q += `&client_id=eq.${encodeURIComponent(cid)}`;
     if (role) q += `&role=eq.${encodeURIComponent(role)}`;
 
-    // Band filter: explicit '' or 'null' → IS NULL; otherwise exact match. If no band param, return all.
     if (bandRaw !== null) {
-      if (bandRaw === '' || String(bandRaw).toLowerCase() === 'null') {
-        q += `&band=is.null`;
-      } else {
-        q += `&band=eq.${encodeURIComponent(bandRaw)}`;
-      }
+      if (bandRaw === '' || String(bandRaw).toLowerCase() === 'null') q += `&band=is.null`;
+      else q += `&band=eq.${encodeURIComponent(bandRaw)}`;
     }
 
-    // Active-on-date filter: date_from <= on AND (date_to >= on OR date_to IS NULL)
     if (on) {
       q += `&date_from=lte.${encodeURIComponent(on)}`;
       q += `&or=(date_to.gte.${encodeURIComponent(on)},date_to.is.null)`;
     }
 
-    // Exclude disabled rows if requested
-    if (onlyEnabled) {
-      q += `&disabled_at_utc=is.null`;
-    }
+    if (onlyEnabled) q += `&disabled_at_utc=is.null`;
 
-    // Deterministic ordering; role is NOT NULL, band may be NULL
     q += `&order=date_from.desc,role.asc,band.nullsfirst&limit=${limit}&offset=${offset}`;
 
     const { rows } = await sbFetch(env, q);
 
     // Enrich with disabled_by_name (email local-part), and strip disabled_by
-    const ids = Array.from(new Set(
-      (rows || []).filter(r => r && r.disabled_by).map(r => String(r.disabled_by))
-    ));
-    let idToName = new Map();
+    const ids = Array.from(new Set((rows || []).filter(r => r && r.disabled_by).map(r => String(r.disabled_by))));
+    const idToName = new Map();
     if (ids.length) {
       const inList = encodeURIComponent(`(${ids.join(',')})`);
       const ures = await fetch(
@@ -7851,7 +7841,6 @@ async function handleListClientRates(env, req, clientId) {
         for (const u of (urows || [])) {
           const em = (u?.email || '');
           const short = (typeof em === 'string' && em.includes('@')) ? em.split('@')[0] : (u?.display_name || null);
-          if (u?.id) idToComm = idToComm; // placeholder to avoid linter warnings
           if (u?.id) idToName.set(String(u.id), short || null);
         }
       }
@@ -7871,6 +7860,8 @@ async function handleListClientRates(env, req, clientId) {
     return withCORS(env, req, serverError("Failed to fetch client default rates"));
   }
 }
+
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Rates: upsert client default (now requires rate_type; uniqueness includes it)
@@ -8091,7 +8082,7 @@ async function handleUpsertClientRate(env, req, clientId) {
 
 async function handlePatchClientDefault(env, req, rateId) {
   const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCIMITA ? withCIMITA : withCORS(env, req, unauthorized()); // ensure CORS
+  if (!user) return withCORS(env, req, unauthorized());
 
   const body = await parseJSONBody(req);
   if (!body || typeof body.disabled !== 'boolean') {
@@ -8103,7 +8094,6 @@ async function handlePatchClientDefault(env, req, rateId) {
     ? { disabled_at_utc: now, disabled_by: user.id, updated_at: now }
     : { disabled_at_utc: null, disabled_by: null,     updated_at: now };
 
-   // Apply patch and return the updated row (representation)
   const url = `${env.SUPABASE_URL}/rest/v1/rates_client_defaults?id=eq.${encodeURIComponent(rateId)}`;
   const res = await fetch(url, {
     method: 'PATCH',
@@ -8113,11 +8103,7 @@ async function handlePatchClientDefault(env, req, rateId) {
 
   if (!res.ok) {
     const msg = await res.text().catch(() => '');
-    return withCORS(
-      env,
-      req,
-      badRequest(msg || `Failed to toggle rate window (status ${res.status})`)
-    );
+    return withCORS(env, req, badRequest(msg || `Failed to toggle rate window (status ${res.status})`));
   }
 
   const rows = await res.json().catch(() => []);
@@ -8151,12 +8137,8 @@ async function handlePatchClientDefault(env, req, rateId) {
     try { await enqueueTsfinRecomputeForClient(env, updated.client_id); } catch (_) {}
   }
 
-  // Strip UUID before returning; include human-readable name
   const { disabled_by, ...rest } = updated;
-  return withCORS(
-    env, req,
-    ok({ rate: { ...rest, disabled_by_name: disabled_by_name || null } })
-  );
+  return withCORS(env, req, ok({ rate: { ...rest, disabled_by_name: disabled_by_name || null } }));
 }
 
 
