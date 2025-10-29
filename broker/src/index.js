@@ -7834,8 +7834,40 @@ async function handleListClientRates(env, req, clientId) {
     q += `&order=date_from.desc,role.asc,band.nullsfirst&limit=${limit}&offset=${offset}`;
 
     const { rows } = await sbFetch(env, q);
-    return withCORS(env, req, ok({ items: rows }));
-  } catch {
+
+    // Enrich with disabled_by_name (email local-part), and strip disabled_by
+    const ids = Array.from(new Set(
+      (rows || []).filter(r => r && r.disabled_by).map(r => String(r.disabled_by))
+    ));
+    let idToName = new Map();
+    if (ids.length) {
+      const inList = encodeURIComponent(`(${ids.join(',')})`);
+      const ures = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/tms_users?select=id,email,display_name&id=in.${inList}`,
+        { method:'GET', headers: { ...sbHeaders(env) } }
+      );
+      if (ures.ok) {
+        const urows = await ures.json().catch(()=>[]);
+        for (const u of (urows || [])) {
+          const em = (u?.email || '');
+          const short = (typeof em === 'string' && em.includes('@')) ? em.split('@')[0] : (u?.display_name || null);
+          if (u?.id) idToComm = idToComm; // placeholder to avoid linter warnings
+          if (u?.id) idToName.set(String(u.id), short || null);
+        }
+      }
+    }
+
+    const enriched = (rows || []).map(r => {
+      const out = { ...r };
+      if (out.disabled_by) {
+        out.disabled_by_name = idToName.get(String(out.disabled_by)) ?? null;
+        delete out.disabled_by; // do not leak UUID
+      }
+      return out;
+    });
+
+    return withCORS(env, req, ok({ items: enriched }));
+  } catch (e) {
     return withCORS(env, req, serverError("Failed to fetch client default rates"));
   }
 }
@@ -8056,25 +8088,23 @@ async function handleUpsertClientRate(env, req, clientId) {
 // Toggle enable/disable for a client default rate window
 // PATCH /api/rates/client-defaults/:id
 // Body: { "disabled": true|false }
+
 async function handlePatchClientDefault(env, req, rateId) {
   const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
+  if (!user) return withCIMITA ? withCIMITA : withCORS(env, req, unauthorized()); // ensure CORS
 
   const body = await parseJSONBody(req);
   if (!body || typeof body.disabled !== 'boolean') {
     return withCORS(env, req, badRequest('Field "disabled" (boolean) is required.'));
   }
 
-  // Build patch: set/clear disabled flags; always bump updated_at
   const now = nowIso();
   const patch = body.disabled
-    ? { disabled_at_ISTA: undefined, disabled_at_utc: now, disabled_by: user.id, updated_at: now } // ISTA key ignored by Supabase; keep for clarity
-    : { disabled_at_utc: null,      disabled_by: null,      updated_at: now };
+    ? { disabled_at_utc: now, disabled_by: user.id, updated_at: now }
+    : { disabled_at_utc: null, disabled_by: null,     updated_at: now };
 
-  // Apply patch and return the updated row
-  const url = `${env.SUPABASE_URL}/rest/v1/rates_client_defaults?id=eq.${encodeURIComponent(
-    rateId
-  )}`;
+   // Apply patch and return the updated row (representation)
+  const url = `${env.SUPABASE_URL}/rest/v1/rates_client_defaults?id=eq.${encodeURIComponent(rateId)}`;
   const res = await fetch(url, {
     method: 'PATCH',
     headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
@@ -8083,11 +8113,10 @@ async function handlePatchClientDefault(env, req, rateId) {
 
   if (!res.ok) {
     const msg = await res.text().catch(() => '');
-    // If uniqueness fails on re-enable, Supabase returns 409; surface the message upstream
     return withCORS(
       env,
       req,
-      badRequest(msg || `Failed to toggle rate window (status ${res.status}).`)
+      badRequest(msg || `Failed to toggle rate window (status ${res.status})`)
     );
   }
 
@@ -8095,51 +8124,38 @@ async function handlePatchClientDefault(env, req, rateId) {
   const updated = Array.isArray(rows) ? rows[0] : rows;
   if (!updated) return withCORS(env, req, serverError('Toggle succeeded but no row returned.'));
 
-  // Optionally enrich with the disabler's display name for UI convenience
+  // Derive short name from tms_users.email (left-of-@). Do NOT return UUID.
   let disabled_by_name = null;
   if (updated.disabled_by) {
     try {
       const ures = await fetch(
-        `${env.SUPABASE_URL}/rest/v1/tms_users?id=eq.${encodeURIComponent(
-          updated.disabled_by
-        )}&select=id,display_name,email&limit=1`,
-        { headers: { ...sbHeaders(env) } }
+        `${env.SUPABASE_URL}/rest/v1/tms_users?select=id,email,display_name&id=eq.${encodeURIComponent(updated.disabled_by)}`,
+        { method: 'GET', headers: { ...sbHeaders(env) } }
       );
       if (ures.ok) {
-        const u = await ures.json().then(a => (Array.isArray(a) ? a[0] : null));
-        if (u) disabled_by_name = u.display_name || u.email || null;
+        const arr = await ures.json().catch(()=>[]);
+        if (Array.isArray(arr) && arr[0]) {
+          const em = (arr[0].email || '');
+          disabled_by_name = (typeof em === 'string' && em.includes('@')) ? em.split('@')[0] : (arr[0].display_name || null);
+        }
       }
-    } catch (_) {
-      /* best-effort enrichment only */
-    }
+    } catch (_) {}
   }
 
-  // Only enqueue a TSFIN recompute if the (now-toggled) window covers "today"
-  const todayWithinWindow = (fromYmd, toYmd) => {
-    if (!fromYmd) return false;
-    const today = new Date().toISOString().slice(0, 10);
-    if (today < String(fromYmd)) return false;
-    if (toYmd && today > String(toYmd)) return false;
-    return true;
-  };
-
-  try {
-    if (updated.client_id && todayWithinWindow(updated.date_from, updated.date_to)) {
-      await enqueueTsfinRecomputeForClient(env, updated.client_id);
-    }
-  } catch (_) {
-    // Don’t fail the PATCH if enqueue has a transient issue; log if you have a logger
+  // enqueue TSFIN recompute only if window is currently effective
+  const today = new Date().toISOString().slice(0,10);
+  const fromYmd = String(updated.date_from || '');
+  const toYmd   = updated.date_to ? String(updated.date_to) : null;
+  const inWindow = fromYmd && (fromYmd <= today) && (!toYmd || today <= toYmd);
+  if (updated?.client_id && inWindow) {
+    try { await enqueueTsfinRecomputeForClient(env, updated.client_id); } catch (_) {}
   }
 
+  // Strip UUID before returning; include human-readable name
+  const { disabled_by, ...rest } = updated;
   return withCORS(
-    env,
-    req,
-    ok({
-      rate: {
-        ...updated,
-        ...(disabled_by_name ? { disabled_by_name } : {}),
-      },
-    })
+    env, req,
+    ok({ rate: { ...rest, disabled_by_name: disabled_by_name || null } })
   );
 }
 
