@@ -7783,19 +7783,23 @@ async function handleRelatedCounts(env, req, entity, id) {
   }
 }
 
-
 // ─────────────────────────────────────────────────────────────────────────────
-// Rates: list client defaults (now supports optional rate_type filter)
+// Rates: LIST CLIENT DEFAULTS (UNIFIED WINDOW)
+// GET /api/rates/client-defaults
+// Supports: client_id, role, band, active_on, limit, offset, only_enabled
+// - only_enabled=true → adds disabled_at_utc=is.null to the query
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleListClientRates(env, req, clientId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
-  const sp      = new URL(req.url).searchParams;
-  const cid     = clientId || sp.get("client_id");        // optional: allow cross-client listing
-  const role    = sp.get("role");                         // exact match (role is NOT NULL)
-  const bandRaw = sp.get("band");                         // exact match; treat ''/null as band IS NULL
-  const on      = sp.get("active_on");                    // YYYY-MM-DD (or ISO)
+  const sp         = new URL(req.url).searchParams;
+  const cid        = clientId || sp.get("client_id");        // optional: allow cross-client listing
+  const role       = sp.get("role");                         // exact match (role is NOT NULL)
+  const bandRaw    = sp.get("band");                         // exact match; treat ''/null as band IS NULL
+  const on         = sp.get("active_on");                    // YYYY-MM-DD (or ISO)
+  const onlyEnabled= sp.get("only_enabled") === 'true';      // when true, exclude disabled rows
+
   const limit   = Math.min(Math.max(parseInt(sp.get('limit')  || '100', 10) || 100, 1), 500);
   const offset  = Math.max(parseInt(sp.get('offset') || '0',   10) || 0, 0);
 
@@ -7808,7 +7812,7 @@ async function handleListClientRates(env, req, clientId) {
 
     // Band filter: explicit '' or 'null' → IS NULL; otherwise exact match. If no band param, return all.
     if (bandRaw !== null) {
-      if (bandRaw === '' || bandRaw.toLowerCase() === 'null') {
+      if (bandRaw === '' || String(bandRaw).toLowerCase() === 'null') {
         q += `&band=is.null`;
       } else {
         q += `&band=eq.${encodeURIComponent(bandRaw)}`;
@@ -7821,6 +7825,11 @@ async function handleListClientRates(env, req, clientId) {
       q += `&or=(date_to.gte.${encodeURIComponent(on)},date_to.is.null)`;
     }
 
+    // Exclude disabled rows if requested
+    if (onlyEnabled) {
+      q += `&disabled_at_utc=is.null`;
+    }
+
     // Deterministic ordering; role is NOT NULL, band may be NULL
     q += `&order=date_from.desc,role.asc,band.nullsfirst&limit=${limit}&offset=${offset}`;
 
@@ -7830,7 +7839,6 @@ async function handleListClientRates(env, req, clientId) {
     return withCORS(env, req, serverError("Failed to fetch client default rates"));
   }
 }
-
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Rates: upsert client default (now requires rate_type; uniqueness includes it)
@@ -7848,6 +7856,16 @@ async function handleListClientRates(env, req, clientId) {
 // - If a later window exists and new.date_to is null or overlaps, clamp new.date_to to (nextStart−1)
 // - Unique key: (client_id, role, band|null, date_from)
 // - Enqueue TSFIN recompute for current, unlocked rows for this client (all pay methods)
+// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Rates: CLIENT DEFAULTS (UNIFIED WINDOW) UPSERT
+// POST /api/rates/client-defaults
+// - Unified payload: one row holds 5×charge + 5×PAYE + 5×Umbrella
+// - No rate_type in API
+// - Insert with start N: truncate incumbent (enabled-only) to N−1
+// - If a later (enabled) window exists and new.date_to is null/overlaps, clamp new.date_to to (nextStart−1)
+// - Unique key: (client_id, role, band|null, date_from) — DB enforces only for enabled rows
+// - Enqueue TSFIN recompute **only if today is within [date_from, date_to] inclusive**
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleUpsertClientRate(env, req, clientId) {
   const user = await requireUser(env, req, ['admin']);
@@ -7898,14 +7916,35 @@ async function handleUpsertClientRate(env, req, clientId) {
   // Helper: encode "(band is null)" vs "band = value"
   const bandFilter = (b) => (b == null ? 'band=is.null' : `band=eq.${encodeURIComponent(b)}`);
 
+  // Helper: YMD day before
+  function dayBeforeYmd(ymd) {
+    if (!ymd) return null;
+    const d = new Date(`${ymd}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - 1);
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${dd}`;
+  }
+
+  // Helper: is today within [from, to] inclusive (to may be null = open)
+  function todayWithinWindow(fromYmd, toYmd) {
+    if (!fromYmd) return false;
+    const today = new Date().toISOString().slice(0, 10);
+    if (today < String(fromYmd)) return false;
+    if (toYmd && today > String(toYmd)) return false;
+    return true;
+  }
+
   try {
-    // 0) UPDATE path? (exact unique key exists) -> PATCH that row, skip truncation logic
+    // 0) UPDATE path? (exact unique key exists among ENABLED rows)
     {
       let q = `${env.SUPABASE_URL}/rest/v1/rates_client_defaults` +
               `?client_id=eq.${encodeURIComponent(client_id)}` +
               `&role=eq.${encodeURIComponent(role)}` +
               `&${bandFilter(band)}` +
               `&date_from=eq.${encodeURIComponent(dateFrom)}` +
+              `&disabled_at_utc=is.null` +                 // ← ignore disabled rows
               `&select=id`;
       const { rows: exactRows } = await sbFetch(env, q);
       if (Array.isArray(exactRows) && exactRows.length === 1) {
@@ -7921,14 +7960,16 @@ async function handleUpsertClientRate(env, req, clientId) {
         const json = await res.json().catch(() => ({}));
         const result = Array.isArray(json) ? json[0] : json;
 
-        // Enqueue recompute for all current, unlocked rows for this client (both pay methods)
-        await enqueueTsfinRecomputeForClient(env, client_id);
+        // Enqueue recompute ONLY if window is currently effective (inclusive)
+        if (todayWithinWindow(rec.date_from, rec.date_to)) {
+          await enqueueTsfinRecomputeForClient(env, client_id);
+        }
 
         return withCORS(env, req, ok({ rate: result }));
       }
     }
 
-    // 1) INSERT path — ensure rollover behavior & no overlaps
+    // 1) INSERT path — rollover behavior & no overlaps (consider ENABLED rows only)
     // 1a) Find incumbent window (same category) active at new start N = dateFrom
     {
       let qInc = `${env.SUPABASE_URL}/rest/v1/rates_client_defaults` +
@@ -7937,6 +7978,7 @@ async function handleUpsertClientRate(env, req, clientId) {
                  `&${bandFilter(band)}` +
                  `&date_from=lte.${encodeURIComponent(dateFrom)}` +
                  `&or=(date_to.gte.${encodeURIComponent(dateFrom)},date_to.is.null)` +
+                 `&disabled_at_utc=is.null` +               // ← ignore disabled rows
                  `&select=id,date_from,date_to` +
                  `&order=date_from.desc&limit=2`;
       const { rows: incumbents } = await sbFetch(env, qInc);
@@ -7965,13 +8007,14 @@ async function handleUpsertClientRate(env, req, clientId) {
       }
     }
 
-    // 1b) If a later window exists, clamp new.date_to to the day before the next start to avoid overlap
+    // 1b) If a later ENABLED window exists, clamp new.date_to to the day before the next start
     {
       let qNext = `${env.SUPABASE_URL}/rest/v1/rates_client_defaults` +
                   `?client_id=eq.${encodeURIComponent(client_id)}` +
                   `&role=eq.${encodeURIComponent(role)}` +
                   `&${bandFilter(band)}` +
                   `&date_from=gt.${encodeURIComponent(dateFrom)}` +
+                  `&disabled_at_utc=is.null` +             // ← ignore disabled rows
                   `&select=date_from` +
                   `&order=date_from.asc&limit=1`;
       const { rows: nexts } = await sbFetch(env, qNext);
@@ -7998,26 +8041,108 @@ async function handleUpsertClientRate(env, req, clientId) {
       const json = await res.json().catch(() => ({}));
       const result = Array.isArray(json) ? json[0] : json;
 
-      // Enqueue recompute for all current, unlocked rows for this client (both pay methods)
-      await enqueueTsfinRecomputeForClient(env, client_id);
+      // Enqueue recompute ONLY if window is currently effective (inclusive)
+      if (todayWithinWindow(rec.date_from, rec.date_to)) {
+        await enqueueTsfinRecomputeForClient(env, client_id);
+      }
 
       return withCORS(env, req, ok({ rate: result }));
     }
   } catch (e) {
     return withCORS(env, req, serverError("Failed to upsert client default window"));
   }
-
-  // Helpers (local)
-  function dayBeforeYmd(ymd) {
-    if (!ymd) return null;
-    const d = new Date(`${ymd}T00:00:00Z`);
-    d.setUTCDate(d.getUTCDate() - 1);
-    const y = d.getUTCFullYear();
-    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
-    const dd = String(d.getUTCDate()).padStart(2, '0');
-    return `${y}-${m}-${dd}`;
-  }
 }
+
+// Toggle enable/disable for a client default rate window
+// PATCH /api/rates/client-defaults/:id
+// Body: { "disabled": true|false }
+async function handlePatchClientDefault(env, req, rateId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const body = await parseJSONBody(req);
+  if (!body || typeof body.disabled !== 'boolean') {
+    return withCORS(env, req, badRequest('Field "disabled" (boolean) is required.'));
+  }
+
+  // Build patch: set/clear disabled flags; always bump updated_at
+  const now = nowIso();
+  const patch = body.disabled
+    ? { disabled_at_ISTA: undefined, disabled_at_utc: now, disabled_by: user.id, updated_at: now } // ISTA key ignored by Supabase; keep for clarity
+    : { disabled_at_utc: null,      disabled_by: null,      updated_at: now };
+
+  // Apply patch and return the updated row
+  const url = `${env.SUPABASE_URL}/rest/v1/rates_client_defaults?id=eq.${encodeURIComponent(
+    rateId
+  )}`;
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
+    body: JSON.stringify(patch),
+  });
+
+  if (!res.ok) {
+    const msg = await res.text().catch(() => '');
+    // If uniqueness fails on re-enable, Supabase returns 409; surface the message upstream
+    return withCORS(
+      env,
+      req,
+      badRequest(msg || `Failed to toggle rate window (status ${res.status}).`)
+    );
+  }
+
+  const rows = await res.json().catch(() => []);
+  const updated = Array.isArray(rows) ? rows[0] : rows;
+  if (!updated) return withCORS(env, req, serverError('Toggle succeeded but no row returned.'));
+
+  // Optionally enrich with the disabler's display name for UI convenience
+  let disabled_by_name = null;
+  if (updated.disabled_by) {
+    try {
+      const ures = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/tms_users?id=eq.${encodeURIComponent(
+          updated.disabled_by
+        )}&select=id,display_name,email&limit=1`,
+        { headers: { ...sbHeaders(env) } }
+      );
+      if (ures.ok) {
+        const u = await ures.json().then(a => (Array.isArray(a) ? a[0] : null));
+        if (u) disabled_by_name = u.display_name || u.email || null;
+      }
+    } catch (_) {
+      /* best-effort enrichment only */
+    }
+  }
+
+  // Only enqueue a TSFIN recompute if the (now-toggled) window covers "today"
+  const todayWithinWindow = (fromYmd, toYmd) => {
+    if (!fromYmd) return false;
+    const today = new Date().toISOString().slice(0, 10);
+    if (today < String(fromYmd)) return false;
+    if (toYmd && today > String(toYmd)) return false;
+    return true;
+  };
+
+  try {
+    if (updated.client_id && todayWithinWindow(updated.date_from, updated.date_to)) {
+      await enqueueTsfinRecomputeForClient(env, updated.client_id);
+    }
+  } catch (_) {
+    // Don’t fail the PATCH if enqueue has a transient issue; log if you have a logger
+  }
+
+  return withCORS(
+    env,
+    req,
+    ok({
+      rate: {
+        ...updated,
+        ...(disabled_by_name ? { disabled_by_name } : {}),
+      },
+    })
+  );
+}
+
 
 async function enqueueTsfinRecomputeForClient(env, client_id) {
   try {
@@ -8762,6 +8887,10 @@ async function fetchActiveOverride(env, { candidate_id, client_id, role, band, d
   return rows && rows[0] ? rows[0] : null;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Rates: RESOLUTION HELPER (ENABLED-ONLY)
+// fetchUnifiedDefaultWindow → now ignores disabled rows for both exact-band and band-null
+// ─────────────────────────────────────────────────────────────────────────────
 async function fetchUnifiedDefaultWindow(env, { client_id, role, band, date }) {
   // Try exact band first
   let qExact =
@@ -8771,6 +8900,7 @@ async function fetchUnifiedDefaultWindow(env, { client_id, role, band, date }) {
     (band == null ? `&band=is.null` : `&band=eq.${encodeURIComponent(band)}`) +
     `&date_from=lte.${encodeURIComponent(date)}` +
     `&or=(date_to.gte.${encodeURIComponent(date)},date_to.is.null)` +
+    `&disabled_at_utc=is.null` +                 // ← ignore disabled rows
     `&select=*` +
     `&order=date_from.desc&limit=1`;
 
@@ -8786,6 +8916,7 @@ async function fetchUnifiedDefaultWindow(env, { client_id, role, band, date }) {
       `&band=is.null` +
       `&date_from=lte.${encodeURIComponent(date)}` +
       `&or=(date_to.gte.${encodeURIComponent(date)},date_to.is.null)` +
+      `&disabled_at_utc=is.null` +               // ← ignore disabled rows
       `&select=*` +
       `&order=date_from.desc&limit=1`;
     const { rows: nullRows } = await sbFetch(env, qNull);
@@ -8794,6 +8925,7 @@ async function fetchUnifiedDefaultWindow(env, { client_id, role, band, date }) {
 
   return null;
 }
+
 
 
 
@@ -11719,10 +11851,19 @@ export default {
         if (cand && req.method === 'PUT')                                  return handleUpdateCandidate(env, req, cand.candidate_id);
       }
 
-      // Rates
-      if (req.method === 'GET' && p === '/api/rates/client-defaults')      return handleListClientRates(env, req);
-      if (req.method === 'POST' && p === '/api/rates/client-defaults')     return handleUpsertClientRate(env, req);
+      // Rates — client defaults
+if (req.method === 'GET'  && p === '/api/rates/client-defaults')  return handleListClientRates(env, req);
+if (req.method === 'POST' && p === '/api/rates/client-defaults')  return handleUpsertClientRate(env, req);
 
+// Toggle enable/disable a specific client-default window
+{
+  const r = matchPath(p, '/api/rates/client-defaults/:id');
+  if (r && req.method === 'PATCH') {
+    return handlePatchClientDefault(env, req, r.id);
+  }
+}
+
+    
       if (req.method === 'GET' && p === '/api/rates/candidate-overrides')  return handleListOverridesByCandidate(env, req);
       if (req.method === 'GET' && p === '/api/rates/client-overrides')     return handleListOverridesByClient(env, req);
       if (req.method === 'POST' && p === '/api/rates/candidate-overrides') return handleCreateOverride(env, req);
