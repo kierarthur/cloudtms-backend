@@ -521,6 +521,21 @@ function deriveUmbrellaVatSnapshots(rowEx, hintRatePct, umbrellaVatChargeable) {
   return { rate, vat, inc };
 }
 
+// /api/me handler — remove admin-only gate
+export async function handleMe(env, req) {
+  const user = await requireUser(env, req /* no role gating here */);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const me = {
+    id: user.id,
+    email: user.email || null,
+    display_name: user.display_name || user.name || user.email || null,
+    roles: Array.isArray(user.roles) ? user.roles : (user.role ? [user.role] : [])
+  };
+
+  return withCORS(env, req, ok({ user: me }));
+}
+
 // ───────────────────────────────────────────────────────────────────────────────
 // 1) PAYMENTS & REMITTANCES
 // ───────────────────────────────────────────────────────────────────────────────
@@ -11802,6 +11817,11 @@ export default {
       if (req.method === "GET" && p === "/readyz")  return handleReady(env);
       if (req.method === "GET" && p === "/version") return handleVersion();
 
+      if (url.pathname === '/api/me' && req.method === 'GET') {
+  return handleMe(env, req);
+}
+
+
       // ====================== PUBLIC (mobile) WRITE FLOW ======================
       if (req.method === "POST" && p === "/timesheets/presign")           return handlePresign(env, req);
       if (req.method === "PUT"  && p === "/upload")                        return handleUpload(env, req, url);
@@ -11814,6 +11834,8 @@ export default {
       if (req.method === "POST" && p === "/timesheets/revoke")             return handleRevoke(env, req);
       if (req.method === "POST" && p === "/timesheets/revoke-and-presign") return handleRevokeAndPresign(env, req);
 
+
+      
       // Reads
       const one = matchPath(p, "/timesheets/:booking_id");
       if (req.method === "GET" && one)                                     return handleGetOne(env, req, one.booking_id, url);
