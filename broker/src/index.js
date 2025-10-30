@@ -12055,9 +12055,15 @@ if (req.method === 'POST' && p === '/api/rates/client-defaults')  return handleU
 
       return new Response("Not found", { status: 404, headers: TEXT_PLAIN });
     } catch (e) {
-      console.error("Unhandled error:", e);
-      return serverError("Unexpected error");
-    }
+  // Log full error to Worker logs
+  console.error("Unhandled error:", e);
+
+  // Expose a useful message to the browser *with* CORS headers,
+  // so you see a JSON 500 instead of a misleading CORS failure.
+  const msg = (e && e.message) ? e.message : "Unexpected error";
+  return withCORS(env, req, serverError(msg));
+}
+
   },
 
   /// Cron handler for TSFIN queue processing + Email outbox drain
