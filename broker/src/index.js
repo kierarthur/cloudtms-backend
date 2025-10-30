@@ -7790,7 +7790,6 @@ async function handleRelatedCounts(env, req, entity, id) {
 // - only_enabled=true → adds disabled_at_utc=is.null to the query
 // ─────────────────────────────────────────────────────────────────────────────
 
-
 async function handleListClientRates(env, req, clientId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -7806,43 +7805,61 @@ async function handleListClientRates(env, req, clientId) {
   const offset  = Math.max(parseInt(sp.get('offset') || '0',   10) || 0, 0);
 
   try {
+    // Base query
     let q = `${env.SUPABASE_URL}/rest/v1/rates_client_defaults?select=*`;
 
     if (cid)  q += `&client_id=eq.${encodeURIComponent(cid)}`;
     if (role) q += `&role=eq.${encodeURIComponent(role)}`;
 
+    // Band filter: explicit '' or 'null' → IS NULL; otherwise exact match.
     if (bandRaw !== null) {
       if (bandRaw === '' || String(bandRaw).toLowerCase() === 'null') q += `&band=is.null`;
       else q += `&band=eq.${encodeURIComponent(bandRaw)}`;
     }
 
+    // Active-on-date filter
     if (on) {
       q += `&date_from=lte.${encodeURIComponent(on)}`;
       q += `&or=(date_to.gte.${encodeURIComponent(on)},date_to.is.null)`;
     }
 
+    // Enabled-only filter
     if (onlyEnabled) q += `&disabled_at_utc=is.null`;
 
+    // Order & pagination
     q += `&order=date_from.desc,role.asc,band.nullsfirst&limit=${limit}&offset=${offset}`;
 
     const { rows } = await sbFetch(env, q);
 
     // Enrich with disabled_by_name (email local-part), and strip disabled_by
-    const ids = Array.from(new Set((rows || []).filter(r => r && r.disabled_by).map(r => String(r.disabled_by))));
+    const ids = Array.from(
+      new Set(
+        (rows || [])
+          .filter(r => r && r.disabled_by)
+          .map(r => String(r.disabled_by))
+      )
+    );
+
     const idToName = new Map();
+
     if (ids.length) {
-      const inList = encodeURIComponent(`(${ids.join(',')})`);
+      // Build IN list WITHOUT URL-encoding the parentheses; PostgREST expects raw "(id1,id2,...)"
+      const inList = `(${ids.join(',')})`;
+
       const ures = await fetch(
-        `${env.SUPABASE_URL}/rest/v1/tms_users?select=id,email,display_name&id=in.${inList}`,
+        `${env.SUPABASE_URL}/rest/v1/tms_users?select=id,email&id=in.${inList}`,
         { method:'GET', headers: { ...sbHeaders(env) } }
       );
+
       if (ures.ok) {
         const urows = await ures.json().catch(()=>[]);
         for (const u of (urows || [])) {
-          const em = (u?.email || '');
-          const short = (typeof em === 'string' && em.includes('@')) ? em.split('@')[0] : (u?.display_name || null);
-          if (u?.id) idToName.set(String(u.id), short || null);
+          const em = (u && typeof u.email === 'string') ? u.email : '';
+          const short = em && em.includes('@') ? em.split('@')[0] : null;
+          if (u?.id) idToName.set(String(u.id), short);
         }
+      } else {
+        // If lookup fails, leave map empty; FE will render blank (no "unknown")
       }
     }
 
@@ -7860,7 +7877,6 @@ async function handleListClientRates(env, req, clientId) {
     return withCORS(env, req, serverError("Failed to fetch client default rates"));
   }
 }
-
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -8094,6 +8110,7 @@ async function handlePatchClientDefault(env, req, rateId) {
     ? { disabled_at_utc: now, disabled_by: user.id, updated_at: now }
     : { disabled_at_utc: null, disabled_by: null,     updated_at: now };
 
+  // Apply patch and return the updated row
   const url = `${env.SUPABASE_URL}/rest/v1/rates_client_defaults?id=eq.${encodeURIComponent(rateId)}`;
   const res = await fetch(url, {
     method: 'PATCH',
@@ -8110,22 +8127,28 @@ async function handlePatchClientDefault(env, req, rateId) {
   const updated = Array.isArray(rows) ? rows[0] : rows;
   if (!updated) return withCORS(env, req, serverError('Toggle succeeded but no row returned.'));
 
-  // Derive short name from tms_users.email (left-of-@). Do NOT return UUID.
+  // Compute short name from tms_users.email (left-of-@), fallback to auth user email if needed.
   let disabled_by_name = null;
   if (updated.disabled_by) {
     try {
       const ures = await fetch(
-        `${env.SUPABASE_URL}/rest/v1/tms_users?select=id,email,display_name&id=eq.${encodeURIComponent(updated.disabled_by)}`,
+        `${env.SUPABASE_URL}/rest/v1/tms_users?select=id,email&id=eq.${encodeURIComponent(updated.disabled_by)}`,
         { method: 'GET', headers: { ...sbHeaders(env) } }
       );
       if (ures.ok) {
         const arr = await ures.json().catch(()=>[]);
         if (Array.isArray(arr) && arr[0]) {
           const em = (arr[0].email || '');
-          disabled_by_name = (typeof em === 'string' && em.includes('@')) ? em.split('@')[0] : (arr[0].display_name || null);
+          disabled_by_name = (typeof em === 'string' && em.includes('@')) ? em.split('@')[0] : null;
         }
       }
-    } catch (_) {}
+    } catch (_) {
+      // fall through to auth user fallback
+    }
+  }
+  if (!disabled_by_name) {
+    const em = (user && typeof user.email === 'string') ? user.email : '';
+    disabled_by_name = (em && em.includes('@')) ? em.split('@')[0] : null;
   }
 
   // enqueue TSFIN recompute only if window is currently effective
