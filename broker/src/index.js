@@ -4930,6 +4930,114 @@ async function handleListClients(env, req) {
     return withCORS(env, req, serverError("Failed to list clients"));
   }
 }
+
+/**
+ * @openapi
+ * /api/rates/candidate-overrides/overlap-exists:
+ *   get:
+ *     summary: Check if any candidate override overlaps a client rate window
+ *     tags: [Rates]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: client_id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: role
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: band
+ *         required: false
+ *         schema:
+ *           type: string
+ *           nullable: true
+ *         description: Use empty string to match NULL band
+ *       - in: query
+ *         name: from
+ *         required: true
+ *         schema: { type: string, format: date }
+ *         description: Client window date_from (YYYY-MM-DD)
+ *       - in: query
+ *         name: to
+ *         required: false
+ *         schema: { type: string, format: date, nullable: true }
+ *         description: Client window date_to (YYYY-MM-DD). Omit for open-ended.
+ *       - in: query
+ *         name: exclude_id
+ *         required: false
+ *         schema: { type: string, format: uuid }
+ *         description: Override id to exclude (useful when editing an existing override)
+ *     responses:
+ *       200:
+ *         description: Overlap summary
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 exists: { type: boolean }
+ *                 count:  { type: integer }
+ *                 sample_id: { type: string, nullable: true }
+ */
+export async function handleCandidateOverrideOverlapExists(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const urlObj   = new URL(req.url);
+  const enc      = (s) => encodeURIComponent(String(s ?? ''));
+  const clientId = urlObj.searchParams.get('client_id');
+  const role     = urlObj.searchParams.get('role');
+  const bandRaw  = urlObj.searchParams.get('band');       // '' (empty) means NULL band
+  const from     = urlObj.searchParams.get('from');       // YYYY-MM-DD
+  const to       = urlObj.searchParams.get('to');         // YYYY-MM-DD or null
+  const exclude  = urlObj.searchParams.get('exclude_id'); // optional
+
+  if (!clientId || !role || !from) {
+    return withCORS(env, req, badRequest('client_id, role and from are required'));
+  }
+
+  // Open-ended end bound if not supplied (use a far-future date to simplify filters)
+  const toEff = to || '9999-12-31';
+
+  // Build PostgREST query over rates_candidate_overrides with overlap logic:
+  // Overlap iff (override.date_from <= toEff) AND (override.date_to IS NULL OR override.date_to >= from)
+  // Match same (client_id, role, band|NULL). We don’t filter by rate_type — both PAYE/UMBRELLA are relevant.
+  let q =
+    `${env.SUPABASE_URL}/rest/v1/rates_candidate_overrides` +
+    `?select=id` +
+    `&client_id=eq.${enc(clientId)}` +
+    `&role=eq.${enc(role)}` +
+    `&date_from=lte.${enc(toEff)}` +
+    `&or=(date_to.is.null,date_to.gte.${enc(from)})` +
+    `&limit=1`; // fast existence check
+
+  if (bandRaw === '' || String(bandRaw).toLowerCase() === 'null') {
+    q += `&band=is.null`;
+  } else if (bandRaw != null) {
+    q += `&band=eq.${enc(bandRaw)}`;
+  } else {
+    // no band param -> accept both NULL and non-NULL? For client windows we normally know band; if truly unknown, omit.
+  }
+
+  if (exclude) {
+    q += `&id=neq.${enc(exclude)}`;
+  }
+
+  // Ask sbFetch for total via Content-Range by passing includeCount=true
+  const { rows, total } = await sbFetch(env, q, true);
+  const exists = (typeof total === 'number' ? total : (rows?.length || 0)) > 0;
+
+  return withCORS(env, req, ok({
+    exists,
+    count: typeof total === 'number' ? total : (rows?.length || 0),
+    sample_id: rows?.[0]?.id || null
+  }));
+}
+
+
 async function handleCreateClient(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -8731,69 +8839,139 @@ async function handleDeleteOverride(env, req, candidateId, clientId) {
   if (!user) return withCORS(env, req, unauthorized());
 
   const sp   = new URL(req.url).searchParams;
+
+  // Prefer explicit override id (path or ?id=)
+  const overrideId = sp.get('id') || null;
+
+  // Back-compat inputs (used only if no id is supplied)
   const cand = candidateId || sp.get("candidate_id");
   const cid  = (clientId !== undefined && clientId !== null) ? clientId : sp.get("client_id");
   const role = sp.get("role");
   const band = sp.get("band");
-  const rateTypeFilter = sp.get("rate_type"); // WHERE-side filter (optional)
-
-  if (!cand) return withCORS(env, req, badRequest("candidate_id required"));
-
-  // Guard to prevent mass-delete
-  if (!cid && !role && !band && !rateTypeFilter) {
-    return withCORS(env, req, badRequest("Provide at least one of client_id, role, band, or rate_type to target an override for delete"));
-  }
+  const rateTypeFilter = sp.get("rate_type"); // optional
 
   try {
-    let url = `${env.SUPABASE_URL}/rest/v1/rates_candidate_overrides?candidate_id=eq.${encodeURIComponent(cand)}`;
+    let targetRow = null;
 
-    if (cid !== undefined && cid !== null) {
-      if (String(cid).toLowerCase() === 'null') url += `&client_id=is.null`;
-      else url += `&client_id=eq.${encodeURIComponent(cid)}`;
-    }
-    if (role) {
-      if (String(role).toLowerCase() === 'null') url += `&role=is.null`;
-      else url += `&role=eq.${encodeURIComponent(role)}`;
-    }
-    if (band) {
-      if (String(band).toLowerCase() === 'null') url += `&band=is.null`;
-      else url += `&band=eq.${encodeURIComponent(band)}`;
-    }
-    if (rateTypeFilter) {
-      url += `&rate_type=eq.${encodeURIComponent(rateTypeFilter)}`;
-    }
-
-    const res = await fetch(url, { method: "DELETE", headers: sbHeaders(env) });
-    if (!res.ok) {
-      const err = await res.text();
-      return withCORS(env, req, badRequest(`Override delete failed: ${err}`));
-    }
-
-    // ── Enqueue recompute for affected TSFIN (current & unlocked), scoped by rate_type if available
-    try {
-      const enqRateType = rateTypeFilter ? rateTypeFilter.toUpperCase() : null;
-
-      let qTsfin = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-                   `?select=timesheet_id` +
-                   `&candidate_id=eq.${encodeURIComponent(cand)}` +
-                   `&is_current=eq.true` +
-                   `&locked_by_invoice_id=is.null`;
-      if (enqRateType) qTsfin += `&pay_method=eq.${encodeURIComponent(enqRateType)}`;
-
-      const { rows: tsfins } = await sbFetch(env, qTsfin);
-      const toEnqueue = (tsfins || []).map(r => ({ timesheet_id: r.timesheet_id, reason: 'RATE_CHANGED' }));
-      if (toEnqueue.length) {
-        await fetch(`${env.SUPABASE_URL}/rest/v1/ts_financials_outbox?on_conflict=timesheet_id,reason`, {
-          method: "POST",
-          headers: { ...sbHeaders(env), "Prefer": "resolution=ignore-duplicates" },
-          body: JSON.stringify(toEnqueue)
-        });
+    if (overrideId) {
+      // Fetch the row first (for enqueue metadata + 404 handling)
+      const qGet = `${env.SUPABASE_URL}/rest/v1/rates_candidate_overrides?select=id,candidate_id,rate_type&id=eq.${encodeURIComponent(overrideId)}&limit=1`;
+      const { rows: getRows } = await sbFetch(env, qGet);
+      if (!getRows || !getRows.length) {
+        return withCORS(env, req, notFound(`Override ${overrideId} not found`));
       }
-    } catch (_) { /* best-effort enqueue; ignore enqueue failures here */ }
+      targetRow = getRows[0];
 
-    return withCORS(env, req, ok({ ok: true }));
+      // Delete by id (single row)
+      const delUrl = `${env.SUPABASE_URL}/rest/v1/rates_candidate_overrides?id=eq.${encodeURIComponent(overrideId)}`;
+      const delRes = await fetch(delUrl, { method: "DELETE", headers: sbHeaders(env) });
+      if (!delRes.ok) {
+        const err = await delRes.text();
+        return withCORS(env, req, badRequest(`Override delete failed: ${err}`));
+      }
+    } else {
+      // Legacy path: delete via candidate + filters — must resolve to exactly ONE row
+      if (!cand) return withCORS(env, req, badRequest("candidate_id required when no override id is provided"));
+      if (!cid && !role && !band && !rateTypeFilter) {
+        return withCORS(env, req, badRequest("Provide at least one of client_id, role, band, or rate_type to target a single override for delete"));
+      }
+
+      // Build a select to find exactly one row
+      let sel = `${env.SUPABASE_URL}/rest/v1/rates_candidate_overrides?select=id,candidate_id,rate_type&candidate_id=eq.${encodeURIComponent(cand)}`;
+      if (cid !== undefined && cid !== null) {
+        if (String(cid).toLowerCase() === 'null') sel += `&client_id=is.null`;
+        else sel += `&client_id=eq.${encodeURIComponent(cid)}`;
+      }
+      if (role) {
+        if (String(role).toLowerCase() === 'null') sel += `&role=is.null`;
+        else sel += `&role=eq.${encodeURIComponent(role)}`;
+      }
+      if (band) {
+        if (String(band).toLowerCase() === 'null') sel += `&band=is.null`;
+        else sel += `&band=eq.${encodeURIComponent(band)}`;
+      }
+      if (rateTypeFilter) sel += `&rate_type=eq.${encodeURIComponent(rateTypeFilter)}`;
+
+      // Request up to 2 rows to detect ambiguity
+      sel += `&limit=2`;
+      const { rows: found } = await sbFetch(env, sel);
+      const n = (found || []).length;
+
+      if (!n) return withCORS(env, req, notFound("No matching candidate override to delete"));
+      if (n > 1) return withCORS(env, req, badRequest("Delete is ambiguous — filters match multiple overrides"));
+
+      targetRow = found[0];
+
+      // Delete that single id
+      const delUrl = `${env.SUPABASE_URL}/rest/v1/rates_candidate_overrides?id=eq.${encodeURIComponent(targetRow.id)}`;
+      const delRes = await fetch(delUrl, { method: "DELETE", headers: sbHeaders(env) });
+      if (!delRes.ok) {
+        const err = await delRes.text();
+        return withCORS(env, req, badRequest(`Override delete failed: ${err}`));
+      }
+    }
+
+    // ── Best-effort enqueue recompute for affected TSFIN (current & unlocked), scoped by pay method
+    try {
+      const enqRateType = targetRow?.rate_type ? String(targetRow.rate_type).toUpperCase() : null;
+      const enqCandId   = targetRow?.candidate_id || cand || null;
+
+      if (enqCandId) {
+        let qTsfin = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+                     `?select=timesheet_id` +
+                     `&candidate_id=eq.${encodeURIComponent(enqCandId)}` +
+                     `&is_current=eq.true` +
+                     `&locked_by_invoice_id=is.null`;
+        if (enqRateType) qTsfin += `&pay_method=eq.${encodeURIComponent(enqRateType)}`;
+
+        const { rows: tsfins } = await sbFetch(env, qTsfin);
+        const toEnqueue = (tsfins || []).map(r => ({ timesheet_id: r.timesheet_id, reason: 'RATE_CHANGED' }));
+        if (toEnqueue.length) {
+          await fetch(`${env.SUPABASE_URL}/rest/v1/ts_financials_outbox?on_conflict=timesheet_id,reason`, {
+            method: "POST",
+            headers: { ...sbHeaders(env), "Prefer": "resolution=ignore-duplicates" },
+            body: JSON.stringify(toEnqueue)
+          });
+        }
+      }
+    } catch (_) { /* best-effort enqueue; ignore failures */ }
+
+    return withCORS(env, req, ok({ ok: true, deleted: 1, id: targetRow?.id || overrideId || null }));
   } catch {
     return withCORS(env, req, serverError("Failed to delete override"));
+  }
+}
+async function handleDeleteClientDefault(env, req, id) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  if (!id) return withCORS(env, req, badRequest("id required"));
+
+  try {
+    // Optional: fetch first to confirm existence (and to return a 404 cleanly)
+    const getUrl = `${env.SUPABASE_URL}/rest/v1/rates_client_defaults?select=id,client_id,role,band,date_from,date_to&id=eq.${encodeURIComponent(id)}&limit=1`;
+    const { rows: rowsGet } = await sbFetch(env, getUrl);
+    if (!rowsGet || !rowsGet.length) {
+      return withCORS(env, req, notFound(`Client default rate ${id} not found`));
+    }
+
+    // Hard delete the window
+    const delUrl = `${env.SUPABASE_URL}/rest/v1/rates_client_defaults?id=eq.${encodeURIComponent(id)}`;
+    const delRes = await fetch(delUrl, { method: 'DELETE', headers: sbHeaders(env) });
+    if (!delRes.ok) {
+      const err = await delRes.text();
+      // 409 when FK/constraint prevents deletion
+      const isConstraint = /foreign key|constraint|violat/i.test(err || '');
+      return withCORS(env, req, isConstraint ? conflict(`Delete blocked: ${err}`) : badRequest(`Client default delete failed: ${err}`));
+    }
+
+    // (Optional) You could enqueue TSFIN recomputes for all candidates at this client/role/band,
+    // but since this is a client-default change, your existing pipelines may already refresh on next resolve.
+
+    // Return success
+    return withCORS(env, req, ok({ ok: true, deleted: 1, id }));
+  } catch (e) {
+    return withCORS(env, req, serverError("Failed to delete client default rate"));
   }
 }
 
@@ -11823,10 +12001,10 @@ export default {
       if (req.method === "GET" && p === "/readyz")  return handleReady(env);
       if (req.method === "GET" && p === "/version") return handleVersion();
 
-      if (url.pathname === '/api/me' && req.method === 'GET') {
-  return handleMe(env, req);
-}
-
+      // Me
+      if (req.method === 'GET' && p === '/api/me') {
+        return handleMe(env, req);
+      }
 
       // ====================== PUBLIC (mobile) WRITE FLOW ======================
       if (req.method === "POST" && p === "/timesheets/presign")           return handlePresign(env, req);
@@ -11840,8 +12018,6 @@ export default {
       if (req.method === "POST" && p === "/timesheets/revoke")             return handleRevoke(env, req);
       if (req.method === "POST" && p === "/timesheets/revoke-and-presign") return handleRevokeAndPresign(env, req);
 
-
-      
       // Reads
       const one = matchPath(p, "/timesheets/:booking_id");
       if (req.method === "GET" && one)                                     return handleGetOne(env, req, one.booking_id, url);
@@ -11891,6 +12067,11 @@ export default {
         if (umb && req.method === 'PUT')                                   return handleUpdateUmbrella(env, req, umb.umbrella_id);
       }
 
+      // Overlap check (must be before broader overrides matchers)
+      if (req.method === 'GET' && p === '/api/rates/candidate-overrides/overlap-exists') {
+        return handleCandidateOverrideOverlapExists(env, req);
+      }
+
       // Candidates
       if (req.method === 'GET' && p === '/api/candidates')                 return handleListCandidates(env, req);
       if (req.method === 'POST' && p === '/api/candidates')                return handleCreateCandidate(env, req);
@@ -11901,22 +12082,22 @@ export default {
       }
 
       // Rates — client defaults
-if (req.method === 'GET'  && p === '/api/rates/client-defaults')  return handleListClientRates(env, req);
-if (req.method === 'POST' && p === '/api/rates/client-defaults')  return handleUpsertClientRate(env, req);
+      if (req.method === 'GET'  && p === '/api/rates/client-defaults')     return handleListClientRates(env, req);
+      if (req.method === 'POST' && p === '/api/rates/client-defaults')     return handleUpsertClientRate(env, req);
 
-// Toggle enable/disable a specific client-default window
-{
-  const r = matchPath(p, '/api/rates/client-defaults/:id');
-  if (r && req.method === 'PATCH') {
-    return handlePatchClientDefault(env, req, r.id);
-  }
-}
+      // Toggle enable/disable a specific client-default window, and delete a window
+      {
+        const r = matchPath(p, '/api/rates/client-defaults/:id');
+        if (r && req.method === 'PATCH')  return handlePatchClientDefault(env, req, r.id);
+        if (r && req.method === 'DELETE') return handleDeleteClientDefault(env, req, r.id);
+      }
 
-    
+      // Candidate overrides
       if (req.method === 'GET' && p === '/api/rates/candidate-overrides')  return handleListOverridesByCandidate(env, req);
       if (req.method === 'GET' && p === '/api/rates/client-overrides')     return handleListOverridesByClient(env, req);
       if (req.method === 'POST' && p === '/api/rates/candidate-overrides') return handleCreateOverride(env, req);
 
+      // Resolve preview
       if (req.method === 'GET'  && p === '/api/rates/resolve-preview')     return handleResolveRate(env, req);
       if (req.method === 'POST' && p === '/api/rates/resolve-preview')     return handleResolveRate(env, req);
 
@@ -11925,6 +12106,7 @@ if (req.method === 'POST' && p === '/api/rates/client-defaults')  return handleU
         if (cov && req.method === 'PATCH')                                 return handleUpdateOverride(env, req, cov.candidate_id);
         if (cov && req.method === 'DELETE')                                return handleDeleteOverride(env, req, cov.candidate_id);
       }
+
       if (req.method === 'GET' && p === '/api/rates/candidate-overrides/by-client') {
         return handleListOverridesByClient(env, req);
       }
@@ -12083,14 +12265,14 @@ if (req.method === 'POST' && p === '/api/rates/client-defaults')  return handleU
 
       return new Response("Not found", { status: 404, headers: TEXT_PLAIN });
     } catch (e) {
-  // Log full error to Worker logs
-  console.error("Unhandled error:", e);
+      // Log full error to Worker logs
+      console.error("Unhandled error:", e);
 
-  // Expose a useful message to the browser *with* CORS headers,
-  // so you see a JSON 500 instead of a misleading CORS failure.
-  const msg = (e && e.message) ? e.message : "Unexpected error";
-  return withCORS(env, req, serverError(msg));
-}
+      // Expose a useful message to the browser *with* CORS headers,
+      // so you see a JSON 500 instead of a misleading CORS failure.
+      const msg = (e && e.message) ? e.message : "Unexpected error";
+      return withCORS(env, req, serverError(msg));
+    }
 
   },
 
