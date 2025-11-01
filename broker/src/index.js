@@ -8606,6 +8606,61 @@ async function enqueueTsfinRecomputeForCandidate(env, candidate_id, rate_type, c
   } catch (_) { /* non-fatal */ }
 }
 
+async function handleUpdateClientDefault(env, req, id) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!id)   return withCORS(env, req, badRequest('id required'));
+
+  // Parse body
+  let body = {};
+  try {
+    body = await parseJSONBody(req);
+  } catch {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  // Whitelist editable fields
+  const allowed = [
+    'client_id','role','band','date_from','date_to',
+    'charge_day','charge_night','charge_sat','charge_sun','charge_bh',
+    'paye_day','paye_night','paye_sat','paye_sun','paye_bh',
+    'umb_day','umb_night','umb_sat','umb_sun','umb_bh'
+  ];
+  const patch = {};
+  for (const k of allowed) if (k in body) patch[k] = body[k];
+
+  if (Object.keys(patch).length === 0) {
+    return withCORS(env, req, badRequest('No updatable fields supplied'));
+  }
+
+  try {
+    // Ensure row exists (optional but yields clean 404)
+    const getUrl = `${env.SUPABASE_URL}/rest/v1/rates_client_defaults?select=id&id=eq.${encodeURIComponent(id)}&limit=1`;
+    const { rows: rowsGet } = await sbFetch(env, getUrl);
+    if (!rowsGet || !rowsGet.length) {
+      return withCORS(env, req, notFound(`Client default ${id} not found`));
+    }
+
+    // Update (PostgREST PATCH is fine for PUT semantics here)
+    const updUrl = `${env.SUPABASE_URL}/rest/v1/rates_client_defaults?id=eq.${encodeURIComponent(id)}`;
+    const res = await fetch(updUrl, {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
+      body: JSON.stringify(patch)
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      // Map unique/constraint violations if needed
+      return withCORS(env, req, badRequest(`Update failed: ${err}`));
+    }
+    const json = await res.json().catch(()=> []);
+    const row  = Array.isArray(json) ? json[0] : json;
+    return withCORS(env, req, ok(row || { ok: true }));
+  } catch (e) {
+    return withCORS(env, req, serverError('Failed to update client default'));
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Overrides: UPDATE (targeting now supports rate_type in the WHERE side)
 // Enqueue: RATE_CHANGED for current, unlocked TSFIN scoped by rate_type (if given)
@@ -12081,16 +12136,17 @@ export default {
         if (cand && req.method === 'PUT')                                  return handleUpdateCandidate(env, req, cand.candidate_id);
       }
 
-      // Rates — client defaults
-      if (req.method === 'GET'  && p === '/api/rates/client-defaults')     return handleListClientRates(env, req);
-      if (req.method === 'POST' && p === '/api/rates/client-defaults')     return handleUpsertClientRate(env, req);
+     // Rates — client defaults
+if (req.method === 'GET'  && p === '/api/rates/client-defaults')     return handleListClientRates(env, req);
+if (req.method === 'POST' && p === '/api/rates/client-defaults')     return handleUpsertClientRate(env, req);
 
-      // Toggle enable/disable a specific client-default window, and delete a window
-      {
-        const r = matchPath(p, '/api/rates/client-defaults/:id');
-        if (r && req.method === 'PATCH')  return handlePatchClientDefault(env, req, r.id);
-        if (r && req.method === 'DELETE') return handleDeleteClientDefault(env, req, r.id);
-      }
+{
+  const r = matchPath(p, '/api/rates/client-defaults/:id');
+  if (r && req.method === 'PUT')     return handleUpdateClientDefault(env, req, r.id);   // NEW: full-field update
+  if (r && req.method === 'PATCH')   return handlePatchClientDefault(env, req, r.id);    // existing: enable/disable etc.
+  if (r && req.method === 'DELETE')  return handleDeleteClientDefault(env, req, r.id);   // existing delete
+}
+
 
       // Candidate overrides
       if (req.method === 'GET' && p === '/api/rates/candidate-overrides')  return handleListOverridesByCandidate(env, req);
