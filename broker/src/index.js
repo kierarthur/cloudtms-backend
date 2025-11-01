@@ -4938,14 +4938,21 @@ async function handleCreateClient(env, req) {
   if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
 
   try {
-    // Strip any accidental client reference fields (immutable/minted by DB)
-    const { cli_ref, cli_num, ...clean } = data || {};
+    // Strip minted/immutable and any non-clients-table fields (notably client_settings)
+    const {
+      cli_ref,
+      cli_num,
+      client_settings: clientSettingsInput,   // <- remove from clients insert
+      hr_validation_required,
+      ts_reference_required,
+      ...clientOnly                            // <- only columns that actually exist on clients
+    } = data || {};
 
     // Create client first (DB trigger will mint CLI-00001, etc)
     const clientRes = await fetch(`${env.SUPABASE_URL}/rest/v1/clients`, {
       method: "POST",
       headers: { ...sbHeaders(env), "Prefer": "return=representation" },
-      body: JSON.stringify({ ...clean, created_at: new Date().toISOString() })
+      body: JSON.stringify({ ...clientOnly, created_at: new Date().toISOString() })
     });
     if (!clientRes.ok) {
       const err = await clientRes.text();
@@ -4954,12 +4961,12 @@ async function handleCreateClient(env, req) {
     const clientJson = await clientRes.json().catch(() => ({}));
     const client = Array.isArray(clientJson) ? clientJson[0] : clientJson;
 
-    // Optionally seed client_settings with new validation flags if provided
+    // Optionally seed client_settings if provided
     const csInput = {
-      ...(typeof clean.client_settings === 'object' ? clean.client_settings : {}),
+      ...(typeof clientSettingsInput === 'object' ? clientSettingsInput : {}),
     };
-    if ('hr_validation_required' in clean) csInput.hr_validation_required = !!clean.hr_validation_required;
-    if ('ts_reference_required' in clean) csInput.ts_reference_required = !!clean.ts_reference_required;
+    if ('hr_validation_required' in data) csInput.hr_validation_required = !!hr_validation_required;
+    if ('ts_reference_required' in data) csInput.ts_reference_required = !!ts_reference_required;
 
     let client_settings;
     if (Object.keys(csInput).length) {
@@ -4988,7 +4995,6 @@ async function handleCreateClient(env, req) {
     return withCORS(env, req, serverError("Failed to create client"));
   }
 }
-
 
 
 /**
