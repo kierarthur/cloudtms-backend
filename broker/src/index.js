@@ -2126,190 +2126,199 @@ export async function handleSearchUmbrellas(env, req) {
 // ───────────────────────────────────────────────────────────────────────────────
 // BACKEND — UPDATED
 // handleReportPresetsList: default sort name.asc; include user join; mine first then shared.
+
 export async function handleReportPresetsList(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
-  const urlObj = new URL(req.url);
-  const q  = (k) => urlObj.searchParams.get(k);
-  const page      = Math.max(1, parseInt(q('page') || '1', 10));
-  const pageSize  = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
-  const section   = q('section');
-  const kind      = q('kind');
-  const text      = q('q');
-  const includeShared = q('include_shared') === 'true';
-  // default changed to name.asc
-  const orderBy   = (q('order_by') || 'name').toLowerCase(); // created_at|name|updated_at
-  const orderDir  = (q('order_dir') || 'asc').toLowerCase() === 'desc' ? 'desc' : 'asc';
+  try {
+    const urlObj = new URL(req.url);
+    const q  = (k) => urlObj.searchParams.get(k);
+    const page      = Math.max(1, parseInt(q('page') || '1', 10));
+    const pageSize  = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
+    const section   = q('section');
+    const kind      = q('kind');
+    const text      = q('q');
+    const includeShared = q('include_shared') === 'true';
+    const orderBy   = (q('order_by') || 'name').toLowerCase(); // created_at|name|updated_at
+    const orderDir  = (q('order_dir') || 'asc').toLowerCase() === 'desc' ? 'desc' : 'asc';
 
-  const orderAllowed = new Set(['created_at','name','updated_at']);
-  const orderExpr = `&order=${orderAllowed.has(orderBy) ? enc(orderBy) : 'name'}.${orderDir}`;
-  const pageExpr  = `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
+    const orderAllowed = new Set(['created_at','name','updated_at']);
+    const orderExpr = `&order=${orderAllowed.has(orderBy) ? enc(orderBy) : 'name'}.${orderDir}`;
+    const pageExpr  = `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
 
-  // ⬇️ include selection_json so FE can save/load selections with filters
-  const sel = `id,user_id,section,kind,name,filters_json,selection_json,is_default,is_shared,created_at,updated_at,` +
-              `user:tms_users(id,display_name,email)`;
+    // include selection_json so FE can save/load selections with filters
+    const sel = `id,user_id,section,kind,name,filters_json,selection_json,is_default,is_shared,created_at,updated_at,` +
+                `user:tms_users(id,display_name,email)`;
 
-  // 1) My presets
-  let urlMine = `${env.SUPABASE_URL}/rest/v1/report_presets` +
-    `?select=${enc(sel)}` +
-    `&user_id=eq.${enc(user.id)}`;
-  if (section) urlMine += `&section=eq.${enc(section)}`;
-  if (kind)    urlMine += `&kind=eq.${enc(kind)}`;
-  if (text)    urlMine += `&name=ilike.*${enc(text)}*`;
-  urlMine += orderExpr + pageExpr;
-
-  const { rows: mine = [] } = await sbFetch(env, urlMine);
-
-  // 2) Shared presets (not mine)
-  let shared = [];
-  if (includeShared) {
-    let urlShared = `${env.SUPABASE_URL}/rest/v1/report_presets` +
+    // 1) My presets
+    let urlMine = `${env.SUPABASE_URL}/rest/v1/report_presets` +
       `?select=${enc(sel)}` +
-      `&is_shared=eq.true` +
-      `&user_id=neq.${enc(user.id)}`;
-    if (section) urlShared += `&section=eq.${enc(section)}`;
-    if (kind)    urlShared += `&kind=eq.${enc(kind)}`;
-    if (text)    urlShared += `&name=ilike.*${enc(text)}*`;
-    urlShared += orderExpr + pageExpr;
-    const { rows } = await sbFetch(env, urlShared);
-    shared = rows || [];
+      `&user_id=eq.${enc(user.id)}`;
+    if (section) urlMine += `&section=eq.${enc(section)}`;
+    if (kind)    urlMine += `&kind=eq.${enc(kind)}`;
+    if (text)    urlMine += `&name=ilike.*${enc(text)}*`;
+    urlMine += orderExpr + pageExpr;
+
+    const { rows: mine = [] } = await sbFetch(env, urlMine);
+
+    // 2) Shared presets (not mine)
+    let shared = [];
+    if (includeShared) {
+      let urlShared = `${env.SUPABASE_URL}/rest/v1/report_presets` +
+        `?select=${enc(sel)}` +
+        `&is_shared=eq.true` +
+        `&user_id=neq.${enc(user.id)}`;
+      if (section) urlShared += `&section=eq.${enc(section)}`;
+      if (kind)    urlShared += `&kind=eq.${enc(kind)}`;
+      if (text)    urlShared += `&name=ilike.*${enc(text)}*`;
+      urlShared += orderExpr + pageExpr;
+      const { rows } = await sbFetch(env, urlShared);
+      shared = rows || [];
+    }
+
+    return withCORS(env, req, ok({
+      rows: (mine || []).concat(shared || []),
+      page, page_size: pageSize,
+      count: (mine?.length || 0) + (shared?.length || 0)
+    }));
+  } catch (err) {
+    return withCORS(env, req, serverError('Failed to list report presets'));
   }
-
-  return withCORS(env, req, ok({
-    rows: (mine || []).concat(shared || []),
-    page, page_size: pageSize,
-    count: (mine?.length || 0) + (shared?.length || 0)
-  }));
 }
-
 
 export async function handleReportPresetsCreate(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
-  let body;
-  try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+  try {
+    let body;
+    try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
 
-  const section = (body?.section || '').trim();
-  const name    = (body?.name || '').trim();
-  const filters = body?.filters || {};
-  const selection = body?.selection; // ⬅️ new (object or undefined)
-  const isDefault = !!body?.is_default;
-  const isShared  = !!body?.is_shared;
-  const kindRaw   = (body?.kind ?? 'search');
-  const kind      = String(kindRaw).trim().toLowerCase();
+    const section = (body?.section || '').trim();
+    const name    = (body?.name || '').trim();
+    const filters = body?.filters || {};
+    const selection = body?.selection; // new (object or undefined)
+    const isDefault = !!body?.is_default;
+    const isShared  = !!body?.is_shared;
+    const kindRaw   = (body?.kind ?? 'search');
+    const kind      = String(kindRaw).trim().toLowerCase();
 
-  const KIND_ALLOWED = new Set(['search','report','dashboard']);
+    const KIND_ALLOWED = new Set(['search','report','dashboard']);
 
-  if (!section) return withCORS(env, req, badRequest('section is required'));
-  if (!name)    return withCORS(env, req, badRequest('name is required'));
-  if (typeof filters !== 'object') return withCORS(env, req, badRequest('filters must be an object'));
-  if (!KIND_ALLOWED.has(kind))     return withCORS(env, req, badRequest('kind must be one of search|report|dashboard'));
+    if (!section) return withCORS(env, req, badRequest('section is required'));
+    if (!name)    return withCORS(env, req, badRequest('name is required'));
+    if (typeof filters !== 'object') return withCORS(env, req, badRequest('filters must be an object'));
+    if (!KIND_ALLOWED.has(kind))     return withCORS(env, req, badRequest('kind must be one of search|report|dashboard'));
 
-  // If setting as default, clear any previous defaults for this user + section + kind
-  if (isDefault) {
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/report_presets` +
-      `?user_id=eq.${enc(user.id)}` +
-      `&section=eq.${enc(section)}` +
-      `&kind=eq.${enc(kind)}` +
-      `&is_default=eq.true`,
-      { method: 'PATCH', headers: { ...sbHeaders(env), Prefer: 'return=minimal' }, body: JSON.stringify({ is_default: false }) }
-    );
-  }
-
-  const payload = {
-    user_id: user.id,
-    section,
-    kind,
-    name,
-    filters_json: filters,
-    // ⬇️ persist selection if provided
-    ...(typeof selection === 'object' ? { selection_json: selection } : {}),
-    is_default: isDefault,
-    is_shared: isShared
-  };
-
-  const { rows } = await sbFetch(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/report_presets`,
-    true, // representation
-    {
-      method: 'POST',
-      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-      body: JSON.stringify(payload)
+    // If setting as default, clear any previous defaults for this user + section + kind
+    if (isDefault) {
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/report_presets` +
+        `?user_id=eq.${enc(user.id)}` +
+        `&section=eq.${enc(section)}` +
+        `&kind=eq.${enc(kind)}` +
+        `&is_default=eq.true`,
+        { method: 'PATCH', headers: { ...sbHeaders(env), Prefer: 'return=minimal' }, body: JSON.stringify({ is_default: false }) }
+      );
     }
-  );
 
-  return withCORS(env, req, ok({ row: rows?.[0] || null }));
+    const payload = {
+      user_id: user.id,
+      section,
+      kind,
+      name,
+      filters_json: filters,
+      ...(typeof selection === 'object' ? { selection_json: selection } : {}),
+      is_default: isDefault,
+      is_shared: isShared
+    };
+
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/report_presets`,
+      true, // representation
+      {
+        method: 'POST',
+        headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+        body: JSON.stringify(payload)
+      }
+    );
+
+    return withCORS(env, req, ok({ row: rows?.[0] || null }));
+  } catch (err) {
+    return withCORS(env, req, serverError('Failed to create report preset'));
+  }
 }
-
 export async function handleReportPresetsUpdate(env, req, routeId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
-  const urlObj  = new URL(req.url);
-  const qsId    = urlObj.searchParams.get('id'); // optional ?id=...
-  let body;
-  try { body = await parseJSONBody(req); } catch { body = {}; }
+  try {
+    const urlObj  = new URL(req.url);
+    const qsId    = urlObj.searchParams.get('id'); // optional ?id=...
+    let body;
+    try { body = await parseJSONBody(req); } catch { body = {}; }
 
-  // Prefer route param, then query, then body
-  const id = routeId || qsId || body?.id;
-  if (!id) return withCORS(env, req, badRequest('id is required'));
+    // Prefer route param, then query, then body
+    const id = routeId || qsId || body?.id;
+    if (!id) return withCORS(env, req, badRequest('id is required'));
 
-  // Fetch to validate ownership and obtain existing section/kind
-  const { rows: existingRows } = await sbFetch(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/report_presets?select=id,user_id,section,kind,is_default&id=eq.${enc(id)}`
-  );
-  const existing = existingRows?.[0];
-  if (!existing) return withCORS(env, req, notFound('Preset not found'));
-  if (existing.user_id !== user.id) return withCORS(env, req, unauthorized());
-
-  const KIND_ALLOWED = new Set(['search','report','dashboard']);
-
-  const patch = {};
-  if (typeof body.name === 'string')    patch.name = body.name.trim();
-  if (typeof body.section === 'string') patch.section = body.section.trim();
-  if (body.filters && typeof body.filters === 'object') patch.filters_json = body.filters;
-  // ⬇️ allow updating/clearing selection
-  if ('selection' in body) {
-    if (body.selection === null) patch.selection_json = null;
-    else if (typeof body.selection === 'object') patch.selection_json = body.selection;
-    else return withCORS(env, req, badRequest('selection must be an object or null'));
-  }
-  if (typeof body.is_shared === 'boolean')  patch.is_shared = body.is_shared;
-  if (typeof body.is_default === 'boolean') patch.is_default = body.is_default;
-  if (typeof body.kind === 'string') {
-    const k = body.kind.trim().toLowerCase();
-    if (!KIND_ALLOWED.has(k)) return withCORS(env, req, badRequest('kind must be one of search|report|dashboard'));
-    patch.kind = k;
-  }
-
-  // If becoming default, clear others for (user, section, kind)
-  if (patch.is_default === true) {
-    const sectionEff = patch.section || existing.section;
-    const kindEff    = patch.kind    || existing.kind;
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/report_presets` +
-      `?user_id=eq.${enc(user.id)}` +
-      `&section=eq.${enc(sectionEff)}` +
-      `&kind=eq.${enc(kindEff)}` +
-      `&is_default=eq.true` +
-      `&id=neq.${enc(id)}`,
-      { method: 'PATCH', headers: { ...sbHeaders(env), Prefer: 'return=minimal' }, body: JSON.stringify({ is_default: false }) }
+    // Fetch to validate ownership and obtain existing section/kind
+    const { rows: existingRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/report_presets?select=id,user_id,section,kind,is_default&id=eq.${enc(id)}`
     );
+    const existing = existingRows?.[0];
+    if (!existing) return withCORS(env, req, notFound('Preset not found'));
+    if (existing.user_id !== user.id) return withCORS(env, req, unauthorized());
+
+    const KIND_ALLOWED = new Set(['search','report','dashboard']);
+
+    const patch = {};
+    if (typeof body.name === 'string')    patch.name = body.name.trim();
+    if (typeof body.section === 'string') patch.section = body.section.trim();
+    if (body.filters && typeof body.filters === 'object') patch.filters_json = body.filters;
+    // allow updating/clearing selection
+    if ('selection' in body) {
+      if (body.selection === null) patch.selection_json = null;
+      else if (typeof body.selection === 'object') patch.selection_json = body.selection;
+      else return withCORS(env, req, badRequest('selection must be an object or null'));
+    }
+    if (typeof body.is_shared === 'boolean')  patch.is_shared = body.is_shared;
+    if (typeof body.is_default === 'boolean') patch.is_default = body.is_default;
+    if (typeof body.kind === 'string') {
+      const k = body.kind.trim().toLowerCase();
+      if (!KIND_ALLOWED.has(k)) return withCORS(env, req, badRequest('kind must be one of search|report|dashboard'));
+      patch.kind = k;
+    }
+
+    // If becoming default, clear others for (user, section, kind)
+    if (patch.is_default === true) {
+      const sectionEff = patch.section || existing.section;
+      const kindEff    = patch.kind    || existing.kind;
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/report_presets` +
+        `?user_id=eq.${enc(user.id)}` +
+        `&section=eq.${enc(sectionEff)}` +
+        `&kind=eq.${enc(kindEff)}` +
+        `&is_default=eq.true` +
+        `&id=neq.${enc(id)}`,
+        { method: 'PATCH', headers: { ...sbHeaders(env), Prefer: 'return=minimal' }, body: JSON.stringify({ is_default: false }) }
+      );
+    }
+
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/report_presets?id=eq.${enc(id)}`,
+      true,
+      { method: 'PATCH', headers: { ...sbHeaders(env), Prefer: 'return=representation' }, body: JSON.stringify(patch) }
+    );
+
+    return withCORS(env, req, ok({ row: rows?.[0] || null }));
+  } catch (err) {
+    return withCORS(env, req, serverError('Failed to update report preset'));
   }
-
-  const { rows } = await sbFetch(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/report_presets?id=eq.${enc(id)}`,
-    true,
-    { method: 'PATCH', headers: { ...sbHeaders(env), Prefer: 'return=representation' }, body: JSON.stringify(patch) }
-  );
-
-  return withCORS(env, req, ok({ row: rows?.[0] || null }));
 }
 
 
