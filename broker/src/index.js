@@ -4933,24 +4933,32 @@ async function handleListClients(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
-  const url = new URL(`${env.SUPABASE_URL}/rest/v1/clients`);
-  // Include all columns so ts_queries_email is returned
-  url.searchParams.set("select", "*");
-
   const params = new URL(req.url).searchParams;
-  const includeCount = params.get("include_count") === "true";
-  const limit = Math.min(parseInt(params.get("limit") || "50", 10), 200);
-  const offset = parseInt(params.get("offset") || "0", 10);
-  url.searchParams.set("limit", String(limit));
-  url.searchParams.set("offset", String(offset));
-  url.searchParams.set("order", "name.asc");
+  const includeCount = params.get('include_count') === 'true';
+
+  // Support page/page_size and legacy limit/offset
+  const pageRaw      = parseInt(params.get('page') || '1', 10);
+  const pageSizeRaw  = params.get('page_size');
+  const legacyLimit  = parseInt(params.get('limit')  || '50', 10);
+  const legacyOffset = parseInt(params.get('offset') || '0',  10);
+
+  const page     = Math.max(1, isNaN(pageRaw) ? 1 : pageRaw);
+  const pageSize = pageSizeRaw != null ? Math.max(1, Math.min(200, parseInt(pageSizeRaw, 10) || 50)) : null;
+  const limit    = pageSize != null ? pageSize : Math.max(1, Math.min(200, isNaN(legacyLimit) ? 50 : legacyLimit));
+  const offset   = pageSize != null ? (page - 1) * limit : Math.max(0, isNaN(legacyOffset) ? 0 : legacyOffset);
+
+  const url = new URL(`${env.SUPABASE_URL}/rest/v1/clients`);
+  url.searchParams.set('select', '*');      // include all columns (e.g., ts_queries_email)
+  url.searchParams.set('order',  'name.asc');
+  url.searchParams.set('limit',  String(limit));
+  url.searchParams.set('offset', String(offset));
 
   try {
     const { rows, total } = await sbFetch(env, url.toString(), includeCount);
     const resp = includeCount ? { items: rows, count: total ?? undefined } : { items: rows };
     return withCORS(env, req, ok(resp));
   } catch {
-    return withCORS(env, req, serverError("Failed to list clients"));
+    return withCORS(env, req, serverError('Failed to list clients'));
   }
 }
 
@@ -5562,17 +5570,42 @@ async function handleDeleteHospital(env, req, clientId, hospitalId) {
  *     security:
  *       - bearerAuth: []
  */
-async function handleListUmbrellas(env, req) {
+
+export async function handleListUmbrellas(env, req) {
   const user = await requireUser(env, req, ['admin']);
-  if (!user) return unauthorized();
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const params = new URL(req.url).searchParams;
+  const includeCount = params.get('include_count') === 'true';
+
+  // Prefer page/page_size; fall back to limit/offset
+  const pageRaw      = parseInt(params.get('page') || '1', 10);
+  const pageSizeRaw  = params.get('page_size');
+  const legacyLimit  = parseInt(params.get('limit')  || '50', 10);
+  const legacyOffset = parseInt(params.get('offset') || '0',  10);
+
+  const page     = Math.max(1, isNaN(pageRaw) ? 1 : pageRaw);
+  const pageSize = pageSizeRaw != null ? Math.max(1, Math.min(200, parseInt(pageSizeRaw, 10) || 50)) : null;
+  const limit    = pageSize != null ? pageSize : Math.max(1, Math.min(200, isNaN(legacyLimit) ? 50 : legacyLimit));
+  const offset   = pageSize != null ? (page - 1) * limit : Math.max(0, isNaN(legacyOffset) ? 0 : legacyOffset);
+
+  const url = new URL(`${env.SUPABASE_URL}/rest/v1/umbrellas`);
+  url.searchParams.set('select', '*');
+  url.searchParams.set('order',  'name.asc');
+  url.searchParams.set('limit',  String(limit));
+  url.searchParams.set('offset', String(offset));
 
   try {
-    const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/umbrellas?select=*`);
-    return withCORS(env, req, ok({ items: rows }));
+    const { rows, total } = await sbFetch(env, url.toString(), includeCount);
+    const resp = includeCount ? { items: rows, count: total ?? undefined } : { items: rows };
+    return withCORS(env, req, ok(resp));
   } catch {
-    return withCORS(env, req, serverError("Failed to list umbrellas"));
+    return withCORS(env, req, serverError('Failed to list umbrellas'));
   }
 }
+
+
+
 async function handleCreateUmbrella(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
@@ -5961,15 +5994,37 @@ export async function handleSearchCandidates(env, req) {
 
 export async function handleListCandidates(env, req) {
   const user = await requireUser(env, req, ['admin']);
-  if (!user) return unauthorized();
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const params = new URL(req.url).searchParams;
+  const includeCount = params.get('include_count') === 'true';
+
+  // Prefer page/page_size; fall back to limit/offset for backward compatibility
+  const pageRaw      = parseInt(params.get('page') || '1', 10);
+  const pageSizeRaw  = params.get('page_size');
+  const legacyLimit  = parseInt(params.get('limit')  || '50', 10);
+  const legacyOffset = parseInt(params.get('offset') || '0',  10);
+
+  const page     = Math.max(1, isNaN(pageRaw) ? 1 : pageRaw);
+  const pageSize = pageSizeRaw != null ? Math.max(1, Math.min(200, parseInt(pageSizeRaw, 10) || 50)) : null;
+  const limit    = pageSize != null ? pageSize : Math.max(1, Math.min(200, isNaN(legacyLimit) ? 50 : legacyLimit));
+  const offset   = pageSize != null ? (page - 1) * limit : Math.max(0, isNaN(legacyOffset) ? 0 : legacyOffset);
+
+  const url = new URL(`${env.SUPABASE_URL}/rest/v1/candidates`);
+  url.searchParams.set('select', '*');
+  url.searchParams.set('order',  'display_name.asc');
+  url.searchParams.set('limit',  String(limit));
+  url.searchParams.set('offset', String(offset));
 
   try {
-    const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/candidates?select=*`);
-    return withCORS(env, req, ok({ items: rows }));
+    const { rows, total } = await sbFetch(env, url.toString(), includeCount);
+    const resp = includeCount ? { items: rows, count: total ?? undefined } : { items: rows };
+    return withCORS(env, req, ok(resp));
   } catch {
-    return withCORS(env, req, serverError("Failed to list candidates"));
+    return withCORS(env, req, serverError('Failed to list candidates'));
   }
 }
+
 
 // ================== BROKER: handleCreateCandidate (UPDATED to strip CCR fields) ==================
 export async function handleCreateCandidate(env, req) {
