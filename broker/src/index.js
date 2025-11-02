@@ -5875,6 +5875,10 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
 // Client defaults: list with optional role/band + active_on filters,
 // and correct NULL/default semantics. Supports pagination.
 // ─────────────────────────────────────────────────────────────────────────────
+// ======================================
+// BACKEND — handleSearchCandidates (UPDATED)
+// Add pass-through support for PostgREST 'id=in.(...)' filter
+// ======================================
 export async function handleSearchCandidates(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -5887,22 +5891,25 @@ export async function handleSearchCandidates(env, req) {
   const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
   const format   = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
 
-  // ---------- Named filters (from FE) ----------
+  // Named filters
   const firstName  = q('first_name');
   const lastName   = q('last_name');
   const email      = q('email');
   const phone      = q('phone');
-  const payMethod  = q('pay_method') ? q('pay_method').toUpperCase() : null; // PAYE|UMBRELLA
-  const active     = q('active'); // 'true'|'false'|null
+  const payMethod  = q('pay_method') ? q('pay_method').toUpperCase() : null;
+  const active     = q('active');
   const createdFrom = q('created_from');
   const createdTo   = q('created_to');
 
-  // roles_any / roles_all as REPEATED params
+  // roles_any / roles_all
   let rolesAny = qa('roles_any').filter(Boolean).map(s => s.trim()).filter(Boolean);
   let rolesAll = qa('roles_all').filter(Boolean).map(s => s.trim()).filter(Boolean);
 
-  // ---------- Back-compat: JSON-in-q supporting roles + free-text ----------
-  const rawQ = q('q'); // {"roles_any":["RMN","HCA"], "roles_all":["RMN"], "text":"ann"}
+  // ids via PostgREST, e.g. id=in.(uuid1,uuid2,...)
+  const idInExpr = q('id'); // we expect 'in.(...)' here, passed through from FE
+
+  // Back-compat JSON-in-q
+  const rawQ = q('q');
   let text = null;
   if (rawQ) {
     try {
@@ -5921,11 +5928,9 @@ export async function handleSearchCandidates(env, req) {
     }
   }
 
-  // De-dup + normalise role codes
   rolesAny = Array.from(new Set(rolesAny.map(s => s.toUpperCase())));
   rolesAll = Array.from(new Set(rolesAll.map(s => s.toUpperCase())));
 
-  // ---------- Build PostgREST URL ----------
   let url =
     `${env.SUPABASE_URL}/rest/v1/candidates` +
     `?select=id,display_name,first_name,last_name,email,phone,pay_method,active,created_at` +
@@ -5933,31 +5938,33 @@ export async function handleSearchCandidates(env, req) {
     `&limit=${pageSize}&offset=${(page - 1) * pageSize}`;
 
   if (text) url += `&display_name=ilike.*${enc(text)}*`;
-
   if (firstName) url += `&first_name=ilike.*${enc(firstName)}*`;
   if (lastName)  url += `&last_name=ilike.*${enc(lastName)}*`;
   if (email)     url += `&email=ilike.*${enc(email)}*`;
   if (phone)     url += `&phone=ilike.*${enc(phone)}*`;
-
-  if (payMethod)    url += `&pay_method=eq.${enc(payMethod)}`;   // PAYE|UMBRELLA
+  if (payMethod)    url += `&pay_method=eq.${enc(payMethod)}`;
   if (active === 'true')  url += `&active=eq.true`;
   if (active === 'false') url += `&active=eq.false`;
-
   if (createdFrom) url += `&created_at=gte.${enc(createdFrom)}`;
   if (createdTo)   url += `&created_at=lte.${enc(createdTo)}`;
 
-  // roles_all (AND): roles @> [{"code":"X"}] for each code
+  // ids=in.(...) passthrough
+  if (idInExpr && /^in\.\(.+\)$/.test(idInExpr)) {
+    url += `&id=${enc(idInExpr)}`;
+  }
+
+  // roles_all (AND)
   if (rolesAll.length) {
     for (const code of rolesAll) {
-      const val = JSON.stringify([{ code }]); // [{"code":"RMN"}]
+      const val = JSON.stringify([{ code }]);
       url += `&roles=cs.${enc(val)}`;
     }
   }
 
-  // roles_any (OR): or=(roles.cs.[{"code":"RMN"}],roles.cs.[{"code":"HCA"}],...)
+  // roles_any (OR)
   if (rolesAny.length) {
     const parts = rolesAny.map(code => {
-      const val = enc(JSON.stringify([{ code }])); // encode [{"code":"HCA"}]
+      const val = enc(JSON.stringify([{ code }]));
       return `roles.cs.${val}`;
     });
     url += `&or=(${parts.join(',')})`;
@@ -5967,7 +5974,6 @@ export async function handleSearchCandidates(env, req) {
   try {
     ({ rows } = await sbFetch(env, url));
   } catch (err) {
-    // Ensure CORS + structured error when backend or PostgREST fails
     return withCORS(env, req, ok({ error: String(err?.message || err), rows: [], page, page_size: pageSize, count: 0 }));
   }
 
