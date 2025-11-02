@@ -2146,7 +2146,8 @@ export async function handleReportPresetsList(env, req) {
   const orderExpr = `&order=${orderAllowed.has(orderBy) ? enc(orderBy) : 'name'}.${orderDir}`;
   const pageExpr  = `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
 
-  const sel = `id,user_id,section,kind,name,filters_json,is_default,is_shared,created_at,updated_at,` +
+  // ⬇️ include selection_json so FE can save/load selections with filters
+  const sel = `id,user_id,section,kind,name,filters_json,selection_json,is_default,is_shared,created_at,updated_at,` +
               `user:tms_users(id,display_name,email)`;
 
   // 1) My presets
@@ -2175,13 +2176,13 @@ export async function handleReportPresetsList(env, req) {
     shared = rows || [];
   }
 
-  // Mine first, then shared (each already name-ordered by orderExpr)
   return withCORS(env, req, ok({
     rows: (mine || []).concat(shared || []),
     page, page_size: pageSize,
     count: (mine?.length || 0) + (shared?.length || 0)
   }));
 }
+
 
 export async function handleReportPresetsCreate(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -2193,8 +2194,9 @@ export async function handleReportPresetsCreate(env, req) {
   const section = (body?.section || '').trim();
   const name    = (body?.name || '').trim();
   const filters = body?.filters || {};
+  const selection = body?.selection; // ⬅️ new (object or undefined)
   const isDefault = !!body?.is_default;
-  const isShared  = !!body?.is_shared; // keep false unless you genuinely want global visibility
+  const isShared  = !!body?.is_shared;
   const kindRaw   = (body?.kind ?? 'search');
   const kind      = String(kindRaw).trim().toLowerCase();
 
@@ -2217,7 +2219,18 @@ export async function handleReportPresetsCreate(env, req) {
     );
   }
 
-  // Create
+  const payload = {
+    user_id: user.id,
+    section,
+    kind,
+    name,
+    filters_json: filters,
+    // ⬇️ persist selection if provided
+    ...(typeof selection === 'object' ? { selection_json: selection } : {}),
+    is_default: isDefault,
+    is_shared: isShared
+  };
+
   const { rows } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/report_presets`,
@@ -2225,20 +2238,13 @@ export async function handleReportPresetsCreate(env, req) {
     {
       method: 'POST',
       headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-      body: JSON.stringify({
-        user_id: user.id,
-        section,
-        kind,
-        name,
-        filters_json: filters,
-        is_default: isDefault,
-        is_shared: isShared
-      })
+      body: JSON.stringify(payload)
     }
   );
 
   return withCORS(env, req, ok({ row: rows?.[0] || null }));
 }
+
 export async function handleReportPresetsUpdate(env, req, routeId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -2267,6 +2273,12 @@ export async function handleReportPresetsUpdate(env, req, routeId) {
   if (typeof body.name === 'string')    patch.name = body.name.trim();
   if (typeof body.section === 'string') patch.section = body.section.trim();
   if (body.filters && typeof body.filters === 'object') patch.filters_json = body.filters;
+  // ⬇️ allow updating/clearing selection
+  if ('selection' in body) {
+    if (body.selection === null) patch.selection_json = null;
+    else if (typeof body.selection === 'object') patch.selection_json = body.selection;
+    else return withCORS(env, req, badRequest('selection must be an object or null'));
+  }
   if (typeof body.is_shared === 'boolean')  patch.is_shared = body.is_shared;
   if (typeof body.is_default === 'boolean') patch.is_default = body.is_default;
   if (typeof body.kind === 'string') {
@@ -2299,6 +2311,7 @@ export async function handleReportPresetsUpdate(env, req, routeId) {
 
   return withCORS(env, req, ok({ row: rows?.[0] || null }));
 }
+
 
 export async function handleReportPresetsDelete(env, req, routeId) {
   const user = await requireUser(env, req, ['admin']);
