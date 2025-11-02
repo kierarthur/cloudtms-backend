@@ -5846,19 +5846,15 @@ export async function handleSearchCandidates(env, req) {
   let rolesAny = qa('roles_any').filter(Boolean).map(s => s.trim()).filter(Boolean);
   let rolesAll = qa('roles_all').filter(Boolean).map(s => s.trim()).filter(Boolean);
 
-  // ---------- Back-compat: support JSON inside q= for roles_any/roles_all and optional text ----------
-  const rawQ = q('q'); // may be JSON: {"roles_any":["RMN","HCA"], "roles_all":["RMN"], "text":"ann"}
-  let text = null;     // display_name partial or free-text
+  // ---------- Back-compat: JSON-in-q supporting roles + free-text ----------
+  const rawQ = q('q'); // {"roles_any":["RMN","HCA"], "roles_all":["RMN"], "text":"ann"}
+  let text = null;
   if (rawQ) {
     try {
       const parsed = JSON.parse(rawQ);
       if (parsed && typeof parsed === 'object') {
-        if (Array.isArray(parsed.roles_any)) {
-          rolesAny = rolesAny.concat(parsed.roles_any.filter(v => typeof v === 'string' && v.trim()).map(v => v.trim()));
-        }
-        if (Array.isArray(parsed.roles_all)) {
-          rolesAll = rolesAll.concat(parsed.roles_all.filter(v => typeof v === 'string' && v.trim()).map(v => v.trim()));
-        }
+        if (Array.isArray(parsed.roles_any)) rolesAny = rolesAny.concat(parsed.roles_any.filter(v => typeof v === 'string' && v.trim()).map(v => v.trim()));
+        if (Array.isArray(parsed.roles_all)) rolesAll = rolesAll.concat(parsed.roles_all.filter(v => typeof v === 'string' && v.trim()).map(v => v.trim()));
         if (typeof parsed.text === 'string') text = parsed.text.trim();
         else if (typeof parsed.display_name === 'string') text = parsed.display_name.trim();
         else if (typeof parsed.q === 'string') text = parsed.q.trim();
@@ -5870,7 +5866,7 @@ export async function handleSearchCandidates(env, req) {
     }
   }
 
-  // De-duplicate roles arrays after merging sources + normalise to UPPERCASE codes
+  // De-dup + normalise role codes
   rolesAny = Array.from(new Set(rolesAny.map(s => s.toUpperCase())));
   rolesAll = Array.from(new Set(rolesAll.map(s => s.toUpperCase())));
 
@@ -5881,25 +5877,21 @@ export async function handleSearchCandidates(env, req) {
     `&order=display_name.asc` +
     `&limit=${pageSize}&offset=${(page - 1) * pageSize}`;
 
-  // Free-text: by default apply to display_name; named fields (first_name etc.) are handled below
   if (text) url += `&display_name=ilike.*${enc(text)}*`;
 
-  // Named partials
   if (firstName) url += `&first_name=ilike.*${enc(firstName)}*`;
   if (lastName)  url += `&last_name=ilike.*${enc(lastName)}*`;
   if (email)     url += `&email=ilike.*${enc(email)}*`;
   if (phone)     url += `&phone=ilike.*${enc(phone)}*`;
 
-  // Exact-ish enumerations / booleans
   if (payMethod)    url += `&pay_method=eq.${enc(payMethod)}`;   // PAYE|UMBRELLA
   if (active === 'true')  url += `&active=eq.true`;
   if (active === 'false') url += `&active=eq.false`;
 
-  // Created range
   if (createdFrom) url += `&created_at=gte.${enc(createdFrom)}`;
   if (createdTo)   url += `&created_at=lte.${enc(createdTo)}`;
 
-  // roles_all (AND semantics) — repeat cs filter (roles @> '[{"code":"X"}]') for each code
+  // roles_all (AND): roles @> [{"code":"X"}] for each code
   if (rolesAll.length) {
     for (const code of rolesAll) {
       const val = JSON.stringify([{ code }]); // [{"code":"RMN"}]
@@ -5907,11 +5899,11 @@ export async function handleSearchCandidates(env, req) {
     }
   }
 
-  // roles_any (OR semantics) — or=(roles.cs.[{"code":"RMN"}],roles.cs.[{"code":"HCA"}],...)
+  // roles_any (OR): or=(roles.cs.[{"code":"RMN"}],roles.cs.[{"code":"HCA"}],...)
   if (rolesAny.length) {
     const parts = rolesAny.map(code => {
       const val = enc(JSON.stringify([{ code }])); // encode [{"code":"HCA"}]
-      return `roles=cs.${val}`;
+      return `roles.cs.${val}`;
     });
     url += `&or=(${parts.join(',')})`;
   }
