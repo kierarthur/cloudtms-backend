@@ -1774,7 +1774,13 @@ export async function handleSearchTimesheets(env, req) {
   const orderCol = orderMap[orderBy] || orderMap.week_ending_date;
   url += `&order=${enc(orderCol)}.${orderDir}&limit=${pageSize}&offset=${(page-1)*pageSize}`;
 
-  const { rows } = await sbFetch(env, url);
+  let rows = [];
+  try {
+    ({ rows } = await sbFetch(env, url));
+  } catch (err) {
+    // Ensure CORS even on failure
+    return withCORS(env, req, ok({ error: String(err?.message || err), rows: [], page, page_size: pageSize, count: 0 }));
+  }
 
   if (format === 'csv') {
     const header = ['WeekEnding','Client','PayMethod','OnHold','Paid','Invoiced','PayExVAT','ChargeExVAT','MarginExVAT'];
@@ -1880,7 +1886,12 @@ export async function handleSearchInvoices(env, req) {
 
   url += `&order=${orderAllowed.has(orderBy) ? enc(orderBy) : 'issued_at_utc'}.${orderDir}`;
 
-  const { rows } = await sbFetch(env, url);
+  let rows = [];
+  try {
+    ({ rows } = await sbFetch(env, url));
+  } catch (err) {
+    return withCORS(env, req, ok({ error: String(err?.message || err), rows: [], page, page_size: pageSize, count: 0 }));
+  }
 
   if (format === 'csv') {
     const header = ['InvoiceNo','Status','IssuedAt','DueAt','CreatedAt','SubtotalExVAT','VAT','TotalIncVAT'];
@@ -1940,6 +1951,7 @@ export async function handleSearchInvoices(env, req) {
 // ───────────────────────────────────────────────────────────────────────────────
 // SEARCH — Clients (richer filters + csv/print)
 // ───────────────────────────────────────────────────────────────────────────────
+
 export async function handleSearchClients(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -1973,7 +1985,12 @@ export async function handleSearchClients(env, req) {
   if (createdFrom) url += `&created_at=gte.${enc(createdFrom)}`;
   if (createdTo)   url += `&created_at=lte.${enc(createdTo)}`;
 
-  const { rows } = await sbFetch(env, url);
+  let rows = [];
+  try {
+    ({ rows } = await sbFetch(env, url));
+  } catch (err) {
+    return withCORS(env, req, ok({ error: String(err?.message || err), rows: [], page, page_size: pageSize, count: 0 }));
+  }
 
   if (format === 'csv') {
     const header = ['ClientId','Name','VATChargeable','PaymentTermsDays','PrimaryInvoiceEmail','APPhone','CliRef','CreatedAt'];
@@ -2016,6 +2033,7 @@ export async function handleSearchClients(env, req) {
 }
 
 
+
 // ───────────────────────────────────────────────────────────────────────────────
 // SEARCH — Umbrellas (richer filters + csv/print)
 // ───────────────────────────────────────────────────────────────────────────────
@@ -2055,7 +2073,12 @@ export async function handleSearchUmbrellas(env, req) {
   if (createdFrom) url += `&created_at=gte.${enc(createdFrom)}`;
   if (createdTo)   url += `&created_at=lte.${enc(createdTo)}`;
 
-  const { rows } = await sbFetch(env, url);
+  let rows = [];
+  try {
+    ({ rows } = await sbFetch(env, url));
+  } catch (err) {
+    return withCORS(env, req, ok({ error: String(err?.message || err), rows: [], page, page_size: pageSize, count: 0 }));
+  }
 
   if (format === 'csv') {
     const header = ['UmbrellaId','Name','Enabled','VATChargeable','Bank','SortCode','AccountNumber','CreatedAt'];
@@ -5847,9 +5870,9 @@ export async function handleSearchCandidates(env, req) {
     }
   }
 
-  // De-duplicate roles arrays after merging sources
-  rolesAny = Array.from(new Set(rolesAny));
-  rolesAll = Array.from(new Set(rolesAll));
+  // De-duplicate roles arrays after merging sources + normalise to UPPERCASE codes
+  rolesAny = Array.from(new Set(rolesAny.map(s => s.toUpperCase())));
+  rolesAll = Array.from(new Set(rolesAll.map(s => s.toUpperCase())));
 
   // ---------- Build PostgREST URL ----------
   let url =
@@ -5893,7 +5916,13 @@ export async function handleSearchCandidates(env, req) {
     url += `&or=(${parts.join(',')})`;
   }
 
-  const { rows } = await sbFetch(env, url);
+  let rows = [];
+  try {
+    ({ rows } = await sbFetch(env, url));
+  } catch (err) {
+    // Ensure CORS + structured error when backend or PostgREST fails
+    return withCORS(env, req, ok({ error: String(err?.message || err), rows: [], page, page_size: pageSize, count: 0 }));
+  }
 
   if (format === 'csv') {
     const header = ['CandidateId','DisplayName','Email','Phone','PayMethod','Active','CreatedAt'];
