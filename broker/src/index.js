@@ -1699,9 +1699,9 @@ export async function handleSearchTimesheets(env, req) {
   if (!user) return withCORS(env, req, unauthorized());
 
   const urlObj = new URL(req.url);
-  const q = (k) => urlObj.searchParams.get(k);
+  const q  = (k) => urlObj.searchParams.get(k);
   const qa = (k) => urlObj.searchParams.getAll(k); // for repeated params (e.g., status)
-  const page = Math.max(1, parseInt(q('page') || '1', 10));
+  const page     = Math.max(1, parseInt(q('page') || '1', 10));
   const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
 
   const format = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
@@ -1727,6 +1727,17 @@ export async function handleSearchTimesheets(env, req) {
   const createdFrom = q('created_from');
   const createdTo   = q('created_to');
   const statuses    = qa('status'); // repeated: status=A&status=B
+
+  // NEW: explicit-ID selection support (timesheet_ids)
+  const idInExpr = q('id');            // expect 'in.(uuid1,uuid2,...)' from FE
+  const idsRaw   = q('ids');           // optional friendlier "uuid1,uuid2,..."
+  let idFilterExpr = null;
+  if (idInExpr && /^in\.\(.+\)$/.test(idInExpr)) {
+    idFilterExpr = idInExpr;
+  } else if (idsRaw) {
+    const list = idsRaw.split(',').map(s => s.trim()).filter(Boolean);
+    if (list.length) idFilterExpr = `in.(${list.join(',')})`;
+  }
 
   const orderBy = (q('order_by') || 'week_ending_date').toLowerCase(); // week_ending_date|margin|charge|pay
   const orderDir = (q('order_dir') || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
@@ -1760,10 +1771,12 @@ export async function handleSearchTimesheets(env, req) {
   if (createdFrom) url += `&created_at=gte.${enc(createdFrom)}`;
   if (createdTo)   url += `&created_at=lte.${enc(createdTo)}`;
   if (Array.isArray(statuses) && statuses.length) {
-    // PostgREST in() — for enums, unquoted tokens are fine: in.(RECEIVED,STORED)
     const inList = statuses.map(s => String(s).toUpperCase().replace(/[(),]/g,'')).join(',');
     url += `&timesheet.status=in.(${inList})`;
   }
+
+  // NEW: explicit-ID selection applied to timesheet_id
+  if (idFilterExpr) url += `&timesheet_id=${enc(idFilterExpr)}`;
 
   const orderMap = {
     week_ending_date: 'timesheet.week_ending_date',
@@ -1778,7 +1791,6 @@ export async function handleSearchTimesheets(env, req) {
   try {
     ({ rows } = await sbFetch(env, url));
   } catch (err) {
-    // Ensure CORS even on failure
     return withCORS(env, req, ok({ error: String(err?.message || err), rows: [], page, page_size: pageSize, count: 0 }));
   }
 
@@ -1833,7 +1845,6 @@ export async function handleSearchTimesheets(env, req) {
 }
 
 
-
 // ───────────────────────────────────────────────────────────────────────────────
 // SEARCH — Invoices (richer filters + csv/print)
 // ───────────────────────────────────────────────────────────────────────────────
@@ -1844,16 +1855,27 @@ export async function handleSearchInvoices(env, req) {
   const urlObj = new URL(req.url);
   const q  = (k) => urlObj.searchParams.get(k);
   const qa = (k) => urlObj.searchParams.getAll(k);
-  const page = Math.max(1, parseInt(q('page') || '1', 10));
+  const page     = Math.max(1, parseInt(q('page') || '1', 10));
   const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
 
   const format = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
 
-  // Filters (now accepting arrays and extra ranges)
-  const statuses  = qa('status');             // repeated
-  const clientId  = q('client_id');
-  const invNo     = q('invoice_no');
-  const invQ      = q('q');                   // partial match on invoice_no
+  // NEW: explicit-ID selection support
+  const idInExpr = q('id');          // pass-through 'in.(...)' if provided
+  const idsRaw   = q('ids');         // optional "uuid1,uuid2,..."
+  let idFilterExpr = null;
+  if (idInExpr && /^in\.\(.+\)$/.test(idInExpr)) {
+    idFilterExpr = idInExpr;
+  } else if (idsRaw) {
+    const list = idsRaw.split(',').map(s => s.trim()).filter(Boolean);
+    if (list.length) idFilterExpr = `in.(${list.join(',')})`;
+  }
+
+  // Filters (accepting arrays and extra ranges)
+  const statuses   = qa('status'); // repeated
+  const clientId   = q('client_id');
+  const invNo      = q('invoice_no');
+  const invQ       = q('q');                   // partial match on invoice_no
   const issuedFrom = q('issued_from');
   const issuedTo   = q('issued_to');
   const dueFrom    = q('due_from');
@@ -1869,7 +1891,6 @@ export async function handleSearchInvoices(env, req) {
     `?select=id,invoice_no,client_id,status,issued_at_utc,due_at_utc,created_at,total_inc_vat,subtotal_ex_vat,vat_amount` +
     `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
 
-  // Apply filters
   if (Array.isArray(statuses) && statuses.length) {
     const inList = statuses.map(s => String(s).toUpperCase().replace(/[(),]/g,'')).join(',');
     url += `&status=in.(${inList})`;
@@ -1883,6 +1904,9 @@ export async function handleSearchInvoices(env, req) {
   if (dueTo)      url += `&due_at_utc=lte.${enc(dueTo)}`;
   if (createdFrom) url += `&created_at=gte.${enc(createdFrom)}`;
   if (createdTo)   url += `&created_at=lte.${enc(createdTo)}`;
+
+  // NEW: explicit-ID selection applied to invoices.id
+  if (idFilterExpr) url += `&id=${enc(idFilterExpr)}`;
 
   url += `&order=${orderAllowed.has(orderBy) ? enc(orderBy) : 'issued_at_utc'}.${orderDir}`;
 
@@ -1958,9 +1982,20 @@ export async function handleSearchClients(env, req) {
 
   const urlObj = new URL(req.url);
   const q = (k) => urlObj.searchParams.get(k);
-  const page = Math.max(1, parseInt(q('page') || '1', 10));
+  const page     = Math.max(1, parseInt(q('page') || '1', 10));
   const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
-  const format = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
+  const format   = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
+
+  // NEW: explicit-ID selection support
+  const idInExpr = q('id');    // 'in.(...)'
+  const idsRaw   = q('ids');   // 'uuid1,uuid2,...'
+  let idFilterExpr = null;
+  if (idInExpr && /^in\.\(.+\)$/.test(idInExpr)) {
+    idFilterExpr = idInExpr;
+  } else if (idsRaw) {
+    const list = idsRaw.split(',').map(s => s.trim()).filter(Boolean);
+    if (list.length) idFilterExpr = `in.(${list.join(',')})`;
+  }
 
   // Filters expanded to match FE
   const text = q('q'); // name partial
@@ -1976,14 +2011,15 @@ export async function handleSearchClients(env, req) {
             `&order=name.asc` +
             `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
 
-  if (text)        url += `&name=ilike.*${enc(text)}*`;
-  if (cliRef)      url += `&cli_ref=ilike.*${enc(cliRef)}*`;
+  if (idFilterExpr) url += `&id=${enc(idFilterExpr)}`;
+  if (text)         url += `&name=ilike.*${enc(text)}*`;
+  if (cliRef)       url += `&cli_ref=ilike.*${enc(cliRef)}*`;
   if (primaryEmail) url += `&primary_invoice_email=ilike.*${enc(primaryEmail)}*`;
-  if (apPhone)     url += `&ap_phone=ilike.*${enc(apPhone)}*`;
+  if (apPhone)      url += `&ap_phone=ilike.*${enc(apPhone)}*`;
   if (vatChargeable === 'true')  url += `&vat_chargeable=eq.true`;
   if (vatChargeable === 'false') url += `&vat_chargeable=eq.false`;
-  if (createdFrom) url += `&created_at=gte.${enc(createdFrom)}`;
-  if (createdTo)   url += `&created_at=lte.${enc(createdTo)}`;
+  if (createdFrom)  url += `&created_at=gte.${enc(createdFrom)}`;
+  if (createdTo)    url += `&created_at=lte.${enc(createdTo)}`;
 
   let rows = [];
   try {
@@ -2033,7 +2069,6 @@ export async function handleSearchClients(env, req) {
 }
 
 
-
 // ───────────────────────────────────────────────────────────────────────────────
 // SEARCH — Umbrellas (richer filters + csv/print)
 // ───────────────────────────────────────────────────────────────────────────────
@@ -2043,9 +2078,20 @@ export async function handleSearchUmbrellas(env, req) {
 
   const urlObj = new URL(req.url);
   const q = (k) => urlObj.searchParams.get(k);
-  const page = Math.max(1, parseInt(q('page') || '1', 10));
+  const page     = Math.max(1, parseInt(q('page') || '1', 10));
   const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
-  const format = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
+  const format   = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
+
+  // NEW: explicit-ID selection support
+  const idInExpr = q('id');    // 'in.(...)'
+  const idsRaw   = q('ids');   // 'uuid1,uuid2,...'
+  let idFilterExpr = null;
+  if (idInExpr && /^in\.\(.+\)$/.test(idInExpr)) {
+    idFilterExpr = idInExpr;
+  } else if (idsRaw) {
+    const list = idsRaw.split(',').map(s => s.trim()).filter(Boolean);
+    if (list.length) idFilterExpr = `in.(${list.join(',')})`;
+  }
 
   // Expanded filters to match FE
   const text         = q('q'); // name partial
@@ -2062,6 +2108,7 @@ export async function handleSearchUmbrellas(env, req) {
             `&order=name.asc` +
             `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
 
+  if (idFilterExpr) url += `&id=${enc(idFilterExpr)}`;
   if (text)      url += `&name=ilike.*${enc(text)}*`;
   if (bankName)  url += `&bank_name=ilike.*${enc(bankName)}*`;
   if (sortCode)  url += `&sort_code=ilike.*${enc(sortCode)}*`;
