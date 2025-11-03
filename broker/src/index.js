@@ -2233,7 +2233,6 @@ export async function handleReportPresetsList(env, req) {
     return withCORS(env, req, serverError('Failed to list report presets'));
   }
 }
-
 export async function handleReportPresetsCreate(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -2242,23 +2241,23 @@ export async function handleReportPresetsCreate(env, req) {
     let body;
     try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
 
-    const section = (body?.section || '').trim();
-    const name    = (body?.name || '').trim();
-    const filters = body?.filters || {};
-    const selection = body?.selection; // new (object or undefined)
+    const section   = (body?.section || '').trim();
+    const name      = (body?.name || '').trim();
+    const filters   = body?.filters || {};
+    const selection = body?.selection; // may be undefined or an object
     const isDefault = !!body?.is_default;
     const isShared  = !!body?.is_shared;
     const kindRaw   = (body?.kind ?? 'search');
     const kind      = String(kindRaw).trim().toLowerCase();
 
-    const KIND_ALLOWED = new Set(['search','report','dashboard']);
+    // ⬅️ include 'selection' kind
+    const KIND_ALLOWED = new Set(['search','report','dashboard','selection']);
 
     if (!section) return withCORS(env, req, badRequest('section is required'));
     if (!name)    return withCORS(env, req, badRequest('name is required'));
     if (typeof filters !== 'object') return withCORS(env, req, badRequest('filters must be an object'));
-    if (!KIND_ALLOWED.has(kind))     return withCORS(env, req, badRequest('kind must be one of search|report|dashboard'));
+    if (!KIND_ALLOWED.has(kind))     return withCORS(env, req, badRequest('kind must be one of search|report|dashboard|selection'));
 
-    // If setting as default, clear any previous defaults for this user + section + kind
     if (isDefault) {
       await fetch(
         `${env.SUPABASE_URL}/rest/v1/report_presets` +
@@ -2275,8 +2274,8 @@ export async function handleReportPresetsCreate(env, req) {
       section,
       kind,
       name,
-      filters_json: filters,
-      ...(typeof selection === 'object' ? { selection_json: selection } : {}),
+      filters_json: filters,                          // for searches
+      ...(typeof selection === 'object' ? { selection_json: selection } : {}), // for selections
       is_default: isDefault,
       is_shared: isShared
     };
@@ -2284,7 +2283,7 @@ export async function handleReportPresetsCreate(env, req) {
     const { rows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/report_presets`,
-      true, // representation
+      true,
       {
         method: 'POST',
         headers: { ...sbHeaders(env), Prefer: 'return=representation' },
@@ -2297,21 +2296,20 @@ export async function handleReportPresetsCreate(env, req) {
     return withCORS(env, req, serverError('Failed to create report preset'));
   }
 }
+
 export async function handleReportPresetsUpdate(env, req, routeId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
   try {
     const urlObj  = new URL(req.url);
-    const qsId    = urlObj.searchParams.get('id'); // optional ?id=...
+    const qsId    = urlObj.searchParams.get('id');
     let body;
     try { body = await parseJSONBody(req); } catch { body = {}; }
 
-    // Prefer route param, then query, then body
     const id = routeId || qsId || body?.id;
     if (!id) return withCORS(env, req, badRequest('id is required'));
 
-    // Fetch to validate ownership and obtain existing section/kind
     const { rows: existingRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/report_presets?select=id,user_id,section,kind,is_default&id=eq.${enc(id)}`
@@ -2320,27 +2318,29 @@ export async function handleReportPresetsUpdate(env, req, routeId) {
     if (!existing) return withCORS(env, req, notFound('Preset not found'));
     if (existing.user_id !== user.id) return withCORS(env, req, unauthorized());
 
-    const KIND_ALLOWED = new Set(['search','report','dashboard']);
+    // ⬅️ include 'selection' kind
+    const KIND_ALLOWED = new Set(['search','report','dashboard','selection']);
 
     const patch = {};
     if (typeof body.name === 'string')    patch.name = body.name.trim();
     if (typeof body.section === 'string') patch.section = body.section.trim();
     if (body.filters && typeof body.filters === 'object') patch.filters_json = body.filters;
+
     // allow updating/clearing selection
     if ('selection' in body) {
       if (body.selection === null) patch.selection_json = null;
       else if (typeof body.selection === 'object') patch.selection_json = body.selection;
       else return withCORS(env, req, badRequest('selection must be an object or null'));
     }
+
     if (typeof body.is_shared === 'boolean')  patch.is_shared = body.is_shared;
     if (typeof body.is_default === 'boolean') patch.is_default = body.is_default;
     if (typeof body.kind === 'string') {
       const k = body.kind.trim().toLowerCase();
-      if (!KIND_ALLOWED.has(k)) return withCORS(env, req, badRequest('kind must be one of search|report|dashboard'));
+      if (!KIND_ALLOWED.has(k)) return withCORS(env, req, badRequest('kind must be one of search|report|dashboard|selection'));
       patch.kind = k;
     }
 
-    // If becoming default, clear others for (user, section, kind)
     if (patch.is_default === true) {
       const sectionEff = patch.section || existing.section;
       const kindEff    = patch.kind    || existing.kind;
@@ -5932,11 +5932,11 @@ export async function handleSearchCandidates(env, req) {
 
   const urlObj = new URL(req.url);
   const q  = (k) => urlObj.searchParams.get(k);
-  const qa = (k) => urlObj.searchParams.getAll(k); // for repeated params e.g. roles_any
+  const qa = (k) => urlObj.searchParams.getAll(k);
 
   const page     = Math.max(1, parseInt(q('page') || '1', 10));
   const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
-  const format   = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
+  const format   = (q('format') || 'json').toLowerCase();
 
   // Named filters
   const firstName  = q('first_name');
@@ -5952,28 +5952,20 @@ export async function handleSearchCandidates(env, req) {
   let rolesAny = qa('roles_any').filter(Boolean).map(s => s.trim()).filter(Boolean);
   let rolesAll = qa('roles_all').filter(Boolean).map(s => s.trim()).filter(Boolean);
 
-  // ids via PostgREST, e.g. id=in.(uuid1,uuid2,...)
-  const idInExpr = q('id'); // we expect 'in.(...)' here, passed through from FE
-
-  // Back-compat JSON-in-q
-  const rawQ = q('q');
-  let text = null;
-  if (rawQ) {
-    try {
-      const parsed = JSON.parse(rawQ);
-      if (parsed && typeof parsed === 'object') {
-        if (Array.isArray(parsed.roles_any)) rolesAny = rolesAny.concat(parsed.roles_any.filter(v => typeof v === 'string' && v.trim()).map(v => v.trim()));
-        if (Array.isArray(parsed.roles_all)) rolesAll = rolesAll.concat(parsed.roles_all.filter(v => typeof v === 'string' && v.trim()).map(v => v.trim()));
-        if (typeof parsed.text === 'string') text = parsed.text.trim();
-        else if (typeof parsed.display_name === 'string') text = parsed.display_name.trim();
-        else if (typeof parsed.q === 'string') text = parsed.q.trim();
-      } else {
-        text = String(rawQ || '').trim();
-      }
-    } catch {
-      text = String(rawQ || '').trim();
-    }
+  // NEW: explicit-IDs support (either id=in.(...) or ids=uuid1,uuid2,...)
+  const idInExpr = q('id');              // raw 'in.(...)'
+  const idsRaw   = q('ids');             // friendly csv
+  let idFilterExpr = null;
+  if (idInExpr && /^in\.\(.+\)$/.test(idInExpr)) {
+    idFilterExpr = idInExpr;
+  } else if (idsRaw) {
+    const list = idsRaw.split(',').map(s => s.trim()).filter(Boolean);
+    if (list.length) idFilterExpr = `in.(${list.join(',')})`;
   }
+
+  // Optional simple free-text
+  const rawQ = q('q');
+  let text = rawQ ? String(rawQ || '').trim() : null;
 
   rolesAny = Array.from(new Set(rolesAny.map(s => s.toUpperCase())));
   rolesAll = Array.from(new Set(rolesAll.map(s => s.toUpperCase())));
@@ -5984,21 +5976,19 @@ export async function handleSearchCandidates(env, req) {
     `&order=display_name.asc` +
     `&limit=${pageSize}&offset=${(page - 1) * pageSize}`;
 
-  if (text) url += `&display_name=ilike.*${enc(text)}*`;
-  if (firstName) url += `&first_name=ilike.*${enc(firstName)}*`;
-  if (lastName)  url += `&last_name=ilike.*${enc(lastName)}*`;
-  if (email)     url += `&email=ilike.*${enc(email)}*`;
-  if (phone)     url += `&phone=ilike.*${enc(phone)}*`;
-  if (payMethod)    url += `&pay_method=eq.${enc(payMethod)}`;
+  if (text)       url += `&display_name=ilike.*${enc(text)}*`;
+  if (firstName)  url += `&first_name=ilike.*${enc(firstName)}*`;
+  if (lastName)   url += `&last_name=ilike.*${enc(lastName)}*`;
+  if (email)      url += `&email=ilike.*${enc(email)}*`;
+  if (phone)      url += `&phone=ilike.*${enc(phone)}*`;
+  if (payMethod)  url += `&pay_method=eq.${enc(payMethod)}`;
   if (active === 'true')  url += `&active=eq.true`;
   if (active === 'false') url += `&active=eq.false`;
   if (createdFrom) url += `&created_at=gte.${enc(createdFrom)}`;
   if (createdTo)   url += `&created_at=lte.${enc(createdTo)}`;
 
-  // ids=in.(...) passthrough
-  if (idInExpr && /^in\.\(.+\)$/.test(idInExpr)) {
-    url += `&id=${enc(idInExpr)}`;
-  }
+  // apply explicit IDs if present
+  if (idFilterExpr) url += `&id=${enc(idFilterExpr)}`;
 
   // roles_all (AND)
   if (rolesAll.length) {
