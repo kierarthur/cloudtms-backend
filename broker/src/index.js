@@ -574,6 +574,20 @@ export async function handleContractsCreate(env, req) {
   body.require_reference_to_pay = clampBool(body.require_reference_to_pay, false);
   body.require_reference_to_invoice = clampBool(body.require_reference_to_invoice, false);
 
+  // Optional per-contract bucket labels
+  const validateLabels = (obj) => {
+    if (!obj || typeof obj !== 'object') return null;
+    const keys = ['day','night','sat','sun','bh'];
+    const out = {};
+    for (const k of keys) {
+      const v = obj[k];
+      if (typeof v !== 'string' || !v.trim()) return null;
+      out[k] = v.trim();
+    }
+    return out;
+  };
+  const bucketLabels = validateLabels(body.bucket_labels_json) || null;
+
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts`, {
     method: 'POST',
     headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
@@ -589,6 +603,8 @@ export async function handleContractsCreate(env, req) {
       pay_method_snapshot: String(body.pay_method_snapshot).toUpperCase() === 'PAYE' ? 'PAYE' : 'UMBRELLA',
       rates_json: body.rates_json || {},
       std_hours_json: body.std_hours_json || null,
+      // NEW: store optional labels
+      bucket_labels_json: bucketLabels,
       default_submission_mode: (String(body.default_submission_mode||'').toUpperCase() === 'MANUAL') ? 'MANUAL' : 'ELECTRONIC',
       week_ending_weekday_snapshot: (Number(body.week_ending_weekday_snapshot) >= 0 && Number(body.week_ending_weekday_snapshot) <= 6) ? Number(body.week_ending_weekday_snapshot) : 0,
       auto_invoice: body.auto_invoice,
@@ -602,6 +618,7 @@ export async function handleContractsCreate(env, req) {
   const row = Array.isArray(json) ? json[0] : json;
   return withCORS(env, req, ok(row));
 }
+
 
 export async function handleContractsList(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -647,7 +664,6 @@ export async function handleContractsGet(env, req, contractId) {
 
   return withCORS(env, req, ok({ contract, counts, weeks: weeks || [] }));
 }
-
 export async function handleContractsUpdate(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -656,7 +672,7 @@ export async function handleContractsUpdate(env, req, contractId) {
   // Load current incl. pay_method_snapshot + candidate_id
   const current = await sbGetOne(
     env,
-    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=id,start_date,end_date,require_reference_to_pay,require_reference_to_invoice,auto_invoice,pay_method_snapshot,candidate_id`
+    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=id,start_date,end_date,require_reference_to_pay,require_reference_to_invoice,auto_invoice,pay_method_snapshot,candidate_id,bucket_labels_json`
   );
   if (!current) return withCORS(env, req, notFound('Contract not found'));
 
@@ -671,8 +687,20 @@ export async function handleContractsUpdate(env, req, contractId) {
   if ('require_reference_to_pay' in body)       patch.require_reference_to_pay = clampBool(body.require_reference_to_pay, current.require_reference_to_pay);
   if ('require_reference_to_invoice' in body)   patch.require_reference_to_invoice = clampBool(body.require_reference_to_invoice, current.require_reference_to_invoice);
 
+  // Optional: update labels
+  if ('bucket_labels_json' in body) {
+    const obj = body.bucket_labels_json;
+    const keys = ['day','night','sat','sun','bh'];
+    if (obj === null) {
+      patch.bucket_labels_json = null; // explicit clear
+    } else if (obj && typeof obj === 'object' && keys.every(k => typeof obj[k] === 'string' && obj[k].trim())) {
+      patch.bucket_labels_json = Object.fromEntries(keys.map(k => [k, obj[k].trim()]));
+    } else {
+      return withCORS(env, req, badRequest('bucket_labels_json must include day|night|sat|sun|bh as non-empty strings or be null'));
+    }
+  }
+
   if (!Object.keys(patch).length) {
-    // Still return warnings if any even when nothing to update
     const warnings = await computePayMethodWarnings(env, current);
     return withCORS(env, req, ok({ contract: current, warnings }));
   }
@@ -690,6 +718,7 @@ export async function handleContractsUpdate(env, req, contractId) {
   const warnings = await computePayMethodWarnings(env, { ...current, ...updated });
   return withCORS(env, req, ok({ contract: updated, warnings }));
 }
+
 
 // Helper: returns ['PAY_METHOD_MISMATCH'] if candidate.pay_method != pay_method_snapshot
 async function computePayMethodWarnings(env, contractRow) {
@@ -1277,7 +1306,7 @@ export async function handleContractWeekCreateExpenseSheet(env, req, weekId) {
 // ----------------------------------------------------------------------------
 
 export async function handleTimesheetsEligibilityWeekly(env, req) {
-  // Public: app supplies candidate_id, optional client_id; return OPEN weeks
+  // Public: app supplies candidate_id, optional client_id; return OPEN weeks + per-contract bucket labels
   let body; try { body = await parseJSONBody(req); } catch { body = {}; }
   const candidateId = body.candidate_id || null;
   if (!candidateId) return withCORS(env, req, badRequest('candidate_id required'));
@@ -1288,11 +1317,25 @@ export async function handleTimesheetsEligibilityWeekly(env, req) {
   if (body.client_id) url += `&client_id=eq.${enc(body.client_id)}`;
 
   const { rows } = await sbFetch(env, url);
-  return withCORS(env, req, ok(rows || []));
-}
+  const list = rows || [];
 
+  // Attach bucket labels per contract for the app UI
+  const DEFAULT_LABELS = { day: 'Day', night: 'Night', sat: 'Sat', sun: 'Sun', bh: 'BH' };
+  const contractIds = [...new Set(list.map(r => r.contract_id).filter(Boolean))];
+  let mapLabels = {};
+  if (contractIds.length) {
+    const { rows: cons } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contracts?id=in.(${contractIds.map(enc).join(',')})&select=id,bucket_labels_json`
+    );
+    mapLabels = Object.fromEntries((cons||[]).map(c => [c.id, (c.bucket_labels_json && typeof c.bucket_labels_json==='object') ? c.bucket_labels_json : DEFAULT_LABELS]));
+  }
+
+  const withLabels = list.map(r => ({ ...r, bucket_labels: mapLabels[r.contract_id] || DEFAULT_LABELS }));
+  return withCORS(env, req, ok(withLabels));
+}
 export async function handleTimesheetsPresignWeekly(env, req) {
-  // Public: presign nurse/authoriser signature uploads for a weekly slot
+  // Public: presign nurse/authoriser signature uploads for a weekly slot + return bucket labels for UI
   let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
 
   let cw = null;
@@ -1307,9 +1350,12 @@ export async function handleTimesheetsPresignWeekly(env, req) {
   }
   if (!cw) return withCORS(env, req, notFound('Weekly slot not found'));
 
-  const contract = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(cw.contract_id)}&select=*`);
+  const contract = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(cw.contract_id)}&select=id,candidate_id,bucket_labels_json`);
   if (!contract) return withCORS(env, req, notFound('Contract not found'));
   const candidateId = contract.candidate_id;
+  const DEFAULT_LABELS = { day: 'Day', night: 'Night', sat: 'Sat', sun: 'Sun', bh: 'BH' };
+  const bucketLabels = (contract.bucket_labels_json && typeof contract.bucket_labels_json === 'object')
+    ? contract.bucket_labels_json : DEFAULT_LABELS;
 
   const bookingId = makeWeeklyBookingId(candidateId, contract, cw);
   const weC = ymdCompact(cw.week_ending_date);
@@ -1317,7 +1363,7 @@ export async function handleTimesheetsPresignWeekly(env, req) {
   const nurseKey = `${base}/nurse.png`;
   const authKey  = `${base}/authoriser.png`;
 
-  // Tokens (reuse your createToken helper used by signatures) – 10MB each
+  // Tokens – 10MB each
   const nurseToken = await createToken(env, 'UPLOAD', { key: nurseKey, c: 'sign', ttlSec: 3600, maxBytes: 10*1024*1024, contentTypes: ['image/png','image/jpeg'] });
   const authToken  = await createToken(env, 'UPLOAD', { key: authKey,  c: 'sign', ttlSec: 3600, maxBytes: 10*1024*1024, contentTypes: ['image/png','image/jpeg'] });
 
@@ -1325,12 +1371,15 @@ export async function handleTimesheetsPresignWeekly(env, req) {
   return withCORS(env, req, ok({
     booking_id: bookingId,
     week_ending_date: cw.week_ending_date,
+    bucket_labels: bucketLabels, // <-- UI displays these labels
     keys: {
       nurse: { key: nurseKey, token: nurseToken, upload_url: `${origin}/api/signatures/upload?key=${enc(nurseKey)}&token=${enc(nurseToken)}` },
       authoriser:{ key: authKey,  token: authToken,  upload_url: `${origin}/api/signatures/upload?key=${enc(authKey)}&token=${enc(authToken)}` }
     }
   }));
 }
+
+
 
 export async function handleTimesheetReplaceManualPdf(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
@@ -2160,7 +2209,6 @@ export async function handlePaymentsGenerateCsv(env, req) {
 }
 
 
-
 export async function handleRemittancesSend(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -2192,6 +2240,34 @@ export async function handleRemittancesSend(env, req) {
 
   const finRows = resend ? finRowsRaw : finRowsRaw.filter(r => !r.remittance_last_sent_at_utc && !r.remittance_send_count);
   if (!finRows.length) return withCORS(env, req, ok({ queued: 0, skipped: finRowsRaw.length, reason: 'already_sent' }));
+
+  // NEW: Resolve per-row labels via timesheet -> contract_week -> contract.bucket_labels_json
+  const DEFAULT_LABELS = { day: 'Day', night: 'Night', sat: 'Sat', sun: 'Sun', bh: 'BH' };
+  const tsIdsAll = [...new Set(finRows.map(r => r.timesheet_id).filter(Boolean))];
+  let labelsByTsId = {};
+  if (tsIdsAll.length) {
+    const { rows: wkRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?timesheet_id=in.(${tsIdsAll.map(enc).join(',')})&select=timesheet_id,contract_id`
+    );
+    const tsToContract = Object.fromEntries((wkRows||[]).map(w => [w.timesheet_id, w.contract_id]).filter(([a,b]) => a && b));
+    const contractIds = [...new Set(Object.values(tsToContract).filter(Boolean))];
+    let mapCon = {};
+    if (contractIds.length) {
+      const { rows: conRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/contracts?id=in.(${contractIds.map(enc).join(',')})&select=id,bucket_labels_json`
+      );
+      mapCon = Object.fromEntries((conRows||[]).map(c => [c.id, c.bucket_labels_json || null]));
+    }
+    labelsByTsId = Object.fromEntries(
+      tsIdsAll.map(id => {
+        const cid = tsToContract[id];
+        const lbl = cid ? mapCon[cid] : null;
+        return [id, (lbl && typeof lbl === 'object') ? lbl : DEFAULT_LABELS];
+      })
+    );
+  }
 
   const candIds = [...new Set(finRows.map(r => r.candidate_id).filter(Boolean))];
   const { rows: candRows } = await sbFetch(
@@ -2310,9 +2386,6 @@ export async function handleRemittancesSend(env, req) {
           <td style="text-align:right">${fmt(r.pay_sun)}</td>
           <td style="text-align:right">${fmt(r.hours_bh)}</td>
           <td style="text-align:right">${fmt(r.pay_bh)}</td>
-          <td style="text-align:right">${fmt(payEx)}</td>
-          <td style="text-align:right">${fmt(expEx)}</td>
-          <td style="text-align:right">${fmt(milEx)}</td>
           <td style="text-align:right"><strong>${fmt(rowEx)}</strong></td>
           ${hasPAYE ? `<td style="text-align:right">${wtrInfoHtml}</td>` : ''}
           ${hasUmb ? `<td style="text-align:right">${vatHtml}</td>` : ''}
@@ -2373,11 +2446,16 @@ export async function handleRemittancesSend(env, req) {
           </tfoot>
         </table>
 
-        ${hasPAYE ? `<p style="margin-top:12px;color:#666">Note: For PAYE, the pay rate is WTR-inclusive. The “Basic + WTR” split is informational only and is included in your payment.</p>` : ''}
-        ${hasUmb ? `<p style="margin-top:8px;color:#666">Note: For Umbrella assignments where VAT applies, totals show ex VAT and inc VAT amounts using the VAT rate captured at the time of payment/lock.</p>` : ''}
+        <p style="margin-top:10px;color:#666">
+          Note: Buckets shown above correspond to your assignment’s configured hours (e.g. “Day”, “Night”, “Sat”, “Sun”, “BH”).
+          Where your assignment uses custom labels, those are reflected in your timesheet and invoice.
+        </p>
+
+        ${hasPAYE ? `<p style="margin-top:12px;color:#666">For PAYE, the pay rate is WTR-inclusive. The “Basic + WTR” split is informational only and is included in your payment.</p>` : ''}
+        ${hasUmb ? `<p style="margin-top:8px;color:#666">For Umbrella assignments where VAT applies, totals show ex VAT and inc VAT amounts using the VAT rate captured at the time of payment/lock.</p>` : ''}
       </div>`;
 
-    // Plain text
+    // Plain text (use row-specific labels here)
     const tlines = [
       `Remittance Advice${titleSuffix}`,
       `${candName}`,
@@ -2392,9 +2470,10 @@ export async function handleRemittancesSend(env, req) {
       const expEx = Number(r.expenses_pay_ex_vat || 0);
       const milEx = Number(r.mileage_pay_ex_vat || 0);
       const rowEx = round2(payEx + expEx + milEx);
+      const L = labelsByTsId[r.timesheet_id] || DEFAULT_LABELS;
 
       tlines.push(`WE ${ts.week_ending_date || ''} — ${cli.name || ''} / ${ts.hospital_norm || ''} / ${ts.ward_norm || ''} / ${ts.shift_label_norm || ''}`);
-      tlines.push(`Day: ${fmt(r.hours_day)} @ ${fmt(r.pay_day)}, Night: ${fmt(r.hours_night)} @ ${fmt(r.pay_night)}, Sat: ${fmt(r.hours_sat)} @ ${fmt(r.pay_sat)}, Sun: ${fmt(r.hours_sun)} @ ${fmt(r.pay_sun)}, BH: ${fmt(r.hours_bh)} @ ${fmt(r.pay_bh)}`);
+      tlines.push(`${L.day}: ${fmt(r.hours_day)} @ ${fmt(r.pay_day)}, ${L.night}: ${fmt(r.hours_night)} @ ${fmt(r.pay_night)}, ${L.sat}: ${fmt(r.hours_sat)} @ ${fmt(r.pay_sat)}, ${L.sun}: ${fmt(r.hours_sun)} @ ${fmt(r.pay_sun)}, ${L.bh}: ${fmt(r.hours_bh)} @ ${fmt(r.pay_bh)}`);
       tlines.push(`Pay ex VAT: ${fmt(payEx)}  |  Expenses: ${fmt(expEx)}  |  Mileage: ${fmt(milEx)}  |  Total ex VAT: ${fmt(rowEx)}`);
       if (pm === 'PAYE') {
         const wtrPct = resolveWtrPctForRow(r, defaults, clientHolidayMap);
@@ -2471,6 +2550,72 @@ export async function handleRemittancesSend(env, req) {
   }
 
   return withCORS(env, req, ok({ queued: totalQueued, outbox_ids: outboxIds }));
+}
+
+export async function handleContractsCheckOverlap(env, req) {
+  const user = await requireUser (env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let body; 
+  try { body = await parseJSONBody(req); } 
+  catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  const candidateId = body?.candidate_id;
+  const start = body?.start_date ? toYmd(body.start_date) : null;
+  const end   = body?.end_date   ? toYmd(body.end_date)   : null;
+  const ignoreId = body?.ignore_contract_id ? String(body.ignore_contract_id) : null;
+
+  if (!candidateId || !start || !end) {
+    return withCORS(env, req, badRequest('candidate_id, start_date, end_date are required'));
+  }
+  const dStart = new Date(`${start}T00:00:00Z`);
+  const dEnd   = new Date(`${end}T00:00:00Z`);
+  if (isNaN(dStart) || isNaN(dEnd) || dEnd < dStart) {
+    return withCORS(env, req, badRequest('end_date must be on/after start_date'));
+  }
+
+  // Fetch existing contracts for this candidate that overlap [start,end]:
+  // overlap condition: existing.start <= end AND existing.end >= start
+  let api = `${env.SUPABASE_URL}/rest/v1/contracts` +
+            `?select=id,candidate_id,client_id,role,band,start_date,end_date,` +
+            `client:clients(name)` +
+            `&candidate_id=eq.${enc(candidateId)}` +
+            `&start_date=lte.${enc(end)}` +
+            `&end_date=gte.${enc(start)}`;
+  if (ignoreId) {
+    api += `&id=neq.${enc(ignoreId)}`;
+  }
+
+  const { rows } = await sbFetch(env, api);
+  const results = (rows || []).map(r => {
+    const eStart = new Date(`${r.start_date}T00:00:00Z`);
+    const eEnd   = new Date(`${(r.end_date || r.start_date)}T00:00:00Z`);
+    const oStart = new Date(Math.max(eStart.getTime(), dStart.getTime()));
+    const oEnd   = new Date(Math.min(eEnd.getTime(),   dEnd.getTime()));
+    const days   = Math.floor((oEnd - oStart) / 86400000) + 1;
+
+    return {
+      contract_id: String(r.id),
+      client_id: r.client_id || null,
+      client_name: r?.client?.name ?? null,
+      role: r?.role ?? null,
+      band: r?.band ?? null,
+      existing_start_date: r.start_date,
+      existing_end_date: r.end_date,
+      overlap_start_date: days > 0 ? oStart.toISOString().slice(0,10) : null,
+      overlap_end_date:   days > 0 ? oEnd.toISOString().slice(0,10)   : null,
+      overlap_days:       days > 0 ? days : 0
+    };
+  }).filter(x => x.overlap_days > 0);
+
+  return withCORS(env, req, ok({
+    candidate_id: String(candidateId),
+    requested_start_date: start,
+    requested_end_date: end,
+    ignore_contract_id: ignoreId || null,
+    has_overlap: results.length > 0,
+    overlaps: results
+  }));
 }
 
 // ───────────────────────────────────────────────────────────────────────────────
@@ -3796,10 +3941,16 @@ function buildHTML(payload) {
         .filter(Boolean)
         .join(" • ");
 
+      // NEW: use per-line labels if provided, otherwise defaults
+      const DEFAULT_LABELS = { day: 'Day', night: 'Night', sat: 'Sat', sun: 'Sun', bh: 'BH' };
+      const labels = (meta.bucket_labels && typeof meta.bucket_labels === 'object') ? meta.bucket_labels : DEFAULT_LABELS;
+
       const hours = { d: meta.hours_day, n: meta.hours_night, sa: meta.hours_sat, su: meta.hours_sun, bh: meta.hours_bh };
+      const mapKey = { d: 'day', n: 'night', sa: 'sat', su: 'sun', bh: 'bh' };
+
       const hourPills = Object.entries(hours)
         .filter(([, v]) => Number(v) > 0)
-        .map(([k, v]) => `<span class="pill">${k.toUpperCase()}: ${Number(v).toFixed(2)}</span>`)
+        .map(([k, v]) => `<span class="pill">${escapeHtml(labels[mapKey[k]] || k.toUpperCase())}: ${Number(v).toFixed(2)}</span>`)
         .join("");
 
       return `
@@ -13012,6 +13163,22 @@ export async function handleCreateInvoiceExpenses(env, req) {
   );
   const tsMetaMap = Object.fromEntries((tsRows || []).map(t => [t.timesheet_id, t]));
 
+  // NEW: map timesheet_id -> contract_id -> labels (kept for consistency, may be used in future expense renderers)
+  const { rows: wkRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?timesheet_id=in.(${inIds})&select=timesheet_id,contract_id`
+  );
+  const tsToContract = Object.fromEntries((wkRows||[]).map(w => [w.timesheet_id, w.contract_id]).filter(([a,b]) => a && b));
+  const contractIds = [...new Set(Object.values(tsToContract).filter(Boolean))];
+  let mapContractLabels = {};
+  if (contractIds.length) {
+    const { rows: conRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contracts?id=in.(${contractIds.map(enc).join(',')})&select=id,bucket_labels_json`
+    );
+    mapContractLabels = Object.fromEntries((conRows||[]).map(c => [c.id, c.bucket_labels_json || null]));
+  }
+
   // Create header (DRAFT)
   const issuedAt = new Date().toISOString();
   const termsDays = Number(client.payment_terms_days ?? 30);
@@ -13221,7 +13388,7 @@ export async function handleCreateInvoiceExpenses(env, req) {
   const usedTsIds = [...new Set(lines.map(l => l.timesheet_id).filter(Boolean))];
   await setWeeksInvoicedForTimesheets(env, usedTsIds);
 
-  // (Optional but recommended) Ensure TS PDFs & write keys back to lines, so render bundles include TS PDFs
+  // Ensure TS PDFs & write keys back to lines (consistent with HOURS flow)
   const concurrency = Math.max(1, Number(env.TIMESHEET_RENDER_CONCURRENCY || 4));
   async function mapWithLimit(arr, limit, iterator) {
     let idx = 0;
@@ -13257,7 +13424,6 @@ export async function handleCreateInvoiceExpenses(env, req) {
   });
 }
 
-
 // ---------------------------
 // Invoices (TSFIN) – create from READY_FOR_INVOICE snapshots, lock them, build invoice_lines
 // ---------------------------
@@ -13287,7 +13453,6 @@ async function setWeeksInvoicedForTimesheets(env, timesheetIds) {
     body: JSON.stringify({ status: 'INVOICED', updated_at: new Date().toISOString() })
   });
 }
-
 export async function handleCreateInvoiceTsfin(env, req) {
   // (HOURS only — expenses invoiced via handleCreateInvoiceExpenses)
   const user = await requireUser(env, req, ['admin']);
@@ -13356,6 +13521,28 @@ export async function handleCreateInvoiceTsfin(env, req) {
   );
   const tsMetaMap = Object.fromEntries((tsRows || []).map(t => [t.timesheet_id, t]));
 
+  // NEW: map timesheet_id -> contract_id -> bucket_labels_json
+  const { rows: wkRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?timesheet_id=in.(${inIds})&select=timesheet_id,contract_id`
+  );
+  const tsToContract = Object.fromEntries((wkRows||[]).map(w => [w.timesheet_id, w.contract_id]).filter(([a,b]) => a && b));
+  const contractIds = [...new Set(Object.values(tsToContract).filter(Boolean))];
+  let mapContractLabels = {};
+  if (contractIds.length) {
+    const { rows: conRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contracts?id=in.(${contractIds.map(enc).join(',')})&select=id,bucket_labels_json`
+    );
+    mapContractLabels = Object.fromEntries((conRows||[]).map(c => [c.id, c.bucket_labels_json || null]));
+  }
+  const DEFAULT_LABELS = { day: 'Day', night: 'Night', sat: 'Sat', sun: 'Sun', bh: 'BH' };
+  const labelsForTs = (tsId) => {
+    const cid = tsToContract[tsId];
+    const lbl = cid ? mapContractLabels[cid] : null;
+    return (lbl && typeof lbl === 'object') ? lbl : DEFAULT_LABELS;
+  };
+
   // Stationery snapshot defaults
   let DEFAULT_STATIONERY_KEY =
     env.INVOICE_STATIONERY_KEY || 'Assets/Stationery/Letterhead/A4/Letterhead_v1@300dpi.png';
@@ -13364,7 +13551,6 @@ export async function handleCreateInvoiceTsfin(env, req) {
   }
   const DEFAULT_STATIONERY_MARGINS_MM = { top: 32, right: 12, bottom: 20, left: 12 };
   const DEFAULT_HIDE_BANK_FOOTER = true;
-
   try { await r2Exists(env, DEFAULT_STATIONERY_KEY).catch(()=>{}); } catch {}
 
   // 3) Create header (DRAFT)
@@ -13478,6 +13664,8 @@ export async function handleCreateInvoiceTsfin(env, req) {
       },
       policy_snapshot_json: s.policy_snapshot_json ?? {},
       rate_source_refs_json: s.rate_source_refs_json ?? {},
+      // NEW: include labels so the renderer prints display names
+      bucket_labels: labelsForTs(s.timesheet_id),
       breakdown: { hours: h, pay, charge: chg },
       totals: {
         line_pay_ex_vat: line_pay_ex,
@@ -14146,6 +14334,10 @@ export default {
         const m = matchPath(p, '/api/contracts/:id/skip-weeks');
         if (m && req.method === 'POST') return handleContractsSkipWeeks(env, req, m.id);
       }
+// POST /api/contracts/check-overlap  -> ask backend if a proposed [start,end] overlaps existing contracts for a candidate
+if (req.method === 'POST' && p === '/api/contracts/check-overlap') {
+  return await handleContractsCheckOverlap(env, req);
+}
 
       // Contract weeks
       if (req.method === 'GET' && p === '/api/contract-weeks') return handleContractWeeksList(env, req);
