@@ -440,10 +440,1327 @@ async function renderTimesheetPDFAndSave(env, timesheetId) {
 
 // Ensure a TS PDF exists; return its key (render/snapshot if missing)
 async function ensureTimesheetPdf(env, timesheetId) {
+  // Prefer a manual uploaded PDF when present; else render from signatures.
+  // We return the key to the PDF in R2 (can be the manual key itself).
+  const ts = await sbGetOne(env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}&select=manual_pdf_r2_key`
+  );
+  if (ts?.manual_pdf_r2_key) {
+    const mk = normalizeKey(ts.manual_pdf_r2_key);
+    if (await r2Exists(env, mk)) return mk; // use attached manual PDF directly
+  }
+
   const key = normalizeKey(`docs-pdf/timesheets/ts_${timesheetId}.pdf`);
   if (await r2Exists(env, key)) return key;
   return await renderTimesheetPDFAndSave(env, timesheetId);
 }
+
+// ============================================================================
+// NEW: Weekly / Manual contracts API handlers
+// ============================================================================
+
+// Small local helpers (reuse existing utils from your file)
+const enc = encodeURIComponent;
+const nowIso = () => new Date().toISOString();
+
+function toYmd(d) {
+  const dt = (typeof d === 'string') ? new Date(d + 'T00:00:00Z') : d;
+  const yyyy = dt.getUTCFullYear();
+  const mm = String(dt.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(dt.getUTCDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+function ymdCompact(ymd) { return (ymd || '').replace(/-/g, ''); }
+function clampBool(v, def=false){ return v === true || v === 'true' ? true : v === false || v === 'false' ? false : def; }
+
+/** Compute week-ending for a given date and weekEndingWeekday (0=Sun..6=Sat) */
+function computeWeekEnding(ymd, weekEndingWeekday=0) {
+  const d = new Date(ymd + 'T00:00:00Z');
+  const dow = d.getUTCDay(); // 0..6
+  const delta = (weekEndingWeekday - dow + 7) % 7;
+  d.setUTCDate(d.getUTCDate() + delta);
+  return toYmd(d);
+}
+
+/** Generate all week-ending dates between start..end (inclusive), aligned to 'wew' (0=Sun..6=Sat) */
+function enumerateWeekEndings(startYmd, endYmd, wew=0) {
+  const startWE = computeWeekEnding(startYmd, wew);
+  const out = [];
+  let d = new Date(startWE + 'T00:00:00Z');
+  const end = new Date(toYmd(endYmd) + 'T00:00:00Z');
+  while (d <= end) {
+    out.push(toYmd(d));
+    d.setUTCDate(d.getUTCDate() + 7);
+  }
+  return out;
+}
+
+/** Load one row helper */
+async function sbGetOne(env, url) {
+  const { rows } = await sbFetch(env, url, false);
+  return (rows && rows[0]) || null;
+}
+
+/** Numeric guard */
+const n = (v) => (v == null || Number.isNaN(Number(v))) ? 0 : Number(v);
+
+/** Pick pay/charge rates from contracts.rates_json by pay method snapshot */
+function payChargeFromContract(contract) {
+  const R = contract?.rates_json || {};
+  const method = (contract?.pay_method_snapshot || '').toUpperCase();
+  const pay = (method === 'PAYE')
+    ? { day: R.paye_day, night: R.paye_night, sat: R.paye_sat, sun: R.paye_sun, bh: R.paye_bh }
+    : { day: R.umb_day,  night: R.umb_night,  sat: R.umb_sat,  sun: R.umb_sun,  bh: R.umb_bh  };
+  const charge = { day: R.charge_day, night: R.charge_night, sat: R.charge_sat, sun: R.charge_sun, bh: R.charge_bh };
+  return { pay, charge, method };
+}
+
+/** Compose a weekly booking id using existing helper */
+function makeWeeklyBookingId(candidateId, contract, cw) {
+  const hospital = contract?.display_site || contract?.client_id || 'client';
+  const ward = contract?.ward_hint || 'contract';
+  const role = contract?.role || 'weekly';
+  const shift = `WEEKLY-${String(cw?.additional_seq || 0)}`;
+  // Reuse your existing makeBookingId helper (present in Worker)
+  return makeBookingId(String(candidateId||''), cw.week_ending_date, String(hospital||''), String(ward||''), String(role||''), shift);
+}
+
+/** Upsert convenience (PostgREST) */
+async function postgrestUpsert(env, table, rows, onConflictCols) {
+  const url = `${env.SUPABASE_URL}/rest/v1/${table}?on_conflict=${onConflictCols}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { ...sbHeaders(env), 'Prefer': 'resolution=merge-duplicates,return=representation' },
+    body: JSON.stringify(rows)
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`${table} upsert failed: ${t}`);
+  }
+  const json = await res.json().catch(()=>[]);
+  return Array.isArray(json) ? json : [json];
+}
+
+/** Attach / replace manual scan key on a contract_week (guard invoiced if linked) */
+async function patchContractWeekScan(env, cwId, r2Key) {
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cwId)}`, {
+    method: 'PATCH',
+    headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
+    body: JSON.stringify({ uploaded_pdf_r2_key: r2Key, updated_at: nowIso() })
+  });
+  if (!res.ok) {
+    throw new Error(`contract_weeks scan patch failed: ${await res.text()}`);
+  }
+  const j = await res.json().catch(()=>[]);
+  return (j && j[0]) || null;
+}
+
+// ----------------------------------------------------------------------------
+// A) CONTRACTS (CRUD + lifecycle)
+// ----------------------------------------------------------------------------
+
+export async function handleContractsCreate(env, req) {
+  const user = await requireUser(env, req, ['admin']); // backoffice only
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  const required = ['candidate_id','client_id','start_date','end_date','pay_method_snapshot'];
+  for (const k of required) if (!body[k]) return withCORS(env, req, badRequest(`${k} is required`));
+
+  // Normalise booleans
+  body.auto_invoice = clampBool(body.auto_invoice, false);
+  body.require_reference_to_pay = clampBool(body.require_reference_to_pay, false);
+  body.require_reference_to_invoice = clampBool(body.require_reference_to_invoice, false);
+
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts`, {
+    method: 'POST',
+    headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
+    body: JSON.stringify({
+      candidate_id: body.candidate_id,
+      client_id: body.client_id,
+      role: body.role || null,
+      band: body.band ?? null,
+      display_site: body.display_site || null,
+      ward_hint: body.ward_hint || null,
+      start_date: body.start_date,
+      end_date: body.end_date,
+      pay_method_snapshot: String(body.pay_method_snapshot).toUpperCase() === 'PAYE' ? 'PAYE' : 'UMBRELLA',
+      rates_json: body.rates_json || {},
+      std_hours_json: body.std_hours_json || null,
+      default_submission_mode: (String(body.default_submission_mode||'').toUpperCase() === 'MANUAL') ? 'MANUAL' : 'ELECTRONIC',
+      week_ending_weekday_snapshot: (Number(body.week_ending_weekday_snapshot) >= 0 && Number(body.week_ending_weekday_snapshot) <= 6) ? Number(body.week_ending_weekday_snapshot) : 0,
+      auto_invoice: body.auto_invoice,
+      require_reference_to_pay: body.require_reference_to_pay,
+      require_reference_to_invoice: body.require_reference_to_invoice,
+      created_at: nowIso(), updated_at: nowIso()
+    })
+  });
+  if (!res.ok) return withCORS(env, req, serverError(await res.text()));
+  const json = await res.json().catch(()=>[]);
+  const row = Array.isArray(json) ? json[0] : json;
+  return withCORS(env, req, ok(row));
+}
+
+export async function handleContractsList(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  const url = new URL(req.url);
+  const q = (k) => url.searchParams.get(k);
+  const qs = (k) => url.searchParams.getAll(k);
+
+  let api = `${env.SUPABASE_URL}/rest/v1/contracts?select=*`;
+  const filters = [];
+  if (q('candidate_id')) filters.push(`candidate_id=eq.${enc(q('candidate_id'))}`);
+  if (q('client_id')) filters.push(`client_id=eq.${enc(q('client_id'))}`);
+  if (q('pay_method_snapshot')) filters.push(`pay_method_snapshot=eq.${enc(q('pay_method_snapshot').toUpperCase())}`);
+  if (q('role')) filters.push(`role=eq.${enc(q('role'))}`);
+  if (q('band')) filters.push(`band=eq.${enc(q('band'))}`);
+  if (q('active_on')) {
+    const d = q('active_on');
+    filters.push(`start_date=lte.${enc(d)}`);
+    filters.push(`end_date=gte.${enc(d)}`);
+  }
+  if (q('auto_invoice')) filters.push(`auto_invoice=eq.${enc(String(clampBool(q('auto_invoice'))))}`);
+
+  if (filters.length) api += `&${filters.join('&')}`;
+  api += '&order=start_date.desc,created_at.desc';
+
+  const { rows } = await sbFetch(env, api);
+  return withCORS(env, req, ok(rows || []));
+}
+
+export async function handleContractsGet(env, req, contractId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const contract = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=*`);
+  if (!contract) return withCORS(env, req, notFound('Contract not found'));
+
+  // Rollups: counts by status + most recent weeks
+  const { rows: weeks } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&select=id,week_ending_date,additional_seq,status,submission_mode_snapshot,timesheet_id,uploaded_pdf_r2_key&order=week_ending_date.desc,additional_seq.asc`
+  );
+  const counts = (weeks || []).reduce((a,w) => { a[w.status] = (a[w.status]||0)+1; return a; }, {});
+
+  return withCORS(env, req, ok({ contract, counts, weeks: weeks || [] }));
+}
+
+export async function handleContractsUpdate(env, req, contractId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  // Load current incl. pay_method_snapshot + candidate_id
+  const current = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=id,start_date,end_date,require_reference_to_pay,require_reference_to_invoice,auto_invoice,pay_method_snapshot,candidate_id`
+  );
+  if (!current) return withCORS(env, req, notFound('Contract not found'));
+
+  const patch = {};
+  if (body.end_date) {
+    const oldEnd = new Date((current.end_date || current.start_date) + 'T00:00:00Z');
+    const newEnd = new Date(toYmd(body.end_date) + 'T00:00:00Z');
+    if (newEnd < oldEnd) return withCORS(env, req, badRequest('Can only extend end_date'));
+    patch.end_date = toYmd(newEnd);
+  }
+  if ('auto_invoice' in body)                   patch.auto_invoice = clampBool(body.auto_invoice, current.auto_invoice);
+  if ('require_reference_to_pay' in body)       patch.require_reference_to_pay = clampBool(body.require_reference_to_pay, current.require_reference_to_pay);
+  if ('require_reference_to_invoice' in body)   patch.require_reference_to_invoice = clampBool(body.require_reference_to_invoice, current.require_reference_to_invoice);
+
+  if (!Object.keys(patch).length) {
+    // Still return warnings if any even when nothing to update
+    const warnings = await computePayMethodWarnings(env, current);
+    return withCORS(env, req, ok({ contract: current, warnings }));
+  }
+
+  patch.updated_at = nowIso();
+
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {
+    method: 'PATCH',
+    headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
+    body: JSON.stringify(patch)
+  });
+  if (!res.ok) return withCORS(env, req, serverError(await res.text()));
+  const updated = (await res.json().catch(()=>[]))[0];
+
+  const warnings = await computePayMethodWarnings(env, { ...current, ...updated });
+  return withCORS(env, req, ok({ contract: updated, warnings }));
+}
+
+// Helper: returns ['PAY_METHOD_MISMATCH'] if candidate.pay_method != pay_method_snapshot
+async function computePayMethodWarnings(env, contractRow) {
+  const out = [];
+  const pmSnap = String(contractRow?.pay_method_snapshot || '').toUpperCase();
+  const candId = contractRow?.candidate_id;
+  if (pmSnap && candId) {
+    const cand = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(candId)}&select=id,pay_method`);
+    const pmCand = String(cand?.pay_method || '').toUpperCase();
+    if (pmCand && pmSnap && pmCand !== pmSnap) out.push('PAY_METHOD_MISMATCH');
+  }
+  return out;
+}
+
+export async function handleContractsDelete(env, req, contractId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  // Safety: only if no TS ever existed
+  const ts = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/timesheets?contract_id=eq.${enc(contractId)}&select=timesheet_id&limit=1`);
+  if (ts) return withCORS(env, req, badRequest('Cannot delete: timesheets exist for this contract'));
+
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {
+    method: 'DELETE',
+    headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
+  });
+  if (!res.ok) return withCORS(env, req, serverError(await res.text()));
+  return withCORS(env, req, ok({ deleted: true }));
+}
+
+export async function handleContractsGenerateWeeks(env, req, contractId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const c = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=*`);
+  if (!c) return withCORS(env, req, notFound('Contract not found'));
+
+  const wew = Number(c.week_ending_weekday_snapshot || 0);
+  const allWE = enumerateWeekEndings(c.start_date, c.end_date, wew);
+  const todayYmd = toYmd(new Date());
+
+  const rows = allWE.map(we => ({
+    contract_id: c.id,
+    week_ending_date: we,
+    additional_seq: 0,
+    status: (we <= todayYmd ? 'OPEN' : 'PLANNED'),
+    submission_mode_snapshot: c.default_submission_mode,
+    timesheet_id: null,
+    created_at: nowIso(),
+    updated_at: nowIso()
+  }));
+
+  const up = await postgrestUpsert(env, 'contract_weeks', rows, 'contract_id,week_ending_date,additional_seq');
+  return withCORS(env, req, ok({ generated: up.length }));
+}
+
+export async function handleContractsCloneAndExtend(env, req, contractId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  const cur = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=*`);
+  if (!cur) return withCORS(env, req, notFound('Contract not found'));
+
+  const newStart = toYmd(body.new_start_date || cur.end_date);
+  const newEnd = toYmd(body.new_end_date || cur.end_date);
+  if (!newStart || !newEnd) return withCORS(env, req, badRequest('new_start_date and new_end_date required'));
+
+  // Close current at day before newStart
+  const closeD = new Date(newStart + 'T00:00:00Z'); closeD.setUTCDate(closeD.getUTCDate() - 1);
+  const closeTo = toYmd(closeD);
+  if (closeTo < cur.start_date) return withCORS(env, req, badRequest('Invalid new_start_date (before original start)'));
+
+  await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {
+    method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
+    body: JSON.stringify({ end_date: closeTo, updated_at: nowIso() })
+  });
+
+  // Create successor with optionally updated rates/pay_method
+  const successor = {
+    candidate_id: cur.candidate_id,
+    client_id: cur.client_id,
+    role: cur.role, band: cur.band, display_site: cur.display_site, ward_hint: cur.ward_hint,
+    start_date: newStart, end_date: newEnd,
+    pay_method_snapshot: (body.pay_method_snapshot || cur.pay_method_snapshot),
+    rates_json: body.rates_json || cur.rates_json || {},
+    std_hours_json: body.std_hours_json || cur.std_hours_json || null,
+    default_submission_mode: body.default_submission_mode || cur.default_submission_mode,
+    week_ending_weekday_snapshot: (body.week_ending_weekday_snapshot != null ? Number(body.week_ending_weekday_snapshot) : cur.week_ending_weekday_snapshot),
+    auto_invoice: cur.auto_invoice,
+    require_reference_to_pay: cur.require_reference_to_pay,
+    require_reference_to_invoice: cur.require_reference_to_invoice,
+    created_at: nowIso(), updated_at: nowIso()
+  };
+
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts`, {
+    method: 'POST', headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
+    body: JSON.stringify(successor)
+  });
+  if (!res.ok) return withCORS(env, req, serverError(await res.text()));
+  const newRow = (await res.json().catch(()=>[]))[0];
+
+  return withCORS(env, req, ok({ closed_at: closeTo, successor: newRow }));
+}
+
+export async function handleContractsCalendar(env, req, contractId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  const url = new URL(req.url);
+  const year = Number(url.searchParams.get('year') || (new Date()).getUTCFullYear());
+
+  const yStart = `${year}-01-01`, yEnd = `${year}-12-31`;
+
+  const { rows: weeks } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+    `?contract_id=eq.${enc(contractId)}` +
+    `&week_ending_date=gte.${enc(yStart)}&week_ending_date=lte.${enc(yEnd)}` +
+    `&select=id,week_ending_date,additional_seq,status,submission_mode_snapshot,timesheet_id,uploaded_pdf_r2_key` +
+    `&order=week_ending_date.asc,additional_seq.asc`
+  );
+
+  // Precheck invoice gates for attached timesheets
+  const ids = (weeks || []).map(w => w.timesheet_id).filter(Boolean);
+  let preMap = {};
+  if (ids.length) {
+    const inList = ids.map(enc).join(',');
+    const { rows: pres } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/v_ts_invoice_precheck?timesheet_id=in.(${inList})`
+    );
+    preMap = Object.fromEntries((pres||[]).map(p => [p.timesheet_id, p]));
+  }
+
+  const items = (weeks||[]).map(w => {
+    const pre = w.timesheet_id ? preMap[w.timesheet_id] : null;
+    const missingPdf = (w.submission_mode_snapshot === 'MANUAL')
+      ? (!w.uploaded_pdf_r2_key && !(pre && pre.manual_pdf_r2_key))
+      : false;
+    const missingRef = (pre?.require_reference_to_invoice === true) && (!pre?.reference_number || String(pre.reference_number).trim()==='');
+    return {
+      id: w.id,
+      week_ending_date: w.week_ending_date,
+      additional_seq: w.additional_seq,
+      status: w.status,
+      submission_mode: w.submission_mode_snapshot,
+      has_timesheet: !!w.timesheet_id,
+      missing_pdf: !!missingPdf,
+      missing_reference: !!missingRef
+    };
+  });
+
+  return withCORS(env, req, ok({ year, items }));
+}
+
+export async function handleContractsSkipWeeks(env, req, contractId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+  const from = toYmd(body.from), to = toYmd(body.to);
+  if (!from || !to) return withCORS(env, req, badRequest('from and to required'));
+
+  // Only weeks without a timesheet can be cancelled
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+    `?contract_id=eq.${enc(contractId)}&week_ending_date=gte.${enc(from)}&week_ending_date=lte.${enc(to)}&timesheet_id=is.null`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
+      body: JSON.stringify({ status: 'CANCELLED', updated_at: nowIso() })
+    }
+  );
+  if (!res.ok) return withCORS(env, req, serverError(await res.text()));
+  const rows = await res.json().catch(()=>[]);
+  return withCORS(env, req, ok({ updated: rows.length }));
+}
+
+// ----------------------------------------------------------------------------
+// B) CONTRACT WEEKS (list / switching / manual / expenses)
+// ----------------------------------------------------------------------------
+
+export async function handleContractWeeksList(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  const url = new URL(req.url);
+  const q = (k) => url.searchParams.get(k);
+  const filters = [];
+
+  let api = `${env.SUPABASE_URL}/rest/v1/v_contract_weeks_enriched?select=*`;
+  if (q('contract_id')) filters.push(`contract_id=eq.${enc(q('contract_id'))}`);
+  if (q('candidate_id')) filters.push(`candidate_id=eq.${enc(q('candidate_id'))}`);
+  if (q('client_id')) filters.push(`client_id=eq.${enc(q('client_id'))}`);
+  if (q('status')) filters.push(`status=eq.${enc(q('status'))}`);
+  if (q('submission_mode_snapshot')) filters.push(`submission_mode_snapshot=eq.${enc(q('submission_mode_snapshot'))}`);
+  if (q('week_ending_from')) filters.push(`week_ending_date=gte.${enc(q('week_ending_from'))}`);
+  if (q('week_ending_to')) filters.push(`week_ending_date=lte.${enc(q('week_ending_to'))}`);
+  if (filters.length) api += `&${filters.join('&')}`;
+  api += `&order=week_ending_date.asc,additional_seq.asc`;
+
+  const { rows } = await sbFetch(env, api);
+  return withCORS(env, req, ok(rows || []));
+}
+
+export async function handleContractWeekUpdate(env, req, weekId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  const cw = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=*`);
+  if (!cw) return withCORS(env, req, notFound('Week not found'));
+
+  const patch = {};
+  if (body.status) {
+    const st = String(body.status).toUpperCase();
+    if (!['OPEN','PLANNED','SUBMITTED','AUTHORISED','INVOICED','CANCELLED'].includes(st)) {
+      return withCORS(env, req, badRequest('Invalid status'));
+    }
+    // Prevent cancelling if a timesheet exists
+    if (st === 'CANCELLED' && cw.timesheet_id) {
+      return withCORS(env, req, badRequest('Cannot cancel: timesheet exists'));
+    }
+    patch.status = st;
+  }
+  if (body.submission_mode_snapshot) {
+    const sm = String(body.submission_mode_snapshot).toUpperCase();
+    if (!['ELECTRONIC','MANUAL'].includes(sm)) return withCORS(env, req, badRequest('Invalid mode'));
+    // Disallow flip if timesheet already linked
+    if (cw.timesheet_id) return withCORS(env, req, badRequest('Cannot change mode: timesheet exists'));
+    patch.submission_mode_snapshot = sm;
+  }
+  if (!Object.keys(patch).length) return withCORS(env, req, badRequest('No updatable fields'));
+  patch.updated_at = nowIso();
+
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`, {
+    method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=representation' }, body: JSON.stringify(patch)
+  });
+  if (!res.ok) return withCORS(env, req, serverError(await res.text()));
+  const json = await res.json().catch(()=>[]);
+  return withCORS(env, req, ok(Array.isArray(json)?json[0]:json));
+}
+
+export async function handleContractWeekCreateAdditional(env, req, weekId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const base = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=*`);
+  if (!base) return withCORS(env, req, notFound('Week not found'));
+
+  const { rows: siblings } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(base.contract_id)}&week_ending_date=eq.${enc(base.week_ending_date)}&select=additional_seq&order=additional_seq.desc&limit=1`
+  );
+  const nextSeq = ((siblings && siblings[0] && Number(siblings[0].additional_seq)) || 0) + 1;
+
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks`, {
+    method: 'POST',
+    headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
+    body: JSON.stringify({
+      contract_id: base.contract_id,
+      week_ending_date: base.week_ending_date,
+      additional_seq: nextSeq,
+      status: 'OPEN',
+      submission_mode_snapshot: base.submission_mode_snapshot,
+      created_at: nowIso(), updated_at: nowIso(),
+    })
+  });
+  if (!res.ok) return withCORS(env, req, serverError(await res.text()));
+  const row = (await res.json().catch(()=>[]))[0];
+  return withCORS(env, req, ok(row));
+}
+
+export async function handleContractWeekSwitchMode(env, req, weekId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const cw = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=*`);
+  if (!cw) return withCORS(env, req, notFound('Week not found'));
+  if (cw.timesheet_id) return withCORS(env, req, badRequest('Cannot switch mode for a week with a timesheet'));
+
+  const newMode = (cw.submission_mode_snapshot === 'ELECTRONIC') ? 'MANUAL' : 'ELECTRONIC';
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`, {
+    method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
+    body: JSON.stringify({ submission_mode_snapshot: newMode, updated_at: nowIso() })
+  });
+  if (!res.ok) return withCORS(env, req, serverError(await res.text()));
+  const row = (await res.json().catch(()=>[]))[0];
+  return withCORS(env, req, ok(row));
+}
+
+export async function handleContractWeekPresignManualPdf(env, req, weekId) {
+  // Admin presign wrapper (uses your existing token scheme; see signatures presign) 
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const cw = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=id,week_ending_date,additional_seq,uploaded_pdf_r2_key,timesheet_id`);
+  if (!cw) return withCORS(env, req, notFound('Week not found'));
+
+  // If already invoiced, forbid replacement at this path (use unissue flow first)
+  if (cw.timesheet_id) {
+    const tsfin = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${enc(cw.timesheet_id)}&is_current=eq.true&select=locked_by_invoice_id`);
+    if (tsfin?.locked_by_invoice_id) {
+      return withCORS(env, req, badRequest('Timesheet invoiced. Unissue invoice before replacing scan.'));
+    }
+  }
+
+  const weC = ymdCompact(cw.week_ending_date);
+  const key = `paper_ts/we=${weC}/cw_${cw.id}_${Date.now()}.upload`;
+  const token = await createToken(env, 'UPLOAD', { key, c: 'manual_ts', ttlSec: 3600, maxBytes: 25 * 1024 * 1024, contentTypes: ['application/pdf','image/jpeg','image/png','image/heic','image/heif'] });
+  const upload_url = `${new URL(req.url).origin}/api/files/upload?key=${enc(key)}&token=${enc(token)}`;
+
+  // Optimistically persist the key on the week (replaced if later call wants)
+  await patchContractWeekScan(env, cw.id, key);
+
+  return withCORS(env, req, ok({ key, upload_url, token, expires_in: 3600 }));
+}
+
+export async function handleContractWeekReplaceManualPdf(env, req, weekId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const cw = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=id,timesheet_id`);
+  if (!cw) return withCORS(env, req, notFound('Week not found'));
+  if (cw.timesheet_id) {
+    const tsfin = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${enc(cw.timesheet_id)}&is_current=eq.true&select=locked_by_invoice_id`);
+    if (tsfin?.locked_by_invoice_id) return withCORS(env, req, badRequest('Invoiced; unissue first to replace PDF'));
+  }
+
+  let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+  if (!body?.r2_key) return withCORS(env, req, badRequest('r2_key is required'));
+  await patchContractWeekScan(env, weekId, String(body.r2_key));
+  return withCORS(env, req, ok({ replaced: true, r2_key: body.r2_key }));
+}
+
+export async function handleContractWeekManualUpsert(env, req, weekId) {
+  // Backoffice "Processed" step: create/update MANUAL weekly TS (+ TSFIN PENDING_AUTH)
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  const cw = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=*`);
+  if (!cw) return withCORS(env, req, notFound('Week not found'));
+
+  const contract = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(cw.contract_id)}&select=*`);
+  if (!contract) return withCORS(env, req, notFound('Contract not found'));
+
+  // Hours: per-day entries (labelled buckets) OR 5-bucket totals (day/night/sat/sun/bh)
+  let hours = { day:0, night:0, sat:0, sun:0, bh:0 };
+  let dayEntries = null;
+
+  if (Array.isArray(body?.day_entries_json) && body.day_entries_json.length) {
+    const valid = new Set(['day','night','sat','sun','bh']);
+    dayEntries = [];
+    try {
+      for (const e of body.day_entries_json) {
+        const b = String(e?.bucket || '').toLowerCase();
+        const h = Number(e?.hours || 0);
+        if (!valid.has(b)) return withCORS(env, req, badRequest(`day_entries_json requires bucket ∈ {day,night,sat,sun,bh}; got "${b}"`));
+        if (h < 0) return withCORS(env, req, badRequest('Negative hours not allowed'));
+        hours[b] += h;
+        dayEntries.push({ bucket: b, hours: h, date: e?.date || null, note: e?.note || null });
+      }
+    } catch {
+      return withCORS(env, req, badRequest('Invalid day_entries_json structure'));
+    }
+  } else {
+    hours = {
+      day: n(body?.hours?.day), night: n(body?.hours?.night), sat: n(body?.hours?.sat), sun: n(body?.hours?.sun), bh: n(body?.hours?.bh)
+    };
+  }
+
+  // Rates must exist for any bucket with > 0 hours (strict)
+  const { pay, charge, method } = payChargeFromContract(contract);
+  if (anyMissingRates(hours, pay, charge)) {
+    return withCORS(env, req, badRequest('Missing rate(s) in contract for one or more entered hour buckets'));
+  }
+
+  // Build or reuse timesheet
+  let ts = null;
+  if (cw.timesheet_id) {
+    ts = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(cw.timesheet_id)}&select=*`);
+  }
+  if (!ts) {
+    const candidate = contract.candidate_id ? await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(contract.candidate_id)}&select=id,display_name,pay_method`) : null;
+    const client = contract.client_id ? await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${enc(contract.client_id)}&select=id,name`) : null;
+
+    const occupant_norm = (candidate?.display_name || String(candidate?.id || 'worker')).toLowerCase();
+    const hospital_norm = (contract.display_site || client?.name || String(contract.client_id)).toLowerCase();
+    const ward_norm = (contract.ward_hint || 'contract').toLowerCase();
+    const job_title_norm = (contract.role || 'weekly').toLowerCase();
+    const booking_id = makeWeeklyBookingId(candidate?.id, contract, cw);
+
+    const payload = [{
+      booking_id,
+      version: 1,
+      is_current: true,
+      status: 'SUBMITTED',
+      occupant_key_norm: occupant_norm,
+      hospital_norm, ward_norm, job_title_norm,
+      shift_label_norm: 'weekly',
+      scheduled_start_iso: null, scheduled_end_iso: null,
+      worked_start_iso: null, worked_end_iso: null,
+      break_start_iso: null, break_end_iso: null, break_minutes: null,
+      authorised_at_server: null, // manual → second checker later
+      week_ending_date: cw.week_ending_date,
+      r2_nurse_key: null, r2_auth_key: null,
+      contract_id: contract.id,
+      submission_mode: 'MANUAL',
+      manual_pdf_r2_key: cw.uploaded_pdf_r2_key || null,
+      line_type: 'HOURS',
+      created_at: nowIso(), updated_at: nowIso()
+    }];
+
+    const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets`, {
+      method: 'POST', headers: { ...sbHeaders(env), 'Prefer': 'return=representation' }, body: JSON.stringify(payload)
+    });
+    if (!ins.ok) return withCORS(env, req, serverError(await ins.text()));
+    ts = (await ins.json().catch(()=>[]))[0];
+
+    // Link week → timesheet
+    await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`, {
+      method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ timesheet_id: ts.timesheet_id, status: 'SUBMITTED', updated_at: nowIso() })
+    });
+  }
+
+  // Compose TSFIN snapshot (PENDING_AUTH)
+  const total_pay = round2(hours.day*n(pay.day) + hours.night*n(pay.night) + hours.sat*n(pay.sat) + hours.sun*n(pay.sun) + hours.bh*n(pay.bh));
+  const total_charge = round2(hours.day*n(charge.day) + hours.night*n(charge.night) + hours.sat*n(charge.sat) + hours.sun*n(charge.sun) + hours.bh*n(charge.bh));
+  const margin = round2(total_charge - total_pay);
+
+  const snap = {
+    timesheet_id: ts.timesheet_id,
+    timesheet_version: ts.version || 1,
+    candidate_id: contract.candidate_id,
+    client_id: contract.client_id,
+    candidate_assignment: 'ASSIGNED',
+    processing_status: 'PENDING_AUTH',
+    pay_method: method,
+    hours_day: hours.day, hours_night: hours.night, hours_sat: hours.sat, hours_sun: hours.sun, hours_bh: hours.bh,
+    rate_day: charge.day, rate_night: charge.night, rate_sat: charge.sat, rate_sun: charge.sun, rate_bh: charge.bh,
+    pay_rate_day: pay.day, pay_rate_night: pay.night, pay_rate_sat: pay.sat, pay_rate_sun: pay.sun, pay_rate_bh: pay.bh,
+    total_pay_ex_vat: total_pay,
+    total_charge_ex_vat: total_charge,
+    margin_ex_vat: margin,
+    expenses_pay_ex_vat: 0, expenses_charge_ex_vat: 0, expenses_description: null, expenses_evidence_r2_key: null,
+    mileage_pay_ex_vat: 0, mileage_charge_ex_vat: 0, mileage_evidence_r2_key: null, mileage_pay_rate: null, mileage_charge_rate: null,
+    pay_on_hold: false, pay_on_hold_reason: null, pay_on_hold_since_utc: null,
+    paid_at_utc: null, paid_by_user_id: null, payment_reference: null,
+    policy_snapshot_json: null,
+    created_at: nowIso(),
+  };
+  await writeSnapshot(env, snap);
+
+  // Persist both the day entries (if any) and totals for audit/UI
+  const weekPatch = { totals_json: { hours }, updated_at: nowIso() };
+  if (dayEntries) weekPatch.day_entries_json = dayEntries;
+  await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`, {
+    method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' }, body: JSON.stringify(weekPatch)
+  });
+
+  return withCORS(env, req, ok({ timesheet_id: ts.timesheet_id, processing_status: 'PENDING_AUTH', hours, had_day_entries: !!dayEntries }));
+}
+
+
+export async function handleContractWeekManualAuthorise(env, req, weekId) {
+  // Second checker: stamp TS authorise + TSFIN → READY_FOR_INVOICE
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const cw = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=id,timesheet_id`);
+  if (!cw?.timesheet_id) return withCORS(env, req, badRequest('No timesheet linked to this week'));
+
+  // Stamp timesheet
+  await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(cw.timesheet_id)}&is_current=eq.true`, {
+    method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
+    body: JSON.stringify({ authorised_at_server: nowIso(), updated_at: nowIso() })
+  });
+
+  // Promote TSFIN
+  await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${enc(cw.timesheet_id)}&is_current=eq.true`, {
+    method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
+    body: JSON.stringify({ processing_status: 'READY_FOR_INVOICE', authorised_by_user_id: user.id, authorised_at_utc: nowIso() })
+  });
+
+  // Update week status → AUTHORISED
+  await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`, {
+    method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
+    body: JSON.stringify({ status: 'AUTHORISED', updated_at: nowIso() })
+  });
+
+  return withCORS(env, req, ok({ authorised: true, timesheet_id: cw.timesheet_id }));
+}
+
+export async function handleContractWeekDeleteTimesheet(env, req, weekId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const cw = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=*`);
+  if (!cw?.timesheet_id) return withCORS(env, req, badRequest('No timesheet attached'));
+
+  const tsfin = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${enc(cw.timesheet_id)}&is_current=eq.true&select=paid_at_utc,locked_by_invoice_id`);
+  if (tsfin?.paid_at_utc) return withCORS(env, req, badRequest('Cannot delete: already paid'));
+  if (tsfin?.locked_by_invoice_id) return withCORS(env, req, badRequest('Cannot delete: invoiced'));
+
+  // Delete TS (versioning scheme assumes cascade will clean snapshots, or snapshots unlocked)
+  const del = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(cw.timesheet_id)}`, {
+    method: 'DELETE', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' }
+  });
+  if (!del.ok) return withCORS(env, req, serverError(await del.text()));
+
+  // Reset week
+  await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`, {
+    method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
+    body: JSON.stringify({ timesheet_id: null, status: 'OPEN', updated_at: nowIso() })
+  });
+
+  return withCORS(env, req, ok({ deleted: true }));
+}
+
+export async function handleContractWeekCreateExpenseSheet(env, req, weekId) {
+  // Create an expense-only TS for the week (line_type=EXPENSES)
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const cw = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=*`);
+  if (!cw) return withCORS(env, req, notFound('Week not found'));
+  const contract = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(cw.contract_id)}&select=*`);
+  if (!contract) return withCORS(env, req, notFound('Contract not found'));
+
+  const candidate = contract.candidate_id ? await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(contract.candidate_id)}&select=id,display_name`) : null;
+  const client = contract.client_id ? await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${enc(contract.client_id)}&select=id,name`) : null;
+
+  const booking_id = makeWeeklyBookingId(candidate?.id, contract, cw);
+
+  const payload = [{
+    booking_id, version: 1, is_current: true, status: 'SUBMITTED',
+    occupant_key_norm: (candidate?.display_name || String(candidate?.id || 'worker')).toLowerCase(),
+    hospital_norm: (contract.display_site || client?.name || String(contract.client_id)).toLowerCase(),
+    ward_norm: (contract.ward_hint || 'contract').toLowerCase(),
+    job_title_norm: (contract.role || 'weekly').toLowerCase(),
+    shift_label_norm: 'weekly-expenses',
+    week_ending_date: cw.week_ending_date,
+    contract_id: contract.id,
+    submission_mode: cw.submission_mode_snapshot,
+    manual_pdf_r2_key: null,
+    line_type: 'EXPENSES',
+    created_at: nowIso(), updated_at: nowIso()
+  }];
+
+  const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets`, {
+    method: 'POST', headers: { ...sbHeaders(env), 'Prefer': 'return=representation' }, body: JSON.stringify(payload)
+  });
+  if (!ins.ok) return withCORS(env, req, serverError(await ins.text()));
+  const ts = (await ins.json().catch(()=>[]))[0];
+
+  // Link if week vacant
+  if (!cw.timesheet_id) {
+    await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`, {
+      method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ timesheet_id: ts.timesheet_id, updated_at: nowIso() })
+    });
+  }
+
+  // Snapshot with zero hours; expenses will be patched via /tsfin/expenses
+  const snap = {
+    timesheet_id: ts.timesheet_id,
+    timesheet_version: ts.version || 1,
+    candidate_id: contract.candidate_id,
+    client_id: contract.client_id,
+    candidate_assignment: 'ASSIGNED',
+    processing_status: 'PENDING_AUTH', // will be promoted after manual authorise or when hours TS authorised
+    pay_method: contract.pay_method_snapshot,
+    total_pay_ex_vat: 0, total_charge_ex_vat: 0, margin_ex_vat: 0,
+    hours_day: 0, hours_night: 0, hours_sat: 0, hours_sun: 0, hours_bh: 0,
+    created_at: nowIso(),
+  };
+  await writeSnapshot(env, snap);
+
+  return withCORS(env, req, ok({ timesheet_id: ts.timesheet_id }));
+}
+
+// ----------------------------------------------------------------------------
+// C) WEEKLY (ELECTRONIC) – public broker endpoints
+// ----------------------------------------------------------------------------
+
+export async function handleTimesheetsEligibilityWeekly(env, req) {
+  // Public: app supplies candidate_id, optional client_id; return OPEN weeks
+  let body; try { body = await parseJSONBody(req); } catch { body = {}; }
+  const candidateId = body.candidate_id || null;
+  if (!candidateId) return withCORS(env, req, badRequest('candidate_id required'));
+
+  let url = `${env.SUPABASE_URL}/rest/v1/v_contract_weeks_enriched?select=*` +
+            `&candidate_id=eq.${enc(candidateId)}` +
+            `&status=in.(${enc('OPEN')},${enc('PLANNED')})`;
+  if (body.client_id) url += `&client_id=eq.${enc(body.client_id)}`;
+
+  const { rows } = await sbFetch(env, url);
+  return withCORS(env, req, ok(rows || []));
+}
+
+export async function handleTimesheetsPresignWeekly(env, req) {
+  // Public: presign nurse/authoriser signature uploads for a weekly slot
+  let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  let cw = null;
+  if (body.contract_week_id) {
+    cw = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(body.contract_week_id)}&select=*`);
+  } else if (body.contract_id && body.week_ending_date) {
+    const addSeq = Number(body.additional_seq || 0);
+    cw = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(body.contract_id)}&week_ending_date=eq.${enc(body.week_ending_date)}&additional_seq=eq.${enc(addSeq)}&select=*`
+    );
+  }
+  if (!cw) return withCORS(env, req, notFound('Weekly slot not found'));
+
+  const contract = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(cw.contract_id)}&select=*`);
+  if (!contract) return withCORS(env, req, notFound('Contract not found'));
+  const candidateId = contract.candidate_id;
+
+  const bookingId = makeWeeklyBookingId(candidateId, contract, cw);
+  const weC = ymdCompact(cw.week_ending_date);
+  const base = `signatures/we=${weC}/${bookingId}/v1`;
+  const nurseKey = `${base}/nurse.png`;
+  const authKey  = `${base}/authoriser.png`;
+
+  // Tokens (reuse your createToken helper used by signatures) – 10MB each
+  const nurseToken = await createToken(env, 'UPLOAD', { key: nurseKey, c: 'sign', ttlSec: 3600, maxBytes: 10*1024*1024, contentTypes: ['image/png','image/jpeg'] });
+  const authToken  = await createToken(env, 'UPLOAD', { key: authKey,  c: 'sign', ttlSec: 3600, maxBytes: 10*1024*1024, contentTypes: ['image/png','image/jpeg'] });
+
+  const origin = new URL(req.url).origin;
+  return withCORS(env, req, ok({
+    booking_id: bookingId,
+    week_ending_date: cw.week_ending_date,
+    keys: {
+      nurse: { key: nurseKey, token: nurseToken, upload_url: `${origin}/api/signatures/upload?key=${enc(nurseKey)}&token=${enc(nurseToken)}` },
+      authoriser:{ key: authKey,  token: authToken,  upload_url: `${origin}/api/signatures/upload?key=${enc(authKey)}&token=${enc(authToken)}` }
+    }
+  }));
+}
+
+export async function handleTimesheetReplaceManualPdf(env, req, timesheetId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const body = await parseJSONBody(req).catch(() => null);
+  const newKeyRaw = body?.manual_pdf_r2_key ?? null;
+  const newKey = newKeyRaw ? normalizeKey(String(newKeyRaw)) : null;
+
+  // If a key is provided, sanity check it exists in R2
+  if (newKey) {
+    const exists = await r2Exists(env, newKey).catch(() => false);
+    if (!exists) return withCORS(env, req, badRequest('manual_pdf_r2_key does not exist in R2'));
+  }
+
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}`, {
+    method: 'PATCH',
+    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+    body: JSON.stringify({ manual_pdf_r2_key: newKey, updated_at: new Date().toISOString() })
+  });
+  if (!res.ok) return withCORS(env, req, serverError(await res.text()));
+
+  await writeAudit(env, user, 'TIMESHEET_MANUAL_PDF_REPLACED', { manual_pdf_r2_key: newKey }, { entity: 'timesheet', subject_id: timesheetId, req });
+  const row = (await res.json().catch(()=>[]))[0] || null;
+  return withCORS(env, req, ok({ timesheet_id: timesheetId, manual_pdf_r2_key: row?.manual_pdf_r2_key || null }));
+}
+
+export async function handleTimesheetsSubmitWeekly(env, req) {
+  // Public: submit weekly electronic timesheet (totals + two signatures)
+  let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  const cwId = body.contract_week_id || null;
+  if (!cwId) return withCORS(env, req, badRequest('contract_week_id required'));
+
+  const cw = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cwId)}&select=*`);
+  if (!cw) return withCORS(env, req, notFound('Weekly slot not found'));
+  if (cw.timesheet_id) return withCORS(env, req, badRequest('Timesheet already submitted for this week'));
+
+  const contract = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(cw.contract_id)}&select=*`);
+  if (!contract) return withCORS(env, req, notFound('Contract not found'));
+
+  // Validate signatures exist in R2 (light check via HEAD)
+  const weC = ymdCompact(cw.week_ending_date);
+  const bookingId = makeWeeklyBookingId(contract.candidate_id, contract, cw);
+  const nurseKey = `signatures/we=${weC}/${bookingId}/v1/nurse.png`;
+  const authKey  = `signatures/we=${weC}/${bookingId}/v1/authoriser.png`;
+
+  try {
+    await r2Head(env, nurseKey);
+    await r2Head(env, authKey);
+  } catch {
+    return withCORS(env, req, badRequest('Signatures not uploaded (nurse and authoriser required)'));
+  }
+
+  // Hours totals in body.hours (day/night/sat/sun/bh)
+  const hours = {
+    day: n(body?.hours?.day), night: n(body?.hours?.night),
+    sat: n(body?.hours?.sat), sun: n(body?.hours?.sun), bh: n(body?.hours?.bh)
+  };
+
+  // Strict rate guard BEFORE writing anything
+  const { pay, charge, method } = payChargeFromContract(contract);
+  if (anyMissingRates(hours, pay, charge)) {
+    return withCORS(env, req, badRequest('Missing rate(s) in contract for one or more entered hour buckets'));
+  }
+
+  // Create TS (ELECTRONIC)
+  const candidate = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(contract.candidate_id)}&select=id,display_name`);
+  const client = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${enc(contract.client_id)}&select=name`);
+
+  const tsPayload = [{
+    booking_id: bookingId, version: 1, is_current: true, status: 'SUBMITTED',
+    occupant_key_norm: (candidate?.display_name || String(candidate?.id)).toLowerCase(),
+    hospital_norm: (contract.display_site || client?.name || String(contract.client_id)).toLowerCase(),
+    ward_norm: (contract.ward_hint || 'contract').toLowerCase(),
+    job_title_norm: (contract.role || 'weekly').toLowerCase(),
+    shift_label_norm: 'weekly',
+    week_ending_date: cw.week_ending_date,
+    r2_nurse_key: nurseKey, r2_auth_key: authKey,
+    contract_id: contract.id,
+    submission_mode: 'ELECTRONIC',
+    manual_pdf_r2_key: null,
+    line_type: 'HOURS',
+    // auto-authorise for ELECTRONIC (as agreed)
+    authorised_at_server: nowIso(),
+    created_at: nowIso(), updated_at: nowIso()
+  }];
+
+  const tsIns = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets`, {
+    method: 'POST', headers: { ...sbHeaders(env), 'Prefer': 'return=representation' }, body: JSON.stringify(tsPayload)
+  });
+  if (!tsIns.ok) return withCORS(env, req, serverError(await tsIns.text()));
+  const ts = (await tsIns.json().catch(()=>[]))[0];
+
+  // Link week + set AUTHORISED (since auto-authorised)
+  await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`, {
+    method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
+    body: JSON.stringify({ timesheet_id: ts.timesheet_id, status: 'AUTHORISED', updated_at: nowIso() })
+  });
+
+  // Snapshot with READY_FOR_INVOICE (auto-authorised path)
+  const total_pay = round2(hours.day*n(pay.day) + hours.night*n(pay.night) + hours.sat*n(pay.sat) + hours.sun*n(pay.sun) + hours.bh*n(pay.bh));
+  const total_charge = round2(hours.day*n(charge.day) + hours.night*n(charge.night) + hours.sat*n(charge.sat) + hours.sun*n(charge.sun) + hours.bh*n(charge.bh));
+
+  const snap = {
+    timesheet_id: ts.timesheet_id,
+    timesheet_version: 1,
+    candidate_id: contract.candidate_id,
+    client_id: contract.client_id,
+    candidate_assignment: 'ASSIGNED',
+    processing_status: 'READY_FOR_INVOICE',
+    pay_method: method,
+    hours_day: hours.day, hours_night: hours.night, hours_sat: hours.sat, hours_sun: hours.sun, hours_bh: hours.bh,
+    pay_rate_day: pay.day, pay_rate_night: pay.night, pay_rate_sat: pay.sat, pay_rate_sun: pay.sun, pay_rate_bh: pay.bh,
+    rate_day: charge.day, rate_night: charge.night, rate_sat: charge.sat, rate_sun: charge.sun, rate_bh: charge.bh,
+    total_pay_ex_vat: total_pay,
+    total_charge_ex_vat: total_charge,
+    margin_ex_vat: round2(total_charge - total_pay),
+    created_at: nowIso()
+  };
+  await writeSnapshot(env, snap);
+
+  return withCORS(env, req, ok({ timesheet_id: ts.timesheet_id, processing_status: 'READY_FOR_INVOICE' }));
+}
+
+
+// ----------------------------------------------------------------------------
+// D) Manual & Expenses (supplementary)
+// ----------------------------------------------------------------------------
+
+export async function handleManualPresign(env, req) {
+  // Public alias: worker uploads manual scan for a chosen contract_week
+  let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+  const weekId = body.contract_week_id || null;
+  const candidateId = body.candidate_id || null;
+  if (!weekId || !candidateId) return withCORS(env, req, badRequest('contract_week_id and candidate_id required'));
+
+  const cw = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/v_contract_weeks_enriched?id=eq.${enc(weekId)}&select=id,contract_id,week_ending_date,candidate_id`);
+  if (!cw) return withCORS(env, req, notFound('Week not found'));
+  if (String(cw.candidate_id) !== String(candidateId)) return withCORS(env, req, unauthorized());
+
+  const weC = ymdCompact(cw.week_ending_date);
+  const key = `paper_ts/we=${weC}/cw_${cw.id}_${Date.now()}.upload`;
+  const token = await createToken(env, 'UPLOAD', { key, c: 'manual_ts', ttlSec: 3600, maxBytes: 25*1024*1024, contentTypes: ['application/pdf','image/jpeg','image/png','image/heic','image/heif'] });
+  const upload_url = `${new URL(req.url).origin}/api/files/upload?key=${enc(key)}&token=${enc(token)}`;
+
+  // Optimistically attach key
+  await patchContractWeekScan(env, cw.id, key);
+
+  return withCORS(env, req, ok({ key, upload_url, token, expires_in: 3600 }));
+}
+
+export async function handleTimesheetUpdateReference(env, req, timesheetId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+  const reference_number = (body?.reference_number || '').trim();
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}`, {
+    method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
+    body: JSON.stringify({ reference_number, updated_at: nowIso() })
+  });
+  if (!res.ok) return withCORS(env, req, serverError(await res.text()));
+  const row = (await res.json().catch(()=>[]))[0];
+  return withCORS(env, req, ok(row));
+}
+
+export async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
+  // Works for manual or electronic weekly: sets authorised_at_server + TSFIN READY_FOR_INVOICE
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`, {
+    method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
+    body: JSON.stringify({ authorised_at_server: nowIso(), updated_at: nowIso() })
+  });
+  await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`, {
+    method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
+    body: JSON.stringify({ processing_status: 'READY_FOR_INVOICE', authorised_by_user_id: user.id, authorised_at_utc: nowIso() })
+  });
+  return withCORS(env, req, ok({ authorised: true }));
+}
+
+export async function handleTimesheetPresignExpensePdf(env, req, timesheetId) {
+  const user = await requireUser(env, req, ['admin']); // backoffice presign; workers can use public files if needed
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const key = `docs/receipts/ts_${timesheetId}/${Date.now()}_${Math.random().toString(16).slice(2)}.upload`;
+  const token = await createToken(env, 'UPLOAD', { key, c: 'receipt', ttlSec: 3600, maxBytes: 20*1024*1024, contentTypes: ['application/pdf','image/jpeg','image/png','image/heic','image/heif'] });
+  const upload_url = `${new URL(req.url).origin}/api/files/upload?key=${enc(key)}&token=${enc(token)}`;
+  return withCORS(env, req, ok({ key, upload_url, token, expires_in: 3600 }));
+}
+
+export async function handleTimesheetSwitchToManual(env, req, timesheetId) {
+  // Convenience: revoke electronic attempt and switch the linked week to MANUAL
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const ts = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}&select=timesheet_id,contract_id,week_ending_date,r2_nurse_key,r2_auth_key`);
+  if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
+
+  // Find its week
+  const cw = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contract_weeks?timesheet_id=eq.${enc(timesheetId)}&select=*`);
+  if (!cw) return withCORS(env, req, badRequest('Timesheet not linked to a contract week'));
+
+  // Ensure not invoiced/paid
+  const tsfin = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true&select=locked_by_invoice_id,paid_at_utc`);
+  if (tsfin?.locked_by_invoice_id || tsfin?.paid_at_utc) return withCORS(env, req, badRequest('Cannot switch: invoiced or paid'));
+
+  // Delete TS and set week to MANUAL OPEN
+  await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}`, {
+    method: 'DELETE', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' }
+  });
+  await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`, {
+    method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
+    body: JSON.stringify({ timesheet_id: null, submission_mode_snapshot: 'MANUAL', status: 'OPEN', updated_at: nowIso() })
+  });
+
+  return withCORS(env, req, ok({ switched: true, contract_week_id: cw.id }));
+}
+
+
+export async function handleTimesheetDelete(env, req, timesheetId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const tsfin = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true&select=paid_at_utc,locked_by_invoice_id`);
+  if (tsfin?.paid_at_utc) return withCORS(env, req, badRequest('Cannot delete: already paid'));
+  if (tsfin?.locked_by_invoice_id) return withCORS(env, req, badRequest('Cannot delete: invoiced'));
+
+  // Unlink any week
+  await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?timesheet_id=eq.${enc(timesheetId)}`, {
+    method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
+    body: JSON.stringify({ timesheet_id: null, status: 'OPEN', updated_at: nowIso() })
+  });
+
+  const del = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}`, {
+    method: 'DELETE', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' }
+  });
+  if (!del.ok) return withCORS(env, req, serverError(await del.text()));
+  return withCORS(env, req, ok({ deleted: true }));
+}
+
+// ----------------------------------------------------------------------------
+// E) Funnel & Prechecks (read-only views)
+// ----------------------------------------------------------------------------
+
+export async function handleFunnelTimesheets(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  const url = new URL(req.url);
+  const q = (k) => url.searchParams.get(k);
+  const qs = (k) => url.searchParams.getAll(k);
+
+  let api = `${env.SUPABASE_URL}/rest/v1/v_timesheets_funnel?select=*`;
+
+  if (q('candidate_id')) api += `&candidate_id=eq.${enc(q('candidate_id'))}`;
+  if (q('client_id')) api += `&client_id=eq.${enc(q('client_id'))}`;
+  if (q('status')) api += `&status=eq.${enc(q('status'))}`;
+  if (q('submission_mode')) api += `&submission_mode=eq.${enc(q('submission_mode'))}`;
+  if (q('week_ending_from')) api += `&week_ending_date=gte.${enc(q('week_ending_from'))}`;
+  if (q('week_ending_to')) api += `&week_ending_date=lte.${enc(q('week_ending_to'))}`;
+
+  api += `&order=week_ending_date.asc`;
+
+  const { rows } = await sbFetch(env, api);
+  return withCORS(env, req, ok(rows || []));
+}
+
+export async function handleInvoiceIssue(env, req, invoiceId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  try {
+    // 1) Collect timesheet IDs on this invoice
+    const { rows: lineRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/invoice_lines?invoice_id=eq.${enc(invoiceId)}&select=timesheet_id`
+    );
+    const tsIds = [...new Set((lineRows || []).map(r => r.timesheet_id).filter(Boolean))];
+    if (!tsIds.length) {
+      // You can choose to issue empty invoices; here we block as a safety net
+      return withCORS(env, req, badRequest('Invoice has no timesheets to validate'));
+    }
+
+    // 2) Precheck rows for all those timesheets
+    const tsIn = tsIds.map(enc).join(',');
+    const { rows: pre } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/v_ts_invoice_precheck?timesheet_id=in.(${tsIn})`
+    );
+
+    // 3) We also need submission_mode to know whether manual PDF is required
+    const { rows: tsRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=in.(${tsIn})&select=timesheet_id,submission_mode`
+    );
+    const tsMode = Object.fromEntries((tsRows || []).map(t => [t.timesheet_id, t.submission_mode || 'ELECTRONIC']));
+
+    // 4) Build blockers
+    const reasons = [];
+    for (const r of (pre || [])) {
+      const tsid = r.timesheet_id;
+      // reference required?
+      if (r.require_reference_to_invoice === true) {
+        const ref = (r.reference_number || '').trim();
+        if (!ref) reasons.push(`TS ${tsid}: missing reference/PO`);
+      }
+      // manual PDF required?
+      const mode = (tsMode[tsid] || '').toUpperCase();
+      if (mode === 'MANUAL' && !(r.manual_pdf_r2_key && String(r.manual_pdf_r2_key).trim())) {
+        reasons.push(`TS ${tsid}: manual PDF not attached`);
+      }
+    }
+
+    // 5) Patch invoice status
+    if (reasons.length) {
+      const onHoldReason = reasons.join('; ');
+      await fetch(`${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${enc(invoiceId)}`, {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+        body: JSON.stringify({ status: 'ON_HOLD', on_hold_reason: onHoldReason })
+      });
+      await writeAudit(env, user, 'INVOICE_ON_HOLD', { reasons }, { entity: 'invoice', subject_id: invoiceId, req });
+      return withCORS(env, req, ok({ status: 'ON_HOLD', reasons }));
+    } else {
+      const now = new Date().toISOString();
+      await fetch(`${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${enc(invoiceId)}`, {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+        body: JSON.stringify({ status: 'ISSUED', issued_at_utc: now, on_hold_reason: null })
+      });
+      await writeAudit(env, user, 'INVOICE_ISSUED', {}, { entity: 'invoice', subject_id: invoiceId, req });
+      return withCORS(env, req, ok({ status: 'ISSUED', issued_at_utc: now }));
+    }
+  } catch (e) {
+    return withCORS(env, req, serverError('Failed to issue invoice'));
+  }
+}
+
+export async function handleInvoicesPrecheck(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  const url = new URL(req.url);
+  const ids = url.searchParams.getAll('timesheet_id');
+  if (!ids.length) return withCORS(env, req, badRequest('timesheet_id (one or more) required'));
+
+  const inList = ids.map(enc).join(',');
+  const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/v_ts_invoice_precheck?timesheet_id=in.(${inList})`);
+  return withCORS(env, req, ok(rows || []));
+}
+
+// ----------------------------------------------------------------------------
+// F) Rates Presets CRUD
+// ----------------------------------------------------------------------------
+
+export async function handleRatesPresetsCreate(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  if (!body?.scope || !['GLOBAL','CLIENT'].includes(String(body.scope).toUpperCase())) {
+    return withCORS(env, req, badRequest('scope must be GLOBAL or CLIENT'));
+  }
+  if (String(body.scope).toUpperCase() === 'CLIENT' && !body.client_id) {
+    return withCORS(env, req, badRequest('client_id required for CLIENT scope'));
+  }
+  if (!body.role || !body.name) return withCORS(env, req, badRequest('role and name required'));
+
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/rates_presets`, {
+    method: 'POST', headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
+    body: JSON.stringify({
+      scope: String(body.scope).toUpperCase(),
+      client_id: body.client_id || null,
+      role: body.role, band: body.band ?? null, name: body.name,
+      paye_day: body.paye_day, paye_night: body.paye_night, paye_sat: body.paye_sat, paye_sun: body.paye_sun, paye_bh: body.paye_bh,
+      umb_day: body.umb_day, umb_night: body.umb_night, umb_sat: body.umb_sat, umb_sun: body.umb_sun, umb_bh: body.umb_bh,
+      charge_day: body.charge_day, charge_night: body.charge_night, charge_sat: body.charge_sat, charge_sun: body.charge_sun, charge_bh: body.charge_bh,
+      created_at: nowIso(), updated_at: nowIso()
+    })
+  });
+  if (!res.ok) return withCORS(env, req, serverError(await res.text()));
+  const row = (await res.json().catch(()=>[]))[0];
+  return withCORS(env, req, ok(row));
+}
+
+export async function handleRatesPresetsList(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  const url = new URL(req.url);
+  const q = (k) => url.searchParams.get(k);
+  const filters = [];
+  let api = `${env.SUPABASE_URL}/rest/v1/rates_presets?select=*`;
+  if (q('scope')) filters.push(`scope=eq.${enc(q('scope').toUpperCase())}`);
+  if (q('client_id')) filters.push(`client_id=eq.${enc(q('client_id'))}`);
+  if (q('role')) filters.push(`role=eq.${enc(q('role'))}`);
+  if (q('band') != null) filters.push(`band=eq.${enc(q('band'))}`);
+  if (q('name')) filters.push(`name=eq.${enc(q('name'))}`);
+  if (filters.length) api += `&${filters.join('&')}`;
+  api += '&order=updated_at.desc';
+
+  const { rows } = await sbFetch(env, api);
+  return withCORS(env, req, ok(rows || []));
+}
+
+export async function handleRatesPresetsUpdate(env, req, presetId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  body.updated_at = nowIso();
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/rates_presets?id=eq.${enc(presetId)}`, {
+    method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=representation' }, body: JSON.stringify(body)
+  });
+  if (!res.ok) return withCORS(env, req, serverError(await res.text()));
+  const row = (await res.json().catch(()=>[]))[0];
+  return withCORS(env, req, ok(row));
+}
+
+export async function handleRatesPresetsDelete(env, req, presetId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/rates_presets?id=eq.${enc(presetId)}`, {
+    method: 'DELETE', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' }
+  });
+  if (!res.ok) return withCORS(env, req, serverError(await res.text()));
+  return withCORS(env, req, ok({ deleted: true }));
+}
+
+
+
 
 //
 // NEW HANDLERS ONLY — per your request
@@ -584,7 +1901,7 @@ export async function handlePaymentsGenerateCsv(env, req) {
       'pay_wtr_rate_pct_snapshot','policy_snapshot_json',
       'pay_vat_rate_pct_snapshot','pay_vat_amount_snapshot','pay_total_inc_vat_snapshot',
       'paid_at_utc','pay_on_hold',
-      'timesheet:timesheets(week_ending_date,authorised_at_server)',
+      'timesheet:timesheets(week_ending_date,authorised_at_server,contract_id,reference_number)',
     ].join(',') +
     `&is_current=eq.true&paid_at_utc=is.null&pay_on_hold=eq.false` +
     `&timesheet.authorised_at_server=not.is.null`;
@@ -598,6 +1915,17 @@ export async function handlePaymentsGenerateCsv(env, req) {
   const { rows: tsRows } = await sbFetch(env, url, false);
   if (!tsRows?.length) {
     return withCORS(env, req, notFound('No eligible timesheets for payment.'));
+  }
+
+  // ==== Load contracts for reference gate (require_reference_to_pay)
+  const contractIds = [...new Set(tsRows.map(r => r?.timesheet?.contract_id).filter(Boolean))];
+  let requireRefMap = {};
+  if (contractIds.length) {
+    const { rows: crows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contracts?id=in.(${contractIds.map(enc).join(',')})&select=id,require_reference_to_pay`
+    );
+    requireRefMap = Object.fromEntries((crows || []).map(c => [c.id, !!c.require_reference_to_pay]));
   }
 
   // ==== Candidate and Umbrella lookups (for bank + method + VAT)
@@ -617,7 +1945,7 @@ export async function handlePaymentsGenerateCsv(env, req) {
     : { rows: [] };
   const mapUmb = Object.fromEntries((umbRows || []).map(u => [u.id, u]));
 
-  // ==== Optional umbrella filter + safety gates
+  // ==== Optional umbrella filter + safety gates + contract reference gate
   const filtered = tsRows.filter(r => {
     const cand = mapCand[r.candidate_id];
     if (!cand) return false;
@@ -638,6 +1966,13 @@ export async function handlePaymentsGenerateCsv(env, req) {
     }
     // Authorised safety (embedded filter above handles most cases)
     if (!r?.timesheet?.authorised_at_server) return false;
+
+    // NEW: contract-level reference gate for PAY
+    const requireRef = r?.timesheet?.contract_id ? !!requireRefMap[r.timesheet.contract_id] : false;
+    if (requireRef) {
+      const ref = (r?.timesheet?.reference_number || '').trim();
+      if (!ref) return false; // exclude from PAY until reference present
+    }
 
     return true;
   });
@@ -670,12 +2005,11 @@ export async function handlePaymentsGenerateCsv(env, req) {
   }
 
   // ==== CSV compose (Monzo format)
-  // Row 1 header MUST match the sample exactly.
   const csvHeader = ['Payment reference','Payee name','Sort code','Bank account number','Bank account type','Amount'];
   const csvRows = [csvHeader.map(csvEsc).join(',')];
 
   const nowIso = new Date().toISOString();
-  const batchRef = `PAY:${nowIso.slice(0,10)}`; // used only for audit correlation
+  const batchRef = `PAY:${nowIso.slice(0,10)}`;
 
   const affectedTsIds = [];
   const patchQueue = [];
@@ -694,7 +2028,6 @@ export async function handlePaymentsGenerateCsv(env, req) {
       const rowEx = round2(payEx + expEx + milEx);
 
       if (payMethodEff === 'PAYE') {
-        // Ensure WTR snapshot if missing
         const wtrPct = resolveWtrPctForRow(r, defaults, clientHolidayMap);
         if (r.pay_wtr_rate_pct_snapshot == null) {
           patchQueue.push({ id: r.id, body: { pay_wtr_rate_pct_snapshot: wtrPct } });
@@ -724,7 +2057,6 @@ export async function handlePaymentsGenerateCsv(env, req) {
           }
           sumInc += Number(incAmt || 0);
         } else {
-          // Not VAT chargeable — snapshots should be neutral
           if ((r.pay_vat_amount_snapshot && Number(r.pay_vat_amount_snapshot) !== 0) ||
               (r.pay_total_inc_vat_snapshot && Number(r.pay_total_inc_vat_snapshot) !== round2(rowEx))) {
             patchQueue.push({
@@ -753,7 +2085,6 @@ export async function handlePaymentsGenerateCsv(env, req) {
       accountNumber = umb.account_number || '';
       accountType   = 'Business';
     } else {
-      // PAYE
       const first   = (cand?.first_name || '').trim();
       const last    = (cand?.last_name  || '').trim();
       const display = [first, last].filter(Boolean).join(' ').trim();
@@ -3894,6 +5225,7 @@ async function makeBookingId(candidate_id, date_of_shift, hospital, ward, job_ti
 async function r2Head(env, key) {
   try { return await env.R2.head(key); } catch { return null; }
 }
+
 async function r2Get(env, key) {
   try { return await env.R2.get(key); } catch { return null; }
 }
@@ -7359,73 +8691,48 @@ async function handleHRValidate(env, req, importId) {
 // ------------------------
 // LIST INVOICES (light UI)
 // ------------------------
-async function handleListInvoices(env, req) {
+export async function handleListInvoices(env, req) {
   const user = await requireUser(env, req, ['admin']);
-  if (!user) return unauthorized(); // keep current behavior
+  if (!user) return unauthorized();
 
-  const params = new URL(req.url).searchParams;
+  const sp = new URL(req.url).searchParams;
 
-  // legacy values: "paid" | "unpaid"
-  // new values: exact enum status: DRAFT | ISSUED | ON_HOLD | PAID
-  const statusFilter = (params.get("status") || "").toUpperCase();
-  const clientId     = params.get("client_id") || null;
-  const issuedFrom   = params.get("issued_from") || null; // ISO date/time
-  const issuedTo     = params.get("issued_to")   || null; // ISO date/time
+  // Accept either exact enum or legacy "paid|unpaid"
+  const statusRaw   = (sp.get('status') || '').toUpperCase();
+  const clientId    = sp.get('client_id') || null;
+  const issuedFrom  = sp.get('issued_from') || null;
+  const issuedTo    = sp.get('issued_to')   || null;
+  const includeCount= sp.get('include_count') === 'true';
+  const limit  = Math.min(parseInt(sp.get('limit')  || '50', 10), 200);
+  const offset = Math.max(0, parseInt(sp.get('offset') || '0', 10));
 
-  const includeCount = params.get("include_count") === "true";
-  const limit  = Math.min(parseInt(params.get("limit")  || "50", 10), 200);
-  const offset = Math.max(0,   parseInt(params.get("offset") || "0", 10));
-
-  // Base select (kept identical to your original)
   const select = [
     'id','invoice_no','client_id','issued_at_utc','due_at_utc',
     'status','subtotal_ex_vat','vat_amount','total_inc_vat',
-    'invoice_pdf_r2_key','header_snapshot_json'
+    'invoice_pdf_r2_key','header_snapshot_json','on_hold_reason','paid_at_utc'
   ].join(',');
 
-  // Build URL w/ filters
   let url = `${env.SUPABASE_URL}/rest/v1/invoices?select=${encodeURIComponent(select)}&order=issued_at_utc.desc&limit=${limit}&offset=${offset}`;
 
-  // Status: support both legacy "paid|unpaid" and exact enum statuses
-  if (statusFilter === 'PAID') {
-    url += `&status=eq.PAID`;
-  } else if (statusFilter === 'UNPAID') {
-    // keep legacy meaning: not yet marked as paid (no paid_at_utc) — matches your current behavior
-    url += `&paid_at_utc=is.null`;
-  } else if (statusFilter === 'PAID_LEGACY' || statusFilter === 'PAID_LEGACY_PLACEHOLDER') {
-    // not used; kept here just to illustrate how you'd branch if you ever needed it
-  } else if (statusFilter === 'DRAFT' || statusFilter === 'ISSUED' || statusFilter === 'ON_HOLD') {
-    url += `&status=eq.${encodeURIComponent(statusFilter)}`;
-  } else if (statusFilter === 'PAID' /* already handled above */) {
-    // noop
-  } else if (statusFilter === 'PAID' /* duplicate guard */) {
-    // noop
-  } else if (statusFilter === 'PAID' /* legacy alias 'paid' handled below */) {
-    // noop
-  } else if (statusFilter === 'PAID' /* keep symmetrical branches tidy */) {
-    // noop
+  if (statusRaw === 'DRAFT' || statusRaw === 'ISSUED' || statusRaw === 'ON_HOLD' || statusRaw === 'PAID') {
+    url += `&status=eq.${encodeURIComponent(statusRaw)}`;
   } else {
-    // legacy "paid" | "unpaid" (lowercase)
-    const legacy = params.get("status");
+    // Legacy: 'paid' | 'unpaid'
+    const legacy = sp.get('status');
     if (legacy === 'paid')   url += `&paid_at_utc=not.is.null`;
     if (legacy === 'unpaid') url += `&paid_at_utc=is.null`;
   }
 
-  // Optional: filter by client
-  if (clientId) {
-    url += `&client_id=eq.${encodeURIComponent(clientId)}`;
-  }
-
-  // Optional: issued date range
-  if (issuedFrom) url += `&issued_at_utc=gte.${encodeURIComponent(issuedFrom)}`;
-  if (issuedTo)   url += `&issued_at_utc=lte.${encodeURIComponent(issuedTo)}`;
+  if (clientId)  url += `&client_id=eq.${encodeURIComponent(clientId)}`;
+  if (issuedFrom)url += `&issued_at_utc=gte.${encodeURIComponent(issuedFrom)}`;
+  if (issuedTo)  url += `&issued_at_utc=lte.${encodeURIComponent(issuedTo)}`;
 
   try {
     const { rows, total } = await sbFetch(env, url, includeCount);
-    const resp = includeCount ? { items: rows, count: total ?? undefined } : { items: rows };
+    const resp = includeCount ? { items: rows || [], count: total ?? undefined } : { items: rows || [] };
     return withCORS(env, req, ok(resp));
-  } catch (e) {
-    return withCORS(env, req, serverError("Failed to list invoices"));
+  } catch {
+    return withCORS(env, req, serverError('Failed to list invoices'));
   }
 }
 
@@ -7488,35 +8795,37 @@ async function handleListInvoices(env, req) {
 // -------------------
 // GET INVOICE (+meta)
 // -------------------
-async function handleGetInvoice(env, req, invoiceId) {
+export async function handleGetInvoice(env, req, invoiceId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
   try {
     const { rows } = await sbFetch(
       env,
-      `${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${encodeURIComponent(invoiceId)}&select=*,client:clients(name,primary_invoice_email)`
+      `${env.SUPABASE_URL}/rest/v1/invoices` +
+      `?id=eq.${encodeURIComponent(invoiceId)}` +
+      `&select=*,client:clients(name,primary_invoice_email)`
     );
-    if (!rows.length) return withCORS(env, req, notFound("Invoice not found"));
-    const invoice = rows[0];
+    if (!rows.length) return withCORS(env, req, notFound('Invoice not found'));
+    const invoice = rows[0]; // now includes on_hold_reason
 
     const { rows: lineRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/invoice_lines` +
-        `?invoice_id=eq.${encodeURIComponent(invoiceId)}` +
-        `&select=` +
-        [
-          'id','invoice_id','timesheet_id','booking_id','description',
-          'hours_day','hours_night','hours_sat','hours_sun','hours_bh',
-          'pay_day','pay_night','pay_sat','pay_sun','pay_bh',
-          'charge_day','charge_night','charge_sat','charge_sun','charge_bh',
-          'total_pay_ex_vat','total_charge_ex_vat','margin_ex_vat',
-          'vat_rate_pct','vat_amount','total_inc_vat','paper_ts_r2_key',
-          'meta_json'
-        ].join(',')
+      `?invoice_id=eq.${encodeURIComponent(invoiceId)}` +
+      `&select=` +
+      [
+        'id','invoice_id','timesheet_id','booking_id','description',
+        'hours_day','hours_night','hours_sat','hours_sun','hours_bh',
+        'pay_day','pay_night','pay_sat','pay_sun','pay_bh',
+        'charge_day','charge_night','charge_sat','charge_sun','charge_bh',
+        'total_pay_ex_vat','total_charge_ex_vat','margin_ex_vat',
+        'vat_rate_pct','vat_amount','total_inc_vat','paper_ts_r2_key',
+        'meta_json'
+      ].join(',')
     );
 
-    const items = lineRows.map(l => ({
+    const items = (lineRows || []).map(l => ({
       booking_id: l.booking_id ?? null,
       timesheet_id: l.timesheet_id ?? null,
       qty: { day: l.hours_day, night: l.hours_night, sat: l.hours_sat, sun: l.hours_sun, bh: l.hours_bh },
@@ -7526,7 +8835,6 @@ async function handleGetInvoice(env, req, invoiceId) {
       meta_json: l.meta_json ?? {}
     }));
 
-    // Optional correspondence
     const includeCorr = new URL(req.url).searchParams.get('include_correspondence');
     if (includeCorr) {
       let correspondence = [];
@@ -7534,11 +8842,11 @@ async function handleGetInvoice(env, req, invoiceId) {
         const { rows: corrRows } = await sbFetch(
           env,
           `${env.SUPABASE_URL}/rest/v1/audit_events` +
-            `?object_type=eq.invoice` +
-            `&object_id_text=eq.${encodeURIComponent(invoiceId)}` +
-            `&or=(action.eq.EMAIL_QUEUED,action.eq.EMAIL_SENT)` +
-            `&select=ts_utc,action,after_json,correlation_id` +
-            `&order=ts_utc.desc`
+          `?object_type=eq.invoice` +
+          `&object_id_text=eq.${encodeURIComponent(invoiceId)}` +
+          `&or=(action.eq.EMAIL_QUEUED,action.eq.EMAIL_SENT)` +
+          `&select=ts_utc,action,after_json,correlation_id` +
+          `&order=ts_utc.desc`
         );
 
         const mailIds = [...new Set((corrRows || []).map(r => r.correlation_id).filter(Boolean))];
@@ -7547,8 +8855,8 @@ async function handleGetInvoice(env, req, invoiceId) {
           const { rows: mailRows } = await sbFetch(
             env,
             `${env.SUPABASE_URL}/rest/v1/mail_outbox` +
-              `?id=in.(${mailIds.map(encodeURIComponent).join(',')})` +
-              `&select=id,to,cc,subject,status,created_at_utc,sent_at,failed_at,reference,provider_message_id`
+            `?id=in.(${mailIds.map(encodeURIComponent).join(',')})` +
+            `&select=id,to,cc,subject,status,created_at_utc,sent_at,failed_at,reference,provider_message_id`
           );
           mailMap = Object.fromEntries((mailRows || []).map(m => [m.id, m]));
         }
@@ -7558,9 +8866,7 @@ async function handleGetInvoice(env, req, invoiceId) {
           action: ev.action,
           correlation_id: ev.correlation_id || null,
           after_json: ev.after_json ?? null,
-          email: ev.correlation_id && mailMap[ev.correlation_id]
-            ? mailMap[ev.correlation_id]
-            : null
+          email: ev.correlation_id && mailMap[ev.correlation_id] ? mailMap[ev.correlation_id] : null
         }));
       } catch {
         correspondence = [];
@@ -7570,14 +8876,15 @@ async function handleGetInvoice(env, req, invoiceId) {
 
     return withCORS(env, req, ok({ invoice, items, header_snapshot_json: invoice.header_snapshot_json ?? {} }));
   } catch {
-    return withCORS(env, req, serverError("Failed to fetch invoice"));
+    return withCORS(env, req, serverError('Failed to fetch invoice'));
   }
 }
 
 
 // === AMENDMENT inside broker/src/index.js ===
 // Replace your existing handleInvoiceRender with this version
-async function handleInvoiceRender(env, req, invoiceId) {
+export async function handleInvoiceRender(env, req, invoiceId) {
+  // (unchanged overall flow, but will now pick up manual PDFs via ensureTimesheetPdf)
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
@@ -7672,7 +8979,6 @@ async function handleInvoiceRender(env, req, invoiceId) {
       const ensuredKey = await ensureTimesheetPdf(env, tsId);
       tsKeys.push(ensuredKey);
 
-      // Update the line rows in case key was missing before
       await fetch(`${env.SUPABASE_URL}/rest/v1/invoice_lines?invoice_id=eq.${encodeURIComponent(inv.id)}&timesheet_id=eq.${encodeURIComponent(tsId)}`, {
         method: "PATCH",
         headers: { ...sbHeaders(env), "Prefer": "return=minimal" },
@@ -7688,11 +8994,9 @@ async function handleInvoiceRender(env, req, invoiceId) {
 
     // 6) Merge: invoice pages first, then timesheets (single combined artifact)
     const merged = await PDFDocument.create();
-    // add invoice
     const invDoc = await PDFDocument.load(invoicePdfU8);
     const invPages = await merged.copyPages(invDoc, invDoc.getPageIndices());
     invPages.forEach(p => merged.addPage(p));
-    // add each TS
     for (const tsBytes of tsBytesList) {
       const tsDoc = await PDFDocument.load(tsBytes);
       const pages = await merged.copyPages(tsDoc, tsDoc.getPageIndices());
@@ -7709,12 +9013,11 @@ async function handleInvoiceRender(env, req, invoiceId) {
       headers: sbHeaders(env),
       body: JSON.stringify({
         invoice_pdf_r2_key: pdfKey,
-        paper_ts_r2_manifest: tsKeys, // good for audit & re-renders
+        paper_ts_r2_manifest: tsKeys,
         updated_at: new Date().toISOString()
       }),
     });
 
-    // 8) Return signed URL to the combined PDF
     const token = await createToken(env.UPLOAD_TOKEN_SECRET, { typ: "dl", key: pdfKey, exp: Math.floor(Date.now()/1000) + Number(env.PRESIGN_EXPIRES_SECONDS || 600) });
     const downloadUrl = new URL(env.PUBLIC_DOWNLOAD_BASE_URL || new URL(new URL(req.url).origin + '/api/files/download').toString());
     downloadUrl.searchParams.set("key", pdfKey);
@@ -7724,6 +9027,75 @@ async function handleInvoiceRender(env, req, invoiceId) {
   } catch (e) {
     return withCORS(env, req, serverError("Failed to render invoice bundle"));
   }
+}
+export async function handleInvoiceHold(env, req, invoiceId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const body = await parseJSONBody(req).catch(() => ({}));
+  const reason = (body && typeof body.reason === 'string' && body.reason.trim()) ? body.reason.trim() : null;
+
+  try {
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${encodeURIComponent(invoiceId)}`, {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify({
+        status: 'ON_HOLD',
+        on_hold_reason: reason || 'Placed on hold'
+      })
+    });
+    if (!res.ok) {
+      const t = await res.text();
+      return withCORS(env, req, serverError(`Failed to hold invoice: ${t}`));
+    }
+    const invoice = (await res.json())[0] || null;
+    await writeAudit(env, user, 'INVOICE_HELD', { reason: invoice?.on_hold_reason || null }, { entity: 'invoice', subject_id: invoiceId, req });
+    return withCORS(env, req, ok({ ok: true, status: 'ON_HOLD', on_hold_reason: invoice?.on_hold_reason || null }));
+  } catch (e) {
+    return withCORS(env, req, serverError('Failed to hold invoice'));
+  }
+}
+
+export async function handleInvoiceUnhold(env, req, invoiceId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  try {
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${encodeURIComponent(invoiceId)}`, {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify({ status: 'DRAFT', on_hold_reason: null })
+    });
+    if (!res.ok) {
+      const t = await res.text();
+      return withCORS(env, req, serverError(`Failed to unhold invoice: ${t}`));
+    }
+    const invoice = (await res.json())[0] || null;
+    await writeAudit(env, user, 'INVOICE_UNHELD', {}, { entity: 'invoice', subject_id: invoiceId, req });
+    return withCORS(env, req, ok({ ok: true, status: 'DRAFT' }));
+  } catch (e) {
+    return withCORS(env, req, serverError('Failed to unhold invoice'));
+  }
+}
+export async function handleInvoiceUnissue(env, req, invoiceId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const body = await parseJSONBody(req).catch(()=>({}));
+  const clearPdf = !!body?.clear_pdf;
+
+  const patch = { status: 'DRAFT', on_hold_reason: null };
+  if (clearPdf) patch.invoice_pdf_r2_key = null;
+
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${enc(invoiceId)}`, {
+    method: 'PATCH',
+    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+    body: JSON.stringify(patch)
+  });
+  if (!res.ok) return withCORS(env, req, serverError(await res.text()));
+
+  await writeAudit(env, user, 'INVOICE_UNISSUED', { clear_pdf: clearPdf }, { entity: 'invoice', subject_id: invoiceId, req });
+  return withCORS(env, req, ok({ status: 'DRAFT', cleared_pdf: clearPdf }));
 }
 
 
@@ -7841,7 +9213,6 @@ async function handleInvoiceMarkPaid(env, req, invoiceId) {
     return withCORS(env, req, serverError("Failed to mark invoice paid"));
   }
 }
-
 async function handleInvoiceMarkUnpaid(env, req, invoiceId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
@@ -7857,6 +9228,7 @@ async function handleInvoiceMarkUnpaid(env, req, invoiceId) {
     return withCORS(env, req, serverError("Failed to mark invoice unpaid"));
   }
 }
+
 
 // ====================== RELATED: COUNTS (generic) ======================
 /**
@@ -8466,6 +9838,95 @@ async function enqueueTsfinRecomputeForClient(env, client_id) {
   } catch (_) { /* non-fatal */ }
 }
 
+// Finds READY_FOR_INVOICE snapshots for contracts with auto_invoice=true,
+// groups by client, creates HOURS-only invoices and immediately issues them.
+// Finds READY_FOR_INVOICE snapshots for contracts with auto_invoice=true,
+// groups by client, creates HOURS-only invoices and immediately issues them.
+export async function runAutoInvoiceCycle(env) {
+  const enc = encodeURIComponent; // ensure we have enc in scope
+
+  try {
+    // 1) Find eligible TSFIN + join to contracts (for contract_id on each TS)
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?select=timesheet_id,client_id,timesheet:timesheets(contract_id)` +
+      `&is_current=eq.true&locked_by_invoice_id=is.null&processing_status=eq.READY_FOR_INVOICE`
+    );
+
+    // Group by contract_id (normalise ID as string)
+    const byContract = new Map(); // contract_id (string) -> row[]
+    for (const r of (rows || [])) {
+      const cidRaw = r?.timesheet?.contract_id;
+      if (!cidRaw) continue;
+      const cid = String(cidRaw);
+      if (!byContract.has(cid)) byContract.set(cid, []);
+      byContract.get(cid).push(r);
+    }
+    if (!byContract.size) return;
+
+    // 2) Load those contracts to filter auto_invoice
+    const contractIdList = Array.from(byContract.keys());
+    const { rows: cons } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contracts?id=in.(${contractIdList.map(enc).join(',')})&select=id,auto_invoice`
+    );
+    const autoIds = new Set((cons || []).filter(c => c.auto_invoice === true).map(c => String(c.id)));
+    if (!autoIds.size) return;
+
+    // 3) Group remaining snapshots by client and create+issue
+    const groups = new Map(); // client_id -> timesheet_ids[]
+    for (const [contractId, list] of byContract.entries()) {
+      if (!autoIds.has(contractId)) continue; // only auto-invoice contracts
+      for (const r of list) {
+        const arr = groups.get(r.client_id) || [];
+        arr.push(r.timesheet_id);
+        groups.set(r.client_id, arr);
+      }
+    }
+
+    for (const [clientId, tsIds] of groups.entries()) {
+      if (!tsIds.length) continue;
+
+      // Create invoice (HOURS only)
+      const createReq = new Request('https://internal', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          // pass an admin token so requireUser(['admin']) succeeds
+          'x-admin-token': env.STATIC_ADMIN_TOKEN || ''
+        },
+        body: JSON.stringify({ timesheet_ids: tsIds })
+      });
+
+      const createdResp = await handleCreateInvoiceTsfin(env, createReq);
+      if (!createdResp?.ok) {
+        const errTxt = await createdResp.text().catch(()=>'');
+        console.warn('[auto-invoice] create failed for client', clientId, errTxt);
+        continue;
+      }
+      const payload = await createdResp.json().catch(() => null);
+      const invoiceId = payload?.invoice_id;
+      if (!invoiceId) {
+        console.warn('[auto-invoice] no invoice_id returned for client', clientId);
+        continue;
+      }
+
+      // Issue it (runs pre-gates)
+      const issueReq = new Request('https://internal', {
+        method: 'POST',
+        headers: { 'x-admin-token': env.STATIC_ADMIN_TOKEN || '' }
+      });
+      const issueResp = await handleInvoiceIssue(env, issueReq, invoiceId);
+      if (!issueResp?.ok) {
+        const errTxt = await issueResp.text().catch(()=>'');
+        console.warn('[auto-invoice] issue failed for invoice', invoiceId, errTxt);
+      }
+    }
+  } catch (e) {
+    console.warn('runAutoInvoiceCycle failed:', e?.message || e);
+  }
+}
 
 
 
@@ -10535,6 +11996,16 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
+  const toNum = (v) => (v === null || v === undefined ? null : Number(v));
+  const nonneg = (n) => (n === null || n === undefined ? true : Number(n) >= 0);
+  const isNonEmptyArray = (v) => Array.isArray(v) && v.length > 0;
+  const normalizeManifest = (v) => {
+    if (v === undefined) return undefined;       // not touched
+    if (v === null) return null;                 // explicit clear
+    return isNonEmptyArray(v) ? v : null;        // empty array → null
+  };
+
+  // -------- basic numeric validations --------
   if (patch.expenses) {
     const xp = patch.expenses;
     if (!nonneg(xp.pay_ex_vat) || !nonneg(xp.charge_ex_vat)) {
@@ -10548,49 +12019,86 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     }
   }
 
+  // -------- load current snapshot (may not include manifests) --------
   const before = await fetchCurrentTsfin(env, timesheetId);
   if (!before) return notFound('TSFIN current row not found');
   if (before.locked_by_invoice_id) return conflict('Timesheet financials are locked by an invoice');
 
-  if (patch.expenses && patch.expenses.charge_ex_vat != null) {
-    const ch = Number(patch.expenses.charge_ex_vat);
-    if (ch > 0 && !patch.expenses.evidence_r2_key && !before.expenses_evidence_r2_key) {
-      return unprocessable('Expenses charge requires evidence_r2_key');
+  // Helper: do we have acceptable evidence now or already on the row?
+  const ensureEvidencePresent = async (kind, chargeVal, patchObj) => {
+    if (chargeVal == null) return true;                 // not touching charge
+    const ch = Number(chargeVal);
+    if (!(ch > 0)) return true;                         // charge is zero / not positive ⇒ no evidence required
+
+    const keyField = `${kind}_evidence_r2_key`;         // e.g. expenses_evidence_r2_key
+    const manField = `${kind}_evidence_manifest`;       // e.g. expenses_evidence_manifest
+
+    // Any new evidence in payload?
+    if (patchObj?.evidence_r2_key) return true;
+    if (isNonEmptyArray(patchObj?.evidence_manifest)) return true;
+
+    // Any existing evidence on 'before'?
+    if (before[keyField]) return true;
+    if (typeof before[manField] !== 'undefined') {
+      if (isNonEmptyArray(before[manField])) return true;
+    } else {
+      // Lazily probe manifest fields if fetchCurrentTsfin didn't select them
+      try {
+        const { rows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true` +
+          `&select=${enc(keyField)},${enc(manField)}`
+        );
+        const r = (rows || [])[0] || {};
+        if (r[keyField]) return true;
+        if (isNonEmptyArray(r[manField])) return true;
+      } catch { /* ignore and fall through */ }
     }
+
+    return false;
+  };
+
+  // -------- evidence requirements (accept key OR non-empty manifest) --------
+  if (patch.expenses) {
+    const ok = await ensureEvidencePresent('expenses', patch.expenses.charge_ex_vat, patch.expenses);
+    if (!ok) return unprocessable('Expenses charge requires evidence (single key or non-empty manifest)');
   }
-  if (patch.mileage && patch.mileage.charge_ex_vat != null) {
-    const ch = Number(patch.mileage.charge_ex_vat);
-    if (ch > 0 && !patch.mileage.evidence_r2_key && !before.mileage_evidence_r2_key) {
-      return unprocessable('Mileage charge requires evidence_r2_key');
-    }
+  if (patch.mileage) {
+    const ok = await ensureEvidencePresent('mileage', patch.mileage.charge_ex_vat, patch.mileage);
+    if (!ok) return unprocessable('Mileage charge requires evidence (single key or non-empty manifest)');
   }
 
+  // -------- construct update payload --------
   const upd = {};
 
   if (patch.expenses) {
     const xp = patch.expenses;
-    if (xp.pay_ex_vat !== undefined)      upd.expenses_pay_ex_vat = toNum(xp.pay_ex_vat) ?? 0;
-    if (xp.charge_ex_vat !== undefined)   upd.expenses_charge_ex_vat = toNum(xp.charge_ex_vat) ?? 0;
-    if (xp.description !== undefined)     upd.expenses_description = xp.description ?? null;
-    if (xp.evidence_r2_key !== undefined) upd.expenses_evidence_r2_key = xp.evidence_r2_key ?? null;
+    if (xp.pay_ex_vat !== undefined)        upd.expenses_pay_ex_vat = toNum(xp.pay_ex_vat) ?? 0;
+    if (xp.charge_ex_vat !== undefined)     upd.expenses_charge_ex_vat = toNum(xp.charge_ex_vat) ?? 0;
+    if (xp.description !== undefined)       upd.expenses_description = (xp.description ?? null);
+    if (xp.evidence_r2_key !== undefined)   upd.expenses_evidence_r2_key = (xp.evidence_r2_key ?? null);
+    const xpMan = normalizeManifest(xp.evidence_manifest);
+    if (xpMan !== undefined)                upd.expenses_evidence_manifest = xpMan;
   }
 
   if (patch.mileage) {
     const ml = patch.mileage;
-    if (ml.pay_ex_vat !== undefined)      upd.mileage_pay_ex_vat = toNum(ml.pay_ex_vat) ?? 0;
-    if (ml.charge_ex_vat !== undefined)   upd.mileage_charge_ex_vat = toNum(ml.charge_ex_vat) ?? 0;
-    if (ml.evidence_r2_key !== undefined) upd.mileage_evidence_r2_key = ml.evidence_r2_key ?? null;
+    if (ml.pay_ex_vat !== undefined)        upd.mileage_pay_ex_vat = toNum(ml.pay_ex_vat) ?? 0;
+    if (ml.charge_ex_vat !== undefined)     upd.mileage_charge_ex_vat = toNum(ml.charge_ex_vat) ?? 0;
+    if (ml.evidence_r2_key !== undefined)   upd.mileage_evidence_r2_key = (ml.evidence_r2_key ?? null);
+    const mlMan = normalizeManifest(ml.evidence_manifest);
+    if (mlMan !== undefined)                upd.mileage_evidence_manifest = mlMan;
 
-    if (ml.pay_rate !== undefined)        upd.mileage_pay_rate = ml.pay_rate === null ? null : toNum(ml.pay_rate);
-    if (ml.charge_rate !== undefined)     upd.mileage_charge_rate = ml.charge_rate === null ? null : toNum(ml.charge_rate);
+    if (ml.pay_rate !== undefined)          upd.mileage_pay_rate = (ml.pay_rate === null ? null : toNum(ml.pay_rate));
+    if (ml.charge_rate !== undefined)       upd.mileage_charge_rate = (ml.charge_rate === null ? null : toNum(ml.charge_rate));
 
+    // Backfill rates from candidate/client if not provided in patch (preserve existing if present)
     if (ml.pay_rate === undefined || ml.charge_rate === undefined) {
       const needPay = ml.pay_rate === undefined;
       const needChg = ml.charge_rate === undefined;
-
       if (needPay || needChg) {
-        let candRate = null;
-        let clientRate = null;
+        let candRate = null, clientRate = null;
         try {
           if (needPay && before.candidate_id) {
             const { rows: candRows } = await sbFetch(
@@ -10607,23 +12115,17 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
             clientRate = cliRows?.[0]?.mileage_charge_rate ?? null;
           }
         } catch { /* ignore */ }
-
-        if (needPay) {
-          upd.mileage_pay_rate = toNum(before.mileage_pay_rate) ?? (candRate == null ? null : Number(candRate));
-        }
-        if (needChg) {
-          upd.mileage_charge_rate = toNum(before.mileage_charge_rate) ?? (clientRate == null ? null : Number(clientRate));
-        }
+        if (needPay) upd.mileage_pay_rate = toNum(before.mileage_pay_rate) ?? (candRate == null ? null : Number(candRate));
+        if (needChg) upd.mileage_charge_rate = toNum(before.mileage_charge_rate) ?? (clientRate == null ? null : Number(clientRate));
       }
     }
   }
 
-  if (patch.po) {
-    if (patch.po.number !== undefined) upd.po_number = patch.po.number ?? null;
+  if (patch.po && patch.po.number !== undefined) {
+    upd.po_number = (patch.po.number ?? null);
   }
 
-  const hasFieldChange = Object.keys(upd).length > 0;
-  if (!hasFieldChange) {
+  if (!Object.keys(upd).length) {
     return ok({ updated: false, tsfin: before });
   }
 
@@ -10661,11 +12163,13 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
         charge_ex_vat: before.expenses_charge_ex_vat,
         description: before.expenses_description,
         evidence_r2_key: before.expenses_evidence_r2_key,
+        evidence_manifest: before.expenses_evidence_manifest ?? null,
       },
       mileage: {
         pay_ex_vat: before.mileage_pay_ex_vat,
         charge_ex_vat: before.mileage_charge_ex_vat,
         evidence_r2_key: before.mileage_evidence_r2_key,
+        evidence_manifest: before.mileage_evidence_manifest ?? null,
         pay_rate: before.mileage_pay_rate,
         charge_rate: before.mileage_charge_rate,
       },
@@ -10677,11 +12181,13 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
         charge_ex_vat: after?.expenses_charge_ex_vat,
         description: after?.expenses_description,
         evidence_r2_key: after?.expenses_evidence_r2_key,
+        evidence_manifest: after?.expenses_evidence_manifest ?? null,
       },
       mileage: {
         pay_ex_vat: after?.mileage_pay_ex_vat,
         charge_ex_vat: after?.mileage_charge_ex_vat,
         evidence_r2_key: after?.mileage_evidence_r2_key,
+        evidence_manifest: after?.mileage_evidence_manifest ?? null,
         pay_rate: after?.mileage_pay_rate,
         charge_rate: after?.mileage_charge_rate,
       },
@@ -11432,6 +12938,325 @@ async function handleFinancePreviewTsfin(env, req) {
 
   return ok(agg);
 }
+export async function handleCreateInvoiceExpenses(env, req) {
+  // EXPENSES-ONLY (and/or mileage) invoice creation, separate from HOURS.
+  // Requires snapshots to be READY_FOR_INVOICE & unlocked; sums expenses/mileage parts only.
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return unauthorized('Unauthorized');
+
+  const body = await parseJSONBody(req).catch(() => null);
+  if (!body || !Array.isArray(body.timesheet_ids) || body.timesheet_ids.length === 0) {
+    return badRequest("timesheet_ids[] required");
+  }
+
+  const timesheetIds = [...new Set(body.timesheet_ids)].filter(Boolean);
+  if (!timesheetIds.length) return badRequest("No valid timesheet_ids");
+
+  const inIds = timesheetIds.map(encodeURIComponent).join(',');
+
+  // Eligible snapshots (READY, unlocked) — we will only invoice expense/mileage components.
+  const snapUrl =
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+    `?select=*` +
+    `&timesheet_id=in.(${inIds})` +
+    `&is_current=eq.true` +
+    `&locked_by_invoice_id=is.null` +
+    `&processing_status=eq.READY_FOR_INVOICE`;
+
+  const { rows: snaps } = await sbFetch(env, snapUrl);
+  if (!snaps?.length) return badRequest("No eligible timesheets (need READY_FOR_INVOICE & unlocked).");
+
+  // Filter to rows that actually have expenses or mileage to bill
+  const billable = snaps.filter(s =>
+    Number(s.expenses_charge_ex_vat || 0) > 0 || Number(s.mileage_charge_ex_vat || 0) > 0
+  );
+  if (!billable.length) return badRequest("No expenses/mileage to invoice for the given timesheets.");
+
+  // Must be single client
+  const clientIds = [...new Set(billable.map(s => s.client_id).filter(Boolean))];
+  if (clientIds.length !== 1) {
+    return badRequest(`Expected exactly one client across snapshots, found ${clientIds.length}.`);
+  }
+  const client_id = clientIds[0];
+
+  // VAT + client snapshot
+  const { rows: defRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=vat_rate_pct,bank_name,bank_sort_code,bank_account_number,vat_registration_number`
+  );
+  const defaultVat = Number(defRows?.[0]?.vat_rate_pct ?? 20);
+
+  const { rows: cliRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/clients?select=id,name,invoice_address,primary_invoice_email,vat_chargeable,payment_terms_days&id=eq.${encodeURIComponent(client_id)}`
+  );
+  const client = cliRows?.[0] || null;
+  if (!client) return badRequest("Client not found for snapshots.");
+
+  const { rows: csRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/client_settings` +
+    `?select=client_id,vat_rate_pct,effective_from` +
+    `&client_id=eq.${encodeURIComponent(client_id)}` +
+    `&order=effective_from.desc&limit=1`
+  );
+  const cs = csRows?.[0] || null;
+
+  const vatRatePct = client.vat_chargeable === false ? 0 : Number(cs?.vat_rate_pct ?? defaultVat);
+
+  // Base TS meta
+  const { rows: tsRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+    `?select=timesheet_id,booking_id,week_ending_date,reference_number` +
+    `&timesheet_id=in.(${inIds})`
+  );
+  const tsMetaMap = Object.fromEntries((tsRows || []).map(t => [t.timesheet_id, t]));
+
+  // Create header (DRAFT)
+  const issuedAt = new Date().toISOString();
+  const termsDays = Number(client.payment_terms_days ?? 30);
+  const dueAt = new Date(Date.now() + termsDays * 86_400_000).toISOString();
+
+  let DEFAULT_STATIONERY_KEY =
+    env.INVOICE_STATIONERY_KEY || 'Assets/Stationery/Letterhead/A4/Letterhead_v1@300dpi.png';
+  if (/\.pdf$/i.test(DEFAULT_STATIONERY_KEY)) {
+    DEFAULT_STATIONERY_KEY = DEFAULT_STATIONERY_KEY.replace(/\.pdf$/i, '@300dpi.png');
+  }
+  const DEFAULT_STATIONERY_MARGINS_MM = { top: 32, right: 12, bottom: 20, left: 12 };
+  const DEFAULT_HIDE_BANK_FOOTER = true;
+
+  const header_snapshot_json = {
+    client_id,
+    client_name: client.name,
+    client_invoice_address: client.invoice_address ?? null,
+    client_primary_invoice_email: client.primary_invoice_email ?? null,
+    vat_chargeable: !!client.vat_chargeable,
+    applied_vat_rate_pct: vatRatePct,
+    payment_terms_days: termsDays,
+    issued_at_utc: issuedAt,
+    due_at_utc: dueAt,
+    stationery_key: DEFAULT_STATIONERY_KEY,
+    stationery_margins_mm: DEFAULT_STATIONERY_MARGINS_MM,
+    hide_bank_footer: DEFAULT_HIDE_BANK_FOOTER,
+    bank: {
+      name: defRows?.[0]?.bank_name ?? null,
+      sort_code: defRows?.[0]?.bank_sort_code ?? null,
+      account_number: defRows?.[0]?.bank_account_number ?? null,
+    },
+    vat_registration_number: defRows?.[0]?.vat_registration_number ?? null,
+    meta: { source: 'TSFIN_EXPENSES', timesheet_count: billable.length }
+  };
+
+  const invIns = await fetch(`${env.SUPABASE_URL}/rest/v1/invoices`, {
+    method: 'POST',
+    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+    body: JSON.stringify({
+      client_id,
+      status: 'DRAFT',
+      issued_at_utc: issuedAt,
+      due_at_utc: dueAt,
+      subtotal_ex_vat: 0,
+      vat_amount: 0,
+      total_inc_vat: 0,
+      header_snapshot_json
+    })
+  });
+  if (!invIns.ok) {
+    const t = await invIns.text();
+    return serverError(`Failed to create invoice: ${t}`);
+  }
+  const invoice = (await invIns.json())[0];
+
+  // Build EXPENSES/MILEAGE lines only
+  let sumEx = 0, sumVat = 0, sumInc = 0;
+  const lines = [];
+
+  for (const s of billable) {
+    const tsMeta = tsMetaMap[s.timesheet_id] || {};
+
+    // Expenses
+    const expCharge = Number(s.expenses_charge_ex_vat || 0);
+    if (expCharge > 0) {
+      const expPay = Number(s.expenses_pay_ex_vat || 0);
+      const expMargin = round2(expCharge - expPay);
+      const expVat = round2(expCharge * vatRatePct / 100);
+      const expInc = round2(expCharge + expVat);
+
+      sumEx += expCharge; sumVat += expVat; sumInc += expInc;
+
+      const expMeta = {
+        line_type: 'EXPENSES',
+        timesheet_id: s.timesheet_id,
+        timesheet_version: s.timesheet_version,
+        booking_id: tsMeta.booking_id ?? null,
+        week_ending_date_local: tsMeta.week_ending_date ?? null,
+        po_number: s.po_number ?? null,
+        description: s.expenses_description ?? null,
+        evidence_r2_key: s.expenses_evidence_r2_key ?? null,
+        totals: {
+          pay_ex_vat: expPay,
+          charge_ex_vat: expCharge,
+          margin_ex_vat: expMargin,
+          vat_rate_pct: vatRatePct,
+          vat_amount: expVat,
+          total_inc_vat: expInc
+        }
+      };
+
+      lines.push({
+        invoice_id: invoice.id,
+        timesheet_id: s.timesheet_id,
+        booking_id: tsMeta.booking_id ?? null,
+        description: `Expenses – ${s.expenses_description || 'Receipted'}`,
+        hours_day: 0, hours_night: 0, hours_sat: 0, hours_sun: 0, hours_bh: 0,
+        pay_day: null, pay_night: null, pay_sat: null, pay_sun: null, pay_bh: null,
+        charge_day: null, charge_night: null, charge_sat: null, charge_sun: null, charge_bh: null,
+        total_pay_ex_vat: expPay,
+        total_charge_ex_vat: expCharge,
+        margin_ex_vat: expMargin,
+        vat_rate_pct: vatRatePct,
+        vat_amount: expVat,
+        total_inc_vat: expInc,
+        meta_json: expMeta
+      });
+    }
+
+    // Mileage
+    const milCharge = Number(s.mileage_charge_ex_vat || 0);
+    if (milCharge > 0) {
+      const milPay = Number(s.mileage_pay_ex_vat || 0);
+      const milMargin = round2(milCharge - milPay);
+      const milVat = round2(milCharge * vatRatePct / 100);
+      const milInc = round2(milCharge + milVat);
+
+      sumEx += milCharge; sumVat += milVat; sumInc += milInc;
+
+      const milMeta = {
+        line_type: 'MILEAGE',
+        timesheet_id: s.timesheet_id,
+        timesheet_version: s.timesheet_version,
+        booking_id: tsMeta.booking_id ?? null,
+        week_ending_date_local: tsMeta.week_ending_date ?? null,
+        po_number: s.po_number ?? null,
+        evidence_r2_key: s.mileage_evidence_r2_key ?? null,
+        pay_rate: s.mileage_pay_rate ?? null,
+        charge_rate: s.mileage_charge_rate ?? null,
+        totals: {
+          pay_ex_vat: milPay,
+          charge_ex_vat: milCharge,
+          margin_ex_vat: milMargin,
+          vat_rate_pct: vatRatePct,
+          vat_amount: milVat,
+          total_inc_vat: milInc
+        }
+      };
+
+      lines.push({
+        invoice_id: invoice.id,
+        timesheet_id: s.timesheet_id,
+        booking_id: tsMeta.booking_id ?? null,
+        description: `Mileage – Receipted`,
+        hours_day: 0, hours_night: 0, hours_sat: 0, hours_sun: 0, hours_bh: 0,
+        pay_day: null, pay_night: null, pay_sat: null, pay_sun: null, pay_bh: null,
+        charge_day: null, charge_night: null, charge_sat: null, charge_sun: null, charge_bh: null,
+        total_pay_ex_vat: milPay,
+        total_charge_ex_vat: milCharge,
+        margin_ex_vat: milMargin,
+        vat_rate_pct: vatRatePct,
+        vat_amount: milVat,
+        total_inc_vat: milInc,
+        meta_json: milMeta
+      });
+    }
+  }
+
+  // Persist lines
+  if (lines.length) {
+    const resLines = await fetch(`${env.SUPABASE_URL}/rest/v1/invoice_lines`, {
+      method: 'POST',
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify(lines)
+    });
+    if (!resLines.ok) {
+      const t = await resLines.text();
+      return serverError(`Failed to insert invoice_lines: ${t}`);
+    }
+  }
+
+  // Update totals
+  const updInv = await fetch(`${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${encodeURIComponent(invoice.id)}`, {
+    method: 'PATCH',
+    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+    body: JSON.stringify({
+      subtotal_ex_vat: round2(sumEx),
+      vat_amount: round2(sumVat),
+      total_inc_vat: round2(sumInc),
+      updated_at: new Date().toISOString()
+    })
+  });
+  if (!updInv.ok) {
+    const t = await updInv.text();
+    return serverError(`Failed to update invoice totals: ${t}`);
+  }
+
+  // Lock the snapshots we used
+  const lockUrl =
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+    `?timesheet_id=in.(${inIds})` +
+    `&is_current=eq.true` +
+    `&locked_by_invoice_id=is.null` +
+    `&processing_status=eq.READY_FOR_INVOICE`;
+
+  const lockRes = await fetch(lockUrl, {
+    method: 'PATCH',
+    headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+    body: JSON.stringify({ locked_by_invoice_id: invoice.id, locked_at_utc: new Date().toISOString() })
+  });
+  if (!lockRes.ok) {
+    const t = await lockRes.text();
+    return serverError(`Failed to lock snapshots: ${t}`);
+  }
+
+  // Mark linked weeks as INVOICED
+  const usedTsIds = [...new Set(lines.map(l => l.timesheet_id).filter(Boolean))];
+  await setWeeksInvoicedForTimesheets(env, usedTsIds);
+
+  // (Optional but recommended) Ensure TS PDFs & write keys back to lines, so render bundles include TS PDFs
+  const concurrency = Math.max(1, Number(env.TIMESHEET_RENDER_CONCURRENCY || 4));
+  async function mapWithLimit(arr, limit, iterator) {
+    let idx = 0;
+    const results = new Array(arr.length);
+    const workers = Array.from({ length: Math.min(limit, arr.length) }, async () => {
+      while (true) {
+        const current = idx++;
+        if (current >= arr.length) break;
+        results[current] = await iterator(arr[current], current);
+      }
+    });
+    await Promise.all(workers);
+    return results;
+  }
+  await mapWithLimit(usedTsIds, concurrency, async (tsId) => {
+    const key = await ensureTimesheetPdf(env, tsId);
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/invoice_lines?invoice_id=eq.${encodeURIComponent(invoice.id)}&timesheet_id=eq.${encodeURIComponent(tsId)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        body: JSON.stringify({ paper_ts_r2_key: key })
+      }
+    );
+    return key;
+  });
+
+  return ok({
+    invoice_id: invoice.id,
+    client_id,
+    lines: lines.length,
+    totals: { ex_vat: round2(sumEx), vat: round2(sumVat), inc_vat: round2(sumInc) }
+  });
+}
 
 
 // ---------------------------
@@ -11451,7 +13276,21 @@ async function handleFinancePreviewTsfin(env, req) {
 // CREATE INVOICE (TSFIN → INV)
 // Adds ts reference number into meta for hours lines
 // -----------------------------
-async function handleCreateInvoiceTsfin(env, req) {
+
+// Helper: mark linked weeks as INVOICED (used by both HOURS + EXPENSES creators)
+async function setWeeksInvoicedForTimesheets(env, timesheetIds) {
+  const ids = Array.from(new Set((timesheetIds || []).filter(Boolean)));
+  if (!ids.length) return;
+  const inList = ids.map(encodeURIComponent).join(',');
+  await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?timesheet_id=in.(${inList})`, {
+    method: 'PATCH',
+    headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+    body: JSON.stringify({ status: 'INVOICED', updated_at: new Date().toISOString() })
+  });
+}
+
+export async function handleCreateInvoiceTsfin(env, req) {
+  // (HOURS only — expenses invoiced via handleCreateInvoiceExpenses)
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized('Unauthorized');
 
@@ -11461,11 +13300,11 @@ async function handleCreateInvoiceTsfin(env, req) {
   }
 
   const timesheetIds = [...new Set(body.timesheet_ids)].filter(Boolean);
-  if (timesheetIds.length === 0) return badRequest("No valid timesheet_ids");
+  if (!timesheetIds.length) return badRequest("No valid timesheet_ids");
 
   const inIds = timesheetIds.map(encodeURIComponent).join(',');
 
-  // 1) Eligible snapshots
+  // Eligible HOURS snapshots only (READY_FOR_INVOICE, unlocked)
   const snapUrl =
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
     `?select=*` +
@@ -11475,18 +13314,16 @@ async function handleCreateInvoiceTsfin(env, req) {
     `&processing_status=eq.READY_FOR_INVOICE`;
 
   const { rows: snaps } = await sbFetch(env, snapUrl);
-  if (!snaps?.length) {
-    return badRequest("No eligible timesheets (need READY_FOR_INVOICE & unlocked).");
-  }
+  if (!snaps?.length) return badRequest("No eligible timesheets (need READY_FOR_INVOICE & unlocked).");
 
   // Must be single client
-  const clientIds = [...new Set(snaps.map((s) => s.client_id).filter(Boolean))];
+  const clientIds = [...new Set(snaps.map(s => s.client_id).filter(Boolean))];
   if (clientIds.length !== 1) {
     return badRequest(`Expected exactly one client across snapshots, found ${clientIds.length}.`);
   }
   const client_id = clientIds[0];
 
-  // VAT + bank defaults
+  // VAT + client snapshot
   const { rows: defRows } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=vat_rate_pct,bank_name,bank_sort_code,bank_account_number,vat_registration_number`
@@ -11505,40 +13342,31 @@ async function handleCreateInvoiceTsfin(env, req) {
     `${env.SUPABASE_URL}/rest/v1/client_settings` +
     `?select=client_id,vat_rate_pct,effective_from` +
     `&client_id=eq.${encodeURIComponent(client_id)}` +
-    `&order=effective_from.desc` +
-    `&limit=1`
+    `&order=effective_from.desc&limit=1`
   );
   const cs = csRows?.[0] || null;
 
   const vatRatePct = client.vat_chargeable === false ? 0 : Number(cs?.vat_rate_pct ?? defaultVat);
 
-  // Base timesheet meta (now also grab reference_number for meta)
+  // Base TS meta (also grab reference_number for meta)
   const { rows: tsRows } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
     `?select=timesheet_id,booking_id,week_ending_date,r2_auth_key,r2_nurse_key,reference_number` +
     `&timesheet_id=in.(${inIds})`
   );
-  const tsMetaMap = Object.fromEntries((tsRows || []).map((t) => [t.timesheet_id, t]));
+  const tsMetaMap = Object.fromEntries((tsRows || []).map(t => [t.timesheet_id, t]));
 
-  // Stationery defaults (PNG)
+  // Stationery snapshot defaults
   let DEFAULT_STATIONERY_KEY =
-    env.INVOICE_STATIONERY_KEY ||
-    'Assets/Stationery/Letterhead/A4/Letterhead_v1@300dpi.png';
+    env.INVOICE_STATIONERY_KEY || 'Assets/Stationery/Letterhead/A4/Letterhead_v1@300dpi.png';
   if (/\.pdf$/i.test(DEFAULT_STATIONERY_KEY)) {
     DEFAULT_STATIONERY_KEY = DEFAULT_STATIONERY_KEY.replace(/\.pdf$/i, '@300dpi.png');
   }
   const DEFAULT_STATIONERY_MARGINS_MM = { top: 32, right: 12, bottom: 20, left: 12 };
   const DEFAULT_HIDE_BANK_FOOTER = true;
 
-  try {
-    const exists = await r2Exists(env, DEFAULT_STATIONERY_KEY);
-    if (!exists) {
-      console.warn(`[handleCreateInvoiceTsfin] Stationery asset missing in R2: ${DEFAULT_STATIONERY_KEY}`);
-    }
-  } catch {
-    // non-fatal
-  }
+  try { await r2Exists(env, DEFAULT_STATIONERY_KEY).catch(()=>{}); } catch {}
 
   // 3) Create header (DRAFT)
   const issuedAt = new Date().toISOString();
@@ -11555,27 +13383,21 @@ async function handleCreateInvoiceTsfin(env, req) {
     payment_terms_days: termsDays,
     issued_at_utc: issuedAt,
     due_at_utc: dueAt,
-
-    // stationery snapshot
     stationery_key: DEFAULT_STATIONERY_KEY,
     stationery_margins_mm: DEFAULT_STATIONERY_MARGINS_MM,
     hide_bank_footer: DEFAULT_HIDE_BANK_FOOTER,
-
     bank: {
       name: defRows?.[0]?.bank_name ?? null,
       sort_code: defRows?.[0]?.bank_sort_code ?? null,
       account_number: defRows?.[0]?.bank_account_number ?? null,
     },
     vat_registration_number: defRows?.[0]?.vat_registration_number ?? null,
-    meta: {
-      source: "TSFIN",
-      timesheet_count: snaps.length
-    }
+    meta: { source: 'TSFIN', timesheet_count: snaps.length }
   };
 
   const invIns = await fetch(`${env.SUPABASE_URL}/rest/v1/invoices`, {
-    method: "POST",
-    headers: { ...sbHeaders(env), "Prefer": "return=representation" },
+    method: 'POST',
+    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
     body: JSON.stringify({
       client_id,
       status: 'DRAFT',
@@ -11593,7 +13415,7 @@ async function handleCreateInvoiceTsfin(env, req) {
   }
   const invoice = (await invIns.json())[0];
 
-  // 4) Build lines
+  // 4) Build HOURS lines only
   let sumEx = 0, sumVat = 0, sumInc = 0;
   const lines = [];
 
@@ -11644,7 +13466,7 @@ async function handleCreateInvoiceTsfin(env, req) {
 
     const tsMeta = tsMetaMap[s.timesheet_id] || {};
     const hoursLineMeta = {
-      line_type: "HOURS",
+      line_type: 'HOURS',
       timesheet_id: s.timesheet_id,
       timesheet_version: s.timesheet_version,
       booking_id: tsMeta.booking_id ?? null,
@@ -11653,7 +13475,7 @@ async function handleCreateInvoiceTsfin(env, req) {
       po_number: s.po_number ?? null,
       evidence: {
         r2_auth_key: tsMeta.r2_auth_key ?? null,
-        r2_nurse_key: tsMeta.r2_nurse_key ?? null
+        r2_nurse_key: tsMeta.r2_nurse_key ?? null,
       },
       policy_snapshot_json: s.policy_snapshot_json ?? {},
       rate_source_refs_json: s.rate_source_refs_json ?? {},
@@ -11684,108 +13506,13 @@ async function handleCreateInvoiceTsfin(env, req) {
       total_inc_vat,
       meta_json: hoursLineMeta
     });
-
-    // Expenses
-    const expCharge = Number(s.expenses_charge_ex_vat || 0);
-    if (expCharge > 0) {
-      const expPay = Number(s.expenses_pay_ex_vat || 0);
-      const expMargin = round2(expCharge - expPay);
-      const expVat = round2(expCharge * vatRatePct / 100);
-      const expInc = round2(expCharge + expVat);
-
-      sumEx += expCharge; sumVat += expVat; sumInc += expInc;
-
-      const expMeta = {
-        line_type: "EXPENSES",
-        timesheet_id: s.timesheet_id,
-        timesheet_version: s.timesheet_version,
-        booking_id: tsMeta.booking_id ?? null,
-        week_ending_date_local: tsMeta.week_ending_date ?? null,
-        po_number: s.po_number ?? null,
-        description: s.expenses_description ?? null,
-        evidence_r2_key: s.expenses_evidence_r2_key ?? null,
-        totals: {
-          pay_ex_vat: expPay,
-          charge_ex_vat: expCharge,
-          margin_ex_vat: expMargin,
-          vat_rate_pct: vatRatePct,
-          vat_amount: expVat,
-          total_inc_vat: expInc
-        }
-      };
-
-      lines.push({
-        invoice_id: invoice.id,
-        timesheet_id: s.timesheet_id,
-        booking_id: tsMeta.booking_id ?? null,
-        description: `Expenses – ${s.expenses_description || 'Receipted'}`,
-        hours_day: 0, hours_night: 0, hours_sat: 0, hours_sun: 0, hours_bh: 0,
-        pay_day: null, pay_night: null, pay_sat: null, pay_sun: null, pay_bh: null,
-        charge_day: null, charge_night: null, charge_sat: null, charge_sun: null, charge_bh: null,
-        total_pay_ex_vat: expPay,
-        total_charge_ex_vat: expCharge,
-        margin_ex_vat: expMargin,
-        vat_rate_pct: vatRatePct,
-        vat_amount: expVat,
-        total_inc_vat: expInc,
-        meta_json: expMeta
-      });
-    }
-
-    // Mileage
-    const milCharge = Number(s.mileage_charge_ex_vat || 0);
-    if (milCharge > 0) {
-      const milPay = Number(s.mileage_pay_ex_vat || 0);
-      const milMargin = round2(milCharge - milPay);
-      const milVat = round2(milCharge * vatRatePct / 100);
-      const milInc = round2(milCharge + milVat);
-
-      sumEx += milCharge; sumVat += milVat; sumInc += milInc;
-
-      const milMeta = {
-        line_type: "MILEAGE",
-        timesheet_id: s.timesheet_id,
-        timesheet_version: s.timesheet_version,
-        booking_id: tsMeta.booking_id ?? null,
-        week_ending_date_local: tsMeta.week_ending_date ?? null,
-        po_number: s.po_number ?? null,
-        evidence_r2_key: s.mileage_evidence_r2_key ?? null,
-        pay_rate: s.mileage_pay_rate ?? null,
-        charge_rate: s.mileage_charge_rate ?? null,
-        totals: {
-          pay_ex_vat: milPay,
-          charge_ex_vat: milCharge,
-          margin_ex_vat: milMargin,
-          vat_rate_pct: vatRatePct,
-          vat_amount: milVat,
-          total_inc_vat: milInc
-        }
-      };
-
-      lines.push({
-        invoice_id: invoice.id,
-        timesheet_id: s.timesheet_id,
-        booking_id: tsMeta.booking_id ?? null,
-        description: `Mileage – Receipted`,
-        hours_day: 0, hours_night: 0, hours_sat: 0, hours_sun: 0, hours_bh: 0,
-        pay_day: null, pay_night: null, pay_sat: null, pay_sun: null, pay_bh: null,
-        charge_day: null, charge_night: null, charge_sat: null, charge_sun: null, charge_bh: null,
-        total_pay_ex_vat: milPay,
-        total_charge_ex_vat: milCharge,
-        margin_ex_vat: milMargin,
-        vat_rate_pct: vatRatePct,
-        vat_amount: milVat,
-        total_inc_vat: milInc,
-        meta_json: milMeta
-      });
-    }
   }
 
   // 5) Persist lines
   if (lines.length) {
     const resLines = await fetch(`${env.SUPABASE_URL}/rest/v1/invoice_lines`, {
-      method: "POST",
-      headers: { ...sbHeaders(env), "Prefer": "return=minimal" },
+      method: 'POST',
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
       body: JSON.stringify(lines)
     });
     if (!resLines.ok) {
@@ -11796,8 +13523,8 @@ async function handleCreateInvoiceTsfin(env, req) {
 
   // 6) Update invoice header totals
   const updInv = await fetch(`${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${encodeURIComponent(invoice.id)}`, {
-    method: "PATCH",
-    headers: { ...sbHeaders(env), "Prefer": "return=representation" },
+    method: 'PATCH',
+    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
     body: JSON.stringify({
       subtotal_ex_vat: round2(sumEx),
       vat_amount: round2(sumVat),
@@ -11819,8 +13546,8 @@ async function handleCreateInvoiceTsfin(env, req) {
     `&processing_status=eq.READY_FOR_INVOICE`;
 
   const lockRes = await fetch(lockUrl, {
-    method: "PATCH",
-    headers: { ...sbHeaders(env), "Prefer": "return=minimal" },
+    method: 'PATCH',
+    headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
     body: JSON.stringify({ locked_by_invoice_id: invoice.id, locked_at_utc: new Date().toISOString() })
   });
   if (!lockRes.ok) {
@@ -11828,100 +13555,14 @@ async function handleCreateInvoiceTsfin(env, req) {
     return serverError(`Failed to lock snapshots: ${t}`);
   }
 
-  // 7b) Back-fill candidate (umbrella) VAT snapshots at lock time (first action wins semantics)
-  try {
-    // Focus only on UM BRELLA items with a candidate
-    const umbSnaps = snaps.filter(s => s.pay_method === 'UMBRELLA' && s.candidate_id);
-
-    if (umbSnaps.length) {
-      // Load candidates -> umbrellas
-      const candIds = [...new Set(umbSnaps.map(s => s.candidate_id))].map(encodeURIComponent).join(',');
-      const { rows: candRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/candidates?select=id,umbrella_id&id=in.(${candIds})`
-      );
-      const candMap = Object.fromEntries((candRows || []).map(c => [c.id, c]));
-      const umbrellaIds = [...new Set((candRows || []).map(c => c.umbrella_id).filter(Boolean))];
-      let umbMap = {};
-      if (umbrellaIds.length) {
-        const umbIn = umbrellaIds.map(encodeURIComponent).join(',');
-        const { rows: umbRows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/umbrellas?select=id,enabled,vat_chargeable&id=in.(${umbIn})`
-        );
-        umbMap = Object.fromEntries((umbRows || []).map(u => [u.id, u]));
-      }
-
-      // Patch each row individually with its snapshot if not already set by earlier PAY
-      for (const s of umbSnaps) {
-        // Skip if already set (earlier PAY path may have set it)
-        const already =
-          (s.pay_vat_rate_pct_snapshot != null) ||
-          Number(s.pay_vat_amount_snapshot || 0) > 0 ||
-          Number(s.pay_total_inc_vat_snapshot || 0) > 0;
-        if (already) continue;
-
-        const cand = candMap[s.candidate_id];
-        if (!cand?.umbrella_id) continue; // no umbrella to snapshot against
-
-        const umb = umbMap[cand.umbrella_id];
-        // If umbrella not found, or disabled, or not VAT-chargeable, set neutral values (rate null, amount 0, total = ex)
-        if (!umb || umb.enabled === false || umb.vat_chargeable === false) {
-          const neutralPayload = {
-            pay_vat_rate_pct_snapshot: null,
-            pay_vat_amount_snapshot: 0,
-            pay_total_inc_vat_snapshot: Number(s.total_pay_ex_vat || 0)
-          };
-          await fetch(
-            `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${encodeURIComponent(s.timesheet_id)}&is_current=eq.true`,
-            {
-              method: "PATCH",
-              headers: { ...sbHeaders(env), "Prefer": "return=minimal" },
-              body: JSON.stringify(neutralPayload)
-            }
-          );
-          continue;
-        }
-
-        // VAT rate for pay-side snapshot: use policy snapshot if present, else default
-        const payVatPct =
-          (s.policy_snapshot_json && s.policy_snapshot_json.vat_rate_pct != null)
-            ? Number(s.policy_snapshot_json.vat_rate_pct)
-            : defaultVat;
-
-        const base = Number(s.total_pay_ex_vat || 0);
-        const vatAmt = round2(base * (Number(payVatPct) || 0) / 100);
-        const totalInc = round2(base + vatAmt);
-
-        const payload = {
-          pay_vat_rate_pct_snapshot: Number(payVatPct),
-          pay_vat_amount_snapshot: vatAmt,
-          pay_total_inc_vat_snapshot: totalInc
-        };
-
-        await fetch(
-          `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${encodeURIComponent(s.timesheet_id)}&is_current=eq.true`,
-          {
-            method: "PATCH",
-            headers: { ...sbHeaders(env), "Prefer": "return=minimal" },
-            body: JSON.stringify(payload)
-          }
-        );
-      }
-    }
-  } catch (e) {
-    // Non-fatal: do not block invoice creation if pay-side VAT snapshotting fails
-    console.warn(`[handleCreateInvoiceTsfin] umbrella VAT snapshot fill failed: ${String(e?.message || e)}`);
-  }
-
-  // Compute partial eligibility (for response diagnostics)
-  const eligibleTsIdSet = new Set(snaps.map(s => s.timesheet_id));
-  const skipped_timesheet_ids = timesheetIds.filter(id => !eligibleTsIdSet.has(id));
+  // 7b) Mark linked weeks as INVOICED
+  const tsIdsUsed = [...new Set(lines.map(l => l.timesheet_id).filter(Boolean))];
+  await setWeeksInvoicedForTimesheets(env, tsIdsUsed);
 
   // 8) Ensure all TS PDFs exist and write keys back to invoice_lines
-  const uniqueTsIds = [...new Set(lines.map(l => l.timesheet_id).filter(Boolean))];
-
+  const uniqueTsIds = tsIdsUsed;
   const concurrency = Math.max(1, Number(env.TIMESHEET_RENDER_CONCURRENCY || 4));
+
   async function mapWithLimit(arr, limit, iterator) {
     let idx = 0;
     const results = new Array(arr.length);
@@ -11937,12 +13578,12 @@ async function handleCreateInvoiceTsfin(env, req) {
   }
 
   await mapWithLimit(uniqueTsIds, concurrency, async (tsId) => {
-    const key = await ensureTimesheetPdf(env, tsId);
+    const key = await ensureTimesheetPdf(env, tsId); // uses manual PDF if present
     await fetch(
       `${env.SUPABASE_URL}/rest/v1/invoice_lines?invoice_id=eq.${encodeURIComponent(invoice.id)}&timesheet_id=eq.${encodeURIComponent(tsId)}`,
       {
-        method: "PATCH",
-        headers: { ...sbHeaders(env), "Prefer": "return=minimal" },
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
         body: JSON.stringify({ paper_ts_r2_key: key })
       }
     );
@@ -11953,8 +13594,7 @@ async function handleCreateInvoiceTsfin(env, req) {
     invoice_id: invoice.id,
     client_id,
     lines: lines.length,
-    totals: { ex_vat: round2(sumEx), vat: round2(sumVat), inc_vat: round2(sumInc) },
-    skipped_timesheet_ids
+    totals: { ex_vat: round2(sumEx), vat: round2(sumVat), inc_vat: round2(sumInc) }
   });
 }
 
@@ -12203,42 +13843,42 @@ export default {
       }
 
       // ====================== PUBLIC (mobile) WRITE FLOW ======================
-      if (req.method === "POST" && p === "/timesheets/presign")           return handlePresign(env, req);
-      if (req.method === "PUT"  && p === "/upload")                        return handleUpload(env, req, url);
-      if (req.method === "POST" && p === "/timesheets/submit")             return handleSubmit(env, req);
+      if (req.method === "POST" && p === "/timesheets/presign")            return handlePresign(env, req);
+      if (req.method === "PUT"  && p === "/upload")                         return handleUpload(env, req, url);
+      if (req.method === "POST" && p === "/timesheets/submit")              return handleSubmit(env, req);
 
       // Time / TZ checks
-      if (req.method === "POST" && p === "/time/uk-check")                 return handleUKTimeCheck(env, req);
+      if (req.method === "POST" && p === "/time/uk-check")                  return handleUKTimeCheck(env, req);
 
       // Revoke flows
-      if (req.method === "POST" && p === "/timesheets/revoke")             return handleRevoke(env, req);
-      if (req.method === "POST" && p === "/timesheets/revoke-and-presign") return handleRevokeAndPresign(env, req);
+      if (req.method === "POST" && p === "/timesheets/revoke")              return handleRevoke(env, req);
+      if (req.method === "POST" && p === "/timesheets/revoke-and-presign")  return handleRevokeAndPresign(env, req);
 
       // Reads
       const one = matchPath(p, "/timesheets/:booking_id");
-      if (req.method === "GET" && one)                                     return handleGetOne(env, req, one.booking_id, url);
-      if (req.method === "GET" && p === "/timesheets")                     return handleList(env, req, url);
-      if (req.method === "POST" && p === "/timesheets/query")              return handleQuery(env, req);
-      if (req.method === "POST" && p === "/timesheets/authorised-status")  return handleAuthorisedStatus(env, req);
+      if (req.method === "GET" && one)                                      return handleGetOne(env, req, one.booking_id, url);
+      if (req.method === "GET" && p === "/timesheets")                      return handleList(env, req, url);
+      if (req.method === "POST" && p === "/timesheets/query")               return handleQuery(env, req);
+      if (req.method === "POST" && p === "/timesheets/authorised-status")   return handleAuthorisedStatus(env, req);
 
       // Signatures
-      if (req.method === "POST" && p === "/signatures/presign-get")        return handleSignPresignGet(env, req);
-      if (req.method === "POST" && p === "/signatures/presign-get/batch")  return handleSignPresignGetBatch(env, req);
-      if (req.method === "GET"  && p === "/signatures/get")                return handleSignGet(env, req, url);
+      if (req.method === "POST" && p === "/signatures/presign-get")         return handleSignPresignGet(env, req);
+      if (req.method === "POST" && p === "/signatures/presign-get/batch")   return handleSignPresignGetBatch(env, req);
+      if (req.method === "GET"  && p === "/signatures/get")                 return handleSignGet(env, req, url);
 
       // ====================== ADMIN/BACKOFFICE API ROUTES ======================
 
       // Settings (singleton)
-      if (req.method === 'GET' && p === '/api/settings/defaults')          return handleGetSettings(env, req);
-      if (req.method === 'PUT' && p === '/api/settings/defaults')          return handleUpdateSettings(env, req);
+      if (req.method === 'GET' && p === '/api/settings/defaults')           return handleGetSettings(env, req);
+      if (req.method === 'PUT' && p === '/api/settings/defaults')           return handleUpdateSettings(env, req);
 
       // Clients
-      if (req.method === 'GET' && p === '/api/clients')                    return handleListClients(env, req);
-      if (req.method === 'POST' && p === '/api/clients')                   return handleCreateClient(env, req);
+      if (req.method === 'GET' && p === '/api/clients')                     return handleListClients(env, req);
+      if (req.method === 'POST' && p === '/api/clients')                    return handleCreateClient(env, req);
       {
         const client = matchPath(p, '/api/clients/:id');
-        if (client && req.method === 'GET')                                return handleGetClient(env, req, client.id);
-        if (client && req.method === 'PUT')                                return handleUpdateClient(env, req, client.id);
+        if (client && req.method === 'GET')                                 return handleGetClient(env, req, client.id);
+        if (client && req.method === 'PUT')                                 return handleUpdateClient(env, req, client.id);
       }
 
       // Client Hospitals
@@ -12255,12 +13895,12 @@ export default {
       }
 
       // Umbrellas
-      if (req.method === 'GET' && p === '/api/umbrellas')                  return handleListUmbrellas(env, req);
-      if (req.method === 'POST' && p === '/api/umbrellas')                 return handleCreateUmbrella(env, req);
+      if (req.method === 'GET' && p === '/api/umbrellas')                   return handleListUmbrellas(env, req);
+      if (req.method === 'POST' && p === '/api/umbrellas')                  return handleCreateUmbrella(env, req);
       {
         const umb = matchPath(p, '/api/umbrellas/:umbrella_id');
-        if (umb && req.method === 'GET')                                   return handleGetUmbrella(env, req, umb.umbrella_id);
-        if (umb && req.method === 'PUT')                                   return handleUpdateUmbrella(env, req, umb.umbrella_id);
+        if (umb && req.method === 'GET')                                    return handleGetUmbrella(env, req, umb.umbrella_id);
+        if (umb && req.method === 'PUT')                                    return handleUpdateUmbrella(env, req, umb.umbrella_id);
       }
 
       // Overlap check (must be before broader overrides matchers)
@@ -12269,39 +13909,37 @@ export default {
       }
 
       // Candidates
-      if (req.method === 'GET' && p === '/api/candidates')                 return handleListCandidates(env, req);
-      if (req.method === 'POST' && p === '/api/candidates')                return handleCreateCandidate(env, req);
+      if (req.method === 'GET' && p === '/api/candidates')                  return handleListCandidates(env, req);
+      if (req.method === 'POST' && p === '/api/candidates')                 return handleCreateCandidate(env, req);
       {
         const cand = matchPath(p, '/api/candidates/:candidate_id');
-        if (cand && req.method === 'GET')                                  return handleGetCandidate(env, req, cand.candidate_id);
-        if (cand && req.method === 'PUT')                                  return handleUpdateCandidate(env, req, cand.candidate_id);
+        if (cand && req.method === 'GET')                                   return handleGetCandidate(env, req, cand.candidate_id);
+        if (cand && req.method === 'PUT')                                   return handleUpdateCandidate(env, req, cand.candidate_id);
       }
 
-     // Rates — client defaults
-if (req.method === 'GET'  && p === '/api/rates/client-defaults')     return handleListClientRates(env, req);
-if (req.method === 'POST' && p === '/api/rates/client-defaults')     return handleUpsertClientRate(env, req);
-
-{
-  const r = matchPath(p, '/api/rates/client-defaults/:id');
-  if (r && req.method === 'PUT')     return handleUpdateClientDefault(env, req, r.id);   // NEW: full-field update
-  if (r && req.method === 'PATCH')   return handlePatchClientDefault(env, req, r.id);    // existing: enable/disable etc.
-  if (r && req.method === 'DELETE')  return handleDeleteClientDefault(env, req, r.id);   // existing delete
-}
-
+      // Rates — client defaults
+      if (req.method === 'GET'  && p === '/api/rates/client-defaults')      return handleListClientRates(env, req);
+      if (req.method === 'POST' && p === '/api/rates/client-defaults')      return handleUpsertClientRate(env, req);
+      {
+        const r = matchPath(p, '/api/rates/client-defaults/:id');
+        if (r && req.method === 'PUT')      return handleUpdateClientDefault(env, req, r.id);   // NEW: full-field update
+        if (r && req.method === 'PATCH')    return handlePatchClientDefault(env, req, r.id);    // existing: enable/disable etc.
+        if (r && req.method === 'DELETE')   return handleDeleteClientDefault(env, req, r.id);   // existing delete
+      }
 
       // Candidate overrides
-      if (req.method === 'GET' && p === '/api/rates/candidate-overrides')  return handleListOverridesByCandidate(env, req);
-      if (req.method === 'GET' && p === '/api/rates/client-overrides')     return handleListOverridesByClient(env, req);
-      if (req.method === 'POST' && p === '/api/rates/candidate-overrides') return handleCreateOverride(env, req);
+      if (req.method === 'GET' && p === '/api/rates/candidate-overrides')   return handleListOverridesByCandidate(env, req);
+      if (req.method === 'GET' && p === '/api/rates/client-overrides')      return handleListOverridesByClient(env, req);
+      if (req.method === 'POST' && p === '/api/rates/candidate-overrides')  return handleCreateOverride(env, req);
 
       // Resolve preview
-      if (req.method === 'GET'  && p === '/api/rates/resolve-preview')     return handleResolveRate(env, req);
-      if (req.method === 'POST' && p === '/api/rates/resolve-preview')     return handleResolveRate(env, req);
+      if (req.method === 'GET'  && p === '/api/rates/resolve-preview')      return handleResolveRate(env, req);
+      if (req.method === 'POST' && p === '/api/rates/resolve-preview')      return handleResolveRate(env, req);
 
       {
         const cov = matchPath(p, '/api/rates/candidate-overrides/:candidate_id');
-        if (cov && req.method === 'PATCH')                                 return handleUpdateOverride(env, req, cov.candidate_id);
-        if (cov && req.method === 'DELETE')                                return handleDeleteOverride(env, req, cov.candidate_id);
+        if (cov && req.method === 'PATCH')                                  return handleUpdateOverride(env, req, cov.candidate_id);
+        if (cov && req.method === 'DELETE')                                 return handleDeleteOverride(env, req, cov.candidate_id);
       }
 
       if (req.method === 'GET' && p === '/api/rates/candidate-overrides/by-client') {
@@ -12309,136 +13947,156 @@ if (req.method === 'POST' && p === '/api/rates/client-defaults')     return hand
       }
 
       // HealthRoster
-      if (req.method === 'POST' && p === '/api/healthroster/import')       return handleHRImport(env, req);
+      if (req.method === 'POST' && p === '/api/healthroster/import')        return handleHRImport(env, req);
       {
         const hrRows = matchPath(p, '/api/healthroster/:import_id/rows');
-        if (hrRows && req.method === 'GET')                                 return handleHRRows(env, req, hrRows.import_id);
+        if (hrRows && req.method === 'GET')                                  return handleHRRows(env, req, hrRows.import_id);
       }
       {
         const hrMap = matchPath(p, '/api/healthroster/:import_id/mapping');
-        if (hrMap && (req.method === 'GET' || req.method === 'POST'))       return handleHRMapping(env, req, hrMap.import_id);
+        if (hrMap && (req.method === 'GET' || req.method === 'POST'))        return handleHRMapping(env, req, hrMap.import_id);
       }
       {
         const hrVal = matchPath(p, '/api/healthroster/:import_id/validate');
-        if (hrVal && req.method === 'POST')                                 return handleHRValidate(env, req, hrVal.import_id);
+        if (hrVal && req.method === 'POST')                                  return handleHRValidate(env, req, hrVal.import_id);
       }
-      if (req.method === 'POST' && p === '/api/hr/tso-failure-email')       return handleQueueTsoFailureEmail(env, req);
+      if (req.method === 'POST' && p === '/api/hr/tso-failure-email')        return handleQueueTsoFailureEmail(env, req);
 
-      if (req.method === 'POST' && p === '/api/timesheets/finance-preview') return handleFinancePreviewTsfin(env, req);
+      if (req.method === 'POST' && p === '/api/timesheets/finance-preview')  return handleFinancePreviewTsfin(env, req);
 
       // TSFIN worker & utilities
-      if (req.method === 'POST' && p === '/api/tsfin/queue/drain')          return handleTsfinDrain(env, req);
-      if (req.method === 'POST' && p === '/api/tsfin/recompute')            return handleTsfinRecompute(env, req);
-      if (req.method === 'GET'  && p === '/api/tsfin/financials')           return handleTsfinFinancials(env, req);
-      if (req.method === 'POST' && p === '/api/tsfin/mark-ready')           return handleTsfinMarkReady(env, req);
+      if (req.method === 'POST' && p === '/api/tsfin/queue/drain')           return handleTsfinDrain(env, req);
+      if (req.method === 'POST' && p === '/api/tsfin/recompute')             return handleTsfinRecompute(env, req);
+      if (req.method === 'GET'  && p === '/api/tsfin/financials')            return handleTsfinFinancials(env, req);
+      if (req.method === 'POST' && p === '/api/tsfin/mark-ready')            return handleTsfinMarkReady(env, req);
 
       {
         const tsfinOne = matchPath(p, '/api/tsfin/:timesheet_id');
-        if (tsfinOne && req.method === 'PATCH')                             return handleTsfinPatch(env, req, tsfinOne.timesheet_id);
+        if (tsfinOne && req.method === 'PATCH')                              return handleTsfinPatch(env, req, tsfinOne.timesheet_id);
 
         const tsfinExp = matchPath(p, '/api/tsfin/:timesheet_id/expenses');
-        if (tsfinExp && req.method === 'PATCH')                             return handleTsfinPatchExpenses(env, req, tsfinExp.timesheet_id);
+        if (tsfinExp && req.method === 'PATCH')                              return handleTsfinPatchExpenses(env, req, tsfinExp.timesheet_id);
 
         const tsfinMil = matchPath(p, '/api/tsfin/:timesheet_id/mileage');
-        if (tsfinMil && req.method === 'PATCH')                             return handleTsfinPatchMileage(env, req, tsfinMil.timesheet_id);
+        if (tsfinMil && req.method === 'PATCH')                              return handleTsfinPatchMileage(env, req, tsfinMil.timesheet_id);
 
         const tsfinPO = matchPath(p, '/api/tsfin/:timesheet_id/po');
-        if (tsfinPO && req.method === 'PATCH')                              return handleTsfinPatchPO(env, req, tsfinPO.timesheet_id);
+        if (tsfinPO && req.method === 'PATCH')                               return handleTsfinPatchPO(env, req, tsfinPO.timesheet_id);
       }
 
       {
         const payHold = matchPath(p, '/api/timesheets/:id/pay-hold');
-        if (payHold && req.method === 'PATCH')                              return handleTimesheetPayHold(env, req, payHold.id);
+        if (payHold && req.method === 'PATCH')                               return handleTimesheetPayHold(env, req, payHold.id);
 
         const markPaid = matchPath(p, '/api/timesheets/:id/mark-paid');
-        if (markPaid && req.method === 'PATCH')                             return handleTimesheetMarkPaid(env, req, markPaid.id);
+        if (markPaid && req.method === 'PATCH')                              return handleTimesheetMarkPaid(env, req, markPaid.id);
       }
 
       // Invoices
-      if (req.method === 'GET'  && p === '/api/invoices')                   return handleListInvoices(env, req);
-      if (req.method === 'POST' && p === '/api/invoices')                   return handleCreateInvoiceTsfin(env, req);
+      if (req.method === 'GET'  && p === '/api/invoices')                    return handleListInvoices(env, req);
+      if (req.method === 'POST' && p === '/api/invoices')                    return handleCreateInvoiceTsfin(env, req);
+      if (req.method === 'POST' && p === '/api/invoices/create-expenses')    return handleCreateInvoiceExpenses(env, req);
 
       {
         const inv = matchPath(p, '/api/invoices/:invoice_id');
-        if (inv && req.method === 'GET')                                    return handleGetInvoice(env, req, inv.invoice_id);
+        if (inv && req.method === 'GET')                                     return handleGetInvoice(env, req, inv.invoice_id);
       }
 
       {
         const invRender = matchPath(p, '/api/invoices/:invoice_id/render');
-        if (invRender && req.method === 'POST')                             return handleInvoiceRender(env, req, invRender.invoice_id);
+        if (invRender && req.method === 'POST')                              return handleInvoiceRender(env, req, invRender.invoice_id);
       }
 
-      if (req.method === 'POST' && p === '/api/invoices/render')            return handleInvoiceRenderFromPayload(env, req);
+      {
+        const m = matchPath(p, '/api/invoices/:invoice_id/hold');
+        if (m && req.method === 'POST')                                      return handleInvoiceHold(env, req, m.invoice_id);
+      }
+      {
+        const m = matchPath(p, '/api/invoices/:invoice_id/unhold');
+        if (m && req.method === 'POST')                                      return handleInvoiceUnhold(env, req, m.invoice_id);
+      }
+{
+  const m = matchPath(p, '/api/invoices/:invoice_id/unissue');
+  if (m && req.method === 'POST') return handleInvoiceUnissue(env, req, m.invoice_id);
+}
 
       {
         const invEmail = matchPath(p, '/api/invoices/:invoice_id/email');
-        if (invEmail && req.method === 'POST')                              return handleInvoiceEmail(env, req, invEmail.invoice_id);
+        if (invEmail && req.method === 'POST')                               return handleInvoiceEmail(env, req, invEmail.invoice_id);
       }
 
       {
         const invCredit = matchPath(p, '/api/invoices/:invoice_id/credit-note');
-        if (invCredit && req.method === 'POST')                             return handleCreateCreditNoteTsfin(env, req, invCredit.invoice_id);
+        if (invCredit && req.method === 'POST')                              return handleCreateCreditNoteTsfin(env, req, invCredit.invoice_id);
       }
 
       {
         const invPaid = matchPath(p, '/api/invoices/:invoice_id/mark-paid');
-        if (invPaid && req.method === 'POST')                               return handleInvoiceMarkPaid(env, req, invPaid.invoice_id);
+        if (invPaid && req.method === 'POST')                                return handleInvoiceMarkPaid(env, req, invPaid.invoice_id);
       }
+      {
+        const invUnpaid = matchPath(p, '/api/invoices/:invoice_id/mark-unpaid');
+        if (invUnpaid && req.method === 'POST')                              return handleInvoiceMarkUnpaid(env, req, invUnpaid.invoice_id);
+      }
+{
+  const m = matchPath(p, '/api/invoices/:invoice_id/issue');
+  if (m && req.method === 'POST') return handleInvoiceIssue(env, req, m.invoice_id);
+}
 
       // Remittances
       if (req.method === 'POST' && p === '/api/remittances/email-for-candidate') {
         return handleRemittanceEmailForCandidate(env, req);
       }
-      if (req.method === 'POST' && p === '/api/remittances/send')           return handleRemittancesSend(env, req);
+      if (req.method === 'POST' && p === '/api/remittances/send')            return handleRemittancesSend(env, req);
 
       // ====================== SEARCH (exportable) ======================
-      if (req.method === 'GET' && p === '/api/search/timesheets')           return handleSearchTimesheets(env, req);
-      if (req.method === 'GET' && p === '/api/search/invoices')             return handleSearchInvoices(env, req);
-      if (req.method === 'GET' && p === '/api/search/candidates')           return handleSearchCandidates(env, req);
-      if (req.method === 'GET' && p === '/api/search/clients')              return handleSearchClients(env, req);
-      if (req.method === 'GET' && p === '/api/search/umbrellas')            return handleSearchUmbrellas(env, req);
+      if (req.method === 'GET' && p === '/api/search/timesheets')            return handleSearchTimesheets(env, req);
+      if (req.method === 'GET' && p === '/api/search/invoices')              return handleSearchInvoices(env, req);
+      if (req.method === 'GET' && p === '/api/search/candidates')            return handleSearchCandidates(env, req);
+      if (req.method === 'GET' && p === '/api/search/clients')               return handleSearchClients(env, req);
+      if (req.method === 'GET' && p === '/api/search/umbrellas')             return handleSearchUmbrellas(env, req);
 
       // ====================== REPORTS (json/csv/print) ======================
-      if (req.method === 'GET'  && p === '/api/reports/timesheets')         return handleReportTimesheets(env, req);
-      if (req.method === 'GET'  && p === '/api/reports/invoices')           return handleReportInvoices(env, req);
-      if (req.method === 'GET'  && p === '/api/reports/candidates')         return handleReportCandidates(env, req);
-      if (req.method === 'GET'  && p === '/api/reports/clients')            return handleReportClients(env, req);
-      if (req.method === 'GET'  && p === '/api/reports/umbrellas')          return handleReportUmbrellas(env, req);
+      if (req.method === 'GET'  && p === '/api/reports/timesheets')          return handleReportTimesheets(env, req);
+      if (req.method === 'GET'  && p === '/api/reports/invoices')            return handleReportInvoices(env, req);
+      if (req.method === 'GET'  && p === '/api/reports/candidates')          return handleReportCandidates(env, req);
+      if (req.method === 'GET'  && p === '/api/reports/clients')             return handleReportClients(env, req);
+      if (req.method === 'GET'  && p === '/api/reports/umbrellas')           return handleReportUmbrellas(env, req);
 
       // ====================== PAYMENTS (Bank CSV) ======================
-      if (req.method === 'POST' && p === '/api/payments/generate-csv')      return handlePaymentsGenerateCsv(env, req);
+      if (req.method === 'POST' && p === '/api/payments/generate-csv')       return handlePaymentsGenerateCsv(env, req);
 
       // ====================== REPORT PRESETS (CRUD) ======================
-      if (req.method === 'POST' && p === '/api/report-presets')             return handleReportPresetsCreate(env, req);
-      if (req.method === 'GET'  && p === '/api/report-presets')             return handleReportPresetsList(env, req);
+      if (req.method === 'POST' && p === '/api/report-presets')              return handleReportPresetsCreate(env, req);
+      if (req.method === 'GET'  && p === '/api/report-presets')              return handleReportPresetsList(env, req);
       {
         const rp = matchPath(p, '/api/report-presets/:preset_id');
-        if (rp && req.method === 'PATCH')                                   return handleReportPresetsUpdate(env, req, rp.preset_id);
-        if (rp && req.method === 'DELETE')                                  return handleReportPresetsDelete(env, req, rp.preset_id);
+        if (rp && req.method === 'PATCH')                                    return handleReportPresetsUpdate(env, req, rp.preset_id);
+        if (rp && req.method === 'DELETE')                                   return handleReportPresetsDelete(env, req, rp.preset_id);
       }
 
       // ====================== EMAIL (OUTBOX, SEND, TSO) ======================
-      if (req.method === 'GET'  && p === '/api/email/outbox')               return handleListOutbox(env, req);
+      if (req.method === 'GET'  && p === '/api/email/outbox')                return handleListOutbox(env, req);
       {
         const outOne = matchPath(p, '/api/email/outbox/:id');
-        if (outOne && req.method === 'GET')                                 return handleGetOutboxItem(env, req, outOne.id);
+        if (outOne && req.method === 'GET')                                  return handleGetOutboxItem(env, req, outOne.id);
       }
       {
         const outbox = matchPath(p, '/api/outbox/:mail_id');
-        if (outbox && req.method === 'GET')                                 return handleGetOutboxItem(env, req, outbox.mail_id);
+        if (outbox && req.method === 'GET')                                   return handleGetOutboxItem(env, req, outbox.mail_id);
       }
 
-      if (req.method === 'POST' && p === '/api/email/outbox/drain')         return handleOutboxDrain(env, req);
+      if (req.method === 'POST' && p === '/api/email/outbox/drain')          return handleOutboxDrain(env, req);
       {
         const outRetry = matchPath(p, '/api/email/outbox/:id/retry');
-        if (outRetry && req.method === 'POST')                              return handleOutboxRetry(env, req, outRetry.id);
+        if (outRetry && req.method === 'POST')                               return handleOutboxRetry(env, req, outRetry.id);
       }
 
-      if (req.method === 'POST' && p === '/api/email/outbox/mark-sent')     return handleOutboxMarkSent(env, req);
-      if (req.method === 'POST' && p === '/api/email/outbox/mark-failed')   return handleOutboxMarkFailed(env, req);
+      if (req.method === 'POST' && p === '/api/email/outbox/mark-sent')      return handleOutboxMarkSent(env, req);
+      if (req.method === 'POST' && p === '/api/email/outbox/mark-failed')    return handleOutboxMarkFailed(env, req);
 
-      if (req.method === 'POST' && p === '/api/email/send')                 return handleEmailSend(env, req);
-      if (req.method === 'POST' && p === '/api/email/broadcast')            return handleEmailSend(env, req);
+      if (req.method === 'POST' && p === '/api/email/send')                  return handleEmailSend(env, req);
+      if (req.method === 'POST' && p === '/api/email/broadcast')             return handleEmailSend(env, req);
 
       // ====================== RELATED (generic) ======================
       {
@@ -12455,10 +14113,136 @@ if (req.method === 'POST' && p === '/api/rates/client-defaults')     return hand
       }
 
       // ====================== FILES (R2, signed) ======================
-      if (req.method === 'POST' && p === '/api/files/presign-upload')       return handleFilePresignUpload(env, req);
-      if (req.method === 'PUT'  && p === '/api/files/upload')               return handleFileUpload(env, req, url);
-      if (req.method === 'POST' && p === '/api/files/presign-download')     return handleFilePresignDownload(env, req);
-      if (req.method === 'GET'  && p === '/api/files/download')             return handleFilesDownload(env, req);
+      if (req.method === 'POST' && p === '/api/files/presign-upload')        return handleFilePresignUpload(env, req);
+      if (req.method === 'PUT'  && p === '/api/files/upload')                return handleFileUpload(env, req, url);
+      if (req.method === 'POST' && p === '/api/files/presign-download')      return handleFilePresignDownload(env, req);
+      if (req.method === 'GET'  && p === '/api/files/download')              return handleFilesDownload(env, req);
+
+      // =============================================================================
+      // NEW ROUTES — Contracts & Weeks
+      // =============================================================================
+
+      // Contracts
+      if (req.method === 'POST' && p === '/api/contracts') return handleContractsCreate(env, req);
+      if (req.method === 'GET'  && p === '/api/contracts') return handleContractsList(env, req);
+      {
+        const m = matchPath(p, '/api/contracts/:id');
+        if (m && req.method === 'GET')    return handleContractsGet(env, req, m.id);
+        if (m && req.method === 'PATCH')  return handleContractsUpdate(env, req, m.id);
+        if (m && req.method === 'DELETE') return handleContractsDelete(env, req, m.id);
+      }
+      {
+        const m = matchPath(p, '/api/contracts/:id/generate-weeks');
+        if (m && req.method === 'POST') return handleContractsGenerateWeeks(env, req, m.id);
+      }
+      {
+        const m = matchPath(p, '/api/contracts/:id/clone-and-extend');
+        if (m && req.method === 'POST') return handleContractsCloneAndExtend(env, req, m.id);
+      }
+      {
+        const m = matchPath(p, '/api/contracts/:id/calendar');
+        if (m && req.method === 'GET') return handleContractsCalendar(env, req, m.id);
+      }
+      {
+        const m = matchPath(p, '/api/contracts/:id/skip-weeks');
+        if (m && req.method === 'POST') return handleContractsSkipWeeks(env, req, m.id);
+      }
+
+      // Contract weeks
+      if (req.method === 'GET' && p === '/api/contract-weeks') return handleContractWeeksList(env, req);
+      {
+        const m = matchPath(p, '/api/contract-weeks/:id');
+        if (m && req.method === 'PATCH') return handleContractWeekUpdate(env, req, m.id);
+      }
+      {
+        const m = matchPath(p, '/api/contract-weeks/:id/additional');
+        if (m && req.method === 'POST') return handleContractWeekCreateAdditional(env, req, m.id);
+      }
+      {
+        const m = matchPath(p, '/api/contract-weeks/:id/switch-mode');
+        if (m && req.method === 'POST') return handleContractWeekSwitchMode(env, req, m.id);
+      }
+      {
+        const m = matchPath(p, '/api/contract-weeks/:id/presign-manual-pdf');
+        if (m && req.method === 'POST') return handleContractWeekPresignManualPdf(env, req, m.id);
+      }
+      {
+        const m = matchPath(p, '/api/contract-weeks/:id/replace-manual-pdf');
+        if (m && req.method === 'POST') return handleContractWeekReplaceManualPdf(env, req, m.id);
+      }
+      {
+        const m = matchPath(p, '/api/contract-weeks/:id/manual-upsert');
+        if (m && req.method === 'POST') return handleContractWeekManualUpsert(env, req, m.id);
+      }
+      {
+        const m = matchPath(p, '/api/contract-weeks/:id/manual-authorise');
+        if (m && req.method === 'POST') return handleContractWeekManualAuthorise(env, req, m.id);
+      }
+      {
+        const m = matchPath(p, '/api/contract-weeks/:id/timesheet');
+        if (m && req.method === 'DELETE') return handleContractWeekDeleteTimesheet(env, req, m.id);
+      }
+      {
+        const m = matchPath(p, '/api/contract-weeks/:id/expense-sheet');
+        if (m && req.method === 'POST') return handleContractWeekCreateExpenseSheet(env, req, m.id);
+      }
+
+      // =============================================================================
+      // NEW ROUTES — Weekly (electronic) – public broker
+      // =============================================================================
+      if (req.method === 'POST' && p === '/timesheets/eligibility-weekly') return handleTimesheetsEligibilityWeekly(env, req);
+      if (req.method === 'POST' && p === '/timesheets/presign-weekly')     return handleTimesheetsPresignWeekly(env, req);
+      if (req.method === 'POST' && p === '/timesheets/submit-weekly')      return handleTimesheetsSubmitWeekly(env, req);
+
+      // =============================================================================
+      // NEW ROUTES — Manual & Expenses
+      // =============================================================================
+      if (req.method === 'POST' && p === '/manual/presign') return handleManualPresign(env, req);
+      {
+        const m = matchPath(p, '/api/timesheets/:id/reference');
+        if (m && req.method === 'PATCH') return handleTimesheetUpdateReference(env, req, m.id);
+      }
+      {
+        const m = matchPath(p, '/api/timesheets/:id/authorise');
+        if (m && req.method === 'POST') return handleTimesheetAuthoriseGeneric(env, req, m.id);
+      }
+      {
+        const m = matchPath(p, '/api/timesheets/:id/tsfin/expenses');
+        if (m && req.method === 'PATCH') return handleTsfinExpensesPatch(env, req, m.id);
+      }
+      {
+        const m = matchPath(p, '/api/timesheets/:id/presign-expense-pdf');
+        if (m && req.method === 'POST') return handleTimesheetPresignExpensePdf(env, req, m.id);
+      }
+      {
+        const m = matchPath(p, '/api/timesheets/:id/switch-to-manual');
+        if (m && req.method === 'POST') return handleTimesheetSwitchToManual(env, req, m.id);
+      }
+      {
+        const m = matchPath(p, '/api/timesheets/:id');
+        if (m && req.method === 'DELETE') return handleTimesheetDelete(env, req, m.id);
+      }
+{
+  const m = matchPath(p, '/api/timesheets/:id/replace-manual-pdf');
+  if (m && req.method === 'POST') return handleTimesheetReplaceManualPdf(env, req, m.id);
+}
+
+      // =============================================================================
+      // NEW ROUTES — Funnel & Prechecks
+      // =============================================================================
+      if (req.method === 'GET' && p === '/api/funnel/timesheets') return handleFunnelTimesheets(env, req);
+      if (req.method === 'GET' && p === '/api/invoices/precheck') return handleInvoicesPrecheck(env, req);
+
+      // =============================================================================
+      // NEW ROUTES — Rates Presets
+      // =============================================================================
+      if (req.method === 'POST' && p === '/api/rates/presets') return handleRatesPresetsCreate(env, req);
+      if (req.method === 'GET'  && p === '/api/rates/presets')  return handleRatesPresetsList(env, req);
+      {
+        const m = matchPath(p, '/api/rates/presets/:id');
+        if (m && req.method === 'PATCH')  return handleRatesPresetsUpdate(env, req, m.id);
+        if (m && req.method === 'DELETE') return handleRatesPresetsDelete(env, req, m.id);
+      }
 
       return new Response("Not found", { status: 404, headers: TEXT_PLAIN });
     } catch (e) {
@@ -12472,20 +14256,37 @@ if (req.method === 'POST' && p === '/api/rates/client-defaults')     return hand
     }
 
   },
-
-  /// Cron handler for TSFIN queue processing + Email outbox drain
+  /// Cron handler for TSFIN queue processing + Auto-invoice + Email outbox drain
   async scheduled(event, env, ctx) {
-    const maxBatches = parseInt(env.TSFIN_MAX_BATCHES || '10', 10);
-    const batchSize  = parseInt(env.TSFIN_BATCH_SIZE  || '50', 10);
+    const maxBatches      = parseInt(env.TSFIN_MAX_BATCHES || '10', 10);
+    const batchSize       = parseInt(env.TSFIN_BATCH_SIZE  || '50', 10);
+    const emailBatchLimit = parseInt(env.EMAIL_DRAIN_LIMIT_DEFAULT || '10', 10);
 
+    // Run tasks in sequence inside one waitUntil:
+    // 1) drain TSFIN queue (may promote snapshots to READY_FOR_INVOICE)
+    // 2) auto-invoice (create HOURS-only invoices for auto_invoice=true contracts and issue them)
+    // 3) drain email outbox (send queued emails)
     ctx.waitUntil((async () => {
-      for (let i = 0; i < maxBatches; i++) {
-        const res = await runTsfinWorkerOnce(env, { limit: batchSize });
-        if (!res || res.picked === 0) break;
+      try {
+        for (let i = 0; i < maxBatches; i++) {
+          const res = await runTsfinWorkerOnce(env, { limit: batchSize });
+          if (!res || res.picked === 0) break;
+        }
+      } catch (e) {
+        console.warn('[scheduled] TSFIN worker failed:', e?.message || e);
+      }
+
+      try {
+        await runAutoInvoiceCycle(env);
+      } catch (e) {
+        console.warn('[scheduled] Auto-invoice cycle failed:', e?.message || e);
+      }
+
+      try {
+        await drainEmailOutboxOnce(env, { limit: emailBatchLimit });
+      } catch (e) {
+        console.warn('[scheduled] Email drain failed:', e?.message || e);
       }
     })());
-
-    const emailBatchLimit = parseInt(env.EMAIL_DRAIN_LIMIT_DEFAULT || '10', 10);
-    ctx.waitUntil(drainEmailOutboxOnce(env, { limit: emailBatchLimit }));
   }
 }
