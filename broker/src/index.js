@@ -619,30 +619,84 @@ export async function handleContractsCreate(env, req) {
   return withCORS(env, req, ok(row));
 }
 
-
+// ──────────────────────────────────────────────────────────────────────────────
+// BACKEND: handleContractsList (amended) — adds paging + extended filters
+// ──────────────────────────────────────────────────────────────────────────────
 export async function handleContractsList(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+
   const url = new URL(req.url);
-  const q = (k) => url.searchParams.get(k);
+  const q  = (k) => url.searchParams.get(k);
   const qs = (k) => url.searchParams.getAll(k);
 
   let api = `${env.SUPABASE_URL}/rest/v1/contracts?select=*`;
   const filters = [];
-  if (q('candidate_id')) filters.push(`candidate_id=eq.${enc(q('candidate_id'))}`);
-  if (q('client_id')) filters.push(`client_id=eq.${enc(q('client_id'))}`);
-  if (q('pay_method_snapshot')) filters.push(`pay_method_snapshot=eq.${enc(q('pay_method_snapshot').toUpperCase())}`);
-  if (q('role')) filters.push(`role=eq.${enc(q('role'))}`);
-  if (q('band')) filters.push(`band=eq.${enc(q('band'))}`);
+
+  // Core filters (existing)
+  if (q('candidate_id'))          filters.push(`candidate_id=eq.${enc(q('candidate_id'))}`);
+  if (q('client_id'))             filters.push(`client_id=eq.${enc(q('client_id'))}`);
+  if (q('pay_method_snapshot'))   filters.push(`pay_method_snapshot=eq.${enc(q('pay_method_snapshot').toUpperCase())}`);
+  if (q('role'))                  filters.push(`role=eq.${enc(q('role'))}`);
+  if (q('band'))                  filters.push(`band=eq.${enc(q('band'))}`);
   if (q('active_on')) {
     const d = q('active_on');
     filters.push(`start_date=lte.${enc(d)}`);
     filters.push(`end_date=gte.${enc(d)}`);
   }
-  if (q('auto_invoice')) filters.push(`auto_invoice=eq.${enc(String(clampBool(q('auto_invoice'))))}`);
+  if (q('auto_invoice'))          filters.push(`auto_invoice=eq.${enc(String(clampBool(q('auto_invoice'))))}`);
+
+  // NEW: free text on client/candidate/role (if those display fields exist)
+  if (q('q')) {
+    const like = `%${q('q')}%`;
+    filters.push(`or=(client_name.ilike.${enc(like)},candidate_display.ilike.${enc(like)},role.ilike.${enc(like)})`);
+  }
+
+  // NEW: roles_any (multiple values)
+  const rolesAny = qs('roles_any');
+  if (rolesAny && rolesAny.length) {
+    const orParts = rolesAny.map(r => `role.eq.${enc(r)}`).join(',');
+    filters.push(`or=(${orParts})`);
+  }
+
+  // NEW: default_submission_mode (accept alias submission_mode)
+  const dsm = q('default_submission_mode') || q('submission_mode');
+  if (dsm) filters.push(`default_submission_mode=eq.${enc(dsm.toUpperCase())}`);
+
+  // NEW: week_ending_weekday_snapshot
+  if (q('week_ending_weekday_snapshot')) {
+    filters.push(`week_ending_weekday_snapshot=eq.${enc(q('week_ending_weekday_snapshot'))}`);
+  }
+
+  // NEW: require_reference_* gates
+  if (q('require_reference_to_pay')) {
+    filters.push(`require_reference_to_pay=eq.${enc(String(clampBool(q('require_reference_to_pay'))))}`);
+  }
+  if (q('require_reference_to_invoice')) {
+    filters.push(`require_reference_to_invoice=eq.${enc(String(clampBool(q('require_reference_to_invoice'))))}`);
+  }
+
+  // NEW: has_custom_labels → bucket_labels_json null/not null
+  if (q('has_custom_labels')) {
+    const yes = clampBool(q('has_custom_labels'));
+    filters.push(yes ? `bucket_labels_json=not.is.null` : `bucket_labels_json=is.null`);
+  }
+
+  // NEW: created_from / created_to (if present in schema)
+  if (q('created_from')) filters.push(`created_at=gte.${enc(q('created_from'))}`);
+  if (q('created_to'))   filters.push(`created_at=lte.${enc(q('created_to'))}`);
 
   if (filters.length) api += `&${filters.join('&')}`;
   api += '&order=start_date.desc,created_at.desc';
+
+  // NEW: paging translation (page/page_size → limit/offset)
+  const page     = Math.max(parseInt(q('page') || '1', 10) || 1, 1);
+  const pageSize = (q('page_size') === 'ALL') ? null : Math.max(parseInt(q('page_size') || '50', 10) || 50, 1);
+  if (pageSize != null) {
+    const limit  = pageSize;
+    const offset = (page - 1) * pageSize;
+    api += `&limit=${enc(limit)}&offset=${enc(offset)}`;
+  }
 
   const { rows } = await sbFetch(env, api);
   return withCORS(env, req, ok(rows || []));
