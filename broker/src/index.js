@@ -460,7 +460,8 @@ async function ensureTimesheetPdf(env, timesheetId) {
 // ============================================================================
 
 // Small local helpers (reuse existing utils from your file)
-const enc = encodeURIComponent;
+const enc = (s) => encodeURIComponent(String(s ?? ''));
+
 const nowIso = () => new Date().toISOString();
 
 function toYmd(d) {
@@ -4040,8 +4041,6 @@ const SIGNED_LINK_TTL_SECS = 7 * 24 * 60 * 60;  // 7 days
 // ------------------------------
 // Small utilities
 // ------------------------------
-const enc = (s) => encodeURIComponent(String(s ?? ''));
-const nowIso = () => new Date().toISOString();
 
 // best-effort byte size estimate for JSON payload
 function estimatePayloadSizeBytes(obj) {
