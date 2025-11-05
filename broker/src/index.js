@@ -5305,7 +5305,164 @@ export async function handleInvoiceEmail(env, req, invoiceId) {
     return withCORS(env, req, serverError('Failed to queue invoice email'));
   }
 }
+// ─────────────────────────────────────────────────────────────────────────────
+// CANDIDATES: snapshot / delta / id-list
+// Assumes candidates table has columns: id, first_name, last_name, display_name, email, active, rev (optional)
+// If rev not present, we fallback to updated_at (timestamp number).
+// roles_display: either materialized, or computed in FE from roles array.
+// ─────────────────────────────────────────────────────────────────────────────
+async function handlePickerCandidatesSnapshot(env, req){
+  const user = await requireUser(env, req, ['admin']); if (!user) return unauthorized();
+  // minimal projection; we prefer selecting explicit columns
+  const sel = 'id,first_name,last_name,display_name,email,active,rev,updated_at,roles';
+  const url = `${env.SUPABASE_URL}/rest/v1/candidates?select=${encodeURIComponent(sel)}&active=is.true`;
+  const { rows } = await sbFetch(env, url);
+  // Project to minimal (roles_display can be computed client-side; include roles for FE to format)
+  const items = (rows||[]).map(r => ({
+    id: r.id,
+    first_name: r.first_name || '',
+    last_name:  r.last_name  || '',
+    display_name: r.display_name || '',
+    email: r.email || '',
+    active: r.active !== false,
+    roles: r.roles || null,   // FE will format to roles_display
+    rev: (r.rev ?? null),
+    updated_at: r.updated_at || null
+  }));
+  const since = computeSinceFromRows(items); // prefer max rev else max updated_at epoch
+  return okJSON({ items, since });
+}
 
+async function handlePickerCandidatesDelta(env, req){
+  const user = await requireUser(env, req, ['admin']); if (!user) return unauthorized();
+  const u = new URL(req.url);
+  const sinceRaw = u.searchParams.get('since');
+  if (!sinceRaw) return badJSON(400, 'missing since');
+
+  // Try rev-based first
+  let urlAdd = `${env.SUPABASE_URL}/rest/v1/candidates?select=id,first_name,last_name,display_name,email,active,rev,updated_at,roles&rev=gt.${encodeURIComponent(sinceRaw)}`;
+  let { rows } = await sbFetch(env, urlAdd);
+  // Fallback to updated_at timestamp (when rev not present); clients can pass timestamp numbers
+  if (!Array.isArray(rows)) rows = [];
+  let updates = rows;
+
+  // Hard deletes: optional tombstones
+  let removed = [];
+  try {
+    const tombUrl = `${env.SUPABASE_URL}/rest/v1/candidates_tombstones?select=id,deleted_rev&deleted_rev=gt.${encodeURIComponent(sinceRaw)}`;
+    const del = await sbFetch(env, tombUrl);
+    removed = (del?.rows||[]).map(r => r.id);
+  } catch {}
+
+  const added = updates.filter(r => r.active !== false); // new/updated active rows
+  const updated = updates.filter(r => r.active === false ? false : true); // treat all as updated on client (we don't distinguish)
+
+  const since = computeSinceFromRows(updates); // max rev/updated_at
+  return okJSON({ added, updated, removed, since });
+}
+
+async function handlePickerCandidatesIdList(env, req){
+  const user = await requireUser(env, req, ['admin']); if (!user) return unauthorized();
+  const u = new URL(req.url);
+  // Map passed filters to PostgREST query. Keep it minimal (ids, role, q, active, etc.)
+  const qs = new URLSearchParams();
+
+  // Example mappings:
+  const ids  = (u.searchParams.get('ids')||'').trim(); if (ids)  qs.set('id', `in.(${ids.split(',').map(x=>`"${x.trim()}"`).join(',')})`);
+  const role = (u.searchParams.get('role')||'').trim(); if (role) qs.set('roles::text', `ilike.*${role}*`);
+  const band = (u.searchParams.get('band')||'').trim(); if (band) qs.set('band', `eq.${band}`);
+  const q    = (u.searchParams.get('q')||'').trim();    if (q)    qs.set('display_name', `ilike.*${q}*`);
+  const active = u.searchParams.get('active');          if (active!=null) qs.set('active', `eq.${active==='true'}`);
+
+  // Return only ids sorted by display_name (server-side consistent ordering)
+  const sel = 'id';
+  const url = `${env.SUPABASE_URL}/rest/v1/candidates?select=${sel}&${qs.toString()}&order=display_name.asc&limit=20000`;
+  const { rows } = await sbFetch(env, url);
+  const idsOut = (rows||[]).map(r => r.id);
+  return okJSON({ fingerprint: u.searchParams.toString(), ids: idsOut, total: idsOut.length });
+}
+// ─────────────────────────────────────────────────────────────────────────────
+// CLIENTS: snapshot / delta / id-list
+// ─────────────────────────────────────────────────────────────────────────────
+async function handlePickerClientsSnapshot(env, req){
+  const user = await requireUser(env, req, ['admin']); if (!user) return unauthorized();
+  const sel = 'id,name,primary_invoice_email,rev,updated_at';
+  const url = `${env.SUPABASE_URL}/rest/v1/clients?select=${encodeURIComponent(sel)}`;
+  const { rows } = await sbFetch(env, url);
+  const items = (rows||[]).map(r => ({
+    id: r.id,
+    name: r.name || '',
+    primary_invoice_email: r.primary_invoice_email || '',
+    rev: (r.rev ?? null),
+    updated_at: r.updated_at || null
+  }));
+  const since = computeSinceFromRows(items);
+  return okJSON({ items, since });
+}
+
+async function handlePickerClientsDelta(env, req){
+  const user = await requireUser(env, req, ['admin']); if (!user) return unauthorized();
+  const u = new URL(req.url);
+  const sinceRaw = u.searchParams.get('since');
+  if (!sinceRaw) return badJSON(400, 'missing since');
+
+  const sel = 'id,name,primary_invoice_email,rev,updated_at';
+  const urlAdd = `${env.SUPABASE_URL}/rest/v1/clients?select=${encodeURIComponent(sel)}&rev=gt.${encodeURIComponent(sinceRaw)}`;
+  let { rows } = await sbFetch(env, urlAdd);
+  if (!Array.isArray(rows)) rows = [];
+
+  let removed = [];
+  try {
+    const tombUrl = `${env.SUPABASE_URL}/rest/v1/clients_tombstones?select=id,deleted_rev&deleted_rev=gt.${encodeURIComponent(sinceRaw)}`;
+    const del = await sbFetch(env, tombUrl);
+    removed = (del?.rows||[]).map(r => r.id);
+  } catch {}
+
+  const since = computeSinceFromRows(rows);
+  const added = [];      // no 'active' on clients; treat all as updates
+  const updated = rows;  // merge these into cache on the frontend
+
+  return okJSON({ added, updated, removed, since });
+}
+
+async function handlePickerClientsIdList(env, req){
+  const user = await requireUser(env, req, ['admin']); if (!user) return unauthorized();
+  const u = new URL(req.url);
+  const qs = new URLSearchParams();
+
+  const ids = (u.searchParams.get('ids')||'').trim();
+  if (ids) qs.set('id', `in.(${ids.split(',').map(x=>`"${x.trim()}"`).join(',')})`);
+
+  const q = (u.searchParams.get('q')||'').trim();
+  if (q) qs.set('name', `ilike.*${q}*`);
+
+  const sel = 'id';
+  const url = `${env.SUPABASE_URL}/rest/v1/clients?select=${sel}${qs.toString() ? `&${qs.toString()}` : ''}&order=name.asc&limit=20000`;
+  const { rows } = await sbFetch(env, url);
+  const idsOut = (rows||[]).map(r => r.id);
+  return okJSON({ fingerprint: u.searchParams.toString(), ids: idsOut, total: idsOut.length });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Utility: computeSinceFromRows(rows)
+// Picks max rev if available else max updated_at (as numeric timestamp)
+// ─────────────────────────────────────────────────────────────────────────────
+function computeSinceFromRows(rows){
+  let maxRev = null, maxTs = 0;
+  for (const r of (rows||[])) {
+    if (r.rev != null) maxRev = (maxRev==null) ? r.rev : Math.max(maxRev, r.rev);
+    if (r.updated_at) {
+      const t = Date.parse(r.updated_at); if (!isNaN(t)) maxTs = Math.max(maxTs, t);
+    }
+  }
+  return (maxRev!=null) ? String(maxRev) : (maxTs ? String(maxTs) : null);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPERS (backend)
+// ─────────────────────────────────────────────────────────────────────────────
+function okJSON(body){ return new Response(JSON.stringify(body), { status:200, headers: { 'content-type':'application/json' } }); }
+function badJSON(status, msg){ return new Response(JSON.stringify({ error: msg || 'Bad Request' }), { status, headers: { 'content-type':'application/json' } }); }
 
 function ok(data, headers = {}) {
   return new Response(JSON.stringify(data), { status: 200, headers: { ...JSON_HEADERS, ...headers } });
@@ -14315,6 +14472,19 @@ export default {
         const markPaid = matchPath(p, '/api/timesheets/:id/mark-paid');
         if (markPaid && req.method === 'PATCH')                              return handleTimesheetMarkPaid(env, req, markPaid.id);
       }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ROUTER entries (add inside your fetch() router switch)
+// ─────────────────────────────────────────────────────────────────────────────
+// Pickers: snapshots, deltas, id-list
+if (req.method === 'GET' && p === '/api/pickers/candidates/snapshot')  return withCORS(env, req, await handlePickerCandidatesSnapshot(env, req));
+if (req.method === 'GET' && p === '/api/pickers/candidates/delta')     return withCORS(env, req, await handlePickerCandidatesDelta(env, req));
+if (req.method === 'GET' && p === '/api/pickers/candidates/id-list')   return withCORS(env, req, await handlePickerCandidatesIdList(env, req));
+
+if (req.method === 'GET' && p === '/api/pickers/clients/snapshot')     return withCORS(env, req, await handlePickerClientsSnapshot(env, req));
+if (req.method === 'GET' && p === '/api/pickers/clients/delta')        return withCORS(env, req, await handlePickerClientsDelta(env, req));
+if (req.method === 'GET' && p === '/api/pickers/clients/id-list')      return withCORS(env, req, await handlePickerClientsIdList(env, req));
+
 
       // Invoices
       if (req.method === 'GET'  && p === '/api/invoices')                    return handleListInvoices(env, req);
