@@ -742,13 +742,11 @@ export async function handleContractsGet(env, req, contractId) {
   );
   if (!contract) return withCORS(env, req, notFound('Contract not found'));
 
-  // Flatten convenience fields
   const candidate_display =
     contract?.candidate?.display_name ||
     ([contract?.candidate?.first_name, contract?.candidate?.last_name].filter(Boolean).join(' ') || null);
   const client_name = contract?.client?.name || null;
 
-  // Rollups: counts by status + most recent weeks
   const { rows: weeks } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
@@ -758,7 +756,6 @@ export async function handleContractsGet(env, req, contractId) {
   );
   const counts = (weeks || []).reduce((a,w) => { a[w.status] = (a[w.status]||0)+1; return a; }, {});
 
-  // Return enriched contract
   const contractOut = { ...contract, candidate_display, client_name };
   return withCORS(env, req, ok({ contract: contractOut, counts, weeks: weeks || [] }));
 }
@@ -768,10 +765,10 @@ export async function handleContractsUpdate(env, req, contractId) {
   if (!user) return withCORS(env, req, unauthorized());
   let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
 
-  // Load current incl. pay_method_snapshot + candidate_id
+  // Load current incl. pay_method_snapshot + candidate_id (+ std_hours_json for validation context if needed later)
   const current = await sbGetOne(
     env,
-    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=id,start_date,end_date,require_reference_to_pay,require_reference_to_invoice,auto_invoice,pay_method_snapshot,candidate_id,bucket_labels_json`
+    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=id,start_date,end_date,require_reference_to_pay,require_reference_to_invoice,auto_invoice,pay_method_snapshot,candidate_id,bucket_labels_json,std_hours_json`
   );
   if (!current) return withCORS(env, req, notFound('Contract not found'));
 
@@ -791,11 +788,32 @@ export async function handleContractsUpdate(env, req, contractId) {
     const obj = body.bucket_labels_json;
     const keys = ['day','night','sat','sun','bh'];
     if (obj === null) {
-      patch.bucket_labels_json = null; // explicit clear
+      patch.bucket_labels_json = null;
     } else if (obj && typeof obj === 'object' && keys.every(k => typeof obj[k] === 'string' && obj[k].trim())) {
       patch.bucket_labels_json = Object.fromEntries(keys.map(k => [k, obj[k].trim()]));
     } else {
       return withCORS(env, req, badRequest('bucket_labels_json must include day|night|sat|sun|bh as non-empty strings or be null'));
+    }
+  }
+
+  // Optional: update guide hours (std_hours_json)
+  if ('std_hours_json' in body) {
+    const gh = body.std_hours_json;
+    const days = ['mon','tue','wed','thu','fri','sat','sun'];
+    if (gh === null) {
+      patch.std_hours_json = null;
+    } else if (gh && typeof gh === 'object' && days.every(d => d in gh)) {
+      const norm = {};
+      for (const d of days) {
+        const n = Number(gh[d]);
+        if (!Number.isFinite(n) || n < 0) {
+          return withCORS(env, req, badRequest(`std_hours_json.${d} must be a non-negative number`));
+        }
+        norm[d] = n;
+      }
+      patch.std_hours_json = norm;
+    } else {
+      return withCORS(env, req, badRequest('std_hours_json must be null or an object with mon|tue|wed|thu|fri|sat|sun numeric values'));
     }
   }
 
@@ -819,6 +837,7 @@ export async function handleContractsUpdate(env, req, contractId) {
 }
 
 // === NEW: strict full-replace handler (PUT /api/contracts/:id) ===
+// === Strict full-replace (PUT) ===
 export async function handleContractsReplace(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -830,23 +849,23 @@ export async function handleContractsReplace(env, req, contractId) {
   // Load current (for immutables + policy checks)
   const current = await sbGetOne(
     env,
-    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=id,candidate_id,client_id,role,band,start_date,end_date,pay_method_snapshot,default_submission_mode,week_ending_weekday_snapshot,auto_invoice,require_reference_to_pay,require_reference_to_invoice,display_site,ward_hint,bucket_labels_json,rates_json`
+    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=id,candidate_id,client_id,role,band,start_date,end_date,pay_method_snapshot,default_submission_mode,week_ending_weekday_snapshot,auto_invoice,require_reference_to_pay,require_reference_to_invoice,display_site,ward_hint,bucket_labels_json,rates_json,std_hours_json`
   );
   if (!current) return withCORS(env, req, notFound('Contract not found'));
 
-  // ---- Validation: full payload presence ----
+  // ---- Required fields for strict PUT ----
   const requiredKeys = [
     'candidate_id','client_id','role','band',
     'start_date','end_date',
     'pay_method_snapshot','default_submission_mode',
-    'week_ending_weekday_snapshot','rates_json'
+    'week_ending_weekday_snapshot','rates_json','std_hours_json','bucket_labels_json'
   ];
   const missing = requiredKeys.filter(k => !(k in body));
   if (missing.length) {
     return withCORS(env, req, badRequest(`Missing required fields: ${missing.join(', ')}`));
   }
 
-  // ---- Validation: immutables (edit-time) ----
+  // ---- Immutables (edit-time) ----
   const immutErrs = [];
   if (body.candidate_id !== current.candidate_id) immutErrs.push('candidate_id is immutable');
   if (body.client_id    !== current.client_id)    immutErrs.push('client_id is immutable');
@@ -856,49 +875,41 @@ export async function handleContractsReplace(env, req, contractId) {
   if (String((body.pay_method_snapshot||'').toUpperCase()) !== String((current.pay_method_snapshot||'').toUpperCase())) {
     immutErrs.push('pay_method_snapshot is immutable');
   }
-  if (immutErrs.length) {
-    return withCORS(env, req, badRequest(immutErrs.join('; ')));
-  }
+  if (immutErrs.length) return withCORS(env, req, badRequest(immutErrs.join('; ')));
 
-  // ---- Validation: business rules ----
-  // 1) end_date: extend-only (cannot be earlier than current end_date)
+  // ---- Business rules ----
+  // end_date: extend-only
   const newEnd = new Date(toYmd(body.end_date) + 'T00:00:00Z');
   const oldEnd = new Date(toYmd(current.end_date || current.start_date) + 'T00:00:00Z');
-  if (newEnd < oldEnd) {
-    return withCORS(env, req, badRequest('Can only extend end_date'));
-  }
+  if (newEnd < oldEnd) return withCORS(env, req, badRequest('Can only extend end_date'));
 
-  // 2) default_submission_mode
+  // default_submission_mode
   const dsm = String(body.default_submission_mode||'').toUpperCase();
   if (!['ELECTRONIC','MANUAL'].includes(dsm)) {
     return withCORS(env, req, badRequest('default_submission_mode must be ELECTRONIC or MANUAL'));
   }
 
-  // 3) week_ending_weekday_snapshot
+  // week_ending_weekday_snapshot
   const wew = Number(body.week_ending_weekday_snapshot);
   if (!Number.isInteger(wew) || wew < 0 || wew > 6) {
     return withCORS(env, req, badRequest('week_ending_weekday_snapshot must be an integer 0–6'));
   }
 
-  // 4) rates_json: require all 15 buckets and numeric values
+  // rates_json: full 15 buckets, non-negative numbers
   const mustRates = ['paye_day','paye_night','paye_sat','paye_sun','paye_bh',
                      'umb_day','umb_night','umb_sat','umb_sun','umb_bh',
                      'charge_day','charge_night','charge_sat','charge_sun','charge_bh'];
   const rj = body.rates_json || {};
   const missingRates = mustRates.filter(k => !(k in rj));
-  if (missingRates.length) {
-    return withCORS(env, req, badRequest(`rates_json missing buckets: ${missingRates.join(', ')}`));
-  }
+  if (missingRates.length) return withCORS(env, req, badRequest(`rates_json missing buckets: ${missingRates.join(', ')}`));
   for (const k of mustRates) {
     const n = Number(rj[k]);
-    if (!Number.isFinite(n) || n < 0) {
-      return withCORS(env, req, badRequest(`rates_json.${k} must be a non-negative number`));
-    }
+    if (!Number.isFinite(n) || n < 0) return withCORS(env, req, badRequest(`rates_json.${k} must be a non-negative number`));
   }
 
-  // 5) bucket_labels_json: must be null or 5 non-empty strings if provided
-  let labelsPatch = undefined;
-  if ('bucket_labels_json' in body) {
+  // bucket_labels_json: null or 5 non-empty strings
+  let labelsPatch;
+  {
     const obj = body.bucket_labels_json;
     const keys = ['day','night','sat','sun','bh'];
     if (obj === null) {
@@ -908,37 +919,48 @@ export async function handleContractsReplace(env, req, contractId) {
     } else {
       return withCORS(env, req, badRequest('bucket_labels_json must include day|night|sat|sun|bh as non-empty strings or be null'));
     }
-  } else {
-    // For strict PUT we require presence; force explicit null if not sent.
-    return withCORS(env, req, badRequest('bucket_labels_json must be present (null or full 5-key object)'));
   }
 
-  // 6) booleans
-  const autoInv   = clampBool(body.auto_invoice, current.auto_invoice);
-  const reqRefPay = clampBool(body.require_reference_to_pay, current.require_reference_to_pay);
-  const reqRefInv = clampBool(body.require_reference_to_invoice, current.require_reference_to_invoice);
+  // std_hours_json: required; null or 7 non-negative numbers
+  let stdHoursPatch;
+  {
+    const gh = body.std_hours_json;
+    const days = ['mon','tue','wed','thu','fri','sat','sun'];
+    if (gh === null) {
+      stdHoursPatch = null;
+    } else if (gh && typeof gh === 'object' && days.every(d => d in gh)) {
+      const norm = {};
+      for (const d of days) {
+        const n = Number(gh[d]);
+        if (!Number.isFinite(n) || n < 0) {
+          return withCORS(env, req, badRequest(`std_hours_json.${d} must be a non-negative number`));
+        }
+        norm[d] = n;
+      }
+      stdHoursPatch = norm;
+    } else {
+      return withCORS(env, req, badRequest('std_hours_json must be null or an object with mon|tue|wed|thu|fri|sat|sun numeric values'));
+    }
+  }
 
-  // 7) simple strings (optional – allow empty/trim)
-  const displaySite = (body.display_site ?? '').toString().trim();
-  const wardHint    = (body.ward_hint ?? '').toString().trim();
-
-  // Build Supabase patch (PUT semantics with allowed mutable fields)
+  // Build patch (PUT semantics; immutable columns enforced above)
   const patch = {
     end_date: toYmd(newEnd),
     default_submission_mode: dsm,
     week_ending_weekday_snapshot: wew,
-    auto_invoice: autoInv,
-    require_reference_to_pay: reqRefPay,
-    require_reference_to_invoice: reqRefInv,
-    display_site: displaySite,
-    ward_hint: wardHint,
+    auto_invoice: clampBool(body.auto_invoice, current.auto_invoice),
+    require_reference_to_pay: clampBool(body.require_reference_to_pay, current.require_reference_to_pay),
+    require_reference_to_invoice: clampBool(body.require_reference_to_invoice, current.require_reference_to_invoice),
+    display_site: (body.display_site ?? '').toString().trim(),
+    ward_hint: (body.ward_hint ?? '').toString().trim(),
     rates_json: Object.fromEntries(mustRates.map(k => [k, Number(rj[k]) || 0])),
     bucket_labels_json: labelsPatch,
+    std_hours_json: stdHoursPatch,
     updated_at: nowIso(),
   };
 
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {
-    method: 'PATCH', // we still use PATCH to update the row; PUT semantics are enforced by our validation
+    method: 'PATCH', // apply validated replace semantics
     headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
     body: JSON.stringify(patch)
   });
