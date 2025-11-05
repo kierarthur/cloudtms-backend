@@ -818,6 +818,136 @@ export async function handleContractsUpdate(env, req, contractId) {
   return withCORS(env, req, ok({ contract: updated, warnings }));
 }
 
+// === NEW: strict full-replace handler (PUT /api/contracts/:id) ===
+export async function handleContractsReplace(env, req, contractId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let body; 
+  try { body = await parseJSONBody(req); } 
+  catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  // Load current (for immutables + policy checks)
+  const current = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=id,candidate_id,client_id,role,band,start_date,end_date,pay_method_snapshot,default_submission_mode,week_ending_weekday_snapshot,auto_invoice,require_reference_to_pay,require_reference_to_invoice,display_site,ward_hint,bucket_labels_json,rates_json`
+  );
+  if (!current) return withCORS(env, req, notFound('Contract not found'));
+
+  // ---- Validation: full payload presence ----
+  const requiredKeys = [
+    'candidate_id','client_id','role','band',
+    'start_date','end_date',
+    'pay_method_snapshot','default_submission_mode',
+    'week_ending_weekday_snapshot','rates_json'
+  ];
+  const missing = requiredKeys.filter(k => !(k in body));
+  if (missing.length) {
+    return withCORS(env, req, badRequest(`Missing required fields: ${missing.join(', ')}`));
+  }
+
+  // ---- Validation: immutables (edit-time) ----
+  const immutErrs = [];
+  if (body.candidate_id !== current.candidate_id) immutErrs.push('candidate_id is immutable');
+  if (body.client_id    !== current.client_id)    immutErrs.push('client_id is immutable');
+  if (String(body.role||'') !== String(current.role||''))   immutErrs.push('role is immutable');
+  if (String(body.band||'') !== String(current.band||''))   immutErrs.push('band is immutable');
+  if (toYmd(body.start_date) !== toYmd(current.start_date)) immutErrs.push('start_date is immutable');
+  if (String((body.pay_method_snapshot||'').toUpperCase()) !== String((current.pay_method_snapshot||'').toUpperCase())) {
+    immutErrs.push('pay_method_snapshot is immutable');
+  }
+  if (immutErrs.length) {
+    return withCORS(env, req, badRequest(immutErrs.join('; ')));
+  }
+
+  // ---- Validation: business rules ----
+  // 1) end_date: extend-only (cannot be earlier than current end_date)
+  const newEnd = new Date(toYmd(body.end_date) + 'T00:00:00Z');
+  const oldEnd = new Date(toYmd(current.end_date || current.start_date) + 'T00:00:00Z');
+  if (newEnd < oldEnd) {
+    return withCORS(env, req, badRequest('Can only extend end_date'));
+  }
+
+  // 2) default_submission_mode
+  const dsm = String(body.default_submission_mode||'').toUpperCase();
+  if (!['ELECTRONIC','MANUAL'].includes(dsm)) {
+    return withCORS(env, req, badRequest('default_submission_mode must be ELECTRONIC or MANUAL'));
+  }
+
+  // 3) week_ending_weekday_snapshot
+  const wew = Number(body.week_ending_weekday_snapshot);
+  if (!Number.isInteger(wew) || wew < 0 || wew > 6) {
+    return withCORS(env, req, badRequest('week_ending_weekday_snapshot must be an integer 0–6'));
+  }
+
+  // 4) rates_json: require all 15 buckets and numeric values
+  const mustRates = ['paye_day','paye_night','paye_sat','paye_sun','paye_bh',
+                     'umb_day','umb_night','umb_sat','umb_sun','umb_bh',
+                     'charge_day','charge_night','charge_sat','charge_sun','charge_bh'];
+  const rj = body.rates_json || {};
+  const missingRates = mustRates.filter(k => !(k in rj));
+  if (missingRates.length) {
+    return withCORS(env, req, badRequest(`rates_json missing buckets: ${missingRates.join(', ')}`));
+  }
+  for (const k of mustRates) {
+    const n = Number(rj[k]);
+    if (!Number.isFinite(n) || n < 0) {
+      return withCORS(env, req, badRequest(`rates_json.${k} must be a non-negative number`));
+    }
+  }
+
+  // 5) bucket_labels_json: must be null or 5 non-empty strings if provided
+  let labelsPatch = undefined;
+  if ('bucket_labels_json' in body) {
+    const obj = body.bucket_labels_json;
+    const keys = ['day','night','sat','sun','bh'];
+    if (obj === null) {
+      labelsPatch = null;
+    } else if (obj && typeof obj === 'object' && keys.every(k => typeof obj[k] === 'string' && obj[k].trim())) {
+      labelsPatch = Object.fromEntries(keys.map(k => [k, obj[k].trim()]));
+    } else {
+      return withCORS(env, req, badRequest('bucket_labels_json must include day|night|sat|sun|bh as non-empty strings or be null'));
+    }
+  } else {
+    // For strict PUT we require presence; force explicit null if not sent.
+    return withCORS(env, req, badRequest('bucket_labels_json must be present (null or full 5-key object)'));
+  }
+
+  // 6) booleans
+  const autoInv   = clampBool(body.auto_invoice, current.auto_invoice);
+  const reqRefPay = clampBool(body.require_reference_to_pay, current.require_reference_to_pay);
+  const reqRefInv = clampBool(body.require_reference_to_invoice, current.require_reference_to_invoice);
+
+  // 7) simple strings (optional – allow empty/trim)
+  const displaySite = (body.display_site ?? '').toString().trim();
+  const wardHint    = (body.ward_hint ?? '').toString().trim();
+
+  // Build Supabase patch (PUT semantics with allowed mutable fields)
+  const patch = {
+    end_date: toYmd(newEnd),
+    default_submission_mode: dsm,
+    week_ending_weekday_snapshot: wew,
+    auto_invoice: autoInv,
+    require_reference_to_pay: reqRefPay,
+    require_reference_to_invoice: reqRefInv,
+    display_site: displaySite,
+    ward_hint: wardHint,
+    rates_json: Object.fromEntries(mustRates.map(k => [k, Number(rj[k]) || 0])),
+    bucket_labels_json: labelsPatch,
+    updated_at: nowIso(),
+  };
+
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {
+    method: 'PATCH', // we still use PATCH to update the row; PUT semantics are enforced by our validation
+    headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
+    body: JSON.stringify(patch)
+  });
+  if (!res.ok) return withCORS(env, req, serverError(await res.text()));
+  const updated = (await res.json().catch(()=>[]))[0];
+
+  const warnings = await computePayMethodWarnings(env, { ...current, ...updated });
+  return withCORS(env, req, ok({ contract: updated, warnings }));
+}
 
 // Helper: returns ['PAY_METHOD_MISMATCH'] if candidate.pay_method != pay_method_snapshot
 async function computePayMethodWarnings(env, contractRow) {
@@ -14624,6 +14754,7 @@ if (req.method === 'GET' && p === '/api/pickers/clients/id-list')      return wi
         if (m && req.method === 'GET')    return handleContractsGet(env, req, m.id);
         if (m && req.method === 'PATCH')  return handleContractsUpdate(env, req, m.id);
         if (m && req.method === 'DELETE') return handleContractsDelete(env, req, m.id);
+        if (m && req.method === 'PUT')    return handleContractsReplace(env, req, m.id); 
       }
       {
         const m = matchPath(p, '/api/contracts/:id/generate-weeks');
