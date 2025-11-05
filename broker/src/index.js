@@ -622,6 +622,8 @@ export async function handleContractsCreate(env, req) {
 // ──────────────────────────────────────────────────────────────────────────────
 // BACKEND: handleContractsList (amended) — adds paging + extended filters
 // ──────────────────────────────────────────────────────────────────────────────
+// handleContractsList — enriched with candidate/client names and relationship-aware free-text filtering
+// (joins based on FK: contracts.candidate_id → candidates.id, contracts.client_id → clients.id)  :contentReference[oaicite:0]{index=0}
 export async function handleContractsList(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -630,45 +632,55 @@ export async function handleContractsList(env, req) {
   const q  = (k) => url.searchParams.get(k);
   const qs = (k) => url.searchParams.getAll(k);
 
-  let api = `${env.SUPABASE_URL}/rest/v1/contracts?select=*`;
+  // Embed related names so FE can show Candidate/Client without extra calls
+  let api = `${env.SUPABASE_URL}/rest/v1/contracts?select=*,` +
+            `candidate:candidates(display_name,first_name,last_name),` +
+            `client:clients(name)`;
+
   const filters = [];
 
   // Core filters (existing)
-  if (q('candidate_id'))          filters.push(`candidate_id=eq.${enc(q('candidate_id'))}`);
-  if (q('client_id'))             filters.push(`client_id=eq.${enc(q('client_id'))}`);
-  if (q('pay_method_snapshot'))   filters.push(`pay_method_snapshot=eq.${enc(q('pay_method_snapshot').toUpperCase())}`);
-  if (q('role'))                  filters.push(`role=eq.${enc(q('role'))}`);
-  if (q('band'))                  filters.push(`band=eq.${enc(q('band'))}`);
+  if (q('candidate_id'))        filters.push(`candidate_id=eq.${enc(q('candidate_id'))}`);
+  if (q('client_id'))           filters.push(`client_id=eq.${enc(q('client_id'))}`);
+  if (q('pay_method_snapshot')) filters.push(`pay_method_snapshot=eq.${enc(q('pay_method_snapshot').toUpperCase())}`);
+  if (q('role'))                filters.push(`role=eq.${enc(q('role'))}`);
+  if (q('band'))                filters.push(`band=eq.${enc(q('band'))}`);
   if (q('active_on')) {
     const d = q('active_on');
     filters.push(`start_date=lte.${enc(d)}`);
     filters.push(`end_date=gte.${enc(d)}`);
   }
-  if (q('auto_invoice'))          filters.push(`auto_invoice=eq.${enc(String(clampBool(q('auto_invoice'))))}`);
+  if (q('auto_invoice'))        filters.push(`auto_invoice=eq.${enc(String(clampBool(q('auto_invoice'))))}`);
 
-  // NEW: free text on client/candidate/role (if those display fields exist)
+  // Free text across related names + role (uses embedded relationship paths)
   if (q('q')) {
     const like = `%${q('q')}%`;
-    filters.push(`or=(client_name.ilike.${enc(like)},candidate_display.ilike.${enc(like)},role.ilike.${enc(like)})`);
+    filters.push(
+      `or=(client.name.ilike.${enc(like)},` +
+      `candidate.display_name.ilike.${enc(like)},` +
+      `candidate.first_name.ilike.${enc(like)},` +
+      `candidate.last_name.ilike.${enc(like)},` +
+      `role.ilike.${enc(like)})`
+    );
   }
 
-  // NEW: roles_any (multiple values)
+  // roles_any (multiple values)
   const rolesAny = qs('roles_any');
   if (rolesAny && rolesAny.length) {
     const orParts = rolesAny.map(r => `role.eq.${enc(r)}`).join(',');
     filters.push(`or=(${orParts})`);
   }
 
-  // NEW: default_submission_mode (accept alias submission_mode)
+  // default_submission_mode (accept alias submission_mode)
   const dsm = q('default_submission_mode') || q('submission_mode');
   if (dsm) filters.push(`default_submission_mode=eq.${enc(dsm.toUpperCase())}`);
 
-  // NEW: week_ending_weekday_snapshot
+  // week_ending_weekday_snapshot
   if (q('week_ending_weekday_snapshot')) {
     filters.push(`week_ending_weekday_snapshot=eq.${enc(q('week_ending_weekday_snapshot'))}`);
   }
 
-  // NEW: require_reference_* gates
+  // require_reference_* gates
   if (q('require_reference_to_pay')) {
     filters.push(`require_reference_to_pay=eq.${enc(String(clampBool(q('require_reference_to_pay'))))}`);
   }
@@ -676,20 +688,20 @@ export async function handleContractsList(env, req) {
     filters.push(`require_reference_to_invoice=eq.${enc(String(clampBool(q('require_reference_to_invoice'))))}`);
   }
 
-  // NEW: has_custom_labels → bucket_labels_json null/not null
+  // has_custom_labels → bucket_labels_json null/not null
   if (q('has_custom_labels')) {
     const yes = clampBool(q('has_custom_labels'));
     filters.push(yes ? `bucket_labels_json=not.is.null` : `bucket_labels_json=is.null`);
   }
 
-  // NEW: created_from / created_to (if present in schema)
+  // created_from / created_to (if present)
   if (q('created_from')) filters.push(`created_at=gte.${enc(q('created_from'))}`);
   if (q('created_to'))   filters.push(`created_at=lte.${enc(q('created_to'))}`);
 
   if (filters.length) api += `&${filters.join('&')}`;
   api += '&order=start_date.desc,created_at.desc';
 
-  // NEW: paging translation (page/page_size → limit/offset)
+  // paging → limit/offset
   const page     = Math.max(parseInt(q('page') || '1', 10) || 1, 1);
   const pageSize = (q('page_size') === 'ALL') ? null : Math.max(parseInt(q('page_size') || '50', 10) || 50, 1);
   if (pageSize != null) {
@@ -699,25 +711,58 @@ export async function handleContractsList(env, req) {
   }
 
   const { rows } = await sbFetch(env, api);
-  return withCORS(env, req, ok(rows || []));
+  // Flatten related names into top-level fields (keep nested for back-compat)
+  const out = (rows || []).map(r => {
+    const candidateDisplay =
+      r?.candidate?.display_name ||
+      ([r?.candidate?.first_name, r?.candidate?.last_name].filter(Boolean).join(' ') || null);
+    const clientName = r?.client?.name || null;
+    return {
+      ...r,
+      candidate_display: candidateDisplay,
+      client_name: clientName
+    };
+  });
+
+  return withCORS(env, req, ok(out));
 }
 
+// handleContractsGet — embed names and flatten convenience fields for FE
+// (joins via FK: contracts.candidate_id → candidates.id, contracts.client_id → clients.id)  :contentReference[oaicite:1]{index=1}
 export async function handleContractsGet(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+  if (!contractId) return withCORS(env, req, badRequest('contract_id required'));
 
-  const contract = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=*`);
+  const contract = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contracts` +
+    `?id=eq.${enc(contractId)}` +
+    `&select=*,candidate:candidates(display_name,first_name,last_name),client:clients(name)`
+  );
   if (!contract) return withCORS(env, req, notFound('Contract not found'));
+
+  // Flatten convenience fields
+  const candidate_display =
+    contract?.candidate?.display_name ||
+    ([contract?.candidate?.first_name, contract?.candidate?.last_name].filter(Boolean).join(' ') || null);
+  const client_name = contract?.client?.name || null;
 
   // Rollups: counts by status + most recent weeks
   const { rows: weeks } = await sbFetch(
     env,
-    `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&select=id,week_ending_date,additional_seq,status,submission_mode_snapshot,timesheet_id,uploaded_pdf_r2_key&order=week_ending_date.desc,additional_seq.asc`
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+    `?contract_id=eq.${enc(contractId)}` +
+    `&select=id,week_ending_date,additional_seq,status,submission_mode_snapshot,timesheet_id,uploaded_pdf_r2_key` +
+    `&order=week_ending_date.desc,additional_seq.asc`
   );
   const counts = (weeks || []).reduce((a,w) => { a[w.status] = (a[w.status]||0)+1; return a; }, {});
 
-  return withCORS(env, req, ok({ contract, counts, weeks: weeks || [] }));
+  // Return enriched contract
+  const contractOut = { ...contract, candidate_display, client_name };
+  return withCORS(env, req, ok({ contract: contractOut, counts, weeks: weeks || [] }));
 }
+
 export async function handleContractsUpdate(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -881,9 +926,12 @@ export async function handleContractsCloneAndExtend(env, req, contractId) {
 export async function handleContractsCalendar(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+
+  // ✅ Guard: contractId required (CORS-safe 400)
+  if (!contractId) return withCORS(env, req, badRequest('contract_id required'));
+
   const url = new URL(req.url);
   const year = Number(url.searchParams.get('year') || (new Date()).getUTCFullYear());
-
   const yStart = `${year}-01-01`, yEnd = `${year}-12-31`;
 
   const { rows: weeks } = await sbFetch(
@@ -895,15 +943,12 @@ export async function handleContractsCalendar(env, req, contractId) {
     `&order=week_ending_date.asc,additional_seq.asc`
   );
 
-  // Precheck invoice gates for attached timesheets
+  // …rest unchanged…
   const ids = (weeks || []).map(w => w.timesheet_id).filter(Boolean);
   let preMap = {};
   if (ids.length) {
     const inList = ids.map(enc).join(',');
-    const { rows: pres } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/v_ts_invoice_precheck?timesheet_id=in.(${inList})`
-    );
+    const { rows: pres } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/v_ts_invoice_precheck?timesheet_id=in.(${inList})`);
     preMap = Object.fromEntries((pres||[]).map(p => [p.timesheet_id, p]));
   }
 
@@ -925,9 +970,8 @@ export async function handleContractsCalendar(env, req, contractId) {
     };
   });
 
-  return withCORS(env, req, ok({ year, items }));
+  return withCORS(env, req, ok({ year, items })); 
 }
-
 export async function handleContractsSkipWeeks(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -6618,6 +6662,7 @@ async function handleListClients(env, req) {
  *                 count:  { type: integer }
  *                 sample_id: { type: string, nullable: true }
  */
+
 export async function handleCandidateOverrideOverlapExists(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -7060,6 +7105,34 @@ async function handleGetHospital(env, req, clientId, hospitalId) {
     return withCORS(env, req, serverError("Failed to fetch client hospital"));
   }
 }
+export async function handleCandidatesGet(env, req, candidateId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!candidateId) return withCORS(env, req, badRequest('candidate_id required'));
+
+  const { rows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(candidateId)}&select=*&limit=1`
+  );
+  const row = (rows && rows[0]) || null;
+  if (!row) return withCORS(env, req, notFound('Candidate not found'));
+  return withCORS(env, req, ok(row));
+}
+
+export async function handleClientsGet(env, req, clientId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!clientId) return withCORS(env, req, badRequest('client_id required'));
+
+  const { rows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${enc(clientId)}&select=*&limit=1`
+  );
+  const row = (rows && rows[0]) || null;
+  if (!row) return withCORS(env, req, notFound('Client not found'));
+  return withCORS(env, req, ok(row));
+}
+
 
 async function handleUpdateHospital(env, req, clientId, hospitalId) {
   const user = await requireUser(env, req, ['admin']);
@@ -14116,9 +14189,14 @@ export default {
       // Clients
       if (req.method === 'GET' && p === '/api/clients')                     return handleListClients(env, req);
       if (req.method === 'POST' && p === '/api/clients')                    return handleCreateClient(env, req);
+      // Enriched details route (legacy/expanded shape)
+      {
+        const clientDetails = matchPath(p, '/api/clients/:id/details');
+        if (clientDetails && req.method === 'GET')                          return handleGetClient(env, req, clientDetails.id);
+      }
       {
         const client = matchPath(p, '/api/clients/:id');
-        if (client && req.method === 'GET')                                 return handleGetClient(env, req, client.id);
+        if (client && req.method === 'GET')                                 return handleClientsGet(env, req, client.id);   // base row for pickers
         if (client && req.method === 'PUT')                                 return handleUpdateClient(env, req, client.id);
       }
 
@@ -14152,9 +14230,14 @@ export default {
       // Candidates
       if (req.method === 'GET' && p === '/api/candidates')                  return handleListCandidates(env, req);
       if (req.method === 'POST' && p === '/api/candidates')                 return handleCreateCandidate(env, req);
+      // Enriched legacy/details route
+      {
+        const candDet = matchPath(p, '/api/candidates/:candidate_id/details');
+        if (candDet && req.method === 'GET')                                return handleGetCandidate(env, req, candDet.candidate_id);
+      }
       {
         const cand = matchPath(p, '/api/candidates/:candidate_id');
-        if (cand && req.method === 'GET')                                   return handleGetCandidate(env, req, cand.candidate_id);
+        if (cand && req.method === 'GET')                                   return handleCandidatesGet(env, req, cand.candidate_id); // base row for pickers
         if (cand && req.method === 'PUT')                                   return handleUpdateCandidate(env, req, cand.candidate_id);
       }
 
@@ -14256,10 +14339,10 @@ export default {
         const m = matchPath(p, '/api/invoices/:invoice_id/unhold');
         if (m && req.method === 'POST')                                      return handleInvoiceUnhold(env, req, m.invoice_id);
       }
-{
-  const m = matchPath(p, '/api/invoices/:invoice_id/unissue');
-  if (m && req.method === 'POST') return handleInvoiceUnissue(env, req, m.invoice_id);
-}
+      {
+        const m = matchPath(p, '/api/invoices/:invoice_id/unissue');
+        if (m && req.method === 'POST') return handleInvoiceUnissue(env, req, m.invoice_id);
+      }
 
       {
         const invEmail = matchPath(p, '/api/invoices/:invoice_id/email');
@@ -14279,10 +14362,10 @@ export default {
         const invUnpaid = matchPath(p, '/api/invoices/:invoice_id/mark-unpaid');
         if (invUnpaid && req.method === 'POST')                              return handleInvoiceMarkUnpaid(env, req, invUnpaid.invoice_id);
       }
-{
-  const m = matchPath(p, '/api/invoices/:invoice_id/issue');
-  if (m && req.method === 'POST') return handleInvoiceIssue(env, req, m.invoice_id);
-}
+      {
+        const m = matchPath(p, '/api/invoices/:invoice_id/issue');
+        if (m && req.method === 'POST') return handleInvoiceIssue(env, req, m.invoice_id);
+      }
 
       // Remittances
       if (req.method === 'POST' && p === '/api/remittances/email-for-candidate') {
@@ -14388,10 +14471,10 @@ export default {
         const m = matchPath(p, '/api/contracts/:id/skip-weeks');
         if (m && req.method === 'POST') return handleContractsSkipWeeks(env, req, m.id);
       }
-// POST /api/contracts/check-overlap  -> ask backend if a proposed [start,end] overlaps existing contracts for a candidate
-if (req.method === 'POST' && p === '/api/contracts/check-overlap') {
-  return await handleContractsCheckOverlap(env, req);
-}
+      // POST /api/contracts/check-overlap
+      if (req.method === 'POST' && p === '/api/contracts/check-overlap') {
+        return await handleContractsCheckOverlap(env, req);
+      }
 
       // Contract weeks
       if (req.method === 'GET' && p === '/api/contract-weeks') return handleContractWeeksList(env, req);
@@ -14467,10 +14550,10 @@ if (req.method === 'POST' && p === '/api/contracts/check-overlap') {
         const m = matchPath(p, '/api/timesheets/:id');
         if (m && req.method === 'DELETE') return handleTimesheetDelete(env, req, m.id);
       }
-{
-  const m = matchPath(p, '/api/timesheets/:id/replace-manual-pdf');
-  if (m && req.method === 'POST') return handleTimesheetReplaceManualPdf(env, req, m.id);
-}
+      {
+        const m = matchPath(p, '/api/timesheets/:id/replace-manual-pdf');
+        if (m && req.method === 'POST') return handleTimesheetReplaceManualPdf(env, req, m.id);
+      }
 
       // =============================================================================
       // NEW ROUTES — Funnel & Prechecks
