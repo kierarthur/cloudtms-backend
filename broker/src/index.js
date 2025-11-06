@@ -1509,14 +1509,24 @@ export async function handleContractsCalendar(env, req, contractId) {
     return Math.max(0, mins);
   };
 
-  const deriveState = (expectedMin, actualMin, ts, fin) => {
+  // FIX: treat planned placeholders as PLANNED, and lift week-level state if a TS exists without per-day actuals
+  const deriveState = (plannedPresent, actualMin, ts, fin) => {
+    // If we have actual minutes for that date, use the normal path
     if (actualMin > 0) {
       if (fin?.paid_at_utc) return 'PAID';
       if (fin?.locked_by_invoice_id) return 'INVOICED';
       if (ts?.authorised_at_server) return 'AUTHORISED';
       return 'SUBMITTED';
     }
-    return (expectedMin > 0) ? 'PLANNED' : 'EMPTY';
+    // No per-day actuals — if a timesheet exists, lift week-level state
+    if (ts) {
+      if (fin?.paid_at_utc) return 'PAID';
+      if (fin?.locked_by_invoice_id) return 'INVOICED';
+      if (ts?.authorised_at_server) return 'AUTHORISED';
+      return 'SUBMITTED';
+    }
+    // No TS and no actuals: if there is a planned entry at all, mark PLANNED (even when expected_minutes == 0)
+    return plannedPresent ? 'PLANNED' : 'EMPTY';
   };
 
   const dayItems = [];
@@ -1529,9 +1539,12 @@ export async function handleContractsCalendar(env, req, contractId) {
     for (const d of plan) {
       const ymd = d?.date || null;
       if (!ymd || ymd < winStart || ymd > winEnd) continue;
+
       const expected = Number(d?.expected_minutes || 0);
       const actual   = hasPerDayActual ? computeActualMinutesForDate(ts, ymd) : 0;
-      const state    = deriveState(expected, actual, ts, fin);
+
+      // plannedPresent is true because we are iterating a planned entry
+      const state    = deriveState(true /* plannedPresent */, actual, ts, fin);
 
       dayItems.push({
         date: ymd,
@@ -1550,6 +1563,7 @@ export async function handleContractsCalendar(env, req, contractId) {
 
   return withCORS(env, req, ok({ from: winStart, to: winEnd, granularity: 'day', items: dayItems }));
 }
+
 
 export async function handleCandidateCalendar(env, req, candidateId) {
   const user = await requireUser(env, req, ['admin']);
