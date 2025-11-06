@@ -140,6 +140,178 @@ async function r2Put(env, key, bytesOrString, opts = {}) {
 
   return bucket.put(cleanKey, body, opts);
 }
+// ---------- Shared helpers (local to this patch block) ----------
+const DOW_MAP = { mon:1, tue:2, wed:3, thu:4, fri:5, sat:6, sun:0 }; // JS: 0=Sun..6=Sat
+
+function parseHHMM(s) {
+  if (!s || typeof s !== 'string') return null;
+  const m = s.trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const h = +m[1], mi = +m[2];
+  if (h<0||h>23||mi<0||mi>59) return null;
+  return h*60 + mi;
+}
+function addDays(ymd, d) { const dt = new Date(ymd+'T00:00:00Z'); dt.setUTCDate(dt.getUTCDate()+d); return dt.toISOString().slice(0,10); }
+function dow(ymd) { return (new Date(ymd+'T00:00:00Z')).getUTCDay(); } // 0=Sun..6=Sat
+function minutesDiff(startMin, endMin, overnight=false) {
+  if (startMin==null || endMin==null) return 0;
+  if (overnight || endMin <= startMin) return (24*60 - startMin) + endMin;
+  return endMin - startMin;
+}
+function isBH(ymd, bhSet) { return bhSet && bhSet.has(ymd); }
+
+// Derive per-day total hours (decimal) from std_schedule_json {mon..sun:{start,end,break_minutes}}
+function deriveStdHoursFromSchedule(stdSched) {
+  if (!stdSched || typeof stdSched !== 'object') return null;
+  const out = {};
+  for (const k of Object.keys(DOW_MAP)) {
+    const d = stdSched[k];
+    if (!d) { out[k] = 0; continue; }
+    const s = parseHHMM(d.start), e = parseHHMM(d.end);
+    if (s==null || e==null) throw new Error(`Invalid HH:MM in std_schedule_json.${k}`);
+    const br = Math.max(0, Number(d.break_minutes||0));
+    const mins = Math.max(0, minutesDiff(s, e, d.overnight===true) - br);
+    out[k] = +(mins/60).toFixed(2);
+  }
+  return out;
+}
+
+// Build planned_schedule_json (7 dated entries) from template (mon..sun) for a given week ending
+function buildPlannedScheduleFromTemplate(stdSched, weekEndingYmd) {
+  const days = [];
+  if (!stdSched || typeof stdSched!=='object') return days;
+  // Collect the 7 dates in that week (WE day + 6 back)
+  const weekDates = Array.from({length:7}, (_,i)=> addDays(weekEndingYmd, - (6-i))); // Mon..Sun if WE is Sun; still safe for any WE
+  // Map by real DOW (0..6) to date for this week
+  const mapDateByDow = Object.fromEntries(weekDates.map(d => [dow(d), d]));
+  // For each mon..sun in template, pick matching date by DOW
+  for (const [k, jsDow] of Object.entries(DOW_MAP)) {
+    const dCfg = stdSched[k];
+    const date = mapDateByDow[jsDow];
+    if (!date) continue;
+    if (!dCfg) {
+      days.push({ date, start:null, end:null, breaks:[], break_minutes:0, overnight:false, expected_minutes:0 });
+      continue;
+    }
+    const s = parseHHMM(dCfg.start), e = parseHHMM(dCfg.end);
+    if (s==null || e==null) throw new Error(`Invalid HH:MM in std_schedule_json.${k}`);
+    const br = Math.max(0, Number(dCfg.break_minutes||0));
+    const overnight = dCfg.overnight===true || e<=s;
+    const mins = Math.max(0, minutesDiff(s, e, overnight) - br);
+    days.push({
+      date, start: dCfg.start, end: dCfg.end,
+      breaks: Array.isArray(dCfg.breaks)? dCfg.breaks : [],
+      break_minutes: br, overnight, expected_minutes: mins
+    });
+  }
+  return days;
+}
+
+// Load client windows & BH list (fallback to defaults if missing)
+async function loadClientTimePolicy(env, clientId) {
+  const cs = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/client_settings?client_id=eq.${enc(clientId)}&select=day_start,day_end,night_start,night_end,bh_list`);
+  const defaults = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=day_start,day_end,night_start,night_end,bh_list`);
+  const ds = (cs && cs.day_start) ? cs : defaults || {};
+  const dayStart = parseHHMM(ds?.day_start || '06:00');
+  const dayEnd   = parseHHMM(ds?.day_end   || '20:00');
+  const nightStart = parseHHMM(ds?.night_start || '20:00');
+  const nightEnd   = parseHHMM(ds?.night_end   || '06:00');
+  const bhList = Array.isArray(ds?.bh_list) ? new Set(ds.bh_list) : new Set();
+  return { dayStart, dayEnd, nightStart, nightEnd, bhList };
+}
+
+// Segment one day's chunk [a,b) in minutes (0..1440), allocate into day/night using client windows.
+// Weekend/BH overlay wins over day/night; precedence BH > Sun > Sat > Night > Day.
+function segmentChunkIntoBuckets(dateYmd, a, b, policy, acc) {
+  const len = Math.max(0, b - a);
+  if (len === 0) return;
+  if (isBH(dateYmd, policy.bhList)) { acc.bh += len; return; }
+  const d = dow(dateYmd);
+  if (d === 0) { acc.sun += len; return; }
+  if (d === 6) { acc.sat += len; return; }
+
+  // split into [dayStart, dayEnd) as 'day', remainder 'night'
+  const ds = policy.dayStart, de = policy.dayEnd;
+  const seg = [
+    { from: 0,  to: ds,  bucket:'night' },
+    { from: ds, to: de,  bucket:'day'   },
+    { from: de, to: 1440, bucket:'night' }
+  ];
+  let remStart = a, remEnd = b;
+  for (const s of seg) {
+    const x1 = Math.max(remStart, s.from), x2 = Math.min(remEnd, s.to);
+    if (x2 > x1) acc[s.bucket] += (x2 - x1);
+  }
+}
+
+// Apply duration-only break: subtract from largest bucket; ties: BH > Sun > Sat > Night > Day
+function applyDurationBreak(acc, breakMin) {
+  if (!breakMin || breakMin<=0) return;
+  const order = ['bh','sun','sat','night','day'];
+  let remaining = breakMin;
+  while (remaining>0) {
+    // find largest bucket by minutes following precedence order for ties
+    let bestK = null, bestVal = -1;
+    for (const k of order) {
+      const v = acc[k]||0;
+      if (v > bestVal) { bestVal = v; bestK = k; }
+    }
+    if (!bestK || bestVal<=0) break;
+    const take = Math.min(remaining, bestVal);
+    acc[bestK] -= take;
+    remaining -= take;
+  }
+}
+
+// Resolve hours (minutes) by bucket from an actual_schedule_json array
+async function resolveBucketsFromSchedule(env, contract, actualDays /* array of {date,start,end,breaks?,break_minutes?,overnight?} */) {
+  const policy = await loadClientTimePolicy(env, contract.client_id);
+  const acc = { day:0, night:0, sat:0, sun:0, bh:0 };
+
+  for (const d of (actualDays||[])) {
+    if (!d || !d.date || !d.start || !d.end) continue;
+    const s = parseHHMM(d.start), e = parseHHMM(d.end);
+    if (s==null || e==null) throw new Error(`Invalid HH:MM in actual_schedule_json for ${d.date}`);
+    const overnight = d.overnight===true || e<=s;
+
+    // Split into 1 or 2 chunks (this date; optionally next date)
+    const chunk1 = { date: d.date, from: s, to: overnight ? 1440 : e };
+    const chunks = [chunk1];
+    if (overnight) {
+      const next = addDays(d.date, 1);
+      chunks.push({ date: next, from: 0, to: e });
+    }
+
+    // Accumulate minutes by bucket for raw shift
+    for (const c of chunks) {
+      segmentChunkIntoBuckets(c.date, c.from, c.to, policy, acc);
+    }
+
+    // Breaks — intervals first
+    if (Array.isArray(d.breaks) && d.breaks.length) {
+      for (const br of d.breaks) {
+        const bs = parseHHMM(br.start), be = parseHHMM(br.end);
+        if (bs==null || be==null) continue;
+        const bOver = be<=bs;
+        const bChunk1 = { date: d.date, from: bs, to: bOver ? 1440 : be };
+        const bChunks = [bChunk1];
+        if (bOver) bChunks.push({ date: addDays(d.date,1), from: 0, to: be });
+
+        // Subtract break overlap minutes from the same buckets they fall in
+        const before = { ...acc };
+        const tmp = { day:0, night:0, sat:0, sun:0, bh:0 };
+        for (const c of bChunks) {
+          segmentChunkIntoBuckets(c.date, c.from, c.to, policy, tmp);
+        }
+        // subtract overlapped minutes
+        for (const k of Object.keys(acc)) acc[k] = Math.max(0, acc[k] - (tmp[k]||0));
+      }
+    } else if (Number(d.break_minutes)>0) {
+      applyDurationBreak(acc, Number(d.break_minutes));
+    }
+  }
+  return acc; // minutes by bucket
+}
 
 
 async function r2GetJSON(env, key) {
@@ -559,7 +731,6 @@ async function patchContractWeekScan(env, cwId, r2Key) {
 // ----------------------------------------------------------------------------
 // A) CONTRACTS (CRUD + lifecycle)
 // ----------------------------------------------------------------------------
-
 export async function handleContractsCreate(env, req) {
   const user = await requireUser(env, req, ['admin']); // backoffice only
   if (!user) return withCORS(env, req, unauthorized());
@@ -588,6 +759,19 @@ export async function handleContractsCreate(env, req) {
   };
   const bucketLabels = validateLabels(body.bucket_labels_json) || null;
 
+  // NEW: accept std_schedule_json and derive std_hours_json
+  let std_schedule_json = null;
+  let derived_hours = null;
+  if (body.std_schedule_json) {
+    try {
+      std_schedule_json = body.std_schedule_json;
+      derived_hours = deriveStdHoursFromSchedule(std_schedule_json);
+    } catch (e) {
+      return withCORS(env, req, badRequest(e.message || 'Invalid std_schedule_json'));
+    }
+  }
+  const std_hours_json = (derived_hours || body.std_hours_json || null);
+
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts`, {
     method: 'POST',
     headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
@@ -602,8 +786,8 @@ export async function handleContractsCreate(env, req) {
       end_date: body.end_date,
       pay_method_snapshot: String(body.pay_method_snapshot).toUpperCase() === 'PAYE' ? 'PAYE' : 'UMBRELLA',
       rates_json: body.rates_json || {},
-      std_hours_json: body.std_hours_json || null,
-      // NEW: store optional labels
+      std_schedule_json,                         // NEW
+      std_hours_json,                            // derived or legacy
       bucket_labels_json: bucketLabels,
       default_submission_mode: (String(body.default_submission_mode||'').toUpperCase() === 'MANUAL') ? 'MANUAL' : 'ELECTRONIC',
       week_ending_weekday_snapshot: (Number(body.week_ending_weekday_snapshot) >= 0 && Number(body.week_ending_weekday_snapshot) <= 6) ? Number(body.week_ending_weekday_snapshot) : 0,
@@ -618,6 +802,7 @@ export async function handleContractsCreate(env, req) {
   const row = Array.isArray(json) ? json[0] : json;
   return withCORS(env, req, ok(row));
 }
+
 
 // ──────────────────────────────────────────────────────────────────────────────
 // BACKEND: handleContractsList (amended) — adds paging + extended filters
@@ -759,62 +944,109 @@ export async function handleContractsGet(env, req, contractId) {
   const contractOut = { ...contract, candidate_display, client_name };
   return withCORS(env, req, ok({ contract: contractOut, counts, weeks: weeks || [] }));
 }
-
 export async function handleContractsUpdate(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
 
-  // Load current incl. pay_method_snapshot + candidate_id (+ std_hours_json for validation context if needed later)
+  // Load current
   const current = await sbGetOne(
     env,
-    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=id,start_date,end_date,require_reference_to_pay,require_reference_to_invoice,auto_invoice,pay_method_snapshot,candidate_id,bucket_labels_json,std_hours_json`
+    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=*`
   );
   if (!current) return withCORS(env, req, notFound('Contract not found'));
 
-  const patch = {};
-  if (body.end_date) {
-    const oldEnd = new Date((current.end_date || current.start_date) + 'T00:00:00Z');
-    const newEnd = new Date(toYmd(body.end_date) + 'T00:00:00Z');
-    if (newEnd < oldEnd) return withCORS(env, req, badRequest('Can only extend end_date'));
-    patch.end_date = toYmd(newEnd);
-  }
-  if ('auto_invoice' in body)                   patch.auto_invoice = clampBool(body.auto_invoice, current.auto_invoice);
-  if ('require_reference_to_pay' in body)       patch.require_reference_to_pay = clampBool(body.require_reference_to_pay, current.require_reference_to_pay);
-  if ('require_reference_to_invoice' in body)   patch.require_reference_to_invoice = clampBool(body.require_reference_to_invoice, current.require_reference_to_invoice);
+  // Has any submitted timesheet?
+  const hasSubmitted = !!(await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets?contract_id=eq.${enc(contractId)}&select=timesheet_id&limit=1`
+  ));
 
-  // Optional: update labels
+  // ----- schedule template & legacy totals -----
+  let schedulePatch = {};
+  if ('std_schedule_json' in body) {
+    try {
+      const std_schedule_json = body.std_schedule_json || null;
+      const std_hours_json = std_schedule_json ? deriveStdHoursFromSchedule(std_schedule_json) : null;
+      schedulePatch.std_schedule_json = std_schedule_json;
+      schedulePatch.std_hours_json = std_hours_json;
+    } catch (e) {
+      return withCORS(env, req, badRequest(e.message || 'Invalid std_schedule_json'));
+    }
+  }
+  if ('std_hours_json' in body && !('std_schedule_json' in body)) {
+    const gh = body.std_hours_json;
+    const days = ['mon','tue','wed','thu','fri','sat','sun'];
+    if (gh !== null && !(gh && typeof gh === 'object' && days.every(d => d in gh && Number.isFinite(Number(gh[d])) && Number(gh[d])>=0))) {
+      return withCORS(env, req, badRequest('std_hours_json must be null or numbers for mon..sun'));
+    }
+    schedulePatch.std_hours_json = gh;
+  }
+
+  const patch = { ...schedulePatch };
+
+  // ----- always-editable bits -----
+  if ('display_site' in body) patch.display_site = (body.display_site ?? '').toString().trim();
+  if ('ward_hint'    in body) patch.ward_hint    = (body.ward_hint ?? '').toString().trim();
+  if ('default_submission_mode' in body) {
+    const dsm = String(body.default_submission_mode||'').toUpperCase();
+    if (!['ELECTRONIC','MANUAL'].includes(dsm)) return withCORS(env, req, badRequest('default_submission_mode must be ELECTRONIC or MANUAL'));
+    patch.default_submission_mode = dsm;
+  }
   if ('bucket_labels_json' in body) {
     const obj = body.bucket_labels_json;
     const keys = ['day','night','sat','sun','bh'];
-    if (obj === null) {
-      patch.bucket_labels_json = null;
-    } else if (obj && typeof obj === 'object' && keys.every(k => typeof obj[k] === 'string' && obj[k].trim())) {
+    if (obj === null) patch.bucket_labels_json = null;
+    else if (obj && typeof obj === 'object' && keys.every(k => typeof obj[k] === 'string' && obj[k].trim()))
       patch.bucket_labels_json = Object.fromEntries(keys.map(k => [k, obj[k].trim()]));
-    } else {
-      return withCORS(env, req, badRequest('bucket_labels_json must include day|night|sat|sun|bh as non-empty strings or be null'));
+    else return withCORS(env, req, badRequest('bucket_labels_json must include day|night|sat|sun|bh as non-empty strings or be null'));
+  }
+  if ('auto_invoice' in body)                 patch.auto_invoice = clampBool(body.auto_invoice, current.auto_invoice);
+  if ('require_reference_to_pay' in body)     patch.require_reference_to_pay = clampBool(body.require_reference_to_pay, current.require_reference_to_pay);
+  if ('require_reference_to_invoice' in body) patch.require_reference_to_invoice = clampBool(body.require_reference_to_invoice, current.require_reference_to_invoice);
+
+  // ----- candidate/client/rates/pay_method: only when NO submitted TS -----
+  if (hasSubmitted) {
+    if ('candidate_id' in body || 'client_id' in body || 'rates_json' in body || 'pay_method_snapshot' in body) {
+      return withCORS(env, req, badRequest('Cannot change candidate/client/rates/pay_method after timesheets have been submitted'));
+    }
+  } else {
+    if ('candidate_id' in body) patch.candidate_id = body.candidate_id || null;
+    if ('client_id'    in body) patch.client_id    = body.client_id || null;
+    if ('rates_json'   in body) {
+      const R = body.rates_json || {};
+      const buckets = ['paye_day','paye_night','paye_sat','paye_sun','paye_bh','umb_day','umb_night','umb_sat','umb_sun','umb_bh','charge_day','charge_night','charge_sat','charge_sun','charge_bh'];
+      for (const k of buckets) if (R[k]!=null && (!Number.isFinite(Number(R[k])) || Number(R[k])<0)) return withCORS(env, req, badRequest(`rates_json.${k} must be a non-negative number`));
+      patch.rates_json = R;
+    }
+    if ('pay_method_snapshot' in body) {
+      const pm = String(body.pay_method_snapshot||'').toUpperCase();
+      if (!['PAYE','UMBRELLA'].includes(pm)) return withCORS(env, req, badRequest('pay_method_snapshot must be PAYE or UMBRELLA'));
+      patch.pay_method_snapshot = pm;
     }
   }
 
-  // Optional: update guide hours (std_hours_json)
-  if ('std_hours_json' in body) {
-    const gh = body.std_hours_json;
-    const days = ['mon','tue','wed','thu','fri','sat','sun'];
-    if (gh === null) {
-      patch.std_hours_json = null;
-    } else if (gh && typeof gh === 'object' && days.every(d => d in gh)) {
-      const norm = {};
-      for (const d of days) {
-        const n = Number(gh[d]);
-        if (!Number.isFinite(n) || n < 0) {
-          return withCORS(env, req, badRequest(`std_hours_json.${d} must be a non-negative number`));
-        }
-        norm[d] = n;
+  // ----- start/end date edits: enforce week START for earliest submitted week; week END for latest submitted week -----
+  const newStart = ('start_date' in body) ? toYmd(body.start_date) : current.start_date;
+  const newEnd   = ('end_date'   in body) ? toYmd(body.end_date)   : current.end_date;
+  if (('start_date' in body) || ('end_date' in body)) {
+    const weRow = await sbGetOne(env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&timesheet_id=not.is.null&select=min:week_ending_date.min(),max:week_ending_date.max()`
+    );
+    const minWE = weRow?.min || null, maxWE = weRow?.max || null;
+
+    if (minWE) {
+      const minWeekStart = addDays(minWE, -6);  // earliest protected week start
+      if (newStart > minWeekStart) {
+        return withCORS(env, req, badRequest(`start_date cannot be after start of earliest submitted week (${minWeekStart})`));
       }
-      patch.std_hours_json = norm;
-    } else {
-      return withCORS(env, req, badRequest('std_hours_json must be null or an object with mon|tue|wed|thu|fri|sat|sun numeric values'));
     }
+    if (maxWE && newEnd < maxWE) {
+      return withCORS(env, req, badRequest(`end_date cannot be before latest submitted week ending (${maxWE})`));
+    }
+
+    patch.start_date = newStart;
+    patch.end_date   = newEnd;
   }
 
   if (!Object.keys(patch).length) {
@@ -824,6 +1056,7 @@ export async function handleContractsUpdate(env, req, contractId) {
 
   patch.updated_at = nowIso();
 
+  // Apply contract update
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {
     method: 'PATCH',
     headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
@@ -832,12 +1065,22 @@ export async function handleContractsUpdate(env, req, contractId) {
   if (!res.ok) return withCORS(env, req, serverError(await res.text()));
   const updated = (await res.json().catch(()=>[]))[0];
 
+  // If dates changed: remove planned weeks outside window, then regenerate missing inside
+  if (('start_date' in body) || ('end_date' in body)) {
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&timesheet_id=is.null&or=(week_ending_date.lt.${enc(newStart)},week_ending_date.gt.${enc(newEnd)})`,
+      { method:'DELETE', headers: { ...sbHeaders(env), 'Prefer':'return=minimal' } }
+    ).catch(()=>{});
+    await handleContractsGenerateWeeks(env, new Request(''), contractId);
+  }
+
   const warnings = await computePayMethodWarnings(env, { ...current, ...updated });
   return withCORS(env, req, ok({ contract: updated, warnings }));
 }
 
 // === NEW: strict full-replace handler (PUT /api/contracts/:id) ===
 // === Strict full-replace (PUT) ===
+
 export async function handleContractsReplace(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -846,130 +1089,108 @@ export async function handleContractsReplace(env, req, contractId) {
   try { body = await parseJSONBody(req); } 
   catch { return withCORS(env, req, badRequest('Invalid JSON')); }
 
-  // Load current (for immutables + policy checks)
   const current = await sbGetOne(
     env,
-    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=id,candidate_id,client_id,role,band,start_date,end_date,pay_method_snapshot,default_submission_mode,week_ending_weekday_snapshot,auto_invoice,require_reference_to_pay,require_reference_to_invoice,display_site,ward_hint,bucket_labels_json,rates_json,std_hours_json`
+    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=*`
   );
   if (!current) return withCORS(env, req, notFound('Contract not found'));
 
-  // ---- Required fields for strict PUT ----
-  const requiredKeys = [
-    'candidate_id','client_id','role','band',
-    'start_date','end_date',
-    'pay_method_snapshot','default_submission_mode',
-    'week_ending_weekday_snapshot','rates_json','std_hours_json','bucket_labels_json'
-  ];
+  const hasSubmitted = !!(await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets?contract_id=eq.${enc(contractId)}&select=timesheet_id&limit=1`
+  ));
+
+  const requiredKeys = ['candidate_id','client_id','start_date','end_date','pay_method_snapshot','default_submission_mode','week_ending_weekday_snapshot','rates_json'];
   const missing = requiredKeys.filter(k => !(k in body));
-  if (missing.length) {
-    return withCORS(env, req, badRequest(`Missing required fields: ${missing.join(', ')}`));
+  if (missing.length) return withCORS(env, req, badRequest(`Missing required fields: ${missing.join(', ')}`));
+
+  // schedule template (optional) and derived hours
+  let std_schedule_json = null, std_hours_json = null;
+  if ('std_schedule_json' in body) {
+    try {
+      std_schedule_json = body.std_schedule_json || null;
+      std_hours_json = std_schedule_json ? deriveStdHoursFromSchedule(std_schedule_json) : null;
+    } catch (e) { return withCORS(env, req, badRequest(e.message || 'Invalid std_schedule_json')); }
+  } else if ('std_hours_json' in body) {
+    std_hours_json = body.std_hours_json;
+  } else {
+    std_hours_json = current.std_hours_json ?? null;
   }
 
-  // ---- Immutables (edit-time) ----
-  const immutErrs = [];
-  if (body.candidate_id !== current.candidate_id) immutErrs.push('candidate_id is immutable');
-  if (body.client_id    !== current.client_id)    immutErrs.push('client_id is immutable');
-  if (String(body.role||'') !== String(current.role||''))   immutErrs.push('role is immutable');
-  if (String(body.band||'') !== String(current.band||''))   immutErrs.push('band is immutable');
-  if (toYmd(body.start_date) !== toYmd(current.start_date)) immutErrs.push('start_date is immutable');
-  if (String((body.pay_method_snapshot||'').toUpperCase()) !== String((current.pay_method_snapshot||'').toUpperCase())) {
-    immutErrs.push('pay_method_snapshot is immutable');
-  }
-  if (immutErrs.length) return withCORS(env, req, badRequest(immutErrs.join('; ')));
-
-  // ---- Business rules ----
-  // end_date: extend-only
-  const newEnd = new Date(toYmd(body.end_date) + 'T00:00:00Z');
-  const oldEnd = new Date(toYmd(current.end_date || current.start_date) + 'T00:00:00Z');
-  if (newEnd < oldEnd) return withCORS(env, req, badRequest('Can only extend end_date'));
-
-  // default_submission_mode
-  const dsm = String(body.default_submission_mode||'').toUpperCase();
-  if (!['ELECTRONIC','MANUAL'].includes(dsm)) {
-    return withCORS(env, req, badRequest('default_submission_mode must be ELECTRONIC or MANUAL'));
-  }
-
-  // week_ending_weekday_snapshot
-  const wew = Number(body.week_ending_weekday_snapshot);
-  if (!Number.isInteger(wew) || wew < 0 || wew > 6) {
-    return withCORS(env, req, badRequest('week_ending_weekday_snapshot must be an integer 0–6'));
-  }
-
-  // rates_json: full 15 buckets, non-negative numbers
-  const mustRates = ['paye_day','paye_night','paye_sat','paye_sun','paye_bh',
-                     'umb_day','umb_night','umb_sat','umb_sun','umb_bh',
-                     'charge_day','charge_night','charge_sat','charge_sun','charge_bh'];
-  const rj = body.rates_json || {};
-  const missingRates = mustRates.filter(k => !(k in rj));
-  if (missingRates.length) return withCORS(env, req, badRequest(`rates_json missing buckets: ${missingRates.join(', ')}`));
-  for (const k of mustRates) {
-    const n = Number(rj[k]);
-    if (!Number.isFinite(n) || n < 0) return withCORS(env, req, badRequest(`rates_json.${k} must be a non-negative number`));
-  }
-
-  // bucket_labels_json: null or 5 non-empty strings
-  let labelsPatch;
-  {
-    const obj = body.bucket_labels_json;
-    const keys = ['day','night','sat','sun','bh'];
-    if (obj === null) {
-      labelsPatch = null;
-    } else if (obj && typeof obj === 'object' && keys.every(k => typeof obj[k] === 'string' && obj[k].trim())) {
-      labelsPatch = Object.fromEntries(keys.map(k => [k, obj[k].trim()]));
-    } else {
-      return withCORS(env, req, badRequest('bucket_labels_json must include day|night|sat|sun|bh as non-empty strings or be null'));
-    }
-  }
-
-  // std_hours_json: required; null or 7 non-negative numbers
-  let stdHoursPatch;
-  {
-    const gh = body.std_hours_json;
-    const days = ['mon','tue','wed','thu','fri','sat','sun'];
-    if (gh === null) {
-      stdHoursPatch = null;
-    } else if (gh && typeof gh === 'object' && days.every(d => d in gh)) {
-      const norm = {};
-      for (const d of days) {
-        const n = Number(gh[d]);
-        if (!Number.isFinite(n) || n < 0) {
-          return withCORS(env, req, badRequest(`std_hours_json.${d} must be a non-negative number`));
-        }
-        norm[d] = n;
+  // lock candidate/client/rates/pay_method if submitted
+  if (hasSubmitted) {
+      if (body.candidate_id !== current.candidate_id) return withCORS(env, req, badRequest('Cannot change candidate after timesheets have been submitted'));
+      if (body.client_id    !== current.client_id)    return withCORS(env, req, badRequest('Cannot change client after timesheets have been submitted'));
+      if (JSON.stringify(body.rates_json||{}) !== JSON.stringify(current.rates_json||{})) return withCORS(env, req, badRequest('Cannot change rates after timesheets have been submitted'));
+      if (String(body.pay_method_snapshot||'').toUpperCase() !== String(current.pay_method_snapshot||'').toUpperCase()) {
+        return withCORS(env, req, badRequest('Cannot change pay_method_snapshot after timesheets have been submitted'));
       }
-      stdHoursPatch = norm;
-    } else {
-      return withCORS(env, req, badRequest('std_hours_json must be null or an object with mon|tue|wed|thu|fri|sat|sun numeric values'));
-    }
   }
 
-  // Build patch (PUT semantics; immutable columns enforced above)
+  // mode & weekday
+  const dsm = String(body.default_submission_mode||'').toUpperCase();
+  if (!['ELECTRONIC','MANUAL'].includes(dsm)) return withCORS(env, req, badRequest('default_submission_mode must be ELECTRONIC or MANUAL'));
+  const wew = Number(body.week_ending_weekday_snapshot);
+  if (!Number.isInteger(wew) || wew < 0 || wew > 6) return withCORS(env, req, badRequest('week_ending_weekday_snapshot must be 0–6'));
+
+  // week-ending window rule
+  const newStart = toYmd(body.start_date), newEnd = toYmd(body.end_date);
+  const weRow = await sbGetOne(env,
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&timesheet_id=not.is.null&select=min:week_ending_date.min(),max:week_ending_date.max()`
+  );
+  const minWE = weRow?.min || null, maxWE = weRow?.max || null;
+
+  if (minWE) {
+    const minWeekStart = addDays(minWE, -6);
+    if (newStart > minWeekStart) {
+      return withCORS(env, req, badRequest(`start_date cannot be after start of earliest submitted week (${minWeekStart})`));
+    }
+  }
+  if (maxWE && newEnd < maxWE) {
+    return withCORS(env, req, badRequest(`end_date cannot be before latest submitted week ending (${maxWE})`));
+  }
+
   const patch = {
-    end_date: toYmd(newEnd),
+    candidate_id: body.candidate_id,
+    client_id:    body.client_id,
+    role:         body.role ?? current.role,
+    band:         body.band ?? current.band,
+    display_site: (body.display_site ?? current.display_site ?? '').toString().trim(),
+    ward_hint:    (body.ward_hint ?? current.ward_hint ?? '').toString().trim(),
+    start_date:   newStart,
+    end_date:     newEnd,
+    pay_method_snapshot: String(body.pay_method_snapshot||current.pay_method_snapshot).toUpperCase(),
     default_submission_mode: dsm,
     week_ending_weekday_snapshot: wew,
+    rates_json: body.rates_json || current.rates_json || {},
+    std_schedule_json,
+    std_hours_json,
+    bucket_labels_json: ('bucket_labels_json' in body) ? (body.bucket_labels_json || null) : (current.bucket_labels_json || null),
     auto_invoice: clampBool(body.auto_invoice, current.auto_invoice),
     require_reference_to_pay: clampBool(body.require_reference_to_pay, current.require_reference_to_pay),
     require_reference_to_invoice: clampBool(body.require_reference_to_invoice, current.require_reference_to_invoice),
-    display_site: (body.display_site ?? '').toString().trim(),
-    ward_hint: (body.ward_hint ?? '').toString().trim(),
-    rates_json: Object.fromEntries(mustRates.map(k => [k, Number(rj[k]) || 0])),
-    bucket_labels_json: labelsPatch,
-    std_hours_json: stdHoursPatch,
     updated_at: nowIso(),
   };
 
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {
-    method: 'PATCH', // apply validated replace semantics
+    method: 'PATCH',
     headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
     body: JSON.stringify(patch)
   });
   if (!res.ok) return withCORS(env, req, serverError(await res.text()));
   const updated = (await res.json().catch(()=>[]))[0];
 
+  // planned-week maintenance
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&timesheet_id=is.null&or=(week_ending_date.lt.${enc(newStart)},week_ending_date.gt.${enc(newEnd)})`,
+    { method:'DELETE', headers: { ...sbHeaders(env), 'Prefer':'return=minimal' } }
+  ).catch(()=>{});
+  await handleContractsGenerateWeeks(env, new Request(''), contractId);
+
   const warnings = await computePayMethodWarnings(env, { ...current, ...updated });
   return withCORS(env, req, ok({ contract: updated, warnings }));
 }
+
 
 // Helper: returns ['PAY_METHOD_MISMATCH'] if candidate.pay_method != pay_method_snapshot
 async function computePayMethodWarnings(env, contractRow) {
@@ -1011,119 +1232,512 @@ export async function handleContractsGenerateWeeks(env, req, contractId) {
   const allWE = enumerateWeekEndings(c.start_date, c.end_date, wew);
   const todayYmd = toYmd(new Date());
 
-  const rows = allWE.map(we => ({
-    contract_id: c.id,
-    week_ending_date: we,
-    additional_seq: 0,
-    status: (we <= todayYmd ? 'OPEN' : 'PLANNED'),
-    submission_mode_snapshot: c.default_submission_mode,
-    timesheet_id: null,
-    created_at: nowIso(),
-    updated_at: nowIso()
-  }));
+  // Build planned_schedule_json for each WE from std_schedule_json (if any)
+  const rows = allWE.map(we => {
+    let planned_schedule_json = null;
+    try { planned_schedule_json = buildPlannedScheduleFromTemplate(c.std_schedule_json || null, we); } catch {}
+    return {
+      contract_id: c.id,
+      week_ending_date: we,
+      additional_seq: 0,
+      status: (we <= todayYmd ? 'OPEN' : 'PLANNED'),
+      submission_mode_snapshot: c.default_submission_mode,
+      timesheet_id: null,
+      planned_schedule_json,  // NEW
+      created_at: nowIso(),
+      updated_at: nowIso()
+    };
+  });
 
   const up = await postgrestUpsert(env, 'contract_weeks', rows, 'contract_id,week_ending_date,additional_seq');
   return withCORS(env, req, ok({ generated: up.length }));
 }
 
+
 export async function handleContractsCloneAndExtend(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
-  let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
 
-  const cur = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=*`);
+  let body; 
+  try { body = await parseJSONBody(req); } 
+  catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  // Load current contract (we need dates, ids, schedule, etc.)
+  const cur = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=*`
+  );
   if (!cur) return withCORS(env, req, notFound('Contract not found'));
 
+  // Required dates for the successor
   const newStart = toYmd(body.new_start_date || cur.end_date);
-  const newEnd = toYmd(body.new_end_date || cur.end_date);
-  if (!newStart || !newEnd) return withCORS(env, req, badRequest('new_start_date and new_end_date required'));
+  const newEnd   = toYmd(body.new_end_date   || cur.end_date);
+  if (!newStart || !newEnd) {
+    return withCORS(env, req, badRequest('new_start_date and new_end_date required'));
+  }
 
   // Close current at day before newStart
-  const closeD = new Date(newStart + 'T00:00:00Z'); closeD.setUTCDate(closeD.getUTCDate() - 1);
+  const closeD  = new Date(newStart + 'T00:00:00Z'); 
+  closeD.setUTCDate(closeD.getUTCDate() - 1);
   const closeTo = toYmd(closeD);
-  if (closeTo < cur.start_date) return withCORS(env, req, badRequest('Invalid new_start_date (before original start)'));
 
+  // Guard: cannot close before the contract started
+  if (closeTo < cur.start_date) {
+    return withCORS(env, req, badRequest('Invalid new_start_date (before original start)'));
+  }
+
+  // === NEW: Block early-close if any submitted TS exists at/after newStart (WE-based rule)
+  // If there is any contract_week with a timesheet and week_ending_date >= newStart, we cannot close early.
+  const submittedAfter = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+    `?contract_id=eq.${enc(cur.id)}&timesheet_id=not.is.null&week_ending_date=gte.${enc(newStart)}` +
+    `&select=week_ending_date&limit=1`
+  );
+  if (submittedAfter) {
+    return withCORS(env, req, badRequest('Cannot close: submitted timesheets exist on or after the new start date.'));
+  }
+
+  // Prune planned weeks no longer required (>= newStart and no TS)
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+    `?contract_id=eq.${enc(cur.id)}&timesheet_id=is.null&week_ending_date=gte.${enc(newStart)}`,
+    { method:'DELETE', headers:{ ...sbHeaders(env), 'Prefer':'return=minimal' } }
+  ).catch(()=>{});
+
+  // Close current contract (safe now because no submitted weeks are beyond)
   await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {
     method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
     body: JSON.stringify({ end_date: closeTo, updated_at: nowIso() })
   });
 
-  // Create successor with optionally updated rates/pay_method
-  const successor = {
+  // Successor: same candidate/client; optionally override pay_method/rates/mode/weekday/schedule
+  // Carry forward std_schedule_json (canonical); derive std_hours_json if schedule provided.
+  let successor_std_schedule = ('std_schedule_json' in body) ? (body.std_schedule_json || null) : (cur.std_schedule_json || null);
+  let successor_std_hours    = null;
+  if (successor_std_schedule) {
+    try {
+      successor_std_hours = deriveStdHoursFromSchedule(successor_std_schedule);
+    } catch (e) {
+      return withCORS(env, req, badRequest(e.message || 'Invalid std_schedule_json for successor'));
+    }
+  } else {
+    // fall back to legacy totals if no schedule provided
+    successor_std_hours = ('std_hours_json' in body) ? (body.std_hours_json || null) : (cur.std_hours_json || null);
+  }
+
+  const successorPayload = [{
     candidate_id: cur.candidate_id,
-    client_id: cur.client_id,
-    role: cur.role, band: cur.band, display_site: cur.display_site, ward_hint: cur.ward_hint,
-    start_date: newStart, end_date: newEnd,
+    client_id:    cur.client_id,
+    role:         cur.role,
+    band:         cur.band,
+    display_site: cur.display_site,
+    ward_hint:    cur.ward_hint,
+
+    start_date: newStart,
+    end_date:   newEnd,
+
+    // Optional overrides for successor (allowed; it’s a new contract)
     pay_method_snapshot: (body.pay_method_snapshot || cur.pay_method_snapshot),
-    rates_json: body.rates_json || cur.rates_json || {},
-    std_hours_json: body.std_hours_json || cur.std_hours_json || null,
+    rates_json:          body.rates_json || cur.rates_json || {},
     default_submission_mode: body.default_submission_mode || cur.default_submission_mode,
-    week_ending_weekday_snapshot: (body.week_ending_weekday_snapshot != null ? Number(body.week_ending_weekday_snapshot) : cur.week_ending_weekday_snapshot),
+    week_ending_weekday_snapshot: (body.week_ending_weekday_snapshot != null
+                                  ? Number(body.week_ending_weekday_snapshot)
+                                  : cur.week_ending_weekday_snapshot),
+
+    std_schedule_json: successor_std_schedule,
+    std_hours_json:    successor_std_hours,
+
+    bucket_labels_json: cur.bucket_labels_json || null,
     auto_invoice: cur.auto_invoice,
     require_reference_to_pay: cur.require_reference_to_pay,
     require_reference_to_invoice: cur.require_reference_to_invoice,
+
     created_at: nowIso(), updated_at: nowIso()
-  };
+  }];
 
-  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts`, {
+  const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts`, {
     method: 'POST', headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
-    body: JSON.stringify(successor)
+    body: JSON.stringify(successorPayload)
   });
-  if (!res.ok) return withCORS(env, req, serverError(await res.text()));
-  const newRow = (await res.json().catch(()=>[]))[0];
+  if (!ins.ok) return withCORS(env, req, serverError(await ins.text()));
+  const successor = (await ins.json().catch(()=>[]))[0];
 
-  return withCORS(env, req, ok({ closed_at: closeTo, successor: newRow }));
+  // Generate successor weeks (with planned_schedule_json)
+  await handleContractsGenerateWeeks(env, new Request(''), successor.id);
+
+  return withCORS(env, req, ok({ closed_at: closeTo, successor }));
 }
 
 export async function handleContractsCalendar(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
-
-  // ✅ Guard: contractId required (CORS-safe 400)
   if (!contractId) return withCORS(env, req, badRequest('contract_id required'));
 
   const url = new URL(req.url);
   const year = Number(url.searchParams.get('year') || (new Date()).getUTCFullYear());
-  const yStart = `${year}-01-01`, yEnd = `${year}-12-31`;
+  const granularity = String(url.searchParams.get('granularity') || 'week').toLowerCase(); // 'week'|'day'
+  const fromQ = url.searchParams.get('from');
+  const toQ   = url.searchParams.get('to');
+
+  // Resolve date window
+  const winStart = fromQ ? toYmd(fromQ) : `${year}-01-01`;
+  const winEnd   = toQ   ? toYmd(toQ)   : `${year}-12-31`;
+
+  // For day mode we need plans; for week mode we don’t
+  const needPlan = (granularity === 'day');
+
+  const selectCols = needPlan
+    ? 'id,contract_id,week_ending_date,additional_seq,status,submission_mode_snapshot,timesheet_id,uploaded_pdf_r2_key,planned_schedule_json'
+    : 'id,contract_id,week_ending_date,additional_seq,status,submission_mode_snapshot,timesheet_id,uploaded_pdf_r2_key';
+
+  // Week filter:
+  // - week mode: within [winStart..winEnd]
+  // - day mode: include weeks whose WE could contain days within range (WE ∈ [winStart .. winEnd+6])
+  const weeksTo = (granularity === 'day') ? addDays(winEnd, 6) : winEnd;
 
   const { rows: weeks } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
     `?contract_id=eq.${enc(contractId)}` +
-    `&week_ending_date=gte.${enc(yStart)}&week_ending_date=lte.${enc(yEnd)}` +
-    `&select=id,week_ending_date,additional_seq,status,submission_mode_snapshot,timesheet_id,uploaded_pdf_r2_key` +
+    `&week_ending_date=gte.${enc(winStart)}&week_ending_date=lte.${enc(weeksTo)}` +
+    `&select=${selectCols}` +
     `&order=week_ending_date.asc,additional_seq.asc`
   );
 
-  // …rest unchanged…
-  const ids = (weeks || []).map(w => w.timesheet_id).filter(Boolean);
-  let preMap = {};
-  if (ids.length) {
-    const inList = ids.map(enc).join(',');
-    const { rows: pres } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/v_ts_invoice_precheck?timesheet_id=in.(${inList})`);
-    preMap = Object.fromEntries((pres||[]).map(p => [p.timesheet_id, p]));
+  if (granularity !== 'day') {
+    // ---- WEEK SUMMARY (unchanged shape, now date-range aware)
+    const ids = (weeks || []).map(w => w.timesheet_id).filter(Boolean);
+    let preMap = {};
+    if (ids.length) {
+      const inList = ids.map(enc).join(',');
+      const { rows: pres } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/v_ts_invoice_precheck?timesheet_id=in.(${inList})`
+      );
+      preMap = Object.fromEntries((pres||[]).map(p => [p.timesheet_id, p]));
+    }
+
+    const items = (weeks||[])
+      .filter(w => w.week_ending_date >= winStart && w.week_ending_date <= winEnd)
+      .map(w => {
+        const pre = w.timesheet_id ? preMap[w.timesheet_id] : null;
+        const missingPdf = (w.submission_mode_snapshot === 'MANUAL')
+          ? (!w.uploaded_pdf_r2_key && !(pre && pre.manual_pdf_r2_key))
+          : false;
+        const missingRef = (pre?.require_reference_to_invoice === true) &&
+                           (!pre?.reference_number || String(pre.reference_number).trim()==='');
+        return {
+          id: w.id,
+          week_ending_date: w.week_ending_date,
+          additional_seq: w.additional_seq,
+          status: w.status,
+          submission_mode: w.submission_mode_snapshot,
+          has_timesheet: !!w.timesheet_id,
+          missing_pdf: !!missingPdf,
+          missing_reference: !!missingRef
+        };
+      });
+
+    return withCORS(env, req, ok({ from: winStart, to: winEnd, granularity: 'week', items }));
   }
 
-  const items = (weeks||[]).map(w => {
-    const pre = w.timesheet_id ? preMap[w.timesheet_id] : null;
-    const missingPdf = (w.submission_mode_snapshot === 'MANUAL')
-      ? (!w.uploaded_pdf_r2_key && !(pre && pre.manual_pdf_r2_key))
-      : false;
-    const missingRef = (pre?.require_reference_to_invoice === true) && (!pre?.reference_number || String(pre.reference_number).trim()==='');
-    return {
-      id: w.id,
-      week_ending_date: w.week_ending_date,
-      additional_seq: w.additional_seq,
-      status: w.status,
-      submission_mode: w.submission_mode_snapshot,
-      has_timesheet: !!w.timesheet_id,
-      missing_pdf: !!missingPdf,
-      missing_reference: !!missingRef
-    };
-  });
+  // ---- DAY MODE
+  const tsIds = [...new Set((weeks||[]).map(w => w.timesheet_id).filter(Boolean))];
+  let tsMap = {}, finMap = {};
+  if (tsIds.length) {
+    const inList = tsIds.map(enc).join(',');
+    const { rows: tsRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=in.(${inList})` +
+      `&select=timesheet_id,authorised_at_server,submission_mode,actual_schedule_json`
+    );
+    tsMap  = Object.fromEntries((tsRows||[]).map(t => [t.timesheet_id, t]));
+    const { rows: finRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?is_current=eq.true&timesheet_id=in.(${inList})` +
+      `&select=timesheet_id,locked_by_invoice_id,paid_at_utc`
+    );
+    finMap = Object.fromEntries((finRows||[]).map(f => [f.timesheet_id, f]));
+  }
 
-  return withCORS(env, req, ok({ year, items })); 
+  const computeActualMinutesForDate = (ts, ymd) => {
+    if (!ts?.actual_schedule_json || !Array.isArray(ts.actual_schedule_json)) return 0;
+    const d = ts.actual_schedule_json.find(x => x && x.date === ymd);
+    if (!d || !d.start || !d.end) return 0;
+    const s = parseHHMM(d.start), e = parseHHMM(d.end);
+    if (s==null || e==null) return 0;
+    const overnight = d.overnight===true || e<=s;
+    let mins = minutesDiff(s, e, overnight);
+    if (Array.isArray(d.breaks) && d.breaks.length) {
+      mins -= d.breaks.reduce((acc,b) => {
+        const bs = parseHHMM(b.start), be = parseHHMM(b.end);
+        if (bs==null || be==null) return acc;
+        return acc + minutesDiff(bs, be, be<=bs);
+      }, 0);
+    } else if (Number(d.break_minutes)>0) {
+      mins -= Number(d.break_minutes);
+    }
+    return Math.max(0, mins);
+  };
+
+  const deriveState = (expectedMin, actualMin, ts, fin) => {
+    if (actualMin > 0) {
+      if (fin?.paid_at_utc) return 'PAID';
+      if (fin?.locked_by_invoice_id) return 'INVOICED';
+      if (ts?.authorised_at_server) return 'AUTHORISED';
+      return 'SUBMITTED';
+    }
+    return (expectedMin > 0) ? 'PLANNED' : 'EMPTY';
+  };
+
+  const dayItems = [];
+  for (const w of (weeks||[])) {
+    const plan = Array.isArray(w.planned_schedule_json) ? w.planned_schedule_json : [];
+    const ts   = w.timesheet_id ? tsMap[w.timesheet_id] : null;
+    const fin  = w.timesheet_id ? finMap[w.timesheet_id] : null;
+    const hasPerDayActual = !!(ts && Array.isArray(ts.actual_schedule_json) && ts.actual_schedule_json.length);
+
+    for (const d of plan) {
+      const ymd = d?.date || null;
+      if (!ymd || ymd < winStart || ymd > winEnd) continue;
+      const expected = Number(d?.expected_minutes || 0);
+      const actual   = hasPerDayActual ? computeActualMinutesForDate(ts, ymd) : 0;
+      const state    = deriveState(expected, actual, ts, fin);
+
+      dayItems.push({
+        date: ymd,
+        week_ending_date: w.week_ending_date,
+        week_id: w.id,
+        expected_minutes: expected,
+        actual_minutes: actual,
+        state,                              // PLANNED | SUBMITTED | AUTHORISED | INVOICED | PAID | EMPTY
+        timesheet_id: w.timesheet_id || null,
+        submission_mode: w.submission_mode_snapshot,
+        invoiced: !!fin?.locked_by_invoice_id,
+        paid_at_utc: fin?.paid_at_utc || null
+      });
+    }
+  }
+
+  return withCORS(env, req, ok({ from: winStart, to: winEnd, granularity: 'day', items: dayItems }));
 }
+
+export async function handleCandidateCalendar(env, req, candidateId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!candidateId) return withCORS(env, req, badRequest('candidate_id required'));
+
+  const url = new URL(req.url);
+  const fromQ = url.searchParams.get('from');
+  const toQ   = url.searchParams.get('to');
+  if (!fromQ || !toQ) return withCORS(env, req, badRequest('from and to are required'));
+  const winStart = toYmd(fromQ), winEnd = toYmd(toQ);
+
+  // ---- 1) Contracts overlapping the window
+  const { rows: cons } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contracts?candidate_id=eq.${enc(candidateId)}` +
+    `&start_date=lte.${enc(winEnd)}&end_date=gte.${enc(winStart)}` +
+    `&select=id,client_id,role,band,start_date,end_date`
+  );
+  const contractIds = (cons||[]).map(c => c.id);
+  const contractsById = Object.fromEntries((cons||[]).map(c => [c.id, c]));
+
+  // ---- 1a) Resolve client names for those contracts
+  const clientIds = [...new Set((cons||[]).map(c => c.client_id).filter(Boolean))];
+  let clientNameById = {};
+  if (clientIds.length) {
+    const inList = clientIds.map(enc).join(',');
+    const { rows: cliRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/clients?id=in.(${inList})&select=id,name`
+    );
+    clientNameById = Object.fromEntries((cliRows||[]).map(r => [r.id, r.name || null]));
+  }
+
+  // ---- 2) contract_weeks with plan (for booked/planned days)
+  let plannedDayItems = [];
+  if (contractIds.length) {
+    const inList = contractIds.map(enc).join(',');
+    const { rows: weeks } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=in.(${inList})` +
+      `&week_ending_date=gte.${enc(winStart)}&week_ending_date=lte.${enc(addDays(winEnd,6))}` +
+      `&select=id,contract_id,week_ending_date,submission_mode_snapshot,timesheet_id,planned_schedule_json`
+    );
+
+    for (const w of (weeks||[])) {
+      const plan = Array.isArray(w.planned_schedule_json) ? w.planned_schedule_json : [];
+      for (const d of plan) {
+        const ymd = d?.date || null;
+        if (!ymd || ymd < winStart || ymd > winEnd) continue;
+        const contr = contractsById[w.contract_id] || {};
+        plannedDayItems.push({
+          source: 'WEEK_PLAN',
+          date: ymd,
+          contract_id: w.contract_id,
+          week_id: w.id,
+          expected_minutes: Number(d?.expected_minutes || 0),
+          actual_minutes: 0,
+          state: (Number(d?.expected_minutes||0) > 0) ? 'PLANNED' : 'EMPTY',
+          timesheet_id: w.timesheet_id || null,
+          submission_mode: w.submission_mode_snapshot,
+          invoiced: false,
+          paid_at_utc: null,
+          role: contr.role || null,
+          band: contr.band || null,
+          client_id: contr.client_id || null,
+          client_name: clientNameById[contr.client_id] || null
+        });
+      }
+    }
+  }
+
+  // ---- 3) Candidate timesheets (weekly + daily) in window
+  const tsOr = `or=(and(week_ending_date.gte.${enc(winStart)},week_ending_date.lte.${enc(addDays(winEnd,6))}),and(worked_start_iso.gte.${enc(winStart+'T00:00:00Z')},worked_start_iso.lte.${enc(winEnd+'T23:59:59Z')}))`;
+  const { rows: tsRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets?candidate_id=eq.${enc(candidateId)}&${tsOr}` +
+    `&select=timesheet_id,contract_id,week_ending_date,line_type,submission_mode,authorised_at_server,` +
+    `worked_start_iso,worked_end_iso,break_start_iso,break_end_iso,break_minutes,` +
+    `actual_schedule_json`
+  );
+
+  const tsIds = (tsRows||[]).map(t => t.timesheet_id);
+  let finMap = {};
+  if (tsIds.length) {
+    const inList = tsIds.map(enc).join(',');
+    const { rows: finRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?is_current=eq.true&timesheet_id=in.(${inList})` +
+      `&select=timesheet_id,locked_by_invoice_id,paid_at_utc`
+    );
+    finMap = Object.fromEntries((finRows||[]).map(f => [f.timesheet_id, f]));
+  }
+
+  const computeDailyActual = (t) => {
+    if (!t?.worked_start_iso || !t?.worked_end_iso) return { ymd:null, mins:0 };
+    const dt = new Date(t.worked_start_iso);
+    const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London', year:'numeric', month:'2-digit', day:'2-digit' }).formatToParts(dt);
+    const ymd = `${parts.find(p=>p.type==='year').value}-${parts.find(p=>p.type==='month').value}-${parts.find(p=>p.type==='day').value}`;
+    const s = new Date(t.worked_start_iso), e = new Date(t.worked_end_iso);
+    let mins = Math.max(0, Math.round((e - s) / 60000));
+    if (t.break_start_iso && t.break_end_iso) {
+      const bs = new Date(t.break_start_iso), be = new Date(t.break_end_iso);
+      mins = Math.max(0, mins - Math.max(0, Math.round((be - bs) / 60000)));
+    } else if (Number(t.break_minutes)>0) {
+      mins = Math.max(0, mins - Number(t.break_minutes));
+    }
+    return { ymd, mins };
+  };
+
+  const deriveState = (actualMin, ts, fin) => {
+    if (actualMin > 0) {
+      if (fin?.paid_at_utc) return 'PAID';
+      if (fin?.locked_by_invoice_id) return 'INVOICED';
+      if (ts?.authorised_at_server) return 'AUTHORISED';
+      return 'SUBMITTED';
+    }
+    return 'PLANNED';
+  };
+
+  const dayItems = [...plannedDayItems];
+
+  // Weekly TS with per-day actuals
+  for (const t of (tsRows||[])) {
+    const fin = finMap[t.timesheet_id];
+    if (t.week_ending_date && Array.isArray(t.actual_schedule_json) && t.actual_schedule_json.length) {
+      for (const d of t.actual_schedule_json) {
+        const ymd = d?.date || null;
+        if (!ymd || ymd < winStart || ymd > winEnd) continue;
+        const s = parseHHMM(d.start), e = parseHHMM(d.end);
+        if (s==null || e==null) continue;
+        const overnight = d.overnight===true || e<=s;
+        let mins = minutesDiff(s, e, overnight);
+        if (Array.isArray(d.breaks) && d.breaks.length) {
+          mins -= d.breaks.reduce((acc,b) => {
+            const bs = parseHHMM(b.start), be = parseHHMM(b.end);
+            if (bs==null || be==null) return acc;
+            return acc + minutesDiff(bs, be, be<=bs);
+          }, 0);
+        } else if (Number(d.break_minutes)>0) {
+          mins -= Number(d.break_minutes);
+        }
+        mins = Math.max(0, mins);
+
+        const contr = contractsById[t.contract_id||''] || {};
+        dayItems.push({
+          source: 'WEEK_TS',
+          date: ymd,
+          contract_id: t.contract_id || null,
+          week_ending_date: t.week_ending_date || null,
+          timesheet_id: t.timesheet_id,
+          expected_minutes: null,
+          actual_minutes: mins,
+          state: deriveState(mins, t, fin),
+          submission_mode: t.submission_mode,
+          invoiced: !!fin?.locked_by_invoice_id,
+          paid_at_utc: fin?.paid_at_utc || null,
+          role: contr.role || null,
+          band: contr.band || null,
+          client_id: contr.client_id || null,
+          client_name: clientNameById[contr.client_id] || null
+        });
+      }
+    }
+  }
+
+  // Weekly TS totals-only (no per-day actuals): lift week state onto planned days of that week
+  const weeklyTotalsOnly = (tsRows||[]).filter(t => t.week_ending_date && (!t.actual_schedule_json || !t.actual_schedule_json.length));
+  if (weeklyTotalsOnly.length && plannedDayItems.length) {
+    for (const t of weeklyTotalsOnly) {
+      const fin = finMap[t.timesheet_id];
+      for (const p of plannedDayItems) {
+        if (p.contract_id === t.contract_id && p.week_id && t.week_ending_date === p.week_ending_date) {
+          if (p.date >= winStart && p.date <= winEnd && p.expected_minutes > 0) {
+            p.state = deriveState(0, t, fin);
+            p.timesheet_id = t.timesheet_id;
+            p.submission_mode = t.submission_mode;
+            p.invoiced = !!fin?.locked_by_invoice_id;
+            p.paid_at_utc = fin?.paid_at_utc || null;
+          }
+        }
+      }
+    }
+  }
+
+  // Daily timesheets (no contract weeks)
+  for (const t of (tsRows||[])) {
+    if (!t.week_ending_date) {
+      const fin = finMap[t.timesheet_id];
+      const { ymd: dayYmd, mins } = computeDailyActual(t);
+      if (!dayYmd || dayYmd < winStart || dayYmd > winEnd) continue;
+      const contr = contractsById[t.contract_id||''] || {};
+      dayItems.push({
+        source: 'DAILY_TS',
+        date: dayYmd,
+        contract_id: t.contract_id || null,
+        week_ending_date: null,
+        timesheet_id: t.timesheet_id,
+        expected_minutes: null,
+        actual_minutes: mins,
+        state: deriveState(mins, t, fin),
+        submission_mode: t.submission_mode,
+        invoiced: !!fin?.locked_by_invoice_id,
+        paid_at_utc: fin?.paid_at_utc || null,
+        role: contr.role || null,
+        band: contr.band || null,
+        client_id: contr.client_id || null,
+        client_name: clientNameById[contr.client_id] || null
+      });
+    }
+  }
+
+  return withCORS(env, req, ok({ from: winStart, to: winEnd, items: dayItems }));
+}
+
+
 export async function handleContractsSkipWeeks(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -1158,14 +1772,21 @@ export async function handleContractWeeksList(env, req) {
   const q = (k) => url.searchParams.get(k);
   const filters = [];
 
-  let api = `${env.SUPABASE_URL}/rest/v1/v_contract_weeks_enriched?select=*`;
-  if (q('contract_id')) filters.push(`contract_id=eq.${enc(q('contract_id'))}`);
-  if (q('candidate_id')) filters.push(`candidate_id=eq.${enc(q('candidate_id'))}`);
-  if (q('client_id')) filters.push(`client_id=eq.${enc(q('client_id'))}`);
-  if (q('status')) filters.push(`status=eq.${enc(q('status'))}`);
-  if (q('submission_mode_snapshot')) filters.push(`submission_mode_snapshot=eq.${enc(q('submission_mode_snapshot'))}`);
-  if (q('week_ending_from')) filters.push(`week_ending_date=gte.${enc(q('week_ending_from'))}`);
-  if (q('week_ending_to')) filters.push(`week_ending_date=lte.${enc(q('week_ending_to'))}`);
+  const includePlan = String(q('include_plan')||'').toLowerCase() === 'true';
+
+  let api = includePlan
+    ? `${env.SUPABASE_URL}/rest/v1/contract_weeks?select=id,contract_id,week_ending_date,additional_seq,status,submission_mode_snapshot,timesheet_id,uploaded_pdf_r2_key,planned_schedule_json,created_at,updated_at`
+    : `${env.SUPABASE_URL}/rest/v1/v_contract_weeks_enriched?select=*`;
+
+  const add = (cond) => { if (cond) filters.push(cond); };
+  add(q('contract_id') ? `contract_id=eq.${enc(q('contract_id'))}` : null);
+  add(q('candidate_id') ? `candidate_id=eq.${enc(q('candidate_id'))}` : null);
+  add(q('client_id') ? `client_id=eq.${enc(q('client_id'))}` : null);
+  add(q('status') ? `status=eq.${enc(q('status'))}` : null);
+  add(q('submission_mode_snapshot') ? `submission_mode_snapshot=eq.${enc(q('submission_mode_snapshot'))}` : null);
+  add(q('week_ending_from') ? `week_ending_date=gte.${enc(q('week_ending_from'))}` : null);
+  add(q('week_ending_to') ? `week_ending_date=lte.${enc(q('week_ending_to'))}` : null);
+
   if (filters.length) api += `&${filters.join('&')}`;
   api += `&order=week_ending_date.asc,additional_seq.asc`;
 
@@ -1173,34 +1794,58 @@ export async function handleContractWeeksList(env, req) {
   return withCORS(env, req, ok(rows || []));
 }
 
+
 export async function handleContractWeekUpdate(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
 
-  const cw = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=*`);
+  const cw = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=contract_id,week_ending_date,timesheet_id,submission_mode_snapshot,planned_schedule_json`);
   if (!cw) return withCORS(env, req, notFound('Week not found'));
 
   const patch = {};
+
+  // Status guard (unchanged)
   if (body.status) {
     const st = String(body.status).toUpperCase();
     if (!['OPEN','PLANNED','SUBMITTED','AUTHORISED','INVOICED','CANCELLED'].includes(st)) {
       return withCORS(env, req, badRequest('Invalid status'));
     }
-    // Prevent cancelling if a timesheet exists
-    if (st === 'CANCELLED' && cw.timesheet_id) {
-      return withCORS(env, req, badRequest('Cannot cancel: timesheet exists'));
-    }
+    if (st === 'CANCELLED' && cw.timesheet_id) return withCORS(env, req, badRequest('Cannot cancel: timesheet exists'));
     patch.status = st;
   }
+
+  // Submission mode guard (unchanged)
   if (body.submission_mode_snapshot) {
     const sm = String(body.submission_mode_snapshot).toUpperCase();
     if (!['ELECTRONIC','MANUAL'].includes(sm)) return withCORS(env, req, badRequest('Invalid mode'));
-    // Disallow flip if timesheet already linked
     if (cw.timesheet_id) return withCORS(env, req, badRequest('Cannot change mode: timesheet exists'));
     patch.submission_mode_snapshot = sm;
   }
+
+  // NEW: plan-only override
+  if ('planned_schedule_json' in body) {
+    try {
+      const plan = Array.isArray(body.planned_schedule_json) ? body.planned_schedule_json : [];
+      // Minimal validation + recompute expected_minutes
+      const fixed = plan.map(d => {
+        if (!d || !d.date) return { date: d?.date || cw.week_ending_date, start:null, end:null, breaks:[], break_minutes:0, overnight:false, expected_minutes:0 };
+        if (!d.start || !d.end) return { ...d, breaks: Array.isArray(d.breaks)? d.breaks : [], break_minutes: Math.max(0, Number(d.break_minutes||0)), overnight: !!d.overnight, expected_minutes:0 };
+        const s = parseHHMM(d.start), e = parseHHMM(d.end);
+        if (s==null || e==null) throw new Error(`Invalid HH:MM in planned_schedule_json for ${d.date}`);
+        const br = Math.max(0, Number(d.break_minutes||0));
+        const overnight = d.overnight===true || e<=s;
+        const mins = Math.max(0, minutesDiff(s, e, overnight) - br);
+        return { date:d.date, start:d.start, end:d.end, breaks: Array.isArray(d.breaks)? d.breaks : [], break_minutes: br, overnight, expected_minutes: mins };
+      });
+      patch.planned_schedule_json = fixed;
+    } catch (e) {
+      return withCORS(env, req, badRequest(e.message || 'Invalid planned_schedule_json'));
+    }
+  }
+
   if (!Object.keys(patch).length) return withCORS(env, req, badRequest('No updatable fields'));
+
   patch.updated_at = nowIso();
 
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`, {
@@ -1304,7 +1949,6 @@ export async function handleContractWeekReplaceManualPdf(env, req, weekId) {
 }
 
 export async function handleContractWeekManualUpsert(env, req, weekId) {
-  // Backoffice "Processed" step: create/update MANUAL weekly TS (+ TSFIN PENDING_AUTH)
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
@@ -1315,44 +1959,50 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
   const contract = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(cw.contract_id)}&select=*`);
   if (!contract) return withCORS(env, req, notFound('Contract not found'));
 
-  // Hours: per-day entries (labelled buckets) OR 5-bucket totals (day/night/sat/sun/bh)
+  // Hours totals or schedule JSON
   let hours = { day:0, night:0, sat:0, sun:0, bh:0 };
-  let dayEntries = null;
+  let actual_schedule_json = null;
 
-  if (Array.isArray(body?.day_entries_json) && body.day_entries_json.length) {
-    const valid = new Set(['day','night','sat','sun','bh']);
-    dayEntries = [];
+  if (Array.isArray(body?.actual_schedule_json) && body.actual_schedule_json.length) {
+    actual_schedule_json = body.actual_schedule_json;
     try {
-      for (const e of body.day_entries_json) {
-        const b = String(e?.bucket || '').toLowerCase();
-        const h = Number(e?.hours || 0);
-        if (!valid.has(b)) return withCORS(env, req, badRequest(`day_entries_json requires bucket ∈ {day,night,sat,sun,bh}; got "${b}"`));
-        if (h < 0) return withCORS(env, req, badRequest('Negative hours not allowed'));
-        hours[b] += h;
-        dayEntries.push({ bucket: b, hours: h, date: e?.date || null, note: e?.note || null });
-      }
-    } catch {
-      return withCORS(env, req, badRequest('Invalid day_entries_json structure'));
+      const minsByBucket = await resolveBucketsFromSchedule(env, contract, actual_schedule_json);
+      hours = {
+        day: +(minsByBucket.day/60).toFixed(2),
+        night:+(minsByBucket.night/60).toFixed(2),
+        sat:  +(minsByBucket.sat/60).toFixed(2),
+        sun:  +(minsByBucket.sun/60).toFixed(2),
+        bh:   +(minsByBucket.bh/60).toFixed(2)
+      };
+    } catch (e) {
+      return withCORS(env, req, badRequest(e.message || 'Invalid actual_schedule_json'));
     }
+  } else if (body?.hours) {
+    // legacy totals path (keep)
+    const n = (v) => (v==null ? 0 : Number(v)||0);
+    hours = { day:n(body.hours.day), night:n(body.hours.night), sat:n(body.hours.sat), sun:n(body.hours.sun), bh:n(body.hours.bh) };
   } else {
-    hours = {
-      day: n(body?.hours?.day), night: n(body?.hours?.night), sat: n(body?.hours?.sat), sun: n(body?.hours?.sun), bh: n(body?.hours?.bh)
-    };
+    return withCORS(env, req, badRequest('Provide either actual_schedule_json or hours totals'));
   }
 
-  // Rates must exist for any bucket with > 0 hours (strict)
+  // Rates must exist for any positive bucket
   const { pay, charge, method } = payChargeFromContract(contract);
-  if (anyMissingRates(hours, pay, charge)) {
+  const anyMissing = (h, P, C) => (h.day>0 && (!P.day&&P.day!==0 || !C.day&&C.day!==0)) ||
+                                  (h.night>0 && (!P.night&&P.night!==0 || !C.night&&C.night!==0)) ||
+                                  (h.sat>0 && (!P.sat&&P.sat!==0 || !C.sat&&C.sat!==0)) ||
+                                  (h.sun>0 && (!P.sun&&P.sun!==0 || !C.sun&&C.sun!==0)) ||
+                                  (h.bh>0 && (!P.bh&&P.bh!==0 || !C.bh&&C.bh!==0));
+  if (anyMissing(hours, pay, charge)) {
     return withCORS(env, req, badRequest('Missing rate(s) in contract for one or more entered hour buckets'));
   }
 
-  // Build or reuse timesheet
-  let ts = null;
-  if (cw.timesheet_id) {
-    ts = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(cw.timesheet_id)}&select=*`);
-  }
+  // Build or reuse timesheet (manual weekly)
+  let ts = cw.timesheet_id
+    ? await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(cw.timesheet_id)}&select=*`)
+    : null;
+
   if (!ts) {
-    const candidate = contract.candidate_id ? await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(contract.candidate_id)}&select=id,display_name,pay_method`) : null;
+    const candidate = contract.candidate_id ? await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(contract.candidate_id)}&select=id,display_name`) : null;
     const client = contract.client_id ? await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${enc(contract.client_id)}&select=id,name`) : null;
 
     const occupant_norm = (candidate?.display_name || String(candidate?.id || 'worker')).toLowerCase();
@@ -1369,16 +2019,14 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
       occupant_key_norm: occupant_norm,
       hospital_norm, ward_norm, job_title_norm,
       shift_label_norm: 'weekly',
-      scheduled_start_iso: null, scheduled_end_iso: null,
-      worked_start_iso: null, worked_end_iso: null,
-      break_start_iso: null, break_end_iso: null, break_minutes: null,
-      authorised_at_server: null, // manual → second checker later
       week_ending_date: cw.week_ending_date,
       r2_nurse_key: null, r2_auth_key: null,
       contract_id: contract.id,
       submission_mode: 'MANUAL',
       manual_pdf_r2_key: cw.uploaded_pdf_r2_key || null,
       line_type: 'HOURS',
+      actual_schedule_json,                     // NEW
+      authorised_at_server: null,
       created_at: nowIso(), updated_at: nowIso()
     }];
 
@@ -1388,17 +2036,23 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
     if (!ins.ok) return withCORS(env, req, serverError(await ins.text()));
     ts = (await ins.json().catch(()=>[]))[0];
 
-    // Link week → timesheet
     await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`, {
       method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
       body: JSON.stringify({ timesheet_id: ts.timesheet_id, status: 'SUBMITTED', updated_at: nowIso() })
     });
+  } else if (actual_schedule_json) {
+    // If we already had a TS and caller re-processes with actual schedule, persist it
+    await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`, {
+      method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ actual_schedule_json, updated_at: nowIso() })
+    }).catch(()=>{});
   }
 
-  // Compose TSFIN snapshot (PENDING_AUTH)
-  const total_pay = round2(hours.day*n(pay.day) + hours.night*n(pay.night) + hours.sat*n(pay.sat) + hours.sun*n(pay.sun) + hours.bh*n(pay.bh));
-  const total_charge = round2(hours.day*n(charge.day) + hours.night*n(charge.night) + hours.sat*n(charge.sat) + hours.sun*n(charge.sun) + hours.bh*n(charge.bh));
-  const margin = round2(total_charge - total_pay);
+  // TSFIN snapshot (PENDING_AUTH)
+  const n2 = (x)=>Number(x)||0;
+  const total_pay    = +(hours.day*n2(pay.day) + hours.night*n2(pay.night) + hours.sat*n2(pay.sat) + hours.sun*n2(pay.sun) + hours.bh*n2(pay.bh)).toFixed(2);
+  const total_charge = +(hours.day*n2(charge.day)+hours.night*n2(charge.night)+hours.sat*n2(charge.sat)+hours.sun*n2(charge.sun)+hours.bh*n2(charge.bh)).toFixed(2);
+  const margin       = +(total_charge - total_pay).toFixed(2);
 
   const snap = {
     timesheet_id: ts.timesheet_id,
@@ -1423,14 +2077,13 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
   };
   await writeSnapshot(env, snap);
 
-  // Persist both the day entries (if any) and totals for audit/UI
+  // (Optional) persist a compact echo for UI in contract_weeks
   const weekPatch = { totals_json: { hours }, updated_at: nowIso() };
-  if (dayEntries) weekPatch.day_entries_json = dayEntries;
   await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`, {
     method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' }, body: JSON.stringify(weekPatch)
   });
 
-  return withCORS(env, req, ok({ timesheet_id: ts.timesheet_id, processing_status: 'PENDING_AUTH', hours, had_day_entries: !!dayEntries }));
+  return withCORS(env, req, ok({ timesheet_id: ts.timesheet_id, processing_status: 'PENDING_AUTH', hours, used_schedule: !!actual_schedule_json }));
 }
 
 
@@ -1658,7 +2311,7 @@ export async function handleTimesheetReplaceManualPdf(env, req, timesheetId) {
 }
 
 export async function handleTimesheetsSubmitWeekly(env, req) {
-  // Public: submit weekly electronic timesheet (totals + two signatures)
+  // Public: submit weekly electronic timesheet (schedule OR totals + two signatures)
   let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
 
   const cwId = body.contract_week_id || null;
@@ -1671,30 +2324,39 @@ export async function handleTimesheetsSubmitWeekly(env, req) {
   const contract = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(cw.contract_id)}&select=*`);
   if (!contract) return withCORS(env, req, notFound('Contract not found'));
 
-  // Validate signatures exist in R2 (light check via HEAD)
+  // Signatures must exist
   const weC = ymdCompact(cw.week_ending_date);
   const bookingId = makeWeeklyBookingId(contract.candidate_id, contract, cw);
   const nurseKey = `signatures/we=${weC}/${bookingId}/v1/nurse.png`;
   const authKey  = `signatures/we=${weC}/${bookingId}/v1/authoriser.png`;
+  try { await r2Head(env, nurseKey); await r2Head(env, authKey); }
+  catch { return withCORS(env, req, badRequest('Signatures not uploaded (nurse and authoriser required)')); }
 
-  try {
-    await r2Head(env, nurseKey);
-    await r2Head(env, authKey);
-  } catch {
-    return withCORS(env, req, badRequest('Signatures not uploaded (nurse and authoriser required)'));
+  // Schedule-first, totals fallback
+  let hours = { day:0, night:0, sat:0, sun:0, bh:0 };
+  let actual_schedule_json = null;
+  if (Array.isArray(body?.actual_schedule_json) && body.actual_schedule_json.length) {
+    actual_schedule_json = body.actual_schedule_json;
+    try {
+      const mins = await resolveBucketsFromSchedule(env, contract, actual_schedule_json);
+      hours = {
+        day:+(mins.day/60).toFixed(2), night:+(mins.night/60).toFixed(2),
+        sat:+(mins.sat/60).toFixed(2), sun:+(mins.sun/60).toFixed(2), bh:+(mins.bh/60).toFixed(2)
+      };
+    } catch (e) { return withCORS(env, req, badRequest(e.message || 'Invalid actual_schedule_json')); }
+  } else {
+    const n = (v)=> (v==null?0:Number(v)||0);
+    hours = { day:n(body?.hours?.day), night:n(body?.hours?.night), sat:n(body?.hours?.sat), sun:n(body?.hours?.sun), bh:n(body?.hours?.bh) };
   }
-
-  // Hours totals in body.hours (day/night/sat/sun/bh)
-  const hours = {
-    day: n(body?.hours?.day), night: n(body?.hours?.night),
-    sat: n(body?.hours?.sat), sun: n(body?.hours?.sun), bh: n(body?.hours?.bh)
-  };
 
   // Strict rate guard BEFORE writing anything
   const { pay, charge, method } = payChargeFromContract(contract);
-  if (anyMissingRates(hours, pay, charge)) {
-    return withCORS(env, req, badRequest('Missing rate(s) in contract for one or more entered hour buckets'));
-  }
+  const anyMissing = (h, P, C) => (h.day>0 && (!P.day&&P.day!==0 || !C.day&&C.day!==0)) ||
+                                  (h.night>0 && (!P.night&&P.night!==0 || !C.night&&C.night!==0)) ||
+                                  (h.sat>0 && (!P.sat&&P.sat!==0 || !C.sat&&C.sat!==0)) ||
+                                  (h.sun>0 && (!P.sun&&P.sun!==0 || !C.sun&&C.sun!==0)) ||
+                                  (h.bh>0 && (!P.bh&&P.bh!==0 || !C.bh&&C.bh!==0));
+  if (anyMissing(hours, pay, charge)) return withCORS(env, req, badRequest('Missing rate(s) in contract for one or more entered hour buckets'));
 
   // Create TS (ELECTRONIC)
   const candidate = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(contract.candidate_id)}&select=id,display_name`);
@@ -1713,8 +2375,8 @@ export async function handleTimesheetsSubmitWeekly(env, req) {
     submission_mode: 'ELECTRONIC',
     manual_pdf_r2_key: null,
     line_type: 'HOURS',
-    // auto-authorise for ELECTRONIC (as agreed)
-    authorised_at_server: nowIso(),
+    actual_schedule_json,                 // NEW when provided
+    authorised_at_server: nowIso(),       // auto-authorise for ELECTRONIC
     created_at: nowIso(), updated_at: nowIso()
   }];
 
@@ -1724,15 +2386,16 @@ export async function handleTimesheetsSubmitWeekly(env, req) {
   if (!tsIns.ok) return withCORS(env, req, serverError(await tsIns.text()));
   const ts = (await tsIns.json().catch(()=>[]))[0];
 
-  // Link week + set AUTHORISED (since auto-authorised)
+  // Link week + set AUTHORISED
   await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`, {
     method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
     body: JSON.stringify({ timesheet_id: ts.timesheet_id, status: 'AUTHORISED', updated_at: nowIso() })
   });
 
-  // Snapshot with READY_FOR_INVOICE (auto-authorised path)
-  const total_pay = round2(hours.day*n(pay.day) + hours.night*n(pay.night) + hours.sat*n(pay.sat) + hours.sun*n(pay.sun) + hours.bh*n(pay.bh));
-  const total_charge = round2(hours.day*n(charge.day) + hours.night*n(charge.night) + hours.sat*n(charge.sat) + hours.sun*n(charge.sun) + hours.bh*n(charge.bh));
+  // Snapshot with READY_FOR_INVOICE
+  const n2 = (x)=>Number(x)||0;
+  const total_pay    = +(hours.day*n2(pay.day) + hours.night*n2(pay.night) + hours.sat*n2(pay.sat) + hours.sun*n2(pay.sun) + hours.bh*n2(pay.bh)).toFixed(2);
+  const total_charge = +(hours.day*n2(charge.day)+hours.night*n2(charge.night)+hours.sat*n2(charge.sat)+hours.sun*n2(charge.sun)+hours.bh*n2(charge.bh)).toFixed(2);
 
   const snap = {
     timesheet_id: ts.timesheet_id,
@@ -1747,13 +2410,14 @@ export async function handleTimesheetsSubmitWeekly(env, req) {
     rate_day: charge.day, rate_night: charge.night, rate_sat: charge.sat, rate_sun: charge.sun, rate_bh: charge.bh,
     total_pay_ex_vat: total_pay,
     total_charge_ex_vat: total_charge,
-    margin_ex_vat: round2(total_charge - total_pay),
+    margin_ex_vat: +(total_charge - total_pay).toFixed(2),
     created_at: nowIso()
   };
   await writeSnapshot(env, snap);
 
   return withCORS(env, req, ok({ timesheet_id: ts.timesheet_id, processing_status: 'READY_FOR_INVOICE' }));
 }
+
 
 
 // ----------------------------------------------------------------------------
@@ -13879,6 +14543,531 @@ export async function handleCreateInvoiceExpenses(env, req) {
 // -----------------------------
 
 // Helper: mark linked weeks as INVOICED (used by both HOURS + EXPENSES creators)
+
+export async function handleContractsPlanRanges(env, req, contractId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let body;
+  try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  const ranges = Array.isArray(body?.ranges) ? body.ranges : [];
+  const extendWindow = body?.extend_contract_window === true;
+  if (!ranges.length) return withCORS(env, req, badRequest('ranges[] is required'));
+
+  // Load contract with fields we need for planning
+  const c = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=id,candidate_id,client_id,start_date,end_date,default_submission_mode,week_ending_weekday_snapshot,std_schedule_json`
+  );
+  if (!c) return withCORS(env, req, badRequest('Contract not found'));
+
+  // --- Week-ending protections (if extending window) --------------------------------
+  if (extendWindow) {
+    // Union of requested ranges
+    const unionStart = ranges.reduce((m,r)=> Math.min(m, Date.parse(toYmd(r.from||r.From||r.start))), Infinity);
+    const unionEnd   = ranges.reduce((m,r)=> Math.max(m, Date.parse(toYmd(r.to||r.To||r.end))),   -Infinity);
+    if (isFinite(unionStart) && isFinite(unionEnd)) {
+      const reqStart = toYmd(new Date(unionStart));
+      const reqEnd   = toYmd(new Date(unionEnd));
+      // Find submitted WE min/max
+      const weRow = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(c.id)}&timesheet_id=not.is.null&select=min:week_ending_date.min(),max:week_ending_date.max()`
+      );
+      const minWE = weRow?.min || null, maxWE = weRow?.max || null;
+      // Determine widened start/end (we only widen; never shrink here)
+      let newStart = c.start_date;
+      let newEnd   = c.end_date;
+      if (reqStart < c.start_date) newStart = reqStart;
+      if (reqEnd   > c.end_date)   newEnd   = reqEnd;
+      // Apply protections
+      if (minWE) {
+        const minWeekStart = addDays(minWE, -6);
+        if (newStart > minWeekStart) newStart = minWeekStart; // cannot start later than earliest submitted week start
+      }
+      if (maxWE) {
+        if (newEnd < maxWE) newEnd = maxWE; // cannot end before latest submitted WE
+      }
+      // Patch if changed
+      if (newStart !== c.start_date || newEnd !== c.end_date) {
+        const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(c.id)}`, {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), 'Prefer':'return=representation' },
+          body: JSON.stringify({ start_date: newStart, end_date: newEnd, updated_at: nowIso() })
+        });
+        if (!res.ok) return withCORS(env, req, serverError(await res.text()));
+        const upd = (await res.json().catch(()=>[]))[0] || c;
+        c.start_date = upd.start_date; c.end_date = upd.end_date;
+        // Remove planned weeks now outside window (no TS)
+        await fetch(
+          `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(c.id)}&timesheet_id=is.null&or=(week_ending_date.lt.${enc(c.start_date)},week_ending_date.gt.${enc(c.end_date)})`,
+          { method:'DELETE', headers: { ...sbHeaders(env), 'Prefer':'return=minimal' } }
+        ).catch(()=>{});
+      }
+    }
+  }
+
+  // --- Helpers for planning ----------------------------------------------------------
+  const weekdayToJs = { mon:1, tue:2, wed:3, thu:4, fri:5, sat:6, sun:0 };
+  const toWeekdayMask = (arr)=> new Set((arr||[]).map(x=> String(x||'').toLowerCase()).filter(k=> k in weekdayToJs));
+
+  function buildPlanEntryForDate(ymd, contract, explicitDayObj) {
+    // explicit per-date wins
+    if (explicitDayObj && explicitDayObj.start && explicitDayObj.end) {
+      const s = parseHHMM(explicitDayObj.start), e = parseHHMM(explicitDayObj.end);
+      if (s==null || e==null) throw new Error(`Invalid HH:MM for ${ymd}`);
+      const br = Math.max(0, Number(explicitDayObj.break_minutes||0));
+      const overnight = explicitDayObj.overnight===true || e<=s;
+      const mins = Math.max(0, minutesDiff(s, e, overnight) - br);
+      const breaks = Array.isArray(explicitDayObj.breaks) ? explicitDayObj.breaks : [];
+      return { date: ymd, start: explicitDayObj.start, end: explicitDayObj.end, breaks, break_minutes: br, overnight, expected_minutes: mins };
+    }
+    // fallback to std_schedule_json for weekday
+    const jsDow = dow(ymd); // 0..6
+    const mon0 = ['sun','mon','tue','wed','thu','fri','sat']; // map 0..6 to names
+    const key = ({sun:0,mon:1,tue:2,wed:3,thu:4,fri:5,sat:6});
+    let wkKey = null;
+    for (const [k,v] of Object.entries(key)) if (v===jsDow) { wkKey = k; break; }
+    const tpl = contract.std_schedule_json?.[wkKey];
+    if (tpl && tpl.start && tpl.end) {
+      const s = parseHHMM(tpl.start), e = parseHHMM(tpl.end);
+      if (s==null || e==null) throw new Error(`Invalid std_schedule_json time for weekday ${wkKey}`);
+      const br = Math.max(0, Number(tpl.break_minutes||0));
+      const overnight = tpl.overnight===true || e<=s;
+      const mins = Math.max(0, minutesDiff(s, e, overnight) - br);
+      const breaks = Array.isArray(tpl.breaks) ? tpl.breaks : [];
+      return { date: ymd, start: tpl.start, end: tpl.end, breaks, break_minutes: br, overnight, expected_minutes: mins };
+    }
+    // placeholder (so it appears booked but no times yet)
+    return { date: ymd, start: null, end: null, breaks: [], break_minutes: 0, overnight: false, expected_minutes: 0 };
+  }
+
+  function splitDatesByWeek(r, wew) {
+    const out = new Map(); // key = WE ymd, value = array of {date, daySpec?}
+    const d0 = new Date(toYmd(r.from||r.From||r.start)+'T00:00:00Z');
+    const d1 = new Date(toYmd(r.to||r.To||r.end)+'T00:00:00Z');
+
+    const mask = Array.isArray(r.days) && r.days.length && typeof r.days[0] === 'string'
+      ? toWeekdayMask(r.days) : null;
+    const explicit = Array.isArray(r.days) && r.days.length && typeof r.days[0] === 'object'
+      ? new Map(r.days.map(o => [toYmd(o.date), o])) : null;
+
+    for (let dt = new Date(d0); dt <= d1; dt.setUTCDate(dt.getUTCDate()+1)) {
+      const ymd = toYmd(dt);
+      // Contract window guard — we plan only inside current window
+      if (ymd < c.start_date || ymd > c.end_date) continue;
+      let include = false;
+      let explicitObj = null;
+
+      if (explicit) {
+        if (explicit.has(ymd)) { include = true; explicitObj = explicit.get(ymd); }
+      } else if (mask) {
+        const js = dt.getUTCDay(); // 0..6
+        const wd = Object.entries(weekdayToJs).find(([,v]) => v===js)?.[0];
+        include = wd ? mask.has(wd) : false;
+      } else {
+        // no 'days' provided → default to all dates in range
+        include = true;
+      }
+
+      if (!include) continue;
+      const we = computeWeekEnding(ymd, c.week_ending_weekday_snapshot || 0);
+      const arr = out.get(we) || [];
+      arr.push({ date: ymd, explicit: explicitObj || null });
+      out.set(we, arr);
+    }
+    return out;
+  }
+
+  async function ensureWeek(contractId, weYmd) {
+    // load all siblings for this WE
+    const { rows: weeks } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&week_ending_date=eq.${enc(weYmd)}`+
+      `&select=id,additional_seq,timesheet_id,planned_schedule_json,status,submission_mode_snapshot&order=additional_seq.asc`
+    );
+    return weeks || [];
+  }
+
+  async function createWeek(contractId, weYmd, additionalSeq=0) {
+    const today = toYmd(new Date());
+    const payload = [{
+      contract_id: contractId,
+      week_ending_date: weYmd,
+      additional_seq: Number(additionalSeq||0),
+      status: (weYmd <= today ? 'OPEN' : 'PLANNED'),
+      submission_mode_snapshot: c.default_submission_mode,
+      timesheet_id: null,
+      planned_schedule_json: [],
+      created_at: nowIso(),
+      updated_at: nowIso()
+    }];
+    const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?on_conflict=contract_id,week_ending_date,additional_seq`, {
+      method: 'POST', headers: { ...sbHeaders(env), 'Prefer':'resolution=merge-duplicates,return=representation' },
+      body: JSON.stringify(payload)
+    });
+    if (!ins.ok) throw new Error(await ins.text());
+    const row = (await ins.json().catch(()=>[]))[0];
+    return row;
+  }
+
+  const results = [];
+  let contractWindowChanged = false;
+
+  for (const r of ranges) {
+    const mergeMode = (String(r.merge||'append').toLowerCase()==='replace') ? 'replace' : 'append';
+    const tsExistsPolicy = (String(r.when_timesheet_exists||'create_additional').toLowerCase()==='reject') ? 'reject' : 'create_additional';
+
+    let createdWeeks = 0, patchedWeeks = 0, createdAdditionalWeeks = 0, daysPlanned = 0, skippedOutside = 0, skippedDueTS = 0;
+
+    // Partition days by week-ending
+    const byWe = splitDatesByWeek(r, c.week_ending_weekday_snapshot || 0);
+
+    // If we extended window above, check if it changed
+    contractWindowChanged = contractWindowChanged || extendWindow;
+
+    for (const [we, dayList] of byWe.entries()) {
+      // Ensure a target week (base or additional)
+      let siblings = await ensureWeek(c.id, we);
+      let base = siblings.find(x => x.additional_seq === 0);
+      if (!base) {
+        base = await createWeek(c.id, we, 0);
+        createdWeeks += 1;
+        siblings = [base]; // refresh local view
+      }
+
+      // Select where to plan dates:
+      let targetWeek = base;
+      if (base.timesheet_id) {
+        if (tsExistsPolicy === 'reject') { skippedDueTS += dayList.length; continue; }
+        // create additional
+        const maxSeq = siblings.reduce((m,w)=> Math.max(m, Number(w.additional_seq||0)), 0);
+        targetWeek = await createWeek(c.id, we, maxSeq+1);
+        createdAdditionalWeeks += 1;
+      }
+
+      // Merge/append dated entries into targetWeek.planned_schedule_json
+      const planArr = Array.isArray(targetWeek.planned_schedule_json) ? targetWeek.planned_schedule_json.slice() : [];
+      let changed = false;
+
+      for (const d of dayList) {
+        const ymd = d.date;
+        if (ymd < c.start_date || ymd > c.end_date) { skippedOutside += 1; continue; }
+        const idx = planArr.findIndex(p => p?.date === ymd);
+        const entry = buildPlanEntryForDate(ymd, c, d.explicit);
+        if (idx >= 0) {
+          if (mergeMode === 'replace') {
+            planArr[idx] = entry;
+            changed = true; daysPlanned += 1;
+          } else {
+            // append mode: ignore duplicates
+          }
+        } else {
+          planArr.push(entry);
+          changed = true; daysPlanned += 1;
+        }
+      }
+
+      if (changed) {
+        const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(targetWeek.id)}`, {
+          method:'PATCH', headers:{ ...sbHeaders(env), 'Prefer':'return=representation' },
+          body: JSON.stringify({ planned_schedule_json: planArr, updated_at: nowIso() })
+        });
+        if (!res.ok) return withCORS(env, req, serverError(await res.text()));
+        patchedWeeks += 1;
+      }
+    }
+
+    results.push({
+      from: toYmd(r.from||r.From||r.start),
+      to:   toYmd(r.to||r.To||r.end),
+      created_weeks: createdWeeks,
+      patched_weeks: patchedWeeks,
+      created_additional_weeks: createdAdditionalWeeks,
+      days_planned: daysPlanned,
+      skipped_outside_window: skippedOutside,
+      skipped_due_to_timesheet: skippedDueTS
+    });
+  }
+
+  return withCORS(env, req, ok({
+    contract_window_changed: contractWindowChanged,
+    ranges: results
+  }));
+}
+export async function handleContractsUnplanRanges(env, req, contractId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let body;
+  try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  const ranges = Array.isArray(body?.ranges) ? body.ranges : [];
+  const tsExistsPolicy = (String(body?.when_timesheet_exists||'skip').toLowerCase()==='error') ? 'error' : 'skip';
+  const emptyWeekAction = (['cancel','delete','keep'].includes(String(body?.empty_week_action||'cancel').toLowerCase()))
+    ? String(body.empty_week_action).toLowerCase()
+    : 'cancel';
+
+  if (!ranges.length) return withCORS(env, req, badRequest('ranges[] is required'));
+
+  // Load minimal contract to get WE weekday + window
+  const c = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=id,start_date,end_date,week_ending_weekday_snapshot`
+  );
+  if (!c) return withCORS(env, req, badRequest('Contract not found'));
+
+  const weekdayToJs = { mon:1, tue:2, wed:3, thu:4, fri:5, sat:6, sun:0 };
+  const toWeekdayMask = (arr)=> new Set((arr||[]).map(x=> String(x||'').toLowerCase()).filter(k=> k in weekdayToJs));
+
+  function splitDatesByWE(r) {
+    const out = new Map();
+    const d0 = new Date(toYmd(r.from||r.From||r.start)+'T00:00:00Z');
+    const d1 = new Date(toYmd(r.to||r.To||r.end)+'T00:00:00Z');
+
+    const mask = Array.isArray(r.days) && r.days.length && typeof r.days[0] === 'string'
+      ? toWeekdayMask(r.days) : null;
+    const explicit = Array.isArray(r.days) && r.days.length && typeof r.days[0] === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.days[0])
+      ? new Set(r.days.map(d => toYmd(d)))
+      : null;
+
+    for (let dt = new Date(d0); dt <= d1; dt.setUTCDate(dt.getUTCDate()+1)) {
+      const ymd = toYmd(dt);
+      if (ymd < c.start_date || ymd > c.end_date) continue;
+      let include = false;
+      if (explicit) {
+        include = explicit.has(ymd);
+      } else if (mask) {
+        const js = dt.getUTCDay();
+        const wd = Object.entries(weekdayToJs).find(([,v]) => v===js)?.[0];
+        include = wd ? mask.has(wd) : false;
+      } else {
+        include = true;
+      }
+      if (!include) continue;
+      const we = computeWeekEnding(ymd, c.week_ending_weekday_snapshot || 0);
+      const arr = out.get(we) || [];
+      arr.push(ymd);
+      out.set(we, arr);
+    }
+    return out;
+  }
+
+  async function loadWeeks(contractId, weSet) {
+    if (!weSet.size) return [];
+    const weList = [...weSet].map(enc).join(',');
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&week_ending_date=in.(${weList})` +
+      `&select=id,week_ending_date,additional_seq,timesheet_id,planned_schedule_json,status`
+    );
+    return rows || [];
+  }
+
+  const results = [];
+
+  for (const r of ranges) {
+    const byWE = splitDatesByWE(r);
+    const weSet = new Set(byWE.keys());
+    const weeks = await loadWeeks(c.id, weSet);
+
+    let patchedWeeks = 0, daysRemoved = 0, emptiedWeeks = 0, skippedDueTS = 0;
+
+    // Group weeks by WE for quick lookup
+    const weeksByWE = new Map();
+    for (const w of weeks) {
+      const arr = weeksByWE.get(w.week_ending_date) || [];
+      arr.push(w);
+      weeksByWE.set(w.week_ending_date, arr);
+    }
+
+    for (const [we, dates] of byWE.entries()) {
+      const siblings = weeksByWE.get(we) || [];
+      if (!siblings.length) continue;
+
+      // For each target date, try to remove from any sibling that contains it (base or additional), preferring base first.
+      for (const ymd of dates) {
+        let removed = false;
+
+        // Prefer base (seq=0) then additional
+        const sorted = siblings.slice().sort((a,b)=> (a.additional_seq||0)-(b.additional_seq||0));
+
+        for (const w of sorted) {
+          const plan = Array.isArray(w.planned_schedule_json) ? w.planned_schedule_json : [];
+          const idx = plan.findIndex(d => d?.date === ymd);
+          if (idx === -1) continue;
+
+          if (w.timesheet_id) {
+            if (tsExistsPolicy === 'error') {
+              return withCORS(env, req, badRequest(`Timesheet exists for WE ${we}; cannot remove ${ymd}`));
+            }
+            skippedDueTS += 1;
+            continue;
+          }
+
+          // remove this date
+          plan.splice(idx, 1);
+          const patch = { planned_schedule_json: plan, updated_at: nowIso() };
+
+          // If empty and no TS, apply empty-week action
+          if (!plan.length && !w.timesheet_id) {
+            if (emptyWeekAction === 'cancel') {
+              patch.status = 'CANCELLED';
+              emptiedWeeks += 1;
+            }
+          }
+
+          const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(w.id)}`, {
+            method:'PATCH', headers:{ ...sbHeaders(env), 'Prefer':'return=representation' }, body: JSON.stringify(patch)
+          });
+          if (!res.ok) return withCORS(env, req, serverError(await res.text()));
+          patchedWeeks += 1; daysRemoved += 1; removed = true;
+
+          // If action=delete and plan is empty, perform hard delete (only if no TS)
+          if (!plan.length && !w.timesheet_id && emptyWeekAction === 'delete') {
+            await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(w.id)}`, {
+              method:'DELETE', headers:{ ...sbHeaders(env), 'Prefer':'return=minimal' }
+            }).catch(()=>{});
+            emptiedWeeks += 1;
+          }
+
+          break; // done for this date
+        }
+
+        if (!removed) {
+          // could be not found in any planned list → ignore silently
+        }
+      }
+    }
+
+    results.push({
+      from: toYmd(r.from||r.From||r.start),
+      to:   toYmd(r.to||r.To||r.end),
+      patched_weeks: patchedWeeks,
+      days_removed: daysRemoved,
+      emptied_weeks: emptiedWeeks,
+      emptied_weeks_action: emptyWeekAction,
+      skipped_due_to_timesheet: skippedDueTS
+    });
+  }
+
+  return withCORS(env, req, ok({ ranges: results }));
+}
+export async function handleContractWeekPlanPatch(env, req, weekId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let body;
+  try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  const adds = Array.isArray(body?.add) ? body.add : [];
+  const removes = Array.isArray(body?.remove) ? body.remove : [];
+  const mergeMode = (String(body?.merge||'append').toLowerCase()==='replace') ? 'replace' : 'append';
+  const emptyAction = (['cancel','delete','keep'].includes(String(body?.empty_week_action||'cancel').toLowerCase()))
+    ? String(body.empty_week_action).toLowerCase()
+    : 'cancel';
+
+  if (!adds.length && !removes.length) return withCORS(env, req, badRequest('Nothing to change (add[]/remove[] empty)'));
+
+  // Load week + its contract (for std_schedule_json)
+  const w = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=id,contract_id,week_ending_date,additional_seq,timesheet_id,planned_schedule_json,status`
+  );
+  if (!w) return withCORS(env, req, badRequest('Week not found'));
+  const c = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(w.contract_id)}&select=id,start_date,end_date,std_schedule_json`
+  );
+  if (!c) return withCORS(env, req, badRequest('Contract not found'));
+
+  // No removing/adding on weeks with TS (base rule)
+  if (w.timesheet_id) {
+    return withCORS(env, req, badRequest('Cannot edit plan for a week that already has a timesheet. Create an additional week instead.'));
+  }
+
+  const plan = Array.isArray(w.planned_schedule_json) ? w.planned_schedule_json.slice() : [];
+  let changed = false;
+
+  // Helper to build entry
+  function buildEntry(d) {
+    if (!d?.date) throw new Error('add[].date is required');
+    const ymd = toYmd(d.date);
+    if (ymd < c.start_date || ymd > c.end_date) throw new Error(`Date ${ymd} is outside contract window`);
+    if (d.start && d.end) {
+      const s = parseHHMM(d.start), e = parseHHMM(d.end);
+      if (s==null || e==null) throw new Error(`Invalid HH:MM for ${ymd}`);
+      const br = Math.max(0, Number(d.break_minutes||0));
+      const overnight = d.overnight===true || e<=s;
+      const mins = Math.max(0, minutesDiff(s, e, overnight) - br);
+      const breaks = Array.isArray(d.breaks) ? d.breaks : [];
+      return { date: ymd, start:d.start, end:d.end, breaks, break_minutes:br, overnight, expected_minutes:mins };
+    }
+    // fallback to template
+    const jsDow = (new Date(ymd+'T00:00:00Z')).getUTCDay();
+    const names = ['sun','mon','tue','wed','thu','fri','sat'];
+    const tpl = c.std_schedule_json?.[names[jsDow]];
+    if (tpl?.start && tpl?.end) {
+      const s = parseHHMM(tpl.start), e = parseHHMM(tpl.end);
+      if (s==null || e==null) throw new Error(`Invalid std_schedule_json time for ${names[jsDow]}`);
+      const br = Math.max(0, Number(tpl.break_minutes||0));
+      const overnight = tpl.overnight===true || e<=s;
+      const mins = Math.max(0, minutesDiff(s, e, overnight) - br);
+      const breaks = Array.isArray(tpl.breaks) ? tpl.breaks : [];
+      return { date: ymd, start:tpl.start, end:tpl.end, breaks, break_minutes:br, overnight, expected_minutes:mins };
+    }
+    return { date: ymd, start:null, end:null, breaks:[], break_minutes:0, overnight:false, expected_minutes:0 };
+  }
+
+  // Apply adds
+  for (const d of adds) {
+    try {
+      const e = buildEntry(d);
+      const idx = plan.findIndex(p => p?.date === e.date);
+      if (idx >= 0) {
+        if (mergeMode === 'replace') { plan[idx] = e; changed = true; }
+      } else {
+        plan.push(e); changed = true;
+      }
+    } catch (ex) {
+      return withCORS(env, req, badRequest(ex.message || 'Invalid add[] payload'));
+    }
+  }
+
+  // Apply removes
+  for (const y of removes) {
+    const ymd = toYmd(y);
+    const idx = plan.findIndex(p => p?.date === ymd);
+    if (idx >= 0) { plan.splice(idx,1); changed = true; }
+  }
+
+  if (!changed) return withCORS(env, req, ok({ updated:false, week_id: w.id }));
+
+  // If emptied, apply action (no TS by guard above)
+  const patch = { planned_schedule_json: plan, updated_at: nowIso() };
+  if (!plan.length) {
+    if (emptyAction === 'cancel') patch.status = 'CANCELLED';
+  }
+
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(w.id)}`, {
+    method:'PATCH', headers:{ ...sbHeaders(env), 'Prefer':'return=representation' }, body: JSON.stringify(patch)
+  });
+  if (!res.ok) return withCORS(env, req, serverError(await res.text()));
+
+  // Hard delete if requested and plan is empty (and still no TS)
+  if (!plan.length && emptyAction === 'delete') {
+    await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(w.id)}`, {
+      method:'DELETE', headers:{ ...sbHeaders(env), 'Prefer':'return=minimal' }
+    }).catch(()=>{});
+    return withCORS(env, req, ok({ updated:true, week_deleted:true, week_id:w.id }));
+  }
+
+  const row = (await res.json().catch(()=>[]))[0] || null;
+  return withCORS(env, req, ok({ updated:true, week: row }));
+}
+
+
 async function setWeeksInvoicedForTimesheets(env, timesheetIds) {
   const ids = Array.from(new Set((timesheetIds || []).filter(Boolean)));
   if (!ids.length) return;
@@ -14545,6 +15734,10 @@ export default {
         if (candDet && req.method === 'GET')                                return handleGetCandidate(env, req, candDet.candidate_id);
       }
       {
+  const cc = matchPath(p, '/api/candidates/:id/calendar');
+  if (cc && req.method === 'GET') return handleCandidateCalendar(env, req, cc.id);
+}
+      {
         const cand = matchPath(p, '/api/candidates/:candidate_id');
         if (cand && req.method === 'GET')                                   return handleCandidatesGet(env, req, cand.candidate_id); // base row for pickers
         if (cand && req.method === 'PUT')                                   return handleUpdateCandidate(env, req, cand.candidate_id);
@@ -14837,7 +16030,15 @@ if (req.method === 'GET' && p === '/api/pickers/clients/id-list')      return wi
         const m = matchPath(p, '/api/contract-weeks/:id/expense-sheet');
         if (m && req.method === 'POST') return handleContractWeekCreateExpenseSheet(env, req, m.id);
       }
-
+{
+  const m = matchPath(p, '/api/contracts/:id/plan-ranges');
+  if (m && req.method === 'POST')   return handleContractsPlanRanges(env, req, m.id);     // bulk add/extend
+  if (m && req.method === 'DELETE') return handleContractsUnplanRanges(env, req, m.id);   // bulk remove
+}
+{
+  const m = matchPath(p, '/api/contract-weeks/:id/plan');
+  if (m && req.method === 'PATCH')  return handleContractWeekPlanPatch(env, req, m.id);   // per-week add/remove
+}
       // =============================================================================
       // NEW ROUTES — Weekly (electronic) – public broker
       // =============================================================================
