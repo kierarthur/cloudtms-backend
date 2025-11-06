@@ -1030,10 +1030,25 @@ export async function handleContractsUpdate(env, req, contractId) {
   const newStart = ('start_date' in body) ? toYmd(body.start_date) : current.start_date;
   const newEnd   = ('end_date'   in body) ? toYmd(body.end_date)   : current.end_date;
   if (('start_date' in body) || ('end_date' in body)) {
-    const weRow = await sbGetOne(env,
-      `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&timesheet_id=not.is.null&select=min:week_ending_date.min(),max:week_ending_date.max()`
-    );
-    const minWE = weRow?.min || null, maxWE = weRow?.max || null;
+    // NO aggregates — use order+limit=1
+    let minWE = null, maxWE = null;
+    try {
+      const { rows: minRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+        `?contract_id=eq.${enc(contractId)}&timesheet_id=not.is.null&select=week_ending_date` +
+        `&order=week_ending_date.asc&limit=1`
+      );
+      minWE = (minRows && minRows[0] && minRows[0].week_ending_date) || null;
+
+      const { rows: maxRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+        `?contract_id=eq.${enc(contractId)}&timesheet_id=not.is.null&select=week_ending_date` +
+        `&order=week_ending_date.desc&limit=1`
+      );
+      maxWE = (maxRows && maxRows[0] && maxRows[0].week_ending_date) || null;
+    } catch (_) {}
 
     if (minWE) {
       const minWeekStart = addDays(minWE, -6);  // earliest protected week start
@@ -1119,12 +1134,12 @@ export async function handleContractsReplace(env, req, contractId) {
 
   // lock candidate/client/rates/pay_method if submitted
   if (hasSubmitted) {
-      if (body.candidate_id !== current.candidate_id) return withCORS(env, req, badRequest('Cannot change candidate after timesheets have been submitted'));
-      if (body.client_id    !== current.client_id)    return withCORS(env, req, badRequest('Cannot change client after timesheets have been submitted'));
-      if (JSON.stringify(body.rates_json||{}) !== JSON.stringify(current.rates_json||{})) return withCORS(env, req, badRequest('Cannot change rates after timesheets have been submitted'));
-      if (String(body.pay_method_snapshot||'').toUpperCase() !== String(current.pay_method_snapshot||'').toUpperCase()) {
-        return withCORS(env, req, badRequest('Cannot change pay_method_snapshot after timesheets have been submitted'));
-      }
+    if (body.candidate_id !== current.candidate_id) return withCORS(env, req, badRequest('Cannot change candidate after timesheets have been submitted'));
+    if (body.client_id    !== current.client_id)    return withCORS(env, req, badRequest('Cannot change client after timesheets have been submitted'));
+    if (JSON.stringify(body.rates_json||{}) !== JSON.stringify(current.rates_json||{})) return withCORS(env, req, badRequest('Cannot change rates after timesheets have been submitted'));
+    if (String(body.pay_method_snapshot||'').toUpperCase() !== String(current.pay_method_snapshot||'').toUpperCase()) {
+      return withCORS(env, req, badRequest('Cannot change pay_method_snapshot after timesheets have been submitted'));
+    }
   }
 
   // mode & weekday
@@ -1133,12 +1148,26 @@ export async function handleContractsReplace(env, req, contractId) {
   const wew = Number(body.week_ending_weekday_snapshot);
   if (!Number.isInteger(wew) || wew < 0 || wew > 6) return withCORS(env, req, badRequest('week_ending_weekday_snapshot must be 0–6'));
 
-  // week-ending window rule
+  // week-ending window rule (NO aggregates)
   const newStart = toYmd(body.start_date), newEnd = toYmd(body.end_date);
-  const weRow = await sbGetOne(env,
-    `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&timesheet_id=not.is.null&select=min:week_ending_date.min(),max:week_ending_date.max()`
-  );
-  const minWE = weRow?.min || null, maxWE = weRow?.max || null;
+  let minWE = null, maxWE = null;
+  try {
+    const { rows: minRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+      `?contract_id=eq.${enc(contractId)}&timesheet_id=not.is.null&select=week_ending_date` +
+      `&order=week_ending_date.asc&limit=1`
+    );
+    minWE = (minRows && minRows[0] && minRows[0].week_ending_date) || null;
+
+    const { rows: maxRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+      `?contract_id=eq.${enc(contractId)}&timesheet_id=not.is.null&select=week_ending_date` +
+      `&order=week_ending_date.desc&limit=1`
+    );
+    maxWE = (maxRows && maxRows[0] && maxRows[0].week_ending_date) || null;
+  } catch (_) {}
 
   if (minWE) {
     const minWeekStart = addDays(minWE, -6);
@@ -1190,7 +1219,6 @@ export async function handleContractsReplace(env, req, contractId) {
   const warnings = await computePayMethodWarnings(env, { ...current, ...updated });
   return withCORS(env, req, ok({ contract: updated, warnings }));
 }
-
 
 // Helper: returns ['PAY_METHOD_MISMATCH'] if candidate.pay_method != pay_method_snapshot
 async function computePayMethodWarnings(env, contractRow) {
@@ -14570,17 +14598,33 @@ export async function handleContractsPlanRanges(env, req, contractId) {
     if (isFinite(unionStart) && isFinite(unionEnd)) {
       const reqStart = toYmd(new Date(unionStart));
       const reqEnd   = toYmd(new Date(unionEnd));
-      // Find submitted WE min/max
-      const weRow = await sbGetOne(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(c.id)}&timesheet_id=not.is.null&select=min:week_ending_date.min(),max:week_ending_date.max()`
-      );
-      const minWE = weRow?.min || null, maxWE = weRow?.max || null;
+
+      // Find submitted WE min/max (NO aggregates — order + limit=1)
+      let minWE = null, maxWE = null;
+      try {
+        const { rows: minRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+          `?contract_id=eq.${enc(c.id)}&timesheet_id=not.is.null&select=week_ending_date` +
+          `&order=week_ending_date.asc&limit=1`
+        );
+        minWE = (minRows && minRows[0] && minRows[0].week_ending_date) || null;
+
+        const { rows: maxRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+          `?contract_id=eq.${enc(c.id)}&timesheet_id=not.is.null&select=week_ending_date` +
+          `&order=week_ending_date.desc&limit=1`
+        );
+        maxWE = (maxRows && maxRows[0] && maxRows[0].week_ending_date) || null;
+      } catch { /* leave as null if lookup fails */ }
+
       // Determine widened start/end (we only widen; never shrink here)
       let newStart = c.start_date;
       let newEnd   = c.end_date;
       if (reqStart < c.start_date) newStart = reqStart;
       if (reqEnd   > c.end_date)   newEnd   = reqEnd;
+
       // Apply protections
       if (minWE) {
         const minWeekStart = addDays(minWE, -6);
@@ -14589,6 +14633,7 @@ export async function handleContractsPlanRanges(env, req, contractId) {
       if (maxWE) {
         if (newEnd < maxWE) newEnd = maxWE; // cannot end before latest submitted WE
       }
+
       // Patch if changed
       if (newStart !== c.start_date || newEnd !== c.end_date) {
         const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(c.id)}`, {
@@ -14599,6 +14644,7 @@ export async function handleContractsPlanRanges(env, req, contractId) {
         if (!res.ok) return withCORS(env, req, serverError(await res.text()));
         const upd = (await res.json().catch(()=>[]))[0] || c;
         c.start_date = upd.start_date; c.end_date = upd.end_date;
+
         // Remove planned weeks now outside window (no TS)
         await fetch(
           `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(c.id)}&timesheet_id=is.null&or=(week_ending_date.lt.${enc(c.start_date)},week_ending_date.gt.${enc(c.end_date)})`,
@@ -14625,7 +14671,6 @@ export async function handleContractsPlanRanges(env, req, contractId) {
     }
     // fallback to std_schedule_json for weekday
     const jsDow = dow(ymd); // 0..6
-    const mon0 = ['sun','mon','tue','wed','thu','fri','sat']; // map 0..6 to names
     const key = ({sun:0,mon:1,tue:2,wed:3,thu:4,fri:5,sat:6});
     let wkKey = null;
     for (const [k,v] of Object.entries(key)) if (v===jsDow) { wkKey = k; break; }
@@ -14796,6 +14841,7 @@ export async function handleContractsPlanRanges(env, req, contractId) {
     ranges: results
   }));
 }
+
 export async function handleContractsUnplanRanges(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
