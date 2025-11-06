@@ -947,7 +947,13 @@ export async function handleContractsGet(env, req, contractId) {
 export async function handleContractsUpdate(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
-  let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  let body;
+  try { body = await parseJSONBody(req); }
+  catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  // 🔎 log the raw incoming payload
+  try { console.log('[CONTRACTS][UPDATE] incoming', { contractId, body }); } catch {}
 
   // Load current
   const current = await sbGetOne(
@@ -1026,11 +1032,10 @@ export async function handleContractsUpdate(env, req, contractId) {
     }
   }
 
-  // ----- start/end date edits: enforce week START for earliest submitted week; week END for latest submitted week -----
+  // ----- start/end date edits: enforce week START/END around submitted weeks -----
   const newStart = ('start_date' in body) ? toYmd(body.start_date) : current.start_date;
   const newEnd   = ('end_date'   in body) ? toYmd(body.end_date)   : current.end_date;
   if (('start_date' in body) || ('end_date' in body)) {
-    // NO aggregates — use order+limit=1
     let minWE = null, maxWE = null;
     try {
       const { rows: minRows } = await sbFetch(
@@ -1051,7 +1056,7 @@ export async function handleContractsUpdate(env, req, contractId) {
     } catch (_) {}
 
     if (minWE) {
-      const minWeekStart = addDays(minWE, -6);  // earliest protected week start
+      const minWeekStart = addDays(minWE, -6);
       if (newStart > minWeekStart) {
         return withCORS(env, req, badRequest(`start_date cannot be after start of earliest submitted week (${minWeekStart})`));
       }
@@ -1071,6 +1076,9 @@ export async function handleContractsUpdate(env, req, contractId) {
 
   patch.updated_at = nowIso();
 
+  // 🔎 log the computed patch
+  try { console.log('[CONTRACTS][UPDATE] patch', { contractId, patch }); } catch {}
+
   // Apply contract update
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {
     method: 'PATCH',
@@ -1086,7 +1094,13 @@ export async function handleContractsUpdate(env, req, contractId) {
       `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&timesheet_id=is.null&or=(week_ending_date.lt.${enc(newStart)},week_ending_date.gt.${enc(newEnd)})`,
       { method:'DELETE', headers: { ...sbHeaders(env), 'Prefer':'return=minimal' } }
     ).catch(()=>{});
-    await handleContractsGenerateWeeks(env, new Request(''), contractId);
+
+    // ✅ pass original req; wrap with try/catch
+    try {
+      await handleContractsGenerateWeeks(env, req, contractId);
+    } catch (e) {
+      try { console.warn('[CONTRACTS][UPDATE] regenerate weeks failed', { contractId, error: e?.message || String(e) }); } catch {}
+    }
   }
 
   const warnings = await computePayMethodWarnings(env, { ...current, ...updated });
@@ -1096,13 +1110,17 @@ export async function handleContractsUpdate(env, req, contractId) {
 // === NEW: strict full-replace handler (PUT /api/contracts/:id) ===
 // === Strict full-replace (PUT) ===
 
+// === Strict full-replace (PUT /api/contracts/:id) ===
 export async function handleContractsReplace(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
-  let body; 
-  try { body = await parseJSONBody(req); } 
+  let body;
+  try { body = await parseJSONBody(req); }
   catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  // 🔎 log the raw incoming payload
+  try { console.log('[CONTRACTS][REPLACE] incoming', { contractId, body }); } catch {}
 
   const current = await sbGetOne(
     env,
@@ -1201,6 +1219,9 @@ export async function handleContractsReplace(env, req, contractId) {
     updated_at: nowIso(),
   };
 
+  // 🔎 log the computed patch
+  try { console.log('[CONTRACTS][REPLACE] patch', { contractId, patch }); } catch {}
+
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {
     method: 'PATCH',
     headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
@@ -1214,11 +1235,18 @@ export async function handleContractsReplace(env, req, contractId) {
     `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&timesheet_id=is.null&or=(week_ending_date.lt.${enc(newStart)},week_ending_date.gt.${enc(newEnd)})`,
     { method:'DELETE', headers: { ...sbHeaders(env), 'Prefer':'return=minimal' } }
   ).catch(()=>{});
-  await handleContractsGenerateWeeks(env, new Request(''), contractId);
+
+  // ✅ pass original req; wrap with try/catch
+  try {
+    await handleContractsGenerateWeeks(env, req, contractId);
+  } catch (e) {
+    try { console.warn('[CONTRACTS][REPLACE] regenerate weeks failed', { contractId, error: e?.message || String(e) }); } catch {}
+  }
 
   const warnings = await computePayMethodWarnings(env, { ...current, ...updated });
   return withCORS(env, req, ok({ contract: updated, warnings }));
 }
+
 
 // Helper: returns ['PAY_METHOD_MISMATCH'] if candidate.pay_method != pay_method_snapshot
 async function computePayMethodWarnings(env, contractRow) {
