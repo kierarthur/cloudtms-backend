@@ -161,30 +161,14 @@ function minutesDiff(startMin, endMin, overnight=false) {
 function isBH(ymd, bhSet) { return bhSet && bhSet.has(ymd); }
 
 // Derive per-day total hours (decimal) from std_schedule_json {mon..sun:{start,end,break_minutes}}
-function deriveStdHoursFromSchedule(stdSched) {
-  if (!stdSched || typeof stdSched !== 'object') return null;
-  const out = {};
-  for (const k of Object.keys(DOW_MAP)) {
-    const d = stdSched[k];
-    if (!d) { out[k] = 0; continue; }
-    const s = parseHHMM(d.start), e = parseHHMM(d.end);
-    if (s==null || e==null) throw new Error(`Invalid HH:MM in std_schedule_json.${k}`);
-    const br = Math.max(0, Number(d.break_minutes||0));
-    const mins = Math.max(0, minutesDiff(s, e, d.overnight===true) - br);
-    out[k] = +(mins/60).toFixed(2);
-  }
-  return out;
-}
 
 // Build planned_schedule_json (7 dated entries) from template (mon..sun) for a given week ending
+
 function buildPlannedScheduleFromTemplate(stdSched, weekEndingYmd) {
   const days = [];
   if (!stdSched || typeof stdSched!=='object') return days;
-  // Collect the 7 dates in that week (WE day + 6 back)
-  const weekDates = Array.from({length:7}, (_,i)=> addDays(weekEndingYmd, - (6-i))); // Mon..Sun if WE is Sun; still safe for any WE
-  // Map by real DOW (0..6) to date for this week
+  const weekDates = Array.from({length:7}, (_,i)=> addDays(weekEndingYmd, - (6-i)));
   const mapDateByDow = Object.fromEntries(weekDates.map(d => [dow(d), d]));
-  // For each mon..sun in template, pick matching date by DOW
   for (const [k, jsDow] of Object.entries(DOW_MAP)) {
     const dCfg = stdSched[k];
     const date = mapDateByDow[jsDow];
@@ -196,7 +180,7 @@ function buildPlannedScheduleFromTemplate(stdSched, weekEndingYmd) {
     const s = parseHHMM(dCfg.start), e = parseHHMM(dCfg.end);
     if (s==null || e==null) throw new Error(`Invalid HH:MM in std_schedule_json.${k}`);
     const br = Math.max(0, Number(dCfg.break_minutes||0));
-    const overnight = dCfg.overnight===true || e<=s;
+    const overnight = (e<=s);                                  // ← infer overnight
     const mins = Math.max(0, minutesDiff(s, e, overnight) - br);
     days.push({
       date, start: dCfg.start, end: dCfg.end,
@@ -205,6 +189,22 @@ function buildPlannedScheduleFromTemplate(stdSched, weekEndingYmd) {
     });
   }
   return days;
+}
+
+
+function deriveStdHoursFromSchedule(stdSched) {
+  if (!stdSched || typeof stdSched !== 'object') return null;
+  const out = {};
+  for (const k of Object.keys(DOW_MAP)) {
+    const d = stdSched[k];
+    if (!d) { out[k] = 0; continue; }
+    const s = parseHHMM(d.start), e = parseHHMM(d.end);
+    if (s==null || e==null) throw new Error(`Invalid HH:MM in std_schedule_json.${k}`);
+    const br = Math.max(0, Number(d.break_minutes||0));
+    const mins = Math.max(0, minutesDiff(s, e, e<=s) - br);   // ← infer overnight
+    out[k] = +(mins/60).toFixed(2);
+  }
+  return out;
 }
 
 // Load client windows & BH list (fallback to defaults if missing)
@@ -272,9 +272,8 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array of 
     if (!d || !d.date || !d.start || !d.end) continue;
     const s = parseHHMM(d.start), e = parseHHMM(d.end);
     if (s==null || e==null) throw new Error(`Invalid HH:MM in actual_schedule_json for ${d.date}`);
-    const overnight = d.overnight===true || e<=s;
+    const overnight = (e<=s);                              // ← infer overnight
 
-    // Split into 1 or 2 chunks (this date; optionally next date)
     const chunk1 = { date: d.date, from: s, to: overnight ? 1440 : e };
     const chunks = [chunk1];
     if (overnight) {
@@ -282,35 +281,28 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array of 
       chunks.push({ date: next, from: 0, to: e });
     }
 
-    // Accumulate minutes by bucket for raw shift
     for (const c of chunks) {
       segmentChunkIntoBuckets(c.date, c.from, c.to, policy, acc);
     }
 
-    // Breaks — intervals first
     if (Array.isArray(d.breaks) && d.breaks.length) {
       for (const br of d.breaks) {
         const bs = parseHHMM(br.start), be = parseHHMM(br.end);
         if (bs==null || be==null) continue;
-        const bOver = be<=bs;
+        const bOver = (be<=bs);
         const bChunk1 = { date: d.date, from: bs, to: bOver ? 1440 : be };
         const bChunks = [bChunk1];
         if (bOver) bChunks.push({ date: addDays(d.date,1), from: 0, to: be });
 
-        // Subtract break overlap minutes from the same buckets they fall in
-        const before = { ...acc };
         const tmp = { day:0, night:0, sat:0, sun:0, bh:0 };
-        for (const c of bChunks) {
-          segmentChunkIntoBuckets(c.date, c.from, c.to, policy, tmp);
-        }
-        // subtract overlapped minutes
+        for (const c of bChunks) segmentChunkIntoBuckets(c.date, c.from, c.to, policy, tmp);
         for (const k of Object.keys(acc)) acc[k] = Math.max(0, acc[k] - (tmp[k]||0));
       }
     } else if (Number(d.break_minutes)>0) {
       applyDurationBreak(acc, Number(d.break_minutes));
     }
   }
-  return acc; // minutes by bucket
+  return acc;
 }
 
 
@@ -1485,20 +1477,14 @@ export async function handleContractsCalendar(env, req, contractId) {
   const fromQ = url.searchParams.get('from');
   const toQ   = url.searchParams.get('to');
 
-  // Resolve date window
   const winStart = fromQ ? toYmd(fromQ) : `${year}-01-01`;
   const winEnd   = toQ   ? toYmd(toQ)   : `${year}-12-31`;
-
-  // For day mode we need plans; for week mode we don’t
   const needPlan = (granularity === 'day');
 
   const selectCols = needPlan
     ? 'id,contract_id,week_ending_date,additional_seq,status,submission_mode_snapshot,timesheet_id,uploaded_pdf_r2_key,planned_schedule_json'
     : 'id,contract_id,week_ending_date,additional_seq,status,submission_mode_snapshot,timesheet_id,uploaded_pdf_r2_key';
 
-  // Week filter:
-  // - week mode: within [winStart..winEnd]
-  // - day mode: include weeks whose WE could contain days within range (WE ∈ [winStart .. winEnd+6])
   const weeksTo = (granularity === 'day') ? addDays(winEnd, 6) : winEnd;
 
   const { rows: weeks } = await sbFetch(
@@ -1511,7 +1497,6 @@ export async function handleContractsCalendar(env, req, contractId) {
   );
 
   if (granularity !== 'day') {
-    // ---- WEEK SUMMARY (unchanged shape, now date-range aware)
     const ids = (weeks || []).map(w => w.timesheet_id).filter(Boolean);
     let preMap = {};
     if (ids.length) {
@@ -1547,7 +1532,6 @@ export async function handleContractsCalendar(env, req, contractId) {
     return withCORS(env, req, ok({ from: winStart, to: winEnd, granularity: 'week', items }));
   }
 
-  // ---- DAY MODE
   const tsIds = [...new Set((weeks||[]).map(w => w.timesheet_id).filter(Boolean))];
   let tsMap = {}, finMap = {};
   if (tsIds.length) {
@@ -1572,13 +1556,13 @@ export async function handleContractsCalendar(env, req, contractId) {
     if (!d || !d.start || !d.end) return 0;
     const s = parseHHMM(d.start), e = parseHHMM(d.end);
     if (s==null || e==null) return 0;
-    const overnight = d.overnight===true || e<=s;
+    const overnight = (e<=s);                             // ← infer overnight
     let mins = minutesDiff(s, e, overnight);
     if (Array.isArray(d.breaks) && d.breaks.length) {
       mins -= d.breaks.reduce((acc,b) => {
         const bs = parseHHMM(b.start), be = parseHHMM(b.end);
         if (bs==null || be==null) return acc;
-        return acc + minutesDiff(bs, be, be<=bs);
+        return acc + minutesDiff(bs, be, (be<=bs));
       }, 0);
     } else if (Number(d.break_minutes)>0) {
       mins -= Number(d.break_minutes);
@@ -1586,23 +1570,19 @@ export async function handleContractsCalendar(env, req, contractId) {
     return Math.max(0, mins);
   };
 
-  // FIX: treat planned placeholders as PLANNED, and lift week-level state if a TS exists without per-day actuals
   const deriveState = (plannedPresent, actualMin, ts, fin) => {
-    // If we have actual minutes for that date, use the normal path
     if (actualMin > 0) {
       if (fin?.paid_at_utc) return 'PAID';
       if (fin?.locked_by_invoice_id) return 'INVOICED';
       if (ts?.authorised_at_server) return 'AUTHORISED';
       return 'SUBMITTED';
     }
-    // No per-day actuals — if a timesheet exists, lift week-level state
     if (ts) {
       if (fin?.paid_at_utc) return 'PAID';
       if (fin?.locked_by_invoice_id) return 'INVOICED';
       if (ts?.authorised_at_server) return 'AUTHORISED';
       return 'SUBMITTED';
     }
-    // No TS and no actuals: if there is a planned entry at all, mark PLANNED (even when expected_minutes == 0)
     return plannedPresent ? 'PLANNED' : 'EMPTY';
   };
 
@@ -1619,8 +1599,6 @@ export async function handleContractsCalendar(env, req, contractId) {
 
       const expected = Number(d?.expected_minutes || 0);
       const actual   = hasPerDayActual ? computeActualMinutesForDate(ts, ymd) : 0;
-
-      // plannedPresent is true because we are iterating a planned entry
       const state    = deriveState(true /* plannedPresent */, actual, ts, fin);
 
       dayItems.push({
@@ -1629,7 +1607,7 @@ export async function handleContractsCalendar(env, req, contractId) {
         week_id: w.id,
         expected_minutes: expected,
         actual_minutes: actual,
-        state,                              // PLANNED | SUBMITTED | AUTHORISED | INVOICED | PAID | EMPTY
+        state,
         timesheet_id: w.timesheet_id || null,
         submission_mode: w.submission_mode_snapshot,
         invoiced: !!fin?.locked_by_invoice_id,
@@ -1640,6 +1618,7 @@ export async function handleContractsCalendar(env, req, contractId) {
 
   return withCORS(env, req, ok({ from: winStart, to: winEnd, granularity: 'day', items: dayItems }));
 }
+
 
 
 export async function handleCandidateCalendar(env, req, candidateId) {
@@ -1913,7 +1892,6 @@ export async function handleContractWeeksList(env, req) {
   return withCORS(env, req, ok(rows || []));
 }
 
-
 export async function handleContractWeekUpdate(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -1942,18 +1920,21 @@ export async function handleContractWeekUpdate(env, req, weekId) {
     patch.submission_mode_snapshot = sm;
   }
 
-  // NEW: plan-only override
+  // plan-only override (normalize, infer overnight from times, recompute expected_minutes)
   if ('planned_schedule_json' in body) {
     try {
       const plan = Array.isArray(body.planned_schedule_json) ? body.planned_schedule_json : [];
-      // Minimal validation + recompute expected_minutes
       const fixed = plan.map(d => {
-        if (!d || !d.date) return { date: d?.date || cw.week_ending_date, start:null, end:null, breaks:[], break_minutes:0, overnight:false, expected_minutes:0 };
-        if (!d.start || !d.end) return { ...d, breaks: Array.isArray(d.breaks)? d.breaks : [], break_minutes: Math.max(0, Number(d.break_minutes||0)), overnight: !!d.overnight, expected_minutes:0 };
+        if (!d || !d.date) {
+          return { date: d?.date || cw.week_ending_date, start:null, end:null, breaks:[], break_minutes:0, overnight:false, expected_minutes:0 };
+        }
+        if (!d.start || !d.end) {
+          return { ...d, breaks: Array.isArray(d.breaks)? d.breaks : [], break_minutes: Math.max(0, Number(d.break_minutes||0)), overnight:false, expected_minutes:0 };
+        }
         const s = parseHHMM(d.start), e = parseHHMM(d.end);
         if (s==null || e==null) throw new Error(`Invalid HH:MM in planned_schedule_json for ${d.date}`);
         const br = Math.max(0, Number(d.break_minutes||0));
-        const overnight = d.overnight===true || e<=s;
+        const overnight = (e <= s); // infer only from times
         const mins = Math.max(0, minutesDiff(s, e, overnight) - br);
         return { date:d.date, start:d.start, end:d.end, breaks: Array.isArray(d.breaks)? d.breaks : [], break_minutes: br, overnight, expected_minutes: mins };
       });
@@ -1974,6 +1955,7 @@ export async function handleContractWeekUpdate(env, req, weekId) {
   const json = await res.json().catch(()=>[]);
   return withCORS(env, req, ok(Array.isArray(json)?json[0]:json));
 }
+
 
 export async function handleContractWeekCreateAdditional(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
@@ -15127,7 +15109,7 @@ export async function handleContractWeekPlanPatch(env, req, weekId) {
   const plan = Array.isArray(w.planned_schedule_json) ? w.planned_schedule_json.slice() : [];
   let changed = false;
 
-  // Helper to build entry
+  // Helper to build entry (infer overnight from times only; recompute expected_minutes)
   function buildEntry(d) {
     if (!d?.date) throw new Error('add[].date is required');
     const ymd = toYmd(d.date);
@@ -15136,12 +15118,12 @@ export async function handleContractWeekPlanPatch(env, req, weekId) {
       const s = parseHHMM(d.start), e = parseHHMM(d.end);
       if (s==null || e==null) throw new Error(`Invalid HH:MM for ${ymd}`);
       const br = Math.max(0, Number(d.break_minutes||0));
-      const overnight = d.overnight===true || e<=s;
+      const overnight = (e <= s); // infer only from times
       const mins = Math.max(0, minutesDiff(s, e, overnight) - br);
       const breaks = Array.isArray(d.breaks) ? d.breaks : [];
       return { date: ymd, start:d.start, end:d.end, breaks, break_minutes:br, overnight, expected_minutes:mins };
     }
-    // fallback to template
+    // fallback to template (also infer only from times)
     const jsDow = (new Date(ymd+'T00:00:00Z')).getUTCDay();
     const names = ['sun','mon','tue','wed','thu','fri','sat'];
     const tpl = c.std_schedule_json?.[names[jsDow]];
@@ -15149,7 +15131,7 @@ export async function handleContractWeekPlanPatch(env, req, weekId) {
       const s = parseHHMM(tpl.start), e = parseHHMM(tpl.end);
       if (s==null || e==null) throw new Error(`Invalid std_schedule_json time for ${names[jsDow]}`);
       const br = Math.max(0, Number(tpl.break_minutes||0));
-      const overnight = tpl.overnight===true || e<=s;
+      const overnight = (e <= s); // infer only from times
       const mins = Math.max(0, minutesDiff(s, e, overnight) - br);
       const breaks = Array.isArray(tpl.breaks) ? tpl.breaks : [];
       return { date: ymd, start:tpl.start, end:tpl.end, breaks, break_minutes:br, overnight, expected_minutes:mins };
