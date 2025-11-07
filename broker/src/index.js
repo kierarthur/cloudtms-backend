@@ -751,7 +751,7 @@ export async function handleContractsCreate(env, req) {
   };
   const bucketLabels = validateLabels(body.bucket_labels_json) || null;
 
-  // NEW: accept std_schedule_json and derive std_hours_json
+  // accept std_schedule_json and derive std_hours_json
   let std_schedule_json = null;
   let derived_hours = null;
   if (body.std_schedule_json) {
@@ -763,6 +763,29 @@ export async function handleContractsCreate(env, req) {
     }
   }
   const std_hours_json = (derived_hours || body.std_hours_json || null);
+
+  // Derive week_ending_weekday_snapshot from client if missing/invalid (fallback 0)
+  let weekEndingSnapshot = null;
+  if (Number.isInteger(Number(body.week_ending_weekday_snapshot)) &&
+      Number(body.week_ending_weekday_snapshot) >= 0 &&
+      Number(body.week_ending_weekday_snapshot) <= 6) {
+    weekEndingSnapshot = Number(body.week_ending_weekday_snapshot);
+  } else {
+    try {
+      const { rows: csRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/client_settings` +
+          `?client_id=eq.${enc(body.client_id)}` +
+          `&select=week_ending_weekday` +
+          `&order=effective_from.desc,created_at.desc&limit=1`
+      );
+      const cs = (csRows && csRows[0]) || null;
+      const we = Number(cs?.week_ending_weekday);
+      weekEndingSnapshot = (Number.isInteger(we) && we >= 0 && we <= 6) ? we : 0;
+    } catch {
+      weekEndingSnapshot = 0;
+    }
+  }
 
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts`, {
     method: 'POST',
@@ -778,11 +801,11 @@ export async function handleContractsCreate(env, req) {
       end_date: body.end_date,
       pay_method_snapshot: String(body.pay_method_snapshot).toUpperCase() === 'PAYE' ? 'PAYE' : 'UMBRELLA',
       rates_json: body.rates_json || {},
-      std_schedule_json,                         // NEW
-      std_hours_json,                            // derived or legacy
+      std_schedule_json,
+      std_hours_json,
       bucket_labels_json: bucketLabels,
       default_submission_mode: (String(body.default_submission_mode||'').toUpperCase() === 'MANUAL') ? 'MANUAL' : 'ELECTRONIC',
-      week_ending_weekday_snapshot: (Number(body.week_ending_weekday_snapshot) >= 0 && Number(body.week_ending_weekday_snapshot) <= 6) ? Number(body.week_ending_weekday_snapshot) : 0,
+      week_ending_weekday_snapshot: weekEndingSnapshot,
       auto_invoice: body.auto_invoice,
       require_reference_to_pay: body.require_reference_to_pay,
       require_reference_to_invoice: body.require_reference_to_invoice,
@@ -944,20 +967,22 @@ export async function handleContractsUpdate(env, req, contractId) {
   try { body = await parseJSONBody(req); }
   catch { return withCORS(env, req, badRequest('Invalid JSON')); }
 
-  // 🔎 log the raw incoming payload
   try { console.log('[CONTRACTS][UPDATE] incoming', { contractId, body }); } catch {}
 
-  // Load current
   const current = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=*`
   );
   if (!current) return withCORS(env, req, notFound('Contract not found'));
 
-  // Has any submitted timesheet?
   const hasSubmitted = !!(await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets?contract_id=eq.${enc(contractId)}&select=timesheet_id&limit=1`
+  ));
+
+  const hasWeeks = !!(await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&select=id&limit=1`
   ));
 
   // ----- schedule template & legacy totals -----
@@ -982,6 +1007,7 @@ export async function handleContractsUpdate(env, req, contractId) {
   }
 
   const patch = { ...schedulePatch };
+  const extraWarnings = [];
 
   // ----- always-editable bits -----
   if ('display_site' in body) patch.display_site = (body.display_site ?? '').toString().trim();
@@ -1024,7 +1050,49 @@ export async function handleContractsUpdate(env, req, contractId) {
     }
   }
 
-  // ----- start/end date edits: enforce week START/END around submitted weeks -----
+  // ----- week_ending_weekday_snapshot rules -----
+  if ('week_ending_weekday_snapshot' in body) {
+    if (hasSubmitted || hasWeeks) {
+      extraWarnings.push('Week-ending day change ignored because weeks/timesheets exist.');
+      // ignore incoming change
+    } else {
+      let we = Number(body.week_ending_weekday_snapshot);
+      if (!Number.isInteger(we) || we < 0 || we > 6) {
+        try {
+          const targetClientId = ('client_id' in patch ? patch.client_id : current.client_id);
+          const { rows: csRows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/client_settings` +
+              `?client_id=eq.${enc(targetClientId)}` +
+              `&select=week_ending_weekday` +
+              `&order=effective_from.desc,created_at.desc&limit=1`
+          );
+          const cs = (csRows && csRows[0]) || null;
+          const derived = Number(cs?.week_ending_weekday);
+          we = (Number.isInteger(derived) && derived >= 0 && derived <= 6) ? derived : 0;
+        } catch { we = 0; }
+      }
+      patch.week_ending_weekday_snapshot = we;
+    }
+  } else {
+    // If client changed and there are no weeks/TS yet, re-derive snapshot from new client
+    if (!hasSubmitted && !hasWeeks && ('client_id' in patch) && patch.client_id && patch.client_id !== current.client_id) {
+      try {
+        const { rows: csRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/client_settings` +
+            `?client_id=eq.${enc(patch.client_id)}` +
+            `&select=week_ending_weekday` +
+            `&order=effective_from.desc,created_at.desc&limit=1`
+        );
+        const cs = (csRows && csRows[0]) || null;
+        const derived = Number(cs?.week_ending_weekday);
+        patch.week_ending_weekday_snapshot = (Number.isInteger(derived) && derived >= 0 && derived <= 6) ? derived : 0;
+      } catch { patch.week_ending_weekday_snapshot = 0; }
+    }
+  }
+
+  // ----- start/end date edits: enforce week window around submitted weeks -----
   const newStart = ('start_date' in body) ? toYmd(body.start_date) : current.start_date;
   const newEnd   = ('end_date'   in body) ? toYmd(body.end_date)   : current.end_date;
   if (('start_date' in body) || ('end_date' in body)) {
@@ -1062,16 +1130,15 @@ export async function handleContractsUpdate(env, req, contractId) {
   }
 
   if (!Object.keys(patch).length) {
-    const warnings = await computePayMethodWarnings(env, current);
+    const warnings0 = await computePayMethodWarnings(env, current);
+    const warnings = Array.isArray(warnings0) ? [...warnings0, ...extraWarnings] : [...extraWarnings];
     return withCORS(env, req, ok({ contract: current, warnings }));
   }
 
   patch.updated_at = nowIso();
 
-  // 🔎 log the computed patch
   try { console.log('[CONTRACTS][UPDATE] patch', { contractId, patch }); } catch {}
 
-  // Apply contract update
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {
     method: 'PATCH',
     headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
@@ -1080,14 +1147,12 @@ export async function handleContractsUpdate(env, req, contractId) {
   if (!res.ok) return withCORS(env, req, serverError(await res.text()));
   const updated = (await res.json().catch(()=>[]))[0];
 
-  // If dates changed: remove planned weeks outside window, then regenerate missing inside
   if (('start_date' in body) || ('end_date' in body)) {
     await fetch(
       `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&timesheet_id=is.null&or=(week_ending_date.lt.${enc(newStart)},week_ending_date.gt.${enc(newEnd)})`,
       { method:'DELETE', headers: { ...sbHeaders(env), 'Prefer':'return=minimal' } }
     ).catch(()=>{});
 
-    // ✅ pass original req; wrap with try/catch
     try {
       await handleContractsGenerateWeeks(env, req, contractId);
     } catch (e) {
@@ -1095,9 +1160,11 @@ export async function handleContractsUpdate(env, req, contractId) {
     }
   }
 
-  const warnings = await computePayMethodWarnings(env, { ...current, ...updated });
+  const warnings0 = await computePayMethodWarnings(env, { ...current, ...updated });
+  const warnings = Array.isArray(warnings0) ? [...warnings0, ...extraWarnings] : [...extraWarnings];
   return withCORS(env, req, ok({ contract: updated, warnings }));
 }
+
 
 // === NEW: strict full-replace handler (PUT /api/contracts/:id) ===
 // === Strict full-replace (PUT) ===
@@ -1124,6 +1191,11 @@ export async function handleContractsReplace(env, req, contractId) {
   const hasSubmitted = !!(await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets?contract_id=eq.${enc(contractId)}&select=timesheet_id&limit=1`
+  ));
+
+  const hasWeeks = !!(await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&select=id&limit=1`
   ));
 
   const requiredKeys = ['candidate_id','client_id','start_date','end_date','pay_method_snapshot','default_submission_mode','week_ending_weekday_snapshot','rates_json'];
@@ -1158,8 +1230,53 @@ export async function handleContractsReplace(env, req, contractId) {
   // mode & weekday
   const dsm = String(body.default_submission_mode||'').toUpperCase();
   if (!['ELECTRONIC','MANUAL'].includes(dsm)) return withCORS(env, req, badRequest('default_submission_mode must be ELECTRONIC or MANUAL'));
-  const wew = Number(body.week_ending_weekday_snapshot);
-  if (!Number.isInteger(wew) || wew < 0 || wew > 6) return withCORS(env, req, badRequest('week_ending_weekday_snapshot must be 0–6'));
+
+  const extraWarnings = [];
+  let wew;
+
+  if (hasSubmitted || hasWeeks) {
+    // Ignore incoming change to snapshot
+    wew = Number(current.week_ending_weekday_snapshot ?? 0);
+    if ('week_ending_weekday_snapshot' in body && Number(body.week_ending_weekday_snapshot) !== wew) {
+      extraWarnings.push('Week-ending day change ignored because weeks/timesheets exist.');
+    }
+  } else {
+    if ('week_ending_weekday_snapshot' in body) {
+      const cand = Number(body.week_ending_weekday_snapshot);
+      if (Number.isInteger(cand) && cand >= 0 && cand <= 6) {
+        wew = cand;
+      } else {
+        try {
+          const targetClientId = body.client_id || current.client_id;
+          const { rows: csRows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/client_settings` +
+              `?client_id=eq.${enc(targetClientId)}` +
+              `&select=week_ending_weekday` +
+              `&order=effective_from.desc,created_at.desc&limit=1`
+          );
+          const cs = (csRows && csRows[0]) || null;
+          const derived = Number(cs?.week_ending_weekday);
+          wew = (Number.isInteger(derived) && derived >= 0 && derived <= 6) ? derived : 0;
+        } catch { wew = 0; }
+      }
+    } else if (body.client_id && body.client_id !== current.client_id) {
+      try {
+        const { rows: csRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/client_settings` +
+            `?client_id=eq.${enc(body.client_id)}` +
+            `&select=week_ending_weekday` +
+            `&order=effective_from.desc,created_at.desc&limit=1`
+        );
+        const cs = (csRows && csRows[0]) || null;
+        const derived = Number(cs?.week_ending_weekday);
+        wew = (Number.isInteger(derived) && derived >= 0 && derived <= 6) ? derived : 0;
+      } catch { wew = 0; }
+    } else {
+      wew = Number(current.week_ending_weekday_snapshot ?? 0);
+    }
+  }
 
   // week-ending window rule (NO aggregates)
   const newStart = toYmd(body.start_date), newEnd = toYmd(body.end_date);
@@ -1224,7 +1341,6 @@ export async function handleContractsReplace(env, req, contractId) {
   if (!res.ok) return withCORS(env, req, serverError(await res.text()));
   const updated = (await res.json().catch(()=>[]))[0];
 
-  // Only if the window or the weekday actually changed…
   const windowChanged =
     (('start_date' in body) && toYmd(body.start_date) !== (current.start_date || '')) ||
     (('end_date'   in body) && toYmd(body.end_date)   !== (current.end_date   || ''));
@@ -1240,7 +1356,7 @@ export async function handleContractsReplace(env, req, contractId) {
     ).catch(()=>{});
   }
 
-  if (windowChanged || weekdayChanged) {
+  if ((windowChanged || weekdayChanged) && !hasSubmitted) {
     try {
       await handleContractsGenerateWeeks(env, req, contractId);
     } catch (e) {
@@ -1248,7 +1364,8 @@ export async function handleContractsReplace(env, req, contractId) {
     }
   }
 
-  const warnings = await computePayMethodWarnings(env, { ...current, ...updated });
+  const warnings0 = await computePayMethodWarnings(env, { ...current, ...updated });
+  const warnings = Array.isArray(warnings0) ? [...warnings0, ...extraWarnings] : [...extraWarnings];
   return withCORS(env, req, ok({ contract: updated, warnings }));
 }
 
@@ -7792,7 +7909,6 @@ export async function handleCandidateOverrideOverlapExists(env, req) {
   }));
 }
 
-
 async function handleCreateClient(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -7801,17 +7917,15 @@ async function handleCreateClient(env, req) {
   if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
 
   try {
-    // Strip minted/immutable and any non-clients-table fields (notably client_settings)
     const {
       cli_ref,
       cli_num,
-      client_settings: clientSettingsInput,   // <- remove from clients insert
+      client_settings: clientSettingsInput,
       hr_validation_required,
       ts_reference_required,
-      ...clientOnly                            // <- only columns that actually exist on clients
+      ...clientOnly
     } = data || {};
 
-    // Create client first (DB trigger will mint CLI-00001, etc)
     const clientRes = await fetch(`${env.SUPABASE_URL}/rest/v1/clients`, {
       method: "POST",
       headers: { ...sbHeaders(env), "Prefer": "return=representation" },
@@ -7824,12 +7938,15 @@ async function handleCreateClient(env, req) {
     const clientJson = await clientRes.json().catch(() => ({}));
     const client = Array.isArray(clientJson) ? clientJson[0] : clientJson;
 
-    // Optionally seed client_settings if provided
     const csInput = {
       ...(typeof clientSettingsInput === 'object' ? clientSettingsInput : {}),
     };
     if ('hr_validation_required' in data) csInput.hr_validation_required = !!hr_validation_required;
     if ('ts_reference_required' in data) csInput.ts_reference_required = !!ts_reference_required;
+
+    // Week ending day (0..6, default 0/Sun)
+    const we = Number(csInput.week_ending_weekday);
+    csInput.week_ending_weekday = (Number.isInteger(we) && we>=0 && we<=6) ? we : 0;
 
     let client_settings;
     if (Object.keys(csInput).length) {
@@ -7846,7 +7963,6 @@ async function handleCreateClient(env, req) {
       });
       if (!csRes.ok) {
         const err = await csRes.text();
-        // don't fail client creation if settings insert fails; return warning
         return withCORS(env, req, ok({ client, warning: `Client created but client_settings insert failed: ${err}` }));
       }
       const csJson = await csRes.json().catch(() => ({}));
@@ -7923,7 +8039,7 @@ async function handleUpdateClient(env, req, clientId) {
   const { cli_ref, cli_num, ...data } = raw;
 
   try {
-    // --- Load existing client + latest client_settings for comparison
+    // --- Load existing client + latest client_settings for comparison (now also selects week_ending_weekday)
     const { rows: beforeClientRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/clients` +
@@ -7937,7 +8053,7 @@ async function handleUpdateClient(env, req, clientId) {
       env,
       `${env.SUPABASE_URL}/rest/v1/client_settings` +
       `?client_id=eq.${encodeURIComponent(clientId)}` +
-      `&select=id,hr_validation_required,ts_reference_required,effective_from,timezone_id,day_start,day_end,night_start,night_end,bh_source,bh_list,bh_feed_url,created_at,updated_at` +
+      `&select=id,hr_validation_required,ts_reference_required,effective_from,timezone_id,day_start,day_end,night_start,night_end,bh_source,bh_list,bh_feed_url,week_ending_weekday,created_at,updated_at` +
       `&order=effective_from.desc,created_at.desc&limit=1`
     );
     const beforeCs = beforeCsRows?.[0] || null;
@@ -7948,6 +8064,14 @@ async function handleUpdateClient(env, req, clientId) {
     };
     if ('hr_validation_required' in data) csInput.hr_validation_required = !!data.hr_validation_required;
     if ('ts_reference_required' in data) csInput.ts_reference_required = !!data.ts_reference_required;
+
+    // Accept top-level week_ending_weekday or inside client_settings; validate 0..6 (default 0 if provided but invalid)
+    const weIn = (data.week_ending_weekday ?? csInput.week_ending_weekday);
+    if (weIn !== undefined) {
+      let we = Number(weIn);
+      if (!Number.isInteger(we) || we < 0 || we > 6) we = 0;
+      csInput.week_ending_weekday = we;
+    }
 
     const { hr_validation_required, ts_reference_required, client_settings, ...clientPatchRaw } = data;
 
@@ -7985,7 +8109,7 @@ async function handleUpdateClient(env, req, clientId) {
       client = Array.isArray(json) ? json[0] : json;
     }
 
-    // --- Upsert/patch client_settings if provided
+    // --- Upsert/patch client_settings if provided (now includes week_ending_weekday)
     let csChanged = false;
     let client_settings_updated = null;
     if (Object.keys(csInput).length) {
@@ -7995,11 +8119,12 @@ async function handleUpdateClient(env, req, clientId) {
       };
       const hasBefore = !!beforeCs?.id;
 
-      const beforeHr = !!(beforeCs?.hr_validation_required ?? false);
+      const beforeHr  = !!(beforeCs?.hr_validation_required ?? false);
       const beforeRef = !!(beforeCs?.ts_reference_required ?? false);
-      const nextHr = !!(desired.hr_validation_required ?? false);
-      const nextRef = !!(desired.ts_reference_required ?? false);
+      const nextHr    = !!(desired.hr_validation_required ?? false);
+      const nextRef   = !!(desired.ts_reference_required ?? false);
       csChanged = (beforeHr !== nextHr) || (beforeRef !== nextRef);
+      // week_ending_weekday does not affect TS financial staleness; no change to csChanged.
 
       if (hasBefore) {
         const csRes = await fetch(
@@ -8036,7 +8161,7 @@ async function handleUpdateClient(env, req, clientId) {
       }
     }
 
-    // --- Change detection for timesheet financials staleness
+    // --- Change detection for timesheet financials staleness (unchanged logic)
     const policyChanged =
       (data.vat_chargeable != null && !!data.vat_chargeable !== !!beforeClient.vat_chargeable) ||
       (data.payment_terms_days != null && Number(data.payment_terms_days) !== Number(beforeClient.payment_terms_days));
@@ -8202,11 +8327,26 @@ export async function handleClientsGet(env, req, clientId) {
     env,
     `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${enc(clientId)}&select=*&limit=1`
   );
-  const row = (rows && rows[0]) || null;
-  if (!row) return withCORS(env, req, notFound('Client not found'));
-  return withCORS(env, req, ok(row));
-}
+  const client = (rows && rows[0]) || null;
+  if (!client) return withCORS(env, req, notFound('Client not found'));
 
+  // Also return the latest client_settings (so FE can derive week-ending day)
+  const { rows: csRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/client_settings` +
+      `?client_id=eq.${enc(client.id)}` +
+      `&select=id,hr_validation_required,ts_reference_required,effective_from,timezone_id,day_start,day_end,night_start,night_end,bh_source,bh_list,bh_feed_url,week_ending_weekday,created_at,updated_at` +
+      `&order=effective_from.desc,created_at.desc&limit=1`
+  );
+  const client_settings = (csRows && csRows[0]) || null;
+
+  // Surface week_ending_weekday at top-level for convenience, and include nested client_settings
+  const week_ending_weekday = (client_settings && Number.isInteger(Number(client_settings.week_ending_weekday)))
+    ? Number(client_settings.week_ending_weekday)
+    : (Number.isInteger(Number(client.week_ending_weekday)) ? Number(client.week_ending_weekday) : 0);
+
+  return withCORS(env, req, ok({ ...client, week_ending_weekday, client_settings }));
+}
 
 async function handleUpdateHospital(env, req, clientId, hospitalId) {
   const user = await requireUser(env, req, ['admin']);
