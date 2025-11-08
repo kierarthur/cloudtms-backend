@@ -1092,10 +1092,78 @@ export async function handleContractsUpdate(env, req, contractId) {
     }
   }
 
-  // ----- start/end date edits: enforce week window around submitted weeks -----
+  // ----- start/end date edits: enforce *real timesheets* boundary, then existing week rules -----
   const newStart = ('start_date' in body) ? toYmd(body.start_date) : current.start_date;
   const newEnd   = ('end_date'   in body) ? toYmd(body.end_date)   : current.end_date;
+
   if (('start_date' in body) || ('end_date' in body)) {
+    // === Real timesheets boundary guard ===
+    let tsRows = [];
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?contract_id=eq.${enc(contractId)}` +
+        `&select=id,timesheet_id,work_date,status,client_id`
+      );
+      tsRows = rows || [];
+    } catch (_) {}
+
+    // Exclude drafts/voids/cancelled by convention; if status missing, treat as real
+    const badStatuses = new Set(['DRAFT','VOID','VOIDED','CANCELLED','CANCELED']);
+    const realTs = (tsRows || []).filter(r => {
+      const st = String(r?.status || '').toUpperCase();
+      return !st || !badStatuses.has(st);
+    });
+
+    let min_ts_date = null, max_ts_date = null;
+    for (const r of realTs) {
+      const d = r?.work_date || null;
+      if (!d) continue;
+      if (!min_ts_date || d < min_ts_date) min_ts_date = d;
+      if (!max_ts_date || d > max_ts_date) max_ts_date = d;
+    }
+
+    const violations = realTs.filter(r => {
+      const d = r?.work_date;
+      if (!d) return false;
+      if (newStart && d < newStart) return true;
+      if (newEnd && d > newEnd) return true;
+      return false;
+    });
+
+    if (violations.length) {
+      // Enrich with client names (best-effort)
+      const clientIds = [...new Set(violations.map(v => v?.client_id).filter(Boolean))];
+      let namesById = {};
+      if (clientIds.length) {
+        try {
+          const { rows: cRows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/clients?id=in.(${clientIds.map(enc).join(',')})&select=id,name`
+          );
+          for (const c of (cRows||[])) namesById[String(c.id)] = c.name || null;
+        } catch {}
+      }
+
+      const payload = {
+        ok: false,
+        min_ts_date,
+        max_ts_date,
+        violations: violations.map(v => ({
+          timesheet_id: v?.timesheet_id ?? v?.id ?? null,
+          date: v?.work_date ?? null,
+          status: v?.status ?? null,
+          client_id: v?.client_id ?? null,
+          client_name: namesById[String(v?.client_id)] || null
+        }))
+      };
+      return withCORS(env, req,
+        new Response(JSON.stringify(payload), { status: 409, headers: { 'content-type': 'application/json' } })
+      );
+    }
+
+    // === Existing submitted week envelope (keep existing guard) ===
     let minWE = null, maxWE = null;
     try {
       const { rows: minRows } = await sbFetch(
@@ -1165,6 +1233,92 @@ export async function handleContractsUpdate(env, req, contractId) {
   return withCORS(env, req, ok({ contract: updated, warnings }));
 }
 
+// Lightweight checker for FE: returns real-timesheet boundary info for proposed window
+export async function handleContractsCheckTimesheetBoundary(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let body;
+  try { body = await parseJSONBody(req); }
+  catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  const contract_id = body?.contract_id || body?.id || null;
+  const startIsoRaw = body?.start_date || body?.start || null;
+  const endIsoRaw   = body?.end_date   || body?.end   || null;
+  if (!contract_id) return withCORS(env, req, badRequest('contract_id is required'));
+  if (!startIsoRaw || !endIsoRaw) return withCORS(env, req, badRequest('start_date and end_date are required'));
+
+  const start_date = toYmd(startIsoRaw);
+  const end_date   = toYmd(endIsoRaw);
+  if (!start_date || !end_date) return withCORS(env, req, badRequest('Invalid start_date or end_date'));
+  if (start_date > end_date)    return withCORS(env, req, badRequest('start_date cannot be after end_date'));
+
+  let tsRows = [];
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?contract_id=eq.${enc(contract_id)}` +
+      `&select=id,timesheet_id,work_date,status,client_id`
+    );
+    tsRows = rows || [];
+  } catch (e) {
+    return withCORS(env, req, serverError('Boundary check failed to load timesheets'));
+  }
+
+  // Filter to real timesheets (exclude drafts/voids/cancelled by convention)
+  const badStatuses = new Set(['DRAFT','VOID','VOIDED','CANCELLED','CANCELED']);
+  const realTs = (tsRows || []).filter(r => {
+    const st = String(r?.status || '').toUpperCase();
+    return !st || !badStatuses.has(st);
+  });
+
+  let min_ts_date = null, max_ts_date = null;
+  for (const r of realTs) {
+    const d = r?.work_date || null;
+    if (!d) continue;
+    if (!min_ts_date || d < min_ts_date) min_ts_date = d;
+    if (!max_ts_date || d > max_ts_date) max_ts_date = d;
+  }
+
+  const violations = realTs.filter(r => {
+    const d = r?.work_date;
+    if (!d) return false;
+    if (d < start_date) return true;
+    if (d > end_date)   return true;
+    return false;
+  });
+
+  // Enrich with client names (best-effort)
+  let namesById = {};
+  if (violations.length) {
+    const clientIds = [...new Set(violations.map(v => v?.client_id).filter(Boolean))];
+    if (clientIds.length) {
+      try {
+        const { rows: cRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/clients?id=in.(${clientIds.map(enc).join(',')})&select=id,name`
+        );
+        for (const c of (cRows||[])) namesById[String(c.id)] = c.name || null;
+      } catch {}
+    }
+  }
+
+  const payload = {
+    ok: violations.length === 0,
+    min_ts_date,
+    max_ts_date,
+    violations: violations.map(v => ({
+      timesheet_id: v?.timesheet_id ?? v?.id ?? null,
+      date: v?.work_date ?? null,
+      status: v?.status ?? null,
+      client_id: v?.client_id ?? null,
+      client_name: namesById[String(v?.client_id)] || null
+    }))
+  };
+
+  return withCORS(env, req, ok(payload));
+}
 
 // === NEW: strict full-replace handler (PUT /api/contracts/:id) ===
 // === Strict full-replace (PUT) ===
@@ -6958,7 +7112,6 @@ async function handleAuthLogin(env, req) {
     user: { id: user.id, email: user.email, role: user.role }
   }), { status: 200, headers });
 }
-
 async function handleAuthRefresh(env, req) {
   const pre = preflightIfNeeded(env, req); if (pre) return pre;
   const cookies = parseCookies(req);
@@ -16229,7 +16382,9 @@ if (req.method === 'GET' && p === '/api/pickers/clients/id-list')      return wi
         if (m && req.method === 'PATCH')  return handleContractsUpdate(env, req, m.id);
         if (m && req.method === 'DELETE') return handleContractsDelete(env, req, m.id);
         if (m && req.method === 'PUT')    return handleContractsReplace(env, req, m.id); 
+     
       }
+
       {
         const m = matchPath(p, '/api/contracts/:id/generate-weeks');
         if (m && req.method === 'POST') return handleContractsGenerateWeeks(env, req, m.id);
@@ -16246,6 +16401,10 @@ if (req.method === 'GET' && p === '/api/pickers/clients/id-list')      return wi
         const m = matchPath(p, '/api/contracts/:id/skip-weeks');
         if (m && req.method === 'POST') return handleContractsSkipWeeks(env, req, m.id);
       }
+      // POST /api/contracts/check-timesheet-boundary
+if (req.method === 'POST' && p === '/api/contracts/check-timesheet-boundary') {
+  return await handleContractsCheckTimesheetBoundary(env, req);
+}
       // POST /api/contracts/check-overlap
       if (req.method === 'POST' && p === '/api/contracts/check-overlap') {
         return await handleContractsCheckOverlap(env, req);
