@@ -983,7 +983,6 @@ export async function handleContractsUpdate(env, req, contractId) {
     `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&select=id&limit=1`
   ));
 
-  // ----- schedule template & legacy totals -----
   let schedulePatch = {};
   if ('std_schedule_json' in body) {
     try {
@@ -1007,7 +1006,6 @@ export async function handleContractsUpdate(env, req, contractId) {
   const patch = { ...schedulePatch };
   const extraWarnings = [];
 
-  // ----- always-editable bits -----
   if ('display_site' in body) patch.display_site = (body.display_site ?? '').toString().trim();
   if ('ward_hint'    in body) patch.ward_hint    = (body.ward_hint ?? '').toString().trim();
   if ('default_submission_mode' in body) {
@@ -1027,7 +1025,6 @@ export async function handleContractsUpdate(env, req, contractId) {
   if ('require_reference_to_pay' in body)     patch.require_reference_to_pay = clampBool(body.require_reference_to_pay, current.require_reference_to_pay);
   if ('require_reference_to_invoice' in body) patch.require_reference_to_invoice = clampBool(body.require_reference_to_invoice, current.require_reference_to_invoice);
 
-  // ----- candidate/client/rates/pay_method: only when NO submitted TS -----
   if (hasSubmitted) {
     if ('candidate_id' in body || 'client_id' in body || 'rates_json' in body || 'pay_method_snapshot' in body) {
       return withCORS(env, req, badRequest('Cannot change candidate/client/rates/pay_method after timesheets have been submitted'));
@@ -1048,11 +1045,9 @@ export async function handleContractsUpdate(env, req, contractId) {
     }
   }
 
-  // ----- week_ending_weekday_snapshot rules -----
   if ('week_ending_weekday_snapshot' in body) {
     if (hasSubmitted || hasWeeks) {
       extraWarnings.push('Week-ending day change ignored because weeks/timesheets exist.');
-      // ignore incoming change
     } else {
       let we = Number(body.week_ending_weekday_snapshot);
       if (!Number.isInteger(we) || we < 0 || we > 6) {
@@ -1073,7 +1068,6 @@ export async function handleContractsUpdate(env, req, contractId) {
       patch.week_ending_weekday_snapshot = we;
     }
   } else {
-    // If client changed and there are no weeks/TS yet, re-derive snapshot from new client
     if (!hasSubmitted && !hasWeeks && ('client_id' in patch) && patch.client_id && patch.client_id !== current.client_id) {
       try {
         const { rows: csRows } = await sbFetch(
@@ -1090,12 +1084,10 @@ export async function handleContractsUpdate(env, req, contractId) {
     }
   }
 
-  // ----- start/end date edits: enforce *real timesheets* boundary, then existing week rules -----
   const newStart = ('start_date' in body) ? toYmd(body.start_date) : current.start_date;
-  const newEnd   = ('end_date'   in body) ? toYmd(body.end_date)   : current.end_date;
+  const newEnd   = ('end_date' in body) ? toYmd(body.end_date)   : current.end_date;
 
   if (('start_date' in body) || ('end_date' in body)) {
-    // === Real timesheets boundary guard ===
     let tsRows = [];
     try {
       const { rows } = await sbFetch(
@@ -1107,7 +1099,6 @@ export async function handleContractsUpdate(env, req, contractId) {
       tsRows = rows || [];
     } catch (_) {}
 
-    // Exclude drafts/voids/cancelled by convention; if status missing, treat as real
     const badStatuses = new Set(['DRAFT','VOID','VOIDED','CANCELLED','CANCELED']);
     const realTs = (tsRows || []).filter(r => {
       const st = String(r?.status || '').toUpperCase();
@@ -1131,7 +1122,6 @@ export async function handleContractsUpdate(env, req, contractId) {
     });
 
     if (violations.length) {
-      // Enrich with client names (best-effort)
       const clientIds = [...new Set(violations.map(v => v?.client_id).filter(Boolean))];
       let namesById = {};
       if (clientIds.length) {
@@ -1161,7 +1151,6 @@ export async function handleContractsUpdate(env, req, contractId) {
       );
     }
 
-    // === Existing submitted week envelope (keep existing guard) ===
     let minWE = null, maxWE = null;
     try {
       const { rows: minRows } = await sbFetch(
@@ -1195,6 +1184,10 @@ export async function handleContractsUpdate(env, req, contractId) {
     patch.end_date   = newEnd;
   }
 
+  const windowChanged =
+    (('start_date' in body) && toYmd(body.start_date) !== (current.start_date || '')) ||
+    (('end_date'   in body) && toYmd(body.end_date)   !== (current.end_date   || ''));
+
   if (!Object.keys(patch).length) {
     const warnings0 = await computePayMethodWarnings(env, current);
     const warnings = Array.isArray(warnings0) ? [...warnings0, ...extraWarnings] : [...extraWarnings];
@@ -1213,16 +1206,17 @@ export async function handleContractsUpdate(env, req, contractId) {
   if (!res.ok) return withCORS(env, req, serverError(await res.text()));
   const updated = (await res.json().catch(()=>[]))[0];
 
-  if (('start_date' in body) || ('end_date' in body)) {
+  if (windowChanged) {
     await fetch(
       `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&timesheet_id=is.null&or=(week_ending_date.lt.${enc(newStart)},week_ending_date.gt.${enc(newEnd)})`,
       { method:'DELETE', headers: { ...sbHeaders(env), 'Prefer':'return=minimal' } }
     ).catch(()=>{});
-
-    try {
-      await handleContractsGenerateWeeks(env, req, contractId);
-    } catch (e) {
-      try { console.warn('[CONTRACTS][UPDATE] regenerate weeks failed', { contractId, error: e?.message || String(e) }); } catch {}
+    if (!body.skip_generate_weeks) {
+      try {
+        await handleContractsGenerateWeeks(env, req, contractId);
+      } catch (e) {
+        try { console.warn('[CONTRACTS][UPDATE] regenerate weeks failed', { contractId, error: e?.message || String(e) }); } catch {}
+      }
     }
   }
 
@@ -1354,7 +1348,6 @@ export async function handleContractsReplace(env, req, contractId) {
   const missing = requiredKeys.filter(k => !(k in body));
   if (missing.length) return withCORS(env, req, badRequest(`Missing required fields: ${missing.join(', ')}`));
 
-  // schedule template (optional) and derived hours
   let std_schedule_json = null, std_hours_json = null;
   if ('std_schedule_json' in body) {
     try {
@@ -1369,7 +1362,6 @@ export async function handleContractsReplace(env, req, contractId) {
     std_hours_json = current.std_hours_json ?? null;
   }
 
-  // lock candidate/client/rates/pay_method if submitted
   if (hasSubmitted) {
     if (body.candidate_id !== current.candidate_id) return withCORS(env, req, badRequest('Cannot change candidate after timesheets have been submitted'));
     if (body.client_id    !== current.client_id)    return withCORS(env, req, badRequest('Cannot change client after timesheets have been submitted'));
@@ -1379,7 +1371,6 @@ export async function handleContractsReplace(env, req, contractId) {
     }
   }
 
-  // mode & weekday
   const dsm = String(body.default_submission_mode||'').toUpperCase();
   if (!['ELECTRONIC','MANUAL'].includes(dsm)) return withCORS(env, req, badRequest('default_submission_mode must be ELECTRONIC or MANUAL'));
 
@@ -1387,7 +1378,6 @@ export async function handleContractsReplace(env, req, contractId) {
   let wew;
 
   if (hasSubmitted || hasWeeks) {
-    // Ignore incoming change to snapshot
     wew = Number(current.week_ending_weekday_snapshot ?? 0);
     if ('week_ending_weekday_snapshot' in body && Number(body.week_ending_weekday_snapshot) !== wew) {
       extraWarnings.push('Week-ending day change ignored because weeks/timesheets exist.');
@@ -1430,7 +1420,6 @@ export async function handleContractsReplace(env, req, contractId) {
     }
   }
 
-  // week-ending window rule (NO aggregates)
   const newStart = toYmd(body.start_date), newEnd = toYmd(body.end_date);
   let minWE = null, maxWE = null;
   try {
@@ -1508,7 +1497,7 @@ export async function handleContractsReplace(env, req, contractId) {
     ).catch(()=>{});
   }
 
-  if ((windowChanged || weekdayChanged) && !hasSubmitted) {
+  if ((windowChanged || weekdayChanged) && !hasSubmitted && !body.skip_generate_weeks) {
     try {
       await handleContractsGenerateWeeks(env, req, contractId);
     } catch (e) {
