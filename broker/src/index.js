@@ -1539,12 +1539,10 @@ export async function handleContractsDelete(env, req, contractId) {
   if (!res.ok) return withCORS(env, req, serverError(await res.text()));
   return withCORS(env, req, ok({ deleted: true }));
 }
-
 export async function handleContractsGenerateWeeks(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
-  // 1) Load contract window + defaults
   const c = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=*`
@@ -1552,10 +1550,10 @@ export async function handleContractsGenerateWeeks(env, req, contractId) {
   if (!c) return withCORS(env, req, notFound('Contract not found'));
 
   const wew = Number(c.week_ending_weekday_snapshot || 0);
-  const allWE = enumerateWeekEndings(c.start_date, c.end_date, wew);
+  const endWE = computeWeekEndingInclusive(c.end_date, wew);
+  const allWE = enumerateWeekEndings(c.start_date, endWE, wew);
   const todayYmd = toYmd(new Date());
 
-  // 2) Read existing BASE weeks (additional_seq = 0) so we don't overwrite them
   let existing = [];
   try {
     const { rows } = await sbFetch(
@@ -1571,17 +1569,17 @@ export async function handleContractsGenerateWeeks(env, req, contractId) {
   }
   const existingSet = new Set((existing || []).map(r => r.week_ending_date));
 
-  // 3) Determine which week-endings are missing
   const missingWE = allWE.filter(we => !existingSet.has(we));
   if (!missingWE.length) {
     return withCORS(env, req, ok({ generated: 0 }));
   }
 
-  // 4) Build INSERT rows ONLY for missing base weeks (do not touch existing)
   const rowsToInsert = missingWE.map(we => {
     let planned_schedule_json = null;
     try {
-      planned_schedule_json = buildPlannedScheduleFromTemplate(c.std_schedule_json || null, we);
+      const raw = buildPlannedScheduleFromTemplate(c.std_schedule_json || null, we);
+      planned_schedule_json = clampPlannedToWindow(raw, we, wew, c.start_date, endWE, c.end_date);
+      if (planned_schedule_json && !Object.keys(planned_schedule_json).length) planned_schedule_json = null;
     } catch {}
     return {
       contract_id: c.id,
@@ -1596,7 +1594,6 @@ export async function handleContractsGenerateWeeks(env, req, contractId) {
     };
   });
 
-  // 5) Insert missing rows (no upsert → no overwrite)
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks`, {
     method: 'POST',
     headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
@@ -1606,6 +1603,30 @@ export async function handleContractsGenerateWeeks(env, req, contractId) {
   const inserted = await res.json().catch(() => []);
 
   return withCORS(env, req, ok({ generated: inserted.length }));
+}
+
+function computeWeekEndingInclusive(ymd, wew) {
+  const d = toDate(ymd);
+  const dow = d.getUTCDay();
+  const delta = ((wew - dow) + 7) % 7;
+  const end = addDays(toYmd(d), delta);
+  return end;
+}
+
+function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEndWEYmd, windowEndYmd) {
+  if (!plan || typeof plan !== 'object') return plan;
+  const order = ['mon','tue','wed','thu','fri','sat','sun'];
+  const offsets = { sun: 0, sat: -1, fri: -2, thu: -3, wed: -4, tue: -5, mon: -6 };
+  const result = {};
+  for (const k of order) {
+    if (!plan[k]) continue;
+    const dayYmd = addDays(weekEndingYmd, offsets[k]);
+    if (dayYmd < windowStartYmd) continue;
+    if (weekEndingYmd > windowEndWEYmd) continue;
+    if (dayYmd > windowEndYmd) continue;
+    result[k] = plan[k];
+  }
+  return result;
 }
 
 export async function handleContractsCloneAndExtend(env, req, contractId) {
