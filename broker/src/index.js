@@ -173,14 +173,12 @@ function buildPlannedScheduleFromTemplate(stdSched, weekEndingYmd) {
     const dCfg = stdSched[k];
     const date = mapDateByDow[jsDow];
     if (!date) continue;
-    if (!dCfg) {
-      days.push({ date, start:null, end:null, breaks:[], break_minutes:0, overnight:false, expected_minutes:0 });
-      continue;
-    }
+    // Skip non-templated weekdays completely (no placeholder rows)
+    if (!dCfg) continue;
     const s = parseHHMM(dCfg.start), e = parseHHMM(dCfg.end);
     if (s==null || e==null) throw new Error(`Invalid HH:MM in std_schedule_json.${k}`);
     const br = Math.max(0, Number(dCfg.break_minutes||0));
-    const overnight = (e<=s);                                  // ← infer overnight
+    const overnight = (e<=s);
     const mins = Math.max(0, minutesDiff(s, e, overnight) - br);
     days.push({
       date, start: dCfg.start, end: dCfg.end,
@@ -1621,7 +1619,6 @@ export async function handleContractsGenerateWeeks(env, req, contractId) {
   return withCORS(env, req, ok({ generated: inserted.length }));
 }
 
-
 export async function handleContractsCloneAndExtend(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -1630,32 +1627,29 @@ export async function handleContractsCloneAndExtend(env, req, contractId) {
   try { body = await parseJSONBody(req); } 
   catch { return withCORS(env, req, badRequest('Invalid JSON')); }
 
-  // Load current contract (we need dates, ids, schedule, etc.)
   const cur = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=*`
   );
   if (!cur) return withCORS(env, req, notFound('Contract not found'));
 
-  // Required dates for the successor
   const newStart = toYmd(body.new_start_date || cur.end_date);
   const newEnd   = toYmd(body.new_end_date   || cur.end_date);
   if (!newStart || !newEnd) {
     return withCORS(env, req, badRequest('new_start_date and new_end_date required'));
   }
+  if (newStart > newEnd) {
+    return withCORS(env, req, badRequest('new_start_date must be on or before new_end_date'));
+  }
 
-  // Close current at day before newStart
   const closeD  = new Date(newStart + 'T00:00:00Z'); 
   closeD.setUTCDate(closeD.getUTCDate() - 1);
   const closeTo = toYmd(closeD);
 
-  // Guard: cannot close before the contract started
   if (closeTo < cur.start_date) {
     return withCORS(env, req, badRequest('Invalid new_start_date (before original start)'));
   }
 
-  // === NEW: Block early-close if any submitted TS exists at/after newStart (WE-based rule)
-  // If there is any contract_week with a timesheet and week_ending_date >= newStart, we cannot close early.
   const submittedAfter = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
@@ -1666,21 +1660,17 @@ export async function handleContractsCloneAndExtend(env, req, contractId) {
     return withCORS(env, req, badRequest('Cannot close: submitted timesheets exist on or after the new start date.'));
   }
 
-  // Prune planned weeks no longer required (>= newStart and no TS)
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
     `?contract_id=eq.${enc(cur.id)}&timesheet_id=is.null&week_ending_date=gte.${enc(newStart)}`,
     { method:'DELETE', headers:{ ...sbHeaders(env), 'Prefer':'return=minimal' } }
   ).catch(()=>{});
 
-  // Close current contract (safe now because no submitted weeks are beyond)
   await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {
     method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
     body: JSON.stringify({ end_date: closeTo, updated_at: nowIso() })
   });
 
-  // Successor: same candidate/client; optionally override pay_method/rates/mode/weekday/schedule
-  // Carry forward std_schedule_json (canonical); derive std_hours_json if schedule provided.
   let successor_std_schedule = ('std_schedule_json' in body) ? (body.std_schedule_json || null) : (cur.std_schedule_json || null);
   let successor_std_hours    = null;
   if (successor_std_schedule) {
@@ -1690,7 +1680,6 @@ export async function handleContractsCloneAndExtend(env, req, contractId) {
       return withCORS(env, req, badRequest(e.message || 'Invalid std_schedule_json for successor'));
     }
   } else {
-    // fall back to legacy totals if no schedule provided
     successor_std_hours = ('std_hours_json' in body) ? (body.std_hours_json || null) : (cur.std_hours_json || null);
   }
 
@@ -1705,7 +1694,6 @@ export async function handleContractsCloneAndExtend(env, req, contractId) {
     start_date: newStart,
     end_date:   newEnd,
 
-    // Optional overrides for successor (allowed; it’s a new contract)
     pay_method_snapshot: (body.pay_method_snapshot || cur.pay_method_snapshot),
     rates_json:          body.rates_json || cur.rates_json || {},
     default_submission_mode: body.default_submission_mode || cur.default_submission_mode,
@@ -1731,7 +1719,6 @@ export async function handleContractsCloneAndExtend(env, req, contractId) {
   if (!ins.ok) return withCORS(env, req, serverError(await ins.text()));
   const successor = (await ins.json().catch(()=>[]))[0];
 
-  // Generate successor weeks (with planned_schedule_json)
   await handleContractsGenerateWeeks(env, new Request(''), successor.id);
 
   return withCORS(env, req, ok({ closed_at: closeTo, successor }));
