@@ -1857,7 +1857,7 @@ export async function handleContractsCalendar(env, req, contractId) {
     if (!d || !d.start || !d.end) return 0;
     const s = parseHHMM(d.start), e = parseHHMM(d.end);
     if (s==null || e==null) return 0;
-    const overnight = (e<=s);                             // ← infer overnight
+    const overnight = (e<=s);
     let mins = minutesDiff(s, e, overnight);
     if (Array.isArray(d.breaks) && d.breaks.length) {
       mins -= d.breaks.reduce((acc,b) => {
@@ -1889,7 +1889,11 @@ export async function handleContractsCalendar(env, req, contractId) {
 
   const dayItems = [];
   for (const w of (weeks||[])) {
-    const plan = Array.isArray(w.planned_schedule_json) ? w.planned_schedule_json : [];
+    let rawPlan = w.planned_schedule_json;
+    if (typeof rawPlan === 'string') {
+      try { rawPlan = JSON.parse(rawPlan); } catch { rawPlan = []; }
+    }
+    const plan = Array.isArray(rawPlan) ? rawPlan : [];
     const ts   = w.timesheet_id ? tsMap[w.timesheet_id] : null;
     const fin  = w.timesheet_id ? finMap[w.timesheet_id] : null;
     const hasPerDayActual = !!(ts && Array.isArray(ts.actual_schedule_json) && ts.actual_schedule_json.length);
@@ -1900,7 +1904,7 @@ export async function handleContractsCalendar(env, req, contractId) {
 
       const expected = Number(d?.expected_minutes || 0);
       const actual   = hasPerDayActual ? computeActualMinutesForDate(ts, ymd) : 0;
-      const state    = deriveState(true /* plannedPresent */, actual, ts, fin);
+      const state    = deriveState(true, actual, ts, fin);
 
       dayItems.push({
         date: ymd,
@@ -1920,8 +1924,6 @@ export async function handleContractsCalendar(env, req, contractId) {
   return withCORS(env, req, ok({ from: winStart, to: winEnd, granularity: 'day', items: dayItems }));
 }
 
-
-
 export async function handleCandidateCalendar(env, req, candidateId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -1933,7 +1935,6 @@ export async function handleCandidateCalendar(env, req, candidateId) {
   if (!fromQ || !toQ) return withCORS(env, req, badRequest('from and to are required'));
   const winStart = toYmd(fromQ), winEnd = toYmd(toQ);
 
-  // ---- 1) Contracts overlapping the window
   const { rows: cons } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/contracts?candidate_id=eq.${enc(candidateId)}` +
@@ -1943,7 +1944,6 @@ export async function handleCandidateCalendar(env, req, candidateId) {
   const contractIds = (cons||[]).map(c => c.id);
   const contractsById = Object.fromEntries((cons||[]).map(c => [c.id, c]));
 
-  // ---- 1a) Resolve client names for those contracts
   const clientIds = [...new Set((cons||[]).map(c => c.client_id).filter(Boolean))];
   let clientNameById = {};
   if (clientIds.length) {
@@ -1955,7 +1955,6 @@ export async function handleCandidateCalendar(env, req, candidateId) {
     clientNameById = Object.fromEntries((cliRows||[]).map(r => [r.id, r.name || null]));
   }
 
-  // ---- 2) contract_weeks with plan (for booked/planned days)
   let plannedDayItems = [];
   if (contractIds.length) {
     const inList = contractIds.map(enc).join(',');
@@ -1967,7 +1966,11 @@ export async function handleCandidateCalendar(env, req, candidateId) {
     );
 
     for (const w of (weeks||[])) {
-      const plan = Array.isArray(w.planned_schedule_json) ? w.planned_schedule_json : [];
+      let rawPlan = w.planned_schedule_json;
+      if (typeof rawPlan === 'string') {
+        try { rawPlan = JSON.parse(rawPlan); } catch { rawPlan = []; }
+      }
+      const plan = Array.isArray(rawPlan) ? rawPlan : [];
       for (const d of plan) {
         const ymd = d?.date || null;
         if (!ymd || ymd < winStart || ymd > winEnd) continue;
@@ -1993,7 +1996,6 @@ export async function handleCandidateCalendar(env, req, candidateId) {
     }
   }
 
-  // ---- 3) Candidate timesheets (weekly + daily) in window
   const tsOr = `or=(and(week_ending_date.gte.${enc(winStart)},week_ending_date.lte.${enc(addDays(winEnd,6))}),and(worked_start_iso.gte.${enc(winStart+'T00:00:00Z')},worked_start_iso.lte.${enc(winEnd+'T23:59:59Z')}))`;
   const { rows: tsRows } = await sbFetch(
     env,
@@ -2043,7 +2045,6 @@ export async function handleCandidateCalendar(env, req, candidateId) {
 
   const dayItems = [...plannedDayItems];
 
-  // Weekly TS with per-day actuals
   for (const t of (tsRows||[])) {
     const fin = finMap[t.timesheet_id];
     if (t.week_ending_date && Array.isArray(t.actual_schedule_json) && t.actual_schedule_json.length) {
@@ -2087,7 +2088,6 @@ export async function handleCandidateCalendar(env, req, candidateId) {
     }
   }
 
-  // Weekly TS totals-only (no per-day actuals): lift week state onto planned days of that week
   const weeklyTotalsOnly = (tsRows||[]).filter(t => t.week_ending_date && (!t.actual_schedule_json || !t.actual_schedule_json.length));
   if (weeklyTotalsOnly.length && plannedDayItems.length) {
     for (const t of weeklyTotalsOnly) {
@@ -2106,7 +2106,6 @@ export async function handleCandidateCalendar(env, req, candidateId) {
     }
   }
 
-  // Daily timesheets (no contract weeks)
   for (const t of (tsRows||[])) {
     if (!t.week_ending_date) {
       const fin = finMap[t.timesheet_id];
