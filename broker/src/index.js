@@ -957,6 +957,7 @@ export async function handleContractsGet(env, req, contractId) {
   const contractOut = { ...contract, candidate_display, client_name };
   return withCORS(env, req, ok({ contract: contractOut, counts, weeks: weeks || [] }));
 }
+
 export async function handleContractsUpdate(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -1225,6 +1226,7 @@ export async function handleContractsUpdate(env, req, contractId) {
   return withCORS(env, req, ok({ contract: updated, warnings }));
 }
 
+
 // Lightweight checker for FE: returns real-timesheet boundary info for proposed window
 export async function handleContractsCheckTimesheetBoundary(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -1258,7 +1260,6 @@ export async function handleContractsCheckTimesheetBoundary(env, req) {
     return withCORS(env, req, serverError('Boundary check failed to load timesheets'));
   }
 
-  // Filter to real timesheets (exclude drafts/voids/cancelled by convention)
   const badStatuses = new Set(['DRAFT','VOID','VOIDED','CANCELLED','CANCELED']);
   const realTs = (tsRows || []).filter(r => {
     const st = String(r?.status || '').toUpperCase();
@@ -1281,7 +1282,6 @@ export async function handleContractsCheckTimesheetBoundary(env, req) {
     return false;
   });
 
-  // Enrich with client names (best-effort)
   let namesById = {};
   if (violations.length) {
     const clientIds = [...new Set(violations.map(v => v?.client_id).filter(Boolean))];
@@ -1606,11 +1606,11 @@ export async function handleContractsGenerateWeeks(env, req, contractId) {
 }
 
 function computeWeekEndingInclusive(ymd, wew) {
-  const d = toDate(ymd);
+  const d = ymdToDate(ymd);
   const dow = d.getUTCDay();
-  const delta = ((wew - dow) + 7) % 7;
-  const end = addDays(toYmd(d), delta);
-  return end;
+  const delta = (wew - dow + 7) % 7;
+  d.setUTCDate(d.getUTCDate() + delta);
+  return dateToYmd(d);
 }
 
 function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEndWEYmd, windowEndYmd) {
@@ -15246,7 +15246,6 @@ export async function handleContractsPlanRanges(env, req, contractId) {
     ranges: results
   }));
 }
-
 export async function handleContractsUnplanRanges(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -15262,7 +15261,6 @@ export async function handleContractsUnplanRanges(env, req, contractId) {
 
   if (!ranges.length) return withCORS(env, req, badRequest('ranges[] is required'));
 
-  // Load minimal contract to get WE weekday + window
   const c = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=id,start_date,end_date,week_ending_weekday_snapshot`
@@ -15277,11 +15275,13 @@ export async function handleContractsUnplanRanges(env, req, contractId) {
     const d0 = new Date(toYmd(r.from||r.From||r.start)+'T00:00:00Z');
     const d1 = new Date(toYmd(r.to||r.To||r.end)+'T00:00:00Z');
 
-    const mask = Array.isArray(r.days) && r.days.length && typeof r.days[0] === 'string'
-      ? toWeekdayMask(r.days) : null;
     const explicit = Array.isArray(r.days) && r.days.length && typeof r.days[0] === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.days[0])
       ? new Set(r.days.map(d => toYmd(d)))
       : null;
+    const mask = (!explicit && Array.isArray(r.days) && r.days.length && typeof r.days[0] === 'string')
+      ? toWeekdayMask(r.days)
+      : null;
+    const hasMask = !!(mask && mask.size);
 
     for (let dt = new Date(d0); dt <= d1; dt.setUTCDate(dt.getUTCDate()+1)) {
       const ymd = toYmd(dt);
@@ -15289,7 +15289,7 @@ export async function handleContractsUnplanRanges(env, req, contractId) {
       let include = false;
       if (explicit) {
         include = explicit.has(ymd);
-      } else if (mask) {
+      } else if (hasMask) {
         const js = dt.getUTCDay();
         const wd = Object.entries(weekdayToJs).find(([,v]) => v===js)?.[0];
         include = wd ? mask.has(wd) : false;
@@ -15325,7 +15325,6 @@ export async function handleContractsUnplanRanges(env, req, contractId) {
 
     let patchedWeeks = 0, daysRemoved = 0, emptiedWeeks = 0, skippedDueTS = 0;
 
-    // Group weeks by WE for quick lookup
     const weeksByWE = new Map();
     for (const w of weeks) {
       const arr = weeksByWE.get(w.week_ending_date) || [];
@@ -15337,11 +15336,9 @@ export async function handleContractsUnplanRanges(env, req, contractId) {
       const siblings = weeksByWE.get(we) || [];
       if (!siblings.length) continue;
 
-      // For each target date, try to remove from any sibling that contains it (base or additional), preferring base first.
       for (const ymd of dates) {
         let removed = false;
 
-        // Prefer base (seq=0) then additional
         const sorted = siblings.slice().sort((a,b)=> (a.additional_seq||0)-(b.additional_seq||0));
 
         for (const w of sorted) {
@@ -15357,11 +15354,9 @@ export async function handleContractsUnplanRanges(env, req, contractId) {
             continue;
           }
 
-          // remove this date
           plan.splice(idx, 1);
           const patch = { planned_schedule_json: plan, updated_at: nowIso() };
 
-          // If empty and no TS, apply empty-week action
           if (!plan.length && !w.timesheet_id) {
             if (emptyWeekAction === 'cancel') {
               patch.status = 'CANCELLED';
@@ -15375,7 +15370,6 @@ export async function handleContractsUnplanRanges(env, req, contractId) {
           if (!res.ok) return withCORS(env, req, serverError(await res.text()));
           patchedWeeks += 1; daysRemoved += 1; removed = true;
 
-          // If action=delete and plan is empty, perform hard delete (only if no TS)
           if (!plan.length && !w.timesheet_id && emptyWeekAction === 'delete') {
             await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(w.id)}`, {
               method:'DELETE', headers:{ ...sbHeaders(env), 'Prefer':'return=minimal' }
@@ -15383,11 +15377,11 @@ export async function handleContractsUnplanRanges(env, req, contractId) {
             emptiedWeeks += 1;
           }
 
-          break; // done for this date
+          break;
         }
 
         if (!removed) {
-          // could be not found in any planned list → ignore silently
+          // ignore silently
         }
       }
     }
@@ -15405,6 +15399,7 @@ export async function handleContractsUnplanRanges(env, req, contractId) {
 
   return withCORS(env, req, ok({ ranges: results }));
 }
+
 export async function handleContractWeekPlanPatch(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
