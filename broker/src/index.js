@@ -1088,102 +1088,8 @@ export async function handleContractsUpdate(env, req, contractId) {
   const newStart = ('start_date' in body) ? toYmd(body.start_date) : current.start_date;
   const newEnd   = ('end_date' in body) ? toYmd(body.end_date)   : current.end_date;
 
-  if (('start_date' in body) || ('end_date' in body)) {
-    let tsRows = [];
-    try {
-      const { rows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?contract_id=eq.${enc(contractId)}` +
-        `&select=id,timesheet_id,work_date,status,client_id`
-      );
-      tsRows = rows || [];
-    } catch (_) {}
-
-    const badStatuses = new Set(['DRAFT','VOID','VOIDED','CANCELLED','CANCELED']);
-    const realTs = (tsRows || []).filter(r => {
-      const st = String(r?.status || '').toUpperCase();
-      return !st || !badStatuses.has(st);
-    });
-
-    let min_ts_date = null, max_ts_date = null;
-    for (const r of realTs) {
-      const d = r?.work_date || null;
-      if (!d) continue;
-      if (!min_ts_date || d < min_ts_date) min_ts_date = d;
-      if (!max_ts_date || d > max_ts_date) max_ts_date = d;
-    }
-
-    const violations = realTs.filter(r => {
-      const d = r?.work_date;
-      if (!d) return false;
-      if (newStart && d < newStart) return true;
-      if (newEnd && d > newEnd) return true;
-      return false;
-    });
-
-    if (violations.length) {
-      const clientIds = [...new Set(violations.map(v => v?.client_id).filter(Boolean))];
-      let namesById = {};
-      if (clientIds.length) {
-        try {
-          const { rows: cRows } = await sbFetch(
-            env,
-            `${env.SUPABASE_URL}/rest/v1/clients?id=in.(${clientIds.map(enc).join(',')})&select=id,name`
-          );
-          for (const c of (cRows||[])) namesById[String(c.id)] = c.name || null;
-        } catch {}
-      }
-
-      const payload = {
-        ok: false,
-        min_ts_date,
-        max_ts_date,
-        violations: violations.map(v => ({
-          timesheet_id: v?.timesheet_id ?? v?.id ?? null,
-          date: v?.work_date ?? null,
-          status: v?.status ?? null,
-          client_id: v?.client_id ?? null,
-          client_name: namesById[String(v?.client_id)] || null
-        }))
-      };
-      return withCORS(env, req,
-        new Response(JSON.stringify(payload), { status: 409, headers: { 'content-type': 'application/json' } })
-      );
-    }
-
-    let minWE = null, maxWE = null;
-    try {
-      const { rows: minRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-        `?contract_id=eq.${enc(contractId)}&timesheet_id=not.is.null&select=week_ending_date` +
-        `&order=week_ending_date.asc&limit=1`
-      );
-      minWE = (minRows && minRows[0] && minRows[0].week_ending_date) || null;
-
-      const { rows: maxRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-        `?contract_id=eq.${enc(contractId)}&timesheet_id=not.is.null&select=week_ending_date` +
-        `&order=week_ending_date.desc&limit=1`
-      );
-      maxWE = (maxRows && maxRows[0] && maxRows[0].week_ending_date) || null;
-    } catch (_) {}
-
-    if (minWE) {
-      const minWeekStart = addDays(minWE, -6);
-      if (newStart > minWeekStart) {
-        return withCORS(env, req, badRequest(`start_date cannot be after start of earliest submitted week (${minWeekStart})`));
-      }
-    }
-    if (maxWE && newEnd < maxWE) {
-      return withCORS(env, req, badRequest(`end_date cannot be before latest submitted week ending (${maxWE})`));
-    }
-
-    patch.start_date = newStart;
-    patch.end_date   = newEnd;
-  }
+  patch.start_date = newStart;
+  patch.end_date   = newEnd;
 
   const windowChanged =
     (('start_date' in body) && toYmd(body.start_date) !== (current.start_date || '')) ||
@@ -1205,7 +1111,7 @@ export async function handleContractsUpdate(env, req, contractId) {
     body: JSON.stringify(patch)
   });
   if (!res.ok) return withCORS(env, req, serverError(await res.text()));
-  const updated = (await res.json().catch(()=>[]))[0];
+  let updated = (await res.json().catch(()=>[]))[0];
 
   if (windowChanged) {
     await fetch(
@@ -1219,6 +1125,65 @@ export async function handleContractsUpdate(env, req, contractId) {
         try { console.warn('[CONTRACTS][UPDATE] regenerate weeks failed', { contractId, error: e?.message || String(e) }); } catch {}
       }
     }
+  }
+
+  // === Auto-correct window to first/last real shift; else planned; else collapse ===
+  let min_ts_date = null, max_ts_date = null;
+  try {
+    const { rows: tsRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?contract_id=eq.${enc(contractId)}` +
+      `&select=work_date,status`
+    );
+    const bad = new Set(['DRAFT','VOID','VOIDED','CANCELLED','CANCELED']);
+    for (const r of (tsRows||[])) {
+      const st = String(r?.status||'').toUpperCase();
+      if (bad.has(st)) continue;
+      const d = r?.work_date;
+      if (!d) continue;
+      if (!min_ts_date || d < min_ts_date) min_ts_date = d;
+      if (!max_ts_date || d > max_ts_date) max_ts_date = d;
+    }
+  } catch {}
+
+  let min_plan_date = null, max_plan_date = null;
+  if (!min_ts_date && !max_ts_date) {
+    try {
+      const { rows: wkRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+        `?contract_id=eq.${enc(contractId)}&select=planned_schedule_json`
+      );
+      for (const w of (wkRows||[])) {
+        const arr = Array.isArray(w?.planned_schedule_json) ? w.planned_schedule_json : [];
+        for (const d of arr.map(x=>x?.date).filter(Boolean)) {
+          if (!min_plan_date || d < min_plan_date) min_plan_date = d;
+          if (!max_plan_date || d > max_plan_date) max_plan_date = d;
+        }
+      }
+    } catch {}
+  }
+
+  let normStart = updated?.start_date || newStart;
+  let normEnd   = updated?.end_date   || newEnd;
+  if (min_ts_date && max_ts_date) {
+    normStart = min_ts_date;
+    normEnd   = max_ts_date;
+  } else if (min_plan_date && max_plan_date) {
+    normStart = min_plan_date;
+    normEnd   = max_plan_date;
+  } else if (normStart) {
+    normEnd = normStart;
+  }
+
+  if ((normStart && normStart !== updated.start_date) || (normEnd && normEnd !== updated.end_date)) {
+    const normRes = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
+      body: JSON.stringify({ start_date: normStart, end_date: normEnd, updated_at: nowIso() })
+    });
+    if (normRes.ok) updated = (await normRes.json().catch(()=>[]))[0] || updated;
   }
 
   const warnings0 = await computePayMethodWarnings(env, { ...current, ...updated });
