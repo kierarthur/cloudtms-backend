@@ -1445,7 +1445,7 @@ export async function handleContractsReplace(env, req, contractId) {
     body: JSON.stringify(patch)
   });
   if (!res.ok) return withCORS(env, req, serverError(await res.text()));
-  const updated = (await res.json().catch(()=>[]))[0];
+  let updated = (await res.json().catch(()=>[]))[0];
 
   const windowChanged =
     (('start_date' in body) && toYmd(body.start_date) !== (current.start_date || '')) ||
@@ -1470,11 +1470,69 @@ export async function handleContractsReplace(env, req, contractId) {
     }
   }
 
+  let min_ts_date = null, max_ts_date = null;
+  try {
+    const { rows: tsRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?contract_id=eq.${enc(contractId)}` +
+      `&select=work_date,status`
+    );
+    const bad = new Set(['DRAFT','VOID','VOIDED','CANCELLED','CANCELED']);
+    for (const r of (tsRows||[])) {
+      const st = String(r?.status||'').toUpperCase();
+      if (bad.has(st)) continue;
+      const d = r?.work_date;
+      if (!d) continue;
+      if (!min_ts_date || d < min_ts_date) min_ts_date = d;
+      if (!max_ts_date || d > max_ts_date) max_ts_date = d;
+    }
+  } catch {}
+
+  let min_plan_date = null, max_plan_date = null;
+  if (!min_ts_date && !max_ts_date) {
+    try {
+      const { rows: wkRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+        `?contract_id=eq.${enc(contractId)}&select=planned_schedule_json`
+      );
+      for (const w of (wkRows||[])) {
+        const raw = w?.planned_schedule_json;
+        const arr = Array.isArray(raw) ? raw : (typeof raw === 'string' ? JSON.parse(raw) : []);
+        for (const d of arr.map(x=>x?.date).filter(Boolean)) {
+          if (!min_plan_date || d < min_plan_date) min_plan_date = d;
+          if (!max_plan_date || d > max_plan_date) max_plan_date = d;
+        }
+      }
+    } catch {}
+  }
+
+  let normStart = updated?.start_date || newStart;
+  let normEnd   = updated?.end_date   || newEnd;
+  if (min_ts_date && max_ts_date) {
+    normStart = min_ts_date;
+    normEnd   = max_ts_date;
+  } else if (min_plan_date && max_plan_date) {
+    normStart = min_plan_date;
+    normEnd   = max_plan_date;
+  } else if (normStart) {
+    normEnd = normStart;
+  }
+
+  if ((normStart && normStart !== updated.start_date) || (normEnd && normEnd !== updated.end_date)) {
+    const normRes = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
+      body: JSON.stringify({ start_date: normStart, end_date: normEnd, updated_at: nowIso() })
+    });
+    if (normRes.ok) updated = (await normRes.json().catch(()=>[]))[0] || updated;
+  }
+
   const warnings0 = await computePayMethodWarnings(env, { ...current, ...updated });
   const warnings = Array.isArray(warnings0) ? [...warnings0, ...extraWarnings] : [...extraWarnings];
   return withCORS(env, req, ok({ contract: updated, warnings }));
 }
-
 
 // Helper: returns ['PAY_METHOD_MISMATCH'] if candidate.pay_method != pay_method_snapshot
 async function computePayMethodWarnings(env, contractRow) {
@@ -15307,7 +15365,8 @@ export async function handleContractsUnplanRanges(env, req, contractId) {
         const sorted = siblings.slice().sort((a,b)=> (a.additional_seq||0)-(b.additional_seq||0));
 
         for (const w of sorted) {
-          const plan = Array.isArray(w.planned_schedule_json) ? w.planned_schedule_json : [];
+          const raw = w.planned_schedule_json;
+          let plan = Array.isArray(raw) ? raw : (typeof raw === 'string' ? JSON.parse(raw) : []);
           const idx = plan.findIndex(d => d?.date === ymd);
           if (idx === -1) continue;
 
@@ -15320,7 +15379,10 @@ export async function handleContractsUnplanRanges(env, req, contractId) {
           }
 
           plan.splice(idx, 1);
-          const patch = { planned_schedule_json: plan, updated_at: nowIso() };
+          const patch = {
+            planned_schedule_json: (typeof raw === 'string') ? JSON.stringify(plan) : plan,
+            updated_at: nowIso()
+          };
 
           if (!plan.length && !w.timesheet_id) {
             if (emptyWeekAction === 'cancel') {
@@ -15344,10 +15406,6 @@ export async function handleContractsUnplanRanges(env, req, contractId) {
 
           break;
         }
-
-        if (!removed) {
-          // ignore silently
-        }
       }
     }
 
@@ -15364,6 +15422,7 @@ export async function handleContractsUnplanRanges(env, req, contractId) {
 
   return withCORS(env, req, ok({ ranges: results }));
 }
+
 
 export async function handleContractWeekPlanPatch(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
