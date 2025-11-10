@@ -1606,11 +1606,11 @@ export async function handleContractsGenerateWeeks(env, req, contractId) {
 }
 
 function computeWeekEndingInclusive(ymd, wew) {
-  const d = ymdToDate(ymd);
-  const dow = d.getUTCDay();
-  const delta = (wew - dow + 7) % 7;
+  const d = new Date(ymd + 'T00:00:00Z');   // ymd → Date (UTC)
+  const dow = d.getUTCDay();                // 0..6 (Sun..Sat)
+  const delta = (wew - dow + 7) % 7;        // inclusive: 0 if already on week end
   d.setUTCDate(d.getUTCDate() + delta);
-  return dateToYmd(d);
+  return toYmd(d);                           // existing helper
 }
 
 function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEndWEYmd, windowEndYmd) {
