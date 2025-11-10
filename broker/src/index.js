@@ -785,6 +785,7 @@ export async function handleContractsCreate(env, req) {
     }
   }
 
+  // Insert contract
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts`, {
     method: 'POST',
     headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
@@ -813,6 +814,36 @@ export async function handleContractsCreate(env, req) {
   if (!res.ok) return withCORS(env, req, serverError(await res.text()));
   const json = await res.json().catch(()=>[]);
   const row = Array.isArray(json) ? json[0] : json;
+
+  // ── NEW: server-side safety net to generate weeks after create (non-fatal on failure)
+  try {
+    const shouldGenerate = !!row?.id && (!!row.std_schedule_json || !!row.std_hours_json);
+    console.log('[CONTRACTS][CREATE] post-insert', {
+      id: row?.id,
+      start: row?.start_date,
+      end: row?.end_date,
+      hasTemplate: !!row?.std_schedule_json,
+      hasHours: !!row?.std_hours_json,
+      weekEnding: row?.week_ending_weekday_snapshot,
+      willGenerateWeeks: shouldGenerate
+    });
+
+    if (shouldGenerate) {
+      // Prefer internal handler if available
+      if (typeof handleContractsGenerateWeeks === 'function') {
+        await handleContractsGenerateWeeks(env, req, row.id);
+        console.log('[CONTRACTS][CREATE] generate-weeks via internal handler ok', { id: row.id });
+      } else {
+        // If you have a routed endpoint, you could call it here.
+        console.log('[CONTRACTS][CREATE] no internal handler found; generation skipped (safe)');
+      }
+    } else {
+      console.log('[CONTRACTS][CREATE] skipped generate-weeks (no template/hours on row)', { id: row?.id });
+    }
+  } catch (e) {
+    console.warn('[CONTRACTS][CREATE] generate-weeks failed (non-fatal)', { id: row?.id, error: String(e?.message || e) });
+  }
+
   return withCORS(env, req, ok(row));
 }
 
