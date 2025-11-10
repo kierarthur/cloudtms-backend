@@ -1959,157 +1959,217 @@ export async function handleContractsCalendar(env, req, contractId) {
 }
 
 export async function handleCandidateCalendar(env, req, candidateId) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-  if (!candidateId) return withCORS(env, req, badRequest('candidate_id required'));
+  try {
+    const user = await requireUser(env, req, ['admin']);
+    if (!user) return withCORS(env, req, unauthorized());
+    if (!candidateId) return withCORS(env, req, badRequest('candidate_id required'));
 
-  const url = new URL(req.url);
-  const fromQ = url.searchParams.get('from');
-  const toQ   = url.searchParams.get('to');
-  if (!fromQ || !toQ) return withCORS(env, req, badRequest('from and to are required'));
-  const winStart = toYmd(fromQ), winEnd = toYmd(toQ);
+    const url = new URL(req.url);
+    const fromQ = url.searchParams.get('from');
+    const toQ   = url.searchParams.get('to');
+    if (!fromQ || !toQ) return withCORS(env, req, badRequest('from and to are required'));
+    const winStart = toYmd(fromQ), winEnd = toYmd(toQ);
 
-  const { rows: cons } = await sbFetch(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/contracts?candidate_id=eq.${enc(candidateId)}` +
-    `&start_date=lte.${enc(winEnd)}&end_date=gte.${enc(winStart)}` +
-    `&select=id,client_id,role,band,start_date,end_date`
-  );
-  const contractIds = (cons||[]).map(c => c.id);
-  const contractsById = Object.fromEntries((cons||[]).map(c => [c.id, c]));
-
-  const clientIds = [...new Set((cons||[]).map(c => c.client_id).filter(Boolean))];
-  let clientNameById = {};
-  if (clientIds.length) {
-    const inList = clientIds.map(enc).join(',');
-    const { rows: cliRows } = await sbFetch(
+    // 1) Candidate’s contracts intersecting the window
+    const { rows: cons } = await sbFetch(
       env,
-      `${env.SUPABASE_URL}/rest/v1/clients?id=in.(${inList})&select=id,name`
+      `${env.SUPABASE_URL}/rest/v1/contracts?candidate_id=eq.${enc(candidateId)}` +
+      `&start_date=lte.${enc(winEnd)}&end_date=gte.${enc(winStart)}` +
+      `&select=id,client_id,role,band,start_date,end_date`
     );
-    clientNameById = Object.fromEntries((cliRows||[]).map(r => [r.id, r.name || null]));
-  }
+    const contractIds = (cons||[]).map(c => c.id);
+    const contractsById = Object.fromEntries((cons||[]).map(c => [c.id, c]));
 
-  let plannedDayItems = [];
-  if (contractIds.length) {
-    const inList = contractIds.map(enc).join(',');
-    const { rows: weeks } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=in.(${inList})` +
-      `&week_ending_date=gte.${enc(winStart)}&week_ending_date=lte.${enc(addDays(winEnd,6))}` +
-      `&select=id,contract_id,week_ending_date,submission_mode_snapshot,timesheet_id,planned_schedule_json`
-    );
-
-    for (const w of (weeks||[])) {
-      let rawPlan = w.planned_schedule_json;
-      if (typeof rawPlan === 'string') {
-        try { rawPlan = JSON.parse(rawPlan); } catch { rawPlan = []; }
-      }
-      const plan = Array.isArray(rawPlan) ? rawPlan : [];
-      for (const d of plan) {
-        const ymd = d?.date || null;
-        if (!ymd || ymd < winStart || ymd > winEnd) continue;
-        const contr = contractsById[w.contract_id] || {};
-        plannedDayItems.push({
-          source: 'WEEK_PLAN',
-          date: ymd,
-          contract_id: w.contract_id,
-          week_id: w.id,
-          expected_minutes: Number(d?.expected_minutes || 0),
-          actual_minutes: 0,
-          state: (Number(d?.expected_minutes||0) > 0) ? 'PLANNED' : 'EMPTY',
-          timesheet_id: w.timesheet_id || null,
-          submission_mode: w.submission_mode_snapshot,
-          invoiced: false,
-          paid_at_utc: null,
-          role: contr.role || null,
-          band: contr.band || null,
-          client_id: contr.client_id || null,
-          client_name: clientNameById[contr.client_id] || null
-        });
-      }
+    // client names
+    const clientIds = [...new Set((cons||[]).map(c => c.client_id).filter(Boolean))];
+    let clientNameById = {};
+    if (clientIds.length) {
+      const inList = clientIds.map(enc).join(',');
+      const { rows: cliRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/clients?id=in.(${inList})&select=id,name`
+      );
+      clientNameById = Object.fromEntries((cliRows||[]).map(r => [r.id, r.name || null]));
     }
-  }
 
-  const tsOr = `or=(and(week_ending_date.gte.${enc(winStart)},week_ending_date.lte.${enc(addDays(winEnd,6))}),and(worked_start_iso.gte.${enc(winStart+'T00:00:00Z')},worked_start_iso.lte.${enc(winEnd+'T23:59:59Z')}))`;
-  const { rows: tsRows } = await sbFetch(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets?candidate_id=eq.${enc(candidateId)}&${tsOr}` +
-    `&select=timesheet_id,contract_id,week_ending_date,line_type,submission_mode,authorised_at_server,` +
-    `worked_start_iso,worked_end_iso,break_start_iso,break_end_iso,break_minutes,` +
-    `actual_schedule_json`
-  );
+    // 2) Planned days from contract_weeks
+    let plannedDayItems = [];
+    if (contractIds.length) {
+      const inList = contractIds.map(enc).join(',');
+      const { rows: weeks } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=in.(${inList})` +
+        `&week_ending_date=gte.${enc(winStart)}&week_ending_date=lte.${enc(addDays(winEnd,6))}` +
+        `&select=id,contract_id,week_ending_date,submission_mode_snapshot,timesheet_id,planned_schedule_json`
+      );
 
-  const tsIds = (tsRows||[]).map(t => t.timesheet_id);
-  let finMap = {};
-  if (tsIds.length) {
-    const inList = tsIds.map(enc).join(',');
-    const { rows: finRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?is_current=eq.true&timesheet_id=in.(${inList})` +
-      `&select=timesheet_id,locked_by_invoice_id,paid_at_utc`
-    );
-    finMap = Object.fromEntries((finRows||[]).map(f => [f.timesheet_id, f]));
-  }
-
-  const computeDailyActual = (t) => {
-    if (!t?.worked_start_iso || !t?.worked_end_iso) return { ymd:null, mins:0 };
-    const dt = new Date(t.worked_start_iso);
-    const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London', year:'numeric', month:'2-digit', day:'2-digit' }).formatToParts(dt);
-    const ymd = `${parts.find(p=>p.type==='year').value}-${parts.find(p=>p.type==='month').value}-${parts.find(p=>p.type==='day').value}`;
-    const s = new Date(t.worked_start_iso), e = new Date(t.worked_end_iso);
-    let mins = Math.max(0, Math.round((e - s) / 60000));
-    if (t.break_start_iso && t.break_end_iso) {
-      const bs = new Date(t.break_start_iso), be = new Date(t.break_end_iso);
-      mins = Math.max(0, mins - Math.max(0, Math.round((be - bs) / 60000)));
-    } else if (Number(t.break_minutes)>0) {
-      mins = Math.max(0, mins - Number(t.break_minutes));
-    }
-    return { ymd, mins };
-  };
-
-  const deriveState = (actualMin, ts, fin) => {
-    if (actualMin > 0) {
-      if (fin?.paid_at_utc) return 'PAID';
-      if (fin?.locked_by_invoice_id) return 'INVOICED';
-      if (ts?.authorised_at_server) return 'AUTHORISED';
-      return 'SUBMITTED';
-    }
-    return 'PLANNED';
-  };
-
-  const dayItems = [...plannedDayItems];
-
-  for (const t of (tsRows||[])) {
-    const fin = finMap[t.timesheet_id];
-    if (t.week_ending_date && Array.isArray(t.actual_schedule_json) && t.actual_schedule_json.length) {
-      for (const d of t.actual_schedule_json) {
-        const ymd = d?.date || null;
-        if (!ymd || ymd < winStart || ymd > winEnd) continue;
-        const s = parseHHMM(d.start), e = parseHHMM(d.end);
-        if (s==null || e==null) continue;
-        const overnight = d.overnight===true || e<=s;
-        let mins = minutesDiff(s, e, overnight);
-        if (Array.isArray(d.breaks) && d.breaks.length) {
-          mins -= d.breaks.reduce((acc,b) => {
-            const bs = parseHHMM(b.start), be = parseHHMM(b.end);
-            if (bs==null || be==null) return acc;
-            return acc + minutesDiff(bs, be, be<=bs);
-          }, 0);
-        } else if (Number(d.break_minutes)>0) {
-          mins -= Number(d.break_minutes);
+      for (const w of (weeks||[])) {
+        let rawPlan = w.planned_schedule_json;
+        if (typeof rawPlan === 'string') {
+          try { rawPlan = JSON.parse(rawPlan); } catch { rawPlan = []; }
         }
-        mins = Math.max(0, mins);
+        const plan = Array.isArray(rawPlan) ? rawPlan : [];
+        for (const d of plan) {
+          const ymd = d?.date || null;
+          if (!ymd || ymd < winStart || ymd > winEnd) continue;
+          const contr = contractsById[w.contract_id] || {};
+          plannedDayItems.push({
+            source: 'WEEK_PLAN',
+            date: ymd,
+            contract_id: w.contract_id,
+            week_id: w.id,
+            expected_minutes: Number(d?.expected_minutes || 0),
+            actual_minutes: 0,
+            state: (Number(d?.expected_minutes||0) > 0) ? 'PLANNED' : 'EMPTY',
+            timesheet_id: w.timesheet_id || null,
+            submission_mode: w.submission_mode_snapshot,
+            invoiced: false,
+            paid_at_utc: null,
+            role: contr.role || null,
+            band: contr.band || null,
+            client_id: contr.client_id || null,
+            client_name: clientNameById[contr.client_id] || null
+          });
+        }
+      }
+    }
 
+    // 3) Timesheets for those contracts (weekly + daily) — NOT by candidate_id
+    let tsRows = [];
+    let finMap = {};
+    if (contractIds.length) {
+      const inList = contractIds.map(enc).join(',');
+      const tsOr = `or=(and(week_ending_date.gte.${enc(winStart)},week_ending_date.lte.${enc(addDays(winEnd,6))}),and(worked_start_iso.gte.${enc(winStart+'T00:00:00Z')},worked_start_iso.lte.${enc(winEnd+'T23:59:59Z')}))`;
+
+      const tsResp = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets?contract_id=in.(${inList})&${tsOr}` +
+        `&select=timesheet_id,contract_id,week_ending_date,line_type,submission_mode,authorised_at_server,` +
+        `worked_start_iso,worked_end_iso,break_start_iso,break_end_iso,break_minutes,` +
+        `actual_schedule_json`
+      );
+      tsRows = tsResp.rows || [];
+
+      const tsIds = tsRows.map(t => t.timesheet_id);
+      if (tsIds.length) {
+        const finIn = tsIds.map(enc).join(',');
+        const { rows: finRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials?is_current=eq.true&timesheet_id=in.(${finIn})` +
+          `&select=timesheet_id,locked_by_invoice_id,paid_at_utc`
+        );
+        finMap = Object.fromEntries((finRows||[]).map(f => [f.timesheet_id, f]));
+      }
+    }
+
+    // helpers
+    const computeDailyActual = (t) => {
+      if (!t?.worked_start_iso || !t?.worked_end_iso) return { ymd:null, mins:0 };
+      const dt = new Date(t.worked_start_iso);
+      const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London', year:'numeric', month:'2-digit', day:'2-digit' }).formatToParts(dt);
+      const ymd = `${parts.find(p=>p.type==='year').value}-${parts.find(p=>p.type==='month').value}-${parts.find(p=>p.type==='day').value}`;
+      const s = new Date(t.worked_start_iso), e = new Date(t.worked_end_iso);
+      let mins = Math.max(0, Math.round((e - s) / 60000));
+      if (t.break_start_iso && t.break_end_iso) {
+        const bs = new Date(t.break_start_iso), be = new Date(t.break_end_iso);
+        mins = Math.max(0, mins - Math.max(0, Math.round((be - bs) / 60000)));
+      } else if (Number(t.break_minutes)>0) {
+        mins = Math.max(0, mins - Number(t.break_minutes));
+      }
+      return { ymd, mins };
+    };
+    const resolveState = (mins, ts, fin) => {
+      if (mins > 0) {
+        if (fin?.paid_at_utc) return 'PAID';
+        if (fin?.locked_by_invoice_id) return 'INVOICED';
+        if (ts?.authorised_at_server) return 'AUTHORISED';
+        return 'SUBMITTED';
+      }
+      return 'PLANNED';
+    };
+
+    const dayItems = [...plannedDayItems];
+
+    // 3a) Weekly timesheets with per-day details
+    for (const t of tsRows) {
+      const fin = finMap[t.timesheet_id];
+      if (t.week_ending_date && Array.isArray(t.actual_schedule_json) && t.actual_schedule_json.length) {
+        for (const d of t.actual_schedule_json) {
+          const ymd = d?.date || null;
+          if (!ymd || ymd < winStart || ymd > winEnd) continue;
+
+          const s = parseHHMM(d.start), e = parseHHMM(d.end);
+          if (s==null || e==null) continue;
+          const overnight = d.overnight===true || e<=s;
+          let mins = minutesDiff(s, e, overnight);
+          if (Array.isArray(d.breaks) && d.breaks.length) {
+            mins -= d.breaks.reduce((acc,b) => {
+              const bs = parseHHMM(b.start), be = parseHHMM(b.end);
+              if (bs==null || be==null) return acc;
+              return acc + minutesDiff(bs, be, be<=bs);
+            }, 0);
+          } else if (Number(d.break_minutes)>0) {
+            mins -= Number(d.break_minutes);
+          }
+          mins = Math.max(0, mins);
+
+          const contr = contractsById[t.contract_id||''] || {};
+          dayItems.push({
+            source: 'WEEK_TS',
+            date: ymd,
+            contract_id: t.contract_id || null,
+            week_ending_date: t.week_ending_date || null,
+            timesheet_id: t.timesheet_id,
+            expected_minutes: null,
+            actual_minutes: mins,
+            state: resolveState(mins, t, fin),
+            submission_mode: t.submission_mode,
+            invoiced: !!fin?.locked_by_invoice_id,
+            paid_at_utc: fin?.paid_at_utc || null,
+            role: contr.role || null,
+            band: contr.band || null,
+            client_id: contr.client_id || null,
+            client_name: clientNameById[contr.client_id] || null
+          });
+        }
+      }
+    }
+
+    // 3b) Weekly totals only: push status onto planned days
+    const weeklyTotalsOnly = tsRows.filter(t => t.week_ending_date && (!t.actual_schedule_json || !t.actual_schedule_json.length));
+    if (weeklyTotalsOnly.length && plannedDayItems.length) {
+      for (const t of weeklyTotalsOnly) {
+        const fin = finMap[t.timesheet_id];
+        for (const p of plannedDayItems) {
+          if (p.contract_id === t.contract_id && p.week_id && t.week_ending_date === p.week_ending_date) {
+            if (p.date >= winStart && p.date <= winEnd && p.expected_minutes > 0) {
+              p.state = resolveState(0, t, fin);
+              p.timesheet_id = t.timesheet_id;
+              p.submission_mode = t.submission_mode;
+              p.invoiced = !!fin?.locked_by_invoice_id;
+              p.paid_at_utc = fin?.paid_at_utc || null;
+            }
+          }
+        }
+      }
+    }
+
+    // 3c) Daily-only timesheets (worked_start/worked_end)
+    for (const t of tsRows) {
+      if (!t.week_ending_date) {
+        const fin = finMap[t.timesheet_id];
+        const { ymd: dayYmd, mins } = computeDailyActual(t);
+        if (!dayYmd || dayYmd < winStart || dayYmd > winEnd) continue;
         const contr = contractsById[t.contract_id||''] || {};
         dayItems.push({
-          source: 'WEEK_TS',
-          date: ymd,
+          source: 'DAILY_TS',
+          date: dayYmd,
           contract_id: t.contract_id || null,
-          week_ending_date: t.week_ending_date || null,
+          week_ending_date: null,
           timesheet_id: t.timesheet_id,
           expected_minutes: null,
           actual_minutes: mins,
-          state: deriveState(mins, t, fin),
+          state: resolveState(mins, t, fin),
           submission_mode: t.submission_mode,
           invoiced: !!fin?.locked_by_invoice_id,
           paid_at_utc: fin?.paid_at_utc || null,
@@ -2120,53 +2180,12 @@ export async function handleCandidateCalendar(env, req, candidateId) {
         });
       }
     }
-  }
 
-  const weeklyTotalsOnly = (tsRows||[]).filter(t => t.week_ending_date && (!t.actual_schedule_json || !t.actual_schedule_json.length));
-  if (weeklyTotalsOnly.length && plannedDayItems.length) {
-    for (const t of weeklyTotalsOnly) {
-      const fin = finMap[t.timesheet_id];
-      for (const p of plannedDayItems) {
-        if (p.contract_id === t.contract_id && p.week_id && t.week_ending_date === p.week_ending_date) {
-          if (p.date >= winStart && p.date <= winEnd && p.expected_minutes > 0) {
-            p.state = deriveState(0, t, fin);
-            p.timesheet_id = t.timesheet_id;
-            p.submission_mode = t.submission_mode;
-            p.invoiced = !!fin?.locked_by_invoice_id;
-            p.paid_at_utc = fin?.paid_at_utc || null;
-          }
-        }
-      }
-    }
+    return withCORS(env, req, ok({ from: winStart, to: winEnd, items: dayItems }));
+  } catch (e) {
+    try { console.warn('[CANDIDATE CAL]', e?.message || e); } catch {}
+    return withCORS(env, req, serverError('candidate calendar failed'));
   }
-
-  for (const t of (tsRows||[])) {
-    if (!t.week_ending_date) {
-      const fin = finMap[t.timesheet_id];
-      const { ymd: dayYmd, mins } = computeDailyActual(t);
-      if (!dayYmd || dayYmd < winStart || dayYmd > winEnd) continue;
-      const contr = contractsById[t.contract_id||''] || {};
-      dayItems.push({
-        source: 'DAILY_TS',
-        date: dayYmd,
-        contract_id: t.contract_id || null,
-        week_ending_date: null,
-        timesheet_id: t.timesheet_id,
-        expected_minutes: null,
-        actual_minutes: mins,
-        state: deriveState(mins, t, fin),
-        submission_mode: t.submission_mode,
-        invoiced: !!fin?.locked_by_invoice_id,
-        paid_at_utc: fin?.paid_at_utc || null,
-        role: contr.role || null,
-        band: contr.band || null,
-        client_id: contr.client_id || null,
-        client_name: clientNameById[contr.client_id] || null
-      });
-    }
-  }
-
-  return withCORS(env, req, ok({ from: winStart, to: winEnd, items: dayItems }));
 }
 
 
