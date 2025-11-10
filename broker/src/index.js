@@ -1114,10 +1114,11 @@ export async function handleContractsUpdate(env, req, contractId) {
   let updated = (await res.json().catch(()=>[]))[0];
 
   if (windowChanged) {
-    await fetch(
+    const del = await fetch(
       `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&timesheet_id=is.null&or=(week_ending_date.lt.${enc(newStart)},week_ending_date.gt.${enc(newEnd)})`,
       { method:'DELETE', headers: { ...sbHeaders(env), 'Prefer':'return=minimal' } }
-    ).catch(()=>{});
+    );
+    try { await del.arrayBuffer(); } catch {}
     if (!body.skip_generate_weeks) {
       try {
         await handleContractsGenerateWeeks(env, req, contractId);
@@ -1127,7 +1128,6 @@ export async function handleContractsUpdate(env, req, contractId) {
     }
   }
 
-  // === Auto-correct window to first/last real shift; else planned; else collapse ===
   let min_ts_date = null, max_ts_date = null;
   try {
     const { rows: tsRows } = await sbFetch(
@@ -1403,7 +1403,7 @@ export async function handleContractsReplace(env, req, contractId) {
       `&order=week_ending_date.desc&limit=1`
     );
     maxWE = (maxRows && maxRows[0] && maxRows[0].week_ending_date) || null;
-  } catch (_) {}
+  } catch {}
 
   if (minWE) {
     const minWeekStart = addDays(minWE, -6);
@@ -1413,7 +1413,7 @@ export async function handleContractsReplace(env, req, contractId) {
   }
   if (maxWE && newEnd < maxWE) {
     return withCORS(env, req, badRequest(`end_date cannot be before latest submitted week ending (${maxWE})`));
-  }
+    }
 
   const patch = {
     candidate_id: body.candidate_id,
@@ -1456,10 +1456,11 @@ export async function handleContractsReplace(env, req, contractId) {
      Number(body.week_ending_weekday_snapshot) !== Number(current.week_ending_weekday_snapshot ?? body.week_ending_weekday_snapshot));
 
   if (windowChanged) {
-    await fetch(
+    const del = await fetch(
       `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&timesheet_id=is.null&or=(week_ending_date.lt.${enc(newStart)},week_ending_date.gt.${enc(newEnd)})`,
       { method:'DELETE', headers: { ...sbHeaders(env), 'Prefer':'return=minimal' } }
-    ).catch(()=>{});
+    );
+    try { await del.arrayBuffer(); } catch {}
   }
 
   if ((windowChanged || weekdayChanged) && !hasSubmitted && !body.skip_generate_weeks) {
@@ -15011,23 +15012,19 @@ export async function handleContractsPlanRanges(env, req, contractId) {
   const extendWindow = body?.extend_contract_window === true;
   if (!ranges.length) return withCORS(env, req, badRequest('ranges[] is required'));
 
-  // Load contract with fields we need for planning
   const c = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=id,candidate_id,client_id,start_date,end_date,default_submission_mode,week_ending_weekday_snapshot,std_schedule_json`
   );
   if (!c) return withCORS(env, req, badRequest('Contract not found'));
 
-  // --- Week-ending protections (if extending window) --------------------------------
   if (extendWindow) {
-    // Union of requested ranges
     const unionStart = ranges.reduce((m,r)=> Math.min(m, Date.parse(toYmd(r.from||r.From||r.start))), Infinity);
     const unionEnd   = ranges.reduce((m,r)=> Math.max(m, Date.parse(toYmd(r.to||r.To||r.end))),   -Infinity);
     if (isFinite(unionStart) && isFinite(unionEnd)) {
       const reqStart = toYmd(new Date(unionStart));
       const reqEnd   = toYmd(new Date(unionEnd));
 
-      // Find submitted WE min/max (NO aggregates — order + limit=1)
       let minWE = null, maxWE = null;
       try {
         const { rows: minRows } = await sbFetch(
@@ -15045,24 +15042,21 @@ export async function handleContractsPlanRanges(env, req, contractId) {
           `&order=week_ending_date.desc&limit=1`
         );
         maxWE = (maxRows && maxRows[0] && maxRows[0].week_ending_date) || null;
-      } catch { /* leave as null if lookup fails */ }
+      } catch {}
 
-      // Determine widened start/end (we only widen; never shrink here)
       let newStart = c.start_date;
       let newEnd   = c.end_date;
       if (reqStart < c.start_date) newStart = reqStart;
       if (reqEnd   > c.end_date)   newEnd   = reqEnd;
 
-      // Apply protections
       if (minWE) {
         const minWeekStart = addDays(minWE, -6);
-        if (newStart > minWeekStart) newStart = minWeekStart; // cannot start later than earliest submitted week start
+        if (newStart > minWeekStart) newStart = minWeekStart;
       }
       if (maxWE) {
-        if (newEnd < maxWE) newEnd = maxWE; // cannot end before latest submitted WE
+        if (newEnd < maxWE) newEnd = maxWE;
       }
 
-      // Patch if changed
       if (newStart !== c.start_date || newEnd !== c.end_date) {
         const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(c.id)}`, {
           method: 'PATCH',
@@ -15073,21 +15067,19 @@ export async function handleContractsPlanRanges(env, req, contractId) {
         const upd = (await res.json().catch(()=>[]))[0] || c;
         c.start_date = upd.start_date; c.end_date = upd.end_date;
 
-        // Remove planned weeks now outside window (no TS)
-        await fetch(
+        const delRes = await fetch(
           `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(c.id)}&timesheet_id=is.null&or=(week_ending_date.lt.${enc(c.start_date)},week_ending_date.gt.${enc(c.end_date)})`,
           { method:'DELETE', headers: { ...sbHeaders(env), 'Prefer':'return=minimal' } }
-        ).catch(()=>{});
+        );
+        try { await delRes.arrayBuffer(); } catch {}
       }
     }
   }
 
-  // --- Helpers for planning ----------------------------------------------------------
   const weekdayToJs = { mon:1, tue:2, wed:3, thu:4, fri:5, sat:6, sun:0 };
   const toWeekdayMask = (arr)=> new Set((arr||[]).map(x=> String(x||'').toLowerCase()).filter(k=> k in weekdayToJs));
 
   function buildPlanEntryForDate(ymd, contract, explicitDayObj) {
-    // explicit per-date wins
     if (explicitDayObj && explicitDayObj.start && explicitDayObj.end) {
       const s = parseHHMM(explicitDayObj.start), e = parseHHMM(explicitDayObj.end);
       if (s==null || e==null) throw new Error(`Invalid HH:MM for ${ymd}`);
@@ -15097,8 +15089,7 @@ export async function handleContractsPlanRanges(env, req, contractId) {
       const breaks = Array.isArray(explicitDayObj.breaks) ? explicitDayObj.breaks : [];
       return { date: ymd, start: explicitDayObj.start, end: explicitDayObj.end, breaks, break_minutes: br, overnight, expected_minutes: mins };
     }
-    // fallback to std_schedule_json for weekday
-    const jsDow = dow(ymd); // 0..6
+    const jsDow = dow(ymd);
     const key = ({sun:0,mon:1,tue:2,wed:3,thu:4,fri:5,sat:6});
     let wkKey = null;
     for (const [k,v] of Object.entries(key)) if (v===jsDow) { wkKey = k; break; }
@@ -15112,12 +15103,11 @@ export async function handleContractsPlanRanges(env, req, contractId) {
       const breaks = Array.isArray(tpl.breaks) ? tpl.breaks : [];
       return { date: ymd, start: tpl.start, end: tpl.end, breaks, break_minutes: br, overnight, expected_minutes: mins };
     }
-    // placeholder (so it appears booked but no times yet)
     return { date: ymd, start: null, end: null, breaks: [], break_minutes: 0, overnight: false, expected_minutes: 0 };
   }
 
   function splitDatesByWeek(r, wew) {
-    const out = new Map(); // key = WE ymd, value = array of {date, daySpec?}
+    const out = new Map();
     const d0 = new Date(toYmd(r.from||r.From||r.start)+'T00:00:00Z');
     const d1 = new Date(toYmd(r.to||r.To||r.end)+'T00:00:00Z');
 
@@ -15128,7 +15118,6 @@ export async function handleContractsPlanRanges(env, req, contractId) {
 
     for (let dt = new Date(d0); dt <= d1; dt.setUTCDate(dt.getUTCDate()+1)) {
       const ymd = toYmd(dt);
-      // Contract window guard — we plan only inside current window
       if (ymd < c.start_date || ymd > c.end_date) continue;
       let include = false;
       let explicitObj = null;
@@ -15136,11 +15125,10 @@ export async function handleContractsPlanRanges(env, req, contractId) {
       if (explicit) {
         if (explicit.has(ymd)) { include = true; explicitObj = explicit.get(ymd); }
       } else if (mask) {
-        const js = dt.getUTCDay(); // 0..6
+        const js = dt.getUTCDay();
         const wd = Object.entries(weekdayToJs).find(([,v]) => v===js)?.[0];
         include = wd ? mask.has(wd) : false;
       } else {
-        // no 'days' provided → default to all dates in range
         include = true;
       }
 
@@ -15154,7 +15142,6 @@ export async function handleContractsPlanRanges(env, req, contractId) {
   }
 
   async function ensureWeek(contractId, weYmd) {
-    // load all siblings for this WE
     const { rows: weeks } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&week_ending_date=eq.${enc(weYmd)}`+
@@ -15194,33 +15181,26 @@ export async function handleContractsPlanRanges(env, req, contractId) {
 
     let createdWeeks = 0, patchedWeeks = 0, createdAdditionalWeeks = 0, daysPlanned = 0, skippedOutside = 0, skippedDueTS = 0;
 
-    // Partition days by week-ending
     const byWe = splitDatesByWeek(r, c.week_ending_weekday_snapshot || 0);
-
-    // If we extended window above, check if it changed
     contractWindowChanged = contractWindowChanged || extendWindow;
 
     for (const [we, dayList] of byWe.entries()) {
-      // Ensure a target week (base or additional)
       let siblings = await ensureWeek(c.id, we);
       let base = siblings.find(x => x.additional_seq === 0);
       if (!base) {
         base = await createWeek(c.id, we, 0);
         createdWeeks += 1;
-        siblings = [base]; // refresh local view
+        siblings = [base];
       }
 
-      // Select where to plan dates:
       let targetWeek = base;
       if (base.timesheet_id) {
         if (tsExistsPolicy === 'reject') { skippedDueTS += dayList.length; continue; }
-        // create additional
         const maxSeq = siblings.reduce((m,w)=> Math.max(m, Number(w.additional_seq||0)), 0);
         targetWeek = await createWeek(c.id, we, maxSeq+1);
         createdAdditionalWeeks += 1;
       }
 
-      // Merge/append dated entries into targetWeek.planned_schedule_json
       const planArr = Array.isArray(targetWeek.planned_schedule_json) ? targetWeek.planned_schedule_json.slice() : [];
       let changed = false;
 
@@ -15230,15 +15210,9 @@ export async function handleContractsPlanRanges(env, req, contractId) {
         const idx = planArr.findIndex(p => p?.date === ymd);
         const entry = buildPlanEntryForDate(ymd, c, d.explicit);
         if (idx >= 0) {
-          if (mergeMode === 'replace') {
-            planArr[idx] = entry;
-            changed = true; daysPlanned += 1;
-          } else {
-            // append mode: ignore duplicates
-          }
+          if (mergeMode === 'replace') { planArr[idx] = entry; changed = true; daysPlanned += 1; }
         } else {
-          planArr.push(entry);
-          changed = true; daysPlanned += 1;
+          planArr.push(entry); changed = true; daysPlanned += 1;
         }
       }
 
@@ -15269,6 +15243,7 @@ export async function handleContractsPlanRanges(env, req, contractId) {
     ranges: results
   }));
 }
+
 export async function handleContractsUnplanRanges(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -15342,6 +15317,56 @@ export async function handleContractsUnplanRanges(env, req, contractId) {
   const results = [];
 
   for (const r of ranges) {
+    const fromY = toYmd(r.from||r.From||r.start);
+    const toY = toYmd(r.to||r.To||r.end);
+    const isRemoveAllFastPath = Array.isArray(r.days) && r.days.length === 0;
+
+    if (isRemoveAllFastPath) {
+      const weFrom = computeWeekEnding(fromY, c.week_ending_weekday_snapshot || 0);
+      const weTo   = computeWeekEnding(toY,   c.week_ending_weekday_snapshot || 0);
+
+      if (emptyWeekAction === 'delete') {
+        const del = await fetch(
+          `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+          `?contract_id=eq.${enc(c.id)}&timesheet_id=is.null&week_ending_date=gte.${enc(weFrom)}&week_ending_date=lte.${enc(weTo)}`,
+          { method:'DELETE', headers: { ...sbHeaders(env), 'Prefer':'return=representation' } }
+        );
+        if (!del.ok) return withCORS(env, req, serverError(await del.text()));
+        const deletedRows = await del.json().catch(()=>[]);
+        results.push({
+          from: fromY,
+          to:   toY,
+          patched_weeks: 0,
+          days_removed: 0,
+          emptied_weeks: Array.isArray(deletedRows) ? deletedRows.length : 0,
+          emptied_weeks_action: 'delete',
+          skipped_due_to_timesheet: 0
+        });
+      } else {
+        const patchBody = (emptyWeekAction === 'cancel')
+          ? { planned_schedule_json: [], status: 'CANCELLED', updated_at: nowIso() }
+          : { planned_schedule_json: [], updated_at: nowIso() };
+
+        const pat = await fetch(
+          `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+          `?contract_id=eq.${enc(c.id)}&timesheet_id=is.null&week_ending_date=gte.${enc(weFrom)}&week_ending_date=lte.${enc(weTo)}`,
+          { method:'PATCH', headers: { ...sbHeaders(env), 'Prefer':'return=representation' }, body: JSON.stringify(patchBody) }
+        );
+        if (!pat.ok) return withCORS(env, req, serverError(await pat.text()));
+        const patched = await pat.json().catch(()=>[]);
+        results.push({
+          from: fromY,
+          to:   toY,
+          patched_weeks: Array.isArray(patched) ? patched.length : 0,
+          days_removed: 0,
+          emptied_weeks: Array.isArray(patched) ? patched.filter(w => Array.isArray(w?.planned_schedule_json) && w.planned_schedule_json.length === 0).length : 0,
+          emptied_weeks_action: emptyWeekAction,
+          skipped_due_to_timesheet: 0
+        });
+      }
+      continue;
+    }
+
     const byWE = splitDatesByWE(r);
     const weSet = new Set(byWE.keys());
     const weeks = await loadWeeks(c.id, weSet);
@@ -15359,59 +15384,62 @@ export async function handleContractsUnplanRanges(env, req, contractId) {
       const siblings = weeksByWE.get(we) || [];
       if (!siblings.length) continue;
 
-      for (const ymd of dates) {
-        let removed = false;
+      const dateSet = new Set(dates);
 
-        const sorted = siblings.slice().sort((a,b)=> (a.additional_seq||0)-(b.additional_seq||0));
-
-        for (const w of sorted) {
-          const raw = w.planned_schedule_json;
-          let plan = Array.isArray(raw) ? raw : (typeof raw === 'string' ? JSON.parse(raw) : []);
-          const idx = plan.findIndex(d => d?.date === ymd);
-          if (idx === -1) continue;
-
-          if (w.timesheet_id) {
+      for (const w of siblings) {
+        if (w.timesheet_id) {
+          const overlapCount = (Array.isArray(w.planned_schedule_json) ? w.planned_schedule_json : []).filter(p => dateSet.has(p?.date)).length;
+          if (overlapCount) {
             if (tsExistsPolicy === 'error') {
-              return withCORS(env, req, badRequest(`Timesheet exists for WE ${we}; cannot remove ${ymd}`));
+              return withCORS(env, req, badRequest(`Timesheet exists for WE ${we}; cannot remove planned dates`));
             }
-            skippedDueTS += 1;
+            skippedDueTS += overlapCount;
+          }
+          continue;
+        }
+
+        const raw = w.planned_schedule_json;
+        const plan = Array.isArray(raw) ? raw : (typeof raw === 'string' ? JSON.parse(raw) : []);
+        const newPlan = plan.filter(p => !dateSet.has(p?.date));
+        const removedHere = plan.length - newPlan.length;
+        if (!removedHere) continue;
+
+        daysRemoved += removedHere;
+
+        if (!newPlan.length) {
+          if (emptyWeekAction === 'delete') {
+            const del = await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(w.id)}`, {
+              method:'DELETE', headers:{ ...sbHeaders(env), 'Prefer':'return=minimal' }
+            });
+            try { await del.arrayBuffer(); } catch {}
+            emptiedWeeks += 1;
+            patchedWeeks += 1;
             continue;
           }
-
-          plan.splice(idx, 1);
-          const patch = {
-            planned_schedule_json: (typeof raw === 'string') ? JSON.stringify(plan) : plan,
-            updated_at: nowIso()
-          };
-
-          if (!plan.length && !w.timesheet_id) {
-            if (emptyWeekAction === 'cancel') {
-              patch.status = 'CANCELLED';
-              emptiedWeeks += 1;
-            }
-          }
-
+          const patch = (emptyWeekAction === 'cancel')
+            ? { planned_schedule_json: [], status: 'CANCELLED', updated_at: nowIso() }
+            : { planned_schedule_json: [], updated_at: nowIso() };
           const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(w.id)}`, {
-            method:'PATCH', headers:{ ...sbHeaders(env), 'Prefer':'return=representation' }, body: JSON.stringify(patch)
+            method:'PATCH', headers:{ ...sbHeaders(env), 'Prefer':'return=minimal' }, body: JSON.stringify(patch)
           });
-          if (!res.ok) return withCORS(env, req, serverError(await res.text()));
-          patchedWeeks += 1; daysRemoved += 1; removed = true;
-
-          if (!plan.length && !w.timesheet_id && emptyWeekAction === 'delete') {
-            await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(w.id)}`, {
-              method:'DELETE', headers:{ ...sbHeaders(env), 'Prefer':'return=minimal' }
-            }).catch(()=>{});
-            emptiedWeeks += 1;
-          }
-
-          break;
+          try { await res.arrayBuffer(); } catch {}
+          emptiedWeeks += 1;
+          patchedWeeks += 1;
+          continue;
         }
+
+        const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(w.id)}`, {
+          method:'PATCH', headers:{ ...sbHeaders(env), 'Prefer':'return=minimal' },
+          body: JSON.stringify({ planned_schedule_json: newPlan, updated_at: nowIso() })
+        });
+        try { await res.arrayBuffer(); } catch {}
+        patchedWeeks += 1;
       }
     }
 
     results.push({
-      from: toYmd(r.from||r.From||r.start),
-      to:   toYmd(r.to||r.To||r.end),
+      from: fromY,
+      to:   toY,
       patched_weeks: patchedWeeks,
       days_removed: daysRemoved,
       emptied_weeks: emptiedWeeks,
