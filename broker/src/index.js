@@ -1719,135 +1719,94 @@ function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEn
   // Unknown shape → nothing to render
   return [];
 }
-
 export async function handleContractsCloneAndExtend(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
-  let body; 
-  try { body = await parseJSONBody(req); } 
+  let body;
+  try { body = await parseJSONBody(req); }
   catch { return withCORS(env, req, badRequest('Invalid JSON')); }
 
-  // Load current contract (we need dates, ids, schedule, etc.)
+  // Load current contract
   const cur = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=*`
   );
   if (!cur) return withCORS(env, req, notFound('Contract not found'));
 
-  // Required dates for the successor (use exactly what the user entered)
+  // Inputs
   const newStart = toYmd(body.new_start_date || cur.end_date);
   const newEnd   = toYmd(body.new_end_date   || cur.end_date);
-  if (!newStart || !newEnd) {
-    return withCORS(env, req, badRequest('new_start_date and new_end_date required'));
-  }
-  if (newStart > newEnd) {
-    return withCORS(env, req, badRequest('new_start_date must be on or before new_end_date'));
-  }
+  if (!newStart || !newEnd)  return withCORS(env, req, badRequest('new_start_date and new_end_date required'));
+  if (newStart  >  newEnd)   return withCORS(env, req, badRequest('new_start_date must be on or before new_end_date'));
 
-  // Close current at day before newStart
-  const closeD  = new Date(newStart + 'T00:00:00Z'); 
-  closeD.setUTCDate(closeD.getUTCDate() - 1);
-  const closeTo = toYmd(closeD);
+  // Should we end existing A?
+  const wantEndExisting = (typeof body.end_existing === 'boolean') ? body.end_existing : true;
 
-  // Guard: cannot close before the contract started
-  if (closeTo < cur.start_date) {
-    return withCORS(env, req, badRequest('Invalid new_start_date (before original start)'));
-  }
+  // Default close date = newStart − 1 day
+  const defaultCloseD = new Date(newStart + 'T00:00:00Z'); defaultCloseD.setUTCDate(defaultCloseD.getUTCDate() - 1);
+  const defaultCloseIso = toYmd(defaultCloseD);
 
-  // If there is any submitted timesheet in/after the new start, we cannot early-close
-  const submittedAfter = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-    `?contract_id=eq.${enc(cur.id)}&timesheet_id=not.is.null&week_ending_date=gte.${enc(newStart)}` +
-    `&select=week_ending_date&limit=1`
-  );
-  if (submittedAfter) {
-    return withCORS(env, req, badRequest('Cannot close: submitted timesheets exist on or after the new start date.'));
+  // If user supplied end date, use it (validated below); else use default
+  let closeTo = wantEndExisting ? toYmd(body.end_existing_on || defaultCloseIso) : null;
+
+  if (wantEndExisting) {
+    if (!closeTo) return withCORS(env, req, badRequest('end_existing_on required when end_existing=true'));
+    if (closeTo < cur.start_date) return withCORS(env, req, badRequest('Existing contract cannot end before its original start'));
+    if (closeTo >= newStart)      return withCORS(env, req, badRequest('Existing contract end must be before the new start'));
   }
 
-  // Tail clean-up (per-day): remove only planned days >= newStart, skip weeks with TS
-  try {
-    // Load all weeks from the cut date onward (any status)
-    const { rows: weeks } = await sbFetch(
+  // If we must end A, ensure no submitted TS on/after the cut
+  if (wantEndExisting) {
+    const submittedAfter = await sbGetOne(
       env,
       `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-      `?contract_id=eq.${enc(cur.id)}&week_ending_date=gte.${enc(newStart)}` +
-      `&select=id,week_ending_date,timesheet_id,planned_schedule_json`
+      `?contract_id=eq.${enc(cur.id)}&timesheet_id=not.is.null&week_ending_date=gte.${enc(newStart)}` +
+      `&select=week_ending_date&limit=1`
     );
-    for (const w of (weeks || [])) {
-      // Skip weeks that already have a timesheet
-      if (w?.timesheet_id) continue;
-
-      const plan = Array.isArray(w?.planned_schedule_json) ? w.planned_schedule_json : [];
-      if (!plan.length) {
-        // nothing planned; delete empty shell week
-        await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(w.id)}`, {
-          method:'DELETE', headers: { ...sbHeaders(env), 'Prefer':'return=minimal' }
-        }).catch(()=>{});
-        continue;
-      }
-
-      // Keep only days BEFORE the newStart cut; drop days on/after newStart
-      const kept = plan.filter(d => d && typeof d.date === 'string' && d.date < newStart);
-
-      if (kept.length) {
-        await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(w.id)}`, {
-          method:'PATCH', headers:{ ...sbHeaders(env), 'Prefer':'return=minimal' },
-          body: JSON.stringify({ planned_schedule_json: kept, updated_at: nowIso() })
-        });
-      } else {
-        // No days left and no TS → delete the week
-        await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(w.id)}`, {
-          method:'DELETE', headers: { ...sbHeaders(env), 'Prefer':'return=minimal' }
-        }).catch(()=>{});
-      }
+    if (submittedAfter) {
+      return withCORS(env, req, badRequest('Cannot close: submitted timesheets exist on or after the new start date.'));
     }
-  } catch (_) {
-    // non-fatal; continue
   }
 
-  // Close current contract (now that tail has been pruned per-day)
-  await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {
-    method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
-    body: JSON.stringify({ end_date: closeTo, updated_at: nowIso() })
-  });
+  // Successor source: allow overrides from body.successor_overrides
+  const ov = (body.successor_overrides && typeof body.successor_overrides === 'object') ? body.successor_overrides : {};
 
-  // Successor: same candidate/client by default; allow overrides via payload
-  let successor_std_schedule = ('std_schedule_json' in body) ? (body.std_schedule_json || null) : (cur.std_schedule_json || null);
+  // Compose successor std_* (prefer explicit override → derived from schedule → inherit)
+  let successor_std_schedule = ('std_schedule_json' in ov) ? (ov.std_schedule_json || null) : (cur.std_schedule_json || null);
   let successor_std_hours    = null;
   if (successor_std_schedule) {
-    try {
-      successor_std_hours = deriveStdHoursFromSchedule(successor_std_schedule);
-    } catch (e) {
-      return withCORS(env, req, badRequest(e.message || 'Invalid std_schedule_json for successor'));
-    }
+    try { successor_std_hours = deriveStdHoursFromSchedule(successor_std_schedule); }
+    catch (e) { return withCORS(env, req, badRequest(e.message || 'Invalid std_schedule_json for successor')); }
   } else {
-    successor_std_hours = ('std_hours_json' in body) ? (body.std_hours_json || null) : (cur.std_hours_json || null);
+    successor_std_hours = ('std_hours_json' in ov) ? (ov.std_hours_json || null) : (cur.std_hours_json || null);
   }
 
+  // Successor payload: copy from A, apply overrides
   const successorPayload = [{
-    candidate_id: cur.candidate_id,
-    client_id:    cur.client_id,
-    role:         cur.role,
-    band:         cur.band,
-    display_site: cur.display_site,
-    ward_hint:    cur.ward_hint,
+    candidate_id: ('candidate_id' in ov) ? ov.candidate_id : cur.candidate_id,
+    client_id:    ('client_id'    in ov) ? ov.client_id    : cur.client_id,
+    role:         ('role'         in ov) ? ov.role         : cur.role,
+    band:         ('band'         in ov) ? ov.band         : cur.band,
+    display_site: ('display_site' in ov) ? ov.display_site : cur.display_site,
+    ward_hint:    ('ward_hint'    in ov) ? ov.ward_hint    : cur.ward_hint,
 
     start_date: newStart,
     end_date:   newEnd,
 
-    pay_method_snapshot: (body.pay_method_snapshot || cur.pay_method_snapshot),
-    rates_json:          body.rates_json || cur.rates_json || {},
-    default_submission_mode: body.default_submission_mode || cur.default_submission_mode,
-    week_ending_weekday_snapshot: (body.week_ending_weekday_snapshot != null
-                                  ? Number(body.week_ending_weekday_snapshot)
+    pay_method_snapshot: ('pay_method_snapshot' in ov) ? ov.pay_method_snapshot : cur.pay_method_snapshot,
+    rates_json:          ('rates_json'          in ov) ? ov.rates_json          : (cur.rates_json || {}),
+
+    default_submission_mode: ('default_submission_mode' in ov) ? ov.default_submission_mode : cur.default_submission_mode,
+    week_ending_weekday_snapshot: (ov.week_ending_weekday_snapshot != null
+                                  ? Number(ov.week_ending_weekday_snapshot)
                                   : cur.week_ending_weekday_snapshot),
 
     std_schedule_json: successor_std_schedule,
     std_hours_json:    successor_std_hours,
 
-    bucket_labels_json: cur.bucket_labels_json || null,
+    bucket_labels_json: ('bucket_labels_json' in ov) ? ov.bucket_labels_json : (cur.bucket_labels_json || null),
+
     auto_invoice: cur.auto_invoice,
     require_reference_to_pay: cur.require_reference_to_pay,
     require_reference_to_invoice: cur.require_reference_to_invoice,
@@ -1855,17 +1814,66 @@ export async function handleContractsCloneAndExtend(env, req, contractId) {
     created_at: nowIso(), updated_at: nowIso()
   }];
 
+  // Insert successor
   const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts`, {
     method: 'POST', headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
     body: JSON.stringify(successorPayload)
   });
-  if (!ins.ok) return withCORS(env, req, serverError(await res.text()));
+  if (!ins.ok) return withCORS(env, req, serverError(await ins.text()));
   const successor = (await ins.json().catch(()=>[]))[0];
 
-  // Generate successor weeks across the exact user-entered range (template-only behaviour is inherent)
-  await handleContractsGenerateWeeks(env, new Request(''), successor.id);
+  // Generate weeks for successor
+  try {
+    await handleContractsGenerateWeeks(env, new Request(''), successor.id);
+  } catch (e) {
+    // non-fatal; leave successor created
+    console.warn('[CLONE-EXTEND] generate-weeks failed for successor', successor.id, e?.message || e);
+  }
 
-  return withCORS(env, req, ok({ closed_at: closeTo, successor }));
+  // End existing A (if requested)
+  if (wantEndExisting) {
+    // Per-day prune at/after newStart (skip TS), then patch end_date = closeTo
+    try {
+      const { rows: weeks } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+        `?contract_id=eq.${enc(cur.id)}&week_ending_date=gte.${enc(newStart)}` +
+        `&select=id,week_ending_date,timesheet_id,planned_schedule_json`
+      );
+      for (const w of (weeks || [])) {
+        if (w?.timesheet_id) continue; // keep weeks with TS
+
+        const plan = Array.isArray(w?.planned_schedule_json) ? w.planned_schedule_json : [];
+        if (!plan.length) {
+          // empty shell → delete
+          await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(w.id)}`, {
+            method:'DELETE', headers: { ...sbHeaders(env), 'Prefer':'return=minimal' }
+          }).catch(()=>{});
+          continue;
+        }
+        // Keep only days strictly before newStart
+        const kept = plan.filter(d => d && typeof d.date === 'string' && d.date < newStart);
+        if (kept.length) {
+          await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(w.id)}`, {
+            method:'PATCH', headers:{ ...sbHeaders(env), 'Prefer':'return=minimal' },
+            body: JSON.stringify({ planned_schedule_json: kept, updated_at: nowIso() })
+          });
+        } else {
+          await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(w.id)}`, {
+            method:'DELETE', headers: { ...sbHeaders(env), 'Prefer':'return=minimal' }
+          }).catch(()=>{});
+        }
+      }
+    } catch (_) {}
+
+    // Patch A.end_date
+    await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {
+      method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ end_date: closeTo, updated_at: nowIso() })
+    });
+  }
+
+  return withCORS(env, req, ok({ successor, closed_at: wantEndExisting ? closeTo : null }));
 }
 
 export async function handleContractsCalendar(env, req, contractId) {
