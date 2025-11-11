@@ -3043,6 +3043,91 @@ export async function handleTimesheetSwitchToManual(env, req, timesheetId) {
   return withCORS(env, req, ok({ switched: true, contract_week_id: cw.id }));
 }
 
+// POST /api/contracts/:id/truncate-tail
+export async function handleContractsTruncateTailSafely(env, req, contractId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let body; try { body = await parseJSONBody(req); } catch { 
+    return withCORS(env, req, badRequest('Invalid JSON')); 
+  }
+  const desiredEnd = String(body?.desired_end || body?.end_date || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(desiredEnd)) {
+    return withCORS(env, req, badRequest('desired_end (YYYY-MM-DD) is required'));
+  }
+
+  // 1) Load current window
+  const c = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contracts`
+      + `?id=eq.${enc(contractId)}&select=id,start_date,end_date`
+  );
+  if (!c) return withCORS(env, req, notFound('Contract not found'));
+
+  // If desired_end >= current end, nothing to do
+  if (desiredEnd >= c.end_date) {
+    return withCORS(env, req, ok({ ok:true, safe_end: c.end_date, clamped:false }));
+  }
+
+  // 2) Find last week-ending date in the tail with a REAL timesheet linked
+  //    Use contract_weeks only; do NOT exclude credit/invoice-locked sheets.
+  let lastTsWE = null;
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks`
+        + `?contract_id=eq.${enc(contractId)}`
+        + `&week_ending_date=gt.${enc(desiredEnd)}&week_ending_date=lte.${enc(c.end_date)}`
+        + `&timesheet_id=not.is.null`
+        + `&select=week_ending_date`
+        + `&order=week_ending_date.desc&limit=1`
+    );
+    lastTsWE = (rows && rows[0] && rows[0].week_ending_date) || null;
+  } catch (e) {}
+
+  const safeEnd = lastTsWE ? (lastTsWE > desiredEnd ? lastTsWE : desiredEnd) : desiredEnd;
+  const clamped = safeEnd > desiredEnd;
+
+  // 3) Unplan weeks AFTER safeEnd (but only those WITHOUT a timesheet)
+  try {
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks`
+        + `?contract_id=eq.${enc(contractId)}`
+        + `&week_ending_date=gt.${enc(safeEnd)}`
+        + `&timesheet_id=is.null`,
+      {
+        method: 'DELETE',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' }
+      }
+    );
+  } catch (e) {
+    return withCORS(env, req, badRequest('Failed to unassign tail weeks: ' + (e?.message||e)));
+  }
+
+  // 4) Patch contract end_date to safeEnd
+  try {
+    const res = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+        body: JSON.stringify({ end_date: safeEnd, updated_at: nowIso() })
+      }
+    );
+    if (!res.ok) {
+      const t = await res.text();
+      return withCORS(env, req, badRequest('Contract end update failed: ' + t));
+    }
+  } catch (e) {
+    return withCORS(env, req, badRequest('Contract end update error: ' + (e?.message||e)));
+  }
+
+  return withCORS(env, req, ok({ ok:true, safe_end: safeEnd, clamped }));
+}
+
+
+
+
 
 export async function handleTimesheetDelete(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
@@ -16620,6 +16705,11 @@ if (req.method === 'POST' && p === '/api/contracts/check-timesheet-boundary') {
         const m = matchPath(p, '/api/contract-weeks/:id/manual-authorise');
         if (m && req.method === 'POST') return handleContractWeekManualAuthorise(env, req, m.id);
       }
+      {
+  const m = matchPath(p, '/api/contracts/:id/truncate-tail');
+  if (m && req.method === 'POST') return withCORS(env, req, await handleContractsTruncateTailSafely(env, req, m.id));
+}
+
       {
         const m = matchPath(p, '/api/contract-weeks/:id/timesheet');
         if (m && req.method === 'DELETE') return handleContractWeekDeleteTimesheet(env, req, m.id);
