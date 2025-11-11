@@ -1667,21 +1667,57 @@ function computeWeekEndingInclusive(ymd, wew) {
   d.setUTCDate(d.getUTCDate() + delta);
   return toYmd(d);                           // existing helper
 }
-
 function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEndWEYmd, windowEndYmd) {
-  if (!plan || typeof plan !== 'object') return plan;
-  const order = ['mon','tue','wed','thu','fri','sat','sun'];
-  const offsets = { sun: 0, sat: -1, fri: -2, thu: -3, wed: -4, tue: -5, mon: -6 };
-  const result = {};
-  for (const k of order) {
-    if (!plan[k]) continue;
-    const dayYmd = addDays(weekEndingYmd, offsets[k]);
-    if (dayYmd < windowStartYmd) continue;
-    if (weekEndingYmd > windowEndWEYmd) continue;
-    if (dayYmd > windowEndYmd) continue;
-    result[k] = plan[k];
+  // Always return an ARRAY of dated entries so downstream day views can render.
+  if (!plan) return [];
+
+  // Fast guard: if this week-ending is beyond the allowed window, nothing for this week.
+  if (weekEndingYmd > windowEndWEYmd) return [];
+
+  // Case 1: plan is already an array of { date, start, end, break_minutes, ... }
+  if (Array.isArray(plan)) {
+    const out = [];
+    for (const d of plan) {
+      if (!d || !d.date) continue;
+      const ymd = d.date;
+
+      // Keep only entries inside the contract window
+      if (ymd < windowStartYmd) continue;
+      if (ymd > windowEndYmd)   continue;
+
+      // Keep only entries that actually belong to THIS week-ending
+      try {
+        const we = computeWeekEndingInclusive(ymd, wew);
+        if (we !== weekEndingYmd) continue;
+      } catch { /* if helper not available, be permissive */ }
+
+      out.push(d);
+    }
+    return out;
   }
-  return result;
+
+  // Case 2: legacy object shape { mon..sun: { start, end, break_minutes, ... } }
+  // Convert to the array shape expected by day views.
+  if (typeof plan === 'object') {
+    const order   = ['mon','tue','wed','thu','fri','sat','sun'];
+    const offsets = { sun: 0, sat: -1, fri: -2, thu: -3, wed: -4, tue: -5, mon: -6 };
+    const out = [];
+    for (const k of order) {
+      if (!plan[k]) continue;
+      const dayYmd = addDays(weekEndingYmd, offsets[k]);
+
+      if (dayYmd < windowStartYmd) continue;
+      if (dayYmd > windowEndYmd)   continue;
+
+      const dCfg = plan[k] || {};
+      // Preserve provided fields; expected_minutes is optional and may be 0
+      out.push({ date: dayYmd, ...dCfg });
+    }
+    return out;
+  }
+
+  // Unknown shape → nothing to render
+  return [];
 }
 
 export async function handleContractsCloneAndExtend(env, req, contractId) {
