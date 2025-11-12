@@ -15423,26 +15423,64 @@ export async function handleContractsPlanRanges(env, req, contractId) {
   }));
 }
 export async function handleContractsUnplanRanges(env, req, contractId) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
+  // ===== Correlation + entry log =====
+  const corr = req.headers.get('X-Save-Corr') || `unplan:${contractId}:${Date.now()}`;
+  const log = (...a) => console.log('[UNPLAN]', corr, ...a);
+  const warn = (...a) => console.warn('[UNPLAN]', corr, ...a);
+  const errl = (...a) => console.error('[UNPLAN]', corr, ...a);
 
+  log('ENTRY', { contractId });
+
+  // ===== Auth =====
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) {
+    warn('UNAUTHORISED');
+    return withCORS(env, req, unauthorized());
+  }
+  log('AUTH OK', { user: user?.id || '(anon)' });
+
+  // ===== Parse body =====
   let body;
-  try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+  try {
+    body = await parseJSONBody(req);
+  } catch (e) {
+    errl('Invalid JSON body', { error: String(e) });
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
 
   const ranges = Array.isArray(body?.ranges) ? body.ranges : [];
-  const tsExistsPolicy = (String(body?.when_timesheet_exists||'skip').toLowerCase()==='error') ? 'error' : 'skip';
-  const emptyWeekAction = (['cancel','delete','keep'].includes(String(body?.empty_week_action||'cancel').toLowerCase()))
+  const tsExistsPolicy = (String(body?.when_timesheet_exists || 'skip').toLowerCase() === 'error') ? 'error' : 'skip';
+  const emptyWeekAction = (['cancel', 'delete', 'keep'].includes(String(body?.empty_week_action || 'cancel').toLowerCase()))
     ? String(body.empty_week_action).toLowerCase()
     : 'cancel';
 
-  if (!ranges.length) return withCORS(env, req, badRequest('ranges[] is required'));
+  log('REQUEST', {
+    rangesCount: ranges.length,
+    tsExistsPolicy,
+    emptyWeekAction,
+    sampleRange: ranges[0] || null
+  });
 
-  // Load current window + WE policy
+  if (!ranges.length) {
+    warn('ranges[] is empty');
+    return withCORS(env, req, badRequest('ranges[] is required'));
+  }
+
+  // ===== Load contract window + WE policy =====
   const c = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=id,start_date,end_date,week_ending_weekday_snapshot`
   );
-  if (!c) return withCORS(env, req, badRequest('Contract not found'));
+  if (!c) {
+    warn('Contract not found');
+    return withCORS(env, req, badRequest('Contract not found'));
+  }
+  log('CONTRACT LOADED', {
+    id: c.id,
+    start_date: c.start_date,
+    end_date: c.end_date,
+    wew: c.week_ending_weekday_snapshot
+  });
 
   const weekdayToJs = { mon:1, tue:2, wed:3, thu:4, fri:5, sat:6, sun:0 };
   const toWeekdayMask = (arr)=> new Set((arr||[]).map(x=> String(x||'').toLowerCase()).filter(k=> k in weekdayToJs));
@@ -15494,6 +15532,10 @@ export async function handleContractsUnplanRanges(env, req, contractId) {
   }
 
   const results = [];
+  let totalPatchedWeeks = 0;
+  let totalDaysRemoved = 0;
+  let totalEmptiedWeeks = 0;
+  let totalSkippedDueTS = 0;
 
   // ===== Apply unplanning to the targeted ranges =====
   for (const r of ranges) {
@@ -15501,9 +15543,12 @@ export async function handleContractsUnplanRanges(env, req, contractId) {
     const toY = toYmd(r.to||r.To||r.end);
     const isRemoveAllFastPath = Array.isArray(r.days) && r.days.length === 0;
 
+    log('RANGE_START', { from: fromY, to: toY, removeAllFastPath: isRemoveAllFastPath });
+
     if (isRemoveAllFastPath) {
       const weFrom = computeWeekEnding(fromY, c.week_ending_weekday_snapshot || 0);
       const weTo   = computeWeekEnding(toY,   c.week_ending_weekday_snapshot || 0);
+      log('FASTPATH_REMOVE_ALL', { weFrom, weTo, emptyWeekAction });
 
       if (emptyWeekAction === 'delete') {
         const del = await fetch(
@@ -15511,17 +15556,25 @@ export async function handleContractsUnplanRanges(env, req, contractId) {
           `?contract_id=eq.${enc(c.id)}&timesheet_id=is.null&week_ending_date=gte.${enc(weFrom)}&week_ending_date=lte.${enc(weTo)}`,
           { method:'DELETE', headers: { ...sbHeaders(env), 'Prefer':'return=representation' } }
         );
-        if (!del.ok) return withCORS(env, req, serverError(await del.text()));
+        if (!del.ok) {
+          const txt = await del.text();
+          errl('DELETE weeks failed', { status: del.status, txt });
+          return withCORS(env, req, serverError(txt));
+        }
         const deletedRows = await del.json().catch(()=>[]);
+        const emptiedCount = Array.isArray(deletedRows) ? deletedRows.length : 0;
+        log('FASTPATH_DELETE_RESULT', { emptiedCount });
+
         results.push({
           from: fromY,
           to:   toY,
           patched_weeks: 0,
           days_removed: 0,
-          emptied_weeks: Array.isArray(deletedRows) ? deletedRows.length : 0,
+          emptied_weeks: emptiedCount,
           emptied_weeks_action: 'delete',
           skipped_due_to_timesheet: 0
         });
+        totalEmptiedWeeks += emptiedCount;
       } else {
         const patchBody = (emptyWeekAction === 'cancel')
           ? { planned_schedule_json: [], status: 'CANCELLED', updated_at: nowIso() }
@@ -15532,24 +15585,42 @@ export async function handleContractsUnplanRanges(env, req, contractId) {
           `?contract_id=eq.${enc(c.id)}&timesheet_id=is.null&week_ending_date=gte.${enc(weFrom)}&week_ending_date=lte.${enc(weTo)}`,
           { method:'PATCH', headers: { ...sbHeaders(env), 'Prefer':'return=representation' }, body: JSON.stringify(patchBody) }
         );
-        if (!pat.ok) return withCORS(env, req, serverError(await pat.text()));
+        if (!pat.ok) {
+          const txt = await pat.text();
+          errl('PATCH weeks (fastpath) failed', { status: pat.status, txt });
+          return withCORS(env, req, serverError(txt));
+        }
         const patched = await pat.json().catch(()=>[]);
+        const patchedCount = Array.isArray(patched) ? patched.length : 0;
+        const emptiedCount = Array.isArray(patched)
+          ? patched.filter(w => Array.isArray(w?.planned_schedule_json) && w.planned_schedule_json.length === 0).length
+          : 0;
+
+        log('FASTPATH_PATCH_RESULT', { patchedCount, emptiedCount, action: emptyWeekAction });
+
         results.push({
           from: fromY,
           to:   toY,
-          patched_weeks: Array.isArray(patched) ? patched.length : 0,
+          patched_weeks: patchedCount,
           days_removed: 0,
-          emptied_weeks: Array.isArray(patched) ? patched.filter(w => Array.isArray(w?.planned_schedule_json) && w.planned_schedule_json.length === 0).length : 0,
+          emptied_weeks: emptiedCount,
           emptied_weeks_action: emptyWeekAction,
           skipped_due_to_timesheet: 0
         });
+        totalPatchedWeeks += patchedCount;
+        totalEmptiedWeeks += emptiedCount;
       }
+
       continue;
     }
 
+    // Group dates by WE for targeted unplan
     const byWE = splitDatesByWE(r);
     const weSet = new Set(byWE.keys());
+    log('SPLIT_BY_WE', { weCount: weSet.size, weeks: [...weSet].slice(0, 6) });
+
     const weeks = await loadWeeks(c.id, weSet);
+    log('WEEKS_LOADED', { count: weeks.length });
 
     let patchedWeeks = 0, daysRemoved = 0, emptiedWeeks = 0, skippedDueTS = 0;
 
@@ -15562,18 +15633,23 @@ export async function handleContractsUnplanRanges(env, req, contractId) {
 
     for (const [we, dates] of byWE.entries()) {
       const siblings = weeksByWE.get(we) || [];
-      if (!siblings.length) continue;
-
+      if (!siblings.length) {
+        log('NO_WEEKS_FOR_WE', { we });
+        continue;
+      }
       const dateSet = new Set(dates);
 
       for (const w of siblings) {
         if (w.timesheet_id) {
-          const overlapCount = (Array.isArray(w.planned_schedule_json) ? w.planned_schedule_json : []).filter(p => dateSet.has(p?.date)).length;
+          const planArr = Array.isArray(w.planned_schedule_json) ? w.planned_schedule_json : [];
+          const overlapCount = planArr.filter(p => dateSet.has(p?.date)).length;
           if (overlapCount) {
             if (tsExistsPolicy === 'error') {
+              warn('TS_EXISTS_ERROR_POLICY', { we, weekId: w.id, overlapCount });
               return withCORS(env, req, badRequest(`Timesheet exists for WE ${we}; cannot remove planned dates`));
             }
             skippedDueTS += overlapCount;
+            log('SKIP_DUE_TS', { we, weekId: w.id, overlapCount });
           }
           continue;
         }
@@ -15594,6 +15670,7 @@ export async function handleContractsUnplanRanges(env, req, contractId) {
             try { await del.arrayBuffer(); } catch {}
             emptiedWeeks += 1;
             patchedWeeks += 1;
+            log('DELETE_EMPTY_WEEK', { we, weekId: w.id });
             continue;
           }
           const patch = (emptyWeekAction === 'cancel')
@@ -15605,6 +15682,7 @@ export async function handleContractsUnplanRanges(env, req, contractId) {
           try { await res.arrayBuffer(); } catch {}
           emptiedWeeks += 1;
           patchedWeeks += 1;
+          log('PATCH_EMPTY_WEEK', { we, weekId: w.id, action: emptyWeekAction });
           continue;
         }
 
@@ -15614,6 +15692,7 @@ export async function handleContractsUnplanRanges(env, req, contractId) {
         });
         try { await res.arrayBuffer(); } catch {}
         patchedWeeks += 1;
+        log('PATCH_PARTIAL_WEEK', { we, weekId: w.id, removedHere });
       }
     }
 
@@ -15626,10 +15705,23 @@ export async function handleContractsUnplanRanges(env, req, contractId) {
       emptied_weeks_action: emptyWeekAction,
       skipped_due_to_timesheet: skippedDueTS
     });
+
+    totalPatchedWeeks += patchedWeeks;
+    totalDaysRemoved  += daysRemoved;
+    totalEmptiedWeeks += emptiedWeeks;
+    totalSkippedDueTS += skippedDueTS;
+
+    log('RANGE_DONE', {
+      from: fromY,
+      to: toY,
+      patchedWeeks,
+      daysRemoved,
+      emptiedWeeks,
+      skippedDueTS
+    });
   }
 
-  // ===== Normalize the contract window AFTER unplanning (mirror plan-ranges logic) =====
-  // 1) Find earliest submitted and latest submitted week (protect shrink)
+  // ===== Normalize window AFTER unplanning (mirror plan-ranges) =====
   let minWE = null, maxWE = null;
   try {
     const { rows: minRows } = await sbFetch(
@@ -15647,9 +15739,10 @@ export async function handleContractsUnplanRanges(env, req, contractId) {
       `&order=week_ending_date.desc&limit=1`
     );
     maxWE = (maxRows && maxRows[0] && maxRows[0].week_ending_date) || null;
-  } catch {}
+  } catch (e) {
+    warn('FETCH_TS_ENVELOPE_FAILED', { error: String(e) });
+  }
 
-  // 2) Compute remaining planned min/max dates (union window)
   let minPlanned = null, maxPlanned = null;
   try {
     const { rows: allWeeks } = await sbFetch(
@@ -15670,9 +15763,10 @@ export async function handleContractsUnplanRanges(env, req, contractId) {
         if (!maxPlanned || y > maxPlanned) maxPlanned = y;
       }
     }
-  } catch {}
+  } catch (e) {
+    warn('SCAN_PLANNED_FAILED', { error: String(e) });
+  }
 
-  // 3) Propose new window = [minPlanned .. maxPlanned]; if none, collapse to at most start_date
   let newStart = c.start_date;
   let newEnd   = c.end_date;
 
@@ -15680,15 +15774,13 @@ export async function handleContractsUnplanRanges(env, req, contractId) {
     newStart = minPlanned;
     newEnd   = maxPlanned;
   } else {
-    // No planned days remain. If there are submitted TS, keep the TS envelope;
-    // otherwise collapse window (match FE behavior; minimal extent).
     if (!minWE && !maxWE) {
       newStart = c.start_date;
       newEnd   = c.start_date;
     }
   }
 
-  // 4) Clamp against submitted timesheets (same as plan-ranges)
+  const beforeClamp = { newStart, newEnd, minWE, maxWE };
   if (minWE) {
     const minWeekStart = addDays(minWE, -6);
     if (newStart > minWeekStart) newStart = minWeekStart;
@@ -15696,34 +15788,58 @@ export async function handleContractsUnplanRanges(env, req, contractId) {
   if (maxWE) {
     if (newEnd < maxWE) newEnd = maxWE;
   }
+  log('NORMALIZE_WINDOW', {
+    proposed: beforeClamp,
+    clamped: { newStart, newEnd }
+  });
 
-  // 5) Persist window change + prune outside weeks (no timesheet)
   let contractWindowChanged = false;
   if (newStart !== c.start_date || newEnd !== c.end_date) {
+    log('PATCH_CONTRACT_WINDOW', {
+      oldStart: c.start_date, oldEnd: c.end_date, newStart, newEnd
+    });
     const pr = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(c.id)}`, {
       method: 'PATCH',
       headers: { ...sbHeaders(env), 'Prefer':'return=representation' },
       body: JSON.stringify({ start_date: newStart, end_date: newEnd, updated_at: nowIso() })
     });
-    if (!pr.ok) return withCORS(env, req, serverError(await pr.text()));
+    if (!pr.ok) {
+      const txt = await pr.text();
+      errl('PATCH_CONTRACT_WINDOW_FAILED', { status: pr.status, txt });
+      return withCORS(env, req, serverError(txt));
+    }
     const upd = (await pr.json().catch(()=>[]))[0] || c;
     c.start_date = upd.start_date; c.end_date = upd.end_date;
     contractWindowChanged = true;
 
-    // delete weeks that sit beyond the new bounds (only unsubmitted)
     try {
+      log('PRUNE_OUTSIDE_WEEKS', { keepFrom: c.start_date, keepTo: c.end_date });
       const delRes = await fetch(
         `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(c.id)}&timesheet_id=is.null&or=(week_ending_date.lt.${enc(c.start_date)},week_ending_date.gt.${enc(c.end_date)})`,
         { method:'DELETE', headers: { ...sbHeaders(env), 'Prefer':'return=minimal' } }
       );
       try { await delRes.arrayBuffer(); } catch {}
-    } catch {}
+    } catch (e) {
+      warn('PRUNE_OUTSIDE_WEEKS_FAILED', { error: String(e) });
+    }
+  } else {
+    log('WINDOW_UNCHANGED', { start_date: c.start_date, end_date: c.end_date });
   }
 
-  return withCORS(env, req, ok({
+  const response = {
     contract_window_changed: contractWindowChanged,
-    ranges: results
-  }));
+    ranges: results,
+    totals: {
+      patched_weeks: totalPatchedWeeks,
+      days_removed: totalDaysRemoved,
+      emptied_weeks: totalEmptiedWeeks,
+      skipped_due_to_timesheet: totalSkippedDueTS
+    },
+    final_window: { start_date: c.start_date, end_date: c.end_date }
+  };
+
+  log('EXIT OK', response);
+  return withCORS(env, req, ok(response));
 }
 
 
