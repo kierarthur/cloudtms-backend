@@ -15422,7 +15422,6 @@ export async function handleContractsPlanRanges(env, req, contractId) {
     ranges: results
   }));
 }
-
 export async function handleContractsUnplanRanges(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -15438,6 +15437,7 @@ export async function handleContractsUnplanRanges(env, req, contractId) {
 
   if (!ranges.length) return withCORS(env, req, badRequest('ranges[] is required'));
 
+  // Load current window + WE policy
   const c = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=id,start_date,end_date,week_ending_weekday_snapshot`
@@ -15495,6 +15495,7 @@ export async function handleContractsUnplanRanges(env, req, contractId) {
 
   const results = [];
 
+  // ===== Apply unplanning to the targeted ranges =====
   for (const r of ranges) {
     const fromY = toYmd(r.from||r.From||r.start);
     const toY = toYmd(r.to||r.To||r.end);
@@ -15627,7 +15628,102 @@ export async function handleContractsUnplanRanges(env, req, contractId) {
     });
   }
 
-  return withCORS(env, req, ok({ ranges: results }));
+  // ===== Normalize the contract window AFTER unplanning (mirror plan-ranges logic) =====
+  // 1) Find earliest submitted and latest submitted week (protect shrink)
+  let minWE = null, maxWE = null;
+  try {
+    const { rows: minRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+      `?contract_id=eq.${enc(c.id)}&timesheet_id=not.is.null&select=week_ending_date` +
+      `&order=week_ending_date.asc&limit=1`
+    );
+    minWE = (minRows && minRows[0] && minRows[0].week_ending_date) || null;
+
+    const { rows: maxRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+      `?contract_id=eq.${enc(c.id)}&timesheet_id=not.is.null&select=week_ending_date` +
+      `&order=week_ending_date.desc&limit=1`
+    );
+    maxWE = (maxRows && maxRows[0] && maxRows[0].week_ending_date) || null;
+  } catch {}
+
+  // 2) Compute remaining planned min/max dates (union window)
+  let minPlanned = null, maxPlanned = null;
+  try {
+    const { rows: allWeeks } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+      `?contract_id=eq.${enc(c.id)}&select=planned_schedule_json,week_ending_date,timesheet_id`
+    );
+    for (const w of (allWeeks || [])) {
+      const arr = Array.isArray(w?.planned_schedule_json)
+        ? w.planned_schedule_json
+        : (typeof w?.planned_schedule_json === 'string'
+            ? JSON.parse(w.planned_schedule_json || '[]')
+            : []);
+      for (const p of arr) {
+        const y = toYmd(p?.date);
+        if (!y) continue;
+        if (!minPlanned || y < minPlanned) minPlanned = y;
+        if (!maxPlanned || y > maxPlanned) maxPlanned = y;
+      }
+    }
+  } catch {}
+
+  // 3) Propose new window = [minPlanned .. maxPlanned]; if none, collapse to at most start_date
+  let newStart = c.start_date;
+  let newEnd   = c.end_date;
+
+  if (minPlanned && maxPlanned) {
+    newStart = minPlanned;
+    newEnd   = maxPlanned;
+  } else {
+    // No planned days remain. If there are submitted TS, keep the TS envelope;
+    // otherwise collapse window (match FE behavior; minimal extent).
+    if (!minWE && !maxWE) {
+      newStart = c.start_date;
+      newEnd   = c.start_date;
+    }
+  }
+
+  // 4) Clamp against submitted timesheets (same as plan-ranges)
+  if (minWE) {
+    const minWeekStart = addDays(minWE, -6);
+    if (newStart > minWeekStart) newStart = minWeekStart;
+  }
+  if (maxWE) {
+    if (newEnd < maxWE) newEnd = maxWE;
+  }
+
+  // 5) Persist window change + prune outside weeks (no timesheet)
+  let contractWindowChanged = false;
+  if (newStart !== c.start_date || newEnd !== c.end_date) {
+    const pr = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(c.id)}`, {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), 'Prefer':'return=representation' },
+      body: JSON.stringify({ start_date: newStart, end_date: newEnd, updated_at: nowIso() })
+    });
+    if (!pr.ok) return withCORS(env, req, serverError(await pr.text()));
+    const upd = (await pr.json().catch(()=>[]))[0] || c;
+    c.start_date = upd.start_date; c.end_date = upd.end_date;
+    contractWindowChanged = true;
+
+    // delete weeks that sit beyond the new bounds (only unsubmitted)
+    try {
+      const delRes = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(c.id)}&timesheet_id=is.null&or=(week_ending_date.lt.${enc(c.start_date)},week_ending_date.gt.${enc(c.end_date)})`,
+        { method:'DELETE', headers: { ...sbHeaders(env), 'Prefer':'return=minimal' } }
+      );
+      try { await delRes.arrayBuffer(); } catch {}
+    } catch {}
+  }
+
+  return withCORS(env, req, ok({
+    contract_window_changed: contractWindowChanged,
+    ranges: results
+  }));
 }
 
 
