@@ -726,15 +726,22 @@ export async function handleContractsCreate(env, req) {
   const user = await requireUser(env, req, ['admin']); // backoffice only
   if (!user) return withCORS(env, req, unauthorized());
 
-  let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+  let body;
+  try { body = await parseJSONBody(req); }
+  catch { return withCORS(env, req, badRequest('Invalid JSON')); }
 
   const required = ['candidate_id','client_id','start_date','end_date','pay_method_snapshot'];
   for (const k of required) if (!body[k]) return withCORS(env, req, badRequest(`${k} is required`));
 
+  // Track whether flags were explicitly supplied so we can decide when to derive from client defaults
+  const hasRequireRefToPay      = Object.prototype.hasOwnProperty.call(body, 'require_reference_to_pay');
+  const hasRequireRefToInvoice  = Object.prototype.hasOwnProperty.call(body, 'require_reference_to_invoice');
+  const hasDefaultSubmission    = Object.prototype.hasOwnProperty.call(body, 'default_submission_mode');
+
   // Normalise booleans
   body.auto_invoice = clampBool(body.auto_invoice, false);
-  body.require_reference_to_pay = clampBool(body.require_reference_to_pay, false);
-  body.require_reference_to_invoice = clampBool(body.require_reference_to_invoice, false);
+  if (hasRequireRefToPay)     body.require_reference_to_pay     = clampBool(body.require_reference_to_pay, false);
+  if (hasRequireRefToInvoice) body.require_reference_to_invoice = clampBool(body.require_reference_to_invoice, false);
 
   // Optional per-contract bucket labels
   const validateLabels = (obj) => {
@@ -763,26 +770,107 @@ export async function handleContractsCreate(env, req) {
   }
   const std_hours_json = (derived_hours || body.std_hours_json || null);
 
-  // Derive week_ending_weekday_snapshot from client if missing/invalid (fallback 0)
+  // Pre-fetch latest client_settings to use for week-ending snapshot and ref/submission defaults
+  let clientSettings = null;
+  try {
+    const { rows: csRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/client_settings` +
+        `?client_id=eq.${enc(body.client_id)}` +
+        `&select=week_ending_weekday,pay_reference_required,invoice_reference_required,default_submission_mode` +
+        `&order=effective_from.desc,created_at.desc&limit=1`
+    );
+    clientSettings = (csRows && csRows[0]) || null;
+  } catch {
+    clientSettings = null;
+  }
+
+  // Derive week_ending_weekday_snapshot from body or client_settings (fallback 0)
   let weekEndingSnapshot = null;
-  if (Number.isInteger(Number(body.week_ending_weekday_snapshot)) &&
-      Number(body.week_ending_weekday_snapshot) >= 0 &&
-      Number(body.week_ending_weekday_snapshot) <= 6) {
+  if (
+    Number.isInteger(Number(body.week_ending_weekday_snapshot)) &&
+    Number(body.week_ending_weekday_snapshot) >= 0 &&
+    Number(body.week_ending_weekday_snapshot) <= 6
+  ) {
     weekEndingSnapshot = Number(body.week_ending_weekday_snapshot);
   } else {
+    const we = Number(clientSettings?.week_ending_weekday);
+    weekEndingSnapshot = (Number.isInteger(we) && we >= 0 && we <= 6) ? we : 0;
+  }
+
+  // Derive reference flags + default submission mode from client_settings if missing from body
+  if (!hasRequireRefToPay || !hasRequireRefToInvoice || !hasDefaultSubmission) {
+    const payRefDefault  = !!(clientSettings && clientSettings.pay_reference_required);
+    const invRefDefault  = !!(clientSettings && clientSettings.invoice_reference_required);
+    const dsmRaw         = String(clientSettings?.default_submission_mode || '').toUpperCase();
+    const dsmFromClient  = ['ELECTRONIC','MANUAL'].includes(dsmRaw) ? dsmRaw : 'ELECTRONIC';
+
+    if (!hasRequireRefToPay)     body.require_reference_to_pay     = payRefDefault;
+    if (!hasRequireRefToInvoice) body.require_reference_to_invoice = invRefDefault;
+    if (!hasDefaultSubmission)   body.default_submission_mode      = dsmFromClient;
+  }
+
+  // Final normalisation for ref flags & default submission
+  body.require_reference_to_pay     = clampBool(body.require_reference_to_pay, false);
+  body.require_reference_to_invoice = clampBool(body.require_reference_to_invoice, false);
+
+  let defaultSubmissionMode = String(body.default_submission_mode || '').toUpperCase();
+  if (!['ELECTRONIC','MANUAL'].includes(defaultSubmissionMode)) {
+    defaultSubmissionMode = 'ELECTRONIC';
+  }
+
+  // Mileage: accept from body, or derive from client.mileage_charge_rate if both omitted
+  const hasMileagePay    = Object.prototype.hasOwnProperty.call(body, 'mileage_pay_rate');
+  const hasMileageCharge = Object.prototype.hasOwnProperty.call(body, 'mileage_charge_rate');
+
+  let mileage_pay_rate = null;
+  let mileage_charge_rate = null;
+
+  if (hasMileagePay) {
+    if (body.mileage_pay_rate === '' || body.mileage_pay_rate === null || body.mileage_pay_rate === undefined) {
+      mileage_pay_rate = null;
+    } else {
+      const n = Number(body.mileage_pay_rate);
+      if (!Number.isFinite(n) || n < 0) {
+        return withCORS(env, req, badRequest('mileage_pay_rate must be a non-negative number if provided'));
+      }
+      mileage_pay_rate = n;
+    }
+  }
+
+  if (hasMileageCharge) {
+    if (body.mileage_charge_rate === '' || body.mileage_charge_rate === null || body.mileage_charge_rate === undefined) {
+      mileage_charge_rate = null;
+    } else {
+      const n = Number(body.mileage_charge_rate);
+      if (!Number.isFinite(n) || n < 0) {
+        return withCORS(env, req, badRequest('mileage_charge_rate must be a non-negative number if provided'));
+      }
+      mileage_charge_rate = n;
+    }
+  }
+
+  // If BOTH mileage fields omitted, derive defaults from client.mileage_charge_rate (if available)
+  if (!hasMileagePay && !hasMileageCharge) {
     try {
-      const { rows: csRows } = await sbFetch(
+      const { rows: cliRows } = await sbFetch(
         env,
-        `${env.SUPABASE_URL}/rest/v1/client_settings` +
-          `?client_id=eq.${enc(body.client_id)}` +
-          `&select=week_ending_weekday` +
-          `&order=effective_from.desc,created_at.desc&limit=1`
+        `${env.SUPABASE_URL}/rest/v1/clients` +
+          `?id=eq.${enc(body.client_id)}` +
+          `&select=mileage_charge_rate&limit=1`
       );
-      const cs = (csRows && csRows[0]) || null;
-      const we = Number(cs?.week_ending_weekday);
-      weekEndingSnapshot = (Number.isInteger(we) && we >= 0 && we <= 6) ? we : 0;
+      const cli = (cliRows && cliRows[0]) || null;
+      if (cli && cli.mileage_charge_rate != null) {
+        const charge = Number(cli.mileage_charge_rate);
+        if (Number.isFinite(charge) && charge >= 0) {
+          mileage_charge_rate = charge;
+          const rawPay = charge - 0.10;
+          const clamped = rawPay < 0 ? 0 : rawPay;
+          mileage_pay_rate = Math.round(clamped * 100) / 100;
+        }
+      }
     } catch {
-      weekEndingSnapshot = 0;
+      // leave mileage_* as null if lookup fails
     }
   }
 
@@ -804,12 +892,15 @@ export async function handleContractsCreate(env, req) {
       std_schedule_json,
       std_hours_json,
       bucket_labels_json: bucketLabels,
-      default_submission_mode: (String(body.default_submission_mode||'').toUpperCase() === 'MANUAL') ? 'MANUAL' : 'ELECTRONIC',
+      default_submission_mode: defaultSubmissionMode,
       week_ending_weekday_snapshot: weekEndingSnapshot,
       auto_invoice: body.auto_invoice,
       require_reference_to_pay: body.require_reference_to_pay,
       require_reference_to_invoice: body.require_reference_to_invoice,
-      created_at: nowIso(), updated_at: nowIso()
+      mileage_pay_rate,
+      mileage_charge_rate,
+      created_at: nowIso(),
+      updated_at: nowIso()
     })
   });
   if (!res.ok) return withCORS(env, req, serverError(await res.text()));
@@ -989,7 +1080,6 @@ export async function handleContractsGet(env, req, contractId) {
   const contractOut = { ...contract, candidate_display, client_name };
   return withCORS(env, req, ok({ contract: contractOut, counts, weeks: weeks || [] }));
 }
-
 export async function handleContractsUpdate(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -1062,19 +1152,53 @@ export async function handleContractsUpdate(env, req, contractId) {
     if ('candidate_id' in body || 'client_id' in body || 'rates_json' in body || 'pay_method_snapshot' in body) {
       return withCORS(env, req, badRequest('Cannot change candidate/client/rates/pay_method after timesheets have been submitted'));
     }
+    if ('mileage_pay_rate' in body || 'mileage_charge_rate' in body) {
+      return withCORS(env, req, badRequest('Cannot change mileage rates after timesheets have been submitted'));
+    }
   } else {
     if ('candidate_id' in body) patch.candidate_id = body.candidate_id || null;
     if ('client_id'    in body) patch.client_id    = body.client_id || null;
     if ('rates_json'   in body) {
       const R = body.rates_json || {};
-      const buckets = ['paye_day','paye_night','paye_sat','paye_sun','paye_bh','umb_day','umb_night','umb_sat','umb_sun','umb_bh','charge_day','charge_night','charge_sat','charge_sun','charge_bh'];
-      for (const k of buckets) if (R[k]!=null && (!Number.isFinite(Number(R[k])) || Number(R[k])<0)) return withCORS(env, req, badRequest(`rates_json.${k} must be a non-negative number`));
+      const buckets = [
+        'paye_day','paye_night','paye_sat','paye_sun','paye_bh',
+        'umb_day','umb_night','umb_sat','umb_sun','umb_bh',
+        'charge_day','charge_night','charge_sat','charge_sun','charge_bh'
+      ];
+      for (const k of buckets) {
+        if (R[k] != null && (!Number.isFinite(Number(R[k])) || Number(R[k]) < 0)) {
+          return withCORS(env, req, badRequest(`rates_json.${k} must be a non-negative number`));
+        }
+      }
       patch.rates_json = R;
     }
     if ('pay_method_snapshot' in body) {
       const pm = String(body.pay_method_snapshot||'').toUpperCase();
       if (!['PAYE','UMBRELLA'].includes(pm)) return withCORS(env, req, badRequest('pay_method_snapshot must be PAYE or UMBRELLA'));
       patch.pay_method_snapshot = pm;
+    }
+    // Mileage can only be changed while there are no submitted timesheets
+    if ('mileage_pay_rate' in body) {
+      if (body.mileage_pay_rate === '' || body.mileage_pay_rate === null || body.mileage_pay_rate === undefined) {
+        patch.mileage_pay_rate = null;
+      } else {
+        const n = Number(body.mileage_pay_rate);
+        if (!Number.isFinite(n) || n < 0) {
+          return withCORS(env, req, badRequest('mileage_pay_rate must be a non-negative number if provided'));
+        }
+        patch.mileage_pay_rate = n;
+      }
+    }
+    if ('mileage_charge_rate' in body) {
+      if (body.mileage_charge_rate === '' || body.mileage_charge_rate === null || body.mileage_charge_rate === undefined) {
+        patch.mileage_charge_rate = null;
+      } else {
+        const n = Number(body.mileage_charge_rate);
+        if (!Number.isFinite(n) || n < 0) {
+          return withCORS(env, req, badRequest('mileage_charge_rate must be a non-negative number if provided'));
+        }
+        patch.mileage_charge_rate = n;
+      }
     }
   }
 
@@ -1314,7 +1438,6 @@ export async function handleContractsCheckTimesheetBoundary(env, req) {
 
 // === Strict full-replace (PUT /api/contracts/:id) ===
 
-
 export async function handleContractsReplace(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -1359,12 +1482,43 @@ export async function handleContractsReplace(env, req, contractId) {
     std_hours_json = current.std_hours_json ?? null;
   }
 
+  // Mileage: normalise and validate before immutability checks
+  let nextMileagePay    = ('mileage_pay_rate'    in body) ? body.mileage_pay_rate    : current.mileage_pay_rate;
+  let nextMileageCharge = ('mileage_charge_rate' in body) ? body.mileage_charge_rate : current.mileage_charge_rate;
+
+  if ('mileage_pay_rate' in body) {
+    if (body.mileage_pay_rate === '' || body.mileage_pay_rate === null || body.mileage_pay_rate === undefined) {
+      nextMileagePay = null;
+    } else {
+      const n = Number(body.mileage_pay_rate);
+      if (!Number.isFinite(n) || n < 0) {
+        return withCORS(env, req, badRequest('mileage_pay_rate must be a non-negative number if provided'));
+      }
+      nextMileagePay = n;
+    }
+  }
+
+  if ('mileage_charge_rate' in body) {
+    if (body.mileage_charge_rate === '' || body.mileage_charge_rate === null || body.mileage_charge_rate === undefined) {
+      nextMileageCharge = null;
+    } else {
+      const n = Number(body.mileage_charge_rate);
+      if (!Number.isFinite(n) || n < 0) {
+        return withCORS(env, req, badRequest('mileage_charge_rate must be a non-negative number if provided'));
+      }
+      nextMileageCharge = n;
+    }
+  }
+
   if (hasSubmitted) {
     if (body.candidate_id !== current.candidate_id) return withCORS(env, req, badRequest('Cannot change candidate after timesheets have been submitted'));
     if (body.client_id    !== current.client_id)    return withCORS(env, req, badRequest('Cannot change client after timesheets have been submitted'));
     if (JSON.stringify(body.rates_json||{}) !== JSON.stringify(current.rates_json||{})) return withCORS(env, req, badRequest('Cannot change rates after timesheets have been submitted'));
     if (String(body.pay_method_snapshot||'').toUpperCase() !== String(current.pay_method_snapshot||'').toUpperCase()) {
       return withCORS(env, req, badRequest('Cannot change pay_method_snapshot after timesheets have been submitted'));
+    }
+    if (nextMileagePay !== current.mileage_pay_rate || nextMileageCharge !== current.mileage_charge_rate) {
+      return withCORS(env, req, badRequest('Cannot change mileage rates after timesheets have been submitted'));
     }
   }
 
@@ -1445,7 +1599,7 @@ export async function handleContractsReplace(env, req, contractId) {
   }
   if (maxWE && newEnd < maxWE) {
     return withCORS(env, req, badRequest(`end_date cannot be before latest submitted week ending (${maxWE})`));
-    }
+  }
 
   const patch = {
     candidate_id: body.candidate_id,
@@ -1466,6 +1620,8 @@ export async function handleContractsReplace(env, req, contractId) {
     auto_invoice: clampBool(body.auto_invoice, current.auto_invoice),
     require_reference_to_pay: clampBool(body.require_reference_to_pay, current.require_reference_to_pay),
     require_reference_to_invoice: clampBool(body.require_reference_to_invoice, current.require_reference_to_invoice),
+    mileage_pay_rate: nextMileagePay,
+    mileage_charge_rate: nextMileageCharge,
     updated_at: nowIso(),
   };
 
@@ -3263,81 +3419,429 @@ export async function handleInvoicesPrecheck(env, req) {
 // ----------------------------------------------------------------------------
 // F) Rates Presets CRUD
 // ----------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Local helpers for rates_presets
+// ---------------------------------------------------------------------------
+
+function validatePresetBucketLabels(obj) {
+  // Mirror contract bucket_labels_json rules: either null or full 5 non-empty strings
+  if (!obj || typeof obj !== 'object') return null;
+  const keys = ['day', 'night', 'sat', 'sun', 'bh'];
+  const out = {};
+  for (const k of keys) {
+    const v = obj[k];
+    if (typeof v !== 'string' || !v.trim()) return null;
+    out[k] = v.trim();
+  }
+  return out;
+}
+
+const numOrNull = (v) => {
+  if (v === '' || v === null || v === undefined) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+async function derivePresetMileageDefaultsForClient(env, clientId, base) {
+  let charge = numOrNull(base.mileage_charge_rate);
+  let pay    = numOrNull(base.mileage_pay_rate);
+
+  // Only derive defaults for CLIENT-scoped presets when charge/pay missing
+  if (clientId && charge == null) {
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/clients` +
+          `?id=eq.${enc(clientId)}` +
+          `&select=mileage_charge_rate&limit=1`
+      );
+      const cli = (rows && rows[0]) || null;
+      if (cli && cli.mileage_charge_rate != null) {
+        const n = Number(cli.mileage_charge_rate);
+        if (Number.isFinite(n)) charge = n;
+      }
+    } catch {
+      // ignore, leave charge as null
+    }
+  }
+
+  if (charge != null && pay == null) {
+    // knock 0.10 off, clamp at 0, round 2dp
+    const raw = charge - 0.10;
+    const clamped = raw < 0 ? 0 : raw;
+    pay = Math.round(clamped * 100) / 100;
+  }
+
+  if (charge != null && charge < 0) {
+    throw new Error('mileage_charge_rate must be non-negative');
+  }
+  if (pay != null && pay < 0) {
+    throw new Error('mileage_pay_rate must be non-negative');
+  }
+
+  return { mileage_charge_rate: charge, mileage_pay_rate: pay };
+}
+
+// ----------------------------------------------------------------------------
+// F) Rates Presets CRUD
+// ----------------------------------------------------------------------------
 
 export async function handleRatesPresetsCreate(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
-  let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
 
-  if (!body?.scope || !['GLOBAL','CLIENT'].includes(String(body.scope).toUpperCase())) {
+  let body;
+  try { body = await parseJSONBody(req); }
+  catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  if (!body?.scope || !['GLOBAL', 'CLIENT'].includes(String(body.scope).toUpperCase())) {
     return withCORS(env, req, badRequest('scope must be GLOBAL or CLIENT'));
   }
-  if (String(body.scope).toUpperCase() === 'CLIENT' && !body.client_id) {
+  const scope = String(body.scope).toUpperCase();
+
+  if (scope === 'CLIENT' && !body.client_id) {
     return withCORS(env, req, badRequest('client_id required for CLIENT scope'));
   }
-  if (!body.role || !body.name) return withCORS(env, req, badRequest('role and name required'));
+  if (!body.role || !body.name) {
+    return withCORS(env, req, badRequest('role and name required'));
+  }
+
+  // Normalise flags
+  const enable_paye      = clampBool(body.enable_paye, false);
+  const enable_umbrella  = clampBool(body.enable_umbrella, false);
+
+  if (!enable_paye && !enable_umbrella) {
+    return withCORS(env, req, badRequest('At least one of enable_paye or enable_umbrella must be true'));
+  }
+
+  // Optional bucket labels (mirror contracts)
+  const bucketLabels = validatePresetBucketLabels(body.bucket_labels_json) || null;
+
+  // Schedule: for presets we store as-is or null (no derived hours here)
+  const std_schedule_json = body.std_schedule_json || null;
+
+  // Normalise rates
+  const buckets = ['day', 'night', 'sat', 'sun', 'bh'];
+  const paye = {};
+  const umb  = {};
+  const charge = {};
+
+  for (const b of buckets) {
+    paye[b]   = numOrNull(body[`paye_${b}`]);
+    umb[b]    = numOrNull(body[`umb_${b}`]);
+    charge[b] = numOrNull(body[`charge_${b}`]);
+  }
+
+  // Non-negative pay/charge (if provided)
+  for (const b of buckets) {
+    if (paye[b] != null && paye[b] < 0) {
+      return withCORS(env, req, badRequest(`paye_${b} must be a non-negative number if provided`));
+    }
+    if (umb[b] != null && umb[b] < 0) {
+      return withCORS(env, req, badRequest(`umb_${b} must be a non-negative number if provided`));
+    }
+    if (charge[b] != null && charge[b] < 0) {
+      return withCORS(env, req, badRequest(`charge_${b} must be a non-negative number if provided`));
+    }
+  }
+
+  // Margin check: for each bucket, charge >= pay for any enabled pay panel
+  for (const b of buckets) {
+    const ch = charge[b];
+    if (ch == null) continue;
+    if (enable_paye && paye[b] != null && ch < paye[b]) {
+      return withCORS(env, req, badRequest(`Negative margin not allowed for PAYE ${b}`));
+    }
+    if (enable_umbrella && umb[b] != null && ch < umb[b]) {
+      return withCORS(env, req, badRequest(`Negative margin not allowed for Umbrella ${b}`));
+    }
+  }
+
+  // Mileage: derive defaults for CLIENT scope if missing, and enforce non-negative
+  let mileage_charge_rate = numOrNull(body.mileage_charge_rate);
+  let mileage_pay_rate    = numOrNull(body.mileage_pay_rate);
+
+  try {
+    if (scope === 'CLIENT') {
+      const derived = await derivePresetMileageDefaultsForClient(env, body.client_id, {
+        mileage_charge_rate,
+        mileage_pay_rate
+      });
+      mileage_charge_rate = derived.mileage_charge_rate;
+      mileage_pay_rate    = derived.mileage_pay_rate;
+    } else {
+      if (mileage_charge_rate != null && mileage_charge_rate < 0) {
+        return withCORS(env, req, badRequest('mileage_charge_rate must be non-negative'));
+      }
+      if (mileage_pay_rate != null && mileage_pay_rate < 0) {
+        return withCORS(env, req, badRequest('mileage_pay_rate must be non-negative'));
+      }
+    }
+  } catch (e) {
+    return withCORS(env, req, badRequest(e.message || 'Invalid mileage defaults'));
+  }
+
+  // Untick semantics: if a panel is disabled, null out its pay values
+  const payload = {
+    scope,
+    client_id: scope === 'CLIENT' ? (body.client_id || null) : null,
+    role: body.role,
+    band: body.band ?? null,
+    name: body.name,
+    display_site: body.display_site || null,
+    bucket_labels_json: bucketLabels,
+    std_schedule_json,
+    enable_paye,
+    enable_umbrella,
+
+    paye_day:   enable_paye ? paye.day   : null,
+    paye_night: enable_paye ? paye.night : null,
+    paye_sat:   enable_paye ? paye.sat   : null,
+    paye_sun:   enable_paye ? paye.sun   : null,
+    paye_bh:    enable_paye ? paye.bh    : null,
+
+    umb_day:    enable_umbrella ? umb.day   : null,
+    umb_night:  enable_umbrella ? umb.night : null,
+    umb_sat:    enable_umbrella ? umb.sat   : null,
+    umb_sun:    enable_umbrella ? umb.sun   : null,
+    umb_bh:     enable_umbrella ? umb.bh    : null,
+
+    charge_day:   charge.day,
+    charge_night: charge.night,
+    charge_sat:   charge.sat,
+    charge_sun:   charge.sun,
+    charge_bh:    charge.bh,
+
+    mileage_pay_rate,
+    mileage_charge_rate,
+    created_at: nowIso(),
+    updated_at: nowIso()
+  };
 
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/rates_presets`, {
-    method: 'POST', headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
-    body: JSON.stringify({
-      scope: String(body.scope).toUpperCase(),
-      client_id: body.client_id || null,
-      role: body.role, band: body.band ?? null, name: body.name,
-      paye_day: body.paye_day, paye_night: body.paye_night, paye_sat: body.paye_sat, paye_sun: body.paye_sun, paye_bh: body.paye_bh,
-      umb_day: body.umb_day, umb_night: body.umb_night, umb_sat: body.umb_sat, umb_sun: body.umb_sun, umb_bh: body.umb_bh,
-      charge_day: body.charge_day, charge_night: body.charge_night, charge_sat: body.charge_sat, charge_sun: body.charge_sun, charge_bh: body.charge_bh,
-      created_at: nowIso(), updated_at: nowIso()
-    })
+    method: 'POST',
+    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+    body: JSON.stringify(payload)
   });
   if (!res.ok) return withCORS(env, req, serverError(await res.text()));
-  const row = (await res.json().catch(()=>[]))[0];
+  const row = (await res.json().catch(() => []))[0];
   return withCORS(env, req, ok(row));
 }
 
 export async function handleRatesPresetsList(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+
   const url = new URL(req.url);
   const q = (k) => url.searchParams.get(k);
   const filters = [];
-  let api = `${env.SUPABASE_URL}/rest/v1/rates_presets?select=*`;
-  if (q('scope')) filters.push(`scope=eq.${enc(q('scope').toUpperCase())}`);
+
+  // Explicit select including new columns + client name
+  let api =
+    `${env.SUPABASE_URL}/rest/v1/rates_presets?select=` +
+    [
+      'id',
+      'scope',
+      'client_id',
+      'role',
+      'band',
+      'name',
+      'display_site',
+      'bucket_labels_json',
+      'std_schedule_json',
+      'enable_paye',
+      'enable_umbrella',
+      'mileage_pay_rate',
+      'mileage_charge_rate',
+      'updated_at',
+      'client:clients(name)'
+    ].join(',');
+
+  if (q('scope'))     filters.push(`scope=eq.${enc(q('scope').toUpperCase())}`);
   if (q('client_id')) filters.push(`client_id=eq.${enc(q('client_id'))}`);
-  if (q('role')) filters.push(`role=eq.${enc(q('role'))}`);
+  if (q('role'))      filters.push(`role=eq.${enc(q('role'))}`);
   if (q('band') != null) filters.push(`band=eq.${enc(q('band'))}`);
-  if (q('name')) filters.push(`name=eq.${enc(q('name'))}`);
+  if (q('name'))      filters.push(`name=eq.${enc(q('name'))}`);
+
   if (filters.length) api += `&${filters.join('&')}`;
   api += '&order=updated_at.desc';
 
   const { rows } = await sbFetch(env, api);
   return withCORS(env, req, ok(rows || []));
 }
-
 export async function handleRatesPresetsUpdate(env, req, presetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
-  let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
 
-  body.updated_at = nowIso();
-  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/rates_presets?id=eq.${enc(presetId)}`, {
-    method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=representation' }, body: JSON.stringify(body)
-  });
+  let body;
+  try { body = await parseJSONBody(req); }
+  catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  // Load existing row so we can merge + validate final state
+  let before;
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/rates_presets?id=eq.${enc(presetId)}&select=*`
+    );
+    before = (rows && rows[0]) || null;
+  } catch (e) {
+    return withCORS(env, req, serverError('Failed to load existing preset'));
+  }
+  if (!before) return withCORS(env, req, badRequest('Preset not found'));
+
+  const scope = String(((body.scope ?? before.scope) || '')).toUpperCase();
+  if (!['GLOBAL', 'CLIENT'].includes(scope)) {
+    return withCORS(env, req, badRequest('scope must be GLOBAL or CLIENT'));
+  }
+
+  const client_id =
+    scope === 'CLIENT'
+      ? (body.client_id ?? before.client_id ?? null)
+      : null;
+
+  if (scope === 'CLIENT' && !client_id) {
+    return withCORS(env, req, badRequest('client_id required for CLIENT scope'));
+  }
+
+  const role = body.role ?? before.role;
+  const name = body.name ?? before.name;
+  const band = (body.band !== undefined) ? body.band : before.band;
+
+  if (!role || !name) {
+    return withCORS(env, req, badRequest('role and name required'));
+  }
+
+  const enable_paye     = clampBool(body.enable_paye, before.enable_paye);
+  const enable_umbrella = clampBool(body.enable_umbrella, before.enable_umbrella);
+
+  if (!enable_paye && !enable_umbrella) {
+    return withCORS(env, req, badRequest('At least one of enable_paye or enable_umbrella must be true'));
+  }
+
+  const display_site =
+    ('display_site' in body)
+      ? (body.display_site || null)
+      : (before.display_site || null);
+
+  const rawBucketLabels =
+    ('bucket_labels_json' in body)
+      ? body.bucket_labels_json
+      : before.bucket_labels_json;
+
+  const bucketLabels = validatePresetBucketLabels(rawBucketLabels) || null;
+
+  const std_schedule_json =
+    ('std_schedule_json' in body)
+      ? (body.std_schedule_json || null)
+      : (before.std_schedule_json || null);
+
+  const buckets = ['day', 'night', 'sat', 'sun', 'bh'];
+  const paye = {};
+  const umb  = {};
+  const charge = {};
+
+  for (const b of buckets) {
+    const payeRaw   = (('paye_'   + b) in body) ? body[`paye_${b}`]   : before[`paye_${b}`];
+    const umbRaw    = (('umb_'    + b) in body) ? body[`umb_${b}`]    : before[`umb_${b}`];
+    const chargeRaw = (('charge_' + b) in body) ? body[`charge_${b}`] : before[`charge_${b}`];
+
+    paye[b]   = numOrNull(payeRaw);
+    umb[b]    = numOrNull(umbRaw);
+    charge[b] = numOrNull(chargeRaw);
+  }
+
+  // Non-negative pay/charge (if provided)
+  for (const b of buckets) {
+    if (paye[b] != null && paye[b] < 0) {
+      return withCORS(env, req, badRequest(`paye_${b} must be a non-negative number if provided`));
+    }
+    if (umb[b] != null && umb[b] < 0) {
+      return withCORS(env, req, badRequest(`umb_${b} must be a non-negative number if provided`));
+    }
+    if (charge[b] != null && charge[b] < 0) {
+      return withCORS(env, req, badRequest(`charge_${b} must be a non-negative number if provided`));
+    }
+  }
+
+  // Margin check
+  for (const b of buckets) {
+    const ch = charge[b];
+    if (ch == null) continue;
+    if (enable_paye && paye[b] != null && ch < paye[b]) {
+      return withCORS(env, req, badRequest(`Negative margin not allowed for PAYE ${b}`));
+    }
+    if (enable_umbrella && umb[b] != null && ch < umb[b]) {
+      return withCORS(env, req, badRequest(`Negative margin not allowed for Umbrella ${b}`));
+    }
+  }
+
+  // Mileage: merge existing + patch, enforce non-negative
+  let mileage_charge_rate =
+    ('mileage_charge_rate' in body)
+      ? numOrNull(body.mileage_charge_rate)
+      : numOrNull(before.mileage_charge_rate);
+
+  let mileage_pay_rate =
+    ('mileage_pay_rate' in body)
+      ? numOrNull(body.mileage_pay_rate)
+      : numOrNull(before.mileage_pay_rate);
+
+  if (mileage_charge_rate != null && mileage_charge_rate < 0) {
+    return withCORS(env, req, badRequest('mileage_charge_rate must be non-negative'));
+  }
+  if (mileage_pay_rate != null && mileage_pay_rate < 0) {
+    return withCORS(env, req, badRequest('mileage_pay_rate must be non-negative'));
+  }
+
+  // Untick semantics for update: if a panel is disabled, null out its pay fields
+  const payload = {
+    scope,
+    client_id,
+    role,
+    band: band ?? null,
+    name,
+    display_site,
+    bucket_labels_json: bucketLabels,
+    std_schedule_json,
+    enable_paye,
+    enable_umbrella,
+
+    paye_day:   enable_paye ? paye.day   : null,
+    paye_night: enable_paye ? paye.night : null,
+    paye_sat:   enable_paye ? paye.sat   : null,
+    paye_sun:   enable_paye ? paye.sun   : null,
+    paye_bh:    enable_paye ? paye.bh    : null,
+
+    umb_day:    enable_umbrella ? umb.day   : null,
+    umb_night:  enable_umbrella ? umb.night : null,
+    umb_sat:    enable_umbrella ? umb.sat   : null,
+    umb_sun:    enable_umbrella ? umb.sun   : null,
+    umb_bh:     enable_umbrella ? umb.bh    : null,
+
+    charge_day:   charge.day,
+    charge_night: charge.night,
+    charge_sat:   charge.sat,
+    charge_sun:   charge.sun,
+    charge_bh:    charge.bh,
+
+    mileage_pay_rate,
+    mileage_charge_rate,
+    updated_at: nowIso()
+  };
+
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/rates_presets?id=eq.${enc(presetId)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify(payload)
+    }
+  );
   if (!res.ok) return withCORS(env, req, serverError(await res.text()));
-  const row = (await res.json().catch(()=>[]))[0];
+  const row = (await res.json().catch(() => []))[0];
   return withCORS(env, req, ok(row));
 }
-
-export async function handleRatesPresetsDelete(env, req, presetId) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/rates_presets?id=eq.${enc(presetId)}`, {
-    method: 'DELETE', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' }
-  });
-  if (!res.ok) return withCORS(env, req, serverError(await res.text()));
-  return withCORS(env, req, ok({ deleted: true }));
-}
-
 
 
 
@@ -8319,6 +8823,9 @@ async function handleCreateClient(env, req) {
       client_settings: clientSettingsInput,
       hr_validation_required,
       ts_reference_required,
+      pay_reference_required,
+      invoice_reference_required,
+      default_submission_mode,
       ...clientOnly
     } = data || {};
 
@@ -8337,12 +8844,23 @@ async function handleCreateClient(env, req) {
     const csInput = {
       ...(typeof clientSettingsInput === 'object' ? clientSettingsInput : {}),
     };
-    if ('hr_validation_required' in data) csInput.hr_validation_required = !!hr_validation_required;
-    if ('ts_reference_required' in data) csInput.ts_reference_required = !!ts_reference_required;
+
+    if ('hr_validation_required' in data)        csInput.hr_validation_required        = !!hr_validation_required;
+    if ('ts_reference_required' in data)        csInput.ts_reference_required        = !!ts_reference_required;
+    if ('pay_reference_required' in data)       csInput.pay_reference_required       = !!pay_reference_required;
+    if ('invoice_reference_required' in data)   csInput.invoice_reference_required   = !!invoice_reference_required;
+    if ('default_submission_mode' in data)      csInput.default_submission_mode      = default_submission_mode;
 
     // Week ending day (0..6, default 0/Sun)
     const we = Number(csInput.week_ending_weekday);
     csInput.week_ending_weekday = (Number.isInteger(we) && we>=0 && we<=6) ? we : 0;
+
+    // Normalise default_submission_mode
+    if ('default_submission_mode' in csInput) {
+      let dsm = String(csInput.default_submission_mode || '').toUpperCase();
+      if (!['ELECTRONIC','MANUAL'].includes(dsm)) dsm = 'ELECTRONIC';
+      csInput.default_submission_mode = dsm;
+    }
 
     let client_settings;
     if (Object.keys(csInput).length) {
@@ -8399,14 +8917,14 @@ async function handleGetClient(env, req, clientId) {
     if (!rows.length) return withCORS(env, req, notFound("Client not found"));
     const client = rows[0];
 
-    // Latest client_settings (include validation flags)
+    // Latest client_settings (include validation flags + new ref/submission fields)
     const { rows: csRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/client_settings` +
       `?client_id=eq.${encodeURIComponent(clientId)}` +
       `&select=id,client_id,vat_rate_pct,holiday_pay_pct,erni_pct,apply_holiday_to,apply_erni_to,margin_includes,effective_from,` +
       `timezone_id,day_start,day_end,night_start,night_end,bh_source,bh_list,bh_feed_url,` +
-      `hr_validation_required,ts_reference_required,created_at,updated_at` +
+      `hr_validation_required,ts_reference_required,pay_reference_required,invoice_reference_required,default_submission_mode,week_ending_weekday,created_at,updated_at` +
       `&order=effective_from.desc,created_at.desc&limit=1`
     );
     const client_settings = csRows?.[0] || null;
@@ -8435,7 +8953,7 @@ async function handleUpdateClient(env, req, clientId) {
   const { cli_ref, cli_num, ...data } = raw;
 
   try {
-    // --- Load existing client + latest client_settings for comparison (now also selects week_ending_weekday)
+    // --- Load existing client + latest client_settings for comparison (now also selects week_ending_weekday + new fields)
     const { rows: beforeClientRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/clients` +
@@ -8449,7 +8967,7 @@ async function handleUpdateClient(env, req, clientId) {
       env,
       `${env.SUPABASE_URL}/rest/v1/client_settings` +
       `?client_id=eq.${encodeURIComponent(clientId)}` +
-      `&select=id,hr_validation_required,ts_reference_required,effective_from,timezone_id,day_start,day_end,night_start,night_end,bh_source,bh_list,bh_feed_url,week_ending_weekday,created_at,updated_at` +
+      `&select=id,hr_validation_required,ts_reference_required,pay_reference_required,invoice_reference_required,default_submission_mode,effective_from,timezone_id,day_start,day_end,night_start,night_end,bh_source,bh_list,bh_feed_url,week_ending_weekday,created_at,updated_at` +
       `&order=effective_from.desc,created_at.desc&limit=1`
     );
     const beforeCs = beforeCsRows?.[0] || null;
@@ -8458,8 +8976,11 @@ async function handleUpdateClient(env, req, clientId) {
     const csInput = {
       ...(typeof data.client_settings === 'object' ? data.client_settings : {})
     };
-    if ('hr_validation_required' in data) csInput.hr_validation_required = !!data.hr_validation_required;
-    if ('ts_reference_required' in data) csInput.ts_reference_required = !!data.ts_reference_required;
+    if ('hr_validation_required' in data)        csInput.hr_validation_required        = !!data.hr_validation_required;
+    if ('ts_reference_required' in data)        csInput.ts_reference_required        = !!data.ts_reference_required;
+    if ('pay_reference_required' in data)       csInput.pay_reference_required       = !!data.pay_reference_required;
+    if ('invoice_reference_required' in data)   csInput.invoice_reference_required   = !!data.invoice_reference_required;
+    if ('default_submission_mode' in data)      csInput.default_submission_mode      = data.default_submission_mode;
 
     // Accept top-level week_ending_weekday or inside client_settings; validate 0..6 (default 0 if provided but invalid)
     const weIn = (data.week_ending_weekday ?? csInput.week_ending_weekday);
@@ -8469,7 +8990,23 @@ async function handleUpdateClient(env, req, clientId) {
       csInput.week_ending_weekday = we;
     }
 
-    const { hr_validation_required, ts_reference_required, client_settings, ...clientPatchRaw } = data;
+    // Normalise default_submission_mode
+    if ('default_submission_mode' in csInput) {
+      let dsm = String(csInput.default_submission_mode || '').toUpperCase();
+      if (!['ELECTRONIC','MANUAL'].includes(dsm)) dsm = 'ELECTRONIC';
+      csInput.default_submission_mode = dsm;
+    }
+
+    const {
+      hr_validation_required,
+      ts_reference_required,
+      pay_reference_required,
+      invoice_reference_required,
+      default_submission_mode,
+      client_settings,
+      week_ending_weekday,
+      ...clientPatchRaw
+    } = data;
 
     // Remove empty strings to avoid overwriting with ''
     const clientPatch = {};
@@ -8505,7 +9042,7 @@ async function handleUpdateClient(env, req, clientId) {
       client = Array.isArray(json) ? json[0] : json;
     }
 
-    // --- Upsert/patch client_settings if provided (now includes week_ending_weekday)
+    // --- Upsert/patch client_settings if provided (now includes week_ending_weekday + new ref/submission fields)
     let csChanged = false;
     let client_settings_updated = null;
     if (Object.keys(csInput).length) {
@@ -8515,12 +9052,23 @@ async function handleUpdateClient(env, req, clientId) {
       };
       const hasBefore = !!beforeCs?.id;
 
-      const beforeHr  = !!(beforeCs?.hr_validation_required ?? false);
-      const beforeRef = !!(beforeCs?.ts_reference_required ?? false);
-      const nextHr    = !!(desired.hr_validation_required ?? false);
-      const nextRef   = !!(desired.ts_reference_required ?? false);
-      csChanged = (beforeHr !== nextHr) || (beforeRef !== nextRef);
-      // week_ending_weekday does not affect TS financial staleness; no change to csChanged.
+      const beforeHr      = !!(beforeCs?.hr_validation_required        ?? false);
+      const beforeRef     = !!(beforeCs?.ts_reference_required         ?? false);
+      const beforePayRef  = !!(beforeCs?.pay_reference_required        ?? false);
+      const beforeInvRef  = !!(beforeCs?.invoice_reference_required    ?? false);
+
+      const nextHr        = !!(desired.hr_validation_required          ?? false);
+      const nextRef       = !!(desired.ts_reference_required           ?? false);
+      const nextPayRef    = !!(desired.pay_reference_required          ?? false);
+      const nextInvRef    = !!(desired.invoice_reference_required      ?? false);
+
+      csChanged = (
+        beforeHr     !== nextHr     ||
+        beforeRef    !== nextRef    ||
+        beforePayRef !== nextPayRef ||
+        beforeInvRef !== nextInvRef
+      );
+      // week_ending_weekday and default_submission_mode do not affect TS financial staleness directly.
 
       if (hasBefore) {
         const csRes = await fetch(
@@ -8557,7 +9105,7 @@ async function handleUpdateClient(env, req, clientId) {
       }
     }
 
-    // --- Change detection for timesheet financials staleness (unchanged logic)
+    // --- Change detection for timesheet financials staleness (unchanged core logic, but csChanged now includes ref flags)
     const policyChanged =
       (data.vat_chargeable != null && !!data.vat_chargeable !== !!beforeClient.vat_chargeable) ||
       (data.payment_terms_days != null && Number(data.payment_terms_days) !== Number(beforeClient.payment_terms_days));
@@ -8607,7 +9155,6 @@ async function handleUpdateClient(env, req, clientId) {
     return withCORS(env, req, serverError("Failed to update client"));
   }
 }
-
 
 // ====================== CLIENT HOSPITALS ======================
 /**
@@ -8713,7 +9260,6 @@ export async function handleCandidatesGet(env, req, candidateId) {
   if (!row) return withCORS(env, req, notFound('Candidate not found'));
   return withCORS(env, req, ok(row));
 }
-
 export async function handleClientsGet(env, req, clientId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -8726,12 +9272,12 @@ export async function handleClientsGet(env, req, clientId) {
   const client = (rows && rows[0]) || null;
   if (!client) return withCORS(env, req, notFound('Client not found'));
 
-  // Also return the latest client_settings (so FE can derive week-ending day)
+  // Also return the latest client_settings (so FE can derive week-ending day and defaults)
   const { rows: csRows } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/client_settings` +
       `?client_id=eq.${enc(client.id)}` +
-      `&select=id,hr_validation_required,ts_reference_required,effective_from,timezone_id,day_start,day_end,night_start,night_end,bh_source,bh_list,bh_feed_url,week_ending_weekday,created_at,updated_at` +
+      `&select=id,hr_validation_required,ts_reference_required,pay_reference_required,invoice_reference_required,default_submission_mode,effective_from,timezone_id,day_start,day_end,night_start,night_end,bh_source,bh_list,bh_feed_url,week_ending_weekday,created_at,updated_at` +
       `&order=effective_from.desc,created_at.desc&limit=1`
   );
   const client_settings = (csRows && csRows[0]) || null;
@@ -8743,6 +9289,7 @@ export async function handleClientsGet(env, req, clientId) {
 
   return withCORS(env, req, ok({ ...client, week_ending_weekday, client_settings }));
 }
+
 
 async function handleUpdateHospital(env, req, clientId, hospitalId) {
   const user = await requireUser(env, req, ['admin']);
@@ -15424,6 +15971,8 @@ export async function handleContractsPlanRanges(env, req, contractId) {
   }));
 }
 export async function handleContractsUnplanRanges(env, req, contractId) {
+  console.log('[UNPLAN][HIT]', 'handleContractsUnplanRanges called', { contractId });
+
   // ===== Correlation + entry log =====
   const corr = req.headers.get('X-Save-Corr') || `unplan:${contractId}:${Date.now()}`;
   const log = (...a) => console.log('[UNPLAN]', corr, ...a);
@@ -16795,13 +17344,25 @@ if (req.method === 'GET' && p === '/api/pickers/clients/id-list')      return wi
       // ====================== PAYMENTS (Bank CSV) ======================
       if (req.method === 'POST' && p === '/api/payments/generate-csv')       return handlePaymentsGenerateCsv(env, req);
 
-      // ====================== REPORT PRESETS (CRUD) ======================
-      if (req.method === 'POST' && p === '/api/report-presets')              return handleReportPresetsCreate(env, req);
-      if (req.method === 'GET'  && p === '/api/report-presets')              return handleReportPresetsList(env, req);
+            // =============================================================================
+      // NEW ROUTES — Rates Presets
+      // =============================================================================
+      if (req.method === 'POST' && p === '/api/rates/presets') {
+        return handleRatesPresetsCreate(env, req);
+      }
+
+      if (req.method === 'GET' && p === '/api/rates/presets') {
+        return handleRatesPresetsList(env, req);
+      }
+
       {
-        const rp = matchPath(p, '/api/report-presets/:preset_id');
-        if (rp && req.method === 'PATCH')                                    return handleReportPresetsUpdate(env, req, rp.preset_id);
-        if (rp && req.method === 'DELETE')                                   return handleReportPresetsDelete(env, req, rp.preset_id);
+        const m = matchPath(p, '/api/rates/presets/:id');
+        if (m && req.method === 'PATCH') {
+          return handleRatesPresetsUpdate(env, req, m.id);
+        }
+        if (m && req.method === 'DELETE') {
+          return handleRatesPresetsDelete(env, req, m.id);
+        }
       }
 
       // ====================== EMAIL (OUTBOX, SEND, TSO) ======================
