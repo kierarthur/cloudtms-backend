@@ -3843,6 +3843,27 @@ export async function handleRatesPresetsUpdate(env, req, presetId) {
   return withCORS(env, req, ok(row));
 }
 
+export async function handleRatesPresetsDelete(env, req, presetId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/rates_presets?id=eq.${enc(presetId)}`,
+    {
+      method: 'DELETE',
+      headers: {
+        ...sbHeaders(env),
+        'Prefer': 'return=minimal'
+      }
+    }
+  );
+
+  if (!res.ok) {
+    return withCORS(env, req, serverError(await res.text()));
+  }
+
+  return withCORS(env, req, ok({ deleted: true }));
+}
 
 
 //
@@ -17552,12 +17573,7 @@ if (req.method === 'POST' && p === '/api/contracts/check-timesheet-boundary') {
       // =============================================================================
       if (req.method === 'POST' && p === '/api/rates/presets') return handleRatesPresetsCreate(env, req);
       if (req.method === 'GET'  && p === '/api/rates/presets')  return handleRatesPresetsList(env, req);
-      {
-        const m = matchPath(p, '/api/rates/presets/:id');
-        if (m && req.method === 'PATCH')  return handleRatesPresetsUpdate(env, req, m.id);
-        if (m && req.method === 'DELETE') return handleRatesPresetsDelete(env, req, m.id);
-      }
-
+      
       return new Response("Not found", { status: 404, headers: TEXT_PLAIN });
     } catch (e) {
       // Log full error to Worker logs
