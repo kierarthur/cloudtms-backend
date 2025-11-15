@@ -3627,16 +3627,15 @@ export async function handleRatesPresetsCreate(env, req) {
   const row = (await res.json().catch(() => []))[0];
   return withCORS(env, req, ok(row));
 }
-
 export async function handleRatesPresetsList(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
-  const url = new URL(req.url);
-  const q = (k) => url.searchParams.get(k);
+  const urlObj = new URL(req.url);
+  const q = (k) => urlObj.searchParams.get(k);
   const filters = [];
 
-  // Explicit select including new columns + client name
+  // Explicit select including all rate columns + client name
   let api =
     `${env.SUPABASE_URL}/rest/v1/rates_presets?select=` +
     [
@@ -3651,17 +3650,63 @@ export async function handleRatesPresetsList(env, req) {
       'std_schedule_json',
       'enable_paye',
       'enable_umbrella',
+
+      // full bucket set so picker/manager can render summaries
+      'paye_day',
+      'paye_night',
+      'paye_sat',
+      'paye_sun',
+      'paye_bh',
+      'umb_day',
+      'umb_night',
+      'umb_sat',
+      'umb_sun',
+      'umb_bh',
+      'charge_day',
+      'charge_night',
+      'charge_sat',
+      'charge_sun',
+      'charge_bh',
+
       'mileage_pay_rate',
       'mileage_charge_rate',
       'updated_at',
       'client:clients(name)'
     ].join(',');
 
-  if (q('scope'))     filters.push(`scope=eq.${enc(q('scope').toUpperCase())}`);
-  if (q('client_id')) filters.push(`client_id=eq.${enc(q('client_id'))}`);
-  if (q('role'))      filters.push(`role=eq.${enc(q('role'))}`);
-  if (q('band') != null) filters.push(`band=eq.${enc(q('band'))}`);
-  if (q('name'))      filters.push(`name=eq.${enc(q('name'))}`);
+  const scope     = q('scope');
+  const clientId  = q('client_id');
+  const role      = q('role');
+  const band      = q('band');
+  const name      = q('name');
+  const text      = q('q');   // NEW: free-text filter (name/role/band)
+
+  if (scope)    filters.push(`scope=eq.${enc(scope.toUpperCase())}`);
+  if (clientId) filters.push(`client_id=eq.${enc(clientId)}`);
+  if (role)     filters.push(`role=eq.${enc(role)}`);
+
+  // Keep existing band semantics (exact match if provided)
+  if (band != null) {
+    filters.push(`band=eq.${enc(band)}`);
+  }
+
+  // Free-text q wins over exact name filter
+  if (text) {
+    const trimmed = String(text || '').trim();
+    if (trimmed) {
+      const like = `%${trimmed}%`;
+      filters.push(
+        `or=(` +
+          `name.ilike.${enc(like)},` +
+          `role.ilike.${enc(like)},` +
+          `band.ilike.${enc(like)}` +
+        `)`
+      );
+    }
+  } else if (name) {
+    // Legacy exact-name filter preserved when q is not present
+    filters.push(`name=eq.${enc(name)}`);
+  }
 
   if (filters.length) api += `&${filters.join('&')}`;
   api += '&order=updated_at.desc';
@@ -3669,6 +3714,7 @@ export async function handleRatesPresetsList(env, req) {
   const { rows } = await sbFetch(env, api);
   return withCORS(env, req, ok(rows || []));
 }
+
 export async function handleRatesPresetsUpdate(env, req, presetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -3865,6 +3911,67 @@ export async function handleRatesPresetsDelete(env, req, presetId) {
   return withCORS(env, req, ok({ deleted: true }));
 }
 
+export async function handleRatesPresetsGet(env, req, presetId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  // Reuse the same column set as handleRatesPresetsList
+  const selectCols = [
+    'id',
+    'scope',
+    'client_id',
+    'role',
+    'band',
+    'name',
+    'display_site',
+    'bucket_labels_json',
+    'std_schedule_json',
+    'enable_paye',
+    'enable_umbrella',
+
+    'paye_day',
+    'paye_night',
+    'paye_sat',
+    'paye_sun',
+    'paye_bh',
+    'umb_day',
+    'umb_night',
+    'umb_sat',
+    'umb_sun',
+    'umb_bh',
+    'charge_day',
+    'charge_night',
+    'charge_sat',
+    'charge_sun',
+    'charge_bh',
+
+    'mileage_pay_rate',
+    'mileage_charge_rate',
+    'updated_at',
+    'client:clients(name)'
+  ].join(',');
+
+  const api =
+    `${env.SUPABASE_URL}/rest/v1/rates_presets` +
+    `?id=eq.${enc(presetId)}` +
+    `&select=${selectCols}`;
+
+  let rows;
+  try {
+    const res = await sbFetch(env, api);
+    rows = res.rows;
+  } catch (e) {
+    return withCORS(env, req, serverError('Failed to load preset'));
+  }
+
+  const row = (rows && rows[0]) || null;
+  if (!row) {
+    // if you don't have notFound(), you can swap this for badRequest('Preset not found')
+    return withCORS(env, req, notFound('Preset not found'));
+  }
+
+  return withCORS(env, req, ok(row));
+}
 
 //
 // NEW HANDLERS ONLY — per your request
@@ -17364,27 +17471,29 @@ if (req.method === 'GET' && p === '/api/pickers/clients/id-list')      return wi
 
       // ====================== PAYMENTS (Bank CSV) ======================
       if (req.method === 'POST' && p === '/api/payments/generate-csv')       return handlePaymentsGenerateCsv(env, req);
+// =============================================================================
+// NEW ROUTES — Rates Presets
+// =============================================================================
+if (req.method === 'POST' && p === '/api/rates/presets') {
+  return handleRatesPresetsCreate(env, req);
+}
 
-            // =============================================================================
-      // NEW ROUTES — Rates Presets
-      // =============================================================================
-      if (req.method === 'POST' && p === '/api/rates/presets') {
-        return handleRatesPresetsCreate(env, req);
-      }
+if (req.method === 'GET' && p === '/api/rates/presets') {
+  return handleRatesPresetsList(env, req);
+}
 
-      if (req.method === 'GET' && p === '/api/rates/presets') {
-        return handleRatesPresetsList(env, req);
-      }
-
-      {
-        const m = matchPath(p, '/api/rates/presets/:id');
-        if (m && req.method === 'PATCH') {
-          return handleRatesPresetsUpdate(env, req, m.id);
-        }
-        if (m && req.method === 'DELETE') {
-          return handleRatesPresetsDelete(env, req, m.id);
-        }
-      }
+{
+  const m = matchPath(p, '/api/rates/presets/:id');
+  if (m && req.method === 'GET') {
+    return handleRatesPresetsGet(env, req, m.id);
+  }
+  if (m && req.method === 'PATCH') {
+    return handleRatesPresetsUpdate(env, req, m.id);
+  }
+  if (m && req.method === 'DELETE') {
+    return handleRatesPresetsDelete(env, req, m.id);
+  }
+}
 
       // ====================== EMAIL (OUTBOX, SEND, TSO) ======================
       if (req.method === 'GET'  && p === '/api/email/outbox')                return handleListOutbox(env, req);
@@ -17568,11 +17677,6 @@ if (req.method === 'POST' && p === '/api/contracts/check-timesheet-boundary') {
       if (req.method === 'GET' && p === '/api/funnel/timesheets') return handleFunnelTimesheets(env, req);
       if (req.method === 'GET' && p === '/api/invoices/precheck') return handleInvoicesPrecheck(env, req);
 
-      // =============================================================================
-      // NEW ROUTES — Rates Presets
-      // =============================================================================
-      if (req.method === 'POST' && p === '/api/rates/presets') return handleRatesPresetsCreate(env, req);
-      if (req.method === 'GET'  && p === '/api/rates/presets')  return handleRatesPresetsList(env, req);
       
       return new Response("Not found", { status: 404, headers: TEXT_PLAIN });
     } catch (e) {
