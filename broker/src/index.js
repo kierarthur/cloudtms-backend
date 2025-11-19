@@ -730,7 +730,8 @@ export async function handleContractsCreate(env, req) {
   try { body = await parseJSONBody(req); }
   catch { return withCORS(env, req, badRequest('Invalid JSON')); }
 
-  const required = ['candidate_id','client_id','start_date','end_date','pay_method_snapshot'];
+  // 🔄 Relaxed: candidate_id is now optional (can be null/unassigned)
+  const required = ['client_id','start_date','end_date','pay_method_snapshot'];
   for (const k of required) if (!body[k]) return withCORS(env, req, badRequest(`${k} is required`));
 
   // Track whether flags were explicitly supplied so we can decide when to derive from client defaults
@@ -879,7 +880,8 @@ export async function handleContractsCreate(env, req) {
     method: 'POST',
     headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
     body: JSON.stringify({
-      candidate_id: body.candidate_id,
+      // 🔄 candidate_id can be null/unassigned
+      candidate_id: (body.candidate_id === undefined ? null : body.candidate_id),
       client_id: body.client_id,
       role: body.role || null,
       band: body.band ?? null,
@@ -1464,7 +1466,8 @@ export async function handleContractsReplace(env, req, contractId) {
     `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&select=id&limit=1`
   ));
 
-  const requiredKeys = ['candidate_id','client_id','start_date','end_date','pay_method_snapshot','default_submission_mode','week_ending_weekday_snapshot','rates_json'];
+  // 🔄 Relaxed: candidate_id no longer required in body (can be omitted/null)
+  const requiredKeys = ['client_id','start_date','end_date','pay_method_snapshot','default_submission_mode','week_ending_weekday_snapshot','rates_json'];
   const missing = requiredKeys.filter(k => !(k in body));
   if (missing.length) return withCORS(env, req, badRequest(`Missing required fields: ${missing.join(', ')}`));
 
@@ -1602,7 +1605,8 @@ export async function handleContractsReplace(env, req, contractId) {
   }
 
   const patch = {
-    candidate_id: body.candidate_id,
+    // candidate_id can be explicitly set to null/omitted in body
+    candidate_id: ('candidate_id' in body ? body.candidate_id : current.candidate_id),
     client_id:    body.client_id,
     role:         body.role ?? current.role,
     band:         body.band ?? current.band,
@@ -1722,6 +1726,122 @@ export async function handleContractsReplace(env, req, contractId) {
   const warnings = Array.isArray(warnings0) ? [...warnings0, ...extraWarnings] : [...extraWarnings];
   return withCORS(env, req, ok({ contract: updated, warnings }));
 }
+export async function handleContractsDuplicate(env, req, contractId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let body;
+  try { body = await parseJSONBody(req); }
+  catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  const rawCount = body?.count;
+  const count = Number(rawCount);
+  if (!Number.isInteger(count) || count < 1 || count > 10) {
+    return withCORS(env, req, badRequest('count must be an integer between 1 and 10'));
+  }
+
+  // Load source contract
+  const src = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=*`
+  );
+  if (!src) return withCORS(env, req, notFound('Source contract not found'));
+
+  // Optional: you can add extra guards here (e.g. forbid duplication of ended contracts)
+  try {
+    console.log('[CONTRACTS][DUPLICATE] source', {
+      id: src.id,
+      candidate_id: src.candidate_id,
+      client_id: src.client_id,
+      start_date: src.start_date,
+      end_date: src.end_date
+    });
+  } catch {}
+
+  const duplicates = [];
+
+  for (let i = 0; i < count; i++) {
+    const payload = {
+      // 🔑 Explicitly unassigned
+      candidate_id: null,
+      client_id: src.client_id,
+      role: src.role || null,
+      band: src.band ?? null,
+      display_site: src.display_site || null,
+      ward_hint: src.ward_hint || null,
+      start_date: src.start_date,
+      end_date: src.end_date,
+      pay_method_snapshot: String(src.pay_method_snapshot || 'PAYE').toUpperCase() === 'PAYE' ? 'PAYE' : 'UMBRELLA',
+      rates_json: src.rates_json || {},
+      std_schedule_json: src.std_schedule_json || null,
+      std_hours_json: src.std_hours_json || null,
+      bucket_labels_json: src.bucket_labels_json || null,
+      default_submission_mode: String(src.default_submission_mode || 'ELECTRONIC').toUpperCase(),
+      week_ending_weekday_snapshot: Number(src.week_ending_weekday_snapshot ?? 0),
+      auto_invoice: !!src.auto_invoice,
+      require_reference_to_pay: !!src.require_reference_to_pay,
+      require_reference_to_invoice: !!src.require_reference_to_invoice,
+      mileage_pay_rate: src.mileage_pay_rate != null ? Number(src.mileage_pay_rate) : null,
+      mileage_charge_rate: src.mileage_charge_rate != null ? Number(src.mileage_charge_rate) : null,
+      created_at: nowIso(),
+      updated_at: nowIso()
+    };
+
+    const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts`, {
+      method: 'POST',
+      headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
+      body: JSON.stringify(payload)
+    });
+    if (!ins.ok) {
+      const txt = await ins.text().catch(()=> '');
+      return withCORS(env, req, serverError(`Failed to duplicate contract: ${txt || ins.status}`));
+    }
+    const j = await ins.json().catch(()=>[]);
+    const row = Array.isArray(j) ? j[0] : j;
+    if (!row || !row.id) {
+      return withCORS(env, req, serverError('Failed to duplicate contract (no row returned)'));
+    }
+
+    // Generate weeks for the duplicate (non-fatal if it fails)
+    try {
+      const shouldGenerate = !!row.std_schedule_json || !!row.std_hours_json;
+      if (shouldGenerate && typeof handleContractsGenerateWeeks === 'function') {
+        await handleContractsGenerateWeeks(env, req, row.id);
+        console.log('[CONTRACTS][DUPLICATE] generate-weeks ok', { id: row.id });
+      } else if (shouldGenerate) {
+        console.log('[CONTRACTS][DUPLICATE] no internal generate-weeks handler; skipped', { id: row.id });
+      }
+    } catch (e) {
+      console.warn('[CONTRACTS][DUPLICATE] generate-weeks failed (non-fatal)', {
+        id: row.id,
+        error: String(e?.message || e)
+      });
+    }
+
+    duplicates.push({
+      id: row.id,
+      candidate_id: row.candidate_id,
+      client_id: row.client_id,
+      start_date: row.start_date,
+      end_date: row.end_date
+    });
+  }
+
+  try {
+    console.log('[CONTRACTS][DUPLICATE] done', {
+      source_id: src.id,
+      count,
+      duplicates: duplicates.map(d => d.id)
+    });
+  } catch {}
+
+  return withCORS(env, req, ok({
+    source_contract_id: src.id,
+    count,
+    duplicates
+  }));
+}
+
 
 // Helper: returns ['PAY_METHOD_MISMATCH'] if candidate.pay_method != pay_method_snapshot
 async function computePayMethodWarnings(env, contractRow) {
@@ -17545,6 +17665,15 @@ if (req.method === 'GET' && p === '/api/rates/presets') {
       // Contracts
       if (req.method === 'POST' && p === '/api/contracts') return handleContractsCreate(env, req);
       if (req.method === 'GET'  && p === '/api/contracts') return handleContractsList(env, req);
+      
+       {
+    const m = matchPath(p, '/api/contracts/:id/duplicate');
+    if (m && req.method === 'POST') {
+      return handleContractsDuplicate(env, req, m.id);
+    }
+  }
+      
+      
       {
         const m = matchPath(p, '/api/contracts/:id');
         if (m && req.method === 'GET')    return handleContractsGet(env, req, m.id);
