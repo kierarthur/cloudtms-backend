@@ -29,6 +29,143 @@ console.log('[BOOT] worker version 2025-11-13-unplan-log');
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 const TEXT_PLAIN = { "content-type": "text/plain; charset=utf-8" };
 
+const DEFAULT_GRID_PREFS = {
+  grid: {
+    clients: {
+      labels: {
+        name: "Client Name",
+        cli_ref: "Client Ref",
+        ap_phone: "A/P Phone",
+        postcode: "Postcode",
+        created_at: "Creation Date",
+        updated_at: "Last Updated",
+        vat_chargeable: "VAT",
+        invoice_address: "Invoice Address",
+        ts_queries_email: "TS Queries Email",
+        payment_terms_days: "Payment Terms",
+        mileage_charge_rate: "Mileage Charge Rate",
+        primary_invoice_email: "Invoice Email"
+      },
+      columns: {
+        name:                 { order: 1,  width: 357, visible: true  },
+        cli_ref:              { order: 0,  width: 114, visible: true  },
+        ap_phone:             { order: 5,  width: 129, visible: true  },
+        postcode:             { order: 4,  width: 121, visible: true  },
+        created_at:           { order: 8,  width: 161, visible: true  },
+        updated_at:           { order: 9,  width: 159, visible: true  },
+        vat_credits:          { order: 6,               visible: true  },
+        invoice_address:      { order: 3,  width: 326, visible: true  },
+        ts_queries_email:     { order: 11,              visible: false },
+        payment_terms_days:   { order: 7,  width: 93,  visible: true  },
+        mileage_charge_rate:  { order: 10,             visible: false },
+        primary_invoice_email:{ order: 2,  width: 246, visible: true }
+      },
+      columns_meta: {},
+      use_friendly_labels: true
+    },
+
+    contracts: {
+      labels: {
+        band: "Band",
+        role: "Role",
+        client: "client",
+        end_date: "End Date",
+        candidate: "candidate",
+        ward_hint: "Rota only Ward Hints",
+        created_at: "Creation Date",
+        rates_json: "rates_json",
+        start_date: "Start Date",
+        updated_at: "Last Updated",
+        client_name: "Client",
+        auto_invoice: "Auto Invoice",
+        display_site: "Site Location",
+        mileage_pay_rate: "Mileage Pay Rate",
+        candidate_display: "Candidate",
+        mileage_charge_rate: "Mileage Charge Rate",
+        pay_method_snapshot: "Pay Method",
+        bucket_labels_preview: "Buckets",
+        default_submission_mode: "Submission Mode",
+        require_reference_to_pay: "Pay needs Ref",
+        require_reference_to_invoice: "Invoice needs Ref",
+        week_ending_weekday_snapshot: "Week Ending Day"
+      },
+      columns: {
+        band:                        { order: 3,  width: 86,  visible: true  },
+        role:                        { order: 2,  width: 83,  visible: true  },
+        client:                      { order: 21,             visible: false },
+        end_date:                    { order: 7,  width: 95,  visible: true  },
+        candidate:                   { order: 20,             visible: false },
+        ward_hint:                   { order: 10,             visible: false },
+        created_at:                  { order: 16,            visible: true  },
+        rates_json:                  { order: 11,            visible: false },
+        start_date:                  { order: 6,  width: 0,   visible: true  },
+        updated_at:                  { order: 17,            visible: true  },
+        client_name:                 { order: 1,  width: 201, visible: true  },
+        auto_invoice:                { order: 13,            visible: true  },
+        display_site:                { order: 9,             visible: true  },
+        mileage_pay_rate:            { order: 18,            visible: false },
+        candidate_display:           { order: 0,  width: 91,  visible: true  },
+        mileage_charge_rate:         { order: 19, width: 158, visible: false },
+        pay_method_snapshot:         { order: 4,             visible: true  },
+        bucket_labels_preview: { order: 8,  width: 272, visible: false },
+        default_submission_mode:     { order: 5,             visible: true  },
+        require_reference_to_pay:    { order: 14,            visible: true  },
+        require_reference_to_invoice:{ order: 15,            visible: true  },
+        week_ending_weekday_snapshot:{ order: 12,            visible: false }
+      },
+      columns_meta: {},
+      use_friendly_labels: true
+    },
+
+    candidates: {
+      labels: {
+        role: "Role",
+        email: "Email",
+        notes: "Notes",
+        phone: "Phone",
+        roles: "Roles",
+        active: "Active",
+        tms_ref: "TMS Ref",
+        postcode: "Postcode",
+        last_name: "Last Name",
+        sort_code: "Sort Code",
+        created_at: "Creation Date",
+        first_name: "First Name",
+        pay_method: "Pay Type",
+        updated_at: "Last Updated",
+        display_name: "Display Name",
+        account_holder: "Account Holder",
+        account_number: "Account number",
+        mileage_pay_rate: "Mileage Pay Rate"
+      },
+      columns: {
+        role:             { order: 4,  width: 110, visible: true  },
+        email:            { order: 5,  width: 252, visible: true  },
+        notes:            { order: 12,             visible: false },
+        phone:            { order: 6,  width: 121, visible: true  },
+        roles:            { order: 11,             visible: false },
+        active:           { order: 8,  width: 80,  visible: true  },
+        tms_ref:          { order: 0,  width: 116, visible: true  },
+        postcode:         { order: 3,              visible: false },
+        last_name:        { order: 2,  width: 103, visible: true  },
+        sort_code:        { order: 12,             visible: false },
+        created_at:       { order: 9,  width: 167, visible: true  },
+        first_name:       { order: 3,  width: 156, visible: true  },
+        pay_method:       { order: 7,  width: 121, visible: true  },
+        updated_at:       { order: 10,            visible: true  },
+        display_name:     { order: 1,  width: 150, visible: true  },
+        account_holder:   { order: 11,            visible: false },
+        account_number:   { order: 13,            visible: false },
+        mileage_pay_rate: { order: 12,            visible: false }
+      },
+      columns_meta: {},
+      use_friendly_labels: true
+    }
+  }
+};
+
+
+
 // worker.mjs (Cloudflare Worker, module syntax)
 import puppeteer from "@cloudflare/puppeteer";
 
@@ -1131,109 +1268,163 @@ export async function handleContractsList(env, req) {
 
   return withCORS(env, req, ok(out));
 }
+// BACKEND — handleUserGridPrefsGet
 export async function handleUserGridPrefsGet(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
   const api =
     `${env.SUPABASE_URL}/rest/v1/tms_users` +
-    `?select=id,grid_prefs_json&id=eq.${enc(user.id)}&limit=1`;
+    `?id=eq.${enc(user.id)}&select=id,grid_prefs_json&limit=1`;
   const { rows } = await sbFetch(env, api);
   const row = (rows && rows[0]) || null;
 
-  let prefs = (row && row.grid_prefs_json) || {};
-  if (!prefs || typeof prefs !== 'object') prefs = { grid: {} };
-  if (!prefs.grid || typeof prefs.grid !== 'object') prefs.grid = {};
+  let prefs = (row && row.grid_prefs_json) || null;
+
+  // If nothing stored yet, seed with backend defaults
+  if (!prefs || typeof prefs !== 'object') {
+    prefs = (typeof DEFAULT_GRID_PREFS === 'object')
+      ? JSON.parse(JSON.stringify(DEFAULT_GRID_PREFS))
+      : { grid: {} };
+  } else {
+    // Ensure we always have a .grid object
+    if (!prefs.grid || typeof prefs.grid !== 'object') {
+      prefs.grid = {};
+    }
+
+    // Merge in any new default sections/keys for existing users
+    if (typeof DEFAULT_GRID_PREFS === 'object' && DEFAULT_GRID_PREFS.grid) {
+      for (const [sec, defSec] of Object.entries(DEFAULT_GRID_PREFS.grid)) {
+        const existing = prefs.grid[sec];
+        if (!existing || typeof existing !== 'object') {
+          // Whole section missing → copy default section
+          prefs.grid[sec] = JSON.parse(JSON.stringify(defSec));
+        } else {
+          // Section exists → only add missing keys
+          for (const [k, v] of Object.entries(defSec)) {
+            if (typeof existing[k] === 'undefined') {
+              existing[k] = JSON.parse(JSON.stringify(v));
+            }
+          }
+        }
+      }
+    }
+  }
 
   return withCORS(env, req, ok(prefs));
 }
 
-export async function handleUserGridPrefsPatch(env, req) {
+// BACKEND — handleUserGridPrefsPatch
+export async function handleUserGridPrefsPatch(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
   const body = await req.json().catch(() => ({}));
 
+  // Deep merge helper: merges b into a, with `null` meaning "delete"
   const deepMerge = (a, b) => {
-    if (Array.isArray(a) && Array.isArray(b)) return b.slice(0);
+    if (Array.isArray(a) && Array.isArray(b)) {
+      return b.slice(); // replace arrays
+    }
     if (a && typeof a === 'object' && b && typeof b === 'object') {
       const out = { ...a };
-      for (const k of Object.keys(b)) {
-        const v = b[k];
-        if (v === undefined) continue;
-        // allow null to delete keys (for width resets etc.)
-        if (v === null) { delete out[k]; continue; }
-        out[k] = deepMerge(out[k], v);
+      for (const key of Object.keys(b)) {
+        const val = b[key];
+        if (val === undefined) continue;
+        if (val === null) {
+          // allow explicit delete
+          delete out[key];
+          continue;
+        }
+        out[key] = deepMerge(out[key], val);
       }
       return out;
     }
-    return (b === undefined) ? a : b;
+    return (b === undefined ? a : b);
   };
 
-  const normalize = (existing, incomingBody) => {
+  const normalize = (existing, incoming) => {
     let result = existing;
-    if (!result || typeof result !== 'object') result = { grid: {} };
-    if (!result.grid || typeof result.grid !== 'object') result.grid = {};
+    if (!result || typeof result !== 'object') {
+      result = { grid: {} };
+    }
+    if (!result.grid || typeof result.grid !== 'object') {
+      result.grid = {};
+    }
 
-    // Case 1: full grid object
-    if (incomingBody && incomingBody.grid && typeof incomingBody.grid === 'object') {
-      result.grid = deepMerge(result.grid, incomingBody.grid);
+    // Case 1: full grid object provided: { grid: { ... } }
+    if (incoming && incoming.grid && typeof incoming.grid === 'object') {
+      result.grid = deepMerge(result.grid, incoming.grid);
       return result;
     }
 
-    // Case 2: single section
-    if (incomingBody &&
-        typeof incomingBody.section === 'string' &&
-        incomingBody.prefs &&
-        typeof incomingBody.prefs === 'object') {
-      const sec = incomingBody.section;
+    // Case 2: section-scoped update: { section: 'contracts', prefs: { ... } } or { section, reset:true }
+    if (incoming && typeof incoming.section === 'string') {
+      const sec = incoming.section;
       result.grid = result.grid || {};
-      result.grid[sec] = deepMerge(result.grid[sec] || {}, incomingBody.prefs);
-      return result;
+
+      // Hard reset for this section if requested
+      if (incoming.reset === true) {
+        if (typeof DEFAULT_GRID_PREFS === 'object' &&
+            DEFAULT_GRID_PREFS.grid &&
+            DEFAULT_GRID_PREFS.grid[sec]) {
+          result.grid[sec] = JSON.parse(JSON.stringify(DEFAULT_GRID_PREFS.grid[sec]));
+        } else {
+          result.grid[sec] = {};
+        }
+        return result;
+      }
+
+      // Merge prefs into this section
+      if (incoming.prefs && typeof incoming.prefs === 'object') {
+        const prev = (result.grid[sec] && typeof result.grid[sec] === 'object')
+          ? result.grid[sec]
+          : {};
+        result.grid[sec] = deepMerge(prev, incoming.prefs);
+        return result;
+      }
     }
 
     return result;
   };
 
-  // Load current
+  // Load current prefs
   const getApi =
     `${env.SUPABASE_URL}/rest/v1/tms_users` +
-    `?select=id,grid_prefs_json&id=eq.${enc(user.id)}&limit=1`;
+    `?id=eq.${enc(user.id)}&select=id,grid_prefs_json&limit=1`;
   const { rows: rows0 } = await sbFetch(env, getApi);
-  const currentRaw = (rows0 && rows0[0] && rows0[0].grid_prefs_json) || {};
+  const currentRaw = (rows0 && rows0[0] && rows0[0].grid_prefs_json) || null;
 
-  const current =
-    (!currentRaw || typeof currentRaw !== 'object')
-      ? { grid: {} }
-      : {
-          ...currentRaw,
-          grid: (currentRaw.grid && typeof currentRaw.grid === 'object')
-            ? currentRaw.grid
-            : {}
-        };
+  let current;
+  if (!currentRaw || typeof currentRaw !== 'object') {
+    // Seed with backend defaults if nothing exists yet
+    current = (typeof DEFAULT_GRID_PREFS === 'object')
+      ? JSON.parse(JSON.stringify(DEFAULT_GRID_PREFS))
+      : { grid: {} };
+  } else {
+    current = {
+      ...currentRaw,
+      grid: (currentRaw.grid && typeof currentRaw.grid === 'object')
+        ? currentRaw.grid
+        : {}
+    };
+  }
 
   const merged = normalize(current, body);
 
-  // Save
+  // Persist updated prefs
   const patchApi = `${env.SUPABASE_URL}/rest/v1/tms_users?id=eq.${enc(user.id)}`;
-  const { rows } = await sbFetch(env, patchApi, {
+  const { rows: rows1 } = await sbFetch(env, patchApi, {
     method: 'PATCH',
-    headers: { 'Prefer': 'return=representation' },
+    headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
     body: JSON.stringify({ grid_prefs_json: merged })
   });
-  const savedRow = (rows && rows[0] && rows[0].grid_prefs_json) || merged;
-  const saved =
-    (!savedRow || typeof savedRow !== 'object')
-      ? { grid: {} }
-      : {
-          ...savedRow,
-          grid: (savedRow.grid && typeof savedRow.grid === 'object')
-            ? savedRow.grid
-            : {}
-        };
+  const saved = (rows1 && rows1[0] && rows1[0].grid_prefs_json) || merged;
 
   return withCORS(env, req, ok(saved));
 }
+
+
 
 // handleContractsGet — embed names and flatten convenience fields for FE
 // (joins via FK: contracts.candidate_id → candidates.id, contracts.client_id → clients.id)  :contentReference[oaicite:1]{index=1}
@@ -17533,6 +17724,7 @@ export default {
       if (req.method === 'PATCH' && p === '/api/users/me/grid-prefs') {
         return withCORS(env, req, await handleUserGridPrefsPatch(env, req));
       }
+
 
       // ====================== PUBLIC (mobile) WRITE FLOW ======================
       if (req.method === "POST" && p === "/timesheets/presign")            return handlePresign(env, req);
