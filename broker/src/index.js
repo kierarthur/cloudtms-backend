@@ -1131,15 +1131,19 @@ export async function handleContractsList(env, req) {
 
   return withCORS(env, req, ok(out));
 }
-
 export async function handleUserGridPrefsGet(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
-  const api = `${env.SUPABASE_URL}/rest/v1/tms_users?select=id,grid_prefs_json&id=eq.${enc(user.id)}&limit=1`;
+  const api =
+    `${env.SUPABASE_URL}/rest/v1/tms_users` +
+    `?select=id,grid_prefs_json&id=eq.${enc(user.id)}&limit=1`;
   const { rows } = await sbFetch(env, api);
   const row = (rows && rows[0]) || null;
-  const prefs = (row && row.grid_prefs_json) || { grid: {} };
+
+  let prefs = (row && row.grid_prefs_json) || {};
+  if (!prefs || typeof prefs !== 'object') prefs = { grid: {} };
+  if (!prefs.grid || typeof prefs.grid !== 'object') prefs.grid = {};
 
   return withCORS(env, req, ok(prefs));
 }
@@ -1149,45 +1153,64 @@ export async function handleUserGridPrefsPatch(env, req) {
   if (!user) return withCORS(env, req, unauthorized());
 
   const body = await req.json().catch(() => ({}));
-  // Accept either:
-  //   { grid: { <section>: {...} } }
-  // or
-  //   { section: 'contracts', prefs: {...} }
-  const normalize = (existing, incoming) => {
-    const deepMerge = (a, b) => {
-      if (Array.isArray(a) && Array.isArray(b)) return b.slice(0);
-      if (a && typeof a === 'object' && b && typeof b === 'object') {
-        const out = { ...a };
-        for (const k of Object.keys(b)) {
-          const v = b[k];
-          if (v === undefined) continue;
-          // allow null to delete keys (for widths reset)
-          if (v === null) { delete out[k]; continue; }
-          out[k] = deepMerge(out[k], v);
-        }
-        return out;
-      }
-      return (b === undefined) ? a : b;
-    };
 
-    const result = { ...(existing || { grid: {} }) };
-    if (body && body.grid && typeof body.grid === 'object') {
-      result.grid = deepMerge(result.grid || {}, body.grid);
+  const deepMerge = (a, b) => {
+    if (Array.isArray(a) && Array.isArray(b)) return b.slice(0);
+    if (a && typeof a === 'object' && b && typeof b === 'object') {
+      const out = { ...a };
+      for (const k of Object.keys(b)) {
+        const v = b[k];
+        if (v === undefined) continue;
+        // allow null to delete keys (for width resets etc.)
+        if (v === null) { delete out[k]; continue; }
+        out[k] = deepMerge(out[k], v);
+      }
+      return out;
+    }
+    return (b === undefined) ? a : b;
+  };
+
+  const normalize = (existing, incomingBody) => {
+    let result = existing;
+    if (!result || typeof result !== 'object') result = { grid: {} };
+    if (!result.grid || typeof result.grid !== 'object') result.grid = {};
+
+    // Case 1: full grid object
+    if (incomingBody && incomingBody.grid && typeof incomingBody.grid === 'object') {
+      result.grid = deepMerge(result.grid, incomingBody.grid);
       return result;
     }
-    if (body && typeof body.section === 'string' && body.prefs && typeof body.prefs === 'object') {
+
+    // Case 2: single section
+    if (incomingBody &&
+        typeof incomingBody.section === 'string' &&
+        incomingBody.prefs &&
+        typeof incomingBody.prefs === 'object') {
+      const sec = incomingBody.section;
       result.grid = result.grid || {};
-      const sec = body.section;
-      result.grid[sec] = deepMerge(result.grid[sec] || {}, body.prefs);
+      result.grid[sec] = deepMerge(result.grid[sec] || {}, incomingBody.prefs);
       return result;
     }
-    return existing || { grid: {} };
+
+    return result;
   };
 
   // Load current
-  const getApi = `${env.SUPABASE_URL}/rest/v1/tms_users?select=id,grid_prefs_json&id=eq.${enc(user.id)}&limit=1`;
+  const getApi =
+    `${env.SUPABASE_URL}/rest/v1/tms_users` +
+    `?select=id,grid_prefs_json&id=eq.${enc(user.id)}&limit=1`;
   const { rows: rows0 } = await sbFetch(env, getApi);
-  const current = (rows0 && rows0[0] && rows0[0].grid_prefs_json) || { grid: {} };
+  const currentRaw = (rows0 && rows0[0] && rows0[0].grid_prefs_json) || {};
+
+  const current =
+    (!currentRaw || typeof currentRaw !== 'object')
+      ? { grid: {} }
+      : {
+          ...currentRaw,
+          grid: (currentRaw.grid && typeof currentRaw.grid === 'object')
+            ? currentRaw.grid
+            : {}
+        };
 
   const merged = normalize(current, body);
 
@@ -1198,11 +1221,19 @@ export async function handleUserGridPrefsPatch(env, req) {
     headers: { 'Prefer': 'return=representation' },
     body: JSON.stringify({ grid_prefs_json: merged })
   });
-  const saved = (rows && rows[0] && rows[0].grid_prefs_json) || merged;
+  const savedRow = (rows && rows[0] && rows[0].grid_prefs_json) || merged;
+  const saved =
+    (!savedRow || typeof savedRow !== 'object')
+      ? { grid: {} }
+      : {
+          ...savedRow,
+          grid: (savedRow.grid && typeof savedRow.grid === 'object')
+            ? savedRow.grid
+            : {}
+        };
 
   return withCORS(env, req, ok(saved));
 }
-
 
 // handleContractsGet — embed names and flatten convenience fields for FE
 // (joins via FK: contracts.candidate_id → candidates.id, contracts.client_id → clients.id)  :contentReference[oaicite:1]{index=1}
