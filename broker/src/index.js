@@ -53,7 +53,7 @@ const DEFAULT_GRID_PREFS = {
         postcode:             { order: 4,  width: 121, visible: true  },
         created_at:           { order: 8,  width: 161, visible: true  },
         updated_at:           { order: 9,  width: 159, visible: true  },
-        vat_credits:          { order: 6,               visible: true  },
+        vat_chargeable: { order: 6, visible: true },
         invoice_address:      { order: 3,  width: 326, visible: true  },
         ts_queries_email:     { order: 11,              visible: false },
         payment_terms_days:   { order: 7,  width: 93,  visible: true  },
@@ -1292,21 +1292,38 @@ export async function handleUserGridPrefsGet(env, req) {
       prefs.grid = {};
     }
 
-    // Merge in any new default sections/keys for existing users
+    // Merge in any new default sections/keys for existing users,
+    // deep-merging nested labels/columns/meta so backend defaults always flow through.
     if (typeof DEFAULT_GRID_PREFS === 'object' && DEFAULT_GRID_PREFS.grid) {
-      for (const [sec, defSec] of Object.entries(DEFAULT_GRID_PREFS.grid)) {
-        const existing = prefs.grid[sec];
-        if (!existing || typeof existing !== 'object') {
-          // Whole section missing → copy default section
-          prefs.grid[sec] = JSON.parse(JSON.stringify(defSec));
-        } else {
-          // Section exists → only add missing keys
-          for (const [k, v] of Object.entries(defSec)) {
-            if (typeof existing[k] === 'undefined') {
-              existing[k] = JSON.parse(JSON.stringify(v));
-            }
-          }
-        }
+      for (const [sec, defSecRaw] of Object.entries(DEFAULT_GRID_PREFS.grid)) {
+        const defSec = defSecRaw || {};
+        const existing = (prefs.grid[sec] && typeof prefs.grid[sec] === 'object')
+          ? prefs.grid[sec]
+          : {};
+
+        // Start with backend defaults, then overlay existing section-level keys
+        const mergedSection = {
+          ...(defSec || {}),
+          ...(existing || {})
+        };
+
+        // Deep-merge important nested objects: backend defaults + user overrides
+        mergedSection.labels = {
+          ...(defSec.labels || {}),
+          ...(existing.labels || {})
+        };
+
+        mergedSection.columns = {
+          ...(defSec.columns || {}),
+          ...(existing.columns || {})
+        };
+
+        mergedSection.columns_meta = {
+          ...(defSec.columns_meta || {}),
+          ...(existing.columns_meta || {})
+        };
+
+        prefs.grid[sec] = mergedSection;
       }
     }
   }
@@ -1314,6 +1331,8 @@ export async function handleUserGridPrefsGet(env, req) {
   return withCORS(env, req, ok(prefs));
 }
 
+
+// BACKEND — handleUserGridPrefsPatch
 // BACKEND — handleUserGridPrefsPatch
 export async function handleUserGridPrefsPatch(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
