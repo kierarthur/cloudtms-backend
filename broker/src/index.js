@@ -1093,20 +1093,44 @@ export async function handleContractsList(env, req) {
   const qs = (k) => url.searchParams.getAll(k);
   const encQ = (v) => enc(v); // short alias
 
-  // ── SELECT with relationships (optionally includes an aggregate to avoid dupes when status=active via join fallback)
-  const wantAggregate = false; // we'll set true below if we need join fallback
+  // Sorting
+  const orderByParam = (q('order_by') || '').toLowerCase();
+  const orderDirParam = (q('order_dir') || '').toLowerCase();
+  const sortMap = {
+    candidate_display:             'candidate.display_name',
+    client_name:                   'client.name',
+    role:                          'role',
+    band:                          'band',
+    start_date:                    'start_date',
+    end_date:                      'end_date',
+    created_at:                    'created_at',
+    updated_at:                    'updated_at',
+    auto_invoice:                  'auto_invoice',
+    display_site:                  'display_site',
+    pay_method_snapshot:           'pay_method_snapshot',
+    default_submission_mode:       'default_submission_mode',
+    week_ending_weekday_snapshot:  'week_ending_weekday_snapshot',
+    require_reference_to_pay:      'require_reference_to_pay',
+    require_reference_to_invoice:  'require_reference_to_invoice',
+    mileage_pay_rate:              'mileage_pay_rate',
+    mileage_charge_rate:           'mileage_charge_rate'
+  };
+  const defaultSortCol = 'start_date';
+  const orderCol = sortMap[orderByParam] || defaultSortCol;
+  const orderDir = (orderDirParam === 'asc' || orderDirParam === 'desc') ? orderDirParam : 'desc';
+
+  // SELECT with relationships (optionally includes an aggregate to avoid dupes when status=active via join fallback)
   let selectParts = [
     '*',
     'candidate:candidates(display_name,first_name,last_name)',
     'client:clients(name)'
   ];
 
-  // Build initial API
   let api = `${env.SUPABASE_URL}/rest/v1/contracts?select=${selectParts.join(',')}`;
 
   const filters = [];
 
-  // ── Core filters (existing) ─────────────────────────────────────────────────
+  // ── Core filters ────────────────────────────────────────────────────────────
   if (q('candidate_id'))        filters.push(`candidate_id=eq.${encQ(q('candidate_id'))}`);
   if (q('client_id'))           filters.push(`client_id=eq.${encQ(q('client_id'))}`);
   if (q('pay_method_snapshot')) filters.push(`pay_method_snapshot=eq.${encQ(q('pay_method_snapshot').toUpperCase())}`);
@@ -1121,7 +1145,7 @@ export async function handleContractsList(env, req) {
 
   if (q('auto_invoice')) filters.push(`auto_invoice=eq.${encQ(String(clampBool(q('auto_invoice'))))}`);
 
-  // ── Free text across related names + role ───────────────────────────────────
+  // Free text across related names + role
   if (q('q')) {
     const like = `%${q('q')}%`;
     filters.push(
@@ -1163,20 +1187,17 @@ export async function handleContractsList(env, req) {
     filters.push(yes ? `bucket_labels_json=not.is.null` : `bucket_labels_json=is.null`);
   }
 
-  // created_from / created_to (if present)
+  // created_from / created_to
   if (q('created_from')) filters.push(`created_at=gte.${encQ(q('created_from'))}`);
   if (q('created_to'))   filters.push(`created_at=lte.${encQ(q('created_to'))}`);
 
-  // ── NEW: status=active|completed|unassigned ─────────────────────────────────
+  // ── status=active|completed|unassigned ──────────────────────────────────────
   const statusParam = (q('status') || '').toLowerCase();
-  const INCOMPLETE_STATUSES = ['OPEN','PLANNED','SUBMITTED','AUTHORISED']; // not fully processed/invoiced
+  const INCOMPLETE_STATUSES = ['OPEN','PLANNED','SUBMITTED','AUTHORISED'];
+
   if (statusParam === 'unassigned') {
     filters.push('candidate_id=is.null');
   } else if (statusParam === 'active' || statusParam === 'completed') {
-    // Strategy: fetch contract_ids that have at least one incomplete week,
-    // then apply id in/not in. This is robust and avoids tricky anti-joins.
-    // If the set is very large, we fall back to a join filter that won't 413.
-
     const fetchActiveContractIds = async () => {
       const limit = 1000;
       let offset = 0;
@@ -1198,9 +1219,8 @@ export async function handleContractsList(env, req) {
 
     const activeIds = await fetchActiveContractIds();
 
-    const safeJoinFallback = () => {
+    const safeJoinFallbackForActive = () => {
       // Use inner join filter to ensure we don't blow URL length.
-      // To avoid duplicates we add an aggregate embedding (count).
       selectParts.push('cw_active:contract_weeks!inner(count)');
       const joined = `contract_weeks!inner.status=in.(${INCOMPLETE_STATUSES.map(encQ).join(',')})`;
       filters.push(joined);
@@ -1208,22 +1228,19 @@ export async function handleContractsList(env, req) {
 
     if (statusParam === 'active') {
       if (activeIds.length === 0) {
-        // No active contracts – short-circuit
         return withCORS(env, req, ok([]));
       } else if (activeIds.length <= 300) {
         filters.push(`id=in.(${activeIds.map(encQ).join(',')})`);
       } else {
-        safeJoinFallback();
+        safeJoinFallbackForActive();
       }
     } else if (statusParam === 'completed') {
       if (activeIds.length > 0 && activeIds.length <= 300) {
         filters.push(`id=not.in.(${activeIds.map(encQ).join(',')})`);
       } else if (activeIds.length === 0) {
-        // Everyone qualifies as "completed" (no contracts with incomplete weeks),
-        // so we add no additional filter.
+        // everyone qualifies as completed; no extra filter
       } else {
         // anti-join fallback: left join + is.null on alias that only links incomplete rows
-        // (works in PostgREST by aliasing the relation)
         selectParts.push('cw_open:contract_weeks!left(count)');
         filters.push(`cw_open:contract_weeks!left.status=in.(${INCOMPLETE_STATUSES.map(encQ).join(',')})`);
         filters.push(`cw_open.id=is.null`);
@@ -1231,16 +1248,21 @@ export async function handleContractsList(env, req) {
     }
   }
 
-  // Re-apply select if we added aggregates
+  // Rebuild api in case selectParts changed (aggregates)
   api = `${env.SUPABASE_URL}/rest/v1/contracts?select=${selectParts.join(',')}`;
-
   if (filters.length) api += `&${filters.join('&')}`;
-  api += '&order=start_date.desc,created_at.desc';
 
-  // ── paging → limit/offset ──────────────────────────────────────────────────
+  // Sorting: primary on requested column, secondary on created_at for stability
+  api += `&order=${encQ(orderCol)}.${orderDir}`;
+  if (orderCol !== 'created_at') {
+    api += `&order=created_at.desc`;
+  }
+
+  // paging → limit/offset
   const page     = Math.max(parseInt(url.searchParams.get('page') || '1', 10) || 1, 1);
-  const pageSize = (url.searchParams.get('page_size') === 'ALL') ? null :
-                    Math.max(parseInt(url.searchParams.get('page_size') || '50', 10) || 50, 1);
+  const pageSizeRaw = url.searchParams.get('page_size');
+  const pageSize = (pageSizeRaw === 'ALL') ? null :
+                    Math.max(parseInt(pageSizeRaw || '50', 10) || 50, 1);
 
   if (pageSize != null) {
     const limit  = pageSize;
@@ -1257,7 +1279,6 @@ export async function handleContractsList(env, req) {
       ([r?.candidate?.first_name, r?.candidate?.last_name].filter(Boolean).join(' ') || null);
     const clientName = r?.client?.name || null;
 
-    // strip the aggregate artifacts if present
     const { cw_active, cw_open, ...rest } = (r || {});
     return {
       ...rest,
@@ -1268,6 +1289,7 @@ export async function handleContractsList(env, req) {
 
   return withCORS(env, req, ok(out));
 }
+
 // BACKEND — handleUserGridPrefsGet
 export async function handleUserGridPrefsGet(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -5846,7 +5868,6 @@ export async function handleReportUmbrellas(env, req) {
 // ───────────────────────────────────────────────────────────────────────────────
 // SEARCH — Timesheets (richer filters + csv/print)
 // ───────────────────────────────────────────────────────────────────────────────
-
 export async function handleSearchTimesheets(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -5872,16 +5893,16 @@ export async function handleSearchTimesheets(env, req) {
   const payMethod = q('pay_method') ? q('pay_method').toUpperCase() : null;
 
   // NEW filters to match FE
-  const bookingId = q('booking_id');
-  const occKey    = q('occupant_key_norm');
-  const hospital  = q('hospital_norm');
-  const workedFrom = q('worked_from');
-  const workedTo   = q('worked_to');
+  const bookingId   = q('booking_id');
+  const occKey      = q('occupant_key_norm');
+  const hospital    = q('hospital_norm');
+  const workedFrom  = q('worked_from');
+  const workedTo    = q('worked_to');
   const createdFrom = q('created_from');
   const createdTo   = q('created_to');
   const statuses    = qa('status'); // repeated: status=A&status=B
 
-  // NEW: explicit-ID selection support (timesheet_ids)
+  // explicit-ID selection support (timesheet_ids)
   const idInExpr = q('id');            // expect 'in.(uuid1,uuid2,...)' from FE
   const idsRaw   = q('ids');           // optional friendlier "uuid1,uuid2,..."
   let idFilterExpr = null;
@@ -5892,10 +5913,22 @@ export async function handleSearchTimesheets(env, req) {
     if (list.length) idFilterExpr = `in.(${list.join(',')})`;
   }
 
-  const orderBy = (q('order_by') || 'week_ending_date').toLowerCase(); // week_ending_date|margin|charge|pay
+  const orderBy = (q('order_by') || 'week_ending_date').toLowerCase();
   const orderDir = (q('order_dir') || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
 
-  // Base select: join needed timesheet bits for filter/sort on week_ending_date & status/hospital/occupant
+  // Allow both legacy keys (margin/charge/pay) and grid keys (margin_ex_vat, total_*_ex_vat)
+  const orderMap = {
+    week_ending_date:     'timesheet.week_ending_date',
+    margin:               'margin_ex_vat',
+    margin_ex_vat:        'margin_ex_vat',
+    charge:               'total_charge_ex_vat',
+    total_charge_ex_vat:  'total_charge_ex_vat',
+    pay:                  'total_pay_ex_vat',
+    total_pay_ex_vat:     'total_pay_ex_vat',
+  };
+  const orderCol = orderMap[orderBy] || orderMap.week_ending_date;
+
+  // Base select
   let url = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
     `?select=timesheet_id,candidate_id,client_id,pay_method,` +
     `total_charge_ex_vat,total_pay_ex_vat,margin_ex_vat,paid_at_utc,locked_by_invoice_id,pay_on_hold,created_at,` +
@@ -5915,7 +5948,7 @@ export async function handleSearchTimesheets(env, req) {
   if (invoiced === 'true')  url += `&locked_by_invoice_id=not.is.null`;
   if (invoiced === 'false') url += `&locked_by_invoice_id=is.null`;
 
-  // NEW: extra filters aligned with FE buildSearchQS()
+  // extra filters aligned with FE buildSearchQS()
   if (bookingId) url += `&timesheet.booking_id=eq.${enc(bookingId)}`;
   if (occKey)    url += `&timesheet.occupant_key_norm=eq.${enc(occKey)}`;
   if (hospital)  url += `&timesheet.hospital_norm=eq.${enc(hospital)}`;
@@ -5928,16 +5961,9 @@ export async function handleSearchTimesheets(env, req) {
     url += `&timesheet.status=in.(${inList})`;
   }
 
-  // NEW: explicit-ID selection applied to timesheet_id
+  // explicit-ID selection applied to timesheet_id
   if (idFilterExpr) url += `&timesheet_id=${enc(idFilterExpr)}`;
 
-  const orderMap = {
-    week_ending_date: 'timesheet.week_ending_date',
-    margin: 'margin_ex_vat',
-    charge: 'total_charge_ex_vat',
-    pay: 'total_pay_ex_vat',
-  };
-  const orderCol = orderMap[orderBy] || orderMap.week_ending_date;
   url += `&order=${enc(orderCol)}.${orderDir}&limit=${pageSize}&offset=${(page-1)*pageSize}`;
 
   let rows = [];
@@ -6139,7 +6165,24 @@ export async function handleSearchClients(env, req) {
   const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
   const format   = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
 
-  // NEW: explicit-ID selection support
+  // Sorting
+  const orderByParam = (q('order_by') || '').toLowerCase();
+  const orderDirParam = (q('order_dir') || '').toLowerCase();
+
+  const allowedSort = {
+    name:                  'name',
+    cli_ref:               'cli_ref',
+    primary_invoice_email: 'primary_invoice_email',
+    ap_phone:              'ap_phone',
+    vat_chargeable:        'vat_chargeable',
+    payment_terms_days:    'payment_terms_days',
+    created_at:            'created_at'
+  };
+  const defaultOrderCol = 'name';
+  const orderCol = allowedSort[orderByParam] || defaultOrderCol;
+  const orderDir = (orderDirParam === 'desc') ? 'desc' : 'asc';
+
+  // explicit-ID selection support
   const idInExpr = q('id');    // 'in.(...)'
   const idsRaw   = q('ids');   // 'uuid1,uuid2,...'
   let idFilterExpr = null;
@@ -6151,17 +6194,17 @@ export async function handleSearchClients(env, req) {
   }
 
   // Filters expanded to match FE
-  const text = q('q'); // name partial
-  const cliRef = q('cli_ref');
-  const primaryEmail = q('primary_invoice_email');
-  const apPhone = q('ap_phone');
+  const text          = q('q'); // name partial
+  const cliRef        = q('cli_ref');
+  const primaryEmail  = q('primary_invoice_email');
+  const apPhone       = q('ap_phone');
   const vatChargeable = q('vat_chargeable'); // 'true'|'false'|null
-  const createdFrom = q('created_from');
-  const createdTo   = q('created_to');
+  const createdFrom   = q('created_from');
+  const createdTo     = q('created_to');
 
   let url = `${env.SUPABASE_URL}/rest/v1/clients` +
             `?select=id,name,vat_chargeable,payment_terms_days,primary_invoice_email,ap_phone,cli_ref,created_at` +
-            `&order=name.asc` +
+            `&order=${enc(orderCol)}.${orderDir}` +
             `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
 
   if (idFilterExpr) url += `&id=${enc(idFilterExpr)}`;
@@ -6186,8 +6229,14 @@ export async function handleSearchClients(env, req) {
     const out = [csvJoin(header)];
     for (const r of rows || []) {
       out.push(csvJoin([
-        r.id, r.name || '', r.vat_chargeable ? 'Y' : 'N', Number(r.payment_terms_days ?? ''),
-        r.primary_invoice_email || '', r.ap_phone || '', r.cli_ref || '', r.created_at || ''
+        r.id,
+        r.name || '',
+        r.vat_chargeable ? 'Y' : 'N',
+        Number(r.payment_terms_days ?? ''),
+        r.primary_invoice_email || '',
+        r.ap_phone || '',
+        r.cli_ref || '',
+        r.created_at || ''
       ]));
     }
     return withCORS(env, req, ok({ csv: out.join('\n'), count: rows?.length || 0, page, page_size: pageSize }));
@@ -6235,7 +6284,24 @@ export async function handleSearchUmbrellas(env, req) {
   const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
   const format   = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
 
-  // NEW: explicit-ID selection support
+  // Sorting
+  const orderByParam = (q('order_by') || '').toLowerCase();
+  const orderDirParam = (q('order_dir') || '').toLowerCase();
+
+  const allowedSort = {
+    name:           'name',
+    enabled:        'enabled',
+    vat_chargeable: 'vat_chargeable',
+    bank_name:      'bank_name',
+    sort_code:      'sort_code',
+    account_number: 'account_number',
+    created_at:     'created_at'
+  };
+  const defaultOrderCol = 'name';
+  const orderCol = allowedSort[orderByParam] || defaultOrderCol;
+  const orderDir = (orderDirParam === 'desc') ? 'desc' : 'asc';
+
+  // explicit-ID selection support
   const idInExpr = q('id');    // 'in.(...)'
   const idsRaw   = q('ids');   // 'uuid1,uuid2,...'
   let idFilterExpr = null;
@@ -6247,18 +6313,18 @@ export async function handleSearchUmbrellas(env, req) {
   }
 
   // Expanded filters to match FE
-  const text         = q('q'); // name partial
-  const bankName     = q('bank_name');
-  const sortCode     = q('sort_code');
-  const accountNo    = q('account_number');
-  const enabled      = q('enabled');        // 'true'|'false'|null
+  const text          = q('q'); // name partial
+  const bankName      = q('bank_name');
+  const sortCode      = q('sort_code');
+  const accountNo     = q('account_number');
+  const enabled       = q('enabled');        // 'true'|'false'|null
   const vatChargeable = q('vat_chargeable'); // 'true'|'false'|null
-  const createdFrom  = q('created_from');
-  const createdTo    = q('created_to');
+  const createdFrom   = q('created_from');
+  const createdTo     = q('created_to');
 
   let url = `${env.SUPABASE_URL}/rest/v1/umbrellas` +
             `?select=id,name,vat_chargeable,enabled,bank_name,sort_code,account_number,created_at` +
-            `&order=name.asc` +
+            `&order=${enc(orderCol)}.${orderDir}` +
             `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
 
   if (idFilterExpr) url += `&id=${enc(idFilterExpr)}`;
@@ -6285,8 +6351,14 @@ export async function handleSearchUmbrellas(env, req) {
     const out = [csvJoin(header)];
     for (const r of rows || []) {
       out.push(csvJoin([
-        r.id, r.name || '', r.enabled ? 'Y' : 'N', r.vat_chargeable ? 'Y' : 'N',
-        r.bank_name || '', r.sort_code || '', r.account_number || '', r.created_at || ''
+        r.id,
+        r.name || '',
+        r.enabled ? 'Y' : 'N',
+        r.vat_chargeable ? 'Y' : 'N',
+        r.bank_name || '',
+        r.sort_code || '',
+        r.account_number || '',
+        r.created_at || ''
       ]));
     }
     return withCORS(env, req, ok({ csv: out.join('\n'), count: rows?.length || 0, page, page_size: pageSize }));
@@ -6319,6 +6391,7 @@ export async function handleSearchUmbrellas(env, req) {
 
   return withCORS(env, req, ok({ rows, page, page_size: pageSize, count: rows?.length || 0 }));
 }
+
 
 // ───────────────────────────────────────────────────────────────────────────────
 // REPORT PRESETS — Create / List / Update / Delete
@@ -10347,13 +10420,31 @@ export async function handleSearchCandidates(env, req) {
   const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
   const format   = (q('format') || 'json').toLowerCase();
 
+  // Sorting
+  const orderByParam = (q('order_by') || '').toLowerCase();
+  const orderDirParam = (q('order_dir') || '').toLowerCase();
+
+  const allowedSort = {
+    display_name: 'display_name',
+    first_name:   'first_name',
+    last_name:    'last_name',
+    email:        'email',
+    phone:        'phone',
+    pay_method:   'pay_method',
+    active:       'active',
+    created_at:   'created_at'
+  };
+  const defaultOrderCol = 'display_name';
+  const orderCol = allowedSort[orderByParam] || defaultOrderCol;
+  const orderDir = (orderDirParam === 'desc') ? 'desc' : 'asc';
+
   // Named filters
-  const firstName  = q('first_name');
-  const lastName   = q('last_name');
-  const email      = q('email');
-  const phone      = q('phone');
-  const payMethod  = q('pay_method') ? q('pay_method').toUpperCase() : null;
-  const active     = q('active');
+  const firstName   = q('first_name');
+  const lastName    = q('last_name');
+  const email       = q('email');
+  const phone       = q('phone');
+  const payMethod   = q('pay_method') ? q('pay_method').toUpperCase() : null;
+  const active      = q('active');
   const createdFrom = q('created_from');
   const createdTo   = q('created_to');
 
@@ -10361,7 +10452,7 @@ export async function handleSearchCandidates(env, req) {
   let rolesAny = qa('roles_any').filter(Boolean).map(s => s.trim()).filter(Boolean);
   let rolesAll = qa('roles_all').filter(Boolean).map(s => s.trim()).filter(Boolean);
 
-  // NEW: explicit-IDs support (either id=in.(...) or ids=uuid1,uuid2,...)
+  // explicit-IDs support (either id=in.(...) or ids=uuid1,uuid2,...)
   const idInExpr = q('id');              // raw 'in.(...)'
   const idsRaw   = q('ids');             // friendly csv
   let idFilterExpr = null;
@@ -10382,7 +10473,7 @@ export async function handleSearchCandidates(env, req) {
   let url =
     `${env.SUPABASE_URL}/rest/v1/candidates` +
     `?select=id,display_name,first_name,last_name,email,phone,pay_method,active,created_at` +
-    `&order=display_name.asc` +
+    `&order=${enc(orderCol)}.${orderDir}` +
     `&limit=${pageSize}&offset=${(page - 1) * pageSize}`;
 
   if (text)       url += `&display_name=ilike.*${enc(text)}*`;
