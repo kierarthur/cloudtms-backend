@@ -954,61 +954,70 @@ export async function handleContractsList(env, req) {
   const url = new URL(req.url);
   const q  = (k) => url.searchParams.get(k);
   const qs = (k) => url.searchParams.getAll(k);
+  const encQ = (v) => enc(v); // short alias
 
-  // Embed related names so FE can show Candidate/Client without extra calls
-  let api = `${env.SUPABASE_URL}/rest/v1/contracts?select=*,` +
-            `candidate:candidates(display_name,first_name,last_name),` +
-            `client:clients(name)`;
+  // ── SELECT with relationships (optionally includes an aggregate to avoid dupes when status=active via join fallback)
+  const wantAggregate = false; // we'll set true below if we need join fallback
+  let selectParts = [
+    '*',
+    'candidate:candidates(display_name,first_name,last_name)',
+    'client:clients(name)'
+  ];
+
+  // Build initial API
+  let api = `${env.SUPABASE_URL}/rest/v1/contracts?select=${selectParts.join(',')}`;
 
   const filters = [];
 
-  // Core filters (existing)
-  if (q('candidate_id'))        filters.push(`candidate_id=eq.${enc(q('candidate_id'))}`);
-  if (q('client_id'))           filters.push(`client_id=eq.${enc(q('client_id'))}`);
-  if (q('pay_method_snapshot')) filters.push(`pay_method_snapshot=eq.${enc(q('pay_method_snapshot').toUpperCase())}`);
-  if (q('role'))                filters.push(`role=eq.${enc(q('role'))}`);
-  if (q('band'))                filters.push(`band=eq.${enc(q('band'))}`);
+  // ── Core filters (existing) ─────────────────────────────────────────────────
+  if (q('candidate_id'))        filters.push(`candidate_id=eq.${encQ(q('candidate_id'))}`);
+  if (q('client_id'))           filters.push(`client_id=eq.${encQ(q('client_id'))}`);
+  if (q('pay_method_snapshot')) filters.push(`pay_method_snapshot=eq.${encQ(q('pay_method_snapshot').toUpperCase())}`);
+  if (q('role'))                filters.push(`role=eq.${encQ(q('role'))}`);
+  if (q('band'))                filters.push(`band=eq.${encQ(q('band'))}`);
+
   if (q('active_on')) {
     const d = q('active_on');
-    filters.push(`start_date=lte.${enc(d)}`);
-    filters.push(`end_date=gte.${enc(d)}`);
+    filters.push(`start_date=lte.${encQ(d)}`);
+    filters.push(`end_date=gte.${encQ(d)}`);
   }
-  if (q('auto_invoice'))        filters.push(`auto_invoice=eq.${enc(String(clampBool(q('auto_invoice'))))}`);
 
-  // Free text across related names + role (uses embedded relationship paths)
+  if (q('auto_invoice')) filters.push(`auto_invoice=eq.${encQ(String(clampBool(q('auto_invoice'))))}`);
+
+  // ── Free text across related names + role ───────────────────────────────────
   if (q('q')) {
     const like = `%${q('q')}%`;
     filters.push(
-      `or=(client.name.ilike.${enc(like)},` +
-      `candidate.display_name.ilike.${enc(like)},` +
-      `candidate.first_name.ilike.${enc(like)},` +
-      `candidate.last_name.ilike.${enc(like)},` +
-      `role.ilike.${enc(like)})`
+      `or=(client.name.ilike.${encQ(like)},` +
+      `candidate.display_name.ilike.${encQ(like)},` +
+      `candidate.first_name.ilike.${encQ(like)},` +
+      `candidate.last_name.ilike.${encQ(like)},` +
+      `role.ilike.${encQ(like)})`
     );
   }
 
   // roles_any (multiple values)
   const rolesAny = qs('roles_any');
   if (rolesAny && rolesAny.length) {
-    const orParts = rolesAny.map(r => `role.eq.${enc(r)}`).join(',');
+    const orParts = rolesAny.map(r => `role.eq.${encQ(r)}`).join(',');
     filters.push(`or=(${orParts})`);
   }
 
   // default_submission_mode (accept alias submission_mode)
   const dsm = q('default_submission_mode') || q('submission_mode');
-  if (dsm) filters.push(`default_submission_mode=eq.${enc(dsm.toUpperCase())}`);
+  if (dsm) filters.push(`default_submission_mode=eq.${encQ(dsm.toUpperCase())}`);
 
   // week_ending_weekday_snapshot
   if (q('week_ending_weekday_snapshot')) {
-    filters.push(`week_ending_weekday_snapshot=eq.${enc(q('week_ending_weekday_snapshot'))}`);
+    filters.push(`week_ending_weekday_snapshot=eq.${encQ(q('week_ending_weekday_snapshot'))}`);
   }
 
   // require_reference_* gates
   if (q('require_reference_to_pay')) {
-    filters.push(`require_reference_to_pay=eq.${enc(String(clampBool(q('require_reference_to_pay'))))}`);
+    filters.push(`require_reference_to_pay=eq.${encQ(String(clampBool(q('require_reference_to_pay'))))}`);
   }
   if (q('require_reference_to_invoice')) {
-    filters.push(`require_reference_to_invoice=eq.${enc(String(clampBool(q('require_reference_to_invoice'))))}`);
+    filters.push(`require_reference_to_invoice=eq.${encQ(String(clampBool(q('require_reference_to_invoice'))))}`);
   }
 
   // has_custom_labels → bucket_labels_json null/not null
@@ -1018,30 +1027,103 @@ export async function handleContractsList(env, req) {
   }
 
   // created_from / created_to (if present)
-  if (q('created_from')) filters.push(`created_at=gte.${enc(q('created_from'))}`);
-  if (q('created_to'))   filters.push(`created_at=lte.${enc(q('created_to'))}`);
+  if (q('created_from')) filters.push(`created_at=gte.${encQ(q('created_from'))}`);
+  if (q('created_to'))   filters.push(`created_at=lte.${encQ(q('created_to'))}`);
+
+  // ── NEW: status=active|completed|unassigned ─────────────────────────────────
+  const statusParam = (q('status') || '').toLowerCase();
+  const INCOMPLETE_STATUSES = ['OPEN','PLANNED','SUBMITTED','AUTHORISED']; // not fully processed/invoiced
+  if (statusParam === 'unassigned') {
+    filters.push('candidate_id=is.null');
+  } else if (statusParam === 'active' || statusParam === 'completed') {
+    // Strategy: fetch contract_ids that have at least one incomplete week,
+    // then apply id in/not in. This is robust and avoids tricky anti-joins.
+    // If the set is very large, we fall back to a join filter that won't 413.
+
+    const fetchActiveContractIds = async () => {
+      const limit = 1000;
+      let offset = 0;
+      const acc = new Set();
+      while (true) {
+        const cwApi =
+          `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+          `?select=contract_id` +
+          `&status=in.(${INCOMPLETE_STATUSES.map(encQ).join(',')})` +
+          `&contract_id=not.is.null` +
+          `&limit=${limit}&offset=${offset}`;
+        const { rows } = await sbFetch(env, cwApi);
+        (rows || []).forEach(r => { if (r && r.contract_id) acc.add(r.contract_id); });
+        if (!rows || rows.length < limit) break;
+        offset += limit;
+      }
+      return Array.from(acc);
+    };
+
+    const activeIds = await fetchActiveContractIds();
+
+    const safeJoinFallback = () => {
+      // Use inner join filter to ensure we don't blow URL length.
+      // To avoid duplicates we add an aggregate embedding (count).
+      selectParts.push('cw_active:contract_weeks!inner(count)');
+      const joined = `contract_weeks!inner.status=in.(${INCOMPLETE_STATUSES.map(encQ).join(',')})`;
+      filters.push(joined);
+    };
+
+    if (statusParam === 'active') {
+      if (activeIds.length === 0) {
+        // No active contracts – short-circuit
+        return withCORS(env, req, ok([]));
+      } else if (activeIds.length <= 300) {
+        filters.push(`id=in.(${activeIds.map(encQ).join(',')})`);
+      } else {
+        safeJoinFallback();
+      }
+    } else if (statusParam === 'completed') {
+      if (activeIds.length > 0 && activeIds.length <= 300) {
+        filters.push(`id=not.in.(${activeIds.map(encQ).join(',')})`);
+      } else if (activeIds.length === 0) {
+        // Everyone qualifies as "completed" (no contracts with incomplete weeks),
+        // so we add no additional filter.
+      } else {
+        // anti-join fallback: left join + is.null on alias that only links incomplete rows
+        // (works in PostgREST by aliasing the relation)
+        selectParts.push('cw_open:contract_weeks!left(count)');
+        filters.push(`cw_open:contract_weeks!left.status=in.(${INCOMPLETE_STATUSES.map(encQ).join(',')})`);
+        filters.push(`cw_open.id=is.null`);
+      }
+    }
+  }
+
+  // Re-apply select if we added aggregates
+  api = `${env.SUPABASE_URL}/rest/v1/contracts?select=${selectParts.join(',')}`;
 
   if (filters.length) api += `&${filters.join('&')}`;
   api += '&order=start_date.desc,created_at.desc';
 
-  // paging → limit/offset
-  const page     = Math.max(parseInt(q('page') || '1', 10) || 1, 1);
-  const pageSize = (q('page_size') === 'ALL') ? null : Math.max(parseInt(q('page_size') || '50', 10) || 50, 1);
+  // ── paging → limit/offset ──────────────────────────────────────────────────
+  const page     = Math.max(parseInt(url.searchParams.get('page') || '1', 10) || 1, 1);
+  const pageSize = (url.searchParams.get('page_size') === 'ALL') ? null :
+                    Math.max(parseInt(url.searchParams.get('page_size') || '50', 10) || 50, 1);
+
   if (pageSize != null) {
     const limit  = pageSize;
     const offset = (page - 1) * pageSize;
-    api += `&limit=${enc(limit)}&offset=${enc(offset)}`;
+    api += `&limit=${encQ(limit)}&offset=${encQ(offset)}`;
   }
 
   const { rows } = await sbFetch(env, api);
+
   // Flatten related names into top-level fields (keep nested for back-compat)
   const out = (rows || []).map(r => {
     const candidateDisplay =
       r?.candidate?.display_name ||
       ([r?.candidate?.first_name, r?.candidate?.last_name].filter(Boolean).join(' ') || null);
     const clientName = r?.client?.name || null;
+
+    // strip the aggregate artifacts if present
+    const { cw_active, cw_open, ...rest } = (r || {});
     return {
-      ...r,
+      ...rest,
       candidate_display: candidateDisplay,
       client_name: clientName
     };
@@ -1049,6 +1131,78 @@ export async function handleContractsList(env, req) {
 
   return withCORS(env, req, ok(out));
 }
+
+export async function handleUserGridPrefsGet(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const api = `${env.SUPABASE_URL}/rest/v1/tms_users?select=id,grid_prefs_json&id=eq.${enc(user.id)}&limit=1`;
+  const { rows } = await sbFetch(env, api);
+  const row = (rows && rows[0]) || null;
+  const prefs = (row && row.grid_prefs_json) || { grid: {} };
+
+  return withCORS(env, req, ok(prefs));
+}
+
+export async function handleUserGridPrefsPatch(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const body = await req.json().catch(() => ({}));
+  // Accept either:
+  //   { grid: { <section>: {...} } }
+  // or
+  //   { section: 'contracts', prefs: {...} }
+  const normalize = (existing, incoming) => {
+    const deepMerge = (a, b) => {
+      if (Array.isArray(a) && Array.isArray(b)) return b.slice(0);
+      if (a && typeof a === 'object' && b && typeof b === 'object') {
+        const out = { ...a };
+        for (const k of Object.keys(b)) {
+          const v = b[k];
+          if (v === undefined) continue;
+          // allow null to delete keys (for widths reset)
+          if (v === null) { delete out[k]; continue; }
+          out[k] = deepMerge(out[k], v);
+        }
+        return out;
+      }
+      return (b === undefined) ? a : b;
+    };
+
+    const result = { ...(existing || { grid: {} }) };
+    if (body && body.grid && typeof body.grid === 'object') {
+      result.grid = deepMerge(result.grid || {}, body.grid);
+      return result;
+    }
+    if (body && typeof body.section === 'string' && body.prefs && typeof body.prefs === 'object') {
+      result.grid = result.grid || {};
+      const sec = body.section;
+      result.grid[sec] = deepMerge(result.grid[sec] || {}, body.prefs);
+      return result;
+    }
+    return existing || { grid: {} };
+  };
+
+  // Load current
+  const getApi = `${env.SUPABASE_URL}/rest/v1/tms_users?select=id,grid_prefs_json&id=eq.${enc(user.id)}&limit=1`;
+  const { rows: rows0 } = await sbFetch(env, getApi);
+  const current = (rows0 && rows0[0] && rows0[0].grid_prefs_json) || { grid: {} };
+
+  const merged = normalize(current, body);
+
+  // Save
+  const patchApi = `${env.SUPABASE_URL}/rest/v1/tms_users?id=eq.${enc(user.id)}`;
+  const { rows } = await sbFetch(env, patchApi, {
+    method: 'PATCH',
+    headers: { 'Prefer': 'return=representation' },
+    body: JSON.stringify({ grid_prefs_json: merged })
+  });
+  const saved = (rows && rows[0] && rows[0].grid_prefs_json) || merged;
+
+  return withCORS(env, req, ok(saved));
+}
+
 
 // handleContractsGet — embed names and flatten convenience fields for FE
 // (joins via FK: contracts.candidate_id → candidates.id, contracts.client_id → clients.id)  :contentReference[oaicite:1]{index=1}
@@ -17339,6 +17493,14 @@ export default {
       // Me
       if (req.method === 'GET' && p === '/api/me') {
         return handleMe(env, req);
+      }
+
+      // User grid preferences (per-user summary column layout)
+      if (req.method === 'GET' && p === '/api/users/me/grid-prefs') {
+        return withCORS(env, req, await handleUserGridPrefsGet(env, req));
+      }
+      if (req.method === 'PATCH' && p === '/api/users/me/grid-prefs') {
+        return withCORS(env, req, await handleUserGridPrefsPatch(env, req));
       }
 
       // ====================== PUBLIC (mobile) WRITE FLOW ======================
