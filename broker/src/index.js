@@ -1096,9 +1096,14 @@ export async function handleContractsList(env, req) {
   // Sorting
   const orderByParam = (q('order_by') || '').toLowerCase();
   const orderDirParam = (q('order_dir') || '').toLowerCase();
+
   const sortMap = {
-    candidate_display:             'candidate.display_name',
-    client_name:                   'client.name',
+    // IMPORTANT: we cannot order the top-level resource by embedded values
+    // candidate.display_name / client.name with PostgREST directly.
+    // For now, approximate by candidate_id / client_id.
+    candidate_display:             'candidate_id',
+    client_name:                   'client_id',
+
     role:                          'role',
     band:                          'band',
     start_date:                    'start_date',
@@ -1115,6 +1120,7 @@ export async function handleContractsList(env, req) {
     mileage_pay_rate:              'mileage_pay_rate',
     mileage_charge_rate:           'mileage_charge_rate'
   };
+
   const defaultSortCol = 'start_date';
   const orderCol = sortMap[orderByParam] || defaultSortCol;
   const orderDir = (orderDirParam === 'asc' || orderDirParam === 'desc') ? orderDirParam : 'desc';
@@ -1270,7 +1276,14 @@ export async function handleContractsList(env, req) {
     api += `&limit=${encQ(limit)}&offset=${encQ(offset)}`;
   }
 
-  const { rows } = await sbFetch(env, api);
+  let rows = [];
+  try {
+    ({ rows } = await sbFetch(env, api));
+  } catch (err) {
+    // Ensure we always respond with CORS, even on Supabase error
+    console.error('[CONTRACTS] handleContractsList failed', err);
+    return withCORS(env, req, ok({ error: String(err?.message || err), rows: [] }));
+  }
 
   // Flatten related names into top-level fields (keep nested for back-compat)
   const out = (rows || []).map(r => {
