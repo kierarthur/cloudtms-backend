@@ -1136,6 +1136,20 @@ export async function handleContractsList(env, req) {
 
   const filters = [];
 
+  // ── ID / IDs filters (used by Focus & selection presets) ────────────────────
+  const idExpr = q('id');   // expects "in.(uuid,uuid,...)"
+  const idsRaw = q('ids');  // optional "uuid1,uuid2,..."
+
+  if (idExpr && /^in\.\(.+\)$/.test(idExpr.trim())) {
+    // Forward the expression as-is: "id=in.(uuid1,uuid2,...)"
+    filters.push(`id=${idExpr.trim()}`);
+  } else if (idsRaw) {
+    const ids = idsRaw.split(',').map(s => s.trim()).filter(Boolean);
+    if (ids.length) {
+      filters.push(`id=in.(${ids.map(encQ).join(',')})`);
+    }
+  }
+
   // ── Core filters ────────────────────────────────────────────────────────────
   if (q('candidate_id'))        filters.push(`candidate_id=eq.${encQ(q('candidate_id'))}`);
   if (q('client_id'))           filters.push(`client_id=eq.${encQ(q('client_id'))}`);
