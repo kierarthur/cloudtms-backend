@@ -18104,6 +18104,15 @@ if (req.method === 'GET' && p === '/api/pickers/clients/id-list')      return wi
       if (req.method === 'GET' && p === '/api/search/clients')               return handleSearchClients(env, req);
       if (req.method === 'GET' && p === '/api/search/umbrellas')             return handleSearchUmbrellas(env, req);
 
+      // ====================== REPORT PRESETS ======================
+      if (req.method === 'GET'  && p === '/api/report-presets')              return handleReportPresetsList(env, req);
+      if (req.method === 'POST' && p === '/api/report-presets')              return handleReportPresetsCreate(env, req);
+      {
+        const rp = matchPath(p, '/api/report-presets/:id');
+        if (rp && (req.method === 'PATCH' || req.method === 'PUT'))          return handleReportPresetsUpdate(env, req, rp.id);
+        if (rp && req.method === 'DELETE')                                   return handleReportPresetsDelete(env, req, rp.id);
+      }
+      
       // ====================== REPORTS (json/csv/print) ======================
       if (req.method === 'GET'  && p === '/api/reports/timesheets')          return handleReportTimesheets(env, req);
       if (req.method === 'GET'  && p === '/api/reports/invoices')            return handleReportInvoices(env, req);
