@@ -18580,11 +18580,14 @@ export default {
   const cc = matchPath(p, '/api/candidates/:id/calendar');
   if (cc && req.method === 'GET') return handleCandidateCalendar(env, req, cc.id);
 }
-      {
-        const cand = matchPath(p, '/api/candidates/:candidate_id');
-        if (cand && req.method === 'GET')                                   return handleCandidatesGet(env, req, cand.candidate_id); // base row for pickers
-        if (cand && req.method === 'PUT')                                   return handleUpdateCandidate(env, req, cand.candidate_id);
-      }
+ {
+  const cand = matchPath(p, '/api/candidates/:candidate_id');
+  if (cand && req.method === 'GET')                                   
+    return handleGetCandidate(env, req, cand.candidate_id); // full row + job_titles
+  if (cand && req.method === 'PUT')                                   
+    return handleUpdateCandidate(env, req, cand.candidate_id);
+}
+
 
       // Rates — client defaults
       if (req.method === 'GET'  && p === '/api/rates/client-defaults')      return handleListClientRates(env, req);
