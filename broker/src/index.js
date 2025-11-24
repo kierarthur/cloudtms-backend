@@ -10618,6 +10618,479 @@ export async function handleListCandidates(env, req) {
 }
 
 
+// ======================= NEW: Job titles list ==========================
+export async function handleListJobTitles(env, req) {
+  const user = await requireUser(env, req);
+  if (!user) return unauthorized(); // you could optionally wrap this with withCORS if you want
+
+  const url = new URL(req.url);
+  const search = (url.searchParams.get('search') || url.searchParams.get('q') || '').trim();
+  const activeOnly = (url.searchParams.get('activeOnly') ?? 'true').toLowerCase() !== 'false';
+
+  let qs = 'select=*';
+
+  if (activeOnly) {
+    qs += '&active=eq.true';
+  }
+
+  if (search) {
+    const safe = search.replace(/\s+/g, ' ').trim();
+    const pattern = `*${safe}*`;
+    qs += `&label=ilike.${encodeURIComponent(pattern)}`;
+  }
+
+  // Optional: sort by depth then label
+  qs += '&order=depth.asc&order=label.asc';
+
+  const base = `${env.SUPABASE_URL}/rest/v1/default_job_titles`;
+  const urlStr = `${base}?${qs}`;
+
+  try {
+    const { rows } = await sbFetch(env, urlStr);
+    return withCORS(env, req, ok({ items: rows || [] }));
+  } catch (err) {
+    console.error('handleListJobTitles failed', err);
+    return withCORS(env, req, serverError('job_titles_list_failed'));
+  }
+}
+// ======================= NEW: Job title create ==========================
+export async function handleCreateJobTitle(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return unauthorized();
+
+  const body = await parseJSONBody(req).catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const rawLabel = (body.label || '').trim();
+  if (!rawLabel) {
+    return withCORS(env, req, badRequest('Label is required'));
+  }
+
+  const parentId = body.parent_id || null;
+  const isRole = !!body.is_role;
+
+  let requiresProfReg = !!body.requires_prof_reg;
+  let profRegType = body.prof_reg_type || null;
+
+  const allowedRegTypes = ['NMC', 'GMC', 'HCPC'];
+
+  if (!isRole) {
+    // Groups/categories can never require registration
+    requiresProfReg = false;
+    profRegType = null;
+  } else {
+    if (requiresProfReg) {
+      const t = String(profRegType || '').toUpperCase();
+      if (!allowedRegTypes.includes(t)) {
+        return withCORS(env, req, badRequest('Invalid professional registration type'));
+      }
+      profRegType = t;
+    } else {
+      profRegType = null;
+    }
+  }
+
+  // Compute depth from parent if provided
+  let depth = 0;
+  if (parentId) {
+    try {
+      const parentUrl =
+        `${env.SUPABASE_URL}/rest/v1/default_job_titles` +
+        `?select=depth&id=eq.${enc(parentId)}&limit=1`;
+      const { rows: parents } = await sbFetch(env, parentUrl);
+      const parent = (parents && parents[0]) || null;
+      if (!parent) {
+        return withCORS(env, req, badRequest('Parent job title not found'));
+      }
+      depth = (Number(parent.depth) || 0) + 1;
+    } catch (e) {
+      console.error('handleCreateJobTitle parent lookup failed', e);
+      return withCORS(env, req, serverError('job_title_parent_lookup_failed'));
+    }
+  }
+
+  const insertRow = {
+    label: rawLabel,
+    parent_id: parentId,
+    depth,
+    is_role: isRole,
+    requires_prof_reg: requiresProfReg,
+    prof_reg_type: profRegType,
+    active: body.active === false ? false : true,
+    updated_at: new Date().toISOString()
+  };
+
+  const urlStr = `${env.SUPABASE_URL}/rest/v1/default_job_titles`;
+
+  try {
+    const { rows } = await sbFetch(env, urlStr, {
+      method: 'POST',
+      headers: {
+        Prefer: 'return=representation'
+      },
+      body: JSON.stringify(insertRow)
+    });
+
+    const created = (rows && rows[0]) || null;
+    if (!created) {
+      return withCORS(env, req, serverError('job_title_create_failed'));
+    }
+
+    return withCORS(env, req, ok({ item: created }, 201));
+  } catch (err) {
+    console.error('handleCreateJobTitle failed', err);
+    return withCORS(env, req, serverError('job_title_create_failed'));
+  }
+}
+
+
+// ======================= NEW: Job title update ==========================
+export async function handleUpdateJobTitle(env, req, jobTitleId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return unauthorized();
+
+  if (!jobTitleId) {
+    return withCORS(env, req, badRequest('Missing job title id'));
+  }
+
+  const body = await parseJSONBody(req).catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  // Load existing row so we can reason about is_role / reg settings / depth
+  let existing;
+  try {
+    const existingUrl =
+      `${env.SUPABASE_URL}/rest/v1/default_job_titles` +
+      `?select=id,label,parent_id,depth,is_role,requires_prof_reg,prof_reg_type,active` +
+      `&id=eq.${enc(jobTitleId)}&limit=1`;
+    const { rows } = await sbFetch(env, existingUrl);
+    existing = (rows && rows[0]) || null;
+    if (!existing) {
+      return withCORS(env, req, notFound());
+    }
+  } catch (e) {
+    console.error('handleUpdateJobTitle existing lookup failed', e);
+    return withCORS(env, req, serverError('job_title_existing_lookup_failed'));
+  }
+
+  const patch = {};
+  let newParentId = undefined;
+
+  if (body.label != null) {
+    const rawLabel = String(body.label || '').trim();
+    if (!rawLabel) {
+      return withCORS(env, req, badRequest('Label cannot be empty'));
+    }
+    patch.label = rawLabel;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'parent_id')) {
+    newParentId = body.parent_id || null;
+    if (newParentId === jobTitleId) {
+      return withCORS(env, req, badRequest('parent_id cannot be the same as id'));
+    }
+    patch.parent_id = newParentId;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'is_role')) {
+    patch.is_role = !!body.is_role;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'requires_prof_reg')) {
+    patch.requires_prof_reg = !!body.requires_prof_reg;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'prof_reg_type')) {
+    if (body.prof_reg_type == null || body.prof_reg_type === '') {
+      patch.prof_reg_type = null;
+    } else {
+      const allowed = ['NMC', 'GMC', 'HCPC'];
+      const t = String(body.prof_reg_type).toUpperCase();
+      if (!allowed.includes(t)) {
+        return withCORS(env, req, badRequest('Invalid professional registration type'));
+      }
+      patch.prof_reg_type = t;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'active')) {
+    patch.active = !!body.active;
+  }
+
+  // If parent changed, recompute depth
+  if (newParentId !== undefined) {
+    let depth = 0;
+    if (newParentId) {
+      try {
+        const parentUrl =
+          `${env.SUPABASE_URL}/rest/v1/default_job_titles` +
+          `?select=depth&id=eq.${enc(newParentId)}&limit=1`;
+        const { rows: parents } = await sbFetch(env, parentUrl);
+        const parent = (parents && parents[0]) || null;
+        if (!parent) {
+          return withCORS(env, req, badRequest('Parent job title not found'));
+        }
+        depth = (Number(parent.depth) || 0) + 1;
+      } catch (e) {
+        console.error('handleUpdateJobTitle parent lookup failed', e);
+        return withCORS(env, req, serverError('job_title_parent_lookup_failed'));
+      }
+    }
+    patch.depth = depth;
+  }
+
+  // Enforce group vs role rules for registration
+  const finalIsRole =
+    Object.prototype.hasOwnProperty.call(patch, 'is_role') ? !!patch.is_role : !!existing.is_role;
+
+  const finalRequiresProf =
+    Object.prototype.hasOwnProperty.call(patch, 'requires_prof_reg')
+      ? !!patch.requires_prof_reg
+      : !!existing.requires_prof_reg;
+
+  const finalProfType =
+    Object.prototype.hasOwnProperty.call(patch, 'prof_reg_type') && patch.prof_reg_type !== undefined
+      ? patch.prof_reg_type
+      : existing.prof_reg_type;
+
+  if (!finalIsRole) {
+    // Groups/categories cannot have registration requirements
+    patch.requires_prof_reg = false;
+    patch.prof_reg_type = null;
+  } else if (finalRequiresProf && !finalProfType) {
+    return withCORS(env, req, badRequest('Professional registration type required when registration is required'));
+  }
+
+  patch.updated_at = new Date().toISOString();
+
+  const urlStr =
+    `${env.SUPABASE_URL}/rest/v1/default_job_titles` +
+    `?id=eq.${enc(jobTitleId)}&select=*`;
+
+  try {
+    const { rows } = await sbFetch(env, urlStr, {
+      method: 'PATCH',
+      headers: {
+        Prefer: 'return=representation'
+      },
+      body: JSON.stringify(patch)
+    });
+
+    const updated = (rows && rows[0]) || null;
+    if (!updated) {
+      return withCORS(env, req, notFound());
+    }
+
+    return withCORS(env, req, ok({ item: updated }));
+  } catch (err) {
+    console.error('handleUpdateJobTitle failed', err);
+    return withCORS(env, req, serverError('job_title_update_failed'));
+  }
+}
+
+// ======================= NEW: Job title delete ==========================
+export async function handleDeleteJobTitle(env, req, jobTitleId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return unauthorized();
+
+  if (!jobTitleId) {
+    return withCORS(env, req, badRequest('Missing job title id'));
+  }
+
+  try {
+    // 1) Check for children
+    const childUrl =
+      `${env.SUPABASE_URL}/rest/v1/default_job_titles` +
+      `?select=id&parent_id=eq.${enc(jobTitleId)}&limit=1`;
+    const { rows: children } = await sbFetch(env, childUrl);
+    if (children && children.length > 0) {
+      return withCORS(
+        env,
+        req,
+        badRequest('Cannot delete: this job title has child nodes. Re-parent or delete children first.')
+      );
+    }
+
+    // 2) Check for candidate references
+    const candUrl =
+      `${env.SUPABASE_URL}/rest/v1/candidates` +
+      `?select=id&job_title_id=eq.${enc(jobTitleId)}&limit=1`;
+    const { rows: cands } = await sbFetch(env, candUrl);
+    const inUse = cands && cands.length > 0;
+
+    if (inUse) {
+      // Soft delete: mark inactive instead of deleting
+      const softUrl =
+        `${env.SUPABASE_URL}/rest/v1/default_job_titles` +
+        `?id=eq.${enc(jobTitleId)}&select=*`;
+      const { rows: updated } = await sbFetch(env, softUrl, {
+        method: 'PATCH',
+        headers: { Prefer: 'return=representation' },
+        body: JSON.stringify({ active: false, updated_at: new Date().toISOString() })
+      });
+      const row = (updated && updated[0]) || null;
+      if (!row) {
+        return withCORS(env, req, serverError('job_title_soft_delete_failed'));
+      }
+      return withCORS(env, req, ok({ softDeleted: true, item: row }));
+    }
+
+    // 3) Hard delete
+    const delUrl =
+      `${env.SUPABASE_URL}/rest/v1/default_job_titles` +
+      `?id=eq.${enc(jobTitleId)}`;
+    const { raw } = await sbFetch(env, delUrl, {
+      method: 'DELETE',
+      headers: { Prefer: 'return=minimal' }
+    });
+
+    if (!raw.ok && raw.status !== 204) {
+      console.error('job_title hard delete non-OK', raw.status);
+      return withCORS(env, req, serverError('job_title_delete_failed'));
+    }
+
+    return withCORS(env, req, ok({ deleted: true }));
+  } catch (err) {
+    console.error('handleDeleteJobTitle failed', err);
+    return withCORS(env, req, serverError('job_title_delete_failed'));
+  }
+}
+
+// ======================= NEW: Postcode lookup (EasyPostcodes) ==========================
+export async function handlePostcodeLookup(env, req) {
+  const user = await requireUser(env, req);
+  if (!user) return unauthorized();
+
+  const url = new URL(req.url);
+  const rawPostcode = (url.searchParams.get('postcode') || '').trim();
+  const rawHouse = (url.searchParams.get('house') || '').trim();
+
+  if (!rawPostcode) {
+    return withCORS(env, req, badRequest('postcode is required'));
+  }
+
+  const apiKey = env.EASYPOSTCODES_API_KEY;
+  if (!apiKey) {
+    console.error('EASYPOSTCODES_API_KEY missing in env');
+    return withCORS(env, req, serverError('postcode_lookup_not_configured'));
+  }
+
+  // Normalise postcode by stripping extra spaces
+  const cleanedPostcode = rawPostcode.replace(/\s+/g, '');
+  const epUrl = `https://api.easypostcodes.com/addresses/${encodeURIComponent(
+    cleanedPostcode
+  )}?includeGeo=false`;
+
+  let resp;
+  try {
+    resp = await fetch(epUrl, {
+      method: 'GET',
+      headers: {
+        Key: apiKey
+      }
+    });
+  } catch (err) {
+    console.error('EasyPostcodes network error', err);
+    return withCORS(env, req, serverError('postcode_lookup_failed'));
+  }
+
+  if (!resp.ok) {
+    console.error('EasyPostcodes non-OK', resp.status);
+    return withCORS(env, req, serverError('postcode_lookup_failed'));
+  }
+
+  let raw;
+  try {
+    raw = await resp.json();
+  } catch (err) {
+    console.error('EasyPostcodes JSON parse error', err);
+    return withCORS(env, req, serverError('postcode_lookup_failed'));
+  }
+
+  if (!Array.isArray(raw)) {
+    return withCORS(env, req, ok({ addresses: [] }));
+  }
+
+  // Optional filter by house number / name
+  let candidates = raw;
+  const house = rawHouse.trim();
+  if (house) {
+    const needle = house.replace(/\s+/g, '').toLowerCase();
+
+    const filtered = raw.filter((a) => {
+      const bn = String(a.buildingNumber || '')
+        .replace(/\s+/g, '')
+        .toLowerCase();
+      const sub = String(a.subBuildingName || '').toLowerCase();
+      const addr1 = String(a.envelopeAddress?.addressLine1 || '').toLowerCase();
+
+      if (bn && bn === needle) return true;
+      if (addr1 && addr1.includes(needle)) return true;
+      if (sub && sub.includes(needle)) return true;
+      return false;
+    });
+
+    if (filtered.length > 0) {
+      candidates = filtered;
+    }
+  }
+
+  const mapped = candidates.map((a, idx) => {
+    const envAddr = a.envelopeAddress || {};
+
+    const line1 =
+      envAddr.addressLine1 ||
+      [a.subBuildingName, a.buildingNumber, a.thoroughfareAndDescriptor]
+        .filter(Boolean)
+        .join(' ')
+        .trim();
+
+    const line2 =
+      envAddr.addressLine2 ||
+      a.dependentLocality ||
+      a.doubleDependentLocality ||
+      '';
+
+    const city = envAddr.town || a.postTown || '';
+    const postcode = envAddr.postCode || a.postCode || rawPostcode;
+
+    return {
+      id: envAddr.summaryLine || `${idx}:${postcode}`,
+      line1,
+      line2,
+      line3: '',
+      city,
+      postcode
+    };
+  });
+
+  return withCORS(env, req, ok({ addresses: mapped }));
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // ================== BROKER: handleCreateCandidate (UPDATED to strip CCR fields) ==================
 export async function handleCreateCandidate(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -17893,6 +18366,20 @@ export default {
       if (req.method === 'GET' && p === '/api/settings/defaults')           return handleGetSettings(env, req);
       if (req.method === 'PUT' && p === '/api/settings/defaults')           return handleUpdateSettings(env, req);
 
+
+      // Job Titles (families / subfamilies / roles)
+      if (req.method === 'GET'  && p === '/api/job-titles')                 return handleListJobTitles(env, req);
+      if (req.method === 'POST' && p === '/api/job-titles')                 return handleCreateJobTitle(env, req);
+      {
+        const jt = matchPath(p, '/api/job-titles/:id');
+        if (jt && req.method === 'PATCH')                                   return handleUpdateJobTitle(env, req, jt.id);
+        if (jt && req.method === 'DELETE')                                  return handleDeleteJobTitle(env, req, jt.id);
+      }
+
+      // Tools
+      if (req.method === 'GET'  && p === '/api/tools/postcode-lookup')      return handlePostcodeLookup(env, req);
+
+
       // Clients
       if (req.method === 'GET' && p === '/api/clients')                     return handleListClients(env, req);
       if (req.method === 'POST' && p === '/api/clients')                    return handleCreateClient(env, req);
@@ -18112,7 +18599,7 @@ if (req.method === 'GET' && p === '/api/pickers/clients/id-list')      return wi
         if (rp && (req.method === 'PATCH' || req.method === 'PUT'))          return handleReportPresetsUpdate(env, req, rp.id);
         if (rp && req.method === 'DELETE')                                   return handleReportPresetsDelete(env, req, rp.id);
       }
-      
+
       // ====================== REPORTS (json/csv/print) ======================
       if (req.method === 'GET'  && p === '/api/reports/timesheets')          return handleReportTimesheets(env, req);
       if (req.method === 'GET'  && p === '/api/reports/invoices')            return handleReportInvoices(env, req);
