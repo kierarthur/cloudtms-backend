@@ -10468,14 +10468,14 @@ export async function handleSearchCandidates(env, req) {
   const orderDir = (orderDirParam === 'desc') ? 'desc' : 'asc';
 
   // Named filters
-  const firstName   = q('first_name');
-  const lastName    = q('last_name');
-  const email       = q('email');
-  const phone       = q('phone');
-  const payMethod   = q('pay_method') ? q('pay_method').toUpperCase() : null;
-  const active      = q('active');
-  const createdFrom = q('created_from');
-  const createdTo   = q('created_to');
+  const firstName        = q('first_name');
+  const lastName         = q('last_name');
+  const email            = q('email');
+  const phone            = q('phone');
+  const payMethod        = q('pay_method') ? q('pay_method').toUpperCase() : null;
+  const active           = q('active');
+  const createdFrom      = q('created_from');
+  const createdTo        = q('created_to');
   const jobTitleContains = q('job_title_contains');
 
   // roles_any / roles_all
@@ -10483,8 +10483,8 @@ export async function handleSearchCandidates(env, req) {
   let rolesAll = qa('roles_all').filter(Boolean).map(s => s.trim()).filter(Boolean);
 
   // explicit-IDs support (either id=in.(...) or ids=uuid1,uuid2,...)
-  const idInExpr = q('id');              // raw 'in.(...)'
-  const idsRaw   = q('ids');             // friendly csv
+  const idInExpr = q('id');   // raw 'in.(...)'
+  const idsRaw   = q('ids');  // friendly csv
   let idFilterExpr = null;
   if (idInExpr && /^in\.\(.+\)$/.test(idInExpr)) {
     idFilterExpr = idInExpr;
@@ -10500,10 +10500,10 @@ export async function handleSearchCandidates(env, req) {
   rolesAny = Array.from(new Set(rolesAny.map(s => s.toUpperCase())));
   rolesAll = Array.from(new Set(rolesAll.map(s => s.toUpperCase())));
 
-  // NOTE: this assumes you have a view `candidates_summary` with job_titles_display
+  // Use the summary view and return the FULL row to keep grid prefs happy
   let url =
     `${env.SUPABASE_URL}/rest/v1/candidates_summary` +
-    `?select=id,display_name,first_name,last_name,email,phone,pay_method,active,created_at,job_titles_display:role` +
+    `?select=*` +
     `&order=${enc(orderCol)}.${orderDir}` +
     `&limit=${pageSize}&offset=${(page - 1) * pageSize}`;
 
@@ -10513,11 +10513,11 @@ export async function handleSearchCandidates(env, req) {
     url += `&or=(display_name.ilike.*${esc}*,email.ilike.*${esc}*,job_titles_display.ilike.*${esc}*)`;
   }
 
-  if (firstName)  url += `&first_name=ilike.*${enc(firstName)}*`;
-  if (lastName)   url += `&last_name=ilike.*${enc(lastName)}*`;
-  if (email)      url += `&email=ilike.*${enc(email)}*`;
-  if (phone)      url += `&phone=ilike.*${enc(phone)}*`;
-  if (payMethod)  url += `&pay_method=eq.${enc(payMethod)}`;
+  if (firstName)   url += `&first_name=ilike.*${enc(firstName)}*`;
+  if (lastName)    url += `&last_name=ilike.*${enc(lastName)}*`;
+  if (email)       url += `&email=ilike.*${enc(email)}*`;
+  if (phone)       url += `&phone=ilike.*${enc(phone)}*`;
+  if (payMethod)   url += `&pay_method=eq.${enc(payMethod)}`;
   if (active === 'true')  url += `&active=eq.true`;
   if (active === 'false') url += `&active=eq.false`;
   if (createdFrom) url += `&created_at=gte.${enc(createdFrom)}`;
@@ -10538,7 +10538,7 @@ export async function handleSearchCandidates(env, req) {
     }
   }
 
-  // roles_any (OR)
+  // roles_any (OR) – note: this will overwrite the free-text or-clause if both are used
   if (rolesAny.length) {
     const parts = rolesAny.map(code => {
       const val = enc(JSON.stringify([{ code }]));
@@ -10551,13 +10551,34 @@ export async function handleSearchCandidates(env, req) {
   try {
     ({ rows } = await sbFetch(env, url));
   } catch (err) {
-    return withCORS(env, req, ok({ error: String(err?.message || err), rows: [], page, page_size: pageSize, count: 0 }));
+    return withCORS(env, req, ok({
+      error: String(err?.message || err),
+      rows: [],
+      page,
+      page_size: pageSize,
+      count: 0
+    }));
   }
 
   if (format === 'csv') {
-    const header = ['CandidateId','DisplayName','Email','Phone','PayMethod','Active','CreatedAt','Role'];
+    // Keep rota role and job titles separate in CSV
+    const header = [
+      'CandidateId',
+      'DisplayName',
+      'Email',
+      'Phone',
+      'PayMethod',
+      'Active',
+      'CreatedAt',
+      'RotaRoles',
+      'JobTitles'
+    ];
     const out = [csvJoin(header)];
     for (const r of rows || []) {
+      const rotaRoles = Array.isArray(r.roles) ? formatRolesSummary(r.roles) : '';
+      const jobTitles = (typeof r.job_titles_display === 'string' && r.job_titles_display.trim())
+        ? r.job_titles_display.trim()
+        : '';
       out.push(csvJoin([
         r.id,
         r.display_name || [r.first_name, r.last_name].filter(Boolean).join(' '),
@@ -10566,10 +10587,16 @@ export async function handleSearchCandidates(env, req) {
         (r.pay_method || '').toUpperCase(),
         r.active ? 'Y' : 'N',
         r.created_at || '',
-        r.role || ''
+        rotaRoles,
+        jobTitles
       ]));
     }
-    return withCORS(env, req, ok({ csv: out.join('\n'), count: rows?.length || 0, page, page_size: pageSize }));
+    return withCORS(env, req, ok({
+      csv: out.join('\n'),
+      count: rows?.length || 0,
+      page,
+      page_size: pageSize
+    }));
   }
 
   if (format === 'print') {
@@ -10592,10 +10619,20 @@ export async function handleSearchCandidates(env, req) {
           <tbody>${rowsHtml}</tbody>
         </table>
       </div>`;
-    return withCORS(env, req, ok({ html, count: rows?.length || 0, page, page_size: pageSize }));
+    return withCORS(env, req, ok({
+      html,
+      count: rows?.length || 0,
+      page,
+      page_size: pageSize
+    }));
   }
 
-  return withCORS(env, req, ok({ rows, page, page_size: pageSize, count: rows?.length || 0 }));
+  return withCORS(env, req, ok({
+    rows,
+    page,
+    page_size: pageSize,
+    count: rows?.length || 0
+  }));
 }
 
 
