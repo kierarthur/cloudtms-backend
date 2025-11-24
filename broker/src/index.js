@@ -134,6 +134,7 @@ const DEFAULT_GRID_PREFS = {
         pay_method: "Pay Type",
         updated_at: "Last Updated",
         display_name: "Display Name",
+        job_titles_display: "Job Titles",
         account_holder: "Account Holder",
         account_number: "Account number",
         mileage_pay_rate: "Mileage Pay Rate"
@@ -141,9 +142,9 @@ const DEFAULT_GRID_PREFS = {
       columns: {
         role:             { order: 4,  width: 110, visible: true  },
         email:            { order: 5,  width: 252, visible: true  },
-        notes:            { order: 12,             visible: false },
+        notes:            { order: 16,             visible: false },
         phone:            { order: 6,  width: 121, visible: true  },
-        roles:            { order: 11,             visible: false },
+        roles:            { order: 15,             visible: false },
         active:           { order: 8,  width: 80,  visible: true  },
         tms_ref:          { order: 0,  width: 116, visible: true  },
         postcode:         { order: 3,              visible: false },
@@ -154,6 +155,7 @@ const DEFAULT_GRID_PREFS = {
         pay_method:       { order: 7,  width: 121, visible: true  },
         updated_at:       { order: 10,            visible: true  },
         display_name:     { order: 1,  width: 150, visible: true  },
+        job_titles_display: { order: 14, width: 150, visible: true }, // pick order/width that fits your layout
         account_holder:   { order: 11,            visible: false },
         account_number:   { order: 13,            visible: false },
         mileage_pay_rate: { order: 12,            visible: false }
@@ -10474,6 +10476,7 @@ export async function handleSearchCandidates(env, req) {
   const active      = q('active');
   const createdFrom = q('created_from');
   const createdTo   = q('created_to');
+  const jobTitleContains = q('job_title_contains');
 
   // roles_any / roles_all
   let rolesAny = qa('roles_any').filter(Boolean).map(s => s.trim()).filter(Boolean);
@@ -10497,13 +10500,19 @@ export async function handleSearchCandidates(env, req) {
   rolesAny = Array.from(new Set(rolesAny.map(s => s.toUpperCase())));
   rolesAll = Array.from(new Set(rolesAll.map(s => s.toUpperCase())));
 
+  // NOTE: this assumes you have a view `candidates_summary` with job_titles_display
   let url =
-    `${env.SUPABASE_URL}/rest/v1/candidates` +
-    `?select=id,display_name,first_name,last_name,email,phone,pay_method,active,created_at` +
+    `${env.SUPABASE_URL}/rest/v1/candidates_summary` +
+    `?select=id,display_name,first_name,last_name,email,phone,pay_method,active,created_at,job_titles_display:role` +
     `&order=${enc(orderCol)}.${orderDir}` +
     `&limit=${pageSize}&offset=${(page - 1) * pageSize}`;
 
-  if (text)       url += `&display_name=ilike.*${enc(text)}*`;
+  // Free-text: search name, email, and job titles
+  if (text) {
+    const esc = enc(text);
+    url += `&or=(display_name.ilike.*${esc}*,email.ilike.*${esc}*,job_titles_display.ilike.*${esc}*)`;
+  }
+
   if (firstName)  url += `&first_name=ilike.*${enc(firstName)}*`;
   if (lastName)   url += `&last_name=ilike.*${enc(lastName)}*`;
   if (email)      url += `&email=ilike.*${enc(email)}*`;
@@ -10514,10 +10523,14 @@ export async function handleSearchCandidates(env, req) {
   if (createdFrom) url += `&created_at=gte.${enc(createdFrom)}`;
   if (createdTo)   url += `&created_at=lte.${enc(createdTo)}`;
 
+  if (jobTitleContains) {
+    url += `&job_titles_display=ilike.*${enc(jobTitleContains)}*`;
+  }
+
   // apply explicit IDs if present
   if (idFilterExpr) url += `&id=${enc(idFilterExpr)}`;
 
-  // roles_all (AND)
+  // roles_all (AND) – requires that the view exposes a roles JSON column
   if (rolesAll.length) {
     for (const code of rolesAll) {
       const val = JSON.stringify([{ code }]);
@@ -10542,7 +10555,7 @@ export async function handleSearchCandidates(env, req) {
   }
 
   if (format === 'csv') {
-    const header = ['CandidateId','DisplayName','Email','Phone','PayMethod','Active','CreatedAt'];
+    const header = ['CandidateId','DisplayName','Email','Phone','PayMethod','Active','CreatedAt','Role'];
     const out = [csvJoin(header)];
     for (const r of rows || []) {
       out.push(csvJoin([
@@ -10552,7 +10565,8 @@ export async function handleSearchCandidates(env, req) {
         r.phone || '',
         (r.pay_method || '').toUpperCase(),
         r.active ? 'Y' : 'N',
-        r.created_at || ''
+        r.created_at || '',
+        r.role || ''
       ]));
     }
     return withCORS(env, req, ok({ csv: out.join('\n'), count: rows?.length || 0, page, page_size: pageSize }));
@@ -10583,6 +10597,7 @@ export async function handleSearchCandidates(env, req) {
 
   return withCORS(env, req, ok({ rows, page, page_size: pageSize, count: rows?.length || 0 }));
 }
+
 
 export async function handleListCandidates(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -10865,6 +10880,28 @@ export async function handleUpdateJobTitle(env, req, jobTitleId) {
     return withCORS(env, req, badRequest('Professional registration type required when registration is required'));
   }
 
+  // Block Role → Group change when in use
+  const isRoleToGroup = !!existing.is_role && !finalIsRole;
+  if (isRoleToGroup) {
+    try {
+      const usageUrl =
+        `${env.SUPABASE_URL}/rest/v1/candidate_job_titles` +
+        `?select=candidate_id&job_title_id=eq.${enc(jobTitleId)}&limit=200`;
+      const { rows: used } = await sbFetch(env, usageUrl);
+      const candidateIds = Array.from(new Set((used || []).map(r => r.candidate_id).filter(Boolean)));
+      if (candidateIds.length) {
+        return withCORS(env, req, ok({
+          error: 'JOB_TITLE_IN_USE',
+          message: `This role is assigned to ${candidateIds.length} candidates.`,
+          candidate_ids: candidateIds
+        }));
+      }
+    } catch (e) {
+      console.error('handleUpdateJobTitle usage check failed', e);
+      // fall through – if the check fails, we still try to apply patch, but log it
+    }
+  }
+
   patch.updated_at = new Date().toISOString();
 
   const urlStr =
@@ -10915,31 +10952,22 @@ export async function handleDeleteJobTitle(env, req, jobTitleId) {
       );
     }
 
-    // 2) Check for candidate references
-    const candUrl =
-      `${env.SUPABASE_URL}/rest/v1/candidates` +
-      `?select=id&job_title_id=eq.${enc(jobTitleId)}&limit=1`;
-    const { rows: cands } = await sbFetch(env, candUrl);
-    const inUse = cands && cands.length > 0;
-
-    if (inUse) {
-      // Soft delete: mark inactive instead of deleting
-      const softUrl =
-        `${env.SUPABASE_URL}/rest/v1/default_job_titles` +
-        `?id=eq.${enc(jobTitleId)}&select=*`;
-      const { rows: updated } = await sbFetch(env, softUrl, {
-        method: 'PATCH',
-        headers: { Prefer: 'return=representation' },
-        body: JSON.stringify({ active: false, updated_at: new Date().toISOString() })
-      });
-      const row = (updated && updated[0]) || null;
-      if (!row) {
-        return withCORS(env, req, serverError('job_title_soft_delete_failed'));
-      }
-      return withCORS(env, req, ok({ softDeleted: true, item: row }));
+    // 2) Check for candidate references via candidate_job_titles
+    const usageUrl =
+      `${env.SUPABASE_URL}/rest/v1/candidate_job_titles` +
+      `?select=candidate_id&job_title_id=eq.${enc(jobTitleId)}&limit=200`;
+    const { rows: used } = await sbFetch(env, usageUrl);
+    const candidateIds = Array.from(new Set((used || []).map(r => r.candidate_id).filter(Boolean)));
+    if (candidateIds.length) {
+      // Do not delete; surface a structured "in use" error envelope
+      return withCORS(env, req, ok({
+        error: 'JOB_TITLE_IN_USE',
+        message: `This role is assigned to ${candidateIds.length} candidates.`,
+        candidate_ids: candidateIds
+      }));
     }
 
-    // 3) Hard delete
+    // 3) Hard delete (no usage)
     const delUrl =
       `${env.SUPABASE_URL}/rest/v1/default_job_titles` +
       `?id=eq.${enc(jobTitleId)}`;
@@ -10959,6 +10987,7 @@ export async function handleDeleteJobTitle(env, req, jobTitleId) {
     return withCORS(env, req, serverError('job_title_delete_failed'));
   }
 }
+
 
 // ======================= NEW: Postcode lookup (EasyPostcodes) ==========================
 export async function handlePostcodeLookup(env, req) {
