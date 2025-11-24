@@ -11100,13 +11100,25 @@ export async function handleCreateCandidate(env, req) {
   if (!dataRaw) return withCORS(env, req, badRequest("Invalid JSON"));
 
   // Strip any accidental CCR fields (immutable/minted by DB)
-  const { tms_ref, ccr_num, ...data } = dataRaw;
+  const { tms_ref, ccr_num, job_titles, ...data } = dataRaw;
+
+  // Normalise job_titles array -> list of UUID strings
+  const jtArray = Array.isArray(job_titles)
+    ? job_titles.map((x) => String(x)).filter(Boolean)
+    : [];
+
+  const primaryJobTitleId = jtArray[0] || null;
 
   try {
+    // Insert candidate; set job_title_id to primary (or null)
     const res = await fetch(`${env.SUPABASE_URL}/rest/v1/candidates`, {
       method: "POST",
       headers: { ...sbHeaders(env), "Prefer": "return=representation" },
-      body: JSON.stringify({ ...data, created_at: new Date().toISOString() })
+      body: JSON.stringify({
+        ...data,
+        job_title_id: primaryJobTitleId,
+        created_at: new Date().toISOString()
+      })
     });
     if (!res.ok) {
       const err = await res.text();
@@ -11114,8 +11126,35 @@ export async function handleCreateCandidate(env, req) {
     }
     const json = await res.json().catch(() => ({}));
     const candidate = Array.isArray(json) ? json[0] : json;
+    const candidateId = candidate?.id;
+
+    // Insert candidate_job_titles join rows if provided
+    if (candidateId && jtArray.length) {
+      const nowIso = new Date().toISOString();
+      const rows = jtArray.map((jobTitleId, idx) => ({
+        candidate_id: candidateId,
+        job_title_id: jobTitleId,
+        is_primary: idx === 0,
+        created_at: nowIso,
+        updated_at: nowIso
+      }));
+
+      const jtRes = await fetch(`${env.SUPABASE_URL}/rest/v1/candidate_job_titles`, {
+        method: "POST",
+        headers: { ...sbHeaders(env), "Prefer": "resolution=ignore-duplicates" },
+        body: JSON.stringify(rows)
+      });
+
+      if (!jtRes.ok) {
+        const err = await jtRes.text().catch(() => 'insert candidate_job_titles failed');
+        console.error('candidate_job_titles insert failed', err);
+        // We still return candidate; you can tighten this later if needed
+      }
+    }
+
     return withCORS(env, req, ok({ candidate }));
-  } catch {
+  } catch (e) {
+    console.error('handleCreateCandidate failed', e);
     return withCORS(env, req, serverError("Failed to create candidate"));
   }
 }
@@ -11133,6 +11172,21 @@ export async function handleGetCandidate(env, req, candidateId) {
     if (!rows.length) return withCORS(env, req, notFound("Candidate not found"));
     const candidate = rows[0];
 
+    // Fetch joined job titles for this candidate
+    let job_titles = [];
+    try {
+      const { rows: jtRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/candidate_job_titles` +
+          `?candidate_id=eq.${encodeURIComponent(candidateId)}` +
+          `&select=job_title_id,is_primary`
+      );
+      job_titles = Array.isArray(jtRows) ? jtRows : [];
+    } catch (e) {
+      console.error('handleGetCandidate: candidate_job_titles lookup failed', e);
+      job_titles = [];
+    }
+
     // If umbrella, fetch umbrella minimal fields
     let umbrella = undefined;
     if (candidate.pay_method === 'UMBRELLA' && candidate.umbrella_id) {
@@ -11149,12 +11203,12 @@ export async function handleGetCandidate(env, req, candidateId) {
       umbrella
     });
 
-    return withCORS(env, req, ok({ candidate, effective_pay_channel }));
-  } catch {
+    return withCORS(env, req, ok({ candidate, effective_pay_channel, job_titles }));
+  } catch (e) {
+    console.error('handleGetCandidate failed', e);
     return withCORS(env, req, serverError("Failed to fetch candidate"));
   }
 }
-
 
 export async function handleUpdateCandidate(env, req, candidateId) {
   const user = await requireUser(env, req, ['admin']);
@@ -11164,10 +11218,18 @@ export async function handleUpdateCandidate(env, req, candidateId) {
   if (!raw) return withCORS(env, req, badRequest("Invalid JSON"));
 
   // Strip any accidental CCR fields (immutable/minted by DB)
-  const { tms_ref, ccr_num, ...data } = raw;
+  const { tms_ref, ccr_num, job_titles, ...data } = raw;
+
+  // Normalise job_titles array if present; undefined => "no change"
+  let jtArray = null;
+  if (Array.isArray(job_titles)) {
+    jtArray = job_titles.map((x) => String(x)).filter(Boolean);
+    // Primary is first entry (if any)
+    data.job_title_id = jtArray[0] || null;
+  }
 
   try {
-    // 1) Load current candidate to detect changes
+    // 1) Load current candidate to detect changes (pay, umbrella, bank, mileage)
     const sel = [
       'pay_method',
       'mileage_pay_rate',
@@ -11183,7 +11245,7 @@ export async function handleUpdateCandidate(env, req, candidateId) {
     );
     const before = beforeRows?.[0] || {};
 
-    // 2) Update
+    // 2) Update candidate
     const url = `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(candidateId)}`;
     const res = await fetch(url, {
       method: "PATCH",
@@ -11197,7 +11259,90 @@ export async function handleUpdateCandidate(env, req, candidateId) {
     const json = await res.json().catch(() => ({}));
     const candidate = Array.isArray(json) ? json[0] : json;
 
-    // 3) Change detection
+    // 2b) Upsert candidate_job_titles if job_titles were explicitly provided
+    if (jtArray !== null) {
+      try {
+        // Load existing mapping
+        const { rows: existingRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/candidate_job_titles` +
+            `?candidate_id=eq.${encodeURIComponent(candidateId)}` +
+            `&select=job_title_id`
+        );
+        const existingIds = new Set(
+          (existingRows || []).map((r) => String(r.job_title_id))
+        );
+        const newIds = new Set(jtArray.map(String));
+
+        // Determine deletions and insertions
+        const toDelete = [];
+        for (const r of existingRows || []) {
+          const id = String(r.job_title_id);
+          if (!newIds.has(id)) toDelete.push(id);
+        }
+        const toInsert = [];
+        for (const id of jtArray.map(String)) {
+          if (!existingIds.has(id)) toInsert.push(id);
+        }
+
+        // Deletes
+        for (const jobTitleId of toDelete) {
+          const delUrl =
+            `${env.SUPABASE_URL}/rest/v1/candidate_job_titles` +
+            `?candidate_id=eq.${encodeURIComponent(candidateId)}` +
+            `&job_title_id=eq.${encodeURIComponent(jobTitleId)}`;
+          await fetch(delUrl, {
+            method: 'DELETE',
+            headers: sbHeaders(env)
+          }).catch((e) => console.error('candidate_job_titles delete failed', e));
+        }
+
+        // Inserts
+        if (toInsert.length) {
+          const nowIso = new Date().toISOString();
+          const rows = toInsert.map((jobTitleId) => ({
+            candidate_id: candidateId,
+            job_title_id: jobTitleId,
+            is_primary: false, // will fix below
+            created_at: nowIso,
+            updated_at: nowIso
+          }));
+          await fetch(`${env.SUPABASE_URL}/rest/v1/candidate_job_titles`, {
+            method: 'POST',
+            headers: { ...sbHeaders(env), "Prefer": "resolution=ignore-duplicates" },
+            body: JSON.stringify(rows)
+          }).catch((e) => console.error('candidate_job_titles insert failed', e));
+        }
+
+        // Update is_primary flags: all false, then primary true (if any)
+        const clearPrimaryUrl =
+          `${env.SUPABASE_URL}/rest/v1/candidate_job_titles` +
+          `?candidate_id=eq.${encodeURIComponent(candidateId)}`;
+        await fetch(clearPrimaryUrl, {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), "Prefer": "return=minimal" },
+          body: JSON.stringify({ is_primary: false, updated_at: new Date().toISOString() })
+        }).catch((e) => console.error('candidate_job_titles clear primary failed', e));
+
+        const primaryId = jtArray[0] || null;
+        if (primaryId) {
+          const setPrimaryUrl =
+            `${env.SUPABASE_URL}/rest/v1/candidate_job_titles` +
+            `?candidate_id=eq.${encodeURIComponent(candidateId)}` +
+            `&job_title_id=eq.${encodeURIComponent(primaryId)}`;
+          await fetch(setPrimaryUrl, {
+            method: 'PATCH',
+            headers: { ...sbHeaders(env), "Prefer": "return=minimal" },
+            body: JSON.stringify({ is_primary: true, updated_at: new Date().toISOString() })
+          }).catch((e) => console.error('candidate_job_titles set primary failed', e));
+        }
+      } catch (jtErr) {
+        console.error('handleUpdateCandidate: candidate_job_titles upsert failed', jtErr);
+        // We still continue – candidate was updated; you can tighten behaviour later
+      }
+    }
+
+    // 3) Change detection (unchanged logic)
     const payMethodChanged  = (data.pay_method != null) && data.pay_method !== before.pay_method;
     const umbrellaChanged   = (data.umbrella_id !== undefined) && data.umbrella_id !== before.umbrella_id;
     const mileagePayChanged = (data.mileage_pay_rate != null) && Number(data.mileage_pay_rate) !== Number(before.mileage_pay_rate);
@@ -11237,10 +11382,12 @@ export async function handleUpdateCandidate(env, req, candidateId) {
     }
 
     return withCORS(env, req, ok({ candidate }));
-  } catch {
+  } catch (e) {
+    console.error('handleUpdateCandidate failed', e);
     return withCORS(env, req, serverError("Failed to update candidate"));
   }
 }
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Files: secure download via short-lived token
