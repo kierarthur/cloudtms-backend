@@ -119,7 +119,7 @@ const DEFAULT_GRID_PREFS = {
 
     candidates: {
       labels: {
-        role: "Role",
+        role: "Care Package Roles",        
         email: "Email",
         notes: "Notes",
         phone: "Phone",
@@ -10450,7 +10450,7 @@ export async function handleSearchCandidates(env, req) {
   const format   = (q('format') || 'json').toLowerCase();
 
   // Sorting
-  const orderByParam = (q('order_by') || '').toLowerCase();
+  const orderByParam  = (q('order_by') || '').toLowerCase();
   const orderDirParam = (q('order_dir') || '').toLowerCase();
 
   const allowedSort = {
@@ -10461,24 +10461,53 @@ export async function handleSearchCandidates(env, req) {
     phone:        'phone',
     pay_method:   'pay_method',
     active:       'active',
-    created_at:   'created_at'
+    created_at:   'created_at',
+    // you can add 'primary_job_title' or 'job_titles_display' here later if you
+    // want direct sort buttons on those
   };
+
   const defaultOrderCol = 'display_name';
   const orderCol = allowedSort[orderByParam] || defaultOrderCol;
   const orderDir = (orderDirParam === 'desc') ? 'desc' : 'asc';
 
-  // Named filters
-  const firstName        = q('first_name');
-  const lastName         = q('last_name');
-  const email            = q('email');
-  const phone            = q('phone');
-  const payMethod        = q('pay_method') ? q('pay_method').toUpperCase() : null;
-  const active           = q('active');
-  const createdFrom      = q('created_from');
-  const createdTo        = q('created_to');
-  const jobTitleContains = q('job_title_contains');
+  // Named filters (top-level)
+  const firstName   = q('first_name');
+  const lastName    = q('last_name');
+  const email       = q('email');
+  const phone       = q('phone');
+  const payMethod   = q('pay_method') ? q('pay_method').toUpperCase() : null;
+  const active      = q('active');
+  const createdFrom = q('created_from');
+  const createdTo   = q('created_to');
 
-  // roles_any / roles_all
+  // New job-title filters
+  const jobTitleContainsAll   = q('job_title_contains');            // all job titles
+  const primaryJobTitleContains = q('primary_job_title_contains');  // primary only
+
+  // New professional registration filters
+  const profRegNumber = q('prof_reg_number');
+  const profRegType   = q('prof_reg_type') ? q('prof_reg_type').toUpperCase() : null;
+
+  // New DOB range
+  const dobFrom = q('dob_from');   // YYYY-MM-DD
+  const dobTo   = q('dob_to');     // YYYY-MM-DD
+
+  // New demographic filters
+  const gender   = q('gender');
+  const townCity = q('town_city');
+  const postcode = q('postcode');
+
+  // New updated_at range
+  const updatedFrom = q('updated_from');
+  const updatedTo   = q('updated_to');
+
+  // New bank / umbrella / ref filters
+  const sortCode      = q('sort_code');
+  const accountNumber = q('account_number');
+  const umbrellaName  = q('umbrella_name');
+  const tmsRef        = q('tms_ref');
+
+  // roles_any / roles_all (Care Package Roles)
   let rolesAny = qa('roles_any').filter(Boolean).map(s => s.trim()).filter(Boolean);
   let rolesAll = qa('roles_all').filter(Boolean).map(s => s.trim()).filter(Boolean);
 
@@ -10500,37 +10529,78 @@ export async function handleSearchCandidates(env, req) {
   rolesAny = Array.from(new Set(rolesAny.map(s => s.toUpperCase())));
   rolesAll = Array.from(new Set(rolesAll.map(s => s.toUpperCase())));
 
-  // Use the summary view and return the FULL row to keep grid prefs happy
+  // Use the summary view and return the FULL row to keep grid prefs + CSV happy
   let url =
     `${env.SUPABASE_URL}/rest/v1/candidates_summary` +
     `?select=*` +
     `&order=${enc(orderCol)}.${orderDir}` +
     `&limit=${pageSize}&offset=${(page - 1) * pageSize}`;
 
-  // Free-text: search name, email, and job titles
+  // Free-text: search name, email, and all job titles
+  // (NB: roles_any OR below will overwrite this or-clause if both are used)
   if (text) {
     const esc = enc(text);
     url += `&or=(display_name.ilike.*${esc}*,email.ilike.*${esc}*,job_titles_display.ilike.*${esc}*)`;
   }
 
+  // Basic name / contact / pay filters
   if (firstName)   url += `&first_name=ilike.*${enc(firstName)}*`;
   if (lastName)    url += `&last_name=ilike.*${enc(lastName)}*`;
   if (email)       url += `&email=ilike.*${enc(email)}*`;
   if (phone)       url += `&phone=ilike.*${enc(phone)}*`;
-  if (payMethod)   url += `&pay_method=eq.${enc(payMethod)}`;
+
+  // Pay method: PAYE, UMBRELLA, or BLANK (null)
+  if (payMethod === 'BLANK') {
+    url += `&pay_method=is.null`;
+  } else if (payMethod) {
+    url += `&pay_method=eq.${enc(payMethod)}`;
+  }
+
   if (active === 'true')  url += `&active=eq.true`;
   if (active === 'false') url += `&active=eq.false`;
+
   if (createdFrom) url += `&created_at=gte.${enc(createdFrom)}`;
   if (createdTo)   url += `&created_at=lte.${enc(createdTo)}`;
 
-  if (jobTitleContains) {
-    url += `&job_titles_display=ilike.*${enc(jobTitleContains)}*`;
+  // Primary job title vs all job titles filters
+  if (primaryJobTitleContains) {
+    url += `&primary_job_title=ilike.*${enc(primaryJobTitleContains)}*`;
   }
+  if (jobTitleContainsAll) {
+    url += `&job_titles_display=ilike.*${enc(jobTitleContainsAll)}*`;
+  }
+
+  // Professional registration filters
+  if (profRegNumber) {
+    url += `&prof_reg_number=ilike.*${enc(profRegNumber)}*`;
+  }
+  if (profRegType) {
+    url += `&prof_reg_type=eq.${enc(profRegType)}`;
+  }
+
+  // DOB range
+  if (dobFrom) url += `&date_of_birth=gte.${enc(dobFrom)}`;
+  if (dobTo)   url += `&date_of_birth=lte.${enc(dobTo)}`;
+
+  // Gender / city / postcode
+  if (gender)   url += `&gender=eq.${enc(gender)}`;
+  if (townCity) url += `&town_city=ilike.*${enc(townCity)}*`;
+  if (postcode) url += `&postcode=ilike.*${enc(postcode)}*`;
+
+  // Updated_at range
+  if (updatedFrom) url += `&updated_at=gte.${enc(updatedFrom)}`;
+  if (updatedTo)   url += `&updated_at=lte.${enc(updatedTo)}`;
+
+  // Banking / umbrella / ref
+  if (sortCode)      url += `&sort_code=ilike.*${enc(sortCode)}*`;
+  if (accountNumber) url += `&account_number=ilike.*${enc(accountNumber)}*`;
+  if (umbrellaName)  url += `&umbrella_name=ilike.*${enc(umbrellaName)}*`; // requires umbrella_name in view
+  if (tmsRef)        url += `&tms_ref=ilike.*${enc(tmsRef)}*`;
 
   // apply explicit IDs if present
   if (idFilterExpr) url += `&id=${enc(idFilterExpr)}`;
 
-  // roles_all (AND) – requires that the view exposes a roles JSON column
+  // Care Package Roles – roles_all (AND)
   if (rolesAll.length) {
     for (const code of rolesAll) {
       const val = JSON.stringify([{ code }]);
@@ -10538,7 +10608,7 @@ export async function handleSearchCandidates(env, req) {
     }
   }
 
-  // roles_any (OR) – note: this will overwrite the free-text or-clause if both are used
+  // Care Package Roles – roles_any (OR). Note: this will overwrite any existing `or=` (e.g. free-text)
   if (rolesAny.length) {
     const parts = rolesAny.map(code => {
       const val = enc(JSON.stringify([{ code }]));
@@ -10560,8 +10630,8 @@ export async function handleSearchCandidates(env, req) {
     }));
   }
 
+  // CSV export: keep rota roles vs job titles separate
   if (format === 'csv') {
-    // Keep rota role and job titles separate in CSV
     const header = [
       'CandidateId',
       'DisplayName',
@@ -10599,6 +10669,7 @@ export async function handleSearchCandidates(env, req) {
     }));
   }
 
+  // Print HTML export
   if (format === 'print') {
     const rowsHtml = (rows || []).map(r => `
       <tr>
@@ -10627,6 +10698,7 @@ export async function handleSearchCandidates(env, req) {
     }));
   }
 
+  // Normal JSON
   return withCORS(env, req, ok({
     rows,
     page,
