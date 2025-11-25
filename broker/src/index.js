@@ -1159,13 +1159,25 @@ export async function handleContractsList(env, req) {
   if (q('role'))                filters.push(`role=eq.${encQ(q('role'))}`);
   if (q('band'))                filters.push(`band=eq.${encQ(q('band'))}`);
 
+  // Name-only filters (separate from free-text q)
+  if (q('candidate_name')) {
+    const like = `*${q('candidate_name')}*`;
+    filters.push(`candidate.display_name=ilike.${encQ(like)}`);
+  }
+  if (q('client_name')) {
+    const like = `*${q('client_name')}*`;
+    filters.push(`client.name=ilike.${encQ(like)}`);
+  }
+
   if (q('active_on')) {
     const d = q('active_on');
     filters.push(`start_date=lte.${encQ(d)}`);
     filters.push(`end_date=gte.${encQ(d)}`);
   }
 
-  if (q('auto_invoice')) filters.push(`auto_invoice=eq.${encQ(String(clampBool(q('auto_invoice'))))}`);
+  if (q('auto_invoice')) {
+    filters.push(`auto_invoice=eq.${encQ(String(clampBool(q('auto_invoice'))))}`);
+  }
 
   // Free text across related names + role
   if (q('q')) {
@@ -1212,6 +1224,26 @@ export async function handleContractsList(env, req) {
   // created_from / created_to
   if (q('created_from')) filters.push(`created_at=gte.${encQ(q('created_from'))}`);
   if (q('created_to'))   filters.push(`created_at=lte.${encQ(q('created_to'))}`);
+
+  // updated_from / updated_to
+  if (q('updated_from')) filters.push(`updated_at=gte.${encQ(q('updated_from'))}`);
+  if (q('updated_to'))   filters.push(`updated_at=lte.${encQ(q('updated_to'))}`);
+
+  // start_date_from / start_date_to
+  if (q('start_date_from')) filters.push(`start_date=gte.${encQ(q('start_date_from'))}`);
+  if (q('start_date_to'))   filters.push(`start_date=lte.${encQ(q('start_date_to'))}`);
+
+  // end_date_from / end_date_to
+  if (q('end_date_from')) filters.push(`end_date=gte.${encQ(q('end_date_from'))}`);
+  if (q('end_date_to'))   filters.push(`end_date=lte.${encQ(q('end_date_to'))}`);
+
+  // mileage filters
+  if (q('mileage_pay_rate')) {
+    filters.push(`mileage_pay_rate=eq.${encQ(q('mileage_pay_rate'))}`);
+  }
+  if (q('mileage_charge_rate')) {
+    filters.push(`mileage_charge_rate=eq.${encQ(q('mileage_charge_rate'))}`);
+  }
 
   // ── status=active|completed|unassigned ──────────────────────────────────────
   const statusParam = (q('status') || '').toLowerCase();
@@ -6205,7 +6237,8 @@ export async function handleSearchClients(env, req) {
     ap_phone:              'ap_phone',
     vat_chargeable:        'vat_chargeable',
     payment_terms_days:    'payment_terms_days',
-    created_at:            'created_at'
+    created_at:            'created_at',
+    updated_at:            'updated_at'
   };
   const defaultOrderCol = 'name';
   const orderCol = allowedSort[orderByParam] || defaultOrderCol;
@@ -6226,25 +6259,43 @@ export async function handleSearchClients(env, req) {
   const text          = q('q'); // name partial
   const cliRef        = q('cli_ref');
   const primaryEmail  = q('primary_invoice_email');
+  const invoiceAddr   = q('invoice_address');
+  const postcode      = q('postcode');
   const apPhone       = q('ap_phone');
   const vatChargeable = q('vat_chargeable'); // 'true'|'false'|null
+  const paymentTerms  = q('payment_terms_days');
+  const mileageRate   = q('mileage_charge_rate');
+  const tsQueries     = q('ts_queries_email');
   const createdFrom   = q('created_from');
   const createdTo     = q('created_to');
+  const updatedFrom   = q('updated_from');
+  const updatedTo     = q('updated_to');
 
-  let url = `${env.SUPABASE_URL}/rest/v1/clients` +
-            `?select=id,name,vat_chargeable,payment_terms_days,primary_invoice_email,ap_phone,cli_ref,created_at` +
-            `&order=${enc(orderCol)}.${orderDir}` +
-            `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
+  let url =
+    `${env.SUPABASE_URL}/rest/v1/clients` +
+    `?select=id,cli_ref,name,invoice_address,postcode,primary_invoice_email,ap_phone,vat_chargeable,payment_terms_days,mileage_charge_rate,ts_queries_email,created_at,updated_at` +
+    `&order=${enc(orderCol)}.${orderDir}` +
+    `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
 
   if (idFilterExpr) url += `&id=${enc(idFilterExpr)}`;
   if (text)         url += `&name=ilike.*${enc(text)}*`;
   if (cliRef)       url += `&cli_ref=ilike.*${enc(cliRef)}*`;
   if (primaryEmail) url += `&primary_invoice_email=ilike.*${enc(primaryEmail)}*`;
+  if (invoiceAddr)  url += `&invoice_address=ilike.*${enc(invoiceAddr)}*`;
+  if (postcode)     url += `&postcode=ilike.*${enc(postcode)}*`;
   if (apPhone)      url += `&ap_phone=ilike.*${enc(apPhone)}*`;
+
   if (vatChargeable === 'true')  url += `&vat_chargeable=eq.true`;
   if (vatChargeable === 'false') url += `&vat_chargeable=eq.false`;
+
+  if (paymentTerms) url += `&payment_terms_days=eq.${enc(paymentTerms)}`;
+  if (mileageRate)  url += `&mileage_charge_rate=eq.${enc(mileageRate)}`;
+  if (tsQueries)    url += `&ts_queries_email=ilike.*${enc(tsQueries)}*`;
+
   if (createdFrom)  url += `&created_at=gte.${enc(createdFrom)}`;
   if (createdTo)    url += `&created_at=lte.${enc(createdTo)}`;
+  if (updatedFrom)  url += `&updated_at=gte.${enc(updatedFrom)}`;
+  if (updatedTo)    url += `&updated_at=lte.${enc(updatedTo)}`;
 
   let rows = [];
   try {
@@ -6254,18 +6305,37 @@ export async function handleSearchClients(env, req) {
   }
 
   if (format === 'csv') {
-    const header = ['ClientId','Name','VATChargeable','PaymentTermsDays','PrimaryInvoiceEmail','APPhone','CliRef','CreatedAt'];
+    const header = [
+      'ClientId',
+      'Name',
+      'ClientRef',
+      'InvoiceAddress',
+      'Postcode',
+      'VATChargeable',
+      'PaymentTermsDays',
+      'PrimaryInvoiceEmail',
+      'APPhone',
+      'MileageChargeRate',
+      'TSQueriesEmail',
+      'CreatedAt',
+      'UpdatedAt'
+    ];
     const out = [csvJoin(header)];
     for (const r of rows || []) {
       out.push(csvJoin([
         r.id,
         r.name || '',
+        r.cli_ref || '',
+        r.invoice_address || '',
+        r.postcode || '',
         r.vat_chargeable ? 'Y' : 'N',
         Number(r.payment_terms_days ?? ''),
         r.primary_invoice_email || '',
         r.ap_phone || '',
-        r.cli_ref || '',
-        r.created_at || ''
+        r.mileage_charge_rate != null ? String(r.mileage_charge_rate) : '',
+        r.ts_queries_email || '',
+        r.created_at || '',
+        r.updated_at || ''
       ]));
     }
     return withCORS(env, req, ok({ csv: out.join('\n'), count: rows?.length || 0, page, page_size: pageSize }));
@@ -6275,20 +6345,28 @@ export async function handleSearchClients(env, req) {
     const rowsHtml = (rows || []).map(r => `
       <tr>
         <td>${r.name || ''}</td>
+        <td>${r.cli_ref || ''}</td>
+        <td>${r.invoice_address || ''}</td>
+        <td>${r.postcode || ''}</td>
         <td>${r.vat_chargeable ? 'Y' : 'N'}</td>
         <td>${Number(r.payment_terms_days ?? '')}</td>
         <td>${r.primary_invoice_email || ''}</td>
         <td>${r.ap_phone || ''}</td>
-        <td>${r.cli_ref || ''}</td>
+        <td>${r.mileage_charge_rate != null ? String(r.mileage_charge_rate) : ''}</td>
+        <td>${r.ts_queries_email || ''}</td>
         <td>${r.created_at || ''}</td>
+        <td>${r.updated_at || ''}</td>
       </tr>`).join('');
     const html = `
       <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif">
         <h3>Clients — Search Results</h3>
         <table width="100%" cellspacing="0" cellpadding="6" style="border-collapse:collapse">
           <thead><tr style="background:#f5f5f5">
-            <th>Name</th><th>VAT Chargeable</th><th>Payment Terms (days)</th>
-            <th>Primary Invoice Email</th><th>A/P Phone</th><th>Client Ref</th><th>Created At</th>
+            <th>Name</th><th>Client Ref</th><th>Invoice Address</th><th>Postcode</th>
+            <th>VAT Chargeable</th><th>Payment Terms (days)</th>
+            <th>Primary Invoice Email</th><th>A/P Phone</th>
+            <th>Mileage Charge Rate</th><th>TS Queries Email</th>
+            <th>Created At</th><th>Updated At</th>
           </tr></thead>
           <tbody>${rowsHtml}</tbody>
         </table>
@@ -6298,6 +6376,7 @@ export async function handleSearchClients(env, req) {
 
   return withCORS(env, req, ok({ rows, page, page_size: pageSize, count: rows?.length || 0 }));
 }
+
 
 
 // ───────────────────────────────────────────────────────────────────────────────
