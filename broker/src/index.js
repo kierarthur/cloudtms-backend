@@ -14460,85 +14460,6 @@ export async function handleContractChangeRatesOutstanding(env, req, contractId)
 // Optional cutoffWeekEnding (YYYY-MM-DD or ISO) limits to week_ending_date >= cutoff.
 // Returns an array of rows: { id, week_ending_date, additional_seq, status, timesheet_id, is_invoiced, is_paid }
 // ─────────────────────────────────────────────────────────────────────────────
-async function findOutstandingWeeksForContract(env, contractId, cutoffWeekEnding) {
-  if (!contractId) return [];
-
-  let cutoffYmd = null;
-  if (cutoffWeekEnding) {
-    try {
-      cutoffYmd = toYmd(cutoffWeekEnding);
-    } catch {
-      cutoffYmd = null;
-    }
-  }
-
-  // 1) Load contract_weeks for this contract (optionally from cutoff onwards)
-  let q =
-    `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-    `?contract_id=eq.${enc(contractId)}` +
-    `&select=id,contract_id,week_ending_date,additional_seq,status,timesheet_id`;
-
-  if (cutoffYmd) {
-    q += `&week_ending_date=gte.${enc(cutoffYmd)}`;
-  }
-
-  q += `&order=week_ending_date.asc,additional_seq.asc`;
-
-  const { rows: weekRows } = await sbFetch(env, q);
-  const weeks = Array.isArray(weekRows) ? weekRows : [];
-  if (!weeks.length) return [];
-
-  // 2) Load current TSFIN rows for attached timesheets (if any)
-  const tsIds = Array.from(
-    new Set(
-      weeks
-        .map(w => w.timesheet_id)
-        .filter(Boolean)
-        .map(String)
-    )
-  );
-
-  const finByTsId = new Map();
-  if (tsIds.length) {
-    const inList = tsIds.map(enc).join(',');
-    const finQ =
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-      `?is_current=eq.true` +
-      `&timesheet_id=in.(${inList})` +
-      `&select=timesheet_id,locked_by_invoice_id,paid_at_utc`;
-    const { rows: finRows } = await sbFetch(env, finQ);
-    for (const r of (finRows || [])) {
-      if (r && r.timesheet_id) {
-        finByTsId.set(String(r.timesheet_id), r);
-      }
-    }
-  }
-
-  // 3) Classify each week as outstanding or not
-  const out = [];
-  for (const w of weeks) {
-    const tsId = w.timesheet_id ? String(w.timesheet_id) : null;
-    const fin = tsId ? (finByTsId.get(tsId) || null) : null;
-
-    const isInvoiced = !!(fin && fin.locked_by_invoice_id);
-    const isPaid     = !!(fin && fin.paid_at_utc);
-    const isOutstanding = !tsId || (!isInvoiced && !isPaid);
-
-    if (!isOutstanding) continue;
-
-    out.push({
-      id: w.id,
-      week_ending_date: w.week_ending_date,
-      additional_seq: w.additional_seq,
-      status: w.status,
-      timesheet_id: w.timesheet_id || null,
-      is_invoiced: isInvoiced,
-      is_paid: isPaid
-    });
-  }
-
-  return out;
-}
 
 
 
@@ -14772,6 +14693,25 @@ async function migrateOutstandingWeeksToNewContract(env, originalId, newId, week
 //   outstanding_weeks, first_outstanding_we, last_outstanding_we
 // }
 // ─────────────────────────────────────────────────────────────────────────────
+
+async function findOutstandingWeeksForContract(env, contractId, cutoffWeekEnding) {
+  if (!contractId) return [];
+
+  let cutoffYmd = null;
+  if (cutoffWeekEnding) {
+    try {
+      cutoffYmd = toYmd(cutoffWeekEnding);
+    } catch {
+      cutoffYmd = null;
+    }
+  }
+
+  const map = await collectOutstandingWeeksByContract(env, [contractId], cutoffYmd);
+  return map.get(String(contractId)) || [];
+}
+
+
+
 async function collectOutstandingWeeklyContractsForCandidate(env, candidateId, newMethod, originalMethod) {
   if (!candidateId) return [];
 
@@ -14792,20 +14732,25 @@ async function collectOutstandingWeeklyContractsForCandidate(env, candidateId, n
   const contracts = Array.isArray(conRows) ? conRows : [];
   if (!contracts.length) return [];
 
-  // 2) For each contract, find outstanding weeks using the shared helper
+  const contractIds = contracts.map(c => c && c.id).filter(Boolean).map(String);
+  if (!contractIds.length) return [];
+
+  // 2) Bulk outstanding weeks for these contracts
+  const outstandingByContract = await collectOutstandingWeeksByContract(env, contractIds, null);
+
   const summaries = [];
   const clientIds = new Set();
 
   for (const c of contracts) {
     if (!c || !c.id) continue;
-    const weeks = await findOutstandingWeeksForContract(env, c.id, null);
-    if (!weeks || !weeks.length) continue;
+    const cid = String(c.id);
+    const weeks = outstandingByContract.get(cid) || [];
+    if (!weeks.length) continue;
 
     const dates = weeks
       .map(w => w.week_ending_date)
       .filter(Boolean)
       .sort();
-
     if (!dates.length) continue;
 
     clientIds.add(c.client_id);
@@ -14850,10 +14795,89 @@ async function collectOutstandingWeeklyContractsForCandidate(env, candidateId, n
 
 
 
+async function collectOutstandingWeeksByContract(env, contractIds, cutoffYmd = null) {
+  const outMap = new Map();
+  const ids = (contractIds || []).map(String).filter(Boolean);
+  if (!ids.length) return outMap;
+
+  // 1) Load contract_weeks for all contracts in one go
+  let cwUrl =
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+    `?contract_id=in.(${ids.map(enc).join(',')})` +
+    `&additional_seq=eq.0` +
+    `&select=id,contract_id,week_ending_date,additional_seq,status,timesheet_id`;
+
+  if (cutoffYmd) {
+    cwUrl += `&week_ending_date=gte.${enc(cutoffYmd)}`;
+  }
+
+  cwUrl += `&order=contract_id.asc,week_ending_date.asc,additional_seq.asc`;
+
+  const { rows: weekRows } = await sbFetch(env, cwUrl);
+  const weeks = Array.isArray(weekRows) ? weekRows : [];
+  if (!weeks.length) return outMap;
+
+  // 2) Load current TSFIN rows for all attached timesheets in one go
+  const tsIds = Array.from(
+    new Set(
+      weeks
+        .map(w => w.timesheet_id)
+        .filter(Boolean)
+        .map(String)
+    )
+  );
+
+  const finByTsId = new Map();
+  if (tsIds.length) {
+    const inList = tsIds.map(enc).join(',');
+    const finQ =
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?is_current=eq.true` +
+      `&timesheet_id=in.(${inList})` +
+      `&select=timesheet_id,locked_by_invoice_id,paid_at_utc`;
+    const { rows: finRows } = await sbFetch(env, finQ);
+    for (const r of (finRows || [])) {
+      if (r && r.timesheet_id) {
+        finByTsId.set(String(r.timesheet_id), r);
+      }
+    }
+  }
+
+  // 3) Compute outstanding weeks and group by contract_id
+  for (const w of weeks) {
+    if (!w || !w.contract_id) continue;
+    const cid = String(w.contract_id);
+    const tsId = w.timesheet_id ? String(w.timesheet_id) : null;
+    const fin = tsId ? (finByTsId.get(tsId) || null) : null;
+
+    const isInvoiced = !!(fin && fin.locked_by_invoice_id);
+    const isPaid     = !!(fin && fin.paid_at_utc);
+    const isOutstanding = !tsId || (!isInvoiced && !isPaid);
+
+    if (!isOutstanding) continue;
+
+    const arr = outMap.get(cid) || [];
+    arr.push({
+      id: w.id,
+      week_ending_date: w.week_ending_date,
+      additional_seq: w.additional_seq,
+      status: w.status,
+      timesheet_id: w.timesheet_id || null,
+      is_invoiced: isInvoiced,
+      is_paid: isPaid
+    });
+    outMap.set(cid, arr);
+  }
+
+  return outMap;
+}
+
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Endpoint: GET /api/candidates/:id/pay-method-change-preview
 // Preview which contracts would be affected by PAYE↔UMBRELLA flip.
 // ─────────────────────────────────────────────────────────────────────────────
+
 export async function handleCandidatePayMethodChangePreview(env, req, candidateId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
@@ -14894,7 +14918,6 @@ export async function handleCandidatePayMethodChangePreview(env, req, candidateI
     contracts
   }));
 }
-
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -14955,25 +14978,23 @@ export async function handleCandidatePayMethodChange(env, req, candidateId) {
     return withCORS(env, req, badRequest('Candidate must have an umbrella_id before moving to UMBRELLA'));
   }
 
-  // -------- Find contracts with outstanding weeks --------
-  const previews = await collectOutstandingWeeklyContractsForCandidate(env, candidateId, newMethod, originalMethod);
+  // -------- Load all relevant contracts in one go --------
+  const conUrl =
+    `${env.SUPABASE_URL}/rest/v1/contracts` +
+    `?candidate_id=eq.${enc(candidateId)}` +
+    `&pay_method_snapshot=eq.${enc(originalMethod)}` +
+    `&select=*`;
 
-  let candidatesContracts = previews;
-  if (contractIdSet) {
-    candidatesContracts = previews.filter(p => contractIdSet.has(String(p.contract_id)));
-  }
-
-  // No contracts to touch → just flip candidate.pay_method and return
-  if (!candidatesContracts.length) {
+  const { rows: conRows } = await sbFetch(env, conUrl);
+  const allContracts = Array.isArray(conRows) ? conRows : [];
+  if (!allContracts.length && !contractIdSet) {
+    // No contracts at all with this snapshot → pure candidate flip
     try {
       const patch = {
         pay_method: newMethod,
         updated_at: nowIso()
       };
-      // Clear umbrella_id if moving to PAYE
-      if (newMethod === 'PAYE') {
-        patch.umbrella_id = null;
-      }
+      if (newMethod === 'PAYE') patch.umbrella_id = null;
       await fetch(
         `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(candidateId)}`,
         {
@@ -14997,13 +15018,82 @@ export async function handleCandidatePayMethodChange(env, req, candidateId) {
     }));
   }
 
-  // -------- Load full contract rows (single batch) --------
-  const idsToLoad = Array.from(new Set(candidatesContracts.map(c => String(c.contract_id)).filter(Boolean)));
-  const conUrl =
-    `${env.SUPABASE_URL}/rest/v1/contracts` +
-    `?id=in.(${idsToLoad.map(enc).join(',')})&select=*`;
-  const { rows: conRows } = await sbFetch(env, conUrl);
-  const contractsById = new Map((conRows || []).map(r => [String(r.id), r]));
+  let selectedContracts = allContracts;
+  if (contractIdSet) {
+    selectedContracts = allContracts.filter(c => c && c.id && contractIdSet.has(String(c.id)));
+  }
+
+  if (!selectedContracts.length) {
+    // User asked for specific contract_ids but none match or have this snapshot
+    try {
+      const patch = {
+        pay_method: newMethod,
+        updated_at: nowIso()
+      };
+      if (newMethod === 'PAYE') patch.umbrella_id = null;
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(candidateId)}`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+          body: JSON.stringify(patch)
+        }
+      );
+    } catch (e) {
+      return withCORS(env, req, badRequest(`Failed to update candidate pay_method: ${e?.message || e}`));
+    }
+
+    return withCORS(env, req, ok({
+      candidate_id: cand.id,
+      original_method: originalMethod,
+      new_method: newMethod,
+      old_contract_ids: [],
+      new_contract_ids: [],
+      affected_timesheet_ids: [],
+      summary: { contracts_changed: 0, weeks_migrated: 0 }
+    }));
+  }
+
+  const idsToLoad = Array.from(new Set(selectedContracts.map(c => String(c.id)).filter(Boolean)));
+
+  // -------- Bulk outstanding weeks for all selected contracts --------
+  const outstandingByContract = await collectOutstandingWeeksByContract(env, idsToLoad, null);
+
+  // If no contracts have outstanding weeks, behave like pure candidate flip
+  const anyOutstanding = idsToLoad.some(id => {
+    const arr = outstandingByContract.get(String(id));
+    return arr && arr.length;
+  });
+
+  if (!anyOutstanding) {
+    try {
+      const patch = {
+        pay_method: newMethod,
+        updated_at: nowIso()
+      };
+      if (newMethod === 'PAYE') patch.umbrella_id = null;
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(candidateId)}`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+          body: JSON.stringify(patch)
+        }
+      );
+    } catch (e) {
+      return withCORS(env, req, badRequest(`Failed to update candidate pay_method: ${e?.message || e}`));
+    }
+
+    return withCORS(env, req, ok({
+      candidate_id: cand.id,
+      original_method: originalMethod,
+      new_method: newMethod,
+      old_contract_ids: [],
+      new_contract_ids: [],
+      affected_timesheet_ids: [],
+      summary: { contracts_changed: 0, weeks_migrated: 0 }
+    }));
+  }
 
   const oldContractIds = [];
   const newContractIds = [];
@@ -15032,23 +15122,31 @@ export async function handleCandidatePayMethodChange(env, req, candidateId) {
     return ch - margin;
   }
 
-  // Local helper: compute ERNI multiplier for (client, date)
+  // ERNI cache per client+date (in case of multiple contracts per client)
+  const erniCache = new Map(); // key: `${clientId}|${ymd}` -> erniMult
+
   async function getErniMultiplierForClient(env, clientId, activeYmd) {
+    const key = `${clientId || ''}|${activeYmd || ''}`;
+    if (erniCache.has(key)) return erniCache.get(key);
+
+    let mult = 1;
     try {
       const policy = await loadPolicy(env, clientId, activeYmd);
       let p = asNumber(policy?.erni_pct ?? 0, 0);
-      // Support 13.8 vs 0.138 (same as FE: if >1, interpret as percent)
       if (p > 1) p = p / 100;
-      return 1 + p;
+      mult = 1 + p;
+      if (!Number.isFinite(mult) || mult <= 0) mult = 1;
     } catch {
-      return 1;
+      mult = 1;
     }
+    erniCache.set(key, mult);
+    return mult;
   }
 
-  // -------- Process each contract --------
-  for (const summary of candidatesContracts) {
-    const contract = contractsById.get(String(summary.contract_id));
-    if (!contract) continue;
+  // -------- Process each selected contract --------
+  for (const contract of selectedContracts) {
+    if (!contract || !contract.id) continue;
+    const contractIdStr = String(contract.id);
 
     const oldMethod = String(contract.pay_method_snapshot || '').toUpperCase();
     if (oldMethod !== originalMethod) {
@@ -15056,7 +15154,7 @@ export async function handleCandidatePayMethodChange(env, req, candidateId) {
       continue;
     }
 
-    const outstandingWeeks = await findOutstandingWeeksForContract(env, contract.id, null);
+    const outstandingWeeks = outstandingByContract.get(contractIdStr) || [];
     if (!outstandingWeeks.length) continue;
 
     let contractHadError = false;
@@ -15065,11 +15163,14 @@ export async function handleCandidatePayMethodChange(env, req, candidateId) {
 
     try {
       // Earliest outstanding WE, start date = WE − 6 days
-      const weDates = outstandingWeeks.map(w => w.week_ending_date).filter(Boolean).sort();
+      const weDates = outstandingWeeks
+        .map(w => w.week_ending_date)
+        .filter(Boolean)
+        .sort();
       const earliestWe = weDates[0];
       const successorStart = addDays(earliestWe, -6);
 
-      // Compute ERNI multiplier from policy
+      // Compute ERNI multiplier from policy (cached)
       const erniMult = await getErniMultiplierForClient(env, contract.client_id, earliestWe);
 
       // Parse rates_json
@@ -15123,7 +15224,7 @@ export async function handleCandidatePayMethodChange(env, req, candidateId) {
         }
       }
 
-      // 🔹 Prune incompatible buckets: keep only new method + charge_*
+      // Prune incompatible buckets: keep only new method + charge_*
       const keepPrefixes =
         newMethod === 'PAYE'     ? ['paye_', 'charge_'] :
         newMethod === 'UMBRELLA' ? ['umb_',  'charge_'] :
@@ -15194,7 +15295,7 @@ export async function handleCandidatePayMethodChange(env, req, candidateId) {
           }
         }
 
-        // Optionally prune any future weeks beyond truncatedEnd without TS
+        // Prune any future weeks beyond truncatedEnd without TS (non-fatal if fails)
         if (!contractHadError) {
           try {
             await fetch(
@@ -15208,8 +15309,6 @@ export async function handleCandidatePayMethodChange(env, req, candidateId) {
               }
             );
           } catch (e) {
-            // pruning failure is non-fatal for migration success,
-            // so we only log it and do not mark the contract as failed
             try { console.warn('[PAY-METHOD-CHANGE] prune future empty weeks failed', contract.id, e); } catch {}
           }
         }
@@ -15220,7 +15319,7 @@ export async function handleCandidatePayMethodChange(env, req, candidateId) {
     }
 
     if (contractHadError) {
-      migrationErrors.push(String(contract.id));
+      migrationErrors.push(contractIdStr);
       continue;
     }
 
@@ -15250,7 +15349,6 @@ export async function handleCandidatePayMethodChange(env, req, candidateId) {
     if (newMethod === 'PAYE') {
       patch.umbrella_id = null;
     }
-    // If newMethod === 'UMBRELLA', we leave umbrella_id as-is (already validated non-null).
     await fetch(
       `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(candidateId)}`,
       {
