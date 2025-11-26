@@ -11658,7 +11658,6 @@ export async function handleUpdateCandidate(env, req, candidateId) {
     }
   }
 
-
   // Normalise job_titles array if present; undefined => "no change"
   let jtArray = null;
   if (Array.isArray(job_titles)) {
@@ -11683,6 +11682,49 @@ export async function handleUpdateCandidate(env, req, candidateId) {
       `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(candidateId)}&select=${sel}`
     );
     const before = beforeRows?.[0] || {};
+
+    const originalPayMethod = (before.pay_method == null)
+      ? null
+      : String(before.pay_method).toUpperCase();
+
+    // Determine target pay_method after normalisation
+    let newPayMethod = originalPayMethod;
+    if (Object.prototype.hasOwnProperty.call(data, 'pay_method')) {
+      newPayMethod =
+        data.pay_method == null
+          ? null
+          : String(data.pay_method).toUpperCase();
+    }
+
+    const isToUnknown =
+      (originalPayMethod === 'PAYE' || originalPayMethod === 'UMBRELLA') &&
+      Object.prototype.hasOwnProperty.call(data, 'pay_method') &&
+      newPayMethod === null;
+
+    if (isToUnknown) {
+      // Safety rule: once a candidate has any contracts at all,
+      // we do not allow reverting pay_method back to Unknown.
+      // (This is stricter than checking only "outstanding" weeks,
+      // but keeps you safely within Cloudflare request limits.)
+      const { rows: conRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/contracts` +
+          `?candidate_id=eq.${encodeURIComponent(candidateId)}` +
+          `&select=id&limit=1`
+      );
+      const hasAnyContract = Array.isArray(conRows) && conRows.length > 0;
+
+      if (hasAnyContract) {
+        return withCORS(
+          env,
+          req,
+          badRequest(
+            'Cannot change pay method to Unknown while this candidate has contracts. ' +
+            'Set pay method to PAYE or UMBRELLA instead.'
+          )
+        );
+      }
+    }
 
     // 2) Update candidate
     const url = `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(candidateId)}`;
