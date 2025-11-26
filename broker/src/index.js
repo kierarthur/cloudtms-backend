@@ -14086,6 +14086,54 @@ async function handlePatchClientDefault(env, req, rateId) {
 
 
 
+export async function handleContractChangeRatesPreview(env, req, contractId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!contractId) return withCORS(env, req, badRequest('contract_id required'));
+
+  const url = new URL(req.url);
+
+  // Normalise YYYY-MM-DD or ISO into YMD safely
+  const cutoffRaw = url.searchParams.get('cutoff_week_ending_date') || null;
+  let cutoffYmd = null;
+  if (cutoffRaw) {
+    try {
+      cutoffYmd = toYmd(cutoffRaw);
+    } catch {
+      cutoffYmd = null;
+    }
+  }
+
+  // Load the contract shell for context
+  const contract = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contracts` +
+    `?id=eq.${enc(contractId)}&select=id,start_date,end_date,pay_method_snapshot`
+  );
+  if (!contract) {
+    return withCORS(env, req, notFound('Contract not found'));
+  }
+
+  // Use the shared helper to find outstanding weeks for this contract
+  const weeksRaw = await findOutstandingWeeksForContract(env, contractId, cutoffYmd);
+  const weeks = Array.isArray(weeksRaw) ? weeksRaw : [];
+
+  return withCORS(env, req, ok({
+    contract_id: contract.id,
+    start_date: contract.start_date,
+    end_date: contract.end_date,
+    pay_method_snapshot: contract.pay_method_snapshot,
+    cutoff_week_ending_date: cutoffYmd || null,
+    weeks: weeks.map(w => ({
+      week_id: w.id,
+      week_ending_date: w.week_ending_date,
+      status: w.status,
+      timesheet_id: w.timesheet_id,
+      is_invoiced: w.is_invoiced,
+      is_paid: w.is_paid
+    }))
+  }));
+}
 
 
 
@@ -14102,7 +14150,7 @@ export async function handleContractChangeRatesOutstanding(env, req, contractId)
   const toYmdSafe = (val) => {
     if (!val) return null;
     try {
-      return toYmd(val); // existing helper already in this file 
+      return toYmd(val); // existing helper already in this file
     } catch {
       return null;
     }
@@ -14249,7 +14297,7 @@ export async function handleContractChangeRatesOutstanding(env, req, contractId)
     .filter(Boolean)
     .sort()[0];
 
-  const earliestStart = addDays(earliestWe, -6); // start-of-week = week-ending minus 6 days 
+  const earliestStart = addDays(earliestWe, -6); // start-of-week = week-ending minus 6 days
 
   // Derive std_hours_json from schedule if provided, else reuse existing
   let successorStdSchedule = newStdSchedule != null ? newStdSchedule : (contract.std_schedule_json || null);
@@ -14373,7 +14421,7 @@ export async function handleContractChangeRatesOutstanding(env, req, contractId)
     try { console.warn('[CONTRACTS][CHANGE-RATES] prune future empty weeks failed', e); } catch {}
   }
 
-  // Generate future weeks for successor (non-fatal if this fails) :contentReference[oaicite:2]{index=2}
+  // Generate full future weeks for successor (non-fatal if this fails)
   try {
     if (typeof handleContractsGenerateWeeks === 'function') {
       await handleContractsGenerateWeeks(env, req, successor.id);
@@ -14382,7 +14430,7 @@ export async function handleContractChangeRatesOutstanding(env, req, contractId)
     try { console.warn('[CONTRACTS][CHANGE-RATES] generate-weeks for successor failed', e); } catch {}
   }
 
-  // Enqueue TSFIN recompute for moved timesheets with reason=RATE_CHANGED 
+  // Enqueue TSFIN recompute for moved timesheets with reason=RATE_CHANGED
   try {
     for (const tsid of tsIds) {
       await sbRpc(env, 'enqueue_ts_financials', {
@@ -14402,6 +14450,7 @@ export async function handleContractChangeRatesOutstanding(env, req, contractId)
     timesheets_migrated: tsIds.length
   }));
 }
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper: findOutstandingWeeksForContract
@@ -14959,6 +15008,7 @@ export async function handleCandidatePayMethodChange(env, req, candidateId) {
   const oldContractIds = [];
   const newContractIds = [];
   const allTsIds = [];
+  const migrationErrors = [];  // track any contracts that failed migration
   let totalWeeksMigrated = 0;
 
   // Local helper to compute new pay for one bucket preserving margin
@@ -15009,138 +15059,187 @@ export async function handleCandidatePayMethodChange(env, req, candidateId) {
     const outstandingWeeks = await findOutstandingWeeksForContract(env, contract.id, null);
     if (!outstandingWeeks.length) continue;
 
-    // Earliest outstanding WE, start date = WE − 6 days
-    const weDates = outstandingWeeks.map(w => w.week_ending_date).filter(Boolean).sort();
-    const earliestWe = weDates[0];
-    const successorStart = addDays(earliestWe, -6);
+    let contractHadError = false;
+    let contractMigratedWeeks = 0;
+    let successor = null;
 
-    // Compute ERNI multiplier from policy
-    const erniMult = await getErniMultiplierForClient(env, contract.client_id, earliestWe);
+    try {
+      // Earliest outstanding WE, start date = WE − 6 days
+      const weDates = outstandingWeeks.map(w => w.week_ending_date).filter(Boolean).sort();
+      const earliestWe = weDates[0];
+      const successorStart = addDays(earliestWe, -6);
 
-    // Parse rates_json
-    let rj = contract.rates_json || {};
-    if (typeof rj === 'string') {
-      try { rj = JSON.parse(rj); } catch { rj = {}; }
-    }
-    if (!rj || typeof rj !== 'object') rj = {};
+      // Compute ERNI multiplier from policy
+      const erniMult = await getErniMultiplierForClient(env, contract.client_id, earliestWe);
 
-    const buckets = ['day', 'night', 'sat', 'sun', 'bh'];
-
-    const charge = {
-      day:   rj.charge_day   ?? null,
-      night: rj.charge_night ?? null,
-      sat:   rj.charge_sat   ?? null,
-      sun:   rj.charge_sun   ?? null,
-      bh:    rj.charge_bh    ?? null
-    };
-
-    const payOld = (oldMethod === 'PAYE')
-      ? {
-          day:   rj.paye_day   ?? null,
-          night: rj.paye_night ?? null,
-          sat:   rj.paye_sat   ?? null,
-          sun:   rj.paye_sun   ?? null,
-          bh:    rj.paye_bh    ?? null
-        }
-      : {
-          day:   rj.umb_day   ?? null,
-          night: rj.umb_night ?? null,
-          sat:   rj.umb_sat   ?? null,
-          sun:   rj.umb_sun   ?? null,
-          bh:    rj.umb_bh    ?? null
-        };
-
-    // Build successor rates_json by copying existing and overwriting only
-    // the pay buckets for the new method where we can compute margin.
-    const newRates = { ...rj };
-
-    for (const b of buckets) {
-      const ch = charge[b];
-      const po = payOld[b];
-      const pn = computeNewPayBucket(ch, po, oldMethod, newMethod, erniMult);
-      if (pn == null || !Number.isFinite(pn)) continue;
-
-      const rounded = +(+pn).toFixed(2);
-      if (newMethod === 'PAYE') {
-        newRates[`paye_${b}`] = rounded;
-      } else {
-        newRates[`umb_${b}`] = rounded;
+      // Parse rates_json
+      let rj = contract.rates_json || {};
+      if (typeof rj === 'string') {
+        try { rj = JSON.parse(rj); } catch { rj = {}; }
       }
-    }
+      if (!rj || typeof rj !== 'object') rj = {};
 
-    // Prepare overrides for successor
-    const overrides = {
-      start_date: successorStart,
-      end_date: contract.end_date,
-      pay_method_snapshot: newMethod,
-      rates_json: newRates,
-      std_schedule_json: contract.std_schedule_json || null,
-      std_hours_json: contract.std_hours_json || null
-    };
+      const buckets = ['day', 'night', 'sat', 'sun', 'bh'];
 
-    // Create successor contract
-    let successor;
-    try {
-      successor = await cloneContractForRatesChange(env, contract, overrides);
-    } catch (e) {
-      // If we can’t create successor, skip this contract (but keep going for others)
-      try { console.warn('[PAY-METHOD-CHANGE] cloneContractForRatesChange failed', contract.id, e); } catch {}
-      continue;
-    }
+      const charge = {
+        day:   rj.charge_day   ?? null,
+        night: rj.charge_night ?? null,
+        sat:   rj.charge_sat   ?? null,
+        sun:   rj.charge_sun   ?? null,
+        bh:    rj.charge_bh    ?? null
+      };
 
-    // Truncate original contract end_date to day before successorStart
-    let truncatedEnd = addDays(successorStart, -1);
-    if (truncatedEnd < contract.start_date) truncatedEnd = contract.start_date;
-
-    try {
-      if (truncatedEnd !== contract.end_date) {
-        await fetch(
-          `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contract.id)}`,
-          {
-            method: 'PATCH',
-            headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-            body: JSON.stringify({ end_date: truncatedEnd, updated_at: nowIso() })
+      const payOld = (oldMethod === 'PAYE')
+        ? {
+            day:   rj.paye_day   ?? null,
+            night: rj.paye_night ?? null,
+            sat:   rj.paye_sat   ?? null,
+            sun:   rj.paye_sun   ?? null,
+            bh:    rj.paye_bh    ?? null
           }
-        );
+        : {
+            day:   rj.umb_day   ?? null,
+            night: rj.umb_night ?? null,
+            sat:   rj.umb_sat   ?? null,
+            sun:   rj.umb_sun   ?? null,
+            bh:    rj.umb_bh    ?? null
+          };
+
+      // Build successor rates_json by copying existing and overwriting only
+      // the pay buckets for the new method where we can compute margin.
+      let newRates = { ...rj };
+
+      for (const b of buckets) {
+        const ch = charge[b];
+        const po = payOld[b];
+        const pn = computeNewPayBucket(ch, po, oldMethod, newMethod, erniMult);
+        if (pn == null || !Number.isFinite(pn)) continue;
+
+        const rounded = +(+pn).toFixed(2);
+        if (newMethod === 'PAYE') {
+          newRates[`paye_${b}`] = rounded;
+        } else {
+          newRates[`umb_${b}`] = rounded;
+        }
+      }
+
+      // 🔹 Prune incompatible buckets: keep only new method + charge_*
+      const keepPrefixes =
+        newMethod === 'PAYE'     ? ['paye_', 'charge_'] :
+        newMethod === 'UMBRELLA' ? ['umb_',  'charge_'] :
+                                   ['charge_'];
+      const cleanedRates = {};
+      for (const [key, val] of Object.entries(newRates)) {
+        if (keepPrefixes.some(pre => key.startsWith(pre))) {
+          cleanedRates[key] = val;
+        }
+      }
+      newRates = cleanedRates;
+
+      // Prepare overrides for successor
+      const overrides = {
+        start_date: successorStart,
+        end_date: contract.end_date,
+        pay_method_snapshot: newMethod,
+        rates_json: newRates,
+        std_schedule_json: contract.std_schedule_json || null,
+        std_hours_json: contract.std_hours_json || null
+      };
+
+      // Create successor contract
+      try {
+        successor = await cloneContractForRatesChange(env, contract, overrides);
+      } catch (e) {
+        contractHadError = true;
+        try { console.warn('[PAY-METHOD-CHANGE] cloneContractForRatesChange failed', contract.id, e); } catch {}
+      }
+
+      if (!successor || !successor.id) {
+        contractHadError = true;
+      }
+
+      if (!contractHadError) {
+        // Truncate original contract end_date to day before successorStart
+        let truncatedEnd = addDays(successorStart, -1);
+        if (truncatedEnd < contract.start_date) truncatedEnd = contract.start_date;
+
+        try {
+          if (truncatedEnd !== contract.end_date) {
+            await fetch(
+              `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contract.id)}`,
+              {
+                method: 'PATCH',
+                headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+                body: JSON.stringify({ end_date: truncatedEnd, updated_at: nowIso() })
+              }
+            );
+          }
+        } catch (e) {
+          contractHadError = true;
+          try { console.warn('[PAY-METHOD-CHANGE] truncate original contract failed', contract.id, e); } catch {}
+        }
+
+        // Move outstanding weeks + timesheets
+        if (!contractHadError) {
+          try {
+            const mig = await migrateOutstandingWeeksToNewContract(env, contract.id, successor.id, outstandingWeeks);
+            contractMigratedWeeks = (mig.week_ids || []).length;
+            totalWeeksMigrated   += contractMigratedWeeks;
+            for (const tsid of (mig.timesheet_ids || [])) {
+              allTsIds.push(tsid);
+            }
+          } catch (e) {
+            contractHadError = true;
+            try { console.warn('[PAY-METHOD-CHANGE] migrateOutstandingWeeksToNewContract failed', contract.id, e); } catch {}
+          }
+        }
+
+        // Optionally prune any future weeks beyond truncatedEnd without TS
+        if (!contractHadError) {
+          try {
+            await fetch(
+              `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+              `?contract_id=eq.${enc(contract.id)}` +
+              `&week_ending_date=gt.${enc(truncatedEnd)}` +
+              `&timesheet_id=is.null`,
+              {
+                method: 'DELETE',
+                headers: { ...sbHeaders(env), Prefer: 'return=minimal' }
+              }
+            );
+          } catch (e) {
+            // pruning failure is non-fatal for migration success,
+            // so we only log it and do not mark the contract as failed
+            try { console.warn('[PAY-METHOD-CHANGE] prune future empty weeks failed', contract.id, e); } catch {}
+          }
+        }
       }
     } catch (e) {
-      try { console.warn('[PAY-METHOD-CHANGE] truncate original contract failed', contract.id, e); } catch {}
+      contractHadError = true;
+      try { console.warn('[PAY-METHOD-CHANGE] unexpected error during contract migration', contract.id, e); } catch {}
     }
 
-    // Move outstanding weeks + timesheets
-    let mig;
-    try {
-      mig = await migrateOutstandingWeeksToNewContract(env, contract.id, successor.id, outstandingWeeks);
-    } catch (e) {
-      try { console.warn('[PAY-METHOD-CHANGE] migrateOutstandingWeeksToNewContract failed', contract.id, e); } catch {}
+    if (contractHadError) {
+      migrationErrors.push(String(contract.id));
       continue;
     }
 
-    oldContractIds.push(contract.id);
-    newContractIds.push(successor.id);
-    totalWeeksMigrated += (mig.week_ids || []).length;
-    for (const tsid of (mig.timesheet_ids || [])) {
-      allTsIds.push(tsid);
-    }
-
-    // Optionally prune any future weeks beyond truncatedEnd without TS
-    try {
-      await fetch(
-        `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-        `?contract_id=eq.${enc(contract.id)}` +
-        `&week_ending_date=gt.${enc(truncatedEnd)}` +
-        `&timesheet_id=is.null`,
-        {
-          method: 'DELETE',
-          headers: { ...sbHeaders(env), Prefer: 'return=minimal' }
-        }
-      );
-    } catch (e) {
-      try { console.warn('[PAY-METHOD-CHANGE] prune future empty weeks failed', contract.id, e); } catch {}
+    // Only record contracts that actually migrated at least one week
+    if (successor && successor.id && contractMigratedWeeks > 0) {
+      oldContractIds.push(contract.id);
+      newContractIds.push(successor.id);
     }
   }
 
   const uniqueTsIds = Array.from(new Set(allTsIds.map(String)));
+
+  // If any contract failed migration, DO NOT flip candidate pay_method
+  if (migrationErrors.length > 0) {
+    return withCORS(env, req, badRequest(
+      `Failed to update all contracts for pay-method change. ` +
+      `Contracts with errors: ${migrationErrors.join(', ')}`
+    ));
+  }
 
   // -------- Update candidate.pay_method (and umbrella_id if required) --------
   try {
@@ -15178,6 +15277,7 @@ export async function handleCandidatePayMethodChange(env, req, candidateId) {
   }));
 }
 
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper: computeBucketRatesPreservingMargin
 // Given an existing rates_json and a PAYE↔UMBRELLA flip, compute new pay buckets
@@ -15192,7 +15292,21 @@ export async function handleCandidatePayMethodChange(env, req, candidateId) {
 // Returns: a NEW object (cloned from oldRates) with updated paye_* or umb_* buckets
 //          for the newMethod; charges and the other method’s buckets are left as-is.
 // ─────────────────────────────────────────────────────────────────────────────
-function computeBucketRatesPreservingMargin(oldMethod, newMethod, oldRates, erniMult) {
+// Compute new PAYE/UMBRELLA pay buckets so that per-bucket margin is preserved,
+// always using the current ERNI percentage from settings_defaults.
+//
+// - oldMethod: 'PAYE' | 'UMBRELLA'
+// - newMethod: 'PAYE' | 'UMBRELLA'
+// - oldRates:  the existing rates_json (object or JSON string) with
+//              charge_day/night/sat/sun/bh and paye_*/umb_*
+//
+// Returns: a NEW object cloned from oldRates with updated paye_* or umb_*
+//          buckets for the new method. Charges and the other method’s buckets
+//          are left as-is.
+//
+// NOTE: This helper is async because it fetches erni_pct from settings_defaults.
+//
+async function computeBucketRatesPreservingMargin(env, oldMethod, newMethod, oldRates) {
   const srcMethod = String(oldMethod || '').toUpperCase();
   const dstMethod = String(newMethod || '').toUpperCase();
 
@@ -15205,9 +15319,31 @@ function computeBucketRatesPreservingMargin(oldMethod, newMethod, oldRates, erni
 
   const out = { ...base };
 
-  // Normalise ERNI multiplier
-  let m = Number(erniMult);
-  if (!Number.isFinite(m) || m <= 0) m = 1;
+  // ─────────────────────────────────────────────────────────────
+  // Fetch ERNI from settings_defaults (latest effective_from)
+  // ─────────────────────────────────────────────────────────────
+  let erniMult = 1;
+  try {
+    const url =
+      `${env.SUPABASE_URL}/rest/v1/settings_defaults` +
+      `?select=erni_pct,effective_from` +
+      `&order=effective_from.desc` +
+      `&limit=1`;
+    const { rows } = await sbFetch(env, url);
+    const row = Array.isArray(rows) ? rows[0] : rows;
+    let pct = row && row.erni_pct != null ? Number(row.erni_pct) : 0;
+
+    // Support 15 vs 0.15 semantics like elsewhere:
+    // if > 1 we treat as a percentage (e.g. 15 → 0.15)
+    if (!Number.isFinite(pct)) pct = 0;
+    if (pct > 1) pct = pct / 100;
+
+    erniMult = 1 + pct;  // ERNI_MULT = 1 + erni_pct
+    if (!Number.isFinite(erniMult) || erniMult <= 0) erniMult = 1;
+  } catch (e) {
+    try { console.warn('[RATES] computeBucketRatesPreservingMargin: failed to load ERNI from settings_defaults, defaulting to 1', e); } catch {}
+    erniMult = 1;
+  }
 
   const buckets = ['day', 'night', 'sat', 'sun', 'bh'];
 
@@ -15218,7 +15354,7 @@ function computeBucketRatesPreservingMargin(oldMethod, newMethod, oldRates, erni
   };
 
   for (const b of buckets) {
-    const chargeKey = `charge_${b}`;
+    const chargeKey  = `charge_${b}`;
     const payPayeKey = `paye_${b}`;
     const payUmbKey  = `umb_${b}`;
 
@@ -15232,23 +15368,26 @@ function computeBucketRatesPreservingMargin(oldMethod, newMethod, oldRates, erni
           ? toNumOrNull(base[payUmbKey])
           : null;
 
+    // If we don’t have a valid old pay, we can’t preserve margin for this bucket.
     if (payOld == null) continue;
 
     // Compute margin under the original method
     let margin;
     if (srcMethod === 'PAYE') {
-      margin = charge - (payOld * m);
+      // Margin(PAYE) = charge - pay * ERNI_MULT
+      margin = charge - (payOld * erniMult);
     } else {
-      // Umbrella or unknown → treat as Umbrella (no ERNI)
+      // Margin(Umbrella) = charge - pay
       margin = charge - payOld;
     }
 
     // Derive new pay keeping margin constant
     let payNew;
     if (dstMethod === 'PAYE') {
-      payNew = (charge - margin) / m;
+      // New PAYE pay = (charge - margin) / ERNI_MULT
+      payNew = (charge - margin) / erniMult;
     } else {
-      // dstMethod === 'UMBRELLA' (or anything else → treat like Umbrella)
+      // New Umbrella pay = charge - margin
       payNew = charge - margin;
     }
 
@@ -20559,7 +20698,7 @@ if (req.method === 'GET' && p === '/api/rates/presets') {
       if (req.method === 'POST' && p === '/api/files/presign-download')      return handleFilePresignDownload(env, req);
       if (req.method === 'GET'  && p === '/api/files/download')              return handleFilesDownload(env, req);
 
-      // =============================================================================
+         // =============================================================================
       // NEW ROUTES — Contracts & Weeks
       // =============================================================================
 
@@ -20567,13 +20706,12 @@ if (req.method === 'GET' && p === '/api/rates/presets') {
       if (req.method === 'POST' && p === '/api/contracts') return handleContractsCreate(env, req);
       if (req.method === 'GET'  && p === '/api/contracts') return handleContractsList(env, req);
       
-       {
-    const m = matchPath(p, '/api/contracts/:id/duplicate');
-    if (m && req.method === 'POST') {
-      return handleContractsDuplicate(env, req, m.id);
-    }
-  }
-      
+      {
+        const m = matchPath(p, '/api/contracts/:id/duplicate');
+        if (m && req.method === 'POST') {
+          return handleContractsDuplicate(env, req, m.id);
+        }
+      }
       
       {
         const m = matchPath(p, '/api/contracts/:id');
@@ -20581,7 +20719,6 @@ if (req.method === 'GET' && p === '/api/rates/presets') {
         if (m && req.method === 'PATCH')  return handleContractsUpdate(env, req, m.id);
         if (m && req.method === 'DELETE') return handleContractsDelete(env, req, m.id);
         if (m && req.method === 'PUT')    return handleContractsReplace(env, req, m.id); 
-     
       }
 
       {
@@ -20592,6 +20729,14 @@ if (req.method === 'GET' && p === '/api/rates/presets') {
         const m = matchPath(p, '/api/contracts/:id/clone-and-extend');
         if (m && req.method === 'POST') return handleContractsCloneAndExtend(env, req, m.id);
       }
+
+      // NEW: change contract rates (preview + apply)
+      {
+        const m = matchPath(p, '/api/contracts/:id/change-rates-outstanding');
+        if (m && req.method === 'GET')  return handleContractChangeRatesPreview(env, req, m.id);
+        if (m && req.method === 'POST') return handleContractChangeRatesOutstanding(env, req, m.id);
+      }
+
       {
         const m = matchPath(p, '/api/contracts/:id/calendar');
         if (m && req.method === 'GET') return handleContractsCalendar(env, req, m.id);
@@ -20600,6 +20745,7 @@ if (req.method === 'GET' && p === '/api/rates/presets') {
         const m = matchPath(p, '/api/contracts/:id/skip-weeks');
         if (m && req.method === 'POST') return handleContractsSkipWeeks(env, req, m.id);
       }
+
       // POST /api/contracts/check-timesheet-boundary
 if (req.method === 'POST' && p === '/api/contracts/check-timesheet-boundary') {
   return await handleContractsCheckTimesheetBoundary(env, req);
