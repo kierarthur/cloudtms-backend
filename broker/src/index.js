@@ -14061,6 +14061,1278 @@ async function handlePatchClientDefault(env, req, rateId) {
 }
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+export async function handleContractChangeRatesOutstanding(env, req, contractId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!contractId) return withCORS(env, req, badRequest('contract_id required'));
+
+  const method = (req.method || 'GET').toUpperCase();
+  const url = new URL(req.url);
+
+  // Small helper: normalise YYYY-MM-DD or ISO into YMD
+  const toYmdSafe = (val) => {
+    if (!val) return null;
+    try {
+      return toYmd(val); // existing helper already in this file 
+    } catch {
+      return null;
+    }
+  };
+
+  // Shared helper: load outstanding weeks for this contract
+  const findOutstandingWeeks = async (cutoffYmd /* may be null */) => {
+    const filters = [
+      `contract_id=eq.${enc(contractId)}`,
+      'additional_seq=eq.0' // only primary weeks; additional handled manually if needed
+    ];
+    if (cutoffYmd) {
+      filters.push(`week_ending_date=gte.${enc(cutoffYmd)}`);
+    }
+
+    const cwUrl =
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+      `?select=id,week_ending_date,additional_seq,status,timesheet_id` +
+      `&${filters.join('&')}` +
+      `&order=week_ending_date.asc,additional_seq.asc`;
+
+    const { rows: weeks } = await sbFetch(env, cwUrl);
+    const list = Array.isArray(weeks) ? weeks : [];
+
+    const tsIds = Array.from(
+      new Set(list.map(w => w.timesheet_id).filter(Boolean).map(String))
+    );
+
+    const finByTsId = new Map();
+
+    if (tsIds.length) {
+      const finUrl =
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?is_current=eq.true` +
+        `&timesheet_id=in.(${tsIds.map(enc).join(',')})` +
+        `&select=timesheet_id,locked_by_invoice_id,paid_at_utc`;
+      const { rows: fins } = await sbFetch(env, finUrl);
+      for (const r of (fins || [])) {
+        if (r && r.timesheet_id) {
+          finByTsId.set(String(r.timesheet_id), r);
+        }
+      }
+    }
+
+    return list.map(w => {
+      const tsId = w.timesheet_id ? String(w.timesheet_id) : null;
+      const fin = tsId ? finByTsId.get(tsId) || null : null;
+      const isInvoiced = !!(fin && fin.locked_by_invoice_id);
+      const isPaid = !!(fin && fin.paid_at_utc);
+      const isOutstanding = !tsId || (!isInvoiced && !isPaid);
+      return {
+        id: w.id,
+        week_ending_date: w.week_ending_date,
+        additional_seq: w.additional_seq,
+        status: w.status,
+        timesheet_id: w.timesheet_id || null,
+        is_invoiced: isInvoiced,
+        is_paid: isPaid,
+        outstanding: isOutstanding
+      };
+    }).filter(w => w.outstanding);
+  };
+
+  if (method === 'GET') {
+    // Preview mode: list all outstanding weeks for this contract (optionally from cutoff)
+    const cutoffRaw = url.searchParams.get('cutoff_week_ending_date') || null;
+    const cutoffYmd = toYmdSafe(cutoffRaw);
+
+    const contract = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contracts` +
+      `?id=eq.${enc(contractId)}&select=id,start_date,end_date,pay_method_snapshot`
+    );
+    if (!contract) {
+      return withCORS(env, req, notFound('Contract not found'));
+    }
+
+    const weeks = await findOutstandingWeeks(cutoffYmd);
+    return withCORS(env, req, ok({
+      contract_id: contract.id,
+      start_date: contract.start_date,
+      end_date: contract.end_date,
+      pay_method_snapshot: contract.pay_method_snapshot,
+      cutoff_week_ending_date: cutoffYmd || null,
+      weeks: weeks.map(w => ({
+        week_id: w.id,
+        week_ending_date: w.week_ending_date,
+        status: w.status,
+        timesheet_id: w.timesheet_id,
+        is_invoiced: w.is_invoiced,
+        is_paid: w.is_paid
+      }))
+    }));
+  }
+
+  if (method !== 'POST') {
+    return withCORS(env, req, badRequest('Only GET and POST are supported'));
+  }
+
+  // Mutation: create successor contract, move outstanding weeks, enqueue TSFIN
+  let body;
+  try {
+    body = await parseJSONBody(req);
+  } catch {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const cutoffYmd = toYmdSafe(body?.cutoff_week_ending_date);
+  if (!cutoffYmd) {
+    return withCORS(env, req, badRequest('cutoff_week_ending_date (YYYY-MM-DD) is required'));
+  }
+
+  const newRates = body?.rates_json && typeof body.rates_json === 'object'
+    ? body.rates_json
+    : null;
+
+  if (!newRates) {
+    return withCORS(env, req, badRequest('rates_json (object) is required'));
+  }
+
+  const newStdSchedule = (body && body.std_schedule_json && typeof body.std_schedule_json === 'object')
+    ? body.std_schedule_json
+    : null;
+
+  // Load original contract
+  const contract = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contracts` +
+    `?id=eq.${enc(contractId)}&select=*`
+  );
+  if (!contract) {
+    return withCORS(env, req, notFound('Contract not found'));
+  }
+
+  // Find all outstanding weeks at/after cutoff
+  const outstandingWeeks = await findOutstandingWeeks(cutoffYmd);
+  if (!outstandingWeeks.length) {
+    return withCORS(env, req, badRequest('No outstanding weeks at or after the cutoff date'));
+  }
+
+  // Earliest week-ending among those outstanding
+  const earliestWe = outstandingWeeks
+    .map(w => w.week_ending_date)
+    .filter(Boolean)
+    .sort()[0];
+
+  const earliestStart = addDays(earliestWe, -6); // start-of-week = week-ending minus 6 days 
+
+  // Derive std_hours_json from schedule if provided, else reuse existing
+  let successorStdSchedule = newStdSchedule != null ? newStdSchedule : (contract.std_schedule_json || null);
+  let successorStdHours = null;
+  if (successorStdSchedule) {
+    try {
+      successorStdHours = deriveStdHoursFromSchedule(successorStdSchedule);
+    } catch (e) {
+      return withCORS(env, req, badRequest(e?.message || 'Invalid std_schedule_json'));
+    }
+  } else {
+    successorStdHours = contract.std_hours_json || null;
+  }
+
+  // Create successor contract C2
+  const now = nowIso();
+  const successorPayload = {
+    candidate_id: contract.candidate_id,
+    client_id: contract.client_id,
+    role: contract.role,
+    band: contract.band,
+    display_site: contract.display_site,
+    ward_hint: contract.ward_hint,
+    start_date: earliestStart,
+    end_date: contract.end_date,
+    pay_method_snapshot: contract.pay_method_snapshot,
+    rates_json: newRates,
+    std_schedule_json: successorStdSchedule,
+    std_hours_json: successorStdHours,
+    bucket_labels_json: contract.bucket_labels_json,
+    default_submission_mode: contract.default_submission_mode,
+    week_ending_weekday_snapshot: contract.week_ending_weekday_snapshot,
+    auto_invoice: contract.auto_invoice,
+    require_reference_to_pay: contract.require_reference_to_pay,
+    require_reference_to_invoice: contract.require_reference_to_invoice,
+    mileage_pay_rate: contract.mileage_pay_rate,
+    mileage_charge_rate: contract.mileage_charge_rate,
+    created_at: now,
+    updated_at: now
+  };
+
+  const ins = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/contracts`,
+    {
+      method: 'POST',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify(successorPayload)
+    }
+  );
+  if (!ins.ok) {
+    const txt = await ins.text().catch(() => '');
+    return withCORS(env, req, serverError(`Failed to create successor contract: ${txt || ins.status}`));
+  }
+  const insJson = await ins.json().catch(() => []);
+  const successor = Array.isArray(insJson) ? insJson[0] : insJson;
+  if (!successor || !successor.id) {
+    return withCORS(env, req, serverError('Failed to create successor contract (no row returned)'));
+  }
+
+  // Truncate original contract end_date to the day before the new start
+  let truncatedEnd = addDays(earliestStart, -1);
+  if (truncatedEnd < contract.start_date) truncatedEnd = contract.start_date;
+
+  try {
+    if (truncatedEnd !== contract.end_date) {
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+          body: JSON.stringify({ end_date: truncatedEnd, updated_at: nowIso() })
+        }
+      );
+    }
+  } catch (e) {
+    // Non-fatal, but log
+    try { console.warn('[CONTRACTS][CHANGE-RATES] truncate original failed', e); } catch {}
+  }
+
+  // Move outstanding weeks + timesheets to successor
+  const weekIds = outstandingWeeks.map(w => w.id).filter(Boolean);
+  const tsIds = Array.from(
+    new Set(outstandingWeeks.map(w => w.timesheet_id).filter(Boolean).map(String))
+  );
+
+  if (weekIds.length) {
+    const cwPatchUrl =
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+      `?id=in.(${weekIds.map(enc).join(',')})`;
+    await fetch(cwPatchUrl, {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify({ contract_id: successor.id, updated_at: nowIso() })
+    });
+  }
+
+  if (tsIds.length) {
+    const tsPatchUrl =
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=in.(${tsIds.map(enc).join(',')})&is_current=eq.true`;
+    await fetch(tsPatchUrl, {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify({ contract_id: successor.id, updated_at: nowIso() })
+    });
+  }
+
+  // Clean up any future weeks on the old contract without timesheets (beyond truncated end)
+  try {
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+      `?contract_id=eq.${enc(contractId)}` +
+      `&week_ending_date=gt.${enc(truncatedEnd)}` +
+      `&timesheet_id=is.null`,
+      {
+        method: 'DELETE',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' }
+      }
+    );
+  } catch (e) {
+    try { console.warn('[CONTRACTS][CHANGE-RATES] prune future empty weeks failed', e); } catch {}
+  }
+
+  // Generate future weeks for successor (non-fatal if this fails) :contentReference[oaicite:2]{index=2}
+  try {
+    if (typeof handleContractsGenerateWeeks === 'function') {
+      await handleContractsGenerateWeeks(env, req, successor.id);
+    }
+  } catch (e) {
+    try { console.warn('[CONTRACTS][CHANGE-RATES] generate-weeks for successor failed', e); } catch {}
+  }
+
+  // Enqueue TSFIN recompute for moved timesheets with reason=RATE_CHANGED 
+  try {
+    for (const tsid of tsIds) {
+      await sbRpc(env, 'enqueue_ts_financials', {
+        timesheet_id: tsid,
+        reason: 'RATE_CHANGED'
+      });
+    }
+  } catch (e) {
+    try { console.warn('[CONTRACTS][CHANGE-RATES] enqueue_ts_financials failed', e); } catch {}
+  }
+
+  return withCORS(env, req, ok({
+    old_contract_id: contract.id,
+    new_contract_id: successor.id,
+    cutoff_week_ending_date: cutoffYmd,
+    weeks_migrated: weekIds.length,
+    timesheets_migrated: tsIds.length
+  }));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helper: findOutstandingWeeksForContract
+// A "week" is outstanding if:
+//   - it has no timesheet, OR
+//   - its current TSFIN is neither invoiced (locked_by_invoice_id) nor paid (paid_at_utc)
+// Optional cutoffWeekEnding (YYYY-MM-DD or ISO) limits to week_ending_date >= cutoff.
+// Returns an array of rows: { id, week_ending_date, additional_seq, status, timesheet_id, is_invoiced, is_paid }
+// ─────────────────────────────────────────────────────────────────────────────
+async function findOutstandingWeeksForContract(env, contractId, cutoffWeekEnding) {
+  if (!contractId) return [];
+
+  let cutoffYmd = null;
+  if (cutoffWeekEnding) {
+    try {
+      cutoffYmd = toYmd(cutoffWeekEnding);
+    } catch {
+      cutoffYmd = null;
+    }
+  }
+
+  // 1) Load contract_weeks for this contract (optionally from cutoff onwards)
+  let q =
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+    `?contract_id=eq.${enc(contractId)}` +
+    `&select=id,contract_id,week_ending_date,additional_seq,status,timesheet_id`;
+
+  if (cutoffYmd) {
+    q += `&week_ending_date=gte.${enc(cutoffYmd)}`;
+  }
+
+  q += `&order=week_ending_date.asc,additional_seq.asc`;
+
+  const { rows: weekRows } = await sbFetch(env, q);
+  const weeks = Array.isArray(weekRows) ? weekRows : [];
+  if (!weeks.length) return [];
+
+  // 2) Load current TSFIN rows for attached timesheets (if any)
+  const tsIds = Array.from(
+    new Set(
+      weeks
+        .map(w => w.timesheet_id)
+        .filter(Boolean)
+        .map(String)
+    )
+  );
+
+  const finByTsId = new Map();
+  if (tsIds.length) {
+    const inList = tsIds.map(enc).join(',');
+    const finQ =
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?is_current=eq.true` +
+      `&timesheet_id=in.(${inList})` +
+      `&select=timesheet_id,locked_by_invoice_id,paid_at_utc`;
+    const { rows: finRows } = await sbFetch(env, finQ);
+    for (const r of (finRows || [])) {
+      if (r && r.timesheet_id) {
+        finByTsId.set(String(r.timesheet_id), r);
+      }
+    }
+  }
+
+  // 3) Classify each week as outstanding or not
+  const out = [];
+  for (const w of weeks) {
+    const tsId = w.timesheet_id ? String(w.timesheet_id) : null;
+    const fin = tsId ? (finByTsId.get(tsId) || null) : null;
+
+    const isInvoiced = !!(fin && fin.locked_by_invoice_id);
+    const isPaid     = !!(fin && fin.paid_at_utc);
+    const isOutstanding = !tsId || (!isInvoiced && !isPaid);
+
+    if (!isOutstanding) continue;
+
+    out.push({
+      id: w.id,
+      week_ending_date: w.week_ending_date,
+      additional_seq: w.additional_seq,
+      status: w.status,
+      timesheet_id: w.timesheet_id || null,
+      is_invoiced: isInvoiced,
+      is_paid: isPaid
+    });
+  }
+
+  return out;
+}
+
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helper: cloneContractForRatesChange
+// Clone a contract row into a new one, applying overrides:
+//   - overrides.start_date / end_date
+//   - overrides.rates_json
+//   - overrides.std_schedule_json / std_hours_json
+//   - overrides.pay_method_snapshot, bucket_labels_json, mileage_* etc (optional)
+// Returns the newly created contract row (successor).
+// ─────────────────────────────────────────────────────────────────────────────
+async function cloneContractForRatesChange(env, contract, overrides = {}) {
+  if (!contract || !contract.id) {
+    throw new Error('cloneContractForRatesChange: source contract missing or invalid');
+  }
+
+  const ov = overrides || {};
+
+  const start_date = ov.start_date || contract.start_date;
+  const end_date   = ov.end_date   || contract.end_date;
+
+  // std_schedule_json / std_hours_json composition:
+  // 1) prefer explicit override std_schedule_json if supplied
+  // 2) else use contract.std_schedule_json
+  // 3) derive std_hours_json from schedule if present
+  // 4) else fall back to override.std_hours_json or contract.std_hours_json
+  let successorStdSchedule =
+    (Object.prototype.hasOwnProperty.call(ov, 'std_schedule_json'))
+      ? (ov.std_schedule_json || null)
+      : (contract.std_schedule_json || null);
+
+  // Handle stringified JSON defensively
+  if (successorStdSchedule && typeof successorStdSchedule === 'string') {
+    try { successorStdSchedule = JSON.parse(successorStdSchedule); } catch { /* leave as-is; deriveStdHoursFromSchedule will throw */ }
+  }
+
+  let successorStdHours = null;
+  if (successorStdSchedule && typeof successorStdSchedule === 'object') {
+    // Derive hours from schedule
+    successorStdHours = deriveStdHoursFromSchedule(successorStdSchedule);
+  } else {
+    successorStdHours =
+      (Object.prototype.hasOwnProperty.call(ov, 'std_hours_json'))
+        ? (ov.std_hours_json || null)
+        : (contract.std_hours_json || null);
+  }
+
+  const now = nowIso();
+
+  const payload = [{
+    // Identity / linkage
+    candidate_id: (Object.prototype.hasOwnProperty.call(ov, 'candidate_id') ? ov.candidate_id : contract.candidate_id),
+    client_id:    (Object.prototype.hasOwnProperty.call(ov, 'client_id')    ? ov.client_id    : contract.client_id),
+    role:         (Object.prototype.hasOwnProperty.call(ov, 'role')         ? ov.role         : contract.role),
+    band:         (Object.prototype.hasOwnProperty.call(ov, 'band')         ? ov.band         : contract.band),
+    display_site: (Object.prototype.hasOwnProperty.call(ov, 'display_site') ? ov.display_site : contract.display_site),
+    ward_hint:    (Object.prototype.hasOwnProperty.call(ov, 'ward_hint')    ? ov.ward_hint    : contract.ward_hint),
+
+    // Window
+    start_date,
+    end_date,
+
+    // Pay method + rates
+    pay_method_snapshot: (Object.prototype.hasOwnProperty.call(ov, 'pay_method_snapshot')
+      ? ov.pay_method_snapshot
+      : contract.pay_method_snapshot),
+    rates_json: (Object.prototype.hasOwnProperty.call(ov, 'rates_json')
+      ? (ov.rates_json || {})
+      : (contract.rates_json || {})),
+
+    // Submission + week ending policy
+    default_submission_mode: (Object.prototype.hasOwnProperty.call(ov, 'default_submission_mode')
+      ? ov.default_submission_mode
+      : contract.default_submission_mode),
+    week_ending_weekday_snapshot: (ov.week_ending_weekday_snapshot != null
+      ? Number(ov.week_ending_weekday_snapshot)
+      : Number(contract.week_ending_weekday_snapshot ?? 0)),
+
+    // Schedule template
+    std_schedule_json: successorStdSchedule,
+    std_hours_json:    successorStdHours,
+
+    // Labels / flags
+    bucket_labels_json: (Object.prototype.hasOwnProperty.call(ov, 'bucket_labels_json')
+      ? ov.bucket_labels_json
+      : (contract.bucket_labels_json || null)),
+
+    auto_invoice: contract.auto_invoice,
+    require_reference_to_pay: contract.require_reference_to_pay,
+    require_reference_to_invoice: contract.require_reference_to_invoice,
+
+    // Mileage (if present on contract / overrides)
+    mileage_pay_rate: (Object.prototype.hasOwnProperty.call(ov, 'mileage_pay_rate')
+      ? ov.mileage_pay_rate
+      : contract.mileage_pay_rate),
+    mileage_charge_rate: (Object.prototype.hasOwnProperty.call(ov, 'mileage_charge_rate')
+      ? ov.mileage_charge_rate
+      : contract.mileage_charge_rate),
+
+    created_at: now,
+    updated_at: now
+  }];
+
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/contracts`,
+    {
+      method: 'POST',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify(payload)
+    }
+  );
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`cloneContractForRatesChange: insert failed (${res.status}): ${txt}`);
+  }
+
+  const json = await res.json().catch(() => []);
+  const row = Array.isArray(json) ? json[0] : json;
+  if (!row || !row.id) {
+    throw new Error('cloneContractForRatesChange: insert returned no row');
+  }
+
+  return row;
+}
+
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helper: migrateOutstandingWeeksToNewContract
+// Move a set of outstanding contract_weeks (and their timesheets) from one
+// contract to another, and enqueue RATE_CHANGED TSFIN recomputes in outbox.
+//   - originalId: source contract_id
+//   - newId:      successor contract_id
+//   - weekRows:   array of { id, timesheet_id, ... } (e.g. from findOutstandingWeeksForContract)
+// Returns { week_ids, timesheet_ids }.
+// ─────────────────────────────────────────────────────────────────────────────
+async function migrateOutstandingWeeksToNewContract(env, originalId, newId, weekRows) {
+  const weeks = Array.isArray(weekRows) ? weekRows : [];
+  if (!weeks.length) {
+    return { week_ids: [], timesheet_ids: [] };
+  }
+
+  const now = nowIso();
+
+  const weekIds = weeks
+    .map(w => w && w.id)
+    .filter(Boolean)
+    .map(String);
+
+  const tsIds = Array.from(
+    new Set(
+      weeks
+        .map(w => w && w.timesheet_id)
+        .filter(Boolean)
+        .map(String)
+    )
+  );
+
+  // 1) Move contract_weeks to the new contract
+  if (weekIds.length) {
+    const inList = weekIds.map(enc).join(',');
+    const url =
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+      `?id=in.(${inList})`;
+    const res = await fetch(url, {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify({ contract_id: newId, updated_at: now })
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new Error(`migrateOutstandingWeeksToNewContract: PATCH contract_weeks failed (${res.status}): ${txt}`);
+    }
+  }
+
+  // 2) Move timesheets (current rows only) to the new contract
+  if (tsIds.length) {
+    const inList = tsIds.map(enc).join(',');
+    const url =
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=in.(${inList})` +
+      `&is_current=eq.true`;
+    const res = await fetch(url, {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify({ contract_id: newId, updated_at: now })
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new Error(`migrateOutstandingWeeksToNewContract: PATCH timesheets failed (${res.status}): ${txt}`);
+    }
+  }
+
+  // 3) Enqueue TSFIN recompute for moved timesheets with reason = RATE_CHANGED
+  if (tsIds.length) {
+    const items = tsIds.map(tsid => ({
+      timesheet_id: tsid,
+      reason: 'RATE_CHANGED',
+      attempt_count: 0,
+      next_attempt_at: now,
+      last_error: null,
+      created_at: now
+    }));
+
+    const outboxUrl =
+      `${env.SUPABASE_URL}/rest/v1/ts_financials_outbox` +
+      `?on_conflict=timesheet_id,reason`;
+
+    await fetch(outboxUrl, {
+      method: 'POST',
+      headers: { ...sbHeaders(env), Prefer: 'resolution=ignore-duplicates' },
+      body: JSON.stringify(items)
+    }).catch(() => {
+      // Best-effort; failures here shouldn't abort the migration, but will show up in logs.
+    });
+  }
+
+  return { week_ids: weekIds, timesheet_ids: tsIds };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helper: collectOutstandingWeeklyContractsForCandidate
+// Used by both preview + mutate handlers for PAYE↔UMBRELLA flips.
+// Returns an array of:
+// {
+//   contract_id, client_id, client_name, role, band,
+//   date_range: { start_date, end_date },
+//   pay_method_snapshot,
+//   outstanding_weeks, first_outstanding_we, last_outstanding_we
+// }
+// ─────────────────────────────────────────────────────────────────────────────
+async function collectOutstandingWeeklyContractsForCandidate(env, candidateId, newMethod, originalMethod) {
+  if (!candidateId) return [];
+
+  const orig = (originalMethod || '').toUpperCase();
+  const target = (newMethod || '').toUpperCase();
+
+  if (!orig || (orig !== 'PAYE' && orig !== 'UMBRELLA')) return [];
+  if (!target || (target !== 'PAYE' && target !== 'UMBRELLA')) return [];
+
+  // 1) Load contracts for this candidate with pay_method_snapshot = originalMethod
+  const url =
+    `${env.SUPABASE_URL}/rest/v1/contracts` +
+    `?candidate_id=eq.${enc(candidateId)}` +
+    `&pay_method_snapshot=eq.${enc(orig)}` +
+    `&select=id,client_id,role,band,start_date,end_date,pay_method_snapshot`;
+
+  const { rows: conRows } = await sbFetch(env, url);
+  const contracts = Array.isArray(conRows) ? conRows : [];
+  if (!contracts.length) return [];
+
+  // 2) For each contract, find outstanding weeks using the shared helper
+  const summaries = [];
+  const clientIds = new Set();
+
+  for (const c of contracts) {
+    if (!c || !c.id) continue;
+    const weeks = await findOutstandingWeeksForContract(env, c.id, null);
+    if (!weeks || !weeks.length) continue;
+
+    const dates = weeks
+      .map(w => w.week_ending_date)
+      .filter(Boolean)
+      .sort();
+
+    if (!dates.length) continue;
+
+    clientIds.add(c.client_id);
+
+    summaries.push({
+      contract_id: c.id,
+      client_id: c.client_id || null,
+      client_name: null, // filled in below
+      role: c.role || null,
+      band: c.band ?? null,
+      date_range: { start_date: c.start_date || null, end_date: c.end_date || null },
+      pay_method_snapshot: c.pay_method_snapshot || null,
+      outstanding_weeks: weeks.length,
+      first_outstanding_we: dates[0],
+      last_outstanding_we: dates[dates.length - 1]
+    });
+  }
+
+  if (!summaries.length) return [];
+
+  // 3) Load client names in one go
+  if (clientIds.size) {
+    const idsList = Array.from(clientIds).filter(Boolean).map(String);
+    if (idsList.length) {
+      const clientsUrl =
+        `${env.SUPABASE_URL}/rest/v1/clients` +
+        `?id=in.(${idsList.map(enc).join(',')})` +
+        `&select=id,name`;
+      const { rows: cliRows } = await sbFetch(env, clientsUrl);
+      const byId = new Map((cliRows || []).map(r => [String(r.id), r.name || null]));
+
+      for (const s of summaries) {
+        if (s.client_id) {
+          s.client_name = byId.get(String(s.client_id)) || null;
+        }
+      }
+    }
+  }
+
+  return summaries;
+}
+
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Endpoint: GET /api/candidates/:id/pay-method-change-preview
+// Preview which contracts would be affected by PAYE↔UMBRELLA flip.
+// ─────────────────────────────────────────────────────────────────────────────
+export async function handleCandidatePayMethodChangePreview(env, req, candidateId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
+  if (!candidateId) return withCORS(env, req, badRequest('candidate_id required'));
+
+  const urlObj = new URL(req.url);
+  const rawNew = (urlObj.searchParams.get('new_method') || '').toUpperCase();
+  const newMethod = rawNew === 'PAYE' || rawNew === 'UMBRELLA' ? rawNew : null;
+
+  if (!newMethod) {
+    return withCORS(env, req, badRequest('new_method must be PAYE or UMBRELLA'));
+  }
+
+  // Load candidate and normalise originalMethod
+  const cand = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/candidates` +
+    `?id=eq.${enc(candidateId)}&select=id,pay_method`
+  );
+  if (!cand) {
+    return withCORS(env, req, notFound('Candidate not found'));
+  }
+
+  const originalMethod = String(cand.pay_method || '').toUpperCase() || null;
+  if (!originalMethod || (originalMethod !== 'PAYE' && originalMethod !== 'UMBRELLA')) {
+    return withCORS(env, req, badRequest('Candidate pay_method must be PAYE or UMBRELLA for this operation'));
+  }
+  if (originalMethod === newMethod) {
+    return withCORS(env, req, badRequest('Candidate already has this pay method'));
+  }
+
+  const contracts = await collectOutstandingWeeklyContractsForCandidate(env, candidateId, newMethod, originalMethod);
+
+  return withCORS(env, req, ok({
+    candidate_id: cand.id,
+    original_method: originalMethod,
+    new_method: newMethod,
+    contracts
+  }));
+}
+
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Endpoint: POST /api/candidates/:id/pay-method-change
+// Perform PAYE↔UMBRELLA flip across all relevant weekly contracts:
+//   • For each affected contract: create successor with new pay_method_snapshot
+//     and recomputed per-bucket pay so margin stays the same.
+//   • Migrate outstanding weeks + timesheets.
+//   • Update candidate.pay_method (and umbrella_id if desired).
+// ─────────────────────────────────────────────────────────────────────────────
+export async function handleCandidatePayMethodChange(env, req, candidateId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
+  if (!candidateId) return withCORS(env, req, badRequest('candidate_id required'));
+
+  // -------- Body parsing --------
+  let body;
+  try {
+    body = await parseJSONBody(req);
+  } catch {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const rawNew = String(body?.new_method || '').toUpperCase();
+  const newMethod = rawNew === 'PAYE' || rawNew === 'UMBRELLA' ? rawNew : null;
+
+  if (!newMethod) {
+    return withCORS(env, req, badRequest('new_method must be PAYE or UMBRELLA'));
+  }
+
+  const contractIdsFilter = Array.isArray(body?.contract_ids)
+    ? Array.from(new Set(body.contract_ids.map(String).filter(Boolean)))
+    : null;
+  const contractIdSet = contractIdsFilter && contractIdsFilter.length
+    ? new Set(contractIdsFilter)
+    : null;
+
+  // -------- Load candidate & validate flip --------
+  const cand = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/candidates` +
+    `?id=eq.${enc(candidateId)}&select=id,pay_method,umbrella_id`
+  );
+  if (!cand) {
+    return withCORS(env, req, notFound('Candidate not found'));
+  }
+
+  const originalMethod = String(cand.pay_method || '').toUpperCase() || null;
+  if (!originalMethod || (originalMethod !== 'PAYE' && originalMethod !== 'UMBRELLA')) {
+    return withCORS(env, req, badRequest('Candidate pay_method must be PAYE or UMBRELLA for this operation'));
+  }
+  if (originalMethod === newMethod) {
+    return withCORS(env, req, badRequest('Candidate already has this pay method'));
+  }
+
+  // When moving TO umbrella, ensure an umbrella_id exists
+  if (newMethod === 'UMBRELLA' && !cand.umbrella_id) {
+    return withCORS(env, req, badRequest('Candidate must have an umbrella_id before moving to UMBRELLA'));
+  }
+
+  // -------- Find contracts with outstanding weeks --------
+  const previews = await collectOutstandingWeeklyContractsForCandidate(env, candidateId, newMethod, originalMethod);
+
+  let candidatesContracts = previews;
+  if (contractIdSet) {
+    candidatesContracts = previews.filter(p => contractIdSet.has(String(p.contract_id)));
+  }
+
+  // No contracts to touch → just flip candidate.pay_method and return
+  if (!candidatesContracts.length) {
+    try {
+      const patch = {
+        pay_method: newMethod,
+        updated_at: nowIso()
+      };
+      // Clear umbrella_id if moving to PAYE
+      if (newMethod === 'PAYE') {
+        patch.umbrella_id = null;
+      }
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(candidateId)}`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+          body: JSON.stringify(patch)
+        }
+      );
+    } catch (e) {
+      return withCORS(env, req, badRequest(`Failed to update candidate pay_method: ${e?.message || e}`));
+    }
+
+    return withCORS(env, req, ok({
+      candidate_id: cand.id,
+      original_method: originalMethod,
+      new_method: newMethod,
+      old_contract_ids: [],
+      new_contract_ids: [],
+      affected_timesheet_ids: [],
+      summary: { contracts_changed: 0, weeks_migrated: 0 }
+    }));
+  }
+
+  // -------- Load full contract rows (single batch) --------
+  const idsToLoad = Array.from(new Set(candidatesContracts.map(c => String(c.contract_id)).filter(Boolean)));
+  const conUrl =
+    `${env.SUPABASE_URL}/rest/v1/contracts` +
+    `?id=in.(${idsToLoad.map(enc).join(',')})&select=*`;
+  const { rows: conRows } = await sbFetch(env, conUrl);
+  const contractsById = new Map((conRows || []).map(r => [String(r.id), r]));
+
+  const oldContractIds = [];
+  const newContractIds = [];
+  const allTsIds = [];
+  let totalWeeksMigrated = 0;
+
+  // Local helper to compute new pay for one bucket preserving margin
+  function computeNewPayBucket(charge, payOld, oldMethod, newMethod, erniMult) {
+    if (charge == null || payOld == null) return null;
+    const ch = Number(charge);
+    const po = Number(payOld);
+    if (!Number.isFinite(ch) || !Number.isFinite(po)) return null;
+
+    let margin;
+    if (oldMethod === 'PAYE') {
+      margin = ch - po * erniMult;
+    } else {
+      margin = ch - po;
+    }
+
+    if (newMethod === 'PAYE') {
+      return (ch - margin) / erniMult;
+    }
+    // newMethod === 'UMBRELLA'
+    return ch - margin;
+  }
+
+  // Local helper: compute ERNI multiplier for (client, date)
+  async function getErniMultiplierForClient(env, clientId, activeYmd) {
+    try {
+      const policy = await loadPolicy(env, clientId, activeYmd);
+      let p = asNumber(policy?.erni_pct ?? 0, 0);
+      // Support 13.8 vs 0.138 (same as FE: if >1, interpret as percent)
+      if (p > 1) p = p / 100;
+      return 1 + p;
+    } catch {
+      return 1;
+    }
+  }
+
+  // -------- Process each contract --------
+  for (const summary of candidatesContracts) {
+    const contract = contractsById.get(String(summary.contract_id));
+    if (!contract) continue;
+
+    const oldMethod = String(contract.pay_method_snapshot || '').toUpperCase();
+    if (oldMethod !== originalMethod) {
+      // It might have been changed in the meantime; skip to be safe.
+      continue;
+    }
+
+    const outstandingWeeks = await findOutstandingWeeksForContract(env, contract.id, null);
+    if (!outstandingWeeks.length) continue;
+
+    // Earliest outstanding WE, start date = WE − 6 days
+    const weDates = outstandingWeeks.map(w => w.week_ending_date).filter(Boolean).sort();
+    const earliestWe = weDates[0];
+    const successorStart = addDays(earliestWe, -6);
+
+    // Compute ERNI multiplier from policy
+    const erniMult = await getErniMultiplierForClient(env, contract.client_id, earliestWe);
+
+    // Parse rates_json
+    let rj = contract.rates_json || {};
+    if (typeof rj === 'string') {
+      try { rj = JSON.parse(rj); } catch { rj = {}; }
+    }
+    if (!rj || typeof rj !== 'object') rj = {};
+
+    const buckets = ['day', 'night', 'sat', 'sun', 'bh'];
+
+    const charge = {
+      day:   rj.charge_day   ?? null,
+      night: rj.charge_night ?? null,
+      sat:   rj.charge_sat   ?? null,
+      sun:   rj.charge_sun   ?? null,
+      bh:    rj.charge_bh    ?? null
+    };
+
+    const payOld = (oldMethod === 'PAYE')
+      ? {
+          day:   rj.paye_day   ?? null,
+          night: rj.paye_night ?? null,
+          sat:   rj.paye_sat   ?? null,
+          sun:   rj.paye_sun   ?? null,
+          bh:    rj.paye_bh    ?? null
+        }
+      : {
+          day:   rj.umb_day   ?? null,
+          night: rj.umb_night ?? null,
+          sat:   rj.umb_sat   ?? null,
+          sun:   rj.umb_sun   ?? null,
+          bh:    rj.umb_bh    ?? null
+        };
+
+    // Build successor rates_json by copying existing and overwriting only
+    // the pay buckets for the new method where we can compute margin.
+    const newRates = { ...rj };
+
+    for (const b of buckets) {
+      const ch = charge[b];
+      const po = payOld[b];
+      const pn = computeNewPayBucket(ch, po, oldMethod, newMethod, erniMult);
+      if (pn == null || !Number.isFinite(pn)) continue;
+
+      const rounded = +(+pn).toFixed(2);
+      if (newMethod === 'PAYE') {
+        newRates[`paye_${b}`] = rounded;
+      } else {
+        newRates[`umb_${b}`] = rounded;
+      }
+    }
+
+    // Prepare overrides for successor
+    const overrides = {
+      start_date: successorStart,
+      end_date: contract.end_date,
+      pay_method_snapshot: newMethod,
+      rates_json: newRates,
+      std_schedule_json: contract.std_schedule_json || null,
+      std_hours_json: contract.std_hours_json || null
+    };
+
+    // Create successor contract
+    let successor;
+    try {
+      successor = await cloneContractForRatesChange(env, contract, overrides);
+    } catch (e) {
+      // If we can’t create successor, skip this contract (but keep going for others)
+      try { console.warn('[PAY-METHOD-CHANGE] cloneContractForRatesChange failed', contract.id, e); } catch {}
+      continue;
+    }
+
+    // Truncate original contract end_date to day before successorStart
+    let truncatedEnd = addDays(successorStart, -1);
+    if (truncatedEnd < contract.start_date) truncatedEnd = contract.start_date;
+
+    try {
+      if (truncatedEnd !== contract.end_date) {
+        await fetch(
+          `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contract.id)}`,
+          {
+            method: 'PATCH',
+            headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+            body: JSON.stringify({ end_date: truncatedEnd, updated_at: nowIso() })
+          }
+        );
+      }
+    } catch (e) {
+      try { console.warn('[PAY-METHOD-CHANGE] truncate original contract failed', contract.id, e); } catch {}
+    }
+
+    // Move outstanding weeks + timesheets
+    let mig;
+    try {
+      mig = await migrateOutstandingWeeksToNewContract(env, contract.id, successor.id, outstandingWeeks);
+    } catch (e) {
+      try { console.warn('[PAY-METHOD-CHANGE] migrateOutstandingWeeksToNewContract failed', contract.id, e); } catch {}
+      continue;
+    }
+
+    oldContractIds.push(contract.id);
+    newContractIds.push(successor.id);
+    totalWeeksMigrated += (mig.week_ids || []).length;
+    for (const tsid of (mig.timesheet_ids || [])) {
+      allTsIds.push(tsid);
+    }
+
+    // Optionally prune any future weeks beyond truncatedEnd without TS
+    try {
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+        `?contract_id=eq.${enc(contract.id)}` +
+        `&week_ending_date=gt.${enc(truncatedEnd)}` +
+        `&timesheet_id=is.null`,
+        {
+          method: 'DELETE',
+          headers: { ...sbHeaders(env), Prefer: 'return=minimal' }
+        }
+      );
+    } catch (e) {
+      try { console.warn('[PAY-METHOD-CHANGE] prune future empty weeks failed', contract.id, e); } catch {}
+    }
+  }
+
+  const uniqueTsIds = Array.from(new Set(allTsIds.map(String)));
+
+  // -------- Update candidate.pay_method (and umbrella_id if required) --------
+  try {
+    const patch = {
+      pay_method: newMethod,
+      updated_at: nowIso()
+    };
+    if (newMethod === 'PAYE') {
+      patch.umbrella_id = null;
+    }
+    // If newMethod === 'UMBRELLA', we leave umbrella_id as-is (already validated non-null).
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(candidateId)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        body: JSON.stringify(patch)
+      }
+    );
+  } catch (e) {
+    return withCORS(env, req, badRequest(`Failed to update candidate pay_method: ${e?.message || e}`));
+  }
+
+  return withCORS(env, req, ok({
+    candidate_id: cand.id,
+    original_method: originalMethod,
+    new_method: newMethod,
+    old_contract_ids: oldContractIds,
+    new_contract_ids: newContractIds,
+    affected_timesheet_ids: uniqueTsIds,
+    summary: {
+      contracts_changed: newContractIds.length,
+      weeks_migrated: totalWeeksMigrated
+    }
+  }));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helper: computeBucketRatesPreservingMargin
+// Given an existing rates_json and a PAYE↔UMBRELLA flip, compute new pay buckets
+// so that per-bucket margin is preserved.
+//
+// oldMethod: 'PAYE' | 'UMBRELLA'
+// newMethod: 'PAYE' | 'UMBRELLA'
+// oldRates:  the existing rates_json (object or JSON string) with:
+//            charge_day/night/sat/sun/bh and paye_*/umb_*
+// erniMult:  numeric ERNI multiplier (1 + erni_pct). If invalid, falls back to 1.
+//
+// Returns: a NEW object (cloned from oldRates) with updated paye_* or umb_* buckets
+//          for the newMethod; charges and the other method’s buckets are left as-is.
+// ─────────────────────────────────────────────────────────────────────────────
+function computeBucketRatesPreservingMargin(oldMethod, newMethod, oldRates, erniMult) {
+  const srcMethod = String(oldMethod || '').toUpperCase();
+  const dstMethod = String(newMethod || '').toUpperCase();
+
+  // Defensive clone + normalisation
+  let base = oldRates || {};
+  if (typeof base === 'string') {
+    try { base = JSON.parse(base); } catch { base = {}; }
+  }
+  if (!base || typeof base !== 'object') base = {};
+
+  const out = { ...base };
+
+  // Normalise ERNI multiplier
+  let m = Number(erniMult);
+  if (!Number.isFinite(m) || m <= 0) m = 1;
+
+  const buckets = ['day', 'night', 'sat', 'sun', 'bh'];
+
+  const toNumOrNull = (v) => {
+    if (v === null || v === undefined || v === '') return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  for (const b of buckets) {
+    const chargeKey = `charge_${b}`;
+    const payPayeKey = `paye_${b}`;
+    const payUmbKey  = `umb_${b}`;
+
+    const charge = toNumOrNull(base[chargeKey]);
+    if (charge == null) continue;
+
+    const payOld =
+      (srcMethod === 'PAYE')
+        ? toNumOrNull(base[payPayeKey])
+        : (srcMethod === 'UMBRELLA')
+          ? toNumOrNull(base[payUmbKey])
+          : null;
+
+    if (payOld == null) continue;
+
+    // Compute margin under the original method
+    let margin;
+    if (srcMethod === 'PAYE') {
+      margin = charge - (payOld * m);
+    } else {
+      // Umbrella or unknown → treat as Umbrella (no ERNI)
+      margin = charge - payOld;
+    }
+
+    // Derive new pay keeping margin constant
+    let payNew;
+    if (dstMethod === 'PAYE') {
+      payNew = (charge - margin) / m;
+    } else {
+      // dstMethod === 'UMBRELLA' (or anything else → treat like Umbrella)
+      payNew = charge - margin;
+    }
+
+    if (!Number.isFinite(payNew)) continue;
+
+    // Round to 2dp like elsewhere in the system
+    const rounded = +(+payNew).toFixed(2);
+
+    if (dstMethod === 'PAYE') {
+      out[payPayeKey] = rounded;
+    } else {
+      out[payUmbKey] = rounded;
+    }
+  }
+
+  return out;
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helper: enqueueTsfinRecomputeForTimesheets
+// Bulk-enqueue TSFIN recomputes for a list of timesheet IDs into ts_financials_outbox.
+//
+// timesheetIds: array of timesheet_id values
+// reason:       string reason, e.g. 'RATE_CHANGED' (default)
+//
+// Uses the same pattern as enqueueTsfinRecomputeForClient / enqueueManualTsfinRecalc:
+// inserts into ts_financials_outbox with on_conflict=timesheet_id,reason and
+// Prefer: resolution=ignore-duplicates.
+// ─────────────────────────────────────────────────────────────────────────────
+async function enqueueTsfinRecomputeForTimesheets(env, timesheetIds, reason = 'RATE_CHANGED') {
+  const ids = Array.isArray(timesheetIds)
+    ? Array.from(new Set(timesheetIds.map(String).filter(Boolean)))
+    : [];
+  if (!ids.length) return;
+
+  const now = nowIso();
+  const rows = ids.map(tsid => ({
+    timesheet_id: tsid,
+    reason,
+    attempt_count: 0,
+    next_attempt_at: now,
+    last_error: null,
+    created_at: now
+  }));
+
+  try {
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/ts_financials_outbox?on_conflict=timesheet_id,reason`,
+      {
+        method: 'POST',
+        headers: { ...sbHeaders(env), Prefer: 'resolution=ignore-duplicates' },
+        body: JSON.stringify(rows)
+      }
+    );
+  } catch (e) {
+    // best-effort; log but don't throw
+    try { console.warn('[TSFIN][enqueue] enqueueTsfinRecomputeForTimesheets failed', e); } catch {}
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 async function enqueueTsfinRecomputeForClient(env, client_id) {
   try {
     const urlList =
@@ -19014,7 +20286,6 @@ export default {
       if (req.method === 'GET' && p === '/api/rates/candidate-overrides/overlap-exists') {
         return handleCandidateOverrideOverlapExists(env, req);
       }
-
       // Candidates
       if (req.method === 'GET' && p === '/api/candidates')                  return handleListCandidates(env, req);
       if (req.method === 'POST' && p === '/api/candidates')                 return handleCreateCandidate(env, req);
@@ -19023,17 +20294,32 @@ export default {
         const candDet = matchPath(p, '/api/candidates/:candidate_id/details');
         if (candDet && req.method === 'GET')                                return handleGetCandidate(env, req, candDet.candidate_id);
       }
+
+      // Candidate calendar
       {
-  const cc = matchPath(p, '/api/candidates/:id/calendar');
-  if (cc && req.method === 'GET') return handleCandidateCalendar(env, req, cc.id);
-}
- {
-  const cand = matchPath(p, '/api/candidates/:candidate_id');
-  if (cand && req.method === 'GET')                                   
-    return handleGetCandidate(env, req, cand.candidate_id); // full row + job_titles
-  if (cand && req.method === 'PUT')                                   
-    return handleUpdateCandidate(env, req, cand.candidate_id);
-}
+        const cc = matchPath(p, '/api/candidates/:id/calendar');
+        if (cc && req.method === 'GET')                                     return handleCandidateCalendar(env, req, cc.id);
+      }
+
+      // NEW: candidate pay-method change preview
+      {
+        const m = matchPath(p, '/api/candidates/:id/pay-method-change-preview');
+        if (m && req.method === 'GET')                                      return handleCandidatePayMethodChangePreview(env, req, m.id);
+      }
+
+      // NEW: candidate pay-method change apply
+      {
+        const m = matchPath(p, '/api/candidates/:id/pay-method-change');
+        if (m && req.method === 'POST')                                     return handleCandidatePayMethodChange(env, req, m.id);
+      }
+
+      {
+        const cand = matchPath(p, '/api/candidates/:candidate_id');
+        if (cand && req.method === 'GET')
+          return handleGetCandidate(env, req, cand.candidate_id); // full row + job_titles
+        if (cand && req.method === 'PUT')
+          return handleUpdateCandidate(env, req, cand.candidate_id);
+      }
 
 
       // Rates — client defaults
