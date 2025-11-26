@@ -347,15 +347,30 @@ function deriveStdHoursFromSchedule(stdSched) {
 
 // Load client windows & BH list (fallback to defaults if missing)
 async function loadClientTimePolicy(env, clientId) {
-  const cs = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/client_settings?client_id=eq.${enc(clientId)}&select=day_start,day_end,night_start,night_end,bh_list`);
-  const defaults = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=day_start,day_end,night_start,night_end,bh_list`);
-  const ds = (cs && cs.day_start) ? cs : defaults || {};
-  const dayStart = parseHHMM(ds?.day_start || '06:00');
-  const dayEnd   = parseHHMM(ds?.day_end   || '20:00');
-  const nightStart = parseHHMM(ds?.night_start || '20:00');
-  const nightEnd   = parseHHMM(ds?.night_end   || '06:00');
-  const bhList = Array.isArray(ds?.bh_list) ? new Set(ds.bh_list) : new Set();
-  return { dayStart, dayEnd, nightStart, nightEnd, bhList };
+  const cs = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/client_settings?client_id=eq.${enc(clientId)}&select=day_start,day_end,night_start,night_end,sat_start,sat_end,sun_start,sun_end,bh_list`
+  );
+  const defaults = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=day_start,day_end,night_start,night_end,sat_start,sat_end,sun_start,sun_end,bh_list`
+  );
+
+  const src = { ...(defaults || {}), ...(cs || {}) };
+
+  const dayStart   = parseHHMM(src.day_start   || '06:00');
+  const dayEnd     = parseHHMM(src.day_end     || '20:00');
+  const nightStart = parseHHMM(src.night_start || '20:00');
+  const nightEnd   = parseHHMM(src.night_end   || '06:00');
+  const satStart   = parseHHMM(src.sat_start   || '00:00');
+  const satEnd     = parseHHMM(src.sat_end     || '00:00');
+  const sunStart   = parseHHMM(src.sun_start   || '00:00');
+  const sunEnd     = parseHHMM(src.sun_end     || '00:00');
+
+  const bhListArr = Array.isArray(cs?.bh_list) ? cs.bh_list : (defaults?.bh_list || []);
+  const bhList = new Set(bhListArr);
+
+  return { dayStart, dayEnd, nightStart, nightEnd, satStart, satEnd, sunStart, sunEnd, bhList };
 }
 
 // Segment one day's chunk [a,b) in minutes (0..1440), allocate into day/night using client windows.
@@ -363,22 +378,102 @@ async function loadClientTimePolicy(env, clientId) {
 function segmentChunkIntoBuckets(dateYmd, a, b, policy, acc) {
   const len = Math.max(0, b - a);
   if (len === 0) return;
-  if (isBH(dateYmd, policy.bhList)) { acc.bh += len; return; }
-  const d = dow(dateYmd);
-  if (d === 0) { acc.sun += len; return; }
-  if (d === 6) { acc.sat += len; return; }
 
-  // split into [dayStart, dayEnd) as 'day', remainder 'night'
-  const ds = policy.dayStart, de = policy.dayEnd;
+  // Bank Holiday overrides everything
+  if (isBH(dateYmd, policy.bhList)) {
+    acc.bh += len;
+    return;
+  }
+
+  const d = dow(dateYmd); // 0=Sun..6=Sat
+
+  const clamp0_1440 = (v) => Math.max(0, Math.min(1440, v));
+
+  const satStart = typeof policy.satStart === 'number' ? policy.satStart : 0;
+  const satEnd   = typeof policy.satEnd   === 'number' ? policy.satEnd   : 0;
+  const sunStart = typeof policy.sunStart === 'number' ? policy.sunStart : 0;
+  const sunEnd   = typeof policy.sunEnd   === 'number' ? policy.sunEnd   : 0;
+
+  // Interpret Sat/Sun windows as:
+  //  - Saturday: from sat_start on Saturday up to sat_end on Sunday (next day)
+  //  - Sunday:   from sun_start on Sunday up to sun_end on Monday (next day)
+  const satEndAbs = 1440 + satEnd; // minutes from Sat 00:00
+  const sunEndAbs = 1440 + sunEnd; // minutes from Sun 00:00
+
+  const weekendIntervals = [];
+
+  if (d === 6) { // Saturday
+    const fromSat = clamp0_1440(satStart);
+    const toSat   = 1440; // portion of [satStart, satEndAbs] that lies on Saturday
+    if (toSat > fromSat) weekendIntervals.push({ from: fromSat, to: toSat, bucket: 'sat' });
+  }
+
+  if (d === 0) { // Sunday
+    // Tail of Saturday window spilling into Sunday (Sat → Sun)
+    const satTail = satEndAbs - 1440;
+    if (satTail > 0) {
+      const from = 0;
+      const to = clamp0_1440(satTail);
+      if (to > from) weekendIntervals.push({ from, to, bucket: 'sat' });
+    }
+    // Sunday window itself
+    const fromSun = clamp0_1440(sunStart);
+    let toSun = sunEndAbs > 1440 ? 1440 : clamp0_1440(sunEndAbs);
+    if (toSun < fromSun) toSun = fromSun;
+    if (toSun > fromSun) weekendIntervals.push({ from: fromSun, to: toSun, bucket: 'sun' });
+  }
+
+  if (d === 1) { // Monday: tail of Sunday window
+    const sunTail = sunEndAbs - 1440;
+    if (sunTail > 0) {
+      const from = 0;
+      const to = clamp0_1440(sunTail);
+      if (to > from) weekendIntervals.push({ from, to, bucket: 'sun' });
+    }
+  }
+
+  // Start with the full [a,b) segment, then chop out weekend intervals for sat/sun buckets.
+  let rem = [{ from: a, to: b }];
+
+  for (const wi of weekendIntervals) {
+    const nextRem = [];
+    for (const r of rem) {
+      const start = r.from;
+      const end   = r.to;
+      const x1 = Math.max(start, wi.from);
+      const x2 = Math.min(end, wi.to);
+      if (x1 < x2) {
+        acc[wi.bucket] += (x2 - x1);
+        if (x1 > start) nextRem.push({ from: start, to: x1 });
+        if (x2 < end)   nextRem.push({ from: x2, to: end });
+      } else {
+        nextRem.push(r);
+      }
+    }
+    rem = nextRem;
+    if (!rem.length) break;
+  }
+
+  if (!rem.length) return;
+
+  // Anything not in Sat/Sun falls back to day/night using dayStart/dayEnd
+  const ds = typeof policy.dayStart === 'number' ? policy.dayStart : 0;
+  const de = typeof policy.dayEnd   === 'number' ? policy.dayEnd   : 1440;
+
   const seg = [
-    { from: 0,  to: ds,  bucket:'night' },
-    { from: ds, to: de,  bucket:'day'   },
+    { from: 0,  to: ds, bucket:'night' },
+    { from: ds, to: de, bucket:'day'   },
     { from: de, to: 1440, bucket:'night' }
   ];
-  let remStart = a, remEnd = b;
-  for (const s of seg) {
-    const x1 = Math.max(remStart, s.from), x2 = Math.min(remEnd, s.to);
-    if (x2 > x1) acc[s.bucket] += (x2 - x1);
+
+  for (const r of rem) {
+    const start = r.from;
+    const end   = r.to;
+    for (const s of seg) {
+      const x1 = Math.max(start, s.from);
+      const x2 = Math.min(end, s.to);
+      if (x2 > x1) acc[s.bucket] += (x2 - x1);
+    }
   }
 }
 
@@ -4845,10 +4940,15 @@ export async function handlePaymentsGenerateCsv(env, req) {
   const mapUmb = Object.fromEntries((umbRows || []).map(u => [u.id, u]));
 
   // ==== Optional umbrella filter + safety gates + contract reference gate
-  const filtered = tsRows.filter(r => {
+   const filtered = tsRows.filter(r => {
     const cand = mapCand[r.candidate_id];
     if (!cand) return false;
-    if (payMethod && String(cand.pay_method || '').toUpperCase() !== payMethod) return false;
+
+    const candMethod = String(cand.pay_method || '').toUpperCase();
+    // Ignore candidates with no clear pay method (Unknown / null)
+    if (!candMethod || (candMethod !== 'PAYE' && candMethod !== 'UMBRELLA')) return false;
+
+    if (payMethod && candMethod !== payMethod) return false;
 
     if (umbrellaIds.length) {
       const u = cand.umbrella_id;
@@ -9518,7 +9618,9 @@ async function handleUpdateSettings(env, req) {
 
   // Allow new validation flags
   const allowed = [
-    'timezone_id','day_start','day_end','night_start','night_end',
+    'timezone_id',
+    'day_start','day_end','night_start','night_end',
+    'sat_start','sat_end','sun_start','sun_end',
     'bh_source','bh_list','bh_feed_url',
     'vat_rate_pct','holiday_pay_pct','erni_pct','apply_holiday_to','apply_erni_to','margin_includes','effective_from',
     'bank_name','bank_sort_code','bank_account_number','vat_registration_number',
@@ -9832,15 +9934,17 @@ async function handleGetClient(env, req, clientId) {
     const client = rows[0];
 
     // Latest client_settings (include validation flags + new ref/submission fields)
-    const { rows: csRows } = await sbFetch(
+      const { rows: csRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/client_settings` +
       `?client_id=eq.${encodeURIComponent(clientId)}` +
       `&select=id,client_id,vat_rate_pct,holiday_pay_pct,erni_pct,apply_holiday_to,apply_erni_to,margin_includes,effective_from,` +
-      `timezone_id,day_start,day_end,night_start,night_end,bh_source,bh_list,bh_feed_url,` +
+      `timezone_id,day_start,day_end,night_start,night_end,sat_start,sat_end,sun_start,sun_end,` +
+      `bh_source,bh_list,bh_feed_url,` +
       `hr_validation_required,ts_reference_required,pay_reference_required,invoice_reference_required,default_submission_mode,week_ending_weekday,created_at,updated_at` +
       `&order=effective_from.desc,created_at.desc&limit=1`
     );
+
     const client_settings = csRows?.[0] || null;
 
     return withCORS(env, req, ok({ client, client_settings }));
@@ -9877,13 +9981,16 @@ async function handleUpdateClient(env, req, clientId) {
     if (!beforeClientRows?.length) return withCORS(env, req, notFound("Client not found"));
     const beforeClient = beforeClientRows[0];
 
-    const { rows: beforeCsRows } = await sbFetch(
+     const { rows: beforeCsRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/client_settings` +
       `?client_id=eq.${encodeURIComponent(clientId)}` +
-      `&select=id,hr_validation_required,ts_reference_required,pay_reference_required,invoice_reference_required,default_submission_mode,effective_from,timezone_id,day_start,day_end,night_start,night_end,bh_source,bh_list,bh_feed_url,week_ending_weekday,created_at,updated_at` +
+      `&select=id,hr_validation_required,ts_reference_required,pay_reference_required,invoice_reference_required,default_submission_mode,effective_from,timezone_id,` +
+      `day_start,day_end,night_start,night_end,sat_start,sat_end,sun_start,sun_end,` +
+      `bh_source,bh_list,bh_feed_url,week_ending_weekday,created_at,updated_at` +
       `&order=effective_from.desc,created_at.desc&limit=1`
     );
+
     const beforeCs = beforeCsRows?.[0] || null;
 
     // --- Split incoming payload between clients and client_settings
@@ -10191,7 +10298,9 @@ export async function handleClientsGet(env, req, clientId) {
     env,
     `${env.SUPABASE_URL}/rest/v1/client_settings` +
       `?client_id=eq.${enc(client.id)}` +
-      `&select=id,hr_validation_required,ts_reference_required,pay_reference_required,invoice_reference_required,default_submission_mode,effective_from,timezone_id,day_start,day_end,night_start,night_end,bh_source,bh_list,bh_feed_url,week_ending_weekday,created_at,updated_at` +
+      `&select=id,hr_validation_required,ts_reference_required,pay_reference_required,invoice_reference_required,default_submission_mode,effective_from,` +
+      `timezone_id,day_start,day_end,night_start,night_end,sat_start,sat_end,sun_start,sun_end,` +
+      `bh_source,bh_list,bh_feed_url,week_ending_weekday,created_at,updated_at` +
       `&order=effective_from.desc,created_at.desc&limit=1`
   );
   const client_settings = (csRows && csRows[0]) || null;
@@ -11407,6 +11516,18 @@ export async function handleCreateCandidate(env, req) {
   // Strip any accidental CCR fields (immutable/minted by DB)
   const { tms_ref, ccr_num, job_titles, ...data } = dataRaw;
 
+  // Normalise pay_method: only PAYE/UMBRELLA; Unknown/other -> null
+  if (Object.prototype.hasOwnProperty.call(data, 'pay_method')) {
+    let pm = (data.pay_method == null ? '' : String(data.pay_method)).trim().toUpperCase();
+    if (pm === 'UNKNOWN' || pm === '') {
+      delete data.pay_method;
+    } else if (pm === 'PAYE' || pm === 'UMBRELLA') {
+      data.pay_method = pm;
+    } else {
+      delete data.pay_method;
+    }
+  }
+
   // Normalise job_titles array -> list of UUID strings
   const jtArray = Array.isArray(job_titles)
     ? job_titles.map((x) => String(x)).filter(Boolean)
@@ -11524,6 +11645,19 @@ export async function handleUpdateCandidate(env, req, candidateId) {
 
   // Strip any accidental CCR fields (immutable/minted by DB)
   const { tms_ref, ccr_num, job_titles, ...data } = raw;
+
+  // Normalise pay_method: only PAYE/UMBRELLA; Unknown/other -> null (no change)
+  if (Object.prototype.hasOwnProperty.call(data, 'pay_method')) {
+    let pm = (data.pay_method == null ? '' : String(data.pay_method)).trim().toUpperCase();
+    if (pm === 'UNKNOWN' || pm === '') {
+      data.pay_method = null;
+    } else if (pm === 'PAYE' || pm === 'UMBRELLA') {
+      data.pay_method = pm;
+    } else {
+      data.pay_method = null;
+    }
+  }
+
 
   // Normalise job_titles array if present; undefined => "no change"
   let jtArray = null;
@@ -15840,7 +15974,6 @@ async function resolveClientId(env, hospital_norm) {
   const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/client_hospitals?hospital_name_norm=eq.${encodeURIComponent(hospital_norm)}&select=client_id&limit=1`);
   return rows[0]?.client_id || null;
 }
-
 async function loadPolicy(env, client_id, workedDateYmd) {
   const { rows: defRows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=*`);
   const def = defRows[0] || {};
@@ -15854,12 +15987,17 @@ async function loadPolicy(env, client_id, workedDateYmd) {
 
   const tz = cs?.timezone_id || def?.timezone_id || 'Europe/London';
   const bh = (cs?.bh_list && Array.isArray(cs.bh_list)) ? cs.bh_list : (def?.bh_list || []);
+
   return {
     timezone_id: tz,
-    day_start: cs?.day_start || def?.day_start || '06:00:00',
-    day_end: cs?.day_end || def?.day_end || '20:00:00',
+    day_start:   cs?.day_start   || def?.day_start   || '06:00:00',
+    day_end:     cs?.day_end     || def?.day_end     || '20:00:00',
     night_start: cs?.night_start || def?.night_start || '20:00:00',
-    night_end: cs?.night_end || def?.night_end || '06:00:00',
+    night_end:   cs?.night_end   || def?.night_end   || '06:00:00',
+    sat_start:   cs?.sat_start   || def?.sat_start   || '00:00:00',
+    sat_end:     cs?.sat_end     || def?.sat_end     || '00:00:00',
+    sun_start:   cs?.sun_start   || def?.sun_start   || '00:00:00',
+    sun_end:     cs?.sun_end     || def?.sun_end     || '00:00:00',
     vat_rate_pct: asNumber(cs?.vat_rate_pct ?? def?.vat_rate_pct ?? 20),
     holiday_pay_pct: asNumber(cs?.holiday_pay_pct ?? def?.holiday_pay_pct ?? 12.07),
     erni_pct: asNumber(cs?.erni_pct ?? def?.erni_pct ?? 13.8),
@@ -15906,9 +16044,25 @@ function subtractBreak(segments, breakStartIso, breakEndIso, breakMin) {
 function classifyMinutes(env, policy, segments) {
   const out = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
   const tz = policy.timezone_id || 'Europe/London';
+
+  // Normalise string times into minutes and BH set
   const dayStartMin = hhmmToMin(policy.day_start);
-  const dayEndMin = hhmmToMin(policy.day_end);
-  const bhSet = new Set(policy.bh_list || []);
+  const dayEndMin   = hhmmToMin(policy.day_end);
+  const satStartMin = hhmmToMin(policy.sat_start || '00:00');
+  const satEndMin   = hhmmToMin(policy.sat_end   || '00:00');
+  const sunStartMin = hhmmToMin(policy.sun_start || '00:00');
+  const sunEndMin   = hhmmToMin(policy.sun_end   || '00:00');
+  const bhSet       = new Set(policy.bh_list || []);
+
+  const normPolicy = {
+    dayStart: dayStartMin,
+    dayEnd:   dayEndMin,
+    satStart: satStartMin,
+    satEnd:   satEndMin,
+    sunStart: sunStartMin,
+    sunEnd:   sunEndMin,
+    bhList:   bhSet
+  };
 
   for (const [isoA, isoB] of segments) {
     let cur = new Date(isoA);
@@ -15920,36 +16074,24 @@ function classifyMinutes(env, policy, segments) {
       const sliceEnd = end < dayEnd ? end : dayEnd;
       const mins = minutesBetween(cur.toISOString(), sliceEnd.toISOString());
 
-      const dow = new Date(`${curYmd}T00:00:00Z`).getUTCDay(); // 0=Sun..6=Sat
-      const curIsBh = bhSet.has(curYmd);
+      const fromMin = hh * 60 + mm;
+      const toMin   = fromMin + mins;
 
-      if (curIsBh) {
-        out.bh += mins;
-      } else if (dow === 0) {
-        out.sun += mins;
-      } else if (dow === 6) {
-        out.sat += mins;
-      } else {
-        const startLocalMin = hh * 60 + mm;
-        const endLocalMin = startLocalMin + mins;
-        const dayOverlap = Math.max(0, Math.min(endLocalMin, dayEndMin) - Math.max(startLocalMin, dayStartMin));
-        const nightOverlap = mins - dayOverlap;
-        out.day += dayOverlap;
-        out.night += nightOverlap;
-      }
+      segmentChunkIntoBuckets(curYmd, fromMin, toMin, normPolicy, out);
 
       cur = sliceEnd;
     }
   }
 
   return {
-    hours_day: round2(out.day / 60),
-    hours_night: round2(out.night / 60),
-    hours_sat: round2(out.sat / 60),
-    hours_sun: round2(out.sun / 60),
-    hours_bh: round2(out.bh / 60),
+    hours_day:  round2(out.day / 60),
+    hours_night:round2(out.night / 60),
+    hours_sat:  round2(out.sat / 60),
+    hours_sun:  round2(out.sun / 60),
+    hours_bh:   round2(out.bh / 60),
   };
 }
+
 
 // ---------------------------
 // Rates resolution
