@@ -15077,7 +15077,7 @@ export async function handleCandidatePayMethodChange(env, req, candidateId) {
         `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(candidateId)}`,
         {
           method: 'PATCH',
-          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
           body: JSON.stringify(patch)
         }
       );
@@ -15164,21 +15164,31 @@ export async function handleCandidatePayMethodChange(env, req, candidateId) {
     return ch - margin;
   }
 
-  // ERNI cache per client+date (in case of multiple contracts per client)
-  const erniCache = new Map(); // key: `${clientId}|${ymd}` -> erniMult
+  // ERNI cache (global, from settings_defaults only)
+  const erniCache = new Map(); // key: 'GLOBAL_ERNI' -> erniMult
 
   async function getErniMultiplierForClient(env, clientId, activeYmd) {
-    const key = `${clientId || ''}|${activeYmd || ''}`;
+    const key = 'GLOBAL_ERNI';
     if (erniCache.has(key)) return erniCache.get(key);
 
     let mult = 1;
     try {
-      const policy = await loadPolicy(env, clientId, activeYmd);
-      let p = asNumber(policy?.erni_pct ?? 0, 0);
-      if (p > 1) p = p / 100;
-      mult = 1 + p;
+      const url =
+        `${env.SUPABASE_URL}/rest/v1/settings_defaults` +
+        `?select=erni_pct,effective_from` +
+        `&order=effective_from.desc` +
+        `&limit=1`;
+      const { rows } = await sbFetch(env, url);
+      const row = Array.isArray(rows) ? rows[0] : rows;
+      let pct = row && row.erni_pct != null ? Number(row.erni_pct) : 0;
+
+      if (!Number.isFinite(pct)) pct = 0;
+      if (pct > 1) pct = pct / 100;
+
+      mult = 1 + pct;
       if (!Number.isFinite(mult) || mult <= 0) mult = 1;
-    } catch {
+    } catch (e) {
+      try { console.warn('[PAY-METHOD-CHANGE] getErniMultiplierForClient: fell back to 1', e); } catch {}
       mult = 1;
     }
     erniCache.set(key, mult);
@@ -15212,7 +15222,7 @@ export async function handleCandidatePayMethodChange(env, req, candidateId) {
       const earliestWe = weDates[0];
       const successorStart = addDays(earliestWe, -6);
 
-      // Compute ERNI multiplier from policy (cached)
+      // Compute ERNI multiplier from global settings_defaults (ignore client)
       const erniMult = await getErniMultiplierForClient(env, contract.client_id, earliestWe);
 
       // Parse rates_json
@@ -17532,7 +17542,14 @@ async function loadPolicy(env, client_id, workedDateYmd) {
   let cs = null;
   if (client_id) {
     const w = workedDateYmd ? `&and=(or(effective_from.lte.${encodeURIComponent(workedDateYmd)},effective_from.is.null))` : '';
-    const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/client_settings?client_id=eq.${encodeURIComponent(client_id)}&select=*&order=effective_from.desc,nullsLast=true&limit=1${w}`);
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/client_settings` +
+        `?client_id=eq.${encodeURIComponent(client_id)}` +
+        `&select=*` +
+        `&order=effective_from.desc,nullsLast=true` +
+        `&limit=1${w}`
+    );
     cs = rows[0] || null;
   }
 
@@ -17549,12 +17566,17 @@ async function loadPolicy(env, client_id, workedDateYmd) {
     sat_end:     cs?.sat_end     || def?.sat_end     || '00:00:00',
     sun_start:   cs?.sun_start   || def?.sun_start   || '00:00:00',
     sun_end:     cs?.sun_end     || def?.sun_end     || '00:00:00',
-    vat_rate_pct: asNumber(cs?.vat_rate_pct ?? def?.vat_rate_pct ?? 20),
-    holiday_pay_pct: asNumber(cs?.holiday_pay_pct ?? def?.holiday_pay_pct ?? 12.07),
-    erni_pct: asNumber(cs?.erni_pct ?? def?.erni_pct ?? 13.8),
-    apply_holiday_to: cs?.apply_holiday_to || def?.apply_holiday_to || 'PAYE_ONLY',
-    apply_erni_to: cs?.apply_erni_to || def?.apply_erni_to || 'PAYE_ONLY',
-    margin_includes: { expenses: !!(cs?.margin_includes?.expenses ?? def?.margin_includes?.expenses) },
+    vat_rate_pct:      asNumber(cs?.vat_rate_pct      ?? def?.vat_rate_pct      ?? 20),
+    holiday_pay_pct:   asNumber(cs?.holiday_pay_pct   ?? def?.holiday_pay_pct   ?? 12.07),
+
+    // 🔹 ERNI is now **global-only** – no client-specific override.
+    erni_pct:          asNumber(def?.erni_pct ?? 13.8),
+
+    apply_holiday_to:  cs?.apply_holiday_to  || def?.apply_holiday_to  || 'PAYE_ONLY',
+    apply_erni_to:     cs?.apply_erni_to     || def?.apply_erni_to     || 'PAYE_ONLY',
+    margin_includes: {
+      expenses: !!(cs?.margin_includes?.expenses ?? def?.margin_includes?.expenses)
+    },
     bh_list: Array.isArray(bh) ? bh : [],
   };
 }
