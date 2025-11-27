@@ -1637,6 +1637,9 @@ export async function handleUserGridPrefsPatch(env, req, contractId) {
 // handleContractsGet — embed names and flatten convenience fields for FE
 // (joins via FK: contracts.candidate_id → candidates.id, contracts.client_id → clients.id)  :contentReference[oaicite:1]{index=1}
 
+// handleContractsGet — embed names and flatten convenience fields for FE
+// (joins via FK: contracts.candidate_id → candidates.id, contracts.client_id → clients.id)
+
 export async function handleContractsGet(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -1662,13 +1665,52 @@ export async function handleContractsGet(env, req, contractId) {
     `&select=id,week_ending_date,additional_seq,status,submission_mode_snapshot,timesheet_id,uploaded_pdf_r2_key` +
     `&order=week_ending_date.desc,additional_seq.asc`
   );
-  const counts = (weeks || []).reduce((a,w) => { a[w.status] = (a[w.status]||0)+1; return a; }, {});
+  const counts = (weeks || []).reduce((a, w) => {
+    a[w.status] = (a[w.status] || 0) + 1;
+    return a;
+  }, {});
 
-  const contractOut = { ...contract, candidate_display, client_name };
+  // ── Deletion eligibility ─────────────────────────────
+  // Keep this logic aligned with handleContractsDelete:
+  // a contract is only deletable if NO timesheets exist at all for this contract.
+  let hasTimesheets = false;
+  try {
+    const ts = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?contract_id=eq.${enc(contractId)}` +
+      `&select=timesheet_id&limit=1`
+    );
+    hasTimesheets = !!ts;
+  } catch (e) {
+    // If we fail to check, be pessimistic and treat as non-deletable
+    try { console.warn('[CONTRACTS][GET] timesheet existence check failed', { contractId, error: String(e?.message || e) }); } catch {}
+    hasTimesheets = true;
+  }
+
+  const contractOut = {
+    ...contract,
+    candidate_display,
+    client_name,
+    // FE uses this to decide whether to show the "Delete contract" button
+    can_delete: !hasTimesheets,
+    has_timesheets: hasTimesheets
+  };
+
   const warnings = await computePayMethodWarnings(env, contractOut);
 
-  return withCORS(env, req, ok({ contract: contractOut, counts, weeks: weeks || [], warnings }));
+  return withCORS(
+    env,
+    req,
+    ok({
+      contract: contractOut,
+      counts,
+      weeks: weeks || [],
+      warnings
+    })
+  );
 }
+
 export async function handleContractsUpdate(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
