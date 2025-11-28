@@ -9874,6 +9874,14 @@ async function handleCreateClient(env, req) {
   const data = await parseJSONBody(req);
   if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
 
+  // Small helper: accept true / "true" / "yes" / "1"
+  const asBool = (v) => {
+    if (v === true) return true;
+    if (v === false || v == null) return false;
+    const s = String(v).trim().toLowerCase();
+    return s === 'true' || s === 'yes' || s === 'y' || s === '1';
+  };
+
   try {
     const {
       cli_ref,
@@ -9884,6 +9892,14 @@ async function handleCreateClient(env, req) {
       pay_reference_required,
       invoice_reference_required,
       default_submission_mode,
+
+      // NEW flags (can be sent at top level)
+      is_nhsp,
+      self_bill_no_invoices_sent,
+      daily_calc_of_invoices,
+      no_timesheet_required,
+      group_nightsat_sunbh,
+
       ...clientOnly
     } = data || {};
 
@@ -9903,11 +9919,29 @@ async function handleCreateClient(env, req) {
       ...(typeof clientSettingsInput === 'object' ? clientSettingsInput : {}),
     };
 
+    // Existing flags → client_settings
     if ('hr_validation_required' in data)        csInput.hr_validation_required        = !!hr_validation_required;
-    if ('ts_reference_required' in data)        csInput.ts_reference_required        = !!ts_reference_required;
-    if ('pay_reference_required' in data)       csInput.pay_reference_required       = !!pay_reference_required;
-    if ('invoice_reference_required' in data)   csInput.invoice_reference_required   = !!invoice_reference_required;
-    if ('default_submission_mode' in data)      csInput.default_submission_mode      = default_submission_mode;
+    if ('ts_reference_required' in data)         csInput.ts_reference_required         = !!ts_reference_required;
+    if ('pay_reference_required' in data)        csInput.pay_reference_required        = !!pay_reference_required;
+    if ('invoice_reference_required' in data)    csInput.invoice_reference_required    = !!invoice_reference_required;
+    if ('default_submission_mode' in data)       csInput.default_submission_mode       = default_submission_mode;
+
+    // NEW flags (default to false if not provided)
+    if ('is_nhsp' in data || 'is_nhsp' in csInput) {
+      csInput.is_nhsp = asBool(csInput.is_nhsp ?? is_nhsp);
+    }
+    if ('self_bill_no_invoices_sent' in data || 'self_bill_no_invoices_sent' in csInput) {
+      csInput.self_bill_no_invoices_sent = asBool(csInput.self_bill_no_invoices_sent ?? self_bill_no_invoices_sent);
+    }
+    if ('daily_calc_of_invoices' in data || 'daily_calc_of_invoices' in csInput) {
+      csInput.daily_calc_of_invoices = asBool(csInput.daily_calc_of_invoices ?? daily_calc_of_invoices);
+    }
+    if ('no_timesheet_required' in data || 'no_timesheet_required' in csInput) {
+      csInput.no_timesheet_required = asBool(csInput.no_timesheet_required ?? no_timesheet_required);
+    }
+    if ('group_nightsat_sunbh' in data || 'group_nightsat_sunbh' in csInput) {
+      csInput.group_nightsat_sunbh = asBool(csInput.group_nightsat_sunbh ?? group_nightsat_sunbh);
+    }
 
     // Week ending day (0..6, default 0/Sun)
     const we = Number(csInput.week_ending_weekday);
@@ -9976,14 +10010,17 @@ async function handleGetClient(env, req, clientId) {
     const client = rows[0];
 
     // Latest client_settings (include validation flags + new ref/submission fields)
-      const { rows: csRows } = await sbFetch(
+    const { rows: csRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/client_settings` +
       `?client_id=eq.${encodeURIComponent(clientId)}` +
       `&select=id,client_id,vat_rate_pct,holiday_pay_pct,erni_pct,apply_holiday_to,apply_erni_to,margin_includes,effective_from,` +
       `timezone_id,day_start,day_end,night_start,night_end,sat_start,sat_end,sun_start,sun_end,` +
       `bh_source,bh_list,bh_feed_url,` +
-      `hr_validation_required,ts_reference_required,pay_reference_required,invoice_reference_required,default_submission_mode,week_ending_weekday,created_at,updated_at` +
+      `hr_validation_required,ts_reference_required,pay_reference_required,invoice_reference_required,default_submission_mode,` +
+      `week_ending_weekday,` +
+      `is_nhsp,self_bill_no_invoices_sent,daily_calc_of_invoices,no_timesheet_required,group_nightsat_sunbh,` +
+      `created_at,updated_at` +
       `&order=effective_from.desc,created_at.desc&limit=1`
     );
 
@@ -10012,8 +10049,16 @@ async function handleUpdateClient(env, req, clientId) {
   // Strip any accidental CLI fields (immutable/minted by DB)
   const { cli_ref, cli_num, ...data } = raw;
 
+  // Helper: normalise YES/NO/true/false
+  const asBool = (v) => {
+    if (v === true) return true;
+    if (v === false || v == null) return false;
+    const s = String(v).trim().toLowerCase();
+    return s === 'true' || s === 'yes' || s === 'y' || s === '1';
+  };
+
   try {
-    // --- Load existing client + latest client_settings for comparison (now also selects week_ending_weekday + new fields)
+    // --- Load existing client + latest client_settings for comparison
     const { rows: beforeClientRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/clients` +
@@ -10023,13 +10068,16 @@ async function handleUpdateClient(env, req, clientId) {
     if (!beforeClientRows?.length) return withCORS(env, req, notFound("Client not found"));
     const beforeClient = beforeClientRows[0];
 
-     const { rows: beforeCsRows } = await sbFetch(
+    const { rows: beforeCsRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/client_settings` +
       `?client_id=eq.${encodeURIComponent(clientId)}` +
-      `&select=id,hr_validation_required,ts_reference_required,pay_reference_required,invoice_reference_required,default_submission_mode,effective_from,timezone_id,` +
+      `&select=id,hr_validation_required,ts_reference_required,pay_reference_required,invoice_reference_required,default_submission_mode,` +
+      `week_ending_weekday,` +
+      `is_nhsp,self_bill_no_invoices_sent,daily_calc_of_invoices,no_timesheet_required,group_nightsat_sunbh,` +
+      `effective_from,timezone_id,` +
       `day_start,day_end,night_start,night_end,sat_start,sat_end,sun_start,sun_end,` +
-      `bh_source,bh_list,bh_feed_url,week_ending_weekday,created_at,updated_at` +
+      `bh_source,bh_list,bh_feed_url,created_at,updated_at` +
       `&order=effective_from.desc,created_at.desc&limit=1`
     );
 
@@ -10039,11 +10087,30 @@ async function handleUpdateClient(env, req, clientId) {
     const csInput = {
       ...(typeof data.client_settings === 'object' ? data.client_settings : {})
     };
+
+    // Existing flags
     if ('hr_validation_required' in data)        csInput.hr_validation_required        = !!data.hr_validation_required;
-    if ('ts_reference_required' in data)        csInput.ts_reference_required        = !!data.ts_reference_required;
-    if ('pay_reference_required' in data)       csInput.pay_reference_required       = !!data.pay_reference_required;
-    if ('invoice_reference_required' in data)   csInput.invoice_reference_required   = !!data.invoice_reference_required;
-    if ('default_submission_mode' in data)      csInput.default_submission_mode      = data.default_submission_mode;
+    if ('ts_reference_required' in data)         csInput.ts_reference_required         = !!data.ts_reference_required;
+    if ('pay_reference_required' in data)        csInput.pay_reference_required        = !!data.pay_reference_required;
+    if ('invoice_reference_required' in data)    csInput.invoice_reference_required    = !!data.invoice_reference_required;
+    if ('default_submission_mode' in data)       csInput.default_submission_mode       = data.default_submission_mode;
+
+    // NEW flags: accept either top-level or nested in client_settings
+    if ('is_nhsp' in data || 'is_nhsp' in csInput) {
+      csInput.is_nhsp = asBool(csInput.is_nhsp ?? data.is_nhsp);
+    }
+    if ('self_bill_no_invoices_sent' in data || 'self_bill_no_invoices_sent' in csInput) {
+      csInput.self_bill_no_invoices_sent = asBool(csInput.self_bill_no_invoices_sent ?? data.self_bill_no_invoices_sent);
+    }
+    if ('daily_calc_of_invoices' in data || 'daily_calc_of_invoices' in csInput) {
+      csInput.daily_calc_of_invoices = asBool(csInput.daily_calc_of_invoices ?? data.daily_calc_of_invoices);
+    }
+    if ('no_timesheet_required' in data || 'no_timesheet_required' in csInput) {
+      csInput.no_timesheet_required = asBool(csInput.no_timesheet_required ?? data.no_timesheet_required);
+    }
+    if ('group_nightsat_sunbh' in data || 'group_nightsat_sunbh' in csInput) {
+      csInput.group_nightsat_sunbh = asBool(csInput.group_nightsat_sunbh ?? data.group_nightsat_sunbh);
+    }
 
     // Accept top-level week_ending_weekday or inside client_settings; validate 0..6 (default 0 if provided but invalid)
     const weIn = (data.week_ending_weekday ?? csInput.week_ending_weekday);
@@ -10068,6 +10135,14 @@ async function handleUpdateClient(env, req, clientId) {
       default_submission_mode,
       client_settings,
       week_ending_weekday,
+
+      // NEW top-level flags pulled into csInput above
+      is_nhsp,
+      self_bill_no_invoices_sent,
+      daily_calc_of_invoices,
+      no_timesheet_required,
+      group_nightsat_sunbh,
+
       ...clientPatchRaw
     } = data;
 
@@ -10105,7 +10180,7 @@ async function handleUpdateClient(env, req, clientId) {
       client = Array.isArray(json) ? json[0] : json;
     }
 
-    // --- Upsert/patch client_settings if provided (now includes week_ending_weekday + new ref/submission fields)
+    // --- Upsert/patch client_settings if provided
     let csChanged = false;
     let client_settings_updated = null;
     if (Object.keys(csInput).length) {
@@ -10131,7 +10206,7 @@ async function handleUpdateClient(env, req, clientId) {
         beforePayRef !== nextPayRef ||
         beforeInvRef !== nextInvRef
       );
-      // week_ending_weekday and default_submission_mode do not affect TS financial staleness directly.
+      // Note: the new flags (is_nhsp, etc.) do NOT currently affect TSFIN staleness.
 
       if (hasBefore) {
         const csRes = await fetch(
@@ -10168,7 +10243,7 @@ async function handleUpdateClient(env, req, clientId) {
       }
     }
 
-    // --- Change detection for timesheet financials staleness (unchanged core logic, but csChanged now includes ref flags)
+    // --- Change detection for timesheet financials staleness (unchanged core logic)
     const policyChanged =
       (data.vat_chargeable != null && !!data.vat_chargeable !== !!beforeClient.vat_chargeable) ||
       (data.payment_terms_days != null && Number(data.payment_terms_days) !== Number(beforeClient.payment_terms_days));
@@ -10218,6 +10293,9 @@ async function handleUpdateClient(env, req, clientId) {
     return withCORS(env, req, serverError("Failed to update client"));
   }
 }
+
+
+
 
 // ====================== CLIENT HOSPITALS ======================
 /**
@@ -10323,6 +10401,7 @@ export async function handleCandidatesGet(env, req, candidateId) {
   if (!row) return withCORS(env, req, notFound('Candidate not found'));
   return withCORS(env, req, ok(row));
 }
+
 export async function handleClientsGet(env, req, clientId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -10340,8 +10419,9 @@ export async function handleClientsGet(env, req, clientId) {
     env,
     `${env.SUPABASE_URL}/rest/v1/client_settings` +
       `?client_id=eq.${enc(client.id)}` +
-      `&select=id,hr_validation_required,ts_reference_required,pay_reference_required,invoice_reference_required,default_submission_mode,effective_from,` +
-      `timezone_id,day_start,day_end,night_start,night_end,sat_start,sat_end,sun_start,sun_end,` +
+      `&select=id,hr_validation_required,ts_reference_required,pay_reference_required,invoice_reference_required,default_submission_mode,` +
+      `is_nhsp,self_bill_no_invoices_sent,daily_calc_of_invoices,no_timesheet_required,group_nightsat_sunbh,` +
+      `effective_from,timezone_id,day_start,day_end,night_start,night_end,sat_start,sat_end,sun_start,sun_end,` +
       `bh_source,bh_list,bh_feed_url,week_ending_weekday,created_at,updated_at` +
       `&order=effective_from.desc,created_at.desc&limit=1`
   );
@@ -15160,7 +15240,7 @@ export async function handleCandidatePayMethodChange(env, req, candidateId) {
         `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(candidateId)}`,
         {
           method: 'PATCH',
-          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
           body: JSON.stringify(patch)
         }
       );
@@ -15353,58 +15433,119 @@ export async function handleCandidatePayMethodChange(env, req, candidateId) {
         contractHadError = true;
       }
 
+      // NEW: adjust old contract dates to wrap around kept weeks with TS
+      let newStartDate = contract.start_date;
+      let newEndDate = contract.end_date;
+
       if (!contractHadError) {
-        // Truncate original contract end_date to day before successorStart
-        let truncatedEnd = addDays(successorStart, -1);
-        if (truncatedEnd < contract.start_date) truncatedEnd = contract.start_date;
+        let allWeeks = [];
+        try {
+          const { rows: cwRows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+            `?contract_id=eq.${enc(contract.id)}` +
+            `&select=id,week_ending_date,timesheet_id`
+          );
+          allWeeks = Array.isArray(cwRows) ? cwRows : (cwRows ? [cwRows] : []);
+        } catch (e) {
+          try { console.warn('[PAY-METHOD-CHANGE] load contract_weeks failed', contract.id, e); } catch {}
+          allWeeks = [];
+        }
+
+        // Weeks being moved (outstanding)
+        const moveSet = new Set(
+          (outstandingWeeks || [])
+            .map(w => w && w.id)
+            .filter(Boolean)
+            .map(String)
+        );
+
+        // Weeks kept on the old contract
+        const keptWeeks = (allWeeks || []).filter(w => {
+          const wid = w && w.id ? String(w.id) : null;
+          return wid && !moveSet.has(wid);
+        });
+
+        // Kept weeks that actually have timesheets
+        const keptWithTimesheet = keptWeeks.filter(w => w && w.timesheet_id);
+
+        if (keptWithTimesheet.length) {
+          // Wrap old contract strictly around the kept TS weeks
+          let firstWe = keptWithTimesheet[0].week_ending_date;
+          let lastWe  = keptWithTimesheet[0].week_ending_date;
+          for (const w of keptWithTimesheet) {
+            if (w.week_ending_date < firstWe) firstWe = w.week_ending_date;
+            if (w.week_ending_date > lastWe)  lastWe  = w.week_ending_date;
+          }
+
+          let wrappedStart = addDays(firstWe, -6); // first day of earliest kept week
+          let wrappedEnd   = lastWe;               // last day (week_ending) of latest kept week
+
+          // Clamp so we never move outside the original contract window
+          if (wrappedStart < contract.start_date) wrappedStart = contract.start_date;
+          if (wrappedEnd   > contract.end_date)   wrappedEnd   = contract.end_date;
+
+          newStartDate = wrappedStart;
+          newEndDate   = wrappedEnd;
+        } else {
+          // No kept TS weeks → fall back to old behaviour (end before successor)
+          let truncatedEnd = addDays(successorStart, -1);
+          if (truncatedEnd < contract.start_date) truncatedEnd = contract.start_date;
+          newEndDate = truncatedEnd;
+          // newStartDate remains contract.start_date
+        }
 
         try {
-          if (truncatedEnd !== contract.end_date) {
+          const patch = {};
+          if (newStartDate !== contract.start_date) patch.start_date = newStartDate;
+          if (newEndDate   !== contract.end_date)   patch.end_date   = newEndDate;
+          if (Object.keys(patch).length) {
+            patch.updated_at = nowIso();
             await fetch(
               `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contract.id)}`,
               {
                 method: 'PATCH',
                 headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-                body: JSON.stringify({ end_date: truncatedEnd, updated_at: nowIso() })
+                body: JSON.stringify(patch)
               }
             );
           }
         } catch (e) {
           contractHadError = true;
-          try { console.warn('[PAY-METHOD-CHANGE] truncate original contract failed', contract.id, e); } catch {}
+          try { console.warn('[PAY-METHOD-CHANGE] update original contract dates failed', contract.id, e); } catch {}
         }
+      }
 
-        // Move outstanding weeks + timesheets
-        if (!contractHadError) {
-          try {
-            const mig = await migrateOutstandingWeeksToNewContract(env, contract.id, successor.id, outstandingWeeks);
-            contractMigratedWeeks = (mig.week_ids || []).length;
-            totalWeeksMigrated   += contractMigratedWeeks;
-            for (const tsid of (mig.timesheet_ids || [])) {
-              allTsIds.push(tsid);
+      // Move outstanding weeks + timesheets
+      if (!contractHadError) {
+        try {
+          const mig = await migrateOutstandingWeeksToNewContract(env, contract.id, successor.id, outstandingWeeks);
+          contractMigratedWeeks = (mig.week_ids || []).length;
+          totalWeeksMigrated   += contractMigratedWeeks;
+          for (const tsid of (mig.timesheet_ids || [])) {
+            allTsIds.push(tsid);
+          }
+        } catch (e) {
+          contractHadError = true;
+          try { console.warn('[PAY-METHOD-CHANGE] migrateOutstandingWeeksToNewContract failed', contract.id, e); } catch {}
+        }
+      }
+
+      // Prune any future weeks beyond newEndDate without TS (non-fatal if fails)
+      if (!contractHadError) {
+        try {
+          await fetch(
+            `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+            `?contract_id=eq.${enc(contract.id)}` +
+            `&week_ending_date=gt.${enc(newEndDate)}` +
+            `&timesheet_id=is.null`,
+            {
+              method: 'DELETE',
+              headers: { ...sbHeaders(env), Prefer: 'return=minimal' }
             }
-          } catch (e) {
-            contractHadError = true;
-            try { console.warn('[PAY-METHOD-CHANGE] migrateOutstandingWeeksToNewContract failed', contract.id, e); } catch {}
-          }
-        }
-
-        // Prune any future weeks beyond truncatedEnd without TS (non-fatal if fails)
-        if (!contractHadError) {
-          try {
-            await fetch(
-              `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-              `?contract_id=eq.${enc(contract.id)}` +
-              `&week_ending_date=gt.${enc(truncatedEnd)}` +
-              `&timesheet_id=is.null`,
-              {
-                method: 'DELETE',
-                headers: { ...sbHeaders(env), Prefer: 'return=minimal' }
-              }
-            );
-          } catch (e) {
-            try { console.warn('[PAY-METHOD-CHANGE] prune future empty weeks failed', contract.id, e); } catch {}
-          }
+          );
+        } catch (e) {
+          try { console.warn('[PAY-METHOD-CHANGE] prune future empty weeks failed', contract.id, e); } catch {}
         }
       }
     } catch (e) {
@@ -15447,7 +15588,7 @@ export async function handleCandidatePayMethodChange(env, req, candidateId) {
       `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(candidateId)}`,
       {
         method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
         body: JSON.stringify(patch)
       }
     );
@@ -15468,7 +15609,6 @@ export async function handleCandidatePayMethodChange(env, req, candidateId) {
     }
   }));
 }
-
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper: computeBucketRatesPreservingMargin
