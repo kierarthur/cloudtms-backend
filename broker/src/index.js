@@ -346,10 +346,13 @@ function deriveStdHoursFromSchedule(stdSched) {
 }
 
 // Load client windows & BH list (fallback to defaults if missing)
+
 async function loadClientTimePolicy(env, clientId) {
   const cs = await sbGetOne(
     env,
-    `${env.SUPABASE_URL}/rest/v1/client_settings?client_id=eq.${enc(clientId)}&select=day_start,day_end,night_start,night_end,sat_start,sat_end,sun_start,sun_end,bh_list`
+    `${env.SUPABASE_URL}/rest/v1/client_settings?client_id=eq.${enc(
+      clientId
+    )}&select=day_start,day_end,night_start,night_end,sat_start,sat_end,sun_start,sun_end,bh_list`
   );
   const defaults = await sbGetOne(
     env,
@@ -358,19 +361,31 @@ async function loadClientTimePolicy(env, clientId) {
 
   const src = { ...(defaults || {}), ...(cs || {}) };
 
-  const dayStart   = parseHHMM(src.day_start   || '06:00');
-  const dayEnd     = parseHHMM(src.day_end     || '20:00');
-  const nightStart = parseHHMM(src.night_start || '20:00');
-  const nightEnd   = parseHHMM(src.night_end   || '06:00');
-  const satStart   = parseHHMM(src.sat_start   || '00:00');
-  const satEnd     = parseHHMM(src.sat_end     || '00:00');
-  const sunStart   = parseHHMM(src.sun_start   || '00:00');
-  const sunEnd     = parseHHMM(src.sun_end     || '00:00');
+  const dayStart = parseHHMM(src.day_start || "06:00");
+  const dayEnd = parseHHMM(src.day_end || "20:00");
+  const nightStart = parseHHMM(src.night_start || "20:00");
+  const nightEnd = parseHHMM(src.night_end || "06:00");
+  const satStart = parseHHMM(src.sat_start || "00:00");
+  const satEnd = parseHHMM(src.sat_end || "00:00");
+  const sunStart = parseHHMM(src.sun_start || "00:00");
+  const sunEnd = parseHHMM(src.sun_end || "00:00");
 
-  const bhListArr = Array.isArray(cs?.bh_list) ? cs.bh_list : (defaults?.bh_list || []);
+  const bhListArr = Array.isArray(cs?.bh_list)
+    ? cs.bh_list
+    : defaults?.bh_list || [];
   const bhList = new Set(bhListArr);
 
-  return { dayStart, dayEnd, nightStart, nightEnd, satStart, satEnd, sunStart, sunEnd, bhList };
+  return {
+    dayStart,
+    dayEnd,
+    nightStart,
+    nightEnd,
+    satStart,
+    satEnd,
+    sunStart,
+    sunEnd,
+    bhList,
+  };
 }
 
 // Segment one day's chunk [a,b) in minutes (0..1440), allocate into day/night using client windows.
@@ -839,7 +854,8 @@ async function renderTimesheetPDFAndSave(env, timesheetId) {
 async function ensureTimesheetPdf(env, timesheetId) {
   // Prefer a manual uploaded PDF when present; else render from signatures.
   // We return the key to the PDF in R2 (can be the manual key itself).
-  const ts = await sbGetOne(env,
+  const ts = await sbGetOne(
+    env,
     `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}&select=manual_pdf_r2_key`
   );
   if (ts?.manual_pdf_r2_key) {
@@ -851,6 +867,7 @@ async function ensureTimesheetPdf(env, timesheetId) {
   if (await r2Exists(env, key)) return key;
   return await renderTimesheetPDFAndSave(env, timesheetId);
 }
+
 
 // ============================================================================
 // NEW: Weekly / Manual contracts API handlers
@@ -967,6 +984,54 @@ export async function handleContractsCreate(env, req) {
   // 🔄 Relaxed: candidate_id is now optional (can be null/unassigned)
   const required = ['client_id','start_date','end_date','pay_method_snapshot'];
   for (const k of required) if (!body[k]) return withCORS(env, req, badRequest(`${k} is required`));
+
+  const normaliseAdditionalRates = (raw) => {
+    if (!raw) return null;
+    const arr = Array.isArray(raw) ? raw : [];
+    const out = [];
+    const seen = new Set();
+    const ALLOWED = new Set(['ONE_PER_WEEK','ONE_PER_DAY','WEEKENDS_AND_BH_ONLY','WEEKDAYS_EXCL_BH_ONLY']);
+
+    const ensureCode = (code, idx) => {
+      const c = String(code || '').toUpperCase();
+      if (/^EX[1-5]$/.test(c)) return c;
+      return `EX${idx + 1}`;
+    };
+
+    arr.slice(0, 5).forEach((row, idx) => {
+      if (!row || typeof row !== 'object') return;
+      const code = ensureCode(row.code, idx);
+      if (seen.has(code)) return;
+      seen.add(code);
+
+      const bucketName = (row.bucket_name || '').trim();
+      const unitName   = (row.unit_name != null && String(row.unit_name).trim())
+        ? String(row.unit_name).trim()
+        : null;
+
+      let freq = String(row.frequency || 'ONE_PER_WEEK').toUpperCase();
+      if (!ALLOWED.has(freq)) freq = 'ONE_PER_WEEK';
+
+      let pay    = (row.pay_rate    !== undefined && row.pay_rate    !== null) ? Number(row.pay_rate)    : null;
+      let charge = (row.charge_rate !== undefined && row.charge_rate !== null) ? Number(row.charge_rate) : null;
+      if (pay != null && (!Number.isFinite(pay) || pay < 0)) pay = null;
+      if (charge != null && (!Number.isFinite(charge) || charge < 0)) charge = null;
+
+      const hasAny = bucketName || pay != null || charge != null || unitName;
+      if (!hasAny) return;
+
+      out.push({
+        code,
+        bucket_name: bucketName,
+        unit_name: unitName,
+        frequency: freq,
+        pay_rate: pay,
+        charge_rate: charge
+      });
+    });
+
+    return out.length ? out : null;
+  };
 
   // Track whether flags were explicitly supplied so we can decide when to derive from client defaults
   const hasRequireRefToPay      = Object.prototype.hasOwnProperty.call(body, 'require_reference_to_pay');
@@ -1123,6 +1188,9 @@ export async function handleContractsCreate(env, req) {
     }
   }
 
+  // NEW: normalise additional_rates_json
+  const additional_rates_json = normaliseAdditionalRates(body.additional_rates_json);
+
   // Insert contract
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts`, {
     method: 'POST',
@@ -1142,6 +1210,7 @@ export async function handleContractsCreate(env, req) {
       std_schedule_json,
       std_hours_json,
       bucket_labels_json: bucketLabels,
+      additional_rates_json,                    // NEW
       default_submission_mode: defaultSubmissionMode,
       week_ending_weekday_snapshot: weekEndingSnapshot,
       auto_invoice: body.auto_invoice,
@@ -1171,12 +1240,10 @@ export async function handleContractsCreate(env, req) {
     });
 
     if (shouldGenerate) {
-      // Prefer internal handler if available
       if (typeof handleContractsGenerateWeeks === 'function') {
         await handleContractsGenerateWeeks(env, req, row.id);
         console.log('[CONTRACTS][CREATE] generate-weeks via internal handler ok', { id: row.id });
       } else {
-        // If you have a routed endpoint, you could call it here.
         console.log('[CONTRACTS][CREATE] no internal handler found; generation skipped (safe)');
       }
     } else {
@@ -1737,6 +1804,54 @@ export async function handleContractsUpdate(env, req, contractId) {
     `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&select=id&limit=1`
   ));
 
+  const normaliseAdditionalRates = (raw) => {
+    if (!raw) return null;
+    const arr = Array.isArray(raw) ? raw : [];
+    const out = [];
+    const seen = new Set();
+    const ALLOWED = new Set(['ONE_PER_WEEK','ONE_PER_DAY','WEEKENDS_AND_BH_ONLY','WEEKDAYS_EXCL_BH_ONLY']);
+
+    const ensureCode = (code, idx) => {
+      const c = String(code || '').toUpperCase();
+      if (/^EX[1-5]$/.test(c)) return c;
+      return `EX${idx + 1}`;
+    };
+
+    arr.slice(0, 5).forEach((row, idx) => {
+      if (!row || typeof row !== 'object') return;
+      const code = ensureCode(row.code, idx);
+      if (seen.has(code)) return;
+      seen.add(code);
+
+      const bucketName = (row.bucket_name || '').trim();
+      const unitName   = (row.unit_name != null && String(row.unit_name).trim())
+        ? String(row.unit_name).trim()
+        : null;
+
+      let freq = String(row.frequency || 'ONE_PER_WEEK').toUpperCase();
+      if (!ALLOWED.has(freq)) freq = 'ONE_PER_WEEK';
+
+      let pay    = (row.pay_rate    !== undefined && row.pay_rate    !== null) ? Number(row.pay_rate)    : null;
+      let charge = (row.charge_rate !== undefined && row.charge_rate !== null) ? Number(row.charge_rate) : null;
+      if (pay != null && (!Number.isFinite(pay) || pay < 0)) pay = null;
+      if (charge != null && (!Number.isFinite(charge) || charge < 0)) charge = null;
+
+      const hasAny = bucketName || pay != null || charge != null || unitName;
+      if (!hasAny) return;
+
+      out.push({
+        code,
+        bucket_name: bucketName,
+        unit_name: unitName,
+        frequency: freq,
+        pay_rate: pay,
+        charge_rate: charge
+      });
+    });
+
+    return out.length ? out : null;
+  };
+
   let schedulePatch = {};
   if ('std_schedule_json' in body) {
     try {
@@ -1780,11 +1895,15 @@ export async function handleContractsUpdate(env, req, contractId) {
   if ('require_reference_to_invoice' in body) patch.require_reference_to_invoice = clampBool(body.require_reference_to_invoice, current.require_reference_to_invoice);
 
   if (hasSubmitted) {
+    // Existing rules for immutable fields after submission
     if ('candidate_id' in body || 'client_id' in body || 'rates_json' in body || 'pay_method_snapshot' in body) {
       return withCORS(env, req, badRequest('Cannot change candidate/client/rates/pay_method after timesheets have been submitted'));
     }
     if ('mileage_pay_rate' in body || 'mileage_charge_rate' in body) {
       return withCORS(env, req, badRequest('Cannot change mileage rates after timesheets have been submitted'));
+    }
+    if ('additional_rates_json' in body) {
+      return withCORS(env, req, badRequest('Cannot change additional rates after timesheets have been submitted'));
     }
   } else {
     if ('candidate_id' in body) patch.candidate_id = body.candidate_id || null;
@@ -1808,7 +1927,6 @@ export async function handleContractsUpdate(env, req, contractId) {
       if (!['PAYE','UMBRELLA'].includes(pm)) return withCORS(env, req, badRequest('pay_method_snapshot must be PAYE or UMBRELLA'));
       patch.pay_method_snapshot = pm;
     }
-    // Mileage can only be changed while there are no submitted timesheets
     if ('mileage_pay_rate' in body) {
       if (body.mileage_pay_rate === '' || body.mileage_pay_rate === null || body.mileage_pay_rate === undefined) {
         patch.mileage_pay_rate = null;
@@ -1830,6 +1948,10 @@ export async function handleContractsUpdate(env, req, contractId) {
         }
         patch.mileage_charge_rate = n;
       }
+    }
+    // NEW: additional_rates_json can be edited while no submitted TS exist
+    if ('additional_rates_json' in body) {
+      patch.additional_rates_json = normaliseAdditionalRates(body.additional_rates_json);
     }
   }
 
@@ -1873,7 +1995,7 @@ export async function handleContractsUpdate(env, req, contractId) {
   }
 
   const newStart = ('start_date' in body) ? toYmd(body.start_date) : current.start_date;
-  const newEnd   = ('end_date' in body) ? toYmd(body.end_date)   : current.end_date;
+  const newEnd   = ('end_date'   in body) ? toYmd(body.end_date)   : current.end_date;
 
   patch.start_date = newStart;
   patch.end_date   = newEnd;
@@ -1995,7 +2117,6 @@ export async function handleContractsUpdate(env, req, contractId) {
 }
 
 
-
 // Lightweight checker for FE: returns real-timesheet boundary info for proposed window
 export async function handleContractsCheckTimesheetBoundary(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -2112,6 +2233,54 @@ export async function handleContractsReplace(env, req, contractId) {
     `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&select=id&limit=1`
   ));
 
+  const normaliseAdditionalRates = (raw) => {
+    if (!raw) return null;
+    const arr = Array.isArray(raw) ? raw : [];
+    const out = [];
+    const seen = new Set();
+    const ALLOWED = new Set(['ONE_PER_WEEK','ONE_PER_DAY','WEEKENDS_AND_BH_ONLY','WEEKDAYS_EXCL_BH_ONLY']);
+
+    const ensureCode = (code, idx) => {
+      const c = String(code || '').toUpperCase();
+      if (/^EX[1-5]$/.test(c)) return c;
+      return `EX${idx + 1}`;
+    };
+
+    arr.slice(0, 5).forEach((row, idx) => {
+      if (!row || typeof row !== 'object') return;
+      const code = ensureCode(row.code, idx);
+      if (seen.has(code)) return;
+      seen.add(code);
+
+      const bucketName = (row.bucket_name || '').trim();
+      const unitName   = (row.unit_name != null && String(row.unit_name).trim())
+        ? String(row.unit_name).trim()
+        : null;
+
+      let freq = String(row.frequency || 'ONE_PER_WEEK').toUpperCase();
+      if (!ALLOWED.has(freq)) freq = 'ONE_PER_WEEK';
+
+      let pay    = (row.pay_rate    !== undefined && row.pay_rate    !== null) ? Number(row.pay_rate)    : null;
+      let charge = (row.charge_rate !== undefined && row.charge_rate !== null) ? Number(row.charge_rate) : null;
+      if (pay != null && (!Number.isFinite(pay) || pay < 0)) pay = null;
+      if (charge != null && (!Number.isFinite(charge) || charge < 0)) charge = null;
+
+      const hasAny = bucketName || pay != null || charge != null || unitName;
+      if (!hasAny) return;
+
+      out.push({
+        code,
+        bucket_name: bucketName,
+        unit_name: unitName,
+        frequency: freq,
+        pay_rate: pay,
+        charge_rate: charge
+      });
+    });
+
+    return out.length ? out : null;
+  };
+
   // 🔄 Relaxed: candidate_id no longer required in body (can be omitted/null)
   const requiredKeys = ['client_id','start_date','end_date','pay_method_snapshot','default_submission_mode','week_ending_weekday_snapshot','rates_json'];
   const missing = requiredKeys.filter(k => !(k in body));
@@ -2168,6 +2337,9 @@ export async function handleContractsReplace(env, req, contractId) {
     }
     if (nextMileagePay !== current.mileage_pay_rate || nextMileageCharge !== current.mileage_charge_rate) {
       return withCORS(env, req, badRequest('Cannot change mileage rates after timesheets have been submitted'));
+    }
+    if ('additional_rates_json' in body) {
+      return withCORS(env, req, badRequest('Cannot change additional rates after timesheets have been submitted'));
     }
   }
 
@@ -2273,6 +2445,9 @@ export async function handleContractsReplace(env, req, contractId) {
     mileage_pay_rate: nextMileagePay,
     mileage_charge_rate: nextMileageCharge,
     updated_at: nowIso(),
+    additional_rates_json: ('additional_rates_json' in body)
+      ? normaliseAdditionalRates(body.additional_rates_json)
+      : (current.additional_rates_json || null) // keep existing by default
   };
 
   // Prune PAYE vs Umbrella buckets according to pay_method_snapshot
@@ -2378,7 +2553,7 @@ export async function handleContractsReplace(env, req, contractId) {
   if ((normStart && normStart !== updated.start_date) || (normEnd && normEnd !== updated.end_date)) {
     const normRes = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {
       method: 'PATCH',
-      headers: { ...sbHeaders(env), 'Prefer':'return=representation' },
+      headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
       body: JSON.stringify({ start_date: normStart, end_date: normEnd, updated_at: nowIso() })
     });
     if (normRes.ok) updated = (await normRes.json().catch(()=>[]))[0] || updated;
@@ -2410,7 +2585,6 @@ export async function handleContractsDuplicate(env, req, contractId) {
   );
   if (!src) return withCORS(env, req, notFound('Source contract not found'));
 
-  // Optional: you can add extra guards here (e.g. forbid duplication of ended contracts)
   try {
     console.log('[CONTRACTS][DUPLICATE] source', {
       id: src.id,
@@ -2439,6 +2613,7 @@ export async function handleContractsDuplicate(env, req, contractId) {
       std_schedule_json: src.std_schedule_json || null,
       std_hours_json: src.std_hours_json || null,
       bucket_labels_json: src.bucket_labels_json || null,
+      additional_rates_json: src.additional_rates_json || null,   // NEW
       default_submission_mode: String(src.default_submission_mode || 'ELECTRONIC').toUpperCase(),
       week_ending_weekday_snapshot: Number(src.week_ending_weekday_snapshot ?? 0),
       auto_invoice: !!src.auto_invoice,
@@ -2701,6 +2876,7 @@ function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEn
   // Unknown shape → nothing to render
   return [];
 }
+
 export async function handleContractsCloneAndExtend(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -2788,10 +2964,14 @@ export async function handleContractsCloneAndExtend(env, req, contractId) {
     std_hours_json:    successor_std_hours,
 
     bucket_labels_json: ('bucket_labels_json' in ov) ? ov.bucket_labels_json : (cur.bucket_labels_json || null),
+    additional_rates_json: ('additional_rates_json' in ov) ? ov.additional_rates_json : (cur.additional_rates_json || null), // NEW
 
     auto_invoice: cur.auto_invoice,
     require_reference_to_pay: cur.require_reference_to_pay,
     require_reference_to_invoice: cur.require_reference_to_invoice,
+
+    mileage_pay_rate: cur.mileage_pay_rate,
+    mileage_charge_rate: cur.mileage_charge_rate,
 
     created_at: nowIso(), updated_at: nowIso()
   }];
@@ -2827,13 +3007,11 @@ export async function handleContractsCloneAndExtend(env, req, contractId) {
 
         const plan = Array.isArray(w?.planned_schedule_json) ? w.planned_schedule_json : [];
         if (!plan.length) {
-          // empty shell → delete
           await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(w.id)}`, {
             method:'DELETE', headers: { ...sbHeaders(env), 'Prefer':'return=minimal' }
           }).catch(()=>{});
           continue;
         }
-        // Keep only days strictly before newStart
         const kept = plan.filter(d => d && typeof d.date === 'string' && d.date < newStart);
         if (kept.length) {
           await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(w.id)}`, {
@@ -2857,6 +3035,8 @@ export async function handleContractsCloneAndExtend(env, req, contractId) {
 
   return withCORS(env, req, ok({ successor, closed_at: wantEndExisting ? closeTo : null }));
 }
+
+
 
 export async function handleContractsCalendar(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
@@ -3496,7 +3676,7 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
     return withCORS(env, req, badRequest('Provide either actual_schedule_json or hours totals'));
   }
 
-  // Rates must exist for any positive bucket
+  // Base rates must exist for any positive bucket
   const { pay, charge, method } = payChargeFromContract(contract);
   const anyMissing = (h, P, C) => (h.day>0 && (!P.day&&P.day!==0 || !C.day&&C.day!==0)) ||
                                   (h.night>0 && (!P.night&&P.night!==0 || !C.night&&C.night!==0)) ||
@@ -3506,6 +3686,144 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
   if (anyMissing(hours, pay, charge)) {
     return withCORS(env, req, badRequest('Missing rate(s) in contract for one or more entered hour buckets'));
   }
+
+  // ─────────────────────────────────────────────────────────────
+  // Additional unit buckets (EX1..EX5) – weekly totals
+  // ─────────────────────────────────────────────────────────────
+  const unitsWeek  = (body.additional_units_week && typeof body.additional_units_week === 'object')
+    ? body.additional_units_week
+    : {};
+  const unitsPerDay = (body.additional_units_per_day && typeof body.additional_units_per_day === 'object')
+    ? body.additional_units_per_day
+    : {};
+
+  const addlConfig = Array.isArray(contract.additional_rates_json)
+    ? contract.additional_rates_json
+    : [];
+
+  // Build 7-day window [WE-6..WE]
+  const weekDates = [];
+  try {
+    const base = new Date(String(cw.week_ending_date) + 'T00:00:00Z');
+    for (let offset = 6; offset >= 0; offset--) {
+      const d = new Date(base);
+      d.setUTCDate(base.getUTCDate() - offset);
+      const yyyy = d.getUTCFullYear();
+      const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const dd   = String(d.getUTCDate()).padStart(2, '0');
+      const ymd  = `${yyyy}-${mm}-${dd}`;
+      const dow  = d.getUTCDay(); // 0..6
+      weekDates.push({ ymd, dow });
+    }
+  } catch {
+    // if somehow fails, we'll treat weekDates as empty and ignore per-day units
+  }
+
+  // Load BH policy for this contract
+  let bhSet = new Set();
+  try {
+    const policy = await loadClientTimePolicy(env, contract.client_id);
+    if (policy && policy.bhList) {
+      if (policy.bhList instanceof Set) {
+        bhSet = policy.bhList;
+      } else if (Array.isArray(policy.bhList)) {
+        bhSet = new Set(policy.bhList);
+      }
+    }
+  } catch {
+    bhSet = new Set();
+  }
+
+  const isBH = (ymd) => bhSet.has(ymd);
+
+  const normaliseFreq = (raw) => {
+    const s = String(raw || '').toUpperCase();
+    if (s === 'ONE_PER_WEEK')         return 'ONE_PER_WEEK';
+    if (s === 'ONE_PER_DAY')          return 'ONE_PER_DAY';
+    if (s === 'WEEKENDS_AND_BH_ONLY') return 'WEEKENDS_AND_BH_ONLY';
+    if (s === 'WEEKDAYS_EXCL_BH_ONLY')return 'WEEKDAYS_EXCL_BH_ONLY';
+    return 'ONE_PER_WEEK';
+  };
+
+  const shouldIncludeDay = (freq, meta) => {
+    const { ymd, dow } = meta;
+    const isBh = isBH(ymd);
+    if (freq === 'ONE_PER_DAY') return true;
+    if (freq === 'WEEKENDS_AND_BH_ONLY') {
+      return isBh || dow === 0 || dow === 6; // Sun or Sat or BH
+    }
+    if (freq === 'WEEKDAYS_EXCL_BH_ONLY') {
+      return !isBh && dow >= 1 && dow <= 5; // Mon–Fri, not BH
+    }
+    return false;
+  };
+
+  let additional_units_json   = {};
+  let additional_pay_ex_vat   = 0;
+  let additional_charge_ex_vat= 0;
+  const badBuckets = [];
+
+  for (const cfgRaw of addlConfig) {
+    if (!cfgRaw || typeof cfgRaw !== 'object') continue;
+    const code = String(cfgRaw.code || '').toUpperCase() || 'EX1';
+    const freq = normaliseFreq(cfgRaw.frequency);
+    let unitCount = 0;
+    const daysUsed = {};
+
+    if (freq === 'ONE_PER_WEEK') {
+      const u = Number(unitsWeek[code] || 0);
+      if (u && Number.isFinite(u)) unitCount = u;
+    } else {
+      const perRaw = (unitsPerDay[code] && typeof unitsPerDay[code] === 'object')
+        ? unitsPerDay[code]
+        : {};
+      for (const meta of weekDates) {
+        const raw = perRaw[meta.ymd];
+        if (raw == null || raw === '') continue;
+        const v = Number(raw);
+        if (!Number.isFinite(v) || !v) continue;
+        if (!shouldIncludeDay(freq, meta)) continue;
+        unitCount += v;
+        daysUsed[meta.ymd] = v;
+      }
+    }
+
+    if (!unitCount || !Number.isFinite(unitCount)) continue;
+
+    const payRate    = (cfgRaw.pay_rate    != null) ? Number(cfgRaw.pay_rate)    : NaN;
+    const chargeRate = (cfgRaw.charge_rate != null) ? Number(cfgRaw.charge_rate) : NaN;
+    if (!Number.isFinite(payRate) || !Number.isFinite(chargeRate)) {
+      badBuckets.push(cfgRaw.bucket_name || code);
+      continue;
+    }
+
+    const payEx = +Number(unitCount * payRate).toFixed(2);
+    const chgEx = +Number(unitCount * chargeRate).toFixed(2);
+
+    additional_units_json[code] = {
+      bucket_name: cfgRaw.bucket_name || null,
+      unit_name:   cfgRaw.unit_name   || null,
+      frequency:   freq,
+      unit_count:  unitCount,
+      pay_rate:    payRate,
+      charge_rate: chargeRate,
+      pay_ex_vat:  payEx,
+      charge_ex_vat: chgEx,
+      days: Object.keys(daysUsed).length ? daysUsed : undefined
+    };
+
+    additional_pay_ex_vat    += payEx;
+    additional_charge_ex_vat += chgEx;
+  }
+
+  if (badBuckets.length) {
+    const msg = `Missing additional rate(s) in contract for bucket(s): ${badBuckets.join(', ')}`;
+    return withCORS(env, req, badRequest(msg));
+  }
+
+  additional_pay_ex_vat    = +Number(additional_pay_ex_vat).toFixed(2);
+  additional_charge_ex_vat = +Number(additional_charge_ex_vat).toFixed(2);
+  const additional_margin_ex_vat = +Number(additional_charge_ex_vat - additional_pay_ex_vat).toFixed(2);
 
   // Build or reuse timesheet (manual weekly)
   let ts = cw.timesheet_id
@@ -3536,7 +3854,7 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
       submission_mode: 'MANUAL',
       manual_pdf_r2_key: cw.uploaded_pdf_r2_key || null,
       line_type: 'HOURS',
-      actual_schedule_json,                     // NEW
+      actual_schedule_json,
       authorised_at_server: null,
       created_at: nowIso(), updated_at: nowIso()
     }];
@@ -3552,18 +3870,20 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
       body: JSON.stringify({ timesheet_id: ts.timesheet_id, status: 'SUBMITTED', updated_at: nowIso() })
     });
   } else if (actual_schedule_json) {
-    // If we already had a TS and caller re-processes with actual schedule, persist it
     await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`, {
       method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
       body: JSON.stringify({ actual_schedule_json, updated_at: nowIso() })
     }).catch(()=>{});
   }
 
-  // TSFIN snapshot (PENDING_AUTH)
+  // TSFIN snapshot (PENDING_AUTH) – include additional buckets
   const n2 = (x)=>Number(x)||0;
-  const total_pay    = +(hours.day*n2(pay.day) + hours.night*n2(pay.night) + hours.sat*n2(pay.sat) + hours.sun*n2(pay.sun) + hours.bh*n2(pay.bh)).toFixed(2);
-  const total_charge = +(hours.day*n2(charge.day)+hours.night*n2(charge.night)+hours.sat*n2(charge.sat)+hours.sun*n2(charge.sun)+hours.bh*n2(charge.bh)).toFixed(2);
-  const margin       = +(total_charge - total_pay).toFixed(2);
+  const base_pay    = +(hours.day*n2(pay.day) + hours.night*n2(pay.night) + hours.sat*n2(pay.sat) + hours.sun*n2(pay.sun) + hours.bh*n2(pay.bh)).toFixed(2);
+  const base_charge = +(hours.day*n2(charge.day)+hours.night*n2(charge.night)+hours.sat*n2(charge.sat)+hours.sun*n2(charge.sun)+hours.bh*n2(charge.bh)).toFixed(2);
+
+  const total_pay    = +Number(base_pay    + additional_pay_ex_vat).toFixed(2);
+  const total_charge = +Number(base_charge + additional_charge_ex_vat).toFixed(2);
+  const margin       = +Number(total_charge - total_pay).toFixed(2);
 
   const snap = {
     timesheet_id: ts.timesheet_id,
@@ -3579,6 +3899,10 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
     total_pay_ex_vat: total_pay,
     total_charge_ex_vat: total_charge,
     margin_ex_vat: margin,
+    additional_units_json: additional_units_json,
+    additional_pay_ex_vat: additional_pay_ex_vat,
+    additional_charge_ex_vat: additional_charge_ex_vat,
+    additional_margin_ex_vat: additional_margin_ex_vat,
     expenses_pay_ex_vat: 0, expenses_charge_ex_vat: 0, expenses_description: null, expenses_evidence_r2_key: null,
     mileage_pay_ex_vat: 0, mileage_charge_ex_vat: 0, mileage_evidence_r2_key: null, mileage_pay_rate: null, mileage_charge_rate: null,
     pay_on_hold: false, pay_on_hold_reason: null, pay_on_hold_since_utc: null,
@@ -3588,13 +3912,18 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
   };
   await writeSnapshot(env, snap);
 
-  // (Optional) persist a compact echo for UI in contract_weeks
+  // Persist a compact echo for UI in contract_weeks
   const weekPatch = { totals_json: { hours }, updated_at: nowIso() };
   await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`, {
     method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' }, body: JSON.stringify(weekPatch)
   });
 
-  return withCORS(env, req, ok({ timesheet_id: ts.timesheet_id, processing_status: 'PENDING_AUTH', hours, used_schedule: !!actual_schedule_json }));
+  return withCORS(env, req, ok({
+    timesheet_id: ts.timesheet_id,
+    processing_status: 'PENDING_AUTH',
+    hours,
+    used_schedule: !!actual_schedule_json
+  }));
 }
 
 
@@ -3764,12 +4093,19 @@ export async function handleTimesheetsPresignWeekly(env, req) {
   }
   if (!cw) return withCORS(env, req, notFound('Weekly slot not found'));
 
-  const contract = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(cw.contract_id)}&select=id,candidate_id,bucket_labels_json`);
+  const contract = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(cw.contract_id)}&select=id,candidate_id,bucket_labels_json,additional_rates_json`
+  );
   if (!contract) return withCORS(env, req, notFound('Contract not found'));
   const candidateId = contract.candidate_id;
   const DEFAULT_LABELS = { day: 'Day', night: 'Night', sat: 'Sat', sun: 'Sun', bh: 'BH' };
   const bucketLabels = (contract.bucket_labels_json && typeof contract.bucket_labels_json === 'object')
     ? contract.bucket_labels_json : DEFAULT_LABELS;
+
+  const additional_rates = Array.isArray(contract.additional_rates_json)
+    ? contract.additional_rates_json
+    : [];
 
   const bookingId = makeWeeklyBookingId(candidateId, contract, cw);
   const weC = ymdCompact(cw.week_ending_date);
@@ -3785,10 +4121,19 @@ export async function handleTimesheetsPresignWeekly(env, req) {
   return withCORS(env, req, ok({
     booking_id: bookingId,
     week_ending_date: cw.week_ending_date,
-    bucket_labels: bucketLabels, // <-- UI displays these labels
+    bucket_labels: bucketLabels,           // core 5 buckets
+    additional_rates,                      // NEW: extra buckets config for UI
     keys: {
-      nurse: { key: nurseKey, token: nurseToken, upload_url: `${origin}/api/signatures/upload?key=${enc(nurseKey)}&token=${enc(nurseToken)}` },
-      authoriser:{ key: authKey,  token: authToken,  upload_url: `${origin}/api/signatures/upload?key=${enc(authKey)}&token=${enc(authToken)}` }
+      nurse: {
+        key: nurseKey,
+        token: nurseToken,
+        upload_url: `${origin}/api/signatures/upload?key=${enc(nurseKey)}&token=${enc(nurseToken)}`
+      },
+      authoriser:{
+        key: authKey,
+        token: authToken,
+        upload_url: `${origin}/api/signatures/upload?key=${enc(authKey)}&token=${enc(authToken)}`
+      }
     }
   }));
 }
@@ -3819,6 +4164,186 @@ export async function handleTimesheetReplaceManualPdf(env, req, timesheetId) {
   await writeAudit(env, user, 'TIMESHEET_MANUAL_PDF_REPLACED', { manual_pdf_r2_key: newKey }, { entity: 'timesheet', subject_id: timesheetId, req });
   const row = (await res.json().catch(()=>[]))[0] || null;
   return withCORS(env, req, ok({ timesheet_id: timesheetId, manual_pdf_r2_key: row?.manual_pdf_r2_key || null }));
+}
+
+
+async function rebuildWeeklyTsfinForTimesheet(env, timesheetId, contract) {
+  // Rebuild the timesheets_financials snapshot for a *weekly* contract timesheet
+  // using:
+  //  - new contract.rates_json & pay_method_snapshot
+  //  - existing hours_* from the latest ts_fin row
+  //  - existing additional_units_json.unit_count per extra bucket, but
+  //    with per-unit pay/charge taken from the *new* contract.additional_rates_json.
+  //
+  // Skips:
+  //  - if timesheet not found
+  //  - if no current ts_fin row
+  //  - if the current ts_fin row is locked by invoice or already paid
+  const { rows: finRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?timesheet_id=eq.${encodeURIComponent(timesheetId)}` +
+      `&is_current=eq.true&select=*`
+  );
+  const fin = (finRows && finRows[0]) || null;
+  if (!fin) {
+    // Nothing to rebuild
+    return { ok: false, reason: 'NO_SNAPSHOT' };
+  }
+
+  // Respect locks: do not touch paid or invoice-locked timesheets
+  if (fin.locked_by_invoice_id || fin.paid_at_utc) {
+    return { ok: false, reason: 'LOCKED_OR_PAID' };
+  }
+
+  // Load timesheet row (for version + any other linkage)
+  const ts = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}&select=*`
+  );
+  if (!ts) {
+    return { ok: false, reason: 'TS_NOT_FOUND' };
+  }
+
+  // Hours from existing snapshot
+  const hours = {
+    day:   Number(fin.hours_day  || 0),
+    night: Number(fin.hours_night|| 0),
+    sat:   Number(fin.hours_sat  || 0),
+    sun:   Number(fin.hours_sun  || 0),
+    bh:    Number(fin.hours_bh   || 0)
+  };
+
+  // New pay/charge buckets from successor contract
+  const { pay, charge, method } = payChargeFromContract(contract);
+
+  const totalHoursPay =
+    (hours.day   * (pay.day   || 0)) +
+    (hours.night * (pay.night || 0)) +
+    (hours.sat   * (pay.sat   || 0)) +
+    (hours.sun   * (pay.sun   || 0)) +
+    (hours.bh    * (pay.bh    || 0));
+
+  const totalHoursCharge =
+    (hours.day   * (charge.day   || 0)) +
+    (hours.night * (charge.night || 0)) +
+    (hours.sat   * (charge.sat   || 0)) +
+    (hours.sun   * (charge.sun   || 0)) +
+    (hours.bh    * (charge.bh    || 0));
+
+  const hoursPayEx    = +Number(totalHoursPay).toFixed(2);
+  const hoursChargeEx = +Number(totalHoursCharge).toFixed(2);
+
+  // Recalculate additional units using new per-unit rates from contract.additional_rates_json
+  let additional_units_json   = {};
+  let additional_pay_ex_vat   = 0;
+  let additional_charge_ex_vat= 0;
+
+  try {
+    const cfgArr = Array.isArray(contract.additional_rates_json)
+      ? contract.additional_rates_json
+      : [];
+    const cfgByCode = {};
+    cfgArr.forEach(c => {
+      if (c && c.code) cfgByCode[String(c.code).toUpperCase()] = c;
+    });
+
+    const stored = fin.additional_units_json || {};
+    for (const [codeRaw, entry] of Object.entries(stored || {})) {
+      const code = String(codeRaw || '').toUpperCase();
+      const cfg  = cfgByCode[code] || {};
+      const units = Number(entry?.unit_count || 0);
+      if (!units || !Number.isFinite(units)) continue;
+
+      const payRateNew =
+        (cfg.pay_rate != null && Number.isFinite(Number(cfg.pay_rate)))
+          ? Number(cfg.pay_rate)
+          : Number(entry.pay_rate || 0);
+
+      const chargeRateNew =
+        (cfg.charge_rate != null && Number.isFinite(Number(cfg.charge_rate)))
+          ? Number(cfg.charge_rate)
+          : Number(entry.charge_rate || 0);
+
+      const payEx  = +Number(units * payRateNew).toFixed(2);
+      const chgEx  = +Number(units * chargeRateNew).toFixed(2);
+
+      additional_units_json[code] = {
+        bucket_name: cfg.bucket_name || entry.bucket_name || null,
+        unit_name:   cfg.unit_name   || entry.unit_name   || null,
+        frequency:   cfg.frequency   || entry.frequency   || null,
+        unit_count:  units,
+        pay_rate:    payRateNew,
+        charge_rate: chargeRateNew,
+        pay_ex_vat:  payEx,
+        charge_ex_vat: chgEx,
+        // preserve per-day breakdown if present
+        days: (entry && entry.days) ? entry.days : undefined
+      };
+
+      additional_pay_ex_vat    += payEx;
+      additional_charge_ex_vat += chgEx;
+    }
+  } catch (e) {
+    // If anything goes wrong, fall back to no extras for safety
+    additional_units_json    = {};
+    additional_pay_ex_vat    = 0;
+    additional_charge_ex_vat = 0;
+  }
+
+  additional_pay_ex_vat     = +Number(additional_pay_ex_vat).toFixed(2);
+  additional_charge_ex_vat  = +Number(additional_charge_ex_vat).toFixed(2);
+  const additional_margin_ex_vat = +Number(additional_charge_ex_vat - additional_pay_ex_vat).toFixed(2);
+
+  const total_pay_ex_vat    = +Number(hoursPayEx    + additional_pay_ex_vat).toFixed(2);
+  const total_charge_ex_vat = +Number(hoursChargeEx + additional_charge_ex_vat).toFixed(2);
+  const margin_ex_vat       = +Number(total_charge_ex_vat - total_pay_ex_vat).toFixed(2);
+
+  // Start from the existing snapshot and overwrite the pieces we recompute
+  const snap = { ...fin };
+
+  // Never carry over the primary key / created_at / versioning fields
+  delete snap.id;
+  delete snap.created_at;
+  delete snap.is_current;
+
+  snap.timesheet_id       = ts.timesheet_id;
+  snap.timesheet_version  = ts.version || fin.timesheet_version || 1;
+  snap.candidate_id       = contract.candidate_id;
+  snap.client_id          = contract.client_id;
+  snap.pay_method         = method;
+
+  snap.hours_day   = hours.day;
+  snap.hours_night = hours.night;
+  snap.hours_sat   = hours.sat;
+  snap.hours_sun   = hours.sun;
+  snap.hours_bh    = hours.bh;
+
+  snap.rate_day    = charge.day   || 0;
+  snap.rate_night  = charge.night || 0;
+  snap.rate_sat    = charge.sat   || 0;
+  snap.rate_sun    = charge.sun   || 0;
+  snap.rate_bh     = charge.bh    || 0;
+
+  snap.pay_rate_day   = pay.day   || 0;
+  snap.pay_rate_night = pay.night || 0;
+  snap.pay_rate_sat   = pay.sat   || 0;
+  snap.pay_rate_sun   = pay.sun   || 0;
+  snap.pay_rate_bh    = pay.bh    || 0;
+
+  snap.additional_units_json    = additional_units_json;
+  snap.additional_pay_ex_vat    = additional_pay_ex_vat;
+  snap.additional_charge_ex_vat = additional_charge_ex_vat;
+  snap.additional_margin_ex_vat = additional_margin_ex_vat;
+
+  snap.total_pay_ex_vat    = total_pay_ex_vat;
+  snap.total_charge_ex_vat = total_charge_ex_vat;
+  snap.margin_ex_vat       = margin_ex_vat;
+
+  snap.created_at = nowIso();
+
+  await writeSnapshot(env, snap);
+  return { ok: true };
 }
 
 export async function handleTimesheetsSubmitWeekly(env, req) {
@@ -3869,6 +4394,144 @@ export async function handleTimesheetsSubmitWeekly(env, req) {
                                   (h.bh>0 && (!P.bh&&P.bh!==0 || !C.bh&&C.bh!==0));
   if (anyMissing(hours, pay, charge)) return withCORS(env, req, badRequest('Missing rate(s) in contract for one or more entered hour buckets'));
 
+  // ─────────────────────────────────────────────────────────────
+  // Additional unit buckets (EX1..EX5) – weekly totals
+  // ─────────────────────────────────────────────────────────────
+  const unitsWeek  = (body.additional_units_week && typeof body.additional_units_week === 'object')
+    ? body.additional_units_week
+    : {};
+  const unitsPerDay = (body.additional_units_per_day && typeof body.additional_units_per_day === 'object')
+    ? body.additional_units_per_day
+    : {};
+
+  const addlConfig = Array.isArray(contract.additional_rates_json)
+    ? contract.additional_rates_json
+    : [];
+
+  // Build 7-day window [WE-6..WE]
+  const weekDates = [];
+  try {
+    const base = new Date(String(cw.week_ending_date) + 'T00:00:00Z');
+    for (let offset = 6; offset >= 0; offset--) {
+      const d = new Date(base);
+      d.setUTCDate(base.getUTCDate() - offset);
+      const yyyy = d.getUTCFullYear();
+      const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const dd   = String(d.getUTCDate()).padStart(2, '0');
+      const ymd  = `${yyyy}-${mm}-${dd}`;
+      const dow  = d.getUTCDay(); // 0..6
+      weekDates.push({ ymd, dow });
+    }
+  } catch {
+    // if somehow fails, we'll treat weekDates as empty and ignore per-day units
+  }
+
+  // Load BH policy for this contract
+  let bhSet = new Set();
+  try {
+    const policy = await loadClientTimePolicy(env, contract.client_id);
+    if (policy && policy.bhList) {
+      if (policy.bhList instanceof Set) {
+        bhSet = policy.bhList;
+      } else if (Array.isArray(policy.bhList)) {
+        bhSet = new Set(policy.bhList);
+      }
+    }
+  } catch {
+    bhSet = new Set();
+  }
+
+  const isBH = (ymd) => bhSet.has(ymd);
+
+  const normaliseFreq = (raw) => {
+    const s = String(raw || '').toUpperCase();
+    if (s === 'ONE_PER_WEEK')         return 'ONE_PER_WEEK';
+    if (s === 'ONE_PER_DAY')          return 'ONE_PER_DAY';
+    if (s === 'WEEKENDS_AND_BH_ONLY') return 'WEEKENDS_AND_BH_ONLY';
+    if (s === 'WEEKDAYS_EXCL_BH_ONLY')return 'WEEKDAYS_EXCL_BH_ONLY';
+    return 'ONE_PER_WEEK';
+  };
+
+  const shouldIncludeDay = (freq, meta) => {
+    const { ymd, dow } = meta;
+    const isBh = isBH(ymd);
+    if (freq === 'ONE_PER_DAY') return true;
+    if (freq === 'WEEKENDS_AND_BH_ONLY') {
+      return isBh || dow === 0 || dow === 6;
+    }
+    if (freq === 'WEEKDAYS_EXCL_BH_ONLY') {
+      return !isBh && dow >= 1 && dow <= 5;
+    }
+    return false;
+  };
+
+  let additional_units_json   = {};
+  let additional_pay_ex_vat   = 0;
+  let additional_charge_ex_vat= 0;
+  const badBuckets = [];
+
+  for (const cfgRaw of addlConfig) {
+    if (!cfgRaw || typeof cfgRaw !== 'object') continue;
+    const code = String(cfgRaw.code || '').toUpperCase() || 'EX1';
+    const freq = normaliseFreq(cfgRaw.frequency);
+    let unitCount = 0;
+    const daysUsed = {};
+
+    if (freq === 'ONE_PER_WEEK') {
+      const u = Number(unitsWeek[code] || 0);
+      if (u && Number.isFinite(u)) unitCount = u;
+    } else {
+      const perRaw = (unitsPerDay[code] && typeof unitsPerDay[code] === 'object')
+        ? unitsPerDay[code]
+        : {};
+      for (const meta of weekDates) {
+        const raw = perRaw[meta.ymd];
+        if (raw == null || raw === '') continue;
+        const v = Number(raw);
+        if (!Number.isFinite(v) || !v) continue;
+        if (!shouldIncludeDay(freq, meta)) continue;
+        unitCount += v;
+        daysUsed[meta.ymd] = v;
+      }
+    }
+
+    if (!unitCount || !Number.isFinite(unitCount)) continue;
+
+    const payRate    = (cfgRaw.pay_rate    != null) ? Number(cfgRaw.pay_rate)    : NaN;
+    const chargeRate = (cfgRaw.charge_rate != null) ? Number(cfgRaw.charge_rate) : NaN;
+    if (!Number.isFinite(payRate) || !Number.isFinite(chargeRate)) {
+      badBuckets.push(cfgRaw.bucket_name || code);
+      continue;
+    }
+
+    const payEx = +Number(unitCount * payRate).toFixed(2);
+    const chgEx = +Number(unitCount * chargeRate).toFixed(2);
+
+    additional_units_json[code] = {
+      bucket_name: cfgRaw.bucket_name || null,
+      unit_name:   cfgRaw.unit_name   || null,
+      frequency:   freq,
+      unit_count:  unitCount,
+      pay_rate:    payRate,
+      charge_rate: chargeRate,
+      pay_ex_vat:  payEx,
+      charge_ex_vat: chgEx,
+      days: Object.keys(daysUsed).length ? daysUsed : undefined
+    };
+
+    additional_pay_ex_vat    += payEx;
+    additional_charge_ex_vat += chgEx;
+  }
+
+  if (badBuckets.length) {
+    const msg = `Missing additional rate(s) in contract for bucket(s): ${badBuckets.join(', ')}`;
+    return withCORS(env, req, badRequest(msg));
+  }
+
+  additional_pay_ex_vat    = +Number(additional_pay_ex_vat).toFixed(2);
+  additional_charge_ex_vat = +Number(additional_charge_ex_vat).toFixed(2);
+  const additional_margin_ex_vat = +Number(additional_charge_ex_vat - additional_pay_ex_vat).toFixed(2);
+
   // Create TS (ELECTRONIC)
   const candidate = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(contract.candidate_id)}&select=id,display_name`);
   const client = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${enc(contract.client_id)}&select=name`);
@@ -3886,8 +4549,8 @@ export async function handleTimesheetsSubmitWeekly(env, req) {
     submission_mode: 'ELECTRONIC',
     manual_pdf_r2_key: null,
     line_type: 'HOURS',
-    actual_schedule_json,                 // NEW when provided
-    authorised_at_server: nowIso(),       // auto-authorise for ELECTRONIC
+    actual_schedule_json,
+    authorised_at_server: nowIso(),
     created_at: nowIso(), updated_at: nowIso()
   }];
 
@@ -3903,10 +4566,13 @@ export async function handleTimesheetsSubmitWeekly(env, req) {
     body: JSON.stringify({ timesheet_id: ts.timesheet_id, status: 'AUTHORISED', updated_at: nowIso() })
   });
 
-  // Snapshot with READY_FOR_INVOICE
+  // Snapshot with READY_FOR_INVOICE (include additional buckets)
   const n2 = (x)=>Number(x)||0;
-  const total_pay    = +(hours.day*n2(pay.day) + hours.night*n2(pay.night) + hours.sat*n2(pay.sat) + hours.sun*n2(pay.sun) + hours.bh*n2(pay.bh)).toFixed(2);
-  const total_charge = +(hours.day*n2(charge.day)+hours.night*n2(charge.night)+hours.sat*n2(charge.sat)+hours.sun*n2(charge.sun)+hours.bh*n2(charge.bh)).toFixed(2);
+  const base_pay    = +(hours.day*n2(pay.day) + hours.night*n2(pay.night) + hours.sat*n2(pay.sat) + hours.sun*n2(pay.sun) + hours.bh*n2(pay.bh)).toFixed(2);
+  const base_charge = +(hours.day*n2(charge.day)+hours.night*n2(charge.night)+hours.sat*n2(charge.sat)+hours.sun*n2(charge.sun)+hours.bh*n2(charge.bh)).toFixed(2);
+
+  const total_pay    = +Number(base_pay    + additional_pay_ex_vat).toFixed(2);
+  const total_charge = +Number(base_charge + additional_charge_ex_vat).toFixed(2);
 
   const snap = {
     timesheet_id: ts.timesheet_id,
@@ -3921,15 +4587,17 @@ export async function handleTimesheetsSubmitWeekly(env, req) {
     rate_day: charge.day, rate_night: charge.night, rate_sat: charge.sat, rate_sun: charge.sun, rate_bh: charge.bh,
     total_pay_ex_vat: total_pay,
     total_charge_ex_vat: total_charge,
-    margin_ex_vat: +(total_charge - total_pay).toFixed(2),
+    margin_ex_vat: +Number(total_charge - total_pay).toFixed(2),
+    additional_units_json: additional_units_json,
+    additional_pay_ex_vat: additional_pay_ex_vat,
+    additional_charge_ex_vat: additional_charge_ex_vat,
+    additional_margin_ex_vat: additional_margin_ex_vat,
     created_at: nowIso()
   };
   await writeSnapshot(env, snap);
 
   return withCORS(env, req, ok({ timesheet_id: ts.timesheet_id, processing_status: 'READY_FOR_INVOICE' }));
 }
-
-
 
 // ----------------------------------------------------------------------------
 // D) Manual & Expenses (supplementary)
@@ -4896,7 +5564,6 @@ export async function handleMe(env, req) {
 // ───────────────────────────────────────────────────────────────────────────────
 // PAYMENTS — CSV (authorised gate + 16-char payment reference cap)
 // ───────────────────────────────────────────────────────────────────────────────
-
 export async function handlePaymentsGenerateCsv(env, req) {
   // ==== Local helpers (pure JS)
   const enc = encodeURIComponent;
@@ -4933,7 +5600,11 @@ export async function handlePaymentsGenerateCsv(env, req) {
     `?select=` +
     [
       'id','timesheet_id','candidate_id','client_id','pay_method',
-      'total_pay_ex_vat','expenses_pay_ex_vat','mileage_pay_ex_vat',
+      // total_pay_ex_vat already includes additional pay for weekly EX buckets
+      'total_pay_ex_vat',
+      // NEW: additional pay explicitly (for inspection / future reporting)
+      'additional_pay_ex_vat',
+      'expenses_pay_ex_vat','mileage_pay_ex_vat',
       'pay_wtr_rate_pct_snapshot','policy_snapshot_json',
       'pay_vat_rate_pct_snapshot','pay_vat_amount_snapshot','pay_total_inc_vat_snapshot',
       'paid_at_utc','pay_on_hold',
@@ -4982,7 +5653,7 @@ export async function handlePaymentsGenerateCsv(env, req) {
   const mapUmb = Object.fromEntries((umbRows || []).map(u => [u.id, u]));
 
   // ==== Optional umbrella filter + safety gates + contract reference gate
-   const filtered = tsRows.filter(r => {
+  const filtered = tsRows.filter(r => {
     const cand = mapCand[r.candidate_id];
     if (!cand) return false;
 
@@ -5008,7 +5679,7 @@ export async function handlePaymentsGenerateCsv(env, req) {
     // Authorised safety (embedded filter above handles most cases)
     if (!r?.timesheet?.authorised_at_server) return false;
 
-    // NEW: contract-level reference gate for PAY
+    // contract-level reference gate for PAY
     const requireRef = r?.timesheet?.contract_id ? !!requireRefMap[r.timesheet.contract_id] : false;
     if (requireRef) {
       const ref = (r?.timesheet?.reference_number || '').trim();
@@ -5063,6 +5734,7 @@ export async function handlePaymentsGenerateCsv(env, req) {
     let sumEx = 0;
     let sumInc = 0;
     for (const r of g.rows) {
+      // total_pay_ex_vat already includes additional pay for weekly EX buckets
       const payEx = Number(r.total_pay_ex_vat || 0);
       const expEx = Number(r.expenses_pay_ex_vat || 0);
       const milEx = Number(r.mileage_pay_ex_vat || 0);
@@ -5219,6 +5891,9 @@ export async function handleRemittancesSend(env, req) {
       'hours_day','hours_night','hours_sat','hours_sun','hours_bh',
       'pay_day','pay_night','pay_sat','pay_sun','pay_bh',
       'total_hours','total_pay_ex_vat',
+      // NEW: include additional pay + units explicitly (total_pay_ex_vat already includes this)
+      'additional_pay_ex_vat',
+      'additional_units_json',
       'expenses_pay_ex_vat','mileage_pay_ex_vat',
       'pay_wtr_rate_pct_snapshot','policy_snapshot_json',
       'pay_vat_rate_pct_snapshot','pay_vat_amount_snapshot','pay_total_inc_vat_snapshot',
@@ -5232,7 +5907,7 @@ export async function handleRemittancesSend(env, req) {
   const finRows = resend ? finRowsRaw : finRowsRaw.filter(r => !r.remittance_last_sent_at_utc && !r.remittance_send_count);
   if (!finRows.length) return withCORS(env, req, ok({ queued: 0, skipped: finRowsRaw.length, reason: 'already_sent' }));
 
-  // NEW: Resolve per-row labels via timesheet -> contract_week -> contract.bucket_labels_json
+  // Resolve per-row labels via timesheet -> contract_week -> contract.bucket_labels_json
   const DEFAULT_LABELS = { day: 'Day', night: 'Night', sat: 'Sat', sun: 'Sun', bh: 'BH' };
   const tsIdsAll = [...new Set(finRows.map(r => r.timesheet_id).filter(Boolean))];
   let labelsByTsId = {};
@@ -5241,7 +5916,11 @@ export async function handleRemittancesSend(env, req) {
       env,
       `${env.SUPABASE_URL}/rest/v1/contract_weeks?timesheet_id=in.(${tsIdsAll.map(enc).join(',')})&select=timesheet_id,contract_id`
     );
-    const tsToContract = Object.fromEntries((wkRows||[]).map(w => [w.timesheet_id, w.contract_id]).filter(([a,b]) => a && b));
+    const tsToContract = Object.fromEntries(
+      (wkRows || [])
+        .map(w => [w.timesheet_id, w.contract_id])
+        .filter(([a, b]) => a && b)
+    );
     const contractIds = [...new Set(Object.values(tsToContract).filter(Boolean))];
     let mapCon = {};
     if (contractIds.length) {
@@ -5249,7 +5928,7 @@ export async function handleRemittancesSend(env, req) {
         env,
         `${env.SUPABASE_URL}/rest/v1/contracts?id=in.(${contractIds.map(enc).join(',')})&select=id,bucket_labels_json`
       );
-      mapCon = Object.fromEntries((conRows||[]).map(c => [c.id, c.bucket_labels_json || null]));
+      mapCon = Object.fromEntries((conRows || []).map(c => [c.id, c.bucket_labels_json || null]));
     }
     labelsByTsId = Object.fromEntries(
       tsIdsAll.map(id => {
@@ -5269,7 +5948,7 @@ export async function handleRemittancesSend(env, req) {
 
   const umbIds = [...new Set((candRows || []).map(c => c.umbrella_id).filter(Boolean))];
   const { rows: umbRows } = umbIds.length
-    ? await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/umbrellas?id=in.(${umbIds.map(enc).join(',')})&select=id,vat_chargeable`)
+    ? await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/umbrellas?id=in.(${umbIds.map(enc).join(',')})&select=id,name,vat_chargeable`)
     : { rows: [] };
   const mapUmb = Object.fromEntries((umbRows || []).map(u => [u.id, u]));
 
@@ -5301,8 +5980,22 @@ export async function handleRemittancesSend(env, req) {
     const periodKey = (first && last) ? (first === last ? `${first}` : `${first}_${last}`) : 'selected';
     const reference = `remit:candidate:${candId}:${periodKey}`;
 
-    // HTML rows
-    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
+    // Top-level pay method context (for heading)
+    const candPayMethod = String(cand.pay_method || '').toUpperCase();
+    const umb = cand.umbrella_id ? mapUmb[cand.umbrella_id] : null;
+    const payMethodLabel =
+      candPayMethod === 'UMBRELLA'
+        ? (umb ? `Umbrella – ${umb.name}` : 'Umbrella')
+        : 'PAYE (paid directly)';
+
+    // HTML helpers
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      '\'': '&#39;'
+    }[c]));
     const fmt = (n) => (n == null ? '' : Number(n).toFixed(2));
     const toNum = (v) => (v == null ? 0 : Number(v) || 0);
 
@@ -5313,10 +6006,12 @@ export async function handleRemittancesSend(env, req) {
     let totalWtrBasic = 0, totalWtrElem = 0;
     let totalVat = 0, totalInc = 0;
 
+    const baseCols = 19 + (hasPAYE ? 1 : 0) + (hasUmb ? 2 : 0); // total columns in main table
+
     const rowsHtml = rows.map((r) => {
       const ts = r.timesheet || {}; const cli = r.client || {};
       const payMethod = String(r.pay_method || '').toUpperCase();
-      const payEx = toNum(r.total_pay_ex_vat);
+      const payEx = toNum(r.total_pay_ex_vat);           // includes additional pay if present
       const expEx = toNum(r.expenses_pay_ex_vat);
       const milEx = toNum(r.mileage_pay_ex_vat);
       const rowEx = round2(payEx + expEx + milEx);
@@ -5336,9 +6031,12 @@ export async function handleRemittancesSend(env, req) {
       // Umbrella VAT
       let vatHtml = '';
       let incHtml = '';
+      let rowVat = 0;
+      let rowInc = rowEx;
+
       if (payMethod === 'UMBRELLA') {
-        const umb = mapUmb[cand.umbrella_id];
-        const vatChargeable = !!umb?.vat_chargeable;
+        const umbRow = mapUmb[cand.umbrella_id];
+        const vatChargeable = !!umbRow?.vat_chargeable;
         let rate = r.pay_vat_rate_pct_snapshot;
         let vatAmt = r.pay_vat_amount_snapshot;
         let incAmt = r.pay_total_inc_vat_snapshot;
@@ -5349,15 +6047,70 @@ export async function handleRemittancesSend(env, req) {
             const derived = deriveUmbrellaVatSnapshots(rowEx, rate, true);
             rate = derived.rate; vatAmt = derived.vat; incAmt = derived.inc;
           }
-          totalVat += Number(vatAmt || 0);
-          totalInc += Number(incAmt || 0);
-          vatHtml = `${fmt(vatAmt)}${(rate || rate === 0) ? ` @ ${fmt(rate)}%` : ''}`;
-          incHtml = `${fmt(incAmt)}`;
+          rowVat = Number(vatAmt || 0);
+          rowInc = Number(incAmt || 0);
+          totalVat += rowVat;
+          totalInc += rowInc;
+          vatHtml = `${fmt(rowVat)}${(rate || rate === 0) ? ` @ ${fmt(rate)}%` : ''}`;
+          incHtml = `${fmt(rowInc)}`;
         } else {
-          totalInc += rowEx;
+          rowVat = 0;
+          rowInc = rowEx;
+          totalInc += rowInc;
           vatHtml = '—';
           incHtml = `${fmt(rowEx)}`;
         }
+      }
+
+      // Parse additional units for this timesheet (if any)
+      let extrasHtml = '';
+      let addUnits = r.additional_units_json || {};
+      if (typeof addUnits === 'string') {
+        try { addUnits = JSON.parse(addUnits); } catch { addUnits = {}; }
+      }
+      if (!addUnits || typeof addUnits !== 'object') addUnits = {};
+
+      const extraRows = [];
+      for (const [codeRaw, ex] of Object.entries(addUnits)) {
+        if (!ex || typeof ex !== 'object') continue;
+        const unitCount = Number(ex.unit_count || 0);
+        if (!Number.isFinite(unitCount) || unitCount <= 0) continue;
+
+        const bucketName = (ex.bucket_name && String(ex.bucket_name).trim()) || String(codeRaw || '').toUpperCase();
+        const unitName   = (ex.unit_name && String(ex.unit_name).trim()) || 'units';
+        const payRate    = Number(ex.pay_rate || 0);
+        const payLine    = Number(ex.pay_ex_vat || (unitCount * payRate));
+
+        extraRows.push(`
+          <tr>
+            <td>${esc(bucketName)}</td>
+            <td>${esc(unitName)}</td>
+            <td style="text-align:right">${fmt(unitCount)}</td>
+            <td style="text-align:right">${fmt(payRate)}</td>
+            <td style="text-align:right">${fmt(payLine)}</td>
+          </tr>`);
+      }
+
+      if (extraRows.length) {
+        extrasHtml = `
+          <tr>
+            <td colspan="${baseCols}" style="padding:0 0 8px 0;">
+              <table width="100%" border="0" cellspacing="0" cellpadding="4" style="border-collapse:collapse;margin-top:4px;background:#fafafa">
+                <thead>
+                  <tr>
+                    <th align="left" style="font-size:12px;border-bottom:1px solid #e0e0e0">Additional rate</th>
+                    <th align="left" style="font-size:12px;border-bottom:1px solid #e0e0e0">Unit</th>
+                    <th align="right" style="font-size:12px;border-bottom:1px solid #e0e0e0">Quantity</th>
+                    <th align="right" style="font-size:12px;border-bottom:1px solid #e0e0e0">Rate (ex VAT)</th>
+                    <th align="right" style="font-size:12px;border-bottom:1px solid #e0e0e0">Amount (ex VAT)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${extraRows.join('')}
+                </tbody>
+              </table>
+            </td>
+          </tr>`;
       }
 
       return `
@@ -5377,11 +6130,15 @@ export async function handleRemittancesSend(env, req) {
           <td style="text-align:right">${fmt(r.pay_sun)}</td>
           <td style="text-align:right">${fmt(r.hours_bh)}</td>
           <td style="text-align:right">${fmt(r.pay_bh)}</td>
+          <td style="text-align:right"><strong>${fmt(payEx)}</strong></td>
+          <td style="text-align:right">${fmt(expEx)}</td>
+          <td style="text-align:right">${fmt(milEx)}</td>
           <td style="text-align:right"><strong>${fmt(rowEx)}</strong></td>
           ${hasPAYE ? `<td style="text-align:right">${wtrInfoHtml}</td>` : ''}
           ${hasUmb ? `<td style="text-align:right">${vatHtml}</td>` : ''}
           ${hasUmb ? `<td style="text-align:right"><strong>${incHtml}</strong></td>` : ''}
-        </tr>`;
+        </tr>
+        ${extrasHtml}`;
     }).join('');
 
     const extraPAYECol = hasPAYE ? '<th align="right">Basic + WTR (info)</th>' : '';
@@ -5392,8 +6149,9 @@ export async function handleRemittancesSend(env, req) {
     const html = `
       <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:14px;line-height:1.4">
         <h2 style="margin:0 0 8px">Remittance Advice${titleSuffix}</h2>
-        <p style="margin:0 0 12px"><strong>${esc(candName)}</strong></p>
-        <p style="margin:0 0 12px">Period: ${esc(periodLabel)}</p>
+        <p style="margin:0 0 4px"><strong>${esc(candName)}</strong></p>
+        <p style="margin:0 0 4px"><strong>Pay method:</strong> ${esc(payMethodLabel)}</p>
+        <p style="margin:0 0 8px"><strong>Period:</strong> ${esc(periodLabel)}</p>
         <p style="margin:0 0 16px;color:#666">Generated: ${esc(nowIso)}</p>
 
         <table width="100%" border="0" cellspacing="0" cellpadding="6" style="border-collapse:collapse">
@@ -5425,7 +6183,7 @@ export async function handleRemittancesSend(env, req) {
           <tbody>${rowsHtml}</tbody>
           <tfoot>
             <tr>
-              <td colspan="${hasPAYE ? 19 : 18}" align="right" style="padding-top:10px;border-top:1px solid #e5e5e5"><strong>Totals:</strong></td>
+              <td colspan="15" align="right" style="padding-top:10px;border-top:1px solid #e5e5e5"><strong>Totals:</strong></td>
               <td align="right" style="padding-top:10px;border-top:1px solid #e5e5e5"><strong>${round2(totalPayEx).toFixed(2)}</strong></td>
               <td align="right" style="padding-top:10px;border-top:1px solid #e5e5e5"><strong>${round2(totalExpEx).toFixed(2)}</strong></td>
               <td align="right" style="padding-top:10px;border-top:1px solid #e5e5e5"><strong>${round2(totalMilEx).toFixed(2)}</strong></td>
@@ -5446,10 +6204,11 @@ export async function handleRemittancesSend(env, req) {
         ${hasUmb ? `<p style="margin-top:8px;color:#666">For Umbrella assignments where VAT applies, totals show ex VAT and inc VAT amounts using the VAT rate captured at the time of payment/lock.</p>` : ''}
       </div>`;
 
-    // Plain text (use row-specific labels here)
+    // Plain text (use row-specific labels and itemise additional buckets)
     const tlines = [
       `Remittance Advice${titleSuffix}`,
       `${candName}`,
+      `Pay method: ${payMethodLabel}`,
       `Period: ${periodLabel}`,
       `Generated: ${nowIso}`,
       ''
@@ -5457,7 +6216,7 @@ export async function handleRemittancesSend(env, req) {
     for (const r of rows) {
       const ts = r.timesheet || {}; const cli = r.client || {};
       const pm = String(r.pay_method || '').toUpperCase();
-      const payEx = Number(r.total_pay_ex_vat || 0);
+      const payEx = Number(r.total_pay_ex_vat || 0);       // includes additional
       const expEx = Number(r.expenses_pay_ex_vat || 0);
       const milEx = Number(r.mileage_pay_ex_vat || 0);
       const rowEx = round2(payEx + expEx + milEx);
@@ -5465,6 +6224,31 @@ export async function handleRemittancesSend(env, req) {
 
       tlines.push(`WE ${ts.week_ending_date || ''} — ${cli.name || ''} / ${ts.hospital_norm || ''} / ${ts.ward_norm || ''} / ${ts.shift_label_norm || ''}`);
       tlines.push(`${L.day}: ${fmt(r.hours_day)} @ ${fmt(r.pay_day)}, ${L.night}: ${fmt(r.hours_night)} @ ${fmt(r.pay_night)}, ${L.sat}: ${fmt(r.hours_sat)} @ ${fmt(r.pay_sat)}, ${L.sun}: ${fmt(r.hours_sun)} @ ${fmt(r.pay_sun)}, ${L.bh}: ${fmt(r.hours_bh)} @ ${fmt(r.pay_bh)}`);
+
+      // Additional buckets (text breakdown, only if present)
+      let addUnits = r.additional_units_json || {};
+      if (typeof addUnits === 'string') {
+        try { addUnits = JSON.parse(addUnits); } catch { addUnits = {}; }
+      }
+      if (addUnits && typeof addUnits === 'object') {
+        const extraLines = [];
+        for (const [codeRaw, ex] of Object.entries(addUnits)) {
+          if (!ex || typeof ex !== 'object') continue;
+          const unitCount = Number(ex.unit_count || 0);
+          if (!Number.isFinite(unitCount) || unitCount <= 0) continue;
+
+          const bucketName = (ex.bucket_name && String(ex.bucket_name).trim()) || String(codeRaw || '').toUpperCase();
+          const unitName   = (ex.unit_name && String(ex.unit_name).trim()) || 'units';
+          const payRate    = Number(ex.pay_rate || 0);
+          const payLine    = Number(ex.pay_ex_vat || (unitCount * payRate));
+          extraLines.push(`${bucketName}: ${fmt(unitCount)} ${unitName} @ ${fmt(payRate)} = ${fmt(payLine)} (ex VAT)`);
+        }
+        if (extraLines.length) {
+          tlines.push('Additional rates:');
+          for (const ln of extraLines) tlines.push(`  - ${ln}`);
+        }
+      }
+
       tlines.push(`Pay ex VAT: ${fmt(payEx)}  |  Expenses: ${fmt(expEx)}  |  Mileage: ${fmt(milEx)}  |  Total ex VAT: ${fmt(rowEx)}`);
       if (pm === 'PAYE') {
         const wtrPct = resolveWtrPctForRow(r, defaults, clientHolidayMap);
@@ -5472,8 +6256,8 @@ export async function handleRemittancesSend(env, req) {
         const wtr = payEx - base;
         tlines.push(`(PAYE) Basic + WTR (info): ${fmt(base)} basic + ${fmt(wtr)} WTR @ ${fmt(wtrPct)}% (included)`);
       } else if (pm === 'UMBRELLA') {
-        const umb = mapUmb[cand.umbrella_id];
-        const vatChargeable = !!umb?.vat_chargeable;
+        const umbRow = mapUmb[cand.umbrella_id];
+        const vatChargeable = !!umbRow?.vat_chargeable;
         let rate = r.pay_vat_rate_pct_snapshot;
         let vatAmt = r.pay_vat_amount_snapshot;
         let incAmt = r.pay_total_inc_vat_snapshot;
@@ -5493,6 +6277,7 @@ export async function handleRemittancesSend(env, req) {
     tlines.push(`Totals — Pay ex VAT: ${round2(totalPayEx).toFixed(2)}, Expenses: ${round2(totalExpEx).toFixed(2)}, Mileage: ${round2(totalMilEx).toFixed(2)}, Total ex VAT: ${round2(totalEx).toFixed(2)}`);
     if (hasPAYE) tlines.push(`PAYE Basic + WTR (info totals): ${round2(totalWtrBasic).toFixed(2)} basic + ${round2(totalWtrElem).toFixed(2)} WTR`);
     if (hasUmb)  tlines.push(`Umbrella VAT Total: ${round2(totalVat).toFixed(2)}  |  Total inc VAT: ${round2(totalInc).toFixed(2)}`);
+
     const text = tlines.join('\n');
 
     // Queue a single email per-candidate
@@ -5532,7 +6317,7 @@ export async function handleRemittancesSend(env, req) {
       const newCount = Number(r.remittance_send_count || 0) + 1;
       await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(r.id)}`, {
         method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
         body: JSON.stringify({ remittance_last_sent_at_utc: nowIso, remittance_send_count: newCount })
       });
     }
@@ -5542,6 +6327,7 @@ export async function handleRemittancesSend(env, req) {
 
   return withCORS(env, req, ok({ queued: totalQueued, outbox_ids: outboxIds }));
 }
+
 
 export async function handleContractsCheckOverlap(env, req) {
   const user = await requireUser (env, req, ['admin']);
@@ -6731,6 +7517,25 @@ export async function handleSearchUmbrellas(env, req) {
 
   return withCORS(env, req, ok({ rows, page, page_size: pageSize, count: rows?.length || 0 }));
 }
+async function buildHealthRosterPdf(env, invoiceId) {
+  // Placeholder implementation:
+  //
+  // In future this should:
+  //  - Look up which HealthRoster import(s) and validation results apply
+  //    to this invoice’s timesheets (by client/candidate/week),
+  //  - Build a filtered HR report (only rows covering the shifts being invoiced),
+  //  - Render that to a PDF (via browser / html → pdf or pre-generated),
+  //  - Return a Uint8Array of the PDF bytes.
+  //
+  // For now we return null so nothing breaks and no HR attachment is added.
+  try {
+    // TODO: implement real HR PDF generation.
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 
 
 // ───────────────────────────────────────────────────────────────────────────────
@@ -9899,6 +10704,9 @@ async function handleCreateClient(env, req) {
       daily_calc_of_invoices,
       no_timesheet_required,
       group_nightsat_sunbh,
+      requires_hr,
+      hr_attach_to_invoice,
+      ts_attach_to_invoice,
 
       ...clientOnly
     } = data || {};
@@ -9926,7 +10734,7 @@ async function handleCreateClient(env, req) {
     if ('invoice_reference_required' in data)    csInput.invoice_reference_required    = !!invoice_reference_required;
     if ('default_submission_mode' in data)       csInput.default_submission_mode       = default_submission_mode;
 
-    // NEW flags (default to false if not provided)
+    // NEW flags (default to false/true as per policy)
     if ('is_nhsp' in data || 'is_nhsp' in csInput) {
       csInput.is_nhsp = asBool(csInput.is_nhsp ?? is_nhsp);
     }
@@ -9941,6 +10749,28 @@ async function handleCreateClient(env, req) {
     }
     if ('group_nightsat_sunbh' in data || 'group_nightsat_sunbh' in csInput) {
       csInput.group_nightsat_sunbh = asBool(csInput.group_nightsat_sunbh ?? group_nightsat_sunbh);
+    }
+
+    // NEW HR / attach flags
+    if ('requires_hr' in data || 'requires_hr' in csInput) {
+      csInput.requires_hr = asBool(csInput.requires_hr ?? requires_hr);
+    }
+    if ('hr_attach_to_invoice' in data || 'hr_attach_to_invoice' in csInput) {
+      csInput.hr_attach_to_invoice = asBool(csInput.hr_attach_to_invoice ?? hr_attach_to_invoice);
+    }
+    if ('ts_attach_to_invoice' in data || 'ts_attach_to_invoice' in csInput) {
+      csInput.ts_attach_to_invoice = asBool(csInput.ts_attach_to_invoice ?? ts_attach_to_invoice);
+    }
+
+    // Defaults if still unset:
+    if (!Object.prototype.hasOwnProperty.call(csInput, 'requires_hr')) {
+      csInput.requires_hr = false;
+    }
+    if (!Object.prototype.hasOwnProperty.call(csInput, 'hr_attach_to_invoice')) {
+      csInput.hr_attach_to_invoice = true;
+    }
+    if (!Object.prototype.hasOwnProperty.call(csInput, 'ts_attach_to_invoice')) {
+      csInput.ts_attach_to_invoice = true;
     }
 
     // Week ending day (0..6, default 0/Sun)
@@ -9996,6 +10826,8 @@ async function handleCreateClient(env, req) {
  *     security:
  *       - bearerAuth: []
  */
+
+
 async function handleGetClient(env, req, clientId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -10009,18 +10841,30 @@ async function handleGetClient(env, req, clientId) {
     if (!rows.length) return withCORS(env, req, notFound("Client not found"));
     const client = rows[0];
 
-    // Latest client_settings (include validation flags + new ref/submission fields)
+    // Latest client_settings (include validation flags + new ref/submission fields + HR/attach flags)
     const { rows: csRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/client_settings` +
       `?client_id=eq.${encodeURIComponent(clientId)}` +
-      `&select=id,client_id,vat_rate_pct,holiday_pay_pct,erni_pct,apply_holiday_to,apply_erni_to,margin_includes,effective_from,` +
-      `timezone_id,day_start,day_end,night_start,night_end,sat_start,sat_end,sun_start,sun_end,` +
-      `bh_source,bh_list,bh_feed_url,` +
-      `hr_validation_required,ts_reference_required,pay_reference_required,invoice_reference_required,default_submission_mode,` +
-      `week_ending_weekday,` +
-      `is_nhsp,self_bill_no_invoices_sent,daily_calc_of_invoices,no_timesheet_required,group_nightsat_sunbh,` +
-      `created_at,updated_at` +
+      `&select=` +
+        [
+          'id','client_id',
+          'vat_rate_pct','holiday_pay_pct','erni_pct',
+          'apply_holiday_to','apply_erni_to','margin_includes',
+          'effective_from',
+          'timezone_id',
+          'day_start','day_end','night_start','night_end','sat_start','sat_end','sun_start','sun_end',
+          'bh_source','bh_list','bh_feed_url',
+          'hr_validation_required',
+          'ts_reference_required','pay_reference_required','invoice_reference_required',
+          'default_submission_mode',
+          'week_ending_weekday',
+          'is_nhsp','self_bill_no_invoices_sent','daily_calc_of_invoices',
+          'no_timesheet_required','group_nightsat_sunbh',
+          // NEW flags
+          'requires_hr','hr_attach_to_invoice','ts_attach_to_invoice',
+          'created_at','updated_at'
+        ].join(',') +
       `&order=effective_from.desc,created_at.desc&limit=1`
     );
 
@@ -10039,6 +10883,7 @@ async function handleGetClient(env, req, clientId) {
 // --------------------------------------------------
 // UPDATE CLIENT (mark stale/enqueue on policy change)
 // --------------------------------------------------
+
 async function handleUpdateClient(env, req, clientId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -10072,12 +10917,21 @@ async function handleUpdateClient(env, req, clientId) {
       env,
       `${env.SUPABASE_URL}/rest/v1/client_settings` +
       `?client_id=eq.${encodeURIComponent(clientId)}` +
-      `&select=id,hr_validation_required,ts_reference_required,pay_reference_required,invoice_reference_required,default_submission_mode,` +
-      `week_ending_weekday,` +
-      `is_nhsp,self_bill_no_invoices_sent,daily_calc_of_invoices,no_timesheet_required,group_nightsat_sunbh,` +
-      `effective_from,timezone_id,` +
-      `day_start,day_end,night_start,night_end,sat_start,sat_end,sun_start,sun_end,` +
-      `bh_source,bh_list,bh_feed_url,created_at,updated_at` +
+      `&select=` +
+        [
+          'id',
+          'hr_validation_required','ts_reference_required','pay_reference_required','invoice_reference_required',
+          'default_submission_mode',
+          'week_ending_weekday',
+          'is_nhsp','self_bill_no_invoices_sent','daily_calc_of_invoices',
+          'no_timesheet_required','group_nightsat_sunbh',
+          'effective_from','timezone_id',
+          'day_start','day_end','night_start','night_end','sat_start','sat_end','sun_start','sun_end',
+          'bh_source','bh_list','bh_feed_url',
+          // NEW flags
+          'requires_hr','hr_attach_to_invoice','ts_attach_to_invoice',
+          'created_at','updated_at'
+        ].join(',') +
       `&order=effective_from.desc,created_at.desc&limit=1`
     );
 
@@ -10095,7 +10949,18 @@ async function handleUpdateClient(env, req, clientId) {
     if ('invoice_reference_required' in data)    csInput.invoice_reference_required    = !!data.invoice_reference_required;
     if ('default_submission_mode' in data)       csInput.default_submission_mode       = data.default_submission_mode;
 
-    // NEW flags: accept either top-level or nested in client_settings
+    // NEW: HR / attach flags (accept either top-level or nested in client_settings)
+    if ('requires_hr' in data || 'requires_hr' in csInput) {
+      csInput.requires_hr = asBool(csInput.requires_hr ?? data.requires_hr);
+    }
+    if ('hr_attach_to_invoice' in data || 'hr_attach_to_invoice' in csInput) {
+      csInput.hr_attach_to_invoice = asBool(csInput.hr_attach_to_invoice ?? data.hr_attach_to_invoice);
+    }
+    if ('ts_attach_to_invoice' in data || 'ts_attach_to_invoice' in csInput) {
+      csInput.ts_attach_to_invoice = asBool(csInput.ts_attach_to_invoice ?? data.ts_attach_to_invoice);
+    }
+
+    // NEW top-level flags: accept at either level
     if ('is_nhsp' in data || 'is_nhsp' in csInput) {
       csInput.is_nhsp = asBool(csInput.is_nhsp ?? data.is_nhsp);
     }
@@ -10142,13 +11007,16 @@ async function handleUpdateClient(env, req, clientId) {
       daily_calc_of_invoices,
       no_timesheet_required,
       group_nightsat_sunbh,
+      requires_hr,
+      hr_attach_to_invoice,
+      ts_attach_to_invoice,
 
       ...clientPatchRaw
     } = data;
 
     // Remove empty strings to avoid overwriting with ''
     const clientPatch = {};
-    for (const [k,v] of Object.entries(clientPatchRaw)) {
+    for (const [k, v] of Object.entries(clientPatchRaw)) {
       if (v === '' || v === undefined) continue;
       clientPatch[k] = v;
     }
@@ -10161,7 +11029,6 @@ async function handleUpdateClient(env, req, clientId) {
     let client = beforeClient;
 
     if (clientKeysToChange.length) {
-      // Only now add updated_at to avoid triggering constraints on no-op updates
       clientPatch.updated_at = new Date().toISOString();
 
       const res = await fetch(
@@ -10200,13 +11067,13 @@ async function handleUpdateClient(env, req, clientId) {
       const nextPayRef    = !!(desired.pay_reference_required          ?? false);
       const nextInvRef    = !!(desired.invoice_reference_required      ?? false);
 
+      // Note: **requires_hr / attach flags** do NOT currently affect TSFIN staleness.
       csChanged = (
         beforeHr     !== nextHr     ||
         beforeRef    !== nextRef    ||
         beforePayRef !== nextPayRef ||
         beforeInvRef !== nextInvRef
       );
-      // Note: the new flags (is_nhsp, etc.) do NOT currently affect TSFIN staleness.
 
       if (hasBefore) {
         const csRes = await fetch(
@@ -10288,7 +11155,10 @@ async function handleUpdateClient(env, req, clientId) {
       }
     }
 
-    return withCORS(env, req, ok({ client, client_settings: client_settings_updated || beforeCs || null }));
+    return withCORS(env, req, ok({
+      client,
+      client_settings: client_settings_updated || beforeCs || null
+    }));
   } catch {
     return withCORS(env, req, serverError("Failed to update client"));
   }
@@ -13301,18 +14171,34 @@ export async function handleGetInvoice(env, req, invoiceId) {
 
 // === AMENDMENT inside broker/src/index.js ===
 // Replace your existing handleInvoiceRender with this version
+
 export async function handleInvoiceRender(env, req, invoiceId) {
-  // (unchanged overall flow, but will now pick up manual PDFs via ensureTimesheetPdf)
+  // Render a combined invoice bundle:
+  //  - Invoice pages (always)
+  //  - Optional HR report (if requires_hr && hr_attach_to_invoice)
+  //  - Optional timesheet PDFs (if ts_attach_to_invoice)
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
+
+  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
   function toMarginsObj(m) {
     const dflt = { top: 32, right: 12, bottom: 20, left: 12 };
     if (Array.isArray(m) && m.length === 4) {
-      return { top: Number(m[0] ?? dflt.top), right: Number(m[1] ?? dflt.right), bottom: Number(m[2] ?? dflt.bottom), left: Number(m[3] ?? dflt.left) };
+      return {
+        top: Number(m[0] ?? dflt.top),
+        right: Number(m[1] ?? dflt.right),
+        bottom: Number(m[2] ?? dflt.bottom),
+        left: Number(m[3] ?? dflt.left),
+      };
     }
-    if (m && typeof m === 'object') {
-      return { top: Number(m.top ?? dflt.top), right: Number(m.right ?? dflt.right), bottom: Number(m.bottom ?? dflt.bottom), left: Number(m.left ?? dflt.left) };
+    if (m && typeof m === "object") {
+      return {
+        top: Number(m.top ?? dflt.top),
+        right: Number(m.right ?? dflt.right),
+        bottom: Number(m.bottom ?? dflt.bottom),
+        left: Number(m.left ?? dflt.left),
+      };
     }
     return dflt;
   }
@@ -13322,31 +14208,88 @@ export async function handleInvoiceRender(env, req, invoiceId) {
     const { rows: invRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/invoices` +
-      `?id=eq.${encodeURIComponent(invoiceId)}` +
-      `&select=id,invoice_no,issued_at_utc,due_at_utc,subtotal_ex_vat,vat_amount,total_inc_vat,header_snapshot_json`
+        `?id=eq.${encodeURIComponent(invoiceId)}` +
+        `&select=id,client_id,invoice_no,issued_at_utc,due_at_utc,subtotal_ex_vat,vat_amount,total_inc_vat,header_snapshot_json`
     );
-    if (!invRows?.length) return withCORS(env, req, notFound("Invoice not found"));
+    if (!invRows?.length)
+      return withCORS(env, req, notFound("Invoice not found"));
     const inv = invRows[0];
 
     const { rows: lineRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/invoice_lines` +
-      `?invoice_id=eq.${encodeURIComponent(invoiceId)}` +
-      `&select=id,timesheet_id,paper_ts_r2_key,description,total_charge_ex_vat,vat_rate_pct,vat_amount,total_inc_vat,meta_json`
+        `?invoice_id=eq.${encodeURIComponent(invoiceId)}` +
+        `&select=id,timesheet_id,paper_ts_r2_key,description,total_charge_ex_vat,vat_rate_pct,vat_amount,total_inc_vat,meta_json`
     );
 
-    // 2) Stationery resolution (auto-swap PDF→PNG), signed URL under header.*
     const header = inv.header_snapshot_json || {};
+
+    // 1b) Resolve attach-policy flags
+    let requiresHr = false;
+    let hrAttach = false;
+    let tsAttach = true;
+
+    const snapAttach = header.attach_policy || null;
+    if (snapAttach) {
+      requiresHr = !!snapAttach.requires_hr;
+      hrAttach =
+        snapAttach && Object.prototype.hasOwnProperty.call(snapAttach, "hr_attach_to_invoice")
+          ? snapAttach.hr_attach_to_invoice !== false
+          : false;
+      tsAttach =
+        snapAttach && Object.prototype.hasOwnProperty.call(snapAttach, "ts_attach_to_invoice")
+          ? snapAttach.ts_attach_to_invoice !== false
+          : true;
+    } else {
+      // Backwards-compat fallback: look up client_settings if attach_policy was not stored
+      const clientId = header.client_id || inv.client_id || null;
+      if (clientId) {
+        try {
+          const { rows: csRows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/client_settings` +
+              `?client_id=eq.${enc(clientId)}` +
+              `&select=requires_hr,hr_attach_to_invoice,ts_attach_to_invoice` +
+              `&order=effective_from.desc&limit=1`
+          );
+          const cs = csRows?.[0] || null;
+          requiresHr = !!cs?.requires_hr;
+          hrAttach =
+            cs &&
+            Object.prototype.hasOwnProperty.call(cs, "hr_attach_to_invoice")
+              ? cs.hr_attach_to_invoice !== false
+              : false;
+          tsAttach =
+            cs &&
+            Object.prototype.hasOwnProperty.call(cs, "ts_attach_to_invoice")
+              ? cs.ts_attach_to_invoice !== false
+              : true;
+        } catch {
+          // defaults if we can't load settings
+          requiresHr = false;
+          hrAttach = false;
+          tsAttach = true;
+        }
+      }
+    }
+
+    // 2) Stationery resolution (auto-swap PDF→PNG), signed URL under header.*
     let stationeryKey =
-      (typeof header.stationery_key === 'string' && header.stationery_key.trim()) ||
+      (typeof header.stationery_key === "string" &&
+        header.stationery_key.trim()) ||
       env.INVOICE_STATIONERY_KEY ||
-      'Assets/Stationery/Letterhead/A4/Letterhead_v1@300dpi.png';
+      "Assets/Stationery/Letterhead/A4/Letterhead_v1@300dpi.png";
     if (/\.pdf$/i.test(stationeryKey)) {
-      stationeryKey = stationeryKey.replace(/\.pdf$/i, '@300dpi.png');
+      stationeryKey = stationeryKey.replace(/\.pdf$/i, "@300dpi.png");
     }
     stationeryKey = normalizeKey(stationeryKey);
 
-    const stationeryUrl = presignR2Url(env, req, stationeryKey, Number(env.PRESIGN_EXPIRES_SECONDS || 600));
+    const stationeryUrl = presignR2Url(
+      env,
+      req,
+      stationeryKey,
+      Number(env.PRESIGN_EXPIRES_SECONDS || 600)
+    );
     const marginsObj = toMarginsObj(header.stationery_margins_mm);
     const hideBankFooter = header.hide_bank_footer === true;
 
@@ -13366,7 +14309,7 @@ export async function handleInvoiceRender(env, req, invoiceId) {
         vat_amount: Number(inv.vat_amount || 0),
         total_inc_vat: Number(inv.total_inc_vat || 0),
       },
-      items: (lineRows || []).map(l => ({
+      items: (lineRows || []).map((l) => ({
         description: l.description,
         meta: l.meta_json ?? {},
         total_ex_vat: Number(l.total_charge_ex_vat || 0),
@@ -13380,28 +14323,37 @@ export async function handleInvoiceRender(env, req, invoiceId) {
     const html = buildHTML(invoiceData);
     const invoicePdfU8 = await withBrowser(env, async (browser) => {
       const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: 'networkidle0' });
-      await page.emulateMediaType('screen');
+      await page.setContent(html, { waitUntil: "networkidle0" });
+      await page.emulateMediaType("screen");
       const pdfArrayBuffer = await page.pdf({
-        format: 'a4',
+        format: "a4",
         printBackground: true,
         margin: { top: 0, right: 0, bottom: 0, left: 0 },
       });
       return new Uint8Array(pdfArrayBuffer);
     });
 
-    // 5) Ensure all timesheet PDFs exist; collect their bytes
-    const tsIds = [...new Set((lineRows || []).map(r => r.timesheet_id).filter(Boolean))];
+    // 5) Ensure all timesheet PDFs exist; collect their bytes (we always
+    // ensure/record them, even if tsAttach=false, so they remain available
+    // as separate artefacts).
+    const tsIds = [
+      ...new Set((lineRows || []).map((r) => r.timesheet_id).filter(Boolean)),
+    ];
     const tsKeys = [];
     for (const tsId of tsIds) {
       const ensuredKey = await ensureTimesheetPdf(env, tsId);
       tsKeys.push(ensuredKey);
 
-      await fetch(`${env.SUPABASE_URL}/rest/v1/invoice_lines?invoice_id=eq.${encodeURIComponent(inv.id)}&timesheet_id=eq.${encodeURIComponent(tsId)}`, {
-        method: "PATCH",
-        headers: { ...sbHeaders(env), "Prefer": "return=minimal" },
-        body: JSON.stringify({ paper_ts_r2_key: ensuredKey })
-      });
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/invoice_lines?invoice_id=eq.${encodeURIComponent(
+          inv.id
+        )}&timesheet_id=eq.${encodeURIComponent(tsId)}`,
+        {
+          method: "PATCH",
+          headers: { ...sbHeaders(env), Prefer: "return=minimal" },
+          body: JSON.stringify({ paper_ts_r2_key: ensuredKey }),
+        }
+      );
     }
 
     const tsBytesList = [];
@@ -13410,42 +14362,90 @@ export async function handleInvoiceRender(env, req, invoiceId) {
       if (bytes) tsBytesList.push(bytes);
     }
 
-    // 6) Merge: invoice pages first, then timesheets (single combined artifact)
+    // 6) Optionally build HR report PDF (one bundle per invoice for now)
+    let hrBytes = null;
+    if (requiresHr && hrAttach) {
+      hrBytes = await buildHealthRosterPdf(env, inv.id).catch(() => null);
+    }
+
+    // 7) Merge: invoice pages first, then HR (if any), then timesheets (if tsAttach)
     const merged = await PDFDocument.create();
+
     const invDoc = await PDFDocument.load(invoicePdfU8);
     const invPages = await merged.copyPages(invDoc, invDoc.getPageIndices());
-    invPages.forEach(p => merged.addPage(p));
-    for (const tsBytes of tsBytesList) {
-      const tsDoc = await PDFDocument.load(tsBytes);
-      const pages = await merged.copyPages(tsDoc, tsDoc.getPageIndices());
-      pages.forEach(p => merged.addPage(p));
+    invPages.forEach((p) => merged.addPage(p));
+
+    if (hrBytes && hrBytes.length) {
+      try {
+        const hrDoc = await PDFDocument.load(hrBytes);
+        const hrPages = await merged.copyPages(hrDoc, hrDoc.getPageIndices());
+        hrPages.forEach((p) => merged.addPage(p));
+      } catch {
+        // If HR PDF fails to load, we skip it rather than break rendering
+      }
     }
+
+    let attachedTsCount = 0;
+    if (tsAttach) {
+      for (const tsBytes of tsBytesList) {
+        const tsDoc = await PDFDocument.load(tsBytes);
+        const pages = await merged.copyPages(tsDoc, tsDoc.getPageIndices());
+        pages.forEach((p) => merged.addPage(p));
+        attachedTsCount++;
+      }
+    }
+
     const combinedU8 = await merged.save();
 
-    // 7) Store combined in R2 and update invoice row
-    const pdfKey = normalizeKey(`docs-pdf/invoices/invoice_${invoiceId}.pdf`);
-    await r2Put(env, pdfKey, combinedU8, { httpMetadata: { contentType: "application/pdf" } });
-
-    await fetch(`${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${encodeURIComponent(invoiceId)}`, {
-      method: "PATCH",
-      headers: sbHeaders(env),
-      body: JSON.stringify({
-        invoice_pdf_r2_key: pdfKey,
-        paper_ts_r2_manifest: tsKeys,
-        updated_at: new Date().toISOString()
-      }),
+    // 8) Store combined in R2 and update invoice row
+    const pdfKey = normalizeKey(
+      `docs-pdf/invoices/invoice_${invoiceId}.pdf`
+    );
+    await r2Put(env, pdfKey, combinedU8, {
+      httpMetadata: { contentType: "application/pdf" },
     });
 
-    const token = await createToken(env.UPLOAD_TOKEN_SECRET, { typ: "dl", key: pdfKey, exp: Math.floor(Date.now()/1000) + Number(env.PRESIGN_EXPIRES_SECONDS || 600) });
-    const downloadUrl = new URL(env.PUBLIC_DOWNLOAD_BASE_URL || new URL(new URL(req.url).origin + '/api/files/download').toString());
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${encodeURIComponent(
+        invoiceId
+      )}`,
+      {
+        method: "PATCH",
+        headers: sbHeaders(env),
+        body: JSON.stringify({
+          invoice_pdf_r2_key: pdfKey,
+          paper_ts_r2_manifest: tsKeys,
+          updated_at: new Date().toISOString(),
+        }),
+      }
+    );
+
+    const token = await createToken(env.UPLOAD_TOKEN_SECRET, {
+      typ: "dl",
+      key: pdfKey,
+      exp:
+        Math.floor(Date.now() / 1000) +
+        Number(env.PRESIGN_EXPIRES_SECONDS || 600),
+    });
+    const downloadUrl = new URL(
+      env.PUBLIC_DOWNLOAD_BASE_URL ||
+        new URL(new URL(req.url).origin + "/api/files/download").toString()
+    );
     downloadUrl.searchParams.set("key", pdfKey);
     downloadUrl.searchParams.set("token", token);
 
-    return withCORS(env, req, ok({ pdf_url: downloadUrl.toString(), attached_timesheets: tsKeys.length }));
+    return withCORS(env, req, ok({
+      pdf_url: downloadUrl.toString(),
+      attached_timesheets: attachedTsCount,
+      attached_hr: !!(hrBytes && hrBytes.length),
+    }));
   } catch (e) {
     return withCORS(env, req, serverError("Failed to render invoice bundle"));
   }
 }
+
+
+
 export async function handleInvoiceHold(env, req, invoiceId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -14301,7 +15301,6 @@ export async function handleContractChangeRatesPreview(env, req, contractId) {
 
 
 
-
 export async function handleContractChangeRatesOutstanding(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -14414,7 +15413,7 @@ export async function handleContractChangeRatesOutstanding(env, req, contractId)
     return withCORS(env, req, badRequest('Only GET and POST are supported'));
   }
 
-  // Mutation: create successor contract, move outstanding weeks, enqueue TSFIN
+  // Mutation: create successor contract, move outstanding weeks, rebuild TSFIN for weekly
   let body;
   try {
     body = await parseJSONBody(req);
@@ -14439,7 +15438,7 @@ export async function handleContractChangeRatesOutstanding(env, req, contractId)
     ? body.std_schedule_json
     : null;
 
-  // Load original contract
+  // Load original contract (includes additional_rates_json)
   const contract = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/contracts` +
@@ -14492,6 +15491,8 @@ export async function handleContractChangeRatesOutstanding(env, req, contractId)
     std_schedule_json: successorStdSchedule,
     std_hours_json: successorStdHours,
     bucket_labels_json: contract.bucket_labels_json,
+    // 🔹 IMPORTANT: carry over any configured additional per-unit buckets
+    additional_rates_json: contract.additional_rates_json || null,
     default_submission_mode: contract.default_submission_mode,
     week_ending_weekday_snapshot: contract.week_ending_weekday_snapshot,
     auto_invoice: contract.auto_invoice,
@@ -14594,16 +15595,25 @@ export async function handleContractChangeRatesOutstanding(env, req, contractId)
     try { console.warn('[CONTRACTS][CHANGE-RATES] generate-weeks for successor failed', e); } catch {}
   }
 
-  // Enqueue TSFIN recompute for moved timesheets with reason=RATE_CHANGED
+  // 🔹 NEW: Rebuild TSFIN snapshots for each moved weekly timesheet using the successor contract's rates,
+  // including additional_rates_json. This replaces the previous generic TSFIN enqueue path.
   try {
     for (const tsid of tsIds) {
-      await sbRpc(env, 'enqueue_ts_financials', {
-        timesheet_id: tsid,
-        reason: 'RATE_CHANGED'
-      });
+      try {
+        await rebuildWeeklyTsfinForTimesheet(env, tsid, successor);
+      } catch (inner) {
+        try {
+          console.warn('[CONTRACTS][CHANGE-RATES] rebuildWeeklyTsfinForTimesheet failed', {
+            timesheet_id: tsid,
+            error: inner?.message || String(inner)
+          });
+        } catch {}
+      }
     }
   } catch (e) {
-    try { console.warn('[CONTRACTS][CHANGE-RATES] enqueue_ts_financials failed', e); } catch {}
+    // Non-fatal: weekly snapshots may remain on old rates if something goes wrong,
+    // but we do NOT enqueue generic TSFIN here to avoid losing additional bucket data.
+    try { console.warn('[CONTRACTS][CHANGE-RATES] bulk weekly TSFIN rebuild failed', e); } catch {}
   }
 
   return withCORS(env, req, ok({
@@ -14711,6 +15721,11 @@ async function cloneContractForRatesChange(env, contract, overrides = {}) {
     bucket_labels_json: (Object.prototype.hasOwnProperty.call(ov, 'bucket_labels_json')
       ? ov.bucket_labels_json
       : (contract.bucket_labels_json || null)),
+
+    // 🔹 NEW: configurable additional per-unit buckets (EX1–EX5)
+    additional_rates_json: (Object.prototype.hasOwnProperty.call(ov, 'additional_rates_json')
+      ? ov.additional_rates_json
+      : (contract.additional_rates_json || null)),
 
     auto_invoice: contract.auto_invoice,
     require_reference_to_pay: contract.require_reference_to_pay,
@@ -15411,6 +16426,28 @@ export async function handleCandidatePayMethodChange(env, req, candidateId) {
       }
       newRates = cleanedRates;
 
+      // 🔹 NEW: reprice additional_rates_json per-unit pay to preserve margin
+      let extrasRaw = contract.additional_rates_json || null;
+      if (typeof extrasRaw === 'string') {
+        try { extrasRaw = JSON.parse(extrasRaw); } catch { extrasRaw = null; }
+      }
+      const extrasArr = Array.isArray(extrasRaw) ? extrasRaw : [];
+      const newAdditionalRates = extrasArr.map((cfg) => {
+        if (!cfg || typeof cfg !== 'object') return cfg;
+        const ch = cfg.charge_rate;
+        const po = cfg.pay_rate;
+        if (ch == null || po == null) return cfg; // nothing to do
+
+        const pn = computeNewPayBucket(ch, po, oldMethod, newMethod, erniMult);
+        if (pn == null || !Number.isFinite(pn)) return cfg; // keep original pay_rate if we can't compute
+
+        const rounded = +(+pn).toFixed(2);
+        return {
+          ...cfg,
+          pay_rate: rounded
+        };
+      });
+
       // Prepare overrides for successor
       const overrides = {
         start_date: successorStart,
@@ -15418,7 +16455,9 @@ export async function handleCandidatePayMethodChange(env, req, candidateId) {
         pay_method_snapshot: newMethod,
         rates_json: newRates,
         std_schedule_json: contract.std_schedule_json || null,
-        std_hours_json: contract.std_hours_json || null
+        std_hours_json: contract.std_hours_json || null,
+        // carry repriced additional buckets into successor
+        additional_rates_json: newAdditionalRates.length ? newAdditionalRates : (extrasArr.length ? extrasArr : null)
       };
 
       // Create successor contract
@@ -15505,7 +16544,7 @@ export async function handleCandidatePayMethodChange(env, req, candidateId) {
               `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contract.id)}`,
               {
                 method: 'PATCH',
-                headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+                headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
                 body: JSON.stringify(patch)
               }
             );
@@ -15541,7 +16580,7 @@ export async function handleCandidatePayMethodChange(env, req, candidateId) {
             `&timesheet_id=is.null`,
             {
               method: 'DELETE',
-              headers: { ...sbHeaders(env), Prefer: 'return=minimal' }
+              headers: { ...sbHeaders(env), Prefer: 'return-minimal' }
             }
           );
         } catch (e) {
@@ -17718,12 +18757,19 @@ async function resolveClientId(env, hospital_norm) {
   return rows[0]?.client_id || null;
 }
 async function loadPolicy(env, client_id, workedDateYmd) {
-  const { rows: defRows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=*`);
+  const { rows: defRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=*`
+  );
   const def = defRows[0] || {};
 
   let cs = null;
   if (client_id) {
-    const w = workedDateYmd ? `&and=(or(effective_from.lte.${encodeURIComponent(workedDateYmd)},effective_from.is.null))` : '';
+    const w = workedDateYmd
+      ? `&and=(or(effective_from.lte.${encodeURIComponent(
+          workedDateYmd
+        )},effective_from.is.null))`
+      : "";
     const { rows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/client_settings` +
@@ -17735,31 +18781,61 @@ async function loadPolicy(env, client_id, workedDateYmd) {
     cs = rows[0] || null;
   }
 
-  const tz = cs?.timezone_id || def?.timezone_id || 'Europe/London';
-  const bh = (cs?.bh_list && Array.isArray(cs.bh_list)) ? cs.bh_list : (def?.bh_list || []);
+  const tz = cs?.timezone_id || def?.timezone_id || "Europe/London";
+  const bh =
+    cs?.bh_list && Array.isArray(cs.bh_list)
+      ? cs.bh_list
+      : def?.bh_list || [];
+
+  // Attach-policy flags: defaults baked in if columns missing
+  const requires_hr =
+    cs && Object.prototype.hasOwnProperty.call(cs, "requires_hr")
+      ? !!cs.requires_hr
+      : !!def.requires_hr || false;
+
+  const hr_attach_to_invoice =
+    cs && Object.prototype.hasOwnProperty.call(cs, "hr_attach_to_invoice")
+      ? cs.hr_attach_to_invoice !== false
+      : def.hr_attach_to_invoice !== false; // default true if unset
+
+  const ts_attach_to_invoice =
+    cs && Object.prototype.hasOwnProperty.call(cs, "ts_attach_to_invoice")
+      ? cs.ts_attach_to_invoice !== false
+      : def.ts_attach_to_invoice !== false; // default true if unset
 
   return {
     timezone_id: tz,
-    day_start:   cs?.day_start   || def?.day_start   || '06:00:00',
-    day_end:     cs?.day_end     || def?.day_end     || '20:00:00',
-    night_start: cs?.night_start || def?.night_start || '20:00:00',
-    night_end:   cs?.night_end   || def?.night_end   || '06:00:00',
-    sat_start:   cs?.sat_start   || def?.sat_start   || '00:00:00',
-    sat_end:     cs?.sat_end     || def?.sat_end     || '00:00:00',
-    sun_start:   cs?.sun_start   || def?.sun_start   || '00:00:00',
-    sun_end:     cs?.sun_end     || def?.sun_end     || '00:00:00',
-    vat_rate_pct:      asNumber(cs?.vat_rate_pct      ?? def?.vat_rate_pct      ?? 20),
-    holiday_pay_pct:   asNumber(cs?.holiday_pay_pct   ?? def?.holiday_pay_pct   ?? 12.07),
+    day_start: cs?.day_start || def?.day_start || "06:00:00",
+    day_end: cs?.day_end || def?.day_end || "20:00:00",
+    night_start: cs?.night_start || def?.night_start || "20:00:00",
+    night_end: cs?.night_end || def?.night_end || "06:00:00",
+    sat_start: cs?.sat_start || def?.sat_start || "00:00:00",
+    sat_end: cs?.sat_end || def?.sat_end || "00:00:00",
+    sun_start: cs?.sun_start || def?.sun_start || "00:00:00",
+    sun_end: cs?.sun_end || def?.sun_end || "00:00:00",
+
+    vat_rate_pct: asNumber(cs?.vat_rate_pct ?? def?.vat_rate_pct ?? 20),
+    holiday_pay_pct: asNumber(
+      cs?.holiday_pay_pct ?? def?.holiday_pay_pct ?? 12.07
+    ),
 
     // 🔹 ERNI is now **global-only** – no client-specific override.
-    erni_pct:          asNumber(def?.erni_pct ?? 13.8),
+    erni_pct: asNumber(def?.erni_pct ?? 13.8),
 
-    apply_holiday_to:  cs?.apply_holiday_to  || def?.apply_holiday_to  || 'PAYE_ONLY',
-    apply_erni_to:     cs?.apply_erni_to     || def?.apply_erni_to     || 'PAYE_ONLY',
+    apply_holiday_to:
+      cs?.apply_holiday_to || def?.apply_holiday_to || "PAYE_ONLY",
+    apply_erni_to: cs?.apply_erni_to || def?.apply_erni_to || "PAYE_ONLY",
     margin_includes: {
-      expenses: !!(cs?.margin_includes?.expenses ?? def?.margin_includes?.expenses)
+      expenses: !!(cs?.margin_includes?.expenses ??
+        def?.margin_includes?.expenses),
     },
+
     bh_list: Array.isArray(bh) ? bh : [],
+
+    // Attach policy (for downstream use)
+    requires_hr,
+    hr_attach_to_invoice,
+    ts_attach_to_invoice,
   };
 }
 
@@ -18310,42 +19386,518 @@ function resolveEffectivePayChannel(input) {
 // ---------------------------
 // Worker: dequeue → compute
 // ---------------------------
-async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
-  // NOTE: Rename RPC arg -> p_limit
-  const lease = await sbRpc(env, 'tsfin_dequeue_batch', { p_limit: limit });
-  if (!Array.isArray(lease) || !lease.length) return { picked: 0, ok: 0, fail: 0 };
 
-  let ok = 0, fail = 0;
+
+// helpers used above
+function hasPayeBank(c) {
+  if (!c) return false;
+  return !!(c.account_number && c.sort_code); // minimal signal; holder/bank_name optional
+}
+
+async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
+  // Local helpers used by both branches
+  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+  const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
+
+  // ─────────────────────────────────────────────────────────────
+  // Weekly helpers (contract-driven)
+  // ─────────────────────────────────────────────────────────────
+
+  // Load contract_week + contract for a given timesheet. If no row, this TS
+  // is treated as daily/rota.
+  async function loadWeeklyContext(env, ts) {
+    if (!ts || !ts.timesheet_id || !ts.contract_id || !ts.week_ending_date) {
+      return null;
+    }
+
+    const cw = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+        `?timesheet_id=eq.${enc(ts.timesheet_id)}` +
+        `&select=*` +
+        `&limit=1`
+    );
+    if (!cw) return null;
+
+    const contract = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contracts` +
+        `?id=eq.${enc(cw.contract_id)}` +
+        `&select=*`
+    );
+    if (!contract) return null;
+
+    return { cw, contract };
+  }
+
+  // Compute hours per bucket for a weekly TS:
+  //  - Prefer actual_schedule_json + resolveBucketsFromSchedule(contract, schedule)
+  //  - Fallback to any hours_* fields on the timesheet if you later add them.
+  async function computeWeeklyHours(env, ts, contract) {
+    let hours = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
+
+    // 1) Schedule-first (matches manual/electronic weekly logic)
+    if (Array.isArray(ts.actual_schedule_json) && ts.actual_schedule_json.length) {
+      const minsByBucket = await resolveBucketsFromSchedule(
+        env,
+        contract,
+        ts.actual_schedule_json
+      );
+      hours = {
+        day: +(asNumberLocal(minsByBucket.day) / 60).toFixed(2),
+        night: +(asNumberLocal(minsByBucket.night) / 60).toFixed(2),
+        sat: +(asNumberLocal(minsByBucket.sat) / 60).toFixed(2),
+        sun: +(asNumberLocal(minsByBucket.sun) / 60).toFixed(2),
+        bh: +(asNumberLocal(minsByBucket.bh) / 60).toFixed(2),
+      };
+      return hours;
+    }
+
+    // 2) Fallback: pre-aggregated hours on the timesheet row (for external sources
+    // that don't send per-day schedule). These columns don't exist today but if
+    // you add them, this will “just work”.
+    const n = (v) => (v == null ? 0 : Number(v) || 0);
+    hours = {
+      day: n(ts.hours_day),
+      night: n(ts.hours_night),
+      sat: n(ts.hours_sat),
+      sun: n(ts.hours_sun),
+      bh: n(ts.hours_bh),
+    };
+    return hours;
+  }
+
+  // Compute additional EX buckets for a weekly TS from:
+  //  - contract.additional_rates_json (EX1..EX5 config)
+  //  - ts.additional_units_week (EX -> units/week)
+  //  - ts.additional_units_per_day (EX -> { ymd -> units })
+  //
+  // It enforces the frequency rules (ONE_PER_WEEK / ONE_PER_DAY / WEEKENDS_AND_BH_ONLY / WEEKDAYS_EXCL_BH_ONLY)
+  // over the 7-day window [WE-6 .. WE], using the client BH list.
+  async function computeWeeklyAdditionalFromTs(env, ts, cw, contract) {
+    let additional_units_json = {};
+    let additional_pay_ex_vat = 0;
+    let additional_charge_ex_vat = 0;
+
+    // No additional config → nothing to do
+    const cfgArrRaw = contract.additional_rates_json;
+    if (!Array.isArray(cfgArrRaw) || !cfgArrRaw.length) {
+      return {
+        additional_units_json,
+        additional_pay_ex_vat,
+        additional_charge_ex_vat,
+        additional_margin_ex_vat: 0,
+      };
+    }
+
+    let cfgArr = cfgArrRaw;
+    if (typeof cfgArrRaw === "string") {
+      try {
+        cfgArr = JSON.parse(cfgArrRaw);
+      } catch {
+        cfgArr = [];
+      }
+    }
+    if (!Array.isArray(cfgArr)) cfgArr = [];
+
+    // Normalise units payload from TS (external weekly submitter must provide these)
+    let unitsWeek = ts.additional_units_week || {};
+    let unitsPerDay = ts.additional_units_per_day || {};
+    if (typeof unitsWeek === "string") {
+      try {
+        unitsWeek = JSON.parse(unitsWeek);
+      } catch {
+        unitsWeek = {};
+      }
+    }
+    if (typeof unitsPerDay === "string") {
+      try {
+        unitsPerDay = JSON.parse(unitsPerDay);
+      } catch {
+        unitsPerDay = {};
+      }
+    }
+    if (!unitsWeek || typeof unitsWeek !== "object") unitsWeek = {};
+    if (!unitsPerDay || typeof unitsPerDay !== "object") unitsPerDay = {};
+
+    // Build the 7-day window [WE-6..WE]
+    const weekEnd = cw.week_ending_date; // 'YYYY-MM-DD'
+    const dates = [];
+    try {
+      const weDate = new Date(`${weekEnd}T00:00:00Z`);
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(weDate);
+        d.setUTCDate(weDate.getUTCDate() - i);
+        dates.push(toYmd(d)); // existing helper, returns YYYY-MM-DD
+      }
+    } catch {
+      // If something goes wrong, we just skip per-day units (we still can use ONE_PER_WEEK)
+    }
+
+    // Load BH list for this contract's client
+    let bhSet = new Set();
+    try {
+      const policy = await loadClientTimePolicy(env, contract.client_id);
+      if (policy && policy.bhList) {
+        if (policy.bhList instanceof Set) {
+          bhSet = policy.bhList;
+        } else if (Array.isArray(policy.bhList)) {
+          bhSet = new Set(policy.bhList);
+        }
+      }
+    } catch {
+      // fall back to empty set
+    }
+
+    // Helper: classify a date
+    const dow = (ymd) => {
+      try {
+        const d = new Date(`${ymd}T00:00:00Z`);
+        return d.getUTCDay(); // 0=Sun..6=Sat
+      } catch {
+        return null;
+      }
+    };
+
+    const freqEnum = new Set([
+      "ONE_PER_WEEK",
+      "ONE_PER_DAY",
+      "WEEKENDS_AND_BH_ONLY",
+      "WEEKDAYS_EXCL_BH_ONLY",
+    ]);
+
+    for (const cfg of cfgArr) {
+      if (!cfg || !cfg.code) continue;
+      const code = String(cfg.code).toUpperCase();
+
+      const freqRaw = (cfg.frequency || "").toString().toUpperCase();
+      const freq = freqEnum.has(freqRaw) ? freqRaw : "ONE_PER_WEEK";
+
+      // Units supplied for this code
+      const weekUnits = Number((unitsWeek && unitsWeek[code]) || 0) || 0;
+      const perDayRaw =
+        unitsPerDay && typeof unitsPerDay[code] === "object"
+          ? unitsPerDay[code]
+          : {};
+
+      let unitCount = 0;
+      const perDayOut = {};
+
+      if (freq === "ONE_PER_WEEK") {
+        unitCount = weekUnits;
+      } else {
+        for (const ymd of dates) {
+          const u = Number(perDayRaw?.[ymd] || 0) || 0;
+          if (!u) continue;
+
+          const d = dow(ymd);
+          const isBh = bhSet.has(ymd);
+
+          let include = false;
+          if (freq === "ONE_PER_DAY") {
+            include = true;
+          } else if (freq === "WEEKENDS_AND_BH_ONLY") {
+            include = isBh || d === 0 || d === 6;
+          } else if (freq === "WEEKDAYS_EXCL_BH_ONLY") {
+            include = !isBh && d != null && d >= 1 && d <= 5;
+          }
+
+          if (!include) continue;
+          unitCount += u;
+          perDayOut[ymd] = (perDayOut[ymd] || 0) + u;
+        }
+      }
+
+      if (!unitCount || !Number.isFinite(unitCount) || unitCount <= 0) continue;
+
+      const payRate = Number(cfg.pay_rate ?? 0) || 0;
+      const chargeRate = Number(cfg.charge_rate ?? 0) || 0;
+
+      const payEx = round2(unitCount * payRate);
+      const chgEx = round2(unitCount * chargeRate);
+
+      additional_units_json[code] = {
+        bucket_name: cfg.bucket_name || null,
+        unit_name: cfg.unit_name || null,
+        frequency: freq,
+        unit_count: unitCount,
+        pay_rate: payRate,
+        charge_rate: chargeRate,
+        pay_ex_vat: payEx,
+        charge_ex_vat: chgEx,
+        days: Object.keys(perDayOut).length ? perDayOut : undefined,
+      };
+
+      additional_pay_ex_vat += payEx;
+      additional_charge_ex_vat += chgEx;
+    }
+
+    additional_pay_ex_vat = round2(additional_pay_ex_vat);
+    additional_charge_ex_vat = round2(additional_charge_ex_vat);
+    const additional_margin_ex_vat = round2(
+      additional_charge_ex_vat - additional_pay_ex_vat
+    );
+
+    return {
+      additional_units_json,
+      additional_pay_ex_vat,
+      additional_charge_ex_vat,
+      additional_margin_ex_vat,
+    };
+  }
+
+  // Build a timesheets_financials snapshot for a weekly, contract-driven TS.
+  async function buildWeeklySnapshot(env, ts, cw, contract) {
+    // Hours
+    const hours = await computeWeeklyHours(env, ts, contract);
+
+    // Rates from contract.rates_json
+    let rj = contract.rates_json || {};
+    if (typeof rj === "string") {
+      try {
+        rj = JSON.parse(rj);
+      } catch {
+        rj = {};
+      }
+    }
+    if (!rj || typeof rj !== "object") rj = {};
+
+    const payMethod = String(contract.pay_method_snapshot || "").toUpperCase();
+    const pay =
+      payMethod === "UMBRELLA"
+        ? {
+            day: rj.umb_day ?? null,
+            night: rj.umb_night ?? null,
+            sat: rj.umb_sat ?? null,
+            sun: rj.umb_sun ?? null,
+            bh: rj.umb_bh ?? null,
+          }
+        : {
+            day: rj.paye_day ?? null,
+            night: rj.paye_night ?? null,
+            sat: rj.paye_sat ?? null,
+            sun: rj.paye_sun ?? null,
+            bh: rj.paye_bh ?? null,
+          };
+
+    const charge = {
+      day: rj.charge_day ?? null,
+      night: rj.charge_night ?? null,
+      sat: rj.charge_sat ?? null,
+      sun: rj.charge_sun ?? null,
+      bh: rj.charge_bh ?? null,
+    };
+
+    // Guard: missing rates for any positive bucket
+    const missingRates =
+      (hours.day > 0 && (pay.day == null || charge.day == null)) ||
+      (hours.night > 0 && (pay.night == null || charge.night == null)) ||
+      (hours.sat > 0 && (pay.sat == null || charge.sat == null)) ||
+      (hours.sun > 0 && (pay.sun == null || charge.sun == null)) ||
+      (hours.bh > 0 && (pay.bh == null || charge.bh == null));
+
+    // Candidate + pay channel gating (contract-driven)
+    const candidate_id = contract.candidate_id || null;
+    const client_id = contract.client_id || null;
+    let candidate_assignment = candidate_id ? "ASSIGNED" : "UNASSIGNED";
+
+    let candidate = null;
+    if (candidate_id) {
+      candidate = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=eq.${enc(
+            candidate_id
+          )}&select=id,pay_method,umbrella_id,account_holder,sort_code,account_number`
+      );
+    }
+
+    // Load client policy just to read requires_hr and attach flags
+    const workedDateYmd = cw.week_ending_date || null;
+    const policy = await loadPolicy(env, client_id, workedDateYmd);
+    const requiresHr = !!policy?.requires_hr;
+
+    // PAY channel gating
+    let processing_status;
+    if (!candidate_id) {
+      processing_status = "UNASSIGNED";
+      candidate_assignment = "UNASSIGNED";
+    } else if (!client_id) {
+      processing_status = "CLIENT_UNRESOLVED";
+    } else if (missingRates) {
+      processing_status = "RATE_MISSING";
+    } else if (
+      payMethod === "UMBRELLA" &&
+      !(candidate && candidate.umbrella_id)
+    ) {
+      processing_status = "PAY_CHANNEL_MISSING";
+    } else if (requiresHr) {
+      processing_status = "READY_FOR_HR";
+    } else {
+      processing_status = "READY_FOR_INVOICE";
+    }
+
+    // Hours totals
+    const hoursPayEx = round2(
+      hours.day * asNumberLocal(pay.day) +
+        hours.night * asNumberLocal(pay.night) +
+        hours.sat * asNumberLocal(pay.sat) +
+        hours.sun * asNumberLocal(pay.sun) +
+        hours.bh * asNumberLocal(pay.bh)
+    );
+    const hoursChargeEx = round2(
+      hours.day * asNumberLocal(charge.day) +
+        hours.night * asNumberLocal(charge.night) +
+        hours.sat * asNumberLocal(charge.sat) +
+        hours.sun * asNumberLocal(charge.sun) +
+        hours.bh * asNumberLocal(charge.bh)
+    );
+
+    // Additional buckets (EX1..EX5)
+    const {
+      additional_units_json,
+      additional_pay_ex_vat,
+      additional_charge_ex_vat,
+      additional_margin_ex_vat,
+    } = await computeWeeklyAdditionalFromTs(env, ts, cw, contract);
+
+    const total_pay_ex_vat = round2(hoursPayEx + additional_pay_ex_vat);
+    const total_charge_ex_vat = round2(hoursChargeEx + additional_charge_ex_vat);
+    const margin_ex_vat = round2(total_charge_ex_vat - total_pay_ex_vat);
+
+    // Snapshot basis: distinguish contract-weekly from rota/daily
+    const basis = "CONTRACT_WEEKLY";
+
+    const snapshot = {
+      timesheet_id: ts.timesheet_id,
+      timesheet_version: ts.version || 1,
+
+      basis,
+      occupant_key_norm: ts.occupant_key_norm || null,
+
+      // Weekly TS do not use worked_start_iso/worked_end_iso in the same way;
+      // keep them for audit if provided, else null.
+      worked_start_iso: ts.worked_start_iso || null,
+      worked_end_iso: ts.worked_end_iso || null,
+      break_start_iso: ts.break_start_iso || null,
+      break_end_iso: ts.break_end_iso || null,
+      break_minutes: ts.break_minutes || null,
+
+      candidate_id,
+      client_id,
+      role: contract.role || null,
+      band: contract.band || null,
+      pay_method: payMethod,
+
+      policy_snapshot_json: policy || null, // weekly can capture client policy too
+      rate_source_refs_json: {}, // not used for contract-weekly; purely contract-driven
+
+      hours_day: hours.day,
+      hours_night: hours.night,
+      hours_sat: hours.sat,
+      hours_sun: hours.sun,
+      hours_bh: hours.bh,
+
+      pay_day: pay.day,
+      pay_night: pay.night,
+      pay_sat: pay.sat,
+      pay_sun: pay.sun,
+      pay_bh: pay.bh,
+
+      charge_day: charge.day,
+      charge_night: charge.night,
+      charge_sat: charge.sat,
+      charge_sun: charge.sun,
+      charge_bh: charge.bh,
+
+      total_hours: round2(
+        hours.day + hours.night + hours.sat + hours.sun + hours.bh
+      ),
+
+      // Additional EX buckets (new fields)
+      additional_units_json,
+      additional_pay_ex_vat,
+      additional_charge_ex_vat,
+      additional_margin_ex_vat,
+
+      total_pay_ex_vat,
+      total_charge_ex_vat,
+      margin_ex_vat,
+
+      candidate_assignment,
+      processing_status,
+    };
+
+    await writeSnapshot(env, snapshot);
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Worker core
+  // ─────────────────────────────────────────────────────────────
+
+  // NOTE: Rename RPC arg -> p_limit
+  const lease = await sbRpc(env, "tsfin_dequeue_batch", { p_limit: limit });
+  if (!Array.isArray(lease) || !lease.length)
+    return { picked: 0, ok: 0, fail: 0 };
+
+  let ok = 0,
+    fail = 0;
 
   for (const item of lease) {
     try {
       const ts = await loadCurrentTimesheet(env, item.timesheet_id);
       if (!ts) {
         // NOTE: Rename RPC args -> p_timesheet_id, p_id
-        await sbRpc(env, 'tsfin_mark_revoked', { p_timesheet_id: item.timesheet_id });
-        await sbRpc(env, 'tsfin_work_success', { p_id: item.id });
-        ok++; continue;
+        await sbRpc(env, "tsfin_mark_revoked", {
+          p_timesheet_id: item.timesheet_id,
+        });
+        await sbRpc(env, "tsfin_work_success", { p_id: item.id });
+        ok++;
+        continue;
       }
 
-      // Must be authorised to proceed with financials
+      // Must be authorised to proceed with financials (both daily and weekly)
       if (!ts.authorised_at_server) {
         // NOTE: Rename RPC arg -> p_id
-        await sbRpc(env, 'tsfin_work_success', { p_id: item.id });
-        ok++; continue;
+        await sbRpc(env, "tsfin_work_success", { p_id: item.id });
+        ok++;
+        continue;
       }
+
+      // ── WEEKLY branch: contract_weeks + contracts only ────────────────────
+      // If there is a contract_week row for this timesheet, we treat it as a
+      // contract-weekly TS and compute financials purely from the contract,
+      // *never* via resolveRates/rate presets.
+      const weeklyCtx = await loadWeeklyContext(env, ts);
+      if (weeklyCtx) {
+        await buildWeeklySnapshot(env, ts, weeklyCtx.cw, weeklyCtx.contract);
+        await sbRpc(env, "tsfin_work_success", { p_id: item.id });
+        ok++;
+        continue;
+      }
+
+      // ── DAILY / ROTA branch (existing logic) ──────────────────────────────
 
       const occupantKey = ts.occupant_key_norm || null;
       const candidate = await loadCandidate(env, occupantKey);
-      const candidate_assignment = candidate ? 'ASSIGNED' : 'UNASSIGNED';
+      const candidate_assignment = candidate ? "ASSIGNED" : "UNASSIGNED";
 
       const client_id = await resolveClientId(env, ts.hospital_norm || null);
-      const workedDateYmd = ts.worked_start_iso ? toLocalParts(ts.worked_start_iso, null).ymd : null;
-      const policy = await loadPolicy(env, client_id, workedDateYmd); // includes time bands + rates like vat, holiday pct etc.
+      const workedDateYmd = ts.worked_start_iso
+        ? toLocalParts(ts.worked_start_iso, null).ymd
+        : null;
+      const policy = await loadPolicy(env, client_id, workedDateYmd); // includes time bands + rates + requires_hr, etc.
 
       // Build minutes -> hour buckets and subtract breaks
       let segments = [];
-      if (ts.worked_start_iso && ts.worked_end_iso) segments.push([ts.worked_start_iso, ts.worked_end_iso]);
-      segments = subtractBreak(segments, ts.break_start_iso || null, ts.break_end_iso || null, ts.break_minutes || null);
+      if (ts.worked_start_iso && ts.worked_end_iso)
+        segments.push([ts.worked_start_iso, ts.worked_end_iso]);
+      segments = subtractBreak(
+        segments,
+        ts.break_start_iso || null,
+        ts.break_end_iso || null,
+        ts.break_minutes || null
+      );
 
       const hours = classifyMinutes(env, policy, segments);
 
@@ -18355,66 +19907,94 @@ async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
         client_id,
         role: ts.job_title_norm || null,
         band: ts.band || null,
-        dateYmd: workedDateYmd
+        dateYmd: workedDateYmd,
       });
 
       const missingRates = anyMissingRates(
-        { day: hours.hours_day, night: hours.hours_night, sat: hours.hours_sat, sun: hours.hours_sun, bh: hours.hours_bh },
+        {
+          day: hours.hours_day,
+          night: hours.hours_night,
+          sat: hours.hours_sat,
+          sun: hours.hours_sun,
+          bh: hours.hours_bh,
+        },
         rates.pay,
         rates.charge
       );
 
       // PAY method: default from candidate with fallback (kept for compatibility)
       const pay_method =
-        (candidate?.pay_method === 'UMBRELLA') ? 'UMBRELLA' :
-        (candidate?.pay_method === 'PAYE') ? 'PAYE' :
-        (ts.pay_method || null);
+        candidate?.pay_method === "UMBRELLA"
+          ? "UMBRELLA"
+          : candidate?.pay_method === "PAYE"
+          ? "PAYE"
+          : ts.pay_method || null;
 
-      // Processing status logic (unchanged semantics, but tightened)
-      let processing_status = 'READY_FOR_HR';
-      if (!candidate) processing_status = 'UNASSIGNED';
-      else if (!client_id) processing_status = 'CLIENT_UNRESOLVED';
-      else if (missingRates) processing_status = 'RATE_MISSING';
-      else if (pay_method === 'UMBRELLA' && !candidate?.umbrella_id) processing_status = 'PAY_CHANNEL_MISSING';
-      else processing_status = 'READY_FOR_HR'; // keep existing external contract
+      // Processing status logic with requires_hr
+      const requiresHr = !!policy?.requires_hr;
+      let processing_status;
+      if (!candidate) processing_status = "UNASSIGNED";
+      else if (!client_id) processing_status = "CLIENT_UNRESOLVED";
+      else if (missingRates) processing_status = "RATE_MISSING";
+      else if (
+        pay_method === "UMBRELLA" &&
+        !(candidate && candidate.umbrella_id)
+      )
+        processing_status = "PAY_CHANNEL_MISSING";
+      else if (requiresHr) processing_status = "READY_FOR_HR";
+      else processing_status = "READY_FOR_INVOICE";
 
       // Totals
-      const pay = rates.pay || { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
-      const charge = rates.charge || { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
+      const pay = rates.pay || {
+        day: 0,
+        night: 0,
+        sat: 0,
+        sun: 0,
+        bh: 0,
+      };
+      const charge = rates.charge || {
+        day: 0,
+        night: 0,
+        sat: 0,
+        sun: 0,
+        bh: 0,
+      };
 
       const total_pay_ex_vat = round2(
-        hours.hours_day * asNumber(pay.day) +
-        hours.hours_night * asNumber(pay.night) +
-        hours.hours_sat * asNumber(pay.sat) +
-        hours.hours_sun * asNumber(pay.sun) +
-        hours.hours_bh * asNumber(pay.bh)
+        hours.hours_day * asNumberLocal(pay.day) +
+          hours.hours_night * asNumberLocal(pay.night) +
+          hours.hours_sat * asNumberLocal(pay.sat) +
+          hours.hours_sun * asNumberLocal(pay.sun) +
+          hours.hours_bh * asNumberLocal(pay.bh)
       );
 
       const total_charge_ex_vat = round2(
-        hours.hours_day * asNumber(charge.day) +
-        hours.hours_night * asNumber(charge.night) +
-        hours.hours_sat * asNumber(charge.sat) +
-        hours.hours_sun * asNumber(charge.sun) +
-        hours.hours_bh * asNumber(charge.bh)
+        hours.hours_day * asNumberLocal(charge.day) +
+          hours.hours_night * asNumberLocal(charge.night) +
+          hours.hours_sat * asNumberLocal(charge.sat) +
+          hours.hours_sun * asNumberLocal(charge.sun) +
+          hours.hours_bh * asNumberLocal(charge.bh)
       );
 
       const margin_ex_vat = round2(total_charge_ex_vat - total_pay_ex_vat);
 
       // Determine “payment-eligibility lite” for WTR snapshot timing:
       const channelOK =
-        (pay_method === 'PAYE' && hasPayeBank(candidate)) ||
-        (pay_method === 'UMBRELLA' && !!candidate?.umbrella_id);
+        (pay_method === "PAYE" && hasPayeBank(candidate)) ||
+        (pay_method === "UMBRELLA" && !!candidate?.umbrella_id);
 
       const paymentReadyLite = !!(channelOK && !missingRates); // ts is authorised earlier
 
       // WTR snapshot rule: set for PAYE when effectively payment-ready; margin unchanged
       const pay_wtr_rate_pct_snapshot =
-        (pay_method === 'PAYE' && paymentReadyLite) ? asNumber(policy?.holiday_pay_pct) ?? null : null;
+        pay_method === "PAYE" && paymentReadyLite
+          ? asNumberLocal(policy?.holiday_pay_pct) ?? null
+          : null;
 
       const snapshot = {
         timesheet_id: item.timesheet_id,
         timesheet_version: ts.version || 1,
-        basis: 'SELF_REPORTED',
+        basis: "SELF_REPORTED",
 
         occupant_key_norm: ts.occupant_key_norm || null,
         worked_start_iso: ts.worked_start_iso || null,
@@ -18449,25 +20029,39 @@ async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
         charge_sun: rates.charge?.sun ?? null,
         charge_bh: rates.charge?.bh ?? null,
 
-        total_hours: round2(hours.hours_day + hours.hours_night + hours.hours_sat + hours.hours_sun + hours.hours_bh),
+        total_hours: round2(
+          hours.hours_day +
+            hours.hours_night +
+            hours.hours_sat +
+            hours.hours_sun +
+            hours.hours_bh
+        ),
         total_pay_ex_vat,
         total_charge_ex_vat,
         margin_ex_vat,
 
+        // Weekly EX buckets are not used in rota/daily branch
+        additional_units_json: {},
+        additional_pay_ex_vat: 0,
+        additional_charge_ex_vat: 0,
+        additional_margin_ex_vat: 0,
+
         // Persisted hints/state
         pay_wtr_rate_pct_snapshot, // may be null; only set for PAYE when ready-lite
         candidate_assignment,
-        processing_status
+        processing_status,
       };
 
       await writeSnapshot(env, snapshot);
       // NOTE: Rename RPC arg -> p_id
-      await sbRpc(env, 'tsfin_work_success', { p_id: item.id });
+      await sbRpc(env, "tsfin_work_success", { p_id: item.id });
       ok++;
-
     } catch (e) {
       // NOTE: Rename RPC args -> p_id, p_error
-      await sbRpc(env, 'tsfin_work_fail', { p_id: item.id, p_error: String(e?.message || e) });
+      await sbRpc(env, "tsfin_work_fail", {
+        p_id: item.id,
+        p_error: String(e?.message || e),
+      });
       fail++;
     }
   }
@@ -18475,11 +20069,6 @@ async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
   return { picked: lease.length, ok, fail };
 }
 
-// helpers used above
-function hasPayeBank(c) {
-  if (!c) return false;
-  return !!(c.account_number && c.sort_code); // minimal signal; holder/bank_name optional
-}
 
 
 // ---------------------------
@@ -20105,6 +21694,8 @@ export async function handleCreateInvoiceTsfin(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized('Unauthorized');
 
+  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
   const body = await parseJSONBody(req).catch(() => null);
   if (!body || !Array.isArray(body.timesheet_ids) || body.timesheet_ids.length === 0) {
     return badRequest("timesheet_ids[] required");
@@ -20151,13 +21742,21 @@ export async function handleCreateInvoiceTsfin(env, req) {
   const { rows: csRows } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/client_settings` +
-    `?select=client_id,vat_rate_pct,effective_from` +
+    `?select=client_id,vat_rate_pct,requires_hr,hr_attach_to_invoice,ts_attach_to_invoice,effective_from` +
     `&client_id=eq.${encodeURIComponent(client_id)}` +
     `&order=effective_from.desc&limit=1`
   );
   const cs = csRows?.[0] || null;
 
   const vatRatePct = client.vat_chargeable === false ? 0 : Number(cs?.vat_rate_pct ?? defaultVat);
+
+  const requiresHr = !!cs?.requires_hr;
+  const hrAttach   = cs && Object.prototype.hasOwnProperty.call(cs, 'hr_attach_to_invoice')
+    ? cs.hr_attach_to_invoice !== false
+    : true;
+  const tsAttach   = cs && Object.prototype.hasOwnProperty.call(cs, 'ts_attach_to_invoice')
+    ? cs.ts_attach_to_invoice !== false
+    : true;
 
   // Base TS meta (also grab reference_number for meta)
   const { rows: tsRows } = await sbFetch(
@@ -20168,12 +21767,16 @@ export async function handleCreateInvoiceTsfin(env, req) {
   );
   const tsMetaMap = Object.fromEntries((tsRows || []).map(t => [t.timesheet_id, t]));
 
-  // NEW: map timesheet_id -> contract_id -> bucket_labels_json
+  // map timesheet_id -> contract_id -> bucket_labels_json
   const { rows: wkRows } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/contract_weeks?timesheet_id=in.(${inIds})&select=timesheet_id,contract_id`
   );
-  const tsToContract = Object.fromEntries((wkRows||[]).map(w => [w.timesheet_id, w.contract_id]).filter(([a,b]) => a && b));
+  const tsToContract = Object.fromEntries(
+    (wkRows || [])
+      .map(w => [w.timesheet_id, w.contract_id])
+      .filter(([a, b]) => a && b)
+  );
   const contractIds = [...new Set(Object.values(tsToContract).filter(Boolean))];
   let mapContractLabels = {};
   if (contractIds.length) {
@@ -20181,7 +21784,9 @@ export async function handleCreateInvoiceTsfin(env, req) {
       env,
       `${env.SUPABASE_URL}/rest/v1/contracts?id=in.(${contractIds.map(enc).join(',')})&select=id,bucket_labels_json`
     );
-    mapContractLabels = Object.fromEntries((conRows||[]).map(c => [c.id, c.bucket_labels_json || null]));
+    mapContractLabels = Object.fromEntries(
+      (conRows || []).map(c => [c.id, c.bucket_labels_json || null])
+    );
   }
   const DEFAULT_LABELS = { day: 'Day', night: 'Night', sat: 'Sat', sun: 'Sun', bh: 'BH' };
   const labelsForTs = (tsId) => {
@@ -20224,7 +21829,12 @@ export async function handleCreateInvoiceTsfin(env, req) {
       account_number: defRows?.[0]?.bank_account_number ?? null,
     },
     vat_registration_number: defRows?.[0]?.vat_registration_number ?? null,
-    meta: { source: 'TSFIN', timesheet_count: snaps.length }
+    meta: { source: 'TSFIN', timesheet_count: snaps.length },
+    attach_policy: {
+      requires_hr: requiresHr,
+      hr_attach_to_invoice: hrAttach,
+      ts_attach_to_invoice: tsAttach,
+    },
   };
 
   const invIns = await fetch(`${env.SUPABASE_URL}/rest/v1/invoices`, {
@@ -20247,11 +21857,12 @@ export async function handleCreateInvoiceTsfin(env, req) {
   }
   const invoice = (await invIns.json())[0];
 
-  // 4) Build HOURS lines only
+  // 4) Build HOURS lines + ADDITIONAL_RATE lines
   let sumEx = 0, sumVat = 0, sumInc = 0;
   const lines = [];
 
   for (const s of snaps) {
+    // ----- HOURS line (base buckets) -----
     const h = {
       day: Number(s.hours_day || 0),
       night: Number(s.hours_night || 0),
@@ -20289,12 +21900,12 @@ export async function handleCreateInvoiceTsfin(env, req) {
       (h.bh * (chg.bh ?? 0))
     );
     const margin_ex = round2(line_charge_ex - line_pay_ex);
-    const vat_amount = round2(line_charge_ex * vatRatePct / 100);
-    const total_inc_vat = round2(line_charge_ex + vat_amount);
+    const vat_amount_hours = round2(line_charge_ex * vatRatePct / 100);
+    const total_inc_vat_hours = round2(line_charge_ex + vat_amount_hours);
 
     sumEx += line_charge_ex;
-    sumVat += vat_amount;
-    sumInc += total_inc_vat;
+    sumVat += vat_amount_hours;
+    sumInc += total_inc_vat_hours;
 
     const tsMeta = tsMetaMap[s.timesheet_id] || {};
     const hoursLineMeta = {
@@ -20311,7 +21922,7 @@ export async function handleCreateInvoiceTsfin(env, req) {
       },
       policy_snapshot_json: s.policy_snapshot_json ?? {},
       rate_source_refs_json: s.rate_source_refs_json ?? {},
-      // NEW: include labels so the renderer prints display names
+      // labels for 5 base buckets
       bucket_labels: labelsForTs(s.timesheet_id),
       breakdown: { hours: h, pay, charge: chg },
       totals: {
@@ -20319,8 +21930,8 @@ export async function handleCreateInvoiceTsfin(env, req) {
         line_charge_ex_vat: line_charge_ex,
         margin_ex_vat: margin_ex,
         vat_rate_pct: vatRatePct,
-        vat_amount,
-        total_inc_vat
+        vat_amount: vat_amount_hours,
+        total_inc_vat: total_inc_vat_hours
       }
     };
 
@@ -20336,17 +21947,100 @@ export async function handleCreateInvoiceTsfin(env, req) {
       total_charge_ex_vat: line_charge_ex,
       margin_ex_vat: margin_ex,
       vat_rate_pct: vatRatePct,
-      vat_amount,
-      total_inc_vat,
+      vat_amount: vat_amount_hours,
+      total_inc_vat: total_inc_vat_hours,
       meta_json: hoursLineMeta
     });
+
+    // ----- ADDITIONAL_RATE lines (per extra bucket) -----
+    let addUnits = s.additional_units_json || {};
+    if (typeof addUnits === 'string') {
+      try { addUnits = JSON.parse(addUnits); } catch { addUnits = {}; }
+    }
+    if (!addUnits || typeof addUnits !== 'object') addUnits = {};
+
+    for (const [codeRaw, ex] of Object.entries(addUnits)) {
+      if (!ex || typeof ex !== 'object') continue;
+      const code = String(codeRaw || '').toUpperCase();
+
+      const unitCount = Number(ex.unit_count || 0);
+      if (!Number.isFinite(unitCount) || unitCount <= 0) continue;
+
+      const chargeEx = Number(ex.charge_ex_vat || 0);
+      const payEx    = Number(ex.pay_ex_vat    || 0);
+      const marginEx = round2(chargeEx - payEx);
+
+      const vat_amount = round2(chargeEx * vatRatePct / 100);
+      const total_inc_vat = round2(chargeEx + vat_amount);
+
+      sumEx  += chargeEx;
+      sumVat += vat_amount;
+      sumInc += total_inc_vat;
+
+      const bucketName = (ex.bucket_name && String(ex.bucket_name).trim()) || code;
+      const unitName   = (ex.unit_name && String(ex.unit_name).trim()) || 'units';
+      const desc = `${bucketName} – ${unitCount} ${unitName} @ £${(Number(ex.charge_rate || 0)).toFixed(2)}`;
+
+      const addMeta = {
+        line_type: 'ADDITIONAL_RATE',
+        timesheet_id: s.timesheet_id,
+        timesheet_version: s.timesheet_version,
+        booking_id: tsMeta.booking_id ?? null,
+        week_ending_date_local: tsMeta.week_ending_date ?? null,
+        ts_reference_number: (tsMeta.reference_number ?? null),
+        po_number: s.po_number ?? null,
+        evidence: {
+          r2_auth_key: tsMeta.r2_auth_key ?? null,
+          r2_nurse_key: tsMeta.r2_nurse_key ?? null,
+        },
+        policy_snapshot_json: s.policy_snapshot_json ?? {},
+        rate_source_refs_json: s.rate_source_refs_json ?? {},
+        bucket: {
+          code,
+          bucket_name: ex.bucket_name ?? null,
+          unit_name:   ex.unit_name   ?? null,
+          frequency:   ex.frequency   ?? null
+        },
+        units: {
+          unit_count: unitCount,
+          pay_rate:   ex.pay_rate    ?? null,
+          charge_rate:ex.charge_rate ?? null
+        },
+        totals: {
+          line_pay_ex_vat: payEx,
+          line_charge_ex_vat: chargeEx,
+          margin_ex_vat: marginEx,
+          vat_rate_pct: vatRatePct,
+          vat_amount,
+          total_inc_vat
+        }
+      };
+
+      lines.push({
+        invoice_id: invoice.id,
+        timesheet_id: s.timesheet_id,
+        booking_id: tsMeta.booking_id ?? null,
+        description: desc,
+        // no hours buckets on this line
+        hours_day: 0, hours_night: 0, hours_sat: 0, hours_sun: 0, hours_bh: 0,
+        pay_day: null, pay_night: null, pay_sat: null, pay_sun: null, pay_bh: null,
+        charge_day: null, charge_night: null, charge_sat: null, charge_sun: null, charge_bh: null,
+        total_pay_ex_vat: payEx,
+        total_charge_ex_vat: chargeEx,
+        margin_ex_vat: marginEx,
+        vat_rate_pct: vatRatePct,
+        vat_amount,
+        total_inc_vat,
+        meta_json: addMeta
+      });
+    }
   }
 
   // 5) Persist lines
   if (lines.length) {
     const resLines = await fetch(`${env.SUPABASE_URL}/rest/v1/invoice_lines`, {
       method: 'POST',
-      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
       body: JSON.stringify(lines)
     });
     if (!resLines.ok) {
@@ -20358,7 +22052,7 @@ export async function handleCreateInvoiceTsfin(env, req) {
   // 6) Update invoice header totals
   const updInv = await fetch(`${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${encodeURIComponent(invoice.id)}`, {
     method: 'PATCH',
-    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+    headers: { ...sbHeaders(env), Prefer: 'return-representation' },
     body: JSON.stringify({
       subtotal_ex_vat: round2(sumEx),
       vat_amount: round2(sumVat),
@@ -20381,7 +22075,7 @@ export async function handleCreateInvoiceTsfin(env, req) {
 
   const lockRes = await fetch(lockUrl, {
     method: 'PATCH',
-    headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+    headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
     body: JSON.stringify({ locked_by_invoice_id: invoice.id, locked_at_utc: new Date().toISOString() })
   });
   if (!lockRes.ok) {
@@ -20417,7 +22111,7 @@ export async function handleCreateInvoiceTsfin(env, req) {
       `${env.SUPABASE_URL}/rest/v1/invoice_lines?invoice_id=eq.${encodeURIComponent(invoice.id)}&timesheet_id=eq.${encodeURIComponent(tsId)}`,
       {
         method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
         body: JSON.stringify({ paper_ts_r2_key: key })
       }
     );
@@ -20431,7 +22125,6 @@ export async function handleCreateInvoiceTsfin(env, req) {
     totals: { ex_vat: round2(sumEx), vat: round2(sumVat), inc_vat: round2(sumInc) }
   });
 }
-
 
 
 
