@@ -11289,10 +11289,40 @@ export async function handleClientsGet(env, req, clientId) {
     env,
     `${env.SUPABASE_URL}/rest/v1/client_settings` +
       `?client_id=eq.${enc(client.id)}` +
-      `&select=id,hr_validation_required,ts_reference_required,pay_reference_required,invoice_reference_required,default_submission_mode,` +
-      `is_nhsp,self_bill_no_invoices_sent,daily_calc_of_invoices,no_timesheet_required,group_nightsat_sunbh,` +
-      `effective_from,timezone_id,day_start,day_end,night_start,night_end,sat_start,sat_end,sun_start,sun_end,` +
-      `bh_source,bh_list,bh_feed_url,week_ending_weekday,created_at,updated_at` +
+      `&select=` +
+        [
+          'id',
+          'hr_validation_required',
+          'ts_reference_required',
+          'pay_reference_required',
+          'invoice_reference_required',
+          'default_submission_mode',
+          'is_nhsp',
+          'self_bill_no_invoices_sent',
+          'daily_calc_of_invoices',
+          'no_timesheet_required',
+          'group_nightsat_sunbh',
+          // 🔹 NEW FLAGS (must be selected so FE sees their saved values)
+          'requires_hr',
+          'hr_attach_to_invoice',
+          'ts_attach_to_invoice',
+          'effective_from',
+          'timezone_id',
+          'day_start',
+          'day_end',
+          'night_start',
+          'night_end',
+          'sat_start',
+          'sat_end',
+          'sun_start',
+          'sun_end',
+          'bh_source',
+          'bh_list',
+          'bh_feed_url',
+          'week_ending_weekday',
+          'created_at',
+          'updated_at'
+        ].join(',') +
       `&order=effective_from.desc,created_at.desc&limit=1`
   );
   const client_settings = (csRows && csRows[0]) || null;
