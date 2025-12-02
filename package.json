@@ -25,7 +25,8 @@
   "dependencies": {
     "@cloudflare/puppeteer": "^1.0.4",
     "pdf-lib": "^1.17.1",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "wrangler": "^4.43.0"
