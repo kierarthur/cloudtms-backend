@@ -11866,6 +11866,10 @@ export async function handleNhspImportConfirm(env, req, importId) {
   }
 }
 
+
+
+
+
 export async function handleHrAutoprocessConfirm(env, req, importId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -22074,11 +22078,41 @@ async function handleRelatedCounts(env, req, entity, id) {
         umbrella = (cand.pay_method === 'UMBRELLA' && cand.umbrella_id) ? 1 : 0;
       }
 
+      // NEW: contract + series (base + adjustments for same contract/week)
+      let hasContract = 0;
+      let seriesCount = 0;
+      try {
+        // Find the contract_week record for this timesheet
+        const cwq = `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+          `?timesheet_id=eq.${encodeURIComponent(id)}` +
+          `&select=contract_id,week_ending_date&limit=1`;
+        const cwr = await sbFetch(env, cwq);
+        const cwRow = (cwr.rows || [])[0] || null;
+
+        if (cwRow && cwRow.contract_id) {
+          hasContract = 1;
+
+          // Count how many contract_weeks share this contract + week_ending and have a timesheet
+          const sibQ = `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+            `?contract_id=eq.${encodeURIComponent(cwRow.contract_id)}` +
+            `&week_ending_date=eq.${encodeURIComponent(cwRow.week_ending_date)}` +
+            `&timesheet_id=not.is.null` +
+            `&select=id`;
+          const sibR = await sbFetch(env, sibQ, { preferExactCount: true });
+          seriesCount = typeof sibR.count === 'number' ? sibR.count : (sibR.rows || []).length;
+        }
+      } catch (e) {
+        // non-fatal – just means no contract/weeks found
+        console.warn('[relatedCounts][timesheet] contract/series lookup failed', e);
+      }
+
       return withCORS(env, req, ok({
         candidate: hasCandidate,
         client:    hasClient,
         invoice:   hasInvoice,
-        umbrella
+        umbrella,
+        contract:  hasContract,
+        series:    seriesCount
       }));
     }
 
@@ -25330,7 +25364,7 @@ async function handleRelatedList(env, req, entity, id) {
         return okList(items, invIds.length);
       }
 
-      if (type === 'clients') { // FIXED: removed stray parenthesis
+      if (type === 'clients') {
         const finq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?candidate_id=eq.${encodeURIComponent(id)}&is_current=eq.true&select=client_id`;
         const fin  = await sbFetch(env, finq);
         const cliIds = [...new Set((fin.rows || []).map(r => r.client_id).filter(Boolean))];
@@ -25412,6 +25446,86 @@ async function handleRelatedList(env, req, entity, id) {
         const ur = await sbFetch(env, uq);
         const u  = (ur.rows || [])[0];
         return okList(u ? [{ id: u.id, name: u.name }] : [], u ? 1 : 0);
+      }
+
+      // NEW: contract for this timesheet
+      if (type === 'contract') {
+        const tsq = `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${encodeURIComponent(id)}&select=contract_id&limit=1`;
+        const tsr = await sbFetch(env, tsq);
+        const contractId = (tsr.rows || [])[0]?.contract_id;
+        if (!contractId) return okList([], 0);
+
+        const cq = `${env.SUPABASE_URL}/rest/v1/contracts` +
+          `?id=eq.${encodeURIComponent(contractId)}` +
+          `&select=id,candidate_id,client_id,role,band,start_date,end_date,display_site`;
+        const cr = await sbFetch(env, cq);
+        const c  = (cr.rows || [])[0];
+        return okList(c ? [c] : [], c ? 1 : 0);
+      }
+
+      // NEW: series (base + adjustments for same contract_week)
+      if (type === 'series') {
+        // Step 1: find base contract/week for this timesheet
+        const cwq = `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+          `?timesheet_id=eq.${encodeURIComponent(id)}` +
+          `&select=contract_id,week_ending_date,additional_seq,is_adjustment,status&limit=1`;
+        const cwr = await sbFetch(env, cwq);
+        const cwRow = (cwr.rows || [])[0] || null;
+        if (!cwRow || !cwRow.contract_id || !cwRow.week_ending_date) {
+          return okList([], 0);
+        }
+
+        // Step 2: get all siblings for same contract + week
+        const sibQ = `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+          `?contract_id=eq.${encodeURIComponent(cwRow.contract_id)}` +
+          `&week_ending_date=eq.${encodeURIComponent(cwRow.week_ending_date)}` +
+          `&timesheet_id=not.is.null` +
+          `&select=timesheet_id,additional_seq,is_adjustment,status`;
+        const sibR = await sbFetch(env, sibQ);
+        const cwSiblings = sibR.rows || [];
+        if (!cwSiblings.length) return okList([], 0);
+
+        const tsIds = [...new Set(cwSiblings.map(r => r.timesheet_id).filter(Boolean))];
+        if (!tsIds.length) return okList([], 0);
+
+        // Step 3: hydrate TSFIN summary for each timesheet
+        const finQ = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=in.(${tsIds.map(encodeURIComponent).join(',')})` +
+          `&is_current=eq.true` +
+          `&select=timesheet_id,total_hours,total_pay_ex_vat,processing_status,basis`;
+        const finR = await sbFetch(env, finQ);
+        const finRows = finR.rows || [];
+        const finByTs = {};
+        finRows.forEach(r => { finByTs[r.timesheet_id] = r; });
+
+        // Step 4: map into related series items
+        let items = cwSiblings.map(r => {
+          const f = finByTs[r.timesheet_id] || {};
+          const seq = (r.additional_seq == null ? 0 : r.additional_seq);
+          return {
+            timesheet_id:     r.timesheet_id,
+            is_current:       String(r.timesheet_id) === String(id),
+            additional_seq:   r.additional_seq,
+            is_adjustment:    !!r.is_adjustment,
+            contract_week_status: r.status || null,
+            total_hours:      f.total_hours ?? null,
+            total_pay_ex_vat: f.total_pay_ex_vat ?? null,
+            processing_status:f.processing_status || null,
+            basis:            f.basis || null
+          };
+        });
+
+        // Base (seq 0) first, then adjustments in seq order
+        items.sort((a, b) => {
+          const aSeq = a.additional_seq == null ? 0 : a.additional_seq;
+          const bSeq = b.additional_seq == null ? 0 : b.additional_seq;
+          if (aSeq === bSeq) return 0;
+          return aSeq < bSeq ? -1 : 1;
+        });
+
+        const total = items.length;
+        const page  = items.slice(offset, offset + limit);
+        return okList(page, total);
       }
 
       return withCORS(env, req, badRequest("Unsupported type for timesheet"));
