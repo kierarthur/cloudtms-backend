@@ -11944,9 +11944,9 @@ export async function handleTimesheetsSummary(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
-  const enc = encodeURIComponent;
+  const enc    = encodeURIComponent;
   const urlObj = new URL(req.url);
-  const q  = (k) => urlObj.searchParams.get(k);
+  const q      = (k) => urlObj.searchParams.get(k);
 
   const page     = Math.max(1, parseInt(q('page') || '1', 10));
   const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
@@ -11959,7 +11959,7 @@ export async function handleTimesheetsSummary(env, req) {
   const routeTypeRaw = q('route_type');
   const routeType    = routeTypeRaw ? routeTypeRaw.toUpperCase() : null;
 
-  // NEW: optional sheet_scope + qr_status filters for weekly / QR awareness
+  // Optional sheet_scope + qr_status filters for weekly / QR awareness
   const sheetScopeRaw = q('sheet_scope');
   const sheetScope    = sheetScopeRaw ? sheetScopeRaw.toUpperCase() : null;
 
@@ -11968,6 +11968,34 @@ export async function handleTimesheetsSummary(env, req) {
 
   const weFrom      = q('week_ending_from');
   const weTo        = q('week_ending_to');
+
+  // Sorting (same pattern as search_* handlers)
+  const orderByParam = (q('order_by') || '').toLowerCase();
+  const orderDirParam = (q('order_dir') || '').toLowerCase();
+
+  // Keys here are lowercased UI sort keys; values are column names on v_timesheets_summary
+  const allowedSort = {
+    week_ending_date:    'week_ending_date',
+    client_name:         'client_name',
+    candidate_name:      'candidate_name',
+    summary_stage:       'summary_stage',
+    route_type:          'route_type',
+    sheet_scope:         'sheet_scope',
+
+    // numeric fields for finance-based sorts
+    total_pay_ex_vat:    'total_pay_ex_vat',
+    total_charge_ex_vat: 'total_charge_ex_vat',
+    margin_ex_vat:       'margin_ex_vat',
+
+    // legacy aliases from other parts of the app
+    pay:                 'total_pay_ex_vat',
+    charge:              'total_charge_ex_vat',
+    margin:              'margin_ex_vat'
+  };
+
+  const defaultOrderCol = 'week_ending_date';
+  const orderCol = allowedSort[orderByParam] || defaultOrderCol;
+  const orderDir = (orderDirParam === 'asc') ? 'asc' : 'desc';
 
   let api =
     `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary?select=*` +
@@ -11982,8 +12010,14 @@ export async function handleTimesheetsSummary(env, req) {
   if (weFrom)      api += `&week_ending_date=gte.${enc(weFrom)}`;
   if (weTo)        api += `&week_ending_date=lte.${enc(weTo)}`;
 
-  // Default ordering: newest weeks first, then client, then candidate
-  api += `&order=week_ending_date.desc,client_name.asc,candidate_name.asc`;
+  // If FE provided an order_by that we recognise, use it as primary sort,
+  // and then secondary sort by client_name / candidate_name for stability.
+  if (orderByParam && allowedSort[orderByParam]) {
+    api += `&order=${enc(orderCol)}.${orderDir},client_name.asc,candidate_name.asc`;
+  } else {
+    // Fallback: original default ordering
+    api += `&order=week_ending_date.desc,client_name.asc,candidate_name.asc`;
+  }
 
   try {
     const { rows } = await sbFetch(env, api);
@@ -14401,9 +14435,9 @@ export async function handleSearchClients(env, req) {
   const cliRef        = q('cli_ref');
   const primaryEmail  = q('primary_invoice_email');
   const invoiceAddr   = q('invoice_address');
-  const postcode      = q('postcode');
+  const postcode      = q('postcode');              // kept as a query param, but no DB column yet
   const apPhone       = q('ap_phone');
-  const vatChargeable = q('vat_chargeable'); // 'true'|'false'|null
+  const vatChargeable = q('vat_chargeable');        // 'true'|'false'|null
   const paymentTerms  = q('payment_terms_days');
   const mileageRate   = q('mileage_charge_rate');
   const tsQueries     = q('ts_queries_email');
@@ -14414,7 +14448,7 @@ export async function handleSearchClients(env, req) {
 
   let url =
     `${env.SUPABASE_URL}/rest/v1/clients` +
-    `?select=id,cli_ref,name,invoice_address,postcode,primary_invoice_email,ap_phone,vat_chargeable,payment_terms_days,mileage_charge_rate,ts_queries_email,created_at,updated_at` +
+    `?select=id,cli_ref,name,invoice_address,primary_invoice_email,ap_phone,vat_chargeable,payment_terms_days,mileage_charge_rate,ts_queries_email,created_at,updated_at` +
     `&order=${enc(orderCol)}.${orderDir}` +
     `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
 
@@ -14423,7 +14457,7 @@ export async function handleSearchClients(env, req) {
   if (cliRef)       url += `&cli_ref=ilike.*${enc(cliRef)}*`;
   if (primaryEmail) url += `&primary_invoice_email=ilike.*${enc(primaryEmail)}*`;
   if (invoiceAddr)  url += `&invoice_address=ilike.*${enc(invoiceAddr)}*`;
-  if (postcode)     url += `&postcode=ilike.*${enc(postcode)}*`;
+  // NOTE: postcode is not a real column on clients table yet, so we don't add a filter here
   if (apPhone)      url += `&ap_phone=ilike.*${enc(apPhone)}*`;
 
   if (vatChargeable === 'true')  url += `&vat_chargeable=eq.true`;
@@ -14468,7 +14502,7 @@ export async function handleSearchClients(env, req) {
         r.name || '',
         r.cli_ref || '',
         r.invoice_address || '',
-        r.postcode || '',
+        '', // postcode placeholder (no DB column yet)
         r.vat_chargeable ? 'Y' : 'N',
         Number(r.payment_terms_days ?? ''),
         r.primary_invoice_email || '',
@@ -14488,7 +14522,7 @@ export async function handleSearchClients(env, req) {
         <td>${r.name || ''}</td>
         <td>${r.cli_ref || ''}</td>
         <td>${r.invoice_address || ''}</td>
-        <td>${r.postcode || ''}</td>
+        <td></td>
         <td>${r.vat_chargeable ? 'Y' : 'N'}</td>
         <td>${Number(r.payment_terms_days ?? '')}</td>
         <td>${r.primary_invoice_email || ''}</td>
@@ -14517,7 +14551,6 @@ export async function handleSearchClients(env, req) {
 
   return withCORS(env, req, ok({ rows, page, page_size: pageSize, count: rows?.length || 0 }));
 }
-
 
 
 // ───────────────────────────────────────────────────────────────────────────────
