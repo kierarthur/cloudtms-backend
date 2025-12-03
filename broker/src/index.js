@@ -30977,39 +30977,6 @@ export async function handleTimesheetSourcePrint(env, req, timesheetId) {
     return withCORS(env, req, serverError('Failed to collect source rows for timesheet'));
   }
 }
-export async function handleTimesheetPdf(env, req, timesheetId) {
-  // Admin auth
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  if (!timesheetId) {
-    return withCORS(env, req, badRequest('timesheet_id is required'));
-  }
-
-  try {
-    // ensureTimesheetPdf will either:
-    // - render the TS to PDF and store in R2, or
-    // - reuse an existing manual/uploaded PDF
-    // It should return the R2 key (string).
-    const r2Key = await ensureTimesheetPdf(env, timesheetId);
-    if (!r2Key) {
-      return withCORS(env, req, serverError('Failed to ensure timesheet PDF'));
-    }
-
-    // We just return the R2 key; frontend can call /api/files/presign-download
-    // to get a one-time URL and embed/print the PDF.
-    return withCORS(env, req, ok({
-      timesheet_id: timesheetId,
-      r2_key: r2Key
-    }));
-  } catch (e) {
-    console.error('[TIMESHEET_PDF] error', {
-      timesheet_id: timesheetId,
-      err: e?.message || String(e)
-    });
-    return withCORS(env, req, serverError('Failed to generate or locate timesheet PDF'));
-  }
-}
 
 export async function collectSourceRowsForInvoice(env, invoiceId) {
   const enc = encodeURIComponent;
