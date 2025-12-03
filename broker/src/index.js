@@ -6041,14 +6041,11 @@ export async function handleTimesheetUpdateReference(env, req, timesheetId) {
 }
 
 export async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
-  // Works for manual or electronic weekly: sets authorised_at_server and
-  // updates TSFIN to READY_FOR_HR or READY_FOR_INVOICE based on client.requires_hr
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
   const now = nowIso();
 
-  // Stamp timesheet as authorised
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`,
     {
@@ -6056,23 +6053,24 @@ export async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
       headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
       body: JSON.stringify({ authorised_at_server: now, updated_at: now })
     }
-  ).catch(() => { /* best-effort */ });
+  ).catch(() => {});
 
-  // Load current TSFIN snapshot
   const { rows: finRows } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
       `?timesheet_id=eq.${enc(timesheetId)}` +
       `&is_current=eq.true` +
-      `&select=id,client_id,processing_status`
+      `&select=id,client_id,processing_status,locked_by_invoice_id,paid_at_utc`
   );
   const fin = finRows?.[0] || null;
   if (!fin) {
-    // No financial snapshot yet; worker will build it after authorisation
     return withCORS(env, req, ok({ authorised: true, tsfin_updated: false }));
   }
 
-  // Determine whether this client requires HR validation
+  if (fin.locked_by_invoice_id || fin.paid_at_utc) {
+    return withCORS(env, req, badRequest('Cannot authorise: timesheet is locked or paid'));
+  }
+
   let requiresHr = false;
   if (fin.client_id) {
     const { rows: csRows } = await sbFetch(
@@ -6085,7 +6083,6 @@ export async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
     requiresHr = !!csRows?.[0]?.requires_hr;
   }
 
-  // Only override status if it is in a "pre-authorised" state (e.g. PENDING_AUTH or READY_FOR_HR)
   let newStatus = fin.processing_status;
   const ps = String(fin.processing_status || '').toUpperCase();
   if (ps === 'PENDING_AUTH' || ps === 'READY_FOR_HR') {
@@ -6104,9 +6101,69 @@ export async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
         updated_at: now
       })
     }
-  ).catch(() => { /* best-effort */ });
+  ).catch(() => {});
 
-  return withCORS(env, req, ok({ authorised: true, tsfin_updated: true, processing_status: newStatus }));
+  return withCORS(env, req, ok({
+    authorised: true,
+    tsfin_updated: true,
+    processing_status: newStatus
+  }));
+}
+export async function handleTimesheetUnauthorise(env, req, timesheetId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const now = nowIso();
+
+  const { rows: finRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=id,locked_by_invoice_id,paid_at_utc,processing_status`
+  );
+  const fin = finRows?.[0] || null;
+  if (!fin) {
+    return withCORS(env, req, badRequest('No financial snapshot to unauthorise'));
+  }
+
+  if (fin.locked_by_invoice_id || fin.paid_at_utc) {
+    return withCORS(env, req, badRequest('Cannot unauthorise: timesheet is locked or paid'));
+  }
+
+  // Clear authorised_at_server on the timesheet
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ authorised_at_server: null, updated_at: now })
+    }
+  ).catch(() => {});
+
+  // Set status back to PENDING_AUTH (or keep if already earlier)
+  const prevStatus = String(fin.processing_status || '').toUpperCase();
+  const newStatus = 'PENDING_AUTH';
+
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
+      body: JSON.stringify({
+        processing_status: newStatus,
+        authorised_by_user_id: null,
+        authorised_at_utc: null,
+        updated_at: now
+      })
+    }
+  ).catch(() => {});
+
+  return withCORS(env, req, ok({
+    unauthorised: true,
+    processing_status: newStatus,
+    previous_status: prevStatus
+  }));
 }
 
 export async function handleTimesheetPresignExpensePdf(env, req, timesheetId) {
@@ -9377,10 +9434,10 @@ export async function handleManualPayAdjustmentCreate(env, req, timesheetId) {
   }
 }
 
+
 export async function handleTimesheetDetails(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
-  // Admin auth
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -9389,7 +9446,6 @@ export async function handleTimesheetDetails(env, req, timesheetId) {
   }
 
   try {
-    // 1) Load core timesheet
     const { rows: tsRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -9402,7 +9458,21 @@ export async function handleTimesheetDetails(env, req, timesheetId) {
       return withCORS(env, req, notFound('Timesheet not found'));
     }
 
-    // 2) Load current TSFIN snapshot (includes invoice_breakdown_json.segments)
+    // Find linked contract_week (if any) so FE can upsert manual weekly hours/extras
+    let contractWeekId = null;
+    try {
+      const { rows: cwRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+        `?timesheet_id=eq.${enc(timesheetId)}` +
+        `&select=id` +
+        `&limit=1`
+      );
+      contractWeekId = cwRows?.[0]?.id || null;
+    } catch {
+      contractWeekId = null;
+    }
+
     const { rows: finRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
@@ -9413,7 +9483,6 @@ export async function handleTimesheetDetails(env, req, timesheetId) {
     );
     const tsfin = finRows?.[0] || null;
 
-    // 3) Load all validations for this timesheet
     const { rows: valRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheet_validations` +
@@ -9423,7 +9492,6 @@ export async function handleTimesheetDetails(env, req, timesheetId) {
     );
     const validations = valRows || [];
 
-    // 4) Load linked NHSP/HR shifts for this timesheet (for debugging / cross-check)
     const { rows: shiftRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
@@ -9433,22 +9501,17 @@ export async function handleTimesheetDetails(env, req, timesheetId) {
     );
     const shifts = shiftRows || [];
 
-    // NOTE: per-shift ref_num, request_id, held_back_reason, exclude_from_pay
-    // are all included in tsfin.invoice_breakdown_json.segments as populated
-    // by buildNhspWeeklySnapshot. We just return TSFIN as-is.
-
     return withCORS(env, req, ok({
       timesheet: ts,
       tsfin,
       validations,
       shifts,
-
-      // NEW: explicit weekly/QR fields to help the UI
       sheet_scope: ts.sheet_scope || null,
       qr_status: ts.qr_status || null,
       qr_generated_at: ts.qr_generated_at || null,
       qr_scanned_at: ts.qr_scanned_at || null,
-      manual_pdf_r2_key: ts.manual_pdf_r2_key || null
+      manual_pdf_r2_key: ts.manual_pdf_r2_key || null,
+      contract_week_id: contractWeekId
     }));
   } catch (e) {
     console.error('[TIMESHEET_DETAILS] error', {
@@ -9458,6 +9521,7 @@ export async function handleTimesheetDetails(env, req, timesheetId) {
     return withCORS(env, req, serverError('Failed to load timesheet details'));
   }
 }
+
 
 
 
@@ -11955,25 +12019,25 @@ export async function handleTimesheetsSummary(env, req) {
   const candidateId = q('candidate_id');
   const stage       = q('summary_stage');
 
-  // Normalise route_type so we can pass uppercase values through to the view
   const routeTypeRaw = q('route_type');
   const routeType    = routeTypeRaw ? routeTypeRaw.toUpperCase() : null;
 
-  // Optional sheet_scope + qr_status filters for weekly / QR awareness
   const sheetScopeRaw = q('sheet_scope');
   const sheetScope    = sheetScopeRaw ? sheetScopeRaw.toUpperCase() : null;
 
   const qrStatusRaw   = q('qr_status');
   const qrStatus      = qrStatusRaw ? qrStatusRaw.toUpperCase() : null;
 
+  const isAdjusted    = q('is_adjusted');
+  const isQr          = q('is_qr');
+  const needsAttention= q('needs_attention');
+
   const weFrom      = q('week_ending_from');
   const weTo        = q('week_ending_to');
 
-  // Sorting (same pattern as search_* handlers)
   const orderByParam = (q('order_by') || '').toLowerCase();
   const orderDirParam = (q('order_dir') || '').toLowerCase();
 
-  // Keys here are lowercased UI sort keys; values are column names on v_timesheets_summary
   const allowedSort = {
     week_ending_date:    'week_ending_date',
     client_name:         'client_name',
@@ -11981,13 +12045,9 @@ export async function handleTimesheetsSummary(env, req) {
     summary_stage:       'summary_stage',
     route_type:          'route_type',
     sheet_scope:         'sheet_scope',
-
-    // numeric fields for finance-based sorts
     total_pay_ex_vat:    'total_pay_ex_vat',
     total_charge_ex_vat: 'total_charge_ex_vat',
     margin_ex_vat:       'margin_ex_vat',
-
-    // legacy aliases from other parts of the app
     pay:                 'total_pay_ex_vat',
     charge:              'total_charge_ex_vat',
     margin:              'margin_ex_vat'
@@ -12010,12 +12070,18 @@ export async function handleTimesheetsSummary(env, req) {
   if (weFrom)      api += `&week_ending_date=gte.${enc(weFrom)}`;
   if (weTo)        api += `&week_ending_date=lte.${enc(weTo)}`;
 
-  // If FE provided an order_by that we recognise, use it as primary sort,
-  // and then secondary sort by client_name / candidate_name for stability.
+  if (isAdjusted === 'true')  api += `&is_adjusted=eq.true`;
+  if (isAdjusted === 'false') api += `&is_adjusted=eq.false`;
+
+  if (isQr === 'true')        api += `&is_qr=eq.true`;
+  if (isQr === 'false')       api += `&is_qr=eq.false`;
+
+  if (needsAttention === 'true')  api += `&needs_attention=eq.true`;
+  if (needsAttention === 'false') api += `&needs_attention=eq.false`;
+
   if (orderByParam && allowedSort[orderByParam]) {
     api += `&order=${enc(orderCol)}.${orderDir},client_name.asc,candidate_name.asc`;
   } else {
-    // Fallback: original default ordering
     api += `&order=week_ending_date.desc,client_name.asc,candidate_name.asc`;
   }
 
