@@ -12782,72 +12782,7 @@ export async function handleTsfinUpdateSegments(env, req, timesheetId) {
   return withCORS(env, req, ok({ updated }));
 }
 
-export async function handleNhspInvoiceCandidates(env, req) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
 
-  const url = new URL(req.url);
-  const q = (k) => url.searchParams.get(k);
-  const enc = encodeURIComponent;
-
-  const runAtRaw = q('run_at');
-  let runAt = new Date();
-  if (runAtRaw) {
-    const d = new Date(runAtRaw);
-    if (!isNaN(d.getTime())) runAt = d;
-  }
-
-  try {
-    // 1) Fetch all PENDING shifts that have a timesheet_id
-    const { rows: shiftRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
-        `?invoice_status=eq.PENDING` +
-        `&timesheet_id=not.is.null` +
-        `&select=*`
-    );
-    const allShifts = shiftRows || [];
-
-    // 2) Filter by defer_until_run_after in JS (NULL or < runAt)
-    const eligibleByDefer = allShifts.filter((s) => {
-      if (!s.defer_until_run_after) return true;
-      const d = new Date(s.defer_until_run_after);
-      if (isNaN(d.getTime())) return true;
-      return d < runAt;
-    });
-
-    if (!eligibleByDefer.length) {
-      return withCORS(env, req, ok({ shifts: [], run_at: runAt.toISOString() }));
-    }
-
-    // 3) Filter by TSFIN readiness: READY_FOR_INVOICE & unlocked
-    const tsIds = [...new Set(eligibleByDefer.map(s => s.timesheet_id).filter(Boolean))];
-    const tsParam = tsIds.map(enc).join(',');
-    const { rows: finRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-        `?timesheet_id=in.(${tsParam})` +
-        `&is_current=eq.true` +
-        `&select=timesheet_id,processing_status,locked_by_invoice_id`
-    );
-    const finMap = new Map();
-    for (const f of finRows || []) finMap.set(f.timesheet_id, f);
-
-    const candidates = eligibleByDefer.filter((s) => {
-      const fin = finMap.get(s.timesheet_id);
-      if (!fin) return false;
-      if (fin.locked_by_invoice_id) return false;
-      return String(fin.processing_status || '').toUpperCase() === 'READY_FOR_INVOICE';
-    });
-
-    return withCORS(env, req, ok({
-      shifts: candidates,
-      run_at: runAt.toISOString()
-    }));
-  } catch (e) {
-    return withCORS(env, req, serverError(`Failed to list NHSP invoice candidates: ${e?.message || e}`));
-  }
-}
 
 export async function handleNhspInvoiceCandidates(env, req) {
   const user = await requireUser(env, req, ['admin']);
