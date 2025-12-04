@@ -6177,32 +6177,335 @@ export async function handleTimesheetPresignExpensePdf(env, req, timesheetId) {
 }
 
 export async function handleTimesheetSwitchToManual(env, req, timesheetId) {
-  // Convenience: revoke electronic attempt and switch the linked week to MANUAL
+  // Switch a WEEKLY CONTRACT_WEEKLY electronic timesheet to MANUAL (hours unchanged)
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+  if (!timesheetId) {
+    return withCORS(env, req, badRequest('timesheet_id is required'));
+  }
 
-  const ts = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}&select=timesheet_id,contract_id,week_ending_date,r2_nurse_key,r2_auth_key`);
-  if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
+  // Load timesheet
+  const ts = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=timesheet_id,contract_id,sheet_scope,submission_mode,r2_nurse_key,r2_auth_key`
+  );
+  if (!ts) {
+    return withCORS(env, req, notFound('Timesheet not found'));
+  }
 
-  // Find its week
-  const cw = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contract_weeks?timesheet_id=eq.${enc(timesheetId)}&select=*`);
-  if (!cw) return withCORS(env, req, badRequest('Timesheet not linked to a contract week'));
+  const scope = String(ts.sheet_scope || '').toUpperCase();
+  if (scope && scope !== 'WEEKLY') {
+    return withCORS(
+      env,
+      req,
+      badRequest('Only WEEKLY timesheets can be switched to manual')
+    );
+  }
+
+  const subMode = String(ts.submission_mode || '').toUpperCase();
+  if (subMode !== 'ELECTRONIC') {
+    return withCORS(
+      env,
+      req,
+      badRequest('Timesheet is not an electronic weekly timesheet')
+    );
+  }
+
+  // Ensure linked contract_week exists
+  const cw = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+      `?timesheet_id=eq.${enc(timesheetId)}&select=*`
+  );
+  if (!cw) {
+    return withCORS(env, req, badRequest('Timesheet not linked to a contract week'));
+  }
+
+  // Ensure not invoiced / paid and basis is CONTRACT_WEEKLY
+  const tsfin = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=id,basis,locked_by_invoice_id,paid_at_utc`
+  );
+  if (!tsfin) {
+    return withCORS(env, req, badRequest('No financial snapshot to switch'));
+  }
+
+  if (tsfin.locked_by_invoice_id || tsfin.paid_at_utc) {
+    return withCORS(
+      env,
+      req,
+      badRequest('Cannot switch: timesheet already invoiced or paid')
+    );
+  }
+
+  const basis = String(tsfin.basis || '').toUpperCase();
+  if (basis !== 'CONTRACT_WEEKLY') {
+    return withCORS(
+      env,
+      req,
+      badRequest('Only CONTRACT_WEEKLY timesheets can be switched to manual')
+    );
+  }
+
+  const now = nowIso();
+
+  // Patch timesheet: keep hours & TSFIN basis, just flip submission_mode and clear e-sign keys
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+      body: JSON.stringify({
+        submission_mode: 'MANUAL',
+        r2_nurse_key: null,
+        r2_auth_key: null,
+        updated_at: now
+      })
+    }
+  ).catch(() => {});
+
+  // Optional: reflect manual mode on the contract_week snapshot
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+      body: JSON.stringify({
+        submission_mode_snapshot: 'MANUAL',
+        updated_at: now
+      })
+    }
+  ).catch(() => {});
+
+  return withCORS(
+    env,
+    req,
+    ok({
+      switched: true,
+      contract_week_id: cw.id,
+      timesheet_id: timesheetId
+    })
+  );
+}
+
+
+export async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
+  // Convert a QR weekly timesheet back to a plain MANUAL weekly sheet
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!timesheetId) {
+    return withCORS(env, req, badRequest('timesheet_id is required'));
+  }
+
+  // Load timesheet with QR metadata
+  const ts = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=timesheet_id,sheet_scope,submission_mode,qr_status,qr_token,qr_generated_at,qr_scanned_at,qr_payload_json,qr_r2_key,manual_pdf_r2_key`
+  );
+  if (!ts) {
+    return withCORS(env, req, notFound('Timesheet not found'));
+  }
+
+  const scope = String(ts.sheet_scope || '').toUpperCase();
+  if (scope && scope !== 'WEEKLY') {
+    return withCORS(
+      env,
+      req,
+      badRequest('QR conversion is only supported for WEEKLY timesheets')
+    );
+  }
+
+  const subMode = String(ts.submission_mode || '').toUpperCase();
+  if (subMode !== 'MANUAL') {
+    return withCORS(
+      env,
+      req,
+      badRequest('Timesheet is not in MANUAL mode; QR conversion not applicable')
+    );
+  }
+
+  const qrStatus = String(ts.qr_status || '').toUpperCase();
+  if (!qrStatus) {
+    return withCORS(
+      env,
+      req,
+      badRequest('Timesheet does not have QR metadata; nothing to convert')
+    );
+  }
 
   // Ensure not invoiced/paid
-  const tsfin = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true&select=locked_by_invoice_id,paid_at_utc`);
-  if (tsfin?.locked_by_invoice_id || tsfin?.paid_at_utc) return withCORS(env, req, badRequest('Cannot switch: invoiced or paid'));
+  const fin = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=basis,locked_by_invoice_id,paid_at_utc`
+  );
+  if (!fin) {
+    return withCORS(env, req, badRequest('No financial snapshot for timesheet'));
+  }
 
-  // Delete TS and set week to MANUAL OPEN
-  await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}`, {
-    method: 'DELETE', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' }
-  });
-  await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`, {
-    method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
-    body: JSON.stringify({ timesheet_id: null, submission_mode_snapshot: 'MANUAL', status: 'OPEN', updated_at: nowIso() })
-  });
+  if (fin.locked_by_invoice_id || fin.paid_at_utc) {
+    return withCORS(
+      env,
+      req,
+      badRequest('Cannot convert QR: timesheet already invoiced or paid')
+    );
+  }
 
-  return withCORS(env, req, ok({ switched: true, contract_week_id: cw.id }));
+  // Optional: ensure it's a contract weekly basis
+  const basis = String(fin.basis || '').toUpperCase();
+  if (basis !== 'CONTRACT_WEEKLY') {
+    return withCORS(
+      env,
+      req,
+      badRequest('Only CONTRACT_WEEKLY QR timesheets can be converted to manual')
+    );
+  }
+
+  const now = nowIso();
+
+  // Clear QR metadata and force new evidence requirement
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+      body: JSON.stringify({
+        // submission_mode remains 'MANUAL'
+        qr_status: null,
+        qr_token: null,
+        qr_generated_at: null,
+        qr_scanned_at: null,
+        qr_payload_json: null,
+        qr_r2_key: null,
+        // remove any existing QR-derived PDF; finance must upload a new manual PDF
+        manual_pdf_r2_key: null,
+        updated_at: now
+      })
+    }
+  ).catch(() => {});
+
+  return withCORS(
+    env,
+    req,
+    ok({
+      converted: true,
+      timesheet_id: timesheetId
+    })
+  );
 }
+
+export async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
+  // Switch a DAILY non-NHSP/HR electronic timesheet to MANUAL
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!timesheetId) {
+    return withCORS(env, req, badRequest('timesheet_id is required'));
+  }
+
+  // Load timesheet
+  const ts = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=timesheet_id,sheet_scope,submission_mode`
+  );
+  if (!ts) {
+    return withCORS(env, req, notFound('Timesheet not found'));
+  }
+
+  const scope = String(ts.sheet_scope || '').toUpperCase();
+  if (scope && scope !== 'DAILY') {
+    return withCORS(
+      env,
+      req,
+      badRequest('Only DAILY timesheets can be switched to manual via this endpoint')
+    );
+  }
+
+  const subMode = String(ts.submission_mode || '').toUpperCase();
+  if (subMode !== 'ELECTRONIC') {
+    return withCORS(
+      env,
+      req,
+      badRequest('Timesheet is not an electronic daily timesheet')
+    );
+  }
+
+  // Ensure not invoiced/paid and basis is not NHSP/HR self-bill
+  const fin = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=basis,locked_by_invoice_id,paid_at_utc`
+  );
+  if (!fin) {
+    return withCORS(env, req, badRequest('No financial snapshot to switch'));
+  }
+
+  if (fin.locked_by_invoice_id || fin.paid_at_utc) {
+    return withCORS(
+      env,
+      req,
+      badRequest('Cannot switch: timesheet already invoiced or paid')
+    );
+  }
+
+  const basis = String(fin.basis || '').toUpperCase();
+  const disallowed = new Set([
+    'NHSP',
+    'NHSP_ADJUSTMENT',
+    'HEALTHROSTER_SELF_BILL',
+    'HEALTHROSTER_ADJUSTMENT'
+  ]);
+  if (disallowed.has(basis)) {
+    return withCORS(
+      env,
+      req,
+      badRequest('Cannot switch NHSP/HR-based daily timesheets to manual')
+    );
+  }
+
+  const now = nowIso();
+
+  // Patch timesheet: flip submission_mode to MANUAL, keep hours/TSFIN as-is
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+      body: JSON.stringify({
+        submission_mode: 'MANUAL',
+        updated_at: now
+      })
+    }
+  ).catch(() => {});
+
+  return withCORS(
+    env,
+    req,
+    ok({
+      switched: true,
+      timesheet_id: timesheetId
+    })
+  );
+}
+
 
 // POST /api/contracts/:id/truncate-tail
 export async function handleContractsTruncateTailSafely(env, req, contractId) {
@@ -7091,12 +7394,23 @@ export async function handleMe(env, req) {
 // PAYMENTS — CSV (authorised gate + 16-char payment reference cap)
 // ───────────────────────────────────────────────────────────────────────────────
 export async function handlePaymentsGenerateCsv(env, req) {
-  const enc   = encodeURIComponent;
+  const enc    = encodeURIComponent;
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
   const capRef = (s, max = 16) => (s ? String(s).slice(0, max) : '');
   const csvEsc = (v) => {
     const s = String(v ?? '');
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+
+  const computeWeekStartFromWeekEnding = (weYmd) => {
+    if (!weYmd) return null;
+    const d = new Date(`${weYmd}T00:00:00Z`);
+    if (Number.isNaN(d.getTime())) return weYmd;
+    d.setUTCDate(d.getUTCDate() - 6);
+    const yyyy = d.getUTCFullYear();
+    const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd   = String(d.getUTCDate() + 0).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
   };
 
   const user = await requireUser(env, req, ['admin']);
@@ -7112,7 +7426,7 @@ export async function handlePaymentsGenerateCsv(env, req) {
   const clientIds    = Array.isArray(body?.client_ids)    ? body.client_ids.filter(Boolean)    : [];
   const candidateIds = Array.isArray(body?.candidate_ids) ? body.candidate_ids.filter(Boolean) : [];
   const payMethod    = body?.pay_method ? String(body.pay_method).toUpperCase() : null;
-  const umbrellaIds  = Array.isArray(body?.umbrella_ids) ? body.umbrella_ids.filter(Boolean)   : [];
+  const umbrellaIds  = Array.isArray(body?.umbrella_ids)  ? body.umbrella_ids.filter(Boolean)  : [];
 
   // ==== Query TSFIN — only current, unpaid, not on hold, AUTHORISED timesheets
   let url =
@@ -7136,6 +7450,7 @@ export async function handlePaymentsGenerateCsv(env, req) {
       'pay_total_inc_vat_snapshot',
       'paid_at_utc',
       'pay_on_hold',
+      'invoice_breakdown_json',
       'timesheet:timesheets(week_ending_date,authorised_at_server,contract_id,reference_number)'
     ].join(',') +
     `&is_current=eq.true&paid_at_utc=is.null&pay_on_hold=eq.false` +
@@ -7238,13 +7553,14 @@ export async function handlePaymentsGenerateCsv(env, req) {
   const defaults = await getDefaultSettings(env);
   const clientHolidayMap = await getClientHolidayPctMap(env, clientIdSet);
 
-  // ==== Load unpaid pay adjustments (Option A)
+  // ==== Load unpaid pay adjustments (only as_advance=false)
   let adjRows = [];
   try {
     let adjUrl =
       `${env.SUPABASE_URL}/rest/v1/ts_pay_adjustments` +
       `?paid_at_utc=is.null` +
-      `&select=id,timesheet_id,candidate_id,client_id,week_ending_date,delta_pay_ex_vat,reason`;
+      `&as_advance=eq.false` + // only non-advance adjustments affect base pay
+      `&select=id,timesheet_id,candidate_id,client_id,week_ending_date,delta_pay_ex_vat,reason,as_advance,advance_reason`;
     if (clientIds.length) {
       adjUrl += `&client_id=in.(${clientIds.map(enc).join(',')})`;
     }
@@ -7279,7 +7595,7 @@ export async function handlePaymentsGenerateCsv(env, req) {
     g.rows.push(r);
   }
 
-  // Then: pay adjustments (may create groups that have no TSFIN rows)
+  // Then: pay adjustments (non-advance only)
   for (const a of adjRows) {
     const key = `${a.candidate_id}__${a.week_ending_date}`;
     let g = groups.get(key);
@@ -7315,9 +7631,9 @@ export async function handlePaymentsGenerateCsv(env, req) {
     const payMethodEff = String(cand.pay_method || g.pay_method || '').toUpperCase();
     if (!payMethodEff || (payMethodEff !== 'PAYE' && payMethodEff !== 'UMBRELLA')) continue;
 
-    // 1) Compute group amount from TSFIN rows
-    let sumEx = 0;
-    let sumInc = 0;
+    // 1) Compute group amount from TSFIN rows (base, before advances)
+    let sumEx  = 0; // gross ex VAT (PAYE)
+    let sumInc = 0; // gross incl VAT (Umbrella)
 
     for (const r of g.rows) {
       const payEx = Number(r.total_pay_ex_vat || 0);
@@ -7342,12 +7658,14 @@ export async function handlePaymentsGenerateCsv(env, req) {
           if (incAmt == null || Number(incAmt) === 0) {
             rate = (rate == null ? defaults.vat : Number(rate));
             const derived = deriveUmbrellaVatSnapshots(rowEx, rate, true);
-            rate = derived.rate; vatAmt = derived.vat; incAmt = derived.inc;
+            rate   = derived.rate;
+            vatAmt = derived.vat;
+            incAmt = derived.inc;
             patchQueue.push({
               id: r.id,
               body: {
                 pay_vat_rate_pct_snapshot: rate,
-                pay_vat_amount_snapshot: vatAmt,
+                pay_vat_amount_snapshot:   vatAmt,
                 pay_total_inc_vat_snapshot: incAmt
               }
             });
@@ -7362,7 +7680,7 @@ export async function handlePaymentsGenerateCsv(env, req) {
               id: r.id,
               body: {
                 pay_vat_rate_pct_snapshot: null,
-                pay_vat_amount_snapshot: 0,
+                pay_vat_amount_snapshot:   0,
                 pay_total_inc_vat_snapshot: rowEx
               }
             });
@@ -7372,7 +7690,7 @@ export async function handlePaymentsGenerateCsv(env, req) {
       }
     }
 
-    // 1b) Add pay adjustments (Option A)
+    // 1b) Add pay adjustments (non-advance only)
     const adjTotal = (g.adjustments || []).reduce(
       (acc, a) => acc + Number(a.delta_pay_ex_vat || 0),
       0
@@ -7384,13 +7702,50 @@ export async function handlePaymentsGenerateCsv(env, req) {
     }
 
     if (g.rows.length === 0 && adjTotal === 0) {
-      // Empty group, nothing to pay
+      // Empty group, nothing to pay or advance
       continue;
     }
 
-    const amount = (payMethodEff === 'PAYE') ? round2(sumEx) : round2(sumInc);
+    const weekEnding = g.week_ending_date || null;
+    const weekStart  = weekEnding ? computeWeekStartFromWeekEnding(weekEnding) : null;
 
-    // 2) Determine payee + bank details + account type
+    // Base gross before advances
+    let baseGross = payMethodEff === 'PAYE' ? round2(sumEx) : round2(sumInc);
+
+    // 2) Auto-register missing-shift repayments and apply advances with net-pay floor
+    if (weekStart) {
+      // For each TSFIN row in this group, attach missing-shift repayments in this pay week
+      for (const r of g.rows) {
+        if (!r.client_id) continue;
+        await createMissingShiftRepayEntriesForTs(
+          env,
+          g.candidate_id,
+          r.client_id,
+          r,
+          weekStart
+        );
+      }
+
+      // Load scheduled advance entries for this candidate + week
+      const { entries } = await loadScheduledAdvanceEntries(env, g.candidate_id, weekStart);
+
+      if (entries && entries.length) {
+        const { newGross, updates } = await applyAdvanceScheduleEntriesForWeek(
+          env,
+          g.candidate_id,
+          weekStart,
+          baseGross,
+          entries
+        );
+        baseGross = newGross;
+        await persistAdvanceRepayments(env, updates, weekStart);
+      }
+    }
+
+    // Final net pay for this candidate/week (guaranteed ≥ 0)
+    const amount = round2(baseGross);
+
+    // 3) Determine payee + bank details + account type
     let payeeName, sortCode, accountNumber, accountType;
     if (payMethodEff === 'UMBRELLA') {
       const umb = mapUmb[cand?.umbrella_id];
@@ -7409,12 +7764,12 @@ export async function handlePaymentsGenerateCsv(env, req) {
       accountType   = 'Personal';
     }
 
-    // 3) PAYMENT REFERENCE: Candidate "Surname Firstname"
+    // 4) PAYMENT REFERENCE: Candidate "Surname Firstname"
     const refLast  = (cand?.last_name  || '').trim();
     const refFirst = (cand?.first_name || '').trim();
     const lineRef  = capRef([refLast, refFirst].filter(Boolean).join(' ').trim(), 16);
 
-    // 4) CSV row
+    // 5) CSV row
     csvRows.push([
       csvEsc(lineRef),
       csvEsc(payeeName),
@@ -7424,7 +7779,7 @@ export async function handlePaymentsGenerateCsv(env, req) {
       csvEsc(amount.toFixed(2)),
     ].join(','));
 
-    // 5) Mark TSFIN rows as paid
+    // 6) Mark TSFIN rows as paid
     for (const r of g.rows) {
       affectedTsIds.push(r.timesheet_id);
       patchQueue.push({
@@ -7437,7 +7792,7 @@ export async function handlePaymentsGenerateCsv(env, req) {
       });
     }
 
-    // 6) Mark ts_pay_adjustments as paid
+    // 7) Mark ts_pay_adjustments as paid (we only loaded non-advance ones)
     for (const a of (g.adjustments || [])) {
       payAdjPatchQueue.push({
         id: a.id,
@@ -9577,6 +9932,20 @@ export async function handleNhspApply(env, req, importId) {
   const norm = (s) => (String(s || '').trim().toLowerCase());
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
+  // Threshold for treating a negative NHSP correction as an "overpay advance"
+  const NHSP_OVERPAY_ADVANCE_THRESHOLD = 200; // adjust if needed
+
+  const computeWeekStartFromWeekEnding = (weYmd) => {
+    if (!weYmd) return null;
+    const d = new Date(`${weYmd}T00:00:00Z`);
+    if (Number.isNaN(d.getTime())) return weYmd;
+    d.setUTCDate(d.getUTCDate() - 6);
+    const yyyy = d.getUTCFullYear();
+    const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd   = String(d.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
   // helper: compute aggregated NHSP pay/charge totals for a set of shifts
   async function computeNhspTotalsForShifts(env, contract, shifts) {
     const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
@@ -9628,6 +9997,54 @@ export async function handleNhspApply(env, req, importId) {
     }
 
     return { totalPayEx, totalChgEx };
+  }
+
+  // helper: create an overpay advance (shared pattern with HR)
+  async function createOverpayAdvance(env, { candidate_id, client_id, amount, reason, notes, week_start }) {
+    try {
+      const amt = Number(amount || 0);
+      if (!candidate_id || !client_id || !(amt > 0)) return;
+
+      const nowIso = new Date().toISOString();
+      const ws = week_start || null;
+
+      const schedule = ws
+        ? [{ week_start: ws, amount: -round2(amt) }]
+        : [];
+
+      const payload = [{
+        candidate_id,
+        client_id,
+        reason,                         // 'OVERPAY_NHSP' / 'OVERPAY_HR'
+        original_amount:   round2(amt),
+        outstanding_amount: round2(amt),
+        linked_shift_date:  null,
+        schedule_json:      schedule,
+        next_due_week_start: ws || null,
+        status: 'ACTIVE',
+        best_guess_hours: null,
+        notes: notes || null,
+        created_at: nowIso,
+        updated_at: nowIso,
+        created_by: null
+      }];
+
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/pay_advances`,
+        {
+          method: 'POST',
+          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+          body: JSON.stringify(payload)
+        }
+      );
+    } catch (e) {
+      console.warn('[NHSP_APPLY] createOverpayAdvance failed', {
+        candidate_id,
+        client_id,
+        reason,
+        err: e?.message || String(e)
+      });
+    }
   }
 
   try {
@@ -10124,6 +10541,22 @@ export async function handleNhspApply(env, req, importId) {
               continue;
             }
 
+            // --- NEW: large negative deltaPay → record as OVERPAY_NHSP advance ---
+            let adjDeltaPay = deltaPayTotal;
+            if (deltaPayTotal < 0 && Math.abs(deltaPayTotal) >= NHSP_OVERPAY_ADVANCE_THRESHOLD) {
+              const weekStart = computeWeekStartFromWeekEnding(g.week_ending_date);
+              await createOverpayAdvance(env, {
+                candidate_id: contract.candidate_id,
+                client_id: contract.client_id,
+                amount: Math.abs(deltaPayTotal),
+                reason: 'OVERPAY_NHSP',
+                notes: `NHSP overpay correction for week ${g.week_ending_date} (import ${importId})`,
+                week_start: weekStart
+              });
+              // We handle the pay over-recovery via advances; keep TSFIN pay delta at 0
+              adjDeltaPay = 0;
+            }
+
             // Find latest adjustment week (if any)
             const adjWeeks = weeks.filter(w => !!w.is_adjustment);
             let latestAdjWeek = null;
@@ -10140,9 +10573,11 @@ export async function handleNhspApply(env, req, importId) {
             const latestAdjUnpaidUnlocked =
               !!(latestAdjFin && !latestAdjFin.paid_at_utc && !latestAdjFin.locked_by_invoice_id);
 
+            const weekStartForAdj = computeWeekStartFromWeekEnding(g.week_ending_date);
+
             if (latestAdjUnpaidUnlocked) {
               // Reuse existing unpaid/unlocked adjustment TSFIN by updating its totals (no new sequential)
-              const newAdjPay = round2(Number(latestAdjFin.total_pay_ex_vat || 0) + deltaPayTotal);
+              const newAdjPay = round2(Number(latestAdjFin.total_pay_ex_vat || 0) + adjDeltaPay);
               const newAdjChg = round2(Number(latestAdjFin.total_charge_ex_vat || 0) + deltaChgTotal);
               const newAdjMar = round2(newAdjChg - newAdjPay);
 
@@ -10161,7 +10596,9 @@ export async function handleNhspApply(env, req, importId) {
                 hours_bh:    0,
                 pay_amount:    newAdjPay,
                 charge_amount: newAdjChg,
-                exclude_from_pay: false
+                exclude_from_pay: false,
+                invoice_target_week_start: weekStartForAdj,
+                invoice_locked_invoice_id: null
               };
 
               const invBreak = {
@@ -10224,7 +10661,7 @@ export async function handleNhspApply(env, req, importId) {
                 `${env.SUPABASE_URL}/rest/v1/contract_weeks`,
                 {
                   method: 'POST',
-                  headers: { ...sbHeaders(env), Prefer: 'return-representation' },
+                  headers: { ...sbHeaders(env), Prefer: 'return=representation' },
                   body: JSON.stringify(adjCwPayload)
                 }
               );
@@ -10312,18 +10749,20 @@ export async function handleNhspApply(env, req, importId) {
                 hours_sat:   0,
                 hours_sun:   0,
                 hours_bh:    0,
-                pay_amount:    deltaPayTotal,
+                pay_amount:    adjDeltaPay,
                 charge_amount: deltaChgTotal,
-                exclude_from_pay: false
+                exclude_from_pay: false,
+                invoice_target_week_start: weekStartForAdj,
+                invoice_locked_invoice_id: null
               };
 
               const invBreak = {
                 mode: 'SEGMENTS',
                 segments: [seg],
                 totals: {
-                  total_pay_ex_vat: deltaPayTotal,
+                  total_pay_ex_vat: adjDeltaPay,
                   total_charge_ex_vat: deltaChgTotal,
-                  margin_ex_vat: round2(deltaChgTotal - deltaPayTotal)
+                  margin_ex_vat: round2(deltaChgTotal - adjDeltaPay)
                 }
               };
 
@@ -10351,9 +10790,9 @@ export async function handleNhspApply(env, req, importId) {
                 additional_charge_ex_vat: 0,
                 additional_margin_ex_vat: 0,
                 total_hours: null,
-                total_pay_ex_vat: deltaPayTotal,
+                total_pay_ex_vat: adjDeltaPay,
                 total_charge_ex_vat: deltaChgTotal,
-                margin_ex_vat: round2(deltaChgTotal - deltaPayTotal),
+                margin_ex_vat: round2(deltaChgTotal - adjDeltaPay),
                 candidate_assignment: contract.candidate_id ? 'ASSIGNED' : 'UNASSIGNED',
                 processing_status: 'READY_FOR_INVOICE',
                 invoice_breakdown_json: invBreak
@@ -10667,6 +11106,21 @@ export async function handleHrAutoprocessApply(env, req, importId) {
   const norm = (s) => (String(s || '').trim().toLowerCase());
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
   const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
+
+  // Helper: derive Mon–Sun week start from a week-ending date (ymd)
+  const computeWeekStartFromWeekEnding = (weYmd) => {
+    if (!weYmd) return null;
+    const d = new Date(`${weYmd}T00:00:00Z`);
+    if (Number.isNaN(d.getTime())) return weYmd;
+    d.setUTCDate(d.getUTCDate() - 6);
+    const yyyy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  // Threshold for treating a negative HR correction as an "overpay advance"
+  const HR_OVERPAY_ADVANCE_THRESHOLD = 200; // adjust as needed
 
   async function computeHrTotalsForShifts(env, contract, client_id, shifts) {
     const candidate_id = contract.candidate_id || null;
@@ -11264,7 +11718,7 @@ export async function handleHrAutoprocessApply(env, req, importId) {
             `${env.SUPABASE_URL}/rest/v1/timesheets`,
             {
               method: 'POST',
-              headers: { ...sbHeaders(env), Prefer: 'return-representation' },
+              headers: { ...sbHeaders(env), Prefer: 'return=representation' },
               body: JSON.stringify(tsPayload)
             }
           );
@@ -11377,7 +11831,7 @@ export async function handleHrAutoprocessApply(env, req, importId) {
         const selfBill = !!contract.self_bill;
 
         // ─────────────────────────────────────────────────────────────
-        // Self-bill = true → NHSP-style logic (existing behaviour)
+        // Self-bill = true → NHSP-style logic (self-bill adjustments)
         // ─────────────────────────────────────────────────────────────
         if (selfBill) {
           if (baseUnpaidUnlocked && adjWeeks.length === 0) {
@@ -11420,6 +11874,8 @@ export async function handleHrAutoprocessApply(env, req, importId) {
             const newAdjChg = round2(Number(latestAdjFin.total_charge_ex_vat || 0) + deltaChgTotal);
             const newAdjMar = round2(newAdjChg - newAdjPay);
 
+            const weekStart = computeWeekStartFromWeekEnding(g.week_ending_date);
+
             const seg = {
               segment_id: `hr_adj:${latestAdjTsId}`,
               date: g.week_ending_date,
@@ -11434,7 +11890,10 @@ export async function handleHrAutoprocessApply(env, req, importId) {
               hours_bh:    0,
               pay_amount:    newAdjPay,
               charge_amount: newAdjChg,
-              exclude_from_pay: false
+              exclude_from_pay: false,
+              // new invoice targeting fields
+              invoice_target_week_start: weekStart,
+              invoice_locked_invoice_id: null
             };
 
             const invBreak = {
@@ -11565,7 +12024,7 @@ export async function handleHrAutoprocessApply(env, req, importId) {
               `${env.SUPABASE_URL}/rest/v1/timesheets`,
               {
                 method: 'POST',
-                headers: { ...sbHeaders(env), Prefer: 'return-representation' },
+                headers: { ...sbHeaders(env), Prefer: 'return=representation' },
                 body: JSON.stringify(adjTsPayload)
               }
             );
@@ -11587,6 +12046,8 @@ export async function handleHrAutoprocessApply(env, req, importId) {
               }
             ).catch(() => {});
 
+            const weekStart = computeWeekStartFromWeekEnding(g.week_ending_date);
+
             const seg = {
               segment_id: `hr_adj:${adjTs.timesheet_id}`,
               date: g.week_ending_date,
@@ -11601,7 +12062,10 @@ export async function handleHrAutoprocessApply(env, req, importId) {
               hours_bh:    0,
               pay_amount:    deltaPayTotal,
               charge_amount: deltaChgTotal,
-              exclude_from_pay: false
+              exclude_from_pay: false,
+              // new invoice targeting fields
+              invoice_target_week_start: weekStart,
+              invoice_locked_invoice_id: null
             };
 
             const invBreak = {
@@ -11759,20 +12223,26 @@ export async function handleHrAutoprocessApply(env, req, importId) {
           const deltaPay = round2(truthPay - currentPay);
 
           if (deltaPay !== 0) {
+            const isLargeNegative =
+              deltaPay < 0 && Math.abs(deltaPay) >= HR_OVERPAY_ADVANCE_THRESHOLD;
+
             const payAdjPayload = [{
               timesheet_id: ts.timesheet_id,
               candidate_id: contract.candidate_id,
               client_id: contract.client_id,
               week_ending_date: g.week_ending_date,
               delta_pay_ex_vat: deltaPay,
-              reason: 'HR_WEEKLY_ADJUSTMENT'
+              reason: 'HR_WEEKLY_ADJUSTMENT',
+              // new flags to distinguish adjustments that should become advances
+              as_advance: isLargeNegative,
+              advance_reason: isLargeNegative ? 'OVERPAY_HR' : null
             }];
 
             const payAdjRes = await fetch(
               `${env.SUPABASE_URL}/rest/v1/ts_pay_adjustments`,
               {
                 method: 'POST',
-                headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+                headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
                 body: JSON.stringify(payAdjPayload)
               }
             ).catch((e) => {
@@ -12113,16 +12583,38 @@ export async function handleTsfinUpdateSegments(env, req, timesheetId) {
   const enc = encodeURIComponent;
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
-  // 1) Load current TSFIN (is_current)
+  const computeWeekStartFromWeekEnding = (weYmd) => {
+    if (!weYmd) return null;
+    const d = new Date(`${weYmd}T00:00:00Z`);
+    if (Number.isNaN(d.getTime())) return weYmd;
+    d.setUTCDate(d.getUTCDate() - 6);
+    const yyyy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  // 1) Load current TSFIN (is_current) + basis + client + week_ending via joined timesheet
   const { rows } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
       `?timesheet_id=eq.${enc(timesheetId)}` +
       `&is_current=eq.true` +
-      `&select=id,invoice_breakdown_json,total_pay_ex_vat,total_charge_ex_vat`
+      `&select=` + [
+        'id',
+        'client_id',
+        'basis',
+        'invoice_breakdown_json',
+        'total_pay_ex_vat',
+        'total_charge_ex_vat',
+        'margin_ex_vat',
+        'timesheet:timesheets(week_ending_date)'
+      ].join(',')
   );
   const fin = rows?.[0] || null;
-  if (!fin) return withCORS(env, req, notFound('Current financial snapshot not found'));
+  if (!fin) {
+    return withCORS(env, req, notFound('Current financial snapshot not found'));
+  }
 
   let breakdown = fin.invoice_breakdown_json || null;
   if (!breakdown || typeof breakdown !== 'object') {
@@ -12131,38 +12623,124 @@ export async function handleTsfinUpdateSegments(env, req, timesheetId) {
 
   // Expect SEGMENTS mode with a segments[] array
   if (breakdown.mode !== 'SEGMENTS' || !Array.isArray(breakdown.segments)) {
-    return withCORS(env, req, badRequest('This snapshot is not SEGMENTS-based; cannot update per-line pay'));
+    return withCORS(env, req, badRequest('This snapshot is not SEGMENTS-based; cannot update per-line settings'));
   }
 
-  const segMap = new Map();
+  const basis = String(fin.basis || '').toUpperCase();
+  const invoiceTargetAllowedBases = new Set([
+    'NHSP',
+    'NHSP_ADJUSTMENT',
+    'HEALTHROSTER_ADJUSTMENT'
+  ]);
+  const allowInvoiceTargetChange = invoiceTargetAllowedBases.has(basis);
+
+  const weekEnding = fin?.timesheet?.week_ending_date || null;
+  const naturalWeekStart = computeWeekStartFromWeekEnding(weekEnding);
+
+  // Build a map of updates per segment_id
+  const updateMap = new Map();
   for (const u of segUpdates) {
     if (!u || typeof u !== 'object') continue;
-    const id = String(u.segment_id || '').trim();
-    if (!id) continue;
-    const ex = u.exclude_from_pay === true;
-    segMap.set(id, ex);
+    const sid = String(u.segment_id || '').trim();
+    if (!sid) continue;
+    const existing = updateMap.get(sid) || {};
+    if ('exclude_from_pay' in u) {
+      existing.exclude_from_pay = (u.exclude_from_pay === true);
+    }
+    if (typeof u.invoice_target_week_start === 'string' && u.invoice_target_week_start.trim()) {
+      existing.invoice_target_week_start = u.invoice_target_week_start.trim();
+    }
+    updateMap.set(sid, existing);
   }
-  if (!segMap.size) {
+
+  if (!updateMap.size) {
     return withCORS(env, req, badRequest('No valid segment_id entries to update'));
   }
 
-  // 2) Apply exclude_from_pay flags to segments, recompute total_pay_ex_vat
+  // Pre-validate invoice_target_week_start changes
+  if (!allowInvoiceTargetChange) {
+    // If this basis isn't allowed to move invoice weeks, reject any attempt to set invoice_target_week_start
+    const anyInvoiceTargetChange = Array.from(updateMap.values()).some(
+      u => typeof u.invoice_target_week_start === 'string'
+    );
+    if (anyInvoiceTargetChange) {
+      return withCORS(
+        env,
+        req,
+        badRequest('invoice_target_week_start cannot be changed for this snapshot basis')
+      );
+    }
+  } else {
+    // Allowed bases: check locked segments and natural week floor
+    const segById = new Map(
+      (breakdown.segments || [])
+        .filter(s => s && typeof s === 'object')
+        .map(s => [String(s.segment_id || '').trim(), s])
+    );
+
+    for (const [sid, upd] of updateMap.entries()) {
+      if (!upd || typeof upd.invoice_target_week_start !== 'string') continue;
+      const seg = segById.get(sid);
+      if (!seg) continue; // ignore unknown ids silently (matches previous behaviour)
+
+      if (seg.invoice_locked_invoice_id) {
+        return withCORS(
+          env,
+          req,
+          badRequest(`Segment ${sid} is already invoiced and cannot be moved`)
+        );
+      }
+
+      if (naturalWeekStart && upd.invoice_target_week_start < naturalWeekStart) {
+        return withCORS(
+          env,
+          req,
+          badRequest(
+            `invoice_target_week_start for segment ${sid} cannot be earlier than natural week start ${naturalWeekStart}`
+          )
+        );
+      }
+    }
+  }
+
+  // 2) Apply changes to segments, recompute total_pay_ex_vat and margin_ex_vat
   let newTotalPay = 0;
-  const segments = breakdown.segments.map((seg) => {
+
+  const segments = (breakdown.segments || []).map((seg) => {
     if (!seg || typeof seg !== 'object') return seg;
     const sid = String(seg.segment_id || '').trim();
+    const upd = updateMap.get(sid) || {};
+
+    // Exclude from pay toggle
     let exclude = !!seg.exclude_from_pay;
-    if (segMap.has(sid)) {
-      exclude = segMap.get(sid);
+    if (Object.prototype.hasOwnProperty.call(upd, 'exclude_from_pay')) {
+      exclude = !!upd.exclude_from_pay;
     }
+
+    // Invoice target week start (only for allowed bases and unlocked segments)
+    let invoiceTargetWeekStart = seg.invoice_target_week_start || null;
+    if (
+      allowInvoiceTargetChange &&
+      typeof upd.invoice_target_week_start === 'string' &&
+      !seg.invoice_locked_invoice_id
+    ) {
+      invoiceTargetWeekStart = upd.invoice_target_week_start;
+    }
+
     const payAmt = Number(seg.pay_amount || 0);
     if (!exclude) {
       newTotalPay += payAmt;
     }
-    return { ...seg, exclude_from_pay: exclude };
+
+    return {
+      ...seg,
+      exclude_from_pay: exclude,
+      invoice_target_week_start: invoiceTargetWeekStart
+    };
   });
 
   newTotalPay = round2(newTotalPay);
+  const newMargin = round2(Number(fin.total_charge_ex_vat || 0) - newTotalPay);
 
   const patch = {
     invoice_breakdown_json: {
@@ -12170,6 +12748,7 @@ export async function handleTsfinUpdateSegments(env, req, timesheetId) {
       segments
     },
     total_pay_ex_vat: newTotalPay,
+    margin_ex_vat: newMargin,
     updated_at: new Date().toISOString()
   };
 
@@ -12193,12 +12772,16 @@ export async function handleTsfinUpdateSegments(env, req, timesheetId) {
     env,
     user,
     'TSFIN_SEGMENTS_UPDATED',
-    { timesheet_id: timesheetId, segment_ids: Array.from(segMap.keys()) },
+    {
+      timesheet_id: timesheetId,
+      segment_ids: Array.from(updateMap.keys())
+    },
     { entity: 'timesheet', subject_id: timesheetId, reason: 'PAYMENT', req }
   );
 
   return withCORS(env, req, ok({ updated }));
 }
+
 export async function handleNhspInvoiceCandidates(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -12265,6 +12848,145 @@ export async function handleNhspInvoiceCandidates(env, req) {
     return withCORS(env, req, serverError(`Failed to list NHSP invoice candidates: ${e?.message || e}`));
   }
 }
+
+export async function handleNhspInvoiceCandidates(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const url = new URL(req.url);
+  const q   = (k) => url.searchParams.get(k);
+  const enc = encodeURIComponent;
+
+  // Parse run_at (defaults to "now")
+  const runAtRaw = q('run_at');
+  let runAt = new Date();
+  if (runAtRaw) {
+    const d = new Date(runAtRaw);
+    if (!isNaN(d.getTime())) runAt = d;
+  }
+
+  // Optional explicit client_id filter
+  const singleClientId = q('client_id') || null;
+
+  // Helper: compute Monday week-start (YYYY-MM-DD) from a Date
+  const toYmd = (d) => {
+    const yyyy = d.getUTCFullYear();
+    const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd   = String(d.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const computeInvoiceWeekStart = (d) => {
+    // normalise to UTC date
+    const base = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+    const day  = base.getUTCDay(); // 0=Sun..6=Sat
+    const offset = (day + 6) % 7;  // days since Monday
+    base.setUTCDate(base.getUTCDate() - offset);
+    return toYmd(base);
+  };
+
+  const invoiceWeekStart = computeInvoiceWeekStart(runAt);
+
+  try {
+    // 1) Determine which NHSP clients to invoice
+    let clientIds = [];
+
+    if (singleClientId) {
+      clientIds = [singleClientId];
+    } else {
+      // Use client_settings.is_nhsp to find NHSP clients
+      const { rows: csRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/client_settings` +
+          `?is_nhsp=eq.true` +
+          `&select=client_id`
+      );
+      clientIds = [...new Set((csRows || []).map(r => r.client_id).filter(Boolean))];
+    }
+
+    if (!clientIds.length) {
+      return withCORS(env, req, ok({
+        run_at: runAt.toISOString(),
+        invoice_week_start: invoiceWeekStart,
+        clients: []
+      }));
+    }
+
+    // 2) For each NHSP client, call the per-week TSFIN invoicer internally
+    const results = [];
+    for (const client_id of clientIds) {
+      // Build a synthetic Request that carries the same headers/auth
+      const body = JSON.stringify({
+        client_id,
+        invoice_week_start: invoiceWeekStart
+      });
+
+      const internalReq = new Request('https://internal/invoices/tsfin/by-week', {
+        method: 'POST',
+        headers: req.headers,   // reuse auth / cookies for requireUser
+        body
+      });
+
+      let status = 'SKIPPED';
+      let invoiceId = null;
+      let message = null;
+
+      try {
+        const res = await handleCreateInvoiceTsfinByWeek(env, internalReq);
+        if (res && typeof res.status === 'number') {
+          if (res.status >= 200 && res.status < 300) {
+            status = 'INVOICED';
+            try {
+              const json = await res.json().catch(() => null);
+              invoiceId = json?.invoice_id ?? null;
+              message   = null;
+            } catch {
+              message = 'Invoice created but response JSON could not be parsed';
+            }
+          } else {
+            status = 'NO_INVOICE';
+            try {
+              const txt = await res.text().catch(() => '');
+              message = txt || `HTTP ${res.status}`;
+            } catch {
+              message = `HTTP ${res.status}`;
+            }
+          }
+        } else {
+          status  = 'ERROR';
+          message = 'Internal handler did not return a Response-like object';
+        }
+      } catch (e) {
+        status  = 'ERROR';
+        message = e?.message || String(e);
+      }
+
+      results.push({
+        client_id,
+        status,
+        invoice_id: invoiceId,
+        message
+      });
+    }
+
+    return withCORS(env, req, ok({
+      run_at: runAt.toISOString(),
+      invoice_week_start: invoiceWeekStart,
+      clients: results
+    }));
+  } catch (e) {
+    return withCORS(
+      env,
+      req,
+      serverError(`Failed to run NHSP invoice cycle: ${e?.message || e}`)
+    );
+  }
+}
+
+
+
+
+
 export async function handleNhspInvoiceRun(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -12822,6 +13544,707 @@ export async function handleInvoiceRemoveTimesheet(env, req, invoiceId) {
   }
 }
 
+
+function getCandidateIdFromPath(req) {
+  const url = new URL(req.url);
+  const parts = url.pathname.split('/').filter(Boolean);
+  const idx = parts.indexOf('candidates');
+  if (idx >= 0 && parts[idx + 1]) return parts[idx + 1];
+  return null;
+}
+
+function getAdvanceIdFromPath(req) {
+  const url = new URL(req.url);
+  const parts = url.pathname.split('/').filter(Boolean);
+  const idx = parts.indexOf('advances');
+  if (idx >= 0 && parts[idx + 1]) return parts[idx + 1];
+  return null;
+}
+
+function computeNextDueFromSchedule(schedule) {
+  if (!Array.isArray(schedule)) return null;
+  let next = null;
+  for (const e of schedule) {
+    if (!e || typeof e !== 'object') continue;
+    const amt = Number(e.amount || 0);
+    const ws = typeof e.week_start === 'string' ? e.week_start : null;
+    if (!ws || !amt || amt >= 0) continue; // only negative entries (repayments)
+    if (!next || ws < next) next = ws;
+  }
+  return next;
+}
+
+export async function handlePayAdvancesList(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const enc = encodeURIComponent;
+  const urlObj = new URL(req.url);
+  const q = (k) => urlObj.searchParams.get(k);
+
+  const candidateId = getCandidateIdFromPath(req);
+  if (!candidateId) {
+    return withCORS(env, req, badRequest('candidate_id missing in path'));
+  }
+
+  const status = q('status'); // optional: ACTIVE | PAUSED | PAID_OFF | null
+
+  let url =
+    `${env.SUPABASE_URL}/rest/v1/pay_advances` +
+    `?candidate_id=eq.${enc(candidateId)}` +
+    `&select=id,candidate_id,client_id,reason,original_amount,outstanding_amount,` +
+    `linked_shift_date,schedule_json,next_due_week_start,status,best_guess_hours,notes,created_at` +
+    `&order=created_at.asc`;
+
+  if (status) {
+    url += `&status=eq.${enc(status)}`;
+  }
+
+  const { rows } = await sbFetch(env, url);
+  const advances = rows || [];
+
+  return withCORS(env, req, ok({ advances }));
+}
+
+export async function handlePayAdvancesCreateMissingShift(env, req, candidateIdParam) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const enc = encodeURIComponent;
+  const candidateId = candidateIdParam || getCandidateIdFromPath(req);
+  if (!candidateId) {
+    return withCORS(env, req, badRequest('candidate_id missing in path'));
+  }
+
+  const body = await parseJSONBody(req).catch(() => null);
+  const client_id = body?.client_id || null;
+  const shift_date = body?.shift_date || null;
+  const amountRaw = body?.amount;
+  const best_guess_hours = body?.best_guess_hours || null;
+  const notes = body?.notes || null;
+
+  const amount = Number(amountRaw || 0);
+  if (!client_id) {
+    return withCORS(env, req, badRequest('client_id is required'));
+  }
+  if (!shift_date) {
+    return withCORS(env, req, badRequest('shift_date is required'));
+  }
+  if (!amount || amount <= 0) {
+    return withCORS(env, req, badRequest('amount must be > 0'));
+  }
+
+  const nowIso = new Date().toISOString();
+
+  const payload = [{
+    candidate_id: candidateId,
+    client_id,
+    reason: 'MISSING_SHIFT',
+    original_amount: round2(amount),
+    outstanding_amount: round2(amount),
+    linked_shift_date: shift_date,
+    schedule_json: [],  // no schedule yet; repays when matching shift is paid
+    next_due_week_start: null,
+    status: 'ACTIVE',
+    best_guess_hours: best_guess_hours || null,
+    notes: notes || null,
+    created_at: nowIso,
+    updated_at: nowIso,
+    created_by: user.id || null
+  }];
+
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/pay_advances`,
+    {
+      method: 'POST',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify(payload)
+    }
+  );
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    return withCORS(env, req, serverError(`Failed to create missing-shift advance: ${t}`));
+  }
+  const json = await res.json().catch(() => []);
+  const advance = Array.isArray(json) ? json[0] : json;
+
+  await writeAudit(
+    env,
+    user,
+    'PAY_ADVANCE_MISSING_SHIFT_CREATED',
+    { candidate_id: candidateId, client_id, shift_date, amount: round2(amount) },
+    { entity: 'candidate', subject_id: candidateId, reason: 'PAYMENT', req }
+  );
+
+  return withCORS(env, req, ok({ advance }));
+}
+
+export async function handlePayAdvancesCreateManual(env, req, candidateIdParam) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const enc = encodeURIComponent;
+  const candidateId = candidateIdParam || getCandidateIdFromPath(req);
+  if (!candidateId) {
+    return withCORS(env, req, badRequest('candidate_id missing in path'));
+  }
+
+  const body = await parseJSONBody(req).catch(() => null);
+  const client_id = body?.client_id || null;
+  const amountRaw = body?.amount;
+  const start_week_start = body?.start_week_start || null;
+  const weeks = Array.isArray(body?.weeks) ? body.weeks : [];
+  const custom_schedule = Array.isArray(body?.custom_schedule) ? body.custom_schedule : null;
+  const notes = body?.notes || null;
+
+  const amount = Number(amountRaw || 0);
+  if (!amount || amount <= 0) {
+    return withCORS(env, req, badRequest('amount must be > 0'));
+  }
+
+  let schedule = [];
+
+  if (custom_schedule && custom_schedule.length) {
+    // Use custom schedule as-is, but ensure numeric amounts
+    schedule = custom_schedule
+      .map((e) => ({
+        week_start: String(e.week_start || '').trim(),
+        amount: Number(e.amount || 0)
+      }))
+      .filter((e) => e.week_start);
+  } else if (weeks.length) {
+    const N = weeks.length;
+    const perWeek = round2(-amount / N);
+    schedule = weeks.map((weekStart, i) => {
+      const ws = String(weekStart || '').trim();
+      if (!ws) return null;
+      const base = (i === N - 1)
+        ? round2(-amount - perWeek * (N - 1))
+        : perWeek;
+      return { week_start: ws, amount: base };
+    }).filter(Boolean);
+  } else if (start_week_start) {
+    // Fallback: single repayment in the specified start week
+    schedule = [{
+      week_start: String(start_week_start).trim(),
+      amount: round2(-amount)
+    }];
+  } else {
+    return withCORS(env, req, badRequest('Either weeks[] or start_week_start is required'));
+  }
+
+  const nowIso = new Date().toISOString();
+  const nextDue = computeNextDueFromSchedule(schedule);
+
+  const payload = [{
+    candidate_id: candidateId,
+    client_id,
+    reason: 'MANUAL_ADVANCE',
+    original_amount: round2(amount),
+    outstanding_amount: round2(amount),
+    linked_shift_date: null,
+    schedule_json: schedule,
+    next_due_week_start: nextDue,
+    status: 'ACTIVE',
+    best_guess_hours: null,
+    notes: notes || null,
+    created_at: nowIso,
+    updated_at: nowIso,
+    created_by: user.id || null
+  }];
+
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/pay_advances`,
+    {
+      method: 'POST',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify(payload)
+    }
+  );
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    return withCORS(env, req, serverError(`Failed to create manual advance: ${t}`));
+  }
+  const json = await res.json().catch(() => []);
+  const advance = Array.isArray(json) ? json[0] : json;
+
+  await writeAudit(
+    env,
+    user,
+    'PAY_ADVANCE_MANUAL_CREATED',
+    { candidate_id: candidateId, client_id, amount: round2(amount) },
+    { entity: 'candidate', subject_id: candidateId, reason: 'PAYMENT', req }
+  );
+
+  return withCORS(env, req, ok({ advance }));
+}
+
+export async function handlePayAdvancesUpdate(env, req, advanceIdParam) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const enc = encodeURIComponent;
+  const advanceId = advanceIdParam || getAdvanceIdFromPath(req);
+  if (!advanceId) {
+    return withCORS(env, req, badRequest('advance id missing in path'));
+  }
+
+  const body = await parseJSONBody(req).catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return withCORS(env, req, badRequest('Invalid JSON body'));
+  }
+
+  const patch = {};
+  if ('notes' in body) patch.notes = body.notes;
+  if ('status' in body && body.status) patch.status = body.status;
+
+  if (Array.isArray(body.schedule_json)) {
+    const schedule = body.schedule_json.map((e) => ({
+      week_start: String(e.week_start || '').trim(),
+      amount: Number(e.amount || 0)
+    })).filter((e) => e.week_start);
+    patch.schedule_json = schedule;
+    patch.next_due_week_start = computeNextDueFromSchedule(schedule);
+  }
+
+  if (!Object.keys(patch).length) {
+    return withCORS(env, req, badRequest('Nothing to update'));
+  }
+
+  patch.updated_at = new Date().toISOString();
+
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/pay_advances?id=eq.${enc(advanceId)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify(patch)
+    }
+  );
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    return withCORS(env, req, serverError(`Failed to update advance: ${t}`));
+  }
+  const json = await res.json().catch(() => []);
+  const advance = Array.isArray(json) ? json[0] : json;
+
+  await writeAudit(
+    env,
+    user,
+    'PAY_ADVANCE_UPDATED',
+    { advance_id: advanceId, patch },
+    { entity: 'pay_advance', subject_id: advanceId, reason: 'PAYMENT', req }
+  );
+
+  return withCORS(env, req, ok({ advance }));
+}
+export async function handlePayAdvancesPause(env, req, advanceIdParam) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const enc = encodeURIComponent;
+  const advanceId = advanceIdParam || getAdvanceIdFromPath(req);
+  if (!advanceId) {
+    return withCORS(env, req, badRequest('advance id missing in path'));
+  }
+
+  const patch = {
+    status: 'PAUSED',
+    updated_at: new Date().toISOString()
+  };
+
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/pay_advances?id=eq.${enc(advanceId)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify(patch)
+    }
+  );
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    return withCORS(env, req, serverError(`Failed to pause advance: ${t}`));
+  }
+  const json = await res.json().catch(() => []);
+  const advance = Array.isArray(json) ? json[0] : json;
+
+  await writeAudit(
+    env,
+    user,
+    'PAY_ADVANCE_PAUSED',
+    { advance_id: advanceId },
+    { entity: 'pay_advance', subject_id: advanceId, reason: 'PAYMENT', req }
+  );
+
+  return withCORS(env, req, ok({ advance }));
+}
+
+export async function handlePayAdvancesResume(env, req, advanceIdParam) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const enc = encodeURIComponent;
+  const advanceId = advanceIdParam || getAdvanceIdFromPath(req);
+  if (!advanceId) {
+    return withCORS(env, req, badRequest('advance id missing in path'));
+  }
+
+  // Load current schedule so we can recompute next_due_week_start
+  const { rows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/pay_advances` +
+      `?id=eq.${enc(advanceId)}` +
+      `&select=id,schedule_json`
+  );
+  const adv = rows?.[0] || null;
+  if (!adv) {
+    return withCORS(env, req, notFound('advance not found'));
+  }
+
+  const schedule = Array.isArray(adv.schedule_json) ? adv.schedule_json : [];
+  const nextDue = computeNextDueFromSchedule(schedule);
+
+  const patch = {
+    status: 'ACTIVE',
+    next_due_week_start: nextDue,
+    updated_at: new Date().toISOString()
+  };
+
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/pay_advances?id=eq.${enc(advanceId)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify(patch)
+    }
+  );
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    return withCORS(env, req, serverError(`Failed to resume advance: ${t}`));
+  }
+  const json = await res.json().catch(() => []);
+  const advance = Array.isArray(json) ? json[0] : json;
+
+  await writeAudit(
+    env,
+    user,
+    'PAY_ADVANCE_RESUMED',
+    { advance_id: advanceId },
+    { entity: 'pay_advance', subject_id: advanceId, reason: 'PAYMENT', req }
+  );
+
+  return withCORS(env, req, ok({ advance }));
+}
+
+export async function handlePayAdvancesSummary(env, req, candidateIdParam) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const enc = encodeURIComponent;
+  const candidateId = candidateIdParam || getCandidateIdFromPath(req);
+  if (!candidateId) {
+    return withCORS(env, req, badRequest('candidate_id missing in path'));
+  }
+
+  const { rows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/pay_advances` +
+      `?candidate_id=eq.${enc(candidateId)}` +
+      `&select=reason,outstanding_amount,original_amount,status` +
+      `&order=created_at.asc`
+  );
+  const advances = rows || [];
+
+  let totalOwedByCandidate = 0;
+  let totalMissingShift = 0;
+
+  for (const a of advances) {
+    const out = Number(a.outstanding_amount || 0);
+    if (a.status === 'ACTIVE' || a.status === 'PAUSED') {
+      totalOwedByCandidate += out;
+      if (a.reason === 'MISSING_SHIFT') {
+        totalMissingShift += out;
+      }
+    }
+  }
+
+  const summary = {
+    total_owed_by_candidate: round2(totalOwedByCandidate),
+    total_advances_not_offset: round2(totalMissingShift)
+  };
+
+  return withCORS(env, req, ok(summary));
+}
+
+async function loadScheduledAdvanceEntries(env, candidateId, weekStart) {
+  const enc = encodeURIComponent;
+
+  // Fetch ACTIVE advances where there's something due on or before weekStart
+  const { rows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/pay_advances` +
+      `?candidate_id=eq.${enc(candidateId)}` +
+      `&status=eq.ACTIVE` +
+      `&next_due_week_start.lte.${enc(weekStart)}` +
+      `&select=id,reason,original_amount,outstanding_amount,schedule_json`
+  );
+
+  const advances = rows || [];
+  const entries = [];
+
+  for (const adv of advances) {
+    const schedule = Array.isArray(adv.schedule_json) ? adv.schedule_json : [];
+    for (const e of schedule) {
+      if (!e || typeof e !== 'object') continue;
+      const ws = String(e.week_start || '').trim();
+      if (!ws || ws !== weekStart) continue;
+
+      const amount = Number(e.amount || 0);
+      if (!amount) continue; // skip zeroes
+
+      entries.push({
+        advance_id: adv.id,
+        amount,
+        reason: adv.reason,
+        original_amount: Number(adv.original_amount || 0),
+        outstanding_amount: Number(adv.outstanding_amount || 0)
+      });
+    }
+  }
+
+  // We return both the flattened entries and the raw advances for convenience
+  return { entries, advances };
+}
+
+async function applyAdvanceScheduleEntriesForWeek(env, candidateId, weekStart, initialGross, scheduleEntries) {
+  let G = Number(initialGross || 0);
+  const updates = [];
+
+  for (const e of scheduleEntries || []) {
+    if (!e || typeof e !== 'object') continue;
+    const advId = e.advance_id;
+    if (!advId) continue;
+
+    const amt = Number(e.amount || 0);
+    if (!amt) continue;
+
+    if (amt > 0) {
+      // Extra pay to worker this week
+      G += amt;
+      updates.push({
+        advance_id: advId,
+        amount: amt,
+        actual: amt,
+        remainder: 0,
+        deltaOutstanding: -amt, // per brief
+        reason: e.reason
+      });
+      continue;
+    }
+
+    // Repayment (negative)
+    const planned = -amt;                // positive
+    const maxAllowed = Math.max(0, G);   // must not push G below 0
+    const actual = Math.min(planned, maxAllowed);
+    G -= actual;
+    const remainder = planned - actual;  // > 0 if we couldn't take it all
+
+    updates.push({
+      advance_id: advId,
+      amount: amt,              // original scheduled amount (negative)
+      actual,                   // amount actually taken this week (>= 0)
+      remainder,                // still to recover in future weeks
+      deltaOutstanding: -actual,
+      reason: e.reason
+    });
+  }
+
+  return {
+    newGross: round2(G),
+    updates
+  };
+}
+async function persistAdvanceRepayments(env, updates, weekStart) {
+  const enc = encodeURIComponent;
+
+  if (!Array.isArray(updates) || !updates.length) return;
+
+  // Group updates by advance_id
+  const grouped = new Map();
+  for (const u of updates) {
+    if (!u || !u.advance_id) continue;
+    const actual = Number(u.actual || 0);
+    const remainder = Number(u.remainder || 0);
+
+    if (!grouped.has(u.advance_id)) {
+      grouped.set(u.advance_id, { totalActual: 0, totalRemainder: 0 });
+    }
+    const g = grouped.get(u.advance_id);
+    g.totalActual += actual;
+    g.totalRemainder += remainder;
+  }
+
+  if (!grouped.size) return;
+
+  // Helper: add 7 days to a YYYY-MM-DD weekStart
+  const add7Days = (ws) => {
+    if (!ws) return null;
+    const d = new Date(`${ws}T00:00:00Z`);
+    if (Number.isNaN(d.getTime())) return ws;
+    d.setUTCDate(d.getUTCDate() + 7);
+    const yyyy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  for (const [advanceId, agg] of grouped.entries()) {
+    const { totalActual, totalRemainder } = agg;
+    if (!totalActual && !totalRemainder) continue;
+
+    // Load current advance row
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/pay_advances` +
+        `?id=eq.${enc(advanceId)}` +
+        `&select=id,outstanding_amount,schedule_json,status`
+    );
+    const adv = rows?.[0] || null;
+    if (!adv) continue;
+
+    let outstanding = Number(adv.outstanding_amount || 0);
+    const oldSchedule = Array.isArray(adv.schedule_json) ? adv.schedule_json : [];
+
+    // Remove all entries for this weekStart
+    const newSchedule = [];
+    for (const e of oldSchedule) {
+      if (!e || typeof e !== 'object') continue;
+      const ws = String(e.week_start || '').trim();
+      if (ws === weekStart) continue; // consumed in this run
+      newSchedule.push(e);
+    }
+
+    // If there's any leftover to recover, schedule it for next week
+    if (totalRemainder > 0) {
+      const futureWeekStart = add7Days(weekStart);
+      newSchedule.push({
+        week_start: futureWeekStart,
+        amount: -round2(totalRemainder) // negative = future repayment
+      });
+    }
+
+    // Adjust outstanding balance by actual taken this week
+    outstanding = round2(outstanding - totalActual);
+
+    // Recompute next_due_week_start based on new schedule
+    const nextDue = computeNextDueFromSchedule(newSchedule);
+
+    // If no negative entries remain or outstanding <= 0 → mark as PAID_OFF
+    const hasNegative = newSchedule.some(
+      (e) => e && typeof e === 'object' && Number(e.amount || 0) < 0
+    );
+    let status = adv.status;
+    if (!hasNegative || outstanding <= 0) {
+      outstanding = 0;
+      status = 'PAID_OFF';
+    }
+
+    const patch = {
+      outstanding_amount: round2(outstanding),
+      schedule_json: newSchedule,
+      next_due_week_start: nextDue,
+      status,
+      updated_at: new Date().toISOString()
+    };
+
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/pay_advances?id=eq.${enc(advanceId)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify(patch)
+      }
+    ).catch((e) => {
+      console.warn('[pay_advances] persistAdvanceRepayments patch failed', {
+        advance_id: advanceId,
+        err: e?.message || String(e)
+      });
+    });
+  }
+}
+async function createMissingShiftRepayEntriesForTs(env, candidateId, clientId, tsfinRow, weekStart) {
+  const enc = encodeURIComponent;
+
+  if (!candidateId || !clientId || !tsfinRow) return;
+
+  const breakdown = tsfinRow.invoice_breakdown_json || {};
+  if (breakdown.mode !== 'SEGMENTS' || !Array.isArray(breakdown.segments)) {
+    return;
+  }
+
+  // Collect distinct shift dates from segments
+  const dateSet = new Set();
+  for (const seg of breakdown.segments) {
+    if (!seg || typeof seg !== 'object') continue;
+    const d = String(seg.date || '').trim();
+    if (!d) continue;
+    dateSet.add(d);
+  }
+
+  const dates = Array.from(dateSet);
+  if (!dates.length) return;
+
+  const datesParam = dates.map(enc).join(',');
+
+  // Find ACTIVE MISSING_SHIFT advances for these dates
+  const { rows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/pay_advances` +
+      `?reason=eq.MISSING_SHIFT` +
+      `&candidate_id=eq.${enc(candidateId)}` +
+      `&client_id=eq.${enc(clientId)}` +
+      `&status=eq.ACTIVE` +
+      `&linked_shift_date=in.(${datesParam})` +
+      `&select=id,linked_shift_date,outstanding_amount,schedule_json`
+  );
+  const advances = rows || [];
+  if (!advances.length) return;
+
+  for (const adv of advances) {
+    const outstanding = Number(adv.outstanding_amount || 0);
+    if (outstanding <= 0) continue;
+
+    const schedule = Array.isArray(adv.schedule_json) ? adv.schedule_json : [];
+
+    // Append a repayment entry for this pay week
+    schedule.push({
+      week_start: weekStart,
+      amount: -round2(outstanding)   // try to recover full outstanding this week
+    });
+
+    const nextDue = computeNextDueFromSchedule(schedule);
+
+    const patch = {
+      schedule_json: schedule,
+      next_due_week_start: nextDue,
+      updated_at: new Date().toISOString()
+    };
+
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/pay_advances?id=eq.${enc(adv.id)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify(patch)
+      }
+    ).catch((e) => {
+      console.warn('[pay_advances] createMissingShiftRepayEntriesForTs patch failed', {
+        advance_id: adv.id,
+        err: e?.message || String(e)
+      });
+    });
+  }
+}
 
 
 export async function handleNhspImportsList(env, req) {
@@ -14740,159 +16163,237 @@ export async function handleSearchUmbrellas(env, req) {
   return withCORS(env, req, ok({ rows, page, page_size: pageSize, count: rows?.length || 0 }));
 }
 
-export async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, basis = 'NHSP') {
-  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
-  const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
+async function buildDailySnapshot(env, ts) {
+  const occupantKey = ts.occupant_key_norm || null;
+  const candidate = await loadCandidate(env, occupantKey);
+  const candidate_assignment = candidate ? "ASSIGNED" : "UNASSIGNED";
 
-  if (!shifts || !shifts.length) {
-    return { ok: false, reason: 'NO_SHIFTS' };
+  const client_id = await resolveClientId(env, ts.hospital_norm || null);
+  const workedDateYmd = ts.worked_start_iso
+    ? toLocalParts(ts.worked_start_iso, null).ymd
+    : null;
+  const policy = await loadPolicy(env, client_id, workedDateYmd);
+
+  let segmentsRaw = [];
+  if (ts.worked_start_iso && ts.worked_end_iso) {
+    segmentsRaw.push([ts.worked_start_iso, ts.worked_end_iso]);
   }
+  segmentsRaw = subtractBreak(
+    segmentsRaw,
+    ts.break_start_iso || null,
+    ts.break_end_iso || null,
+    ts.break_minutes || null
+  );
 
-  const candidate_id = contract.candidate_id || null;
-  const client_id    = contract.client_id   || null;
+  const hours = classifyMinutes(env, policy, segmentsRaw);
 
-  const segments = [];
-  let totalPayEx  = 0;
-  let totalChgEx  = 0;
+  const rates = await resolveRates(env, {
+    candidate_id: candidate?.id || null,
+    client_id,
+    role: ts.job_title_norm || null,
+    band: ts.band || null,
+    dateYmd: workedDateYmd,
+  });
 
-  for (const sh of shifts) {
-    const workDate = sh.work_date;
-    if (!workDate || !sh.start_utc || !sh.end_utc) continue;
+  const missingRates = anyMissingRates(
+    {
+      day: hours.hours_day,
+      night: hours.hours_night,
+      sat: hours.hours_sat,
+      sun: hours.hours_sun,
+      bh: hours.hours_bh,
+    },
+    rates.pay,
+    rates.charge
+  );
 
-    const policy = await loadPolicy(env, client_id, workDate);
+  const pay_method =
+    candidate?.pay_method === "UMBRELLA"
+      ? "UMBRELLA"
+      : candidate?.pay_method === "PAYE"
+      ? "PAYE"
+      : ts.pay_method || null;
 
-    let segs = [[sh.start_utc, sh.end_utc]];
-    segs = subtractBreak(
-      segs,
-      null,
-      null,
-      sh.break_mins || 0
-    );
+  const requiresHr = !!policy?.requires_hr;
+  let processing_status;
+  if (!candidate) processing_status = "UNASSIGNED";
+  else if (!client_id) processing_status = "CLIENT_UNRESOLVED";
+  else if (missingRates) processing_status = "RATE_MISSING";
+  else if (
+    pay_method === "UMBRELLA" &&
+    !(candidate && candidate.umbrella_id)
+  )
+    processing_status = "PAY_CHANNEL_MISSING";
+  else if (requiresHr) processing_status = "READY_FOR_HR";
+  else processing_status = "READY_FOR_INVOICE";
 
-    const hours = classifyMinutes(env, policy, segs);
+  const pay = rates.pay || {
+    day: 0,
+    night: 0,
+    sat: 0,
+    sun: 0,
+    bh: 0,
+  };
+  const charge = rates.charge || {
+    day: 0,
+    night: 0,
+    sat: 0,
+    sun: 0,
+    bh: 0,
+  };
 
-    const rates = await resolveRates(env, {
-      candidate_id,
-      client_id,
-      role: contract.role || null,
-      band: contract.band || null,
-      dateYmd: workDate,
-    });
+  const total_pay_ex_vat = round2(
+    hours.hours_day * asNumberLocal(pay.day) +
+      hours.hours_night * asNumberLocal(pay.night) +
+      hours.hours_sat * asNumberLocal(pay.sat) +
+      hours.hours_sun * asNumberLocal(pay.sun) +
+      hours.hours_bh * asNumberLocal(pay.bh)
+  );
 
-    const pay = rates.pay || {};
-    const chg = rates.charge || {};
+  const total_charge_ex_vat = round2(
+    hours.hours_day * asNumberLocal(charge.day) +
+      hours.hours_night * asNumberLocal(charge.night) +
+      hours.hours_sat * asNumberLocal(charge.sat) +
+      hours.hours_sun * asNumberLocal(charge.sun) +
+      hours.hours_bh * asNumberLocal(charge.bh)
+  );
 
-    const payEx = round2(
-      (hours.hours_day   || 0) * asNumberLocal(pay.day)   +
-      (hours.hours_night || 0) * asNumberLocal(pay.night) +
-      (hours.hours_sat   || 0) * asNumberLocal(pay.sat)   +
-      (hours.hours_sun   || 0) * asNumberLocal(pay.sun)   +
-      (hours.hours_bh    || 0) * asNumberLocal(pay.bh)
-    );
+  const margin_ex_vat = round2(total_charge_ex_vat - total_pay_ex_vat);
 
-    const chgEx = round2(
-      (hours.hours_day   || 0) * asNumberLocal(chg.day)   +
-      (hours.hours_night || 0) * asNumberLocal(chg.night) +
-      (hours.hours_sat   || 0) * asNumberLocal(chg.sat)   +
-      (hours.hours_sun   || 0) * asNumberLocal(chg.sun)   +
-      (hours.hours_bh    || 0) * asNumberLocal(chg.bh)
-    );
+  const channelOK =
+    (pay_method === "PAYE" && hasPayeBank(candidate)) ||
+    (pay_method === "UMBRELLA" && !!candidate?.umbrella_id);
 
-    totalPayEx += payEx;
-    totalChgEx += chgEx;
+  const paymentReadyLite = !!(channelOK && !missingRates);
 
-    const refNum       = (sh.nhsp_ref_num || sh.ref_num || null) || null;
-    const requestId    = (sh.hr_request_id || sh.request_id || null) || null;
-    const heldBack     = sh.held_back_reason || null;
-    const sourceSystem = sh.source_system || null;
+  const pay_wtr_rate_pct_snapshot =
+    pay_method === "PAYE" && paymentReadyLite
+      ? asNumberLocal(policy?.holiday_pay_pct) ?? null
+      : null;
 
-    segments.push({
-      segment_id: `nhsp:${sh.id}`,
-      date: workDate,
-      ward: sh.ward || null,
-      start_utc: sh.start_utc,
-      end_utc: sh.end_utc,
-      break_mins: sh.break_mins || 0,
+  // --- NEW: build a SEGMENTS-based invoice breakdown for daily self-reported TS ---
 
-      hours_day:   hours.hours_day   || 0,
-      hours_night: hours.hours_night || 0,
-      hours_sat:   hours.hours_sat   || 0,
-      hours_sun:   hours.hours_sun   || 0,
-      hours_bh:    hours.hours_bh    || 0,
+  const invoiceWeekYmd = ts.week_ending_date || workedDateYmd || null;
 
-      pay_amount:    payEx,
-      charge_amount: chgEx,
-      exclude_from_pay: false,
-
-      // New metadata for UI & diagnostics
-      ref_num: refNum,
-      request_id: requestId,
-      held_back_reason: heldBack,
-      source_system: sourceSystem
-    });
-  }
-
-  if (!segments.length) {
-    return { ok: false, reason: 'NO_VALID_SEGMENTS' };
-  }
-
-  totalPayEx = round2(totalPayEx);
-  totalChgEx = round2(totalChgEx);
-  const marginEx = round2(totalChgEx - totalPayEx);
+  const seg = {
+    segment_id: `daily:${ts.timesheet_id}`,
+    date: workedDateYmd,
+    hours_day: hours.hours_day,
+    hours_night: hours.hours_night,
+    hours_sat: hours.hours_sat,
+    hours_sun: hours.hours_sun,
+    hours_bh: hours.hours_bh,
+    pay_amount: total_pay_ex_vat,
+    charge_amount: total_charge_ex_vat,
+    margin_amount: margin_ex_vat,
+    exclude_from_pay: false,
+    // invoice targeting & locking (new logic)
+    invoice_target_week_start: invoiceWeekYmd,
+    invoice_locked_invoice_id: null,
+  };
 
   const invoice_breakdown_json = {
-    mode: 'SEGMENTS',
-    segments,
+    mode: "SEGMENTS",
+    segments: [seg],
+    base_hours: {
+      // keep base_hours for backwards compatibility
+      day: hours.hours_day,
+      night: hours.hours_night,
+      sat: hours.hours_sat,
+      sun: hours.hours_sun,
+      bh: hours.hours_bh,
+      pay_rates: {
+        day: rates.pay?.day ?? null,
+        night: rates.pay?.night ?? null,
+        sat: rates.pay?.sat ?? null,
+        sun: rates.pay?.sun ?? null,
+        bh: rates.pay?.bh ?? null,
+      },
+      charge_rates: {
+        day: rates.charge?.day ?? null,
+        night: rates.charge?.night ?? null,
+        sat: rates.charge?.sat ?? null,
+        sun: rates.charge?.sun ?? null,
+        bh: rates.charge?.bh ?? null,
+      },
+      pay_ex_vat: total_pay_ex_vat,
+      charge_ex_vat: total_charge_ex_vat,
+    },
+    additional: {
+      units: {},
+      pay_ex_vat: 0,
+      charge_ex_vat: 0,
+      margin_ex_vat: 0,
+    },
     totals: {
-      total_pay_ex_vat: totalPayEx,
-      total_charge_ex_vat: totalChgEx,
-      margin_ex_vat: marginEx
-    }
+      total_pay_ex_vat,
+      total_charge_ex_vat,
+      margin_ex_vat,
+    },
   };
 
   const snapshot = {
     timesheet_id: ts.timesheet_id,
     timesheet_version: ts.version || 1,
-
-    basis, // 'NHSP', 'CONTRACT_WEEKLY', or 'NHSP_ADJUSTMENT'
-    nhsp_import_id: nhspImportId || null,
+    basis: "SELF_REPORTED", // daily/rota self-reported
 
     occupant_key_norm: ts.occupant_key_norm || null,
-    week_ending_date: ts.week_ending_date || null,
+    worked_start_iso: ts.worked_start_iso || null,
+    worked_end_iso: ts.worked_end_iso || null,
+    break_start_iso: ts.break_start_iso || null,
+    break_end_iso: ts.break_end_iso || null,
+    break_minutes: ts.break_minutes || null,
 
-    candidate_id,
-    client_id,
-    role: contract.role || null,
-    band: contract.band || null,
-    pay_method: contract.pay_method_snapshot || null,
+    candidate_id: candidate?.id || null,
+    client_id: client_id || null,
+    role: ts.job_title_norm || null,
+    band: ts.band || null,
+    pay_method,
 
-    policy_snapshot_json: null,
-    rate_source_refs_json: {},
+    policy_snapshot_json: policy,
+    rate_source_refs_json: rates.source,
 
-    hours_day:   null,
-    hours_night: null,
-    hours_sat:   null,
-    hours_sun:   null,
-    hours_bh:    null,
+    hours_day:   hours.hours_day,
+    hours_night: hours.hours_night,
+    hours_sat:   hours.hours_sat,
+    hours_sun:   hours.hours_sun,
+    hours_bh:    hours.hours_bh,
+
+    pay_day:   rates.pay?.day   ?? null,
+    pay_night: rates.pay?.night ?? null,
+    pay_sat:   rates.pay?.sat   ?? null,
+    pay_sun:   rates.pay?.sun   ?? null,
+    pay_bh:    rates.pay?.bh    ?? null,
+    charge_day:   rates.charge?.day   ?? null,
+    charge_night: rates.charge?.night ?? null,
+    charge_sat:   rates.charge?.sat   ?? null,
+    charge_sun:   rates.charge?.sun   ?? null,
+    charge_bh:    rates.charge?.bh    ?? null,
+
+    total_hours: round2(
+      hours.hours_day +
+        hours.hours_night +
+        hours.hours_sat +
+        hours.hours_sun +
+        hours.hours_bh
+    ),
+    total_pay_ex_vat,
+    total_charge_ex_vat,
+    margin_ex_vat,
 
     additional_units_json: {},
     additional_pay_ex_vat: 0,
     additional_charge_ex_vat: 0,
     additional_margin_ex_vat: 0,
 
-    total_hours: null,
-    total_pay_ex_vat: totalPayEx,
-    total_charge_ex_vat: totalChgEx,
-    margin_ex_vat: marginEx,
+    pay_wtr_rate_pct_snapshot,
+    candidate_assignment,
+    processing_status,
 
-    candidate_assignment: candidate_id ? 'ASSIGNED' : 'UNASSIGNED',
-    processing_status: 'READY_FOR_INVOICE',
-
-    invoice_breakdown_json
+    invoice_breakdown_json,
   };
 
   await writeSnapshot(env, snapshot);
-  return { ok: true };
 }
 
 
@@ -27185,217 +28686,218 @@ async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
 
   // Build a timesheets_financials snapshot for a weekly, contract-driven TS.
   // basis = 'CONTRACT_WEEKLY' (requires enum extension).
-  async function buildWeeklySnapshot(env, ts, cw, contract) {
-    const hours = await computeWeeklyHours(env, ts, contract);
+async function buildWeeklySnapshot(env, ts, cw, contract) {
+  const hours = await computeWeeklyHours(env, ts, contract);
 
-    let rj = contract.rates_json || {};
-    if (typeof rj === "string") {
-      try {
-        rj = JSON.parse(rj);
-      } catch {
-        rj = {};
-      }
+  let rj = contract.rates_json || {};
+  if (typeof rj === "string") {
+    try {
+      rj = JSON.parse(rj);
+    } catch {
+      rj = {};
     }
-    if (!rj || typeof rj !== "object") rj = {};
+  }
+  if (!rj || typeof rj !== "object") rj = {};
 
-    const payMethod = String(contract.pay_method_snapshot || "").toUpperCase();
-    const pay =
-      payMethod === "UMBRELLA"
-        ? {
-            day: rj.umb_day ?? null,
-            night: rj.umb_night ?? null,
-            sat: rj.umb_sat ?? null,
-            sun: rj.umb_sun ?? null,
-            bh: rj.umb_bh ?? null,
-          }
-        : {
-            day: rj.paye_day ?? null,
-            night: rj.paye_night ?? null,
-            sat: rj.paye_sat ?? null,
-            sun: rj.paye_sun ?? null,
-            bh: rj.paye_bh ?? null,
-          };
+  const payMethod = String(contract.pay_method_snapshot || "").toUpperCase();
+  const pay =
+    payMethod === "UMBRELLA"
+      ? {
+          day: rj.umb_day ?? null,
+          night: rj.umb_night ?? null,
+          sat: rj.umb_sat ?? null,
+          sun: rj.umb_sun ?? null,
+          bh: rj.umb_bh ?? null,
+        }
+      : {
+          day: rj.paye_day ?? null,
+          night: rj.paye_night ?? null,
+          sat: rj.paye_sat ?? null,
+          sun: rj.paye_sun ?? null,
+          bh: rj.paye_bh ?? null,
+        };
 
-    const charge = {
-      day: rj.charge_day ?? null,
-      night: rj.charge_night ?? null,
-      sat: rj.charge_sat ?? null,
-      sun: rj.charge_sun ?? null,
-      bh: rj.charge_bh ?? null,
-    };
+  const charge = {
+    day: rj.charge_day ?? null,
+    night: rj.charge_night ?? null,
+    sat: rj.charge_sat ?? null,
+    sun: rj.charge_sun ?? null,
+    bh: rj.charge_bh ?? null,
+  };
 
-    const missingRates =
-      (hours.day > 0 && (pay.day == null || charge.day == null)) ||
-      (hours.night > 0 && (pay.night == null || charge.night == null)) ||
-      (hours.sat > 0 && (pay.sat == null || charge.sat == null)) ||
-      (hours.sun > 0 && (pay.sun == null || charge.sun == null)) ||
-      (hours.bh > 0 && (pay.bh == null || charge.bh == null));
+  const missingRates =
+    (hours.day > 0 && (pay.day == null || charge.day == null)) ||
+    (hours.night > 0 && (pay.night == null || charge.night == null)) ||
+    (hours.sat > 0 && (pay.sat == null || charge.sat == null)) ||
+    (hours.sun > 0 && (pay.sun == null || charge.sun == null)) ||
+    (hours.bh > 0 && (pay.bh == null || charge.bh == null));
 
-    const candidate_id = contract.candidate_id || null;
-    const client_id = contract.client_id || null;
-    let candidate_assignment = candidate_id ? "ASSIGNED" : "UNASSIGNED";
+  const candidate_id = contract.candidate_id || null;
+  const client_id = contract.client_id || null;
+  let candidate_assignment = candidate_id ? "ASSIGNED" : "UNASSIGNED";
 
-    let candidate = null;
-    if (candidate_id) {
-      candidate = await sbGetOne(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/candidates` +
-          `?id=eq.${enc(
-            candidate_id
-          )}&select=id,pay_method,umbrella_id,account_holder,sort_code,account_number`
-      );
-    }
-
-    const workedDateYmd = cw.week_ending_date || null;
-    const policy = await loadPolicy(env, client_id, workedDateYmd);
-    const requiresHr = !!policy?.requires_hr;
-
-    let processing_status;
-    if (!candidate_id) {
-      processing_status = "UNASSIGNED";
-      candidate_assignment = "UNASSIGNED";
-    } else if (!client_id) {
-      processing_status = "CLIENT_UNRESOLVED";
-    } else if (missingRates) {
-      processing_status = "RATE_MISSING";
-    } else if (
-      payMethod === "UMBRELLA" &&
-      !(candidate && candidate.umbrella_id)
-    ) {
-      processing_status = "PAY_CHANNEL_MISSING";
-    } else if (requiresHr) {
-      processing_status = "READY_FOR_HR";
-    } else {
-      processing_status = "READY_FOR_INVOICE";
-    }
-
-    const hoursPayEx = round2(
-      hours.day * asNumberLocal(pay.day) +
-        hours.night * asNumberLocal(pay.night) +
-        hours.sat * asNumberLocal(pay.sat) +
-        hours.sun * asNumberLocal(pay.sun) +
-        hours.bh * asNumberLocal(pay.bh)
+  let candidate = null;
+  if (candidate_id) {
+    candidate = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/candidates` +
+        `?id=eq.${enc(
+          candidate_id
+        )}&select=id,pay_method,umbrella_id,account_holder,sort_code,account_number`
     );
-    const hoursChargeEx = round2(
-      hours.day * asNumberLocal(charge.day) +
-        hours.night * asNumberLocal(charge.night) +
-        hours.sat * asNumberLocal(charge.sat) +
-        hours.sun * asNumberLocal(charge.sun) +
-        hours.bh * asNumberLocal(charge.bh)
-    );
+  }
 
-    const {
-      additional_units_json,
-      additional_pay_ex_vat,
-      additional_charge_ex_vat,
-      additional_margin_ex_vat,
-    } = await computeWeeklyAdditionalFromTs(env, ts, cw, contract);
+  const workedDateYmd = cw.week_ending_date || null;
+  const policy = await loadPolicy(env, client_id, workedDateYmd);
+  const requiresHr = !!policy?.requires_hr;
 
-    const total_pay_ex_vat = round2(hoursPayEx + additional_pay_ex_vat);
-    const total_charge_ex_vat = round2(hoursChargeEx + additional_charge_ex_vat);
-    const margin_ex_vat = round2(total_charge_ex_vat - total_pay_ex_vat);
+  let processing_status;
+  if (!candidate_id) {
+    processing_status = "UNASSIGNED";
+    candidate_assignment = "UNASSIGNED";
+  } else if (!client_id) {
+    processing_status = "CLIENT_UNRESOLVED";
+  } else if (missingRates) {
+    processing_status = "RATE_MISSING";
+  } else if (
+    payMethod === "UMBRELLA" &&
+    !(candidate && candidate.umbrella_id)
+  ) {
+    processing_status = "PAY_CHANNEL_MISSING";
+  } else if (requiresHr) {
+    processing_status = "READY_FOR_HR";
+  } else {
+    processing_status = "READY_FOR_INVOICE";
+  }
 
-    const invoice_breakdown_json = {
-      mode: "AGGREGATE",
-      base_hours: {
-        day: hours.day,
-        night: hours.night,
-        sat: hours.sat,
-        sun: hours.sun,
-        bh: hours.bh,
-        pay_rates: {
-          day: pay.day,
-          night: pay.night,
-          sat: pay.sat,
-          sun: pay.sun,
-          bh: pay.bh,
-        },
-        charge_rates: {
-          day: charge.day,
-          night: charge.night,
-          sat: charge.sat,
-          sun: charge.sun,
-          bh: charge.bh,
-        },
-        pay_ex_vat: hoursPayEx,
-        charge_ex_vat: hoursChargeEx,
+  const hoursPayEx = round2(
+    hours.day * asNumberLocal(pay.day) +
+      hours.night * asNumberLocal(pay.night) +
+      hours.sat * asNumberLocal(pay.sat) +
+      hours.sun * asNumberLocal(pay.sun) +
+      hours.bh * asNumberLocal(pay.bh)
+  );
+  const hoursChargeEx = round2(
+    hours.day * asNumberLocal(charge.day) +
+      hours.night * asNumberLocal(charge.night) +
+      hours.sat * asNumberLocal(charge.sat) +
+      hours.sun * asNumberLocal(charge.sun) +
+      hours.bh * asNumberLocal(charge.bh)
+  );
+
+  const {
+    additional_units_json,
+    additional_pay_ex_vat,
+    additional_charge_ex_vat,
+    additional_margin_ex_vat,
+  } = await computeWeeklyAdditionalFromTs(env, ts, cw, contract);
+
+  const total_pay_ex_vat = round2(hoursPayEx + additional_pay_ex_vat);
+  const total_charge_ex_vat = round2(hoursChargeEx + additional_charge_ex_vat);
+  const margin_ex_vat = round2(total_charge_ex_vat - total_pay_ex_vat);
+
+  const invoice_breakdown_json = {
+    // revised per 2.1.1 – this is a bucketed weekly summary for contract weeks
+    mode: "WEEKLY_BUCKETS",
+    base_hours: {
+      day: hours.day,
+      night: hours.night,
+      sat: hours.sat,
+      sun: hours.sun,
+      bh: hours.bh,
+      pay_rates: {
+        day: pay.day,
+        night: pay.night,
+        sat: pay.sat,
+        sun: pay.sun,
+        bh: pay.bh,
       },
-      additional: {
-        units: additional_units_json,
-        pay_ex_vat: additional_pay_ex_vat,
-        charge_ex_vat: additional_charge_ex_vat,
-        margin_ex_vat: additional_margin_ex_vat,
+      charge_rates: {
+        day: charge.day,
+        night: charge.night,
+        sat: charge.sat,
+        sun: charge.sun,
+        bh: charge.bh,
       },
-      totals: {
-        total_pay_ex_vat,
-        total_charge_ex_vat,
-        margin_ex_vat,
-      },
-    };
-
-    const basis = "CONTRACT_WEEKLY";
-
-    const snapshot = {
-      timesheet_id: ts.timesheet_id,
-      timesheet_version: ts.version || 1,
-
-      basis,
-      occupant_key_norm: ts.occupant_key_norm || null,
-
-      worked_start_iso: ts.worked_start_iso || null,
-      worked_end_iso: ts.worked_end_iso || null,
-      break_start_iso: ts.break_start_iso || null,
-      break_end_iso: ts.break_end_iso || null,
-      break_minutes: ts.break_minutes || null,
-
-      candidate_id,
-      client_id,
-      role: contract.role || null,
-      band: contract.band || null,
-      pay_method: payMethod,
-
-      policy_snapshot_json: policy || null,
-      rate_source_refs_json: {},
-
-      hours_day: hours.day,
-      hours_night: hours.night,
-      hours_sat: hours.sat,
-      hours_sun: hours.sun,
-      hours_bh: hours.bh,
-
-      pay_day: pay.day,
-      pay_night: pay.night,
-      pay_sat: pay.sat,
-      pay_sun: pay.sun,
-      pay_bh: pay.bh,
-
-      charge_day: charge.day,
-      charge_night: charge.night,
-      charge_sat: charge.sat,
-      charge_sun: charge.sun,
-      charge_bh: charge.bh,
-
-      total_hours: round2(
-        hours.day + hours.night + hours.sat + hours.sun + hours.bh
-      ),
-
-      additional_units_json,
-      additional_pay_ex_vat,
-      additional_charge_ex_vat,
-      additional_margin_ex_vat,
-
+      pay_ex_vat: hoursPayEx,
+      charge_ex_vat: hoursChargeEx,
+    },
+    additional: {
+      units: additional_units_json,
+      pay_ex_vat: additional_pay_ex_vat,
+      charge_ex_vat: additional_charge_ex_vat,
+      margin_ex_vat: additional_margin_ex_vat,
+    },
+    totals: {
       total_pay_ex_vat,
       total_charge_ex_vat,
       margin_ex_vat,
+    },
+  };
 
-      candidate_assignment,
-      processing_status,
+  const basis = "CONTRACT_WEEKLY";
 
-      invoice_breakdown_json,
-    };
+  const snapshot = {
+    timesheet_id: ts.timesheet_id,
+    timesheet_version: ts.version || 1,
 
-    await writeSnapshot(env, snapshot);
-  }
+    basis,
+    occupant_key_norm: ts.occupant_key_norm || null,
+
+    worked_start_iso: ts.worked_start_iso || null,
+    worked_end_iso: ts.worked_end_iso || null,
+    break_start_iso: ts.break_start_iso || null,
+    break_end_iso: ts.break_end_iso || null,
+    break_minutes: ts.break_minutes || null,
+
+    candidate_id,
+    client_id,
+    role: contract.role || null,
+    band: contract.band || null,
+    pay_method: payMethod,
+
+    policy_snapshot_json: policy || null,
+    rate_source_refs_json: {},
+
+    hours_day: hours.day,
+    hours_night: hours.night,
+    hours_sat: hours.sat,
+    hours_sun: hours.sun,
+    hours_bh: hours.bh,
+
+    pay_day: pay.day,
+    pay_night: pay.night,
+    pay_sat: pay.sat,
+    pay_sun: pay.sun,
+    pay_bh: pay.bh,
+
+    charge_day: charge.day,
+    charge_night: charge.night,
+    charge_sat: charge.sat,
+    charge_sun: charge.sun,
+    charge_bh: charge.bh,
+
+    total_hours: round2(
+      hours.day + hours.night + hours.sat + hours.sun + hours.bh
+    ),
+
+    additional_units_json,
+    additional_pay_ex_vat,
+    additional_charge_ex_vat,
+    additional_margin_ex_vat,
+
+    total_pay_ex_vat,
+    total_charge_ex_vat,
+    margin_ex_vat,
+
+    candidate_assignment,
+    processing_status,
+
+    invoice_breakdown_json,
+  };
+
+  await writeSnapshot(env, snapshot);
+}
 
   // ─────────────────────────────────────────────────────────────
   // Daily / Rota helper (SELF_REPORTED basis)
@@ -30487,6 +31989,21 @@ export async function handleCreateInvoiceTsfin(env, req) {
   const { rows: snaps } = await sbFetch(env, snapUrl);
   if (!snaps?.length) return badRequest("No eligible timesheets (need READY_FOR_INVOICE & unlocked).");
 
+  // Disallow NHSP / HR self-bill here (use /by-week endpoint for those)
+  const disallowedBases = new Set([
+    'NHSP',
+    'NHSP_ADJUSTMENT',
+    'HEALTHROSTER_SELF_BILL',
+    'HEALTHROSTER_ADJUSTMENT'
+  ]);
+  const bad = snaps.filter(s => disallowedBases.has(String(s.basis || '').toUpperCase()));
+  if (bad.length) {
+    return badRequest(
+      'This endpoint cannot invoice NHSP or HR self-bill timesheets. ' +
+      'Use the /api/invoices/tsfin/by-week endpoint instead.'
+    );
+  }
+
   // Must be single client (before reference gating)
   const clientIds = [...new Set(snaps.map(s => s.client_id).filter(Boolean))];
   if (clientIds.length !== 1) {
@@ -30561,12 +32078,12 @@ export async function handleCreateInvoiceTsfin(env, req) {
       .map(w => [w.timesheet_id, w.contract_id])
       .filter(([a, b]) => a && b)
   );
-  const contractIds = [...new Set(Object.values(tsToContract).filter(Boolean))];
+  const contractIds2 = [...new Set(Object.values(tsToContract).filter(Boolean))];
   let mapContractLabels = {};
-  if (contractIds.length) {
+  if (contractIds2.length) {
     const { rows: conRows } = await sbFetch(
       env,
-      `${env.SUPABASE_URL}/rest/v1/contracts?id=in.(${contractIds.map(enc).join(',')})&select=id,bucket_labels_json`
+      `${env.SUPABASE_URL}/rest/v1/contracts?id=in.(${contractIds2.map(enc).join(',')})&select=id,bucket_labels_json`
     );
     mapContractLabels = Object.fromEntries(
       (conRows || []).map(c => [c.id, c.bucket_labels_json || null])
@@ -30838,26 +32355,38 @@ export async function handleCreateInvoiceTsfin(env, req) {
     return serverError(`Failed to update invoice totals: ${t}`);
   }
 
-  // 7) Lock the snapshots to this invoice (only those we actually invoiced)
+  // 7) Lock snapshots and segments for this invoice
   const usedTsIds = [...new Set(snapsToUse.map(s => s.timesheet_id).filter(Boolean))];
-  if (usedTsIds.length) {
-    const usedInIds = usedTsIds.map(encodeURIComponent).join(',');
-    const lockUrl =
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-      `?timesheet_id=in.(${usedInIds})` +
-      `&is_current=eq.true` +
-      `&locked_by_invoice_id=is.null` +
-      `&processing_status=eq.READY_FOR_INVOICE`;
+  const lockNowIso = new Date().toISOString();
 
-    const lockRes = await fetch(lockUrl, {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-      body: JSON.stringify({ locked_by_invoice_id: invoice.id, locked_at_utc: new Date().toISOString() })
-    });
-    if (!lockRes.ok) {
-      const t = await lockRes.text();
-      return serverError(`Failed to lock snapshots: ${t}`);
+  for (const s of snapsToUse) {
+    let ib = s.invoice_breakdown_json || null;
+
+    if (ib && typeof ib === 'object' && ib.mode === 'SEGMENTS' && Array.isArray(ib.segments)) {
+      ib = {
+        ...ib,
+        segments: ib.segments.map(seg => {
+          if (!seg || typeof seg !== 'object') return seg;
+          if (seg.invoice_locked_invoice_id) return seg;
+          return { ...seg, invoice_locked_invoice_id: invoice.id };
+        })
+      };
     }
+
+    const patch = {
+      locked_by_invoice_id: invoice.id,
+      locked_at_utc: lockNowIso
+    };
+    if (ib) patch.invoice_breakdown_json = ib;
+
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${encodeURIComponent(s.id)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify(patch)
+      }
+    );
   }
 
   // 7b) Mark linked weeks as INVOICED
@@ -30894,9 +32423,8 @@ export async function handleCreateInvoiceTsfin(env, req) {
     return key;
   });
 
-  // 9) Cache HR/NHSP source rows for this invoice (invoice_hr_source_rows)
+  // 9) Cache HR/NHSP source rows for this invoice (unchanged)
   try {
-    // Collect shift_ids from TSFIN segments for HR/NHSP basis
     const shiftIds = new Set();
     for (const s of snapsToUse) {
       const ib = s.invoice_breakdown_json || {};
@@ -30904,7 +32432,7 @@ export async function handleCreateInvoiceTsfin(env, req) {
       for (const seg of segs) {
         const src = (seg.source_system || '').toUpperCase();
         const sid = String(seg.segment_id || '');
-        if (!sid.startsWith('nhsp:')) continue;       // only real shift-based segments
+        if (!sid.startsWith('nhsp:')) continue;
         if (src !== 'NHSP' && src !== 'HEALTHROSTER') continue;
         const idPart = sid.slice('nhsp:'.length).trim();
         if (idPart) shiftIds.add(idPart);
@@ -30915,7 +32443,6 @@ export async function handleCreateInvoiceTsfin(env, req) {
       const allShiftIds = Array.from(shiftIds);
       const shiftParam = allShiftIds.map(enc).join(',');
 
-      // Fetch nhsp_shifts for these shift IDs
       const { rows: shiftRows } = await sbFetch(
         env,
         `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
@@ -30925,8 +32452,7 @@ export async function handleCreateInvoiceTsfin(env, req) {
       const usefulShifts = (shiftRows || []).filter(s => s.latest_import_id && s.external_row_key);
 
       if (usefulShifts.length) {
-        // Group by (source_system, latest_import_id)
-        const groups = new Map(); // key -> { source_system, import_id, keys:Set }
+        const groups = new Map();
         for (const sh of usefulShifts) {
           const sys = (sh.source_system || '').toUpperCase() || 'UNKNOWN';
           const impId = sh.latest_import_id;
@@ -30943,7 +32469,6 @@ export async function handleCreateInvoiceTsfin(env, req) {
           g.keys.add(sh.external_row_key);
         }
 
-        // Clear any existing cached rows for this invoice
         await fetch(
           `${env.SUPABASE_URL}/rest/v1/invoice_hr_source_rows?invoice_id=eq.${enc(invoice.id)}`,
           {
@@ -30952,12 +32477,10 @@ export async function handleCreateInvoiceTsfin(env, req) {
           }
         ).catch(() => {});
 
-        // For each group, fetch header_columns + hr_rows and insert
         for (const g of groups.values()) {
           const importId = g.import_id;
           const sourceSystem = g.source_system;
 
-          // Get header_columns from hr_imports.parse_summary_json
           const { rows: impRows2 } = await sbFetch(
             env,
             `${env.SUPABASE_URL}/rest/v1/hr_imports` +
@@ -30982,7 +32505,6 @@ export async function handleCreateInvoiceTsfin(env, req) {
           );
           const rowsJson = (hrRows2 || []).map(r => r.payload_json || {});
 
-          // Insert into invoice_hr_source_rows
           const insPayload = [{
             invoice_id: invoice.id,
             source_system: sourceSystem,
@@ -30995,7 +32517,7 @@ export async function handleCreateInvoiceTsfin(env, req) {
             `${env.SUPABASE_URL}/rest/v1/invoice_hr_source_rows`,
             {
               method: 'POST',
-              headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
               body: JSON.stringify(insPayload)
             }
           ).catch((e) => {
@@ -31022,6 +32544,473 @@ export async function handleCreateInvoiceTsfin(env, req) {
     totals: { ex_vat: round2(sumEx), vat: round2(sumVat), inc_vat: round2(sumInc) }
   });
 }
+
+function extractBillableSegmentsForWeek(snaps, weekStart) {
+  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+  const computeWeekStartFromWeekEnding = (weYmd) => {
+    if (!weYmd) return null;
+    const d = new Date(`${weYmd}T00:00:00Z`);
+    if (Number.isNaN(d.getTime())) return weYmd;
+    d.setUTCDate(d.getUTCDate() - 6);
+    const yyyy = d.getUTCFullYear();
+    const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd   = String(d.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const entries = [];
+  const tsIdsUsed = new Set();
+  const tsfinIdsUsed = new Set();
+
+  for (const s of snaps || []) {
+    if (!s) continue;
+    const basis = String(s.basis || '').toUpperCase();
+    const ib = s.invoice_breakdown_json || {};
+    const tsMeta = s.timesheet || {};
+    const naturalWeekStart = tsMeta.week_ending_date
+      ? computeWeekStartFromWeekEnding(tsMeta.week_ending_date)
+      : null;
+
+    if (ib && ib.mode === 'SEGMENTS' && Array.isArray(ib.segments)) {
+      const segs = ib.segments || [];
+      for (let idx = 0; idx < segs.length; idx++) {
+        const seg = segs[idx];
+        if (!seg || typeof seg !== 'object') continue;
+        if (seg.invoice_locked_invoice_id) continue;
+
+        const targetWeek = seg.invoice_target_week_start || naturalWeekStart;
+        if (!targetWeek || targetWeek !== weekStart) continue;
+
+        entries.push({
+          tsfin_id: s.id,
+          timesheet_id: s.timesheet_id,
+          candidate_id: s.candidate_id,
+          client_id: s.client_id,
+          basis,
+          segment: seg,
+          segment_index: idx,
+          pseudo: false
+        });
+        tsIdsUsed.add(s.timesheet_id);
+        tsfinIdsUsed.add(s.id);
+      }
+    } else {
+      // WEEKLY_BUCKETS / AGGREGATE: treat as atomic for this week
+      if (!naturalWeekStart || naturalWeekStart !== weekStart) continue;
+      if (s.locked_by_invoice_id) continue;
+
+      const pay = Number(s.total_pay_ex_vat || 0);
+      const chg = Number(s.total_charge_ex_vat || 0);
+      const margin = round2(chg - pay);
+
+      const pseudoSeg = {
+        segment_id: `ts:${s.timesheet_id}`,
+        date: tsMeta.week_ending_date || weekStart,
+        pay_amount: pay,
+        charge_amount: chg,
+        margin_amount: margin,
+        invoice_target_week_start: weekStart,
+        invoice_locked_invoice_id: s.locked_by_invoice_id || null
+      };
+
+      entries.push({
+        tsfin_id: s.id,
+        timesheet_id: s.timesheet_id,
+        candidate_id: s.candidate_id,
+        client_id: s.client_id,
+        basis,
+        segment: pseudoSeg,
+        segment_index: -1,
+        pseudo: true
+      });
+      tsIdsUsed.add(s.timesheet_id);
+      tsfinIdsUsed.add(s.id);
+    }
+  }
+
+  return {
+    entries,
+    timesheet_ids: [...tsIdsUsed],
+    tsfin_ids: [...tsfinIdsUsed]
+  };
+}
+
+async function lockSegmentsForInvoice(env, invoiceId, segmentRefs) {
+  const enc = encodeURIComponent;
+  const nowIso = new Date().toISOString();
+
+  if (!Array.isArray(segmentRefs) || !segmentRefs.length) return;
+
+  const byTsfin = new Map();
+  for (const ref of segmentRefs) {
+    if (!ref || !ref.tsfin_id) continue;
+    const id = ref.tsfin_id;
+    let entry = byTsfin.get(id);
+    if (!entry) {
+      entry = {
+        tsfin_id: id,
+        segmentIds: new Set(),
+        lockWhole: false
+      };
+      byTsfin.set(id, entry);
+    }
+    if (!ref.segment_id) {
+      entry.lockWhole = true;
+    } else {
+      entry.segmentIds.add(String(ref.segment_id));
+    }
+  }
+
+  if (!byTsfin.size) return;
+
+  for (const [tsfinId, ref] of byTsfin.entries()) {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?id=eq.${enc(tsfinId)}` +
+        `&select=id,basis,locked_by_invoice_id,invoice_breakdown_json`
+    );
+    const snap = rows?.[0] || null;
+    if (!snap) continue;
+
+    let ib = snap.invoice_breakdown_json || null;
+    const basis = String(snap.basis || '').toUpperCase();
+    const isSelfBillOrNhsp = (
+      basis === 'NHSP' ||
+      basis === 'NHSP_ADJUSTMENT' ||
+      basis === 'HEALTHROSTER_SELF_BILL' ||
+      basis === 'HEALTHROSTER_ADJUSTMENT'
+    );
+
+    let allLocked = true;
+
+    if (ib && typeof ib === 'object' && ib.mode === 'SEGMENTS' && Array.isArray(ib.segments)) {
+      ib = {
+        ...ib,
+        segments: ib.segments.map((seg) => {
+          if (!seg || typeof seg !== 'object') return seg;
+          const sid = String(seg.segment_id || '');
+          let locked = seg.invoice_locked_invoice_id;
+
+          if (ref.lockWhole || ref.segmentIds.has(sid)) {
+            if (!locked) locked = invoiceId;
+          }
+
+          if (!locked) allLocked = false;
+
+          return {
+            ...seg,
+            invoice_locked_invoice_id: locked
+          };
+        })
+      };
+    } else {
+      // No segments; treat as "no segment-level lock", and allLocked is just existing lock
+      allLocked = !!snap.locked_by_invoice_id || ref.lockWhole;
+    }
+
+    const patch = {
+      updated_at: nowIso
+    };
+
+    if (ib) {
+      patch.invoice_breakdown_json = ib;
+    }
+
+    // For non-NHSP/HR basis: if all segments are locked (or lockWhole), set locked_by_invoice_id
+    if (!isSelfBillOrNhsp && allLocked) {
+      patch.locked_by_invoice_id = invoiceId;
+      patch.locked_at_utc = nowIso;
+    }
+
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(tsfinId)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify(patch)
+      }
+    ).catch((e) => {
+      console.warn('[lockSegmentsForInvoice] patch failed', {
+        tsfin_id: tsfinId,
+        err: e?.message || String(e)
+      });
+    });
+  }
+}
+
+export async function handleCreateInvoiceTsfinByWeek(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return unauthorized('Unauthorized');
+
+  const enc    = encodeURIComponent;
+  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+  const body = await parseJSONBody(req).catch(() => null);
+  const client_id = body?.client_id || null;
+  const invoice_week_start = body?.invoice_week_start || null;
+
+  if (!client_id) {
+    return badRequest('client_id is required');
+  }
+  if (!invoice_week_start) {
+    return badRequest('invoice_week_start is required');
+  }
+
+  // Basic sanity check that invoice_week_start is a valid date
+  const wsDate = new Date(`${invoice_week_start}T00:00:00Z`);
+  if (Number.isNaN(wsDate.getTime())) {
+    return badRequest('invoice_week_start must be a valid YYYY-MM-DD date');
+  }
+  const weekStart = invoice_week_start; // assume caller passes the Mon week start
+
+  // Load eligible TSFIN snapshots for this client
+  const { rows: snaps } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?client_id=eq.${enc(client_id)}` +
+      `&is_current=eq.true` +
+      `&locked_by_invoice_id=is.null` +
+      `&processing_status=eq.READY_FOR_INVOICE` +
+      `&select=` + [
+        'id',
+        'timesheet_id',
+        'candidate_id',
+        'client_id',
+        'basis',
+        'total_pay_ex_vat',
+        'total_charge_ex_vat',
+        'invoice_breakdown_json',
+        'locked_by_invoice_id',
+        'policy_snapshot_json',
+        'rate_source_refs_json',
+        'timesheet:timesheets(week_ending_date,booking_id,r2_auth_key,r2_nurse_key,reference_number,contract_id)'
+      ].join(',')
+  );
+
+  if (!snaps?.length) {
+    return badRequest('No eligible snapshots for this client.');
+  }
+
+  // Extract billable segments for this week
+  const { entries, timesheet_ids } = extractBillableSegmentsForWeek(snaps, weekStart);
+  if (!entries.length) {
+    return badRequest('Nothing to invoice for this week.');
+  }
+
+  // VAT + client snapshot
+  const { rows: defRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=vat_rate_pct,bank_name,bank_sort_code,bank_account_number,vat_registration_number`
+  );
+  const defaultVat = Number(defRows?.[0]?.vat_rate_pct ?? 20);
+
+  const { rows: cliRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/clients?select=id,name,invoice_address,primary_invoice_email,vat_chargeable,payment_terms_days&id=eq.${enc(client_id)}`
+  );
+  const client = cliRows?.[0] || null;
+  if (!client) return badRequest("Client not found.");
+
+  const { rows: csRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/client_settings` +
+    `?select=client_id,vat_rate_pct,requires_hr,hr_attach_to_invoice,ts_attach_to_invoice,invoice_reference_required,effective_from` +
+    `&client_id=eq.${enc(client_id)}` +
+    `&order=effective_from.desc&limit=1`
+  );
+  const cs = csRows?.[0] || null;
+
+  const vatRatePct = client.vat_chargeable === false ? 0 : Number(cs?.vat_rate_pct ?? defaultVat);
+  const requiresHr = !!cs?.requires_hr;
+  const hrAttach   = cs && Object.prototype.hasOwnProperty.call(cs, 'hr_attach_to_invoice')
+    ? cs.hr_attach_to_invoice !== false
+    : true;
+  const tsAttach   = cs && Object.prototype.hasOwnProperty.call(cs, 'ts_attach_to_invoice')
+    ? cs.ts_attach_to_invoice !== false
+    : true;
+
+  // Invoice header
+  const issuedAt = new Date().toISOString();
+  const termsDays = Number(client.payment_terms_days ?? 30);
+  const dueAt = new Date(Date.now() + termsDays * 86_400_000).toISOString();
+
+  const header_snapshot_json = {
+    client_id,
+    client_name: client.name,
+    client_invoice_address: client.invoice_address ?? null,
+    client_primary_invoice_email: client.primary_invoice_email ?? null,
+    vat_chargeable: !!client.vat_chargeable,
+    applied_vat_rate_pct: vatRatePct,
+    payment_terms_days: termsDays,
+    issued_at_utc: issuedAt,
+    due_at_utc: dueAt,
+    stationery_key: env.INVOICE_STATIONERY_KEY || null,
+    stationery_margins_mm: null,
+    hide_bank_footer: null,
+    bank: {
+      name: defRows?.[0]?.bank_name ?? null,
+      sort_code: defRows?.[0]?.bank_sort_code ?? null,
+      account_number: defRows?.[0]?.bank_account_number ?? null,
+    },
+    vat_registration_number: defRows?.[0]?.vat_registration_number ?? null,
+    meta: {
+      source: 'TSFIN_SEGMENTS',
+      invoice_week_start: weekStart,
+      timesheet_count: timesheet_ids.length,
+      segment_count: entries.length
+    },
+    attach_policy: {
+      requires_hr: requiresHr,
+      hr_attach_to_invoice: hrAttach,
+      ts_attach_to_invoice: tsAttach,
+    },
+  };
+
+  const invIns = await fetch(`${env.SUPABASE_URL}/rest/v1/invoices`, {
+    method: 'POST',
+    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+    body: JSON.stringify({
+      client_id,
+      status: 'DRAFT',
+      issued_at_utc: issuedAt,
+      due_at_utc: dueAt,
+      subtotal_ex_vat: 0,
+      vat_amount: 0,
+      total_inc_vat: 0,
+      header_snapshot_json
+    })
+  });
+  if (!invIns.ok) {
+    const t = await invIns.text();
+    return serverError(`Failed to create invoice: ${t}`);
+  }
+  const invoice = (await invIns.json())[0];
+
+  // Build lines: one per segment entry (simple, clear)
+  let sumEx = 0, sumVat = 0, sumInc = 0;
+  const lines = [];
+
+  for (const e of entries) {
+    const seg = e.segment || {};
+    const tsMeta = (e.timesheet || {}); // not present on e; if needed, you can extend extractBillableSegmentsForWeek to include s.timesheet
+
+    const chargeEx = Number(seg.charge_amount || 0);
+    const payEx    = Number(seg.pay_amount || 0);
+    const marginEx = round2(chargeEx - payEx);
+
+    const vatAmt = round2(chargeEx * vatRatePct / 100);
+    const incAmt = round2(chargeEx + vatAmt);
+
+    sumEx  += chargeEx;
+    sumVat += vatAmt;
+    sumInc += incAmt;
+
+    const desc = `TS ${e.timesheet_id} – ${e.basis || 'SEGMENT'} – ${seg.date || weekStart}`;
+
+    const meta = {
+      line_type: 'SEGMENT',
+      basis: e.basis,
+      timesheet_id: e.timesheet_id,
+      tsfin_id: e.tsfin_id,
+      segment_id: seg.segment_id || null,
+      segment_index: e.segment_index,
+      date: seg.date || null,
+      invoice_target_week_start: seg.invoice_target_week_start || weekStart,
+      source_system: seg.source_system || null,
+      totals: {
+        line_pay_ex_vat: payEx,
+        line_charge_ex_vat: chargeEx,
+        margin_ex_vat: marginEx,
+        vat_rate_pct: vatRatePct,
+        vat_amount: vatAmt,
+        total_inc_vat: incAmt
+      }
+    };
+
+    lines.push({
+      invoice_id: invoice.id,
+      timesheet_id: e.timesheet_id,
+      booking_id: null,
+      description: desc,
+      hours_day: 0, hours_night: 0, hours_sat: 0, hours_sun: 0, hours_bh: 0,
+      pay_day: null, pay_night: null, pay_sat: null, pay_sun: null, pay_bh: null,
+      charge_day: null, charge_night: null, charge_sat: null, charge_sun: null, charge_bh: null,
+      total_pay_ex_vat: payEx,
+      total_charge_ex_vat: chargeEx,
+      margin_ex_vat: marginEx,
+      vat_rate_pct: vatRatePct,
+      vat_amount: vatAmt,
+      total_inc_vat: incAmt,
+      meta_json: meta
+    });
+  }
+
+  if (!lines.length) {
+    return badRequest('Nothing to invoice (no billable segments).');
+  }
+
+  const resLines = await fetch(`${env.SUPABASE_URL}/rest/v1/invoice_lines`, {
+    method: 'POST',
+    headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+    body: JSON.stringify(lines)
+  });
+  if (!resLines.ok) {
+    const t = await resLines.text();
+    return serverError(`Failed to insert invoice_lines: ${t}`);
+  }
+
+  // Update invoice header totals
+  const updInv = await fetch(`${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${enc(invoice.id)}`, {
+    method: 'PATCH',
+    headers: { ...sbHeaders(env), Prefer: 'return-representation' },
+    body: JSON.stringify({
+      subtotal_ex_vat: round2(sumEx),
+      vat_amount: round2(sumVat),
+      total_inc_vat: round2(sumInc),
+      updated_at: new Date().toISOString()
+    })
+  });
+  if (!updInv.ok) {
+    const t = await updInv.text();
+    return serverError(`Failed to update invoice totals: ${t}`);
+  }
+
+  // Lock segments for this invoice (NHSP/HR self-bill + any buckets)
+  const segmentRefs = entries.map(e => ({
+    tsfin_id: e.tsfin_id,
+    timesheet_id: e.timesheet_id,
+    segment_id: e.segment?.segment_id || null,
+    basis: e.basis
+  }));
+  await lockSegmentsForInvoice(env, invoice.id, segmentRefs);
+
+  // Mark weeks as INVOICED where entire TSFIN got locked_by_invoice_id = invoice.id
+  try {
+    const { rows: lockedRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?locked_by_invoice_id=eq.${enc(invoice.id)}` +
+        `&select=timesheet_id`
+    );
+    const fullTsIds = [...new Set((lockedRows || []).map(r => r.timesheet_id).filter(Boolean))];
+    if (fullTsIds.length) {
+      await setWeeksInvoicedForTimesheets(env, fullTsIds);
+    }
+  } catch (e) {
+    console.warn('[handleCreateInvoiceTsfinByWeek] setWeeksInvoicedForTimesheets failed', e?.message || e);
+  }
+
+  return ok({
+    invoice_id: invoice.id,
+    client_id,
+    invoice_week_start: weekStart,
+    lines: lines.length,
+    totals: { ex_vat: round2(sumEx), vat: round2(sumVat), inc_vat: round2(sumInc) }
+  });
+}
+
 export async function collectSourceRowsForTimesheet(env, timesheetId, opts = {}) {
   const enc = encodeURIComponent;
   const scope = (opts.scope || 'all').toLowerCase();
@@ -31739,6 +33728,35 @@ export default {
           return handleUpdateCandidate(env, req, cand.candidate_id);
       }
 
+      // ====================== PAY ADVANCES ======================
+      {
+        const m = matchPath(p, '/api/candidates/:id/advances');
+        if (m && req.method === 'GET')   return handlePayAdvancesList(env, req);
+      }
+      {
+        const m = matchPath(p, '/api/candidates/:id/advances/summary');
+        if (m && req.method === 'GET')   return handlePayAdvancesSummary(env, req, m.id);
+      }
+      {
+        const m = matchPath(p, '/api/candidates/:id/advances/missing-shift');
+        if (m && req.method === 'POST')  return handlePayAdvancesCreateMissingShift(env, req, m.id);
+      }
+      {
+        const m = matchPath(p, '/api/candidates/:id/advances/manual');
+        if (m && req.method === 'POST')  return handlePayAdvancesCreateManual(env, req, m.id);
+      }
+      {
+        const m = matchPath(p, '/api/advances/:id');
+        if (m && req.method === 'PATCH') return handlePayAdvancesUpdate(env, req, m.id);
+      }
+      {
+        const m = matchPath(p, '/api/advances/:id/pause');
+        if (m && req.method === 'POST')  return handlePayAdvancesPause(env, req, m.id);
+      }
+      {
+        const m = matchPath(p, '/api/advances/:id/resume');
+        if (m && req.method === 'POST')  return handlePayAdvancesResume(env, req, m.id);
+      }
 
       // Rates — client defaults
       if (req.method === 'GET'  && p === '/api/rates/client-defaults')      return handleListClientRates(env, req);
@@ -31870,6 +33888,8 @@ export default {
       if (req.method === 'GET'  && p === '/api/invoices')                    return handleListInvoices(env, req);
       if (req.method === 'POST' && p === '/api/invoices')                    return handleCreateInvoiceTsfin(env, req);
       if (req.method === 'POST' && p === '/api/invoices/create-expenses')    return handleCreateInvoiceExpenses(env, req);
+      // NEW: per-week, segment-based TSFIN invoicer
+      if (req.method === 'POST' && p === '/api/invoices/tsfin/by-week')      return handleCreateInvoiceTsfinByWeek(env, req);
 
       {
         const inv = matchPath(p, '/api/invoices/:invoice_id');
@@ -32156,7 +34176,7 @@ export default {
       if (req.method === 'POST' && p === '/timesheets/submit-weekly')      return handleTimesheetsSubmitWeekly(env, req);
 
 
-            // =============================================================================
+      // =============================================================================
       // NEW ROUTE — QR Scan (broker → backend)
       // =============================================================================
       if (req.method === 'POST' && p === '/api/timesheets/qr-scan') {
@@ -32186,6 +34206,16 @@ export default {
       {
         const m = matchPath(p, '/api/timesheets/:id/switch-to-manual');
         if (m && req.method === 'POST') return handleTimesheetSwitchToManual(env, req, m.id);
+      }
+      // NEW: convert QR → plain manual
+      {
+        const m = matchPath(p, '/api/timesheets/:id/convert-qr-to-manual');
+        if (m && req.method === 'POST') return handleTimesheetConvertQrToManual(env, req, m.id);
+      }
+      // NEW: switch DAILY electronic → manual
+      {
+        const m = matchPath(p, '/api/timesheets/:id/switch-daily-to-manual');
+        if (m && req.method === 'POST') return handleTimesheetSwitchDailyToManual(env, req, m.id);
       }
       {
         const m = matchPath(p, '/api/timesheets/:id');
@@ -32305,4 +34335,5 @@ export default {
     })());
   }
 }
+
 
