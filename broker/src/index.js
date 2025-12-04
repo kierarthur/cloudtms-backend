@@ -9815,17 +9815,20 @@ export async function handleTimesheetDetails(env, req, timesheetId) {
 
     // Find linked contract_week (if any) so FE can upsert manual weekly hours/extras
     let contractWeekId = null;
+    let contractWeek   = null;
     try {
       const { rows: cwRows } = await sbFetch(
         env,
         `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
         `?timesheet_id=eq.${enc(timesheetId)}` +
-        `&select=id` +
+        `&select=*` +            // ⬅️ full row so FE can inspect status / planned hours later
         `&limit=1`
       );
-      contractWeekId = cwRows?.[0]?.id || null;
+      contractWeek   = cwRows?.[0] || null;
+      contractWeekId = contractWeek?.id || null;
     } catch {
       contractWeekId = null;
+      contractWeek   = null;
     }
 
     const { rows: finRows } = await sbFetch(
@@ -9866,7 +9869,8 @@ export async function handleTimesheetDetails(env, req, timesheetId) {
       qr_generated_at: ts.qr_generated_at || null,
       qr_scanned_at: ts.qr_scanned_at || null,
       manual_pdf_r2_key: ts.manual_pdf_r2_key || null,
-      contract_week_id: contractWeekId
+      contract_week_id: contractWeekId,
+      contract_week: contractWeek    // ⬅️ NEW
     }));
   } catch (e) {
     console.error('[TIMESHEET_DETAILS] error', {
@@ -9876,7 +9880,6 @@ export async function handleTimesheetDetails(env, req, timesheetId) {
     return withCORS(env, req, serverError('Failed to load timesheet details'));
   }
 }
-
 
 
 
@@ -12628,10 +12631,12 @@ export async function handleTsfinUpdateSegments(env, req, timesheetId) {
 
   const basis = String(fin.basis || '').toUpperCase();
   const invoiceTargetAllowedBases = new Set([
-    'NHSP',
-    'NHSP_ADJUSTMENT',
-    'HEALTHROSTER_ADJUSTMENT'
-  ]);
+  'NHSP',
+  'NHSP_ADJUSTMENT',
+  'HEALTHROSTER_SELF_BILL',   // NEW
+  'HEALTHROSTER_ADJUSTMENT'
+]);
+
   const allowInvoiceTargetChange = invoiceTargetAllowedBases.has(basis);
 
   const weekEnding = fin?.timesheet?.week_ending_date || null;
@@ -32766,62 +32771,94 @@ export async function handleCreateInvoiceTsfinByWeek(env, req) {
     ? cs.ts_attach_to_invoice !== false
     : true;
 
-  // Invoice header
-  const issuedAt = new Date().toISOString();
-  const termsDays = Number(client.payment_terms_days ?? 30);
-  const dueAt = new Date(Date.now() + termsDays * 86_400_000).toISOString();
+  // Decide if this run is pure self-bill (NHSP / HR self-bill bases only)
+  const selfBillBases = new Set([
+    'NHSP',
+    'NHSP_ADJUSTMENT',
+    'HEALTHROSTER_SELF_BILL',
+    'HEALTHROSTER_ADJUSTMENT'
+  ]);
+  const allSelfBill = entries.every(e =>
+    selfBillBases.has(String(e.basis || '').toUpperCase())
+  );
 
-  const header_snapshot_json = {
-    client_id,
-    client_name: client.name,
-    client_invoice_address: client.invoice_address ?? null,
-    client_primary_invoice_email: client.primary_invoice_email ?? null,
-    vat_chargeable: !!client.vat_chargeable,
-    applied_vat_rate_pct: vatRatePct,
-    payment_terms_days: termsDays,
-    issued_at_utc: issuedAt,
-    due_at_utc: dueAt,
-    stationery_key: env.INVOICE_STATIONERY_KEY || null,
-    stationery_margins_mm: null,
-    hide_bank_footer: null,
-    bank: {
-      name: defRows?.[0]?.bank_name ?? null,
-      sort_code: defRows?.[0]?.bank_sort_code ?? null,
-      account_number: defRows?.[0]?.bank_account_number ?? null,
-    },
-    vat_registration_number: defRows?.[0]?.vat_registration_number ?? null,
-    meta: {
-      source: 'TSFIN_SEGMENTS',
-      invoice_week_start: weekStart,
-      timesheet_count: timesheet_ids.length,
-      segment_count: entries.length
-    },
-    attach_policy: {
-      requires_hr: requiresHr,
-      hr_attach_to_invoice: hrAttach,
-      ts_attach_to_invoice: tsAttach,
-    },
-  };
+  // Invoice header / row: for self-bill, reuse-or-create; otherwise always create new
+  let invoice;
 
-  const invIns = await fetch(`${env.SUPABASE_URL}/rest/v1/invoices`, {
-    method: 'POST',
-    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-    body: JSON.stringify({
+  if (allSelfBill) {
+    // NHSP / HR self-bill → reuse existing invoice for this (client, week) if possible
+    invoice = await findOrCreateSelfBillInvoice(
+      env,
       client_id,
-      status: 'DRAFT',
+      weekStart,
+      client,
+      defRows,
+      vatRatePct,
+      timesheet_ids,
+      entries
+    );
+  } else {
+    // Non-self-bill → always create a new invoice header (existing behaviour)
+    const issuedAt = new Date().toISOString();
+    const termsDays = Number(client.payment_terms_days ?? 30);
+    const dueAt = new Date(Date.now() + termsDays * 86_400_000).toISOString();
+
+    const header_snapshot_json = {
+      client_id,
+      client_name: client.name,
+      client_invoice_address: client.invoice_address ?? null,
+      client_primary_invoice_email: client.primary_invoice_email ?? null,
+      vat_chargeable: !!client.vat_chargeable,
+      applied_vat_rate_pct: vatRatePct,
+      payment_terms_days: termsDays,
       issued_at_utc: issuedAt,
       due_at_utc: dueAt,
-      subtotal_ex_vat: 0,
-      vat_amount: 0,
-      total_inc_vat: 0,
-      header_snapshot_json
-    })
-  });
-  if (!invIns.ok) {
-    const t = await invIns.text();
-    return serverError(`Failed to create invoice: ${t}`);
+      stationery_key: env.INVOICE_STATIONERY_KEY || null,
+      stationery_margins_mm: null,
+      hide_bank_footer: null,
+      bank: {
+        name: defRows?.[0]?.bank_name ?? null,
+        sort_code: defRows?.[0]?.bank_sort_code ?? null,
+        account_number: defRows?.[0]?.bank_account_number ?? null,
+      },
+      vat_registration_number: defRows?.[0]?.vat_registration_number ?? null,
+      meta: {
+        source: 'TSFIN_SEGMENTS',
+        invoice_week_start: weekStart,
+        timesheet_count: timesheet_ids.length,
+        segment_count: entries.length
+      },
+      attach_policy: {
+        requires_hr: requiresHr,
+        hr_attach_to_invoice: hrAttach,
+        ts_attach_to_invoice: tsAttach,
+      },
+    };
+
+    const invIns = await fetch(`${env.SUPABASE_URL}/rest/v1/invoices`, {
+      method: 'POST',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify({
+        client_id,
+        status: 'DRAFT',
+        issued_at_utc: issuedAt,
+        due_at_utc: dueAt,
+        subtotal_ex_vat: 0,
+        vat_amount: 0,
+        total_inc_vat: 0,
+        header_snapshot_json
+      })
+    });
+    if (!invIns.ok) {
+      const t = await invIns.text();
+      return serverError(`Failed to create invoice: ${t}`);
+    }
+    invoice = (await invIns.json())[0];
   }
-  const invoice = (await invIns.json())[0];
+
+  if (!invoice || !invoice.id) {
+    return serverError('Failed to obtain invoice row');
+  }
 
   // Build lines: one per segment entry (simple, clear)
   let sumEx = 0, sumVat = 0, sumInc = 0;
@@ -32829,7 +32866,6 @@ export async function handleCreateInvoiceTsfinByWeek(env, req) {
 
   for (const e of entries) {
     const seg = e.segment || {};
-    const tsMeta = (e.timesheet || {}); // not present on e; if needed, you can extend extractBillableSegmentsForWeek to include s.timesheet
 
     const chargeEx = Number(seg.charge_amount || 0);
     const payEx    = Number(seg.pay_amount || 0);
@@ -32896,14 +32932,24 @@ export async function handleCreateInvoiceTsfinByWeek(env, req) {
     return serverError(`Failed to insert invoice_lines: ${t}`);
   }
 
-  // Update invoice header totals
+  // Update invoice header totals:
+  // - for normal invoices, invoice.subtotal_ex_vat etc will be 0 (new header)
+  // - for self-bill top-ups, we ADD to existing totals
+  const existingEx  = Number(invoice.subtotal_ex_vat || 0);
+  const existingVat = Number(invoice.vat_amount || 0);
+  const existingInc = Number(invoice.total_inc_vat || 0);
+
+  const newSubtotalEx = round2(existingEx  + sumEx);
+  const newVat        = round2(existingVat + sumVat);
+  const newInc        = round2(existingInc + sumInc);
+
   const updInv = await fetch(`${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${enc(invoice.id)}`, {
     method: 'PATCH',
     headers: { ...sbHeaders(env), Prefer: 'return-representation' },
     body: JSON.stringify({
-      subtotal_ex_vat: round2(sumEx),
-      vat_amount: round2(sumVat),
-      total_inc_vat: round2(sumInc),
+      subtotal_ex_vat: newSubtotalEx,
+      vat_amount: newVat,
+      total_inc_vat: newInc,
       updated_at: new Date().toISOString()
     })
   });
@@ -32942,8 +32988,137 @@ export async function handleCreateInvoiceTsfinByWeek(env, req) {
     client_id,
     invoice_week_start: weekStart,
     lines: lines.length,
-    totals: { ex_vat: round2(sumEx), vat: round2(sumVat), inc_vat: round2(sumInc) }
+    totals: { ex_vat: newSubtotalEx, vat: newVat, inc_vat: newInc }
   });
+}
+
+// Self-bill helper: reuse existing invoice for (client, week) if possible,
+// otherwise create a new self-bill invoice header.
+async function findOrCreateSelfBillInvoice(
+  env,
+  client_id,
+  weekStart,
+  client,
+  defRows,
+  vatRatePct,
+  timesheet_ids,
+  entries
+) {
+  const enc = encodeURIComponent;
+  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+  // 1) Try to find an existing self-bill invoice for this client + week
+  //    We treat invoices with:
+  //      - meta.source = 'TSFIN_SEGMENTS'
+  //      - meta.invoice_week_start = weekStart
+  //      - status in (DRAFT, ON_HOLD)
+  //    as reusable "buckets" for NHSP / HR self-bill.
+  const { rows: existingRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/invoices` +
+      `?client_id=eq.${enc(client_id)}` +
+      `&status=in.(DRAFT,ON_HOLD)` +
+      `&header_snapshot_json->meta->>source=eq.TSFIN_SEGMENTS` +
+      `&header_snapshot_json->meta->>invoice_week_start=eq.${enc(weekStart)}` +
+      `&select=*` +
+      `&limit=1`
+  );
+
+  if (existingRows && existingRows[0]) {
+    return existingRows[0];
+  }
+
+  // 2) No existing self-bill invoice → create a new one
+  const def = defRows && defRows[0] ? defRows[0] : {};
+
+  // Load client_settings for attach_policy, if present
+  let requiresHr = false;
+  let hrAttach   = true;
+  let tsAttach   = true;
+
+  try {
+    const { rows: csRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/client_settings` +
+        `?client_id=eq.${enc(client_id)}` +
+        `&order=effective_from.desc&limit=1`
+    );
+    const cs = csRows?.[0] || null;
+    requiresHr = !!cs?.requires_hr;
+    hrAttach   = cs && Object.prototype.hasOwnProperty.call(cs, 'hr_attach_to_invoice')
+      ? cs.hr_attach_to_invoice !== false
+      : true;
+    tsAttach   = cs && Object.prototype.hasOwnProperty.call(cs, 'ts_attach_to_invoice')
+      ? cs.ts_attach_to_invoice !== false
+      : true;
+  } catch (e) {
+    // If client_settings lookup fails, fall back to defaults
+  }
+
+  const issuedAt = new Date().toISOString();
+  const termsDays = Number(client.payment_terms_days ?? 30);
+  const dueAt = new Date(Date.now() + termsDays * 86_400_000).toISOString();
+
+  const header_snapshot_json = {
+    client_id,
+    client_name: client.name,
+    client_invoice_address: client.invoice_address ?? null,
+    client_primary_invoice_email: client.primary_invoice_email ?? null,
+    vat_chargeable: !!client.vat_chargeable,
+    applied_vat_rate_pct: vatRatePct,
+    payment_terms_days: termsDays,
+    issued_at_utc: issuedAt,
+    due_at_utc: dueAt,
+    stationery_key: env.INVOICE_STATIONERY_KEY || null,
+    stationery_margins_mm: null,
+    hide_bank_footer: null,
+    bank: {
+      name: def.bank_name ?? null,
+      sort_code: def.bank_sort_code ?? null,
+      account_number: def.bank_account_number ?? null,
+    },
+    vat_registration_number: def.vat_registration_number ?? null,
+    meta: {
+      source: 'TSFIN_SEGMENTS',
+      self_bill: true,
+      invoice_week_start: weekStart,
+      timesheet_count: timesheet_ids.length,
+      segment_count: entries.length
+    },
+    attach_policy: {
+      requires_hr: requiresHr,
+      hr_attach_to_invoice: hrAttach,
+      ts_attach_to_invoice: tsAttach,
+    },
+  };
+
+  const invIns = await fetch(`${env.SUPABASE_URL}/rest/v1/invoices`, {
+    method: 'POST',
+    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+    body: JSON.stringify({
+      client_id,
+      status: 'DRAFT',
+      issued_at_utc: issuedAt,
+      due_at_utc: dueAt,
+      subtotal_ex_vat: round2(0),
+      vat_amount:      round2(0),
+      total_inc_vat:   round2(0),
+      header_snapshot_json
+    })
+  });
+
+  if (!invIns.ok) {
+    const t = await invIns.text().catch(() => '');
+    throw new Error(`Failed to create self-bill invoice: ${t}`);
+  }
+
+  const createdArr = await invIns.json().catch(() => []);
+  const invoice = Array.isArray(createdArr) ? createdArr[0] : createdArr;
+  if (!invoice || !invoice.id) {
+    throw new Error('Failed to create self-bill invoice: no invoice returned');
+  }
+
+  return invoice;
 }
 
 export async function collectSourceRowsForTimesheet(env, timesheetId, opts = {}) {
