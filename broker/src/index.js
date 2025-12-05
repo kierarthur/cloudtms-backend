@@ -595,14 +595,48 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array of 
   validateScheduleStructure(actualDays);
 
   const policy = await loadClientTimePolicy(env, contract.client_id);
-  const acc = { day:0, night:0, sat:0, sun:0, bh:0 };
+  const acc = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
 
-  for (const d of (actualDays||[])) {
+  // Helper for safe logging
+  const logBuckets = (label, payload) => {
+    try {
+      console.log('[BUCKETS]', label, JSON.stringify(payload));
+    } catch (e) {
+      // avoid blowing up the worker on log issues
+    }
+  };
+
+  // Log the policy + contract context once
+  logBuckets('policy', {
+    client_id: contract.client_id,
+    contract_id: contract.id,
+    policy
+  });
+
+  for (const d of (actualDays || [])) {
     if (!d || !d.date || !d.start || !d.end) continue;
-    const s = parseHHMM(d.start), e = parseHHMM(d.end);
-    if (s==null || e==null) throw new Error(`Invalid HH:MM in actual_schedule_json for ${d.date}`);
-    const overnight = (e<=s);                              // ← infer overnight
 
+    const s = parseHHMM(d.start);
+    const e = parseHHMM(d.end);
+
+    if (s == null || e == null) {
+      throw new Error(`Invalid HH:MM in actual_schedule_json for ${d.date}`);
+    }
+
+    const overnight = (e <= s); // ← infer overnight
+
+    logBuckets('day-entry', {
+      date: d.date,
+      start: d.start,
+      end: d.end,
+      parsed_start_min: s,
+      parsed_end_min: e,
+      overnight,
+      breaks: d.breaks || null,
+      break_minutes: d.break_minutes || null
+    });
+
+    // Build one or two chunks for this shift (handle overnight)
     const chunk1 = { date: d.date, from: s, to: overnight ? 1440 : e };
     const chunks = [chunk1];
     if (overnight) {
@@ -610,29 +644,115 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array of 
       chunks.push({ date: next, from: 0, to: e });
     }
 
+    // Apply each working chunk into buckets, logging deltas
     for (const c of chunks) {
+      const before = { ...acc };
       segmentChunkIntoBuckets(c.date, c.from, c.to, policy, acc);
+      const after = acc;
+
+      const diff = {};
+      for (const k of Object.keys(acc)) {
+        const delta = (after[k] || 0) - (before[k] || 0);
+        if (delta !== 0) diff[k] = delta;
+      }
+
+      logBuckets('work-chunk', {
+        chunk_date: c.date,
+        from_min: c.from,
+        to_min: c.to,
+        added_minutes: diff,
+        acc_after: after
+      });
     }
 
+    // ── Breaks by explicit windows ──
     if (Array.isArray(d.breaks) && d.breaks.length) {
       for (const br of d.breaks) {
-        const bs = parseHHMM(br.start), be = parseHHMM(br.end);
-        if (bs==null || be==null) continue;
-        const bOver = (be<=bs);
+        const bs = parseHHMM(br.start);
+        const be = parseHHMM(br.end);
+        if (bs == null || be == null) {
+          logBuckets('break-skip-invalid', {
+            date: d.date,
+            break: br
+          });
+          continue;
+        }
+
+        const bOver = (be <= bs);
         const bChunk1 = { date: d.date, from: bs, to: bOver ? 1440 : be };
         const bChunks = [bChunk1];
-        if (bOver) bChunks.push({ date: addDays(d.date,1), from: 0, to: be });
+        if (bOver) bChunks.push({ date: addDays(d.date, 1), from: 0, to: be });
 
-        const tmp = { day:0, night:0, sat:0, sun:0, bh:0 };
-        for (const c of bChunks) segmentChunkIntoBuckets(c.date, c.from, c.to, policy, tmp);
-        for (const k of Object.keys(acc)) acc[k] = Math.max(0, acc[k] - (tmp[k]||0));
+        // tmp holds break minutes per bucket for this break window
+        const tmp = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
+        for (const c of bChunks) {
+          segmentChunkIntoBuckets(c.date, c.from, c.to, policy, tmp);
+        }
+
+        // Log what the break contributed before subtracting
+        logBuckets('break-window', {
+          date: d.date,
+          break_start: br.start,
+          break_end: br.end,
+          parsed_start_min: bs,
+          parsed_end_min: be,
+          overnight: bOver,
+          break_minutes_per_bucket: tmp
+        });
+
+        // Subtract break minutes from working accumulator
+        const beforeAcc = { ...acc };
+        for (const k of Object.keys(acc)) {
+          acc[k] = Math.max(0, acc[k] - (tmp[k] || 0));
+        }
+
+        const afterAcc = acc;
+        const diffAfter = {};
+        for (const k of Object.keys(acc)) {
+          const delta = (afterAcc[k] || 0) - (beforeAcc[k] || 0);
+          if (delta !== 0) diffAfter[k] = delta;
+        }
+
+        logBuckets('break-applied', {
+          date: d.date,
+          delta_minutes: diffAfter,
+          acc_after: afterAcc
+        });
       }
-    } else if (Number(d.break_minutes)>0) {
-      applyDurationBreak(acc, Number(d.break_minutes));
     }
+    // ── Floating break minutes (no explicit windows) ──
+    else if (Number(d.break_minutes) > 0) {
+      const mins = Number(d.break_minutes) || 0;
+      const beforeAcc = { ...acc };
+      applyDurationBreak(acc, mins);
+      const afterAcc = acc;
+
+      const diffAfter = {};
+      for (const k of Object.keys(acc)) {
+        const delta = (afterAcc[k] || 0) - (beforeAcc[k] || 0);
+        if (delta !== 0) diffAfter[k] = delta;
+      }
+
+      logBuckets('floating-break-applied', {
+        date: d.date,
+        break_minutes: mins,
+        delta_minutes: diffAfter,
+        acc_after: afterAcc
+      });
+    }
+
+    // Per-day summary after all chunks + breaks
+    logBuckets('day-summary', {
+      date: d.date,
+      acc_after_day: { ...acc }
+    });
   }
+
+  // Final accumulator in minutes
+  logBuckets('final-accumulator', acc);
   return acc;
 }
+
 
 // Validate that, within a single timesheet schedule:
 // - Each shift has valid start/end HH:MM
