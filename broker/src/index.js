@@ -4293,7 +4293,7 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
   if (Array.isArray(body?.actual_schedule_json) && body.actual_schedule_json.length) {
     actual_schedule_json = body.actual_schedule_json;
 
-    // 🔴 NEW: structural validation before classification
+    // 🔴 structural validation before classification
     try {
       validateScheduleStructure(actual_schedule_json);
     } catch (e) {
@@ -4303,29 +4303,37 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
     try {
       const minsByBucket = await resolveBucketsFromSchedule(env, contract, actual_schedule_json);
       hours = {
-        day: +(minsByBucket.day/60).toFixed(2),
-        night:+(minsByBucket.night/60).toFixed(2),
-        sat:  +(minsByBucket.sat/60).toFixed(2),
-        sun:  +(minsByBucket.sun/60).toFixed(2),
-        bh:   +(minsByBucket.bh/60).toFixed(2)
+        day:   +(minsByBucket.day  / 60).toFixed(2),
+        night: +(minsByBucket.night/ 60).toFixed(2),
+        sat:   +(minsByBucket.sat  / 60).toFixed(2),
+        sun:   +(minsByBucket.sun  / 60).toFixed(2),
+        bh:    +(minsByBucket.bh   / 60).toFixed(2)
       };
     } catch (e) {
       return withCORS(env, req, badRequest(e.message || 'Invalid actual_schedule_json'));
     }
   } else if (body?.hours) {
     const n = (v) => (v==null ? 0 : Number(v)||0);
-    hours = { day:n(body.hours.day), night:n(body.hours.night), sat:n(body.hours.sat), sun:n(body.hours.sun), bh:n(body.hours.bh) };
+    hours = {
+      day:   n(body.hours.day),
+      night: n(body.hours.night),
+      sat:   n(body.hours.sat),
+      sun:   n(body.hours.sun),
+      bh:    n(body.hours.bh)
+    };
   } else {
     return withCORS(env, req, badRequest('Provide either actual_schedule_json or hours totals'));
   }
 
   // Base rates must exist for any positive bucket
   const { pay, charge, method } = payChargeFromContract(contract);
-  const anyMissing = (h, P, C) => (h.day>0 && (!P.day&&P.day!==0 || !C.day&&C.day!==0)) ||
-                                  (h.night>0 && (!P.night&&P.night!==0 || !C.night&&C.night!==0)) ||
-                                  (h.sat>0 && (!P.sat&&P.sat!==0 || !C.sat&&C.sat!==0)) ||
-                                  (h.sun>0 && (!P.sun&&P.sun!==0 || !C.sun&&C.sun!==0)) ||
-                                  (h.bh>0 && (!P.bh&&P.bh!==0 || !C.bh&&C.bh!==0));
+  const anyMissing = (h, P, C) =>
+    (h.day   > 0 && (!P.day   && P.day   !== 0 || !C.day   && C.day   !== 0)) ||
+    (h.night > 0 && (!P.night && P.night !== 0 || !C.night && C.night !== 0)) ||
+    (h.sat   > 0 && (!P.sat   && P.sat   !== 0 || !C.sat   && C.sat   !== 0)) ||
+    (h.sun   > 0 && (!P.sun   && P.sun   !== 0 || !C.sun   && C.sun   !== 0)) ||
+    (h.bh    > 0 && (!P.bh    && P.bh    !== 0 || !C.bh    && C.bh    !== 0));
+
   if (anyMissing(hours, pay, charge)) {
     return withCORS(env, req, badRequest('Missing rate(s) in contract for one or more entered hour buckets'));
   }
@@ -4352,7 +4360,7 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
       d.setUTCDate(base.getUTCDate() - offset);
       const yyyy = d.getUTCFullYear();
       const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
-      const dd   = String(d.getUTCDate()).padStart(2, '0');
+      const dd   = String(d.getUTCDate()).toString().padStart(2, '0');
       const ymd  = `${yyyy}-${mm}-${dd}`;
       const dow  = d.getUTCDay();
       weekDates.push({ ymd, dow });
@@ -4389,13 +4397,9 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
   const shouldIncludeDay = (freq, meta) => {
     const { ymd, dow } = meta;
     const bh = isBH(ymd);
-    if (freq === 'ONE_PER_DAY') return true;
-    if (freq === 'WEEKENDS_AND_BH_ONLY') {
-      return bh || dow === 0 || dow === 6;
-    }
-    if (freq === 'WEEKDAYS_EXCL_BH_ONLY') {
-      return !bh && dow >= 1 && dow <= 5;
-    }
+    if (freq === 'ONE_PER_DAY')          return true;
+    if (freq === 'WEEKENDS_AND_BH_ONLY') return bh || dow === 0 || dow === 6;
+    if (freq === 'WEEKDAYS_EXCL_BH_ONLY')return !bh && dow >= 1 && dow <= 5;
     return false;
   };
 
@@ -4466,22 +4470,36 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
   additional_charge_ex_vat = +Number(additional_charge_ex_vat).toFixed(2);
   const additional_margin_ex_vat = +Number(additional_charge_ex_vat - additional_pay_ex_vat).toFixed(2);
 
-  // Build or reuse timesheet (manual weekly)
+  // Build or reuse timesheet (manual weekly) – always use the CURRENT version if it exists
   let ts = cw.timesheet_id
-    ? await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(cw.timesheet_id)}&select=*`)
+    ? await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(cw.timesheet_id)}&is_current=eq.true&select=*`
+      )
     : null;
 
   const nowIso = new Date().toISOString();
 
   if (!ts) {
-    const candidate = contract.candidate_id ? await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(contract.candidate_id)}&select=id,display_name`) : null;
-    const client = contract.client_id ? await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${enc(contract.client_id)}&select=id,name`) : null;
+    const candidate = contract.candidate_id
+      ? await sbGetOne(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(contract.candidate_id)}&select=id,display_name`
+        )
+      : null;
+    const client = contract.client_id
+      ? await sbGetOne(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${enc(contract.client_id)}&select=id,name`
+        )
+      : null;
 
     const occupant_norm = (candidate?.display_name || String(candidate?.id || 'worker')).toLowerCase();
     const hospital_norm = (contract.display_site || client?.name || String(contract.client_id)).toLowerCase();
-    const ward_norm = (contract.ward_hint || 'contract').toLowerCase();
-    const job_title_norm = (contract.role || 'weekly').toLowerCase();
-    const booking_id = makeWeeklyBookingId(candidate?.id, contract, cw);
+    const ward_norm     = (contract.ward_hint || 'contract').toLowerCase();
+    const job_title_norm= (contract.role || 'weekly').toLowerCase();
+    const booking_id    = makeWeeklyBookingId(candidate?.id, contract, cw);
 
     const payload = [{
       booking_id,
@@ -4504,15 +4522,27 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
     }];
 
     const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets`, {
-      method: 'POST', headers: { ...sbHeaders(env), 'Prefer': 'return=representation' }, body: JSON.stringify(payload)
+      method: 'POST',
+      headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
+      body: JSON.stringify(payload)
     });
-    if (!ins.ok) return withCORS(env, req, serverError(await ins.text()));
+    if (!ins.ok) {
+      return withCORS(env, req, serverError(await ins.text()));
+    }
     ts = (await ins.json().catch(()=>[]))[0];
 
-    await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`, {
-      method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return-minimal' },
-      body: JSON.stringify({ timesheet_id: ts.timesheet_id, status: 'SUBMITTED', updated_at: nowIso })
-    });
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), 'Prefer': 'return-minimal' },
+        body: JSON.stringify({
+          timesheet_id: ts.timesheet_id,
+          status: 'SUBMITTED',
+          updated_at: nowIso
+        })
+      }
+    );
   } else if (actual_schedule_json) {
     const patchBody = {
       actual_schedule_json,
@@ -4523,13 +4553,18 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
       patchBody.manual_pdf_rotation_degrees = manualPdfRotationDeg;
     }
 
-    await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`, {
-      method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return-minimal' },
-      body: JSON.stringify(patchBody)
-    }).catch(()=>{});
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), 'Prefer': 'return-minimal' },
+        body: JSON.stringify(patchBody)
+      }
+    ).catch(()=>{});
   }
 
-  // TSFIN snapshot (PENDING_AUTH) – either SEGMENTS or AGGREGATE depending on schedule availability
+  // TSFIN snapshot (PENDING_AUTH) – SEGMENTS vs AGGREGATE
   let snap;
 
   if (actual_schedule_json && Array.isArray(actual_schedule_json) && actual_schedule_json.length) {
@@ -4541,7 +4576,7 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
     let segChgTotal   = 0;
 
     for (let i = 0; i < actual_schedule_json.length; i++) {
-      const seg = actual_schedule_json[i] || {};
+      const seg  = actual_schedule_json[i] || {};
       const date = seg.date;
       const start = seg.start_utc;
       const end   = seg.end_utc;
@@ -4561,10 +4596,10 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
         client_id: clientId,
         role: contract.role || null,
         band: contract.band || null,
-        dateYmd: date,
+        dateYmd: date
       });
 
-      const p = rates.pay || {};
+      const p = rates.pay    || {};
       const c = rates.charge || {};
 
       const segPay = round2(
@@ -4591,7 +4626,7 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
         date,
         ward: seg.ward || null,
         start_utc: start,
-        end_utc: end,
+        end_utc:   end,
         break_mins: br,
         hours_day:   h.hours_day   || 0,
         hours_night: h.hours_night || 0,
@@ -4604,14 +4639,13 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
       });
     }
 
-    // Combine SEGMENTS totals with additional EX buckets
     const basePay    = segPayTotal;
     const baseCharge = segChgTotal;
     const total_pay  = round2(basePay    + additional_pay_ex_vat);
     const total_chg  = round2(baseCharge + additional_charge_ex_vat);
     const margin     = round2(total_chg   - total_pay);
 
-    // 🔴 guard against negative margin
+    // guard against negative margin
     if (margin < 0) {
       return withCORS(
         env,
@@ -4624,15 +4658,15 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
       mode: 'SEGMENTS',
       segments,
       additional: {
-        units: additional_units_json,
-        pay_ex_vat: additional_pay_ex_vat,
+        units:        additional_units_json,
+        pay_ex_vat:   additional_pay_ex_vat,
         charge_ex_vat: additional_charge_ex_vat,
         margin_ex_vat: additional_margin_ex_vat
       },
       totals: {
-        total_pay_ex_vat: total_pay,
+        total_pay_ex_vat:    total_pay,
         total_charge_ex_vat: total_chg,
-        margin_ex_vat: margin
+        margin_ex_vat:       margin
       }
     };
 
@@ -4641,16 +4675,16 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
       timesheet_version: ts.version || 1,
       basis: 'CONTRACT_WEEKLY',
       candidate_id: contract.candidate_id,
-      client_id: contract.client_id,
+      client_id:    contract.client_id,
       candidate_assignment: contract.candidate_id ? 'ASSIGNED' : 'UNASSIGNED',
       processing_status: 'PENDING_AUTH',
       pay_method: method,
 
-      hours_day: hours.day,
+      hours_day:   hours.day,
       hours_night: hours.night,
-      hours_sat: hours.sat,
-      hours_sun: hours.sun,
-      hours_bh: hours.bh,
+      hours_sat:   hours.sat,
+      hours_sun:   hours.sun,
+      hours_bh:    hours.bh,
 
       rate_day:   charge.day,
       rate_night: charge.night,
@@ -4664,9 +4698,9 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
       pay_rate_sun:   pay.sun,
       pay_rate_bh:    pay.bh,
 
-      total_pay_ex_vat: total_pay,
+      total_pay_ex_vat:    total_pay,
       total_charge_ex_vat: total_chg,
-      margin_ex_vat: margin,
+      margin_ex_vat:       margin,
 
       additional_units_json,
       additional_pay_ex_vat,
@@ -4697,7 +4731,7 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
       invoice_breakdown_json
     };
   } else {
-    // AGGREGATE mode (no schedule provided)
+    // AGGREGATE mode
     const n2 = (x)=>Number(x)||0;
     const base_pay    = +(hours.day*n2(pay.day) + hours.night*n2(pay.night) + hours.sat*n2(pay.sat) + hours.sun*n2(pay.sun) + hours.bh*n2(pay.bh)).toFixed(2);
     const base_charge = +(hours.day*n2(charge.day)+hours.night*n2(charge.night)+hours.sat*n2(charge.sat)+hours.sun*n2(charge.sun)+hours.bh*n2(charge.bh)).toFixed(2);
@@ -4706,7 +4740,6 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
     const total_charge = +Number(base_charge + additional_charge_ex_vat).toFixed(2);
     const margin       = +Number(total_charge - total_pay).toFixed(2);
 
-    // 🔴 guard against negative margin
     if (margin < 0) {
       return withCORS(
         env,
@@ -4728,29 +4761,29 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
           night: pay.night,
           sat: pay.sat,
           sun: pay.sun,
-          bh: pay.bh,
+          bh: pay.bh
         },
         charge_rates: {
           day: charge.day,
           night: charge.night,
           sat: charge.sat,
           sun: charge.sun,
-          bh: charge.bh,
+          bh: charge.bh
         },
         pay_ex_vat: base_pay,
-        charge_ex_vat: base_charge,
+        charge_ex_vat: base_charge
       },
       additional: {
-        units: additional_units_json,
-        pay_ex_vat: additional_pay_ex_vat,
+        units:        additional_units_json,
+        pay_ex_vat:   additional_pay_ex_vat,
         charge_ex_vat: additional_charge_ex_vat,
-        margin_ex_vat: additional_margin_ex_vat,
+        margin_ex_vat: additional_margin_ex_vat
       },
       totals: {
-        total_pay_ex_vat: total_pay,
+        total_pay_ex_vat:    total_pay,
         total_charge_ex_vat: total_charge,
-        margin_ex_vat: margin,
-      },
+        margin_ex_vat:       margin
+      }
     };
 
     snap = {
@@ -4758,24 +4791,47 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
       timesheet_version: ts.version || 1,
       basis: 'CONTRACT_WEEKLY',
       candidate_id: contract.candidate_id,
-      client_id: contract.client_id,
+      client_id:    contract.client_id,
       candidate_assignment: 'ASSIGNED',
       processing_status: 'PENDING_AUTH',
       pay_method: method,
-      hours_day: hours.day, hours_night: hours.night, hours_sat: hours.sat, hours_sun: hours.sun, hours_bh: hours.bh,
-      rate_day: charge.day, rate_night: charge.night, rate_sat: charge.sat, rate_sun: charge.sun, rate_bh: charge.bh,
-      pay_rate_day: pay.day, pay_rate_night: pay.night, pay_rate_sat: pay.sat, pay_rate_sun: pay.sun, pay_rate_bh: pay.bh,
-      total_pay_ex_vat: total_pay,
+      hours_day:   hours.day,
+      hours_night: hours.night,
+      hours_sat:   hours.sat,
+      hours_sun:   hours.sun,
+      hours_bh:    hours.bh,
+      rate_day:    charge.day,
+      rate_night:  charge.night,
+      rate_sat:    charge.sat,
+      rate_sun:    charge.sun,
+      rate_bh:     charge.bh,
+      pay_rate_day:   pay.day,
+      pay_rate_night: pay.night,
+      pay_rate_sat:   pay.sat,
+      pay_rate_sun:   pay.sun,
+      pay_rate_bh:    pay.bh,
+      total_pay_ex_vat:    total_pay,
       total_charge_ex_vat: total_charge,
-      margin_ex_vat: margin,
-      additional_units_json: additional_units_json,
-      additional_pay_ex_vat: additional_pay_ex_vat,
-      additional_charge_ex_vat: additional_charge_ex_vat,
-      additional_margin_ex_vat: additional_margin_ex_vat,
-      expenses_pay_ex_vat: 0, expenses_charge_ex_vat: 0, expenses_description: null, expenses_evidence_r2_key: null,
-      mileage_pay_ex_vat: 0, mileage_charge_ex_vat: 0, mileage_evidence_r2_key: null, mileage_pay_rate: null, mileage_charge_rate: null,
-      pay_on_hold: false, pay_on_hold_reason: null, pay_on_hold_since_utc: null,
-      paid_at_utc: null, paid_by_user_id: null, payment_reference: null,
+      margin_ex_vat:       margin,
+      additional_units_json,
+      additional_pay_ex_vat,
+      additional_charge_ex_vat,
+      additional_margin_ex_vat,
+      expenses_pay_ex_vat: 0,
+      expenses_charge_ex_vat: 0,
+      expenses_description: null,
+      expenses_evidence_r2_key: null,
+      mileage_pay_ex_vat: 0,
+      mileage_charge_ex_vat: 0,
+      mileage_evidence_r2_key: null,
+      mileage_pay_rate: null,
+      mileage_charge_rate: null,
+      pay_on_hold: false,
+      pay_on_hold_reason: null,
+      pay_on_hold_since_utc: null,
+      paid_at_utc: null,
+      paid_by_user_id: null,
+      payment_reference: null,
       policy_snapshot_json: null,
       created_at: nowIso,
       invoice_breakdown_json
@@ -4785,9 +4841,14 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
   await writeSnapshot(env, snap);
 
   const weekPatch = { totals_json: { hours }, updated_at: nowIso };
-  await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`, {
-    method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return-minimal' }, body: JSON.stringify(weekPatch)
-  });
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), 'Prefer': 'return-minimal' },
+      body: JSON.stringify(weekPatch)
+    }
+  );
 
   return withCORS(env, req, ok({
     timesheet_id: ts.timesheet_id,
@@ -4796,7 +4857,6 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
     used_schedule: !!actual_schedule_json
   }));
 }
-
 
 export async function handleManualTimesheetQueueEnqueue(env, req) {
   const enc = encodeURIComponent;
@@ -5479,33 +5539,97 @@ export async function handleContractWeekManualAuthorise(env, req, weekId) {
   return withCORS(env, req, ok({ authorised: true, timesheet_id: cw.timesheet_id }));
 }
 
-
-
 export async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+  if (!weekId) return withCORS(env, req, badRequest('contract_week_id is required'));
 
-  const cw = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=*`);
-  if (!cw?.timesheet_id) return withCORS(env, req, badRequest('No timesheet attached'));
+  const enc = encodeURIComponent;
 
-  const tsfin = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${enc(cw.timesheet_id)}&is_current=eq.true&select=paid_at_utc,locked_by_invoice_id`);
-  if (tsfin?.paid_at_utc) return withCORS(env, req, badRequest('Cannot delete: already paid'));
-  if (tsfin?.locked_by_invoice_id) return withCORS(env, req, badRequest('Cannot delete: invoiced'));
+  const cw = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=*`
+  );
+  if (!cw) {
+    return withCORS(env, req, notFound('Week not found'));
+  }
+  if (!cw.timesheet_id) {
+    return withCORS(env, req, badRequest('No timesheet attached'));
+  }
 
-  // Delete TS (versioning scheme assumes cascade will clean snapshots, or snapshots unlocked)
-  const del = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(cw.timesheet_id)}`, {
-    method: 'DELETE', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' }
-  });
-  if (!del.ok) return withCORS(env, req, serverError(await del.text()));
+  const timesheetId = cw.timesheet_id;
 
-  // Reset week
-  await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`, {
-    method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
-    body: JSON.stringify({ timesheet_id: null, status: 'OPEN', updated_at: nowIso() })
-  });
+  // Guard 1: current TSFIN must not be paid or invoiced
+  const tsfin = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=paid_at_utc,locked_by_invoice_id`
+  );
+  if (tsfin?.paid_at_utc) {
+    return withCORS(env, req, badRequest('Cannot delete: already paid'));
+  }
+  if (tsfin?.locked_by_invoice_id) {
+    return withCORS(env, req, badRequest('Cannot delete: invoiced'));
+  }
+
+  // Check whether any timesheet rows still exist for this id
+  const { rows: tsRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&select=timesheet_id&limit=1`
+  );
+  const versions = tsRows || [];
+
+  if (!versions.length) {
+    // Timesheet id on cw but no rows – just reset the week
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), 'Prefer': 'return-minimal' },
+        body: JSON.stringify({
+          timesheet_id: null,
+          status: 'OPEN',
+          updated_at: nowIso()
+        })
+      }
+    ).catch(() => {});
+    return withCORS(env, req, ok({ deleted: false, reset: true }));
+  }
+
+  // Delete ALL versions for this timesheet_id (manual + electronic)
+  const del = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}`,
+    {
+      method: 'DELETE',
+      headers: { ...sbHeaders(env), 'Prefer': 'return-minimal' }
+    }
+  );
+  if (!del.ok) {
+    return withCORS(env, req, serverError(await del.text()));
+  }
+
+  // Reset week to OPEN so the candidate can (if allowed) resubmit electronically
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), 'Prefer': 'return-minimal' },
+      body: JSON.stringify({
+        timesheet_id: null,
+        status: 'OPEN',
+        updated_at: nowIso()
+      })
+    }
+  ).catch(() => {});
 
   return withCORS(env, req, ok({ deleted: true }));
 }
+
+
 
 export async function handleContractWeekCreateExpenseSheet(env, req, weekId) {
   // Create an expense-only TS for the week (line_type=EXPENSES)
@@ -5925,7 +6049,12 @@ async function rebuildWeeklyTsfinForTimesheet(env, timesheetId, contract) {
 
 export async function handleTimesheetsSubmitWeekly(env, req) {
   // Public: submit weekly electronic timesheet (schedule OR totals + two signatures)
-  let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+  let body;
+  try {
+    body = await parseJSONBody(req);
+  } catch {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
 
   const cwId = body.contract_week_id || null;
   if (!cwId) return withCORS(env, req, badRequest('contract_week_id required'));
@@ -5960,8 +6089,21 @@ export async function handleTimesheetsSubmitWeekly(env, req) {
   // Schedule-first, totals fallback
   let hours = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
   let actual_schedule_json = null;
+
   if (Array.isArray(body?.actual_schedule_json) && body.actual_schedule_json.length) {
     actual_schedule_json = body.actual_schedule_json;
+
+    // 🔴 NEW: structural validation (overlaps, break windows inside shift, etc.)
+    try {
+      validateScheduleStructure(actual_schedule_json);
+    } catch (e) {
+      return withCORS(
+        env,
+        req,
+        badRequest(e?.message || 'Invalid schedule: overlapping shifts or invalid break windows.')
+      );
+    }
+
     try {
       const mins = await resolveBucketsFromSchedule(env, contract, actual_schedule_json);
       hours = {
@@ -6018,7 +6160,7 @@ export async function handleTimesheetsSubmitWeekly(env, req) {
       d.setUTCDate(base.getUTCDate() - offset);
       const yyyy = d.getUTCFullYear();
       const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
-      const dd   = String(d.getUTCDate()).padStart(2, '0');
+      const dd   = String(d.getUTCDate()).toFixed(0).padStart(2, '0');
       const ymd  = `${yyyy}-${mm}-${dd}`;
       const dow  = d.getUTCDay();
       weekDates.push({ ymd, dow });
@@ -6129,7 +6271,7 @@ export async function handleTimesheetsSubmitWeekly(env, req) {
   const additional_margin_ex_vat =
     +Number(additional_charge_ex_vat - additional_pay_ex_vat).toFixed(2);
 
-  // Create TS (ELECTRONIC weekly)
+  // Create TS (ELECTRONIC weekly, initial immutable version)
   const candidate = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(contract.candidate_id)}&select=id,display_name`
@@ -6146,7 +6288,7 @@ export async function handleTimesheetsSubmitWeekly(env, req) {
     version: 1,
     is_current: true,
     status: 'SUBMITTED',
-    sheet_scope: 'WEEKLY', // NEW: explicitly mark this as a weekly timesheet
+    sheet_scope: 'WEEKLY',
     occupant_key_norm: (candidate?.display_name || String(candidate?.id)).toLowerCase(),
     hospital_norm:     (contract.display_site || client?.name || String(contract.client_id)).toLowerCase(),
     ward_norm:         (contract.ward_hint || 'contract').toLowerCase(),
@@ -6160,7 +6302,7 @@ export async function handleTimesheetsSubmitWeekly(env, req) {
     manual_pdf_r2_key: null,
     line_type:         'HOURS',
     actual_schedule_json,
-    authorised_at_server: now,    // keep existing behaviour: this path is treated as authorised
+    authorised_at_server: now,    // existing behaviour: this path is treated as authorised
     created_at:           now,
     updated_at:           now
   }];
@@ -6211,6 +6353,16 @@ export async function handleTimesheetsSubmitWeekly(env, req) {
   const total_charge = +Number(base_charge + additional_charge_ex_vat).toFixed(2);
   const margin       = +Number(total_charge - total_pay).toFixed(2);
 
+  // 🔴 NEW: guard against negative margin – do not accept a signed electronic TS
+  // that would pay out more than it charges.
+  if (margin < 0) {
+    return withCORS(
+      env,
+      req,
+      badRequest('Negative margin: total charge is less than total pay for the submitted hours/rates.')
+    );
+  }
+
   const invoice_breakdown_json = {
     mode: "AGGREGATE",
     base_hours: {
@@ -6237,8 +6389,8 @@ export async function handleTimesheetsSubmitWeekly(env, req) {
       charge_ex_vat:  base_charge,
     },
     additional: {
-      units:        additional_units_json,
-      pay_ex_vat:   additional_pay_ex_vat,
+      units:         additional_units_json,
+      pay_ex_vat:    additional_pay_ex_vat,
       charge_ex_vat: additional_charge_ex_vat,
       margin_ex_vat: additional_margin_ex_vat,
     },
@@ -6252,11 +6404,11 @@ export async function handleTimesheetsSubmitWeekly(env, req) {
   const snap = {
     timesheet_id: ts.timesheet_id,
     timesheet_version: 1,
-    basis: 'CONTRACT_WEEKLY', // NEW: explicitly tag this as a contract-weekly TSFIN
+    basis: 'CONTRACT_WEEKLY',
     candidate_id: contract.candidate_id,
     client_id:    contract.client_id,
     candidate_assignment: 'ASSIGNED',
-    processing_status:    'READY_FOR_INVOICE', // existing behaviour (treated as fully authorised)
+    processing_status:    'READY_FOR_INVOICE',
     pay_method:           method,
 
     hours_day:   hours.day,
@@ -6286,7 +6438,7 @@ export async function handleTimesheetsSubmitWeekly(env, req) {
     additional_charge_ex_vat,
     additional_margin_ex_vat,
 
-    created_at:              now,
+    created_at:            now,
     invoice_breakdown_json
   };
 
@@ -6476,20 +6628,20 @@ export async function handleTimesheetPresignExpensePdf(env, req, timesheetId) {
 }
 
 export async function handleTimesheetSwitchToManual(env, req, timesheetId) {
-  // Switch a WEEKLY CONTRACT_WEEKLY electronic timesheet to MANUAL (hours unchanged)
+  // Switch a WEEKLY CONTRACT_WEEKLY electronic timesheet to MANUAL via a new version
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   if (!timesheetId) {
     return withCORS(env, req, badRequest('timesheet_id is required'));
   }
 
-  // Load timesheet
+  // Load FULL current timesheet row (we need version + schedule etc.)
   const ts = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
       `?timesheet_id=eq.${enc(timesheetId)}` +
       `&is_current=eq.true` +
-      `&select=timesheet_id,contract_id,sheet_scope,submission_mode,r2_nurse_key,r2_auth_key`
+      `&select=*`
   );
   if (!ts) {
     return withCORS(env, req, notFound('Timesheet not found'));
@@ -6554,7 +6706,24 @@ export async function handleTimesheetSwitchToManual(env, req, timesheetId) {
 
   const now = nowIso();
 
-  // Patch timesheet: keep hours & TSFIN basis, just flip submission_mode and clear e-sign keys
+  // Determine next version for this timesheet_id
+  let nextVersion = 2;
+  try {
+    const { rows: vRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(timesheetId)}` +
+        `&select=version` +
+        `&order=version.desc` +
+        `&limit=1`
+    );
+    const currentMax = vRows?.[0]?.version != null ? Number(vRows[0].version) : 1;
+    nextVersion = Number.isFinite(currentMax) ? currentMax + 1 : 2;
+  } catch {
+    nextVersion = 2;
+  }
+
+  // 1) Mark existing ELECTRONIC version as not current (but DO NOT mutate its content)
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
       `?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`,
@@ -6562,15 +6731,48 @@ export async function handleTimesheetSwitchToManual(env, req, timesheetId) {
       method: 'PATCH',
       headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
       body: JSON.stringify({
-        submission_mode: 'MANUAL',
-        r2_nurse_key: null,
-        r2_auth_key: null,
+        is_current: false,
         updated_at: now
       })
     }
   ).catch(() => {});
 
-  // Optional: reflect manual mode on the contract_week snapshot
+  // 2) Insert MANUAL version v+1 with hours/schedule copied, signatures cleared
+  const manualTs = { ...ts };
+
+  // Ensure we do NOT carry the primary key of the row (if there is one)
+  delete manualTs.id;
+
+  const newManual = {
+    ...manualTs,
+    version: nextVersion,
+    is_current: true,
+    submission_mode: 'MANUAL',
+    // clear electronic signature keys for the manual override
+    r2_nurse_key: null,
+    r2_auth_key: null,
+    // keep same timesheet_id so versions are grouped
+    timesheet_id: timesheetId,
+    // created_at can remain the original or be "now" – for audit we set created_at to now for v2
+    created_at: now,
+    updated_at: now
+  };
+
+  const insRes = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets`,
+    {
+      method: 'POST',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify([newManual])
+    }
+  );
+  if (!insRes.ok) {
+    const txt = await insRes.text();
+    return withCORS(env, req, serverError(`Failed to create manual version: ${txt}`));
+  }
+  const inserted = (await insRes.json().catch(() => []))[0] || null;
+
+  // 3) Optional: reflect manual mode on the contract_week snapshot (unchanged behaviour)
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
     {
@@ -6589,7 +6791,8 @@ export async function handleTimesheetSwitchToManual(env, req, timesheetId) {
     ok({
       switched: true,
       contract_week_id: cw.id,
-      timesheet_id: timesheetId
+      timesheet_id: timesheetId,
+      manual_version: inserted?.version ?? nextVersion
     })
   );
 }
@@ -6705,22 +6908,21 @@ export async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
     })
   );
 }
-
 export async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
-  // Switch a DAILY non-NHSP/HR electronic timesheet to MANUAL
+  // Switch a DAILY non-NHSP/HR electronic timesheet to MANUAL via a new version
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   if (!timesheetId) {
     return withCORS(env, req, badRequest('timesheet_id is required'));
   }
 
-  // Load timesheet
+  // Load FULL current timesheet row
   const ts = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
       `?timesheet_id=eq.${enc(timesheetId)}` +
       `&is_current=eq.true` +
-      `&select=timesheet_id,sheet_scope,submission_mode`
+      `&select=*`
   );
   if (!ts) {
     return withCORS(env, req, notFound('Timesheet not found'));
@@ -6781,7 +6983,24 @@ export async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) 
 
   const now = nowIso();
 
-  // Patch timesheet: flip submission_mode to MANUAL, keep hours/TSFIN as-is
+  // Determine next version for this timesheet_id
+  let nextVersion = 2;
+  try {
+    const { rows: vRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(timesheetId)}` +
+        `&select=version` +
+        `&order=version.desc` +
+        `&limit=1`
+    );
+    const currentMax = vRows?.[0]?.version != null ? Number(vRows[0].version) : 1;
+    nextVersion = Number.isFinite(currentMax) ? currentMax + 1 : 2;
+  } catch {
+    nextVersion = 2;
+  }
+
+  // 1) Mark existing ELECTRONIC version as not current
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
       `?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`,
@@ -6789,21 +7008,54 @@ export async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) 
       method: 'PATCH',
       headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
       body: JSON.stringify({
-        submission_mode: 'MANUAL',
+        is_current: false,
         updated_at: now
       })
     }
   ).catch(() => {});
+
+  // 2) Insert MANUAL version v+1
+  const manualTs = { ...ts };
+  delete manualTs.id;
+
+  const newManual = {
+    ...manualTs,
+    version: nextVersion,
+    is_current: true,
+    submission_mode: 'MANUAL',
+    // clear any electronic signature keys for daily as well (if present)
+    r2_nurse_key: null,
+    r2_auth_key: null,
+    timesheet_id: timesheetId,
+    created_at: now,
+    updated_at: now
+  };
+
+  const insRes = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets`,
+    {
+      method: 'POST',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify([newManual])
+    }
+  );
+  if (!insRes.ok) {
+    const txt = await insRes.text();
+    return withCORS(env, req, serverError(`Failed to create daily manual version: ${txt}`));
+  }
+  const inserted = (await insRes.json().catch(() => []))[0] || null;
 
   return withCORS(
     env,
     req,
     ok({
       switched: true,
-      timesheet_id: timesheetId
+      timesheet_id: timesheetId,
+      manual_version: inserted?.version ?? nextVersion
     })
   );
 }
+
 
 
 // POST /api/contracts/:id/truncate-tail
@@ -6891,27 +7143,72 @@ export async function handleContractsTruncateTailSafely(env, req, contractId) {
 
 
 
-
 export async function handleTimesheetDelete(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+  if (!timesheetId) {
+    return withCORS(env, req, badRequest('timesheet_id is required'));
+  }
 
-  const tsfin = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true&select=paid_at_utc,locked_by_invoice_id`);
-  if (tsfin?.paid_at_utc) return withCORS(env, req, badRequest('Cannot delete: already paid'));
-  if (tsfin?.locked_by_invoice_id) return withCORS(env, req, badRequest('Cannot delete: invoiced'));
+  const enc = encodeURIComponent;
 
-  // Unlink any week
-  await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?timesheet_id=eq.${enc(timesheetId)}`, {
-    method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
-    body: JSON.stringify({ timesheet_id: null, status: 'OPEN', updated_at: nowIso() })
-  });
+  // Guard 1: current TSFIN must not be paid or invoiced
+  const tsfin = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=paid_at_utc,locked_by_invoice_id`
+  );
 
-  const del = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}`, {
-    method: 'DELETE', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' }
-  });
-  if (!del.ok) return withCORS(env, req, serverError(await del.text()));
+  if (tsfin?.paid_at_utc) {
+    return withCORS(env, req, badRequest('Cannot delete: already paid'));
+  }
+  if (tsfin?.locked_by_invoice_id) {
+    return withCORS(env, req, badRequest('Cannot delete: invoiced'));
+  }
+
+  // Confirm the timesheet chain actually exists
+  const { rows: tsRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&select=timesheet_id&limit=1`
+  );
+  const versions = tsRows || [];
+  if (!versions.length) {
+    return withCORS(env, req, notFound('Timesheet not found'));
+  }
+
+  // Unlink any contract_weeks that point at this timesheet_id
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?timesheet_id=eq.${enc(timesheetId)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), 'Prefer': 'return-minimal' },
+      body: JSON.stringify({
+        timesheet_id: null,
+        status: 'OPEN',
+        updated_at: nowIso()
+      })
+    }
+  ).catch(() => {});
+
+  // Delete ALL versions for this timesheet_id (manual + electronic)
+  const del = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}`,
+    {
+      method: 'DELETE',
+      headers: { ...sbHeaders(env), 'Prefer': 'return-minimal' }
+    }
+  );
+  if (!del.ok) {
+    return withCORS(env, req, serverError(await del.text()));
+  }
+
   return withCORS(env, req, ok({ deleted: true }));
 }
+
 
 // ----------------------------------------------------------------------------
 // E) Funnel & Prechecks (read-only views)
@@ -10088,7 +10385,6 @@ export async function handleManualPayAdjustmentCreate(env, req, timesheetId) {
   }
 }
 
-
 export async function handleTimesheetDetails(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -10104,6 +10400,7 @@ export async function handleTimesheetDetails(env, req, timesheetId) {
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
       `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&is_current=eq.true` +      // 🔴 ensure we always show the current version
       `&select=*` +
       `&limit=1`
     );
@@ -10120,7 +10417,7 @@ export async function handleTimesheetDetails(env, req, timesheetId) {
         env,
         `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
         `?timesheet_id=eq.${enc(timesheetId)}` +
-        `&select=*` +            // ⬅️ full row so FE can inspect status / planned hours later
+        `&select=*` +
         `&limit=1`
       );
       contractWeek   = cwRows?.[0] || null;
@@ -10169,7 +10466,7 @@ export async function handleTimesheetDetails(env, req, timesheetId) {
       qr_scanned_at: ts.qr_scanned_at || null,
       manual_pdf_r2_key: ts.manual_pdf_r2_key || null,
       contract_week_id: contractWeekId,
-      contract_week: contractWeek    // ⬅️ NEW
+      contract_week: contractWeek
     }));
   } catch (e) {
     console.error('[TIMESHEET_DETAILS] error', {
@@ -31630,47 +31927,90 @@ export async function handleContractWeekGeneratePrintable(env, req, weekId) {
   }));
 }
 
-
 export async function handleTimesheetBucketPreview(env, req) {
-  const enc = encodeURIComponent;
+  const enc    = encodeURIComponent;
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
   let body;
-  try { body = await parseJSONBody(req); }
-  catch { return withCORS(env, req, badRequest('Invalid JSON')); }
-
-  const timesheetId = body?.timesheet_id || null;
-  if (!timesheetId) {
-    return withCORS(env, req, badRequest('timesheet_id is required'));
+  try {
+    body = await parseJSONBody(req);
+  } catch {
+    return withCORS(env, req, badRequest('Invalid JSON'));
   }
 
-  // Load TS + contract_week + contract just like the weekly helpers do
-  const ts = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}&select=*`
-  );
-  if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
+  const timesheetId    = body?.timesheet_id     || null;
+  const contractWeekId = body?.contract_week_id || null;
 
-  const ctx = await loadWeeklyContext(env, ts); // uses contract_weeks + contracts
-  if (!ctx) return withCORS(env, req, badRequest('Not a weekly contract-driven timesheet'));
+  if (!timesheetId && !contractWeekId) {
+    return withCORS(env, req, badRequest('timesheet_id or contract_week_id is required'));
+  }
 
-  const { cw, contract } = ctx;
+  let ts       = null;
+  let cw       = null;
+  let contract = null;
 
-  // 1) hours from schedule override (or fallback hours)
+  // ─────────────────────
+  // 0) Load context
+  // ─────────────────────
+  if (timesheetId) {
+    // Existing timesheet: use CURRENT weekly context
+    ts = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(timesheetId)}` +
+        `&is_current=eq.true` +
+        `&select=*`
+    );
+    if (!ts) {
+      return withCORS(env, req, notFound('Timesheet not found'));
+    }
+
+    const ctx = await loadWeeklyContext(env, ts); // { cw, contract } for weekly TS
+    if (!ctx) {
+      return withCORS(env, req, badRequest('Not a weekly contract-driven timesheet'));
+    }
+    cw       = ctx.cw;
+    contract = ctx.contract;
+  } else {
+    // Planned week: no TS yet
+    cw = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(contractWeekId)}&select=*`
+    );
+    if (!cw) {
+      return withCORS(env, req, notFound('Contract week not found'));
+    }
+
+    contract = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(cw.contract_id)}&select=*`
+    );
+    if (!contract) {
+      return withCORS(env, req, notFound('Contract not found'));
+    }
+  }
+
+  // ─────────────────────
+  // 1) Derive hours by buckets
+  // ─────────────────────
   let hours = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
   let actual_schedule_json = null;
 
+  // 1a) FE schedule override from Lines
   if (Array.isArray(body.actual_schedule_json) && body.actual_schedule_json.length) {
     actual_schedule_json = body.actual_schedule_json;
 
-    // 🔴 NEW: structural validation before classification
     try {
       validateScheduleStructure(actual_schedule_json);
     } catch (e) {
-      return withCORS(env, req, badRequest(e.message || 'Invalid schedule (overlap/breaks).'));
+      return withCORS(
+        env,
+        req,
+        badRequest(e.message || 'Invalid schedule (overlap/breaks).')
+      );
     }
 
     try {
@@ -31680,11 +32020,13 @@ export async function handleTimesheetBucketPreview(env, req) {
         night: +(mins.night / 60).toFixed(2),
         sat:   +(mins.sat   / 60).toFixed(2),
         sun:   +(mins.sun   / 60).toFixed(2),
-        bh:    +(mins.bh    / 60).toFixed(2),
+        bh:    +(mins.bh    / 60).toFixed(2)
       };
     } catch (e) {
       return withCORS(env, req, badRequest(e.message || 'Invalid actual_schedule_json'));
     }
+
+  // 1b) Direct hours override
   } else if (body?.hours) {
     const n = (v) => (v == null ? 0 : Number(v) || 0);
     hours = {
@@ -31692,16 +32034,65 @@ export async function handleTimesheetBucketPreview(env, req) {
       night: n(body.hours.night),
       sat:   n(body.hours.sat),
       sun:   n(body.hours.sun),
-      bh:    n(body.hours.bh),
+      bh:    n(body.hours.bh)
     };
-  } else {
-    // If no override provided, preview current TSFIN-like hours
+
+  // 1c) Existing TS: fallback to TSFIN-like hours
+  } else if (ts) {
     const h = await computeWeeklyHours(env, ts, contract);
     hours = h;
+
+  // 1d) Planned week: use planned or std schedule
+  } else {
+    let sched = cw.planned_schedule_json || cw.std_schedule_json || contract.std_schedule_json || null;
+
+    if (typeof sched === 'string') {
+      try {
+        sched = JSON.parse(sched);
+      } catch {
+        sched = null;
+      }
+    }
+
+    if (!Array.isArray(sched) || !sched.length) {
+      return withCORS(
+        env,
+        req,
+        badRequest('No schedule or hours available to preview for this planned week.')
+      );
+    }
+
+    actual_schedule_json = sched;
+
+    try {
+      validateScheduleStructure(actual_schedule_json);
+    } catch (e) {
+      return withCORS(
+        env,
+        req,
+        badRequest(e.message || 'Invalid planned schedule (overlap/breaks).')
+      );
+    }
+
+    try {
+      const mins = await resolveBucketsFromSchedule(env, contract, actual_schedule_json);
+      hours = {
+        day:   +(mins.day   / 60).toFixed(2),
+        night: +(mins.night / 60).toFixed(2),
+        sat:   +(mins.sat   / 60).toFixed(2),
+        sun:   +(mins.sun   / 60).toFixed(2),
+        bh:    +(mins.bh    / 60).toFixed(2)
+      };
+    } catch (e) {
+      return withCORS(env, req, badRequest(e.message || 'Failed to classify planned schedule'));
+    }
   }
 
-  // 2) Resolve pay/charge from contract (existing helper)
+  // ─────────────────────
+  // 2) Rates and missing-rate guard
+  // ─────────────────────
   const { pay, charge } = payChargeFromContract(contract);
+
   const anyMissing = (h, P, C) =>
     (h.day   > 0 && (P.day   == null || C.day   == null)) ||
     (h.night > 0 && (P.night == null || C.night == null)) ||
@@ -31717,13 +32108,18 @@ export async function handleTimesheetBucketPreview(env, req) {
     );
   }
 
-  // 3) Additional units + totals (reuse computeWeeklyAdditionalFromTs, but with staged units from body)
+  // ─────────────────────
+  // 3) Additional units + totals
+  // ─────────────────────
+  const baseTsPayload = ts || {};
+  const tsLike        = { ...baseTsPayload, ...body };
+
   const {
     additional_units_json,
     additional_pay_ex_vat,
     additional_charge_ex_vat,
-    additional_margin_ex_vat,
-  } = await computeWeeklyAdditionalFromTs(env, { ...ts, ...body }, cw, contract);
+    additional_margin_ex_vat
+  } = await computeWeeklyAdditionalFromTs(env, tsLike, cw, contract);
 
   const hoursPayEx = round2(
     hours.day   * (pay.day   || 0) +
@@ -31732,6 +32128,7 @@ export async function handleTimesheetBucketPreview(env, req) {
     hours.sun   * (pay.sun   || 0) +
     hours.bh    * (pay.bh    || 0)
   );
+
   const hoursChargeEx = round2(
     hours.day   * (charge.day   || 0) +
     hours.night * (charge.night || 0) +
@@ -31744,7 +32141,6 @@ export async function handleTimesheetBucketPreview(env, req) {
   const total_charge_ex_vat = round2(hoursChargeEx + additional_charge_ex_vat);
   const margin_ex_vat       = round2(total_charge_ex_vat - total_pay_ex_vat);
 
-  // 🔴 guard against negative margin (zero is allowed)
   if (margin_ex_vat < 0) {
     return withCORS(
       env,
@@ -31763,7 +32159,7 @@ export async function handleTimesheetBucketPreview(env, req) {
     additional_margin_ex_vat,
     total_pay_ex_vat,
     total_charge_ex_vat,
-    margin_ex_vat,
+    margin_ex_vat
   }));
 }
 
@@ -34449,6 +34845,13 @@ if (req.method === 'POST' && p === '/api/timesheets/bucket-preview') {
         if (markPaid && req.method === 'PATCH')                              return handleTimesheetMarkPaid(env, req, markPaid.id);
       }
 
+            {
+        const m = matchPath(p, '/api/timesheets/:id/revert-to-electronic');
+        if (m && req.method === 'POST') {
+          return handleTimesheetRevertToElectronic(env, req, m.id);
+        }
+      }
+
       // ─────────────────────────────────────────────────────────────────────────────
       // Pickers: snapshots, deltas, id-list
       // ─────────────────────────────────────────────────────────────────────────────
@@ -34784,6 +35187,8 @@ if (req.method === 'POST' && p === '/api/timesheets/bucket-preview') {
         const m = matchPath(p, '/api/timesheets/:id/switch-to-manual');
         if (m && req.method === 'POST') return handleTimesheetSwitchToManual(env, req, m.id);
       }
+
+      
       // NEW: convert QR → plain manual
       {
         const m = matchPath(p, '/api/timesheets/:id/convert-qr-to-manual');
