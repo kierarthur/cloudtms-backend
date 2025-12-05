@@ -32037,7 +32037,7 @@ export async function handleTimesheetBucketPreview(env, req) {
       bh:    n(body.hours.bh)
     };
 
-  // 1c) Existing TS: fallback to TSFIN-like hours
+  // 1c) Existing TS: fallback to computeWeeklyHours
   } else if (ts) {
     const h = await computeWeeklyHours(env, ts, contract);
     hours = h;
@@ -32089,7 +32089,7 @@ export async function handleTimesheetBucketPreview(env, req) {
   }
 
   // ─────────────────────
-  // 2) Rates and missing-rate guard
+  // 2) Rates and missing-rate guard (core buckets)
   // ─────────────────────
   const { pay, charge } = payChargeFromContract(contract);
 
@@ -32109,18 +32109,65 @@ export async function handleTimesheetBucketPreview(env, req) {
   }
 
   // ─────────────────────
-  // 3) Additional units + totals
+  // 3) Additional units + totals (inline, no computeWeeklyAdditionalFromTs)
   // ─────────────────────
-  const baseTsPayload = ts || {};
-  const tsLike        = { ...baseTsPayload, ...body };
+  // Staged week units from FE (e.g. { "CALL": 2, "TRAIN": 1 })
+  let unitsWeek = body?.additional_units_week || {};
+  if (!unitsWeek || typeof unitsWeek !== 'object') unitsWeek = {};
 
-  const {
-    additional_units_json,
-    additional_pay_ex_vat,
-    additional_charge_ex_vat,
-    additional_margin_ex_vat
-  } = await computeWeeklyAdditionalFromTs(env, tsLike, cw, contract);
+  // Contract additional rates config
+  let cfgArr = contract.additional_rates_json || [];
+  if (typeof cfgArr === 'string') {
+    try { cfgArr = JSON.parse(cfgArr); } catch { cfgArr = []; }
+  }
+  if (!Array.isArray(cfgArr)) cfgArr = [];
 
+  const additional_units_json = {};
+  let additional_pay_ex_vat    = 0;
+  let additional_charge_ex_vat = 0;
+
+  for (const [rawCode, rawUnits] of Object.entries(unitsWeek)) {
+    const units = Number(rawUnits || 0);
+    if (!Number.isFinite(units) || units <= 0) continue;
+
+    const code = String(rawCode || '').toUpperCase();
+    const cfg  = cfgArr.find(
+      c => c && String(c.code || '').toUpperCase() === code
+    ) || {};
+
+    const bucketName = (cfg.bucket_name || code || '').trim();
+    const unitName   = (cfg.unit_name   || 'units').trim();
+
+    const payRate   = Number(cfg.pay_rate    || 0);
+    const chargeRate= Number(cfg.charge_rate || 0);
+
+    const payEx   = round2(units * payRate);
+    const chgEx   = round2(units * chargeRate);
+    const marEx   = round2(chgEx - payEx);
+
+    additional_units_json[code] = {
+      code,
+      bucket_name: bucketName,
+      unit_name:   unitName,
+      unit_count:  units,
+      pay_rate:    payRate || null,
+      charge_rate: chargeRate || null,
+      pay_ex_vat:  payEx,
+      charge_ex_vat: chgEx,
+      margin_ex_vat: marEx
+    };
+
+    additional_pay_ex_vat    += payEx;
+    additional_charge_ex_vat += chgEx;
+  }
+
+  additional_pay_ex_vat    = round2(additional_pay_ex_vat);
+  additional_charge_ex_vat = round2(additional_charge_ex_vat);
+  const additional_margin_ex_vat = round2(additional_charge_ex_vat - additional_pay_ex_vat);
+
+  // ─────────────────────
+  // 4) Core hours totals + overall totals
+  // ─────────────────────
   const hoursPayEx = round2(
     hours.day   * (pay.day   || 0) +
     hours.night * (pay.night || 0) +
