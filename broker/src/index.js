@@ -355,12 +355,15 @@ function deriveStdHoursFromSchedule(stdSched) {
 
 // Load client windows & BH list (fallback to defaults if missing)
 async function loadClientTimePolicy(env, clientId) {
+  const enc = encodeURIComponent;
+
   const cs = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/client_settings?client_id=eq.${enc(
       clientId
     )}&select=day_start,day_end,night_start,night_end,sat_start,sat_end,sun_start,sun_end,bh_start,bh_end,bh_list`
   );
+
   const defaults = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=day_start,day_end,night_start,night_end,sat_start,sat_end,sun_start,sun_end,bh_start,bh_end,bh_list`
@@ -368,30 +371,61 @@ async function loadClientTimePolicy(env, clientId) {
 
   const src = { ...(defaults || {}), ...(cs || {}) };
 
-  const dayStart   = parseHHMM(src.day_start   || "06:00");
-  const dayEnd     = parseHHMM(src.day_end     || "20:00");
-  const nightStart = parseHHMM(src.night_start || "20:00");
-  const nightEnd   = parseHHMM(src.night_end   || "06:00");
-  const satStart   = parseHHMM(src.sat_start   || "00:00");
-  const satEnd     = parseHHMM(src.sat_end     || "00:00");
-  const sunStart   = parseHHMM(src.sun_start   || "00:00");
-  const sunEnd     = parseHHMM(src.sun_end     || "00:00");
+  // Normalise "HH:MM:SS" → "HH:MM" before parseHHMM
+  const toHHMM = (val, fallback) => {
+    const raw = (val ?? fallback ?? "").toString().trim();
+    if (!raw) return fallback;
+
+    const parts = raw.split(":"); // "06:00:00" → ["06","00","00"]
+    const hh = (parts[0] ?? "00").padStart(2, "0");
+    const mm = (parts[1] ?? "00").padStart(2, "0");
+    return `${hh}:${mm}`;
+  };
+
+  const dayStart   = parseHHMM(toHHMM(src.day_start,   "06:00"));
+  const dayEnd     = parseHHMM(toHHMM(src.day_end,     "20:00"));
+  const nightStart = parseHHMM(toHHMM(src.night_start, "20:00"));
+  const nightEnd   = parseHHMM(toHHMM(src.night_end,   "06:00"));
+  const satStart   = parseHHMM(toHHMM(src.sat_start,   "00:00"));
+  const satEnd     = parseHHMM(toHHMM(src.sat_end,     "00:00"));
+  const sunStart   = parseHHMM(toHHMM(src.sun_start,   "00:00"));
+  const sunEnd     = parseHHMM(toHHMM(src.sun_end,     "00:00"));
 
   // BH window (00:00–00:00 = full BH day). Prefer client override, else global.
   const bhStart = parseHHMM(
-    (cs && cs.bh_start) ||
-    (defaults && defaults.bh_start) ||
-    "00:00"
+    toHHMM(
+      (cs && cs.bh_start) ||
+        (defaults && defaults.bh_start) ||
+        "00:00",
+      "00:00"
+    )
   );
   const bhEnd = parseHHMM(
-    (cs && cs.bh_end) ||
-    (defaults && defaults.bh_end) ||
-    "00:00"
+    toHHMM(
+      (cs && cs.bh_end) ||
+        (defaults && defaults.bh_end) ||
+        "00:00",
+      "00:00"
+    )
   );
 
-  const bhListArr = Array.isArray(cs?.bh_list)
-    ? cs.bh_list
-    : defaults?.bh_list || [];
+  // Normalise BH list (array or JSON string → array → Set)
+  const rawBhList =
+    (cs && cs.bh_list != null ? cs.bh_list : defaults && defaults.bh_list) ??
+    [];
+
+  let bhListArr = [];
+  if (Array.isArray(rawBhList)) {
+    bhListArr = rawBhList;
+  } else if (typeof rawBhList === "string") {
+    try {
+      const parsed = JSON.parse(rawBhList);
+      if (Array.isArray(parsed)) bhListArr = parsed;
+    } catch {
+      // leave as []
+    }
+  }
+
   const bhList = new Set(bhListArr);
 
   return {
@@ -28487,10 +28521,23 @@ async function loadPolicy(env, client_id, workedDateYmd) {
   }
 
   const tz = cs?.timezone_id || def?.timezone_id || "Europe/London";
-  const bh =
-    cs?.bh_list && Array.isArray(cs.bh_list)
-      ? cs.bh_list
-      : def?.bh_list || [];
+
+  // Normalise bh_list: can be array or JSON string
+  const normaliseBhList = (val) => {
+    if (!val) return [];
+    if (Array.isArray(val)) return val;
+    if (typeof val === "string") {
+      try {
+        const parsed = JSON.parse(val);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  };
+
+  const bh = cs ? normaliseBhList(cs.bh_list) : normaliseBhList(def?.bh_list);
 
   // Attach-policy flags: defaults baked in if columns missing
   const requires_hr =
@@ -28514,6 +28561,12 @@ async function loadPolicy(env, client_id, workedDateYmd) {
       ? !!cs.daily_calc_of_invoices
       : !!def.daily_calc_of_invoices || false;
 
+  // Helper for numeric fields
+  const asNumber = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  };
+
   return {
     timezone_id: tz,
 
@@ -28526,7 +28579,7 @@ async function loadPolicy(env, client_id, workedDateYmd) {
     sun_start:   cs?.sun_start   || def?.sun_start   || "00:00:00",
     sun_end:     cs?.sun_end     || def?.sun_end     || "00:00:00",
 
-    // NEW: BH hours (00:00–00:00 means “full BH day”)
+    // BH window (00:00–00:00 means “full BH day”)
     bh_start:    cs?.bh_start    || def?.bh_start    || "00:00:00",
     bh_end:      cs?.bh_end      || def?.bh_end      || "00:00:00",
 
@@ -28535,18 +28588,19 @@ async function loadPolicy(env, client_id, workedDateYmd) {
       cs?.holiday_pay_pct ?? def?.holiday_pay_pct ?? 12.07
     ),
 
-    // 🔹 ERNI is now **global-only** – no client-specific override.
+    // ERNI is global-only here
     erni_pct: asNumber(def?.erni_pct ?? 13.8),
 
     apply_holiday_to:
       cs?.apply_holiday_to || def?.apply_holiday_to || "PAYE_ONLY",
     apply_erni_to: cs?.apply_erni_to || def?.apply_erni_to || "PAYE_ONLY",
+
     margin_includes: {
       expenses: !!(cs?.margin_includes?.expenses ??
         def?.margin_includes?.expenses),
     },
 
-    bh_list: Array.isArray(bh) ? bh : [],
+    bh_list: bh,
 
     // Attach policy (for downstream use)
     requires_hr,
