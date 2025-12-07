@@ -4409,15 +4409,50 @@ export async function handleContractWeekReplaceManualPdf(env, req, weekId) {
 
 
 export async function handleContractWeekManualUpsert(env, req, weekId) {
+  const enc = encodeURIComponent;
+
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
-  let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
 
-  const cw = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=*`);
+  let body;
+  try {
+    body = await parseJSONBody(req);
+  } catch {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  // NEW: QR revoke/reissue hints (from FE)
+  const rawRevokeQr  = !!body?.revoke_qr;
+  const rawReissueQr = !!body?.reissue_qr;
+
+  const cw = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=*`
+  );
   if (!cw) return withCORS(env, req, notFound('Week not found'));
 
-  const contract = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(cw.contract_id)}&select=*`);
+  const contract = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(cw.contract_id)}&select=*`
+  );
   if (!contract) return withCORS(env, req, notFound('Contract not found'));
+
+  // Load candidate/client once for use in TS creation + QR reissue
+  const candidate = contract.candidate_id
+    ? await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=eq.${enc(contract.candidate_id)}&select=id,display_name,email`
+      )
+    : null;
+
+  const client = contract.client_id
+    ? await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/clients` +
+          `?id=eq.${enc(contract.client_id)}&select=id,name`
+      )
+    : null;
 
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
   const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
@@ -4441,13 +4476,13 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
   );
 
   // Hours totals or schedule JSON
-  let hours = { day:0, night:0, sat:0, sun:0, bh:0 };
+  let hours = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
   let actual_schedule_json = null;
 
   if (Array.isArray(body?.actual_schedule_json) && body.actual_schedule_json.length) {
     actual_schedule_json = body.actual_schedule_json;
 
-    // 🔴 structural validation before classification
+    // Structural validation before classification
     try {
       validateScheduleStructure(actual_schedule_json);
     } catch (e) {
@@ -4457,17 +4492,17 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
     try {
       const minsByBucket = await resolveBucketsFromSchedule(env, contract, actual_schedule_json);
       hours = {
-        day:   +(minsByBucket.day  / 60).toFixed(2),
-        night: +(minsByBucket.night/ 60).toFixed(2),
-        sat:   +(minsByBucket.sat  / 60).toFixed(2),
-        sun:   +(minsByBucket.sun  / 60).toFixed(2),
-        bh:    +(minsByBucket.bh   / 60).toFixed(2)
+        day:   +(minsByBucket.day   / 60).toFixed(2),
+        night: +(minsByBucket.night / 60).toFixed(2),
+        sat:   +(minsByBucket.sat   / 60).toFixed(2),
+        sun:   +(minsByBucket.sun   / 60).toFixed(2),
+        bh:    +(minsByBucket.bh    / 60).toFixed(2)
       };
     } catch (e) {
       return withCORS(env, req, badRequest(e.message || 'Invalid actual_schedule_json'));
     }
   } else if (body?.hours) {
-    const n = (v) => (v==null ? 0 : Number(v)||0);
+    const n = (v) => (v == null ? 0 : Number(v) || 0);
     hours = {
       day:   n(body.hours.day),
       night: n(body.hours.night),
@@ -4489,7 +4524,11 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
     (h.bh    > 0 && (!P.bh    && P.bh    !== 0 || !C.bh    && C.bh    !== 0));
 
   if (anyMissing(hours, pay, charge)) {
-    return withCORS(env, req, badRequest('Missing rate(s) in contract for one or more entered hour buckets'));
+    return withCORS(
+      env,
+      req,
+      badRequest('Missing rate(s) in contract for one or more entered hour buckets')
+    );
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -4622,33 +4661,21 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
 
   additional_pay_ex_vat    = +Number(additional_pay_ex_vat).toFixed(2);
   additional_charge_ex_vat = +Number(additional_charge_ex_vat).toFixed(2);
-  const additional_margin_ex_vat = +Number(additional_charge_ex_vat - additional_pay_ex_vat).toFixed(2);
+  const additional_margin_ex_vat =
+    +Number(additional_charge_ex_vat - additional_pay_ex_vat).toFixed(2);
 
   // Build or reuse timesheet (manual weekly) – always use the CURRENT version if it exists
   let ts = cw.timesheet_id
     ? await sbGetOne(
         env,
         `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=eq.${enc(cw.timesheet_id)}&is_current=eq.true&select=*`
+          `?timesheet_id=eq.${enc(cw.timesheet_id)}&is_current=eq.true&select=*`
       )
     : null;
 
   const nowIso = new Date().toISOString();
 
   if (!ts) {
-    const candidate = contract.candidate_id
-      ? await sbGetOne(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(contract.candidate_id)}&select=id,display_name`
-        )
-      : null;
-    const client = contract.client_id
-      ? await sbGetOne(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${enc(contract.client_id)}&select=id,name`
-        )
-      : null;
-
     const occupant_norm = (candidate?.display_name || String(candidate?.id || 'worker')).toLowerCase();
     const hospital_norm = (contract.display_site || client?.name || String(contract.client_id)).toLowerCase();
     const ward_norm     = (contract.ward_hint || 'contract').toLowerCase();
@@ -4718,7 +4745,15 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
     ).catch(()=>{});
   }
 
-  // TSFIN snapshot (PENDING_AUTH) – SEGMENTS vs AGGREGATE
+  // Was this week previously QR-enabled?
+  const hadQrBefore = !!(ts.qr_status);
+  const effectiveRevoke  = hadQrBefore && rawRevokeQr;
+  const effectiveReissue = hadQrBefore && rawReissueQr;
+
+  // For QR reissue, we want TSFIN back in AWAITING_MANUAL_SIGNATURE; otherwise PENDING_AUTH
+  const processingStatus = effectiveReissue ? 'AWAITING_MANUAL_SIGNATURE' : 'PENDING_AUTH';
+
+  // TSFIN snapshot – SEGMENTS vs AGGREGATE
   let snap;
 
   if (actual_schedule_json && Array.isArray(actual_schedule_json) && actual_schedule_json.length) {
@@ -4831,7 +4866,7 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
       candidate_id: contract.candidate_id,
       client_id:    contract.client_id,
       candidate_assignment: contract.candidate_id ? 'ASSIGNED' : 'UNASSIGNED',
-      processing_status: 'PENDING_AUTH',
+      processing_status: processingStatus,
       pay_method: method,
 
       hours_day:   hours.day,
@@ -4947,7 +4982,7 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
       candidate_id: contract.candidate_id,
       client_id:    contract.client_id,
       candidate_assignment: 'ASSIGNED',
-      processing_status: 'PENDING_AUTH',
+      processing_status: processingStatus,
       pay_method: method,
       hours_day:   hours.day,
       hours_night: hours.night,
@@ -5004,11 +5039,204 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
     }
   );
 
+  // ─────────────────────────────────────────────────────────────
+  // NEW: QR revoke / reissue handling
+  // ─────────────────────────────────────────────────────────────
+  let qrReissued   = false;
+  let qrPdfKey     = null;
+  let qrToken      = null;
+  let qr_r2_key    = null;
+
+  if (effectiveRevoke || effectiveReissue) {
+    // Clear existing QR linkage on this timesheet
+    try {
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), 'Prefer': 'return-minimal' },
+          body: JSON.stringify({
+            qr_token: null,
+            qr_status: null,
+            qr_payload_json: null,
+            qr_generated_at: null,
+            qr_r2_key: null,
+            updated_at: nowIso
+          })
+        }
+      );
+    } catch (e) {
+      console.warn('[CW_MANUAL_UPSERT][QR] revoke patch failed', {
+        timesheet_id: ts.timesheet_id,
+        err: e?.message || String(e)
+      });
+    }
+
+    if (effectiveReissue) {
+      try {
+        // 1) Generate & store new QR image (TSQ1)
+        const qrRes = await generateAndStoreTimesheetQr(env, {
+          timesheet_id:     ts.timesheet_id,
+          contract_week_id: cw.id,
+          contract_id:      contract.id,
+          candidate_id:     contract.candidate_id || null,
+          client_id:        contract.client_id || null,
+          week_ending_ymd:  cw.week_ending_date
+        });
+
+        qr_r2_key = qrRes?.qr_r2_key || null;
+
+        // 2) New application-level token + payload
+        try {
+          if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+            qrToken = crypto.randomUUID();
+          } else {
+            qrToken = `${ts.timesheet_id}:${Date.now()}`;
+          }
+        } catch {
+          qrToken = `${ts.timesheet_id}:${Date.now()}`;
+        }
+
+        const qrPayload = {
+          kind: 'WEEKLY_QR_TIMESHEET',
+          token: qrToken,
+          timesheet_id: ts.timesheet_id,
+          contract_week_id: cw.id,
+          contract_id: contract.id,
+          candidate_id: contract.candidate_id || null,
+          client_id: contract.client_id || null,
+          week_ending_date: cw.week_ending_date,
+          reason: 'REISSUE_AFTER_HOURS_CHANGE'
+        };
+
+        // 3) Patch TS with new QR metadata
+        await fetch(
+          `${env.SUPABASE_URL}/rest/v1/timesheets` +
+            `?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
+          {
+            method: 'PATCH',
+            headers: { ...sbHeaders(env), 'Prefer': 'return-minimal' },
+            body: JSON.stringify({
+              qr_token: qrToken,
+              qr_status: 'PENDING',
+              qr_generated_at: nowIso,
+              qr_payload_json: qrPayload,
+              qr_r2_key,
+              updated_at: nowIso
+            })
+          }
+        ).catch(()=>{});
+
+        // 4) Render new PDF (with new QR) and attach to TS
+        qrPdfKey = await renderTimesheetPDFAndSave(env, ts.timesheet_id).catch((e) => {
+          console.error('[CW_MANUAL_UPSERT][QR] renderTimesheetPDFAndSave failed', {
+            timesheet_id: ts.timesheet_id,
+            err: e?.message || String(e)
+          });
+          return null;
+        });
+
+        if (qrPdfKey) {
+          await fetch(
+            `${env.SUPABASE_URL}/rest/v1/timesheets` +
+              `?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
+            {
+              method: 'PATCH',
+              headers: { ...sbHeaders(env), 'Prefer': 'return-minimal' },
+              body: JSON.stringify({
+                manual_pdf_r2_key: qrPdfKey,
+                updated_at: nowIso
+              })
+            }
+          ).catch(()=>{});
+        }
+
+        qrReissued = true;
+
+        // 5) Email worker: hours changed, previous QR invalid
+        try {
+          const email = (candidate && candidate.email && String(candidate.email).trim()) || null;
+          if (email && qrPdfKey) {
+            const subject =
+              `Updated weekly QR timesheet – week ending ${cw.week_ending_date}`;
+
+            const bodyText =
+              `Your weekly timesheet has been updated because your hours were changed.\n\n` +
+              `Any previous QR timesheets for this week are no longer valid.\n\n` +
+              `Please print the attached timesheet, ask the ward manager to sign it, ` +
+              `and then upload the signed copy via the app.\n\n` +
+              `Week ending: ${cw.week_ending_date}\n` +
+              `Timesheet ID: ${ts.timesheet_id}\n`;
+
+            const outboxPayload = [{
+              to_email: email,
+              subject,
+              body_text: bodyText,
+              attachments_json: [
+                {
+                  kind: 'R2',
+                  r2_key: qrPdfKey,
+                  filename: `Timesheet_${cw.week_ending_date}.pdf`,
+                  content_type: 'application/pdf'
+                }
+              ],
+              created_by_user_id: user.id || null
+            }];
+
+            const insOut = await fetch(
+              `${env.SUPABASE_URL}/rest/v1/email_outbox`,
+              {
+                method: 'POST',
+                headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+                body: JSON.stringify(outboxPayload)
+              }
+            );
+            if (!insOut.ok) {
+              const errTxt = await insOut.text().catch(() => '');
+              console.warn('[CW_MANUAL_UPSERT][QR] email_outbox insert failed', errTxt);
+            }
+          }
+        } catch (e) {
+          console.warn('[CW_MANUAL_UPSERT][QR] email enqueue failed', e?.message || e);
+        }
+
+        // 6) Audit reissue
+        try {
+          await writeAudit(
+            env,
+            user,
+            'WEEKLY_QR_REISSUED_AFTER_HOURS_CHANGE',
+            {
+              contract_week_id: cw.id,
+              contract_id: contract.id,
+              timesheet_id: ts.timesheet_id,
+              pdf_r2_key: qrPdfKey,
+              qr_token: qrToken,
+              qr_status: 'PENDING',
+              qr_r2_key
+            },
+            { entity: 'contract_weeks', subject_id: cw.id, req }
+          );
+        } catch (e) {
+          console.warn('[CW_MANUAL_UPSERT][QR] audit failed', e?.message || e);
+        }
+      } catch (e) {
+        console.warn('[CW_MANUAL_UPSERT][QR] reissue failed (non-fatal)', {
+          timesheet_id: ts.timesheet_id,
+          err: e?.message || String(e)
+        });
+      }
+    }
+  }
+
   return withCORS(env, req, ok({
     timesheet_id: ts.timesheet_id,
-    processing_status: 'PENDING_AUTH',
+    processing_status: processingStatus,
     hours,
-    used_schedule: !!actual_schedule_json
+    used_schedule: !!actual_schedule_json,
+    qr_reissued: qrReissued,
+    qr_pdf_key: qrPdfKey
   }));
 }
 
@@ -5595,6 +5823,397 @@ export async function handleTimesheetPdf(env, req, timesheetId) {
   }
 }
 
+export async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
+  const enc = encodeURIComponent;
+
+  // 1) Auth
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  if (!timesheetId) {
+    return withCORS(env, req, badRequest('timesheet_id is required'));
+  }
+
+  // 2) Parse body
+  let body;
+  try {
+    body = await parseJSONBody(req);
+  } catch {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const worked_start_iso = body?.worked_start_iso || null;
+  const worked_end_iso   = body?.worked_end_iso   || null;
+  const break_start_iso  = body?.break_start_iso  ?? null;
+  const break_end_iso    = body?.break_end_iso    ?? null;
+  const break_minutes    = (body?.break_minutes   !== undefined)
+    ? body.break_minutes
+    : null;
+
+  const revokeQr  = body?.revoke_qr  === true;
+  const reissueQr = body?.reissue_qr === true;
+
+  const now = nowIso();
+
+  // 3) Load DAILY timesheet (current version)
+  const ts = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=*`
+  );
+  if (!ts) {
+    return withCORS(env, req, notFound('Timesheet not found'));
+  }
+
+  const sheetScope = String(ts.sheet_scope || '').toUpperCase();
+  const subMode    = String(ts.submission_mode || '').toUpperCase();
+
+  if (sheetScope !== 'DAILY') {
+    return withCORS(
+      env,
+      req,
+      badRequest('Timesheet is not DAILY; daily-manual-upsert only applies to DAILY sheets')
+    );
+  }
+
+  if (subMode !== 'MANUAL') {
+    return withCORS(
+      env,
+      req,
+      badRequest('Timesheet must be MANUAL before editing hours. Use switch-daily-to-manual first.')
+    );
+  }
+
+  // 4) Load TSFIN – must not be locked/paid
+  const tsfin = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=*`
+  ).catch(() => null);
+
+  if (tsfin && (tsfin.locked_by_invoice_id || tsfin.paid_at_utc)) {
+    return withCORS(
+      env,
+      req,
+      badRequest('Timesheet already invoiced or paid; cannot edit DAILY manual hours')
+    );
+  }
+
+  const hadQrBefore = !!ts.qr_status;
+
+  // 5) Patch timesheet worked/break fields
+  const tsPatch = {
+    updated_at: now
+  };
+
+  // Only override fields that are explicitly provided; otherwise keep existing
+  if (worked_start_iso !== null) tsPatch.worked_start_iso = worked_start_iso;
+  if (worked_end_iso   !== null) tsPatch.worked_end_iso   = worked_end_iso;
+  if (break_start_iso  !== null) tsPatch.break_start_iso  = break_start_iso;
+  if (break_end_iso    !== null) tsPatch.break_end_iso    = break_end_iso;
+  if (break_minutes    !== null) tsPatch.break_minutes    = break_minutes;
+
+  try {
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify(tsPatch)
+      }
+    );
+  } catch (e) {
+    return withCORS(
+      env,
+      req,
+      serverError(`Failed to update daily timesheet hours: ${e?.message || e}`)
+    );
+  }
+
+  // 6) Reload updated timesheet for snapshot + QR
+  const updatedTs = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=*`
+  );
+
+  // 7) Rebuild DAILY snapshot (TSFIN)
+  try {
+    await buildDailySnapshot(env, updatedTs);
+  } catch (e) {
+    console.warn('[TS_DAILY_MANUAL][SNAPSHOT] buildDailySnapshot failed', e?.message || e);
+    return withCORS(
+      env,
+      req,
+      serverError(`Failed to recompute daily snapshot: ${e?.message || e}`)
+    );
+  }
+
+  // Reload TSFIN after recompute
+  const finAfter = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=*`
+  ).catch(() => null);
+
+  // 8) QR revoke (if requested)
+  let qrRevoked  = false;
+  let qrReissued = false;
+  let pdfKey     = null;
+
+  if (revokeQr && hadQrBefore && finAfter && !finAfter.locked_by_invoice_id && !finAfter.paid_at_utc) {
+    const qrClearPatch = {
+      qr_token: null,
+      qr_status: null,
+      qr_payload_json: null,
+      qr_generated_at: null,
+      qr_r2_key: null,
+      qr_scan_info_json: null,
+      updated_at: nowIso()
+    };
+
+    try {
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+          body: JSON.stringify(qrClearPatch)
+        }
+      );
+      qrRevoked = true;
+    } catch (e) {
+      console.warn('[TS_DAILY_MANUAL][QR] revoke patch failed', e?.message || e);
+      return withCORS(
+        env,
+        req,
+        serverError('Failed to revoke existing daily QR timesheet')
+      );
+    }
+  }
+
+  // 9) QR reissue (if requested AND there was a QR before)
+  if (reissueQr && hadQrBefore && finAfter && !finAfter.locked_by_invoice_id && !finAfter.paid_at_utc) {
+    const now2 = nowIso();
+
+    // 9a) Ensure TSFIN is AWAITING_MANUAL_SIGNATURE for the QR flow
+    if (String(finAfter.processing_status || '').toUpperCase() !== 'AWAITING_MANUAL_SIGNATURE') {
+      try {
+        await fetch(
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(finAfter.id)}`,
+          {
+            method: 'PATCH',
+            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+            body: JSON.stringify({
+              processing_status: 'AWAITING_MANUAL_SIGNATURE',
+              updated_at: now2
+            })
+          }
+        );
+      } catch (e) {
+        console.warn('[TS_DAILY_MANUAL][QR] failed to patch TSFIN to AWAITING_MANUAL_SIGNATURE', {
+          timesheet_id: timesheetId,
+          err: e?.message || String(e)
+        });
+        return withCORS(
+          env,
+          req,
+          serverError('Failed to set TSFIN to AWAITING_MANUAL_SIGNATURE for QR reissue')
+        );
+      }
+    }
+
+    // 9b) Derive worked_date (YMD) from worked_start_iso
+    let workedDateYmd = null;
+    if (updatedTs.worked_start_iso) {
+      try {
+        const parts = toLocalParts(updatedTs.worked_start_iso, null);
+        workedDateYmd = parts && parts.ymd ? parts.ymd : String(updatedTs.worked_start_iso).slice(0, 10);
+      } catch {
+        workedDateYmd = String(updatedTs.worked_start_iso).slice(0, 10);
+      }
+    }
+
+    // 9c) Generate new QR token + payload
+    let qrToken;
+    try {
+      if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        qrToken = crypto.randomUUID();
+      } else {
+        qrToken = `${timesheetId}:${Date.now()}`;
+      }
+    } catch {
+      qrToken = `${timesheetId}:${Date.now()}`;
+    }
+
+    const qrPayload = {
+      kind: 'DAILY_QR_TIMESHEET',
+      token: qrToken,
+      timesheet_id: updatedTs.timesheet_id,
+      worked_date: workedDateYmd,
+      candidate_id: updatedTs.candidate_id || null,
+      client_id: finAfter.client_id || updatedTs.client_id || null
+    };
+
+    // 9d) Patch timesheet with new QR metadata
+    try {
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+          body: JSON.stringify({
+            qr_token: qrToken,
+            qr_status: 'PENDING',
+            qr_generated_at: now2,
+            qr_payload_json: qrPayload,
+            updated_at: now2
+          })
+        }
+      );
+    } catch (e) {
+      console.warn('[TS_DAILY_MANUAL][QR] failed to patch QR metadata for reissue', {
+        timesheet_id: timesheetId,
+        err: e?.message || String(e)
+      });
+      return withCORS(
+        env,
+        req,
+        serverError('Failed to update QR metadata for reissued daily timesheet')
+      );
+    }
+
+    // 9e) Ensure PDF with new QR embedded
+    try {
+      pdfKey = await ensureTimesheetPdf(env, timesheetId);
+      if (pdfKey) {
+        await fetch(
+          `${env.SUPABASE_URL}/rest/v1/timesheets` +
+            `?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`,
+          {
+            method: 'PATCH',
+            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+            body: JSON.stringify({
+              manual_pdf_r2_key: pdfKey,
+              updated_at: nowIso()
+            })
+          }
+        ).catch(() => {});
+      }
+    } catch (e) {
+      console.warn('[TS_DAILY_MANUAL][QR] ensureTimesheetPdf failed (non-fatal)', {
+        timesheet_id: timesheetId,
+        err: e?.message || String(e)
+      });
+    }
+
+    // 9f) Best-effort: email updated QR timesheet to worker (if you use email_outbox)
+    try {
+      if (pdfKey && updatedTs.candidate_id) {
+        const cand = await sbGetOne(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/candidates` +
+            `?id=eq.${enc(updatedTs.candidate_id)}` +
+            `&select=id,display_name,email`
+        ).catch(() => null);
+
+        const email = cand && cand.email && String(cand.email).trim();
+        if (email) {
+          const subject =
+            workedDateYmd
+              ? `Updated daily timesheet for signature – ${workedDateYmd}`
+              : 'Updated daily timesheet for signature';
+
+          const bodyText =
+            `Your daily timesheet has been updated.\n\n` +
+            `The hours on your timesheet were amended by the back office, and any previous QR timesheet for this shift is no longer valid.\n\n` +
+            `Please use the attached updated timesheet only.\n`;
+
+          const outboxPayload = [{
+            to_email: email,
+            subject,
+            body_text: bodyText,
+            attachments_json: [
+              {
+                kind: 'R2',
+                r2_key: pdfKey,
+                filename: `Timesheet_${workedDateYmd || timesheetId}.pdf`,
+                content_type: 'application/pdf'
+              }
+            ],
+            created_by_user_id: user.id || null
+          }];
+
+          try {
+            const ins = await fetch(
+              `${env.SUPABASE_URL}/rest/v1/email_outbox`,
+              {
+                method: 'POST',
+                headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+                body: JSON.stringify(outboxPayload)
+              }
+            );
+            if (!ins.ok) {
+              const txt = await ins.text().catch(() => '');
+              console.warn('[TS_DAILY_MANUAL][QR] email_outbox insert failed', txt);
+            }
+          } catch (e) {
+            console.warn('[TS_DAILY_MANUAL][QR] email enqueue failed (non-fatal)', e?.message || e);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[TS_DAILY_MANUAL][QR] email logic failed (non-fatal)', e?.message || e);
+    }
+
+    qrReissued = true;
+  }
+
+  // 10) Audit
+  try {
+    await writeAudit(
+      env,
+      user,
+      'DAILY_MANUAL_UPSERT',
+      {
+        timesheet_id: timesheetId,
+        worked_start_iso: worked_start_iso ?? ts.worked_start_iso,
+        worked_end_iso:   worked_end_iso   ?? ts.worked_end_iso,
+        break_start_iso:  break_start_iso  ?? ts.break_start_iso,
+        break_end_iso:    break_end_iso    ?? ts.break_end_iso,
+        break_minutes:    break_minutes    ?? ts.break_minutes,
+        revoke_qr:  revokeQr,
+        reissue_qr: reissueQr,
+        had_qr_before: hadQrBefore,
+        qr_revoked:  qrRevoked,
+        qr_reissued: qrReissued,
+        pdf_key:     pdfKey || null
+      },
+      { entity: 'timesheets', subject_id: timesheetId, req }
+    );
+  } catch (e) {
+    console.warn('[TS_DAILY_MANUAL][AUDIT] failed', e?.message || e);
+  }
+
+  return withCORS(env, req, ok({
+    ok: true,
+    timesheet_id: timesheetId,
+    qr_revoked: qrRevoked,
+    qr_reissued: qrReissued,
+    pdf_key: pdfKey || null
+  }));
+}
 
 export async function handleContractWeekManualAuthorise(env, req, weekId) {
   // Second checker: stamp TS authorise + TSFIN → READY_FOR_HR or READY_FOR_INVOICE
@@ -16065,46 +16684,6 @@ function normaliseAliasList(val) {
 // Helper: resolve a staff name from NHSP/HealthRoster to a candidate.
 // 1) Try candidates.nhsp_hr_name_aliases (JSONB aliases).
 // 2) Fall back to hr_name_mappings (existing behaviour).
-async function findCandidateByImportName(env, staffName, { trustNorm } = {}) {
-  const enc = encodeURIComponent;
-  const norm = (s) => String(s || '').trim().toLowerCase();
-  const nameNorm = norm(staffName);
-  if (!nameNorm) return null;
-
-  // 1) Candidate alias list on candidates (JSONB)
-  try {
-    const aliasJson = JSON.stringify([nameNorm]); // ["john smith"]
-    const { rows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/candidates` +
-      `?nhsp_hr_name_aliases=cs.${enc(aliasJson)}` +
-      `&active=eq.true` +
-      `&select=id` +
-      `&limit=2`
-    );
-    if (rows?.length === 1 && rows[0]?.id) {
-      return rows[0].id;
-    }
-    // if 0 or >1, fall through to hr_name_mappings
-  } catch {
-    // best-effort; fall through
-  }
-
-  // 2) Fallback: existing hr_name_mappings behaviour
-  let mapUrl =
-    `${env.SUPABASE_URL}/rest/v1/hr_name_mappings` +
-    `?hr_name_norm=eq.${enc(nameNorm)}` +
-    `&active=eq.true` +
-    `&select=candidate_id` +
-    `&limit=1`;
-
-  if (trustNorm) {
-    mapUrl += `&hospital_or_trust=eq.${enc(trustNorm)}`;
-  }
-
-  const { rows: mapRows } = await sbFetch(env, mapUrl);
-  return mapRows?.[0]?.candidate_id || null;
-}
 
 // ─────────────────────────────────────────────────────────────
 // resolveClientId: now uses JSONB aliases on client_hospitals.hospital_name_norm
@@ -22369,8 +22948,6 @@ export async function handleHrRotaValidationApply(env, req, importId) {
     emails_queued: emailsQueued
   }));
 }
-
-
 async function enqueueHrMismatchEmail(env, { timesheet_id, importId, row }) {
   const enc = encodeURIComponent;
 
@@ -22410,16 +22987,16 @@ async function enqueueHrMismatchEmail(env, { timesheet_id, importId, row }) {
   }
 
   // 3) Compose subject/body
-  const staffName = row?.staff_name || row?.payload_json?.staff_name || 'Agency worker';
-  const dateLocal = row?.date_local || row?.payload_json?.date_local || 'Unknown date';
+  const staffName  = row?.staff_name || row?.payload_json?.staff_name || 'Agency worker';
+  const dateLocal  = row?.date_local || row?.payload_json?.date_local || 'Unknown date';
   const hrRequestId = row?.hr_request_id || row?.payload_json?.request_id || null;
   const reasonCode  = row?.reason_code || 'actual_hours_mismatch';
 
   const detail = row?.details || {};
-  const hrStart  = detail.start_local  || detail.hr_start  || 'N/A';
-  const hrEnd    = detail.end_local    || detail.hr_end    || 'N/A';
-  const hrHours  = detail.hr_hours     || detail.hr_actual_hours || detail.hours_worked || 'N/A';
-  const tsHours  = detail.ts_hours     || detail.ts_total_hours  || 'N/A';
+  const hrStart = detail.start_local  || detail.hr_start        || 'N/A';
+  const hrEnd   = detail.end_local    || detail.hr_end          || 'N/A';
+  const hrHours = detail.hr_hours     || detail.hr_actual_hours || detail.hours_worked || 'N/A';
+  const tsHours = detail.ts_hours     || detail.ts_total_hours  || 'N/A';
 
   const subject = `Timesheet hours mismatch – ${staffName} – ${dateLocal} – ${hrRequestId || 'no HR ref'}`;
 
@@ -22440,34 +23017,32 @@ async function enqueueHrMismatchEmail(env, { timesheet_id, importId, row }) {
     `Signed timesheet attached shows:`,
     `  Actual Hours: ${tsHours}`,
     ``,
-    `Once amended, please resend the rota exported file so we can re-validate.`,
+    `Once amended, please kindly confirm.`,
     ``,
     `Kind regards,`,
     `CloudTMS`
   ];
 
   const body_text = lines.join('\n');
-  const body_html = `<p>${lines.map(l => l === '' ? '<br/>' : l).join('<br/>')}</p>`;
+  const body_html = `<p>${lines.map(l => (l === '' ? '<br/>' : l)).join('<br/>')}</p>`;
 
-  const nowIso = new Date().toISOString();
-
-  // 4) Insert into mail_outbox
+  // 4) Insert into mail_outbox (using existing schema)
   const mailPayload = [{
-    to_email: recipientEmail,
+    // existing columns on mail_outbox
+    to: recipientEmail,
     subject,
     body_text,
     body_html,
-    type: 'HR_DAILY_MISMATCH',
-    // store attachments in a JSONB field; actual column may differ in your schema
-    attachments_json: [{
+    // attachments is the existing JSONB field for attachments
+    attachments: [{
       r2_key: pdfKey,
       filename: `Timesheet_${timesheet_id}.pdf`
     }],
-    created_at: nowIso,
-    updated_at: nowIso,
-    status: 'QUEUED',
-    import_id: importId,
-    timesheet_id
+    // type must be one of the allowed enum values
+    type: 'TSO_FAILURE',
+    // preserve context in reference / correlation_id for debugging
+    reference: hrRequestId || null,
+    correlation_id: `HR_DAILY_MISMATCH:${timesheet_id}:${hrRequestId || ''}`
   }];
 
   try {
@@ -22475,7 +23050,7 @@ async function enqueueHrMismatchEmail(env, { timesheet_id, importId, row }) {
       `${env.SUPABASE_URL}/rest/v1/mail_outbox`,
       {
         method: 'POST',
-        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
         body: JSON.stringify(mailPayload)
       }
     );
@@ -22501,7 +23076,7 @@ async function enqueueHrMismatchEmail(env, { timesheet_id, importId, row }) {
   try {
     await writeAudit(
       env,
-      null, // no specific user beyond system; you can pass user if available
+      null, // system / worker context; no interactive user
       'HR_DAILY_MISMATCH_EMAIL_QUEUED',
       {
         import_id: importId,
@@ -22522,6 +23097,7 @@ async function enqueueHrMismatchEmail(env, { timesheet_id, importId, row }) {
     });
   }
 }
+
 
 async function mapRequestGradeToRole(env, { client_id, candidate_id, gradeRaw, dateYmd }) {
   const enc = encodeURIComponent;
@@ -23339,7 +23915,7 @@ export async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
     return withCORS(env, req, notFound('Timesheet not found'));
   }
 
-  const scope = String(ts.sheet_scope || '').toUpperCase();
+  const scope   = String(ts.sheet_scope || '').toUpperCase();
   const subMode = String(ts.submission_mode || '').toUpperCase();
 
   if (scope !== 'DAILY') {
@@ -23350,15 +23926,17 @@ export async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
     );
   }
 
+  // We require the DAILY timesheet to already be MANUAL for QR route.
+  // Front-end or broker should call switch-daily-to-manual first.
   if (subMode !== 'MANUAL') {
     return withCORS(
       env,
       req,
-      badRequest('Timesheet must be MANUAL before generating QR (call switch-to-manual first)')
+      badRequest('Timesheet must be MANUAL before generating QR (call switch-daily-to-manual first)')
     );
   }
 
-  // Load TSFIN to ensure not paid/invoiced and set status
+  // Load TSFIN to ensure not paid/invoiced and to adjust status
   const tsfin = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
@@ -23399,7 +23977,7 @@ export async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
     }
   }
 
-  // Derive workedDateYmd from worked_start_iso
+  // Derive workedDateYmd from worked_start_iso for QR payload
   let workedDateYmd = null;
   if (ts.worked_start_iso) {
     try {
@@ -23410,10 +23988,9 @@ export async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
     }
   }
 
-  // Generate QR payload
+  // Generate new QR token – this will invalidate all old QR codes for this TS once saved
   let qrToken;
   try {
-    // crypto.randomUUID is not always available in Workers, so fallback
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
       qrToken = crypto.randomUUID();
     } else {
@@ -23432,7 +24009,7 @@ export async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
     client_id: (tsfin && tsfin.client_id) || ts.client_id || null
   };
 
-  // Patch timesheet with QR metadata
+  // Patch timesheet with QR metadata (and clear any previous scan)
   try {
     await fetch(
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -23444,6 +24021,7 @@ export async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
           qr_token: qrToken,
           qr_status: 'PENDING',
           qr_generated_at: now,
+          qr_scanned_at: null,
           qr_payload_json: qrPayload,
           updated_at: now
         })
@@ -23461,12 +24039,13 @@ export async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
     );
   }
 
-  // Generate / ensure PDF (with QR embedded by renderer)
+  // Generate / ensure PDF (renderer should embed the QR using ts.qr_r2_key / qr_payload_json)
   let pdfKey = null;
   try {
+    // If your renderer already embeds QR based on qr_payload_json, ensureTimesheetPdf is fine
     pdfKey = await ensureTimesheetPdf(env, timesheetId);
     if (pdfKey) {
-      // Ensure manual_pdf_r2_key is set
+      // Ensure manual_pdf_r2_key is set to this latest QR PDF
       await fetch(
         `${env.SUPABASE_URL}/rest/v1/timesheets` +
           `?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`,
@@ -23487,7 +24066,7 @@ export async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
     });
   }
 
-  // Optional: email to candidate could be added here by reusing existing emailing helper.
+  // Optional: email to candidate could be added here if you want Daily QR emails from CloudTMS
 
   return withCORS(env, req, ok({
     ok: true,
@@ -23499,6 +24078,7 @@ export async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
     pdf_key: pdfKey || null
   }));
 }
+
 
 export async function handleHrRotaQueueTsoEmail(env, req) {
   const enc = encodeURIComponent;
@@ -23513,10 +24093,10 @@ export async function handleHrRotaQueueTsoEmail(env, req) {
     return withCORS(env, req, badRequest('Invalid JSON'));
   }
 
-  const timesheetId   = body?.timesheet_id || body?.timesheetId || null;
-  const hrRequestId   = body?.hr_request_id || body?.hrRequestId || null;
-  const reasonCode    = body?.reason_code || body?.reasonCode || 'actual_hours_mismatch';
-  const mismatch      = body?.mismatch_details || body?.mismatchDetails || null;
+  const timesheetId = body?.timesheet_id || body?.timesheetId || null;
+  const hrRequestId = body?.hr_request_id || body?.hrRequestId || null;
+  const reasonCode  = body?.reason_code || body?.reasonCode || 'actual_hours_mismatch';
+  const mismatch    = body?.mismatch_details || body?.mismatchDetails || null;
 
   if (!timesheetId) {
     return withCORS(
@@ -23632,22 +24212,19 @@ export async function handleHrRotaQueueTsoEmail(env, req) {
 
   const nowIso = new Date().toISOString();
 
-  // 4) Insert into mail_outbox
+  // 4) Insert into mail_outbox (using existing schema)
   const mailPayload = [{
-    to_email: recipientEmail,
+    to: recipientEmail,
     subject,
     body_text,
     body_html,
-    type: 'HR_DAILY_MISMATCH',
-    attachments_json: [{
+    attachments: [{
       r2_key: pdfKey,
       filename: `Timesheet_${timesheetId}.pdf`
     }],
-    status: 'QUEUED',
-    created_at: nowIso,
-    updated_at: nowIso,
-    timesheet_id: timesheetId,
-    hr_request_id: hrRequestId || null
+    type: 'TSO_FAILURE',
+    reference: hrRequestId || null,
+    correlation_id: `HR_DAILY_MISMATCH:${timesheetId}:${hrRequestId || ''}`
   }];
 
   try {
@@ -23805,36 +24382,6 @@ async function handleListHospitals(env, req, clientId) {
     return withCORS(env, req, ok({ items: rows }));
   } catch {
     return withCORS(env, req, serverError("Failed to list client hospitals"));
-  }
-}
-
-async function handleCreateHospital(env, req, clientId) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return unauthorized();
-
-  const data = await parseJSONBody(req);
-  if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
-
-  try {
-    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/client_hospitals`, {
-      method: "POST",
-      headers: { ...sbHeaders(env), "Prefer": "return=representation" },
-      body: JSON.stringify({
-        ...data,
-        client_id: clientId,
-        hospital_name_norm: data.hospital_name_norm || data.name || data.hospital,
-        created_at: new Date().toISOString()
-      })
-    });
-    if (!res.ok) {
-      const err = await res.text();
-      return withCORS(env, req, badRequest(`Hospital creation failed: ${err}`));
-    }
-    const json = await res.json().catch(() => ({}));
-    const hospital = Array.isArray(json) ? json[0] : json;
-    return withCORS(env, req, ok({ hospital }));
-  } catch {
-    return withCORS(env, req, serverError("Failed to create client hospital"));
   }
 }
 
@@ -26291,18 +26838,59 @@ async function findAuthorisedTimesheet(env, { candidate_id, ymd, start_hhmm, end
   return null;
 }
 
-
 async function upsertValidation(env, user, { timesheet_id, status, reason, hr_reference, import_id }) {
-  // Upsert into timesheet_validations keyed by timesheet_id
+  const enc    = encodeURIComponent;
   const nowIso = new Date().toISOString();
+
+  // Only stamp validated_at_utc for "OK / PASS / VALID" statuses
   const shouldStamp =
     typeof status === 'string' && /ok|pass|valid/i.test(status);
+
+  // HR request triple (id + set_at + source) must be all-null or all-non-null
+  let hr_request_id          = hr_reference || null;
+  let hr_request_set_at_utc  = null;
+  let hr_request_source      = null;
+
+  if (hr_request_id) {
+    hr_request_set_at_utc = nowIso;
+
+    // Try to infer source from hr_imports if import_id is present
+    if (import_id) {
+      try {
+        const { rows: impRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/hr_imports` +
+            `?id=eq.${enc(import_id)}` +
+            `&select=source_system` +
+            `&limit=1`
+        );
+        const imp = impRows?.[0] || null;
+        if (imp && imp.source_system) {
+          // e.g. 'HEALTHROSTER_DAILY', 'HEALTHROSTER', 'NHSP'
+          hr_request_source = String(imp.source_system);
+        } else {
+          hr_request_source = 'HR_IMPORT';
+        }
+      } catch (e) {
+        console.warn('[upsertValidation] failed to resolve hr_request_source from hr_imports', {
+          import_id,
+          err: e?.message || String(e)
+        });
+        hr_request_source = 'HR_IMPORT';
+      }
+    } else {
+      // No import_id → manual/other source
+      hr_request_source = 'MANUAL';
+    }
+  }
 
   const payload = {
     timesheet_id,
     status,
-    reason_code: reason || null,
-    hr_request_id: hr_reference || null,
+    reason_code:    reason || null,
+    hr_request_id,
+    hr_request_set_at_utc,
+    hr_request_source,
     validated_at_utc: shouldStamp ? nowIso : null,
     last_source: import_id || null
   };
@@ -26315,11 +26903,12 @@ async function upsertValidation(env, user, { timesheet_id, status, reason, hr_re
       body: JSON.stringify(payload)
     }
   );
-  if (!res.ok){
-    const err = await res.text();
+  if (!res.ok) {
+    const err = await res.text().catch(() => '');
     throw new Error(`timesheet_validations upsert failed: ${err}`);
   }
 }
+
 
 // --- FIXED: hr_results insert uses correct columns only ---
 async function writeHRResult(env, importId, rowId, payload) {
@@ -32574,37 +33163,37 @@ async function buildWeeklySnapshot(env, ts, cw, contract) {
   const pay =
     payMethod === "UMBRELLA"
       ? {
-          day: rj.umb_day ?? null,
+          day:   rj.umb_day   ?? null,
           night: rj.umb_night ?? null,
-          sat: rj.umb_sat ?? null,
-          sun: rj.umb_sun ?? null,
-          bh: rj.umb_bh ?? null,
+          sat:   rj.umb_sat   ?? null,
+          sun:   rj.umb_sun   ?? null,
+          bh:    rj.umb_bh    ?? null,
         }
       : {
-          day: rj.paye_day ?? null,
+          day:   rj.paye_day   ?? null,
           night: rj.paye_night ?? null,
-          sat: rj.paye_sat ?? null,
-          sun: rj.paye_sun ?? null,
-          bh: rj.paye_bh ?? null,
+          sat:   rj.paye_sat   ?? null,
+          sun:   rj.paye_sun   ?? null,
+          bh:    rj.paye_bh    ?? null,
         };
 
   const charge = {
-    day: rj.charge_day ?? null,
+    day:   rj.charge_day   ?? null,
     night: rj.charge_night ?? null,
-    sat: rj.charge_sat ?? null,
-    sun: rj.charge_sun ?? null,
-    bh: rj.charge_bh ?? null,
+    sat:   rj.charge_sat   ?? null,
+    sun:   rj.charge_sun   ?? null,
+    bh:    rj.charge_bh    ?? null,
   };
 
   const missingRates =
-    (hours.day > 0 && (pay.day == null || charge.day == null)) ||
+    (hours.day   > 0 && (pay.day   == null || charge.day   == null)) ||
     (hours.night > 0 && (pay.night == null || charge.night == null)) ||
-    (hours.sat > 0 && (pay.sat == null || charge.sat == null)) ||
-    (hours.sun > 0 && (pay.sun == null || charge.sun == null)) ||
-    (hours.bh > 0 && (pay.bh == null || charge.bh == null));
+    (hours.sat   > 0 && (pay.sat   == null || charge.sat   == null)) ||
+    (hours.sun   > 0 && (pay.sun   == null || charge.sun   == null)) ||
+    (hours.bh    > 0 && (pay.bh    == null || charge.bh    == null));
 
   const candidate_id = contract.candidate_id || null;
-  const client_id    = contract.client_id || null;
+  const client_id    = contract.client_id   || null;
   let candidate_assignment = candidate_id ? "ASSIGNED" : "UNASSIGNED";
 
   // Load candidate for pay-channel checks
@@ -32618,20 +33207,36 @@ async function buildWeeklySnapshot(env, ts, cw, contract) {
     );
   }
 
+  // Load client policy (HR requirements, BH list, day/night windows, etc.)
   const workedDateYmd = cw.week_ending_date || null;
   const policy        = await loadPolicy(env, client_id, workedDateYmd);
   const requiresHr    = !!policy?.requires_hr;
 
-  // NEW: unified pay-channel check via resolveEffectivePayChannel
+  // NEW: unified pay-channel check via resolveEffectivePayChannel (correct signature)
   let payChannelBad = false;
   try {
-    // Only bother checking pay channel if we actually have a candidate & client
     if (candidate_id && client_id && typeof resolveEffectivePayChannel === 'function') {
-      const payCh = await resolveEffectivePayChannel(env, { candidate, client_id });
-      payChannelBad = !payCh || payCh.ok === false;
+      let umbrella = null;
+      if (candidate?.umbrella_id) {
+        // Fetch umbrella so the helper can verify umbrella bank details if needed
+        umbrella = await sbGetOne(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/umbrellas` +
+            `?id=eq.${enc(candidate.umbrella_id)}` +
+            `&select=id,name,bank_name,sort_code,account_number` +
+            `&limit=1`
+        );
+      }
+
+      const channel = resolveEffectivePayChannel({
+        pay_method: payMethod || (candidate?.pay_method || null),
+        candidate,
+        umbrella,
+      });
+
+      payChannelBad = !channel || channel.ok === false;
     }
   } catch (e) {
-    // If resolver fails, treat as bad pay channel rather than silently passing
     console.warn('[TSFIN][buildWeeklySnapshot] resolveEffectivePayChannel failed', e);
     payChannelBad = true;
   }
@@ -32681,7 +33286,6 @@ async function buildWeeklySnapshot(env, ts, cw, contract) {
   const margin_ex_vat       = round2(total_charge_ex_vat - total_pay_ex_vat);
 
   const invoice_breakdown_json = {
-    // revised per 2.1.1 – this is a bucketed weekly summary for contract weeks
     mode: "WEEKLY_BUCKETS",
     base_hours: {
       day:   hours.day,
@@ -32707,8 +33311,8 @@ async function buildWeeklySnapshot(env, ts, cw, contract) {
       charge_ex_vat: hoursChargeEx,
     },
     additional: {
-      units:        additional_units_json,
-      pay_ex_vat:   additional_pay_ex_vat,
+      units:         additional_units_json,
+      pay_ex_vat:    additional_pay_ex_vat,
       charge_ex_vat: additional_charge_ex_vat,
       margin_ex_vat: additional_margin_ex_vat,
     },
@@ -32783,9 +33387,86 @@ async function buildWeeklySnapshot(env, ts, cw, contract) {
   await writeSnapshot(env, snapshot);
 }
 
+
   // ─────────────────────────────────────────────────────────────
   // Daily / Rota helper (SELF_REPORTED basis)
   // ─────────────────────────────────────────────────────────────
+
+
+
+  // ─────────────────────────────────────────────────────────────
+  // Worker core
+  // ─────────────────────────────────────────────────────────────
+
+  const lease = await sbRpc(env, "tsfin_dequeue_batch", { p_limit: limit });
+  if (!Array.isArray(lease) || !lease.length)
+    return { picked: 0, ok: 0, fail: 0 };
+
+  let ok = 0, fail = 0;
+
+  for (const item of lease) {
+    try {
+      const ts = await loadCurrentTimesheet(env, item.timesheet_id);
+      if (!ts) {
+        await sbRpc(env, "tsfin_mark_revoked", {
+          p_timesheet_id: item.timesheet_id,
+        });
+        await sbRpc(env, "tsfin_work_success", { p_id: item.id });
+        ok++;
+        continue;
+      }
+
+      // NEW: if this timesheet already has a current NHSP / NHSP_ADJUSTMENT snapshot,
+      // do NOT overwrite it with a generic CONTRACT_WEEKLY or SELF_REPORTED snapshot.
+      try {
+        const { rows: curFinRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=eq.${enc(ts.timesheet_id)}` +
+          `&is_current=eq.true` +
+          `&select=basis` +
+          `&limit=1`
+        );
+        const curBasis = (curFinRows && curFinRows[0] && curFinRows[0].basis) || null;
+        if (curBasis === 'NHSP' || curBasis === 'NHSP_ADJUSTMENT') {
+          await sbRpc(env, "tsfin_work_success", { p_id: item.id });
+          ok++;
+          continue;
+        }
+      } catch {
+        // if this lookup fails, fall back to normal behaviour
+      }
+
+      if (!ts.authorised_at_server) {
+        // Only build TSFIN for authorised timesheets
+        await sbRpc(env, "tsfin_work_success", { p_id: item.id });
+        ok++;
+        continue;
+      }
+
+      const weeklyCtx = await loadWeeklyContext(env, ts);
+      if (weeklyCtx) {
+        await buildWeeklySnapshot(env, ts, weeklyCtx.cw, weeklyCtx.contract);
+        await sbRpc(env, "tsfin_work_success", { p_id: item.id });
+        ok++;
+        continue;
+      }
+
+      // ── DAILY / ROTA branch ──────────────────────────────
+      await buildDailySnapshot(env, ts);
+      await sbRpc(env, "tsfin_work_success", { p_id: item.id });
+      ok++;
+    } catch (e) {
+      await sbRpc(env, "tsfin_work_fail", {
+        p_id: item.id,
+        p_error: String(e?.message || e),
+      });
+      fail++;
+    }
+  }
+
+  return { picked: lease.length, ok, fail };
+}
 
 async function buildDailySnapshot(env, ts) {
   const occupantKey = ts.occupant_key_norm || null;
@@ -32849,12 +33530,28 @@ async function buildDailySnapshot(env, ts) {
       ? "PAYE"
       : ts.pay_method || null;
 
-  // NEW: Pay-channel state via resolveEffectivePayChannel
+  // NEW: Pay-channel state via resolveEffectivePayChannel (correct signature)
   let payChannelBad = false;
   try {
     if (candidate_id && client_id && typeof resolveEffectivePayChannel === 'function') {
-      const payCh = await resolveEffectivePayChannel(env, { candidate, client_id });
-      payChannelBad = !payCh || payCh.ok === false;
+      let umbrella = null;
+      if (candidate?.umbrella_id) {
+        umbrella = await sbGetOne(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/umbrellas` +
+            `?id=eq.${enc(candidate.umbrella_id)}` +
+            `&select=id,name,bank_name,sort_code,account_number` +
+            `&limit=1`
+        );
+      }
+
+      const channel = resolveEffectivePayChannel({
+        pay_method: pay_method || candidate?.pay_method || null,
+        candidate,
+        umbrella,
+      });
+
+      payChannelBad = !channel || channel.ok === false;
     }
   } catch (e) {
     console.warn('[TSFIN][buildDailySnapshot] resolveEffectivePayChannel failed', e);
@@ -33025,82 +33722,6 @@ async function buildDailySnapshot(env, ts) {
 
   await writeSnapshot(env, snapshot);
 }
-
-
-  // ─────────────────────────────────────────────────────────────
-  // Worker core
-  // ─────────────────────────────────────────────────────────────
-
-  const lease = await sbRpc(env, "tsfin_dequeue_batch", { p_limit: limit });
-  if (!Array.isArray(lease) || !lease.length)
-    return { picked: 0, ok: 0, fail: 0 };
-
-  let ok = 0, fail = 0;
-
-  for (const item of lease) {
-    try {
-      const ts = await loadCurrentTimesheet(env, item.timesheet_id);
-      if (!ts) {
-        await sbRpc(env, "tsfin_mark_revoked", {
-          p_timesheet_id: item.timesheet_id,
-        });
-        await sbRpc(env, "tsfin_work_success", { p_id: item.id });
-        ok++;
-        continue;
-      }
-
-      // NEW: if this timesheet already has a current NHSP / NHSP_ADJUSTMENT snapshot,
-      // do NOT overwrite it with a generic CONTRACT_WEEKLY or SELF_REPORTED snapshot.
-      try {
-        const { rows: curFinRows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?timesheet_id=eq.${enc(ts.timesheet_id)}` +
-          `&is_current=eq.true` +
-          `&select=basis` +
-          `&limit=1`
-        );
-        const curBasis = (curFinRows && curFinRows[0] && curFinRows[0].basis) || null;
-        if (curBasis === 'NHSP' || curBasis === 'NHSP_ADJUSTMENT') {
-          await sbRpc(env, "tsfin_work_success", { p_id: item.id });
-          ok++;
-          continue;
-        }
-      } catch {
-        // if this lookup fails, fall back to normal behaviour
-      }
-
-      if (!ts.authorised_at_server) {
-        // Only build TSFIN for authorised timesheets
-        await sbRpc(env, "tsfin_work_success", { p_id: item.id });
-        ok++;
-        continue;
-      }
-
-      const weeklyCtx = await loadWeeklyContext(env, ts);
-      if (weeklyCtx) {
-        await buildWeeklySnapshot(env, ts, weeklyCtx.cw, weeklyCtx.contract);
-        await sbRpc(env, "tsfin_work_success", { p_id: item.id });
-        ok++;
-        continue;
-      }
-
-      // ── DAILY / ROTA branch ──────────────────────────────
-      await buildDailySnapshot(env, ts);
-      await sbRpc(env, "tsfin_work_success", { p_id: item.id });
-      ok++;
-    } catch (e) {
-      await sbRpc(env, "tsfin_work_fail", {
-        p_id: item.id,
-        p_error: String(e?.message || e),
-      });
-      fail++;
-    }
-  }
-
-  return { picked: lease.length, ok, fail };
-}
-
 
 // ---------------------------
 // API: Manual drain
@@ -34757,11 +35378,11 @@ export async function handleContractWeekGeneratePrintable(env, req, weekId) {
   // 2b) Rate guard
   const { pay, charge, method } = payChargeFromContract(contract);
   const anyMissing = (h, P, C) =>
-    (h.day   > 0 && (!P.day   && P.day   !== 0 || !C.day   && C.day   !== 0)) ||
-    (h.night > 0 && (!P.night && P.night !== 0 || !C.night && C.night !== 0)) ||
-    (h.sat   > 0 && (!P.sat   && P.sat   !== 0 || !C.sat   && C.sat   !== 0)) ||
-    (h.sun   > 0 && (!P.sun   && P.sun   !== 0 || !C.sun   && C.sun   !== 0)) ||
-    (h.bh    > 0 && (!P.bh    && P.bh    !== 0 || !C.bh    && C.bh    !== 0));
+    (h.day   > 0 && ((P.day   == null && P.day   !== 0) || (C.day   == null && C.day   !== 0))) ||
+    (h.night > 0 && ((P.night == null && P.night !== 0) || (C.night == null && C.night !== 0))) ||
+    (h.sat   > 0 && ((P.sat   == null && P.sat   !== 0) || (C.sat   == null && C.sat   !== 0))) ||
+    (h.sun   > 0 && ((P.sun   == null && P.sun   !== 0) || (C.sun   == null && C.sun   !== 0))) ||
+    (h.bh    > 0 && ((P.bh    == null && P.bh    !== 0) || (C.bh    == null && C.bh    !== 0)));
 
   if (anyMissing(hours, pay, charge)) {
     return withCORS(
@@ -34922,11 +35543,11 @@ export async function handleContractWeekGeneratePrintable(env, req, weekId) {
 
   const now = nowIso();
 
-  const occupant_norm = (candidate?.display_name || String(candidate?.id || 'worker')).toLowerCase();
-  const hospital_norm = (contract.display_site || client?.name || String(contract.client_id)).toLowerCase();
-  const ward_norm     = (contract.ward_hint || 'contract').toLowerCase();
-  const job_title_norm= (contract.role || 'weekly').toLowerCase();
-  const booking_id    = makeWeeklyBookingId(candidate?.id, contract, cw);
+  const occupant_norm  = (candidate?.display_name || String(candidate?.id || 'worker')).toLowerCase();
+  const hospital_norm  = (contract.display_site || client?.name || String(contract.client_id)).toLowerCase();
+  const ward_norm      = (contract.ward_hint || 'contract').toLowerCase();
+  const job_title_norm = (contract.role || 'weekly').toLowerCase();
+  const booking_id     = makeWeeklyBookingId(candidate?.id, contract, cw);
 
   let ts = null;
 
@@ -35040,7 +35661,7 @@ export async function handleContractWeekGeneratePrintable(env, req, weekId) {
     return withCORS(env, req, serverError('Failed to create or load timesheet for QR weekly'));
   }
 
-  // 4) TSFIN snapshot with AWAITING_MANUAL_SIGNATURE
+  // 4) TSFIN snapshot with AWAITING_MANUAL_SIGNATURE from the supplied hours
   const n2 = (x) => Number(x) || 0;
 
   const basePay    = +(
@@ -35168,7 +35789,7 @@ export async function handleContractWeekGeneratePrintable(env, req, weekId) {
     });
   });
 
-  // 5) Generate signed TSQ1 QR and store it (this sets ts.qr_r2_key)
+  // 5) Generate signed TSQ1 QR and store it (sets ts.qr_r2_key etc.)
   let qrText = null;
   let qr_r2_key = null;
   try {
@@ -35189,7 +35810,7 @@ export async function handleContractWeekGeneratePrintable(env, req, weekId) {
     });
   }
 
-  // 6) Your separate qr_token/payload (for broker/app tracking)
+  // 6) Separate qr_token/payload for token-based invalidation
   const qrToken = (typeof crypto !== 'undefined' && crypto.randomUUID)
     ? crypto.randomUUID()
     : `${ts.timesheet_id}:${Date.now()}`;
@@ -35217,13 +35838,14 @@ export async function handleContractWeekGeneratePrintable(env, req, weekId) {
         qr_token: qrToken,
         qr_status: 'PENDING',
         qr_generated_at: now,
+        qr_scanned_at: null,
         qr_payload_json: qrPayload,
         updated_at: now
       })
     }
   ).catch(() => {});
 
-  // 7) Render PDF (weekly layout will draw rows, and PDF renderer will draw QR via ts.qr_r2_key)
+  // 7) Render PDF (weekly layout; renderer will draw QR via ts.qr_r2_key / payload)
   const pdfKey = await renderTimesheetPDFAndSave(env, ts.timesheet_id).catch((e) => {
     console.error('[QR_WEEKLY][GENERATE] renderTimesheetPDFAndSave failed', {
       timesheet_id: ts.timesheet_id,
@@ -35243,7 +35865,7 @@ export async function handleContractWeekGeneratePrintable(env, req, weekId) {
     ).catch(() => {});
   }
 
-  // 8) Best-effort: email to candidate with PDF
+  // 8) Best-effort: email to candidate with PDF (unchanged behaviour)
   let emailQueued = false;
   try {
     const email = (candidate && candidate.email && String(candidate.email).trim()) || null;
@@ -35320,6 +35942,7 @@ export async function handleContractWeekGeneratePrintable(env, req, weekId) {
     email_queued: emailQueued
   }));
 }
+
 
 export async function handleTimesheetBucketPreview(env, req) {
   const enc    = encodeURIComponent;
@@ -35857,7 +36480,8 @@ export async function handleTimesheetQrScan(env, req) {
     );
   }
 
-  const p = verification.payload; // expected: { v, tsid, cwid?, cid?, cand?, cli?, we?, nonce, iat }
+  // Payload may contain a token in newer QRs
+  const p = verification.payload; // e.g. { v, tsid, cwid?, cid?, cand?, cli?, we?, nonce, iat, token? }
 
   // ─────────────────────────────────────────────────────────────
   // 2) Load timesheet and basic QR state checks
@@ -35883,10 +36507,32 @@ export async function handleTimesheetQrScan(env, req) {
     );
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // 2a) Token check – invalidate older QRs when a new one is generated
+  // ─────────────────────────────────────────────────────────────
+  // Behaviour:
+  // - If the timesheet has a stored qr_token (new regime), the payload must also
+  //   carry a matching token or the QR is rejected.
+  // - This ensures that once back-office or the app regenerates a QR (new token),
+  //   any older printed code immediately becomes invalid.
+  const payloadToken = p.token || null;
+  const tsToken      = ts.qr_token || null;
+
+  if (tsToken) {
+    // We're in token-aware regime; payload token must match
+    if (!payloadToken || String(payloadToken) !== String(tsToken)) {
+      return withCORS(
+        env,
+        req,
+        badRequest('QR token is no longer valid for this timesheet')
+      );
+    }
+  }
+
   const now = nowIso();
 
   // ─────────────────────────────────────────────────────────────
-  // WEEKLY BRANCH (existing behaviour, unchanged)
+  // WEEKLY BRANCH (existing behaviour, token-guarded)
   // ─────────────────────────────────────────────────────────────
   if (sheetScope === 'WEEKLY') {
     // 2b) Contract week
@@ -35982,7 +36628,7 @@ export async function handleTimesheetQrScan(env, req) {
       );
     }
 
-    // 3) Attach the scanned image (if provided)
+    // 3) Attach the scanned image (if provided) and mark QR as USED
     const tsPatchBase = {
       qr_status: 'USED',
       qr_scanned_at: now,
@@ -38791,6 +39437,11 @@ export default {
         const m = matchPath(p, '/api/timesheets/:id/daily-qr-printable');
         if (m && req.method === 'POST') return handleTimesheetDailyQrPrintable(env, req, m.id);
       }
+      // NEW: daily manual upsert (edit daily manual hours + QR hints)
+      {
+        const m = matchPath(p, '/api/timesheets/:id/daily-manual-upsert');
+        if (m && req.method === 'POST') return handleTimesheetDailyManualUpsert(env, req, m.id);
+      }
       {
         const m = matchPath(p, '/api/timesheets/:id');
         if (m && req.method === 'DELETE') return handleTimesheetDelete(env, req, m.id);
@@ -38925,6 +39576,7 @@ export default {
     })());
   }
 }
+
 
 
 
