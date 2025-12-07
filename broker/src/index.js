@@ -31859,13 +31859,16 @@ function handleVersion() {
 // Minimal helpers (reuse your base ones if present)
 // ---------------------------
 
-
 function asNumber(x, d = 0) {
   if (x === null || x === undefined) return d;
   const n = typeof x === 'number' ? x : Number(x);
   return Number.isFinite(n) ? n : d;
 }
 
+// Alias used throughout TSFIN maths
+function asNumberLocal(x, d = 0) {
+  return asNumber(x, d);
+}
 
 
 function ymd(iso) {
