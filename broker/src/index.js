@@ -31000,104 +31000,6 @@ async function fetchUnifiedDefaultWindow(env, { client_id, role, band, date }) {
   return null;
 }
 
-// 3) Resolve combined PAY/CHARGE view
-async function resolveRates(env, { candidate_id, client_id, role, band, dateYmd }) {
-  // Determine effective rate_type from candidate if available
-  let rate_type = null;
-  if (candidate_id) {
-    try {
-      const { rows: cand } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/candidates` +
-        `?id=eq.${encodeURIComponent(candidate_id)}` +
-        `&select=pay_method&limit=1`
-      );
-      const pm = (cand && cand[0] && (cand[0].pay_method || '')).toUpperCase();
-      rate_type = (pm === 'PAYE' || pm === 'UMBRELLA') ? pm : 'UMBRELLA';
-    } catch {
-      // If anything goes wrong looking up the candidate, fall back to Umbrella
-      rate_type = 'UMBRELLA';
-    }
-  } else {
-    // No candidate: fall back to Umbrella semantics for pay
-    rate_type = 'UMBRELLA';
-  }
-
-  // 1) Candidate override PAY (exact band → band-null)
-  let override = null;
-  if (candidate_id && dateYmd) {
-    override = await fetchActiveOverride(env, {
-      candidate_id,
-      client_id,
-      role,
-      band,
-      date: dateYmd,
-      rate_type
-    });
-  }
-
-  // 2) Client default window for CHARGE (and PAY if needed)
-  let windowDef = null;
-  if (client_id && role && dateYmd) {
-    windowDef = await fetchUnifiedDefaultWindow(env, {
-      client_id,
-      role,
-      band,
-      date: dateYmd
-    });
-  }
-
-  // Compose result
-  const charge = windowDef
-    ? {
-        day:   windowDef.charge_day,
-        night: windowDef.charge_night,
-        sat:   windowDef.charge_sat,
-        sun:   windowDef.charge_sun,
-        bh:    windowDef.charge_bh
-      }
-    : null;
-
-  const pay = override
-    ? {
-        day:   override.pay_day,
-        night: override.pay_night,
-        sat:   override.pay_sat,
-        sun:   override.pay_sun,
-        bh:    override.pay_bh
-      }
-    : (windowDef
-        ? (
-            rate_type === 'PAYE'
-              ? {
-                  day:   windowDef.paye_day,
-                  night: windowDef.paye_night,
-                  sat:   windowDef.paye_sat,
-                  sun:   windowDef.paye_sun,
-                  bh:    windowDef.paye_bh
-                }
-              : {
-                  day:   windowDef.umb_day,
-                  night: windowDef.umb_night,
-                  sat:   windowDef.umb_sat,
-                  sun:   windowDef.umb_sun,
-                  bh:    windowDef.umb_bh
-                }
-          )
-        : null
-      );
-
-  return {
-    source: override
-      ? { kind: 'CANDIDATE_OVERRIDE', id: override.id, rate_type }
-      : (windowDef
-          ? { kind: 'CLIENT_DEFAULT', id: windowDef.id, rate_type }
-          : { kind: 'NONE', id: null, rate_type }
-        ),
-    pay,
-    charge
-  };
-}
 // ====================== RELATED: LIST (generic) ======================
 /**
  * @openapi
@@ -32312,7 +32214,104 @@ function classifyMinutes(env, policy, segments) {
     hours_bh:   round2(out.bh    / 60),
   };
 }
+// 3) Resolve combined PAY/CHARGE view
+async function resolveRates(env, { candidate_id, client_id, role, band, dateYmd }) {
+  // Determine effective rate_type from candidate if available
+  let rate_type = null;
+  if (candidate_id) {
+    try {
+      const { rows: cand } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/candidates` +
+        `?id=eq.${encodeURIComponent(candidate_id)}` +
+        `&select=pay_method&limit=1`
+      );
+      const pm = (cand && cand[0] && (cand[0].pay_method || '')).toUpperCase();
+      rate_type = (pm === 'PAYE' || pm === 'UMBRELLA') ? pm : 'UMBRELLA';
+    } catch {
+      // If anything goes wrong looking up the candidate, fall back to Umbrella
+      rate_type = 'UMBRELLA';
+    }
+  } else {
+    // No candidate: fall back to Umbrella semantics for pay
+    rate_type = 'UMBRELLA';
+  }
 
+  // 1) Candidate override PAY (exact band → band-null)
+  let override = null;
+  if (candidate_id && dateYmd) {
+    override = await fetchActiveOverride(env, {
+      candidate_id,
+      client_id,
+      role,
+      band,
+      date: dateYmd,
+      rate_type
+    });
+  }
+
+  // 2) Client default window for CHARGE (and PAY if needed)
+  let windowDef = null;
+  if (client_id && role && dateYmd) {
+    windowDef = await fetchUnifiedDefaultWindow(env, {
+      client_id,
+      role,
+      band,
+      date: dateYmd
+    });
+  }
+
+  // Compose result
+  const charge = windowDef
+    ? {
+        day:   windowDef.charge_day,
+        night: windowDef.charge_night,
+        sat:   windowDef.charge_sat,
+        sun:   windowDef.charge_sun,
+        bh:    windowDef.charge_bh
+      }
+    : null;
+
+  const pay = override
+    ? {
+        day:   override.pay_day,
+        night: override.pay_night,
+        sat:   override.pay_sat,
+        sun:   override.pay_sun,
+        bh:    override.pay_bh
+      }
+    : (windowDef
+        ? (
+            rate_type === 'PAYE'
+              ? {
+                  day:   windowDef.paye_day,
+                  night: windowDef.paye_night,
+                  sat:   windowDef.paye_sat,
+                  sun:   windowDef.paye_sun,
+                  bh:    windowDef.paye_bh
+                }
+              : {
+                  day:   windowDef.umb_day,
+                  night: windowDef.umb_night,
+                  sat:   windowDef.umb_sat,
+                  sun:   windowDef.umb_sun,
+                  bh:    windowDef.umb_bh
+                }
+          )
+        : null
+      );
+
+  return {
+    source: override
+      ? { kind: 'CANDIDATE_OVERRIDE', id: override.id, rate_type }
+      : (windowDef
+          ? { kind: 'CLIENT_DEFAULT', id: windowDef.id, rate_type }
+          : { kind: 'NONE', id: null, rate_type }
+        ),
+    pay,
+    charge
+  };
+}
 
 // ---------------------------
 // Rates resolution
@@ -32326,51 +32325,6 @@ function classifyMinutes(env, policy, segments) {
 // Internal resolver used by the worker (UNIFIED DEFAULTS)
 // - Same logic as handleResolveRate but returns a plain object (no HTTP response)
 // ─────────────────────────────────────────────────────────────────────────────
-async function resolveRates(env, { candidate_id, client_id, role, band, dateYmd }) {
-  // Determine effective rate_type from candidate if available
-  let rate_type = null;
-  if (candidate_id) {
-    try {
-      const { rows: cand } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(candidate_id)}&select=pay_method&limit=1`
-      );
-      const pm = (cand && cand[0] && (cand[0].pay_method || '')).toUpperCase();
-      rate_type = (pm === 'PAYE' || pm === 'UMBRELLA') ? pm : 'UMBRELLA';
-    } catch {
-      rate_type = 'UMBRELLA';
-    }
-  } else {
-    rate_type = 'UMBRELLA';
-  }
-
-  // 1) Candidate override PAY (exact band → band-null)
-  const override = await fetchActiveOverride(env, { candidate_id, client_id, role, band, date: dateYmd, rate_type });
-
-  // 2) Client default window for CHARGE (and PAY if needed)
-  const windowDef = await fetchUnifiedDefaultWindow(env, { client_id, role, band, date: dateYmd });
-
-  // Compose result
-  const charge = windowDef ? {
-    day: windowDef.charge_day, night: windowDef.charge_night, sat: windowDef.charge_sat, sun: windowDef.charge_sun, bh: windowDef.charge_bh
-  } : null;
-
-  const pay = override ? {
-    day: override.pay_day, night: override.pay_night, sat: override.pay_sat, sun: override.pay_sun, bh: override.pay_bh
-  } : (windowDef ? (
-    rate_type === 'PAYE'
-      ? { day: windowDef.paye_day, night: windowDef.paye_night, sat: windowDef.paye_sat, sun: windowDef.paye_sun, bh: windowDef.paye_bh }
-      : { day: windowDef.umb_day,  night: windowDef.umb_night,  sat: windowDef.umb_sat,  sun: windowDef.umb_sun,  bh: windowDef.umb_bh  }
-  ) : null);
-
-  return {
-    source: override
-      ? { kind: 'CANDIDATE_OVERRIDE', id: override.id, rate_type }
-      : (windowDef ? { kind: 'CLIENT_DEFAULT', id: windowDef.id, rate_type } : { kind: 'NONE', id: null, rate_type }),
-    pay,
-    charge
-  };
-}
 
 
 function anyMissingRates(hours, pay, charge) {
