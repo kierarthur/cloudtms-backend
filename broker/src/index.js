@@ -31612,11 +31612,6 @@ async function loadCandidate(env, key_norm) {
   return rows[0] || null;
 }
 
-async function resolveClientId(env, hospital_norm) {
-  if (!hospital_norm) return null;
-  const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/client_hospitals?hospital_name_norm=eq.${encodeURIComponent(hospital_norm)}&select=client_id&limit=1`);
-  return rows[0]?.client_id || null;
-}
 
 async function loadPolicy(env, client_id, workedDateYmd) {
   const { rows: defRows } = await sbFetch(
