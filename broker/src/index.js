@@ -32012,7 +32012,8 @@ async function loadPolicy(env, client_id, workedDateYmd) {
       `${env.SUPABASE_URL}/rest/v1/client_settings` +
         `?client_id=eq.${encodeURIComponent(client_id)}` +
         `&select=*` +
-        `&order=effective_from.desc,nullsLast=true` +
+        // FIXED: PostgREST syntax for nulls-last ordering
+        `&order=effective_from.desc.nullslast` +
         `&limit=1${w}`
     );
     cs = rows[0] || null;
@@ -32053,19 +32054,19 @@ async function loadPolicy(env, client_id, workedDateYmd) {
       ? cs.ts_attach_to_invoice !== false
       : def.ts_attach_to_invoice !== false; // default true if unset
 
-  // NEW: autoprocess_hr flag (default false if missing)
+  // autoprocess_hr flag (default false if missing)
   const autoprocess_hr =
     cs && Object.prototype.hasOwnProperty.call(cs, "autoprocess_hr")
       ? !!cs.autoprocess_hr
       : !!def.autoprocess_hr || false;
 
-  // NEW: no_timesheet_required flag (default false if missing)
+  // no_timesheet_required flag (default false if missing)
   const no_timesheet_required =
     cs && Object.prototype.hasOwnProperty.call(cs, "no_timesheet_required")
       ? !!cs.no_timesheet_required
       : !!def.no_timesheet_required || false;
 
-  // NEW: daily invoice calc flag (default false if missing)
+  // daily invoice calc flag (default false if missing)
   const daily_calc_of_invoices =
     cs && Object.prototype.hasOwnProperty.call(cs, "daily_calc_of_invoices")
       ? !!cs.daily_calc_of_invoices
@@ -32117,14 +32118,15 @@ async function loadPolicy(env, client_id, workedDateYmd) {
     hr_attach_to_invoice,
     ts_attach_to_invoice,
 
-    // NEW: HR auto-process & timesheet requirement flags
+    // HR auto-process & timesheet requirement flags
     autoprocess_hr,
     no_timesheet_required,
 
-    // NEW: daily invoicing policy (used by downstream logic and TSFIN)
+    // daily invoicing policy (used by downstream logic and TSFIN)
     daily_calc_of_invoices,
   };
 }
+
 
 
 // ---------------------------
@@ -32350,7 +32352,11 @@ async function writeSnapshot(env, snapshot) {
   // - basis: 'SELF_REPORTED' | 'HR_VALIDATED' | 'OVERRIDDEN' | 'CONTRACT_WEEKLY' | 'NHSP' | 'NHSP_ADJUSTMENT'
   // - nhsp_import_id: uuid, linking this TSFIN to an NHSP hr_import
   // - invoice_breakdown_json: either AGGREGATE or per-shift breakdown for NHSP/autoproc
-  await sbRpc(env, 'tsfin_prepare_write', { timesheet_id: snapshot.timesheet_id });
+
+  // Use the correct argument name for the Postgres function:
+  await sbRpc(env, 'tsfin_prepare_write', {
+    p_timesheet_id: snapshot.timesheet_id
+  });
 
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets_financials`, {
     method: 'POST',
@@ -38832,8 +38838,16 @@ export default {
         return handleHrAutoprocessImport(env, req);
       }
       {
+        // NEW: HealthRoster weekly autoprocess PREVIEW
+        const hrAutoPrev = matchPath(p, '/api/healthroster/autoprocess/:import_id/preview');
+        if (hrAutoPrev && req.method === 'GET') {
+          return handleHrAutoprocessPreview(env, req, hrAutoPrev.import_id);
+        }
+
         const hrAuto = matchPath(p, '/api/healthroster/:import_id/autoprocess-apply');
-        if (hrAuto && req.method === 'POST')                                 return handleHrAutoprocessApply(env, req, hrAuto.import_id);
+        if (hrAuto && req.method === 'POST') {
+          return handleHrAutoprocessApply(env, req, hrAuto.import_id);
+        }
       }
 
       if (req.method === 'POST' && p === '/api/hr/tso-failure-email')        return handleQueueTsoFailureEmail(env, req);
@@ -39372,8 +39386,12 @@ export default {
       if (req.method === 'GET' && p === '/api/funnel/timesheets') return handleFunnelTimesheets(env, req);
       if (req.method === 'GET' && p === '/api/invoices/precheck') return handleInvoicesPrecheck(env, req);
 
-      
-      return new Response("Not found", { status: 404, headers: TEXT_PLAIN });
+
+      // FINAL: Not found – now CORS-safe
+      return withCORS(env, req, new Response("Not found", {
+        status: 404,
+        headers: TEXT_PLAIN
+      }));
     } catch (e) {
       // Log full error to Worker logs
       console.error("Unhandled error:", e);
@@ -39419,7 +39437,6 @@ export default {
     })());
   }
 }
-
 
 
 
