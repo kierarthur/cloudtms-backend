@@ -11059,8 +11059,6 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
   };
 }
 
-
-
 async function parseHealthRosterWorkbookIntoHrRows(
   env,
   { import_id, file_key, client_id, tz = 'Europe/London' }
@@ -11078,7 +11076,9 @@ async function parseHealthRosterWorkbookIntoHrRows(
     }));
   }
 
+  // ─────────────────────────────────────────────────────────────
   // Determine source_system for this import so we can branch weekly vs daily rota
+  // ─────────────────────────────────────────────────────────────
   let importSourceSystem = 'HEALTHROSTER';
   try {
     const { rows: impRows } = await sbFetch(
@@ -11101,6 +11101,9 @@ async function parseHealthRosterWorkbookIntoHrRows(
     }
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // Load bytes from R2 and sniff for HTML vs real XLS
+  // ─────────────────────────────────────────────────────────────
   const u8 = await r2GetBytes(env, file_key);
   if (!u8) {
     if (LOG) {
@@ -11113,7 +11116,44 @@ async function parseHealthRosterWorkbookIntoHrRows(
     throw new Error(`R2 object not found for key ${file_key}`);
   }
 
-  const wb = XLSX.read(u8, { type: 'array' });
+  const text  = new TextDecoder('utf-8').decode(u8);
+  const sniff = text.slice(0, 2048).toLowerCase();
+
+  const looksLikeHtml =
+    sniff.replace(/^[\uFEFF\s]+/, '').startsWith('<table') ||
+    sniff.includes('<table') ||
+    sniff.includes('<html') ||
+    sniff.startsWith('<!doctype html');
+
+  let wb;
+  let rows = [];
+
+  try {
+    if (looksLikeHtml) {
+      if (LOG) {
+        console.log('[HR_PARSE]', JSON.stringify({
+          stage: 'detected_html',
+          import_id,
+          file_key
+        }));
+      }
+      wb = XLSX.read(text, { type: 'string' });
+    } else {
+      wb = XLSX.read(u8, { type: 'array' });
+    }
+  } catch (e) {
+    if (LOG) {
+      console.warn('[HR_PARSE]', JSON.stringify({
+        stage: 'wb_read_failed',
+        import_id,
+        file_key,
+        err: e?.message || String(e)
+      }));
+    }
+    // Fallback: try array mode
+    wb = XLSX.read(u8, { type: 'array' });
+  }
+
   if (!wb.SheetNames || !wb.SheetNames.length) {
     if (LOG) {
       console.error('[HR_PARSE]', JSON.stringify({
@@ -11124,12 +11164,14 @@ async function parseHealthRosterWorkbookIntoHrRows(
     }
     throw new Error('HealthRoster workbook has no sheets');
   }
+
   const sheet = wb.Sheets[wb.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json(sheet, {
+  rows = XLSX.utils.sheet_to_json(sheet, {
     header: 1,
     raw:    true,
     defval: ''
   });
+
   if (!rows.length) {
     if (LOG) {
       console.warn('[HR_PARSE]', JSON.stringify({
@@ -11147,6 +11189,9 @@ async function parseHealthRosterWorkbookIntoHrRows(
     };
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // Utilities
+  // ─────────────────────────────────────────────────────────────
   const pad2 = (n) => String(n).padStart(2, '0');
 
   function excelDateToYmd(v) {
@@ -11214,10 +11259,25 @@ async function parseHealthRosterWorkbookIntoHrRows(
   function normalizeStr(s) {
     return String(s || '').trim();
   }
+
   function normalizeKeyParts(parts) {
     return parts
       .map(s => String(s || '').replace(/[|]/g, ' ').trim().toLowerCase())
       .join('|');
+  }
+
+  function inferRoleTypeFromText(textA, textB) {
+    const s = `${textA || ''} ${textB || ''}`.toLowerCase();
+    if (
+      s.includes('hca') ||
+      s.includes('healthcare assistant') ||
+      s.includes('support worker') ||
+      s.includes('csw') ||
+      s.includes('hcsw')
+    ) {
+      return 'HCA';
+    }
+    return 'RMN';
   }
 
   // header detection
@@ -11250,7 +11310,9 @@ async function parseHealthRosterWorkbookIntoHrRows(
 
   const hrRowsPayload = [];
 
-  // DAILY
+  // ─────────────────────────────────────────────────────────────
+  // DAILY ROTA
+  // ─────────────────────────────────────────────────────────────
   if (importSourceSystem === 'HEALTHROSTER_DAILY') {
     const reqIdIdx       = findCol(-1, h => h.includes('request') && h.includes('id'));
     const dateIdx        = findCol(-1, h => h.includes('date'));
@@ -11346,27 +11408,34 @@ async function parseHealthRosterWorkbookIntoHrRows(
       fullRow.booked_hours      = rawBooked;
       fullRow.rate              = rawRate;
 
+      const roleType = inferRoleTypeFromText(gradeRaw, staffRaw);
+
       hrRowsPayload.push({
         import_id,
-        source_system: 'HEALTHROSTER_DAILY',
         hr_request_id: requestId || null,
         date_local: dateYmd,
         start_time_local: startHhmm,
         end_time_local: endHhmm,
-        staff_raw: staffRaw,
-        staff_norm: staffNorm,
-        hospital_or_trust: unitRaw,
-        assignment_grade_norm: gradeNorm,
-        hours_worked: hoursWorked,
+        staff_norm: staffNorm || '',
+        role_type: roleType,
+        unit_raw: unitRaw || null,
+        unit_hint: null,
+        agency_raw: 'HEALTHROSTER_DAILY',
         external_row_key,
-        payload_json: fullRow
+        payload_json: fullRow,
+        staff_raw: staffRaw || null,
+        assignment_grade_norm: gradeNorm,
+        hours_worked: typeof hoursWorked === 'number' ? hoursWorked : null
       });
 
       rows_parsed++;
     }
 
   } else {
-    // WEEKLY
+    // ─────────────────────────────────────────────────────────────
+    // WEEKLY HEALTHROSTER (autoprocess)
+    // ─────────────────────────────────────────────────────────────
+
     const requestColIdx   = findCol(0,  h => h.includes('request'));
     const staffColIdx     = findCol(1,  h => h.includes('staff') || h.includes('name'));
     const dateColIdx      = findCol(4,  h => h.includes('date'));
@@ -11467,10 +11536,24 @@ async function parseHealthRosterWorkbookIntoHrRows(
         raw_columns
       };
 
+      const roleType = inferRoleTypeFromText(ward, staffName);
+
       hrRowsPayload.push({
         import_id,
+        hr_request_id: requestId || null,
+        date_local: workDateYmd,
+        start_time_local: startHhmm,
+        end_time_local: endHhmm,
+        staff_norm: staffNorm || '',
+        role_type: roleType,
+        unit_raw: ward || null,
+        unit_hint: null,
+        agency_raw: 'HEALTHROSTER',
         external_row_key,
-        payload_json
+        payload_json,
+        staff_raw: staffName || null,
+        assignment_grade_norm: null,
+        hours_worked: typeof hoursWorked === 'number' ? hoursWorked : null
       });
 
       rows_parsed++;
@@ -11522,6 +11605,7 @@ async function parseHealthRosterWorkbookIntoHrRows(
     header_columns
   };
 }
+
 
 
 export async function handleManualPayAdjustmentCreate(env, req, timesheetId) {
@@ -14158,7 +14242,6 @@ export async function handleHrAutoprocessClients(env, req) {
 }
 
 
-
 export async function handleHrAutoprocessConfirm(env, req, importId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -15846,6 +15929,781 @@ async function createMissingShiftRepayEntriesForTs(env, candidateId, clientId, t
 }
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+async function loadSettingsDefaults(env) {
+  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
+
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/settings_defaults` +
+        `?select=timezone_id,import_config_json` +
+        `&limit=1`
+    );
+    const row = rows?.[0] || {};
+    const cfg = row.import_config_json || {};
+
+    const timezoneId = row.timezone_id || 'Europe/London';
+
+    const importConfig = {
+      // main switch you asked for: whether to use batching or not
+      useBatchedClassification:
+        (typeof cfg.use_batched_classification === 'boolean')
+          ? cfg.use_batched_classification
+          : true,
+
+      // optional: how many subrequests we aim to stay under in preview
+      maxPreviewSubrequests:
+        typeof cfg.max_preview_subrequests === 'number'
+          ? cfg.max_preview_subrequests
+          : 40,
+
+      // optional: max hr_rows to allow full preview for (beyond this, you might do a lighter view)
+      maxHrRowsForFullPreview:
+        typeof cfg.max_hr_rows_for_full_preview === 'number'
+          ? cfg.max_hr_rows_for_full_preview
+          : 500
+    };
+
+    if (LOG) {
+      console.log('[SETTINGS_DEFAULTS]', JSON.stringify({
+        stage: 'loaded',
+        timezone_id: timezoneId,
+        importConfig
+      }));
+    }
+
+    return { timezone_id: timezoneId, importConfig };
+  } catch (e) {
+    if (LOG) {
+      console.warn('[SETTINGS_DEFAULTS]', JSON.stringify({
+        stage: 'load_failed',
+        err: e?.message || String(e)
+      }));
+    }
+    // safe fallbacks
+    return {
+      timezone_id: 'Europe/London',
+      importConfig: {
+        useBatchedClassification: true,
+        maxPreviewSubrequests: 40,
+        maxHrRowsForFullPreview: 500
+      }
+    };
+  }
+}
+
+async function buildHrRotaValidationContext(env, importId) {
+  const enc  = encodeURIComponent;
+  const norm = (s) => String(s || '').trim().toLowerCase();
+  const LOG  = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
+
+  const ctx = {
+    import_id: importId,
+    imp: null,
+    error: null,
+    hrRows: [],
+    // caches
+    candidateByNameTrust: new Map(), // `${staffNorm}|${trustNorm}` -> candidate_id|null
+    clientByTrust: new Map(),        // trustNorm -> client_id|null
+    timesheetsByCand: new Map()      // candidate_id -> [timesheets...]
+  };
+
+  // Load hr_imports
+  const { rows: impRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/hr_imports` +
+      `?id=eq.${enc(importId)}` +
+      `&select=id,source_system,client_id,parse_summary_json` +
+      `&limit=1`
+  );
+  const imp = impRows?.[0] || null;
+  if (!imp) {
+    ctx.error = 'import_not_found';
+    if (LOG) {
+      console.warn('[HR_ROTA_CTX]', JSON.stringify({
+        stage: 'import_not_found',
+        import_id: importId
+      }));
+    }
+    return ctx;
+  }
+  ctx.imp = imp;
+  const src = String(imp.source_system || '').toUpperCase();
+  if (src !== 'HEALTHROSTER_DAILY') {
+    ctx.error = 'source_system_mismatch';
+    if (LOG) {
+      console.warn('[HR_ROTA_CTX]', JSON.stringify({
+        stage: 'source_system_mismatch',
+        import_id: importId,
+        actual_source_system: src
+      }));
+    }
+    return ctx;
+  }
+
+  // Load hr_rows (daily)
+  const { rows: hrRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/hr_rows` +
+      `?import_id=eq.${enc(importId)}` +
+      `&select=id,hr_request_id,date_local,start_time_local,end_time_local,` +
+      `staff_raw,staff_norm,unit_raw,assignment_grade_norm,hours_worked,payload_json` +
+      `&order=id.asc`
+  );
+  ctx.hrRows = hrRows || [];
+
+  if (LOG) {
+    console.log('[HR_ROTA_CTX]', JSON.stringify({
+      stage: 'loaded',
+      import_id: importId,
+      hr_row_count: ctx.hrRows.length
+    }));
+  }
+
+  return ctx;
+}
+
+async function classifyHrRotaRow(env, hrRow, context) {
+  const enc   = encodeURIComponent;
+  const norm  = (s) => String(s || '').trim().toLowerCase();
+
+  const importId = context.import_id;
+
+  // helper: candidate + trust cache
+  async function resolveCandidateByNameTrustCached(staffRaw, staffNorm, trustNorm) {
+    const nameKey = `${staffNorm || norm(staffRaw)}|${trustNorm || ''}`;
+    if (context.candidateByNameTrust.has(nameKey)) {
+      return context.candidateByNameTrust.get(nameKey);
+    }
+    let candidateId = null;
+    try {
+      candidateId = await findCandidateByImportName(env, staffRaw || staffNorm, { trustNorm });
+    } catch (e) {
+      console.warn('[HR_ROTA_CLASSIFY] candidate resolve failed (non-fatal)', {
+        import_id: importId,
+        staff: staffRaw,
+        trustNorm,
+        err: e?.message || String(e)
+      });
+    }
+    context.candidateByNameTrust.set(nameKey, candidateId || null);
+    return candidateId || null;
+  }
+
+  async function resolveClientIdCached(hospRaw) {
+    const t = String(hospRaw || '').trim();
+    const trustNorm = norm(t);
+    if (!trustNorm) return null;
+    if (context.clientByTrust.has(trustNorm)) return context.clientByTrust.get(trustNorm);
+
+    let clientId = null;
+    try {
+      clientId = await resolveClientId(env, hospRaw);
+    } catch (e) {
+      console.warn('[HR_ROTA_CLASSIFY] client resolve failed (non-fatal)', {
+        import_id: importId,
+        hospital: hospRaw,
+        err: e?.message || String(e)
+      });
+    }
+    context.clientByTrust.set(trustNorm, clientId || null);
+    return clientId || null;
+  }
+
+  async function getDailyTimesheetsForCandidateCached(candidateId) {
+    if (!candidateId) return [];
+    if (context.timesheetsByCand.has(candidateId)) {
+      return context.timesheetsByCand.get(candidateId);
+    }
+    let tsRows = [];
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?candidate_id=eq.${enc(candidateId)}` +
+          `&sheet_scope=eq.DAILY` +
+          `&is_current=eq.true` +
+          `&select=timesheet_id,worked_start_iso,hospital_norm,contract_id,job_title_norm,band`
+      );
+      tsRows = rows || [];
+    } catch (e) {
+      console.warn('[HR_ROTA_CLASSIFY] timesheets lookup failed (non-fatal)', {
+        import_id: importId,
+        candidate_id: candidateId,
+        err: e?.message || String(e)
+      });
+      tsRows = [];
+    }
+    context.timesheetsByCand.set(candidateId, tsRows);
+    return tsRows;
+  }
+
+  // extract HR row fields
+  const hrRowId       = hrRow.id;
+  const hrRequestId   = hrRow.hr_request_id || null;
+  const dateLocal     = hrRow.date_local || null;
+  const staffRaw      = hrRow.staff_raw || hrRow.payload_json?.staff_name || '';
+  const staffNorm     = hrRow.staff_norm || norm(staffRaw);
+  const hospRaw       = hrRow.unit_raw || hrRow.payload_json?.unit || hrRow.payload_json?.ward || '';
+  const hospNorm      = norm(hospRaw);
+  const gradeRaw      = hrRow.assignment_grade_norm || hrRow.payload_json?.grade_raw || hrRow.payload_json?.Request_Grade || null;
+  const hoursWorked   = hrRow.hours_worked ?? hrRow.payload_json?.actual_hours ?? null;
+  const startLocal    = hrRow.start_time_local || hrRow.payload_json?.start_local || null;
+  const endLocal      = hrRow.end_time_local || hrRow.payload_json?.end_local || null;
+
+  const baseResult = {
+    hr_row_id: hrRowId,
+    import_id: importId,
+    source_system: 'HEALTHROSTER_DAILY',
+    hr_request_id: hrRequestId,
+    staff_name: staffRaw || null,
+    staff_norm: staffNorm || null,
+    hospital_or_trust: hospRaw || null,
+    trust_norm: hospNorm || null,
+    date_local: dateLocal,
+    timesheet_id: null,
+    status: 'UNMATCHED',
+    reason_code: 'timesheet_not_found_or_ambiguous',
+    can_email: false,
+    details: {
+      start_local: startLocal,
+      end_local: endLocal,
+      hours_worked: hoursWorked
+    }
+  };
+
+  // candidate
+  let candidateId = null;
+  if (staffNorm) {
+    candidateId = await resolveCandidateByNameTrustCached(staffRaw, staffNorm, hospNorm);
+  }
+
+  // client
+  let clientId = null;
+  if (hospRaw) {
+    clientId = await resolveClientIdCached(hospRaw);
+  }
+
+  if (!candidateId || !clientId || !dateLocal) {
+    return { baseResult, classification: { ...baseResult } };
+  }
+
+  // timesheet
+  let ts = null;
+  const tsRows = await getDailyTimesheetsForCandidateCached(candidateId);
+  const candidates = [];
+  for (const t of tsRows || []) {
+    const wsIso = t.worked_start_iso || null;
+    if (!wsIso) continue;
+    let ymd = null;
+    try {
+      const parts = toLocalParts(wsIso, null);
+      ymd = parts && parts.ymd ? parts.ymd : String(wsIso).slice(0, 10);
+    } catch {
+      ymd = String(wsIso).slice(0, 10);
+    }
+    if (ymd !== dateLocal) continue;
+    if (hospNorm && t.hospital_norm) {
+      const tsHospNorm = norm(t.hospital_norm);
+      if (tsHospNorm !== hospNorm) {
+        continue;
+      }
+    }
+    candidates.push(t);
+  }
+
+  if (candidates.length === 1) {
+    ts = candidates[0];
+  } else {
+    return { baseResult, classification: { ...baseResult } };
+  }
+
+  const timesheetId = ts?.timesheet_id || null;
+  if (!timesheetId) {
+    return { baseResult, classification: { ...baseResult } };
+  }
+
+  // map grade to roleForRates
+  let roleForRates = null;
+  try {
+    const gradeUse = gradeRaw || null;
+    roleForRates = await mapRequestGradeToRole(env, {
+      client_id: clientId,
+      candidate_id: candidateId,
+      gradeRaw: gradeUse,
+      dateYmd: dateLocal
+    });
+  } catch (e) {
+    console.warn('[HR_ROTA_CLASSIFY] mapRequestGradeToRole failed (non-fatal)', {
+      import_id: importId,
+      hr_row_id: hrRowId,
+      err: e?.message || String(e)
+    });
+  }
+
+  const hrRowForValidation = {
+    id: hrRowId,
+    hr_request_id: hrRequestId,
+    date_local: dateLocal,
+    start_time_local: startLocal,
+    end_time_local: endLocal,
+    staff_raw: staffRaw,
+    staff_norm: staffNorm,
+    hospital_or_trust: hospRaw,
+    assignment_grade_norm: gradeRaw,
+    hours_worked: hoursWorked,
+    payload_json: hrRow.payload_json || {}
+  };
+
+  let validationRes = { ok: false, reason_code: 'internal_error', detail: null };
+  try {
+    validationRes = await validateDailyRotaRowAgainstTimesheet(
+      env,
+      ts,
+      hrRowForValidation,
+      { roleForRates }
+    );
+  } catch (e) {
+    console.warn('[HR_ROTA_CLASSIFY] validateDailyRotaRowAgainstTimesheet failed (non-fatal)', {
+      import_id: importId,
+      hr_row_id: hrRowId,
+      timesheet_id: timesheetId,
+      err: e?.message || String(e)
+    });
+  }
+
+  const ok = !!validationRes.ok;
+  const reasonCode = validationRes.reason_code || null;
+  const canEmail =
+    !!timesheetId &&
+    !!reasonCode &&
+    ['actual_hours_mismatch', 'start_end_mismatch', 'break_minutes_mismatch'].includes(
+      String(reasonCode).toLowerCase()
+    );
+
+  const classification = {
+    ...baseResult,
+    timesheet_id: timesheetId,
+    status: ok ? 'VALIDATION_OK' : 'FAILED',
+    reason_code: reasonCode || (ok ? null : 'validation_failed'),
+    can_email: canEmail,
+    details: validationRes.detail || baseResult.details
+  };
+
+  return { baseResult, classification };
+}
+
+
+
+async function buildWeeklyImportContext(env, importId, sourceSystem) {
+  const enc  = encodeURIComponent;
+  const norm = (s) => String(s || '').trim().toLowerCase();
+  const LOG  = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
+
+  const ctx = {
+    import_id: importId,
+    expected_source_system: String(sourceSystem || '').toUpperCase(),
+    imp: null,
+    source_system: null,
+    hrRows: [],
+    settings: null,
+
+    // caches for batching
+    candidateByNi: new Map(),
+    candidateById: new Map(),
+    candidateByNameTrust: new Map(), // `${name_norm}|${trust_norm}` -> candidate_id|null
+    clientByTrust: new Map(),        // trust_norm -> {client_id,name}|null
+    clientById: new Map(),           // client_id -> row
+    contractsByCandClient: new Map(),// `${cand_id}__${client_id}` -> [contracts]
+    clientSettingsByClient: new Map(),// client_id -> client_settings row
+    timesheetsById: new Map(),
+    tsfinById: new Map()
+  };
+
+  // Load settings
+  ctx.settings = await loadSettingsDefaults(env);
+
+  // Load hr_imports row
+  const { rows: impRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/hr_imports` +
+      `?id=eq.${enc(importId)}` +
+      `&select=id,source_system,client_id,filename,parse_summary_json` +
+      `&limit=1`
+  );
+  const imp = impRows?.[0] || null;
+  if (!imp) {
+    ctx.error = 'import_not_found';
+    if (LOG) {
+      console.warn('[WEEKLY_CTX]', JSON.stringify({
+        stage: 'import_not_found',
+        import_id: importId
+      }));
+    }
+    return ctx;
+  }
+  ctx.imp = imp;
+  ctx.source_system = String(imp.source_system || '').toUpperCase();
+
+  if (ctx.source_system !== ctx.expected_source_system) {
+    ctx.error = 'source_system_mismatch';
+    if (LOG) {
+      console.warn('[WEEKLY_CTX]', JSON.stringify({
+        stage: 'source_system_mismatch',
+        import_id: importId,
+        expected: ctx.expected_source_system,
+        actual: ctx.source_system
+      }));
+    }
+    return ctx;
+  }
+
+  // Load hr_rows
+  const { rows: hrRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/hr_rows` +
+      `?import_id=eq.${enc(importId)}` +
+      `&select=id,external_row_key,payload_json` +
+      `&order=id.asc`
+  );
+  ctx.hrRows = hrRows || [];
+
+  if (LOG) {
+    console.log('[WEEKLY_CTX]', JSON.stringify({
+      stage: 'loaded',
+      import_id: importId,
+      source_system: ctx.source_system,
+      hr_row_count: ctx.hrRows.length
+    }));
+  }
+
+  return ctx;
+}
+
+async function resolveClientForWeeklyRow(env, payload, context) {
+  const enc  = encodeURIComponent;
+  const norm = (s) => String(s || '').trim().toLowerCase();
+
+  const trustRaw = String(
+    payload.trust ||
+    payload.hospital_or_trust ||
+    payload.client ||
+    ''
+  ).trim();
+  const trustNorm = norm(trustRaw);
+
+  if (!trustNorm) return null;
+
+  if (context.clientByTrust.has(trustNorm)) {
+    const row = context.clientByTrust.get(trustNorm);
+    return row ? row.client_id : null;
+  }
+
+  let clientId = null;
+  let clientName = null;
+
+  try {
+    const aliasJson = JSON.stringify([trustNorm]);
+    const { rows: hospRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/client_hospitals` +
+        `?hospital_name_norm=cs.${enc(aliasJson)}` +
+        `&select=client_id&limit=1`
+    );
+    if (hospRows?.[0]?.client_id) {
+      clientId = hospRows[0].client_id;
+    } else {
+      const { rows: cliRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/clients` +
+          `?name=eq.${enc(trustRaw)}` +
+          `&select=id,name&limit=1`
+      );
+      if (cliRows?.[0]?.id) {
+        clientId   = cliRows[0].id;
+        clientName = cliRows[0].name;
+      }
+    }
+  } catch {
+    if (!clientId) {
+      const { rows: cliRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/clients` +
+          `?name=eq.${enc(trustRaw)}` +
+          `&select=id,name&limit=1`
+      );
+      if (cliRows?.[0]?.id) {
+        clientId   = cliRows[0].id;
+        clientName = cliRows[0].name;
+      }
+    }
+  }
+
+  if (clientId && !clientName) {
+    const { rows: cliRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/clients` +
+        `?id=eq.${enc(clientId)}&select=id,name&limit=1`
+    );
+    const cli = cliRows?.[0] || null;
+    clientName = cli?.name || null;
+  }
+
+  const row = clientId ? { client_id: clientId, name: clientName } : null;
+  context.clientByTrust.set(trustNorm, row);
+  if (row) context.clientById.set(clientId, row);
+  return clientId;
+}
+
+async function groupWeeklyRows(env, hrRows, context, sourceSystem) {
+  const norm = (s) => String(s || '').trim().toLowerCase();
+  const upper = (s) => String(s || '').trim().toUpperCase();
+
+  const groupMap = new Map(); // key -> group object
+
+  for (const hrRow of hrRows || []) {
+    const payload = hrRow.payload_json || {};
+    const id      = hrRow.id;
+
+    let staffName = '';
+    let workDate  = '';
+    let ward      = '';
+    let trustRaw  = '';
+    let startIso  = null;
+    let endIso    = null;
+    let breakMins = 0;
+    let finalised = '';
+    let assignmentCode = '';
+
+    if (sourceSystem === 'NHSP') {
+      staffName = String(payload.worker_name || payload.name || '').trim();
+      workDate  = String(payload.work_date || payload.date || '').trim();
+      ward      = String(payload.ward || payload.unit || '').trim();
+      trustRaw  = String(payload.trust || payload.hospital_or_trust || '').trim();
+      startIso  = payload.start_utc || payload.actual_start_iso || payload.actual_start || null;
+      endIso    = payload.end_utc   || payload.actual_end_iso   || payload.actual_end   || null;
+      breakMins = Number(payload.break_mins ?? payload.break_minutes ?? payload.actual_break_minutes ?? 0) || 0;
+      assignmentCode = String(payload.assignment || payload.assignment_code || '').trim();
+    } else {
+      // HEALTHROSTER
+      staffName = String(payload.staff_name || payload.worker_name || '').trim();
+      workDate  = String(payload.work_date || payload.date || '').trim();
+      ward      = String(payload.ward || payload.unit || '').trim();
+      trustRaw  = String(payload.trust || payload.hospital_or_trust || '').trim();
+      startIso  = payload.start_utc || null;
+      endIso    = payload.end_utc   || null;
+      breakMins = Number(payload.break_mins ?? 0) || 0;
+      finalised = String(payload.finalised_date || payload.finalized_date || '').trim();
+    }
+
+    if (!workDate || !startIso || !endIso) {
+      // skip bad rows at grouping time; row-level rejection can still be added by caller
+      continue;
+    }
+
+    const staffNorm = norm(staffName);
+    const trustNorm = norm(trustRaw);
+
+    const candidateId = await resolveCandidateForWeeklyRow(env, payload, context);
+    const clientId    = await resolveClientForWeeklyRow(env, payload, context);
+
+    if (!candidateId || !clientId) {
+      // cannot group; caller can treat as row-level REJECT
+      continue;
+    }
+
+    // Contracts & week-ending are best handled by the main classifier.
+    // Here we'll just collect raw shifts keyed by candidate/client/date.
+    const key = `${candidateId}__${clientId}__${workDate}`;
+    let g = groupMap.get(key);
+    if (!g) {
+      g = {
+        candidate_id: candidateId,
+        candidate_name: staffName,
+        client_id: clientId,
+        client_name: null, // caller can populate from context.clientById
+        work_date: workDate,
+        shifts: [],
+        hr_row_ids: [],
+        has_unfinalised: sourceSystem === 'HEALTHROSTER' && !finalised,
+        assignment_code: (sourceSystem === 'NHSP' ? assignmentCode : null)
+      };
+      groupMap.set(key, g);
+    }
+
+    g.shifts.push({
+      hr_row_id: id,
+      staff_name: staffName,
+      work_date: workDate,
+      ward,
+      start_utc: startIso,
+      end_utc: endIso,
+      break_mins: breakMins,
+      assignment_code: (sourceSystem === 'NHSP' ? assignmentCode : null),
+      is_unfinalised: (sourceSystem === 'HEALTHROSTER' && !finalised)
+    });
+    g.hr_row_ids.push(id);
+  }
+
+  return groupMap;
+}
+
+async function classifyWeeklyGroup(env, group, context, sourceSystem) {
+  // This is a *skeleton* that you can fill with your existing classifyGroup logic.
+  // For now, we return an UNKNOWN action, so it is safe but not yet fully wired.
+
+  const result = {
+    level: 'group',
+    preview_group_id: `grp:${group.contract_id || 'UNK'}:${group.week_ending_date || group.work_date}:${group.candidate_id}`,
+    import_id: context.import_id,
+    source_system: sourceSystem,
+    candidate_id: group.candidate_id,
+    candidate_name: group.candidate_name || null,
+    client_id: group.client_id,
+    client_name: group.client_name || null,
+    contract_id: group.contract_id || null,
+    week_ending_date: group.week_ending_date || group.work_date || null,
+    assignment_code: group.assignment_code || null,
+    self_bill: null,
+    has_unfinalised: !!group.has_unfinalised,
+    hr_row_ids: group.hr_row_ids ? group.hr_row_ids.slice() : [],
+    truth_pay_ex_vat: null,
+    truth_charge_ex_vat: null,
+    current_pay_ex_vat: null,
+    current_charge_ex_vat: null,
+    delta_pay_ex_vat: null,
+    delta_charge_ex_vat: null,
+    base_timesheet_id: null,
+    latest_adjustment_timesheet_id: null,
+    action: 'UNKNOWN',
+    reason: 'classifyWeeklyGroup is not yet wired with full group logic',
+    default_selected: false
+  };
+
+  return result;
+}
+
+
+async function buildWeeklyImportContext(env, importId, sourceSystem) {
+  const enc  = encodeURIComponent;
+  const norm = (s) => String(s || '').trim().toLowerCase();
+  const LOG  = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
+
+  const ctx = {
+    import_id: importId,
+    expected_source_system: String(sourceSystem || '').toUpperCase(),
+    imp: null,
+    source_system: null,
+    hrRows: [],
+    settings: null,
+
+    // caches for batching
+    candidateByNi: new Map(),
+    candidateById: new Map(),
+    candidateByNameTrust: new Map(), // `${name_norm}|${trust_norm}` -> candidate_id|null
+    clientByTrust: new Map(),        // trust_norm -> {client_id,name}|null
+    clientById: new Map(),           // client_id -> row
+    contractsByCandClient: new Map(),// `${cand_id}__${client_id}` -> [contracts]
+    clientSettingsByClient: new Map(),// client_id -> client_settings row
+    timesheetsById: new Map(),
+    tsfinById: new Map()
+  };
+
+  // Load settings
+  ctx.settings = await loadSettingsDefaults(env);
+
+  // Load hr_imports row
+  const { rows: impRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/hr_imports` +
+      `?id=eq.${enc(importId)}` +
+      `&select=id,source_system,client_id,filename,parse_summary_json` +
+      `&limit=1`
+  );
+  const imp = impRows?.[0] || null;
+  if (!imp) {
+    ctx.error = 'import_not_found';
+    if (LOG) {
+      console.warn('[WEEKLY_CTX]', JSON.stringify({
+        stage: 'import_not_found',
+        import_id: importId
+      }));
+    }
+    return ctx;
+  }
+  ctx.imp = imp;
+  ctx.source_system = String(imp.source_system || '').toUpperCase();
+
+  if (ctx.source_system !== ctx.expected_source_system) {
+    ctx.error = 'source_system_mismatch';
+    if (LOG) {
+      console.warn('[WEEKLY_CTX]', JSON.stringify({
+        stage: 'source_system_mismatch',
+        import_id: importId,
+        expected: ctx.expected_source_system,
+        actual: ctx.source_system
+      }));
+    }
+    return ctx;
+  }
+
+  // Load hr_rows
+  const { rows: hrRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/hr_rows` +
+      `?import_id=eq.${enc(importId)}` +
+      `&select=id,external_row_key,payload_json` +
+      `&order=id.asc`
+  );
+  ctx.hrRows = hrRows || [];
+
+  if (LOG) {
+    console.log('[WEEKLY_CTX]', JSON.stringify({
+      stage: 'loaded',
+      import_id: importId,
+      source_system: ctx.source_system,
+      hr_row_count: ctx.hrRows.length
+    }));
+  }
+
+  return ctx;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 export async function handleNhspImportsList(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -16409,6 +17267,1063 @@ async function handleCreateHospital(env, req, clientId) {
 // and candidate aliases for staff name→candidate.
 // ─────────────────────────────────────────────────────────────
 async function classifyWeeklyImportRows(env, importId, { source_system }) {
+  const enc   = encodeURIComponent;
+  const norm  = (s) => String(s || '').trim().toLowerCase();
+  const upper = (s) => String(s || '').trim().toUpperCase();
+  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+  const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
+
+  console.log('[WEEKLY_CLASSIFY] start', { importId, source_system });
+
+  // ─────────────────────────────────────────────────────────────
+  // 0) Build shared context (import + hr_rows + settings)
+  // ─────────────────────────────────────────────────────────────
+  const ctx = await buildWeeklyImportContext(env, importId, source_system);
+  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
+
+  if (ctx.error === 'import_not_found') {
+    if (LOG) {
+      console.warn('[WEEKLY_CLASSIFY]', JSON.stringify({
+        stage: 'import_not_found',
+        import_id: importId
+      }));
+    }
+    return { error: 'import_not_found', import_id: importId, source_system, rows: [] };
+  }
+  if (ctx.error === 'source_system_mismatch') {
+    if (LOG) {
+      console.warn('[WEEKLY_CLASSIFY]', JSON.stringify({
+        stage: 'source_system_mismatch',
+        import_id: importId,
+        expected: ctx.expected_source_system,
+        actual: ctx.source_system
+      }));
+    }
+    return {
+      error: 'source_system_mismatch',
+      import_id: importId,
+      expected_source_system: source_system,
+      actual_source_system: ctx.source_system,
+      rows: []
+    };
+  }
+
+   // ─────────────────────────────────────────────────────────────
+  // 0.5) Decide batched vs legacy based on settings
+  // ─────────────────────────────────────────────────────────────
+  const useBatched =
+    !!(ctx.settings &&
+       ctx.settings.importConfig &&
+       ctx.settings.importConfig.useBatchedClassification);
+
+  if (LOG) {
+    console.log('[WEEKLY_CLASSIFY]', JSON.stringify({
+      stage: 'context_loaded',
+      import_id: importId,
+      source_system: ctx.source_system,
+      hr_row_count: (ctx.hrRows || []).length,
+      use_batched_classification: useBatched
+    }));
+  }
+
+  // NOTE: To switch to the legacy (non-batched) classifier in future,
+  // set this in the database:
+  //
+  //   UPDATE public.settings_defaults
+  //   SET import_config_json = jsonb_build_object(
+  //     'use_batched_classification', false
+  //   );
+  //
+  // …and make sure classifyWeeklyImportRowsLegacy(env, importId, { source_system })
+  // is defined and exported in this module.
+
+  if (!useBatched) {
+    // Run the old non-batched implementation instead
+    return await classifyWeeklyImportRowsLegacy(env, importId, { source_system });
+  }
+
+  // From here down is the batched implementation
+  const imp    = ctx.imp;
+  const hrRows = ctx.hrRows || [];
+
+  if (!hrRows.length) {
+    console.log('[WEEKLY_CLASSIFY] no hr_rows', { import_id: importId });
+    return { import_id: importId, source_system, rows: [] };
+  }
+
+
+  // ─────────────────────────────────────────────────────────────
+  // CACHES to cut down on subrequests (local to this function)
+  // ─────────────────────────────────────────────────────────────
+  const candidateByNiCache        = new Map(); // ni_norm -> candidate row {id,display_name,...}
+  const candidateByIdCache        = new Map(); // id -> candidate row
+  const candidateByNameTrustCache = new Map(); // `${name_norm}|${trust_norm}` -> candidate_id|null
+
+  const clientByTrustCache = new Map();       // trust_norm -> {client_id,name}|null
+  const clientByIdCache    = new Map();       // client_id -> {id,name}
+
+  const contractByCandClientCache = new Map();// `${cand_id}__${client_id}` -> contracts[]
+  const clientSettingsMap         = new Map();// client_id -> client_settings row
+
+  // Helper: cached candidate-by-NI lookup
+  async function getCandidateByNi(uniqueId) {
+    const key = String(uniqueId || '').trim().toLowerCase();
+    if (!key) return null;
+    if (candidateByNiCache.has(key)) return candidateByNiCache.get(key);
+
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/candidates` +
+      `?ni_number=eq.${enc(key)}` +
+      `&select=id,display_name,ni_number` +
+      `&limit=1`
+    );
+    const row = rows?.[0] || null;
+    if (row) {
+      candidateByNiCache.set(key, row);
+      candidateByIdCache.set(row.id, row);
+    } else {
+      candidateByNiCache.set(key, null);
+    }
+    return row;
+  }
+
+  // Helper: cached candidate-by-id lookup
+  async function getCandidateByIdCached(id) {
+    if (!id) return null;
+    if (candidateByIdCache.has(id)) return candidateByIdCache.get(id);
+    const cand = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/candidates` +
+      `?id=eq.${enc(id)}&select=id,display_name&limit=1`
+    );
+    if (cand) candidateByIdCache.set(id, cand);
+    return cand;
+  }
+
+  // Helper: cached name+trust → candidate_id (using your existing findCandidateByImportName)
+  async function findCandidateByImportNameCached(staffName, trustNorm) {
+    const nameNorm = norm(staffName);
+    const key = `${nameNorm}|${trustNorm || ''}`;
+    if (candidateByNameTrustCache.has(key)) {
+      return candidateByNameTrustCache.get(key);
+    }
+    const id = await findCandidateByImportName(env, staffName, { trustNorm });
+    candidateByNameTrustCache.set(key, id || null);
+    return id || null;
+  }
+
+  // Helper: cached client-by-id
+  async function getClientByIdCached(clientId) {
+    if (!clientId) return null;
+    if (clientByIdCache.has(clientId)) return clientByIdCache.get(clientId);
+    const cli = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/clients` +
+      `?id=eq.${enc(clientId)}&select=id,name,is_nhsp&limit=1`
+    );
+    if (cli) clientByIdCache.set(clientId, cli);
+    return cli;
+  }
+
+  // Helper: cached client-by-trust/hospital
+  async function getClientByTrustCached(trustRaw) {
+    const t = String(trustRaw || '').trim();
+    const trustNorm = norm(t);
+    if (!trustNorm) return null;
+    if (clientByTrustCache.has(trustNorm)) return clientByTrustCache.get(trustNorm);
+
+    let clientId = null;
+    let clientName = null;
+
+    try {
+      const aliasJson = JSON.stringify([trustNorm]);
+      const { rows: hospRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/client_hospitals` +
+        `?hospital_name_norm=cs.${enc(aliasJson)}` +
+        `&select=client_id&limit=1`
+      );
+      if (hospRows?.[0]?.client_id) {
+        clientId = hospRows[0].client_id;
+      } else {
+        const { rows: cliRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/clients` +
+          `?name=eq.${enc(t)}` +
+          `&select=id,name&limit=1`
+        );
+        if (cliRows?.[0]?.id) {
+          clientId   = cliRows[0].id;
+          clientName = cliRows[0].name;
+        }
+      }
+    } catch {
+      if (!clientId) {
+        const { rows: cliRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/clients` +
+          `?name=eq.${enc(t)}` +
+          `&select=id,name&limit=1`
+        );
+        if (cliRows?.[0]?.id) {
+          clientId   = cliRows[0].id;
+          clientName = cliRows[0].name;
+        }
+      }
+    }
+
+    if (clientId && !clientName) {
+      const cli = await getClientByIdCached(clientId);
+      clientName = cli?.name || null;
+    }
+
+    const val = clientId ? { client_id: clientId, name: clientName } : null;
+    clientByTrustCache.set(trustNorm, val);
+    return val;
+  }
+
+  // Helper: cached contracts (per candidate/client pair)
+  async function getContractsForCandClientCached(candidateId, clientId) {
+    const key = `${candidateId || ''}__${clientId || ''}`;
+    if (contractByCandClientCache.has(key)) return contractByCandClientCache.get(key);
+
+    const { rows: contractRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contracts` +
+      `?candidate_id=eq.${enc(candidateId)}` +
+      `&client_id=eq.${enc(clientId)}` +
+      `&select=id,start_date,end_date,role,band,pay_method_snapshot,self_bill` +
+      `&order=start_date.asc`
+    );
+    const allContracts = contractRows || [];
+    contractByCandClientCache.set(key, allContracts);
+    return allContracts;
+  }
+
+  // Helper: cached client_settings (week-ending weekday) per client
+  async function getClientSettingsCached(clientId) {
+    if (!clientId) return null;
+    if (clientSettingsMap.has(clientId)) return clientSettingsMap.get(clientId);
+    const { rows: csRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/client_settings` +
+      `?client_id=eq.${enc(clientId)}` +
+      `&select=client_id,week_ending_weekday` +
+      `&order=effective_from.desc,created_at.desc&limit=1`
+    );
+    const cs = csRows?.[0] || null;
+    if (cs) clientSettingsMap.set(clientId, cs);
+    return cs;
+  }
+
+  const weekEndingFor = async (client_id, workDateYmd) => {
+    let weDow = 0;
+    const cs = await getClientSettingsCached(client_id);
+    if (cs && Number.isInteger(Number(cs.week_ending_weekday))) {
+      weDow = Number(cs.week_ending_weekday);
+    }
+
+    const d = new Date(`${workDateYmd}T00:00:00Z`);
+    if (isNaN(d.getTime())) return null;
+    while (d.getUTCDay() !== weDow) {
+      d.setUTCDate(d.getUTCDate() + 1);
+    }
+    const yyyy = d.getUTCFullYear();
+    const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd   = String(d.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  // ─────────────────────────────────────────────────────────────
+  // 1) hrRows from context
+  // ─────────────────────────────────────────────────────────────
+
+  console.log('[WEEKLY_CLASSIFY] loaded hr_rows', { import_id: importId, count: hrRows.length });
+
+  // ─────────────────────────────────────────────────────────────
+  // 3) Row-level classification first: parse + candidate/client/contract mapping
+  // ─────────────────────────────────────────────────────────────
+  const previewRows = [];
+  const groupMap = new Map(); // key -> { candidate_id, client_id, contract_id, week_ending_date, shifts: [], context... }
+
+  for (const hrRow of hrRows) {
+    const payload = hrRow.payload_json || {};
+    const preview_row_id = `row:${hrRow.id}`;
+
+    let staffName = '';
+    let workDate  = '';
+    let ward      = '';
+    let startIso  = null;
+    let endIso    = null;
+    let breakMins = 0;
+    let finalised = '';
+    let assignmentCode = '';
+    let requestId = '';
+    let refNum    = '';
+    let trustRaw  = '';
+
+    if (source_system === 'NHSP') {
+      staffName = String(payload.worker_name || payload.name || '').trim();
+      workDate  = String(payload.work_date || payload.date || '').trim();
+      ward      = String(payload.ward || payload.unit || '').trim();
+      trustRaw  = String(payload.trust || payload.hospital_or_trust || '').trim();
+      startIso  = payload.start_utc || payload.actual_start_iso || payload.actual_start || null;
+      endIso    = payload.end_utc   || payload.actual_end_iso   || payload.actual_end   || null;
+      breakMins = Number(payload.break_mins ?? payload.break_minutes ?? payload.actual_break_minutes ?? 0) || 0;
+      assignmentCode = String(payload.assignment || payload.assignment_code || '').trim();
+      refNum    = String(payload.ref_num || payload.reference || '').trim();
+    } else if (source_system === 'HEALTHROSTER') {
+      staffName = String(payload.staff_name || payload.worker_name || '').trim();
+      workDate  = String(payload.work_date || payload.date || '').trim();
+      ward      = String(payload.ward || payload.unit || '').trim();
+      trustRaw  = String(payload.trust || payload.hospital_or_trust || '').trim();
+      startIso  = payload.start_utc || null;
+      endIso    = payload.end_utc   || null;
+      breakMins = Number(payload.break_mins ?? 0) || 0;
+      finalised = String(payload.finalised_date || payload.finalized_date || payload.finalized_date || '').trim();
+      requestId = String(payload.request_id || '').trim();
+    } else {
+      previewRows.push({
+        level: 'row',
+        preview_row_id,
+        hr_row_id: hrRow.id,
+        import_id: importId,
+        source_system,
+        staff_name: staffName,
+        work_date: workDate,
+        ward,
+        assignment_code: (source_system === 'NHSP' ? assignmentCode : null),
+        request_id: requestId || null,
+        ref_num: refNum || null,
+        action: 'REJECT_UNSUPPORTED_SOURCE',
+        reason: `Unsupported source_system=${source_system}`,
+        default_selected: false
+      });
+      continue;
+    }
+
+    const isUnfinalised = (source_system === 'HEALTHROSTER' && !finalised);
+
+    // Basic field sanity
+    if (!workDate || !startIso || !endIso) {
+      previewRows.push({
+        level: 'row',
+        preview_row_id,
+        hr_row_id: hrRow.id,
+        import_id: importId,
+        source_system,
+        staff_name: staffName,
+        work_date: workDate,
+        ward,
+        assignment_code: (source_system === 'NHSP' ? assignmentCode : null),
+        request_id: requestId || null,
+        ref_num: refNum || null,
+        action: 'REJECT_BAD_ROW',
+        reason: 'Missing date or start/end times in payload',
+        default_selected: false
+      });
+      continue;
+    }
+
+    // Candidate mapping (cached)
+    let candidateId = null;
+    let candidateName = null;
+
+    if (source_system === 'NHSP') {
+      const uniqueId = String(
+        payload.unique_id ||
+        payload.worker_unique_id ||
+        payload.agency_worker_unique_id ||
+        ''
+      ).trim();
+
+      if (uniqueId) {
+        const c = await getCandidateByNi(uniqueId);
+        if (c) {
+          candidateId   = c.id;
+          candidateName = c.display_name || null;
+        }
+      }
+    }
+
+    if (!candidateId && staffName) {
+      const trustNorm = norm(trustRaw);
+      const foundCandidateId = await findCandidateByImportNameCached(staffName, trustNorm);
+      if (foundCandidateId) {
+        candidateId = foundCandidateId;
+      }
+    }
+
+    if (!candidateId) {
+      previewRows.push({
+        level: 'row',
+        preview_row_id,
+        hr_row_id: hrRow.id,
+        import_id: importId,
+        source_system,
+        staff_name: staffName,
+        work_date: workDate,
+        ward,
+        assignment_code: (source_system === 'NHSP' ? assignmentCode : null),
+        request_id: requestId || null,
+        ref_num: refNum || null,
+        action: 'REJECT_NO_CANDIDATE',
+        reason: 'No candidate found for this staff (no NI match and no alias/HR name mapping)',
+        default_selected: false
+      });
+      continue;
+    }
+
+    if (!candidateName) {
+      const cand = await getCandidateByIdCached(candidateId);
+      candidateName = cand?.display_name || null;
+    }
+
+    // Client mapping (cached)
+    let clientId = null;
+    let clientName = null;
+
+    if (source_system === 'HEALTHROSTER') {
+      clientId = imp.client_id || null;
+      if (!clientId) {
+        previewRows.push({
+          level: 'row',
+          preview_row_id,
+          hr_row_id: hrRow.id,
+          import_id: importId,
+          source_system,
+          staff_name: staffName,
+          work_date: workDate,
+          ward,
+          request_id: requestId || null,
+          ref_num: null,
+          action: 'REJECT_NO_CLIENT',
+          reason: 'HealthRoster import has no client_id configured',
+          default_selected: false
+        });
+        continue;
+      }
+      const cli = await getClientByIdCached(clientId);
+      if (!cli) {
+        previewRows.push({
+          level: 'row',
+          preview_row_id,
+          hr_row_id: hrRow.id,
+          import_id: importId,
+          source_system,
+          staff_name: staffName,
+          work_date: workDate,
+          ward,
+          request_id: requestId || null,
+          ref_num: null,
+          action: 'REJECT_NO_CLIENT',
+          reason: 'HealthRoster client_id not found in clients table',
+          default_selected: false
+        });
+        continue;
+      }
+      clientName = cli.name;
+    } else {
+      const trustNorm = norm(trustRaw);
+      if (trustNorm) {
+        const cliRes = await getClientByTrustCached(trustRaw);
+        if (cliRes) {
+          clientId   = cliRes.client_id;
+          clientName = cliRes.name;
+        }
+      }
+
+      if (!clientId) {
+        previewRows.push({
+          level: 'row',
+          preview_row_id,
+          hr_row_id: hrRow.id,
+          import_id: importId,
+          source_system,
+          staff_name: staffName,
+          work_date: workDate,
+          ward,
+          assignment_code: assignmentCode || null,
+          request_id: null,
+          ref_num: refNum || null,
+          action: 'REJECT_NO_CLIENT',
+          reason: `No client mapping for trust/hospital '${trustRaw}'`,
+          default_selected: false
+        });
+        continue;
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Contract mapping with NHSP assignment ↔ band matching (cached)
+    // ─────────────────────────────────────────────────────────────
+    const allContracts = await getContractsForCandClientCached(candidateId, clientId);
+
+    const workDateObj = new Date(`${workDate}T00:00:00Z`);
+    if (isNaN(workDateObj.getTime())) {
+      previewRows.push({
+        level: 'row',
+        preview_row_id,
+        hr_row_id: hrRow.id,
+        import_id: importId,
+        source_system,
+        staff_name: staffName,
+        work_date: workDate,
+        ward,
+        assignment_code: (source_system === 'NHSP' ? assignmentCode : null),
+        request_id: requestId || null,
+        ref_num: refNum || null,
+        action: 'REJECT_BAD_ROW',
+        reason: 'Invalid work_date in payload',
+        default_selected: false
+      });
+      continue;
+    }
+
+    const inRange = [];
+    for (const c of allContracts) {
+      const s = c.start_date ? new Date(`${c.start_date}T00:00:00Z`) : null;
+      const e = c.end_date   ? new Date(`${c.end_date}T00:00:00Z`)   : null;
+      if (s && workDateObj < s) continue;
+      if (e && workDateObj > e) continue;
+      inRange.push(c);
+    }
+
+    if (!inRange.length) {
+      previewRows.push({
+        level: 'row',
+        preview_row_id,
+        hr_row_id: hrRow.id,
+        import_id: importId,
+        source_system,
+        staff_name: staffName,
+        work_date: workDate,
+        ward,
+        assignment_code: (source_system === 'NHSP' ? assignmentCode : null),
+        request_id: requestId || null,
+        ref_num: refNum || null,
+        action: 'REJECT_NO_CONTRACT',
+        reason: 'No active contract for this candidate/client on this date',
+        default_selected: false
+      });
+      continue;
+    }
+
+    let candidateContracts = inRange;
+    if (source_system === 'NHSP' && assignmentCode) {
+      const assignNorm = upper(assignmentCode);
+      const bandMatches = [];
+
+      for (const c of inRange) {
+        const bandStr = upper(c.band || '');
+        if (!bandStr) continue;
+        const tokens = bandStr.split(/[,\s]+/).filter(Boolean);
+        if (tokens.includes(assignNorm)) {
+          bandMatches.push(c);
+        }
+      }
+
+      if (!bandMatches.length) {
+        previewRows.push({
+          level: 'row',
+          preview_row_id,
+          hr_row_id: hrRow.id,
+          import_id: importId,
+          source_system,
+          staff_name: staffName,
+          work_date: workDate,
+          ward,
+          assignment_code: assignmentCode,
+          request_id: requestId || null,
+          ref_num: refNum || null,
+          action: 'REJECT_NO_CONTRACT_BAND_MISMATCH',
+          reason: `No contract band contains assignment '${assignmentCode}' for this candidate/client on this date`,
+          default_selected: false
+        });
+        continue;
+      }
+      candidateContracts = bandMatches;
+    }
+
+    let chosenContract = null;
+    for (const c of candidateContracts) {
+      if (!chosenContract) {
+        chosenContract = c;
+        continue;
+      }
+      const prevStart = chosenContract.start_date ? new Date(`${chosenContract.start_date}T00:00:00Z`) : null;
+      const thisStart = c.start_date            ? new Date(`${c.start_date}T00:00:00Z`)            : null;
+      if (thisStart && prevStart && thisStart > prevStart) {
+        chosenContract = c;
+      }
+    }
+
+    if (!chosenContract) {
+      previewRows.push({
+        level: 'row',
+        preview_row_id,
+        hr_row_id: hrRow.id,
+        import_id: importId,
+        source_system,
+        staff_name: staffName,
+        work_date: workDate,
+        ward,
+        assignment_code: (source_system === 'NHSP' ? assignmentCode : null),
+        request_id: requestId || null,
+        ref_num: refNum || null,
+        action: 'REJECT_NO_CONTRACT',
+        reason: 'No active contract for this candidate/client on this date (after band/assignment filtering)',
+        default_selected: false
+      });
+      continue;
+    }
+
+    const we = await weekEndingFor(clientId, workDate);
+    if (!we) {
+      previewRows.push({
+        level: 'row',
+        preview_row_id,
+        hr_row_id: hrRow.id,
+        import_id: importId,
+        source_system,
+        staff_name: staffName,
+        work_date: workDate,
+        ward,
+        assignment_code: (source_system === 'NHSP' ? assignmentCode : null),
+        request_id: requestId || null,
+        ref_num: refNum || null,
+        action: 'REJECT_BAD_ROW',
+        reason: 'Unable to derive week-ending date',
+        default_selected: false
+      });
+      continue;
+    }
+
+    // Group key: candidate + client + contract + week-ending
+    const groupKey = `${candidateId}__${clientId}__${chosenContract.id}__${we}`;
+    let g = groupMap.get(groupKey);
+    if (!g) {
+      g = {
+        candidate_id: candidateId,
+        candidate_name: candidateName,
+        client_id: clientId,
+        client_name: clientName,
+        contract_id: chosenContract.id,
+        week_ending_date: we,
+        pay_method_snapshot: chosenContract.pay_method_snapshot,
+        assignment_code: (source_system === 'NHSP' ? assignmentCode : null),
+        shifts: [],
+        hr_row_ids: [],
+        has_unfinalised: false
+      };
+      groupMap.set(groupKey, g);
+    }
+
+    if (isUnfinalised && source_system === 'HEALTHROSTER') {
+      g.has_unfinalised = true;
+    }
+
+    g.shifts.push({
+      hr_row_id: hrRow.id,
+      staff_name: staffName,
+      work_date: workDate,
+      ward,
+      start_utc: startIso,
+      end_utc: endIso,
+      break_mins: breakMins,
+      assignment_code: (source_system === 'NHSP' ? assignmentCode : null),
+      request_id: requestId || null,
+      ref_num: refNum || null,
+      is_unfinalised: isUnfinalised
+    });
+    g.hr_row_ids.push(hrRow.id);
+  }
+
+  console.log('[WEEKLY_CLASSIFY] grouping complete', {
+    import_id: importId,
+    source_system,
+    group_count: groupMap.size,
+    preview_row_count: previewRows.length
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // 4) Group-level classification: base/adjustment TSFIN, delta, action
+  // ─────────────────────────────────────────────────────────────
+  const classifyGroup = async (g) => {
+    const { candidate_id, client_id, contract_id, week_ending_date } = g;
+
+    // Load contract (incl self_bill)
+    const contract = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contracts` +
+      `?id=eq.${enc(contract_id)}&select=id,role,band,pay_method_snapshot,self_bill&limit=1`
+    );
+    if (!contract) {
+      return {
+        level: 'group',
+        preview_group_id: `grp:${contract_id}:${week_ending_date}:${candidate_id}`,
+        import_id: importId,
+        source_system,
+        candidate_id,
+        candidate_name: g.candidate_name,
+        client_id,
+        client_name: g.client_name,
+        contract_id,
+        week_ending_date,
+        assignment_code: g.assignment_code || null,
+        self_bill: null,
+        has_unfinalised: !!g.has_unfinalised,
+        hr_row_ids: g.hr_row_ids.slice(),
+        truth_pay_ex_vat: 0,
+        truth_charge_ex_vat: 0,
+        current_pay_ex_vat: 0,
+        current_charge_ex_vat: 0,
+        delta_pay_ex_vat: 0,
+        delta_charge_ex_vat: 0,
+        base_timesheet_id: null,
+        latest_adjustment_timesheet_id: null,
+        action: 'REJECT_NO_CONTRACT',
+        reason: 'Contract not found at apply stage',
+        default_selected: false
+      };
+    }
+
+    // Load contract_weeks for this contract/week
+    const { rows: cwRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+      `?contract_id=eq.${enc(contract_id)}` +
+      `&week_ending_date=eq.${enc(week_ending_date)}` +
+      `&select=id,timesheet_id,additional_seq,is_adjustment` +
+      `&order=additional_seq.asc`
+    );
+    const weeks = cwRows || [];
+    const baseWeek   = weeks.find(w => !w.is_adjustment && Number(w.additional_seq || 0) === 0) || null;
+    const adjWeeks   = weeks.filter(w => !!w.is_adjustment);
+
+    const tsIds = weeks.map(w => w.timesheet_id).filter(Boolean);
+    let tsById = new Map();
+    if (tsIds.length) {
+      const { rows: tsRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=in.(${tsIds.map(enc).join(',')})` +
+        `&select=timesheet_id,submission_mode,status`
+      );
+      tsById = new Map((tsRows || []).map(t => [t.timesheet_id, t]));
+    }
+
+    let finByTsId = new Map();
+    if (tsIds.length) {
+      const { rows: finRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?timesheet_id=in.(${tsIds.map(enc).join(',')})` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,total_pay_ex_vat,total_charge_ex_vat,basis,paid_at_utc,locked_by_invoice_id`
+      );
+      finByTsId = new Map((finRows || []).map(f => [f.timesheet_id, f]));
+    }
+
+    // Compute truth totals from import shifts
+    let truthPay = 0;
+    let truthChg = 0;
+
+    for (const sh of g.shifts) {
+      const policy = await loadPolicy(env, client_id, sh.work_date);
+      let segs = [[sh.start_utc, sh.end_utc]];
+      segs = subtractBreak(segs, null, null, sh.break_mins || 0);
+
+      const hours = classifyMinutes(env, policy, segs);
+      const rates = await resolveRates(env, {
+        candidate_id,
+        client_id,
+        role: contract.role || null,
+        band: contract.band || null,
+        dateYmd: sh.work_date,
+      });
+      const pay = rates.pay || {};
+      const chg = rates.charge || {};
+
+      const segPay = round2(
+        (hours.hours_day   || 0) * asNumberLocal(pay.day)   +
+        (hours.hours_night || 0) * asNumberLocal(pay.night) +
+        (hours.hours_sat   || 0) * asNumberLocal(pay.sat)   +
+        (hours.hours_sun   || 0) * asNumberLocal(pay.sun)   +
+        (hours.hours_bh    || 0) * asNumberLocal(pay.bh)
+      );
+      const segChg = round2(
+        (hours.hours_day   || 0) * asNumberLocal(chg.day)   +
+        (hours.hours_night || 0) * asNumberLocal(chg.night) +
+        (hours.hours_sat   || 0) * asNumberLocal(chg.sat)   +
+        (hours.hours_sun   || 0) * asNumberLocal(chg.sun)   +
+        (hours.hours_bh    || 0) * asNumberLocal(chg.bh)
+      );
+      truthPay += segPay;
+      truthChg += segChg;
+    }
+    truthPay = round2(truthPay);
+    truthChg = round2(truthChg);
+
+    let currentPay = 0;
+    let currentChg = 0;
+
+    for (const w of weeks) {
+      const tsId = w.timesheet_id;
+      if (!tsId) continue;
+      const fin = finByTsId.get(tsId);
+      if (!fin) continue;
+      currentPay += Number(fin.total_pay_ex_vat || 0);
+      currentChg += Number(fin.total_charge_ex_vat || 0);
+    }
+    currentPay = round2(currentPay);
+    currentChg = round2(currentChg);
+
+    const deltaPay = round2(truthPay - currentPay);
+    const deltaChg = round2(truthChg - currentChg);
+    const tol = 0.01;
+
+    const baseTsId    = baseWeek?.timesheet_id || null;
+    const baseTs      = baseTsId ? tsById.get(baseTsId) : null;
+    const baseFin     = baseTsId ? finByTsId.get(baseTsId) : null;
+
+    let latestAdjWeek = null;
+    if (adjWeeks.length) {
+      latestAdjWeek = adjWeeks.reduce((m, w) =>
+        Number(w.additional_seq || 0) > Number(m.additional_seq || 0) ? w : m,
+        adjWeeks[0]
+      );
+    }
+    const latestAdjTsId = latestAdjWeek?.timesheet_id || null;
+    const latestAdjFin  = latestAdjTsId ? finByTsId.get(latestAdjTsId) : null;
+
+    const anyAdj = !!latestAdjWeek;
+    const latestAdjUnpaidUnlocked =
+      !!(latestAdjFin && !latestAdjFin.paid_at_utc && !latestAdjFin.locked_by_invoice_id);
+    const baseUnpaidUnlocked =
+      !!(baseFin && !baseFin.paid_at_utc && !baseFin.locked_by_invoice_id);
+
+    const isPaid     = !!(baseFin && baseFin.paid_at_utc);
+    const isInvoiced = !!(baseFin && baseFin.locked_by_invoice_id);
+    const selfBill   = (source_system === 'HEALTHROSTER') ? !!contract.self_bill : null;
+    const hasUnfinal = !!g.has_unfinalised;
+
+    let result = {
+      level: 'group',
+      preview_group_id: `grp:${contract_id}:${week_ending_date}:${candidate_id}`,
+      import_id: importId,
+      source_system,
+      candidate_id,
+      candidate_name: g.candidate_name,
+      client_id,
+      client_name: g.client_name,
+      contract_id,
+      week_ending_date,
+      assignment_code: g.assignment_code || null,
+      self_bill: selfBill,
+      has_unfinalised: hasUnfinal,
+      hr_row_ids: g.hr_row_ids.slice(),
+      truth_pay_ex_vat: truthPay,
+      truth_charge_ex_vat: truthChg,
+      current_pay_ex_vat: currentPay,
+      current_charge_ex_vat: currentChg,
+      delta_pay_ex_vat: deltaPay,
+      delta_charge_ex_vat: deltaChg,
+      base_timesheet_id: baseTsId,
+      latest_adjustment_timesheet_id: latestAdjTsId,
+      action: 'UNKNOWN',
+      reason: 'Unable to classify this weekly group – please review manually.',
+      default_selected: false
+    };
+
+    // No base timesheet yet
+    if (!baseTsId) {
+      if (Math.abs(truthPay) < tol && Math.abs(truthChg) < tol) {
+        result.action = 'SKIP_ALREADY_PROCESSED';
+        result.reason = 'No weekly timesheet yet and truth totals are zero – nothing to create.';
+        result.default_selected = false;
+      } else {
+        result.action = 'NEW_AUTOPROC_TIMESHEET';
+        result.reason = 'No existing weekly timesheet – a new weekly TS and TSFIN will be created from these shifts.';
+        result.default_selected = !hasUnfinal;
+      }
+      return result;
+    }
+
+    // Base TS exists: if totals already match, skip
+    if (Math.abs(deltaPay) < tol && Math.abs(deltaChg) < tol) {
+      result.action = 'SKIP_ALREADY_PROCESSED';
+      result.reason = 'Base timesheet and existing adjustments already match NHSP/HealthRoster totals – nothing further to do.';
+      result.default_selected = false;
+      return result;
+    }
+
+    const submissionMode = String(baseTs?.submission_mode || '').toUpperCase();
+
+    // Manual base: unchanged logic
+    if (submissionMode === 'MANUAL') {
+      if (baseUnpaidUnlocked && !anyAdj) {
+        result.action = 'UPDATE_MANUAL_WEEK';
+        result.reason = 'Existing manual weekly timesheet (unpaid/uninvoiced) will be overwritten with NHSP/HR hours for this week.';
+        result.default_selected = !hasUnfinal;
+        return result;
+      }
+
+      if (latestAdjUnpaidUnlocked) {
+        result.action = 'UPDATE_ADJUSTMENT_TS';
+        result.reason = 'Existing unpaid/uninvoiced adjustment timesheet will be updated to reflect the new delta.';
+        result.default_selected = !hasUnfinal;
+        return result;
+      }
+
+      result.action = 'CREATE_ADJUSTMENT_TS';
+      result.reason = 'Base and previous adjustments are paid/invoiced; a new sequential adjustment timesheet will be created for the new delta.';
+      result.default_selected = !hasUnfinal;
+      return result;
+    }
+
+    // Autoproc base
+    if (submissionMode !== 'MANUAL') {
+      // NHSP and HR self_bill=true → standard NHSP-style logic
+      if (source_system === 'NHSP' || (source_system === 'HEALTHROSTER' && selfBill)) {
+        if (baseUnpaidUnlocked && !anyAdj) {
+          result.action = 'UPDATE_AUTOPROC_TS';
+          result.reason = 'Existing autoproc weekly timesheet (unpaid/uninvoiced) will be updated with corrected NHSP/HR hours for this week.';
+          result.default_selected = !hasUnfinal;
+          return result;
+        }
+
+        if (latestAdjUnpaidUnlocked) {
+          result.action = 'UPDATE_ADJUSTMENT_TS';
+          result.reason = 'Existing unpaid/uninvoiced adjustment timesheet will be updated to reflect the new delta.';
+          result.default_selected = !hasUnfinal;
+          return result;
+        }
+
+        result.action = 'CREATE_ADJUSTMENT_TS';
+        result.reason = 'Autoproc base and previous adjustments are paid/invoiced; a new sequential adjustment timesheet will be created for the new delta.';
+        result.default_selected = !hasUnfinal;
+        return result;
+      }
+
+      // HEALTHROSTER, self_bill = false → special HR logic
+      if (source_system === 'HEALTHROSTER' && selfBill === false) {
+        if (!isPaid && !isInvoiced) {
+          result.action = 'UPDATE_AUTOPROC_TS';
+          result.reason = 'HR weekly (self-bill=false): base timesheet will be overwritten with HR hours for this week; no new adjustment weeks will be created.';
+          result.default_selected = !hasUnfinal;
+          return result;
+        }
+
+        if (isInvoiced) {
+          result.action = 'BLOCK_INVOICE_ISSUED';
+          result.reason = 'HR weekly (self-bill=false): invoice already issued – unissue the invoice before applying these HR changes.';
+          result.default_selected = false;
+          return result;
+        }
+
+        if (isPaid && !isInvoiced) {
+          result.action = 'CREATE_PAY_ADJUSTMENT_ONLY';
+          result.reason = 'HR weekly (self-bill=false): candidate already paid – a pay-only adjustment will be created; invoice will reflect full HR hours.';
+          result.default_selected = !hasUnfinal;
+          return result;
+        }
+
+        // Fallback
+        result.action = 'UNKNOWN';
+        result.reason = 'HR weekly (self-bill=false): unhandled state – please review manually.';
+        result.default_selected = false;
+        return result;
+      }
+
+      // Fallback for other autoproc routes
+      result.action = 'UNKNOWN';
+      result.reason = 'Unable to classify this weekly group – please review manually.';
+      result.default_selected = !hasUnfinal;
+      return result;
+    }
+
+    // Fallback
+    return result;
+  };
+
+  for (const g of groupMap.values()) {
+    const gp = await classifyGroup(g);
+    previewRows.push(gp);
+  }
+
+  console.log('[WEEKLY_CLASSIFY] done', {
+    import_id: importId,
+    source_system,
+    preview_rows: previewRows.length
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // 5) Post-process previewRows with mapping fields for FE
+  // ─────────────────────────────────────────────────────────────
+  for (const pr of previewRows) {
+    const lvl = String(pr.level || '').toLowerCase();
+
+    if (lvl === 'row') {
+      // staff / hospital for row-level entries
+      const staffRaw = pr.staff_name || '';
+      const ward     = pr.ward || '';
+      const trust    = pr.trust || pr.hospital_or_trust || '';
+      const hosp     = ward || trust;
+
+      pr.staff_raw         = staffRaw;
+      pr.staff_norm        = norm(staffRaw);
+      pr.hospital_or_trust = hosp;
+      pr.trust_norm        = norm(hosp);
+
+      // candidate/client ids for row-level entries are not tracked here
+      if (!Object.prototype.hasOwnProperty.call(pr, 'candidate_id')) {
+        pr.candidate_id = null;
+      }
+      if (!Object.prototype.hasOwnProperty.call(pr, 'client_id')) {
+        pr.client_id = null;
+      }
+
+      // resolution_status derived from action
+      const act = String(pr.action || '').toUpperCase();
+      if (!pr.resolution_status) {
+        if (act === 'REJECT_NO_CANDIDATE') pr.resolution_status = 'NO_CANDIDATE';
+        else if (act === 'REJECT_NO_CLIENT') pr.resolution_status = 'NO_CLIENT';
+        else if (act === 'REJECT_BAD_ROW' || act === 'REJECT_BAD_ROW2') pr.resolution_status = 'BAD_ROW';
+        else if (act === 'REJECT_NO_CONTRACT' || act === 'REJECT_NO_CONTRACT_BAND_MISMATCH') pr.resolution_status = act;
+        else if (act.startsWith('REJECT_')) pr.resolution_status = act;
+        else pr.resolution_status = 'OK';
+      }
+
+    } else if (lvl === 'group') {
+      // group-level: ensure resolution_status and mapping fields exist
+      if (!Object.prototype.hasOwnProperty.call(pr, 'staff_raw')) {
+        pr.staff_raw = null;
+      }
+      if (!Object.prototype.hasOwnProperty.call(pr, 'staff_norm')) {
+        pr.staff_norm = null;
+      }
+      if (!Object.prototype.hasOwnProperty.call(pr, 'hospital_or_trust')) {
+        pr.hospital_or_trust = null;
+      }
+      if (!Object.prototype.hasOwnProperty.call(pr, 'trust_norm')) {
+        pr.trust_norm = null;
+      }
+      // candidate_id / client_id already present on group result
+      if (!pr.resolution_status) {
+        pr.resolution_status = pr.action || 'UNKNOWN';
+      }
+    }
+  }
+
+  return {
+    import_id: importId,
+    source_system,
+    rows: previewRows
+  };
+}
+async function classifyWeeklyImportRowsLegacy(env, importId, { source_system }) {
   const enc   = encodeURIComponent;
   const norm  = (s) => String(s || '').trim().toLowerCase();
   const upper = (s) => String(s || '').trim().toUpperCase();
@@ -17362,6 +19277,7 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
   };
 }
 
+
 export async function handleNhspImport(env, req) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
@@ -17574,7 +19490,12 @@ export async function handleNhspImportPreview(env, req, importId) {
     }
 
     if (LOG) {
-      const groups = Array.isArray(result.groups) ? result.groups : [];
+      const groups = Array.isArray(result.groups)
+        ? result.groups
+        : (Array.isArray(result.rows)
+            ? result.rows.filter(r => r && r.level === 'group')
+            : []);
+
       const sampleProblems = groups
         .filter(g => g.action && g.action !== 'APPLY_OK')
         .slice(0, 10)
@@ -17584,7 +19505,7 @@ export async function handleNhspImportPreview(env, req, importId) {
           reason: g.reason || null,
           candidate_id: g.candidate_id,
           client_id: g.client_id,
-          week_ending: g.week_ending
+          week_ending: g.week_ending_date
         }));
 
       console.log('[NHSP_PREVIEW]', JSON.stringify({
@@ -17601,7 +19522,7 @@ export async function handleNhspImportPreview(env, req, importId) {
       console.error('[NHSP_PREVIEW]', JSON.stringify({
         import_id: importId,
         stage: 'unexpected_error',
-        error: e?.message || String(e)
+        error: e?.message || e
       }));
     }
     return withCORS(env, req, serverError(`NHSP preview failed: ${e?.message || e}`));
@@ -17644,7 +19565,12 @@ export async function handleHrAutoprocessPreview(env, req, importId) {
     }
 
     if (LOG) {
-      const groups = Array.isArray(result.groups) ? result.groups : [];
+      const groups = Array.isArray(result.groups)
+        ? result.groups
+        : (Array.isArray(result.rows)
+            ? result.rows.filter(r => r && r.level === 'group')
+            : []);
+
       const sampleProblems = groups
         .filter(g => g.action && g.action !== 'APPLY_OK')
         .slice(0, 10)
@@ -17654,7 +19580,7 @@ export async function handleHrAutoprocessPreview(env, req, importId) {
           reason: g.reason || null,
           candidate_id: g.candidate_id,
           client_id: g.client_id,
-          week_ending: g.week_ending
+          week_ending: g.week_ending_date
         }));
 
       console.log('[HR_WEEKLY_PREVIEW]', JSON.stringify({
@@ -22039,13 +23965,88 @@ export async function handleImportHrRotaParse(env, req) {
 }
 
 
-
-
 async function classifyHrRotaValidationImport(env, importId) {
   const enc   = encodeURIComponent;
   const norm  = (s) => String(s || '').trim().toLowerCase();
 
+  // ─────────────────────────────────────────────────────────────
+  // CACHES to avoid per-row subrequests
+  // ─────────────────────────────────────────────────────────────
+  const candidateByNameTrustCache = new Map(); // `${staffNorm}|${trustNorm}` -> candidate_id|null
+  const clientByTrustCache        = new Map(); // trustNorm -> client_id|null
+  const timesheetsByCandCache     = new Map(); // candidate_id -> [timesheets...]
+
+  async function resolveCandidateByNameTrustCached(staffRaw, staffNorm, trustNorm) {
+    const nameKey = `${staffNorm || norm(staffRaw)}|${trustNorm || ''}`;
+    if (candidateByNameTrustCache.has(nameKey)) {
+      return candidateByNameTrustCache.get(nameKey);
+    }
+    let candidateId = null;
+    try {
+      candidateId = await findCandidateByImportName(env, staffRaw || staffNorm, { trustNorm });
+    } catch (e) {
+      console.warn('[HR_ROTA_CLASSIFY] candidate resolve failed (non-fatal)', {
+        import_id: importId,
+        staff: staffRaw,
+        trustNorm,
+        err: e?.message || String(e)
+      });
+    }
+    candidateByNameTrustCache.set(nameKey, candidateId || null);
+    return candidateId || null;
+  }
+
+  async function resolveClientIdCached(hospRaw) {
+    const t = String(hospRaw || '').trim();
+    const trustNorm = norm(t);
+    if (!trustNorm) return null;
+    if (clientByTrustCache.has(trustNorm)) return clientByTrustCache.get(trustNorm);
+
+    let clientId = null;
+    try {
+      clientId = await resolveClientId(env, hospRaw);
+    } catch (e) {
+      console.warn('[HR_ROTA_CLASSIFY] client resolve failed (non-fatal)', {
+        import_id: importId,
+        hospital: hospRaw,
+        err: e?.message || String(e)
+      });
+    }
+    clientByTrustCache.set(trustNorm, clientId || null);
+    return clientId || null;
+  }
+
+  async function getDailyTimesheetsForCandidateCached(candidateId) {
+    if (!candidateId) return [];
+    if (timesheetsByCandCache.has(candidateId)) {
+      return timesheetsByCandCache.get(candidateId);
+    }
+    let tsRows = [];
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?candidate_id=eq.${enc(candidateId)}` +
+          `&sheet_scope=eq.DAILY` +
+          `&is_current=eq.true` +
+          `&select=timesheet_id,worked_start_iso,hospital_norm,contract_id,job_title_norm,band`
+      );
+      tsRows = rows || [];
+    } catch (e) {
+      console.warn('[HR_ROTA_CLASSIFY] timesheets lookup failed (non-fatal)', {
+        import_id: importId,
+        candidate_id: candidateId,
+        err: e?.message || String(e)
+      });
+      tsRows = [];
+    }
+    timesheetsByCandCache.set(candidateId, tsRows);
+    return tsRows;
+  }
+
+  // ─────────────────────────────────────────────────────────────
   // 1) Load import and verify source_system
+  // ─────────────────────────────────────────────────────────────
   const { rows: impRows } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/hr_imports` +
@@ -22075,13 +24076,15 @@ async function classifyHrRotaValidationImport(env, importId) {
     };
   }
 
-  // 2) Load hr_rows for this import
+  // ─────────────────────────────────────────────────────────────
+  // 2) Load hr_rows for this import (using unit_raw, not hospital_or_trust)
+  // ─────────────────────────────────────────────────────────────
   const { rows: hrRows } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/hr_rows` +
       `?import_id=eq.${enc(importId)}` +
       `&select=id,hr_request_id,date_local,start_time_local,end_time_local,` +
-      `staff_raw,staff_norm,hospital_or_trust,assignment_grade_norm,hours_worked,payload_json` +
+      `staff_raw,staff_norm,unit_raw,assignment_grade_norm,hours_worked,payload_json` +
       `&order=id.asc`
   );
 
@@ -22094,6 +24097,9 @@ async function classifyHrRotaValidationImport(env, importId) {
     };
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // 3) Per-row classification, with batched/cached lookups
+  // ─────────────────────────────────────────────────────────────
   const results = [];
   let total = 0;
   let okCount = 0;
@@ -22109,7 +24115,7 @@ async function classifyHrRotaValidationImport(env, importId) {
     const dateLocal     = hr.date_local || null;
     const staffRaw      = hr.staff_raw || hr.payload_json?.staff_name || '';
     const staffNorm     = hr.staff_norm || norm(staffRaw);
-    const hospRaw       = hr.hospital_or_trust || hr.payload_json?.unit || hr.payload_json?.ward || '';
+    const hospRaw       = hr.unit_raw || hr.payload_json?.unit || hr.payload_json?.ward || '';
     const hospNorm      = norm(hospRaw);
     const gradeRaw      = hr.assignment_grade_norm || hr.payload_json?.grade_raw || hr.payload_json?.Request_Grade || null;
     const hoursWorked   = hr.hours_worked ?? hr.payload_json?.actual_hours ?? null;
@@ -22138,11 +24144,11 @@ async function classifyHrRotaValidationImport(env, importId) {
       }
     };
 
-    // Resolve candidate by staff name
+    // Resolve candidate by staff name + trust (cached)
     let candidateId = null;
     try {
       if (staffNorm) {
-        candidateId = await findCandidateByImportName(env, staffRaw || staffNorm, { trustNorm: hospNorm });
+        candidateId = await resolveCandidateByNameTrustCached(staffRaw, staffNorm, hospNorm);
       }
     } catch (e) {
       console.warn('[HR_ROTA_CLASSIFY] candidate resolve failed (non-fatal)', {
@@ -22152,11 +24158,11 @@ async function classifyHrRotaValidationImport(env, importId) {
       });
     }
 
-    // Resolve client via alias mapping
+    // Resolve client via alias mapping (cached)
     let clientId = null;
     try {
       if (hospRaw) {
-        clientId = await resolveClientId(env, hospRaw);
+        clientId = await resolveClientIdCached(hospRaw);
       }
     } catch (e) {
       console.warn('[HR_ROTA_CLASSIFY] client resolve failed (non-fatal)', {
@@ -22177,14 +24183,7 @@ async function classifyHrRotaValidationImport(env, importId) {
     // Find daily timesheet for this candidate + date (+ hospital match where possible)
     let ts = null;
     try {
-      const { rows: tsRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/timesheets` +
-          `?candidate_id=eq.${enc(candidateId)}` +
-          `&sheet_scope=eq.DAILY` +
-          `&is_current=eq.true` +
-          `&select=timesheet_id,worked_start_iso,hospital_norm,contract_id,job_title_norm,band`
-      );
+      const tsRows = await getDailyTimesheetsForCandidateCached(candidateId);
       const candidates = [];
       for (const t of tsRows || []) {
         const wsIso = t.worked_start_iso || null;
@@ -22242,26 +24241,8 @@ async function classifyHrRotaValidationImport(env, importId) {
       continue;
     }
 
-    // Load current TSFIN
-    let tsfin = null;
-    try {
-      const { rows: finRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?timesheet_id=eq.${enc(timesheetId)}` +
-          `&is_current=eq.true` +
-          `&select=*` +
-          `&limit=1`
-      );
-      tsfin = finRows?.[0] || null;
-    } catch (e) {
-      console.warn('[HR_ROTA_CLASSIFY] TSFIN lookup failed (non-fatal)', {
-        import_id: importId,
-        hr_row_id: hrRowId,
-        timesheet_id: timesheetId,
-        err: e?.message || String(e)
-      });
-    }
+    // Remove TSFIN lookup here — validation does not depend on it,
+    // and this was a major source of subrequests.
 
     // Map grade → roleForRates
     let roleForRates = null;
@@ -22357,6 +24338,8 @@ async function classifyHrRotaValidationImport(env, importId) {
     rows: results
   };
 }
+
+
 export async function handleHrRotaValidationPreview(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
@@ -22421,6 +24404,7 @@ export async function handleHrRotaValidationPreview(env, req, importId) {
     );
   }
 }
+
 
 export async function handleHrRotaValidationApply(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
@@ -22536,7 +24520,7 @@ export async function handleHrRotaValidationApply(env, req, importId) {
           );
         } catch (e) {
           console.warn('[HR_ROTA_APPLY] reference_number update failed', {
-            import_id: importId,
+            import_id: ImportId,
             timesheet_id: timesheetId,
             hr_row_id: hrRowId,
             err: e?.message || String(e)
@@ -22632,6 +24616,7 @@ export async function handleHrRotaValidationApply(env, req, importId) {
     emails_queued: emailsQueued
   }));
 }
+
 
 async function enqueueHrMismatchEmail(env, { timesheet_id, importId, row }) {
   const enc = encodeURIComponent;
