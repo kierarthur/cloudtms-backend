@@ -31640,6 +31640,23 @@ async function handleFileUpload(env, req, url) {
     return withCORS(env, req, tooLarge(`Max ${maxBytes} bytes`));
   }
 
+  // Read the body into a buffer so we know exactly what we’re sending to R2
+  let bodyBuf;
+  try {
+    bodyBuf = await req.arrayBuffer();
+  } catch (e) {
+    if (LOG) {
+      console.error('[FILES_UPLOAD]', JSON.stringify({
+        stage: 'read_body_failed',
+        key,
+        err: e?.message || String(e)
+      }));
+    }
+    return withCORS(env, req, serverError('Failed to read upload body'));
+  }
+
+  const actualLen = bodyBuf.byteLength;
+
   if (LOG) {
     const cleanKey = (key || '').replace(/^\/+/, '');
     console.log('[FILES_UPLOAD]', JSON.stringify({
@@ -31647,11 +31664,12 @@ async function handleFileUpload(env, req, url) {
       key,
       cleanKey,
       content_type: ct,
-      content_length: contentLength
+      header_content_length: contentLength,
+      actual_body_length: actualLen
     }));
   }
 
-  const putRes = await r2Put(env, key, req.body, {
+  const putRes = await r2Put(env, key, bodyBuf, {
     httpMetadata: { contentType: ct },
     customMetadata: {}
   });
@@ -31664,7 +31682,7 @@ async function handleFileUpload(env, req, url) {
     }));
   }
 
-  const size = contentLength || undefined;
+  const size = actualLen || undefined;
   return withCORS(env, req, ok({ ok: true, key, etag: putRes?.etag, size }));
 }
 
