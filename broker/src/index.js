@@ -10525,7 +10525,6 @@ export async function handleSearchTimesheets(env, req) {
     count: rows?.length || 0
   }));
 }
-
 async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Europe/London' }) {
   console.log('[NHSP_PARSE] start', { import_id, file_key, tz });
 
@@ -10535,7 +10534,29 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
     throw new Error(`R2 object not found for key ${file_key}`);
   }
 
-  const wb = XLSX.read(u8, { type: 'array' });
+  let wb;
+  try {
+    // Try to detect HTML masquerading as XLS (NHSP often sends HTML tables with .xls extension)
+    const text = new TextDecoder('utf-8').decode(u8);
+    const sniff = text.slice(0, 512).toLowerCase();
+
+    if (sniff.includes('<table') || sniff.includes('<html')) {
+      console.log('[NHSP_PARSE] detected HTML content, parsing as string', { import_id, file_key });
+      wb = XLSX.read(text, { type: 'string' });
+    } else {
+      // Looks like a real Excel workbook → use binary/array path
+      wb = XLSX.read(u8, { type: 'array' });
+    }
+  } catch (e) {
+    // If sniffing or string parse fails, fall back to original behaviour
+    console.warn('[NHSP_PARSE] sniff/string parse failed, falling back to array', {
+      import_id,
+      file_key,
+      err: e?.message || String(e)
+    });
+    wb = XLSX.read(u8, { type: 'array' });
+  }
+
   if (!wb.SheetNames || !wb.SheetNames.length) {
     console.error('[NHSP_PARSE] workbook has no sheets', { import_id, file_key });
     throw new Error('NHSP workbook has no sheets');
@@ -10784,6 +10805,7 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
     header_columns
   };
 }
+
 async function parseHealthRosterWorkbookIntoHrRows(
   env,
   { import_id, file_key, client_id, tz = 'Europe/London' }
