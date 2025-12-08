@@ -10976,8 +10976,18 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
       raw_columns
     };
 
+    // FIX: populate structured hr_rows columns (date_local is NOT NULL)
     hrRowsPayload.push({
       import_id,
+      source_system: 'NHSP',
+      hr_request_id: refStr || null,
+      date_local: workDateYmd,
+      start_time_local: startHhmm,
+      end_time_local: endHhmm,
+      staff_norm: staffNorm || null,
+      hospital_or_trust: trust || null,
+      assignment_grade_norm: null,
+      hours_worked: hoursWorked,
       external_row_key,
       payload_json
     });
