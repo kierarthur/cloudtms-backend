@@ -10525,7 +10525,11 @@ export async function handleSearchTimesheets(env, req) {
     count: rows?.length || 0
   }));
 }
+
 async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Europe/London' }) {
+  // Version marker so we can confirm in Wrangler tail that this HTML-sniffing version is deployed
+  console.log('[NHSP_PARSE_VERSION]', 'v2025-12-08-html-sniff-1');
+
   console.log('[NHSP_PARSE] start', { import_id, file_key, tz });
 
   const u8 = await r2GetBytes(env, file_key);
@@ -10536,7 +10540,7 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
 
   let wb;
   try {
-    // Try to detect HTML masquerading as XLS (NHSP often sends HTML tables with .xls extension)
+    // Try to detect HTML masquerading as .xls (NHSP often sends HTML tables)
     const text = new TextDecoder('utf-8').decode(u8);
     const sniff = text.slice(0, 512).toLowerCase();
 
@@ -10544,11 +10548,11 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
       console.log('[NHSP_PARSE] detected HTML content, parsing as string', { import_id, file_key });
       wb = XLSX.read(text, { type: 'string' });
     } else {
-      // Looks like a real Excel workbook → use binary/array path
+      // Looks like a real Excel workbook → use original array path
       wb = XLSX.read(u8, { type: 'array' });
     }
   } catch (e) {
-    // If sniffing or string parse fails, fall back to original behaviour
+    // On any sniff/string error, fall back to original behaviour
     console.warn('[NHSP_PARSE] sniff/string parse failed, falling back to array', {
       import_id,
       file_key,
@@ -10568,9 +10572,17 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
     defval: ''
   });
 
+  console.log('[NHSP_PARSE] raw_rows_length', { import_id, length: rows.length });
+
   if (!rows.length) {
     console.warn('[NHSP_PARSE] empty sheet', { import_id, file_key });
-    return { rows_total: 0, rows_parsed: 0, rows_skipped: 0, notes: 'Empty NHSP sheet', header_columns: [] };
+    return {
+      rows_total: 0,
+      rows_parsed: 0,
+      rows_skipped: 0,
+      notes: 'Empty NHSP sheet',
+      header_columns: []
+    };
   }
 
   const pad2 = (n) => String(n).padStart(2, '0');
@@ -10741,7 +10753,6 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
 
     const refStr = normalizeStr(rawRef);
 
-    // Preserve full row as raw_columns
     const raw_columns = headerRow.map((_, idx) => row[idx]);
 
     const payload_json = {
@@ -10805,6 +10816,8 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
     header_columns
   };
 }
+
+
 
 async function parseHealthRosterWorkbookIntoHrRows(
   env,
