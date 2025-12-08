@@ -1023,11 +1023,50 @@ async function r2Exists(env, key) {
   return !!obj;
 }
 async function r2GetBytes(env, key) {
-  const bucket = env.R2_BUCKET || env.R2;
-  const obj = await bucket.get(normalizeKey(key));
-  if (!obj) return null;
+  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
+
+  const bucket   = env.R2_BUCKET || env.R2;
+  const cleanKey = normalizeKey(key);
+
+  let obj;
+  try {
+    obj = await bucket.get(cleanKey);
+  } catch (e) {
+    if (LOG) {
+      console.error('[R2_GET_BYTES]', JSON.stringify({
+        stage: 'error',
+        key,
+        cleanKey,
+        err: e?.message || String(e)
+      }));
+    }
+    return null;
+  }
+
+  if (!obj) {
+    if (LOG) {
+      console.warn('[R2_GET_BYTES]', JSON.stringify({
+        stage: 'not_found',
+        key,
+        cleanKey
+      }));
+    }
+    return null;
+  }
+
   const ab = await new Response(obj.body).arrayBuffer();
-  return new Uint8Array(ab);
+  const u8 = new Uint8Array(ab);
+
+  if (LOG) {
+    console.log('[R2_GET_BYTES]', JSON.stringify({
+      stage: 'ok',
+      key,
+      cleanKey,
+      length: u8.length
+    }));
+  }
+
+  return u8;
 }
 
 // Signed public download URL (for stationery fetching inside invoice HTML)
@@ -31558,29 +31597,77 @@ async function handleFilePresignUpload(env, req) {
 }
 
 async function handleFileUpload(env, req, url) {
-  const key = url.searchParams.get("key") || "";
+  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
+
+  const key   = url.searchParams.get("key")   || "";
   const token = url.searchParams.get("token") || "";
+
   const ver = await verifyToken(env.UPLOAD_TOKEN_SECRET, token);
   if (!ver.ok) return withCORS(env, req, unauthorized("Invalid token"));
+
   const p = ver.payload;
   if (p.typ !== "file_upload" || p.key !== key) {
     return withCORS(env, req, unauthorized("Token mismatch"));
   }
+
   const keyOk = /^\/files\/\d{8}\/file_[0-9a-f]{16}(\.[A-Za-z0-9]{3,10})?$/.test(key);
   if (!keyOk) return withCORS(env, req, badRequest("Invalid key"));
 
   const ct = req.headers.get("content-type") || "";
   const allowedTypes = /^(image\/|application\/pdf|text\/|application\/vnd\.openxmlformats|application\/vnd\.ms-excel)/i;
-  if (!allowedTypes.test(ct)) return withCORS(env, req, unsupported("File type not allowed"));
+  if (!allowedTypes.test(ct)) {
+    if (LOG) {
+      console.warn('[FILES_UPLOAD]', JSON.stringify({
+        stage: 'blocked_type',
+        key,
+        content_type: ct
+      }));
+    }
+    return withCORS(env, req, unsupported("File type not allowed"));
+  }
 
-  const maxBytes = parseInt(env.FILE_MAX_BYTES || "5000000", 10);
+  const maxBytes      = parseInt(env.FILE_MAX_BYTES || "5000000", 10);
   const contentLength = parseInt(req.headers.get("content-length") || "0", 10);
-  if (contentLength > maxBytes) return withCORS(env, req, tooLarge(`Max ${maxBytes} bytes`));
+  if (contentLength > maxBytes) {
+    if (LOG) {
+      console.warn('[FILES_UPLOAD]', JSON.stringify({
+        stage: 'too_large',
+        key,
+        content_length: contentLength,
+        max_bytes: maxBytes
+      }));
+    }
+    return withCORS(env, req, tooLarge(`Max ${maxBytes} bytes`));
+  }
 
-  const putRes = await r2Put(env, key, req.body, { httpMetadata: { contentType: ct }, customMetadata: {} });
+  if (LOG) {
+    const cleanKey = (key || '').replace(/^\/+/, '');
+    console.log('[FILES_UPLOAD]', JSON.stringify({
+      stage: 'before_put',
+      key,
+      cleanKey,
+      content_type: ct,
+      content_length: contentLength
+    }));
+  }
+
+  const putRes = await r2Put(env, key, req.body, {
+    httpMetadata: { contentType: ct },
+    customMetadata: {}
+  });
+
+  if (LOG) {
+    console.log('[FILES_UPLOAD]', JSON.stringify({
+      stage: 'after_put',
+      key,
+      etag: putRes?.etag || null
+    }));
+  }
+
   const size = contentLength || undefined;
   return withCORS(env, req, ok({ ok: true, key, etag: putRes?.etag, size }));
 }
+
 
 async function handleFilePresignDownload(env, req) {
   const user = await requireUser(env, req, ['admin']);
