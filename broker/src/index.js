@@ -22066,21 +22066,20 @@ async function handleUpdateClient(env, req, clientId) {
 
 
 
-
-
 export async function handleImportHrRotaParse(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
-  let body;
-  try {
-    body = await parseJSONBody(req);
-  } catch {
-    body = null;
+  // Expect JSON: { file_r2_key, original_name, [client_id], [tz_assumption], [parse_summary_json] }
+  const body = await parseJSONBody(req).catch(() => null);
+  if (!body) {
+    return withCORS(env, req, badRequest('Invalid JSON body'));
   }
 
-  const fileKey =
-    (body && (body.file_r2_key || body.file_key)) || null;
+  const fileKey   = (body.file_r2_key || body.file_key || '').trim();
+  const filename  = (body.original_name || body.filename || fileKey || '').trim();
+  const tzAssump  = body.tz_assumption || 'Europe/London';
+  const clientId  = body.client_id && String(body.client_id).trim();
 
   if (!fileKey) {
     return withCORS(
@@ -22090,18 +22089,35 @@ export async function handleImportHrRotaParse(env, req) {
     );
   }
 
-  const now = new Date().toISOString();
+  if (!filename) {
+    return withCORS(
+      env,
+      req,
+      badRequest('original_name or file_key is required for HR rota import')
+    );
+  }
 
-  // Insert hr_imports row for daily rota validation
-  const insPayload = [{
+  const nowIso = new Date().toISOString();
+
+  // hr_imports columns:
+  //   id (uuid, default), filename (NOT NULL),
+  //   uploaded_by, uploaded_at_utc (NOT NULL, default now()),
+  //   tz_assumption (NOT NULL), parse_summary_json,
+  //   created_at (NOT NULL, default now()),
+  //   source_system (NOT NULL), file_r2_key, client_id
+  const insPayload = {
+    filename,
     uploaded_by: user.id,
-    tz_assumption: 'Europe/London',
+    uploaded_at_utc: nowIso,
+    tz_assumption: tzAssump,
     source_system: 'HEALTHROSTER_DAILY',
     file_r2_key: fileKey,
-    parse_summary_json: body?.parse_summary_json || {},
-    created_at: now,
-    updated_at: now
-  }];
+    parse_summary_json: body.parse_summary_json || {}
+  };
+
+  if (clientId) {
+    insPayload.client_id = clientId;
+  }
 
   let imp;
   try {
@@ -22113,6 +22129,7 @@ export async function handleImportHrRotaParse(env, req) {
         body: JSON.stringify(insPayload)
       }
     );
+
     if (!res.ok) {
       const txt = await res.text().catch(() => '');
       return withCORS(
@@ -22121,6 +22138,7 @@ export async function handleImportHrRotaParse(env, req) {
         serverError(`Failed to insert hr_imports row: ${txt}`)
       );
     }
+
     const json = await res.json().catch(() => []);
     imp = Array.isArray(json) ? json[0] : json;
   } catch (e) {
@@ -22147,8 +22165,8 @@ export async function handleImportHrRotaParse(env, req) {
     parseResult = await parseHealthRosterWorkbookIntoHrRows(env, {
       import_id: importId,
       file_key: fileKey,
-      client_id: imp.client_id || null,
-      tz: imp.tz_assumption || 'Europe/London'
+      client_id: imp.client_id || clientId || null,
+      tz: imp.tz_assumption || tzAssump || 'Europe/London'
     });
   } catch (e) {
     console.error('[HR_ROTA_PARSE] parse failed', {
@@ -22164,20 +22182,17 @@ export async function handleImportHrRotaParse(env, req) {
 
   const mergedSummary = {
     ...(imp.parse_summary_json || {}),
-    ...parseResult
+    ...(parseResult || {})
   };
 
-  // Update hr_imports.parse_summary_json
+  // Update hr_imports.parse_summary_json (⚠️ hr_imports has no updated_at column)
   try {
     await fetch(
       `${env.SUPABASE_URL}/rest/v1/hr_imports?id=eq.${encodeURIComponent(importId)}`,
       {
         method: 'PATCH',
         headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify({
-          parse_summary_json: mergedSummary,
-          updated_at: new Date().toISOString()
-        })
+        body: JSON.stringify({ parse_summary_json: mergedSummary })
       }
     );
   } catch (e) {
@@ -22192,6 +22207,7 @@ export async function handleImportHrRotaParse(env, req) {
     parse_summary_json: mergedSummary
   }));
 }
+
 
 async function classifyHrRotaValidationImport(env, importId) {
   const enc   = encodeURIComponent;
@@ -33061,7 +33077,7 @@ async function buildWeeklySnapshot(env, ts, cw, contract) {
   const policy        = await loadPolicy(env, client_id, workedDateYmd);
   const requiresHr    = !!policy?.requires_hr;
 
-  // NEW: unified pay-channel check via resolveEffectivePayChannel (correct signature)
+  // Pay-channel check (only meaningful once both IDs are known)
   let payChannelBad = false;
   try {
     if (candidate_id && client_id && typeof resolveEffectivePayChannel === 'function') {
@@ -33090,21 +33106,34 @@ async function buildWeeklySnapshot(env, ts, cw, contract) {
     payChannelBad = true;
   }
 
-  // Unified processing_status ladder
+  // ── ID-first ladder + issue flags ──
   let processing_status;
+  let hasRateIssue       = false;
+  let hasPayChannelIssue = false;
+
   if (!candidate_id) {
-    processing_status = "UNASSIGNED";
+    processing_status    = "UNASSIGNED";
     candidate_assignment = "UNASSIGNED";
+    // No rate/pay-channel issues recorded yet
   } else if (!client_id) {
-    processing_status = "CLIENT_UNRESOLVED";
+    processing_status    = "CLIENT_UNRESOLVED";
+    // No rate/pay-channel issues recorded yet
   } else if (missingRates) {
-    processing_status = "RATE_MISSING";
+    processing_status    = "RATE_MISSING";
+    hasRateIssue         = true;
+    hasPayChannelIssue   = !!payChannelBad;
   } else if (payChannelBad) {
-    processing_status = "PAY_CHANNEL_MISSING";
+    processing_status    = "PAY_CHANNEL_MISSING";
+    hasRateIssue         = false;
+    hasPayChannelIssue   = true;
   } else if (requiresHr) {
-    processing_status = "READY_FOR_HR";
+    processing_status    = "READY_FOR_HR";
+    hasRateIssue         = false;
+    hasPayChannelIssue   = false;
   } else {
-    processing_status = "READY_FOR_INVOICE";
+    processing_status    = "READY_FOR_INVOICE";
+    hasRateIssue         = false;
+    hasPayChannelIssue   = false;
   }
 
   const hoursPayEx = round2(
@@ -33229,6 +33258,10 @@ async function buildWeeklySnapshot(env, ts, cw, contract) {
 
     candidate_assignment,
     processing_status,
+
+    // NEW issue flags
+    has_rate_issue:        hasRateIssue,
+    has_pay_channel_issue: hasPayChannelIssue,
 
     invoice_breakdown_json,
   };
@@ -33379,7 +33412,7 @@ async function buildDailySnapshot(env, ts) {
       ? "PAYE"
       : ts.pay_method || null;
 
-  // NEW: Pay-channel state via resolveEffectivePayChannel (correct signature)
+  // Pay-channel state via resolveEffectivePayChannel (only meaningful once IDs known)
   let payChannelBad = false;
   try {
     if (candidate_id && client_id && typeof resolveEffectivePayChannel === 'function') {
@@ -33409,20 +33442,31 @@ async function buildDailySnapshot(env, ts) {
 
   const requiresHr = !!policy?.requires_hr;
 
-  // Unified processing_status ladder
+  // ── ID-first ladder + issue flags ──
   let processing_status;
+  let hasRateIssue       = false;
+  let hasPayChannelIssue = false;
+
   if (!candidate_id) {
     processing_status = "UNASSIGNED";
   } else if (!client_id) {
     processing_status = "CLIENT_UNRESOLVED";
   } else if (missingRates) {
-    processing_status = "RATE_MISSING";
+    processing_status   = "RATE_MISSING";
+    hasRateIssue        = true;
+    hasPayChannelIssue  = !!payChannelBad;
   } else if (payChannelBad) {
-    processing_status = "PAY_CHANNEL_MISSING";
+    processing_status   = "PAY_CHANNEL_MISSING";
+    hasRateIssue        = false;
+    hasPayChannelIssue  = true;
   } else if (requiresHr) {
-    processing_status = "READY_FOR_HR";
+    processing_status   = "READY_FOR_HR";
+    hasRateIssue        = false;
+    hasPayChannelIssue  = false;
   } else {
-    processing_status = "READY_FOR_INVOICE";
+    processing_status   = "READY_FOR_INVOICE";
+    hasRateIssue        = false;
+    hasPayChannelIssue  = false;
   }
 
   const pay = rates.pay || {
@@ -33566,11 +33610,16 @@ async function buildDailySnapshot(env, ts) {
     candidate_assignment,
     processing_status,
 
+    // NEW issue flags
+    has_rate_issue:        hasRateIssue,
+    has_pay_channel_issue: hasPayChannelIssue,
+
     invoice_breakdown_json,
   };
 
   await writeSnapshot(env, snapshot);
 }
+
 
 // ---------------------------
 // API: Manual drain
