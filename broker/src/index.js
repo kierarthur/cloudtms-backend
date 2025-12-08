@@ -10645,7 +10645,7 @@ function parseNhspHtmlTableToRows(html) {
 // Main NHSP parser: handles both HTML “fake xls” and real Excel
 // ─────────────────────────────────────────────────────────────
 async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Europe/London' }) {
-  console.log('[NHSP_PARSE_VERSION]', 'v2025-12-08-html-sniff-3');
+  console.log('[NHSP_PARSE_VERSION]', 'v2025-12-08-html-sniff-4');
   console.log('[NHSP_PARSE] start', { import_id, file_key, tz });
 
   // ─────────────────────────────────────────────────────────────
@@ -10680,45 +10680,44 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
   // 1) Parse workbook → rows[] (HTML or real XLS)
   // ─────────────────────────────────────────────────────────────
   if (looksLikeHtml) {
-    // 1a) Try SheetJS HTML parsing first
-    try {
-      console.log('[NHSP_PARSE] detected HTML-like .xls, trying SheetJS HTML parse', {
-        import_id,
-        file_key
-      });
-
-      wb = XLSX.read(text, { type: 'string' });
-
-      if (wb.SheetNames && wb.SheetNames.length) {
-        const sheet = wb.Sheets[wb.SheetNames[0]];
-        rows = XLSX.utils.sheet_to_json(sheet, {
-          header: 1,
-          raw:    true,
-          defval: ''
-        }) || [];
-      }
-    } catch (err) {
-      console.warn('[NHSP_PARSE] XLSX HTML read failed, will fall back to manual HTML parse', {
-        import_id,
-        file_key,
-        err: err?.message || String(err)
-      });
-      rows = [];
-    }
-
-    const hasUsableTableShape =
-      Array.isArray(rows) &&
-      rows.length > 1 &&
-      rows.some(r => Array.isArray(r) && r.length > 3);
-
-    // 1b) Manual HTML fallback when SheetJS gives 0/1 row or something weird
-    if (!hasUsableTableShape && typeof parseNhspHtmlTableToRows === 'function') {
+    // For NHSP "fake XLS" exports, always use our HTML table parser.
+    // This avoids Excel serial dates like 45699 and keeps "02/11/2025"
+    // as a string so excelDateToYmd can interpret dd/mm correctly.
+    if (typeof parseNhspHtmlTableToRows === 'function') {
       rows = parseNhspHtmlTableToRows(text);
-      console.log('[NHSP_PARSE] manual HTML parsed rows', {
+      console.log('[NHSP_PARSE] using HTML <table> parser', {
         import_id,
         file_key,
-        length: rows.length
+        length: Array.isArray(rows) ? rows.length : 0
       });
+    } else {
+      // Fallback: if helper is missing, fall back to SheetJS HTML parsing.
+      try {
+        console.log('[NHSP_PARSE] HTML-like .xls but parseNhspHtmlTableToRows not defined; falling back to SheetJS', {
+          import_id,
+          file_key
+        });
+
+        wb = XLSX.read(text, { type: 'string' });
+
+        if (wb.SheetNames && wb.SheetNames.length) {
+          const sheet = wb.Sheets[wb.SheetNames[0]];
+          rows = XLSX.utils.sheet_to_json(sheet, {
+            header: 1,
+            raw:    true,
+            defval: ''
+          }) || [];
+        } else {
+          rows = [];
+        }
+      } catch (err) {
+        console.warn('[NHSP_PARSE] SheetJS HTML read failed and no HTML helper available', {
+          import_id,
+          file_key,
+          err: err?.message || String(err)
+        });
+        rows = [];
+      }
     }
   } else {
     // Not HTML – treat as real Excel bytes (original behaviour)
@@ -10742,17 +10741,6 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
         err: err?.message || String(err)
       });
       rows = [];
-    }
-
-    // Extra safety: if binary path produced nothing but the bytes
-    // clearly look like HTML, run the HTML parser anyway.
-    if ((!rows || rows.length <= 1) && looksLikeHtml && typeof parseNhspHtmlTableToRows === 'function') {
-      rows = parseNhspHtmlTableToRows(text);
-      console.log('[NHSP_PARSE] HTML fallback after XLSX binary parse', {
-        import_id,
-        file_key,
-        length: rows.length
-      });
     }
   }
 
@@ -11019,7 +11007,7 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
       external_row_key,
       payload_json,
       staff_raw: staffName || null,
-      assignment_grade_norm: null,        // you can normalise assignment here later if needed
+      assignment_grade_norm: null,        // can be normalised later if needed
       hours_worked: typeof hoursWorked === 'number' ? hoursWorked : null
     });
 
@@ -11125,21 +11113,46 @@ async function parseHealthRosterWorkbookIntoHrRows(
     sniff.includes('<html') ||
     sniff.startsWith('<!doctype html');
 
-  let wb;
+  let wb = null;
   let rows = [];
 
+  // ─────────────────────────────────────────────────────────────
+  // Workbook / HTML parsing with date-safe behaviour
+  // ─────────────────────────────────────────────────────────────
   try {
-    if (looksLikeHtml) {
+    if (looksLikeHtml && typeof parseNhspHtmlTableToRows === 'function') {
+      // For HTML-style HealthRoster exports, reuse the NHSP HTML table parser
+      // so we get raw strings (e.g. "02/11/2025") not Excel serials.
+      rows = parseNhspHtmlTableToRows(text);
       if (LOG) {
         console.log('[HR_PARSE]', JSON.stringify({
-          stage: 'detected_html',
+          stage: 'html_table_parsed',
           import_id,
-          file_key
+          file_key,
+          length: Array.isArray(rows) ? rows.length : 0
         }));
       }
-      wb = XLSX.read(text, { type: 'string' });
     } else {
+      // Normal path: treat as real Excel bytes
       wb = XLSX.read(u8, { type: 'array' });
+
+      if (!wb.SheetNames || !wb.SheetNames.length) {
+        if (LOG) {
+          console.error('[HR_PARSE]', JSON.stringify({
+            stage: 'no_sheets',
+            import_id,
+            file_key
+          }));
+        }
+        throw new Error('HealthRoster workbook has no sheets');
+      }
+
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      rows = XLSX.utils.sheet_to_json(sheet, {
+        header: 1,
+        raw:    true,
+        defval: ''
+      });
     }
   } catch (e) {
     if (LOG) {
@@ -11150,27 +11163,20 @@ async function parseHealthRosterWorkbookIntoHrRows(
         err: e?.message || String(e)
       }));
     }
-    // Fallback: try array mode
-    wb = XLSX.read(u8, { type: 'array' });
-  }
-
-  if (!wb.SheetNames || !wb.SheetNames.length) {
-    if (LOG) {
-      console.error('[HR_PARSE]', JSON.stringify({
-        stage: 'no_sheets',
-        import_id,
-        file_key
-      }));
+    // Last resort: try Excel array read if not already tried
+    if (!rows || !rows.length) {
+      wb = XLSX.read(u8, { type: 'array' });
+      if (!wb.SheetNames || !wb.SheetNames.length) {
+        throw new Error('HealthRoster workbook has no sheets');
+      }
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      rows = XLSX.utils.sheet_to_json(sheet, {
+        header: 1,
+        raw:    true,
+        defval: ''
+      });
     }
-    throw new Error('HealthRoster workbook has no sheets');
   }
-
-  const sheet = wb.Sheets[wb.SheetNames[0]];
-  rows = XLSX.utils.sheet_to_json(sheet, {
-    header: 1,
-    raw:    true,
-    defval: ''
-  });
 
   if (!rows.length) {
     if (LOG) {
@@ -11605,6 +11611,7 @@ async function parseHealthRosterWorkbookIntoHrRows(
     header_columns
   };
 }
+
 
 
 
@@ -23879,7 +23886,6 @@ export async function handleImportHrRotaParse(env, req) {
   }));
 }
 
-
 async function classifyHrRotaValidationImport(env, importId) {
   const enc   = encodeURIComponent;
   const norm  = (s) => String(s || '').trim().toLowerCase();
@@ -24087,11 +24093,30 @@ async function classifyHrRotaValidationImport(env, importId) {
       });
     }
 
-    if (!candidateId || !clientId || !dateLocal) {
-      // Can't match timesheet without all three
+    // ── NEW: explicit reason codes for unresolved candidate / client ─────────
+    const candidateMissing = !candidateId;
+    const clientMissing    = !clientId;
+    const dateMissing      = !dateLocal;
+
+    if (candidateMissing || clientMissing || dateMissing) {
       unmatchedCount++;
-      byReason['timesheet_not_found_or_ambiguous'] = (byReason['timesheet_not_found_or_ambiguous'] || 0) + 1;
-      results.push(baseResult);
+
+      let reasonKey;
+      if (candidateMissing) {
+        reasonKey = 'candidate_unresolved';
+      } else if (clientMissing) {
+        reasonKey = 'client_unresolved';
+      } else {
+        // date missing or other non-timesheet-specific issue
+        reasonKey = 'timesheet_not_found_or_ambiguous';
+      }
+
+      byReason[reasonKey] = (byReason[reasonKey] || 0) + 1;
+      results.push({
+        ...baseResult,
+        status: 'UNMATCHED',
+        reason_code: reasonKey
+      });
       continue;
     }
 
@@ -24100,7 +24125,7 @@ async function classifyHrRotaValidationImport(env, importId) {
     try {
       const tsRows = await getDailyTimesheetsForCandidateCached(candidateId);
       const candidates = [];
-      for (const t of tsRows || []) {
+      for (const t of (tsRows || [])) {
         const wsIso = t.worked_start_iso || null;
         if (!wsIso) continue;
         let ymd = null;
@@ -24128,12 +24153,20 @@ async function classifyHrRotaValidationImport(env, importId) {
         // More than one candidate timesheet -> ambiguous
         unmatchedCount++;
         byReason['timesheet_not_found_or_ambiguous'] = (byReason['timesheet_not_found_or_ambiguous'] || 0) + 1;
-        results.push(baseResult);
+        results.push({
+          ...baseResult,
+          status: 'UNMATCHED',
+          reason_code: 'timesheet_not_found_or_ambiguous'
+        });
         continue;
       } else {
         unmatchedCount++;
         byReason['timesheet_not_found_or_ambiguous'] = (byReason['timesheet_not_found_or_ambiguous'] || 0) + 1;
-        results.push(baseResult);
+        results.push({
+          ...baseResult,
+          status: 'UNMATCHED',
+          reason_code: 'timesheet_not_found_or_ambiguous'
+        });
         continue;
       }
     } catch (e) {
@@ -24144,7 +24177,11 @@ async function classifyHrRotaValidationImport(env, importId) {
       });
       unmatchedCount++;
       byReason['timesheet_not_found_or_ambiguous'] = (byReason['timesheet_not_found_or_ambiguous'] || 0) + 1;
-      results.push(baseResult);
+      results.push({
+        ...baseResult,
+        status: 'UNMATCHED',
+        reason_code: 'timesheet_not_found_or_ambiguous'
+      });
       continue;
     }
 
@@ -24152,7 +24189,11 @@ async function classifyHrRotaValidationImport(env, importId) {
     if (!timesheetId) {
       unmatchedCount++;
       byReason['timesheet_not_found_or_ambiguous'] = (byReason['timesheet_not_found_or_ambiguous'] || 0) + 1;
-      results.push(baseResult);
+      results.push({
+        ...baseResult,
+        status: 'UNMATCHED',
+        reason_code: 'timesheet_not_found_or_ambiguous'
+      });
       continue;
     }
 
@@ -24319,8 +24360,6 @@ export async function handleHrRotaValidationPreview(env, req, importId) {
     );
   }
 }
-
-
 export async function handleHrRotaValidationApply(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
@@ -24404,7 +24443,7 @@ export async function handleHrRotaValidationApply(env, req, importId) {
           timesheet_id: timesheetId,
           status: 'VALIDATION_OK',
           reason: 'HEALTHROSTER_DAILY',
-          hr_request_id: hrRequestId,
+          hr_reference: hrRequestId,
           import_id: importId
         });
         validationsOk++;
@@ -24435,7 +24474,7 @@ export async function handleHrRotaValidationApply(env, req, importId) {
           );
         } catch (e) {
           console.warn('[HR_ROTA_APPLY] reference_number update failed', {
-            import_id: ImportId,
+            import_id: importId,
             timesheet_id: timesheetId,
             hr_row_id: hrRowId,
             err: e?.message || String(e)
@@ -24473,7 +24512,7 @@ export async function handleHrRotaValidationApply(env, req, importId) {
             timesheet_id: timesheetId,
             status: 'VALIDATION_ERROR',
             reason: rc || 'actual_hours_mismatch',
-            hr_request_id: hrRequestId,
+            hr_reference: hrRequestId,
             import_id: importId
           });
         } catch (e) {
@@ -28492,6 +28531,192 @@ async function upsertValidation(env, user, { timesheet_id, status, reason, hr_re
     const err = await res.text().catch(() => '');
     throw new Error(`timesheet_validations upsert failed: ${err}`);
   }
+}
+
+export async function handleHrRotaResolveMappings(env, req, importId) {
+  const enc   = encodeURIComponent;
+  const norm  = (s) => String(s || '').trim().toLowerCase();
+  const nowIso = new Date().toISOString();
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!importId) {
+    return withCORS(env, req, badRequest('import_id is required'));
+  }
+
+  let body;
+  try {
+    body = await parseJSONBody(req);
+  } catch (e) {
+    console.warn('[HR_ROTA_RESOLVE] failed to parse body', {
+      import_id: importId,
+      err: e?.message || String(e)
+    });
+    return withCORS(env, req, badRequest('Invalid JSON body'));
+  }
+
+  const candidateMappings = Array.isArray(body?.candidate_mappings)
+    ? body.candidate_mappings
+    : [];
+  const clientAliases = Array.isArray(body?.client_aliases)
+    ? body.client_aliases
+    : [];
+
+  // ─────────────────────────────────────────────────────────────
+  // 1) Upsert hr_name_mappings for candidate mappings
+  // ─────────────────────────────────────────────────────────────
+  const hrNameRows = [];
+
+  for (const m of candidateMappings) {
+    if (!m) continue;
+    const rawStaff  = m.staff_norm || m.staff_raw || '';
+    const staffNorm = norm(rawStaff);
+    const hospRaw   = m.hospital_or_trust || '';
+    const hospNorm  = hospRaw ? norm(hospRaw) : null;
+    const candidateId = m.candidate_id || null;
+
+    if (!staffNorm || !candidateId) continue;
+
+    hrNameRows.push({
+      hr_name_norm: staffNorm,
+      hospital_or_trust: hospNorm,
+      candidate_id: candidateId,
+      active: true,
+      last_used_at: nowIso
+    });
+  }
+
+  if (hrNameRows.length) {
+    try {
+      // Use on_conflict on (hr_name_norm, hospital_or_trust) to upsert mappings
+      const res = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/hr_name_mappings?on_conflict=hr_name_norm,hospital_or_trust`,
+        {
+          method: 'POST',
+          headers: { ...sbHeaders(env), Prefer: 'resolution=merge-duplicates,return=minimal' },
+          body: JSON.stringify(hrNameRows)
+        }
+      );
+      if (!res.ok) {
+        const err = await res.text().catch(() => '');
+        console.warn('[HR_ROTA_RESOLVE] hr_name_mappings upsert failed', {
+          import_id: importId,
+          err
+        });
+      }
+    } catch (e) {
+      console.warn('[HR_ROTA_RESOLVE] hr_name_mappings upsert exception', {
+        import_id: importId,
+        err: e?.message || String(e)
+      });
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 2) Upsert client_hospitals aliases
+  //    Merge hospital_name_norm arrays, ensuring alias is present
+  // ─────────────────────────────────────────────────────────────
+  for (const a of clientAliases) {
+    if (!a) continue;
+    const clientId    = a.client_id || null;
+    const hospNormRaw = a.hospital_norm || '';
+    const hospNorm    = norm(hospNormRaw);
+
+    if (!clientId || !hospNorm) continue;
+
+    try {
+      // Fetch existing client_hospitals row (if any)
+      const { rows: chRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/client_hospitals` +
+          `?client_id=eq.${enc(clientId)}` +
+          `&select=id,hospital_name_norm` +
+          `&limit=1`
+      );
+      const existing = chRows?.[0] || null;
+
+      if (!existing) {
+        // Create a new row for this client with this alias
+        try {
+          const res = await fetch(
+            `${env.SUPABASE_URL}/rest/v1/client_hospitals`,
+            {
+              method: 'POST',
+              headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+              body: JSON.stringify({
+                client_id: clientId,
+                hospital_name_norm: [hospNorm],
+                updated_at: nowIso
+              })
+            }
+          );
+          if (!res.ok) {
+            const err = await res.text().catch(() => '');
+            console.warn('[HR_ROTA_RESOLVE] client_hospitals insert failed', {
+              import_id: importId,
+              client_id: clientId,
+              err
+            });
+          }
+        } catch (e) {
+          console.warn('[HR_ROTA_RESOLVE] client_hospitals insert exception', {
+            import_id: importId,
+            client_id: clientId,
+            err: e?.message || String(e)
+          });
+        }
+      } else {
+        // Merge hospital_name_norm array
+        const arr = Array.isArray(existing.hospital_name_norm)
+          ? existing.hospital_name_norm.map((x) => norm(x)).filter(Boolean)
+          : [];
+        if (!arr.includes(hospNorm)) {
+          arr.push(hospNorm);
+        }
+
+        try {
+          const res = await fetch(
+            `${env.SUPABASE_URL}/rest/v1/client_hospitals` +
+              `?id=eq.${enc(existing.id)}`,
+            {
+              method: 'PATCH',
+              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+              body: JSON.stringify({
+                hospital_name_norm: arr,
+                updated_at: nowIso
+              })
+            }
+          );
+          if (!res.ok) {
+            const err = await res.text().catch(() => '');
+            console.warn('[HR_ROTA_RESOLVE] client_hospitals update failed', {
+              import_id: importId,
+              client_id: clientId,
+              err
+            });
+          }
+        } catch (e) {
+          console.warn('[HR_ROTA_RESOLVE] client_hospitals update exception', {
+            import_id: importId,
+            client_id: clientId,
+            err: e?.message || String(e)
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('[HR_ROTA_RESOLVE] client_hospitals fetch failed', {
+        import_id: importId,
+        client_id: clientId,
+        err: e?.message || String(e)
+      });
+    }
+  }
+
+  return withCORS(env, req, ok({
+    import_id: importId,
+    candidate_mappings_applied: hrNameRows.length,
+    client_aliases_applied: clientAliases.length
+  }));
 }
 
 
@@ -40773,7 +40998,7 @@ if (req.method === 'GET' && p === '/api/healthroster/autoprocess/clients') {
 
       if (req.method === 'POST' && p === '/api/hr/tso-failure-email')        return handleQueueTsoFailureEmail(env, req);
 
-      // NEW: HR rota daily import/preview/apply
+          // NEW: HR rota daily import/preview/apply
       if (req.method === 'POST' && p === '/api/imports/hr-rota/parse') {
         return handleImportHrRotaParse(env, req);
       }
@@ -40787,6 +41012,13 @@ if (req.method === 'GET' && p === '/api/healthroster/autoprocess/clients') {
         const rotaApply = matchPath(p, '/api/imports/hr-rota/:import_id/apply');
         if (rotaApply && req.method === 'POST') {
           return handleHrRotaValidationApply(env, req, rotaApply.import_id);
+        }
+      }
+      {
+        // NEW: HR rota daily resolve-conflicts (name/client aliases only)
+        const rotaResolve = matchPath(p, '/api/imports/hr-rota/:import_id/resolve-conflicts');
+        if (rotaResolve && req.method === 'POST') {
+          return handleHrRotaResolveMappings(env, req, rotaResolve.import_id);
         }
       }
 
