@@ -10526,64 +10526,212 @@ export async function handleSearchTimesheets(env, req) {
   }));
 }
 
-async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Europe/London' }) {
-  // Version marker so we can confirm in Wrangler tail that this HTML-sniffing version is deployed
-  console.log('[NHSP_PARSE_VERSION]', 'v2025-12-08-html-sniff-1');
+// ─────────────────────────────────────────────────────────────
+// Helpers: HTML entity decode + HTML <table> → string[][]
+// ─────────────────────────────────────────────────────────────
 
+function decodeHtmlEntities(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    // numeric entities
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCharCode(parseInt(n, 16)));
+}
+
+// Parse the NHSP HTML export (e.g. Export (4).xls) into rows: string[][]
+function parseNhspHtmlTableToRows(html) {
+  if (!html) return [];
+
+  // Try to narrow to the NHSP table (id="dynamicTable"), fallback to first <table>
+  const tableMatch =
+    html.match(/<table[^>]*id=["']dynamicTable["'][^>]*>[\s\S]*?<\/table>/i) ||
+    html.match(/<table[^>]*>[\s\S]*?<\/table>/i);
+
+  if (!tableMatch) return [];
+
+  const tableHtml = tableMatch[0];
+
+  const rowRe  = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+  const cellRe = /<t[hd][^>]*>([\s\S]*?)<\/t[hd]>/gi;
+
+  const rows = [];
+  let rowMatch;
+
+  // Iterate over <tr>...</tr>
+  // eslint-disable-next-line no-cond-assign
+  while ((rowMatch = rowRe.exec(tableHtml)) !== null) {
+    const rowHtml = rowMatch[1];
+    const cells   = [];
+    let cellMatch;
+
+    // Iterate over <th>/<td> in the row
+    // eslint-disable-next-line no-cond-assign
+    while ((cellMatch = cellRe.exec(rowHtml)) !== null) {
+      let cellInner = cellMatch[1];
+
+      // Convert <br> to newline so wards like "...<br/>Liaison..." don't get smashed
+      cellInner = cellInner.replace(/<br\s*\/?>/gi, '\n');
+
+      // Strip any remaining tags inside the cell
+      cellInner = cellInner.replace(/<[^>]+>/g, '');
+
+      // Decode HTML entities and normalise whitespace
+      let text = decodeHtmlEntities(cellInner);
+      text     = text.replace(/\s+/g, ' ').trim();
+
+      cells.push(text);
+    }
+
+    if (!cells.length) continue;
+
+    // Skip the big title row "Timesheets Previously Released"
+    if (cells.length === 1 &&
+        /timesheets previously released/i.test(cells[0])) {
+      continue;
+    }
+
+    rows.push(cells);
+  }
+
+  return rows;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Main NHSP parser: handles both HTML “fake xls” and real Excel
+// ─────────────────────────────────────────────────────────────
+
+async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Europe/London' }) {
+  console.log('[NHSP_PARSE_VERSION]', 'v2025-12-08-html-sniff-2');
   console.log('[NHSP_PARSE] start', { import_id, file_key, tz });
 
   const u8 = await r2GetBytes(env, file_key);
-  if (!u8) {
-    console.error('[NHSP_PARSE] R2 object not found', { file_key });
-    throw new Error(`R2 object not found for key ${file_key}`);
-  }
-
-  let wb;
-  try {
-    // Try to detect HTML masquerading as .xls (NHSP often sends HTML tables)
-    const text = new TextDecoder('utf-8').decode(u8);
-    const sniff = text.slice(0, 512).toLowerCase();
-
-    if (sniff.includes('<table') || sniff.includes('<html')) {
-      console.log('[NHSP_PARSE] detected HTML content, parsing as string', { import_id, file_key });
-      wb = XLSX.read(text, { type: 'string' });
-    } else {
-      // Looks like a real Excel workbook → use original array path
-      wb = XLSX.read(u8, { type: 'array' });
-    }
-  } catch (e) {
-    // On any sniff/string error, fall back to original behaviour
-    console.warn('[NHSP_PARSE] sniff/string parse failed, falling back to array', {
-      import_id,
-      file_key,
-      err: e?.message || String(e)
-    });
-    wb = XLSX.read(u8, { type: 'array' });
-  }
-
-  if (!wb.SheetNames || !wb.SheetNames.length) {
-    console.error('[NHSP_PARSE] workbook has no sheets', { import_id, file_key });
-    throw new Error('NHSP workbook has no sheets');
-  }
-  const sheet = wb.Sheets[wb.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json(sheet, {
-    header: 1,
-    raw:    true,
-    defval: ''
-  });
-
-  console.log('[NHSP_PARSE] raw_rows_length', { import_id, length: rows.length });
-
-  if (!rows.length) {
-    console.warn('[NHSP_PARSE] empty sheet', { import_id, file_key });
+  if (!u8 || !u8.length) {
+    console.warn('[NHSP_PARSE] no file bytes', { import_id, file_key });
     return {
+      status: 'PARSED',
       rows_total: 0,
       rows_parsed: 0,
       rows_skipped: 0,
-      notes: 'Empty NHSP sheet',
+      notes: 'No bytes returned from R2',
       header_columns: []
     };
   }
+
+  const text  = new TextDecoder('utf-8').decode(u8);
+  const sniff = text.slice(0, 2048).toLowerCase();
+
+  const looksLikeHtml =
+    sniff.replace(/^[\uFEFF\s]+/, '').startsWith('<table') ||
+    sniff.includes('<table') ||
+    sniff.includes('<html') ||
+    sniff.startsWith('<!doctype html');
+
+  let rows = [];
+  let wb;
+
+  if (looksLikeHtml) {
+    // 1) Try SheetJS HTML parsing first
+    try {
+      console.log('[NHSP_PARSE] detected HTML-like .xls, trying SheetJS HTML parse', {
+        import_id,
+        file_key
+      });
+
+      wb = XLSX.read(text, { type: 'string' });
+
+      if (wb.SheetNames && wb.SheetNames.length) {
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(sheet, {
+          header: 1,
+          raw:    true,
+          defval: ''
+        }) || [];
+      }
+    } catch (err) {
+      console.warn('[NHSP_PARSE] XLSX HTML read failed, will fall back to manual HTML parse', {
+        import_id,
+        file_key,
+        err: err?.message || String(err)
+      });
+      rows = [];
+    }
+
+    const hasUsableTableShape =
+      Array.isArray(rows) &&
+      rows.length > 1 &&
+      rows.some(r => Array.isArray(r) && r.length > 3);
+
+    // 2) Manual HTML fallback when SheetJS gives 0/1 row or something weird
+    if (!hasUsableTableShape) {
+      rows = parseNhspHtmlTableToRows(text);
+      console.log('[NHSP_PARSE] manual HTML parsed rows', {
+        import_id,
+        file_key,
+        length: rows.length
+      });
+    }
+  } else {
+    // Not HTML – treat as real Excel bytes (original behaviour)
+    try {
+      wb = XLSX.read(u8, { type: 'array' });
+
+      if (wb.SheetNames && wb.SheetNames.length) {
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(sheet, {
+          header: 1,
+          raw:    true,
+          defval: ''
+        }) || [];
+      } else {
+        rows = [];
+      }
+    } catch (err) {
+      console.warn('[NHSP_PARSE] binary XLSX read failed', {
+        import_id,
+        file_key,
+        err: err?.message || String(err)
+      });
+      rows = [];
+    }
+
+    // Extra safety: if binary path produced nothing but the bytes
+    // clearly look like HTML, run the HTML parser anyway.
+    if ((!rows || rows.length <= 1) && looksLikeHtml) {
+      rows = parseNhspHtmlTableToRows(text);
+      console.log('[NHSP_PARSE] HTML fallback after XLSX binary parse', {
+        import_id,
+        file_key,
+        length: rows.length
+      });
+    }
+  }
+
+  console.log('[NHSP_PARSE] raw_rows_length', {
+    import_id,
+    length: Array.isArray(rows) ? rows.length : 0
+  });
+
+  if (!rows || !rows.length) {
+    console.warn('[NHSP_PARSE] no rows after HTML/XLSX parsing', { import_id, file_key });
+    return {
+      status: 'PARSED',
+      rows_total: 0,
+      rows_parsed: 0,
+      rows_skipped: 0,
+      notes: 'No rows found in NHSP file (after HTML/XLSX parsing)',
+      header_columns: []
+    };
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Existing mapping logic (with slightly smarter header detection)
+  // ─────────────────────────────────────────────────────────────
 
   const pad2 = (n) => String(n).padStart(2, '0');
 
@@ -10658,15 +10806,18 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
       .join('|');
   }
 
-  // header & col mapping
-  let headerRow = rows[0] || [];
+  // Header detection: find the first row with both "date" and "ref" in it
   let headerIdx = 0;
-
-  const firstHasText = headerRow.some(c => String(c || '').match(/[A-Za-z]/));
-  if (!firstHasText && rows.length > 1) {
-    headerRow = rows[1];
-    headerIdx = 1;
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i] || [];
+    const lower = r.map(c => String(c || '').toLowerCase());
+    if (lower.some(h => h.includes('date')) && lower.some(h => h.includes('ref'))) {
+      headerIdx = i;
+      break;
+    }
   }
+
+  let headerRow = rows[headerIdx] || [];
   const header_columns = headerRow.map(c => String(c ?? ''));
 
   const findCol = (fallbackIdx, matcher) => {
@@ -10677,7 +10828,14 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
   const dateColIdx       = findCol(0,  h => h.includes('date'));
   const refColIdx        = findCol(1,  h => h.includes('ref'));
   const staffColIdx      = findCol(2,  h => h.includes('staff') || h.includes('worker') || h.includes('name'));
-  const uniqueColIdx     = findCol(3,  h => h.includes('unique') || h.includes('agency') || h.includes('staff no'));
+  // safer unique id matcher: must mention "unique" or "staff no" or both "agency" and "id"
+  const uniqueColIdx     = findCol(
+    3,
+    h =>
+      h.includes('unique') ||
+      h.includes('staff no') ||
+      (h.includes('agency') && h.includes('id'))
+  );
   const trustColIdx      = findCol(4,  h => h.includes('hospital') || h.includes('trust') || h.includes('client'));
   const wardColIdx       = findCol(5,  h => h.includes('ward') || h.includes('unit') || h.includes('dept'));
   const assignmentColIdx = findCol(6,  h => h.includes('assign'));
@@ -10692,6 +10850,7 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
 
   const hrRowsPayload = [];
 
+  // Data rows start after headerIdx
   for (let i = headerIdx + 1; i < rows.length; i++) {
     const row = rows[i];
     if (!row || row.length === 0) continue;
@@ -10787,6 +10946,7 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
     rows_parsed++;
   }
 
+  // Insert hr_rows in chunks
   const chunkSize = 500;
   for (let i = 0; i < hrRowsPayload.length; i += chunkSize) {
     const chunk = hrRowsPayload.slice(i, i + chunkSize);
