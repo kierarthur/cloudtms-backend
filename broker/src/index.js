@@ -10644,11 +10644,13 @@ function parseNhspHtmlTableToRows(html) {
 // ─────────────────────────────────────────────────────────────
 // Main NHSP parser: handles both HTML “fake xls” and real Excel
 // ─────────────────────────────────────────────────────────────
-
 async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Europe/London' }) {
-  console.log('[NHSP_PARSE_VERSION]', 'v2025-12-08-html-sniff-2');
+  console.log('[NHSP_PARSE_VERSION]', 'v2025-12-08-html-sniff-3');
   console.log('[NHSP_PARSE] start', { import_id, file_key, tz });
 
+  // ─────────────────────────────────────────────────────────────
+  // 0) Load bytes from R2
+  // ─────────────────────────────────────────────────────────────
   const u8 = await r2GetBytes(env, file_key);
   if (!u8 || !u8.length) {
     console.warn('[NHSP_PARSE] no file bytes', { import_id, file_key });
@@ -10674,8 +10676,11 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
   let rows = [];
   let wb;
 
+  // ─────────────────────────────────────────────────────────────
+  // 1) Parse workbook → rows[] (HTML or real XLS)
+  // ─────────────────────────────────────────────────────────────
   if (looksLikeHtml) {
-    // 1) Try SheetJS HTML parsing first
+    // 1a) Try SheetJS HTML parsing first
     try {
       console.log('[NHSP_PARSE] detected HTML-like .xls, trying SheetJS HTML parse', {
         import_id,
@@ -10706,8 +10711,8 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
       rows.length > 1 &&
       rows.some(r => Array.isArray(r) && r.length > 3);
 
-    // 2) Manual HTML fallback when SheetJS gives 0/1 row or something weird
-    if (!hasUsableTableShape) {
+    // 1b) Manual HTML fallback when SheetJS gives 0/1 row or something weird
+    if (!hasUsableTableShape && typeof parseNhspHtmlTableToRows === 'function') {
       rows = parseNhspHtmlTableToRows(text);
       console.log('[NHSP_PARSE] manual HTML parsed rows', {
         import_id,
@@ -10741,7 +10746,7 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
 
     // Extra safety: if binary path produced nothing but the bytes
     // clearly look like HTML, run the HTML parser anyway.
-    if ((!rows || rows.length <= 1) && looksLikeHtml) {
+    if ((!rows || rows.length <= 1) && looksLikeHtml && typeof parseNhspHtmlTableToRows === 'function') {
       rows = parseNhspHtmlTableToRows(text);
       console.log('[NHSP_PARSE] HTML fallback after XLSX binary parse', {
         import_id,
@@ -10769,9 +10774,8 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
   }
 
   // ─────────────────────────────────────────────────────────────
-  // Existing mapping logic (with slightly smarter header detection)
+  // 2) Helpers for date/time & keys
   // ─────────────────────────────────────────────────────────────
-
   const pad2 = (n) => String(n).padStart(2, '0');
 
   function excelDateToYmd(v) {
@@ -10839,13 +10843,33 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
   function normalizeStr(s) {
     return String(s || '').trim();
   }
+
   function normalizeKeyParts(parts) {
     return parts
       .map(s => String(s || '').replace(/[|]/g, ' ').trim().toLowerCase())
       .join('|');
   }
 
-  // Header detection: find the first row with both "date" and "ref" in it
+  // Infer role_type_enum (RMN | HCA) from assignment / ward text
+  function inferRoleTypeEnum(assignment, ward) {
+    const s = `${assignment || ''} ${ward || ''}`.toLowerCase();
+
+    // crude but practical heuristics – anything clearly HCA-ish → HCA, else RMN
+    if (
+      s.includes('hca') ||
+      s.includes('healthcare assistant') ||
+      s.includes('support worker') ||
+      s.includes('csw') ||
+      s.includes('hcsw')
+    ) {
+      return 'HCA';
+    }
+    return 'RMN';
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 3) Header detection (first row with "date" & "ref")
+  // ─────────────────────────────────────────────────────────────
   let headerIdx = 0;
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i] || [];
@@ -10867,7 +10891,6 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
   const dateColIdx       = findCol(0,  h => h.includes('date'));
   const refColIdx        = findCol(1,  h => h.includes('ref'));
   const staffColIdx      = findCol(2,  h => h.includes('staff') || h.includes('worker') || h.includes('name'));
-  // safer unique id matcher: must mention "unique" or "staff no" or both "agency" and "id"
   const uniqueColIdx     = findCol(
     3,
     h =>
@@ -10889,7 +10912,9 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
 
   const hrRowsPayload = [];
 
-  // Data rows start after headerIdx
+  // ─────────────────────────────────────────────────────────────
+  // 4) Row loop → hr_rows payload (DB-compliant)
+  // ─────────────────────────────────────────────────────────────
   for (let i = headerIdx + 1; i < rows.length; i++) {
     const row = rows[i];
     if (!row || row.length === 0) continue;
@@ -10951,6 +10976,7 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
 
     const refStr = normalizeStr(rawRef);
 
+    // Preserve the full row as raw_columns (for diagnostics)
     const raw_columns = headerRow.map((_, idx) => row[idx]);
 
     const payload_json = {
@@ -10964,7 +10990,6 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
       unique_id: uniqueId,
       assignment,
       trust,
-      hospital_or_trust: trust,
       client: trust,
       ward,
       start_local: startHhmm,
@@ -10976,26 +11001,34 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
       raw_columns
     };
 
-    // FIX: populate structured hr_rows columns (date_local is NOT NULL)
+    // Decide role_type_enum value (RMN | HCA)
+    const roleType = inferRoleTypeEnum(assignment, ward);
+
+    // IMPORTANT: only use columns that actually exist on public.hr_rows
     hrRowsPayload.push({
       import_id,
-      source_system: 'NHSP',
       hr_request_id: refStr || null,
       date_local: workDateYmd,
       start_time_local: startHhmm,
       end_time_local: endHhmm,
       staff_norm: staffNorm || null,
-      hospital_or_trust: trust || null,
-      assignment_grade_norm: null,
-      hours_worked: hoursWorked,
+      role_type: roleType,                 // role_type_enum, NOT NULL
+      unit_raw: trust || null,            // text, nullable
+      unit_hint: ward || null,            // text, nullable
+      agency_raw: 'NHSP',                 // text, nullable – helpful for diagnostics
       external_row_key,
-      payload_json
+      payload_json,
+      staff_raw: staffName || null,
+      assignment_grade_norm: null,        // you can normalise assignment here later if needed
+      hours_worked: typeof hoursWorked === 'number' ? hoursWorked : null
     });
 
     rows_parsed++;
   }
 
-  // Insert hr_rows in chunks
+  // ─────────────────────────────────────────────────────────────
+  // 5) Bulk insert into hr_rows
+  // ─────────────────────────────────────────────────────────────
   const chunkSize = 500;
   for (let i = 0; i < hrRowsPayload.length; i += chunkSize) {
     const chunk = hrRowsPayload.slice(i, i + chunkSize);
