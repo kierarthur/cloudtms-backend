@@ -14405,6 +14405,153 @@ export async function handleNhspImportConfirm(env, req, importId) {
   }
 }
 
+export async function handleTimesheetsSummary(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const enc    = encodeURIComponent;
+  const urlObj = new URL(req.url);
+  const q      = (k) => urlObj.searchParams.get(k);
+
+  const page     = Math.max(1, parseInt(q('page') || '1', 10));
+  const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
+
+  const clientId    = q('client_id');
+  const candidateId = q('candidate_id');
+  const stage       = q('summary_stage');
+
+  const routeTypeRaw = q('route_type');
+  const routeType    = routeTypeRaw ? routeTypeRaw.toUpperCase() : null;
+
+  const sheetScopeRaw = q('sheet_scope');
+  const sheetScope    = sheetScopeRaw ? sheetScopeRaw.toUpperCase() : null;
+
+  const qrStatusRaw   = q('qr_status');
+  const qrStatus      = qrStatusRaw ? qrStatusRaw.toUpperCase() : null;
+
+  const isAdjusted     = q('is_adjusted');
+  const isQr           = q('is_qr');
+  const needsAttention = q('needs_attention');
+
+  // NEW: Tools filters – candidate/client payment & invoicing
+  const candidatePaid   = q('candidate_paid');
+  const clientInvoiced  = q('client_invoiced');
+
+  const weFrom      = q('week_ending_from');
+  const weTo        = q('week_ending_to');
+
+  const orderByParam  = (q('order_by') || '').toLowerCase();
+  const orderDirParam = (q('order_dir') || '').toLowerCase();
+
+  // processing_status filter
+  const procStatusParamRaw = q('processing_status');
+  let procStatusList = null;
+  if (procStatusParamRaw) {
+    const v = procStatusParamRaw.trim();
+    if (v && v.toUpperCase() !== 'ALL') {
+      procStatusList = v
+        .split(',')
+        .map(s => s.trim().toUpperCase())
+        .filter(Boolean);
+    }
+  }
+
+  const allowedSort = {
+    week_ending_date:    'week_ending_date',
+    client_name:         'client_name',
+    candidate_name:      'candidate_name',
+    summary_stage:       'summary_stage',
+    route_type:          'route_type',
+    sheet_scope:         'sheet_scope',
+    total_pay_ex_vat:    'total_pay_ex_vat',
+    total_charge_ex_vat: 'total_charge_ex_vat',
+    margin_ex_vat:       'margin_ex_vat',
+    pay:                 'total_pay_ex_vat',
+    charge:              'total_charge_ex_vat',
+    margin:              'margin_ex_vat'
+  };
+
+  const defaultOrderCol = 'week_ending_date';
+  const orderCol = allowedSort[orderByParam] || defaultOrderCol;
+  const orderDir = (orderDirParam === 'asc') ? 'asc' : 'desc';
+
+  let api =
+    `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary?select=*` +
+    `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
+
+  if (clientId)    api += `&client_id=eq.${enc(clientId)}`;
+  if (candidateId) api += `&candidate_id=eq.${enc(candidateId)}`;
+  if (stage && stage.toUpperCase() !== 'ALL') api += `&summary_stage=eq.${enc(stage)}`;
+
+  // NEW: aggregated Route handling
+  if (routeType && routeType !== 'ALL') {
+    if (routeType === 'ELECTRONIC') {
+      api += `&route_type=in.(DAILY_ELECTRONIC,WEEKLY_ELECTRONIC)`;
+    } else if (routeType === 'MANUAL') {
+      api += `&route_type=in.(DAILY_MANUAL,WEEKLY_MANUAL)`;
+    } else if (routeType === 'NHSP') {
+      api += `&route_type=in.(WEEKLY_NHSP,WEEKLY_NHSP_ADJUSTMENT)`;
+    } else if (routeType === 'HEALTHROSTER') {
+      api += `&route_type=eq.WEEKLY_HEALTHROSTER`;
+    } else {
+      // fallback – treat as direct match if we ever pass a raw route_type
+      api += `&route_type=eq.${enc(routeType)}`;
+    }
+  }
+
+  if (sheetScope && sheetScope !== 'ALL') api += `&sheet_scope=eq.${enc(sheetScope)}`;
+  if (qrStatus)    api += `&qr_status=eq.${enc(qrStatus)}`;
+  if (weFrom)      api += `&week_ending_date=gte.${enc(weFrom)}`;
+  if (weTo)        api += `&week_ending_date=lte.${enc(weTo)}`;
+
+  if (isAdjusted === 'true')  api += `&is_adjusted=eq.true`;
+  if (isAdjusted === 'false') api += `&is_adjusted=eq.false`;
+
+  // QR-only filter is still supported if explicitly requested via query,
+  // but Route=QR now comes via is_qr on the query string.
+  if (isQr === 'true')        api += `&is_qr=eq.true`;
+  if (isQr === 'false')       api += `&is_qr=eq.false`;
+
+  if (needsAttention === 'true')  api += `&needs_attention=eq.true`;
+  if (needsAttention === 'false') api += `&needs_attention=eq.false`;
+
+  // NEW: Candidate Paid / Client Invoiced filters from Tools
+  if (candidatePaid === 'true') {
+    // Any TSFIN with paid_at_utc NOT NULL → fully paid
+    api += `&paid_at_utc=is.not.null`;
+  }
+  if (clientInvoiced === 'true') {
+    // Any TSFIN with locked_by_invoice_id NOT NULL → fully invoiced
+    api += `&locked_by_invoice_id=is.not.null`;
+  }
+
+  // processing_status filter
+  if (procStatusList && procStatusList.length) {
+    if (procStatusList.length === 1) {
+      api += `&processing_status=eq.${enc(procStatusList[0])}`;
+    } else {
+      api += `&processing_status=in.(${procStatusList.map(enc).join(',')})`;
+    }
+  }
+
+  if (orderByParam && allowedSort[orderByParam]) {
+    api += `&order=${enc(orderCol)}.${orderDir},client_name.asc,candidate_name.asc`;
+  } else {
+    api += `&order=week_ending_date.desc,client_name.asc,candidate_name.asc`;
+  }
+
+  try {
+    const { rows } = await sbFetch(env, api);
+    return withCORS(env, req, ok({
+      items: rows || [],
+      page,
+      page_size: pageSize,
+      count: (rows || []).length
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError(`Failed to fetch timesheets summary: ${e?.message || e}`));
+  }
+}
 
 
 
@@ -14479,121 +14626,6 @@ export async function handleHrAutoprocessConfirm(env, req, importId) {
   }
 }
 
-export async function handleTimesheetsSummary(env, req) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  const enc    = encodeURIComponent;
-  const urlObj = new URL(req.url);
-  const q      = (k) => urlObj.searchParams.get(k);
-
-  const page     = Math.max(1, parseInt(q('page') || '1', 10));
-  const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
-
-  const clientId    = q('client_id');
-  const candidateId = q('candidate_id');
-  const stage       = q('summary_stage');
-
-  const routeTypeRaw = q('route_type');
-  const routeType    = routeTypeRaw ? routeTypeRaw.toUpperCase() : null;
-
-  const sheetScopeRaw = q('sheet_scope');
-  const sheetScope    = sheetScopeRaw ? sheetScopeRaw.toUpperCase() : null;
-
-  const qrStatusRaw   = q('qr_status');
-  const qrStatus      = qrStatusRaw ? qrStatusRaw.toUpperCase() : null;
-
-  const isAdjusted     = q('is_adjusted');
-  const isQr           = q('is_qr');
-  const needsAttention = q('needs_attention');
-
-  const weFrom      = q('week_ending_from');
-  const weTo        = q('week_ending_to');
-
-  const orderByParam  = (q('order_by') || '').toLowerCase();
-  const orderDirParam = (q('order_dir') || '').toLowerCase();
-
-  // NEW: processing_status filter
-  const procStatusParamRaw = q('processing_status');
-  let procStatusList = null;
-  if (procStatusParamRaw) {
-    const v = procStatusParamRaw.trim();
-    if (v && v.toUpperCase() !== 'ALL') {
-      procStatusList = v
-        .split(',')
-        .map(s => s.trim().toUpperCase())
-        .filter(Boolean);
-    }
-  }
-
-  const allowedSort = {
-    week_ending_date:    'week_ending_date',
-    client_name:         'client_name',
-    candidate_name:      'candidate_name',
-    summary_stage:       'summary_stage',
-    route_type:          'route_type',
-    sheet_scope:         'sheet_scope',
-    total_pay_ex_vat:    'total_pay_ex_vat',
-    total_charge_ex_vat: 'total_charge_ex_vat',
-    margin_ex_vat:       'margin_ex_vat',
-    pay:                 'total_pay_ex_vat',
-    charge:              'total_charge_ex_vat',
-    margin:              'margin_ex_vat'
-  };
-
-  const defaultOrderCol = 'week_ending_date';
-  const orderCol = allowedSort[orderByParam] || defaultOrderCol;
-  const orderDir = (orderDirParam === 'asc') ? 'asc' : 'desc';
-
-  let api =
-    `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary?select=*` +
-    `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
-
-  if (clientId)    api += `&client_id=eq.${enc(clientId)}`;
-  if (candidateId) api += `&candidate_id=eq.${enc(candidateId)}`;
-  if (stage)       api += `&summary_stage=eq.${enc(stage)}`;
-  if (routeType)   api += `&route_type=eq.${enc(routeType)}`;
-  if (sheetScope)  api += `&sheet_scope=eq.${enc(sheetScope)}`;
-  if (qrStatus)    api += `&qr_status=eq.${enc(qrStatus)}`;
-  if (weFrom)      api += `&week_ending_date=gte.${enc(weFrom)}`;
-  if (weTo)        api += `&week_ending_date=lte.${enc(weTo)}`;
-
-  if (isAdjusted === 'true')  api += `&is_adjusted=eq.true`;
-  if (isAdjusted === 'false') api += `&is_adjusted=eq.false`;
-
-  if (isQr === 'true')        api += `&is_qr=eq.true`;
-  if (isQr === 'false')       api += `&is_qr=eq.false`;
-
-  if (needsAttention === 'true')  api += `&needs_attention=eq.true`;
-  if (needsAttention === 'false') api += `&needs_attention=eq.false`;
-
-  // NEW: processing_status filter
-  if (procStatusList && procStatusList.length) {
-    if (procStatusList.length === 1) {
-      api += `&processing_status=eq.${enc(procStatusList[0])}`;
-    } else {
-      api += `&processing_status=in.(${procStatusList.map(enc).join(',')})`;
-    }
-  }
-
-  if (orderByParam && allowedSort[orderByParam]) {
-    api += `&order=${enc(orderCol)}.${orderDir},client_name.asc,candidate_name.asc`;
-  } else {
-    api += `&order=week_ending_date.desc,client_name.asc,candidate_name.asc`;
-  }
-
-  try {
-    const { rows } = await sbFetch(env, api);
-    return withCORS(env, req, ok({
-      items: rows || [],
-      page,
-      page_size: pageSize,
-      count: (rows || []).length
-    }));
-  } catch (e) {
-    return withCORS(env, req, serverError(`Failed to fetch timesheets summary: ${e?.message || e}`));
-  }
-}
 
 
 export async function handleTsfinUpdateSegments(env, req, timesheetId) {
