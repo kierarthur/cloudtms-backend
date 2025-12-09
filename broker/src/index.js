@@ -11933,6 +11933,180 @@ async function parseHealthRosterWorkbookIntoHrRows(
   };
 }
 
+async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, basis = 'NHSP') {
+  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+  const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
+
+  if (!shifts || !shifts.length) {
+    return { ok: false, reason: 'NO_SHIFTS' };
+  }
+
+  const candidate_id = contract.candidate_id || null;
+  const client_id    = contract.client_id   || null;
+
+  const segments = [];
+  let totalPayEx  = 0;
+  let totalChgEx  = 0;
+
+  // Build SEGMENTS from NHSP shifts (canonical data)
+  for (const sh of shifts) {
+    const workDate = sh.work_date;
+    if (!workDate || !sh.start_utc || !sh.end_utc) continue;
+
+    const policy = await loadPolicy(env, client_id, workDate);
+
+    let segs = [[sh.start_utc, sh.end_utc]];
+    segs = subtractBreak(
+      segs,
+      null,
+      null,
+      sh.break_mins || 0
+    );
+
+    const hours = classifyMinutes(env, policy, segs);
+
+    const rates = await resolveRates(env, {
+      candidate_id,
+      client_id,
+      role: contract.role || null,
+      band: contract.band || null,
+      dateYmd: workDate,
+    });
+
+    const pay = rates.pay || {};
+    const chg = rates.charge || {};
+
+    const payEx = round2(
+      (hours.hours_day   || 0) * asNumberLocal(pay.day)   +
+      (hours.hours_night || 0) * asNumberLocal(pay.night) +
+      (hours.hours_sat   || 0) * asNumberLocal(pay.sat)   +
+      (hours.hours_sun   || 0) * asNumberLocal(pay.sun)   +
+      (hours.hours_bh    || 0) * asNumberLocal(pay.bh)
+    );
+
+    const chgEx = round2(
+      (hours.hours_day   || 0) * asNumberLocal(chg.day)   +
+      (hours.hours_night || 0) * asNumberLocal(chg.night) +
+      (hours.hours_sat   || 0) * asNumberLocal(chg.sat)   +
+      (hours.hours_sun   || 0) * asNumberLocal(chg.sun)   +
+      (hours.hours_bh    || 0) * asNumberLocal(chg.bh)
+    );
+
+    totalPayEx += payEx;
+    totalChgEx += chgEx;
+
+    const refNum       = (sh.nhsp_ref_num || sh.ref_num || null) || null;
+    const requestId    = (sh.hr_request_id || sh.request_id || null) || null;
+    const heldBack     = sh.held_back_reason || null;
+    const sourceSystem = sh.source_system || null;
+
+    segments.push({
+      segment_id: `nhsp:${sh.id}`,
+      date: workDate,
+      ward: sh.ward || null,
+      start_utc: sh.start_utc,
+      end_utc: sh.end_utc,
+      break_mins: sh.break_mins || 0,
+
+      hours_day:   hours.hours_day   || 0,
+      hours_night: hours.hours_night || 0,
+      hours_sat:   hours.hours_sat   || 0,
+      hours_sun:   hours.hours_sun   || 0,
+      hours_bh:    hours.hours_bh    || 0,
+
+      pay_amount:    payEx,
+      charge_amount: chgEx,
+      exclude_from_pay: false,
+
+      // Metadata for UI & diagnostics
+      ref_num: refNum,
+      request_id: requestId,
+      held_back_reason: heldBack,
+      source_system: sourceSystem
+    });
+  }
+
+  if (!segments.length) {
+    return { ok: false, reason: 'NO_VALID_SEGMENTS' };
+  }
+
+  totalPayEx = round2(totalPayEx);
+  totalChgEx = round2(totalChgEx);
+  const marginEx = round2(totalChgEx - totalPayEx);
+
+  const invoice_breakdown_json = {
+    mode: 'SEGMENTS',
+    segments,
+    totals: {
+      total_pay_ex_vat: totalPayEx,
+      total_charge_ex_vat: totalChgEx,
+      margin_ex_vat: marginEx
+    }
+  };
+
+  // external_source_rows_json.NHSP_WEEKLY for invoice page-2+ itemised breakdown
+  // raw_row is the original NHSP import row from nhsp_shifts.payload_json
+  const nhspWeekly = shifts.map(sh => ({
+    date: sh.work_date,
+    source_system: 'NHSP',
+    reference: (sh.nhsp_ref_num || sh.ref_num || (sh.payload_json && (sh.payload_json.ref_num || sh.payload_json.Reference))) || null,
+    nhsp_shift_id: sh.id,
+    raw_row: sh.payload_json || null
+  }));
+
+  const snapshot = {
+    timesheet_id: ts.timesheet_id,
+    timesheet_version: ts.version || 1,
+
+    basis, // 'NHSP' or 'NHSP_ADJUSTMENT'
+    nhsp_import_id: nhspImportId || null,
+
+    occupant_key_norm: ts.occupant_key_norm || null,
+    week_ending_date: ts.week_ending_date || null,
+
+    candidate_id,
+    client_id,
+    role: contract.role || null,
+    band: contract.band || null,
+    pay_method: contract.pay_method_snapshot || null,
+
+    policy_snapshot_json: null,
+    rate_source_refs_json: {},
+
+    // For NHSP we historically left these bucket fields null and used SEGMENTS instead.
+    // Keeping that behaviour to avoid breaking downstream logic.
+    hours_day:   null,
+    hours_night: null,
+    hours_sat:   null,
+    hours_sun:   null,
+    hours_bh:    null,
+
+    additional_units_json: {},
+    additional_pay_ex_vat: 0,
+    additional_charge_ex_vat: 0,
+    additional_margin_ex_vat: 0,
+
+    total_hours: null,
+    total_pay_ex_vat: totalPayEx,
+    total_charge_ex_vat: totalChgEx,
+    margin_ex_vat: marginEx,
+
+    candidate_assignment: candidate_id ? 'ASSIGNED' : 'UNASSIGNED',
+    processing_status: 'READY_FOR_INVOICE',
+
+    has_rate_issue: false,
+    has_pay_channel_issue: false,
+
+    invoice_breakdown_json,
+
+    external_source_rows_json: {
+      NHSP_WEEKLY: nhspWeekly
+    }
+  };
+
+  await writeSnapshot(env, snapshot);
+  return { ok: true };
+}
 
 
 
@@ -36747,442 +36921,11 @@ async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
       additional_margin_ex_vat,
     };
   }
-export async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, basis = 'NHSP') {
-  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
-  const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
 
-  if (!shifts || !shifts.length) {
-    return { ok: false, reason: 'NO_SHIFTS' };
-  }
-
-  const candidate_id = contract.candidate_id || null;
-  const client_id    = contract.client_id   || null;
-
-  const segments = [];
-  let totalPayEx  = 0;
-  let totalChgEx  = 0;
-
-  // Build SEGMENTS from NHSP shifts (canonical data)
-  for (const sh of shifts) {
-    const workDate = sh.work_date;
-    if (!workDate || !sh.start_utc || !sh.end_utc) continue;
-
-    const policy = await loadPolicy(env, client_id, workDate);
-
-    let segs = [[sh.start_utc, sh.end_utc]];
-    segs = subtractBreak(
-      segs,
-      null,
-      null,
-      sh.break_mins || 0
-    );
-
-    const hours = classifyMinutes(env, policy, segs);
-
-    const rates = await resolveRates(env, {
-      candidate_id,
-      client_id,
-      role: contract.role || null,
-      band: contract.band || null,
-      dateYmd: workDate,
-    });
-
-    const pay = rates.pay || {};
-    const chg = rates.charge || {};
-
-    const payEx = round2(
-      (hours.hours_day   || 0) * asNumberLocal(pay.day)   +
-      (hours.hours_night || 0) * asNumberLocal(pay.night) +
-      (hours.hours_sat   || 0) * asNumberLocal(pay.sat)   +
-      (hours.hours_sun   || 0) * asNumberLocal(pay.sun)   +
-      (hours.hours_bh    || 0) * asNumberLocal(pay.bh)
-    );
-
-    const chgEx = round2(
-      (hours.hours_day   || 0) * asNumberLocal(chg.day)   +
-      (hours.hours_night || 0) * asNumberLocal(chg.night) +
-      (hours.hours_sat   || 0) * asNumberLocal(chg.sat)   +
-      (hours.hours_sun   || 0) * asNumberLocal(chg.sun)   +
-      (hours.hours_bh    || 0) * asNumberLocal(chg.bh)
-    );
-
-    totalPayEx += payEx;
-    totalChgEx += chgEx;
-
-    const refNum       = (sh.nhsp_ref_num || sh.ref_num || null) || null;
-    const requestId    = (sh.hr_request_id || sh.request_id || null) || null;
-    const heldBack     = sh.held_back_reason || null;
-    const sourceSystem = sh.source_system || null;
-
-    segments.push({
-      segment_id: `nhsp:${sh.id}`,
-      date: workDate,
-      ward: sh.ward || null,
-      start_utc: sh.start_utc,
-      end_utc: sh.end_utc,
-      break_mins: sh.break_mins || 0,
-
-      hours_day:   hours.hours_day   || 0,
-      hours_night: hours.hours_night || 0,
-      hours_sat:   hours.hours_sat   || 0,
-      hours_sun:   hours.hours_sun   || 0,
-      hours_bh:    hours.hours_bh    || 0,
-
-      pay_amount:    payEx,
-      charge_amount: chgEx,
-      exclude_from_pay: false,
-
-      // Metadata for UI & diagnostics
-      ref_num: refNum,
-      request_id: requestId,
-      held_back_reason: heldBack,
-      source_system: sourceSystem
-    });
-  }
-
-  if (!segments.length) {
-    return { ok: false, reason: 'NO_VALID_SEGMENTS' };
-  }
-
-  totalPayEx = round2(totalPayEx);
-  totalChgEx = round2(totalChgEx);
-  const marginEx = round2(totalChgEx - totalPayEx);
-
-  const invoice_breakdown_json = {
-    mode: 'SEGMENTS',
-    segments,
-    totals: {
-      total_pay_ex_vat: totalPayEx,
-      total_charge_ex_vat: totalChgEx,
-      margin_ex_vat: marginEx
-    }
-  };
-
-  // NEW: external_source_rows_json.NHSP_WEEKLY for invoice page-2+ itemised breakdown
-  // raw_row is the original NHSP import row from nhsp_shifts.payload_json
-  const nhspWeekly = shifts.map(sh => ({
-    date: sh.work_date,
-    source_system: 'NHSP',
-    reference: (sh.nhsp_ref_num || sh.ref_num || (sh.payload_json && (sh.payload_json.ref_num || sh.payload_json.Reference))) || null,
-    nhsp_shift_id: sh.id,
-    raw_row: sh.payload_json || null
-  }));
-
-  const snapshot = {
-    timesheet_id: ts.timesheet_id,
-    timesheet_version: ts.version || 1,
-
-    basis, // 'NHSP' or 'NHSP_ADJUSTMENT'
-    nhsp_import_id: nhspImportId || null,
-
-    occupant_key_norm: ts.occupant_key_norm || null,
-    week_ending_date: ts.week_ending_date || null,
-
-    candidate_id,
-    client_id,
-    role: contract.role || null,
-    band: contract.band || null,
-    pay_method: contract.pay_method_snapshot || null,
-
-    policy_snapshot_json: null,
-    rate_source_refs_json: {},
-
-    // For NHSP we historically left these bucket fields null and used SEGMENTS instead.
-    // Keeping that behaviour to avoid breaking downstream logic.
-    hours_day:   null,
-    hours_night: null,
-    hours_sat:   null,
-    hours_sun:   null,
-    hours_bh:    null,
-
-    additional_units_json: {},
-    additional_pay_ex_vat: 0,
-    additional_charge_ex_vat: 0,
-    additional_margin_ex_vat: 0,
-
-    total_hours: null,
-    total_pay_ex_vat: totalPayEx,
-    total_charge_ex_vat: totalChgEx,
-    margin_ex_vat: marginEx,
-
-    candidate_assignment: candidate_id ? 'ASSIGNED' : 'UNASSIGNED',
-    processing_status: 'READY_FOR_INVOICE',
-
-    // In NHSP context we don’t use the generic rate/pay-channel flags,
-    // but set them explicitly to false for consistency with the schema.
-    has_rate_issue: false,
-    has_pay_channel_issue: false,
-
-    invoice_breakdown_json,
-
-    external_source_rows_json: {
-      NHSP_WEEKLY: nhspWeekly
-    }
-  };
-
-  await writeSnapshot(env, snapshot);
-  return { ok: true };
-}
 
   // Build a timesheets_financials snapshot for a weekly, contract-driven TS.
   // basis = 'CONTRACT_WEEKLY' (requires enum extension).
-  async function buildWeeklySnapshot(env, ts, cw, contract) {
-    const hours = await computeWeeklyHours(env, ts, contract);
-
-    let rj = contract.rates_json || {};
-    if (typeof rj === "string") {
-      try {
-        rj = JSON.parse(rj);
-      } catch {
-        rj = {};
-      }
-    }
-    if (!rj || typeof rj !== "object") rj = {};
-
-    const payMethod = String(contract.pay_method_snapshot || "").toUpperCase();
-    const pay =
-      payMethod === "UMBRELLA"
-        ? {
-            day:   rj.umb_day   ?? null,
-            night: rj.umb_night ?? null,
-            sat:   rj.umb_sat   ?? null,
-            sun:   rj.umb_sun   ?? null,
-            bh:    rj.umb_bh    ?? null,
-          }
-        : {
-            day:   rj.paye_day   ?? null,
-            night: rj.paye_night ?? null,
-            sat:   rj.paye_sat   ?? null,
-            sun:   rj.paye_sun   ?? null,
-            bh:    rj.paye_bh    ?? null,
-          };
-
-    const charge = {
-      day:   rj.charge_day   ?? null,
-      night: rj.charge_night ?? null,
-      sat:   rj.charge_sat   ?? null,
-      sun:   rj.charge_sun   ?? null,
-      bh:    rj.charge_bh    ?? null,
-    };
-
-    const missingRates =
-      (hours.day   > 0 && (pay.day   == null || charge.day   == null)) ||
-      (hours.night > 0 && (pay.night == null || charge.night == null)) ||
-      (hours.sat   > 0 && (pay.sat   == null || charge.sat   == null)) ||
-      (hours.sun   > 0 && (pay.sun   == null || charge.sun   == null)) ||
-      (hours.bh    > 0 && (pay.bh    == null || charge.bh    == null));
-
-    const candidate_id = contract.candidate_id || null;
-    const client_id    = contract.client_id   || null;
-    let candidate_assignment = candidate_id ? "ASSIGNED" : "UNASSIGNED";
-
-    // Load candidate for pay-channel checks
-    let candidate = null;
-    if (candidate_id) {
-      candidate = await sbGetOne(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/candidates` +
-          `?id=eq.${enc(candidate_id)}` +
-          `&select=id,pay_method,umbrella_id,account_holder,sort_code,account_number`
-      );
-    }
-
-    // Load client policy (HR requirements, BH list, day/night windows, etc.)
-    const workedDateYmd = cw.week_ending_date || null;
-    const policy        = await loadPolicy(env, client_id, workedDateYmd);
-    const requiresHr    = !!policy?.requires_hr;
-
-    // Pay-channel check (only meaningful once both IDs are known)
-    let payChannelBad = false;
-    try {
-      if (candidate_id && client_id && typeof resolveEffectivePayChannel === 'function') {
-        let umbrella = null;
-        if (candidate?.umbrella_id) {
-          // Fetch umbrella so the helper can verify umbrella bank details if needed
-          umbrella = await sbGetOne(
-            env,
-            `${env.SUPABASE_URL}/rest/v1/umbrellas` +
-              `?id=eq.${enc(candidate.umbrella_id)}` +
-              `&select=id,name,bank_name,sort_code,account_number` +
-              `&limit=1`
-          );
-        }
-
-        const channel = resolveEffectivePayChannel({
-          pay_method: payMethod || (candidate?.pay_method || null),
-          candidate,
-          umbrella,
-        });
-
-        payChannelBad = !channel || channel.ok === false;
-      }
-    } catch (e) {
-      console.warn('[TSFIN][buildWeeklySnapshot] resolveEffectivePayChannel failed', e);
-      payChannelBad = true;
-    }
-
-    // ── ID-first ladder + issue flags ──
-    let processing_status;
-    let hasRateIssue       = false;
-    let hasPayChannelIssue = false;
-
-    if (!candidate_id) {
-      processing_status    = "UNASSIGNED";
-      candidate_assignment = "UNASSIGNED";
-      // No rate/pay-channel issues recorded yet
-    } else if (!client_id) {
-      processing_status    = "CLIENT_UNRESOLVED";
-      // No rate/pay-channel issues recorded yet
-    } else if (missingRates) {
-      processing_status    = "RATE_MISSING";
-      hasRateIssue         = true;
-      hasPayChannelIssue   = !!payChannelBad;
-    } else if (payChannelBad) {
-      processing_status    = "PAY_CHANNEL_MISSING";
-      hasRateIssue         = false;
-      hasPayChannelIssue   = true;
-    } else if (requiresHr) {
-      processing_status    = "READY_FOR_HR";
-      hasRateIssue         = false;
-      hasPayChannelIssue   = false;
-    } else {
-      processing_status    = "READY_FOR_INVOICE";
-      hasRateIssue         = false;
-      hasPayChannelIssue   = false;
-    }
-
-    const hoursPayEx = round2(
-      hours.day   * asNumberLocal(pay.day)   +
-      hours.night * asNumberLocal(pay.night) +
-      hours.sat   * asNumberLocal(pay.sat)   +
-      hours.sun   * asNumberLocal(pay.sun)   +
-      hours.bh    * asNumberLocal(pay.bh)
-    );
-
-    const hoursChargeEx = round2(
-      hours.day   * asNumberLocal(charge.day)   +
-      hours.night * asNumberLocal(charge.night) +
-      hours.sat   * asNumberLocal(charge.sat)   +
-      hours.sun   * asNumberLocal(charge.sun)   +
-      hours.bh    * asNumberLocal(charge.bh)
-    );
-
-    const {
-      additional_units_json,
-      additional_pay_ex_vat,
-      additional_charge_ex_vat,
-      additional_margin_ex_vat,
-    } = await computeWeeklyAdditionalFromTs(env, ts, cw, contract);
-
-    const total_pay_ex_vat    = round2(hoursPayEx + additional_pay_ex_vat);
-    const total_charge_ex_vat = round2(hoursChargeEx + additional_charge_ex_vat);
-    const margin_ex_vat       = round2(total_charge_ex_vat - total_pay_ex_vat);
-
-    const invoice_breakdown_json = {
-      mode: "WEEKLY_BUCKETS",
-      base_hours: {
-        day:   hours.day,
-        night: hours.night,
-        sat:   hours.sat,
-        sun:   hours.sun,
-        bh:    hours.bh,
-        pay_rates: {
-          day:   pay.day,
-          night: pay.night,
-          sat:   pay.sat,
-          sun:   pay.sun,
-          bh:    pay.bh,
-        },
-        charge_rates: {
-          day:   charge.day,
-          night: charge.night,
-          sat:   charge.sat,
-          sun:   charge.sun,
-          bh:    charge.bh,
-        },
-        pay_ex_vat:    hoursPayEx,
-        charge_ex_vat: hoursChargeEx,
-      },
-      additional: {
-        units:         additional_units_json,
-        pay_ex_vat:    additional_pay_ex_vat,
-        charge_ex_vat: additional_charge_ex_vat,
-        margin_ex_vat: additional_margin_ex_vat,
-      },
-      totals: {
-        total_pay_ex_vat,
-        total_charge_ex_vat,
-        margin_ex_vat,
-      },
-    };
-
-    const basis = "CONTRACT_WEEKLY";
-
-    const snapshot = {
-      timesheet_id: ts.timesheet_id,
-      timesheet_version: ts.version || 1,
-
-      basis,
-      occupant_key_norm: ts.occupant_key_norm || null,
-
-      worked_start_iso: ts.worked_start_iso || null,
-      worked_end_iso:   ts.worked_end_iso   || null,
-      break_start_iso:  ts.break_start_iso  || null,
-      break_end_iso:    ts.break_end_iso    || null,
-      break_minutes:    ts.break_minutes    || null,
-
-      candidate_id,
-      client_id,
-      role: contract.role || null,
-      band: contract.band || null,
-      pay_method: payMethod,
-
-      policy_snapshot_json: policy || null,
-      rate_source_refs_json: {},
-
-      hours_day:   hours.day,
-      hours_night: hours.night,
-      hours_sat:   hours.sat,
-      hours_sun:   hours.sun,
-      hours_bh:    hours.bh,
-
-      pay_day:   pay.day,
-      pay_night: pay.night,
-      pay_sat:   pay.sat,
-      pay_sun:   pay.sun,
-      pay_bh:    pay.bh,
-
-      charge_day:   charge.day,
-      charge_night: charge.night,
-      charge_sat:   charge.sat,
-      charge_sun:   charge.sun,
-      charge_bh:    charge.bh,
-
-      total_hours: round2(
-        hours.day + hours.night + hours.sat + hours.sun + hours.bh
-      ),
-
-      additional_units_json,
-      additional_pay_ex_vat,
-      additional_charge_ex_vat,
-      additional_margin_ex_vat,
-
-      total_pay_ex_vat,
-      total_charge_ex_vat,
-      margin_ex_vat,
-
-      candidate_assignment,
-      processing_status,
-
-      // NEW issue flags
-      has_rate_issue:        hasRateIssue,
-      has_pay_channel_issue: hasPayChannelIssue,
-
-      invoice_breakdown_json,
-    };
-
-    await writeSnapshot(env, snapshot);
-  }
+  
 
   export async function pruneOldHrWeeklyImports(env) {
   const enc = encodeURIComponent;
