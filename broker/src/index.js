@@ -12695,7 +12695,8 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
   }
 }
 
- async function assertCandidateHasValidContract(env, {
+
+async function assertCandidateHasValidContract(env, {
   candidate_id,
   client_id,
   work_date
@@ -12707,25 +12708,30 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
   const cliId   = norm(client_id || '');
   const workYmd = norm(work_date || '');
 
-  if (!candId || !cliId || !workYmd) {
-    throw new Error('Missing candidate_id, client_id or work_date for contract validation');
+  // We *always* need a candidate and a date. Client is optional.
+  if (!candId || !workYmd) {
+    throw new Error('Missing candidate_id or work_date for contract validation');
   }
 
   let rows = [];
   try {
+    // If we have a client_id, restrict by that client.
+    // Otherwise, check any active contract for the candidate.
+    const clientFilter = cliId ? `&client_id=eq.${enc(cliId)}` : '';
+
     const { rows: cRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/contracts` +
         `?candidate_id=eq.${enc(candId)}` +
-        `&client_id=eq.${enc(cliId)}` +
+        clientFilter +
         `&active=eq.true` +
-        `&select=id,start_date,end_date`
+        `&select=id,start_date,end_date,client_id`
     );
     rows = cRows || [];
   } catch (e) {
     console.error('[CONTRACT_VALIDATE] contracts lookup failed', {
       candidate_id: candId,
-      client_id: cliId,
+      client_id: cliId || null,
       work_date: workYmd,
       err: e?.message || String(e)
     });
@@ -12752,7 +12758,8 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
     );
   }
 }
- async function handleNhspResolveMappings(env, req, importId) {
+
+async function handleNhspResolveMappings(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
   const user = await requireUser(env, req, ['admin']);
@@ -12801,9 +12808,11 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
     } catch (e) {
       const msg = e?.message || 'Contract validation failed';
 
-      // If this is the specific security message, treat as 400; otherwise 500.
+      // If this is the specific security/missing message, treat as 400; otherwise 500.
       const isSecurityMsg = msg.startsWith('Due to security reasons when linking a candidate');
-      const isMissingMsg  = msg.startsWith('Missing candidate_id');
+      const isMissingMsg  =
+        msg.startsWith('Missing candidate_id') ||
+        msg.startsWith('Missing candidate_id or work_date');
 
       const status = (isSecurityMsg || isMissingMsg) ? 400 : 500;
       const payload = {
@@ -12858,6 +12867,7 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
 
   return withCORS(env, req, ok({ ok: true }));
 }
+
 
 
  async function handleHrAutoprocessResolveMappings(env, req, importId) {
