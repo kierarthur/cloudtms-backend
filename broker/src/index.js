@@ -12715,18 +12715,18 @@ async function assertCandidateHasValidContract(env, {
 
   let rows = [];
   try {
-    // If we have a client_id, restrict by that client.
-    // Otherwise, check any active contract for the candidate.
-    const clientFilter = cliId ? `&client_id=eq.${enc(cliId)}` : '';
-
-    const { rows: cRows } = await sbFetch(
-      env,
+    // Base filter: candidate_id
+    let url =
       `${env.SUPABASE_URL}/rest/v1/contracts` +
-        `?candidate_id=eq.${enc(candId)}` +
-        clientFilter +
-        `&active=eq.true` +
-        `&select=id,start_date,end_date,client_id`
-    );
+      `?candidate_id=eq.${enc(candId)}` +
+      `&select=id,client_id,start_date,end_date`;
+
+    // If we have a client_id, additionally restrict by that client.
+    if (cliId) {
+      url += `&client_id=eq.${enc(cliId)}`;
+    }
+
+    const { rows: cRows } = await sbFetch(env, url);
     rows = cRows || [];
   } catch (e) {
     console.error('[CONTRACT_VALIDATE] contracts lookup failed', {
@@ -12867,6 +12867,7 @@ async function handleNhspResolveMappings(env, req, importId) {
 
   return withCORS(env, req, ok({ ok: true }));
 }
+
 
 
 
