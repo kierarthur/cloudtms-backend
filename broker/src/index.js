@@ -37664,8 +37664,7 @@ await fetch(
   return { picked: lease.length, ok, fail };
 }
 
-
-export async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, basis = 'NHSP') {
+async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, basis = 'NHSP') {
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
   const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
 
@@ -37776,7 +37775,7 @@ export async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImp
     }
   };
 
-  // NEW: external_source_rows_json.NHSP_WEEKLY for invoice page-2+ itemised breakdown
+  // external_source_rows_json.NHSP_WEEKLY for invoice page-2+ itemised breakdown
   // raw_row is the original NHSP import row from nhsp_shifts.payload_json
   const nhspWeekly = shifts.map(sh => ({
     date: sh.work_date,
@@ -37826,8 +37825,6 @@ export async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImp
     candidate_assignment: candidate_id ? 'ASSIGNED' : 'UNASSIGNED',
     processing_status: 'READY_FOR_INVOICE',
 
-    // In NHSP context we don’t use the generic rate/pay-channel flags,
-    // but set them explicitly to false for consistency with the schema.
     has_rate_issue: false,
     has_pay_channel_issue: false,
 
@@ -37841,6 +37838,7 @@ export async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImp
   await writeSnapshot(env, snapshot);
   return { ok: true };
 }
+
 
 // Run HR weekly cross-check in bulk for every (client, candidate, week)
 // touched by a given HR_WEEKLY import.
