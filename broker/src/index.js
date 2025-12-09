@@ -21050,7 +21050,7 @@ async function findCandidateByImportName(env, staffName, { trustNorm } = {}) {
   const nameNorm = norm(staffName);
   if (!nameNorm) return null;
 
-  // 1) Try candidate-level alias JSONB: candidates.nhsp_hr_name_aliases contains nameNorm
+  // 1) Candidate-level alias JSONB: candidates.nhsp_hr_name_aliases contains nameNorm
   try {
     const aliasJson = JSON.stringify([nameNorm]); // ["john smith"]
     const { rows: candRows } = await sbFetch(
@@ -21069,40 +21069,45 @@ async function findCandidateByImportName(env, staffName, { trustNorm } = {}) {
     // If this fails for any reason, just fall through to hr_name_mappings
   }
 
-  // 2) hr_name_mappings – prefer name + hospital_or_trust when trustNorm is available
+  // 2) hr_name_mappings: single query for all active mappings for this name
+  let mapRows = [];
   try {
-    if (trustNorm) {
-      const urlWithTrust =
-        `${env.SUPABASE_URL}/rest/v1/hr_name_mappings` +
-        `?hr_name_norm=eq.${enc(nameNorm)}` +
-        `&hospital_or_trust=eq.${enc(trustNorm)}` +
-        `&active=eq.true` +
-        `&select=candidate_id` +
-        `&limit=2`;
-
-      const { rows: withTrust } = await sbFetch(env, urlWithTrust);
-      if (withTrust?.length === 1 && withTrust[0]?.candidate_id) {
-        return withTrust[0].candidate_id;
-      }
-      // If 0 or >1 rows, fall through to name-only
-    }
-
-    // 3) Fallback: name-only hr_name_mappings (no hospital filter)
-    const urlNameOnly =
+    const { rows } = await sbFetch(
+      env,
       `${env.SUPABASE_URL}/rest/v1/hr_name_mappings` +
-      `?hr_name_norm=eq.${enc(nameNorm)}` +
-      `&active=eq.true` +
-      `&select=candidate_id` +
-      `&limit=2`;
-
-    const { rows: nameOnly } = await sbFetch(env, urlNameOnly);
-    if (nameOnly?.length === 1 && nameOnly[0]?.candidate_id) {
-      return nameOnly[0].candidate_id;
-    }
+        `?hr_name_norm=eq.${enc(nameNorm)}` +
+        `&active=eq.true` +
+        `&select=candidate_id,hospital_or_trust`
+      // no limit: table is small; this is one subrequest either way
+    );
+    mapRows = rows || [];
   } catch {
-    // Non-fatal – caller will treat null as "no alias, needs resolving"
+    return null;
   }
 
+  if (!mapRows.length) {
+    return null;
+  }
+
+  const tNorm = norm(trustNorm);
+
+  // Prefer mappings that match this hospital_or_trust
+  if (tNorm) {
+    const matches = mapRows.filter((r) => norm(r.hospital_or_trust) === tNorm);
+    const ids = [...new Set(matches.map((r) => r.candidate_id).filter(Boolean))];
+    if (ids.length === 1) {
+      return ids[0];
+    }
+    // if >1 candidate_id for the same site, treat as ambiguous and fall back to name-only
+  }
+
+  // Name-only fallback: if all mappings for this name point to the same candidate, use it
+  const allIds = [...new Set(mapRows.map((r) => r.candidate_id).filter(Boolean))];
+  if (allIds.length === 1) {
+    return allIds[0];
+  }
+
+  // Ambiguous (multiple candidates for same name); require manual resolve
   return null;
 }
 
