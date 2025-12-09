@@ -15527,7 +15527,7 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
   }
 }
 
- async function handleTimesheetsSummary(env, req) {
+async function handleTimesheetsSummary(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -15558,6 +15558,10 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
   // NEW: Tools filters – candidate/client payment & invoicing
   const candidatePaid   = q('candidate_paid');
   const clientInvoiced  = q('client_invoiced');
+
+  // NEW: HR issue filter – e.g. 'HOURS_MISMATCH_HR'
+  const hrIssueRaw = q('hr_issue');
+  const hrIssue    = hrIssueRaw ? hrIssueRaw.toUpperCase() : null;
 
   const weFrom      = q('week_ending_from');
   const weTo        = q('week_ending_to');
@@ -15647,6 +15651,12 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
     api += `&locked_by_invoice_id=is.not.null`;
   }
 
+  // NEW: HR issue filter – map hr_issue → hr_crosscheck_issues array containment
+  if (hrIssue) {
+    // Supabase filter: cs.{VAL} → array contains VAL (case-sensitive)
+    api += `&hr_crosscheck_issues=cs.{${enc(hrIssue)}}`;
+  }
+
   // processing_status filter
   if (procStatusList && procStatusList.length) {
     if (procStatusList.length === 1) {
@@ -15674,6 +15684,7 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
     return withCORS(env, req, serverError(`Failed to fetch timesheets summary: ${e?.message || e}`));
   }
 }
+
 
  async function handleHrAutoprocessClients(env, req) {
   const user = await requireUser(env, req, ['admin']);
