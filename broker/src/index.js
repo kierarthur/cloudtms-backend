@@ -4448,7 +4448,6 @@ export async function handleContractWeekReplaceManualPdf(env, req, weekId) {
   return withCORS(env, req, ok({ replaced: true, r2_key: body.r2_key }));
 }
 
-
 export async function handleContractWeekManualUpsert(env, req, weekId) {
   const enc = encodeURIComponent;
 
@@ -4460,6 +4459,27 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
     body = await parseJSONBody(req);
   } catch {
     return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  // NEW: optional per-day references from FE
+  // Expecting an object like { "2025-01-06": "REF123", ... } or null
+  let dayReferencesJson = null;
+  if (body && Object.prototype.hasOwnProperty.call(body, 'day_references_json')) {
+    if (body.day_references_json && typeof body.day_references_json === 'object') {
+      dayReferencesJson = body.day_references_json;
+    } else if (body.day_references_json === null) {
+      dayReferencesJson = null; // explicit clear
+    } else if (typeof body.day_references_json === 'string') {
+      try {
+        const parsed = JSON.parse(body.day_references_json);
+        if (parsed && typeof parsed === 'object') {
+          dayReferencesJson = parsed;
+        }
+      } catch {
+        // if string but not valid JSON, we ignore rather than error
+        dayReferencesJson = null;
+      }
+    }
   }
 
   // NEW: QR revoke/reissue hints (from FE)
@@ -4739,6 +4759,8 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
       manual_pdf_rotation_degrees: manualPdfRotationDeg,
       line_type: 'HOURS',
       actual_schedule_json,
+      // NEW: per-day references (if provided)
+      day_references_json: dayReferencesJson ?? null,
       authorised_at_server: null,
       created_at: nowIso, updated_at: nowIso
     }];
@@ -4773,6 +4795,10 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
     // Only patch rotation if explicitly provided in this call
     if (body?.manual_pdf_rotation_degrees != null || body?.rotation_degrees != null) {
       patchBody.manual_pdf_rotation_degrees = manualPdfRotationDeg;
+    }
+    // Only patch day_references_json if the field was present in the request body
+    if (body && Object.prototype.hasOwnProperty.call(body, 'day_references_json')) {
+      patchBody.day_references_json = dayReferencesJson ?? null;
     }
 
     await fetch(
@@ -5280,6 +5306,7 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
     qr_pdf_key: qrPdfKey
   }));
 }
+
 
 export async function handleManualTimesheetQueueEnqueue(env, req) {
   const enc = encodeURIComponent;
@@ -6636,9 +6663,240 @@ export async function handleTimesheetsEligibilityWeekly(env, req) {
   return withCORS(env, req, ok(withLabels));
 }
 
+// GET /api/timesheets/:id/evidence
+export async function handleTimesheetEvidenceList(env, req, tsId) {
+  const enc = encodeURIComponent;
 
+  // Auth: admin only
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  if (!tsId) {
+    return withCORS(env, req, badRequest('timesheet_id is required'));
+  }
+
+  try {
+    // Ensure the timesheet exists
+    const { rows: tsRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(tsId)}` +
+        `&select=timesheet_id` +
+        `&limit=1`
+    );
+    const ts = tsRows?.[0] || null;
+    if (!ts) {
+      return withCORS(env, req, notFound('Timesheet not found'));
+    }
+
+    // Fetch evidence rows for this timesheet
+    const { rows: evRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
+        `?timesheet_id=eq.${enc(tsId)}` +
+        `&select=id,kind,display_name,storage_key,created_at,created_by` +
+        `&order=created_at.asc`
+    );
+
+    const evidence = evRows || [];
+
+    return withCORS(env, req, ok(evidence));
+  } catch (e) {
+    return withCORS(
+      env,
+      req,
+      serverError(`Failed to list timesheet evidence: ${e?.message || e}`)
+    );
+  }
+}
+
+// POST /api/timesheets/:id/evidence
+export async function handleTimesheetEvidenceAdd(env, req, tsId) {
+  const enc = encodeURIComponent;
+
+  // Auth: admin only
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  if (!tsId) {
+    return withCORS(env, req, badRequest('timesheet_id is required'));
+  }
+
+  let body;
+  try {
+    body = await parseJSONBody(req);
+  } catch {
+    return withCORS(env, req, badRequest('Invalid JSON payload'));
+  }
+
+  const kind        = body && body.kind && String(body.kind).trim();
+  const displayName = body && body.display_name != null ? String(body.display_name).trim() : null;
+  const storageKey  = body && body.storage_key && String(body.storage_key).trim();
+
+  if (!kind) {
+    return withCORS(env, req, badRequest('kind is required'));
+  }
+  if (!storageKey) {
+    return withCORS(env, req, badRequest('storage_key is required'));
+  }
+
+  try {
+    // Ensure the timesheet exists
+    const { rows: tsRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(tsId)}` +
+        `&select=timesheet_id` +
+        `&limit=1`
+    );
+    const ts = tsRows?.[0] || null;
+    if (!ts) {
+      return withCORS(env, req, notFound('Timesheet not found'));
+    }
+
+    // Validate that the storage_key exists in R2 (best-effort)
+    try {
+      if (typeof r2Exists === 'function') {
+        const exists = await r2Exists(env, storageKey);
+        if (!exists) {
+          return withCORS(env, req, badRequest('storage_key does not exist in R2'));
+        }
+      }
+    } catch (e) {
+      // If R2 check fails, we log and continue; DB will still accept the key
+      console.warn('[handleTimesheetEvidenceAdd] r2Exists check failed (non-fatal)', {
+        storage_key: storageKey,
+        err: e?.message || String(e)
+      });
+    }
+
+    const nowIso = new Date().toISOString();
+
+    const payload = [{
+      timesheet_id: tsId,
+      kind,
+      display_name: displayName || kind,
+      storage_key: storageKey,
+      created_at: nowIso,
+      created_by: user.id || null
+    }];
+
+    const insRes = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence`,
+      {
+        method: 'POST',
+        headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+        body: JSON.stringify(payload)
+      }
+    );
+
+    const txt = await insRes.text().catch(() => '');
+    if (!insRes.ok) {
+      return withCORS(
+        env,
+        req,
+        serverError(`Failed to add timesheet evidence: ${txt}`)
+      );
+    }
+
+    let row = null;
+    try {
+      const json = txt ? JSON.parse(txt) : [];
+      row = Array.isArray(json) ? json[0] : json;
+    } catch {
+      // If parsing fails, still return ok with no row
+      row = null;
+    }
+
+    if (row && row.id) {
+      return withCORS(env, req, ok(row));
+    }
+
+    return withCORS(env, req, ok({ ok: true }));
+  } catch (e) {
+    return withCORS(
+      env,
+      req,
+      serverError(`Failed to add timesheet evidence: ${e?.message || e}`)
+    );
+  }
+}
+
+// DELETE /api/timesheets/:id/evidence/:evidence_id
+export async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
+  const enc = encodeURIComponent;
+
+  // Auth: admin only
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  if (!tsId) {
+    return withCORS(env, req, badRequest('timesheet_id is required'));
+  }
+  if (!evidenceId) {
+    return withCORS(env, req, badRequest('evidence_id is required'));
+  }
+
+  try {
+    // Ensure the evidence row exists and belongs to this timesheet
+    const { rows: evRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
+        `?id=eq.${enc(evidenceId)}` +
+        `&timesheet_id=eq.${enc(tsId)}` +
+        `&select=id,storage_key` +
+        `&limit=1`
+    );
+    const ev = evRows?.[0] || null;
+    if (!ev) {
+      return withCORS(env, req, notFound('Evidence not found for this timesheet'));
+    }
+
+    const storageKey = ev.storage_key || null;
+
+    // Optionally delete from R2 (best-effort, non-fatal)
+    try {
+      if (storageKey && typeof r2Delete === 'function') {
+        await r2Delete(env, storageKey);
+      }
+    } catch (e) {
+      console.warn('[handleTimesheetEvidenceDelete] r2Delete failed (non-fatal)', {
+        storage_key: storageKey,
+        err: e?.message || String(e)
+      });
+    }
+
+    // Delete DB row
+    const delRes = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(evidenceId)}`,
+      {
+        method: 'DELETE',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' }
+      }
+    );
+
+    if (!delRes.ok) {
+      const t = await delRes.text().catch(() => '');
+      return withCORS(
+        env,
+        req,
+        serverError(`Failed to delete timesheet evidence: ${t}`)
+      );
+    }
+
+    return withCORS(env, req, ok({ ok: true }));
+  } catch (e) {
+    return withCORS(
+      env,
+      req,
+      serverError(`Failed to delete timesheet evidence: ${e?.message || e}`)
+    );
+  }
+}
 
 export async function handleTimesheetReplaceManualPdf(env, req, timesheetId) {
+  const enc = encodeURIComponent;
+
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -6649,20 +6907,83 @@ export async function handleTimesheetReplaceManualPdf(env, req, timesheetId) {
   // If a key is provided, sanity check it exists in R2
   if (newKey) {
     const exists = await r2Exists(env, newKey).catch(() => false);
-    if (!exists) return withCORS(env, req, badRequest('manual_pdf_r2_key does not exist in R2'));
+    if (!exists) {
+      return withCORS(env, req, badRequest('manual_pdf_r2_key does not exist in R2'));
+    }
   }
 
-  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}`, {
-    method: 'PATCH',
-    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-    body: JSON.stringify({ manual_pdf_r2_key: newKey, updated_at: new Date().toISOString() })
-  });
-  if (!res.ok) return withCORS(env, req, serverError(await res.text()));
+  // Patch the timesheet's manual_pdf_r2_key
+  const tsRes = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify({
+        manual_pdf_r2_key: newKey,
+        updated_at: new Date().toISOString()
+      })
+    }
+  );
 
-  await writeAudit(env, user, 'TIMESHEET_MANUAL_PDF_REPLACED', { manual_pdf_r2_key: newKey }, { entity: 'timesheet', subject_id: timesheetId, req });
-  const row = (await res.json().catch(()=>[]))[0] || null;
-  return withCORS(env, req, ok({ timesheet_id: timesheetId, manual_pdf_r2_key: row?.manual_pdf_r2_key || null }));
+  if (!tsRes.ok) {
+    return withCORS(env, req, serverError(await tsRes.text()));
+  }
+
+  const tsJson = await tsRes.json().catch(() => []);
+  const row = (Array.isArray(tsJson) ? tsJson[0] : tsJson) || null;
+
+  // NEW: insert timesheet_evidence row when a new manual PDF is set
+  if (newKey) {
+    try {
+      const payload = [{
+        timesheet_id: timesheetId,
+        kind: 'MANUAL_PDF',
+        display_name: 'Scanned timesheet',
+        storage_key: newKey,
+        created_by: user.id || null
+      }];
+
+      const evRes = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/timesheet_evidence`,
+        {
+          method: 'POST',
+          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+          body: JSON.stringify(payload)
+        }
+      );
+
+      if (!evRes.ok) {
+        const errTxt = await evRes.text().catch(() => '');
+        return withCORS(
+          env,
+          req,
+          serverError(`Failed to record timesheet evidence: ${errTxt}`)
+        );
+      }
+    } catch (e) {
+      return withCORS(
+        env,
+        req,
+        serverError(`Failed to record timesheet evidence: ${e?.message || e}`)
+      );
+    }
+  }
+
+  // Audit the PDF replacement (whether we set or cleared it)
+  await writeAudit(
+    env,
+    user,
+    'TIMESHEET_MANUAL_PDF_REPLACED',
+    { manual_pdf_r2_key: newKey },
+    { entity: 'timesheet', subject_id: timesheetId, req }
+  );
+
+  return withCORS(env, req, ok({
+    timesheet_id: timesheetId,
+    manual_pdf_r2_key: row?.manual_pdf_r2_key || null
+  }));
 }
+
 
 async function rebuildWeeklyTsfinForTimesheet(env, timesheetId, contract) {
   const { rows: finRows } = await sbFetch(
@@ -11744,7 +12065,6 @@ export async function handleManualPayAdjustmentCreate(env, req, timesheetId) {
     return withCORS(env, req, serverError('Failed to create manual pay adjustment'));
   }
 }
-
 export async function handleTimesheetDetails(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -11797,7 +12117,7 @@ export async function handleTimesheetDetails(env, req, timesheetId) {
         `&select=*` +
         `&limit=1`
     );
-    const tsfin = finRows?.[0] || null;
+    const tsfinRaw = finRows?.[0] || null;
 
     // Validation rows (most recent first)
     const { rows: valRows } = await sbFetch(
@@ -11822,7 +12142,7 @@ export async function handleTimesheetDetails(env, req, timesheetId) {
     // ───────────────────── Policy snapshot (requires_hr, autoprocess_hr, no_timesheet_required, etc.) ─────────────────────
     // Determine client for policy: prefer TSFIN client_id, fall back to timesheet/client, then contract_week client_id.
     const clientIdForPolicy =
-      tsfin?.client_id ||
+      tsfinRaw?.client_id ||
       ts.client_id ||
       contractWeek?.client_id ||
       null;
@@ -11863,9 +12183,34 @@ export async function handleTimesheetDetails(env, req, timesheetId) {
       policy = null;
     }
 
+    // ───────────────────── Shape TS + TSFIN payloads for FE ─────────────────────
+    // Ensure timesheet object always includes day_references_json (even if null)
+    const timesheetOut = {
+      ...ts,
+      day_references_json: Object.prototype.hasOwnProperty.call(ts, 'day_references_json')
+        ? ts.day_references_json
+        : null
+    };
+
+    // Ensure tsfin object explicitly includes HR cross-check fields
+    const tsfinOut = tsfinRaw
+      ? {
+          ...tsfinRaw,
+          hr_crosscheck_status: Object.prototype.hasOwnProperty.call(tsfinRaw, 'hr_crosscheck_status')
+            ? tsfinRaw.hr_crosscheck_status
+            : null,
+          hr_crosscheck_issues: Object.prototype.hasOwnProperty.call(tsfinRaw, 'hr_crosscheck_issues')
+            ? tsfinRaw.hr_crosscheck_issues
+            : null,
+          external_source_rows_json: Object.prototype.hasOwnProperty.call(tsfinRaw, 'external_source_rows_json')
+            ? tsfinRaw.external_source_rows_json
+            : null
+        }
+      : null;
+
     return withCORS(env, req, ok({
-      timesheet: ts,
-      tsfin,
+      timesheet: timesheetOut,
+      tsfin: tsfinOut,
       validations,
       shifts,
       sheet_scope: ts.sheet_scope || null,
@@ -11875,7 +12220,8 @@ export async function handleTimesheetDetails(env, req, timesheetId) {
       manual_pdf_r2_key: ts.manual_pdf_r2_key || null,
       contract_week_id: contractWeekId,
       contract_week: contractWeek,
-      policy               // NEW: full policy snapshot for FE (requires_hr, autoprocess_hr, no_timesheet_required, etc.)
+      policy,               // full policy snapshot for FE (requires_hr, autoprocess_hr, no_timesheet_required, etc.)
+      evidence: []          // stub; Evidence tab will call /api/timesheets/:id/evidence
     }));
   } catch (e) {
     console.error('[TIMESHEET_DETAILS] error', {
@@ -11886,6 +12232,569 @@ export async function handleTimesheetDetails(env, req, timesheetId) {
   }
 }
 
+export async function applyWeeklyMappingsOnly(env, {
+  source_system,
+  import_id,
+  candidate_mappings,
+  client_aliases
+}) {
+  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
+  const L   = (...a) => { if (LOG) console.log('[WEEKLY_MAPPINGS]', ...a); };
+
+  const enc  = encodeURIComponent;
+  const norm = (s) => String(s || '').trim().toLowerCase();
+
+  const nowIso = new Date().toISOString();
+
+  const candMaps = Array.isArray(candidate_mappings)
+    ? candidate_mappings.filter(Boolean)
+    : [];
+
+  const cliAliases = Array.isArray(client_aliases)
+    ? client_aliases.filter(Boolean)
+    : [];
+
+  if (LOG) {
+    L('applyWeeklyMappingsOnly ENTER', {
+      source_system,
+      import_id,
+      candidate_mappings_count: candMaps.length,
+      client_aliases_count: cliAliases.length
+    });
+  }
+
+  // ─────────────────────────────────────────────
+  // hr_name_mappings upserts
+  // ─────────────────────────────────────────────
+  for (const m of candMaps) {
+    try {
+      if (!m) continue;
+
+      // We prefer an explicit staff_norm, but fall back to staff_name if present
+      const staffNormRaw = m.staff_norm || m.staff_name || '';
+      const hrNameNorm   = norm(staffNormRaw);
+
+      const hospRaw  = (m.hospital_or_trust != null ? m.hospital_or_trust : null);
+      const hospNorm = hospRaw != null ? norm(hospRaw) : null;
+
+      const candidateId = m.candidate_id || null;
+
+      if (!hrNameNorm || !candidateId) {
+        if (LOG) {
+          L('skip candidate mapping (missing hr_name_norm or candidate_id)', {
+            staffNormRaw,
+            hrNameNorm,
+            candidate_id: candidateId
+          });
+        }
+        continue;
+      }
+
+      // Look for an existing mapping for (hr_name_norm, hospital_or_trust)
+      let existing = null;
+      try {
+        let url =
+          `${env.SUPABASE_URL}/rest/v1/hr_name_mappings` +
+          `?hr_name_norm=eq.${enc(hrNameNorm)}` +
+          `&select=id,hr_name_norm,hospital_or_trust,candidate_id,active` +
+          `&limit=1`;
+
+        if (hospNorm) {
+          url += `&hospital_or_trust=eq.${enc(hospNorm)}`;
+        } else {
+          // Prefer the explicit "no site" row if your schema uses NULL
+          url += `&hospital_or_trust=is.null`;
+        }
+
+        const { rows } = await sbFetch(env, url);
+        existing = rows && rows[0] ? rows[0] : null;
+      } catch (e) {
+        console.warn('[WEEKLY_MAPPINGS] hr_name_mappings lookup failed (non-fatal)', {
+          hr_name_norm: hrNameNorm,
+          hospital_or_trust: hospNorm,
+          err: e?.message || String(e)
+        });
+      }
+
+      if (existing && existing.id) {
+        // PATCH existing row
+        try {
+          await fetch(
+            `${env.SUPABASE_URL}/rest/v1/hr_name_mappings?id=eq.${enc(existing.id)}`,
+            {
+              method: 'PATCH',
+              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+              body: JSON.stringify({
+                candidate_id:      candidateId,
+                hospital_or_trust: hospNorm,
+                active:            true,
+                last_used_at:      nowIso
+              })
+            }
+          );
+          if (LOG) {
+            L('hr_name_mappings PATCH ok', {
+              id:          existing.id,
+              hr_name_norm: hrNameNorm,
+              hospital_or_trust: hospNorm,
+              candidate_id: candidateId
+            });
+          }
+        } catch (e) {
+          console.warn('[WEEKLY_MAPPINGS] hr_name_mappings PATCH failed (non-fatal)', {
+            id: existing.id,
+            err: e?.message || String(e)
+          });
+        }
+      } else {
+        // INSERT new row
+        try {
+          const payload = [{
+            hr_name_norm:      hrNameNorm,
+            hospital_or_trust: hospNorm,
+            candidate_id:      candidateId,
+            active:            true,
+            last_used_at:      nowIso
+          }];
+          await fetch(
+            `${env.SUPABASE_URL}/rest/v1/hr_name_mappings`,
+            {
+              method: 'POST',
+              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+              body: JSON.stringify(payload)
+            }
+          );
+          if (LOG) {
+            L('hr_name_mappings INSERT ok', {
+              hr_name_norm: hrNameNorm,
+              hospital_or_trust: hospNorm,
+              candidate_id: candidateId
+            });
+          }
+        } catch (e) {
+          console.warn('[WEEKLY_MAPPINGS] hr_name_mappings INSERT failed (non-fatal)', {
+            hr_name_norm: hrNameNorm,
+            hospital_or_trust: hospNorm,
+            candidate_id: candidateId,
+            err: e?.message || String(e)
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('[WEEKLY_MAPPINGS] candidate mapping loop failed (non-fatal)', {
+        err: e?.message || String(e)
+      });
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // client_hospitals upserts
+  // ─────────────────────────────────────────────
+  const normAliasList = (val) => {
+    if (!val) return [];
+    if (Array.isArray(val)) return val;
+    if (typeof val === 'string') {
+      try {
+        const parsed = JSON.parse(val);
+        return Array.isArray(parsed) ? parsed : [val];
+      } catch {
+        return [val];
+      }
+    }
+    return [];
+  };
+
+  for (const m of cliAliases) {
+    try {
+      if (!m) continue;
+
+      const hospitalNormRaw = m.hospital_norm || '';
+      const alias           = norm(hospitalNormRaw);
+      const clientId        = m.client_id || null;
+
+      if (!alias || !clientId) {
+        if (LOG) {
+          L('skip client alias (missing alias or client_id)', {
+            hospital_norm_raw: hospitalNormRaw,
+            alias,
+            client_id: clientId
+          });
+        }
+        continue;
+      }
+
+      let existing = null;
+      try {
+        const { rows: hospRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/client_hospitals` +
+            `?client_id=eq.${enc(clientId)}` +
+            `&select=id,display_name,hospital_name_norm` +
+            `&limit=1`
+        );
+        existing = hospRows && hospRows[0] ? hospRows[0] : null;
+      } catch (e) {
+        console.warn('[WEEKLY_MAPPINGS] client_hospitals lookup failed (non-fatal)', {
+          hospital_norm: hospitalNormRaw,
+          client_id: clientId,
+          err: e?.message || String(e)
+        });
+      }
+
+      if (!existing) {
+        // Insert a new client_hospitals row
+        const newRow = [{
+          client_id:         clientId,
+          display_name:      hospitalNormRaw || alias,
+          hospital_name_norm: [alias]
+        }];
+        try {
+          await fetch(
+            `${env.SUPABASE_URL}/rest/v1/client_hospitals`,
+            {
+              method: 'POST',
+              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+              body: JSON.stringify(newRow)
+            }
+          );
+          if (LOG) {
+            L('client_hospitals INSERT ok', {
+              client_id: clientId,
+              hospital_norm: alias
+            });
+          }
+        } catch (e) {
+          console.warn('[WEEKLY_MAPPINGS] client_hospitals INSERT failed (non-fatal)', {
+            hospital_norm: hospitalNormRaw,
+            client_id: clientId,
+            err: e?.message || String(e)
+          });
+        }
+      } else {
+        const currentAliases = normAliasList(existing.hospital_name_norm);
+        if (!currentAliases.includes(alias)) {
+          const updated = [...currentAliases, alias];
+          try {
+            await fetch(
+              `${env.SUPABASE_URL}/rest/v1/client_hospitals?id=eq.${enc(existing.id)}`,
+              {
+                method: 'PATCH',
+                headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+                body: JSON.stringify({ hospital_name_norm: updated })
+              }
+            );
+            if (LOG) {
+              L('client_hospitals PATCH ok', {
+                id: existing.id,
+                client_id: clientId,
+                hospital_norm: alias
+              });
+            }
+          } catch (e) {
+            console.warn('[WEEKLY_MAPPINGS] client_hospitals PATCH failed (non-fatal)', {
+              id: existing.id,
+              client_id: clientId,
+              hospital_norm: alias,
+              err: e?.message || String(e)
+            });
+          }
+        } else if (LOG) {
+          L('client_hospitals alias already present (no-op)', {
+            id: existing.id,
+            client_id: clientId,
+            hospital_norm: alias
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('[WEEKLY_MAPPINGS] client alias loop failed (non-fatal)', {
+        err: e?.message || String(e)
+      });
+    }
+  }
+
+  if (LOG) {
+    L('applyWeeklyMappingsOnly EXIT', {
+      source_system,
+      import_id
+    });
+  }
+}
+
+export async function assertCandidateHasValidContract(env, {
+  candidate_id,
+  client_id,
+  work_date
+}) {
+  const enc  = encodeURIComponent;
+  const norm = (s) => String(s || '').trim();
+
+  const candId  = norm(candidate_id || '');
+  const cliId   = norm(client_id || '');
+  const workYmd = norm(work_date || '');
+
+  if (!candId || !cliId || !workYmd) {
+    throw new Error('Missing candidate_id, client_id or work_date for contract validation');
+  }
+
+  let rows = [];
+  try {
+    const { rows: cRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contracts` +
+        `?candidate_id=eq.${enc(candId)}` +
+        `&client_id=eq.${enc(cliId)}` +
+        `&active=eq.true` +
+        `&select=id,start_date,end_date`
+    );
+    rows = cRows || [];
+  } catch (e) {
+    console.error('[CONTRACT_VALIDATE] contracts lookup failed', {
+      candidate_id: candId,
+      client_id: cliId,
+      work_date: workYmd,
+      err: e?.message || String(e)
+    });
+    // Bubble this up as a generic error; handler will treat as 500.
+    throw new Error('Contract lookup failed');
+  }
+
+  let ok = false;
+  for (const c of rows) {
+    const start = c?.start_date || null;
+    const end   = c?.end_date   || null;
+    if (!start) continue;
+
+    // String comparison is safe for YYYY-MM-DD
+    if (start <= workYmd && (!end || end >= workYmd)) {
+      ok = true;
+      break;
+    }
+  }
+
+  if (!ok) {
+    throw new Error(
+      'Due to security reasons when linking a candidate they must have a valid contract. Please create the contract and try again.'
+    );
+  }
+}
+export async function handleNhspResolveMappings(env, req, importId) {
+  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!importId) return withCORS(env, req, badRequest('import_id is required'));
+
+  let body;
+  try {
+    body = await parseJSONBody(req);
+  } catch {
+    body = null;
+  }
+
+  const candidateMappings = Array.isArray(body?.candidate_mappings)
+    ? body.candidate_mappings.filter(Boolean)
+    : [];
+
+  const clientAliases = Array.isArray(body?.client_aliases)
+    ? body.client_aliases.filter(Boolean)
+    : [];
+
+  if (LOG) {
+    console.log('[NHSP_RESOLVE]', JSON.stringify({
+      stage: 'start',
+      import_id: importId,
+      candidate_mappings_count: candidateMappings.length,
+      client_aliases_count: clientAliases.length
+    }));
+  }
+
+  // ─────────────────────────────────────────────
+  // Contract check for each candidate mapping
+  // ─────────────────────────────────────────────
+  for (const m of candidateMappings) {
+    try {
+      if (!m) continue;
+      const candidate_id = m.candidate_id || null;
+      const client_id    = m.client_id    || null;
+      const work_date    = m.work_date    || null;
+
+      await assertCandidateHasValidContract(env, {
+        candidate_id,
+        client_id,
+        work_date
+      });
+    } catch (e) {
+      const msg = e?.message || 'Contract validation failed';
+
+      // If this is the specific security message, treat as 400; otherwise 500.
+      const isSecurityMsg = msg.startsWith('Due to security reasons when linking a candidate');
+      const isMissingMsg  = msg.startsWith('Missing candidate_id');
+
+      const status = (isSecurityMsg || isMissingMsg) ? 400 : 500;
+      const payload = {
+        error:   (status === 400 ? 'NO_CONTRACT_FOR_DATE' : 'CONTRACT_VALIDATION_FAILED'),
+        message: msg
+      };
+
+      if (LOG) {
+        console.warn('[NHSP_RESOLVE] contract validation failed', {
+          import_id: importId,
+          mapping: m,
+          status,
+          msg
+        });
+      }
+
+      return withCORS(
+        env,
+        req,
+        new Response(JSON.stringify(payload), {
+          status,
+          headers: { 'content-type': 'application/json' }
+        })
+      );
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // If all contract checks pass, persist aliases only
+  // ─────────────────────────────────────────────
+  try {
+    await applyWeeklyMappingsOnly(env, {
+      source_system: 'NHSP',
+      import_id: importId,
+      candidate_mappings: candidateMappings,
+      client_aliases:     clientAliases
+    });
+  } catch (e) {
+    console.error('[NHSP_RESOLVE] applyWeeklyMappingsOnly failed', {
+      import_id: importId,
+      err: e?.message || String(e)
+    });
+    return withCORS(env, req, serverError(`Failed to apply NHSP weekly mappings: ${e?.message || e}`));
+  }
+
+  if (LOG) {
+    console.log('[NHSP_RESOLVE]', JSON.stringify({
+      stage: 'completed',
+      import_id: importId
+    }));
+  }
+
+  return withCORS(env, req, ok({ ok: true }));
+}
+
+
+export async function handleHrAutoprocessResolveMappings(env, req, importId) {
+  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!importId) return withCORS(env, req, badRequest('import_id is required'));
+
+  let body;
+  try {
+    body = await parseJSONBody(req);
+  } catch {
+    body = null;
+  }
+
+  const candidateMappings = Array.isArray(body?.candidate_mappings)
+    ? body.candidate_mappings.filter(Boolean)
+    : [];
+
+  const clientAliases = Array.isArray(body?.client_aliases)
+    ? body.client_aliases.filter(Boolean)
+    : [];
+
+  if (LOG) {
+    console.log('[HR_AUTOPROC_RESOLVE]', JSON.stringify({
+      stage: 'start',
+      import_id: importId,
+      candidate_mappings_count: candidateMappings.length,
+      client_aliases_count: clientAliases.length
+    }));
+  }
+
+  // ─────────────────────────────────────────────
+  // Contract check for each candidate mapping
+  // ─────────────────────────────────────────────
+  for (const m of candidateMappings) {
+    try {
+      if (!m) continue;
+      const candidate_id = m.candidate_id || null;
+      const client_id    = m.client_id    || null;
+      const work_date    = m.work_date    || null;
+
+      await assertCandidateHasValidContract(env, {
+        candidate_id,
+        client_id,
+        work_date
+      });
+    } catch (e) {
+      const msg = e?.message || 'Contract validation failed';
+
+      // If this is the specific security message, treat as 400; otherwise 500.
+      const isSecurityMsg = msg.startsWith('Due to security reasons when linking a candidate');
+      const isMissingMsg  = msg.startsWith('Missing candidate_id');
+
+      const status = (isSecurityMsg || isMissingMsg) ? 400 : 500;
+      const payload = {
+        error:   (status === 400 ? 'NO_CONTRACT_FOR_DATE' : 'CONTRACT_VALIDATION_FAILED'),
+        message: msg
+      };
+
+      if (LOG) {
+        console.warn('[HR_AUTOPROC_RESOLVE] contract validation failed', {
+          import_id: importId,
+          mapping: m,
+          status,
+          msg
+        });
+      }
+
+      return withCORS(
+        env,
+        req,
+        new Response(JSON.stringify(payload), {
+          status,
+          headers: { 'content-type': 'application/json' }
+        })
+      );
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // If all contract checks pass, persist aliases only
+  // ─────────────────────────────────────────────
+  try {
+    await applyWeeklyMappingsOnly(env, {
+      source_system: 'HR_WEEKLY',
+      import_id: importId,
+      candidate_mappings: candidateMappings,
+      client_aliases:     clientAliases
+    });
+  } catch (e) {
+    console.error('[HR_AUTOPROC_RESOLVE] applyWeeklyMappingsOnly failed', {
+      import_id: importId,
+      err: e?.message || String(e)
+    });
+    return withCORS(env, req, serverError(`Failed to apply HealthRoster weekly mappings: ${e?.message || e}`));
+  }
+
+  if (LOG) {
+    console.log('[HR_AUTOPROC_RESOLVE]', JSON.stringify({
+      stage: 'completed',
+      import_id: importId
+    }));
+  }
+
+  return withCORS(env, req, ok({ ok: true }));
+}
+
+
+
 export async function handleNhspApply(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
@@ -11893,8 +12802,8 @@ export async function handleNhspApply(env, req, importId) {
   if (!user) return withCORS(env, req, unauthorized());
   if (!importId) return withCORS(env, req, badRequest("import_id is required"));
 
-  const enc = encodeURIComponent;
-  const norm = (s) => String(s || '').trim().toLowerCase();
+  const enc   = encodeURIComponent;
+  const norm  = (s) => String(s || '').trim().toLowerCase();
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
   const NHSP_OVERPAY_ADVANCE_THRESHOLD = 200; // adjust if needed
@@ -11941,155 +12850,16 @@ export async function handleNhspApply(env, req, importId) {
 
   // ---------- PHASE 0: apply explicit mappings ----------
   try {
-    // Candidate name mappings → hr_name_mappings
-    for (const m of candidateMappings) {
-      const staffNormRaw  = m && m.staff_norm;
-      const hospNormRaw   = m && m.hospital_or_trust;
-      const candidateId   = m && m.candidate_id;
-      const staffNorm     = norm(staffNormRaw);
-      const hospNorm      = hospNormRaw != null ? norm(hospNormRaw) : null;
-
-      if (!staffNorm || !candidateId) continue;
-
-      let existing = null;
-      try {
-        let url =
-          `${env.SUPABASE_URL}/rest/v1/hr_name_mappings` +
-          `?hr_name_norm=eq.${enc(staffNorm)}` +
-          `&select=id,hr_name_norm,hospital_or_trust,candidate_id,active` +
-          `&limit=1`;
-        if (hospNorm) {
-          url += `&hospital_or_trust=eq.${enc(hospNorm)}`;
-        }
-        const { rows } = await sbFetch(env, url);
-        existing = rows && rows[0] ? rows[0] : null;
-      } catch (e) {
-        console.warn('[NHSP_APPLY] hr_name_mappings lookup failed (non-fatal)', {
-          staffNorm,
-          hospNorm,
-          err: e?.message || String(e)
-        });
-      }
-
-      const nowIso = new Date().toISOString();
-
-      if (existing && existing.id) {
-        try {
-          await fetch(
-            `${env.SUPABASE_URL}/rest/v1/hr_name_mappings?id=eq.${enc(existing.id)}`,
-            {
-              method: 'PATCH',
-              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-              body: JSON.stringify({
-                candidate_id: candidateId,
-                hospital_or_trust: hospNorm,
-                active: true,
-                last_used_at: nowIso
-              })
-            }
-          );
-        } catch (e) {
-          console.warn('[NHSP_APPLY] hr_name_mappings PATCH failed (non-fatal)', {
-            id: existing.id,
-            err: e?.message || String(e)
-          });
-        }
-      } else {
-        try {
-          const payload = [{
-            hr_name_norm: staffNorm,
-            hospital_or_trust: hospNorm,
-            candidate_id: candidateId,
-            active: true,
-            last_used_at: nowIso
-          }];
-          await fetch(
-            `${env.SUPABASE_URL}/rest/v1/hr_name_mappings`,
-            {
-              method: 'POST',
-              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-              body: JSON.stringify(payload)
-            }
-          );
-        } catch (e) {
-          console.warn('[NHSP_APPLY] hr_name_mappings INSERT failed (non-fatal)', {
-            staffNorm,
-            hospNorm,
-            candidateId,
-            err: e?.message || String(e)
-          });
-        }
-      }
-    }
-
-    // Client hospital aliases → client_hospitals
-    for (const m of clientAliases) {
-      const hospitalNormRaw = m && m.hospital_norm;
-      const clientId        = m && m.client_id;
-      const alias           = norm(hospitalNormRaw);
-
-      if (!alias || !clientId) continue;
-
-      try {
-        const { rows: hospRows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/client_hospitals` +
-            `?client_id=eq.${enc(clientId)}` +
-            `&select=id,display_name,hospital_name_norm` +
-            `&limit=1`
-        );
-        const existing = hospRows && hospRows[0] ? hospRows[0] : null;
-
-        const normAliasList = (val) => {
-          if (!val) return [];
-          if (Array.isArray(val)) return val;
-          if (typeof val === 'string') {
-            try {
-              const parsed = JSON.parse(val);
-              return Array.isArray(parsed) ? parsed : [val];
-            } catch {
-              return [val];
-            }
-          }
-          return [];
-        };
-
-        if (!existing) {
-          const newRow = [{
-            client_id: clientId,
-            display_name: hospitalNormRaw || alias,
-            hospital_name_norm: [alias]
-          }];
-          await fetch(
-            `${env.SUPABASE_URL}/rest/v1/client_hospitals`,
-            {
-              method: 'POST',
-              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-              body: JSON.stringify(newRow)
-            }
-          );
-        } else {
-          const currentAliases = normAliasList(existing.hospital_name_norm);
-          if (!currentAliases.includes(alias)) {
-            const updated = [...currentAliases, alias];
-            await fetch(
-              `${env.SUPABASE_URL}/rest/v1/client_hospitals?id=eq.${enc(existing.id)}`,
-              {
-                method: 'PATCH',
-                headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-                body: JSON.stringify({ hospital_name_norm: updated })
-              }
-            );
-          }
-        }
-      } catch (e) {
-        console.warn('[NHSP_APPLY] client_hospitals alias update failed (non-fatal)', {
-          hospital_norm: hospitalNormRaw,
-          client_id: clientId,
-          err: e?.message || String(e)
-        });
-      }
-    }
+    // Delegate all alias persistence to the shared weekly helper.
+    // This writes:
+    //   - hr_name_mappings (staff_norm + hospital_or_trust → candidate_id)
+    //   - client_hospitals (hospital_name_norm[] → client_id)
+    await applyWeeklyMappingsOnly(env, {
+      source_system: 'NHSP',
+      import_id: importId,
+      candidate_mappings: candidateMappings,
+      client_aliases: clientAliases
+    });
 
     if (LOG) {
       console.log('[NHSP_APPLY]', JSON.stringify({
@@ -12100,6 +12870,7 @@ export async function handleNhspApply(env, req, importId) {
       }));
     }
   } catch (e) {
+    // Non-fatal: if explicit mappings fail, we still continue with classification + apply.
     console.warn('[NHSP_APPLY] failed to apply candidate/client mappings (non-fatal)', {
       import_id: importId,
       err: e?.message || String(e)
@@ -12174,7 +12945,7 @@ export async function handleNhspApply(env, req, importId) {
         candidate_id,
         client_id,
         reason,
-        original_amount:   round2(amt),
+        original_amount:    round2(amt),
         outstanding_amount: round2(amt),
         linked_shift_date:  null,
         schedule_json:      schedule,
@@ -12261,180 +13032,181 @@ export async function handleNhspApply(env, req, importId) {
       }));
     }
 
-    let created = 0;
-    let updated = 0;
+    // ---------- PHASE 1: build / update nhsp_shifts ----------
+    let created          = 0;
+    let updated          = 0;
     let mappedCandidates = 0;
-    let mappedClients = 0;
+    let mappedClients    = 0;
 
-    // ---------- PHASE 1: row → nhsp_shifts + auto candidate/client mapping ----------
-    for (const row of hrRows) {
-      const hrRowId = row.id;
-      let key = row.external_row_key;
-      const payload = row.payload_json || {};
+    const groupIdSet = new Set(selectedGroupIds);
 
-      if (!key) {
-        const date  = String(payload.date || payload.work_date || '').trim();
-        const ref   = String(payload.ref_num || payload.reference || '').trim();
-        const uid   = String(payload.unique_id || payload.worker_unique_id || payload.agency_worker_unique_id || '').trim();
-        const trust = String(payload.trust || payload.hospital_or_trust || payload.client || '').trim();
-        const ward  = String(payload.ward || '').trim();
+    for (const hr of hrRows) {
+      const payload = hr.payload_json || {};
+      const externalKey = hr.external_row_key || payload.external_row_key || null;
 
-        const rawKey = [date, ref, uid, trust, ward]
-          .map(s => (s || '').replace(/[|]/g, ' ').trim())
-          .join('|');
+      const staffName = String(payload.staff_name || payload.worker || '').trim();
+      const staffNorm = norm(staffName);
+      const workDate  = payload.work_date || payload.shift_date || null;
+      const ward      = String(payload.ward || payload.unit || '').trim();
+      const wardNorm  = norm(ward);
+      const assignmentCode = payload.assignment_code || payload.Request_Grade || null;
+      const refNum         = payload.ref_num || payload.Reference || null;
+      const weekEnding     = payload.week_ending_date || null;
 
-        if (!rawKey) continue;
-        key = rawKey;
-
-        await fetch(
-          `${env.SUPABASE_URL}/rest/v1/hr_rows?id=eq.${enc(hrRowId)}`,
-          {
-            method: 'PATCH',
-            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-            body: JSON.stringify({ external_row_key: key })
-          }
-        ).catch(() => {});
+      // Skip rows not in selected groups (if groups were provided)
+      if (groupIdSet.size > 0) {
+        const grpKey = payload.group_key || payload.group_id || null;
+        if (!grpKey || !groupIdSet.has(String(grpKey))) {
+          continue;
+        }
       }
 
-      const workDate   = (payload.work_date || payload.date || '').trim();
-      const ward       = payload.ward || null;
-      const startIso   = payload.start_utc || payload.actual_start_iso || payload.actual_start || null;
-      const endIso     = payload.end_utc   || payload.actual_end_iso   || payload.actual_end   || null;
-      const breakMins  = Number(payload.break_mins ?? payload.break_minutes ?? payload.actual_break_minutes ?? 0) || 0;
+      // Look up or create nhsp_shifts row for this external_key
+      let shift = null;
+      if (externalKey) {
+        try {
+          const { rows: existingShifts } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
+            `?external_row_key=eq.${enc(externalKey)}` +
+            `&source_system=eq.NHSP` +
+            `&select=*` +
+            `&limit=1`
+          );
+          shift = existingShifts?.[0] || null;
+        } catch (e) {
+          console.warn('[NHSP_APPLY] nhsp_shifts lookup failed (non-fatal)', {
+            import_id: importId,
+            external_row_key: externalKey,
+            err: e?.message || String(e)
+          });
+        }
+      }
 
-      if (!workDate || !startIso || !endIso) continue;
+      const nowIso = new Date().toISOString();
 
-      const { rows: existing } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
-        `?external_row_key=eq.${enc(key)}` +
-        `&select=id,candidate_id,client_id,work_date,start_utc,end_utc,break_mins,source_system` +
-        `&limit=1`
-      );
-      const shift = existing?.[0] || null;
+      const shiftPayload = {
+        latest_import_id: importId,
+        source_system: 'NHSP',
+        external_row_key: externalKey,
+        staff_name: staffName || null,
+        staff_norm: staffNorm || null,
+        ward: ward || null,
+        ward_norm: wardNorm || null,
+        work_date: workDate || null,
+        assignment_code: assignmentCode || null,
+        ref_num: refNum || null,              // <-- NHSP reference persisted canonically
+        week_ending_date: weekEnding || null,
+        updated_at: nowIso
+      };
 
-      let shiftId = null;
+      let shiftId   = shift?.id || null;
       let candidateId = shift?.candidate_id || null;
       let clientId    = shift?.client_id || null;
 
       if (!shift) {
-        const insPayload = {
-          external_row_key: key,
-          latest_import_id: importId,
-          source_system: 'NHSP',
-          work_date: workDate,
-          ward,
-          start_utc: startIso,
-          end_utc: endIso,
-          break_mins: breakMins
-        };
-
-        const insRes = await fetch(
-          `${env.SUPABASE_URL}/rest/v1/nhsp_shifts`,
-          {
-            method: 'POST',
-            headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-            body: JSON.stringify(insPayload)
+        // Insert new nhsp_shifts
+        try {
+          const insRes = await fetch(
+            `${env.SUPABASE_URL}/rest/v1/nhsp_shifts`,
+            {
+              method: 'POST',
+              headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+              body: JSON.stringify([{
+                ...shiftPayload,
+                created_at: nowIso
+              }])
+            }
+          );
+          const txt = await insRes.text().catch(() => '');
+          if (!insRes.ok) {
+            console.warn('[NHSP_APPLY] nhsp_shifts insert failed', {
+              import_id: importId,
+              external_row_key: externalKey,
+              status: insRes.status,
+              body: txt
+            });
+            continue;
           }
-        );
-        if (insRes.ok) {
-          const j = await insRes.json().catch(() => []);
-          const rec = Array.isArray(j) ? j[0] : j;
-          shiftId = rec?.id || null;
+          const json = txt ? JSON.parse(txt) : [];
+          const row0 = Array.isArray(json) ? json[0] : json;
+          shiftId = row0?.id || null;
+          shift   = row0 || null;
           created++;
-        } else {
+        } catch (e) {
+          console.warn('[NHSP_APPLY] nhsp_shifts insert threw (non-fatal)', {
+            import_id: importId,
+            external_row_key: externalKey,
+            err: e?.message || String(e)
+          });
           continue;
         }
       } else {
-        shiftId    = shift.id;
-        candidateId = shift.candidate_id || null;
-        clientId    = shift.client_id || null;
-
-        const patch = {
-          latest_import_id: importId,
-          source_system: 'NHSP',
-          work_date: workDate,
-          ward,
-          start_utc: startIso,
-          end_utc: endIso,
-          break_mins: breakMins,
-          updated_at: new Date().toISOString()
-        };
-
-        const upRes = await fetch(
-          `${env.SUPABASE_URL}/rest/v1/nhsp_shifts?id=eq.${enc(shift.id)}`,
-          {
-            method: 'PATCH',
-            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-            body: JSON.stringify(patch)
+        // Update existing nhsp_shifts
+        try {
+          const upRes = await fetch(
+            `${env.SUPABASE_URL}/rest/v1/nhsp_shifts?id=eq.${enc(shiftId)}`,
+            {
+              method: 'PATCH',
+              headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+              body: JSON.stringify(shiftPayload)
+            }
+          );
+          if (!upRes.ok) {
+            const errTxt = await upRes.text().catch(() => '');
+            console.warn('[NHSP_APPLY] nhsp_shifts update failed', {
+              import_id: importId,
+              shift_id: shiftId,
+              status: upRes.status,
+              body: errTxt
+            });
+          } else {
+            updated++;
           }
-        );
-        if (upRes.ok) updated++;
+        } catch (e) {
+          console.warn('[NHSP_APPLY] nhsp_shifts update threw (non-fatal)', {
+            import_id: importId,
+            shift_id: shiftId,
+            err: e?.message || String(e)
+          });
+        }
       }
 
       if (!shiftId) continue;
 
-      // Candidate mapping (auto)
-      if (!candidateId) {
-        const uniqueId = String(
-          payload.unique_id ||
-          payload.worker_unique_id ||
-          payload.agency_worker_unique_id ||
-          ''
-        ).trim();
-
+      // Candidate mapping (auto) – unchanged
+      if (!candidateId && staffName) {
+        const nameNorm = staffNorm;
         let foundCandidate = null;
 
-        if (uniqueId) {
-          const { rows: candByNi } = await sbFetch(
-            env,
-            `${env.SUPABASE_URL}/rest/v1/candidates` +
-            `?ni_number=eq.${enc(uniqueId)}` +
-            `&select=id` +
-            `&limit=1`
-          );
-          if (candByNi?.[0]?.id) {
-            foundCandidate = candByNi[0].id;
-          }
-        }
-
-        if (!foundCandidate) {
-          const nameRaw   = String(payload.worker_name || payload.name || '').trim();
-          const trustRaw  = String(payload.trust || payload.hospital_or_trust || '').trim();
-          const nameNorm  = norm(nameRaw);
-          const trustNorm = norm(trustRaw);
-
-          if (nameNorm) {
-            try {
-              const aliasJson = JSON.stringify([nameNorm]);
-              const { rows: aliasRows } = await sbFetch(
-                env,
-                `${env.SUPABASE_URL}/rest/v1/candidates` +
-                `?nhsp_hr_name_aliases=cs.${enc(aliasJson)}` +
-                `&select=id` +
-                `&limit=2`
-              );
-              if (aliasRows?.length === 1 && aliasRows[0]?.id) {
-                foundCandidate = aliasRows[0].id;
-              }
-            } catch {
-              // ignore and fall through
+        if (nameNorm) {
+          try {
+            const aliasJson = JSON.stringify([nameNorm]);
+            const { rows: aliasRows } = await sbFetch(
+              env,
+              `${env.SUPABASE_URL}/rest/v1/candidates` +
+              `?nhsp_hr_name_aliases=cs.${enc(aliasJson)}` +
+              `&select=id` +
+              `&limit=2`
+            );
+            if (aliasRows?.length === 1 && aliasRows[0]?.id) {
+              foundCandidate = aliasRows[0].id;
             }
+          } catch {
+            // fall through
+          }
 
-            if (!foundCandidate) {
-              let mapUrl =
-                `${env.SUPABASE_URL}/rest/v1/hr_name_mappings` +
-                `?hr_name_norm=eq.${enc(nameNorm)}` +
-                `&active=eq.true` +
-                `&select=candidate_id` +
-                `&limit=1`;
-              if (trustNorm) {
-                mapUrl += `&hospital_or_trust=eq.${enc(trustNorm)}`;
-              }
-              const { rows: mapRows } = await sbFetch(env, mapUrl);
-              if (mapRows?.[0]?.candidate_id) {
-                foundCandidate = mapRows[0].candidate_id;
-              }
+          if (!foundCandidate) {
+            const { rows: mapRows } = await sbFetch(
+              env,
+              `${env.SUPABASE_URL}/rest/v1/hr_name_mappings` +
+              `?hr_name_norm=eq.${enc(nameNorm)}` +
+              `&active=eq.true` +
+              `&select=candidate_id` +
+              `&limit=1`
+            );
+            if (mapRows?.[0]?.candidate_id) {
+              foundCandidate = mapRows[0].candidate_id;
             }
           }
         }
@@ -12453,7 +13225,7 @@ export async function handleNhspApply(env, req, importId) {
         }
       }
 
-      // Client mapping (auto)
+      // Client mapping (auto) – unchanged
       if (!clientId) {
         const trustRaw  = String(payload.trust || payload.hospital_or_trust || '').trim();
         const trustNorm = norm(trustRaw);
@@ -12524,550 +13296,143 @@ export async function handleNhspApply(env, req, importId) {
           env,
           `${env.SUPABASE_URL}/rest/v1/client_settings` +
           `?client_id=in.(${clientIds.map(enc).join(',')})` +
-          `&select=client_id,is_nhsp,week_ending_weekday` +
-          `&order=effective_from.desc`
+          `&select=client_id,default_weekly_ts_grouping`
         );
-        for (const r of csRows || []) {
-          if (!csMap.has(r.client_id)) csMap.set(r.client_id, r);
-        }
+        csMap = new Map((csRows || []).map(r => [r.client_id, r.default_weekly_ts_grouping || 'CANDIDATE']));
       }
 
       for (const sh of shifts) {
-        const cs = csMap.get(sh.client_id) || {};
-        const weDow = Number.isInteger(Number(cs.week_ending_weekday))
-          ? Number(cs.week_ending_weekday)
-          : 0;
+        const keyClient   = sh.client_id;
+        const keyCand     = sh.candidate_id;
+        const keyWorkDate = sh.work_date;
 
-        const d = new Date(`${sh.work_date}T00:00:00Z`);
-        if (isNaN(d.getTime())) continue;
+        const weekStart = computeWeekStartFromWeekEnding(sh.week_ending_date || keyWorkDate);
+        const grouping  = csMap.get(keyClient) || 'CANDIDATE';
 
-        while (d.getUTCDay() !== weDow) {
-          d.setUTCDate(d.getUTCDate() + 1);
-        }
-        const yyyy = d.getUTCFullYear();
-        const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
-        const dd   = String(d.getUTCDate()).padStart(2, '0');
-        const weekEndingDate = `${yyyy}-${mm}-${dd}`;
+        const grpKey =
+          grouping === 'CLIENT_ONLY'
+            ? `${keyClient}|${weekStart}`
+            : `${keyClient}|${keyCand}|${weekStart}`;
 
-        const key = `${sh.candidate_id}__${sh.client_id}__${weekEndingDate}`;
-        let g = groups.get(key);
-        if (!g) {
-          g = {
-            candidate_id: sh.candidate_id,
-            client_id: sh.client_id,
-            week_ending_date: weekEndingDate,
+        if (!groups.has(grpKey)) {
+          groups.set(grpKey, {
+            client_id:   keyClient,
+            candidate_id: keyCand,
+            week_start:  weekStart,
             shifts: []
-          };
-          groups.set(key, g);
+          });
         }
-        g.shifts.push(sh);
+        groups.get(grpKey).shifts.push(sh);
       }
     }
 
-    if (LOG) {
-      console.log('[NHSP_APPLY]', JSON.stringify({
-        stage: 'nhsp_shifts_grouped',
-        import_id: importId,
-        nhsp_shifts_total: (allShifts || []).length,
-        usable_shifts_for_groups: shifts.length,
-        groups_count: groups.size
-      }));
-    }
+    for (const [grpKey, g] of groups.entries()) {
+      const { client_id: clientId, candidate_id: candidateId, week_start: weekStart, shifts: grpShifts } = g;
+      if (!clientId || !candidateId || !weekStart || !grpShifts?.length) continue;
 
-    for (const g of groups.values()) {
-      const { rows: contractRows } = await sbFetch(
+      // Find contract & contract_week for this candidate + client + week
+      const { rows: contracts } = await sbFetch(
         env,
         `${env.SUPABASE_URL}/rest/v1/contracts` +
-        `?candidate_id=eq.${enc(g.candidate_id)}` +
-        `&client_id=eq.${enc(g.client_id)}` +
+        `?client_id=eq.${enc(clientId)}` +
+        `&candidate_id=eq.${enc(candidateId)}` +
+        `&active=eq.true` +
         `&select=*`
       );
-      const allContracts = contractRows || [];
-      if (!allContracts.length) continue;
+      const contract = contracts?.[0] || null;
+      if (!contract) continue;
 
-      const anyDate = g.shifts[0]?.work_date;
-      const dateObj = new Date(`${anyDate}T00:00:00Z`);
-      if (isNaN(dateObj.getTime())) continue;
-
-      let chosen = null;
-      for (const c of allContracts) {
-        const start = c.start_date ? new Date(`${c.start_date}T00:00:00Z`) : null;
-        const end   = c.end_date   ? new Date(`${c.end_date}T00:00:00Z`)   : null;
-        if (start && dateObj < start) continue;
-        if (end   && dateObj > end)   continue;
-        if (!chosen) chosen = c;
-        else {
-          const prevStart = chosen.start_date ? new Date(`${chosen.start_date}T00:00:00Z`) : null;
-          const thisStart = c.start_date ? new Date(`${c.start_date}T00:00:00Z`) : null;
-          if (thisStart && prevStart && thisStart > prevStart) chosen = c;
-        }
-      }
-      if (!chosen) continue;
-      const contract = chosen;
-
-      const previewGroupId = `grp:${contract.id}:${g.week_ending_date}:${g.candidate_id}`;
-      if (selectedGroupIds.length && !selectedGroupIds.includes(previewGroupId)) {
-        continue;
-      }
-
-      const { rows: cwRows } = await sbFetch(
+      const { rows: cws } = await sbFetch(
         env,
         `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
         `?contract_id=eq.${enc(contract.id)}` +
-        `&week_ending_date=eq.${enc(g.week_ending_date)}` +
+        `&week_start=eq.${enc(weekStart)}` +
         `&select=*` +
-        `&order=additional_seq.asc`
+        `&limit=1`
       );
-      let cw = cwRows?.find(w => !w.is_adjustment && Number(w.additional_seq || 0) === 0) || null;
+      let cw = cws?.[0] || null;
+
       const nowIso = new Date().toISOString();
 
       if (!cw) {
-        const cwPayload = {
-          contract_id: contract.id,
-          week_ending_date: g.week_ending_date,
-          additional_seq: 0,
-          is_adjustment: false,
-          status: 'OPEN',
+        // Create missing contract_week for this week_start
+        try {
+          const insCw = await fetch(
+            `${env.SUPABASE_URL}/rest/v1/contract_weeks`,
+            {
+              method: 'POST',
+              headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+              body: JSON.stringify([{
+                contract_id: contract.id,
+                week_start: weekStart,
+                status: 'SUBMITTED',
+                created_at: nowIso,
+                updated_at: nowIso
+              }])
+            }
+          );
+          const txt = await insCw.text().catch(() => '');
+          if (!insCw.ok) {
+            console.warn('[NHSP_APPLY] contract_weeks insert failed', {
+              import_id: importId,
+              contract_id: contract.id,
+              week_start: weekStart,
+              status: insCw.status,
+              body: txt
+            });
+            continue;
+          }
+          const json = txt ? JSON.parse(txt) : [];
+          cw = Array.isArray(json) ? json[0] : json;
+        } catch (e) {
+          console.warn('[NHSP_APPLY] contract_weeks insert threw (non-fatal)', {
+            import_id: importId,
+            contract_id: contract.id,
+            week_start: weekStart,
+            err: e?.message || String(e)
+          });
+          continue;
+        }
+      }
+
+      // Find or create weekly timesheet for this contract_week
+      let ts = null;
+      if (cw.timesheet_id) {
+        try {
+          const { rows: tsRows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/timesheets` +
+            `?timesheet_id=eq.${enc(cw.timesheet_id)}` +
+            `&is_current=eq.true` +
+            `&select=*` +
+            `&limit=1`
+          );
+          ts = tsRows?.[0] || null;
+        } catch {
+          // ignore
+        }
+      }
+
+      if (!ts) {
+        const tsPayload = {
+          candidate_id: candidateId,
+          client_id: clientId,
+          hospital_norm: null,
+          sheet_scope: 'WEEKLY',
+          submission_mode: 'MANUAL',
+          timesheet_ref: null,
+          week_start: weekStart,
+          is_current: true,
           created_at: nowIso,
           updated_at: nowIso
         };
-        const insCw = await fetch(
-          `${env.SUPABASE_URL}/rest/v1/contract_weeks`,
-          {
-            method: 'POST',
-            headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-            body: JSON.stringify(cwPayload)
-          }
-        );
-        if (!insCw.ok) continue;
-        const cwJson = await insCw.json().catch(() => []);
-        cw = Array.isArray(cwJson) ? cwJson[0] : cwJson;
-      }
 
-      let ts = null;
-      if (cw.timesheet_id) {
-        const { rows: tsRows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/timesheets` +
-          `?timesheet_id=eq.${enc(cw.timesheet_id)}&select=*`
-        );
-        ts = tsRows?.[0] || null;
-      }
-
-      if (ts && ts.submission_mode === 'MANUAL') {
-        const { rows: finRows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?timesheet_id=eq.${enc(ts.timesheet_id)}` +
-          `&is_current=eq.true&select=*`
-        );
-        const fin = finRows?.[0] || null;
-
-        const { totalPayEx: truthPay, totalChgEx: truthChg } =
-          await computeNhspTotalsForShifts(env, contract, g.shifts);
-
-        if (!fin || !fin.paid_at_utc) {
-          const newSched = g.shifts.map(sh => ({
-            date: sh.work_date,
-            ward: sh.ward || null,
-            start_utc: sh.start_utc,
-            end_utc: sh.end_utc,
-            break_mins: sh.break_mins || 0
-          }));
-
-          await fetch(
-            `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
-            {
-              method: 'PATCH',
-              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-              body: JSON.stringify({ actual_schedule_json: newSched, updated_at: nowIso })
-            }
-          ).catch(() => {});
-
-          await buildNhspWeeklySnapshot(env, ts, contract, g.shifts, importId, 'CONTRACT_WEEKLY');
-
-          try {
-            await upsertValidation(env, user, {
-              timesheet_id: ts.timesheet_id,
-              status: 'VALIDATION_OK',
-              reason: 'NHSP_IMPORT',
-              hr_reference: null,
-              import_id
-            });
-          } catch {}
-        } else {
-          const tol = 0.01;
-          const { rows: allCwRows } = await sbFetch(
-            env,
-            `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-            `?contract_id=eq.${enc(contract.id)}` +
-            `&week_ending_date=eq.${enc(g.week_ending_date)}` +
-            `&select=id,additional_seq,is_adjustment,timesheet_id` +
-            `&order=additional_seq.asc`
-          );
-          const weeks = allCwRows || [];
-
-          const tsIds2 = weeks.map(w => w.timesheet_id).filter(Boolean);
-          let finByTsId = new Map();
-          if (tsIds2.length) {
-            const { rows: allFinRows } = await sbFetch(
-              env,
-              `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-              `?timesheet_id=in.(${tsIds2.map(enc).join(',')})` +
-              `&is_current=eq.true` +
-              `&select=timesheet_id,total_pay_ex_vat,total_charge_ex_vat,paid_at_utc,locked_by_invoice_id,basis,id,invoice_breakdown_json`
-            );
-            finByTsId = new Map((allFinRows || []).map(f => [f.timesheet_id, f]));
-          }
-
-          let currentPay = 0;
-          let currentChg = 0;
-          for (const w of weeks) {
-            const tsId = w.timesheet_id;
-            if (!tsId) continue;
-            const frow = finByTsId.get(tsId);
-            if (!frow) continue;
-            currentPay += Number(frow.total_pay_ex_vat || 0);
-            currentChg += Number(frow.total_charge_ex_vat || 0);
-          }
-          currentPay = round2(currentPay);
-          currentChg = round2(currentChg);
-
-          const { totalPayEx: truthPay2, totalChgEx: truthChg2 } =
-            await computeNhspTotalsForShifts(env, contract, g.shifts);
-
-          const deltaPayTotal = round2(truthPay2 - currentPay);
-          const deltaChgTotal = round2(truthChg2 - currentChg);
-
-          if (Math.abs(deltaPayTotal) < tol && Math.abs(deltaChgTotal) < tol) {
-            try {
-              await upsertValidation(env, user, {
-                timesheet_id: ts.timesheet_id,
-                status: 'VALIDATION_OK',
-                reason: 'NHSP_IMPORT',
-                hr_reference: null,
-                import_id
-              });
-            } catch {}
-            continue;
-          }
-
-          let adjDeltaPay = deltaPayTotal;
-          if (deltaPayTotal < 0 && Math.abs(deltaPayTotal) >= NHSP_OVERPAY_ADVANCE_THRESHOLD) {
-            const weekStart = computeWeekStartFromWeekEnding(g.week_ending_date);
-            await createOverpayAdvance(env, {
-              candidate_id: contract.candidate_id,
-              client_id: contract.client_id,
-              amount: Math.abs(deltaPayTotal),
-              reason: 'OVERPAY_NHSP',
-              notes: `NHSP overpay correction for week ${g.week_ending_date} (import ${importId})`,
-              week_start: weekStart
-            });
-            adjDeltaPay = 0;
-          }
-
-          const adjWeeks = weeks.filter(w => !!w.is_adjustment);
-          let latestAdjWeek = null;
-          if (adjWeeks.length) {
-            latestAdjWeek = adjWeeks.reduce(
-              (m, w) => Number(w.additional_seq || 0) > Number(m.additional_seq || 0) ? w : m,
-              adjWeeks[0]
-            );
-          }
-
-          const latestAdjTsId = latestAdjWeek?.timesheet_id || null;
-          const latestAdjFin  = latestAdjTsId ? finByTsId.get(latestAdjTsId) : null;
-
-          const latestAdjUnpaidUnlocked =
-            !!(latestAdjFin && !latestAdjFin.paid_at_utc && !latestAdjFin.locked_by_invoice_id);
-
-          const weekStartForAdj = computeWeekStartFromWeekEnding(g.week_ending_date);
-
-          if (latestAdjUnpaidUnlocked) {
-            const newAdjPay = round2(Number(latestAdjFin.total_pay_ex_vat || 0) + adjDeltaPay);
-            const newAdjChg = round2(Number(latestAdjFin.total_charge_ex_vat || 0) + deltaChgTotal);
-            const newAdjMar = round2(newAdjChg - newAdjPay);
-
-            const seg = {
-              segment_id: `nhsp_adj:${latestAdjTsId}`,
-              date: g.week_ending_date,
-              ward: null,
-              start_utc: null,
-              end_utc: null,
-              break_mins: 0,
-              hours_day:   0,
-              hours_night: 0,
-              hours_sat:   0,
-              hours_sun:   0,
-              hours_bh:    0,
-              pay_amount:    newAdjPay,
-              charge_amount: newAdjChg,
-              exclude_from_pay: false,
-              invoice_target_week_start: weekStartForAdj,
-              invoice_locked_invoice_id: null
-            };
-
-            const invBreak = {
-              mode: 'SEGMENTS',
-              segments: [seg],
-              totals: {
-                total_pay_ex_vat: newAdjPay,
-                total_charge_ex_vat: newAdjChg,
-                margin_ex_vat: newAdjMar
-              }
-            };
-
-            await fetch(
-              `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(latestAdjFin.id)}`,
-              {
-                method: 'PATCH',
-                headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-                body: JSON.stringify({
-                  total_pay_ex_vat: newAdjPay,
-                  total_charge_ex_vat: newAdjChg,
-                  margin_ex_vat: newAdjMar,
-                  invoice_breakdown_json: invBreak,
-                  updated_at: nowIso
-                })
-              }
-            ).catch(() => {});
-
-            try {
-              await upsertValidation(env, user, {
-                timesheet_id: ts.timesheet_id,
-                status: 'VALIDATION_OK',
-                reason: 'NHSP_IMPORT',
-                hr_reference: null,
-                import_id
-              });
-            } catch {}
-          } else {
-            const { rows: allCwRows2 } = await sbFetch(
-              env,
-              `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-              `?contract_id=eq.${enc(contract.id)}` +
-              `&week_ending_date=eq.${enc(g.week_ending_date)}` +
-              `&select=id,additional_seq` +
-              `&order=additional_seq.desc`
-            );
-            const maxSeq = (allCwRows2 || []).reduce((m, r) => Math.max(m, Number(r.additional_seq || 0)), 0);
-            const adjSeq = maxSeq + 1;
-
-            const adjCwPayload = {
-              contract_id: contract.id,
-              week_ending_date: g.week_ending_date,
-              additional_seq: adjSeq,
-              is_adjustment: true,
-              status: 'OPEN',
-              created_at: nowIso,
-              updated_at: nowIso
-            };
-            const insAdjCw = await fetch(
-              `${env.SUPABASE_URL}/rest/v1/contract_weeks`,
-              {
-                method: 'POST',
-                headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-                body: JSON.stringify(adjCwPayload)
-              }
-            );
-            if (!insAdjCw.ok) continue;
-            const adjCwJson = await insAdjCw.json().catch(() => []);
-            const adjCw = Array.isArray(adjCwJson) ? adjCwJson[0] : adjCwJson;
-            if (!adjCw?.id) continue;
-
-            const { rows: candRows2 } = await sbFetch(
-              env,
-              `${env.SUPABASE_URL}/rest/v1/candidates` +
-              `?id=eq.${enc(g.candidate_id)}&select=id,display_name` +
-              `&limit=1`
-            );
-            const cand = candRows2?.[0] || null;
-            const { rows: cliRows2 } = await sbFetch(
-              env,
-              `${env.SUPABASE_URL}/rest/v1/clients` +
-              `?id=eq.${enc(g.client_id)}&select=id,name` +
-              `&limit=1`
-            );
-            const client = cliRows2?.[0] || null;
-
-            const occNorm  = (cand?.display_name || String(cand?.id || '')).toLowerCase();
-            const hospNorm = (contract.display_site || client?.name || String(client?.id || '')).toLowerCase();
-            const wardNorm = 'nhsp-adjustment';
-            const jobTitleNorm = (contract.role || 'nhsp-adjustment').toLowerCase();
-
-            const bookingIdAdj = `NHSP_ADJ:${g.candidate_id}:${g.client_id}:${g.week_ending_date}:${adjSeq}`;
-
-            const adjTsPayload = [{
-              booking_id: bookingIdAdj,
-              version: 1,
-              is_current: true,
-              status: 'SUBMITTED',
-              occupant_key_norm: occNorm,
-              hospital_norm: hospNorm,
-              ward_norm: wardNorm,
-              job_title_norm: jobTitleNorm,
-              shift_label_norm: 'weekly',
-              week_ending_date: g.week_ending_date,
-              r2_nurse_key: null,
-              r2_auth_key: null,
-              contract_id: contract.id,
-              submission_mode: null,
-              manual_pdf_r2_key: null,
-              line_type: 'HOURS',
-              actual_schedule_json: [],
-              authorised_at_server: nowIso,
-              created_at: nowIso,
-              updated_at: nowIso
-            }];
-
-            const insAdjTs = await fetch(
-              `${env.SUPABASE_URL}/rest/v1/timesheets`,
-              {
-                method: 'POST',
-                headers: { ...sbHeaders(env), Prefer: 'return-representation' },
-                body: JSON.stringify(adjTsPayload)
-              }
-            );
-            if (!insAdjTs.ok) continue;
-            const adjTsJson = await insAdjTs.json().catch(() => []);
-            const adjTs = Array.isArray(adjTsJson) ? adjTsJson[0] : adjTsJson;
-            if (!adjTs?.timesheet_id) continue;
-
-            await fetch(
-              `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(adjCw.id)}`,
-              {
-                method: 'PATCH',
-                headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-                body: JSON.stringify({ timesheet_id: adjTs.timesheet_id, status: 'SUBMITTED', updated_at: nowIso })
-              }
-            ).catch(() => {});
-
-            const seg = {
-              segment_id: `nhsp_adj:${adjTs.timesheet_id}`,
-              date: g.week_ending_date,
-              ward: null,
-              start_utc: null,
-              end_utc: null,
-              break_mins: 0,
-              hours_day:   0,
-              hours_night: 0,
-              hours_sat:   0,
-              hours_sun:   0,
-              hours_bh:    0,
-              pay_amount:    adjDeltaPay,
-              charge_amount: deltaChgTotal,
-              exclude_from_pay: false,
-              invoice_target_week_start: weekStartForAdj,
-              invoice_locked_invoice_id: null
-            };
-
-            const invBreak = {
-              mode: 'SEGMENTS',
-              segments: [seg],
-              totals: {
-                total_pay_ex_vat: adjDeltaPay,
-                total_charge_ex_vat: deltaChgTotal,
-                margin_ex_vat: round2(deltaChgTotal - adjDeltaPay)
-              }
-            };
-
-            const adjSnap = {
-              timesheet_id: adjTs.timesheet_id,
-              timesheet_version: adjTs.version || 1,
-              basis: 'NHSP_ADJUSTMENT',
-              nhsp_import_id: importId,
-              occupant_key_norm: adjTs.occupant_key_norm || null,
-              week_ending_date: adjTs.week_ending_date || null,
-              candidate_id: contract.candidate_id || null,
-              client_id: contract.client_id || null,
-              role: contract.role || null,
-              band: contract.band || null,
-              pay_method: contract.pay_method_snapshot || null,
-              policy_snapshot_json: null,
-              rate_source_refs_json: {},
-              hours_day: null,
-              hours_night: null,
-              hours_sat: null,
-              hours_sun: null,
-              hours_bh: null,
-              additional_units_json: {},
-              additional_pay_ex_vat: 0,
-              additional_charge_ex_vat: 0,
-              additional_margin_ex_vat: 0,
-              total_hours: null,
-              total_pay_ex_vat: adjDeltaPay,
-              total_charge_ex_vat: deltaChgTotal,
-              margin_ex_vat: round2(deltaChgTotal - adjDeltaPay),
-              candidate_assignment: contract.candidate_id ? 'ASSIGNED' : 'UNASSIGNED',
-              processing_status: 'READY_FOR_INVOICE',
-              invoice_breakdown_json: invBreak
-            };
-
-            await writeSnapshot(env, adjSnap).catch(() => {});
-
-            try {
-              await upsertValidation(env, user, {
-                timesheet_id: ts.timesheet_id,
-                status: 'VALIDATION_OK',
-                reason: 'NHSP_IMPORT',
-                hr_reference: null,
-                import_id
-              });
-            } catch {}
-          }
-        }
-      } else {
-        if (!ts) {
-          const { rows: candRows2 } = await sbFetch(
-            env,
-            `${env.SUPABASE_URL}/rest/v1/candidates` +
-            `?id=eq.${enc(g.candidate_id)}&select=id,display_name` +
-            `&limit=1`
-          );
-          const cand = candRows2?.[0] || null;
-          const { rows: cliRows2 } = await sbFetch(
-            env,
-            `${env.SUPABASE_URL}/rest/v1/clients` +
-            `?id=eq.${enc(g.client_id)}&select=id,name` +
-            `&limit=1`
-          );
-          const client = cliRows2?.[0] || null;
-
-          const occNorm  = (cand?.display_name || String(cand?.id || '')).toLowerCase();
-          const hospNorm = (contract.display_site || client?.name || String(client?.id || '')).toLowerCase();
-          const wardNorm = (contract.ward_hint || 'nhsp-weekly').toLowerCase();
-          const jobTitleNorm = (contract.role || 'nhsp-weekly').toLowerCase();
-
-          const bookingId = `NHSP:${g.candidate_id}:${g.client_id}:${g.week_ending_date}`;
-
-          const tsPayload = [{
-            booking_id: bookingId,
-            version: 1,
-            is_current: true,
-            status: 'SUBMITTED',
-            occupant_key_norm: occNorm,
-            hospital_norm: hospNorm,
-            ward_norm: wardNorm,
-            job_title_norm: jobTitleNorm,
-            shift_label_norm: 'weekly',
-            week_ending_date: g.week_ending_date,
-            r2_nurse_key: null,
-            r2_auth_key: null,
-            contract_id: contract.id,
-            submission_mode: 'ELECTRONIC',
-            manual_pdf_r2_key: null,
-            line_type: 'HOURS',
-            actual_schedule_json: [],
-            authorised_at_server: nowIso,
-            created_at: nowIso,
-            updated_at: nowIso
-          }];
-
+        try {
           const insTs = await fetch(
             `${env.SUPABASE_URL}/rest/v1/timesheets`,
             {
               method: 'POST',
-              headers: { ...sbHeaders(env), Prefer: 'return-representation' },
+              headers: { ...sbHeaders(env), Prefer: 'return=representation' },
               body: JSON.stringify(tsPayload)
             }
           );
@@ -13083,32 +13448,95 @@ export async function handleNhspApply(env, req, importId) {
               body: JSON.stringify({ timesheet_id: ts.timesheet_id, status: 'SUBMITTED', updated_at: nowIso })
             }
           ).catch(() => {});
+        } catch {
+          continue;
         }
+      }
 
-        const shiftIdsForTs = g.shifts.map(s => s.id);
-        if (shiftIdsForTs.length) {
-          const shParam = shiftIdsForTs.map(enc).join(',');
+      const shiftIdsForTs = g.shifts.map(s => s.id);
+      if (shiftIdsForTs.length) {
+        const shParam = shiftIdsForTs.map(enc).join(',');
+        await fetch(
+          `${env.SUPABASE_URL}/rest/v1/nhsp_shifts?id=in.(${shParam})`,
+          {
+            method: 'PATCH',
+            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+            body: JSON.stringify({
+              timesheet_id: ts.timesheet_id,
+              contract_id: contract.id,
+              updated_at: new Date().toISOString()
+            })
+          }
+        ).catch(() => {});
+      }
+
+      // Build NHSP weekly TSFIN snapshot
+      await buildNhspWeeklySnapshot(env, ts, contract, g.shifts, importId, 'NHSP');
+
+      // NEW: populate per-day references into timesheets.day_references_json
+      try {
+        const dayRefs = {};
+        for (const sh of g.shifts) {
+          const ymd = sh.work_date;
+          const ref = sh.ref_num || null;
+          if (!ymd || !ref) continue;
+          if (!dayRefs[ymd]) dayRefs[ymd] = ref;
+        }
+        if (ts && ts.timesheet_id) {
           await fetch(
-            `${env.SUPABASE_URL}/rest/v1/nhsp_shifts?id=in.(${shParam})`,
+            `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
             {
               method: 'PATCH',
               headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-              body: JSON.stringify({ timesheet_id: ts.timesheet_id, contract_id: contract.id, updated_at: new Date().toISOString() })
+              body: JSON.stringify({
+                day_references_json: Object.keys(dayRefs).length ? dayRefs : null,
+                updated_at: nowIso
+              })
             }
           ).catch(() => {});
         }
+      } catch (e) {
+        console.warn('[NHSP_APPLY] failed to patch day_references_json (non-fatal)', {
+          import_id: importId,
+          timesheet_id: ts?.timesheet_id || null,
+          err: e?.message || String(e)
+        });
+      }
 
-        await buildNhspWeeklySnapshot(env, ts, contract, g.shifts, importId, 'NHSP');
+      try {
+        await upsertValidation(env, user, {
+          timesheet_id: ts.timesheet_id,
+          status: 'VALIDATION_OK',
+          reason: 'NHSP_IMPORT',
+          hr_reference: null,
+          import_id
+        });
+      } catch {
+        // non-fatal
+      }
 
-        try {
-          await upsertValidation(env, user, {
-            timesheet_id: ts.timesheet_id,
-            status: 'VALIDATION_OK',
+      // Optional: overpay advance logic (unchanged)
+      try {
+        const totals = await computeNhspTotalsForShifts(env, contract, g.shifts);
+        const diff   = round2((totals.totalChgEx || 0) - (totals.totalPayEx || 0));
+        if (diff > NHSP_OVERPAY_ADVANCE_THRESHOLD) {
+          await createOverpayAdvance(env, {
+            candidate_id: candidateId,
+            client_id: clientId,
+            amount: diff,
             reason: 'NHSP_IMPORT',
-            hr_reference: null,
-            import_id
+            notes: `Auto overpay advance from NHSP weekly import ${importId}, week ${weekStart}`,
+            week_start: weekStart
           });
-        } catch {}
+        }
+      } catch (e) {
+        console.warn('[NHSP_APPLY] overpay advance logic failed (non-fatal)', {
+          import_id: importId,
+          client_id: clientId,
+          candidate_id: candidateId,
+          week_start: weekStart,
+          err: e?.message || String(e)
+        });
       }
     }
 
@@ -13155,7 +13583,6 @@ export async function handleNhspApply(env, req, importId) {
     return withCORS(env, req, serverError(`Failed to apply NHSP import: ${e?.message || e}`));
   }
 }
-
 
 
 export async function handleNhspRows(env, req, importId) {
@@ -13236,6 +13663,7 @@ export async function handleHrAutoprocessImport(env, req) {
       source_system: 'HEALTHROSTER',
       client_id: clientId,
       file_r2_key: fileKey,
+      import_scope: 'HR_WEEKLY', // <-- NEW: explicitly mark this as a weekly HR autoprocess import
       parse_summary_json: {
         status: 'PENDING_PARSE',
         rows_total: 0,
@@ -13412,6 +13840,13 @@ export async function handleHrAutoprocessApply(env, req, importId) {
       candidate_mappings_count: candidateMappings.length,
       client_aliases_count: clientAliases.length
     }));
+  } else {
+    console.log('[HR_AUTOPROC_APPLY] start', {
+      importId,
+      selectedGroupIds_count: selectedGroupIds.length,
+      candidateMappings_count: candidateMappings.length,
+      clientAliases_count: clientAliases.length
+    });
   }
 
   const enc   = encodeURIComponent;
@@ -13419,6 +13854,7 @@ export async function handleHrAutoprocessApply(env, req, importId) {
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
   const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
 
+  // Helper: derive Mon–Sun week start from a week-ending date (ymd)
   const computeWeekStartFromWeekEnding = (weYmd) => {
     if (!weYmd) return null;
     const d = new Date(`${weYmd}T00:00:00Z`);
@@ -13430,7 +13866,8 @@ export async function handleHrAutoprocessApply(env, req, importId) {
     return `${yyyy}-${mm}-${dd}`;
   };
 
-  const HR_OVERPAY_ADVANCE_THRESHOLD = 200;
+  // Threshold for treating a negative HR correction as an "overpay advance"
+  const HR_OVERPAY_ADVANCE_THRESHOLD = 200; // adjust as needed
 
   async function computeHrTotalsForShifts(env, contract, client_id, shifts) {
     const candidate_id = contract.candidate_id || null;
@@ -13481,6 +13918,7 @@ export async function handleHrAutoprocessApply(env, req, importId) {
     return { totalPayEx, totalChgEx };
   }
 
+  // create an overpay advance (shared pattern with NHSP)
   async function createOverpayAdvance(env, { candidate_id, client_id, amount, reason, notes, week_start }) {
     try {
       const amt = Number(amount || 0);
@@ -13496,7 +13934,7 @@ export async function handleHrAutoprocessApply(env, req, importId) {
       const payload = [{
         candidate_id,
         client_id,
-        reason,
+        reason,                         // 'OVERPAY_HR'
         original_amount:   round2(amt),
         outstanding_amount: round2(amt),
         linked_shift_date:  null,
@@ -13529,156 +13967,36 @@ export async function handleHrAutoprocessApply(env, req, importId) {
   }
 
   try {
-    // PHASE 0: explicit mappings
-    for (const m of candidateMappings) {
-      const staffNormRaw  = m && m.staff_norm;
-      const hospNormRaw   = m && m.hospital_or_trust;
-      const candidateId   = m && m.candidate_id;
-      const staffNorm     = norm(staffNormRaw);
-      const hospNorm      = hospNormRaw != null ? norm(hospNormRaw) : null;
-
-      if (!staffNorm || !candidateId) continue;
-
-      let existing = null;
-      try {
-        let url =
-          `${env.SUPABASE_URL}/rest/v1/hr_name_mappings` +
-          `?hr_name_norm=eq.${enc(staffNorm)}` +
-          `&select=id,hr_name_norm,hospital_or_trust,candidate_id,active` +
-          `&limit=1`;
-        if (hospNorm) {
-          url += `&hospital_or_trust=eq.${enc(hospNorm)}`;
-        }
-        const { rows } = await sbFetch(env, url);
-        existing = rows && rows[0] ? rows[0] : null;
-      } catch (e) {
-        console.warn('[HR_AUTOPROC_APPLY] hr_name_mappings lookup failed (non-fatal)', {
-          staffNorm,
-          hospNorm,
+    // ─────────────────────────────────────────────
+    // PHASE 0: explicit mappings (aliases only)
+    // ─────────────────────────────────────────────
+    // Delegate to shared weekly alias helper so HR weekly uses the
+    // same hr_name_mappings / client_hospitals logic as NHSP.
+    try {
+      await applyWeeklyMappingsOnly(env, {
+        source_system: 'HEALTHROSTER',
+        import_id: importId,
+        candidate_mappings: candidateMappings,
+        client_aliases:     clientAliases
+      });
+    } catch (e) {
+      // Non-fatal: we still proceed to Phase 1/2, but log the failure.
+      if (LOG) {
+        console.warn('[HR_AUTOPROC_APPLY] applyWeeklyMappingsOnly failed (non-fatal)', {
+          import_id: importId,
           err: e?.message || String(e)
         });
-      }
-
-      const nowIso = new Date().toISOString();
-
-      if (existing && existing.id) {
-        try {
-          await fetch(
-            `${env.SUPABASE_URL}/rest/v1/hr_name_mappings?id=eq.${enc(existing.id)}`,
-            {
-              method: 'PATCH',
-              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-              body: JSON.stringify({
-                candidate_id: candidateId,
-                hospital_or_trust: hospNorm,
-                active: true,
-                last_used_at: nowIso
-              })
-            }
-          );
-        } catch (e) {
-          console.warn('[HR_AUTOPROC_APPLY] hr_name_mappings PATCH failed (non-fatal)', {
-            id: existing.id,
-            err: e?.message || String(e)
-          });
-        }
       } else {
-        try {
-          const payload = [{
-            hr_name_norm: staffNorm,
-            hospital_or_trust: hospNorm,
-            candidate_id: candidateId,
-            active: true,
-            last_used_at: nowIso
-          }];
-          await fetch(
-            `${env.SUPABASE_URL}/rest/v1/hr_name_mappings`,
-            {
-              method: 'POST',
-              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-              body: JSON.stringify(payload)
-            }
-          );
-        } catch (e) {
-          console.warn('[HR_AUTOPROC_APPLY] hr_name_mappings INSERT failed (non-fatal)', {
-            staffNorm,
-            hospNorm,
-            candidateId,
-            err: e?.message || String(e)
-          });
-        }
-      }
-    }
-
-    for (const m of clientAliases) {
-      const hospitalNormRaw = m && m.hospital_norm;
-      const clientId        = m && m.client_id;
-      const alias           = norm(hospitalNormRaw);
-
-      if (!alias || !clientId) continue;
-
-      try {
-        const { rows: hospRows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/client_hospitals` +
-            `?client_id=eq.${enc(clientId)}` +
-            `&select=id,display_name,hospital_name_norm` +
-            `&limit=1`
-        );
-        const existing = hospRows && hospRows[0] ? hospRows[0] : null;
-
-        const normAliasList = (val) => {
-          if (!val) return [];
-          if (Array.isArray(val)) return val;
-          if (typeof val === 'string') {
-            try {
-              const parsed = JSON.parse(val);
-              return Array.isArray(parsed) ? parsed : [val];
-            } catch {
-              return [val];
-            }
-          }
-          return [];
-        };
-
-        if (!existing) {
-          const newRow = [{
-            client_id: clientId,
-            display_name: hospitalNormRaw || alias,
-            hospital_name_norm: [alias]
-          }];
-          await fetch(
-            `${env.SUPABASE_URL}/rest/v1/client_hospitals`,
-            {
-              method: 'POST',
-              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-              body: JSON.stringify(newRow)
-            }
-          );
-        } else {
-          const currentAliases = normAliasList(existing.hospital_name_norm);
-          if (!currentAliases.includes(alias)) {
-            const updated = [...currentAliases, alias];
-            await fetch(
-              `${env.SUPABASE_URL}/rest/v1/client_hospitals?id=eq.${enc(existing.id)}`,
-              {
-                method: 'PATCH',
-                headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-                body: JSON.stringify({ hospital_name_norm: updated })
-              }
-            );
-          }
-        }
-      } catch (e) {
-        console.warn('[HR_AUTOPROC_APPLY] client_hospitals alias update failed (non-fatal)', {
-          hospital_norm: hospitalNormRaw,
-          client_id: clientId,
+        console.warn('[HR_AUTOPROC_APPLY] applyWeeklyMappingsOnly failed (non-fatal)', {
+          import_id: importId,
           err: e?.message || String(e)
         });
       }
     }
 
-    // Load import
+    // ─────────────────────────────────────────────
+    // Load import header
+    // ─────────────────────────────────────────────
     const { rows: impRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/hr_imports` +
@@ -13692,6 +14010,8 @@ export async function handleHrAutoprocessApply(env, req, importId) {
           stage: 'import_not_found',
           import_id: importId
         }));
+      } else {
+        console.warn('[HR_AUTOPROC_APPLY] import not found', { importId });
       }
       return withCORS(env, req, notFound("HealthRoster import not found"));
     }
@@ -13702,6 +14022,11 @@ export async function handleHrAutoprocessApply(env, req, importId) {
           import_id: importId,
           source_system: imp.source_system
         }));
+      } else {
+        console.warn('[HR_AUTOPROC_APPLY] wrong source_system', {
+          importId,
+          source_system: imp.source_system
+        });
       }
       return withCORS(env, req, badRequest(`Import ${importId} is not HEALTHROSTER (source_system=${imp.source_system})`));
     }
@@ -13711,6 +14036,8 @@ export async function handleHrAutoprocessApply(env, req, importId) {
           stage: 'missing_client_id',
           import_id: importId
         }));
+      } else {
+        console.warn('[HR_AUTOPROC_APPLY] missing client_id', { importId });
       }
       return withCORS(env, req, badRequest("HealthRoster autoprocess import is missing client_id"));
     }
@@ -13723,8 +14050,18 @@ export async function handleHrAutoprocessApply(env, req, importId) {
         client_id: imp.client_id,
         parse_summary: imp.parse_summary_json || null
       }));
+    } else {
+      console.log('[HR_AUTOPROC_APPLY] import loaded', {
+        importId,
+        source_system: imp.source_system,
+        client_id: imp.client_id,
+        parse_summary: imp.parse_summary_json || null
+      });
     }
 
+    // ─────────────────────────────────────────────
+    // Load hr_rows → Phase 1 mapping into nhsp_shifts
+    // ─────────────────────────────────────────────
     const { rows: hrRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/hr_rows` +
@@ -13739,6 +14076,8 @@ export async function handleHrAutoprocessApply(env, req, importId) {
           stage: 'no_hr_rows',
           import_id: importId
         }));
+      } else {
+        console.log('[HR_AUTOPROC_APPLY] no hr_rows', { importId });
       }
       return withCORS(env, req, ok({
         import_id: importId,
@@ -13871,7 +14210,7 @@ export async function handleHrAutoprocessApply(env, req, importId) {
 
       if (!shiftId) continue;
 
-      // Candidate mapping (by name)
+      // Candidate mapping (by name via aliases / mappings)
       if (!candidateId && staffName) {
         const nameNorm = norm(staffName);
         let foundCandidate = null;
@@ -13940,13 +14279,960 @@ export async function handleHrAutoprocessApply(env, req, importId) {
       });
     }
 
-    // PHASE 2 – unchanged logic, but with some key logs already in your current version
-    // (I’m not re-diffing the entire massive phase-2 block here again since we added
-    // plenty of logs above; you already have multiple console.log/console.warn there.)
+    // ---------- PHASE 2: weekly grouping/TS/TSFIN with self-bill-aware logic ----------
+    const { rows: allShifts } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
+      `?latest_import_id=eq.${enc(importId)}&source_system=eq.HEALTHROSTER` +
+      `&select=*`
+    );
+    const shifts = (allShifts || []).filter(s => s.candidate_id && s.client_id && s.work_date);
 
-    // … existing Phase 2 logic remains the same …
+    if (shifts.length) {
+      const clientIds = [...new Set(shifts.map(s => s.client_id).filter(Boolean))];
+      let csMap = new Map();
+      if (clientIds.length) {
+        const { rows: csRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/client_settings` +
+          `?client_id=in.(${clientIds.map(enc).join(',')})` +
+          `&select=client_id,week_ending_weekday` +
+          `&order=effective_from.desc`
+        );
+        for (const r of csRows || []) {
+          if (!csMap.has(r.client_id)) csMap.set(r.client_id, r);
+        }
+      }
 
-    // At the very end, keep + extend the final log
+      const groups = new Map();
+
+      for (const sh of shifts) {
+        const cs = csMap.get(sh.client_id) || {};
+        const weDow = Number.isInteger(Number(cs.week_ending_weekday))
+          ? Number(cs.week_ending_weekday)
+          : 0;
+
+        const d = new Date(`${sh.work_date}T00:00:00Z`);
+        if (isNaN(d.getTime())) continue;
+
+        // Move forward until we hit the client's configured week-ending weekday
+        while (d.getUTCDay() !== weDow) {
+          d.setUTCDate(d.getUTCDate() + 1);
+        }
+        const yyyy = d.getUTCFullYear();
+        const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
+        const dd   = String(d.getUTCDate()).padStart(2, '0');
+        const weekEndingDate = `${yyyy}-${mm}-${dd}`;
+
+        const key = `${sh.candidate_id}__${sh.client_id}__${weekEndingDate}`;
+        let g = groups.get(key);
+        if (!g) {
+          g = {
+            candidate_id: sh.candidate_id,
+            client_id: sh.client_id,
+            week_ending_date: weekEndingDate,
+            shifts: []
+          };
+          groups.set(key, g);
+        }
+        g.shifts.push(sh);
+      }
+
+      console.log('[HR_AUTOPROC_APPLY] phase2 groups built', {
+        importId,
+        group_count: groups.size
+      });
+
+      for (const g of groups.values()) {
+        // Resolve contract for this candidate/client/week
+        const { rows: contractRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/contracts` +
+          `?candidate_id=eq.${enc(g.candidate_id)}` +
+          `&client_id=eq.${enc(g.client_id)}` +
+          `&select=*`
+        );
+        const allContracts = contractRows || [];
+        if (!allContracts.length) continue;
+
+        const anyDate = g.shifts[0]?.work_date;
+        const dateObj = new Date(`${anyDate}T00:00:00Z`);
+        if (isNaN(dateObj.getTime())) continue;
+
+        let chosen = null;
+        for (const c of allContracts) {
+          const start = c.start_date ? new Date(`${c.start_date}T00:00:00Z`) : null;
+          const end   = c.end_date   ? new Date(`${c.end_date}T00:00:00Z`)   : null;
+          if (start && dateObj < start) continue;
+          if (end   && dateObj > end)   continue;
+          if (!chosen) chosen = c;
+          else {
+            const prevStart = chosen.start_date ? new Date(`${chosen.start_date}T00:00:00Z`) : null;
+            const thisStart = c.start_date ? new Date(`${c.start_date}T00:00:00Z`) : null;
+            if (thisStart && prevStart && thisStart > prevStart) chosen = c;
+          }
+        }
+        if (!chosen) continue;
+        const contract = chosen;
+
+        console.log('[HR_AUTOPROC_APPLY] contract flags', {
+          importId,
+          contract_id: contract.id,
+          self_bill: !!contract.self_bill
+        });
+
+        const previewGroupId = `grp:${contract.id}:${g.week_ending_date}:${g.candidate_id}`;
+        if (selectedGroupIds.length && !selectedGroupIds.includes(previewGroupId)) {
+          // Skip groups that weren't selected by the user in the preview UI
+          continue;
+        }
+
+        // Load contract_weeks for this contract/week
+        const { rows: cwRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+          `?contract_id=eq.${enc(contract.id)}` +
+          `&week_ending_date=eq.${enc(g.week_ending_date)}` +
+          `&select=id,additional_seq,is_adjustment,timesheet_id` +
+          `&order=additional_seq.asc`
+        );
+        let weeks = cwRows || [];
+        let baseWeek = weeks.find(w => !w.is_adjustment && Number(w.additional_seq || 0) === 0) || null;
+        const nowIso = new Date().toISOString();
+
+        // Ensure base week exists (create if missing)
+        if (!baseWeek) {
+          const cwPayload = {
+            contract_id: contract.id,
+            week_ending_date: g.week_ending_date,
+            additional_seq: 0,
+            is_adjustment: false,
+            status: 'OPEN',
+            created_at: nowIso,
+            updated_at: nowIso
+          };
+          const insCw = await fetch(
+            `${env.SUPABASE_URL}/rest/v1/contract_weeks`,
+            {
+              method: 'POST',
+              headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+              body: JSON.stringify(cwPayload)
+            }
+          );
+          if (!insCw.ok) {
+            const err = await insCw.text().catch(() => '');
+            console.warn('[HR_AUTOPROC_APPLY] contract_weeks insert failed', { importId, err });
+            continue;
+          }
+          const cwJson = await insCw.json().catch(() => []);
+          baseWeek = Array.isArray(cwJson) ? cwJson[0] : cwJson;
+          if (!baseWeek?.id) continue;
+
+          // Create a new base weekly TS
+          const { rows: candRows2 } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/candidates` +
+            `?id=eq.${enc(g.candidate_id)}&select=id,display_name` +
+            `&limit=1`
+          );
+          const cand = candRows2?.[0] || null;
+          const { rows: cliRows2 } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/clients` +
+            `?id=eq.${enc(g.client_id)}&select=id,name` +
+            `&limit=1`
+          );
+          const client = cliRows2?.[0] || null;
+
+          const occNorm  = (cand?.display_name || String(cand?.id || '')).toLowerCase();
+          const hospNorm = (contract.display_site || client?.name || String(client?.id || '')).toLowerCase();
+          const wardNorm = (contract.ward_hint || 'hr-weekly').toLowerCase();
+          const jobTitleNorm = (contract.role || 'hr-weekly').toLowerCase();
+
+          const bookingId = `HR:${g.candidate_id}:${g.client_id}:${g.week_ending_date}`;
+
+          const tsPayload = [{
+            booking_id: bookingId,
+            version: 1,
+            is_current: true,
+            status: 'SUBMITTED',
+            occupant_key_norm: occNorm,
+            hospital_norm: hospNorm,
+            ward_norm: wardNorm,
+            job_title_norm: jobTitleNorm,
+            shift_label_norm: 'weekly',
+            week_ending_date: g.week_ending_date,
+            r2_nurse_key: null,
+            r2_auth_key: null,
+            contract_id: contract.id,
+            submission_mode: 'ELECTRONIC',
+            manual_pdf_r2_key: null,
+            line_type: 'HOURS',
+            actual_schedule_json: [],
+            authorised_at_server: nowIso,
+            created_at: nowIso,
+            updated_at: nowIso
+          }];
+
+          const insTs = await fetch(
+            `${env.SUPABASE_URL}/rest/v1/timesheets`,
+            {
+              method: 'POST',
+              headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+              body: JSON.stringify(tsPayload)
+            }
+          );
+          if (!insTs.ok) {
+            const err = await insTs.text().catch(() => '');
+            console.warn('[HR_AUTOPROC_APPLY] timesheets insert failed (new base)', { importId, err });
+            continue;
+          }
+          const tsJson = await insTs.json().catch(() => []);
+          const ts = Array.isArray(tsJson) ? tsJson[0] : tsJson;
+          if (!ts?.timesheet_id) continue;
+
+          await fetch(
+            `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(baseWeek.id)}`,
+            {
+              method: 'PATCH',
+              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+              body: JSON.stringify({ timesheet_id: ts.timesheet_id, status: 'SUBMITTED', updated_at: nowIso })
+            }
+          ).catch(() => {});
+
+          // Link this group's shifts to the base TS
+          const shiftIdsForTs0 = g.shifts.map(s => s.id);
+          if (shiftIdsForTs0.length) {
+            const shParam = shiftIdsForTs0.map(enc).join(',');
+            await fetch(
+              `${env.SUPABASE_URL}/rest/v1/nhsp_shifts?id=in.(${shParam})`,
+              {
+                method: 'PATCH',
+                headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+                body: JSON.stringify({ timesheet_id: ts.timesheet_id, contract_id: contract.id, updated_at: nowIso })
+              }
+            ).catch(() => {});
+          }
+
+          // Base snapshot from HR truth
+          await buildNhspWeeklySnapshot(env, ts, contract, g.shifts, importId, 'CONTRACT_WEEKLY');
+
+          try {
+            await upsertValidation(env, user, {
+              timesheet_id: ts.timesheet_id,
+              status: 'VALIDATION_OK',
+              reason: 'HEALTHROSTER_IMPORT',
+              hr_reference: null,
+              import_id: importId
+            });
+          } catch (e) {
+            console.warn('[HR_AUTOPROC_APPLY] upsertValidation failed (new base)', {
+              importId,
+              timesheet_id: ts.timesheet_id,
+              err: e?.message || String(e)
+            });
+          }
+          continue;
+        }
+
+        // We now have baseWeek; load TS + TSFIN for base + adjustments
+        weeks = cwRows || [];
+        const tsIds = weeks.map(w => w.timesheet_id).filter(Boolean);
+
+        let tsById = new Map();
+        if (tsIds.length) {
+          const { rows: tsRows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/timesheets` +
+            `?timesheet_id=in.(${tsIds.map(enc).join(',')})` +
+            `&select=timesheet_id,submission_mode,status`
+          );
+          tsById = new Map((tsRows || []).map(t => [t.timesheet_id, t]));
+        }
+
+        let finByTsId = new Map();
+        if (tsIds.length) {
+          const { rows: finRows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+            `?timesheet_id=in.(${tsIds.map(enc).join(',')})` +
+            `&is_current=eq.true` +
+            `&select=id,timesheet_id,total_pay_ex_vat,total_charge_ex_vat,paid_at_utc,locked_by_invoice_id,basis,invoice_breakdown_json`
+          );
+          finByTsId = new Map((finRows || []).map(f => [f.timesheet_id, f]));
+        }
+
+        const baseTsId = baseWeek.timesheet_id || null;
+        const baseTs   = baseTsId ? tsById.get(baseTsId) : null;
+        const baseFin  = baseTsId ? finByTsId.get(baseTsId) : null;
+
+        let ts = baseTs || null;
+
+        // Ensure TS exists for base week (double safety)
+        if (!ts) {
+          const { rows: candRows2 } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/candidates` +
+            `?id=eq.${enc(g.candidate_id)}&select=id,display_name` +
+            `&limit=1`
+          );
+          const cand = candRows2?.[0] || null;
+          const { rows: cliRows2 } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/clients` +
+            `?id=eq.${enc(g.client_id)}&select=id,name` +
+            `&limit=1`
+          );
+          const client = cliRows2?.[0] || null;
+
+          const occNorm  = (cand?.display_name || String(cand?.id || '')).toLowerCase();
+          const hospNorm = (contract.display_site || client?.name || String(client?.id || '')).toLowerCase();
+          const wardNorm = (contract.ward_hint || 'hr-weekly').toLowerCase();
+          const jobTitleNorm = (contract.role || 'hr-weekly').toLowerCase();
+
+          const bookingId = `HR:${g.candidate_id}:${g.client_id}:${g.week_ending_date}`;
+
+          const tsPayload = [{
+            booking_id: bookingId,
+            version: 1,
+            is_current: true,
+            status: 'SUBMITTED',
+            occupant_key_norm: occNorm,
+            hospital_norm: hospNorm,
+            ward_norm: wardNorm,
+            job_title_norm: jobTitleNorm,
+            shift_label_norm: 'weekly',
+            week_ending_date: g.week_ending_date,
+            r2_nurse_key: null,
+            r2_auth_key: null,
+            contract_id: contract.id,
+            submission_mode: 'ELECTRONIC',
+            manual_pdf_r2_key: null,
+            line_type: 'HOURS',
+            actual_schedule_json: [],
+            authorised_at_server: nowIso,
+            created_at: nowIso,
+            updated_at: nowIso
+          }];
+
+          const insTs = await fetch(
+            `${env.SUPABASE_URL}/rest/v1/timesheets`,
+            {
+              method: 'POST',
+              headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+              body: JSON.stringify(tsPayload)
+            }
+          );
+          if (!insTs.ok) {
+            const err = await insTs.text().catch(() => '');
+            console.warn('[HR_AUTOPROC_APPLY] timesheets insert failed (base missing)', { importId, err });
+            continue;
+          }
+          const tsJson = await insTs.json().catch(() => []);
+          ts = Array.isArray(tsJson) ? tsJson[0] : tsJson;
+          if (!ts?.timesheet_id) continue;
+
+          await fetch(
+            `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(baseWeek.id)}`,
+            {
+              method: 'PATCH',
+              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+              body: JSON.stringify({ timesheet_id: ts.timesheet_id, status: 'SUBMITTED', updated_at: nowIso })
+            }
+          ).catch(() => {});
+        }
+
+        // Link shifts to base TS
+        const shiftIdsForTs = g.shifts.map(s => s.id);
+        if (shiftIdsForTs.length) {
+          const shParam = shiftIdsForTs.map(enc).join(',');
+          await fetch(
+            `${env.SUPABASE_URL}/rest/v1/nhsp_shifts?id=in.(${shParam})`,
+            {
+              method: 'PATCH',
+              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+              body: JSON.stringify({ timesheet_id: ts.timesheet_id, contract_id: contract.id, updated_at: nowIso })
+            }
+          ).catch(() => {});
+        }
+
+        // Compute truth totals from HR data
+        const { totalPayEx: truthPay, totalChgEx: truthChg } =
+          await computeHrTotalsForShifts(env, contract, g.client_id, g.shifts);
+
+        const tol = 0.01;
+
+        if (!baseFin && !weeks.some(w => w.is_adjustment)) {
+          // If there is no financial snapshot at all, we can treat HR as truth
+          await buildNhspWeeklySnapshot(env, ts, contract, g.shifts, importId, 'CONTRACT_WEEKLY');
+          try {
+            await upsertValidation(env, user, {
+              timesheet_id: ts.timesheet_id,
+              status: 'VALIDATION_OK',
+              reason: 'HEALTHROSTER_IMPORT',
+              hr_reference: null,
+              import_id: importId
+            });
+          } catch (e) {
+            console.warn('[HR_AUTOPROC_APPLY] upsertValidation failed (no baseFin)', {
+              importId,
+              timesheet_id: ts.timesheet_id,
+              err: e?.message || String(e)
+            });
+          }
+          continue;
+        }
+
+        const adjWeeks = weeks.filter(w => !!w.is_adjustment);
+
+        let currentPay = 0;
+        let currentChg = 0;
+
+        for (const w of weeks) {
+          const tsId = w.timesheet_id;
+          if (!tsId) continue;
+          const frow = finByTsId.get(tsId);
+          if (!frow) continue;
+          currentPay += Number(frow.total_pay_ex_vat || 0);
+          currentChg += Number(frow.total_charge_ex_vat || 0);
+        }
+        currentPay = round2(currentPay);
+        currentChg = round2(currentChg);
+
+        const deltaPayTotal = round2(truthPay - currentPay);
+        const deltaChgTotal = round2(truthChg - currentChg);
+
+        if (Math.abs(deltaPayTotal) < tol && Math.abs(deltaChgTotal) < tol) {
+          // Already matches HR totals
+          try {
+            await upsertValidation(env, user, {
+              timesheet_id: ts.timesheet_id,
+              status: 'VALIDATION_OK',
+              reason: 'HEALTHROSTER_IMPORT',
+              hr_reference: null,
+              import_id: importId
+            });
+          } catch (e) {
+            console.warn('[HR_AUTOPROC_APPLY] upsertValidation failed (no delta)', {
+              importId,
+              timesheet_id: ts.timesheet_id,
+              err: e?.message || String(e)
+            });
+          }
+          continue;
+        }
+
+        const isPaid     = !!(baseFin && baseFin.paid_at_utc);
+        const isInvoiced = !!(baseFin && baseFin.locked_by_invoice_id);
+
+        const baseUnpaidUnlocked =
+          !!(baseFin && !baseFin.paid_at_utc && !baseFin.locked_by_invoice_id);
+
+        const selfBill = !!contract.self_bill;
+
+        // ─────────────────────────────────────────────
+        // Self-bill = true → NHSP-style logic (self-bill adjustments)
+        // ─────────────────────────────────────────────
+        if (selfBill) {
+          if (baseUnpaidUnlocked && adjWeeks.length === 0) {
+            // Simple case: just rebuild base snapshot to HR truth
+            await buildNhspWeeklySnapshot(env, ts, contract, g.shifts, importId, 'CONTRACT_WEEKLY');
+            try {
+              await upsertValidation(env, user, {
+                timesheet_id: ts.timesheet_id,
+                status: 'VALIDATION_OK',
+                reason: 'HEALTHROSTER_IMPORT',
+                hr_reference: null,
+                import_id: importId
+              });
+            } catch (e) {
+              console.warn('[HR_AUTOPROC_APPLY] upsertValidation failed (base overwrite, self-bill)', {
+                importId,
+                timesheet_id: ts.timesheet_id,
+                err: e?.message || String(e)
+              });
+            }
+            continue;
+          }
+
+          let latestAdjWeek = null;
+          if (adjWeeks.length) {
+            latestAdjWeek = adjWeeks.reduce(
+              (m, w) => Number(w.additional_seq || 0) > Number(m.additional_seq || 0) ? w : m,
+              adjWeeks[0]
+            );
+          }
+
+          const latestAdjTsId = latestAdjWeek?.timesheet_id || null;
+          const latestAdjFin  = latestAdjTsId ? finByTsId.get(latestAdjTsId) : null;
+
+          const latestAdjUnpaidUnlocked =
+            !!(latestAdjFin && !latestAdjFin.paid_at_utc && !latestAdjFin.locked_by_invoice_id);
+
+          if (latestAdjUnpaidUnlocked) {
+            // Reuse unpaid/uninvoiced adjustment TSFIN and fold delta into it
+            const newAdjPay = round2(Number(latestAdjFin.total_pay_ex_vat || 0) + deltaPayTotal);
+            const newAdjChg = round2(Number(latestAdjFin.total_charge_ex_vat || 0) + deltaChgTotal);
+            const newAdjMar = round2(newAdjChg - newAdjPay);
+
+            const weekStart = computeWeekStartFromWeekEnding(g.week_ending_date);
+
+            const seg = {
+              segment_id: `hr_adj:${latestAdjTsId}`,
+              date: g.week_ending_date,
+              ward: null,
+              start_utc: null,
+              end_utc: null,
+              break_mins: 0,
+              hours_day:   0,
+              hours_night: 0,
+              hours_sat:   0,
+              hours_sun:   0,
+              hours_bh:    0,
+              pay_amount:    newAdjPay,
+              charge_amount: newAdjChg,
+              exclude_from_pay: false,
+              invoice_target_week_start: weekStart,
+              invoice_locked_invoice_id: null
+            };
+
+            const invBreak = {
+              mode: 'SEGMENTS',
+              segments: [seg],
+              totals: {
+                total_pay_ex_vat: newAdjPay,
+                total_charge_ex_vat: newAdjChg,
+                margin_ex_vat: newAdjMar
+              }
+            };
+
+            await fetch(
+              `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(latestAdjFin.id)}`,
+              {
+                method: 'PATCH',
+                headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+                body: JSON.stringify({
+                  total_pay_ex_vat: newAdjPay,
+                  total_charge_ex_vat: newAdjChg,
+                  margin_ex_vat: newAdjMar,
+                  invoice_breakdown_json: invBreak,
+                  updated_at: nowIso
+                })
+              }
+            ).catch(() => {});
+
+            try {
+              await upsertValidation(env, user, {
+                timesheet_id: ts.timesheet_id,
+                status: 'VALIDATION_OK',
+                reason: 'HEALTHROSTER_IMPORT',
+                hr_reference: null,
+                import_id: importId
+              });
+            } catch (e) {
+              console.warn('[HR_AUTOPROC_APPLY] upsertValidation failed (reuse adj, self-bill)', {
+                importId,
+                timesheet_id: ts.timesheet_id,
+                err: e?.message || String(e)
+              });
+            }
+          } else {
+            // Create a brand-new sequential HR adjustment TS/TSFIN
+            const { rows: allCwRows2 } = await sbFetch(
+              env,
+              `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+              `?contract_id=eq.${enc(contract.id)}` +
+              `&week_ending_date=eq.${enc(g.week_ending_date)}` +
+              `&select=id,additional_seq` +
+              `&order=additional_seq.desc`
+            );
+            const maxSeq = (allCwRows2 || []).reduce((m, r) => Math.max(m, Number(r.additional_seq || 0)), 0);
+            const adjSeq = maxSeq + 1;
+
+            const adjCwPayload = {
+              contract_id: contract.id,
+              week_ending_date: g.week_ending_date,
+              additional_seq: adjSeq,
+              is_adjustment: true,
+              status: 'OPEN',
+              created_at: nowIso,
+              updated_at: nowIso
+            };
+            const insAdjCw = await fetch(
+              `${env.SUPABASE_URL}/rest/v1/contract_weeks`,
+              {
+                method: 'POST',
+                headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+                body: JSON.stringify(adjCwPayload)
+              }
+            );
+            if (!insAdjCw.ok) {
+              const err = await insAdjCw.text().catch(() => '');
+              console.warn('[HR_AUTOPROC_APPLY] contract_weeks insert failed (adj, self-bill)', { importId, err });
+              continue;
+            }
+            const adjCwJson = await insAdjCw.json().catch(() => []);
+            const adjCw = Array.isArray(adjCwJson) ? adjCwJson[0] : adjCwJson;
+            if (!adjCw?.id) continue;
+
+            const { rows: candRows2 } = await sbFetch(
+              env,
+              `${env.SUPABASE_URL}/rest/v1/candidates` +
+              `?id=eq.${enc(g.candidate_id)}&select=id,display_name` +
+              `&limit=1`
+            );
+            const cand = candRows2?.[0] || null;
+            const { rows: cliRows2 } = await sbFetch(
+              env,
+              `${env.SUPABASE_URL}/rest/v1/clients` +
+              `?id=eq.${enc(g.client_id)}&select=id,name` +
+              `&limit=1`
+            );
+            const client = cliRows2?.[0] || null;
+
+            const occNorm  = (cand?.display_name || String(cand?.id || '')).toLowerCase();
+            const hospNorm = (contract.display_site || client?.name || String(client?.id || '')).toLowerCase();
+            const wardNorm = 'hr-adjustment';
+            const jobTitleNorm = (contract.role || 'hr-adjustment').toLowerCase();
+
+            const bookingIdAdj = `HR_ADJ:${g.candidate_id}:${g.client_id}:${g.week_ending_date}:${adjSeq}`;
+
+            const adjTsPayload = [{
+              booking_id: bookingIdAdj,
+              version: 1,
+              is_current: true,
+              status: 'SUBMITTED',
+              occupant_key_norm: occNorm,
+              hospital_norm: hospNorm,
+              ward_norm: wardNorm,
+              job_title_norm: jobTitleNorm,
+              shift_label_norm: 'weekly',
+              week_ending_date: g.week_ending_date,
+              r2_nurse_key: null,
+              r2_auth_key: null,
+              contract_id: contract.id,
+              submission_mode: null,
+              manual_pdf_r2_key: null,
+              line_type: 'HOURS',
+              actual_schedule_json: [],
+              authorised_at_server: nowIso,
+              created_at: nowIso,
+              updated_at: nowIso
+            }];
+
+            const insAdjTs = await fetch(
+              `${env.SUPABASE_URL}/rest/v1/timesheets`,
+              {
+                method: 'POST',
+                headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+                body: JSON.stringify(adjTsPayload)
+              }
+            );
+            if (!insAdjTs.ok) {
+              const err = await insAdjTs.text().catch(() => '');
+              console.warn('[HR_AUTOPROC_APPLY] timesheets insert failed (adj, self-bill)', { importId, err });
+              continue;
+            }
+            const adjTsJson = await insAdjTs.json().catch(() => []);
+            const adjTs = Array.isArray(adjTsJson) ? adjTsJson[0] : adjTsJson;
+            if (!adjTs?.timesheet_id) continue;
+
+            await fetch(
+              `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(adjCw.id)}`,
+              {
+                method: 'PATCH',
+                headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+                body: JSON.stringify({ timesheet_id: adjTs.timesheet_id, status: 'SUBMITTED', updated_at: nowIso })
+              }
+            ).catch(() => {});
+
+            const weekStart = computeWeekStartFromWeekEnding(g.week_ending_date);
+
+            const seg = {
+              segment_id: `hr_adj:${adjTs.timesheet_id}`,
+              date: g.week_ending_date,
+              ward: null,
+              start_utc: null,
+              end_utc: null,
+              break_mins: 0,
+              hours_day:   0,
+              hours_night: 0,
+              hours_sat:   0,
+              hours_sun:   0,
+              hours_bh:    0,
+              pay_amount:    deltaPayTotal,
+              charge_amount: deltaChgTotal,
+              exclude_from_pay: false,
+              invoice_target_week_start: weekStart,
+              invoice_locked_invoice_id: null
+            };
+
+            const invBreak = {
+              mode: 'SEGMENTS',
+              segments: [seg],
+              totals: {
+                total_pay_ex_vat: deltaPayTotal,
+                total_charge_ex_vat: deltaChgTotal,
+                margin_ex_vat: round2(deltaChgTotal - deltaPayTotal)
+              }
+            };
+
+            const adjSnap = {
+              timesheet_id: adjTs.timesheet_id,
+              timesheet_version: adjTs.version || 1,
+              basis: 'HEALTHROSTER_ADJUSTMENT',
+              nhsp_import_id: importId,
+              occupant_key_norm: adjTs.occupant_key_norm || null,
+              week_ending_date: adjTs.week_ending_date || null,
+              candidate_id: contract.candidate_id || null,
+              client_id: contract.client_id || null,
+              role: contract.role || null,
+              band: contract.band || null,
+              pay_method: contract.pay_method_snapshot || null,
+              policy_snapshot_json: null,
+              rate_source_refs_json: {},
+              hours_day: null,
+              hours_night: null,
+              hours_sat: null,
+              hours_sun: null,
+              hours_bh: null,
+              additional_units_json: {},
+              additional_pay_ex_vat: 0,
+              additional_charge_ex_vat: 0,
+              additional_margin_ex_vat: 0,
+              total_hours: null,
+              total_pay_ex_vat: deltaPayTotal,
+              total_charge_ex_vat: deltaChgTotal,
+              margin_ex_vat: round2(deltaChgTotal - deltaPayTotal),
+              candidate_assignment: contract.candidate_id ? 'ASSIGNED' : 'UNASSIGNED',
+              processing_status: 'READY_FOR_INVOICE',
+              invoice_breakdown_json: invBreak
+            };
+
+            await writeSnapshot(env, adjSnap).catch((e) => {
+              console.warn('[HR_AUTOPROC_APPLY] writeSnapshot failed (adj, self-bill)', {
+                importId,
+                timesheet_id: adjTs.timesheet_id,
+                err: e?.message || String(e)
+              });
+            });
+
+            try {
+              await upsertValidation(env, user, {
+                timesheet_id: ts.timesheet_id,
+                status: 'VALIDATION_OK',
+                reason: 'HEALTHROSTER_IMPORT',
+                hr_reference: null,
+                import_id: importId
+              });
+            } catch (e) {
+              console.warn('[HR_AUTOPROC_APPLY] upsertValidation failed (new adj, self-bill)', {
+                importId,
+                timesheet_id: ts.timesheet_id,
+                err: e?.message || String(e)
+              });
+            }
+          }
+
+          continue; // self-bill path complete
+        }
+
+        // ─────────────────────────────────────────────
+        // Self-bill = false → special HR logic (no new sequentials)
+        // ─────────────────────────────────────────────
+
+        if (!baseFin) {
+          await buildNhspWeeklySnapshot(env, ts, contract, g.shifts, importId, 'CONTRACT_WEEKLY');
+          try {
+            await upsertValidation(env, user, {
+              timesheet_id: ts.timesheet_id,
+              status: 'VALIDATION_OK',
+              reason: 'HEALTHROSTER_IMPORT',
+              hr_reference: null,
+              import_id: importId
+            });
+          } catch (e) {
+            console.warn('[HR_AUTOPROC_APPLY] upsertValidation failed (no baseFin, self-bill=false)', {
+              importId,
+              timesheet_id: ts.timesheet_id,
+              err: e?.message || String(e)
+            });
+          }
+          continue;
+        }
+
+        // A) Not paid and not invoiced → overwrite base TS & TSFIN
+        if (!isPaid && !isInvoiced) {
+          await buildNhspWeeklySnapshot(env, ts, contract, g.shifts, importId, 'CONTRACT_WEEKLY');
+          try {
+            await upsertValidation(env, user, {
+              timesheet_id: ts.timesheet_id,
+              status: 'VALIDATION_OK',
+              reason: 'HEALTHROSTER_IMPORT',
+              hr_reference: null,
+              import_id: importId
+            });
+          } catch (e) {
+            console.warn('[HR_AUTOPROC_APPLY] upsertValidation failed (base overwrite, self-bill=false)', {
+              importId,
+              timesheet_id: ts.timesheet_id,
+              err: e?.message || String(e)
+            });
+          }
+          continue;
+        }
+
+        // B) Invoice already issued → skip (no changes)
+        if (isInvoiced) {
+          console.warn('[HR_AUTOPROC_APPLY] skipping group; invoice already issued', {
+            importId,
+            timesheet_id: baseTsId
+          });
+          continue;
+        }
+
+        // C) Paid but not invoiced → pay-only adjustment & optional advance
+        if (isPaid && !isInvoiced) {
+          const oldPay   = Number(baseFin.total_pay_ex_vat || 0);
+          const newCharge = truthChg;
+          const newMargin = round2(newCharge - oldPay);
+
+          await fetch(
+            `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(baseFin.id)}`,
+            {
+              method: 'PATCH',
+              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+              body: JSON.stringify({
+                total_charge_ex_vat: newCharge,
+                margin_ex_vat: newMargin,
+                updated_at: nowIso
+              })
+            }
+          ).catch((e) => {
+            console.warn('[HR_AUTOPROC_APPLY] failed to patch base TSFIN charges (self-bill=false)', {
+              importId,
+              tsfin_id: baseFin.id,
+              err: e?.message || String(e)
+            });
+          });
+
+          const deltaPay = round2(truthPay - currentPay);
+
+          if (deltaPay !== 0) {
+            const isLargeNegative =
+              deltaPay < 0 && Math.abs(deltaPay) >= HR_OVERPAY_ADVANCE_THRESHOLD;
+
+            const weekStart = computeWeekStartFromWeekEnding(g.week_ending_date);
+
+            const payAdjPayload = [{
+              timesheet_id: ts.timesheet_id,
+              candidate_id: contract.candidate_id,
+              client_id: contract.client_id,
+              week_ending_date: g.week_ending_date,
+              delta_pay_ex_vat: deltaPay,
+              reason: 'HR_WEEKLY_ADJUSTMENT',
+              as_advance: isLargeNegative,
+              advance_reason: isLargeNegative ? 'OVERPAY_HR' : null
+            }];
+
+            const payAdjRes = await fetch(
+              `${env.SUPABASE_URL}/rest/v1/ts_pay_adjustments`,
+              {
+                method: 'POST',
+                headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+                body: JSON.stringify(payAdjPayload)
+              }
+            ).catch((e) => {
+              console.warn('[HR_AUTOPROC_APPLY] ts_pay_adjustments insert failed', {
+                importId,
+                timesheet_id: ts.timesheet_id,
+                err: e?.message || String(e)
+              });
+            });
+
+            if (isLargeNegative) {
+              await createOverpayAdvance(env, {
+                candidate_id: contract.candidate_id,
+                client_id: contract.client_id,
+                amount: Math.abs(deltaPay),
+                reason: 'OVERPAY_HR',
+                notes: `HR overpay correction for week ${g.week_ending_date} (import ${importId})`,
+                week_start: weekStart
+              });
+            }
+
+            if (payAdjRes && !payAdjRes.ok) {
+              const err = await payAdjRes.text().catch(() => '');
+              console.warn('[HR_AUTOPROC_APPLY] ts_pay_adjustments insert failed (non-OK)', {
+                importId,
+                timesheet_id: ts.timesheet_id,
+                err
+              });
+            }
+          }
+
+          try {
+            await upsertValidation(env, user, {
+              timesheet_id: ts.timesheet_id,
+              status: 'VALIDATION_OK',
+              reason: 'HEALTHROSTER_IMPORT',
+              hr_reference: null,
+              import_id: importId
+            });
+          } catch (e) {
+            console.warn('[HR_AUTOPROC_APPLY] upsertValidation failed (pay-only adj, self-bill=false)', {
+              importId,
+              timesheet_id: ts.timesheet_id,
+              err: e?.message || String(e)
+            });
+          }
+          continue;
+        }
+
+        console.warn('[HR_AUTOPROC_APPLY] unhandled HR self-bill=false state', {
+          importId,
+          timesheet_id: baseTsId,
+          isPaid,
+          isInvoiced
+        });
+      }
+    }
+
+    // ─────────────────────────────────────────────
+    // Mark import as applied + scope
+    // ─────────────────────────────────────────────
+    try {
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/hr_imports?id=eq.${enc(importId)}`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+          body: JSON.stringify({
+            import_scope: 'HR_WEEKLY',
+            applied_at: new Date().toISOString()
+          })
+        }
+      );
+    } catch (e) {
+      if (LOG) {
+        console.warn('[HR_AUTOPROC_APPLY] failed to mark import as applied', {
+          import_id: importId,
+          err: e?.message || String(e)
+        });
+      } else {
+        console.warn('[HR_AUTOPROC_APPLY] failed to mark import as applied', {
+          import_id: importId,
+          err: e?.message || String(e)
+        });
+      }
+    }
+
+    // ─────────────────────────────────────────────
+    // HR weekly cross-check for all affected slots
+    // ─────────────────────────────────────────────
+    await applyWeeklyHealthRosterCrosscheck(env, { import_id: importId });
+
+    // Final audit + response
     await writeAudit(
       env,
       user,
@@ -16803,6 +18089,12 @@ export async function handleTimesheetCreateManualNhspShift(env, req) {
   const breakMins   = Number(body.break_mins || 0) || 0;
   const ward        = body.ward && String(body.ward).trim();
 
+  // NEW: optional per-day reference for this shift (e.g. NHSP ref / manual ref)
+  // If the caller includes day_reference, we will merge it into timesheets.day_references_json[workDate].
+  const hasDayReferenceField = Object.prototype.hasOwnProperty.call(body, 'day_reference');
+  const dayReferenceRaw      = hasDayReferenceField ? (body.day_reference ?? '') : undefined;
+  const dayReference         = hasDayReferenceField ? String(dayReferenceRaw || '').trim() : undefined;
+
   if (!candidateId || !clientId || !workDate || !startUtc || !endUtc) {
     return withCORS(env, req, badRequest('candidate_id, client_id, work_date, start_utc and end_utc are required'));
   }
@@ -17013,12 +18305,38 @@ export async function handleTimesheetCreateManualNhspShift(env, req) {
       break_mins: breakMins
     });
 
+    // NEW: merge per-day reference into timesheets.day_references_json (if supplied)
+    let patchBody = {
+      actual_schedule_json: existingSched,
+      updated_at: nowIso
+    };
+
+    if (hasDayReferenceField) {
+      // Start from any existing day_references_json on the timesheet
+      let dayRefs = {};
+      if (ts.day_references_json && typeof ts.day_references_json === 'object') {
+        dayRefs = { ...ts.day_references_json };
+      }
+
+      if (dayReference) {
+        // Set/overwrite the reference for this workDate
+        dayRefs[workDate] = dayReference;
+      } else {
+        // Empty string/null in the request means "clear this date's reference"
+        if (dayRefs.hasOwnProperty(workDate)) {
+          delete dayRefs[workDate];
+        }
+      }
+
+      patchBody.day_references_json = Object.keys(dayRefs).length ? dayRefs : null;
+    }
+
     await fetch(
       `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
       {
         method: 'PATCH',
         headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify({ actual_schedule_json: existingSched, updated_at: nowIso })
+        body: JSON.stringify(patchBody)
       }
     ).catch(() => {});
 
@@ -17041,7 +18359,9 @@ export async function handleTimesheetCreateManualNhspShift(env, req) {
         end_utc: endUtc,
         break_mins: breakMins,
         timesheet_id: ts.timesheet_id,
-        contract_week_id: cw.id
+        contract_week_id: cw.id,
+        // Include reference info in the audit if provided
+        ...(hasDayReferenceField ? { day_reference: dayReference || null } : {})
       },
       { entity: 'timesheet', subject_id: ts.timesheet_id, req }
     );
@@ -17056,6 +18376,7 @@ export async function handleTimesheetCreateManualNhspShift(env, req) {
     return withCORS(env, req, serverError(`Failed to create manual NHSP shift: ${e?.message || e}`));
   }
 }
+
 // Helper: normalise a value (string / CSV / JSON / array) into a
 // lower-cased, de-duplicated array of aliases.
 function normaliseAliasList(val) {
@@ -29323,7 +30644,9 @@ export async function handleInvoiceRender(env, req, invoiceId) {
   // Render a combined invoice bundle:
   //  - Invoice pages (always)
   //  - Optional HR report (if requires_hr && hr_attach_to_invoice)
+  //  - Optional NHSP report (if NHSP external rows exist)
   //  - Optional timesheet PDFs (if ts_attach_to_invoice)
+  //  - Optional evidence PDFs from timesheet_evidence
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
@@ -29348,6 +30671,163 @@ export async function handleInvoiceRender(env, req, invoiceId) {
       };
     }
     return dflt;
+  }
+
+  // Build HTML for the HealthRoster (HR) report using TSFIN external_source_rows_json.HR_WEEKLY
+  function buildHrReportHTML(inv, header, hrRows) {
+    const safe = (v) => (v == null ? '' : String(v));
+    const h = header || {};
+    const clientName = safe(h.client_name || h.client || '');
+    const invNo = safe(inv.invoice_no || '');
+    const issued = safe(inv.issued_at_utc || '');
+
+    const rowsHtml = hrRows.map((r, idx) => {
+      // raw_row from HR import, we select typical HR fields if present
+      const raw = r.raw_row || {};
+      const date      = safe(r.date || raw.work_date || '');
+      const staff     = safe(raw.staff_name || raw.worker || '');
+      const ward      = safe(raw.ward || '');
+      const start     = safe(raw.start_utc || '');
+      const end       = safe(raw.end_utc || '');
+      const breakMins = safe(raw.break_mins != null ? raw.break_mins : '');
+      const ref       = safe(r.reference || raw.reference || raw.ref_num || '');
+      return `
+        <tr>
+          <td>${idx + 1}</td>
+          <td>${date}</td>
+          <td>${staff}</td>
+          <td>${ward}</td>
+          <td>${start}</td>
+          <td>${end}</td>
+          <td>${breakMins}</td>
+          <td>${ref}</td>
+        </tr>
+      `;
+    }).join('');
+
+    const hasRows = hrRows.length > 0;
+
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>HealthRoster Report</title>
+  <style>
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 11px; margin: 24px; }
+    h1 { font-size: 18px; margin-bottom: 4px; }
+    h2 { font-size: 13px; margin-top: 4px; margin-bottom: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: 9px; }
+    th, td { border: 1px solid #ccc; padding: 3px 4px; text-align: left; }
+    th { background: #f2f2f2; }
+    .meta { margin-bottom: 12px; font-size: 10px; }
+    .meta span { display: inline-block; margin-right: 16px; }
+    .no-data { margin-top: 12px; font-style: italic; }
+  </style>
+</head>
+<body>
+  <h1>HealthRoster report</h1>
+  <h2>Invoice ${invNo}</h2>
+  <div class="meta">
+    <span><strong>Client:</strong> ${clientName}</span>
+    <span><strong>Issued:</strong> ${issued}</span>
+  </div>
+  ${hasRows ? `
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Date</th>
+          <th>Staff</th>
+          <th>Ward</th>
+          <th>Start</th>
+          <th>End</th>
+          <th>Break (mins)</th>
+          <th>Reference</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml}
+      </tbody>
+    </table>
+  ` : `
+    <div class="no-data">No HealthRoster rows captured for this invoice.</div>
+  `}
+</body>
+</html>
+    `;
+  }
+
+  // Build HTML for the NHSP report using TSFIN external_source_rows_json.NHSP_WEEKLY
+  // Columns come directly from raw_row keys so they match the import exactly.
+  function buildNhspReportHTML(inv, header, nhspRows) {
+    const safe = (v) => (v == null ? '' : String(v));
+    const h = header || {};
+    const clientName = safe(h.client_name || h.client || '');
+    const invNo = safe(inv.invoice_no || '');
+    const issued = safe(inv.issued_at_utc || '');
+
+    // Determine columns from the first raw_row
+    let columns = [];
+    const firstWithRaw = nhspRows.find(r => r.raw_row && typeof r.raw_row === 'object');
+    if (firstWithRaw) {
+      columns = Object.keys(firstWithRaw.raw_row);
+    }
+
+    const hasRows = nhspRows.length > 0 && columns.length > 0;
+
+    const headerHtml = hasRows
+      ? `<tr>${columns.map(col => `<th>${safe(col)}</th>`).join('')}</tr>`
+      : '';
+
+    const rowsHtml = hasRows
+      ? nhspRows.map(r => {
+          const raw = r.raw_row || {};
+          const cells = columns.map(col => `<td>${safe(raw[col])}</td>`).join('');
+          return `<tr>${cells}</tr>`;
+        }).join('')
+      : '';
+
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>NHSP Itemised Breakdown</title>
+  <style>
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 11px; margin: 24px; }
+    h1 { font-size: 18px; margin-bottom: 4px; }
+    h2 { font-size: 13px; margin-top: 4px; margin-bottom: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: 8.5px; table-layout: fixed; }
+    th, td { border: 1px solid #ccc; padding: 2px 3px; text-align: left; word-wrap: break-word; }
+    th { background: #f2f2f2; }
+    .meta { margin-bottom: 12px; font-size: 10px; }
+    .meta span { display: inline-block; margin-right: 16px; }
+    .no-data { margin-top: 12px; font-style: italic; }
+  </style>
+</head>
+<body>
+  <h1>NHSP itemised breakdown</h1>
+  <h2>Invoice ${invNo}</h2>
+  <div class="meta">
+    <span><strong>Client:</strong> ${clientName}</span>
+    <span><strong>Issued:</strong> ${issued}</span>
+  </div>
+  ${hasRows ? `
+    <table>
+      <thead>
+        ${headerHtml}
+      </thead>
+      <tbody>
+        ${rowsHtml}
+      </tbody>
+    </table>
+  ` : `
+    <div class="no-data">No NHSP itemised rows captured for this invoice.</div>
+  `}
+</body>
+</html>
+    `;
   }
 
   try {
@@ -29486,6 +30966,7 @@ export async function handleInvoiceRender(env, req, invoiceId) {
     const tsIds = [
       ...new Set((lineRows || []).map((r) => r.timesheet_id).filter(Boolean)),
     ];
+
     const tsKeys = [];
     for (const tsId of tsIds) {
       const ensuredKey = await ensureTimesheetPdf(env, tsId);
@@ -29509,13 +30990,129 @@ export async function handleInvoiceRender(env, req, invoiceId) {
       if (bytes) tsBytesList.push(bytes);
     }
 
-    // 6) Optionally build HR report PDF (one bundle per invoice for now)
-    let hrBytes = null;
-    if (requiresHr && hrAttach) {
-      hrBytes = await buildHealthRosterPdf(env, inv.id).catch(() => null);
+    // 5b) Load TSFIN external_source_rows_json for HR/NHSP report & evidence for each TS
+    let tsfinByTsId = new Map();
+    if (tsIds.length) {
+      const tsParam = tsIds.map(encodeURIComponent).join(',');
+      const { rows: tfRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=in.(${tsParam})` +
+          `&is_current=eq.true` +
+          `&select=timesheet_id,external_source_rows_json`
+      );
+      tsfinByTsId = new Map((tfRows || []).map(r => [r.timesheet_id, r]));
     }
 
-    // 7) Merge: invoice pages first, then HR (if any), then timesheets (if tsAttach)
+    // Evidence via timesheet_evidence (for attaching extra PDFs)
+    const evidenceByTsId = new Map();
+    if (tsIds.length) {
+      try {
+        const evParam = tsIds.map(encodeURIComponent).join(',');
+        const { rows: evRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
+            `?timesheet_id=in.(${evParam})` +
+            `&select=timesheet_id,kind,display_name,storage_key,created_at` +
+            `&order=created_at.asc`
+        );
+        for (const ev of evRows || []) {
+          if (!ev || !ev.timesheet_id || !ev.storage_key) continue;
+          const list = evidenceByTsId.get(ev.timesheet_id) || [];
+          list.push(ev);
+          evidenceByTsId.set(ev.timesheet_id, list);
+        }
+      } catch (e) {
+        console.warn('[handleInvoiceRender] evidence lookup failed (non-fatal)', {
+          invoice_id: invoiceId,
+          err: e?.message || String(e)
+        });
+      }
+    }
+
+    // 6a) Optionally build HR report PDF (per invoice) from TSFIN external_source_rows_json.HR_WEEKLY
+    let hrBytes = null;
+    if (requiresHr && hrAttach && tsfinByTsId.size > 0) {
+      const hrRows = [];
+      for (const [tsId, tf] of tsfinByTsId.entries()) {
+        if (!tf || !tf.external_source_rows_json) continue;
+        const ext = tf.external_source_rows_json || {};
+        const hrWeekly = Array.isArray(ext.HR_WEEKLY) ? ext.HR_WEEKLY : [];
+        for (const row of hrWeekly) {
+          hrRows.push({
+            ...row,
+            timesheet_id: tsId
+          });
+        }
+      }
+
+      if (hrRows.length) {
+        const hrHtml = buildHrReportHTML(inv, header, hrRows);
+        try {
+          hrBytes = await withBrowser(env, async (browser) => {
+            const page = await browser.newPage();
+            await page.setContent(hrHtml, { waitUntil: 'networkidle0' });
+            await page.emulateMediaType('screen');
+            const pdfArrayBuffer = await page.pdf({
+              format: 'a4',
+              printBackground: true,
+              margin: { top: 24, right: 24, bottom: 24, left: 24 }
+            });
+            return new Uint8Array(pdfArrayBuffer);
+          });
+        } catch (e) {
+          console.warn('[handleInvoiceRender] HR report render failed (non-fatal)', {
+            invoice_id: invoiceId,
+            err: e?.message || String(e)
+          });
+          hrBytes = null;
+        }
+      }
+    }
+
+    // 6b) Build NHSP itemised breakdown PDF from TSFIN external_source_rows_json.NHSP_WEEKLY
+    let nhspBytes = null;
+    if (tsfinByTsId.size > 0) {
+      const nhspRows = [];
+      for (const [tsId, tf] of tsfinByTsId.entries()) {
+        if (!tf || !tf.external_source_rows_json) continue;
+        const ext = tf.external_source_rows_json || {};
+        const nhspWeekly = Array.isArray(ext.NHSP_WEEKLY) ? ext.NHSP_WEEKLY : [];
+        for (const row of nhspWeekly) {
+          // We expect raw_row to be the original import row with all columns
+          nhspRows.push({
+            ...row,
+            timesheet_id: tsId
+          });
+        }
+      }
+
+      if (nhspRows.length) {
+        const nhspHtml = buildNhspReportHTML(inv, header, nhspRows);
+        try {
+          nhspBytes = await withBrowser(env, async (browser) => {
+            const page = await browser.newPage();
+            await page.setContent(nhspHtml, { waitUntil: 'networkidle0' });
+            await page.emulateMediaType('screen');
+            const pdfArrayBuffer = await page.pdf({
+              format: 'a4',
+              printBackground: true,
+              margin: { top: 24, right: 24, bottom: 24, left: 24 }
+            });
+            return new Uint8Array(pdfArrayBuffer);
+          });
+        } catch (e) {
+          console.warn('[handleInvoiceRender] NHSP report render failed (non-fatal)', {
+            invoice_id: invoiceId,
+            err: e?.message || String(e)
+          });
+          nhspBytes = null;
+        }
+      }
+    }
+
+    // 7) Merge: invoice pages first, then HR (if any), then NHSP (if any),
+    //    then timesheets (if tsAttach), then evidence PDFs
     const merged = await PDFDocument.create();
 
     const invDoc = await PDFDocument.load(invoicePdfU8);
@@ -29532,13 +31129,50 @@ export async function handleInvoiceRender(env, req, invoiceId) {
       }
     }
 
+    if (nhspBytes && nhspBytes.length) {
+      try {
+        const nhspDoc = await PDFDocument.load(nhspBytes);
+        const nhspPages = await merged.copyPages(nhspDoc, nhspDoc.getPageIndices());
+        nhspPages.forEach((p) => merged.addPage(p));
+      } catch {
+        // If NHSP PDF fails to load, we skip it rather than break rendering
+      }
+    }
+
     let attachedTsCount = 0;
     if (tsAttach) {
       for (const tsBytes of tsBytesList) {
-        const tsDoc = await PDFDocument.load(tsBytes);
-        const pages = await merged.copyPages(tsDoc, tsDoc.getPageIndices());
-        pages.forEach((p) => merged.addPage(p));
-        attachedTsCount++;
+        try {
+          const tsDoc = await PDFDocument.load(tsBytes);
+          const pages = await merged.copyPages(tsDoc, tsDoc.getPageIndices());
+          pages.forEach((p) => merged.addPage(p));
+          attachedTsCount++;
+        } catch {
+          // Skip malformed PDFs
+        }
+      }
+    }
+
+    // Attach evidence PDFs (if any) after HR + NHSP + timesheets
+    let attachedEvidenceCount = 0;
+    for (const tsId of tsIds) {
+      const evList = evidenceByTsId.get(tsId) || [];
+      for (const ev of evList) {
+        const key = ev.storage_key;
+        if (!key) continue;
+        try {
+          const bytes = await r2GetBytes(env, key);
+          if (!bytes) continue;
+          const evDoc = await PDFDocument.load(bytes);
+          const pages = await merged.copyPages(evDoc, evDoc.getPageIndices());
+          pages.forEach((p) => merged.addPage(p));
+          attachedEvidenceCount++;
+        } catch (e) {
+          console.warn('[handleInvoiceRender] evidence PDF load failed (non-fatal)', {
+            storage_key: key,
+            err: e?.message || String(e)
+          });
+        }
       }
     }
 
@@ -29585,6 +31219,8 @@ export async function handleInvoiceRender(env, req, invoiceId) {
       pdf_url: downloadUrl.toString(),
       attached_timesheets: attachedTsCount,
       attached_hr: !!(hrBytes && hrBytes.length),
+      attached_nhsp: !!(nhspBytes && nhspBytes.length),
+      attached_evidence: attachedEvidenceCount
     }));
   } catch (e) {
     return withCORS(env, req, serverError("Failed to render invoice bundle"));
@@ -34864,6 +36500,18 @@ async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
   const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
   const enc = encodeURIComponent;
 
+  // Helper: derive Mon–Sun week start from a week-ending date (ymd)
+  const computeWeekStartFromWeekEnding = (weYmd) => {
+    if (!weYmd) return null;
+    const d = new Date(`${weYmd}T00:00:00Z`);
+    if (Number.isNaN(d.getTime())) return weYmd;
+    d.setUTCDate(d.getUTCDate() - 6);
+    const yyyy = d.getUTCFullYear();
+    const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd   = String(d.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
   // ─────────────────────────────────────────────────────────────
   // Weekly helpers (contract-driven)
   // ─────────────────────────────────────────────────────────────
@@ -34893,47 +36541,46 @@ async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
     return { cw, contract };
   }
 
- async function computeWeeklyHours(env, ts, contract) {
-  // Canonical shape
-  const zeroHours = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
+  async function computeWeeklyHours(env, ts, contract) {
+    // Canonical shape
+    const zeroHours = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
 
-  // 1) Preferred path – schedule-driven for weekly timesheets
-  if (Array.isArray(ts.actual_schedule_json) && ts.actual_schedule_json.length) {
-    const minsByBucket = await resolveBucketsFromSchedule(
-      env,
-      contract,
-      ts.actual_schedule_json
-    );
+    // 1) Preferred path – schedule-driven for weekly timesheets
+    if (Array.isArray(ts.actual_schedule_json) && ts.actual_schedule_json.length) {
+      const minsByBucket = await resolveBucketsFromSchedule(
+        env,
+        contract,
+        ts.actual_schedule_json
+      );
+      const hours = {
+        day: +(asNumberLocal(minsByBucket.day) / 60).toFixed(2),
+        night: +(asNumberLocal(minsByBucket.night) / 60).toFixed(2),
+        sat: +(asNumberLocal(minsByBucket.sat) / 60).toFixed(2),
+        sun: +(asNumberLocal(minsByBucket.sun) / 60).toFixed(2),
+        bh: +(asNumberLocal(minsByBucket.bh) / 60).toFixed(2),
+      };
+      return hours;
+    }
+
+    // 2) For WEEKLY sheets, the schedule is the canonical source.
+    // If there is no actual_schedule_json yet, treat hours as 0 and let
+    // Issues / holds flag the problem rather than silently falling back.
+    const scope = String(ts.sheet_scope || "").toUpperCase();
+    if (scope === "WEEKLY") {
+      return zeroHours;
+    }
+
+    // 3) Legacy fallback for any non-weekly usage (kept for safety)
+    const n = (v) => (v == null ? 0 : Number(v) || 0);
     const hours = {
-      day: +(asNumberLocal(minsByBucket.day) / 60).toFixed(2),
-      night: +(asNumberLocal(minsByBucket.night) / 60).toFixed(2),
-      sat: +(asNumberLocal(minsByBucket.sat) / 60).toFixed(2),
-      sun: +(asNumberLocal(minsByBucket.sun) / 60).toFixed(2),
-      bh: +(asNumberLocal(minsByBucket.bh) / 60).toFixed(2),
+      day: n(ts.hours_day),
+      night: n(ts.hours_night),
+      sat: n(ts.hours_sat),
+      sun: n(ts.hours_sun),
+      bh: n(ts.hours_bh),
     };
     return hours;
   }
-
-  // 2) For WEEKLY sheets, the schedule is the canonical source.
-  // If there is no actual_schedule_json yet, treat hours as 0 and let
-  // Issues / holds flag the problem rather than silently falling back.
-  const scope = String(ts.sheet_scope || "").toUpperCase();
-  if (scope === "WEEKLY") {
-    return zeroHours;
-  }
-
-  // 3) Legacy fallback for any non-weekly usage (kept for safety)
-  const n = (v) => (v == null ? 0 : Number(v) || 0);
-  const hours = {
-    day: n(ts.hours_day),
-    night: n(ts.hours_night),
-    sat: n(ts.hours_sat),
-    sun: n(ts.hours_sun),
-    bh: n(ts.hours_bh),
-  };
-  return hours;
-}
-
 
   async function computeWeeklyAdditionalFromTs(env, ts, cw, contract) {
     let additional_units_json = {};
@@ -35100,273 +36747,823 @@ async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
       additional_margin_ex_vat,
     };
   }
+export async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, basis = 'NHSP') {
+  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+  const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
 
-  // Build a timesheets_financials snapshot for a weekly, contract-driven TS.
-  // basis = 'CONTRACT_WEEKLY' (requires enum extension).
-async function buildWeeklySnapshot(env, ts, cw, contract) {
-  const hours = await computeWeeklyHours(env, ts, contract);
-
-  let rj = contract.rates_json || {};
-  if (typeof rj === "string") {
-    try {
-      rj = JSON.parse(rj);
-    } catch {
-      rj = {};
-    }
+  if (!shifts || !shifts.length) {
+    return { ok: false, reason: 'NO_SHIFTS' };
   }
-  if (!rj || typeof rj !== "object") rj = {};
-
-  const payMethod = String(contract.pay_method_snapshot || "").toUpperCase();
-  const pay =
-    payMethod === "UMBRELLA"
-      ? {
-          day:   rj.umb_day   ?? null,
-          night: rj.umb_night ?? null,
-          sat:   rj.umb_sat   ?? null,
-          sun:   rj.umb_sun   ?? null,
-          bh:    rj.umb_bh    ?? null,
-        }
-      : {
-          day:   rj.paye_day   ?? null,
-          night: rj.paye_night ?? null,
-          sat:   rj.paye_sat   ?? null,
-          sun:   rj.paye_sun   ?? null,
-          bh:    rj.paye_bh    ?? null,
-        };
-
-  const charge = {
-    day:   rj.charge_day   ?? null,
-    night: rj.charge_night ?? null,
-    sat:   rj.charge_sat   ?? null,
-    sun:   rj.charge_sun   ?? null,
-    bh:    rj.charge_bh    ?? null,
-  };
-
-  const missingRates =
-    (hours.day   > 0 && (pay.day   == null || charge.day   == null)) ||
-    (hours.night > 0 && (pay.night == null || charge.night == null)) ||
-    (hours.sat   > 0 && (pay.sat   == null || charge.sat   == null)) ||
-    (hours.sun   > 0 && (pay.sun   == null || charge.sun   == null)) ||
-    (hours.bh    > 0 && (pay.bh    == null || charge.bh    == null));
 
   const candidate_id = contract.candidate_id || null;
   const client_id    = contract.client_id   || null;
-  let candidate_assignment = candidate_id ? "ASSIGNED" : "UNASSIGNED";
 
-  // Load candidate for pay-channel checks
-  let candidate = null;
-  if (candidate_id) {
-    candidate = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/candidates` +
-        `?id=eq.${enc(candidate_id)}` +
-        `&select=id,pay_method,umbrella_id,account_holder,sort_code,account_number`
+  const segments = [];
+  let totalPayEx  = 0;
+  let totalChgEx  = 0;
+
+  // Build SEGMENTS from NHSP shifts (canonical data)
+  for (const sh of shifts) {
+    const workDate = sh.work_date;
+    if (!workDate || !sh.start_utc || !sh.end_utc) continue;
+
+    const policy = await loadPolicy(env, client_id, workDate);
+
+    let segs = [[sh.start_utc, sh.end_utc]];
+    segs = subtractBreak(
+      segs,
+      null,
+      null,
+      sh.break_mins || 0
     );
+
+    const hours = classifyMinutes(env, policy, segs);
+
+    const rates = await resolveRates(env, {
+      candidate_id,
+      client_id,
+      role: contract.role || null,
+      band: contract.band || null,
+      dateYmd: workDate,
+    });
+
+    const pay = rates.pay || {};
+    const chg = rates.charge || {};
+
+    const payEx = round2(
+      (hours.hours_day   || 0) * asNumberLocal(pay.day)   +
+      (hours.hours_night || 0) * asNumberLocal(pay.night) +
+      (hours.hours_sat   || 0) * asNumberLocal(pay.sat)   +
+      (hours.hours_sun   || 0) * asNumberLocal(pay.sun)   +
+      (hours.hours_bh    || 0) * asNumberLocal(pay.bh)
+    );
+
+    const chgEx = round2(
+      (hours.hours_day   || 0) * asNumberLocal(chg.day)   +
+      (hours.hours_night || 0) * asNumberLocal(chg.night) +
+      (hours.hours_sat   || 0) * asNumberLocal(chg.sat)   +
+      (hours.hours_sun   || 0) * asNumberLocal(chg.sun)   +
+      (hours.hours_bh    || 0) * asNumberLocal(chg.bh)
+    );
+
+    totalPayEx += payEx;
+    totalChgEx += chgEx;
+
+    const refNum       = (sh.nhsp_ref_num || sh.ref_num || null) || null;
+    const requestId    = (sh.hr_request_id || sh.request_id || null) || null;
+    const heldBack     = sh.held_back_reason || null;
+    const sourceSystem = sh.source_system || null;
+
+    segments.push({
+      segment_id: `nhsp:${sh.id}`,
+      date: workDate,
+      ward: sh.ward || null,
+      start_utc: sh.start_utc,
+      end_utc: sh.end_utc,
+      break_mins: sh.break_mins || 0,
+
+      hours_day:   hours.hours_day   || 0,
+      hours_night: hours.hours_night || 0,
+      hours_sat:   hours.hours_sat   || 0,
+      hours_sun:   hours.hours_sun   || 0,
+      hours_bh:    hours.hours_bh    || 0,
+
+      pay_amount:    payEx,
+      charge_amount: chgEx,
+      exclude_from_pay: false,
+
+      // Metadata for UI & diagnostics
+      ref_num: refNum,
+      request_id: requestId,
+      held_back_reason: heldBack,
+      source_system: sourceSystem
+    });
   }
 
-  // Load client policy (HR requirements, BH list, day/night windows, etc.)
-  const workedDateYmd = cw.week_ending_date || null;
-  const policy        = await loadPolicy(env, client_id, workedDateYmd);
-  const requiresHr    = !!policy?.requires_hr;
-
-  // Pay-channel check (only meaningful once both IDs are known)
-  let payChannelBad = false;
-  try {
-    if (candidate_id && client_id && typeof resolveEffectivePayChannel === 'function') {
-      let umbrella = null;
-      if (candidate?.umbrella_id) {
-        // Fetch umbrella so the helper can verify umbrella bank details if needed
-        umbrella = await sbGetOne(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/umbrellas` +
-            `?id=eq.${enc(candidate.umbrella_id)}` +
-            `&select=id,name,bank_name,sort_code,account_number` +
-            `&limit=1`
-        );
-      }
-
-      const channel = resolveEffectivePayChannel({
-        pay_method: payMethod || (candidate?.pay_method || null),
-        candidate,
-        umbrella,
-      });
-
-      payChannelBad = !channel || channel.ok === false;
-    }
-  } catch (e) {
-    console.warn('[TSFIN][buildWeeklySnapshot] resolveEffectivePayChannel failed', e);
-    payChannelBad = true;
+  if (!segments.length) {
+    return { ok: false, reason: 'NO_VALID_SEGMENTS' };
   }
 
-  // ── ID-first ladder + issue flags ──
-  let processing_status;
-  let hasRateIssue       = false;
-  let hasPayChannelIssue = false;
-
-  if (!candidate_id) {
-    processing_status    = "UNASSIGNED";
-    candidate_assignment = "UNASSIGNED";
-    // No rate/pay-channel issues recorded yet
-  } else if (!client_id) {
-    processing_status    = "CLIENT_UNRESOLVED";
-    // No rate/pay-channel issues recorded yet
-  } else if (missingRates) {
-    processing_status    = "RATE_MISSING";
-    hasRateIssue         = true;
-    hasPayChannelIssue   = !!payChannelBad;
-  } else if (payChannelBad) {
-    processing_status    = "PAY_CHANNEL_MISSING";
-    hasRateIssue         = false;
-    hasPayChannelIssue   = true;
-  } else if (requiresHr) {
-    processing_status    = "READY_FOR_HR";
-    hasRateIssue         = false;
-    hasPayChannelIssue   = false;
-  } else {
-    processing_status    = "READY_FOR_INVOICE";
-    hasRateIssue         = false;
-    hasPayChannelIssue   = false;
-  }
-
-  const hoursPayEx = round2(
-    hours.day   * asNumberLocal(pay.day)   +
-    hours.night * asNumberLocal(pay.night) +
-    hours.sat   * asNumberLocal(pay.sat)   +
-    hours.sun   * asNumberLocal(pay.sun)   +
-    hours.bh    * asNumberLocal(pay.bh)
-  );
-
-  const hoursChargeEx = round2(
-    hours.day   * asNumberLocal(charge.day)   +
-    hours.night * asNumberLocal(charge.night) +
-    hours.sat   * asNumberLocal(charge.sat)   +
-    hours.sun   * asNumberLocal(charge.sun)   +
-    hours.bh    * asNumberLocal(charge.bh)
-  );
-
-  const {
-    additional_units_json,
-    additional_pay_ex_vat,
-    additional_charge_ex_vat,
-    additional_margin_ex_vat,
-  } = await computeWeeklyAdditionalFromTs(env, ts, cw, contract);
-
-  const total_pay_ex_vat    = round2(hoursPayEx + additional_pay_ex_vat);
-  const total_charge_ex_vat = round2(hoursChargeEx + additional_charge_ex_vat);
-  const margin_ex_vat       = round2(total_charge_ex_vat - total_pay_ex_vat);
+  totalPayEx = round2(totalPayEx);
+  totalChgEx = round2(totalChgEx);
+  const marginEx = round2(totalChgEx - totalPayEx);
 
   const invoice_breakdown_json = {
-    mode: "WEEKLY_BUCKETS",
-    base_hours: {
-      day:   hours.day,
-      night: hours.night,
-      sat:   hours.sat,
-      sun:   hours.sun,
-      bh:    hours.bh,
-      pay_rates: {
-        day:   pay.day,
-        night: pay.night,
-        sat:   pay.sat,
-        sun:   pay.sun,
-        bh:    pay.bh,
-      },
-      charge_rates: {
-        day:   charge.day,
-        night: charge.night,
-        sat:   charge.sat,
-        sun:   charge.sun,
-        bh:    charge.bh,
-      },
-      pay_ex_vat:    hoursPayEx,
-      charge_ex_vat: hoursChargeEx,
-    },
-    additional: {
-      units:         additional_units_json,
-      pay_ex_vat:    additional_pay_ex_vat,
-      charge_ex_vat: additional_charge_ex_vat,
-      margin_ex_vat: additional_margin_ex_vat,
-    },
+    mode: 'SEGMENTS',
+    segments,
     totals: {
-      total_pay_ex_vat,
-      total_charge_ex_vat,
-      margin_ex_vat,
-    },
+      total_pay_ex_vat: totalPayEx,
+      total_charge_ex_vat: totalChgEx,
+      margin_ex_vat: marginEx
+    }
   };
 
-  const basis = "CONTRACT_WEEKLY";
+  // NEW: external_source_rows_json.NHSP_WEEKLY for invoice page-2+ itemised breakdown
+  // raw_row is the original NHSP import row from nhsp_shifts.payload_json
+  const nhspWeekly = shifts.map(sh => ({
+    date: sh.work_date,
+    source_system: 'NHSP',
+    reference: (sh.nhsp_ref_num || sh.ref_num || (sh.payload_json && (sh.payload_json.ref_num || sh.payload_json.Reference))) || null,
+    nhsp_shift_id: sh.id,
+    raw_row: sh.payload_json || null
+  }));
 
   const snapshot = {
     timesheet_id: ts.timesheet_id,
     timesheet_version: ts.version || 1,
 
-    basis,
-    occupant_key_norm: ts.occupant_key_norm || null,
+    basis, // 'NHSP' or 'NHSP_ADJUSTMENT'
+    nhsp_import_id: nhspImportId || null,
 
-    worked_start_iso: ts.worked_start_iso || null,
-    worked_end_iso:   ts.worked_end_iso   || null,
-    break_start_iso:  ts.break_start_iso  || null,
-    break_end_iso:    ts.break_end_iso    || null,
-    break_minutes:    ts.break_minutes    || null,
+    occupant_key_norm: ts.occupant_key_norm || null,
+    week_ending_date: ts.week_ending_date || null,
 
     candidate_id,
     client_id,
     role: contract.role || null,
     band: contract.band || null,
-    pay_method: payMethod,
+    pay_method: contract.pay_method_snapshot || null,
 
-    policy_snapshot_json: policy || null,
+    policy_snapshot_json: null,
     rate_source_refs_json: {},
 
-    hours_day:   hours.day,
-    hours_night: hours.night,
-    hours_sat:   hours.sat,
-    hours_sun:   hours.sun,
-    hours_bh:    hours.bh,
+    // For NHSP we historically left these bucket fields null and used SEGMENTS instead.
+    // Keeping that behaviour to avoid breaking downstream logic.
+    hours_day:   null,
+    hours_night: null,
+    hours_sat:   null,
+    hours_sun:   null,
+    hours_bh:    null,
 
-    pay_day:   pay.day,
-    pay_night: pay.night,
-    pay_sat:   pay.sat,
-    pay_sun:   pay.sun,
-    pay_bh:    pay.bh,
+    additional_units_json: {},
+    additional_pay_ex_vat: 0,
+    additional_charge_ex_vat: 0,
+    additional_margin_ex_vat: 0,
 
-    charge_day:   charge.day,
-    charge_night: charge.night,
-    charge_sat:   charge.sat,
-    charge_sun:   charge.sun,
-    charge_bh:    charge.bh,
+    total_hours: null,
+    total_pay_ex_vat: totalPayEx,
+    total_charge_ex_vat: totalChgEx,
+    margin_ex_vat: marginEx,
 
-    total_hours: round2(
-      hours.day + hours.night + hours.sat + hours.sun + hours.bh
-    ),
+    candidate_assignment: candidate_id ? 'ASSIGNED' : 'UNASSIGNED',
+    processing_status: 'READY_FOR_INVOICE',
 
-    additional_units_json,
-    additional_pay_ex_vat,
-    additional_charge_ex_vat,
-    additional_margin_ex_vat,
-
-    total_pay_ex_vat,
-    total_charge_ex_vat,
-    margin_ex_vat,
-
-    candidate_assignment,
-    processing_status,
-
-    // NEW issue flags
-    has_rate_issue:        hasRateIssue,
-    has_pay_channel_issue: hasPayChannelIssue,
+    // In NHSP context we don’t use the generic rate/pay-channel flags,
+    // but set them explicitly to false for consistency with the schema.
+    has_rate_issue: false,
+    has_pay_channel_issue: false,
 
     invoice_breakdown_json,
+
+    external_source_rows_json: {
+      NHSP_WEEKLY: nhspWeekly
+    }
   };
 
   await writeSnapshot(env, snapshot);
+  return { ok: true };
 }
 
+  // Build a timesheets_financials snapshot for a weekly, contract-driven TS.
+  // basis = 'CONTRACT_WEEKLY' (requires enum extension).
+  async function buildWeeklySnapshot(env, ts, cw, contract) {
+    const hours = await computeWeeklyHours(env, ts, contract);
+
+    let rj = contract.rates_json || {};
+    if (typeof rj === "string") {
+      try {
+        rj = JSON.parse(rj);
+      } catch {
+        rj = {};
+      }
+    }
+    if (!rj || typeof rj !== "object") rj = {};
+
+    const payMethod = String(contract.pay_method_snapshot || "").toUpperCase();
+    const pay =
+      payMethod === "UMBRELLA"
+        ? {
+            day:   rj.umb_day   ?? null,
+            night: rj.umb_night ?? null,
+            sat:   rj.umb_sat   ?? null,
+            sun:   rj.umb_sun   ?? null,
+            bh:    rj.umb_bh    ?? null,
+          }
+        : {
+            day:   rj.paye_day   ?? null,
+            night: rj.paye_night ?? null,
+            sat:   rj.paye_sat   ?? null,
+            sun:   rj.paye_sun   ?? null,
+            bh:    rj.paye_bh    ?? null,
+          };
+
+    const charge = {
+      day:   rj.charge_day   ?? null,
+      night: rj.charge_night ?? null,
+      sat:   rj.charge_sat   ?? null,
+      sun:   rj.charge_sun   ?? null,
+      bh:    rj.charge_bh    ?? null,
+    };
+
+    const missingRates =
+      (hours.day   > 0 && (pay.day   == null || charge.day   == null)) ||
+      (hours.night > 0 && (pay.night == null || charge.night == null)) ||
+      (hours.sat   > 0 && (pay.sat   == null || charge.sat   == null)) ||
+      (hours.sun   > 0 && (pay.sun   == null || charge.sun   == null)) ||
+      (hours.bh    > 0 && (pay.bh    == null || charge.bh    == null));
+
+    const candidate_id = contract.candidate_id || null;
+    const client_id    = contract.client_id   || null;
+    let candidate_assignment = candidate_id ? "ASSIGNED" : "UNASSIGNED";
+
+    // Load candidate for pay-channel checks
+    let candidate = null;
+    if (candidate_id) {
+      candidate = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=eq.${enc(candidate_id)}` +
+          `&select=id,pay_method,umbrella_id,account_holder,sort_code,account_number`
+      );
+    }
+
+    // Load client policy (HR requirements, BH list, day/night windows, etc.)
+    const workedDateYmd = cw.week_ending_date || null;
+    const policy        = await loadPolicy(env, client_id, workedDateYmd);
+    const requiresHr    = !!policy?.requires_hr;
+
+    // Pay-channel check (only meaningful once both IDs are known)
+    let payChannelBad = false;
+    try {
+      if (candidate_id && client_id && typeof resolveEffectivePayChannel === 'function') {
+        let umbrella = null;
+        if (candidate?.umbrella_id) {
+          // Fetch umbrella so the helper can verify umbrella bank details if needed
+          umbrella = await sbGetOne(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/umbrellas` +
+              `?id=eq.${enc(candidate.umbrella_id)}` +
+              `&select=id,name,bank_name,sort_code,account_number` +
+              `&limit=1`
+          );
+        }
+
+        const channel = resolveEffectivePayChannel({
+          pay_method: payMethod || (candidate?.pay_method || null),
+          candidate,
+          umbrella,
+        });
+
+        payChannelBad = !channel || channel.ok === false;
+      }
+    } catch (e) {
+      console.warn('[TSFIN][buildWeeklySnapshot] resolveEffectivePayChannel failed', e);
+      payChannelBad = true;
+    }
+
+    // ── ID-first ladder + issue flags ──
+    let processing_status;
+    let hasRateIssue       = false;
+    let hasPayChannelIssue = false;
+
+    if (!candidate_id) {
+      processing_status    = "UNASSIGNED";
+      candidate_assignment = "UNASSIGNED";
+      // No rate/pay-channel issues recorded yet
+    } else if (!client_id) {
+      processing_status    = "CLIENT_UNRESOLVED";
+      // No rate/pay-channel issues recorded yet
+    } else if (missingRates) {
+      processing_status    = "RATE_MISSING";
+      hasRateIssue         = true;
+      hasPayChannelIssue   = !!payChannelBad;
+    } else if (payChannelBad) {
+      processing_status    = "PAY_CHANNEL_MISSING";
+      hasRateIssue         = false;
+      hasPayChannelIssue   = true;
+    } else if (requiresHr) {
+      processing_status    = "READY_FOR_HR";
+      hasRateIssue         = false;
+      hasPayChannelIssue   = false;
+    } else {
+      processing_status    = "READY_FOR_INVOICE";
+      hasRateIssue         = false;
+      hasPayChannelIssue   = false;
+    }
+
+    const hoursPayEx = round2(
+      hours.day   * asNumberLocal(pay.day)   +
+      hours.night * asNumberLocal(pay.night) +
+      hours.sat   * asNumberLocal(pay.sat)   +
+      hours.sun   * asNumberLocal(pay.sun)   +
+      hours.bh    * asNumberLocal(pay.bh)
+    );
+
+    const hoursChargeEx = round2(
+      hours.day   * asNumberLocal(charge.day)   +
+      hours.night * asNumberLocal(charge.night) +
+      hours.sat   * asNumberLocal(charge.sat)   +
+      hours.sun   * asNumberLocal(charge.sun)   +
+      hours.bh    * asNumberLocal(charge.bh)
+    );
+
+    const {
+      additional_units_json,
+      additional_pay_ex_vat,
+      additional_charge_ex_vat,
+      additional_margin_ex_vat,
+    } = await computeWeeklyAdditionalFromTs(env, ts, cw, contract);
+
+    const total_pay_ex_vat    = round2(hoursPayEx + additional_pay_ex_vat);
+    const total_charge_ex_vat = round2(hoursChargeEx + additional_charge_ex_vat);
+    const margin_ex_vat       = round2(total_charge_ex_vat - total_pay_ex_vat);
+
+    const invoice_breakdown_json = {
+      mode: "WEEKLY_BUCKETS",
+      base_hours: {
+        day:   hours.day,
+        night: hours.night,
+        sat:   hours.sat,
+        sun:   hours.sun,
+        bh:    hours.bh,
+        pay_rates: {
+          day:   pay.day,
+          night: pay.night,
+          sat:   pay.sat,
+          sun:   pay.sun,
+          bh:    pay.bh,
+        },
+        charge_rates: {
+          day:   charge.day,
+          night: charge.night,
+          sat:   charge.sat,
+          sun:   charge.sun,
+          bh:    charge.bh,
+        },
+        pay_ex_vat:    hoursPayEx,
+        charge_ex_vat: hoursChargeEx,
+      },
+      additional: {
+        units:         additional_units_json,
+        pay_ex_vat:    additional_pay_ex_vat,
+        charge_ex_vat: additional_charge_ex_vat,
+        margin_ex_vat: additional_margin_ex_vat,
+      },
+      totals: {
+        total_pay_ex_vat,
+        total_charge_ex_vat,
+        margin_ex_vat,
+      },
+    };
+
+    const basis = "CONTRACT_WEEKLY";
+
+    const snapshot = {
+      timesheet_id: ts.timesheet_id,
+      timesheet_version: ts.version || 1,
+
+      basis,
+      occupant_key_norm: ts.occupant_key_norm || null,
+
+      worked_start_iso: ts.worked_start_iso || null,
+      worked_end_iso:   ts.worked_end_iso   || null,
+      break_start_iso:  ts.break_start_iso  || null,
+      break_end_iso:    ts.break_end_iso    || null,
+      break_minutes:    ts.break_minutes    || null,
+
+      candidate_id,
+      client_id,
+      role: contract.role || null,
+      band: contract.band || null,
+      pay_method: payMethod,
+
+      policy_snapshot_json: policy || null,
+      rate_source_refs_json: {},
+
+      hours_day:   hours.day,
+      hours_night: hours.night,
+      hours_sat:   hours.sat,
+      hours_sun:   hours.sun,
+      hours_bh:    hours.bh,
+
+      pay_day:   pay.day,
+      pay_night: pay.night,
+      pay_sat:   pay.sat,
+      pay_sun:   pay.sun,
+      pay_bh:    pay.bh,
+
+      charge_day:   charge.day,
+      charge_night: charge.night,
+      charge_sat:   charge.sat,
+      charge_sun:   charge.sun,
+      charge_bh:    charge.bh,
+
+      total_hours: round2(
+        hours.day + hours.night + hours.sat + hours.sun + hours.bh
+      ),
+
+      additional_units_json,
+      additional_pay_ex_vat,
+      additional_charge_ex_vat,
+      additional_margin_ex_vat,
+
+      total_pay_ex_vat,
+      total_charge_ex_vat,
+      margin_ex_vat,
+
+      candidate_assignment,
+      processing_status,
+
+      // NEW issue flags
+      has_rate_issue:        hasRateIssue,
+      has_pay_channel_issue: hasPayChannelIssue,
+
+      invoice_breakdown_json,
+    };
+
+    await writeSnapshot(env, snapshot);
+  }
+
+  export async function pruneOldHrWeeklyImports(env) {
+  const enc = encodeURIComponent;
+
+  const now = new Date();
+  const ninetyDaysMs = 90 * 24 * 60 * 60 * 1000;
+  const threshold = new Date(now.getTime() - ninetyDaysMs);
+  const thresholdIso = threshold.toISOString();
+
+  try {
+    // 1) Find HR weekly imports that were applied > 90 days ago and not yet pruned
+    const { rows: impRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/hr_imports` +
+        `?import_scope=eq.HR_WEEKLY` +
+        `&applied_at=is.not.null` +
+        `&pruned_at=is.null` +
+        `&applied_at=lt.${enc(thresholdIso)}` +
+        `&select=id`
+    );
+
+    const importIds = (impRows || [])
+      .map(r => r.id)
+      .filter(Boolean);
+
+    if (!importIds.length) {
+      // Nothing to prune
+      return { ok: true, pruned_imports: 0, pruned_rows: 0 };
+    }
+
+    const idsParam = importIds.map(enc).join(',');
+
+    // 2) Delete staged hr_rows for these imports
+    let prunedRows = 0;
+    try {
+      const delRes = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/hr_rows?import_id=in.(${idsParam})`,
+        {
+          method: 'DELETE',
+          headers: {
+            ...sbHeaders(env),
+            Prefer: 'count=exact'
+          }
+        }
+      );
+      if (!delRes.ok) {
+        const txt = await delRes.text().catch(() => '');
+        console.warn('[pruneOldHrWeeklyImports] hr_rows delete failed', {
+          status: delRes.status,
+          body: txt
+        });
+      } else {
+        const range = delRes.headers.get('content-range');
+        // content-range is usually "0-9/10" → total after slash
+        if (range && range.includes('/')) {
+          const parts = range.split('/');
+          const totalStr = parts[1] || '';
+          const totalNum = Number(totalStr);
+          if (Number.isFinite(totalNum)) {
+            prunedRows = totalNum;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[pruneOldHrWeeklyImports] hr_rows delete threw', {
+        err: e?.message || String(e)
+      });
+    }
+
+    // 3) Mark hr_imports as pruned
+    try {
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/hr_imports?id=in.(${idsParam})`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+          body: JSON.stringify({ pruned_at: new Date().toISOString() })
+        }
+      );
+    } catch (e) {
+      console.warn('[pruneOldHrWeeklyImports] hr_imports patch failed', {
+        import_ids: importIds,
+        err: e?.message || String(e)
+      });
+    }
+
+    return {
+      ok: true,
+      pruned_imports: importIds.length,
+      pruned_rows: prunedRows,
+      import_ids: importIds
+    };
+  } catch (e) {
+    console.error('[pruneOldHrWeeklyImports] unexpected error', {
+      err: e?.message || String(e)
+    });
+    return { ok: false, error: e?.message || String(e) };
+  }
+}
+
+  // ─────────────────────────────────────────────────────────────
+  // HR cross-check enrichment helper (NEW)
+  // ─────────────────────────────────────────────────────────────
+
+  async function enrichTsfinWithHrCrosscheck(env, ts, tsfinRow) {
+    try {
+      if (!ts || !tsfinRow) return;
+
+ const scope = String(ts.sheet_scope || "").toUpperCase();
+if (scope !== 'WEEKLY') {
+  // Non-weekly timesheets should not carry HR cross-check flags
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(tsfinRow.id)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+      body: JSON.stringify({
+        hr_crosscheck_status: null,
+        hr_crosscheck_issues: null
+      })
+    }
+  ).catch(() => {});
+  return;
+}
+
+
+      // Derive key fields
+      const clientId    = tsfinRow.client_id || ts.client_id || null;
+      const candidateId = tsfinRow.candidate_id || ts.candidate_id || null;
+      const weekEnding  = ts.week_ending_date || tsfinRow.week_ending_date || null;
+
+      if (!clientId || !candidateId || !weekEnding) {
+        // Clear HR flags if we don't have enough to cross-check
+        await fetch(
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(tsfinRow.id)}`,
+          {
+            method: 'PATCH',
+            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+            body: JSON.stringify({
+              hr_crosscheck_status: null,
+              hr_crosscheck_issues: null
+            })
+          }
+        ).catch(() => {});
+        return;
+      }
+
+      // Load client settings to see if HR cross-check applies
+      let requiresHr = false;
+      let noTsRequired = false;
+      try {
+        const { rows: csRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/client_settings` +
+          `?client_id=eq.${enc(clientId)}` +
+          `&select=client_id,requires_hr,no_timesheet_required` +
+          `&order=effective_from.desc` +
+          `&limit=1`
+        );
+        const cs = csRows?.[0] || null;
+        if (cs) {
+          requiresHr   = !!cs.requires_hr;
+          noTsRequired = !!cs.no_timesheet_required;
+        }
+      } catch {
+        // If we can't load client_settings, treat as no HR cross-check
+      }
+
+      if (!requiresHr || noTsRequired) {
+        // HR cross-check not required for this client; clear HR fields
+        await fetch(
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(tsfinRow.id)}`,
+          {
+            method: 'PATCH',
+            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+            body: JSON.stringify({
+              hr_crosscheck_status: null,
+              hr_crosscheck_issues: null
+            })
+          }
+        ).catch(() => {});
+        return;
+      }
+
+      const weekStart = computeWeekStartFromWeekEnding(weekEnding) || weekEnding;
+
+      // Load HR (HealthRoster) shifts for this client+candidate+week
+      let hrShifts = [];
+      try {
+        const { rows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
+          `?source_system=eq.HEALTHROSTER` +
+          `&client_id=eq.${enc(clientId)}` +
+          `&candidate_id=eq.${enc(candidateId)}` +
+          `&work_date=gte.${enc(weekStart)}` +
+          `&work_date=lte.${enc(weekEnding)}` +
+          `&select=id,work_date,start_utc,end_utc,break_mins,ref_num,payload_json`
+        );
+        hrShifts = rows || [];
+      } catch {
+        hrShifts = [];
+      }
+
+      // Build per-day paid minutes from HR
+      const hrMinsByDate = {};
+      const hrHasAny = hrShifts.length > 0;
+
+      function accumulateMins(map, ymd, startIso, endIso, breakMins) {
+        if (!ymd || !startIso || !endIso) return;
+        try {
+          const start = new Date(startIso);
+          const end   = new Date(endIso);
+          if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return;
+          let mins = (end.getTime() - start.getTime()) / 60000;
+          mins -= Number(breakMins || 0);
+          if (mins < 0) mins = 0;
+          map[ymd] = (map[ymd] || 0) + mins;
+        } catch {
+          // ignore bad rows
+        }
+      }
+
+      for (const sh of hrShifts) {
+        accumulateMins(hrMinsByDate, sh.work_date, sh.start_utc, sh.end_utc, sh.break_mins);
+      }
+
+      // Build per-day paid minutes from TS schedule
+      const tsMinsByDate = {};
+      let tsHasAny = false;
+      if (Array.isArray(ts.actual_schedule_json)) {
+        for (const seg of ts.actual_schedule_json) {
+          if (!seg) continue;
+          const ymd = seg.date || seg.date_ymd || seg.work_date || null;
+          const startIso = seg.start_utc || seg.start || null;
+          const endIso   = seg.end_utc   || seg.end   || null;
+          const bmins    = seg.break_mins || seg.break_minutes || 0;
+          accumulateMins(tsMinsByDate, ymd, startIso, endIso, bmins);
+        }
+      }
+
+      tsHasAny = Object.values(tsMinsByDate).some(v => (v || 0) > 0);
+
+      // Build external_source_rows_json.HR_WEEKLY snapshot
+      const external = tsfinRow.external_source_rows_json && typeof tsfinRow.external_source_rows_json === 'object'
+        ? { ...tsfinRow.external_source_rows_json }
+        : {};
+
+      external.HR_WEEKLY = hrShifts.map(sh => ({
+        date: sh.work_date,
+        source_system: 'HEALTHROSTER',
+        reference: sh.ref_num || (sh.payload_json && (sh.payload_json.reference || sh.payload_json.ref_num)) || null,
+        nhsp_shift_id: sh.id,
+        raw_row: sh.payload_json || null
+      }));
+
+      let issues = [];
+      let status = null;
+
+      const epsilonHours = 0.01; // ~0.6 minutes
+
+      const allDates = new Set([
+        ...Object.keys(hrMinsByDate),
+        ...Object.keys(tsMinsByDate)
+      ]);
+
+      if (!hrHasAny && tsHasAny) {
+        // Timesheet has hours but there are no HR rows at all
+        status = 'HR_HOURS_MISSING';
+        issues.push('HR_HOURS_MISSING');
+      } else if (!hrHasAny && !tsHasAny) {
+        // Neither side has hours → treat as "no cross-check" (no issues)
+        status = null;
+        issues = [];
+      } else {
+        let anyMissing = false;
+        let anyMismatch = false;
+
+        for (const ymd of allDates) {
+          const hrM = hrMinsByDate[ymd] || 0;
+          const tsM = tsMinsByDate[ymd] || 0;
+          const hrH = hrM / 60;
+          const tsH = tsM / 60;
+
+          if (tsM > 0 && hrM === 0) {
+            anyMissing = true;
+          } else if (hrM > 0 && tsM === 0) {
+            // HR has shift, TS has none → hours mismatch as well
+            anyMismatch = true;
+          } else if (Math.abs(hrH - tsH) > epsilonHours) {
+            anyMismatch = true;
+          }
+        }
+
+        if (anyMismatch) {
+          status = 'HOURS_MISMATCH_HR';
+          issues.push('HOURS_MISMATCH_HR');
+        }
+        if (anyMissing) {
+          // Distinct issue from mismatch
+          if (!issues.includes('HR_HOURS_MISSING')) {
+            issues.push('HR_HOURS_MISSING');
+          }
+          if (!status) status = 'HR_HOURS_MISSING';
+        }
+        if (!anyMismatch && !anyMissing) {
+          status = 'OK';
+          issues = [];
+        }
+      }
+
+      // Duplicate contracts check for this client/candidate/week
+      try {
+        const { rows: dupRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+          `?week_ending_date=eq.${enc(weekEnding)}` +
+          `&select=id,contract_id,status`
+        );
+        const cwRows = dupRows || [];
+        if (cwRows.length > 1) {
+          // Need to check contracts belong to this client & candidate
+          const cwIds = cwRows.map(r => r.contract_id).filter(Boolean);
+          if (cwIds.length) {
+            const { rows: conRows } = await sbFetch(
+              env,
+              `${env.SUPABASE_URL}/rest/v1/contracts` +
+              `?id=in.(${cwIds.map(enc).join(',')})` +
+              `&select=id,client_id,candidate_id,status`
+            );
+            const relevant = (conRows || []).filter(
+              c => c.client_id === clientId && c.candidate_id === candidateId && c.status !== 'CANCELLED'
+            );
+            if (relevant.length > 1) {
+              if (!issues.includes('DUPLICATE_CONTRACTS')) {
+                issues.push('DUPLICATE_CONTRACTS');
+              }
+              // We don't override status here; view-level needs_attention will pick it up.
+            }
+          }
+        }
+      } catch {
+        // duplicate check failure is non-fatal
+      }
+
+     // Decide if this TSFIN row should be flagged as needing attention
+const needsAttention =
+  (status && status !== 'OK') ||
+  (Array.isArray(issues) && issues.includes('DUPLICATE_CONTRACTS'));
+
+// Write back HR cross-check fields + needs_attention
+const patch = {
+  hr_crosscheck_status: status,
+  hr_crosscheck_issues: issues.length ? issues : null,
+  external_source_rows_json: external,
+  needs_attention: needsAttention,
+  updated_at: new Date().toISOString()
+};
+
+await fetch(
+  `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(tsfinRow.id)}`,
+  {
+    method: 'PATCH',
+    headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+    body: JSON.stringify(patch)
+  }
+).catch(() => {});
+
+    } catch (e) {
+      console.warn('[TSFIN] enrichTsfinWithHrCrosscheck failed', {
+        timesheet_id: ts?.timesheet_id,
+        tsfin_id: tsfinRow?.id,
+        err: e?.message || String(e)
+      });
+    }
+  }
 
   // ─────────────────────────────────────────────────────────────
   // Daily / Rota helper (SELF_REPORTED basis)
   // ─────────────────────────────────────────────────────────────
-
-
+  // (unchanged here; Daily snapshot builder is elsewhere in the file)
 
   // ─────────────────────────────────────────────────────────────
   // Worker core
@@ -35420,7 +37617,30 @@ async function buildWeeklySnapshot(env, ts, cw, contract) {
 
       const weeklyCtx = await loadWeeklyContext(env, ts);
       if (weeklyCtx) {
+        // Weekly CONTRACT_WEEKLY snapshot
         await buildWeeklySnapshot(env, ts, weeklyCtx.cw, weeklyCtx.contract);
+
+        // After writing the snapshot, load the current TSFIN row and enrich with HR cross-check if applicable
+        try {
+          const { rows: tfRows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+            `?timesheet_id=eq.${enc(ts.timesheet_id)}` +
+            `&is_current=eq.true` +
+            `&select=*` +
+            `&limit=1`
+          );
+          const tsfinRow = tfRows?.[0] || null;
+          if (tsfinRow) {
+            await enrichTsfinWithHrCrosscheck(env, ts, tsfinRow);
+          }
+        } catch (e) {
+          console.warn('[TSFIN] failed to load TSFIN for HR cross-check', {
+            timesheet_id: ts.timesheet_id,
+            err: e?.message || String(e)
+          });
+        }
+
         await sbRpc(env, "tsfin_work_success", { p_id: item.id });
         ok++;
         continue;
@@ -35428,6 +37648,8 @@ async function buildWeeklySnapshot(env, ts, cw, contract) {
 
       // ── DAILY / ROTA branch ──────────────────────────────
       await buildDailySnapshot(env, ts);
+      // (HR cross-check does not apply to daily rota; nothing extra here)
+
       await sbRpc(env, "tsfin_work_success", { p_id: item.id });
       ok++;
     } catch (e) {
@@ -35441,6 +37663,221 @@ async function buildWeeklySnapshot(env, ts, cw, contract) {
 
   return { picked: lease.length, ok, fail };
 }
+
+// Run HR weekly cross-check in bulk for every (client, candidate, week)
+// touched by a given HR_WEEKLY import.
+//
+// This helper is invoked from handleHrAutoprocessApply(env, req, importId).
+async function applyWeeklyHealthRosterCrosscheck(env, { import_id }) {
+  const enc = encodeURIComponent;
+  if (!import_id) return { triples: 0, timesheets_checked: 0 };
+
+  // ─────────────────────────────────────────────
+  // Step 1: fetch hr_rows for this import
+  // ─────────────────────────────────────────────
+
+  let hrRows = [];
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/hr_rows` +
+      `?import_id=eq.${enc(import_id)}` +
+      `&select=client_id,candidate_id,week_ending_date,work_date,import_type`
+    );
+    hrRows = rows || [];
+  } catch (e) {
+    console.warn('[applyWeeklyHealthRosterCrosscheck] failed to load hr_rows', {
+      import_id,
+      err: e?.message || String(e)
+    });
+    return { triples: 0, timesheets_checked: 0 };
+  }
+
+  if (!hrRows.length) {
+    return { triples: 0, timesheets_checked: 0 };
+  }
+
+  // Filter down to HEALTHROSTER_WEEKLY rows if import_type is present,
+  // otherwise just use all rows for this import.
+  const filteredRows = hrRows.filter(r => {
+    const t = (r.import_type || '').toString().toUpperCase();
+    return !r.import_type || t === 'HEALTHROSTER_WEEKLY';
+  });
+
+  if (!filteredRows.length) {
+    return { triples: 0, timesheets_checked: 0 };
+  }
+
+  // ─────────────────────────────────────────────
+  // Step 2: compute distinct (client_id, candidate_id, week_ending_date)
+  // ─────────────────────────────────────────────
+
+  const triplesMap = new Map(); // key -> { client_id, candidate_id, week_ending_date }
+
+  // cache client week-ending weekday to avoid repeated lookups
+  const clientWeekdayCache = new Map(); // client_id -> week_ending_weekday (0=Sun..6=Sat, default 0)
+
+  async function getWeekEndingForRow(row) {
+    const clientId = row.client_id || null;
+    let weekEnd    = row.week_ending_date || null;
+    const workDate = row.work_date || null;
+
+    if (weekEnd) return weekEnd;
+    if (!clientId || !workDate) return null;
+
+    // Look up client's configured week-ending weekday
+    let weDow = clientWeekdayCache.get(clientId);
+    if (weDow === undefined) {
+      weDow = 0;
+      try {
+        const { rows: csRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/client_settings` +
+          `?client_id=eq.${enc(clientId)}` +
+          `&select=client_id,week_ending_weekday` +
+          `&order=effective_from.desc` +
+          `&limit=1`
+        );
+        const cs = csRows?.[0] || null;
+        if (cs && cs.week_ending_weekday != null) {
+          const v = Number(cs.week_ending_weekday);
+          if (Number.isInteger(v)) weDow = v;
+        }
+      } catch {
+        weDow = 0;
+      }
+      clientWeekdayCache.set(clientId, weDow);
+    }
+
+    try {
+      const d = new Date(`${workDate}T00:00:00Z`);
+      if (Number.isNaN(d.getTime())) return null;
+      // Move forward to the client's configured week-ending weekday
+      while (d.getUTCDay() !== weDow) {
+        d.setUTCDate(d.getUTCDate() + 1);
+      }
+      const yyyy = d.getUTCFullYear();
+      const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const dd   = String(d.getUTCDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    } catch {
+      return null;
+    }
+  }
+
+  for (const r of filteredRows) {
+    const clientId    = r.client_id || null;
+    const candidateId = r.candidate_id || null;
+    if (!clientId || !candidateId) continue;
+
+    // Resolve week_ending_date from hr_rows.week_ending_date or work_date + client settings
+    // using the same convention as weekly TS logic.
+    // eslint-disable-next-line no-await-in-loop
+    const weekEnd = await getWeekEndingForRow(r);
+    if (!weekEnd) continue;
+
+    const key = `${clientId}__${candidateId}__${weekEnd}`;
+    if (!triplesMap.has(key)) {
+      triplesMap.set(key, {
+        client_id: clientId,
+        candidate_id: candidateId,
+        week_ending_date: weekEnd
+      });
+    }
+  }
+
+  if (!triplesMap.size) {
+    return { triples: 0, timesheets_checked: 0 };
+  }
+
+  // ─────────────────────────────────────────────
+  // Step 3: for each triple, run enrichTsfinWithHrCrosscheck on all TSs
+  // ─────────────────────────────────────────────
+
+  let timesheetsChecked = 0;
+
+  for (const triple of triplesMap.values()) {
+    const { client_id, candidate_id, week_ending_date } = triple;
+
+    // Load weekly timesheets for this client+candidate+week
+    let tsRows = [];
+    try {
+      const res = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?client_id=eq.${enc(client_id)}` +
+        `&candidate_id=eq.${enc(candidate_id)}` +
+        `&sheet_scope=eq.WEEKLY` +
+        `&week_ending_date=eq.${enc(week_ending_date)}` +
+        `&is_current=eq.true` +
+        `&select=*`
+      );
+      tsRows = res.rows || [];
+    } catch (e) {
+      console.warn('[applyWeeklyHealthRosterCrosscheck] failed to load timesheets', {
+        import_id,
+        client_id,
+        candidate_id,
+        week_ending_date,
+        err: e?.message || String(e)
+      });
+      continue;
+    }
+
+    if (!tsRows.length) {
+      // If there is a contract_week but no TS, TSFIN will be created later;
+      // enrichTsfinWithHrCrosscheck will run then via the TSFIN worker.
+      continue;
+    }
+
+    for (const ts of tsRows) {
+      // Load current TSFIN snapshot for this TS
+      let tfRows;
+      try {
+        const resTf = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=eq.${enc(ts.timesheet_id)}` +
+          `&is_current=eq.true` +
+          `&select=*` +
+          `&limit=1`
+        );
+        tfRows = resTf.rows || [];
+      } catch (e) {
+        console.warn('[applyWeeklyHealthRosterCrosscheck] failed to load TSFIN', {
+          import_id,
+          timesheet_id: ts.timesheet_id,
+          err: e?.message || String(e)
+        });
+        continue;
+      }
+
+      const tsfinRow = tfRows[0];
+      if (!tsfinRow) {
+        // No TSFIN yet; worker will handle it later.
+        continue;
+      }
+
+      try {
+        // Reuse the same cross-check helper used by the worker
+        await enrichTsfinWithHrCrosscheck(env, ts, tsfinRow);
+        timesheetsChecked++;
+      } catch (e) {
+        console.warn('[applyWeeklyHealthRosterCrosscheck] enrich failed', {
+          import_id,
+          timesheet_id: ts.timesheet_id,
+          tsfin_id: tsfinRow.id,
+          err: e?.message || String(e)
+        });
+      }
+    }
+  }
+
+  return { triples: triplesMap.size, timesheets_checked: timesheetsChecked };
+}
+
+
+
 
 async function buildDailySnapshot(env, ts) {
   const occupantKey = ts.occupant_key_norm || null;
@@ -35846,7 +38283,8 @@ export async function handleTsfinMarkReady(env, req) {
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
       `?select=timesheet_id,processing_status,candidate_id,client_id,pay_method,basis,` +
-      `expenses_charge_ex_vat,expenses_evidence_r2_key,mileage_charge_ex_vat,mileage_evidence_r2_key` +
+      `expenses_charge_ex_vat,expenses_evidence_r2_key,mileage_charge_ex_vat,mileage_evidence_r2_key,` +
+      `hr_crosscheck_status,hr_crosscheck_issues` +
       `&timesheet_id=in.(${idsParam})` +
       `&is_current=eq.true` +
       `&locked_by_invoice_id=is.null`
@@ -35875,7 +38313,7 @@ export async function handleTsfinMarkReady(env, req) {
     }
   }
 
-  // Determine which timesheets actually need HR validation
+  // Determine which timesheets actually need HR validation (existing validation gate)
   const idsNeedingHr = (tsfinRows || [])
     .filter(r => r.client_id && hrByClientId.get(r.client_id))
     .map(r => r.timesheet_id);
@@ -35911,6 +38349,28 @@ export async function handleTsfinMarkReady(env, req) {
     );
     for (const t of tsRows || []) {
       tsMetaMap.set(t.timesheet_id, t);
+    }
+  }
+
+  // NEW: Evidence counts via timesheet_evidence (per timesheet)
+  const evidenceCountByTsId = new Map();
+  if (ids.length) {
+    try {
+      const evParam = ids.map(encodeURIComponent).join(',');
+      const { rows: evRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
+          `?select=timesheet_id,count=id` +
+          `&timesheet_id=in.(${evParam})` +
+          `&group=timesheet_id`
+      );
+      for (const ev of evRows || []) {
+        evidenceCountByTsId.set(ev.timesheet_id, Number(ev.count) || 0);
+      }
+    } catch (e) {
+      console.warn('[handleTsfinMarkReady] evidence count lookup failed (non-fatal)', {
+        err: e?.message || String(e)
+      });
     }
   }
 
@@ -35965,7 +38425,7 @@ export async function handleTsfinMarkReady(env, req) {
 
     const tsMeta = tsMetaMap.get(id) || {};
 
-    // 1) HR Validation gating (per client)
+    // 1) HR Validation gating (per client) — existing behaviour
     if (requiresHr) {
       const v = latestById.get(id);
       if (!v || !OK.has(v.status)) {
@@ -35974,7 +38434,7 @@ export async function handleTsfinMarkReady(env, req) {
       }
     }
 
-    // 1b) Authorisation gating when autoprocess_hr = false
+    // 1b) Authorisation gating when autoprocess_hr = false — existing
     if (requiresHr && !autoprocessHr) {
       const authorised = !!tsMeta.authorised_at_server;
       if (!authorised) {
@@ -35983,7 +38443,25 @@ export async function handleTsfinMarkReady(env, req) {
       }
     }
 
-    // 1c) Timesheet required gate (no_timesheet_required=false)
+    // NEW 1c) HR cross-check gate
+    if (requiresHr) {
+      const hrStatus = (row.hr_crosscheck_status || '').toString().toUpperCase() || null;
+      const hrIssues = Array.isArray(row.hr_crosscheck_issues) ? row.hr_crosscheck_issues : [];
+
+      if (hrStatus && hrStatus !== 'OK') {
+        // e.g. HOURS_MISMATCH_HR or HR_HOURS_MISSING
+        blocked.push({ id, reason: 'hr_crosscheck_failed' });
+        continue;
+      }
+
+      if (hrIssues.includes('DUPLICATE_CONTRACTS')) {
+        // Even if status is OK, duplicates should block promotion
+        blocked.push({ id, reason: 'hr_crosscheck_failed' });
+        continue;
+      }
+    }
+
+    // 1d) Timesheet required gate (no_timesheet_required=false) + evidence
     if (requiresHr && !noTsReq) {
       const basisStr = String(tsMeta.basis || row.basis || '').toUpperCase();
       const subMode  = String(tsMeta.submission_mode || '').toUpperCase();
@@ -35999,13 +38477,16 @@ export async function handleTsfinMarkReady(env, req) {
 
       const hasManual = !!tsMeta.manual_pdf_r2_key;
 
-      if (isHrBasis && !hasElectronic && !hasManual) {
+      const evCount = evidenceCountByTsId.get(id) || 0;
+      const hasAnyEvidence = (evCount > 0) || hasManual || hasElectronic;
+
+      if (isHrBasis && !hasAnyEvidence) {
         blocked.push({ id, reason: 'timesheet_missing' });
         continue;
       }
     }
 
-    // 2) Evidence rules: if charge>0 → evidence required
+    // 2) Evidence rules: if charge>0 → expenses/mileage evidence required
     const expChg = Number(row.expenses_charge_ex_vat || 0);
     const milChg = Number(row.mileage_charge_ex_vat || 0);
     if (expChg > 0 && !row.expenses_evidence_r2_key) {
@@ -36045,7 +38526,7 @@ export async function handleTsfinMarkReady(env, req) {
   }
 
   if (!eligibleIds.length) {
-    return badRequest("No timesheets are eligible to mark READY_FOR_INVOICE (validation/evidence/pay-channel/reference/timesheet/authorisation rules failed).");
+    return badRequest("No timesheets are eligible to mark READY_FOR_INVOICE (validation/evidence/pay-channel/reference/timesheet/authorisation/HR rules failed).");
   }
 
   // Promote READY_FOR_HR → READY_FOR_INVOICE for just the eligible set
@@ -41027,7 +43508,7 @@ if (req.method === 'GET' && p === '/api/healthroster/autoprocess/clients') {
         return handleHrRotaQueueTsoEmail(env, req);
       }
 
-      // NHSP imports + apply + diagnostics
+          // NHSP imports + apply + diagnostics
       if (req.method === 'POST' && p === '/api/nhsp/import')                 return handleNhspImport(env, req);
       {
         const nRows = matchPath(p, '/api/nhsp/:import_id/rows');
@@ -41045,7 +43526,15 @@ if (req.method === 'GET' && p === '/api/healthroster/autoprocess/clients') {
         const nApply = matchPath(p, '/api/nhsp/:import_id/apply');
         if (nApply && req.method === 'POST')                                 return handleNhspApply(env, req, nApply.import_id);
       }
+      {
+        // NEW: NHSP weekly resolve-conflicts (aliases + contract check)
+        const nResolve = matchPath(p, '/api/nhsp/:import_id/resolve-conflicts');
+        if (nResolve && req.method === 'POST') {
+          return withCORS(env, req, await handleNhspResolveMappings(env, req, nResolve.import_id));
+        }
+      }
       if (req.method === 'GET' && p === '/api/nhsp/imports')                 return handleNhspImportsList(env, req);
+
       {
         const nSum = matchPath(p, '/api/nhsp/:import_id/summary');
         if (nSum && req.method === 'GET')                                    return handleNhspImportSummary(env, req, nSum.import_id);
