@@ -1168,7 +1168,7 @@ function printableShortRef(s) {
 
 // Render a single timesheet to PDF, save to R2 (idempotent), return the R2 key.
 // Render a single timesheet to PDF, save to R2 (idempotent), return the R2 key.
-export async function renderTimesheetPDFAndSave(env, timesheetId) {
+ async function renderTimesheetPDFAndSave(env, timesheetId) {
   const bucket = env.R2_BUCKET || env.R2;
   if (!bucket?.get || !bucket?.put) throw new Error("Storage not configured");
 
@@ -1654,7 +1654,7 @@ export async function renderTimesheetPDFAndSave(env, timesheetId) {
 }
 
 // Ensure a TS PDF exists; return its key (render/snapshot if missing)
-export async function ensureTimesheetPdf(env, timesheetId) {
+ async function ensureTimesheetPdf(env, timesheetId) {
   // Prefer a manual uploaded PDF when present; else render from signatures.
   // We return the key to the PDF in R2 (can be the manual key itself).
   const enc = encodeURIComponent;
@@ -1780,7 +1780,7 @@ async function patchContractWeekScan(env, cwId, r2Key) {
 // A) CONTRACTS (CRUD + lifecycle)
 // ----------------------------------------------------------------------------
 
-export async function handleContractsCreate(env, req) {
+ async function handleContractsCreate(env, req) {
   const user = await requireUser(env, req, ['admin']); // backoffice only
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -2069,7 +2069,7 @@ export async function handleContractsCreate(env, req) {
 // handleContractsList — enriched with candidate/client names and relationship-aware free-text filtering
 // (joins based on FK: contracts.candidate_id → candidates.id, contracts.client_id → clients.id)  :contentReference[oaicite:0]{index=0}
 
-export async function handleContractsList(env, req) {
+ async function handleContractsList(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -2331,7 +2331,7 @@ export async function handleContractsList(env, req) {
 }
 
 // BACKEND — handleUserGridPrefsGet
-export async function handleUserGridPrefsGet(env, req) {
+ async function handleUserGridPrefsGet(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -2396,7 +2396,7 @@ export async function handleUserGridPrefsGet(env, req) {
 
 // BACKEND — handleUserGridPrefsPatch
 // BACKEND — handleUserGridPrefsPatch
-export async function handleUserGridPrefsPatch(env, req, contractId) {
+ async function handleUserGridPrefsPatch(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -2513,7 +2513,7 @@ export async function handleUserGridPrefsPatch(env, req, contractId) {
 // handleContractsGet — embed names and flatten convenience fields for FE
 // (joins via FK: contracts.candidate_id → candidates.id, contracts.client_id → clients.id)
 
-export async function handleContractsGet(env, req, contractId) {
+ async function handleContractsGet(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   if (!contractId) return withCORS(env, req, badRequest('contract_id required'));
@@ -2584,7 +2584,7 @@ export async function handleContractsGet(env, req, contractId) {
   );
 }
 
-export async function handleContractsUpdate(env, req, contractId) {
+ async function handleContractsUpdate(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -2927,7 +2927,7 @@ export async function handleContractsUpdate(env, req, contractId) {
 
 
 // Lightweight checker for FE: returns real-timesheet boundary info for proposed window
-export async function handleContractsCheckTimesheetBoundary(env, req) {
+ async function handleContractsCheckTimesheetBoundary(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -3016,7 +3016,7 @@ export async function handleContractsCheckTimesheetBoundary(env, req) {
 
 // === Strict full-replace (PUT /api/contracts/:id) ===
 
-export async function handleContractsReplace(env, req, contractId) {
+ async function handleContractsReplace(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -3373,7 +3373,7 @@ export async function handleContractsReplace(env, req, contractId) {
   return withCORS(env, req, ok({ contract: updated, warnings }));
 }
 
-export async function handleContractsDuplicate(env, req, contractId) {
+ async function handleContractsDuplicate(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -3545,7 +3545,7 @@ async function computePayMethodWarnings(env, contractRow) {
   return out;
 }
 
-export async function handleContractsDelete(env, req, contractId) {
+ async function handleContractsDelete(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -3560,7 +3560,7 @@ export async function handleContractsDelete(env, req, contractId) {
   if (!res.ok) return withCORS(env, req, serverError(await res.text()));
   return withCORS(env, req, ok({ deleted: true }));
 }
-export async function handleContractsGenerateWeeks(env, req, contractId) {
+ async function handleContractsGenerateWeeks(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -3686,7 +3686,7 @@ function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEn
   return [];
 }
 
-export async function handleContractsCloneAndExtend(env, req, contractId) {
+ async function handleContractsCloneAndExtend(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -3847,7 +3847,7 @@ export async function handleContractsCloneAndExtend(env, req, contractId) {
 
 
 
-export async function handleContractsCalendar(env, req, contractId) {
+ async function handleContractsCalendar(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   if (!contractId) return withCORS(env, req, badRequest('contract_id required'));
@@ -4004,7 +4004,7 @@ export async function handleContractsCalendar(env, req, contractId) {
   return withCORS(env, req, ok({ from: winStart, to: winEnd, granularity: 'day', items: dayItems }));
 }
 
-export async function handleCandidateCalendar(env, req, candidateId) {
+ async function handleCandidateCalendar(env, req, candidateId) {
   try {
     const user = await requireUser(env, req, ['admin']);
     if (!user) return withCORS(env, req, unauthorized());
@@ -4235,7 +4235,7 @@ export async function handleCandidateCalendar(env, req, candidateId) {
 }
 
 
-export async function handleContractsSkipWeeks(env, req, contractId) {
+ async function handleContractsSkipWeeks(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -4262,7 +4262,7 @@ export async function handleContractsSkipWeeks(env, req, contractId) {
 // B) CONTRACT WEEKS (list / switching / manual / expenses)
 // ----------------------------------------------------------------------------
 
-export async function handleContractWeeksList(env, req) {
+ async function handleContractWeeksList(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   const url = new URL(req.url);
@@ -4291,7 +4291,7 @@ export async function handleContractWeeksList(env, req) {
   return withCORS(env, req, ok(rows || []));
 }
 
-export async function handleContractWeekUpdate(env, req, weekId) {
+ async function handleContractWeekUpdate(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
@@ -4356,7 +4356,7 @@ export async function handleContractWeekUpdate(env, req, weekId) {
 }
 
 
-export async function handleContractWeekCreateAdditional(env, req, weekId) {
+ async function handleContractWeekCreateAdditional(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -4386,7 +4386,7 @@ export async function handleContractWeekCreateAdditional(env, req, weekId) {
   return withCORS(env, req, ok(row));
 }
 
-export async function handleContractWeekSwitchMode(env, req, weekId) {
+ async function handleContractWeekSwitchMode(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -4404,7 +4404,7 @@ export async function handleContractWeekSwitchMode(env, req, weekId) {
   return withCORS(env, req, ok(row));
 }
 
-export async function handleContractWeekPresignManualPdf(env, req, weekId) {
+ async function handleContractWeekPresignManualPdf(env, req, weekId) {
   // Admin presign wrapper (uses your existing token scheme; see signatures presign) 
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -4431,7 +4431,7 @@ export async function handleContractWeekPresignManualPdf(env, req, weekId) {
   return withCORS(env, req, ok({ key, upload_url, token, expires_in: 3600 }));
 }
 
-export async function handleContractWeekReplaceManualPdf(env, req, weekId) {
+ async function handleContractWeekReplaceManualPdf(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -4448,7 +4448,7 @@ export async function handleContractWeekReplaceManualPdf(env, req, weekId) {
   return withCORS(env, req, ok({ replaced: true, r2_key: body.r2_key }));
 }
 
-export async function handleContractWeekManualUpsert(env, req, weekId) {
+ async function handleContractWeekManualUpsert(env, req, weekId) {
   const enc = encodeURIComponent;
 
   const user = await requireUser(env, req, ['admin']);
@@ -5308,7 +5308,7 @@ export async function handleContractWeekManualUpsert(env, req, weekId) {
 }
 
 
-export async function handleManualTimesheetQueueEnqueue(env, req) {
+ async function handleManualTimesheetQueueEnqueue(env, req) {
   const enc = encodeURIComponent;
 
   const user = await requireUser(env, req, ['admin']);
@@ -5469,7 +5469,7 @@ export async function handleManualTimesheetQueueEnqueue(env, req) {
   }));
 }
 
-export async function handleManualTimesheetQueueList(env, req) {
+ async function handleManualTimesheetQueueList(env, req) {
   const enc = encodeURIComponent;
   const url = new URL(req.url);
   const q = (k) => url.searchParams.get(k);
@@ -5528,7 +5528,7 @@ export async function handleManualTimesheetQueueList(env, req) {
 }
 
 
-export async function handleManualTimesheetQueueGet(env, req, queueId) {
+ async function handleManualTimesheetQueueGet(env, req, queueId) {
   const enc = encodeURIComponent;
 
   const user = await requireUser(env, req, ['admin']);
@@ -5560,7 +5560,7 @@ export async function handleManualTimesheetQueueGet(env, req, queueId) {
     return withCORS(env, req, serverError('Failed to load manual timesheet queue item'));
   }
 }
-export async function handleManualTimesheetQueueDelete(env, req, queueId) {
+ async function handleManualTimesheetQueueDelete(env, req, queueId) {
   const enc = encodeURIComponent;
 
   const user = await requireUser(env, req, ['admin']);
@@ -5627,7 +5627,7 @@ export async function handleManualTimesheetQueueDelete(env, req, queueId) {
     return withCORS(env, req, serverError('Failed to discard manual timesheet queue item'));
   }
 }
-export async function handleManualTimesheetQueueAttach(env, req, queueId) {
+ async function handleManualTimesheetQueueAttach(env, req, queueId) {
   const enc = encodeURIComponent;
 
   const user = await requireUser(env, req, ['admin']);
@@ -5744,7 +5744,7 @@ export async function handleManualTimesheetQueueAttach(env, req, queueId) {
     return withCORS(env, req, serverError('Failed to attach manual timesheet queue item'));
   }
 }
-export async function handleManualTimesheetQueueRotate(env, req, queueId) {
+ async function handleManualTimesheetQueueRotate(env, req, queueId) {
   const enc = encodeURIComponent;
 
   const user = await requireUser(env, req, ['admin']);
@@ -5836,7 +5836,7 @@ export async function handleManualTimesheetQueueRotate(env, req, queueId) {
   }
 }
 
-export async function handleTimesheetPdf(env, req, timesheetId) {
+ async function handleTimesheetPdf(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
   // Admin auth
@@ -5891,7 +5891,7 @@ export async function handleTimesheetPdf(env, req, timesheetId) {
   }
 }
 
-export async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
+ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
   // 1) Auth
@@ -6283,7 +6283,7 @@ export async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
   }));
 }
 
-export async function handleContractWeekManualAuthorise(env, req, weekId) {
+ async function handleContractWeekManualAuthorise(env, req, weekId) {
   // Second checker: stamp TS authorise + TSFIN → READY_FOR_HR or READY_FOR_INVOICE
   // based on client_settings.requires_hr, and mark the week as AUTHORISED.
   const user = await requireUser(env, req, ['admin']);
@@ -6380,7 +6380,7 @@ export async function handleContractWeekManualAuthorise(env, req, weekId) {
   return withCORS(env, req, ok({ authorised: true, timesheet_id: cw.timesheet_id }));
 }
 
-export async function handleContractWeekDeleteTimesheet(env, req, weekId) {
+ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   if (!weekId) return withCORS(env, req, badRequest('contract_week_id is required'));
@@ -6472,7 +6472,7 @@ export async function handleContractWeekDeleteTimesheet(env, req, weekId) {
 
 
 
-export async function handleContractWeekCreateExpenseSheet(env, req, weekId) {
+ async function handleContractWeekCreateExpenseSheet(env, req, weekId) {
   // Create an expense-only TS for the week (line_type=EXPENSES)
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -6539,7 +6539,7 @@ export async function handleContractWeekCreateExpenseSheet(env, req, weekId) {
 // ----------------------------------------------------------------------------
 
 
-export async function handleTimesheetsPresignWeekly(env, req) {
+ async function handleTimesheetsPresignWeekly(env, req) {
   // Public: presign nurse/authoriser signature uploads for a weekly slot + return bucket labels for UI
   let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
 
@@ -6623,7 +6623,7 @@ export async function handleTimesheetsPresignWeekly(env, req) {
 }
 
 
-export async function handleTimesheetsEligibilityWeekly(env, req) {
+ async function handleTimesheetsEligibilityWeekly(env, req) {
   // Public: app supplies candidate_id, optional client_id; return OPEN weeks + per-contract bucket labels
   let body; try { body = await parseJSONBody(req); } catch { body = {}; }
   const candidateId = body.candidate_id || null;
@@ -6664,7 +6664,7 @@ export async function handleTimesheetsEligibilityWeekly(env, req) {
 }
 
 // GET /api/timesheets/:id/evidence
-export async function handleTimesheetEvidenceList(env, req, tsId) {
+ async function handleTimesheetEvidenceList(env, req, tsId) {
   const enc = encodeURIComponent;
 
   // Auth: admin only
@@ -6711,7 +6711,7 @@ export async function handleTimesheetEvidenceList(env, req, tsId) {
 }
 
 // POST /api/timesheets/:id/evidence
-export async function handleTimesheetEvidenceAdd(env, req, tsId) {
+ async function handleTimesheetEvidenceAdd(env, req, tsId) {
   const enc = encodeURIComponent;
 
   // Auth: admin only
@@ -6823,7 +6823,7 @@ export async function handleTimesheetEvidenceAdd(env, req, tsId) {
 }
 
 // DELETE /api/timesheets/:id/evidence/:evidence_id
-export async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
+ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
   const enc = encodeURIComponent;
 
   // Auth: admin only
@@ -6894,7 +6894,7 @@ export async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) 
   }
 }
 
-export async function handleTimesheetReplaceManualPdf(env, req, timesheetId) {
+ async function handleTimesheetReplaceManualPdf(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
   const user = await requireUser(env, req, ['admin']);
@@ -7182,7 +7182,7 @@ async function rebuildWeeklyTsfinForTimesheet(env, timesheetId, contract) {
   return { ok: true };
 }
 
-export async function handleTimesheetsSubmitWeekly(env, req) {
+ async function handleTimesheetsSubmitWeekly(env, req) {
   // Public: submit weekly electronic timesheet (schedule OR totals + two signatures)
   let body;
   try {
@@ -7590,7 +7590,7 @@ export async function handleTimesheetsSubmitWeekly(env, req) {
 // D) Manual & Expenses (supplementary)
 // ----------------------------------------------------------------------------
 
-export async function handleManualPresign(env, req) {
+ async function handleManualPresign(env, req) {
   // Public alias: worker uploads manual scan for a chosen contract_week
   let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
   const weekId = body.contract_week_id || null;
@@ -7612,7 +7612,7 @@ export async function handleManualPresign(env, req) {
   return withCORS(env, req, ok({ key, upload_url, token, expires_in: 3600 }));
 }
 
-export async function handleTimesheetUpdateReference(env, req, timesheetId) {
+ async function handleTimesheetUpdateReference(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
@@ -7626,7 +7626,7 @@ export async function handleTimesheetUpdateReference(env, req, timesheetId) {
   return withCORS(env, req, ok(row));
 }
 
-export async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
+ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -7695,7 +7695,7 @@ export async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
     processing_status: newStatus
   }));
 }
-export async function handleTimesheetUnauthorise(env, req, timesheetId) {
+ async function handleTimesheetUnauthorise(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -7752,7 +7752,7 @@ export async function handleTimesheetUnauthorise(env, req, timesheetId) {
   }));
 }
 
-export async function handleTimesheetPresignExpensePdf(env, req, timesheetId) {
+ async function handleTimesheetPresignExpensePdf(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']); // backoffice presign; workers can use public files if needed
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -7762,7 +7762,7 @@ export async function handleTimesheetPresignExpensePdf(env, req, timesheetId) {
   return withCORS(env, req, ok({ key, upload_url, token, expires_in: 3600 }));
 }
 
-export async function handleTimesheetSwitchToManual(env, req, timesheetId) {
+ async function handleTimesheetSwitchToManual(env, req, timesheetId) {
   // Switch a WEEKLY CONTRACT_WEEKLY electronic timesheet to MANUAL via a new version
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -7933,7 +7933,7 @@ export async function handleTimesheetSwitchToManual(env, req, timesheetId) {
 }
 
 
-export async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
+ async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
   // Convert a QR weekly timesheet back to a plain MANUAL weekly sheet
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -8043,7 +8043,7 @@ export async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
     })
   );
 }
-export async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
+ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
   // Switch a DAILY non-NHSP/HR electronic timesheet to MANUAL via a new version
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -8194,7 +8194,7 @@ export async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) 
 
 
 // POST /api/contracts/:id/truncate-tail
-export async function handleContractsTruncateTailSafely(env, req, contractId) {
+ async function handleContractsTruncateTailSafely(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -8278,7 +8278,7 @@ export async function handleContractsTruncateTailSafely(env, req, contractId) {
 
 
 
-export async function handleTimesheetDelete(env, req, timesheetId) {
+ async function handleTimesheetDelete(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   if (!timesheetId) {
@@ -8349,7 +8349,7 @@ export async function handleTimesheetDelete(env, req, timesheetId) {
 // E) Funnel & Prechecks (read-only views)
 // ----------------------------------------------------------------------------
 
-export async function handleFunnelTimesheets(env, req) {
+ async function handleFunnelTimesheets(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -8386,7 +8386,7 @@ export async function handleFunnelTimesheets(env, req) {
   return withCORS(env, req, ok(rows || []));
 }
 
-export async function handleInvoiceIssue(env, req, invoiceId) {
+ async function handleInvoiceIssue(env, req, invoiceId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -8457,7 +8457,7 @@ export async function handleInvoiceIssue(env, req, invoiceId) {
   }
 }
 
-export async function handleInvoicesPrecheck(env, req) {
+ async function handleInvoicesPrecheck(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   const url = new URL(req.url);
@@ -8539,7 +8539,7 @@ async function derivePresetMileageDefaultsForClient(env, clientId, base) {
 // F) Rates Presets CRUD
 // ----------------------------------------------------------------------------
 
-export async function handleRatesPresetsCreate(env, req) {
+ async function handleRatesPresetsCreate(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -8680,7 +8680,7 @@ export async function handleRatesPresetsCreate(env, req) {
   const row = (await res.json().catch(() => []))[0];
   return withCORS(env, req, ok(row));
 }
-export async function handleRatesPresetsList(env, req) {
+ async function handleRatesPresetsList(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -8768,7 +8768,7 @@ export async function handleRatesPresetsList(env, req) {
   return withCORS(env, req, ok(rows || []));
 }
 
-export async function handleRatesPresetsUpdate(env, req, presetId) {
+ async function handleRatesPresetsUpdate(env, req, presetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -8942,7 +8942,7 @@ export async function handleRatesPresetsUpdate(env, req, presetId) {
   return withCORS(env, req, ok(row));
 }
 
-export async function handleRatesPresetsDelete(env, req, presetId) {
+ async function handleRatesPresetsDelete(env, req, presetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -8964,7 +8964,7 @@ export async function handleRatesPresetsDelete(env, req, presetId) {
   return withCORS(env, req, ok({ deleted: true }));
 }
 
-export async function handleRatesPresetsGet(env, req, presetId) {
+ async function handleRatesPresetsGet(env, req, presetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -9103,7 +9103,7 @@ function deriveUmbrellaVatSnapshots(rowEx, hintRatePct, umbrellaVatChargeable) {
 }
 
 // /api/me handler — remove admin-only gate
-export async function handleMe(env, req) {
+ async function handleMe(env, req) {
   const user = await requireUser(env, req /* no role gating here */);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -9124,7 +9124,7 @@ export async function handleMe(env, req) {
 // ───────────────────────────────────────────────────────────────────────────────
 // PAYMENTS — CSV (authorised gate + 16-char payment reference cap)
 // ───────────────────────────────────────────────────────────────────────────────
-export async function handlePaymentsGenerateCsv(env, req) {
+ async function handlePaymentsGenerateCsv(env, req) {
   const enc    = encodeURIComponent;
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
   const capRef = (s, max = 16) => (s ? String(s).slice(0, max) : '');
@@ -9584,7 +9584,7 @@ export async function handlePaymentsGenerateCsv(env, req) {
 }
 
 
-export async function handleRemittancesSend(env, req) {
+ async function handleRemittancesSend(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -10041,7 +10041,7 @@ export async function handleRemittancesSend(env, req) {
 }
 
 
-export async function handleContractsCheckOverlap(env, req) {
+ async function handleContractsCheckOverlap(env, req) {
   const user = await requireUser (env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -10111,7 +10111,7 @@ export async function handleContractsCheckOverlap(env, req) {
 // 2) TIMESHEETS — PAY STATE
 // ───────────────────────────────────────────────────────────────────────────────
 
-export async function handleTimesheetPayHold(env, req, timesheetId) {
+ async function handleTimesheetPayHold(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -10143,7 +10143,7 @@ export async function handleTimesheetPayHold(env, req, timesheetId) {
   return withCORS(env, req, ok({ updated: true, on_hold: onHold, row }));
 }
 
-export async function handleTimesheetMarkPaid(env, req, timesheetId) {
+ async function handleTimesheetMarkPaid(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -10241,7 +10241,7 @@ export async function handleTimesheetMarkPaid(env, req, timesheetId) {
 // REPORTS — Timesheets (unchanged; already supports print/csv)
 // ───────────────────────────────────────────────────────────────────────────────
 
-export async function handleReportTimesheets(env, req) {
+ async function handleReportTimesheets(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -10347,7 +10347,7 @@ export async function handleReportTimesheets(env, req) {
 // REPORTS — Invoices (add print)
 // ───────────────────────────────────────────────────────────────────────────────
 
-export async function handleReportInvoices(env, req) {
+ async function handleReportInvoices(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -10445,7 +10445,7 @@ export async function handleReportInvoices(env, req) {
 // REPORTS — Candidates (add print)
 // ───────────────────────────────────────────────────────────────────────────────
 
-export async function handleReportCandidates(env, req) {
+ async function handleReportCandidates(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -10515,7 +10515,7 @@ export async function handleReportCandidates(env, req) {
 // REPORTS — Clients (add print)
 // ───────────────────────────────────────────────────────────────────────────────
 
-export async function handleReportClients(env, req) {
+ async function handleReportClients(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -10585,7 +10585,7 @@ export async function handleReportClients(env, req) {
 // REPORTS — Umbrellas (add charge/margin + print)
 // ───────────────────────────────────────────────────────────────────────────────
 
-export async function handleReportUmbrellas(env, req) {
+ async function handleReportUmbrellas(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -10659,7 +10659,7 @@ export async function handleReportUmbrellas(env, req) {
 // ───────────────────────────────────────────────────────────────────────────────
 // SEARCH — Timesheets (richer filters + csv/print)
 // ───────────────────────────────────────────────────────────────────────────────
-export async function handleSearchTimesheets(env, req) {
+ async function handleSearchTimesheets(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -10904,7 +10904,7 @@ function decodeHtmlEntities(str) {
     .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCharCode(parseInt(n, 16)));
 }
 
-// Parse the NHSP HTML export (e.g. Export (4).xls) into rows: string[][]
+// Parse the NHSP HTML  (e.g.  (4).xls) into rows: string[][]
 function parseNhspHtmlTableToRows(html) {
   if (!html) return [];
 
@@ -11001,7 +11001,7 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
   // 1) Parse workbook → rows[] (HTML or real XLS)
   // ─────────────────────────────────────────────────────────────
   if (looksLikeHtml) {
-    // For NHSP "fake XLS" exports, always use our HTML table parser.
+    // For NHSP "fake XLS" s, always use our HTML table parser.
     // This avoids Excel serial dates like 45699 and keeps "02/11/2025"
     // as a string so excelDateToYmd can interpret dd/mm correctly.
     if (typeof parseNhspHtmlTableToRows === 'function') {
@@ -11442,7 +11442,7 @@ async function parseHealthRosterWorkbookIntoHrRows(
   // ─────────────────────────────────────────────────────────────
   try {
     if (looksLikeHtml && typeof parseNhspHtmlTableToRows === 'function') {
-      // For HTML-style HealthRoster exports, reuse the NHSP HTML table parser
+      // For HTML-style HealthRoster s, reuse the NHSP HTML table parser
       // so we get raw strings (e.g. "02/11/2025") not Excel serials.
       rows = parseNhspHtmlTableToRows(text);
       if (LOG) {
@@ -12110,7 +12110,7 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
 
 
 
-export async function handleManualPayAdjustmentCreate(env, req, timesheetId) {
+ async function handleManualPayAdjustmentCreate(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
   // Admin auth
@@ -12239,7 +12239,7 @@ export async function handleManualPayAdjustmentCreate(env, req, timesheetId) {
     return withCORS(env, req, serverError('Failed to create manual pay adjustment'));
   }
 }
-export async function handleTimesheetDetails(env, req, timesheetId) {
+ async function handleTimesheetDetails(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
   const user = await requireUser(env, req, ['admin']);
@@ -12406,7 +12406,7 @@ export async function handleTimesheetDetails(env, req, timesheetId) {
   }
 }
 
-export async function applyWeeklyMappingsOnly(env, {
+ async function applyWeeklyMappingsOnly(env, {
   source_system,
   import_id,
   candidate_mappings,
@@ -12695,7 +12695,7 @@ export async function applyWeeklyMappingsOnly(env, {
   }
 }
 
-export async function assertCandidateHasValidContract(env, {
+ async function assertCandidateHasValidContract(env, {
   candidate_id,
   client_id,
   work_date
@@ -12752,7 +12752,7 @@ export async function assertCandidateHasValidContract(env, {
     );
   }
 }
-export async function handleNhspResolveMappings(env, req, importId) {
+ async function handleNhspResolveMappings(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
   const user = await requireUser(env, req, ['admin']);
@@ -12860,7 +12860,7 @@ export async function handleNhspResolveMappings(env, req, importId) {
 }
 
 
-export async function handleHrAutoprocessResolveMappings(env, req, importId) {
+ async function handleHrAutoprocessResolveMappings(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
   const user = await requireUser(env, req, ['admin']);
@@ -12969,7 +12969,7 @@ export async function handleHrAutoprocessResolveMappings(env, req, importId) {
 
 
 
-export async function handleNhspApply(env, req, importId) {
+ async function handleNhspApply(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
   const user = await requireUser(env, req, ['admin']);
@@ -13759,7 +13759,7 @@ export async function handleNhspApply(env, req, importId) {
 }
 
 
-export async function handleNhspRows(env, req, importId) {
+ async function handleNhspRows(env, req, importId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -13791,7 +13791,7 @@ export async function handleNhspRows(env, req, importId) {
 }
 
 
-export async function handleHrAutoprocessImport(env, req) {
+ async function handleHrAutoprocessImport(env, req) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
   const user = await requireUser(env, req, ['admin']);
@@ -13981,7 +13981,7 @@ export async function handleHrAutoprocessImport(env, req) {
   }
 }
 
-export async function handleHrAutoprocessApply(env, req, importId) {
+ async function handleHrAutoprocessApply(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
   const user = await requireUser(env, req, ['admin']);
@@ -15455,7 +15455,7 @@ export async function handleHrAutoprocessApply(env, req, importId) {
 
 
 
-export async function handleNhspImportConfirm(env, req, importId) {
+ async function handleNhspImportConfirm(env, req, importId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   if (!importId) return withCORS(env, req, badRequest('import_id is required'));
@@ -15527,7 +15527,7 @@ export async function handleNhspImportConfirm(env, req, importId) {
   }
 }
 
-export async function handleTimesheetsSummary(env, req) {
+ async function handleTimesheetsSummary(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -15675,7 +15675,7 @@ export async function handleTimesheetsSummary(env, req) {
   }
 }
 
-export async function handleHrAutoprocessClients(env, req) {
+ async function handleHrAutoprocessClients(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) {
     return withCORS(env, req, unauthorized());
@@ -15709,7 +15709,7 @@ export async function handleHrAutoprocessClients(env, req) {
 }
 
 
-export async function handleHrAutoprocessConfirm(env, req, importId) {
+ async function handleHrAutoprocessConfirm(env, req, importId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   if (!importId) return withCORS(env, req, badRequest('import_id is required'));
@@ -15781,7 +15781,7 @@ export async function handleHrAutoprocessConfirm(env, req, importId) {
 
 
 
-export async function handleTsfinUpdateSegments(env, req, timesheetId) {
+ async function handleTsfinUpdateSegments(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id required'));
@@ -15998,7 +15998,7 @@ export async function handleTsfinUpdateSegments(env, req, timesheetId) {
 
 
 
-export async function handleNhspInvoiceCandidates(env, req) {
+ async function handleNhspInvoiceCandidates(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -16136,7 +16136,7 @@ export async function handleNhspInvoiceCandidates(env, req) {
 
 
 
-export async function handleNhspInvoiceRun(env, req) {
+ async function handleNhspInvoiceRun(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -16472,7 +16472,7 @@ export async function handleNhspInvoiceRun(env, req) {
   }
 }
 
-export async function handleNhspShiftDefer(env, req, shiftId) {
+ async function handleNhspShiftDefer(env, req, shiftId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   if (!shiftId) return withCORS(env, req, badRequest('shift id required'));
@@ -16533,7 +16533,7 @@ export async function handleNhspShiftDefer(env, req, shiftId) {
   }
 }
 
-export async function handleInvoiceRemoveTimesheet(env, req, invoiceId) {
+ async function handleInvoiceRemoveTimesheet(env, req, invoiceId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   if (!invoiceId) return withCORS(env, req, badRequest('invoice_id required'));
@@ -16723,7 +16723,7 @@ function computeNextDueFromSchedule(schedule) {
   return next;
 }
 
-export async function handlePayAdvancesList(env, req) {
+ async function handlePayAdvancesList(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -16755,7 +16755,7 @@ export async function handlePayAdvancesList(env, req) {
   return withCORS(env, req, ok({ advances }));
 }
 
-export async function handlePayAdvancesCreateMissingShift(env, req, candidateIdParam) {
+ async function handlePayAdvancesCreateMissingShift(env, req, candidateIdParam) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -16828,7 +16828,7 @@ export async function handlePayAdvancesCreateMissingShift(env, req, candidateIdP
   return withCORS(env, req, ok({ advance }));
 }
 
-export async function handlePayAdvancesCreateManual(env, req, candidateIdParam) {
+ async function handlePayAdvancesCreateManual(env, req, candidateIdParam) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -16928,7 +16928,7 @@ export async function handlePayAdvancesCreateManual(env, req, candidateIdParam) 
   return withCORS(env, req, ok({ advance }));
 }
 
-export async function handlePayAdvancesUpdate(env, req, advanceIdParam) {
+ async function handlePayAdvancesUpdate(env, req, advanceIdParam) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -16987,7 +16987,7 @@ export async function handlePayAdvancesUpdate(env, req, advanceIdParam) {
 
   return withCORS(env, req, ok({ advance }));
 }
-export async function handlePayAdvancesPause(env, req, advanceIdParam) {
+ async function handlePayAdvancesPause(env, req, advanceIdParam) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -17028,7 +17028,7 @@ export async function handlePayAdvancesPause(env, req, advanceIdParam) {
   return withCORS(env, req, ok({ advance }));
 }
 
-export async function handlePayAdvancesResume(env, req, advanceIdParam) {
+ async function handlePayAdvancesResume(env, req, advanceIdParam) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -17085,7 +17085,7 @@ export async function handlePayAdvancesResume(env, req, advanceIdParam) {
   return withCORS(env, req, ok({ advance }));
 }
 
-export async function handlePayAdvancesSummary(env, req, candidateIdParam) {
+ async function handlePayAdvancesSummary(env, req, candidateIdParam) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -18086,7 +18086,7 @@ async function classifyWeeklyGroup(env, group, context, sourceSystem) {
 
 
 
-export async function handleNhspImportsList(env, req) {
+ async function handleNhspImportsList(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -18157,7 +18157,7 @@ export async function handleNhspImportsList(env, req) {
     return withCORS(env, req, serverError(`Failed to list NHSP imports: ${e?.message || e}`));
   }
 }
-export async function handleNhspImportSummary(env, req, importId) {
+ async function handleNhspImportSummary(env, req, importId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   if (!importId) return withCORS(env, req, badRequest('import_id required'));
@@ -18249,7 +18249,7 @@ export async function handleNhspImportSummary(env, req, importId) {
     return withCORS(env, req, serverError(`Failed to summarise NHSP import: ${e?.message || e}`));
   }
 }
-export async function handleTimesheetCreateManualNhspShift(env, req) {
+ async function handleTimesheetCreateManualNhspShift(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -18752,7 +18752,7 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
   //   );
   //
   // …and make sure classifyWeeklyImportRowsLegacy(env, importId, { source_system })
-  // is defined and exported in this module.
+  // is defined and ed in this module.
 
   if (!useBatched) {
     // Run the old non-batched implementation instead
@@ -20695,7 +20695,7 @@ async function classifyWeeklyImportRowsLegacy(env, importId, { source_system }) 
 }
 
 
-export async function handleNhspImport(env, req) {
+ async function handleNhspImport(env, req) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
   const user = await requireUser(env, req, ['admin']);
@@ -20871,7 +20871,7 @@ export async function handleNhspImport(env, req) {
 }
 
 
-export async function handleNhspImportPreview(env, req, importId) {
+ async function handleNhspImportPreview(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
   const user = await requireUser(env, req, ['admin']);
@@ -20946,7 +20946,7 @@ export async function handleNhspImportPreview(env, req, importId) {
   }
 }
 
-export async function handleHrAutoprocessPreview(env, req, importId) {
+ async function handleHrAutoprocessPreview(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
   const user = await requireUser(env, req, ['admin']);
@@ -21068,7 +21068,7 @@ async function findCandidateByImportName(env, staffName, { trustNorm } = {}) {
 // ───────────────────────────────────────────────────────────────────────────────
 // SEARCH — Invoices (richer filters + csv/print)
 // ───────────────────────────────────────────────────────────────────────────────
-export async function handleSearchInvoices(env, req) {
+ async function handleSearchInvoices(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -21196,7 +21196,7 @@ export async function handleSearchInvoices(env, req) {
 // SEARCH — Clients (richer filters + csv/print)
 // ───────────────────────────────────────────────────────────────────────────────
 
-export async function handleSearchClients(env, req) {
+ async function handleSearchClients(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -21361,7 +21361,7 @@ export async function handleSearchClients(env, req) {
 // ───────────────────────────────────────────────────────────────────────────────
 // SEARCH — Umbrellas (richer filters + csv/print)
 // ───────────────────────────────────────────────────────────────────────────────
-export async function handleSearchUmbrellas(env, req) {
+ async function handleSearchUmbrellas(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -21509,7 +21509,7 @@ async function buildHealthRosterPdf(env, invoiceId) {
 // BACKEND — UPDATED
 // handleReportPresetsList: default sort name.asc; include user join; mine first then shared.
 
-export async function handleReportPresetsList(env, req) {
+ async function handleReportPresetsList(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -21568,7 +21568,7 @@ export async function handleReportPresetsList(env, req) {
     return withCORS(env, req, serverError('Failed to list report presets'));
   }
 }
-export async function handleReportPresetsCreate(env, req) {
+ async function handleReportPresetsCreate(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -21632,7 +21632,7 @@ export async function handleReportPresetsCreate(env, req) {
   }
 }
 
-export async function handleReportPresetsUpdate(env, req, routeId) {
+ async function handleReportPresetsUpdate(env, req, routeId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -21704,7 +21704,7 @@ export async function handleReportPresetsUpdate(env, req, routeId) {
 }
 
 
-export async function handleReportPresetsDelete(env, req, routeId) {
+ async function handleReportPresetsDelete(env, req, routeId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -22008,7 +22008,7 @@ function buildHTML(payload) {
     - writeAudit(env, user, action, afterJson, opts) -> writes audit_events
     - handleInvoiceRender(env, req, invoiceId) -> returns Response JSON { pdf_url }
 
-  New exported handlers in this module:
+  New ed handlers in this module:
     - handleOutboxDrain
     - handleEmailSend
     - handleQueueTsoFailureEmail
@@ -22348,7 +22348,7 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
 // ------------------------------
 // HTTP handlers – Outbox ops
 // ------------------------------
-export async function handleOutboxDrain(env, req) {
+ async function handleOutboxDrain(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -22363,7 +22363,7 @@ export async function handleOutboxDrain(env, req) {
   }
 }
 
-export async function handleEmailSend(env, req) {
+ async function handleEmailSend(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -22421,7 +22421,7 @@ export async function handleEmailSend(env, req) {
   return withCORS(env, req, ok({ sent: true, provider_message_id: resp.provider_message_id }));
 }
 
-export async function handleOutboxRetry(env, req, outboxId) {
+ async function handleOutboxRetry(env, req, outboxId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -22438,7 +22438,7 @@ export async function handleOutboxRetry(env, req, outboxId) {
   }
 }
 
-export async function handleListOutbox(env, req) {
+ async function handleListOutbox(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -22456,7 +22456,7 @@ export async function handleListOutbox(env, req) {
   return withCORS(env, req, ok({ items: rows }));
 }
 
-export async function handleGetOutboxItem(env, req, outboxId) {
+ async function handleGetOutboxItem(env, req, outboxId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -22465,7 +22465,7 @@ export async function handleGetOutboxItem(env, req, outboxId) {
   return withCORS(env, req, ok(rows[0]));
 }
 
-export async function handleOutboxMarkSent(env, req) {
+ async function handleOutboxMarkSent(env, req) {
   // Optional callback for provider -> system reconciliation
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -22485,7 +22485,7 @@ export async function handleOutboxMarkSent(env, req) {
   return withCORS(env, req, ok({ ok: true }));
 }
 
-export async function handleOutboxMarkFailed(env, req) {
+ async function handleOutboxMarkFailed(env, req) {
   // Optional callback for provider -> system reconciliation
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -22508,7 +22508,7 @@ export async function handleOutboxMarkFailed(env, req) {
 // ------------------------------
 // HTTP handler – TSO failure email queueing
 // ------------------------------
-export async function handleQueueTsoFailureEmail(env, req) {
+ async function handleQueueTsoFailureEmail(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -22560,7 +22560,7 @@ export async function handleQueueTsoFailureEmail(env, req) {
 // ------------------------------
 // Recipient resolution for TSO mails
 // ------------------------------
-export async function resolveTsoRecipientForTimesheet(env, { timesheet_id, booking_id }) {
+ async function resolveTsoRecipientForTimesheet(env, { timesheet_id, booking_id }) {
   // Prefer to resolve via current financials -> client_id
   if (timesheet_id) {
     const url = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
@@ -22631,7 +22631,7 @@ async function recordEmailAudit(env, userOrNull, action, meta) {
 // ------------------------------
 // REVISED: Remittance & Invoice email queueing
 // ------------------------------
-export async function handleRemittanceEmailForCandidate(env, req) {
+ async function handleRemittanceEmailForCandidate(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -23010,7 +23010,7 @@ export async function handleRemittanceEmailForCandidate(env, req) {
 }
 
 
-export async function handleInvoiceEmail(env, req, invoiceId) {
+ async function handleInvoiceEmail(env, req, invoiceId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -24586,7 +24586,7 @@ async function handleListClients(env, req) {
  *                 sample_id: { type: string, nullable: true }
  */
 
-export async function handleCandidateOverrideOverlapExists(env, req) {
+ async function handleCandidateOverrideOverlapExists(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -25167,7 +25167,7 @@ async function handleUpdateClient(env, req, clientId) {
 
 
 
-export async function handleImportHrRotaParse(env, req) {
+ async function handleImportHrRotaParse(env, req) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
   const user = await requireUser(env, req, ['admin']);
@@ -25791,7 +25791,7 @@ async function classifyHrRotaValidationImport(env, importId) {
 }
 
 
-export async function handleHrRotaValidationPreview(env, req, importId) {
+ async function handleHrRotaValidationPreview(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
   const user = await requireUser(env, req, ['admin']);
@@ -25855,7 +25855,7 @@ export async function handleHrRotaValidationPreview(env, req, importId) {
     );
   }
 }
-export async function handleHrRotaValidationApply(env, req, importId) {
+ async function handleHrRotaValidationApply(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
   const user = await requireUser(env, req, ['admin']);
@@ -26625,7 +26625,7 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
     detail
   };
 }
-export async function handleTimesheetsResolvePreview(env, req) {
+ async function handleTimesheetsResolvePreview(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -26675,7 +26675,7 @@ export async function handleTimesheetsResolvePreview(env, req) {
   }
 }
 
-export async function handleTimesheetResolveCandidate(env, req, timesheetId) {
+ async function handleTimesheetResolveCandidate(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
   const user = await requireUser(env, req, ['admin']);
@@ -26818,7 +26818,7 @@ export async function handleTimesheetResolveCandidate(env, req, timesheetId) {
   }
 }
 
-export async function handleTimesheetResolveClient(env, req, timesheetId) {
+ async function handleTimesheetResolveClient(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
   const user = await requireUser(env, req, ['admin']);
@@ -27011,7 +27011,7 @@ export async function handleTimesheetResolveClient(env, req, timesheetId) {
   }
 }
 
-export async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
+ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
   const user = await requireUser(env, req, ['admin']);
@@ -27199,7 +27199,7 @@ export async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
 }
 
 
-export async function handleHrRotaQueueTsoEmail(env, req) {
+ async function handleHrRotaQueueTsoEmail(env, req) {
   const enc = encodeURIComponent;
 
   const user = await requireUser(env, req, ['admin']);
@@ -27519,7 +27519,7 @@ async function handleGetHospital(env, req, clientId, hospitalId) {
     return withCORS(env, req, serverError("Failed to fetch client hospital"));
   }
 }
-export async function handleCandidatesGet(env, req, candidateId) {
+ async function handleCandidatesGet(env, req, candidateId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   if (!candidateId) return withCORS(env, req, badRequest('candidate_id required'));
@@ -27533,7 +27533,7 @@ export async function handleCandidatesGet(env, req, candidateId) {
   return withCORS(env, req, ok(row));
 }
 
-export async function handleClientsGet(env, req, clientId) {
+ async function handleClientsGet(env, req, clientId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   if (!clientId) return withCORS(env, req, badRequest('client_id required'));
@@ -27732,7 +27732,7 @@ async function handleDeleteHospital(env, req, clientId, hospitalId) {
  *       - bearerAuth: []
  */
 
-export async function handleListUmbrellas(env, req) {
+ async function handleListUmbrellas(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -28019,7 +28019,7 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
 // Add pass-through support for PostgREST 'id=in.(...)' filter
 // ======================================
 
-export async function handleSearchCandidates(env, req) {
+ async function handleSearchCandidates(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -28210,7 +28210,7 @@ export async function handleSearchCandidates(env, req) {
     }));
   }
 
-  // CSV export: keep rota roles vs job titles separate
+  // CSV : keep rota roles vs job titles separate
   if (format === 'csv') {
     const header = [
       'CandidateId',
@@ -28249,7 +28249,7 @@ export async function handleSearchCandidates(env, req) {
     }));
   }
 
-  // Print HTML export
+  // Print HTML 
   if (format === 'print') {
     const rowsHtml = (rows || []).map(r => `
       <tr>
@@ -28287,7 +28287,7 @@ export async function handleSearchCandidates(env, req) {
   }));
 }
 
-export async function handleListCandidates(env, req) {
+ async function handleListCandidates(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -28322,7 +28322,7 @@ export async function handleListCandidates(env, req) {
 
 
 // ======================= NEW: Job titles list ==========================
-export async function handleListJobTitles(env, req) {
+ async function handleListJobTitles(env, req) {
   const user = await requireUser(env, req);
   if (!user) return unauthorized(); // you could optionally wrap this with withCORS if you want
 
@@ -28357,7 +28357,7 @@ export async function handleListJobTitles(env, req) {
   }
 }
 // ======================= NEW: Job title create ==========================
-export async function handleCreateJobTitle(env, req) {
+ async function handleCreateJobTitle(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
@@ -28450,7 +28450,7 @@ export async function handleCreateJobTitle(env, req) {
 
 
 // ======================= NEW: Job title update ==========================
-export async function handleUpdateJobTitle(env, req, jobTitleId) {
+ async function handleUpdateJobTitle(env, req, jobTitleId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
@@ -28618,7 +28618,7 @@ export async function handleUpdateJobTitle(env, req, jobTitleId) {
 }
 
 // ======================= NEW: Job title delete ==========================
-export async function handleDeleteJobTitle(env, req, jobTitleId) {
+ async function handleDeleteJobTitle(env, req, jobTitleId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
@@ -28678,7 +28678,7 @@ export async function handleDeleteJobTitle(env, req, jobTitleId) {
 
 
 // ======================= NEW: Postcode lookup (EasyPostcodes) ==========================
-export async function handlePostcodeLookup(env, req) {
+ async function handlePostcodeLookup(env, req) {
   const user = await requireUser(env, req);
   if (!user) return unauthorized();
 
@@ -28809,7 +28809,7 @@ export async function handlePostcodeLookup(env, req) {
 
 
 // ================== BROKER: handleCreateCandidate (UPDATED to strip CCR fields) ==================
-export async function handleCreateCandidate(env, req) {
+ async function handleCreateCandidate(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
@@ -28934,7 +28934,7 @@ export async function handleCreateCandidate(env, req) {
   }
 }
 
-export async function handleGetCandidate(env, req, candidateId) {
+ async function handleGetCandidate(env, req, candidateId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
@@ -28985,7 +28985,7 @@ export async function handleGetCandidate(env, req, candidateId) {
   }
 }
 
-export async function handleUpdateCandidate(env, req, candidateId) {
+ async function handleUpdateCandidate(env, req, candidateId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
@@ -30028,7 +30028,7 @@ async function upsertValidation(env, user, { timesheet_id, status, reason, hr_re
   }
 }
 
-export async function handleHrRotaResolveMappings(env, req, importId) {
+ async function handleHrRotaResolveMappings(env, req, importId) {
   const enc   = encodeURIComponent;
   const norm  = (s) => String(s || '').trim().toLowerCase();
   const nowIso = new Date().toISOString();
@@ -30621,7 +30621,7 @@ async function handleHRValidate(env, req, importId) {
 // ------------------------
 // LIST INVOICES (light UI)
 // ------------------------
-export async function handleListInvoices(env, req) {
+ async function handleListInvoices(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
@@ -30725,7 +30725,7 @@ export async function handleListInvoices(env, req) {
 // -------------------
 // GET INVOICE (+meta)
 // -------------------
-export async function handleGetInvoice(env, req, invoiceId) {
+ async function handleGetInvoice(env, req, invoiceId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
@@ -30814,7 +30814,7 @@ export async function handleGetInvoice(env, req, invoiceId) {
 // === AMENDMENT inside broker/src/index.js ===
 // Replace your existing handleInvoiceRender with this version
 
-export async function handleInvoiceRender(env, req, invoiceId) {
+ async function handleInvoiceRender(env, req, invoiceId) {
   // Render a combined invoice bundle:
   //  - Invoice pages (always)
   //  - Optional HR report (if requires_hr && hr_attach_to_invoice)
@@ -31403,7 +31403,7 @@ export async function handleInvoiceRender(env, req, invoiceId) {
 
 
 
-export async function handleInvoiceHold(env, req, invoiceId) {
+ async function handleInvoiceHold(env, req, invoiceId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -31431,7 +31431,7 @@ export async function handleInvoiceHold(env, req, invoiceId) {
   }
 }
 
-export async function handleInvoiceUnhold(env, req, invoiceId) {
+ async function handleInvoiceUnhold(env, req, invoiceId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -31452,7 +31452,7 @@ export async function handleInvoiceUnhold(env, req, invoiceId) {
     return withCORS(env, req, serverError('Failed to unhold invoice'));
   }
 }
-export async function handleInvoiceUnissue(env, req, invoiceId) {
+ async function handleInvoiceUnissue(env, req, invoiceId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -32237,7 +32237,7 @@ async function handlePatchClientDefault(env, req, rateId) {
 
 
 
-export async function handleContractChangeRatesPreview(env, req, contractId) {
+ async function handleContractChangeRatesPreview(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   if (!contractId) return withCORS(env, req, badRequest('contract_id required'));
@@ -32288,7 +32288,7 @@ export async function handleContractChangeRatesPreview(env, req, contractId) {
 
 
 
-export async function handleContractChangeRatesOutstanding(env, req, contractId) {
+ async function handleContractChangeRatesOutstanding(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   if (!contractId) return withCORS(env, req, badRequest('contract_id required'));
@@ -33044,7 +33044,7 @@ async function collectOutstandingWeeksByContract(env, contractIds, cutoffYmd = n
 // Preview which contracts would be affected by PAYE↔UMBRELLA flip.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function handleCandidatePayMethodChangePreview(env, req, candidateId) {
+ async function handleCandidatePayMethodChangePreview(env, req, candidateId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
   if (!candidateId) return withCORS(env, req, badRequest('candidate_id required'));
@@ -33094,7 +33094,7 @@ export async function handleCandidatePayMethodChangePreview(env, req, candidateI
 //   • Migrate outstanding weeks + timesheets.
 //   • Update candidate.pay_method (and umbrella_id if desired).
 // ─────────────────────────────────────────────────────────────────────────────
-export async function handleCandidatePayMethodChange(env, req, candidateId) {
+ async function handleCandidatePayMethodChange(env, req, candidateId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
   if (!candidateId) return withCORS(env, req, badRequest('candidate_id required'));
@@ -33865,7 +33865,7 @@ async function enqueueTsfinRecomputeForClient(env, client_id) {
 // groups by client, creates HOURS-only invoices and immediately issues them.
 // Finds READY_FOR_INVOICE snapshots for contracts with auto_invoice=true,
 // groups by client, creates HOURS-only invoices and immediately issues them.
-export async function runAutoInvoiceCycle(env) {
+ async function runAutoInvoiceCycle(env) {
   const enc = encodeURIComponent; // ensure we have enc in scope
 
   try {
@@ -36927,7 +36927,7 @@ async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
   // basis = 'CONTRACT_WEEKLY' (requires enum extension).
   
 
-  export async function pruneOldHrWeeklyImports(env) {
+   async function pruneOldHrWeeklyImports(env) {
   const enc = encodeURIComponent;
 
   const now = new Date();
@@ -38169,7 +38169,7 @@ async function handleTsfinFinancials(env, req) {
 // settings_defaults.hr_validation_required and
 // settings_defaults.ts_reference_required)
 // ------------------------------------------------------
-export async function handleTsfinMarkReady(env, req) {
+ async function handleTsfinMarkReady(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized('Unauthorized');
 
@@ -38490,7 +38490,7 @@ export async function handleTsfinMarkReady(env, req) {
 // FINANCE PREVIEW (now adds exp/mileage)
 // ---------------------------------------
 
-export async function handleFinancePreviewTsfin(env, req) {
+ async function handleFinancePreviewTsfin(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
@@ -38662,7 +38662,7 @@ export async function handleFinancePreviewTsfin(env, req) {
 }
 
 
-export async function handleCreateInvoiceExpenses(env, req) {
+ async function handleCreateInvoiceExpenses(env, req) {
   // EXPENSES-ONLY (and/or mileage) invoice creation, separate from HOURS.
   // Requires snapshots to be READY_FOR_INVOICE & unlocked; sums expenses/mileage parts only.
   const user = await requireUser(env, req, ['admin']);
@@ -39018,7 +39018,7 @@ export async function handleCreateInvoiceExpenses(env, req) {
 
 // Helper: mark linked weeks as INVOICED (used by both HOURS + EXPENSES creators)
 
-export async function handleContractsPlanRanges(env, req, contractId) {
+ async function handleContractsPlanRanges(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -39260,7 +39260,7 @@ export async function handleContractsPlanRanges(env, req, contractId) {
     ranges: results
   }));
 }
-export async function handleContractsUnplanRanges(env, req, contractId) {
+ async function handleContractsUnplanRanges(env, req, contractId) {
   console.log('[UNPLAN][HIT]', 'handleContractsUnplanRanges called', { contractId });
 
   // ===== Correlation + entry log =====
@@ -39682,7 +39682,7 @@ export async function handleContractsUnplanRanges(env, req, contractId) {
   return withCORS(env, req, ok(response));
 }
 
-export async function handleContractWeekGeneratePrintable(env, req, weekId) {
+ async function handleContractWeekGeneratePrintable(env, req, weekId) {
   const enc = encodeURIComponent;
 
   const user = await requireUser(env, req, ['admin']);
@@ -40334,7 +40334,7 @@ export async function handleContractWeekGeneratePrintable(env, req, weekId) {
 }
 
 
-export async function handleTimesheetBucketPreview(env, req) {
+ async function handleTimesheetBucketPreview(env, req) {
   const enc    = encodeURIComponent;
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
@@ -40830,7 +40830,7 @@ async function generateAndStoreTimesheetQr(env, {
   return { qrText, qr_r2_key };
 }
 
-export async function handleTimesheetQrScan(env, req) {
+ async function handleTimesheetQrScan(env, req) {
   const enc = encodeURIComponent;
 
   // Called by broker with x-admin-token so requireUser(['admin']) works
@@ -41236,7 +41236,7 @@ export async function handleTimesheetQrScan(env, req) {
 }
 
 
-export async function handleContractWeekPlanPatch(env, req, weekId) {
+ async function handleContractWeekPlanPatch(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -41361,7 +41361,7 @@ async function setWeeksInvoicedForTimesheets(env, timesheetIds) {
   });
 }
 
-export async function handleCreateInvoiceTsfin(env, req) {
+ async function handleCreateInvoiceTsfin(env, req) {
   // (HOURS only — expenses invoiced via handleCreateInvoiceExpenses)
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized('Unauthorized');
@@ -42142,7 +42142,7 @@ async function lockSegmentsForInvoice(env, invoiceId, segmentRefs) {
   }
 }
 
-export async function handleCreateInvoiceTsfinByWeek(env, req) {
+ async function handleCreateInvoiceTsfinByWeek(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized('Unauthorized');
 
@@ -42583,7 +42583,7 @@ async function findOrCreateSelfBillInvoice(
   return invoice;
 }
 
-export async function collectSourceRowsForTimesheet(env, timesheetId, opts = {}) {
+ async function collectSourceRowsForTimesheet(env, timesheetId, opts = {}) {
   const enc = encodeURIComponent;
   const scope = (opts.scope || 'all').toLowerCase();
   const filterShiftId = scope === 'shift' && opts.shift_id ? String(opts.shift_id) : null;
@@ -42712,7 +42712,7 @@ export async function collectSourceRowsForTimesheet(env, timesheetId, opts = {})
   return { imports };
 }
 
-export async function handleTimesheetSourcePrint(env, req, timesheetId) {
+ async function handleTimesheetSourcePrint(env, req, timesheetId) {
   const enc = encodeURIComponent;
   const url = new URL(req.url);
   const q = (k) => url.searchParams.get(k);
@@ -42752,7 +42752,7 @@ export async function handleTimesheetSourcePrint(env, req, timesheetId) {
   }
 }
 
-export async function collectSourceRowsForInvoice(env, invoiceId) {
+ async function collectSourceRowsForInvoice(env, invoiceId) {
   const enc = encodeURIComponent;
 
   // 1) Try cached data first
@@ -42904,7 +42904,7 @@ export async function collectSourceRowsForInvoice(env, invoiceId) {
 
   return { imports };
 }
-export async function handleInvoiceSourcePrint(env, req, invoiceId) {
+ async function handleInvoiceSourcePrint(env, req, invoiceId) {
   const enc = encodeURIComponent;
 
   // Admin auth
@@ -43145,7 +43145,7 @@ function matchPath(pathname, pattern) {
   }
   return params;
 }
-// BACKEND — FULL ROUTER (export default) — unchanged routes map but now benefits from updated CORS/sbFetch
+// BACKEND — FULL ROUTER ( default) — unchanged routes map but now benefits from updated CORS/sbFetch
 export default {
   async fetch(req, env) {
     const pre = preflightIfNeeded(env, req);
@@ -43593,7 +43593,7 @@ if (req.method === 'GET' && p === '/api/healthroster/autoprocess/clients') {
       }
       if (req.method === 'POST' && p === '/api/remittances/send')            return handleRemittancesSend(env, req);
 
-      // ====================== SEARCH (exportable) ======================
+      // ====================== SEARCH (able) ======================
       if (req.method === 'GET' && p === '/api/search/timesheets')            return handleSearchTimesheets(env, req);
       if (req.method === 'GET' && p === '/api/search/invoices')              return handleSearchInvoices(env, req);
       if (req.method === 'GET' && p === '/api/search/candidates')            return handleSearchCandidates(env, req);
