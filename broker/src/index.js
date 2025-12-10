@@ -29247,6 +29247,7 @@ async function handleUpdateCandidate(env, req, candidateId) {
   }
 }
 
+
 async function handleGetCandidate(env, req, candidateId) {
   const enc  = encodeURIComponent;
   const user = await requireUser(env, req, ['admin']);
