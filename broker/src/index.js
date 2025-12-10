@@ -13259,45 +13259,62 @@ if (LOG) {
     );
     const shifts = (allShifts || []).filter(s => s.candidate_id && s.client_id && s.work_date);
 
-    const groups = new Map();
+     const groups = new Map();
 
     if (shifts.length) {
       const clientIds = [...new Set(shifts.map(s => s.client_id).filter(Boolean))];
+
+      // Load each client's configured week-ending weekday (0–6).
       let csMap = new Map();
       if (clientIds.length) {
         const { rows: csRows } = await sbFetch(
           env,
           `${env.SUPABASE_URL}/rest/v1/client_settings` +
           `?client_id=in.(${clientIds.map(enc).join(',')})` +
-          `&select=client_id,default_weekly_ts_grouping`
+          `&select=client_id,week_ending_weekday`
         );
-        csMap = new Map((csRows || []).map(r => [r.client_id, r.default_weekly_ts_grouping || 'CANDIDATE']));
+        csMap = new Map((csRows || []).map(r => [r.client_id, r]));
       }
 
       for (const sh of shifts) {
-        const keyClient   = sh.client_id;
-        const keyCand     = sh.candidate_id;
-        const keyWorkDate = sh.work_date;
+        const clientId    = sh.client_id;
+        const candidateId = sh.candidate_id;
+        const workDate    = sh.work_date;
+        if (!clientId || !candidateId || !workDate) continue;
 
-        const weekStart = computeWeekStartFromWeekEnding(sh.week_ending_date || keyWorkDate);
-        const grouping  = csMap.get(keyClient) || 'CANDIDATE';
+        // Derive the correct week-ending date from the client’s configured weekday.
+        const cs    = csMap.get(clientId) || {};
+        const weDow = Number.isInteger(Number(cs.week_ending_weekday))
+          ? Number(cs.week_ending_weekday)
+          : 0; // default Sunday if not configured
 
-        const grpKey =
-          grouping === 'CLIENT_ONLY'
-            ? `${keyClient}|${weekStart}`
-            : `${keyClient}|${keyCand}|${weekStart}`;
+        const d = new Date(`${workDate}T00:00:00Z`);
+        if (Number.isNaN(d.getTime())) continue;
+
+        while (d.getUTCDay() !== weDow) {
+          d.setUTCDate(d.getUTCDate() + 1);
+        }
+        const yyyy       = d.getUTCFullYear();
+        const mm         = String(d.getUTCMonth() + 1).padStart(2, '0');
+        const dd         = String(d.getUTCDate()).padStart(2, '0');
+        const weekEnding = `${yyyy}-${mm}-${dd}`;
+        const weekStart  = computeWeekStartFromWeekEnding(weekEnding);
+
+        // NHSP is always grouped by (client, candidate, week).
+        const grpKey = `${clientId}|${candidateId}|${weekEnding}`;
 
         if (!groups.has(grpKey)) {
           groups.set(grpKey, {
-            client_id:   keyClient,
-            candidate_id: keyCand,
-            week_start:  weekStart,
-            shifts: []
+            client_id:    clientId,
+            candidate_id: candidateId,
+            week_start:   weekStart,
+            shifts:       []
           });
         }
         groups.get(grpKey).shifts.push(sh);
       }
     }
+
 
     for (const [grpKey, g] of groups.entries()) {
       const { client_id: clientId, candidate_id: candidateId, week_start: weekStart, shifts: grpShifts } = g;
