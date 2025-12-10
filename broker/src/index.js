@@ -18466,9 +18466,12 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // NEW: NHSP candidate/client mapping in SQL (single RPC)
+  // NEW: SQL-backed candidate/client mapping (NHSP + HR)
   // ─────────────────────────────────────────────────────────────
   let nhspMappingByHrRowId = null;
+  let hrPreviewMappingByHrRowId = null;
+
+  // NHSP preview mappings
   if (source_system === 'NHSP') {
     try {
       const rpcBody = { p_import_id: importId };
@@ -18508,6 +18511,49 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
     } catch (e) {
       console.warn('[WEEKLY_CLASSIFY] nhsp_preview_mappings_phase1 failed (non-fatal)', e);
       nhspMappingByHrRowId = null; // fall back to JS mapping if RPC fails
+    }
+  }
+
+  // HEALTHROSTER preview mappings
+  if (source_system === 'HEALTHROSTER') {
+    try {
+      const rpcBody = { p_import_id: importId };
+      const res = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/rpc/hr_weekly_preview_mappings_phase1`,
+        {
+          method: 'POST',
+          headers: { ...sbHeaders(env), 'content-type': 'application/json' },
+          body: JSON.stringify(rpcBody)
+        }
+      );
+
+      const txt = await res.text().catch(() => '');
+      let json;
+      try {
+        json = txt ? JSON.parse(txt) : [];
+      } catch {
+        json = [];
+      }
+
+      if (Array.isArray(json) && json.length) {
+        hrPreviewMappingByHrRowId = new Map();
+        for (const row of json) {
+          if (row && row.hr_row_id) {
+            hrPreviewMappingByHrRowId.set(String(row.hr_row_id), row);
+          }
+        }
+      }
+
+      if (LOG) {
+        console.log('[WEEKLY_CLASSIFY]', JSON.stringify({
+          stage: 'hr_preview_mappings_loaded',
+          import_id: importId,
+          rows: Array.isArray(json) ? json.length : 0
+        }));
+      }
+    } catch (e) {
+      console.warn('[WEEKLY_CLASSIFY] hr_weekly_preview_mappings_phase1 failed (non-fatal)', e);
+      hrPreviewMappingByHrRowId = null; // fall back to JS mapping if RPC fails
     }
   }
 
@@ -18785,21 +18831,21 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
       continue;
     }
 
-    // Row-level SQL mapping (NHSP only)
+    // Row-level SQL mapping:
     const rowMapping =
       (source_system === 'NHSP' && nhspMappingByHrRowId instanceof Map)
         ? (nhspMappingByHrRowId.get(String(hrRow.id)) || null)
-        : null;
+        : (source_system === 'HEALTHROSTER' && hrPreviewMappingByHrRowId instanceof Map)
+          ? (hrPreviewMappingByHrRowId.get(String(hrRow.id)) || null)
+          : null;
 
-    // Candidate mapping (SQL first for NHSP, then JS fallback)
+    // Candidate mapping (SQL first when available, then JS fallback)
     let candidateId = null;
     let candidateName = null;
 
-    if (source_system === 'NHSP' && rowMapping) {
-      if (rowMapping.candidate_id) {
-        candidateId   = rowMapping.candidate_id;
-        candidateName = rowMapping.candidate_name || null;
-      }
+    if (rowMapping && rowMapping.candidate_id) {
+      candidateId   = rowMapping.candidate_id;
+      candidateName = rowMapping.candidate_name || null;
     }
 
     if (!candidateId) {
@@ -18849,20 +18895,18 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
       continue;
     }
 
-    if (!candidateName && !(source_system === 'NHSP' && rowMapping && rowMapping.candidate_name)) {
+    if (!candidateName && !(rowMapping && rowMapping.candidate_name)) {
       const cand = await getCandidateByIdCached(candidateId);
       candidateName = cand?.display_name || null;
     }
 
-    // Client mapping (SQL first for NHSP, then JS fallback / HR behaviour)
+    // Client mapping (SQL first when available, then JS fallback / HR behaviour)
     let clientId = null;
     let clientName = null;
 
-    if (source_system === 'NHSP' && rowMapping) {
-      if (rowMapping.client_id) {
-        clientId   = rowMapping.client_id;
-        clientName = rowMapping.client_name || null;
-      }
+    if (rowMapping && rowMapping.client_id) {
+      clientId   = rowMapping.client_id;
+      clientName = rowMapping.client_name || null;
     }
 
     if (!clientId) {
@@ -19003,7 +19047,7 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
       for (const c of inRange) {
         const bandStr = upper(c.band || '');
         if (!bandStr) continue;
-        const tokens = bandStr.split(/[,\s]+/).filter(Boolean);
+        const tokens = bandStr.split(/[,\s]+).filter(Boolean);
         if (tokens.includes(assignNorm)) {
           bandMatches.push(c);
         }
@@ -19134,6 +19178,7 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
 
   // ─────────────────────────────────────────────────────────────
   // 4) Group-level classification: base/adjustment TSFIN, delta, action
+  // (unchanged from your version)
   // ─────────────────────────────────────────────────────────────
   const classifyGroup = async (g) => {
     const { candidate_id, client_id, contract_id, week_ending_date } = g;
