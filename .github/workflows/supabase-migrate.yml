@@ -30,7 +30,7 @@ jobs:
           for f in supabase/migrations/*.sql; do
             if [ -f "$f" ]; then
               echo "Applying migration: $f"
-              psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f "$f"
+              psql -4 "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f "$f"
             fi
           done
 
