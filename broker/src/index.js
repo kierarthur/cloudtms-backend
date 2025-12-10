@@ -19047,7 +19047,8 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
       for (const c of inRange) {
         const bandStr = upper(c.band || '');
         if (!bandStr) continue;
-        const tokens = bandStr.split(/[,\s]+).filter(Boolean);
+     const tokens = bandStr.split(/[,\s]+/).filter(Boolean);
+
         if (tokens.includes(assignNorm)) {
           bandMatches.push(c);
         }
