@@ -1,7 +1,4 @@
--- 20251210_test_migration.sql
--- Simple test table to confirm GitHub → Supabase migrations work.
+-- 20251211_drop_migration_test.sql
+-- Drop the test table we created earlier.
 
-create table if not exists migration_test (
-  id uuid primary key default gen_random_uuid(),
-  created_at timestamptz not null default now()
-);
+drop table if exists migration_test;
