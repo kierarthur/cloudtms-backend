@@ -13259,203 +13259,226 @@ if (LOG) {
     );
     const shifts = (allShifts || []).filter(s => s.candidate_id && s.client_id && s.work_date);
 
-     const groups = new Map();
+  const groups = new Map();
 
-    if (shifts.length) {
-      const clientIds = [...new Set(shifts.map(s => s.client_id).filter(Boolean))];
+if (shifts.length) {
+  const clientIds = [...new Set(shifts.map(s => s.client_id).filter(Boolean))];
 
-      // Load each client's configured week-ending weekday (0–6).
-      let csMap = new Map();
-      if (clientIds.length) {
-        const { rows: csRows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/client_settings` +
-          `?client_id=in.(${clientIds.map(enc).join(',')})` +
-          `&select=client_id,week_ending_weekday`
-        );
-        csMap = new Map((csRows || []).map(r => [r.client_id, r]));
-      }
+  let csMap = new Map();
+  if (clientIds.length) {
+    const { rows: csRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/client_settings` +
+      `?client_id=in.(${clientIds.map(enc).join(',')})` +
+      `&select=client_id,week_ending_weekday`
+    );
+    csMap = new Map((csRows || []).map(r => [r.client_id, r]));
+  }
 
-      for (const sh of shifts) {
-        const clientId    = sh.client_id;
-        const candidateId = sh.candidate_id;
-        const workDate    = sh.work_date;
-        if (!clientId || !candidateId || !workDate) continue;
+  for (const sh of shifts) {
+    const clientId    = sh.client_id;
+    const candidateId = sh.candidate_id;
+    const workDate    = sh.work_date;
+    if (!clientId || !candidateId || !workDate) continue;
 
-        // Derive the correct week-ending date from the client’s configured weekday.
-        const cs    = csMap.get(clientId) || {};
-        const weDow = Number.isInteger(Number(cs.week_ending_weekday))
-          ? Number(cs.week_ending_weekday)
-          : 0; // default Sunday if not configured
+    const cs    = csMap.get(clientId) || {};
+    const weDow = Number.isInteger(Number(cs.week_ending_weekday))
+      ? Number(cs.week_ending_weekday)
+      : 0; // default Sunday
 
-        const d = new Date(`${workDate}T00:00:00Z`);
-        if (Number.isNaN(d.getTime())) continue;
+    const d = new Date(`${workDate}T00:00:00Z`);
+    if (Number.isNaN(d.getTime())) continue;
 
-        while (d.getUTCDay() !== weDow) {
-          d.setUTCDate(d.getUTCDate() + 1);
-        }
-        const yyyy       = d.getUTCFullYear();
-        const mm         = String(d.getUTCMonth() + 1).padStart(2, '0');
-        const dd         = String(d.getUTCDate()).padStart(2, '0');
-        const weekEnding = `${yyyy}-${mm}-${dd}`;
-        const weekStart  = computeWeekStartFromWeekEnding(weekEnding);
-
-        // NHSP is always grouped by (client, candidate, week).
-        const grpKey = `${clientId}|${candidateId}|${weekEnding}`;
-
-        if (!groups.has(grpKey)) {
-          groups.set(grpKey, {
-            client_id:    clientId,
-            candidate_id: candidateId,
-            week_start:   weekStart,
-            shifts:       []
-          });
-        }
-        groups.get(grpKey).shifts.push(sh);
-      }
+    while (d.getUTCDay() !== weDow) {
+      d.setUTCDate(d.getUTCDate() + 1);
     }
+    const yyyy       = d.getUTCFullYear();
+    const mm         = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd         = String(d.getUTCDate()).padStart(2, '0');
+    const weekEnding = `${yyyy}-${mm}-${dd}`;
+    const weekStart  = computeWeekStartFromWeekEnding(weekEnding);
+
+    const grpKey = `${clientId}|${candidateId}|${weekEnding}`;
+
+    if (!groups.has(grpKey)) {
+      groups.set(grpKey, {
+        client_id:        clientId,
+        candidate_id:     candidateId,
+        week_ending_date: weekEnding,  // <-- new, real DB column
+        week_start:       weekStart,   // <-- kept for advances/invoice targeting
+        shifts:           []
+      });
+    }
+    groups.get(grpKey).shifts.push(sh);
+  }
+}
 
 
-    for (const [grpKey, g] of groups.entries()) {
-      const { client_id: clientId, candidate_id: candidateId, week_start: weekStart, shifts: grpShifts } = g;
-      if (!clientId || !candidateId || !weekStart || !grpShifts?.length) continue;
 
-      const { rows: contracts } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/contracts` +
-        `?client_id=eq.${enc(clientId)}` +
-        `&candidate_id=eq.${enc(candidateId)}` +
-        `&active=eq.true` +
-        `&select=*`
+ for (const [grpKey, g] of groups.entries()) {
+  const { client_id: clientId, candidate_id: candidateId, week_start: weekStart, shifts: grpShifts } = g;
+  if (!clientId || !candidateId || !weekStart || !grpShifts?.length) continue;
+
+  // Derive week_ending_date (Mon → Sun) from week_start
+  let weekEndingDate = null;
+  try {
+    const d = new Date(`${weekStart}T00:00:00Z`);
+    if (!Number.isNaN(d.getTime())) {
+      d.setUTCDate(d.getUTCDate() + 6);
+      const yyyy = d.getUTCFullYear();
+      const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const dd   = String(d.getUTCDate()).padStart(2, '0');
+      weekEndingDate = `${yyyy}-${mm}-${dd}`;
+    }
+  } catch {
+    weekEndingDate = null;
+  }
+  if (!weekEndingDate) continue;
+
+  const { rows: contracts } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contracts` +
+    `?client_id=eq.${enc(clientId)}` +
+    `&candidate_id=eq.${enc(candidateId)}` +
+    `&select=*`
+  );
+  const contract = contracts?.[0] || null;
+  if (!contract) continue;
+
+  const { rows: cws } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+    `?contract_id=eq.${enc(contract.id)}` +
+    `&week_ending_date=eq.${enc(weekEndingDate)}` +
+    `&additional_seq=eq.0` +
+    `&select=*` +
+    `&limit=1`
+  );
+  let cw = cws?.[0] || null;
+
+  const nowIso = new Date().toISOString();
+
+  if (!cw) {
+    // Create missing base contract_week for this week_ending_date
+    try {
+      const insCw = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/contract_weeks`,
+        {
+          method: 'POST',
+          headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+          body: JSON.stringify([{
+            contract_id:        contract.id,
+            week_ending_date:   weekEndingDate,
+            additional_seq:     0,
+            status:             'SUBMITTED',
+            created_at:         nowIso,
+            updated_at:         nowIso
+          }])
+        }
       );
-      const contract = contracts?.[0] || null;
-      if (!contract) continue;
+      const txt = await insCw.text().catch(() => '');
+      if (!insCw.ok) {
+        console.warn('[NHSP_APPLY] contract_weeks insert failed', {
+          import_id:   importId,
+          contract_id: contract.id,
+          week_ending_date: weekEndingDate,
+          status:     insCw.status,
+          body:       txt
+        });
+        continue;
+      }
+      const json = txt ? JSON.parse(txt) : [];
+      cw = Array.isArray(json) ? json[0] : json;
+    } catch (e) {
+      console.warn('[NHSP_APPLY] contract_weeks insert threw (non-fatal)', {
+        import_id:   importId,
+        contract_id: contract.id,
+        week_ending_date: weekEndingDate,
+        err: e?.message || String(e)
+      });
+      continue;
+    }
+  }
 
-      const { rows: cws } = await sbFetch(
+  // Find or create weekly timesheet for this contract_week
+  let ts = null;
+  if (cw.timesheet_id) {
+    try {
+      const { rows: tsRows } = await sbFetch(
         env,
-        `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-        `?contract_id=eq.${enc(contract.id)}` +
-        `&week_start=eq.${enc(weekStart)}` +
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(cw.timesheet_id)}` +
+        `&is_current=eq.true` +
         `&select=*` +
         `&limit=1`
       );
-      let cw = cws?.[0] || null;
+      ts = tsRows?.[0] || null;
+    } catch {
+      // ignore
+    }
+  }
 
-      const nowIso = new Date().toISOString();
+  if (!ts) {
+    const tsPayload = {
+      candidate_id:     candidateId,
+      client_id:        clientId,
+      hospital_norm:    null,
+      sheet_scope:      'WEEKLY',
+      submission_mode:  'MANUAL',
+      timesheet_ref:    null,
+      week_ending_date: weekEndingDate,
+      is_current:       true,
+      created_at:       nowIso,
+      updated_at:       nowIso
+    };
 
-      if (!cw) {
-        try {
-          const insCw = await fetch(
-            `${env.SUPABASE_URL}/rest/v1/contract_weeks`,
-            {
-              method: 'POST',
-              headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-              body: JSON.stringify([{
-                contract_id: contract.id,
-                week_start: weekStart,
-                status: 'SUBMITTED',
-                created_at: nowIso,
-                updated_at: nowIso
-              }])
-            }
-          );
-          const txt = await insCw.text().catch(() => '');
-          if (!insCw.ok) {
-            console.warn('[NHSP_APPLY] contract_weeks insert failed', {
-              import_id: importId,
-              contract_id: contract.id,
-              week_start: weekStart,
-              status: insCw.status,
-              body: txt
-            });
-            continue;
-          }
-          const json = txt ? JSON.parse(txt) : [];
-          cw = Array.isArray(json) ? json[0] : json;
-        } catch (e) {
-          console.warn('[NHSP_APPLY] contract_weeks insert threw (non-fatal)', {
-            import_id: importId,
-            contract_id: contract.id,
-            week_start: weekStart,
-            err: e?.message || String(e)
-          });
-          continue;
+    try {
+      const insTs = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/timesheets`,
+        {
+          method: 'POST',
+          headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+          body: JSON.stringify(tsPayload)
         }
-      }
+      );
+      if (!insTs.ok) continue;
+      const tsJson = await insTs.json().catch(() => []);
+      ts = Array.isArray(tsJson) ? tsJson[0] : tsJson;
 
-      let ts = null;
-      if (cw.timesheet_id) {
-        try {
-          const { rows: tsRows } = await sbFetch(
-            env,
-            `${env.SUPABASE_URL}/rest/v1/timesheets` +
-            `?timesheet_id=eq.${enc(cw.timesheet_id)}` +
-            `&is_current=eq.true` +
-            `&select=*` +
-            `&limit=1`
-          );
-          ts = tsRows?.[0] || null;
-        } catch {
-          // ignore
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+          body: JSON.stringify({
+            timesheet_id: ts.timesheet_id,
+            status:       'SUBMITTED',
+            updated_at:   nowIso
+          })
         }
+      ).catch(() => {});
+    } catch {
+      continue;
+    }
+  }
+
+  const shiftIdsForTs = g.shifts.map(s => s.id);
+  if (shiftIdsForTs.length) {
+    const shParam = shiftIdsForTs.map(enc).join(',');
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/nhsp_shifts?id=in.(${shParam})`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify({
+          timesheet_id: ts.timesheet_id,
+          contract_id:  contract.id,
+          updated_at:   new Date().toISOString()
+        })
       }
+    ).catch(() => {});
+  }
 
-      if (!ts) {
-        const tsPayload = {
-          candidate_id: candidateId,
-          client_id: clientId,
-          hospital_norm: null,
-          sheet_scope: 'WEEKLY',
-          submission_mode: 'MANUAL',
-          timesheet_ref: null,
-          week_start: weekStart,
-          is_current: true,
-          created_at: nowIso,
-          updated_at: nowIso
-        };
-
-        try {
-          const insTs = await fetch(
-            `${env.SUPABASE_URL}/rest/v1/timesheets`,
-            {
-              method: 'POST',
-              headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-              body: JSON.stringify(tsPayload)
-            }
-          );
-          if (!insTs.ok) continue;
-          const tsJson = await insTs.json().catch(() => []);
-          ts = Array.isArray(tsJson) ? tsJson[0] : tsJson;
-
-          await fetch(
-            `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
-            {
-              method: 'PATCH',
-              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-              body: JSON.stringify({ timesheet_id: ts.timesheet_id, status: 'SUBMITTED', updated_at: nowIso })
-            }
-          ).catch(() => {});
-        } catch {
-          continue;
-        }
-      }
-
-      const shiftIdsForTs = g.shifts.map(s => s.id);
-      if (shiftIdsForTs.length) {
-        const shParam = shiftIdsForTs.map(enc).join(',');
-        await fetch(
-          `${env.SUPABASE_URL}/rest/v1/nhsp_shifts?id=in.(${shParam})`,
-          {
-            method: 'PATCH',
-            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-            body: JSON.stringify({
-              timesheet_id: ts.timesheet_id,
-              contract_id: contract.id,
-              updated_at: new Date().toISOString()
-            })
-          }
-        ).catch(() => {});
-      }
 
       await buildNhspWeeklySnapshot(env, ts, contract, g.shifts, importId, 'NHSP');
 
