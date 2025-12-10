@@ -13184,10 +13184,11 @@ async function handleNhspApply(env, req, importId) {
     let mappedClients    = 0;
 
     try {
-      const rpcBody = {
-        import_id: importId,
-        selected_group_ids: selectedGroupIds.length ? selectedGroupIds : null
-      };
+    const rpcBody = {
+  p_import_id: importId,
+  p_selected_group_ids: selectedGroupIds.length ? selectedGroupIds : null
+};
+
 
       const rpcRes = await fetch(
         `${env.SUPABASE_URL}/rest/v1/rpc/nhsp_apply_import_phase1`,
@@ -13197,27 +13198,42 @@ async function handleNhspApply(env, req, importId) {
           body: JSON.stringify(rpcBody)
         }
       );
-      const txt = await rpcRes.text().catch(() => '');
+  const txt = await rpcRes.text().catch(() => '');
 
-      if (!rpcRes.ok) {
-        console.error('[NHSP_APPLY] nhsp_apply_import_phase1 RPC failed', {
-          import_id: importId,
-          status: rpcRes.status,
-          body: txt
-        });
-        throw new Error(`nhsp_apply_import_phase1 failed with status ${rpcRes.status}`);
-      }
+if (!rpcRes.ok) {
+  console.error('[NHSP_APPLY] nhsp_apply_import_phase1 RPC failed', {
+    import_id: importId,
+    status: rpcRes.status,
+    body: txt
+  });
+  throw new Error(`nhsp_apply_import_phase1 failed with status ${rpcRes.status}`);
+}
 
-      let rpcJson;
-      try { rpcJson = txt ? JSON.parse(txt) : null; } catch { rpcJson = null; }
-      const row0 = Array.isArray(rpcJson) ? rpcJson[0] : rpcJson;
+let rpcJson;
+try {
+  rpcJson = txt ? JSON.parse(txt) : null;
+} catch {
+  rpcJson = null;
+}
 
-      if (row0 && typeof row0 === 'object') {
-        created          = Number(row0.shifts_created    ?? 0);
-        updated          = Number(row0.shifts_updated    ?? 0);
-        mappedCandidates = Number(row0.mapped_candidates ?? 0);
-        mappedClients    = Number(row0.mapped_clients    ?? 0);
-      }
+const row0 = Array.isArray(rpcJson) ? rpcJson[0] : rpcJson;
+// When called via SQL editor you saw this shape:
+// [ { "nhsp_apply_import_phase1": { ... } } ]
+const payload = row0?.nhsp_apply_import_phase1 || row0 || {};
+
+created          = Number(payload.shifts_created     ?? 0);
+updated          = Number(payload.shifts_updated     ?? 0);
+mappedCandidates = Number(payload.mapped_candidates  ?? 0);
+mappedClients    = Number(payload.mapped_clients     ?? 0);
+
+if (LOG) {
+  console.log('[NHSP_APPLY]', JSON.stringify({
+    stage: 'phase1_done',
+    import_id: importId,
+    summary: { created, updated, mappedCandidates, mappedClients }
+  }));
+}
+
 
       if (LOG) {
         console.log('[NHSP_APPLY]', JSON.stringify({
@@ -14013,225 +14029,85 @@ async function handleNhspApply(env, req, importId) {
       });
     }
 
+        // ─────────────────────────────────────────────
+    // PHASE 1: hr_rows → nhsp_shifts in Postgres
     // ─────────────────────────────────────────────
-    // Load hr_rows → Phase 1 mapping into nhsp_shifts
-    // ─────────────────────────────────────────────
-    const { rows: hrRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/hr_rows` +
-      `?import_id=eq.${enc(importId)}` +
-      `&select=id,external_row_key,payload_json` +
-      `&order=id.asc`
-    );
-
-    if (!hrRows?.length) {
-      if (LOG) {
-        console.log('[HR_AUTOPROC_APPLY]', JSON.stringify({
-          stage: 'no_hr_rows',
-          import_id: importId
-        }));
-      } else {
-        console.log('[HR_AUTOPROC_APPLY] no hr_rows', { importId });
-      }
-      return withCORS(env, req, ok({
-        import_id: importId,
-        shifts_created: 0,
-        shifts_updated: 0,
-        mapped_candidates: 0,
-        mapped_clients: 0
-      }));
-    }
-
     let created = 0;
     let updated = 0;
     let mappedCandidates = 0;
 
-    // PHASE 1: hr_rows → nhsp_shifts (HEALTHROSTER)
-    for (const row of hrRows) {
-      const hrRowId = row.id;
-      let key = row.external_row_key;
-      const payload = row.payload_json || {};
-
-      const staffName = String(payload.staff_name || '').trim();
-      const workDate  = String(payload.work_date || '').trim();
-      const ward      = payload.ward || null;
-      const startIso  = payload.start_utc || null;
-      const endIso    = payload.end_utc   || null;
-      const breakMins = Number(payload.break_mins || 0) || 0;
-      const finalized = String(payload.finalized_date || payload.finalised_date || '').trim();
-      const requestId = String(payload.request_id || '').trim();
-
-      const heldBackReason = finalized ? null : 'NO_FINALISED_DATE';
-
-      if (!workDate || !startIso || !endIso) continue;
-
-      if (!key) {
-        const staffNorm = norm(staffName);
-        const rawKey = [workDate, staffNorm, ward || '', String(imp.client_id || ''), requestId]
-          .map(s => (s || '').replace(/[|]/g, ' ').trim())
-          .join('|');
-
-        if (!rawKey) continue;
-        key = rawKey;
-
-        await fetch(
-          `${env.SUPABASE_URL}/rest/v1/hr_rows?id=eq.${enc(hrRowId)}`,
-          {
-            method: 'PATCH',
-            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-            body: JSON.stringify({ external_row_key: key })
-          }
-        ).catch(() => {});
-      }
-
-      const { rows: existing } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
-        `?external_row_key=eq.${enc(key)}` +
-        `&select=id,candidate_id,client_id,work_date,start_utc,end_utc,break_mins,source_system,hr_request_id,held_back_reason` +
-        `&limit=1`
-      );
-      const shift = existing?.[0] || null;
-
-      let shiftId = null;
-      let candidateId = shift?.candidate_id || null;
-
-      if (!shift) {
-        const insPayload = {
-          external_row_key: key,
-          latest_import_id: importId,
-          source_system: 'HEALTHROSTER',
-          work_date: workDate,
-          ward,
-          start_utc: startIso,
-          end_utc: endIso,
-          break_mins: breakMins,
-          client_id: imp.client_id,
-          hr_request_id: requestId || null,
-          held_back_reason: heldBackReason
-        };
-
-        const insRes = await fetch(
-          `${env.SUPABASE_URL}/rest/v1/nhsp_shifts`,
-          {
-            method: 'POST',
-            headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-            body: JSON.stringify(insPayload)
-          }
-        );
-        if (insRes.ok) {
-          const j = await insRes.json().catch(() => []);
-          const rec = Array.isArray(j) ? j[0] : j;
-          shiftId = rec?.id || null;
-          created++;
-        } else {
-          const err = await insRes.text().catch(() => '');
-          console.warn('[HR_AUTOPROC_APPLY] nhsp_shifts insert failed', { importId, err });
-          continue;
-        }
-      } else {
-        shiftId = shift.id;
-
-        const patch = {
-          latest_import_id: importId,
-          source_system: 'HEALTHROSTER',
-          work_date: workDate,
-          ward,
-          start_utc: startIso,
-          end_utc: endIso,
-          break_mins: breakMins,
-          client_id: imp.client_id,
-          hr_request_id: requestId || null,
-          held_back_reason: heldBackReason,
-          updated_at: new Date().toISOString()
-        };
-
-        const upRes = await fetch(
-          `${env.SUPABASE_URL}/rest/v1/nhsp_shifts?id=eq.${enc(shift.id)}`,
-          {
-            method: 'PATCH',
-            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-            body: JSON.stringify(patch)
-          }
-        );
-        if (upRes.ok) {
-          updated++;
-        } else {
-          const err = await upRes.text().catch(() => '');
-          console.warn('[HR_AUTOPROC_APPLY] nhsp_shifts patch failed', { importId, shift_id: shift.id, err });
-        }
-      }
-
-      if (!shiftId) continue;
-
-      // Candidate mapping (by name via aliases / mappings)
-      if (!candidateId && staffName) {
-        const nameNorm = norm(staffName);
-        let foundCandidate = null;
-
-        if (nameNorm) {
-          try {
-            const aliasJson = JSON.stringify([nameNorm]);
-            const { rows: aliasRows } = await sbFetch(
-              env,
-              `${env.SUPABASE_URL}/rest/v1/candidates` +
-              `?nhsp_hr_name_aliases=cs.${enc(aliasJson)}` +
-              `&select=id` +
-              `&limit=2`
-            );
-            if (aliasRows?.length === 1 && aliasRows[0]?.id) {
-              foundCandidate = aliasRows[0].id;
-            }
-          } catch {
-            // fall through
-          }
-
-          if (!foundCandidate) {
-            const { rows: mapRows } = await sbFetch(
-              env,
-              `${env.SUPABASE_URL}/rest/v1/hr_name_mappings` +
-              `?hr_name_norm=eq.${enc(nameNorm)}` +
-              `&active=eq.true` +
-              `&select=candidate_id` +
-              `&limit=1`
-            );
-            if (mapRows?.[0]?.candidate_id) {
-              foundCandidate = mapRows[0].candidate_id;
-            }
-          }
-        }
-
-        if (foundCandidate) {
-          candidateId = foundCandidate;
-          mappedCandidates++;
-          await fetch(
-            `${env.SUPABASE_URL}/rest/v1/nhsp_shifts?id=eq.${enc(shiftId)}`,
-            {
-              method: 'PATCH',
-              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-              body: JSON.stringify({ candidate_id: candidateId })
-            }
-          ).catch(() => {});
-        }
-      }
-    }
-
-    if (LOG) {
-      console.log('[HR_AUTOPROC_APPLY]', JSON.stringify({
-        stage: 'phase1_complete',
+    try {
+      const rpcBody = {
         import_id: importId,
-        shifts_created: created,
-        shifts_updated: updated,
-        mapped_candidates: mappedCandidates
-      }));
-    } else {
-      console.log('[HR_AUTOPROC_APPLY] phase1 complete', {
-        importId,
-        shifts_created: created,
-        shifts_updated: updated,
-        mapped_candidates: mappedCandidates
+        // For HR we don't currently filter Phase 1 by group,
+        // but we keep the parameter for symmetry & future use.
+        selected_group_ids: null
+      };
+
+      const rpcRes = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/rpc/hr_autoprocess_apply_phase1`,
+        {
+          method: 'POST',
+          headers: {
+            ...sbHeaders(env),
+            'content-type': 'application/json'
+          },
+          body: JSON.stringify(rpcBody)
+        }
+      );
+
+      const txt = await rpcRes.text().catch(() => '');
+      if (!rpcRes.ok) {
+        console.error('[HR_AUTOPROC_APPLY] hr_autoprocess_apply_phase1 RPC failed', {
+          import_id: importId,
+          status: rpcRes.status,
+          body: txt
+        });
+        throw new Error(`hr_autoprocess_apply_phase1 failed with status ${rpcRes.status}`);
+      }
+
+      let rpcJson;
+      try {
+        rpcJson = txt ? JSON.parse(txt) : null;
+      } catch {
+        rpcJson = null;
+      }
+
+      // For scalar jsonb-returning RPC, PostgREST returns the JSON object directly.
+      // If Supabase ever wraps it in an array, this also handles that.
+      const row0 = Array.isArray(rpcJson) ? rpcJson[0] : rpcJson;
+
+      if (row0 && typeof row0 === 'object') {
+        created          = Number(row0.shifts_created    ?? 0);
+        updated          = Number(row0.shifts_updated    ?? 0);
+        mappedCandidates = Number(row0.mapped_candidates ?? 0);
+      }
+
+      if (LOG) {
+        console.log('[HR_AUTOPROC_APPLY]', JSON.stringify({
+          stage: 'phase1_complete',
+          import_id: importId,
+          shifts_created: created,
+          shifts_updated: updated,
+          mapped_candidates: mappedCandidates
+        }));
+      } else {
+        console.log('[HR_AUTOPROC_APPLY] phase1 complete', {
+          importId,
+          shifts_created: created,
+          shifts_updated: updated,
+          mapped_candidates: mappedCandidates
+        });
+      }
+    } catch (e) {
+      console.error('[HR_AUTOPROC_APPLY] hr_autoprocess_apply_phase1 RPC threw', {
+        import_id: importId,
+        err: e?.message || String(e)
       });
+      // Bubble up so caller sees failure
+      throw e;
     }
+
 
     // ---------- PHASE 2: weekly grouping/TS/TSFIN with self-bill-aware logic ----------
     const { rows: allShifts } = await sbFetch(
