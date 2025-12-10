@@ -25522,8 +25522,7 @@ async function classifyHrRotaValidationImport(env, importId) {
   };
 }
 
-
- async function handleHrRotaValidationPreview(env, req, importId) {
+async function handleHrRotaValidationPreview(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
   const user = await requireUser(env, req, ['admin']);
@@ -25531,6 +25530,47 @@ async function classifyHrRotaValidationImport(env, importId) {
   if (!importId) {
     return withCORS(env, req, badRequest('import_id is required'));
   }
+
+  const enc = encodeURIComponent;
+  const EMAIL_REASON_CODES = new Set([
+    'actual_hours_mismatch',
+    'start_end_mismatch',
+    'break_minutes_mismatch'
+  ]);
+
+  const makeIssueFingerprint = (row) => {
+    const reasonCode = String(row.reason_code || '').toLowerCase();
+    const tsId       = row.timesheet_id || '';
+    const hrRowId    = row.hr_row_id || '';
+
+    const detail = row.details || row.detail || {};
+    const hrStart = detail.start_local  || detail.hr_start        || '';
+    const hrEnd   = detail.end_local    || detail.hr_end          || '';
+    const hrHours = detail.hr_hours     || detail.hr_actual_hours || detail.hours_worked || '';
+    const tsHours = detail.ts_hours     || detail.ts_total_hours  || '';
+
+    const dateLocal = row.date_local || row.date || row.shift_date || '';
+    const staffNorm = (row.staff_norm || row.staff_name || row.staff_raw || '')
+      .toLowerCase()
+      .trim();
+    const unitNorm  = (row.unit_norm || row.unit || row.hospital_or_trust || row.hospital_norm || '')
+      .toLowerCase()
+      .trim();
+
+    return [
+      'HEALTHROSTER_DAILY',
+      reasonCode,
+      tsId,
+      hrRowId,
+      staffNorm,
+      unitNorm,
+      dateLocal,
+      hrStart,
+      hrEnd,
+      hrHours,
+      tsHours
+    ].join('|');
+  };
 
   try {
     const result = await classifyHrRotaValidationImport(env, importId);
@@ -25546,10 +25586,77 @@ async function classifyHrRotaValidationImport(env, importId) {
       return withCORS(env, req, ok(result));
     }
 
+    const rows = Array.isArray(result.rows) ? result.rows : [];
+
+    // ── Precompute fingerprints for rows that *could* ever have an email ─────
+    const fingerprints = [];
+    const rowFingerprints = new Array(rows.length).fill(null);
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const reasonCode = String(row.reason_code || '').toLowerCase();
+      const tsId       = row.timesheet_id || null;
+
+      const canEmailBase =
+        !!tsId &&
+        !!reasonCode &&
+        EMAIL_REASON_CODES.has(reasonCode);
+
+      if (!canEmailBase) {
+        rowFingerprints[i] = null;
+        continue;
+      }
+
+      const fp = makeIssueFingerprint(row);
+      rowFingerprints[i] = fp;
+      if (fp) fingerprints.push(fp);
+    }
+
+    // ── Look up which of those fingerprints already have an email row ────────
+    let alreadySentSet = new Set();
+    if (fingerprints.length) {
+      try {
+        const uniqueFps = Array.from(new Set(fingerprints));
+        const { rows: sentRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/hr_issue_emails` +
+            `?issue_fingerprint=in.(${uniqueFps.map(enc).join(',')})` +
+            `&select=issue_fingerprint`
+        );
+        alreadySentSet = new Set((sentRows || []).map(r => r.issue_fingerprint));
+      } catch (e) {
+        if (LOG) {
+          console.warn('[HR_DAILY_PREVIEW]', JSON.stringify({
+            stage: 'hr_issue_emails_lookup_failed',
+            import_id: importId,
+            err: e?.message || String(e)
+          }));
+        }
+      }
+    }
+
+    const decoratedRows = rows.map((row, idx) => {
+      const reasonCode = String(row.reason_code || '').toLowerCase();
+      const tsId       = row.timesheet_id || null;
+
+      const emailEligible =
+        !!tsId &&
+        !!reasonCode &&
+        EMAIL_REASON_CODES.has(reasonCode);
+
+      const fp = rowFingerprints[idx];
+      const alreadySent = fp ? alreadySentSet.has(fp) : false;
+
+      return {
+        ...row,
+        email_eligible: emailEligible,
+        email_already_sent: alreadySent
+      };
+    });
+
     if (LOG) {
-      const rows = Array.isArray(result.rows) ? result.rows : [];
       const summary = result.summary || {};
-      const sampleFails = rows
+      const sampleFails = decoratedRows
         .filter(r => String(r.status || '').toUpperCase() !== 'VALIDATION_OK')
         .slice(0, 10)
         .map(r => ({
@@ -25557,14 +25664,14 @@ async function classifyHrRotaValidationImport(env, importId) {
           timesheet_id: r.timesheet_id,
           status: r.status,
           reason_code: r.reason_code,
-          details: r.details && r.details.reason || null
+          details: (r.details && r.details.reason) || (r.detail && r.detail.reason) || null
         }));
 
       console.log('[HR_DAILY_PREVIEW]', JSON.stringify({
         import_id: result.import_id,
         source_system: result.source_system,
         summary,
-        total_rows: rows.length,
+        total_rows: decoratedRows.length,
         sample_failures: sampleFails
       }));
     }
@@ -25573,7 +25680,7 @@ async function classifyHrRotaValidationImport(env, importId) {
       import_id: result.import_id,
       source_system: result.source_system,
       summary: result.summary,
-      rows: result.rows
+      rows: decoratedRows
     }));
   } catch (e) {
     console.error('[HR_ROTA_PREVIEW] error', {
@@ -25587,7 +25694,11 @@ async function classifyHrRotaValidationImport(env, importId) {
     );
   }
 }
- async function handleHrRotaValidationApply(env, req, importId) {
+
+
+
+
+async function handleHrRotaValidationApply(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
   const user = await requireUser(env, req, ['admin']);
@@ -25615,6 +25726,47 @@ async function classifyHrRotaValidationImport(env, importId) {
       send_email_row_ids_count: send_email_row_ids.length
     }));
   }
+
+  const enc = encodeURIComponent;
+  const EMAIL_REASON_CODES = new Set([
+    'actual_hours_mismatch',
+    'start_end_mismatch',
+    'break_minutes_mismatch'
+  ]);
+
+  const makeIssueFingerprint = (row) => {
+    const reasonCode = String(row.reason_code || '').toLowerCase();
+    const tsId       = row.timesheet_id || '';
+    const hrRowId    = row.hr_row_id || '';
+
+    const detail = row.details || row.detail || {};
+    const hrStart = detail.start_local  || detail.hr_start        || '';
+    const hrEnd   = detail.end_local    || detail.hr_end          || '';
+    const hrHours = detail.hr_hours     || detail.hr_actual_hours || detail.hours_worked || '';
+    const tsHours = detail.ts_hours     || detail.ts_total_hours  || '';
+
+    const dateLocal = row.date_local || row.date || row.shift_date || '';
+    const staffNorm = (row.staff_norm || row.staff_name || row.staff_raw || '')
+      .toLowerCase()
+      .trim();
+    const unitNorm  = (row.unit_norm || row.unit || row.hospital_or_trust || row.hospital_norm || '')
+      .toLowerCase()
+      .trim();
+
+    return [
+      'HEALTHROSTER_DAILY',
+      reasonCode,
+      tsId,
+      hrRowId,
+      staffNorm,
+      unitNorm,
+      dateLocal,
+      hrStart,
+      hrEnd,
+      hrHours,
+      tsHours
+    ].join('|');
+  };
 
   let classification;
   try {
@@ -25649,6 +25801,51 @@ async function classifyHrRotaValidationImport(env, importId) {
   let emailsQueued = 0;
   const reasonCounts = {};
 
+  // ── Precompute fingerprints for rows that the user *wants* to email about ──
+  const candidateFingerprints = [];
+  const fpByHrRowId = new Map();
+
+  for (const row of rows) {
+    const hrRowId     = row.hr_row_id;
+    const timesheetId = row.timesheet_id || null;
+    const reasonCode  = String(row.reason_code || '').toLowerCase();
+    const key         = String(hrRowId || '');
+
+    if (!timesheetId) continue;
+    if (!EMAIL_REASON_CODES.has(reasonCode)) continue;
+    if (!emailRowIdSet.has(key)) continue;
+
+    const fp = makeIssueFingerprint(row);
+    if (!fp) continue;
+
+    candidateFingerprints.push(fp);
+    fpByHrRowId.set(key, fp);
+  }
+
+  // ── Look up which candidate issues already have an email row ──────────────
+  let alreadySentSet = new Set();
+  if (candidateFingerprints.length) {
+    try {
+      const uniqueFps = Array.from(new Set(candidateFingerprints));
+      const { rows: sentRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/hr_issue_emails` +
+          `?issue_fingerprint=in.(${uniqueFps.map(enc).join(',')})` +
+          `&select=issue_fingerprint`
+      );
+      alreadySentSet = new Set((sentRows || []).map(r => r.issue_fingerprint));
+    } catch (e) {
+      if (LOG) {
+        console.warn('[HR_DAILY_APPLY]', JSON.stringify({
+          stage: 'hr_issue_emails_lookup_failed',
+          import_id: importId,
+          err: e?.message || String(e)
+        }));
+      }
+    }
+  }
+
+  // ── Main loop: apply validations + optionally send emails & record issues ──
   for (const row of rows) {
     const hrRowId     = row.hr_row_id;
     const timesheetId = row.timesheet_id || null;
@@ -25665,6 +25862,7 @@ async function classifyHrRotaValidationImport(env, importId) {
     }
 
     if (status === 'VALIDATION_OK') {
+      // ✅ Fully validated / hours match
       try {
         await upsertValidation(env, user, {
           timesheet_id: timesheetId,
@@ -25708,42 +25906,20 @@ async function classifyHrRotaValidationImport(env, importId) {
           });
         }
       }
-    } else {
-      // FAILED rows
-      validationsFailed++;
 
-      const rc = String(reasonCode || '').toLowerCase();
-      if (
-        rc === 'actual_hours_mismatch' &&
-        emailRowIdSet.has(String(hrRowId))
-      ) {
+      // 🧹 Once validated OK, remove any stored email-issue records for this hr_row_id
+      if (hrRowId) {
         try {
-          await enqueueHrMismatchEmail(env, {
-            timesheet_id: timesheetId,
-            importId,
-            row
-          });
-          emailsQueued++;
+          await fetch(
+            `${env.SUPABASE_URL}/rest/v1/hr_issue_emails` +
+              `?hr_row_id=eq.${enc(hrRowId)}`,
+            {
+              method: 'DELETE',
+              headers: { ...sbHeaders(env), Prefer: 'return-minimal' }
+            }
+          );
         } catch (e) {
-          console.warn('[HR_ROTA_APPLY] enqueueHrMismatchEmail failed', {
-            import_id: importId,
-            timesheet_id: timesheetId,
-            hr_row_id: hrRowId,
-            err: e?.message || String(e)
-          });
-        }
-
-        // Optionally mark validation as FAILED / ERROR
-        try {
-          await upsertValidation(env, user, {
-            timesheet_id: timesheetId,
-            status: 'VALIDATION_ERROR',
-            reason: rc || 'actual_hours_mismatch',
-            hr_reference: hrRequestId,
-            import_id: importId
-          });
-        } catch (e) {
-          console.warn('[HR_ROTA_APPLY] upsertValidation VALIDATION_ERROR failed', {
+          console.warn('[HR_ROTA_APPLY] hr_issue_emails cleanup failed', {
             import_id: importId,
             timesheet_id: timesheetId,
             hr_row_id: hrRowId,
@@ -25751,6 +25927,103 @@ async function classifyHrRotaValidationImport(env, importId) {
           });
         }
       }
+
+      continue;
+    }
+
+    // FAILED rows
+    validationsFailed++;
+
+    const rc = String(reasonCode || '').toLowerCase();
+    const key = String(hrRowId || '');
+    const fp  = fpByHrRowId.get(key) || null;
+    const alreadySent = fp ? alreadySentSet.has(fp) : false;
+
+    const emailAllowedByReason = EMAIL_REASON_CODES.has(rc);
+    const userWantsEmail       = emailRowIdSet.has(key);
+    const shouldSendEmail      =
+      emailAllowedByReason &&
+      userWantsEmail &&
+      !!timesheetId &&
+      !!fp; // NOTE: no !alreadySent here – user can resend on purpose
+
+    if (shouldSendEmail) {
+      // 🔔 Send / re-send the mismatch email
+      try {
+        await enqueueHrMismatchEmail(env, {
+          timesheet_id: timesheetId,
+          importId,
+          row
+        });
+        emailsQueued++;
+      } catch (e) {
+        console.warn('[HR_ROTA_APPLY] enqueueHrMismatchEmail failed', {
+          import_id: importId,
+          timesheet_id: timesheetId,
+          hr_row_id: hrRowId,
+          err: e?.message || String(e)
+        });
+      }
+
+      // Record this issue snapshot in hr_issue_emails if we haven't already
+      if (fp && !alreadySent) {
+        try {
+          const detail    = row.details || row.detail || {};
+          const dateLocal = row.date_local || row.date || row.shift_date || null;
+          const staffNorm = (row.staff_norm || row.staff_name || row.staff_raw || '')
+            .toLowerCase()
+            .trim() || null;
+          const unitNorm  = (row.unit_norm || row.unit || row.hospital_or_trust || row.hospital_norm || '')
+            .toLowerCase()
+            .trim() || null;
+
+          await fetch(
+            `${env.SUPABASE_URL}/rest/v1/hr_issue_emails`,
+            {
+              method: 'POST',
+              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+              body: JSON.stringify([{
+                source_system: classification.source_system || 'HEALTHROSTER_DAILY',
+                import_id: classification.import_id || importId,
+                client_id: row.client_id || null,
+                timesheet_id: timesheetId,
+                hr_row_id: hrRowId || null,
+                staff_norm: staffNorm,
+                hospital_norm: unitNorm,
+                work_date: dateLocal,
+                reason_code: rc,
+                issue_fingerprint: fp,
+                last_sent_at: new Date().toISOString()
+              }])
+            }
+          ).catch(() => { /* best effort */ });
+        } catch (e) {
+          console.warn('[HR_ROTA_APPLY] hr_issue_emails insert failed', {
+            import_id: importId,
+            timesheet_id: timesheetId,
+            hr_row_id: hrRowId,
+            err: e?.message || String(e)
+          });
+        }
+      }
+    }
+
+    // Mark validation state as an error for this line (even if no email)
+    try {
+      await upsertValidation(env, user, {
+        timesheet_id: timesheetId,
+        status: 'VALIDATION_ERROR',
+        reason: rc || 'actual_hours_mismatch',
+        hr_reference: hrRequestId,
+        import_id: importId
+      });
+    } catch (e) {
+      console.warn('[HR_ROTA_APPLY] upsertValidation VALIDATION_ERROR failed', {
+        import_id: importId,
+        timesheet_id: timesheetId,
+        hr_row_id: hrRowId,
+        err: e?.message || String(e)
+      });
     }
   }
 
@@ -25775,11 +26048,12 @@ async function classifyHrRotaValidationImport(env, importId) {
     });
   }
 
+  const reasonsArr = Object.entries(reasonCounts).map(([reason_code, count]) => ({
+    reason_code,
+    count
+  }));
+
   if (LOG) {
-    const reasonsArr = Object.entries(reasonCounts).map(([reason_code, count]) => ({
-      reason_code,
-      count
-    }));
     console.log('[HR_DAILY_APPLY]', JSON.stringify({
       stage: 'completed',
       import_id: importId,
@@ -25794,7 +26068,8 @@ async function classifyHrRotaValidationImport(env, importId) {
     import_id: importId,
     validations_ok: validationsOk,
     validations_failed: validationsFailed,
-    emails_queued: emailsQueued
+    emails_queued: emailsQueued,
+    reasons: reasonsArr
   }));
 }
 
