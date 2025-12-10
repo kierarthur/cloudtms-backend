@@ -27526,19 +27526,44 @@ async function handleGetHospital(env, req, clientId, hospitalId) {
     return withCORS(env, req, serverError("Failed to fetch client hospital"));
   }
 }
- async function handleCandidatesGet(env, req, candidateId) {
+async function handleCandidatesGet(env, req, candidateId) {
+  const enc = encodeURIComponent;
+
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   if (!candidateId) return withCORS(env, req, badRequest('candidate_id required'));
 
+  // Base candidate row (unchanged)
   const { rows } = await sbFetch(
     env,
-    `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(candidateId)}&select=*&limit=1`
+    `${env.SUPABASE_URL}/rest/v1/candidates` +
+      `?id=eq.${enc(candidateId)}` +
+      `&select=*` +
+      `&limit=1`
   );
   const row = (rows && rows[0]) || null;
   if (!row) return withCORS(env, req, notFound('Candidate not found'));
+
+  // NEW: fetch hr_name_mappings for this candidate so the FE can see aliases
+  try {
+    const { rows: aliasRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/hr_name_mappings` +
+        `?candidate_id=eq.${enc(candidateId)}` +
+        `&select=id,hr_name_norm,hospital_or_trust,last_used_at`
+    );
+    row.hr_aliases = Array.isArray(aliasRows) ? aliasRows : [];
+  } catch (e) {
+    console.error('handleCandidatesGet: hr_name_mappings lookup failed', {
+      candidate_id: candidateId,
+      err: e?.message || String(e)
+    });
+    row.hr_aliases = [];
+  }
+
   return withCORS(env, req, ok(row));
 }
+
 
  async function handleClientsGet(env, req, clientId) {
   const user = await requireUser(env, req, ['admin']);
@@ -28816,7 +28841,7 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
 
 
 // ================== BROKER: handleCreateCandidate (UPDATED to strip CCR fields) ==================
- async function handleCreateCandidate(env, req) {
+async function handleCreateCandidate(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
@@ -28930,7 +28955,7 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
       if (!jtRes.ok) {
         const err = await jtRes.text().catch(() => 'insert candidate_job_titles failed');
         console.error('candidate_job_titles insert failed', err);
-        // We still return candidate; you can tighten this later if needed
+        // Candidate is still returned; you can tighten this later if needed
       }
     }
 
@@ -28941,58 +28966,7 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
   }
 }
 
- async function handleGetCandidate(env, req, candidateId) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return unauthorized();
-
-  try {
-    // Fetch candidate
-    const { rows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(candidateId)}&select=*`
-    );
-    if (!rows.length) return withCORS(env, req, notFound("Candidate not found"));
-    const candidate = rows[0];
-
-    // Fetch joined job titles for this candidate
-    let job_titles = [];
-    try {
-      const { rows: jtRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/candidate_job_titles` +
-          `?candidate_id=eq.${encodeURIComponent(candidateId)}` +
-          `&select=job_title_id,is_primary`
-      );
-      job_titles = Array.isArray(jtRows) ? jtRows : [];
-    } catch (e) {
-      console.error('handleGetCandidate: candidate_job_titles lookup failed', e);
-      job_titles = [];
-    }
-
-    // If umbrella, fetch umbrella minimal fields
-    let umbrella = undefined;
-    if (candidate.pay_method === 'UMBRELLA' && candidate.umbrella_id) {
-      const { rows: umbRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/umbrellas?id=eq.${encodeURIComponent(candidate.umbrella_id)}&select=id,name,bank_name,sort_code,account_number`
-      );
-      umbrella = umbRows?.[0];
-    }
-
-    const effective_pay_channel = resolveEffectivePayChannel({
-      pay_method: candidate.pay_method,
-      candidate,
-      umbrella
-    });
-
-    return withCORS(env, req, ok({ candidate, effective_pay_channel, job_titles }));
-  } catch (e) {
-    console.error('handleGetCandidate failed', e);
-    return withCORS(env, req, serverError("Failed to fetch candidate"));
-  }
-}
-
- async function handleUpdateCandidate(env, req, candidateId) {
+async function handleUpdateCandidate(env, req, candidateId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
@@ -29081,7 +29055,9 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
     ].join(',');
     const { rows: beforeRows } = await sbFetch(
       env,
-      `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(candidateId)}&select=${sel}`
+      `${env.SUPABASE_URL}/rest/v1/candidates` +
+        `?id=eq.${encodeURIComponent(candidateId)}` +
+        `&select=${sel}`
     );
     const before = beforeRows?.[0] || {};
 
@@ -29106,8 +29082,6 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
     if (isToUnknown) {
       // Safety rule: once a candidate has any contracts at all,
       // we do not allow reverting pay_method back to Unknown.
-      // (This is stricter than checking only "outstanding" weeks,
-      // but keeps you safely within Cloudflare request limits.)
       const { rows: conRows } = await sbFetch(
         env,
         `${env.SUPABASE_URL}/rest/v1/contracts` +
@@ -29129,7 +29103,9 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
     }
 
     // 2) Update candidate
-    const url = `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(candidateId)}`;
+    const url =
+      `${env.SUPABASE_URL}/rest/v1/candidates` +
+      `?id=eq.${encodeURIComponent(candidateId)}`;
     const res = await fetch(url, {
       method: "PATCH",
       headers: { ...sbHeaders(env), "Prefer": "return=representation" },
@@ -29221,7 +29197,7 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
         }
       } catch (jtErr) {
         console.error('handleUpdateCandidate: candidate_job_titles upsert failed', jtErr);
-        // We still continue – candidate was updated; you can tighten behaviour later
+        // Candidate was updated; leave as is
       }
     }
 
@@ -29271,6 +29247,265 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
   }
 }
 
+async function handleGetCandidate(env, req, candidateId) {
+  const enc  = encodeURIComponent;
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return unauthorized();
+
+  try {
+    // Fetch candidate
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/candidates` +
+        `?id=eq.${enc(candidateId)}` +
+        `&select=*`
+    );
+    if (!rows.length) {
+      return withCORS(env, req, notFound("Candidate not found"));
+    }
+    const candidate = rows[0];
+
+    // Fetch joined job titles for this candidate
+    let job_titles = [];
+    try {
+      const { rows: jtRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/candidate_job_titles` +
+          `?candidate_id=eq.${enc(candidateId)}` +
+          `&select=job_title_id,is_primary`
+      );
+      job_titles = Array.isArray(jtRows) ? jtRows : [];
+    } catch (e) {
+      console.error('handleGetCandidate: candidate_job_titles lookup failed', e);
+      job_titles = [];
+    }
+
+    // If umbrella, fetch umbrella minimal fields
+    let umbrella = undefined;
+    if (candidate.pay_method === 'UMBRELLA' && candidate.umbrella_id) {
+      const { rows: umbRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/umbrellas` +
+          `?id=eq.${enc(candidate.umbrella_id)}` +
+          `&select=id,name,bank_name,sort_code,account_number`
+      );
+      umbrella = umbRows?.[0];
+    }
+
+    const effective_pay_channel = resolveEffectivePayChannel({
+      pay_method: candidate.pay_method,
+      candidate,
+      umbrella
+    });
+
+    // NEW: fetch hr_name_mappings aliases for this candidate
+    let hr_aliases = [];
+    try {
+      const { rows: aliasRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/hr_name_mappings` +
+          `?candidate_id=eq.${enc(candidateId)}` +
+          `&select=id,hr_name_norm,hospital_or_trust,last_used_at`
+      );
+      hr_aliases = Array.isArray(aliasRows) ? aliasRows : [];
+    } catch (e) {
+      console.error('handleGetCandidate: hr_name_mappings lookup failed', {
+        candidate_id: candidateId,
+        err: e?.message || String(e)
+      });
+      hr_aliases = [];
+    }
+
+    return withCORS(
+      env,
+      req,
+      ok({
+        candidate,
+        effective_pay_channel,
+        job_titles,
+        hr_aliases
+      })
+    );
+  } catch (e) {
+    console.error('handleGetCandidate failed', e);
+    return withCORS(env, req, serverError("Failed to fetch candidate"));
+  }
+}
+
+
+async function handleCandidateAliasesDelete(env, req, candidateId) {
+  const enc  = encodeURIComponent;
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!candidateId) {
+    return withCORS(env, req, badRequest('candidate_id required'));
+  }
+
+  let body;
+  try {
+    body = await parseJSONBody(req);
+  } catch (e) {
+    return withCORS(env, req, badRequest('Invalid JSON body'));
+  }
+
+  const mappingIds = Array.isArray(body?.mapping_ids)
+    ? body.mapping_ids.map(String).filter(Boolean)
+    : [];
+
+  if (!mappingIds.length) {
+    return withCORS(env, req, badRequest('mapping_ids (array) is required'));
+  }
+
+  try {
+    // Delete only mappings that belong to this candidate
+    const filter =
+      `id=in.(${mappingIds.map((id) => enc(id)).join(',')})` +
+      `&candidate_id=eq.${enc(candidateId)}`;
+
+    const url =
+      `${env.SUPABASE_URL}/rest/v1/hr_name_mappings?${filter}`;
+
+    const res = await fetch(url, {
+      method: 'DELETE',
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' }
+    });
+
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      return withCORS(env, req, serverError(
+        txt || 'Failed to delete candidate alias mappings'
+      ));
+    }
+
+    return withCORS(env, req, ok({
+      candidate_id: candidateId,
+      deleted: mappingIds.length
+    }));
+  } catch (e) {
+    console.error('handleCandidateAliasesDelete failed', {
+      candidate_id: candidateId,
+      err: e?.message || String(e)
+    });
+    return withCORS(env, req, serverError('Failed to delete candidate aliases'));
+  }
+}
+
+async function handleClientAliasesDelete(env, req, clientId) {
+  const enc  = encodeURIComponent;
+  const norm = (s) => String(s || '').trim().toLowerCase();
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!clientId) {
+    return withCORS(env, req, badRequest('client_id required'));
+  }
+
+  let body;
+  try {
+    body = await parseJSONBody(req);
+  } catch (e) {
+    return withCORS(env, req, badRequest('Invalid JSON body'));
+  }
+
+  // Allow either a single alias or an array of aliases
+  let aliasesToDelete = [];
+  if (Array.isArray(body?.aliases)) {
+    aliasesToDelete = body.aliases.map(norm).filter(Boolean);
+  } else if (body?.alias) {
+    aliasesToDelete = [norm(body.alias)];
+  }
+
+  if (!aliasesToDelete.length) {
+    return withCORS(env, req, badRequest('alias or aliases (array) is required'));
+  }
+
+  const deleteSet = new Set(aliasesToDelete);
+
+  // Helper copied from applyWeeklyMappingsOnly
+  const normAliasList = (val) => {
+    if (!val) return [];
+    if (Array.isArray(val)) return val;
+    if (typeof val === 'string') {
+      try {
+        const parsed = JSON.parse(val);
+        return Array.isArray(parsed) ? parsed : [val];
+      } catch {
+        return [val];
+      }
+    }
+    return [];
+  };
+
+  try {
+    // There is typically a single client_hospitals row per client
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/client_hospitals` +
+        `?client_id=eq.${enc(clientId)}` +
+        `&select=id,display_name,hospital_name_norm`
+    );
+
+    if (!Array.isArray(rows) || !rows.length) {
+      return withCORS(env, req, ok({
+        client_id: clientId,
+        deleted: 0
+      }));
+    }
+
+    let totalRemoved = 0;
+
+    for (const r of rows) {
+      const existing = normAliasList(r.hospital_name_norm);
+      if (!existing.length) continue;
+
+      const kept = [];
+      let removedHere = 0;
+
+      for (const alias of existing) {
+        const canonical = norm(alias);
+        if (deleteSet.has(canonical)) {
+          removedHere++;
+        } else {
+          kept.push(alias);
+        }
+      }
+
+      if (!removedHere) continue;
+      totalRemoved += removedHere;
+
+      // Patch this row with the pruned alias list
+      const patchUrl =
+        `${env.SUPABASE_URL}/rest/v1/client_hospitals` +
+        `?id=eq.${enc(r.id)}`;
+
+      const res = await fetch(patchUrl, {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        body: JSON.stringify({ hospital_name_norm: kept })
+      });
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        console.warn('handleClientAliasesDelete: PATCH failed', {
+          id: r.id,
+          client_id: clientId,
+          err: txt
+        });
+      }
+    }
+
+    return withCORS(env, req, ok({
+      client_id: clientId,
+      deleted: totalRemoved
+    }));
+  } catch (e) {
+    console.error('handleClientAliasesDelete failed', {
+      client_id: clientId,
+      err: e?.message || String(e)
+    });
+    return withCORS(env, req, serverError('Failed to delete client aliases'));
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Files: secure download via short-lived token
@@ -43065,6 +43300,14 @@ export default {
         const clientDetails = matchPath(p, '/api/clients/:id/details');
         if (clientDetails && req.method === 'GET')                          return handleGetClient(env, req, clientDetails.id);
       }
+
+{
+  const clientAlias = matchPath(p, '/api/clients/:id/aliases');
+  if (clientAlias && req.method === 'DELETE') {
+    return handleClientAliasesDelete(env, req, clientAlias.id);
+  }
+}
+
       {
         const client = matchPath(p, '/api/clients/:id');
         if (client && req.method === 'GET')                                 return handleClientsGet(env, req, client.id);   // base row for pickers
@@ -43105,6 +43348,14 @@ export default {
         const candDet = matchPath(p, '/api/candidates/:candidate_id/details');
         if (candDet && req.method === 'GET')                                return handleGetCandidate(env, req, candDet.candidate_id);
       }
+
+{
+  const candAlias = matchPath(p, '/api/candidates/:id/aliases');
+  if (candAlias && req.method === 'DELETE') {
+    return handleCandidateAliasesDelete(env, req, candAlias.id);
+  }
+}
+
 
       // Candidate calendar
       {
