@@ -12978,9 +12978,7 @@ async function handleNhspResolveMappings(env, req, importId) {
   return withCORS(env, req, ok({ ok: true }));
 }
 
-
-
- async function handleNhspApply(env, req, importId) {
+async function handleNhspApply(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
   const user = await requireUser(env, req, ['admin']);
@@ -12988,7 +12986,6 @@ async function handleNhspResolveMappings(env, req, importId) {
   if (!importId) return withCORS(env, req, badRequest("import_id is required"));
 
   const enc   = encodeURIComponent;
-  const norm  = (s) => String(s || '').trim().toLowerCase();
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
   const NHSP_OVERPAY_ADVANCE_THRESHOLD = 200; // adjust if needed
@@ -13033,12 +13030,8 @@ async function handleNhspResolveMappings(env, req, importId) {
     }));
   }
 
-  // ---------- PHASE 0: apply explicit mappings ----------
+  // ---------- PHASE 0: apply explicit mappings (JS, unchanged) ----------
   try {
-    // Delegate all alias persistence to the shared weekly helper.
-    // This writes:
-    //   - hr_name_mappings (staff_norm + hospital_or_trust → candidate_id)
-    //   - client_hospitals (hospital_name_norm[] → client_id)
     await applyWeeklyMappingsOnly(env, {
       source_system: 'NHSP',
       import_id: importId,
@@ -13055,13 +13048,13 @@ async function handleNhspResolveMappings(env, req, importId) {
       }));
     }
   } catch (e) {
-    // Non-fatal: if explicit mappings fail, we still continue with classification + apply.
     console.warn('[NHSP_APPLY] failed to apply candidate/client mappings (non-fatal)', {
       import_id: importId,
       err: e?.message || String(e)
     });
   }
 
+  // Helpers used in Phase 2 (unchanged)
   async function computeNhspTotalsForShifts(env, contract, shifts) {
     const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
     const candidate_id = contract.candidate_id || null;
@@ -13184,282 +13177,61 @@ async function handleNhspResolveMappings(env, req, importId) {
       }));
     }
 
-    // 2) Load all hr_rows for this import
-    const { rows: hrRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/hr_rows` +
-      `?import_id=eq.${enc(importId)}` +
-      `&select=id,external_row_key,payload_json` +
-      `&order=id.asc`
-    );
-
-    if (!hrRows?.length) {
-      if (LOG) {
-        console.log('[NHSP_APPLY]', JSON.stringify({
-          stage: 'no_hr_rows',
-          import_id: importId
-        }));
-      }
-      return withCORS(env, req, ok({
-        import_id: importId,
-        shifts_created: 0,
-        shifts_updated: 0,
-        mapped_candidates: 0,
-        mapped_clients: 0
-      }));
-    }
-
-    if (LOG) {
-      console.log('[NHSP_APPLY]', JSON.stringify({
-        stage: 'hr_rows_loaded',
-        import_id: importId,
-        hr_rows_count: hrRows.length
-      }));
-    }
-
-    // ---------- PHASE 1: build / update nhsp_shifts ----------
+    // ---------- PHASE 1: let Postgres upsert nhsp_shifts in bulk ----------
     let created          = 0;
     let updated          = 0;
     let mappedCandidates = 0;
     let mappedClients    = 0;
 
-    const groupIdSet = new Set(selectedGroupIds);
-
-    for (const hr of hrRows) {
-      const payload = hr.payload_json || {};
-      const externalKey = hr.external_row_key || payload.external_row_key || null;
-
-      const staffName = String(payload.staff_name || payload.worker || '').trim();
-      const staffNorm = norm(staffName);
-      const workDate  = payload.work_date || payload.shift_date || null;
-      const ward      = String(payload.ward || payload.unit || '').trim();
-      const wardNorm  = norm(ward);
-      const assignmentCode = payload.assignment_code || payload.Request_Grade || null;
-      const refNum         = payload.ref_num || payload.Reference || null;
-      const weekEnding     = payload.week_ending_date || null;
-
-      // Skip rows not in selected groups (if groups were provided)
-      if (groupIdSet.size > 0) {
-        const grpKey = payload.group_key || payload.group_id || null;
-        if (!grpKey || !groupIdSet.has(String(grpKey))) {
-          continue;
-        }
-      }
-
-      // Look up or create nhsp_shifts row for this external_key
-      let shift = null;
-      if (externalKey) {
-        try {
-          const { rows: existingShifts } = await sbFetch(
-            env,
-            `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
-            `?external_row_key=eq.${enc(externalKey)}` +
-            `&source_system=eq.NHSP` +
-            `&select=*` +
-            `&limit=1`
-          );
-          shift = existingShifts?.[0] || null;
-        } catch (e) {
-          console.warn('[NHSP_APPLY] nhsp_shifts lookup failed (non-fatal)', {
-            import_id: importId,
-            external_row_key: externalKey,
-            err: e?.message || String(e)
-          });
-        }
-      }
-
-      const nowIso = new Date().toISOString();
-
-      const shiftPayload = {
-        latest_import_id: importId,
-        source_system: 'NHSP',
-        external_row_key: externalKey,
-        staff_name: staffName || null,
-        staff_norm: staffNorm || null,
-        ward: ward || null,
-        ward_norm: wardNorm || null,
-        work_date: workDate || null,
-        assignment_code: assignmentCode || null,
-        ref_num: refNum || null,              // <-- NHSP reference persisted canonically
-        week_ending_date: weekEnding || null,
-        updated_at: nowIso
+    try {
+      const rpcBody = {
+        import_id: importId,
+        selected_group_ids: selectedGroupIds.length ? selectedGroupIds : null
       };
 
-      let shiftId   = shift?.id || null;
-      let candidateId = shift?.candidate_id || null;
-      let clientId    = shift?.client_id || null;
+      const rpcRes = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/rpc/nhsp_apply_import_phase1`,
+        {
+          method: 'POST',
+          headers: { ...sbHeaders(env), 'content-type': 'application/json' },
+          body: JSON.stringify(rpcBody)
+        }
+      );
+      const txt = await rpcRes.text().catch(() => '');
 
-      if (!shift) {
-        // Insert new nhsp_shifts
-        try {
-          const insRes = await fetch(
-            `${env.SUPABASE_URL}/rest/v1/nhsp_shifts`,
-            {
-              method: 'POST',
-              headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-              body: JSON.stringify([{
-                ...shiftPayload,
-                created_at: nowIso
-              }])
-            }
-          );
-          const txt = await insRes.text().catch(() => '');
-          if (!insRes.ok) {
-            console.warn('[NHSP_APPLY] nhsp_shifts insert failed', {
-              import_id: importId,
-              external_row_key: externalKey,
-              status: insRes.status,
-              body: txt
-            });
-            continue;
-          }
-          const json = txt ? JSON.parse(txt) : [];
-          const row0 = Array.isArray(json) ? json[0] : json;
-          shiftId = row0?.id || null;
-          shift   = row0 || null;
-          created++;
-        } catch (e) {
-          console.warn('[NHSP_APPLY] nhsp_shifts insert threw (non-fatal)', {
-            import_id: importId,
-            external_row_key: externalKey,
-            err: e?.message || String(e)
-          });
-          continue;
-        }
-      } else {
-        // Update existing nhsp_shifts
-        try {
-          const upRes = await fetch(
-            `${env.SUPABASE_URL}/rest/v1/nhsp_shifts?id=eq.${enc(shiftId)}`,
-            {
-              method: 'PATCH',
-              headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-              body: JSON.stringify(shiftPayload)
-            }
-          );
-          if (!upRes.ok) {
-            const errTxt = await upRes.text().catch(() => '');
-            console.warn('[NHSP_APPLY] nhsp_shifts update failed', {
-              import_id: importId,
-              shift_id: shiftId,
-              status: upRes.status,
-              body: errTxt
-            });
-          } else {
-            updated++;
-          }
-        } catch (e) {
-          console.warn('[NHSP_APPLY] nhsp_shifts update threw (non-fatal)', {
-            import_id: importId,
-            shift_id: shiftId,
-            err: e?.message || String(e)
-          });
-        }
+      if (!rpcRes.ok) {
+        console.error('[NHSP_APPLY] nhsp_apply_import_phase1 RPC failed', {
+          import_id: importId,
+          status: rpcRes.status,
+          body: txt
+        });
+        throw new Error(`nhsp_apply_import_phase1 failed with status ${rpcRes.status}`);
       }
 
-      if (!shiftId) continue;
+      let rpcJson;
+      try { rpcJson = txt ? JSON.parse(txt) : null; } catch { rpcJson = null; }
+      const row0 = Array.isArray(rpcJson) ? rpcJson[0] : rpcJson;
 
-      // Candidate mapping (auto) – unchanged
-      if (!candidateId && staffName) {
-        const nameNorm = staffNorm;
-        let foundCandidate = null;
-
-        if (nameNorm) {
-          try {
-            const aliasJson = JSON.stringify([nameNorm]);
-            const { rows: aliasRows } = await sbFetch(
-              env,
-              `${env.SUPABASE_URL}/rest/v1/candidates` +
-              `?nhsp_hr_name_aliases=cs.${enc(aliasJson)}` +
-              `&select=id` +
-              `&limit=2`
-            );
-            if (aliasRows?.length === 1 && aliasRows[0]?.id) {
-              foundCandidate = aliasRows[0].id;
-            }
-          } catch {
-            // fall through
-          }
-
-          if (!foundCandidate) {
-            const { rows: mapRows } = await sbFetch(
-              env,
-              `${env.SUPABASE_URL}/rest/v1/hr_name_mappings` +
-              `?hr_name_norm=eq.${enc(nameNorm)}` +
-              `&active=eq.true` +
-              `&select=candidate_id` +
-              `&limit=1`
-            );
-            if (mapRows?.[0]?.candidate_id) {
-              foundCandidate = mapRows[0].candidate_id;
-            }
-          }
-        }
-
-        if (foundCandidate) {
-          candidateId = foundCandidate;
-          mappedCandidates++;
-          await fetch(
-            `${env.SUPABASE_URL}/rest/v1/nhsp_shifts?id=eq.${enc(shiftId)}`,
-            {
-              method: 'PATCH',
-              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-              body: JSON.stringify({ candidate_id: candidateId })
-            }
-          ).catch(() => {});
-        }
+      if (row0 && typeof row0 === 'object') {
+        created          = Number(row0.shifts_created    ?? 0);
+        updated          = Number(row0.shifts_updated    ?? 0);
+        mappedCandidates = Number(row0.mapped_candidates ?? 0);
+        mappedClients    = Number(row0.mapped_clients    ?? 0);
       }
 
-      // Client mapping (auto) – unchanged
-      if (!clientId) {
-        const trustRaw  = String(payload.trust || payload.hospital_or_trust || '').trim();
-        const trustNorm = norm(trustRaw);
-
-        let foundClient = null;
-        if (trustNorm) {
-          try {
-            const aliasJson = JSON.stringify([trustNorm]);
-            const { rows: hospRows } = await sbFetch(
-              env,
-              `${env.SUPABASE_URL}/rest/v1/client_hospitals` +
-              `?hospital_name_norm=cs.${enc(aliasJson)}` +
-              `&select=client_id` +
-              `&limit=1`
-            );
-            if (hospRows?.[0]?.client_id) {
-              foundClient = hospRows[0].client_id;
-            }
-          } catch {
-            // fall through to clients.name
-          }
-
-          if (!foundClient) {
-            const { rows: cliRows } = await sbFetch(
-              env,
-              `${env.SUPABASE_URL}/rest/v1/clients` +
-              `?name=eq.${enc(trustRaw)}` +
-              `&select=id,is_nhsp` +
-              `&limit=1`
-            );
-            if (cliRows?.[0]?.id) {
-              foundClient = cliRows[0].id;
-            }
-          }
-        }
-
-        if (foundClient) {
-          clientId = foundClient;
-          mappedClients++;
-          await fetch(
-            `${env.SUPABASE_URL}/rest/v1/nhsp_shifts?id=eq.${enc(shiftId)}`,
-            {
-              method: 'PATCH',
-              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-              body: JSON.stringify({ client_id: clientId })
-            }
-          ).catch(() => {});
-        }
+      if (LOG) {
+        console.log('[NHSP_APPLY]', JSON.stringify({
+          stage: 'phase1_done',
+          import_id: importId,
+          summary: { created, updated, mappedCandidates, mappedClients }
+        }));
       }
+    } catch (e) {
+      console.error('[NHSP_APPLY] nhsp_apply_import_phase1 RPC threw', {
+        import_id: importId,
+        err: e?.message || String(e)
+      });
+      throw e;
     }
 
     // ---------- PHASE 2: map shifts to timesheets & build NHSP TSFIN ----------
@@ -13515,7 +13287,6 @@ async function handleNhspResolveMappings(env, req, importId) {
       const { client_id: clientId, candidate_id: candidateId, week_start: weekStart, shifts: grpShifts } = g;
       if (!clientId || !candidateId || !weekStart || !grpShifts?.length) continue;
 
-      // Find contract & contract_week for this candidate + client + week
       const { rows: contracts } = await sbFetch(
         env,
         `${env.SUPABASE_URL}/rest/v1/contracts` +
@@ -13540,7 +13311,6 @@ async function handleNhspResolveMappings(env, req, importId) {
       const nowIso = new Date().toISOString();
 
       if (!cw) {
-        // Create missing contract_week for this week_start
         try {
           const insCw = await fetch(
             `${env.SUPABASE_URL}/rest/v1/contract_weeks`,
@@ -13580,7 +13350,6 @@ async function handleNhspResolveMappings(env, req, importId) {
         }
       }
 
-      // Find or create weekly timesheet for this contract_week
       let ts = null;
       if (cw.timesheet_id) {
         try {
@@ -13655,15 +13424,14 @@ async function handleNhspResolveMappings(env, req, importId) {
         ).catch(() => {});
       }
 
-      // Build NHSP weekly TSFIN snapshot
       await buildNhspWeeklySnapshot(env, ts, contract, g.shifts, importId, 'NHSP');
 
-      // NEW: populate per-day references into timesheets.day_references_json
+      // Per-day references
       try {
         const dayRefs = {};
         for (const sh of g.shifts) {
           const ymd = sh.work_date;
-          const ref = sh.ref_num || null;
+          const ref = sh.ref_num || sh.nhsp_ref_num || null;
           if (!ymd || !ref) continue;
           if (!dayRefs[ymd]) dayRefs[ymd] = ref;
         }
@@ -13700,7 +13468,7 @@ async function handleNhspResolveMappings(env, req, importId) {
         // non-fatal
       }
 
-      // Optional: overpay advance logic (unchanged)
+      // Overpay advance logic (unchanged)
       try {
         const totals = await computeNhspTotalsForShifts(env, contract, g.shifts);
         const diff   = round2((totals.totalChgEx || 0) - (totals.totalPayEx || 0));
@@ -13768,6 +13536,7 @@ async function handleNhspResolveMappings(env, req, importId) {
     return withCORS(env, req, serverError(`Failed to apply NHSP import: ${e?.message || e}`));
   }
 }
+
 
 
  async function handleNhspRows(env, req, importId) {
