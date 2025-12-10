@@ -18390,6 +18390,7 @@ async function handleCreateHospital(env, req, clientId) {
 // classifyWeeklyImportRows: updated to use JSON aliases for hospital→client,
 // and candidate aliases for staff name→candidate.
 // ─────────────────────────────────────────────────────────────
+
 async function classifyWeeklyImportRows(env, importId, { source_system }) {
   const enc   = encodeURIComponent;
   const norm  = (s) => String(s || '').trim().toLowerCase();
@@ -18432,7 +18433,7 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
     };
   }
 
-   // ─────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
   // 0.5) Decide batched vs legacy based on settings
   // ─────────────────────────────────────────────────────────────
   const useBatched =
@@ -18450,17 +18451,6 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
     }));
   }
 
-  // NOTE: To switch to the legacy (non-batched) classifier in future,
-  // set this in the database:
-  //
-  //   UPDATE public.settings_defaults
-  //   SET import_config_json = jsonb_build_object(
-  //     'use_batched_classification', false
-  //   );
-  //
-  // …and make sure classifyWeeklyImportRowsLegacy(env, importId, { source_system })
-  // is defined and ed in this module.
-
   if (!useBatched) {
     // Run the old non-batched implementation instead
     return await classifyWeeklyImportRowsLegacy(env, importId, { source_system });
@@ -18475,6 +18465,51 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
     return { import_id: importId, source_system, rows: [] };
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // NEW: NHSP candidate/client mapping in SQL (single RPC)
+  // ─────────────────────────────────────────────────────────────
+  let nhspMappingByHrRowId = null;
+  if (source_system === 'NHSP') {
+    try {
+      const rpcBody = { p_import_id: importId };
+      const res = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/rpc/nhsp_preview_mappings_phase1`,
+        {
+          method: 'POST',
+          headers: { ...sbHeaders(env), 'content-type': 'application/json' },
+          body: JSON.stringify(rpcBody)
+        }
+      );
+
+      const txt = await res.text().catch(() => '');
+      let json;
+      try {
+        json = txt ? JSON.parse(txt) : [];
+      } catch {
+        json = [];
+      }
+
+      if (Array.isArray(json) && json.length) {
+        nhspMappingByHrRowId = new Map();
+        for (const row of json) {
+          if (row && row.hr_row_id) {
+            nhspMappingByHrRowId.set(String(row.hr_row_id), row);
+          }
+        }
+      }
+
+      if (LOG) {
+        console.log('[WEEKLY_CLASSIFY]', JSON.stringify({
+          stage: 'nhsp_preview_mappings_loaded',
+          import_id: importId,
+          rows: Array.isArray(json) ? json.length : 0
+        }));
+      }
+    } catch (e) {
+      console.warn('[WEEKLY_CLASSIFY] nhsp_preview_mappings_phase1 failed (non-fatal)', e);
+      nhspMappingByHrRowId = null; // fall back to JS mapping if RPC fails
+    }
+  }
 
   // ─────────────────────────────────────────────────────────────
   // CACHES to cut down on subrequests (local to this function)
@@ -18525,7 +18560,7 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
     return cand;
   }
 
-  // Helper: cached name+trust → candidate_id (using your existing findCandidateByImportName)
+  // Helper: cached name+trust → candidate_id (using existing findCandidateByImportName)
   async function findCandidateByImportNameCached(staffName, trustNorm) {
     const nameNorm = norm(staffName);
     const key = `${nameNorm}|${trustNorm || ''}`;
@@ -18750,32 +18785,47 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
       continue;
     }
 
-    // Candidate mapping (cached)
+    // Row-level SQL mapping (NHSP only)
+    const rowMapping =
+      (source_system === 'NHSP' && nhspMappingByHrRowId instanceof Map)
+        ? (nhspMappingByHrRowId.get(String(hrRow.id)) || null)
+        : null;
+
+    // Candidate mapping (SQL first for NHSP, then JS fallback)
     let candidateId = null;
     let candidateName = null;
 
-    if (source_system === 'NHSP') {
-      const uniqueId = String(
-        payload.unique_id ||
-        payload.worker_unique_id ||
-        payload.agency_worker_unique_id ||
-        ''
-      ).trim();
-
-      if (uniqueId) {
-        const c = await getCandidateByNi(uniqueId);
-        if (c) {
-          candidateId   = c.id;
-          candidateName = c.display_name || null;
-        }
+    if (source_system === 'NHSP' && rowMapping) {
+      if (rowMapping.candidate_id) {
+        candidateId   = rowMapping.candidate_id;
+        candidateName = rowMapping.candidate_name || null;
       }
     }
 
-    if (!candidateId && staffName) {
-      const trustNorm = norm(trustRaw);
-      const foundCandidateId = await findCandidateByImportNameCached(staffName, trustNorm);
-      if (foundCandidateId) {
-        candidateId = foundCandidateId;
+    if (!candidateId) {
+      if (source_system === 'NHSP') {
+        const uniqueId = String(
+          payload.unique_id ||
+          payload.worker_unique_id ||
+          payload.agency_worker_unique_id ||
+          ''
+        ).trim();
+
+        if (uniqueId) {
+          const c = await getCandidateByNi(uniqueId);
+          if (c) {
+            candidateId   = c.id;
+            candidateName = c.display_name || null;
+          }
+        }
+      }
+
+      if (!candidateId && staffName) {
+        const trustNorm = norm(trustRaw);
+        const foundCandidateId = await findCandidateByImportNameCached(staffName, trustNorm);
+        if (foundCandidateId) {
+          candidateId = foundCandidateId;
+        }
       }
     }
 
@@ -18799,84 +18849,95 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
       continue;
     }
 
-    if (!candidateName) {
+    if (!candidateName && !(source_system === 'NHSP' && rowMapping && rowMapping.candidate_name)) {
       const cand = await getCandidateByIdCached(candidateId);
       candidateName = cand?.display_name || null;
     }
 
-    // Client mapping (cached)
+    // Client mapping (SQL first for NHSP, then JS fallback / HR behaviour)
     let clientId = null;
     let clientName = null;
 
-    if (source_system === 'HEALTHROSTER') {
-      clientId = imp.client_id || null;
-      if (!clientId) {
-        previewRows.push({
-          level: 'row',
-          preview_row_id,
-          hr_row_id: hrRow.id,
-          import_id: importId,
-          source_system,
-          staff_name: staffName,
-          work_date: workDate,
-          ward,
-          request_id: requestId || null,
-          ref_num: null,
-          action: 'REJECT_NO_CLIENT',
-          reason: 'HealthRoster import has no client_id configured',
-          default_selected: false
-        });
-        continue;
+    if (source_system === 'NHSP' && rowMapping) {
+      if (rowMapping.client_id) {
+        clientId   = rowMapping.client_id;
+        clientName = rowMapping.client_name || null;
       }
-      const cli = await getClientByIdCached(clientId);
-      if (!cli) {
-        previewRows.push({
-          level: 'row',
-          preview_row_id,
-          hr_row_id: hrRow.id,
-          import_id: importId,
-          source_system,
-          staff_name: staffName,
-          work_date: workDate,
-          ward,
-          request_id: requestId || null,
-          ref_num: null,
-          action: 'REJECT_NO_CLIENT',
-          reason: 'HealthRoster client_id not found in clients table',
-          default_selected: false
-        });
-        continue;
-      }
-      clientName = cli.name;
-    } else {
-      const trustNorm = norm(trustRaw);
-      if (trustNorm) {
-        const cliRes = await getClientByTrustCached(trustRaw);
-        if (cliRes) {
-          clientId   = cliRes.client_id;
-          clientName = cliRes.name;
+    }
+
+    if (!clientId) {
+      if (source_system === 'HEALTHROSTER') {
+        clientId = imp.client_id || null;
+        if (!clientId) {
+          previewRows.push({
+            level: 'row',
+            preview_row_id,
+            hr_row_id: hrRow.id,
+            import_id: importId,
+            source_system,
+            staff_name: staffName,
+            work_date: workDate,
+            ward,
+            request_id: requestId || null,
+            ref_num: null,
+            action: 'REJECT_NO_CLIENT',
+            reason: 'HealthRoster import has no client_id configured',
+            default_selected: false
+          });
+          continue;
+        }
+        const cli = await getClientByIdCached(clientId);
+        if (!cli) {
+          previewRows.push({
+            level: 'row',
+            preview_row_id,
+            hr_row_id: hrRow.id,
+            import_id: importId,
+            source_system,
+            staff_name: staffName,
+            work_date: workDate,
+            ward,
+            request_id: requestId || null,
+            ref_num: null,
+            action: 'REJECT_NO_CLIENT',
+            reason: 'HealthRoster client_id not found in clients table',
+            default_selected: false
+          });
+          continue;
+        }
+        clientName = cli.name;
+      } else {
+        const trustNorm = norm(trustRaw);
+        if (trustNorm) {
+          const cliRes = await getClientByTrustCached(trustRaw);
+          if (cliRes) {
+            clientId   = cliRes.client_id;
+            clientName = cliRes.name;
+          }
         }
       }
+    }
 
-      if (!clientId) {
-        previewRows.push({
-          level: 'row',
-          preview_row_id,
-          hr_row_id: hrRow.id,
-          import_id: importId,
-          source_system,
-          staff_name: staffName,
-          work_date: workDate,
-          ward,
-          assignment_code: assignmentCode || null,
-          request_id: null,
-          ref_num: refNum || null,
-          action: 'REJECT_NO_CLIENT',
-          reason: `No client mapping for trust/hospital '${trustRaw}'`,
-          default_selected: false
-        });
-        continue;
-      }
+    if (!clientId) {
+      previewRows.push({
+        level: 'row',
+        preview_row_id,
+        hr_row_id: hrRow.id,
+        import_id: importId,
+        source_system,
+        staff_name: staffName,
+        work_date: workDate,
+        ward,
+        assignment_code: (source_system === 'NHSP' ? assignmentCode : null),
+        request_id: (source_system === 'HEALTHROSTER' ? requestId : null),
+        ref_num: (source_system === 'NHSP' ? refNum : null),
+        action: 'REJECT_NO_CLIENT',
+        reason: source_system === 'NHSP'
+          ? `No client mapping for trust/hospital '${trustRaw}'`
+          : 'No client mapping for trust/hospital',
+        default_selected: false
+      });
+      continue;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -19447,6 +19508,9 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
     rows: previewRows
   };
 }
+
+
+
 async function classifyWeeklyImportRowsLegacy(env, importId, { source_system }) {
   const enc   = encodeURIComponent;
   const norm  = (s) => String(s || '').trim().toLowerCase();
