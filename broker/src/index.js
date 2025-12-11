@@ -22998,13 +22998,13 @@ async function handlePickerClientsSnapshot(env, req){
   const items = (rows || []).map(r => {
     const cs = r.client_settings || {};
     return {
-      id: r.id,
+      id:   r.id,
       name: r.name || '',
       primary_invoice_email: r.primary_invoice_email || '',
-      is_nhsp: !!cs.is_nhsp,
+      is_nhsp:       !!cs.is_nhsp,
       autoprocess_hr: !!cs.autoprocess_hr,
-      rev: (r.rev ?? null),
-      updated_at: r.updated_at || null
+      rev:          (r.rev ?? null),
+      updated_at:   r.updated_at || null
     };
   });
 
@@ -23012,47 +23012,48 @@ async function handlePickerClientsSnapshot(env, req){
   return okJSON({ items, since });
 }
 
-
 async function handlePickerClientsDelta(env, req){
   const user = await requireUser(env, req, ['admin']); 
   if (!user) return unauthorized();
 
-  const u = new URL(req.url);
+  const u        = new URL(req.url);
   const sinceRaw = u.searchParams.get('since');
   if (!sinceRaw) return badJSON(400, 'missing since');
 
   const sel = 'id,name,primary_invoice_email,rev,updated_at,client_settings(is_nhsp,autoprocess_hr)';
-  const urlAdd = `${env.SUPABASE_URL}/rest/v1/clients` +
+  const urlAdd =
+    `${env.SUPABASE_URL}/rest/v1/clients` +
     `?select=${encodeURIComponent(sel)}` +
     `&rev=gt.${encodeURIComponent(sinceRaw)}`;
 
   let { rows } = await sbFetch(env, urlAdd);
   if (!Array.isArray(rows)) rows = [];
 
-  const items = rows.map(r => {
+  const items = (rows || []).map(r => {
     const cs = r.client_settings || {};
     return {
-      id: r.id,
+      id:   r.id,
       name: r.name || '',
       primary_invoice_email: r.primary_invoice_email || '',
-      is_nhsp: !!cs.is_nhsp,
+      is_nhsp:       !!cs.is_nhsp,
       autoprocess_hr: !!cs.autoprocess_hr,
-      rev: (r.rev ?? null),
-      updated_at: r.updated_at || null
+      rev:          (r.rev ?? null),
+      updated_at:   r.updated_at || null
     };
   });
 
   // Hard deletes: optional tombstones
   let removed = [];
   try {
-    const tombUrl = `${env.SUPABASE_URL}/rest/v1/clients_tombstones` +
+    const tombUrl =
+      `${env.SUPABASE_URL}/rest/v1/clients_tombstones` +
       `?select=id,deleted_rev&deleted_rev=gt.${encodeURIComponent(sinceRaw)}`;
     const del = await sbFetch(env, tombUrl);
     removed = (del?.rows || []).map(r => r.id);
   } catch {}
 
-  // No "active" flag on clients – treat all changes as updates on the FE
-  const added   = items;
+  // For clients we just treat all as "updated" on the FE side.
+  const added   = [];
   const updated = items;
 
   const since = computeSinceFromRows(items);
