@@ -35218,9 +35218,6 @@ async function handleRelatedList(env, req, entity, id) {
 
       // ---- Candidate → Contracts (full contracts summary shape) ----
       if (type === 'contracts') {
-        const INCOMPLETE_STATUSES = ['OPEN','PLANNED','SUBMITTED','AUTHORISED'];
-
-        // Mirror handleContractsList, but filtered by candidate_id and with simple paging
         const selectParts = [
           '*',
           'candidate:candidates(display_name,first_name,last_name)',
@@ -35562,12 +35559,26 @@ async function handleRelatedList(env, req, entity, id) {
       }
 
       if (type === 'candidates') {
+        // Union candidates from TSFIN + contracts (to match counts)
         const finQ =
           `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
           `?client_id=eq.${enc(id)}` +
           `&is_current=eq.true&select=candidate_id`;
         const fin  = await sbFetch(env, finQ);
-        const candIds = [...new Set((fin.rows || []).map(r => r.candidate_id).filter(Boolean))];
+        const candFromTsfin = new Set(
+          (fin.rows || []).map(r => r.candidate_id).filter(Boolean)
+        );
+
+        const ctrQ =
+          `${env.SUPABASE_URL}/rest/v1/contracts` +
+          `?client_id=eq.${enc(id)}` +
+          `&select=candidate_id`;
+        const ctr = await sbFetch(env, ctrQ);
+        const candFromContracts = new Set(
+          (ctr.rows || []).map(r => r.candidate_id).filter(Boolean)
+        );
+
+        const candIds = [...new Set([...candFromTsfin, ...candFromContracts])];
         const total   = candIds.length;
         const pageIds = candIds.slice(offset, offset + limit);
         if (!pageIds.length) return okList([], total);
@@ -35616,6 +35627,70 @@ async function handleRelatedList(env, req, entity, id) {
       }
 
       return withCORS(env, req, badRequest("Unsupported type for client"));
+    }
+
+    // ───────────────────────── CONTRACT ─────────────────────────
+    if (entity === 'contract') {
+      // Load base contract so we know candidate/client once
+      const conUrl =
+        `${env.SUPABASE_URL}/rest/v1/contracts` +
+        `?id=eq.${enc(id)}&select=candidate_id,client_id&limit=1`;
+      const conRes = await sbFetch(env, conUrl);
+      const conRow = (conRes.rows || [])[0] || null;
+      const candId  = conRow?.candidate_id || null;
+      const clientId= conRow?.client_id    || null;
+
+      if (type === 'candidate') {
+        if (!candId) return okList([], 0);
+        const candUrl =
+          `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=eq.${enc(candId)}&select=*`;
+        const cr = await sbFetch(env, candUrl);
+        const c  = (cr.rows || [])[0];
+        return okList(c ? [c] : [], c ? 1 : 0);
+      }
+
+      if (type === 'client') {
+        if (!clientId) return okList([], 0);
+        const cliUrl =
+          `${env.SUPABASE_URL}/rest/v1/clients` +
+          `?id=eq.${enc(clientId)}&select=*`;
+        const cr = await sbFetch(env, cliUrl);
+        const c  = (cr.rows || [])[0];
+        return okList(c ? [c] : [], c ? 1 : 0);
+      }
+
+      if (type === 'timesheets') {
+        // All TS/contract-weeks for this contract via v_timesheets_summary
+        const tsUrl =
+          `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
+          `?select=*` +
+          `&contract_id=eq.${enc(id)}` +
+          `&order=week_ending_date.desc,client_name.asc,candidate_name.asc` +
+          `&limit=${limit}&offset=${offset}`;
+        const { rows, total } = await sbFetch(env, tsUrl, true);
+        return okList(rows || [], total ?? (rows || []).length);
+      }
+
+      if (type === 'umbrella') {
+        if (!candId) return okList([], 0);
+        const candQ =
+          `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=eq.${enc(candId)}&select=pay_method,umbrella_id&limit=1`;
+        const candR = await sbFetch(env, candQ);
+        const cand = (candR.rows || [])[0];
+        if (!cand || cand.pay_method !== 'UMBRELLA' || !cand.umbrella_id) {
+          return okList([], 0);
+        }
+        const umbUrl =
+          `${env.SUPABASE_URL}/rest/v1/umbrellas` +
+          `?id=eq.${enc(cand.umbrella_id)}&select=*`;
+        const umbR = await sbFetch(env, umbUrl);
+        const u = (umbR.rows || [])[0];
+        return okList(u ? [u] : [], u ? 1 : 0);
+      }
+
+      return withCORS(env, req, badRequest("Unsupported type for contract"));
     }
 
     // ───────────────────────── UMBRELLA ─────────────────────────
@@ -35752,6 +35827,7 @@ async function handleRelatedList(env, req, entity, id) {
     return withCORS(env, req, serverError("Failed to load related list"));
   }
 }
+
 
 // ====================== RELATED: LIST (generic) ======================
 /**
