@@ -12406,7 +12406,7 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
   }
 }
 
- async function applyWeeklyMappingsOnly(env, {
+async function applyWeeklyMappingsOnly(env, {
   source_system,
   import_id,
   candidate_mappings,
@@ -12493,7 +12493,7 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
       if (existing && existing.id) {
         // PATCH existing row
         try {
-          await fetch(
+          const res = await fetch(
             `${env.SUPABASE_URL}/rest/v1/hr_name_mappings?id=eq.${enc(existing.id)}`,
             {
               method: 'PATCH',
@@ -12506,9 +12506,16 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
               })
             }
           );
-          if (LOG) {
+          if (!res.ok) {
+            const txt = await res.text().catch(() => '');
+            console.warn('[WEEKLY_MAPPINGS] hr_name_mappings PATCH failed (non-fatal)', {
+              id: existing.id,
+              status: res.status,
+              body: txt
+            });
+          } else if (LOG) {
             L('hr_name_mappings PATCH ok', {
-              id:          existing.id,
+              id:           existing.id,
               hr_name_norm: hrNameNorm,
               hospital_or_trust: hospNorm,
               candidate_id: candidateId
@@ -12530,7 +12537,7 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
             active:            true,
             last_used_at:      nowIso
           }];
-          await fetch(
+          const res = await fetch(
             `${env.SUPABASE_URL}/rest/v1/hr_name_mappings`,
             {
               method: 'POST',
@@ -12538,7 +12545,16 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
               body: JSON.stringify(payload)
             }
           );
-          if (LOG) {
+          if (!res.ok) {
+            const txt = await res.text().catch(() => '');
+            console.warn('[WEEKLY_MAPPINGS] hr_name_mappings INSERT failed (non-fatal)', {
+              hr_name_norm: hrNameNorm,
+              hospital_or_trust: hospNorm,
+              candidate_id: candidateId,
+              status: res.status,
+              body: txt
+            });
+          } else if (LOG) {
             L('hr_name_mappings INSERT ok', {
               hr_name_norm: hrNameNorm,
               hospital_or_trust: hospNorm,
@@ -12603,7 +12619,7 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
           env,
           `${env.SUPABASE_URL}/rest/v1/client_hospitals` +
             `?client_id=eq.${enc(clientId)}` +
-            `&select=id,display_name,hospital_name_norm` +
+            `&select=id,hospital_name_norm` +
             `&limit=1`
         );
         existing = hospRows && hospRows[0] ? hospRows[0] : null;
@@ -12618,12 +12634,11 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
       if (!existing) {
         // Insert a new client_hospitals row
         const newRow = [{
-          client_id:         clientId,
-          display_name:      hospitalNormRaw || alias,
+          client_id:          clientId,
           hospital_name_norm: [alias]
         }];
         try {
-          await fetch(
+          const res = await fetch(
             `${env.SUPABASE_URL}/rest/v1/client_hospitals`,
             {
               method: 'POST',
@@ -12631,7 +12646,15 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
               body: JSON.stringify(newRow)
             }
           );
-          if (LOG) {
+          if (!res.ok) {
+            const txt = await res.text().catch(() => '');
+            console.warn('[WEEKLY_MAPPINGS] client_hospitals INSERT failed (non-fatal)', {
+              hospital_norm: hospitalNormRaw,
+              client_id: clientId,
+              status: res.status,
+              body: txt
+            });
+          } else if (LOG) {
             L('client_hospitals INSERT ok', {
               client_id: clientId,
               hospital_norm: alias
@@ -12649,7 +12672,7 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
         if (!currentAliases.includes(alias)) {
           const updated = [...currentAliases, alias];
           try {
-            await fetch(
+            const res = await fetch(
               `${env.SUPABASE_URL}/rest/v1/client_hospitals?id=eq.${enc(existing.id)}`,
               {
                 method: 'PATCH',
@@ -12657,7 +12680,16 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
                 body: JSON.stringify({ hospital_name_norm: updated })
               }
             );
-            if (LOG) {
+            if (!res.ok) {
+              const txt = await res.text().catch(() => '');
+              console.warn('[WEEKLY_MAPPINGS] client_hospitals PATCH failed (non-fatal)', {
+                id: existing.id,
+                client_id: clientId,
+                hospital_norm: alias,
+                status: res.status,
+                body: txt
+              });
+            } else if (LOG) {
               L('client_hospitals PATCH ok', {
                 id: existing.id,
                 client_id: clientId,
@@ -26983,8 +27015,7 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
     );
   }
 }
-
- async function handleTimesheetResolveClient(env, req, timesheetId) {
+async function handleTimesheetResolveClient(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
   const user = await requireUser(env, req, ['admin']);
@@ -27029,7 +27060,7 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
     // If there is no alias string at all, we can at least attach client_id directly
     if (!alias) {
       try {
-        await fetch(
+        const res = await fetch(
           `${env.SUPABASE_URL}/rest/v1/timesheets` +
             `?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`,
           {
@@ -27041,6 +27072,14 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
             })
           }
         );
+        if (!res.ok) {
+          const txt = await res.text().catch(() => '');
+          console.warn('[TS_RESOLVE_CLIENT] patch timesheet.client_id failed', {
+            timesheet_id: timesheetId,
+            status: res.status,
+            body: txt
+          });
+        }
       } catch (e) {
         console.warn('[TS_RESOLVE_CLIENT] patch timesheet.client_id failed', {
           timesheet_id: timesheetId,
@@ -27073,7 +27112,7 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
         env,
         `${env.SUPABASE_URL}/rest/v1/client_hospitals` +
           `?client_id=eq.${enc(clientId)}` +
-          `&select=id,display_name,hospital_name_norm` +
+          `&select=id,hospital_name_norm` +
           `&order=id.asc`
       );
       if (hospRows?.length) {
@@ -27101,10 +27140,9 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
       try {
         const payload = [{
           client_id: clientId,
-          display_name: rawHosp || alias,
           hospital_name_norm: [alias]
         }];
-        await fetch(
+        const res = await fetch(
           `${env.SUPABASE_URL}/rest/v1/client_hospitals`,
           {
             method: 'POST',
@@ -27112,6 +27150,15 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
             body: JSON.stringify(payload)
           }
         );
+        if (!res.ok) {
+          const txt = await res.text().catch(() => '');
+          console.warn('[TS_RESOLVE_CLIENT] client_hospitals insert failed', {
+            client_id: clientId,
+            alias,
+            status: res.status,
+            body: txt
+          });
+        }
       } catch (e) {
         console.warn('[TS_RESOLVE_CLIENT] client_hospitals insert failed', {
           client_id: clientId,
@@ -27126,7 +27173,7 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
         const lowerSet = new Set(currentAliases.map(a => String(a || '').toLowerCase()));
         if (!lowerSet.has(alias)) {
           const updated = [...currentAliases, alias];
-          await fetch(
+          const res = await fetch(
             `${env.SUPABASE_URL}/rest/v1/client_hospitals?id=eq.${enc(existingRow.id)}`,
             {
               method: 'PATCH',
@@ -27134,6 +27181,15 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
               body: JSON.stringify({ hospital_name_norm: updated })
             }
           );
+          if (!res.ok) {
+            const txt = await res.text().catch(() => '');
+            console.warn('[TS_RESOLVE_CLIENT] client_hospitals patch failed', {
+              id: existingRow.id,
+              alias,
+              status: res.status,
+              body: txt
+            });
+          }
         }
       } catch (e) {
         console.warn('[TS_RESOLVE_CLIENT] client_hospitals patch failed', {
@@ -27146,7 +27202,7 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
 
     // Optionally attach client_id directly to this timesheet as well
     try {
-      await fetch(
+      const res = await fetch(
         `${env.SUPABASE_URL}/rest/v1/timesheets` +
           `?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`,
         {
@@ -27158,6 +27214,14 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
           })
         }
       );
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        console.warn('[TS_RESOLVE_CLIENT] timesheet client_id patch failed', {
+          timesheet_id: timesheetId,
+          status: res.status,
+          body: txt
+        });
+      }
     } catch (e) {
       console.warn('[TS_RESOLVE_CLIENT] timesheet client_id patch failed', {
         timesheet_id: timesheetId,
@@ -27176,6 +27240,7 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
     );
   }
 }
+
 
  async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
   const enc = encodeURIComponent;
