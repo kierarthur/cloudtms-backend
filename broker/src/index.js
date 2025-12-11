@@ -12417,6 +12417,7 @@ async function applyWeeklyMappingsOnly(env, {
 
   const enc  = encodeURIComponent;
   const norm = (s) => String(s || '').trim().toLowerCase();
+  const sys  = String(source_system || '').toUpperCase();
 
   const nowIso = new Date().toISOString();
 
@@ -12430,7 +12431,7 @@ async function applyWeeklyMappingsOnly(env, {
 
   if (LOG) {
     L('applyWeeklyMappingsOnly ENTER', {
-      source_system,
+      source_system: sys,
       import_id,
       candidate_mappings_count: candMaps.length,
       client_aliases_count: cliAliases.length
@@ -12438,13 +12439,13 @@ async function applyWeeklyMappingsOnly(env, {
   }
 
   // ─────────────────────────────────────────────
-  // hr_name_mappings upserts
+  // 1) hr_name_mappings upserts (unchanged in spirit)
   // ─────────────────────────────────────────────
   for (const m of candMaps) {
     try {
       if (!m) continue;
 
-      // We prefer an explicit staff_norm, but fall back to staff_name if present
+      // Prefer an explicit staff_norm, but fall back to staff_name if present
       const staffNormRaw = m.staff_norm || m.staff_name || '';
       const hrNameNorm   = norm(staffNormRaw);
 
@@ -12476,7 +12477,6 @@ async function applyWeeklyMappingsOnly(env, {
         if (hospNorm) {
           url += `&hospital_or_trust=eq.${enc(hospNorm)}`;
         } else {
-          // Prefer the explicit "no site" row if your schema uses NULL
           url += `&hospital_or_trust=is.null`;
         }
 
@@ -12578,8 +12578,12 @@ async function applyWeeklyMappingsOnly(env, {
   }
 
   // ─────────────────────────────────────────────
-  // client_hospitals upserts
+  // 2) client_hospitals upserts — derive aliases from hr_rows
+  //    using hr_row_ids when available, falling back to
+  //    any legacy hospital_norm strings.
   // ─────────────────────────────────────────────
+
+  // Helper: normalise hospital_name_norm field from Supabase (array or JSON-string)
   const normAliasList = (val) => {
     if (!val) return [];
     if (Array.isArray(val)) return val;
@@ -12594,138 +12598,217 @@ async function applyWeeklyMappingsOnly(env, {
     return [];
   };
 
+  // 2.1 Collect requested hr_row_ids and any legacy string hints
+  const hrRowIdsByClient = new Map();  // client_id -> Set<hr_row_id>
+  const extraAliasByClient = new Map(); // client_id -> Set<alias from hospital_norm>
+
   for (const m of cliAliases) {
+    if (!m) continue;
+    const clientId = m.client_id || null;
+    if (!clientId) continue;
+
+    // NEW: preferred path – hr_row_ids
+    if (Array.isArray(m.hr_row_ids) && m.hr_row_ids.length) {
+      let set = hrRowIdsByClient.get(clientId);
+      if (!set) {
+        set = new Set();
+        hrRowIdsByClient.set(clientId, set);
+      }
+      m.hr_row_ids
+        .map(String)
+        .map((id) => id.trim())
+        .filter(Boolean)
+        .forEach((id) => set.add(id));
+    }
+
+    // Backwards-compatible fallback: explicit hospital_norm string
+    const hospitalNormRaw = m.hospital_norm || '';
+    const aliasFromHint   = norm(hospitalNormRaw);
+    if (aliasFromHint) {
+      let set = extraAliasByClient.get(clientId);
+      if (!set) {
+        set = new Set();
+        extraAliasByClient.set(clientId, set);
+      }
+      set.add(aliasFromHint);
+    }
+  }
+
+  // 2.2 Build alias sets per client_id (from hints + hr_rows)
+  const aliasSetsByClient = new Map(); // client_id -> Set<alias>
+
+  // Seed with any extra aliases passed explicitly
+  for (const [clientId, set] of extraAliasByClient.entries()) {
+    const tgt = aliasSetsByClient.get(clientId) || new Set();
+    set.forEach((a) => tgt.add(a));
+    aliasSetsByClient.set(clientId, tgt);
+  }
+
+  // If we have hr_row_ids, fetch those hr_rows and derive trust_raw exactly
+  // as per the SQL nhsp_preview_mappings_phase1 / hr_weekly_preview_mappings_phase1:
+  //   trust_raw = coalesce(payload_json->>'trust',
+  //                        payload_json->>'hospital_or_trust',
+  //                        unit_raw)
+  const allHrRowIds = new Set();
+  for (const set of hrRowIdsByClient.values()) {
+    for (const id of set) allHrRowIds.add(id);
+  }
+
+  if (allHrRowIds.size) {
     try {
-      if (!m) continue;
+      const idParam = Array.from(allHrRowIds).map(enc).join(',');
+      const { rows: hrRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/hr_rows` +
+          `?import_id=eq.${enc(import_id)}` +
+          `&id=in.(${idParam})` +
+          `&select=id,unit_raw,payload_json`
+      );
+      const hrMap = new Map(
+        (hrRows || []).map((r) => [String(r.id), r])
+      );
 
-      const hospitalNormRaw = m.hospital_norm || '';
-      const alias           = norm(hospitalNormRaw);
-      const clientId        = m.client_id || null;
-
-      if (!alias || !clientId) {
-        if (LOG) {
-          L('skip client alias (missing alias or client_id)', {
-            hospital_norm_raw: hospitalNormRaw,
-            alias,
-            client_id: clientId
-          });
+      for (const [clientId, idSet] of hrRowIdsByClient.entries()) {
+        let aliasSet = aliasSetsByClient.get(clientId);
+        if (!aliasSet) {
+          aliasSet = new Set();
+          aliasSetsByClient.set(clientId, aliasSet);
         }
-        continue;
-      }
 
-      let existing = null;
-      try {
-        const { rows: hospRows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/client_hospitals` +
-            `?client_id=eq.${enc(clientId)}` +
-            `&select=id,hospital_name_norm` +
-            `&limit=1`
-        );
-        existing = hospRows && hospRows[0] ? hospRows[0] : null;
-      } catch (e) {
-        console.warn('[WEEKLY_MAPPINGS] client_hospitals lookup failed (non-fatal)', {
-          hospital_norm: hospitalNormRaw,
-          client_id: clientId,
-          err: e?.message || String(e)
-        });
-      }
+        for (const id of idSet) {
+          const row = hrMap.get(String(id));
+          if (!row) continue;
+          const payload = row.payload_json || {};
+          const trustRaw =
+            (payload.trust ||
+             payload.hospital_or_trust ||
+             row.unit_raw ||
+             '').toString().trim();
 
-      if (!existing) {
-        // Insert a new client_hospitals row
-        const newRow = [{
-          client_id:          clientId,
-          hospital_name_norm: [alias]
-        }];
-        try {
-          const res = await fetch(
-            `${env.SUPABASE_URL}/rest/v1/client_hospitals`,
-            {
-              method: 'POST',
-              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-              body: JSON.stringify(newRow)
-            }
-          );
-          if (!res.ok) {
-            const txt = await res.text().catch(() => '');
-            console.warn('[WEEKLY_MAPPINGS] client_hospitals INSERT failed (non-fatal)', {
-              hospital_norm: hospitalNormRaw,
-              client_id: clientId,
-              status: res.status,
-              body: txt
-            });
-          } else if (LOG) {
-            L('client_hospitals INSERT ok', {
-              client_id: clientId,
-              hospital_norm: alias
-            });
-          }
-        } catch (e) {
-          console.warn('[WEEKLY_MAPPINGS] client_hospitals INSERT failed (non-fatal)', {
-            hospital_norm: hospitalNormRaw,
-            client_id: clientId,
-            err: e?.message || String(e)
-          });
-        }
-      } else {
-        const currentAliases = normAliasList(existing.hospital_name_norm);
-        if (!currentAliases.includes(alias)) {
-          const updated = [...currentAliases, alias];
-          try {
-            const res = await fetch(
-              `${env.SUPABASE_URL}/rest/v1/client_hospitals?id=eq.${enc(existing.id)}`,
-              {
-                method: 'PATCH',
-                headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-                body: JSON.stringify({ hospital_name_norm: updated })
-              }
-            );
-            if (!res.ok) {
-              const txt = await res.text().catch(() => '');
-              console.warn('[WEEKLY_MAPPINGS] client_hospitals PATCH failed (non-fatal)', {
-                id: existing.id,
-                client_id: clientId,
-                hospital_norm: alias,
-                status: res.status,
-                body: txt
-              });
-            } else if (LOG) {
-              L('client_hospitals PATCH ok', {
-                id: existing.id,
-                client_id: clientId,
-                hospital_norm: alias
-              });
-            }
-          } catch (e) {
-            console.warn('[WEEKLY_MAPPINGS] client_hospitals PATCH failed (non-fatal)', {
-              id: existing.id,
-              client_id: clientId,
-              hospital_norm: alias,
-              err: e?.message || String(e)
-            });
-          }
-        } else if (LOG) {
-          L('client_hospitals alias already present (no-op)', {
-            id: existing.id,
-            client_id: clientId,
-            hospital_norm: alias
-          });
+          const alias = norm(trustRaw);
+          if (alias) aliasSet.add(alias);
         }
       }
     } catch (e) {
-      console.warn('[WEEKLY_MAPPINGS] client alias loop failed (non-fatal)', {
+      console.warn('[WEEKLY_MAPPINGS] hr_rows lookup for aliases failed (non-fatal)', {
+        import_id,
         err: e?.message || String(e)
       });
     }
   }
 
+  // 2.3 Upsert client_hospitals per client using accumulated alias sets
+  for (const [clientId, aliasSet] of aliasSetsByClient.entries()) {
+    const aliases = Array.from(aliasSet).filter(Boolean);
+    if (!clientId || !aliases.length) continue;
+
+    let existing = null;
+    try {
+      const { rows: hospRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/client_hospitals` +
+          `?client_id=eq.${enc(clientId)}` +
+          `&select=id,hospital_name_norm` +
+          `&limit=1`
+      );
+      existing = hospRows && hospRows[0] ? hospRows[0] : null;
+    } catch (e) {
+      console.warn('[WEEKLY_MAPPINGS] client_hospitals lookup failed (non-fatal)', {
+        client_id: clientId,
+        err: e?.message || String(e)
+      });
+    }
+
+    if (!existing) {
+      // Insert a new client_hospitals row with all aliases
+      const newRow = [{
+        client_id:          clientId,
+        hospital_name_norm: aliases,
+        updated_at:         nowIso
+      }];
+      try {
+        const res = await fetch(
+          `${env.SUPABASE_URL}/rest/v1/client_hospitals`,
+          {
+            method: 'POST',
+            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+            body: JSON.stringify(newRow)
+          }
+        );
+        if (!res.ok) {
+          const txt = await res.text().catch(() => '');
+          console.warn('[WEEKLY_MAPPINGS] client_hospitals INSERT failed (non-fatal)', {
+            client_id: clientId,
+            aliases,
+            status: res.status,
+            body: txt
+          });
+        } else if (LOG) {
+          L('client_hospitals INSERT ok', {
+            client_id: clientId,
+            aliases
+          });
+        }
+      } catch (e) {
+        console.warn('[WEEKLY_MAPPINGS] client_hospitals INSERT failed (non-fatal)', {
+          client_id: clientId,
+          aliases,
+          err: e?.message || String(e)
+        });
+      }
+    } else {
+      const currentAliases = normAliasList(existing.hospital_name_norm);
+      const merged = new Set(currentAliases.map(norm));
+      aliases.forEach((a) => merged.add(a));
+      const updated = Array.from(merged);
+
+      try {
+        const res = await fetch(
+          `${env.SUPABASE_URL}/rest/v1/client_hospitals?id=eq.${enc(existing.id)}`,
+          {
+            method: 'PATCH',
+            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+            body: JSON.stringify({
+              hospital_name_norm: updated,
+              updated_at: nowIso
+            })
+          }
+        );
+        if (!res.ok) {
+          const txt = await res.text().catch(() => '');
+          console.warn('[WEEKLY_MAPPINGS] client_hospitals PATCH failed (non-fatal)', {
+            id: existing.id,
+            client_id: clientId,
+            aliases: updated,
+            status: res.status,
+            body: txt
+          });
+        } else if (LOG) {
+          L('client_hospitals PATCH ok', {
+            id: existing.id,
+            client_id: clientId,
+            aliases: updated
+          });
+        }
+      } catch (e) {
+        console.warn('[WEEKLY_MAPPINGS] client_hospitals PATCH failed (non-fatal)', {
+          id: existing.id,
+          client_id: clientId,
+          aliases: updated,
+          err: e?.message || String(e)
+        });
+      }
+    }
+  }
+
   if (LOG) {
     L('applyWeeklyMappingsOnly EXIT', {
-      source_system,
+      source_system: sys,
       import_id
     });
   }
 }
+
 
 
 async function assertCandidateHasValidContract(env, {
@@ -12791,6 +12874,7 @@ async function assertCandidateHasValidContract(env, {
   }
 }
 
+
 async function handleNhspResolveMappings(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
@@ -12840,7 +12924,6 @@ async function handleNhspResolveMappings(env, req, importId) {
     } catch (e) {
       const msg = e?.message || 'Contract validation failed';
 
-      // If this is the specific security/missing message, treat as 400; otherwise 500.
       const isSecurityMsg = msg.startsWith('Due to security reasons when linking a candidate');
       const isMissingMsg  =
         msg.startsWith('Missing candidate_id') ||
@@ -12901,9 +12984,7 @@ async function handleNhspResolveMappings(env, req, importId) {
 }
 
 
-
-
- async function handleHrAutoprocessResolveMappings(env, req, importId) {
+async function handleHrAutoprocessResolveMappings(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
   const user = await requireUser(env, req, ['admin']);
@@ -12952,7 +13033,6 @@ async function handleNhspResolveMappings(env, req, importId) {
     } catch (e) {
       const msg = e?.message || 'Contract validation failed';
 
-      // If this is the specific security message, treat as 400; otherwise 500.
       const isSecurityMsg = msg.startsWith('Due to security reasons when linking a candidate');
       const isMissingMsg  = msg.startsWith('Missing candidate_id');
 
@@ -30495,7 +30575,7 @@ async function upsertValidation(env, user, { timesheet_id, status, reason, hr_re
   }
 }
 
- async function handleHrRotaResolveMappings(env, req, importId) {
+async function handleHrRotaResolveMappings(env, req, importId) {
   const enc   = encodeURIComponent;
   const norm  = (s) => String(s || '').trim().toLowerCase();
   const nowIso = new Date().toISOString();
@@ -30518,14 +30598,15 @@ async function upsertValidation(env, user, { timesheet_id, status, reason, hr_re
   }
 
   const candidateMappings = Array.isArray(body?.candidate_mappings)
-    ? body.candidate_mappings
+    ? body.candidate_mappings.filter(Boolean)
     : [];
   const clientAliases = Array.isArray(body?.client_aliases)
-    ? body.client_aliases
+    ? body.client_aliases.filter(Boolean)
     : [];
 
   // ─────────────────────────────────────────────────────────────
   // 1) Upsert hr_name_mappings for candidate mappings
+  //    (still driven by staff_norm + hospital_or_trust from FE)
   // ─────────────────────────────────────────────────────────────
   const hrNameRows = [];
 
@@ -30540,17 +30621,16 @@ async function upsertValidation(env, user, { timesheet_id, status, reason, hr_re
     if (!staffNorm || !candidateId) continue;
 
     hrNameRows.push({
-      hr_name_norm: staffNorm,
+      hr_name_norm:      staffNorm,
       hospital_or_trust: hospNorm,
-      candidate_id: candidateId,
-      active: true,
-      last_used_at: nowIso
+      candidate_id:      candidateId,
+      active:            true,
+      last_used_at:      nowIso
     });
   }
 
   if (hrNameRows.length) {
     try {
-      // Use on_conflict on (hr_name_norm, hospital_or_trust) to upsert mappings
       const res = await fetch(
         `${env.SUPABASE_URL}/rest/v1/hr_name_mappings?on_conflict=hr_name_norm,hospital_or_trust`,
         {
@@ -30575,19 +30655,127 @@ async function upsertValidation(env, user, { timesheet_id, status, reason, hr_re
   }
 
   // ─────────────────────────────────────────────────────────────
-  // 2) Upsert client_hospitals aliases
-  //    Merge hospital_name_norm arrays, ensuring alias is present
+  // 2) Upsert client_hospitals aliases for rota:
+  //    derive aliases from hr_rows using hr_row_ids when present.
+  //    Fallback: use explicit hospital_norm strings if provided.
   // ─────────────────────────────────────────────────────────────
+
+  // (a) Collect hr_row_ids and legacy hints per client
+  const hrRowIdsByClient = new Map();    // client_id -> Set<hr_row_id>
+  const extraAliasByClient = new Map();  // client_id -> Set<alias from hospital_norm>
+
   for (const a of clientAliases) {
     if (!a) continue;
-    const clientId    = a.client_id || null;
-    const hospNormRaw = a.hospital_norm || '';
-    const hospNorm    = norm(hospNormRaw);
+    const clientId = a.client_id || null;
+    if (!clientId) continue;
 
-    if (!clientId || !hospNorm) continue;
+    // Preferred: hr_row_ids from rota preview rows
+    if (Array.isArray(a.hr_row_ids) && a.hr_row_ids.length) {
+      let set = hrRowIdsByClient.get(clientId);
+      if (!set) {
+        set = new Set();
+        hrRowIdsByClient.set(clientId, set);
+      }
+      a.hr_row_ids
+        .map(String)
+        .map((id) => id.trim())
+        .filter(Boolean)
+        .forEach((id) => set.add(id));
+    }
+
+    // Fallback: explicit hospital_norm string
+    const hospNormRaw = a.hospital_norm || '';
+    const aliasFromHint = norm(hospNormRaw);
+    if (aliasFromHint) {
+      let set = extraAliasByClient.get(clientId);
+      if (!set) {
+        set = new Set();
+        extraAliasByClient.set(clientId, set);
+      }
+      set.add(aliasFromHint);
+    }
+  }
+
+  // (b) Build alias sets per client
+  const aliasSetsByClient = new Map(); // client_id -> Set<alias>
+
+  // Seed from any explicit hints
+  for (const [clientId, set] of extraAliasByClient.entries()) {
+    const tgt = aliasSetsByClient.get(clientId) || new Set();
+    set.forEach((a) => tgt.add(a));
+    aliasSetsByClient.set(clientId, tgt);
+  }
+
+  // Add aliases derived from hr_rows (rota rows)
+  const allHrRowIds = new Set();
+  for (const set of hrRowIdsByClient.values()) {
+    for (const id of set) allHrRowIds.add(id);
+  }
+
+  if (allHrRowIds.size) {
+    try {
+      const idParam = Array.from(allHrRowIds).map(enc).join(',');
+      const { rows: hrRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/hr_rows` +
+          `?import_id=eq.${enc(importId)}` +
+          `&id=in.(${idParam})` +
+          `&select=id,unit_raw,payload_json`
+      );
+      const hrMap = new Map(
+        (hrRows || []).map((r) => [String(r.id), r])
+      );
+
+      for (const [clientId, idSet] of hrRowIdsByClient.entries()) {
+        let aliasSet = aliasSetsByClient.get(clientId);
+        if (!aliasSet) {
+          aliasSet = new Set();
+          aliasSetsByClient.set(clientId, aliasSet);
+        }
+
+        for (const id of idSet) {
+          const row = hrMap.get(String(id));
+          if (!row) continue;
+          const payload = row.payload_json || {};
+          // Rota classification uses: unit_raw || payload.unit || payload.ward
+          const hospRaw =
+            (row.unit_raw ||
+             payload.unit ||
+             payload.ward ||
+             '').toString().trim();
+
+          const alias = norm(hospRaw);
+          if (alias) aliasSet.add(alias);
+        }
+      }
+    } catch (e) {
+      console.warn('[HR_ROTA_RESOLVE] hr_rows lookup for aliases failed', {
+        import_id: importId,
+        err: e?.message || String(e)
+      });
+    }
+  }
+
+  // (c) Upsert client_hospitals per client
+  const normAliasList = (val) => {
+    if (!val) return [];
+    if (Array.isArray(val)) return val;
+    if (typeof val === 'string') {
+      try {
+        const parsed = JSON.parse(val);
+        return Array.isArray(parsed) ? parsed : [val];
+      } catch {
+        return [val];
+      }
+    }
+    return [];
+  };
+
+  for (const [clientId, aliasSet] of aliasSetsByClient.entries()) {
+    const aliases = Array.from(aliasSet).filter(Boolean);
+    if (!clientId || !aliases.length) continue;
 
     try {
-      // Fetch existing client_hospitals row (if any)
       const { rows: chRows } = await sbFetch(
         env,
         `${env.SUPABASE_URL}/rest/v1/client_hospitals` +
@@ -30598,18 +30786,18 @@ async function upsertValidation(env, user, { timesheet_id, status, reason, hr_re
       const existing = chRows?.[0] || null;
 
       if (!existing) {
-        // Create a new row for this client with this alias
+        // Insert a new row for this client with these aliases
         try {
           const res = await fetch(
             `${env.SUPABASE_URL}/rest/v1/client_hospitals`,
             {
               method: 'POST',
-              headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-              body: JSON.stringify({
-                client_id: clientId,
-                hospital_name_norm: [hospNorm],
-                updated_at: nowIso
-              })
+              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+              body: JSON.stringify([{
+                client_id:          clientId,
+                hospital_name_norm: aliases,
+                updated_at:         nowIso
+              }])
             }
           );
           if (!res.ok) {
@@ -30617,6 +30805,7 @@ async function upsertValidation(env, user, { timesheet_id, status, reason, hr_re
             console.warn('[HR_ROTA_RESOLVE] client_hospitals insert failed', {
               import_id: importId,
               client_id: clientId,
+              aliases,
               err
             });
           }
@@ -30624,17 +30813,16 @@ async function upsertValidation(env, user, { timesheet_id, status, reason, hr_re
           console.warn('[HR_ROTA_RESOLVE] client_hospitals insert exception', {
             import_id: importId,
             client_id: clientId,
+            aliases,
             err: e?.message || String(e)
           });
         }
       } else {
-        // Merge hospital_name_norm array
-        const arr = Array.isArray(existing.hospital_name_norm)
-          ? existing.hospital_name_norm.map((x) => norm(x)).filter(Boolean)
-          : [];
-        if (!arr.includes(hospNorm)) {
-          arr.push(hospNorm);
-        }
+        // Merge existing aliases + new ones
+        const current = normAliasList(existing.hospital_name_norm).map(norm);
+        const merged  = new Set(current);
+        aliases.forEach((a) => merged.add(a));
+        const updated = Array.from(merged);
 
         try {
           const res = await fetch(
@@ -30644,7 +30832,7 @@ async function upsertValidation(env, user, { timesheet_id, status, reason, hr_re
               method: 'PATCH',
               headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
               body: JSON.stringify({
-                hospital_name_norm: arr,
+                hospital_name_norm: updated,
                 updated_at: nowIso
               })
             }
@@ -30654,6 +30842,7 @@ async function upsertValidation(env, user, { timesheet_id, status, reason, hr_re
             console.warn('[HR_ROTA_RESOLVE] client_hospitals update failed', {
               import_id: importId,
               client_id: clientId,
+              aliases: updated,
               err
             });
           }
@@ -30661,6 +30850,7 @@ async function upsertValidation(env, user, { timesheet_id, status, reason, hr_re
           console.warn('[HR_ROTA_RESOLVE] client_hospitals update exception', {
             import_id: importId,
             client_id: clientId,
+            aliases: updated,
             err: e?.message || String(e)
           });
         }
