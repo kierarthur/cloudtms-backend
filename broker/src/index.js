@@ -22996,15 +22996,23 @@ async function handlePickerClientsSnapshot(env, req){
   const { rows } = await sbFetch(env, url);
 
   const items = (rows || []).map(r => {
-    const cs = r.client_settings || {};
+    // client_settings is usually an array from PostgREST when nested
+    const raw = r.client_settings;
+    let cs;
+    if (Array.isArray(raw)) {
+      cs = raw[0] || {};
+    } else {
+      cs = raw || {};
+    }
+
     return {
       id:   r.id,
       name: r.name || '',
       primary_invoice_email: r.primary_invoice_email || '',
-      is_nhsp:       !!cs.is_nhsp,
+      is_nhsp:        !!cs.is_nhsp,
       autoprocess_hr: !!cs.autoprocess_hr,
-      rev:          (r.rev ?? null),
-      updated_at:   r.updated_at || null
+      rev:            (r.rev ?? null),
+      updated_at:     r.updated_at || null
     };
   });
 
@@ -23030,15 +23038,22 @@ async function handlePickerClientsDelta(env, req){
   if (!Array.isArray(rows)) rows = [];
 
   const items = (rows || []).map(r => {
-    const cs = r.client_settings || {};
+    const raw = r.client_settings;
+    let cs;
+    if (Array.isArray(raw)) {
+      cs = raw[0] || {};
+    } else {
+      cs = raw || {};
+    }
+
     return {
       id:   r.id,
       name: r.name || '',
       primary_invoice_email: r.primary_invoice_email || '',
-      is_nhsp:       !!cs.is_nhsp,
+      is_nhsp:        !!cs.is_nhsp,
       autoprocess_hr: !!cs.autoprocess_hr,
-      rev:          (r.rev ?? null),
-      updated_at:   r.updated_at || null
+      rev:            (r.rev ?? null),
+      updated_at:     r.updated_at || null
     };
   });
 
