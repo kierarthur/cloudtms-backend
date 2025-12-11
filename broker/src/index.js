@@ -22987,60 +22987,78 @@ async function handlePickerCandidatesIdList(env, req){
 // CLIENTS: snapshot / delta / id-list
 // ─────────────────────────────────────────────────────────────────────────────
 async function handlePickerClientsSnapshot(env, req){
-  const user = await requireUser(env, req, ['admin']); if (!user) return unauthorized();
+  const user = await requireUser(env, req, ['admin']); 
+  if (!user) return unauthorized();
 
-  // Include is_nhsp and autoprocess_hr so the frontend can filter NHSP / HR autoproc clients
-  const sel = 'id,name,primary_invoice_email,is_nhsp,autoprocess_hr,rev,updated_at';
+  // Pull NHSP / HR autoproc flags from client_settings via nested select
+  const sel = 'id,name,primary_invoice_email,rev,updated_at,client_settings(is_nhsp,autoprocess_hr)';
   const url = `${env.SUPABASE_URL}/rest/v1/clients?select=${encodeURIComponent(sel)}`;
   const { rows } = await sbFetch(env, url);
 
-  const items = (rows||[]).map(r => ({
-    id: r.id,
-    name: r.name || '',
-    primary_invoice_email: r.primary_invoice_email || '',
-    is_nhsp: r.is_nhsp,
-    autoprocess_hr: r.autoprocess_hr,
-    rev: (r.rev ?? null),
-    updated_at: r.updated_at || null
-  }));
+  const items = (rows || []).map(r => {
+    const cs = r.client_settings || {};
+    return {
+      id: r.id,
+      name: r.name || '',
+      primary_invoice_email: r.primary_invoice_email || '',
+      is_nhsp: !!cs.is_nhsp,
+      autoprocess_hr: !!cs.autoprocess_hr,
+      rev: (r.rev ?? null),
+      updated_at: r.updated_at || null
+    };
+  });
 
   const since = computeSinceFromRows(items);
   return okJSON({ items, since });
 }
+
+
 async function handlePickerClientsDelta(env, req){
-  const user = await requireUser(env, req, ['admin']); if (!user) return unauthorized();
+  const user = await requireUser(env, req, ['admin']); 
+  if (!user) return unauthorized();
+
   const u = new URL(req.url);
   const sinceRaw = u.searchParams.get('since');
   if (!sinceRaw) return badJSON(400, 'missing since');
 
-  const sel = 'id,name,primary_invoice_email,is_nhsp,autoprocess_hr,rev,updated_at';
-  const urlAdd = `${env.SUPABASE_URL}/rest/v1/clients?select=${encodeURIComponent(sel)}&rev=gt.${encodeURIComponent(sinceRaw)}`;
+  const sel = 'id,name,primary_invoice_email,rev,updated_at,client_settings(is_nhsp,autoprocess_hr)';
+  const urlAdd = `${env.SUPABASE_URL}/rest/v1/clients` +
+    `?select=${encodeURIComponent(sel)}` +
+    `&rev=gt.${encodeURIComponent(sinceRaw)}`;
+
   let { rows } = await sbFetch(env, urlAdd);
   if (!Array.isArray(rows)) rows = [];
 
-  rows = rows.map(r => ({
-    id: r.id,
-    name: r.name || '',
-    primary_invoice_email: r.primary_invoice_email || '',
-    is_nhsp: r.is_nhsp,
-    autoprocess_hr: r.autoprocess_hr,
-    rev: (r.rev ?? null),
-    updated_at: r.updated_at || null
-  }));
+  const items = rows.map(r => {
+    const cs = r.client_settings || {};
+    return {
+      id: r.id,
+      name: r.name || '',
+      primary_invoice_email: r.primary_invoice_email || '',
+      is_nhsp: !!cs.is_nhsp,
+      autoprocess_hr: !!cs.autoprocess_hr,
+      rev: (r.rev ?? null),
+      updated_at: r.updated_at || null
+    };
+  });
 
+  // Hard deletes: optional tombstones
   let removed = [];
   try {
-    const tombUrl = `${env.SUPABASE_URL}/rest/v1/clients_tombstones?select=id,deleted_rev&deleted_rev=gt.${encodeURIComponent(sinceRaw)}`;
+    const tombUrl = `${env.SUPABASE_URL}/rest/v1/clients_tombstones` +
+      `?select=id,deleted_rev&deleted_rev=gt.${encodeURIComponent(sinceRaw)}`;
     const del = await sbFetch(env, tombUrl);
-    removed = (del?.rows||[]).map(r => r.id);
+    removed = (del?.rows || []).map(r => r.id);
   } catch {}
 
-  const since = computeSinceFromRows(rows);
-  const added = [];      // no 'active' on clients; treat all as updates
-  const updated = rows;  // merge these into cache on the frontend
+  // No "active" flag on clients – treat all changes as updates on the FE
+  const added   = items;
+  const updated = items;
 
+  const since = computeSinceFromRows(items);
   return okJSON({ added, updated, removed, since });
 }
+
 
 async function handlePickerClientsIdList(env, req){
   const user = await requireUser(env, req, ['admin']); if (!user) return unauthorized();
@@ -32022,31 +32040,88 @@ async function handleInvoiceMarkUnpaid(env, req, invoiceId) {
  *                     timesheets: { type: integer }
  *                     candidate:  { type: integer }
  */
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rates: LIST CLIENT DEFAULTS (UNIFIED WINDOW)
+// GET /api/rates/client-defaults
+// Supports: client_id, role, band, active_on, limit, offset, only_enabled
+// - only_enabled=true → adds disabled_at_utc=is.null to the query
+// ─────────────────────────────────────────────────────────────────────────────
 async function handleRelatedCounts(env, req, entity, id) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
+  const enc = encodeURIComponent;
   const countOrLen = (res) => (typeof res.count === 'number' ? res.count : (res.rows?.length || 0));
 
   try {
     // ===== CANDIDATE =====
     if (entity === 'candidate') {
-      const tsq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?candidate_id=eq.${encodeURIComponent(id)}&is_current=eq.true&select=id,client_id,locked_by_invoice_id`;
+      // Base: TSFIN rows for this candidate
+      const tsq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?candidate_id=eq.${enc(id)}` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,client_id,locked_by_invoice_id`;
       const tsfin = await sbFetch(env, tsq, { preferExactCount: true });
-      const rows = tsfin.rows || [];
-      const invDistinct = new Set(rows.map(r => r.locked_by_invoice_id).filter(Boolean));
-      const cliDistinct = new Set(rows.map(r => r.client_id).filter(Boolean));
+      const tsRows = tsfin.rows || [];
+
+      const baseTsCount = countOrLen(tsfin);
+      const invDistinct = new Set(tsRows.map(r => r.locked_by_invoice_id).filter(Boolean));
+      const cliDistinct = new Set(tsRows.map(r => r.client_id).filter(Boolean));
+      const tsIdsFromFin = new Set(tsRows.map(r => r.timesheet_id).filter(Boolean));
+
+      // UNION IN: contract_weeks for this candidate's contracts, without double-counting TSFIN
+      let extraTimesheets = 0;
+      const extraClientIds = new Set();
+
+      try {
+        // All contracts for this candidate
+        const conQ = `${env.SUPABASE_URL}/rest/v1/contracts` +
+          `?candidate_id=eq.${enc(id)}` +
+          `&select=id,client_id`;
+        const conRes = await sbFetch(env, conQ);
+        const conRows = conRes.rows || [];
+        const contractIds = [];
+
+        for (const r of conRows) {
+          if (r.client_id && !cliDistinct.has(r.client_id)) {
+            extraClientIds.add(r.client_id);
+          }
+          if (r.id) contractIds.push(r.id);
+        }
+
+        if (contractIds.length) {
+          const cwQ = `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+            `?contract_id=in.(${contractIds.map(enc).join(',')})` +
+            `&select=id,timesheet_id`;
+          const cwRes = await sbFetch(env, cwQ);
+          const cwRows = cwRes.rows || [];
+
+          // Treat each contract_week as a "timesheet" unless it already has a TSFIN
+          extraTimesheets = cwRows.filter(cw =>
+            !cw.timesheet_id || !tsIdsFromFin.has(cw.timesheet_id)
+          ).length;
+        }
+      } catch (e) {
+        console.warn('[relatedCounts][candidate] contract_weeks union failed', e);
+      }
+
+      const timesheetsTotal = baseTsCount + extraTimesheets;
+      const clientsTotal    = cliDistinct.size + extraClientIds.size;
 
       // umbrella 0/1
-      const cq  = `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(id)}&select=pay_method,umbrella_id&limit=1`;
+      const cq  = `${env.SUPABASE_URL}/rest/v1/candidates` +
+        `?id=eq.${enc(id)}` +
+        `&select=pay_method,umbrella_id&limit=1`;
       const c   = await sbFetch(env, cq);
       const cand = (c.rows || [])[0] || {};
       const umbrella = (cand.pay_method === 'UMBRELLA' && cand.umbrella_id) ? 1 : 0;
 
       return withCORS(env, req, ok({
-        timesheets: countOrLen(tsfin),
+        timesheets: timesheetsTotal,
         invoices:   invDistinct.size,
-        clients:    cliDistinct.size,
+        clients:    clientsTotal,
         umbrella
       }));
     }
@@ -32054,7 +32129,10 @@ async function handleRelatedCounts(env, req, entity, id) {
     // ===== TIMESHEET =====
     if (entity === 'timesheet') {
       // candidate, client, invoice from current snapshot
-      const curq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${encodeURIComponent(id)}&is_current=eq.true&select=candidate_id,client_id,locked_by_invoice_id`;
+      const curq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?timesheet_id=eq.${enc(id)}` +
+        `&is_current=eq.true` +
+        `&select=candidate_id,client_id,locked_by_invoice_id`;
       const cur  = await sbFetch(env, curq);
       const row  = (cur.rows || [])[0] || {};
       const hasCandidate = row.candidate_id ? 1 : 0;
@@ -32064,19 +32142,20 @@ async function handleRelatedCounts(env, req, entity, id) {
       // umbrella 0/1: prefer candidate's current pay context
       let umbrella = 0;
       if (row.candidate_id) {
-        const cq = `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(row.candidate_id)}&select=pay_method,umbrella_id&limit=1`;
+        const cq = `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=eq.${enc(row.candidate_id)}` +
+          `&select=pay_method,umbrella_id&limit=1`;
         const c  = await sbFetch(env, cq);
         const cand = (c.rows || [])[0] || {};
         umbrella = (cand.pay_method === 'UMBRELLA' && cand.umbrella_id) ? 1 : 0;
       }
 
-      // NEW: contract + series (base + adjustments for same contract/week)
+      // Contract + "series" (base + adjustments for same contract/week)
       let hasContract = 0;
       let seriesCount = 0;
       try {
-        // Find the contract_week record for this timesheet
         const cwq = `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-          `?timesheet_id=eq.${encodeURIComponent(id)}` +
+          `?timesheet_id=eq.${enc(id)}` +
           `&select=contract_id,week_ending_date&limit=1`;
         const cwr = await sbFetch(env, cwq);
         const cwRow = (cwr.rows || [])[0] || null;
@@ -32084,33 +32163,39 @@ async function handleRelatedCounts(env, req, entity, id) {
         if (cwRow && cwRow.contract_id) {
           hasContract = 1;
 
-          // Count how many contract_weeks share this contract + week_ending and have a timesheet
           const sibQ = `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-            `?contract_id=eq.${encodeURIComponent(cwRow.contract_id)}` +
-            `&week_ending_date=eq.${encodeURIComponent(cwRow.week_ending_date)}` +
+            `?contract_id=eq.${enc(cwRow.contract_id)}` +
+            `&week_ending_date=eq.${enc(cwRow.week_ending_date)}` +
             `&timesheet_id=not.is.null` +
             `&select=id`;
           const sibR = await sbFetch(env, sibQ, { preferExactCount: true });
-          seriesCount = typeof sibR.count === 'number' ? sibR.count : (sibR.rows || []).length;
+          const totalInSeries = typeof sibR.count === 'number'
+            ? sibR.count
+            : (sibR.rows || []).length;
+
+          // "series" = number of OTHER timesheets in this chain (will be shown as "Adjustments" in UI)
+          seriesCount = totalInSeries > 0 ? Math.max(totalInSeries - 1, 0) : 0;
         }
       } catch (e) {
-        // non-fatal – just means no contract/weeks found
         console.warn('[relatedCounts][timesheet] contract/series lookup failed', e);
       }
 
       return withCORS(env, req, ok({
-        candidate: hasCandidate,
-        client:    hasClient,
-        invoice:   hasInvoice,
+        candidate:  hasCandidate,
+        client:     hasClient,
+        invoice:    hasInvoice,
         umbrella,
-        contract:  hasContract,
-        series:    seriesCount
+        contract:   hasContract,
+        series:     seriesCount
       }));
     }
 
     // ===== INVOICE =====
     if (entity === 'invoice') {
-      const tsq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?locked_by_invoice_id=eq.${encodeURIComponent(id)}&is_current=eq.true&select=candidate_id,client_id,id`;
+      const tsq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?locked_by_invoice_id=eq.${enc(id)}` +
+        `&is_current=eq.true` +
+        `&select=candidate_id,client_id,id`;
       const tsfin = await sbFetch(env, tsq, { preferExactCount: true });
       const rows  = tsfin.rows || [];
       const candDistinct = new Set(rows.map(r => r.candidate_id).filter(Boolean));
@@ -32119,51 +32204,109 @@ async function handleRelatedCounts(env, req, entity, id) {
       // umbrellas on this invoice (candidates with umbrella pay)
       let umbCount = 0;
       if (candDistinct.size) {
-        const ids = Array.from(candDistinct).map(encodeURIComponent).join(',');
-        const cq  = `${env.SUPABASE_URL}/rest/v1/candidates?id=in.(${ids})&select=umbrella_id,pay_method`;
+        const ids = Array.from(candDistinct).map(enc).join(',');
+        const cq  = `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=in.(${ids})&select=umbrella_id,pay_method`;
         const cr  = await sbFetch(env, cq);
-        const umbDistinct = new Set((cr.rows || []).filter(r => r.pay_method === 'UMBRELLA' && r.umbrella_id).map(r => r.umbrella_id));
+        const umbDistinct = new Set(
+          (cr.rows || [])
+            .filter(r => r.pay_method === 'UMBRELLA' && r.umbrella_id)
+            .map(r => r.umbrella_id)
+        );
         umbCount = umbDistinct.size;
       }
 
       return withCORS(env, req, ok({
         timesheets: countOrLen(tsfin),
         candidates: candDistinct.size,
-        client:     clientId,   // always present (1)
+        client:     clientId,
         umbrellas:  umbCount
       }));
     }
 
     // ===== CLIENT =====
     if (entity === 'client') {
-      const tsq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?client_id=eq.${encodeURIComponent(id)}&is_current=eq.true&select=candidate_id,id`;
+      // Base: TSFIN rows for this client
+      const tsq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?client_id=eq.${enc(id)}` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,candidate_id,id`;
       const tsfin = await sbFetch(env, tsq, { preferExactCount: true });
       const rows  = tsfin.rows || [];
-      const candDistinct = new Set(rows.map(r => r.candidate_id).filter(Boolean));
 
-      const invq = `${env.SUPABASE_URL}/rest/v1/invoices?client_id=eq.${encodeURIComponent(id)}&select=id`;
+      const baseTsCount = countOrLen(tsfin);
+      const candDistinct = new Set(rows.map(r => r.candidate_id).filter(Boolean));
+      const tsIdsFromFin = new Set(rows.map(r => r.timesheet_id).filter(Boolean));
+
+      let extraTimesheets = 0;
+      const extraCandIds  = new Set();
+
+      try {
+        // All contracts for this client
+        const conQ = `${env.SUPABASE_URL}/rest/v1/contracts` +
+          `?client_id=eq.${enc(id)}` +
+          `&select=id,candidate_id`;
+        const conRes = await sbFetch(env, conQ);
+        const conRows = conRes.rows || [];
+        const contractIds = [];
+
+        for (const r of conRows) {
+          if (r.candidate_id && !candDistinct.has(r.candidate_id)) {
+            extraCandIds.add(r.candidate_id);
+          }
+          if (r.id) contractIds.push(r.id);
+        }
+
+        if (contractIds.length) {
+          const cwQ = `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+            `?contract_id=in.(${contractIds.map(enc).join(',')})` +
+            `&select=id,timesheet_id`;
+          const cwRes = await sbFetch(env, cwQ);
+          const cwRows = cwRes.rows || [];
+
+          // Extra "timesheets" for planned weeks not already represented by TSFIN
+          extraTimesheets = cwRows.filter(cw =>
+            !cw.timesheet_id || !tsIdsFromFin.has(cw.timesheet_id)
+          ).length;
+        }
+      } catch (e) {
+        console.warn('[relatedCounts][client] contract_weeks union failed', e);
+      }
+
+      const timesheetsTotal = baseTsCount + extraTimesheets;
+      const candidatesTotal = candDistinct.size + extraCandIds.size;
+
+      const invq = `${env.SUPABASE_URL}/rest/v1/invoices` +
+        `?client_id=eq.${enc(id)}` +
+        `&select=id`;
       const inv  = await sbFetch(env, invq, { preferExactCount: true });
 
       return withCORS(env, req, ok({
-        timesheets: countOrLen(tsfin),
+        timesheets: timesheetsTotal,
         invoices:   countOrLen(inv),
-        candidates: candDistinct.size
+        candidates: candidatesTotal
       }));
     }
 
     // ===== UMBRELLA =====
     if (entity === 'umbrella') {
-      const cq = `${env.SUPABASE_URL}/rest/v1/candidates?umbrella_id=eq.${encodeURIComponent(id)}&select=id`;
+      const cq = `${env.SUPABASE_URL}/rest/v1/candidates` +
+        `?umbrella_id=eq.${enc(id)}&select=id`;
       const cand = await sbFetch(env, cq, { preferExactCount: true });
       const candIds = (cand.rows || []).map(r => r.id);
 
       let tsCount = 0, invCount = 0;
       if (candIds.length) {
-        const ids = candIds.map(encodeURIComponent).join(',');
-        const tsq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?candidate_id=in.(${ids})&is_current=eq.true&select=locked_by_invoice_id,id`;
+        const ids = candIds.map(enc).join(',');
+        const tsq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?candidate_id=in.(${ids})` +
+          `&is_current=eq.true` +
+          `&select=locked_by_invoice_id,id`;
         const ts  = await sbFetch(env, tsq, { preferExactCount: true });
         tsCount = countOrLen(ts);
-        const invDistinct = new Set((ts.rows || []).map(r => r.locked_by_invoice_id).filter(Boolean));
+        const invDistinct = new Set(
+          (ts.rows || []).map(r => r.locked_by_invoice_id).filter(Boolean)
+        );
         invCount = invDistinct.size;
       }
 
@@ -32176,12 +32319,16 @@ async function handleRelatedCounts(env, req, entity, id) {
 
     // ===== REMITTANCE ===== (kept for completeness)
     if (entity === 'remittance') {
-      const base = `correlation_id=eq.${encodeURIComponent(id)}&reason=eq.REMITTANCE`;
-      const tsAudQ = `${env.SUPABASE_URL}/rest/v1/audit_events?${base}&object_type=eq.timesheet&select=object_id_text`;
+      const base = `correlation_id=eq.${enc(id)}&reason=eq.REMITTANCE`;
+      const tsAudQ = `${env.SUPABASE_URL}/rest/v1/audit_events` +
+        `?${base}&object_type=eq.timesheet&select=object_id_text`;
       const tsAud  = await sbFetch(env, tsAudQ);
-      const tsDistinct = new Set((tsAud.rows || []).map(r => r.object_id_text).filter(Boolean));
+      const tsDistinct = new Set(
+        (tsAud.rows || []).map(r => r.object_id_text).filter(Boolean)
+      );
 
-      const candAudQ = `${env.SUPABASE_URL}/rest/v1/audit_events?${base}&object_type=eq.candidate&select=id`;
+      const candAudQ = `${env.SUPABASE_URL}/rest/v1/audit_events` +
+        `?${base}&object_type=eq.candidate&select=id`;
       const candAud  = await sbFetch(env, candAudQ);
       const hasCand  = (candAud.rows || []).length > 0 ? 1 : 0;
 
@@ -32197,13 +32344,6 @@ async function handleRelatedCounts(env, req, entity, id) {
     return withCORS(env, req, serverError("Failed to load related counts"));
   }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Rates: LIST CLIENT DEFAULTS (UNIFIED WINDOW)
-// GET /api/rates/client-defaults
-// Supports: client_id, role, band, active_on, limit, offset, only_enabled
-// - only_enabled=true → adds disabled_at_utc=is.null to the query
-// ─────────────────────────────────────────────────────────────────────────────
 
 async function handleListClientRates(env, req, clientId) {
   const user = await requireUser(env, req, ['admin']);
