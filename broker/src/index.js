@@ -35261,11 +35261,31 @@ async function handleRelatedList(env, req, entity, id) {
     if (entity === 'timesheet') {
       // Timesheet → Candidate (full candidate row)
       if (type === 'candidate') {
+        // First try TSFIN by timesheet_id
         const curQ =
           `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
           `?timesheet_id=eq.${enc(id)}&is_current=eq.true&select=candidate_id&limit=1`;
         const cur = await sbFetch(env, curQ);
-        const candId = (cur.rows || [])[0]?.candidate_id;
+        const curRows = cur.rows || [];
+        let candId = (curRows[0] && curRows[0].candidate_id) || null;
+
+        // Fallback: treat id as contract_week.id → contracts → candidate
+        if (!candId) {
+          const cwQ =
+            `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+            `?id=eq.${enc(id)}&select=contract_id&limit=1`;
+          const cwR = await sbFetch(env, cwQ);
+          const cwRow = (cwR.rows || [])[0] || null;
+          if (cwRow && cwRow.contract_id) {
+            const conQ =
+              `${env.SUPABASE_URL}/rest/v1/contracts` +
+              `?id=eq.${enc(cwRow.contract_id)}&select=candidate_id&limit=1`;
+            const conR = await sbFetch(env, conQ);
+            const con = (conR.rows || [])[0] || null;
+            candId = con && con.candidate_id ? con.candidate_id : null;
+          }
+        }
+
         if (!candId) return okList([], 0);
 
         const candUrl =
@@ -35300,11 +35320,31 @@ async function handleRelatedList(env, req, entity, id) {
 
       // Timesheet → Client (full client row)
       if (type === 'client') {
+        // First try TSFIN by timesheet_id
         const curQ =
           `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
           `?timesheet_id=eq.${enc(id)}&is_current=eq.true&select=client_id&limit=1`;
         const cur = await sbFetch(env, curQ);
-        const clientId = (cur.rows || [])[0]?.client_id;
+        const curRows = cur.rows || [];
+        let clientId = (curRows[0] && curRows[0].client_id) || null;
+
+        // Fallback: treat id as contract_week.id → contracts → client
+        if (!clientId) {
+          const cwQ =
+            `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+            `?id=eq.${enc(id)}&select=contract_id&limit=1`;
+          const cwR = await sbFetch(env, cwQ);
+          const cwRow = (cwR.rows || [])[0] || null;
+          if (cwRow && cwRow.contract_id) {
+            const conQ =
+              `${env.SUPABASE_URL}/rest/v1/contracts` +
+              `?id=eq.${enc(cwRow.contract_id)}&select=client_id&limit=1`;
+            const conR = await sbFetch(env, conQ);
+            const con  = (conR.rows || [])[0] || null;
+            clientId   = con && con.client_id ? con.client_id : null;
+          }
+        }
+
         if (!clientId) return okList([], 0);
 
         const cliUrl =
@@ -35317,12 +35357,31 @@ async function handleRelatedList(env, req, entity, id) {
 
       // Timesheet → Umbrella (full umbrella row)
       if (type === 'umbrella') {
-        // Look up candidate for this TS
+        // First try candidate from TSFIN
         const curQ =
           `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
           `?timesheet_id=eq.${enc(id)}&is_current=eq.true&select=candidate_id&limit=1`;
         const cur = await sbFetch(env, curQ);
-        const candId = (cur.rows || [])[0]?.candidate_id;
+        const curRows = cur.rows || [];
+        let candId = (curRows[0] && curRows[0].candidate_id) || null;
+
+        // Fallback: treat id as contract_week.id → contracts → candidate
+        if (!candId) {
+          const cwQ =
+            `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+            `?id=eq.${enc(id)}&select=contract_id&limit=1`;
+          const cwR = await sbFetch(env, cwQ);
+          const cwRow = (cwR.rows || [])[0] || null;
+          if (cwRow && cwRow.contract_id) {
+            const conQ =
+              `${env.SUPABASE_URL}/rest/v1/contracts` +
+              `?id=eq.${enc(cwRow.contract_id)}&select=candidate_id&limit=1`;
+            const conR = await sbFetch(env, conQ);
+            const con = (conR.rows || [])[0] || null;
+            candId    = con && con.candidate_id ? con.candidate_id : null;
+          }
+        }
+
         if (!candId) return okList([], 0);
 
         const candQ =
@@ -35344,11 +35403,26 @@ async function handleRelatedList(env, req, entity, id) {
 
       // Timesheet → Contract (full contracts summary shape for the one contract)
       if (type === 'contract') {
+        // First try real timesheets row
         const tsQ =
           `${env.SUPABASE_URL}/rest/v1/timesheets` +
           `?timesheet_id=eq.${enc(id)}&select=contract_id&limit=1`;
         const tsR = await sbFetch(env, tsQ);
-        const contractId = (tsR.rows || [])[0]?.contract_id;
+        const tsRows = tsR.rows || [];
+        let contractId = (tsRows[0] && tsRows[0].contract_id) || null;
+
+        // Fallback: treat id as contract_week.id → contract_weeks → contract_id
+        if (!contractId) {
+          const cwQ =
+            `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+            `?id=eq.${enc(id)}&select=contract_id&limit=1`;
+          const cwR = await sbFetch(env, cwQ);
+          const cwRow = (cwR.rows || [])[0] || null;
+          if (cwRow && cwRow.contract_id) {
+            contractId = cwRow.contract_id;
+          }
+        }
+
         if (!contractId) return okList([], 0);
 
         const selectParts = [
@@ -35883,7 +35957,6 @@ async function handleRelatedList(env, req, entity, id) {
  */
 // UPDATED: handleRelatedList — fixes syntax error on candidate→clients branch and supports all related types per spec
 
-
 async function handleRelatedCounts(env, req, entity, id) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
@@ -35968,13 +36041,79 @@ async function handleRelatedCounts(env, req, entity, id) {
 
     // ===== TIMESHEET =====
     if (entity === 'timesheet') {
-      // candidate, client, invoice from current snapshot
+      // First attempt: treat id as a real timesheet_id in TSFIN
       const curq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
         `?timesheet_id=eq.${enc(id)}` +
         `&is_current=eq.true` +
         `&select=candidate_id,client_id,locked_by_invoice_id`;
       const cur  = await sbFetch(env, curq);
-      const row  = (cur.rows || [])[0] || {};
+      const curRows = cur.rows || [];
+
+      // Fallback path: id may actually be a contract_week.id (planned week with no TS yet)
+      if (!curRows.length) {
+        try {
+          const cwQ = `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+            `?id=eq.${enc(id)}` +
+            `&select=contract_id&limit=1`;
+          const cwR = await sbFetch(env, cwQ);
+          const cwRow = (cwR.rows || [])[0] || null;
+
+          if (!cwRow || !cwRow.contract_id) {
+            // Nothing we can infer
+            return withCORS(env, req, ok({
+              candidate: 0,
+              client:    0,
+              invoice:   0,
+              umbrella:  0,
+              contract:  0,
+              series:    0
+            }));
+          }
+
+          // Use the contract to infer candidate/client
+          const conQ = `${env.SUPABASE_URL}/rest/v1/contracts` +
+            `?id=eq.${enc(cwRow.contract_id)}` +
+            `&select=candidate_id,client_id&limit=1`;
+          const conR  = await sbFetch(env, conQ);
+          const con   = (conR.rows || [])[0] || {};
+          const candId  = con.candidate_id || null;
+          const clientId= con.client_id    || null;
+
+          let umbrella = 0;
+          if (candId) {
+            const cq = `${env.SUPABASE_URL}/rest/v1/candidates` +
+              `?id=eq.${enc(candId)}` +
+              `&select=pay_method,umbrella_id&limit=1`;
+            const cR = await sbFetch(env, cq);
+            const cand = (cR.rows || [])[0] || {};
+            if (cand.pay_method === 'UMBRELLA' && cand.umbrella_id) {
+              umbrella = 1;
+            }
+          }
+
+          return withCORS(env, req, ok({
+            candidate: candId ? 1 : 0,
+            client:    clientId ? 1 : 0,
+            invoice:   0,
+            umbrella,
+            contract:  1,
+            series:    0
+          }));
+        } catch (e) {
+          console.warn('[relatedCounts][timesheet] fallback contract_week lookup failed', e);
+          return withCORS(env, req, ok({
+            candidate: 0,
+            client:    0,
+            invoice:   0,
+            umbrella:  0,
+            contract:  0,
+            series:    0
+          }));
+        }
+      }
+
+      // Normal path: real TSFIN row found
+      const row  = curRows[0] || {};
       const hasCandidate = row.candidate_id ? 1 : 0;
       const hasClient    = row.client_id ? 1 : 0;
       const hasInvoice   = row.locked_by_invoice_id ? 1 : 0;
