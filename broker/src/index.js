@@ -22988,30 +22988,45 @@ async function handlePickerCandidatesIdList(env, req){
 // ─────────────────────────────────────────────────────────────────────────────
 async function handlePickerClientsSnapshot(env, req){
   const user = await requireUser(env, req, ['admin']); if (!user) return unauthorized();
-  const sel = 'id,name,primary_invoice_email,rev,updated_at';
+
+  // Include is_nhsp and autoprocess_hr so the frontend can filter NHSP / HR autoproc clients
+  const sel = 'id,name,primary_invoice_email,is_nhsp,autoprocess_hr,rev,updated_at';
   const url = `${env.SUPABASE_URL}/rest/v1/clients?select=${encodeURIComponent(sel)}`;
   const { rows } = await sbFetch(env, url);
+
   const items = (rows||[]).map(r => ({
     id: r.id,
     name: r.name || '',
     primary_invoice_email: r.primary_invoice_email || '',
+    is_nhsp: r.is_nhsp,
+    autoprocess_hr: r.autoprocess_hr,
     rev: (r.rev ?? null),
     updated_at: r.updated_at || null
   }));
+
   const since = computeSinceFromRows(items);
   return okJSON({ items, since });
 }
-
 async function handlePickerClientsDelta(env, req){
   const user = await requireUser(env, req, ['admin']); if (!user) return unauthorized();
   const u = new URL(req.url);
   const sinceRaw = u.searchParams.get('since');
   if (!sinceRaw) return badJSON(400, 'missing since');
 
-  const sel = 'id,name,primary_invoice_email,rev,updated_at';
+  const sel = 'id,name,primary_invoice_email,is_nhsp,autoprocess_hr,rev,updated_at';
   const urlAdd = `${env.SUPABASE_URL}/rest/v1/clients?select=${encodeURIComponent(sel)}&rev=gt.${encodeURIComponent(sinceRaw)}`;
   let { rows } = await sbFetch(env, urlAdd);
   if (!Array.isArray(rows)) rows = [];
+
+  rows = rows.map(r => ({
+    id: r.id,
+    name: r.name || '',
+    primary_invoice_email: r.primary_invoice_email || '',
+    is_nhsp: r.is_nhsp,
+    autoprocess_hr: r.autoprocess_hr,
+    rev: (r.rev ?? null),
+    updated_at: r.updated_at || null
+  }));
 
   let removed = [];
   try {
