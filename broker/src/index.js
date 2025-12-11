@@ -36076,8 +36076,8 @@ async function handleRelatedCounts(env, req, entity, id) {
             `&select=candidate_id,client_id&limit=1`;
           const conR  = await sbFetch(env, conQ);
           const con   = (conR.rows || [])[0] || {};
-          const candId  = con.candidate_id || null;
-          const clientId= con.client_id    || null;
+          const candId   = con.candidate_id || null;
+          const clientId = con.client_id    || null;
 
           let umbrella = 0;
           if (candId) {
@@ -36271,6 +36271,58 @@ async function handleRelatedCounts(env, req, entity, id) {
       }));
     }
 
+    // ===== CONTRACT =====
+    if (entity === 'contract') {
+      // Base contract → candidate/client ids
+      const conQ = `${env.SUPABASE_URL}/rest/v1/contracts` +
+        `?id=eq.${enc(id)}` +
+        `&select=candidate_id,client_id&limit=1`;
+      const conRes = await sbFetch(env, conQ);
+      const conRow = (conRes.rows || [])[0] || null;
+
+      const candId   = conRow && conRow.candidate_id ? conRow.candidate_id : null;
+      const clientId = conRow && conRow.client_id    ? conRow.client_id    : null;
+
+      // Timesheets/contract-weeks for this contract via v_timesheets_summary
+      let timesheetsTotal = 0;
+      try {
+        const tsUrl =
+          `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
+          `?select=timesheet_id` +
+          `&contract_id=eq.${enc(id)}`;
+        const tsRes = await sbFetch(env, tsUrl, { preferExactCount: true });
+        timesheetsTotal = countOrLen(tsRes);
+      } catch (e) {
+        console.warn('[relatedCounts][contract] v_timesheets_summary lookup failed', e);
+        timesheetsTotal = 0;
+      }
+
+      // Umbrella 0/1 based on contract's candidate pay method
+      let umbrella = 0;
+      if (candId) {
+        try {
+          const cq = `${env.SUPABASE_URL}/rest/v1/candidates` +
+            `?id=eq.${enc(candId)}` +
+            `&select=pay_method,umbrella_id&limit=1`;
+          const cr = await sbFetch(env, cq);
+          const cand = (cr.rows || [])[0] || {};
+          if (cand.pay_method === 'UMBRELLA' && cand.umbrella_id) {
+            umbrella = 1;
+          }
+        } catch (e) {
+          console.warn('[relatedCounts][contract] umbrella lookup failed', e);
+          umbrella = 0;
+        }
+      }
+
+      return withCORS(env, req, ok({
+        candidate:  candId   ? 1 : 0,
+        client:     clientId ? 1 : 0,
+        timesheets: timesheetsTotal,
+        umbrella
+      }));
+    }
+
     // ===== UMBRELLA =====
     if (entity === 'umbrella') {
       const cq = `${env.SUPABASE_URL}/rest/v1/candidates` +
@@ -36366,7 +36418,6 @@ async function handleRelatedCounts(env, req, entity, id) {
     return withCORS(env, req, serverError("Failed to load related counts"));
   }
 }
-
 
 
 // ====================== OUTBOX: GET ONE (full email) ======================
