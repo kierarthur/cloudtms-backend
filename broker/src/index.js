@@ -32048,302 +32048,6 @@ async function handleInvoiceMarkUnpaid(env, req, invoiceId) {
 // Supports: client_id, role, band, active_on, limit, offset, only_enabled
 // - only_enabled=true → adds disabled_at_utc=is.null to the query
 // ─────────────────────────────────────────────────────────────────────────────
-async function handleRelatedCounts(env, req, entity, id) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return unauthorized();
-
-  const enc = encodeURIComponent;
-  const countOrLen = (res) => (typeof res.count === 'number' ? res.count : (res.rows?.length || 0));
-
-  try {
-    // ===== CANDIDATE =====
-    if (entity === 'candidate') {
-      // Base: TSFIN rows for this candidate
-      const tsq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-        `?candidate_id=eq.${enc(id)}` +
-        `&is_current=eq.true` +
-        `&select=timesheet_id,client_id,locked_by_invoice_id`;
-      const tsfin = await sbFetch(env, tsq, { preferExactCount: true });
-      const tsRows = tsfin.rows || [];
-
-      const baseTsCount = countOrLen(tsfin);
-      const invDistinct = new Set(tsRows.map(r => r.locked_by_invoice_id).filter(Boolean));
-      const cliDistinct = new Set(tsRows.map(r => r.client_id).filter(Boolean));
-      const tsIdsFromFin = new Set(tsRows.map(r => r.timesheet_id).filter(Boolean));
-
-      // UNION IN: contract_weeks for this candidate's contracts, without double-counting TSFIN
-      let extraTimesheets = 0;
-      const extraClientIds = new Set();
-
-      try {
-        // All contracts for this candidate
-        const conQ = `${env.SUPABASE_URL}/rest/v1/contracts` +
-          `?candidate_id=eq.${enc(id)}` +
-          `&select=id,client_id`;
-        const conRes = await sbFetch(env, conQ);
-        const conRows = conRes.rows || [];
-        const contractIds = [];
-
-        for (const r of conRows) {
-          if (r.client_id && !cliDistinct.has(r.client_id)) {
-            extraClientIds.add(r.client_id);
-          }
-          if (r.id) contractIds.push(r.id);
-        }
-
-        if (contractIds.length) {
-          const cwQ = `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-            `?contract_id=in.(${contractIds.map(enc).join(',')})` +
-            `&select=id,timesheet_id`;
-          const cwRes = await sbFetch(env, cwQ);
-          const cwRows = cwRes.rows || [];
-
-          // Treat each contract_week as a "timesheet" unless it already has a TSFIN
-          extraTimesheets = cwRows.filter(cw =>
-            !cw.timesheet_id || !tsIdsFromFin.has(cw.timesheet_id)
-          ).length;
-        }
-      } catch (e) {
-        console.warn('[relatedCounts][candidate] contract_weeks union failed', e);
-      }
-
-      const timesheetsTotal = baseTsCount + extraTimesheets;
-      const clientsTotal    = cliDistinct.size + extraClientIds.size;
-
-      // umbrella 0/1
-      const cq  = `${env.SUPABASE_URL}/rest/v1/candidates` +
-        `?id=eq.${enc(id)}` +
-        `&select=pay_method,umbrella_id&limit=1`;
-      const c   = await sbFetch(env, cq);
-      const cand = (c.rows || [])[0] || {};
-      const umbrella = (cand.pay_method === 'UMBRELLA' && cand.umbrella_id) ? 1 : 0;
-
-      return withCORS(env, req, ok({
-        timesheets: timesheetsTotal,
-        invoices:   invDistinct.size,
-        clients:    clientsTotal,
-        umbrella
-      }));
-    }
-
-    // ===== TIMESHEET =====
-    if (entity === 'timesheet') {
-      // candidate, client, invoice from current snapshot
-      const curq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-        `?timesheet_id=eq.${enc(id)}` +
-        `&is_current=eq.true` +
-        `&select=candidate_id,client_id,locked_by_invoice_id`;
-      const cur  = await sbFetch(env, curq);
-      const row  = (cur.rows || [])[0] || {};
-      const hasCandidate = row.candidate_id ? 1 : 0;
-      const hasClient    = row.client_id ? 1 : 0;
-      const hasInvoice   = row.locked_by_invoice_id ? 1 : 0;
-
-      // umbrella 0/1: prefer candidate's current pay context
-      let umbrella = 0;
-      if (row.candidate_id) {
-        const cq = `${env.SUPABASE_URL}/rest/v1/candidates` +
-          `?id=eq.${enc(row.candidate_id)}` +
-          `&select=pay_method,umbrella_id&limit=1`;
-        const c  = await sbFetch(env, cq);
-        const cand = (c.rows || [])[0] || {};
-        umbrella = (cand.pay_method === 'UMBRELLA' && cand.umbrella_id) ? 1 : 0;
-      }
-
-      // Contract + "series" (base + adjustments for same contract/week)
-      let hasContract = 0;
-      let seriesCount = 0;
-      try {
-        const cwq = `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-          `?timesheet_id=eq.${enc(id)}` +
-          `&select=contract_id,week_ending_date&limit=1`;
-        const cwr = await sbFetch(env, cwq);
-        const cwRow = (cwr.rows || [])[0] || null;
-
-        if (cwRow && cwRow.contract_id) {
-          hasContract = 1;
-
-          const sibQ = `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-            `?contract_id=eq.${enc(cwRow.contract_id)}` +
-            `&week_ending_date=eq.${enc(cwRow.week_ending_date)}` +
-            `&timesheet_id=not.is.null` +
-            `&select=id`;
-          const sibR = await sbFetch(env, sibQ, { preferExactCount: true });
-          const totalInSeries = typeof sibR.count === 'number'
-            ? sibR.count
-            : (sibR.rows || []).length;
-
-          // "series" = number of OTHER timesheets in this chain (will be shown as "Adjustments" in UI)
-          seriesCount = totalInSeries > 0 ? Math.max(totalInSeries - 1, 0) : 0;
-        }
-      } catch (e) {
-        console.warn('[relatedCounts][timesheet] contract/series lookup failed', e);
-      }
-
-      return withCORS(env, req, ok({
-        candidate:  hasCandidate,
-        client:     hasClient,
-        invoice:    hasInvoice,
-        umbrella,
-        contract:   hasContract,
-        series:     seriesCount
-      }));
-    }
-
-    // ===== INVOICE =====
-    if (entity === 'invoice') {
-      const tsq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-        `?locked_by_invoice_id=eq.${enc(id)}` +
-        `&is_current=eq.true` +
-        `&select=candidate_id,client_id,id`;
-      const tsfin = await sbFetch(env, tsq, { preferExactCount: true });
-      const rows  = tsfin.rows || [];
-      const candDistinct = new Set(rows.map(r => r.candidate_id).filter(Boolean));
-      const clientId = (rows[0] && rows[0].client_id) ? 1 : 1; // invoices always have a single client header
-
-      // umbrellas on this invoice (candidates with umbrella pay)
-      let umbCount = 0;
-      if (candDistinct.size) {
-        const ids = Array.from(candDistinct).map(enc).join(',');
-        const cq  = `${env.SUPABASE_URL}/rest/v1/candidates` +
-          `?id=in.(${ids})&select=umbrella_id,pay_method`;
-        const cr  = await sbFetch(env, cq);
-        const umbDistinct = new Set(
-          (cr.rows || [])
-            .filter(r => r.pay_method === 'UMBRELLA' && r.umbrella_id)
-            .map(r => r.umbrella_id)
-        );
-        umbCount = umbDistinct.size;
-      }
-
-      return withCORS(env, req, ok({
-        timesheets: countOrLen(tsfin),
-        candidates: candDistinct.size,
-        client:     clientId,
-        umbrellas:  umbCount
-      }));
-    }
-
-    // ===== CLIENT =====
-    if (entity === 'client') {
-      // Base: TSFIN rows for this client
-      const tsq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-        `?client_id=eq.${enc(id)}` +
-        `&is_current=eq.true` +
-        `&select=timesheet_id,candidate_id,id`;
-      const tsfin = await sbFetch(env, tsq, { preferExactCount: true });
-      const rows  = tsfin.rows || [];
-
-      const baseTsCount = countOrLen(tsfin);
-      const candDistinct = new Set(rows.map(r => r.candidate_id).filter(Boolean));
-      const tsIdsFromFin = new Set(rows.map(r => r.timesheet_id).filter(Boolean));
-
-      let extraTimesheets = 0;
-      const extraCandIds  = new Set();
-
-      try {
-        // All contracts for this client
-        const conQ = `${env.SUPABASE_URL}/rest/v1/contracts` +
-          `?client_id=eq.${enc(id)}` +
-          `&select=id,candidate_id`;
-        const conRes = await sbFetch(env, conQ);
-        const conRows = conRes.rows || [];
-        const contractIds = [];
-
-        for (const r of conRows) {
-          if (r.candidate_id && !candDistinct.has(r.candidate_id)) {
-            extraCandIds.add(r.candidate_id);
-          }
-          if (r.id) contractIds.push(r.id);
-        }
-
-        if (contractIds.length) {
-          const cwQ = `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-            `?contract_id=in.(${contractIds.map(enc).join(',')})` +
-            `&select=id,timesheet_id`;
-          const cwRes = await sbFetch(env, cwQ);
-          const cwRows = cwRes.rows || [];
-
-          // Extra "timesheets" for planned weeks not already represented by TSFIN
-          extraTimesheets = cwRows.filter(cw =>
-            !cw.timesheet_id || !tsIdsFromFin.has(cw.timesheet_id)
-          ).length;
-        }
-      } catch (e) {
-        console.warn('[relatedCounts][client] contract_weeks union failed', e);
-      }
-
-      const timesheetsTotal = baseTsCount + extraTimesheets;
-      const candidatesTotal = candDistinct.size + extraCandIds.size;
-
-      const invq = `${env.SUPABASE_URL}/rest/v1/invoices` +
-        `?client_id=eq.${enc(id)}` +
-        `&select=id`;
-      const inv  = await sbFetch(env, invq, { preferExactCount: true });
-
-      return withCORS(env, req, ok({
-        timesheets: timesheetsTotal,
-        invoices:   countOrLen(inv),
-        candidates: candidatesTotal
-      }));
-    }
-
-    // ===== UMBRELLA =====
-    if (entity === 'umbrella') {
-      const cq = `${env.SUPABASE_URL}/rest/v1/candidates` +
-        `?umbrella_id=eq.${enc(id)}&select=id`;
-      const cand = await sbFetch(env, cq, { preferExactCount: true });
-      const candIds = (cand.rows || []).map(r => r.id);
-
-      let tsCount = 0, invCount = 0;
-      if (candIds.length) {
-        const ids = candIds.map(enc).join(',');
-        const tsq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?candidate_id=in.(${ids})` +
-          `&is_current=eq.true` +
-          `&select=locked_by_invoice_id,id`;
-        const ts  = await sbFetch(env, tsq, { preferExactCount: true });
-        tsCount = countOrLen(ts);
-        const invDistinct = new Set(
-          (ts.rows || []).map(r => r.locked_by_invoice_id).filter(Boolean)
-        );
-        invCount = invDistinct.size;
-      }
-
-      return withCORS(env, req, ok({
-        candidates: countOrLen(cand),
-        timesheets: tsCount,
-        invoices:   invCount
-      }));
-    }
-
-    // ===== REMITTANCE ===== (kept for completeness)
-    if (entity === 'remittance') {
-      const base = `correlation_id=eq.${enc(id)}&reason=eq.REMITTANCE`;
-      const tsAudQ = `${env.SUPABASE_URL}/rest/v1/audit_events` +
-        `?${base}&object_type=eq.timesheet&select=object_id_text`;
-      const tsAud  = await sbFetch(env, tsAudQ);
-      const tsDistinct = new Set(
-        (tsAud.rows || []).map(r => r.object_id_text).filter(Boolean)
-      );
-
-      const candAudQ = `${env.SUPABASE_URL}/rest/v1/audit_events` +
-        `?${base}&object_type=eq.candidate&select=id`;
-      const candAud  = await sbFetch(env, candAudQ);
-      const hasCand  = (candAud.rows || []).length > 0 ? 1 : 0;
-
-      return withCORS(env, req, ok({
-        timesheets: tsDistinct.size,
-        candidate:  hasCand
-      }));
-    }
-
-    return withCORS(env, req, badRequest("Unsupported entity"));
-  } catch (e) {
-    console.error('handleRelatedCounts error', e);
-    return withCORS(env, req, serverError("Failed to load related counts"));
-  }
-}
 
 async function handleListClientRates(env, req, clientId) {
   const user = await requireUser(env, req, ['admin']);
@@ -35425,7 +35129,9 @@ async function handleRelatedList(env, req, entity, id) {
   const okList = (items, total = undefined) =>
     withCORS(env, req, ok({ items, ...(typeof total === 'number' ? { total } : {}) }));
 
-  // Helpers for week-ending (Sunday) computation without touching timesheets table
+  const enc = encodeURIComponent;
+
+  // Helpers for week-ending (Sunday) computation – for a few legacy branches
   const MS_DAY = 24 * 60 * 60 * 1000;
   const toISODate = (d) => {
     const y = d.getUTCFullYear();
@@ -35436,7 +35142,7 @@ async function handleRelatedList(env, req, entity, id) {
   const parseDate = (s) => {
     if (!s) return null;
     const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (m) return new Date(Date.UTC(+m[1], +m[2]-1, +m[3]));
+    if (m) return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
     const d = new Date(s);
     return isNaN(d.getTime()) ? null : d;
   };
@@ -35449,7 +35155,6 @@ async function handleRelatedList(env, req, entity, id) {
     return toISODate(sunday);
   };
   const computeWEFromRow = (r) => {
-    // Priority: use existing week_ending_date if present, else any reasonable base date, else null
     const base =
       r.week_ending_date ||
       r.worked_date ||
@@ -35463,174 +35168,290 @@ async function handleRelatedList(env, req, entity, id) {
   };
 
   try {
-    // -------- CANDIDATE --------
+    // ───────────────────────── CANDIDATE ─────────────────────────
     if (entity === 'candidate') {
+      // ---- Candidate → Timesheets (use v_timesheets_summary full shape) ----
       if (type === 'timesheets') {
-        // Only use timesheets_financials; compute week ending in Worker
-        const finQ = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?candidate_id=eq.${encodeURIComponent(id)}` +
+        const tsUrl =
+          `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
+          `?select=*` +
+          `&candidate_id=eq.${enc(id)}` +
+          `&order=week_ending_date.desc,client_name.asc,candidate_name.asc` +
+          `&limit=${limit}&offset=${offset}`;
+
+        const { rows, total } = await sbFetch(env, tsUrl, true);
+        return okList(rows || [], total ?? (rows || []).length);
+      }
+
+      // ---- Candidate → Invoices (same shape as handleListInvoices) ----
+      if (type === 'invoices') {
+        const finQ =
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?candidate_id=eq.${enc(id)}` +
           `&is_current=eq.true` +
+          `&locked_by_invoice_id=not.is.null` +
+          `&select=locked_by_invoice_id`;
+        const fin  = await sbFetch(env, finQ);
+        const invIds = [...new Set((fin.rows || []).map(r => r.locked_by_invoice_id).filter(Boolean))];
+        const total = invIds.length;
+        const pageIds = invIds.slice(offset, offset + limit);
+        if (!pageIds.length) return okList([], total);
+
+        const sel = [
+          'id','invoice_no','client_id','issued_at_utc','due_at_utc',
+          'status','subtotal_ex_vat','vat_amount','total_inc_vat',
+          'invoice_pdf_r2_key','header_snapshot_json','on_hold_reason','paid_at_utc'
+        ].join(',');
+        const invUrl =
+          `${env.SUPABASE_URL}/rest/v1/invoices` +
+          `?id=in.(${pageIds.map(enc).join(',')})` +
+          `&select=${enc(sel)}` +
+          `&order=issued_at_utc.desc`;
+
+        const { rows } = await sbFetch(env, invUrl);
+        return okList(rows || [], total);
+      }
+
+      // ---- Candidate → Clients (TSFIN + Contracts, then full client rows) ----
+      if (type === 'clients') {
+        // TSFIN clients
+        const finQ =
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?candidate_id=eq.${enc(id)}` +
+          `&is_current=eq.true` +
+          `&select=client_id`;
+        const fin  = await sbFetch(env, finQ);
+        const finCliIds = new Set(
+          (fin.rows || []).map(r => r.client_id).filter(Boolean)
+        );
+
+        // Contracts clients
+        const ctrQ =
+          `${env.SUPABASE_URL}/rest/v1/contracts` +
+          `?candidate_id=eq.${enc(id)}` +
+          `&select=client_id`;
+        const ctr = await sbFetch(env, ctrQ);
+        const contractCliIds = new Set(
+          (ctr.rows || []).map(r => r.client_id).filter(Boolean)
+        );
+
+        const cliIds = [...new Set([...finCliIds, ...contractCliIds])];
+        const total  = cliIds.length;
+        const pageIds = cliIds.slice(offset, offset + limit);
+        if (!pageIds.length) return okList([], total);
+
+        const clUrl =
+          `${env.SUPABASE_URL}/rest/v1/clients` +
+          `?id=in.(${pageIds.map(enc).join(',')})` +
+          `&select=*` +
+          `&order=name.asc`;
+
+        const { rows } = await sbFetch(env, clUrl);
+        return okList(rows || [], total);
+      }
+
+      // ---- Candidate → Umbrella (single, full umbrella row) ----
+      if (type === 'umbrella') {
+        const candQ =
+          `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=eq.${enc(id)}` +
+          `&select=pay_method,umbrella_id&limit=1`;
+        const candR = await sbFetch(env, candQ);
+        const cand = (candR.rows || [])[0];
+        if (!cand || cand.pay_method !== 'UMBRELLA' || !cand.umbrella_id) {
+          return okList([], 0);
+        }
+
+        const umbUrl =
+          `${env.SUPABASE_URL}/rest/v1/umbrellas` +
+          `?id=eq.${enc(cand.umbrella_id)}` +
           `&select=*`;
-        const fin = await sbFetch(env, finQ, { preferExactCount: true });
-        const finRows = fin.rows || [];
-        const total = typeof fin.count === 'number' ? fin.count : finRows.length;
+        const umbR = await sbFetch(env, umbUrl);
+        const u = (umbR.rows || [])[0];
+        return okList(u ? [u] : [], u ? 1 : 0);
+      }
 
-        if (!finRows.length) return okList([], total);
+      // ---- Candidate → Contracts (full contracts summary shape) ----
+      if (type === 'contracts') {
+        const INCOMPLETE_STATUSES = ['OPEN','PLANNED','SUBMITTED','AUTHORISED'];
 
-        const mapped = finRows.map(r => ({
-          timesheet_id:      r.timesheet_id,
-          week_ending_date:  computeWEFromRow(r),
-          processing_status: r.processing_status,
-          total_pay_ex_vat:  r.total_pay_ex_vat,
-          total_hours:       r.total_hours,
-          client_id:         r.client_id || null,
-        })).sort((a, b) => {
-          const ax = a.week_ending_date || '';
-          const bx = b.week_ending_date || '';
-          return ax < bx ? 1 : ax > bx ? -1 : 0;
+        // Mirror handleContractsList, but filtered by candidate_id and with simple paging
+        const selectParts = [
+          '*',
+          'candidate:candidates(display_name,first_name,last_name)',
+          'client:clients(name)'
+        ];
+        let api =
+          `${env.SUPABASE_URL}/rest/v1/contracts` +
+          `?select=${selectParts.join(',')}` +
+          `&candidate_id=eq.${enc(id)}` +
+          `&order=start_date.desc&order=created_at.desc` +
+          `&limit=${limit}&offset=${offset}`;
+
+        let rows = [];
+        try {
+          ({ rows } = await sbFetch(env, api));
+        } catch (err) {
+          console.error('[RELATED][contracts][candidate] list failed', err);
+          return okList([], 0);
+        }
+
+        const out = (rows || []).map(r => {
+          const candidateDisplay =
+            r?.candidate?.display_name ||
+            ([r?.candidate?.first_name, r?.candidate?.last_name].filter(Boolean).join(' ') || null);
+          const clientName = r?.client?.name || null;
+          const { cw_active, cw_open, candidate, client, ...rest } = (r || {});
+          return {
+            ...rest,
+            candidate_display: candidateDisplay,
+            client_name: clientName
+          };
         });
 
-        const page = mapped.slice(offset, offset + limit);
-        return okList(page, total);
-      }
-
-      if (type === 'invoices') {
-        // Distinct invoice ids from tsfin, then fetch invoice summaries
-        const finq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?candidate_id=eq.${encodeURIComponent(id)}&is_current=eq.true&locked_by_invoice_id=not.is.null&select=locked_by_invoice_id`;
-        const fin = await sbFetch(env, finq);
-        const invIds = [...new Set((fin.rows || []).map(r => r.locked_by_invoice_id).filter(Boolean))];
-
-        const pageIds = invIds.slice(offset, offset + limit);
-        if (pageIds.length === 0) return okList([], invIds.length);
-
-        const invq = `${env.SUPABASE_URL}/rest/v1/invoices?id=in.(${pageIds.map(encodeURIComponent).join(',')})&select=id,invoice_no,issued_at_utc,status,total_inc_vat,client_id&order=issued_at_utc.desc`;
-        const inv  = await sbFetch(env, invq);
-        const items = (inv.rows || []).map(r => ({
-          invoice_id:    r.id,
-          invoice_no:    r.invoice_no,
-          issued_at_utc: r.issued_at_utc,
-          status:        r.status,
-          total_inc_vat: r.total_inc_vat,
-          client_id:     r.client_id,
-        }));
-        return okList(items, invIds.length);
-      }
-
-      if (type === 'clients') {
-        const finq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?candidate_id=eq.${encodeURIComponent(id)}&is_current=eq.true&select=client_id`;
-        const fin  = await sbFetch(env, finq);
-        const cliIds = [...new Set((fin.rows || []).map(r => r.client_id).filter(Boolean))];
-        const pageIds = cliIds.slice(offset, offset + limit);
-        if (!pageIds.length) return okList([], cliIds.length);
-
-        const clq = `${env.SUPABASE_URL}/rest/v1/clients?id=in.(${pageIds.map(encodeURIComponent).join(',')})&select=id,name,cli_ref`;
-        const clr = await sbFetch(env, clq);
-        const items = (clr.rows || []).map(c => ({ id: c.id, name: c.name, cli_ref: c.cli_ref || null }));
-        return okList(items, cliIds.length);
-      }
-
-      if (type === 'umbrella') {
-        const cq = `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(id)}&select=pay_method,umbrella_id&limit=1`;
-        const cr = await sbFetch(env, cq);
-        const cand = (cr.rows || [])[0];
-        if (!cand || cand.pay_method !== 'UMBRELLA' || !cand.umbrella_id) return okList([], 0);
-        const uq = `${env.SUPABASE_URL}/rest/v1/umbrellas?id=eq.${encodeURIComponent(cand.umbrella_id)}&select=id,name`;
-        const ur = await sbFetch(env, uq);
-        const u  = (ur.rows || [])[0];
-        return okList(u ? [{ id: u.id, name: u.name }] : [], u ? 1 : 0);
+        return okList(out, out.length);
       }
 
       return withCORS(env, req, badRequest("Unsupported type for candidate"));
     }
 
-    // -------- TIMESHEET --------
+    // ───────────────────────── TIMESHEET ─────────────────────────
     if (entity === 'timesheet') {
+      // Timesheet → Candidate (full candidate row)
       if (type === 'candidate') {
-        const curq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${encodeURIComponent(id)}&is_current=eq.true&select=candidate_id`;
-        const cur = await sbFetch(env, curq);
+        const curQ =
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=eq.${enc(id)}&is_current=eq.true&select=candidate_id&limit=1`;
+        const cur = await sbFetch(env, curQ);
         const candId = (cur.rows || [])[0]?.candidate_id;
         if (!candId) return okList([], 0);
-        const cq = `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(candId)}&select=id,display_name,email`;
-        const cr = await sbFetch(env, cq);
+
+        const candUrl =
+          `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=eq.${enc(candId)}&select=*`;
+        const cr = await sbFetch(env, candUrl);
         const c = (cr.rows || [])[0];
-        return okList(c ? [{ id: c.id, display_name: c.display_name, email: c.email }] : [], c ? 1 : 0);
-      }
-
-      if (type === 'invoice') {
-        const curq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${encodeURIComponent(id)}&is_current=eq.true&select=locked_by_invoice_id`;
-        const cur = await sbFetch(env, curq);
-        const invId = (cur.rows || [])[0]?.locked_by_invoice_id;
-        if (!invId) return okList([], 0);
-        const iq = `${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${encodeURIComponent(invId)}&select=id,invoice_no,issued_at_utc,status,total_inc_vat,client_id`;
-        const ir = await sbFetch(env, iq);
-        const i = (ir.rows || [])[0];
-        return okList(i ? [{
-          invoice_id:    i.id,
-          invoice_no:    i.invoice_no,
-          issued_at_utc: i.issued_at_utc,
-          status:        i.status,
-          total_inc_vat: i.total_inc_vat,
-          client_id:     i.client_id,
-        }] : [], i ? 1 : 0);
-      }
-
-      if (type === 'client') {
-        const curq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${encodeURIComponent(id)}&is_current=eq.true&select=client_id`;
-        const cur = await sbFetch(env, curq);
-        const clientId = (cur.rows || [])[0]?.client_id;
-        if (!clientId) return okList([], 0);
-        const cq = `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(clientId)}&select=id,name,cli_ref`;
-        const cr = await sbFetch(env, cq);
-        const c  = (cr.rows || [])[0];
-        return okList(c ? [{ id:c.id, name:c.name, cli_ref:c.cli_ref||null }] : [], c ? 1 : 0);
-      }
-
-      if (type === 'umbrella') {
-        const curq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${encodeURIComponent(id)}&is_current=eq.true&select=candidate_id`;
-        const cur = await sbFetch(env, curq);
-        const candId = (cur.rows || [])[0]?.candidate_id;
-        if (!candId) return okList([], 0);
-        const cq = `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(candId)}&select=pay_method,umbrella_id&limit=1`;
-        const cr = await sbFetch(env, cq);
-        const cand = (cr.rows || [])[0];
-        if (!cand || cand.pay_method !== 'UMBRELLA' || !cand.umbrella_id) return okList([], 0);
-        const uq = `${env.SUPABASE_URL}/rest/v1/umbrellas?id=eq.${encodeURIComponent(cand.umbrella_id)}&select=id,name`;
-        const ur = await sbFetch(env, uq);
-        const u  = (ur.rows || [])[0];
-        return okList(u ? [{ id: u.id, name: u.name }] : [], u ? 1 : 0);
-      }
-
-      // NEW: contract for this timesheet
-      if (type === 'contract') {
-        const tsq = `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${encodeURIComponent(id)}&select=contract_id&limit=1`;
-        const tsr = await sbFetch(env, tsq);
-        const contractId = (tsr.rows || [])[0]?.contract_id;
-        if (!contractId) return okList([], 0);
-
-        const cq = `${env.SUPABASE_URL}/rest/v1/contracts` +
-          `?id=eq.${encodeURIComponent(contractId)}` +
-          `&select=id,candidate_id,client_id,role,band,start_date,end_date,display_site`;
-        const cr = await sbFetch(env, cq);
-        const c  = (cr.rows || [])[0];
         return okList(c ? [c] : [], c ? 1 : 0);
       }
 
-      // NEW: series (base + adjustments for same contract_week)
+      // Timesheet → Invoice (full invoice row)
+      if (type === 'invoice') {
+        const curQ =
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=eq.${enc(id)}&is_current=eq.true&select=locked_by_invoice_id&limit=1`;
+        const cur = await sbFetch(env, curQ);
+        const invId = (cur.rows || [])[0]?.locked_by_invoice_id;
+        if (!invId) return okList([], 0);
+
+        const sel = [
+          'id','invoice_no','client_id','issued_at_utc','due_at_utc',
+          'status','subtotal_ex_vat','vat_amount','total_inc_vat',
+          'invoice_pdf_r2_key','header_snapshot_json','on_hold_reason','paid_at_utc'
+        ].join(',');
+        const invUrl =
+          `${env.SUPABASE_URL}/rest/v1/invoices` +
+          `?id=eq.${enc(invId)}&select=${enc(sel)}`;
+        const ir = await sbFetch(env, invUrl);
+        const i = (ir.rows || [])[0];
+        return okList(i ? [i] : [], i ? 1 : 0);
+      }
+
+      // Timesheet → Client (full client row)
+      if (type === 'client') {
+        const curQ =
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=eq.${enc(id)}&is_current=eq.true&select=client_id&limit=1`;
+        const cur = await sbFetch(env, curQ);
+        const clientId = (cur.rows || [])[0]?.client_id;
+        if (!clientId) return okList([], 0);
+
+        const cliUrl =
+          `${env.SUPABASE_URL}/rest/v1/clients` +
+          `?id=eq.${enc(clientId)}&select=*`;
+        const cr = await sbFetch(env, cliUrl);
+        const c = (cr.rows || [])[0];
+        return okList(c ? [c] : [], c ? 1 : 0);
+      }
+
+      // Timesheet → Umbrella (full umbrella row)
+      if (type === 'umbrella') {
+        // Look up candidate for this TS
+        const curQ =
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=eq.${enc(id)}&is_current=eq.true&select=candidate_id&limit=1`;
+        const cur = await sbFetch(env, curQ);
+        const candId = (cur.rows || [])[0]?.candidate_id;
+        if (!candId) return okList([], 0);
+
+        const candQ =
+          `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=eq.${enc(candId)}&select=pay_method,umbrella_id&limit=1`;
+        const candR = await sbFetch(env, candQ);
+        const cand = (candR.rows || [])[0];
+        if (!cand || cand.pay_method !== 'UMBRELLA' || !cand.umbrella_id) {
+          return okList([], 0);
+        }
+
+        const umbUrl =
+          `${env.SUPABASE_URL}/rest/v1/umbrellas` +
+          `?id=eq.${enc(cand.umbrella_id)}&select=*`;
+        const umbR = await sbFetch(env, umbUrl);
+        const u = (umbR.rows || [])[0];
+        return okList(u ? [u] : [], u ? 1 : 0);
+      }
+
+      // Timesheet → Contract (full contracts summary shape for the one contract)
+      if (type === 'contract') {
+        const tsQ =
+          `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?timesheet_id=eq.${enc(id)}&select=contract_id&limit=1`;
+        const tsR = await sbFetch(env, tsQ);
+        const contractId = (tsR.rows || [])[0]?.contract_id;
+        if (!contractId) return okList([], 0);
+
+        const selectParts = [
+          '*',
+          'candidate:candidates(display_name,first_name,last_name)',
+          'client:clients(name)'
+        ];
+        const api =
+          `${env.SUPABASE_URL}/rest/v1/contracts` +
+          `?id=eq.${enc(contractId)}` +
+          `&select=${selectParts.join(',')}`;
+
+        const { rows } = await sbFetch(env, api);
+        const out = (rows || []).map(r => {
+          const candidateDisplay =
+            r?.candidate?.display_name ||
+            ([r?.candidate?.first_name, r?.candidate?.last_name].filter(Boolean).join(' ') || null);
+          const clientName = r?.client?.name || null;
+          const { cw_active, cw_open, candidate, client, ...rest } = (r || {});
+          return {
+            ...rest,
+            candidate_display: candidateDisplay,
+            client_name: clientName
+          };
+        });
+
+        return okList(out, out.length);
+      }
+
+      // Timesheet → Series (Adjustments) – keep existing CW + TSFIN logic
       if (type === 'series') {
-        // Step 1: find base contract/week for this timesheet
-        const cwq = `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-          `?timesheet_id=eq.${encodeURIComponent(id)}` +
+        const cwQ =
+          `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+          `?timesheet_id=eq.${enc(id)}` +
           `&select=contract_id,week_ending_date,additional_seq,is_adjustment,status&limit=1`;
-        const cwr = await sbFetch(env, cwq);
+        const cwr = await sbFetch(env, cwQ);
         const cwRow = (cwr.rows || [])[0] || null;
         if (!cwRow || !cwRow.contract_id || !cwRow.week_ending_date) {
           return okList([], 0);
         }
 
-        // Step 2: get all siblings for same contract + week
-        const sibQ = `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-          `?contract_id=eq.${encodeURIComponent(cwRow.contract_id)}` +
-          `&week_ending_date=eq.${encodeURIComponent(cwRow.week_ending_date)}` +
+        const sibQ =
+          `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+          `?contract_id=eq.${enc(cwRow.contract_id)}` +
+          `&week_ending_date=eq.${enc(cwRow.week_ending_date)}` +
           `&timesheet_id=not.is.null` +
           `&select=timesheet_id,additional_seq,is_adjustment,status`;
         const sibR = await sbFetch(env, sibQ);
@@ -35640,9 +35461,9 @@ async function handleRelatedList(env, req, entity, id) {
         const tsIds = [...new Set(cwSiblings.map(r => r.timesheet_id).filter(Boolean))];
         if (!tsIds.length) return okList([], 0);
 
-        // Step 3: hydrate TSFIN summary for each timesheet
-        const finQ = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?timesheet_id=in.(${tsIds.map(encodeURIComponent).join(',')})` +
+        const finQ =
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=in.(${tsIds.map(enc).join(',')})` +
           `&is_current=eq.true` +
           `&select=timesheet_id,total_hours,total_pay_ex_vat,processing_status,basis`;
         const finR = await sbFetch(env, finQ);
@@ -35650,10 +35471,8 @@ async function handleRelatedList(env, req, entity, id) {
         const finByTs = {};
         finRows.forEach(r => { finByTs[r.timesheet_id] = r; });
 
-        // Step 4: map into related series items
         let items = cwSiblings.map(r => {
           const f = finByTs[r.timesheet_id] || {};
-          const seq = (r.additional_seq == null ? 0 : r.additional_seq);
           return {
             timesheet_id:     r.timesheet_id,
             is_current:       String(r.timesheet_id) === String(id),
@@ -35667,7 +35486,9 @@ async function handleRelatedList(env, req, entity, id) {
           };
         });
 
-        // Base (seq 0) first, then adjustments in seq order
+        // Exclude the current TS itself so list = "other adjustments"
+        items = items.filter(it => String(it.timesheet_id) !== String(id));
+
         items.sort((a, b) => {
           const aSeq = a.additional_seq == null ? 0 : a.additional_seq;
           const bSeq = b.additional_seq == null ? 0 : b.additional_seq;
@@ -35683,238 +35504,283 @@ async function handleRelatedList(env, req, entity, id) {
       return withCORS(env, req, badRequest("Unsupported type for timesheet"));
     }
 
-    // -------- INVOICE --------
+    // ───────────────────────── INVOICE ─────────────────────────
     if (entity === 'invoice') {
       if (type === 'timesheets') {
-        // Use only timesheets_financials; compute week ending here
-        const finQ = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?locked_by_invoice_id=eq.${encodeURIComponent(id)}` +
-          `&is_current=eq.true` +
-          `&select=*`;
-        const fin = await sbFetch(env, finQ, { preferExactCount: true });
-        const finRows = fin.rows || [];
-        const total = typeof fin.count === 'number' ? fin.count : finRows.length;
-
-        if (!finRows.length) return okList([], total);
-
-        const mapped = finRows.map(r => ({
-          timesheet_id:      r.timesheet_id,
-          week_ending_date:  computeWEFromRow(r),
-          processing_status: r.processing_status,
-          total_pay_ex_vat:  r.total_pay_ex_vat,
-          total_hours:       r.total_hours,
-          candidate_id:      r.candidate_id || null,
-          client_id:         r.client_id || null,
-        })).sort((a, b) => {
-          const ax = a.week_ending_date || '';
-          const bx = b.week_ending_date || '';
-          return ax < bx ? 1 : ax > bx ? -1 : 0;
-        });
-
-        const page = mapped.slice(offset, offset + limit);
-        return okList(page, total);
+        const tsUrl =
+          `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
+          `?select=*` +
+          `&locked_by_invoice_id=eq.${enc(id)}` +
+          `&order=week_ending_date.desc,client_name.asc,candidate_name.asc` +
+          `&limit=${limit}&offset=${offset}`;
+        const { rows, total } = await sbFetch(env, tsUrl, true);
+        return okList(rows || [], total ?? (rows || []).length);
       }
 
       if (type === 'candidates') {
-        const cq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?locked_by_invoice_id=eq.${encodeURIComponent(id)}&is_current=eq.true&select=candidate_id`;
-        const cr = await sbFetch(env, cq);
-        const candIds = [...new Set((cr.rows || []).map(r => r.candidate_id).filter(Boolean))];
-        const total = candIds.length;
+        const finQ =
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?locked_by_invoice_id=eq.${enc(id)}` +
+          `&is_current=eq.true&select=candidate_id`;
+        const fin  = await sbFetch(env, finQ);
+        const candIds = [...new Set((fin.rows || []).map(r => r.candidate_id).filter(Boolean))];
+        const total   = candIds.length;
         const pageIds = candIds.slice(offset, offset + limit);
         if (!pageIds.length) return okList([], total);
 
-        const cdetq = `${env.SUPABASE_URL}/rest/v1/candidates?id=in.(${pageIds.map(encodeURIComponent).join(',')})&select=id,display_name,email`;
-        const cdet = await sbFetch(env, cdetq);
-        const items = (cdet.rows || []).map(c => ({ id: c.id, display_name: c.display_name, email: c.email }));
-        return okList(items, total);
+        const candUrl =
+          `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=in.(${pageIds.map(enc).join(',')})` +
+          `&select=*` +
+          `&order=display_name.asc`;
+        const cr = await sbFetch(env, candUrl);
+        return okList(cr.rows || [], total);
       }
 
       if (type === 'client') {
-        const iq = `${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${encodeURIComponent(id)}&select=client_id&limit=1`;
-        const ir = await sbFetch(env, iq);
+        const invQ =
+          `${env.SUPABASE_URL}/rest/v1/invoices` +
+          `?id=eq.${enc(id)}&select=client_id&limit=1`;
+        const ir = await sbFetch(env, invQ);
         const clientId = (ir.rows || [])[0]?.client_id;
         if (!clientId) return okList([], 0);
-        const cq = `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(clientId)}&select=id,name,cli_ref`;
-        const cr = await sbFetch(env, cq);
-        const c  = (cr.rows || [])[0];
-        return okList(c ? [{ id: c.id, name: c.name, cli_ref: c.cli_ref || null }] : [], c ? 1 : 0);
+
+        const cliUrl =
+          `${env.SUPABASE_URL}/rest/v1/clients` +
+          `?id=eq.${enc(clientId)}&select=*`;
+        const cr = await sbFetch(env, cliUrl);
+        const c = (cr.rows || [])[0];
+        return okList(c ? [c] : [], c ? 1 : 0);
       }
 
       if (type === 'umbrellas') {
-        const cq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?locked_by_invoice_id=eq.${encodeURIComponent(id)}&is_current=eq.true&select=candidate_id`;
-        const cr = await sbFetch(env, cq);
-        const candIds = [...new Set((cr.rows || []).map(r => r.candidate_id).filter(Boolean))];
+        const finQ =
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?locked_by_invoice_id=eq.${enc(id)}` +
+          `&is_current=eq.true&select=candidate_id`;
+        const fin  = await sbFetch(env, finQ);
+        const candIds = [...new Set((fin.rows || []).map(r => r.candidate_id).filter(Boolean))];
         if (!candIds.length) return okList([], 0);
 
-        const ids = candIds.map(encodeURIComponent).join(',');
-        const kq  = `${env.SUPABASE_URL}/rest/v1/candidates?id=in.(${ids})&select=umbrella_id,pay_method`;
-        const kr  = await sbFetch(env, kq);
-        const umbIds = [...new Set((kr.rows || []).filter(r => r.pay_method === 'UMBRELLA' && r.umbrella_id).map(r => r.umbrella_id))];
+        const candList = candIds.map(enc).join(',');
+        const candQ =
+          `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=in.(${candList})&select=umbrella_id,pay_method`;
+        const cr = await sbFetch(env, candQ);
+        const umbIds = [...new Set(
+          (cr.rows || [])
+            .filter(r => r.pay_method === 'UMBRELLA' && r.umbrella_id)
+            .map(r => r.umbrella_id)
+        )];
+        const total   = umbIds.length;
         const pageIds = umbIds.slice(offset, offset + limit);
-        if (!pageIds.length) return okList([], umbIds.length);
+        if (!pageIds.length) return okList([], total);
 
-        const uq = `${env.SUPABASE_URL}/rest/v1/umbrellas?id=in.(${pageIds.map(encodeURIComponent).join(',')})&select=id,name`;
-        const ur = await sbFetch(env, uq);
-        const items = (ur.rows || []).map(u => ({ id: u.id, name: u.name }));
-        return okList(items, umbIds.length);
+        const umbUrl =
+          `${env.SUPABASE_URL}/rest/v1/umbrellas` +
+          `?id=in.(${pageIds.map(enc).join(',')})&select=*` +
+          `&order=name.asc`;
+        const ur = await sbFetch(env, umbUrl);
+        return okList(ur.rows || [], total);
       }
 
       return withCORS(env, req, badRequest("Unsupported type for invoice"));
     }
 
-    // -------- CLIENT --------
+    // ───────────────────────── CLIENT ─────────────────────────
     if (entity === 'client') {
       if (type === 'timesheets') {
-        const finQ = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?client_id=eq.${encodeURIComponent(id)}` +
-          `&is_current=eq.true` +
-          `&select=*`;
-        const fin  = await sbFetch(env, finQ, { preferExactCount: true });
-        const rows = fin.rows || [];
-        const total = typeof fin.count === 'number' ? fin.count : rows.length;
-
-        const items = rows.map(r => ({
-          timesheet_id:      r.timesheet_id,
-          week_ending_date:  computeWEFromRow(r),
-          processing_status: r.processing_status,
-          total_pay_ex_vat:  r.total_pay_ex_vat,
-          total_hours:       r.total_hours,
-          candidate_id:      r.candidate_id || null
-        })).sort((a,b) => {
-          const ax = a.week_ending_date || '';
-          const bx = b.week_ending_date || '';
-          return ax < bx ? 1 : ax > bx ? -1 : 0;
-        });
-
-        return okList(items.slice(offset, offset + limit), total);
+        const tsUrl =
+          `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
+          `?select=*` +
+          `&client_id=eq.${enc(id)}` +
+          `&order=week_ending_date.desc,client_name.asc,candidate_name.asc` +
+          `&limit=${limit}&offset=${offset}`;
+        const { rows, total } = await sbFetch(env, tsUrl, true);
+        return okList(rows || [], total ?? (rows || []).length);
       }
 
       if (type === 'invoices') {
-        const iq = `${env.SUPABASE_URL}/rest/v1/invoices?client_id=eq.${encodeURIComponent(id)}&select=id,invoice_no,issued_at_utc,status,total_inc_vat&order=issued_at_utc.desc`;
-        const ir = await sbFetch(env, iq, { preferExactCount: true });
-        const items = (ir.rows || []).map(r => ({
-          invoice_id:    r.id,
-          invoice_no:    r.invoice_no,
-          issued_at_utc: r.issued_at_utc,
-          status:        r.status,
-          total_inc_vat: r.total_inc_vat
-        }));
-        return okList(items.slice(offset, offset + limit), typeof ir.count === 'number' ? ir.count : items.length);
+        const sel = [
+          'id','invoice_no','client_id','issued_at_utc','due_at_utc',
+          'status','subtotal_ex_vat','vat_amount','total_inc_vat',
+          'invoice_pdf_r2_key','header_snapshot_json','on_hold_reason','paid_at_utc'
+        ].join(',');
+        const invUrl =
+          `${env.SUPABASE_URL}/rest/v1/invoices` +
+          `?client_id=eq.${enc(id)}` +
+          `&select=${enc(sel)}` +
+          `&order=issued_at_utc.desc` +
+          `&limit=${limit}&offset=${offset}`;
+        const { rows, total } = await sbFetch(env, invUrl, true);
+        return okList(rows || [], total ?? (rows || []).length);
       }
 
       if (type === 'candidates') {
-        const finq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?client_id=eq.${encodeURIComponent(id)}&is_current=eq.true&select=candidate_id`;
-        const fin  = await sbFetch(env, finq);
+        const finQ =
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?client_id=eq.${enc(id)}` +
+          `&is_current=eq.true&select=candidate_id`;
+        const fin  = await sbFetch(env, finQ);
         const candIds = [...new Set((fin.rows || []).map(r => r.candidate_id).filter(Boolean))];
+        const total   = candIds.length;
         const pageIds = candIds.slice(offset, offset + limit);
-        if (!pageIds.length) return okList([], candIds.length);
+        if (!pageIds.length) return okList([], total);
 
-        const cq = `${env.SUPABASE_URL}/rest/v1/candidates?id=in.(${pageIds.map(encodeURIComponent).join(',')})&select=id,display_name,email`;
-        const cr = await sbFetch(env, cq);
-        const items = (cr.rows || []).map(c => ({ id:c.id, display_name:c.display_name, email:c.email }));
-        return okList(items, candIds.length);
+        const candUrl =
+          `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=in.(${pageIds.map(enc).join(',')})` +
+          `&select=*` +
+          `&order=display_name.asc`;
+        const cr = await sbFetch(env, candUrl);
+        return okList(cr.rows || [], total);
+      }
+
+      if (type === 'contracts') {
+        const selectParts = [
+          '*',
+          'candidate:candidates(display_name,first_name,last_name)',
+          'client:clients(name)'
+        ];
+        const api =
+          `${env.SUPABASE_URL}/rest/v1/contracts` +
+          `?client_id=eq.${enc(id)}` +
+          `&select=${selectParts.join(',')}` +
+          `&order=start_date.desc&order=created_at.desc` +
+          `&limit=${limit}&offset=${offset}`;
+        let rows = [];
+        try {
+          ({ rows } = await sbFetch(env, api));
+        } catch (err) {
+          console.error('[RELATED][contracts][client] list failed', err);
+          return okList([], 0);
+        }
+        const out = (rows || []).map(r => {
+          const candidateDisplay =
+            r?.candidate?.display_name ||
+            ([r?.candidate?.first_name, r?.candidate?.last_name].filter(Boolean).join(' ') || null);
+          const clientName = r?.client?.name || null;
+          const { cw_active, cw_open, candidate, client, ...rest } = (r || {});
+          return {
+            ...rest,
+            candidate_display: candidateDisplay,
+            client_name: clientName
+          };
+        });
+        return okList(out, out.length);
       }
 
       return withCORS(env, req, badRequest("Unsupported type for client"));
     }
 
-    // -------- UMBRELLA --------
+    // ───────────────────────── UMBRELLA ─────────────────────────
     if (entity === 'umbrella') {
       if (type === 'candidates') {
-        const cq = `${env.SUPABASE_URL}/rest/v1/candidates?umbrella_id=eq.${encodeURIComponent(id)}&select=id,display_name,email`;
-        const cr = await sbFetch(env, cq, { preferExactCount: true });
-        const items = (cr.rows || []);
-        return okList(items.slice(offset, offset + limit), typeof cr.count === 'number' ? cr.count : items.length);
+        const candUrl =
+          `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?umbrella_id=eq.${enc(id)}` +
+          `&select=*` +
+          `&order=display_name.asc` +
+          `&limit=${limit}&offset=${offset}`;
+        const { rows, total } = await sbFetch(env, candUrl, true);
+        return okList(rows || [], total ?? (rows || []).length);
       }
 
       if (type === 'timesheets') {
-        const candq = `${env.SUPABASE_URL}/rest/v1/candidates?umbrella_id=eq.${encodeURIComponent(id)}&select=id`;
-        const cand  = await sbFetch(env, candq);
-        const candIds = (cand.rows || []).map(r => r.id);
+        const candQ =
+          `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?umbrella_id=eq.${enc(id)}&select=id`;
+        const candR = await sbFetch(env, candQ);
+        const candIds = (candR.rows || []).map(r => r.id);
         if (!candIds.length) return okList([], 0);
 
-        const ids = candIds.map(encodeURIComponent).join(',');
-        const tsq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?candidate_id=in.(${ids})&is_current=eq.true&select=*`;
-        const ts  = await sbFetch(env, tsq, { preferExactCount: true });
-        const rows = ts.rows || [];
-        const items = rows.map(r => ({
-          timesheet_id:      r.timesheet_id,
-          week_ending_date:  computeWEFromRow(r),
-          processing_status: r.processing_status,
-          total_pay_ex_vat:  r.total_pay_ex_vat,
-          total_hours:       r.total_hours,
-          candidate_id:      r.candidate_id || null,
-          client_id:         r.client_id || null
-        })).sort((a,b) => {
-          const ax = a.week_ending_date || '';
-          const bx = b.week_ending_date || '';
-          return ax < bx ? 1 : ax > bx ? -1 : 0;
-        });
-
-        return okList(items.slice(offset, offset + limit), typeof ts.count === 'number' ? ts.count : items.length);
+        const tsUrl =
+          `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
+          `?select=*` +
+          `&candidate_id=in.(${candIds.map(enc).join(',')})` +
+          `&order=week_ending_date.desc,client_name.asc,candidate_name.asc` +
+          `&limit=${limit}&offset=${offset}`;
+        const { rows, total } = await sbFetch(env, tsUrl, true);
+        return okList(rows || [], total ?? (rows || []).length);
       }
 
       if (type === 'invoices') {
-        const candq = `${env.SUPABASE_URL}/rest/v1/candidates?umbrella_id=eq.${encodeURIComponent(id)}&select=id`;
-        const cand  = await sbFetch(env, candq);
-        const candIds = (cand.rows || []).map(r => r.id);
+        const candQ =
+          `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?umbrella_id=eq.${enc(id)}&select=id`;
+        const candR = await sbFetch(env, candQ);
+        const candIds = (candR.rows || []).map(r => r.id);
         if (!candIds.length) return okList([], 0);
 
-        const ids = candIds.map(encodeURIComponent).join(',');
-        const tsq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials?candidate_id=in.(${ids})&is_current=eq.true&locked_by_invoice_id=not.is.null&select=locked_by_invoice_id`;
-        const ts  = await sbFetch(env, tsq);
-        const invIds = [...new Set((ts.rows || []).map(r => r.locked_by_invoice_id).filter(Boolean))];
+        const candList = candIds.map(enc).join(',');
+        const tsQ =
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?candidate_id=in.(${candList})` +
+          `&is_current=eq.true` +
+          `&locked_by_invoice_id=not.is.null` +
+          `&select=locked_by_invoice_id`;
+        const tsR = await sbFetch(env, tsQ);
+        const invIds = [...new Set((tsR.rows || []).map(r => r.locked_by_invoice_id).filter(Boolean))];
+        const total   = invIds.length;
         const pageIds = invIds.slice(offset, offset + limit);
-        if (!pageIds.length) return okList([], invIds.length);
+        if (!pageIds.length) return okList([], total);
 
-        const iq = `${env.SUPABASE_URL}/rest/v1/invoices?id=in.(${pageIds.map(encodeURIComponent).join(',')})&select=id,invoice_no,issued_at_utc,status,total_inc_vat,client_id`;
-        const ir = await sbFetch(env, iq);
-        const items = (ir.rows || []).map(i => ({
-          invoice_id:    i.id,
-          invoice_no:    i.invoice_no,
-          issued_at_utc: i.issued_at_utc,
-          status:        i.status,
-          total_inc_vat: i.total_inc_vat,
-          client_id:     i.client_id
-        }));
-        return okList(items, invIds.length);
+        const sel = [
+          'id','invoice_no','client_id','issued_at_utc','due_at_utc',
+          'status','subtotal_ex_vat','vat_amount','total_inc_vat',
+          'invoice_pdf_r2_key','header_snapshot_json','on_hold_reason','paid_at_utc'
+        ].join(',');
+        const invUrl =
+          `${env.SUPABASE_URL}/rest/v1/invoices` +
+          `?id=in.(${pageIds.map(enc).join(',')})` +
+          `&select=${enc(sel)}` +
+          `&order=issued_at_utc.desc`;
+        const ir = await sbFetch(env, invUrl);
+        return okList(ir.rows || [], total);
       }
 
       return withCORS(env, req, badRequest("Unsupported type for umbrella"));
     }
 
-    // -------- REMITTANCE -------- (kept for completeness)
+    // ───────────────────────── REMITTANCE ─────────────────────────
     if (entity === 'remittance') {
       if (type === 'timesheets') {
-        const audq = `${env.SUPABASE_URL}/rest/v1/audit_events?correlation_id=eq.${encodeURIComponent(id)}&reason=eq.REMITTANCE&object_type=eq.timesheet&select=object_id_text,ts_utc&order=ts_utc.desc`;
-        const aud  = await sbFetch(env, audq);
-        const tsIds = [...new Set((aud.rows || []).map(r => r.object_id_text).filter(Boolean))];
-        const total = tsIds.length;
+        const audQ =
+          `${env.SUPABASE_URL}/rest/v1/audit_events` +
+          `?correlation_id=eq.${enc(id)}` +
+          `&reason=eq.REMITTANCE` +
+          `&object_type=eq.timesheet` +
+          `&select=object_id_text,ts_utc` +
+          `&order=ts_utc.desc`;
+        const audR = await sbFetch(env, audQ);
+        const tsIds = [...new Set((audR.rows || []).map(r => r.object_id_text).filter(Boolean))];
+        const total   = tsIds.length;
         const pageIds = tsIds.slice(offset, offset + limit);
         if (!pageIds.length) return okList([], total);
 
-        const tsfinQ = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?timesheet_id=in.(${pageIds.map(encodeURIComponent).join(',')})` +
-          `&is_current=eq.true&select=*`;
-        const tsfinR = await sbFetch(env, tsfinQ);
-        const items = (tsfinR.rows || []).map(r => ({
-          timesheet_id:      r.timesheet_id,
-          week_ending_date:  computeWEFromRow(r),
-        })).sort((a,b) => {
-          const ax = a.week_ending_date || '';
-          const bx = b.week_ending_date || '';
-          return ax < bx ? 1 : ax > bx ? -1 : 0;
-        });
-        return okList(items, total);
+        const tsUrl =
+          `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
+          `?select=*` +
+          `&timesheet_id=in.(${pageIds.map(enc).join(',')})` +
+          `&order=week_ending_date.desc,client_name.asc,candidate_name.asc`;
+        const { rows } = await sbFetch(env, tsUrl);
+        return okList(rows || [], total);
       }
 
       if (type === 'candidate') {
-        const audq = `${env.SUPABASE_URL}/rest/v1/audit_events?correlation_id=eq.${encodeURIComponent(id)}&reason=eq.REMITTANCE&object_type=eq.candidate&select=object_id_text&limit=1`;
-        const aud  = await sbFetch(env, audq);
-        let candId = (aud.rows || [])[0]?.object_id_text;
+        const audQ =
+          `${env.SUPABASE_URL}/rest/v1/audit_events` +
+          `?correlation_id=eq.${enc(id)}` +
+          `&reason=eq.REMITTANCE` +
+          `&object_type=eq.candidate` +
+          `&select=object_id_text&limit=1`;
+        const audR = await sbFetch(env, audQ);
+        let candId = (audR.rows || [])[0]?.object_id_text;
 
         if (!candId) {
-          const mq = `${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${encodeURIComponent(id)}&select=reference&limit=1`;
+          const mq =
+            `${env.SUPABASE_URL}/rest/v1/mail_outbox` +
+            `?id=eq.${enc(id)}&select=reference&limit=1`;
           const mr = await sbFetch(env, mq);
           const ref = (mr.rows || [])[0]?.reference || '';
           const m = ref.match(/^remit:candidate:([0-9a-fA-F-]{36}):/);
@@ -35922,10 +35788,13 @@ async function handleRelatedList(env, req, entity, id) {
         }
 
         if (!candId) return okList([], 0);
-        const cq = `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(candId)}&select=id,display_name,email&limit=1`;
-        const cr = await sbFetch(env, cq);
+
+        const candUrl =
+          `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=eq.${enc(candId)}&select=*`;
+        const cr = await sbFetch(env, candUrl);
         const c  = (cr.rows || [])[0];
-        return okList(c ? [{ id: c.id, display_name: c.display_name, email: c.email }] : [], c ? 1 : 0);
+        return okList(c ? [c] : [], c ? 1 : 0);
       }
 
       return withCORS(env, req, badRequest("Unsupported type for remittance"));
@@ -35937,6 +35806,352 @@ async function handleRelatedList(env, req, entity, id) {
     return withCORS(env, req, serverError("Failed to load related list"));
   }
 }
+
+async function handleRelatedCounts(env, req, entity, id) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return unauthorized();
+
+  const enc = encodeURIComponent;
+  const countOrLen = (res) => (typeof res.count === 'number' ? res.count : (res.rows?.length || 0));
+
+  try {
+    // ===== CANDIDATE =====
+    if (entity === 'candidate') {
+      // Base: TSFIN rows for this candidate
+      const tsq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?candidate_id=eq.${enc(id)}` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,client_id,locked_by_invoice_id`;
+      const tsfin = await sbFetch(env, tsq, { preferExactCount: true });
+      const tsRows = tsfin.rows || [];
+
+      const baseTsCount = countOrLen(tsfin);
+      const invDistinct = new Set(tsRows.map(r => r.locked_by_invoice_id).filter(Boolean));
+      const cliDistinct = new Set(tsRows.map(r => r.client_id).filter(Boolean));
+      const tsIdsFromFin = new Set(tsRows.map(r => r.timesheet_id).filter(Boolean));
+
+      // UNION IN: contract_weeks for this candidate's contracts, without double-counting TSFIN
+      let extraTimesheets = 0;
+      const extraClientIds = new Set();
+      let contractsTotal   = 0;
+
+      try {
+        // All contracts for this candidate
+        const conQ = `${env.SUPABASE_URL}/rest/v1/contracts` +
+          `?candidate_id=eq.${enc(id)}` +
+          `&select=id,client_id`;
+        const conRes = await sbFetch(env, conQ);
+        const conRows = conRes.rows || [];
+        const contractIds = [];
+
+        contractsTotal = conRows.length;
+
+        for (const r of conRows) {
+          if (r.client_id && !cliDistinct.has(r.client_id)) {
+            extraClientIds.add(r.client_id);
+          }
+          if (r.id) contractIds.push(r.id);
+        }
+
+        if (contractIds.length) {
+          const cwQ = `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+            `?contract_id=in.(${contractIds.map(enc).join(',')})` +
+            `&select=id,timesheet_id`;
+          const cwRes = await sbFetch(env, cwQ);
+          const cwRows = cwRes.rows || [];
+
+          // Treat each contract_week as a "timesheet" unless it already has a TSFIN
+          extraTimesheets = cwRows.filter(cw =>
+            !cw.timesheet_id || !tsIdsFromFin.has(cw.timesheet_id)
+          ).length;
+        }
+      } catch (e) {
+        console.warn('[relatedCounts][candidate] contract_weeks union failed', e);
+      }
+
+      const timesheetsTotal = baseTsCount + extraTimesheets;
+      const clientsTotal    = cliDistinct.size + extraClientIds.size;
+
+      // umbrella 0/1
+      const cq  = `${env.SUPABASE_URL}/rest/v1/candidates` +
+        `?id=eq.${enc(id)}` +
+        `&select=pay_method,umbrella_id&limit=1`;
+      const c   = await sbFetch(env, cq);
+      const cand = (c.rows || [])[0] || {};
+      const umbrella = (cand.pay_method === 'UMBRELLA' && cand.umbrella_id) ? 1 : 0;
+
+      return withCORS(env, req, ok({
+        timesheets: timesheetsTotal,
+        invoices:   invDistinct.size,
+        clients:    clientsTotal,
+        contracts:  contractsTotal,
+        umbrella
+      }));
+    }
+
+    // ===== TIMESHEET =====
+    if (entity === 'timesheet') {
+      // candidate, client, invoice from current snapshot
+      const curq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?timesheet_id=eq.${enc(id)}` +
+        `&is_current=eq.true` +
+        `&select=candidate_id,client_id,locked_by_invoice_id`;
+      const cur  = await sbFetch(env, curq);
+      const row  = (cur.rows || [])[0] || {};
+      const hasCandidate = row.candidate_id ? 1 : 0;
+      const hasClient    = row.client_id ? 1 : 0;
+      const hasInvoice   = row.locked_by_invoice_id ? 1 : 0;
+
+      // umbrella 0/1: prefer candidate's current pay context
+      let umbrella = 0;
+      if (row.candidate_id) {
+        const cq = `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=eq.${enc(row.candidate_id)}` +
+          `&select=pay_method,umbrella_id&limit=1`;
+        const c  = await sbFetch(env, cq);
+        const cand = (c.rows || [])[0] || {};
+        umbrella = (cand.pay_method === 'UMBRELLA' && cand.umbrella_id) ? 1 : 0;
+      }
+
+      // Contract + "series" (base + adjustments for same contract/week)
+      let hasContract = 0;
+      let seriesCount = 0;
+      try {
+        const cwq = `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+          `?timesheet_id=eq.${enc(id)}` +
+          `&select=contract_id,week_ending_date&limit=1`;
+        const cwr = await sbFetch(env, cwq);
+        const cwRow = (cwr.rows || [])[0] || null;
+
+        if (cwRow && cwRow.contract_id) {
+          hasContract = 1;
+
+          const sibQ = `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+            `?contract_id=eq.${enc(cwRow.contract_id)}` +
+            `&week_ending_date=eq.${enc(cwRow.week_ending_date)}` +
+            `&timesheet_id=not.is.null` +
+            `&select=id`;
+          const sibR = await sbFetch(env, sibQ, { preferExactCount: true });
+          const totalInSeries = typeof sibR.count === 'number'
+            ? sibR.count
+            : (sibR.rows || []).length;
+
+          // "series" = number of OTHER timesheets in this chain (shown as "Adjustments" in UI)
+          seriesCount = totalInSeries > 0 ? Math.max(totalInSeries - 1, 0) : 0;
+        }
+      } catch (e) {
+        console.warn('[relatedCounts][timesheet] contract/series lookup failed', e);
+      }
+
+      return withCORS(env, req, ok({
+        candidate:  hasCandidate,
+        client:     hasClient,
+        invoice:    hasInvoice,
+        umbrella,
+        contract:   hasContract,
+        series:     seriesCount
+      }));
+    }
+
+    // ===== INVOICE =====
+    if (entity === 'invoice') {
+      const tsq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?locked_by_invoice_id=eq.${enc(id)}` +
+        `&is_current=eq.true` +
+        `&select=candidate_id,client_id,id`;
+      const tsfin = await sbFetch(env, tsq, { preferExactCount: true });
+      const rows  = tsfin.rows || [];
+      const candDistinct = new Set(rows.map(r => r.candidate_id).filter(Boolean));
+      const clientId = (rows[0] && rows[0].client_id) ? 1 : 1; // invoices always have a single client header
+
+      // umbrellas on this invoice (candidates with umbrella pay)
+      let umbCount = 0;
+      if (candDistinct.size) {
+        const ids = Array.from(candDistinct).map(enc).join(',');
+        const cq  = `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=in.(${ids})&select=umbrella_id,pay_method`;
+        const cr  = await sbFetch(env, cq);
+        const umbDistinct = new Set(
+          (cr.rows || [])
+            .filter(r => r.pay_method === 'UMBRELLA' && r.umbrella_id)
+            .map(r => r.umbrella_id)
+        );
+        umbCount = umbDistinct.size;
+      }
+
+      return withCORS(env, req, ok({
+        timesheets: countOrLen(tsfin),
+        candidates: candDistinct.size,
+        client:     clientId,
+        umbrellas:  umbCount
+      }));
+    }
+
+    // ===== CLIENT =====
+    if (entity === 'client') {
+      // Base: TSFIN rows for this client
+      const tsq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?client_id=eq.${enc(id)}` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,candidate_id,id`;
+      const tsfin = await sbFetch(env, tsq, { preferExactCount: true });
+      const rows  = tsfin.rows || [];
+
+      const baseTsCount = countOrLen(tsfin);
+      const candDistinct = new Set(rows.map(r => r.candidate_id).filter(Boolean));
+      const tsIdsFromFin = new Set(rows.map(r => r.timesheet_id).filter(Boolean));
+
+      let extraTimesheets = 0;
+      const extraCandIds  = new Set();
+      let contractsTotal  = 0;
+
+      try {
+        // All contracts for this client
+        const conQ = `${env.SUPABASE_URL}/rest/v1/contracts` +
+          `?client_id=eq.${enc(id)}` +
+          `&select=id,candidate_id`;
+        const conRes = await sbFetch(env, conQ);
+        const conRows = conRes.rows || [];
+        const contractIds = [];
+
+        contractsTotal = conRows.length;
+
+        for (const r of conRows) {
+          if (r.candidate_id && !candDistinct.has(r.candidate_id)) {
+            extraCandIds.add(r.candidate_id);
+          }
+          if (r.id) contractIds.push(r.id);
+        }
+
+        if (contractIds.length) {
+          const cwQ = `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+            `?contract_id=in.(${contractIds.map(enc).join(',')})` +
+            `&select=id,timesheet_id`;
+          const cwRes = await sbFetch(env, cwQ);
+          const cwRows = cwRes.rows || [];
+
+          // Extra "timesheets" for planned weeks not already represented by TSFIN
+          extraTimesheets = cwRows.filter(cw =>
+            !cw.timesheet_id || !tsIdsFromFin.has(cw.timesheet_id)
+          ).length;
+        }
+      } catch (e) {
+        console.warn('[relatedCounts][client] contract_weeks union failed', e);
+      }
+
+      const timesheetsTotal = baseTsCount + extraTimesheets;
+      const candidatesTotal = candDistinct.size + extraCandIds.size;
+
+      const invq = `${env.SUPABASE_URL}/rest/v1/invoices` +
+        `?client_id=eq.${enc(id)}` +
+        `&select=id`;
+      const inv  = await sbFetch(env, invq, { preferExactCount: true });
+
+      return withCORS(env, req, ok({
+        timesheets: timesheetsTotal,
+        invoices:   countOrLen(inv),
+        candidates: candidatesTotal,
+        contracts:  contractsTotal
+      }));
+    }
+
+    // ===== UMBRELLA =====
+    if (entity === 'umbrella') {
+      const cq = `${env.SUPABASE_URL}/rest/v1/candidates` +
+        `?umbrella_id=eq.${enc(id)}&select=id`;
+      const cand = await sbFetch(env, cq, { preferExactCount: true });
+      const candIds = (cand.rows || []).map(r => r.id);
+
+      let baseTsCount = 0;
+      let extraTimesheets = 0;
+      let invCount = 0;
+
+      if (candIds.length) {
+        const ids = candIds.map(enc).join(',');
+
+        // Base: TSFIN rows for umbrella's candidates
+        const tsq = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?candidate_id=in.(${ids})` +
+          `&is_current=eq.true` +
+          `&select=timesheet_id,locked_by_invoice_id,id`;
+        const ts  = await sbFetch(env, tsq, { preferExactCount: true });
+        const tsRows = ts.rows || [];
+
+        baseTsCount = countOrLen(ts);
+
+        const tsIdsFromFin = new Set(
+          tsRows.map(r => r.timesheet_id).filter(Boolean)
+        );
+        const invDistinct = new Set(
+          tsRows.map(r => r.locked_by_invoice_id).filter(Boolean)
+        );
+        invCount = invDistinct.size;
+
+        // UNION IN: contract_weeks for contracts held by these candidates,
+        // without double-counting TSFIN
+        try {
+          const ctrQ = `${env.SUPABASE_URL}/rest/v1/contracts` +
+            `?candidate_id=in.(${ids})` +
+            `&select=id`;
+          const ctrR = await sbFetch(env, ctrQ);
+          const contractIds = (ctrR.rows || [])
+            .map(r => r.id)
+            .filter(Boolean);
+
+          if (contractIds.length) {
+            const cwQ = `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+              `?contract_id=in.(${contractIds.map(enc).join(',')})` +
+              `&select=id,timesheet_id`;
+            const cwR = await sbFetch(env, cwQ);
+            const cwRows = cwR.rows || [];
+
+            extraTimesheets = cwRows.filter(cw =>
+              !cw.timesheet_id || !tsIdsFromFin.has(cw.timesheet_id)
+            ).length;
+          }
+        } catch (e) {
+          console.warn('[relatedCounts][umbrella] contract_weeks union failed', e);
+        }
+      }
+
+      const timesheetsTotal = baseTsCount + extraTimesheets;
+
+      return withCORS(env, req, ok({
+        candidates: countOrLen(cand),
+        timesheets: timesheetsTotal,
+        invoices:   invCount
+      }));
+    }
+
+    // ===== REMITTANCE ===== (kept for completeness)
+    if (entity === 'remittance') {
+      const base = `correlation_id=eq.${enc(id)}&reason=eq.REMITTANCE`;
+      const tsAudQ = `${env.SUPABASE_URL}/rest/v1/audit_events` +
+        `?${base}&object_type=eq.timesheet&select=object_id_text`;
+      const tsAud  = await sbFetch(env, tsAudQ);
+      const tsDistinct = new Set(
+        (tsAud.rows || []).map(r => r.object_id_text).filter(Boolean)
+      );
+
+      const candAudQ = `${env.SUPABASE_URL}/rest/v1/audit_events` +
+        `?${base}&object_type=eq.candidate&select=id`;
+      const candAud  = await sbFetch(env, candAudQ);
+      const hasCand  = (candAud.rows || []).length > 0 ? 1 : 0;
+
+      return withCORS(env, req, ok({
+        timesheets: tsDistinct.size,
+        candidate:  hasCand
+      }));
+    }
+
+    return withCORS(env, req, badRequest("Unsupported entity"));
+  } catch (e) {
+    console.error('handleRelatedCounts error', e);
+    return withCORS(env, req, serverError("Failed to load related counts"));
+  }
+}
+
+
 
 // ====================== OUTBOX: GET ONE (full email) ======================
 /**
@@ -36002,6 +36217,695 @@ async function handleOutboxGet(env, req, mailId) {
   }
 }
 
+async function handleRelatedList(env, req, entity, id) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return unauthorized();
+
+  const url = new URL(req.url);
+  const type = (matchPath(url.pathname, '/api/related/:entity/:id/:type') || {}).type;
+  const limit  = Math.max(1, Math.min(100, parseInt(url.searchParams.get('limit')  || '20', 10)));
+  const offset = Math.max(0, parseInt(url.searchParams.get('offset') || '0', 10));
+
+  const okList = (items, total = undefined) =>
+    withCORS(env, req, ok({ items, ...(typeof total === 'number' ? { total } : {}) }));
+
+  const enc = encodeURIComponent;
+
+  // Helpers for week-ending (Sunday) computation – for a few legacy branches
+  const MS_DAY = 24 * 60 * 60 * 1000;
+  const toISODate = (d) => {
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+  const parseDate = (s) => {
+    if (!s) return null;
+    const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  };
+  const computeWeekEndingSunday = (baseStr) => {
+    const d = parseDate(baseStr);
+    if (!d) return null;
+    const dow = d.getUTCDay(); // 0=Sun
+    const add = (7 - dow) % 7; // if already Sunday (0), add 0
+    const sunday = new Date(d.getTime() + add * MS_DAY);
+    return toISODate(sunday);
+  };
+  const computeWEFromRow = (r) => {
+    const base =
+      r.week_ending_date ||
+      r.worked_date ||
+      r.worked_from_date ||
+      r.shift_date ||
+      r.created_at_utc ||
+      r.created_at ||
+      null;
+    const we = computeWeekEndingSunday(base);
+    return we || null;
+  };
+
+  try {
+    // ───────────────────────── CANDIDATE ─────────────────────────
+    if (entity === 'candidate') {
+      // ---- Candidate → Timesheets (use v_timesheets_summary full shape) ----
+      if (type === 'timesheets') {
+        const tsUrl =
+          `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
+          `?select=*` +
+          `&candidate_id=eq.${enc(id)}` +
+          `&order=week_ending_date.desc,client_name.asc,candidate_name.asc` +
+          `&limit=${limit}&offset=${offset}`;
+
+        const { rows, total } = await sbFetch(env, tsUrl, true);
+        return okList(rows || [], total ?? (rows || []).length);
+      }
+
+      // ---- Candidate → Invoices (same shape as handleListInvoices) ----
+      if (type === 'invoices') {
+        const finQ =
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?candidate_id=eq.${enc(id)}` +
+          `&is_current=eq.true` +
+          `&locked_by_invoice_id=not.is.null` +
+          `&select=locked_by_invoice_id`;
+        const fin  = await sbFetch(env, finQ);
+        const invIds = [...new Set((fin.rows || []).map(r => r.locked_by_invoice_id).filter(Boolean))];
+        const total = invIds.length;
+        const pageIds = invIds.slice(offset, offset + limit);
+        if (!pageIds.length) return okList([], total);
+
+        const sel = [
+          'id','invoice_no','client_id','issued_at_utc','due_at_utc',
+          'status','subtotal_ex_vat','vat_amount','total_inc_vat',
+          'invoice_pdf_r2_key','header_snapshot_json','on_hold_reason','paid_at_utc'
+        ].join(',');
+        const invUrl =
+          `${env.SUPABASE_URL}/rest/v1/invoices` +
+          `?id=in.(${pageIds.map(enc).join(',')})` +
+          `&select=${enc(sel)}` +
+          `&order=issued_at_utc.desc`;
+
+        const { rows } = await sbFetch(env, invUrl);
+        return okList(rows || [], total);
+      }
+
+      // ---- Candidate → Clients (TSFIN + Contracts, then full client rows) ----
+      if (type === 'clients') {
+        // TSFIN clients
+        const finQ =
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?candidate_id=eq.${enc(id)}` +
+          `&is_current=eq.true` +
+          `&select=client_id`;
+        const fin  = await sbFetch(env, finQ);
+        const finCliIds = new Set(
+          (fin.rows || []).map(r => r.client_id).filter(Boolean)
+        );
+
+        // Contracts clients
+        const ctrQ =
+          `${env.SUPABASE_URL}/rest/v1/contracts` +
+          `?candidate_id=eq.${enc(id)}` +
+          `&select=client_id`;
+        const ctr = await sbFetch(env, ctrQ);
+        const contractCliIds = new Set(
+          (ctr.rows || []).map(r => r.client_id).filter(Boolean)
+        );
+
+        const cliIds = [...new Set([...finCliIds, ...contractCliIds])];
+        const total  = cliIds.length;
+        const pageIds = cliIds.slice(offset, offset + limit);
+        if (!pageIds.length) return okList([], total);
+
+        const clUrl =
+          `${env.SUPABASE_URL}/rest/v1/clients` +
+          `?id=in.(${pageIds.map(enc).join(',')})` +
+          `&select=*` +
+          `&order=name.asc`;
+
+        const { rows } = await sbFetch(env, clUrl);
+        return okList(rows || [], total);
+      }
+
+      // ---- Candidate → Umbrella (single, full umbrella row) ----
+      if (type === 'umbrella') {
+        const candQ =
+          `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=eq.${enc(id)}` +
+          `&select=pay_method,umbrella_id&limit=1`;
+        const candR = await sbFetch(env, candQ);
+        const cand = (candR.rows || [])[0];
+        if (!cand || cand.pay_method !== 'UMBRELLA' || !cand.umbrella_id) {
+          return okList([], 0);
+        }
+
+        const umbUrl =
+          `${env.SUPABASE_URL}/rest/v1/umbrellas` +
+          `?id=eq.${enc(cand.umbrella_id)}&select=*`;
+        const umbR = await sbFetch(env, umbUrl);
+        const u = (umbR.rows || [])[0];
+        return okList(u ? [u] : [], u ? 1 : 0);
+      }
+
+      // ---- Candidate → Contracts (full contracts summary shape) ----
+      if (type === 'contracts') {
+        const INCOMPLETE_STATUSES = ['OPEN','PLANNED','SUBMITTED','AUTHORISED'];
+
+        // Mirror handleContractsList, but filtered by candidate_id and with simple paging
+        const selectParts = [
+          '*',
+          'candidate:candidates(display_name,first_name,last_name)',
+          'client:clients(name)'
+        ];
+        let api =
+          `${env.SUPABASE_URL}/rest/v1/contracts` +
+          `?select=${selectParts.join(',')}` +
+          `&candidate_id=eq.${enc(id)}` +
+          `&order=start_date.desc&order=created_at.desc` +
+          `&limit=${limit}&offset=${offset}`;
+
+        let rows = [];
+        try {
+          ({ rows } = await sbFetch(env, api));
+        } catch (err) {
+          console.error('[RELATED][contracts][candidate] list failed', err);
+          return okList([], 0);
+        }
+
+        const out = (rows || []).map(r => {
+          const candidateDisplay =
+            r?.candidate?.display_name ||
+            ([r?.candidate?.first_name, r?.candidate?.last_name].filter(Boolean).join(' ') || null);
+          const clientName = r?.client?.name || null;
+          const { cw_active, cw_open, candidate, client, ...rest } = (r || {});
+          return {
+            ...rest,
+            candidate_display: candidateDisplay,
+            client_name: clientName
+          };
+        });
+
+        return okList(out, out.length);
+      }
+
+      return withCORS(env, req, badRequest("Unsupported type for candidate"));
+    }
+
+    // ───────────────────────── TIMESHEET ─────────────────────────
+    if (entity === 'timesheet') {
+      // Timesheet → Candidate (full candidate row)
+      if (type === 'candidate') {
+        const curQ =
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=eq.${enc(id)}&is_current=eq.true&select=candidate_id&limit=1`;
+        const cur = await sbFetch(env, curQ);
+        const candId = (cur.rows || [])[0]?.candidate_id;
+        if (!candId) return okList([], 0);
+
+        const candUrl =
+          `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=eq.${enc(candId)}&select=*`;
+        const cr = await sbFetch(env, candUrl);
+        const c = (cr.rows || [])[0];
+        return okList(c ? [c] : [], c ? 1 : 0);
+      }
+
+      // Timesheet → Invoice (full invoice row)
+      if (type === 'invoice') {
+        const curQ =
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=eq.${enc(id)}&is_current=eq.true&select=locked_by_invoice_id&limit=1`;
+        const cur = await sbFetch(env, curQ);
+        const invId = (cur.rows || [])[0]?.locked_by_invoice_id;
+        if (!invId) return okList([], 0);
+
+        const sel = [
+          'id','invoice_no','client_id','issued_at_utc','due_at_utc',
+          'status','subtotal_ex_vat','vat_amount','total_inc_vat',
+          'invoice_pdf_r2_key','header_snapshot_json','on_hold_reason','paid_at_utc'
+        ].join(',');
+        const invUrl =
+          `${env.SUPABASE_URL}/rest/v1/invoices` +
+          `?id=eq.${enc(invId)}&select=${enc(sel)}`;
+        const ir = await sbFetch(env, invUrl);
+        const i = (ir.rows || [])[0];
+        return okList(i ? [i] : [], i ? 1 : 0);
+      }
+
+      // Timesheet → Client (full client row)
+      if (type === 'client') {
+        const curQ =
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=eq.${enc(id)}&is_current=eq.true&select=client_id&limit=1`;
+        const cur = await sbFetch(env, curQ);
+        const clientId = (cur.rows || [])[0]?.client_id;
+        if (!clientId) return okList([], 0);
+
+        const cliUrl =
+          `${env.SUPABASE_URL}/rest/v1/clients` +
+          `?id=eq.${enc(clientId)}&select=*`;
+        const cr = await sbFetch(env, cliUrl);
+        const c = (cr.rows || [])[0];
+        return okList(c ? [c] : [], c ? 1 : 0);
+      }
+
+      // Timesheet → Umbrella (full umbrella row)
+      if (type === 'umbrella') {
+        // Look up candidate for this TS
+        const curQ =
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=eq.${enc(id)}&is_current=eq.true&select=candidate_id&limit=1`;
+        const cur = await sbFetch(env, curQ);
+        const candId = (cur.rows || [])[0]?.candidate_id;
+        if (!candId) return okList([], 0);
+
+        const candQ =
+          `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=eq.${enc(candId)}&select=pay_method,umbrella_id&limit=1`;
+        const candR = await sbFetch(env, candQ);
+        const cand = (candR.rows || [])[0];
+        if (!cand || cand.pay_method !== 'UMBRELLA' || !cand.umbrella_id) {
+          return okList([], 0);
+        }
+
+        const umbUrl =
+          `${env.SUPABASE_URL}/rest/v1/umbrellas` +
+          `?id=eq.${enc(cand.umbrella_id)}&select=*`;
+        const umbR = await sbFetch(env, umbUrl);
+        const u = (umbR.rows || [])[0];
+        return okList(u ? [u] : [], u ? 1 : 0);
+      }
+
+      // Timesheet → Contract (full contracts summary shape for the one contract)
+      if (type === 'contract') {
+        const tsQ =
+          `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?timesheet_id=eq.${enc(id)}&select=contract_id&limit=1`;
+        const tsR = await sbFetch(env, tsQ);
+        const contractId = (tsR.rows || [])[0]?.contract_id;
+        if (!contractId) return okList([], 0);
+
+        const selectParts = [
+          '*',
+          'candidate:candidates(display_name,first_name,last_name)',
+          'client:clients(name)'
+        ];
+        const api =
+          `${env.SUPABASE_URL}/rest/v1/contracts` +
+          `?id=eq.${enc(contractId)}` +
+          `&select=${selectParts.join(',')}`;
+
+        const { rows } = await sbFetch(env, api);
+        const out = (rows || []).map(r => {
+          const candidateDisplay =
+            r?.candidate?.display_name ||
+            ([r?.candidate?.first_name, r?.candidate?.last_name].filter(Boolean).join(' ') || null);
+          const clientName = r?.client?.name || null;
+          const { cw_active, cw_open, candidate, client, ...rest } = (r || {});
+          return {
+            ...rest,
+            candidate_display: candidateDisplay,
+            client_name: clientName
+          };
+        });
+
+        return okList(out, out.length);
+      }
+
+      // Timesheet → Series (Adjustments) – keep existing CW + TSFIN logic
+      if (type === 'series') {
+        const cwQ =
+          `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+          `?timesheet_id=eq.${enc(id)}` +
+          `&select=contract_id,week_ending_date,additional_seq,is_adjustment,status&limit=1`;
+        const cwr = await sbFetch(env, cwQ);
+        const cwRow = (cwr.rows || [])[0] || null;
+        if (!cwRow || !cwRow.contract_id || !cwRow.week_ending_date) {
+          return okList([], 0);
+        }
+
+        const sibQ =
+          `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+          `?contract_id=eq.${enc(cwRow.contract_id)}` +
+          `&week_ending_date=eq.${enc(cwRow.week_ending_date)}` +
+          `&timesheet_id=not.is.null` +
+          `&select=timesheet_id,additional_seq,is_adjustment,status`;
+        const sibR = await sbFetch(env, sibQ);
+        const cwSiblings = sibR.rows || [];
+        if (!cwSiblings.length) return okList([], 0);
+
+        const tsIds = [...new Set(cwSiblings.map(r => r.timesheet_id).filter(Boolean))];
+        if (!tsIds.length) return okList([], 0);
+
+        const finQ =
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=in.(${tsIds.map(enc).join(',')})` +
+          `&is_current=eq.true` +
+          `&select=timesheet_id,total_hours,total_pay_ex_vat,processing_status,basis`;
+        const finR = await sbFetch(env, finQ);
+        const finRows = finR.rows || [];
+        const finByTs = {};
+        finRows.forEach(r => { finByTs[r.timesheet_id] = r; });
+
+        let items = cwSiblings.map(r => {
+          const f = finByTs[r.timesheet_id] || {};
+          return {
+            timesheet_id:     r.timesheet_id,
+            is_current:       String(r.timesheet_id) === String(id),
+            additional_seq:   r.additional_seq,
+            is_adjustment:    !!r.is_adjustment,
+            contract_week_status: r.status || null,
+            total_hours:      f.total_hours ?? null,
+            total_pay_ex_vat: f.total_pay_ex_vat ?? null,
+            processing_status:f.processing_status || null,
+            basis:            f.basis || null
+          };
+        });
+
+        // Exclude the current TS itself so list = "other adjustments"
+        items = items.filter(it => String(it.timesheet_id) !== String(id));
+
+        items.sort((a, b) => {
+          const aSeq = a.additional_seq == null ? 0 : a.additional_seq;
+          const bSeq = b.additional_seq == null ? 0 : b.additional_seq;
+          if (aSeq === bSeq) return 0;
+          return aSeq < bSeq ? -1 : 1;
+        });
+
+        const total = items.length;
+        const page  = items.slice(offset, offset + limit);
+        return okList(page, total);
+      }
+
+      return withCORS(env, req, badRequest("Unsupported type for timesheet"));
+    }
+
+    // ───────────────────────── INVOICE ─────────────────────────
+    if (entity === 'invoice') {
+      if (type === 'timesheets') {
+        const tsUrl =
+          `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
+          `?select=*` +
+          `&locked_by_invoice_id=eq.${enc(id)}` +
+          `&order=week_ending_date.desc,client_name.asc,candidate_name.asc` +
+          `&limit=${limit}&offset=${offset}`;
+        const { rows, total } = await sbFetch(env, tsUrl, true);
+        return okList(rows || [], total ?? (rows || []).length);
+      }
+
+      if (type === 'candidates') {
+        const finQ =
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?locked_by_invoice_id=eq.${enc(id)}` +
+          `&is_current=eq.true&select=candidate_id`;
+        const fin  = await sbFetch(env, finQ);
+        const candIds = [...new Set((fin.rows || []).map(r => r.candidate_id).filter(Boolean))];
+        const total   = candIds.length;
+        const pageIds = candIds.slice(offset, offset + limit);
+        if (!pageIds.length) return okList([], total);
+
+        const candUrl =
+          `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=in.(${pageIds.map(enc).join(',')})` +
+          `&select=*` +
+          `&order=display_name.asc`;
+        const cr = await sbFetch(env, candUrl);
+        return okList(cr.rows || [], total);
+      }
+
+      if (type === 'client') {
+        const invQ =
+          `${env.SUPABASE_URL}/rest/v1/invoices` +
+          `?id=eq.${enc(id)}&select=client_id&limit=1`;
+        const ir = await sbFetch(env, invQ);
+        const clientId = (ir.rows || [])[0]?.client_id;
+        if (!clientId) return okList([], 0);
+
+        const cliUrl =
+          `${env.SUPABASE_URL}/rest/v1/clients` +
+          `?id=eq.${enc(clientId)}&select=*`;
+        const cr = await sbFetch(env, cliUrl);
+        const c = (cr.rows || [])[0];
+        return okList(c ? [c] : [], c ? 1 : 0);
+      }
+
+      if (type === 'umbrellas') {
+        const finQ =
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?locked_by_invoice_id=eq.${enc(id)}` +
+          `&is_current=eq.true&select=candidate_id`;
+        const fin  = await sbFetch(env, finQ);
+        const candIds = [...new Set((fin.rows || []).map(r => r.candidate_id).filter(Boolean))];
+        if (!candIds.length) return okList([], 0);
+
+        const candList = candIds.map(enc).join(',');
+        const candQ =
+          `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=in.(${candList})&select=umbrella_id,pay_method`;
+        const cr = await sbFetch(env, candQ);
+        const umbIds = [...new Set(
+          (cr.rows || [])
+            .filter(r => r.pay_method === 'UMBRELLA' && r.umbrella_id)
+            .map(r => r.umbrella_id)
+        )];
+        const total   = umbIds.length;
+        const pageIds = umbIds.slice(offset, offset + limit);
+        if (!pageIds.length) return okList([], total);
+
+        const umbUrl =
+          `${env.SUPABASE_URL}/rest/v1/umbrellas` +
+          `?id=in.(${pageIds.map(enc).join(',')})&select=*` +
+          `&order=name.asc`;
+        const ur = await sbFetch(env, umbUrl);
+        return okList(ur.rows || [], total);
+      }
+
+      return withCORS(env, req, badRequest("Unsupported type for invoice"));
+    }
+
+    // ───────────────────────── CLIENT ─────────────────────────
+    if (entity === 'client') {
+      if (type === 'timesheets') {
+        const tsUrl =
+          `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
+          `?select=*` +
+          `&client_id=eq.${enc(id)}` +
+          `&order=week_ending_date.desc,client_name.asc,candidate_name.asc` +
+          `&limit=${limit}&offset=${offset}`;
+        const { rows, total } = await sbFetch(env, tsUrl, true);
+        return okList(rows || [], total ?? (rows || []).length);
+      }
+
+      if (type === 'invoices') {
+        const sel = [
+          'id','invoice_no','client_id','issued_at_utc','due_at_utc',
+          'status','subtotal_ex_vat','vat_amount','total_inc_vat',
+          'invoice_pdf_r2_key','header_snapshot_json','on_hold_reason','paid_at_utc'
+        ].join(',');
+        const invUrl =
+          `${env.SUPABASE_URL}/rest/v1/invoices` +
+          `?client_id=eq.${enc(id)}` +
+          `&select=${enc(sel)}` +
+          `&order=issued_at_utc.desc` +
+          `&limit=${limit}&offset=${offset}`;
+        const { rows, total } = await sbFetch(env, invUrl, true);
+        return okList(rows || [], total ?? (rows || []).length);
+      }
+
+      if (type === 'candidates') {
+        const finQ =
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?client_id=eq.${enc(id)}` +
+          `&is_current=eq.true&select=candidate_id`;
+        const fin  = await sbFetch(env, finQ);
+        const candIds = [...new Set((fin.rows || []).map(r => r.candidate_id).filter(Boolean))];
+        const total   = candIds.length;
+        const pageIds = candIds.slice(offset, offset + limit);
+        if (!pageIds.length) return okList([], total);
+
+        const candUrl =
+          `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=in.(${pageIds.map(enc).join(',')})` +
+          `&select=*` +
+          `&order=display_name.asc`;
+        const cr = await sbFetch(env, candUrl);
+        return okList(cr.rows || [], total);
+      }
+
+      if (type === 'contracts') {
+        const selectParts = [
+          '*',
+          'candidate:candidates(display_name,first_name,last_name)',
+          'client:clients(name)'
+        ];
+        const api =
+          `${env.SUPABASE_URL}/rest/v1/contracts` +
+          `?client_id=eq.${enc(id)}` +
+          `&select=${selectParts.join(',')}` +
+          `&order=start_date.desc&order=created_at.desc` +
+          `&limit=${limit}&offset=${offset}`;
+        let rows = [];
+        try {
+          ({ rows } = await sbFetch(env, api));
+        } catch (err) {
+          console.error('[RELATED][contracts][client] list failed', err);
+          return okList([], 0);
+        }
+        const out = (rows || []).map(r => {
+          const candidateDisplay =
+            r?.candidate?.display_name ||
+            ([r?.candidate?.first_name, r?.candidate?.last_name].filter(Boolean).join(' ') || null);
+          const clientName = r?.client?.name || null;
+          const { cw_active, cw_open, candidate, client, ...rest } = (r || {});
+          return {
+            ...rest,
+            candidate_display: candidateDisplay,
+            client_name: clientName
+          };
+        });
+        return okList(out, out.length);
+      }
+
+      return withCORS(env, req, badRequest("Unsupported type for client"));
+    }
+
+    // ───────────────────────── UMBRELLA ─────────────────────────
+    if (entity === 'umbrella') {
+      if (type === 'candidates') {
+        const candUrl =
+          `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?umbrella_id=eq.${enc(id)}` +
+          `&select=*` +
+          `&order=display_name.asc` +
+          `&limit=${limit}&offset=${offset}`;
+
+        const { rows, total } = await sbFetch(env, candUrl, true);
+        return okList(rows || [], total ?? (rows || []).length);
+      }
+
+      if (type === 'timesheets') {
+        const candQ =
+          `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?umbrella_id=eq.${enc(id)}&select=id`;
+        const candR = await sbFetch(env, candQ);
+        const candIds = (candR.rows || []).map(r => r.id);
+        if (!candIds.length) return okList([], 0);
+
+        const tsUrl =
+          `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
+          `?select=*` +
+          `&candidate_id=in.(${candIds.map(enc).join(',')})` +
+          `&order=week_ending_date.desc,client_name.asc,candidate_name.asc` +
+          `&limit=${limit}&offset=${offset}`;
+        const { rows, total } = await sbFetch(env, tsUrl, true);
+        return okList(rows || [], total ?? (rows || []).length);
+      }
+
+      if (type === 'invoices') {
+        const candQ =
+          `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?umbrella_id=eq.${enc(id)}&select=id`;
+        const candR = await sbFetch(env, candQ);
+        const candIds = (candR.rows || []).map(r => r.id);
+        if (!candIds.length) return okList([], 0);
+
+        const candList = candIds.map(enc).join(',');
+        const tsQ =
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?candidate_id=in.(${candList})` +
+          `&is_current=eq.true` +
+          `&locked_by_invoice_id=not.is.null` +
+          `&select=locked_by_invoice_id`;
+        const tsR = await sbFetch(env, tsQ);
+        const invIds = [...new Set((tsR.rows || []).map(r => r.locked_by_invoice_id).filter(Boolean))];
+        const total   = invIds.length;
+        const pageIds = invIds.slice(offset, offset + limit);
+        if (!pageIds.length) return okList([], total);
+
+        const sel = [
+          'id','invoice_no','client_id','issued_at_utc','due_at_utc',
+          'status','subtotal_ex_vat','vat_amount','total_inc_vat',
+          'invoice_pdf_r2_key','header_snapshot_json','on_hold_reason','paid_at_utc'
+        ].join(',');
+        const invUrl =
+          `${env.SUPABASE_URL}/rest/v1/invoices` +
+          `?id=in.(${pageIds.map(enc).join(',')})` +
+          `&select=${enc(sel)}` +
+          `&order=issued_at_utc.desc`;
+        const ir = await sbFetch(env, invUrl);
+        return okList(ir.rows || [], total);
+      }
+
+      return withCORS(env, req, badRequest("Unsupported type for umbrella"));
+    }
+
+    // ───────────────────────── REMITTANCE ─────────────────────────
+    if (entity === 'remittance') {
+      if (type === 'timesheets') {
+        const audQ =
+          `${env.SUPABASE_URL}/rest/v1/audit_events` +
+          `?correlation_id=eq.${enc(id)}` +
+          `&reason=eq.REMITTANCE` +
+          `&object_type=eq.timesheet` +
+          `&select=object_id_text,ts_utc` +
+          `&order=ts_utc.desc`;
+        const audR = await sbFetch(env, audQ);
+        const tsIds = [...new Set((audR.rows || []).map(r => r.object_id_text).filter(Boolean))];
+        const total   = tsIds.length;
+        const pageIds = tsIds.slice(offset, offset + limit);
+        if (!pageIds.length) return okList([], total);
+
+        const tsUrl =
+          `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
+          `?select=*` +
+          `&timesheet_id=in.(${pageIds.map(enc).join(',')})` +
+          `&order=week_ending_date.desc,client_name.asc,candidate_name.asc`;
+        const { rows } = await sbFetch(env, tsUrl);
+        return okList(rows || [], total);
+      }
+
+      if (type === 'candidate') {
+        const audQ =
+          `${env.SUPABASE_URL}/rest/v1/audit_events` +
+          `?correlation_id=eq.${enc(id)}` +
+          `&reason=eq.REMITTANCE` +
+          `&object_type=eq.candidate` +
+          `&select=object_id_text&limit=1`;
+        const audR = await sbFetch(env, audQ);
+        let candId = (audR.rows || [])[0]?.object_id_text;
+
+        if (!candId) {
+          const mq =
+            `${env.SUPABASE_URL}/rest/v1/mail_outbox` +
+            `?id=eq.${enc(id)}&select=reference&limit=1`;
+          const mr = await sbFetch(env, mq);
+          const ref = (mr.rows || [])[0]?.reference || '';
+          const m = ref.match(/^remit:candidate:([0-9a-fA-F-]{36}):/);
+          if (m) candId = m[1];
+        }
+
+        if (!candId) return okList([], 0);
+
+        const candUrl =
+          `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=eq.${enc(candId)}&select=*`;
+        const cr = await sbFetch(env, candUrl);
+        const c  = (cr.rows || [])[0];
+        return okList(c ? [c] : [], c ? 1 : 0);
+      }
+
+      return withCORS(env, req, badRequest("Unsupported type for remittance"));
+    }
+
+    return withCORS(env, req, badRequest("Unsupported entity"));
+  } catch (e) {
+    console.error('handleRelatedList error', e);
+    return withCORS(env, req, serverError("Failed to load related list"));
+  }
+}
 
 
 
