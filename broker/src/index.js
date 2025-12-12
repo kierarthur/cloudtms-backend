@@ -20629,7 +20629,7 @@ async function classifyWeeklyImportRowsLegacy(env, importId, { source_system }) 
         result.default_selected = false;
       } else {
         result.action = 'NEW_AUTOPROC_TIMESHEET';
-        result.reason = 'No existing weekly timesheet – a new weekly TS and TSFIN will be created from these shifts.';
+        result.reason = 'No existing weekly timesheet – a new weekly TS will be created from these shifts.';
         result.default_selected = !hasUnfinal;
       }
       return result;
