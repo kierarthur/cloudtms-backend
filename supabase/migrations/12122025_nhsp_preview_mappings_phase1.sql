@@ -102,10 +102,7 @@ as $$
 
     from raw src
 
-    -- shared normalisations:
-    -- staff_lc: lower+trim
-    -- staff_norm2: remove all non [a-z0-9]
-    -- trust_norm: same
+    -- shared normalisations (strip spaces/symbols; keep only [a-z0-9])
     cross join lateral (
       select
         nullif(lower(trim(coalesce(src.staff_name,''))), '') as staff_lc,
@@ -155,7 +152,10 @@ as $$
           )
       )
       select
-        case when count(*) = 1 then max(candidate_id) end as candidate_id
+        case
+          when count(*) = 1
+            then (array_agg(candidate_id order by candidate_id::text))[1]
+        end as candidate_id
       from matches
     ) cand_exact_unique on (cand_alias.id is null and cand_map.candidate_id is null)
 
@@ -181,7 +181,10 @@ as $$
           and regexp_replace(lower(coalesce(cl.name,'')), '[^a-z0-9]+', '', 'g') = n.trust_norm
       )
       select
-        case when count(*) = 1 then max(client_id) end as client_id
+        case
+          when count(*) = 1
+            then (array_agg(client_id order by client_id::text))[1]
+        end as client_id
       from matches
     ) cli_name on (cli_alias.client_id is null)
   )
