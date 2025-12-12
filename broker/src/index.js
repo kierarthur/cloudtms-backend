@@ -12051,7 +12051,6 @@ async function parseHealthRosterWorkbookIntoHrRows(
   };
 }
 
-
 async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, basis = 'NHSP') {
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
   const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
@@ -12182,7 +12181,8 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
     nhsp_import_id: nhspImportId || null,
 
     occupant_key_norm: ts.occupant_key_norm || null,
-    week_ending_date: ts.week_ending_date || null,
+
+    // ✅ IMPORTANT: DO NOT include week_ending_date in TSFIN payload (it is not a TSFIN column)
 
     candidate_id,
     client_id,
@@ -12231,8 +12231,7 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
   return { ok: true };
 }
 
-
- async function handleManualPayAdjustmentCreate(env, req, timesheetId) {
+async function handleManualPayAdjustmentCreate(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
   // Admin auth
@@ -12260,13 +12259,14 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
   const note = typeof body?.note === 'string' ? body.note.trim() : null;
 
   try {
-    // 1) Load current TSFIN for this timesheet to get candidate_id, client_id, week_ending_date
+    // 1) Load current TSFIN for this timesheet to get candidate_id, client_id
+    // ✅ IMPORTANT: DO NOT select week_ending_date from TSFIN (it is not a TSFIN column)
     const { rows: finRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
       `?timesheet_id=eq.${enc(timesheetId)}` +
       `&is_current=eq.true` +
-      `&select=timesheet_id,candidate_id,client_id,week_ending_date` +
+      `&select=timesheet_id,candidate_id,client_id` +
       `&limit=1`
     );
     const fin = finRows?.[0] || null;
@@ -12275,19 +12275,15 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
       return withCORS(env, req, badRequest('No current financial snapshot for this timesheet'));
     }
 
-    let weekEnding = fin.week_ending_date || null;
-
-    // Fallback to timesheets.week_ending_date if TSFIN lacks it
-    if (!weekEnding) {
-      const { rows: tsRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=eq.${enc(timesheetId)}` +
-        `&select=week_ending_date` +
-        `&limit=1`
-      );
-      weekEnding = (tsRows?.[0]?.week_ending_date) || null;
-    }
+    // 2) Always load week_ending_date from timesheets (authoritative source)
+    const { rows: tsRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&select=week_ending_date` +
+      `&limit=1`
+    );
+    const weekEnding = (tsRows?.[0]?.week_ending_date) || null;
 
     if (!weekEnding) {
       return withCORS(env, req, badRequest('week_ending_date is missing; cannot create pay adjustment'));
@@ -12361,6 +12357,8 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
     return withCORS(env, req, serverError('Failed to create manual pay adjustment'));
   }
 }
+
+
  async function handleTimesheetDetails(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -15450,36 +15448,38 @@ async function handleHrAutoprocessApply(env, req, importId) {
             };
 
             const adjSnap = {
-              timesheet_id: adjTs.timesheet_id,
-              timesheet_version: adjTs.version || 1,
-              basis: 'HEALTHROSTER_ADJUSTMENT',
-              nhsp_import_id: importId,
-              occupant_key_norm: adjTs.occupant_key_norm || null,
-              week_ending_date: adjTs.week_ending_date || null,
-              candidate_id: contract.candidate_id || null,
-              client_id: contract.client_id || null,
-              role: contract.role || null,
-              band: contract.band || null,
-              pay_method: contract.pay_method_snapshot || null,
-              policy_snapshot_json: null,
-              rate_source_refs_json: { mode: 'CONTRACT_RATES_JSON', contract_id: contract.id || null },
-              hours_day: null,
-              hours_night: null,
-              hours_sat: null,
-              hours_sun: null,
-              hours_bh: null,
-              additional_units_json: {},
-              additional_pay_ex_vat: 0,
-              additional_charge_ex_vat: 0,
-              additional_margin_ex_vat: 0,
-              total_hours: null,
-              total_pay_ex_vat: deltaPayTotal,
-              total_charge_ex_vat: deltaChgTotal,
-              margin_ex_vat: round2(deltaChgTotal - deltaPayTotal),
-              candidate_assignment: contract.candidate_id ? 'ASSIGNED' : 'UNASSIGNED',
-              processing_status: 'READY_FOR_INVOICE',
-              invoice_breakdown_json: invBreak
-            };
+  timesheet_id: adjTs.timesheet_id,
+  timesheet_version: adjTs.version || 1,
+  basis: 'HEALTHROSTER_ADJUSTMENT',
+  nhsp_import_id: importId,
+  occupant_key_norm: adjTs.occupant_key_norm || null,
+
+  // ✅ REMOVED: week_ending_date (not a timesheets_financials column)
+
+  candidate_id: contract.candidate_id || null,
+  client_id: contract.client_id || null,
+  role: contract.role || null,
+  band: contract.band || null,
+  pay_method: contract.pay_method_snapshot || null,
+  policy_snapshot_json: null,
+  rate_source_refs_json: { mode: 'CONTRACT_RATES_JSON', contract_id: contract.id || null },
+  hours_day: null,
+  hours_night: null,
+  hours_sat: null,
+  hours_sun: null,
+  hours_bh: null,
+  additional_units_json: {},
+  additional_pay_ex_vat: 0,
+  additional_charge_ex_vat: 0,
+  additional_margin_ex_vat: 0,
+  total_hours: null,
+  total_pay_ex_vat: deltaPayTotal,
+  total_charge_ex_vat: deltaChgTotal,
+  margin_ex_vat: round2(deltaChgTotal - deltaPayTotal),
+  candidate_assignment: contract.candidate_id ? 'ASSIGNED' : 'UNASSIGNED',
+  processing_status: 'READY_FOR_INVOICE',
+  invoice_breakdown_json: invBreak
+};
 
             await writeSnapshot(env, adjSnap).catch((e) => {
               console.warn('[HR_AUTOPROC_APPLY] writeSnapshot failed (adj, self-bill)', {
