@@ -19697,7 +19697,7 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
         result.default_selected = false;
       } else {
         result.action = 'NEW_AUTOPROC_TIMESHEET';
-        result.reason = 'No existing weekly timesheet – a new weekly TS and TSFIN will be created from these shifts.';
+        result.reason = 'No existing weekly timesheet – a new weekly timesheet the shift.';
         result.default_selected = !hasUnfinal;
       }
       return result;
@@ -19706,7 +19706,7 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
     // Base TS exists: if totals already match, skip
     if (Math.abs(deltaPay) < tol && Math.abs(deltaChg) < tol) {
       result.action = 'SKIP_ALREADY_PROCESSED';
-      result.reason = 'Base timesheet and existing adjustments already match NHSP/HealthRoster totals – nothing further to do.';
+      result.reason = 'Timesheet and existing adjustments already match NHSP/HealthRoster – nothing further to do.';
       result.default_selected = false;
       return result;
     }
@@ -19717,20 +19717,20 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
     if (submissionMode === 'MANUAL') {
       if (baseUnpaidUnlocked && !anyAdj) {
         result.action = 'UPDATE_MANUAL_WEEK';
-        result.reason = 'Existing manual weekly timesheet (unpaid/uninvoiced) will be overwritten with NHSP/HR hours for this week.';
+        result.reason = 'Existing manual weekly timesheet will be overwritten with newly updated NHSP/HR hours for this week.';
         result.default_selected = !hasUnfinal;
         return result;
       }
 
       if (latestAdjUnpaidUnlocked) {
         result.action = 'UPDATE_ADJUSTMENT_TS';
-        result.reason = 'Existing unpaid/uninvoiced adjustment timesheet will be updated to reflect the new delta.';
+        result.reason = 'Existing unpaid/uninvoiced adjustment timesheet will be updated to reflect the new changes.';
         result.default_selected = !hasUnfinal;
         return result;
       }
 
       result.action = 'CREATE_ADJUSTMENT_TS';
-      result.reason = 'Base and previous adjustments are paid/invoiced; a new sequential adjustment timesheet will be created for the new delta.';
+      result.reason = 'Existing timesheet and previous adjustments are paid/invoiced; a new sequential adjustment timesheet will be created for the new hours.';
       result.default_selected = !hasUnfinal;
       return result;
     }
@@ -19741,20 +19741,20 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
       if (source_system === 'NHSP' || (source_system === 'HEALTHROSTER' && selfBill)) {
         if (baseUnpaidUnlocked && !anyAdj) {
           result.action = 'UPDATE_AUTOPROC_TS';
-          result.reason = 'Existing autoproc weekly timesheet (unpaid/uninvoiced) will be updated with corrected NHSP/HR hours for this week.';
+          result.reason = 'Existing weekly timesheet (unpaid/uninvoiced) will be updated with corrected NHSP/HR hours for this week.';
           result.default_selected = !hasUnfinal;
           return result;
         }
 
         if (latestAdjUnpaidUnlocked) {
           result.action = 'UPDATE_ADJUSTMENT_TS';
-          result.reason = 'Existing unpaid/uninvoiced adjustment timesheet will be updated to reflect the new delta.';
+          result.reason = 'Existing unpaid/uninvoiced adjustment timesheet will be updated to reflect the new changes.';
           result.default_selected = !hasUnfinal;
           return result;
         }
 
         result.action = 'CREATE_ADJUSTMENT_TS';
-        result.reason = 'Autoproc base and previous adjustments are paid/invoiced; a new sequential adjustment timesheet will be created for the new delta.';
+        result.reason = 'Timesheet and previous adjustments are paid/invoiced; a new sequential adjustment timesheet will be created for the amended hours.';
         result.default_selected = !hasUnfinal;
         return result;
       }
@@ -19763,21 +19763,21 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
       if (source_system === 'HEALTHROSTER' && selfBill === false) {
         if (!isPaid && !isInvoiced) {
           result.action = 'UPDATE_AUTOPROC_TS';
-          result.reason = 'HR weekly (self-bill=false): base timesheet will be overwritten with HR hours for this week; no new adjustment weeks will be created.';
+          result.reason = 'HR timesheet will be overwritten with modified hours for this week; will require authorising later by you..';
           result.default_selected = !hasUnfinal;
           return result;
         }
 
         if (isInvoiced) {
           result.action = 'BLOCK_INVOICE_ISSUED';
-          result.reason = 'HR weekly (self-bill=false): invoice already issued – unissue the invoice before applying these HR changes.';
+          result.reason = 'HR Timesheet invoice already issued – unissue the invoice before applying these HR changes.';
           result.default_selected = false;
           return result;
         }
 
         if (isPaid && !isInvoiced) {
           result.action = 'CREATE_PAY_ADJUSTMENT_ONLY';
-          result.reason = 'HR weekly (self-bill=false): candidate already paid – a pay-only adjustment will be created; invoice will reflect full HR hours.';
+          result.reason = 'HR - Candidate already paid (not invoiced yet) – a pay-only adjustment will be created; invoice will reflect full HR hours. Will require authorising by you.';
           result.default_selected = !hasUnfinal;
           return result;
         }
