@@ -101,14 +101,14 @@ begin
     select
       src.*,
       n.staff_lc,
-      n.staff_norm,
+      n.staff_key,
       n.trust_lc,
-      n.trust_norm,
+      n.trust_key,
 
       -- candidate mapping precedence:
-      -- 1) candidates.nhsp_hr_name_aliases contains staff_lc OR staff_norm
-      -- 2) hr_name_mappings.hr_name_norm equals staff_lc OR staff_norm
-      -- 3) UNIQUE exact candidate match on (first+last) OR (last+first) using staff_norm
+      -- 1) candidates.nhsp_hr_name_aliases contains staff_lc OR staff_key
+      -- 2) hr_name_mappings.hr_name_norm equals staff_lc OR staff_key
+      -- 3) UNIQUE exact candidate match on (first+last) OR (last+first) using staff_key
       coalesce(
         cand_alias.id,
         cand_map.candidate_id,
@@ -116,7 +116,7 @@ begin
       ) as candidate_id,
 
       -- client mapping:
-      -- NHSP: trust → client_hospitals alias (trust_lc OR trust_norm) → UNIQUE fallback clients.name (norm)
+      -- NHSP: trust → client_hospitals alias (trust_lc OR trust_key) → UNIQUE fallback clients.name (key)
       -- HR_WEEKLY: client_id comes from hr_imports.client_id
       case
         when v_sys = 'NHSP' then coalesce(cli_alias.client_id, cli_name.client_id)
@@ -130,82 +130,87 @@ begin
     cross join lateral (
       select
         nullif(lower(trim(coalesce(src.staff_name,''))), '') as staff_lc,
-        nullif(regexp_replace(lower(coalesce(src.staff_name,'')), '[^a-z0-9]+', '', 'g'), '') as staff_norm,
+        nullif(regexp_replace(lower(coalesce(src.staff_name,'')), '[^a-z0-9]+', '', 'g'), '') as staff_key,
         nullif(lower(trim(coalesce(src.trust_raw,''))), '') as trust_lc,
-        nullif(regexp_replace(lower(coalesce(src.trust_raw,'')), '[^a-z0-9]+', '', 'g'), '') as trust_norm
+        nullif(regexp_replace(lower(coalesce(src.trust_raw,'')), '[^a-z0-9]+', '', 'g'), '') as trust_key
     ) n
 
-    -- 1) candidate alias match (support legacy + new norm)
+    -- 1) candidate alias match (support legacy + key)
     left join lateral (
       select c.id
       from public.candidates c
-      where
-        c.nhsp_hr_name_aliases is not null
+      where c.nhsp_hr_name_aliases is not null
         and (
-          (n.staff_lc   is not null and c.nhsp_hr_name_aliases @> to_jsonb(array[n.staff_lc]::text[]))
+          (n.staff_lc  is not null and c.nhsp_hr_name_aliases @> to_jsonb(array[n.staff_lc]::text[]))
           or
-          (n.staff_norm is not null and c.nhsp_hr_name_aliases @> to_jsonb(array[n.staff_norm]::text[]))
+          (n.staff_key is not null and c.nhsp_hr_name_aliases @> to_jsonb(array[n.staff_key]::text[]))
         )
       limit 1
     ) cand_alias on true
 
-    -- 2) hr_name_mappings match (support legacy + new norm)
+    -- 2) hr_name_mappings match (support legacy + key)
     left join lateral (
       select hm.candidate_id
       from public.hr_name_mappings hm
       where hm.active = true
         and (
-          (n.staff_lc   is not null and hm.hr_name_norm = n.staff_lc)
+          (n.staff_lc  is not null and hm.hr_name_norm = n.staff_lc)
           or
-          (n.staff_norm is not null and hm.hr_name_norm = n.staff_norm)
+          (n.staff_key is not null and hm.hr_name_norm = n.staff_key)
         )
       order by hm.created_at desc
       limit 1
     ) cand_map on (cand_alias.id is null)
 
-    -- 3) UNIQUE exact candidate fallback: match staff_norm against first+last OR last+first (symbols/spaces removed)
+    -- 3) UNIQUE exact candidate fallback: key matches first+last OR last+first (NO ambiguous col names, NO max(uuid))
     left join lateral (
       with matches as (
-        select c.id as candidate_id
+        select c.id as cid
         from public.candidates c
         where c.active = true
-          and n.staff_norm is not null
+          and n.staff_key is not null
           and (
-            regexp_replace(lower(coalesce(c.first_name,'') || coalesce(c.last_name,'')), '[^a-z0-9]+', '', 'g') = n.staff_norm
+            regexp_replace(lower(coalesce(c.first_name,'') || coalesce(c.last_name,'')), '[^a-z0-9]+', '', 'g') = n.staff_key
             or
-            regexp_replace(lower(coalesce(c.last_name,'')  || coalesce(c.first_name,'')), '[^a-z0-9]+', '', 'g') = n.staff_norm
+            regexp_replace(lower(coalesce(c.last_name,'')  || coalesce(c.first_name,'')), '[^a-z0-9]+', '', 'g') = n.staff_key
           )
       )
       select
-        case when count(*) = 1 then max(candidate_id) end as candidate_id
+        case
+          when count(*) = 1
+            then (array_agg(cid order by cid::text))[1]
+        end as candidate_id
       from matches
     ) cand_exact_unique on (cand_alias.id is null and cand_map.candidate_id is null)
 
-    -- NHSP client alias match (support legacy + new norm)
+    -- NHSP client alias match (support legacy + key)
     left join lateral (
       select ch.client_id
       from public.client_hospitals ch
       where v_sys = 'NHSP'
         and ch.hospital_name_norm is not null
         and (
-          (n.trust_lc   is not null and ch.hospital_name_norm @> to_jsonb(array[n.trust_lc]::text[]))
+          (n.trust_lc  is not null and ch.hospital_name_norm @> to_jsonb(array[n.trust_lc]::text[]))
           or
-          (n.trust_norm is not null and ch.hospital_name_norm @> to_jsonb(array[n.trust_norm]::text[]))
+          (n.trust_key is not null and ch.hospital_name_norm @> to_jsonb(array[n.trust_key]::text[]))
         )
       limit 1
     ) cli_alias on (v_sys = 'NHSP')
 
-    -- NHSP UNIQUE fallback: compare normalised trust_norm to normalised clients.name
+    -- NHSP UNIQUE fallback: trust_key == clients.name key (NO max(uuid))
     left join lateral (
       with matches as (
-        select cl.id as client_id
+        select cl.id as clid
         from public.clients cl
         where v_sys = 'NHSP'
-          and n.trust_norm is not null
-          and regexp_replace(lower(coalesce(cl.name,'')), '[^a-z0-9]+', '', 'g') = n.trust_norm
+          and n.trust_key is not null
+          and regexp_replace(lower(coalesce(cl.name,'')), '[^a-z0-9]+', '', 'g') = n.trust_key
       )
       select
-        case when count(*) = 1 then max(client_id) end as client_id
+        case
+          when count(*) = 1
+            then (array_agg(clid order by clid::text))[1]
+        end as client_id
       from matches
     ) cli_name on (v_sys = 'NHSP' and cli_alias.client_id is null)
   ),
