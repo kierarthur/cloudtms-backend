@@ -41,7 +41,7 @@ begin
       contract_id = p2.contract_id,
       updated_at  = now(),
 
-      -- keep ids aligned but SAFE: only fill if currently null
+      -- ✅ FIX: only fill ids if currently null (do NOT overwrite existing)
       candidate_id = coalesce(s.candidate_id, p2.candidate_id),
       client_id    = coalesce(s.client_id,    p2.client_id)
 
