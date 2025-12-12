@@ -23,14 +23,12 @@ begin
       hi.client_id  as client_id,
       r.date_local  as work_date,
 
-      -- Staff name: payload.staff_name, else staff_raw / staff_norm
       coalesce(
         nullif((r.payload_json ->> 'staff_name'), ''),
         nullif(r.staff_raw, ''),
         nullif(r.staff_norm, '')
       ) as staff_name,
 
-      -- Ward: payload.ward, else hints from hr_rows
       coalesce(
         nullif((r.payload_json ->> 'ward'), ''),
         nullif(r.unit_hint, ''),
@@ -55,7 +53,7 @@ begin
       -- keep existing behaviour for staff_norm output (lower+trim)
       nullif(lower(trim(coalesce(s.staff_name,''))), '') as staff_norm,
 
-      -- NEW: symbol/space stripped variant for matching
+      -- symbol/space stripped variant for matching
       nullif(regexp_replace(lower(coalesce(s.staff_name,'')), '[^a-z0-9]+', '', 'g'), '') as staff_norm2,
 
       s.ward,
@@ -73,18 +71,17 @@ begin
       coalesce(
         cand_alias.id,
         cand_map.candidate_id,
-        cand_exact_unique.candidate_id
+        cand_exact_unique.cid
       ) as candidate_id,
 
       coalesce(
         cand_alias.display_name,
         cand_map.display_name,
-        cand_exact_unique.display_name
+        cand_exact_unique.cname
       ) as candidate_name
 
     from normed n
 
-    -- 1) candidate aliases via nhsp_hr_name_aliases (support legacy + symbol/space stripped)
     left join lateral (
       select c.id, c.display_name
       from public.candidates c
@@ -97,7 +94,6 @@ begin
       limit 1
     ) cand_alias on true
 
-    -- 2) fallback via hr_name_mappings.hr_name_norm (support legacy + symbol/space stripped)
     left join lateral (
       select hm.candidate_id, c.display_name
       from public.hr_name_mappings hm
@@ -113,12 +109,12 @@ begin
       limit 1
     ) cand_map on cand_alias.id is null
 
-    -- 3) UNIQUE exact candidate fallback (first+last OR last+first), symbols/spaces removed
+    -- ✅ FIX: do NOT emit a column named candidate_id inside PL/pgSQL returns-table function
     left join lateral (
       with matches as (
         select
-          c.id,
-          c.display_name
+          c.id as cid,
+          c.display_name as cname
         from public.candidates c
         where c.active = true
           and n.staff_norm2 is not null
@@ -131,12 +127,12 @@ begin
       select
         case
           when count(*) = 1
-            then (array_agg(id order by id::text))[1]
-        end as candidate_id,
+            then (array_agg(cid order by cid::text))[1]
+        end as cid,
         case
           when count(*) = 1
-            then (array_agg(display_name order by id::text))[1]
-        end as display_name
+            then (array_agg(cname order by cid::text))[1]
+        end as cname
       from matches
     ) cand_exact_unique on (cand_alias.id is null and cand_map.candidate_id is null)
   )
