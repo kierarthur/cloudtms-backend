@@ -58,7 +58,7 @@ as $$
       )                                as ref_num,
       coalesce(
         nullif((r.payload_json ->> 'assignment_code'), ''),
-        nullif((r.payload_json ->> 'assignment'), ''),          -- ✅ NEW: parser writes payload_json.assignment
+        nullif((r.payload_json ->> 'assignment'), ''),          -- ✅ parser writes payload_json.assignment
         nullif((r.payload_json ->> 'Request_Grade'), ''),
         nullif(r.assignment_grade_norm, '')
       )                                as assignment_code
@@ -71,53 +71,118 @@ as $$
   resolved as (
     select
       src.*,
+      n.staff_lc,
+      n.staff_norm2,
+      n.trust_lc,
+      n.trust_norm,
+
       greatest(
         0,
         (extract(epoch from (src.end_utc - src.start_utc)) / 60)::int
         - src.break_mins
       ) as pay_minutes,
 
-      -- Candidate mapping:
-      --  1) candidates.nhsp_hr_name_aliases contains staff_name (lower)
-      --  2) fallback to hr_name_mappings.hr_name_norm
+      -- Candidate mapping precedence:
+      --  1) candidates.nhsp_hr_name_aliases contains staff_lc OR staff_norm2
+      --  2) fallback to hr_name_mappings.hr_name_norm = staff_lc OR staff_norm2
+      --  3) UNIQUE exact candidate match on (first+last) OR (last+first) using staff_norm2 (spaces/symbols removed)
       coalesce(
         cand_alias.id,
-        cand_map.candidate_id
+        cand_map.candidate_id,
+        cand_exact_unique.candidate_id
       ) as candidate_id,
 
       -- Client mapping:
-      --  1) client_hospitals.hospital_name_norm contains trust_norm
-      --  2) fallback to clients.name = trust_raw
+      --  1) client_hospitals.hospital_name_norm contains trust_lc OR trust_norm
+      --  2) UNIQUE fallback where norm(clients.name) = trust_norm (spaces/symbols removed)
       coalesce(
         cli_alias.client_id,
         cli_name.client_id
       ) as client_id
+
     from raw src
+
+    -- shared normalisations:
+    -- staff_lc: lower+trim
+    -- staff_norm2: remove all non [a-z0-9]
+    -- trust_norm: same
+    cross join lateral (
+      select
+        nullif(lower(trim(coalesce(src.staff_name,''))), '') as staff_lc,
+        nullif(regexp_replace(lower(coalesce(src.staff_name,'')), '[^a-z0-9]+', '', 'g'), '') as staff_norm2,
+        nullif(lower(trim(coalesce(src.trust_raw,''))), '') as trust_lc,
+        nullif(regexp_replace(lower(coalesce(src.trust_raw,'')), '[^a-z0-9]+', '', 'g'), '') as trust_norm
+    ) n
+
+    -- 1) candidate alias match (support legacy + normalised)
     left join lateral (
       select c.id
       from public.candidates c
-      where c.nhsp_hr_name_aliases @> to_jsonb(array[lower(src.staff_name)]::text[])
+      where c.nhsp_hr_name_aliases is not null
+        and (
+          (n.staff_lc    is not null and c.nhsp_hr_name_aliases @> to_jsonb(array[n.staff_lc]::text[]))
+          or
+          (n.staff_norm2 is not null and c.nhsp_hr_name_aliases @> to_jsonb(array[n.staff_norm2]::text[]))
+        )
       limit 1
     ) cand_alias on true
+
+    -- 2) hr_name_mappings match (support legacy + normalised)
     left join lateral (
       select hm.candidate_id
       from public.hr_name_mappings hm
-      where hm.hr_name_norm = lower(src.staff_name)
-        and hm.active = true
+      where hm.active = true
+        and (
+          (n.staff_lc    is not null and hm.hr_name_norm = n.staff_lc)
+          or
+          (n.staff_norm2 is not null and hm.hr_name_norm = n.staff_norm2)
+        )
       order by hm.created_at desc
       limit 1
     ) cand_map on (cand_alias.id is null)
+
+    -- 3) UNIQUE exact candidate fallback (first+last OR last+first), symbols/spaces removed
+    left join lateral (
+      with matches as (
+        select c.id as candidate_id
+        from public.candidates c
+        where c.active = true
+          and n.staff_norm2 is not null
+          and (
+            regexp_replace(lower(coalesce(c.first_name,'') || coalesce(c.last_name,'')), '[^a-z0-9]+', '', 'g') = n.staff_norm2
+            or
+            regexp_replace(lower(coalesce(c.last_name,'')  || coalesce(c.first_name,'')), '[^a-z0-9]+', '', 'g') = n.staff_norm2
+          )
+      )
+      select
+        case when count(*) = 1 then max(candidate_id) end as candidate_id
+      from matches
+    ) cand_exact_unique on (cand_alias.id is null and cand_map.candidate_id is null)
+
+    -- 1) client alias match (support legacy + normalised)
     left join lateral (
       select ch.client_id
       from public.client_hospitals ch
-      where ch.hospital_name_norm @> to_jsonb(array[lower(src.trust_raw)]::text[])
+      where ch.hospital_name_norm is not null
+        and (
+          (n.trust_lc   is not null and ch.hospital_name_norm @> to_jsonb(array[n.trust_lc]::text[]))
+          or
+          (n.trust_norm is not null and ch.hospital_name_norm @> to_jsonb(array[n.trust_norm]::text[]))
+        )
       limit 1
     ) cli_alias on true
+
+    -- 2) UNIQUE fallback: normalised clients.name == trust_norm
     left join lateral (
-      select cl.id as client_id
-      from public.clients cl
-      where cl.name = src.trust_raw
-      limit 1
+      with matches as (
+        select cl.id as client_id
+        from public.clients cl
+        where n.trust_norm is not null
+          and regexp_replace(lower(coalesce(cl.name,'')), '[^a-z0-9]+', '', 'g') = n.trust_norm
+      )
+      select
+        case when count(*) = 1 then max(client_id) end as client_id
+      from matches
     ) cli_name on (cli_alias.client_id is null)
   )
   select
