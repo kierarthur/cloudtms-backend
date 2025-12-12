@@ -75,7 +75,10 @@ begin
       s.client_id,
       s.work_date,
       s.staff_name,
+
+      -- keep existing behaviour for staff_norm output (lower+trim)
       lower(trim(s.staff_name)) as staff_norm,
+
       s.ward,
       lower(trim(s.ward))       as ward_norm,
       s.start_utc,
@@ -94,14 +97,10 @@ begin
           when s.work_date is null or s.start_utc is null or s.end_utc is null then null
           else array_to_string(ARRAY[
             regexp_replace(trim(s.work_date::text),             '\|', ' ', 'g'),
-            regexp_replace(coalesce(lower(trim(s.staff_name)),''),
-                           '\|',' ','g'),
-            regexp_replace(coalesce(lower(trim(s.ward)),''),
-                           '\|',' ','g'),
-            regexp_replace(coalesce(s.client_id::text,''),
-                           '\|',' ','g'),
-            regexp_replace(coalesce(trim(s.request_id),''),
-                           '\|',' ','g')
+            regexp_replace(coalesce(lower(trim(s.staff_name)),''), '\|',' ','g'),
+            regexp_replace(coalesce(lower(trim(s.ward)),''),       '\|',' ','g'),
+            regexp_replace(coalesce(s.client_id::text,''),         '\|',' ','g'),
+            regexp_replace(coalesce(trim(s.request_id),''),        '\|',' ','g')
           ], '|')
         end
       ) as external_row_key
@@ -109,30 +108,77 @@ begin
   ),
 
   ----------------------------------------------------------------
-  -- Candidate auto-mapping (same logic as JS: aliases → hr_name_mappings)
+  -- Candidate auto-mapping:
+  --  1) aliases (legacy lower/trim OR symbol/space stripped)
+  --  2) hr_name_mappings (legacy OR stripped)
+  --  3) UNIQUE exact match on candidates (first+last OR last+first), stripped
   ----------------------------------------------------------------
   resolved as (
     select
       n.*,
+
       coalesce(
         cand_alias.id,
-        cand_map.candidate_id
+        cand_map.candidate_id,
+        cand_exact_unique.candidate_id
       ) as candidate_id
+
     from normed n
+
+    -- normalisations used for matching
+    cross join lateral (
+      select
+        nullif(lower(trim(coalesce(n.staff_name,''))), '') as staff_lc,
+        nullif(regexp_replace(lower(coalesce(n.staff_name,'')), '[^a-z0-9]+', '', 'g'), '') as staff_norm2
+    ) nx
+
+    -- 1) candidate aliases via nhsp_hr_name_aliases (support legacy + stripped)
     left join lateral (
       select c.id
       from public.candidates c
-      where c.nhsp_hr_name_aliases @> to_jsonb(array[lower(n.staff_name)]::text[])
+      where c.nhsp_hr_name_aliases is not null
+        and (
+          (nx.staff_lc    is not null and c.nhsp_hr_name_aliases @> to_jsonb(array[nx.staff_lc]::text[]))
+          or
+          (nx.staff_norm2 is not null and c.nhsp_hr_name_aliases @> to_jsonb(array[nx.staff_norm2]::text[]))
+        )
       limit 1
     ) cand_alias on true
+
+    -- 2) fallback via hr_name_mappings.hr_name_norm (support legacy + stripped)
     left join lateral (
       select hm.candidate_id
       from public.hr_name_mappings hm
-      where hm.hr_name_norm = lower(n.staff_name)
-        and hm.active = true
+      where hm.active = true
+        and (
+          (nx.staff_lc    is not null and hm.hr_name_norm = nx.staff_lc)
+          or
+          (nx.staff_norm2 is not null and hm.hr_name_norm = nx.staff_norm2)
+        )
       order by hm.created_at desc
       limit 1
     ) cand_map on (cand_alias.id is null)
+
+    -- 3) UNIQUE exact candidate fallback (first+last OR last+first), symbols/spaces removed
+    left join lateral (
+      with matches as (
+        select c.id as candidate_id
+        from public.candidates c
+        where c.active = true
+          and nx.staff_norm2 is not null
+          and (
+            regexp_replace(lower(coalesce(c.first_name,'') || coalesce(c.last_name,'')), '[^a-z0-9]+', '', 'g') = nx.staff_norm2
+            or
+            regexp_replace(lower(coalesce(c.last_name,'')  || coalesce(c.first_name,'')), '[^a-z0-9]+', '', 'g') = nx.staff_norm2
+          )
+      )
+      select
+        case
+          when count(*) = 1
+            then (array_agg(candidate_id order by candidate_id::text))[1]
+        end as candidate_id
+      from matches
+    ) cand_exact_unique on (cand_alias.id is null and cand_map.candidate_id is null)
   ),
 
   ----------------------------------------------------------------
