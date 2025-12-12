@@ -65,7 +65,7 @@ begin
       )                              as ref_num,
       coalesce(
         nullif((r.payload_json ->> 'assignment_code'), ''),
-        nullif((r.payload_json ->> 'assignment'), ''),          -- ✅ NEW: parser writes payload_json.assignment
+        nullif((r.payload_json ->> 'assignment'), ''),          -- ✅ parser writes payload_json.assignment
         nullif((r.payload_json ->> 'Request_Grade'), ''),
         nullif(r.assignment_grade_norm, '')
       )                              as assignment_code,
@@ -91,6 +91,11 @@ begin
   resolved as (
     select
       src.*,
+      n.staff_lc,
+      n.staff_norm2,
+      n.trust_lc,
+      n.trust_norm,
+
       -- Compute pay_minutes (for completeness; not heavily used)
       greatest(
         0,
@@ -98,47 +103,110 @@ begin
         - src.break_mins
       ) as pay_minutes,
 
-      -- Candidate mapping:
-      --  1) candidates.nhsp_hr_name_aliases contains staff_name (lower)
-      --  2) fallback to hr_name_mappings.hr_name_norm
+      -- Candidate mapping precedence:
+      --  1) candidates.nhsp_hr_name_aliases contains staff_lc OR staff_norm2
+      --  2) fallback to hr_name_mappings.hr_name_norm = staff_lc OR staff_norm2
+      --  3) UNIQUE exact candidate match on (first+last) OR (last+first) using staff_norm2
       coalesce(
         cand_alias.id,
-        cand_map.candidate_id
+        cand_map.candidate_id,
+        cand_exact_unique.candidate_id
       ) as candidate_id,
 
       -- Client mapping:
-      --  1) client_hospitals.hospital_name_norm contains trust_norm
-      --  2) fallback to clients.name = trust_raw
+      --  1) client_hospitals.hospital_name_norm contains trust_lc OR trust_norm
+      --  2) UNIQUE fallback where norm(clients.name) = trust_norm
       coalesce(
         cli_alias.client_id,
         cli_name.client_id
       ) as client_id
+
     from src
+
+    -- shared normalisations (strip spaces/symbols; keep only [a-z0-9])
+    cross join lateral (
+      select
+        nullif(lower(trim(coalesce(src.staff_name,''))), '') as staff_lc,
+        nullif(regexp_replace(lower(coalesce(src.staff_name,'')), '[^a-z0-9]+', '', 'g'), '') as staff_norm2,
+        nullif(lower(trim(coalesce(src.trust_raw,''))), '') as trust_lc,
+        nullif(regexp_replace(lower(coalesce(src.trust_raw,'')), '[^a-z0-9]+', '', 'g'), '') as trust_norm
+    ) n
+
+    -- 1) candidate alias match (support legacy + normalised)
     left join lateral (
       select c.id
       from public.candidates c
-      where c.nhsp_hr_name_aliases @> to_jsonb(array[lower(src.staff_name)]::text[])
+      where c.nhsp_hr_name_aliases is not null
+        and (
+          (n.staff_lc    is not null and c.nhsp_hr_name_aliases @> to_jsonb(array[n.staff_lc]::text[]))
+          or
+          (n.staff_norm2 is not null and c.nhsp_hr_name_aliases @> to_jsonb(array[n.staff_norm2]::text[]))
+        )
       limit 1
     ) cand_alias on true
+
+    -- 2) hr_name_mappings match (support legacy + normalised)
     left join lateral (
       select hm.candidate_id
       from public.hr_name_mappings hm
-      where hm.hr_name_norm = lower(src.staff_name)
-        and hm.active = true
+      where hm.active = true
+        and (
+          (n.staff_lc    is not null and hm.hr_name_norm = n.staff_lc)
+          or
+          (n.staff_norm2 is not null and hm.hr_name_norm = n.staff_norm2)
+        )
       order by hm.created_at desc
       limit 1
     ) cand_map on (cand_alias.id is null)
+
+    -- 3) UNIQUE exact candidate fallback: match staff_norm2 against first+last OR last+first (symbols/spaces removed)
+    left join lateral (
+      with matches as (
+        select c.id as candidate_id
+        from public.candidates c
+        where c.active = true
+          and n.staff_norm2 is not null
+          and (
+            regexp_replace(lower(coalesce(c.first_name,'') || coalesce(c.last_name,'')), '[^a-z0-9]+', '', 'g') = n.staff_norm2
+            or
+            regexp_replace(lower(coalesce(c.last_name,'')  || coalesce(c.first_name,'')), '[^a-z0-9]+', '', 'g') = n.staff_norm2
+          )
+      )
+      select
+        case
+          when count(*) = 1
+            then (array_agg(candidate_id order by candidate_id::text))[1]
+        end as candidate_id
+      from matches
+    ) cand_exact_unique on (cand_alias.id is null and cand_map.candidate_id is null)
+
+    -- 1) client alias match (support legacy + normalised)
     left join lateral (
       select ch.client_id
       from public.client_hospitals ch
-      where ch.hospital_name_norm @> to_jsonb(array[lower(src.trust_raw)]::text[])
+      where ch.hospital_name_norm is not null
+        and (
+          (n.trust_lc   is not null and ch.hospital_name_norm @> to_jsonb(array[n.trust_lc]::text[]))
+          or
+          (n.trust_norm is not null and ch.hospital_name_norm @> to_jsonb(array[n.trust_norm]::text[]))
+        )
       limit 1
     ) cli_alias on true
+
+    -- 2) UNIQUE client fallback: normalised clients.name == trust_norm
     left join lateral (
-      select cl.id as client_id
-      from public.clients cl
-      where cl.name = src.trust_raw
-      limit 1
+      with matches as (
+        select cl.id as client_id
+        from public.clients cl
+        where n.trust_norm is not null
+          and regexp_replace(lower(coalesce(cl.name,'')), '[^a-z0-9]+', '', 'g') = n.trust_norm
+      )
+      select
+        case
+          when count(*) = 1
+            then (array_agg(client_id order by client_id::text))[1]
+        end as client_id
+      from matches
     ) cli_name on (cli_alias.client_id is null)
   ),
   ins as (
@@ -168,9 +236,9 @@ begin
       p_import_id,
       'NHSP'::hr_source_enum,
       nullif(r.staff_name, ''),
-      nullif(lower(r.staff_name), ''),
+      nullif(lower(r.staff_name), ''),    -- keep existing stored format
       nullif(r.ward, ''),
-      nullif(lower(r.ward), ''),
+      nullif(lower(r.ward), ''),          -- keep existing stored format
       r.work_date,
       nullif(r.assignment_code, ''),
       nullif(r.ref_num, ''),
@@ -199,9 +267,9 @@ begin
     set
       latest_import_id = p_import_id,
       staff_name       = nullif(r.staff_name, ''),
-      staff_norm       = nullif(lower(r.staff_name), ''),
+      staff_norm       = nullif(lower(r.staff_name), ''),  -- keep existing stored format
       ward             = nullif(r.ward, ''),
-      ward_norm        = nullif(lower(r.ward), ''),
+      ward_norm        = nullif(lower(r.ward), ''),        -- keep existing stored format
       work_date        = r.work_date,
       assignment_code  = nullif(r.assignment_code, ''),
       ref_num          = nullif(r.ref_num, ''),
