@@ -13642,6 +13642,38 @@ async function handleNhspApply(env, req, importId) {
       }
     }
 
+    // ✅ batch-load candidates + clients for required timesheets norm fields
+    const candidateById = new Map();
+    const clientById = new Map();
+    {
+      const candIds = [...new Set([...groups.values()].map(g => g.candidate_id).filter(Boolean))];
+      const cliIds  = [...new Set([...groups.values()].map(g => g.client_id).filter(Boolean))];
+
+      const chunkSize = 150;
+
+      for (let i = 0; i < candIds.length; i += chunkSize) {
+        const chunk = candIds.slice(i, i + chunkSize);
+        const { rows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=in.(${chunk.map(enc).join(',')})` +
+          `&select=id,display_name,tms_ref`
+        );
+        for (const r of (rows || [])) candidateById.set(r.id, r);
+      }
+
+      for (let i = 0; i < cliIds.length; i += chunkSize) {
+        const chunk = cliIds.slice(i, i + chunkSize);
+        const { rows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/clients` +
+          `?id=in.(${chunk.map(enc).join(',')})` +
+          `&select=id,name`
+        );
+        for (const r of (rows || [])) clientById.set(r.id, r);
+      }
+    }
+
     for (const [grpKey, g] of groups.entries()) {
       const { client_id: clientId, candidate_id: candidateId, contract_id: contractId, week_start: weekStart, shifts: grpShifts } = g;
       if (!clientId || !candidateId || !contractId || !weekStart || !grpShifts?.length) continue;
@@ -13732,6 +13764,11 @@ async function handleNhspApply(env, req, importId) {
 
       // Find or create weekly timesheet for this contract_week
       let ts = null;
+
+      // ✅ compute stable booking_id (same helper used elsewhere)
+      const bookingId = makeWeeklyBookingId(contract.candidate_id || candidateId, contract, cw);
+
+      // 1) If contract_week already linked, load it
       if (cw.timesheet_id) {
         try {
           const { rows: tsRows } = await sbFetch(
@@ -13748,19 +13785,83 @@ async function handleNhspApply(env, req, importId) {
         }
       }
 
+      // 2) If not linked (or link is stale), try find by booking_id (idempotent recovery)
+      if (!ts && bookingId) {
+        try {
+          const { rows: tsRows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/timesheets` +
+            `?booking_id=eq.${enc(bookingId)}` +
+            `&is_current=eq.true` +
+            `&select=*` +
+            `&limit=1`
+          );
+          ts = tsRows?.[0] || null;
+
+          // If found and week isn't linked, link it now
+          if (ts && !cw.timesheet_id) {
+            await fetch(
+              `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
+              {
+                method: 'PATCH',
+                headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+                body: JSON.stringify({
+                  timesheet_id: ts.timesheet_id,
+                  status:       'SUBMITTED',
+                  updated_at:   nowIso
+                })
+              }
+            ).catch(() => {});
+            cw.timesheet_id = ts.timesheet_id;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      // 3) Create timesheet if still missing (✅ FIXED: valid columns + required NOT NULL fields)
       if (!ts) {
-        const tsPayload = {
-          candidate_id:     candidateId,
-          client_id:        clientId,
-          hospital_norm:    null,
-          sheet_scope:      'WEEKLY',
-          submission_mode:  'MANUAL',
-          timesheet_ref:    null,
+        const cand = candidateById.get(candidateId) || null;
+        const cli  = clientById.get(clientId) || null;
+        const firstShift = grpShifts?.[0] || {};
+
+        const occupantKeyNorm =
+          String(cand?.tms_ref || cand?.display_name || candidateId || 'worker').toLowerCase();
+
+        const hospitalNorm =
+          String(contract.display_site || cli?.name || clientId || 'client').toLowerCase();
+
+        const wardNorm =
+          String(contract.ward_hint || firstShift.ward || 'contract').toLowerCase();
+
+        const jobTitleNorm =
+          String(contract.role || firstShift.assignment_code || 'weekly').toLowerCase();
+
+        const tsPayload = [{
+          booking_id: bookingId,
+          version: 1,
+          is_current: true,
+
+          sheet_scope: 'WEEKLY',
+          submission_mode: 'MANUAL',
+          line_type: 'HOURS',
+
+          occupant_key_norm: occupantKeyNorm,
+          hospital_norm: hospitalNorm,
+          ward_norm: wardNorm,
+          job_title_norm: jobTitleNorm,
+          shift_label_norm: 'weekly',
+
           week_ending_date: weekEndingDate,
-          is_current:       true,
-          created_at:       nowIso,
-          updated_at:       nowIso
-        };
+          contract_id: contract.id,
+
+          manual_pdf_r2_key: null,
+          actual_schedule_json: [],
+
+          authorised_at_server: null,
+          created_at: nowIso,
+          updated_at: nowIso
+        }];
 
         try {
           const insTs = await fetch(
@@ -13771,10 +13872,24 @@ async function handleNhspApply(env, req, importId) {
               body: JSON.stringify(tsPayload)
             }
           );
-          if (!insTs.ok) continue;
-          const tsJson = await insTs.json().catch(() => []);
+
+          const txt = await insTs.text().catch(() => '');
+          if (!insTs.ok) {
+            console.warn('[NHSP_APPLY] timesheets insert failed', {
+              import_id: importId,
+              booking_id: bookingId,
+              contract_id: contract.id,
+              week_ending_date: weekEndingDate,
+              status: insTs.status,
+              body: txt
+            });
+            continue;
+          }
+
+          const tsJson = txt ? JSON.parse(txt) : [];
           ts = Array.isArray(tsJson) ? tsJson[0] : tsJson;
 
+          // Link contract_week → timesheet
           await fetch(
             `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
             {
@@ -13787,7 +13902,15 @@ async function handleNhspApply(env, req, importId) {
               })
             }
           ).catch(() => {});
-        } catch {
+          cw.timesheet_id = ts.timesheet_id;
+        } catch (e) {
+          console.warn('[NHSP_APPLY] timesheets insert threw (non-fatal)', {
+            import_id: importId,
+            booking_id: bookingId,
+            contract_id: contract.id,
+            week_ending_date: weekEndingDate,
+            err: e?.message || String(e)
+          });
           continue;
         }
       }
