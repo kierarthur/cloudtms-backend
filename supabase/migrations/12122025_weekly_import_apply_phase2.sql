@@ -25,7 +25,10 @@ begin
     raise exception 'weekly_import_apply_phase2: invalid p_system_type=% (expected NHSP or HR_WEEKLY)', p_system_type;
   end if;
 
-  v_src := case when v_sys = 'NHSP' then 'NHSP'::hr_source_enum else 'HEALTHROSTER'::hr_source_enum end;
+  v_src := case when v_sys = 'NHSP'
+           then 'NHSP'::hr_source_enum
+           else 'HEALTHROSTER'::hr_source_enum
+          end;
 
   return query
   with p2 as (
@@ -37,9 +40,9 @@ begin
     set
       contract_id = p2.contract_id,
       updated_at  = now(),
-      -- keep ids aligned (safe)
-      candidate_id = coalesce(s.candidate_id, p2.candidate_id),
-      client_id    = coalesce(s.client_id,    p2.client_id)
+      -- keep ids aligned (prefer phase2 values; keep existing if phase2 null)
+      candidate_id = coalesce(p2.candidate_id, s.candidate_id),
+      client_id    = coalesce(p2.client_id,    s.client_id)
     from p2
     where p2.action = 'OK'
       and p2.contract_id is not null
