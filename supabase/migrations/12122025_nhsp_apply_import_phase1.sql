@@ -65,6 +65,7 @@ begin
       )                              as ref_num,
       coalesce(
         nullif((r.payload_json ->> 'assignment_code'), ''),
+        nullif((r.payload_json ->> 'assignment'), ''),          -- ✅ NEW: parser writes payload_json.assignment
         nullif((r.payload_json ->> 'Request_Grade'), ''),
         nullif(r.assignment_grade_norm, '')
       )                              as assignment_code,
