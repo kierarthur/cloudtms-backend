@@ -248,7 +248,8 @@ begin
         and exists (
           select 1
           from unnest(w.band_patterns) p
-          where position(p in lower(coalesce(c.band,''))) > 0
+          -- FIX: case-insensitive pattern matching (patterns are already lowercased)
+          where position(lower(p) in lower(coalesce(c.band,''))) > 0
         )
       order by c.start_date desc nulls last, c.id desc
       limit 1
