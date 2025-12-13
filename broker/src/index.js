@@ -4447,8 +4447,7 @@ function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEn
   await patchContractWeekScan(env, weekId, String(body.r2_key));
   return withCORS(env, req, ok({ replaced: true, r2_key: body.r2_key }));
 }
-
- async function handleContractWeekManualUpsert(env, req, weekId) {
+async function handleContractWeekManualUpsert(env, req, weekId) {
   const enc = encodeURIComponent;
 
   const user = await requireUser(env, req, ['admin']);
@@ -4820,6 +4819,20 @@ function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEn
   // For QR reissue, we want TSFIN back in AWAITING_MANUAL_SIGNATURE; otherwise PENDING_AUTH
   const processingStatus = effectiveReissue ? 'AWAITING_MANUAL_SIGNATURE' : 'PENDING_AUTH';
 
+  // ✅ Policy snapshot (TSFIN requires non-null policy_snapshot_json)
+  let policySnapshot = {};
+  try {
+    policySnapshot = await loadPolicy(env, contract.client_id || null, cw.week_ending_date);
+    if (!policySnapshot || typeof policySnapshot !== 'object') policySnapshot = {};
+  } catch {
+    policySnapshot = {};
+  }
+
+  const pay_wtr_rate_pct_snapshot =
+    (String(method || '').toUpperCase() === 'PAYE' && policySnapshot && policySnapshot.holiday_pay_pct != null)
+      ? Number(policySnapshot.holiday_pay_pct)
+      : null;
+
   // TSFIN snapshot – SEGMENTS vs AGGREGATE
   let snap;
 
@@ -4847,16 +4860,9 @@ function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEn
 
       const h = classifyMinutes(env, policy, segsArr);
 
-      const rates = await resolveRates(env, {
-        candidate_id: candidateId,
-        client_id: clientId,
-        role: contract.role || null,
-        band: contract.band || null,
-        dateYmd: date
-      });
-
-      const p = rates.pay    || {};
-      const c = rates.charge || {};
+      // ✅ Weekly CONTRACT_WEEKLY: use contract rates (not resolveRates overrides)
+      const p = pay || {};
+      const c = charge || {};
 
       const segPay = round2(
         (h.hours_day   || 0) * asNumberLocal(p.day)   +
@@ -4932,27 +4938,37 @@ function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEn
       basis: 'CONTRACT_WEEKLY',
       candidate_id: contract.candidate_id,
       client_id:    contract.client_id,
+      role: contract.role || null,
+      band: contract.band || null,
       candidate_assignment: contract.candidate_id ? 'ASSIGNED' : 'UNASSIGNED',
       processing_status: processingStatus,
       pay_method: method,
 
-      hours_day:   hours.day,
-      hours_night: hours.night,
-      hours_sat:   hours.sat,
-      hours_sun:   hours.sun,
-      hours_bh:    hours.bh,
+      hours_day:   Number(hours.day   || 0),
+      hours_night: Number(hours.night || 0),
+      hours_sat:   Number(hours.sat   || 0),
+      hours_sun:   Number(hours.sun   || 0),
+      hours_bh:    Number(hours.bh    || 0),
+      total_hours: round2(
+        Number(hours.day   || 0) +
+        Number(hours.night || 0) +
+        Number(hours.sat   || 0) +
+        Number(hours.sun   || 0) +
+        Number(hours.bh    || 0)
+      ),
 
-      rate_day:   charge.day,
-      rate_night: charge.night,
-      rate_sat:   charge.sat,
-      rate_sun:   charge.sun,
-      rate_bh:    charge.bh,
+      // ✅ TSFIN columns
+      pay_day:   pay.day,
+      pay_night: pay.night,
+      pay_sat:   pay.sat,
+      pay_sun:   pay.sun,
+      pay_bh:    pay.bh,
 
-      pay_rate_day:   pay.day,
-      pay_rate_night: pay.night,
-      pay_rate_sat:   pay.sat,
-      pay_rate_sun:   pay.sun,
-      pay_rate_bh:    pay.bh,
+      charge_day:   charge.day,
+      charge_night: charge.night,
+      charge_sat:   charge.sat,
+      charge_sun:   charge.sun,
+      charge_bh:    charge.bh,
 
       total_pay_ex_vat:    total_pay,
       total_charge_ex_vat: total_chg,
@@ -4982,7 +4998,10 @@ function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEn
       paid_by_user_id: null,
       payment_reference: null,
 
-      policy_snapshot_json: null,
+      policy_snapshot_json: policySnapshot,
+      rate_source_refs_json: { mode: 'CONTRACT_RATES_JSON', contract_id: contract.id || null },
+      pay_wtr_rate_pct_snapshot,
+
       created_at: nowIso,
       invoice_breakdown_json
     };
@@ -5048,47 +5067,70 @@ function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEn
       basis: 'CONTRACT_WEEKLY',
       candidate_id: contract.candidate_id,
       client_id:    contract.client_id,
+      role: contract.role || null,
+      band: contract.band || null,
       candidate_assignment: 'ASSIGNED',
       processing_status: processingStatus,
       pay_method: method,
-      hours_day:   hours.day,
-      hours_night: hours.night,
-      hours_sat:   hours.sat,
-      hours_sun:   hours.sun,
-      hours_bh:    hours.bh,
-      rate_day:    charge.day,
-      rate_night:  charge.night,
-      rate_sat:    charge.sat,
-      rate_sun:    charge.sun,
-      rate_bh:     charge.bh,
-      pay_rate_day:   pay.day,
-      pay_rate_night: pay.night,
-      pay_rate_sat:   pay.sat,
-      pay_rate_sun:   pay.sun,
-      pay_rate_bh:    pay.bh,
+
+      hours_day:   Number(hours.day   || 0),
+      hours_night: Number(hours.night || 0),
+      hours_sat:   Number(hours.sat   || 0),
+      hours_sun:   Number(hours.sun   || 0),
+      hours_bh:    Number(hours.bh    || 0),
+      total_hours: round2(
+        Number(hours.day   || 0) +
+        Number(hours.night || 0) +
+        Number(hours.sat   || 0) +
+        Number(hours.sun   || 0) +
+        Number(hours.bh    || 0)
+      ),
+
+      // ✅ TSFIN columns
+      pay_day:   pay.day,
+      pay_night: pay.night,
+      pay_sat:   pay.sat,
+      pay_sun:   pay.sun,
+      pay_bh:    pay.bh,
+
+      charge_day:   charge.day,
+      charge_night: charge.night,
+      charge_sat:   charge.sat,
+      charge_sun:   charge.sun,
+      charge_bh:    charge.bh,
+
       total_pay_ex_vat:    total_pay,
       total_charge_ex_vat: total_charge,
       margin_ex_vat:       margin,
+
       additional_units_json,
       additional_pay_ex_vat,
       additional_charge_ex_vat,
       additional_margin_ex_vat,
+
       expenses_pay_ex_vat: 0,
       expenses_charge_ex_vat: 0,
       expenses_description: null,
       expenses_evidence_r2_key: null,
+
       mileage_pay_ex_vat: 0,
       mileage_charge_ex_vat: 0,
       mileage_evidence_r2_key: null,
       mileage_pay_rate: null,
       mileage_charge_rate: null,
+
       pay_on_hold: false,
       pay_on_hold_reason: null,
       pay_on_hold_since_utc: null,
+
       paid_at_utc: null,
       paid_by_user_id: null,
       payment_reference: null,
-      policy_snapshot_json: null,
+
+      policy_snapshot_json: policySnapshot,
+      rate_source_refs_json: { mode: 'CONTRACT_RATES_JSON', contract_id: contract.id || null },
+      pay_wtr_rate_pct_snapshot,
+
       created_at: nowIso,
       invoice_breakdown_json
     };
@@ -5306,6 +5348,7 @@ function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEn
     qr_pdf_key: qrPdfKey
   }));
 }
+
 
 
  async function handleManualTimesheetQueueEnqueue(env, req) {
@@ -6472,10 +6515,12 @@ function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEn
 
 
 
- async function handleContractWeekCreateExpenseSheet(env, req, weekId) {
+async function handleContractWeekCreateExpenseSheet(env, req, weekId) {
   // Create an expense-only TS for the week (line_type=EXPENSES)
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+
+  const enc = encodeURIComponent;
 
   const cw = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=*`);
   if (!cw) return withCORS(env, req, notFound('Week not found'));
@@ -6487,6 +6532,8 @@ function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEn
 
   const booking_id = makeWeeklyBookingId(candidate?.id, contract, cw);
 
+  const now = nowIso();
+
   const payload = [{
     booking_id, version: 1, is_current: true, status: 'SUBMITTED',
     occupant_key_norm: (candidate?.display_name || String(candidate?.id || 'worker')).toLowerCase(),
@@ -6496,10 +6543,14 @@ function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEn
     shift_label_norm: 'weekly-expenses',
     week_ending_date: cw.week_ending_date,
     contract_id: contract.id,
-    submission_mode: cw.submission_mode_snapshot,
+
+    // IMPORTANT: expense-only TS must NOT be ELECTRONIC (would require signatures)
+    submission_mode: 'MANUAL',
+    sheet_scope: 'WEEKLY',
+
     manual_pdf_r2_key: null,
     line_type: 'EXPENSES',
-    created_at: nowIso(), updated_at: nowIso()
+    created_at: now, updated_at: now
   }];
 
   const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets`, {
@@ -6517,18 +6568,38 @@ function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEn
   }
 
   // Snapshot with zero hours; expenses will be patched via /tsfin/expenses
+  // IMPORTANT: policy_snapshot_json is NOT NULL in DB, so must not be null.
   const snap = {
     timesheet_id: ts.timesheet_id,
     timesheet_version: ts.version || 1,
+    basis: 'CONTRACT_WEEKLY',
     candidate_id: contract.candidate_id,
     client_id: contract.client_id,
     candidate_assignment: 'ASSIGNED',
     processing_status: 'PENDING_AUTH', // will be promoted after manual authorise or when hours TS authorised
     pay_method: contract.pay_method_snapshot,
-    total_pay_ex_vat: 0, total_charge_ex_vat: 0, margin_ex_vat: 0,
+
+    policy_snapshot_json: {},            // ✅ not null
+    rate_source_refs_json: {},           // ✅ not null
+
     hours_day: 0, hours_night: 0, hours_sat: 0, hours_sun: 0, hours_bh: 0,
+    total_hours: 0,
+
+    total_pay_ex_vat: 0, total_charge_ex_vat: 0, margin_ex_vat: 0,
+
+    additional_units_json: {},
+    additional_pay_ex_vat: 0,
+    additional_charge_ex_vat: 0,
+    additional_margin_ex_vat: 0,
+
+    invoice_breakdown_json: {
+      mode: 'EXPENSES_ONLY',
+      totals: { total_pay_ex_vat: 0, total_charge_ex_vat: 0, margin_ex_vat: 0 }
+    },
+
     created_at: nowIso(),
   };
+
   await writeSnapshot(env, snap);
 
   return withCORS(env, req, ok({ timesheet_id: ts.timesheet_id }));
@@ -6986,6 +7057,9 @@ function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEn
 
 
 async function rebuildWeeklyTsfinForTimesheet(env, timesheetId, contract) {
+  const enc = encodeURIComponent;
+  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
   const { rows: finRows } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
@@ -7136,6 +7210,17 @@ async function rebuildWeeklyTsfinForTimesheet(env, timesheetId, contract) {
     },
   };
 
+  // Ensure policy_snapshot_json is NOT NULL (DB constraint)
+  let policySnap = fin.policy_snapshot_json;
+  if (!policySnap || typeof policySnap !== 'object') {
+    try {
+      const ymd = ts.week_ending_date || null;
+      policySnap = ymd ? await loadPolicy(env, contract.client_id, ymd) : {};
+    } catch {
+      policySnap = {};
+    }
+  }
+
   const snap = { ...fin };
 
   delete snap.id;
@@ -7148,23 +7233,29 @@ async function rebuildWeeklyTsfinForTimesheet(env, timesheetId, contract) {
   snap.client_id          = contract.client_id;
   snap.pay_method         = method;
 
+  snap.policy_snapshot_json   = policySnap; // ✅ not null
+  snap.rate_source_refs_json  = { mode: 'CONTRACT_RATES_JSON', contract_id: contract.id || null }; // ✅ not null
+
   snap.hours_day   = hours.day;
   snap.hours_night = hours.night;
   snap.hours_sat   = hours.sat;
   snap.hours_sun   = hours.sun;
   snap.hours_bh    = hours.bh;
 
-  snap.rate_day    = charge.day   || 0;
-  snap.rate_night  = charge.night || 0;
-  snap.rate_sat    = charge.sat   || 0;
-  snap.rate_sun    = charge.sun   || 0;
-  snap.rate_bh     = charge.bh    || 0;
+  // ✅ Correct TSFIN column names (no rate_day / pay_rate_day columns exist)
+  snap.pay_day   = (pay.day   != null) ? Number(pay.day)   : null;
+  snap.pay_night = (pay.night != null) ? Number(pay.night) : null;
+  snap.pay_sat   = (pay.sat   != null) ? Number(pay.sat)   : null;
+  snap.pay_sun   = (pay.sun   != null) ? Number(pay.sun)   : null;
+  snap.pay_bh    = (pay.bh    != null) ? Number(pay.bh)    : null;
 
-  snap.pay_rate_day   = pay.day   || 0;
-  snap.pay_rate_night = pay.night || 0;
-  snap.pay_rate_sat   = pay.sat   || 0;
-  snap.pay_rate_sun   = pay.sun   || 0;
-  snap.pay_rate_bh    = pay.bh    || 0;
+  snap.charge_day   = (charge.day   != null) ? Number(charge.day)   : null;
+  snap.charge_night = (charge.night != null) ? Number(charge.night) : null;
+  snap.charge_sat   = (charge.sat   != null) ? Number(charge.sat)   : null;
+  snap.charge_sun   = (charge.sun   != null) ? Number(charge.sun)   : null;
+  snap.charge_bh    = (charge.bh    != null) ? Number(charge.bh)    : null;
+
+  snap.total_hours = round2(hours.day + hours.night + hours.sat + hours.sun + hours.bh);
 
   snap.additional_units_json    = additional_units_json;
   snap.additional_pay_ex_vat    = additional_pay_ex_vat;
@@ -7181,6 +7272,7 @@ async function rebuildWeeklyTsfinForTimesheet(env, timesheetId, contract) {
   await writeSnapshot(env, snap);
   return { ok: true };
 }
+
 
  async function handleTimesheetsSubmitWeekly(env, req) {
   // Public: submit weekly electronic timesheet (schedule OR totals + two signatures)
@@ -12076,6 +12168,12 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
   let totalPayEx  = 0;
   let totalChgEx  = 0;
 
+  let sumDay = 0;
+  let sumNight = 0;
+  let sumSat = 0;
+  let sumSun = 0;
+  let sumBh = 0;
+
   // Build SEGMENTS from NHSP shifts (canonical data)
   for (const sh of shifts) {
     const workDate = sh.work_date;
@@ -12093,6 +12191,13 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
     );
 
     const hours = classifyMinutes(env, policy, segs);
+
+    // ✅ roll up bucket hours for TSFIN
+    sumDay   += (hours.hours_day   || 0);
+    sumNight += (hours.hours_night || 0);
+    sumSat   += (hours.hours_sat   || 0);
+    sumSun   += (hours.hours_sun   || 0);
+    sumBh    += (hours.hours_bh    || 0);
 
     // ✅ Weekly rule: use contract pay/charge buckets directly (no resolveRates)
     const payEx = round2(
@@ -12173,6 +12278,28 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
     raw_row: sh.payload_json || null
   }));
 
+  // ✅ TSFIN requires non-null policy_snapshot_json and bucket hour totals
+  const hours_day = round2(sumDay);
+  const hours_night = round2(sumNight);
+  const hours_sat = round2(sumSat);
+  const hours_sun = round2(sumSun);
+  const hours_bh = round2(sumBh);
+  const total_hours = round2(hours_day + hours_night + hours_sat + hours_sun + hours_bh);
+
+  let policy_snapshot_json = {};
+  try {
+    const we = (ts && ts.week_ending_date) ? ts.week_ending_date : (shifts && shifts[0] ? shifts[0].work_date : null);
+    policy_snapshot_json = (we && client_id) ? (await loadPolicy(env, client_id, we)) : {};
+    if (!policy_snapshot_json || typeof policy_snapshot_json !== 'object') policy_snapshot_json = {};
+  } catch {
+    policy_snapshot_json = {};
+  }
+
+  const pay_wtr_rate_pct_snapshot =
+    (String(contract?.pay_method_snapshot || '').toUpperCase() === 'PAYE')
+      ? (Number.isFinite(Number(policy_snapshot_json?.holiday_pay_pct)) ? Number(policy_snapshot_json.holiday_pay_pct) : null)
+      : null;
+
   const snapshot = {
     timesheet_id: ts.timesheet_id,
     timesheet_version: ts.version || 1,
@@ -12190,29 +12317,42 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
     band: contract.band || null,
     pay_method: contract.pay_method_snapshot || null,
 
-    policy_snapshot_json: null,
+    policy_snapshot_json: policy_snapshot_json,
     rate_source_refs_json: {
       mode: 'CONTRACT_RATES_JSON',
       contract_id: contract.id || null
     },
 
-    // For NHSP we historically left these bucket fields null and used SEGMENTS instead.
-    // Keeping that behaviour to avoid breaking downstream logic.
-    hours_day:   null,
-    hours_night: null,
-    hours_sat:   null,
-    hours_sun:   null,
-    hours_bh:    null,
+    // ✅ Populate TSFIN bucket hours (required by DB + used elsewhere in code)
+    hours_day:   hours_day,
+    hours_night: hours_night,
+    hours_sat:   hours_sat,
+    hours_sun:   hours_sun,
+    hours_bh:    hours_bh,
+
+    // Rates (for downstream finance/remittance tooling)
+    pay_day:      pay.day   ?? null,
+    pay_night:    pay.night ?? null,
+    pay_sat:      pay.sat   ?? null,
+    pay_sun:      pay.sun   ?? null,
+    pay_bh:       pay.bh    ?? null,
+    charge_day:   chg.day   ?? null,
+    charge_night: chg.night ?? null,
+    charge_sat:   chg.sat   ?? null,
+    charge_sun:   chg.sun   ?? null,
+    charge_bh:    chg.bh    ?? null,
 
     additional_units_json: {},
     additional_pay_ex_vat: 0,
     additional_charge_ex_vat: 0,
     additional_margin_ex_vat: 0,
 
-    total_hours: null,
+    total_hours: total_hours,
     total_pay_ex_vat: totalPayEx,
     total_charge_ex_vat: totalChgEx,
     margin_ex_vat: marginEx,
+
+    pay_wtr_rate_pct_snapshot,
 
     candidate_assignment: candidate_id ? 'ASSIGNED' : 'UNASSIGNED',
     processing_status: 'READY_FOR_INVOICE',
@@ -15447,39 +15587,49 @@ async function handleHrAutoprocessApply(env, req, importId) {
               }
             };
 
+            // ✅ TSFIN requires non-null policy_snapshot_json and numeric hour buckets
+            let policySnapshotAdj = {};
+            try {
+              policySnapshotAdj = (await loadPolicy(env, contract.client_id || g.client_id, g.week_ending_date)) || {};
+              if (!policySnapshotAdj || typeof policySnapshotAdj !== 'object') policySnapshotAdj = {};
+            } catch {
+              policySnapshotAdj = {};
+            }
+
             const adjSnap = {
-  timesheet_id: adjTs.timesheet_id,
-  timesheet_version: adjTs.version || 1,
-  basis: 'HEALTHROSTER_ADJUSTMENT',
-  nhsp_import_id: importId,
-  occupant_key_norm: adjTs.occupant_key_norm || null,
+              timesheet_id: adjTs.timesheet_id,
+              timesheet_version: adjTs.version || 1,
+              basis: 'HEALTHROSTER_ADJUSTMENT',
+              nhsp_import_id: importId,
+              occupant_key_norm: adjTs.occupant_key_norm || null,
 
-  // ✅ REMOVED: week_ending_date (not a timesheets_financials column)
+              // ✅ REMOVED: week_ending_date (not a timesheets_financials column)
 
-  candidate_id: contract.candidate_id || null,
-  client_id: contract.client_id || null,
-  role: contract.role || null,
-  band: contract.band || null,
-  pay_method: contract.pay_method_snapshot || null,
-  policy_snapshot_json: null,
-  rate_source_refs_json: { mode: 'CONTRACT_RATES_JSON', contract_id: contract.id || null },
-  hours_day: null,
-  hours_night: null,
-  hours_sat: null,
-  hours_sun: null,
-  hours_bh: null,
-  additional_units_json: {},
-  additional_pay_ex_vat: 0,
-  additional_charge_ex_vat: 0,
-  additional_margin_ex_vat: 0,
-  total_hours: null,
-  total_pay_ex_vat: deltaPayTotal,
-  total_charge_ex_vat: deltaChgTotal,
-  margin_ex_vat: round2(deltaChgTotal - deltaPayTotal),
-  candidate_assignment: contract.candidate_id ? 'ASSIGNED' : 'UNASSIGNED',
-  processing_status: 'READY_FOR_INVOICE',
-  invoice_breakdown_json: invBreak
-};
+              candidate_id: contract.candidate_id || null,
+              client_id: contract.client_id || null,
+              role: contract.role || null,
+              band: contract.band || null,
+              pay_method: contract.pay_method_snapshot || null,
+              policy_snapshot_json: policySnapshotAdj,
+              rate_source_refs_json: { mode: 'CONTRACT_RATES_JSON', contract_id: contract.id || null },
+              hours_day: 0,
+              hours_night: 0,
+              hours_sat: 0,
+              hours_sun: 0,
+              hours_bh: 0,
+              additional_units_json: {},
+              additional_pay_ex_vat: 0,
+              additional_charge_ex_vat: 0,
+              additional_margin_ex_vat: 0,
+              total_hours: 0,
+              total_pay_ex_vat: deltaPayTotal,
+              total_charge_ex_vat: deltaChgTotal,
+              margin_ex_vat: round2(deltaChgTotal - deltaPayTotal),
+              pay_wtr_rate_pct_snapshot: (String(contract.pay_method_snapshot || '').toUpperCase() === 'PAYE') ? (Number.isFinite(Number(policySnapshotAdj?.holiday_pay_pct)) ? Number(policySnapshotAdj.holiday_pay_pct) : null) : null,
+              candidate_assignment: contract.candidate_id ? 'ASSIGNED' : 'UNASSIGNED',
+              processing_status: 'READY_FOR_INVOICE',
+              invoice_breakdown_json: invBreak
+            };
 
             await writeSnapshot(env, adjSnap).catch((e) => {
               console.warn('[HR_AUTOPROC_APPLY] writeSnapshot failed (adj, self-bill)', {
@@ -41075,7 +41225,7 @@ async function handleTsfinFinancials(env, req) {
   return withCORS(env, req, ok(response));
 }
 
- async function handleContractWeekGeneratePrintable(env, req, weekId) {
+async function handleContractWeekGeneratePrintable(env, req, weekId) {
   const enc = encodeURIComponent;
 
   const user = await requireUser(env, req, ['admin']);
@@ -41444,6 +41594,21 @@ async function handleTsfinFinancials(env, req) {
     return withCORS(env, req, serverError('Failed to create or load timesheet for QR weekly'));
   }
 
+  // ✅ Policy snapshot (TSFIN requires non-null policy_snapshot_json)
+  let policySnapshot = {};
+  try {
+    policySnapshot = await loadPolicy(env, contract.client_id || null, cw.week_ending_date);
+    if (!policySnapshot || typeof policySnapshot !== 'object') policySnapshot = {};
+  } catch {
+    policySnapshot = {};
+  }
+
+  // WTR snapshot (only meaningful for PAYE)
+  const pay_wtr_rate_pct_snapshot =
+    (String(method || '').toUpperCase() === 'PAYE' && policySnapshot && policySnapshot.holiday_pay_pct != null)
+      ? Number(policySnapshot.holiday_pay_pct)
+      : null;
+
   // 4) TSFIN snapshot with AWAITING_MANUAL_SIGNATURE from the supplied hours
   const n2 = (x) => Number(x) || 0;
 
@@ -41509,28 +41674,43 @@ async function handleTsfinFinancials(env, req) {
     timesheet_id: ts.timesheet_id,
     timesheet_version: ts.version || 1,
     basis: 'CONTRACT_WEEKLY',
+
+    occupant_key_norm: ts.occupant_key_norm || null,
     candidate_id: contract.candidate_id || null,
     client_id: contract.client_id || null,
+    role: contract.role || null,
+    band: contract.band || null,
+    pay_method: method,
+
     candidate_assignment: contract.candidate_id ? 'ASSIGNED' : 'UNASSIGNED',
     processing_status: 'AWAITING_MANUAL_SIGNATURE',
-    pay_method: method,
-    hours_day:   hours.day,
-    hours_night: hours.night,
-    hours_sat:   hours.sat,
-    hours_sun:   hours.sun,
-    hours_bh:    hours.bh,
 
-    pay_rate_day:   pay.day,
-    pay_rate_night: pay.night,
-    pay_rate_sat:   pay.sat,
-    pay_rate_sun:   pay.sun,
-    pay_rate_bh:    pay.bh,
+    // ✅ TSFIN requires these NOT NULL (hours_* + total_hours)
+    hours_day:   Number(hours.day   || 0),
+    hours_night: Number(hours.night || 0),
+    hours_sat:   Number(hours.sat   || 0),
+    hours_sun:   Number(hours.sun   || 0),
+    hours_bh:    Number(hours.bh    || 0),
+    total_hours: round2(
+      Number(hours.day   || 0) +
+      Number(hours.night || 0) +
+      Number(hours.sat   || 0) +
+      Number(hours.sun   || 0) +
+      Number(hours.bh    || 0)
+    ),
 
-    rate_day:   charge.day,
-    rate_night: charge.night,
-    rate_sat:   charge.sat,
-    rate_sun:   charge.sun,
-    rate_bh:    charge.bh,
+    // ✅ TSFIN column names are pay_* and charge_* (not pay_rate_* / rate_*)
+    pay_day:   pay.day,
+    pay_night: pay.night,
+    pay_sat:   pay.sat,
+    pay_sun:   pay.sun,
+    pay_bh:    pay.bh,
+
+    charge_day:   charge.day,
+    charge_night: charge.night,
+    charge_sat:   charge.sat,
+    charge_sun:   charge.sun,
+    charge_bh:    charge.bh,
 
     total_pay_ex_vat:    totalPay,
     total_charge_ex_vat: totalCharge,
@@ -41560,7 +41740,12 @@ async function handleTsfinFinancials(env, req) {
     paid_by_user_id:       null,
     payment_reference:     null,
 
-    policy_snapshot_json:  null,
+    // ✅ TSFIN requires NOT NULL policy_snapshot_json + rate_source_refs_json
+    policy_snapshot_json: policySnapshot,
+    rate_source_refs_json: { mode: 'CONTRACT_RATES_JSON', contract_id: contract.id || null },
+
+    pay_wtr_rate_pct_snapshot,
+
     created_at:            now,
     invoice_breakdown_json
   };
