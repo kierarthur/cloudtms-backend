@@ -13361,6 +13361,12 @@ async function handleHrAutoprocessResolveMappings(env, req, importId) {
 async function handleNhspApply(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
+  // ---- logging helpers (ALL logging is gated by LOG) ----
+  const logInfo  = (obj) => { if (LOG) console.log('[NHSP_APPLY]', JSON.stringify(obj)); };
+  const logWarn  = (obj) => { if (LOG) console.warn('[NHSP_APPLY]', JSON.stringify(obj)); };
+  const logError = (obj) => { if (LOG) console.error('[NHSP_APPLY]', JSON.stringify(obj)); };
+  const logFail  = (obj) => { if (LOG) console.warn('[NHSP_APPLY][GROUP_FAIL]', JSON.stringify(obj)); };
+
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   if (!importId) return withCORS(env, req, badRequest("import_id is required"));
@@ -13381,6 +13387,22 @@ async function handleNhspApply(env, req, importId) {
     return `${yyyy}-${mm}-${dd}`;
   };
 
+  // Compute week-ending (YYYY-MM-DD) for a work_date (YYYY-MM-DD) given weDow (0=Sun..6=Sat)
+  const computeWeekEndingForWorkDate = (workDateYmd, weDow) => {
+    if (!workDateYmd) return null;
+    const d = new Date(`${workDateYmd}T00:00:00Z`);
+    if (Number.isNaN(d.getTime())) return null;
+    const target = Number.isInteger(Number(weDow)) ? Number(weDow) : 0;
+    while (d.getUTCDay() !== target) d.setUTCDate(d.getUTCDate() + 1);
+    const yyyy = d.getUTCFullYear();
+    const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd   = String(d.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  // Basic “is string” guard (booking_id must be TEXT, and unique index depends on it)
+  const isNonEmptyString = (v) => (typeof v === 'string' && v.trim().length > 0);
+
   let body;
   try {
     body = await parseJSONBody(req);
@@ -13400,15 +13422,13 @@ async function handleNhspApply(env, req, importId) {
     ? body.client_aliases
     : [];
 
-  if (LOG) {
-    console.log('[NHSP_APPLY]', JSON.stringify({
-      stage: 'start',
-      import_id: importId,
-      selected_group_ids_count: selectedGroupIds.length,
-      candidate_mappings_count: candidateMappings.length,
-      client_aliases_count: clientAliases.length
-    }));
-  }
+  logInfo({
+    stage: 'start',
+    import_id: importId,
+    selected_group_ids_count: selectedGroupIds.length,
+    candidate_mappings_count: candidateMappings.length,
+    client_aliases_count: clientAliases.length
+  });
 
   // ---------- PHASE 0: apply explicit mappings (JS, unchanged) ----------
   try {
@@ -13419,27 +13439,25 @@ async function handleNhspApply(env, req, importId) {
       client_aliases: clientAliases
     });
 
-    if (LOG) {
-      console.log('[NHSP_APPLY]', JSON.stringify({
-        stage: 'mappings_applied',
-        import_id: importId,
-        candidate_mappings_attempted: candidateMappings.length,
-        client_aliases_attempted: clientAliases.length
-      }));
-    }
+    logInfo({
+      stage: 'mappings_applied',
+      import_id: importId,
+      candidate_mappings_attempted: candidateMappings.length,
+      client_aliases_attempted: clientAliases.length
+    });
   } catch (e) {
-    console.warn('[NHSP_APPLY] failed to apply candidate/client mappings (non-fatal)', {
+    logWarn({
+      stage: 'mappings_apply_failed_non_fatal',
       import_id: importId,
       err: e?.message || String(e)
     });
   }
 
-  // Helpers used in Phase 2 (✅ UPDATED: contract rates, missing bucket detection)
+  // Helpers used in Phase 2 (weekly totals from contract rates)
   async function computeNhspTotalsForShifts(env, contract, shifts) {
     const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
     const client_id    = contract.client_id   || null;
 
-    // ✅ Weekly rule: totals must be computed from contract rates_json (not resolveRates)
     const pc = payChargeFromContract(contract);
     const pay = pc?.pay || null;
     const chg = pc?.charge || null;
@@ -13447,7 +13465,6 @@ async function handleNhspApply(env, req, importId) {
     const missing = new Set();
 
     if (!pay || !chg) {
-      // Caller can treat this as a hard failure / reject
       return {
         totalPayEx: 0,
         totalChgEx: 0,
@@ -13458,7 +13475,6 @@ async function handleNhspApply(env, req, importId) {
     let totalPayEx = 0;
     let totalChgEx = 0;
 
-    // small cache to avoid re-loading the policy multiple times for the same date
     const policyByDate = new Map();
 
     for (const sh of shifts) {
@@ -13484,7 +13500,6 @@ async function handleNhspApply(env, req, importId) {
         bh:    (hours.hours_bh    || 0)
       };
 
-      // ✅ Missing bucket detection (only for buckets actually used)
       for (const k of ['day','night','sat','sun','bh']) {
         if ((used[k] || 0) > 0) {
           const pv = pay[k];
@@ -13559,7 +13574,8 @@ async function handleNhspApply(env, req, importId) {
         }
       );
     } catch (e) {
-      console.warn('[NHSP_APPLY] createOverpayAdvance failed', {
+      logWarn({
+        stage: 'create_overpay_advance_failed_non_fatal',
         candidate_id,
         client_id,
         reason,
@@ -13582,16 +13598,14 @@ async function handleNhspApply(env, req, importId) {
       return withCORS(env, req, badRequest(`Import ${importId} is not NHSP (source_system=${imp.source_system})`));
     }
 
-    if (LOG) {
-      console.log('[NHSP_APPLY]', JSON.stringify({
-        stage: 'import_loaded',
-        import_id: importId,
-        source_system: imp.source_system,
-        parse_summary: imp.parse_summary_json || null
-      }));
-    }
+    logInfo({
+      stage: 'import_loaded',
+      import_id: importId,
+      source_system: imp.source_system,
+      parse_summary: imp.parse_summary_json || null
+    });
 
-    // ---------- PHASE 1: let Postgres upsert nhsp_shifts in bulk ----------
+    // ---------- PHASE 1: Postgres upsert nhsp_shifts ----------
     let created          = 0;
     let updated          = 0;
     let mappedCandidates = 0;
@@ -13614,7 +13628,8 @@ async function handleNhspApply(env, req, importId) {
       const txt = await rpcRes.text().catch(() => '');
 
       if (!rpcRes.ok) {
-        console.error('[NHSP_APPLY] nhsp_apply_import_phase1 RPC failed', {
+        logError({
+          stage: 'phase1_rpc_failed',
           import_id: importId,
           status: rpcRes.status,
           body: txt
@@ -13630,8 +13645,6 @@ async function handleNhspApply(env, req, importId) {
       }
 
       const row0 = Array.isArray(rpcJson) ? rpcJson[0] : rpcJson;
-      // When called via SQL editor you saw this shape:
-      // [ { "nhsp_apply_import_phase1": { ... } } ]
       const payload = row0?.nhsp_apply_import_phase1 || row0 || {};
 
       created          = Number(payload.shifts_created     ?? 0);
@@ -13639,23 +13652,25 @@ async function handleNhspApply(env, req, importId) {
       mappedCandidates = Number(payload.mapped_candidates  ?? 0);
       mappedClients    = Number(payload.mapped_clients     ?? 0);
 
-      if (LOG) {
-        console.log('[NHSP_APPLY]', JSON.stringify({
-          stage: 'phase1_done',
-          import_id: importId,
-          summary: { created, updated, mappedCandidates, mappedClients }
-        }));
-      }
+      logInfo({
+        stage: 'phase1_done',
+        import_id: importId,
+        summary: { created, updated, mappedCandidates, mappedClients }
+      });
     } catch (e) {
-      console.error('[NHSP_APPLY] nhsp_apply_import_phase1 RPC threw', {
+      logError({
+        stage: 'phase1_rpc_threw',
         import_id: importId,
         err: e?.message || String(e)
       });
       throw e;
     }
 
-    // ---------- PHASE 1.5 (NEW): SQL-selected contract alignment ----------
-    // This ensures nhsp_shifts.contract_id is set using the SAME selection logic as preview (mapping table).
+    // ---------- PHASE 1.5: SQL-selected contract alignment ----------
+    let phase15Rows = [];
+    let phase15Updated = 0;
+    let phase15Ok = 0;
+
     try {
       const rpcBody = { p_import_id: importId, p_system_type: 'NHSP' };
       const res = await fetch(
@@ -13669,7 +13684,8 @@ async function handleNhspApply(env, req, importId) {
 
       const txt = await res.text().catch(() => '');
       if (!res.ok) {
-        console.error('[NHSP_APPLY] weekly_import_apply_phase2 RPC failed (FATAL)', {
+        logError({
+          stage: 'phase1_5_rpc_failed_fatal',
           import_id: importId,
           status: res.status,
           body: txt
@@ -13677,22 +13693,27 @@ async function handleNhspApply(env, req, importId) {
         throw new Error(`weekly_import_apply_phase2 failed with status ${res.status}`);
       }
 
-      if (LOG) {
-        let rowsCount = null;
-        try {
-          const j = txt ? JSON.parse(txt) : [];
-          rowsCount = Array.isArray(j) ? j.length : null;
-        } catch {
-          rowsCount = null;
-        }
-        console.log('[NHSP_APPLY]', JSON.stringify({
-          stage: 'phase1_5_contract_alignment_done',
-          import_id: importId,
-          rows: rowsCount
-        }));
+      try {
+        const j = txt ? JSON.parse(txt) : [];
+        phase15Rows = Array.isArray(j) ? j : [];
+        phase15Updated = phase15Rows.filter(r => r && r.shift_updated === true).length;
+        phase15Ok = phase15Rows.filter(r => r && String(r.action || '').toUpperCase() === 'OK').length;
+      } catch {
+        phase15Rows = [];
+        phase15Updated = 0;
+        phase15Ok = 0;
       }
+
+      logInfo({
+        stage: 'phase1_5_contract_alignment_done',
+        import_id: importId,
+        rows_returned: Array.isArray(phase15Rows) ? phase15Rows.length : null,
+        rows_ok: phase15Ok,
+        rows_shift_updated: phase15Updated
+      });
     } catch (e) {
-      console.error('[NHSP_APPLY] contract alignment failed (FATAL)', {
+      logError({
+        stage: 'phase1_5_failed_fatal',
         import_id: importId,
         err: e?.message || String(e)
       });
@@ -13707,16 +13728,14 @@ async function handleNhspApply(env, req, importId) {
       `&select=*`
     );
 
-    // ✅ now requires contract_id to be present (Phase1.5 sets it)
-    const shifts = (allShifts || []).filter(s => s.candidate_id && s.client_id && s.contract_id && s.work_date);
+    const allShiftsArr = Array.isArray(allShifts) ? allShifts : [];
+    const eligibleShifts = allShiftsArr.filter(s => s && s.candidate_id && s.client_id && s.contract_id && s.work_date);
 
     const groups = new Map();
 
-    if (shifts.length) {
-      const clientIds = [...new Set(shifts.map(s => s.client_id).filter(Boolean))];
-
-      // ✅ align with SQL: order client_settings so we use latest values consistently
-      let csMap = new Map();
+    const csMap = new Map();
+    if (eligibleShifts.length) {
+      const clientIds = [...new Set(eligibleShifts.map(s => s.client_id).filter(Boolean))];
       if (clientIds.length) {
         const { rows: csRows } = await sbFetch(
           env,
@@ -13726,52 +13745,42 @@ async function handleNhspApply(env, req, importId) {
           `&order=effective_from.desc,created_at.desc`
         );
         for (const r of (csRows || [])) {
-          if (!csMap.has(r.client_id)) csMap.set(r.client_id, r);
+          if (r && r.client_id && !csMap.has(r.client_id)) csMap.set(r.client_id, r);
         }
-      }
-
-      for (const sh of shifts) {
-        const clientId    = sh.client_id;
-        const candidateId = sh.candidate_id;
-        const contractId  = sh.contract_id;
-        const workDate    = sh.work_date;
-        if (!clientId || !candidateId || !contractId || !workDate) continue;
-
-        const cs    = csMap.get(clientId) || {};
-        const weDow = Number.isInteger(Number(cs.week_ending_weekday))
-          ? Number(cs.week_ending_weekday)
-          : 0; // default Sunday
-
-        const d = new Date(`${workDate}T00:00:00Z`);
-        if (Number.isNaN(d.getTime())) continue;
-
-        while (d.getUTCDay() !== weDow) {
-          d.setUTCDate(d.getUTCDate() + 1);
-        }
-        const yyyy       = d.getUTCFullYear();
-        const mm         = String(d.getUTCMonth() + 1).padStart(2, '0');
-        const dd         = String(d.getUTCDate()).padStart(2, '0');
-        const weekEnding = `${yyyy}-${mm}-${dd}`;
-        const weekStart  = computeWeekStartFromWeekEnding(weekEnding);
-
-        // ✅ include contractId so different contracts never get merged
-        const grpKey = `${clientId}|${candidateId}|${contractId}|${weekEnding}`;
-
-        if (!groups.has(grpKey)) {
-          groups.set(grpKey, {
-            client_id:        clientId,
-            candidate_id:     candidateId,
-            contract_id:      contractId,
-            week_ending_date: weekEnding,
-            week_start:       weekStart,
-            shifts:           []
-          });
-        }
-        groups.get(grpKey).shifts.push(sh);
       }
     }
 
-    // ✅ batch-load contracts by id to reduce subrequests
+    for (const sh of eligibleShifts) {
+      const clientId    = sh.client_id;
+      const candidateId = sh.candidate_id;
+      const contractId  = sh.contract_id;
+      const workDate    = sh.work_date;
+      if (!clientId || !candidateId || !contractId || !workDate) continue;
+
+      const cs    = csMap.get(clientId) || {};
+      const weDow = Number.isInteger(Number(cs.week_ending_weekday))
+        ? Number(cs.week_ending_weekday)
+        : 0;
+
+      const weekEnding = computeWeekEndingForWorkDate(workDate, weDow);
+      if (!weekEnding) continue;
+
+      const weekStart  = computeWeekStartFromWeekEnding(weekEnding);
+      const grpKey = `${clientId}|${candidateId}|${contractId}|${weekEnding}`;
+
+      if (!groups.has(grpKey)) {
+        groups.set(grpKey, {
+          client_id:        clientId,
+          candidate_id:     candidateId,
+          contract_id:      contractId,
+          week_ending_date: weekEnding,
+          week_start:       weekStart,
+          shifts:           []
+        });
+      }
+      groups.get(grpKey).shifts.push(sh);
+    }
+
     const contractById = new Map();
     {
       const contractIds = [...new Set([...groups.values()].map(g => g.contract_id).filter(Boolean))];
@@ -13788,7 +13797,6 @@ async function handleNhspApply(env, req, importId) {
       }
     }
 
-    // ✅ batch-load candidates + clients for required timesheets norm fields
     const candidateById = new Map();
     const clientById = new Map();
     {
@@ -13820,35 +13828,43 @@ async function handleNhspApply(env, req, importId) {
       }
     }
 
-    // ✅ NEW: group outcome counters (for UI)
+    // ---------- group outcome counters ----------
     let groups_total = 0;
     let groups_attempted = 0;
     let groups_succeeded = 0;
     let groups_failed = 0;
 
-    // “Ready to process” actions (from weekly classifier)
     const READY_ACTIONS = new Set([
       'NEW_AUTOPROC_TIMESHEET',
       'UPDATE_AUTOPROC_TS',
       'UPDATE_MANUAL_WEEK',
+      'UPDATE_AUTOPROC_TS', // harmless duplicate guard
       'UPDATE_ADJUSTMENT_TS',
       'CREATE_ADJUSTMENT_TS',
       'CREATE_PAY_ADJUSTMENT_ONLY'
     ]);
 
     const failSamples = [];
-    const addFail = (preview_group_id, action, reason) => {
+    const addFail = (preview_group_id, action, reason, debugExtra = null) => {
       groups_failed++;
-      if (failSamples.length < 10) {
-        failSamples.push({
-          preview_group_id: preview_group_id || null,
-          action: action || null,
-          reason: reason || null
-        });
-      }
+      const sample = {
+        preview_group_id: preview_group_id || null,
+        action: action || null,
+        reason: reason || null
+      };
+      if (debugExtra && typeof debugExtra === 'object') sample.debug = debugExtra;
+      if (failSamples.length < 10) failSamples.push(sample);
+
+      logFail({
+        import_id: importId,
+        preview_group_id: preview_group_id || null,
+        action: action || null,
+        reason: reason || null,
+        debug: debugExtra || undefined
+      });
     };
 
-    // ✅ NEW: classify groups using the same logic as preview, so counts match the UI list
+    // Classify using same logic as preview
     let classifiedGroups = [];
     try {
       const cls = await classifyWeeklyImportRows(env, importId, { source_system: 'NHSP' });
@@ -13856,13 +13872,13 @@ async function handleNhspApply(env, req, importId) {
       classifiedGroups = rows.filter(r => r && r.level === 'group');
     } catch (e) {
       classifiedGroups = [];
-      console.warn('[NHSP_APPLY] classifyWeeklyImportRows failed (non-fatal)', {
+      logWarn({
+        stage: 'classify_failed_non_fatal',
         import_id: importId,
         err: e?.message || String(e)
       });
     }
 
-    // Fallback: if classifier returns nothing, treat all computed groups as “considered”
     if (!classifiedGroups.length) {
       classifiedGroups = [...groups.values()].map(g => ({
         level: 'group',
@@ -13877,25 +13893,108 @@ async function handleNhspApply(env, req, importId) {
       }));
     }
 
-    // Process only “ready” groups (and selected groups, if selection is implemented)
+    const ensureClientWeDow = async (clientId) => {
+      const cs = csMap.get(clientId);
+      if (cs && cs.client_id) {
+        const we = Number.isInteger(Number(cs.week_ending_weekday)) ? Number(cs.week_ending_weekday) : 0;
+        return { weDow: we, source: 'cache' };
+      }
+      try {
+        const { rows: csRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/client_settings` +
+          `?client_id=eq.${enc(clientId)}` +
+          `&select=client_id,week_ending_weekday` +
+          `&order=effective_from.desc,created_at.desc` +
+          `&limit=1`
+        );
+        const row = csRows?.[0] || null;
+        if (row && row.client_id) {
+          csMap.set(row.client_id, row);
+          const we = Number.isInteger(Number(row.week_ending_weekday)) ? Number(row.week_ending_weekday) : 0;
+          return { weDow: we, source: 'db' };
+        }
+      } catch {}
+      return { weDow: 0, source: 'default' };
+    };
+
+    const buildNoShiftsDiagnostics = async ({ candidateId, clientId, contractId, weekEndingDate }) => {
+      const { weDow, source } = await ensureClientWeDow(clientId);
+
+      const candClient = allShiftsArr.filter(s => s && s.candidate_id === candidateId && s.client_id === clientId && s.work_date);
+      const byWeek = candClient.filter(s => computeWeekEndingForWorkDate(s.work_date, weDow) === weekEndingDate);
+
+      const byWeekMissingContract = byWeek.filter(s => !s.contract_id);
+      const byWeekOtherContract   = byWeek.filter(s => s.contract_id && s.contract_id !== contractId);
+      const byWeekThisContract    = byWeek.filter(s => s.contract_id === contractId);
+
+      const missingCandidate = allShiftsArr.filter(s => s && !s.candidate_id && s.client_id === clientId && s.work_date);
+      const missingClient    = allShiftsArr.filter(s => s && s.candidate_id === candidateId && !s.client_id && s.work_date);
+      const missingContract  = allShiftsArr.filter(s => s && s.candidate_id === candidateId && s.client_id === clientId && !s.contract_id && s.work_date);
+
+      const weCounts = {};
+      for (const s of candClient) {
+        const we = computeWeekEndingForWorkDate(s.work_date, weDow);
+        if (!we) continue;
+        weCounts[we] = (weCounts[we] || 0) + 1;
+      }
+
+      const phase15ForGroup = Array.isArray(phase15Rows)
+        ? phase15Rows.filter(r =>
+            r &&
+            r.candidate_id === candidateId &&
+            r.client_id === clientId &&
+            r.contract_id === contractId &&
+            r.week_ending_date === weekEndingDate
+          )
+        : [];
+      const phase15GroupOk = phase15ForGroup.filter(r => String(r.action || '').toUpperCase() === 'OK').length;
+      const phase15GroupUpdated = phase15ForGroup.filter(r => r.shift_updated === true).length;
+
+      return {
+        all_import_rows: allShiftsArr.length,
+        eligible_rows_after_filter: eligibleShifts.length,
+        candidate_client_rows_with_work_date: candClient.length,
+        candidate_client_rows_in_week: byWeek.length,
+        in_week_this_contract: byWeekThisContract.length,
+        in_week_missing_contract: byWeekMissingContract.length,
+        in_week_other_contract: byWeekOtherContract.length,
+        missing_candidate_total_for_client: missingCandidate.length,
+        missing_client_total_for_candidate: missingClient.length,
+        missing_contract_total_for_candidate_client: missingContract.length,
+        week_ending_weekday_used: weDow,
+        week_ending_weekday_source: source,
+        week_ending_distribution_for_candidate_client: weCounts,
+        phase15_rows_for_group: phase15ForGroup.length,
+        phase15_ok_for_group: phase15GroupOk,
+        phase15_shift_updated_for_group: phase15GroupUpdated
+      };
+    };
+
     for (const gr of classifiedGroups) {
       groups_total++;
 
       const actionUpper = String(gr.action || '').trim().toUpperCase();
-      const previewGroupId = String(gr.preview_group_id || `grp:${gr.contract_id}:${gr.week_ending_date}:${gr.candidate_id}`);
+      const previewGroupId = String(
+        gr.preview_group_id ||
+        `grp:${gr.contract_id}:${gr.week_ending_date}:${gr.candidate_id}`
+      );
 
       const isSelected =
         selectedGroupIds.length
           ? selectedGroupIds.includes(previewGroupId)
           : (gr.default_selected !== false);
 
-      // Only attempt if selected + ready-to-process
       if (!isSelected) continue;
       if (!READY_ACTIONS.has(actionUpper)) continue;
 
-      // NHSP: adjustment-only actions are not implemented here (avoid unsafe overwrite)
       if (actionUpper === 'CREATE_ADJUSTMENT_TS' || actionUpper === 'UPDATE_ADJUSTMENT_TS' || actionUpper === 'CREATE_PAY_ADJUSTMENT_ONLY') {
-        addFail(previewGroupId, actionUpper, 'Weekly NHSP adjustment actions are not implemented in handleNhspApply; refusing to overwrite base timesheet.');
+        addFail(
+          previewGroupId,
+          actionUpper,
+          'Weekly NHSP adjustment actions are not implemented in handleNhspApply; refusing to overwrite base timesheet.',
+          { note: 'Implement explicit safe adjustment rules (like HR self-bill logic) rather than overwriting.' }
+        );
         continue;
       }
 
@@ -13906,36 +14005,63 @@ async function handleNhspApply(env, req, importId) {
       const contractId = gr.contract_id || null;
       const weekEndingDate = gr.week_ending_date || null;
 
+      logInfo({
+        stage: 'group_attempt',
+        import_id: importId,
+        preview_group_id: previewGroupId,
+        action: actionUpper,
+        candidate_id: candidateId,
+        client_id: clientId,
+        contract_id: contractId,
+        week_ending_date: weekEndingDate
+      });
+
       if (!clientId || !candidateId || !contractId || !weekEndingDate) {
-        addFail(previewGroupId, actionUpper, 'Missing candidate_id/client_id/contract_id/week_ending_date on group.');
+        addFail(previewGroupId, actionUpper, 'Missing candidate_id/client_id/contract_id/week_ending_date on group.', {
+          candidate_id: candidateId,
+          client_id: clientId,
+          contract_id: contractId,
+          week_ending_date: weekEndingDate
+        });
         continue;
       }
 
       const key = `${clientId}|${candidateId}|${contractId}|${weekEndingDate}`;
       const bundle = groups.get(key) || null;
-      const grpShifts = bundle?.shifts || [];
+
+      const { weDow } = await ensureClientWeDow(clientId);
+      const directMatched = allShiftsArr.filter(s =>
+        s &&
+        s.work_date &&
+        s.candidate_id === candidateId &&
+        s.client_id === clientId &&
+        s.contract_id === contractId &&
+        computeWeekEndingForWorkDate(s.work_date, weDow) === weekEndingDate
+      );
+
+      const grpShifts = (directMatched.length ? directMatched : (bundle?.shifts || []));
 
       if (!grpShifts.length) {
-        addFail(previewGroupId, actionUpper, 'No shifts available for this group.');
+        const diag = await buildNoShiftsDiagnostics({ candidateId, clientId, contractId, weekEndingDate });
+        addFail(previewGroupId, actionUpper, 'No eligible shifts found for this group (see debug counts).', diag);
         continue;
       }
 
-      const weekStart = bundle?.week_start || computeWeekStartFromWeekEnding(weekEndingDate);
+      const weekStart = computeWeekStartFromWeekEnding(weekEndingDate);
 
       const contract = contractById.get(contractId) || null;
       if (!contract) {
-        addFail(previewGroupId, actionUpper, 'Contract not found for contract_id.');
+        addFail(previewGroupId, actionUpper, 'Contract not found for contract_id.', { contract_id: contractId });
         continue;
       }
 
-      // ✅ Early guard: if contract has no rates_json buckets, skip group
       const pc = payChargeFromContract(contract);
       if (!pc?.pay || !pc?.charge) {
-        addFail(previewGroupId, actionUpper, 'Contract rates missing (rates_json incomplete).');
+        addFail(previewGroupId, actionUpper, 'Contract rates missing (rates_json incomplete).', { contract_id: contractId });
         continue;
       }
 
-      // Ensure base contract_week exists for this week ending
+      // Ensure base contract_week exists
       let cw = null;
       try {
         const { rows: cws } = await sbFetch(
@@ -13973,13 +14099,19 @@ async function handleNhspApply(env, req, importId) {
           );
           const txt = await insCw.text().catch(() => '');
           if (!insCw.ok) {
-            addFail(previewGroupId, actionUpper, `contract_weeks insert failed (${insCw.status}): ${txt || 'unknown error'}`);
+            addFail(previewGroupId, actionUpper, `contract_weeks insert failed (${insCw.status}): ${txt || 'unknown error'}`, {
+              contract_id: contract.id,
+              week_ending_date: weekEndingDate
+            });
             continue;
           }
           const json = txt ? JSON.parse(txt) : [];
           cw = Array.isArray(json) ? json[0] : json;
         } catch (e) {
-          addFail(previewGroupId, actionUpper, `contract_weeks insert threw: ${e?.message || String(e)}`);
+          addFail(previewGroupId, actionUpper, `contract_weeks insert threw: ${e?.message || String(e)}`, {
+            contract_id: contract.id,
+            week_ending_date: weekEndingDate
+          });
           continue;
         }
       }
@@ -13987,12 +14119,24 @@ async function handleNhspApply(env, req, importId) {
       // Find or create weekly timesheet for this contract_week
       let ts = null;
 
-      // ✅ FIX: makeWeeklyBookingId is async now; must await it, otherwise booking_id becomes "{}"
+      // booking id must be awaited (makeBookingId is async)
       let bookingId = null;
       try {
         bookingId = await makeWeeklyBookingId(contract.candidate_id || candidateId, contract, cw);
       } catch (e) {
         bookingId = null;
+      }
+
+      if (!isNonEmptyString(bookingId)) {
+        addFail(previewGroupId, actionUpper, 'Invalid booking_id computed (expected non-empty string).', {
+          booking_id_type: typeof bookingId,
+          booking_id_value: bookingId,
+          contract_id: contract.id,
+          candidate_id: contract.candidate_id || candidateId,
+          client_id: contract.client_id || clientId,
+          week_ending_date: cw?.week_ending_date || weekEndingDate
+        });
+        continue;
       }
 
       // 1) If contract_week already linked, load it
@@ -14012,7 +14156,7 @@ async function handleNhspApply(env, req, importId) {
         }
       }
 
-      // 2) If not linked (or link is stale), try find by booking_id (idempotent recovery)
+      // 2) If not linked, try find by booking_id (idempotent recovery)
       if (!ts && bookingId) {
         try {
           const { rows: tsRows } = await sbFetch(
@@ -14025,7 +14169,6 @@ async function handleNhspApply(env, req, importId) {
           );
           ts = tsRows?.[0] || null;
 
-          // If found and week isn't linked, link it now
           if (ts && !cw.timesheet_id) {
             await fetch(
               `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
@@ -14068,6 +14211,7 @@ async function handleNhspApply(env, req, importId) {
           booking_id: bookingId,
           version: 1,
           is_current: true,
+          status: 'RECEIVED',
 
           sheet_scope: 'WEEKLY',
           submission_mode: 'MANUAL',
@@ -14102,14 +14246,17 @@ async function handleNhspApply(env, req, importId) {
 
           const txt = await insTs.text().catch(() => '');
           if (!insTs.ok) {
-            addFail(previewGroupId, actionUpper, `timesheets insert failed (${insTs.status}): ${txt || 'unknown error'}`);
+            addFail(previewGroupId, actionUpper, `timesheets insert failed (${insTs.status}): ${txt || 'unknown error'}`, {
+              booking_id: bookingId,
+              week_ending_date: weekEndingDate,
+              contract_id: contract.id
+            });
             continue;
           }
 
           const tsJson = txt ? JSON.parse(txt) : [];
           ts = Array.isArray(tsJson) ? tsJson[0] : tsJson;
 
-          // Link contract_week → timesheet
           await fetch(
             `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
             {
@@ -14124,13 +14271,17 @@ async function handleNhspApply(env, req, importId) {
           ).catch(() => {});
           cw.timesheet_id = ts.timesheet_id;
         } catch (e) {
-          addFail(previewGroupId, actionUpper, `timesheets insert threw: ${e?.message || String(e)}`);
+          addFail(previewGroupId, actionUpper, `timesheets insert threw: ${e?.message || String(e)}`, {
+            booking_id: bookingId,
+            week_ending_date: weekEndingDate,
+            contract_id: contract.id
+          });
           continue;
         }
       }
 
       // Link shifts to TS
-      const shiftIdsForTs = grpShifts.map(s => s.id);
+      const shiftIdsForTs = grpShifts.map(s => s.id).filter(Boolean);
       if (shiftIdsForTs.length) {
         const shParam = shiftIdsForTs.map(enc).join(',');
         await fetch(
@@ -14140,7 +14291,7 @@ async function handleNhspApply(env, req, importId) {
             headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
             body: JSON.stringify({
               timesheet_id: ts.timesheet_id,
-              contract_id:  contract.id, // ✅ contract selected by SQL
+              contract_id:  contract.id,
               updated_at:   new Date().toISOString()
             })
           }
@@ -14148,9 +14299,18 @@ async function handleNhspApply(env, req, importId) {
       }
 
       // Build weekly snapshot from contract rates
-      const snapRes = await buildNhspWeeklySnapshot(env, ts, contract, grpShifts, importId, 'NHSP');
+      let snapRes = null;
+      try {
+        snapRes = await buildNhspWeeklySnapshot(env, ts, contract, grpShifts, importId, 'NHSP');
+      } catch (e) {
+        snapRes = { ok: false, reason: e?.message || String(e) };
+      }
+
       if (!snapRes || snapRes.ok !== true) {
-        addFail(previewGroupId, actionUpper, `buildNhspWeeklySnapshot failed: ${snapRes?.reason || 'UNKNOWN'}`);
+        addFail(previewGroupId, actionUpper, `buildNhspWeeklySnapshot failed: ${snapRes?.reason || 'UNKNOWN'}`, {
+          timesheet_id: ts?.timesheet_id || null,
+          contract_id: contract?.id || null
+        });
         continue;
       }
 
@@ -14177,8 +14337,8 @@ async function handleNhspApply(env, req, importId) {
           ).catch(() => {});
         }
       } catch (e) {
-        // non-fatal
-        console.warn('[NHSP_APPLY] failed to patch day_references_json (non-fatal)', {
+        logWarn({
+          stage: 'day_references_patch_failed_non_fatal',
           import_id: importId,
           timesheet_id: ts?.timesheet_id || null,
           err: e?.message || String(e)
@@ -14197,12 +14357,13 @@ async function handleNhspApply(env, req, importId) {
         // non-fatal
       }
 
-      // Overpay advance logic (contract-rate totals + missing bucket reporting)
+      // Overpay advance logic
       try {
         const totals = await computeNhspTotalsForShifts(env, contract, grpShifts);
 
         if (totals?.missingBuckets && totals.missingBuckets.length) {
-          console.warn('[NHSP_APPLY] overpay advance skipped due to missing contract buckets', {
+          logWarn({
+            stage: 'overpay_advance_skipped_missing_buckets',
             import_id: importId,
             contract_id: contract?.id || null,
             client_id: clientId,
@@ -14224,7 +14385,8 @@ async function handleNhspApply(env, req, importId) {
           }
         }
       } catch (e) {
-        console.warn('[NHSP_APPLY] overpay advance logic failed (non-fatal)', {
+        logWarn({
+          stage: 'overpay_advance_logic_failed_non_fatal',
           import_id: importId,
           client_id: clientId,
           candidate_id: candidateId,
@@ -14233,24 +14395,28 @@ async function handleNhspApply(env, req, importId) {
         });
       }
 
-      // ✅ success
       groups_succeeded++;
+
+      logInfo({
+        stage: 'group_success',
+        import_id: importId,
+        preview_group_id: previewGroupId,
+        timesheet_id: ts?.timesheet_id || null
+      });
     }
 
-    if (LOG) {
-      console.log('[NHSP_APPLY]', JSON.stringify({
-        stage: 'completed',
-        import_id: importId,
-        shifts_created: created,
-        shifts_updated: updated,
-        mapped_candidates: mappedCandidates,
-        mapped_clients: mappedClients,
-        groups_total,
-        groups_attempted,
-        groups_succeeded,
-        groups_failed
-      }));
-    }
+    logWarn({
+      stage: 'completed',
+      import_id: importId,
+      shifts_created: created,
+      shifts_updated: updated,
+      mapped_candidates: mappedCandidates,
+      mapped_clients: mappedClients,
+      groups_total,
+      groups_attempted,
+      groups_succeeded,
+      groups_failed
+    });
 
     await writeAudit(
       env,
@@ -14284,13 +14450,11 @@ async function handleNhspApply(env, req, importId) {
       group_fail_samples: failSamples
     }));
   } catch (e) {
-    if (LOG) {
-      console.error('[NHSP_APPLY]', JSON.stringify({
-        stage: 'unexpected_error',
-        import_id: importId,
-        error: e?.message || String(e)
-      }));
-    }
+    logError({
+      stage: 'unexpected_error',
+      import_id: importId,
+      error: e?.message || String(e)
+    });
     return withCORS(env, req, serverError(`Failed to apply NHSP import: ${e?.message || e}`));
   }
 }
