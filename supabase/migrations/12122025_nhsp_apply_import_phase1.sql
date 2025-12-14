@@ -104,9 +104,6 @@ begin
       ) as pay_minutes,
 
       -- Candidate mapping precedence:
-      --  1) candidates.nhsp_hr_name_aliases contains staff_lc OR staff_norm2
-      --  2) fallback to hr_name_mappings.hr_name_norm = staff_lc OR staff_norm2
-      --  3) UNIQUE exact candidate match on (first+last) OR (last+first) using staff_norm2
       coalesce(
         cand_alias.id,
         cand_map.candidate_id,
@@ -114,8 +111,6 @@ begin
       ) as candidate_id,
 
       -- Client mapping:
-      --  1) client_hospitals.hospital_name_norm contains trust_lc OR trust_norm
-      --  2) UNIQUE fallback where norm(clients.name) = trust_norm
       coalesce(
         cli_alias.client_id,
         cli_name.client_id
@@ -123,7 +118,6 @@ begin
 
     from src
 
-    -- shared normalisations (strip spaces/symbols; keep only [a-z0-9])
     cross join lateral (
       select
         nullif(lower(trim(coalesce(src.staff_name,''))), '') as staff_lc,
@@ -132,7 +126,6 @@ begin
         nullif(regexp_replace(lower(coalesce(src.trust_raw,'')), '[^a-z0-9]+', '', 'g'), '') as trust_norm
     ) n
 
-    -- 1) candidate alias match (support legacy + normalised)
     left join lateral (
       select c.id
       from public.candidates c
@@ -145,7 +138,6 @@ begin
       limit 1
     ) cand_alias on true
 
-    -- 2) hr_name_mappings match (support legacy + normalised)
     left join lateral (
       select hm.candidate_id
       from public.hr_name_mappings hm
@@ -159,7 +151,6 @@ begin
       limit 1
     ) cand_map on (cand_alias.id is null)
 
-    -- 3) UNIQUE exact candidate fallback: match staff_norm2 against first+last OR last+first (symbols/spaces removed)
     left join lateral (
       with matches as (
         select c.id as candidate_id
@@ -180,7 +171,6 @@ begin
       from matches
     ) cand_exact_unique on (cand_alias.id is null and cand_map.candidate_id is null)
 
-    -- 1) client alias match (support legacy + normalised)
     left join lateral (
       select ch.client_id
       from public.client_hospitals ch
@@ -193,7 +183,6 @@ begin
       limit 1
     ) cli_alias on true
 
-    -- 2) UNIQUE client fallback: normalised clients.name == trust_norm
     left join lateral (
       with matches as (
         select cl.id as client_id
@@ -208,6 +197,19 @@ begin
         end as client_id
       from matches
     ) cli_name on (cli_alias.client_id is null)
+  ),
+
+  ----------------------------------------------------------------
+  -- Current TSFIN state per timesheet (no reference to nhsp_shifts alias)
+  ----------------------------------------------------------------
+  fin_current as (
+    select distinct on (tf.timesheet_id)
+      tf.timesheet_id,
+      tf.locked_by_invoice_id,
+      tf.paid_at_utc
+    from public.timesheets_financials tf
+    where tf.is_current = true
+    order by tf.timesheet_id, tf.created_at desc
   ),
 
   ins as (
@@ -256,90 +258,91 @@ begin
     where r.external_row_key is not null
       and not exists (
         select 1
-        from public.nhsp_shifts s
-        where s.external_row_key = r.external_row_key
+        from public.nhsp_shifts s2
+        where s2.external_row_key = r.external_row_key
       )
     returning
       (candidate_id is not null) as mapped_candidate,
       (client_id    is not null) as mapped_client
   ),
 
+  ----------------------------------------------------------------
+  -- Build update source rows with safe/blocked flags (avoids illegal LATERAL reference to UPDATE target)
+  ----------------------------------------------------------------
+  upd_src as (
+    select
+      s.external_row_key,
+      s.timesheet_id,
+      s.candidate_id as old_candidate_id,
+      s.client_id    as old_client_id,
+
+      r.work_date,
+      r.staff_name,
+      r.ward,
+      r.assignment_code,
+      r.ref_num,
+      r.start_utc,
+      r.end_utc,
+      r.break_mins,
+      r.pay_minutes,
+
+      r.candidate_id as new_candidate_id,
+      r.client_id    as new_client_id,
+
+      fc.locked_by_invoice_id,
+      fc.paid_at_utc,
+      (fc.timesheet_id is null) as tsfin_missing,
+
+      (
+        s.timesheet_id is null
+        or fc.timesheet_id is null
+        or (fc.locked_by_invoice_id is null and fc.paid_at_utc is null)
+      ) as safe_to_overwrite
+    from public.nhsp_shifts s
+    join resolved r
+      on r.external_row_key = s.external_row_key
+    left join fin_current fc
+      on fc.timesheet_id = s.timesheet_id
+  ),
+
   upd as (
     update public.nhsp_shifts s
     set
       latest_import_id = p_import_id,
-      staff_name       = nullif(r.staff_name, ''),
-      staff_norm       = nullif(lower(r.staff_name), ''),  -- keep existing stored format
-      ward             = nullif(r.ward, ''),
-      ward_norm        = nullif(lower(r.ward), ''),        -- keep existing stored format
-      work_date        = r.work_date,
-      assignment_code  = nullif(r.assignment_code, ''),
-      ref_num          = nullif(r.ref_num, ''),
-      start_utc        = r.start_utc,
-      end_utc          = r.end_utc,
-      break_mins       = coalesce(r.break_mins, 0),
-      pay_minutes      = greatest(0, r.pay_minutes),
+      staff_name       = nullif(u.staff_name, ''),
+      staff_norm       = nullif(lower(u.staff_name), ''),  -- keep existing stored format
+      ward             = nullif(u.ward, ''),
+      ward_norm        = nullif(lower(u.ward), ''),        -- keep existing stored format
+      work_date        = u.work_date,
+      assignment_code  = nullif(u.assignment_code, ''),
+      ref_num          = nullif(u.ref_num, ''),
+      start_utc        = u.start_utc,
+      end_utc          = u.end_utc,
+      break_mins       = coalesce(u.break_mins, 0),
+      pay_minutes      = greatest(0, u.pay_minutes),
       source_system    = 'NHSP'::hr_source_enum,
       updated_at       = now(),
 
-      -- ✅ UPDATED FIX:
-      -- Allow corrected candidate_id/client_id to overwrite when it is SAFE.
-      -- SAFE means:
+      -- ✅ UPDATED FIX (SAFE OVERWRITE):
+      -- Allow corrected candidate_id/client_id to overwrite when SAFE:
       --   - shift not linked to a timesheet yet, OR
       --   - linked timesheet has no current TSFIN row, OR
       --   - linked timesheet TSFIN exists and is not paid and not invoice-locked.
       candidate_id     = case
-                           when r.candidate_id is not null
-                            and (
-                              s.timesheet_id is null
-                              or fin.tsfin_missing = true
-                              or (fin.locked_by_invoice_id is null and fin.paid_at_utc is null)
-                            )
-                             then r.candidate_id
+                           when u.new_candidate_id is not null and u.safe_to_overwrite
+                             then u.new_candidate_id
                            else s.candidate_id
                          end,
-
       client_id        = case
-                           when r.client_id is not null
-                            and (
-                              s.timesheet_id is null
-                              or fin.tsfin_missing = true
-                              or (fin.locked_by_invoice_id is null and fin.paid_at_utc is null)
-                            )
-                             then r.client_id
+                           when u.new_client_id is not null and u.safe_to_overwrite
+                             then u.new_client_id
                            else s.client_id
                          end
-
-    from resolved r
-    left join lateral (
-      select
-        tf.locked_by_invoice_id,
-        tf.paid_at_utc,
-        (tf.timesheet_id is null) as tsfin_missing
-      from public.timesheets_financials tf
-      where tf.timesheet_id = s.timesheet_id
-        and tf.is_current = true
-      order by tf.created_at desc
-      limit 1
-    ) fin on true
-    where s.external_row_key = r.external_row_key
+    from upd_src u
+    where s.external_row_key = u.external_row_key
     returning
-      (
-        r.candidate_id is not null
-        and (
-          s.timesheet_id is null
-          or fin.tsfin_missing = true
-          or (fin.locked_by_invoice_id is null and fin.paid_at_utc is null)
-        )
-      ) as mapped_candidate,
-      (
-        r.client_id is not null
-        and (
-          s.timesheet_id is null
-          or fin.tsfin_missing = true
-          or (fin.locked_by_invoice_id is null and fin.paid_at_utc is null)
-        )
-      ) as mapped_client
+      (u.old_candidate_id is null and u.new_candidate_id is not null and u.safe_to_overwrite) as mapped_candidate,
+      (u.old_client_id    is null and u.new_client_id    is not null and u.safe_to_overwrite) as mapped_client
   )
 
   select
