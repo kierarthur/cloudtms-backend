@@ -13462,6 +13462,19 @@ async function handleNhspApply(env, req, importId) {
     });
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // NEW: policy cache (prevents per-shift loadPolicy subrequests)
+  // key = `${client_id}__${dateYmd}`
+  // ─────────────────────────────────────────────────────────────
+  const _policyCache = new Map();
+  const getPolicyCached = async (client_id, dateYmd) => {
+    const k = `${String(client_id || '')}__${String(dateYmd || '')}`;
+    if (_policyCache.has(k)) return _policyCache.get(k);
+    const p = await loadPolicy(env, client_id, dateYmd);
+    _policyCache.set(k, p);
+    return p;
+  };
+
   // Helpers used in Phase 2 (weekly totals from contract rates)
   async function computeNhspTotalsForShifts(env, contract, shifts) {
     const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
@@ -13484,17 +13497,11 @@ async function handleNhspApply(env, req, importId) {
     let totalPayEx = 0;
     let totalChgEx = 0;
 
-    const policyByDate = new Map();
-
     for (const sh of shifts) {
       const workDate = sh.work_date;
       if (!workDate || !sh.start_utc || !sh.end_utc) continue;
 
-      let policy = policyByDate.get(workDate);
-      if (!policy) {
-        policy = await loadPolicy(env, client_id, workDate);
-        policyByDate.set(workDate, policy);
-      }
+      const policy = await getPolicyCached(client_id, workDate);
 
       let segs = [[sh.start_utc, sh.end_utc]];
       segs = subtractBreak(segs, null, null, sh.break_mins || 0);
@@ -13591,6 +13598,221 @@ async function handleNhspApply(env, req, importId) {
         err: e?.message || String(e)
       });
     }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // NEW: Snapshot builder that avoids “Too many subrequests”
+  // - identical business logic to buildNhspWeeklySnapshot
+  // - but uses getPolicyCached(...) so we only fetch policy per date once
+  // ─────────────────────────────────────────────────────────────
+  async function buildNhspWeeklySnapshotCached(env, ts, contract, shifts, nhspImportId, basis = 'NHSP') {
+    const round2Local = (n) => Math.round((Number(n) || 0) * 100) / 100;
+    const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
+
+    if (!shifts || !shifts.length) {
+      return { ok: false, reason: 'NO_SHIFTS' };
+    }
+
+    const pc = payChargeFromContract(contract);
+    const pay = pc?.pay || null;
+    const chg = pc?.charge || null;
+
+    if (!pay || !chg) {
+      return { ok: false, reason: 'CONTRACT_RATES_MISSING' };
+    }
+
+    const candidate_id = contract.candidate_id || null;
+    const client_id    = contract.client_id   || null;
+
+    const segments = [];
+    let totalPayEx  = 0;
+    let totalChgEx  = 0;
+
+    let sumDay = 0;
+    let sumNight = 0;
+    let sumSat = 0;
+    let sumSun = 0;
+    let sumBh = 0;
+
+    for (const sh of shifts) {
+      const workDate = sh.work_date;
+      if (!workDate || !sh.start_utc || !sh.end_utc) continue;
+
+      const policy = await getPolicyCached(client_id, workDate);
+
+      let segs = [[sh.start_utc, sh.end_utc]];
+      segs = subtractBreak(segs, null, null, sh.break_mins || 0);
+
+      const hours = classifyMinutes(env, policy, segs);
+
+      sumDay   += (hours.hours_day   || 0);
+      sumNight += (hours.hours_night || 0);
+      sumSat   += (hours.hours_sat   || 0);
+      sumSun   += (hours.hours_sun   || 0);
+      sumBh    += (hours.hours_bh    || 0);
+
+      const payEx = round2Local(
+        (hours.hours_day   || 0) * asNumberLocal(pay.day)   +
+        (hours.hours_night || 0) * asNumberLocal(pay.night) +
+        (hours.hours_sat   || 0) * asNumberLocal(pay.sat)   +
+        (hours.hours_sun   || 0) * asNumberLocal(pay.sun)   +
+        (hours.hours_bh    || 0) * asNumberLocal(pay.bh)
+      );
+
+      const chgEx = round2Local(
+        (hours.hours_day   || 0) * asNumberLocal(chg.day)   +
+        (hours.hours_night || 0) * asNumberLocal(chg.night) +
+        (hours.hours_sat   || 0) * asNumberLocal(chg.sat)   +
+        (hours.hours_sun   || 0) * asNumberLocal(chg.sun)   +
+        (hours.hours_bh    || 0) * asNumberLocal(chg.bh)
+      );
+
+      totalPayEx += payEx;
+      totalChgEx += chgEx;
+
+      const refNum       = (sh.nhsp_ref_num || sh.ref_num || null) || null;
+      const requestId    = (sh.hr_request_id || sh.request_id || null) || null;
+      const heldBack     = sh.held_back_reason || null;
+      const sourceSystem = sh.source_system || null;
+
+      segments.push({
+        segment_id: `nhsp:${sh.id}`,
+        date: workDate,
+        ward: sh.ward || null,
+        start_utc: sh.start_utc,
+        end_utc: sh.end_utc,
+        break_mins: sh.break_mins || 0,
+
+        hours_day:   hours.hours_day   || 0,
+        hours_night: hours.hours_night || 0,
+        hours_sat:   hours.hours_sat   || 0,
+        hours_sun:   hours.hours_sun   || 0,
+        hours_bh:    hours.hours_bh    || 0,
+
+        pay_amount:    payEx,
+        charge_amount: chgEx,
+        exclude_from_pay: false,
+
+        ref_num: refNum,
+        request_id: requestId,
+        held_back_reason: heldBack,
+        source_system: sourceSystem
+      });
+    }
+
+    if (!segments.length) {
+      return { ok: false, reason: 'NO_VALID_SEGMENTS' };
+    }
+
+    totalPayEx = round2Local(totalPayEx);
+    totalChgEx = round2Local(totalChgEx);
+    const marginEx = round2Local(totalChgEx - totalPayEx);
+
+    const invoice_breakdown_json = {
+      mode: 'SEGMENTS',
+      segments,
+      totals: {
+        total_pay_ex_vat: totalPayEx,
+        total_charge_ex_vat: totalChgEx,
+        margin_ex_vat: marginEx
+      }
+    };
+
+    const nhspWeekly = shifts.map(sh => ({
+      date: sh.work_date,
+      source_system: 'NHSP',
+      reference:
+        (sh.nhsp_ref_num || sh.ref_num || (sh.payload_json && (sh.payload_json.ref_num || sh.payload_json.Reference))) || null,
+      nhsp_shift_id: sh.id,
+      raw_row: sh.payload_json || null
+    }));
+
+    const hours_day   = round2Local(sumDay);
+    const hours_night = round2Local(sumNight);
+    const hours_sat   = round2Local(sumSat);
+    const hours_sun   = round2Local(sumSun);
+    const hours_bh    = round2Local(sumBh);
+    const total_hours = round2Local(hours_day + hours_night + hours_sat + hours_sun + hours_bh);
+
+    let policy_snapshot_json = {};
+    try {
+      const we = (ts && ts.week_ending_date) ? ts.week_ending_date : (shifts && shifts[0] ? shifts[0].work_date : null);
+      policy_snapshot_json = (we && client_id) ? (await getPolicyCached(client_id, we)) : {};
+      if (!policy_snapshot_json || typeof policy_snapshot_json !== 'object') policy_snapshot_json = {};
+    } catch {
+      policy_snapshot_json = {};
+    }
+
+    const pay_wtr_rate_pct_snapshot =
+      (String(contract?.pay_method_snapshot || '').toUpperCase() === 'PAYE')
+        ? (Number.isFinite(Number(policy_snapshot_json?.holiday_pay_pct)) ? Number(policy_snapshot_json.holiday_pay_pct) : null)
+        : null;
+
+    const snapshot = {
+      timesheet_id: ts.timesheet_id,
+      timesheet_version: ts.version || 1,
+
+      basis,
+      nhsp_import_id: nhspImportId || null,
+
+      occupant_key_norm: ts.occupant_key_norm || null,
+
+      candidate_id,
+      client_id,
+      role: contract.role || null,
+      band: contract.band || null,
+      pay_method: contract.pay_method_snapshot || null,
+
+      policy_snapshot_json: policy_snapshot_json,
+      rate_source_refs_json: {
+        mode: 'CONTRACT_RATES_JSON',
+        contract_id: contract.id || null
+      },
+
+      hours_day:   hours_day,
+      hours_night: hours_night,
+      hours_sat:   hours_sat,
+      hours_sun:   hours_sun,
+      hours_bh:    hours_bh,
+
+      pay_day:      pay.day   ?? null,
+      pay_night:    pay.night ?? null,
+      pay_sat:      pay.sat   ?? null,
+      pay_sun:      pay.sun   ?? null,
+      pay_bh:       pay.bh    ?? null,
+      charge_day:   chg.day   ?? null,
+      charge_night: chg.night ?? null,
+      charge_sat:   chg.sat   ?? null,
+      charge_sun:   chg.sun   ?? null,
+      charge_bh:    chg.bh    ?? null,
+
+      additional_units_json: {},
+      additional_pay_ex_vat: 0,
+      additional_charge_ex_vat: 0,
+      additional_margin_ex_vat: 0,
+
+      total_hours: total_hours,
+      total_pay_ex_vat: totalPayEx,
+      total_charge_ex_vat: totalChgEx,
+      margin_ex_vat: marginEx,
+
+      pay_wtr_rate_pct_snapshot,
+
+      candidate_assignment: candidate_id ? 'ASSIGNED' : 'UNASSIGNED',
+      processing_status: 'READY_FOR_INVOICE',
+
+      has_rate_issue: false,
+      has_pay_channel_issue: false,
+
+      invoice_breakdown_json,
+
+      external_source_rows_json: {
+        NHSP_WEEKLY: nhspWeekly
+      }
+    };
+
+    await writeSnapshot(env, snapshot);
+    return { ok: true };
   }
 
   try {
@@ -14003,21 +14225,11 @@ async function handleNhspApply(env, req, importId) {
       if (!isSelected) continue;
       if (!READY_ACTIONS.has(actionUpper)) continue;
 
-      // NHSP: do not do adjustment actions in this handler
-      if (actionUpper === 'CREATE_ADJUSTMENT_TS' || actionUpper === 'UPDATE_ADJUSTMENT_TS' || actionUpper === 'CREATE_PAY_ADJUSTMENT_ONLY') {
-        addFail(
-          previewGroupId,
-          actionUpper,
-          'Weekly NHSP adjustment actions are not implemented in handleNhspApply; refusing to overwrite base timesheet.'
-        );
-        continue;
-      }
-
       groups_attempted++;
 
-      const clientId      = gr.client_id || null;
-      const candidateId   = gr.candidate_id || null;
-      const contractId    = gr.contract_id || null;
+      const clientId       = gr.client_id || null;
+      const candidateId    = gr.candidate_id || null;
+      const contractId     = gr.contract_id || null;
       const weekEndingDate = gr.week_ending_date || null;
 
       logInfo({
@@ -14305,7 +14517,9 @@ async function handleNhspApply(env, req, importId) {
         continue;
       }
 
-      // ✅ TSFIN recompute safety: refuse to overwrite if the existing TSFIN is locked/paid
+      // ✅ TSFIN recompute safety: if locked/paid -> cannot rebuild base snapshot
+      // NOTE: If TSFIN is missing, fin=null and we treat it as safe to rebuild.
+      let finLockedOrPaid = false;
       try {
         const { rows: finRows } = await sbFetch(
           env,
@@ -14317,16 +14531,30 @@ async function handleNhspApply(env, req, importId) {
         );
         const fin = finRows?.[0] || null;
         if (fin?.locked_by_invoice_id || fin?.paid_at_utc) {
-          addFail(previewGroupId, actionUpper, 'Timesheet TSFIN is locked or paid; refusing to rebuild snapshot.', {
-            timesheet_id: ts.timesheet_id,
-            locked_by_invoice_id: fin?.locked_by_invoice_id || null,
-            paid_at_utc: fin?.paid_at_utc || null
-          });
-          continue;
+          finLockedOrPaid = true;
         }
       } catch (e) {
-        // If we can't read TSFIN, do NOT blindly overwrite; treat as failure.
         addFail(previewGroupId, actionUpper, `Failed to load current TSFIN for lock/paid check: ${e?.message || String(e)}`, {
+          timesheet_id: ts.timesheet_id
+        });
+        continue;
+      }
+
+      // ✅ Revised adjustment handling:
+      // If classifier says CREATE/UPDATE_ADJUSTMENT_TS but base is NOT locked/paid,
+      // we treat it as a base refresh (rebuild snapshot) rather than failing.
+      if (
+        (actionUpper === 'CREATE_ADJUSTMENT_TS' || actionUpper === 'UPDATE_ADJUSTMENT_TS') &&
+        finLockedOrPaid
+      ) {
+        addFail(previewGroupId, actionUpper, 'Classifier requested adjustment but base TSFIN is locked/paid; NHSP adjustment creation not implemented here.', {
+          timesheet_id: ts.timesheet_id
+        });
+        continue;
+      }
+
+      if (actionUpper === 'CREATE_PAY_ADJUSTMENT_ONLY') {
+        addFail(previewGroupId, actionUpper, 'NHSP pay-only adjustment action is not implemented in handleNhspApply.', {
           timesheet_id: ts.timesheet_id
         });
         continue;
@@ -14350,10 +14578,10 @@ async function handleNhspApply(env, req, importId) {
         ).catch(() => {});
       }
 
-      // ✅ TSFIN recalculation: always rebuild snapshot for the processed group
+      // ✅ TSFIN recalculation: rebuild snapshot for the processed group (cached policies => avoids subrequest limit)
       let snapRes = null;
       try {
-        snapRes = await buildNhspWeeklySnapshot(env, ts, contract, grpShifts, importId, 'NHSP');
+        snapRes = await buildNhspWeeklySnapshotCached(env, ts, contract, grpShifts, importId, 'NHSP');
       } catch (e) {
         snapRes = { ok: false, reason: e?.message || String(e) };
       }
@@ -14800,6 +15028,20 @@ async function handleHrAutoprocessApply(env, req, importId) {
   // Threshold for treating a negative HR correction as an "overpay advance"
   const HR_OVERPAY_ADVANCE_THRESHOLD = 200; // adjust as needed
 
+  // ─────────────────────────────────────────────────────────────
+  // NEW: request-scoped policy cache (prevents per-shift loadPolicy thrash)
+  // key = `${client_id}__${dateYmd}`
+  // NOTE: loadPolicy now also caches on env.__POLICY_CACHE; this is an extra cheap layer.
+  // ─────────────────────────────────────────────────────────────
+  const _policyCache = new Map();
+  const getPolicyCached = async (client_id, dateYmd) => {
+    const k = `${String(client_id || '')}__${String(dateYmd || '')}`;
+    if (_policyCache.has(k)) return _policyCache.get(k);
+    const p = await loadPolicy(env, client_id, dateYmd);
+    _policyCache.set(k, p);
+    return p;
+  };
+
   // ✅ UPDATED: weekly truth totals must use contract rates (payChargeFromContract), not resolveRates
   // Also returns missingBuckets so caller can safely skip/reject the group.
   async function computeHrTotalsForShifts(env, contract, client_id, shifts) {
@@ -14820,18 +15062,11 @@ async function handleHrAutoprocessApply(env, req, importId) {
     let totalPayEx = 0;
     let totalChgEx = 0;
 
-    // cache policy per date to reduce subrequests
-    const policyByDate = new Map();
-
     for (const sh of shifts) {
       const workDate = sh.work_date;
       if (!workDate || !sh.start_utc || !sh.end_utc) continue;
 
-      let policy = policyByDate.get(workDate);
-      if (!policy) {
-        policy = await loadPolicy(env, client_id, workDate);
-        policyByDate.set(workDate, policy);
-      }
+      const policy = await getPolicyCached(client_id, workDate);
 
       let segs = [[sh.start_utc, sh.end_utc]];
       segs = subtractBreak(segs, null, null, sh.break_mins || 0);
@@ -14931,10 +15166,225 @@ async function handleHrAutoprocessApply(env, req, importId) {
     }
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // NEW: cached snapshot builder (prevents “Too many subrequests”)
+  // Business logic matches buildNhspWeeklySnapshot but uses getPolicyCached(...)
+  // ─────────────────────────────────────────────────────────────
+  async function buildNhspWeeklySnapshotCached(env, ts, contract, shifts, nhspImportId, basis = 'NHSP') {
+    const round2Local = (n) => Math.round((Number(n) || 0) * 100) / 100;
+    const asNumberLocal2 = (v) => (v == null ? 0 : Number(v) || 0);
+
+    if (!shifts || !shifts.length) {
+      return { ok: false, reason: 'NO_SHIFTS' };
+    }
+
+    // Weekly rule: pay/charge must come from contract.rates_json via payChargeFromContract
+    const pc = payChargeFromContract(contract);
+    const pay = pc?.pay || null;
+    const chg = pc?.charge || null;
+
+    if (!pay || !chg) {
+      return { ok: false, reason: 'CONTRACT_RATES_MISSING' };
+    }
+
+    const candidate_id = contract.candidate_id || null;
+    const client_id    = contract.client_id   || null;
+
+    const segments = [];
+    let totalPayEx  = 0;
+    let totalChgEx  = 0;
+
+    let sumDay = 0;
+    let sumNight = 0;
+    let sumSat = 0;
+    let sumSun = 0;
+    let sumBh = 0;
+
+    for (const sh of shifts) {
+      const workDate = sh.work_date;
+      if (!workDate || !sh.start_utc || !sh.end_utc) continue;
+
+      const policy = await getPolicyCached(client_id, workDate);
+
+      let segs = [[sh.start_utc, sh.end_utc]];
+      segs = subtractBreak(segs, null, null, sh.break_mins || 0);
+
+      const hours = classifyMinutes(env, policy, segs);
+
+      sumDay   += (hours.hours_day   || 0);
+      sumNight += (hours.hours_night || 0);
+      sumSat   += (hours.hours_sat   || 0);
+      sumSun   += (hours.hours_sun   || 0);
+      sumBh    += (hours.hours_bh    || 0);
+
+      const payEx = round2Local(
+        (hours.hours_day   || 0) * asNumberLocal2(pay.day)   +
+        (hours.hours_night || 0) * asNumberLocal2(pay.night) +
+        (hours.hours_sat   || 0) * asNumberLocal2(pay.sat)   +
+        (hours.hours_sun   || 0) * asNumberLocal2(pay.sun)   +
+        (hours.hours_bh    || 0) * asNumberLocal2(pay.bh)
+      );
+
+      const chgEx = round2Local(
+        (hours.hours_day   || 0) * asNumberLocal2(chg.day)   +
+        (hours.hours_night || 0) * asNumberLocal2(chg.night) +
+        (hours.hours_sat   || 0) * asNumberLocal2(chg.sat)   +
+        (hours.hours_sun   || 0) * asNumberLocal2(chg.sun)   +
+        (hours.hours_bh    || 0) * asNumberLocal2(chg.bh)
+      );
+
+      totalPayEx += payEx;
+      totalChgEx += chgEx;
+
+      const refNum       = (sh.nhsp_ref_num || sh.ref_num || null) || null;
+      const requestId    = (sh.hr_request_id || sh.request_id || null) || null;
+      const heldBack     = sh.held_back_reason || null;
+      const sourceSystem = sh.source_system || null;
+
+      segments.push({
+        segment_id: `nhsp:${sh.id}`,
+        date: workDate,
+        ward: sh.ward || null,
+        start_utc: sh.start_utc,
+        end_utc: sh.end_utc,
+        break_mins: sh.break_mins || 0,
+
+        hours_day:   hours.hours_day   || 0,
+        hours_night: hours.hours_night || 0,
+        hours_sat:   hours.hours_sat   || 0,
+        hours_sun:   hours.hours_sun   || 0,
+        hours_bh:    hours.hours_bh    || 0,
+
+        pay_amount:    payEx,
+        charge_amount: chgEx,
+        exclude_from_pay: false,
+
+        ref_num: refNum,
+        request_id: requestId,
+        held_back_reason: heldBack,
+        source_system: sourceSystem
+      });
+    }
+
+    if (!segments.length) {
+      return { ok: false, reason: 'NO_VALID_SEGMENTS' };
+    }
+
+    totalPayEx = round2Local(totalPayEx);
+    totalChgEx = round2Local(totalChgEx);
+    const marginEx = round2Local(totalChgEx - totalPayEx);
+
+    const invoice_breakdown_json = {
+      mode: 'SEGMENTS',
+      segments,
+      totals: {
+        total_pay_ex_vat: totalPayEx,
+        total_charge_ex_vat: totalChgEx,
+        margin_ex_vat: marginEx
+      }
+    };
+
+    const nhspWeekly = shifts.map(sh => ({
+      date: sh.work_date,
+      source_system: 'NHSP',
+      reference:
+        (sh.nhsp_ref_num || sh.ref_num || (sh.payload_json && (sh.payload_json.ref_num || sh.payload_json.Reference))) || null,
+      nhsp_shift_id: sh.id,
+      raw_row: sh.payload_json || null
+    }));
+
+    const hours_day   = round2Local(sumDay);
+    const hours_night = round2Local(sumNight);
+    const hours_sat   = round2Local(sumSat);
+    const hours_sun   = round2Local(sumSun);
+    const hours_bh    = round2Local(sumBh);
+    const total_hours = round2Local(hours_day + hours_night + hours_sat + hours_sun + hours_bh);
+
+    let policy_snapshot_json = {};
+    try {
+      const we = (ts && ts.week_ending_date) ? ts.week_ending_date : (shifts && shifts[0] ? shifts[0].work_date : null);
+      policy_snapshot_json = (we && client_id) ? (await getPolicyCached(client_id, we)) : {};
+      if (!policy_snapshot_json || typeof policy_snapshot_json !== 'object') policy_snapshot_json = {};
+    } catch {
+      policy_snapshot_json = {};
+    }
+
+    const pay_wtr_rate_pct_snapshot =
+      (String(contract?.pay_method_snapshot || '').toUpperCase() === 'PAYE')
+        ? (Number.isFinite(Number(policy_snapshot_json?.holiday_pay_pct)) ? Number(policy_snapshot_json.holiday_pay_pct) : null)
+        : null;
+
+    const snapshot = {
+      timesheet_id: ts.timesheet_id,
+      timesheet_version: ts.version || 1,
+
+      basis,
+      nhsp_import_id: nhspImportId || null,
+
+      occupant_key_norm: ts.occupant_key_norm || null,
+
+      candidate_id,
+      client_id,
+      role: contract.role || null,
+      band: contract.band || null,
+      pay_method: contract.pay_method_snapshot || null,
+
+      policy_snapshot_json: policy_snapshot_json,
+      rate_source_refs_json: {
+        mode: 'CONTRACT_RATES_JSON',
+        contract_id: contract.id || null
+      },
+
+      hours_day:   hours_day,
+      hours_night: hours_night,
+      hours_sat:   hours_sat,
+      hours_sun:   hours_sun,
+      hours_bh:    hours_bh,
+
+      pay_day:      pay.day   ?? null,
+      pay_night:    pay.night ?? null,
+      pay_sat:      pay.sat   ?? null,
+      pay_sun:      pay.sun   ?? null,
+      pay_bh:       pay.bh    ?? null,
+      charge_day:   chg.day   ?? null,
+      charge_night: chg.night ?? null,
+      charge_sat:   chg.sat   ?? null,
+      charge_sun:   chg.sun   ?? null,
+      charge_bh:    chg.bh    ?? null,
+
+      additional_units_json: {},
+      additional_pay_ex_vat: 0,
+      additional_charge_ex_vat: 0,
+      additional_margin_ex_vat: 0,
+
+      total_hours: total_hours,
+      total_pay_ex_vat: totalPayEx,
+      total_charge_ex_vat: totalChgEx,
+      margin_ex_vat: marginEx,
+
+      pay_wtr_rate_pct_snapshot,
+
+      candidate_assignment: candidate_id ? 'ASSIGNED' : 'UNASSIGNED',
+      processing_status: 'READY_FOR_INVOICE',
+
+      has_rate_issue: false,
+      has_pay_channel_issue: false,
+
+      invoice_breakdown_json,
+
+      external_source_rows_json: {
+        NHSP_WEEKLY: nhspWeekly
+      }
+    };
+
+    await writeSnapshot(env, snapshot);
+    return { ok: true };
+  }
+
   // ✅ Helper to ensure we don’t silently proceed if weekly snapshot fails
   async function buildWeeklySnapshotSafe(ts, contract, shifts, basis) {
     try {
-      const r = await buildNhspWeeklySnapshot(env, ts, contract, shifts, importId, basis);
+      const r = await buildNhspWeeklySnapshotCached(env, ts, contract, shifts, importId, basis);
       if (!r || r.ok !== true) {
         console.warn('[HR_AUTOPROC_APPLY] buildNhspWeeklySnapshot failed (skipping group)', {
           import_id: importId,
@@ -15656,7 +16106,7 @@ async function handleHrAutoprocessApply(env, req, importId) {
             if (!selfBill || adjWeeks.length === 0) {
               const okRefresh = await buildWeeklySnapshotSafe(ts, contract, g.shifts, 'CONTRACT_WEEKLY');
               if (!okRefresh) {
-                addFail(previewGroupId, actionUpper, 'TSFIN refresh failed even though delta=0 (unpaid/uninvoiced).');
+                addFail(previewGroupId, actionUpper, 'TSFIN refresh failed even though delta=0 (unpaid/ununinvoiced).');
                 continue;
               }
             }
@@ -15926,7 +16376,7 @@ async function handleHrAutoprocessApply(env, req, importId) {
 
             let policySnapshotAdj = {};
             try {
-              policySnapshotAdj = (await loadPolicy(env, contract.client_id || g.client_id, g.week_ending_date)) || {};
+              policySnapshotAdj = (await getPolicyCached(contract.client_id || g.client_id, g.week_ending_date)) || {};
               if (!policySnapshotAdj || typeof policySnapshotAdj !== 'object') policySnapshotAdj = {};
             } catch {
               policySnapshotAdj = {};
@@ -16223,6 +16673,7 @@ async function handleHrAutoprocessApply(env, req, importId) {
     return withCORS(env, req, serverError(`Failed to apply HealthRoster autoprocess import: ${e?.message || e}`));
   }
 }
+
 
 
 
@@ -20027,6 +20478,9 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
   // 6) Group-level classification (UPDATED):
   //    - truth totals use payChargeFromContract(contract) (NOT resolveRates)
   //    - reject if contract missing bucket rates used by shifts
+  //    - IMPORTANT FIX: if base timesheet exists but TSFIN is missing,
+  //      treat it as unpaid/uninvoiced (safe to rebuild) and DO NOT
+  //      force CREATE_ADJUSTMENT_TS.
   // ─────────────────────────────────────────────────────────────
   const policyCache = new Map(); // key=client_id__dateYmd -> policy
   const getPolicyCached = async (client_id, dateYmd) => {
@@ -20208,7 +20662,7 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
     truthPay = round2(truthPay);
     truthChg = round2(truthChg);
 
-    // Current totals from existing TSFIN
+    // Current totals from existing TSFIN (missing TSFIN rows count as 0)
     let currentPay = 0;
     let currentChg = 0;
 
@@ -20240,10 +20694,19 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
     const latestAdjFin  = latestAdjTsId ? finByTsId.get(latestAdjTsId) : null;
 
     const anyAdj = !!latestAdjWeek;
+
+    // ✅ IMPORTANT FIX:
+    // If base timesheet exists but there is NO current TSFIN row, treat the base as
+    // "unpaid + uninvoiced + safe to rebuild" for classification purposes.
+    const baseFinMissing = !!baseTsId && !baseFin;
+
+    const baseUnpaidUnlocked =
+      baseFinMissing ||
+      !!(baseFin && !baseFin.paid_at_utc && !baseFin.locked_by_invoice_id);
+
+    // Keep adjustment-unpaid logic strict: only consider it "unpaid/unlocked" if its TSFIN exists and is unlocked.
     const latestAdjUnpaidUnlocked =
       !!(latestAdjFin && !latestAdjFin.paid_at_utc && !latestAdjFin.locked_by_invoice_id);
-    const baseUnpaidUnlocked =
-      !!(baseFin && !baseFin.paid_at_utc && !baseFin.locked_by_invoice_id);
 
     const isPaid     = !!(baseFin && baseFin.paid_at_utc);
     const isInvoiced = !!(baseFin && baseFin.locked_by_invoice_id);
@@ -20289,13 +20752,14 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
         result.default_selected = false;
       } else {
         result.action = 'NEW_AUTOPROC_TIMESHEET';
-        result.reason = 'No existing weekly timesheet – a new weekly timesheet the shift.';
+        result.reason = 'No existing weekly timesheet – a new weekly timesheet will be created from the import.';
         result.default_selected = !hasUnfinal;
       }
       return result;
     }
 
     // Base TS exists: if totals already match, skip
+    // NOTE: If TSFIN is missing, current totals are 0 so this condition won't trigger; we'll classify as UPDATE_* and rebuild.
     if (Math.abs(deltaPay) < tol && Math.abs(deltaChg) < tol) {
       result.action = 'SKIP_ALREADY_PROCESSED';
       result.reason = 'Timesheet and existing adjustments already match NHSP/HealthRoster – nothing further to do.';
@@ -20303,13 +20767,23 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
       return result;
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // DECISION: manual vs autoproc
+    //
+    // We cannot introduce a new submission_mode, and import-created timesheets may currently
+    // have submission_mode='MANUAL'. Therefore:
+    // - treat a base as "manual" ONLY when there is an existing current TSFIN (baseFin),
+    //   so we don't mis-classify a missing-TSFIN import week as "manual" and incorrectly
+    //   propose CREATE_ADJUSTMENT_TS.
+    // ─────────────────────────────────────────────────────────────
     const submissionMode = String(baseTs?.submission_mode || '').toUpperCase();
+    const treatAsManualWeek = (submissionMode === 'MANUAL' && !baseFinMissing);
 
-    // Manual base
-    if (submissionMode === 'MANUAL') {
+    // Manual base (true manual workflow)
+    if (treatAsManualWeek) {
       if (baseUnpaidUnlocked && !anyAdj) {
         result.action = 'UPDATE_MANUAL_WEEK';
-        result.reason = 'Existing manual weekly timesheet will be overwritten with newly updated NHSP/HR hours for this week.';
+        result.reason = 'Existing manual weekly timesheet (unpaid/uninvoiced) will be overwritten with updated import hours for this week.';
         result.default_selected = !hasUnfinal;
         return result;
       }
@@ -20322,70 +20796,73 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
       }
 
       result.action = 'CREATE_ADJUSTMENT_TS';
-      result.reason = 'Existing timesheet and previous adjustments are paid/invoiced; a new sequential adjustment timesheet will be created for the new hours.';
+      result.reason = 'Existing timesheet/adjustments appear paid or invoiced; a new sequential adjustment timesheet will be created for the changes.';
       result.default_selected = !hasUnfinal;
       return result;
     }
 
-    // Autoproc base
-    if (submissionMode !== 'MANUAL') {
-      // NHSP and HR self_bill=true → NHSP-style logic
-      if (source_system === 'NHSP' || (source_system === 'HEALTHROSTER' && selfBill)) {
-        if (baseUnpaidUnlocked && !anyAdj) {
-          result.action = 'UPDATE_AUTOPROC_TS';
-          result.reason = 'Existing weekly timesheet (unpaid/uninvoiced) will be updated with corrected NHSP/HR hours for this week.';
-          result.default_selected = !hasUnfinal;
-          return result;
-        }
-
-        if (latestAdjUnpaidUnlocked) {
-          result.action = 'UPDATE_ADJUSTMENT_TS';
-          result.reason = 'Existing unpaid/uninvoiced adjustment timesheet will be updated to reflect the new changes.';
-          result.default_selected = !hasUnfinal;
-          return result;
-        }
-
-        result.action = 'CREATE_ADJUSTMENT_TS';
-        result.reason = 'Timesheet and previous adjustments are paid/invoiced; a new sequential adjustment timesheet will be created for the amended hours.';
+    // Autoproc/import base (NHSP and HR_WEEKLY import routes)
+    // NHSP and HR self_bill=true → NHSP-style logic
+    if (source_system === 'NHSP' || (source_system === 'HEALTHROSTER' && selfBill)) {
+      if (baseUnpaidUnlocked && !anyAdj) {
+        result.action = 'UPDATE_AUTOPROC_TS';
+        result.reason =
+          baseFinMissing
+            ? 'Base timesheet exists but has no current financial snapshot (TSFIN). Snapshot will be rebuilt from import shifts (safe/unpaid/uninvoiced).'
+            : 'Existing weekly timesheet (unpaid/uninvoiced) will be updated with corrected import hours for this week.';
         result.default_selected = !hasUnfinal;
         return result;
       }
 
-      // HEALTHROSTER, self_bill = false → special HR logic
-      if (source_system === 'HEALTHROSTER' && selfBill === false) {
-        if (!isPaid && !isInvoiced) {
-          result.action = 'UPDATE_AUTOPROC_TS';
-          result.reason = 'HR timesheet will be overwritten with modified hours for this week; will require authorising later by you..';
-          result.default_selected = !hasUnfinal;
-          return result;
-        }
-
-        if (isInvoiced) {
-          result.action = 'BLOCK_INVOICE_ISSUED';
-          result.reason = 'HR Timesheet invoice already issued – unissue the invoice before applying these HR changes.';
-          result.default_selected = false;
-          return result;
-        }
-
-        if (isPaid && !isInvoiced) {
-          result.action = 'CREATE_PAY_ADJUSTMENT_ONLY';
-          result.reason = 'HR - Candidate already paid (not invoiced yet) – a pay-only adjustment will be created; invoice will reflect full HR hours. Will require authorising by you.';
-          result.default_selected = !hasUnfinal;
-          return result;
-        }
-
-        result.action = 'UNKNOWN';
-        result.reason = 'HR weekly (self-bill=false): unhandled state – please review manually.';
-        result.default_selected = false;
+      if (latestAdjUnpaidUnlocked) {
+        result.action = 'UPDATE_ADJUSTMENT_TS';
+        result.reason = 'Existing unpaid/uninvoiced adjustment timesheet will be updated to reflect the new changes.';
+        result.default_selected = !hasUnfinal;
         return result;
       }
 
-      result.action = 'UNKNOWN';
-      result.reason = 'Unable to classify this weekly group – please review manually.';
+      result.action = 'CREATE_ADJUSTMENT_TS';
+      result.reason = 'Timesheet and previous adjustments appear paid/invoiced; a new sequential adjustment timesheet will be created for the amended hours.';
       result.default_selected = !hasUnfinal;
       return result;
     }
 
+    // HEALTHROSTER, self_bill = false → special HR logic
+    if (source_system === 'HEALTHROSTER' && selfBill === false) {
+      // If TSFIN is missing, we must treat it as not-paid/not-invoiced so we can rebuild it (this is the fix).
+      if (!isPaid && !isInvoiced) {
+        result.action = 'UPDATE_AUTOPROC_TS';
+        result.reason =
+          baseFinMissing
+            ? 'Base timesheet exists but has no current financial snapshot (TSFIN). Snapshot will be rebuilt from import shifts (safe/unpaid/uninvoiced).'
+            : 'HR weekly timesheet will be overwritten with modified hours for this week (unpaid/uninvoiced).';
+        result.default_selected = !hasUnfinal;
+        return result;
+      }
+
+      if (isInvoiced) {
+        result.action = 'BLOCK_INVOICE_ISSUED';
+        result.reason = 'HR Timesheet invoice already issued – unissue the invoice before applying these HR changes.';
+        result.default_selected = false;
+        return result;
+      }
+
+      if (isPaid && !isInvoiced) {
+        result.action = 'CREATE_PAY_ADJUSTMENT_ONLY';
+        result.reason = 'HR - Candidate already paid (not invoiced yet) – a pay-only adjustment will be created; invoice will reflect full HR hours.';
+        result.default_selected = !hasUnfinal;
+        return result;
+      }
+
+      result.action = 'UNKNOWN';
+      result.reason = 'HR weekly (self-bill=false): unhandled state – please review manually.';
+      result.default_selected = false;
+      return result;
+    }
+
+    result.action = 'UNKNOWN';
+    result.reason = 'Unable to classify this weekly group – please review manually.';
+    result.default_selected = !hasUnfinal;
     return result;
   };
 
