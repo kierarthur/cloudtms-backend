@@ -13371,7 +13371,7 @@ async function handleNhspApply(env, req, importId) {
   if (!user) return withCORS(env, req, unauthorized());
   if (!importId) return withCORS(env, req, badRequest("import_id is required"));
 
-  const enc   = encodeURIComponent;
+  const enc    = encodeURIComponent;
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
   const NHSP_OVERPAY_ADVANCE_THRESHOLD = 200; // adjust if needed
@@ -13456,9 +13456,9 @@ async function handleNhspApply(env, req, importId) {
   // Helpers used in Phase 2 (weekly totals from contract rates)
   async function computeNhspTotalsForShifts(env, contract, shifts) {
     const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
-    const client_id    = contract.client_id   || null;
+    const client_id     = contract.client_id || null;
 
-    const pc = payChargeFromContract(contract);
+    const pc  = payChargeFromContract(contract);
     const pay = pc?.pay || null;
     const chg = pc?.charge || null;
 
@@ -13720,7 +13720,7 @@ async function handleNhspApply(env, req, importId) {
       throw e;
     }
 
-    // ---------- PHASE 2: map shifts to timesheets & build NHSP TSFIN ----------
+    // ---------- PHASE 2: map shifts to timesheets & rebuild TSFIN ----------
     const { rows: allShifts } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
@@ -13728,11 +13728,13 @@ async function handleNhspApply(env, req, importId) {
       `&select=*`
     );
 
-    const allShiftsArr = Array.isArray(allShifts) ? allShifts : [];
+    const allShiftsArr   = Array.isArray(allShifts) ? allShifts : [];
     const eligibleShifts = allShiftsArr.filter(s => s && s.candidate_id && s.client_id && s.contract_id && s.work_date);
 
+    // Pre-build a groups map from eligible shifts (fast lookup)
     const groups = new Map();
 
+    // Client settings map (latest week_ending_weekday per client)
     const csMap = new Map();
     if (eligibleShifts.length) {
       const clientIds = [...new Set(eligibleShifts.map(s => s.client_id).filter(Boolean))];
@@ -13765,22 +13767,23 @@ async function handleNhspApply(env, req, importId) {
       const weekEnding = computeWeekEndingForWorkDate(workDate, weDow);
       if (!weekEnding) continue;
 
-      const weekStart  = computeWeekStartFromWeekEnding(weekEnding);
-      const grpKey = `${clientId}|${candidateId}|${contractId}|${weekEnding}`;
+      const weekStart = computeWeekStartFromWeekEnding(weekEnding);
+      const grpKey    = `${clientId}|${candidateId}|${contractId}|${weekEnding}`;
 
       if (!groups.has(grpKey)) {
         groups.set(grpKey, {
-          client_id:        clientId,
-          candidate_id:     candidateId,
-          contract_id:      contractId,
+          client_id: clientId,
+          candidate_id: candidateId,
+          contract_id: contractId,
           week_ending_date: weekEnding,
-          week_start:       weekStart,
-          shifts:           []
+          week_start: weekStart,
+          shifts: []
         });
       }
       groups.get(grpKey).shifts.push(sh);
     }
 
+    // Load contracts by id (needed to create timesheets/snapshots)
     const contractById = new Map();
     {
       const contractIds = [...new Set([...groups.values()].map(g => g.contract_id).filter(Boolean))];
@@ -13797,12 +13800,12 @@ async function handleNhspApply(env, req, importId) {
       }
     }
 
+    // Load candidate + client display fields for required timesheets NOT NULL norms
     const candidateById = new Map();
-    const clientById = new Map();
+    const clientById    = new Map();
     {
       const candIds = [...new Set([...groups.values()].map(g => g.candidate_id).filter(Boolean))];
       const cliIds  = [...new Set([...groups.values()].map(g => g.client_id).filter(Boolean))];
-
       const chunkSize = 150;
 
       for (let i = 0; i < candIds.length; i += chunkSize) {
@@ -13829,16 +13832,16 @@ async function handleNhspApply(env, req, importId) {
     }
 
     // ---------- group outcome counters ----------
-    let groups_total = 0;
+    let groups_total     = 0;
     let groups_attempted = 0;
     let groups_succeeded = 0;
-    let groups_failed = 0;
+    let groups_failed    = 0;
 
+    // “Ready to process” actions (from weekly classifier)
     const READY_ACTIONS = new Set([
       'NEW_AUTOPROC_TIMESHEET',
       'UPDATE_AUTOPROC_TS',
       'UPDATE_MANUAL_WEEK',
-      'UPDATE_AUTOPROC_TS', // harmless duplicate guard
       'UPDATE_ADJUSTMENT_TS',
       'CREATE_ADJUSTMENT_TS',
       'CREATE_PAY_ADJUSTMENT_ONLY'
@@ -13847,12 +13850,14 @@ async function handleNhspApply(env, req, importId) {
     const failSamples = [];
     const addFail = (preview_group_id, action, reason, debugExtra = null) => {
       groups_failed++;
+
       const sample = {
         preview_group_id: preview_group_id || null,
         action: action || null,
         reason: reason || null
       };
       if (debugExtra && typeof debugExtra === 'object') sample.debug = debugExtra;
+
       if (failSamples.length < 10) failSamples.push(sample);
 
       logFail({
@@ -13867,7 +13872,7 @@ async function handleNhspApply(env, req, importId) {
     // Classify using same logic as preview
     let classifiedGroups = [];
     try {
-      const cls = await classifyWeeklyImportRows(env, importId, { source_system: 'NHSP' });
+      const cls  = await classifyWeeklyImportRows(env, importId, { source_system: 'NHSP' });
       const rows = (cls && Array.isArray(cls.rows)) ? cls.rows : [];
       classifiedGroups = rows.filter(r => r && r.level === 'group');
     } catch (e) {
@@ -13879,6 +13884,7 @@ async function handleNhspApply(env, req, importId) {
       });
     }
 
+    // Fallback: if classifier returns nothing, treat computed eligible groups as “considered”
     if (!classifiedGroups.length) {
       classifiedGroups = [...groups.values()].map(g => ({
         level: 'group',
@@ -13922,7 +13928,7 @@ async function handleNhspApply(env, req, importId) {
       const { weDow, source } = await ensureClientWeDow(clientId);
 
       const candClient = allShiftsArr.filter(s => s && s.candidate_id === candidateId && s.client_id === clientId && s.work_date);
-      const byWeek = candClient.filter(s => computeWeekEndingForWorkDate(s.work_date, weDow) === weekEndingDate);
+      const byWeek     = candClient.filter(s => computeWeekEndingForWorkDate(s.work_date, weDow) === weekEndingDate);
 
       const byWeekMissingContract = byWeek.filter(s => !s.contract_id);
       const byWeekOtherContract   = byWeek.filter(s => s.contract_id && s.contract_id !== contractId);
@@ -13945,10 +13951,10 @@ async function handleNhspApply(env, req, importId) {
             r.candidate_id === candidateId &&
             r.client_id === clientId &&
             r.contract_id === contractId &&
-            r.week_ending_date === weekEndingDate
+            String(r.week_ending_date) === String(weekEndingDate)
           )
         : [];
-      const phase15GroupOk = phase15ForGroup.filter(r => String(r.action || '').toUpperCase() === 'OK').length;
+      const phase15GroupOk      = phase15ForGroup.filter(r => String(r.action || '').toUpperCase() === 'OK').length;
       const phase15GroupUpdated = phase15ForGroup.filter(r => r.shift_updated === true).length;
 
       return {
@@ -13988,21 +13994,21 @@ async function handleNhspApply(env, req, importId) {
       if (!isSelected) continue;
       if (!READY_ACTIONS.has(actionUpper)) continue;
 
+      // NHSP: do not do adjustment actions in this handler
       if (actionUpper === 'CREATE_ADJUSTMENT_TS' || actionUpper === 'UPDATE_ADJUSTMENT_TS' || actionUpper === 'CREATE_PAY_ADJUSTMENT_ONLY') {
         addFail(
           previewGroupId,
           actionUpper,
-          'Weekly NHSP adjustment actions are not implemented in handleNhspApply; refusing to overwrite base timesheet.',
-          { note: 'Implement explicit safe adjustment rules (like HR self-bill logic) rather than overwriting.' }
+          'Weekly NHSP adjustment actions are not implemented in handleNhspApply; refusing to overwrite base timesheet.'
         );
         continue;
       }
 
       groups_attempted++;
 
-      const clientId = gr.client_id || null;
-      const candidateId = gr.candidate_id || null;
-      const contractId = gr.contract_id || null;
+      const clientId      = gr.client_id || null;
+      const candidateId   = gr.candidate_id || null;
+      const contractId    = gr.contract_id || null;
       const weekEndingDate = gr.week_ending_date || null;
 
       logInfo({
@@ -14026,7 +14032,8 @@ async function handleNhspApply(env, req, importId) {
         continue;
       }
 
-      const key = `${clientId}|${candidateId}|${contractId}|${weekEndingDate}`;
+      // Use bundle if present, but also compute a direct-match set from allShiftsArr
+      const key    = `${clientId}|${candidateId}|${contractId}|${weekEndingDate}`;
       const bundle = groups.get(key) || null;
 
       const { weDow } = await ensureClientWeDow(clientId);
@@ -14036,7 +14043,7 @@ async function handleNhspApply(env, req, importId) {
         s.candidate_id === candidateId &&
         s.client_id === clientId &&
         s.contract_id === contractId &&
-        computeWeekEndingForWorkDate(s.work_date, weDow) === weekEndingDate
+        computeWeekEndingForWorkDate(s.work_date, weDow) === String(weekEndingDate)
       );
 
       const grpShifts = (directMatched.length ? directMatched : (bundle?.shifts || []));
@@ -14047,7 +14054,7 @@ async function handleNhspApply(env, req, importId) {
         continue;
       }
 
-      const weekStart = computeWeekStartFromWeekEnding(weekEndingDate);
+      const weekStart = computeWeekStartFromWeekEnding(String(weekEndingDate));
 
       const contract = contractById.get(contractId) || null;
       if (!contract) {
@@ -14280,6 +14287,42 @@ async function handleNhspApply(env, req, importId) {
         }
       }
 
+      if (!ts?.timesheet_id) {
+        addFail(previewGroupId, actionUpper, 'Timesheet missing timesheet_id after create/load.', {
+          booking_id: bookingId,
+          week_ending_date: weekEndingDate,
+          contract_id: contract.id
+        });
+        continue;
+      }
+
+      // ✅ TSFIN recompute safety: refuse to overwrite if the existing TSFIN is locked/paid
+      try {
+        const { rows: finRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=eq.${enc(ts.timesheet_id)}` +
+          `&is_current=eq.true` +
+          `&select=id,locked_by_invoice_id,paid_at_utc` +
+          `&limit=1`
+        );
+        const fin = finRows?.[0] || null;
+        if (fin?.locked_by_invoice_id || fin?.paid_at_utc) {
+          addFail(previewGroupId, actionUpper, 'Timesheet TSFIN is locked or paid; refusing to rebuild snapshot.', {
+            timesheet_id: ts.timesheet_id,
+            locked_by_invoice_id: fin?.locked_by_invoice_id || null,
+            paid_at_utc: fin?.paid_at_utc || null
+          });
+          continue;
+        }
+      } catch (e) {
+        // If we can't read TSFIN, do NOT blindly overwrite; treat as failure.
+        addFail(previewGroupId, actionUpper, `Failed to load current TSFIN for lock/paid check: ${e?.message || String(e)}`, {
+          timesheet_id: ts.timesheet_id
+        });
+        continue;
+      }
+
       // Link shifts to TS
       const shiftIdsForTs = grpShifts.map(s => s.id).filter(Boolean);
       if (shiftIdsForTs.length) {
@@ -14298,7 +14341,7 @@ async function handleNhspApply(env, req, importId) {
         ).catch(() => {});
       }
 
-      // Build weekly snapshot from contract rates
+      // ✅ TSFIN recalculation: always rebuild snapshot for the processed group
       let snapRes = null;
       try {
         snapRes = await buildNhspWeeklySnapshot(env, ts, contract, grpShifts, importId, 'NHSP');
@@ -14323,19 +14366,17 @@ async function handleNhspApply(env, req, importId) {
           if (!ymd || !ref) continue;
           if (!dayRefs[ymd]) dayRefs[ymd] = ref;
         }
-        if (ts && ts.timesheet_id) {
-          await fetch(
-            `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
-            {
-              method: 'PATCH',
-              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-              body: JSON.stringify({
-                day_references_json: Object.keys(dayRefs).length ? dayRefs : null,
-                updated_at: nowIso
-              })
-            }
-          ).catch(() => {});
-        }
+        await fetch(
+          `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
+          {
+            method: 'PATCH',
+            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+            body: JSON.stringify({
+              day_references_json: Object.keys(dayRefs).length ? dayRefs : null,
+              updated_at: nowIso
+            })
+          }
+        ).catch(() => {});
       } catch (e) {
         logWarn({
           stage: 'day_references_patch_failed_non_fatal',
@@ -14724,8 +14765,8 @@ async function handleHrAutoprocessApply(env, req, importId) {
     });
   }
 
-  const enc   = encodeURIComponent;
-  const norm  = (s) => (String(s || '').trim().toLowerCase());
+  const enc    = encodeURIComponent;
+  const norm   = (s) => (String(s || '').trim().toLowerCase());
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
   const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
 
@@ -14753,7 +14794,7 @@ async function handleHrAutoprocessApply(env, req, importId) {
   // ✅ UPDATED: weekly truth totals must use contract rates (payChargeFromContract), not resolveRates
   // Also returns missingBuckets so caller can safely skip/reject the group.
   async function computeHrTotalsForShifts(env, contract, client_id, shifts) {
-    const pc = payChargeFromContract(contract);
+    const pc  = payChargeFromContract(contract);
     const pay = pc?.pay || null;
     const chg = pc?.charge || null;
 
@@ -14849,7 +14890,7 @@ async function handleHrAutoprocessApply(env, req, importId) {
       const payload = [{
         candidate_id,
         client_id,
-        reason,                         // 'OVERPAY_HR'
+        reason, // 'OVERPAY_HR'
         original_amount:   round2(amt),
         outstanding_amount: round2(amt),
         linked_shift_date:  null,
@@ -15572,27 +15613,6 @@ async function handleHrAutoprocessApply(env, req, importId) {
 
         const tol = 0.01;
 
-        if (!baseFin && !weeks.some(w => w.is_adjustment)) {
-          const okSnap = await buildWeeklySnapshotSafe(ts, contract, g.shifts, 'CONTRACT_WEEKLY');
-          if (!okSnap) {
-            addFail(previewGroupId, actionUpper, 'buildNhspWeeklySnapshot failed (no baseFin)');
-            continue;
-          }
-
-          try {
-            await upsertValidation(env, user, {
-              timesheet_id: ts.timesheet_id,
-              status: 'VALIDATION_OK',
-              reason: 'HEALTHROSTER_IMPORT',
-              hr_reference: null,
-              import_id: importId
-            });
-          } catch (e) {}
-
-          groups_succeeded++;
-          continue;
-        }
-
         const adjWeeks = weeks.filter(w => !!w.is_adjustment);
 
         let currentPay = 0;
@@ -15612,7 +15632,27 @@ async function handleHrAutoprocessApply(env, req, importId) {
         const deltaPayTotal = round2(truthPay - currentPay);
         const deltaChgTotal = round2(truthChg - currentChg);
 
+        const isPaid     = !!(baseFin && baseFin.paid_at_utc);
+        const isInvoiced = !!(baseFin && baseFin.locked_by_invoice_id);
+        const baseUnpaidUnlocked =
+          !!(baseFin && !baseFin.paid_at_utc && !baseFin.locked_by_invoice_id);
+        const selfBill = !!contract.self_bill;
+
+        // ✅ UPDATED RECOMPUTE LOGIC:
+        // If totals already match (delta ~ 0), still refresh TSFIN *only when it is safe*:
+        // - self_bill=false: refresh if base is not paid/invoiced (keeps segments/external rows current)
+        // - self_bill=true: refresh ONLY if there are no adjustment weeks (otherwise base+adj composition may differ)
         if (Math.abs(deltaPayTotal) < tol && Math.abs(deltaChgTotal) < tol) {
+          if (!isPaid && !isInvoiced) {
+            if (!selfBill || adjWeeks.length === 0) {
+              const okRefresh = await buildWeeklySnapshotSafe(ts, contract, g.shifts, 'CONTRACT_WEEKLY');
+              if (!okRefresh) {
+                addFail(previewGroupId, actionUpper, 'TSFIN refresh failed even though delta=0 (unpaid/uninvoiced).');
+                continue;
+              }
+            }
+          }
+
           try {
             await upsertValidation(env, user, {
               timesheet_id: ts.timesheet_id,
@@ -15623,18 +15663,9 @@ async function handleHrAutoprocessApply(env, req, importId) {
             });
           } catch (e) {}
 
-          // No delta to apply; treat as successful processing
           groups_succeeded++;
           continue;
         }
-
-        const isPaid     = !!(baseFin && baseFin.paid_at_utc);
-        const isInvoiced = !!(baseFin && baseFin.locked_by_invoice_id);
-
-        const baseUnpaidUnlocked =
-          !!(baseFin && !baseFin.paid_at_utc && !baseFin.locked_by_invoice_id);
-
-        const selfBill = !!contract.self_bill;
 
         // ─────────────────────────────────────────────
         // Self-bill = true → NHSP-style logic (self-bill adjustments)
@@ -15919,7 +15950,9 @@ async function handleHrAutoprocessApply(env, req, importId) {
               total_pay_ex_vat: deltaPayTotal,
               total_charge_ex_vat: deltaChgTotal,
               margin_ex_vat: round2(deltaChgTotal - deltaPayTotal),
-              pay_wtr_rate_pct_snapshot: (String(contract.pay_method_snapshot || '').toUpperCase() === 'PAYE') ? (Number.isFinite(Number(policySnapshotAdj?.holiday_pay_pct)) ? Number(policySnapshotAdj.holiday_pay_pct) : null) : null,
+              pay_wtr_rate_pct_snapshot: (String(contract.pay_method_snapshot || '').toUpperCase() === 'PAYE')
+                ? (Number.isFinite(Number(policySnapshotAdj?.holiday_pay_pct)) ? Number(policySnapshotAdj.holiday_pay_pct) : null)
+                : null,
               candidate_assignment: contract.candidate_id ? 'ASSIGNED' : 'UNASSIGNED',
               processing_status: 'READY_FOR_INVOICE',
               invoice_breakdown_json: invBreak
@@ -16014,7 +16047,6 @@ async function handleHrAutoprocessApply(env, req, importId) {
               })
             }
           ).catch((e) => {
-            // non-fatal for group outcome; but record as failure because processing didn’t complete cleanly
             addFail(previewGroupId, actionUpper, `Failed to patch base TSFIN charges: ${e?.message || String(e)}`);
           });
 
