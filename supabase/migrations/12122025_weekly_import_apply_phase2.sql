@@ -41,9 +41,17 @@ begin
       contract_id = p2.contract_id,
       updated_at  = now(),
 
-      -- ✅ FIX: only fill ids if currently null (do NOT overwrite existing)
-      candidate_id = coalesce(s.candidate_id, p2.candidate_id),
-      client_id    = coalesce(s.client_id,    p2.client_id)
+      -- ✅ FIX:
+      -- allow corrected ids to overwrite ONLY when shift is not yet linked to a timesheet.
+      -- once linked, preserve existing candidate_id/client_id to avoid moving paid/invoiced logic implicitly.
+      candidate_id = case
+        when s.timesheet_id is null then coalesce(p2.candidate_id, s.candidate_id)
+        else s.candidate_id
+      end,
+      client_id = case
+        when s.timesheet_id is null then coalesce(p2.client_id, s.client_id)
+        else s.client_id
+      end
 
     from p2
     where p2.action = 'OK'
