@@ -13463,7 +13463,7 @@ async function handleNhspApply(env, req, importId) {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // NEW: policy cache (prevents per-shift loadPolicy subrequests)
+  // Request-scoped policy cache (prevents per-shift loadPolicy subrequests)
   // key = `${client_id}__${dateYmd}`
   // ─────────────────────────────────────────────────────────────
   const _policyCache = new Map();
@@ -13601,9 +13601,8 @@ async function handleNhspApply(env, req, importId) {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // NEW: Snapshot builder that avoids “Too many subrequests”
-  // - identical business logic to buildNhspWeeklySnapshot
-  // - but uses getPolicyCached(...) so we only fetch policy per date once
+  // Snapshot builder that avoids “Too many subrequests”
+  // (same business logic as buildNhspWeeklySnapshot but uses getPolicyCached)
   // ─────────────────────────────────────────────────────────────
   async function buildNhspWeeklySnapshotCached(env, ts, contract, shifts, nhspImportId, basis = 'NHSP') {
     const round2Local = (n) => Math.round((Number(n) || 0) * 100) / 100;
@@ -13897,7 +13896,9 @@ async function handleNhspApply(env, req, importId) {
       throw e;
     }
 
-    // ---------- PHASE 1.5: SQL-selected contract alignment ----------
+    // ---------- PHASE 1.5: SQL-selected repair (AUTHORITATIVE) ----------
+    // Call the UPDATED weekly_import_apply_phase2(importId,'NHSP') and treat its output
+    // as authoritative repair results for grouping + applying.
     let phase15Rows = [];
     let phase15Updated = 0;
     let phase15Ok = 0;
@@ -13951,7 +13952,7 @@ async function handleNhspApply(env, req, importId) {
       throw e;
     }
 
-    // ---------- PHASE 2: map shifts to timesheets & rebuild TSFIN ----------
+    // ---------- PHASE 2: fetch shifts AFTER repair (essential) ----------
     const { rows: allShifts } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
@@ -13959,65 +13960,94 @@ async function handleNhspApply(env, req, importId) {
       `&select=*`
     );
 
-    const allShiftsArr   = Array.isArray(allShifts) ? allShifts : [];
-    const eligibleShifts = allShiftsArr.filter(s => s && s.candidate_id && s.client_id && s.contract_id && s.work_date);
+    const allShiftsArr = Array.isArray(allShifts) ? allShifts : [];
 
-    // Pre-build a groups map from eligible shifts (fast lookup)
-    const groups = new Map();
-
-    // Client settings map (latest week_ending_weekday per client)
-    const csMap = new Map();
-    if (eligibleShifts.length) {
-      const clientIds = [...new Set(eligibleShifts.map(s => s.client_id).filter(Boolean))];
-      if (clientIds.length) {
-        const { rows: csRows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/client_settings` +
-          `?client_id=in.(${clientIds.map(enc).join(',')})` +
-          `&select=client_id,week_ending_weekday` +
-          `&order=effective_from.desc,created_at.desc`
-        );
-        for (const r of (csRows || [])) {
-          if (r && r.client_id && !csMap.has(r.client_id)) csMap.set(r.client_id, r);
-        }
-      }
+    // Build a fast external_row_key -> shift row map (AUTHORITATIVE lookups)
+    const shiftByExternalKey = new Map();
+    for (const s of allShiftsArr) {
+      if (s && s.external_row_key) shiftByExternalKey.set(String(s.external_row_key), s);
     }
 
-    for (const sh of eligibleShifts) {
-      const clientId    = sh.client_id;
-      const candidateId = sh.candidate_id;
-      const contractId  = sh.contract_id;
-      const workDate    = sh.work_date;
-      if (!clientId || !candidateId || !contractId || !workDate) continue;
+    // Build authoritative groups from Phase1.5 (weekly_import_apply_phase2 output),
+    // NOT from “whatever shifts currently look like”.
+    const p2Ok = (phase15Rows || []).filter(r => {
+      const act = String(r?.action || '').toUpperCase();
+      return (
+        act === 'OK' &&
+        r?.external_row_key &&
+        r?.candidate_id &&
+        r?.client_id &&
+        r?.contract_id &&
+        r?.week_ending_date
+      );
+    });
 
-      const cs    = csMap.get(clientId) || {};
-      const weDow = Number.isInteger(Number(cs.week_ending_weekday))
-        ? Number(cs.week_ending_weekday)
-        : 0;
+    // Group key = (candidate_id, client_id, contract_id, week_ending_date)
+    // Maintain external_row_keys list.
+    const p2GroupByPreviewId = new Map(); // preview_group_id -> group {candidate_id, client_id, contract_id, week_ending_date, external_row_keys[]}
+    for (const r of p2Ok) {
+      const candidateId = String(r.candidate_id);
+      const clientId    = String(r.client_id);
+      const contractId  = String(r.contract_id);
+      const we          = String(r.week_ending_date);
+      const extKey      = String(r.external_row_key);
 
-      const weekEnding = computeWeekEndingForWorkDate(workDate, weDow);
-      if (!weekEnding) continue;
-
-      const weekStart = computeWeekStartFromWeekEnding(weekEnding);
-      const grpKey    = `${clientId}|${candidateId}|${contractId}|${weekEnding}`;
-
-      if (!groups.has(grpKey)) {
-        groups.set(grpKey, {
-          client_id: clientId,
+      const previewGroupId = `grp:${contractId}:${we}:${candidateId}`;
+      let g = p2GroupByPreviewId.get(previewGroupId);
+      if (!g) {
+        g = {
           candidate_id: candidateId,
+          client_id: clientId,
           contract_id: contractId,
-          week_ending_date: weekEnding,
-          week_start: weekStart,
-          shifts: []
+          week_ending_date: we,
+          external_row_keys: []
+        };
+        p2GroupByPreviewId.set(previewGroupId, g);
+      }
+      if (!g.external_row_keys.includes(extKey)) g.external_row_keys.push(extKey);
+    }
+
+    // ---------- classification meta (for UI semantics + selection) ----------
+    let classifiedGroups = [];
+    try {
+      const cls  = await classifyWeeklyImportRows(env, importId, { source_system: 'NHSP' });
+      const rows = (cls && Array.isArray(cls.rows)) ? cls.rows : [];
+      classifiedGroups = rows.filter(r => r && r.level === 'group');
+    } catch (e) {
+      classifiedGroups = [];
+      logWarn({
+        stage: 'classify_failed_non_fatal',
+        import_id: importId,
+        err: e?.message || String(e)
+      });
+    }
+
+    const metaByPreviewId = new Map();
+    for (const g of classifiedGroups) {
+      if (g && g.preview_group_id) metaByPreviewId.set(String(g.preview_group_id), g);
+    }
+
+    // If classifier returns nothing, fallback meta for all p2 groups as NEW_AUTOPROC_TIMESHEET
+    if (!metaByPreviewId.size && p2GroupByPreviewId.size) {
+      for (const [pid, g] of p2GroupByPreviewId.entries()) {
+        metaByPreviewId.set(pid, {
+          level: 'group',
+          preview_group_id: pid,
+          candidate_id: g.candidate_id,
+          client_id: g.client_id,
+          contract_id: g.contract_id,
+          week_ending_date: g.week_ending_date,
+          action: 'NEW_AUTOPROC_TIMESHEET',
+          reason: 'No classifier result; apply fallback treats group as new.',
+          default_selected: true
         });
       }
-      groups.get(grpKey).shifts.push(sh);
     }
 
     // Load contracts by id (needed to create timesheets/snapshots)
     const contractById = new Map();
     {
-      const contractIds = [...new Set([...groups.values()].map(g => g.contract_id).filter(Boolean))];
+      const contractIds = [...new Set([...p2GroupByPreviewId.values()].map(g => g.contract_id).filter(Boolean))];
       const chunkSize = 150;
       for (let i = 0; i < contractIds.length; i += chunkSize) {
         const chunk = contractIds.slice(i, i + chunkSize);
@@ -14035,8 +14065,8 @@ async function handleNhspApply(env, req, importId) {
     const candidateById = new Map();
     const clientById    = new Map();
     {
-      const candIds = [...new Set([...groups.values()].map(g => g.candidate_id).filter(Boolean))];
-      const cliIds  = [...new Set([...groups.values()].map(g => g.client_id).filter(Boolean))];
+      const candIds = [...new Set([...p2GroupByPreviewId.values()].map(g => g.candidate_id).filter(Boolean))];
+      const cliIds  = [...new Set([...p2GroupByPreviewId.values()].map(g => g.client_id).filter(Boolean))];
       const chunkSize = 150;
 
       for (let i = 0; i < candIds.length; i += chunkSize) {
@@ -14100,137 +14130,51 @@ async function handleNhspApply(env, req, importId) {
       });
     };
 
-    // Classify using same logic as preview
-    let classifiedGroups = [];
-    try {
-      const cls  = await classifyWeeklyImportRows(env, importId, { source_system: 'NHSP' });
-      const rows = (cls && Array.isArray(cls.rows)) ? cls.rows : [];
-      classifiedGroups = rows.filter(r => r && r.level === 'group');
-    } catch (e) {
-      classifiedGroups = [];
-      logWarn({
-        stage: 'classify_failed_non_fatal',
-        import_id: importId,
-        err: e?.message || String(e)
-      });
-    }
+    // Helper: fetch TSFIN lock state for a set of timesheet_ids (missing TSFIN => safe)
+    const loadTsfinLocks = async (timesheetIds) => {
+      const ids = [...new Set((timesheetIds || []).filter(Boolean).map(String))];
+      const finByTsId = new Map();
+      if (!ids.length) return finByTsId;
 
-    // Fallback: if classifier returns nothing, treat computed eligible groups as “considered”
-    if (!classifiedGroups.length) {
-      classifiedGroups = [...groups.values()].map(g => ({
-        level: 'group',
-        preview_group_id: `grp:${g.contract_id}:${g.week_ending_date}:${g.candidate_id}`,
-        candidate_id: g.candidate_id,
-        client_id: g.client_id,
-        contract_id: g.contract_id,
-        week_ending_date: g.week_ending_date,
-        action: 'NEW_AUTOPROC_TIMESHEET',
-        reason: 'No classifier result; apply fallback treats group as new.',
-        default_selected: true
-      }));
-    }
-
-    const ensureClientWeDow = async (clientId) => {
-      const cs = csMap.get(clientId);
-      if (cs && cs.client_id) {
-        const we = Number.isInteger(Number(cs.week_ending_weekday)) ? Number(cs.week_ending_weekday) : 0;
-        return { weDow: we, source: 'cache' };
-      }
-      try {
-        const { rows: csRows } = await sbFetch(
+      const chunkSize = 200;
+      for (let i = 0; i < ids.length; i += chunkSize) {
+        const chunk = ids.slice(i, i + chunkSize);
+        const { rows } = await sbFetch(
           env,
-          `${env.SUPABASE_URL}/rest/v1/client_settings` +
-          `?client_id=eq.${enc(clientId)}` +
-          `&select=client_id,week_ending_weekday` +
-          `&order=effective_from.desc,created_at.desc` +
-          `&limit=1`
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=in.(${chunk.map(enc).join(',')})` +
+          `&is_current=eq.true` +
+          `&select=timesheet_id,locked_by_invoice_id,paid_at_utc`
         );
-        const row = csRows?.[0] || null;
-        if (row && row.client_id) {
-          csMap.set(row.client_id, row);
-          const we = Number.isInteger(Number(row.week_ending_weekday)) ? Number(row.week_ending_weekday) : 0;
-          return { weDow: we, source: 'db' };
+        for (const r of (rows || [])) {
+          if (r && r.timesheet_id) finByTsId.set(String(r.timesheet_id), r);
         }
-      } catch {}
-      return { weDow: 0, source: 'default' };
-    };
-
-    const buildNoShiftsDiagnostics = async ({ candidateId, clientId, contractId, weekEndingDate }) => {
-      const { weDow, source } = await ensureClientWeDow(clientId);
-
-      const candClient = allShiftsArr.filter(s => s && s.candidate_id === candidateId && s.client_id === clientId && s.work_date);
-      const byWeek     = candClient.filter(s => computeWeekEndingForWorkDate(s.work_date, weDow) === weekEndingDate);
-
-      const byWeekMissingContract = byWeek.filter(s => !s.contract_id);
-      const byWeekOtherContract   = byWeek.filter(s => s.contract_id && s.contract_id !== contractId);
-      const byWeekThisContract    = byWeek.filter(s => s.contract_id === contractId);
-
-      const missingCandidate = allShiftsArr.filter(s => s && !s.candidate_id && s.client_id === clientId && s.work_date);
-      const missingClient    = allShiftsArr.filter(s => s && s.candidate_id === candidateId && !s.client_id && s.work_date);
-      const missingContract  = allShiftsArr.filter(s => s && s.candidate_id === candidateId && s.client_id === clientId && !s.contract_id && s.work_date);
-
-      const weCounts = {};
-      for (const s of candClient) {
-        const we = computeWeekEndingForWorkDate(s.work_date, weDow);
-        if (!we) continue;
-        weCounts[we] = (weCounts[we] || 0) + 1;
       }
-
-      const phase15ForGroup = Array.isArray(phase15Rows)
-        ? phase15Rows.filter(r =>
-            r &&
-            r.candidate_id === candidateId &&
-            r.client_id === clientId &&
-            r.contract_id === contractId &&
-            String(r.week_ending_date) === String(weekEndingDate)
-          )
-        : [];
-      const phase15GroupOk      = phase15ForGroup.filter(r => String(r.action || '').toUpperCase() === 'OK').length;
-      const phase15GroupUpdated = phase15ForGroup.filter(r => r.shift_updated === true).length;
-
-      return {
-        all_import_rows: allShiftsArr.length,
-        eligible_rows_after_filter: eligibleShifts.length,
-        candidate_client_rows_with_work_date: candClient.length,
-        candidate_client_rows_in_week: byWeek.length,
-        in_week_this_contract: byWeekThisContract.length,
-        in_week_missing_contract: byWeekMissingContract.length,
-        in_week_other_contract: byWeekOtherContract.length,
-        missing_candidate_total_for_client: missingCandidate.length,
-        missing_client_total_for_candidate: missingClient.length,
-        missing_contract_total_for_candidate_client: missingContract.length,
-        week_ending_weekday_used: weDow,
-        week_ending_weekday_source: source,
-        week_ending_distribution_for_candidate_client: weCounts,
-        phase15_rows_for_group: phase15ForGroup.length,
-        phase15_ok_for_group: phase15GroupOk,
-        phase15_shift_updated_for_group: phase15GroupUpdated
-      };
+      return finByTsId;
     };
 
-    for (const gr of classifiedGroups) {
+    // Apply loop: iterate Phase2 groups (authoritative contract/week selection)
+    for (const [previewGroupId, p2g] of p2GroupByPreviewId.entries()) {
       groups_total++;
 
-      const actionUpper = String(gr.action || '').trim().toUpperCase();
-      const previewGroupId = String(
-        gr.preview_group_id ||
-        `grp:${gr.contract_id}:${gr.week_ending_date}:${gr.candidate_id}`
-      );
+      const meta = metaByPreviewId.get(previewGroupId) || null;
+      const actionUpper = String(meta?.action || 'NEW_AUTOPROC_TIMESHEET').trim().toUpperCase();
+      const defaultSelected = (meta ? (meta.default_selected !== false) : true);
 
       const isSelected =
         selectedGroupIds.length
           ? selectedGroupIds.includes(previewGroupId)
-          : (gr.default_selected !== false);
+          : defaultSelected;
 
       if (!isSelected) continue;
       if (!READY_ACTIONS.has(actionUpper)) continue;
 
       groups_attempted++;
 
-      const clientId       = gr.client_id || null;
-      const candidateId    = gr.candidate_id || null;
-      const contractId     = gr.contract_id || null;
-      const weekEndingDate = gr.week_ending_date || null;
+      const clientId       = p2g.client_id || null;
+      const candidateId    = p2g.candidate_id || null;
+      const contractId     = p2g.contract_id || null;
+      const weekEndingDate = p2g.week_ending_date || null;
 
       logInfo({
         stage: 'group_attempt',
@@ -14240,11 +14184,12 @@ async function handleNhspApply(env, req, importId) {
         candidate_id: candidateId,
         client_id: clientId,
         contract_id: contractId,
-        week_ending_date: weekEndingDate
+        week_ending_date: weekEndingDate,
+        ext_keys: p2g.external_row_keys?.length || 0
       });
 
       if (!clientId || !candidateId || !contractId || !weekEndingDate) {
-        addFail(previewGroupId, actionUpper, 'Missing candidate_id/client_id/contract_id/week_ending_date on group.', {
+        addFail(previewGroupId, actionUpper, 'Missing candidate_id/client_id/contract_id/week_ending_date on Phase2 group.', {
           candidate_id: candidateId,
           client_id: clientId,
           contract_id: contractId,
@@ -14253,25 +14198,24 @@ async function handleNhspApply(env, req, importId) {
         continue;
       }
 
-      // Use bundle if present, but also compute a direct-match set from allShiftsArr
-      const key    = `${clientId}|${candidateId}|${contractId}|${weekEndingDate}`;
-      const bundle = groups.get(key) || null;
+      // Locate the actual nhsp_shifts rows by external_row_key (AUTHORITATIVE)
+      const extKeys = Array.isArray(p2g.external_row_keys) ? p2g.external_row_keys.slice() : [];
+      const grpShifts = [];
+      const missingExt = [];
 
-      const { weDow } = await ensureClientWeDow(clientId);
-      const directMatched = allShiftsArr.filter(s =>
-        s &&
-        s.work_date &&
-        s.candidate_id === candidateId &&
-        s.client_id === clientId &&
-        s.contract_id === contractId &&
-        computeWeekEndingForWorkDate(s.work_date, weDow) === String(weekEndingDate)
-      );
-
-      const grpShifts = (directMatched.length ? directMatched : (bundle?.shifts || []));
+      for (const k of extKeys) {
+        const sh = shiftByExternalKey.get(String(k)) || null;
+        if (sh) grpShifts.push(sh);
+        else missingExt.push(String(k));
+      }
 
       if (!grpShifts.length) {
-        const diag = await buildNoShiftsDiagnostics({ candidateId, clientId, contractId, weekEndingDate });
-        addFail(previewGroupId, actionUpper, 'No eligible shifts found for this group (see debug counts).', diag);
+        addFail(previewGroupId, actionUpper, 'No shifts found for Phase2 external_row_keys (cannot apply).', {
+          missing_external_row_keys_count: missingExt.length,
+          sample_missing_external_row_keys: missingExt.slice(0, 5),
+          phase2_external_row_keys_count: extKeys.length,
+          all_import_rows: allShiftsArr.length
+        });
         continue;
       }
 
@@ -14347,7 +14291,7 @@ async function handleNhspApply(env, req, importId) {
       // Find or create weekly timesheet for this contract_week
       let ts = null;
 
-      // booking id must be awaited (makeBookingId is async)
+      // booking id must be awaited (makeWeeklyBookingId is async)
       let bookingId = null;
       try {
         bookingId = await makeWeeklyBookingId(contract.candidate_id || candidateId, contract, cw);
@@ -14442,7 +14386,7 @@ async function handleNhspApply(env, req, importId) {
           status: 'RECEIVED',
 
           sheet_scope: 'WEEKLY',
-          submission_mode: 'MANUAL',
+          submission_mode: 'MANUAL', // keep as-is (no new submission mode)
           line_type: 'HOURS',
 
           occupant_key_norm: occupantKeyNorm,
@@ -14517,9 +14461,19 @@ async function handleNhspApply(env, req, importId) {
         continue;
       }
 
-      // ✅ TSFIN recompute safety: if locked/paid -> cannot rebuild base snapshot
-      // NOTE: If TSFIN is missing, fin=null and we treat it as safe to rebuild.
-      let finLockedOrPaid = false;
+      // ✅ Reassignment rule:
+      // “As long as the timesheet hasn't been locked or paid” we can move shifts and rebuild TSFIN.
+      // That applies BOTH to:
+      // - the base timesheet we are about to build, AND
+      // - any existing timesheet currently holding these shifts.
+      //
+      // We therefore:
+      // 1) Verify base timesheet is safe (TSFIN missing OR unpaid+unlocked).
+      // 2) Verify all shifts are either unassigned OR currently in safe timesheets.
+      // 3) Then patch shifts to the correct base timesheet and rebuild TSFIN.
+
+      // 1) Base TSFIN lock/paid check (missing TSFIN => safe)
+      let baseFinLockedOrPaid = false;
       try {
         const { rows: finRows } = await sbFetch(
           env,
@@ -14530,22 +14484,61 @@ async function handleNhspApply(env, req, importId) {
           `&limit=1`
         );
         const fin = finRows?.[0] || null;
-        if (fin?.locked_by_invoice_id || fin?.paid_at_utc) {
-          finLockedOrPaid = true;
-        }
+        if (fin?.locked_by_invoice_id || fin?.paid_at_utc) baseFinLockedOrPaid = true;
       } catch (e) {
-        addFail(previewGroupId, actionUpper, `Failed to load current TSFIN for lock/paid check: ${e?.message || String(e)}`, {
+        addFail(previewGroupId, actionUpper, `Failed to load base TSFIN for lock/paid check: ${e?.message || String(e)}`, {
           timesheet_id: ts.timesheet_id
         });
         continue;
       }
 
-      // ✅ Revised adjustment handling:
-      // If classifier says CREATE/UPDATE_ADJUSTMENT_TS but base is NOT locked/paid,
-      // we treat it as a base refresh (rebuild snapshot) rather than failing.
+      if (baseFinLockedOrPaid) {
+        addFail(previewGroupId, actionUpper, 'Base timesheet TSFIN is locked or paid; refusing to rebuild/repair.', {
+          timesheet_id: ts.timesheet_id
+        });
+        continue;
+      }
+
+      // 2) Existing-holder timesheet safety for shifts (missing TSFIN => safe)
+      const existingTsIds = [...new Set(grpShifts.map(s => s && s.timesheet_id).filter(Boolean).map(String))];
+      const existingFinByTs = await loadTsfinLocks(existingTsIds);
+
+      const unsafeShiftIds = [];
+      const unsafeTsIds = new Set();
+
+      for (const sh of grpShifts) {
+        const curTsId = sh?.timesheet_id ? String(sh.timesheet_id) : null;
+        if (!curTsId) continue;
+
+        const fin = existingFinByTs.get(curTsId) || null;
+        // Missing TSFIN => safe, per our earlier agreed rule.
+        if (!fin) continue;
+
+        if (fin.locked_by_invoice_id || fin.paid_at_utc) {
+          unsafeShiftIds.push(sh.id);
+          unsafeTsIds.add(curTsId);
+        }
+      }
+
+      if (unsafeShiftIds.length) {
+        addFail(
+          previewGroupId,
+          actionUpper,
+          'Some shifts are currently linked to paid/locked timesheets; refusing to move them automatically.',
+          {
+            unsafe_shift_count: unsafeShiftIds.length,
+            unsafe_timesheet_ids: Array.from(unsafeTsIds).slice(0, 10),
+            sample_unsafe_shift_ids: unsafeShiftIds.slice(0, 10)
+          }
+        );
+        continue;
+      }
+
+      // Adjustment actions:
+      // If classifier says adjustment but base is not locked/paid, we can treat as base refresh/repair.
       if (
         (actionUpper === 'CREATE_ADJUSTMENT_TS' || actionUpper === 'UPDATE_ADJUSTMENT_TS') &&
-        finLockedOrPaid
+        baseFinLockedOrPaid
       ) {
         addFail(previewGroupId, actionUpper, 'Classifier requested adjustment but base TSFIN is locked/paid; NHSP adjustment creation not implemented here.', {
           timesheet_id: ts.timesheet_id
@@ -14560,7 +14553,7 @@ async function handleNhspApply(env, req, importId) {
         continue;
       }
 
-      // Link shifts to TS
+      // 3) Patch shifts to the correct base timesheet (and correct ids)
       const shiftIdsForTs = grpShifts.map(s => s.id).filter(Boolean);
       if (shiftIdsForTs.length) {
         const shParam = shiftIdsForTs.map(enc).join(',');
@@ -14572,16 +14565,24 @@ async function handleNhspApply(env, req, importId) {
             body: JSON.stringify({
               timesheet_id: ts.timesheet_id,
               contract_id:  contract.id,
+              candidate_id: candidateId,
+              client_id: clientId,
               updated_at:   new Date().toISOString()
             })
           }
         ).catch(() => {});
       }
 
-      // ✅ TSFIN recalculation: rebuild snapshot for the processed group (cached policies => avoids subrequest limit)
+      // Re-read shifts for this group post-patch (optional safety: ensures TSFIN rebuild uses latest rows)
+      const grpShiftsFresh = grpShifts.map(s => {
+        const k = s && s.external_row_key ? String(s.external_row_key) : null;
+        return k ? (shiftByExternalKey.get(k) || s) : s;
+      });
+
+      // 4) Rebuild TSFIN snapshot for the processed group
       let snapRes = null;
       try {
-        snapRes = await buildNhspWeeklySnapshotCached(env, ts, contract, grpShifts, importId, 'NHSP');
+        snapRes = await buildNhspWeeklySnapshotCached(env, ts, contract, grpShiftsFresh, importId, 'NHSP');
       } catch (e) {
         snapRes = { ok: false, reason: e?.message || String(e) };
       }
@@ -14594,10 +14595,10 @@ async function handleNhspApply(env, req, importId) {
         continue;
       }
 
-      // Per-day references
+      // Per-day references (store for UI)
       try {
         const dayRefs = {};
-        for (const sh of grpShifts) {
+        for (const sh of grpShiftsFresh) {
           const ymd = sh.work_date;
           const ref = sh.ref_num || sh.nhsp_ref_num || null;
           if (!ymd || !ref) continue;
@@ -14637,7 +14638,7 @@ async function handleNhspApply(env, req, importId) {
 
       // Overpay advance logic
       try {
-        const totals = await computeNhspTotalsForShifts(env, contract, grpShifts);
+        const totals = await computeNhspTotalsForShifts(env, contract, grpShiftsFresh);
 
         if (totals?.missingBuckets && totals.missingBuckets.length) {
           logWarn({
@@ -14690,6 +14691,8 @@ async function handleNhspApply(env, req, importId) {
       shifts_updated: updated,
       mapped_candidates: mappedCandidates,
       mapped_clients: mappedClients,
+      phase2_rows_ok: phase15Ok,
+      phase2_rows_shift_updated: phase15Updated,
       groups_total,
       groups_attempted,
       groups_succeeded,
@@ -14706,6 +14709,8 @@ async function handleNhspApply(env, req, importId) {
         shifts_updated: updated,
         mapped_candidates: mappedCandidates,
         mapped_clients: mappedClients,
+        phase2_rows_ok: phase15Ok,
+        phase2_rows_shift_updated: phase15Updated,
         groups_total,
         groups_attempted,
         groups_succeeded,
@@ -14721,6 +14726,8 @@ async function handleNhspApply(env, req, importId) {
       shifts_updated: updated,
       mapped_candidates: mappedCandidates,
       mapped_clients: mappedClients,
+      phase2_rows_ok: phase15Ok,
+      phase2_rows_shift_updated: phase15Updated,
       groups_total,
       groups_attempted,
       groups_succeeded,
@@ -15029,9 +15036,9 @@ async function handleHrAutoprocessApply(env, req, importId) {
   const HR_OVERPAY_ADVANCE_THRESHOLD = 200; // adjust as needed
 
   // ─────────────────────────────────────────────────────────────
-  // NEW: request-scoped policy cache (prevents per-shift loadPolicy thrash)
+  // request-scoped policy cache (prevents per-shift loadPolicy thrash)
   // key = `${client_id}__${dateYmd}`
-  // NOTE: loadPolicy now also caches on env.__POLICY_CACHE; this is an extra cheap layer.
+  // NOTE: loadPolicy also caches on env.__POLICY_CACHE; this is an extra cheap layer.
   // ─────────────────────────────────────────────────────────────
   const _policyCache = new Map();
   const getPolicyCached = async (client_id, dateYmd) => {
@@ -15043,7 +15050,6 @@ async function handleHrAutoprocessApply(env, req, importId) {
   };
 
   // ✅ UPDATED: weekly truth totals must use contract rates (payChargeFromContract), not resolveRates
-  // Also returns missingBuckets so caller can safely skip/reject the group.
   async function computeHrTotalsForShifts(env, contract, client_id, shifts) {
     const pc  = payChargeFromContract(contract);
     const pay = pc?.pay || null;
@@ -15167,7 +15173,7 @@ async function handleHrAutoprocessApply(env, req, importId) {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // NEW: cached snapshot builder (prevents “Too many subrequests”)
+  // cached snapshot builder (prevents “Too many subrequests”)
   // Business logic matches buildNhspWeeklySnapshot but uses getPolicyCached(...)
   // ─────────────────────────────────────────────────────────────
   async function buildNhspWeeklySnapshotCached(env, ts, contract, shifts, nhspImportId, basis = 'NHSP') {
@@ -15381,12 +15387,11 @@ async function handleHrAutoprocessApply(env, req, importId) {
     return { ok: true };
   }
 
-  // ✅ Helper to ensure we don’t silently proceed if weekly snapshot fails
   async function buildWeeklySnapshotSafe(ts, contract, shifts, basis) {
     try {
       const r = await buildNhspWeeklySnapshotCached(env, ts, contract, shifts, importId, basis);
       if (!r || r.ok !== true) {
-        console.warn('[HR_AUTOPROC_APPLY] buildNhspWeeklySnapshot failed (skipping group)', {
+        console.warn('[HR_AUTOPROC_APPLY] build snapshot failed (skipping group)', {
           import_id: importId,
           timesheet_id: ts?.timesheet_id || null,
           contract_id: contract?.id || null,
@@ -15397,7 +15402,7 @@ async function handleHrAutoprocessApply(env, req, importId) {
       }
       return true;
     } catch (e) {
-      console.warn('[HR_AUTOPROC_APPLY] buildNhspWeeklySnapshot threw (skipping group)', {
+      console.warn('[HR_AUTOPROC_APPLY] build snapshot threw (skipping group)', {
         import_id: importId,
         timesheet_id: ts?.timesheet_id || null,
         contract_id: contract?.id || null,
@@ -15407,6 +15412,29 @@ async function handleHrAutoprocessApply(env, req, importId) {
       return false;
     }
   }
+
+  // Helper: fetch TSFIN lock state for a set of timesheet_ids (missing TSFIN => safe)
+  const loadTsfinLocks = async (timesheetIds) => {
+    const ids = [...new Set((timesheetIds || []).filter(Boolean).map(String))];
+    const finByTsId = new Map();
+    if (!ids.length) return finByTsId;
+
+    const chunkSize = 200;
+    for (let i = 0; i < ids.length; i += chunkSize) {
+      const c = ids.slice(i, i + chunkSize);
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?timesheet_id=in.(${c.map(enc).join(',')})` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,locked_by_invoice_id,paid_at_utc`
+      );
+      for (const r of (rows || [])) {
+        if (r && r.timesheet_id) finByTsId.set(String(r.timesheet_id), r);
+      }
+    }
+    return finByTsId;
+  };
 
   try {
     // ─────────────────────────────────────────────
@@ -15420,17 +15448,10 @@ async function handleHrAutoprocessApply(env, req, importId) {
         client_aliases:     clientAliases
       });
     } catch (e) {
-      if (LOG) {
-        console.warn('[HR_AUTOPROC_APPLY] applyWeeklyMappingsOnly failed (non-fatal)', {
-          import_id: importId,
-          err: e?.message || String(e)
-        });
-      } else {
-        console.warn('[HR_AUTOPROC_APPLY] applyWeeklyMappingsOnly failed (non-fatal)', {
-          import_id: importId,
-          err: e?.message || String(e)
-        });
-      }
+      console.warn('[HR_AUTOPROC_APPLY] applyWeeklyMappingsOnly failed (non-fatal)', {
+        import_id: importId,
+        err: e?.message || String(e)
+      });
     }
 
     // ─────────────────────────────────────────────
@@ -15443,59 +15464,12 @@ async function handleHrAutoprocessApply(env, req, importId) {
       `&select=id,source_system,client_id,file_r2_key,parse_summary_json&limit=1`
     );
     const imp = impRows?.[0] || null;
-    if (!imp) {
-      if (LOG) {
-        console.warn('[HR_AUTOPROC_APPLY]', JSON.stringify({
-          stage: 'import_not_found',
-          import_id: importId
-        }));
-      } else {
-        console.warn('[HR_AUTOPROC_APPLY] import not found', { importId });
-      }
-      return withCORS(env, req, notFound("HealthRoster import not found"));
-    }
+    if (!imp) return withCORS(env, req, notFound("HealthRoster import not found"));
     if (imp.source_system !== 'HEALTHROSTER') {
-      if (LOG) {
-        console.warn('[HR_AUTOPROC_APPLY]', JSON.stringify({
-          stage: 'wrong_source_system',
-          import_id: importId,
-          source_system: imp.source_system
-        }));
-      } else {
-        console.warn('[HR_AUTOPROC_APPLY] wrong source_system', {
-          importId,
-          source_system: imp.source_system
-        });
-      }
       return withCORS(env, req, badRequest(`Import ${importId} is not HEALTHROSTER (source_system=${imp.source_system})`));
     }
     if (!imp.client_id) {
-      if (LOG) {
-        console.warn('[HR_AUTOPROC_APPLY]', JSON.stringify({
-          stage: 'missing_client_id',
-          import_id: importId
-        }));
-      } else {
-        console.warn('[HR_AUTOPROC_APPLY] missing client_id', { importId });
-      }
       return withCORS(env, req, badRequest("HealthRoster autoprocess import is missing client_id"));
-    }
-
-    if (LOG) {
-      console.log('[HR_AUTOPROC_APPLY]', JSON.stringify({
-        stage: 'import_loaded',
-        import_id: importId,
-        source_system: imp.source_system,
-        client_id: imp.client_id,
-        parse_summary: imp.parse_summary_json || null
-      }));
-    } else {
-      console.log('[HR_AUTOPROC_APPLY] import loaded', {
-        importId,
-        source_system: imp.source_system,
-        client_id: imp.client_id,
-        parse_summary: imp.parse_summary_json || null
-      });
     }
 
     // ─────────────────────────────────────────────
@@ -15506,78 +15480,10 @@ async function handleHrAutoprocessApply(env, req, importId) {
     let mappedCandidates = 0;
 
     try {
-      const rpcBody = {
-        import_id: importId,
-        selected_group_ids: null
-      };
+      const rpcBody = { import_id: importId, selected_group_ids: null };
 
       const rpcRes = await fetch(
         `${env.SUPABASE_URL}/rest/v1/rpc/hr_autoprocess_apply_phase1`,
-        {
-          method: 'POST',
-          headers: {
-            ...sbHeaders(env),
-            'content-type': 'application/json'
-          },
-          body: JSON.stringify(rpcBody)
-        }
-      );
-
-      const txt = await rpcRes.text().catch(() => '');
-      if (!rpcRes.ok) {
-        console.error('[HR_AUTOPROC_APPLY] hr_autoprocess_apply_phase1 RPC failed', {
-          import_id: importId,
-          status: rpcRes.status,
-          body: txt
-        });
-        throw new Error(`hr_autoprocess_apply_phase1 failed with status ${rpcRes.status}`);
-      }
-
-      let rpcJson;
-      try {
-        rpcJson = txt ? JSON.parse(txt) : null;
-      } catch {
-        rpcJson = null;
-      }
-
-      const row0 = Array.isArray(rpcJson) ? rpcJson[0] : rpcJson;
-
-      if (row0 && typeof row0 === 'object') {
-        created          = Number(row0.shifts_created    ?? 0);
-        updated          = Number(row0.shifts_updated    ?? 0);
-        mappedCandidates = Number(row0.mapped_candidates ?? 0);
-      }
-
-      if (LOG) {
-        console.log('[HR_AUTOPROC_APPLY]', JSON.stringify({
-          stage: 'phase1_complete',
-          import_id: importId,
-          shifts_created: created,
-          shifts_updated: updated,
-          mapped_candidates: mappedCandidates
-        }));
-      } else {
-        console.log('[HR_AUTOPROC_APPLY] phase1 complete', {
-          importId,
-          shifts_created: created,
-          shifts_updated: updated,
-          mapped_candidates: mappedCandidates
-        });
-      }
-    } catch (e) {
-      console.error('[HR_AUTOPROC_APPLY] hr_autoprocess_apply_phase1 RPC threw', {
-        import_id: importId,
-        err: e?.message || String(e)
-      });
-      throw e;
-    }
-
-    // ---------- PHASE 1.5 (NEW): SQL-selected contract alignment ----------
-    // Ensures nhsp_shifts.contract_id is set using the SAME mapping-table selection logic as weekly preview.
-    try {
-      const rpcBody = { p_import_id: importId, p_system_type: 'HR_WEEKLY' };
-      const res = await fetch(
-        `${env.SUPABASE_URL}/rest/v1/rpc/weekly_import_apply_phase2`,
         {
           method: 'POST',
           headers: { ...sbHeaders(env), 'content-type': 'application/json' },
@@ -15585,50 +15491,107 @@ async function handleHrAutoprocessApply(env, req, importId) {
         }
       );
 
-      const txt = await res.text().catch(() => '');
-      if (!res.ok) {
-        console.error('[HR_AUTOPROC_APPLY] weekly_import_apply_phase2 RPC failed (FATAL)', {
-          import_id: importId,
-          status: res.status,
-          body: txt
-        });
-        throw new Error(`weekly_import_apply_phase2 failed with status ${res.status}`);
+      const txt = await rpcRes.text().catch(() => '');
+      if (!rpcRes.ok) {
+        throw new Error(`hr_autoprocess_apply_phase1 failed: ${txt || rpcRes.status}`);
       }
 
-      if (LOG) {
-        let rowsCount = null;
-        try {
-          const j = txt ? JSON.parse(txt) : [];
-          rowsCount = Array.isArray(j) ? j.length : null;
-        } catch {
-          rowsCount = null;
-        }
-        console.log('[HR_AUTOPROC_APPLY]', JSON.stringify({
-          stage: 'phase1_5_contract_alignment_done',
-          import_id: importId,
-          rows: rowsCount
-        }));
+      let rpcJson;
+      try { rpcJson = txt ? JSON.parse(txt) : null; } catch { rpcJson = null; }
+      const row0 = Array.isArray(rpcJson) ? rpcJson[0] : rpcJson;
+
+      if (row0 && typeof row0 === 'object') {
+        created          = Number(row0.shifts_created    ?? 0);
+        updated          = Number(row0.shifts_updated    ?? 0);
+        mappedCandidates = Number(row0.mapped_candidates ?? 0);
       }
     } catch (e) {
-      console.error('[HR_AUTOPROC_APPLY] contract alignment failed (FATAL)', {
-        import_id: importId,
-        err: e?.message || String(e)
-      });
+      console.error('[HR_AUTOPROC_APPLY] phase1 failed', { import_id: importId, err: e?.message || String(e) });
       throw e;
     }
 
-    // ---------- PHASE 2: weekly grouping/TS/TSFIN with self-bill-aware logic ----------
+    // ─────────────────────────────────────────────
+    // PHASE 1.5: AUTHORITATIVE repair via weekly_import_apply_phase2(importId,'HR_WEEKLY')
+    // We will group/apply based on its output (contract/week selection + external_row_key),
+    // not based on whatever nhsp_shifts currently look like.
+    // ─────────────────────────────────────────────
+    let phase15Rows = [];
+    let phase15Ok = 0;
+    let phase15Updated = 0;
+
+    try {
+      const res = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/rpc/weekly_import_apply_phase2`,
+        {
+          method: 'POST',
+          headers: { ...sbHeaders(env), 'content-type': 'application/json' },
+          body: JSON.stringify({ p_import_id: importId, p_system_type: 'HR_WEEKLY' })
+        }
+      );
+      const txt = await res.text().catch(() => '');
+      if (!res.ok) throw new Error(`weekly_import_apply_phase2 failed: ${txt || res.status}`);
+
+      try {
+        const j = txt ? JSON.parse(txt) : [];
+        phase15Rows = Array.isArray(j) ? j : [];
+      } catch {
+        phase15Rows = [];
+      }
+
+      phase15Ok = phase15Rows.filter(r => String(r?.action || '').toUpperCase() === 'OK').length;
+      phase15Updated = phase15Rows.filter(r => r && r.shift_updated === true).length;
+    } catch (e) {
+      console.error('[HR_AUTOPROC_APPLY] phase1.5 failed (fatal)', { import_id: importId, err: e?.message || String(e) });
+      throw e;
+    }
+
+    // ─────────────────────────────────────────────
+    // PHASE 2: fetch shifts AFTER repair (essential)
+    // ─────────────────────────────────────────────
     const { rows: allShifts } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
       `?latest_import_id=eq.${enc(importId)}&source_system=eq.HEALTHROSTER` +
       `&select=*`
     );
+    const allShiftsArr = Array.isArray(allShifts) ? allShifts : [];
 
-    // ✅ require contract_id so apply cannot drift from preview
-    const shifts = (allShifts || []).filter(s => s.candidate_id && s.client_id && s.contract_id && s.work_date);
+    const shiftByExternalKey = new Map();
+    for (const s of allShiftsArr) {
+      if (s && s.external_row_key) shiftByExternalKey.set(String(s.external_row_key), s);
+    }
 
-    // ✅ NEW: classifier-driven group outcome reporting (matches preview list)
+    // Build authoritative groups from Phase1.5 output
+    const p2Ok = (phase15Rows || []).filter(r => {
+      const act = String(r?.action || '').toUpperCase();
+      return (
+        act === 'OK' &&
+        r?.external_row_key &&
+        r?.candidate_id &&
+        r?.client_id &&
+        r?.contract_id &&
+        r?.week_ending_date
+      );
+    });
+
+    const p2GroupByPreviewId = new Map(); // preview_group_id -> {candidate_id, client_id, contract_id, week_ending_date, external_row_keys[]}
+    for (const r of p2Ok) {
+      const candidateId = String(r.candidate_id);
+      const clientId    = String(r.client_id);
+      const contractId  = String(r.contract_id);
+      const we          = String(r.week_ending_date);
+      const extKey      = String(r.external_row_key);
+
+      const previewGroupId = `grp:${contractId}:${we}:${candidateId}`;
+      let g = p2GroupByPreviewId.get(previewGroupId);
+      if (!g) {
+        g = { candidate_id: candidateId, client_id: clientId, contract_id: contractId, week_ending_date: we, external_row_keys: [] };
+        p2GroupByPreviewId.set(previewGroupId, g);
+      }
+      if (!g.external_row_keys.includes(extKey)) g.external_row_keys.push(extKey);
+    }
+
+    // Classifier meta (selection + action semantics)
     const READY_ACTIONS = new Set([
       'NEW_AUTOPROC_TIMESHEET',
       'UPDATE_AUTOPROC_TS',
@@ -15637,23 +15600,6 @@ async function handleHrAutoprocessApply(env, req, importId) {
       'CREATE_ADJUSTMENT_TS',
       'CREATE_PAY_ADJUSTMENT_ONLY'
     ]);
-
-    let groups_total = 0;
-    let groups_attempted = 0;
-    let groups_succeeded = 0;
-    let groups_failed = 0;
-
-    const failSamples = [];
-    const addFail = (preview_group_id, action, reason) => {
-      groups_failed++;
-      if (failSamples.length < 10) {
-        failSamples.push({
-          preview_group_id: preview_group_id || null,
-          action: action || null,
-          reason: reason || null
-        });
-      }
-    };
 
     let classifiedGroups = [];
     try {
@@ -15672,223 +15618,234 @@ async function handleHrAutoprocessApply(env, req, importId) {
     for (const g0 of classifiedGroups) {
       if (g0 && g0.preview_group_id) metaByPreviewId.set(String(g0.preview_group_id), g0);
     }
-    groups_total = classifiedGroups.length;
-
-    if (shifts.length) {
-      const clientIds = [...new Set(shifts.map(s => s.client_id).filter(Boolean))];
-      let csMap = new Map();
-      if (clientIds.length) {
-        const { rows: csRows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/client_settings` +
-          `?client_id=in.(${clientIds.map(enc).join(',')})` +
-          `&select=client_id,week_ending_weekday` +
-          `&order=effective_from.desc,created_at.desc`
-        );
-        for (const r of csRows || []) {
-          if (!csMap.has(r.client_id)) csMap.set(r.client_id, r);
-        }
-      }
-
-      const groups = new Map();
-
-      for (const sh of shifts) {
-        const cs = csMap.get(sh.client_id) || {};
-        const weDow = Number.isInteger(Number(cs.week_ending_weekday))
-          ? Number(cs.week_ending_weekday)
-          : 0;
-
-        const d = new Date(`${sh.work_date}T00:00:00Z`);
-        if (isNaN(d.getTime())) continue;
-
-        while (d.getUTCDay() !== weDow) {
-          d.setUTCDate(d.getUTCDate() + 1);
-        }
-        const yyyy = d.getUTCFullYear();
-        const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
-        const dd   = String(d.getUTCDate()).padStart(2, '0');
-        const weekEndingDate = `${yyyy}-${mm}-${dd}`;
-
-        // ✅ include contract_id to keep separate contracts separate
-        const key = `${sh.candidate_id}__${sh.client_id}__${sh.contract_id}__${weekEndingDate}`;
-        let g = groups.get(key);
-        if (!g) {
-          g = {
-            candidate_id: sh.candidate_id,
-            client_id: sh.client_id,
-            contract_id: sh.contract_id,
-            week_ending_date: weekEndingDate,
-            shifts: []
-          };
-          groups.set(key, g);
-        }
-        g.shifts.push(sh);
-      }
-
-      console.log('[HR_AUTOPROC_APPLY] phase2 groups built', {
-        importId,
-        group_count: groups.size
-      });
-
-      // ✅ batch-load contracts by id
-      const contractById = new Map();
-      {
-        const contractIds = [...new Set([...groups.values()].map(g => g.contract_id).filter(Boolean))];
-        for (const idChunk of chunk(contractIds, 150)) {
-          const { rows: cRows } = await sbFetch(
-            env,
-            `${env.SUPABASE_URL}/rest/v1/contracts` +
-            `?id=in.(${idChunk.map(enc).join(',')})` +
-            `&select=*`
-          );
-          for (const c of (cRows || [])) contractById.set(c.id, c);
-        }
-      }
-
-      for (const g of groups.values()) {
-        const previewGroupId = `grp:${g.contract_id}:${g.week_ending_date}:${g.candidate_id}`;
-        const meta = metaByPreviewId.get(previewGroupId) || null;
-        const actionUpper = String(meta?.action || '').trim().toUpperCase();
-        const isSelected =
-          selectedGroupIds.length
-            ? selectedGroupIds.includes(previewGroupId)
-            : (meta ? (meta.default_selected !== false) : true);
-
-        // Only attempt ready-to-process groups (matches UI semantics)
-        if (!isSelected) continue;
-        if (!READY_ACTIONS.has(actionUpper)) continue;
-
-        groups_attempted++;
-
-        const contract = contractById.get(g.contract_id) || null;
-        if (!contract) {
-          addFail(previewGroupId, actionUpper, 'Contract not found for contract_id');
-          continue;
-        }
-
-        // ✅ Early guard: weekly HR requires contract rates_json available
-        const pc = payChargeFromContract(contract);
-        if (!pc?.pay || !pc?.charge) {
-          addFail(previewGroupId, actionUpper, 'Contract rates missing (rates_json incomplete)');
-          continue;
-        }
-
-        console.log('[HR_AUTOPROC_APPLY] contract flags', {
-          importId,
-          contract_id: contract.id,
-          self_bill: !!contract.self_bill
+    // If classifier returned nothing, provide fallback meta so groups still apply
+    if (!metaByPreviewId.size && p2GroupByPreviewId.size) {
+      for (const [pid, g] of p2GroupByPreviewId.entries()) {
+        metaByPreviewId.set(pid, {
+          level: 'group',
+          preview_group_id: pid,
+          candidate_id: g.candidate_id,
+          client_id: g.client_id,
+          contract_id: g.contract_id,
+          week_ending_date: g.week_ending_date,
+          action: 'NEW_AUTOPROC_TIMESHEET',
+          reason: 'No classifier result; apply fallback treats group as new.',
+          default_selected: true
         });
+      }
+    }
 
-        // Load contract_weeks for this contract/week
-        const { rows: cwRows } = await sbFetch(
+    // Batch load contracts for all groups
+    const contractById = new Map();
+    {
+      const contractIds = [...new Set([...p2GroupByPreviewId.values()].map(g => g.contract_id).filter(Boolean))];
+      for (const idChunk of chunk(contractIds, 150)) {
+        const { rows: cRows } = await sbFetch(
           env,
-          `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-          `?contract_id=eq.${enc(contract.id)}` +
-          `&week_ending_date=eq.${enc(g.week_ending_date)}` +
-          `&select=id,additional_seq,is_adjustment,timesheet_id` +
-          `&order=additional_seq.asc`
+          `${env.SUPABASE_URL}/rest/v1/contracts` +
+          `?id=in.(${idChunk.map(enc).join(',')})` +
+          `&select=*`
         );
-        let weeks = cwRows || [];
-        let baseWeek = weeks.find(w => !w.is_adjustment && Number(w.additional_seq || 0) === 0) || null;
-        const nowIso = new Date().toISOString();
+        for (const c of (cRows || [])) contractById.set(c.id, c);
+      }
+    }
 
-        // Ensure base week exists (create if missing)
-        if (!baseWeek) {
-          const cwPayload = {
-            contract_id: contract.id,
-            week_ending_date: g.week_ending_date,
-            additional_seq: 0,
-            is_adjustment: false,
-            status: 'OPEN',
-            created_at: nowIso,
-            updated_at: nowIso
-          };
-          const insCw = await fetch(
-            `${env.SUPABASE_URL}/rest/v1/contract_weeks`,
-            {
-              method: 'POST',
-              headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-              body: JSON.stringify(cwPayload)
-            }
-          );
-          if (!insCw.ok) {
-            const err = await insCw.text().catch(() => '');
-            addFail(previewGroupId, actionUpper, `contract_weeks insert failed: ${err || 'unknown error'}`);
-            continue;
+    // Batch load candidates + clients for norms (timesheets NOT NULL fields)
+    const candidateById = new Map();
+    const clientById    = new Map();
+    {
+      const candIds = [...new Set([...p2GroupByPreviewId.values()].map(g => g.candidate_id).filter(Boolean))];
+      const cliIds  = [...new Set([...p2GroupByPreviewId.values()].map(g => g.client_id).filter(Boolean))];
+
+      for (const idChunk of chunk(candIds, 150)) {
+        const { rows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=in.(${idChunk.map(enc).join(',')})` +
+          `&select=id,display_name,tms_ref`
+        );
+        for (const r of (rows || [])) candidateById.set(r.id, r);
+      }
+
+      for (const idChunk of chunk(cliIds, 150)) {
+        const { rows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/clients` +
+          `?id=in.(${idChunk.map(enc).join(',')})` +
+          `&select=id,name`
+        );
+        for (const r of (rows || [])) clientById.set(r.id, r);
+      }
+    }
+
+    // Outcome counters
+    let groups_total = 0;
+    let groups_attempted = 0;
+    let groups_succeeded = 0;
+    let groups_failed = 0;
+
+    const addFail = (preview_group_id, action, reason, debugExtra = null) => {
+      groups_failed++;
+      if (failSamples.length < 10) {
+        const x = {
+          preview_group_id: preview_group_id || null,
+          action: action || null,
+          reason: reason || null
+        };
+        if (debugExtra && typeof debugExtra === 'object') x.debug = debugExtra;
+        failSamples.push(x);
+      }
+    };
+
+    // Iterate authoritative Phase2 groups (not “whatever shifts look like”)
+    for (const [previewGroupId, p2g] of p2GroupByPreviewId.entries()) {
+      groups_total++;
+
+      const meta = metaByPreviewId.get(previewGroupId) || null;
+      const actionUpper = String(meta?.action || 'NEW_AUTOPROC_TIMESHEET').trim().toUpperCase();
+      const defaultSelected = (meta ? (meta.default_selected !== false) : true);
+
+      const isSelected =
+        selectedGroupIds.length
+          ? selectedGroupIds.includes(previewGroupId)
+          : defaultSelected;
+
+      if (!isSelected) continue;
+      if (!READY_ACTIONS.has(actionUpper)) continue;
+
+      groups_attempted++;
+
+      const clientId       = p2g.client_id || null;
+      const candidateId    = p2g.candidate_id || null;
+      const contractId     = p2g.contract_id || null;
+      const weekEndingDate = p2g.week_ending_date || null;
+
+      if (!clientId || !candidateId || !contractId || !weekEndingDate) {
+        addFail(previewGroupId, actionUpper, 'Missing ids on Phase2 group', {
+          client_id: clientId, candidate_id: candidateId, contract_id: contractId, week_ending_date: weekEndingDate
+        });
+        continue;
+      }
+
+      // Locate shift rows by external_row_key (authoritative row-set)
+      const extKeys = Array.isArray(p2g.external_row_keys) ? p2g.external_row_keys.slice() : [];
+      const grpShifts = [];
+      const missingExt = [];
+      for (const k of extKeys) {
+        const sh = shiftByExternalKey.get(String(k)) || null;
+        if (sh) grpShifts.push(sh);
+        else missingExt.push(String(k));
+      }
+      if (!grpShifts.length) {
+        addFail(previewGroupId, actionUpper, 'No shifts found for Phase2 external_row_keys (cannot apply).', {
+          phase2_external_row_keys_count: extKeys.length,
+          missing_external_row_keys_count: missingExt.length,
+          sample_missing_external_row_keys: missingExt.slice(0, 5),
+          all_import_rows: allShiftsArr.length
+        });
+        continue;
+      }
+
+      const contract = contractById.get(contractId) || null;
+      if (!contract) {
+        addFail(previewGroupId, actionUpper, 'Contract not found', { contract_id: contractId });
+        continue;
+      }
+
+      const pc = payChargeFromContract(contract);
+      if (!pc?.pay || !pc?.charge) {
+        addFail(previewGroupId, actionUpper, 'Contract rates missing (rates_json incomplete)', { contract_id: contractId });
+        continue;
+      }
+
+      // Load all contract_weeks for this contract/week (base + adjustments)
+      const { rows: cwRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+        `?contract_id=eq.${enc(contract.id)}` +
+        `&week_ending_date=eq.${enc(weekEndingDate)}` +
+        `&select=id,additional_seq,is_adjustment,timesheet_id,status` +
+        `&order=additional_seq.asc`
+      );
+      let weeks = Array.isArray(cwRows) ? cwRows : [];
+      let baseWeek = weeks.find(w => !w.is_adjustment && Number(w.additional_seq || 0) === 0) || null;
+      const adjWeeks = weeks.filter(w => !!w.is_adjustment);
+      const nowIso = new Date().toISOString();
+
+      // Ensure baseWeek exists
+      if (!baseWeek) {
+        const ins = await fetch(
+          `${env.SUPABASE_URL}/rest/v1/contract_weeks`,
+          {
+            method: 'POST',
+            headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+            body: JSON.stringify([{
+              contract_id: contract.id,
+              week_ending_date: weekEndingDate,
+              additional_seq: 0,
+              is_adjustment: false,
+              status: 'SUBMITTED',
+              created_at: nowIso,
+              updated_at: nowIso
+            }])
           }
-          const cwJson = await insCw.json().catch(() => []);
-          baseWeek = Array.isArray(cwJson) ? cwJson[0] : cwJson;
-          if (!baseWeek?.id) {
-            addFail(previewGroupId, actionUpper, 'contract_weeks insert returned no id');
-            continue;
-          }
+        );
+        const txt = await ins.text().catch(() => '');
+        if (!ins.ok) {
+          addFail(previewGroupId, actionUpper, `contract_weeks insert failed: ${txt || ins.status}`);
+          continue;
+        }
+        const j = txt ? JSON.parse(txt) : [];
+        baseWeek = Array.isArray(j) ? j[0] : j;
+        weeks = [baseWeek, ...weeks];
+      }
 
-          // Create a new base weekly TS
-          const { rows: candRows2 } = await sbFetch(
-            env,
-            `${env.SUPABASE_URL}/rest/v1/candidates` +
-            `?id=eq.${enc(g.candidate_id)}&select=id,display_name` +
-            `&limit=1`
-          );
-          const cand = candRows2?.[0] || null;
-          const { rows: cliRows2 } = await sbFetch(
-            env,
-            `${env.SUPABASE_URL}/rest/v1/clients` +
-            `?id=eq.${enc(g.client_id)}&select=id,name` +
-            `&limit=1`
-          );
-          const client = cliRows2?.[0] || null;
+      // Ensure/locate base timesheet for baseWeek
+      let ts = null;
 
-          const occNorm  = (cand?.display_name || String(cand?.id || '')).toLowerCase();
-          const hospNorm = (contract.display_site || client?.name || String(client?.id || '')).toLowerCase();
-          const wardNorm = (contract.ward_hint || 'hr-weekly').toLowerCase();
-          const jobTitleNorm = (contract.role || 'hr-weekly').toLowerCase();
+      // booking id must be awaited (makeWeeklyBookingId is async)
+      let bookingId = null;
+      try {
+        bookingId = await makeWeeklyBookingId(contract.candidate_id || candidateId, contract, baseWeek);
+      } catch (e) {
+        bookingId = null;
+      }
+      if (!bookingId || typeof bookingId !== 'string' || !bookingId.trim()) {
+        addFail(previewGroupId, actionUpper, 'Invalid booking_id computed for base week', {
+          contract_id: contract.id,
+          candidate_id: contract.candidate_id || candidateId,
+          week_ending_date: weekEndingDate,
+          booking_id: bookingId
+        });
+        continue;
+      }
 
-          const bookingId = `HR:${g.candidate_id}:${g.client_id}:${g.week_ending_date}`;
+      // If baseWeek linked, load timesheet
+      if (baseWeek.timesheet_id) {
+        const { rows: tsRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?timesheet_id=eq.${enc(baseWeek.timesheet_id)}` +
+          `&is_current=eq.true` +
+          `&select=*` +
+          `&limit=1`
+        );
+        ts = tsRows?.[0] || null;
+      }
 
-          const tsPayload = [{
-            booking_id: bookingId,
-            version: 1,
-            is_current: true,
-            status: 'SUBMITTED',
-            occupant_key_norm: occNorm,
-            hospital_norm: hospNorm,
-            ward_norm: wardNorm,
-            job_title_norm: jobTitleNorm,
-            shift_label_norm: 'weekly',
-            week_ending_date: g.week_ending_date,
-            r2_nurse_key: null,
-            r2_auth_key: null,
-            contract_id: contract.id,
-            submission_mode: 'ELECTRONIC',
-            manual_pdf_r2_key: null,
-            line_type: 'HOURS',
-            actual_schedule_json: [],
-            authorised_at_server: nowIso,
-            created_at: nowIso,
-            updated_at: nowIso
-          }];
+      // Else find by booking_id (idempotent)
+      if (!ts) {
+        const { rows: tsRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?booking_id=eq.${enc(bookingId)}` +
+          `&is_current=eq.true` +
+          `&select=*` +
+          `&limit=1`
+        );
+        ts = tsRows?.[0] || null;
 
-          const insTs = await fetch(
-            `${env.SUPABASE_URL}/rest/v1/timesheets`,
-            {
-              method: 'POST',
-              headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-              body: JSON.stringify(tsPayload)
-            }
-          );
-          if (!insTs.ok) {
-            const err = await insTs.text().catch(() => '');
-            addFail(previewGroupId, actionUpper, `timesheets insert failed (new base): ${err || 'unknown error'}`);
-            continue;
-          }
-          const tsJson = await insTs.json().catch(() => []);
-          const ts = Array.isArray(tsJson) ? tsJson[0] : tsJson;
-          if (!ts?.timesheet_id) {
-            addFail(previewGroupId, actionUpper, 'timesheets insert returned no timesheet_id (new base)');
-            continue;
-          }
-
+        if (ts && !baseWeek.timesheet_id) {
           await fetch(
             `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(baseWeek.id)}`,
             {
@@ -15897,246 +15854,262 @@ async function handleHrAutoprocessApply(env, req, importId) {
               body: JSON.stringify({ timesheet_id: ts.timesheet_id, status: 'SUBMITTED', updated_at: nowIso })
             }
           ).catch(() => {});
+          baseWeek.timesheet_id = ts.timesheet_id;
+        }
+      }
 
-          // Link this group's shifts to the base TS
-          const shiftIdsForTs0 = g.shifts.map(s => s.id);
-          if (shiftIdsForTs0.length) {
-            const shParam = shiftIdsForTs0.map(enc).join(',');
-            await fetch(
-              `${env.SUPABASE_URL}/rest/v1/nhsp_shifts?id=in.(${shParam})`,
-              {
-                method: 'PATCH',
-                headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-                body: JSON.stringify({ timesheet_id: ts.timesheet_id, contract_id: contract.id, updated_at: nowIso })
-              }
-            ).catch(() => {});
+      // Else create base timesheet (KEEP submission_mode=MANUAL; no new submission mode)
+      if (!ts) {
+        const cand = candidateById.get(candidateId) || null;
+        const cli  = clientById.get(clientId) || null;
+        const firstShift = grpShifts[0] || {};
+
+        const occupantKeyNorm =
+          String(cand?.tms_ref || cand?.display_name || candidateId || 'worker').toLowerCase();
+
+        const hospitalNorm =
+          String(contract.display_site || cli?.name || clientId || 'client').toLowerCase();
+
+        const wardNorm =
+          String(contract.ward_hint || firstShift.ward || 'contract').toLowerCase();
+
+        const jobTitleNorm =
+          String(contract.role || 'hr-weekly').toLowerCase();
+
+        const tsPayload = [{
+          booking_id: bookingId,
+          version: 1,
+          is_current: true,
+          status: 'RECEIVED',
+
+          sheet_scope: 'WEEKLY',
+          submission_mode: 'MANUAL',
+          line_type: 'HOURS',
+
+          occupant_key_norm: occupantKeyNorm,
+          hospital_norm: hospitalNorm,
+          ward_norm: wardNorm,
+          job_title_norm: jobTitleNorm,
+          shift_label_norm: 'weekly',
+
+          week_ending_date: weekEndingDate,
+          contract_id: contract.id,
+
+          manual_pdf_r2_key: null,
+          actual_schedule_json: [],
+
+          authorised_at_server: null,
+          created_at: nowIso,
+          updated_at: nowIso
+        }];
+
+        const ins = await fetch(
+          `${env.SUPABASE_URL}/rest/v1/timesheets`,
+          {
+            method: 'POST',
+            headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+            body: JSON.stringify(tsPayload)
           }
+        );
+        const txt = await ins.text().catch(() => '');
+        if (!ins.ok) {
+          addFail(previewGroupId, actionUpper, `timesheets insert failed (base): ${txt || ins.status}`, { booking_id: bookingId });
+          continue;
+        }
+        const j = txt ? JSON.parse(txt) : [];
+        ts = Array.isArray(j) ? j[0] : j;
 
-          // Base snapshot from HR truth (weekly contract rates)
-          const okSnap = await buildWeeklySnapshotSafe(ts, contract, g.shifts, 'CONTRACT_WEEKLY');
-          if (!okSnap) {
-            addFail(previewGroupId, actionUpper, 'buildNhspWeeklySnapshot failed (new base)');
-            continue;
-          }
-
-          try {
-            await upsertValidation(env, user, {
-              timesheet_id: ts.timesheet_id,
-              status: 'VALIDATION_OK',
-              reason: 'HEALTHROSTER_IMPORT',
-              hr_reference: null,
-              import_id: importId
-            });
-          } catch (e) {
-            // non-fatal
-          }
-
-          groups_succeeded++;
+        if (!ts?.timesheet_id) {
+          addFail(previewGroupId, actionUpper, 'timesheets insert returned no timesheet_id (base)');
           continue;
         }
 
-        // We now have baseWeek; load TS + TSFIN for base + adjustments
-        weeks = cwRows || [];
-        const tsIds = weeks.map(w => w.timesheet_id).filter(Boolean);
+        await fetch(
+          `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(baseWeek.id)}`,
+          {
+            method: 'PATCH',
+            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+            body: JSON.stringify({ timesheet_id: ts.timesheet_id, status: 'SUBMITTED', updated_at: nowIso })
+          }
+        ).catch(() => {});
+        baseWeek.timesheet_id = ts.timesheet_id;
+      }
 
-        let tsById = new Map();
-        if (tsIds.length) {
-          const { rows: tsRows } = await sbFetch(
-            env,
-            `${env.SUPABASE_URL}/rest/v1/timesheets` +
-            `?timesheet_id=in.(${tsIds.map(enc).join(',')})` +
-            `&select=timesheet_id,submission_mode,status`
-          );
-          tsById = new Map((tsRows || []).map(t => [t.timesheet_id, t]));
+      if (!ts?.timesheet_id) {
+        addFail(previewGroupId, actionUpper, 'Base timesheet missing timesheet_id after ensure/create');
+        continue;
+      }
+
+      // ─────────────────────────────────────────────
+      // REPAIR RULE (same as NHSP):
+      // As long as the destination (base) TS is not paid/locked AND any current-holder TS
+      // for these shifts is not paid/locked, we are allowed to reassign shifts and rebuild TSFIN.
+      // Missing TSFIN counts as SAFE.
+      // ─────────────────────────────────────────────
+      // Base lock/paid check
+      let baseFinLockedOrPaid = false;
+      {
+        const { rows: finRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=eq.${enc(ts.timesheet_id)}` +
+          `&is_current=eq.true` +
+          `&select=timesheet_id,locked_by_invoice_id,paid_at_utc` +
+          `&limit=1`
+        );
+        const fin = finRows?.[0] || null;
+        if (fin?.locked_by_invoice_id || fin?.paid_at_utc) baseFinLockedOrPaid = true;
+      }
+      if (baseFinLockedOrPaid) {
+        addFail(previewGroupId, actionUpper, 'Base timesheet is paid/locked; refusing to move shifts or rebuild.', {
+          timesheet_id: ts.timesheet_id
+        });
+        continue;
+      }
+
+      // Current-holder lock/paid checks for shifts (missing TSFIN => safe)
+      const existingTsIds = [...new Set(grpShifts.map(s => s && s.timesheet_id).filter(Boolean).map(String))];
+      const existingFinByTs = await loadTsfinLocks(existingTsIds);
+
+      const unsafeShiftIds = [];
+      const unsafeTsIds = new Set();
+      for (const sh of grpShifts) {
+        const curTsId = sh?.timesheet_id ? String(sh.timesheet_id) : null;
+        if (!curTsId) continue;
+
+        const fin = existingFinByTs.get(curTsId) || null;
+        if (!fin) continue; // missing TSFIN => safe
+
+        if (fin.locked_by_invoice_id || fin.paid_at_utc) {
+          unsafeShiftIds.push(sh.id);
+          unsafeTsIds.add(curTsId);
         }
+      }
+      if (unsafeShiftIds.length) {
+        addFail(previewGroupId, actionUpper, 'Some shifts are currently linked to paid/locked timesheets; refusing to move them automatically.', {
+          unsafe_shift_count: unsafeShiftIds.length,
+          unsafe_timesheet_ids: Array.from(unsafeTsIds).slice(0, 10),
+          sample_unsafe_shift_ids: unsafeShiftIds.slice(0, 10)
+        });
+        continue;
+      }
 
-        let finByTsId = new Map();
-        if (tsIds.length) {
+      // Now we can repair: reassign shifts to correct base timesheet for this contract/week
+      const shiftIdsForTs = grpShifts.map(s => s.id).filter(Boolean);
+      if (shiftIdsForTs.length) {
+        const shParam = shiftIdsForTs.map(enc).join(',');
+        await fetch(
+          `${env.SUPABASE_URL}/rest/v1/nhsp_shifts?id=in.(${shParam})`,
+          {
+            method: 'PATCH',
+            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+            body: JSON.stringify({
+              timesheet_id: ts.timesheet_id,
+              contract_id: contract.id,
+              candidate_id: candidateId,
+              client_id: clientId,
+              updated_at: nowIso
+            })
+          }
+        ).catch(() => {});
+      }
+
+      // Refresh shifts from the authoritative map (post-patch)
+      const grpShiftsFresh = grpShifts.map(s => {
+        const k = s && s.external_row_key ? String(s.external_row_key) : null;
+        return k ? (shiftByExternalKey.get(k) || s) : s;
+      });
+
+      // Compute truth totals from HR data (contract rates)
+      const truthRes = await computeHrTotalsForShifts(env, contract, clientId, grpShiftsFresh);
+      if (truthRes?.missingBuckets && truthRes.missingBuckets.length) {
+        addFail(previewGroupId, actionUpper, `Missing contract buckets: ${truthRes.missingBuckets.join(', ')}`);
+        continue;
+      }
+
+      const truthPay = truthRes.totalPayEx;
+      const truthChg = truthRes.totalChgEx;
+      const tol = 0.01;
+
+      // Load TSFIN for base + adjustment timesheets (if any) for delta logic
+      const tsIdsAll = [...new Set(weeks.map(w => w.timesheet_id).filter(Boolean).map(String))];
+      const finByTsId = await (async () => {
+        const m = new Map();
+        if (!tsIdsAll.length) return m;
+        for (const idChunk of chunk(tsIdsAll, 200)) {
           const { rows: finRows } = await sbFetch(
             env,
             `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-            `?timesheet_id=in.(${tsIds.map(enc).join(',')})` +
+            `?timesheet_id=in.(${idChunk.map(enc).join(',')})` +
             `&is_current=eq.true` +
             `&select=id,timesheet_id,total_pay_ex_vat,total_charge_ex_vat,paid_at_utc,locked_by_invoice_id,basis,invoice_breakdown_json`
           );
-          finByTsId = new Map((finRows || []).map(f => [f.timesheet_id, f]));
-        }
-
-        const baseTsId = baseWeek.timesheet_id || null;
-        const baseTs   = baseTsId ? tsById.get(baseTsId) : null;
-        const baseFin  = baseTsId ? finByTsId.get(baseTsId) : null;
-
-        let ts = baseTs || null;
-
-        // Ensure TS exists for base week (double safety)
-        if (!ts) {
-          const { rows: candRows2 } = await sbFetch(
-            env,
-            `${env.SUPABASE_URL}/rest/v1/candidates` +
-            `?id=eq.${enc(g.candidate_id)}&select=id,display_name` +
-            `&limit=1`
-          );
-          const cand = candRows2?.[0] || null;
-          const { rows: cliRows2 } = await sbFetch(
-            env,
-            `${env.SUPABASE_URL}/rest/v1/clients` +
-            `?id=eq.${enc(g.client_id)}&select=id,name` +
-            `&limit=1`
-          );
-          const client = cliRows2?.[0] || null;
-
-          const occNorm  = (cand?.display_name || String(cand?.id || '')).toLowerCase();
-          const hospNorm = (contract.display_site || client?.name || String(client?.id || '')).toLowerCase();
-          const wardNorm = (contract.ward_hint || 'hr-weekly').toLowerCase();
-          const jobTitleNorm = (contract.role || 'hr-weekly').toLowerCase();
-
-          const bookingId = `HR:${g.candidate_id}:${g.client_id}:${g.week_ending_date}`;
-
-          const tsPayload = [{
-            booking_id: bookingId,
-            version: 1,
-            is_current: true,
-            status: 'SUBMITTED',
-            occupant_key_norm: occNorm,
-            hospital_norm: hospNorm,
-            ward_norm: wardNorm,
-            job_title_norm: jobTitleNorm,
-            shift_label_norm: 'weekly',
-            week_ending_date: g.week_ending_date,
-            r2_nurse_key: null,
-            r2_auth_key: null,
-            contract_id: contract.id,
-            submission_mode: 'ELECTRONIC',
-            manual_pdf_r2_key: null,
-            line_type: 'HOURS',
-            actual_schedule_json: [],
-            authorised_at_server: nowIso,
-            created_at: nowIso,
-            updated_at: nowIso
-          }];
-
-          const insTs = await fetch(
-            `${env.SUPABASE_URL}/rest/v1/timesheets`,
-            {
-              method: 'POST',
-              headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-              body: JSON.stringify(tsPayload)
-            }
-          );
-          if (!insTs.ok) {
-            const err = await insTs.text().catch(() => '');
-            addFail(previewGroupId, actionUpper, `timesheets insert failed (base missing): ${err || 'unknown error'}`);
-            continue;
+          for (const f of (finRows || [])) {
+            if (f && f.timesheet_id) m.set(String(f.timesheet_id), f);
           }
-          const tsJson = await insTs.json().catch(() => []);
-          ts = Array.isArray(tsJson) ? tsJson[0] : tsJson;
-          if (!ts?.timesheet_id) {
-            addFail(previewGroupId, actionUpper, 'timesheets insert returned no timesheet_id (base missing)');
-            continue;
-          }
-
-          await fetch(
-            `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(baseWeek.id)}`,
-            {
-              method: 'PATCH',
-              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-              body: JSON.stringify({ timesheet_id: ts.timesheet_id, status: 'SUBMITTED', updated_at: nowIso })
-            }
-          ).catch(() => {});
         }
+        return m;
+      })();
 
-        // Link shifts to base TS
-        const shiftIdsForTs = g.shifts.map(s => s.id);
-        if (shiftIdsForTs.length) {
-          const shParam = shiftIdsForTs.map(enc).join(',');
-          await fetch(
-            `${env.SUPABASE_URL}/rest/v1/nhsp_shifts?id=in.(${shParam})`,
-            {
-              method: 'PATCH',
-              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-              body: JSON.stringify({ timesheet_id: ts.timesheet_id, contract_id: contract.id, updated_at: nowIso })
-            }
-          ).catch(() => {});
-        }
+      const baseFin = finByTsId.get(String(ts.timesheet_id)) || null;
+      const isPaid     = !!(baseFin && baseFin.paid_at_utc);
+      const isInvoiced = !!(baseFin && baseFin.locked_by_invoice_id);
 
-        // ✅ Compute truth totals from HR data (contract rates)
-        const truthRes = await computeHrTotalsForShifts(env, contract, g.client_id, g.shifts);
+      // Current totals across base + adjustments (missing TSFIN contributes 0)
+      let currentPay = 0;
+      let currentChg = 0;
+      for (const w of weeks) {
+        const tId = w.timesheet_id;
+        if (!tId) continue;
+        const f = finByTsId.get(String(tId)) || null;
+        if (!f) continue;
+        currentPay += Number(f.total_pay_ex_vat || 0);
+        currentChg += Number(f.total_charge_ex_vat || 0);
+      }
+      currentPay = round2(currentPay);
+      currentChg = round2(currentChg);
 
-        if (truthRes?.missingBuckets && truthRes.missingBuckets.length) {
-          addFail(previewGroupId, actionUpper, `Missing contract buckets: ${truthRes.missingBuckets.join(', ')}`);
+      const deltaPayTotal = round2(truthPay - currentPay);
+      const deltaChgTotal = round2(truthChg - currentChg);
+
+      const selfBill = !!contract.self_bill;
+
+      // If base is not paid/invoiced (or baseFin missing), we always rebuild base snapshot from repaired shifts.
+      // This is the “finalize corrects everything” behaviour.
+      if (!isPaid && !isInvoiced) {
+        const okSnap = await buildWeeklySnapshotSafe(ts, contract, grpShiftsFresh, 'CONTRACT_WEEKLY');
+        if (!okSnap) {
+          addFail(previewGroupId, actionUpper, 'build snapshot failed (base rebuild)');
           continue;
         }
 
-        const truthPay = truthRes.totalPayEx;
-        const truthChg = truthRes.totalChgEx;
+        try {
+          await upsertValidation(env, user, {
+            timesheet_id: ts.timesheet_id,
+            status: 'VALIDATION_OK',
+            reason: 'HEALTHROSTER_IMPORT',
+            hr_reference: null,
+            import_id: importId
+          });
+        } catch (e) {}
 
-        const tol = 0.01;
+        groups_succeeded++;
+        continue;
+      }
 
-        const adjWeeks = weeks.filter(w => !!w.is_adjustment);
+      // If invoice already issued → block
+      if (isInvoiced) {
+        addFail(previewGroupId, actionUpper, 'Invoice already issued; refusing to modify paid/locked state.');
+        continue;
+      }
 
-        let currentPay = 0;
-        let currentChg = 0;
-
-        for (const w of weeks) {
-          const tsId = w.timesheet_id;
-          if (!tsId) continue;
-          const frow = finByTsId.get(tsId);
-          if (!frow) continue;
-          currentPay += Number(frow.total_pay_ex_vat || 0);
-          currentChg += Number(frow.total_charge_ex_vat || 0);
-        }
-        currentPay = round2(currentPay);
-        currentChg = round2(currentChg);
-
-        const deltaPayTotal = round2(truthPay - currentPay);
-        const deltaChgTotal = round2(truthChg - currentChg);
-
-        const isPaid     = !!(baseFin && baseFin.paid_at_utc);
-        const isInvoiced = !!(baseFin && baseFin.locked_by_invoice_id);
-        const baseUnpaidUnlocked =
-          !!(baseFin && !baseFin.paid_at_utc && !baseFin.locked_by_invoice_id);
-        const selfBill = !!contract.self_bill;
-
-        // ✅ UPDATED RECOMPUTE LOGIC:
-        // If totals already match (delta ~ 0), still refresh TSFIN *only when it is safe*:
-        // - self_bill=false: refresh if base is not paid/invoiced (keeps segments/external rows current)
-        // - self_bill=true: refresh ONLY if there are no adjustment weeks (otherwise base+adj composition may differ)
-        if (Math.abs(deltaPayTotal) < tol && Math.abs(deltaChgTotal) < tol) {
-          if (!isPaid && !isInvoiced) {
-            if (!selfBill || adjWeeks.length === 0) {
-              const okRefresh = await buildWeeklySnapshotSafe(ts, contract, g.shifts, 'CONTRACT_WEEKLY');
-              if (!okRefresh) {
-                addFail(previewGroupId, actionUpper, 'TSFIN refresh failed even though delta=0 (unpaid/ununinvoiced).');
-                continue;
-              }
-            }
-          }
-
-          try {
-            await upsertValidation(env, user, {
-              timesheet_id: ts.timesheet_id,
-              status: 'VALIDATION_OK',
-              reason: 'HEALTHROSTER_IMPORT',
-              hr_reference: null,
-              import_id: importId
-            });
-          } catch (e) {}
-
-          groups_succeeded++;
-          continue;
-        }
-
-        // ─────────────────────────────────────────────
-        // Self-bill = true → NHSP-style logic (self-bill adjustments)
-        // ─────────────────────────────────────────────
+      // Paid but not invoiced:
+      // - self_bill=true: use adjustment timesheet logic (if allowed)
+      // - self_bill=false: HR special (pay-only adjustment + charge patch)
+      if (isPaid && !isInvoiced) {
         if (selfBill) {
-          if (baseUnpaidUnlocked && adjWeeks.length === 0) {
-            const okSnap = await buildWeeklySnapshotSafe(ts, contract, g.shifts, 'CONTRACT_WEEKLY');
-            if (!okSnap) {
-              addFail(previewGroupId, actionUpper, 'buildNhspWeeklySnapshot failed (base overwrite, self-bill)');
-              continue;
-            }
-
+          // Self-bill true: if delta is basically 0, nothing to do
+          if (Math.abs(deltaPayTotal) < tol && Math.abs(deltaChgTotal) < tol) {
             try {
               await upsertValidation(env, user, {
                 timesheet_id: ts.timesheet_id,
@@ -16146,11 +16119,11 @@ async function handleHrAutoprocessApply(env, req, importId) {
                 import_id: importId
               });
             } catch (e) {}
-
             groups_succeeded++;
             continue;
           }
 
+          // Try update latest unpaid/uninvoiced adjustment, else create a new adjustment timesheet+week
           let latestAdjWeek = null;
           if (adjWeeks.length) {
             latestAdjWeek = adjWeeks.reduce(
@@ -16158,9 +16131,8 @@ async function handleHrAutoprocessApply(env, req, importId) {
               adjWeeks[0]
             );
           }
-
           const latestAdjTsId = latestAdjWeek?.timesheet_id || null;
-          const latestAdjFin  = latestAdjTsId ? finByTsId.get(latestAdjTsId) : null;
+          const latestAdjFin  = latestAdjTsId ? finByTsId.get(String(latestAdjTsId)) : null;
 
           const latestAdjUnpaidUnlocked =
             !!(latestAdjFin && !latestAdjFin.paid_at_utc && !latestAdjFin.locked_by_invoice_id);
@@ -16170,11 +16142,11 @@ async function handleHrAutoprocessApply(env, req, importId) {
             const newAdjChg = round2(Number(latestAdjFin.total_charge_ex_vat || 0) + deltaChgTotal);
             const newAdjMar = round2(newAdjChg - newAdjPay);
 
-            const weekStart = computeWeekStartFromWeekEnding(g.week_ending_date);
+            const weekStart = computeWeekStartFromWeekEnding(weekEndingDate);
 
             const seg = {
               segment_id: `hr_adj:${latestAdjTsId}`,
-              date: g.week_ending_date,
+              date: weekEndingDate,
               ward: null,
               start_utc: null,
               end_utc: null,
@@ -16229,110 +16201,84 @@ async function handleHrAutoprocessApply(env, req, importId) {
             groups_succeeded++;
             continue;
           } else {
-            const { rows: allCwRows2 } = await sbFetch(
-              env,
-              `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-              `?contract_id=eq.${enc(contract.id)}` +
-              `&week_ending_date=eq.${enc(g.week_ending_date)}` +
-              `&select=id,additional_seq` +
-              `&order=additional_seq.desc`
-            );
-            const maxSeq = (allCwRows2 || []).reduce((m, r) => Math.max(m, Number(r.additional_seq || 0)), 0);
+            // Create new adjustment contract_week + timesheet (no shift reassignment because base is paid)
+            const maxSeq = weeks.reduce((m, r) => Math.max(m, Number(r.additional_seq || 0)), 0);
             const adjSeq = maxSeq + 1;
 
-            const adjCwPayload = {
-              contract_id: contract.id,
-              week_ending_date: g.week_ending_date,
-              additional_seq: adjSeq,
-              is_adjustment: true,
-              status: 'OPEN',
-              created_at: nowIso,
-              updated_at: nowIso
-            };
             const insAdjCw = await fetch(
               `${env.SUPABASE_URL}/rest/v1/contract_weeks`,
               {
                 method: 'POST',
                 headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-                body: JSON.stringify(adjCwPayload)
+                body: JSON.stringify([{
+                  contract_id: contract.id,
+                  week_ending_date: weekEndingDate,
+                  additional_seq: adjSeq,
+                  is_adjustment: true,
+                  status: 'SUBMITTED',
+                  created_at: nowIso,
+                  updated_at: nowIso
+                }])
               }
             );
+            const txtCw = await insAdjCw.text().catch(() => '');
             if (!insAdjCw.ok) {
-              const err = await insAdjCw.text().catch(() => '');
-              addFail(previewGroupId, actionUpper, `contract_weeks insert failed (adj, self-bill): ${err || 'unknown error'}`);
+              addFail(previewGroupId, actionUpper, `contract_weeks insert failed (adj, self-bill): ${txtCw || insAdjCw.status}`);
               continue;
             }
-            const adjCwJson = await insAdjCw.json().catch(() => []);
-            const adjCw = Array.isArray(adjCwJson) ? adjCwJson[0] : adjCwJson;
-            if (!adjCw?.id) {
-              addFail(previewGroupId, actionUpper, 'contract_weeks insert returned no id (adj, self-bill)');
-              continue;
-            }
+            const jCw = txtCw ? JSON.parse(txtCw) : [];
+            const adjCw = Array.isArray(jCw) ? jCw[0] : jCw;
 
-            const { rows: candRows2 } = await sbFetch(
-              env,
-              `${env.SUPABASE_URL}/rest/v1/candidates` +
-              `?id=eq.${enc(g.candidate_id)}&select=id,display_name` +
-              `&limit=1`
-            );
-            const cand = candRows2?.[0] || null;
-            const { rows: cliRows2 } = await sbFetch(
-              env,
-              `${env.SUPABASE_URL}/rest/v1/clients` +
-              `?id=eq.${enc(g.client_id)}&select=id,name` +
-              `&limit=1`
-            );
-            const client = cliRows2?.[0] || null;
+            // Create adj timesheet
+            const cand = candidateById.get(candidateId) || null;
+            const cli  = clientById.get(clientId) || null;
 
-            const occNorm  = (cand?.display_name || String(cand?.id || '')).toLowerCase();
-            const hospNorm = (contract.display_site || client?.name || String(client?.id || '')).toLowerCase();
+            const occupantKeyNorm =
+              String(cand?.tms_ref || cand?.display_name || candidateId || 'worker').toLowerCase();
+
+            const hospitalNorm =
+              String(contract.display_site || cli?.name || clientId || 'client').toLowerCase();
+
             const wardNorm = 'hr-adjustment';
-            const jobTitleNorm = (contract.role || 'hr-adjustment').toLowerCase();
+            const jobTitleNorm = String(contract.role || 'hr-adjustment').toLowerCase();
 
-            const bookingIdAdj = `HR_ADJ:${g.candidate_id}:${g.client_id}:${g.week_ending_date}:${adjSeq}`;
-
-            const adjTsPayload = [{
-              booking_id: bookingIdAdj,
-              version: 1,
-              is_current: true,
-              status: 'SUBMITTED',
-              occupant_key_norm: occNorm,
-              hospital_norm: hospNorm,
-              ward_norm: wardNorm,
-              job_title_norm: jobTitleNorm,
-              shift_label_norm: 'weekly',
-              week_ending_date: g.week_ending_date,
-              r2_nurse_key: null,
-              r2_auth_key: null,
-              contract_id: contract.id,
-              submission_mode: null,
-              manual_pdf_r2_key: null,
-              line_type: 'HOURS',
-              actual_schedule_json: [],
-              authorised_at_server: nowIso,
-              created_at: nowIso,
-              updated_at: nowIso
-            }];
+            const bookingAdj = `HR_ADJ:${contract.id}:${weekEndingDate}:${adjSeq}`;
 
             const insAdjTs = await fetch(
               `${env.SUPABASE_URL}/rest/v1/timesheets`,
               {
                 method: 'POST',
                 headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-                body: JSON.stringify(adjTsPayload)
+                body: JSON.stringify([{
+                  booking_id: bookingAdj,
+                  version: 1,
+                  is_current: true,
+                  status: 'RECEIVED',
+                  sheet_scope: 'WEEKLY',
+                  submission_mode: 'MANUAL',
+                  line_type: 'HOURS',
+                  occupant_key_norm: occupantKeyNorm,
+                  hospital_norm: hospitalNorm,
+                  ward_norm: wardNorm,
+                  job_title_norm: jobTitleNorm,
+                  shift_label_norm: 'weekly',
+                  week_ending_date: weekEndingDate,
+                  contract_id: contract.id,
+                  manual_pdf_r2_key: null,
+                  actual_schedule_json: [],
+                  authorised_at_server: null,
+                  created_at: nowIso,
+                  updated_at: nowIso
+                }])
               }
             );
+            const txtTs = await insAdjTs.text().catch(() => '');
             if (!insAdjTs.ok) {
-              const err = await insAdjTs.text().catch(() => '');
-              addFail(previewGroupId, actionUpper, `timesheets insert failed (adj, self-bill): ${err || 'unknown error'}`);
+              addFail(previewGroupId, actionUpper, `timesheets insert failed (adj, self-bill): ${txtTs || insAdjTs.status}`);
               continue;
             }
-            const adjTsJson = await insAdjTs.json().catch(() => []);
-            const adjTs = Array.isArray(adjTsJson) ? adjTsJson[0] : adjTsJson;
-            if (!adjTs?.timesheet_id) {
-              addFail(previewGroupId, actionUpper, 'timesheets insert returned no timesheet_id (adj, self-bill)');
-              continue;
-            }
+            const jTs = txtTs ? JSON.parse(txtTs) : [];
+            const adjTs = Array.isArray(jTs) ? jTs[0] : jTs;
 
             await fetch(
               `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(adjCw.id)}`,
@@ -16343,11 +16289,11 @@ async function handleHrAutoprocessApply(env, req, importId) {
               }
             ).catch(() => {});
 
-            const weekStart = computeWeekStartFromWeekEnding(g.week_ending_date);
+            const weekStart = computeWeekStartFromWeekEnding(weekEndingDate);
 
             const seg = {
               segment_id: `hr_adj:${adjTs.timesheet_id}`,
-              date: g.week_ending_date,
+              date: weekEndingDate,
               ward: null,
               start_utc: null,
               end_utc: null,
@@ -16376,7 +16322,7 @@ async function handleHrAutoprocessApply(env, req, importId) {
 
             let policySnapshotAdj = {};
             try {
-              policySnapshotAdj = (await getPolicyCached(contract.client_id || g.client_id, g.week_ending_date)) || {};
+              policySnapshotAdj = (await getPolicyCached(contract.client_id || clientId, weekEndingDate)) || {};
               if (!policySnapshotAdj || typeof policySnapshotAdj !== 'object') policySnapshotAdj = {};
             } catch {
               policySnapshotAdj = {};
@@ -16417,9 +16363,7 @@ async function handleHrAutoprocessApply(env, req, importId) {
               invoice_breakdown_json: invBreak
             };
 
-            await writeSnapshot(env, adjSnap).catch((e) => {
-              addFail(previewGroupId, actionUpper, `writeSnapshot failed (adj, self-bill): ${e?.message || String(e)}`);
-            });
+            await writeSnapshot(env, adjSnap);
 
             try {
               await upsertValidation(env, user, {
@@ -16434,68 +16378,16 @@ async function handleHrAutoprocessApply(env, req, importId) {
             groups_succeeded++;
             continue;
           }
-        }
-
-        // ─────────────────────────────────────────────
-        // Self-bill = false → special HR logic (no new sequentials)
-        // ─────────────────────────────────────────────
-        if (!baseFin) {
-          const okSnap = await buildWeeklySnapshotSafe(ts, contract, g.shifts, 'CONTRACT_WEEKLY');
-          if (!okSnap) {
-            addFail(previewGroupId, actionUpper, 'buildNhspWeeklySnapshot failed (no baseFin, self-bill=false)');
-            continue;
-          }
-
-          try {
-            await upsertValidation(env, user, {
-              timesheet_id: ts.timesheet_id,
-              status: 'VALIDATION_OK',
-              reason: 'HEALTHROSTER_IMPORT',
-              hr_reference: null,
-              import_id: importId
-            });
-          } catch (e) {}
-
-          groups_succeeded++;
-          continue;
-        }
-
-        // A) Not paid and not invoiced → overwrite base TS & TSFIN
-        if (!isPaid && !isInvoiced) {
-          const okSnap = await buildWeeklySnapshotSafe(ts, contract, g.shifts, 'CONTRACT_WEEKLY');
-          if (!okSnap) {
-            addFail(previewGroupId, actionUpper, 'buildNhspWeeklySnapshot failed (base overwrite, self-bill=false)');
-            continue;
-          }
-
-          try {
-            await upsertValidation(env, user, {
-              timesheet_id: ts.timesheet_id,
-              status: 'VALIDATION_OK',
-              reason: 'HEALTHROSTER_IMPORT',
-              hr_reference: null,
-              import_id: importId
-            });
-          } catch (e) {}
-
-          groups_succeeded++;
-          continue;
-        }
-
-        // B) Invoice already issued → skip (no changes)
-        if (isInvoiced) {
-          addFail(previewGroupId, actionUpper, 'Invoice already issued; refusing to modify.');
-          continue;
-        }
-
-        // C) Paid but not invoiced → pay-only adjustment & optional advance
-        if (isPaid && !isInvoiced) {
-          const oldPay   = Number(baseFin.total_pay_ex_vat || 0);
+        } else {
+          // self_bill=false special HR paid-not-invoiced logic:
+          // - patch charge to truth
+          // - create pay adjustment (and optional advance)
+          const oldPay = Number(baseFin?.total_pay_ex_vat || 0);
           const newCharge = truthChg;
           const newMargin = round2(newCharge - oldPay);
 
           await fetch(
-            `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(baseFin.id)}`,
+            `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
             {
               method: 'PATCH',
               headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
@@ -16505,39 +16397,30 @@ async function handleHrAutoprocessApply(env, req, importId) {
                 updated_at: nowIso
               })
             }
-          ).catch((e) => {
-            addFail(previewGroupId, actionUpper, `Failed to patch base TSFIN charges: ${e?.message || String(e)}`);
-          });
+          ).catch(() => {});
 
           const deltaPay = round2(truthPay - currentPay);
-
           if (deltaPay !== 0) {
-            const isLargeNegative =
-              deltaPay < 0 && Math.abs(deltaPay) >= HR_OVERPAY_ADVANCE_THRESHOLD;
-
-            const weekStart = computeWeekStartFromWeekEnding(g.week_ending_date);
-
-            const payAdjPayload = [{
-              timesheet_id: ts.timesheet_id,
-              candidate_id: contract.candidate_id,
-              client_id: contract.client_id,
-              week_ending_date: g.week_ending_date,
-              delta_pay_ex_vat: deltaPay,
-              reason: 'HR_WEEKLY_ADJUSTMENT',
-              as_advance: isLargeNegative,
-              advance_reason: isLargeNegative ? 'OVERPAY_HR' : null
-            }];
+            const isLargeNegative = deltaPay < 0 && Math.abs(deltaPay) >= HR_OVERPAY_ADVANCE_THRESHOLD;
+            const weekStart = computeWeekStartFromWeekEnding(weekEndingDate);
 
             const payAdjRes = await fetch(
               `${env.SUPABASE_URL}/rest/v1/ts_pay_adjustments`,
               {
                 method: 'POST',
                 headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-                body: JSON.stringify(payAdjPayload)
+                body: JSON.stringify([{
+                  timesheet_id: ts.timesheet_id,
+                  candidate_id: contract.candidate_id,
+                  client_id: contract.client_id,
+                  week_ending_date: weekEndingDate,
+                  delta_pay_ex_vat: deltaPay,
+                  reason: 'HR_WEEKLY_ADJUSTMENT',
+                  as_advance: isLargeNegative,
+                  advance_reason: isLargeNegative ? 'OVERPAY_HR' : null
+                }])
               }
-            ).catch((e) => {
-              addFail(previewGroupId, actionUpper, `ts_pay_adjustments insert failed: ${e?.message || String(e)}`);
-            });
+            ).catch(() => null);
 
             if (isLargeNegative) {
               await createOverpayAdvance(env, {
@@ -16545,14 +16428,15 @@ async function handleHrAutoprocessApply(env, req, importId) {
                 client_id: contract.client_id,
                 amount: Math.abs(deltaPay),
                 reason: 'OVERPAY_HR',
-                notes: `HR overpay correction for week ${g.week_ending_date} (import ${importId})`,
+                notes: `HR overpay correction for week ${weekEndingDate} (import ${importId})`,
                 week_start: weekStart
               });
             }
 
             if (payAdjRes && !payAdjRes.ok) {
               const err = await payAdjRes.text().catch(() => '');
-              addFail(previewGroupId, actionUpper, `ts_pay_adjustments insert failed (non-OK): ${err || 'unknown error'}`);
+              addFail(previewGroupId, actionUpper, `ts_pay_adjustments insert failed: ${err || 'unknown error'}`);
+              continue;
             }
           }
 
@@ -16569,10 +16453,10 @@ async function handleHrAutoprocessApply(env, req, importId) {
           groups_succeeded++;
           continue;
         }
-
-        addFail(previewGroupId, actionUpper, `Unhandled HR self-bill=false state (isPaid=${!!isPaid}, isInvoiced=${!!isInvoiced})`);
-        continue;
       }
+
+      addFail(previewGroupId, actionUpper, 'Unhandled state after paid/not-invoiced logic');
+      continue;
     }
 
     // ─────────────────────────────────────────────
@@ -16591,17 +16475,10 @@ async function handleHrAutoprocessApply(env, req, importId) {
         }
       );
     } catch (e) {
-      if (LOG) {
-        console.warn('[HR_AUTOPROC_APPLY] failed to mark import as applied', {
-          import_id: importId,
-          err: e?.message || String(e)
-        });
-      } else {
-        console.warn('[HR_AUTOPROC_APPLY] failed to mark import as applied', {
-          import_id: importId,
-          err: e?.message || String(e)
-        });
-      }
+      console.warn('[HR_AUTOPROC_APPLY] failed to mark import as applied', {
+        import_id: importId,
+        err: e?.message || String(e)
+      });
     }
 
     // ─────────────────────────────────────────────
@@ -16609,7 +16486,6 @@ async function handleHrAutoprocessApply(env, req, importId) {
     // ─────────────────────────────────────────────
     await applyWeeklyHealthRosterCrosscheck(env, { import_id: importId });
 
-    // Final audit + response
     await writeAudit(
       env,
       user,
@@ -16619,6 +16495,8 @@ async function handleHrAutoprocessApply(env, req, importId) {
         shifts_created: created,
         shifts_updated: updated,
         mapped_candidates: mappedCandidates,
+        phase2_rows_ok: phase15Ok,
+        phase2_rows_shift_updated: phase15Updated,
         groups_total,
         groups_attempted,
         groups_succeeded,
@@ -16628,36 +16506,13 @@ async function handleHrAutoprocessApply(env, req, importId) {
       { entity: 'hr_imports', subject_id: importId, req }
     );
 
-    if (LOG) {
-      console.log('[HR_AUTOPROC_APPLY]', JSON.stringify({
-        stage: 'completed',
-        import_id: importId,
-        shifts_created: created,
-        shifts_updated: updated,
-        mapped_candidates: mappedCandidates,
-        groups_total,
-        groups_attempted,
-        groups_succeeded,
-        groups_failed
-      }));
-    } else {
-      console.log('[HR_AUTOPROC_APPLY] done', {
-        import_id: importId,
-        shifts_created: created,
-        shifts_updated: updated,
-        mapped_candidates: mappedCandidates,
-        groups_total,
-        groups_attempted,
-        groups_succeeded,
-        groups_failed
-      });
-    }
-
     return withCORS(env, req, ok({
       import_id: importId,
       shifts_created: created,
       shifts_updated: updated,
       mapped_candidates: mappedCandidates,
+      phase2_rows_ok: phase15Ok,
+      phase2_rows_shift_updated: phase15Updated,
       groups_total,
       groups_attempted,
       groups_succeeded,
