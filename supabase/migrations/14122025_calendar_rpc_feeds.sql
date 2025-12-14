@@ -28,14 +28,14 @@ as $$
     c.band,
     c.start_date,
     c.end_date,
-    greatest(c.start_date, from_date) as "from",
-    least(coalesce(c.end_date, to_date), to_date) as "to"
+    greatest(c.start_date, $2) as "from",
+    least(coalesce(c.end_date, $3), $3) as "to"
   from contracts c
   left join clients cl on cl.id = c.client_id
-  where c.candidate_id = candidate_id
-    and c.start_date <= to_date
-    and coalesce(c.end_date, to_date) >= from_date
-  order by greatest(c.start_date, from_date), cl.name nulls last, c.role nulls last, c.band nulls last;
+  where c.candidate_id = $1
+    and c.start_date <= $3
+    and coalesce(c.end_date, $3) >= $2
+  order by greatest(c.start_date, $2), cl.name nulls last, c.role nulls last, c.band nulls last;
 $$;
 
 
@@ -52,7 +52,6 @@ returns table (
   contract_id uuid,
   state text,
 
-  -- extras (useful for UI overlays/debug)
   planned boolean,
   has_tsfin boolean,
   any_ready boolean,
@@ -61,7 +60,6 @@ returns table (
   invoiced boolean,
   paid boolean,
 
-  -- per-line/day flags
   pay_line_on_hold boolean,
   invoice_line_on_hold boolean,
 
@@ -73,9 +71,9 @@ as $$
 with candidate_contracts as (
   select c.id as contract_id
   from contracts c
-  where c.candidate_id = candidate_id
-    and c.start_date <= to_date
-    and coalesce(c.end_date, to_date) >= from_date
+  where c.candidate_id = $1
+    and c.start_date <= $3
+    and coalesce(c.end_date, $3) >= $2
 ),
 
 planned_days as (
@@ -85,7 +83,7 @@ planned_days as (
   from contract_weeks cw
   join candidate_contracts cc on cc.contract_id = cw.contract_id
   cross join lateral jsonb_array_elements(coalesce(cw.planned_schedule_json, '[]'::jsonb)) p
-  where (p->>'date')::date between from_date and to_date
+  where (p->>'date')::date between $2 and $3
 ),
 
 ts_with_tf as (
@@ -93,7 +91,7 @@ ts_with_tf as (
     ts.timesheet_id,
     ts.contract_id,
 
-    -- ✅ real linkage: contract_weeks -> timesheets via timesheet_id
+    -- link weekly timesheet to its contract_week via contract_weeks.timesheet_id
     cw.id as contract_week_id,
     cw.planned_schedule_json as cw_planned_schedule_json,
 
@@ -122,13 +120,13 @@ ts_with_tf as (
     (
       -- weekly timesheets relevant to window (+/- 14 days buffer)
       (ts.sheet_scope = 'WEEKLY'
-       and ts.week_ending_date between (from_date - 14) and (to_date + 14)
+       and ts.week_ending_date between ($2 - 14) and ($3 + 14)
       )
       or
       -- daily timesheets relevant to window
       (ts.sheet_scope = 'DAILY'
        and ts.worked_start_iso is not null
-       and ((ts.worked_start_iso)::timestamptz at time zone 'Europe/London')::date between from_date and to_date
+       and ((ts.worked_start_iso)::timestamptz at time zone 'Europe/London')::date between $2 and $3
       )
     )
 ),
@@ -144,17 +142,16 @@ segment_events as (
     t.pay_on_hold,
     t.paid_at_utc,
 
-    -- invoice per segment for NHSP/HR; fallback to tsfin lock if ever present
+    -- invoice per segment (NHSP/HR), fallback to tsfin lock if present
     coalesce(
       nullif(seg->>'invoice_locked_invoice_id','')::uuid,
       t.locked_by_invoice_id
     ) as invoice_id,
 
-    -- pay line hold
+    -- pay line hold (segment-level)
     coalesce((seg->>'exclude_from_pay')::boolean,false) as pay_line_on_hold,
 
-    -- invoice line delayed/held:
-    -- if target week start differs from "natural week start" AND segment isn't invoiced yet
+    -- invoice line delayed/held (segment-level)
     (
       nullif(seg->>'invoice_locked_invoice_id','') is null
       and nullif(seg->>'invoice_target_week_start','') is not null
@@ -171,7 +168,7 @@ segment_events as (
   cross join lateral jsonb_array_elements(coalesce(t.invoice_breakdown_json->'segments','[]'::jsonb)) seg
   where t.tsfin_id is not null
     and coalesce(t.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
-    and (seg->>'date')::date between from_date and to_date
+    and (seg->>'date')::date between $2 and $3
 ),
 
 -- 2) WEEKLY non-segments: worked days from timesheets.actual_schedule_json[*].date
@@ -192,11 +189,10 @@ weekly_schedule_events as (
   cross join lateral jsonb_array_elements(coalesce(t.actual_schedule_json,'[]'::jsonb)) s
   where t.sheet_scope = 'WEEKLY'
     and coalesce(t.invoice_breakdown_json->>'mode','') <> 'SEGMENTS'
-    and (s->>'date')::date between from_date and to_date
+    and (s->>'date')::date between $2 and $3
 ),
 
--- 3) WEEKLY fallback: if we have TSFIN but no segments and no actual_schedule_json,
--- apply TSFIN status to planned days linked to that timesheet via contract_weeks.timesheet_id
+-- 3) WEEKLY fallback: TSFIN exists but no segments & no schedule -> apply TSFIN onto linked planned days
 weekly_plan_fallback_events as (
   select
     t.contract_id,
@@ -216,7 +212,7 @@ weekly_plan_fallback_events as (
     and t.tsfin_id is not null
     and coalesce(t.invoice_breakdown_json->>'mode','') <> 'SEGMENTS'
     and coalesce(jsonb_array_length(coalesce(t.actual_schedule_json,'[]'::jsonb)),0) = 0
-    and (p->>'date')::date between from_date and to_date
+    and (p->>'date')::date between $2 and $3
 ),
 
 -- 4) DAILY: worked day from worked_start_iso UK date
@@ -236,7 +232,7 @@ daily_events as (
   from ts_with_tf t
   where t.sheet_scope = 'DAILY'
     and t.worked_start_iso is not null
-    and ((t.worked_start_iso)::timestamptz at time zone 'Europe/London')::date between from_date and to_date
+    and ((t.worked_start_iso)::timestamptz at time zone 'Europe/London')::date between $2 and $3
 ),
 
 all_events as (
@@ -350,13 +346,14 @@ select
   invoice_line_on_hold,
   invoice_nos
 from agg
-where date between from_date and to_date
+where date between $2 and $3
 order by date, contract_id;
 $$;
 
 
 -- =========================================================
 -- Contract: day feed for a single contract
+-- (fixed: prevents contract_id shadowing)
 -- =========================================================
 create or replace function public.calendar_contract_day_feed(
   contract_id uuid,
@@ -386,9 +383,9 @@ stable
 as $$
   select *
   from public.calendar_candidate_day_feed(
-    (select c.candidate_id from contracts c where c.id = contract_id),
-    from_date,
-    to_date
+    (select c.candidate_id from contracts c where c.id = $1),
+    $2,
+    $3
   )
-  where calendar_candidate_day_feed.contract_id = contract_id;
+  where public.calendar_candidate_day_feed.contract_id = $1;
 $$;
