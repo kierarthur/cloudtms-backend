@@ -3854,8 +3854,7 @@ function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEn
 }
 
 
-
- async function handleContractsCalendar(env, req, contractId) {
+async function handleContractsCalendar(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   if (!contractId) return withCORS(env, req, badRequest('contract_id required'));
@@ -3868,13 +3867,40 @@ function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEn
 
   const winStart = fromQ ? toYmd(fromQ) : `${year}-01-01`;
   const winEnd   = toQ   ? toYmd(toQ)   : `${year}-12-31`;
-  const needPlan = (granularity === 'day');
 
+  // =========================
+  // DAY: RPC-backed day feed
+  // =========================
+  if (granularity === 'day') {
+    try {
+      const items = await sbRpc(env, 'calendar_contract_day_feed', {
+        contract_id: contractId,
+        from_date: winStart,
+        to_date: winEnd
+      });
+
+      return withCORS(env, req, ok({
+        contract_id: contractId,
+        from: winStart,
+        to: winEnd,
+        granularity: 'day',
+        items: Array.isArray(items) ? items : []
+      }));
+    } catch (e) {
+      console.warn('[CONTRACT CAL DAY] rpc failed', { contract_id: contractId, err: e?.message || String(e) });
+      return withCORS(env, req, serverError('contract calendar (day) failed'));
+    }
+  }
+
+  // =========================
+  // WEEK: keep existing behaviour
+  // =========================
+  const needPlan = false;
   const selectCols = needPlan
     ? 'id,contract_id,week_ending_date,additional_seq,status,submission_mode_snapshot,timesheet_id,uploaded_pdf_r2_key,planned_schedule_json'
     : 'id,contract_id,week_ending_date,additional_seq,status,submission_mode_snapshot,timesheet_id,uploaded_pdf_r2_key';
 
-  const weeksTo = (granularity === 'day') ? addDays(winEnd, 6) : winEnd;
+  const weeksTo = winEnd;
 
   const { rows: weeks } = await sbFetch(
     env,
@@ -3885,134 +3911,55 @@ function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEn
     `&order=week_ending_date.asc,additional_seq.asc`
   );
 
-  if (granularity !== 'day') {
-    const ids = (weeks || []).map(w => w.timesheet_id).filter(Boolean);
-    let preMap = {};
-    if (ids.length) {
-      const inList = ids.map(enc).join(',');
-      const { rows: pres } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/v_ts_invoice_precheck?timesheet_id=in.(${inList})`
-      );
-      preMap = Object.fromEntries((pres||[]).map(p => [p.timesheet_id, p]));
-    }
-
-    const items = (weeks||[])
-      .filter(w => w.week_ending_date >= winStart && w.week_ending_date <= winEnd)
-      .map(w => {
-        const pre = w.timesheet_id ? preMap[w.timesheet_id] : null;
-        const missingPdf = (w.submission_mode_snapshot === 'MANUAL')
-          ? (!w.uploaded_pdf_r2_key && !(pre && pre.manual_pdf_r2_key))
-          : false;
-        const missingRef = (pre?.require_reference_to_invoice === true) &&
-                           (!pre?.reference_number || String(pre.reference_number).trim()==='');
-        return {
-          id: w.id,
-          week_ending_date: w.week_ending_date,
-          additional_seq: w.additional_seq,
-          status: w.status,
-          submission_mode: w.submission_mode_snapshot,
-          has_timesheet: !!w.timesheet_id,
-          missing_pdf: !!missingPdf,
-          missing_reference: !!missingRef
-        };
-      });
-
-    return withCORS(env, req, ok({ from: winStart, to: winEnd, granularity: 'week', items }));
+  const ids = (weeks || []).map(w => w.timesheet_id).filter(Boolean);
+  let preMap = {};
+  if (ids.length) {
+    const inList = ids.map(enc).join(',');
+    const { rows: pres } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/v_ts_invoice_precheck?timesheet_id=in.(${inList})`
+    );
+    preMap = Object.fromEntries((pres || []).map(p => [p.timesheet_id, p]));
   }
 
-  const tsIds = [...new Set((weeks||[]).map(w => w.timesheet_id).filter(Boolean))];
-  let tsMap = {}, finMap = {};
-  if (tsIds.length) {
-    const inList = tsIds.map(enc).join(',');
-    const { rows: tsRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=in.(${inList})` +
-      `&select=timesheet_id,authorised_at_server,submission_mode,actual_schedule_json`
-    );
-    tsMap  = Object.fromEntries((tsRows||[]).map(t => [t.timesheet_id, t]));
-    const { rows: finRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?is_current=eq.true&timesheet_id=in.(${inList})` +
-      `&select=timesheet_id,locked_by_invoice_id,paid_at_utc`
-    );
-    finMap = Object.fromEntries((finRows||[]).map(f => [f.timesheet_id, f]));
-  }
+  const items = (weeks || [])
+    .filter(w => w.week_ending_date >= winStart && w.week_ending_date <= winEnd)
+    .map(w => {
+      const pre = w.timesheet_id ? preMap[w.timesheet_id] : null;
 
-  const computeActualMinutesForDate = (ts, ymd) => {
-    if (!ts?.actual_schedule_json || !Array.isArray(ts.actual_schedule_json)) return 0;
-    const d = ts.actual_schedule_json.find(x => x && x.date === ymd);
-    if (!d || !d.start || !d.end) return 0;
-    const s = parseHHMM(d.start), e = parseHHMM(d.end);
-    if (s==null || e==null) return 0;
-    const overnight = (e<=s);
-    let mins = minutesDiff(s, e, overnight);
-    if (Array.isArray(d.breaks) && d.breaks.length) {
-      mins -= d.breaks.reduce((acc,b) => {
-        const bs = parseHHMM(b.start), be = parseHHMM(b.end);
-        if (bs==null || be==null) return acc;
-        return acc + minutesDiff(bs, be, (be<=bs));
-      }, 0);
-    } else if (Number(d.break_minutes)>0) {
-      mins -= Number(d.break_minutes);
-    }
-    return Math.max(0, mins);
-  };
+      const missingPdf = (w.submission_mode_snapshot === 'MANUAL')
+        ? (!w.uploaded_pdf_r2_key && !(pre && pre.manual_pdf_r2_key))
+        : false;
 
-  const deriveState = (plannedPresent, actualMin, ts, fin) => {
-    if (actualMin > 0) {
-      if (fin?.paid_at_utc) return 'PAID';
-      if (fin?.locked_by_invoice_id) return 'INVOICED';
-      if (ts?.authorised_at_server) return 'AUTHORISED';
-      return 'SUBMITTED';
-    }
-    if (ts) {
-      if (fin?.paid_at_utc) return 'PAID';
-      if (fin?.locked_by_invoice_id) return 'INVOICED';
-      if (ts?.authorised_at_server) return 'AUTHORISED';
-      return 'SUBMITTED';
-    }
-    return plannedPresent ? 'PLANNED' : 'EMPTY';
-  };
+      const missingRef =
+        (pre?.require_reference_to_invoice === true) &&
+        (!pre?.reference_number || String(pre.reference_number).trim() === '');
 
-  const dayItems = [];
-  for (const w of (weeks||[])) {
-    let rawPlan = w.planned_schedule_json;
-    if (typeof rawPlan === 'string') {
-      try { rawPlan = JSON.parse(rawPlan); } catch { rawPlan = []; }
-    }
-    const plan = Array.isArray(rawPlan) ? rawPlan : [];
-    const ts   = w.timesheet_id ? tsMap[w.timesheet_id] : null;
-    const fin  = w.timesheet_id ? finMap[w.timesheet_id] : null;
-    const hasPerDayActual = !!(ts && Array.isArray(ts.actual_schedule_json) && ts.actual_schedule_json.length);
-
-    for (const d of plan) {
-      const ymd = d?.date || null;
-      if (!ymd || ymd < winStart || ymd > winEnd) continue;
-
-      const expected = Number(d?.expected_minutes || 0);
-      const actual   = hasPerDayActual ? computeActualMinutesForDate(ts, ymd) : 0;
-      const state    = deriveState(true, actual, ts, fin);
-
-      dayItems.push({
-        date: ymd,
+      return {
+        id: w.id,
         week_ending_date: w.week_ending_date,
-        week_id: w.id,
-        expected_minutes: expected,
-        actual_minutes: actual,
-        state,
-        timesheet_id: w.timesheet_id || null,
+        additional_seq: w.additional_seq,
+        status: w.status,
         submission_mode: w.submission_mode_snapshot,
-        invoiced: !!fin?.locked_by_invoice_id,
-        paid_at_utc: fin?.paid_at_utc || null
-      });
-    }
-  }
+        has_timesheet: !!w.timesheet_id,
 
-  return withCORS(env, req, ok({ from: winStart, to: winEnd, granularity: 'day', items: dayItems }));
+        // ✅ NEW: include timesheet_id so FE weekIndex logic can rely on it
+        timesheet_id: w.timesheet_id || null,
+
+        missing_pdf: !!missingPdf,
+        missing_reference: !!missingRef
+      };
+    });
+
+  return withCORS(env, req, ok({
+    from: winStart,
+    to: winEnd,
+    granularity: 'week',
+    items
+  }));
 }
 
- async function handleCandidateCalendar(env, req, candidateId) {
+async function handleCandidateCalendar(env, req, candidateId) {
   try {
     const user = await requireUser(env, req, ['admin']);
     if (!user) return withCORS(env, req, unauthorized());
@@ -4022,249 +3969,70 @@ function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEn
     const fromQ = url.searchParams.get('from');
     const toQ   = url.searchParams.get('to');
     if (!fromQ || !toQ) return withCORS(env, req, badRequest('from and to are required'));
-    const winStart = toYmd(fromQ), winEnd = toYmd(toQ);
 
-    // 1) Candidate’s contracts intersecting the window
-    const { rows: cons } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/contracts?candidate_id=eq.${enc(candidateId)}` +
-      `&start_date=lte.${enc(winEnd)}&end_date=gte.${enc(winStart)}` +
-      `&select=id,client_id,role,band,start_date,end_date`
-    );
-    const contractIds = (cons||[]).map(c => c.id);
-    const contractsById = Object.fromEntries((cons||[]).map(c => [c.id, c]));
+    const winStart = toYmd(fromQ);
+    const winEnd   = toYmd(toQ);
 
-    // client names
-    const clientIds = [...new Set((cons||[]).map(c => c.client_id).filter(Boolean))];
-    let clientNameById = {};
-    if (clientIds.length) {
-      const inList = clientIds.map(enc).join(',');
-      const { rows: cliRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/clients?id=in.(${inList})&select=id,name`
-      );
-      clientNameById = Object.fromEntries((cliRows||[]).map(r => [r.id, r.name || null]));
-    }
+    // RPC: contract list for the window (for FE contract list + highlighting)
+    const contracts = await sbRpc(env, 'calendar_candidate_contracts_range', {
+      candidate_id: candidateId,
+      from_date: winStart,
+      to_date: winEnd
+    });
 
-    // 2) Planned days from contract_weeks
-    let plannedDayItems = [];
-    if (contractIds.length) {
-      const inList = contractIds.map(enc).join(',');
-      const { rows: weeks } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=in.(${inList})` +
-        `&week_ending_date=gte.${enc(winStart)}&week_ending_date=lte.${enc(addDays(winEnd,6))}` +
-        `&select=id,contract_id,week_ending_date,submission_mode_snapshot,timesheet_id,planned_schedule_json`
-      );
+    // RPC: authoritative day feed (segments-aware, holds-aware)
+    const items = await sbRpc(env, 'calendar_candidate_day_feed', {
+      candidate_id: candidateId,
+      from_date: winStart,
+      to_date: winEnd
+    });
 
-      for (const w of (weeks||[])) {
-        let rawPlan = w.planned_schedule_json;
-        if (typeof rawPlan === 'string') {
-          try { rawPlan = JSON.parse(rawPlan); } catch { rawPlan = []; }
-        }
-        const plan = Array.isArray(rawPlan) ? rawPlan : [];
-        for (const d of plan) {
-          const ymd = d?.date || null;
-          if (!ymd || ymd < winStart || ymd > winEnd) continue;
-          const contr = contractsById[w.contract_id] || {};
-          plannedDayItems.push({
-            source: 'WEEK_PLAN',
-            date: ymd,
-            contract_id: w.contract_id,
-            week_id: w.id,
-            expected_minutes: Number(d?.expected_minutes || 0),
-            actual_minutes: 0,
-            state: (Number(d?.expected_minutes||0) > 0) ? 'PLANNED' : 'EMPTY',
-            timesheet_id: w.timesheet_id || null,
-            submission_mode: w.submission_mode_snapshot,
-            invoiced: false,
-            paid_at_utc: null,
-            role: contr.role || null,
-            band: contr.band || null,
-            client_id: contr.client_id || null,
-            client_name: clientNameById[contr.client_id] || null
-          });
-        }
-      }
-    }
-
-    // 3) Timesheets for those contracts (weekly + daily) — NOT by candidate_id
-    let tsRows = [];
-    let finMap = {};
-    if (contractIds.length) {
-      const inList = contractIds.map(enc).join(',');
-      const tsOr = `or=(and(week_ending_date.gte.${enc(winStart)},week_ending_date.lte.${enc(addDays(winEnd,6))}),and(worked_start_iso.gte.${enc(winStart+'T00:00:00Z')},worked_start_iso.lte.${enc(winEnd+'T23:59:59Z')}))`;
-
-      const tsResp = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/timesheets?contract_id=in.(${inList})&${tsOr}` +
-        `&select=timesheet_id,contract_id,week_ending_date,line_type,submission_mode,authorised_at_server,` +
-        `worked_start_iso,worked_end_iso,break_start_iso,break_end_iso,break_minutes,` +
-        `actual_schedule_json`
-      );
-      tsRows = tsResp.rows || [];
-
-      const tsIds = tsRows.map(t => t.timesheet_id);
-      if (tsIds.length) {
-        const finIn = tsIds.map(enc).join(',');
-        const { rows: finRows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/timesheets_financials?is_current=eq.true&timesheet_id=in.(${finIn})` +
-          `&select=timesheet_id,locked_by_invoice_id,paid_at_utc`
-        );
-        finMap = Object.fromEntries((finRows||[]).map(f => [f.timesheet_id, f]));
-      }
-    }
-
-    // helpers
-    const computeDailyActual = (t) => {
-      if (!t?.worked_start_iso || !t?.worked_end_iso) return { ymd:null, mins:0 };
-      const dt = new Date(t.worked_start_iso);
-      const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London', year:'numeric', month:'2-digit', day:'2-digit' }).formatToParts(dt);
-      const ymd = `${parts.find(p=>p.type==='year').value}-${parts.find(p=>p.type==='month').value}-${parts.find(p=>p.type==='day').value}`;
-      const s = new Date(t.worked_start_iso), e = new Date(t.worked_end_iso);
-      let mins = Math.max(0, Math.round((e - s) / 60000));
-      if (t.break_start_iso && t.break_end_iso) {
-        const bs = new Date(t.break_start_iso), be = new Date(t.break_end_iso);
-        mins = Math.max(0, mins - Math.max(0, Math.round((be - bs) / 60000)));
-      } else if (Number(t.break_minutes)>0) {
-        mins = Math.max(0, mins - Number(t.break_minutes));
-      }
-      return { ymd, mins };
-    };
-    const resolveState = (mins, ts, fin) => {
-      if (mins > 0) {
-        if (fin?.paid_at_utc) return 'PAID';
-        if (fin?.locked_by_invoice_id) return 'INVOICED';
-        if (ts?.authorised_at_server) return 'AUTHORISED';
-        return 'SUBMITTED';
-      }
-      return 'PLANNED';
-    };
-
-    const dayItems = [...plannedDayItems];
-
-    // 3a) Weekly timesheets with per-day details
-    for (const t of tsRows) {
-      const fin = finMap[t.timesheet_id];
-      if (t.week_ending_date && Array.isArray(t.actual_schedule_json) && t.actual_schedule_json.length) {
-        for (const d of t.actual_schedule_json) {
-          const ymd = d?.date || null;
-          if (!ymd || ymd < winStart || ymd > winEnd) continue;
-
-          const s = parseHHMM(d.start), e = parseHHMM(d.end);
-          if (s==null || e==null) continue;
-          const overnight = d.overnight===true || e<=s;
-          let mins = minutesDiff(s, e, overnight);
-          if (Array.isArray(d.breaks) && d.breaks.length) {
-            mins -= d.breaks.reduce((acc,b) => {
-              const bs = parseHHMM(b.start), be = parseHHMM(b.end);
-              if (bs==null || be==null) return acc;
-              return acc + minutesDiff(bs, be, be<=bs);
-            }, 0);
-          } else if (Number(d.break_minutes)>0) {
-            mins -= Number(d.break_minutes);
-          }
-          mins = Math.max(0, mins);
-
-          const contr = contractsById[t.contract_id||''] || {};
-          dayItems.push({
-            source: 'WEEK_TS',
-            date: ymd,
-            contract_id: t.contract_id || null,
-            week_ending_date: t.week_ending_date || null,
-            timesheet_id: t.timesheet_id,
-            expected_minutes: null,
-            actual_minutes: mins,
-            state: resolveState(mins, t, fin),
-            submission_mode: t.submission_mode,
-            invoiced: !!fin?.locked_by_invoice_id,
-            paid_at_utc: fin?.paid_at_utc || null,
-            role: contr.role || null,
-            band: contr.band || null,
-            client_id: contr.client_id || null,
-            client_name: clientNameById[contr.client_id] || null
-          });
-        }
-      }
-    }
-
-    // 3b) Weekly totals only: push status onto planned days
-    const weeklyTotalsOnly = tsRows.filter(t => t.week_ending_date && (!t.actual_schedule_json || !t.actual_schedule_json.length));
-    if (weeklyTotalsOnly.length && plannedDayItems.length) {
-      for (const t of weeklyTotalsOnly) {
-        const fin = finMap[t.timesheet_id];
-        for (const p of plannedDayItems) {
-          if (p.contract_id === t.contract_id && p.week_id && t.week_ending_date === p.week_ending_date) {
-            if (p.date >= winStart && p.date <= winEnd && p.expected_minutes > 0) {
-              p.state = resolveState(0, t, fin);
-              p.timesheet_id = t.timesheet_id;
-              p.submission_mode = t.submission_mode;
-              p.invoiced = !!fin?.locked_by_invoice_id;
-              p.paid_at_utc = fin?.paid_at_utc || null;
-            }
-          }
-        }
-      }
-    }
-
-    // 3c) Daily-only timesheets (worked_start/worked_end)
-    for (const t of tsRows) {
-      if (!t.week_ending_date) {
-        const fin = finMap[t.timesheet_id];
-        const { ymd: dayYmd, mins } = computeDailyActual(t);
-        if (!dayYmd || dayYmd < winStart || dayYmd > winEnd) continue;
-        const contr = contractsById[t.contract_id||''] || {};
-        dayItems.push({
-          source: 'DAILY_TS',
-          date: dayYmd,
-          contract_id: t.contract_id || null,
-          week_ending_date: null,
-          timesheet_id: t.timesheet_id,
-          expected_minutes: null,
-          actual_minutes: mins,
-          state: resolveState(mins, t, fin),
-          submission_mode: t.submission_mode,
-          invoiced: !!fin?.locked_by_invoice_id,
-          paid_at_utc: fin?.paid_at_utc || null,
-          role: contr.role || null,
-          band: contr.band || null,
-          client_id: contr.client_id || null,
-          client_name: clientNameById[contr.client_id] || null
-        });
-      }
-    }
-
-    return withCORS(env, req, ok({ from: winStart, to: winEnd, items: dayItems }));
+    return withCORS(env, req, ok({
+      candidate_id: candidateId,
+      from: winStart,
+      to: winEnd,
+      contracts: Array.isArray(contracts) ? contracts : [],
+      items: Array.isArray(items) ? items : []
+    }));
   } catch (e) {
     try { console.warn('[CANDIDATE CAL]', e?.message || e); } catch {}
     return withCORS(env, req, serverError('candidate calendar failed'));
   }
 }
 
-
- async function handleContractsSkipWeeks(env, req, contractId) {
+async function handleContractsSkipWeeks(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
-  let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+  let body;
+  try { body = await parseJSONBody(req); }
+  catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
   const from = toYmd(body.from), to = toYmd(body.to);
   if (!from || !to) return withCORS(env, req, badRequest('from and to required'));
 
-  // Only weeks without a timesheet can be cancelled
+  // NEW BEHAVIOUR:
+  // We do NOT "cancel" weeks anymore. If a week is being skipped/removed, we delete the contract_weeks row
+  // as long as it has no real timesheet.
   const res = await fetch(
     `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-    `?contract_id=eq.${enc(contractId)}&week_ending_date=gte.${enc(from)}&week_ending_date=lte.${enc(to)}&timesheet_id=is.null`,
+    `?contract_id=eq.${enc(contractId)}` +
+    `&week_ending_date=gte.${enc(from)}` +
+    `&week_ending_date=lte.${enc(to)}` +
+    `&timesheet_id=is.null`,
     {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
-      body: JSON.stringify({ status: 'CANCELLED', updated_at: nowIso() })
+      method: 'DELETE',
+      headers: { ...sbHeaders(env), 'Prefer': 'return=representation' }
     }
   );
+
   if (!res.ok) return withCORS(env, req, serverError(await res.text()));
   const rows = await res.json().catch(()=>[]);
-  return withCORS(env, req, ok({ updated: rows.length }));
+  const deletedCount = Array.isArray(rows) ? rows.length : 0;
+
+  return withCORS(env, req, ok({ deleted: deletedCount }));
 }
+
 
 // ----------------------------------------------------------------------------
 // B) CONTRACT WEEKS (list / switching / manual / expenses)
@@ -41287,7 +41055,7 @@ async function handleTsfinFinancials(env, req) {
 
 // Helper: mark linked weeks as INVOICED (used by both HOURS + EXPENSES creators)
 
- async function handleContractsPlanRanges(env, req, contractId) {
+async function handleContractsPlanRanges(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -41473,6 +41241,7 @@ async function handleTsfinFinancials(env, req) {
     for (const [we, dayList] of byWe.entries()) {
       let siblings = await ensureWeek(c.id, we);
       let base = siblings.find(x => x.additional_seq === 0);
+
       if (!base) {
         base = await createWeek(c.id, we, 0);
         createdWeeks += 1;
@@ -41495,6 +41264,7 @@ async function handleTsfinFinancials(env, req) {
         if (ymd < c.start_date || ymd > c.end_date) { skippedOutside += 1; continue; }
         const idx = planArr.findIndex(p => p?.date === ymd);
         const entry = buildPlanEntryForDate(ymd, c, d.explicit);
+
         if (idx >= 0) {
           if (mergeMode === 'replace') { planArr[idx] = entry; changed = true; daysPlanned += 1; }
         } else {
@@ -41503,9 +41273,22 @@ async function handleTsfinFinancials(env, req) {
       }
 
       if (changed) {
+        const today = toYmd(new Date());
+        const statusIfReviving = (we <= today ? 'OPEN' : 'PLANNED');
+
+        const patch = {
+          planned_schedule_json: planArr,
+          updated_at: nowIso()
+        };
+
+        // If this week was previously CANCELLED, revive it when adding plan entries.
+        if (String(targetWeek.status || '').toUpperCase() === 'CANCELLED') {
+          patch.status = statusIfReviving;
+        }
+
         const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(targetWeek.id)}`, {
           method:'PATCH', headers:{ ...sbHeaders(env), 'Prefer':'return=representation' },
-          body: JSON.stringify({ planned_schedule_json: planArr, updated_at: nowIso() })
+          body: JSON.stringify(patch)
         });
         if (!res.ok) return withCORS(env, req, serverError(await res.text()));
         patchedWeeks += 1;
@@ -41529,7 +41312,9 @@ async function handleTsfinFinancials(env, req) {
     ranges: results
   }));
 }
- async function handleContractsUnplanRanges(env, req, contractId) {
+
+
+async function handleContractsUnplanRanges(env, req, contractId) {
   console.log('[UNPLAN][HIT]', 'handleContractsUnplanRanges called', { contractId });
 
   // ===== Correlation + entry log =====
@@ -41558,15 +41343,20 @@ async function handleTsfinFinancials(env, req) {
   }
 
   const ranges = Array.isArray(body?.ranges) ? body.ranges : [];
-  const tsExistsPolicy = (String(body?.when_timesheet_exists || 'skip').toLowerCase() === 'error') ? 'error' : 'skip';
-  const emptyWeekAction = (['cancel', 'delete', 'keep'].includes(String(body?.empty_week_action || 'cancel').toLowerCase()))
+  const tsExistsPolicy =
+    (String(body?.when_timesheet_exists || 'skip').toLowerCase() === 'error') ? 'error' : 'skip';
+
+  // NOTE: We still accept empty_week_action for backward compatibility,
+  // but we now ALWAYS DELETE the contract_weeks row if it becomes empty (timesheet_id IS NULL).
+  const emptyWeekActionRaw = (['cancel', 'delete', 'keep'].includes(String(body?.empty_week_action || 'cancel').toLowerCase()))
     ? String(body.empty_week_action).toLowerCase()
     : 'cancel';
 
   log('REQUEST', {
     rangesCount: ranges.length,
     tsExistsPolicy,
-    emptyWeekAction,
+    emptyWeekAction: emptyWeekActionRaw,
+    emptyWeekAction_effective: 'delete_if_empty',
     sampleRange: ranges[0] || null
   });
 
@@ -41602,14 +41392,17 @@ async function handleTsfinFinancials(env, req) {
     const explicit = Array.isArray(r.days) && r.days.length && typeof r.days[0] === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.days[0])
       ? new Set(r.days.map(d => toYmd(d)))
       : null;
+
     const mask = (!explicit && Array.isArray(r.days) && r.days.length && typeof r.days[0] === 'string')
       ? toWeekdayMask(r.days)
       : null;
+
     const hasMask = !!(mask && mask.size);
 
     for (let dt = new Date(d0); dt <= d1; dt.setUTCDate(dt.getUTCDate()+1)) {
       const ymd = toYmd(dt);
       if (ymd < c.start_date || ymd > c.end_date) continue;
+
       let include = false;
       if (explicit) {
         include = explicit.has(ymd);
@@ -41620,7 +41413,10 @@ async function handleTsfinFinancials(env, req) {
       } else {
         include = true;
       }
+
       if (!include) continue;
+
+      // ✅ week_ending_date is computed using the contract/client week-ending weekday policy
       const we = computeWeekEnding(ymd, c.week_ending_weekday_snapshot || 0);
       const arr = out.get(we) || [];
       arr.push(ymd);
@@ -41649,7 +41445,9 @@ async function handleTsfinFinancials(env, req) {
   // ===== Apply unplanning to the targeted ranges =====
   for (const r of ranges) {
     const fromY = toYmd(r.from||r.From||r.start);
-    const toY = toYmd(r.to||r.To||r.end);
+    const toY   = toYmd(r.to||r.To||r.end);
+
+    // Existing convention: if days is [] (empty array), treat as "remove everything in range"
     const isRemoveAllFastPath = Array.isArray(r.days) && r.days.length === 0;
 
     log('RANGE_START', { from: fromY, to: toY, removeAllFastPath: isRemoveAllFastPath });
@@ -41657,75 +41455,52 @@ async function handleTsfinFinancials(env, req) {
     if (isRemoveAllFastPath) {
       const weFrom = computeWeekEnding(fromY, c.week_ending_weekday_snapshot || 0);
       const weTo   = computeWeekEnding(toY,   c.week_ending_weekday_snapshot || 0);
-      log('FASTPATH_REMOVE_ALL', { weFrom, weTo, emptyWeekAction });
 
-      if (emptyWeekAction === 'delete') {
-        const del = await fetch(
-          `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-          `?contract_id=eq.${enc(c.id)}&timesheet_id=is.null&week_ending_date=gte.${enc(weFrom)}&week_ending_date=lte.${enc(weTo)}`,
-          { method:'DELETE', headers: { ...sbHeaders(env), 'Prefer':'return=representation' } }
-        );
-        if (!del.ok) {
-          const txt = await del.text();
-          errl('DELETE weeks failed', { status: del.status, txt });
-          return withCORS(env, req, serverError(txt));
-        }
-        const deletedRows = await del.json().catch(()=>[]);
-        const emptiedCount = Array.isArray(deletedRows) ? deletedRows.length : 0;
-        log('FASTPATH_DELETE_RESULT', { emptiedCount });
+      log('FASTPATH_REMOVE_ALL', {
+        weFrom, weTo,
+        note: 'Deleting contract_weeks rows (timesheet_id IS NULL) rather than cancelling.'
+      });
 
-        results.push({
-          from: fromY,
-          to:   toY,
-          patched_weeks: 0,
-          days_removed: 0,
-          emptied_weeks: emptiedCount,
-          emptied_weeks_action: 'delete',
-          skipped_due_to_timesheet: 0
-        });
-        totalEmptiedWeeks += emptiedCount;
-      } else {
-        const patchBody = (emptyWeekAction === 'cancel')
-          ? { planned_schedule_json: [], status: 'CANCELLED', updated_at: nowIso() }
-          : { planned_schedule_json: [], updated_at: nowIso() };
+      // NEW BEHAVIOUR: always DELETE week rows without timesheets in the WE range
+      const del = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+        `?contract_id=eq.${enc(c.id)}` +
+        `&timesheet_id=is.null` +
+        `&week_ending_date=gte.${enc(weFrom)}` +
+        `&week_ending_date=lte.${enc(weTo)}`,
+        { method:'DELETE', headers: { ...sbHeaders(env), 'Prefer':'return=representation' } }
+      );
 
-        const pat = await fetch(
-          `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-          `?contract_id=eq.${enc(c.id)}&timesheet_id=is.null&week_ending_date=gte.${enc(weFrom)}&week_ending_date=lte.${enc(weTo)}`,
-          { method:'PATCH', headers: { ...sbHeaders(env), 'Prefer':'return=representation' }, body: JSON.stringify(patchBody) }
-        );
-        if (!pat.ok) {
-          const txt = await pat.text();
-          errl('PATCH weeks (fastpath) failed', { status: pat.status, txt });
-          return withCORS(env, req, serverError(txt));
-        }
-        const patched = await pat.json().catch(()=>[]);
-        const patchedCount = Array.isArray(patched) ? patched.length : 0;
-        const emptiedCount = Array.isArray(patched)
-          ? patched.filter(w => Array.isArray(w?.planned_schedule_json) && w.planned_schedule_json.length === 0).length
-          : 0;
-
-        log('FASTPATH_PATCH_RESULT', { patchedCount, emptiedCount, action: emptyWeekAction });
-
-        results.push({
-          from: fromY,
-          to:   toY,
-          patched_weeks: patchedCount,
-          days_removed: 0,
-          emptied_weeks: emptiedCount,
-          emptied_weeks_action: emptyWeekAction,
-          skipped_due_to_timesheet: 0
-        });
-        totalPatchedWeeks += patchedCount;
-        totalEmptiedWeeks += emptiedCount;
+      if (!del.ok) {
+        const txt = await del.text();
+        errl('DELETE weeks failed', { status: del.status, txt });
+        return withCORS(env, req, serverError(txt));
       }
 
+      const deletedRows = await del.json().catch(()=>[]);
+      const deletedCount = Array.isArray(deletedRows) ? deletedRows.length : 0;
+
+      log('FASTPATH_DELETE_RESULT', { deletedCount });
+
+      results.push({
+        from: fromY,
+        to:   toY,
+        patched_weeks: deletedCount,
+        days_removed: 0,
+        emptied_weeks: deletedCount,
+        emptied_weeks_action: 'delete',
+        skipped_due_to_timesheet: 0
+      });
+
+      totalPatchedWeeks += deletedCount;
+      totalEmptiedWeeks += deletedCount;
       continue;
     }
 
     // Group dates by WE for targeted unplan
     const byWE = splitDatesByWE(r);
     const weSet = new Set(byWE.keys());
+
     log('SPLIT_BY_WE', { weCount: weSet.size, weeks: [...weSet].slice(0, 6) });
 
     const weeks = await loadWeeks(c.id, weSet);
@@ -41746,12 +41521,15 @@ async function handleTsfinFinancials(env, req) {
         log('NO_WEEKS_FOR_WE', { we });
         continue;
       }
+
       const dateSet = new Set(dates);
 
       for (const w of siblings) {
+        // If there is a real timesheet, we do NOT mutate/delete week rows here.
         if (w.timesheet_id) {
           const planArr = Array.isArray(w.planned_schedule_json) ? w.planned_schedule_json : [];
           const overlapCount = planArr.filter(p => dateSet.has(p?.date)).length;
+
           if (overlapCount) {
             if (tsExistsPolicy === 'error') {
               warn('TS_EXISTS_ERROR_POLICY', { we, weekId: w.id, overlapCount });
@@ -41767,39 +41545,39 @@ async function handleTsfinFinancials(env, req) {
         const plan = Array.isArray(raw) ? raw : (typeof raw === 'string' ? JSON.parse(raw) : []);
         const newPlan = plan.filter(p => !dateSet.has(p?.date));
         const removedHere = plan.length - newPlan.length;
+
         if (!removedHere) continue;
 
         daysRemoved += removedHere;
 
+        // NEW BEHAVIOUR: if the week becomes empty and has no timesheet, DELETE the row.
+        // ✅ This is correct because contract_weeks rows are keyed by week_ending_date (client WE day),
+        // so a row is only deleted when the entire week (Mon..WE) becomes empty.
         if (!newPlan.length) {
-          if (emptyWeekAction === 'delete') {
-            const del = await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(w.id)}`, {
-              method:'DELETE', headers:{ ...sbHeaders(env), 'Prefer':'return=minimal' }
-            });
-            try { await del.arrayBuffer(); } catch {}
-            emptiedWeeks += 1;
-            patchedWeeks += 1;
-            log('DELETE_EMPTY_WEEK', { we, weekId: w.id });
-            continue;
-          }
-          const patch = (emptyWeekAction === 'cancel')
-            ? { planned_schedule_json: [], status: 'CANCELLED', updated_at: nowIso() }
-            : { planned_schedule_json: [], updated_at: nowIso() };
-          const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(w.id)}`, {
-            method:'PATCH', headers:{ ...sbHeaders(env), 'Prefer':'return=minimal' }, body: JSON.stringify(patch)
-          });
-          try { await res.arrayBuffer(); } catch {}
+          const del = await fetch(
+            `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(w.id)}`,
+            { method:'DELETE', headers:{ ...sbHeaders(env), 'Prefer':'return=minimal' } }
+          );
+          try { await del.arrayBuffer(); } catch {}
+
           emptiedWeeks += 1;
           patchedWeeks += 1;
-          log('PATCH_EMPTY_WEEK', { we, weekId: w.id, action: emptyWeekAction });
+
+          log('DELETE_EMPTY_WEEK', { we, weekId: w.id });
           continue;
         }
 
-        const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(w.id)}`, {
-          method:'PATCH', headers:{ ...sbHeaders(env), 'Prefer':'return=minimal' },
-          body: JSON.stringify({ planned_schedule_json: newPlan, updated_at: nowIso() })
-        });
+        // Otherwise patch the reduced plan
+        const res = await fetch(
+          `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(w.id)}`,
+          {
+            method:'PATCH',
+            headers:{ ...sbHeaders(env), 'Prefer':'return=minimal' },
+            body: JSON.stringify({ planned_schedule_json: newPlan, updated_at: nowIso() })
+          }
+        );
         try { await res.arrayBuffer(); } catch {}
+
         patchedWeeks += 1;
         log('PATCH_PARTIAL_WEEK', { we, weekId: w.id, removedHere });
       }
@@ -41811,7 +41589,7 @@ async function handleTsfinFinancials(env, req) {
       patched_weeks: patchedWeeks,
       days_removed: daysRemoved,
       emptied_weeks: emptiedWeeks,
-      emptied_weeks_action: emptyWeekAction,
+      emptied_weeks_action: 'delete_if_empty',
       skipped_due_to_timesheet: skippedDueTS
     });
 
@@ -41830,7 +41608,12 @@ async function handleTsfinFinancials(env, req) {
     });
   }
 
-  // ===== Normalize window AFTER unplanning (mirror plan-ranges) =====
+  // ===== Normalize contract window AFTER unplanning =====
+  // Requirements implemented:
+  //  - If planned dates still exist: shrink window to [minPlanned, maxPlanned] (then clamp to TS envelope)
+  //  - If NO planned dates remain:
+  //      * if TS envelope exists: shrink to TS envelope
+  //      * if no TS envelope: keep start_date as-is, set end_date = start_date
   let minWE = null, maxWE = null;
   try {
     const { rows: minRows } = await sbFetch(
@@ -41852,6 +41635,7 @@ async function handleTsfinFinancials(env, req) {
     warn('FETCH_TS_ENVELOPE_FAILED', { error: String(e) });
   }
 
+  // Scan remaining planned dates (best-effort)
   let minPlanned = null, maxPlanned = null;
   try {
     const { rows: allWeeks } = await sbFetch(
@@ -41880,16 +41664,25 @@ async function handleTsfinFinancials(env, req) {
   let newEnd   = c.end_date;
 
   if (minPlanned && maxPlanned) {
+    // shrink to the remaining planned envelope
     newStart = minPlanned;
     newEnd   = maxPlanned;
   } else {
-    if (!minWE && !maxWE) {
+    // no planned dates remain
+    if (minWE || maxWE) {
+      // shrink to real timesheet envelope
+      newStart = minWE ? addDays(minWE, -6) : c.start_date;
+      newEnd   = maxWE ? maxWE : c.end_date;
+    } else {
+      // nothing planned + no timesheets => keep start, collapse end to start
       newStart = c.start_date;
       newEnd   = c.start_date;
     }
   }
 
   const beforeClamp = { newStart, newEnd, minWE, maxWE };
+
+  // Clamp (never shrink past real TS envelope)
   if (minWE) {
     const minWeekStart = addDays(minWE, -6);
     if (newStart > minWeekStart) newStart = minWeekStart;
@@ -41897,6 +41690,7 @@ async function handleTsfinFinancials(env, req) {
   if (maxWE) {
     if (newEnd < maxWE) newEnd = maxWE;
   }
+
   log('NORMALIZE_WINDOW', {
     proposed: beforeClamp,
     clamped: { newStart, newEnd }
@@ -41907,24 +41701,32 @@ async function handleTsfinFinancials(env, req) {
     log('PATCH_CONTRACT_WINDOW', {
       oldStart: c.start_date, oldEnd: c.end_date, newStart, newEnd
     });
+
     const pr = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(c.id)}`, {
       method: 'PATCH',
       headers: { ...sbHeaders(env), 'Prefer':'return=representation' },
       body: JSON.stringify({ start_date: newStart, end_date: newEnd, updated_at: nowIso() })
     });
+
     if (!pr.ok) {
       const txt = await pr.text();
       errl('PATCH_CONTRACT_WINDOW_FAILED', { status: pr.status, txt });
       return withCORS(env, req, serverError(txt));
     }
+
     const upd = (await pr.json().catch(()=>[]))[0] || c;
-    c.start_date = upd.start_date; c.end_date = upd.end_date;
+    c.start_date = upd.start_date;
+    c.end_date   = upd.end_date;
     contractWindowChanged = true;
 
+    // Prune empty weeks outside the new window (only no-timesheet rows)
     try {
       log('PRUNE_OUTSIDE_WEEKS', { keepFrom: c.start_date, keepTo: c.end_date });
       const delRes = await fetch(
-        `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(c.id)}&timesheet_id=is.null&or=(week_ending_date.lt.${enc(c.start_date)},week_ending_date.gt.${enc(c.end_date)})`,
+        `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+        `?contract_id=eq.${enc(c.id)}` +
+        `&timesheet_id=is.null` +
+        `&or=(week_ending_date.lt.${enc(c.start_date)},week_ending_date.gt.${enc(c.end_date)})`,
         { method:'DELETE', headers: { ...sbHeaders(env), 'Prefer':'return=minimal' } }
       );
       try { await delRes.arrayBuffer(); } catch {}
@@ -41950,6 +41752,8 @@ async function handleTsfinFinancials(env, req) {
   log('EXIT OK', response);
   return withCORS(env, req, ok(response));
 }
+
+
 
 async function handleContractWeekGeneratePrintable(env, req, weekId) {
   const enc = encodeURIComponent;
@@ -43539,22 +43343,28 @@ async function generateAndStoreTimesheetQr(env, {
   );
 }
 
-
- async function handleContractWeekPlanPatch(env, req, weekId) {
+async function handleContractWeekPlanPatch(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
   let body;
-  try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+  try { body = await parseJSONBody(req); }
+  catch { return withCORS(env, req, badRequest('Invalid JSON')); }
 
   const adds = Array.isArray(body?.add) ? body.add : [];
   const removes = Array.isArray(body?.remove) ? body.remove : [];
   const mergeMode = (String(body?.merge||'append').toLowerCase()==='replace') ? 'replace' : 'append';
-  const emptyAction = (['cancel','delete','keep'].includes(String(body?.empty_week_action||'cancel').toLowerCase()))
+
+  // NOTE: we keep empty_week_action for backward compatibility,
+  // but effective behaviour is:
+  // - if plan becomes empty (and no timesheet), DELETE the contract_weeks row.
+  const emptyActionRaw = (['cancel','delete','keep'].includes(String(body?.empty_week_action||'cancel').toLowerCase()))
     ? String(body.empty_week_action).toLowerCase()
     : 'cancel';
 
-  if (!adds.length && !removes.length) return withCORS(env, req, badRequest('Nothing to change (add[]/remove[] empty)'));
+  if (!adds.length && !removes.length) {
+    return withCORS(env, req, badRequest('Nothing to change (add[]/remove[] empty)'));
+  }
 
   // Load week + its contract (for std_schedule_json)
   const w = await sbGetOne(
@@ -43562,9 +43372,10 @@ async function generateAndStoreTimesheetQr(env, {
     `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=id,contract_id,week_ending_date,additional_seq,timesheet_id,planned_schedule_json,status`
   );
   if (!w) return withCORS(env, req, badRequest('Week not found'));
+
   const c = await sbGetOne(
     env,
-    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(w.contract_id)}&select=id,start_date,end_date,std_schedule_json`
+    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(w.contract_id)}&select=id,start_date,end_date,std_schedule_json,week_ending_weekday_snapshot`
   );
   if (!c) return withCORS(env, req, badRequest('Contract not found'));
 
@@ -43581,6 +43392,7 @@ async function generateAndStoreTimesheetQr(env, {
     if (!d?.date) throw new Error('add[].date is required');
     const ymd = toYmd(d.date);
     if (ymd < c.start_date || ymd > c.end_date) throw new Error(`Date ${ymd} is outside contract window`);
+
     if (d.start && d.end) {
       const s = parseHHMM(d.start), e = parseHHMM(d.end);
       if (s==null || e==null) throw new Error(`Invalid HH:MM for ${ymd}`);
@@ -43590,10 +43402,12 @@ async function generateAndStoreTimesheetQr(env, {
       const breaks = Array.isArray(d.breaks) ? d.breaks : [];
       return { date: ymd, start:d.start, end:d.end, breaks, break_minutes:br, overnight, expected_minutes:mins };
     }
+
     // fallback to template (also infer only from times)
     const jsDow = (new Date(ymd+'T00:00:00Z')).getUTCDay();
     const names = ['sun','mon','tue','wed','thu','fri','sat'];
     const tpl = c.std_schedule_json?.[names[jsDow]];
+
     if (tpl?.start && tpl?.end) {
       const s = parseHHMM(tpl.start), e = parseHHMM(tpl.end);
       if (s==null || e==null) throw new Error(`Invalid std_schedule_json time for ${names[jsDow]}`);
@@ -43603,6 +43417,7 @@ async function generateAndStoreTimesheetQr(env, {
       const breaks = Array.isArray(tpl.breaks) ? tpl.breaks : [];
       return { date: ymd, start:tpl.start, end:tpl.end, breaks, break_minutes:br, overnight, expected_minutes:mins };
     }
+
     return { date: ymd, start:null, end:null, breaks:[], break_minutes:0, overnight:false, expected_minutes:0 };
   }
 
@@ -43628,30 +43443,59 @@ async function generateAndStoreTimesheetQr(env, {
     if (idx >= 0) { plan.splice(idx,1); changed = true; }
   }
 
-  if (!changed) return withCORS(env, req, ok({ updated:false, week_id: w.id }));
-
-  // If emptied, apply action (no TS by guard above)
-  const patch = { planned_schedule_json: plan, updated_at: nowIso() };
-  if (!plan.length) {
-    if (emptyAction === 'cancel') patch.status = 'CANCELLED';
+  if (!changed) {
+    return withCORS(env, req, ok({ updated:false, week_id: w.id, empty_week_action: emptyActionRaw }));
   }
 
-  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(w.id)}`, {
-    method:'PATCH', headers:{ ...sbHeaders(env), 'Prefer':'return=representation' }, body: JSON.stringify(patch)
-  });
+  // NEW BEHAVIOUR: if emptied, DELETE the contract_weeks row (since there is no TS)
+  if (!plan.length) {
+    const del = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(w.id)}`,
+      { method:'DELETE', headers:{ ...sbHeaders(env), 'Prefer':'return=minimal' } }
+    );
+    try { await del.arrayBuffer(); } catch {}
+
+    return withCORS(env, req, ok({
+      updated: true,
+      week_deleted: true,
+      week_id: w.id,
+      empty_week_action: emptyActionRaw,
+      empty_week_action_effective: 'delete'
+    }));
+  }
+
+  // If we are (re)adding days to a previously cancelled week, restore status automatically.
+  const todayYmd = toYmd(new Date());
+  const desiredStatus = (String(w.week_ending_date) <= todayYmd) ? 'OPEN' : 'PLANNED';
+
+  const patch = {
+    planned_schedule_json: plan,
+    updated_at: nowIso()
+  };
+
+  if (String(w.status || '').toUpperCase() === 'CANCELLED') {
+    patch.status = desiredStatus;
+  }
+
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(w.id)}`,
+    {
+      method:'PATCH',
+      headers:{ ...sbHeaders(env), 'Prefer':'return=representation' },
+      body: JSON.stringify(patch)
+    }
+  );
   if (!res.ok) return withCORS(env, req, serverError(await res.text()));
 
-  // Hard delete if requested and plan is empty (and still no TS)
-  if (!plan.length && emptyAction === 'delete') {
-    await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(w.id)}`, {
-      method:'DELETE', headers:{ ...sbHeaders(env), 'Prefer':'return=minimal' }
-    }).catch(()=>{});
-    return withCORS(env, req, ok({ updated:true, week_deleted:true, week_id:w.id }));
-  }
-
   const row = (await res.json().catch(()=>[]))[0] || null;
-  return withCORS(env, req, ok({ updated:true, week: row }));
+  return withCORS(env, req, ok({
+    updated: true,
+    week: row,
+    empty_week_action: emptyActionRaw,
+    empty_week_action_effective: 'delete_if_empty'
+  }));
 }
+
 
 
 async function setWeeksInvoicedForTimesheets(env, timesheetIds) {
