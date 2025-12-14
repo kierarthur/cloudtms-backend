@@ -276,7 +276,7 @@ begin
                            when s.timesheet_id is null and r.candidate_id is not null
                              then r.candidate_id
                            else s.candidate_id
-                         )
+                         end
     from resolved r
     where s.external_row_key = r.external_row_key
     returning
