@@ -386,6 +386,7 @@ as $$
     (select c.candidate_id from contracts c where c.id = $1),
     $2,
     $3
-  )
-  where public.calendar_candidate_day_feed.contract_id = $1;
+  ) as f
+  where f.contract_id = $1;
 $$;
+
