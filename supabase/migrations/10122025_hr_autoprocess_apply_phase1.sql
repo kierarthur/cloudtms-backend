@@ -182,6 +182,19 @@ begin
   ),
 
   ----------------------------------------------------------------
+  -- Current TSFIN state per timesheet (keyed by timesheet_id)
+  ----------------------------------------------------------------
+  fin_current as (
+    select distinct on (tf.timesheet_id)
+      tf.timesheet_id,
+      tf.locked_by_invoice_id,
+      tf.paid_at_utc
+    from public.timesheets_financials tf
+    where tf.is_current = true
+    order by tf.timesheet_id, tf.created_at desc
+  ),
+
+  ----------------------------------------------------------------
   -- Update hr_rows.external_row_key where it was previously null/different
   ----------------------------------------------------------------
   ext_update as (
@@ -247,66 +260,83 @@ begin
   ),
 
   ----------------------------------------------------------------
-  -- Update existing shifts with latest HR data
+  -- Build update source rows + SAFE overwrite decision (no illegal LATERAL ref)
+  ----------------------------------------------------------------
+  upd_src as (
+    select
+      s.external_row_key,
+      s.timesheet_id,
+
+      s.candidate_id as old_candidate_id,
+      s.client_id    as old_client_id,
+
+      r.work_date,
+      r.ward,
+      r.start_utc,
+      r.end_utc,
+      r.break_mins,
+      r.request_id,
+      r.held_back_reason,
+      r.client_id     as new_client_id,
+      r.candidate_id  as new_candidate_id,
+
+      fc.locked_by_invoice_id,
+      fc.paid_at_utc,
+      (fc.timesheet_id is null) as tsfin_missing,
+
+      (
+        s.timesheet_id is null
+        or fc.timesheet_id is null
+        or (fc.locked_by_invoice_id is null and fc.paid_at_utc is null)
+      ) as safe_to_overwrite
+    from public.nhsp_shifts s
+    join resolved r
+      on r.external_row_key = s.external_row_key
+    left join fin_current fc
+      on fc.timesheet_id = s.timesheet_id
+  ),
+
+  ----------------------------------------------------------------
+  -- Update existing shifts with latest HR data (+ SAFE overwrite of ids)
   ----------------------------------------------------------------
   upd as (
     update public.nhsp_shifts s
     set
       latest_import_id = hr_autoprocess_apply_phase1.import_id,
       source_system    = 'HEALTHROSTER'::hr_source_enum,
-      work_date        = r.work_date,
-      ward             = nullif(r.ward, ''),
-      start_utc        = r.start_utc,
-      end_utc          = r.end_utc,
-      break_mins       = coalesce(r.break_mins, 0),
+      work_date        = u.work_date,
+      ward             = nullif(u.ward, ''),
+      start_utc        = u.start_utc,
+      end_utc          = u.end_utc,
+      break_mins       = coalesce(u.break_mins, 0),
       pay_minutes      = greatest(
                            0,
-                           (extract(epoch from (r.end_utc - r.start_utc)) / 60)::int
-                           - coalesce(r.break_mins, 0)
+                           (extract(epoch from (u.end_utc - u.start_utc)) / 60)::int
+                           - coalesce(u.break_mins, 0)
                          ),
-      client_id        = r.client_id,
-      hr_request_id    = r.request_id,
-      held_back_reason = r.held_back_reason,
+      client_id        = case
+                           when u.new_client_id is not null and u.safe_to_overwrite
+                             then u.new_client_id
+                           else s.client_id
+                         end,
+      hr_request_id    = u.request_id,
+      held_back_reason = u.held_back_reason,
       updated_at       = now(),
 
       -- ✅ UPDATED FIX (same as NHSP apply logic):
-      -- Allow corrected candidate_id to overwrite when it is SAFE.
-      -- SAFE means:
+      -- Allow corrected candidate_id to overwrite when SAFE:
       --   - shift not linked to a timesheet yet, OR
       --   - linked timesheet has no current TSFIN row, OR
       --   - linked timesheet TSFIN exists and is not paid and not invoice-locked.
       candidate_id     = case
-                           when r.candidate_id is not null
-                            and (
-                              s.timesheet_id is null
-                              or fin.tsfin_missing = true
-                              or (fin.locked_by_invoice_id is null and fin.paid_at_utc is null)
-                            )
-                             then r.candidate_id
+                           when u.new_candidate_id is not null and u.safe_to_overwrite
+                             then u.new_candidate_id
                            else s.candidate_id
                          end
-    from resolved r
-    left join lateral (
-      select
-        tf.locked_by_invoice_id,
-        tf.paid_at_utc,
-        (tf.timesheet_id is null) as tsfin_missing
-      from public.timesheets_financials tf
-      where tf.timesheet_id = s.timesheet_id
-        and tf.is_current = true
-      order by tf.created_at desc
-      limit 1
-    ) fin on true
-    where s.external_row_key = r.external_row_key
+    from upd_src u
+    where s.external_row_key = u.external_row_key
     returning
-      (
-        r.candidate_id is not null
-        and (
-          s.timesheet_id is null
-          or fin.tsfin_missing = true
-          or (fin.locked_by_invoice_id is null and fin.paid_at_utc is null)
-        )
-      ) as mapped_candidate
+      (u.old_candidate_id is null and u.new_candidate_id is not null and u.safe_to_overwrite) as mapped_candidate
   )
 
   ----------------------------------------------------------------
