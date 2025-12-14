@@ -279,8 +279,22 @@ begin
       pay_minutes      = greatest(0, r.pay_minutes),
       source_system    = 'NHSP'::hr_source_enum,
       updated_at       = now(),
-      candidate_id     = coalesce(s.candidate_id, r.candidate_id),
-      client_id        = coalesce(s.client_id,    r.client_id)
+
+      -- ✅ FIX:
+      -- Allow corrected candidate_id/client_id to overwrite ONLY when this shift
+      -- is not yet linked to a timesheet (timesheet_id is NULL).
+      -- If timesheet_id is present, keep existing ids (do not mutate).
+      candidate_id     = case
+                           when s.timesheet_id is null and r.candidate_id is not null
+                             then r.candidate_id
+                           else s.candidate_id
+                         end,
+      client_id        = case
+                           when s.timesheet_id is null and r.client_id is not null
+                             then r.client_id
+                           else s.client_id
+                         end
+
     from resolved r
     where s.external_row_key = r.external_row_key
     returning
