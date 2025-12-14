@@ -268,7 +268,15 @@ begin
       hr_request_id    = r.request_id,
       held_back_reason = r.held_back_reason,
       updated_at       = now(),
-      candidate_id     = coalesce(s.candidate_id, r.candidate_id)
+
+      -- ✅ FIX:
+      -- Allow corrected candidate_id to overwrite ONLY when shift is not linked
+      -- to a timesheet yet (timesheet_id IS NULL). If linked, keep existing.
+      candidate_id     = case
+                           when s.timesheet_id is null and r.candidate_id is not null
+                             then r.candidate_id
+                           else s.candidate_id
+                         )
     from resolved r
     where s.external_row_key = r.external_row_key
     returning
