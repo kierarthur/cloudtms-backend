@@ -209,6 +209,7 @@ begin
       from matches
     ) cli_name on (cli_alias.client_id is null)
   ),
+
   ins as (
     insert into public.nhsp_shifts (
       external_row_key,
@@ -262,6 +263,7 @@ begin
       (candidate_id is not null) as mapped_candidate,
       (client_id    is not null) as mapped_client
   ),
+
   upd as (
     update public.nhsp_shifts s
     set
@@ -280,27 +282,66 @@ begin
       source_system    = 'NHSP'::hr_source_enum,
       updated_at       = now(),
 
-      -- ✅ FIX:
-      -- Allow corrected candidate_id/client_id to overwrite ONLY when this shift
-      -- is not yet linked to a timesheet (timesheet_id is NULL).
-      -- If timesheet_id is present, keep existing ids (do not mutate).
+      -- ✅ UPDATED FIX:
+      -- Allow corrected candidate_id/client_id to overwrite when it is SAFE.
+      -- SAFE means:
+      --   - shift not linked to a timesheet yet, OR
+      --   - linked timesheet has no current TSFIN row, OR
+      --   - linked timesheet TSFIN exists and is not paid and not invoice-locked.
       candidate_id     = case
-                           when s.timesheet_id is null and r.candidate_id is not null
+                           when r.candidate_id is not null
+                            and (
+                              s.timesheet_id is null
+                              or fin.tsfin_missing = true
+                              or (fin.locked_by_invoice_id is null and fin.paid_at_utc is null)
+                            )
                              then r.candidate_id
                            else s.candidate_id
                          end,
+
       client_id        = case
-                           when s.timesheet_id is null and r.client_id is not null
+                           when r.client_id is not null
+                            and (
+                              s.timesheet_id is null
+                              or fin.tsfin_missing = true
+                              or (fin.locked_by_invoice_id is null and fin.paid_at_utc is null)
+                            )
                              then r.client_id
                            else s.client_id
                          end
 
     from resolved r
+    left join lateral (
+      select
+        tf.locked_by_invoice_id,
+        tf.paid_at_utc,
+        (tf.timesheet_id is null) as tsfin_missing
+      from public.timesheets_financials tf
+      where tf.timesheet_id = s.timesheet_id
+        and tf.is_current = true
+      order by tf.created_at desc
+      limit 1
+    ) fin on true
     where s.external_row_key = r.external_row_key
     returning
-      (s.candidate_id is null and r.candidate_id is not null) as mapped_candidate,
-      (s.client_id    is null and r.client_id    is not null) as mapped_client
+      (
+        r.candidate_id is not null
+        and (
+          s.timesheet_id is null
+          or fin.tsfin_missing = true
+          or (fin.locked_by_invoice_id is null and fin.paid_at_utc is null)
+        )
+      ) as mapped_candidate,
+      (
+        r.client_id is not null
+        and (
+          s.timesheet_id is null
+          or fin.tsfin_missing = true
+          or (fin.locked_by_invoice_id is null and fin.paid_at_utc is null)
+        )
+      ) as mapped_client
   )
+
   select
     coalesce((select count(*) from ins), 0)                                   as created,
     coalesce((select count(*) from upd), 0)                                   as updated,
