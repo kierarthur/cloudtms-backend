@@ -38845,20 +38845,35 @@ async function writeSnapshot(env, snapshot) {
   // - nhsp_import_id: uuid, linking this TSFIN to an NHSP hr_import
   // - invoice_breakdown_json: either AGGREGATE or per-shift breakdown for NHSP/autoproc
 
+  if (!snapshot || !snapshot.timesheet_id) {
+    throw new Error('writeSnapshot: snapshot.timesheet_id is required');
+  }
+
+  const nowIso = new Date().toISOString();
+
+  // Always insert a "current" snapshot row, and ensure timestamps exist.
+  // (We keep any caller-supplied created_at/updated_at if they provided them.)
+  const snap = { ...snapshot };
+  snap.is_current = true;
+  if (!snap.created_at) snap.created_at = nowIso;
+  if (!snap.updated_at) snap.updated_at = nowIso;
+
   // Use the correct argument name for the Postgres function:
   await sbRpc(env, 'tsfin_prepare_write', {
-    p_timesheet_id: snapshot.timesheet_id
+    p_timesheet_id: snap.timesheet_id
   });
 
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets_financials`, {
     method: 'POST',
     headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-    body: JSON.stringify(snapshot)
+    body: JSON.stringify(snap)
   });
+
   if (!res.ok) {
     const txt = await res.text();
     throw new Error(`timesheets_financials insert failed: ${txt}`);
   }
+
   const json = await res.json().catch(() => ([]));
   return Array.isArray(json) ? json[0] : json;
 }
