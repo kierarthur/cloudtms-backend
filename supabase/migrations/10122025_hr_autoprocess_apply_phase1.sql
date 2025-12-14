@@ -96,7 +96,7 @@ begin
         case
           when s.work_date is null or s.start_utc is null or s.end_utc is null then null
           else array_to_string(ARRAY[
-            regexp_replace(trim(s.work_date::text),             '\|', ' ', 'g'),
+            regexp_replace(trim(s.work_date::text),               '\|', ' ', 'g'),
             regexp_replace(coalesce(lower(trim(s.staff_name)),''), '\|',' ','g'),
             regexp_replace(coalesce(lower(trim(s.ward)),''),       '\|',' ','g'),
             regexp_replace(coalesce(s.client_id::text,''),         '\|',' ','g'),
@@ -269,18 +269,44 @@ begin
       held_back_reason = r.held_back_reason,
       updated_at       = now(),
 
-      -- ✅ FIX:
-      -- Allow corrected candidate_id to overwrite ONLY when shift is not linked
-      -- to a timesheet yet (timesheet_id IS NULL). If linked, keep existing.
+      -- ✅ UPDATED FIX (same as NHSP apply logic):
+      -- Allow corrected candidate_id to overwrite when it is SAFE.
+      -- SAFE means:
+      --   - shift not linked to a timesheet yet, OR
+      --   - linked timesheet has no current TSFIN row, OR
+      --   - linked timesheet TSFIN exists and is not paid and not invoice-locked.
       candidate_id     = case
-                           when s.timesheet_id is null and r.candidate_id is not null
+                           when r.candidate_id is not null
+                            and (
+                              s.timesheet_id is null
+                              or fin.tsfin_missing = true
+                              or (fin.locked_by_invoice_id is null and fin.paid_at_utc is null)
+                            )
                              then r.candidate_id
                            else s.candidate_id
                          end
     from resolved r
+    left join lateral (
+      select
+        tf.locked_by_invoice_id,
+        tf.paid_at_utc,
+        (tf.timesheet_id is null) as tsfin_missing
+      from public.timesheets_financials tf
+      where tf.timesheet_id = s.timesheet_id
+        and tf.is_current = true
+      order by tf.created_at desc
+      limit 1
+    ) fin on true
     where s.external_row_key = r.external_row_key
     returning
-      (s.candidate_id is null and r.candidate_id is not null) as mapped_candidate
+      (
+        r.candidate_id is not null
+        and (
+          s.timesheet_id is null
+          or fin.tsfin_missing = true
+          or (fin.locked_by_invoice_id is null and fin.paid_at_utc is null)
+        )
+      ) as mapped_candidate
   )
 
   ----------------------------------------------------------------
