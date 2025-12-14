@@ -61,7 +61,7 @@ returns table (
   invoiced boolean,
   paid boolean,
 
-  -- NEW: per-line/day flags
+  -- per-line/day flags
   pay_line_on_hold boolean,
   invoice_line_on_hold boolean,
 
@@ -92,11 +92,16 @@ ts_with_tf as (
   select
     ts.timesheet_id,
     ts.contract_id,
-    ts.contract_week_id,
+
+    -- ✅ real linkage: contract_weeks -> timesheets via timesheet_id
+    cw.id as contract_week_id,
+    cw.planned_schedule_json as cw_planned_schedule_json,
+
     ts.week_ending_date,
     ts.sheet_scope,
     ts.worked_start_iso,
     ts.actual_schedule_json,
+
     tf.id as tsfin_id,
     tf.processing_status,
     coalesce(tf.pay_on_hold,false) as pay_on_hold,
@@ -105,9 +110,14 @@ ts_with_tf as (
     tf.invoice_breakdown_json
   from timesheets ts
   join candidate_contracts cc on cc.contract_id = ts.contract_id
+
+  left join contract_weeks cw
+    on cw.timesheet_id = ts.timesheet_id
+
   left join timesheets_financials tf
     on tf.timesheet_id = ts.timesheet_id
    and tf.is_current = true
+
   where
     (
       -- weekly timesheets relevant to window (+/- 14 days buffer)
@@ -140,10 +150,10 @@ segment_events as (
       t.locked_by_invoice_id
     ) as invoice_id,
 
-    -- NEW: pay line hold
+    -- pay line hold
     coalesce((seg->>'exclude_from_pay')::boolean,false) as pay_line_on_hold,
 
-    -- NEW: invoice line delayed/held:
+    -- invoice line delayed/held:
     -- if target week start differs from "natural week start" AND segment isn't invoiced yet
     (
       nullif(seg->>'invoice_locked_invoice_id','') is null
@@ -186,7 +196,7 @@ weekly_schedule_events as (
 ),
 
 -- 3) WEEKLY fallback: if we have TSFIN but no segments and no actual_schedule_json,
--- apply TSFIN status to planned days in that contract_week.
+-- apply TSFIN status to planned days linked to that timesheet via contract_weeks.timesheet_id
 weekly_plan_fallback_events as (
   select
     t.contract_id,
@@ -201,8 +211,7 @@ weekly_plan_fallback_events as (
     false as pay_line_on_hold,
     false as invoice_line_on_hold
   from ts_with_tf t
-  join contract_weeks cw on cw.id = t.contract_week_id
-  cross join lateral jsonb_array_elements(coalesce(cw.planned_schedule_json,'[]'::jsonb)) p
+  cross join lateral jsonb_array_elements(coalesce(t.cw_planned_schedule_json,'[]'::jsonb)) p
   where t.sheet_scope = 'WEEKLY'
     and t.tsfin_id is not null
     and coalesce(t.invoice_breakdown_json->>'mode','') <> 'SEGMENTS'
@@ -348,7 +357,6 @@ $$;
 
 -- =========================================================
 -- Contract: day feed for a single contract
--- (same logic, just filtered by contract_id)
 -- =========================================================
 create or replace function public.calendar_contract_day_feed(
   contract_id uuid,
