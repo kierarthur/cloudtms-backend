@@ -12182,13 +12182,20 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
   let sumSun = 0;
   let sumBh = 0;
 
+  // NEW: local cache so we do not re-resolve policy multiple times for the same date
+  const policyByDate = new Map(); // workDate -> policy object
+
   // Build SEGMENTS from NHSP shifts (canonical data)
   for (const sh of shifts) {
     const workDate = sh.work_date;
     if (!workDate || !sh.start_utc || !sh.end_utc) continue;
 
-    // policy still depends on client/date (BH/Sun/Sat/Night precedence etc.)
-    const policy = await loadPolicy(env, client_id, workDate);
+    // policy depends on client/date (BH/Sun/Sat/Night precedence etc.)
+    let policy = policyByDate.get(workDate);
+    if (!policy) {
+      policy = await loadPolicy(env, client_id, workDate);
+      policyByDate.set(workDate, policy);
+    }
 
     let segs = [[sh.start_utc, sh.end_utc]];
     segs = subtractBreak(
@@ -12277,7 +12284,6 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
   };
 
   // external_source_rows_json.NHSP_WEEKLY for invoice page-2+ itemised breakdown
-  // raw_row is the original NHSP shift row (nhsp_shifts.payload_json)
   const nhspWeekly = shifts.map(sh => ({
     date: sh.work_date,
     source_system: 'NHSP',
@@ -12287,18 +12293,32 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
   }));
 
   // ✅ TSFIN requires non-null policy_snapshot_json and bucket hour totals
-  const hours_day = round2(sumDay);
+  const hours_day   = round2(sumDay);
   const hours_night = round2(sumNight);
-  const hours_sat = round2(sumSat);
-  const hours_sun = round2(sumSun);
-  const hours_bh = round2(sumBh);
+  const hours_sat   = round2(sumSat);
+  const hours_sun   = round2(sumSun);
+  const hours_bh    = round2(sumBh);
   const total_hours = round2(hours_day + hours_night + hours_sat + hours_sun + hours_bh);
 
+  // NEW: derive policy_snapshot_json without extra subrequests if possible
   let policy_snapshot_json = {};
   try {
-    const we = (ts && ts.week_ending_date) ? ts.week_ending_date : (shifts && shifts[0] ? shifts[0].work_date : null);
-    policy_snapshot_json = (we && client_id) ? (await loadPolicy(env, client_id, we)) : {};
-    if (!policy_snapshot_json || typeof policy_snapshot_json !== 'object') policy_snapshot_json = {};
+    const we = (ts && ts.week_ending_date)
+      ? String(ts.week_ending_date)
+      : (shifts && shifts[0] ? String(shifts[0].work_date) : null);
+
+    // Prefer a policy we already loaded in-loop; otherwise load once (loadPolicy is now cached)
+    if (we && policyByDate.has(we)) {
+      policy_snapshot_json = policyByDate.get(we) || {};
+    } else if (we && client_id) {
+      policy_snapshot_json = await loadPolicy(env, client_id, we);
+    } else {
+      policy_snapshot_json = {};
+    }
+
+    if (!policy_snapshot_json || typeof policy_snapshot_json !== 'object') {
+      policy_snapshot_json = {};
+    }
   } catch {
     policy_snapshot_json = {};
   }
@@ -12331,24 +12351,12 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
       contract_id: contract.id || null
     },
 
-    // ✅ Populate TSFIN bucket hours (required by DB + used elsewhere in code)
+    // ✅ Populate TSFIN bucket hours
     hours_day:   hours_day,
     hours_night: hours_night,
     hours_sat:   hours_sat,
     hours_sun:   hours_sun,
     hours_bh:    hours_bh,
-
-    // Rates (for downstream finance/remittance tooling)
-    pay_day:      pay.day   ?? null,
-    pay_night:    pay.night ?? null,
-    pay_sat:      pay.sat   ?? null,
-    pay_sun:      pay.sun   ?? null,
-    pay_bh:       pay.bh    ?? null,
-    charge_day:   chg.day   ?? null,
-    charge_night: chg.night ?? null,
-    charge_sat:   chg.sat   ?? null,
-    charge_sun:   chg.sun   ?? null,
-    charge_bh:    chg.bh    ?? null,
 
     additional_units_json: {},
     additional_pay_ex_vat: 0,
@@ -12378,6 +12386,7 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
   await writeSnapshot(env, snapshot);
   return { ok: true };
 }
+
 
 async function handleManualPayAdjustmentCreate(env, req, timesheetId) {
   const enc = encodeURIComponent;
@@ -37938,31 +37947,87 @@ async function loadCandidate(env, key_norm) {
   return rows[0] || null;
 }
 
-
 async function loadPolicy(env, client_id, workedDateYmd) {
-  const { rows: defRows } = await sbFetch(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=*`
-  );
-  const def = defRows[0] || {};
+  // ─────────────────────────────────────────────────────────────
+  // Request-scoped cache (reduces subrequests drastically)
+  // - settings_defaults fetched once per request
+  // - client_settings fetched once per client_id per request (all rows)
+  // - resolved policy cached per (client_id|workedDateYmd)
+  // ─────────────────────────────────────────────────────────────
+  env.__POLICY_CACHE = env.__POLICY_CACHE || {
+    defaults: null,
+    csRowsByClient: new Map(),   // client_id -> client_settings rows (ordered)
+    policyByKey: new Map()       // `${client_id}|${workedDateYmd||''}` -> final policy object
+  };
 
-  let cs = null;
-  if (client_id) {
-    const w = workedDateYmd
-      ? `&and=(or(effective_from.lte.${encodeURIComponent(
-          workedDateYmd
-        )},effective_from.is.null))`
-      : "";
-    const { rows } = await sbFetch(
+  const cache = env.__POLICY_CACHE;
+  const key = `${String(client_id || '')}|${String(workedDateYmd || '')}`;
+
+  // Cache hit
+  if (cache.policyByKey.has(key)) {
+    return cache.policyByKey.get(key);
+  }
+
+  // 1) Load global defaults once
+  let def = cache.defaults;
+  if (!def) {
+    const { rows: defRows } = await sbFetch(
       env,
-      `${env.SUPABASE_URL}/rest/v1/client_settings` +
-        `?client_id=eq.${encodeURIComponent(client_id)}` +
-        `&select=*` +
-        // FIXED: PostgREST syntax for nulls-last ordering
-        `&order=effective_from.desc.nullslast` +
-        `&limit=1${w}`
+      `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=*`
     );
-    cs = rows[0] || null;
+    def = defRows?.[0] || {};
+    cache.defaults = def;
+  }
+
+  // 2) Load all client_settings rows once per client_id (ordered newest first)
+  let csRows = null;
+  if (client_id) {
+    const cid = String(client_id);
+    csRows = cache.csRowsByClient.get(cid) || null;
+
+    if (!csRows) {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/client_settings` +
+          `?client_id=eq.${encodeURIComponent(cid)}` +
+          `&select=*` +
+          `&order=effective_from.desc.nullslast,created_at.desc` +
+          `&limit=250`
+      );
+      csRows = Array.isArray(rows) ? rows : [];
+      cache.csRowsByClient.set(cid, csRows);
+    }
+  }
+
+  // 3) Pick the effective client_settings row for this workedDateYmd
+  let cs = null;
+
+  if (client_id && Array.isArray(csRows) && csRows.length) {
+    if (!workedDateYmd) {
+      // Old behaviour when workedDateYmd not provided: latest row
+      cs = csRows[0] || null;
+    } else {
+      // Old behaviour: latest row where effective_from <= workedDateYmd OR effective_from IS NULL
+      // (because order is effective_from desc nullslast, the first match is correct)
+      const w = String(workedDateYmd);
+
+      for (const row of csRows) {
+        if (!row) continue;
+
+        const ef = row.effective_from; // date or null
+        if (ef == null) {
+          // effective_from IS NULL is allowed as fallback
+          cs = row;
+          break;
+        }
+
+        // Compare as YYYY-MM-DD strings (safe for ISO dates)
+        if (String(ef) <= w) {
+          cs = row;
+          break;
+        }
+      }
+    }
   }
 
   const tz = cs?.timezone_id || def?.timezone_id || "Europe/London";
@@ -38024,7 +38089,7 @@ async function loadPolicy(env, client_id, workedDateYmd) {
     return Number.isFinite(n) ? n : 0;
   };
 
-  return {
+  const out = {
     timezone_id: tz,
 
     day_start:   cs?.day_start   || def?.day_start   || "06:00:00",
@@ -38071,6 +38136,10 @@ async function loadPolicy(env, client_id, workedDateYmd) {
     // daily invoicing policy (used by downstream logic and TSFIN)
     daily_calc_of_invoices,
   };
+
+  // Store in cache and return
+  cache.policyByKey.set(key, out);
+  return out;
 }
 
 
