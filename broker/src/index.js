@@ -12476,11 +12476,23 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
   return { ok: true };
 }
 
-
-async function buildNhspWeeklySnapshotCached(env, ts, contract, shifts, nhspImportId, basis = 'NHSP') {
+async function buildNhspWeeklySnapshotCached(
+  env,
+  ts,
+  contract,
+  shifts,
+  nhspImportId,
+  basis = 'NHSP',
+  getPolicyCached
+) {
   const round2Local   = (n) => Math.round((Number(n) || 0) * 100) / 100;
   const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
   const enc           = encodeURIComponent;
+
+  // ✅ HARD REQUIREMENT: shared request-scoped policy resolver must be passed in
+  if (typeof getPolicyCached !== 'function') {
+    throw new Error('buildNhspWeeklySnapshotCached: getPolicyCached must be provided (request-scoped cache)');
+  }
 
   if (!shifts || !shifts.length) {
     return { ok: false, reason: 'NO_SHIFTS' };
@@ -12581,6 +12593,7 @@ async function buildNhspWeeklySnapshotCached(env, ts, contract, shifts, nhspImpo
     const workDate = sh.work_date;
     if (!workDate || !sh.start_utc || !sh.end_utc) continue;
 
+    // ✅ use the passed-in cached resolver (prevents per-group re-fetch)
     const policy = await getPolicyCached(client_id, workDate);
 
     let segs = [[sh.start_utc, sh.end_utc]];
@@ -14810,7 +14823,16 @@ async function handleNhspApply(env, req, importId) {
       // (assumes you already patched snapshot builder(s) to preserve segment flags/locks)
       let snapRes = null;
       try {
-        snapRes = await buildNhspWeeklySnapshotCached(env, ts, contract, grpShiftsForSnapshot, importId, 'NHSP');
+   snapRes = await buildNhspWeeklySnapshotCached(
+  env,
+  ts,
+  contract,
+  grpShiftsForSnapshot,
+  importId,
+  'NHSP',
+  getPolicyCached
+);
+
       } catch (e) {
         snapRes = { ok: false, reason: e?.message || String(e) };
       }
@@ -16209,7 +16231,16 @@ async function handleHrAutoprocessApply(env, req, importId) {
       // (uses your patched snapshot builder that preserves per-segment flags/locks)
       const okSnap = await (async () => {
         try {
-          const r = await buildNhspWeeklySnapshotCached(env, ts, contract, grpShiftsFresh, importId, 'HEALTHROSTER_SELF_BILL');
+   const r = await buildNhspWeeklySnapshotCached(
+  env,
+  ts,
+  contract,
+  grpShiftsFresh,
+  importId,
+  'HEALTHROSTER_SELF_BILL',
+  getPolicyCached
+);
+
           return !!(r && r.ok === true);
         } catch {
           return false;
