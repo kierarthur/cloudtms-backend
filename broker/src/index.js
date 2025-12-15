@@ -12136,7 +12136,6 @@ async function parseHealthRosterWorkbookIntoHrRows(
     header_columns
   };
 }
-
 async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, basis = 'NHSP') {
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
   const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
@@ -12147,7 +12146,7 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
   }
 
   // ✅ Weekly rule: pay/charge must come from contract.rates_json via payChargeFromContract
-  const pc = payChargeFromContract(contract);
+  const pc  = payChargeFromContract(contract);
   const pay = pc?.pay || null;
   const chg = pc?.charge || null;
 
@@ -12160,17 +12159,12 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
   const client_id    = contract.client_id   || null;
 
   // ─────────────────────────────────────────────────────────────
-  // NEW: Preserve per-segment controls from the existing TSFIN snapshot
+  // Preserve per-segment controls from existing TSFIN snapshot
   // - exclude_from_pay
   // - invoice_target_week_start
   // - invoice_locked_invoice_id
-  //
-  // Guardrail:
-  // - If no current TSFIN OR not SEGMENTS mode, fall back to defaults and warn.
-  //
-  // Factoring:
-  // - We hang a shared loader off env.__loadPreservedSegmentFields so BOTH builders
-  //   can call the same logic (cached/non-cached) and not regress independently.
+  // Guardrail: if missing/not SEGMENTS, fall back to defaults (and warn)
+  // Shared loader lives on env so cached/non-cached builders can share
   // ─────────────────────────────────────────────────────────────
   if (!env.__TSFIN_SEGMENT_PRESERVE_CACHE) env.__TSFIN_SEGMENT_PRESERVE_CACHE = new Map();
 
@@ -12192,8 +12186,8 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
             `&limit=1`
         );
 
-        const fin = rows?.[0] || null;
-        const ib  = fin?.invoice_breakdown_json || null;
+        const fin  = rows?.[0] || null;
+        const ib   = fin?.invoice_breakdown_json || null;
         const mode = String(ib?.mode || '').toUpperCase();
         const segs = Array.isArray(ib?.segments) ? ib.segments : null;
 
@@ -12237,8 +12231,8 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
   const preservedBySegmentId = await env.__loadPreservedSegmentFields(ts?.timesheet_id || null);
 
   const segments = [];
-  let totalPayEx  = 0;
-  let totalChgEx  = 0;
+  let totalPayEx = 0;
+  let totalChgEx = 0;
 
   let sumDay = 0;
   let sumNight = 0;
@@ -12299,7 +12293,7 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
     const sourceSystem = sh.source_system || null;
 
     const segment_id = `nhsp:${sh.id}`;
-    const preserved = preservedBySegmentId.get(segment_id) || null;
+    const preserved  = preservedBySegmentId.get(segment_id) || null;
 
     // Defaults are the previous behavior; if we have preserved fields, use them.
     const exclude_from_pay =
@@ -12411,6 +12405,8 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
       ? (Number.isFinite(Number(policy_snapshot_json?.holiday_pay_pct)) ? Number(policy_snapshot_json.holiday_pay_pct) : null)
       : null;
 
+  // ✅ FIX: include the 5× pay_* and 5× charge_* bucket rates in the TSFIN snapshot
+  // (your remittance + UI expects these fields to exist)
   const snapshot = {
     timesheet_id: ts.timesheet_id,
     timesheet_version: ts.version || 1,
@@ -12426,24 +12422,37 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
     band: contract.band || null,
     pay_method: contract.pay_method_snapshot || null,
 
-    policy_snapshot_json: policy_snapshot_json,
+    policy_snapshot_json,
     rate_source_refs_json: {
       mode: 'CONTRACT_RATES_JSON',
       contract_id: contract.id || null
     },
 
-    hours_day:   hours_day,
-    hours_night: hours_night,
-    hours_sat:   hours_sat,
-    hours_sun:   hours_sun,
-    hours_bh:    hours_bh,
+    hours_day,
+    hours_night,
+    hours_sat,
+    hours_sun,
+    hours_bh,
+
+    // bucket rates (required across UI/remittance/invoice views)
+    pay_day:    pay.day   ?? null,
+    pay_night:  pay.night ?? null,
+    pay_sat:    pay.sat   ?? null,
+    pay_sun:    pay.sun   ?? null,
+    pay_bh:     pay.bh    ?? null,
+
+    charge_day:   chg.day   ?? null,
+    charge_night: chg.night ?? null,
+    charge_sat:   chg.sat   ?? null,
+    charge_sun:   chg.sun   ?? null,
+    charge_bh:    chg.bh    ?? null,
 
     additional_units_json: {},
     additional_pay_ex_vat: 0,
     additional_charge_ex_vat: 0,
     additional_margin_ex_vat: 0,
 
-    total_hours: total_hours,
+    total_hours,
     total_pay_ex_vat: totalPayEx,
     total_charge_ex_vat: totalChgEx,
     margin_ex_vat: marginEx,
@@ -12466,6 +12475,306 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
   await writeSnapshot(env, snapshot);
   return { ok: true };
 }
+
+
+async function buildNhspWeeklySnapshotCached(env, ts, contract, shifts, nhspImportId, basis = 'NHSP') {
+  const round2Local   = (n) => Math.round((Number(n) || 0) * 100) / 100;
+  const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
+  const enc           = encodeURIComponent;
+
+  if (!shifts || !shifts.length) {
+    return { ok: false, reason: 'NO_SHIFTS' };
+  }
+
+  const pc  = payChargeFromContract(contract);
+  const pay = pc?.pay || null;
+  const chg = pc?.charge || null;
+
+  if (!pay || !chg) {
+    return { ok: false, reason: 'CONTRACT_RATES_MISSING' };
+  }
+
+  const candidate_id = contract.candidate_id || null;
+  const client_id    = contract.client_id   || null;
+
+  // ─────────────────────────────────────────────────────────────
+  // Preserve per-segment controls from existing TSFIN snapshot
+  // - exclude_from_pay
+  // - invoice_target_week_start
+  // - invoice_locked_invoice_id
+  //
+  // Factoring:
+  // - One shared loader on env.__loadPreservedSegmentFields
+  // - Request-scope cache on env.__TSFIN_SEGMENT_PRESERVE_CACHE
+  // ─────────────────────────────────────────────────────────────
+  if (!env.__TSFIN_SEGMENT_PRESERVE_CACHE) env.__TSFIN_SEGMENT_PRESERVE_CACHE = new Map();
+
+  if (typeof env.__loadPreservedSegmentFields !== 'function') {
+    env.__loadPreservedSegmentFields = async (timesheet_id) => {
+      const preserved = new Map();
+      if (!timesheet_id) return preserved;
+
+      const cache = env.__TSFIN_SEGMENT_PRESERVE_CACHE;
+      if (cache.has(timesheet_id)) return cache.get(timesheet_id) || preserved;
+
+      try {
+        const { rows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+            `?timesheet_id=eq.${enc(timesheet_id)}` +
+            `&is_current=eq.true` +
+            `&select=timesheet_id,invoice_breakdown_json` +
+            `&limit=1`
+        );
+
+        const fin  = rows?.[0] || null;
+        const ib   = fin?.invoice_breakdown_json || null;
+        const mode = String(ib?.mode || '').toUpperCase();
+        const segs = Array.isArray(ib?.segments) ? ib.segments : null;
+
+        if (mode !== 'SEGMENTS' || !segs) {
+          console.warn('[SNAPSHOT_PRESERVE] no SEGMENTS snapshot to preserve from', {
+            timesheet_id,
+            has_fin: !!fin,
+            mode: ib?.mode ?? null
+          });
+          cache.set(timesheet_id, preserved);
+          return preserved;
+        }
+
+        for (const s of segs) {
+          const segment_id = s?.segment_id ? String(s.segment_id) : null;
+          if (!segment_id) continue;
+
+          preserved.set(segment_id, {
+            exclude_from_pay:
+              (typeof s.exclude_from_pay === 'boolean') ? s.exclude_from_pay : undefined,
+            invoice_target_week_start:
+              (s.invoice_target_week_start != null) ? String(s.invoice_target_week_start) : undefined,
+            invoice_locked_invoice_id:
+              (s.invoice_locked_invoice_id != null) ? String(s.invoice_locked_invoice_id) : undefined
+          });
+        }
+
+        cache.set(timesheet_id, preserved);
+        return preserved;
+      } catch (e) {
+        console.warn('[SNAPSHOT_PRESERVE] failed to load prior TSFIN (falling back to defaults)', {
+          timesheet_id,
+          err: e?.message || String(e)
+        });
+        cache.set(timesheet_id, preserved);
+        return preserved;
+      }
+    };
+  }
+
+  const preservedBySegmentId = await env.__loadPreservedSegmentFields(ts?.timesheet_id || null);
+
+  const segments = [];
+  let totalPayEx = 0;
+  let totalChgEx = 0;
+
+  let sumDay = 0, sumNight = 0, sumSat = 0, sumSun = 0, sumBh = 0;
+
+  for (const sh of shifts) {
+    const workDate = sh.work_date;
+    if (!workDate || !sh.start_utc || !sh.end_utc) continue;
+
+    const policy = await getPolicyCached(client_id, workDate);
+
+    let segs = [[sh.start_utc, sh.end_utc]];
+    segs = subtractBreak(segs, null, null, sh.break_mins || 0);
+
+    const hours = classifyMinutes(env, policy, segs);
+
+    sumDay   += (hours.hours_day   || 0);
+    sumNight += (hours.hours_night || 0);
+    sumSat   += (hours.hours_sat   || 0);
+    sumSun   += (hours.hours_sun   || 0);
+    sumBh    += (hours.hours_bh    || 0);
+
+    const payEx = round2Local(
+      (hours.hours_day   || 0) * asNumberLocal(pay.day)   +
+      (hours.hours_night || 0) * asNumberLocal(pay.night) +
+      (hours.hours_sat   || 0) * asNumberLocal(pay.sat)   +
+      (hours.hours_sun   || 0) * asNumberLocal(pay.sun)   +
+      (hours.hours_bh    || 0) * asNumberLocal(pay.bh)
+    );
+
+    const chgEx = round2Local(
+      (hours.hours_day   || 0) * asNumberLocal(chg.day)   +
+      (hours.hours_night || 0) * asNumberLocal(chg.night) +
+      (hours.hours_sat   || 0) * asNumberLocal(chg.sat)   +
+      (hours.hours_sun   || 0) * asNumberLocal(chg.sun)   +
+      (hours.hours_bh    || 0) * asNumberLocal(chg.bh)
+    );
+
+    totalPayEx += payEx;
+    totalChgEx += chgEx;
+
+    const segment_id = `nhsp:${sh.id}`;
+    const preserved  = preservedBySegmentId.get(segment_id) || null;
+
+    const exclude_from_pay =
+      (preserved && typeof preserved.exclude_from_pay === 'boolean')
+        ? preserved.exclude_from_pay
+        : false;
+
+    const invoice_target_week_start =
+      (preserved && preserved.invoice_target_week_start != null)
+        ? preserved.invoice_target_week_start
+        : undefined;
+
+    const invoice_locked_invoice_id =
+      (preserved && preserved.invoice_locked_invoice_id != null)
+        ? preserved.invoice_locked_invoice_id
+        : undefined;
+
+    segments.push({
+      segment_id,
+      date: workDate,
+      ward: sh.ward || null,
+      start_utc: sh.start_utc,
+      end_utc: sh.end_utc,
+      break_mins: sh.break_mins || 0,
+
+      hours_day:   hours.hours_day   || 0,
+      hours_night: hours.hours_night || 0,
+      hours_sat:   hours.hours_sat   || 0,
+      hours_sun:   hours.hours_sun   || 0,
+      hours_bh:    hours.hours_bh    || 0,
+
+      pay_amount:    payEx,
+      charge_amount: chgEx,
+
+      // preserved fields
+      exclude_from_pay,
+      ...(invoice_target_week_start != null ? { invoice_target_week_start } : {}),
+      ...(invoice_locked_invoice_id != null ? { invoice_locked_invoice_id } : {}),
+
+      // meta
+      ref_num: (sh.nhsp_ref_num || sh.ref_num || null) || null,
+      request_id: (sh.hr_request_id || sh.request_id || null) || null,
+      held_back_reason: sh.held_back_reason || null,
+      source_system: sh.source_system || null
+    });
+  }
+
+  if (!segments.length) {
+    return { ok: false, reason: 'NO_VALID_SEGMENTS' };
+  }
+
+  totalPayEx = round2Local(totalPayEx);
+  totalChgEx = round2Local(totalChgEx);
+  const marginEx = round2Local(totalChgEx - totalPayEx);
+
+  const invoice_breakdown_json = {
+    mode: 'SEGMENTS',
+    segments,
+    totals: {
+      total_pay_ex_vat: totalPayEx,
+      total_charge_ex_vat: totalChgEx,
+      margin_ex_vat: marginEx
+    }
+  };
+
+  const nhspWeekly = shifts.map(sh => ({
+    date: sh.work_date,
+    source_system: 'NHSP',
+    reference:
+      (sh.nhsp_ref_num || sh.ref_num || (sh.payload_json && (sh.payload_json.ref_num || sh.payload_json.Reference))) || null,
+    nhsp_shift_id: sh.id,
+    raw_row: sh.payload_json || null
+  }));
+
+  const hours_day   = round2Local(sumDay);
+  const hours_night = round2Local(sumNight);
+  const hours_sat   = round2Local(sumSat);
+  const hours_sun   = round2Local(sumSun);
+  const hours_bh    = round2Local(sumBh);
+  const total_hours = round2Local(hours_day + hours_night + hours_sat + hours_sun + hours_bh);
+
+  let policy_snapshot_json = {};
+  try {
+    const we = (ts && ts.week_ending_date) ? ts.week_ending_date : (shifts && shifts[0] ? shifts[0].work_date : null);
+    policy_snapshot_json = (we && client_id) ? (await getPolicyCached(client_id, we)) : {};
+    if (!policy_snapshot_json || typeof policy_snapshot_json !== 'object') policy_snapshot_json = {};
+  } catch {
+    policy_snapshot_json = {};
+  }
+
+  const pay_wtr_rate_pct_snapshot =
+    (String(contract?.pay_method_snapshot || '').toUpperCase() === 'PAYE')
+      ? (Number.isFinite(Number(policy_snapshot_json?.holiday_pay_pct)) ? Number(policy_snapshot_json.holiday_pay_pct) : null)
+      : null;
+
+  const snapshot = {
+    timesheet_id: ts.timesheet_id,
+    timesheet_version: ts.version || 1,
+
+    basis,
+    nhsp_import_id: nhspImportId || null,
+
+    occupant_key_norm: ts.occupant_key_norm || null,
+
+    candidate_id,
+    client_id,
+    role: contract.role || null,
+    band: contract.band || null,
+    pay_method: contract.pay_method_snapshot || null,
+
+    policy_snapshot_json,
+    rate_source_refs_json: { mode: 'CONTRACT_RATES_JSON', contract_id: contract.id || null },
+
+    hours_day,
+    hours_night,
+    hours_sat,
+    hours_sun,
+    hours_bh,
+
+    // bucket rates
+    pay_day:    pay.day   ?? null,
+    pay_night:  pay.night ?? null,
+    pay_sat:    pay.sat   ?? null,
+    pay_sun:    pay.sun   ?? null,
+    pay_bh:     pay.bh    ?? null,
+
+    charge_day:   chg.day   ?? null,
+    charge_night: chg.night ?? null,
+    charge_sat:   chg.sat   ?? null,
+    charge_sun:   chg.sun   ?? null,
+    charge_bh:    chg.bh    ?? null,
+
+    additional_units_json: {},
+    additional_pay_ex_vat: 0,
+    additional_charge_ex_vat: 0,
+    additional_margin_ex_vat: 0,
+
+    total_hours,
+    total_pay_ex_vat: totalPayEx,
+    total_charge_ex_vat: totalChgEx,
+    margin_ex_vat: marginEx,
+
+    pay_wtr_rate_pct_snapshot,
+
+    candidate_assignment: candidate_id ? 'ASSIGNED' : 'UNASSIGNED',
+    processing_status: 'READY_FOR_INVOICE',
+
+    has_rate_issue: false,
+    has_pay_channel_issue: false,
+
+    invoice_breakdown_json,
+
+    external_source_rows_json: { NHSP_WEEKLY: nhspWeekly }
+  };
+
+  await writeSnapshot(env, snapshot);
+  return { ok: true };
+}
+
+
+
 
 
 async function handleManualPayAdjustmentCreate(env, req, timesheetId) {
