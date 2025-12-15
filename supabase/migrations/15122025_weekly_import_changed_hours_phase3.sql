@@ -1,8 +1,10 @@
 -- 15122025_weekly_import_changed_hours_phase3.sql
 --
--- FULL REPLACEMENT (compiles):
--- - Removes illegal nested helper functions inside plpgsql.
--- - Promotes helper functions to top-level public._wkimp_* helpers.
+-- FULL REPLACEMENT (compiles) + FILTERED OUTPUT:
+-- ✅ Now returns ONLY rows that REQUIRE OPERATOR ATTENTION
+--    (i.e. requires_any_decision = true).
+--
+-- Notes:
 -- - Keeps the same RPC signature:
 --     public.weekly_import_changed_hours_phase3(p_import_id uuid, p_system_type text)
 -- - NHSP-only invoice_lines fallback:
@@ -417,6 +419,7 @@ $$;
 
 -- ---------------------------------------------------------
 -- PHASE 3 RPC: preview "changed hours" rows (read-only)
+-- NOW FILTERED: returns ONLY requires_any_decision=true
 -- ---------------------------------------------------------
 create or replace function public.weekly_import_changed_hours_phase3(
   p_import_id uuid,
@@ -604,106 +607,111 @@ amounts as (
       , 2)
     end as new_charge_ex
   from new_hours n
-)
-select
-  a.hr_row_id,
-  a.external_row_key,
+),
+final_rows as (
+  select
+    a.hr_row_id,
+    a.external_row_key,
 
-  a.shift_id,
-  a.source_system,
+    a.shift_id,
+    a.source_system,
 
-  a.candidate_id,
-  a.client_id,
-  a.contract_id,
-  a.timesheet_id,
+    a.candidate_id,
+    a.client_id,
+    a.contract_id,
+    a.timesheet_id,
 
-  coalesce(a.old_work_date, a.work_date) as work_date,
-  a.week_ending_date,
+    coalesce(a.old_work_date, a.work_date) as work_date,
+    a.week_ending_date,
 
-  a.old_start_utc,
-  a.old_end_utc,
-  a.old_break_mins,
+    a.old_start_utc,
+    a.old_end_utc,
+    a.old_break_mins,
 
-  a.new_start_utc,
-  a.new_end_utc,
-  a.new_break_mins,
+    a.new_start_utc,
+    a.new_end_utc,
+    a.new_break_mins,
 
-  a.old_paid_minutes,
-  a.new_paid_minutes,
+    a.old_paid_minutes,
+    a.new_paid_minutes,
 
-  (
-    a.shift_id is not null
-    and (
-      a.old_start_utc is distinct from a.new_start_utc
-      or a.old_end_utc is distinct from a.new_end_utc
-      or coalesce(a.old_break_mins,0) <> coalesce(a.new_break_mins,0)
-    )
-  ) as is_changed_hours,
-
-  (a.paid_at_utc is not null) as is_paid,
-
-  (
-    -- invoiced if:
-    -- - segment-level invoice lock exists, OR
-    -- - timesheet-level lock exists, OR
-    -- - shift row has invoice_id (NHSP invoice-run / any shift-based invoice runner)
-    a.seg_invoice_id is not null
-    or a.locked_by_invoice_id is not null
-    or exists (select 1 from public.nhsp_shifts s2 where s2.id = a.shift_id and s2.invoice_id is not null)
-  ) as is_invoiced,
-
-  a.old_pay_ex,
-  a.old_charge_ex,
-
-  a.new_pay_ex,
-  a.new_charge_ex,
-
-  case when a.new_pay_ex is null or a.old_pay_ex is null then null else round(a.new_pay_ex - a.old_pay_ex, 2) end as delta_pay_ex,
-  case when a.new_charge_ex is null or a.old_charge_ex is null then null else round(a.new_charge_ex - a.old_charge_ex, 2) end as delta_charge_ex,
-
-  (
-    (a.paid_at_utc is not null)
-    and (
+    (
       a.shift_id is not null
       and (
         a.old_start_utc is distinct from a.new_start_utc
         or a.old_end_utc is distinct from a.new_end_utc
         or coalesce(a.old_break_mins,0) <> coalesce(a.new_break_mins,0)
       )
-    )
-  ) as requires_pay_decision,
+    ) as is_changed_hours,
 
-  (
+    (a.paid_at_utc is not null) as is_paid,
+
     (
+      -- invoiced if:
+      -- - segment-level invoice lock exists, OR
+      -- - timesheet-level lock exists, OR
+      -- - shift row has invoice_id
       a.seg_invoice_id is not null
       or a.locked_by_invoice_id is not null
       or exists (select 1 from public.nhsp_shifts s2 where s2.id = a.shift_id and s2.invoice_id is not null)
-    )
-    and (
-      a.shift_id is not null
-      and (
-        a.old_start_utc is distinct from a.new_start_utc
-        or a.old_end_utc is distinct from a.new_end_utc
-        or coalesce(a.old_break_mins,0) <> coalesce(a.new_break_mins,0)
-      )
-    )
-  ) as requires_invoice_decision,
+    ) as is_invoiced,
 
-  (
+    a.old_pay_ex,
+    a.old_charge_ex,
+
+    a.new_pay_ex,
+    a.new_charge_ex,
+
+    case when a.new_pay_ex is null or a.old_pay_ex is null then null else round(a.new_pay_ex - a.old_pay_ex, 2) end as delta_pay_ex,
+    case when a.new_charge_ex is null or a.old_charge_ex is null then null else round(a.new_charge_ex - a.old_charge_ex, 2) end as delta_charge_ex,
+
     (
       (a.paid_at_utc is not null)
-      or
-      (a.seg_invoice_id is not null or a.locked_by_invoice_id is not null or exists (select 1 from public.nhsp_shifts s2 where s2.id = a.shift_id and s2.invoice_id is not null))
-    )
-    and (
-      a.shift_id is not null
       and (
-        a.old_start_utc is distinct from a.new_start_utc
-        or a.old_end_utc is distinct from a.new_end_utc
-        or coalesce(a.old_break_mins,0) <> coalesce(a.new_break_mins,0)
+        a.shift_id is not null
+        and (
+          a.old_start_utc is distinct from a.new_start_utc
+          or a.old_end_utc is distinct from a.new_end_utc
+          or coalesce(a.old_break_mins,0) <> coalesce(a.new_break_mins,0)
+        )
       )
-    )
-  ) as requires_any_decision
-from amounts a
+    ) as requires_pay_decision,
+
+    (
+      (
+        a.seg_invoice_id is not null
+        or a.locked_by_invoice_id is not null
+        or exists (select 1 from public.nhsp_shifts s2 where s2.id = a.shift_id and s2.invoice_id is not null)
+      )
+      and (
+        a.shift_id is not null
+        and (
+          a.old_start_utc is distinct from a.new_start_utc
+          or a.old_end_utc is distinct from a.new_end_utc
+          or coalesce(a.old_break_mins,0) <> coalesce(a.new_break_mins,0)
+        )
+      )
+    ) as requires_invoice_decision,
+
+    (
+      (
+        (a.paid_at_utc is not null)
+        or
+        (a.seg_invoice_id is not null or a.locked_by_invoice_id is not null or exists (select 1 from public.nhsp_shifts s2 where s2.id = a.shift_id and s2.invoice_id is not null))
+      )
+      and (
+        a.shift_id is not null
+        and (
+          a.old_start_utc is distinct from a.new_start_utc
+          or a.old_end_utc is distinct from a.new_end_utc
+          or coalesce(a.old_break_mins,0) <> coalesce(a.new_break_mins,0)
+        )
+      )
+    ) as requires_any_decision
+  from amounts a
+)
+select *
+from final_rows
+where requires_any_decision = true
 order by work_date asc, external_row_key asc;
 $$;
