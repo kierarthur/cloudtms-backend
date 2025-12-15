@@ -1,11 +1,23 @@
--- Phase 1 of HealthRoster autoprocess apply:
+-- Phase 1 of HealthRoster autoprocess apply (REVISED):
 -- hr_rows (for given import_id) -> nhsp_shifts (source_system = 'HEALTHROSTER')
 -- + candidate_id auto-mapping.
--- Returns counts so the Worker can log / display summary.
+--
+-- REVISED LOGIC (hours-change workflow support):
+-- - Adds support for:
+--   (a) SKIP list: do not insert/update shifts for these external_row_keys
+--   (b) FORCE OVERWRITE list: allow overwriting time fields (start/end/break/pay_minutes)
+--       even when the linked timesheet is paid/invoiced/locked.
+-- - If a shift is NOT safe_to_overwrite and NOT forced:
+--   - we will NOT overwrite start/end/break/pay_minutes (preserve prior truth)
+--   - we still update metadata (latest_import_id, ward, request_id, held_back_reason, etc.)
+--
+-- Returns counts so the Worker can log/display summary.
 
 create or replace function public.hr_autoprocess_apply_phase1(
   import_id uuid,
-  selected_group_ids text[] default null  -- currently unused, kept for symmetry/future
+  selected_group_ids text[] default null,               -- currently unused, kept for symmetry/future
+  p_skip_external_row_keys text[] default null,
+  p_force_overwrite_external_row_keys text[] default null
 )
 returns jsonb
 language plpgsql
@@ -107,6 +119,17 @@ begin
     from src s
   ),
 
+  -- Apply SKIP list after external_row_key has been computed
+  normed_filtered as (
+    select *
+    from normed n
+    where
+      p_skip_external_row_keys is null
+      or array_length(p_skip_external_row_keys, 1) is null
+      or n.external_row_key is null
+      or n.external_row_key <> all(p_skip_external_row_keys)
+  ),
+
   ----------------------------------------------------------------
   -- Candidate auto-mapping:
   --  1) aliases (legacy lower/trim OR symbol/space stripped)
@@ -123,7 +146,7 @@ begin
         cand_exact_unique.candidate_id
       ) as candidate_id
 
-    from normed n
+    from normed_filtered n
 
     -- normalisations used for matching
     cross join lateral (
@@ -260,7 +283,7 @@ begin
   ),
 
   ----------------------------------------------------------------
-  -- Build update source rows + SAFE overwrite decision (no illegal LATERAL ref)
+  -- Build update source rows + SAFE overwrite + FORCE overwrite (time fields only)
   ----------------------------------------------------------------
   upd_src as (
     select
@@ -282,13 +305,32 @@ begin
 
       fc.locked_by_invoice_id,
       fc.paid_at_utc,
-      (fc.timesheet_id is null) as tsfin_missing,
 
       (
         s.timesheet_id is null
         or fc.timesheet_id is null
         or (fc.locked_by_invoice_id is null and fc.paid_at_utc is null)
-      ) as safe_to_overwrite
+      ) as safe_to_overwrite,
+
+      (
+        p_force_overwrite_external_row_keys is not null
+        and array_length(p_force_overwrite_external_row_keys, 1) is not null
+        and s.external_row_key = any(p_force_overwrite_external_row_keys)
+      ) as force_overwrite,
+
+      (
+        (
+          s.timesheet_id is null
+          or fc.timesheet_id is null
+          or (fc.locked_by_invoice_id is null and fc.paid_at_utc is null)
+        )
+        or (
+          p_force_overwrite_external_row_keys is not null
+          and array_length(p_force_overwrite_external_row_keys, 1) is not null
+          and s.external_row_key = any(p_force_overwrite_external_row_keys)
+        )
+      ) as should_overwrite_time
+
     from public.nhsp_shifts s
     join resolved r
       on r.external_row_key = s.external_row_key
@@ -297,37 +339,41 @@ begin
   ),
 
   ----------------------------------------------------------------
-  -- Update existing shifts with latest HR data (+ SAFE overwrite of ids)
+  -- Update existing shifts with latest HR data (+ SAFE overwrite of ids; SAFE/FORCE overwrite of times)
   ----------------------------------------------------------------
   upd as (
     update public.nhsp_shifts s
     set
       latest_import_id = hr_autoprocess_apply_phase1.import_id,
       source_system    = 'HEALTHROSTER'::hr_source_enum,
+
+      -- Work date / ward / request / held-back reason update (metadata)
       work_date        = u.work_date,
       ward             = nullif(u.ward, ''),
-      start_utc        = u.start_utc,
-      end_utc          = u.end_utc,
-      break_mins       = coalesce(u.break_mins, 0),
-      pay_minutes      = greatest(
-                           0,
-                           (extract(epoch from (u.end_utc - u.start_utc)) / 60)::int
-                           - coalesce(u.break_mins, 0)
-                         ),
+      hr_request_id    = u.request_id,
+      held_back_reason = u.held_back_reason,
+      updated_at       = now(),
+
+      -- Time fields only update when SAFE or FORCED
+      start_utc        = case when u.should_overwrite_time then u.start_utc else s.start_utc end,
+      end_utc          = case when u.should_overwrite_time then u.end_utc   else s.end_utc   end,
+      break_mins       = case when u.should_overwrite_time then coalesce(u.break_mins, 0) else s.break_mins end,
+      pay_minutes      = case when u.should_overwrite_time then
+                           greatest(
+                             0,
+                             (extract(epoch from (u.end_utc - u.start_utc)) / 60)::int
+                             - coalesce(u.break_mins, 0)
+                           )
+                         else s.pay_minutes
+                         end,
+
+      -- Client/candidate mapping remains SAFE-gated
       client_id        = case
                            when u.new_client_id is not null and u.safe_to_overwrite
                              then u.new_client_id
                            else s.client_id
                          end,
-      hr_request_id    = u.request_id,
-      held_back_reason = u.held_back_reason,
-      updated_at       = now(),
 
-      -- ✅ UPDATED FIX (same as NHSP apply logic):
-      -- Allow corrected candidate_id to overwrite when SAFE:
-      --   - shift not linked to a timesheet yet, OR
-      --   - linked timesheet has no current TSFIN row, OR
-      --   - linked timesheet TSFIN exists and is not paid and not invoice-locked.
       candidate_id     = case
                            when u.new_candidate_id is not null and u.safe_to_overwrite
                              then u.new_candidate_id
