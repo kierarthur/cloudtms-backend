@@ -46230,6 +46230,139 @@ function __normAlias(s){
   return String(s || '').trim().toLowerCase();
 }
 
+export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!timesheetId) {
+    return withCORS(env, req, badRequest('timesheet_id is required'));
+  }
+
+  // Load all versions for this logical timesheet
+  const { rows: tsRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&select=*`
+  );
+  const versions = tsRows || [];
+  if (!versions.length) {
+    return withCORS(env, req, notFound('Timesheet not found'));
+  }
+
+  // Electronic version = earliest submission_mode='ELECTRONIC'
+  const electronicVersions = versions
+    .filter((r) => String(r.submission_mode || '').toUpperCase() === 'ELECTRONIC')
+    .sort((a, b) => (a.version || 1) - (b.version || 1));
+
+  const elec = electronicVersions[0] || null;
+  if (!elec) {
+    return withCORS(
+      env,
+      req,
+      badRequest('No electronic version exists for this timesheet')
+    );
+  }
+
+  // Current version = is_current=true (or fall back to highest version)
+  let current =
+    versions.find((r) => r.is_current === true) ||
+    versions.sort((a, b) => (b.version || 1) - (a.version || 1))[0];
+
+  const elecVersion   = elec.version   || 1;
+  const currentVersion= current.version|| 1;
+
+  // Guard: do not revert if the CURRENT snapshot is paid or invoiced
+  const tsfin = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=id,locked_by_invoice_id,paid_at_utc,processing_status`
+  );
+  if (tsfin && (tsfin.locked_by_invoice_id || tsfin.paid_at_utc)) {
+    return withCORS(
+      env,
+      req,
+      badRequest('Cannot revert: current timesheet is invoiced or paid')
+    );
+  }
+
+  // If electronic is already current → no-op
+  if (current.timesheet_id === elec.timesheet_id &&
+      (current.version || 1) === elecVersion &&
+      current.is_current) {
+    return withCORS(
+      env,
+      req,
+      ok({
+        reverted: false,
+        reason: 'Electronic version is already current',
+        timesheet_id: timesheetId,
+        current_version: elecVersion
+      })
+    );
+  }
+
+  const now = nowIso();
+
+  // 1) Demote current version (if different from electronic)
+  if (currentVersion !== elecVersion) {
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(timesheetId)}` +
+        `&version=eq.${enc(String(currentVersion))}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), 'Prefer': 'return-minimal' },
+        body: JSON.stringify({
+          is_current: false,
+          updated_at: now
+        })
+      }
+    ).catch(() => {});
+  }
+
+  // 2) Promote electronic version to current
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&version=eq.${enc(String(elecVersion))}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), 'Prefer': 'return-minimal' },
+      body: JSON.stringify({
+        is_current: true,
+        updated_at: now
+      })
+    }
+  ).catch(() => {});
+
+  // 3) Enqueue TSFIN recompute against the now-current electronic version
+  try {
+    await sbRpc(env, 'enqueue_ts_financials', {
+      timesheet_id: timesheetId,
+      reason: 'REVERT_TO_ELECTRONIC'
+    });
+  } catch {
+    // Non-fatal – worker will recompute later if enqueuing fails silently
+  }
+
+  return withCORS(
+    env,
+    req,
+    ok({
+      reverted: true,
+      timesheet_id: timesheetId,
+      electronic_version: elecVersion,
+      previous_current_version: currentVersion
+    })
+  );
+}
+
+
+
 async function getImportColumnAliasesCached(env, systemType, fieldKey) {
   const sys = __normEnum(systemType);
   const key = __normEnum(fieldKey);
