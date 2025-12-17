@@ -45034,6 +45034,779 @@ async function generateAndStoreTimesheetQr(env, {
 
   return { qrText, qr_r2_key };
 }
+async function handleTimesheetQrResendEmail(env, req, timesheetId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
+
+  // Load current timesheet
+  const ts = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=*` +
+      `&limit=1`
+  );
+  if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
+
+  const qrStatus = String(ts.qr_status || '').toUpperCase();
+  const hasToken = !!(ts.qr_token && String(ts.qr_token).trim());
+  const hasGeneratedAt = !!ts.qr_generated_at;
+  const scannedAt = ts.qr_scanned_at || null;
+
+  if (qrStatus === 'EXPIRED') {
+    return withCORS(env, req, badRequest('QR is expired; reissue required'));
+  }
+  if (qrStatus !== 'PENDING') {
+    return withCORS(env, req, badRequest(`QR resend not allowed (qr_status=${qrStatus || 'NULL'})`));
+  }
+  // Scenario 2 requirements
+  if (!hasToken || !hasGeneratedAt || scannedAt) {
+    return withCORS(env, req, badRequest('QR resend requires Scenario 2 (PENDING + token + generated_at + not scanned)'));
+  }
+
+  // Ensure we have a PDF to attach
+  let pdfKey = ts.manual_pdf_r2_key || null;
+  if (!pdfKey) {
+    try {
+      pdfKey = await ensureTimesheetPdf(env, timesheetId);
+      if (pdfKey) {
+        await fetch(
+          `${env.SUPABASE_URL}/rest/v1/timesheets` +
+            `?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`,
+          {
+            method: 'PATCH',
+            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+            body: JSON.stringify({ manual_pdf_r2_key: pdfKey, updated_at: nowIso() })
+          }
+        ).catch(() => {});
+      }
+    } catch (e) {
+      return withCORS(env, req, serverError('Failed to prepare timesheet PDF for resend'));
+    }
+  }
+
+  if (!pdfKey) {
+    return withCORS(env, req, serverError('No PDF available to resend'));
+  }
+
+  // Resolve candidate email via contract
+  if (!ts.contract_id) {
+    return withCORS(env, req, badRequest('Cannot resend: timesheet.contract_id is missing'));
+  }
+
+  const contract = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contracts` +
+      `?id=eq.${enc(ts.contract_id)}` +
+      `&select=id,candidate_id,client_id` +
+      `&limit=1`
+  );
+  if (!contract) return withCORS(env, req, badRequest('Cannot resend: contract not found'));
+
+  const cand = contract.candidate_id
+    ? await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=eq.${enc(contract.candidate_id)}` +
+          `&select=id,display_name,email` +
+          `&limit=1`
+      )
+    : null;
+
+  const toEmail = cand?.email ? String(cand.email).trim() : null;
+  if (!toEmail) return withCORS(env, req, badRequest('Candidate email not found'));
+
+  const scope = String(ts.sheet_scope || '').toUpperCase();
+  const dateLabel =
+    (scope === 'WEEKLY')
+      ? (ts.week_ending_date || '')
+      : (ts.worked_start_iso ? String(ts.worked_start_iso).slice(0, 10) : '');
+
+  const subject =
+    (scope === 'WEEKLY')
+      ? `Weekly QR timesheet – week ending ${dateLabel || '(unknown)'}`
+      : `Daily QR timesheet – ${dateLabel || '(unknown date)'}`;
+
+  const lines = [
+    `Please print the attached timesheet, ask the ward manager to sign it,`,
+    `and then upload the signed copy via the app.`,
+    ``,
+    ...(dateLabel ? [`Date: ${dateLabel}`] : []),
+    `Timesheet ID: ${timesheetId}`
+  ];
+  const body_text = lines.join('\n');
+  const body_html = `<p>${lines.map(l => (l === '' ? '<br/>' : l)).join('<br/>')}</p>`;
+
+  // Queue in mail_outbox
+  const insert = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
+    method: 'POST',
+    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+    body: JSON.stringify({
+      type: 'TIMESHEET_QR',
+      to: toEmail,
+      cc: null,
+      subject,
+      body_html,
+      body_text,
+      attachments: [{ r2_key: pdfKey, filename: `Timesheet_${dateLabel || timesheetId}.pdf` }],
+      status: 'QUEUED',
+      reference: `timesheet_qr:resend:${timesheetId}`,
+      created_by: user?.id || null
+    })
+  });
+
+  if (!insert.ok) {
+    const t = await insert.text().catch(() => '');
+    return withCORS(env, req, serverError(`Failed to queue resend email: ${t}`));
+  }
+
+  // Audit
+  try {
+    await writeAudit(
+      env,
+      user,
+      'QR_RESENT',
+      { timesheet_id: timesheetId, pdf_r2_key: pdfKey, to: toEmail },
+      { entity: 'timesheets', subject_id: timesheetId, req }
+    );
+  } catch {}
+
+  return withCORS(env, req, ok({ queued: true, timesheet_id: timesheetId, pdf_key: pdfKey }));
+}
+async function handleTimesheetQrRefuseAndReset(env, req, timesheetId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+
+  const reason = (body && typeof body.reason === 'string') ? body.reason : (body && typeof body.rejected_reason === 'string' ? body.rejected_reason : '');
+  const reasonTrim = String(reason || '').trim();
+
+  // Call SQL RPC (installed)
+  const rpcRes = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/timesheet_qr_refuse_and_reset`, {
+    method: 'POST',
+    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+    body: JSON.stringify({
+      p_timesheet_id: timesheetId,
+      p_reason: reasonTrim || null,
+      p_actor_user_id: user?.id || null
+    })
+  });
+
+  if (!rpcRes.ok) {
+    const t = await rpcRes.text().catch(() => '');
+    return withCORS(env, req, badRequest(`Refuse failed: ${t}`));
+  }
+
+  const rpcRows = await rpcRes.json().catch(() => []);
+  const rpcRow = Array.isArray(rpcRows) ? rpcRows[0] : rpcRows;
+
+  // After RPC, current version is Scenario 1 (qr_status=PENDING, no token), and TSFIN is reset. 
+
+  // Resolve candidate email via contract on the NEW current row
+  const tsCur = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=contract_id,sheet_scope,week_ending_date,worked_start_iso` +
+      `&limit=1`
+  );
+
+  let queuedEmail = false;
+
+  if (tsCur?.contract_id) {
+    const contract = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contracts` +
+        `?id=eq.${enc(tsCur.contract_id)}` +
+        `&select=id,candidate_id,client_id` +
+        `&limit=1`
+    );
+
+    const cand = contract?.candidate_id
+      ? await sbGetOne(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/candidates` +
+            `?id=eq.${enc(contract.candidate_id)}` +
+            `&select=id,display_name,email` +
+            `&limit=1`
+        )
+      : null;
+
+    const toEmail = cand?.email ? String(cand.email).trim() : null;
+
+    if (toEmail) {
+      const scope = String(tsCur.sheet_scope || '').toUpperCase();
+      const dateLabel =
+        (scope === 'WEEKLY')
+          ? (tsCur.week_ending_date || '')
+          : (tsCur.worked_start_iso ? String(tsCur.worked_start_iso).slice(0, 10) : '');
+
+      const subject =
+        (scope === 'WEEKLY')
+          ? `Weekly timesheet refused – week ending ${dateLabel || '(unknown)'}`
+          : `Daily timesheet refused – ${dateLabel || '(unknown date)'}`;
+
+      const lines = [
+        `Your submitted timesheet has been refused.`,
+        ``,
+        ...(reasonTrim ? [`Reason: ${reasonTrim}`, ``] : []),
+        `Please open the app and resubmit as requested.`,
+        ``,
+        `Timesheet ID: ${timesheetId}`
+      ];
+      const body_text = lines.join('\n');
+      const body_html = `<p>${lines.map(l => (l === '' ? '<br/>' : l)).join('<br/>')}</p>`;
+
+      const out = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
+        method: 'POST',
+        headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+        body: JSON.stringify({
+          type: 'TIMESHEET_REFUSAL',
+          to: toEmail,
+          cc: null,
+          subject,
+          body_html,
+          body_text,
+          attachments: null,
+          status: 'QUEUED',
+          reference: `timesheet_qr:refused:${timesheetId}`,
+          created_by: user?.id || null
+        })
+      });
+
+      queuedEmail = out.ok;
+    }
+  }
+
+  // Return refreshed details (minimal: current timesheet + current tsfin)
+  const tsFull = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=*` +
+      `&limit=1`
+  );
+
+  const fin = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=*` +
+      `&limit=1`
+  );
+
+  // NOTE: RPC already inserts the 'QR_HOURS_REFUSED' audit event, so we do not duplicate it. :contentReference[oaicite:6]{index=6}
+
+  return withCORS(env, req, ok({
+    ok: true,
+    timesheet_id: timesheetId,
+    rpc: rpcRow || null,
+    email_queued: queuedEmail,
+    timesheet: tsFull || null,
+    tsfin: fin || null
+  }));
+}
+
+async function handleTimesheetQrRestore(env, req, timesheetId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+
+  // required: kind = 'PENDING' | 'SIGNED' (matches SQL) 
+  const kindRaw = String(body?.kind || body?.restore_kind || body?.p_restore_kind || '').toUpperCase();
+  if (kindRaw !== 'PENDING' && kindRaw !== 'SIGNED') {
+    return withCORS(env, req, badRequest('kind must be PENDING or SIGNED'));
+  }
+
+  const rpcRes = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/timesheet_qr_restore_version`, {
+    method: 'POST',
+    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+    body: JSON.stringify({
+      p_timesheet_id: timesheetId,
+      p_restore_kind: kindRaw,
+      p_actor_user_id: user?.id || null
+    })
+  });
+
+  if (!rpcRes.ok) {
+    const t = await rpcRes.text().catch(() => '');
+    return withCORS(env, req, badRequest(`Restore failed: ${t}`));
+  }
+
+  const rpcRows = await rpcRes.json().catch(() => []);
+  const rpcRow = Array.isArray(rpcRows) ? rpcRows[0] : rpcRows;
+
+  // Fetch new current state
+  const tsCur = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=*` +
+      `&limit=1`
+  );
+
+  const finCur = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=*` +
+      `&limit=1`
+  );
+
+  // IMPORTANT: SQL RPC already inserts audit event 'QR_RESTORED', so do not double-audit. 
+
+  return withCORS(env, req, ok({
+    ok: true,
+    timesheet_id: timesheetId,
+    restored: rpcRow || null,
+    timesheet: tsCur || null,
+    tsfin: finCur || null
+  }));
+}
+
+async function handleContractWeekDeletePlanned(env, req, contractWeekId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!contractWeekId) return withCORS(env, req, badRequest('contract_week_id is required'));
+
+  const rpcRes = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/contract_week_delete_planned`, {
+    method: 'POST',
+    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+    body: JSON.stringify({
+      p_contract_week_id: contractWeekId,
+      p_actor_user_id: user?.id || null
+    })
+  });
+
+  if (!rpcRes.ok) {
+    const t = await rpcRes.text().catch(() => '');
+    return withCORS(env, req, badRequest(`Planned delete failed: ${t}`));
+  }
+
+  const rows = await rpcRes.json().catch(() => []);
+  const row = Array.isArray(rows) ? rows[0] : rows;
+
+  // RPC inserts audit event CONTRACT_WEEK_DELETED_PLANNED. :contentReference[oaicite:9]{index=9}
+  return withCORS(env, req, ok({ ok: true, result: row || null }));
+}
+
+async function handleTimesheetAuditFeed(env, req, timesheetId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
+
+  const rpcRes = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/timesheet_audit_feed`, {
+    method: 'POST',
+    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+    body: JSON.stringify({ p_timesheet_id: timesheetId })
+  });
+
+  if (!rpcRes.ok) {
+    const t = await rpcRes.text().catch(() => '');
+    return withCORS(env, req, serverError(`Audit feed failed: ${t}`));
+  }
+
+  const rows = await rpcRes.json().catch(() => []);
+  return withCORS(env, req, ok({ items: rows || [] }));
+}
+
+async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
+
+  // Load current timesheet
+  const ts = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=*` +
+      `&limit=1`
+  );
+  if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
+
+  // Lock guard
+  const fin = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=id,locked_by_invoice_id,paid_at_utc,timesheet_version,processing_status` +
+      `&limit=1`
+  );
+  if (fin && (fin.locked_by_invoice_id || fin.paid_at_utc)) {
+    return withCORS(env, req, badRequest('Cannot allow QR again: timesheet is invoiced/locked or paid'));
+  }
+
+  // Must be manual-only (derived)
+  const sm = String(ts.submission_mode || '').toUpperCase();
+  const qrStatusNow = String(ts.qr_status || '').toUpperCase() || '';
+  const hasQrToken = !!(ts.qr_token && String(ts.qr_token).trim());
+  const hasQrGen = !!ts.qr_generated_at;
+  const hasQrScan = !!ts.qr_scanned_at;
+
+  const isManualOnly =
+    (sm === 'MANUAL') &&
+    !qrStatusNow &&
+    !hasQrToken &&
+    !hasQrGen &&
+    !hasQrScan;
+
+  if (!isManualOnly) {
+    return withCORS(env, req, badRequest('Allow QR again is only valid for manual-only timesheets'));
+  }
+
+  const now = nowIso();
+
+  // Next version number
+  let nextVersion = 2;
+  try {
+    const { rows: vRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(timesheetId)}` +
+        `&select=version` +
+        `&order=version.desc` +
+        `&limit=1`
+    );
+    const maxV = vRows?.[0]?.version != null ? Number(vRows[0].version) : Number(ts.version || 1);
+    nextVersion = Number.isFinite(maxV) ? maxV + 1 : (Number(ts.version || 1) + 1);
+  } catch {
+    nextVersion = Number(ts.version || 1) + 1;
+  }
+
+  // 1) Demote old current (preserve evidence in history)
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&version=eq.${enc(String(ts.version || 1))}` +
+      `&is_current=eq.true`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+      body: JSON.stringify({
+        is_current: false,
+        status: 'REVOKED',
+        revoked_reason: 'ALLOW_QR_AGAIN',
+        revoked_by: user?.id || null,
+        updated_at: now
+      })
+    }
+  ).catch(() => {});
+
+  // 2) Insert new current version with QR Scenario 1 fields
+  const newRowBase = { ...ts };
+  delete newRowBase.id;
+
+  const newRow = {
+    ...newRowBase,
+    version: nextVersion,
+    is_current: true,
+    status: 'RECEIVED',
+
+    submission_mode: 'MANUAL',
+
+    // Clear evidence pointer on new current (evidence preserved in old version)
+    manual_pdf_r2_key: null,
+    r2_nurse_key: null,
+    r2_auth_key: null,
+    authorised_at_server: null,
+
+    // QR Scenario 1
+    qr_status: 'PENDING',
+    qr_token: null,
+    qr_payload_json: {}, // NOT NULL
+    qr_generated_at: null,
+    qr_scanned_at: null,
+    qr_scan_info_json: null,
+    qr_r2_key: null,
+
+    created_at: now,
+    updated_at: now
+  };
+
+  const insRes = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets`, {
+    method: 'POST',
+    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+    body: JSON.stringify([newRow])
+  });
+
+  if (!insRes.ok) {
+    const t = await insRes.text().catch(() => '');
+    return withCORS(env, req, serverError(`Failed to create QR-enabled version: ${t}`));
+  }
+
+  const inserted = (await insRes.json().catch(() => []))[0] || null;
+
+  // 3) Update TSFIN version marker + status gate
+  if (fin?.id) {
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify({
+          timesheet_version: inserted?.version ?? nextVersion,
+          processing_status: 'AWAITING_MANUAL_SIGNATURE',
+          updated_at: now
+        })
+      }
+    ).catch(() => {});
+  }
+
+  // 4) Audit
+  try {
+    await writeAudit(
+      env,
+      user,
+      'QR_ALLOWED_AGAIN',
+      {
+        timesheet_id: timesheetId,
+        old_version: ts.version,
+        new_version: inserted?.version ?? nextVersion
+      },
+      { entity: 'timesheets', subject_id: timesheetId, req }
+    );
+  } catch {}
+
+  return withCORS(env, req, ok({
+    ok: true,
+    timesheet_id: timesheetId,
+    new_version: inserted?.version ?? nextVersion
+  }));
+}
+async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
+
+  // Load current timesheet
+  const ts = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=*` +
+      `&limit=1`
+  );
+  if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
+
+  // Lock guard
+  const fin = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=id,locked_by_invoice_id,paid_at_utc,timesheet_version,processing_status,client_id` +
+      `&limit=1`
+  );
+  if (fin && (fin.locked_by_invoice_id || fin.paid_at_utc)) {
+    return withCORS(env, req, badRequest('Cannot allow electronic again: timesheet is invoiced/locked or paid'));
+  }
+
+  // Must be manual-only (derived)
+  const sm = String(ts.submission_mode || '').toUpperCase();
+  const qrStatusNow = String(ts.qr_status || '').toUpperCase() || '';
+  const hasQrToken = !!(ts.qr_token && String(ts.qr_token).trim());
+  const hasQrGen = !!ts.qr_generated_at;
+  const hasQrScan = !!ts.qr_scanned_at;
+
+  const isManualOnly =
+    (sm === 'MANUAL') &&
+    !qrStatusNow &&
+    !hasQrToken &&
+    !hasQrGen &&
+    !hasQrScan;
+
+  if (!isManualOnly) {
+    return withCORS(env, req, badRequest('Allow electronic again is only valid for manual-only timesheets'));
+  }
+
+  // Determine client_id for authoritative capability check (client_settings.default_submission_mode)
+  let clientId = fin?.client_id || null;
+
+  if (!clientId && ts.contract_id) {
+    const contract = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contracts` +
+        `?id=eq.${enc(ts.contract_id)}` +
+        `&select=id,client_id` +
+        `&limit=1`
+    );
+    clientId = contract?.client_id || null;
+  }
+
+  if (!clientId) {
+    return withCORS(env, req, badRequest('Cannot resolve client_id for electronic eligibility check'));
+  }
+
+  let supportsElectronic = false;
+  try {
+    const { rows: csRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/client_settings` +
+        `?client_id=eq.${enc(clientId)}` +
+        `&select=default_submission_mode,updated_at,created_at` +
+        `&order=updated_at.desc.nullslast,created_at.desc.nullslast` +
+        `&limit=1`
+    );
+    const cs = csRows?.[0] || null;
+    supportsElectronic = (String(cs?.default_submission_mode || '').toUpperCase() === 'ELECTRONIC');
+  } catch {
+    supportsElectronic = false;
+  }
+
+  if (!supportsElectronic) {
+    return withCORS(env, req, badRequest('Client does not support electronic submission'));
+  }
+
+  const now = nowIso();
+
+  // Next version number
+  let nextVersion = 2;
+  try {
+    const { rows: vRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(timesheetId)}` +
+        `&select=version` +
+        `&order=version.desc` +
+        `&limit=1`
+    );
+    const maxV = vRows?.[0]?.version != null ? Number(vRows[0].version) : Number(ts.version || 1);
+    nextVersion = Number.isFinite(maxV) ? maxV + 1 : (Number(ts.version || 1) + 1);
+  } catch {
+    nextVersion = Number(ts.version || 1) + 1;
+  }
+
+  // 1) Demote old current (preserve evidence in history)
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&version=eq.${enc(String(ts.version || 1))}` +
+      `&is_current=eq.true`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+      body: JSON.stringify({
+        is_current: false,
+        status: 'REVOKED',
+        revoked_reason: 'ALLOW_ELECTRONIC_AGAIN',
+        revoked_by: user?.id || null,
+        updated_at: now
+      })
+    }
+  ).catch(() => {});
+
+  // 2) Insert new ELECTRONIC current version (clear QR overlay + evidence pointers)
+  const newRowBase = { ...ts };
+  delete newRowBase.id;
+
+  const newRow = {
+    ...newRowBase,
+    version: nextVersion,
+    is_current: true,
+    status: 'RECEIVED',
+
+    submission_mode: 'ELECTRONIC',
+
+    // clear evidence/authorisation; candidate will submit again
+    manual_pdf_r2_key: null,
+    authorised_at_server: null,
+
+    // clear signature pointers so app can upload new ones
+    r2_nurse_key: null,
+    r2_auth_key: null,
+
+    // clear QR overlay fully
+    qr_status: null,
+    qr_token: null,
+    qr_payload_json: {}, // NOT NULL
+    qr_generated_at: null,
+    qr_scanned_at: null,
+    qr_scan_info_json: null,
+    qr_r2_key: null,
+
+    created_at: now,
+    updated_at: now
+  };
+
+  const insRes = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets`, {
+    method: 'POST',
+    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+    body: JSON.stringify([newRow])
+  });
+
+  if (!insRes.ok) {
+    const t = await insRes.text().catch(() => '');
+    return withCORS(env, req, serverError(`Failed to create electronic version: ${t}`));
+  }
+
+  const inserted = (await insRes.json().catch(() => []))[0] || null;
+
+  // 3) Update TSFIN version marker + status
+  if (fin?.id) {
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify({
+          timesheet_version: inserted?.version ?? nextVersion,
+          processing_status: 'UNASSIGNED',
+          updated_at: now
+        })
+      }
+    ).catch(() => {});
+  }
+
+  // 4) Audit
+  try {
+    await writeAudit(
+      env,
+      user,
+      'ELECTRONIC_ALLOWED_AGAIN',
+      {
+        timesheet_id: timesheetId,
+        old_version: ts.version,
+        new_version: inserted?.version ?? nextVersion,
+        client_id: clientId
+      },
+      { entity: 'timesheets', subject_id: timesheetId, req }
+    );
+  } catch {}
+
+  return withCORS(env, req, ok({
+    ok: true,
+    timesheet_id: timesheetId,
+    new_version: inserted?.version ?? nextVersion
+  }));
+}
+
 
 async function handleTimesheetQrScan(env, req) {
   const enc = encodeURIComponent;
