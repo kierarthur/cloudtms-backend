@@ -4033,59 +4033,6 @@ async function handleContractsSkipWeeks(env, req, contractId) {
   return withCORS(env, req, ok({ deleted: deletedCount }));
 }
 
-async function handleContractWeeksList(env, req) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-  const url = new URL(req.url);
-  const q = (k) => url.searchParams.get(k);
-  const filters = [];
-
-  const includePlan = String(q('include_plan')||'').toLowerCase() === 'true';
-
-  let api = includePlan
-    ? `${env.SUPABASE_URL}/rest/v1/contract_weeks?select=` +
-      [
-        // identity / linkage
-        'id',
-        'contract_id',
-        'week_ending_date',
-        'additional_seq',
-        'status',
-        'submission_mode_snapshot',
-        'timesheet_id',
-
-        // plan / evidence
-        'uploaded_pdf_r2_key',
-        'planned_schedule_json',
-
-        // ✅ NEW: required to show stored hours + extras on planned weeks after draft save
-        'totals_json',
-        'additional_units_week',
-
-        // ✅ OPTIONAL (but useful for planned-week modal display)
-        'day_entries_json',
-
-        // audit
-        'created_at',
-        'updated_at'
-      ].join(',')
-    : `${env.SUPABASE_URL}/rest/v1/v_contract_weeks_enriched?select=*`;
-
-  const add = (cond) => { if (cond) filters.push(cond); };
-  add(q('contract_id') ? `contract_id=eq.${enc(q('contract_id'))}` : null);
-  add(q('candidate_id') ? `candidate_id=eq.${enc(q('candidate_id'))}` : null);
-  add(q('client_id') ? `client_id=eq.${enc(q('client_id'))}` : null);
-  add(q('status') ? `status=eq.${enc(q('status'))}` : null);
-  add(q('submission_mode_snapshot') ? `submission_mode_snapshot=eq.${enc(q('submission_mode_snapshot'))}` : null);
-  add(q('week_ending_from') ? `week_ending_date=gte.${enc(q('week_ending_from'))}` : null);
-  add(q('week_ending_to') ? `week_ending_date=lte.${enc(q('week_ending_to'))}` : null);
-
-  if (filters.length) api += `&${filters.join('&')}`;
-  api += `&order=week_ending_date.asc,additional_seq.asc`;
-
-  const { rows } = await sbFetch(env, api);
-  return withCORS(env, req, ok(rows || []));
-}
 
 // ----------------------------------------------------------------------------
 // B) CONTRACT WEEKS (list / switching / manual / expenses)
@@ -49778,7 +49725,7 @@ if (req.method === 'GET' && p === '/api/healthroster/autoprocess/clients') {
         return await handleContractsCheckOverlap(env, req);
       }
 
-      // Contract weeks
+          // Contract weeks
       if (req.method === 'GET' && p === '/api/contract-weeks') return handleContractWeeksList(env, req);
       {
         const m = matchPath(p, '/api/contract-weeks/:id');
@@ -49800,6 +49747,14 @@ if (req.method === 'GET' && p === '/api/healthroster/autoprocess/clients') {
         const m = matchPath(p, '/api/contract-weeks/:id/replace-manual-pdf');
         if (m && req.method === 'POST') return handleContractWeekReplaceManualPdf(env, req, m.id);
       }
+
+      // ✅ NEW: draft save for planned MANUAL weeks (does NOT create timesheet)
+      {
+        const m = matchPath(p, '/api/contract-weeks/:id/manual-draft-upsert');
+        if (m && req.method === 'POST') return handleContractWeekManualDraftUpsert(env, req, m.id);
+      }
+
+      // Existing: manual upsert (creates/updates real timesheet)
       {
         const m = matchPath(p, '/api/contract-weeks/:id/manual-upsert');
         if (m && req.method === 'POST') return handleContractWeekManualUpsert(env, req, m.id);
@@ -49808,6 +49763,7 @@ if (req.method === 'GET' && p === '/api/healthroster/autoprocess/clients') {
         const m = matchPath(p, '/api/contract-weeks/:id/manual-authorise');
         if (m && req.method === 'POST') return handleContractWeekManualAuthorise(env, req, m.id);
       }
+
       {
         const m = matchPath(p, '/api/contract-weeks/:id/printable');
         if (m && req.method === 'POST') return handleContractWeekGeneratePrintable(env, req, m.id);
