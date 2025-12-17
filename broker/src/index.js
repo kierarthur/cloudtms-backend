@@ -4033,12 +4033,7 @@ async function handleContractsSkipWeeks(env, req, contractId) {
   return withCORS(env, req, ok({ deleted: deletedCount }));
 }
 
-
-// ----------------------------------------------------------------------------
-// B) CONTRACT WEEKS (list / switching / manual / expenses)
-// ----------------------------------------------------------------------------
-
- async function handleContractWeeksList(env, req) {
+async function handleContractWeeksList(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   const url = new URL(req.url);
@@ -4048,7 +4043,32 @@ async function handleContractsSkipWeeks(env, req, contractId) {
   const includePlan = String(q('include_plan')||'').toLowerCase() === 'true';
 
   let api = includePlan
-    ? `${env.SUPABASE_URL}/rest/v1/contract_weeks?select=id,contract_id,week_ending_date,additional_seq,status,submission_mode_snapshot,timesheet_id,uploaded_pdf_r2_key,planned_schedule_json,created_at,updated_at`
+    ? `${env.SUPABASE_URL}/rest/v1/contract_weeks?select=` +
+      [
+        // identity / linkage
+        'id',
+        'contract_id',
+        'week_ending_date',
+        'additional_seq',
+        'status',
+        'submission_mode_snapshot',
+        'timesheet_id',
+
+        // plan / evidence
+        'uploaded_pdf_r2_key',
+        'planned_schedule_json',
+
+        // ✅ NEW: required to show stored hours + extras on planned weeks after draft save
+        'totals_json',
+        'additional_units_week',
+
+        // ✅ OPTIONAL (but useful for planned-week modal display)
+        'day_entries_json',
+
+        // audit
+        'created_at',
+        'updated_at'
+      ].join(',')
     : `${env.SUPABASE_URL}/rest/v1/v_contract_weeks_enriched?select=*`;
 
   const add = (cond) => { if (cond) filters.push(cond); };
@@ -4066,6 +4086,295 @@ async function handleContractsSkipWeeks(env, req, contractId) {
   const { rows } = await sbFetch(env, api);
   return withCORS(env, req, ok(rows || []));
 }
+
+// ----------------------------------------------------------------------------
+// B) CONTRACT WEEKS (list / switching / manual / expenses)
+// ----------------------------------------------------------------------------
+
+// ============================================================================
+// NEW: handleContractWeekManualDraftUpsert
+// Save a MANUAL planned contract_week as a *draft* (no timesheet creation).
+// - Validates: week exists, timesheet_id is NULL, submission_mode_snapshot === 'MANUAL'
+// - Accepts: actual_schedule_json (array) OR hours fallback
+// - Computes canonical bucket hours from schedule via resolveBucketsFromSchedule()
+// - Persists:
+//     contract_weeks.planned_schedule_json
+//     contract_weeks.totals_json = { ...existingTotals, hours: {day,night,sat,sun,bh}, additional_units_week?: {...} }
+//     contract_weeks.day_entries_json (from day_references_json if provided)
+//     contract_weeks.updated_at
+// - Returns the updated contract_week row (representation)
+// ============================================================================
+async function handleContractWeekManualDraftUpsert(env, req, weekId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!weekId) return withCORS(env, req, badRequest('weekId is required'));
+
+  let body;
+  try {
+    body = await parseJSONBody(req);
+  } catch {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  // Load contract_week (must be a planned/manual draft)
+  const cw = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}` +
+    `&select=id,contract_id,week_ending_date,timesheet_id,submission_mode_snapshot,planned_schedule_json,totals_json,day_entries_json`
+  );
+  if (!cw) return withCORS(env, req, notFound('Week not found'));
+
+  if (cw.timesheet_id) {
+    return withCORS(env, req, badRequest('This week already has a timesheet; draft save is not allowed.'));
+  }
+
+  const mode = String(cw.submission_mode_snapshot || '').toUpperCase();
+  if (mode !== 'MANUAL') {
+    return withCORS(env, req, badRequest('Draft save is only allowed for MANUAL weeks.'));
+  }
+
+  // Load contract (needed for bucket resolution via client time policy + BH list)
+  const contract = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(cw.contract_id)}&select=id,client_id`
+  );
+  if (!contract) return withCORS(env, req, notFound('Contract not found'));
+
+  // Small normalisers (keep storage stable / predictable)
+  const normaliseDayRefs = (obj) => {
+    if (!obj || typeof obj !== 'object') return {};
+    const out = {};
+    for (const [kRaw, vRaw] of Object.entries(obj)) {
+      const k = String(kRaw || '').trim();
+      if (!k) continue;
+      const v = (vRaw == null) ? null : String(vRaw).trim();
+      out[k] = v ? v : null;
+    }
+    return out;
+  };
+
+  const normaliseUnitsWeek = (obj) => {
+    if (!obj || typeof obj !== 'object') return {};
+    const out = {};
+    for (const [kRaw, vRaw] of Object.entries(obj)) {
+      const code = String(kRaw || '').toUpperCase().trim();
+      if (!code) continue;
+      const n = Number(vRaw || 0);
+      if (!Number.isFinite(n) || !n) continue; // strip zeros + invalid
+      out[code] = n;
+    }
+    return out;
+  };
+
+  // ─────────────────────────────────────────────────────────────
+  // Parse day references (optional) → store in contract_weeks.day_entries_json
+  // Shape expected: { "YYYY-MM-DD": "REF123", ... } or null
+  // ─────────────────────────────────────────────────────────────
+  let dayReferencesJson = undefined; // undefined = "no change"; null = clear; object = set
+  if (body && Object.prototype.hasOwnProperty.call(body, 'day_references_json')) {
+    if (body.day_references_json === null) {
+      dayReferencesJson = null;
+    } else if (body.day_references_json && typeof body.day_references_json === 'object') {
+      dayReferencesJson = normaliseDayRefs(body.day_references_json);
+    } else if (typeof body.day_references_json === 'string') {
+      try {
+        const parsed = JSON.parse(body.day_references_json);
+        if (parsed && typeof parsed === 'object') dayReferencesJson = normaliseDayRefs(parsed);
+      } catch {
+        // ignore invalid string; treat as "no change"
+        dayReferencesJson = undefined;
+      }
+    } else {
+      // ignore other types; treat as "no change"
+      dayReferencesJson = undefined;
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Parse schedule (preferred) or hours fallback
+  // ─────────────────────────────────────────────────────────────
+  let actual_schedule_json = null;
+
+  if (Array.isArray(body?.actual_schedule_json)) {
+    actual_schedule_json = body.actual_schedule_json;
+  } else if (typeof body?.actual_schedule_json === 'string') {
+    try {
+      const parsed = JSON.parse(body.actual_schedule_json);
+      if (Array.isArray(parsed)) actual_schedule_json = parsed;
+    } catch {
+      actual_schedule_json = null;
+    }
+  } else if (Array.isArray(body?.schedule_json)) {
+    // defensive: allow alternate key if ever used
+    actual_schedule_json = body.schedule_json;
+  }
+
+  // Canonical bucket hours (decimal)
+  let hours = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
+
+  if (Array.isArray(actual_schedule_json) && actual_schedule_json.length) {
+    // Validate schedule structure (overlaps + break windows)
+    try {
+      validateScheduleStructure(actual_schedule_json);
+    } catch (e) {
+      return withCORS(env, req, badRequest(e?.message || 'Invalid schedule (overlap/break windows).'));
+    }
+
+    // Compute minutes by bucket -> hours
+    try {
+      const mins = await resolveBucketsFromSchedule(env, contract, actual_schedule_json);
+      hours = {
+        day:   +(Number(mins?.day   || 0) / 60).toFixed(2),
+        night: +(Number(mins?.night || 0) / 60).toFixed(2),
+        sat:   +(Number(mins?.sat   || 0) / 60).toFixed(2),
+        sun:   +(Number(mins?.sun   || 0) / 60).toFixed(2),
+        bh:    +(Number(mins?.bh    || 0) / 60).toFixed(2)
+      };
+    } catch (e) {
+      return withCORS(env, req, badRequest(e?.message || 'Failed to bucket schedule'));
+    }
+  } else if (body?.hours) {
+    // Fallback: allow direct hours save (still draft; no timesheet creation)
+    const n = (v) => (v == null ? 0 : Number(v) || 0);
+    hours = {
+      day:   +n(body.hours.day).toFixed(2),
+      night: +n(body.hours.night).toFixed(2),
+      sat:   +n(body.hours.sat).toFixed(2),
+      sun:   +n(body.hours.sun).toFixed(2),
+      bh:    +n(body.hours.bh).toFixed(2)
+    };
+    // If schedule absent, we do NOT overwrite planned_schedule_json.
+    actual_schedule_json = null;
+  } else {
+    return withCORS(env, req, badRequest('Provide either actual_schedule_json (preferred) or hours totals'));
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Additional units (optional): contract_weeks has NO dedicated column.
+  // We persist them inside totals_json.additional_units_week if provided.
+  // ─────────────────────────────────────────────────────────────
+  let additionalUnitsWeek = undefined; // undefined = "no change"
+  if (body && Object.prototype.hasOwnProperty.call(body, 'additional_units_week')) {
+    if (body.additional_units_week && typeof body.additional_units_week === 'object') {
+      additionalUnitsWeek = normaliseUnitsWeek(body.additional_units_week);
+    } else if (body.additional_units_week === null) {
+      additionalUnitsWeek = {}; // treat explicit null as clear
+    } else if (typeof body.additional_units_week === 'string') {
+      try {
+        const parsed = JSON.parse(body.additional_units_week);
+        if (parsed && typeof parsed === 'object') additionalUnitsWeek = normaliseUnitsWeek(parsed);
+      } catch {
+        additionalUnitsWeek = undefined;
+      }
+    } else {
+      additionalUnitsWeek = undefined;
+    }
+  }
+
+  // Build patch
+  const now = nowIso();
+
+  const existingTotals =
+    (cw.totals_json && typeof cw.totals_json === 'object') ? cw.totals_json : {};
+
+  const totals_json = {
+    ...existingTotals,
+    hours
+  };
+
+  // ✅ Option A: only overwrite this key if the request included additional_units_week
+  if (additionalUnitsWeek !== undefined) {
+    totals_json.additional_units_week = additionalUnitsWeek;
+  }
+
+  const patch = {
+    totals_json,
+    updated_at: now
+  };
+
+  // Only overwrite planned_schedule_json when a schedule was provided
+  if (Array.isArray(actual_schedule_json)) {
+    patch.planned_schedule_json = actual_schedule_json;
+  }
+
+  // ✅ Only touch day_entries_json when explicitly provided (missing = “no change”)
+  if (dayReferencesJson !== undefined) {
+    patch.day_entries_json = dayReferencesJson;
+  }
+
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify(patch)
+    }
+  );
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    return withCORS(env, req, serverError(txt || 'Failed to patch contract_week'));
+  }
+
+  const json = await res.json().catch(() => []);
+  const row = Array.isArray(json) ? (json[0] || null) : json;
+
+  return withCORS(env, req, ok(row || { updated: true, week_id: weekId, hours }));
+}
+
+
+async function handleContractWeeksList(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  const url = new URL(req.url);
+  const q = (k) => url.searchParams.get(k);
+  const filters = [];
+
+  const includePlan = String(q('include_plan')||'').toLowerCase() === 'true';
+
+  // NOTE:
+  // - contract_weeks does NOT have an additional_units_week column.
+  // - draft extras are stored in contract_weeks.totals_json.additional_units_week (Option A).
+  let api = includePlan
+    ? `${env.SUPABASE_URL}/rest/v1/contract_weeks?select=` +
+      [
+        'id',
+        'contract_id',
+        'week_ending_date',
+        'additional_seq',
+        'status',
+        'submission_mode_snapshot',
+        'timesheet_id',
+        'uploaded_pdf_r2_key',
+        'planned_schedule_json',
+
+        // ✅ required for planned-week repaint after draft save
+        'totals_json',
+        'day_entries_json',
+
+        'created_at',
+        'updated_at'
+      ].join(',')
+    : `${env.SUPABASE_URL}/rest/v1/v_contract_weeks_enriched?select=*`;
+
+  const add = (cond) => { if (cond) filters.push(cond); };
+  add(q('contract_id') ? `contract_id=eq.${enc(q('contract_id'))}` : null);
+  add(q('candidate_id') ? `candidate_id=eq.${enc(q('candidate_id'))}` : null);
+  add(q('client_id') ? `client_id=eq.${enc(q('client_id'))}` : null);
+  add(q('status') ? `status=eq.${enc(q('status'))}` : null);
+  add(q('submission_mode_snapshot') ? `submission_mode_snapshot=eq.${enc(q('submission_mode_snapshot'))}` : null);
+  add(q('week_ending_from') ? `week_ending_date=gte.${enc(q('week_ending_from'))}` : null);
+  add(q('week_ending_to') ? `week_ending_date=lte.${enc(q('week_ending_to'))}` : null);
+
+  if (filters.length) api += `&${filters.join('&')}`;
+  api += `&order=week_ending_date.asc,additional_seq.asc`;
+
+  const { rows } = await sbFetch(env, api);
+  return withCORS(env, req, ok(rows || []));
+}
+
 
  async function handleContractWeekUpdate(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
@@ -4237,6 +4546,10 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     return withCORS(env, req, badRequest('Invalid JSON'));
   }
 
+  const hasDayRefsKey     = !!(body && Object.prototype.hasOwnProperty.call(body, 'day_references_json'));
+  const hasUnitsWeekKey   = !!(body && Object.prototype.hasOwnProperty.call(body, 'additional_units_week'));
+  const hasUnitsPerDayKey = !!(body && Object.prototype.hasOwnProperty.call(body, 'additional_units_per_day'));
+
   // NEW: optional per-day references from FE
   // Expecting an object like { "2025-01-06": "REF123", ... } or null
   let dayReferencesJson = null;
@@ -4375,13 +4688,79 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
 
   // ─────────────────────────────────────────────────────────────
   // Additional unit buckets (EX1..EX5) – weekly totals
+  //
+  // CRITICAL CHANGE:
+  // - If the request OMITS additional_units_week/per_day, we must reuse the
+  //   existing values from the current timesheet (so schedule-only edits
+  //   do not wipe additional units in TSFIN recompute).
+  // - If the request INCLUDES them, we use the request values and also
+  //   persist them onto the timesheet row.
   // ─────────────────────────────────────────────────────────────
-  const unitsWeek  = (body.additional_units_week && typeof body.additional_units_week === 'object')
-    ? body.additional_units_week
-    : {};
-  const unitsPerDay = (body.additional_units_per_day && typeof body.additional_units_per_day === 'object')
-    ? body.additional_units_per_day
-    : {};
+  const normaliseUnitsWeek = (obj) => {
+    const out = {};
+    const src = (obj && typeof obj === 'object') ? obj : {};
+    for (const [kRaw, vRaw] of Object.entries(src)) {
+      const code = String(kRaw || '').toUpperCase().trim();
+      if (!code) continue;
+      const n = Number(vRaw || 0);
+      if (!Number.isFinite(n) || !n) continue;
+      out[code] = n;
+    }
+    return out;
+  };
+
+  const normaliseUnitsPerDay = (obj) => {
+    const out = {};
+    const src = (obj && typeof obj === 'object') ? obj : {};
+    for (const [kRaw, per] of Object.entries(src)) {
+      const code = String(kRaw || '').toUpperCase().trim();
+      if (!code) continue;
+      if (!per || typeof per !== 'object') continue;
+      out[code] = { ...per };
+    }
+    return out;
+  };
+
+  // Start with request values if present
+  let unitsWeek  = hasUnitsWeekKey
+    ? (
+        (body.additional_units_week && typeof body.additional_units_week === 'object')
+          ? normaliseUnitsWeek(body.additional_units_week)
+          : {}
+      )
+    : null; // null means "not provided"
+
+  let unitsPerDay = hasUnitsPerDayKey
+    ? (
+        (body.additional_units_per_day && typeof body.additional_units_per_day === 'object')
+          ? normaliseUnitsPerDay(body.additional_units_per_day)
+          : {}
+      )
+    : null;
+
+  // If missing, reuse from the current timesheet (if any)
+  if ((!hasUnitsWeekKey || !hasUnitsPerDayKey) && cw.timesheet_id) {
+    const tsExistingUnits = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(cw.timesheet_id)}` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,additional_units_week,additional_units_per_day`
+    );
+
+    if (!hasUnitsWeekKey) {
+      const u = tsExistingUnits?.additional_units_week;
+      unitsWeek = (u && typeof u === 'object') ? normaliseUnitsWeek(u) : {};
+    }
+    if (!hasUnitsPerDayKey) {
+      const u = tsExistingUnits?.additional_units_per_day;
+      unitsPerDay = (u && typeof u === 'object') ? normaliseUnitsPerDay(u) : {};
+    }
+  }
+
+  // If still null (no request + no TS), default to empty maps (timesheets schema requires week map NOT NULL)
+  if (unitsWeek == null) unitsWeek = {};
+  if (unitsPerDay == null) unitsPerDay = {};
 
   const addlConfig = Array.isArray(contract.additional_rates_json)
     ? contract.additional_rates_json
@@ -4578,6 +4957,10 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       qr_scan_info_json: null,
       qr_r2_key: null,
 
+      // ✅ carry current additional units forward into the new current version
+      additional_units_week: currentTs.additional_units_week || {},
+      additional_units_per_day: currentTs.additional_units_per_day || {},
+
       updated_at: now2,
       created_at: now2
     };
@@ -4621,6 +5004,11 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       manual_pdf_rotation_degrees: manualPdfRotationDeg,
       line_type: 'HOURS',
       actual_schedule_json,
+
+      // ✅ Persist additional units onto the timesheet row (NOT NULL week map)
+      additional_units_week: unitsWeek || {},
+      additional_units_per_day: unitsPerDay || {},
+
       // NEW: per-day references (if provided)
       day_references_json: dayReferencesJson ?? null,
       authorised_at_server: null,
@@ -4660,8 +5048,16 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     if (body?.manual_pdf_rotation_degrees != null || body?.rotation_degrees != null) {
       patchBody.manual_pdf_rotation_degrees = manualPdfRotationDeg;
     }
-    if (body && Object.prototype.hasOwnProperty.call(body, 'day_references_json')) {
+    if (hasDayRefsKey) {
       patchBody.day_references_json = dayReferencesJson ?? null;
+    }
+
+    // ✅ Only patch additional units if provided in the request
+    if (hasUnitsWeekKey) {
+      patchBody.additional_units_week = unitsWeek || {};
+    }
+    if (hasUnitsPerDayKey) {
+      patchBody.additional_units_per_day = unitsPerDay || {};
     }
 
     await fetch(
@@ -4673,6 +5069,40 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
         body: JSON.stringify(patchBody)
       }
     ).catch(()=>{});
+  } else {
+    // ✅ NEW: even if schedule is NOT provided, we still need to persist units/refs/rotation
+    // when they were explicitly provided in the request.
+    const patchBody = { updated_at: nowIso };
+    let changed = false;
+
+    if (body?.manual_pdf_rotation_degrees != null || body?.rotation_degrees != null) {
+      patchBody.manual_pdf_rotation_degrees = manualPdfRotationDeg;
+      changed = true;
+    }
+    if (hasDayRefsKey) {
+      patchBody.day_references_json = dayReferencesJson ?? null;
+      changed = true;
+    }
+    if (hasUnitsWeekKey) {
+      patchBody.additional_units_week = unitsWeek || {};
+      changed = true;
+    }
+    if (hasUnitsPerDayKey) {
+      patchBody.additional_units_per_day = unitsPerDay || {};
+      changed = true;
+    }
+
+    if (changed) {
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), 'Prefer': 'return-minimal' },
+          body: JSON.stringify(patchBody)
+        }
+      ).catch(()=>{});
+    }
   }
 
   // Determine QR action (enum preferred, legacy booleans fallback)
@@ -5017,7 +5447,27 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
 
   await writeSnapshot(env, snap);
 
-  const weekPatch = { totals_json: { hours }, updated_at: nowIso };
+  // ✅ Preserve existing totals_json fields (Option A stores additional_units_week in totals_json)
+  const existingWeekTotals =
+    (cw.totals_json && typeof cw.totals_json === 'object') ? cw.totals_json : {};
+
+  const mergedWeekTotals = {
+    ...existingWeekTotals,
+    hours
+  };
+
+  // If request explicitly included units, mirror onto week totals_json as well (keeps draft store consistent)
+  if (hasUnitsWeekKey) {
+    mergedWeekTotals.additional_units_week = unitsWeek || {};
+  }
+
+  const weekPatch = { totals_json: mergedWeekTotals, updated_at: nowIso };
+
+  // Keep day_entries_json in sync only if explicitly provided
+  if (hasDayRefsKey) {
+    weekPatch.day_entries_json = dayReferencesJson ?? null;
+  }
+
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
     {
