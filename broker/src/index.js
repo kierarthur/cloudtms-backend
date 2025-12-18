@@ -4935,7 +4935,17 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     const ward_norm     = (contract.ward_hint || 'contract').toLowerCase();
     const job_title_norm= (contract.role || 'weekly').toLowerCase();
     const booking_id    = makeWeeklyBookingId(candidate?.id, contract, cw);
-
+console.log('[CW_MANUAL_UPSERT][BOOKING_ID]', {
+  weekId,
+  booking_id,
+  booking_id_type: typeof booking_id,
+  candidate_id: contract?.candidate_id,
+  candidate_loaded: !!candidate,
+  contract_id: contract?.id,
+  cw_id: cw?.id,
+  cw_week_ending_date: cw?.week_ending_date,
+  cw_additional_seq: cw?.additional_seq
+});
       const payload = [{
       booking_id,
       version: 1,
