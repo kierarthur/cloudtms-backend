@@ -4883,17 +4883,18 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     );
 
     // Create new current version (do NOT inherit signed pdf or qr metadata)
-    const newRow = {
+       const newRow = {
       ...currentTs,
       version: newVersion,
       is_current: true,
-      status: 'SUBMITTED',
+      status: 'RECEIVED', // ✅ timesheet_status_enum valid
       revoked_reason: null,
       revoked_by: null,
 
       // Evidence should not carry over; the new version needs fresh evidence/QR.
       manual_pdf_r2_key: null,
-      manual_pdf_rotation_degrees: currentTs.manual_pdf_rotation_degrees ?? null,
+  manual_pdf_rotation_degrees: Number(currentTs.manual_pdf_rotation_degrees ?? 0),
+
 
       // Clear QR linkage for the new current; if reissuing, we'll set below.
       qr_token: null,
@@ -4935,18 +4936,20 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     const job_title_norm= (contract.role || 'weekly').toLowerCase();
     const booking_id    = makeWeeklyBookingId(candidate?.id, contract, cw);
 
-    const payload = [{
+      const payload = [{
       booking_id,
       version: 1,
       is_current: true,
-      status: 'SUBMITTED',
+      status: 'RECEIVED', // ✅ timesheet_status_enum valid
       occupant_key_norm: occupant_norm,
       hospital_norm, ward_norm, job_title_norm,
-      shift_label_norm: 'weekly',
+           shift_label_norm: 'weekly',
       week_ending_date: cw.week_ending_date,
       r2_nurse_key: null, r2_auth_key: null,
       contract_id: contract.id,
+      sheet_scope: 'WEEKLY',          // ✅ prevent default DAILY
       submission_mode: 'MANUAL',
+
       manual_pdf_r2_key: cw.uploaded_pdf_r2_key || null,
       manual_pdf_rotation_degrees: manualPdfRotationDeg,
       line_type: 'HOURS',
@@ -4961,8 +4964,18 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       authorised_at_server: null,
       created_at: nowIso, updated_at: nowIso,
 
-      // Ensure NOT NULL JSONB has a value
-      qr_payload_json: {}
+  // Ensure NOT NULL JSONB has a value
+qr_payload_json: {},
+
+// ✅ override DB default qr_status='PENDING' for non-QR manual timesheets
+qr_status: null,
+qr_token: null,
+qr_generated_at: null,
+qr_scanned_at: null,
+qr_scan_info_json: null,
+qr_r2_key: null
+
+
     }];
 
     const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets`, {
@@ -5112,22 +5125,90 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     const segments    = [];
     let segPayTotal   = 0;
     let segChgTotal   = 0;
+// ─────────────────────────────────────────────────────────────
+// OPTION B: Convert WEEKLY schedule entries (UK local date + HH:MM)
+// into UTC ISO ranges for SEGMENTS classification.
+// This keeps resolveBucketsFromSchedule() as-is, but makes classifyMinutes()
+// deterministic and correct (BST-aware).
+// Requires ukLocalToUtcISO(ymd, hhmm) to exist in this file/scope.
+// ─────────────────────────────────────────────────────────────
+if (typeof ukLocalToUtcISO !== 'function') {
+  throw new Error('ukLocalToUtcISO helper is missing (required for weekly SEGMENTS conversion).');
+}
 
-    for (let i = 0; i < actual_schedule_json.length; i++) {
-      const seg  = actual_schedule_json[i] || {};
-      const date = seg.date;
-      const start = seg.start_utc;
-      const end   = seg.end_utc;
-      const br    = Number(seg.break_mins || 0);
+const _parseHHMM = (hhmm) => {
+  const s = String(hhmm || '').trim();
+  const m = s.match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const h = Number(m[1]);
+  const mm = Number(m[2]);
+  if (!Number.isFinite(h) || !Number.isFinite(mm)) return null;
+  if (h < 0 || h > 23 || mm < 0 || mm > 59) return null;
+  return h * 60 + mm;
+};
 
-      if (!date || !start || !end) continue;
+const _addDaysYmd = (ymd, days) => {
+  const d = new Date(`${String(ymd)}T00:00:00Z`);
+  if (!Number.isFinite(d.getTime())) return String(ymd || '');
+  d.setUTCDate(d.getUTCDate() + Number(days || 0));
+  const yyyy = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(d.getUTCDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
 
-      const policy = await loadPolicy(env, clientId, date);
+const _isIsoLike = (s) => {
+  const x = String(s || '');
+  return x.includes('T') && (x.endsWith('Z') || /[+\-]\d{2}:\d{2}$/.test(x));
+};
 
-      let segsArr = [[start, end]];
-      segsArr = subtractBreak(segsArr, null, null, br);
+const scheduleEntryToUtcRange = (seg) => {
+  const date = String(seg?.date || '').trim(); // "YYYY-MM-DD"
+  if (!date) return { startUtcIso: null, endUtcIso: null };
 
-      const h = classifyMinutes(env, policy, segsArr);
+  // If already ISO, accept it
+  const startIsoRaw = seg?.start_utc || seg?.start_iso || null;
+  const endIsoRaw   = seg?.end_utc   || seg?.end_iso   || null;
+  if (startIsoRaw && endIsoRaw && _isIsoLike(startIsoRaw) && _isIsoLike(endIsoRaw)) {
+    return { startUtcIso: String(startIsoRaw), endUtcIso: String(endIsoRaw) };
+  }
+
+  // Weekly schedule inputs
+  const startHH = String(seg?.start || '').trim(); // "HH:MM"
+  const endHH   = String(seg?.end   || '').trim(); // "HH:MM"
+  if (!startHH || !endHH) return { startUtcIso: null, endUtcIso: null };
+
+  const sMin = _parseHHMM(startHH);
+  const eMin = _parseHHMM(endHH);
+  if (sMin == null || eMin == null) return { startUtcIso: null, endUtcIso: null };
+
+  const overnight = (eMin <= sMin);
+  const endYmd = overnight ? _addDaysYmd(date, 1) : date;
+
+  return {
+    startUtcIso: ukLocalToUtcISO(date, startHH),
+    endUtcIso:   ukLocalToUtcISO(endYmd, endHH)
+  };
+};
+
+ for (let i = 0; i < actual_schedule_json.length; i++) {
+  const seg  = actual_schedule_json[i] || {};
+  const date = seg.date;
+
+  const { startUtcIso, endUtcIso } = scheduleEntryToUtcRange(seg);
+  const start = startUtcIso;
+  const end   = endUtcIso;
+
+  const br = Number(seg.break_mins ?? seg.break_minutes ?? 0);
+
+  if (!date || !start || !end) continue;
+
+  const policy = await loadPolicy(env, clientId, date);
+
+  let segsArr = [[start, end]];
+  segsArr = subtractBreak(segsArr, null, null, br);
+
+  const h = classifyMinutes(env, policy, segsArr);
 
       const p = pay || {};
       const c = charge || {};
@@ -5151,13 +5232,13 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       segPayTotal += segPay;
       segChgTotal += segChg;
 
-      segments.push({
-        segment_id: `ts:${ts.timesheet_id}:${i}`,
-        date,
-        ward: seg.ward || null,
-        start_utc: start,
-        end_utc:   end,
-        break_mins: br,
+   segments.push({
+  segment_id: `ts:${ts.timesheet_id}:${i}`,
+  date,
+  ward: seg.ward || null,
+  start_utc: start, // now UTC ISO
+  end_utc:   end,   // now UTC ISO
+  break_mins: br,
         hours_day:   h.hours_day   || 0,
         hours_night: h.hours_night || 0,
         hours_sat:   h.hours_sat   || 0,
