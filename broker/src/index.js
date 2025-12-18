@@ -4637,13 +4637,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
 
   // ─────────────────────────────────────────────────────────────
   // Additional unit buckets (EX1..EX5) – weekly totals
-  //
-  // CRITICAL CHANGE:
-  // - If the request OMITS additional_units_week/per_day, we must reuse the
-  //   existing values from the current timesheet (so schedule-only edits
-  //   do not wipe additional units in TSFIN recompute).
-  // - If the request INCLUDES them, we use the request values and also
-  //   persist them onto the timesheet row.
   // ─────────────────────────────────────────────────────────────
   const normaliseUnitsWeek = (obj) => {
     const out = {};
@@ -4845,6 +4838,37 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
 
   const nowIso = new Date().toISOString();
 
+  // ─────────────────────────────────────────────────────────────
+  // MINIMAL AUDIT: capture "before" snapshot for change detection
+  // ─────────────────────────────────────────────────────────────
+  const stableJson = (x) => {
+    try { return JSON.stringify(x ?? null); } catch { return ''; }
+  };
+  const beforeTsId = ts?.timesheet_id || null;
+  const beforeScheduleJsonStr = stableJson(ts?.actual_schedule_json ?? null);
+
+  let beforeTsfin = null;
+  if (beforeTsId) {
+    try {
+      beforeTsfin = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=eq.${enc(beforeTsId)}` +
+          `&is_current=eq.true` +
+          `&select=hours_day,hours_night,hours_sat,hours_sun,hours_bh,total_hours,processing_status`
+      );
+    } catch {
+      beforeTsfin = null;
+    }
+  }
+  const beforeHours = {
+    day:   Number(beforeTsfin?.hours_day   ?? 0),
+    night: Number(beforeTsfin?.hours_night ?? 0),
+    sat:   Number(beforeTsfin?.hours_sat   ?? 0),
+    sun:   Number(beforeTsfin?.hours_sun   ?? 0),
+    bh:    Number(beforeTsfin?.hours_bh    ?? 0)
+  };
+
   // Lock enforcement: block changes if invoiced or paid
   let finLock = null;
   if (ts && ts.timesheet_id) {
@@ -4885,7 +4909,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     );
 
     // Create new current version (do NOT inherit signed pdf or qr metadata)
-       const newRow = {
+    const newRow = {
       ...currentTs,
       version: newVersion,
       is_current: true,
@@ -4895,8 +4919,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
 
       // Evidence should not carry over; the new version needs fresh evidence/QR.
       manual_pdf_r2_key: null,
-  manual_pdf_rotation_degrees: Number(currentTs.manual_pdf_rotation_degrees ?? 0),
-
+      manual_pdf_rotation_degrees: Number(currentTs.manual_pdf_rotation_degrees ?? 0),
 
       // Clear QR linkage for the new current; if reissuing, we'll set below.
       qr_token: null,
@@ -4931,35 +4954,39 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     return created || { ...currentTs, version: newVersion, is_current: true };
   };
 
+  let createdNow = false;
+
   if (!ts) {
     const occupant_norm = (candidate?.display_name || String(candidate?.id || 'worker')).toLowerCase();
     const hospital_norm = (contract.display_site || client?.name || String(contract.client_id)).toLowerCase();
     const ward_norm     = (contract.ward_hint || 'contract').toLowerCase();
     const job_title_norm= (contract.role || 'weekly').toLowerCase();
-   const booking_id = await makeWeeklyBookingId(contract?.candidate_id || null, contract, cw);
-   if (!booking_id || booking_id === '{}' || booking_id === 'null' || booking_id === 'undefined') {
-  return withCORS(env, req, badRequest(`Invalid booking_id produced: "${booking_id}"`));
-}
 
-console.log('[CW_MANUAL_UPSERT][BOOKING_ID]', {
-  weekId,
-  booking_id,
-  booking_id_type: typeof booking_id,
-  candidate_id: contract?.candidate_id,
-  candidate_loaded: !!candidate,
-  contract_id: contract?.id,
-  cw_id: cw?.id,
-  cw_week_ending_date: cw?.week_ending_date,
-  cw_additional_seq: cw?.additional_seq
-});
-      const payload = [{
+    const booking_id = await makeWeeklyBookingId(contract?.candidate_id || null, contract, cw);
+    if (!booking_id || booking_id === '{}' || booking_id === 'null' || booking_id === 'undefined') {
+      return withCORS(env, req, badRequest(`Invalid booking_id produced: "${booking_id}"`));
+    }
+
+    console.log('[CW_MANUAL_UPSERT][BOOKING_ID]', {
+      weekId,
+      booking_id,
+      booking_id_type: typeof booking_id,
+      candidate_id: contract?.candidate_id,
+      candidate_loaded: !!candidate,
+      contract_id: contract?.id,
+      cw_id: cw?.id,
+      cw_week_ending_date: cw?.week_ending_date,
+      cw_additional_seq: cw?.additional_seq
+    });
+
+    const payload = [{
       booking_id,
       version: 1,
       is_current: true,
       status: 'RECEIVED', // ✅ timesheet_status_enum valid
       occupant_key_norm: occupant_norm,
       hospital_norm, ward_norm, job_title_norm,
-           shift_label_norm: 'weekly',
+      shift_label_norm: 'weekly',
       week_ending_date: cw.week_ending_date,
       r2_nurse_key: null, r2_auth_key: null,
       contract_id: contract.id,
@@ -4980,18 +5007,16 @@ console.log('[CW_MANUAL_UPSERT][BOOKING_ID]', {
       authorised_at_server: null,
       created_at: nowIso, updated_at: nowIso,
 
-  // Ensure NOT NULL JSONB has a value
-qr_payload_json: {},
+      // Ensure NOT NULL JSONB has a value
+      qr_payload_json: {},
 
-// ✅ override DB default qr_status='PENDING' for non-QR manual timesheets
-qr_status: null,
-qr_token: null,
-qr_generated_at: null,
-qr_scanned_at: null,
-qr_scan_info_json: null,
-qr_r2_key: null
-
-
+      // ✅ override DB default qr_status='PENDING' for non-QR manual timesheets
+      qr_status: null,
+      qr_token: null,
+      qr_generated_at: null,
+      qr_scanned_at: null,
+      qr_scan_info_json: null,
+      qr_r2_key: null
     }];
 
     const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets`, {
@@ -5003,6 +5028,7 @@ qr_r2_key: null
       return withCORS(env, req, serverError(await ins.text()));
     }
     ts = (await ins.json().catch(()=>[]))[0];
+    createdNow = true;
 
     await fetch(
       `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
@@ -5016,6 +5042,27 @@ qr_r2_key: null
         })
       }
     );
+
+    // ─────────────────────────────────────────────────────────────
+    // MINIMAL AUDIT: TIMESHEET_CREATED
+    // ─────────────────────────────────────────────────────────────
+    try {
+      await writeAudit(
+        env,
+        user,
+        'TIMESHEET_CREATED',
+        {
+          timesheet_id: ts.timesheet_id,
+          contract_week_id: cw.id,
+          contract_id: contract.id,
+          sheet_scope: 'WEEKLY',
+          submission_mode: 'MANUAL',
+          source: 'contract_week_manual_upsert',
+          week_ending_date: cw.week_ending_date
+        },
+        { entity: 'timesheets', subject_id: ts.timesheet_id, req }
+      );
+    } catch {}
   } else if (actual_schedule_json) {
     const patchBody = {
       actual_schedule_json,
@@ -5141,90 +5188,85 @@ qr_r2_key: null
     const segments    = [];
     let segPayTotal   = 0;
     let segChgTotal   = 0;
-// ─────────────────────────────────────────────────────────────
-// OPTION B: Convert WEEKLY schedule entries (UK local date + HH:MM)
-// into UTC ISO ranges for SEGMENTS classification.
-// This keeps resolveBucketsFromSchedule() as-is, but makes classifyMinutes()
-// deterministic and correct (BST-aware).
-// Requires ukLocalToUtcISO(ymd, hhmm) to exist in this file/scope.
-// ─────────────────────────────────────────────────────────────
-if (typeof ukLocalToUtcISO !== 'function') {
-  throw new Error('ukLocalToUtcISO helper is missing (required for weekly SEGMENTS conversion).');
-}
 
-const _parseHHMM = (hhmm) => {
-  const s = String(hhmm || '').trim();
-  const m = s.match(/^(\d{1,2}):(\d{2})$/);
-  if (!m) return null;
-  const h = Number(m[1]);
-  const mm = Number(m[2]);
-  if (!Number.isFinite(h) || !Number.isFinite(mm)) return null;
-  if (h < 0 || h > 23 || mm < 0 || mm > 59) return null;
-  return h * 60 + mm;
-};
+    // OPTION B conversion helpers
+    if (typeof ukLocalToUtcISO !== 'function') {
+      throw new Error('ukLocalToUtcISO helper is missing (required for weekly SEGMENTS conversion).');
+    }
 
-const _addDaysYmd = (ymd, days) => {
-  const d = new Date(`${String(ymd)}T00:00:00Z`);
-  if (!Number.isFinite(d.getTime())) return String(ymd || '');
-  d.setUTCDate(d.getUTCDate() + Number(days || 0));
-  const yyyy = d.getUTCFullYear();
-  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-  const dd = String(d.getUTCDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
-};
+    const _parseHHMM = (hhmm) => {
+      const s = String(hhmm || '').trim();
+      const m = s.match(/^(\d{1,2}):(\d{2})$/);
+      if (!m) return null;
+      const h = Number(m[1]);
+      const mm = Number(m[2]);
+      if (!Number.isFinite(h) || !Number.isFinite(mm)) return null;
+      if (h < 0 || h > 23 || mm < 0 || mm > 59) return null;
+      return h * 60 + mm;
+    };
 
-const _isIsoLike = (s) => {
-  const x = String(s || '');
-  return x.includes('T') && (x.endsWith('Z') || /[+\-]\d{2}:\d{2}$/.test(x));
-};
+    const _addDaysYmd = (ymd, days) => {
+      const d = new Date(`${String(ymd)}T00:00:00Z`);
+      if (!Number.isFinite(d.getTime())) return String(ymd || '');
+      d.setUTCDate(d.getUTCDate() + Number(days || 0));
+      const yyyy = d.getUTCFullYear();
+      const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const dd = String(d.getUTCDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    };
 
-const scheduleEntryToUtcRange = (seg) => {
-  const date = String(seg?.date || '').trim(); // "YYYY-MM-DD"
-  if (!date) return { startUtcIso: null, endUtcIso: null };
+    const _isIsoLike = (s) => {
+      const x = String(s || '');
+      return x.includes('T') && (x.endsWith('Z') || /[+\-]\d{2}:\d{2}$/.test(x));
+    };
 
-  // If already ISO, accept it
-  const startIsoRaw = seg?.start_utc || seg?.start_iso || null;
-  const endIsoRaw   = seg?.end_utc   || seg?.end_iso   || null;
-  if (startIsoRaw && endIsoRaw && _isIsoLike(startIsoRaw) && _isIsoLike(endIsoRaw)) {
-    return { startUtcIso: String(startIsoRaw), endUtcIso: String(endIsoRaw) };
-  }
+    const scheduleEntryToUtcRange = (seg) => {
+      const date = String(seg?.date || '').trim(); // "YYYY-MM-DD"
+      if (!date) return { startUtcIso: null, endUtcIso: null };
 
-  // Weekly schedule inputs
-  const startHH = String(seg?.start || '').trim(); // "HH:MM"
-  const endHH   = String(seg?.end   || '').trim(); // "HH:MM"
-  if (!startHH || !endHH) return { startUtcIso: null, endUtcIso: null };
+      // If already ISO, accept it
+      const startIsoRaw = seg?.start_utc || seg?.start_iso || null;
+      const endIsoRaw   = seg?.end_utc   || seg?.end_iso   || null;
+      if (startIsoRaw && endIsoRaw && _isIsoLike(startIsoRaw) && _isIsoLike(endIsoRaw)) {
+        return { startUtcIso: String(startIsoRaw), endUtcIso: String(endIsoRaw) };
+      }
 
-  const sMin = _parseHHMM(startHH);
-  const eMin = _parseHHMM(endHH);
-  if (sMin == null || eMin == null) return { startUtcIso: null, endUtcIso: null };
+      // Weekly schedule inputs
+      const startHH = String(seg?.start || '').trim(); // "HH:MM"
+      const endHH   = String(seg?.end   || '').trim(); // "HH:MM"
+      if (!startHH || !endHH) return { startUtcIso: null, endUtcIso: null };
 
-  const overnight = (eMin <= sMin);
-  const endYmd = overnight ? _addDaysYmd(date, 1) : date;
+      const sMin = _parseHHMM(startHH);
+      const eMin = _parseHHMM(endHH);
+      if (sMin == null || eMin == null) return { startUtcIso: null, endUtcIso: null };
 
-  return {
-    startUtcIso: ukLocalToUtcISO(date, startHH),
-    endUtcIso:   ukLocalToUtcISO(endYmd, endHH)
-  };
-};
+      const overnight = (eMin <= sMin);
+      const endYmd = overnight ? _addDaysYmd(date, 1) : date;
 
- for (let i = 0; i < actual_schedule_json.length; i++) {
-  const seg  = actual_schedule_json[i] || {};
-  const date = seg.date;
+      return {
+        startUtcIso: ukLocalToUtcISO(date, startHH),
+        endUtcIso:   ukLocalToUtcISO(endYmd, endHH)
+      };
+    };
 
-  const { startUtcIso, endUtcIso } = scheduleEntryToUtcRange(seg);
-  const start = startUtcIso;
-  const end   = endUtcIso;
+    for (let i = 0; i < actual_schedule_json.length; i++) {
+      const seg  = actual_schedule_json[i] || {};
+      const date = seg.date;
 
-  const br = Number(seg.break_mins ?? seg.break_minutes ?? 0);
+      const { startUtcIso, endUtcIso } = scheduleEntryToUtcRange(seg);
+      const start = startUtcIso;
+      const end   = endUtcIso;
 
-  if (!date || !start || !end) continue;
+      const br = Number(seg.break_mins ?? seg.break_minutes ?? 0);
 
-  const policy = await loadPolicy(env, clientId, date);
+      if (!date || !start || !end) continue;
 
-  let segsArr = [[start, end]];
-  segsArr = subtractBreak(segsArr, null, null, br);
+      const policy = await loadPolicy(env, clientId, date);
 
-  const h = classifyMinutes(env, policy, segsArr);
+      let segsArr = [[start, end]];
+      segsArr = subtractBreak(segsArr, null, null, br);
+
+      const h = classifyMinutes(env, policy, segsArr);
 
       const p = pay || {};
       const c = charge || {};
@@ -5248,13 +5290,13 @@ const scheduleEntryToUtcRange = (seg) => {
       segPayTotal += segPay;
       segChgTotal += segChg;
 
-   segments.push({
-  segment_id: `ts:${ts.timesheet_id}:${i}`,
-  date,
-  ward: seg.ward || null,
-  start_utc: start, // now UTC ISO
-  end_utc:   end,   // now UTC ISO
-  break_mins: br,
+      segments.push({
+        segment_id: `ts:${ts.timesheet_id}:${i}`,
+        date,
+        ward: seg.ward || null,
+        start_utc: start, // now UTC ISO
+        end_utc:   end,   // now UTC ISO
+        break_mins: br,
         hours_day:   h.hours_day   || 0,
         hours_night: h.hours_night || 0,
         hours_sat:   h.hours_sat   || 0,
@@ -5520,6 +5562,70 @@ const scheduleEntryToUtcRange = (seg) => {
       body: JSON.stringify(weekPatch)
     }
   );
+
+  // ─────────────────────────────────────────────────────────────
+  // MINIMAL AUDIT: detect "hours/schedule changed" and log processed
+  // ─────────────────────────────────────────────────────────────
+  const afterScheduleJsonStr = stableJson(actual_schedule_json ?? ts?.actual_schedule_json ?? null);
+  const scheduleChanged = beforeScheduleJsonStr !== afterScheduleJsonStr;
+
+  const hoursChanged =
+    Number(beforeHours.day   || 0) !== Number(hours.day   || 0) ||
+    Number(beforeHours.night || 0) !== Number(hours.night || 0) ||
+    Number(beforeHours.sat   || 0) !== Number(hours.sat   || 0) ||
+    Number(beforeHours.sun   || 0) !== Number(hours.sun   || 0) ||
+    Number(beforeHours.bh    || 0) !== Number(hours.bh    || 0);
+
+  // Only log HOURS_CHANGED when there *was* something before (avoid double-noise on first creation)
+  if (!createdNow && (hoursChanged || scheduleChanged)) {
+    try {
+      await writeAudit(
+        env,
+        user,
+        'TIMESHEET_HOURS_CHANGED',
+        {
+          timesheet_id: ts.timesheet_id,
+          contract_week_id: cw.id,
+          contract_id: contract.id,
+          sheet_scope: 'WEEKLY',
+          submission_mode: 'MANUAL',
+          source: 'contract_week_manual_upsert',
+          before: {
+            hours: beforeHours,
+            schedule_present: !!(beforeScheduleJsonStr && beforeScheduleJsonStr !== 'null'),
+            schedule_len: Array.isArray(ts?.actual_schedule_json) ? ts.actual_schedule_json.length : null
+          },
+          after: {
+            hours,
+            schedule_present: !!(afterScheduleJsonStr && afterScheduleJsonStr !== 'null'),
+            schedule_len: Array.isArray(actual_schedule_json) ? actual_schedule_json.length : null
+          }
+        },
+        { entity: 'timesheets', subject_id: ts.timesheet_id, req }
+      );
+    } catch {}
+  }
+
+  // Always log PROCESSED after the snapshot is written successfully
+  try {
+    await writeAudit(
+      env,
+      user,
+      'TIMESHEET_PROCESSED',
+      {
+        timesheet_id: ts.timesheet_id,
+        contract_week_id: cw.id,
+        contract_id: contract.id,
+        sheet_scope: 'WEEKLY',
+        submission_mode: 'MANUAL',
+        source: 'contract_week_manual_upsert',
+        processing_status: processingStatus,
+        hours,
+        schedule_len: Array.isArray(actual_schedule_json) ? actual_schedule_json.length : null
+      },
+      { entity: 'timesheets', subject_id: ts.timesheet_id, req }
+    );
+  } catch {}
 
   // ─────────────────────────────────────────────────────────────
   // QR actions (revoke-to-manual / reissue)
@@ -6402,7 +6508,11 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
       ...currentTs,
       version: newVersion,
       is_current: true,
-      status: 'SUBMITTED',
+
+      // ✅ IMPORTANT: must be a valid timesheet_status_enum
+      // Keep the prior status (from DB) rather than using an invalid enum like 'SUBMITTED'
+      status: currentTs.status || 'RECEIVED',
+
       revoked_reason: null,
       revoked_by: null,
 
@@ -6436,6 +6546,10 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
 
     const created = (await ins.json().catch(() => []))[0] || null;
     return created || { ...currentTs, version: newVersion, is_current: true };
+  };
+
+  const stableJson = (x) => {
+    try { return JSON.stringify(x ?? null); } catch { return ''; }
   };
 
   // 3) Load DAILY timesheet (current version)
@@ -6472,6 +6586,12 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     return withCORS(env, req, badRequest('Timesheet already invoiced or paid; cannot edit'));
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // MINIMAL TIMESHEET AUDIT: capture BEFORE for diffing
+  // ─────────────────────────────────────────────────────────────
+  const tsBefore = { ...ts };
+  const finBefore = { ...tsfin };
+
   const hadQrBefore = !!ts.qr_status;
 
   // Decide requested QR action (priority)
@@ -6481,6 +6601,10 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
   else if (hadQrBefore && rawDisableQr) qrAction = 'DISABLE';
   else if (hadQrBefore && rawIssueQr) qrAction = 'ISSUE';
 
+  const preRotateVersion = Number(ts.version || 1);
+  let rotated = false;
+  let rotateReason = null;
+
   // Rotate for revoke/disable/reissue so restore is possible.
   if (hadQrBefore && (qrAction === 'REISSUE' || qrAction === 'REVOKE_TO_MANUAL' || qrAction === 'DISABLE')) {
     const why =
@@ -6488,7 +6612,9 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
       (qrAction === 'REVOKE_TO_MANUAL') ? 'QR_REVOKED_TO_MANUAL' :
       'QR_DISABLED_TO_MANUAL';
 
+    rotateReason = why;
     ts = await rotateTimesheetVersion(ts, why);
+    rotated = true;
   }
 
   // 5) Patch worked/break fields (ONLY what was provided)
@@ -6535,6 +6661,76 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
       `&is_current=eq.true` +
       `&select=*`
   ).catch(() => null);
+
+  // ─────────────────────────────────────────────────────────────
+  // MINIMAL TIMESHEET AUDIT: log HOURS_CHANGED only when meaningful
+  // ─────────────────────────────────────────────────────────────
+  const changedFields = [];
+  const same = (a, b) => String(a ?? '') === String(b ?? '');
+
+  if (worked_start_iso !== undefined && !same(tsBefore.worked_start_iso, updatedTs?.worked_start_iso)) changedFields.push('worked_start_iso');
+  if (worked_end_iso   !== undefined && !same(tsBefore.worked_end_iso,   updatedTs?.worked_end_iso))   changedFields.push('worked_end_iso');
+  if (break_start_iso  !== undefined && !same(tsBefore.break_start_iso,  updatedTs?.break_start_iso))  changedFields.push('break_start_iso');
+  if (break_end_iso    !== undefined && !same(tsBefore.break_end_iso,    updatedTs?.break_end_iso))    changedFields.push('break_end_iso');
+  if (break_minutes    !== undefined && !same(tsBefore.break_minutes,    updatedTs?.break_minutes))    changedFields.push('break_minutes');
+
+  const hoursChangedBuckets = !!(finAfter && (
+    Number(finBefore.hours_day   ?? 0) !== Number(finAfter.hours_day   ?? 0) ||
+    Number(finBefore.hours_night ?? 0) !== Number(finAfter.hours_night ?? 0) ||
+    Number(finBefore.hours_sat   ?? 0) !== Number(finAfter.hours_sat   ?? 0) ||
+    Number(finBefore.hours_sun   ?? 0) !== Number(finAfter.hours_sun   ?? 0) ||
+    Number(finBefore.hours_bh    ?? 0) !== Number(finAfter.hours_bh    ?? 0) ||
+    Number(finBefore.total_hours ?? 0) !== Number(finAfter.total_hours ?? 0)
+  ));
+
+  if (changedFields.length || hoursChangedBuckets) {
+    try {
+      await writeAudit(
+        env,
+        user,
+        'TIMESHEET_HOURS_CHANGED',
+        {
+          timesheet_id: timesheetId,
+          sheet_scope: 'DAILY',
+          submission_mode: 'MANUAL',
+          changed_fields: changedFields,
+          rotated_for_qr: rotated,
+          rotate_reason: rotateReason,
+          before: {
+            worked_start_iso: tsBefore.worked_start_iso ?? null,
+            worked_end_iso:   tsBefore.worked_end_iso   ?? null,
+            break_start_iso:  tsBefore.break_start_iso  ?? null,
+            break_end_iso:    tsBefore.break_end_iso    ?? null,
+            break_minutes:    tsBefore.break_minutes    ?? null,
+            bucket_hours: {
+              day:   Number(finBefore.hours_day   ?? 0),
+              night: Number(finBefore.hours_night ?? 0),
+              sat:   Number(finBefore.hours_sat   ?? 0),
+              sun:   Number(finBefore.hours_sun   ?? 0),
+              bh:    Number(finBefore.hours_bh    ?? 0),
+              total: Number(finBefore.total_hours ?? 0)
+            }
+          },
+          after: {
+            worked_start_iso: updatedTs?.worked_start_iso ?? null,
+            worked_end_iso:   updatedTs?.worked_end_iso   ?? null,
+            break_start_iso:  updatedTs?.break_start_iso  ?? null,
+            break_end_iso:    updatedTs?.break_end_iso    ?? null,
+            break_minutes:    updatedTs?.break_minutes    ?? null,
+            bucket_hours: finAfter ? {
+              day:   Number(finAfter.hours_day   ?? 0),
+              night: Number(finAfter.hours_night ?? 0),
+              sat:   Number(finAfter.hours_sat   ?? 0),
+              sun:   Number(finAfter.hours_sun   ?? 0),
+              bh:    Number(finAfter.hours_bh    ?? 0),
+              total: Number(finAfter.total_hours ?? 0)
+            } : null
+          }
+        },
+        { entity: 'timesheets', subject_id: timesheetId, req }
+      );
+    } catch {}
+  }
 
   // 8) Evidence gating
   let qrIssued = false;
@@ -6635,6 +6831,105 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     }
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // MINIMAL TIMESHEET AUDIT: QR events (only meaningful ones)
+  // ─────────────────────────────────────────────────────────────
+  try {
+    if (qrAction === 'DISABLE' && rotated) {
+      await writeAudit(
+        env,
+        user,
+        'TIMESHEET_QR_DISABLED',
+        {
+          timesheet_id: timesheetId,
+          sheet_scope: 'DAILY',
+          rotated: true,
+          from_version: preRotateVersion,
+          to_version: Number(ts?.version || preRotateVersion),
+          reason: rotateReason
+        },
+        { entity: 'timesheets', subject_id: timesheetId, req }
+      );
+    }
+
+    if (qrAction === 'REVOKE_TO_MANUAL' && rotated) {
+      await writeAudit(
+        env,
+        user,
+        'TIMESHEET_QR_REVOKED_TO_MANUAL',
+        {
+          timesheet_id: timesheetId,
+          sheet_scope: 'DAILY',
+          rotated: true,
+          from_version: preRotateVersion,
+          to_version: Number(ts?.version || preRotateVersion),
+          reason: rotateReason
+        },
+        { entity: 'timesheets', subject_id: timesheetId, req }
+      );
+    }
+
+    if (qrIssued && qrToken) {
+      await writeAudit(
+        env,
+        user,
+        'TIMESHEET_QR_ISSUED',
+        {
+          timesheet_id: timesheetId,
+          sheet_scope: 'DAILY',
+          qr_token: qrToken,
+          qr_r2_key: qr_r2_key || null,
+          pdf_r2_key: pdfKey || null
+        },
+        { entity: 'timesheets', subject_id: timesheetId, req }
+      );
+    }
+
+    if (qrReissued && qrToken) {
+      await writeAudit(
+        env,
+        user,
+        'TIMESHEET_QR_REISSUED',
+        {
+          timesheet_id: timesheetId,
+          sheet_scope: 'DAILY',
+          qr_token: qrToken,
+          qr_r2_key: qr_r2_key || null,
+          pdf_r2_key: pdfKey || null
+        },
+        { entity: 'timesheets', subject_id: timesheetId, req }
+      );
+    }
+  } catch {}
+
+  // ─────────────────────────────────────────────────────────────
+  // MINIMAL TIMESHEET AUDIT: PROCESSED (always after rebuild)
+  // ─────────────────────────────────────────────────────────────
+  try {
+    await writeAudit(
+      env,
+      user,
+      'TIMESHEET_PROCESSED',
+      {
+        timesheet_id: timesheetId,
+        sheet_scope: 'DAILY',
+        submission_mode: 'MANUAL',
+        source: 'timesheet_daily_manual_upsert',
+        qr_action: qrAction,
+        processing_status: finAfter?.processing_status ?? null,
+        bucket_hours: finAfter ? {
+          day:   Number(finAfter.hours_day   ?? 0),
+          night: Number(finAfter.hours_night ?? 0),
+          sat:   Number(finAfter.hours_sat   ?? 0),
+          sun:   Number(finAfter.hours_sun   ?? 0),
+          bh:    Number(finAfter.hours_bh    ?? 0),
+          total: Number(finAfter.total_hours ?? 0)
+        } : null
+      },
+      { entity: 'timesheets', subject_id: timesheetId, req }
+    );
+  } catch {}
+
   return withCORS(env, req, ok({
     timesheet_id: timesheetId,
     qr_action: qrAction,
@@ -6646,7 +6941,7 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
   }));
 }
 
- async function handleContractWeekManualAuthorise(env, req, weekId) {
+async function handleContractWeekManualAuthorise(env, req, weekId) {
   // Second checker: stamp TS authorise + TSFIN → READY_FOR_HR or READY_FOR_INVOICE
   // based on client_settings.requires_hr, and mark the week as AUTHORISED.
   const user = await requireUser(env, req, ['admin']);
@@ -6662,7 +6957,18 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
 
   const now = nowIso();
 
-  // Load TSFIN first so we can inspect processing_status before stamping anything
+  // Load current TS + TSFIN first so we can:
+  // - guard QR pending signature
+  // - detect meaningful status change for audit
+  // - include old/new in the audit payload
+  const tsBefore = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(cw.timesheet_id)}` +
+      `&is_current=eq.true` +
+      `&select=timesheet_id,authorised_at_server,submission_mode,sheet_scope,version,status`
+  ).catch(() => null);
+
   const { rows: finRows } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
@@ -6672,8 +6978,12 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
   );
   const fin = finRows?.[0] || null;
 
+  // Track for audit
+  const finBeforeStatus = String(fin?.processing_status || '').toUpperCase();
+  let finAfterStatus = fin?.processing_status || null;
+
   if (fin) {
-    const ps = String(fin.processing_status || '').toUpperCase();
+    const ps = finBeforeStatus;
 
     // NEW: guard for QR-print-and-sign flow
     // If TSFIN is in a QR "awaiting signature" state, do NOT auto-promote.
@@ -6703,6 +7013,7 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     if (ps === 'PENDING_AUTH' || ps === 'READY_FOR_HR') {
       newStatus = requiresHr ? 'READY_FOR_HR' : 'READY_FOR_INVOICE';
     }
+    finAfterStatus = newStatus;
 
     // Promote TSFIN (unchanged for non-QR flows)
     await fetch(
@@ -6740,8 +7051,47 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     }
   ).catch(() => { /* best-effort */ });
 
+  // ─────────────────────────────────────────────────────────────
+  // AUDIT (Timesheet tab)
+  // ─────────────────────────────────────────────────────────────
+  try {
+    const wasAlreadyAuthorised = !!(tsBefore && tsBefore.authorised_at_server);
+    const didPromoteStatus = (fin && String(finBeforeStatus || '') !== String(finAfterStatus || ''));
+
+    // Only log meaningful events:
+    // - first time authorise (not repeated clicks)
+    // - TSFIN processing_status actually changed
+    if (!wasAlreadyAuthorised || didPromoteStatus) {
+      await writeAudit(
+        env,
+        user,
+        'TIMESHEET_AUTHORISED',
+        {
+          timesheet_id: cw.timesheet_id,
+          contract_week_id: weekId,
+          authorised_at_utc: now,
+          tsfin_processing_status_before: finBeforeStatus || null,
+          tsfin_processing_status_after: finAfterStatus ? String(finAfterStatus).toUpperCase() : null
+        },
+        {
+          entity: 'timesheets',
+          subject_id: cw.timesheet_id,
+          req,
+          before: {
+            authorised_at_server: tsBefore?.authorised_at_server || null,
+            tsfin_processing_status: finBeforeStatus || null
+          },
+          reason: didPromoteStatus ? 'PROMOTED_TSFIN_STATUS' : 'STAMPED_AUTHORISE'
+        }
+      );
+    }
+  } catch {
+    // best-effort
+  }
+
   return withCORS(env, req, ok({ authorised: true, timesheet_id: cw.timesheet_id }));
 }
+
 
 async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
@@ -7387,7 +7737,7 @@ async function handleTimesheetsEligibilityWeekly(env, req) {
 }
 
 // POST /api/timesheets/:id/evidence
- async function handleTimesheetEvidenceAdd(env, req, tsId) {
+async function handleTimesheetEvidenceAdd(env, req, tsId) {
   const enc = encodeURIComponent;
 
   // Auth: admin only
@@ -7422,7 +7772,7 @@ async function handleTimesheetsEligibilityWeekly(env, req) {
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
         `?timesheet_id=eq.${enc(tsId)}` +
-        `&select=timesheet_id` +
+        `&select=timesheet_id,contract_id,week_ending_date,sheet_scope,submission_mode` +
         `&limit=1`
     );
     const ts = tsRows?.[0] || null;
@@ -7484,6 +7834,33 @@ async function handleTimesheetsEligibilityWeekly(env, req) {
       row = null;
     }
 
+    // ✅ Audit: evidence added
+    try {
+      await writeAudit(
+        env,
+        user,
+        'TIMESHEET_EVIDENCE_ADDED',
+        {
+          timesheet_id: tsId,
+          evidence_id: row?.id || null,
+          kind,
+          display_name: displayName || kind,
+          storage_key: storageKey,
+          contract_id: ts.contract_id || null,
+          week_ending_date: ts.week_ending_date || null,
+          sheet_scope: ts.sheet_scope || null,
+          submission_mode: ts.submission_mode || null
+        },
+        {
+          entity: 'timesheets',
+          subject_id: tsId,
+          req
+        }
+      );
+    } catch {
+      // best-effort
+    }
+
     if (row && row.id) {
       return withCORS(env, req, ok(row));
     }
@@ -7498,8 +7875,9 @@ async function handleTimesheetsEligibilityWeekly(env, req) {
   }
 }
 
+
 // DELETE /api/timesheets/:id/evidence/:evidence_id
- async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
+async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
   const enc = encodeURIComponent;
 
   // Auth: admin only
@@ -7520,12 +7898,27 @@ async function handleTimesheetsEligibilityWeekly(env, req) {
       `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
         `?id=eq.${enc(evidenceId)}` +
         `&timesheet_id=eq.${enc(tsId)}` +
-        `&select=id,storage_key` +
+        `&select=id,storage_key,kind,display_name` +
         `&limit=1`
     );
     const ev = evRows?.[0] || null;
     if (!ev) {
       return withCORS(env, req, notFound('Evidence not found for this timesheet'));
+    }
+
+    // Load minimal TS context for audit
+    let tsMeta = null;
+    try {
+      const { rows: tsRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?timesheet_id=eq.${enc(tsId)}` +
+          `&select=timesheet_id,contract_id,week_ending_date,sheet_scope,submission_mode` +
+          `&limit=1`
+      );
+      tsMeta = tsRows?.[0] || null;
+    } catch {
+      tsMeta = null;
     }
 
     const storageKey = ev.storage_key || null;
@@ -7558,6 +7951,33 @@ async function handleTimesheetsEligibilityWeekly(env, req) {
         req,
         serverError(`Failed to delete timesheet evidence: ${t}`)
       );
+    }
+
+    // ✅ Audit: evidence removed
+    try {
+      await writeAudit(
+        env,
+        user,
+        'TIMESHEET_EVIDENCE_REMOVED',
+        {
+          timesheet_id: tsId,
+          evidence_id: evidenceId,
+          kind: ev.kind || null,
+          display_name: ev.display_name || null,
+          storage_key: storageKey,
+          contract_id: tsMeta?.contract_id || null,
+          week_ending_date: tsMeta?.week_ending_date || null,
+          sheet_scope: tsMeta?.sheet_scope || null,
+          submission_mode: tsMeta?.submission_mode || null
+        },
+        {
+          entity: 'timesheets',
+          subject_id: tsId,
+          req
+        }
+      );
+    } catch {
+      // best-effort
     }
 
     return withCORS(env, req, ok({ ok: true }));
@@ -7878,7 +8298,6 @@ async function rebuildWeeklyTsfinForTimesheet(env, timesheetId, contract) {
   return { ok: true };
 }
 
-
 async function handleTimesheetsSubmitWeekly(env, req) {
   // Public / broker: submit weekly timesheet (ELECTRONIC or QR intent)
   const enc = encodeURIComponent;
@@ -7950,12 +8369,13 @@ async function handleTimesheetsSubmitWeekly(env, req) {
         `&limit=1`
     );
 
+    // ✅ include hours for minimal “hours changed” audit diff
     existingFin = await sbGetOne(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
         `?timesheet_id=eq.${enc(existingTimesheetId)}` +
         `&is_current=eq.true` +
-        `&select=paid_at_utc,locked_by_invoice_id,processing_status,id` +
+        `&select=paid_at_utc,locked_by_invoice_id,processing_status,id,hours_day,hours_night,hours_sat,hours_sun,hours_bh,total_hours` +
         `&limit=1`
     );
 
@@ -8174,14 +8594,52 @@ async function handleTimesheetsSubmitWeekly(env, req) {
     `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${enc(contract.client_id)}&select=id,name`
   );
 
+  // Actor for audit (public route): show candidate name in audit tab
+  const auditActor = {
+    id: null,
+    display_name: candidateRec?.display_name ? `${candidateRec.display_name} (candidate)` : 'CloudTMS server',
+    email: candidateRec?.email || null,
+    role: 'candidate'
+  };
+
   const now = nowIso();
   const weC = ymdCompact(cw.week_ending_date);
-  const bookingId = makeWeeklyBookingId(contract.candidate_id, contract, cw);
+
+  // ✅ FIX: makeWeeklyBookingId is async (wraps async makeBookingId)
+  const bookingId = await makeWeeklyBookingId(contract.candidate_id, contract, cw);
+  if (!bookingId || typeof bookingId !== 'string' || bookingId === '{}' || bookingId === 'null' || bookingId === 'undefined') {
+    return withCORS(env, req, badRequest(`Invalid booking_id produced: "${String(bookingId)}"`));
+  }
 
   // If resubmitting into same timesheet_id, rotate version; otherwise create new timesheet_id
   // We keep same timesheet_id for auditability and consistency with your versioning model.
   let timesheetIdToUse = existingTimesheetId || null;
   let newVersion = 1;
+
+  // Minimal hours-change detection (for audit)
+  const stableJson = (x) => { try { return JSON.stringify(x ?? null); } catch { return ''; } };
+  const prevHours = existingFin ? {
+    day:   Number(existingFin.hours_day   ?? 0),
+    night: Number(existingFin.hours_night ?? 0),
+    sat:   Number(existingFin.hours_sat   ?? 0),
+    sun:   Number(existingFin.hours_sun   ?? 0),
+    bh:    Number(existingFin.hours_bh    ?? 0),
+    total: Number(existingFin.total_hours ?? 0),
+  } : null;
+  const nextHours = {
+    day:   Number(hours.day   ?? 0),
+    night: Number(hours.night ?? 0),
+    sat:   Number(hours.sat   ?? 0),
+    sun:   Number(hours.sun   ?? 0),
+    bh:    Number(hours.bh    ?? 0),
+    total: Number((Number(hours.day||0)+Number(hours.night||0)+Number(hours.sat||0)+Number(hours.sun||0)+Number(hours.bh||0)).toFixed(2))
+  };
+  const scheduleChanged =
+    !!existingTs &&
+    stableJson(existingTs.actual_schedule_json) !== stableJson(actual_schedule_json);
+  const hoursChanged =
+    !!prevHours &&
+    stableJson(prevHours) !== stableJson(nextHours);
 
   if (timesheetIdToUse) {
     // Determine next version number
@@ -8232,11 +8690,18 @@ async function handleTimesheetsSubmitWeekly(env, req) {
   }
 
   // Create new current timesheet version row
-  const tsPayload = [{
+  const tsRow = {
     booking_id: bookingId,
+
+    // ✅ IMPORTANT: keep the SAME timesheet_id on resubmissions (versioned model)
+    ...(timesheetIdToUse ? { timesheet_id: timesheetIdToUse } : {}),
+
     version: newVersion,
     is_current: true,
-    status: 'SUBMITTED',
+
+    // ✅ IMPORTANT: must be valid timesheet_status_enum (no "SUBMITTED")
+    status: 'RECEIVED',
+
     sheet_scope: 'WEEKLY',
     occupant_key_norm: (candidateRec?.display_name || String(candidateRec?.id)).toLowerCase(),
     hospital_norm:     (contract.display_site || clientRec?.name || String(contract.client_id)).toLowerCase(),
@@ -8254,15 +8719,23 @@ async function handleTimesheetsSubmitWeekly(env, req) {
     authorised_at_server: wantsQR ? null : now,
     created_at: now,
     updated_at: now,
-    qr_payload_json: {} // keep NOT NULL safe
-  }];
+
+    // Keep NOT NULL safe + avoid accidental “QR-looking” rows on ELECTRONIC
+    qr_payload_json: {},
+    qr_status: null,
+    qr_token: null,
+    qr_generated_at: null,
+    qr_scanned_at: null,
+    qr_scan_info_json: null,
+    qr_r2_key: null
+  };
 
   const tsIns = await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheets`,
     {
       method: 'POST',
       headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-      body: JSON.stringify(tsPayload)
+      body: JSON.stringify([tsRow])
     }
   );
   if (!tsIns.ok) {
@@ -8299,6 +8772,93 @@ async function handleTimesheetsSubmitWeekly(env, req) {
       }
     ).catch(() => {});
   }
+
+  // ─────────────────────────────────────────────────────────────
+  // ✅ TIMESHEET TAB AUDIT (minimal + meaningful)
+  // ─────────────────────────────────────────────────────────────
+  try {
+    if (!existingTimesheetId) {
+      await writeAudit(
+        env,
+        auditActor,
+        'TIMESHEET_CREATED',
+        {
+          timesheet_id: ts.timesheet_id,
+          sheet_scope: 'WEEKLY',
+          submission_route: wantsQR ? 'QR' : 'ELECTRONIC',
+          submission_mode: wantsQR ? 'MANUAL' : 'ELECTRONIC',
+          version: newVersion,
+          contract_week_id: cw.id,
+          contract_id: contract.id
+        },
+        { entity: 'timesheets', subject_id: ts.timesheet_id, req }
+      );
+    } else {
+      await writeAudit(
+        env,
+        auditActor,
+        'TIMESHEET_RESUBMITTED',
+        {
+          timesheet_id: ts.timesheet_id,
+          sheet_scope: 'WEEKLY',
+          submission_route: wantsQR ? 'QR' : 'ELECTRONIC',
+          version: newVersion,
+          previous_version: newVersion - 1,
+          schedule_changed: !!scheduleChanged,
+          hours_changed: !!hoursChanged
+        },
+        { entity: 'timesheets', subject_id: ts.timesheet_id, req }
+      );
+
+      if (scheduleChanged || hoursChanged) {
+        await writeAudit(
+          env,
+          auditActor,
+          'TIMESHEET_HOURS_CHANGED',
+          {
+            timesheet_id: ts.timesheet_id,
+            sheet_scope: 'WEEKLY',
+            version: newVersion,
+            before_hours: prevHours,
+            after_hours: nextHours,
+            schedule_changed: !!scheduleChanged
+          },
+          { entity: 'timesheets', subject_id: ts.timesheet_id, req }
+        );
+      }
+    }
+
+    await writeAudit(
+      env,
+      auditActor,
+      'TIMESHEET_SUBMITTED',
+      {
+        timesheet_id: ts.timesheet_id,
+        sheet_scope: 'WEEKLY',
+        submission_route: wantsQR ? 'QR' : 'ELECTRONIC',
+        submission_mode: wantsQR ? 'MANUAL' : 'ELECTRONIC',
+        version: newVersion
+      },
+      { entity: 'timesheets', subject_id: ts.timesheet_id, req }
+    );
+
+    if (!wantsQR) {
+      await writeAudit(
+        env,
+        auditActor,
+        'TIMESHEET_AUTHORISED',
+        {
+          timesheet_id: ts.timesheet_id,
+          sheet_scope: 'WEEKLY',
+          version: newVersion,
+          authorised_at_server: now,
+          r2_nurse_key: nurseKey,
+          r2_auth_key: authKey
+        },
+        { entity: 'timesheets', subject_id: ts.timesheet_id, req }
+      );
+    }
+  } catch {}
 
   // Snapshot
   const n2 = (x) => Number(x) || 0;
@@ -8382,6 +8942,7 @@ async function handleTimesheetsSubmitWeekly(env, req) {
     hours_sun:   hours.sun,
     hours_bh:    hours.bh,
 
+    // (keep your snapshot schema fields as-is)
     pay_rate_day:   pay.day,
     pay_rate_night: pay.night,
     pay_rate_sat:   pay.sat,
@@ -8408,6 +8969,24 @@ async function handleTimesheetsSubmitWeekly(env, req) {
   };
 
   await writeSnapshot(env, snap);
+
+  // ✅ audit: processed (after snapshot)
+  try {
+    await writeAudit(
+      env,
+      auditActor,
+      'TIMESHEET_PROCESSED',
+      {
+        timesheet_id: ts.timesheet_id,
+        sheet_scope: 'WEEKLY',
+        submission_route: wantsQR ? 'QR' : 'ELECTRONIC',
+        version: newVersion,
+        processing_status: processingStatus,
+        hours: nextHours
+      },
+      { entity: 'timesheets', subject_id: ts.timesheet_id, req }
+    );
+  } catch {}
 
   // If QR route, issue QR immediately (scenario2), generate PDF, and queue email
   let qrPdfKey = null;
@@ -8531,24 +9110,26 @@ async function handleTimesheetsSubmitWeekly(env, req) {
         ).catch(() => {});
       }
     } catch {}
-  }
 
-  // Audit (best-effort)
-  try {
-    await writeAudit(
-      env,
-      null,
-      wantsQR ? 'CANDIDATE_WEEKLY_SELECTED_QR' : (existingTimesheetId ? 'CANDIDATE_WEEKLY_ELECTRONIC_RESUBMITTED' : 'CANDIDATE_WEEKLY_ELECTRONIC_SUBMITTED'),
-      {
-        contract_week_id: cw.id,
-        contract_id: contract.id,
-        timesheet_id: ts.timesheet_id,
-        version: newVersion,
-        route: wantsQR ? 'QR' : 'ELECTRONIC'
-      },
-      { entity: 'contract_weeks', subject_id: cw.id, req }
-    );
-  } catch {}
+    // ✅ audit: QR issued (includes pdf key)
+    try {
+      await writeAudit(
+        env,
+        auditActor,
+        'TIMESHEET_QR_ISSUED',
+        {
+          timesheet_id: ts.timesheet_id,
+          sheet_scope: 'WEEKLY',
+          version: newVersion,
+          qr_status: 'PENDING',
+          qr_token: qrToken,
+          qr_r2_key: qr_r2_key || null,
+          pdf_r2_key: qrPdfKey || null
+        },
+        { entity: 'timesheets', subject_id: ts.timesheet_id, req }
+      );
+    } catch {}
+  }
 
   return withCORS(env, req, ok({
     timesheet_id: ts.timesheet_id,
@@ -8559,6 +9140,7 @@ async function handleTimesheetsSubmitWeekly(env, req) {
     qr_r2_key: qr_r2_key || null
   }));
 }
+
 
 
 // ----------------------------------------------------------------------------
@@ -8600,21 +9182,20 @@ async function handleTimesheetsSubmitWeekly(env, req) {
   const row = (await res.json().catch(()=>[]))[0];
   return withCORS(env, req, ok(row));
 }
-
- async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
+async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
   const now = nowIso();
 
-  await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`,
-    {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
-      body: JSON.stringify({ authorised_at_server: now, updated_at: now })
-    }
-  ).catch(() => {});
+  // Load current TS + TSFIN first (for meaningful audit + idempotency)
+  const tsBefore = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=timesheet_id,authorised_at_server,submission_mode,sheet_scope,version,status`
+  ).catch(() => null);
 
   const { rows: finRows } = await sbFetch(
     env,
@@ -8624,7 +9205,48 @@ async function handleTimesheetsSubmitWeekly(env, req) {
       `&select=id,client_id,processing_status,locked_by_invoice_id,paid_at_utc`
   );
   const fin = finRows?.[0] || null;
+
+  const finBeforeStatus = String(fin?.processing_status || '').toUpperCase();
+  let finAfterStatus = fin?.processing_status || null;
+
+  // Stamp timesheet as authorised (best effort)
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ authorised_at_server: now, updated_at: now })
+    }
+  ).catch(() => {});
+
   if (!fin) {
+    // Audit: only log if this is a meaningful "first authorise" stamp
+    try {
+      const wasAlreadyAuthorised = !!(tsBefore && tsBefore.authorised_at_server);
+      if (!wasAlreadyAuthorised) {
+        await writeAudit(
+          env,
+          user,
+          'TIMESHEET_AUTHORISED',
+          {
+            timesheet_id: timesheetId,
+            authorised_at_utc: now,
+            tsfin_processing_status_before: null,
+            tsfin_processing_status_after: null
+          },
+          {
+            entity: 'timesheets',
+            subject_id: timesheetId,
+            req,
+            before: { authorised_at_server: tsBefore?.authorised_at_server || null },
+            reason: 'STAMPED_AUTHORISE_NO_TSFIN'
+          }
+        );
+      }
+    } catch {
+      // best-effort
+    }
+
     return withCORS(env, req, ok({ authorised: true, tsfin_updated: false }));
   }
 
@@ -8645,10 +9267,11 @@ async function handleTimesheetsSubmitWeekly(env, req) {
   }
 
   let newStatus = fin.processing_status;
-  const ps = String(fin.processing_status || '').toUpperCase();
+  const ps = finBeforeStatus;
   if (ps === 'PENDING_AUTH' || ps === 'READY_FOR_HR') {
     newStatus = requiresHr ? 'READY_FOR_HR' : 'READY_FOR_INVOICE';
   }
+  finAfterStatus = newStatus;
 
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
@@ -8664,12 +9287,50 @@ async function handleTimesheetsSubmitWeekly(env, req) {
     }
   ).catch(() => {});
 
+  // ─────────────────────────────────────────────────────────────
+  // AUDIT (Timesheet tab) — only meaningful logs
+  // ─────────────────────────────────────────────────────────────
+  try {
+    const wasAlreadyAuthorised = !!(tsBefore && tsBefore.authorised_at_server);
+    const didPromoteStatus = String(finBeforeStatus || '') !== String(finAfterStatus || '').toUpperCase();
+
+    // Log if:
+    // - this is the first time we authorised, OR
+    // - TSFIN processing_status changed
+    if (!wasAlreadyAuthorised || didPromoteStatus) {
+      await writeAudit(
+        env,
+        user,
+        'TIMESHEET_AUTHORISED',
+        {
+          timesheet_id: timesheetId,
+          authorised_at_utc: now,
+          tsfin_processing_status_before: finBeforeStatus || null,
+          tsfin_processing_status_after: finAfterStatus ? String(finAfterStatus).toUpperCase() : null
+        },
+        {
+          entity: 'timesheets',
+          subject_id: timesheetId,
+          req,
+          before: {
+            authorised_at_server: tsBefore?.authorised_at_server || null,
+            tsfin_processing_status: finBeforeStatus || null
+          },
+          reason: didPromoteStatus ? 'PROMOTED_TSFIN_STATUS' : 'STAMPED_AUTHORISE'
+        }
+      );
+    }
+  } catch {
+    // best-effort
+  }
+
   return withCORS(env, req, ok({
     authorised: true,
     tsfin_updated: true,
     processing_status: newStatus
   }));
 }
+
  async function handleTimesheetUnauthorise(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -19247,8 +19908,7 @@ async function handleTimesheetsSummary(env, req) {
 
 
 
-
- async function handleNhspInvoiceRun(env, req) {
+async function handleNhspInvoiceRun(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -19272,7 +19932,7 @@ async function handleTimesheetsSummary(env, req) {
 
   try {
     // 1) Load candidate shifts (reuse logic from handleNhspInvoiceCandidates)
-    const nowIso = runAt.toISOString();
+    const runAtIso = runAt.toISOString();
 
     const { rows: rawShifts } = await sbFetch(
       env,
@@ -19298,7 +19958,7 @@ async function handleTimesheetsSummary(env, req) {
     }
 
     if (!shifts.length) {
-      return withCORS(env, req, ok({ invoices: [], run_at: nowIso }));
+      return withCORS(env, req, ok({ invoices: [], run_at: runAtIso }));
     }
 
     // 2) Filter by TSFIN readiness
@@ -19322,13 +19982,13 @@ async function handleTimesheetsSummary(env, req) {
     });
 
     if (!shifts.length) {
-      return withCORS(env, req, ok({ invoices: [], run_at: nowIso }));
+      return withCORS(env, req, ok({ invoices: [], run_at: runAtIso }));
     }
 
     // 3) Filter by NHSP clients (client_settings.is_nhsp = true)
     const clientIds = [...new Set(shifts.map(s => s.client_id).filter(Boolean))];
     if (!clientIds.length) {
-      return withCORS(env, req, ok({ invoices: [], run_at: nowIso }));
+      return withCORS(env, req, ok({ invoices: [], run_at: runAtIso }));
     }
 
     const { rows: csRows } = await sbFetch(
@@ -19353,7 +20013,7 @@ async function handleTimesheetsSummary(env, req) {
     // Keep only shifts belonging to NHSP clients
     shifts = shifts.filter(s => nhspClients.has(String(s.client_id)));
     if (!shifts.length) {
-      return withCORS(env, req, ok({ invoices: [], run_at: nowIso }));
+      return withCORS(env, req, ok({ invoices: [], run_at: runAtIso }));
     }
 
     // 4) Load defaults & client snapshots for VAT and header info
@@ -19406,7 +20066,7 @@ async function handleTimesheetsSummary(env, req) {
         ? 0
         : (vatCfgByClient.get(cid) ?? defaultVat);
 
-      const issuedAt = nowIso;
+      const issuedAt = runAtIso;
       const termsDays = Number(client.payment_terms_days ?? 30);
       const dueAt = new Date(runAt.getTime() + termsDays * 86400000).toISOString();
 
@@ -19468,6 +20128,26 @@ async function handleTimesheetsSummary(env, req) {
       let sumInc = 0;
       const lines = [];
 
+      // ✅ NEW: per-timesheet aggregation for Timesheet Audit Tab
+      const byTimesheet = new Map(); // tsId -> { shift_count, charge_ex_vat, first_date, last_date }
+      const bumpTs = (tsId, workDate, chargeEx) => {
+        if (!tsId) return;
+        const k = String(tsId);
+        let v = byTimesheet.get(k);
+        if (!v) {
+          v = { shift_count: 0, charge_ex_vat: 0, first_date: null, last_date: null };
+          byTimesheet.set(k, v);
+        }
+        v.shift_count += 1;
+        v.charge_ex_vat += Number(chargeEx || 0);
+
+        if (workDate) {
+          const wd = String(workDate);
+          if (!v.first_date || wd < v.first_date) v.first_date = wd;
+          if (!v.last_date  || wd > v.last_date)  v.last_date  = wd;
+        }
+      };
+
       for (const sh of clientShifts) {
         const chargeEx = Number(sh.charge_amount_snapshot || 0);
         const vatAmt   = round2(chargeEx * (vatRatePct / 100));
@@ -19476,6 +20156,8 @@ async function handleTimesheetsSummary(env, req) {
         sumEx  += chargeEx;
         sumVat += vatAmt;
         sumInc += incAmt;
+
+        bumpTs(sh.timesheet_id || null, sh.work_date || null, chargeEx);
 
         const desc = `NHSP shift ${sh.work_date} ${sh.start_utc}–${sh.end_utc}${sh.ward ? ' (' + sh.ward + ')' : ''}`;
 
@@ -19542,7 +20224,7 @@ async function handleTimesheetsSummary(env, req) {
             subtotal_ex_vat: round2(sumEx),
             vat_amount: round2(sumVat),
             total_inc_vat: round2(sumInc),
-            updated_at: nowIso
+            updated_at: runAtIso
           })
         }
       );
@@ -19562,10 +20244,34 @@ async function handleTimesheetsSummary(env, req) {
           body: JSON.stringify({
             invoice_status: 'INCLUDED',
             invoice_id: invoice.id,
-            updated_at: nowIso
+            updated_at: runAtIso
           })
         }
       ).catch(() => {});
+
+      // ✅ NEW: Timesheet tab audit logging (one event per timesheet_id)
+      try {
+        for (const [tsId, agg] of byTimesheet.entries()) {
+          await writeAudit(
+            env,
+            user,
+            'TIMESHEET_NHSP_INVOICED',
+            {
+              timesheet_id: tsId,
+              invoice_id: invoice.id,
+              client_id: client.id,
+              run_at: issuedAt,
+              shift_count: agg.shift_count,
+              total_charge_ex_vat: round2(agg.charge_ex_vat),
+              work_date_from: agg.first_date,
+              work_date_to: agg.last_date
+            },
+            { entity: 'timesheets', subject_id: tsId, req }
+          );
+        }
+      } catch {
+        // best-effort
+      }
 
       invoicesOut.push({ invoice_id: invoice.id, client_id: client.id, shift_count: clientShifts.length });
     }
@@ -19574,15 +20280,16 @@ async function handleTimesheetsSummary(env, req) {
       env,
       user,
       'NHSP_INVOICE_RUN_COMPLETED',
-      { run_at: nowIso, invoices: invoicesOut },
+      { run_at: runAtIso, invoices: invoicesOut },
       { entity: 'invoice', subject_id: null, req }
     );
 
-    return withCORS(env, req, ok({ run_at: nowIso, invoices: invoicesOut }));
+    return withCORS(env, req, ok({ run_at: runAtIso, invoices: invoicesOut }));
   } catch (e) {
     return withCORS(env, req, serverError(`Failed to run NHSP invoice batch: ${e?.message || e}`));
   }
 }
+
 
  async function handleNhspShiftDefer(env, req, shiftId) {
   const user = await requireUser(env, req, ['admin']);
@@ -27270,8 +27977,10 @@ async function handleUpload(env, req, url) {
   return withCORS(env, req, ok({ ok: true, role, key, etag: putRes?.etag, size, version }));
 }
 
+
 async function handleSubmit(env, req) {
-  const pre = preflightIfNeeded(env, req); if (pre) return pre;
+  const pre = preflightIfNeeded(env, req);
+  if (pre) return pre;
 
   const body = await parseJSONBody(req);
   if (!body) return withCORS(env, req, badRequest("Invalid JSON"));
@@ -27285,7 +27994,10 @@ async function handleSubmit(env, req) {
   for (const k of required) if (!body[k]) return withCORS(env, req, badRequest(`Missing ${k}`));
 
   if (!isEligibleWindow(body.worked_end_iso)) {
-    return withCORS(env, req, new Response(JSON.stringify({ error: "Shift not in eligible window (must be ongoing or ended â‰¤ 4h)", code: "INELIGIBLE" }), { status: 422, headers: JSON_HEADERS }));
+    return withCORS(env, req, new Response(JSON.stringify({
+      error: "Shift not in eligible window (must be ongoing or ended ≤ 4h)",
+      code: "INELIGIBLE"
+    }), { status: 422, headers: JSON_HEADERS }));
   }
 
   const nurseHead = await r2Head(env, body.nurse_key);
@@ -27293,10 +28005,10 @@ async function handleSubmit(env, req) {
   if (!nurseHead || !authHead) return withCORS(env, req, badRequest("Signatures not uploaded"));
 
   const worked_date_local = londonDate(body.worked_start_iso);
-  const week_ending_date = weekEndingSunday(worked_date_local);
-  const break_minutes = minutesBetween(body.break_start_iso, body.break_end_iso);
-  const worked_minutes = minutesBetween(body.worked_start_iso, body.worked_end_iso);
-  const break_expected = parseInt(env.BREAK_EXPECTED_MINUTES || "60", 10);
+  const week_ending_date  = weekEndingSunday(worked_date_local);
+  const break_minutes     = minutesBetween(body.break_start_iso, body.break_end_iso);
+  const worked_minutes    = minutesBetween(body.worked_start_iso, body.worked_end_iso);
+  const break_expected    = parseInt(env.BREAK_EXPECTED_MINUTES || "60", 10);
 
   let version = parseInt(body.version || "0", 10);
   if (!version || Number.isNaN(version)) {
@@ -27307,13 +28019,21 @@ async function handleSubmit(env, req) {
   const current = await sbGetTimesheetCurrent(env, body.booking_id);
   if (current && current.is_current === true) {
     const maxV = await sbMaxVersion(env, body.booking_id);
-    if (maxV >= 1) return withCORS(env, req, conflict("A current timesheet exists for this booking. Revoke before resubmitting."));
+    if (maxV >= 1) {
+      return withCORS(env, req, conflict("A current timesheet exists for this booking. Revoke before resubmitting."));
+    }
   }
+
+  const authorised_at_server = new Date().toISOString();
 
   const row = {
     booking_id: body.booking_id,
     version,
     is_current: true,
+
+    // ✅ Explicitly classify this as DAILY + ELECTRONIC (so admin UI + routes behave correctly)
+    sheet_scope: "DAILY",
+    submission_mode: "ELECTRONIC",
 
     occupant_key_norm: (body.candidate_id || body.occupant_key || "").toLowerCase(),
     hospital_norm: (body.hospital || "").toLowerCase(),
@@ -27334,15 +28054,26 @@ async function handleSubmit(env, req) {
 
     auth_name: body.auth_name,
     auth_job_title: body.auth_job_title,
-    authorised_at_server: new Date().toISOString(),
+    authorised_at_server,
 
     r2_nurse_key: body.nurse_key,
     r2_auth_key: body.authoriser_key,
 
-    status: "SUBMITTED",
+    // ✅ MUST match timesheet_status_enum (no "SUBMITTED" in your DB enum)
+    status: "RECEIVED",
+
     idempotency_key: body.idempotency_key,
     client_hash: body.client_hash || null,
     client_ua: body.client_user_agent || req.headers.get("user-agent") || "",
+
+    // ✅ Keep NOT NULL safe + avoid default QR “PENDING” making it look like QR
+    qr_payload_json: {},
+    qr_status: null,
+    qr_token: null,
+    qr_generated_at: null,
+    qr_scanned_at: null,
+    qr_scan_info_json: null,
+    qr_r2_key: null
   };
 
   let ts;
@@ -27353,7 +28084,58 @@ async function handleSubmit(env, req) {
   }
 
   const ts_id = ts?.timesheet_id || null;
-  return withCORS(env, req, ok({ ok: true, timesheet_id: ts_id, status: "SUBMITTED", break_ok: break_minutes === break_expected, version }));
+
+  // ─────────────────────────────────────────────────────────────
+  // ✅ TIMESHEET TAB AUDIT (minimal + meaningful)
+  // Action: TIMESHEET_CREATED (source: daily electronic submit)
+  // ─────────────────────────────────────────────────────────────
+  try {
+    // Actor is not a tms_user here (public submit), so label as mobile submitter.
+    const auditActor = {
+      id: null,
+      display_name: (body.occupant_key || body.candidate_id || "Mobile submit"),
+      email: null,
+      role: "mobile"
+    };
+
+    if (ts_id) {
+      await writeAudit(
+        env,
+        auditActor,
+        "TIMESHEET_CREATED",
+        {
+          source: "DAILY_ELECTRONIC_SUBMIT",
+          timesheet_id: ts_id,
+          booking_id: body.booking_id,
+          sheet_scope: "DAILY",
+          submission_mode: "ELECTRONIC",
+          version,
+          week_ending_date,
+          worked_start_iso: body.worked_start_iso,
+          worked_end_iso: body.worked_end_iso,
+          break_minutes,
+          authorised_at_server,
+          idempotency_key: body.idempotency_key
+        },
+        {
+          entity: "timesheets",
+          subject_id: ts_id,
+          correlation_id: body.idempotency_key,
+          req
+        }
+      );
+    }
+  } catch {
+    // best-effort
+  }
+
+  return withCORS(env, req, ok({
+    ok: true,
+    timesheet_id: ts_id,
+    status: "RECEIVED",
+    break_ok: break_minutes === break_expected,
+    version
+  }));
 }
 
 // ---------------------- Revoke flows ----------------------
@@ -33668,43 +34450,68 @@ async function writeAudit(env, user, action, details = null, opts = {}) {
 
     // Request meta (all optional)
     const ip  = req?.headers?.get('cf-connecting-ip')
-             || req?.headers?.get('x-forwarded-for')
+             || (req?.headers?.get('x-forwarded-for') || '').split(',')[0].trim()
              || null;
     const ua  = req?.headers?.get('user-agent') || null;
 
     // Prefer an explicit correlation_id (e.g., mail_outbox.id), then fallbacks
     const correlationId =
       opts.correlation_id ??
-      (details && details.mail_id) ??
+      (details && (details.mail_id || details.mailId)) ??
       req?.headers?.get('x-correlation-id') ??
       req?.headers?.get('x-request-id') ??
       req?.headers?.get('idempotency-key') ??
       req?.headers?.get('x-idempotency-key') ??
       null;
 
-    // Actor normalization (support id or sub; include role/email if present)
-    const actor_user_id       = user?.id ?? user?.sub ?? null;
-    const actor_display       = user?.email ?? null;
-    const actor_role_at_time  = user?.role ?? null;
+    // Actor normalization
+    const actor_user_id      = user?.id ?? user?.sub ?? null;
+    const actor_role_at_time = user?.role ?? 'system';
+
+    // Prefer display_name from DB (tms_users) so audit renders nicely
+    let actor_display = user?.display_name ?? user?.email ?? null;
+    if (actor_user_id && !user?.display_name) {
+      try {
+        const enc = encodeURIComponent;
+        const { rows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/tms_users` +
+            `?id=eq.${enc(String(actor_user_id))}` +
+            `&select=display_name,email` +
+            `&limit=1`
+        );
+        const u = rows?.[0] || null;
+        actor_display = (u?.display_name || '').trim()
+          || (u?.email || '').trim()
+          || actor_display;
+      } catch {
+        // non-fatal
+      }
+    }
+    if (!actor_display) actor_display = 'CloudTMS server';
 
     // Object targeting
-    const object_type     = opts.entity || opts.object_type || 'generic';
-    const object_id_text  =
+    const object_type = opts.entity || opts.object_type || 'generic';
+    const object_id_text =
       opts.subject_id != null
         ? String(opts.subject_id)
         : (opts.object_id_text != null ? String(opts.object_id_text) : null);
 
     // Build payload aligned to audit_events schema
     const payload = {
-      object_type,                 // e.g. 'invoice' | 'timesheet' | 'candidate'
-      object_id_text,              // target id as text
-      action: String(action),      // e.g. 'EMAIL_QUEUED' | 'EMAIL_SENT'
+      object_type,
+      object_id_text,
+      action: String(action),
+
       before_json: opts.before ?? null,
-      after_json: details ?? null,  // include extra context (e.g., {to, subject, invoice_pdf_r2_key, mail_id})
+      after_json: details ?? null,
+
       reason: opts.reason ?? null,
+
       actor_user_id,
       actor_display,
       actor_role_at_time,
+
       ip,
       user_agent: ua,
       correlation_id: correlationId
@@ -33714,7 +34521,7 @@ async function writeAudit(env, user, action, details = null, opts = {}) {
     // Best-effort POST; do not throw on failure
     const res = await fetch(`${env.SUPABASE_URL}/rest/v1/audit_events`, {
       method: 'POST',
-      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
       body: JSON.stringify(payload)
     });
 
@@ -33726,7 +34533,6 @@ async function writeAudit(env, user, action, details = null, opts = {}) {
     console.warn('writeAudit error', err);
   }
 }
-
 
 // ---------------------- HealthRoster Endpoints (expanded) ----------------------
 /**
@@ -47002,6 +47808,26 @@ async function setWeeksInvoicedForTimesheets(env, timesheetIds) {
   }
   const invoice = (await invIns.json())[0];
 
+  // ─────────────────────────────────────────────────────────────
+  // AUDIT (basic): invoice created (invoice-level)
+  // ─────────────────────────────────────────────────────────────
+  try {
+    await writeAudit(
+      env,
+      user,
+      'INVOICE_CREATED',
+      {
+        invoice_id: invoice.id,
+        client_id,
+        timesheet_ids: snapsToUse.map(s => s.timesheet_id),
+        status: 'DRAFT'
+      },
+      { entity: 'invoices', subject_id: invoice.id, req }
+    );
+  } catch {
+    // best-effort
+  }
+
   // 4) Build HOURS lines + ADDITIONAL_RATE lines
   let sumEx = 0, sumVat = 0, sumInc = 0;
   const lines = [];
@@ -47235,6 +48061,34 @@ async function setWeeksInvoicedForTimesheets(env, timesheetIds) {
 
   // 7b) Mark linked weeks as INVOICED
   await setWeeksInvoicedForTimesheets(env, usedTsIds);
+
+  // ─────────────────────────────────────────────────────────────
+  // AUDIT (Timesheet tab): timesheet invoiced (one event per timesheet)
+  // ─────────────────────────────────────────────────────────────
+  try {
+    for (const tsId of usedTsIds) {
+      await writeAudit(
+        env,
+        user,
+        'TIMESHEET_INVOICED',
+        {
+          timesheet_id: tsId,
+          invoice_id: invoice.id,
+          invoice_status: 'DRAFT',
+          locked_at_utc: lockNowIso
+        },
+        {
+          entity: 'timesheets',
+          subject_id: tsId,
+          req,
+          before: { locked_by_invoice_id: null },
+          reason: 'LOCKED_BY_INVOICE'
+        }
+      );
+    }
+  } catch {
+    // best-effort
+  }
 
   // 8) Ensure all TS PDFs exist and write keys back to invoice_lines
   const uniqueTsIds = usedTsIds;
@@ -47584,7 +48438,7 @@ async function lockSegmentsForInvoice(env, invoiceId, segmentRefs) {
   }
 }
 
- async function handleCreateInvoiceTsfinByWeek(env, req) {
+async function handleCreateInvoiceTsfinByWeek(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized('Unauthorized');
 
@@ -47688,6 +48542,7 @@ async function lockSegmentsForInvoice(env, invoiceId, segmentRefs) {
 
   // Invoice header / row: for self-bill, reuse-or-create; otherwise always create new
   let invoice;
+  let invoiceCreatedByThisHandler = false;
 
   if (allSelfBill) {
     // NHSP / HR self-bill → reuse existing invoice for this (client, week) if possible
@@ -47701,6 +48556,8 @@ async function lockSegmentsForInvoice(env, invoiceId, segmentRefs) {
       timesheet_ids,
       entries
     );
+    // We don't know whether it was created or reused without changing findOrCreateSelfBillInvoice,
+    // so we log a neutral event below.
   } else {
     // Non-self-bill → always create a new invoice header (existing behaviour)
     const issuedAt = new Date().toISOString();
@@ -47758,15 +48615,54 @@ async function lockSegmentsForInvoice(env, invoiceId, segmentRefs) {
       return serverError(`Failed to create invoice: ${t}`);
     }
     invoice = (await invIns.json())[0];
+    invoiceCreatedByThisHandler = true;
   }
 
   if (!invoice || !invoice.id) {
     return serverError('Failed to obtain invoice row');
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // AUDIT (basic): invoice chosen/created for this week run
+  // ─────────────────────────────────────────────────────────────
+  try {
+    await writeAudit(
+      env,
+      user,
+      invoiceCreatedByThisHandler ? 'INVOICE_CREATED' : 'INVOICE_USED_FOR_WEEK_RUN',
+      {
+        invoice_id: invoice.id,
+        client_id,
+        invoice_week_start: weekStart,
+        mode: allSelfBill ? 'SELF_BILL_SEGMENTS' : 'SEGMENTS',
+        timesheet_count: timesheet_ids.length,
+        segment_count: entries.length
+      },
+      { entity: 'invoices', subject_id: invoice.id, req }
+    );
+  } catch {
+    // best-effort
+  }
+
   // Build lines: one per segment entry (simple, clear)
   let sumEx = 0, sumVat = 0, sumInc = 0;
   const lines = [];
+
+  // Accumulate per-timesheet totals so Timesheet Audit tab can show “Invoiced (segments)”
+  const byTimesheet = new Map(); // tsId -> { chargeEx, payEx, count, bases:Set }
+  const bumpTs = (tsId, basis, chargeEx, payEx) => {
+    if (!tsId) return;
+    const k = String(tsId);
+    let v = byTimesheet.get(k);
+    if (!v) {
+      v = { chargeEx: 0, payEx: 0, count: 0, bases: new Set() };
+      byTimesheet.set(k, v);
+    }
+    v.chargeEx += Number(chargeEx || 0);
+    v.payEx    += Number(payEx || 0);
+    v.count    += 1;
+    if (basis) v.bases.add(String(basis).toUpperCase());
+  };
 
   for (const e of entries) {
     const seg = e.segment || {};
@@ -47781,6 +48677,8 @@ async function lockSegmentsForInvoice(env, invoiceId, segmentRefs) {
     sumEx  += chargeEx;
     sumVat += vatAmt;
     sumInc += incAmt;
+
+    bumpTs(e.timesheet_id, e.basis, chargeEx, payEx);
 
     const desc = `TS ${e.timesheet_id} – ${e.basis || 'SEGMENT'} – ${seg.date || weekStart}`;
 
@@ -47871,6 +48769,31 @@ async function lockSegmentsForInvoice(env, invoiceId, segmentRefs) {
   }));
   await lockSegmentsForInvoice(env, invoice.id, segmentRefs);
 
+  // ─────────────────────────────────────────────────────────────
+  // AUDIT (Timesheet tab): segments invoiced for this week (one per timesheet)
+  // ─────────────────────────────────────────────────────────────
+  try {
+    for (const [tsId, agg] of byTimesheet.entries()) {
+      await writeAudit(
+        env,
+        user,
+        'TIMESHEET_SEGMENTS_INVOICED',
+        {
+          timesheet_id: tsId,
+          invoice_id: invoice.id,
+          invoice_week_start: weekStart,
+          segment_count: agg.count,
+          total_charge_ex_vat: round2(agg.chargeEx),
+          total_pay_ex_vat: round2(agg.payEx),
+          bases: Array.from(agg.bases || [])
+        },
+        { entity: 'timesheets', subject_id: tsId, req }
+      );
+    }
+  } catch {
+    // best-effort
+  }
+
   // Mark weeks as INVOICED where entire TSFIN got locked_by_invoice_id = invoice.id
   try {
     const { rows: lockedRows } = await sbFetch(
@@ -47882,6 +48805,30 @@ async function lockSegmentsForInvoice(env, invoiceId, segmentRefs) {
     const fullTsIds = [...new Set((lockedRows || []).map(r => r.timesheet_id).filter(Boolean))];
     if (fullTsIds.length) {
       await setWeeksInvoicedForTimesheets(env, fullTsIds);
+
+      // If any timesheets were fully locked, log a stronger event too (optional but useful)
+      try {
+        for (const tsId of fullTsIds) {
+          await writeAudit(
+            env,
+            user,
+            'TIMESHEET_INVOICED',
+            {
+              timesheet_id: tsId,
+              invoice_id: invoice.id,
+              invoice_week_start: weekStart
+            },
+            {
+              entity: 'timesheets',
+              subject_id: tsId,
+              req,
+              reason: 'LOCKED_BY_INVOICE'
+            }
+          );
+        }
+      } catch {
+        // best-effort
+      }
     }
   } catch (e) {
     console.warn('[handleCreateInvoiceTsfinByWeek] setWeeksInvoicedForTimesheets failed', e?.message || e);
@@ -47895,6 +48842,7 @@ async function lockSegmentsForInvoice(env, invoiceId, segmentRefs) {
     totals: { ex_vat: newSubtotalEx, vat: newVat, inc_vat: newInc }
   });
 }
+
 
 // Self-bill helper: reuse existing invoice for (client, week) if possible,
 // otherwise create a new self-bill invoice header.
