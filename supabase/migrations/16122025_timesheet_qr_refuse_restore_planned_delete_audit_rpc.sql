@@ -466,58 +466,75 @@ $$;
 -- ------------------------------------------------------------
 -- 4) Timesheet audit feed (timesheet + related contract_week)
 -- ------------------------------------------------------------
+
 create or replace function public.timesheet_audit_feed(
   p_timesheet_id uuid
 )
 returns table (
   id uuid,
   ts_utc timestamptz,
-  object_type text,
-  object_id_text text,
-  action text,
-  reason text,
   actor_user_id uuid,
   actor_display text,
   actor_role_at_time text,
+  object_type text,
+  object_id_text text,
+  action text,
   before_json jsonb,
   after_json jsonb,
+  reason text,
+  ip text,
+  user_agent text,
   correlation_id text
 )
 language sql
+stable
 security definer
 set search_path = public
 as $$
   with cw as (
-    select cw.id::text as contract_week_id_text
-    from public.contract_weeks cw
-    where cw.timesheet_id = p_timesheet_id
-    order by cw.week_ending_date desc, cw.additional_seq desc
+    select id::text as cw_id_text
+    from public.contract_weeks
+    where timesheet_id = p_timesheet_id
+    order by updated_at desc nulls last, week_ending_date desc
     limit 1
+  ),
+  ids as (
+    select
+      p_timesheet_id::text as ts_id_text,
+      (select cw_id_text from cw) as cw_id_text
   )
   select
-    a.id,
-    a.ts_utc,
-    a.object_type,
-    a.object_id_text,
-    a.action,
-    a.reason,
-    a.actor_user_id,
-    a.actor_display,
-    a.actor_role_at_time,
-    a.before_json,
-    a.after_json,
-    a.correlation_id
-  from public.audit_events a
-  where
-    (
-      a.object_id_text = p_timesheet_id::text
-      and a.object_type in ('timesheet','timesheets')
-    )
-    or
-    (
-      exists (select 1 from cw)
-      and a.object_id_text = (select contract_week_id_text from cw)
-      and a.object_type in ('contract_week','contract_weeks')
-    )
-  order by a.ts_utc desc, a.id desc;
+    ae.id,
+    ae.ts_utc,
+    ae.actor_user_id,
+    coalesce(ae.actor_display, tu.display_name, tu.email, 'CloudTMS server') as actor_display,
+    coalesce(ae.actor_role_at_time, tu.role, 'system') as actor_role_at_time,
+    ae.object_type,
+    ae.object_id_text,
+    ae.action,
+    ae.before_json,
+    ae.after_json,
+    ae.reason,
+    ae.ip,
+    ae.user_agent,
+    ae.correlation_id
+  from public.audit_events ae
+  left join public.tms_users tu
+    on tu.id = ae.actor_user_id
+  cross join ids
+ where
+  (
+    ae.object_type in ('timesheet','timesheets')
+    and ae.object_id_text = ids.ts_id_text
+  )
+  or
+  (
+    ids.cw_id_text is not null
+    and ae.object_type in ('contract_week', 'contract_weeks')
+    and ae.object_id_text = ids.cw_id_text
+  )
+
+order by ae.ts_utc desc, ae.id desc
+
+  limit 500;
 $$;
