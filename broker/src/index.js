@@ -50535,6 +50535,30 @@ if (req.method === 'GET' && p === '/api/healthroster/autoprocess/clients') {
         }
       }
 
+// Evidence (timesheet_evidence)
+
+// GET /api/timesheets/:id/evidence
+// POST /api/timesheets/:id/evidence
+{
+  const m = matchPath(p, '/api/timesheets/:id/evidence');
+  if (m && req.method === 'GET') {
+    return withCORS(env, req, await handleTimesheetEvidenceList(env, req, m.id));
+  }
+  if (m && req.method === 'POST') {
+    return withCORS(env, req, await handleTimesheetEvidenceAdd(env, req, m.id));
+  }
+}
+
+// DELETE /api/timesheets/:id/evidence/:evidence_id
+{
+  const m = matchPath(p, '/api/timesheets/:id/evidence/:evidence_id');
+  if (m && req.method === 'DELETE') {
+    return withCORS(env, req, await handleTimesheetEvidenceDelete(env, req, m.id, m.evidence_id));
+  }
+}
+
+
+
       // ─────────────────────────────────────────────────────────────────────────────
       // Pickers: snapshots, deltas, id-list
       // ─────────────────────────────────────────────────────────────────────────────
