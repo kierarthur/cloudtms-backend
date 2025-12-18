@@ -5971,7 +5971,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     return withCORS(env, req, serverError('Failed to discard manual timesheet queue item'));
   }
 }
- async function handleManualTimesheetQueueAttach(env, req, queueId) {
+async function handleManualTimesheetQueueAttach(env, req, queueId) {
   const enc = encodeURIComponent;
 
   const user = await requireUser(env, req, ['admin']);
@@ -6054,8 +6054,9 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
           method: 'PATCH',
           headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
           body: JSON.stringify({
-            manual_pdf_r2_key: item.r2_key
-            // We *could* also persist last_rotation_deg onto the TS later
+            manual_pdf_r2_key: item.r2_key,
+            // ✅ Persist rotation onto the timesheet so PDF view renders correctly
+            manual_pdf_rotation_degrees: (item.last_rotation_deg != null ? Number(item.last_rotation_deg) : 0)
           })
         }
       ).catch(() => {});
@@ -6088,6 +6089,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     return withCORS(env, req, serverError('Failed to attach manual timesheet queue item'));
   }
 }
+
  async function handleManualTimesheetQueueRotate(env, req, queueId) {
   const enc = encodeURIComponent;
 
