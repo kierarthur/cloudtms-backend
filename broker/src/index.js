@@ -1737,14 +1737,14 @@ function payChargeFromContract(contract) {
 }
 
 /** Compose a weekly booking id using existing helper */
+// AFTER (replace makeWeeklyBookingId)
 async function makeWeeklyBookingId(candidateId, contract, cw) {
   const hospital = contract?.display_site || contract?.client_id || 'client';
-  const ward = contract?.ward_hint || 'contract';
-  const role = contract?.role || 'weekly';
-  const shift = `WEEKLY-${String(cw?.additional_seq || 0)}`;
+  const ward     = contract?.ward_hint   || 'contract';
+  const role     = contract?.role        || 'weekly';
+  const shift    = `WEEKLY-${String(cw?.additional_seq ?? 0)}`;
 
-  // ✅ FIX: makeBookingId is async, so this wrapper must be async + await it
-  return await makeBookingId(
+  const id = await makeBookingId(
     String(candidateId || ''),
     String(cw?.week_ending_date || ''),
     String(hospital || ''),
@@ -1752,6 +1752,8 @@ async function makeWeeklyBookingId(candidateId, contract, cw) {
     String(role || ''),
     shift
   );
+
+  return String(id || '').trim();
 }
 
 /** Upsert convenience (PostgREST) */
@@ -4934,7 +4936,11 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     const hospital_norm = (contract.display_site || client?.name || String(contract.client_id)).toLowerCase();
     const ward_norm     = (contract.ward_hint || 'contract').toLowerCase();
     const job_title_norm= (contract.role || 'weekly').toLowerCase();
-    const booking_id    = makeWeeklyBookingId(candidate?.id, contract, cw);
+   const booking_id = await makeWeeklyBookingId(contract?.candidate_id || null, contract, cw);
+   if (!booking_id || booking_id === '{}' || booking_id === 'null' || booking_id === 'undefined') {
+  return withCORS(env, req, badRequest(`Invalid booking_id produced: "${booking_id}"`));
+}
+
 console.log('[CW_MANUAL_UPSERT][BOOKING_ID]', {
   weekId,
   booking_id,
@@ -6898,8 +6904,8 @@ async function handleContractWeekCreateExpenseSheet(env, req, weekId) {
 
   const candidate = contract.candidate_id ? await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(contract.candidate_id)}&select=id,display_name`) : null;
   const client = contract.client_id ? await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${enc(contract.client_id)}&select=id,name`) : null;
+const booking_id = await makeWeeklyBookingId(contract?.candidate_id || null, contract, cw);
 
-  const booking_id = makeWeeklyBookingId(candidate?.id, contract, cw);
 
   const now = nowIso();
 
@@ -44542,7 +44548,9 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
   const hospital_norm  = (contract.display_site || client?.name || String(contract.client_id)).toLowerCase();
   const ward_norm      = (contract.ward_hint || 'contract').toLowerCase();
   const job_title_norm = (contract.role || 'weekly').toLowerCase();
-  const booking_id     = makeWeeklyBookingId(candidate?.id, contract, cw);
+ const booking_id     = await makeWeeklyBookingId(contract?.candidate_id || null, contract, cw);
+
+
 
   let ts = null;
 
