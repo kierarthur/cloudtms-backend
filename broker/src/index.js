@@ -8468,7 +8468,10 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
 
   const kind        = body && body.kind && String(body.kind).trim();
   const displayName = body && body.display_name != null ? String(body.display_name).trim() : null;
-  const storageKey  = body && body.storage_key && String(body.storage_key).trim();
+
+  // ✅ FIX: normalise storage_key (R2 keys must not start with "/")
+  const storageKeyRaw = body && body.storage_key && String(body.storage_key).trim();
+  const storageKey = storageKeyRaw ? storageKeyRaw.replace(/^\/+/, '') : '';
 
   if (!kind) {
     return withCORS(env, req, badRequest('kind is required'));
@@ -8513,7 +8516,7 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
       timesheet_id: tsId,
       kind,
       display_name: displayName || kind,
-      storage_key: storageKey,
+      storage_key: storageKey, // ✅ store normalised key (no leading "/")
       created_at: nowIso,
       created_by: user.id || null
     }];
@@ -8632,16 +8635,19 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
       tsMeta = null;
     }
 
-    const storageKey = ev.storage_key || null;
+    const storageKeyRaw = ev.storage_key || null;
+
+    // ✅ FIX: normalise key for R2 operations (R2 keys must not start with "/")
+    const storageKeyForR2 = storageKeyRaw ? String(storageKeyRaw).trim().replace(/^\/+/, '') : null;
 
     // Optionally delete from R2 (best-effort, non-fatal)
     try {
-      if (storageKey && typeof r2Delete === 'function') {
-        await r2Delete(env, storageKey);
+      if (storageKeyForR2 && typeof r2Delete === 'function') {
+        await r2Delete(env, storageKeyForR2);
       }
     } catch (e) {
       console.warn('[handleTimesheetEvidenceDelete] r2Delete failed (non-fatal)', {
-        storage_key: storageKey,
+        storage_key: storageKeyForR2,
         err: e?.message || String(e)
       });
     }
@@ -8675,7 +8681,8 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
           evidence_id: evidenceId,
           kind: ev.kind || null,
           display_name: ev.display_name || null,
-          storage_key: storageKey,
+          // keep what was in the DB row for traceability
+          storage_key: storageKeyRaw,
           contract_id: tsMeta?.contract_id || null,
           week_ending_date: tsMeta?.week_ending_date || null,
           sheet_scope: tsMeta?.sheet_scope || null,
@@ -41840,24 +41847,44 @@ async function handleFileUpload(env, req, url) {
 
 async function handleFilePresignDownload(env, req) {
   const user = await requireUser(env, req, ['admin']);
-  if (!user) return unauthorized();
+  if (!user) return withCORS(env, req, unauthorized());
 
   const data = await parseJSONBody(req);
   if (!data || !data.key) return withCORS(env, req, badRequest("key is required"));
 
-  const key = String(data.key);
+  // ✅ FIX: normalise keys coming from DB/UI (often stored as "/files/....")
+  // R2 keys must NOT start with "/"
+  let key = String(data.key || '').trim();
+  key = key.replace(/^\/+/, '');
+  if (!key) return withCORS(env, req, badRequest("key is required"));
+
   const head = await r2Head(env, key);
   if (!head) return withCORS(env, req, notFound("File not found"));
 
-  const exp = Math.floor(Date.now()/1000) + 300;
+  const exp = Math.floor(Date.now() / 1000) + 300;
+
+  // Keep your existing token scheme (do not change secret usage)
   const token = await createToken(env.UPLOAD_TOKEN_SECRET, { typ: "file_dl", key, exp });
+
   const baseUrl = new URL(req.url);
   baseUrl.pathname = "/api/files/download";
   baseUrl.search = "";
   baseUrl.searchParams.set("key", key);
   baseUrl.searchParams.set("token", token);
-  return withCORS(env, req, ok({ download_url: baseUrl.toString(), expires_at: new Date(exp * 1000).toISOString() }));
+
+  const url = baseUrl.toString();
+
+  // ✅ FIX: return fields the frontend viewer already looks for (url / signed_url),
+  // while keeping download_url for backwards compatibility.
+  return withCORS(env, req, ok({
+    url,
+    signed_url: url,
+    download_url: url,
+    key,
+    expires_at: new Date(exp * 1000).toISOString()
+  }));
 }
+
 
 async function handleFileDownload(env, req, url) {
   const key = url.searchParams.get("key") || "";
