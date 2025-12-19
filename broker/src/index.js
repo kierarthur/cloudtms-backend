@@ -1087,11 +1087,14 @@ async function r2GetBytes(env, key) {
 }
 
 // Signed public download URL (for stationery fetching inside invoice HTML)
-function presignR2Url(env, req, key, ttlSeconds = 300) {
+async function presignR2Url(env, req, key, ttlSeconds = 300) {
   const cleanKey = normalizeKey(key);
   const exp = Math.floor(Date.now() / 1000) + (ttlSeconds | 0);
   const tokenPayload = { typ: "dl", key: cleanKey, exp };
-  const token = createToken(env.UPLOAD_TOKEN_SECRET, tokenPayload);
+
+  // ✅ FIX: createToken is async in your codebase → must await
+  const token = await createToken(env.UPLOAD_TOKEN_SECRET, tokenPayload);
+
   const base = env.PUBLIC_DOWNLOAD_BASE_URL || new URL(new URL(req.url).origin + '/api/files/download').toString();
   const u = new URL(base);
   u.searchParams.set('key', cleanKey);
@@ -34731,11 +34734,12 @@ async function handleFilesDownload(env, req) {
       return withCORS(env, req, unauthorized());
     }
 
-    // Add stationery & rendered-docs prefixes
+    // ✅ FIX: allow uploaded evidence files (your evidence uses files/YYYYMMDD/…)
     const ALLOWED_PREFIXES = [
+      'files/',                     // ✅ NEW: uploaded evidence
       'invoices/', 'remittances/', 'paper_ts/', 'signatures/', 'docs/',
-      'docs-pdf/',                 // rendered PDFs (e.g. docs-pdf/invoices/…)
-      'Assets/', 'assets/'         // stationery & other assets (PNG letterhead lives here)
+      'docs-pdf/',                  // rendered PDFs (e.g. docs-pdf/invoices/…)
+      'Assets/', 'assets/'          // stationery & other assets
     ];
     if (!ALLOWED_PREFIXES.some(p => key.startsWith(p))) {
       return withCORS(env, req, unauthorized());
@@ -34745,7 +34749,6 @@ async function handleFilesDownload(env, req) {
     const secret = env.UPLOAD_TOKEN_SECRET;
     if (!secret) return withCORS(env, req, serverError("Server not configured"));
 
-    // verifyToken should return the payload or throw/reject on invalid
     let payload;
     try {
       payload = await verifyToken(secret, token);
@@ -34756,8 +34759,13 @@ async function handleFilesDownload(env, req) {
 
     // Claims checks (normalize payload key as well)
     const payloadKey = (payload && typeof payload.key === 'string') ? payload.key.replace(/^\/+/, '') : '';
-    if (!payload || payload.typ !== 'dl' || payloadKey !== key) {
-      await writeAudit(env, null, 'FILE_DOWNLOAD_DENIED', { key, reason: 'claims_mismatch' }, { entity: 'r2', subject_id: key, req });
+
+    // ✅ FIX: allow both "dl" and the older "file_dl" token types (backwards compatible)
+    const typ = payload?.typ;
+    const typOk = (typ === 'dl' || typ === 'file_dl');
+
+    if (!payload || !typOk || payloadKey !== key) {
+      await writeAudit(env, null, 'FILE_DOWNLOAD_DENIED', { key, reason: 'claims_mismatch', typ }, { entity: 'r2', subject_id: key, req });
       return withCORS(env, req, unauthorized());
     }
 
@@ -34792,8 +34800,10 @@ async function handleFilesDownload(env, req) {
     const baseName = key.split('/').pop() || 'download.bin';
     const chosen = (overrideName || metaName || baseName)
       .replace(/[/\\]/g, '_')
-      .replace(/[\r\n"]/g, ''); // basic header injection hardening
-    headers.set('Content-Disposition', `attachment; filename="${chosen}"`);
+      .replace(/[\r\n"]/g, '');
+
+    // ✅ Optional: inline by default so iframe preview works (still downloadable)
+    headers.set('Content-Disposition', `inline; filename="${chosen}"`);
 
     await writeAudit(env, null, 'FILE_DOWNLOAD_OK', { key, size: obj.size || null }, { entity: 'r2', subject_id: key, req });
     return withCORS(env, req, new Response(obj.body, { status: 200, headers }));
@@ -36662,12 +36672,13 @@ async function handleHRValidate(env, req, importId) {
     }
     stationeryKey = normalizeKey(stationeryKey);
 
-    const stationeryUrl = presignR2Url(
-      env,
-      req,
-      stationeryKey,
-      Number(env.PRESIGN_EXPIRES_SECONDS || 600)
-    );
+   const stationeryUrl = await presignR2Url(
+  env,
+  req,
+  stationeryKey,
+  Number(env.PRESIGN_EXPIRES_SECONDS || 600)
+);
+
     const marginsObj = toMarginsObj(header.stationery_margins_mm);
     const hideBankFooter = header.hide_bank_footer === true;
 
