@@ -8291,6 +8291,7 @@ async function handleTimesheetsEligibilityWeekly(env, req) {
 
 
 // GET /api/timesheets/:id/evidence
+// GET /api/timesheets/:id/evidence
 async function handleTimesheetEvidenceList(env, req, tsId) {
   const enc = encodeURIComponent;
 
@@ -8327,24 +8328,64 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
         `&order=created_at.asc`
     );
 
-    const userEvidence = (evRows || []).map(ev => {
+    const userEvidenceRaw = (evRows || []).map(ev => {
       const out = { ...(ev || {}) };
       out.system = false;
       out.can_delete = true;
+
+      // Convenience: keep a consistent timestamp field available
+      if (!out.uploaded_at_utc && out.created_at) out.uploaded_at_utc = out.created_at;
+
+      return out;
+    });
+
+    // ─────────────────────────────────────────────────────────────
+    // 1b) Enrich user evidence with uploader display name
+    //     (tms_users.id → tms_users.display_name)
+    // ─────────────────────────────────────────────────────────────
+    const uploaderIds = new Set();
+    for (const ev of userEvidenceRaw) {
+      const uid = ev && ev.created_by ? String(ev.created_by).trim() : '';
+      if (uid) uploaderIds.add(uid);
+    }
+
+    const uploaderMap = {}; // id -> display_name
+    if (uploaderIds.size) {
+      try {
+        const idParam = Array.from(uploaderIds).map(enc).join(',');
+        const { rows: uRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/tms_users` +
+            `?id=in.(${idParam})` +
+            `&select=id,display_name` +
+            `&limit=1000`
+        );
+
+        for (const u of (uRows || [])) {
+          const id = u && u.id ? String(u.id) : '';
+          if (!id) continue;
+          uploaderMap[id] = (u && u.display_name != null) ? String(u.display_name) : '';
+        }
+      } catch (e) {
+        // non-fatal; FE will show "—" if uploader name isn't available
+        console.warn('[handleTimesheetEvidenceList] uploader name enrich failed (non-fatal)', {
+          err: e?.message || String(e)
+        });
+      }
+    }
+
+    const userEvidence = userEvidenceRaw.map(ev => {
+      const out = { ...(ev || {}) };
+      const uid = out.created_by ? String(out.created_by).trim() : '';
+      const dn  = uid && Object.prototype.hasOwnProperty.call(uploaderMap, uid) ? uploaderMap[uid] : '';
+      // FE will read uploaded_by_display (preferred) or created_by_display (fallback)
+      out.uploaded_by_display = dn || null;
+      out.created_by_display  = dn || null;
       return out;
     });
 
     // ─────────────────────────────────────────────────────────────
     // 2) System evidence rows (NHSP / HealthRoster)
-    //
-    // Sources:
-    //  - nhsp_shifts linked to this timesheet → latest_import_id (+ source_system)
-    //  - timesheet_validations.last_source → import id (covers HR daily validation flows)
-    //
-    // Then join hr_imports for:
-    //  - filename
-    //  - uploaded_at_utc
-    //  - file_r2_key
     // ─────────────────────────────────────────────────────────────
     const importIds = new Set();
 
@@ -8363,7 +8404,7 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
         if (iid) importIds.add(iid);
       }
     } catch {
-      // non-fatal (system evidence is best-effort)
+      // non-fatal
     }
 
     // 2b) From timesheet_validations.last_source (covers HR daily validation)
@@ -8400,7 +8441,7 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
         );
 
         systemEvidence = (impRows || [])
-          .filter(r => r && r.file_r2_key) // viewer requires a key
+          .filter(r => r && r.file_r2_key)
           .map(r => {
             const sys = String(r.source_system || '').toUpperCase();
             const importId = r.id ? String(r.id) : '';
@@ -8416,10 +8457,14 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
               kind: kindLabel,
               display_name: r.filename || kindLabel,
               storage_key: r.file_r2_key,
-              created_at: uploadedAt,          // keep FE-compatible date field
-              uploaded_at_utc: uploadedAt,     // explicit for clarity
+              created_at: uploadedAt,
+              uploaded_at_utc: uploadedAt,
               system: true,
-              can_delete: false
+              can_delete: false,
+
+              // ✅ NEW: for FE "Uploaded by" column
+              uploaded_by_display: 'System',
+              created_by_display: 'System'
             };
           });
       } catch {
@@ -8427,7 +8472,7 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
       }
     }
 
-    // Combine + sort by date (ascending) for stable display
+    // Combine + sort by date (ascending)
     const all = [...userEvidence, ...systemEvidence];
 
     const toTs = (x) => {
