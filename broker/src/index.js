@@ -4440,23 +4440,45 @@ async function handleContractWeeksList(env, req) {
   return withCORS(env, req, ok(row));
 }
 
- async function handleContractWeekSwitchMode(env, req, weekId) {
+async function handleContractWeekSwitchMode(env, req, weekId) {
+  const enc = encodeURIComponent;
+
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+  if (!weekId) return withCORS(env, req, badRequest('contract_week_id is required'));
 
-  const cw = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=*`);
+  const cw = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=*`
+  );
   if (!cw) return withCORS(env, req, notFound('Week not found'));
   if (cw.timesheet_id) return withCORS(env, req, badRequest('Cannot switch mode for a week with a timesheet'));
 
-  const newMode = (cw.submission_mode_snapshot === 'ELECTRONIC') ? 'MANUAL' : 'ELECTRONIC';
-  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`, {
-    method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
-    body: JSON.stringify({ submission_mode_snapshot: newMode, updated_at: nowIso() })
-  });
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+
+  let newMode = null;
+  if (body && typeof body.submission_mode_snapshot === 'string' && body.submission_mode_snapshot.trim()) {
+    const m = body.submission_mode_snapshot.trim().toUpperCase();
+    if (m === 'MANUAL' || m === 'ELECTRONIC') newMode = m;
+  }
+  if (!newMode) {
+    newMode = (String(cw.submission_mode_snapshot || '').toUpperCase() === 'ELECTRONIC') ? 'MANUAL' : 'ELECTRONIC';
+  }
+
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify({ submission_mode_snapshot: newMode, updated_at: nowIso() })
+    }
+  );
   if (!res.ok) return withCORS(env, req, serverError(await res.text()));
-  const row = (await res.json().catch(()=>[]))[0];
+  const row = (await res.json().catch(() => []))[0];
   return withCORS(env, req, ok(row));
 }
+
 
 async function handleContractWeekPresignManualPdf(env, req, weekId) {
   // Admin presign wrapper — MUST align with /api/files/presign-upload + /api/files/upload token/key rules
@@ -10167,14 +10189,10 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
 async function handleTimesheetSwitchToManual(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
-  // Switch a WEEKLY CONTRACT_WEEKLY electronic timesheet to MANUAL via a new version
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
-  if (!timesheetId) {
-    return withCORS(env, req, badRequest('timesheet_id is required'));
-  }
+  if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
 
-  // Load FULL current timesheet row (we need version + schedule etc.)
   const ts = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -10182,9 +10200,10 @@ async function handleTimesheetSwitchToManual(env, req, timesheetId) {
       `&is_current=eq.true` +
       `&select=*`
   );
-  if (!ts) {
-    return withCORS(env, req, notFound('Timesheet not found'));
-  }
+  if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
+
+  const bookingId = ts.booking_id || null;
+  if (!bookingId) return withCORS(env, req, badRequest('Timesheet booking_id is missing; cannot version'));
 
   const scope = String(ts.sheet_scope || '').toUpperCase();
   if (scope && scope !== 'WEEKLY') {
@@ -10196,18 +10215,16 @@ async function handleTimesheetSwitchToManual(env, req, timesheetId) {
     return withCORS(env, req, badRequest('Timesheet is not an electronic weekly timesheet'));
   }
 
-  // Ensure linked contract_week exists
+  // Find contract_week that currently points at this timesheet row
   const cw = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-      `?timesheet_id=eq.${enc(timesheetId)}&select=*`
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&select=*` +
+      `&limit=1`
   );
-  if (!cw) {
-    return withCORS(env, req, badRequest('Timesheet not linked to a contract week'));
-  }
+  if (!cw) return withCORS(env, req, badRequest('Timesheet not linked to a contract week'));
 
-  // Ensure not invoiced / paid and basis is CONTRACT_WEEKLY
-  // Use select=* so we can defensively respect any other hard-lock fields present in your TSFIN schema.
   const tsfin = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
@@ -10215,20 +10232,16 @@ async function handleTimesheetSwitchToManual(env, req, timesheetId) {
       `&is_current=eq.true` +
       `&select=*`
   );
-  if (!tsfin) {
-    return withCORS(env, req, badRequest('No financial snapshot to switch'));
-  }
+  if (!tsfin) return withCORS(env, req, badRequest('No financial snapshot to switch'));
 
   const hardLocked =
     !!tsfin.paid_at_utc ||
     !!tsfin.locked_by_invoice_id ||
-    !!tsfin.locked_by_invoice ||          // defensive (if exists)
-    !!tsfin.locked_by_invoice_line_id ||  // defensive (if exists)
-    !!tsfin.locked_by_invoice_at_utc;     // defensive (if exists)
+    !!tsfin.locked_by_invoice ||
+    !!tsfin.locked_by_invoice_line_id ||
+    !!tsfin.locked_by_invoice_at_utc;
 
-  if (hardLocked) {
-    return withCORS(env, req, badRequest('Cannot switch: timesheet already invoiced or paid'));
-  }
+  if (hardLocked) return withCORS(env, req, badRequest('Cannot switch: timesheet already invoiced or paid'));
 
   const basis = String(tsfin.basis || '').toUpperCase();
   if (basis !== 'CONTRACT_WEEKLY') {
@@ -10237,28 +10250,27 @@ async function handleTimesheetSwitchToManual(env, req, timesheetId) {
 
   const now = nowIso();
 
-  // Determine next version for this timesheet_id
+  // Next version by booking_id
   let nextVersion = 2;
   try {
     const { rows: vRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=eq.${enc(timesheetId)}` +
+        `?booking_id=eq.${enc(bookingId)}` +
         `&select=version` +
         `&order=version.desc` +
         `&limit=1`
     );
-    const currentMax = vRows?.[0]?.version != null ? Number(vRows[0].version) : 1;
-    nextVersion = Number.isFinite(currentMax) ? currentMax + 1 : 2;
+    const maxV = vRows?.[0]?.version != null ? Number(vRows[0].version) : Number(ts.version || 1);
+    nextVersion = Number.isFinite(maxV) ? maxV + 1 : (Number(ts.version || 1) + 1);
   } catch {
-    nextVersion = 2;
+    nextVersion = Number(ts.version || 1) + 1;
   }
 
-  // 1) Mark existing ELECTRONIC version as not current + revoked marker for audit/history
+  // 1) Demote current by booking_id
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
-      `&version=eq.${enc(ts.version)}` +
+      `?booking_id=eq.${enc(bookingId)}` +
       `&is_current=eq.true`,
     {
       method: 'PATCH',
@@ -10273,21 +10285,21 @@ async function handleTimesheetSwitchToManual(env, req, timesheetId) {
     }
   ).catch(() => {});
 
-  // 2) Insert MANUAL version v+1 with hours/schedule copied, signatures cleared
-  const manualTs = { ...ts };
-  delete manualTs.id;
+  // 2) Insert MANUAL version (NO timesheet_id)
+  const base = { ...ts };
+  delete base.id;
+  delete base.timesheet_id;
 
   const newManual = {
-    ...manualTs,
+    ...base,
+    booking_id: bookingId,
     version: nextVersion,
     is_current: true,
     submission_mode: 'MANUAL',
 
-    // clear electronic signature keys
     r2_nurse_key: null,
     r2_auth_key: null,
 
-    // ensure QR overlay is cleared on the new manual version
     qr_token: null,
     qr_status: null,
     qr_payload_json: {},
@@ -10296,55 +10308,53 @@ async function handleTimesheetSwitchToManual(env, req, timesheetId) {
     qr_scan_info_json: null,
     qr_r2_key: null,
 
-    // evidence in manual-only path should be uploaded by admin (do not carry any)
     manual_pdf_r2_key: null,
 
-    timesheet_id: timesheetId,
     created_at: now,
     updated_at: now
   };
 
-  const insRes = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheets`,
-    {
-      method: 'POST',
-      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-      body: JSON.stringify([newManual])
-    }
-  );
+  const insRes = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets`, {
+    method: 'POST',
+    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+    body: JSON.stringify([newManual])
+  });
   if (!insRes.ok) {
-    const txt = await insRes.text();
+    const txt = await insRes.text().catch(() => '');
     return withCORS(env, req, serverError(`Failed to create manual version: ${txt}`));
   }
-  const inserted = (await insRes.json().catch(() => []))[0] || null;
 
-  // 3) Reflect manual mode on the contract_week snapshot (unchanged behaviour)
+  const inserted = (await insRes.json().catch(() => []))[0] || null;
+  const newTimesheetId = inserted?.timesheet_id || null;
+  if (!newTimesheetId) return withCORS(env, req, serverError('Insert succeeded but no timesheet_id returned'));
+
+  // 3) Update contract_week: point to the new timesheet row + mark manual snapshot
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
     {
       method: 'PATCH',
       headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
       body: JSON.stringify({
+        timesheet_id: newTimesheetId,
         submission_mode_snapshot: 'MANUAL',
         updated_at: now
       })
     }
   ).catch(() => {});
 
-  // 4) Keep TSFIN's version marker aligned
-  try {
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(tsfin.id)}`,
-      {
-        method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify({
-          timesheet_version: inserted?.version ?? nextVersion,
-          updated_at: now
-        })
-      }
-    );
-  } catch {}
+  // 4) TSFIN: move row to new timesheet_id + update version marker
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(tsfin.id)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+      body: JSON.stringify({
+        timesheet_id: newTimesheetId,
+        timesheet_version: inserted?.version ?? nextVersion,
+        updated_at: now
+      })
+    }
+  ).catch(() => {});
 
   // 5) Audit
   try {
@@ -10353,45 +10363,39 @@ async function handleTimesheetSwitchToManual(env, req, timesheetId) {
       user,
       'WEEKLY_SWITCHED_TO_MANUAL',
       {
+        booking_id: bookingId,
         contract_week_id: cw.id,
-        timesheet_id: timesheetId,
+        old_timesheet_id: timesheetId,
+        new_timesheet_id: newTimesheetId,
         old_version: ts.version,
         new_version: inserted?.version ?? nextVersion,
         basis
       },
-      { entity: 'timesheets', subject_id: timesheetId, req }
+      { entity: 'timesheets', subject_id: newTimesheetId, req }
     );
-  } catch (e) {
-    console.warn('[TS][WEEKLY_SWITCH_TO_MANUAL] audit failed', e?.message || e);
-  }
+  } catch {}
 
-  return withCORS(
-    env,
-    req,
-    ok({
-      switched: true,
-      contract_week_id: cw.id,
-      timesheet_id: timesheetId,
-      manual_version: inserted?.version ?? nextVersion,
-      has_electronic_original: true,
-      electronic_version: ts.version ?? 1
-    })
-  );
+  return withCORS(env, req, ok({
+    switched: true,
+    booking_id: bookingId,
+    contract_week_id: cw.id,
+    old_timesheet_id: timesheetId,
+    current_timesheet_id: newTimesheetId,
+    manual_version: inserted?.version ?? nextVersion,
+    has_electronic_original: true,
+    electronic_version: ts.version ?? 1
+  }));
 }
 
 
 
 async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
-  // Convert a QR timesheet back to a plain MANUAL sheet (WEEKLY or DAILY) via version rotation
   const enc = encodeURIComponent;
 
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
-  if (!timesheetId) {
-    return withCORS(env, req, badRequest('timesheet_id is required'));
-  }
+  if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
 
-  // Load FULL current timesheet row
   const ts = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -10400,9 +10404,10 @@ async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
       `&select=*` +
       `&limit=1`
   );
-  if (!ts) {
-    return withCORS(env, req, notFound('Timesheet not found'));
-  }
+  if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
+
+  const bookingId = ts.booking_id || null;
+  if (!bookingId) return withCORS(env, req, badRequest('Timesheet booking_id is missing; cannot version'));
 
   const scope = String(ts.sheet_scope || '').toUpperCase();
   if (scope && scope !== 'WEEKLY' && scope !== 'DAILY') {
@@ -10419,7 +10424,6 @@ async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
     return withCORS(env, req, badRequest('Timesheet does not have QR metadata; nothing to convert'));
   }
 
-  // Ensure not invoiced/paid (and respect any other hard-lock fields defensively)
   const fin = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
@@ -10427,16 +10431,14 @@ async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
       `&is_current=eq.true` +
       `&select=*`
   );
-  if (!fin) {
-    return withCORS(env, req, badRequest('No financial snapshot for timesheet'));
-  }
+  if (!fin) return withCORS(env, req, badRequest('No financial snapshot for timesheet'));
 
   const hardLocked =
     !!fin.paid_at_utc ||
     !!fin.locked_by_invoice_id ||
-    !!fin.locked_by_invoice ||          // defensive (if exists)
-    !!fin.locked_by_invoice_line_id ||  // defensive (if exists)
-    !!fin.locked_by_invoice_at_utc;     // defensive (if exists)
+    !!fin.locked_by_invoice ||
+    !!fin.locked_by_invoice_line_id ||
+    !!fin.locked_by_invoice_at_utc;
 
   if (hardLocked) {
     return withCORS(env, req, badRequest('Cannot convert QR: timesheet already invoiced or paid'));
@@ -10444,28 +10446,25 @@ async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
 
   const now = nowIso();
 
-  // Determine next version for this timesheet_id
-  let nextVersion = (Number(ts.version || 1) + 1);
+  // Next version by booking_id
+  let nextVersion = Number(ts.version || 1) + 1;
   try {
     const { rows: vRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=eq.${enc(timesheetId)}` +
+        `?booking_id=eq.${enc(bookingId)}` +
         `&select=version` +
         `&order=version.desc` +
         `&limit=1`
     );
-    const currentMax = vRows?.[0]?.version != null ? Number(vRows[0].version) : Number(ts.version || 1);
-    nextVersion = Number.isFinite(currentMax) ? currentMax + 1 : (Number(ts.version || 1) + 1);
-  } catch {
-    nextVersion = (Number(ts.version || 1) + 1);
-  }
+    const maxV = vRows?.[0]?.version != null ? Number(vRows[0].version) : Number(ts.version || 1);
+    nextVersion = Number.isFinite(maxV) ? maxV + 1 : (Number(ts.version || 1) + 1);
+  } catch {}
 
-  // 1) Mark existing QR version as not current (preserves signed PDF / QR metadata for restore)
+  // 1) Demote current by booking_id
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
-      `&version=eq.${enc(ts.version)}` +
+      `?booking_id=eq.${enc(bookingId)}` +
       `&is_current=eq.true`,
     {
       method: 'PATCH',
@@ -10480,57 +10479,76 @@ async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
     }
   ).catch(() => {});
 
-  // 2) Insert a new current version which is plain MANUAL (non-QR)
-  const newManual = { ...ts };
-  delete newManual.id;
+  // 2) Insert new current manual non-QR (NO timesheet_id)
+  const base = { ...ts };
+  delete base.id;
+  delete base.timesheet_id;
 
   const newRow = {
-    ...newManual,
+    ...base,
+    booking_id: bookingId,
     version: nextVersion,
     is_current: true,
     submission_mode: 'MANUAL',
 
-    // Remove QR overlay on the new current version
     qr_status: null,
     qr_token: null,
     qr_generated_at: null,
     qr_scanned_at: null,
     qr_scan_info_json: null,
     qr_r2_key: null,
-
-    // qr_payload_json must NOT be null in your schema
     qr_payload_json: {},
 
-    // do NOT carry forward signed QR PDF pointer
     manual_pdf_r2_key: null,
 
     created_at: now,
     updated_at: now
   };
 
-  const insRes = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheets`,
-    {
-      method: 'POST',
-      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-      body: JSON.stringify([newRow])
-    }
-  );
+  const insRes = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets`, {
+    method: 'POST',
+    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+    body: JSON.stringify([newRow])
+  });
 
   if (!insRes.ok) {
-    const txt = await insRes.text();
+    const txt = await insRes.text().catch(() => '');
     return withCORS(env, req, serverError(`Failed to create manual non-QR version: ${txt}`));
   }
 
   const inserted = (await insRes.json().catch(() => []))[0] || null;
+  const newTimesheetId = inserted?.timesheet_id || null;
+  if (!newTimesheetId) return withCORS(env, req, serverError('Insert succeeded but no timesheet_id returned'));
 
-  // 3) TSFIN: force evidence gate and set version marker
+  // 2b) Move contract_week pointer if it points at old current row (weekly case)
+  try {
+    const cw = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+        `?timesheet_id=eq.${enc(timesheetId)}` +
+        `&select=id` +
+        `&limit=1`
+    );
+    if (cw?.id) {
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+          body: JSON.stringify({ timesheet_id: newTimesheetId, updated_at: now })
+        }
+      ).catch(() => {});
+    }
+  } catch {}
+
+  // 3) TSFIN: move row to new timesheet_id and gate evidence
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
     {
       method: 'PATCH',
       headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
       body: JSON.stringify({
+        timesheet_id: newTimesheetId,
         timesheet_version: inserted?.version ?? nextVersion,
         processing_status: 'AWAITING_MANUAL_SIGNATURE',
         updated_at: now
@@ -10545,27 +10563,25 @@ async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
       user,
       'QR_CONVERTED_TO_MANUAL',
       {
-        timesheet_id: timesheetId,
+        booking_id: bookingId,
+        old_timesheet_id: timesheetId,
+        new_timesheet_id: newTimesheetId,
         old_version: ts.version,
         new_version: inserted?.version ?? nextVersion,
         sheet_scope: scope || null,
         had_qr_status: qrStatus
       },
-      { entity: 'timesheets', subject_id: timesheetId, req }
+      { entity: 'timesheets', subject_id: newTimesheetId, req }
     );
-  } catch (e) {
-    console.warn('[TS][QR_CONVERT_TO_MANUAL] audit failed', e?.message || e);
-  }
+  } catch {}
 
-  return withCORS(
-    env,
-    req,
-    ok({
-      converted: true,
-      timesheet_id: timesheetId,
-      new_version: inserted?.version ?? nextVersion
-    })
-  );
+  return withCORS(env, req, ok({
+    converted: true,
+    booking_id: bookingId,
+    old_timesheet_id: timesheetId,
+    current_timesheet_id: newTimesheetId,
+    new_version: inserted?.version ?? nextVersion
+  }));
 }
 
 async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
@@ -10578,16 +10594,29 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
     return withCORS(env, req, badRequest('timesheet_id is required'));
   }
 
-  // Load FULL current timesheet row
+  // Load FULL current timesheet row (current version row by PK)
   const ts = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
       `?timesheet_id=eq.${enc(timesheetId)}` +
       `&is_current=eq.true` +
-      `&select=*`
+      `&select=*` +
+      `&limit=1`
   );
   if (!ts) {
     return withCORS(env, req, notFound('Timesheet not found'));
+  }
+
+  const bookingId = ts.booking_id || null;
+  const badBooking =
+    !bookingId ||
+    String(bookingId).trim() === '' ||
+    String(bookingId).trim() === '{}' ||
+    String(bookingId).trim().toLowerCase() === 'null' ||
+    String(bookingId).trim().toLowerCase() === 'undefined';
+
+  if (badBooking) {
+    return withCORS(env, req, badRequest('Timesheet booking_id is invalid; cannot rotate versions. Please repair booking_id.'));
   }
 
   const scope = String(ts.sheet_scope || '').toUpperCase();
@@ -10601,13 +10630,13 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
   }
 
   // Ensure not invoiced/paid and basis is not NHSP/HR self-bill
-  // Use select=* so we can defensively respect any other hard-lock fields present in your TSFIN schema.
   const fin = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
       `?timesheet_id=eq.${enc(timesheetId)}` +
       `&is_current=eq.true` +
-      `&select=*`
+      `&select=*` +
+      `&limit=1`
   );
   if (!fin) {
     return withCORS(env, req, badRequest('No financial snapshot to switch'));
@@ -10616,9 +10645,9 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
   const hardLocked =
     !!fin.paid_at_utc ||
     !!fin.locked_by_invoice_id ||
-    !!fin.locked_by_invoice ||          // defensive (if exists)
-    !!fin.locked_by_invoice_line_id ||  // defensive (if exists)
-    !!fin.locked_by_invoice_at_utc;     // defensive (if exists)
+    !!fin.locked_by_invoice ||
+    !!fin.locked_by_invoice_line_id ||
+    !!fin.locked_by_invoice_at_utc;
 
   if (hardLocked) {
     return withCORS(env, req, badRequest('Cannot switch: timesheet already invoiced or paid'));
@@ -10637,28 +10666,27 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
 
   const now = nowIso();
 
-  // Determine next version for this timesheet_id
-  let nextVersion = 2;
+  // Determine next version for this booking_id (NOT timesheet_id)
+  let nextVersion = Number(ts.version || 1) + 1;
   try {
     const { rows: vRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=eq.${enc(timesheetId)}` +
+        `?booking_id=eq.${enc(bookingId)}` +
         `&select=version` +
         `&order=version.desc` +
         `&limit=1`
     );
-    const currentMax = vRows?.[0]?.version != null ? Number(vRows[0].version) : 1;
-    nextVersion = Number.isFinite(currentMax) ? currentMax + 1 : 2;
+    const currentMax = vRows?.[0]?.version != null ? Number(vRows[0].version) : Number(ts.version || 1);
+    nextVersion = Number.isFinite(currentMax) ? currentMax + 1 : (Number(ts.version || 1) + 1);
   } catch {
-    nextVersion = 2;
+    nextVersion = Number(ts.version || 1) + 1;
   }
 
-  // 1) Mark existing ELECTRONIC version as not current + revoked marker
+  // 1) Demote current row for this booking_id (defensive)
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
-      `&version=eq.${enc(ts.version)}` +
+      `?booking_id=eq.${enc(bookingId)}` +
       `&is_current=eq.true`,
     {
       method: 'PATCH',
@@ -10673,21 +10701,21 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
     }
   ).catch(() => {});
 
-  // 2) Insert MANUAL version v+1
+  // 2) Insert MANUAL version v+1 (NO timesheet_id)
   const manualTs = { ...ts };
   delete manualTs.id;
+  delete manualTs.timesheet_id;
 
   const newManual = {
     ...manualTs,
+    booking_id: bookingId,
     version: nextVersion,
     is_current: true,
     submission_mode: 'MANUAL',
 
-    // clear any electronic signature keys (if present)
     r2_nurse_key: null,
     r2_auth_key: null,
 
-    // ensure QR overlay is cleared on the new manual version
     qr_token: null,
     qr_status: null,
     qr_payload_json: {},
@@ -10696,10 +10724,8 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
     qr_scan_info_json: null,
     qr_r2_key: null,
 
-    // manual evidence should be uploaded by admin
     manual_pdf_r2_key: null,
 
-    timesheet_id: timesheetId,
     created_at: now,
     updated_at: now
   };
@@ -10713,25 +10739,29 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
     }
   );
   if (!insRes.ok) {
-    const txt = await insRes.text();
+    const txt = await insRes.text().catch(() => '');
     return withCORS(env, req, serverError(`Failed to create daily manual version: ${txt}`));
   }
-  const inserted = (await insRes.json().catch(() => []))[0] || null;
 
-  // 3) Keep TSFIN's version marker aligned
-  try {
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
-      {
-        method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify({
-          timesheet_version: inserted?.version ?? nextVersion,
-          updated_at: now
-        })
-      }
-    );
-  } catch {}
+  const inserted = (await insRes.json().catch(() => []))[0] || null;
+  const newTimesheetId = inserted?.timesheet_id || null;
+  if (!newTimesheetId) {
+    return withCORS(env, req, serverError('Insert succeeded but no timesheet_id returned'));
+  }
+
+  // 3) TSFIN: move current TSFIN row to new timesheet_id + align version marker
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+      body: JSON.stringify({
+        timesheet_id: newTimesheetId,
+        timesheet_version: inserted?.version ?? nextVersion,
+        updated_at: now
+      })
+    }
+  ).catch(() => {});
 
   // 4) Audit
   try {
@@ -10740,12 +10770,14 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
       user,
       'DAILY_SWITCHED_TO_MANUAL',
       {
-        timesheet_id: timesheetId,
+        booking_id: bookingId,
+        old_timesheet_id: timesheetId,
+        new_timesheet_id: newTimesheetId,
         old_version: ts.version,
         new_version: inserted?.version ?? nextVersion,
         basis
       },
-      { entity: 'timesheets', subject_id: timesheetId, req }
+      { entity: 'timesheets', subject_id: newTimesheetId, req }
     );
   } catch (e) {
     console.warn('[TS][DAILY_SWITCH_TO_MANUAL] audit failed', e?.message || e);
@@ -10756,7 +10788,9 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
     req,
     ok({
       switched: true,
-      timesheet_id: timesheetId,
+      booking_id: bookingId,
+      old_timesheet_id: timesheetId,
+      current_timesheet_id: newTimesheetId,
       manual_version: inserted?.version ?? nextVersion,
       has_electronic_original: true,
       electronic_version: ts.version ?? 1
@@ -15683,7 +15717,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
   }
 
   try {
-    // Current timesheet record
+    // Current timesheet record (current version row by PK)
     const { rows: tsRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -15697,7 +15731,9 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       return withCORS(env, req, notFound('Timesheet not found'));
     }
 
-    // Linked contract_week (if any)
+    const bookingId = ts.booking_id || null;
+
+    // Linked contract_week (if any) - points at CURRENT row id (your other endpoints now keep this updated)
     let contractWeekId = null;
     let contractWeek = null;
     try {
@@ -15715,7 +15751,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       contractWeek = null;
     }
 
-    // Current TSFIN snapshot
+    // Current TSFIN snapshot (current TSFIN row keyed to current timesheet_id)
     const { rows: finRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
@@ -15726,8 +15762,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     );
     const tsfinRaw = finRows?.[0] || null;
 
-    // ✅ NEW: pull view-derived flags (ready_to_pay, issue_codes, summary_stage, route_type)
-    // This ensures the modal can always rely on the same logic as the summary grid.
+    // View-derived flags (ready_to_pay, issue_codes, summary_stage, route_type)
     let summaryRow = null;
     try {
       const { rows: sRows } = await sbFetch(
@@ -15815,7 +15850,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
         const dsm = String(cs?.default_submission_mode || '').toUpperCase();
         supportsElectronicSubmission = (dsm === 'ELECTRONIC');
       }
-    } catch (e) {
+    } catch {
       supportsElectronicSubmission = false;
     }
 
@@ -15827,10 +15862,6 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     const hasQrGenerated = !!ts.qr_generated_at;
     const hasQrScanned = !!ts.qr_scanned_at;
 
-    // Derived "manual-only" hard-stop:
-    // - MANUAL submission_mode
-    // - and QR overlay is not enabled/active (no qr_status/token/generated/scanned)
-    // This is the best derivation available without a dedicated DB flag.
     const isManualOnly =
       (subMode === 'MANUAL') &&
       !qrStatus &&
@@ -15838,11 +15869,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       !hasQrGenerated &&
       !hasQrScanned;
 
-    // QR scenario classification
-    // scenario1: PENDING + no token + not generated
-    // scenario2: PENDING + token + generated + not scanned
-    // scenario3: USED + scanned
-    let qrScenario = null; // 'SCENARIO_1' | 'SCENARIO_2' | 'SCENARIO_3' | 'EXPIRED' | 'CANCELLED' | null
+    let qrScenario = null;
 
     if (qrStatus === 'CANCELLED') {
       qrScenario = 'CANCELLED';
@@ -15851,7 +15878,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     } else if (qrStatus === 'PENDING') {
       if (!hasQrToken && !hasQrGenerated) qrScenario = 'SCENARIO_1';
       else if (hasQrToken && hasQrGenerated && !hasQrScanned) qrScenario = 'SCENARIO_2';
-      else qrScenario = 'SCENARIO_2'; // defensive fallback: pending means "awaiting upload" in practice
+      else qrScenario = 'SCENARIO_2';
     } else if (qrStatus === 'USED') {
       qrScenario = hasQrScanned ? 'SCENARIO_3' : 'SCENARIO_3';
     } else {
@@ -15864,64 +15891,67 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     const isHardLocked = isLockedByInvoice || isPaid;
 
     // ───────────────────── Action availability flags ─────────────────────
-    // History lookups to determine restore/revert availability
+    // FIX: history lookups MUST be by booking_id (version group), not by timesheet_id
     let canRestoreQrPending = false;
     let canRestoreQrSigned = false;
     let canRevertToElectronic = false;
 
-    try {
-      // pending QR version exists in history
-      const { rows: pendingRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/timesheets` +
-          `?timesheet_id=eq.${enc(timesheetId)}` +
-          `&is_current=eq.false` +
-          `&qr_status=eq.PENDING` +
-          `&qr_generated_at=is.not.null` +
-          `&qr_scanned_at=is.null` +
-          `&qr_token=is.not.null` +
-          `&select=version` +
-          `&order=version.desc` +
-          `&limit=1`
-      );
-      canRestoreQrPending = !!(pendingRows && pendingRows.length);
-    } catch {
+    if (bookingId) {
+      try {
+        const { rows: pendingRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/timesheets` +
+            `?booking_id=eq.${enc(bookingId)}` +
+            `&is_current=eq.false` +
+            `&qr_status=eq.PENDING` +
+            `&qr_generated_at=is.not.null` +
+            `&qr_scanned_at=is.null` +
+            `&qr_token=is.not.null` +
+            `&select=timesheet_id,version` +
+            `&order=version.desc` +
+            `&limit=1`
+        );
+        canRestoreQrPending = !!(pendingRows && pendingRows.length);
+      } catch {
+        canRestoreQrPending = false;
+      }
+
+      try {
+        const { rows: signedRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/timesheets` +
+            `?booking_id=eq.${enc(bookingId)}` +
+            `&is_current=eq.false` +
+            `&qr_status=eq.USED` +
+            `&qr_scanned_at=is.not.null` +
+            `&manual_pdf_r2_key=is.not.null` +
+            `&select=timesheet_id,version` +
+            `&order=version.desc` +
+            `&limit=1`
+        );
+        canRestoreQrSigned = !!(signedRows && signedRows.length);
+      } catch {
+        canRestoreQrSigned = false;
+      }
+
+      try {
+        const { rows: elecRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/timesheets` +
+            `?booking_id=eq.${enc(bookingId)}` +
+            `&is_current=eq.false` +
+            `&submission_mode=eq.ELECTRONIC` +
+            `&select=timesheet_id,version` +
+            `&order=version.desc` +
+            `&limit=1`
+        );
+        canRevertToElectronic = !!(elecRows && elecRows.length);
+      } catch {
+        canRevertToElectronic = false;
+      }
+    } else {
       canRestoreQrPending = false;
-    }
-
-    try {
-      // signed (USED) QR version exists in history
-      const { rows: signedRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/timesheets` +
-          `?timesheet_id=eq.${enc(timesheetId)}` +
-          `&is_current=eq.false` +
-          `&qr_status=eq.USED` +
-          `&qr_scanned_at=is.not.null` +
-          `&manual_pdf_r2_key=is.not.null` +
-          `&select=version` +
-          `&order=version.desc` +
-          `&limit=1`
-      );
-      canRestoreQrSigned = !!(signedRows && signedRows.length);
-    } catch {
       canRestoreQrSigned = false;
-    }
-
-    try {
-      // electronic version exists in history
-      const { rows: elecRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/timesheets` +
-          `?timesheet_id=eq.${enc(timesheetId)}` +
-          `&is_current=eq.false` +
-          `&submission_mode=eq.ELECTRONIC` +
-          `&select=version` +
-          `&order=version.desc` +
-          `&limit=1`
-      );
-      canRevertToElectronic = !!(elecRows && elecRows.length);
-    } catch {
       canRevertToElectronic = false;
     }
 
@@ -15952,21 +15982,17 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       : null;
 
     const action_flags = {
-      // restore/revert
       can_restore_qr_pending: (!isHardLocked) && canRestoreQrPending,
       can_restore_qr_signed: (!isHardLocked) && canRestoreQrSigned,
       can_revert_to_electronic: (!isHardLocked) && canRevertToElectronic,
 
-      // re-enable
       can_allow_qr_again: canAllowQrAgain,
       can_allow_electronic_again: canAllowElectronicAgain,
 
-      // capabilities/derived state
       supports_electronic_submission: supportsElectronicSubmission,
       is_manual_only: isManualOnly,
       qr_scenario: qrScenario,
 
-      // locks
       locked_by_invoice: isLockedByInvoice,
       paid: isPaid
     };
@@ -15977,7 +16003,6 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       validations,
       shifts,
 
-      // ✅ NEW: view-derived flags for consistent FE logic
       ready_to_pay: !!summaryRow?.ready_to_pay,
       summary_stage: summaryRow?.summary_stage || null,
       route_type: summaryRow?.route_type || null,
@@ -16002,6 +16027,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     return withCORS(env, req, serverError('Failed to load timesheet details'));
   }
 }
+
 
 async function applyWeeklyMappingsOnly(env, {
   source_system,
@@ -47856,7 +47882,6 @@ async function handleTimesheetAuditFeed(env, req, timesheetId) {
   const rows = await rpcRes.json().catch(() => []);
   return withCORS(env, req, ok({ items: rows || [] }));
 }
-
 async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -47864,7 +47889,7 @@ async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
   if (!user) return withCORS(env, req, unauthorized());
   if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
 
-  // Load current timesheet
+  // Load current version row by PK
   const ts = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -47875,7 +47900,10 @@ async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
   );
   if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
 
-  // Lock guard
+  const bookingId = ts.booking_id || null;
+  if (!bookingId) return withCORS(env, req, badRequest('Timesheet booking_id is missing; cannot version'));
+
+  // Lock guard (current TSFIN row for current PK)
   const fin = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
@@ -47908,13 +47936,13 @@ async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
 
   const now = nowIso();
 
-  // Next version number
+  // Next version number by booking_id (NOT by timesheet_id)
   let nextVersion = 2;
   try {
     const { rows: vRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=eq.${enc(timesheetId)}` +
+        `?booking_id=eq.${enc(bookingId)}` +
         `&select=version` +
         `&order=version.desc` +
         `&limit=1`
@@ -47925,11 +47953,10 @@ async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
     nextVersion = Number(ts.version || 1) + 1;
   }
 
-  // 1) Demote old current (preserve evidence in history)
+  // 1) Demote any current row for this booking_id (defensive)
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
-      `&version=eq.${enc(String(ts.version || 1))}` +
+      `?booking_id=eq.${enc(bookingId)}` +
       `&is_current=eq.true`,
     {
       method: 'PATCH',
@@ -47944,25 +47971,24 @@ async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
     }
   ).catch(() => {});
 
-  // 2) Insert new current version with QR Scenario 1 fields
+  // 2) Insert new current version (NO timesheet_id)
   const newRowBase = { ...ts };
   delete newRowBase.id;
+  delete newRowBase.timesheet_id;
 
   const newRow = {
     ...newRowBase,
+    booking_id: bookingId,
     version: nextVersion,
     is_current: true,
     status: 'RECEIVED',
-
     submission_mode: 'MANUAL',
 
-    // Clear evidence pointer on new current (evidence preserved in old version)
     manual_pdf_r2_key: null,
     r2_nurse_key: null,
     r2_auth_key: null,
     authorised_at_server: null,
 
-    // QR Scenario 1
     qr_status: 'PENDING',
     qr_token: null,
     qr_payload_json: {}, // NOT NULL
@@ -47987,8 +48013,33 @@ async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
   }
 
   const inserted = (await insRes.json().catch(() => []))[0] || null;
+  const newTimesheetId = inserted?.timesheet_id || null;
+  if (!newTimesheetId) {
+    return withCORS(env, req, serverError('Insert succeeded but no timesheet_id returned'));
+  }
 
-  // 3) Update TSFIN version marker + status gate
+  // 2b) Move contract_week pointer if it points at the old current row
+  try {
+    const cw = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+        `?timesheet_id=eq.${enc(timesheetId)}` +
+        `&select=id` +
+        `&limit=1`
+    );
+    if (cw?.id) {
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+          body: JSON.stringify({ timesheet_id: newTimesheetId, updated_at: now })
+        }
+      ).catch(() => {});
+    }
+  } catch {}
+
+  // 3) TSFIN: move the current TSFIN row to the new timesheet_id + set gate
   if (fin?.id) {
     await fetch(
       `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
@@ -47996,6 +48047,7 @@ async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
         method: 'PATCH',
         headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
         body: JSON.stringify({
+          timesheet_id: newTimesheetId,
           timesheet_version: inserted?.version ?? nextVersion,
           processing_status: 'AWAITING_MANUAL_SIGNATURE',
           updated_at: now
@@ -48011,20 +48063,25 @@ async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
       user,
       'QR_ALLOWED_AGAIN',
       {
-        timesheet_id: timesheetId,
+        booking_id: bookingId,
+        old_timesheet_id: timesheetId,
+        new_timesheet_id: newTimesheetId,
         old_version: ts.version,
         new_version: inserted?.version ?? nextVersion
       },
-      { entity: 'timesheets', subject_id: timesheetId, req }
+      { entity: 'timesheets', subject_id: newTimesheetId, req }
     );
   } catch {}
 
   return withCORS(env, req, ok({
     ok: true,
-    timesheet_id: timesheetId,
+    booking_id: bookingId,
+    old_timesheet_id: timesheetId,
+    current_timesheet_id: newTimesheetId,
     new_version: inserted?.version ?? nextVersion
   }));
 }
+
 async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -48032,7 +48089,7 @@ async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
   if (!user) return withCORS(env, req, unauthorized());
   if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
 
-  // Load current timesheet
+  // Load current version row by PK
   const ts = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -48042,6 +48099,9 @@ async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
       `&limit=1`
   );
   if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
+
+  const bookingId = ts.booking_id || null;
+  if (!bookingId) return withCORS(env, req, badRequest('Timesheet booking_id is missing; cannot version'));
 
   // Lock guard
   const fin = await sbGetOne(
@@ -48074,9 +48134,8 @@ async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
     return withCORS(env, req, badRequest('Allow electronic again is only valid for manual-only timesheets'));
   }
 
-  // Determine client_id for authoritative capability check (client_settings.default_submission_mode)
+  // Determine client_id for eligibility check
   let clientId = fin?.client_id || null;
-
   if (!clientId && ts.contract_id) {
     const contract = await sbGetOne(
       env,
@@ -48087,7 +48146,6 @@ async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
     );
     clientId = contract?.client_id || null;
   }
-
   if (!clientId) {
     return withCORS(env, req, badRequest('Cannot resolve client_id for electronic eligibility check'));
   }
@@ -48114,13 +48172,13 @@ async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
 
   const now = nowIso();
 
-  // Next version number
+  // Next version number by booking_id
   let nextVersion = 2;
   try {
     const { rows: vRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=eq.${enc(timesheetId)}` +
+        `?booking_id=eq.${enc(bookingId)}` +
         `&select=version` +
         `&order=version.desc` +
         `&limit=1`
@@ -48131,11 +48189,10 @@ async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
     nextVersion = Number(ts.version || 1) + 1;
   }
 
-  // 1) Demote old current (preserve evidence in history)
+  // 1) Demote current for booking_id
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
-      `&version=eq.${enc(String(ts.version || 1))}` +
+      `?booking_id=eq.${enc(bookingId)}` +
       `&is_current=eq.true`,
     {
       method: 'PATCH',
@@ -48150,27 +48207,24 @@ async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
     }
   ).catch(() => {});
 
-  // 2) Insert new ELECTRONIC current version (clear QR overlay + evidence pointers)
+  // 2) Insert new ELECTRONIC current version (NO timesheet_id)
   const newRowBase = { ...ts };
   delete newRowBase.id;
+  delete newRowBase.timesheet_id;
 
   const newRow = {
     ...newRowBase,
+    booking_id: bookingId,
     version: nextVersion,
     is_current: true,
     status: 'RECEIVED',
-
     submission_mode: 'ELECTRONIC',
 
-    // clear evidence/authorisation; candidate will submit again
     manual_pdf_r2_key: null,
     authorised_at_server: null,
-
-    // clear signature pointers so app can upload new ones
     r2_nurse_key: null,
     r2_auth_key: null,
 
-    // clear QR overlay fully
     qr_status: null,
     qr_token: null,
     qr_payload_json: {}, // NOT NULL
@@ -48195,8 +48249,33 @@ async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
   }
 
   const inserted = (await insRes.json().catch(() => []))[0] || null;
+  const newTimesheetId = inserted?.timesheet_id || null;
+  if (!newTimesheetId) {
+    return withCORS(env, req, serverError('Insert succeeded but no timesheet_id returned'));
+  }
 
-  // 3) Update TSFIN version marker + status
+  // 2b) Move contract_week pointer if it points at old current row
+  try {
+    const cw = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+        `?timesheet_id=eq.${enc(timesheetId)}` +
+        `&select=id` +
+        `&limit=1`
+    );
+    if (cw?.id) {
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+          body: JSON.stringify({ timesheet_id: newTimesheetId, updated_at: now })
+        }
+      ).catch(() => {});
+    }
+  } catch {}
+
+  // 3) TSFIN: move row to new timesheet_id + reset status
   if (fin?.id) {
     await fetch(
       `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
@@ -48204,6 +48283,7 @@ async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
         method: 'PATCH',
         headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
         body: JSON.stringify({
+          timesheet_id: newTimesheetId,
           timesheet_version: inserted?.version ?? nextVersion,
           processing_status: 'UNASSIGNED',
           updated_at: now
@@ -48219,18 +48299,22 @@ async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
       user,
       'ELECTRONIC_ALLOWED_AGAIN',
       {
-        timesheet_id: timesheetId,
+        booking_id: bookingId,
+        old_timesheet_id: timesheetId,
+        new_timesheet_id: newTimesheetId,
         old_version: ts.version,
         new_version: inserted?.version ?? nextVersion,
         client_id: clientId
       },
-      { entity: 'timesheets', subject_id: timesheetId, req }
+      { entity: 'timesheets', subject_id: newTimesheetId, req }
     );
   } catch {}
 
   return withCORS(env, req, ok({
     ok: true,
-    timesheet_id: timesheetId,
+    booking_id: bookingId,
+    old_timesheet_id: timesheetId,
+    current_timesheet_id: newTimesheetId,
     new_version: inserted?.version ?? nextVersion
   }));
 }
@@ -50662,51 +50746,43 @@ export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
 
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
-  if (!timesheetId) {
-    return withCORS(env, req, badRequest('timesheet_id is required'));
-  }
+  if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
 
-  // Optional body flag:
-  // { allow_manual_only: true } to allow revert even if current is manual-only hard-stop
   let body = null;
-  try {
-    body = await parseJSONBody(req);
-  } catch {
-    body = null;
-  }
+  try { body = await parseJSONBody(req); } catch { body = null; }
   const allowManualOnly = !!body?.allow_manual_only;
 
-  // Load all versions for this logical timesheet
-  const { rows: tsRows } = await sbFetch(
+  // Load current row by PK (must be current)
+  const current = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
       `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=*` +
+      `&limit=1`
+  );
+  if (!current) return withCORS(env, req, notFound('Timesheet not found'));
+
+  const bookingId = current.booking_id || null;
+  if (!bookingId) return withCORS(env, req, badRequest('Timesheet booking_id is missing; cannot revert'));
+
+  // Load all versions by booking_id
+  const { rows: tsRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?booking_id=eq.${enc(bookingId)}` +
       `&select=*`
   );
   const versions = tsRows || [];
-  if (!versions.length) {
-    return withCORS(env, req, notFound('Timesheet not found'));
-  }
+  if (!versions.length) return withCORS(env, req, notFound('Timesheet not found'));
 
-  // Electronic version = MOST RECENT submission_mode='ELECTRONIC' (highest version)
-  const electronicVersions = versions
+  const elec = versions
     .filter((r) => String(r.submission_mode || '').toUpperCase() === 'ELECTRONIC')
-    .sort((a, b) => (b.version || 1) - (a.version || 1));
+    .sort((a, b) => (b.version || 1) - (a.version || 1))[0] || null;
 
-  const elec = electronicVersions[0] || null;
-  if (!elec) {
-    return withCORS(env, req, badRequest('No electronic version exists for this timesheet'));
-  }
+  if (!elec) return withCORS(env, req, badRequest('No electronic version exists for this timesheet'));
 
-  // Current version = is_current=true (or fall back to highest version)
-  let current =
-    versions.find((r) => r.is_current === true) ||
-    versions.sort((a, b) => (b.version || 1) - (a.version || 1))[0];
-
-  const elecVersion = elec.version || 1;
-  const currentVersion = current.version || 1;
-
-  // Guard: do not revert if the CURRENT snapshot is paid or invoiced (or other hard locks)
+  // Guard: TSFIN lock check uses the current row id (input id)
   const tsfin = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
@@ -50727,7 +50803,7 @@ export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
     }
   }
 
-  // Block revert when current is manual-only unless explicitly allowed
+  // Block revert when current is manual-only unless override
   const currentSubMode = String(current.submission_mode || '').toUpperCase();
   const currentQrStatus = String(current.qr_status || '').toUpperCase() || '';
   const hasQrToken = !!(current.qr_token && String(current.qr_token).trim());
@@ -50745,49 +50821,63 @@ export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
     return withCORS(env, req, badRequest('Cannot revert: current is manual-only (set allow_manual_only=true to override)'));
   }
 
-  // If electronic is already current → no-op
-  if ((current.version || 1) === elecVersion && current.is_current) {
+  if (current.timesheet_id === elec.timesheet_id && current.is_current) {
     return withCORS(env, req, ok({
       reverted: false,
       reason: 'Electronic version is already current',
-      timesheet_id: timesheetId,
-      current_version: elecVersion
+      booking_id: bookingId,
+      current_timesheet_id: current.timesheet_id,
+      current_version: elec.version || 1
     }));
   }
 
   const now = nowIso();
 
-  // 1) Demote current version
+  // 1) Demote current for booking_id (defensive)
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
-      `&version=eq.${enc(String(currentVersion))}`,
+      `?booking_id=eq.${enc(bookingId)}` +
+      `&is_current=eq.true`,
     {
       method: 'PATCH',
       headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-      body: JSON.stringify({
-        is_current: false,
-        updated_at: now
-      })
+      body: JSON.stringify({ is_current: false, updated_at: now })
     }
   ).catch(() => {});
 
-  // 2) Promote electronic version to current
+  // 2) Promote electronic row to current by its PK
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
-      `&version=eq.${enc(String(elecVersion))}`,
+      `?timesheet_id=eq.${enc(elec.timesheet_id)}`,
     {
       method: 'PATCH',
       headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-      body: JSON.stringify({
-        is_current: true,
-        updated_at: now
-      })
+      body: JSON.stringify({ is_current: true, updated_at: now })
     }
   ).catch(() => {});
 
-  // 3) Keep TSFIN version marker aligned + enqueue recompute
+  // 2b) Move contract_week pointer if it points at old current row
+  try {
+    const cw = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+        `?timesheet_id=eq.${enc(timesheetId)}` +
+        `&select=id` +
+        `&limit=1`
+    );
+    if (cw?.id) {
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+          body: JSON.stringify({ timesheet_id: elec.timesheet_id, updated_at: now })
+        }
+      ).catch(() => {});
+    }
+  } catch {}
+
+  // 3) TSFIN: move current TSFIN row from old current PK to new current PK
   try {
     if (tsfin?.id) {
       await fetch(
@@ -50796,7 +50886,8 @@ export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
           method: 'PATCH',
           headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
           body: JSON.stringify({
-            timesheet_version: elecVersion,
+            timesheet_id: elec.timesheet_id,
+            timesheet_version: elec.version || 1,
             updated_at: now
           })
         }
@@ -50806,7 +50897,7 @@ export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
 
   try {
     await sbRpc(env, 'enqueue_ts_financials', {
-      timesheet_id: timesheetId,
+      timesheet_id: elec.timesheet_id,
       reason: 'REVERT_TO_ELECTRONIC'
     });
   } catch {}
@@ -50818,22 +50909,22 @@ export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
       user,
       'REVERTED_TO_ELECTRONIC',
       {
-        timesheet_id: timesheetId,
-        electronic_version: elecVersion,
-        previous_current_version: currentVersion,
+        booking_id: bookingId,
+        previous_current_timesheet_id: timesheetId,
+        new_current_timesheet_id: elec.timesheet_id,
+        electronic_version: elec.version || 1,
         allow_manual_only: allowManualOnly
       },
-      { entity: 'timesheets', subject_id: timesheetId, req }
+      { entity: 'timesheets', subject_id: elec.timesheet_id, req }
     );
-  } catch (e) {
-    console.warn('[TS][REVERT_TO_ELECTRONIC] audit failed', e?.message || e);
-  }
+  } catch {}
 
   return withCORS(env, req, ok({
     reverted: true,
-    timesheet_id: timesheetId,
-    electronic_version: elecVersion,
-    previous_current_version: currentVersion
+    booking_id: bookingId,
+    previous_current_timesheet_id: timesheetId,
+    current_timesheet_id: elec.timesheet_id,
+    electronic_version: elec.version || 1
   }));
 }
 
