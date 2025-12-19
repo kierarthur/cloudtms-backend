@@ -29734,6 +29734,90 @@ async function handleUpdateClient(env, req, clientId) {
     return s === 'true' || s === 'yes' || s === 'y' || s === '1';
   };
 
+  // Server-side canonicalisation for the new gated weekly logic.
+  // Only applied when client_settings is being changed in this request.
+  const canonicalizeClientSettingsServer = (beforeCs, incomingPatch) => {
+    const merged = { ...(beforeCs || {}), ...(incomingPatch || {}) };
+
+    const b = (x, def = false) => {
+      if (typeof x === 'boolean') return x;
+      if (x === 'on' || x === 'true' || x === true || x === 1 || x === '1') return true;
+      if (x === 'false' || x === false || x === 0 || x === '0' || x == null || x === '') return false;
+      return def;
+    };
+
+    // Defaults (preserve existing if present; on insert fall back to sensible defaults)
+    const out = { ...merged };
+
+    // Derive weekly mode from booleans
+    const isNhsp = b(out.is_nhsp, false);
+    const isHr   = b(out.autoprocess_hr, false);
+
+    if (isNhsp) {
+      out.is_nhsp = true;
+
+      out.autoprocess_hr = false;
+      out.requires_hr = false;
+      out.no_timesheet_required = false;
+
+      out.pay_reference_required = false;
+      out.invoice_reference_required = false;
+
+      out.self_bill_no_invoices_sent = true;
+      out.daily_calc_of_invoices = true;
+      out.group_nightsat_sunbh = false;
+
+      out.hr_attach_to_invoice = false;
+      out.ts_attach_to_invoice = false;
+
+      return out;
+    }
+
+    if (!isHr) {
+      // Manual (NONE)
+      out.is_nhsp = false;
+
+      out.autoprocess_hr = false;
+      out.requires_hr = false;
+      out.no_timesheet_required = false;
+
+      out.hr_attach_to_invoice = false;
+      out.ts_attach_to_invoice = true;
+
+      // Other manual flags remain user-configurable (do not force)
+      // pay_reference_required, invoice_reference_required, self_bill_no_invoices_sent,
+      // daily_calc_of_invoices, group_nightsat_sunbh are left as-is.
+      return out;
+    }
+
+    // HealthRoster
+    out.is_nhsp = false;
+    out.autoprocess_hr = true;
+
+    const createMode = b(out.no_timesheet_required, false);
+
+    // Enforce refs off for HR modes
+    out.pay_reference_required = false;
+    out.invoice_reference_required = false;
+
+    // Attach defaults if unset
+    if (out.hr_attach_to_invoice == null) out.hr_attach_to_invoice = true;
+    if (out.ts_attach_to_invoice == null) out.ts_attach_to_invoice = true;
+
+    if (createMode) {
+      // HR creates timesheets; no cross-check; do not attach timesheets
+      out.requires_hr = false;
+      out.no_timesheet_required = true;
+      out.ts_attach_to_invoice = false;
+      return out;
+    }
+
+    // HR verify mode
+    out.requires_hr = true;
+    out.no_timesheet_required = false;
+    return out;
+  };
+
   try {
     // --- Load existing client + latest client_settings for comparison
     const { rows: beforeClientRows } = await sbFetch(
@@ -29760,7 +29844,6 @@ async function handleUpdateClient(env, req, clientId) {
           'effective_from','timezone_id',
           'day_start','day_end','night_start','night_end','sat_start','sat_end','sun_start','sun_end',
           'bh_source','bh_list','bh_feed_url',
-          // NEW flags
           'requires_hr','autoprocess_hr','hr_attach_to_invoice','ts_attach_to_invoice',
           'created_at','updated_at'
         ].join(',') +
@@ -29774,6 +29857,11 @@ async function handleUpdateClient(env, req, clientId) {
       ...(typeof data.client_settings === 'object' ? data.client_settings : {})
     };
 
+    // Remove any UI-only helper keys if they arrive
+    delete csInput.weekly_mode;
+    delete csInput.hr_weekly_behaviour;
+    delete csInput.__from_ui;
+
     // Existing flags in client_settings
     if ('hr_validation_required' in data)        csInput.hr_validation_required        = !!data.hr_validation_required;
     if ('ts_reference_required' in data)         csInput.ts_reference_required         = !!data.ts_reference_required;
@@ -29781,7 +29869,7 @@ async function handleUpdateClient(env, req, clientId) {
     if ('invoice_reference_required' in data)    csInput.invoice_reference_required    = !!data.invoice_reference_required;
     if ('default_submission_mode' in data)       csInput.default_submission_mode       = data.default_submission_mode;
 
-    // NEW: HR / attach flags (accept either top-level or nested in client_settings)
+    // HR / attach flags (accept either top-level or nested in client_settings)
     if ('requires_hr' in data || 'requires_hr' in csInput) {
       csInput.requires_hr = asBool(csInput.requires_hr ?? data.requires_hr);
     }
@@ -29795,7 +29883,7 @@ async function handleUpdateClient(env, req, clientId) {
       csInput.ts_attach_to_invoice = asBool(csInput.ts_attach_to_invoice ?? data.ts_attach_to_invoice);
     }
 
-    // NEW top-level flags: accept at either level
+    // Top-level flags: accept at either level
     if ('is_nhsp' in data || 'is_nhsp' in csInput) {
       csInput.is_nhsp = asBool(csInput.is_nhsp ?? data.is_nhsp);
     }
@@ -29836,7 +29924,7 @@ async function handleUpdateClient(env, req, clientId) {
       client_settings,
       week_ending_weekday,
 
-      // NEW top-level flags pulled into csInput above
+      // flags pulled into csInput above
       is_nhsp,
       self_bill_no_invoices_sent,
       daily_calc_of_invoices,
@@ -29886,38 +29974,29 @@ async function handleUpdateClient(env, req, clientId) {
     // --- Upsert/patch client_settings if provided
     let csChanged = false;
     let client_settings_updated = null;
+
     if (Object.keys(csInput).length) {
-      const desired = {
-        ...(beforeCs || { client_id: clientId }),
-        ...csInput
-      };
       const hasBefore = !!beforeCs?.id;
 
-      const beforeHr      = !!(beforeCs?.hr_validation_required        ?? false);
-      const beforeRef     = !!(beforeCs?.ts_reference_required         ?? false);
-      const beforePayRef  = !!(beforeCs?.pay_reference_required        ?? false);
-      const beforeInvRef  = !!(beforeCs?.invoice_reference_required    ?? false);
+      // Canonicalise server-side (enforces the gated weekly rules)
+      const canon = canonicalizeClientSettingsServer(beforeCs, csInput);
 
-      const nextHr        = !!(desired.hr_validation_required          ?? false);
-      const nextRef       = !!(desired.ts_reference_required           ?? false);
-      const nextPayRef    = !!(desired.pay_reference_required          ?? false);
-      const nextInvRef    = !!(desired.invoice_reference_required      ?? false);
-
-      // Note: requires_hr / autoprocess_hr / attach flags do NOT currently affect TSFIN staleness.
-      csChanged = (
-        beforeHr     !== nextHr     ||
-        beforeRef    !== nextRef    ||
-        beforePayRef !== nextPayRef ||
-        beforeInvRef !== nextInvRef
-      );
-
+      // Build a minimal PATCH (only fields that actually differ), but allow canon to force values
+      const patch = {};
       if (hasBefore) {
+        for (const [k, v] of Object.entries(canon)) {
+          if (k === 'id' || k === 'client_id' || k === 'created_at' || k === 'updated_at') continue;
+          const beforeV = beforeCs ? beforeCs[k] : undefined;
+          if (JSON.stringify(beforeV) !== JSON.stringify(v)) patch[k] = v;
+        }
+        patch.updated_at = new Date().toISOString();
+
         const csRes = await fetch(
           `${env.SUPABASE_URL}/rest/v1/client_settings?id=eq.${encodeURIComponent(beforeCs.id)}`,
           {
             method: "PATCH",
             headers: { ...sbHeaders(env), "Prefer": "return=representation" },
-            body: JSON.stringify({ ...csInput, updated_at: new Date().toISOString() })
+            body: JSON.stringify(patch)
           }
         );
         if (!csRes.ok) {
@@ -29927,15 +30006,18 @@ async function handleUpdateClient(env, req, clientId) {
         const csJson = await csRes.json().catch(() => ({}));
         client_settings_updated = Array.isArray(csJson) ? csJson[0] : csJson;
       } else {
+        const insertRow = {
+          client_id: clientId,
+          ...canon,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+        delete insertRow.id;
+
         const csRes = await fetch(`${env.SUPABASE_URL}/rest/v1/client_settings`, {
           method: "POST",
           headers: { ...sbHeaders(env), "Prefer": "return=representation" },
-          body: JSON.stringify({
-            client_id: clientId,
-            ...csInput,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
+          body: JSON.stringify(insertRow)
         });
         if (!csRes.ok) {
           const err = await csRes.text();
@@ -29944,6 +30026,24 @@ async function handleUpdateClient(env, req, clientId) {
         const csJson = await csRes.json().catch(() => ({}));
         client_settings_updated = Array.isArray(csJson) ? csJson[0] : csJson;
       }
+
+      // TSFIN staleness detection (keep existing behaviour)
+      const beforeHr      = !!(beforeCs?.hr_validation_required        ?? false);
+      const beforeRef     = !!(beforeCs?.ts_reference_required         ?? false);
+      const beforePayRef  = !!(beforeCs?.pay_reference_required        ?? false);
+      const beforeInvRef  = !!(beforeCs?.invoice_reference_required    ?? false);
+
+      const nextHr        = !!(canon.hr_validation_required            ?? false);
+      const nextRef       = !!(canon.ts_reference_required             ?? false);
+      const nextPayRef    = !!(canon.pay_reference_required            ?? false);
+      const nextInvRef    = !!(canon.invoice_reference_required        ?? false);
+
+      csChanged = (
+        beforeHr     !== nextHr     ||
+        beforeRef    !== nextRef    ||
+        beforePayRef !== nextPayRef ||
+        beforeInvRef !== nextInvRef
+      );
     }
 
     // --- Change detection for timesheet financials staleness (unchanged core logic)
