@@ -798,42 +798,68 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array of 
 function validateScheduleStructure(actualDays /* array of {date,start,end,breaks?,break_start?,break_end?} */) {
   if (!Array.isArray(actualDays) || !actualDays.length) return;
 
-  // Group shift intervals by date
   const byDate = new Map();
+  const hasText = (v) => v != null && String(v).trim() !== '';
+
+  const hasAnyBreakTimes = (d) => {
+    if (!d) return false;
+    if (hasText(d.break_start) || hasText(d.break_end)) return true;
+    if (Array.isArray(d.breaks)) {
+      return d.breaks.some(b => b && (hasText(b.start) || hasText(b.end)));
+    }
+    return false;
+  };
 
   for (const d of actualDays) {
     if (!d || !d.date) continue;
     const date = d.date;
 
+    const hasStart = hasText(d.start);
+    const hasEnd   = hasText(d.end);
+
+    // shift start/end must both exist or neither
+    if (hasStart !== hasEnd) {
+      throw new Error(`Shift start/end must both be set (or both blank) for ${date}`);
+    }
+
+    // if no shift, there must be no break windows
+    if (!hasStart && !hasEnd) {
+      if (hasAnyBreakTimes(d)) {
+        throw new Error(`Breaks require a valid shift start/end on ${date}`);
+      }
+      continue;
+    }
+
     const s = parseHHMM(d.start);
     const e = parseHHMM(d.end);
 
-    // If either is present but invalid, treat as a hard error
-    if ((d.start && s == null) || (d.end && e == null)) {
+    // hard error if invalid HH:MM
+    if (s == null || e == null) {
       throw new Error(`Invalid HH:MM in actual_schedule_json for ${date}`);
     }
 
-    // Require both start and end to consider this a shift
-    if (s == null || e == null) continue;
+    // start != end
+    if (s === e) {
+      throw new Error(`Shift start and end cannot be the same on ${date}`);
+    }
 
-    // Compute base-day interval for overlap detection
-    const overnight = (e <= s);
-    const shiftStart = s;
-    const shiftEndBase = overnight ? 1440 : e; // [start, 1440) on base date for overnight
+    // start after end allowed only as overnight (wrap)
+    const shiftStartMin = s;
+    const shiftEndMin   = (e > s) ? e : (e + 1440); // overnight ok
+    const shiftMinutes  = shiftEndMin - shiftStartMin;
 
-    // Store for overlap checking
     if (!byDate.has(date)) byDate.set(date, []);
     byDate.get(date).push({
-      startMin: shiftStart,
-      endMin: shiftEndBase,
-      entry: d,
+      startMin: shiftStartMin,
+      endMin:   shiftEndMin,
+      entry:    d,
     });
 
-    // Validate breaks for this shift
-    validateBreaksForShift(date, s, e, d);
+    // Validate breaks for this shift (all rules, overnight-aware)
+    validateBreaksForShift(date, shiftStartMin, shiftEndMin, shiftMinutes, d);
   }
 
-  // Now check overlaps per date
+  // Overlapping shifts per date (overnight-aware because endMin may exceed 1440)
   for (const [date, segments] of byDate.entries()) {
     if (!Array.isArray(segments) || segments.length < 2) continue;
 
@@ -842,8 +868,6 @@ function validateScheduleStructure(actualDays /* array of {date,start,end,breaks
     for (let i = 1; i < segments.length; i++) {
       const prev = segments[i - 1];
       const cur  = segments[i];
-
-      // Overlap if current starts before previous ends
       if (cur.startMin < prev.endMin) {
         throw new Error(`Overlapping shifts detected on ${date}`);
       }
@@ -851,81 +875,74 @@ function validateScheduleStructure(actualDays /* array of {date,start,end,breaks
   }
 }
 
-// Validate primary + extra break windows for a single shift on a given date.
-// Ensures they fall within the shift window (with simple handling of overnight shifts).
-function validateBreaksForShift(date, shiftStartMin, shiftEndMin, entry) {
-  const overnightShift = (shiftEndMin <= shiftStartMin);
+function validateBreaksForShift(date, shiftStartMin, shiftEndMin, shiftMinutes, d) {
+  const hasText = (v) => v != null && String(v).trim() !== '';
 
-  const collectBreaks = () => {
-    const arr = [];
+  // Choose canonical break windows:
+  // - if breaks[] has any populated entries, use that
+  // - else fall back to break_start/break_end
+  let windows = [];
+  const breaksArr = Array.isArray(d.breaks) ? d.breaks.filter(b => b && (hasText(b.start) || hasText(b.end))) : [];
 
-    // Primary break_start / break_end
-    if (entry.break_start || entry.break_end) {
-      arr.push({
-        start: entry.break_start || null,
-        end:   entry.break_end   || null,
-      });
+  if (breaksArr.length) {
+    windows = breaksArr.map((b, i) => ({ start: b.start, end: b.end, idx: i }));
+  } else if (hasText(d.break_start) || hasText(d.break_end)) {
+    windows = [{ start: d.break_start, end: d.break_end, idx: -1 }];
+  }
+
+  // break windows must both exist or neither; start!=end; ordering allows overnight only if still within shift span
+  const ranges = []; // { bsAdj, beAdj }
+
+  for (const w of windows) {
+    const hasBStart = hasText(w.start);
+    const hasBEnd   = hasText(w.end);
+
+    if (hasBStart !== hasBEnd) {
+      throw new Error(`Break start/end must both be set (or both blank) on ${date}`);
+    }
+    if (!hasBStart && !hasBEnd) continue;
+
+    const bs0 = parseHHMM(w.start);
+    const be0 = parseHHMM(w.end);
+
+    if (bs0 == null || be0 == null) {
+      throw new Error(`Invalid HH:MM in break window on ${date}`);
+    }
+    if (bs0 === be0) {
+      throw new Error(`Break start and end cannot be the same on ${date}`);
     }
 
-    // Extra breaks array
-    if (Array.isArray(entry.breaks)) {
-      for (const br of entry.breaks) {
-        if (!br) continue;
-        if (!br.start && !br.end) continue;
-        arr.push({
-          start: br.start || null,
-          end:   br.end   || null,
-        });
-      }
+    // Place break on same timeline as shift (overnight-aware)
+    let bsAdj = bs0;
+    if (bsAdj < shiftStartMin) bsAdj += 1440;
+
+    let beAdj = be0;
+    if (beAdj <= bsAdj) beAdj += 1440; // break overnight allowed
+
+    // Must be fully within shift span
+    if (bsAdj < shiftStartMin || beAdj > shiftEndMin || beAdj <= bsAdj) {
+      throw new Error(`Break must be within shift on ${date} (${w.start}-${w.end})`);
     }
 
-    return arr;
-  };
+    ranges.push({ bsAdj, beAdj });
+  }
 
-  const breaks = collectBreaks();
-  if (!breaks.length) return;
-
-  for (const bw of breaks) {
-    const bs = bw.start ? parseHHMM(bw.start) : null;
-    const be = bw.end   ? parseHHMM(bw.end)   : null;
-
-    // If either time is invalid, treat as structural error
-    if ((bw.start && bs == null) || (bw.end && be == null)) {
-      throw new Error(`Invalid break HH:MM in actual_schedule_json for ${date}`);
-    }
-
-    // Only enforce bounds when both start and end are present;
-    // partial break times are handled as "no break" by the rest of the system.
-    if (bs == null || be == null) continue;
-
-    if (!overnightShift) {
-      // Non-overnight shift: break must sit wholly within [shiftStartMin, shiftEndMin)
-      // and must not itself be overnight.
-      if (be <= bs) {
-        throw new Error(`Break window crosses midnight for a non-overnight shift on ${date}`);
-      }
-      if (bs < shiftStartMin || be > shiftEndMin) {
-        throw new Error(`Break window is outside the shift for ${date}`);
-      }
-    } else {
-      // Overnight shift: shift is [shiftStartMin,24:00) on date and [00:00,shiftEndMin) next day.
-      const overnightBreak = (be <= bs);
-
-      if (overnightBreak) {
-        // Overnight break (crosses midnight): it must start after shiftStart on base date
-        // and end before shiftEnd on following date.
-        if (bs < shiftStartMin || be > shiftEndMin) {
-          throw new Error(`Overnight break window is outside the overnight shift for ${date}`);
-        }
-      } else {
-        // Same-day break window for an overnight shift must be on the "evening" part: start >= shiftStartMin.
-        if (bs < shiftStartMin || be > 1440) {
-          throw new Error(`Break window is outside the shift for ${date}`);
-        }
-      }
+  // break windows must not overlap each other
+  ranges.sort((a, b) => a.bsAdj - b.bsAdj);
+  for (let i = 1; i < ranges.length; i++) {
+    if (ranges[i].bsAdj < ranges[i - 1].beAdj) {
+      throw new Error(`Overlapping breaks detected on ${date}`);
     }
   }
+
+  // Optional sanity: total break minutes < shift minutes (prevents break >= shift)
+  const totalBreakMin = ranges.reduce((sum, r) => sum + (r.beAdj - r.bsAdj), 0);
+  if (totalBreakMin >= shiftMinutes) {
+    throw new Error(`Total break time must be less than shift length on ${date}`);
+  }
 }
+
+
 
 async function r2GetJSON(env, key) {
   const u8 = await r2GetBytes(env, key);
@@ -4438,32 +4455,215 @@ async function handleContractWeeksList(env, req) {
   return withCORS(env, req, ok(row));
 }
 
- async function handleContractWeekPresignManualPdf(env, req, weekId) {
-  // Admin presign wrapper (uses your existing token scheme; see signatures presign) 
+async function handleContractWeekPresignManualPdf(env, req, weekId) {
+  // Admin presign wrapper — MUST align with /api/files/presign-upload + /api/files/upload token/key rules
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
-  const cw = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=id,week_ending_date,additional_seq,uploaded_pdf_r2_key,timesheet_id`);
+  const cw = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=id,week_ending_date,additional_seq,uploaded_pdf_r2_key,timesheet_id`
+  );
   if (!cw) return withCORS(env, req, notFound('Week not found'));
 
   // If already invoiced, forbid replacement at this path (use unissue flow first)
   if (cw.timesheet_id) {
-    const tsfin = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${enc(cw.timesheet_id)}&is_current=eq.true&select=locked_by_invoice_id`);
+    const tsfin = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${enc(cw.timesheet_id)}&is_current=eq.true&select=locked_by_invoice_id`
+    );
     if (tsfin?.locked_by_invoice_id) {
       return withCORS(env, req, badRequest('Timesheet invoiced. Unissue invoice before replacing scan.'));
     }
   }
 
-  const weC = ymdCompact(cw.week_ending_date);
-  const key = `paper_ts/we=${weC}/cw_${cw.id}_${Date.now()}.upload`;
-  const token = await createToken(env, 'UPLOAD', { key, c: 'manual_ts', ttlSec: 3600, maxBytes: 25 * 1024 * 1024, contentTypes: ['application/pdf','image/jpeg','image/png','image/heic','image/heif'] });
-  const upload_url = `${new URL(req.url).origin}/api/files/upload?key=${enc(key)}&token=${enc(token)}`;
+  // Optional hints (backward compatible with callers that POST {})
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
 
-  // Optimistically persist the key on the week (replaced if later call wants)
+  const contentTypeRaw =
+    (body && (body.content_type || body.contentType)) ||
+    'application/pdf';
+
+  const filenameRaw =
+    (body && (body.filename || body.name)) ||
+    `contract_week_${cw.id}.pdf`;
+
+  const contentType = String(contentTypeRaw || 'application/pdf');
+  const filename = String(filenameRaw || '');
+
+  // Derive extension like handleFilePresignUpload (so key matches /api/files/upload regex)
+  let ext = '';
+  if (filename && filename.includes('.')) {
+    ext = filename.substring(filename.lastIndexOf('.'));
+  } else {
+    const ctMap = {
+      'image/png': '.png',
+      'image/jpeg': '.jpg',
+      'image/gif': '.gif',
+      'image/webp': '.webp',
+      'image/heic': '.heic',
+      'image/heif': '.heif',
+      'application/pdf': '.pdf'
+    };
+    if (contentType in ctMap) ext = ctMap[contentType];
+  }
+
+  // MUST match /api/files/upload:
+  //   key:  /^\/files\/\d{8}\/file_[0-9a-f]{16}(\.[A-Za-z0-9]{3,10})?$/
+  //   token payload: { typ: "file_upload", key, exp } signed with env.UPLOAD_TOKEN_SECRET
+  const dateTag = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const randBytes = crypto.getRandomValues(new Uint8Array(8));
+  let randHex = '';
+  randBytes.forEach(b => { randHex += b.toString(16).padStart(2, '0'); });
+
+  const key = `/files/${dateTag}/file_${randHex}${ext || ''}`;
+
+  const expiresSec = Math.min(parseInt(env.PRESIGN_EXPIRES_SECONDS || '600', 10) || 600, 900);
+  const exp = Math.floor(Date.now() / 1000) + expiresSec;
+
+  const token = await createToken(env.UPLOAD_TOKEN_SECRET, { typ: 'file_upload', key, exp });
+
+  const uploadBase = new URL(req.url);
+  uploadBase.pathname = '/api/files/upload';
+  uploadBase.search = '';
+  uploadBase.searchParams.set('key', key);
+  uploadBase.searchParams.set('token', token);
+  const upload_url = uploadBase.toString();
+
+  // Persist the key on the week (legacy behaviour)
   await patchContractWeekScan(env, cw.id, key);
 
-  return withCORS(env, req, ok({ key, upload_url, token, expires_in: 3600 }));
+  return withCORS(
+    env,
+    req,
+    ok({
+      key,
+      upload_url,
+      token,
+      expires_in: expiresSec,
+      expires_at: new Date(exp * 1000).toISOString(),
+      max_bytes: parseInt(env.FILE_MAX_BYTES || '5000000', 10)
+    })
+  );
 }
+
+// PATCH /api/timesheets/:id/evidence/:evidence_id
+// Body: { kind: "Timesheet" | "Mileage" | "Accommodation" | "Expenses" | "<custom>" }
+async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
+  const enc = encodeURIComponent;
+
+  // Auth: admin only
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  if (!tsId) {
+    return withCORS(env, req, badRequest('timesheet_id is required'));
+  }
+  if (!evidenceId) {
+    return withCORS(env, req, badRequest('evidence_id is required'));
+  }
+
+  // Defensive: block synthetic/system ids
+  if (String(evidenceId).startsWith('SYS:')) {
+    return withCORS(env, req, badRequest('System evidence cannot be edited'));
+  }
+
+  // Defensive: evidence ids in timesheet_evidence are UUIDs
+  const uuidRe =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!uuidRe.test(String(evidenceId))) {
+    return withCORS(env, req, badRequest('Invalid evidence_id'));
+  }
+
+  let body;
+  try {
+    body = await parseJSONBody(req);
+  } catch {
+    return withCORS(env, req, badRequest('Invalid JSON payload'));
+  }
+
+  const newKind = body && body.kind != null ? String(body.kind).trim() : '';
+  if (!newKind) {
+    return withCORS(env, req, badRequest('kind is required'));
+  }
+
+  try {
+    // Ensure evidence exists and belongs to this timesheet
+    const { rows: evRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
+        `?id=eq.${enc(evidenceId)}` +
+        `&timesheet_id=eq.${enc(tsId)}` +
+        `&select=id,kind,display_name,storage_key,created_at,created_by` +
+        `&limit=1`
+    );
+
+    const ev = evRows?.[0] || null;
+    if (!ev) {
+      return withCORS(env, req, notFound('Evidence not found for this timesheet'));
+    }
+
+    const oldKind = ev.kind != null ? String(ev.kind) : '';
+
+    // No-op
+    if (oldKind === newKind) {
+      return withCORS(env, req, ok(ev));
+    }
+
+    // Patch DB row
+    const patchRes = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(evidenceId)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+        body: JSON.stringify({ kind: newKind })
+      }
+    );
+
+    const txt = await patchRes.text().catch(() => '');
+    if (!patchRes.ok) {
+      return withCORS(env, req, serverError(`Failed to update evidence kind: ${txt}`));
+    }
+
+    let updated = null;
+    try {
+      const json = txt ? JSON.parse(txt) : [];
+      updated = Array.isArray(json) ? json[0] : json;
+    } catch {
+      updated = null;
+    }
+
+    // Audit (best-effort)
+    try {
+      await writeAudit(
+        env,
+        user,
+        'TIMESHEET_EVIDENCE_RECLASSIFIED',
+        {
+          timesheet_id: tsId,
+          evidence_id: evidenceId,
+          old_kind: oldKind || null,
+          new_kind: newKind,
+          storage_key: ev.storage_key || null,
+          display_name: ev.display_name || null
+        },
+        { entity: 'timesheets', subject_id: tsId, req }
+      );
+    } catch {
+      // best-effort
+    }
+
+    return withCORS(env, req, ok(updated || { ok: true }));
+  } catch (e) {
+    return withCORS(
+      env,
+      req,
+      serverError(`Failed to update evidence kind: ${e?.message || e}`)
+    );
+  }
+}
+
 
  async function handleContractWeekReplaceManualPdf(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
@@ -6439,6 +6639,7 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
     return withCORS(env, req, serverError('Failed to generate or locate timesheet PDF'));
   }
 }
+
 async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -6461,14 +6662,17 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
   const has = (k) => Object.prototype.hasOwnProperty.call(body || {}, k);
 
   // Optional helper input (do NOT patch to DB unless you actually have this column)
-  const worked_date_ymd = body?.worked_date_ymd ? String(body.worked_date_ymd) : null;
+  let worked_date_ymd = body?.worked_date_ymd ? String(body.worked_date_ymd) : null;
 
   // Worked/break inputs (only patch if provided)
-  const worked_start_iso = has('worked_start_iso') ? body.worked_start_iso : undefined;
-  const worked_end_iso   = has('worked_end_iso')   ? body.worked_end_iso   : undefined;
-  const break_start_iso  = has('break_start_iso')  ? body.break_start_iso  : undefined;
-  const break_end_iso    = has('break_end_iso')    ? body.break_end_iso    : undefined;
-  const break_minutes    = has('break_minutes')    ? body.break_minutes    : undefined;
+  const worked_start_iso_in = has('worked_start_iso') ? body.worked_start_iso : undefined;
+  const worked_end_iso_in   = has('worked_end_iso')   ? body.worked_end_iso   : undefined;
+  const break_start_iso_in  = has('break_start_iso')  ? body.break_start_iso  : undefined;
+  const break_end_iso_in    = has('break_end_iso')    ? body.break_end_iso    : undefined;
+  const break_minutes_in    = has('break_minutes')    ? body.break_minutes    : undefined;
+
+  // NEW: schedule_json payload (preferred FE shape for daily upsert)
+  const schedule_json_in    = has('schedule_json')    ? body.schedule_json    : undefined;
 
   // QR action hints from FE decision modal
   const rawIssueQr        = body?.issue_qr === true;
@@ -6478,6 +6682,253 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
   const rawReissueQr      = body?.reissue_qr === true;  // legacy
 
   const now = nowIso();
+
+  // Helpers
+  const normIso = (v) => {
+    if (v === undefined) return undefined;
+    if (v === null) return null;
+    const s = String(v).trim();
+    return s ? s : null; // treat '' as null (clear)
+  };
+
+  const hasIso = (v) => (v != null && String(v).trim() !== '');
+
+  const isoToMs = (iso) => {
+    if (!hasIso(iso)) return null;
+    const t = new Date(String(iso)).getTime();
+    return Number.isFinite(t) ? t : null;
+  };
+
+  const bad = (msg) => withCORS(env, req, badRequest(msg));
+
+  const parseYmd = (ymdStr) => {
+    if (!ymdStr || typeof ymdStr !== 'string') return null;
+    const m = ymdStr.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return null;
+    const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
+    if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) return null;
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+    return { y, mo, d };
+  };
+
+  const addDaysYmd = (ymdStr, days) => {
+    const p = parseYmd(ymdStr);
+    if (!p) return null;
+    const dt = new Date(Date.UTC(p.y, p.mo - 1, p.d, 0, 0, 0, 0));
+    dt.setUTCDate(dt.getUTCDate() + Number(days || 0));
+    const y = dt.getUTCFullYear();
+    const m = String(dt.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(dt.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
+  const normaliseHHMM = (raw) => {
+    let s = String(raw || '').trim();
+    if (!s) return '';
+    if (/^\d{1,2}:\d{2}$/.test(s)) {
+      const [h, m] = s.split(':');
+      const hh = String(Number(h) || 0).padStart(2, '0');
+      const mm = String(Number(m) || 0).padStart(2, '0');
+      return `${hh}:${mm}`;
+    }
+    s = s.replace(':', '');
+    if (!/^\d{1,4}$/.test(s)) return '';
+    if (s.length <= 2) {
+      const h = Number(s);
+      if (!Number.isFinite(h)) return '';
+      return `${String(h).padStart(2, '0')}:00`;
+    }
+    const mm = s.slice(-2);
+    const h  = s.slice(0, -2);
+    const hh = String(Number(h) || 0).padStart(2, '0');
+    const mm2 = String(Number(mm) || 0).padStart(2, '0');
+    return `${hh}:${mm2}`;
+  };
+
+  const hhmmToMinutes = (hhmm) => {
+    if (!hhmm || typeof hhmm !== 'string') return null;
+    const m = hhmm.trim().match(/^(\d{2}):(\d{2})$/);
+    if (!m) return null;
+    const h = Number(m[1]);
+    const mi = Number(m[2]);
+    if (!Number.isFinite(h) || !Number.isFinite(mi)) return null;
+    if (h < 0 || h > 23 || mi < 0 || mi > 59) return null;
+    return h * 60 + mi;
+  };
+
+  const getLondonOffsetHours = (ymdStr) => {
+    try {
+      if (typeof isBSTLocal === 'function') return isBSTLocal(ymdStr) ? 1 : 0;
+    } catch {}
+    return 0;
+  };
+
+  const localYmdHhmmToIsoUtc = (ymdStr, hhmmStr) => {
+    const p = parseYmd(ymdStr);
+    if (!p) return null;
+    const norm = normaliseHHMM(hhmmStr);
+    const mins = hhmmToMinutes(norm);
+    if (mins == null) return null;
+    const hh = Math.floor(mins / 60);
+    const mm = mins % 60;
+    const off = getLondonOffsetHours(ymdStr);
+    const ms = Date.UTC(p.y, p.mo - 1, p.d, hh - off, mm, 0, 0);
+    return new Date(ms).toISOString();
+  };
+
+  // Map schedule_json -> ISO fields (Europe/London local HH:MM + YMD -> UTC ISO)
+  const mapScheduleJsonToIso = (scheduleJson) => {
+    let seg = null;
+
+    if (Array.isArray(scheduleJson)) {
+      const nonNull = scheduleJson.filter(x => x && typeof x === 'object');
+      if (!nonNull.length) return { error: 'schedule_json must contain at least one day entry.' };
+      if (nonNull.length > 1) {
+        const dates = new Set(nonNull.map(x => String(x.date || x.work_date || x.ymd || '').trim()).filter(Boolean));
+        if (dates.size > 1) return { error: 'DAILY schedule_json must contain exactly one date entry.' };
+      }
+      seg = nonNull[0];
+    } else if (scheduleJson && typeof scheduleJson === 'object') {
+      seg = scheduleJson;
+    } else {
+      return { error: 'schedule_json must be an object or array.' };
+    }
+
+    const ymdStrRaw = String(seg.date || seg.work_date || seg.ymd || '').trim();
+    const ymdStr = ymdStrRaw || null;
+    if (!ymdStr || !parseYmd(ymdStr)) return { error: 'schedule_json.date must be a valid YYYY-MM-DD.' };
+
+    const startHHMM = normaliseHHMM(seg.start || seg.worked_start || '');
+    const endHHMM   = normaliseHHMM(seg.end   || seg.worked_end   || '');
+
+    const hasStart = !!startHHMM;
+    const hasEnd   = !!endHHMM;
+
+    if (hasStart !== hasEnd) return { error: 'schedule_json.start and schedule_json.end must both be present (or both blank).' };
+
+    let worked_start_iso = null;
+    let worked_end_iso   = null;
+
+    let shiftStartMin0 = null;
+    let shiftEndMin0   = null;
+    let shiftStartAdj  = null;
+    let shiftEndAdj    = null;
+
+    if (hasStart && hasEnd) {
+      shiftStartMin0 = hhmmToMinutes(startHHMM);
+      shiftEndMin0   = hhmmToMinutes(endHHMM);
+      if (shiftStartMin0 == null || shiftEndMin0 == null) return { error: 'schedule_json.start/end must be valid HH:MM.' };
+      if (shiftStartMin0 === shiftEndMin0) return { error: 'schedule_json.start cannot equal schedule_json.end.' };
+
+      shiftStartAdj = shiftStartMin0;
+      shiftEndAdj   = (shiftEndMin0 > shiftStartMin0) ? shiftEndMin0 : (shiftEndMin0 + 1440);
+
+      const endDayAdd = Math.floor(shiftEndAdj / 1440);
+      const endYmd = addDaysYmd(ymdStr, endDayAdd);
+      if (!endYmd) return { error: 'Failed to compute overnight end date.' };
+
+      worked_start_iso = localYmdHhmmToIsoUtc(ymdStr, startHHMM);
+      worked_end_iso   = localYmdHhmmToIsoUtc(endYmd, normaliseHHMM(`${Math.floor((shiftEndAdj % 1440) / 60)}:${String((shiftEndAdj % 1440) % 60).padStart(2,'0')}`));
+
+      if (!worked_start_iso || !worked_end_iso) return { error: 'Failed to convert schedule_json.start/end to ISO.' };
+    }
+
+    // Break source: prefer explicit fields; else breaks[0]
+    let brStartHHMM = normaliseHHMM(seg.break_start || '');
+    let brEndHHMM   = normaliseHHMM(seg.break_end   || '');
+
+    const breaksArr = Array.isArray(seg.breaks) ? seg.breaks : [];
+    const meaningfulBreaks = breaksArr.filter(b => b && typeof b === 'object' && (String(b.start || '').trim() || String(b.end || '').trim()));
+
+    if ((!brStartHHMM && !brEndHHMM) && meaningfulBreaks.length) {
+      brStartHHMM = normaliseHHMM(meaningfulBreaks[0].start || '');
+      brEndHHMM   = normaliseHHMM(meaningfulBreaks[0].end   || '');
+    }
+
+    if (meaningfulBreaks.length > 1) {
+      return { error: 'DAILY schedule_json supports only one break window. Remove extra breaks or use break_minutes only.' };
+    }
+
+    const hasBrStart = !!brStartHHMM;
+    const hasBrEnd   = !!brEndHHMM;
+
+    if (hasBrStart !== hasBrEnd) return { error: 'schedule_json.break_start and schedule_json.break_end must both be present (or both blank).' };
+
+    let break_start_iso = null;
+    let break_end_iso   = null;
+    let break_minutes   = null;
+
+    // If break times are provided: compute ISO + minutes (overnight-aware using shift timeline)
+    if (hasBrStart && hasBrEnd) {
+      if (!(hasStart && hasEnd)) return { error: 'Cannot set a break window without a worked start/end.' };
+
+      const bs0 = hhmmToMinutes(brStartHHMM);
+      const be0 = hhmmToMinutes(brEndHHMM);
+      if (bs0 == null || be0 == null) return { error: 'schedule_json.break_start/end must be valid HH:MM.' };
+      if (bs0 === be0) return { error: 'schedule_json.break_start cannot equal schedule_json.break_end.' };
+
+      // Place break on the same adjusted timeline as the shift
+      let bsAdj = bs0;
+      if (bsAdj < shiftStartAdj) bsAdj += 1440;
+
+      let beAdj = be0;
+      if (beAdj < bsAdj) beAdj += 1440;
+
+      if (bsAdj < shiftStartAdj || beAdj > shiftEndAdj || beAdj <= bsAdj) {
+        return { error: 'Break window must be within the worked shift span (overnight-aware).' };
+      }
+
+      const bsDayAdd = Math.floor(bsAdj / 1440);
+      const beDayAdd = Math.floor(beAdj / 1440);
+
+      const bsYmd = addDaysYmd(ymdStr, bsDayAdd);
+      const beYmd = addDaysYmd(ymdStr, beDayAdd);
+      if (!bsYmd || !beYmd) return { error: 'Failed to compute break dates.' };
+
+      const bsM = bsAdj % 1440;
+      const beM = beAdj % 1440;
+
+      const bsHH = String(Math.floor(bsM / 60)).padStart(2, '0');
+      const bsMM = String(bsM % 60).padStart(2, '0');
+
+      const beHH = String(Math.floor(beM / 60)).padStart(2, '0');
+      const beMM = String(beM % 60).padStart(2, '0');
+
+      break_start_iso = localYmdHhmmToIsoUtc(bsYmd, `${bsHH}:${bsMM}`);
+      break_end_iso   = localYmdHhmmToIsoUtc(beYmd, `${beHH}:${beMM}`);
+
+      if (!break_start_iso || !break_end_iso) return { error: 'Failed to convert break window to ISO.' };
+
+      break_minutes = Math.round((beAdj - bsAdj));
+      if (!(break_minutes > 0)) return { error: 'Break duration must be > 0 minutes.' };
+    } else {
+      // No break window: accept numeric break minutes if present
+      let bm =
+        (seg.break_minutes != null) ? Number(seg.break_minutes) :
+        (seg.break_mins    != null) ? Number(seg.break_mins) :
+        null;
+
+      if (bm != null && !Number.isFinite(bm)) bm = null;
+
+      if (bm != null) {
+        if (!(hasStart && hasEnd)) return { error: 'Cannot set break_minutes without a worked start/end.' };
+        bm = Math.round(bm);
+        if (bm < 0) return { error: 'break_minutes must be a non-negative number.' };
+        const shiftLen = shiftEndAdj - shiftStartAdj;
+        if (bm > shiftLen) return { error: 'break_minutes cannot exceed the worked shift duration.' };
+        break_minutes = bm;
+      }
+    }
+
+    return {
+      ymd: ymdStr,
+      worked_start_iso,
+      worked_end_iso,
+      break_start_iso,
+      break_end_iso,
+      break_minutes
+    };
+  };
 
   // Helper: rotate current TS -> history, insert new current version (restorable)
   const rotateTimesheetVersion = async (currentTs, revokeReason) => {
@@ -6510,7 +6961,6 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
       is_current: true,
 
       // ✅ IMPORTANT: must be a valid timesheet_status_enum
-      // Keep the prior status (from DB) rather than using an invalid enum like 'SUBMITTED'
       status: currentTs.status || 'RECEIVED',
 
       revoked_reason: null,
@@ -6548,10 +6998,6 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     return created || { ...currentTs, version: newVersion, is_current: true };
   };
 
-  const stableJson = (x) => {
-    try { return JSON.stringify(x ?? null); } catch { return ''; }
-  };
-
   // 3) Load DAILY timesheet (current version)
   let ts = await sbGetOne(
     env,
@@ -6564,12 +7010,12 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
 
   const sheetScope = String(ts.sheet_scope || '').toUpperCase();
   if (sheetScope !== 'DAILY') {
-    return withCORS(env, req, badRequest('Timesheet is not DAILY; daily-manual-upsert only applies to DAILY sheets'));
+    return bad('Timesheet is not DAILY; daily-manual-upsert only applies to DAILY sheets');
   }
 
   const subMode = String(ts.submission_mode || '').toUpperCase();
   if (subMode !== 'MANUAL') {
-    return withCORS(env, req, badRequest('Timesheet must be MANUAL before editing hours. Use switch-daily-to-manual first.'));
+    return bad('Timesheet must be MANUAL before editing hours. Use switch-daily-to-manual first.');
   }
 
   // 4) Load TSFIN – must not be locked/paid
@@ -6583,7 +7029,148 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
   if (!tsfin) return withCORS(env, req, serverError('No TSFIN snapshot found'));
 
   if (tsfin.locked_by_invoice_id || tsfin.paid_at_utc) {
-    return withCORS(env, req, badRequest('Timesheet already invoiced or paid; cannot edit'));
+    return bad('Timesheet already invoiced or paid; cannot edit');
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // NEW: schedule_json -> ISO mapping (runs BEFORE validation)
+  // ─────────────────────────────────────────────────────────────
+  const scheduleProvided = (schedule_json_in !== undefined);
+  let mappedWorkedStartIso = worked_start_iso_in;
+  let mappedWorkedEndIso   = worked_end_iso_in;
+  let mappedBreakStartIso  = break_start_iso_in;
+  let mappedBreakEndIso    = break_end_iso_in;
+  let mappedBreakMinutesIn = break_minutes_in;
+
+  if (scheduleProvided) {
+    if (schedule_json_in == null) return bad('schedule_json must not be null.');
+    const mapped = mapScheduleJsonToIso(schedule_json_in);
+    if (mapped && mapped.error) return bad(mapped.error);
+
+    worked_date_ymd = mapped.ymd || worked_date_ymd;
+
+    mappedWorkedStartIso = mapped.worked_start_iso;
+    mappedWorkedEndIso   = mapped.worked_end_iso;
+    mappedBreakStartIso  = mapped.break_start_iso;
+    mappedBreakEndIso    = mapped.break_end_iso;
+    mappedBreakMinutesIn = (mapped.break_minutes != null) ? mapped.break_minutes : null;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // ✅ Pre-validate worked/break ordering + partials BEFORE rotate/patch/rebuild
+  // ─────────────────────────────────────────────────────────────
+  const nextWorkedStartIso = (mappedWorkedStartIso !== undefined) ? normIso(mappedWorkedStartIso) : normIso(ts.worked_start_iso);
+  const nextWorkedEndIso   = (mappedWorkedEndIso   !== undefined) ? normIso(mappedWorkedEndIso)   : normIso(ts.worked_end_iso);
+
+  const nextBreakStartIso  = (mappedBreakStartIso  !== undefined) ? normIso(mappedBreakStartIso)  : normIso(ts.break_start_iso);
+  const nextBreakEndIso    = (mappedBreakEndIso    !== undefined) ? normIso(mappedBreakEndIso)    : normIso(ts.break_end_iso);
+
+  let nextBreakMinutesNum =
+    (mappedBreakMinutesIn !== undefined)
+      ? Number(mappedBreakMinutesIn == null ? NaN : mappedBreakMinutesIn)
+      : (ts.break_minutes != null ? Number(ts.break_minutes) : null);
+
+  const hasShiftStart = hasIso(nextWorkedStartIso);
+  const hasShiftEnd   = hasIso(nextWorkedEndIso);
+
+  if (hasShiftStart !== hasShiftEnd) {
+    return bad('worked_start_iso and worked_end_iso must both be provided (or both cleared).');
+  }
+
+  let shiftStartMs = null;
+  let shiftEndMs   = null;
+  let shiftMinutes = null;
+
+  if (hasShiftStart && hasShiftEnd) {
+    shiftStartMs = isoToMs(nextWorkedStartIso);
+    shiftEndMs   = isoToMs(nextWorkedEndIso);
+
+    if (shiftStartMs == null || shiftEndMs == null) {
+      return bad('worked_start_iso/worked_end_iso must be valid ISO timestamps.');
+    }
+
+    const diffMs = shiftEndMs - shiftStartMs;
+    if (diffMs <= 0) {
+      return bad('worked_end_iso must be after worked_start_iso (overnight shifts must use next-day end ISO).');
+    }
+
+    const diffMin = diffMs / 60000;
+    if (!(diffMin > 0)) {
+      return bad('Worked shift duration must be > 0 minutes.');
+    }
+
+    if (diffMs === 0) {
+      return bad('worked_start_iso cannot equal worked_end_iso.');
+    }
+
+    shiftMinutes = Math.round(diffMin);
+    if (shiftMinutes <= 0) {
+      return bad('Worked shift duration must be at least 1 minute.');
+    }
+  }
+
+  const hasBrStart = hasIso(nextBreakStartIso);
+  const hasBrEnd   = hasIso(nextBreakEndIso);
+
+  if (hasBrStart !== hasBrEnd) {
+    return bad('break_start_iso and break_end_iso must both be provided (or both cleared).');
+  }
+
+  const anyBreakInfo =
+    (hasBrStart && hasBrEnd) ||
+    (mappedBreakMinutesIn !== undefined && Number.isFinite(nextBreakMinutesNum));
+
+  if (anyBreakInfo && !(hasShiftStart && hasShiftEnd)) {
+    return bad('You cannot set break times/minutes without worked_start_iso and worked_end_iso.');
+  }
+
+  let computedBreakMinutes = null;
+
+  if (hasBrStart && hasBrEnd) {
+    const brStartMs = isoToMs(nextBreakStartIso);
+    const brEndMs   = isoToMs(nextBreakEndIso);
+
+    if (brStartMs == null || brEndMs == null) {
+      return bad('break_start_iso/break_end_iso must be valid ISO timestamps.');
+    }
+
+    const brDiffMs = brEndMs - brStartMs;
+    if (brDiffMs <= 0) {
+      return bad('break_end_iso must be after break_start_iso (overnight breaks must use next-day end ISO).');
+    }
+
+    if (brDiffMs === 0) {
+      return bad('break_start_iso cannot equal break_end_iso.');
+    }
+
+    if (brStartMs < shiftStartMs || brEndMs > shiftEndMs) {
+      return bad('Break window must be fully within the worked shift span.');
+    }
+
+    computedBreakMinutes = Math.round(brDiffMs / 60000);
+    if (!(computedBreakMinutes > 0)) {
+      return bad('Break duration must be > 0 minutes.');
+    }
+
+    if (shiftMinutes != null && computedBreakMinutes > shiftMinutes) {
+      return bad('Break duration cannot exceed the worked shift duration.');
+    }
+
+    nextBreakMinutesNum = computedBreakMinutes;
+  } else {
+    if (mappedBreakMinutesIn !== undefined) {
+      if (!Number.isFinite(nextBreakMinutesNum) || nextBreakMinutesNum < 0) {
+        return bad('break_minutes must be a non-negative number.');
+      }
+      nextBreakMinutesNum = Math.round(nextBreakMinutesNum);
+      if (shiftMinutes != null && nextBreakMinutesNum > shiftMinutes) {
+        return bad('break_minutes cannot exceed the worked shift duration.');
+      }
+    } else {
+      if (Number.isFinite(nextBreakMinutesNum) && shiftMinutes != null && nextBreakMinutesNum > shiftMinutes) {
+        return bad('Existing break_minutes exceeds the worked shift duration. Please reduce break_minutes or set break_start_iso/break_end_iso.');
+      }
+    }
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -6617,14 +7204,26 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     rotated = true;
   }
 
-  // 5) Patch worked/break fields (ONLY what was provided)
+  // 5) Patch worked/break fields
   const patchBody = { updated_at: now };
 
-  if (worked_start_iso !== undefined) patchBody.worked_start_iso = worked_start_iso;
-  if (worked_end_iso   !== undefined) patchBody.worked_end_iso   = worked_end_iso;
-  if (break_start_iso  !== undefined) patchBody.break_start_iso  = break_start_iso;
-  if (break_end_iso    !== undefined) patchBody.break_end_iso    = break_end_iso;
-  if (break_minutes    !== undefined) patchBody.break_minutes    = break_minutes;
+  const shouldPatchWorked = scheduleProvided || worked_start_iso_in !== undefined || worked_end_iso_in !== undefined;
+  const shouldPatchBreakTimes = scheduleProvided || break_start_iso_in !== undefined || break_end_iso_in !== undefined;
+  const shouldPatchBreakMinutes = scheduleProvided || break_minutes_in !== undefined || (hasBrStart && hasBrEnd);
+
+  if (shouldPatchWorked) {
+    patchBody.worked_start_iso = normIso(nextWorkedStartIso);
+    patchBody.worked_end_iso   = normIso(nextWorkedEndIso);
+  }
+
+  if (shouldPatchBreakTimes) {
+    patchBody.break_start_iso = normIso(nextBreakStartIso);
+    patchBody.break_end_iso   = normIso(nextBreakEndIso);
+  }
+
+  if (shouldPatchBreakMinutes) {
+    patchBody.break_minutes = (Number.isFinite(nextBreakMinutesNum) ? nextBreakMinutesNum : null);
+  }
 
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -6668,11 +7267,11 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
   const changedFields = [];
   const same = (a, b) => String(a ?? '') === String(b ?? '');
 
-  if (worked_start_iso !== undefined && !same(tsBefore.worked_start_iso, updatedTs?.worked_start_iso)) changedFields.push('worked_start_iso');
-  if (worked_end_iso   !== undefined && !same(tsBefore.worked_end_iso,   updatedTs?.worked_end_iso))   changedFields.push('worked_end_iso');
-  if (break_start_iso  !== undefined && !same(tsBefore.break_start_iso,  updatedTs?.break_start_iso))  changedFields.push('break_start_iso');
-  if (break_end_iso    !== undefined && !same(tsBefore.break_end_iso,    updatedTs?.break_end_iso))    changedFields.push('break_end_iso');
-  if (break_minutes    !== undefined && !same(tsBefore.break_minutes,    updatedTs?.break_minutes))    changedFields.push('break_minutes');
+  if ((scheduleProvided || worked_start_iso_in !== undefined) && !same(tsBefore.worked_start_iso, updatedTs?.worked_start_iso)) changedFields.push('worked_start_iso');
+  if ((scheduleProvided || worked_end_iso_in   !== undefined) && !same(tsBefore.worked_end_iso,   updatedTs?.worked_end_iso))   changedFields.push('worked_end_iso');
+  if ((scheduleProvided || break_start_iso_in  !== undefined) && !same(tsBefore.break_start_iso,  updatedTs?.break_start_iso))  changedFields.push('break_start_iso');
+  if ((scheduleProvided || break_end_iso_in    !== undefined) && !same(tsBefore.break_end_iso,    updatedTs?.break_end_iso))    changedFields.push('break_end_iso');
+  if ((scheduleProvided || break_minutes_in !== undefined || (hasBrStart && hasBrEnd)) && !same(tsBefore.break_minutes, updatedTs?.break_minutes)) changedFields.push('break_minutes');
 
   const hoursChangedBuckets = !!(finAfter && (
     Number(finBefore.hours_day   ?? 0) !== Number(finAfter.hours_day   ?? 0) ||
@@ -6776,7 +7375,6 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
         ? crypto.randomUUID()
         : `${ts.timesheet_id}:${Date.now()}`;
 
-      // worked date for payload: prefer worked_start_iso-derived, else provided helper
       const workedDateYmd =
         updatedTs?.worked_start_iso ? (toLocalParts(updatedTs.worked_start_iso, null)?.ymd || String(updatedTs.worked_start_iso).slice(0,10))
         : worked_date_ymd || null;
@@ -6809,7 +7407,6 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
         }
       ).catch(() => {});
 
-      // Align with your existing daily QR printable behaviour: ensureTimesheetPdf
       pdfKey = await ensureTimesheetPdf(env, ts.timesheet_id).catch(() => null);
 
       if (pdfKey) {
@@ -6940,6 +7537,7 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     qr_token: qrToken || null
   }));
 }
+
 
 async function handleContractWeekManualAuthorise(env, req, weekId) {
   // Second checker: stamp TS authorise + TSFIN → READY_FOR_HR or READY_FOR_INVOICE
@@ -7690,7 +8288,7 @@ async function handleTimesheetsEligibilityWeekly(env, req) {
 
 
 // GET /api/timesheets/:id/evidence
- async function handleTimesheetEvidenceList(env, req, tsId) {
+async function handleTimesheetEvidenceList(env, req, tsId) {
   const enc = encodeURIComponent;
 
   // Auth: admin only
@@ -7715,7 +8313,9 @@ async function handleTimesheetsEligibilityWeekly(env, req) {
       return withCORS(env, req, notFound('Timesheet not found'));
     }
 
-    // Fetch evidence rows for this timesheet
+    // ─────────────────────────────────────────────────────────────
+    // 1) User evidence rows (timesheet_evidence)
+    // ─────────────────────────────────────────────────────────────
     const { rows: evRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
@@ -7724,9 +8324,119 @@ async function handleTimesheetsEligibilityWeekly(env, req) {
         `&order=created_at.asc`
     );
 
-    const evidence = evRows || [];
+    const userEvidence = (evRows || []).map(ev => {
+      const out = { ...(ev || {}) };
+      out.system = false;
+      out.can_delete = true;
+      return out;
+    });
 
-    return withCORS(env, req, ok(evidence));
+    // ─────────────────────────────────────────────────────────────
+    // 2) System evidence rows (NHSP / HealthRoster)
+    //
+    // Sources:
+    //  - nhsp_shifts linked to this timesheet → latest_import_id (+ source_system)
+    //  - timesheet_validations.last_source → import id (covers HR daily validation flows)
+    //
+    // Then join hr_imports for:
+    //  - filename
+    //  - uploaded_at_utc
+    //  - file_r2_key
+    // ─────────────────────────────────────────────────────────────
+    const importIds = new Set();
+
+    // 2a) From nhsp_shifts for this timesheet
+    try {
+      const { rows: shiftRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
+          `?timesheet_id=eq.${enc(tsId)}` +
+          `&select=latest_import_id,source_system` +
+          `&limit=10000`
+      );
+
+      for (const sh of shiftRows || []) {
+        const iid = sh && sh.latest_import_id ? String(sh.latest_import_id).trim() : '';
+        if (iid) importIds.add(iid);
+      }
+    } catch {
+      // non-fatal (system evidence is best-effort)
+    }
+
+    // 2b) From timesheet_validations.last_source (covers HR daily validation)
+    try {
+      const { rows: valRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheet_validations` +
+          `?timesheet_id=eq.${enc(tsId)}` +
+          `&select=last_source,updated_at` +
+          `&order=updated_at.desc` +
+          `&limit=1`
+      );
+
+      const lastSource = valRows?.[0]?.last_source || null;
+      if (lastSource) {
+        const iid = String(lastSource).trim();
+        if (iid) importIds.add(iid);
+      }
+    } catch {
+      // non-fatal
+    }
+
+    let systemEvidence = [];
+
+    if (importIds.size) {
+      try {
+        const idParam = Array.from(importIds).map(enc).join(',');
+        const { rows: impRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/hr_imports` +
+            `?id=in.(${idParam})` +
+            `&select=id,source_system,filename,uploaded_at_utc,file_r2_key` +
+            `&limit=1000`
+        );
+
+        systemEvidence = (impRows || [])
+          .filter(r => r && r.file_r2_key) // viewer requires a key
+          .map(r => {
+            const sys = String(r.source_system || '').toUpperCase();
+            const importId = r.id ? String(r.id) : '';
+
+            let kindLabel = sys || 'SYSTEM';
+            if (sys.includes('NHSP')) kindLabel = 'NHSP';
+            else if (sys.includes('HEALTHROSTER')) kindLabel = 'HealthRoster';
+
+            const uploadedAt = r.uploaded_at_utc || null;
+
+            return {
+              id: `SYS:${kindLabel}:${importId || 'UNKNOWN'}`,
+              kind: kindLabel,
+              display_name: r.filename || kindLabel,
+              storage_key: r.file_r2_key,
+              created_at: uploadedAt,          // keep FE-compatible date field
+              uploaded_at_utc: uploadedAt,     // explicit for clarity
+              system: true,
+              can_delete: false
+            };
+          });
+      } catch {
+        systemEvidence = [];
+      }
+    }
+
+    // Combine + sort by date (ascending) for stable display
+    const all = [...userEvidence, ...systemEvidence];
+
+    const toTs = (x) => {
+      const s = x && (x.uploaded_at_utc || x.created_at);
+      if (!s) return 0;
+      const t = new Date(s).getTime();
+      return Number.isFinite(t) ? t : 0;
+    };
+
+    all.sort((a, b) => toTs(a) - toTs(b));
+
+    return withCORS(env, req, ok(all));
   } catch (e) {
     return withCORS(
       env,
@@ -7735,6 +8445,7 @@ async function handleTimesheetsEligibilityWeekly(env, req) {
     );
   }
 }
+
 
 // POST /api/timesheets/:id/evidence
 async function handleTimesheetEvidenceAdd(env, req, tsId) {
@@ -45077,7 +45788,6 @@ async function handleContractsUnplanRanges(env, req, contractId) {
   log('EXIT OK', response);
   return withCORS(env, req, ok(response));
 }
-
 async function handleContractWeekGeneratePrintable(env, req, weekId) {
   const enc = encodeURIComponent;
 
@@ -45153,6 +45863,18 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
 
   if (Array.isArray(body?.actual_schedule_json) && body.actual_schedule_json.length) {
     actual_schedule_json = body.actual_schedule_json;
+
+    // ✅ REQUIRED: validate schedule structure before bucket resolution / persistence
+    try {
+      validateScheduleStructure(actual_schedule_json);
+    } catch (e) {
+      return withCORS(
+        env,
+        req,
+        badRequest(e?.message || 'Invalid schedule: overlapping shifts or invalid break windows.')
+      );
+    }
+
     try {
       const mins = await resolveBucketsFromSchedule(env, contract, actual_schedule_json);
       hours = {
@@ -45354,9 +46076,7 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
   const hospital_norm  = (contract.display_site || client?.name || String(contract.client_id)).toLowerCase();
   const ward_norm      = (contract.ward_hint || 'contract').toLowerCase();
   const job_title_norm = (contract.role || 'weekly').toLowerCase();
- const booking_id     = await makeWeeklyBookingId(contract?.candidate_id || null, contract, cw);
-
-
+  const booking_id     = await makeWeeklyBookingId(contract?.candidate_id || null, contract, cw);
 
   let ts = null;
 
@@ -45400,9 +46120,13 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
       sheet_scope: 'WEEKLY',
       submission_mode: 'MANUAL',
       line_type: 'HOURS',
-      actual_schedule_json,
       updated_at: now
     };
+
+    // ✅ Only overwrite schedule if caller supplied one
+    if (Array.isArray(actual_schedule_json)) {
+      tsPatch.actual_schedule_json = actual_schedule_json;
+    }
 
     await fetch(
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -45424,7 +46148,8 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
       booking_id,
       version: 1,
       is_current: true,
-      status: 'SUBMITTED',
+      // ✅ IMPORTANT: must be a valid timesheet_status_enum (avoid 'SUBMITTED')
+      status: 'RECEIVED',
       occupant_key_norm: occupant_norm,
       hospital_norm,
       ward_norm,
@@ -45804,6 +46529,7 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
     email_queued: emailQueued
   }));
 }
+
 
 
  async function handleTimesheetBucketPreview(env, req) {
@@ -50549,13 +51275,22 @@ if (req.method === 'GET' && p === '/api/healthroster/autoprocess/clients') {
   }
 }
 
+// PATCH /api/timesheets/:id/evidence/:evidence_id   (reclassify kind)
 // DELETE /api/timesheets/:id/evidence/:evidence_id
 {
   const m = matchPath(p, '/api/timesheets/:id/evidence/:evidence_id');
+
+  if (m && req.method === 'PATCH') {
+    return withCORS(env, req, await handleTimesheetEvidenceUpdateKind(env, req, m.id, m.evidence_id));
+  }
+
   if (m && req.method === 'DELETE') {
     return withCORS(env, req, await handleTimesheetEvidenceDelete(env, req, m.id, m.evidence_id));
   }
 }
+
+
+
 
 
 
