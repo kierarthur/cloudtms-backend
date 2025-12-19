@@ -34715,102 +34715,6 @@ async function handleClientAliasesDelete(env, req, clientId) {
 // Files: secure download via short-lived token
 // GET /api/files/download?key=...&token=...[&filename=...]
 // ─────────────────────────────────────────────────────────────────────────────
-async function handleFilesDownload(env, req) {
-  try {
-    const url = new URL(req.url);
-    const keyParam = url.searchParams.get('key');
-    const token = url.searchParams.get('token');
-    const overrideName = url.searchParams.get('filename') || null;
-
-    if (!keyParam || !token) {
-      return withCORS(env, req, badRequest("key and token are required"));
-    }
-
-    // Normalize the incoming key to a bare R2 key (no leading slash)
-    const key = keyParam.replace(/^\/+/, '');
-
-    // Basic key sanitisation + prefix allow-list (check after normalization)
-    if (key.includes('..')) {
-      return withCORS(env, req, unauthorized());
-    }
-
-    // ✅ FIX: allow uploaded evidence files (your evidence uses files/YYYYMMDD/…)
-    const ALLOWED_PREFIXES = [
-      'files/',                     // ✅ NEW: uploaded evidence
-      'invoices/', 'remittances/', 'paper_ts/', 'signatures/', 'docs/',
-      'docs-pdf/',                  // rendered PDFs (e.g. docs-pdf/invoices/…)
-      'Assets/', 'assets/'          // stationery & other assets
-    ];
-    if (!ALLOWED_PREFIXES.some(p => key.startsWith(p))) {
-      return withCORS(env, req, unauthorized());
-    }
-
-    // Verify token
-    const secret = env.UPLOAD_TOKEN_SECRET;
-    if (!secret) return withCORS(env, req, serverError("Server not configured"));
-
-    let payload;
-    try {
-      payload = await verifyToken(secret, token);
-    } catch {
-      await writeAudit(env, null, 'FILE_DOWNLOAD_DENIED', { key, reason: 'invalid_token' }, { entity: 'r2', subject_id: key, req });
-      return withCORS(env, req, unauthorized());
-    }
-
-    // Claims checks (normalize payload key as well)
-    const payloadKey = (payload && typeof payload.key === 'string') ? payload.key.replace(/^\/+/, '') : '';
-
-    // ✅ FIX: allow both "dl" and the older "file_dl" token types (backwards compatible)
-    const typ = payload?.typ;
-    const typOk = (typ === 'dl' || typ === 'file_dl');
-
-    if (!payload || !typOk || payloadKey !== key) {
-      await writeAudit(env, null, 'FILE_DOWNLOAD_DENIED', { key, reason: 'claims_mismatch', typ }, { entity: 'r2', subject_id: key, req });
-      return withCORS(env, req, unauthorized());
-    }
-
-    // Expiry check (payload.exp is unix seconds)
-    const now = Math.floor(Date.now() / 1000);
-    if (typeof payload.exp === 'number' && now >= payload.exp) {
-      await writeAudit(env, null, 'FILE_DOWNLOAD_DENIED', { key, reason: 'expired' }, { entity: 'r2', subject_id: key, req });
-      return withCORS(env, req, new Response("Link expired", { status: 410 }));
-    }
-
-    // Fetch from R2
-    const bucket = env.R2_BUCKET || env.R2;
-    if (!bucket || !bucket.get) {
-      return withCORS(env, req, serverError("Storage not configured"));
-    }
-    const obj = await bucket.get(key);
-    if (!obj) {
-      await writeAudit(env, null, 'FILE_DOWNLOAD_NOT_FOUND', { key }, { entity: 'r2', subject_id: key, req });
-      return withCORS(env, req, notFound("File not found"));
-    }
-
-    // Build headers
-    const headers = new Headers();
-    const ct = obj.httpMetadata?.contentType || 'application/octet-stream';
-    headers.set('Content-Type', ct);
-    if (typeof obj.size === 'number') headers.set('Content-Length', String(obj.size));
-    headers.set('X-Content-Type-Options', 'nosniff');
-    headers.set('Cache-Control', 'no-store');
-
-    // Choose safe filename
-    const metaName = obj.customMetadata?.originalName || null;
-    const baseName = key.split('/').pop() || 'download.bin';
-    const chosen = (overrideName || metaName || baseName)
-      .replace(/[/\\]/g, '_')
-      .replace(/[\r\n"]/g, '');
-
-    // ✅ Optional: inline by default so iframe preview works (still downloadable)
-    headers.set('Content-Disposition', `inline; filename="${chosen}"`);
-
-    await writeAudit(env, null, 'FILE_DOWNLOAD_OK', { key, size: obj.size || null }, { entity: 'r2', subject_id: key, req });
-    return withCORS(env, req, new Response(obj.body, { status: 200, headers }));
-  } catch {
-    return withCORS(env, req, serverError("Failed to download file"));
-  }
-}
 
 
 
@@ -34887,6 +34791,158 @@ async function handleHRRows(env, req, importId) {
   }
 }
 
+async function handleFilesDownload(env, req) {
+  const LOG = true;
+  const log = (msg, obj) => { try { if (LOG) console.log('[FILES][DL]', msg, obj || {}); } catch {} };
+
+  try {
+    const url = new URL(req.url);
+    const keyParam = url.searchParams.get('key');
+    const token = url.searchParams.get('token');
+    const overrideName = url.searchParams.get('filename') || null;
+
+    if (!keyParam || !token) {
+      log('deny: missing key/token', { hasKey: !!keyParam, hasToken: !!token });
+      return withCORS(env, req, badRequest("key and token are required"));
+    }
+
+    // Normalize incoming key to bare R2 key (no leading slash, no backslashes)
+    const key = String(keyParam || '')
+      .replace(/\\/g, '/')
+      .replace(/^\/+/, '')
+      .trim();
+
+    // Basic key sanitisation
+    if (!key || key.includes('..')) {
+      log('deny: bad key', { key });
+      return withCORS(env, req, unauthorized());
+    }
+
+    // Prefix allow-list (after normalization)
+    const ALLOWED_PREFIXES = [
+      'files/',                     // ✅ uploaded evidence
+      'invoices/', 'remittances/', 'paper_ts/', 'signatures/', 'docs/',
+      'docs-pdf/',
+      'Assets/', 'assets/'
+    ];
+
+    const prefixOk = ALLOWED_PREFIXES.some(p => key.startsWith(p));
+    if (!prefixOk) {
+      log('deny: prefix_not_allowed', { key, allowed: ALLOWED_PREFIXES });
+      try {
+        await writeAudit(env, null, 'FILE_DOWNLOAD_DENIED', { key, reason: 'prefix_not_allowed' }, { entity: 'r2', subject_id: key, req });
+      } catch {}
+      return withCORS(env, req, unauthorized());
+    }
+
+    // Verify token
+    const secret = env.UPLOAD_TOKEN_SECRET;
+    if (!secret) {
+      log('error: missing UPLOAD_TOKEN_SECRET', {});
+      return withCORS(env, req, serverError("Server not configured"));
+    }
+
+    let payload;
+    try {
+      payload = await verifyToken(secret, token);
+    } catch (e) {
+      log('deny: invalid_token', { key, err: e?.message || String(e) });
+      try {
+        await writeAudit(env, null, 'FILE_DOWNLOAD_DENIED', { key, reason: 'invalid_token' }, { entity: 'r2', subject_id: key, req });
+      } catch {}
+      return withCORS(env, req, unauthorized());
+    }
+
+    // Claims checks
+    const payloadKey = (payload && typeof payload.key === 'string')
+      ? payload.key.replace(/\\/g, '/').replace(/^\/+/, '').trim()
+      : '';
+
+    // Backwards compatible token types
+    const typ = payload?.typ;
+    const typOk = (typ === 'dl' || typ === 'file_dl');
+
+    if (!payload || !typOk || payloadKey !== key) {
+      log('deny: claims_mismatch', {
+        key,
+        payloadTyp: typ,
+        payloadKey,
+        exp: payload?.exp ?? null
+      });
+
+      try {
+        await writeAudit(
+          env,
+          null,
+          'FILE_DOWNLOAD_DENIED',
+          { key, reason: 'claims_mismatch', typ, payload_key: payloadKey || null },
+          { entity: 'r2', subject_id: key, req }
+        );
+      } catch {}
+
+      return withCORS(env, req, unauthorized());
+    }
+
+    // Expiry check (payload.exp is unix seconds)
+    const now = Math.floor(Date.now() / 1000);
+    if (typeof payload.exp === 'number' && now >= payload.exp) {
+      log('deny: expired', { key, now, exp: payload.exp });
+      try {
+        await writeAudit(env, null, 'FILE_DOWNLOAD_DENIED', { key, reason: 'expired', now, exp: payload.exp }, { entity: 'r2', subject_id: key, req });
+      } catch {}
+      return withCORS(env, req, new Response("Link expired", { status: 410 }));
+    }
+
+    // Fetch from R2
+    const bucket = env.R2_BUCKET || env.R2;
+    if (!bucket || !bucket.get) {
+      log('error: storage not configured', { hasR2: !!env.R2, hasR2Bucket: !!env.R2_BUCKET });
+      return withCORS(env, req, serverError("Storage not configured"));
+    }
+
+    const obj = await bucket.get(key);
+    if (!obj) {
+      log('deny: r2_not_found', { key });
+      try {
+        await writeAudit(env, null, 'FILE_DOWNLOAD_NOT_FOUND', { key }, { entity: 'r2', subject_id: key, req });
+      } catch {}
+      return withCORS(env, req, notFound("File not found"));
+    }
+
+    // Build headers
+    const headers = new Headers();
+    const ct = obj.httpMetadata?.contentType || 'application/octet-stream';
+    headers.set('Content-Type', ct);
+    if (typeof obj.size === 'number') headers.set('Content-Length', String(obj.size));
+    headers.set('X-Content-Type-Options', 'nosniff');
+    headers.set('Cache-Control', 'no-store');
+
+    // Choose safe filename
+    const metaName = obj.customMetadata?.originalName || null;
+    const baseName = key.split('/').pop() || 'download.bin';
+    const chosen = String(overrideName || metaName || baseName)
+      .replace(/[/\\]/g, '_')
+      .replace(/[\r\n"]/g, '');
+
+    // Inline for previewable types (PDF/images), attachment otherwise
+    const isInline =
+      ct === 'application/pdf' ||
+      ct.startsWith('image/');
+
+    headers.set('Content-Disposition', `${isInline ? 'inline' : 'attachment'}; filename="${chosen}"`);
+
+    log('ok: download', { key, ct, size: obj.size ?? null, typ });
+
+    try {
+      await writeAudit(env, null, 'FILE_DOWNLOAD_OK', { key, size: obj.size || null, content_type: ct }, { entity: 'r2', subject_id: key, req });
+    } catch {}
+
+    return withCORS(env, req, new Response(obj.body, { status: 200, headers }));
+  } catch (e) {
+    log('error: exception', { err: e?.message || String(e) });
+    return withCORS(env, req, serverError("Failed to download file"));
+  }
+}
 
 
 
