@@ -34792,8 +34792,7 @@ async function handleHRRows(env, req, importId) {
 }
 
 async function handleFilesDownload(env, req) {
-  const LOG = true;
-  const log = (msg, obj) => { try { if (LOG) console.log('[FILES][DL]', msg, obj || {}); } catch {} };
+  const LOG = true; // set false if you want to reduce console noise
 
   try {
     const url = new URL(req.url);
@@ -34802,114 +34801,103 @@ async function handleFilesDownload(env, req) {
     const overrideName = url.searchParams.get('filename') || null;
 
     if (!keyParam || !token) {
-      log('deny: missing key/token', { hasKey: !!keyParam, hasToken: !!token });
+      if (LOG) console.warn('[FILES][DL] deny: missing_params', {
+        hasKey: !!keyParam,
+        hasToken: !!token
+      });
       return withCORS(env, req, badRequest("key and token are required"));
     }
 
-    // Normalize incoming key to bare R2 key (no leading slash, no backslashes)
-    const key = String(keyParam || '')
-      .replace(/\\/g, '/')
-      .replace(/^\/+/, '')
-      .trim();
+    // Normalize incoming key to a bare R2 key (no leading slash)
+    const key = String(keyParam || '').replace(/^\/+/, '').trim();
 
-    // Basic key sanitisation
-    if (!key || key.includes('..')) {
-      log('deny: bad key', { key });
+    if (key.includes('..')) {
+      if (LOG) console.warn('[FILES][DL] deny: dotdot', { key });
       return withCORS(env, req, unauthorized());
     }
 
-    // Prefix allow-list (after normalization)
+    // Allow uploaded evidence + other doc prefixes
     const ALLOWED_PREFIXES = [
-      'files/',                     // ✅ uploaded evidence
+      'files/',                     // evidence uploads
       'invoices/', 'remittances/', 'paper_ts/', 'signatures/', 'docs/',
       'docs-pdf/',
       'Assets/', 'assets/'
     ];
-
-    const prefixOk = ALLOWED_PREFIXES.some(p => key.startsWith(p));
-    if (!prefixOk) {
-      log('deny: prefix_not_allowed', { key, allowed: ALLOWED_PREFIXES });
-      try {
-        await writeAudit(env, null, 'FILE_DOWNLOAD_DENIED', { key, reason: 'prefix_not_allowed' }, { entity: 'r2', subject_id: key, req });
-      } catch {}
+    if (!ALLOWED_PREFIXES.some(p => key.startsWith(p))) {
+      if (LOG) console.warn('[FILES][DL] deny: prefix', { key });
       return withCORS(env, req, unauthorized());
     }
 
-    // Verify token
     const secret = env.UPLOAD_TOKEN_SECRET;
     if (!secret) {
-      log('error: missing UPLOAD_TOKEN_SECRET', {});
+      if (LOG) console.warn('[FILES][DL] deny: missing_secret');
       return withCORS(env, req, serverError("Server not configured"));
     }
 
-    let payload;
+    // ✅ FIX: verifyToken returns { ok, payload } (NOT the payload itself)
+    let ver;
     try {
-      payload = await verifyToken(secret, token);
+      ver = await verifyToken(secret, token);
     } catch (e) {
-      log('deny: invalid_token', { key, err: e?.message || String(e) });
-      try {
-        await writeAudit(env, null, 'FILE_DOWNLOAD_DENIED', { key, reason: 'invalid_token' }, { entity: 'r2', subject_id: key, req });
-      } catch {}
+      if (LOG) console.warn('[FILES][DL] deny: verify_throw', {
+        key,
+        err: e?.message || String(e)
+      });
+      await writeAudit(env, null, 'FILE_DOWNLOAD_DENIED', { key, reason: 'invalid_token_throw' }, { entity: 'r2', subject_id: key, req });
       return withCORS(env, req, unauthorized());
     }
 
-    // Claims checks
-    const payloadKey = (payload && typeof payload.key === 'string')
-      ? payload.key.replace(/\\/g, '/').replace(/^\/+/, '').trim()
-      : '';
+    if (!ver || !ver.ok) {
+      if (LOG) console.warn('[FILES][DL] deny: invalid_token', { key });
+      await writeAudit(env, null, 'FILE_DOWNLOAD_DENIED', { key, reason: 'invalid_token' }, { entity: 'r2', subject_id: key, req });
+      return withCORS(env, req, unauthorized());
+    }
 
-    // Backwards compatible token types
-    const typ = payload?.typ;
+    const p = ver.payload || {};
+    const payloadKey = (typeof p.key === 'string') ? p.key.replace(/^\/+/, '').trim() : '';
+    const typ = (p.typ != null) ? String(p.typ) : null;
+    const exp = (typeof p.exp === 'number') ? p.exp : null;
+
+    // Accept both token types (backwards compatible)
     const typOk = (typ === 'dl' || typ === 'file_dl');
 
-    if (!payload || !typOk || payloadKey !== key) {
-      log('deny: claims_mismatch', {
+    if (!typOk || !payloadKey || payloadKey !== key) {
+      if (LOG) console.warn('[FILES][DL] deny: claims_mismatch', {
         key,
-        payloadTyp: typ,
-        payloadKey,
-        exp: payload?.exp ?? null
+        payloadKey: payloadKey || null,
+        typ
       });
-
-      try {
-        await writeAudit(
-          env,
-          null,
-          'FILE_DOWNLOAD_DENIED',
-          { key, reason: 'claims_mismatch', typ, payload_key: payloadKey || null },
-          { entity: 'r2', subject_id: key, req }
-        );
-      } catch {}
-
+      await writeAudit(
+        env,
+        null,
+        'FILE_DOWNLOAD_DENIED',
+        { key, reason: 'claims_mismatch', payload_key: payloadKey || null, typ },
+        { entity: 'r2', subject_id: key, req }
+      );
       return withCORS(env, req, unauthorized());
     }
 
-    // Expiry check (payload.exp is unix seconds)
+    // Expiry check (unix seconds)
     const now = Math.floor(Date.now() / 1000);
-    if (typeof payload.exp === 'number' && now >= payload.exp) {
-      log('deny: expired', { key, now, exp: payload.exp });
-      try {
-        await writeAudit(env, null, 'FILE_DOWNLOAD_DENIED', { key, reason: 'expired', now, exp: payload.exp }, { entity: 'r2', subject_id: key, req });
-      } catch {}
+    if (!exp || now >= exp) {
+      if (LOG) console.warn('[FILES][DL] deny: expired', { key, exp, now });
+      await writeAudit(env, null, 'FILE_DOWNLOAD_DENIED', { key, reason: 'expired', exp }, { entity: 'r2', subject_id: key, req });
       return withCORS(env, req, new Response("Link expired", { status: 410 }));
     }
 
-    // Fetch from R2
     const bucket = env.R2_BUCKET || env.R2;
     if (!bucket || !bucket.get) {
-      log('error: storage not configured', { hasR2: !!env.R2, hasR2Bucket: !!env.R2_BUCKET });
+      if (LOG) console.warn('[FILES][DL] deny: no_bucket');
       return withCORS(env, req, serverError("Storage not configured"));
     }
 
     const obj = await bucket.get(key);
     if (!obj) {
-      log('deny: r2_not_found', { key });
-      try {
-        await writeAudit(env, null, 'FILE_DOWNLOAD_NOT_FOUND', { key }, { entity: 'r2', subject_id: key, req });
-      } catch {}
+      if (LOG) console.warn('[FILES][DL] not_found', { key });
+      await writeAudit(env, null, 'FILE_DOWNLOAD_NOT_FOUND', { key }, { entity: 'r2', subject_id: key, req });
       return withCORS(env, req, notFound("File not found"));
     }
 
-    // Build headers
     const headers = new Headers();
     const ct = obj.httpMetadata?.contentType || 'application/octet-stream';
     headers.set('Content-Type', ct);
@@ -34917,33 +34905,24 @@ async function handleFilesDownload(env, req) {
     headers.set('X-Content-Type-Options', 'nosniff');
     headers.set('Cache-Control', 'no-store');
 
-    // Choose safe filename
     const metaName = obj.customMetadata?.originalName || null;
     const baseName = key.split('/').pop() || 'download.bin';
-    const chosen = String(overrideName || metaName || baseName)
+    const chosen = (overrideName || metaName || baseName)
       .replace(/[/\\]/g, '_')
       .replace(/[\r\n"]/g, '');
 
-    // Inline for previewable types (PDF/images), attachment otherwise
-    const isInline =
-      ct === 'application/pdf' ||
-      ct.startsWith('image/');
+    // ✅ inline so iframe preview works
+    headers.set('Content-Disposition', `inline; filename="${chosen}"`);
 
-    headers.set('Content-Disposition', `${isInline ? 'inline' : 'attachment'}; filename="${chosen}"`);
-
-    log('ok: download', { key, ct, size: obj.size ?? null, typ });
-
-    try {
-      await writeAudit(env, null, 'FILE_DOWNLOAD_OK', { key, size: obj.size || null, content_type: ct }, { entity: 'r2', subject_id: key, req });
-    } catch {}
-
+    await writeAudit(env, null, 'FILE_DOWNLOAD_OK', { key, size: obj.size || null }, { entity: 'r2', subject_id: key, req });
     return withCORS(env, req, new Response(obj.body, { status: 200, headers }));
   } catch (e) {
-    log('error: exception', { err: e?.message || String(e) });
+    try {
+      console.warn('[FILES][DL] fatal', { err: e?.message || String(e) });
+    } catch {}
     return withCORS(env, req, serverError("Failed to download file"));
   }
 }
-
 
 
 // ====================== TIMESHEETS FINANCE PREVIEW ======================
