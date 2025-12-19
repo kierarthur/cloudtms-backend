@@ -41770,9 +41770,24 @@ async function handleOutboxGet(env, req, mailId) {
  */
 async function handleFilePresignUpload(env, req) {
   const user = await requireUser(env, req, ['admin']);
-  if (!user) return unauthorized();
+  if (!user) {
+    try {
+      console.warn('[FILES_PRESIGN_UPLOAD] unauthorized', {
+        origin: req.headers.get('origin') || null,
+        hasCookie: !!req.headers.get('cookie'),
+        url: req.url
+      });
+    } catch {}
+    return withCORS(env, req, unauthorized());
+  }
 
-  const data = await parseJSONBody(req);
+  let data;
+  try {
+    data = await parseJSONBody(req);
+  } catch {
+    return withCORS(env, req, badRequest("Invalid JSON"));
+  }
+
   if (!data || !data.content_type) return withCORS(env, req, badRequest("content_type required"));
 
   const filename = data.filename || "";
@@ -41795,14 +41810,17 @@ async function handleFilePresignUpload(env, req) {
     if (contentType in ctMap) ext = ctMap[contentType];
   }
 
-  const dateTag = new Date().toISOString().slice(0,10).replace(/-/g,"");
+  const dateTag = new Date().toISOString().slice(0, 10).replace(/-/g, "");
   const randBytes = crypto.getRandomValues(new Uint8Array(8));
   let randHex = "";
   randBytes.forEach(b => randHex += b.toString(16).padStart(2, "0"));
-  const fileKey = `/files/${dateTag}/file_${randHex}${ext || ""}`;
+
+  // ✅ FIX: canonical key WITHOUT leading slash
+  const fileKey = `files/${dateTag}/file_${randHex}${ext || ""}`;
 
   const expiresSec = Math.min(parseInt(env.PRESIGN_EXPIRES_SECONDS || "600", 10), 900);
   const exp = Math.floor(Date.now() / 1000) + expiresSec;
+
   const token = await createToken(env.UPLOAD_TOKEN_SECRET, { typ: "file_upload", key: fileKey, exp });
 
   const baseUrl = new URL(req.url);
@@ -41820,23 +41838,70 @@ async function handleFilePresignUpload(env, req) {
     content_type: contentType
   }));
 }
-
 async function handleFileUpload(env, req, url) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
-  const key   = url.searchParams.get("key")   || "";
+  const rawKey = url.searchParams.get("key") || "";
   const token = url.searchParams.get("token") || "";
 
-  const ver = await verifyToken(env.UPLOAD_TOKEN_SECRET, token);
-  if (!ver.ok) return withCORS(env, req, unauthorized("Invalid token"));
+  // ✅ FIX: normalize key (accept both "/files/..." and "files/...")
+  const key = String(rawKey || '').replace(/^\/+/, '').trim();
 
-  const p = ver.payload;
-  if (p.typ !== "file_upload" || p.key !== key) {
+  let ver;
+  try {
+    ver = await verifyToken(env.UPLOAD_TOKEN_SECRET, token);
+  } catch (e) {
+    if (LOG) {
+      console.warn('[FILES_UPLOAD]', JSON.stringify({
+        stage: 'verifyToken_throw',
+        key_raw: rawKey,
+        key,
+        err: e?.message || String(e)
+      }));
+    }
+    return withCORS(env, req, unauthorized("Invalid token"));
+  }
+
+  if (!ver || !ver.ok) {
+    if (LOG) {
+      console.warn('[FILES_UPLOAD]', JSON.stringify({
+        stage: 'invalid_token',
+        key_raw: rawKey,
+        key
+      }));
+    }
+    return withCORS(env, req, unauthorized("Invalid token"));
+  }
+
+  const p = ver.payload || {};
+  const pKey = String(p.key || '').replace(/^\/+/, '').trim();
+
+  if (p.typ !== "file_upload" || pKey !== key) {
+    if (LOG) {
+      console.warn('[FILES_UPLOAD]', JSON.stringify({
+        stage: 'token_mismatch',
+        key_raw: rawKey,
+        key,
+        payload_typ: p.typ || null,
+        payload_key: p.key || null,
+        payload_key_norm: pKey
+      }));
+    }
     return withCORS(env, req, unauthorized("Token mismatch"));
   }
 
-  const keyOk = /^\/files\/\d{8}\/file_[0-9a-f]{16}(\.[A-Za-z0-9]{3,10})?$/.test(key);
-  if (!keyOk) return withCORS(env, req, badRequest("Invalid key"));
+  // ✅ FIX: validate canonical key format (no leading slash)
+  const keyOk = /^files\/\d{8}\/file_[0-9a-f]{16}(\.[A-Za-z0-9]{3,10})?$/.test(key);
+  if (!keyOk) {
+    if (LOG) {
+      console.warn('[FILES_UPLOAD]', JSON.stringify({
+        stage: 'bad_key',
+        key_raw: rawKey,
+        key
+      }));
+    }
+    return withCORS(env, req, badRequest("Invalid key"));
+  }
 
   const ct = req.headers.get("content-type") || "";
   const allowedTypes = /^(image\/|application\/pdf|text\/|application\/vnd\.openxmlformats|application\/vnd\.ms-excel)/i;
@@ -41851,12 +41916,12 @@ async function handleFileUpload(env, req, url) {
     return withCORS(env, req, unsupported("File type not allowed"));
   }
 
-  const maxBytes      = parseInt(env.FILE_MAX_BYTES || "5000000", 10);
+  const maxBytes = parseInt(env.FILE_MAX_BYTES || "5000000", 10);
   const contentLength = parseInt(req.headers.get("content-length") || "0", 10);
   if (contentLength > maxBytes) {
     if (LOG) {
       console.warn('[FILES_UPLOAD]', JSON.stringify({
-        stage: 'too_large',
+        stage: 'too_large_header',
         key,
         content_length: contentLength,
         max_bytes: maxBytes
@@ -41865,7 +41930,7 @@ async function handleFileUpload(env, req, url) {
     return withCORS(env, req, tooLarge(`Max ${maxBytes} bytes`));
   }
 
-  // Read the body into a buffer so we know exactly what we’re sending to R2
+  // Read body
   let bodyBuf;
   try {
     bodyBuf = await req.arrayBuffer();
@@ -41882,18 +41947,30 @@ async function handleFileUpload(env, req, url) {
 
   const actualLen = bodyBuf.byteLength;
 
+  // ✅ FIX: enforce actual length too (covers missing/0 content-length)
+  if (actualLen > maxBytes) {
+    if (LOG) {
+      console.warn('[FILES_UPLOAD]', JSON.stringify({
+        stage: 'too_large_body',
+        key,
+        actual_body_length: actualLen,
+        max_bytes: maxBytes
+      }));
+    }
+    return withCORS(env, req, tooLarge(`Max ${maxBytes} bytes`));
+  }
+
   if (LOG) {
-    const cleanKey = (key || '').replace(/^\/+/, '');
     console.log('[FILES_UPLOAD]', JSON.stringify({
       stage: 'before_put',
       key,
-      cleanKey,
       content_type: ct,
       header_content_length: contentLength,
       actual_body_length: actualLen
     }));
   }
 
+  // ✅ FIX: always put to R2 using canonical key
   const putRes = await r2Put(env, key, bodyBuf, {
     httpMetadata: { contentType: ct },
     customMetadata: {}
@@ -41907,20 +41984,33 @@ async function handleFileUpload(env, req, url) {
     }));
   }
 
-  const size = actualLen || undefined;
-  return withCORS(env, req, ok({ ok: true, key, etag: putRes?.etag, size }));
+  return withCORS(env, req, ok({ ok: true, key, etag: putRes?.etag, size: actualLen || undefined }));
 }
 
 
 async function handleFilePresignDownload(env, req) {
   const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
+  if (!user) {
+    try {
+      console.warn('[FILES_PRESIGN_DOWNLOAD] unauthorized', {
+        origin: req.headers.get('origin') || null,
+        hasCookie: !!req.headers.get('cookie'),
+        url: req.url
+      });
+    } catch {}
+    return withCORS(env, req, unauthorized());
+  }
 
-  const data = await parseJSONBody(req);
+  let data;
+  try {
+    data = await parseJSONBody(req);
+  } catch {
+    return withCORS(env, req, badRequest("Invalid JSON"));
+  }
+
   if (!data || !data.key) return withCORS(env, req, badRequest("key is required"));
 
   // ✅ FIX: normalise keys coming from DB/UI (often stored as "/files/....")
-  // R2 keys must NOT start with "/"
   let key = String(data.key || '').trim();
   key = key.replace(/^\/+/, '');
   if (!key) return withCORS(env, req, badRequest("key is required"));
@@ -41930,7 +42020,7 @@ async function handleFilePresignDownload(env, req) {
 
   const exp = Math.floor(Date.now() / 1000) + 300;
 
-  // Keep your existing token scheme (do not change secret usage)
+  // Keep your existing scheme, but the download handler will accept both file_dl and dl
   const token = await createToken(env.UPLOAD_TOKEN_SECRET, { typ: "file_dl", key, exp });
 
   const baseUrl = new URL(req.url);
@@ -41939,42 +42029,110 @@ async function handleFilePresignDownload(env, req) {
   baseUrl.searchParams.set("key", key);
   baseUrl.searchParams.set("token", token);
 
-  const url = baseUrl.toString();
+  const signed = baseUrl.toString();
 
-  // ✅ FIX: return fields the frontend viewer already looks for (url / signed_url),
-  // while keeping download_url for backwards compatibility.
   return withCORS(env, req, ok({
-    url,
-    signed_url: url,
-    download_url: url,
+    url: signed,
+    signed_url: signed,
+    download_url: signed,
     key,
     expires_at: new Date(exp * 1000).toISOString()
   }));
 }
 
-
 async function handleFileDownload(env, req, url) {
-  const key = url.searchParams.get("key") || "";
-  const token = url.searchParams.get("token") || "";
-  const ver = await verifyToken(env.UPLOAD_TOKEN_SECRET, token);
-  if (!ver.ok) return unauthorized("Invalid token");
-  const p = ver.payload;
-  if (p.typ !== "file_dl" || p.key !== key) return unauthorized("Token mismatch");
+  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
+
+  const rawKey = url.searchParams.get("key") || "";
+  const token  = url.searchParams.get("token") || "";
+
+  if (!rawKey || !token) {
+    if (LOG) {
+      console.warn('[FILES_DOWNLOAD]', JSON.stringify({
+        stage: 'missing_params',
+        has_key: !!rawKey,
+        has_token: !!token
+      }));
+    }
+    return withCORS(env, req, badRequest("key and token are required"));
+  }
+
+  // ✅ FIX: normalize key consistently
+  const key = String(rawKey || '').replace(/^\/+/, '').trim();
+
+  let ver;
+  try {
+    ver = await verifyToken(env.UPLOAD_TOKEN_SECRET, token);
+  } catch (e) {
+    if (LOG) {
+      console.warn('[FILES_DOWNLOAD]', JSON.stringify({
+        stage: 'verifyToken_throw',
+        key_raw: rawKey,
+        key,
+        err: e?.message || String(e)
+      }));
+    }
+    return withCORS(env, req, unauthorized("Invalid token"));
+  }
+
+  if (!ver || !ver.ok) {
+    if (LOG) {
+      console.warn('[FILES_DOWNLOAD]', JSON.stringify({
+        stage: 'invalid_token',
+        key_raw: rawKey,
+        key
+      }));
+    }
+    return withCORS(env, req, unauthorized("Invalid token"));
+  }
+
+  const p = ver.payload || {};
+  const pKey = String(p.key || '').replace(/^\/+/, '').trim();
+  const typ  = String(p.typ || '');
+
+  // ✅ FIX: accept both dl and file_dl (backwards compatible)
+  const typOk = (typ === 'file_dl' || typ === 'dl');
+
+  if (!typOk || pKey !== key) {
+    if (LOG) {
+      console.warn('[FILES_DOWNLOAD]', JSON.stringify({
+        stage: 'claims_mismatch',
+        key_raw: rawKey,
+        key,
+        payload_typ: typ || null,
+        payload_key: p.key || null,
+        payload_key_norm: pKey
+      }));
+    }
+    return withCORS(env, req, unauthorized("Token mismatch"));
+  }
 
   const obj = await r2Get(env, key);
-  if (!obj) return notFound("Not found");
+  if (!obj) {
+    if (LOG) {
+      console.warn('[FILES_DOWNLOAD]', JSON.stringify({
+        stage: 'not_found',
+        key
+      }));
+    }
+    return withCORS(env, req, notFound("Not found"));
+  }
 
   let contentType = "application/octet-stream";
   if (obj.httpMetadata?.contentType) contentType = obj.httpMetadata.contentType;
 
   const headers = new Headers({
     "content-type": contentType,
-    "cache-control": "private, max-age=300"
+    "cache-control": "no-store",
+    "x-content-type-options": "nosniff"
   });
-  const dispName = obj.customMetadata?.originalName || key.split("/").pop();
-  headers.set("Content-Disposition", `attachment; filename="${dispName}"`);
 
-  return new Response(obj.body, { status: 200, headers });
+  const dispName = obj.customMetadata?.originalName || key.split("/").pop() || "download.bin";
+
+  // ✅ FIX: inline so iframe preview works
+  headers.set("Content-Disposition", `inline; filename="${String(dispName).replace(/[/\\]/g, "_").replace(/[\r\n"]/g, "")}"`);
+
+  return withCORS(env, req, new Response(obj.body, { status: 200, headers }));
 }
 
 
