@@ -15672,8 +15672,7 @@ async function handleManualPayAdjustmentCreate(env, req, timesheetId) {
   }
 }
 
-
- async function handleTimesheetDetails(env, req, timesheetId) {
+async function handleTimesheetDetails(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
   const user = await requireUser(env, req, ['admin']);
@@ -15726,6 +15725,22 @@ async function handleManualPayAdjustmentCreate(env, req, timesheetId) {
         `&limit=1`
     );
     const tsfinRaw = finRows?.[0] || null;
+
+    // ✅ NEW: pull view-derived flags (ready_to_pay, issue_codes, summary_stage, route_type)
+    // This ensures the modal can always rely on the same logic as the summary grid.
+    let summaryRow = null;
+    try {
+      const { rows: sRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
+          `?timesheet_id=eq.${enc(timesheetId)}` +
+          `&select=ready_to_pay,issue_codes,summary_stage,route_type` +
+          `&limit=1`
+      );
+      summaryRow = sRows?.[0] || null;
+    } catch {
+      summaryRow = null;
+    }
 
     // Validation rows (most recent first)
     const { rows: valRows } = await sbFetch(
@@ -15961,6 +15976,13 @@ async function handleManualPayAdjustmentCreate(env, req, timesheetId) {
       tsfin: tsfinOut,
       validations,
       shifts,
+
+      // ✅ NEW: view-derived flags for consistent FE logic
+      ready_to_pay: !!summaryRow?.ready_to_pay,
+      summary_stage: summaryRow?.summary_stage || null,
+      route_type: summaryRow?.route_type || null,
+      issue_codes: Array.isArray(summaryRow?.issue_codes) ? summaryRow.issue_codes : [],
+
       sheet_scope: ts.sheet_scope || null,
       qr_status: ts.qr_status || null,
       qr_generated_at: ts.qr_generated_at || null,
