@@ -4,12 +4,23 @@
 -- ✅ Now returns ONLY rows that REQUIRE OPERATOR ATTENTION
 --    (i.e. requires_any_decision = true).
 --
+-- FIX (requested):
+-- ✅ Adds contract_self_bill boolean (from contracts.self_bill)
+-- ✅ Adds invoice_id_detected uuid (coalesce seg lock, TSFIN lock, shift.invoice_id)
+--    so UI/back-end can clearly distinguish “self-bill correction allowed” vs “credit note required”.
+--
 -- Notes:
 -- - Keeps the same RPC signature:
 --     public.weekly_import_changed_hours_phase3(p_import_id uuid, p_system_type text)
 -- - NHSP-only invoice_lines fallback:
 --     meta_json->>'nhsp_shift_id' is only consulted when source_system='NHSP'.
 --     HealthRoster relies on TSFIN segment charge/pay amounts (segment_id = 'nhsp:'||shift_id).
+--
+-- IMPORTANT:
+-- Postgres cannot change the OUT row type of an existing function with CREATE OR REPLACE.
+-- So we DROP and recreate.
+
+drop function if exists public.weekly_import_changed_hours_phase3(uuid, text);
 
 -- ---------------------------------------------------------
 -- Helper: HH:MM(:SS) -> minutes since midnight
@@ -420,8 +431,9 @@ $$;
 -- ---------------------------------------------------------
 -- PHASE 3 RPC: preview "changed hours" rows (read-only)
 -- NOW FILTERED: returns ONLY requires_any_decision=true
+-- FIX: adds contract_self_bill + invoice_id_detected
 -- ---------------------------------------------------------
-create or replace function public.weekly_import_changed_hours_phase3(
+create function public.weekly_import_changed_hours_phase3(
   p_import_id uuid,
   p_system_type text
 )
@@ -436,6 +448,8 @@ returns table (
   client_id uuid,
   contract_id uuid,
   timesheet_id uuid,
+
+  contract_self_bill boolean,
 
   work_date date,
   week_ending_date date,
@@ -455,6 +469,8 @@ returns table (
 
   is_paid boolean,
   is_invoiced boolean,
+
+  invoice_id_detected uuid,
 
   old_pay_ex numeric,
   old_charge_ex numeric,
@@ -507,12 +523,18 @@ matched as (
     s.start_utc as old_start_utc,
     s.end_utc   as old_end_utc,
     coalesce(s.break_mins,0) as old_break_mins,
-    coalesce(s.pay_minutes,0) as old_paid_minutes
+    coalesce(s.pay_minutes,0) as old_paid_minutes,
+
+    s.invoice_id as shift_invoice_id,
+
+    c.self_bill as contract_self_bill
   from rows_in ri
   join wanted w on true
   left join public.nhsp_shifts s
     on s.external_row_key = ri.external_row_key
    and (w.sys is null or s.source_system = w.sys)
+  left join public.contracts c
+    on c.id = s.contract_id
 ),
 fin as (
   select
@@ -546,8 +568,6 @@ seg_old as (
 invline_old as (
   select
     s.*,
-    -- NHSP invoice run writes invoice_lines.meta_json.nhsp_shift_id
-    -- Guard: only attempt this fallback for NHSP.
     case
       when s.source_system = 'NHSP' then (
         select max(il.total_charge_ex_vat)
@@ -578,13 +598,9 @@ amounts as (
   select
     n.*,
 
-    -- OLD amounts:
-    -- pay: prefer TSFIN segment pay_amount
-    -- charge: prefer TSFIN segment charge_amount; for NHSP fallback to invoice_lines charge
     coalesce(n.seg_old_pay_ex, null) as old_pay_ex,
     coalesce(n.seg_old_charge_ex, n.invline_old_charge_ex, null) as old_charge_ex,
 
-    -- NEW amounts from policy+rates (when policy + rate buckets exist)
     case
       when n.policy_snapshot_json is null then null
       else round(
@@ -621,6 +637,8 @@ final_rows as (
     a.contract_id,
     a.timesheet_id,
 
+    a.contract_self_bill,
+
     coalesce(a.old_work_date, a.work_date) as work_date,
     a.week_ending_date,
 
@@ -647,14 +665,12 @@ final_rows as (
     (a.paid_at_utc is not null) as is_paid,
 
     (
-      -- invoiced if:
-      -- - segment-level invoice lock exists, OR
-      -- - timesheet-level lock exists, OR
-      -- - shift row has invoice_id
       a.seg_invoice_id is not null
       or a.locked_by_invoice_id is not null
-      or exists (select 1 from public.nhsp_shifts s2 where s2.id = a.shift_id and s2.invoice_id is not null)
+      or a.shift_invoice_id is not null
     ) as is_invoiced,
+
+    coalesce(a.seg_invoice_id, a.locked_by_invoice_id, a.shift_invoice_id) as invoice_id_detected,
 
     a.old_pay_ex,
     a.old_charge_ex,
@@ -681,7 +697,7 @@ final_rows as (
       (
         a.seg_invoice_id is not null
         or a.locked_by_invoice_id is not null
-        or exists (select 1 from public.nhsp_shifts s2 where s2.id = a.shift_id and s2.invoice_id is not null)
+        or a.shift_invoice_id is not null
       )
       and (
         a.shift_id is not null
@@ -697,7 +713,7 @@ final_rows as (
       (
         (a.paid_at_utc is not null)
         or
-        (a.seg_invoice_id is not null or a.locked_by_invoice_id is not null or exists (select 1 from public.nhsp_shifts s2 where s2.id = a.shift_id and s2.invoice_id is not null))
+        (a.seg_invoice_id is not null or a.locked_by_invoice_id is not null or a.shift_invoice_id is not null)
       )
       and (
         a.shift_id is not null
