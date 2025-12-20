@@ -27,8 +27,16 @@
 --    - Resolves booking_id and returns audit for ALL timesheet_ids in that booking series.
 --    - Also includes related contract_week audit (by current contract_weeks pointer).
 --
+-- NEW (Atomic concurrency guard inside SQL):
+-- - timesheet_qr_refuse_and_reset now accepts p_expected_timesheet_id UUID and refuses (no side effects)
+--   if expected != current, raising an exception with JSON:
+--   {"error":"TIMESHEET_MOVED","current_timesheet_id":"<uuid>"}
+--
+-- - timesheet_qr_restore_version now accepts p_expected_timesheet_id UUID and behaves the same.
+--
 -- Safety: stable search_path for SECURITY DEFINER.
 -- ============================================================
+
 
 -- ------------------------------------------------------------
 -- 1) Refuse QR hours: rotate current TS to history + reset to
@@ -36,6 +44,7 @@
 -- ------------------------------------------------------------
 create or replace function public.timesheet_qr_refuse_and_reset(
   p_timesheet_id uuid,
+  p_expected_timesheet_id uuid,
   p_reason text,
   p_actor_user_id uuid
 )
@@ -69,6 +78,11 @@ begin
     raise exception 'timesheet_id is required';
   end if;
 
+  if p_expected_timesheet_id is null then
+    raise exception '%',
+      jsonb_build_object('error','EXPECTED_TIMESHEET_ID_REQUIRED')::text;
+  end if;
+
   -- 0) Resolve booking_id from ANY row (stale or current)
   select *
   into v_any
@@ -95,6 +109,15 @@ begin
 
   if not found then
     raise exception 'Current timesheet not found for booking_id';
+  end if;
+
+  -- ✅ ATOMIC expected-guard (no side effects beyond row lock)
+  if p_expected_timesheet_id <> v_current.timesheet_id then
+    raise exception '%',
+      jsonb_build_object(
+        'error','TIMESHEET_MOVED',
+        'current_timesheet_id', v_current.timesheet_id
+      )::text;
   end if;
 
   -- 2) Lock CURRENT TSFIN row (keyed to the CURRENT timesheet_id) and block if paid/invoiced
@@ -241,35 +264,35 @@ begin
   if v_fin.id is not null then
     update public.timesheets_financials
     set
-      timesheet_id            = v_new_timesheet_id,
-      timesheet_version       = v_new_version,
-      processing_status       = 'UNASSIGNED'::public.ts_fin_processing_status_enum,
+      timesheet_id             = v_new_timesheet_id,
+      timesheet_version        = v_new_version,
+      processing_status        = 'UNASSIGNED'::public.ts_fin_processing_status_enum,
 
       -- Hours MUST remain NOT NULL (set to 0 rather than NULL)
-      hours_day               = 0,
-      hours_night             = 0,
-      hours_sat               = 0,
-      hours_sun               = 0,
-      hours_bh                = 0,
-      total_hours             = 0,
+      hours_day                = 0,
+      hours_night              = 0,
+      hours_sat                = 0,
+      hours_sun                = 0,
+      hours_bh                 = 0,
+      total_hours              = 0,
 
-      total_pay_ex_vat        = 0,
-      total_charge_ex_vat     = 0,
-      margin_ex_vat           = 0,
-      additional_pay_ex_vat   = 0,
-      additional_charge_ex_vat= 0,
-      additional_margin_ex_vat= 0,
+      total_pay_ex_vat         = 0,
+      total_charge_ex_vat      = 0,
+      margin_ex_vat            = 0,
+      additional_pay_ex_vat    = 0,
+      additional_charge_ex_vat = 0,
+      additional_margin_ex_vat = 0,
 
-      authorised_at_utc       = null,
-      authorised_by_user_id   = null,
-      locked_by_invoice_id    = null,
-      locked_at_utc           = null,
-      paid_at_utc             = null,
-      paid_by_user_id         = null,
-      payment_reference       = null,
+      authorised_at_utc        = null,
+      authorised_by_user_id    = null,
+      locked_by_invoice_id     = null,
+      locked_at_utc            = null,
+      paid_at_utc              = null,
+      paid_by_user_id          = null,
+      payment_reference        = null,
 
       -- keep policy_snapshot_json / rate_source_refs_json as-is (NOT NULL constraints)
-      updated_at              = v_now
+      updated_at               = v_now
     where id = v_fin.id;
 
     -- 7) Enqueue TSFIN recompute (optional but useful) for NEW timesheet_id
@@ -320,11 +343,13 @@ begin
 end;
 $$;
 
+
 -- ------------------------------------------------------------
 -- 2) Restore a previously revoked QR version (pending or signed)
 -- ------------------------------------------------------------
 create or replace function public.timesheet_qr_restore_version(
   p_timesheet_id uuid,
+  p_expected_timesheet_id uuid,
   p_restore_kind text,  -- 'PENDING' or 'SIGNED'
   p_actor_user_id uuid
 )
@@ -354,6 +379,11 @@ declare
 begin
   if p_timesheet_id is null then
     raise exception 'timesheet_id is required';
+  end if;
+
+  if p_expected_timesheet_id is null then
+    raise exception '%',
+      jsonb_build_object('error','EXPECTED_TIMESHEET_ID_REQUIRED')::text;
   end if;
 
   if upper(coalesce(p_restore_kind,'')) not in ('PENDING','SIGNED') then
@@ -386,6 +416,15 @@ begin
 
   if not found then
     raise exception 'Current timesheet not found for booking_id';
+  end if;
+
+  -- ✅ ATOMIC expected-guard (no side effects beyond row lock)
+  if p_expected_timesheet_id <> v_current.timesheet_id then
+    raise exception '%',
+      jsonb_build_object(
+        'error','TIMESHEET_MOVED',
+        'current_timesheet_id', v_current.timesheet_id
+      )::text;
   end if;
 
   -- 2) Lock CURRENT TSFIN and block restore if invoiced/paid
@@ -501,6 +540,7 @@ begin
 end;
 $$;
 
+
 -- ------------------------------------------------------------
 -- 3) Delete a planned-only contract week (no timesheet_id)
 -- ------------------------------------------------------------
@@ -560,6 +600,7 @@ begin
   return next;
 end;
 $$;
+
 
 -- ------------------------------------------------------------
 -- 4) Timesheet audit feed (timesheet + related contract_week)
