@@ -182,6 +182,9 @@ ts_base AS (
   -- banking fields
   LEFT JOIN candidates cand ON cand.id = COALESCE(tf.candidate_id, ct.candidate_id)
   LEFT JOIN umbrellas umb ON umb.id = cand.umbrella_id
+
+  -- ✅ AMENDMENT: only show CURRENT timesheets in summary
+  WHERE ts.is_current = true
 ),
 planned_weeks AS (
   SELECT
