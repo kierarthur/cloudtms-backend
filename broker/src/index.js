@@ -4581,13 +4581,8 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
   // Auth: admin only
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
-
-  if (!tsId) {
-    return withCORS(env, req, badRequest('timesheet_id is required'));
-  }
-  if (!evidenceId) {
-    return withCORS(env, req, badRequest('evidence_id is required'));
-  }
+  if (!tsId) return withCORS(env, req, badRequest('timesheet_id is required'));
+  if (!evidenceId) return withCORS(env, req, badRequest('evidence_id is required'));
 
   // Defensive: block synthetic/system ids
   if (String(evidenceId).startsWith('SYS:')) {
@@ -4608,10 +4603,29 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
     return withCORS(env, req, badRequest('Invalid JSON payload'));
   }
 
-  const newKind = body && body.kind != null ? String(body.kind).trim() : '';
-  if (!newKind) {
-    return withCORS(env, req, badRequest('kind is required'));
+  // ✅ Guarded write
+  const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+
+  // ✅ Rotation-safe resolve
+  const resolved = await resolveTimesheetToCurrent(env, tsId);
+  if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
+  const currentTsId = resolved.current_timesheet_id;
+
+  // ✅ Guard mismatch → 409 TIMESHEET_MOVED
+  if (String(expected) !== String(currentTsId)) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTsId }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
   }
+
+  const newKind = body && body.kind != null ? String(body.kind).trim() : '';
+  if (!newKind) return withCORS(env, req, badRequest('kind is required'));
 
   try {
     // Ensure evidence exists and belongs to this timesheet
@@ -4619,24 +4633,25 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
         `?id=eq.${enc(evidenceId)}` +
-        `&timesheet_id=eq.${enc(tsId)}` +
+        `&timesheet_id=eq.${enc(currentTsId)}` +
         `&select=id,kind,display_name,storage_key,created_at,created_by` +
         `&limit=1`
     );
 
     const ev = evRows?.[0] || null;
-    if (!ev) {
-      return withCORS(env, req, notFound('Evidence not found for this timesheet'));
-    }
+    if (!ev) return withCORS(env, req, notFound('Evidence not found for this timesheet'));
 
     const oldKind = ev.kind != null ? String(ev.kind) : '';
-
-    // No-op
     if (oldKind === newKind) {
-      return withCORS(env, req, ok(ev));
+      return withCORS(env, req, ok({
+        ok: true,
+        requested_timesheet_id: resolved.requested_timesheet_id || tsId,
+        current_timesheet_id: currentTsId,
+        was_stale: !!resolved.was_stale,
+        evidence: ev
+      }));
     }
 
-    // Patch DB row
     const patchRes = await fetch(
       `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(evidenceId)}`,
       {
@@ -4659,33 +4674,33 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
       updated = null;
     }
 
-    // Audit (best-effort)
+    // Audit
     try {
       await writeAudit(
         env,
         user,
         'TIMESHEET_EVIDENCE_RECLASSIFIED',
         {
-          timesheet_id: tsId,
+          timesheet_id: currentTsId,
           evidence_id: evidenceId,
           old_kind: oldKind || null,
           new_kind: newKind,
           storage_key: ev.storage_key || null,
           display_name: ev.display_name || null
         },
-        { entity: 'timesheets', subject_id: tsId, req }
+        { entity: 'timesheets', subject_id: currentTsId, req }
       );
-    } catch {
-      // best-effort
-    }
+    } catch {}
 
-    return withCORS(env, req, ok(updated || { ok: true }));
+    return withCORS(env, req, ok({
+      ok: true,
+      requested_timesheet_id: resolved.requested_timesheet_id || tsId,
+      current_timesheet_id: currentTsId,
+      was_stale: !!resolved.was_stale,
+      evidence: updated || { ok: true }
+    }));
   } catch (e) {
-    return withCORS(
-      env,
-      req,
-      serverError(`Failed to update evidence kind: ${e?.message || e}`)
-    );
+    return withCORS(env, req, serverError(`Failed to update evidence kind: ${e?.message || e}`));
   }
 }
 
@@ -4720,37 +4735,35 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     return withCORS(env, req, badRequest('Invalid JSON'));
   }
 
+  // ✅ Guarded write (only enforced when a current timesheet already exists for this week)
+  const expectedTimesheetId = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+
   const hasDayRefsKey     = !!(body && Object.prototype.hasOwnProperty.call(body, 'day_references_json'));
   const hasUnitsWeekKey   = !!(body && Object.prototype.hasOwnProperty.call(body, 'additional_units_week'));
   const hasUnitsPerDayKey = !!(body && Object.prototype.hasOwnProperty.call(body, 'additional_units_per_day'));
 
-  // NEW: optional per-day references from FE
-  // Expecting an object like { "2025-01-06": "REF123", ... } or null
+  // optional per-day references from FE
   let dayReferencesJson = null;
   if (body && Object.prototype.hasOwnProperty.call(body, 'day_references_json')) {
     if (body.day_references_json && typeof body.day_references_json === 'object') {
       dayReferencesJson = body.day_references_json;
     } else if (body.day_references_json === null) {
-      dayReferencesJson = null; // explicit clear
+      dayReferencesJson = null;
     } else if (typeof body.day_references_json === 'string') {
       try {
         const parsed = JSON.parse(body.day_references_json);
-        if (parsed && typeof parsed === 'object') {
-          dayReferencesJson = parsed;
-        }
+        if (parsed && typeof parsed === 'object') dayReferencesJson = parsed;
       } catch {
-        // if string but not valid JSON, we ignore rather than error
         dayReferencesJson = null;
       }
     }
   }
 
-  // NEW: QR revoke/reissue hints (from FE)
+  // QR revoke/reissue hints (legacy)
   const rawRevokeQr  = !!body?.revoke_qr;
   const rawReissueQr = !!body?.reissue_qr;
 
-  // NEW: preferred single enum action (keeps legacy booleans as fallback)
-  // Allowed: 'REISSUE' | 'REVOKE_TO_MANUAL'
+  // preferred enum
   const qrActionEnumRaw = String(body?.qr_action || body?.qrAction || '').trim().toUpperCase();
   const enumOk = (x) => (x === 'REISSUE' || x === 'REVOKE_TO_MANUAL');
 
@@ -4765,6 +4778,46 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(cw.contract_id)}&select=*`
   );
   if (!contract) return withCORS(env, req, notFound('Contract not found'));
+
+  // ✅ Resolve cw.timesheet_id to the current timesheet id (if one exists)
+  let currentTimesheetIdForWeek = cw.timesheet_id || null;
+  let wasStaleWeekTs = false;
+  if (currentTimesheetIdForWeek) {
+    const resTs = await resolveTimesheetToCurrent(env, currentTimesheetIdForWeek);
+    if (!resTs) return withCORS(env, req, notFound('Timesheet not found'));
+    if (String(resTs.current_timesheet_id) !== String(currentTimesheetIdForWeek)) {
+      wasStaleWeekTs = true;
+      currentTimesheetIdForWeek = resTs.current_timesheet_id;
+
+      // keep contract_week pointer aligned (best-effort)
+      try {
+        await fetch(
+          `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
+          {
+            method: 'PATCH',
+            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+            body: JSON.stringify({ timesheet_id: currentTimesheetIdForWeek, updated_at: nowIso() })
+          }
+        ).catch(() => {});
+      } catch {}
+    }
+
+    // Guard requires expected_timesheet_id when a timesheet exists
+    if (!expectedTimesheetId) {
+      return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+    }
+
+    if (String(expectedTimesheetId) !== String(currentTimesheetIdForWeek)) {
+      return withCORS(
+        env,
+        req,
+        new Response(
+          JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetIdForWeek }),
+          { status: 409, headers: { 'Content-Type': 'application/json' } }
+        )
+      );
+    }
+  }
 
   // Load candidate/client once for use in TS creation + QR reissue
   const candidate = contract.candidate_id
@@ -4786,20 +4839,17 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
   const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
 
-  // Normalise optional manual PDF rotation (0, 90, 180, 270)
+  // rotation degrees normalisation
   const normaliseRotation = (raw) => {
     if (raw == null) return 0;
     let n = Number(raw);
     if (!Number.isFinite(n)) return 0;
-    // Normalise to 0..359
     n = ((n % 360) + 360) % 360;
-    // Snap to 0/90/180/270
     if (n >= 315 || n < 45) return 0;
     if (n >= 45 && n < 135) return 90;
     if (n >= 135 && n < 225) return 180;
     return 270;
   };
-
   const manualPdfRotationDeg = normaliseRotation(
     body?.manual_pdf_rotation_degrees ?? body?.rotation_degrees
   );
@@ -4811,7 +4861,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
   if (Array.isArray(body?.actual_schedule_json) && body.actual_schedule_json.length) {
     actual_schedule_json = body.actual_schedule_json;
 
-    // Structural validation before classification
     try {
       validateScheduleStructure(actual_schedule_json);
     } catch (e) {
@@ -4853,16 +4902,10 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     (h.bh    > 0 && (!P.bh    && P.bh    !== 0 || !C.bh    && C.bh    !== 0));
 
   if (anyMissing(hours, pay, charge)) {
-    return withCORS(
-      env,
-      req,
-      badRequest('Missing rate(s) in contract for one or more entered hour buckets')
-    );
+    return withCORS(env, req, badRequest('Missing rate(s) in contract for one or more entered hour buckets'));
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // Additional unit buckets (EX1..EX5) – weekly totals
-  // ─────────────────────────────────────────────────────────────
+  // Additional unit buckets – weekly totals
   const normaliseUnitsWeek = (obj) => {
     const out = {};
     const src = (obj && typeof obj === 'object') ? obj : {};
@@ -4888,29 +4931,20 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     return out;
   };
 
-  // Start with request values if present
-  let unitsWeek  = hasUnitsWeekKey
-    ? (
-        (body.additional_units_week && typeof body.additional_units_week === 'object')
-          ? normaliseUnitsWeek(body.additional_units_week)
-          : {}
-      )
-    : null; // null means "not provided"
+  let unitsWeek = hasUnitsWeekKey
+    ? ((body.additional_units_week && typeof body.additional_units_week === 'object') ? normaliseUnitsWeek(body.additional_units_week) : {})
+    : null;
 
   let unitsPerDay = hasUnitsPerDayKey
-    ? (
-        (body.additional_units_per_day && typeof body.additional_units_per_day === 'object')
-          ? normaliseUnitsPerDay(body.additional_units_per_day)
-          : {}
-      )
+    ? ((body.additional_units_per_day && typeof body.additional_units_per_day === 'object') ? normaliseUnitsPerDay(body.additional_units_per_day) : {})
     : null;
 
   // If missing, reuse from the current timesheet (if any)
-  if ((!hasUnitsWeekKey || !hasUnitsPerDayKey) && cw.timesheet_id) {
+  if ((!hasUnitsWeekKey || !hasUnitsPerDayKey) && currentTimesheetIdForWeek) {
     const tsExistingUnits = await sbGetOne(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=eq.${enc(cw.timesheet_id)}` +
+        `?timesheet_id=eq.${enc(currentTimesheetIdForWeek)}` +
         `&is_current=eq.true` +
         `&select=timesheet_id,additional_units_week,additional_units_per_day`
     );
@@ -4925,14 +4959,12 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     }
   }
 
-  // If still null (no request + no TS), default to empty maps (timesheets schema requires week map NOT NULL)
   if (unitsWeek == null) unitsWeek = {};
   if (unitsPerDay == null) unitsPerDay = {};
 
-  const addlConfig = Array.isArray(contract.additional_rates_json)
-    ? contract.additional_rates_json
-    : [];
+  const addlConfig = Array.isArray(contract.additional_rates_json) ? contract.additional_rates_json : [];
 
+  // Derive week dates (for per-day units)
   const weekDates = [];
   try {
     const base = new Date(String(cw.week_ending_date) + 'T00:00:00Z');
@@ -4946,19 +4978,14 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       const dow  = d.getUTCDay();
       weekDates.push({ ymd, dow });
     }
-  } catch {
-    // ignore; we'll still use ONE_PER_WEEK units
-  }
+  } catch {}
 
   let bhSet = new Set();
   try {
     const policy = await loadClientTimePolicy(env, contract.client_id);
     if (policy && policy.bhList) {
-      if (policy.bhList instanceof Set) {
-        bhSet = policy.bhList;
-      } else if (Array.isArray(policy.bhList)) {
-        bhSet = new Set(policy.bhList);
-      }
+      if (policy.bhList instanceof Set) bhSet = policy.bhList;
+      else if (Array.isArray(policy.bhList)) bhSet = new Set(policy.bhList);
     }
   } catch {
     bhSet = new Set();
@@ -4968,25 +4995,25 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
 
   const normaliseFreq = (raw) => {
     const s = String(raw || '').toUpperCase();
-    if (s === 'ONE_PER_WEEK')         return 'ONE_PER_WEEK';
-    if (s === 'ONE_PER_DAY')          return 'ONE_PER_DAY';
-    if (s === 'WEEKENDS_AND_BH_ONLY') return 'WEEKENDS_AND_BH_ONLY';
-    if (s === 'WEEKDAYS_EXCL_BH_ONLY')return 'WEEKDAYS_EXCL_BH_ONLY';
+    if (s === 'ONE_PER_WEEK')          return 'ONE_PER_WEEK';
+    if (s === 'ONE_PER_DAY')           return 'ONE_PER_DAY';
+    if (s === 'WEEKENDS_AND_BH_ONLY')  return 'WEEKENDS_AND_BH_ONLY';
+    if (s === 'WEEKDAYS_EXCL_BH_ONLY') return 'WEEKDAYS_EXCL_BH_ONLY';
     return 'ONE_PER_WEEK';
   };
 
   const shouldIncludeDay = (freq, meta) => {
     const { ymd, dow } = meta;
     const bh = isBH(ymd);
-    if (freq === 'ONE_PER_DAY')          return true;
-    if (freq === 'WEEKENDS_AND_BH_ONLY') return bh || dow === 0 || dow === 6;
-    if (freq === 'WEEKDAYS_EXCL_BH_ONLY')return !bh && dow >= 1 && dow <= 5;
+    if (freq === 'ONE_PER_DAY')           return true;
+    if (freq === 'WEEKENDS_AND_BH_ONLY')  return bh || dow === 0 || dow === 6;
+    if (freq === 'WEEKDAYS_EXCL_BH_ONLY') return !bh && dow >= 1 && dow <= 5;
     return false;
   };
 
-  let additional_units_json   = {};
-  let additional_pay_ex_vat   = 0;
-  let additional_charge_ex_vat= 0;
+  let additional_units_json = {};
+  let additional_pay_ex_vat = 0;
+  let additional_charge_ex_vat = 0;
   const badBuckets = [];
 
   for (const cfgRaw of addlConfig) {
@@ -5000,9 +5027,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       const u = Number(unitsWeek[code] || 0);
       if (u && Number.isFinite(u)) unitCount = u;
     } else {
-      const perRaw = (unitsPerDay[code] && typeof unitsPerDay[code] === 'object')
-        ? unitsPerDay[code]
-        : {};
+      const perRaw = (unitsPerDay[code] && typeof unitsPerDay[code] === 'object') ? unitsPerDay[code] : {};
       for (const meta of weekDates) {
         const raw = perRaw[meta.ymd];
         if (raw == null || raw === '') continue;
@@ -5038,61 +5063,30 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       days: Object.keys(daysUsed).length ? daysUsed : undefined
     };
 
-    additional_pay_ex_vat    += payEx;
+    additional_pay_ex_vat += payEx;
     additional_charge_ex_vat += chgEx;
   }
 
   if (badBuckets.length) {
-    const msg = `Missing additional rate(s) in contract for bucket(s): ${badBuckets.join(', ')}`;
-    return withCORS(env, req, badRequest(msg));
+    return withCORS(env, req, badRequest(`Missing additional rate(s) in contract for bucket(s): ${badBuckets.join(', ')}`));
   }
 
-  additional_pay_ex_vat    = +Number(additional_pay_ex_vat).toFixed(2);
+  additional_pay_ex_vat = +Number(additional_pay_ex_vat).toFixed(2);
   additional_charge_ex_vat = +Number(additional_charge_ex_vat).toFixed(2);
-  const additional_margin_ex_vat =
-    +Number(additional_charge_ex_vat - additional_pay_ex_vat).toFixed(2);
+  const additional_margin_ex_vat = +Number(additional_charge_ex_vat - additional_pay_ex_vat).toFixed(2);
 
-  // Build or reuse timesheet (manual weekly) – always use the CURRENT version if it exists
-  let ts = cw.timesheet_id
+  // Load current timesheet row (if exists)
+  let ts = currentTimesheetIdForWeek
     ? await sbGetOne(
         env,
         `${env.SUPABASE_URL}/rest/v1/timesheets` +
-          `?timesheet_id=eq.${enc(cw.timesheet_id)}&is_current=eq.true&select=*`
+          `?timesheet_id=eq.${enc(currentTimesheetIdForWeek)}` +
+          `&is_current=eq.true` +
+          `&select=*`
       )
     : null;
 
-  const nowIso = new Date().toISOString();
-
-  // ─────────────────────────────────────────────────────────────
-  // MINIMAL AUDIT: capture "before" snapshot for change detection
-  // ─────────────────────────────────────────────────────────────
-  const stableJson = (x) => {
-    try { return JSON.stringify(x ?? null); } catch { return ''; }
-  };
-  const beforeTsId = ts?.timesheet_id || null;
-  const beforeScheduleJsonStr = stableJson(ts?.actual_schedule_json ?? null);
-
-  let beforeTsfin = null;
-  if (beforeTsId) {
-    try {
-      beforeTsfin = await sbGetOne(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?timesheet_id=eq.${enc(beforeTsId)}` +
-          `&is_current=eq.true` +
-          `&select=hours_day,hours_night,hours_sat,hours_sun,hours_bh,total_hours,processing_status`
-      );
-    } catch {
-      beforeTsfin = null;
-    }
-  }
-  const beforeHours = {
-    day:   Number(beforeTsfin?.hours_day   ?? 0),
-    night: Number(beforeTsfin?.hours_night ?? 0),
-    sat:   Number(beforeTsfin?.hours_sat   ?? 0),
-    sun:   Number(beforeTsfin?.hours_sun   ?? 0),
-    bh:    Number(beforeTsfin?.hours_bh    ?? 0)
-  };
+  const nowIso = nowIso();
 
   // Lock enforcement: block changes if invoiced or paid
   let finLock = null;
@@ -5108,18 +5102,35 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     }
   }
 
-  // Helper: rotate the current timesheet version (preserve old QR/signed evidence)
+  // Helper: rotate the current timesheet version (preserve old QR/signed evidence by revoking old current)
   const rotateTimesheetVersion = async (currentTs, revokeReason) => {
     if (!currentTs || !currentTs.timesheet_id) return currentTs;
-    const oldVersion = Number(currentTs.version || 1);
-    const newVersion = oldVersion + 1;
-    const now2 = nowIso;
 
-    // Mark old version as not current + revoked
+    const bookingId = currentTs.booking_id || null;
+    if (!bookingId) throw new Error('Cannot rotate: booking_id missing on current timesheet');
+
+    // Determine next version by booking_id
+    let nextVersion = Number(currentTs.version || 1) + 1;
+    try {
+      const { rows: vRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?booking_id=eq.${enc(bookingId)}` +
+          `&select=version` +
+          `&order=version.desc` +
+          `&limit=1`
+      );
+      const maxV = vRows?.[0]?.version != null ? Number(vRows[0].version) : Number(currentTs.version || 1);
+      nextVersion = Number.isFinite(maxV) ? maxV + 1 : (Number(currentTs.version || 1) + 1);
+    } catch {}
+
+    const now2 = nowIso();
+
+    // Demote any current row for this booking_id
     await fetch(
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=eq.${enc(currentTs.timesheet_id)}` +
-        `&version=eq.${enc(oldVersion)}`,
+        `?booking_id=eq.${enc(bookingId)}` +
+        `&is_current=eq.true`,
       {
         method: 'PATCH',
         headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
@@ -5131,57 +5142,66 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
           updated_at: now2
         })
       }
-    );
+    ).catch(() => {});
 
-    // Create new current version (do NOT inherit signed pdf or qr metadata)
-    const newRow = {
-      ...currentTs,
-      version: newVersion,
+    // Create new current version (NO timesheet_id)
+    const newRow = { ...currentTs };
+    delete newRow.id;
+    delete newRow.timesheet_id;
+
+    Object.assign(newRow, {
+      booking_id: bookingId,
+      version: nextVersion,
       is_current: true,
-      status: 'RECEIVED', // ✅ timesheet_status_enum valid
+      status: 'RECEIVED',
       revoked_reason: null,
       revoked_by: null,
 
-      // Evidence should not carry over; the new version needs fresh evidence/QR.
       manual_pdf_r2_key: null,
       manual_pdf_rotation_degrees: Number(currentTs.manual_pdf_rotation_degrees ?? 0),
 
-      // Clear QR linkage for the new current; if reissuing, we'll set below.
       qr_token: null,
       qr_status: null,
-      qr_payload_json: {}, // NOT NULL in schema
+      qr_payload_json: {},
       qr_generated_at: null,
       qr_scanned_at: null,
       qr_scan_info_json: null,
       qr_r2_key: null,
 
-      // ✅ carry current additional units forward into the new current version
       additional_units_week: currentTs.additional_units_week || {},
       additional_units_per_day: currentTs.additional_units_per_day || {},
 
       updated_at: now2,
       created_at: now2
-    };
-
-    // Ensure we don't accidentally carry non-insertable fields
-    delete newRow.id;
+    });
 
     const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets`, {
       method: 'POST',
       headers: { ...sbHeaders(env), Prefer: 'return=representation' },
       body: JSON.stringify([newRow])
     });
+
     if (!ins.ok) {
       const t = await ins.text().catch(() => '');
       throw new Error(`Failed to rotate timesheet version: ${t}`);
     }
+
     const created = (await ins.json().catch(() => []))[0] || null;
-    return created || { ...currentTs, version: newVersion, is_current: true };
+    return created || null;
   };
+
+  // Determine QR action (enum preferred, legacy booleans fallback)
+  let qrAction = null; // 'REISSUE' | 'REVOKE_TO_MANUAL' | null
+  if (enumOk(qrActionEnumRaw)) qrAction = qrActionEnumRaw;
+  else {
+    if (rawReissueQr) qrAction = 'REISSUE';
+    else if (rawRevokeQr) qrAction = 'REVOKE_TO_MANUAL';
+  }
 
   let createdNow = false;
 
   if (!ts) {
+    // create new timesheet for this contract_week
     const occupant_norm = (candidate?.display_name || String(candidate?.id || 'worker')).toLowerCase();
     const hospital_norm = (contract.display_site || client?.name || String(contract.client_id)).toLowerCase();
     const ward_norm     = (contract.ward_hint || 'contract').toLowerCase();
@@ -5192,30 +5212,18 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       return withCORS(env, req, badRequest(`Invalid booking_id produced: "${booking_id}"`));
     }
 
-    console.log('[CW_MANUAL_UPSERT][BOOKING_ID]', {
-      weekId,
-      booking_id,
-      booking_id_type: typeof booking_id,
-      candidate_id: contract?.candidate_id,
-      candidate_loaded: !!candidate,
-      contract_id: contract?.id,
-      cw_id: cw?.id,
-      cw_week_ending_date: cw?.week_ending_date,
-      cw_additional_seq: cw?.additional_seq
-    });
-
     const payload = [{
       booking_id,
       version: 1,
       is_current: true,
-      status: 'RECEIVED', // ✅ timesheet_status_enum valid
+      status: 'RECEIVED',
       occupant_key_norm: occupant_norm,
       hospital_norm, ward_norm, job_title_norm,
       shift_label_norm: 'weekly',
       week_ending_date: cw.week_ending_date,
       r2_nurse_key: null, r2_auth_key: null,
       contract_id: contract.id,
-      sheet_scope: 'WEEKLY',          // ✅ prevent default DAILY
+      sheet_scope: 'WEEKLY',
       submission_mode: 'MANUAL',
 
       manual_pdf_r2_key: cw.uploaded_pdf_r2_key || null,
@@ -5223,19 +5231,14 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       line_type: 'HOURS',
       actual_schedule_json,
 
-      // ✅ Persist additional units onto the timesheet row (NOT NULL week map)
       additional_units_week: unitsWeek || {},
       additional_units_per_day: unitsPerDay || {},
 
-      // NEW: per-day references (if provided)
       day_references_json: dayReferencesJson ?? null,
       authorised_at_server: null,
       created_at: nowIso, updated_at: nowIso,
 
-      // Ensure NOT NULL JSONB has a value
       qr_payload_json: {},
-
-      // ✅ override DB default qr_status='PENDING' for non-QR manual timesheets
       qr_status: null,
       qr_token: null,
       qr_generated_at: null,
@@ -5246,31 +5249,27 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
 
     const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets`, {
       method: 'POST',
-      headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
       body: JSON.stringify(payload)
     });
-    if (!ins.ok) {
-      return withCORS(env, req, serverError(await ins.text()));
-    }
-    ts = (await ins.json().catch(()=>[]))[0];
+    if (!ins.ok) return withCORS(env, req, serverError(await ins.text()));
+
+    ts = (await ins.json().catch(() => []))[0];
     createdNow = true;
 
     await fetch(
       `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
       {
         method: 'PATCH',
-        headers: { ...sbHeaders(env), 'Prefer': 'return-minimal' },
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
         body: JSON.stringify({
           timesheet_id: ts.timesheet_id,
           status: 'SUBMITTED',
           updated_at: nowIso
         })
       }
-    );
+    ).catch(() => {});
 
-    // ─────────────────────────────────────────────────────────────
-    // MINIMAL AUDIT: TIMESHEET_CREATED
-    // ─────────────────────────────────────────────────────────────
     try {
       await writeAudit(
         env,
@@ -5288,91 +5287,46 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
         { entity: 'timesheets', subject_id: ts.timesheet_id, req }
       );
     } catch {}
-  } else if (actual_schedule_json) {
-    const patchBody = {
-      actual_schedule_json,
-      updated_at: nowIso
-    };
+  } else {
+    // Patch existing current timesheet for this week
+    const patchBody = { updated_at: nowIso };
+
+    if (actual_schedule_json) patchBody.actual_schedule_json = actual_schedule_json;
     if (body?.manual_pdf_rotation_degrees != null || body?.rotation_degrees != null) {
       patchBody.manual_pdf_rotation_degrees = manualPdfRotationDeg;
     }
-    if (hasDayRefsKey) {
-      patchBody.day_references_json = dayReferencesJson ?? null;
-    }
-
-    // ✅ Only patch additional units if provided in the request
-    if (hasUnitsWeekKey) {
-      patchBody.additional_units_week = unitsWeek || {};
-    }
-    if (hasUnitsPerDayKey) {
-      patchBody.additional_units_per_day = unitsPerDay || {};
-    }
+    if (hasDayRefsKey) patchBody.day_references_json = dayReferencesJson ?? null;
+    if (hasUnitsWeekKey) patchBody.additional_units_week = unitsWeek || {};
+    if (hasUnitsPerDayKey) patchBody.additional_units_per_day = unitsPerDay || {};
 
     await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
+      `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
+      { method: 'PATCH', headers: { ...sbHeaders(env), Prefer: 'return-minimal' }, body: JSON.stringify(patchBody) }
+    ).catch(() => {});
+  }
+
+  // If QR action on existing QR timesheet, rotate for audit/restore
+  const hadQrBefore = !!(ts && ts.qr_status);
+  if (ts && ts.timesheet_id && hadQrBefore && (qrAction === 'REISSUE' || qrAction === 'REVOKE_TO_MANUAL')) {
+    const why = (qrAction === 'REISSUE') ? 'QR_REISSUE_AFTER_HOURS_CHANGE' : 'QR_REVOKED_TO_MANUAL';
+
+    const rotated = await rotateTimesheetVersion(ts, why);
+    if (!rotated || !rotated.timesheet_id) {
+      return withCORS(env, req, serverError('Failed to rotate timesheet version'));
+    }
+    ts = rotated;
+
+    // ✅ Move contract_week pointer to the new current timesheet id
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
       {
         method: 'PATCH',
-        headers: { ...sbHeaders(env), 'Prefer': 'return-minimal' },
-        body: JSON.stringify(patchBody)
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify({ timesheet_id: ts.timesheet_id, updated_at: nowIso })
       }
-    ).catch(()=>{});
-  } else {
-    // ✅ NEW: even if schedule is NOT provided, we still need to persist units/refs/rotation
-    // when they were explicitly provided in the request.
-    const patchBody = { updated_at: nowIso };
-    let changed = false;
+    ).catch(() => {});
 
-    if (body?.manual_pdf_rotation_degrees != null || body?.rotation_degrees != null) {
-      patchBody.manual_pdf_rotation_degrees = manualPdfRotationDeg;
-      changed = true;
-    }
-    if (hasDayRefsKey) {
-      patchBody.day_references_json = dayReferencesJson ?? null;
-      changed = true;
-    }
-    if (hasUnitsWeekKey) {
-      patchBody.additional_units_week = unitsWeek || {};
-      changed = true;
-    }
-    if (hasUnitsPerDayKey) {
-      patchBody.additional_units_per_day = unitsPerDay || {};
-      changed = true;
-    }
-
-    if (changed) {
-      await fetch(
-        `${env.SUPABASE_URL}/rest/v1/timesheets` +
-          `?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
-        {
-          method: 'PATCH',
-          headers: { ...sbHeaders(env), 'Prefer': 'return-minimal' },
-          body: JSON.stringify(patchBody)
-        }
-      ).catch(()=>{});
-    }
-  }
-
-  // Determine QR action (enum preferred, legacy booleans fallback)
-  let qrAction = null; // 'REISSUE' | 'REVOKE_TO_MANUAL' | null
-  if (enumOk(qrActionEnumRaw)) {
-    qrAction = qrActionEnumRaw;
-  } else {
-    if (rawReissueQr) qrAction = 'REISSUE';
-    else if (rawRevokeQr) qrAction = 'REVOKE_TO_MANUAL';
-  }
-
-  const hadQrBefore = !!(ts.qr_status);
-
-  // If we're changing QR state on an existing QR timesheet, rotate for audit/restore
-  if (ts && ts.timesheet_id && hadQrBefore && (qrAction === 'REISSUE' || qrAction === 'REVOKE_TO_MANUAL')) {
-    const why = (qrAction === 'REISSUE')
-      ? 'QR_REISSUE_AFTER_HOURS_CHANGE'
-      : 'QR_REVOKED_TO_MANUAL';
-
-    ts = await rotateTimesheetVersion(ts, why);
-
-    // After rotation, any previous finLock object is now stale; reload lock snapshot for the new current
+    // Reload lock snapshot for the new current (if needed later)
     finLock = await sbGetOne(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
@@ -5381,15 +5335,13 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     );
   }
 
-  // processing_status rules:
-  // - REISSUE or REVOKE_TO_MANUAL => AWAITING_MANUAL_SIGNATURE
-  // - otherwise => PENDING_AUTH
+  // processing status rules
   const processingStatus =
     (qrAction === 'REISSUE' || qrAction === 'REVOKE_TO_MANUAL')
       ? 'AWAITING_MANUAL_SIGNATURE'
       : 'PENDING_AUTH';
 
-  // ✅ Policy snapshot (TSFIN requires non-null policy_snapshot_json)
+  // Policy snapshot (TSFIN requires non-null)
   let policySnapshot = {};
   try {
     policySnapshot = await loadPolicy(env, contract.client_id || null, cw.week_ending_date);
@@ -5403,18 +5355,15 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       ? Number(policySnapshot.holiday_pay_pct)
       : null;
 
-  // TSFIN snapshot – SEGMENTS vs AGGREGATE
+  // Build snapshot (existing logic unchanged beyond using ts.timesheet_id)
   let snap;
-
   if (actual_schedule_json && Array.isArray(actual_schedule_json) && actual_schedule_json.length) {
-    // SEGMENTS mode – one segment per manual shift
-    const candidateId = contract.candidate_id || null;
-    const clientId    = contract.client_id   || null;
-    const segments    = [];
-    let segPayTotal   = 0;
-    let segChgTotal   = 0;
+    // SEGMENTS mode
+    const clientId = contract.client_id || null;
+    const segments = [];
+    let segPayTotal = 0;
+    let segChgTotal = 0;
 
-    // OPTION B conversion helpers
     if (typeof ukLocalToUtcISO !== 'function') {
       throw new Error('ukLocalToUtcISO helper is missing (required for weekly SEGMENTS conversion).');
     }
@@ -5446,19 +5395,17 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     };
 
     const scheduleEntryToUtcRange = (seg) => {
-      const date = String(seg?.date || '').trim(); // "YYYY-MM-DD"
+      const date = String(seg?.date || '').trim();
       if (!date) return { startUtcIso: null, endUtcIso: null };
 
-      // If already ISO, accept it
       const startIsoRaw = seg?.start_utc || seg?.start_iso || null;
       const endIsoRaw   = seg?.end_utc   || seg?.end_iso   || null;
       if (startIsoRaw && endIsoRaw && _isIsoLike(startIsoRaw) && _isIsoLike(endIsoRaw)) {
         return { startUtcIso: String(startIsoRaw), endUtcIso: String(endIsoRaw) };
       }
 
-      // Weekly schedule inputs
-      const startHH = String(seg?.start || '').trim(); // "HH:MM"
-      const endHH   = String(seg?.end   || '').trim(); // "HH:MM"
+      const startHH = String(seg?.start || '').trim();
+      const endHH   = String(seg?.end   || '').trim();
       if (!startHH || !endHH) return { startUtcIso: null, endUtcIso: null };
 
       const sMin = _parseHHMM(startHH);
@@ -5475,7 +5422,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     };
 
     for (let i = 0; i < actual_schedule_json.length; i++) {
-      const seg  = actual_schedule_json[i] || {};
+      const seg = actual_schedule_json[i] || {};
       const date = seg.date;
 
       const { startUtcIso, endUtcIso } = scheduleEntryToUtcRange(seg);
@@ -5483,14 +5430,11 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       const end   = endUtcIso;
 
       const br = Number(seg.break_mins ?? seg.break_minutes ?? 0);
-
       if (!date || !start || !end) continue;
 
       const policy = await loadPolicy(env, clientId, date);
-
       let segsArr = [[start, end]];
       segsArr = subtractBreak(segsArr, null, null, br);
-
       const h = classifyMinutes(env, policy, segsArr);
 
       const p = pay || {};
@@ -5519,86 +5463,53 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
         segment_id: `ts:${ts.timesheet_id}:${i}`,
         date,
         ward: seg.ward || null,
-        start_utc: start, // now UTC ISO
-        end_utc:   end,   // now UTC ISO
+        start_utc: start,
+        end_utc: end,
         break_mins: br,
         hours_day:   h.hours_day   || 0,
         hours_night: h.hours_night || 0,
         hours_sat:   h.hours_sat   || 0,
         hours_sun:   h.hours_sun   || 0,
         hours_bh:    h.hours_bh    || 0,
-        pay_amount:    segPay,
+        pay_amount: segPay,
         charge_amount: segChg,
         exclude_from_pay: false
       });
     }
 
-    const basePay    = segPayTotal;
+    const basePay = segPayTotal;
     const baseCharge = segChgTotal;
-    const total_pay  = round2(basePay    + additional_pay_ex_vat);
-    const total_chg  = round2(baseCharge + additional_charge_ex_vat);
-    const margin     = round2(total_chg   - total_pay);
+    const total_pay = round2(basePay + additional_pay_ex_vat);
+    const total_chg = round2(baseCharge + additional_charge_ex_vat);
+    const margin = round2(total_chg - total_pay);
 
-    if (margin < 0) {
-      return withCORS(env, req, badRequest('Negative margin: total charge is less than total pay for the staged hours/rates.'));
-    }
-
-    const invoice_breakdown_json = {
-      mode: 'SEGMENTS',
-      segments,
-      additional: {
-        units:        additional_units_json,
-        pay_ex_vat:   additional_pay_ex_vat,
-        charge_ex_vat: additional_charge_ex_vat,
-        margin_ex_vat: additional_margin_ex_vat
-      },
-      totals: {
-        total_pay_ex_vat:    total_pay,
-        total_charge_ex_vat: total_chg,
-        margin_ex_vat:       margin
-      }
-    };
+    if (margin < 0) return withCORS(env, req, badRequest('Negative margin: total charge is less than total pay.'));
 
     snap = {
       timesheet_id: ts.timesheet_id,
       timesheet_version: ts.version || 1,
       basis: 'CONTRACT_WEEKLY',
       candidate_id: contract.candidate_id,
-      client_id:    contract.client_id,
+      client_id: contract.client_id,
       role: contract.role || null,
       band: contract.band || null,
       candidate_assignment: contract.candidate_id ? 'ASSIGNED' : 'UNASSIGNED',
       processing_status: processingStatus,
       pay_method: method,
 
-      hours_day:   Number(hours.day   || 0),
+      hours_day: Number(hours.day || 0),
       hours_night: Number(hours.night || 0),
-      hours_sat:   Number(hours.sat   || 0),
-      hours_sun:   Number(hours.sun   || 0),
-      hours_bh:    Number(hours.bh    || 0),
-      total_hours: round2(
-        Number(hours.day   || 0) +
-        Number(hours.night || 0) +
-        Number(hours.sat   || 0) +
-        Number(hours.sun   || 0) +
-        Number(hours.bh    || 0)
-      ),
+      hours_sat: Number(hours.sat || 0),
+      hours_sun: Number(hours.sun || 0),
+      hours_bh: Number(hours.bh || 0),
+      total_hours: round2(Number(hours.day || 0) + Number(hours.night || 0) + Number(hours.sat || 0) + Number(hours.sun || 0) + Number(hours.bh || 0)),
 
-      pay_day:   pay.day,
-      pay_night: pay.night,
-      pay_sat:   pay.sat,
-      pay_sun:   pay.sun,
-      pay_bh:    pay.bh,
+      pay_day: pay.day, pay_night: pay.night, pay_sat: pay.sat, pay_sun: pay.sun, pay_bh: pay.bh,
+      charge_day: charge.day, charge_night: charge.night, charge_sat: charge.sat, charge_sun: charge.sun, charge_bh: charge.bh,
 
-      charge_day:   charge.day,
-      charge_night: charge.night,
-      charge_sat:   charge.sat,
-      charge_sun:   charge.sun,
-      charge_bh:    charge.bh,
-
-      total_pay_ex_vat:    total_pay,
+      total_pay_ex_vat: total_pay,
       total_charge_ex_vat: total_chg,
-      margin_ex_vat:       margin,
+      margin_ex_vat: margin,
 
       additional_units_json,
       additional_pay_ex_vat,
@@ -5629,99 +5540,58 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       pay_wtr_rate_pct_snapshot,
 
       created_at: nowIso,
-      invoice_breakdown_json
+      invoice_breakdown_json: {
+        mode: 'SEGMENTS',
+        segments,
+        additional: {
+          units: additional_units_json,
+          pay_ex_vat: additional_pay_ex_vat,
+          charge_ex_vat: additional_charge_ex_vat,
+          margin_ex_vat: additional_margin_ex_vat
+        },
+        totals: {
+          total_pay_ex_vat: total_pay,
+          total_charge_ex_vat: total_chg,
+          margin_ex_vat: margin
+        }
+      }
     };
   } else {
     const n2 = (x)=>Number(x)||0;
-    const base_pay    = +(hours.day*n2(pay.day) + hours.night*n2(pay.night) + hours.sat*n2(pay.sat) + hours.sun*n2(pay.sun) + hours.bh*n2(pay.bh)).toFixed(2);
-    const base_charge = +(hours.day*n2(charge.day)+hours.night*n2(charge.night)+hours.sat*n2(charge.sat)+hours.sun*n2(charge.sun)+hours.bh*n2(charge.bh)).toFixed(2);
+    const base_pay = +(hours.day*n2(pay.day) + hours.night*n2(pay.night) + hours.sat*n2(pay.sat) + hours.sun*n2(pay.sun) + hours.bh*n2(pay.bh)).toFixed(2);
+    const base_charge = +(hours.day*n2(charge.day) + hours.night*n2(charge.night) + hours.sat*n2(charge.sat) + hours.sun*n2(charge.sun) + hours.bh*n2(charge.bh)).toFixed(2);
 
-    const total_pay    = +Number(base_pay    + additional_pay_ex_vat).toFixed(2);
+    const total_pay = +Number(base_pay + additional_pay_ex_vat).toFixed(2);
     const total_charge = +Number(base_charge + additional_charge_ex_vat).toFixed(2);
-    const margin       = +Number(total_charge - total_pay).toFixed(2);
+    const margin = +Number(total_charge - total_pay).toFixed(2);
 
-    if (margin < 0) {
-      return withCORS(env, req, badRequest('Negative margin: total charge is less than total pay for the staged hours/rates.'));
-    }
-
-    const invoice_breakdown_json = {
-      mode: "AGGREGATE",
-      base_hours: {
-        day: hours.day,
-        night: hours.night,
-        sat: hours.sat,
-        sun: hours.sun,
-        bh: hours.bh,
-        pay_rates: {
-          day: pay.day,
-          night: pay.night,
-          sat: pay.sat,
-          sun: pay.sun,
-          bh: pay.bh
-        },
-        charge_rates: {
-          day: charge.day,
-          night: charge.night,
-          sat: charge.sat,
-          sun: charge.sun,
-          bh: charge.bh
-        },
-        pay_ex_vat: base_pay,
-        charge_ex_vat: base_charge
-      },
-      additional: {
-        units:        additional_units_json,
-        pay_ex_vat:   additional_pay_ex_vat,
-        charge_ex_vat: additional_charge_ex_vat,
-        margin_ex_vat: additional_margin_ex_vat
-      },
-      totals: {
-        total_pay_ex_vat:    total_pay,
-        total_charge_ex_vat: total_charge,
-        margin_ex_vat:       margin
-      }
-    };
+    if (margin < 0) return withCORS(env, req, badRequest('Negative margin: total charge is less than total pay.'));
 
     snap = {
       timesheet_id: ts.timesheet_id,
       timesheet_version: ts.version || 1,
       basis: 'CONTRACT_WEEKLY',
       candidate_id: contract.candidate_id,
-      client_id:    contract.client_id,
+      client_id: contract.client_id,
       role: contract.role || null,
       band: contract.band || null,
       candidate_assignment: 'ASSIGNED',
       processing_status: processingStatus,
       pay_method: method,
 
-      hours_day:   Number(hours.day   || 0),
+      hours_day: Number(hours.day || 0),
       hours_night: Number(hours.night || 0),
-      hours_sat:   Number(hours.sat   || 0),
-      hours_sun:   Number(hours.sun   || 0),
-      hours_bh:    Number(hours.bh    || 0),
-      total_hours: round2(
-        Number(hours.day   || 0) +
-        Number(hours.night || 0) +
-        Number(hours.sat   || 0) +
-        Number(hours.sun   || 0) +
-        Number(hours.bh    || 0)
-      ),
+      hours_sat: Number(hours.sat || 0),
+      hours_sun: Number(hours.sun || 0),
+      hours_bh: Number(hours.bh || 0),
+      total_hours: round2(Number(hours.day || 0) + Number(hours.night || 0) + Number(hours.sat || 0) + Number(hours.sun || 0) + Number(hours.bh || 0)),
 
-      pay_day:   pay.day,
-      pay_night: pay.night,
-      pay_sat:   pay.sat,
-      pay_sun:   pay.sun,
-      pay_bh:    pay.bh,
+      pay_day: pay.day, pay_night: pay.night, pay_sat: pay.sat, pay_sun: pay.sun, pay_bh: pay.bh,
+      charge_day: charge.day, charge_night: charge.night, charge_sat: charge.sat, charge_sun: charge.sun, charge_bh: charge.bh,
 
-      charge_day:   charge.day,
-      charge_night: charge.night,
-      charge_sat:   charge.sat,
-      charge_sun:   charge.sun,
-      charge_bh:    charge.bh,
-
-      total_pay_ex_vat:    total_pay,
+      total_pay_ex_vat: total_pay,
       total_charge_ex_vat: total_charge,
-      margin_ex_vat:       margin,
+      margin_ex_vat: margin,
 
       additional_units_json,
       additional_pay_ex_vat,
@@ -5752,330 +5622,58 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       pay_wtr_rate_pct_snapshot,
 
       created_at: nowIso,
-      invoice_breakdown_json
+      invoice_breakdown_json: {
+        mode: "AGGREGATE",
+        base_hours: {
+          day: hours.day,
+          night: hours.night,
+          sat: hours.sat,
+          sun: hours.sun,
+          bh: hours.bh,
+          pay_rates: { day: pay.day, night: pay.night, sat: pay.sat, sun: pay.sun, bh: pay.bh },
+          charge_rates: { day: charge.day, night: charge.night, sat: charge.sat, sun: charge.sun, bh: charge.bh },
+          pay_ex_vat: base_pay,
+          charge_ex_vat: base_charge
+        },
+        additional: {
+          units: additional_units_json,
+          pay_ex_vat: additional_pay_ex_vat,
+          charge_ex_vat: additional_charge_ex_vat,
+          margin_ex_vat: additional_margin_ex_vat
+        },
+        totals: {
+          total_pay_ex_vat: total_pay,
+          total_charge_ex_vat: total_charge,
+          margin_ex_vat: margin
+        }
+      }
     };
   }
 
   await writeSnapshot(env, snap);
 
-  // ✅ Preserve existing totals_json fields (Option A stores additional_units_week in totals_json)
-  const existingWeekTotals =
-    (cw.totals_json && typeof cw.totals_json === 'object') ? cw.totals_json : {};
-
-  const mergedWeekTotals = {
-    ...existingWeekTotals,
-    hours
-  };
-
-  // If request explicitly included units, mirror onto week totals_json as well (keeps draft store consistent)
-  if (hasUnitsWeekKey) {
-    mergedWeekTotals.additional_units_week = unitsWeek || {};
-  }
+  // Preserve existing totals_json fields (Option A stores additional_units_week in totals_json)
+  const existingWeekTotals = (cw.totals_json && typeof cw.totals_json === 'object') ? cw.totals_json : {};
+  const mergedWeekTotals = { ...existingWeekTotals, hours };
+  if (hasUnitsWeekKey) mergedWeekTotals.additional_units_week = unitsWeek || {};
 
   const weekPatch = { totals_json: mergedWeekTotals, updated_at: nowIso };
-
-  // Keep day_entries_json in sync only if explicitly provided
-  if (hasDayRefsKey) {
-    weekPatch.day_entries_json = dayReferencesJson ?? null;
-  }
+  if (hasDayRefsKey) weekPatch.day_entries_json = dayReferencesJson ?? null;
 
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
-    {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), 'Prefer': 'return-minimal' },
-      body: JSON.stringify(weekPatch)
-    }
-  );
-
-  // ─────────────────────────────────────────────────────────────
-  // MINIMAL AUDIT: detect "hours/schedule changed" and log processed
-  // ─────────────────────────────────────────────────────────────
-  const afterScheduleJsonStr = stableJson(actual_schedule_json ?? ts?.actual_schedule_json ?? null);
-  const scheduleChanged = beforeScheduleJsonStr !== afterScheduleJsonStr;
-
-  const hoursChanged =
-    Number(beforeHours.day   || 0) !== Number(hours.day   || 0) ||
-    Number(beforeHours.night || 0) !== Number(hours.night || 0) ||
-    Number(beforeHours.sat   || 0) !== Number(hours.sat   || 0) ||
-    Number(beforeHours.sun   || 0) !== Number(hours.sun   || 0) ||
-    Number(beforeHours.bh    || 0) !== Number(hours.bh    || 0);
-
-  // Only log HOURS_CHANGED when there *was* something before (avoid double-noise on first creation)
-  if (!createdNow && (hoursChanged || scheduleChanged)) {
-    try {
-      await writeAudit(
-        env,
-        user,
-        'TIMESHEET_HOURS_CHANGED',
-        {
-          timesheet_id: ts.timesheet_id,
-          contract_week_id: cw.id,
-          contract_id: contract.id,
-          sheet_scope: 'WEEKLY',
-          submission_mode: 'MANUAL',
-          source: 'contract_week_manual_upsert',
-          before: {
-            hours: beforeHours,
-            schedule_present: !!(beforeScheduleJsonStr && beforeScheduleJsonStr !== 'null'),
-            schedule_len: Array.isArray(ts?.actual_schedule_json) ? ts.actual_schedule_json.length : null
-          },
-          after: {
-            hours,
-            schedule_present: !!(afterScheduleJsonStr && afterScheduleJsonStr !== 'null'),
-            schedule_len: Array.isArray(actual_schedule_json) ? actual_schedule_json.length : null
-          }
-        },
-        { entity: 'timesheets', subject_id: ts.timesheet_id, req }
-      );
-    } catch {}
-  }
-
-  // Always log PROCESSED after the snapshot is written successfully
-  try {
-    await writeAudit(
-      env,
-      user,
-      'TIMESHEET_PROCESSED',
-      {
-        timesheet_id: ts.timesheet_id,
-        contract_week_id: cw.id,
-        contract_id: contract.id,
-        sheet_scope: 'WEEKLY',
-        submission_mode: 'MANUAL',
-        source: 'contract_week_manual_upsert',
-        processing_status: processingStatus,
-        hours,
-        schedule_len: Array.isArray(actual_schedule_json) ? actual_schedule_json.length : null
-      },
-      { entity: 'timesheets', subject_id: ts.timesheet_id, req }
-    );
-  } catch {}
-
-  // ─────────────────────────────────────────────────────────────
-  // QR actions (revoke-to-manual / reissue)
-  // ─────────────────────────────────────────────────────────────
-  let qrReissued   = false;
-  let qrPdfKey     = null;
-  let qrToken      = null;
-  let qr_r2_key    = null;
-
-  if (qrAction === 'REVOKE_TO_MANUAL') {
-    // On the new current version (if rotated), ensure QR fields are cleared and enforce NOT NULL jsonb
-    try {
-      await fetch(
-        `${env.SUPABASE_URL}/rest/v1/timesheets` +
-          `?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
-        {
-          method: 'PATCH',
-          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-          body: JSON.stringify({
-            qr_token: null,
-            qr_status: null,
-            qr_payload_json: {},
-            qr_generated_at: null,
-            qr_scanned_at: null,
-            qr_scan_info_json: null,
-            qr_r2_key: null,
-            updated_at: nowIso
-          })
-        }
-      );
-    } catch (e) {
-      console.warn('[CW_MANUAL_UPSERT][QR] revoke-to-manual patch failed', {
-        timesheet_id: ts.timesheet_id,
-        err: e?.message || String(e)
-      });
-    }
-
-    // Audit revoke-to-manual
-    try {
-      await writeAudit(
-        env,
-        user,
-        'WEEKLY_QR_REVOKED_TO_MANUAL',
-        {
-          contract_week_id: cw.id,
-          contract_id: contract.id,
-          timesheet_id: ts.timesheet_id
-        },
-        { entity: 'contract_weeks', subject_id: cw.id, req }
-      );
-    } catch (e) {
-      console.warn('[CW_MANUAL_UPSERT][QR] revoke audit failed', e?.message || e);
-    }
-  }
-
-  if (qrAction === 'REISSUE') {
-    try {
-      // 0) Generate token FIRST (required so TSQ1 includes tok and old prints are invalidated)
-      try {
-        if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-          qrToken = crypto.randomUUID();
-        } else {
-          qrToken = `${ts.timesheet_id}:${Date.now()}`;
-        }
-      } catch {
-        qrToken = `${ts.timesheet_id}:${Date.now()}`;
-      }
-
-      // 1) Generate & store new QR image (TSQ1) WITH TOKEN EMBEDDED
-      const qrRes = await generateAndStoreTimesheetQr(env, {
-        timesheet_id:     ts.timesheet_id,
-        contract_week_id: cw.id,
-        contract_id:      contract.id,
-        candidate_id:     contract.candidate_id || null,
-        client_id:        contract.client_id || null,
-        week_ending_ymd:  cw.week_ending_date,
-        qr_token:         qrToken
-      });
-
-      qr_r2_key = qrRes?.qr_r2_key || null;
-
-      // 2) App-level payload (separate from TSQ1 payload)
-      const qrPayload = {
-        kind: 'WEEKLY_QR_TIMESHEET',
-        token: qrToken,
-        timesheet_id: ts.timesheet_id,
-        contract_week_id: cw.id,
-        contract_id: contract.id,
-        candidate_id: contract.candidate_id || null,
-        client_id: contract.client_id || null,
-        week_ending_date: cw.week_ending_date,
-        reason: 'REISSUE_AFTER_HOURS_CHANGE'
-      };
-
-      // 3) Patch TS with new QR metadata (clear any previous scan)
-      await fetch(
-        `${env.SUPABASE_URL}/rest/v1/timesheets` +
-          `?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
-        {
-          method: 'PATCH',
-          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-          body: JSON.stringify({
-            qr_token: qrToken,
-            qr_status: 'PENDING',
-            qr_generated_at: nowIso,
-            qr_scanned_at: null,
-            qr_scan_info_json: null,
-            qr_payload_json: qrPayload, // must be NOT NULL
-            qr_r2_key: qr_r2_key || null,
-            updated_at: nowIso
-          })
-        }
-      ).catch(()=>{});
-
-      // 4) Render new PDF (with new QR) and attach to TS
-      qrPdfKey = await renderTimesheetPDFAndSave(env, ts.timesheet_id).catch((e) => {
-        console.error('[CW_MANUAL_UPSERT][QR] renderTimesheetPDFAndSave failed', {
-          timesheet_id: ts.timesheet_id,
-          err: e?.message || String(e)
-        });
-        return null;
-      });
-
-      if (qrPdfKey) {
-        await fetch(
-          `${env.SUPABASE_URL}/rest/v1/timesheets` +
-            `?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
-          {
-            method: 'PATCH',
-            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-            body: JSON.stringify({
-              manual_pdf_r2_key: qrPdfKey,
-              updated_at: nowIso
-            })
-          }
-        ).catch(()=>{});
-      }
-
-      qrReissued = true;
-
-      // 5) Email via mail_outbox (TIMESHEET_QR)
-      try {
-        const email = (candidate && candidate.email && String(candidate.email).trim()) || null;
-        if (email && qrPdfKey) {
-          const subject = `Updated weekly QR timesheet – week ending ${cw.week_ending_date}`;
-
-          const bodyText =
-            `Your weekly timesheet has been updated because your hours were changed.\n\n` +
-            `Any previous QR timesheets for this week are no longer valid.\n\n` +
-            `Please print the attached timesheet, ask the ward manager to sign it, ` +
-            `and then upload the signed copy via the app.\n\n` +
-            `Week ending: ${cw.week_ending_date}\n` +
-            `Timesheet ID: ${ts.timesheet_id}\n`;
-
-          const bodyHtml =
-            `<p>` +
-            `Your weekly timesheet has been updated because your hours were changed.<br/><br/>` +
-            `Any previous QR timesheets for this week are no longer valid.<br/><br/>` +
-            `Please print the attached timesheet, ask the ward manager to sign it, and then upload the signed copy via the app.<br/><br/>` +
-            `Week ending: ${cw.week_ending_date}<br/>` +
-            `Timesheet ID: ${ts.timesheet_id}` +
-            `</p>`;
-
-          await fetch(
-            `${env.SUPABASE_URL}/rest/v1/mail_outbox`,
-            {
-              method: 'POST',
-              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-              body: JSON.stringify({
-                type: 'TIMESHEET_QR',
-                to: email,
-                cc: null,
-                subject,
-                body_text: bodyText,
-                body_html: bodyHtml,
-                attachments: [{
-                  r2_key: qrPdfKey,
-                  filename: `Timesheet_${cw.week_ending_date}.pdf`
-                }],
-                status: 'QUEUED',
-                reference: `timesheet_qr:weekly:${ts.timesheet_id}:${cw.week_ending_date}:reissue`,
-                created_by: user?.id || null
-              })
-            }
-          ).catch(() => {});
-        }
-      } catch (e) {
-        console.warn('[CW_MANUAL_UPSERT][QR] mail enqueue failed (non-fatal)', e?.message || e);
-      }
-
-      // 6) Audit reissue
-      try {
-        await writeAudit(
-          env,
-          user,
-          'WEEKLY_QR_REISSUED_AFTER_HOURS_CHANGE',
-          {
-            contract_week_id: cw.id,
-            contract_id: contract.id,
-            timesheet_id: ts.timesheet_id,
-            pdf_r2_key: qrPdfKey,
-            qr_token: qrToken,
-            qr_status: 'PENDING',
-            qr_r2_key
-          },
-          { entity: 'contract_weeks', subject_id: cw.id, req }
-        );
-      } catch (e) {
-        console.warn('[CW_MANUAL_UPSERT][QR] audit failed', e?.message || e);
-      }
-    } catch (e) {
-      console.warn('[CW_MANUAL_UPSERT][QR] reissue failed (non-fatal)', {
-        timesheet_id: ts.timesheet_id,
-        err: e?.message || String(e)
-      });
-    }
-  }
+    { method: 'PATCH', headers: { ...sbHeaders(env), Prefer: 'return-minimal' }, body: JSON.stringify(weekPatch) }
+  ).catch(() => {});
 
   return withCORS(env, req, ok({
     timesheet_id: ts.timesheet_id,
+    current_timesheet_id: ts.timesheet_id,
+    was_stale: !!wasStaleWeekTs,
     processing_status: processingStatus,
     hours,
     used_schedule: !!actual_schedule_json,
-    qr_reissued: qrReissued,
-    qr_pdf_key: qrPdfKey
+    qr_reissued: false,
+    qr_pdf_key: null
   }));
 }
 
@@ -6399,98 +5997,114 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     return withCORS(env, req, serverError('Failed to discard manual timesheet queue item'));
   }
 }
+
+// BE FIX: require expected_timesheet_id + resolve to CURRENT; strict 409 payload; patch queue + timesheet using CURRENT id only
 async function handleManualTimesheetQueueAttach(env, req, queueId) {
   const enc = encodeURIComponent;
 
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
-  if (!queueId) {
-    return withCORS(env, req, badRequest('queue_id is required'));
-  }
+  if (!queueId) return withCORS(env, req, badRequest('queue_id is required'));
 
   let body;
-  try {
-    body = await parseJSONBody(req);
-  } catch {
-    return withCORS(env, req, badRequest('Invalid JSON'));
+  try { body = await parseJSONBody(req); }
+  catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  const requestedTimesheetId = String(body?.timesheet_id || '').trim();
+  if (!requestedTimesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
+
+  const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+
+  // ✅ resolve + guard
+  const resolved = await resolveTimesheetToCurrent(env, requestedTimesheetId);
+  const currentTimesheetId = resolved?.current_timesheet_id ? String(resolved.current_timesheet_id) : '';
+  if (!currentTimesheetId) return withCORS(env, req, badRequest('Timesheet not found for timesheet_id'));
+
+  if (String(expected) !== String(currentTimesheetId)) {
+    return withCORS(
+      env,
+      req,
+      new Response(JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetId }), {
+        status: 409,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
   }
 
-  const timesheetId = String(body?.timesheet_id || '').trim();
-  if (!timesheetId) {
-    return withCORS(env, req, badRequest('timesheet_id is required'));
-  }
-
   try {
-    // Load the queue item
     const { rows: qRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
-      `?id=eq.${enc(queueId)}` +
-      `&select=id,status,timesheet_id,content_hash,r2_key,last_rotation_deg,meta_json` +
-      `&limit=1`
+        `?id=eq.${enc(queueId)}` +
+        `&select=id,status,timesheet_id,content_hash,r2_key,last_rotation_deg,meta_json` +
+        `&limit=1`
     );
     const item = qRows?.[0] || null;
-    if (!item) {
-      return withCORS(env, req, notFound('Queue item not found'));
-    }
+    if (!item) return withCORS(env, req, notFound('Queue item not found'));
 
     const status = String(item.status || '').toUpperCase();
+
     if (status === 'ATTACHED') {
-      if (String(item.timesheet_id || '') === timesheetId) {
-        return withCORS(env, req, ok({ attached: true, id: item.id, timesheet_id: timesheetId }));
+      const attachedId = String(item.timesheet_id || '').trim();
+      if (!attachedId) return withCORS(env, req, badRequest('Queue item is marked ATTACHED but has no timesheet_id'));
+
+      const attachedResolved = await resolveTimesheetToCurrent(env, attachedId).catch(() => null);
+      const attachedCurrent = attachedResolved?.current_timesheet_id ? String(attachedResolved.current_timesheet_id) : attachedId;
+
+      if (String(attachedCurrent) === String(currentTimesheetId)) {
+        // Best-effort: normalise queue row to current id
+        if (String(attachedId) !== String(currentTimesheetId)) {
+          await fetch(`${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(queueId)}`, {
+            method: 'PATCH',
+            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+            body: JSON.stringify({ timesheet_id: currentTimesheetId })
+          }).catch(() => {});
+        }
+
+        return withCORS(env, req, ok({ attached: true, id: item.id, timesheet_id: currentTimesheetId, current_timesheet_id: currentTimesheetId }));
       }
+
       return withCORS(env, req, badRequest('Queue item already attached to a different timesheet'));
     }
-    if (status === 'DISCARDED') {
-      return withCORS(env, req, badRequest('Cannot attach a discarded queue item'));
-    }
 
-    // Validate timesheet exists
+    if (status === 'DISCARDED') return withCORS(env, req, badRequest('Cannot attach a discarded queue item'));
+
+    // Validate CURRENT timesheet exists
     const ts = await sbGetOne(
       env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(timesheetId)}&select=timesheet_id&limit=1`
+      `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&select=timesheet_id&limit=1`
     );
-    if (!ts) {
-      return withCORS(env, req, badRequest('Timesheet not found for timesheet_id'));
-    }
+    if (!ts) return withCORS(env, req, badRequest('Timesheet not found for timesheet_id'));
 
-    // 1) Patch queue row: mark as ATTACHED + set timesheet_id
-    const patchQueueRes = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(queueId)}`,
-      {
-        method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify({
-          status: 'ATTACHED',
-          timesheet_id: timesheetId
-        })
-      }
-    );
+    // 1) Patch queue: ATTACHED + CURRENT id
+    const patchQueueRes = await fetch(`${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(queueId)}`, {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+      body: JSON.stringify({ status: 'ATTACHED', timesheet_id: currentTimesheetId })
+    });
 
     if (!patchQueueRes.ok) {
       const txt = await patchQueueRes.text().catch(() => '');
       return withCORS(env, req, serverError(`Failed to attach queue item: ${txt}`));
     }
 
-    // 2) Patch timesheet to use this PDF as manual source
+    // 2) Patch CURRENT timesheet to use PDF
     if (item.r2_key) {
       await fetch(
-        `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`,
+        `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
         {
           method: 'PATCH',
           headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
           body: JSON.stringify({
             manual_pdf_r2_key: item.r2_key,
-            // ✅ Persist rotation onto the timesheet so PDF view renders correctly
             manual_pdf_rotation_degrees: (item.last_rotation_deg != null ? Number(item.last_rotation_deg) : 0)
           })
         }
       ).catch(() => {});
     }
 
-    // Optional audit
     try {
       await writeAudit(
         env,
@@ -6498,25 +6112,24 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
         'MANUAL_TIMESHEET_QUEUE_ATTACHED',
         {
           queue_id: item.id,
-          timesheet_id: timesheetId,
+          requested_timesheet_id: requestedTimesheetId,
+          current_timesheet_id: currentTimesheetId,
           content_hash: item.content_hash || null,
           r2_key: item.r2_key || null
         },
         { entity: 'manual_timesheet_queue', subject_id: item.id, req }
       );
-    } catch {
-      // best-effort
-    }
+    } catch {}
 
-    return withCORS(env, req, ok({ attached: true, id: item.id, timesheet_id: timesheetId }));
+    return withCORS(env, req, ok({ attached: true, id: item.id, timesheet_id: currentTimesheetId, current_timesheet_id: currentTimesheetId }));
   } catch (e) {
-    console.error('[MT_QUEUE_ATTACH] error', {
-      queue_id: queueId,
-      err: e?.message || String(e)
-    });
     return withCORS(env, req, serverError('Failed to attach manual timesheet queue item'));
   }
 }
+
+
+
+
 
  async function handleManualTimesheetQueueRotate(env, req, queueId) {
   const enc = encodeURIComponent;
@@ -6664,6 +6277,460 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
     return withCORS(env, req, serverError('Failed to generate or locate timesheet PDF'));
   }
 }
+// BE FIX: expected guard + resolve CW-linked timesheet to CURRENT before mutating TS/TSFIN; strict 409 payload
+async function handleContractWeekManualAuthorise(env, req, weekId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const enc = encodeURIComponent;
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+
+  const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+
+  const cw = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=id,timesheet_id`
+  );
+  if (!cw?.timesheet_id) return withCORS(env, req, badRequest('No timesheet linked to this week'));
+
+  // ✅ Resolve + guard
+  const resolved = await resolveTimesheetToCurrent(env, cw.timesheet_id);
+  const currentTimesheetId = resolved?.current_timesheet_id ? String(resolved.current_timesheet_id) : '';
+  if (!currentTimesheetId) return withCORS(env, req, notFound('Timesheet not found'));
+
+  if (String(expected) !== String(currentTimesheetId)) {
+    return withCORS(
+      env,
+      req,
+      new Response(JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetId }), {
+        status: 409,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+  }
+
+  const now = nowIso();
+
+  // Load CURRENT TS + TSFIN
+  const tsBefore = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=timesheet_id,authorised_at_server,submission_mode,sheet_scope,version,status`
+  ).catch(() => null);
+
+  const { rows: finRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=id,client_id,processing_status`
+  );
+  const fin = finRows?.[0] || null;
+
+  const finBeforeStatus = String(fin?.processing_status || '').toUpperCase();
+  let finAfterStatus = fin?.processing_status || null;
+
+  if (fin) {
+    const ps = finBeforeStatus;
+
+    // Guard for QR print/sign flow
+    if (ps === 'QR_PENDING_SIGNATURE' || ps === 'AWAITING_QR_SIGNATURE') {
+      return withCORS(env, req, badRequest('Timesheet is awaiting QR/manual signature; cannot authorise yet'));
+    }
+
+    // Determine whether this client requires HR validation
+    let requiresHr = false;
+    if (fin.client_id) {
+      const { rows: csRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/client_settings` +
+          `?client_id=eq.${enc(fin.client_id)}` +
+          `&select=requires_hr` +
+          `&order=effective_from.desc&limit=1`
+      );
+      requiresHr = !!csRows?.[0]?.requires_hr;
+    }
+
+    let newStatus = fin.processing_status;
+    if (ps === 'PENDING_AUTH' || ps === 'READY_FOR_HR') {
+      newStatus = requiresHr ? 'READY_FOR_HR' : 'READY_FOR_INVOICE';
+    }
+    finAfterStatus = newStatus;
+
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}&is_current=eq.true`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify({
+          processing_status: newStatus,
+          authorised_by_user_id: user.id,
+          authorised_at_utc: now,
+          updated_at: now
+        })
+      }
+    ).catch(() => {});
+  }
+
+  // Stamp timesheet as authorised (CURRENT only)
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+      body: JSON.stringify({ authorised_at_server: now, updated_at: now })
+    }
+  ).catch(() => {});
+
+  // Update week status → AUTHORISED
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+      body: JSON.stringify({ status: 'AUTHORISED', updated_at: now })
+    }
+  ).catch(() => {});
+
+  // Audit
+  try {
+    const wasAlreadyAuthorised = !!(tsBefore && tsBefore.authorised_at_server);
+    const didPromoteStatus = !!(fin && String(finBeforeStatus || '') !== String(finAfterStatus || ''));
+
+    if (!wasAlreadyAuthorised || didPromoteStatus) {
+      await writeAudit(
+        env,
+        user,
+        'TIMESHEET_AUTHORISED',
+        {
+          timesheet_id: currentTimesheetId,
+          contract_week_id: weekId,
+          authorised_at_utc: now,
+          tsfin_processing_status_before: finBeforeStatus || null,
+          tsfin_processing_status_after: finAfterStatus ? String(finAfterStatus).toUpperCase() : null
+        },
+        {
+          entity: 'timesheets',
+          subject_id: currentTimesheetId,
+          req,
+          before: {
+            authorised_at_server: tsBefore?.authorised_at_server || null,
+            tsfin_processing_status: finBeforeStatus || null
+          },
+          reason: didPromoteStatus ? 'PROMOTED_TSFIN_STATUS' : 'STAMPED_AUTHORISE'
+        }
+      );
+    }
+  } catch {}
+
+  return withCORS(env, req, ok({ authorised: true, timesheet_id: currentTimesheetId }));
+}
+
+
+
+
+
+
+
+
+
+
+
+async function handleTimesheetUpdateReference(env, req, timesheetId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let body;
+  try { body = await parseJSONBody(req); }
+  catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  // NEW: guarded write (optimistic concurrency)
+  const expectedTimesheetId = body?.expected_timesheet_id || null;
+  const guard = await guardCurrentTimesheetWrite(env, req, timesheetId, expectedTimesheetId);
+  if (!guard.ok) return guard.res;
+
+  const currentTimesheetId = guard.resolved.current_timesheet_id;
+
+  const reference_number = (body?.reference_number || '').trim();
+
+  // NEW: patch only the CURRENT timesheet row
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify({ reference_number, updated_at: nowIso() })
+    }
+  );
+
+  if (!res.ok) return withCORS(env, req, serverError(await res.text()));
+  const row = (await res.json().catch(() => []))[0];
+
+  return withCORS(env, req, ok({
+    ...row,
+    booking_id: guard.resolved.booking_id || null,
+    requested_timesheet_id: guard.resolved.requested_timesheet_id || timesheetId,
+    current_timesheet_id: currentTimesheetId,
+    current_version: guard.resolved.current_version ?? null,
+    was_stale: !!guard.resolved.was_stale
+  }));
+}
+
+
+async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  // NEW: require expected_timesheet_id for guarded write
+  let body;
+  try { body = await parseJSONBody(req); }
+  catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  const expectedTimesheetId = body?.expected_timesheet_id || null;
+  const guard = await guardCurrentTimesheetWrite(env, req, timesheetId, expectedTimesheetId);
+  if (!guard.ok) return guard.res;
+
+  const currentTimesheetId = guard.resolved.current_timesheet_id;
+  const now = nowIso();
+
+  // Load current TS + TSFIN first (for meaningful audit + idempotency)
+  const tsBefore = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=timesheet_id,authorised_at_server,submission_mode,sheet_scope,version,status`
+  ).catch(() => null);
+
+  const { rows: finRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=id,client_id,processing_status,locked_by_invoice_id,paid_at_utc`
+  );
+  const fin = finRows?.[0] || null;
+
+  const finBeforeStatus = String(fin?.processing_status || '').toUpperCase();
+  let finAfterStatus = fin?.processing_status || null;
+
+  // Stamp timesheet as authorised (best effort)
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify({ authorised_at_server: now, updated_at: now })
+    }
+  ).catch(() => {});
+
+  if (!fin) {
+    // Audit: only log if this is a meaningful "first authorise" stamp
+    try {
+      const wasAlreadyAuthorised = !!(tsBefore && tsBefore.authorised_at_server);
+      if (!wasAlreadyAuthorised) {
+        await writeAudit(
+          env,
+          user,
+          'TIMESHEET_AUTHORISED',
+          {
+            timesheet_id: currentTimesheetId,
+            authorised_at_utc: now,
+            tsfin_processing_status_before: null,
+            tsfin_processing_status_after: null
+          },
+          {
+            entity: 'timesheets',
+            subject_id: currentTimesheetId,
+            req,
+            before: { authorised_at_server: tsBefore?.authorised_at_server || null },
+            reason: 'STAMPED_AUTHORISE_NO_TSFIN'
+          }
+        );
+      }
+    } catch {
+      // best-effort
+    }
+
+    return withCORS(env, req, ok({
+      authorised: true,
+      tsfin_updated: false,
+      booking_id: guard.resolved.booking_id || null,
+      requested_timesheet_id: guard.resolved.requested_timesheet_id || timesheetId,
+      current_timesheet_id: currentTimesheetId,
+      current_version: guard.resolved.current_version ?? null,
+      was_stale: !!guard.resolved.was_stale
+    }));
+  }
+
+  if (fin.locked_by_invoice_id || fin.paid_at_utc) {
+    return withCORS(env, req, badRequest('Cannot authorise: timesheet is locked or paid'));
+  }
+
+  let requiresHr = false;
+  if (fin.client_id) {
+    const { rows: csRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/client_settings` +
+        `?client_id=eq.${enc(fin.client_id)}` +
+        `&select=requires_hr` +
+        `&order=effective_from.desc&limit=1`
+    );
+    requiresHr = !!csRows?.[0]?.requires_hr;
+  }
+
+  let newStatus = fin.processing_status;
+  const ps = finBeforeStatus;
+  if (ps === 'PENDING_AUTH' || ps === 'READY_FOR_HR') {
+    newStatus = requiresHr ? 'READY_FOR_HR' : 'READY_FOR_INVOICE';
+  }
+  finAfterStatus = newStatus;
+
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        processing_status: newStatus,
+        authorised_by_user_id: user.id,
+        authorised_at_utc: now,
+        updated_at: now
+      })
+    }
+  ).catch(() => {});
+
+  // ─────────────────────────────────────────────────────────────
+  // AUDIT (Timesheet tab) — only meaningful logs
+  // ─────────────────────────────────────────────────────────────
+  try {
+    const wasAlreadyAuthorised = !!(tsBefore && tsBefore.authorised_at_server);
+    const didPromoteStatus = String(finBeforeStatus || '') !== String(finAfterStatus || '').toUpperCase();
+
+    if (!wasAlreadyAuthorised || didPromoteStatus) {
+      await writeAudit(
+        env,
+        user,
+        'TIMESHEET_AUTHORISED',
+        {
+          timesheet_id: currentTimesheetId,
+          authorised_at_utc: now,
+          tsfin_processing_status_before: finBeforeStatus || null,
+          tsfin_processing_status_after: finAfterStatus ? String(finAfterStatus).toUpperCase() : null
+        },
+        {
+          entity: 'timesheets',
+          subject_id: currentTimesheetId,
+          req,
+          before: {
+            authorised_at_server: tsBefore?.authorised_at_server || null,
+            tsfin_processing_status: finBeforeStatus || null
+          },
+          reason: didPromoteStatus ? 'PROMOTED_TSFIN_STATUS' : 'STAMPED_AUTHORISE'
+        }
+      );
+    }
+  } catch {
+    // best-effort
+  }
+
+  return withCORS(env, req, ok({
+    authorised: true,
+    tsfin_updated: true,
+    processing_status: newStatus,
+    booking_id: guard.resolved.booking_id || null,
+    requested_timesheet_id: guard.resolved.requested_timesheet_id || timesheetId,
+    current_timesheet_id: currentTimesheetId,
+    current_version: guard.resolved.current_version ?? null,
+    was_stale: !!guard.resolved.was_stale
+  }));
+}
+
+
+async function handleTimesheetUnauthorise(env, req, timesheetId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  // NEW: require expected_timesheet_id for guarded write
+  let body;
+  try { body = await parseJSONBody(req); }
+  catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  const expectedTimesheetId = body?.expected_timesheet_id || null;
+  const guard = await guardCurrentTimesheetWrite(env, req, timesheetId, expectedTimesheetId);
+  if (!guard.ok) return guard.res;
+
+  const currentTimesheetId = guard.resolved.current_timesheet_id;
+
+  const now = nowIso();
+
+  const { rows: finRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=id,locked_by_invoice_id,paid_at_utc,processing_status`
+  );
+  const fin = finRows?.[0] || null;
+  if (!fin) {
+    return withCORS(env, req, badRequest('No financial snapshot to unauthorise'));
+  }
+
+  if (fin.locked_by_invoice_id || fin.paid_at_utc) {
+    return withCORS(env, req, badRequest('Cannot unauthorise: timesheet is locked or paid'));
+  }
+
+  // Clear authorised_at_server on the timesheet
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify({ authorised_at_server: null, updated_at: now })
+    }
+  ).catch(() => {});
+
+  // Set status back to PENDING_AUTH
+  const prevStatus = String(fin.processing_status || '').toUpperCase();
+  const newStatus = 'PENDING_AUTH';
+
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        processing_status: newStatus,
+        authorised_by_user_id: null,
+        authorised_at_utc: null,
+        updated_at: now
+      })
+    }
+  ).catch(() => {});
+
+  return withCORS(env, req, ok({
+    unauthorised: true,
+    processing_status: newStatus,
+    previous_status: prevStatus,
+    booking_id: guard.resolved.booking_id || null,
+    requested_timesheet_id: guard.resolved.requested_timesheet_id || timesheetId,
+    current_timesheet_id: currentTimesheetId,
+    current_version: guard.resolved.current_version ?? null,
+    was_stale: !!guard.resolved.was_stale
+  }));
+}
+
 
 async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
   const enc = encodeURIComponent;
@@ -6683,6 +6750,14 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
   } catch {
     return withCORS(env, req, badRequest('Invalid JSON'));
   }
+
+  // NEW: guarded write (optimistic concurrency)
+  const expectedTimesheetId = body?.expected_timesheet_id || null;
+  const guard = await guardCurrentTimesheetWrite(env, req, timesheetId, expectedTimesheetId);
+  if (!guard.ok) return guard.res;
+
+  // From here on, always act on the CURRENT timesheet row.
+  let currentTimesheetId = guard.resolved.current_timesheet_id;
 
   const has = (k) => Object.prototype.hasOwnProperty.call(body || {}, k);
 
@@ -6791,8 +6866,8 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
   const localYmdHhmmToIsoUtc = (ymdStr, hhmmStr) => {
     const p = parseYmd(ymdStr);
     if (!p) return null;
-    const norm = normaliseHHMM(hhmmStr);
-    const mins = hhmmToMinutes(norm);
+    const normT = normaliseHHMM(hhmmStr);
+    const mins = hhmmToMinutes(normT);
     if (mins == null) return null;
     const hh = Math.floor(mins / 60);
     const mm = mins % 60;
@@ -7006,7 +7081,9 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
       created_at: now2
     };
 
+    // IMPORTANT FIX: do not reuse ids on insert
     delete newRow.id;
+    delete newRow.timesheet_id;
 
     const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets`, {
       method: 'POST',
@@ -7023,11 +7100,11 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     return created || { ...currentTs, version: newVersion, is_current: true };
   };
 
-  // 3) Load DAILY timesheet (current version)
+  // 3) Load DAILY timesheet (current version) — use currentTimesheetId
   let ts = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
       `&is_current=eq.true` +
       `&select=*`
   );
@@ -7043,11 +7120,11 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     return bad('Timesheet must be MANUAL before editing hours. Use switch-daily-to-manual first.');
   }
 
-  // 4) Load TSFIN – must not be locked/paid
+  // 4) Load TSFIN – must not be locked/paid — use currentTimesheetId
   const tsfin = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
       `&is_current=eq.true` +
       `&select=*`
   );
@@ -7227,9 +7304,12 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     rotateReason = why;
     ts = await rotateTimesheetVersion(ts, why);
     rotated = true;
+
+    // NEW: after rotation we are now operating on the new timesheet_id
+    currentTimesheetId = ts?.timesheet_id || currentTimesheetId;
   }
 
-  // 5) Patch worked/break fields
+  // 5) Patch worked/break fields (on CURRENT timesheet id)
   const patchBody = { updated_at: now };
 
   const shouldPatchWorked = scheduleProvided || worked_start_iso_in !== undefined || worked_end_iso_in !== undefined;
@@ -7252,7 +7332,7 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
 
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
       `&is_current=eq.true`,
     {
       method: 'PATCH',
@@ -7261,11 +7341,11 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     }
   ).catch(() => {});
 
-  // 6) Reload updated TS for snapshot + QR
+  // 6) Reload updated TS for snapshot + QR (CURRENT timesheet id)
   const updatedTs = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
       `&is_current=eq.true` +
       `&select=*`
   );
@@ -7277,11 +7357,11 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     return withCORS(env, req, serverError(`Failed to rebuild daily snapshot: ${e?.message || e}`));
   }
 
-  // Reload TSFIN after recompute
+  // Reload TSFIN after recompute (CURRENT timesheet id)
   const finAfter = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
       `&is_current=eq.true` +
       `&select=*`
   ).catch(() => null);
@@ -7314,7 +7394,7 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
         user,
         'TIMESHEET_HOURS_CHANGED',
         {
-          timesheet_id: timesheetId,
+          timesheet_id: currentTimesheetId,
           sheet_scope: 'DAILY',
           submission_mode: 'MANUAL',
           changed_fields: changedFields,
@@ -7351,7 +7431,7 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
             } : null
           }
         },
-        { entity: 'timesheets', subject_id: timesheetId, req }
+        { entity: 'timesheets', subject_id: currentTimesheetId, req }
       );
     } catch {}
   }
@@ -7387,18 +7467,18 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
 
     try {
       const qrRes = await generateAndStoreTimesheetQr(env, {
-        timesheet_id: ts.timesheet_id,
+        timesheet_id: currentTimesheetId,
         contract_week_id: null,
-        contract_id: ts.contract_id || null,
-        candidate_id: ts.candidate_id || null,
-        client_id: finAfter.client_id || ts.client_id || null,
+        contract_id: updatedTs?.contract_id || ts.contract_id || null,
+        candidate_id: updatedTs?.candidate_id || ts.candidate_id || null,
+        client_id: finAfter.client_id || updatedTs?.client_id || ts.client_id || null,
         week_ending_ymd: null
       });
       qr_r2_key = qrRes?.qr_r2_key || null;
 
       qrToken = (typeof crypto !== 'undefined' && crypto.randomUUID)
         ? crypto.randomUUID()
-        : `${ts.timesheet_id}:${Date.now()}`;
+        : `${currentTimesheetId}:${Date.now()}`;
 
       const workedDateYmd =
         updatedTs?.worked_start_iso ? (toLocalParts(updatedTs.worked_start_iso, null)?.ymd || String(updatedTs.worked_start_iso).slice(0,10))
@@ -7407,16 +7487,16 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
       const qrPayload = {
         kind: 'DAILY_QR_TIMESHEET',
         token: qrToken,
-        timesheet_id: ts.timesheet_id,
+        timesheet_id: currentTimesheetId,
         worked_date: workedDateYmd,
-        candidate_id: ts.candidate_id || null,
-        client_id: finAfter.client_id || ts.client_id || null,
+        candidate_id: updatedTs?.candidate_id || ts.candidate_id || null,
+        client_id: finAfter.client_id || updatedTs?.client_id || ts.client_id || null,
         reason: (qrAction === 'REISSUE') ? 'REISSUE_AFTER_HOURS_CHANGE' : 'ISSUE_AFTER_ADMIN_EDIT'
       };
 
       await fetch(
         `${env.SUPABASE_URL}/rest/v1/timesheets` +
-          `?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
+          `?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
         {
           method: 'PATCH',
           headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
@@ -7432,12 +7512,12 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
         }
       ).catch(() => {});
 
-      pdfKey = await ensureTimesheetPdf(env, ts.timesheet_id).catch(() => null);
+      pdfKey = await ensureTimesheetPdf(env, currentTimesheetId).catch(() => null);
 
       if (pdfKey) {
         await fetch(
           `${env.SUPABASE_URL}/rest/v1/timesheets` +
-            `?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
+            `?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
           {
             method: 'PATCH',
             headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
@@ -7463,14 +7543,14 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
         user,
         'TIMESHEET_QR_DISABLED',
         {
-          timesheet_id: timesheetId,
+          timesheet_id: currentTimesheetId,
           sheet_scope: 'DAILY',
           rotated: true,
           from_version: preRotateVersion,
           to_version: Number(ts?.version || preRotateVersion),
           reason: rotateReason
         },
-        { entity: 'timesheets', subject_id: timesheetId, req }
+        { entity: 'timesheets', subject_id: currentTimesheetId, req }
       );
     }
 
@@ -7480,14 +7560,14 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
         user,
         'TIMESHEET_QR_REVOKED_TO_MANUAL',
         {
-          timesheet_id: timesheetId,
+          timesheet_id: currentTimesheetId,
           sheet_scope: 'DAILY',
           rotated: true,
           from_version: preRotateVersion,
           to_version: Number(ts?.version || preRotateVersion),
           reason: rotateReason
         },
-        { entity: 'timesheets', subject_id: timesheetId, req }
+        { entity: 'timesheets', subject_id: currentTimesheetId, req }
       );
     }
 
@@ -7497,13 +7577,13 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
         user,
         'TIMESHEET_QR_ISSUED',
         {
-          timesheet_id: timesheetId,
+          timesheet_id: currentTimesheetId,
           sheet_scope: 'DAILY',
           qr_token: qrToken,
           qr_r2_key: qr_r2_key || null,
           pdf_r2_key: pdfKey || null
         },
-        { entity: 'timesheets', subject_id: timesheetId, req }
+        { entity: 'timesheets', subject_id: currentTimesheetId, req }
       );
     }
 
@@ -7513,13 +7593,13 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
         user,
         'TIMESHEET_QR_REISSUED',
         {
-          timesheet_id: timesheetId,
+          timesheet_id: currentTimesheetId,
           sheet_scope: 'DAILY',
           qr_token: qrToken,
           qr_r2_key: qr_r2_key || null,
           pdf_r2_key: pdfKey || null
         },
-        { entity: 'timesheets', subject_id: timesheetId, req }
+        { entity: 'timesheets', subject_id: currentTimesheetId, req }
       );
     }
   } catch {}
@@ -7533,7 +7613,7 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
       user,
       'TIMESHEET_PROCESSED',
       {
-        timesheet_id: timesheetId,
+        timesheet_id: currentTimesheetId,
         sheet_scope: 'DAILY',
         submission_mode: 'MANUAL',
         source: 'timesheet_daily_manual_upsert',
@@ -7548,12 +7628,18 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
           total: Number(finAfter.total_hours ?? 0)
         } : null
       },
-      { entity: 'timesheets', subject_id: timesheetId, req }
+      { entity: 'timesheets', subject_id: currentTimesheetId, req }
     );
   } catch {}
 
   return withCORS(env, req, ok({
-    timesheet_id: timesheetId,
+    timesheet_id: currentTimesheetId,
+    booking_id: guard.resolved.booking_id || null,
+    requested_timesheet_id: guard.resolved.requested_timesheet_id || timesheetId,
+    current_timesheet_id: currentTimesheetId,
+    current_version: ts?.version ?? guard.resolved.current_version ?? null,
+    was_stale: !!guard.resolved.was_stale,
+
     qr_action: qrAction,
     qr_issued: qrIssued,
     qr_reissued: qrReissued,
@@ -7563,165 +7649,15 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
   }));
 }
 
-
-async function handleContractWeekManualAuthorise(env, req, weekId) {
-  // Second checker: stamp TS authorise + TSFIN → READY_FOR_HR or READY_FOR_INVOICE
-  // based on client_settings.requires_hr, and mark the week as AUTHORISED.
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  const cw = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=id,timesheet_id`
-  );
-  if (!cw?.timesheet_id) {
-    return withCORS(env, req, badRequest('No timesheet linked to this week'));
-  }
-
-  const now = nowIso();
-
-  // Load current TS + TSFIN first so we can:
-  // - guard QR pending signature
-  // - detect meaningful status change for audit
-  // - include old/new in the audit payload
-  const tsBefore = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(cw.timesheet_id)}` +
-      `&is_current=eq.true` +
-      `&select=timesheet_id,authorised_at_server,submission_mode,sheet_scope,version,status`
-  ).catch(() => null);
-
-  const { rows: finRows } = await sbFetch(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-      `?timesheet_id=eq.${enc(cw.timesheet_id)}` +
-      `&is_current=eq.true` +
-      `&select=id,client_id,processing_status`
-  );
-  const fin = finRows?.[0] || null;
-
-  // Track for audit
-  const finBeforeStatus = String(fin?.processing_status || '').toUpperCase();
-  let finAfterStatus = fin?.processing_status || null;
-
-  if (fin) {
-    const ps = finBeforeStatus;
-
-    // NEW: guard for QR-print-and-sign flow
-    // If TSFIN is in a QR "awaiting signature" state, do NOT auto-promote.
-    // The QR auto-process will move it to PENDING_AUTH once the signed PDF is processed.
-    if (ps === 'QR_PENDING_SIGNATURE' || ps === 'AWAITING_QR_SIGNATURE') {
-      return withCORS(
-        env,
-        req,
-        badRequest('Timesheet is awaiting QR/manual signature; cannot authorise yet')
-      );
-    }
-
-    // Determine whether this client requires HR validation
-    let requiresHr = false;
-    if (fin.client_id) {
-      const { rows: csRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/client_settings` +
-          `?client_id=eq.${enc(fin.client_id)}` +
-          `&select=requires_hr` +
-          `&order=effective_from.desc&limit=1`
-      );
-      requiresHr = !!csRows?.[0]?.requires_hr;
-    }
-
-    let newStatus = fin.processing_status;
-    if (ps === 'PENDING_AUTH' || ps === 'READY_FOR_HR') {
-      newStatus = requiresHr ? 'READY_FOR_HR' : 'READY_FOR_INVOICE';
-    }
-    finAfterStatus = newStatus;
-
-    // Promote TSFIN (unchanged for non-QR flows)
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
-      {
-        method: 'PATCH',
-        headers: { ...sbHeaders(env), 'Prefer': 'return-minimal' },
-        body: JSON.stringify({
-          processing_status: newStatus,
-          authorised_by_user_id: user.id,
-          authorised_at_utc: now,
-          updated_at: now
-        })
-      }
-    ).catch(() => { /* best-effort */ });
-  }
-
-  // Stamp timesheet as authorised (we only reach here if not blocked by QR guard)
-  await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(cw.timesheet_id)}&is_current=eq.true`,
-    {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), 'Prefer': 'return-minimal' },
-      body: JSON.stringify({ authorised_at_server: now, updated_at: now })
-    }
-  ).catch(() => { /* best-effort */ });
-
-  // Update week status → AUTHORISED
-  await fetch(
-    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`,
-    {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), 'Prefer': 'return-minimal' },
-      body: JSON.stringify({ status: 'AUTHORISED', updated_at: now })
-    }
-  ).catch(() => { /* best-effort */ });
-
-  // ─────────────────────────────────────────────────────────────
-  // AUDIT (Timesheet tab)
-  // ─────────────────────────────────────────────────────────────
-  try {
-    const wasAlreadyAuthorised = !!(tsBefore && tsBefore.authorised_at_server);
-    const didPromoteStatus = (fin && String(finBeforeStatus || '') !== String(finAfterStatus || ''));
-
-    // Only log meaningful events:
-    // - first time authorise (not repeated clicks)
-    // - TSFIN processing_status actually changed
-    if (!wasAlreadyAuthorised || didPromoteStatus) {
-      await writeAudit(
-        env,
-        user,
-        'TIMESHEET_AUTHORISED',
-        {
-          timesheet_id: cw.timesheet_id,
-          contract_week_id: weekId,
-          authorised_at_utc: now,
-          tsfin_processing_status_before: finBeforeStatus || null,
-          tsfin_processing_status_after: finAfterStatus ? String(finAfterStatus).toUpperCase() : null
-        },
-        {
-          entity: 'timesheets',
-          subject_id: cw.timesheet_id,
-          req,
-          before: {
-            authorised_at_server: tsBefore?.authorised_at_server || null,
-            tsfin_processing_status: finBeforeStatus || null
-          },
-          reason: didPromoteStatus ? 'PROMOTED_TSFIN_STATUS' : 'STAMPED_AUTHORISE'
-        }
-      );
-    }
-  } catch {
-    // best-effort
-  }
-
-  return withCORS(env, req, ok({ authorised: true, timesheet_id: cw.timesheet_id }));
-}
-
-
 async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   if (!weekId) return withCORS(env, req, badRequest('contract_week_id is required'));
 
   const enc = encodeURIComponent;
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
 
   const cw = await sbGetOne(
     env,
@@ -7731,7 +7667,8 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     return withCORS(env, req, notFound('Week not found'));
   }
 
-  // ✅ NEW: planned-only delete (no timesheet_id) → SQL RPC contract_week_delete_planned(...)
+  // ✅ planned-only delete (no timesheet_id) → SQL RPC contract_week_delete_planned(...)
+  // (No expected_timesheet_id required here; if the week has gained a timesheet_id, it will go down the guarded branch below.)
   if (!cw.timesheet_id) {
     try {
       const rpcRes = await fetch(
@@ -7751,87 +7688,87 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
         return withCORS(env, req, serverError(`Planned delete failed: ${t}`));
       }
 
-      // RPC inserts audit; we return consistent shape
       return withCORS(env, req, ok({ deleted: true, planned: true }));
     } catch (e) {
       return withCORS(env, req, serverError(`Planned delete failed: ${e?.message || String(e)}`));
     }
   }
 
-  const timesheetId = cw.timesheet_id;
+  // ✅ Guarded delete for a week that currently has a timesheet
+  const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
 
-  // Guard 1: current TSFIN must not be paid or invoiced
-  const tsfin = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
-      `&is_current=eq.true` +
-      `&select=paid_at_utc,locked_by_invoice_id`
-  );
-  if (tsfin?.paid_at_utc) {
-    return withCORS(env, req, badRequest('Cannot delete: already paid'));
+  // Resolve CW-linked timesheet to CURRENT
+  const resolved = await resolveTimesheetToCurrent(env, cw.timesheet_id);
+  if (!resolved?.current_timesheet_id) {
+    return withCORS(env, req, serverError('Failed to resolve current timesheet for contract week'));
   }
-  if (tsfin?.locked_by_invoice_id) {
-    return withCORS(env, req, badRequest('Cannot delete: invoiced'));
+  const currentTimesheetId = String(resolved.current_timesheet_id);
+
+  // Guard mismatch → 409 moved
+  if (String(expected) !== String(currentTimesheetId)) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetId }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
   }
 
-  // Check whether any timesheet rows still exist for this id
-  const { rows: tsRows } = await sbFetch(
+  // booking_id is required to delete the whole rotation series safely
+  if (!resolved.booking_id) {
+    return withCORS(env, req, serverError('Failed to resolve booking_id for contract week timesheet'));
+  }
+  const bookingId = String(resolved.booking_id);
+
+  // Fetch all timesheet_ids in this booking_id series
+  const { rows: tsRowsAll } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
-      `&select=timesheet_id&limit=1`
+      `?booking_id=eq.${enc(bookingId)}` +
+      `&select=timesheet_id`
   );
-  const versions = tsRows || [];
+  const allIds = (tsRowsAll || []).map(r => r.timesheet_id).filter(Boolean);
 
-  if (!versions.length) {
-    // Timesheet id on cw but no rows – just reset the week
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`,
-      {
-        method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify({
-          timesheet_id: null,
-          status: 'OPEN',
-          updated_at: nowIso()
-        })
+  // Guard: no current TSFIN in this series may be paid or invoiced
+  if (allIds.length) {
+    const inList = allIds.map(x => `"${String(x).replace(/"/g, '')}"`).join(',');
+    const { rows: finRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?is_current=eq.true&timesheet_id=in.(${inList})` +
+        `&select=timesheet_id,paid_at_utc,locked_by_invoice_id`
+    );
+
+    for (const f of (finRows || [])) {
+      if (f?.paid_at_utc) {
+        return withCORS(env, req, badRequest('Cannot delete: already paid'));
       }
-    ).catch(() => {});
-
-    try {
-      await writeAudit(
-        env,
-        user,
-        'CONTRACT_WEEK_TIMESHEET_RESET_NO_ROWS',
-        { contract_week_id: weekId, timesheet_id: timesheetId },
-        { entity: 'contract_weeks', subject_id: weekId, req }
-      );
-    } catch {}
-
-    return withCORS(env, req, ok({ deleted: false, reset: true }));
+      if (f?.locked_by_invoice_id) {
+        return withCORS(env, req, badRequest('Cannot delete: invoiced'));
+      }
+    }
   }
 
-  // Delete ALL versions for this timesheet_id (manual + electronic)
-  const del = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}`,
-    {
-      method: 'DELETE',
-      headers: { ...sbHeaders(env), Prefer: 'return-minimal' }
-    }
+  // Delete all timesheet rows in the series
+  const delTs = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets?booking_id=eq.${enc(bookingId)}`,
+    { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return-minimal' } }
   );
-  if (!del.ok) {
-    return withCORS(env, req, serverError(await del.text()));
+  if (!delTs.ok) {
+    return withCORS(env, req, serverError(await delTs.text()));
   }
 
-  // ✅ NEW: delete TSFIN rows too (avoid orphan snapshots)
-  await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${enc(timesheetId)}`,
-    {
-      method: 'DELETE',
-      headers: { ...sbHeaders(env), Prefer: 'return-minimal' }
-    }
-  ).catch(() => {});
+  // Delete TSFIN rows for those timesheet_ids (avoid orphan snapshots)
+  if (allIds.length) {
+    const inList = allIds.map(x => `"${String(x).replace(/"/g, '')}"`).join(',');
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=in.(${inList})`,
+      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return-minimal' } }
+    ).catch(() => {});
+  }
 
   // Reset week to OPEN
   await fetch(
@@ -7853,12 +7790,19 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
       env,
       user,
       'CONTRACT_WEEK_TIMESHEET_DELETED',
-      { contract_week_id: weekId, timesheet_id: timesheetId },
+      { contract_week_id: weekId, booking_id: bookingId, timesheet_id: currentTimesheetId },
       { entity: 'contract_weeks', subject_id: weekId, req }
     );
   } catch {}
 
-  return withCORS(env, req, ok({ deleted: true, planned: false }));
+  return withCORS(env, req, ok({
+    deleted: true,
+    planned: false,
+    booking_id: bookingId,
+    requested_timesheet_id: cw.timesheet_id,
+    current_timesheet_id: currentTimesheetId,
+    was_stale: !!resolved?.was_stale
+  }));
 }
 
 
@@ -8130,8 +8074,9 @@ async function handleTimesheetsPresignWeekly(env, req) {
   }));
 }
 
-
 async function handleTimesheetsEligibilityWeekly(env, req) {
+  const enc = encodeURIComponent;
+
   // Public: app supplies candidate_id, optional client_id; return eligible weeks + per-contract bucket labels
   let body; try { body = await parseJSONBody(req); } catch { body = {}; }
   const candidateId = body.candidate_id || null;
@@ -8269,14 +8214,13 @@ async function handleTimesheetsEligibilityWeekly(env, req) {
 
     const canSubmitQr =
       !lockInfo.locked &&
-      !isManualOnly; // QR always allowed unless admin has manual-only or locked
+      !isManualOnly;
 
     const canSubmitElectronic =
       supportsElectronic &&
       !lockInfo.locked &&
       !isManualOnly;
 
-    // overall can proceed (either route)
     const canProceed = canSubmitQr || canSubmitElectronic;
 
     let blockedReason = null;
@@ -8287,14 +8231,12 @@ async function handleTimesheetsEligibilityWeekly(env, req) {
       else blockedReason = 'BLOCKED';
     }
 
-    // For UI clarity: indicate whether this is a resubmission case
     const isResubmission = hasExistingTs && !lockInfo.locked && !isManualOnly;
 
     return {
       ...r,
       bucket_labels: mapLabels[r.contract_id] || DEFAULT_LABELS,
 
-      // NEW eligibility flags
       supports_electronic_submission: supportsElectronic,
       has_existing_timesheet: hasExistingTs,
       is_resubmission: isResubmission,
@@ -8313,7 +8255,6 @@ async function handleTimesheetsEligibilityWeekly(env, req) {
 
 
 // GET /api/timesheets/:id/evidence
-// GET /api/timesheets/:id/evidence
 async function handleTimesheetEvidenceList(env, req, tsId) {
   const enc = encodeURIComponent;
 
@@ -8321,49 +8262,45 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
-  if (!tsId) {
-    return withCORS(env, req, badRequest('timesheet_id is required'));
+  if (!tsId) return withCORS(env, req, badRequest('timesheet_id is required'));
+
+  // ✅ Rotation-safe: resolve requested -> current
+  const resolved = await resolveTimesheetToCurrent(env, tsId);
+  if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
+  const currentTsId = resolved.current_timesheet_id;
+
+  // Optional: meta=1 returns wrapper object; default keeps legacy array response
+  let wantMeta = false;
+  try {
+    const u = new URL(req.url);
+    wantMeta = (u.searchParams.get('meta') === '1');
+  } catch {
+    wantMeta = false;
   }
 
   try {
-    // Ensure the timesheet exists
-    const { rows: tsRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=eq.${enc(tsId)}` +
-        `&select=timesheet_id` +
-        `&limit=1`
-    );
-    const ts = tsRows?.[0] || null;
-    if (!ts) {
-      return withCORS(env, req, notFound('Timesheet not found'));
-    }
-
     // ─────────────────────────────────────────────────────────────
     // 1) User evidence rows (timesheet_evidence)
     // ─────────────────────────────────────────────────────────────
     const { rows: evRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
-        `?timesheet_id=eq.${enc(tsId)}` +
+        `?timesheet_id=eq.${enc(currentTsId)}` +
         `&select=id,kind,display_name,storage_key,created_at,created_by` +
         `&order=created_at.asc`
     );
 
     const userEvidenceRaw = (evRows || []).map(ev => {
       const out = { ...(ev || {}) };
+      out.timesheet_id = currentTsId;
       out.system = false;
       out.can_delete = true;
-
-      // Convenience: keep a consistent timestamp field available
       if (!out.uploaded_at_utc && out.created_at) out.uploaded_at_utc = out.created_at;
-
       return out;
     });
 
     // ─────────────────────────────────────────────────────────────
     // 1b) Enrich user evidence with uploader display name
-    //     (tms_users.id → tms_users.display_name)
     // ─────────────────────────────────────────────────────────────
     const uploaderIds = new Set();
     for (const ev of userEvidenceRaw) {
@@ -8389,8 +8326,7 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
           uploaderMap[id] = (u && u.display_name != null) ? String(u.display_name) : '';
         }
       } catch (e) {
-        // non-fatal; FE will show "—" if uploader name isn't available
-        console.warn('[handleTimesheetEvidenceList] uploader name enrich failed (non-fatal)', {
+        console.warn('[handleTimesheetEvidenceList] uploader enrich failed (non-fatal)', {
           err: e?.message || String(e)
         });
       }
@@ -8400,7 +8336,6 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
       const out = { ...(ev || {}) };
       const uid = out.created_by ? String(out.created_by).trim() : '';
       const dn  = uid && Object.prototype.hasOwnProperty.call(uploaderMap, uid) ? uploaderMap[uid] : '';
-      // FE will read uploaded_by_display (preferred) or created_by_display (fallback)
       out.uploaded_by_display = dn || null;
       out.created_by_display  = dn || null;
       return out;
@@ -8411,46 +8346,37 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
     // ─────────────────────────────────────────────────────────────
     const importIds = new Set();
 
-    // 2a) From nhsp_shifts for this timesheet
     try {
       const { rows: shiftRows } = await sbFetch(
         env,
         `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
-          `?timesheet_id=eq.${enc(tsId)}` +
+          `?timesheet_id=eq.${enc(currentTsId)}` +
           `&select=latest_import_id,source_system` +
           `&limit=10000`
       );
-
       for (const sh of shiftRows || []) {
         const iid = sh && sh.latest_import_id ? String(sh.latest_import_id).trim() : '';
         if (iid) importIds.add(iid);
       }
-    } catch {
-      // non-fatal
-    }
+    } catch {}
 
-    // 2b) From timesheet_validations.last_source (covers HR daily validation)
     try {
       const { rows: valRows } = await sbFetch(
         env,
         `${env.SUPABASE_URL}/rest/v1/timesheet_validations` +
-          `?timesheet_id=eq.${enc(tsId)}` +
+          `?timesheet_id=eq.${enc(currentTsId)}` +
           `&select=last_source,updated_at` +
           `&order=updated_at.desc` +
           `&limit=1`
       );
-
       const lastSource = valRows?.[0]?.last_source || null;
       if (lastSource) {
         const iid = String(lastSource).trim();
         if (iid) importIds.add(iid);
       }
-    } catch {
-      // non-fatal
-    }
+    } catch {}
 
     let systemEvidence = [];
-
     if (importIds.size) {
       try {
         const idParam = Array.from(importIds).map(enc).join(',');
@@ -8476,6 +8402,7 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
 
             return {
               id: `SYS:${kindLabel}:${importId || 'UNKNOWN'}`,
+              timesheet_id: currentTsId,
               kind: kindLabel,
               display_name: r.filename || kindLabel,
               storage_key: r.file_r2_key,
@@ -8483,8 +8410,6 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
               uploaded_at_utc: uploadedAt,
               system: true,
               can_delete: false,
-
-              // ✅ NEW: for FE "Uploaded by" column
               uploaded_by_display: 'System',
               created_by_display: 'System'
             };
@@ -8494,7 +8419,6 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
       }
     }
 
-    // Combine + sort by date (ascending)
     const all = [...userEvidence, ...systemEvidence];
 
     const toTs = (x) => {
@@ -8503,18 +8427,24 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
       const t = new Date(s).getTime();
       return Number.isFinite(t) ? t : 0;
     };
-
     all.sort((a, b) => toTs(a) - toTs(b));
 
+    if (wantMeta) {
+      return withCORS(env, req, ok({
+        requested_timesheet_id: resolved.requested_timesheet_id || tsId,
+        current_timesheet_id: currentTsId,
+        was_stale: !!resolved.was_stale,
+        evidence: all
+      }));
+    }
+
+    // Legacy response (array)
     return withCORS(env, req, ok(all));
   } catch (e) {
-    return withCORS(
-      env,
-      req,
-      serverError(`Failed to list timesheet evidence: ${e?.message || e}`)
-    );
+    return withCORS(env, req, serverError(`Failed to list timesheet evidence: ${e?.message || e}`));
   }
 }
+
 
 
 // POST /api/timesheets/:id/evidence
@@ -8524,10 +8454,7 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
   // Auth: admin only
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
-
-  if (!tsId) {
-    return withCORS(env, req, badRequest('timesheet_id is required'));
-  }
+  if (!tsId) return withCORS(env, req, badRequest('timesheet_id is required'));
 
   let body;
   try {
@@ -8536,45 +8463,58 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
     return withCORS(env, req, badRequest('Invalid JSON payload'));
   }
 
+  // ✅ Guarded write
+  const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+
+  // ✅ Rotation-safe resolve
+  const resolved = await resolveTimesheetToCurrent(env, tsId);
+  if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
+  const currentTsId = resolved.current_timesheet_id;
+
+  // ✅ Guard mismatch → 409 TIMESHEET_MOVED
+  if (String(expected) !== String(currentTsId)) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTsId }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
+
   const kind        = body && body.kind && String(body.kind).trim();
   const displayName = body && body.display_name != null ? String(body.display_name).trim() : null;
 
-  // ✅ FIX: normalise storage_key (R2 keys must not start with "/")
+  // normalise storage_key (R2 keys must not start with "/")
   const storageKeyRaw = body && body.storage_key && String(body.storage_key).trim();
   const storageKey = storageKeyRaw ? storageKeyRaw.replace(/^\/+/, '') : '';
 
-  if (!kind) {
-    return withCORS(env, req, badRequest('kind is required'));
-  }
-  if (!storageKey) {
-    return withCORS(env, req, badRequest('storage_key is required'));
-  }
+  if (!kind) return withCORS(env, req, badRequest('kind is required'));
+  if (!storageKey) return withCORS(env, req, badRequest('storage_key is required'));
 
   try {
-    // Ensure the timesheet exists
+    // Ensure the timesheet exists (for audit context)
     const { rows: tsRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=eq.${enc(tsId)}` +
+        `?timesheet_id=eq.${enc(currentTsId)}` +
+        `&is_current=eq.true` +
         `&select=timesheet_id,contract_id,week_ending_date,sheet_scope,submission_mode` +
         `&limit=1`
     );
     const ts = tsRows?.[0] || null;
-    if (!ts) {
-      return withCORS(env, req, notFound('Timesheet not found'));
-    }
+    if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
 
     // Validate that the storage_key exists in R2 (best-effort)
     try {
       if (typeof r2Exists === 'function') {
         const exists = await r2Exists(env, storageKey);
-        if (!exists) {
-          return withCORS(env, req, badRequest('storage_key does not exist in R2'));
-        }
+        if (!exists) return withCORS(env, req, badRequest('storage_key does not exist in R2'));
       }
     } catch (e) {
-      // If R2 check fails, we log and continue; DB will still accept the key
-      console.warn('[handleTimesheetEvidenceAdd] r2Exists check failed (non-fatal)', {
+      console.warn('[handleTimesheetEvidenceAdd] r2Exists failed (non-fatal)', {
         storage_key: storageKey,
         err: e?.message || String(e)
       });
@@ -8583,30 +8523,23 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
     const nowIso = new Date().toISOString();
 
     const payload = [{
-      timesheet_id: tsId,
+      timesheet_id: currentTsId,
       kind,
       display_name: displayName || kind,
-      storage_key: storageKey, // ✅ store normalised key (no leading "/")
+      storage_key: storageKey,
       created_at: nowIso,
       created_by: user.id || null
     }];
 
-    const insRes = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence`,
-      {
-        method: 'POST',
-        headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-        body: JSON.stringify(payload)
-      }
-    );
+    const insRes = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheet_evidence`, {
+      method: 'POST',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify(payload)
+    });
 
     const txt = await insRes.text().catch(() => '');
     if (!insRes.ok) {
-      return withCORS(
-        env,
-        req,
-        serverError(`Failed to add timesheet evidence: ${txt}`)
-      );
+      return withCORS(env, req, serverError(`Failed to add timesheet evidence: ${txt}`));
     }
 
     let row = null;
@@ -8614,18 +8547,17 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
       const json = txt ? JSON.parse(txt) : [];
       row = Array.isArray(json) ? json[0] : json;
     } catch {
-      // If parsing fails, still return ok with no row
       row = null;
     }
 
-    // ✅ Audit: evidence added
+    // Audit
     try {
       await writeAudit(
         env,
         user,
         'TIMESHEET_EVIDENCE_ADDED',
         {
-          timesheet_id: tsId,
+          timesheet_id: currentTsId,
           evidence_id: row?.id || null,
           kind,
           display_name: displayName || kind,
@@ -8635,60 +8567,73 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
           sheet_scope: ts.sheet_scope || null,
           submission_mode: ts.submission_mode || null
         },
-        {
-          entity: 'timesheets',
-          subject_id: tsId,
-          req
-        }
+        { entity: 'timesheets', subject_id: currentTsId, req }
       );
-    } catch {
-      // best-effort
-    }
+    } catch {}
 
-    if (row && row.id) {
-      return withCORS(env, req, ok(row));
-    }
-
-    return withCORS(env, req, ok({ ok: true }));
+    return withCORS(env, req, ok({
+      ok: true,
+      requested_timesheet_id: resolved.requested_timesheet_id || tsId,
+      current_timesheet_id: currentTsId,
+      was_stale: !!resolved.was_stale,
+      evidence: row || null
+    }));
   } catch (e) {
-    return withCORS(
-      env,
-      req,
-      serverError(`Failed to add timesheet evidence: ${e?.message || e}`)
-    );
+    return withCORS(env, req, serverError(`Failed to add timesheet evidence: ${e?.message || e}`));
   }
 }
 
 
+
 // DELETE /api/timesheets/:id/evidence/:evidence_id
+
+
+
+
 async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
   const enc = encodeURIComponent;
 
   // Auth: admin only
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+  if (!tsId) return withCORS(env, req, badRequest('timesheet_id is required'));
+  if (!evidenceId) return withCORS(env, req, badRequest('evidence_id is required'));
 
-  if (!tsId) {
-    return withCORS(env, req, badRequest('timesheet_id is required'));
-  }
-  if (!evidenceId) {
-    return withCORS(env, req, badRequest('evidence_id is required'));
+  // ✅ Guarded write (DELETE with JSON body)
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+
+  // ✅ Rotation-safe resolve
+  const resolved = await resolveTimesheetToCurrent(env, tsId);
+  if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
+  const currentTsId = resolved.current_timesheet_id;
+
+  // ✅ Guard mismatch → 409 TIMESHEET_MOVED
+  if (String(expected) !== String(currentTsId)) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTsId }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
   }
 
   try {
-    // Ensure the evidence row exists and belongs to this timesheet
+    // Ensure evidence row exists and belongs to this timesheet
     const { rows: evRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
         `?id=eq.${enc(evidenceId)}` +
-        `&timesheet_id=eq.${enc(tsId)}` +
+        `&timesheet_id=eq.${enc(currentTsId)}` +
         `&select=id,storage_key,kind,display_name` +
         `&limit=1`
     );
     const ev = evRows?.[0] || null;
-    if (!ev) {
-      return withCORS(env, req, notFound('Evidence not found for this timesheet'));
-    }
+    if (!ev) return withCORS(env, req, notFound('Evidence not found for this timesheet'));
 
     // Load minimal TS context for audit
     let tsMeta = null;
@@ -8696,21 +8641,18 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
       const { rows: tsRows } = await sbFetch(
         env,
         `${env.SUPABASE_URL}/rest/v1/timesheets` +
-          `?timesheet_id=eq.${enc(tsId)}` +
+          `?timesheet_id=eq.${enc(currentTsId)}` +
+          `&is_current=eq.true` +
           `&select=timesheet_id,contract_id,week_ending_date,sheet_scope,submission_mode` +
           `&limit=1`
       );
       tsMeta = tsRows?.[0] || null;
-    } catch {
-      tsMeta = null;
-    }
+    } catch {}
 
     const storageKeyRaw = ev.storage_key || null;
-
-    // ✅ FIX: normalise key for R2 operations (R2 keys must not start with "/")
     const storageKeyForR2 = storageKeyRaw ? String(storageKeyRaw).trim().replace(/^\/+/, '') : null;
 
-    // Optionally delete from R2 (best-effort, non-fatal)
+    // Best-effort delete from R2
     try {
       if (storageKeyForR2 && typeof r2Delete === 'function') {
         await r2Delete(env, storageKeyForR2);
@@ -8725,80 +8667,88 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
     // Delete DB row
     const delRes = await fetch(
       `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(evidenceId)}`,
-      {
-        method: 'DELETE',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' }
-      }
+      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return-minimal' } }
     );
 
     if (!delRes.ok) {
       const t = await delRes.text().catch(() => '');
-      return withCORS(
-        env,
-        req,
-        serverError(`Failed to delete timesheet evidence: ${t}`)
-      );
+      return withCORS(env, req, serverError(`Failed to delete timesheet evidence: ${t}`));
     }
 
-    // ✅ Audit: evidence removed
+    // Audit
     try {
       await writeAudit(
         env,
         user,
         'TIMESHEET_EVIDENCE_REMOVED',
         {
-          timesheet_id: tsId,
+          timesheet_id: currentTsId,
           evidence_id: evidenceId,
           kind: ev.kind || null,
           display_name: ev.display_name || null,
-          // keep what was in the DB row for traceability
           storage_key: storageKeyRaw,
           contract_id: tsMeta?.contract_id || null,
           week_ending_date: tsMeta?.week_ending_date || null,
           sheet_scope: tsMeta?.sheet_scope || null,
           submission_mode: tsMeta?.submission_mode || null
         },
-        {
-          entity: 'timesheets',
-          subject_id: tsId,
-          req
-        }
+        { entity: 'timesheets', subject_id: currentTsId, req }
       );
-    } catch {
-      // best-effort
-    }
+    } catch {}
 
-    return withCORS(env, req, ok({ ok: true }));
+    return withCORS(env, req, ok({
+      ok: true,
+      requested_timesheet_id: resolved.requested_timesheet_id || tsId,
+      current_timesheet_id: currentTsId,
+      was_stale: !!resolved.was_stale
+    }));
   } catch (e) {
-    return withCORS(
-      env,
-      req,
-      serverError(`Failed to delete timesheet evidence: ${e?.message || e}`)
-    );
+    return withCORS(env, req, serverError(`Failed to delete timesheet evidence: ${e?.message || e}`));
   }
 }
 
- async function handleTimesheetReplaceManualPdf(env, req, timesheetId) {
+async function handleTimesheetReplaceManualPdf(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+  if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
 
   const body = await parseJSONBody(req).catch(() => null);
+
+  // ✅ Guarded write
+  const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+
+  // ✅ stale-safe resolve
+  const resolved = await resolveTimesheetToCurrent(env, timesheetId);
+  if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
+  const currentTimesheetId = resolved.current_timesheet_id;
+
+  // ✅ Guard mismatch → 409 TIMESHEET_MOVED
+  if (String(expected) !== String(currentTimesheetId)) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetId }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
+
   const newKeyRaw = body?.manual_pdf_r2_key ?? null;
   const newKey = newKeyRaw ? normalizeKey(String(newKeyRaw)) : null;
 
   // If a key is provided, sanity check it exists in R2
   if (newKey) {
     const exists = await r2Exists(env, newKey).catch(() => false);
-    if (!exists) {
-      return withCORS(env, req, badRequest('manual_pdf_r2_key does not exist in R2'));
-    }
+    if (!exists) return withCORS(env, req, badRequest('manual_pdf_r2_key does not exist in R2'));
   }
 
-  // Patch the timesheet's manual_pdf_r2_key
+  // Patch the CURRENT timesheet row's manual_pdf_r2_key
   const tsRes = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}`,
+    `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
     {
       method: 'PATCH',
       headers: { ...sbHeaders(env), Prefer: 'return=representation' },
@@ -8809,18 +8759,16 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
     }
   );
 
-  if (!tsRes.ok) {
-    return withCORS(env, req, serverError(await tsRes.text()));
-  }
+  if (!tsRes.ok) return withCORS(env, req, serverError(await tsRes.text()));
 
   const tsJson = await tsRes.json().catch(() => []);
   const row = (Array.isArray(tsJson) ? tsJson[0] : tsJson) || null;
 
-  // NEW: insert timesheet_evidence row when a new manual PDF is set
+  // Insert timesheet_evidence row when a new manual PDF is set
   if (newKey) {
     try {
       const payload = [{
-        timesheet_id: timesheetId,
+        timesheet_id: currentTimesheetId,
         kind: 'MANUAL_PDF',
         display_name: 'Scanned timesheet',
         storage_key: newKey,
@@ -8838,32 +8786,29 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
 
       if (!evRes.ok) {
         const errTxt = await evRes.text().catch(() => '');
-        return withCORS(
-          env,
-          req,
-          serverError(`Failed to record timesheet evidence: ${errTxt}`)
-        );
+        return withCORS(env, req, serverError(`Failed to record timesheet evidence: ${errTxt}`));
       }
     } catch (e) {
-      return withCORS(
-        env,
-        req,
-        serverError(`Failed to record timesheet evidence: ${e?.message || e}`)
-      );
+      return withCORS(env, req, serverError(`Failed to record timesheet evidence: ${e?.message || e}`));
     }
   }
 
   // Audit the PDF replacement (whether we set or cleared it)
-  await writeAudit(
-    env,
-    user,
-    'TIMESHEET_MANUAL_PDF_REPLACED',
-    { manual_pdf_r2_key: newKey },
-    { entity: 'timesheet', subject_id: timesheetId, req }
-  );
+  try {
+    await writeAudit(
+      env,
+      user,
+      'TIMESHEET_MANUAL_PDF_REPLACED',
+      { manual_pdf_r2_key: newKey },
+      { entity: 'timesheets', subject_id: currentTimesheetId, req }
+    );
+  } catch {}
 
   return withCORS(env, req, ok({
-    timesheet_id: timesheetId,
+    timesheet_id: currentTimesheetId,
+    current_timesheet_id: currentTimesheetId,
+    requested_timesheet_id: resolved.requested_timesheet_id || timesheetId,
+    was_stale: !!resolved.was_stale,
     manual_pdf_r2_key: row?.manual_pdf_r2_key || null
   }));
 }
@@ -9957,235 +9902,717 @@ async function handleTimesheetsSubmitWeekly(env, req) {
   return withCORS(env, req, ok({ key, upload_url, token, expires_in: 3600 }));
 }
 
- async function handleTimesheetUpdateReference(env, req, timesheetId) {
+
+async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
+  const enc = encodeURIComponent;
+
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
-  let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
-  const reference_number = (body?.reference_number || '').trim();
-  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}`, {
-    method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
-    body: JSON.stringify({ reference_number, updated_at: nowIso() })
-  });
-  if (!res.ok) return withCORS(env, req, serverError(await res.text()));
-  const row = (await res.json().catch(()=>[]))[0];
-  return withCORS(env, req, ok(row));
-}
-async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
+  if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
+
+  // ✅ NEW: guarded write (optimistic concurrency)
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  const expectedTimesheetId = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  if (!expectedTimesheetId) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+
+  // Stale-safe resolve
+  const resolved = await resolveTimesheetToCurrent(env, timesheetId);
+  if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
+
+  const currentTimesheetId = resolved.current_timesheet_id;
+
+  // Guard: if the caller's expected id is no longer current, refuse
+  if (String(expectedTimesheetId) !== String(currentTimesheetId)) {
+    return withCORS(
+      env,
+      req,
+      new Response(JSON.stringify({
+        error: 'TIMESHEET_MOVED',
+        current_timesheet_id: currentTimesheetId
+      }), { status: 409, headers: { 'Content-Type': 'application/json' } })
+    );
+  }
+
+  const ts = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=*` +
+      `&limit=1`
+  );
+  if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
+
+  const bookingId = ts.booking_id || resolved.booking_id || null;
+  if (!bookingId) return withCORS(env, req, badRequest('Timesheet booking_id is missing; cannot version'));
+
+  const scope = String(ts.sheet_scope || '').toUpperCase();
+  if (scope && scope !== 'WEEKLY' && scope !== 'DAILY') {
+    return withCORS(env, req, badRequest('Unsupported sheet_scope for QR conversion'));
+  }
+
+  const subMode = String(ts.submission_mode || '').toUpperCase();
+  if (subMode !== 'MANUAL') {
+    return withCORS(env, req, badRequest('Timesheet is not in MANUAL mode; QR conversion not applicable'));
+  }
+
+  const qrStatus = String(ts.qr_status || '').toUpperCase();
+  if (!qrStatus) {
+    return withCORS(env, req, badRequest('Timesheet does not have QR metadata; nothing to convert'));
+  }
+
+  const fin = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=*`
+  );
+  if (!fin) return withCORS(env, req, badRequest('No financial snapshot for timesheet'));
+
+  const hardLocked =
+    !!fin.paid_at_utc ||
+    !!fin.locked_by_invoice_id ||
+    !!fin.locked_by_invoice ||
+    !!fin.locked_by_invoice_line_id ||
+    !!fin.locked_by_invoice_at_utc;
+
+  if (hardLocked) {
+    return withCORS(env, req, badRequest('Cannot convert QR: timesheet already invoiced or paid'));
+  }
 
   const now = nowIso();
 
-  // Load current TS + TSFIN first (for meaningful audit + idempotency)
-  const tsBefore = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
-      `&is_current=eq.true` +
-      `&select=timesheet_id,authorised_at_server,submission_mode,sheet_scope,version,status`
-  ).catch(() => null);
+  // Next version by booking_id
+  let nextVersion = Number(ts.version || 1) + 1;
+  try {
+    const { rows: vRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?booking_id=eq.${enc(bookingId)}` +
+        `&select=version` +
+        `&order=version.desc` +
+        `&limit=1`
+    );
+    const maxV = vRows?.[0]?.version != null ? Number(vRows[0].version) : Number(ts.version || 1);
+    nextVersion = Number.isFinite(maxV) ? maxV + 1 : (Number(ts.version || 1) + 1);
+  } catch {}
 
-  const { rows: finRows } = await sbFetch(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
-      `&is_current=eq.true` +
-      `&select=id,client_id,processing_status,locked_by_invoice_id,paid_at_utc`
-  );
-  const fin = finRows?.[0] || null;
-
-  const finBeforeStatus = String(fin?.processing_status || '').toUpperCase();
-  let finAfterStatus = fin?.processing_status || null;
-
-  // Stamp timesheet as authorised (best effort)
+  // 1) Demote current by booking_id
   await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?booking_id=eq.${enc(bookingId)}` +
+      `&is_current=eq.true`,
     {
       method: 'PATCH',
-      headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
-      body: JSON.stringify({ authorised_at_server: now, updated_at: now })
+      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+      body: JSON.stringify({
+        is_current: false,
+        status: 'REVOKED',
+        revoked_reason: 'QR_CONVERTED_TO_MANUAL',
+        revoked_by: user.id || null,
+        updated_at: now
+      })
     }
   ).catch(() => {});
 
-  if (!fin) {
-    // Audit: only log if this is a meaningful "first authorise" stamp
-    try {
-      const wasAlreadyAuthorised = !!(tsBefore && tsBefore.authorised_at_server);
-      if (!wasAlreadyAuthorised) {
-        await writeAudit(
-          env,
-          user,
-          'TIMESHEET_AUTHORISED',
-          {
-            timesheet_id: timesheetId,
-            authorised_at_utc: now,
-            tsfin_processing_status_before: null,
-            tsfin_processing_status_after: null
-          },
-          {
-            entity: 'timesheets',
-            subject_id: timesheetId,
-            req,
-            before: { authorised_at_server: tsBefore?.authorised_at_server || null },
-            reason: 'STAMPED_AUTHORISE_NO_TSFIN'
-          }
-        );
-      }
-    } catch {
-      // best-effort
+  // 2) Insert new current manual non-QR (NO timesheet_id)
+  const base = { ...ts };
+  delete base.id;
+  delete base.timesheet_id;
+
+  const newRow = {
+    ...base,
+    booking_id: bookingId,
+    version: nextVersion,
+    is_current: true,
+    submission_mode: 'MANUAL',
+
+    qr_status: null,
+    qr_token: null,
+    qr_generated_at: null,
+    qr_scanned_at: null,
+    qr_scan_info_json: null,
+    qr_r2_key: null,
+    qr_payload_json: {},
+
+    manual_pdf_r2_key: null,
+
+    created_at: now,
+    updated_at: now
+  };
+
+  const insRes = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets`, {
+    method: 'POST',
+    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+    body: JSON.stringify([newRow])
+  });
+
+  if (!insRes.ok) {
+    const txt = await insRes.text().catch(() => '');
+    return withCORS(env, req, serverError(`Failed to create manual non-QR version: ${txt}`));
+  }
+
+  const inserted = (await insRes.json().catch(() => []))[0] || null;
+  const newTimesheetId = inserted?.timesheet_id || null;
+  if (!newTimesheetId) return withCORS(env, req, serverError('Insert succeeded but no timesheet_id returned'));
+
+  // 2b) Move contract_week pointer if it points at old current row (weekly case)
+  try {
+    const cw = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&select=id` +
+        `&limit=1`
+    );
+    if (cw?.id) {
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+          body: JSON.stringify({ timesheet_id: newTimesheetId, updated_at: now })
+        }
+      ).catch(() => {});
     }
+  } catch {}
 
-    return withCORS(env, req, ok({ authorised: true, tsfin_updated: false }));
+  // 3) TSFIN: move row to new timesheet_id and gate evidence
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+      body: JSON.stringify({
+        timesheet_id: newTimesheetId,
+        timesheet_version: inserted?.version ?? nextVersion,
+        processing_status: 'AWAITING_MANUAL_SIGNATURE',
+        updated_at: now
+      })
+    }
+  ).catch(() => {});
+
+  // 4) Audit
+  try {
+    await writeAudit(
+      env,
+      user,
+      'QR_CONVERTED_TO_MANUAL',
+      {
+        booking_id: bookingId,
+        old_timesheet_id: currentTimesheetId,
+        new_timesheet_id: newTimesheetId,
+        old_version: ts.version,
+        new_version: inserted?.version ?? nextVersion,
+        sheet_scope: scope || null,
+        had_qr_status: qrStatus
+      },
+      { entity: 'timesheets', subject_id: newTimesheetId, req }
+    );
+  } catch {}
+
+  return withCORS(env, req, ok({
+    converted: true,
+    booking_id: bookingId,
+    old_timesheet_id: currentTimesheetId,
+    current_timesheet_id: newTimesheetId,
+    new_version: inserted?.version ?? nextVersion,
+
+    requested_timesheet_id: resolved.requested_timesheet_id || timesheetId,
+    was_stale: !!resolved.was_stale
+  }));
+}
+
+async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
+
+  // ✅ NEW: guarded write
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  const expectedTimesheetId = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  if (!expectedTimesheetId) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+
+  // Stale-safe resolve (accept historical/stale ids)
+  const resolved = await resolveTimesheetToCurrent(env, timesheetId);
+  if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
+
+  const currentTimesheetId = resolved.current_timesheet_id;
+
+  if (String(expectedTimesheetId) !== String(currentTimesheetId)) {
+    return withCORS(
+      env,
+      req,
+      new Response(JSON.stringify({
+        error: 'TIMESHEET_MOVED',
+        current_timesheet_id: currentTimesheetId
+      }), { status: 409, headers: { 'Content-Type': 'application/json' } })
+    );
   }
 
-  if (fin.locked_by_invoice_id || fin.paid_at_utc) {
-    return withCORS(env, req, badRequest('Cannot authorise: timesheet is locked or paid'));
+  // Load current version row by PK
+  const ts = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=*` +
+      `&limit=1`
+  );
+  if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
+
+  const bookingId = ts.booking_id || resolved.booking_id || null;
+  if (!bookingId) return withCORS(env, req, badRequest('Timesheet booking_id is missing; cannot version'));
+
+  // Lock guard
+  const fin = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=id,locked_by_invoice_id,paid_at_utc,timesheet_version,processing_status,client_id` +
+      `&limit=1`
+  );
+  if (fin && (fin.locked_by_invoice_id || fin.paid_at_utc)) {
+    return withCORS(env, req, badRequest('Cannot allow electronic again: timesheet is invoiced/locked or paid'));
   }
 
-  let requiresHr = false;
-  if (fin.client_id) {
+  // Must be manual-only (derived)
+  const sm = String(ts.submission_mode || '').toUpperCase();
+  const qrStatusNow = String(ts.qr_status || '').toUpperCase() || '';
+  const hasQrToken = !!(ts.qr_token && String(ts.qr_token).trim());
+  const hasQrGen = !!ts.qr_generated_at;
+  const hasQrScan = !!ts.qr_scanned_at;
+
+  const isManualOnly =
+    (sm === 'MANUAL') &&
+    !qrStatusNow &&
+    !hasQrToken &&
+    !hasQrGen &&
+    !hasQrScan;
+
+  if (!isManualOnly) {
+    return withCORS(env, req, badRequest('Allow electronic again is only valid for manual-only timesheets'));
+  }
+
+  // Determine client_id for eligibility check
+  let clientId = fin?.client_id || null;
+  if (!clientId && ts.contract_id) {
+    const contract = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contracts` +
+        `?id=eq.${enc(ts.contract_id)}` +
+        `&select=id,client_id` +
+        `&limit=1`
+    );
+    clientId = contract?.client_id || null;
+  }
+  if (!clientId) {
+    return withCORS(env, req, badRequest('Cannot resolve client_id for electronic eligibility check'));
+  }
+
+  let supportsElectronic = false;
+  try {
     const { rows: csRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/client_settings` +
-        `?client_id=eq.${enc(fin.client_id)}` +
-        `&select=requires_hr` +
-        `&order=effective_from.desc&limit=1`
+        `?client_id=eq.${enc(clientId)}` +
+        `&select=default_submission_mode,updated_at,created_at` +
+        `&order=updated_at.desc.nullslast,created_at.desc.nullslast` +
+        `&limit=1`
     );
-    requiresHr = !!csRows?.[0]?.requires_hr;
-  }
-
-  let newStatus = fin.processing_status;
-  const ps = finBeforeStatus;
-  if (ps === 'PENDING_AUTH' || ps === 'READY_FOR_HR') {
-    newStatus = requiresHr ? 'READY_FOR_HR' : 'READY_FOR_INVOICE';
-  }
-  finAfterStatus = newStatus;
-
-  await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
-    {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
-      body: JSON.stringify({
-        processing_status: newStatus,
-        authorised_by_user_id: user.id,
-        authorised_at_utc: now,
-        updated_at: now
-      })
-    }
-  ).catch(() => {});
-
-  // ─────────────────────────────────────────────────────────────
-  // AUDIT (Timesheet tab) — only meaningful logs
-  // ─────────────────────────────────────────────────────────────
-  try {
-    const wasAlreadyAuthorised = !!(tsBefore && tsBefore.authorised_at_server);
-    const didPromoteStatus = String(finBeforeStatus || '') !== String(finAfterStatus || '').toUpperCase();
-
-    // Log if:
-    // - this is the first time we authorised, OR
-    // - TSFIN processing_status changed
-    if (!wasAlreadyAuthorised || didPromoteStatus) {
-      await writeAudit(
-        env,
-        user,
-        'TIMESHEET_AUTHORISED',
-        {
-          timesheet_id: timesheetId,
-          authorised_at_utc: now,
-          tsfin_processing_status_before: finBeforeStatus || null,
-          tsfin_processing_status_after: finAfterStatus ? String(finAfterStatus).toUpperCase() : null
-        },
-        {
-          entity: 'timesheets',
-          subject_id: timesheetId,
-          req,
-          before: {
-            authorised_at_server: tsBefore?.authorised_at_server || null,
-            tsfin_processing_status: finBeforeStatus || null
-          },
-          reason: didPromoteStatus ? 'PROMOTED_TSFIN_STATUS' : 'STAMPED_AUTHORISE'
-        }
-      );
-    }
+    const cs = csRows?.[0] || null;
+    supportsElectronic = (String(cs?.default_submission_mode || '').toUpperCase() === 'ELECTRONIC');
   } catch {
-    // best-effort
+    supportsElectronic = false;
   }
 
-  return withCORS(env, req, ok({
-    authorised: true,
-    tsfin_updated: true,
-    processing_status: newStatus
-  }));
-}
-
- async function handleTimesheetUnauthorise(env, req, timesheetId) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
+  if (!supportsElectronic) {
+    return withCORS(env, req, badRequest('Client does not support electronic submission'));
+  }
 
   const now = nowIso();
 
-  const { rows: finRows } = await sbFetch(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
-      `&is_current=eq.true` +
-      `&select=id,locked_by_invoice_id,paid_at_utc,processing_status`
-  );
-  const fin = finRows?.[0] || null;
-  if (!fin) {
-    return withCORS(env, req, badRequest('No financial snapshot to unauthorise'));
+  // Next version number by booking_id
+  let nextVersion = 2;
+  try {
+    const { rows: vRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?booking_id=eq.${enc(bookingId)}` +
+        `&select=version` +
+        `&order=version.desc` +
+        `&limit=1`
+    );
+    const maxV = vRows?.[0]?.version != null ? Number(vRows[0].version) : Number(ts.version || 1);
+    nextVersion = Number.isFinite(maxV) ? maxV + 1 : (Number(ts.version || 1) + 1);
+  } catch {
+    nextVersion = Number(ts.version || 1) + 1;
   }
 
-  if (fin.locked_by_invoice_id || fin.paid_at_utc) {
-    return withCORS(env, req, badRequest('Cannot unauthorise: timesheet is locked or paid'));
-  }
-
-  // Clear authorised_at_server on the timesheet
+  // 1) Demote current for booking_id
   await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?booking_id=eq.${enc(bookingId)}` +
+      `&is_current=eq.true`,
     {
       method: 'PATCH',
-      headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
-      body: JSON.stringify({ authorised_at_server: null, updated_at: now })
-    }
-  ).catch(() => {});
-
-  // Set status back to PENDING_AUTH (or keep if already earlier)
-  const prevStatus = String(fin.processing_status || '').toUpperCase();
-  const newStatus = 'PENDING_AUTH';
-
-  await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
-    {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
+      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
       body: JSON.stringify({
-        processing_status: newStatus,
-        authorised_by_user_id: null,
-        authorised_at_utc: null,
+        is_current: false,
+        status: 'REVOKED',
+        revoked_reason: 'ALLOW_ELECTRONIC_AGAIN',
+        revoked_by: user?.id || null,
         updated_at: now
       })
     }
   ).catch(() => {});
 
+  // 2) Insert new ELECTRONIC current version (NO timesheet_id)
+  const newRowBase = { ...ts };
+  delete newRowBase.id;
+  delete newRowBase.timesheet_id;
+
+  const newRow = {
+    ...newRowBase,
+    booking_id: bookingId,
+    version: nextVersion,
+    is_current: true,
+    status: 'RECEIVED',
+    submission_mode: 'ELECTRONIC',
+
+    manual_pdf_r2_key: null,
+    authorised_at_server: null,
+    r2_nurse_key: null,
+    r2_auth_key: null,
+
+    qr_status: null,
+    qr_token: null,
+    qr_payload_json: {}, // NOT NULL
+    qr_generated_at: null,
+    qr_scanned_at: null,
+    qr_scan_info_json: null,
+    qr_r2_key: null,
+
+    created_at: now,
+    updated_at: now
+  };
+
+  const insRes = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets`, {
+    method: 'POST',
+    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+    body: JSON.stringify([newRow])
+  });
+
+  if (!insRes.ok) {
+    const t = await insRes.text().catch(() => '');
+    return withCORS(env, req, serverError(`Failed to create electronic version: ${t}`));
+  }
+
+  const inserted = (await insRes.json().catch(() => []))[0] || null;
+  const newTimesheetId = inserted?.timesheet_id || null;
+  if (!newTimesheetId) {
+    return withCORS(env, req, serverError('Insert succeeded but no timesheet_id returned'));
+  }
+
+  // 2b) Move contract_week pointer if it points at old current row
+  try {
+    const cw = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&select=id` +
+        `&limit=1`
+    );
+    if (cw?.id) {
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+          body: JSON.stringify({ timesheet_id: newTimesheetId, updated_at: now })
+        }
+      ).catch(() => {});
+    }
+  } catch {}
+
+  // 3) TSFIN: move row to new timesheet_id + reset status
+  if (fin?.id) {
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify({
+          timesheet_id: newTimesheetId,
+          timesheet_version: inserted?.version ?? nextVersion,
+          processing_status: 'UNASSIGNED',
+          updated_at: now
+        })
+      }
+    ).catch(() => {});
+  }
+
+  // 4) Audit
+  try {
+    await writeAudit(
+      env,
+      user,
+      'ELECTRONIC_ALLOWED_AGAIN',
+      {
+        booking_id: bookingId,
+        old_timesheet_id: currentTimesheetId,
+        new_timesheet_id: newTimesheetId,
+        old_version: ts.version,
+        new_version: inserted?.version ?? nextVersion,
+        client_id: clientId
+      },
+      { entity: 'timesheets', subject_id: newTimesheetId, req }
+    );
+  } catch {}
+
   return withCORS(env, req, ok({
-    unauthorised: true,
-    processing_status: newStatus,
-    previous_status: prevStatus
+    ok: true,
+    booking_id: bookingId,
+    old_timesheet_id: currentTimesheetId,
+    current_timesheet_id: newTimesheetId,
+    new_version: inserted?.version ?? nextVersion,
+
+    requested_timesheet_id: resolved.requested_timesheet_id || timesheetId,
+    was_stale: !!resolved.was_stale
   }));
 }
 
- async function handleTimesheetPresignExpensePdf(env, req, timesheetId) {
-  const user = await requireUser(env, req, ['admin']); // backoffice presign; workers can use public files if needed
+async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+  if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
 
-  const key = `docs/receipts/ts_${timesheetId}/${Date.now()}_${Math.random().toString(16).slice(2)}.upload`;
-  const token = await createToken(env, 'UPLOAD', { key, c: 'receipt', ttlSec: 3600, maxBytes: 20*1024*1024, contentTypes: ['application/pdf','image/jpeg','image/png','image/heic','image/heif'] });
-  const upload_url = `${new URL(req.url).origin}/api/files/upload?key=${enc(key)}&token=${enc(token)}`;
-  return withCORS(env, req, ok({ key, upload_url, token, expires_in: 3600 }));
+  // ✅ NEW: guarded write
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  const expectedTimesheetId = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  if (!expectedTimesheetId) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+
+  // Stale-safe resolve (accept historical/stale ids)
+  const resolved = await resolveTimesheetToCurrent(env, timesheetId);
+  if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
+
+  const currentTimesheetId = resolved.current_timesheet_id;
+
+  if (String(expectedTimesheetId) !== String(currentTimesheetId)) {
+    return withCORS(
+      env,
+      req,
+      new Response(JSON.stringify({
+        error: 'TIMESHEET_MOVED',
+        current_timesheet_id: currentTimesheetId
+      }), { status: 409, headers: { 'Content-Type': 'application/json' } })
+    );
+  }
+
+  // Load current version row by PK (current id)
+  const ts = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=*` +
+      `&limit=1`
+  );
+  if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
+
+  const bookingId = ts.booking_id || resolved.booking_id || null;
+  if (!bookingId) return withCORS(env, req, badRequest('Timesheet booking_id is missing; cannot version'));
+
+  // Lock guard (current TSFIN row for current PK)
+  const fin = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=id,locked_by_invoice_id,paid_at_utc,timesheet_version,processing_status` +
+      `&limit=1`
+  );
+  if (fin && (fin.locked_by_invoice_id || fin.paid_at_utc)) {
+    return withCORS(env, req, badRequest('Cannot allow QR again: timesheet is invoiced/locked or paid'));
+  }
+
+  // Must be manual-only (derived)
+  const sm = String(ts.submission_mode || '').toUpperCase();
+  const qrStatusNow = String(ts.qr_status || '').toUpperCase() || '';
+  const hasQrToken = !!(ts.qr_token && String(ts.qr_token).trim());
+  const hasQrGen = !!ts.qr_generated_at;
+  const hasQrScan = !!ts.qr_scanned_at;
+
+  const isManualOnly =
+    (sm === 'MANUAL') &&
+    !qrStatusNow &&
+    !hasQrToken &&
+    !hasQrGen &&
+    !hasQrScan;
+
+  if (!isManualOnly) {
+    return withCORS(env, req, badRequest('Allow QR again is only valid for manual-only timesheets'));
+  }
+
+  const now = nowIso();
+
+  // Next version number by booking_id (NOT by timesheet_id)
+  let nextVersion = 2;
+  try {
+    const { rows: vRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?booking_id=eq.${enc(bookingId)}` +
+        `&select=version` +
+        `&order=version.desc` +
+        `&limit=1`
+    );
+    const maxV = vRows?.[0]?.version != null ? Number(vRows[0].version) : Number(ts.version || 1);
+    nextVersion = Number.isFinite(maxV) ? maxV + 1 : (Number(ts.version || 1) + 1);
+  } catch {
+    nextVersion = Number(ts.version || 1) + 1;
+  }
+
+  // 1) Demote any current row for this booking_id (defensive)
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?booking_id=eq.${enc(bookingId)}` +
+      `&is_current=eq.true`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+      body: JSON.stringify({
+        is_current: false,
+        status: 'REVOKED',
+        revoked_reason: 'ALLOW_QR_AGAIN',
+        revoked_by: user?.id || null,
+        updated_at: now
+      })
+    }
+  ).catch(() => {});
+
+  // 2) Insert new current version (NO timesheet_id)
+  const newRowBase = { ...ts };
+  delete newRowBase.id;
+  delete newRowBase.timesheet_id;
+
+  const newRow = {
+    ...newRowBase,
+    booking_id: bookingId,
+    version: nextVersion,
+    is_current: true,
+    status: 'RECEIVED',
+    submission_mode: 'MANUAL',
+
+    manual_pdf_r2_key: null,
+    r2_nurse_key: null,
+    r2_auth_key: null,
+    authorised_at_server: null,
+
+    qr_status: 'PENDING',
+    qr_token: null,
+    qr_payload_json: {}, // NOT NULL
+    qr_generated_at: null,
+    qr_scanned_at: null,
+    qr_scan_info_json: null,
+    qr_r2_key: null,
+
+    created_at: now,
+    updated_at: now
+  };
+
+  const insRes = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets`, {
+    method: 'POST',
+    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+    body: JSON.stringify([newRow])
+  });
+
+  if (!insRes.ok) {
+    const t = await insRes.text().catch(() => '');
+    return withCORS(env, req, serverError(`Failed to create QR-enabled version: ${t}`));
+  }
+
+  const inserted = (await insRes.json().catch(() => []))[0] || null;
+  const newTimesheetId = inserted?.timesheet_id || null;
+  if (!newTimesheetId) {
+    return withCORS(env, req, serverError('Insert succeeded but no timesheet_id returned'));
+  }
+
+  // 2b) Move contract_week pointer if it points at the old current row
+  try {
+    const cw = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&select=id` +
+        `&limit=1`
+    );
+    if (cw?.id) {
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+          body: JSON.stringify({ timesheet_id: newTimesheetId, updated_at: now })
+        }
+      ).catch(() => {});
+    }
+  } catch {}
+
+  // 3) TSFIN: move the current TSFIN row to the new timesheet_id + set gate
+  if (fin?.id) {
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify({
+          timesheet_id: newTimesheetId,
+          timesheet_version: inserted?.version ?? nextVersion,
+          processing_status: 'AWAITING_MANUAL_SIGNATURE',
+          updated_at: now
+        })
+      }
+    ).catch(() => {});
+  }
+
+  // 4) Audit
+  try {
+    await writeAudit(
+      env,
+      user,
+      'QR_ALLOWED_AGAIN',
+      {
+        booking_id: bookingId,
+        old_timesheet_id: currentTimesheetId,
+        new_timesheet_id: newTimesheetId,
+        old_version: ts.version,
+        new_version: inserted?.version ?? nextVersion
+      },
+      { entity: 'timesheets', subject_id: newTimesheetId, req }
+    );
+  } catch {}
+
+  return withCORS(env, req, ok({
+    ok: true,
+    booking_id: bookingId,
+    old_timesheet_id: currentTimesheetId,
+    current_timesheet_id: newTimesheetId,
+    new_version: inserted?.version ?? nextVersion,
+
+    requested_timesheet_id: resolved.requested_timesheet_id || timesheetId,
+    was_stale: !!resolved.was_stale
+  }));
 }
-
 async function handleTimesheetSwitchToManual(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -10193,16 +10620,38 @@ async function handleTimesheetSwitchToManual(env, req, timesheetId) {
   if (!user) return withCORS(env, req, unauthorized());
   if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
 
+  // ✅ NEW: guarded write
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  const expectedTimesheetId = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  if (!expectedTimesheetId) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+
+  // Stale-safe resolve
+  const resolved = await resolveTimesheetToCurrent(env, timesheetId);
+  if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
+  const currentTimesheetId = resolved.current_timesheet_id;
+
+  if (String(expectedTimesheetId) !== String(currentTimesheetId)) {
+    return withCORS(
+      env,
+      req,
+      new Response(JSON.stringify({
+        error: 'TIMESHEET_MOVED',
+        current_timesheet_id: currentTimesheetId
+      }), { status: 409, headers: { 'Content-Type': 'application/json' } })
+    );
+  }
+
   const ts = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
       `&is_current=eq.true` +
       `&select=*`
   );
   if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
 
-  const bookingId = ts.booking_id || null;
+  const bookingId = ts.booking_id || resolved.booking_id || null;
   if (!bookingId) return withCORS(env, req, badRequest('Timesheet booking_id is missing; cannot version'));
 
   const scope = String(ts.sheet_scope || '').toUpperCase();
@@ -10219,7 +10668,7 @@ async function handleTimesheetSwitchToManual(env, req, timesheetId) {
   const cw = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
       `&select=*` +
       `&limit=1`
   );
@@ -10228,7 +10677,7 @@ async function handleTimesheetSwitchToManual(env, req, timesheetId) {
   const tsfin = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
       `&is_current=eq.true` +
       `&select=*`
   );
@@ -10365,7 +10814,7 @@ async function handleTimesheetSwitchToManual(env, req, timesheetId) {
       {
         booking_id: bookingId,
         contract_week_id: cw.id,
-        old_timesheet_id: timesheetId,
+        old_timesheet_id: currentTimesheetId,
         new_timesheet_id: newTimesheetId,
         old_version: ts.version,
         new_version: inserted?.version ?? nextVersion,
@@ -10379,235 +10828,60 @@ async function handleTimesheetSwitchToManual(env, req, timesheetId) {
     switched: true,
     booking_id: bookingId,
     contract_week_id: cw.id,
-    old_timesheet_id: timesheetId,
+    old_timesheet_id: currentTimesheetId,
     current_timesheet_id: newTimesheetId,
     manual_version: inserted?.version ?? nextVersion,
     has_electronic_original: true,
-    electronic_version: ts.version ?? 1
+    electronic_version: ts.version ?? 1,
+
+    requested_timesheet_id: resolved.requested_timesheet_id || timesheetId,
+    was_stale: !!resolved.was_stale
   }));
 }
 
-
-
-async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
-  const enc = encodeURIComponent;
-
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-  if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
-
-  const ts = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
-      `&is_current=eq.true` +
-      `&select=*` +
-      `&limit=1`
-  );
-  if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
-
-  const bookingId = ts.booking_id || null;
-  if (!bookingId) return withCORS(env, req, badRequest('Timesheet booking_id is missing; cannot version'));
-
-  const scope = String(ts.sheet_scope || '').toUpperCase();
-  if (scope && scope !== 'WEEKLY' && scope !== 'DAILY') {
-    return withCORS(env, req, badRequest('Unsupported sheet_scope for QR conversion'));
-  }
-
-  const subMode = String(ts.submission_mode || '').toUpperCase();
-  if (subMode !== 'MANUAL') {
-    return withCORS(env, req, badRequest('Timesheet is not in MANUAL mode; QR conversion not applicable'));
-  }
-
-  const qrStatus = String(ts.qr_status || '').toUpperCase();
-  if (!qrStatus) {
-    return withCORS(env, req, badRequest('Timesheet does not have QR metadata; nothing to convert'));
-  }
-
-  const fin = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
-      `&is_current=eq.true` +
-      `&select=*`
-  );
-  if (!fin) return withCORS(env, req, badRequest('No financial snapshot for timesheet'));
-
-  const hardLocked =
-    !!fin.paid_at_utc ||
-    !!fin.locked_by_invoice_id ||
-    !!fin.locked_by_invoice ||
-    !!fin.locked_by_invoice_line_id ||
-    !!fin.locked_by_invoice_at_utc;
-
-  if (hardLocked) {
-    return withCORS(env, req, badRequest('Cannot convert QR: timesheet already invoiced or paid'));
-  }
-
-  const now = nowIso();
-
-  // Next version by booking_id
-  let nextVersion = Number(ts.version || 1) + 1;
-  try {
-    const { rows: vRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?booking_id=eq.${enc(bookingId)}` +
-        `&select=version` +
-        `&order=version.desc` +
-        `&limit=1`
-    );
-    const maxV = vRows?.[0]?.version != null ? Number(vRows[0].version) : Number(ts.version || 1);
-    nextVersion = Number.isFinite(maxV) ? maxV + 1 : (Number(ts.version || 1) + 1);
-  } catch {}
-
-  // 1) Demote current by booking_id
-  await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?booking_id=eq.${enc(bookingId)}` +
-      `&is_current=eq.true`,
-    {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-      body: JSON.stringify({
-        is_current: false,
-        status: 'REVOKED',
-        revoked_reason: 'QR_CONVERTED_TO_MANUAL',
-        revoked_by: user.id || null,
-        updated_at: now
-      })
-    }
-  ).catch(() => {});
-
-  // 2) Insert new current manual non-QR (NO timesheet_id)
-  const base = { ...ts };
-  delete base.id;
-  delete base.timesheet_id;
-
-  const newRow = {
-    ...base,
-    booking_id: bookingId,
-    version: nextVersion,
-    is_current: true,
-    submission_mode: 'MANUAL',
-
-    qr_status: null,
-    qr_token: null,
-    qr_generated_at: null,
-    qr_scanned_at: null,
-    qr_scan_info_json: null,
-    qr_r2_key: null,
-    qr_payload_json: {},
-
-    manual_pdf_r2_key: null,
-
-    created_at: now,
-    updated_at: now
-  };
-
-  const insRes = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets`, {
-    method: 'POST',
-    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-    body: JSON.stringify([newRow])
-  });
-
-  if (!insRes.ok) {
-    const txt = await insRes.text().catch(() => '');
-    return withCORS(env, req, serverError(`Failed to create manual non-QR version: ${txt}`));
-  }
-
-  const inserted = (await insRes.json().catch(() => []))[0] || null;
-  const newTimesheetId = inserted?.timesheet_id || null;
-  if (!newTimesheetId) return withCORS(env, req, serverError('Insert succeeded but no timesheet_id returned'));
-
-  // 2b) Move contract_week pointer if it points at old current row (weekly case)
-  try {
-    const cw = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-        `?timesheet_id=eq.${enc(timesheetId)}` +
-        `&select=id` +
-        `&limit=1`
-    );
-    if (cw?.id) {
-      await fetch(
-        `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
-        {
-          method: 'PATCH',
-          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-          body: JSON.stringify({ timesheet_id: newTimesheetId, updated_at: now })
-        }
-      ).catch(() => {});
-    }
-  } catch {}
-
-  // 3) TSFIN: move row to new timesheet_id and gate evidence
-  await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
-    {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-      body: JSON.stringify({
-        timesheet_id: newTimesheetId,
-        timesheet_version: inserted?.version ?? nextVersion,
-        processing_status: 'AWAITING_MANUAL_SIGNATURE',
-        updated_at: now
-      })
-    }
-  ).catch(() => {});
-
-  // 4) Audit
-  try {
-    await writeAudit(
-      env,
-      user,
-      'QR_CONVERTED_TO_MANUAL',
-      {
-        booking_id: bookingId,
-        old_timesheet_id: timesheetId,
-        new_timesheet_id: newTimesheetId,
-        old_version: ts.version,
-        new_version: inserted?.version ?? nextVersion,
-        sheet_scope: scope || null,
-        had_qr_status: qrStatus
-      },
-      { entity: 'timesheets', subject_id: newTimesheetId, req }
-    );
-  } catch {}
-
-  return withCORS(env, req, ok({
-    converted: true,
-    booking_id: bookingId,
-    old_timesheet_id: timesheetId,
-    current_timesheet_id: newTimesheetId,
-    new_version: inserted?.version ?? nextVersion
-  }));
-}
-
+// ✅ NEW/UPDATED HANDLER: guarded DAILY switch-to-manual
 async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
   // Switch a DAILY non-NHSP/HR electronic timesheet to MANUAL via a new version
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
-  if (!timesheetId) {
-    return withCORS(env, req, badRequest('timesheet_id is required'));
+  if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
+
+  // ✅ NEW: guarded write
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  const expectedTimesheetId = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  if (!expectedTimesheetId) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+
+  // Stale-safe resolve
+  const resolved = await resolveTimesheetToCurrent(env, timesheetId);
+  if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
+  const currentTimesheetId = resolved.current_timesheet_id;
+
+  if (String(expectedTimesheetId) !== String(currentTimesheetId)) {
+    return withCORS(
+      env,
+      req,
+      new Response(JSON.stringify({
+        error: 'TIMESHEET_MOVED',
+        current_timesheet_id: currentTimesheetId
+      }), { status: 409, headers: { 'Content-Type': 'application/json' } })
+    );
   }
 
-  // Load FULL current timesheet row (current version row by PK)
+  // Load FULL current timesheet row
   const ts = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
       `&is_current=eq.true` +
       `&select=*` +
       `&limit=1`
   );
-  if (!ts) {
-    return withCORS(env, req, notFound('Timesheet not found'));
-  }
+  if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
 
-  const bookingId = ts.booking_id || null;
+  const bookingId = ts.booking_id || resolved.booking_id || null;
   const badBooking =
     !bookingId ||
     String(bookingId).trim() === '' ||
@@ -10633,14 +10907,12 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
   const fin = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
       `&is_current=eq.true` +
       `&select=*` +
       `&limit=1`
   );
-  if (!fin) {
-    return withCORS(env, req, badRequest('No financial snapshot to switch'));
-  }
+  if (!fin) return withCORS(env, req, badRequest('No financial snapshot to switch'));
 
   const hardLocked =
     !!fin.paid_at_utc ||
@@ -10649,9 +10921,7 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
     !!fin.locked_by_invoice_line_id ||
     !!fin.locked_by_invoice_at_utc;
 
-  if (hardLocked) {
-    return withCORS(env, req, badRequest('Cannot switch: timesheet already invoiced or paid'));
-  }
+  if (hardLocked) return withCORS(env, req, badRequest('Cannot switch: timesheet already invoiced or paid'));
 
   const basis = String(fin.basis || '').toUpperCase();
   const disallowed = new Set([
@@ -10730,14 +11000,11 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
     updated_at: now
   };
 
-  const insRes = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheets`,
-    {
-      method: 'POST',
-      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-      body: JSON.stringify([newManual])
-    }
-  );
+  const insRes = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets`, {
+    method: 'POST',
+    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+    body: JSON.stringify([newManual])
+  });
   if (!insRes.ok) {
     const txt = await insRes.text().catch(() => '');
     return withCORS(env, req, serverError(`Failed to create daily manual version: ${txt}`));
@@ -10745,9 +11012,7 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
 
   const inserted = (await insRes.json().catch(() => []))[0] || null;
   const newTimesheetId = inserted?.timesheet_id || null;
-  if (!newTimesheetId) {
-    return withCORS(env, req, serverError('Insert succeeded but no timesheet_id returned'));
-  }
+  if (!newTimesheetId) return withCORS(env, req, serverError('Insert succeeded but no timesheet_id returned'));
 
   // 3) TSFIN: move current TSFIN row to new timesheet_id + align version marker
   await fetch(
@@ -10771,7 +11036,7 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
       'DAILY_SWITCHED_TO_MANUAL',
       {
         booking_id: bookingId,
-        old_timesheet_id: timesheetId,
+        old_timesheet_id: currentTimesheetId,
         new_timesheet_id: newTimesheetId,
         old_version: ts.version,
         new_version: inserted?.version ?? nextVersion,
@@ -10783,20 +11048,241 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
     console.warn('[TS][DAILY_SWITCH_TO_MANUAL] audit failed', e?.message || e);
   }
 
-  return withCORS(
-    env,
-    req,
-    ok({
-      switched: true,
-      booking_id: bookingId,
-      old_timesheet_id: timesheetId,
-      current_timesheet_id: newTimesheetId,
-      manual_version: inserted?.version ?? nextVersion,
-      has_electronic_original: true,
-      electronic_version: ts.version ?? 1
-    })
-  );
+  return withCORS(env, req, ok({
+    switched: true,
+    booking_id: bookingId,
+    old_timesheet_id: currentTimesheetId,
+    current_timesheet_id: newTimesheetId,
+    manual_version: inserted?.version ?? nextVersion,
+    has_electronic_original: true,
+    electronic_version: ts.version ?? 1,
+
+    requested_timesheet_id: resolved.requested_timesheet_id || timesheetId,
+    was_stale: !!resolved.was_stale
+  }));
 }
+export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+
+  // ✅ NEW: guarded write
+  const expectedTimesheetId = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  if (!expectedTimesheetId) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+
+  const allowManualOnly = !!body?.allow_manual_only;
+
+  // Stale-safe resolve
+  const resolved = await resolveTimesheetToCurrent(env, timesheetId);
+  if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
+  const currentTimesheetId = resolved.current_timesheet_id;
+
+  if (String(expectedTimesheetId) !== String(currentTimesheetId)) {
+    return withCORS(
+      env,
+      req,
+      new Response(JSON.stringify({
+        error: 'TIMESHEET_MOVED',
+        current_timesheet_id: currentTimesheetId
+      }), { status: 409, headers: { 'Content-Type': 'application/json' } })
+    );
+  }
+
+  // Load current row by PK (must be current)
+  const current = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=*` +
+      `&limit=1`
+  );
+  if (!current) return withCORS(env, req, notFound('Timesheet not found'));
+
+  const bookingId = current.booking_id || resolved.booking_id || null;
+  if (!bookingId) return withCORS(env, req, badRequest('Timesheet booking_id is missing; cannot revert'));
+
+  // Load all versions by booking_id
+  const { rows: tsRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?booking_id=eq.${enc(bookingId)}` +
+      `&select=*`
+  );
+  const versions = tsRows || [];
+  if (!versions.length) return withCORS(env, req, notFound('Timesheet not found'));
+
+  const elec = versions
+    .filter((r) => String(r.submission_mode || '').toUpperCase() === 'ELECTRONIC')
+    .sort((a, b) => (b.version || 1) - (a.version || 1))[0] || null;
+
+  if (!elec) return withCORS(env, req, badRequest('No electronic version exists for this timesheet'));
+
+  // TSFIN lock check uses the CURRENT row id
+  const tsfin = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=*`
+  );
+  if (tsfin) {
+    const hardLocked =
+      !!tsfin.paid_at_utc ||
+      !!tsfin.locked_by_invoice_id ||
+      !!tsfin.locked_by_invoice ||
+      !!tsfin.locked_by_invoice_line_id ||
+      !!tsfin.locked_by_invoice_at_utc;
+
+    if (hardLocked) {
+      return withCORS(env, req, badRequest('Cannot revert: current timesheet is invoiced or paid'));
+    }
+  }
+
+  // Block revert when current is manual-only unless override
+  const currentSubMode = String(current.submission_mode || '').toUpperCase();
+  const currentQrStatus = String(current.qr_status || '').toUpperCase() || '';
+  const hasQrToken = !!(current.qr_token && String(current.qr_token).trim());
+  const hasQrGen = !!current.qr_generated_at;
+  const hasQrScan = !!current.qr_scanned_at;
+
+  const isManualOnly =
+    (currentSubMode === 'MANUAL') &&
+    !currentQrStatus &&
+    !hasQrToken &&
+    !hasQrGen &&
+    !hasQrScan;
+
+  if (isManualOnly && !allowManualOnly) {
+    return withCORS(env, req, badRequest('Cannot revert: current is manual-only (set allow_manual_only=true to override)'));
+  }
+
+  if (current.timesheet_id === elec.timesheet_id && current.is_current) {
+    return withCORS(env, req, ok({
+      reverted: false,
+      reason: 'Electronic version is already current',
+      booking_id: bookingId,
+      current_timesheet_id: current.timesheet_id,
+      current_version: elec.version || 1
+    }));
+  }
+
+  const now = nowIso();
+
+  // 1) Demote current for booking_id (defensive)
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?booking_id=eq.${enc(bookingId)}` +
+      `&is_current=eq.true`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+      body: JSON.stringify({ is_current: false, updated_at: now })
+    }
+  ).catch(() => {});
+
+  // 2) Promote electronic row to current by its PK
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(elec.timesheet_id)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+      body: JSON.stringify({ is_current: true, updated_at: now })
+    }
+  ).catch(() => {});
+
+  // 2b) Move contract_week pointer if it points at old current row
+  try {
+    const cw = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&select=id` +
+        `&limit=1`
+    );
+    if (cw?.id) {
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+          body: JSON.stringify({ timesheet_id: elec.timesheet_id, updated_at: now })
+        }
+      ).catch(() => {});
+    }
+  } catch {}
+
+  // 3) TSFIN: move current TSFIN row from old current PK to new current PK
+  try {
+    if (tsfin?.id) {
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(tsfin.id)}`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+          body: JSON.stringify({
+            timesheet_id: elec.timesheet_id,
+            timesheet_version: elec.version || 1,
+            updated_at: now
+          })
+        }
+      ).catch(() => {});
+    }
+  } catch {}
+
+  try {
+    await sbRpc(env, 'enqueue_ts_financials', {
+      timesheet_id: elec.timesheet_id,
+      reason: 'REVERT_TO_ELECTRONIC'
+    });
+  } catch {}
+
+  // 4) Audit
+  try {
+    await writeAudit(
+      env,
+      user,
+      'REVERTED_TO_ELECTRONIC',
+      {
+        booking_id: bookingId,
+        previous_current_timesheet_id: currentTimesheetId,
+        new_current_timesheet_id: elec.timesheet_id,
+        electronic_version: elec.version || 1,
+        allow_manual_only: allowManualOnly
+      },
+      { entity: 'timesheets', subject_id: elec.timesheet_id, req }
+    );
+  } catch {}
+
+  return withCORS(env, req, ok({
+    reverted: true,
+    booking_id: bookingId,
+    previous_current_timesheet_id: currentTimesheetId,
+    current_timesheet_id: elec.timesheet_id,
+    electronic_version: elec.version || 1,
+
+    requested_timesheet_id: resolved.requested_timesheet_id || timesheetId,
+    was_stale: !!resolved.was_stale
+  }));
+}
+
+ async function handleTimesheetPresignExpensePdf(env, req, timesheetId) {
+  const user = await requireUser(env, req, ['admin']); // backoffice presign; workers can use public files if needed
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const key = `docs/receipts/ts_${timesheetId}/${Date.now()}_${Math.random().toString(16).slice(2)}.upload`;
+  const token = await createToken(env, 'UPLOAD', { key, c: 'receipt', ttlSec: 3600, maxBytes: 20*1024*1024, contentTypes: ['application/pdf','image/jpeg','image/png','image/heic','image/heif'] });
+  const upload_url = `${new URL(req.url).origin}/api/files/upload?key=${enc(key)}&token=${enc(token)}`;
+  return withCORS(env, req, ok({ key, upload_url, token, expires_in: 3600 }));
+}
+
+
 
 
 
@@ -10882,23 +11368,41 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
   return withCORS(env, req, ok({ ok:true, safe_end: safeEnd, clamped }));
 }
 
-
-
-
 async function handleTimesheetDelete(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
-  if (!timesheetId) {
-    return withCORS(env, req, badRequest('timesheet_id is required'));
-  }
+  if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
 
   const enc = encodeURIComponent;
+
+  // ✅ Guarded write: require expected_timesheet_id in JSON body
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+
+  // ✅ stale-safe resolve
+  const resolved = await resolveTimesheetToCurrent(env, timesheetId);
+  if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
+  const currentTimesheetId = resolved.current_timesheet_id;
+
+  // ✅ Guard mismatch → 409 TIMESHEET_MOVED
+  if (String(expected) !== String(currentTimesheetId)) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetId }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
 
   // Guard: current TSFIN must not be paid or invoiced (and respect other hard locks defensively)
   const tsfin = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
       `&is_current=eq.true` +
       `&select=*`
   );
@@ -10911,26 +11415,22 @@ async function handleTimesheetDelete(env, req, timesheetId) {
       !!tsfin.locked_by_invoice_line_id ||
       !!tsfin.locked_by_invoice_at_utc;
 
-    if (hardLocked) {
-      return withCORS(env, req, badRequest('Cannot delete: invoiced or paid'));
-    }
+    if (hardLocked) return withCORS(env, req, badRequest('Cannot delete: invoiced or paid'));
   }
 
-  // Confirm the timesheet chain actually exists
+  // Confirm the timesheet row exists (chain/version record)
   const { rows: tsRows } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
       `&select=timesheet_id&limit=1`
   );
   const versions = tsRows || [];
-  if (!versions.length) {
-    return withCORS(env, req, notFound('Timesheet not found'));
-  }
+  if (!versions.length) return withCORS(env, req, notFound('Timesheet not found'));
 
   // Unlink any contract_weeks that point at this timesheet_id
   await fetch(
-    `${env.SUPABASE_URL}/rest/v1/contract_weeks?timesheet_id=eq.${enc(timesheetId)}`,
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?timesheet_id=eq.${enc(currentTimesheetId)}`,
     {
       method: 'PATCH',
       headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
@@ -10944,7 +11444,7 @@ async function handleTimesheetDelete(env, req, timesheetId) {
 
   // Unlink any nhsp_shifts that point at this timesheet_id (defensive)
   await fetch(
-    `${env.SUPABASE_URL}/rest/v1/nhsp_shifts?timesheet_id=eq.${enc(timesheetId)}`,
+    `${env.SUPABASE_URL}/rest/v1/nhsp_shifts?timesheet_id=eq.${enc(currentTimesheetId)}`,
     {
       method: 'PATCH',
       headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
@@ -10957,7 +11457,7 @@ async function handleTimesheetDelete(env, req, timesheetId) {
 
   // Delete validations (defensive cleanup)
   await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheet_validations?timesheet_id=eq.${enc(timesheetId)}`,
+    `${env.SUPABASE_URL}/rest/v1/timesheet_validations?timesheet_id=eq.${enc(currentTimesheetId)}`,
     {
       method: 'DELETE',
       headers: { ...sbHeaders(env), Prefer: 'return-minimal' }
@@ -10966,24 +11466,22 @@ async function handleTimesheetDelete(env, req, timesheetId) {
 
   // Delete TSFIN snapshots (avoid orphaned financials)
   await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${enc(timesheetId)}`,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${enc(currentTimesheetId)}`,
     {
       method: 'DELETE',
       headers: { ...sbHeaders(env), Prefer: 'return-minimal' }
     }
   ).catch(() => {});
 
-  // Delete ALL versions for this timesheet_id (manual + electronic)
+  // Delete timesheet row (current version id)
   const del = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}`,
+    `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}`,
     {
       method: 'DELETE',
       headers: { ...sbHeaders(env), Prefer: 'return-minimal' }
     }
   );
-  if (!del.ok) {
-    return withCORS(env, req, serverError(await del.text()));
-  }
+  if (!del.ok) return withCORS(env, req, serverError(await del.text()));
 
   // Audit
   try {
@@ -10991,15 +11489,23 @@ async function handleTimesheetDelete(env, req, timesheetId) {
       env,
       user,
       'TIMESHEET_DELETED',
-      { timesheet_id: timesheetId },
-      { entity: 'timesheets', subject_id: timesheetId, req }
+      { timesheet_id: currentTimesheetId },
+      { entity: 'timesheets', subject_id: currentTimesheetId, req }
     );
   } catch (e) {
     console.warn('[TS][DELETE] audit failed', e?.message || e);
   }
 
-  return withCORS(env, req, ok({ deleted: true }));
+  return withCORS(env, req, ok({
+    deleted: true,
+    timesheet_id: currentTimesheetId,
+    current_timesheet_id: currentTimesheetId,
+    requested_timesheet_id: resolved.requested_timesheet_id || timesheetId,
+    was_stale: !!resolved.was_stale
+  }));
 }
+
+
 
 
 // ----------------------------------------------------------------------------
@@ -12985,23 +13491,31 @@ async function handleRemittancesSend(env, req) {
 // ───────────────────────────────────────────────────────────────────────────────
 // 2) TIMESHEETS — PAY STATE
 // ───────────────────────────────────────────────────────────────────────────────
-
- async function handleTimesheetPayHold(env, req, timesheetId) {
+async function handleTimesheetPayHold(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
   let body;
-  try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+  try { body = await parseJSONBody(req); }
+  catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  // NEW: guarded write (optimistic concurrency)
+  const expectedTimesheetId = body?.expected_timesheet_id || null;
+  const guard = await guardCurrentTimesheetWrite(env, req, timesheetId, expectedTimesheetId);
+  if (!guard.ok) return guard.res;
+
+  const currentTimesheetId = guard.resolved.current_timesheet_id;
+
   const onHold = body?.on_hold === true;
   const reason = (body?.reason || '').trim() || null;
 
-  // Update the current financial snapshot for the timesheet
+  // Update the current financial snapshot for the CURRENT timesheet
   const patch = onHold
     ? { pay_on_hold: true, pay_on_hold_reason: reason, pay_on_hold_since_utc: new Date().toISOString() }
     : { pay_on_hold: false, pay_on_hold_reason: null, pay_on_hold_since_utc: null };
 
   const res = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheets_financials?is_current=eq.true&timesheet_id=eq.${enc(timesheetId)}`,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials?is_current=eq.true&timesheet_id=eq.${enc(currentTimesheetId)}`,
     { method: 'PATCH', headers: { ...sbHeaders(env), Prefer: 'return=representation' }, body: JSON.stringify(patch) }
   );
   if (!res.ok) {
@@ -13013,24 +13527,43 @@ async function handleRemittancesSend(env, req) {
 
   await writeAudit(env, user, onHold ? 'PAY_HOLD_SET' : 'PAY_HOLD_CLEARED', {
     reason,
-  }, { entity: 'timesheet', subject_id: timesheetId, reason: 'PAYMENT', correlation_id: null, req });
+  }, { entity: 'timesheet', subject_id: currentTimesheetId, reason: 'PAYMENT', correlation_id: null, req });
 
-  return withCORS(env, req, ok({ updated: true, on_hold: onHold, row }));
+  return withCORS(env, req, ok({
+    updated: true,
+    on_hold: onHold,
+    row,
+    // NEW: return resolution metadata so FE can adopt the current id if needed
+    booking_id: guard.resolved.booking_id || null,
+    requested_timesheet_id: guard.resolved.requested_timesheet_id || timesheetId,
+    current_timesheet_id: currentTimesheetId,
+    current_version: guard.resolved.current_version ?? null,
+    was_stale: !!guard.resolved.was_stale
+  }));
 }
 
- async function handleTimesheetMarkPaid(env, req, timesheetId) {
+async function handleTimesheetMarkPaid(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
   let body;
-  try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+  try { body = await parseJSONBody(req); }
+  catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  // NEW: guarded write (optimistic concurrency)
+  const expectedTimesheetId = body?.expected_timesheet_id || null;
+  const guard = await guardCurrentTimesheetWrite(env, req, timesheetId, expectedTimesheetId);
+  if (!guard.ok) return guard.res;
+
+  const currentTimesheetId = guard.resolved.current_timesheet_id;
+
   const paid = body?.paid === true;
   const paymentRef = (body?.payment_reference || '').trim() || `MANUAL:${new Date().toISOString().slice(0,10)}`;
 
-  // Load current row
+  // Load current TSFIN row FOR CURRENT timesheet id
   const { rows } = await sbFetch(
     env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets_financials?is_current=eq.true&timesheet_id=eq.${enc(timesheetId)}` +
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials?is_current=eq.true&timesheet_id=eq.${enc(currentTimesheetId)}` +
     `&select=id,candidate_id,client_id,pay_method,total_pay_ex_vat,expenses_pay_ex_vat,mileage_pay_ex_vat,policy_snapshot_json,` +
     `pay_wtr_rate_pct_snapshot,pay_vat_rate_pct_snapshot,pay_vat_amount_snapshot,pay_total_inc_vat_snapshot`
   );
@@ -13096,16 +13629,24 @@ async function handleRemittancesSend(env, req) {
 
   await writeAudit(env, user, paid ? 'MARK_PAID' : 'MARK_UNPAID', {
     payment_reference: paymentRef
-  }, { entity: 'timesheet', subject_id: timesheetId, reason: 'PAYMENT', correlation_id: null, req });
+  }, { entity: 'timesheet', subject_id: currentTimesheetId, reason: 'PAYMENT', correlation_id: null, req });
 
   // Optionally enqueue worker to re-evaluate eligibility on UNPAID
   if (!paid) {
     try {
-      await sbRpc(env, 'enqueue_ts_financials', { timesheet_id: timesheetId, reason: 'CONTEXT_CHANGED' });
+      await sbRpc(env, 'enqueue_ts_financials', { timesheet_id: currentTimesheetId, reason: 'CONTEXT_CHANGED' });
     } catch { /* noop */ }
   }
 
-  return withCORS(env, req, ok({ updated }));
+  return withCORS(env, req, ok({
+    updated,
+    // NEW: return resolution metadata so FE can adopt the current id if needed
+    booking_id: guard.resolved.booking_id || null,
+    requested_timesheet_id: guard.resolved.requested_timesheet_id || timesheetId,
+    current_timesheet_id: currentTimesheetId,
+    current_version: guard.resolved.current_version ?? null,
+    was_stale: !!guard.resolved.was_stale
+  }));
 }
 
 // ───────────────────────────────────────────────────────────────────────────────
@@ -15575,64 +16116,65 @@ async function buildNhspWeeklySnapshotCached(
   return { ok: true };
 }
 
-
-
-
-
+// BE FIX: require expected_timesheet_id + resolve to CURRENT; strict 409 payload; write against CURRENT id only
 async function handleManualPayAdjustmentCreate(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
-  // Admin auth
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
-  if (!timesheetId) {
-    return withCORS(env, req, badRequest('timesheet_id is required'));
-  }
+  if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
 
-  // Parse body: { delta_pay_ex_vat, note? }
   let body;
-  try {
-    body = await parseJSONBody(req);
-  } catch {
-    return withCORS(env, req, badRequest('Invalid JSON'));
-  }
+  try { body = await parseJSONBody(req); }
+  catch { return withCORS(env, req, badRequest('Invalid JSON')); }
 
-  const rawDelta = body?.delta_pay_ex_vat;
-  const delta = Number(rawDelta);
+  const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+
+  const delta = Number(body?.delta_pay_ex_vat);
   if (!Number.isFinite(delta) || delta === 0) {
     return withCORS(env, req, badRequest('delta_pay_ex_vat must be a non-zero number'));
   }
 
   const note = typeof body?.note === 'string' ? body.note.trim() : null;
 
+  // ✅ resolve + guard
+  const resolved = await resolveTimesheetToCurrent(env, timesheetId);
+  const currentTimesheetId = resolved?.current_timesheet_id ? String(resolved.current_timesheet_id) : '';
+  if (!currentTimesheetId) return withCORS(env, req, notFound('Timesheet not found'));
+
+  if (String(expected) !== String(currentTimesheetId)) {
+    return withCORS(
+      env,
+      req,
+      new Response(JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetId }), {
+        status: 409,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+  }
+
   try {
-    // 1) Load current TSFIN for this timesheet to get candidate_id, client_id
-    // ✅ IMPORTANT: DO NOT select week_ending_date from TSFIN (it is not a TSFIN column)
     const { rows: finRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
-      `&is_current=eq.true` +
-      `&select=timesheet_id,candidate_id,client_id` +
-      `&limit=1`
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,candidate_id,client_id` +
+        `&limit=1`
     );
     const fin = finRows?.[0] || null;
+    if (!fin) return withCORS(env, req, badRequest('No current financial snapshot for this timesheet'));
 
-    if (!fin) {
-      return withCORS(env, req, badRequest('No current financial snapshot for this timesheet'));
-    }
-
-    // 2) Always load week_ending_date from timesheets (authoritative source)
     const { rows: tsRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
-      `&select=week_ending_date` +
-      `&limit=1`
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&select=week_ending_date` +
+        `&limit=1`
     );
-    const weekEnding = (tsRows?.[0]?.week_ending_date) || null;
-
+    const weekEnding = tsRows?.[0]?.week_ending_date || null;
     if (!weekEnding) {
       return withCORS(env, req, badRequest('week_ending_date is missing; cannot create pay adjustment'));
     }
@@ -15642,7 +16184,7 @@ async function handleManualPayAdjustmentCreate(env, req, timesheetId) {
     }
 
     const adjPayload = [{
-      timesheet_id: fin.timesheet_id,
+      timesheet_id: currentTimesheetId,
       candidate_id: fin.candidate_id,
       client_id: fin.client_id,
       week_ending_date: weekEnding,
@@ -15651,60 +16193,48 @@ async function handleManualPayAdjustmentCreate(env, req, timesheetId) {
       note: note || null
     }];
 
-    const insRes = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/ts_pay_adjustments`,
-      {
-        method: 'POST',
-        headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-        body: JSON.stringify(adjPayload)
-      }
-    );
+    const insRes = await fetch(`${env.SUPABASE_URL}/rest/v1/ts_pay_adjustments`, {
+      method: 'POST',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify(adjPayload)
+    });
 
     if (!insRes.ok) {
       const err = await insRes.text().catch(() => '');
-      console.warn('[PAY_ADJ_MANUAL] insert failed', {
-        timesheet_id: timesheetId,
-        err
-      });
       return withCORS(env, req, serverError(`Failed to create manual pay adjustment: ${err}`));
     }
 
     const json = await insRes.json().catch(() => []);
     const created = Array.isArray(json) ? json[0] : json;
 
-    // Audit
     try {
       await writeAudit(
         env,
         user,
         'PAY_ADJUSTMENT_MANUAL_CREATED',
         {
-          timesheet_id: timesheetId,
+          timesheet_id: currentTimesheetId,
           ts_pay_adjustment_id: created?.id || null,
           delta_pay_ex_vat: delta,
           reason: 'MANUAL_EXTRA',
           note: note || null
         },
-        { entity: 'timesheet', subject_id: timesheetId, req }
+        { entity: 'timesheet', subject_id: currentTimesheetId, req }
       );
-    } catch (e) {
-      console.warn('[PAY_ADJ_MANUAL] audit failed', {
-        timesheet_id: timesheetId,
-        err: e?.message || String(e)
-      });
-    }
+    } catch {}
 
-    return withCORS(env, req, ok({
-      adjustment: created
-    }));
+    return withCORS(env, req, ok({ adjustment: created }));
   } catch (e) {
-    console.error('[PAY_ADJ_MANUAL] error', {
-      timesheet_id: timesheetId,
-      err: e?.message || String(e)
-    });
     return withCORS(env, req, serverError('Failed to create manual pay adjustment'));
   }
 }
+
+
+
+
+
+
+
 
 async function handleTimesheetDetails(env, req, timesheetId) {
   const enc = encodeURIComponent;
@@ -15717,30 +16247,40 @@ async function handleTimesheetDetails(env, req, timesheetId) {
   }
 
   try {
-    // Current timesheet record (current version row by PK)
+    // ─────────────────────────────────────────────────────────────
+    // NEW: resolve stale/historical timesheet_id -> current by booking_id
+    // ─────────────────────────────────────────────────────────────
+    const resolved = await resolveTimesheetToCurrent(env, timesheetId);
+    if (!resolved) {
+      return withCORS(env, req, notFound('Timesheet not found'));
+    }
+
+    const bookingId = resolved.booking_id || null;
+    const currentTimesheetId = resolved.current_timesheet_id || timesheetId;
+
+    // Current timesheet record (ALWAYS load by current_timesheet_id)
     const { rows: tsRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=eq.${enc(timesheetId)}` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
         `&is_current=eq.true` +
         `&select=*` +
         `&limit=1`
     );
     const ts = tsRows?.[0] || null;
     if (!ts) {
+      // Defensive: if resolver produced an id but current row is missing, treat as not found.
       return withCORS(env, req, notFound('Timesheet not found'));
     }
 
-    const bookingId = ts.booking_id || null;
-
-    // Linked contract_week (if any) - points at CURRENT row id (your other endpoints now keep this updated)
+    // Linked contract_week (if any) - points at CURRENT row id
     let contractWeekId = null;
     let contractWeek = null;
     try {
       const { rows: cwRows } = await sbFetch(
         env,
         `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-          `?timesheet_id=eq.${enc(timesheetId)}` +
+          `?timesheet_id=eq.${enc(currentTimesheetId)}` +
           `&select=*` +
           `&limit=1`
       );
@@ -15755,7 +16295,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     const { rows: finRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-        `?timesheet_id=eq.${enc(timesheetId)}` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
         `&is_current=eq.true` +
         `&select=*` +
         `&limit=1`
@@ -15768,7 +16308,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       const { rows: sRows } = await sbFetch(
         env,
         `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
-          `?timesheet_id=eq.${enc(timesheetId)}` +
+          `?timesheet_id=eq.${enc(currentTimesheetId)}` +
           `&select=ready_to_pay,issue_codes,summary_stage,route_type` +
           `&limit=1`
       );
@@ -15781,7 +16321,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     const { rows: valRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheet_validations` +
-        `?timesheet_id=eq.${enc(timesheetId)}` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
         `&select=*` +
         `&order=validated_at_utc.desc,created_at.desc`
     );
@@ -15791,7 +16331,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     const { rows: shiftRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
-        `?timesheet_id=eq.${enc(timesheetId)}` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
         `&select=*` +
         `&order=work_date.asc,start_utc.asc`
     );
@@ -15826,7 +16366,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       policy = await loadPolicy(env, clientIdForPolicy, workedDateYmdForPolicy);
     } catch (e) {
       console.warn('[TIMESHEET_DETAILS] loadPolicy failed (non-fatal)', {
-        timesheet_id: timesheetId,
+        timesheet_id: currentTimesheetId,
         client_id: clientIdForPolicy,
         workedDateYmdForPolicy,
         err: e?.message || String(e)
@@ -15891,7 +16431,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     const isHardLocked = isLockedByInvoice || isPaid;
 
     // ───────────────────── Action availability flags ─────────────────────
-    // FIX: history lookups MUST be by booking_id (version group), not by timesheet_id
+    // History lookups by booking_id (version group), not by timesheet_id
     let canRestoreQrPending = false;
     let canRestoreQrSigned = false;
     let canRevertToElectronic = false;
@@ -15998,6 +16538,13 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     };
 
     return withCORS(env, req, ok({
+      // NEW: rotation resolution metadata (always present)
+      booking_id: bookingId,
+      requested_timesheet_id: resolved.requested_timesheet_id,
+      current_timesheet_id: resolved.current_timesheet_id,
+      current_version: resolved.current_version,
+      was_stale: resolved.was_stale,
+
       timesheet: timesheetOut,
       tsfin: tsfinOut,
       validations,
@@ -16026,6 +16573,79 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     });
     return withCORS(env, req, serverError('Failed to load timesheet details'));
   }
+}
+// Guard a write against timesheet rotation (optimistic concurrency).
+//
+// Rule:
+// - Resolve requested timesheetId -> current row (by booking_id/is_current).
+// - Compare expectedTimesheetId (from client) to current_timesheet_id.
+// - If mismatch => return { ok:false, res: 409 Response } payload that caller can early-return.
+// - If match    => return { ok:true, resolved } so caller can proceed.
+//
+// This helper DOES NOT parse JSON bodies; callers should already have expected_timesheet_id.
+async function guardCurrentTimesheetWrite(env, req, timesheetId, expectedTimesheetId) {
+  const expected = expectedTimesheetId ? String(expectedTimesheetId) : '';
+
+  // If caller didn't supply an expected id, this is a client bug.
+  // Return 400 so you immediately see it in logs rather than silently allowing unsafe writes.
+  if (!expected) {
+    return {
+      ok: false,
+      resolved: null,
+      res: withCORS(env, req, badRequest('expected_timesheet_id is required'))
+    };
+  }
+
+  // Resolve requested -> current
+  const resolved = await resolveTimesheetToCurrent(env, timesheetId);
+  if (!resolved) {
+    return {
+      ok: false,
+      resolved: null,
+      res: withCORS(env, req, notFound('Timesheet not found'))
+    };
+  }
+
+  const currentId = resolved.current_timesheet_id ? String(resolved.current_timesheet_id) : '';
+  if (!currentId) {
+    // Data integrity issue: resolver returned no current id.
+    return {
+      ok: false,
+      resolved,
+      res: withCORS(env, req, serverError('Failed to resolve current timesheet'))
+    };
+  }
+
+  // Compare expected to current
+  if (expected !== currentId) {
+    const payload = {
+      error: 'TIMESHEET_MOVED',
+      booking_id: resolved.booking_id || null,
+      requested_timesheet_id: resolved.requested_timesheet_id || timesheetId || null,
+      current_timesheet_id: resolved.current_timesheet_id || null,
+      current_version: resolved.current_version != null ? resolved.current_version : null
+    };
+
+    return {
+      ok: false,
+      resolved,
+      res: withCORS(
+        env,
+        req,
+        new Response(JSON.stringify(payload), {
+          status: 409,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      )
+    };
+  }
+
+  // OK to proceed
+  return {
+    ok: true,
+    resolved,
+    res: null
+  };
 }
 
 
@@ -19923,11 +20543,90 @@ async function applyWeeklyHoursCorrections(env, {
   let invoiceCreditsTouched = 0;
   let invoiceReinvoicesTouched = 0;
 
+  // NEW: track invoiced rows we refused to mutate because contract is not self-bill
+  let invoiceCorrectionsBlocked = 0;
+
+  const normUpper = (s) => String(s || '').trim().toUpperCase();
+  const isHrSystem = normUpper(system_type) === 'HEALTHROSTER';
+
+  // ---------------------------
+  // NEW: Batch-load contracts to know self_bill per contract_id
+  // ---------------------------
+  const contractSelfBillById = new Map();
+
+  const contractIds = Array.from(new Set(
+    (decisionsNorm?.proceedRows || [])
+      .map(x => x?.row?.contract_id)
+      .filter(Boolean)
+      .map(String)
+  ));
+
+  if (contractIds.length) {
+    // Minimal internal fetch to Supabase REST. If your codebase already has sbGet/sbPost helpers,
+    // you can replace this block with those to keep it consistent.
+    const key =
+      env.SUPABASE_SERVICE_ROLE_KEY ||
+      env.SUPABASE_SERVICE_KEY ||
+      env.SUPABASE_ANON_KEY;
+
+    if (!env.SUPABASE_URL || !key) {
+      throw new Error('applyWeeklyHoursCorrections: missing SUPABASE_URL or service key for contract self_bill lookup');
+    }
+
+    // Supabase REST "in" filter: id=in.(a,b,c)
+    const inList = contractIds.map(encodeURIComponent).join(',');
+    const url =
+      `${env.SUPABASE_URL}/rest/v1/contracts` +
+      `?select=id,self_bill&id=in.(${inList})`;
+
+    const r = await fetch(url, {
+      method: 'GET',
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!r.ok) {
+      const txt = await r.text().catch(() => '');
+      throw new Error(`applyWeeklyHoursCorrections: failed to load contracts (status ${r.status}) ${txt}`);
+    }
+
+    const rows = await r.json().catch(() => []);
+    for (const c of (rows || [])) {
+      contractSelfBillById.set(String(c.id), !!c.self_bill);
+    }
+  }
+
+  const isNonSelfBillHrContract = (row) => {
+    // Gate only applies to HR weekly changed-hours corrections.
+    if (!isHrSystem) return false;
+
+    // Prefer explicit row source if present; otherwise treat system_type HEALTHROSTER as HR.
+    const src = normUpper(row?.source_system);
+    const isHrRow = (!src) ? true : (src === 'HEALTHROSTER' || src === 'HR_WEEKLY' || src === 'HR');
+
+    if (!isHrRow) return false;
+
+    const cid = row?.contract_id ? String(row.contract_id) : null;
+    // If we can't determine contract, be safe and treat as non-self-bill (block invoice mutation).
+    if (!cid) return true;
+
+    const selfBill = contractSelfBillById.get(cid);
+    // Unknown => be safe (block invoice mutation)
+    if (typeof selfBill !== 'boolean') return true;
+
+    return selfBill === false;
+  };
+
   for (const { row } of (decisionsNorm?.proceedRows || [])) {
     const ek = String(row.external_row_key);
     const corrId = makeWeeklyHoursCorrectionId(import_id, row);
 
+    // ---------------------------
     // Pay-side (only if paid)
+    // ---------------------------
     if (row.is_paid) {
       const deltaPay = Number(row.delta_pay_ex);
       if (Number.isFinite(deltaPay) && deltaPay !== 0) {
@@ -19975,8 +20674,18 @@ async function applyWeeklyHoursCorrections(env, {
       }
     }
 
+    // ---------------------------
     // Invoice-side (only if invoiced)
+    // ---------------------------
     if (row.is_invoiced) {
+      // NEW: hard gate — do not mutate invoices for HR non-self-bill contracts
+      if (isNonSelfBillHrContract(row)) {
+        // We intentionally do NOT throw here so pay-side corrections can still be applied.
+        // Caller/UI should guide the user to credit-note/unissue flows for invoiced corrections.
+        invoiceCorrectionsBlocked++;
+        continue;
+      }
+
       const d = decisionsNorm.byKey?.[ek];
       const credit_week_start = d?.credit_week_start;
       const reinvoice_week_start = d?.reinvoice_week_start;
@@ -20025,7 +20734,10 @@ async function applyWeeklyHoursCorrections(env, {
     pay_adjustments_touched: payAdjustmentsTouched,
     recoveries_touched: recoveriesTouched,
     invoice_credits_touched: invoiceCreditsTouched,
-    invoice_reinvoices_touched: invoiceReinvoicesTouched
+    invoice_reinvoices_touched: invoiceReinvoicesTouched,
+
+    // NEW (non-breaking extra field): how many invoiced rows were blocked from invoice mutation
+    invoice_corrections_blocked: invoiceCorrectionsBlocked
   };
 }
 
@@ -20367,13 +21079,19 @@ async function handleTimesheetsSummary(env, req) {
 }
 
 
-
- async function handleTsfinUpdateSegments(env, req, timesheetId) {
+async function handleTsfinUpdateSegments(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id required'));
 
   const body = await parseJSONBody(req).catch(() => null);
+
+  // NEW: guarded write (optimistic concurrency)
+  const expectedTimesheetId = body?.expected_timesheet_id || null;
+  const guard = await guardCurrentTimesheetWrite(env, req, timesheetId, expectedTimesheetId);
+  if (!guard.ok) return guard.res;
+  const currentTimesheetId = guard.resolved.current_timesheet_id;
+
   const segUpdates = Array.isArray(body?.segments) ? body.segments : [];
   if (!segUpdates.length) {
     return withCORS(env, req, badRequest('segments[] required'));
@@ -20397,7 +21115,7 @@ async function handleTimesheetsSummary(env, req) {
   const { rows } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
       `&is_current=eq.true` +
       `&select=` + [
         'id',
@@ -20427,11 +21145,11 @@ async function handleTimesheetsSummary(env, req) {
 
   const basis = String(fin.basis || '').toUpperCase();
   const invoiceTargetAllowedBases = new Set([
-  'NHSP',
-  'NHSP_ADJUSTMENT',
-  'HEALTHROSTER_SELF_BILL',   // NEW
-  'HEALTHROSTER_ADJUSTMENT'
-]);
+    'NHSP',
+    'NHSP_ADJUSTMENT',
+    'HEALTHROSTER_SELF_BILL',   // NEW
+    'HEALTHROSTER_ADJUSTMENT'
+  ]);
 
   const allowInvoiceTargetChange = invoiceTargetAllowedBases.has(basis);
 
@@ -20574,15 +21292,22 @@ async function handleTimesheetsSummary(env, req) {
     user,
     'TSFIN_SEGMENTS_UPDATED',
     {
-      timesheet_id: timesheetId,
+      timesheet_id: currentTimesheetId,
       segment_ids: Array.from(updateMap.keys())
     },
-    { entity: 'timesheet', subject_id: timesheetId, reason: 'PAYMENT', req }
+    { entity: 'timesheet', subject_id: currentTimesheetId, reason: 'PAYMENT', req }
   );
 
-  return withCORS(env, req, ok({ updated }));
+  return withCORS(env, req, ok({
+    updated,
+    // NEW: return resolution metadata so FE can adopt the current id if needed
+    booking_id: guard.resolved.booking_id || null,
+    requested_timesheet_id: guard.resolved.requested_timesheet_id || timesheetId,
+    current_timesheet_id: currentTimesheetId,
+    current_version: guard.resolved.current_version ?? null,
+    was_stale: !!guard.resolved.was_stale
+  }));
 }
-
 
 
  async function handleNhspInvoiceCandidates(env, req) {
@@ -30376,6 +31101,9 @@ async function classifyHrRotaValidationImport(env, importId) {
   const clientByTrustCache        = new Map(); // trustNorm -> client_id|null
   const timesheetsByCandCache     = new Map(); // candidate_id -> [timesheets...]
 
+  // NEW: TSFIN cache (only 1 lookup per unique timesheet_id)
+  const tsfinByTimesheetCache     = new Map(); // timesheet_id -> { paid_at_utc, locked_by_invoice_id } | null
+
   async function resolveCandidateByNameTrustCached(staffRaw, staffNorm, trustNorm) {
     const nameKey = `${staffNorm || norm(staffRaw)}|${trustNorm || ''}`;
     if (candidateByNameTrustCache.has(nameKey)) {
@@ -30442,6 +31170,44 @@ async function classifyHrRotaValidationImport(env, importId) {
     }
     timesheetsByCandCache.set(candidateId, tsRows);
     return tsRows;
+  }
+
+  // NEW: TSFIN lookup helper (cached)
+  async function getTsfinForTimesheetCached(timesheetId) {
+    if (!timesheetId) return null;
+    const key = String(timesheetId);
+    if (tsfinByTimesheetCache.has(key)) return tsfinByTimesheetCache.get(key);
+
+    let out = null;
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=eq.${enc(key)}` +
+          `&is_current=eq.true` +
+          `&select=paid_at_utc,locked_by_invoice_id` +
+          `&limit=1`
+      );
+      const r = rows?.[0] || null;
+      if (r) {
+        out = {
+          paid_at_utc: r.paid_at_utc || null,
+          locked_by_invoice_id: r.locked_by_invoice_id || null
+        };
+      } else {
+        out = null;
+      }
+    } catch (e) {
+      console.warn('[HR_ROTA_CLASSIFY] TSFIN lookup failed (non-fatal)', {
+        import_id: importId,
+        timesheet_id: key,
+        err: e?.message || String(e)
+      });
+      out = null;
+    }
+
+    tsfinByTimesheetCache.set(key, out);
+    return out;
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -30534,6 +31300,14 @@ async function classifyHrRotaValidationImport(env, importId) {
       trust_norm: hospNorm || null,
       date_local: dateLocal,
       timesheet_id: null,
+
+      // NEW: remediation hooks (populated when we have a timesheet match)
+      tsfin_paid_at_utc: null,
+      tsfin_locked_by_invoice_id: null,
+      tsfin_is_paid: false,
+      tsfin_is_invoiced: false,
+      tsfin_invoice_id_detected: null,
+
       status: 'UNMATCHED',
       reason_code: 'timesheet_not_found_or_ambiguous',
       can_email: false,
@@ -30676,8 +31450,10 @@ async function classifyHrRotaValidationImport(env, importId) {
       continue;
     }
 
-    // Remove TSFIN lookup here — validation does not depend on it,
-    // and this was a major source of subrequests.
+    // NEW: TSFIN remediation hooks (cached, one call per timesheet_id)
+    const tsfin = await getTsfinForTimesheetCached(timesheetId);
+    const tsfinPaidAt = tsfin?.paid_at_utc || null;
+    const tsfinInvId  = tsfin?.locked_by_invoice_id || null;
 
     // Map grade → roleForRates
     let roleForRates = null;
@@ -30741,6 +31517,14 @@ async function classifyHrRotaValidationImport(env, importId) {
     const resRow = {
       ...baseResult,
       timesheet_id: timesheetId,
+
+      // NEW: TSFIN remediation fields
+      tsfin_paid_at_utc: tsfinPaidAt,
+      tsfin_locked_by_invoice_id: tsfinInvId,
+      tsfin_is_paid: !!tsfinPaidAt,
+      tsfin_is_invoiced: !!tsfinInvId,
+      tsfin_invoice_id_detected: tsfinInvId,
+
       status: ok ? 'VALIDATION_OK' : 'FAILED',
       reason_code: reasonCode || (ok ? null : 'validation_failed'),
       can_email: canEmail,
@@ -30771,6 +31555,87 @@ async function classifyHrRotaValidationImport(env, importId) {
     source_system: 'HEALTHROSTER_DAILY',
     summary,
     rows: results
+  };
+}
+// Resolve any timesheet_id (current or historical) to the current row for its booking_id.
+// Returns null if the requested timesheet_id does not exist.
+async function resolveTimesheetToCurrent(env, timesheet_id) {
+  const enc = encodeURIComponent;
+
+  if (!timesheet_id) return null;
+
+  // 1) Load the requested row by PK (current OR historical)
+  const { rows: reqRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(timesheet_id)}` +
+      `&select=timesheet_id,booking_id,version,is_current` +
+      `&limit=1`
+  );
+
+  const reqRow = (reqRows && reqRows[0]) ? reqRows[0] : null;
+  if (!reqRow) return null;
+
+  const booking_id = reqRow.booking_id || null;
+
+  // If booking_id is missing, we cannot resolve the series.
+  // Return a structured response so callers can turn this into a 400.
+  if (!booking_id) {
+    return {
+      booking_id: null,
+      requested_timesheet_id: reqRow.timesheet_id,
+      current_timesheet_id: reqRow.timesheet_id,
+      current_version: reqRow.version != null ? Number(reqRow.version) : null,
+      was_stale: false
+    };
+  }
+
+  // 2) Load the current row for this booking_id
+  let curRow = null;
+  try {
+    const { rows: curRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?booking_id=eq.${enc(booking_id)}` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,booking_id,version,is_current` +
+        `&limit=1`
+    );
+    curRow = (curRows && curRows[0]) ? curRows[0] : null;
+  } catch {
+    curRow = null;
+  }
+
+  // Defensive fallback if data is inconsistent (no is_current row found):
+  // pick the highest version row.
+  if (!curRow) {
+    try {
+      const { rows: vRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?booking_id=eq.${enc(booking_id)}` +
+          `&select=timesheet_id,booking_id,version,is_current` +
+          `&order=version.desc` +
+          `&limit=1`
+      );
+      curRow = (vRows && vRows[0]) ? vRows[0] : null;
+    } catch {
+      curRow = null;
+    }
+  }
+
+  // If still missing, treat the requested row as the best-known "current".
+  if (!curRow) curRow = reqRow;
+
+  const current_timesheet_id = curRow.timesheet_id;
+  const current_version = curRow.version != null ? Number(curRow.version) : null;
+
+  return {
+    booking_id,
+    requested_timesheet_id: reqRow.timesheet_id,
+    current_timesheet_id,
+    current_version,
+    was_stale: String(reqRow.timesheet_id) !== String(current_timesheet_id)
   };
 }
 
@@ -31933,8 +32798,7 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
     );
   }
 }
-
- async function handleTimesheetResolveCandidate(env, req, timesheetId) {
+async function handleTimesheetResolveCandidate(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
   const user = await requireUser(env, req, ['admin']);
@@ -31951,21 +32815,45 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
     body = null;
   }
 
+  // ✅ Guarded write (required)
+  const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  if (!expected) {
+    return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+  }
+
   const candidateId = body?.candidate_id || body?.candidateId || null;
   if (!candidateId) {
+    return withCORS(env, req, badRequest('candidate_id is required'));
+  }
+
+  // ✅ stale-safe resolve
+  const resolved = await resolveTimesheetToCurrent(env, timesheetId);
+  if (!resolved?.current_timesheet_id) {
+    return withCORS(env, req, notFound('Timesheet not found'));
+  }
+  const currentTimesheetId = String(resolved.current_timesheet_id);
+  const requestedTimesheetId = String(timesheetId);
+  const wasStale = (currentTimesheetId !== requestedTimesheetId);
+
+  // ✅ Guard mismatch → 409 TIMESHEET_MOVED
+  if (String(expected) !== String(currentTimesheetId)) {
     return withCORS(
       env,
       req,
-      badRequest('candidate_id is required')
+      new Response(
+        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetId }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
     );
   }
 
   try {
-    // Load timesheet
+    // Load CURRENT timesheet (not requested id)
     const ts = await sbGetOne(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=eq.${enc(timesheetId)}` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&is_current=eq.true` +
         `&select=timesheet_id,occupant_key_norm,candidate_id` +
         `&limit=1`
     );
@@ -31986,13 +32874,13 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
     }
 
     const rawAlias = ts.occupant_key_norm || '';
-    const alias = rawAlias.trim().toLowerCase();
+    const alias = String(rawAlias).trim().toLowerCase();
 
-    // If we have no alias string, just set candidate_id and return
+    // If we have no alias string, just set candidate_id and return (on CURRENT id)
     if (!alias) {
       try {
-        await fetch(
-          `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`,
+        const res = await fetch(
+          `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
           {
             method: 'PATCH',
             headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
@@ -32002,14 +32890,28 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
             })
           }
         );
+
+        if (!res.ok) {
+          const txt = await res.text().catch(() => '');
+          console.warn('[TS_RESOLVE_CAND] patch timesheet candidate_id failed', {
+            timesheet_id: currentTimesheetId,
+            status: res.status,
+            body: txt
+          });
+        }
       } catch (e) {
         console.warn('[TS_RESOLVE_CAND] patch timesheet candidate_id failed', {
-          timesheet_id: timesheetId,
+          timesheet_id: currentTimesheetId,
           err: e?.message || String(e)
         });
       }
 
-      return withCORS(env, req, ok({ ok: true }));
+      return withCORS(env, req, ok({
+        ok: true,
+        requested_timesheet_id: requestedTimesheetId,
+        current_timesheet_id: currentTimesheetId,
+        was_stale: wasStale
+      }));
     }
 
     // Merge alias into nhsp_hr_name_aliases
@@ -32017,7 +32919,6 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
       ? cand.nhsp_hr_name_aliases
       : [];
 
-    // normaliseAliasList is already used elsewhere in backend
     const mergedAliases = normaliseAliasList([
       ...existingAliases,
       alias
@@ -32027,7 +32928,7 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
 
     // Patch candidate with updated aliases (and key_norm if empty)
     try {
-      await fetch(
+      const res = await fetch(
         `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(candidateId)}`,
         {
           method: 'PATCH',
@@ -32038,6 +32939,15 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
           })
         }
       );
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        console.warn('[TS_RESOLVE_CAND] patch candidate aliases failed', {
+          candidate_id: candidateId,
+          status: res.status,
+          body: txt
+        });
+      }
     } catch (e) {
       console.warn('[TS_RESOLVE_CAND] patch candidate aliases failed', {
         candidate_id: candidateId,
@@ -32045,10 +32955,10 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
       });
     }
 
-    // Optionally patch TS candidate_id for this daily TS
+    // Patch CURRENT timesheet candidate_id
     try {
-      await fetch(
-        `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`,
+      const res = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
         {
           method: 'PATCH',
           headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
@@ -32058,16 +32968,30 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
           })
         }
       );
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        console.warn('[TS_RESOLVE_CAND] patch timesheet candidate_id failed', {
+          timesheet_id: currentTimesheetId,
+          status: res.status,
+          body: txt
+        });
+      }
     } catch (e) {
       console.warn('[TS_RESOLVE_CAND] patch timesheet candidate_id failed', {
-        timesheet_id: timesheetId,
+        timesheet_id: currentTimesheetId,
         err: e?.message || String(e)
       });
     }
 
     // Triggers on candidates will enqueue TSFIN recompute for affected timesheets
 
-    return withCORS(env, req, ok({ ok: true }));
+    return withCORS(env, req, ok({
+      ok: true,
+      requested_timesheet_id: requestedTimesheetId,
+      current_timesheet_id: currentTimesheetId,
+      was_stale: wasStale
+    }));
   } catch (e) {
     return withCORS(
       env,
@@ -32076,6 +33000,7 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
     );
   }
 }
+
 async function handleTimesheetResolveClient(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -32093,21 +33018,45 @@ async function handleTimesheetResolveClient(env, req, timesheetId) {
     body = null;
   }
 
+  // ✅ Guarded write (required)
+  const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  if (!expected) {
+    return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+  }
+
   const clientId = body?.client_id || body?.clientId || null;
   if (!clientId) {
+    return withCORS(env, req, badRequest('client_id is required'));
+  }
+
+  // ✅ stale-safe resolve
+  const resolved = await resolveTimesheetToCurrent(env, timesheetId);
+  if (!resolved?.current_timesheet_id) {
+    return withCORS(env, req, notFound('Timesheet not found'));
+  }
+  const currentTimesheetId = String(resolved.current_timesheet_id);
+  const requestedTimesheetId = String(timesheetId);
+  const wasStale = (currentTimesheetId !== requestedTimesheetId);
+
+  // ✅ Guard mismatch → 409 TIMESHEET_MOVED
+  if (String(expected) !== String(currentTimesheetId)) {
     return withCORS(
       env,
       req,
-      badRequest('client_id is required')
+      new Response(
+        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetId }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
     );
   }
 
   try {
-    // Load timesheet to get hospital_norm
+    // Load CURRENT timesheet to get hospital_norm
     const ts = await sbGetOne(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=eq.${enc(timesheetId)}` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&is_current=eq.true` +
         `&select=timesheet_id,hospital_norm,client_id,is_current` +
         `&limit=1`
     );
@@ -32116,14 +33065,13 @@ async function handleTimesheetResolveClient(env, req, timesheetId) {
     }
 
     const rawHosp = ts.hospital_norm || '';
-    const alias = rawHosp.trim().toLowerCase();
+    const alias = String(rawHosp).trim().toLowerCase();
 
     // If there is no alias string at all, we can at least attach client_id directly
     if (!alias) {
       try {
         const res = await fetch(
-          `${env.SUPABASE_URL}/rest/v1/timesheets` +
-            `?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`,
+          `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
           {
             method: 'PATCH',
             headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
@@ -32136,19 +33084,24 @@ async function handleTimesheetResolveClient(env, req, timesheetId) {
         if (!res.ok) {
           const txt = await res.text().catch(() => '');
           console.warn('[TS_RESOLVE_CLIENT] patch timesheet.client_id failed', {
-            timesheet_id: timesheetId,
+            timesheet_id: currentTimesheetId,
             status: res.status,
             body: txt
           });
         }
       } catch (e) {
         console.warn('[TS_RESOLVE_CLIENT] patch timesheet.client_id failed', {
-          timesheet_id: timesheetId,
+          timesheet_id: currentTimesheetId,
           err: e?.message || String(e)
         });
       }
 
-      return withCORS(env, req, ok({ ok: true }));
+      return withCORS(env, req, ok({
+        ok: true,
+        requested_timesheet_id: requestedTimesheetId,
+        current_timesheet_id: currentTimesheetId,
+        was_stale: wasStale
+      }));
     }
 
     // Find / update client_hospitals for this client
@@ -32184,7 +33137,6 @@ async function handleTimesheetResolveClient(env, req, timesheetId) {
             break;
           }
         }
-        // If we didn't find alias yet, but at least have one row, use first row to append alias
         if (!existingRow && hospRows.length) {
           existingRow = hospRows[0];
         }
@@ -32261,11 +33213,10 @@ async function handleTimesheetResolveClient(env, req, timesheetId) {
       }
     }
 
-    // Optionally attach client_id directly to this timesheet as well
+    // Attach client_id directly to CURRENT timesheet as well
     try {
       const res = await fetch(
-        `${env.SUPABASE_URL}/rest/v1/timesheets` +
-          `?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`,
+        `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
         {
           method: 'PATCH',
           headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
@@ -32278,21 +33229,26 @@ async function handleTimesheetResolveClient(env, req, timesheetId) {
       if (!res.ok) {
         const txt = await res.text().catch(() => '');
         console.warn('[TS_RESOLVE_CLIENT] timesheet client_id patch failed', {
-          timesheet_id: timesheetId,
+          timesheet_id: currentTimesheetId,
           status: res.status,
           body: txt
         });
       }
     } catch (e) {
       console.warn('[TS_RESOLVE_CLIENT] timesheet client_id patch failed', {
-        timesheet_id: timesheetId,
+        timesheet_id: currentTimesheetId,
         err: e?.message || String(e)
       });
     }
 
-    // The DB trigger trg_tsfin_client_hospitals_wakeup_aiu will enqueue TSFIN recompute for all matching aliases
+    // DB trigger trg_tsfin_client_hospitals_wakeup_aiu enqueues TSFIN recompute for matching aliases
 
-    return withCORS(env, req, ok({ ok: true }));
+    return withCORS(env, req, ok({
+      ok: true,
+      requested_timesheet_id: requestedTimesheetId,
+      current_timesheet_id: currentTimesheetId,
+      was_stale: wasStale
+    }));
   } catch (e) {
     return withCORS(
       env,
@@ -32301,31 +33257,53 @@ async function handleTimesheetResolveClient(env, req, timesheetId) {
     );
   }
 }
+
+
+
+
 async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+  if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
 
-  if (!timesheetId) {
-    return withCORS(env, req, badRequest('timesheet_id is required'));
+  // ✅ Guarded write: require expected_timesheet_id
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+
+  // ✅ Stale-safe resolve
+  const resolved = await resolveTimesheetToCurrent(env, timesheetId);
+  if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
+  const currentTimesheetId = resolved.current_timesheet_id;
+
+  // ✅ Guard mismatch → 409 TIMESHEET_MOVED
+  if (String(expected) !== String(currentTimesheetId)) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetId }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
   }
 
   // Load timesheet (current version)
   const ts = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
       `&is_current=eq.true` +
       `&select=*` +
       `&limit=1`
   );
-  if (!ts) {
-    return withCORS(env, req, notFound('Timesheet not found'));
-  }
+  if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
 
-  const scope   = String(ts.sheet_scope || '').toUpperCase();
-  let subMode   = String(ts.submission_mode || '').toUpperCase();
+  const scope = String(ts.sheet_scope || '').toUpperCase();
+  let subMode = String(ts.submission_mode || '').toUpperCase();
 
   if (scope !== 'DAILY') {
     return withCORS(env, req, badRequest('Timesheet is not DAILY; cannot generate daily QR'));
@@ -32335,7 +33313,7 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
   const tsfin = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
       `&is_current=eq.true` +
       `&select=*` +
       `&limit=1`
@@ -32344,19 +33322,19 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
     return withCORS(env, req, badRequest('Timesheet already invoiced or paid; cannot generate QR'));
   }
 
-  const now = new Date().toISOString();
+  const now = nowIso();
 
   // ✅ Allow DAILY ELECTRONIC → QR without requiring pre-switch
-  // We flip submission_mode to MANUAL in-place (candidate route switch does not require preserve).
+  // We flip submission_mode to MANUAL in-place (route switch does not require preserve).
   if (subMode !== 'MANUAL') {
     if (subMode !== 'ELECTRONIC') {
       return withCORS(env, req, badRequest('Unsupported submission_mode for DAILY QR'));
     }
 
     try {
-      await fetch(
+      const flipRes = await fetch(
         `${env.SUPABASE_URL}/rest/v1/timesheets` +
-          `?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`,
+          `?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
         {
           method: 'PATCH',
           headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
@@ -32369,10 +33347,21 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
           })
         }
       );
+
+      if (!flipRes.ok) {
+        const t = await flipRes.text().catch(() => '');
+        console.warn('[TS_DAILY_QR] failed to flip ELECTRONIC→MANUAL', {
+          timesheet_id: currentTimesheetId,
+          status: flipRes.status,
+          bodyPreview: (t || '').slice(0, 200)
+        });
+        return withCORS(env, req, serverError('Failed to switch DAILY timesheet to MANUAL for QR'));
+      }
+
       subMode = 'MANUAL';
     } catch (e) {
-      console.warn('[TS_DAILY_QR] failed to flip ELECTRONIC→MANUAL', {
-        timesheet_id: timesheetId,
+      console.warn('[TS_DAILY_QR] failed to flip ELECTRONIC→MANUAL (exception)', {
+        timesheet_id: currentTimesheetId,
         err: e?.message || String(e)
       });
       return withCORS(env, req, serverError('Failed to switch DAILY timesheet to MANUAL for QR'));
@@ -32395,13 +33384,13 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
       );
     } catch (e) {
       console.warn('[TS_DAILY_QR] failed to patch TSFIN to AWAITING_MANUAL_SIGNATURE', {
-        timesheet_id: timesheetId,
+        timesheet_id: currentTimesheetId,
         err: e?.message || String(e)
       });
     }
   }
 
-  // Derive workedDateYmd from worked_start_iso for QR payload / TSQ1 "we"
+  // Derive workedDateYmd from worked_start_iso for QR payload / subject label
   let workedDateYmd = null;
   if (ts.worked_start_iso) {
     try {
@@ -32418,17 +33407,17 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
       qrToken = crypto.randomUUID();
     } else {
-      qrToken = `${ts.timesheet_id}:${Date.now()}`;
+      qrToken = `${currentTimesheetId}:${Date.now()}`;
     }
   } catch {
-    qrToken = `${ts.timesheet_id}:${Date.now()}`;
+    qrToken = `${currentTimesheetId}:${Date.now()}`;
   }
 
   // 1) Generate / store a signed TSQ1 QR PNG in R2 (token embedded)
   let qr_r2_key = null;
   try {
     const res = await generateAndStoreTimesheetQr(env, {
-      timesheet_id: ts.timesheet_id,
+      timesheet_id: currentTimesheetId,
       contract_week_id: null,
       contract_id: ts.contract_id || null,
       candidate_id: ts.candidate_id || null,
@@ -32439,7 +33428,7 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
     qr_r2_key = res?.qr_r2_key || null;
   } catch (e) {
     console.warn('[TS_DAILY_QR] generateAndStoreTimesheetQr failed', {
-      timesheet_id: timesheetId,
+      timesheet_id: currentTimesheetId,
       err: e?.message || String(e)
     });
     return withCORS(env, req, serverError('Failed to generate QR image'));
@@ -32448,7 +33437,7 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
   const qrPayload = {
     kind: 'DAILY_QR_TIMESHEET',
     token: qrToken,
-    timesheet_id: ts.timesheet_id,
+    timesheet_id: currentTimesheetId,
     worked_date: workedDateYmd,
     candidate_id: ts.candidate_id || null,
     client_id: (tsfin && tsfin.client_id) || ts.client_id || null
@@ -32456,9 +33445,9 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
 
   // 2) Patch timesheet with QR metadata (and clear any previous scan)
   try {
-    await fetch(
+    const patchRes = await fetch(
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`,
+        `?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
       {
         method: 'PATCH',
         headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
@@ -32474,9 +33463,19 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
         })
       }
     );
+
+    if (!patchRes.ok) {
+      const t = await patchRes.text().catch(() => '');
+      console.warn('[TS_DAILY_QR] failed to patch timesheet QR fields', {
+        timesheet_id: currentTimesheetId,
+        status: patchRes.status,
+        bodyPreview: (t || '').slice(0, 200)
+      });
+      return withCORS(env, req, serverError('Failed to update timesheet QR fields'));
+    }
   } catch (e) {
-    console.warn('[TS_DAILY_QR] failed to patch timesheet QR fields', {
-      timesheet_id: timesheetId,
+    console.warn('[TS_DAILY_QR] failed to patch timesheet QR fields (exception)', {
+      timesheet_id: currentTimesheetId,
       err: e?.message || String(e)
     });
     return withCORS(env, req, serverError('Failed to update timesheet QR fields'));
@@ -32485,24 +33484,24 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
   // 3) Generate / ensure PDF (renderer should embed QR using ts.qr_r2_key)
   let pdfKey = null;
   try {
-    pdfKey = await ensureTimesheetPdf(env, timesheetId);
+    pdfKey = await ensureTimesheetPdf(env, currentTimesheetId);
     if (pdfKey) {
       await fetch(
         `${env.SUPABASE_URL}/rest/v1/timesheets` +
-          `?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`,
+          `?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
         {
           method: 'PATCH',
           headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
           body: JSON.stringify({
             manual_pdf_r2_key: pdfKey,
-            updated_at: new Date().toISOString()
+            updated_at: nowIso()
           })
         }
       ).catch(() => {});
     }
   } catch (e) {
     console.warn('[TS_DAILY_QR] ensureTimesheetPdf failed', {
-      timesheet_id: timesheetId,
+      timesheet_id: currentTimesheetId,
       err: e?.message || String(e)
     });
     return withCORS(env, req, serverError('Failed to prepare timesheet PDF'));
@@ -32533,7 +33532,7 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
         ``,
         ...(candName ? [`Candidate: ${candName}`] : []),
         ...(workedDateYmd ? [`Date: ${workedDateYmd}`] : []),
-        `Timesheet ID: ${timesheetId}`
+        `Timesheet ID: ${currentTimesheetId}`
       ];
 
       const bodyText = lines.join('\n');
@@ -32553,10 +33552,10 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
             body_html: bodyHtml,
             attachments: [{
               r2_key: pdfKey,
-              filename: workedDateYmd ? `Timesheet_${workedDateYmd}.pdf` : `Timesheet_${timesheetId}.pdf`
+              filename: workedDateYmd ? `Timesheet_${workedDateYmd}.pdf` : `Timesheet_${currentTimesheetId}.pdf`
             }],
             status: 'QUEUED',
-            reference: `timesheet_qr:daily:${timesheetId}:${workedDateYmd || ''}`,
+            reference: `timesheet_qr:daily:${currentTimesheetId}:${workedDateYmd || ''}`,
             created_by: user?.id || null
           })
         }
@@ -32564,7 +33563,7 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
     }
   } catch (e) {
     console.warn('[TS_DAILY_QR] mail queue failed (non-fatal)', {
-      timesheet_id: timesheetId,
+      timesheet_id: currentTimesheetId,
       err: e?.message || String(e)
     });
   }
@@ -32576,14 +33575,14 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
       user,
       'DAILY_QR_PRINTABLE_GENERATED',
       {
-        timesheet_id: timesheetId,
+        timesheet_id: currentTimesheetId,
         qr_token: qrToken,
         qr_status: 'PENDING',
         qr_r2_key,
         pdf_r2_key: pdfKey || null,
         worked_date: workedDateYmd || null
       },
-      { entity: 'timesheets', subject_id: timesheetId, req }
+      { entity: 'timesheets', subject_id: currentTimesheetId, req }
     );
   } catch (e) {
     console.warn('[TS_DAILY_QR] audit failed (non-fatal)', e?.message || e);
@@ -32591,7 +33590,11 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
 
   return withCORS(env, req, ok({
     ok: true,
-    timesheet_id: timesheetId,
+    timesheet_id: currentTimesheetId,
+    current_timesheet_id: currentTimesheetId,
+    requested_timesheet_id: resolved.requested_timesheet_id || timesheetId,
+    was_stale: !!resolved.was_stale,
+
     sheet_scope: 'DAILY',
     qr_status: 'PENDING',
     qr_token: qrToken,
@@ -42497,8 +43500,31 @@ async function sbRpc(env, fn, args) {
 // Context loaders
 // ---------------------------
 async function loadCurrentTimesheet(env, timesheet_id) {
-  const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${encodeURIComponent(timesheet_id)}&is_current=eq.true&select=*`);
-  return rows[0] || null;
+  const enc = encodeURIComponent;
+
+  if (!timesheet_id) return null;
+
+  // NEW: stale-safe resolve (accept historical/stale ids)
+  let currentId = timesheet_id;
+  try {
+    const resolved = await resolveTimesheetToCurrent(env, timesheet_id);
+    if (resolved && resolved.current_timesheet_id) {
+      currentId = resolved.current_timesheet_id;
+    }
+  } catch {
+    // If resolve fails, fall back to direct lookup
+    currentId = timesheet_id;
+  }
+
+  const { rows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentId)}` +
+      `&is_current=eq.true` +
+      `&select=*`
+  );
+
+  return (rows && rows[0]) ? rows[0] : null;
 }
 
 async function loadCandidate(env, key_norm) {
@@ -43029,14 +44055,42 @@ async function insertAuditEvent(env, req, args) {
     body: JSON.stringify(payload),
   });
 }
-
-/**
- * Shared patcher (JS)
- */
 async function patchTsfinCommon(env, req, timesheetId, patch) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
+  const enc = encodeURIComponent;
+
+  // ─────────────────────────────────────────────────────────────
+  // NEW: optimistic concurrency guard (expected current id required)
+  // ─────────────────────────────────────────────────────────────
+  const expected = (patch && patch.expected_timesheet_id) ? String(patch.expected_timesheet_id) : '';
+  if (!expected) {
+    return badRequest('expected_timesheet_id is required');
+  }
+
+  const resolved = await resolveTimesheetToCurrent(env, timesheetId);
+  if (!resolved || !resolved.current_timesheet_id) {
+    return notFound('Timesheet not found');
+  }
+
+  const currentTimesheetId = String(resolved.current_timesheet_id);
+  if (expected !== currentTimesheetId) {
+    // Return 409 with the standard payload (no CORS here; caller wraps withCORS)
+    const payload = {
+      error: 'TIMESHEET_MOVED',
+      booking_id: resolved.booking_id || null,
+      requested_timesheet_id: resolved.requested_timesheet_id || timesheetId || null,
+      current_timesheet_id: resolved.current_timesheet_id || null,
+      current_version: resolved.current_version != null ? resolved.current_version : null
+    };
+    return new Response(JSON.stringify(payload), {
+      status: 409,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  // From here on: ALWAYS use currentTimesheetId
   const toNum = (v) => (v === null || v === undefined ? null : Number(v));
   const nonneg = (n) => (n === null || n === undefined ? true : Number(n) >= 0);
   const isNonEmptyArray = (v) => Array.isArray(v) && v.length > 0;
@@ -43061,7 +44115,7 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
   }
 
   // -------- load current snapshot (may not include manifests) --------
-  const before = await fetchCurrentTsfin(env, timesheetId);
+  const before = await fetchCurrentTsfin(env, currentTimesheetId);
   if (!before) return notFound('TSFIN current row not found');
   if (before.locked_by_invoice_id) return conflict('Timesheet financials are locked by an invoice');
 
@@ -43088,7 +44142,7 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
         const { rows } = await sbFetch(
           env,
           `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true` +
+          `?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true` +
           `&select=${enc(keyField)},${enc(manField)}`
         );
         const r = (rows || [])[0] || {};
@@ -43102,12 +44156,12 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
 
   // -------- evidence requirements (accept key OR non-empty manifest) --------
   if (patch.expenses) {
-    const ok = await ensureEvidencePresent('expenses', patch.expenses.charge_ex_vat, patch.expenses);
-    if (!ok) return unprocessable('Expenses charge requires evidence (single key or non-empty manifest)');
+    const okEv = await ensureEvidencePresent('expenses', patch.expenses.charge_ex_vat, patch.expenses);
+    if (!okEv) return unprocessable('Expenses charge requires evidence (single key or non-empty manifest)');
   }
   if (patch.mileage) {
-    const ok = await ensureEvidencePresent('mileage', patch.mileage.charge_ex_vat, patch.mileage);
-    if (!ok) return unprocessable('Mileage charge requires evidence (single key or non-empty manifest)');
+    const okEv = await ensureEvidencePresent('mileage', patch.mileage.charge_ex_vat, patch.mileage);
+    if (!okEv) return unprocessable('Mileage charge requires evidence (single key or non-empty manifest)');
   }
 
   // -------- construct update payload --------
@@ -43175,7 +44229,7 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
 
   const url =
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-    `?timesheet_id=eq.${encodeURIComponent(timesheetId)}` +
+    `?timesheet_id=eq.${encodeURIComponent(currentTimesheetId)}` +
     `&is_current=eq.true` +
     `&locked_by_invoice_id=is.null`;
 
@@ -43192,10 +44246,10 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
   const json = await res.json().catch(() => []);
   const after = Array.isArray(json) ? json[0] : json;
 
-  await enqueueManualTsfinRecalc(env, timesheetId).catch(() => {});
+  await enqueueManualTsfinRecalc(env, currentTimesheetId).catch(() => {});
   await insertAuditEvent(env, req, {
     object_type: 'timesheets_financials',
-    object_id_text: timesheetId,
+    object_id_text: currentTimesheetId,
     action: 'PATCH',
     reason: patch.reason ?? null,
     before_json: {
@@ -43236,19 +44290,35 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     }
   }).catch(() => {});
 
-  return ok({ updated: true, tsfin: after });
+  return ok({
+    updated: true,
+    tsfin: after,
+    booking_id: resolved.booking_id || null,
+    requested_timesheet_id: resolved.requested_timesheet_id || timesheetId || null,
+    current_timesheet_id: currentTimesheetId,
+    current_version: resolved.current_version ?? null,
+    was_stale: !!resolved.was_stale
+  });
 }
 
+/**
+ * Shared patcher (JS)
+ */
+
 // -------------------- public handlers --------------------
+
+
 async function handleTsfinPatchExpenses(env, req, timesheetId) {
   const body = await parseJSONBody(req).catch(() => ({}));
   return withCORS(env, req, await patchTsfinCommon(env, req, timesheetId, {
+    expected_timesheet_id: body?.expected_timesheet_id,
     reason: body?.reason ?? null,
     expenses: {
       pay_ex_vat: body?.pay_ex_vat,
       charge_ex_vat: body?.charge_ex_vat,
       description: body?.description,
       evidence_r2_key: body?.evidence_r2_key,
+      evidence_manifest: body?.evidence_manifest
     }
   }));
 }
@@ -43256,11 +44326,13 @@ async function handleTsfinPatchExpenses(env, req, timesheetId) {
 async function handleTsfinPatchMileage(env, req, timesheetId) {
   const body = await parseJSONBody(req).catch(() => ({}));
   return withCORS(env, req, await patchTsfinCommon(env, req, timesheetId, {
+    expected_timesheet_id: body?.expected_timesheet_id,
     reason: body?.reason ?? null,
     mileage: {
       pay_ex_vat: body?.pay_ex_vat,
       charge_ex_vat: body?.charge_ex_vat,
       evidence_r2_key: body?.evidence_r2_key,
+      evidence_manifest: body?.evidence_manifest,
       pay_rate: body?.pay_rate,
       charge_rate: body?.charge_rate,
     }
@@ -43270,10 +44342,367 @@ async function handleTsfinPatchMileage(env, req, timesheetId) {
 async function handleTsfinPatchPO(env, req, timesheetId) {
   const body = await parseJSONBody(req).catch(() => ({}));
   return withCORS(env, req, await patchTsfinCommon(env, req, timesheetId, {
+    expected_timesheet_id: body?.expected_timesheet_id,
     reason: body?.reason ?? null,
     po: { number: body?.number }
   }));
 }
+
+async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
+  // Local helpers used by both branches
+  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+  const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
+  const enc = encodeURIComponent;
+
+  // Helper: derive Mon–Sun week start from a week-ending date (ymd)
+  const computeWeekStartFromWeekEnding = (weYmd) => {
+    if (!weYmd) return null;
+    const d = new Date(`${weYmd}T00:00:00Z`);
+    if (Number.isNaN(d.getTime())) return weYmd;
+    d.setUTCDate(d.getUTCDate() - 6);
+    const yyyy = d.getUTCFullYear();
+    const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd   = String(d.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  // ─────────────────────────────────────────────────────────────
+  // Weekly helpers (contract-driven)
+  // ─────────────────────────────────────────────────────────────
+
+  async function loadWeeklyContext(env, ts) {
+    if (!ts || !ts.timesheet_id || !ts.contract_id || !ts.week_ending_date) {
+      return null;
+    }
+
+    const cw = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+        `?timesheet_id=eq.${enc(ts.timesheet_id)}` +
+        `&select=*` +
+        `&limit=1`
+    );
+    if (!cw) return null;
+
+    const contract = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contracts` +
+        `?id=eq.${enc(cw.contract_id)}` +
+        `&select=*`
+    );
+    if (!contract) return null;
+
+    return { cw, contract };
+  }
+
+  async function computeWeeklyHours(env, ts, contract) {
+    // Canonical shape
+    const zeroHours = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
+
+    // 1) Preferred path – schedule-driven for weekly timesheets
+    if (Array.isArray(ts.actual_schedule_json) && ts.actual_schedule_json.length) {
+      const minsByBucket = await resolveBucketsFromSchedule(
+        env,
+        contract,
+        ts.actual_schedule_json
+      );
+      const hours = {
+        day: +(asNumberLocal(minsByBucket.day) / 60).toFixed(2),
+        night: +(asNumberLocal(minsByBucket.night) / 60).toFixed(2),
+        sat: +(asNumberLocal(minsByBucket.sat) / 60).toFixed(2),
+        sun: +(asNumberLocal(minsByBucket.sun) / 60).toFixed(2),
+        bh: +(asNumberLocal(minsByBucket.bh) / 60).toFixed(2),
+      };
+      return hours;
+    }
+
+    // 2) For WEEKLY sheets, the schedule is the canonical source.
+    const scope = String(ts.sheet_scope || "").toUpperCase();
+    if (scope === "WEEKLY") {
+      return zeroHours;
+    }
+
+    // 3) Legacy fallback for any non-weekly usage (kept for safety)
+    const n = (v) => (v == null ? 0 : Number(v) || 0);
+    const hours = {
+      day: n(ts.hours_day),
+      night: n(ts.hours_night),
+      sat: n(ts.hours_sat),
+      sun: n(ts.hours_sun),
+      bh: n(ts.hours_bh),
+    };
+    return hours;
+  }
+
+  async function computeWeeklyAdditionalFromTs(env, ts, cw, contract) {
+    let additional_units_json = {};
+    let additional_pay_ex_vat = 0;
+    let additional_charge_ex_vat = 0;
+
+    const cfgArrRaw = contract.additional_rates_json;
+    if (!Array.isArray(cfgArrRaw) || !cfgArrRaw.length) {
+      return {
+        additional_units_json,
+        additional_pay_ex_vat,
+        additional_charge_ex_vat,
+        additional_margin_ex_vat: 0,
+      };
+    }
+
+    let cfgArr = cfgArrRaw;
+    if (typeof cfgArrRaw === "string") {
+      try {
+        cfgArr = JSON.parse(cfgArrRaw);
+      } catch {
+        cfgArr = [];
+      }
+    }
+    if (!Array.isArray(cfgArr)) cfgArr = [];
+
+    let unitsWeek = ts.additional_units_week || {};
+    let unitsPerDay = ts.additional_units_per_day || {};
+    if (typeof unitsWeek === "string") {
+      try {
+        unitsWeek = JSON.parse(unitsWeek);
+      } catch {
+        unitsWeek = {};
+      }
+    }
+    if (typeof unitsPerDay === "string") {
+      try {
+        unitsPerDay = JSON.parse(unitsPerDay);
+      } catch {
+        unitsPerDay = {};
+      }
+    }
+    if (!unitsWeek || typeof unitsWeek !== "object") unitsWeek = {};
+    if (!unitsPerDay || typeof unitsPerDay !== "object") unitsPerDay = {};
+
+    const weekEnd = cw.week_ending_date; // 'YYYY-MM-DD'
+    const dates = [];
+    try {
+      const weDate = new Date(`${weekEnd}T00:00:00Z`);
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(weDate);
+        d.setUTCDate(weDate.getUTCDate() - i);
+        dates.push(toYmd(d)); // existing helper
+      }
+    } catch {
+      // ignore
+    }
+
+    let bhSet = new Set();
+    try {
+      const policy = await loadClientTimePolicy(env, contract.client_id);
+      if (policy && policy.bhList) {
+        if (policy.bhList instanceof Set) {
+          bhSet = policy.bhList;
+        } else if (Array.isArray(policy.bhList)) {
+          bhSet = new Set(policy.bhList);
+        }
+      }
+    } catch {}
+
+    const dow = (ymd) => {
+      try {
+        const d = new Date(`${ymd}T00:00:00Z`);
+        return d.getUTCDay(); // 0=Sun..6=Sat
+      } catch {
+        return null;
+      }
+    };
+
+    const freqEnum = new Set([
+      "ONE_PER_WEEK",
+      "ONE_PER_DAY",
+      "WEEKENDS_AND_BH_ONLY",
+      "WEEKDAYS_EXCL_BH_ONLY",
+    ]);
+
+    for (const cfg of cfgArr) {
+      if (!cfg || !cfg.code) continue;
+      const code = String(cfg.code).toUpperCase();
+
+      const freqRaw = (cfg.frequency || "").toString().toUpperCase();
+      const freq = freqEnum.has(freqRaw) ? freqRaw : "ONE_PER_WEEK";
+
+      const weekUnits = Number((unitsWeek && unitsWeek[code]) || 0) || 0;
+      const perDayRaw =
+        unitsPerDay && typeof unitsPerDay[code] === "object"
+          ? unitsPerDay[code]
+          : {};
+
+      let unitCount = 0;
+      const perDayOut = {};
+
+      if (freq === "ONE_PER_WEEK") {
+        unitCount = weekUnits;
+      } else {
+        for (const ymd of dates) {
+          const u = Number(perDayRaw?.[ymd] || 0) || 0;
+          if (!u) continue;
+
+          const d = dow(ymd);
+          const isBh = bhSet.has(ymd);
+
+          let include = false;
+          if (freq === "ONE_PER_DAY") {
+            include = true;
+          } else if (freq === "WEEKENDS_AND_BH_ONLY") {
+            include = isBh || d === 0 || d === 6;
+          } else if (freq === "WEEKDAYS_EXCL_BH_ONLY") {
+            include = !isBh && d != null && d >= 1 && d <= 5;
+          }
+
+          if (!include) continue;
+          unitCount += u;
+          perDayOut[ymd] = (perDayOut[ymd] || 0) + u;
+        }
+      }
+
+      if (!unitCount || !Number.isFinite(unitCount) || unitCount <= 0) continue;
+
+      const payRate = Number(cfg.pay_rate ?? 0) || 0;
+      const chargeRate = Number(cfg.charge_rate ?? 0) || 0;
+
+      const payEx = round2(unitCount * payRate);
+      const chgEx = round2(unitCount * chargeRate);
+
+      additional_units_json[code] = {
+        bucket_name: cfg.bucket_name || null,
+        unit_name: cfg.unit_name || null,
+        frequency: freq,
+        unit_count: unitCount,
+        pay_rate: payRate,
+        charge_rate: chargeRate,
+        pay_ex_vat: payEx,
+        charge_ex_vat: chgEx,
+        days: Object.keys(perDayOut).length ? perDayOut : undefined,
+      };
+
+      additional_pay_ex_vat += payEx;
+      additional_charge_ex_vat += chgEx;
+    }
+
+    additional_pay_ex_vat = round2(additional_pay_ex_vat);
+    additional_charge_ex_vat = round2(additional_charge_ex_vat);
+    const additional_margin_ex_vat = round2(
+      additional_charge_ex_vat - additional_pay_ex_vat
+    );
+
+    return {
+      additional_units_json,
+      additional_pay_ex_vat,
+      additional_charge_ex_vat,
+      additional_margin_ex_vat,
+    };
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Worker core
+  // ─────────────────────────────────────────────────────────────
+
+  const lease = await sbRpc(env, "tsfin_dequeue_batch", { p_limit: limit });
+  if (!Array.isArray(lease) || !lease.length)
+    return { picked: 0, ok: 0, fail: 0 };
+
+  let ok = 0, fail = 0;
+
+  for (const item of lease) {
+    try {
+      // NEW: resolve possibly-stale queue timesheet_id to current
+      let workTimesheetId = item.timesheet_id;
+      try {
+        const r = await resolveTimesheetToCurrent(env, item.timesheet_id);
+        if (r && r.current_timesheet_id) workTimesheetId = r.current_timesheet_id;
+      } catch { /* non-fatal */ }
+
+      const ts = await loadCurrentTimesheet(env, workTimesheetId);
+      if (!ts) {
+        await sbRpc(env, "tsfin_mark_revoked", {
+          p_timesheet_id: workTimesheetId,
+        });
+        await sbRpc(env, "tsfin_work_success", { p_id: item.id });
+        ok++;
+        continue;
+      }
+
+      // NEW: if this timesheet already has a current NHSP / NHSP_ADJUSTMENT snapshot,
+      // do NOT overwrite it with a generic CONTRACT_WEEKLY or SELF_REPORTED snapshot.
+      try {
+        const { rows: curFinRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=eq.${enc(ts.timesheet_id)}` +
+          `&is_current=eq.true` +
+          `&select=basis` +
+          `&limit=1`
+        );
+        const curBasis = (curFinRows && curFinRows[0] && curFinRows[0].basis) || null;
+        if (curBasis === 'NHSP' || curBasis === 'NHSP_ADJUSTMENT') {
+          await sbRpc(env, "tsfin_work_success", { p_id: item.id });
+          ok++;
+          continue;
+        }
+      } catch {
+        // if this lookup fails, fall back to normal behaviour
+      }
+
+      if (!ts.authorised_at_server) {
+        // Only build TSFIN for authorised timesheets
+        await sbRpc(env, "tsfin_work_success", { p_id: item.id });
+        ok++;
+        continue;
+      }
+
+      const weeklyCtx = await loadWeeklyContext(env, ts);
+      if (weeklyCtx) {
+        // Weekly CONTRACT_WEEKLY snapshot
+        await buildWeeklySnapshot(env, ts, weeklyCtx.cw, weeklyCtx.contract);
+
+        // After writing the snapshot, load the current TSFIN row and enrich with HR cross-check if applicable
+        try {
+          const { rows: tfRows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+            `?timesheet_id=eq.${enc(ts.timesheet_id)}` +
+            `&is_current=eq.true` +
+            `&select=*` +
+            `&limit=1`
+          );
+          const tsfinRow = tfRows?.[0] || null;
+          if (tsfinRow) {
+            await enrichTsfinWithHrCrosscheck(env, ts, tsfinRow);
+          }
+        } catch (e) {
+          console.warn('[TSFIN] failed to load TSFIN for HR cross-check', {
+            timesheet_id: ts.timesheet_id,
+            err: e?.message || String(e)
+          });
+        }
+
+        await sbRpc(env, "tsfin_work_success", { p_id: item.id });
+        ok++;
+        continue;
+      }
+
+      // ── DAILY / ROTA branch ──────────────────────────────
+      await buildDailySnapshot(env, ts);
+
+      await sbRpc(env, "tsfin_work_success", { p_id: item.id });
+      ok++;
+    } catch (e) {
+      await sbRpc(env, "tsfin_work_fail", {
+        p_id: item.id,
+        p_error: String(e?.message || e),
+      });
+      fail++;
+    }
+  }
+
+  return { picked: lease.length, ok, fail };
+}
+
 
 // ---------------------------
 // Pay channel resolution (pure)
@@ -44666,32 +46095,85 @@ async function handleTsfinFinancials(env, req) {
 // settings_defaults.hr_validation_required and
 // settings_defaults.ts_reference_required)
 // ------------------------------------------------------
- async function handleTsfinMarkReady(env, req) {
+async function handleTsfinMarkReady(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized('Unauthorized');
 
   const payload = await parseJSONBody(req);
-  if (!payload || !Array.isArray(payload.timesheet_ids) || payload.timesheet_ids.length === 0) {
-    return badRequest("timesheet_ids[] required");
+
+  // ─────────────────────────────────────────────────────────────
+  // OPTION A: per-item expected guard
+  // payload: { items: [{ timesheet_id, expected_timesheet_id }, ...] }
+  // ─────────────────────────────────────────────────────────────
+  if (!payload || !Array.isArray(payload.items) || payload.items.length === 0) {
+    return badRequest('items[] required (each item: { timesheet_id, expected_timesheet_id })');
   }
-  const ids = [...new Set(payload.timesheet_ids)].filter(Boolean);
-  if (ids.length === 0) return badRequest("No valid timesheet_ids");
+
+  // Normalise + de-dupe by expected_timesheet_id (safe “selection” identity)
+  const seen = new Set();
+  const items = [];
+  for (const it of payload.items) {
+    const requested = String(it?.timesheet_id || '').trim();
+    const expected  = String(it?.expected_timesheet_id || '').trim();
+    if (!requested || !expected) continue;
+    const key = expected; // dedupe key
+    if (seen.has(key)) continue;
+    seen.add(key);
+    items.push({ requested_timesheet_id: requested, expected_timesheet_id: expected });
+  }
+
+  if (!items.length) {
+    return badRequest('No valid items (timesheet_id + expected_timesheet_id required)');
+  }
+
+  // Resolve requested → current and enforce expected == current (fail fast with strict 409)
+  const requestedToCurrent = new Map(); // requested -> current
+  const currentIds = [];
+
+  for (const it of items) {
+    let resolved = null;
+    try {
+      resolved = await resolveTimesheetToCurrent(env, it.requested_timesheet_id);
+    } catch {
+      resolved = null;
+    }
+
+    const current = resolved?.current_timesheet_id ? String(resolved.current_timesheet_id) : '';
+    if (!current) {
+      // If the timesheet can’t be resolved at all, treat as bad input
+      return badRequest(`Timesheet not found: ${it.requested_timesheet_id}`);
+    }
+
+    if (String(it.expected_timesheet_id) !== String(current)) {
+      // STRICT moved payload (per your rule)
+      return new Response(
+        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: current }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    requestedToCurrent.set(it.requested_timesheet_id, current);
+    currentIds.push(current);
+  }
+
+  // Work set for downstream queries
+  const ids = Array.from(new Set(currentIds)).filter(Boolean);
+  if (!ids.length) return badRequest('No valid timesheet ids after resolution');
 
   const idsParam = ids.map(encodeURIComponent).join(',');
 
   // Load global feature flags from defaults
-  // - ts_reference_required: optional global gating for timesheet reference
   let tsRefRequired = false;
   try {
     const { rows: defRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=ts_reference_required`
     );
-    if (defRows && defRows[0] && typeof defRows[0].ts_reference_required === 'boolean') {
+    if (defRows?.[0] && typeof defRows[0].ts_reference_required === 'boolean') {
       tsRefRequired = defRows[0].ts_reference_required;
     }
   } catch {
-    // if settings lookup fails, proceed with default (false)
+    // default false
   }
 
   // Current/unlocked TSFIN snapshots we might promote
@@ -44706,37 +46188,46 @@ async function handleTsfinFinancials(env, req) {
       `&locked_by_invoice_id=is.null`
   );
 
-  // Build per-client settings map (requires_hr, autoprocess_hr, no_timesheet_required)
+  // Map TSFIN by timesheet_id (avoid O(n^2) find)
+  const tsfinById = new Map((tsfinRows || []).map(r => [r.timesheet_id, r]));
+
+  // Build per-client settings map (LATEST per client)
   const clientIds = Array.from(new Set((tsfinRows || []).map(r => r.client_id).filter(Boolean)));
-  const hrByClientId           = new Map(); // client_id -> requires_hr
-  const autoprocessByClientId  = new Map(); // client_id -> autoprocess_hr
-  const noTsReqByClientId      = new Map(); // client_id -> no_timesheet_required
+  const hrByClientId          = new Map(); // client_id -> requires_hr
+  const autoprocessByClientId = new Map(); // client_id -> autoprocess_hr
+  const noTsReqByClientId     = new Map(); // client_id -> no_timesheet_required
 
   if (clientIds.length) {
     const csParam = clientIds.map(encodeURIComponent).join(',');
     const { rows: csRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/client_settings` +
-        `?select=client_id,requires_hr,autoprocess_hr,no_timesheet_required` +
-        `&client_id=in.(${csParam})`
+        `?select=client_id,requires_hr,autoprocess_hr,no_timesheet_required,effective_from` +
+        `&client_id=in.(${csParam})` +
+        `&order=client_id.asc,effective_from.desc`
     );
+
+    // Take first row per client_id due to ordering (latest effective_from wins)
+    const seenClient = new Set();
     for (const cs of csRows || []) {
       const cid = cs.client_id;
-      if (!cid) continue;
+      if (!cid || seenClient.has(cid)) continue;
+      seenClient.add(cid);
+
       hrByClientId.set(cid, !!cs.requires_hr);
       autoprocessByClientId.set(cid, !!cs.autoprocess_hr);
       noTsReqByClientId.set(cid, !!cs.no_timesheet_required);
     }
   }
 
-  // Determine which timesheets actually need HR validation (existing validation gate)
+  // Determine which timesheets need HR validation
   const idsNeedingHr = (tsfinRows || [])
     .filter(r => r.client_id && hrByClientId.get(r.client_id))
     .map(r => r.timesheet_id);
 
   // Latest validation per TS (only for those that need HR)
   const latestById = new Map();
-  const OK = new Set(['VALIDATION_OK','OVERRIDDEN']);
+  const OK = new Set(['VALIDATION_OK', 'OVERRIDDEN']);
 
   if (idsNeedingHr.length) {
     const valParam = idsNeedingHr.map(encodeURIComponent).join(',');
@@ -44763,12 +46254,10 @@ async function handleTsfinFinancials(env, req) {
         `r2_nurse_key,r2_auth_key,manual_pdf_r2_key,basis` +
         `&timesheet_id=in.(${idsParam})`
     );
-    for (const t of tsRows || []) {
-      tsMetaMap.set(t.timesheet_id, t);
-    }
+    for (const t of tsRows || []) tsMetaMap.set(t.timesheet_id, t);
   }
 
-  // NEW: Evidence counts via timesheet_evidence (per timesheet)
+  // Evidence counts via timesheet_evidence (per timesheet)
   const evidenceCountByTsId = new Map();
   if (ids.length) {
     try {
@@ -44791,10 +46280,10 @@ async function handleTsfinFinancials(env, req) {
   }
 
   const eligibleIds = [];
-  const blocked     = [];
+  const blocked = [];
 
   // Candidate → umbrella lookups for pay-channel gating
-  const candIds = Array.from(new Set((tsfinRows || []).map((r) => r.candidate_id).filter(Boolean)));
+  const candIds = Array.from(new Set((tsfinRows || []).map(r => r.candidate_id).filter(Boolean)));
   let candidatesById = new Map();
   let umbrellasById  = new Map();
 
@@ -44806,11 +46295,9 @@ async function handleTsfinFinancials(env, req) {
         `?select=id,umbrella_id,account_holder,bank_name,sort_code,account_number` +
         `&id=in.(${candParam})`
     );
-    candidatesById = new Map((candRows || []).map((c) => [c.id, c]));
+    candidatesById = new Map((candRows || []).map(c => [c.id, c]));
 
-    const umbIds = Array.from(new Set((candRows || [])
-      .map((c) => c.umbrella_id)
-      .filter(Boolean)));
+    const umbIds = Array.from(new Set((candRows || []).map(c => c.umbrella_id).filter(Boolean)));
     if (umbIds.length) {
       const umbParam = umbIds.map(encodeURIComponent).join(',');
       const { rows: umbRows } = await sbFetch(
@@ -44819,12 +46306,13 @@ async function handleTsfinFinancials(env, req) {
           `?select=id,name,bank_name,sort_code,account_number` +
           `&id=in.(${umbParam})`
       );
-      umbrellasById = new Map((umbRows || []).map((u) => [u.id, u]));
+      umbrellasById = new Map((umbRows || []).map(u => [u.id, u]));
     }
   }
 
   for (const id of ids) {
-    const row = (tsfinRows || []).find((r) => r.timesheet_id === id);
+    const row = tsfinById.get(id);
+
     if (!row) {
       blocked.push({ id, reason: 'tsfin_missing_or_locked' });
       continue;
@@ -44834,14 +46322,14 @@ async function handleTsfinFinancials(env, req) {
       continue;
     }
 
-    const clientId   = row.client_id || null;
-    const requiresHr = !!(clientId && hrByClientId.get(clientId));
+    const clientId      = row.client_id || null;
+    const requiresHr    = !!(clientId && hrByClientId.get(clientId));
     const autoprocessHr = !!(clientId && autoprocessByClientId.get(clientId));
-    const noTsReq    = !!(clientId && noTsReqByClientId.get(clientId));
+    const noTsReq       = !!(clientId && noTsReqByClientId.get(clientId));
 
     const tsMeta = tsMetaMap.get(id) || {};
 
-    // 1) HR Validation gating (per client) — existing behaviour
+    // 1) HR Validation gating
     if (requiresHr) {
       const v = latestById.get(id);
       if (!v || !OK.has(v.status)) {
@@ -44850,7 +46338,7 @@ async function handleTsfinFinancials(env, req) {
       }
     }
 
-    // 1b) Authorisation gating when autoprocess_hr = false — existing
+    // 1b) Authorisation gating when autoprocess_hr = false
     if (requiresHr && !autoprocessHr) {
       const authorised = !!tsMeta.authorised_at_server;
       if (!authorised) {
@@ -44859,19 +46347,16 @@ async function handleTsfinFinancials(env, req) {
       }
     }
 
-    // NEW 1c) HR cross-check gate
+    // 1c) HR cross-check gate
     if (requiresHr) {
       const hrStatus = (row.hr_crosscheck_status || '').toString().toUpperCase() || null;
       const hrIssues = Array.isArray(row.hr_crosscheck_issues) ? row.hr_crosscheck_issues : [];
 
       if (hrStatus && hrStatus !== 'OK') {
-        // e.g. HOURS_MISMATCH_HR or HR_HOURS_MISSING
         blocked.push({ id, reason: 'hr_crosscheck_failed' });
         continue;
       }
-
       if (hrIssues.includes('DUPLICATE_CONTRACTS')) {
-        // Even if status is OK, duplicates should block promotion
         blocked.push({ id, reason: 'hr_crosscheck_failed' });
         continue;
       }
@@ -44918,7 +46403,7 @@ async function handleTsfinFinancials(env, req) {
     const cand = candidatesById.get(row.candidate_id);
     const umb  = cand?.umbrella_id ? umbrellasById.get(cand.umbrella_id) : undefined;
     const channel = resolveEffectivePayChannel({
-      pay_method: row.pay_method,  // prefer TSFIN snapshot
+      pay_method: row.pay_method,
       candidate: cand,
       umbrella: umb
     });
@@ -44937,12 +46422,13 @@ async function handleTsfinFinancials(env, req) {
       }
     }
 
-    // Passed all gates
     eligibleIds.push(id);
   }
 
   if (!eligibleIds.length) {
-    return badRequest("No timesheets are eligible to mark READY_FOR_INVOICE (validation/evidence/pay-channel/reference/timesheet/authorisation/HR rules failed).");
+    return badRequest(
+      'No timesheets are eligible to mark READY_FOR_INVOICE (validation/evidence/pay-channel/reference/timesheet/authorisation/HR rules failed).'
+    );
   }
 
   // Promote READY_FOR_HR → READY_FOR_INVOICE for just the eligible set
@@ -44954,23 +46440,23 @@ async function handleTsfinFinancials(env, req) {
     `&processing_status=eq.READY_FOR_HR`;
 
   const res = await fetch(updUrl, {
-    method: "PATCH",
-    headers: { ...sbHeaders(env), "Prefer": "return=representation" },
+    method: 'PATCH',
+    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
     body: JSON.stringify({
-      processing_status: "READY_FOR_INVOICE",
+      processing_status: 'READY_FOR_INVOICE',
       updated_at: new Date().toISOString()
     })
   });
 
   if (!res.ok) {
-    const t = await res.text();
+    const t = await res.text().catch(() => '');
     return serverError(`Failed to mark READY_FOR_INVOICE: ${t}`);
   }
 
   const promoted = await res.json().catch(() => []);
   return ok({
     promoted_count: promoted.length,
-    promoted_ids: promoted.map((r) => r.timesheet_id),
+    promoted_ids: promoted.map(r => r.timesheet_id),
     blocked_ids: blocked
   });
 }
@@ -47488,6 +48974,7 @@ async function generateAndStoreTimesheetQr(env, {
 
   return { qrText, qr_r2_key };
 }
+
 async function handleTimesheetQrResendEmail(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -47495,11 +48982,34 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
   if (!user) return withCORS(env, req, unauthorized());
   if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
 
+  // ✅ Guarded write: require expected_timesheet_id
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+
+  // ✅ stale-safe resolve
+  const resolved = await resolveTimesheetToCurrent(env, timesheetId);
+  if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
+  const currentTimesheetId = resolved.current_timesheet_id;
+
+  // ✅ Guard mismatch → 409 TIMESHEET_MOVED
+  if (String(expected) !== String(currentTimesheetId)) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetId }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
+
   // Load current timesheet
   const ts = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
       `&is_current=eq.true` +
       `&select=*` +
       `&limit=1`
@@ -47526,11 +49036,11 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
   let pdfKey = ts.manual_pdf_r2_key || null;
   if (!pdfKey) {
     try {
-      pdfKey = await ensureTimesheetPdf(env, timesheetId);
+      pdfKey = await ensureTimesheetPdf(env, currentTimesheetId);
       if (pdfKey) {
         await fetch(
           `${env.SUPABASE_URL}/rest/v1/timesheets` +
-            `?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`,
+            `?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
           {
             method: 'PATCH',
             headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
@@ -47543,9 +49053,7 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
     }
   }
 
-  if (!pdfKey) {
-    return withCORS(env, req, serverError('No PDF available to resend'));
-  }
+  if (!pdfKey) return withCORS(env, req, serverError('No PDF available to resend'));
 
   // Resolve candidate email via contract
   if (!ts.contract_id) {
@@ -47590,7 +49098,7 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
     `and then upload the signed copy via the app.`,
     ``,
     ...(dateLabel ? [`Date: ${dateLabel}`] : []),
-    `Timesheet ID: ${timesheetId}`
+    `Timesheet ID: ${currentTimesheetId}`
   ];
   const body_text = lines.join('\n');
   const body_html = `<p>${lines.map(l => (l === '' ? '<br/>' : l)).join('<br/>')}</p>`;
@@ -47606,9 +49114,9 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
       subject,
       body_html,
       body_text,
-      attachments: [{ r2_key: pdfKey, filename: `Timesheet_${dateLabel || timesheetId}.pdf` }],
+      attachments: [{ r2_key: pdfKey, filename: `Timesheet_${dateLabel || currentTimesheetId}.pdf` }],
       status: 'QUEUED',
-      reference: `timesheet_qr:resend:${timesheetId}`,
+      reference: `timesheet_qr:resend:${currentTimesheetId}`,
       created_by: user?.id || null
     })
   });
@@ -47624,13 +49132,144 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
       env,
       user,
       'QR_RESENT',
-      { timesheet_id: timesheetId, pdf_r2_key: pdfKey, to: toEmail },
-      { entity: 'timesheets', subject_id: timesheetId, req }
+      { timesheet_id: currentTimesheetId, pdf_r2_key: pdfKey, to: toEmail },
+      { entity: 'timesheets', subject_id: currentTimesheetId, req }
     );
   } catch {}
 
-  return withCORS(env, req, ok({ queued: true, timesheet_id: timesheetId, pdf_key: pdfKey }));
+  return withCORS(env, req, ok({
+    queued: true,
+    timesheet_id: currentTimesheetId,
+    current_timesheet_id: currentTimesheetId,
+    requested_timesheet_id: resolved.requested_timesheet_id || timesheetId,
+    was_stale: !!resolved.was_stale,
+    pdf_key: pdfKey
+  }));
 }
+
+
+
+
+
+async function handleTimesheetQrRestore(env, req, timesheetId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+
+  // ✅ Guarded write
+  const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+
+  // ✅ stale-safe resolve
+  const resolved = await resolveTimesheetToCurrent(env, timesheetId);
+  if (!resolved?.current_timesheet_id) return withCORS(env, req, notFound('Timesheet not found'));
+  const currentTimesheetId = String(resolved.current_timesheet_id);
+
+  // ✅ Guard mismatch → 409 TIMESHEET_MOVED
+  if (String(expected) !== String(currentTimesheetId)) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetId }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
+
+  // required: kind = 'PENDING' | 'SIGNED' (matches SQL)
+  const kindRaw = String(body?.kind || body?.restore_kind || body?.p_restore_kind || '').toUpperCase();
+  if (kindRaw !== 'PENDING' && kindRaw !== 'SIGNED') {
+    return withCORS(env, req, badRequest('kind must be PENDING or SIGNED'));
+  }
+
+  // Helper: map SQL-raised JSON to 409
+  const tryParseMovedFromRpcError = (text) => {
+    const t = String(text || '');
+    const start = t.indexOf('{');
+    const end = t.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      const chunk = t.slice(start, end + 1);
+      try {
+        const j = JSON.parse(chunk);
+        if (j && j.error === 'TIMESHEET_MOVED' && j.current_timesheet_id) return j;
+      } catch {}
+    }
+    return null;
+  };
+
+  const rpcRes = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/timesheet_qr_restore_version`, {
+    method: 'POST',
+    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+    body: JSON.stringify({
+      p_timesheet_id: currentTimesheetId,
+      p_expected_timesheet_id: expected,        // ✅ REQUIRED by SQL
+      p_restore_kind: kindRaw,                  // ✅ REQUIRED by SQL
+      p_actor_user_id: user?.id || null
+    })
+  });
+
+  if (!rpcRes.ok) {
+    const t = await rpcRes.text().catch(() => '');
+    const moved = tryParseMovedFromRpcError(t);
+    if (moved) {
+      return withCORS(
+        env,
+        req,
+        new Response(JSON.stringify(moved), { status: 409, headers: { 'Content-Type': 'application/json' } })
+      );
+    }
+    return withCORS(env, req, badRequest(`Restore failed: ${t}`));
+  }
+
+  const rpcRows = await rpcRes.json().catch(() => []);
+  const rpcRow = Array.isArray(rpcRows) ? rpcRows[0] : rpcRows;
+
+  // ✅ Re-resolve after RPC (defensive if RPC rotates)
+  let afterId = currentTimesheetId;
+  try {
+    const resolvedAfter = await resolveTimesheetToCurrent(env, currentTimesheetId);
+    if (resolvedAfter?.current_timesheet_id) afterId = String(resolvedAfter.current_timesheet_id);
+  } catch {}
+
+  // Fetch new current state
+  const tsCur = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(afterId)}` +
+      `&is_current=eq.true` +
+      `&select=*` +
+      `&limit=1`
+  );
+
+  const finCur = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?timesheet_id=eq.${enc(afterId)}` +
+      `&is_current=eq.true` +
+      `&select=*` +
+      `&limit=1`
+  );
+
+  return withCORS(env, req, ok({
+    ok: true,
+    timesheet_id: afterId,
+    current_timesheet_id: afterId,
+    requested_timesheet_id: resolved?.requested_timesheet_id || timesheetId,
+    was_stale: !!resolved?.was_stale,
+
+    restored: rpcRow || null,
+    timesheet: tsCur || null,
+    tsfin: finCur || null
+  }));
+}
+
+
 async function handleTimesheetQrRefuseAndReset(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -47641,15 +49280,56 @@ async function handleTimesheetQrRefuseAndReset(env, req, timesheetId) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
 
-  const reason = (body && typeof body.reason === 'string') ? body.reason : (body && typeof body.rejected_reason === 'string' ? body.rejected_reason : '');
+  // ✅ Guarded write
+  const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+
+  // ✅ stale-safe resolve
+  const resolved = await resolveTimesheetToCurrent(env, timesheetId);
+  if (!resolved?.current_timesheet_id) return withCORS(env, req, notFound('Timesheet not found'));
+  const currentTimesheetId = String(resolved.current_timesheet_id);
+
+  // ✅ Guard mismatch → 409 TIMESHEET_MOVED
+  if (String(expected) !== String(currentTimesheetId)) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetId }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
+
+  const reason =
+    (body && typeof body.reason === 'string')
+      ? body.reason
+      : (body && typeof body.rejected_reason === 'string' ? body.rejected_reason : '');
+
   const reasonTrim = String(reason || '').trim();
 
-  // Call SQL RPC (installed)
+  // Helper: map SQL-raised JSON to 409
+  const tryParseMovedFromRpcError = (text) => {
+    const t = String(text || '');
+    const start = t.indexOf('{');
+    const end = t.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      const chunk = t.slice(start, end + 1);
+      try {
+        const j = JSON.parse(chunk);
+        if (j && j.error === 'TIMESHEET_MOVED' && j.current_timesheet_id) return j;
+      } catch {}
+    }
+    return null;
+  };
+
+  // Call SQL RPC — operate on CURRENT id
   const rpcRes = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/timesheet_qr_refuse_and_reset`, {
     method: 'POST',
     headers: { ...sbHeaders(env), Prefer: 'return=representation' },
     body: JSON.stringify({
-      p_timesheet_id: timesheetId,
+      p_timesheet_id: currentTimesheetId,
+      p_expected_timesheet_id: expected,                 // ✅ REQUIRED by SQL
       p_reason: reasonTrim || null,
       p_actor_user_id: user?.id || null
     })
@@ -47657,19 +49337,32 @@ async function handleTimesheetQrRefuseAndReset(env, req, timesheetId) {
 
   if (!rpcRes.ok) {
     const t = await rpcRes.text().catch(() => '');
+    const moved = tryParseMovedFromRpcError(t);
+    if (moved) {
+      return withCORS(
+        env,
+        req,
+        new Response(JSON.stringify(moved), { status: 409, headers: { 'Content-Type': 'application/json' } })
+      );
+    }
     return withCORS(env, req, badRequest(`Refuse failed: ${t}`));
   }
 
   const rpcRows = await rpcRes.json().catch(() => []);
   const rpcRow = Array.isArray(rpcRows) ? rpcRows[0] : rpcRows;
 
-  // After RPC, current version is Scenario 1 (qr_status=PENDING, no token), and TSFIN is reset. 
+  // ✅ Re-resolve after RPC (defensive if RPC rotates)
+  let afterId = currentTimesheetId;
+  try {
+    const resolvedAfter = await resolveTimesheetToCurrent(env, currentTimesheetId);
+    if (resolvedAfter?.current_timesheet_id) afterId = String(resolvedAfter.current_timesheet_id);
+  } catch {}
 
-  // Resolve candidate email via contract on the NEW current row
+  // Resolve candidate email via contract on the CURRENT row after RPC
   const tsCur = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `?timesheet_id=eq.${enc(afterId)}` +
       `&is_current=eq.true` +
       `&select=contract_id,sheet_scope,week_ending_date,worked_start_iso` +
       `&limit=1`
@@ -47716,7 +49409,7 @@ async function handleTimesheetQrRefuseAndReset(env, req, timesheetId) {
         ...(reasonTrim ? [`Reason: ${reasonTrim}`, ``] : []),
         `Please open the app and resubmit as requested.`,
         ``,
-        `Timesheet ID: ${timesheetId}`
+        `Timesheet ID: ${afterId}`
       ];
       const body_text = lines.join('\n');
       const body_html = `<p>${lines.map(l => (l === '' ? '<br/>' : l)).join('<br/>')}</p>`;
@@ -47733,7 +49426,7 @@ async function handleTimesheetQrRefuseAndReset(env, req, timesheetId) {
           body_text,
           attachments: null,
           status: 'QUEUED',
-          reference: `timesheet_qr:refused:${timesheetId}`,
+          reference: `timesheet_qr:refused:${afterId}`,
           created_by: user?.id || null
         })
       });
@@ -47742,11 +49435,10 @@ async function handleTimesheetQrRefuseAndReset(env, req, timesheetId) {
     }
   }
 
-  // Return refreshed details (minimal: current timesheet + current tsfin)
   const tsFull = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `?timesheet_id=eq.${enc(afterId)}` +
       `&is_current=eq.true` +
       `&select=*` +
       `&limit=1`
@@ -47755,85 +49447,23 @@ async function handleTimesheetQrRefuseAndReset(env, req, timesheetId) {
   const fin = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `?timesheet_id=eq.${enc(afterId)}` +
       `&is_current=eq.true` +
       `&select=*` +
       `&limit=1`
   );
 
-  // NOTE: RPC already inserts the 'QR_HOURS_REFUSED' audit event, so we do not duplicate it. :contentReference[oaicite:6]{index=6}
-
   return withCORS(env, req, ok({
     ok: true,
-    timesheet_id: timesheetId,
+    timesheet_id: afterId,
+    current_timesheet_id: afterId,
+    requested_timesheet_id: resolved?.requested_timesheet_id || timesheetId,
+    was_stale: !!resolved?.was_stale,
+
     rpc: rpcRow || null,
     email_queued: queuedEmail,
     timesheet: tsFull || null,
     tsfin: fin || null
-  }));
-}
-
-async function handleTimesheetQrRestore(env, req, timesheetId) {
-  const enc = encodeURIComponent;
-
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-  if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
-
-  let body = null;
-  try { body = await parseJSONBody(req); } catch { body = null; }
-
-  // required: kind = 'PENDING' | 'SIGNED' (matches SQL) 
-  const kindRaw = String(body?.kind || body?.restore_kind || body?.p_restore_kind || '').toUpperCase();
-  if (kindRaw !== 'PENDING' && kindRaw !== 'SIGNED') {
-    return withCORS(env, req, badRequest('kind must be PENDING or SIGNED'));
-  }
-
-  const rpcRes = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/timesheet_qr_restore_version`, {
-    method: 'POST',
-    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-    body: JSON.stringify({
-      p_timesheet_id: timesheetId,
-      p_restore_kind: kindRaw,
-      p_actor_user_id: user?.id || null
-    })
-  });
-
-  if (!rpcRes.ok) {
-    const t = await rpcRes.text().catch(() => '');
-    return withCORS(env, req, badRequest(`Restore failed: ${t}`));
-  }
-
-  const rpcRows = await rpcRes.json().catch(() => []);
-  const rpcRow = Array.isArray(rpcRows) ? rpcRows[0] : rpcRows;
-
-  // Fetch new current state
-  const tsCur = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
-      `&is_current=eq.true` +
-      `&select=*` +
-      `&limit=1`
-  );
-
-  const finCur = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
-      `&is_current=eq.true` +
-      `&select=*` +
-      `&limit=1`
-  );
-
-  // IMPORTANT: SQL RPC already inserts audit event 'QR_RESTORED', so do not double-audit. 
-
-  return withCORS(env, req, ok({
-    ok: true,
-    timesheet_id: timesheetId,
-    restored: rpcRow || null,
-    timesheet: tsCur || null,
-    tsfin: finCur || null
   }));
 }
 
@@ -47882,442 +49512,9 @@ async function handleTimesheetAuditFeed(env, req, timesheetId) {
   const rows = await rpcRes.json().catch(() => []);
   return withCORS(env, req, ok({ items: rows || [] }));
 }
-async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
-  const enc = encodeURIComponent;
 
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-  if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
 
-  // Load current version row by PK
-  const ts = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
-      `&is_current=eq.true` +
-      `&select=*` +
-      `&limit=1`
-  );
-  if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
 
-  const bookingId = ts.booking_id || null;
-  if (!bookingId) return withCORS(env, req, badRequest('Timesheet booking_id is missing; cannot version'));
-
-  // Lock guard (current TSFIN row for current PK)
-  const fin = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
-      `&is_current=eq.true` +
-      `&select=id,locked_by_invoice_id,paid_at_utc,timesheet_version,processing_status` +
-      `&limit=1`
-  );
-  if (fin && (fin.locked_by_invoice_id || fin.paid_at_utc)) {
-    return withCORS(env, req, badRequest('Cannot allow QR again: timesheet is invoiced/locked or paid'));
-  }
-
-  // Must be manual-only (derived)
-  const sm = String(ts.submission_mode || '').toUpperCase();
-  const qrStatusNow = String(ts.qr_status || '').toUpperCase() || '';
-  const hasQrToken = !!(ts.qr_token && String(ts.qr_token).trim());
-  const hasQrGen = !!ts.qr_generated_at;
-  const hasQrScan = !!ts.qr_scanned_at;
-
-  const isManualOnly =
-    (sm === 'MANUAL') &&
-    !qrStatusNow &&
-    !hasQrToken &&
-    !hasQrGen &&
-    !hasQrScan;
-
-  if (!isManualOnly) {
-    return withCORS(env, req, badRequest('Allow QR again is only valid for manual-only timesheets'));
-  }
-
-  const now = nowIso();
-
-  // Next version number by booking_id (NOT by timesheet_id)
-  let nextVersion = 2;
-  try {
-    const { rows: vRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?booking_id=eq.${enc(bookingId)}` +
-        `&select=version` +
-        `&order=version.desc` +
-        `&limit=1`
-    );
-    const maxV = vRows?.[0]?.version != null ? Number(vRows[0].version) : Number(ts.version || 1);
-    nextVersion = Number.isFinite(maxV) ? maxV + 1 : (Number(ts.version || 1) + 1);
-  } catch {
-    nextVersion = Number(ts.version || 1) + 1;
-  }
-
-  // 1) Demote any current row for this booking_id (defensive)
-  await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?booking_id=eq.${enc(bookingId)}` +
-      `&is_current=eq.true`,
-    {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-      body: JSON.stringify({
-        is_current: false,
-        status: 'REVOKED',
-        revoked_reason: 'ALLOW_QR_AGAIN',
-        revoked_by: user?.id || null,
-        updated_at: now
-      })
-    }
-  ).catch(() => {});
-
-  // 2) Insert new current version (NO timesheet_id)
-  const newRowBase = { ...ts };
-  delete newRowBase.id;
-  delete newRowBase.timesheet_id;
-
-  const newRow = {
-    ...newRowBase,
-    booking_id: bookingId,
-    version: nextVersion,
-    is_current: true,
-    status: 'RECEIVED',
-    submission_mode: 'MANUAL',
-
-    manual_pdf_r2_key: null,
-    r2_nurse_key: null,
-    r2_auth_key: null,
-    authorised_at_server: null,
-
-    qr_status: 'PENDING',
-    qr_token: null,
-    qr_payload_json: {}, // NOT NULL
-    qr_generated_at: null,
-    qr_scanned_at: null,
-    qr_scan_info_json: null,
-    qr_r2_key: null,
-
-    created_at: now,
-    updated_at: now
-  };
-
-  const insRes = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets`, {
-    method: 'POST',
-    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-    body: JSON.stringify([newRow])
-  });
-
-  if (!insRes.ok) {
-    const t = await insRes.text().catch(() => '');
-    return withCORS(env, req, serverError(`Failed to create QR-enabled version: ${t}`));
-  }
-
-  const inserted = (await insRes.json().catch(() => []))[0] || null;
-  const newTimesheetId = inserted?.timesheet_id || null;
-  if (!newTimesheetId) {
-    return withCORS(env, req, serverError('Insert succeeded but no timesheet_id returned'));
-  }
-
-  // 2b) Move contract_week pointer if it points at the old current row
-  try {
-    const cw = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-        `?timesheet_id=eq.${enc(timesheetId)}` +
-        `&select=id` +
-        `&limit=1`
-    );
-    if (cw?.id) {
-      await fetch(
-        `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
-        {
-          method: 'PATCH',
-          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-          body: JSON.stringify({ timesheet_id: newTimesheetId, updated_at: now })
-        }
-      ).catch(() => {});
-    }
-  } catch {}
-
-  // 3) TSFIN: move the current TSFIN row to the new timesheet_id + set gate
-  if (fin?.id) {
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
-      {
-        method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify({
-          timesheet_id: newTimesheetId,
-          timesheet_version: inserted?.version ?? nextVersion,
-          processing_status: 'AWAITING_MANUAL_SIGNATURE',
-          updated_at: now
-        })
-      }
-    ).catch(() => {});
-  }
-
-  // 4) Audit
-  try {
-    await writeAudit(
-      env,
-      user,
-      'QR_ALLOWED_AGAIN',
-      {
-        booking_id: bookingId,
-        old_timesheet_id: timesheetId,
-        new_timesheet_id: newTimesheetId,
-        old_version: ts.version,
-        new_version: inserted?.version ?? nextVersion
-      },
-      { entity: 'timesheets', subject_id: newTimesheetId, req }
-    );
-  } catch {}
-
-  return withCORS(env, req, ok({
-    ok: true,
-    booking_id: bookingId,
-    old_timesheet_id: timesheetId,
-    current_timesheet_id: newTimesheetId,
-    new_version: inserted?.version ?? nextVersion
-  }));
-}
-
-async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
-  const enc = encodeURIComponent;
-
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-  if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
-
-  // Load current version row by PK
-  const ts = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
-      `&is_current=eq.true` +
-      `&select=*` +
-      `&limit=1`
-  );
-  if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
-
-  const bookingId = ts.booking_id || null;
-  if (!bookingId) return withCORS(env, req, badRequest('Timesheet booking_id is missing; cannot version'));
-
-  // Lock guard
-  const fin = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
-      `&is_current=eq.true` +
-      `&select=id,locked_by_invoice_id,paid_at_utc,timesheet_version,processing_status,client_id` +
-      `&limit=1`
-  );
-  if (fin && (fin.locked_by_invoice_id || fin.paid_at_utc)) {
-    return withCORS(env, req, badRequest('Cannot allow electronic again: timesheet is invoiced/locked or paid'));
-  }
-
-  // Must be manual-only (derived)
-  const sm = String(ts.submission_mode || '').toUpperCase();
-  const qrStatusNow = String(ts.qr_status || '').toUpperCase() || '';
-  const hasQrToken = !!(ts.qr_token && String(ts.qr_token).trim());
-  const hasQrGen = !!ts.qr_generated_at;
-  const hasQrScan = !!ts.qr_scanned_at;
-
-  const isManualOnly =
-    (sm === 'MANUAL') &&
-    !qrStatusNow &&
-    !hasQrToken &&
-    !hasQrGen &&
-    !hasQrScan;
-
-  if (!isManualOnly) {
-    return withCORS(env, req, badRequest('Allow electronic again is only valid for manual-only timesheets'));
-  }
-
-  // Determine client_id for eligibility check
-  let clientId = fin?.client_id || null;
-  if (!clientId && ts.contract_id) {
-    const contract = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/contracts` +
-        `?id=eq.${enc(ts.contract_id)}` +
-        `&select=id,client_id` +
-        `&limit=1`
-    );
-    clientId = contract?.client_id || null;
-  }
-  if (!clientId) {
-    return withCORS(env, req, badRequest('Cannot resolve client_id for electronic eligibility check'));
-  }
-
-  let supportsElectronic = false;
-  try {
-    const { rows: csRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/client_settings` +
-        `?client_id=eq.${enc(clientId)}` +
-        `&select=default_submission_mode,updated_at,created_at` +
-        `&order=updated_at.desc.nullslast,created_at.desc.nullslast` +
-        `&limit=1`
-    );
-    const cs = csRows?.[0] || null;
-    supportsElectronic = (String(cs?.default_submission_mode || '').toUpperCase() === 'ELECTRONIC');
-  } catch {
-    supportsElectronic = false;
-  }
-
-  if (!supportsElectronic) {
-    return withCORS(env, req, badRequest('Client does not support electronic submission'));
-  }
-
-  const now = nowIso();
-
-  // Next version number by booking_id
-  let nextVersion = 2;
-  try {
-    const { rows: vRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?booking_id=eq.${enc(bookingId)}` +
-        `&select=version` +
-        `&order=version.desc` +
-        `&limit=1`
-    );
-    const maxV = vRows?.[0]?.version != null ? Number(vRows[0].version) : Number(ts.version || 1);
-    nextVersion = Number.isFinite(maxV) ? maxV + 1 : (Number(ts.version || 1) + 1);
-  } catch {
-    nextVersion = Number(ts.version || 1) + 1;
-  }
-
-  // 1) Demote current for booking_id
-  await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?booking_id=eq.${enc(bookingId)}` +
-      `&is_current=eq.true`,
-    {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-      body: JSON.stringify({
-        is_current: false,
-        status: 'REVOKED',
-        revoked_reason: 'ALLOW_ELECTRONIC_AGAIN',
-        revoked_by: user?.id || null,
-        updated_at: now
-      })
-    }
-  ).catch(() => {});
-
-  // 2) Insert new ELECTRONIC current version (NO timesheet_id)
-  const newRowBase = { ...ts };
-  delete newRowBase.id;
-  delete newRowBase.timesheet_id;
-
-  const newRow = {
-    ...newRowBase,
-    booking_id: bookingId,
-    version: nextVersion,
-    is_current: true,
-    status: 'RECEIVED',
-    submission_mode: 'ELECTRONIC',
-
-    manual_pdf_r2_key: null,
-    authorised_at_server: null,
-    r2_nurse_key: null,
-    r2_auth_key: null,
-
-    qr_status: null,
-    qr_token: null,
-    qr_payload_json: {}, // NOT NULL
-    qr_generated_at: null,
-    qr_scanned_at: null,
-    qr_scan_info_json: null,
-    qr_r2_key: null,
-
-    created_at: now,
-    updated_at: now
-  };
-
-  const insRes = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets`, {
-    method: 'POST',
-    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-    body: JSON.stringify([newRow])
-  });
-
-  if (!insRes.ok) {
-    const t = await insRes.text().catch(() => '');
-    return withCORS(env, req, serverError(`Failed to create electronic version: ${t}`));
-  }
-
-  const inserted = (await insRes.json().catch(() => []))[0] || null;
-  const newTimesheetId = inserted?.timesheet_id || null;
-  if (!newTimesheetId) {
-    return withCORS(env, req, serverError('Insert succeeded but no timesheet_id returned'));
-  }
-
-  // 2b) Move contract_week pointer if it points at old current row
-  try {
-    const cw = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-        `?timesheet_id=eq.${enc(timesheetId)}` +
-        `&select=id` +
-        `&limit=1`
-    );
-    if (cw?.id) {
-      await fetch(
-        `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
-        {
-          method: 'PATCH',
-          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-          body: JSON.stringify({ timesheet_id: newTimesheetId, updated_at: now })
-        }
-      ).catch(() => {});
-    }
-  } catch {}
-
-  // 3) TSFIN: move row to new timesheet_id + reset status
-  if (fin?.id) {
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
-      {
-        method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify({
-          timesheet_id: newTimesheetId,
-          timesheet_version: inserted?.version ?? nextVersion,
-          processing_status: 'UNASSIGNED',
-          updated_at: now
-        })
-      }
-    ).catch(() => {});
-  }
-
-  // 4) Audit
-  try {
-    await writeAudit(
-      env,
-      user,
-      'ELECTRONIC_ALLOWED_AGAIN',
-      {
-        booking_id: bookingId,
-        old_timesheet_id: timesheetId,
-        new_timesheet_id: newTimesheetId,
-        old_version: ts.version,
-        new_version: inserted?.version ?? nextVersion,
-        client_id: clientId
-      },
-      { entity: 'timesheets', subject_id: newTimesheetId, req }
-    );
-  } catch {}
-
-  return withCORS(env, req, ok({
-    ok: true,
-    booking_id: bookingId,
-    old_timesheet_id: timesheetId,
-    current_timesheet_id: newTimesheetId,
-    new_version: inserted?.version ?? nextVersion
-  }));
-}
 
 
 async function handleTimesheetQrScan(env, req) {
@@ -50741,192 +51938,6 @@ function __normAlias(s){
   return String(s || '').trim().toLowerCase();
 }
 
-export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
-  const enc = encodeURIComponent;
-
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-  if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
-
-  let body = null;
-  try { body = await parseJSONBody(req); } catch { body = null; }
-  const allowManualOnly = !!body?.allow_manual_only;
-
-  // Load current row by PK (must be current)
-  const current = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
-      `&is_current=eq.true` +
-      `&select=*` +
-      `&limit=1`
-  );
-  if (!current) return withCORS(env, req, notFound('Timesheet not found'));
-
-  const bookingId = current.booking_id || null;
-  if (!bookingId) return withCORS(env, req, badRequest('Timesheet booking_id is missing; cannot revert'));
-
-  // Load all versions by booking_id
-  const { rows: tsRows } = await sbFetch(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?booking_id=eq.${enc(bookingId)}` +
-      `&select=*`
-  );
-  const versions = tsRows || [];
-  if (!versions.length) return withCORS(env, req, notFound('Timesheet not found'));
-
-  const elec = versions
-    .filter((r) => String(r.submission_mode || '').toUpperCase() === 'ELECTRONIC')
-    .sort((a, b) => (b.version || 1) - (a.version || 1))[0] || null;
-
-  if (!elec) return withCORS(env, req, badRequest('No electronic version exists for this timesheet'));
-
-  // Guard: TSFIN lock check uses the current row id (input id)
-  const tsfin = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
-      `&is_current=eq.true` +
-      `&select=*`
-  );
-  if (tsfin) {
-    const hardLocked =
-      !!tsfin.paid_at_utc ||
-      !!tsfin.locked_by_invoice_id ||
-      !!tsfin.locked_by_invoice ||
-      !!tsfin.locked_by_invoice_line_id ||
-      !!tsfin.locked_by_invoice_at_utc;
-
-    if (hardLocked) {
-      return withCORS(env, req, badRequest('Cannot revert: current timesheet is invoiced or paid'));
-    }
-  }
-
-  // Block revert when current is manual-only unless override
-  const currentSubMode = String(current.submission_mode || '').toUpperCase();
-  const currentQrStatus = String(current.qr_status || '').toUpperCase() || '';
-  const hasQrToken = !!(current.qr_token && String(current.qr_token).trim());
-  const hasQrGen = !!current.qr_generated_at;
-  const hasQrScan = !!current.qr_scanned_at;
-
-  const isManualOnly =
-    (currentSubMode === 'MANUAL') &&
-    !currentQrStatus &&
-    !hasQrToken &&
-    !hasQrGen &&
-    !hasQrScan;
-
-  if (isManualOnly && !allowManualOnly) {
-    return withCORS(env, req, badRequest('Cannot revert: current is manual-only (set allow_manual_only=true to override)'));
-  }
-
-  if (current.timesheet_id === elec.timesheet_id && current.is_current) {
-    return withCORS(env, req, ok({
-      reverted: false,
-      reason: 'Electronic version is already current',
-      booking_id: bookingId,
-      current_timesheet_id: current.timesheet_id,
-      current_version: elec.version || 1
-    }));
-  }
-
-  const now = nowIso();
-
-  // 1) Demote current for booking_id (defensive)
-  await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?booking_id=eq.${enc(bookingId)}` +
-      `&is_current=eq.true`,
-    {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-      body: JSON.stringify({ is_current: false, updated_at: now })
-    }
-  ).catch(() => {});
-
-  // 2) Promote electronic row to current by its PK
-  await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(elec.timesheet_id)}`,
-    {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-      body: JSON.stringify({ is_current: true, updated_at: now })
-    }
-  ).catch(() => {});
-
-  // 2b) Move contract_week pointer if it points at old current row
-  try {
-    const cw = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-        `?timesheet_id=eq.${enc(timesheetId)}` +
-        `&select=id` +
-        `&limit=1`
-    );
-    if (cw?.id) {
-      await fetch(
-        `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
-        {
-          method: 'PATCH',
-          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-          body: JSON.stringify({ timesheet_id: elec.timesheet_id, updated_at: now })
-        }
-      ).catch(() => {});
-    }
-  } catch {}
-
-  // 3) TSFIN: move current TSFIN row from old current PK to new current PK
-  try {
-    if (tsfin?.id) {
-      await fetch(
-        `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(tsfin.id)}`,
-        {
-          method: 'PATCH',
-          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-          body: JSON.stringify({
-            timesheet_id: elec.timesheet_id,
-            timesheet_version: elec.version || 1,
-            updated_at: now
-          })
-        }
-      ).catch(() => {});
-    }
-  } catch {}
-
-  try {
-    await sbRpc(env, 'enqueue_ts_financials', {
-      timesheet_id: elec.timesheet_id,
-      reason: 'REVERT_TO_ELECTRONIC'
-    });
-  } catch {}
-
-  // 4) Audit
-  try {
-    await writeAudit(
-      env,
-      user,
-      'REVERTED_TO_ELECTRONIC',
-      {
-        booking_id: bookingId,
-        previous_current_timesheet_id: timesheetId,
-        new_current_timesheet_id: elec.timesheet_id,
-        electronic_version: elec.version || 1,
-        allow_manual_only: allowManualOnly
-      },
-      { entity: 'timesheets', subject_id: elec.timesheet_id, req }
-    );
-  } catch {}
-
-  return withCORS(env, req, ok({
-    reverted: true,
-    booking_id: bookingId,
-    previous_current_timesheet_id: timesheetId,
-    current_timesheet_id: elec.timesheet_id,
-    electronic_version: elec.version || 1
-  }));
-}
 
 
 async function getImportColumnAliasesCached(env, systemType, fieldKey) {
