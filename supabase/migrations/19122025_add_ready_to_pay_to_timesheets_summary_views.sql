@@ -1,5 +1,10 @@
--- Add ready_to_pay to v_timesheets_summary_base + expose via v_timesheets_summary
--- Safe: no DROP, uses CREATE OR REPLACE (preserves deps + avoids privilege wipe)
+-- =========================================================
+-- UPDATED: v_timesheets_summary_base + v_timesheets_summary
+-- Fixes WEEKLY reference gating for schedule-driven MANUAL weeks:
+-- - Reference now comes from per-shift ref_num in timesheets.actual_schedule_json
+-- - day_references_json remains only for non-MANUAL weekly (legacy/imports)
+-- - ready_to_pay reference gate updated accordingly
+-- =========================================================
 
 CREATE OR REPLACE VIEW public.v_timesheets_summary_base AS
 WITH latest_tsfin AS (
@@ -139,6 +144,10 @@ ts_base AS (
 
     ts.reference_number,
     ts.day_references_json,
+
+    -- ✅ NEW (internal only): schedule JSON used for per-shift refs in WEEKLY MANUAL
+    ts.actual_schedule_json,
+
     ts.r2_nurse_key,
     ts.r2_auth_key,
     ts.manual_pdf_r2_key,
@@ -183,7 +192,6 @@ ts_base AS (
   LEFT JOIN candidates cand ON cand.id = COALESCE(tf.candidate_id, ct.candidate_id)
   LEFT JOIN umbrellas umb ON umb.id = cand.umbrella_id
 
-  -- ✅ AMENDMENT: only show CURRENT timesheets in summary
   WHERE ts.is_current = true
 ),
 planned_weeks AS (
@@ -257,6 +265,10 @@ planned_weeks AS (
 
     NULL::text AS reference_number,
     NULL::jsonb AS day_references_json,
+
+    -- union compat (internal only)
+    NULL::jsonb AS actual_schedule_json,
+
     NULL::text AS r2_nurse_key,
     NULL::text AS r2_auth_key,
     NULL::text AS manual_pdf_r2_key,
@@ -396,12 +408,39 @@ with_issues AS (
           )
         )
         AND (
-          ar.day_references_json IS NULL
-          OR ar.day_references_json = '{}'::jsonb
-          OR NOT EXISTS (
-            SELECT 1
-            FROM jsonb_each_text(ar.day_references_json) j(k, v)
-            WHERE btrim(j.v) <> ''::text
+          (
+            ar.submission_mode = 'MANUAL'::submission_mode_enum
+            AND (
+              ar.actual_schedule_json IS NULL
+              OR jsonb_typeof(ar.actual_schedule_json) <> 'array'::text
+              OR (
+                jsonb_typeof(ar.actual_schedule_json) = 'array'::text
+                AND (
+                  jsonb_array_length(ar.actual_schedule_json) = 0
+                  OR EXISTS (
+                    SELECT 1
+                    FROM jsonb_array_elements(ar.actual_schedule_json) seg
+                    WHERE
+                      coalesce(btrim(seg->>'start'), '') <> ''
+                      AND coalesce(btrim(seg->>'end'), '') <> ''
+                      AND coalesce(btrim(seg->>'ref_num'), '') = ''
+                  )
+                )
+              )
+            )
+          )
+          OR
+          (
+            ar.submission_mode <> 'MANUAL'::submission_mode_enum
+            AND (
+              ar.day_references_json IS NULL
+              OR ar.day_references_json = '{}'::jsonb
+              OR NOT EXISTS (
+                SELECT 1
+                FROM jsonb_each_text(ar.day_references_json) j(k, v)
+                WHERE btrim(j.v) <> ''::text
+              )
+            )
           )
         )
         THEN ARRAY['Reference'::text]
@@ -487,7 +526,46 @@ SELECT
 
     AND (
       COALESCE(require_reference_to_pay, false) = false
-      OR (reference_number IS NOT NULL AND length(btrim(reference_number)) > 0)
+      OR (
+        CASE
+          WHEN sheet_scope = 'DAILY'::timesheet_scope_enum THEN
+            (reference_number IS NOT NULL AND length(btrim(reference_number)) > 0)
+
+          WHEN sheet_scope = 'WEEKLY'::timesheet_scope_enum THEN
+            CASE
+              WHEN submission_mode = 'MANUAL'::submission_mode_enum THEN
+                (
+                  actual_schedule_json IS NOT NULL
+                  AND jsonb_typeof(actual_schedule_json) = 'array'::text
+                  AND jsonb_array_length(actual_schedule_json) > 0
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM jsonb_array_elements(actual_schedule_json) seg
+                    WHERE
+                      coalesce(btrim(seg->>'start'), '') <> ''
+                      AND coalesce(btrim(seg->>'end'), '') <> ''
+                      AND coalesce(btrim(seg->>'ref_num'), '') = ''
+                  )
+                )
+              ELSE
+                (
+                  (reference_number IS NOT NULL AND length(btrim(reference_number)) > 0)
+                  OR (
+                    day_references_json IS NOT NULL
+                    AND day_references_json <> '{}'::jsonb
+                    AND EXISTS (
+                      SELECT 1
+                      FROM jsonb_each_text(day_references_json) j(k, v)
+                      WHERE btrim(j.v) <> ''::text
+                    )
+                  )
+                )
+            END
+
+          ELSE
+            (reference_number IS NOT NULL AND length(btrim(reference_number)) > 0)
+        END
+      )
     )
   ) AS ready_to_pay,
 
@@ -577,8 +655,81 @@ SELECT
 FROM public.v_timesheets_summary_base v
 LEFT JOIN public.contract_weeks cw ON cw.id = v.contract_week_id;
 
--- Optional safety: ensure your execution roles can read these views
 GRANT SELECT ON public.v_timesheets_summary_base TO service_role;
 GRANT SELECT ON public.v_timesheets_summary      TO service_role;
 GRANT SELECT ON public.v_timesheets_summary_base TO authenticated;
 GRANT SELECT ON public.v_timesheets_summary      TO authenticated;
+
+
+-- =========================================================
+-- UPDATED: v_ts_invoice_precheck
+-- Fixes WEEKLY MANUAL invoice reference gating to require per-shift ref_num.
+-- Keeps DAILY behaviour (reference_number) unchanged.
+-- =========================================================
+
+CREATE OR REPLACE VIEW public.v_ts_invoice_precheck AS
+SELECT
+  ts.timesheet_id,
+  ts.week_ending_date,
+  ts.submission_mode,
+  ts.manual_pdf_r2_key,
+  ts.reference_number,
+  c.require_reference_to_invoice,
+  CASE
+    WHEN (ts.submission_mode = 'MANUAL'::submission_mode_enum)
+      AND (ts.manual_pdf_r2_key IS NULL)
+      THEN 'BLOCK_NO_PDF'::text
+
+    WHEN COALESCE(c.require_reference_to_invoice, false) = true
+      AND (
+        (
+          ts.sheet_scope = 'DAILY'::timesheet_scope_enum
+          AND (ts.reference_number IS NULL OR length(btrim(ts.reference_number)) = 0)
+        )
+        OR
+        (
+          ts.sheet_scope = 'WEEKLY'::timesheet_scope_enum
+          AND ts.submission_mode = 'MANUAL'::submission_mode_enum
+          AND (
+            ts.actual_schedule_json IS NULL
+            OR jsonb_typeof(ts.actual_schedule_json) <> 'array'::text
+            OR (
+              jsonb_typeof(ts.actual_schedule_json) = 'array'::text
+              AND (
+                jsonb_array_length(ts.actual_schedule_json) = 0
+                OR EXISTS (
+                  SELECT 1
+                  FROM jsonb_array_elements(ts.actual_schedule_json) seg
+                  WHERE
+                    coalesce(btrim(seg->>'start'), '') <> ''
+                    AND coalesce(btrim(seg->>'end'), '') <> ''
+                    AND coalesce(btrim(seg->>'ref_num'), '') = ''
+                )
+              )
+            )
+          )
+        )
+        OR
+        (
+          ts.sheet_scope = 'WEEKLY'::timesheet_scope_enum
+          AND ts.submission_mode <> 'MANUAL'::submission_mode_enum
+          AND (
+            (ts.reference_number IS NULL OR length(btrim(ts.reference_number)) = 0)
+            AND (
+              ts.day_references_json IS NULL
+              OR ts.day_references_json = '{}'::jsonb
+              OR NOT EXISTS (
+                SELECT 1
+                FROM jsonb_each_text(ts.day_references_json) j(k, v)
+                WHERE btrim(j.v) <> ''::text
+              )
+            )
+          )
+        )
+      )
+      THEN 'BLOCK_NO_REFERENCE'::text
+
+    ELSE 'OK'::text
+  END AS precheck_status
+FROM timesheets ts
+LEFT JOIN contracts c ON c.id = ts.contract_id;
