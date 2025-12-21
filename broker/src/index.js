@@ -445,6 +445,53 @@ async function loadClientTimePolicy(env, clientId) {
   };
 }
 
+// ─────────────────────────────────────────────────────────────
+// Shared helper: reference completeness (matches DB view truth)
+// ─────────────────────────────────────────────────────────────
+
+function strTrim(x) { return (x == null) ? '' : String(x).trim(); }
+
+function dayRefsHasAny(dayRefs) {
+  if (!dayRefs || typeof dayRefs !== 'object') return false;
+  return Object.values(dayRefs).some(v => strTrim(v));
+}
+
+function weeklyManualScheduleHasCompleteRefs(schedule) {
+  const arr = Array.isArray(schedule) ? schedule : [];
+  if (!arr.length) return false;
+
+  for (const seg of arr) {
+    if (!seg || typeof seg !== 'object') continue;
+    const start = strTrim(seg.start);
+    const end   = strTrim(seg.end);
+
+    // Only enforce ref on “real shift” segments
+    if (start && end) {
+      const ref = strTrim(seg.ref_num);
+      if (!ref) return false;
+    }
+  }
+  return true;
+}
+
+function timesheetHasInvoiceReference(ts) {
+  const scope = strTrim(ts?.sheet_scope).toUpperCase();
+  const mode  = strTrim(ts?.submission_mode).toUpperCase();
+
+  // WEEKLY + MANUAL is schedule-driven
+  if (scope === 'WEEKLY' && mode === 'MANUAL') {
+    return weeklyManualScheduleHasCompleteRefs(ts?.actual_schedule_json);
+  }
+
+  // WEEKLY non-manual uses legacy weekly reference model
+  if (scope === 'WEEKLY') {
+    return !!strTrim(ts?.reference_number) || dayRefsHasAny(ts?.day_references_json);
+  }
+
+  // DAILY (and anything else) uses reference_number
+  return !!strTrim(ts?.reference_number);
+}
+
 // Segment one day's chunk [a,b) in minutes (0..1440), allocate into day/night using client windows.
 // Weekend/BH overlay wins over day/night; precedence BH > Sun > Sat > Night > Day.
 
@@ -627,11 +674,34 @@ function applyDurationBreak(acc, breakMin) {
 
 // Resolve hours (minutes) by bucket from an actual_schedule_json array
 async function resolveBucketsFromSchedule(env, contract, actualDays /* array of {date,start,end,breaks?,break_minutes?,overnight?} */) {
-  // 🔴 Ensure schedule has no internal overlaps / bad breaks before bucketing
+  // ✅ Ensure schedule has no internal overlaps / bad breaks before bucketing
   validateScheduleStructure(actualDays);
 
   const policy = await loadClientTimePolicy(env, contract.client_id);
   const acc = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
+
+  // ✅ Self-contained date add helper (avoid relying on a global addDays())
+  const addDays = (ymd, days) => {
+    try {
+      const d = new Date(`${String(ymd)}T00:00:00Z`);
+      if (!Number.isFinite(d.getTime())) return String(ymd || '');
+      d.setUTCDate(d.getUTCDate() + Number(days || 0));
+      const yyyy = d.getUTCFullYear();
+      const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const dd   = String(d.getUTCDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    } catch {
+      return String(ymd || '');
+    }
+  };
+
+  // ✅ Defensive: ensure required helpers exist (your precedence logic lives in segmentChunkIntoBuckets)
+  if (typeof segmentChunkIntoBuckets !== 'function') {
+    throw new Error('segmentChunkIntoBuckets is missing (required for BH/Sun/Sat/Night/Day precedence bucketing)');
+  }
+  if (typeof applyDurationBreak !== 'function') {
+    throw new Error('applyDurationBreak is missing (required for floating break_minutes bucketing)');
+  }
 
   // Helper for safe logging
   const logBuckets = (label, payload) => {
@@ -659,7 +729,7 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array of 
       throw new Error(`Invalid HH:MM in actual_schedule_json for ${d.date}`);
     }
 
-    const overnight = (e <= s); // ← infer overnight
+    const overnight = (e <= s);
 
     logBuckets('day-entry', {
       date: d.date,
@@ -725,7 +795,6 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array of 
           segmentChunkIntoBuckets(c.date, c.from, c.to, policy, tmp);
         }
 
-        // Log what the break contributed before subtracting
         logBuckets('break-window', {
           date: d.date,
           break_start: br.start,
@@ -777,14 +846,12 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array of 
       });
     }
 
-    // Per-day summary after all chunks + breaks
     logBuckets('day-summary', {
       date: d.date,
       acc_after_day: { ...acc }
     });
   }
 
-  // Final accumulator in minutes
   logBuckets('final-accumulator', acc);
   return acc;
 }
@@ -1188,7 +1255,9 @@ function printableShortRef(s) {
 
 // Render a single timesheet to PDF, save to R2 (idempotent), return the R2 key.
 // Render a single timesheet to PDF, save to R2 (idempotent), return the R2 key.
- async function renderTimesheetPDFAndSave(env, timesheetId) {
+
+
+async function renderTimesheetPDFAndSave(env, timesheetId) {
   const bucket = env.R2_BUCKET || env.R2;
   if (!bucket?.get || !bucket?.put) throw new Error("Storage not configured");
 
@@ -1201,9 +1270,7 @@ function printableShortRef(s) {
   // Load TS row
   const { rows: tsRows } = await sbFetch(
     env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${encodeURIComponent(
-      timesheetId
-    )}&select=*`
+    `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${encodeURIComponent(timesheetId)}&select=*`
   );
   const ts = tsRows?.[0];
   if (!ts) throw new Error("Timesheet not found");
@@ -1214,7 +1281,7 @@ function printableShortRef(s) {
   const { rows: finRows } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-      `?timesheet_id=eq.${encodeURIComponent(timesheetId)}` + // ← FIXED
+      `?timesheet_id=eq.${encodeURIComponent(timesheetId)}` +
       `&is_current=eq.true` +
       `&select=candidate_id,band,additional_units_json,invoice_breakdown_json`
   );
@@ -1226,9 +1293,7 @@ function printableShortRef(s) {
     const { rows: cRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/candidates` +
-        `?id=eq.${encodeURIComponent(
-          fin.candidate_id
-        )}&select=display_name,first_name,last_name`
+        `?id=eq.${encodeURIComponent(fin.candidate_id)}&select=display_name,first_name,last_name`
     );
     const c = cRows?.[0];
     if (c) {
@@ -1245,8 +1310,7 @@ function printableShortRef(s) {
   try {
     const { rows: defRows } = await sbFetch(
       env,
-      `${env.SUPABASE_URL}/rest/v1/settings_defaults` +
-        `?id=eq.1&select=agency_name,agency_logo`
+      `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=agency_name,agency_logo`
     );
     const def = defRows?.[0] || {};
     agencyName = def.agency_name || null;
@@ -1258,8 +1322,7 @@ function printableShortRef(s) {
 
   // Load template (should already be landscape)
   const templateKey = normalizeKey(
-    env.TIMESHEET_TEMPLATE_KEY ||
-      "Assets/Stationery/Timesheet/Blank Timesheet.pdf"
+    env.TIMESHEET_TEMPLATE_KEY || "Assets/Stationery/Timesheet/Blank Timesheet.pdf"
   );
   const templateBytes = await r2GetBytes(env, templateKey);
   if (!templateBytes) throw new Error("Timesheet template not found in R2");
@@ -1267,17 +1330,17 @@ function printableShortRef(s) {
   const pdfDoc = await PDFDocument.load(templateBytes);
   const page =
     pdfDoc.getPages()[0] ||
-    pdfDoc.addPage([
-      mmToPt(layout.page.width_mm),
-      mmToPt(layout.page.height_mm),
-    ]);
+    pdfDoc.addPage([mmToPt(layout.page.width_mm), mmToPt(layout.page.height_mm)]);
 
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fz = layout.text?.fontSize || 10;
 
   const drawText = (txt, mm, size = fz) => {
-    if (!txt || !mm) return;
-    page.drawText(String(txt), {
+    if (txt === undefined || txt === null) return;
+    if (!mm) return;
+    const s = String(txt);
+    if (!s) return;
+    page.drawText(s, {
       x: mmToPt(mm.x_mm),
       y: mmToPt(mm.y_mm),
       size,
@@ -1286,28 +1349,30 @@ function printableShortRef(s) {
     });
   };
 
+  const drawTextLine = (txt, cellMm, lineIdx, lineSpacingMm, size = fz) => {
+    if (txt === undefined || txt === null) return;
+    if (!cellMm) return;
+    const s = String(txt);
+    if (!s) return;
+    const y = Number(cellMm.y_mm);
+    const dy = Number(lineSpacingMm || 0) * Number(lineIdx || 0);
+    drawText(s, { x_mm: cellMm.x_mm, y_mm: y - dy }, size);
+  };
+
   // ─────────────────────────────────────────────────────────────
   // Common header: agency + core fields (for daily + weekly)
   // ─────────────────────────────────────────────────────────────
 
-  // Agency name at top if layout provides a slot
   if (agencyName && layout.fields && layout.fields.agency_name) {
-    drawText(
-      agencyName,
-      layout.fields.agency_name,
-      layout.text?.agencyFontSize || fz + 2
-    );
+    drawText(agencyName, layout.fields.agency_name, layout.text?.agencyFontSize || fz + 2);
   }
 
-  // Agency logo next to name (if present + layout slot)
   if (agencyLogoUrl && layout.fields && layout.fields.agency_logo) {
     try {
       const logoKey = normalizeKey(agencyLogoUrl);
       const logoObj = await bucket.get(logoKey);
       if (logoObj) {
-        const logoBytes = new Uint8Array(
-          await new Response(logoObj.body).arrayBuffer()
-        );
+        const logoBytes = new Uint8Array(await new Response(logoObj.body).arrayBuffer());
         await drawImageInBox(
           page,
           pdfDoc,
@@ -1324,37 +1389,24 @@ function printableShortRef(s) {
     }
   }
 
-  // Existing header fields (unchanged)
-  if (layout.fields?.hospital)
-    drawText(ts.hospital_norm || "", layout.fields.hospital);
-  if (layout.fields?.ward)
-    drawText(ts.ward_norm || "", layout.fields.ward);
-  if (layout.fields?.candidate)
-    drawText(candidateName || "", layout.fields.candidate);
-  if (layout.fields?.job_title)
-    drawText(ts.job_title_norm || "", layout.fields.job_title);
+  if (layout.fields?.hospital) drawText(ts.hospital_norm || "", layout.fields.hospital);
+  if (layout.fields?.ward) drawText(ts.ward_norm || "", layout.fields.ward);
+  if (layout.fields?.candidate) drawText(candidateName || "", layout.fields.candidate);
+  if (layout.fields?.job_title) drawText(ts.job_title_norm || "", layout.fields.job_title);
   if (layout.fields?.band) drawText(fin.band || "", layout.fields.band);
-  if (layout.fields?.booking_ref)
-    drawText(ts.booking_id || "", layout.fields.booking_ref);
-  if (layout.fields?.week_ending)
-    drawText(fmtUKDate(ts.week_ending_date), layout.fields.week_ending);
-  if (layout.fields?.ts_number)
-    drawText(
-      printableShortRef(ts.reference_number || "") || "",
-      layout.fields.ts_number
-    );
+  if (layout.fields?.booking_ref) drawText(ts.booking_id || "", layout.fields.booking_ref);
+  if (layout.fields?.week_ending) drawText(fmtUKDate(ts.week_ending_date), layout.fields.week_ending);
+  if (layout.fields?.ts_number) {
+    drawText(printableShortRef(ts.reference_number || "") || "", layout.fields.ts_number);
+  }
 
   // ─────────────────────────────────────────────────────────────
   // DAILY / ROTA PATH (unchanged)
   // ─────────────────────────────────────────────────────────────
   if (!isWeekly) {
-    // Day row (UK-local) – existing behaviour
     const rowIdx =
-      typeof ts.worked_start_iso === "string"
-        ? ukWeekdayIndexMon0(ts.worked_start_iso)
-        : 0;
-    const row =
-      (layout.rows && layout.rows[rowIdx]) || (layout.rows && layout.rows[0]);
+      typeof ts.worked_start_iso === "string" ? ukWeekdayIndexMon0(ts.worked_start_iso) : 0;
+    const row = (layout.rows && layout.rows[rowIdx]) || (layout.rows && layout.rows[0]);
 
     if (row) {
       drawText(fmtUKDate(ts.worked_start_iso), row.date);
@@ -1369,14 +1421,11 @@ function printableShortRef(s) {
       drawText(ts.job_title_norm || "", row.role);
     }
 
-    // Signatures (fit=contain, never distort, never scale up)
     if (ts.r2_nurse_key && layout.fields?.nurse_signature) {
       const nk = normalizeKey(ts.r2_nurse_key);
       const nurseObj = await bucket.get(nk);
       if (nurseObj) {
-        const nurseBytes = new Uint8Array(
-          await new Response(nurseObj.body).arrayBuffer()
-        );
+        const nurseBytes = new Uint8Array(await new Response(nurseObj.body).arrayBuffer());
         await drawImageInBox(
           page,
           pdfDoc,
@@ -1390,9 +1439,7 @@ function printableShortRef(s) {
       const ak = normalizeKey(ts.r2_auth_key);
       const authObj = await bucket.get(ak);
       if (authObj) {
-        const authBytes = new Uint8Array(
-          await new Response(authObj.body).arrayBuffer()
-        );
+        const authBytes = new Uint8Array(await new Response(authObj.body).arrayBuffer());
         await drawImageInBox(
           page,
           pdfDoc,
@@ -1403,68 +1450,68 @@ function printableShortRef(s) {
       }
     }
 
-    // Sign dates (UK-local)
     if (ts.authorised_at_server && layout.fields?.auth_sign_date) {
-      drawText(
-        fmtUKDate(ts.authorised_at_server),
-        layout.fields.auth_sign_date
-      );
+      drawText(fmtUKDate(ts.authorised_at_server), layout.fields.auth_sign_date);
     }
     if (layout.fields?.nurse_sign_date) {
-      drawText(
-        fmtUKDate(ts.worked_end_iso || ts.worked_start_iso),
-        layout.fields.nurse_sign_date
-      );
+      drawText(fmtUKDate(ts.worked_end_iso || ts.worked_start_iso), layout.fields.nurse_sign_date);
     }
 
-    // Debug overlay (calibration-only)
     drawDebugOverlay(page, font, layout);
 
     const outBytes = await pdfDoc.save();
-    await bucket.put(outKey, outBytes, {
-      httpMetadata: { contentType: "application/pdf" },
-    });
+    await bucket.put(outKey, outBytes, { httpMetadata: { contentType: "application/pdf" } });
     return outKey;
   }
 
   // ─────────────────────────────────────────────────────────────
-  // WEEKLY / QR WEEKLY PATH
+  // WEEKLY PATH (UPDATED): ALWAYS 7 DAYS + MULTI-SHIFT PER DAY
+  // Date prints once per day, start/finish/break stack multiple lines.
+  // Week window is ALWAYS the 7-day window ending at week_ending_date
+  // (so if week ending is Fri, the window is Sat..Fri, etc).
   // ─────────────────────────────────────────────────────────────
 
-  // Weekly layout – prefer layout.weekly, fallback to layout.rows
   const weeklyLayout = layout.weekly || layout;
   const weeklyRows = weeklyLayout.rows || layout.rows || [];
 
-  // Build 7-day window based on week_ending_date
+  // Fallbacks / tunables
+  const lineSpacingMm = Number(
+    weeklyLayout.line_spacing_mm ||
+    weeklyLayout.lineSpacingMm ||
+    layout.text?.weeklyLineSpacingMm ||
+    3.6
+  );
+
+  // Build 7-day window based on week_ending_date (ALWAYS 7)
   const weekDates = [];
   try {
     const base = new Date(String(ts.week_ending_date) + "T00:00:00Z");
-    for (let offset = 6; offset >= 0; offset--) {
-      const d = new Date(base);
-      d.setUTCDate(base.getUTCDate() - offset);
-      const yyyy = d.getUTCFullYear();
-      const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
-      const dd = String(d.getUTCDate()).padStart(2, "0");
-      weekDates.push(`${yyyy}-${mm}-${dd}`);
+    if (!Number.isNaN(base.getTime())) {
+      for (let offset = 6; offset >= 0; offset--) {
+        const d = new Date(base);
+        d.setUTCDate(base.getUTCDate() - offset);
+        const yyyy = d.getUTCFullYear();
+        const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+        const dd = String(d.getUTCDate()).padStart(2, "0");
+        weekDates.push(`${yyyy}-${mm}-${dd}`);
+      }
     }
   } catch {
-    // if anything goes wrong, just leave weekDates empty and we won't draw rows
+    // ignore
   }
+  // Hard guarantee: if parsing failed, still output 7 placeholder days (date field will show blanks)
+  while (weekDates.length < 7) weekDates.push("");
 
-  // Group actual_schedule_json by date for weekly grid
-  const schedule = Array.isArray(ts.actual_schedule_json)
-    ? ts.actual_schedule_json
-    : [];
+  // Group actual_schedule_json by date
+  const schedule = Array.isArray(ts.actual_schedule_json) ? ts.actual_schedule_json : [];
   const groupedByDate = new Map();
   for (const seg of schedule) {
-    const ymd = seg.date || null;
+    const ymd = seg?.date || null;
     if (!ymd) continue;
     if (!groupedByDate.has(ymd)) groupedByDate.set(ymd, []);
     groupedByDate.get(ymd).push(seg);
   }
 
-  // Helper: get displayable times from either new schedule fields (start/end)
-  // or legacy UTC fields (start_utc/end_utc).
   const getDisplayTimes = (seg) => {
     if (!seg) return { startText: "", endText: "" };
 
@@ -1475,74 +1522,145 @@ function printableShortRef(s) {
 
     // Legacy shape: ISO strings
     if (seg.start_utc && seg.end_utc) {
-      return {
-        startText: fmtUKTime(seg.start_utc),
-        endText: fmtUKTime(seg.end_utc),
-      };
+      return { startText: fmtUKTime(seg.start_utc), endText: fmtUKTime(seg.end_utc) };
     }
 
     return { startText: "", endText: "" };
   };
 
-  // Render Mon–Sun (or 7-day window ending week_ending_date) into weekly rows
-  weekDates.forEach((ymd, idx) => {
+  const parseHHMM = (t) => {
+    if (typeof t !== "string") return null;
+    const m = t.trim().match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) return null;
+    const hh = Number(m[1]);
+    const mm = Number(m[2]);
+    if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+    if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
+    return hh * 60 + mm;
+  };
+
+  const sumBreakMinutes = (seg) => {
+    if (!seg || typeof seg !== "object") return 0;
+
+    // Prefer explicit totals if present
+    if (seg.break_minutes != null) return Number(seg.break_minutes) || 0;
+    if (seg.break_mins != null) return Number(seg.break_mins) || 0;
+
+    // Otherwise sum breaks[]
+    const arr = Array.isArray(seg.breaks) ? seg.breaks : [];
+    let total = 0;
+    for (const b of arr) {
+      const s = parseHHMM(b?.start || "");
+      const e = parseHHMM(b?.end || "");
+      if (s == null || e == null) continue;
+      const mins = e - s;
+      if (mins > 0) total += mins;
+    }
+    return total;
+  };
+
+  const getRowAnchorY = (row) => {
+    // Pick an anchor to measure row height
+    const c = row?.start || row?.finish || row?.brkStart || row?.role || row?.date;
+    const y = c?.y_mm;
+    return (typeof y === "number") ? y : null;
+  };
+
+  const calcMaxLinesForRow = (idx) => {
     const row = weeklyRows[idx];
-    if (!row) return;
+    if (!row) return 1;
 
-    const segsForDay = (groupedByDate.get(ymd) || []).slice();
+    // explicit override if you add it to layout later
+    const explicit = Number(row.max_lines_per_day || weeklyLayout.max_lines_per_day || 0);
+    if (explicit && explicit > 0) return Math.max(1, Math.floor(explicit));
 
-    if (!segsForDay.length) {
-      // If no segments for this day, just write the date if we have a slot
-      if (row.date) drawText(fmtUKDate(ymd), row.date);
-      return;
+    const yThis = getRowAnchorY(row);
+    const yNext = (idx + 1 < weeklyRows.length) ? getRowAnchorY(weeklyRows[idx + 1]) : null;
+
+    if (typeof yThis === "number" && typeof yNext === "number") {
+      const rowHeight = yThis - yNext; // should be positive top→bottom
+      if (rowHeight > 0 && lineSpacingMm > 0) {
+        // small padding so we don't bleed into next row
+        const usable = Math.max(0, rowHeight - 0.8);
+        const max = Math.max(1, Math.floor(usable / lineSpacingMm));
+        return max;
+      }
     }
 
-    // Sort segments by start time (HH:MM or ISO) so earliest is first.
-    segsForDay.sort((a, b) => {
-      const sa = String(a.start || a.start_utc || "");
-      const sb = String(b.start || b.start_utc || "");
-      return sa.localeCompare(sb);
+    // Conservative default: two lines fits most templates
+    return 2;
+  };
+
+  // Render 7 days (ALWAYS): date always printed even if no shifts.
+  for (let idx = 0; idx < 7; idx++) {
+    const ymd = weekDates[idx] || "";
+    const row = weeklyRows[idx];
+    if (!row) continue;
+
+    // ✅ ALWAYS print date (even if no shifts)
+    if (row.date) drawText(fmtUKDate(ymd), row.date);
+
+    // Segments for this day
+    const segsForDayRaw = (ymd && groupedByDate.get(ymd)) ? groupedByDate.get(ymd).slice() : [];
+
+    // Keep only real shift segments (start+end present in either shape)
+    const segsForDay = segsForDayRaw.filter(seg => {
+      const t = getDisplayTimes(seg);
+      return !!(t.startText && t.endText);
     });
 
-    // Consolidate multiple segments into a single overall row:
-    // earliest start, latest end, sum of break minutes.
-    const firstSeg = segsForDay[0];
-    const lastSeg = segsForDay[segsForDay.length - 1];
+    if (!segsForDay.length) continue;
 
-    const firstTimes = getDisplayTimes(firstSeg);
-    const lastTimes = getDisplayTimes(lastSeg);
+    // Sort by start time for clean display
+    segsForDay.sort((a, b) => {
+      const ta = getDisplayTimes(a).startText || "";
+      const tb = getDisplayTimes(b).startText || "";
+      return String(ta).localeCompare(String(tb));
+    });
 
-    let earliestStartText = firstTimes.startText;
-    let latestEndText = lastTimes.endText;
-    let totalBreak = 0;
-    let roleText = ts.job_title_norm || "";
+    const maxLines = calcMaxLinesForRow(idx);
+    const visible = segsForDay.slice(0, Math.max(1, maxLines));
+    const overflow = segsForDay.length - visible.length;
 
-    for (const seg of segsForDay) {
-      // Sum break minutes from either new or legacy fields
-      const brk =
-        seg.break_minutes != null
-          ? seg.break_minutes
-          : seg.break_mins != null
-          ? seg.break_mins
-          : 0;
-      totalBreak += Number(brk || 0) || 0;
+    for (let li = 0; li < visible.length; li++) {
+      const seg = visible[li];
+      const { startText, endText } = getDisplayTimes(seg);
 
-      if (!roleText && seg.role) roleText = seg.role;
+      const brkMin = sumBreakMinutes(seg);
+      const brkTxt = brkMin > 0 ? `${Math.round(brkMin)}m` : "";
+
+      const refTxt = (seg?.ref_num != null && String(seg.ref_num).trim())
+        ? String(seg.ref_num).trim()
+        : "";
+
+      // Role: keep consistent (template usually expects a single role)
+      let roleTxt = ts.job_title_norm || "";
+      if (!roleTxt && seg?.role) roleTxt = String(seg.role);
+
+      // If no dedicated ref column exists, optionally append ref to role on that line
+      // (only if you want refs visible on PDF without changing the template)
+      if (!row.ref && refTxt) {
+        roleTxt = roleTxt ? `${roleTxt} (Ref ${refTxt})` : `Ref ${refTxt}`;
+      }
+
+      // On the last visible line, show overflow indicator if we had to truncate
+      if (overflow > 0 && li === visible.length - 1) {
+        roleTxt = roleTxt ? `${roleTxt} (+${overflow} more)` : `(+${overflow} more)`;
+      }
+
+      if (row.start && startText) drawTextLine(startText, row.start, li, lineSpacingMm);
+      if (row.finish && endText) drawTextLine(endText, row.finish, li, lineSpacingMm);
+
+      // Weekly templates typically use brkStart for “break minutes” display.
+      if (row.brkStart && brkTxt) drawTextLine(brkTxt, row.brkStart, li, lineSpacingMm);
+
+      // If your weekly template also has a brkEnd column, leave blank (or you can use it for break detail later)
+      if (row.role) drawTextLine(roleTxt || "", row.role, li, lineSpacingMm);
+
+      // If you later add a dedicated ref cell to weekly layout, support it:
+      if (row.ref && refTxt) drawTextLine(refTxt, row.ref, li, lineSpacingMm);
     }
-
-    if (row.date) drawText(fmtUKDate(ymd), row.date);
-    if (row.start && earliestStartText)
-      drawText(earliestStartText, row.start);
-    if (row.finish && latestEndText)
-      drawText(latestEndText, row.finish);
-
-    if (row.brkStart && totalBreak > 0) {
-      drawText(`${totalBreak}m`, row.brkStart);
-    }
-    if (row.role) {
-      drawText(roleText || "", row.role);
-    }
-  });
+  }
 
   // Additional units block (if layout provides it and TSFIN has data)
   let additionalUnits = {};
@@ -1560,11 +1678,7 @@ function printableShortRef(s) {
     additionalUnits = fin.invoice_breakdown_json.additional.units;
   }
 
-  if (
-    additionalUnits &&
-    typeof additionalUnits === "object" &&
-    weeklyLayout.additional
-  ) {
+  if (additionalUnits && typeof additionalUnits === "object" && weeklyLayout.additional) {
     const baseBox = weeklyLayout.additional; // { x_mm, y_mm, line_height_mm?, fontSize? }
     const lineH = baseBox.line_height_mm || 4;
     const fsExtra = baseBox.fontSize || fz;
@@ -1576,13 +1690,8 @@ function printableShortRef(s) {
       const units = Number(cfg.unit_count || 0);
       const chargeEx = Number(cfg.charge_ex_vat || 0);
 
-      const txt = `${bucketName}: ${units} units, charge £${chargeEx.toFixed(
-        2
-      )}`;
-      const lineMm = {
-        x_mm: baseBox.x_mm,
-        y_mm: baseBox.y_mm - lineIdx * lineH,
-      };
+      const txt = `${bucketName}: ${units} units, charge £${chargeEx.toFixed(2)}`;
+      const lineMm = { x_mm: baseBox.x_mm, y_mm: baseBox.y_mm - lineIdx * lineH };
       drawText(txt, lineMm, fsExtra);
       lineIdx++;
     }
@@ -1594,9 +1703,7 @@ function printableShortRef(s) {
       const qrKey = normalizeKey(ts.qr_r2_key);
       const qrObj = await bucket.get(qrKey);
       if (qrObj) {
-        const qrBytes = new Uint8Array(
-          await new Response(qrObj.body).arrayBuffer()
-        );
+        const qrBytes = new Uint8Array(await new Response(qrObj.body).arrayBuffer());
         await drawImageInBox(
           page,
           pdfDoc,
@@ -1613,14 +1720,12 @@ function printableShortRef(s) {
     }
   }
 
-  // Signatures (same logic as daily – weekly TS should still store r2_nurse_key / r2_auth_key)
+  // Signatures (same logic as daily)
   if (ts.r2_nurse_key && layout.fields?.nurse_signature) {
     const nk = normalizeKey(ts.r2_nurse_key);
     const nurseObj = await bucket.get(nk);
     if (nurseObj) {
-      const nurseBytes = new Uint8Array(
-        await new Response(nurseObj.body).arrayBuffer()
-      );
+      const nurseBytes = new Uint8Array(await new Response(nurseObj.body).arrayBuffer());
       await drawImageInBox(
         page,
         pdfDoc,
@@ -1634,9 +1739,7 @@ function printableShortRef(s) {
     const ak = normalizeKey(ts.r2_auth_key);
     const authObj = await bucket.get(ak);
     if (authObj) {
-      const authBytes = new Uint8Array(
-        await new Response(authObj.body).arrayBuffer()
-      );
+      const authBytes = new Uint8Array(await new Response(authObj.body).arrayBuffer());
       await drawImageInBox(
         page,
         pdfDoc,
@@ -1649,27 +1752,18 @@ function printableShortRef(s) {
 
   // Sign dates (UK-local)
   if (ts.authorised_at_server && layout.fields?.auth_sign_date) {
-    drawText(
-      fmtUKDate(ts.authorised_at_server),
-      layout.fields.auth_sign_date
-    );
+    drawText(fmtUKDate(ts.authorised_at_server), layout.fields.auth_sign_date);
   }
   if (layout.fields?.nurse_sign_date) {
-    // For weekly, use week_ending_date as nurse sign date if no better field
-    const nurseDateSrc =
-      ts.worked_end_iso || ts.worked_start_iso || ts.week_ending_date;
-    if (nurseDateSrc) {
-      drawText(fmtUKDate(nurseDateSrc), layout.fields.nurse_sign_date);
-    }
+    const nurseDateSrc = ts.worked_end_iso || ts.worked_start_iso || ts.week_ending_date;
+    if (nurseDateSrc) drawText(fmtUKDate(nurseDateSrc), layout.fields.nurse_sign_date);
   }
 
   // Debug overlay (calibration-only)
   drawDebugOverlay(page, font, layout);
 
   const outBytes = await pdfDoc.save();
-  await bucket.put(outKey, outBytes, {
-    httpMetadata: { contentType: "application/pdf" },
-  });
+  await bucket.put(outKey, outBytes, { httpMetadata: { contentType: "application/pdf" } });
   return outKey;
 }
 
@@ -3949,13 +4043,18 @@ async function handleContractsCalendar(env, req, contractId) {
     .map(w => {
       const pre = w.timesheet_id ? preMap[w.timesheet_id] : null;
 
-      const missingPdf = (w.submission_mode_snapshot === 'MANUAL')
-        ? (!w.uploaded_pdf_r2_key && !(pre && pre.manual_pdf_r2_key))
-        : false;
+      const preStatus = String(pre?.precheck_status || '').toUpperCase();
 
-      const missingRef =
-        (pre?.require_reference_to_invoice === true) &&
-        (!pre?.reference_number || String(pre.reference_number).trim() === '');
+      // Prefer view’s computed status when available
+      const missingPdf =
+        (preStatus === 'BLOCK_NO_PDF') ||
+        ((w.submission_mode_snapshot === 'MANUAL')
+          ? (!w.uploaded_pdf_r2_key && !(pre && pre.manual_pdf_r2_key))
+          : false);
+
+      // ✅ FIX: weekly manual schedule-driven references are checked by v_ts_invoice_precheck
+      // (per-shift ref_num in actual_schedule_json). Do NOT use reference_number here.
+      const missingRef = (preStatus === 'BLOCK_NO_REFERENCE');
 
       return {
         id: w.id,
@@ -3965,7 +4064,7 @@ async function handleContractsCalendar(env, req, contractId) {
         submission_mode: w.submission_mode_snapshot,
         has_timesheet: !!w.timesheet_id,
 
-        // ✅ NEW: include timesheet_id so FE weekIndex logic can rely on it
+        // include timesheet_id so FE weekIndex logic can rely on it
         timesheet_id: w.timesheet_id || null,
 
         missing_pdf: !!missingPdf,
@@ -3980,6 +4079,7 @@ async function handleContractsCalendar(env, req, contractId) {
     items
   }));
 }
+
 
 async function handleCandidateCalendar(env, req, candidateId) {
   try {
@@ -4091,7 +4191,7 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
   const cw = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}` +
-    `&select=id,contract_id,week_ending_date,timesheet_id,submission_mode_snapshot,planned_schedule_json,totals_json,day_entries_json`
+      `&select=id,contract_id,week_ending_date,timesheet_id,submission_mode_snapshot,planned_schedule_json,totals_json`
   );
   if (!cw) return withCORS(env, req, notFound('Week not found'));
 
@@ -4111,19 +4211,139 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
   );
   if (!contract) return withCORS(env, req, notFound('Contract not found'));
 
-  // Small normalisers (keep storage stable / predictable)
-  const normaliseDayRefs = (obj) => {
-    if (!obj || typeof obj !== 'object') return {};
-    const out = {};
-    for (const [kRaw, vRaw] of Object.entries(obj)) {
-      const k = String(kRaw || '').trim();
-      if (!k) continue;
-      const v = (vRaw == null) ? null : String(vRaw).trim();
-      out[k] = v ? v : null;
+  // ─────────────────────────────────────────────────────────────
+  // ✅ Schedule-driven ONLY (weekly manual draft)
+  // We require actual_schedule_json (array) – can be EMPTY to clear the plan.
+  // ─────────────────────────────────────────────────────────────
+  let actual_schedule_json = null;
+
+  if (Array.isArray(body?.actual_schedule_json)) {
+    actual_schedule_json = body.actual_schedule_json;
+  } else if (typeof body?.actual_schedule_json === 'string') {
+    try {
+      const parsed = JSON.parse(body.actual_schedule_json);
+      if (Array.isArray(parsed)) actual_schedule_json = parsed;
+    } catch {}
+  } else if (Array.isArray(body?.schedule_json)) {
+    // defensive alias
+    actual_schedule_json = body.schedule_json;
+  } else if (typeof body?.schedule_json === 'string') {
+    try {
+      const parsed = JSON.parse(body.schedule_json);
+      if (Array.isArray(parsed)) actual_schedule_json = parsed;
+    } catch {}
+  }
+
+  if (!Array.isArray(actual_schedule_json)) {
+    return withCORS(env, req, badRequest('actual_schedule_json is required (schedule-driven weekly manual only)'));
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Normalise schedule (stable storage: breaks[] + break_mins)
+  // ─────────────────────────────────────────────────────────────
+  const parseHHMM = (s) => {
+    const m = String(s || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) return null;
+    const hh = Number(m[1]), mm = Number(m[2]);
+    if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+    if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
+    return hh * 60 + mm;
+  };
+
+  const diffMins = (a, b) => {
+    const am = parseHHMM(a);
+    const bm = parseHHMM(b);
+    if (am == null || bm == null) return null;
+    let d = bm - am;
+    if (d < 0) d += 1440;
+    return d;
+  };
+
+  const normaliseSchedule = (arr) => {
+    const out = [];
+    for (const raw of (arr || [])) {
+      const seg = (raw && typeof raw === 'object') ? { ...raw } : null;
+      if (!seg) continue;
+
+      // normalise ref key
+      if (seg.ref_num == null && seg.reference != null) seg.ref_num = seg.reference;
+
+      // build breaks[]
+      let breaks = [];
+      if (Array.isArray(seg.breaks)) {
+        breaks = seg.breaks
+          .map(b => ({
+            start: String(b?.start || '').trim(),
+            end:   String(b?.end   || '').trim()
+          }))
+          .filter(b => b.start || b.end);
+      }
+
+      // legacy primary break fields -> include as first break if present and not already
+      const bs0 = String(seg.break_start || '').trim();
+      const be0 = String(seg.break_end   || '').trim();
+      if ((bs0 || be0) && !breaks.some(b => (b.start === bs0 && b.end === be0))) {
+        breaks.unshift({ start: bs0, end: be0 });
+      }
+
+      // compute break minutes from breaks if possible
+      let br = Number(seg.break_mins ?? seg.break_minutes ?? 0);
+      if ((!Number.isFinite(br) || br <= 0) && breaks.length) {
+        let sum = 0;
+        for (const b of breaks) {
+          const d = diffMins(b.start, b.end);
+          if (Number.isFinite(d) && d > 0) sum += d;
+        }
+        br = sum;
+      }
+      if (!Number.isFinite(br) || br < 0) br = 0;
+
+      seg.breaks = breaks;
+      seg.break_mins = br;
+      seg.break_minutes = br;
+
+      // keep legacy convenience fields aligned to first break
+      const p = breaks[0] || null;
+      seg.break_start = p ? p.start : (seg.break_start || '');
+      seg.break_end   = p ? p.end   : (seg.break_end   || '');
+
+      out.push(seg);
     }
     return out;
   };
 
+  actual_schedule_json = normaliseSchedule(actual_schedule_json);
+
+  // Validate schedule only if there is at least one shift segment
+  if (actual_schedule_json.length) {
+    try {
+      validateScheduleStructure(actual_schedule_json);
+    } catch (e) {
+      return withCORS(env, req, badRequest(e?.message || 'Invalid schedule (overlap/break windows).'));
+    }
+  }
+
+  // Compute minutes by bucket -> hours (canonical)
+  let hours = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
+  try {
+    if (actual_schedule_json.length) {
+      const mins = await resolveBucketsFromSchedule(env, contract, actual_schedule_json);
+      hours = {
+        day:   +(Number(mins?.day   || 0) / 60).toFixed(2),
+        night: +(Number(mins?.night || 0) / 60).toFixed(2),
+        sat:   +(Number(mins?.sat   || 0) / 60).toFixed(2),
+        sun:   +(Number(mins?.sun   || 0) / 60).toFixed(2),
+        bh:    +(Number(mins?.bh    || 0) / 60).toFixed(2)
+      };
+    }
+  } catch (e) {
+    return withCORS(env, req, badRequest(e?.message || 'Failed to bucket schedule'));
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Additional units (optional)
+  // Persist inside totals_json.additional_units_week (no dedicated column).
+  // ─────────────────────────────────────────────────────────────
   const normaliseUnitsWeek = (obj) => {
     if (!obj || typeof obj !== 'object') return {};
     const out = {};
@@ -4137,99 +4357,12 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
     return out;
   };
 
-  // ─────────────────────────────────────────────────────────────
-  // Parse day references (optional) → store in contract_weeks.day_entries_json
-  // Shape expected: { "YYYY-MM-DD": "REF123", ... } or null
-  // ─────────────────────────────────────────────────────────────
-  let dayReferencesJson = undefined; // undefined = "no change"; null = clear; object = set
-  if (body && Object.prototype.hasOwnProperty.call(body, 'day_references_json')) {
-    if (body.day_references_json === null) {
-      dayReferencesJson = null;
-    } else if (body.day_references_json && typeof body.day_references_json === 'object') {
-      dayReferencesJson = normaliseDayRefs(body.day_references_json);
-    } else if (typeof body.day_references_json === 'string') {
-      try {
-        const parsed = JSON.parse(body.day_references_json);
-        if (parsed && typeof parsed === 'object') dayReferencesJson = normaliseDayRefs(parsed);
-      } catch {
-        // ignore invalid string; treat as "no change"
-        dayReferencesJson = undefined;
-      }
-    } else {
-      // ignore other types; treat as "no change"
-      dayReferencesJson = undefined;
-    }
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // Parse schedule (preferred) or hours fallback
-  // ─────────────────────────────────────────────────────────────
-  let actual_schedule_json = null;
-
-  if (Array.isArray(body?.actual_schedule_json)) {
-    actual_schedule_json = body.actual_schedule_json;
-  } else if (typeof body?.actual_schedule_json === 'string') {
-    try {
-      const parsed = JSON.parse(body.actual_schedule_json);
-      if (Array.isArray(parsed)) actual_schedule_json = parsed;
-    } catch {
-      actual_schedule_json = null;
-    }
-  } else if (Array.isArray(body?.schedule_json)) {
-    // defensive: allow alternate key if ever used
-    actual_schedule_json = body.schedule_json;
-  }
-
-  // Canonical bucket hours (decimal)
-  let hours = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
-
-  if (Array.isArray(actual_schedule_json) && actual_schedule_json.length) {
-    // Validate schedule structure (overlaps + break windows)
-    try {
-      validateScheduleStructure(actual_schedule_json);
-    } catch (e) {
-      return withCORS(env, req, badRequest(e?.message || 'Invalid schedule (overlap/break windows).'));
-    }
-
-    // Compute minutes by bucket -> hours
-    try {
-      const mins = await resolveBucketsFromSchedule(env, contract, actual_schedule_json);
-      hours = {
-        day:   +(Number(mins?.day   || 0) / 60).toFixed(2),
-        night: +(Number(mins?.night || 0) / 60).toFixed(2),
-        sat:   +(Number(mins?.sat   || 0) / 60).toFixed(2),
-        sun:   +(Number(mins?.sun   || 0) / 60).toFixed(2),
-        bh:    +(Number(mins?.bh    || 0) / 60).toFixed(2)
-      };
-    } catch (e) {
-      return withCORS(env, req, badRequest(e?.message || 'Failed to bucket schedule'));
-    }
-  } else if (body?.hours) {
-    // Fallback: allow direct hours save (still draft; no timesheet creation)
-    const n = (v) => (v == null ? 0 : Number(v) || 0);
-    hours = {
-      day:   +n(body.hours.day).toFixed(2),
-      night: +n(body.hours.night).toFixed(2),
-      sat:   +n(body.hours.sat).toFixed(2),
-      sun:   +n(body.hours.sun).toFixed(2),
-      bh:    +n(body.hours.bh).toFixed(2)
-    };
-    // If schedule absent, we do NOT overwrite planned_schedule_json.
-    actual_schedule_json = null;
-  } else {
-    return withCORS(env, req, badRequest('Provide either actual_schedule_json (preferred) or hours totals'));
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // Additional units (optional): contract_weeks has NO dedicated column.
-  // We persist them inside totals_json.additional_units_week if provided.
-  // ─────────────────────────────────────────────────────────────
   let additionalUnitsWeek = undefined; // undefined = "no change"
   if (body && Object.prototype.hasOwnProperty.call(body, 'additional_units_week')) {
     if (body.additional_units_week && typeof body.additional_units_week === 'object') {
       additionalUnitsWeek = normaliseUnitsWeek(body.additional_units_week);
     } else if (body.additional_units_week === null) {
-      additionalUnitsWeek = {}; // treat explicit null as clear
+      additionalUnitsWeek = {}; // explicit clear
     } else if (typeof body.additional_units_week === 'string') {
       try {
         const parsed = JSON.parse(body.additional_units_week);
@@ -4253,25 +4386,16 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
     hours
   };
 
-  // ✅ Option A: only overwrite this key if the request included additional_units_week
+  // overwrite only if key provided
   if (additionalUnitsWeek !== undefined) {
     totals_json.additional_units_week = additionalUnitsWeek;
   }
 
   const patch = {
     totals_json,
+    planned_schedule_json: actual_schedule_json, // ALWAYS set (including empty array) so "clear" persists
     updated_at: now
   };
-
-  // Only overwrite planned_schedule_json when a schedule was provided
-  if (Array.isArray(actual_schedule_json)) {
-    patch.planned_schedule_json = actual_schedule_json;
-  }
-
-  // ✅ Only touch day_entries_json when explicitly provided (missing = “no change”)
-  if (dayReferencesJson !== undefined) {
-    patch.day_entries_json = dayReferencesJson;
-  }
 
   const res = await fetch(
     `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`,
@@ -4738,26 +4862,9 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
   // ✅ Guarded write (only enforced when a current timesheet already exists for this week)
   const expectedTimesheetId = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
 
-  const hasDayRefsKey     = !!(body && Object.prototype.hasOwnProperty.call(body, 'day_references_json'));
+  // Additional units keys (weekly/per-day) are still supported
   const hasUnitsWeekKey   = !!(body && Object.prototype.hasOwnProperty.call(body, 'additional_units_week'));
   const hasUnitsPerDayKey = !!(body && Object.prototype.hasOwnProperty.call(body, 'additional_units_per_day'));
-
-  // optional per-day references from FE
-  let dayReferencesJson = null;
-  if (body && Object.prototype.hasOwnProperty.call(body, 'day_references_json')) {
-    if (body.day_references_json && typeof body.day_references_json === 'object') {
-      dayReferencesJson = body.day_references_json;
-    } else if (body.day_references_json === null) {
-      dayReferencesJson = null;
-    } else if (typeof body.day_references_json === 'string') {
-      try {
-        const parsed = JSON.parse(body.day_references_json);
-        if (parsed && typeof parsed === 'object') dayReferencesJson = parsed;
-      } catch {
-        dayReferencesJson = null;
-      }
-    }
-  }
 
   // QR revoke/reissue hints (legacy)
   const rawRevokeQr  = !!body?.revoke_qr;
@@ -4765,7 +4872,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
 
   // preferred enum
   const qrActionEnumRaw = String(body?.qr_action || body?.qrAction || '').trim().toUpperCase();
-  const enumOk = (x) => (x === 'REISSUE' || x === 'REVOKE_TO_MANUAL');
+  const enumOk = (x) => (x === 'REISSUE' || x === 'REVOKE_TO_MANUAL' || x === 'ISSUE' || x === 'SAVE_WITHOUT_ISSUE');
 
   const cw = await sbGetOne(
     env,
@@ -4779,12 +4886,17 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
   );
   if (!contract) return withCORS(env, req, notFound('Contract not found'));
 
+  // ✅ Compute a timestamp ONCE (and do not shadow the nowIso() helper)
+  const nowIso2 = nowIso();
+
   // ✅ Resolve cw.timesheet_id to the current timesheet id (if one exists)
   let currentTimesheetIdForWeek = cw.timesheet_id || null;
   let wasStaleWeekTs = false;
+
   if (currentTimesheetIdForWeek) {
     const resTs = await resolveTimesheetToCurrent(env, currentTimesheetIdForWeek);
     if (!resTs) return withCORS(env, req, notFound('Timesheet not found'));
+
     if (String(resTs.current_timesheet_id) !== String(currentTimesheetIdForWeek)) {
       wasStaleWeekTs = true;
       currentTimesheetIdForWeek = resTs.current_timesheet_id;
@@ -4796,7 +4908,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
           {
             method: 'PATCH',
             headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-            body: JSON.stringify({ timesheet_id: currentTimesheetIdForWeek, updated_at: nowIso() })
+            body: JSON.stringify({ timesheet_id: currentTimesheetIdForWeek, updated_at: nowIso2 })
           }
         ).catch(() => {});
       } catch {}
@@ -4854,20 +4966,115 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     body?.manual_pdf_rotation_degrees ?? body?.rotation_degrees
   );
 
-  // Hours totals or schedule JSON
-  let hours = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
+  // ─────────────────────────────────────────────────────────────
+  // ✅ SCHEDULE-DRIVEN ONLY (weekly manual)
+  // Require actual_schedule_json (array; may be empty for "clear schedule")
+  // ─────────────────────────────────────────────────────────────
   let actual_schedule_json = null;
 
-  if (Array.isArray(body?.actual_schedule_json) && body.actual_schedule_json.length) {
+  if (Array.isArray(body?.actual_schedule_json)) {
     actual_schedule_json = body.actual_schedule_json;
-
+  } else if (typeof body?.actual_schedule_json === 'string') {
     try {
-      validateScheduleStructure(actual_schedule_json);
-    } catch (e) {
-      return withCORS(env, req, badRequest(e.message || 'Invalid schedule (overlap/breaks).'));
+      const parsed = JSON.parse(body.actual_schedule_json);
+      if (Array.isArray(parsed)) actual_schedule_json = parsed;
+    } catch {}
+  }
+
+  if (!Array.isArray(actual_schedule_json)) {
+    return withCORS(env, req, badRequest('actual_schedule_json is required (schedule-driven weekly manual only)'));
+  }
+
+  // Normalise: ensure breaks[] exists, and break_mins reflects sum of breaks windows
+  const parseHHMM = (s) => {
+    const m = String(s || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) return null;
+    const hh = Number(m[1]), mm = Number(m[2]);
+    if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+    if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
+    return hh * 60 + mm;
+  };
+
+  const diffMins = (a, b) => {
+    const am = parseHHMM(a);
+    const bm = parseHHMM(b);
+    if (am == null || bm == null) return null;
+    let d = bm - am;
+    if (d < 0) d += 1440;
+    return d;
+  };
+
+  const normaliseSchedule = (arr) => {
+    const out = [];
+    for (const raw of (arr || [])) {
+      const seg = (raw && typeof raw === 'object') ? { ...raw } : null;
+      if (!seg) continue;
+
+      // normalise ref key
+      if (seg.ref_num == null && seg.reference != null) seg.ref_num = seg.reference;
+
+      // build breaks[]
+      let breaks = [];
+      if (Array.isArray(seg.breaks)) {
+        breaks = seg.breaks
+          .map(b => ({
+            start: String(b?.start || '').trim(),
+            end:   String(b?.end   || '').trim()
+          }))
+          .filter(b => b.start || b.end);
+      }
+
+      // legacy primary break fields -> include as first break if present and not already
+      const bs0 = String(seg.break_start || '').trim();
+      const be0 = String(seg.break_end   || '').trim();
+      if ((bs0 || be0) && !breaks.some(b => (b.start === bs0 && b.end === be0))) {
+        breaks.unshift({ start: bs0, end: be0 });
+      }
+
+      // compute break minutes from breaks if possible
+      let br = Number(seg.break_mins ?? seg.break_minutes ?? 0);
+      if ((!Number.isFinite(br) || br <= 0) && breaks.length) {
+        let sum = 0;
+        for (const b of breaks) {
+          const d = diffMins(b.start, b.end);
+          if (Number.isFinite(d) && d > 0) sum += d;
+        }
+        br = sum;
+      }
+      if (!Number.isFinite(br) || br < 0) br = 0;
+
+      seg.breaks = breaks;
+      seg.break_mins = br;
+      seg.break_minutes = br;
+
+      // keep legacy convenience fields aligned to first break
+      const p = breaks[0] || null;
+      seg.break_start = p ? p.start : (seg.break_start || '');
+      seg.break_end   = p ? p.end   : (seg.break_end   || '');
+
+      out.push(seg);
     }
+    return out;
+  };
 
-    try {
+  actual_schedule_json = normaliseSchedule(actual_schedule_json);
+
+  // If we are creating a NEW timesheet (no ts exists), require at least 1 shift segment.
+  // Draft/planned saves belong in the draft endpoint.
+  if (!currentTimesheetIdForWeek && actual_schedule_json.length === 0) {
+    return withCORS(env, req, badRequest('Cannot create a timesheet with an empty schedule. Save as draft or add at least one shift.'));
+  }
+
+  try {
+    validateScheduleStructure(actual_schedule_json);
+  } catch (e) {
+    return withCORS(env, req, badRequest(e.message || 'Invalid schedule (overlap/breaks).'));
+  }
+
+  // Resolve bucket minutes from schedule (single source of truth)
+  let hours = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
+  try {
+    if (actual_schedule_json.length) {
       const minsByBucket = await resolveBucketsFromSchedule(env, contract, actual_schedule_json);
       hours = {
         day:   +(minsByBucket.day   / 60).toFixed(2),
@@ -4876,20 +5083,9 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
         sun:   +(minsByBucket.sun   / 60).toFixed(2),
         bh:    +(minsByBucket.bh    / 60).toFixed(2)
       };
-    } catch (e) {
-      return withCORS(env, req, badRequest(e.message || 'Invalid actual_schedule_json'));
     }
-  } else if (body?.hours) {
-    const n = (v) => (v == null ? 0 : Number(v) || 0);
-    hours = {
-      day:   n(body.hours.day),
-      night: n(body.hours.night),
-      sat:   n(body.hours.sat),
-      sun:   n(body.hours.sun),
-      bh:    n(body.hours.bh)
-    };
-  } else {
-    return withCORS(env, req, badRequest('Provide either actual_schedule_json or hours totals'));
+  } catch (e) {
+    return withCORS(env, req, badRequest(e.message || 'Invalid actual_schedule_json'));
   }
 
   // Base rates must exist for any positive bucket
@@ -4905,7 +5101,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     return withCORS(env, req, badRequest('Missing rate(s) in contract for one or more entered hour buckets'));
   }
 
-  // Additional unit buckets – weekly totals
+  // Additional unit buckets – weekly totals (still supported)
   const normaliseUnitsWeek = (obj) => {
     const out = {};
     const src = (obj && typeof obj === 'object') ? obj : {};
@@ -5086,8 +5282,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       )
     : null;
 
-  const nowIso = nowIso();
-
   // Lock enforcement: block changes if invoiced or paid
   let finLock = null;
   if (ts && ts.timesheet_id) {
@@ -5144,7 +5338,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       }
     ).catch(() => {});
 
-    // Create new current version (NO timesheet_id)
+    // Create new current version (NEW timesheet_id)
     const newRow = { ...currentTs };
     delete newRow.id;
     delete newRow.timesheet_id;
@@ -5157,9 +5351,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       revoked_reason: null,
       revoked_by: null,
 
-      manual_pdf_r2_key: null,
-      manual_pdf_rotation_degrees: Number(currentTs.manual_pdf_rotation_degrees ?? 0),
-
+      // reset QR payload/evidence fields on the new current version
       qr_token: null,
       qr_status: null,
       qr_payload_json: {},
@@ -5167,9 +5359,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       qr_scanned_at: null,
       qr_scan_info_json: null,
       qr_r2_key: null,
-
-      additional_units_week: currentTs.additional_units_week || {},
-      additional_units_per_day: currentTs.additional_units_per_day || {},
 
       updated_at: now2,
       created_at: now2
@@ -5191,12 +5380,39 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
   };
 
   // Determine QR action (enum preferred, legacy booleans fallback)
-  let qrAction = null; // 'REISSUE' | 'REVOKE_TO_MANUAL' | null
+  let qrAction = null; // 'REISSUE' | 'REVOKE_TO_MANUAL' | 'ISSUE' | null
   if (enumOk(qrActionEnumRaw)) qrAction = qrActionEnumRaw;
   else {
     if (rawReissueQr) qrAction = 'REISSUE';
     else if (rawRevokeQr) qrAction = 'REVOKE_TO_MANUAL';
   }
+
+  // If QR action on existing QR timesheet, rotate FIRST so new schedule lands on the new current version
+  const hadQrBefore = !!(ts && ts.qr_status);
+  if (ts && ts.timesheet_id && hadQrBefore && (qrAction === 'REISSUE' || qrAction === 'REVOKE_TO_MANUAL')) {
+    const why = (qrAction === 'REISSUE') ? 'QR_REISSUE_AFTER_HOURS_CHANGE' : 'QR_REVOKED_TO_MANUAL';
+    const rotated = await rotateTimesheetVersion(ts, why);
+    if (!rotated || !rotated.timesheet_id) {
+      return withCORS(env, req, serverError('Failed to rotate timesheet version'));
+    }
+    ts = rotated;
+
+    // Move contract_week pointer to the new current timesheet id
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify({ timesheet_id: ts.timesheet_id, updated_at: nowIso2 })
+      }
+    ).catch(() => {});
+  }
+
+  // processing status
+  const processingStatus =
+    (qrAction === 'REISSUE' || qrAction === 'REVOKE_TO_MANUAL')
+      ? 'AWAITING_MANUAL_SIGNATURE'
+      : 'PENDING_AUTH';
 
   let createdNow = false;
 
@@ -5229,14 +5445,18 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       manual_pdf_r2_key: cw.uploaded_pdf_r2_key || null,
       manual_pdf_rotation_degrees: manualPdfRotationDeg,
       line_type: 'HOURS',
+
+      // ✅ schedule-driven truth
       actual_schedule_json,
 
       additional_units_week: unitsWeek || {},
       additional_units_per_day: unitsPerDay || {},
 
-      day_references_json: dayReferencesJson ?? null,
+      // per-day refs are obsolete in this flow (per-shift ref_num lives inside schedule)
+      day_references_json: null,
+
       authorised_at_server: null,
-      created_at: nowIso, updated_at: nowIso,
+      created_at: nowIso2, updated_at: nowIso2,
 
       qr_payload_json: {},
       qr_status: null,
@@ -5265,7 +5485,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
         body: JSON.stringify({
           timesheet_id: ts.timesheet_id,
           status: 'SUBMITTED',
-          updated_at: nowIso
+          updated_at: nowIso2
         })
       }
     ).catch(() => {});
@@ -5288,16 +5508,19 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       );
     } catch {}
   } else {
-    // Patch existing current timesheet for this week
-    const patchBody = { updated_at: nowIso };
+    // Patch existing current timesheet for this week (always schedule-driven)
+    const patchBody = { updated_at: nowIso2 };
 
-    if (actual_schedule_json) patchBody.actual_schedule_json = actual_schedule_json;
+    patchBody.actual_schedule_json = actual_schedule_json;
+
     if (body?.manual_pdf_rotation_degrees != null || body?.rotation_degrees != null) {
       patchBody.manual_pdf_rotation_degrees = manualPdfRotationDeg;
     }
-    if (hasDayRefsKey) patchBody.day_references_json = dayReferencesJson ?? null;
+
     if (hasUnitsWeekKey) patchBody.additional_units_week = unitsWeek || {};
     if (hasUnitsPerDayKey) patchBody.additional_units_per_day = unitsPerDay || {};
+
+    // do NOT set day_references_json here (obsolete)
 
     await fetch(
       `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
@@ -5305,43 +5528,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     ).catch(() => {});
   }
 
-  // If QR action on existing QR timesheet, rotate for audit/restore
-  const hadQrBefore = !!(ts && ts.qr_status);
-  if (ts && ts.timesheet_id && hadQrBefore && (qrAction === 'REISSUE' || qrAction === 'REVOKE_TO_MANUAL')) {
-    const why = (qrAction === 'REISSUE') ? 'QR_REISSUE_AFTER_HOURS_CHANGE' : 'QR_REVOKED_TO_MANUAL';
-
-    const rotated = await rotateTimesheetVersion(ts, why);
-    if (!rotated || !rotated.timesheet_id) {
-      return withCORS(env, req, serverError('Failed to rotate timesheet version'));
-    }
-    ts = rotated;
-
-    // ✅ Move contract_week pointer to the new current timesheet id
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
-      {
-        method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify({ timesheet_id: ts.timesheet_id, updated_at: nowIso })
-      }
-    ).catch(() => {});
-
-    // Reload lock snapshot for the new current (if needed later)
-    finLock = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-        `?timesheet_id=eq.${enc(ts.timesheet_id)}` +
-        `&is_current=eq.true&select=*`
-    );
-  }
-
-  // processing status rules
-  const processingStatus =
-    (qrAction === 'REISSUE' || qrAction === 'REVOKE_TO_MANUAL')
-      ? 'AWAITING_MANUAL_SIGNATURE'
-      : 'PENDING_AUTH';
-
-  // Policy snapshot (TSFIN requires non-null)
+  // policy snapshot (for holiday, etc.)
   let policySnapshot = {};
   try {
     policySnapshot = await loadPolicy(env, contract.client_id || null, cw.week_ending_date);
@@ -5355,310 +5542,235 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       ? Number(policySnapshot.holiday_pay_pct)
       : null;
 
-  // Build snapshot (existing logic unchanged beyond using ts.timesheet_id)
-  let snap;
-  if (actual_schedule_json && Array.isArray(actual_schedule_json) && actual_schedule_json.length) {
-    // SEGMENTS mode
-    const clientId = contract.client_id || null;
-    const segments = [];
-    let segPayTotal = 0;
-    let segChgTotal = 0;
+  // ─────────────────────────────────────────────────────────────
+  // TSFIN snapshot: ALWAYS SEGMENTS for schedule-driven weekly manual
+  // (supports multiple shifts per day + per-shift ref_num)
+  // ─────────────────────────────────────────────────────────────
+  const clientId = contract.client_id || null;
+  const segments = [];
 
-    if (typeof ukLocalToUtcISO !== 'function') {
-      throw new Error('ukLocalToUtcISO helper is missing (required for weekly SEGMENTS conversion).');
-    }
-
-    const _parseHHMM = (hhmm) => {
-      const s = String(hhmm || '').trim();
-      const m = s.match(/^(\d{1,2}):(\d{2})$/);
-      if (!m) return null;
-      const h = Number(m[1]);
-      const mm = Number(m[2]);
-      if (!Number.isFinite(h) || !Number.isFinite(mm)) return null;
-      if (h < 0 || h > 23 || mm < 0 || mm > 59) return null;
-      return h * 60 + mm;
-    };
-
-    const _addDaysYmd = (ymd, days) => {
-      const d = new Date(`${String(ymd)}T00:00:00Z`);
-      if (!Number.isFinite(d.getTime())) return String(ymd || '');
-      d.setUTCDate(d.getUTCDate() + Number(days || 0));
-      const yyyy = d.getUTCFullYear();
-      const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-      const dd = String(d.getUTCDate()).padStart(2, '0');
-      return `${yyyy}-${mm}-${dd}`;
-    };
-
-    const _isIsoLike = (s) => {
-      const x = String(s || '');
-      return x.includes('T') && (x.endsWith('Z') || /[+\-]\d{2}:\d{2}$/.test(x));
-    };
-
-    const scheduleEntryToUtcRange = (seg) => {
-      const date = String(seg?.date || '').trim();
-      if (!date) return { startUtcIso: null, endUtcIso: null };
-
-      const startIsoRaw = seg?.start_utc || seg?.start_iso || null;
-      const endIsoRaw   = seg?.end_utc   || seg?.end_iso   || null;
-      if (startIsoRaw && endIsoRaw && _isIsoLike(startIsoRaw) && _isIsoLike(endIsoRaw)) {
-        return { startUtcIso: String(startIsoRaw), endUtcIso: String(endIsoRaw) };
-      }
-
-      const startHH = String(seg?.start || '').trim();
-      const endHH   = String(seg?.end   || '').trim();
-      if (!startHH || !endHH) return { startUtcIso: null, endUtcIso: null };
-
-      const sMin = _parseHHMM(startHH);
-      const eMin = _parseHHMM(endHH);
-      if (sMin == null || eMin == null) return { startUtcIso: null, endUtcIso: null };
-
-      const overnight = (eMin <= sMin);
-      const endYmd = overnight ? _addDaysYmd(date, 1) : date;
-
-      return {
-        startUtcIso: ukLocalToUtcISO(date, startHH),
-        endUtcIso:   ukLocalToUtcISO(endYmd, endHH)
-      };
-    };
-
-    for (let i = 0; i < actual_schedule_json.length; i++) {
-      const seg = actual_schedule_json[i] || {};
-      const date = seg.date;
-
-      const { startUtcIso, endUtcIso } = scheduleEntryToUtcRange(seg);
-      const start = startUtcIso;
-      const end   = endUtcIso;
-
-      const br = Number(seg.break_mins ?? seg.break_minutes ?? 0);
-      if (!date || !start || !end) continue;
-
-      const policy = await loadPolicy(env, clientId, date);
-      let segsArr = [[start, end]];
-      segsArr = subtractBreak(segsArr, null, null, br);
-      const h = classifyMinutes(env, policy, segsArr);
-
-      const p = pay || {};
-      const c = charge || {};
-
-      const segPay = round2(
-        (h.hours_day   || 0) * asNumberLocal(p.day)   +
-        (h.hours_night || 0) * asNumberLocal(p.night) +
-        (h.hours_sat   || 0) * asNumberLocal(p.sat)   +
-        (h.hours_sun   || 0) * asNumberLocal(p.sun)   +
-        (h.hours_bh    || 0) * asNumberLocal(p.bh)
-      );
-
-      const segChg = round2(
-        (h.hours_day   || 0) * asNumberLocal(c.day)   +
-        (h.hours_night || 0) * asNumberLocal(c.night) +
-        (h.hours_sat   || 0) * asNumberLocal(c.sat)   +
-        (h.hours_sun   || 0) * asNumberLocal(c.sun)   +
-        (h.hours_bh    || 0) * asNumberLocal(c.bh)
-      );
-
-      segPayTotal += segPay;
-      segChgTotal += segChg;
-
-      segments.push({
-        segment_id: `ts:${ts.timesheet_id}:${i}`,
-        date,
-        ward: seg.ward || null,
-        start_utc: start,
-        end_utc: end,
-        break_mins: br,
-        hours_day:   h.hours_day   || 0,
-        hours_night: h.hours_night || 0,
-        hours_sat:   h.hours_sat   || 0,
-        hours_sun:   h.hours_sun   || 0,
-        hours_bh:    h.hours_bh    || 0,
-        pay_amount: segPay,
-        charge_amount: segChg,
-        exclude_from_pay: false
-      });
-    }
-
-    const basePay = segPayTotal;
-    const baseCharge = segChgTotal;
-    const total_pay = round2(basePay + additional_pay_ex_vat);
-    const total_chg = round2(baseCharge + additional_charge_ex_vat);
-    const margin = round2(total_chg - total_pay);
-
-    if (margin < 0) return withCORS(env, req, badRequest('Negative margin: total charge is less than total pay.'));
-
-    snap = {
-      timesheet_id: ts.timesheet_id,
-      timesheet_version: ts.version || 1,
-      basis: 'CONTRACT_WEEKLY',
-      candidate_id: contract.candidate_id,
-      client_id: contract.client_id,
-      role: contract.role || null,
-      band: contract.band || null,
-      candidate_assignment: contract.candidate_id ? 'ASSIGNED' : 'UNASSIGNED',
-      processing_status: processingStatus,
-      pay_method: method,
-
-      hours_day: Number(hours.day || 0),
-      hours_night: Number(hours.night || 0),
-      hours_sat: Number(hours.sat || 0),
-      hours_sun: Number(hours.sun || 0),
-      hours_bh: Number(hours.bh || 0),
-      total_hours: round2(Number(hours.day || 0) + Number(hours.night || 0) + Number(hours.sat || 0) + Number(hours.sun || 0) + Number(hours.bh || 0)),
-
-      pay_day: pay.day, pay_night: pay.night, pay_sat: pay.sat, pay_sun: pay.sun, pay_bh: pay.bh,
-      charge_day: charge.day, charge_night: charge.night, charge_sat: charge.sat, charge_sun: charge.sun, charge_bh: charge.bh,
-
-      total_pay_ex_vat: total_pay,
-      total_charge_ex_vat: total_chg,
-      margin_ex_vat: margin,
-
-      additional_units_json,
-      additional_pay_ex_vat,
-      additional_charge_ex_vat,
-      additional_margin_ex_vat,
-
-      expenses_pay_ex_vat: 0,
-      expenses_charge_ex_vat: 0,
-      expenses_description: null,
-      expenses_evidence_r2_key: null,
-
-      mileage_pay_ex_vat: 0,
-      mileage_charge_ex_vat: 0,
-      mileage_evidence_r2_key: null,
-      mileage_pay_rate: null,
-      mileage_charge_rate: null,
-
-      pay_on_hold: false,
-      pay_on_hold_reason: null,
-      pay_on_hold_since_utc: null,
-
-      paid_at_utc: null,
-      paid_by_user_id: null,
-      payment_reference: null,
-
-      policy_snapshot_json: policySnapshot,
-      rate_source_refs_json: { mode: 'CONTRACT_RATES_JSON', contract_id: contract.id || null },
-      pay_wtr_rate_pct_snapshot,
-
-      created_at: nowIso,
-      invoice_breakdown_json: {
-        mode: 'SEGMENTS',
-        segments,
-        additional: {
-          units: additional_units_json,
-          pay_ex_vat: additional_pay_ex_vat,
-          charge_ex_vat: additional_charge_ex_vat,
-          margin_ex_vat: additional_margin_ex_vat
-        },
-        totals: {
-          total_pay_ex_vat: total_pay,
-          total_charge_ex_vat: total_chg,
-          margin_ex_vat: margin
-        }
-      }
-    };
-  } else {
-    const n2 = (x)=>Number(x)||0;
-    const base_pay = +(hours.day*n2(pay.day) + hours.night*n2(pay.night) + hours.sat*n2(pay.sat) + hours.sun*n2(pay.sun) + hours.bh*n2(pay.bh)).toFixed(2);
-    const base_charge = +(hours.day*n2(charge.day) + hours.night*n2(charge.night) + hours.sat*n2(charge.sat) + hours.sun*n2(charge.sun) + hours.bh*n2(charge.bh)).toFixed(2);
-
-    const total_pay = +Number(base_pay + additional_pay_ex_vat).toFixed(2);
-    const total_charge = +Number(base_charge + additional_charge_ex_vat).toFixed(2);
-    const margin = +Number(total_charge - total_pay).toFixed(2);
-
-    if (margin < 0) return withCORS(env, req, badRequest('Negative margin: total charge is less than total pay.'));
-
-    snap = {
-      timesheet_id: ts.timesheet_id,
-      timesheet_version: ts.version || 1,
-      basis: 'CONTRACT_WEEKLY',
-      candidate_id: contract.candidate_id,
-      client_id: contract.client_id,
-      role: contract.role || null,
-      band: contract.band || null,
-      candidate_assignment: 'ASSIGNED',
-      processing_status: processingStatus,
-      pay_method: method,
-
-      hours_day: Number(hours.day || 0),
-      hours_night: Number(hours.night || 0),
-      hours_sat: Number(hours.sat || 0),
-      hours_sun: Number(hours.sun || 0),
-      hours_bh: Number(hours.bh || 0),
-      total_hours: round2(Number(hours.day || 0) + Number(hours.night || 0) + Number(hours.sat || 0) + Number(hours.sun || 0) + Number(hours.bh || 0)),
-
-      pay_day: pay.day, pay_night: pay.night, pay_sat: pay.sat, pay_sun: pay.sun, pay_bh: pay.bh,
-      charge_day: charge.day, charge_night: charge.night, charge_sat: charge.sat, charge_sun: charge.sun, charge_bh: charge.bh,
-
-      total_pay_ex_vat: total_pay,
-      total_charge_ex_vat: total_charge,
-      margin_ex_vat: margin,
-
-      additional_units_json,
-      additional_pay_ex_vat,
-      additional_charge_ex_vat,
-      additional_margin_ex_vat,
-
-      expenses_pay_ex_vat: 0,
-      expenses_charge_ex_vat: 0,
-      expenses_description: null,
-      expenses_evidence_r2_key: null,
-
-      mileage_pay_ex_vat: 0,
-      mileage_charge_ex_vat: 0,
-      mileage_evidence_r2_key: null,
-      mileage_pay_rate: null,
-      mileage_charge_rate: null,
-
-      pay_on_hold: false,
-      pay_on_hold_reason: null,
-      pay_on_hold_since_utc: null,
-
-      paid_at_utc: null,
-      paid_by_user_id: null,
-      payment_reference: null,
-
-      policy_snapshot_json: policySnapshot,
-      rate_source_refs_json: { mode: 'CONTRACT_RATES_JSON', contract_id: contract.id || null },
-      pay_wtr_rate_pct_snapshot,
-
-      created_at: nowIso,
-      invoice_breakdown_json: {
-        mode: "AGGREGATE",
-        base_hours: {
-          day: hours.day,
-          night: hours.night,
-          sat: hours.sat,
-          sun: hours.sun,
-          bh: hours.bh,
-          pay_rates: { day: pay.day, night: pay.night, sat: pay.sat, sun: pay.sun, bh: pay.bh },
-          charge_rates: { day: charge.day, night: charge.night, sat: charge.sat, sun: charge.sun, bh: charge.bh },
-          pay_ex_vat: base_pay,
-          charge_ex_vat: base_charge
-        },
-        additional: {
-          units: additional_units_json,
-          pay_ex_vat: additional_pay_ex_vat,
-          charge_ex_vat: additional_charge_ex_vat,
-          margin_ex_vat: additional_margin_ex_vat
-        },
-        totals: {
-          total_pay_ex_vat: total_pay,
-          total_charge_ex_vat: total_charge,
-          margin_ex_vat: margin
-        }
-      }
-    };
+  if (typeof ukLocalToUtcISO !== 'function') {
+    throw new Error('ukLocalToUtcISO helper is missing (required for weekly conversion).');
   }
+
+  const _addDaysYmd = (ymd, days) => {
+    const d = new Date(`${String(ymd)}T00:00:00Z`);
+    if (!Number.isFinite(d.getTime())) return String(ymd || '');
+    d.setUTCDate(d.getUTCDate() + Number(days || 0));
+    const yyyy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const _isIsoLike = (s) => {
+    const x = String(s || '');
+    return x.includes('T') && (x.endsWith('Z') || /[+\-]\d{2}:\d{2}$/.test(x));
+  };
+
+  const scheduleEntryToUtcRange = (seg) => {
+    const date = String(seg?.date || '').trim();
+    if (!date) return { startUtcIso: null, endUtcIso: null };
+
+    const startIsoRaw = seg?.start_utc || seg?.start_iso || null;
+    const endIsoRaw   = seg?.end_utc   || seg?.end_iso   || null;
+    if (startIsoRaw && endIsoRaw && _isIsoLike(startIsoRaw) && _isIsoLike(endIsoRaw)) {
+      return { startUtcIso: String(startIsoRaw), endUtcIso: String(endIsoRaw) };
+    }
+
+    const startHH = String(seg?.start || '').trim();
+    const endHH   = String(seg?.end   || '').trim();
+    if (!startHH || !endHH) return { startUtcIso: null, endUtcIso: null };
+
+    const sMin = parseHHMM(startHH);
+    const eMin = parseHHMM(endHH);
+    if (sMin == null || eMin == null) return { startUtcIso: null, endUtcIso: null };
+
+    const overnight = (eMin <= sMin);
+    const endYmd = overnight ? _addDaysYmd(date, 1) : date;
+
+    return {
+      startUtcIso: ukLocalToUtcISO(date, startHH),
+      endUtcIso:   ukLocalToUtcISO(endYmd, endHH)
+    };
+  };
+
+  // Per-segment bucket calc (consistent w/ resolveBucketsFromSchedule)
+  let segPayTotal = 0;
+  let segChgTotal = 0;
+
+  for (let i = 0; i < actual_schedule_json.length; i++) {
+    const seg = actual_schedule_json[i] || {};
+    const date = String(seg.date || '').trim();
+    if (!date) continue;
+
+    const { startUtcIso, endUtcIso } = scheduleEntryToUtcRange(seg);
+    if (!startUtcIso || !endUtcIso) continue;
+
+    // bucket mins for THIS segment using the same resolver
+    let minsByBucketSeg = null;
+    try {
+      minsByBucketSeg = await resolveBucketsFromSchedule(env, contract, [seg]);
+    } catch (e) {
+      return withCORS(env, req, badRequest(e.message || 'Invalid schedule segment'));
+    }
+
+    const h = {
+      hours_day:   +(minsByBucketSeg.day   / 60).toFixed(2),
+      hours_night: +(minsByBucketSeg.night / 60).toFixed(2),
+      hours_sat:   +(minsByBucketSeg.sat   / 60).toFixed(2),
+      hours_sun:   +(minsByBucketSeg.sun   / 60).toFixed(2),
+      hours_bh:    +(minsByBucketSeg.bh    / 60).toFixed(2)
+    };
+
+    const p = pay || {};
+    const c = charge || {};
+
+    const segPay = round2(
+      (h.hours_day   || 0) * asNumberLocal(p.day)   +
+      (h.hours_night || 0) * asNumberLocal(p.night) +
+      (h.hours_sat   || 0) * asNumberLocal(p.sat)   +
+      (h.hours_sun   || 0) * asNumberLocal(p.sun)   +
+      (h.hours_bh    || 0) * asNumberLocal(p.bh)
+    );
+
+    const segChg = round2(
+      (h.hours_day   || 0) * asNumberLocal(c.day)   +
+      (h.hours_night || 0) * asNumberLocal(c.night) +
+      (h.hours_sat   || 0) * asNumberLocal(c.sat)   +
+      (h.hours_sun   || 0) * asNumberLocal(c.sun)   +
+      (h.hours_bh    || 0) * asNumberLocal(c.bh)
+    );
+
+    segPayTotal += segPay;
+    segChgTotal += segChg;
+
+    const br = Number(seg.break_mins ?? seg.break_minutes ?? 0);
+
+    segments.push({
+      segment_id: `ts:${ts.timesheet_id}:${i}`,
+      date,
+      start_utc: startUtcIso,
+      end_utc: endUtcIso,
+      break_mins: Number.isFinite(br) ? br : 0,
+
+      // ✅ per-shift reference number (supports multiple refs per day)
+      ref_num: (seg.ref_num != null && String(seg.ref_num).trim()) ? String(seg.ref_num).trim() : null,
+
+      // optional: keep breaks array for audit/debug
+      breaks: Array.isArray(seg.breaks) ? seg.breaks : [],
+
+      hours_day:   h.hours_day   || 0,
+      hours_night: h.hours_night || 0,
+      hours_sat:   h.hours_sat   || 0,
+      hours_sun:   h.hours_sun   || 0,
+      hours_bh:    h.hours_bh    || 0,
+
+      pay_amount: segPay,
+      charge_amount: segChg,
+      exclude_from_pay: false
+    });
+  }
+
+  const basePay = round2(segPayTotal);
+  const baseCharge = round2(segChgTotal);
+  const total_pay = round2(basePay + additional_pay_ex_vat);
+  const total_chg = round2(baseCharge + additional_charge_ex_vat);
+  const margin = round2(total_chg - total_pay);
+
+  if (margin < 0) return withCORS(env, req, badRequest('Negative margin: total charge is less than total pay.'));
+
+  const snap = {
+    timesheet_id: ts.timesheet_id,
+    timesheet_version: ts.version || 1,
+    basis: 'CONTRACT_WEEKLY',
+    candidate_id: contract.candidate_id,
+    client_id: contract.client_id,
+    role: contract.role || null,
+    band: contract.band || null,
+    candidate_assignment: contract.candidate_id ? 'ASSIGNED' : 'UNASSIGNED',
+    processing_status: processingStatus,
+    pay_method: method,
+
+    // hours buckets derived from schedule (authoritative)
+    hours_day: Number(hours.day || 0),
+    hours_night: Number(hours.night || 0),
+    hours_sat: Number(hours.sat || 0),
+    hours_sun: Number(hours.sun || 0),
+    hours_bh: Number(hours.bh || 0),
+    total_hours: round2(
+      Number(hours.day || 0) +
+      Number(hours.night || 0) +
+      Number(hours.sat || 0) +
+      Number(hours.sun || 0) +
+      Number(hours.bh || 0)
+    ),
+
+    pay_day: pay.day, pay_night: pay.night, pay_sat: pay.sat, pay_sun: pay.sun, pay_bh: pay.bh,
+    charge_day: charge.day, charge_night: charge.night, charge_sat: charge.sat, charge_sun: charge.sun, charge_bh: charge.bh,
+
+    total_pay_ex_vat: total_pay,
+    total_charge_ex_vat: total_chg,
+    margin_ex_vat: margin,
+
+    additional_units_json,
+    additional_pay_ex_vat,
+    additional_charge_ex_vat,
+    additional_margin_ex_vat,
+
+    expenses_pay_ex_vat: 0,
+    expenses_charge_ex_vat: 0,
+    expenses_description: null,
+    expenses_evidence_r2_key: null,
+
+    mileage_pay_ex_vat: 0,
+    mileage_charge_ex_vat: 0,
+    mileage_evidence_r2_key: null,
+    mileage_pay_rate: null,
+    mileage_charge_rate: null,
+
+    pay_on_hold: false,
+    pay_on_hold_reason: null,
+    pay_on_hold_since_utc: null,
+
+    paid_at_utc: null,
+    paid_by_user_id: null,
+    payment_reference: null,
+
+    policy_snapshot_json: policySnapshot,
+    rate_source_refs_json: { mode: 'CONTRACT_RATES_JSON', contract_id: contract.id || null },
+    pay_wtr_rate_pct_snapshot,
+
+    created_at: nowIso2,
+    invoice_breakdown_json: {
+      mode: 'SEGMENTS',
+      segments,
+      additional: {
+        units: additional_units_json,
+        pay_ex_vat: additional_pay_ex_vat,
+        charge_ex_vat: additional_charge_ex_vat,
+        margin_ex_vat: additional_margin_ex_vat
+      },
+      totals: {
+        total_pay_ex_vat: total_pay,
+        total_charge_ex_vat: total_chg,
+        margin_ex_vat: margin
+      }
+    }
+  };
 
   await writeSnapshot(env, snap);
 
-  // Preserve existing totals_json fields (Option A stores additional_units_week in totals_json)
+  // Persist week totals + schedule + weekly extras (draft-per-day refs removed)
   const existingWeekTotals = (cw.totals_json && typeof cw.totals_json === 'object') ? cw.totals_json : {};
   const mergedWeekTotals = { ...existingWeekTotals, hours };
   if (hasUnitsWeekKey) mergedWeekTotals.additional_units_week = unitsWeek || {};
 
-  const weekPatch = { totals_json: mergedWeekTotals, updated_at: nowIso };
-  if (hasDayRefsKey) weekPatch.day_entries_json = dayReferencesJson ?? null;
+  const weekPatch = {
+    totals_json: mergedWeekTotals,
+    planned_schedule_json: actual_schedule_json, // keep week schedule aligned for future view/processing
+    updated_at: nowIso2
+  };
 
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
@@ -5671,12 +5783,10 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     was_stale: !!wasStaleWeekTs,
     processing_status: processingStatus,
     hours,
-    used_schedule: !!actual_schedule_json,
-    qr_reissued: false,
-    qr_pdf_key: null
+    used_schedule: true,
+    created_now: !!createdNow
   }));
 }
-
 
  async function handleManualTimesheetQueueEnqueue(env, req) {
   const enc = encodeURIComponent;
@@ -8813,43 +8923,772 @@ async function handleTimesheetReplaceManualPdf(env, req, timesheetId) {
   }));
 }
 
-
 async function rebuildWeeklyTsfinForTimesheet(env, timesheetId, contract) {
   const enc = encodeURIComponent;
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+  const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
 
+  // Load current TSFIN
   const { rows: finRows } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-      `?timesheet_id=eq.${encodeURIComponent(timesheetId)}` +
-      `&is_current=eq.true&select=*`
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&is_current=eq.true&select=*` +
+      `&limit=1`
   );
   const fin = (finRows && finRows[0]) || null;
-  if (!fin) {
-    return { ok: false, reason: 'NO_SNAPSHOT' };
-  }
+  if (!fin) return { ok: false, reason: 'NO_SNAPSHOT' };
 
   if (fin.locked_by_invoice_id || fin.paid_at_utc) {
     return { ok: false, reason: 'LOCKED_OR_PAID' };
   }
 
+  // Load timesheet row
   const ts = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}&select=*`
   );
-  if (!ts) {
-    return { ok: false, reason: 'TS_NOT_FOUND' };
-  }
+  if (!ts) return { ok: false, reason: 'TS_NOT_FOUND' };
 
-  const hours = {
-    day:   Number(fin.hours_day  || 0),
-    night: Number(fin.hours_night|| 0),
-    sat:   Number(fin.hours_sat  || 0),
-    sun:   Number(fin.hours_sun  || 0),
-    bh:    Number(fin.hours_bh   || 0)
+  // Resolve rates (pay method + 5 buckets)
+  const pc = payChargeFromContract(contract);
+  const pay = pc?.pay || null;
+  const charge = pc?.charge || null;
+  const method = pc?.method || contract?.pay_method_snapshot || contract?.pay_method || null;
+  if (!pay || !charge) return { ok: false, reason: 'CONTRACT_RATES_MISSING' };
+
+  const basis = String(fin.basis || '').toUpperCase();
+
+  // Helpers
+  const toYmd = (d) => {
+    const yyyy = d.getUTCFullYear();
+    const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd   = String(d.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
   };
 
-  const { pay, charge, method } = payChargeFromContract(contract);
+  const addDaysYmd = (ymd, days) => {
+    const d = new Date(`${String(ymd)}T00:00:00Z`);
+    if (!Number.isFinite(d.getTime())) return String(ymd || '');
+    d.setUTCDate(d.getUTCDate() + Number(days || 0));
+    return toYmd(d);
+  };
+
+  const parseHHMM = (s) => {
+    const m = String(s || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) return null;
+    const hh = Number(m[1]), mm = Number(m[2]);
+    if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+    if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
+    return hh * 60 + mm;
+  };
+
+  const getWeekDates = (weekEndingYmd) => {
+    const out = [];
+    if (!weekEndingYmd) return out;
+    try {
+      const base = new Date(`${String(weekEndingYmd)}T00:00:00Z`);
+      if (!Number.isFinite(base.getTime())) return out;
+      for (let offset = 6; offset >= 0; offset--) {
+        const d = new Date(base);
+        d.setUTCDate(base.getUTCDate() - offset);
+        out.push({ ymd: toYmd(d), dow: d.getUTCDay() });
+      }
+    } catch {}
+    return out;
+  };
+
+  const normaliseFreq = (raw) => {
+    const s = String(raw || '').toUpperCase();
+    if (s === 'ONE_PER_WEEK')          return 'ONE_PER_WEEK';
+    if (s === 'ONE_PER_DAY')           return 'ONE_PER_DAY';
+    if (s === 'WEEKENDS_AND_BH_ONLY')  return 'WEEKENDS_AND_BH_ONLY';
+    if (s === 'WEEKDAYS_EXCL_BH_ONLY') return 'WEEKDAYS_EXCL_BH_ONLY';
+    return 'ONE_PER_WEEK';
+  };
+
+  const computeAdditionalFromTsOrFin = async () => {
+    const cfgArrRaw = contract.additional_rates_json;
+    let cfgArr = Array.isArray(cfgArrRaw) ? cfgArrRaw : [];
+    if (typeof cfgArrRaw === 'string') {
+      try { cfgArr = JSON.parse(cfgArrRaw); } catch { cfgArr = []; }
+    }
+    if (!Array.isArray(cfgArr)) cfgArr = [];
+
+    if (!cfgArr.length) {
+      return {
+        additional_units_json: {},
+        additional_pay_ex_vat: 0,
+        additional_charge_ex_vat: 0,
+        additional_margin_ex_vat: 0
+      };
+    }
+
+    // units source: prefer timesheet columns, fall back to fin.additional_units_json
+    let unitsWeek = ts.additional_units_week || {};
+    let unitsPerDay = ts.additional_units_per_day || {};
+
+    if (typeof unitsWeek === 'string') { try { unitsWeek = JSON.parse(unitsWeek); } catch { unitsWeek = {}; } }
+    if (typeof unitsPerDay === 'string') { try { unitsPerDay = JSON.parse(unitsPerDay); } catch { unitsPerDay = {}; } }
+
+    if (!unitsWeek || typeof unitsWeek !== 'object') unitsWeek = {};
+    if (!unitsPerDay || typeof unitsPerDay !== 'object') unitsPerDay = {};
+
+    const finStored = (fin.additional_units_json && typeof fin.additional_units_json === 'object') ? fin.additional_units_json : {};
+
+    const weekDates = getWeekDates(ts.week_ending_date || null);
+
+    // BH list for WEEKENDS_AND_BH_ONLY / WEEKDAYS_EXCL_BH_ONLY
+    let bhSet = new Set();
+    try {
+      const pol = await loadClientTimePolicy(env, contract.client_id);
+      if (pol && pol.bhList) {
+        if (pol.bhList instanceof Set) bhSet = pol.bhList;
+        else if (Array.isArray(pol.bhList)) bhSet = new Set(pol.bhList);
+      }
+    } catch {
+      bhSet = new Set();
+    }
+    const isBH = (ymd) => bhSet.has(ymd);
+
+    const shouldIncludeDay = (freq, meta) => {
+      const { ymd, dow } = meta;
+      const bh = isBH(ymd);
+      if (freq === 'ONE_PER_DAY')           return true;
+      if (freq === 'WEEKENDS_AND_BH_ONLY')  return bh || dow === 0 || dow === 6;
+      if (freq === 'WEEKDAYS_EXCL_BH_ONLY') return !bh && dow >= 1 && dow <= 5;
+      return false;
+    };
+
+    const additional_units_json = {};
+    let additional_pay_ex_vat = 0;
+    let additional_charge_ex_vat = 0;
+
+    for (const cfg of cfgArr) {
+      if (!cfg || !cfg.code) continue;
+      const code = String(cfg.code || '').toUpperCase().trim();
+      if (!code) continue;
+
+      const freq = normaliseFreq(cfg.frequency);
+
+      let unitCount = 0;
+      let daysUsed = undefined;
+
+      if (freq === 'ONE_PER_WEEK') {
+        const u = Number(unitsWeek[code] ?? unitsWeek[String(code)] ?? 0);
+        if (Number.isFinite(u) && u > 0) unitCount = u;
+        else {
+          const stored = finStored[code] || finStored[String(code)] || null;
+          const su = Number(stored?.unit_count ?? 0);
+          if (Number.isFinite(su) && su > 0) unitCount = su;
+          if (stored && stored.days && typeof stored.days === 'object') daysUsed = stored.days;
+        }
+      } else {
+        const perRaw = (unitsPerDay[code] && typeof unitsPerDay[code] === 'object') ? unitsPerDay[code] : {};
+        const stored = finStored[code] || null;
+        const storedDays = (stored && stored.days && typeof stored.days === 'object') ? stored.days : null;
+
+        const perDayOut = {};
+        let any = false;
+
+        if (weekDates.length) {
+          for (const meta of weekDates) {
+            const raw = perRaw?.[meta.ymd];
+            const v = Number(raw ?? 0);
+            if (!Number.isFinite(v) || v <= 0) continue;
+            if (!shouldIncludeDay(freq, meta)) continue;
+            unitCount += v;
+            perDayOut[meta.ymd] = (perDayOut[meta.ymd] || 0) + v;
+            any = true;
+          }
+        }
+
+        if (!any && storedDays) {
+          for (const [ymd, vv] of Object.entries(storedDays)) {
+            const meta = {
+              ymd: String(ymd || ''),
+              dow: (() => {
+                try { return new Date(`${String(ymd)}T00:00:00Z`).getUTCDay(); } catch { return null; }
+              })()
+            };
+            const v = Number(vv ?? 0);
+            if (!Number.isFinite(v) || v <= 0) continue;
+            if (meta.dow == null) continue;
+            if (!shouldIncludeDay(freq, meta)) continue;
+            unitCount += v;
+            perDayOut[meta.ymd] = (perDayOut[meta.ymd] || 0) + v;
+            any = true;
+          }
+        }
+
+        if (any && Object.keys(perDayOut).length) daysUsed = perDayOut;
+      }
+
+      if (!Number.isFinite(unitCount) || unitCount <= 0) continue;
+
+      const payRate =
+        (cfg.pay_rate != null && Number.isFinite(Number(cfg.pay_rate)))
+          ? Number(cfg.pay_rate)
+          : Number((finStored[code] && finStored[code].pay_rate) || 0);
+
+      const chargeRate =
+        (cfg.charge_rate != null && Number.isFinite(Number(cfg.charge_rate)))
+          ? Number(cfg.charge_rate)
+          : Number((finStored[code] && finStored[code].charge_rate) || 0);
+
+      const payEx = +Number(unitCount * payRate).toFixed(2);
+      const chgEx = +Number(unitCount * chargeRate).toFixed(2);
+
+      additional_units_json[code] = {
+        bucket_name: cfg.bucket_name || finStored?.[code]?.bucket_name || null,
+        unit_name:   cfg.unit_name   || finStored?.[code]?.unit_name   || null,
+        frequency:   freq,
+        unit_count:  unitCount,
+        pay_rate:    payRate,
+        charge_rate: chargeRate,
+        pay_ex_vat:  payEx,
+        charge_ex_vat: chgEx,
+        ...(daysUsed ? { days: daysUsed } : {})
+      };
+
+      additional_pay_ex_vat += payEx;
+      additional_charge_ex_vat += chgEx;
+    }
+
+    additional_pay_ex_vat = +Number(additional_pay_ex_vat).toFixed(2);
+    additional_charge_ex_vat = +Number(additional_charge_ex_vat).toFixed(2);
+    const additional_margin_ex_vat = +Number(additional_charge_ex_vat - additional_pay_ex_vat).toFixed(2);
+
+    return {
+      additional_units_json,
+      additional_pay_ex_vat,
+      additional_charge_ex_vat,
+      additional_margin_ex_vat
+    };
+  };
+
+  const getPreservedBySegmentId = () => {
+    const preserved = new Map();
+    try {
+      const ib = fin.invoice_breakdown_json || null;
+      const mode = String(ib?.mode || '').toUpperCase();
+      const segs = Array.isArray(ib?.segments) ? ib.segments : null;
+      if (mode !== 'SEGMENTS' || !segs) return preserved;
+
+      for (const s of segs) {
+        const sid = s?.segment_id ? String(s.segment_id) : null;
+        if (!sid) continue;
+        preserved.set(sid, {
+          exclude_from_pay: (typeof s.exclude_from_pay === 'boolean') ? s.exclude_from_pay : undefined,
+          invoice_target_week_start: (s.invoice_target_week_start != null) ? String(s.invoice_target_week_start) : undefined,
+          invoice_locked_invoice_id: (s.invoice_locked_invoice_id != null) ? String(s.invoice_locked_invoice_id) : undefined
+        });
+      }
+    } catch {}
+    return preserved;
+  };
+
+  // Ensure policy_snapshot_json is NOT NULL (DB constraint)
+  let policySnap = fin.policy_snapshot_json;
+  if (!policySnap || typeof policySnap !== 'object') {
+    try {
+      const ymd = ts.week_ending_date || null;
+      policySnap = ymd ? await loadPolicy(env, contract.client_id, ymd) : {};
+    } catch {
+      policySnap = {};
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Evidence base routing
+  // 1) Schedule-driven weekly (actual_schedule_json) -> SEGMENTS (preserve per-segment controls)
+  // 2) NHSP/NHSP_ADJUSTMENT -> rebuild via NHSP builder from nhsp_shifts
+  // 3) Existing SEGMENTS evidence -> reprice without changing hours evidence
+  // 4) Fallback AGGREGATE only if no segments evidence exists
+  // ─────────────────────────────────────────────────────────────
+
+  // 2) NHSP basis: rebuild using NHSP shifts (SEGMENTS)
+  if (basis === 'NHSP' || basis === 'NHSP_ADJUSTMENT') {
+    const { rows: shiftRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
+        `?timesheet_id=eq.${enc(ts.timesheet_id)}` +
+        `&select=*` +
+        `&order=work_date.asc,start_utc.asc`
+    );
+    const shifts = Array.isArray(shiftRows) ? shiftRows : [];
+
+    // Request-scope policy cache for this call
+    const policyCache = new Map();
+    const getPolicyCached = async (client_id, ymd) => {
+      const key = `${String(client_id || '')}|${String(ymd || '')}`;
+      if (policyCache.has(key)) return policyCache.get(key);
+      const pol = await loadPolicy(env, client_id, ymd);
+      policyCache.set(key, pol);
+      return pol;
+    };
+
+    if (shifts.length) {
+      const nhspImportId = fin.nhsp_import_id || null;
+      await buildNhspWeeklySnapshotCached(env, ts, contract, shifts, nhspImportId, basis, getPolicyCached);
+      return { ok: true, mode: 'NHSP_REBUILD' };
+    }
+
+    // If no shifts found, fall back to preserving existing segments evidence if present
+    const ib = fin.invoice_breakdown_json || null;
+    const mode = String(ib?.mode || '').toUpperCase();
+    const segs = Array.isArray(ib?.segments) ? ib.segments : null;
+    if (mode === 'SEGMENTS' && segs && segs.length) {
+      // reprice while keeping segment hours evidence
+      const preservedSegs = segs.map(s => {
+        const hDay   = asNumberLocal(s.hours_day);
+        const hNight = asNumberLocal(s.hours_night);
+        const hSat   = asNumberLocal(s.hours_sat);
+        const hSun   = asNumberLocal(s.hours_sun);
+        const hBh    = asNumberLocal(s.hours_bh);
+
+        const payEx = round2(
+          hDay   * asNumberLocal(pay.day) +
+          hNight * asNumberLocal(pay.night) +
+          hSat   * asNumberLocal(pay.sat) +
+          hSun   * asNumberLocal(pay.sun) +
+          hBh    * asNumberLocal(pay.bh)
+        );
+
+        const chgEx = round2(
+          hDay   * asNumberLocal(charge.day) +
+          hNight * asNumberLocal(charge.night) +
+          hSat   * asNumberLocal(charge.sat) +
+          hSun   * asNumberLocal(charge.sun) +
+          hBh    * asNumberLocal(charge.bh)
+        );
+
+        return { ...s, pay_amount: payEx, charge_amount: chgEx };
+      });
+
+      let sumDay = 0, sumNight = 0, sumSat = 0, sumSun = 0, sumBh = 0;
+      let sumPay = 0, sumChg = 0;
+      preservedSegs.forEach(s => {
+        sumDay += asNumberLocal(s.hours_day);
+        sumNight += asNumberLocal(s.hours_night);
+        sumSat += asNumberLocal(s.hours_sat);
+        sumSun += asNumberLocal(s.hours_sun);
+        sumBh += asNumberLocal(s.hours_bh);
+        sumPay += asNumberLocal(s.pay_amount);
+        sumChg += asNumberLocal(s.charge_amount);
+      });
+
+      const addl = await computeAdditionalFromTsOrFin();
+
+      const hours = {
+        day: round2(sumDay),
+        night: round2(sumNight),
+        sat: round2(sumSat),
+        sun: round2(sumSun),
+        bh: round2(sumBh)
+      };
+      const total_hours = round2(hours.day + hours.night + hours.sat + hours.sun + hours.bh);
+
+      const total_pay_ex_vat = +Number(round2(sumPay) + Number(addl.additional_pay_ex_vat || 0)).toFixed(2);
+      const total_charge_ex_vat = +Number(round2(sumChg) + Number(addl.additional_charge_ex_vat || 0)).toFixed(2);
+      const margin_ex_vat = +Number(total_charge_ex_vat - total_pay_ex_vat).toFixed(2);
+
+      const snap = { ...fin };
+      delete snap.id;
+      delete snap.created_at;
+      delete snap.is_current;
+
+      snap.timesheet_id = ts.timesheet_id;
+      snap.timesheet_version = ts.version || fin.timesheet_version || 1;
+      snap.candidate_id = contract.candidate_id;
+      snap.client_id = contract.client_id;
+      snap.pay_method = method;
+
+      snap.policy_snapshot_json = policySnap;
+      snap.rate_source_refs_json = { mode: 'CONTRACT_RATES_JSON', contract_id: contract.id || null };
+
+      snap.hours_day = hours.day;
+      snap.hours_night = hours.night;
+      snap.hours_sat = hours.sat;
+      snap.hours_sun = hours.sun;
+      snap.hours_bh = hours.bh;
+
+      snap.pay_day = (pay.day != null) ? Number(pay.day) : null;
+      snap.pay_night = (pay.night != null) ? Number(pay.night) : null;
+      snap.pay_sat = (pay.sat != null) ? Number(pay.sat) : null;
+      snap.pay_sun = (pay.sun != null) ? Number(pay.sun) : null;
+      snap.pay_bh = (pay.bh != null) ? Number(pay.bh) : null;
+
+      snap.charge_day = (charge.day != null) ? Number(charge.day) : null;
+      snap.charge_night = (charge.night != null) ? Number(charge.night) : null;
+      snap.charge_sat = (charge.sat != null) ? Number(charge.sat) : null;
+      snap.charge_sun = (charge.sun != null) ? Number(charge.sun) : null;
+      snap.charge_bh = (charge.bh != null) ? Number(charge.bh) : null;
+
+      snap.total_hours = total_hours;
+
+      snap.additional_units_json = addl.additional_units_json || {};
+      snap.additional_pay_ex_vat = +Number(addl.additional_pay_ex_vat || 0).toFixed(2);
+      snap.additional_charge_ex_vat = +Number(addl.additional_charge_ex_vat || 0).toFixed(2);
+      snap.additional_margin_ex_vat = +Number(addl.additional_margin_ex_vat || 0).toFixed(2);
+
+      snap.total_pay_ex_vat = total_pay_ex_vat;
+      snap.total_charge_ex_vat = total_charge_ex_vat;
+      snap.margin_ex_vat = margin_ex_vat;
+
+      snap.invoice_breakdown_json = {
+        mode: 'SEGMENTS',
+        segments: preservedSegs,
+        additional: {
+          units: addl.additional_units_json || {},
+          pay_ex_vat: +Number(addl.additional_pay_ex_vat || 0).toFixed(2),
+          charge_ex_vat: +Number(addl.additional_charge_ex_vat || 0).toFixed(2),
+          margin_ex_vat: +Number(addl.additional_margin_ex_vat || 0).toFixed(2)
+        },
+        totals: {
+          total_pay_ex_vat,
+          total_charge_ex_vat,
+          margin_ex_vat
+        }
+      };
+
+      snap.created_at = nowIso();
+      await writeSnapshot(env, snap);
+      return { ok: true, mode: 'SEGMENTS_EVIDENCE_REPRICE' };
+    }
+
+    return { ok: false, reason: 'NO_SHIFTS_FOR_NHSP_REBUILD' };
+  }
+
+  // 1) Schedule-driven weekly -> SEGMENTS
+  if (Array.isArray(ts.actual_schedule_json) && ts.actual_schedule_json.length) {
+    const preservedById = getPreservedBySegmentId();
+
+    const segments = [];
+    let sumDay = 0, sumNight = 0, sumSat = 0, sumSun = 0, sumBh = 0;
+    let sumPay = 0, sumChg = 0;
+
+    // Convert schedule entry to utc iso if missing (best effort)
+    const scheduleEntryToUtcRange = (seg) => {
+      const date = String(seg?.date || '').trim();
+      if (!date) return { startUtcIso: null, endUtcIso: null };
+
+      const startIsoRaw = seg?.start_utc || seg?.start_iso || null;
+      const endIsoRaw   = seg?.end_utc   || seg?.end_iso   || null;
+
+      const isIsoLike = (s) => {
+        const x = String(s || '');
+        return x.includes('T') && (x.endsWith('Z') || /[+\-]\d{2}:\d{2}$/.test(x));
+      };
+
+      if (startIsoRaw && endIsoRaw && isIsoLike(startIsoRaw) && isIsoLike(endIsoRaw)) {
+        return { startUtcIso: String(startIsoRaw), endUtcIso: String(endIsoRaw) };
+      }
+
+      const startHH = String(seg?.start || '').trim();
+      const endHH   = String(seg?.end   || '').trim();
+      if (!startHH || !endHH) return { startUtcIso: null, endUtcIso: null };
+
+      const sMin = parseHHMM(startHH);
+      const eMin = parseHHMM(endHH);
+      if (sMin == null || eMin == null) return { startUtcIso: null, endUtcIso: null };
+
+      const overnight = (eMin <= sMin);
+      const endYmd = overnight ? addDaysYmd(date, 1) : date;
+
+      if (typeof ukLocalToUtcISO !== 'function') {
+        return { startUtcIso: null, endUtcIso: null };
+      }
+
+      return {
+        startUtcIso: ukLocalToUtcISO(date, startHH),
+        endUtcIso:   ukLocalToUtcISO(endYmd, endHH)
+      };
+    };
+
+    for (let i = 0; i < ts.actual_schedule_json.length; i++) {
+      const seg = ts.actual_schedule_json[i] || {};
+      const mins = await resolveBucketsFromSchedule(env, contract, [seg]);
+
+      const hDay   = +(asNumberLocal(mins.day)   / 60).toFixed(2);
+      const hNight = +(asNumberLocal(mins.night) / 60).toFixed(2);
+      const hSat   = +(asNumberLocal(mins.sat)   / 60).toFixed(2);
+      const hSun   = +(asNumberLocal(mins.sun)   / 60).toFixed(2);
+      const hBh    = +(asNumberLocal(mins.bh)    / 60).toFixed(2);
+
+      sumDay += hDay; sumNight += hNight; sumSat += hSat; sumSun += hSun; sumBh += hBh;
+
+      const payEx = round2(
+        hDay   * asNumberLocal(pay.day) +
+        hNight * asNumberLocal(pay.night) +
+        hSat   * asNumberLocal(pay.sat) +
+        hSun   * asNumberLocal(pay.sun) +
+        hBh    * asNumberLocal(pay.bh)
+      );
+
+      const chgEx = round2(
+        hDay   * asNumberLocal(charge.day) +
+        hNight * asNumberLocal(charge.night) +
+        hSat   * asNumberLocal(charge.sat) +
+        hSun   * asNumberLocal(charge.sun) +
+        hBh    * asNumberLocal(charge.bh)
+      );
+
+      sumPay += payEx;
+      sumChg += chgEx;
+
+      const sid = `ts:${ts.timesheet_id}:${i}`;
+      const preserved = preservedById.get(sid) || null;
+
+      const exclude_from_pay =
+        (preserved && typeof preserved.exclude_from_pay === 'boolean') ? preserved.exclude_from_pay : false;
+
+      const invoice_target_week_start =
+        (preserved && preserved.invoice_target_week_start != null) ? preserved.invoice_target_week_start : undefined;
+
+      const invoice_locked_invoice_id =
+        (preserved && preserved.invoice_locked_invoice_id != null) ? preserved.invoice_locked_invoice_id : undefined;
+
+      const { startUtcIso, endUtcIso } = scheduleEntryToUtcRange(seg);
+      const br = Number(seg.break_mins ?? seg.break_minutes ?? 0);
+
+      segments.push({
+        segment_id: sid,
+        date: seg.date || null,
+        start_utc: startUtcIso,
+        end_utc: endUtcIso,
+        break_mins: Number.isFinite(br) ? br : 0,
+
+        ref_num: (seg.ref_num != null && String(seg.ref_num).trim()) ? String(seg.ref_num).trim() : null,
+        breaks: Array.isArray(seg.breaks) ? seg.breaks : [],
+
+        hours_day: hDay,
+        hours_night: hNight,
+        hours_sat: hSat,
+        hours_sun: hSun,
+        hours_bh: hBh,
+
+        pay_amount: payEx,
+        charge_amount: chgEx,
+
+        exclude_from_pay,
+        ...(invoice_target_week_start != null ? { invoice_target_week_start } : {}),
+        ...(invoice_locked_invoice_id != null ? { invoice_locked_invoice_id } : {})
+      });
+    }
+
+    const hours = {
+      day: round2(sumDay),
+      night: round2(sumNight),
+      sat: round2(sumSat),
+      sun: round2(sumSun),
+      bh: round2(sumBh)
+    };
+    const total_hours = round2(hours.day + hours.night + hours.sat + hours.sun + hours.bh);
+
+    const addl = await computeAdditionalFromTsOrFin();
+
+    const total_pay_ex_vat = +Number(round2(sumPay) + Number(addl.additional_pay_ex_vat || 0)).toFixed(2);
+    const total_charge_ex_vat = +Number(round2(sumChg) + Number(addl.additional_charge_ex_vat || 0)).toFixed(2);
+    const margin_ex_vat = +Number(total_charge_ex_vat - total_pay_ex_vat).toFixed(2);
+
+    const snap = { ...fin };
+    delete snap.id;
+    delete snap.created_at;
+    delete snap.is_current;
+
+    snap.timesheet_id       = ts.timesheet_id;
+    snap.timesheet_version  = ts.version || fin.timesheet_version || 1;
+    snap.candidate_id       = contract.candidate_id;
+    snap.client_id          = contract.client_id;
+    snap.pay_method         = method;
+
+    snap.policy_snapshot_json   = policySnap;
+    snap.rate_source_refs_json  = { mode: 'CONTRACT_RATES_JSON', contract_id: contract.id || null };
+
+    snap.hours_day   = hours.day;
+    snap.hours_night = hours.night;
+    snap.hours_sat   = hours.sat;
+    snap.hours_sun   = hours.sun;
+    snap.hours_bh    = hours.bh;
+
+    snap.pay_day   = (pay.day   != null) ? Number(pay.day)   : null;
+    snap.pay_night = (pay.night != null) ? Number(pay.night) : null;
+    snap.pay_sat   = (pay.sat   != null) ? Number(pay.sat)   : null;
+    snap.pay_sun   = (pay.sun   != null) ? Number(pay.sun)   : null;
+    snap.pay_bh    = (pay.bh    != null) ? Number(pay.bh)    : null;
+
+    snap.charge_day   = (charge.day   != null) ? Number(charge.day)   : null;
+    snap.charge_night = (charge.night != null) ? Number(charge.night) : null;
+    snap.charge_sat   = (charge.sat   != null) ? Number(charge.sat)   : null;
+    snap.charge_sun   = (charge.sun   != null) ? Number(charge.sun)   : null;
+    snap.charge_bh    = (charge.bh    != null) ? Number(charge.bh)    : null;
+
+    snap.total_hours = total_hours;
+
+    snap.additional_units_json    = addl.additional_units_json || {};
+    snap.additional_pay_ex_vat    = +Number(addl.additional_pay_ex_vat || 0).toFixed(2);
+    snap.additional_charge_ex_vat = +Number(addl.additional_charge_ex_vat || 0).toFixed(2);
+    snap.additional_margin_ex_vat = +Number(addl.additional_margin_ex_vat || 0).toFixed(2);
+
+    snap.total_pay_ex_vat    = total_pay_ex_vat;
+    snap.total_charge_ex_vat = total_charge_ex_vat;
+    snap.margin_ex_vat       = margin_ex_vat;
+
+    snap.invoice_breakdown_json = {
+      mode: 'SEGMENTS',
+      segments,
+      additional: {
+        units: addl.additional_units_json || {},
+        pay_ex_vat: +Number(addl.additional_pay_ex_vat || 0).toFixed(2),
+        charge_ex_vat: +Number(addl.additional_charge_ex_vat || 0).toFixed(2),
+        margin_ex_vat: +Number(addl.additional_margin_ex_vat || 0).toFixed(2)
+      },
+      totals: {
+        total_pay_ex_vat,
+        total_charge_ex_vat,
+        margin_ex_vat
+      }
+    };
+
+    snap.created_at = nowIso();
+    await writeSnapshot(env, snap);
+    return { ok: true, mode: 'SCHEDULE_SEGMENTS_REBUILD' };
+  }
+
+  // 3) Existing SEGMENTS evidence (non-NHSP): reprice without changing hours evidence
+  {
+    const ib = fin.invoice_breakdown_json || null;
+    const mode = String(ib?.mode || '').toUpperCase();
+    const segs = Array.isArray(ib?.segments) ? ib.segments : null;
+
+    if (mode === 'SEGMENTS' && segs && segs.length) {
+      const nextSegments = segs.map(s => {
+        const hDay   = asNumberLocal(s.hours_day);
+        const hNight = asNumberLocal(s.hours_night);
+        const hSat   = asNumberLocal(s.hours_sat);
+        const hSun   = asNumberLocal(s.hours_sun);
+        const hBh    = asNumberLocal(s.hours_bh);
+
+        const payEx = round2(
+          hDay   * asNumberLocal(pay.day) +
+          hNight * asNumberLocal(pay.night) +
+          hSat   * asNumberLocal(pay.sat) +
+          hSun   * asNumberLocal(pay.sun) +
+          hBh    * asNumberLocal(pay.bh)
+        );
+
+        const chgEx = round2(
+          hDay   * asNumberLocal(charge.day) +
+          hNight * asNumberLocal(charge.night) +
+          hSat   * asNumberLocal(charge.sat) +
+          hSun   * asNumberLocal(charge.sun) +
+          hBh    * asNumberLocal(charge.bh)
+        );
+
+        return { ...s, pay_amount: payEx, charge_amount: chgEx };
+      });
+
+      let sumDay = 0, sumNight = 0, sumSat = 0, sumSun = 0, sumBh = 0;
+      let sumPay = 0, sumChg = 0;
+      nextSegments.forEach(s => {
+        sumDay += asNumberLocal(s.hours_day);
+        sumNight += asNumberLocal(s.hours_night);
+        sumSat += asNumberLocal(s.hours_sat);
+        sumSun += asNumberLocal(s.hours_sun);
+        sumBh += asNumberLocal(s.hours_bh);
+        sumPay += asNumberLocal(s.pay_amount);
+        sumChg += asNumberLocal(s.charge_amount);
+      });
+
+      const addl = await computeAdditionalFromTsOrFin();
+
+      const hours = {
+        day: round2(sumDay),
+        night: round2(sumNight),
+        sat: round2(sumSat),
+        sun: round2(sumSun),
+        bh: round2(sumBh)
+      };
+      const total_hours = round2(hours.day + hours.night + hours.sat + hours.sun + hours.bh);
+
+      const total_pay_ex_vat = +Number(round2(sumPay) + Number(addl.additional_pay_ex_vat || 0)).toFixed(2);
+      const total_charge_ex_vat = +Number(round2(sumChg) + Number(addl.additional_charge_ex_vat || 0)).toFixed(2);
+      const margin_ex_vat = +Number(total_charge_ex_vat - total_pay_ex_vat).toFixed(2);
+
+      const snap = { ...fin };
+      delete snap.id;
+      delete snap.created_at;
+      delete snap.is_current;
+
+      snap.timesheet_id       = ts.timesheet_id;
+      snap.timesheet_version  = ts.version || fin.timesheet_version || 1;
+      snap.candidate_id       = contract.candidate_id;
+      snap.client_id          = contract.client_id;
+      snap.pay_method         = method;
+
+      snap.policy_snapshot_json   = policySnap;
+      snap.rate_source_refs_json  = { mode: 'CONTRACT_RATES_JSON', contract_id: contract.id || null };
+
+      snap.hours_day   = hours.day;
+      snap.hours_night = hours.night;
+      snap.hours_sat   = hours.sat;
+      snap.hours_sun   = hours.sun;
+      snap.hours_bh    = hours.bh;
+
+      snap.pay_day   = (pay.day   != null) ? Number(pay.day)   : null;
+      snap.pay_night = (pay.night != null) ? Number(pay.night) : null;
+      snap.pay_sat   = (pay.sat   != null) ? Number(pay.sat)   : null;
+      snap.pay_sun   = (pay.sun   != null) ? Number(pay.sun)   : null;
+      snap.pay_bh    = (pay.bh    != null) ? Number(pay.bh)    : null;
+
+      snap.charge_day   = (charge.day   != null) ? Number(charge.day)   : null;
+      snap.charge_night = (charge.night != null) ? Number(charge.night) : null;
+      snap.charge_sat   = (charge.sat   != null) ? Number(charge.sat)   : null;
+      snap.charge_sun   = (charge.sun   != null) ? Number(charge.sun)   : null;
+      snap.charge_bh    = (charge.bh    != null) ? Number(charge.bh)    : null;
+
+      snap.total_hours = total_hours;
+
+      snap.additional_units_json    = addl.additional_units_json || {};
+      snap.additional_pay_ex_vat    = +Number(addl.additional_pay_ex_vat || 0).toFixed(2);
+      snap.additional_charge_ex_vat = +Number(addl.additional_charge_ex_vat || 0).toFixed(2);
+      snap.additional_margin_ex_vat = +Number(addl.additional_margin_ex_vat || 0).toFixed(2);
+
+      snap.total_pay_ex_vat    = total_pay_ex_vat;
+      snap.total_charge_ex_vat = total_charge_ex_vat;
+      snap.margin_ex_vat       = margin_ex_vat;
+
+      snap.invoice_breakdown_json = {
+        mode: 'SEGMENTS',
+        segments: nextSegments,
+        additional: {
+          units: addl.additional_units_json || {},
+          pay_ex_vat: +Number(addl.additional_pay_ex_vat || 0).toFixed(2),
+          charge_ex_vat: +Number(addl.additional_charge_ex_vat || 0).toFixed(2),
+          margin_ex_vat: +Number(addl.additional_margin_ex_vat || 0).toFixed(2)
+        },
+        totals: {
+          total_pay_ex_vat,
+          total_charge_ex_vat,
+          margin_ex_vat
+        }
+      };
+
+      snap.created_at = nowIso();
+      await writeSnapshot(env, snap);
+      return { ok: true, mode: 'SEGMENTS_EVIDENCE_REPRICE' };
+    }
+  }
+
+  // 4) Fallback AGGREGATE only when we truly do not have segment evidence
+  const hours = {
+    day:   Number(fin.hours_day   || 0),
+    night: Number(fin.hours_night || 0),
+    sat:   Number(fin.hours_sat   || 0),
+    sun:   Number(fin.hours_sun   || 0),
+    bh:    Number(fin.hours_bh    || 0)
+  };
 
   const totalHoursPay =
     (hours.day   * (pay.day   || 0)) +
@@ -8868,66 +9707,10 @@ async function rebuildWeeklyTsfinForTimesheet(env, timesheetId, contract) {
   const hoursPayEx    = +Number(totalHoursPay).toFixed(2);
   const hoursChargeEx = +Number(totalHoursCharge).toFixed(2);
 
-  let additional_units_json   = {};
-  let additional_pay_ex_vat   = 0;
-  let additional_charge_ex_vat= 0;
+  const addl = await computeAdditionalFromTsOrFin();
 
-  try {
-    const cfgArr = Array.isArray(contract.additional_rates_json)
-      ? contract.additional_rates_json
-      : [];
-    const cfgByCode = {};
-    cfgArr.forEach(c => {
-      if (c && c.code) cfgByCode[String(c.code).toUpperCase()] = c;
-    });
-
-    const stored = fin.additional_units_json || {};
-    for (const [codeRaw, entry] of Object.entries(stored || {})) {
-      const code = String(codeRaw || '').toUpperCase();
-      const cfg  = cfgByCode[code] || {};
-      const units = Number(entry?.unit_count || 0);
-      if (!units || !Number.isFinite(units)) continue;
-
-      const payRateNew =
-        (cfg.pay_rate != null && Number.isFinite(Number(cfg.pay_rate)))
-          ? Number(cfg.pay_rate)
-          : Number(entry.pay_rate || 0);
-
-      const chargeRateNew =
-        (cfg.charge_rate != null && Number.isFinite(Number(cfg.charge_rate)))
-          ? Number(cfg.charge_rate)
-          : Number(entry.charge_rate || 0);
-
-      const payEx  = +Number(units * payRateNew).toFixed(2);
-      const chgEx  = +Number(units * chargeRateNew).toFixed(2);
-
-      additional_units_json[code] = {
-        bucket_name: cfg.bucket_name || entry.bucket_name || null,
-        unit_name:   cfg.unit_name   || entry.unit_name   || null,
-        frequency:   cfg.frequency   || entry.frequency   || null,
-        unit_count:  units,
-        pay_rate:    payRateNew,
-        charge_rate: chargeRateNew,
-        pay_ex_vat:  payEx,
-        charge_ex_vat: chgEx,
-        days: (entry && entry.days) ? entry.days : undefined
-      };
-
-      additional_pay_ex_vat    += payEx;
-      additional_charge_ex_vat += chgEx;
-    }
-  } catch {
-    additional_units_json    = {};
-    additional_pay_ex_vat    = 0;
-    additional_charge_ex_vat = 0;
-  }
-
-  additional_pay_ex_vat     = +Number(additional_pay_ex_vat).toFixed(2);
-  additional_charge_ex_vat  = +Number(additional_charge_ex_vat).toFixed(2);
-  const additional_margin_ex_vat = +Number(additional_charge_ex_vat - additional_pay_ex_vat).toFixed(2);
-
-  const total_pay_ex_vat    = +Number(hoursPayEx    + additional_pay_ex_vat).toFixed(2);
-  const total_charge_ex_vat = +Number(hoursChargeEx + additional_charge_ex_vat).toFixed(2);
+  const total_pay_ex_vat    = +Number(hoursPayEx    + Number(addl.additional_pay_ex_vat || 0)).toFixed(2);
+  const total_charge_ex_vat = +Number(hoursChargeEx + Number(addl.additional_charge_ex_vat || 0)).toFixed(2);
   const margin_ex_vat       = +Number(total_charge_ex_vat - total_pay_ex_vat).toFixed(2);
 
   const invoice_breakdown_json = {
@@ -8938,28 +9721,16 @@ async function rebuildWeeklyTsfinForTimesheet(env, timesheetId, contract) {
       sat: hours.sat,
       sun: hours.sun,
       bh: hours.bh,
-      pay_rates: {
-        day: pay.day,
-        night: pay.night,
-        sat: pay.sat,
-        sun: pay.sun,
-        bh: pay.bh,
-      },
-      charge_rates: {
-        day: charge.day,
-        night: charge.night,
-        sat: charge.sat,
-        sun: charge.sun,
-        bh: charge.bh,
-      },
+      pay_rates: { day: pay.day, night: pay.night, sat: pay.sat, sun: pay.sun, bh: pay.bh },
+      charge_rates: { day: charge.day, night: charge.night, sat: charge.sat, sun: charge.sun, bh: charge.bh },
       pay_ex_vat: hoursPayEx,
       charge_ex_vat: hoursChargeEx,
     },
     additional: {
-      units: additional_units_json,
-      pay_ex_vat: additional_pay_ex_vat,
-      charge_ex_vat: additional_charge_ex_vat,
-      margin_ex_vat: additional_margin_ex_vat,
+      units: addl.additional_units_json || {},
+      pay_ex_vat: +Number(addl.additional_pay_ex_vat || 0).toFixed(2),
+      charge_ex_vat: +Number(addl.additional_charge_ex_vat || 0).toFixed(2),
+      margin_ex_vat: +Number(addl.additional_margin_ex_vat || 0).toFixed(2),
     },
     totals: {
       total_pay_ex_vat,
@@ -8967,17 +9738,6 @@ async function rebuildWeeklyTsfinForTimesheet(env, timesheetId, contract) {
       margin_ex_vat,
     },
   };
-
-  // Ensure policy_snapshot_json is NOT NULL (DB constraint)
-  let policySnap = fin.policy_snapshot_json;
-  if (!policySnap || typeof policySnap !== 'object') {
-    try {
-      const ymd = ts.week_ending_date || null;
-      policySnap = ymd ? await loadPolicy(env, contract.client_id, ymd) : {};
-    } catch {
-      policySnap = {};
-    }
-  }
 
   const snap = { ...fin };
 
@@ -8991,8 +9751,8 @@ async function rebuildWeeklyTsfinForTimesheet(env, timesheetId, contract) {
   snap.client_id          = contract.client_id;
   snap.pay_method         = method;
 
-  snap.policy_snapshot_json   = policySnap; // ✅ not null
-  snap.rate_source_refs_json  = { mode: 'CONTRACT_RATES_JSON', contract_id: contract.id || null }; // ✅ not null
+  snap.policy_snapshot_json   = policySnap;
+  snap.rate_source_refs_json  = { mode: 'CONTRACT_RATES_JSON', contract_id: contract.id || null };
 
   snap.hours_day   = hours.day;
   snap.hours_night = hours.night;
@@ -9000,7 +9760,6 @@ async function rebuildWeeklyTsfinForTimesheet(env, timesheetId, contract) {
   snap.hours_sun   = hours.sun;
   snap.hours_bh    = hours.bh;
 
-  // ✅ Correct TSFIN column names (no rate_day / pay_rate_day columns exist)
   snap.pay_day   = (pay.day   != null) ? Number(pay.day)   : null;
   snap.pay_night = (pay.night != null) ? Number(pay.night) : null;
   snap.pay_sat   = (pay.sat   != null) ? Number(pay.sat)   : null;
@@ -9015,10 +9774,10 @@ async function rebuildWeeklyTsfinForTimesheet(env, timesheetId, contract) {
 
   snap.total_hours = round2(hours.day + hours.night + hours.sat + hours.sun + hours.bh);
 
-  snap.additional_units_json    = additional_units_json;
-  snap.additional_pay_ex_vat    = additional_pay_ex_vat;
-  snap.additional_charge_ex_vat = additional_charge_ex_vat;
-  snap.additional_margin_ex_vat = additional_margin_ex_vat;
+  snap.additional_units_json    = addl.additional_units_json || {};
+  snap.additional_pay_ex_vat    = +Number(addl.additional_pay_ex_vat || 0).toFixed(2);
+  snap.additional_charge_ex_vat = +Number(addl.additional_charge_ex_vat || 0).toFixed(2);
+  snap.additional_margin_ex_vat = +Number(addl.additional_margin_ex_vat || 0).toFixed(2);
 
   snap.total_pay_ex_vat    = total_pay_ex_vat;
   snap.total_charge_ex_vat = total_charge_ex_vat;
@@ -9028,7 +9787,7 @@ async function rebuildWeeklyTsfinForTimesheet(env, timesheetId, contract) {
   snap.created_at = nowIso();
 
   await writeSnapshot(env, snap);
-  return { ok: true };
+  return { ok: true, mode: 'AGGREGATE_FALLBACK' };
 }
 
 async function handleTimesheetsSubmitWeekly(env, req) {
@@ -11549,7 +12308,9 @@ async function handleTimesheetDelete(env, req, timesheetId) {
   return withCORS(env, req, ok(rows || []));
 }
 
- async function handleInvoiceIssue(env, req, invoiceId) {
+async function handleInvoiceIssue(env, req, invoiceId) {
+  const enc = encodeURIComponent;
+
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -11565,37 +12326,25 @@ async function handleTimesheetDelete(env, req, timesheetId) {
       return withCORS(env, req, badRequest('Invoice has no timesheets to validate'));
     }
 
-    // 2) Precheck rows for all those timesheets
+    // 2) Precheck rows for all those timesheets (only pull what we need)
     const tsIn = tsIds.map(enc).join(',');
     const { rows: pre } = await sbFetch(
       env,
-      `${env.SUPABASE_URL}/rest/v1/v_ts_invoice_precheck?timesheet_id=in.(${tsIn})`
+      `${env.SUPABASE_URL}/rest/v1/v_ts_invoice_precheck` +
+      `?timesheet_id=in.(${tsIn})&select=timesheet_id,precheck_status`
     );
 
-    // 3) We also need submission_mode to know whether manual PDF is required
-    const { rows: tsRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=in.(${tsIn})&select=timesheet_id,submission_mode`
-    );
-    const tsMode = Object.fromEntries((tsRows || []).map(t => [t.timesheet_id, t.submission_mode || 'ELECTRONIC']));
-
-    // 4) Build blockers
+    // 3) Build blockers from precheck_status (authoritative)
     const reasons = [];
     for (const r of (pre || [])) {
       const tsid = r.timesheet_id;
-      // reference required?
-      if (r.require_reference_to_invoice === true) {
-        const ref = (r.reference_number || '').trim();
-        if (!ref) reasons.push(`TS ${tsid}: missing reference/PO`);
-      }
-      // manual PDF required?
-      const mode = (tsMode[tsid] || '').toUpperCase();
-      if (mode === 'MANUAL' && !(r.manual_pdf_r2_key && String(r.manual_pdf_r2_key).trim())) {
-        reasons.push(`TS ${tsid}: manual PDF not attached`);
-      }
+      const st = String(r.precheck_status || '').toUpperCase();
+
+      if (st === 'BLOCK_NO_REFERENCE') reasons.push(`TS ${tsid}: missing reference/PO`);
+      if (st === 'BLOCK_NO_PDF')       reasons.push(`TS ${tsid}: manual PDF not attached`);
     }
 
-    // 5) Patch invoice status
+    // 4) Patch invoice status
     if (reasons.length) {
       const onHoldReason = reasons.join('; ');
       await fetch(`${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${enc(invoiceId)}`, {
@@ -11619,6 +12368,7 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     return withCORS(env, req, serverError('Failed to issue invoice'));
   }
 }
+
 
  async function handleInvoicesPrecheck(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -15466,6 +16216,8 @@ async function parseHealthRosterWorkbookIntoHrRows(
     header_columns
   };
 }
+
+
 async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, basis = 'NHSP') {
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
   const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
@@ -15479,6 +16231,7 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
   const pc  = payChargeFromContract(contract);
   const pay = pc?.pay || null;
   const chg = pc?.charge || null;
+  const method = pc?.method || contract?.pay_method_snapshot || contract?.pay_method || null;
 
   // ✅ Guard: if contract rates missing, fail fast with explicit reason
   if (!pay || !chg) {
@@ -15590,14 +16343,12 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
 
     const hours = classifyMinutes(env, policy, segs);
 
-    // roll up bucket hours for TSFIN
     sumDay   += (hours.hours_day   || 0);
     sumNight += (hours.hours_night || 0);
     sumSat   += (hours.hours_sat   || 0);
     sumSun   += (hours.hours_sun   || 0);
     sumBh    += (hours.hours_bh    || 0);
 
-    // Weekly rule: use contract pay/charge buckets directly
     const payEx = round2(
       (hours.hours_day   || 0) * asNumberLocal(pay.day)   +
       (hours.hours_night || 0) * asNumberLocal(pay.night) +
@@ -15625,7 +16376,6 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
     const segment_id = `nhsp:${sh.id}`;
     const preserved  = preservedBySegmentId.get(segment_id) || null;
 
-    // Defaults are the previous behavior; if we have preserved fields, use them.
     const exclude_from_pay =
       (preserved && typeof preserved.exclude_from_pay === 'boolean')
         ? preserved.exclude_from_pay
@@ -15658,12 +16408,10 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
       pay_amount:    payEx,
       charge_amount: chgEx,
 
-      // PRESERVED FIELDS (critical)
       exclude_from_pay,
       ...(invoice_target_week_start != null ? { invoice_target_week_start } : {}),
       ...(invoice_locked_invoice_id != null ? { invoice_locked_invoice_id } : {}),
 
-      // Metadata for UI & diagnostics
       ref_num: refNum,
       request_id: requestId,
       held_back_reason: heldBack,
@@ -15689,7 +16437,6 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
     }
   };
 
-  // external_source_rows_json.NHSP_WEEKLY for invoice page-2+ itemised breakdown
   const nhspWeekly = shifts.map(sh => ({
     date: sh.work_date,
     source_system: 'NHSP',
@@ -15699,7 +16446,6 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
     raw_row: sh.payload_json || null
   }));
 
-  // TSFIN requires non-null policy_snapshot_json and bucket hour totals
   const hours_day   = round2(sumDay);
   const hours_night = round2(sumNight);
   const hours_sat   = round2(sumSat);
@@ -15707,14 +16453,12 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
   const hours_bh    = round2(sumBh);
   const total_hours = round2(hours_day + hours_night + hours_sat + hours_sun + hours_bh);
 
-  // derive policy_snapshot_json without extra subrequests if possible
   let policy_snapshot_json = {};
   try {
     const we = (ts && ts.week_ending_date)
       ? String(ts.week_ending_date)
       : (shifts && shifts[0] ? String(shifts[0].work_date) : null);
 
-    // Prefer a policy we already loaded in-loop; otherwise load once
     if (we && policyByDate.has(we)) {
       policy_snapshot_json = policyByDate.get(we) || {};
     } else if (we && client_id) {
@@ -15731,12 +16475,10 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
   }
 
   const pay_wtr_rate_pct_snapshot =
-    (String(contract?.pay_method_snapshot || '').toUpperCase() === 'PAYE')
+    (String(method || '').toUpperCase() === 'PAYE')
       ? (Number.isFinite(Number(policy_snapshot_json?.holiday_pay_pct)) ? Number(policy_snapshot_json.holiday_pay_pct) : null)
       : null;
 
-  // ✅ FIX: include the 5× pay_* and 5× charge_* bucket rates in the TSFIN snapshot
-  // (your remittance + UI expects these fields to exist)
   const snapshot = {
     timesheet_id: ts.timesheet_id,
     timesheet_version: ts.version || 1,
@@ -15750,7 +16492,9 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
     client_id,
     role: contract.role || null,
     band: contract.band || null,
-    pay_method: contract.pay_method_snapshot || null,
+
+    // ✅ FIX: record the resolved method that pricing used
+    pay_method: method,
 
     policy_snapshot_json,
     rate_source_refs_json: {
@@ -15764,7 +16508,6 @@ async function buildNhspWeeklySnapshot(env, ts, contract, shifts, nhspImportId, 
     hours_sun,
     hours_bh,
 
-    // bucket rates (required across UI/remittance/invoice views)
     pay_day:    pay.day   ?? null,
     pay_night:  pay.night ?? null,
     pay_sat:    pay.sat   ?? null,
@@ -15819,7 +16562,6 @@ async function buildNhspWeeklySnapshotCached(
   const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
   const enc           = encodeURIComponent;
 
-  // ✅ HARD REQUIREMENT: shared request-scoped policy resolver must be passed in
   if (typeof getPolicyCached !== 'function') {
     throw new Error('buildNhspWeeklySnapshotCached: getPolicyCached must be provided (request-scoped cache)');
   }
@@ -15831,6 +16573,7 @@ async function buildNhspWeeklySnapshotCached(
   const pc  = payChargeFromContract(contract);
   const pay = pc?.pay || null;
   const chg = pc?.charge || null;
+  const method = pc?.method || contract?.pay_method_snapshot || contract?.pay_method || null;
 
   if (!pay || !chg) {
     return { ok: false, reason: 'CONTRACT_RATES_MISSING' };
@@ -15839,16 +16582,6 @@ async function buildNhspWeeklySnapshotCached(
   const candidate_id = contract.candidate_id || null;
   const client_id    = contract.client_id   || null;
 
-  // ─────────────────────────────────────────────────────────────
-  // Preserve per-segment controls from existing TSFIN snapshot
-  // - exclude_from_pay
-  // - invoice_target_week_start
-  // - invoice_locked_invoice_id
-  //
-  // Factoring:
-  // - One shared loader on env.__loadPreservedSegmentFields
-  // - Request-scope cache on env.__TSFIN_SEGMENT_PRESERVE_CACHE
-  // ─────────────────────────────────────────────────────────────
   if (!env.__TSFIN_SEGMENT_PRESERVE_CACHE) env.__TSFIN_SEGMENT_PRESERVE_CACHE = new Map();
 
   if (typeof env.__loadPreservedSegmentFields !== 'function') {
@@ -15923,7 +16656,6 @@ async function buildNhspWeeklySnapshotCached(
     const workDate = sh.work_date;
     if (!workDate || !sh.start_utc || !sh.end_utc) continue;
 
-    // ✅ use the passed-in cached resolver (prevents per-group re-fetch)
     const policy = await getPolicyCached(client_id, workDate);
 
     let segs = [[sh.start_utc, sh.end_utc]];
@@ -15991,12 +16723,10 @@ async function buildNhspWeeklySnapshotCached(
       pay_amount:    payEx,
       charge_amount: chgEx,
 
-      // preserved fields
       exclude_from_pay,
       ...(invoice_target_week_start != null ? { invoice_target_week_start } : {}),
       ...(invoice_locked_invoice_id != null ? { invoice_locked_invoice_id } : {}),
 
-      // meta
       ref_num: (sh.nhsp_ref_num || sh.ref_num || null) || null,
       request_id: (sh.hr_request_id || sh.request_id || null) || null,
       held_back_reason: sh.held_back_reason || null,
@@ -16048,7 +16778,7 @@ async function buildNhspWeeklySnapshotCached(
   }
 
   const pay_wtr_rate_pct_snapshot =
-    (String(contract?.pay_method_snapshot || '').toUpperCase() === 'PAYE')
+    (String(method || '').toUpperCase() === 'PAYE')
       ? (Number.isFinite(Number(policy_snapshot_json?.holiday_pay_pct)) ? Number(policy_snapshot_json.holiday_pay_pct) : null)
       : null;
 
@@ -16065,7 +16795,9 @@ async function buildNhspWeeklySnapshotCached(
     client_id,
     role: contract.role || null,
     band: contract.band || null,
-    pay_method: contract.pay_method_snapshot || null,
+
+    // ✅ FIX: record the resolved method that pricing used
+    pay_method: method,
 
     policy_snapshot_json,
     rate_source_refs_json: { mode: 'CONTRACT_RATES_JSON', contract_id: contract.id || null },
@@ -16076,7 +16808,6 @@ async function buildNhspWeeklySnapshotCached(
     hours_sun,
     hours_bh,
 
-    // bucket rates
     pay_day:    pay.day   ?? null,
     pay_night:  pay.night ?? null,
     pay_sat:    pay.sat   ?? null,
@@ -16115,6 +16846,7 @@ async function buildNhspWeeklySnapshotCached(
   await writeSnapshot(env, snapshot);
   return { ok: true };
 }
+
 
 // BE FIX: require expected_timesheet_id + resolve to CURRENT; strict 409 payload; write against CURRENT id only
 async function handleManualPayAdjustmentCreate(env, req, timesheetId) {
@@ -16231,11 +16963,6 @@ async function handleManualPayAdjustmentCreate(env, req, timesheetId) {
 
 
 
-
-
-
-
-
 async function handleTimesheetDetails(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -16248,7 +16975,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
 
   try {
     // ─────────────────────────────────────────────────────────────
-    // NEW: resolve stale/historical timesheet_id -> current by booking_id
+    // Resolve stale/historical timesheet_id -> current by booking_id
     // ─────────────────────────────────────────────────────────────
     const resolved = await resolveTimesheetToCurrent(env, timesheetId);
     if (!resolved) {
@@ -16259,17 +16986,18 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     const currentTimesheetId = resolved.current_timesheet_id || timesheetId;
 
     // Current timesheet record (ALWAYS load by current_timesheet_id)
-    const { rows: tsRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-        `&is_current=eq.true` +
-        `&select=*` +
-        `&limit=1`
-    );
-    const ts = tsRows?.[0] || null;
+    let ts = null;
+    {
+      const { rows: tsRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+          `&select=*` +
+          `&limit=1`
+      );
+      ts = tsRows?.[0] || null;
+    }
     if (!ts) {
-      // Defensive: if resolver produced an id but current row is missing, treat as not found.
       return withCORS(env, req, notFound('Timesheet not found'));
     }
 
@@ -16521,6 +17249,19 @@ async function handleTimesheetDetails(env, req, timesheetId) {
         }
       : null;
 
+    const invoiceBreakdown =
+      (tsfinOut && tsfinOut.invoice_breakdown_json && typeof tsfinOut.invoice_breakdown_json === 'object')
+        ? tsfinOut.invoice_breakdown_json
+        : null;
+
+    const isSegmentsMode =
+      !!(invoiceBreakdown && String(invoiceBreakdown.mode || '').toUpperCase() === 'SEGMENTS');
+
+    const segments =
+      (isSegmentsMode && invoiceBreakdown && Array.isArray(invoiceBreakdown.segments))
+        ? invoiceBreakdown.segments
+        : [];
+
     const action_flags = {
       can_restore_qr_pending: (!isHardLocked) && canRestoreQrPending,
       can_restore_qr_signed: (!isHardLocked) && canRestoreQrSigned,
@@ -16538,15 +17279,22 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     };
 
     return withCORS(env, req, ok({
-      // NEW: rotation resolution metadata (always present)
+      // Rotation resolution metadata (always present)
       booking_id: bookingId,
       requested_timesheet_id: resolved.requested_timesheet_id,
       current_timesheet_id: resolved.current_timesheet_id,
       current_version: resolved.current_version,
       was_stale: resolved.was_stale,
 
+      // Core payloads FE relies on
       timesheet: timesheetOut,
       tsfin: tsfinOut,
+
+      // FE expects these for Lines/Finance/Overview tabs
+      invoiceBreakdown,
+      isSegmentsMode,
+      segments,
+
       validations,
       shifts,
 
@@ -16560,8 +17308,9 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       qr_generated_at: ts.qr_generated_at || null,
       qr_scanned_at: ts.qr_scanned_at || null,
       manual_pdf_r2_key: ts.manual_pdf_r2_key || null,
+
       contract_week_id: contractWeekId,
-      contract_week: contractWeek,
+      contract_week: contractWeek, // includes planned_schedule_json and any other fields (select=*)
       policy,
       evidence: [],
       action_flags
@@ -16574,6 +17323,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     return withCORS(env, req, serverError('Failed to load timesheet details'));
   }
 }
+
 // Guard a write against timesheet rotation (optimistic concurrency).
 //
 // Rule:
@@ -31559,6 +32309,8 @@ async function classifyHrRotaValidationImport(env, importId) {
 }
 // Resolve any timesheet_id (current or historical) to the current row for its booking_id.
 // Returns null if the requested timesheet_id does not exist.
+
+
 async function resolveTimesheetToCurrent(env, timesheet_id) {
   const enc = encodeURIComponent;
 
@@ -31599,6 +32351,7 @@ async function resolveTimesheetToCurrent(env, timesheet_id) {
         `?booking_id=eq.${enc(booking_id)}` +
         `&is_current=eq.true` +
         `&select=timesheet_id,booking_id,version,is_current` +
+        `&order=version.desc` +
         `&limit=1`
     );
     curRow = (curRows && curRows[0]) ? curRows[0] : null;
@@ -31638,6 +32391,7 @@ async function resolveTimesheetToCurrent(env, timesheet_id) {
     was_stale: String(reqRow.timesheet_id) !== String(current_timesheet_id)
   };
 }
+
 
 async function handleHrRotaValidationPreview(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
@@ -44367,9 +45121,22 @@ async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
   };
 
   // ─────────────────────────────────────────────────────────────
+  // Request-scope policy cache for imported weekly builders
+  // ─────────────────────────────────────────────────────────────
+  const _policyCache = new Map(); // key: `${client_id}|${ymd}` -> policy obj
+  const getPolicyCached = async (client_id, ymd) => {
+    const cid = String(client_id || '').trim();
+    const d   = String(ymd || '').trim();
+    const key = `${cid}|${d}`;
+    if (_policyCache.has(key)) return _policyCache.get(key);
+    const pol = await loadPolicy(env, client_id, ymd);
+    _policyCache.set(key, pol);
+    return pol;
+  };
+
+  // ─────────────────────────────────────────────────────────────
   // Weekly helpers (contract-driven)
   // ─────────────────────────────────────────────────────────────
-
   async function loadWeeklyContext(env, ts) {
     if (!ts || !ts.timesheet_id || !ts.contract_id || !ts.week_ending_date) {
       return null;
@@ -44451,65 +45218,39 @@ async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
 
     let cfgArr = cfgArrRaw;
     if (typeof cfgArrRaw === "string") {
-      try {
-        cfgArr = JSON.parse(cfgArrRaw);
-      } catch {
-        cfgArr = [];
-      }
+      try { cfgArr = JSON.parse(cfgArrRaw); } catch { cfgArr = []; }
     }
     if (!Array.isArray(cfgArr)) cfgArr = [];
 
     let unitsWeek = ts.additional_units_week || {};
     let unitsPerDay = ts.additional_units_per_day || {};
-    if (typeof unitsWeek === "string") {
-      try {
-        unitsWeek = JSON.parse(unitsWeek);
-      } catch {
-        unitsWeek = {};
-      }
-    }
-    if (typeof unitsPerDay === "string") {
-      try {
-        unitsPerDay = JSON.parse(unitsPerDay);
-      } catch {
-        unitsPerDay = {};
-      }
-    }
+    if (typeof unitsWeek === "string") { try { unitsWeek = JSON.parse(unitsWeek); } catch { unitsWeek = {}; } }
+    if (typeof unitsPerDay === "string") { try { unitsPerDay = JSON.parse(unitsPerDay); } catch { unitsPerDay = {}; } }
     if (!unitsWeek || typeof unitsWeek !== "object") unitsWeek = {};
     if (!unitsPerDay || typeof unitsPerDay !== "object") unitsPerDay = {};
 
-    const weekEnd = cw.week_ending_date; // 'YYYY-MM-DD'
+    const weekEnd = cw.week_ending_date;
     const dates = [];
     try {
       const weDate = new Date(`${weekEnd}T00:00:00Z`);
       for (let i = 6; i >= 0; i--) {
         const d = new Date(weDate);
         d.setUTCDate(weDate.getUTCDate() - i);
-        dates.push(toYmd(d)); // existing helper
+        dates.push(toYmd(d));
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
 
     let bhSet = new Set();
     try {
       const policy = await loadClientTimePolicy(env, contract.client_id);
       if (policy && policy.bhList) {
-        if (policy.bhList instanceof Set) {
-          bhSet = policy.bhList;
-        } else if (Array.isArray(policy.bhList)) {
-          bhSet = new Set(policy.bhList);
-        }
+        if (policy.bhList instanceof Set) bhSet = policy.bhList;
+        else if (Array.isArray(policy.bhList)) bhSet = new Set(policy.bhList);
       }
     } catch {}
 
     const dow = (ymd) => {
-      try {
-        const d = new Date(`${ymd}T00:00:00Z`);
-        return d.getUTCDay(); // 0=Sun..6=Sat
-      } catch {
-        return null;
-      }
+      try { return new Date(`${ymd}T00:00:00Z`).getUTCDay(); } catch { return null; }
     };
 
     const freqEnum = new Set([
@@ -44546,13 +45287,9 @@ async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
           const isBh = bhSet.has(ymd);
 
           let include = false;
-          if (freq === "ONE_PER_DAY") {
-            include = true;
-          } else if (freq === "WEEKENDS_AND_BH_ONLY") {
-            include = isBh || d === 0 || d === 6;
-          } else if (freq === "WEEKDAYS_EXCL_BH_ONLY") {
-            include = !isBh && d != null && d >= 1 && d <= 5;
-          }
+          if (freq === "ONE_PER_DAY") include = true;
+          else if (freq === "WEEKENDS_AND_BH_ONLY") include = isBh || d === 0 || d === 6;
+          else if (freq === "WEEKDAYS_EXCL_BH_ONLY") include = !isBh && d != null && d >= 1 && d <= 5;
 
           if (!include) continue;
           unitCount += u;
@@ -44586,9 +45323,7 @@ async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
 
     additional_pay_ex_vat = round2(additional_pay_ex_vat);
     additional_charge_ex_vat = round2(additional_charge_ex_vat);
-    const additional_margin_ex_vat = round2(
-      additional_charge_ex_vat - additional_pay_ex_vat
-    );
+    const additional_margin_ex_vat = round2(additional_charge_ex_vat - additional_pay_ex_vat);
 
     return {
       additional_units_json,
@@ -44599,53 +45334,419 @@ async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
   }
 
   // ─────────────────────────────────────────────────────────────
+  // Snapshot routing helpers (preserve evidence base)
+  // ─────────────────────────────────────────────────────────────
+  async function loadCurrentTsfinFor(tsId) {
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=eq.${enc(tsId)}` +
+          `&is_current=eq.true` +
+          `&select=basis,locked_by_invoice_id,paid_at_utc,invoice_breakdown_json,nhsp_import_id` +
+          `&limit=1`
+      );
+      return rows?.[0] || null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function loadNhspShiftsFor(tsId) {
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
+          `?timesheet_id=eq.${enc(tsId)}` +
+          `&select=*` +
+          `&order=work_date.asc,start_utc.asc`
+      );
+      return Array.isArray(rows) ? rows : [];
+    } catch {
+      return [];
+    }
+  }
+
+  async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin) {
+    const pc = payChargeFromContract(contract);
+    const pay = pc?.pay || null;
+    const chg = pc?.charge || null;
+    const method = pc?.method || contract.pay_method_snapshot || null;
+
+    if (!pay || !chg) {
+      throw new Error('CONTRACT_RATES_MISSING');
+    }
+
+    const actual = Array.isArray(ts.actual_schedule_json) ? ts.actual_schedule_json : [];
+    if (!actual.length) {
+      // schedule-driven weekly: if no schedule, hours must be zero
+      const zero = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
+      const snapshot = {
+        timesheet_id: ts.timesheet_id,
+        timesheet_version: ts.version || 1,
+        basis: (curFin?.basis || 'CONTRACT_WEEKLY'),
+        candidate_id: contract.candidate_id || null,
+        client_id: contract.client_id || null,
+        role: contract.role || null,
+        band: contract.band || null,
+        pay_method: method,
+        policy_snapshot_json: {},
+        rate_source_refs_json: { mode: 'CONTRACT_RATES_JSON', contract_id: contract.id || null },
+
+        hours_day: 0,
+        hours_night: 0,
+        hours_sat: 0,
+        hours_sun: 0,
+        hours_bh: 0,
+        total_hours: 0,
+
+        pay_day: pay.day, pay_night: pay.night, pay_sat: pay.sat, pay_sun: pay.sun, pay_bh: pay.bh,
+        charge_day: chg.day, charge_night: chg.night, charge_sat: chg.sat, charge_sun: chg.sun, charge_bh: chg.bh,
+
+        additional_units_json: {},
+        additional_pay_ex_vat: 0,
+        additional_charge_ex_vat: 0,
+        additional_margin_ex_vat: 0,
+
+        total_pay_ex_vat: 0,
+        total_charge_ex_vat: 0,
+        margin_ex_vat: 0,
+
+        candidate_assignment: (contract.candidate_id ? 'ASSIGNED' : 'UNASSIGNED'),
+        processing_status: 'READY_FOR_INVOICE',
+
+        invoice_breakdown_json: { mode: 'SEGMENTS', segments: [], totals: { total_pay_ex_vat: 0, total_charge_ex_vat: 0, margin_ex_vat: 0 } }
+      };
+
+      await writeSnapshot(env, snapshot);
+      return;
+    }
+
+    // Preserve per-segment controls if we have an existing SEGMENTS snapshot
+    const preserved = new Map();
+    try {
+      const ib = curFin?.invoice_breakdown_json || null;
+      const mode = String(ib?.mode || '').toUpperCase();
+      const segs = Array.isArray(ib?.segments) ? ib.segments : null;
+      if (mode === 'SEGMENTS' && segs) {
+        for (const s of segs) {
+          const sid = s?.segment_id ? String(s.segment_id) : null;
+          if (!sid) continue;
+          preserved.set(sid, {
+            exclude_from_pay: (typeof s.exclude_from_pay === 'boolean') ? s.exclude_from_pay : undefined,
+            invoice_target_week_start: (s.invoice_target_week_start != null) ? String(s.invoice_target_week_start) : undefined,
+            invoice_locked_invoice_id: (s.invoice_locked_invoice_id != null) ? String(s.invoice_locked_invoice_id) : undefined
+          });
+        }
+      }
+    } catch {}
+
+    const segments = [];
+    let sumDay = 0, sumNight = 0, sumSat = 0, sumSun = 0, sumBh = 0;
+    let sumPay = 0, sumChg = 0;
+
+    for (let i = 0; i < actual.length; i++) {
+      const seg = actual[i] || {};
+      const mins = await resolveBucketsFromSchedule(env, contract, [seg]);
+      const hDay   = +(asNumberLocal(mins.day)   / 60).toFixed(2);
+      const hNight = +(asNumberLocal(mins.night) / 60).toFixed(2);
+      const hSat   = +(asNumberLocal(mins.sat)   / 60).toFixed(2);
+      const hSun   = +(asNumberLocal(mins.sun)   / 60).toFixed(2);
+      const hBh    = +(asNumberLocal(mins.bh)    / 60).toFixed(2);
+
+      sumDay += hDay; sumNight += hNight; sumSat += hSat; sumSun += hSun; sumBh += hBh;
+
+      const payEx = round2(
+        hDay   * asNumberLocal(pay.day) +
+        hNight * asNumberLocal(pay.night) +
+        hSat   * asNumberLocal(pay.sat) +
+        hSun   * asNumberLocal(pay.sun) +
+        hBh    * asNumberLocal(pay.bh)
+      );
+
+      const chgEx = round2(
+        hDay   * asNumberLocal(chg.day) +
+        hNight * asNumberLocal(chg.night) +
+        hSat   * asNumberLocal(chg.sat) +
+        hSun   * asNumberLocal(chg.sun) +
+        hBh    * asNumberLocal(chg.bh)
+      );
+
+      sumPay += payEx;
+      sumChg += chgEx;
+
+      const sid = `ts:${ts.timesheet_id}:${i}`;
+      const p = preserved.get(sid) || null;
+
+      const exclude_from_pay =
+        (p && typeof p.exclude_from_pay === 'boolean') ? p.exclude_from_pay : false;
+
+      const invoice_target_week_start =
+        (p && p.invoice_target_week_start != null) ? p.invoice_target_week_start : undefined;
+
+      const invoice_locked_invoice_id =
+        (p && p.invoice_locked_invoice_id != null) ? p.invoice_locked_invoice_id : undefined;
+
+      segments.push({
+        segment_id: sid,
+        date: seg.date || null,
+        start_utc: seg.start_utc || seg.start_iso || null,
+        end_utc: seg.end_utc || seg.end_iso || null,
+        break_mins: Number(seg.break_mins ?? seg.break_minutes ?? 0) || 0,
+        ref_num: (seg.ref_num != null && String(seg.ref_num).trim()) ? String(seg.ref_num).trim() : null,
+        breaks: Array.isArray(seg.breaks) ? seg.breaks : [],
+
+        hours_day: hDay,
+        hours_night: hNight,
+        hours_sat: hSat,
+        hours_sun: hSun,
+        hours_bh: hBh,
+
+        pay_amount: payEx,
+        charge_amount: chgEx,
+
+        exclude_from_pay,
+        ...(invoice_target_week_start != null ? { invoice_target_week_start } : {}),
+        ...(invoice_locked_invoice_id != null ? { invoice_locked_invoice_id } : {})
+      });
+    }
+
+    const hours = {
+      day: round2(sumDay),
+      night: round2(sumNight),
+      sat: round2(sumSat),
+      sun: round2(sumSun),
+      bh: round2(sumBh)
+    };
+
+    const total_hours = round2(hours.day + hours.night + hours.sat + hours.sun + hours.bh);
+
+    const addl = await computeWeeklyAdditionalFromTs(env, ts, cw, contract);
+    const total_pay_ex_vat = round2(round2(sumPay) + round2(addl.additional_pay_ex_vat || 0));
+    const total_charge_ex_vat = round2(round2(sumChg) + round2(addl.additional_charge_ex_vat || 0));
+    const margin_ex_vat = round2(total_charge_ex_vat - total_pay_ex_vat);
+
+    let policy_snapshot_json = {};
+    try {
+      const we = String(ts.week_ending_date || cw.week_ending_date || '');
+      policy_snapshot_json = (contract.client_id && we) ? (await getPolicyCached(contract.client_id, we)) : {};
+      if (!policy_snapshot_json || typeof policy_snapshot_json !== 'object') policy_snapshot_json = {};
+    } catch {
+      policy_snapshot_json = {};
+    }
+
+    const snapshot = {
+      timesheet_id: ts.timesheet_id,
+      timesheet_version: ts.version || 1,
+
+      basis: (curFin?.basis || 'CONTRACT_WEEKLY'),
+      candidate_id: contract.candidate_id || null,
+      client_id: contract.client_id || null,
+      role: contract.role || null,
+      band: contract.band || null,
+      pay_method: method,
+
+      policy_snapshot_json,
+      rate_source_refs_json: { mode: 'CONTRACT_RATES_JSON', contract_id: contract.id || null },
+
+      hours_day: hours.day,
+      hours_night: hours.night,
+      hours_sat: hours.sat,
+      hours_sun: hours.sun,
+      hours_bh: hours.bh,
+      total_hours,
+
+      pay_day: pay.day, pay_night: pay.night, pay_sat: pay.sat, pay_sun: pay.sun, pay_bh: pay.bh,
+      charge_day: chg.day, charge_night: chg.night, charge_sat: chg.sat, charge_sun: chg.sun, charge_bh: chg.bh,
+
+      additional_units_json: addl.additional_units_json || {},
+      additional_pay_ex_vat: round2(addl.additional_pay_ex_vat || 0),
+      additional_charge_ex_vat: round2(addl.additional_charge_ex_vat || 0),
+      additional_margin_ex_vat: round2(addl.additional_margin_ex_vat || 0),
+
+      total_pay_ex_vat,
+      total_charge_ex_vat,
+      margin_ex_vat,
+
+      candidate_assignment: (contract.candidate_id ? 'ASSIGNED' : 'UNASSIGNED'),
+      processing_status: 'READY_FOR_INVOICE',
+
+      invoice_breakdown_json: {
+        mode: 'SEGMENTS',
+        segments,
+        additional: {
+          units: addl.additional_units_json || {},
+          pay_ex_vat: round2(addl.additional_pay_ex_vat || 0),
+          charge_ex_vat: round2(addl.additional_charge_ex_vat || 0),
+          margin_ex_vat: round2(addl.additional_margin_ex_vat || 0)
+        },
+        totals: {
+          total_pay_ex_vat,
+          total_charge_ex_vat,
+          margin_ex_vat
+        }
+      }
+    };
+
+    await writeSnapshot(env, snapshot);
+  }
+
+  async function rebuildFromExistingSegmentsEvidence(env, ts, cw, contract, curFin) {
+    const ib = curFin?.invoice_breakdown_json || null;
+    const mode = String(ib?.mode || '').toUpperCase();
+    const segs = Array.isArray(ib?.segments) ? ib.segments : null;
+    if (mode !== 'SEGMENTS' || !segs || !segs.length) {
+      throw new Error('NO_EXISTING_SEGMENTS_EVIDENCE');
+    }
+
+    const pc = payChargeFromContract(contract);
+    const pay = pc?.pay || null;
+    const chg = pc?.charge || null;
+    const method = pc?.method || contract.pay_method_snapshot || null;
+    if (!pay || !chg) throw new Error('CONTRACT_RATES_MISSING');
+
+    let sumDay = 0, sumNight = 0, sumSat = 0, sumSun = 0, sumBh = 0;
+    let totalPayEx = 0, totalChgEx = 0;
+
+    const nextSegments = segs.map(s => {
+      const hDay   = asNumberLocal(s.hours_day);
+      const hNight = asNumberLocal(s.hours_night);
+      const hSat   = asNumberLocal(s.hours_sat);
+      const hSun   = asNumberLocal(s.hours_sun);
+      const hBh    = asNumberLocal(s.hours_bh);
+
+      sumDay += hDay; sumNight += hNight; sumSat += hSat; sumSun += hSun; sumBh += hBh;
+
+      const payEx = round2(
+        hDay   * asNumberLocal(pay.day) +
+        hNight * asNumberLocal(pay.night) +
+        hSat   * asNumberLocal(pay.sat) +
+        hSun   * asNumberLocal(pay.sun) +
+        hBh    * asNumberLocal(pay.bh)
+      );
+
+      const chgEx = round2(
+        hDay   * asNumberLocal(chg.day) +
+        hNight * asNumberLocal(chg.night) +
+        hSat   * asNumberLocal(chg.sat) +
+        hSun   * asNumberLocal(chg.sun) +
+        hBh    * asNumberLocal(chg.bh)
+      );
+
+      totalPayEx += payEx;
+      totalChgEx += chgEx;
+
+      return {
+        ...s,
+        pay_amount: payEx,
+        charge_amount: chgEx
+      };
+    });
+
+    totalPayEx = round2(totalPayEx);
+    totalChgEx = round2(totalChgEx);
+    const marginEx = round2(totalChgEx - totalPayEx);
+
+    const hours_day   = round2(sumDay);
+    const hours_night = round2(sumNight);
+    const hours_sat   = round2(sumSat);
+    const hours_sun   = round2(sumSun);
+    const hours_bh    = round2(sumBh);
+    const total_hours = round2(hours_day + hours_night + hours_sat + hours_sun + hours_bh);
+
+    let policy_snapshot_json = {};
+    try {
+      const we = String(ts.week_ending_date || cw.week_ending_date || '');
+      policy_snapshot_json = (contract.client_id && we) ? (await getPolicyCached(contract.client_id, we)) : {};
+      if (!policy_snapshot_json || typeof policy_snapshot_json !== 'object') policy_snapshot_json = {};
+    } catch {
+      policy_snapshot_json = {};
+    }
+
+    const snapshot = {
+      timesheet_id: ts.timesheet_id,
+      timesheet_version: ts.version || 1,
+
+      basis: curFin?.basis || 'CONTRACT_WEEKLY',
+      candidate_id: contract.candidate_id || null,
+      client_id: contract.client_id || null,
+      role: contract.role || null,
+      band: contract.band || null,
+      pay_method: method,
+
+      policy_snapshot_json,
+      rate_source_refs_json: { mode: 'CONTRACT_RATES_JSON', contract_id: contract.id || null },
+
+      hours_day,
+      hours_night,
+      hours_sat,
+      hours_sun,
+      hours_bh,
+      total_hours,
+
+      pay_day: pay.day, pay_night: pay.night, pay_sat: pay.sat, pay_sun: pay.sun, pay_bh: pay.bh,
+      charge_day: chg.day, charge_night: chg.night, charge_sat: chg.sat, charge_sun: chg.sun, charge_bh: chg.bh,
+
+      additional_units_json: {},
+      additional_pay_ex_vat: 0,
+      additional_charge_ex_vat: 0,
+      additional_margin_ex_vat: 0,
+
+      total_pay_ex_vat: totalPayEx,
+      total_charge_ex_vat: totalChgEx,
+      margin_ex_vat: marginEx,
+
+      candidate_assignment: (contract.candidate_id ? 'ASSIGNED' : 'UNASSIGNED'),
+      processing_status: 'READY_FOR_INVOICE',
+
+      invoice_breakdown_json: {
+        mode: 'SEGMENTS',
+        segments: nextSegments,
+        totals: {
+          total_pay_ex_vat: totalPayEx,
+          total_charge_ex_vat: totalChgEx,
+          margin_ex_vat: marginEx
+        }
+      },
+
+      external_source_rows_json: curFin?.external_source_rows_json || {}
+    };
+
+    await writeSnapshot(env, snapshot);
+  }
+
+  // ─────────────────────────────────────────────────────────────
   // Worker core
   // ─────────────────────────────────────────────────────────────
-
   const lease = await sbRpc(env, "tsfin_dequeue_batch", { p_limit: limit });
-  if (!Array.isArray(lease) || !lease.length)
-    return { picked: 0, ok: 0, fail: 0 };
+  if (!Array.isArray(lease) || !lease.length) return { picked: 0, ok: 0, fail: 0 };
 
   let ok = 0, fail = 0;
 
   for (const item of lease) {
     try {
-      // NEW: resolve possibly-stale queue timesheet_id to current
+      // Resolve possibly-stale queue timesheet_id to current
       let workTimesheetId = item.timesheet_id;
       try {
         const r = await resolveTimesheetToCurrent(env, item.timesheet_id);
         if (r && r.current_timesheet_id) workTimesheetId = r.current_timesheet_id;
-      } catch { /* non-fatal */ }
+      } catch {}
 
       const ts = await loadCurrentTimesheet(env, workTimesheetId);
       if (!ts) {
-        await sbRpc(env, "tsfin_mark_revoked", {
-          p_timesheet_id: workTimesheetId,
-        });
+        await sbRpc(env, "tsfin_mark_revoked", { p_timesheet_id: workTimesheetId });
         await sbRpc(env, "tsfin_work_success", { p_id: item.id });
         ok++;
         continue;
       }
 
-      // NEW: if this timesheet already has a current NHSP / NHSP_ADJUSTMENT snapshot,
-      // do NOT overwrite it with a generic CONTRACT_WEEKLY or SELF_REPORTED snapshot.
-      try {
-        const { rows: curFinRows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?timesheet_id=eq.${enc(ts.timesheet_id)}` +
-          `&is_current=eq.true` +
-          `&select=basis` +
-          `&limit=1`
-        );
-        const curBasis = (curFinRows && curFinRows[0] && curFinRows[0].basis) || null;
-        if (curBasis === 'NHSP' || curBasis === 'NHSP_ADJUSTMENT') {
-          await sbRpc(env, "tsfin_work_success", { p_id: item.id });
-          ok++;
-          continue;
-        }
-      } catch {
-        // if this lookup fails, fall back to normal behaviour
+      // Do not rebuild locked (paid/invoiced) snapshots
+      const curFin = await loadCurrentTsfinFor(ts.timesheet_id);
+      const isLocked = !!(curFin?.locked_by_invoice_id || curFin?.paid_at_utc);
+      if (isLocked) {
+        await sbRpc(env, "tsfin_work_success", { p_id: item.id });
+        ok++;
+        continue;
       }
 
       if (!ts.authorised_at_server) {
@@ -44655,12 +45756,85 @@ async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
         continue;
       }
 
-      const weeklyCtx = await loadWeeklyContext(env, ts);
-      if (weeklyCtx) {
-        // Weekly CONTRACT_WEEKLY snapshot
-        await buildWeeklySnapshot(env, ts, weeklyCtx.cw, weeklyCtx.contract);
+      const scope = String(ts.sheet_scope || '').toUpperCase();
 
-        // After writing the snapshot, load the current TSFIN row and enrich with HR cross-check if applicable
+      // WEEKLY routing: preserve evidence base
+      if (scope === 'WEEKLY') {
+        const weeklyCtx = await loadWeeklyContext(env, ts);
+        if (!weeklyCtx) {
+          // No weekly context; fall back to existing behavior if available
+          await buildDailySnapshot(env, ts);
+          await sbRpc(env, "tsfin_work_success", { p_id: item.id });
+          ok++;
+          continue;
+        }
+
+        const basis = String(curFin?.basis || '').toUpperCase();
+        const isNhspBasis = (basis === 'NHSP' || basis === 'NHSP_ADJUSTMENT');
+        const isHrBasis = (basis === 'HEALTHROSTER_SELF_BILL' || basis === 'HEALTHROSTER_ADJUSTMENT');
+
+        // 1) NHSP / NHSP_ADJUSTMENT: rebuild from nhsp_shifts into SEGMENTS (do NOT skip)
+        if (isNhspBasis) {
+          const shifts = await loadNhspShiftsFor(ts.timesheet_id);
+          if (shifts && shifts.length) {
+            await buildNhspWeeklySnapshotCached(
+              env,
+              ts,
+              weeklyCtx.contract,
+              shifts,
+              curFin?.nhsp_import_id || null,
+              basis || 'NHSP',
+              getPolicyCached
+            );
+          } else {
+            // If we cannot access shifts, preserve evidence base from existing segments if present
+            await rebuildFromExistingSegmentsEvidence(env, ts, weeklyCtx.cw, weeklyCtx.contract, curFin);
+          }
+
+          // Enrich with HR cross-check if applicable
+          try {
+            const { rows: tfRows } = await sbFetch(
+              env,
+              `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+              `?timesheet_id=eq.${enc(ts.timesheet_id)}` +
+              `&is_current=eq.true` +
+              `&select=*` +
+              `&limit=1`
+            );
+            const tsfinRow = tfRows?.[0] || null;
+            if (tsfinRow) await enrichTsfinWithHrCrosscheck(env, ts, tsfinRow);
+          } catch {}
+
+          await sbRpc(env, "tsfin_work_success", { p_id: item.id });
+          ok++;
+          continue;
+        }
+
+        // 2) HR self-bill bases: preserve existing SEGMENTS evidence and recompute money from contract rates
+        if (isHrBasis) {
+          await rebuildFromExistingSegmentsEvidence(env, ts, weeklyCtx.cw, weeklyCtx.contract, curFin);
+
+          try {
+            const { rows: tfRows } = await sbFetch(
+              env,
+              `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+              `?timesheet_id=eq.${enc(ts.timesheet_id)}` +
+              `&is_current=eq.true` +
+              `&select=*` +
+              `&limit=1`
+            );
+            const tsfinRow = tfRows?.[0] || null;
+            if (tsfinRow) await enrichTsfinWithHrCrosscheck(env, ts, tsfinRow);
+          } catch {}
+
+          await sbRpc(env, "tsfin_work_success", { p_id: item.id });
+          ok++;
+          continue;
+        }
+
+        // 3) CONTRACT_WEEKLY schedule-driven: rebuild from actual_schedule_json into SEGMENTS
+        await buildWeeklyScheduleSegmentsSnapshot(env, ts, weeklyCtx.cw, weeklyCtx.contract, curFin);
+
         try {
           const { rows: tfRows } = await sbFetch(
             env,
@@ -44671,15 +45845,8 @@ async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
             `&limit=1`
           );
           const tsfinRow = tfRows?.[0] || null;
-          if (tsfinRow) {
-            await enrichTsfinWithHrCrosscheck(env, ts, tsfinRow);
-          }
-        } catch (e) {
-          console.warn('[TSFIN] failed to load TSFIN for HR cross-check', {
-            timesheet_id: ts.timesheet_id,
-            err: e?.message || String(e)
-          });
-        }
+          if (tsfinRow) await enrichTsfinWithHrCrosscheck(env, ts, tsfinRow);
+        } catch {}
 
         await sbRpc(env, "tsfin_work_success", { p_id: item.id });
         ok++;
@@ -44688,7 +45855,6 @@ async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
 
       // ── DAILY / ROTA branch ──────────────────────────────
       await buildDailySnapshot(env, ts);
-
       await sbRpc(env, "tsfin_work_success", { p_id: item.id });
       ok++;
     } catch (e) {
@@ -45513,6 +46679,7 @@ async function handleTsfinMarkReady(env, req) {
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
         `?select=timesheet_id,reference_number,authorised_at_server,submission_mode,` +
+        `sheet_scope,day_references_json,actual_schedule_json,` +   // ✅ added
         `r2_nurse_key,r2_auth_key,manual_pdf_r2_key,basis` +
         `&timesheet_id=in.(${idsParam})`
     );
@@ -45674,11 +46841,10 @@ async function handleTsfinMarkReady(env, req) {
       continue;
     }
 
-    // 4) Timesheet reference gating (if required)
+    // 4) Timesheet reference gating (if required) — ✅ schedule-aware
     if (tsRefRequired) {
-      const meta = tsMetaMap.get(id);
-      const ref = (meta?.reference_number || '').toString().trim();
-      if (!ref) {
+      const meta = tsMetaMap.get(id) || {};
+      if (!timesheetHasInvoiceReference(meta)) {
         blocked.push({ id, reason: 'reference_missing' });
         continue;
       }
@@ -49276,13 +50442,79 @@ async function setWeeksInvoicedForTimesheets(env, timesheetIds) {
   });
 }
 
- async function handleCreateInvoiceTsfin(env, req) {
+async function handleCreateInvoiceTsfin(env, req) {
   // (HOURS only — expenses invoiced via handleCreateInvoiceExpenses)
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized('Unauthorized');
 
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
   const enc    = encodeURIComponent;
+
+  // ─────────────────────────────────────────────────────────────
+  // Local helper: schedule-aware reference gating (matches your SQL truth)
+  // WEEKLY+MANUAL => per-shift seg.ref_num completeness in actual_schedule_json
+  // WEEKLY non-manual => reference_number OR any non-empty day_references_json
+  // DAILY => reference_number
+  // ─────────────────────────────────────────────────────────────
+  const strTrim = (x) => (x == null) ? '' : String(x).trim();
+
+  const dayRefsHasAny = (dayRefs) => {
+    if (!dayRefs || typeof dayRefs !== 'object') return false;
+    return Object.values(dayRefs).some(v => strTrim(v));
+  };
+
+  const weeklyManualScheduleHasCompleteRefs = (schedule) => {
+    const arr = Array.isArray(schedule) ? schedule : [];
+    if (!arr.length) return false;
+
+    for (const seg of arr) {
+      if (!seg || typeof seg !== 'object') continue;
+      const start = strTrim(seg.start);
+      const end   = strTrim(seg.end);
+      if (start && end) {
+        const ref = strTrim(seg.ref_num);
+        if (!ref) return false;
+      }
+    }
+    return true;
+  };
+
+  const timesheetHasInvoiceReference = (ts) => {
+    const scope = strTrim(ts?.sheet_scope).toUpperCase();
+    const mode  = strTrim(ts?.submission_mode).toUpperCase();
+
+    if (scope === 'WEEKLY' && mode === 'MANUAL') {
+      return weeklyManualScheduleHasCompleteRefs(ts?.actual_schedule_json);
+    }
+    if (scope === 'WEEKLY') {
+      return !!strTrim(ts?.reference_number) || dayRefsHasAny(ts?.day_references_json);
+    }
+    return !!strTrim(ts?.reference_number);
+  };
+
+  const collectWeeklyManualScheduleRefs = (ts) => {
+    const scope = strTrim(ts?.sheet_scope).toUpperCase();
+    const mode  = strTrim(ts?.submission_mode).toUpperCase();
+    if (!(scope === 'WEEKLY' && mode === 'MANUAL')) return [];
+
+    const arr = Array.isArray(ts?.actual_schedule_json) ? ts.actual_schedule_json : [];
+    const out = [];
+    const seen = new Set();
+
+    for (const seg of arr) {
+      if (!seg || typeof seg !== 'object') continue;
+      const start = strTrim(seg.start);
+      const end   = strTrim(seg.end);
+      if (!(start && end)) continue;
+
+      const ref = strTrim(seg.ref_num);
+      if (!ref) continue;
+      if (seen.has(ref)) continue;
+      seen.add(ref);
+      out.push(ref);
+    }
+    return out;
+  };
 
   const body = await parseJSONBody(req).catch(() => null);
   if (!body || !Array.isArray(body.timesheet_ids) || body.timesheet_ids.length === 0) {
@@ -49362,27 +50594,38 @@ async function setWeeksInvoicedForTimesheets(env, timesheetIds) {
     ? cs.ts_attach_to_invoice !== false
     : true;
 
-  // Base TS meta (also grab reference_number for meta and gating)
+  // Base TS meta (schedule-aware)
   const { rows: tsRows } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
-    `?select=timesheet_id,booking_id,week_ending_date,r2_auth_key,r2_nurse_key,reference_number` +
+    `?select=` + [
+      'timesheet_id',
+      'booking_id',
+      'week_ending_date',
+      'r2_auth_key',
+      'r2_nurse_key',
+      'reference_number',
+      // ✅ schedule-aware fields for weekly manual
+      'sheet_scope',
+      'submission_mode',
+      'day_references_json',
+      'actual_schedule_json'
+    ].join(',') +
     `&timesheet_id=in.(${inIds})`
   );
   const tsMetaMap = Object.fromEntries((tsRows || []).map(t => [t.timesheet_id, t]));
 
-  // Reference-required gating: only invoice timesheets with a reference_number
+  // ✅ Reference-required gating (FIXED): schedule-aware, not reference_number-only
   let snapsToUse = snaps;
   if (invoiceRefRequired) {
     snapsToUse = snaps.filter(s => {
       const meta = tsMetaMap[s.timesheet_id] || {};
-      const ref  = (meta.reference_number || '').trim();
-      return !!ref;
+      return timesheetHasInvoiceReference(meta);
     });
   }
 
   if (!snapsToUse.length) {
-    return badRequest("No eligible timesheets after reference_number gating.");
+    return badRequest("No eligible timesheets after reference gating.");
   }
 
   // map timesheet_id -> contract_id -> bucket_labels_json
@@ -49501,6 +50744,7 @@ async function setWeeksInvoicedForTimesheets(env, timesheetIds) {
 
   for (const s of snapsToUse) {
     const tsMeta = tsMetaMap[s.timesheet_id] || {};
+    const scheduleRefs = collectWeeklyManualScheduleRefs(tsMeta); // may be []
 
     const addPayEx  = Number(s.additional_pay_ex_vat    || 0);
     const addChgEx  = Number(s.additional_charge_ex_vat || 0);
@@ -49543,7 +50787,14 @@ async function setWeeksInvoicedForTimesheets(env, timesheetIds) {
       timesheet_version: s.timesheet_version,
       booking_id: tsMeta.booking_id ?? null,
       week_ending_date_local: tsMeta.week_ending_date ?? null,
+
+      // legacy single TS ref (may be blank for WEEKLY+MANUAL schedule-driven)
       ts_reference_number: (tsMeta.reference_number ?? null),
+
+      // ✅ preserve schedule-driven per-shift refs (bucket invoices)
+      schedule_ref_nums: scheduleRefs,
+      schedule_ref_count: scheduleRefs.length,
+
       po_number: s.po_number ?? null,
       evidence: {
         r2_auth_key: tsMeta.r2_auth_key ?? null,
@@ -49615,7 +50866,14 @@ async function setWeeksInvoicedForTimesheets(env, timesheetIds) {
         timesheet_version: s.timesheet_version,
         booking_id: tsMeta.booking_id ?? null,
         week_ending_date_local: tsMeta.week_ending_date ?? null,
+
+        // legacy single TS ref (may be blank for WEEKLY+MANUAL schedule-driven)
         ts_reference_number: (tsMeta.reference_number ?? null),
+
+        // ✅ preserve schedule-driven per-shift refs (bucket invoices)
+        schedule_ref_nums: scheduleRefs,
+        schedule_ref_count: scheduleRefs.length,
+
         po_number: s.po_number ?? null,
         evidence: {
           r2_auth_key: tsMeta.r2_auth_key ?? null,
@@ -49631,8 +50889,8 @@ async function setWeeksInvoicedForTimesheets(env, timesheetIds) {
         },
         units: {
           unit_count: unitCount,
-          pay_rate:   ex.pay_rate    ?? null,
-          charge_rate:ex.charge_rate ?? null
+          pay_rate:   ex.pay_rate     ?? null,
+          charge_rate:ex.charge_rate  ?? null
         },
         totals: {
           line_pay_ex_vat: payEx,
@@ -49824,11 +51082,7 @@ async function setWeeksInvoicedForTimesheets(env, timesheetIds) {
           const gKey = `${sys}__${impId}`;
           let g = groups.get(gKey);
           if (!g) {
-            g = {
-              source_system: sys,
-              import_id: impId,
-              keys: new Set()
-            };
+            g = { source_system: sys, import_id: impId, keys: new Set() };
             groups.set(gKey, g);
           }
           g.keys.add(sh.external_row_key);
@@ -49836,10 +51090,7 @@ async function setWeeksInvoicedForTimesheets(env, timesheetIds) {
 
         await fetch(
           `${env.SUPABASE_URL}/rest/v1/invoice_hr_source_rows?invoice_id=eq.${enc(invoice.id)}`,
-          {
-            method: 'DELETE',
-            headers: { ...sbHeaders(env), Prefer: 'return-minimal' }
-          }
+          { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return-minimal' } }
         ).catch(() => {});
 
         for (const g of groups.values()) {
@@ -50150,18 +51401,26 @@ async function handleCreateInvoiceTsfinByWeek(env, req) {
         'locked_by_invoice_id',
         'policy_snapshot_json',
         'rate_source_refs_json',
-        'timesheet:timesheets(week_ending_date,booking_id,r2_auth_key,r2_nurse_key,reference_number,contract_id)'
+        // ✅ include schedule + scope/mode so gating can honor WEEKLY+MANUAL per-shift refs
+        'timesheet:timesheets(' +
+          [
+            'week_ending_date',
+            'booking_id',
+            'r2_auth_key',
+            'r2_nurse_key',
+            'reference_number',
+            'contract_id',
+            'sheet_scope',
+            'submission_mode',
+            'day_references_json',
+            'actual_schedule_json'
+          ].join(',') +
+        ')'
       ].join(',')
   );
 
   if (!snaps?.length) {
     return badRequest('No eligible snapshots for this client.');
-  }
-
-  // Extract billable segments for this week
-  const { entries, timesheet_ids } = extractBillableSegmentsForWeek(snaps, weekStart);
-  if (!entries.length) {
-    return badRequest('Nothing to invoice for this week.');
   }
 
   // VAT + client snapshot
@@ -50188,6 +51447,8 @@ async function handleCreateInvoiceTsfinByWeek(env, req) {
   const cs = csRows?.[0] || null;
 
   const vatRatePct = client.vat_chargeable === false ? 0 : Number(cs?.vat_rate_pct ?? defaultVat);
+  const invoiceRefRequired = !!cs?.invoice_reference_required;
+
   const requiresHr = !!cs?.requires_hr;
   const hrAttach   = cs && Object.prototype.hasOwnProperty.call(cs, 'hr_attach_to_invoice')
     ? cs.hr_attach_to_invoice !== false
@@ -50195,6 +51456,22 @@ async function handleCreateInvoiceTsfinByWeek(env, req) {
   const tsAttach   = cs && Object.prototype.hasOwnProperty.call(cs, 'ts_attach_to_invoice')
     ? cs.ts_attach_to_invoice !== false
     : true;
+
+  // ✅ Reference-required gating: honor WEEKLY+MANUAL schedule refs
+  let snapsToUse = snaps;
+  if (invoiceRefRequired) {
+    snapsToUse = (snaps || []).filter(s => timesheetHasInvoiceReference(s?.timesheet || {}));
+  }
+
+  if (!snapsToUse.length) {
+    return badRequest('No eligible timesheets after reference gating.');
+  }
+
+  // Extract billable segments for this week (from filtered snaps)
+  const { entries, timesheet_ids } = extractBillableSegmentsForWeek(snapsToUse, weekStart);
+  if (!entries.length) {
+    return badRequest('Nothing to invoice for this week.');
+  }
 
   // Decide if this run is pure self-bill (NHSP / HR self-bill bases only)
   const selfBillBases = new Set([
@@ -50331,6 +51608,21 @@ async function handleCreateInvoiceTsfinByWeek(env, req) {
     if (basis) v.bases.add(String(basis).toUpperCase());
   };
 
+  // helper to show segment times (works for schedule-driven segments + NHSP/HR)
+  const timeRangeForSeg = (seg) => {
+    const s = seg || {};
+    const startTxt =
+      (typeof s.start === 'string' && s.start.trim())
+        ? s.start.trim()
+        : (s.start_utc ? fmtUKTime(s.start_utc) : '');
+    const endTxt =
+      (typeof s.end === 'string' && s.end.trim())
+        ? s.end.trim()
+        : (s.end_utc ? fmtUKTime(s.end_utc) : '');
+    if (startTxt && endTxt) return `${startTxt}-${endTxt}`;
+    return '';
+  };
+
   for (const e of entries) {
     const seg = e.segment || {};
 
@@ -50347,7 +51639,19 @@ async function handleCreateInvoiceTsfinByWeek(env, req) {
 
     bumpTs(e.timesheet_id, e.basis, chargeEx, payEx);
 
-    const desc = `TS ${e.timesheet_id} – ${e.basis || 'SEGMENT'} – ${seg.date || weekStart}`;
+    const segRef = (seg.ref_num != null) ? String(seg.ref_num).trim() : '';
+    const segDate = seg.date || weekStart;
+    const segTime = timeRangeForSeg(seg);
+
+    // ✅ make multi-shift days visibly distinct on invoice
+    const descParts = [
+      `TS ${e.timesheet_id}`,
+      (e.basis || 'SEGMENT'),
+      segDate
+    ];
+    if (segTime) descParts.push(segTime);
+    if (segRef) descParts.push(`Ref ${segRef}`);
+    const desc = descParts.join(' – ');
 
     const meta = {
       line_type: 'SEGMENT',
@@ -50357,6 +51661,16 @@ async function handleCreateInvoiceTsfinByWeek(env, req) {
       segment_id: seg.segment_id || null,
       segment_index: e.segment_index,
       date: seg.date || null,
+
+      // ✅ preserve per-shift reference for exports/audit
+      ref_num: segRef || null,
+
+      // helpful display fields if present
+      start_utc: seg.start_utc || null,
+      end_utc: seg.end_utc || null,
+      start: (typeof seg.start === 'string') ? seg.start : null,
+      end:   (typeof seg.end === 'string') ? seg.end : null,
+
       invoice_target_week_start: seg.invoice_target_week_start || weekStart,
       source_system: seg.source_system || null,
       totals: {
