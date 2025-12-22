@@ -862,11 +862,27 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array of 
 // - No shift overlaps another shift on the same date
 // - Break windows (primary + extras) are inside their shift window
 // Throws Error with a descriptive message if invalid.
-function validateScheduleStructure(actualDays /* array of {date,start,end,breaks?,break_start?,break_end?} */) {
+function validateScheduleStructure(actualDays /* array of {date,start,end,breaks?,break_start?,break_end?,break_minutes?} */) {
   if (!Array.isArray(actualDays) || !actualDays.length) return;
 
   const byDate = new Map();
   const hasText = (v) => v != null && String(v).trim() !== '';
+
+  const breakMinutesValue = (d) => {
+    if (!d) return null;
+    // accept break_minutes or break_mins
+    const raw = (d.break_minutes != null) ? d.break_minutes : d.break_mins;
+    if (raw == null || raw === '') return null;
+
+    const n = Number(raw);
+    if (!Number.isFinite(n)) {
+      throw new Error(`Invalid break_minutes (must be numeric) on ${String(d.date || '').trim() || 'unknown date'}`);
+    }
+    if (n < 0) {
+      throw new Error(`Invalid break_minutes (must be >= 0) on ${String(d.date || '').trim() || 'unknown date'}`);
+    }
+    return Math.floor(n);
+  };
 
   const hasAnyBreakTimes = (d) => {
     if (!d) return false;
@@ -889,9 +905,13 @@ function validateScheduleStructure(actualDays /* array of {date,start,end,breaks
       throw new Error(`Shift start/end must both be set (or both blank) for ${date}`);
     }
 
-    // if no shift, there must be no break windows
+    const hasWindowBreaks = hasAnyBreakTimes(d);
+    const bm = breakMinutesValue(d);
+    const hasBreakMins = (bm != null && bm > 0);
+
+    // If no shift, there must be no breaks of any kind
     if (!hasStart && !hasEnd) {
-      if (hasAnyBreakTimes(d)) {
+      if (hasWindowBreaks || hasBreakMins) {
         throw new Error(`Breaks require a valid shift start/end on ${date}`);
       }
       continue;
@@ -915,6 +935,18 @@ function validateScheduleStructure(actualDays /* array of {date,start,end,breaks
     const shiftEndMin   = (e > s) ? e : (e + 1440); // overnight ok
     const shiftMinutes  = shiftEndMin - shiftStartMin;
 
+    // Disallow mixing break minutes with break windows on the same segment
+    if (hasBreakMins && hasWindowBreaks) {
+      throw new Error(`Use either break_minutes OR break start/end windows (not both) on ${date}`);
+    }
+
+    // Sanity check floating break minutes
+    if (hasBreakMins) {
+      if (bm >= shiftMinutes) {
+        throw new Error(`break_minutes must be less than shift duration on ${date}`);
+      }
+    }
+
     if (!byDate.has(date)) byDate.set(date, []);
     byDate.get(date).push({
       startMin: shiftStartMin,
@@ -923,7 +955,11 @@ function validateScheduleStructure(actualDays /* array of {date,start,end,breaks
     });
 
     // Validate breaks for this shift (all rules, overnight-aware)
-    validateBreaksForShift(date, shiftStartMin, shiftEndMin, shiftMinutes, d);
+    // - validateBreaksForShift already checks window breaks; we only call it if windows exist
+    // - break_minutes is validated above
+    if (hasWindowBreaks) {
+      validateBreaksForShift(date, shiftStartMin, shiftEndMin, shiftMinutes, d);
+    }
   }
 
   // Overlapping shifts per date (overnight-aware because endMin may exceed 1440)
@@ -944,6 +980,26 @@ function validateScheduleStructure(actualDays /* array of {date,start,end,breaks
 
 function validateBreaksForShift(date, shiftStartMin, shiftEndMin, shiftMinutes, d) {
   const hasText = (v) => v != null && String(v).trim() !== '';
+
+  // ✅ If break_minutes/break_mins is used, do not accept break windows too.
+  // validateScheduleStructure already validates bm < shiftMinutes, but keep it defensive here too.
+  const rawBm = (d && (d.break_minutes != null ? d.break_minutes : d.break_mins));
+  const bm = (rawBm == null || rawBm === '') ? null : Number(rawBm);
+  const hasBreakMins = (bm != null && Number.isFinite(bm) && bm > 0);
+
+  const hasWindow =
+    (hasText(d?.break_start) || hasText(d?.break_end)) ||
+    (Array.isArray(d?.breaks) && d.breaks.some(b => b && (hasText(b.start) || hasText(b.end))));
+
+  if (hasBreakMins) {
+    if (hasWindow) {
+      throw new Error(`Use either break_minutes OR break windows (not both) on ${date}`);
+    }
+    if (bm >= shiftMinutes) {
+      throw new Error(`break_minutes must be less than shift length on ${date}`);
+    }
+    return; // nothing else to validate
+  }
 
   // Choose canonical break windows:
   // - if breaks[] has any populated entries, use that
