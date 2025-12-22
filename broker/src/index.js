@@ -5142,9 +5142,28 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       }
       if (!Number.isFinite(br) || br < 0) br = 0;
 
-      seg.breaks = breaks;
-      seg.break_mins = br;
-      seg.break_minutes = br;
+    seg.breaks = breaks;
+
+// ✅ Canonical: never store both
+if (breaks.length) {
+  // windows mode
+  delete seg.break_mins;
+  delete seg.break_minutes;
+  delete seg.break_minutes; // (keep once if duplicated)
+} else {
+  // minutes mode (only if >0)
+  const bm = Number(seg.break_mins ?? seg.break_minutes ?? 0);
+  const n = (Number.isFinite(bm) && bm > 0) ? Math.floor(bm) : 0;
+
+  if (n > 0) seg.break_minutes = n;
+  else delete seg.break_minutes;
+
+  delete seg.break_mins;
+  delete seg.break_start;
+  delete seg.break_end;
+  delete seg.breaks;
+}
+
 
       // keep legacy convenience fields aligned to first break
       const p = breaks[0] || null;
