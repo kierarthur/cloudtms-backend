@@ -19315,58 +19315,103 @@ async function handleNhspApply(env, req, importId) {
         }
       }
 
-      if (!ts) {
-        const cand = candidateById.get(candidateId) || null;
-        const cli  = clientById.get(clientId) || null;
-        const firstShift = grpShifts?.[0] || {};
+     if (!ts) {
+  const cand = candidateById.get(candidateId) || null;
+  const cli  = clientById.get(clientId) || null;
+  const firstShift = grpShifts?.[0] || {};
 
-        const occupantKeyNorm = String(cand?.tms_ref || cand?.display_name || candidateId || 'worker').toLowerCase();
-        const hospitalNorm    = String(contract.display_site || cli?.name || clientId || 'client').toLowerCase();
-        const wardNorm        = String(contract.ward_hint || firstShift.ward || 'contract').toLowerCase();
-        const jobTitleNorm    = String(contract.role || firstShift.assignment_code || 'weekly').toLowerCase();
+  const occupantKeyNorm = String(cand?.tms_ref || cand?.display_name || candidateId || 'worker').toLowerCase();
+  const hospitalNorm    = String(contract.display_site || cli?.name || clientId || 'client').toLowerCase();
+  const wardNorm        = String(contract.ward_hint || firstShift.ward || 'contract').toLowerCase();
+  const jobTitleNorm    = String(contract.role || firstShift.assignment_code || 'weekly').toLowerCase();
 
-        const tsPayload = [{
-          booking_id: bookingId,
-          version: 1,
-          is_current: true,
-          status: 'RECEIVED',
-          sheet_scope: 'WEEKLY',
-          submission_mode: 'MANUAL',
-          line_type: 'HOURS',
-          occupant_key_norm: occupantKeyNorm,
-          hospital_norm: hospitalNorm,
-          ward_norm: wardNorm,
-          job_title_norm: jobTitleNorm,
-          shift_label_norm: 'weekly',
-          week_ending_date: weekEndingDate,
-          contract_id: contract.id,
-          manual_pdf_r2_key: null,
-          actual_schedule_json: [],
-          authorised_at_server: null,
-          created_at: nowIso,
-          updated_at: nowIso
-        }];
+  // ✅ FIX: determine next version for booking_id (NOT hard-coded 1)
+  let nextVersion = 1;
+  try {
+    const { rows: vRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?booking_id=eq.${enc(bookingId)}` +
+        `&select=version` +
+        `&order=version.desc` +
+        `&limit=1`
+    );
+    const maxV = vRows?.[0]?.version != null ? Number(vRows[0].version) : null;
+    nextVersion = Number.isFinite(maxV) ? (maxV + 1) : 1;
+  } catch {
+    nextVersion = 1;
+  }
 
-        const insTs = await fetch(
-          `${env.SUPABASE_URL}/rest/v1/timesheets`,
-          { method: 'POST', headers: { ...sbHeaders(env), Prefer: 'return=representation' }, body: JSON.stringify(tsPayload) }
-        );
+  // ✅ Optional but recommended: demote any current row for this booking_id (keeps invariants clean)
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?booking_id=eq.${enc(bookingId)}` +
+      `&is_current=eq.true`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+      body: JSON.stringify({
+        is_current: false,
+        status: 'REVOKED',
+        revoked_reason: 'IMPORT_REPLACED_BY_AUTOPROC',
+        revoked_by: user?.id || null,
+        updated_at: nowIso
+      })
+    }
+  ).catch(() => {});
 
-        const txt = await insTs.text().catch(() => '');
-        if (!insTs.ok) {
-          addFail(previewGroupId, actionUpper, `timesheets insert failed (${insTs.status}): ${txt || 'unknown error'}`, { booking_id: bookingId, contract_id: contract.id });
-          continue;
-        }
+  const tsPayload = [{
+    booking_id: bookingId,
+    version: nextVersion,               // ✅ FIXED
+    is_current: true,
+    status: 'RECEIVED',
+    sheet_scope: 'WEEKLY',
+    submission_mode: 'MANUAL',
+    line_type: 'HOURS',
+    occupant_key_norm: occupantKeyNorm,
+    hospital_norm: hospitalNorm,
+    ward_norm: wardNorm,
+    job_title_norm: jobTitleNorm,
+    shift_label_norm: 'weekly',
+    week_ending_date: weekEndingDate,
+    contract_id: contract.id,
+    manual_pdf_r2_key: null,
+    actual_schedule_json: [],
+    authorised_at_server: null,
+    created_at: nowIso,
+    updated_at: nowIso
+  }];
 
-        const tsJson = txt ? JSON.parse(txt) : [];
-        ts = Array.isArray(tsJson) ? tsJson[0] : tsJson;
+  const insTs = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets`,
+    { method: 'POST', headers: { ...sbHeaders(env), Prefer: 'return=representation' }, body: JSON.stringify(tsPayload) }
+  );
 
-        await fetch(
-          `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
-          { method: 'PATCH', headers: { ...sbHeaders(env), Prefer: 'return-minimal' }, body: JSON.stringify({ timesheet_id: ts.timesheet_id, status: 'SUBMITTED', updated_at: nowIso }) }
-        ).catch(() => {});
-        cw.timesheet_id = ts.timesheet_id;
-      }
+  const txt = await insTs.text().catch(() => '');
+  if (!insTs.ok) {
+    addFail(
+      previewGroupId,
+      actionUpper,
+      `timesheets insert failed (${insTs.status}): ${txt || 'unknown error'}`,
+      { booking_id: bookingId, contract_id: contract.id, attempted_version: nextVersion }
+    );
+    continue;
+  }
+
+  const tsJson = txt ? JSON.parse(txt) : [];
+  ts = Array.isArray(tsJson) ? tsJson[0] : tsJson;
+
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+      body: JSON.stringify({ timesheet_id: ts.timesheet_id, status: 'SUBMITTED', updated_at: nowIso })
+    }
+  ).catch(() => {});
+  cw.timesheet_id = ts.timesheet_id;
+}
+
 
       if (!ts?.timesheet_id) {
         addFail(previewGroupId, actionUpper, 'Timesheet missing timesheet_id after create/load.', { booking_id: bookingId });
@@ -20710,60 +20755,105 @@ async function handleHrAutoprocessApply(env, req, importId) {
       }
 
       if (!ts) {
-        const cand = candidateById.get(candidateId) || null;
-        const cli  = clientById.get(clientId) || null;
-        const firstShift = grpShifts[0] || {};
+  const cand = candidateById.get(candidateId) || null;
+  const cli  = clientById.get(clientId) || null;
+  const firstShift = grpShifts[0] || {};
 
-        const occupantKeyNorm = String(cand?.tms_ref || cand?.display_name || candidateId || 'worker').toLowerCase();
-        const hospitalNorm    = String(contract.display_site || cli?.name || clientId || 'client').toLowerCase();
-        const wardNorm        = String(contract.ward_hint || firstShift.ward || 'contract').toLowerCase();
-        const jobTitleNorm    = String(contract.role || 'hr-weekly').toLowerCase();
+  const occupantKeyNorm = String(cand?.tms_ref || cand?.display_name || candidateId || 'worker').toLowerCase();
+  const hospitalNorm    = String(contract.display_site || cli?.name || clientId || 'client').toLowerCase();
+  const wardNorm        = String(contract.ward_hint || firstShift.ward || 'contract').toLowerCase();
+  const jobTitleNorm    = String(contract.role || 'hr-weekly').toLowerCase();
 
-        const tsPayload = [{
-          booking_id: bookingId,
-          version: 1,
-          is_current: true,
-          status: 'RECEIVED',
-          sheet_scope: 'WEEKLY',
-          submission_mode: 'MANUAL',
-          line_type: 'HOURS',
-          occupant_key_norm: occupantKeyNorm,
-          hospital_norm: hospitalNorm,
-          ward_norm: wardNorm,
-          job_title_norm: jobTitleNorm,
-          shift_label_norm: 'weekly',
-          week_ending_date: weekEndingDate,
-          contract_id: contract.id,
-          manual_pdf_r2_key: null,
-          actual_schedule_json: [],
-          authorised_at_server: null,
-          created_at: nowIso,
-          updated_at: nowIso
-        }];
+  // ✅ FIX: determine next version for booking_id (NOT hard-coded 1)
+  let nextVersion = 1;
+  try {
+    const { rows: vRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?booking_id=eq.${enc(bookingId)}` +
+        `&select=version` +
+        `&order=version.desc` +
+        `&limit=1`
+    );
+    const maxV = vRows?.[0]?.version != null ? Number(vRows[0].version) : null;
+    nextVersion = Number.isFinite(maxV) ? (maxV + 1) : 1;
+  } catch {
+    nextVersion = 1;
+  }
 
-        const ins = await fetch(
-          `${env.SUPABASE_URL}/rest/v1/timesheets`,
-          { method: 'POST', headers: { ...sbHeaders(env), Prefer: 'return=representation' }, body: JSON.stringify(tsPayload) }
-        );
-        const txt = await ins.text().catch(() => '');
-        if (!ins.ok) {
-          addFail(previewGroupId, actionUpper, `timesheets insert failed (base): ${txt || ins.status}`, { booking_id: bookingId });
-          continue;
-        }
-        const j = txt ? JSON.parse(txt) : [];
-        ts = Array.isArray(j) ? j[0] : j;
+  // ✅ Optional but recommended: demote any current row for this booking_id (keeps invariants clean)
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?booking_id=eq.${enc(bookingId)}` +
+      `&is_current=eq.true`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+      body: JSON.stringify({
+        is_current: false,
+        status: 'REVOKED',
+        revoked_reason: 'IMPORT_REPLACED_BY_AUTOPROC',
+        revoked_by: user?.id || null,
+        updated_at: nowIso
+      })
+    }
+  ).catch(() => {});
 
-        if (!ts?.timesheet_id) {
-          addFail(previewGroupId, actionUpper, 'timesheets insert returned no timesheet_id (base)');
-          continue;
-        }
+  const tsPayload = [{
+    booking_id: bookingId,
+    version: nextVersion,              // ✅ FIXED
+    is_current: true,
+    status: 'RECEIVED',
+    sheet_scope: 'WEEKLY',
+    submission_mode: 'MANUAL',
+    line_type: 'HOURS',
+    occupant_key_norm: occupantKeyNorm,
+    hospital_norm: hospitalNorm,
+    ward_norm: wardNorm,
+    job_title_norm: jobTitleNorm,
+    shift_label_norm: 'weekly',
+    week_ending_date: weekEndingDate,
+    contract_id: contract.id,
+    manual_pdf_r2_key: null,
+    actual_schedule_json: [],
+    authorised_at_server: null,
+    created_at: nowIso,
+    updated_at: nowIso
+  }];
 
-        await fetch(
-          `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(baseWeek.id)}`,
-          { method: 'PATCH', headers: { ...sbHeaders(env), Prefer: 'return-minimal' }, body: JSON.stringify({ timesheet_id: ts.timesheet_id, status: 'SUBMITTED', updated_at: nowIso }) }
-        ).catch(() => {});
-        baseWeek.timesheet_id = ts.timesheet_id;
-      }
+  const ins = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets`,
+    { method: 'POST', headers: { ...sbHeaders(env), Prefer: 'return=representation' }, body: JSON.stringify(tsPayload) }
+  );
+  const txt = await ins.text().catch(() => '');
+  if (!ins.ok) {
+    addFail(
+      previewGroupId,
+      actionUpper,
+      `timesheets insert failed (base): ${txt || ins.status}`,
+      { booking_id: bookingId, attempted_version: nextVersion }
+    );
+    continue;
+  }
+  const j = txt ? JSON.parse(txt) : [];
+  ts = Array.isArray(j) ? j[0] : j;
+
+  if (!ts?.timesheet_id) {
+    addFail(previewGroupId, actionUpper, 'timesheets insert returned no timesheet_id (base)');
+    continue;
+  }
+
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(baseWeek.id)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+      body: JSON.stringify({ timesheet_id: ts.timesheet_id, status: 'SUBMITTED', updated_at: nowIso })
+    }
+  ).catch(() => {});
+  baseWeek.timesheet_id = ts.timesheet_id;
+}
+
 
       if (!ts?.timesheet_id) {
         addFail(previewGroupId, actionUpper, 'Base timesheet missing timesheet_id after ensure/create');
