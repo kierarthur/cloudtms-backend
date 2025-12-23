@@ -1,14 +1,44 @@
+BEGIN;
+
+-- =========================================================
+-- CONTRACT ROUTE OVERRIDES (minimal + non-duplicating)
+-- =========================================================
+
+ALTER TABLE public.contracts
+  ADD COLUMN IF NOT EXISTS is_nhsp boolean,
+  ADD COLUMN IF NOT EXISTS autoprocess_hr boolean,
+  ADD COLUMN IF NOT EXISTS requires_hr boolean,
+  ADD COLUMN IF NOT EXISTS no_timesheet_required boolean,
+  ADD COLUMN IF NOT EXISTS daily_calc_of_invoices boolean,
+  ADD COLUMN IF NOT EXISTS group_nightsat_sunbh boolean;
+
+-- Optional sanity constraints (safe with NULLs; NULL treated as false)
+ALTER TABLE public.contracts
+  DROP CONSTRAINT IF EXISTS contracts_route_one_source_chk;
+
+ALTER TABLE public.contracts
+  ADD CONSTRAINT contracts_route_one_source_chk
+  CHECK (
+    (CASE WHEN COALESCE(is_nhsp, false) THEN 1 ELSE 0 END) +
+    (CASE WHEN COALESCE(autoprocess_hr, false) THEN 1 ELSE 0 END)
+    <= 1
+  );
+
+ALTER TABLE public.contracts
+  DROP CONSTRAINT IF EXISTS contracts_no_ts_requires_hr_chk;
+
+ALTER TABLE public.contracts
+  ADD CONSTRAINT contracts_no_ts_requires_hr_chk
+  CHECK (
+    COALESCE(no_timesheet_required, false) = false
+    OR COALESCE(autoprocess_hr, false) = true
+  );
+
+
+
 -- =========================================================
 -- UPDATED: v_timesheets_summary_base + v_timesheets_summary
--- Fixes WEEKLY reference gating for schedule-driven MANUAL weeks:
--- - Reference now comes from per-shift ref_num in timesheets.actual_schedule_json
--- - day_references_json remains only for non-MANUAL weekly (legacy/imports)
--- - ready_to_pay reference gate updated accordingly
---
--- NEW (this change): NHSP filter must include planned weeks for NHSP clients.
--- - Add client_hr.is_nhsp
--- - Carry client_is_nhsp into ts_base + planned_weeks
--- - route_type: treat WEEKLY + client_is_nhsp as WEEKLY_NHSP (no new route type)
+-- (contract flags preferred; fallback to client_settings)
 -- =========================================================
 
 CREATE OR REPLACE VIEW public.v_timesheets_summary_base AS
@@ -86,7 +116,7 @@ client_hr AS (
     bool_or(cs.invoice_reference_required) AS invoice_reference_required,
     bool_or(cs.hr_validation_required) AS hr_validation_required,
     bool_or(cs.ts_reference_required) AS ts_reference_required,
-    bool_or(cs.is_nhsp) AS is_nhsp                         -- ✅ NEW
+    bool_or(cs.is_nhsp) AS is_nhsp
   FROM client_settings cs
   GROUP BY cs.client_id
 ),
@@ -134,14 +164,17 @@ ts_base AS (
     ts.qr_status,
     COALESCE(pa.pay_adjustment_count, 0) AS pay_adjustment_count,
 
-    COALESCE(ch.autoprocess_hr, false) AS client_autoprocess_hr,
-    COALESCE(ch.requires_hr, false) AS client_requires_hr,
-    COALESCE(ch.no_timesheet_required, false) AS client_no_timesheet_required,
+    -- Effective route flags: contract override (if set) wins, else client_settings
+    COALESCE(ct.autoprocess_hr, ch.autoprocess_hr, false) AS client_autoprocess_hr,
+    COALESCE(ct.requires_hr, ch.requires_hr, false) AS client_requires_hr,
+    COALESCE(ct.no_timesheet_required, ch.no_timesheet_required, false) AS client_no_timesheet_required,
+
     COALESCE(ch.pay_reference_required, false) AS client_pay_reference_required,
     COALESCE(ch.invoice_reference_required, false) AS client_invoice_reference_required,
     COALESCE(ch.hr_validation_required, false) AS client_hr_validation_required,
     COALESCE(ch.ts_reference_required, false) AS client_ts_reference_required,
-    COALESCE(ch.is_nhsp, false) AS client_is_nhsp,          -- ✅ NEW
+
+    COALESCE(ct.is_nhsp, ch.is_nhsp, false) AS client_is_nhsp,
 
     tf.has_rate_issue,
     tf.has_pay_channel_issue,
@@ -152,7 +185,7 @@ ts_base AS (
     ts.reference_number,
     ts.day_references_json,
 
-    -- ✅ NEW (internal only): schedule JSON used for per-shift refs in WEEKLY MANUAL
+    -- schedule JSON used for per-shift refs in WEEKLY MANUAL
     ts.actual_schedule_json,
 
     ts.r2_nurse_key,
@@ -256,14 +289,17 @@ planned_weeks AS (
 
     0 AS pay_adjustment_count,
 
-    COALESCE(ch.autoprocess_hr, false) AS client_autoprocess_hr,
-    COALESCE(ch.requires_hr, false) AS client_requires_hr,
-    COALESCE(ch.no_timesheet_required, false) AS client_no_timesheet_required,
+    -- Effective route flags for planned stubs too
+    COALESCE(ct.autoprocess_hr, ch.autoprocess_hr, false) AS client_autoprocess_hr,
+    COALESCE(ct.requires_hr, ch.requires_hr, false) AS client_requires_hr,
+    COALESCE(ct.no_timesheet_required, ch.no_timesheet_required, false) AS client_no_timesheet_required,
+
     COALESCE(ch.pay_reference_required, false) AS client_pay_reference_required,
     COALESCE(ch.invoice_reference_required, false) AS client_invoice_reference_required,
     COALESCE(ch.hr_validation_required, false) AS client_hr_validation_required,
     COALESCE(ch.ts_reference_required, false) AS client_ts_reference_required,
-    COALESCE(ch.is_nhsp, false) AS client_is_nhsp,          -- ✅ NEW
+
+    COALESCE(ct.is_nhsp, ch.is_nhsp, false) AS client_is_nhsp,
 
     false AS has_rate_issue,
     false AS has_pay_channel_issue,
@@ -346,8 +382,7 @@ with_issues AS (
                 CASE
                   WHEN ar.hr_crosscheck_status = 'HOURS_MISMATCH_HR'::text OR ar.hr_crosscheck_issues && ARRAY['HOURS_MISMATCH_HR'::text]
                     THEN ARRAY['Hours mismatch HR'::text]
-                  ELSE ARRAY[]::text[]
-                END
+                  ELSE ARRAY[]::text[] END
               ) ||
               CASE WHEN ar.hr_crosscheck_issues && ARRAY['HR_HOURS_MISSING'::text] THEN ARRAY['HR hours missing'::text] ELSE ARRAY[]::text[] END
             ) ||
@@ -446,7 +481,7 @@ with_issues AS (
               OR NOT EXISTS (
                 SELECT 1
                 FROM jsonb_each_text(ar.day_references_json) j(k, v)
-                WHERE btrim(j.v) <> ''::text
+                WHERE btrim(j.v) <> ''
               )
             )
           )
@@ -564,7 +599,7 @@ SELECT
                     AND EXISTS (
                       SELECT 1
                       FROM jsonb_each_text(day_references_json) j(k, v)
-                      WHERE btrim(j.v) <> ''::text
+                      WHERE btrim(j.v) <> ''
                     )
                   )
                 )
@@ -621,7 +656,6 @@ SELECT
     WHEN sheet_scope = 'WEEKLY'::timesheet_scope_enum AND basis = 'NHSP_ADJUSTMENT'::timesheet_fin_basis_enum THEN 'WEEKLY_NHSP_ADJUSTMENT'::text
     WHEN sheet_scope = 'WEEKLY'::timesheet_scope_enum AND basis = 'NHSP'::timesheet_fin_basis_enum THEN 'WEEKLY_NHSP'::text
 
-    -- ✅ NEW: planned (or non-tsfin) weekly rows for NHSP clients should still be WEEKLY_NHSP
     WHEN sheet_scope = 'WEEKLY'::timesheet_scope_enum AND client_is_nhsp IS TRUE THEN 'WEEKLY_NHSP'::text
 
     WHEN sheet_scope = 'WEEKLY'::timesheet_scope_enum AND submission_mode = 'ELECTRONIC'::submission_mode_enum THEN 'WEEKLY_ELECTRONIC'::text
@@ -675,10 +709,9 @@ GRANT SELECT ON public.v_timesheets_summary_base TO authenticated;
 GRANT SELECT ON public.v_timesheets_summary      TO authenticated;
 
 
+
 -- =========================================================
 -- UPDATED: v_ts_invoice_precheck
--- Fixes WEEKLY MANUAL invoice reference gating to require per-shift ref_num.
--- Keeps DAILY behaviour (reference_number) unchanged.
 -- =========================================================
 
 CREATE OR REPLACE VIEW public.v_ts_invoice_precheck AS
@@ -747,3 +780,8 @@ SELECT
   END AS precheck_status
 FROM timesheets ts
 LEFT JOIN contracts c ON c.id = ts.contract_id;
+
+GRANT SELECT ON public.v_ts_invoice_precheck TO service_role;
+GRANT SELECT ON public.v_ts_invoice_precheck TO authenticated;
+
+COMMIT;
