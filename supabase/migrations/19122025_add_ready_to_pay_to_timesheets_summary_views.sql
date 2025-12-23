@@ -4,6 +4,11 @@
 -- - Reference now comes from per-shift ref_num in timesheets.actual_schedule_json
 -- - day_references_json remains only for non-MANUAL weekly (legacy/imports)
 -- - ready_to_pay reference gate updated accordingly
+--
+-- NEW (this change): NHSP filter must include planned weeks for NHSP clients.
+-- - Add client_hr.is_nhsp
+-- - Carry client_is_nhsp into ts_base + planned_weeks
+-- - route_type: treat WEEKLY + client_is_nhsp as WEEKLY_NHSP (no new route type)
 -- =========================================================
 
 CREATE OR REPLACE VIEW public.v_timesheets_summary_base AS
@@ -80,7 +85,8 @@ client_hr AS (
     bool_or(cs.pay_reference_required) AS pay_reference_required,
     bool_or(cs.invoice_reference_required) AS invoice_reference_required,
     bool_or(cs.hr_validation_required) AS hr_validation_required,
-    bool_or(cs.ts_reference_required) AS ts_reference_required
+    bool_or(cs.ts_reference_required) AS ts_reference_required,
+    bool_or(cs.is_nhsp) AS is_nhsp                         -- ✅ NEW
   FROM client_settings cs
   GROUP BY cs.client_id
 ),
@@ -135,6 +141,7 @@ ts_base AS (
     COALESCE(ch.invoice_reference_required, false) AS client_invoice_reference_required,
     COALESCE(ch.hr_validation_required, false) AS client_hr_validation_required,
     COALESCE(ch.ts_reference_required, false) AS client_ts_reference_required,
+    COALESCE(ch.is_nhsp, false) AS client_is_nhsp,          -- ✅ NEW
 
     tf.has_rate_issue,
     tf.has_pay_channel_issue,
@@ -256,6 +263,7 @@ planned_weeks AS (
     COALESCE(ch.invoice_reference_required, false) AS client_invoice_reference_required,
     COALESCE(ch.hr_validation_required, false) AS client_hr_validation_required,
     COALESCE(ch.ts_reference_required, false) AS client_ts_reference_required,
+    COALESCE(ch.is_nhsp, false) AS client_is_nhsp,          -- ✅ NEW
 
     false AS has_rate_issue,
     false AS has_pay_channel_issue,
@@ -607,9 +615,15 @@ SELECT
   CASE
     WHEN sheet_scope = 'DAILY'::timesheet_scope_enum AND submission_mode = 'ELECTRONIC'::submission_mode_enum THEN 'DAILY_ELECTRONIC'::text
     WHEN sheet_scope = 'DAILY'::timesheet_scope_enum AND submission_mode = 'MANUAL'::submission_mode_enum THEN 'DAILY_MANUAL'::text
+
     WHEN sheet_scope = 'WEEKLY'::timesheet_scope_enum AND client_autoprocess_hr IS TRUE THEN 'WEEKLY_HEALTHROSTER'::text
-    WHEN sheet_scope = 'WEEKLY'::timesheet_scope_enum AND basis = 'NHSP'::timesheet_fin_basis_enum THEN 'WEEKLY_NHSP'::text
+
     WHEN sheet_scope = 'WEEKLY'::timesheet_scope_enum AND basis = 'NHSP_ADJUSTMENT'::timesheet_fin_basis_enum THEN 'WEEKLY_NHSP_ADJUSTMENT'::text
+    WHEN sheet_scope = 'WEEKLY'::timesheet_scope_enum AND basis = 'NHSP'::timesheet_fin_basis_enum THEN 'WEEKLY_NHSP'::text
+
+    -- ✅ NEW: planned (or non-tsfin) weekly rows for NHSP clients should still be WEEKLY_NHSP
+    WHEN sheet_scope = 'WEEKLY'::timesheet_scope_enum AND client_is_nhsp IS TRUE THEN 'WEEKLY_NHSP'::text
+
     WHEN sheet_scope = 'WEEKLY'::timesheet_scope_enum AND submission_mode = 'ELECTRONIC'::submission_mode_enum THEN 'WEEKLY_ELECTRONIC'::text
     WHEN sheet_scope = 'WEEKLY'::timesheet_scope_enum AND submission_mode = 'MANUAL'::submission_mode_enum THEN 'WEEKLY_MANUAL'::text
     ELSE 'UNKNOWN'::text
