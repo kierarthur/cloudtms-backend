@@ -19360,27 +19360,39 @@ async function handleNhspApply(env, req, importId) {
     }
   ).catch(() => {});
 
-  const tsPayload = [{
-    booking_id: bookingId,
-    version: nextVersion,               // ✅ FIXED
-    is_current: true,
-    status: 'RECEIVED',
-    sheet_scope: 'WEEKLY',
-    submission_mode: 'MANUAL',
-    line_type: 'HOURS',
-    occupant_key_norm: occupantKeyNorm,
-    hospital_norm: hospitalNorm,
-    ward_norm: wardNorm,
-    job_title_norm: jobTitleNorm,
-    shift_label_norm: 'weekly',
-    week_ending_date: weekEndingDate,
-    contract_id: contract.id,
-    manual_pdf_r2_key: null,
-    actual_schedule_json: [],
-    authorised_at_server: null,
-    created_at: nowIso,
-    updated_at: nowIso
-  }];
+ const tsPayload = [{
+  booking_id: bookingId,
+  version: nextVersion,
+  is_current: true,
+  status: 'RECEIVED',
+  sheet_scope: 'WEEKLY',
+  submission_mode: 'MANUAL',
+  line_type: 'HOURS',
+  occupant_key_norm: occupantKeyNorm,
+  hospital_norm: hospitalNorm,
+  ward_norm: wardNorm,
+  job_title_norm: jobTitleNorm,
+  shift_label_norm: 'weekly',
+  week_ending_date: weekEndingDate,
+  contract_id: contract.id,
+
+  manual_pdf_r2_key: null,
+  actual_schedule_json: [],
+  authorised_at_server: null,
+
+  // ✅ FIX: imports must NEVER default into QR mode
+  qr_status: null,
+  qr_token: null,
+  qr_generated_at: null,
+  qr_scanned_at: null,
+  qr_scan_info_json: null,
+  qr_r2_key: null,
+  qr_payload_json: {},
+
+  created_at: nowIso,
+  updated_at: nowIso
+}];
+
 
   const insTs = await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheets`,
@@ -20798,29 +20810,39 @@ async function handleHrAutoprocessApply(env, req, importId) {
       })
     }
   ).catch(() => {});
+// AFTER (fixed – explicitly force “non-QR” on import-created timesheets)
+const tsPayload = [{
+  booking_id: bookingId,
+  version: nextVersion,
+  is_current: true,
+  status: 'RECEIVED',
+  sheet_scope: 'WEEKLY',
+  submission_mode: 'MANUAL',
+  line_type: 'HOURS',
+  occupant_key_norm: occupantKeyNorm,
+  hospital_norm: hospitalNorm,
+  ward_norm: wardNorm,
+  job_title_norm: jobTitleNorm,
+  shift_label_norm: 'weekly',
+  week_ending_date: weekEndingDate,
+  contract_id: contract.id,
 
-  const tsPayload = [{
-    booking_id: bookingId,
-    version: nextVersion,              // ✅ FIXED
-    is_current: true,
-    status: 'RECEIVED',
-    sheet_scope: 'WEEKLY',
-    submission_mode: 'MANUAL',
-    line_type: 'HOURS',
-    occupant_key_norm: occupantKeyNorm,
-    hospital_norm: hospitalNorm,
-    ward_norm: wardNorm,
-    job_title_norm: jobTitleNorm,
-    shift_label_norm: 'weekly',
-    week_ending_date: weekEndingDate,
-    contract_id: contract.id,
-    manual_pdf_r2_key: null,
-    actual_schedule_json: [],
-    authorised_at_server: null,
-    created_at: nowIso,
-    updated_at: nowIso
-  }];
+  manual_pdf_r2_key: null,
+  actual_schedule_json: [],
+  authorised_at_server: null,
 
+  // ✅ FIX: imports must NEVER default into QR mode
+  qr_status: null,
+  qr_token: null,
+  qr_generated_at: null,
+  qr_scanned_at: null,
+  qr_scan_info_json: null,
+  qr_r2_key: null,
+  qr_payload_json: {},
+
+  created_at: nowIso,
+  updated_at: nowIso
+}];
   const ins = await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheets`,
     { method: 'POST', headers: { ...sbHeaders(env), Prefer: 'return=representation' }, body: JSON.stringify(tsPayload) }
