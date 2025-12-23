@@ -4677,6 +4677,35 @@ async function handleContractWeekSwitchMode(env, req, weekId) {
   if (!cw) return withCORS(env, req, notFound('Week not found'));
   if (cw.timesheet_id) return withCORS(env, req, badRequest('Cannot switch mode for a week with a timesheet'));
 
+  // ✅ NEW: backend defence-in-depth — block import-authoritative planned weeks from mode switching
+  const isImportAuthoritativeMode = (weeklyMode, hrWeeklyBehaviour) => {
+    const wm = String(weeklyMode || '').toUpperCase();
+    const hb = String(hrWeeklyBehaviour || '').toUpperCase();
+    return (wm === 'NHSP') || (wm === 'HEALTHROSTER' && hb === 'CREATE');
+  };
+
+  try {
+    const contractId = cw.contract_id || null;
+    if (contractId) {
+      const ctr = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/contracts` +
+          `?id=eq.${enc(contractId)}` +
+          `&select=id,weekly_mode,hr_weekly_behaviour` +
+          `&limit=1`
+      );
+      if (ctr && isImportAuthoritativeMode(ctr.weekly_mode, ctr.hr_weekly_behaviour)) {
+        return withCORS(
+          env,
+          req,
+          badRequest('Import-authoritative weeks (NHSP / HealthRoster weekly CREATE) cannot switch planned submission mode')
+        );
+      }
+    }
+  } catch {
+    // fail-open if contract flags cannot be loaded
+  }
+
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
 
@@ -7694,19 +7723,22 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     const now2 = nowIso();
 
     try {
-      const qrRes = await generateAndStoreTimesheetQr(env, {
-        timesheet_id: currentTimesheetId,
-        contract_week_id: null,
-        contract_id: updatedTs?.contract_id || ts.contract_id || null,
-        candidate_id: updatedTs?.candidate_id || ts.candidate_id || null,
-        client_id: finAfter.client_id || updatedTs?.client_id || ts.client_id || null,
-        week_ending_ymd: null
-      });
-      qr_r2_key = qrRes?.qr_r2_key || null;
+   // token FIRST
+qrToken = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+  ? crypto.randomUUID()
+  : `${currentTimesheetId}:${Date.now()}`;
 
-      qrToken = (typeof crypto !== 'undefined' && crypto.randomUUID)
-        ? crypto.randomUUID()
-        : `${currentTimesheetId}:${Date.now()}`;
+const qrRes = await generateAndStoreTimesheetQr(env, {
+  timesheet_id: currentTimesheetId,
+  contract_week_id: null,
+  contract_id: updatedTs?.contract_id || ts.contract_id || null,
+  candidate_id: updatedTs?.candidate_id || ts.candidate_id || null,
+  client_id: finAfter.client_id || updatedTs?.client_id || ts.client_id || null,
+  week_ending_ymd: null,
+  qr_token: qrToken
+});
+qr_r2_key = qrRes?.qr_r2_key || null;
+
 
       const workedDateYmd =
         updatedTs?.worked_start_iso ? (toLocalParts(updatedTs.worked_start_iso, null)?.ymd || String(updatedTs.worked_start_iso).slice(0,10))
@@ -10645,16 +10677,17 @@ async function handleTimesheetsSubmitWeekly(env, req) {
       {
         method: 'PATCH',
         headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify({
-          qr_token: qrToken,
-          qr_status: 'PENDING',
-          qr_generated_at: now,
-          qr_scanned_at: null,
-          qr_scan_info_json: null,
-          qr_payload_json: qrPayload,
-          qr_r2_key: qr_r2_key || null,
-          updated_at: now
-        })
+     body: JSON.stringify({
+  qr_token: qrToken,
+  qr_status: 'PENDING',
+  qr_generated_at: now,
+  qr_scanned_at: null,
+  qr_scan_info_json: null,
+  // qr_payload_json: (leave as TSQ1 payload set by generateAndStoreTimesheetQr)
+  qr_r2_key: qr_r2_key || null,
+  updated_at: now
+})
+
       }
     ).catch(() => {});
 
@@ -10779,7 +10812,6 @@ async function handleTimesheetsSubmitWeekly(env, req) {
   return withCORS(env, req, ok({ key, upload_url, token, expires_in: 3600 }));
 }
 
-
 async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -10823,6 +10855,48 @@ async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
 
   const bookingId = ts.booking_id || resolved.booking_id || null;
   if (!bookingId) return withCORS(env, req, badRequest('Timesheet booking_id is missing; cannot version'));
+
+  // ✅ NEW: backend defence-in-depth — block import-authoritative routes
+  const isImportAuthoritativeMode = (weeklyMode, hrWeeklyBehaviour) => {
+    const wm = String(weeklyMode || '').toUpperCase();
+    const hb = String(hrWeeklyBehaviour || '').toUpperCase();
+    return (wm === 'NHSP') || (wm === 'HEALTHROSTER' && hb === 'CREATE');
+  };
+
+  try {
+    // Prefer contract via contract_week pointer (weekly), fallback to ts.contract_id
+    let contractId = ts.contract_id || null;
+
+    try {
+      const cwRow = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+          `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+          `&select=contract_id` +
+          `&limit=1`
+      );
+      if (cwRow?.contract_id) contractId = cwRow.contract_id;
+    } catch {}
+
+    if (contractId) {
+      const ctr = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/contracts` +
+          `?id=eq.${enc(contractId)}` +
+          `&select=id,weekly_mode,hr_weekly_behaviour` +
+          `&limit=1`
+      );
+      if (ctr && isImportAuthoritativeMode(ctr.weekly_mode, ctr.hr_weekly_behaviour)) {
+        return withCORS(
+          env,
+          req,
+          badRequest('Import-authoritative timesheets (NHSP / HealthRoster weekly CREATE) cannot change submission route')
+        );
+      }
+    }
+  } catch {
+    // fail-open if flags cannot be loaded
+  }
 
   const scope = String(ts.sheet_scope || '').toUpperCase();
   if (scope && scope !== 'WEEKLY' && scope !== 'DAILY') {
@@ -11046,6 +11120,48 @@ async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
   const bookingId = ts.booking_id || resolved.booking_id || null;
   if (!bookingId) return withCORS(env, req, badRequest('Timesheet booking_id is missing; cannot version'));
 
+  // ✅ NEW: backend defence-in-depth — block import-authoritative routes
+  const isImportAuthoritativeMode = (weeklyMode, hrWeeklyBehaviour) => {
+    const wm = String(weeklyMode || '').toUpperCase();
+    const hb = String(hrWeeklyBehaviour || '').toUpperCase();
+    return (wm === 'NHSP') || (wm === 'HEALTHROSTER' && hb === 'CREATE');
+  };
+
+  try {
+    // Prefer contract via contract_week pointer (weekly), fallback to ts.contract_id
+    let contractId = ts.contract_id || null;
+
+    try {
+      const cwRow = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+          `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+          `&select=contract_id` +
+          `&limit=1`
+      );
+      if (cwRow?.contract_id) contractId = cwRow.contract_id;
+    } catch {}
+
+    if (contractId) {
+      const ctr = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/contracts` +
+          `?id=eq.${enc(contractId)}` +
+          `&select=id,weekly_mode,hr_weekly_behaviour` +
+          `&limit=1`
+      );
+      if (ctr && isImportAuthoritativeMode(ctr.weekly_mode, ctr.hr_weekly_behaviour)) {
+        return withCORS(
+          env,
+          req,
+          badRequest('Import-authoritative timesheets (NHSP / HealthRoster weekly CREATE) cannot use Allow electronic again')
+        );
+      }
+    }
+  } catch {
+    // fail-open if flags cannot be loaded
+  }
+
   // Lock guard
   const fin = await sbGetOne(
     env,
@@ -11265,6 +11381,7 @@ async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
   }));
 }
 
+
 async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -11308,6 +11425,48 @@ async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
 
   const bookingId = ts.booking_id || resolved.booking_id || null;
   if (!bookingId) return withCORS(env, req, badRequest('Timesheet booking_id is missing; cannot version'));
+
+  // ✅ NEW: backend defence-in-depth — block import-authoritative routes
+  const isImportAuthoritativeMode = (weeklyMode, hrWeeklyBehaviour) => {
+    const wm = String(weeklyMode || '').toUpperCase();
+    const hb = String(hrWeeklyBehaviour || '').toUpperCase();
+    return (wm === 'NHSP') || (wm === 'HEALTHROSTER' && hb === 'CREATE');
+  };
+
+  try {
+    // Prefer contract via contract_week pointer (weekly), fallback to ts.contract_id
+    let contractId = ts.contract_id || null;
+
+    try {
+      const cwRow = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+          `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+          `&select=contract_id` +
+          `&limit=1`
+      );
+      if (cwRow?.contract_id) contractId = cwRow.contract_id;
+    } catch {}
+
+    if (contractId) {
+      const ctr = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/contracts` +
+          `?id=eq.${enc(contractId)}` +
+          `&select=id,weekly_mode,hr_weekly_behaviour` +
+          `&limit=1`
+      );
+      if (ctr && isImportAuthoritativeMode(ctr.weekly_mode, ctr.hr_weekly_behaviour)) {
+        return withCORS(
+          env,
+          req,
+          badRequest('Import-authoritative timesheets (NHSP / HealthRoster weekly CREATE) cannot use Allow QR again')
+        );
+      }
+    }
+  } catch {
+    // fail-open if flags cannot be loaded
+  }
 
   // Lock guard (current TSFIN row for current PK)
   const fin = await sbGetOne(
@@ -11490,6 +11649,9 @@ async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
     was_stale: !!resolved.was_stale
   }));
 }
+
+
+
 async function handleTimesheetSwitchToManual(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -11550,6 +11712,36 @@ async function handleTimesheetSwitchToManual(env, req, timesheetId) {
       `&limit=1`
   );
   if (!cw) return withCORS(env, req, badRequest('Timesheet not linked to a contract week'));
+
+  // ✅ NEW: backend defence-in-depth — block import-authoritative conversions
+  const isImportAuthoritativeMode = (weeklyMode, hrWeeklyBehaviour) => {
+    const wm = String(weeklyMode || '').toUpperCase();
+    const hb = String(hrWeeklyBehaviour || '').toUpperCase();
+    return (wm === 'NHSP') || (wm === 'HEALTHROSTER' && hb === 'CREATE');
+  };
+
+  try {
+    const contractId = cw.contract_id || ts.contract_id || null;
+    if (contractId) {
+      const ctr = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/contracts` +
+          `?id=eq.${enc(contractId)}` +
+          `&select=id,weekly_mode,hr_weekly_behaviour` +
+          `&limit=1`
+      );
+      if (ctr && isImportAuthoritativeMode(ctr.weekly_mode, ctr.hr_weekly_behaviour)) {
+        return withCORS(
+          env,
+          req,
+          badRequest('Import-authoritative timesheets (NHSP / HealthRoster weekly CREATE) cannot be converted to manual')
+        );
+      }
+    }
+  } catch {
+    // If we can't load contract flags, do not block here (fail-open).
+    // Frontend + other guards still exist; backend enforcement applies when flags are detectable.
+  }
 
   const tsfin = await sbGetOne(
     env,
@@ -11984,6 +12176,48 @@ export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
   const bookingId = current.booking_id || resolved.booking_id || null;
   if (!bookingId) return withCORS(env, req, badRequest('Timesheet booking_id is missing; cannot revert'));
 
+  // ✅ NEW: backend defence-in-depth — block import-authoritative routes
+  const isImportAuthoritativeMode = (weeklyMode, hrWeeklyBehaviour) => {
+    const wm = String(weeklyMode || '').toUpperCase();
+    const hb = String(hrWeeklyBehaviour || '').toUpperCase();
+    return (wm === 'NHSP') || (wm === 'HEALTHROSTER' && hb === 'CREATE');
+  };
+
+  try {
+    // Prefer contract via contract_week pointer (weekly), fallback to current.contract_id
+    let contractId = current.contract_id || null;
+
+    try {
+      const cwRow = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+          `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+          `&select=contract_id` +
+          `&limit=1`
+      );
+      if (cwRow?.contract_id) contractId = cwRow.contract_id;
+    } catch {}
+
+    if (contractId) {
+      const ctr = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/contracts` +
+          `?id=eq.${enc(contractId)}` +
+          `&select=id,weekly_mode,hr_weekly_behaviour` +
+          `&limit=1`
+      );
+      if (ctr && isImportAuthoritativeMode(ctr.weekly_mode, ctr.hr_weekly_behaviour)) {
+        return withCORS(
+          env,
+          req,
+          badRequest('Import-authoritative timesheets (NHSP / HealthRoster weekly CREATE) cannot change submission route')
+        );
+      }
+    }
+  } catch {
+    // fail-open if flags cannot be loaded
+  }
+
   // Load all versions by booking_id
   const { rows: tsRows } = await sbFetch(
     env,
@@ -12148,6 +12382,7 @@ export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
     was_stale: !!resolved.was_stale
   }));
 }
+
 
  async function handleTimesheetPresignExpensePdf(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']); // backoffice presign; workers can use public files if needed
@@ -49520,7 +49755,6 @@ async function generateAndStoreTimesheetQr(env, {
 
   return { qrText, qr_r2_key };
 }
-
 async function handleTimesheetQrResendEmail(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -49552,7 +49786,7 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
   }
 
   // Load current timesheet
-  const ts = await sbGetOne(
+  let ts = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
       `?timesheet_id=eq.${enc(currentTimesheetId)}` +
@@ -49562,48 +49796,28 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
   );
   if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
 
-  const qrStatus = String(ts.qr_status || '').toUpperCase();
-  const hasToken = !!(ts.qr_token && String(ts.qr_token).trim());
-  const hasGeneratedAt = !!ts.qr_generated_at;
-  const scannedAt = ts.qr_scanned_at || null;
+  let qrStatus = String(ts.qr_status || '').toUpperCase();
+  let hasToken = !!(ts.qr_token && String(ts.qr_token).trim());
+  let hasGeneratedAt = !!ts.qr_generated_at;
+  let scannedAt = ts.qr_scanned_at || null;
 
   if (qrStatus === 'EXPIRED') {
     return withCORS(env, req, badRequest('QR is expired; reissue required'));
   }
   if (qrStatus !== 'PENDING') {
-    return withCORS(env, req, badRequest(`QR resend not allowed (qr_status=${qrStatus || 'NULL'})`));
-  }
-  // Scenario 2 requirements
-  if (!hasToken || !hasGeneratedAt || scannedAt) {
-    return withCORS(env, req, badRequest('QR resend requires Scenario 2 (PENDING + token + generated_at + not scanned)'));
+    return withCORS(env, req, badRequest(`QR send not allowed (qr_status=${qrStatus || 'NULL'})`));
   }
 
-  // Ensure we have a PDF to attach
-  let pdfKey = ts.manual_pdf_r2_key || null;
-  if (!pdfKey) {
-    try {
-      pdfKey = await ensureTimesheetPdf(env, currentTimesheetId);
-      if (pdfKey) {
-        await fetch(
-          `${env.SUPABASE_URL}/rest/v1/timesheets` +
-            `?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
-          {
-            method: 'PATCH',
-            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-            body: JSON.stringify({ manual_pdf_r2_key: pdfKey, updated_at: nowIso() })
-          }
-        ).catch(() => {});
-      }
-    } catch (e) {
-      return withCORS(env, req, serverError('Failed to prepare timesheet PDF for resend'));
-    }
+  const isScenario2 = (hasToken && hasGeneratedAt && !scannedAt);
+  const isScenario1 = (!scannedAt && (!hasToken || !hasGeneratedAt));
+
+  if (!isScenario1 && !isScenario2) {
+    return withCORS(env, req, badRequest('QR send not allowed in current state'));
   }
 
-  if (!pdfKey) return withCORS(env, req, serverError('No PDF available to resend'));
-
-  // Resolve candidate email via contract
+  // Resolve contract + candidate email first (needed for both issue + resend)
   if (!ts.contract_id) {
-    return withCORS(env, req, badRequest('Cannot resend: timesheet.contract_id is missing'));
+    return withCORS(env, req, badRequest('Cannot send: timesheet.contract_id is missing'));
   }
 
   const contract = await sbGetOne(
@@ -49613,7 +49827,7 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
       `&select=id,candidate_id,client_id` +
       `&limit=1`
   );
-  if (!contract) return withCORS(env, req, badRequest('Cannot resend: contract not found'));
+  if (!contract) return withCORS(env, req, badRequest('Cannot send: contract not found'));
 
   const cand = contract.candidate_id
     ? await sbGetOne(
@@ -49627,6 +49841,93 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
 
   const toEmail = cand?.email ? String(cand.email).trim() : null;
   if (!toEmail) return withCORS(env, req, badRequest('Candidate email not found'));
+
+  // ✅ Scenario 1: ISSUE first (create token + QR image + mark generated_at + keep qr_payload_json from TSQ1)
+  if (isScenario1) {
+    const now2 = nowIso();
+
+    let qrToken;
+    try {
+      qrToken = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+        ? crypto.randomUUID()
+        : `${currentTimesheetId}:${Date.now()}`;
+    } catch {
+      qrToken = `${currentTimesheetId}:${Date.now()}`;
+    }
+
+    // Generate/store QR PNG + patch qr_payload_json (TSQ1 payload) + qr_r2_key
+    let qrRes = null;
+    try {
+      qrRes = await generateAndStoreTimesheetQr(env, {
+        timesheet_id: currentTimesheetId,
+        contract_week_id: null,
+        contract_id: contract.id,
+        candidate_id: contract.candidate_id || null,
+        client_id: contract.client_id || null,
+        week_ending_ymd: (String(ts.sheet_scope || '').toUpperCase() === 'WEEKLY')
+          ? (ts.week_ending_date || null)
+          : null,
+        qr_token: qrToken
+      });
+    } catch (e) {
+      return withCORS(env, req, serverError(`Failed to generate QR: ${e?.message || e}`));
+    }
+
+    // Patch metadata fields on current timesheet (do NOT overwrite qr_payload_json)
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&is_current=eq.true`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify({
+          is_qr: true,
+          qr_token: qrToken,
+          qr_status: 'PENDING',
+          qr_generated_at: now2,
+          qr_scanned_at: null,
+          qr_scan_info_json: null,
+          qr_r2_key: qrRes?.qr_r2_key || null,
+          updated_at: now2
+        })
+      }
+    ).catch(() => {});
+
+    // Reload TS so the downstream logic sees the issued state (optional but safer)
+    ts = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&is_current=eq.true` +
+        `&select=*` +
+        `&limit=1`
+    );
+  }
+
+  // Ensure we have a PDF to attach (now after issuance so QR can appear in PDF)
+  let pdfKey = ts.manual_pdf_r2_key || null;
+  if (!pdfKey) {
+    try {
+      pdfKey = await ensureTimesheetPdf(env, currentTimesheetId);
+      if (pdfKey) {
+        await fetch(
+          `${env.SUPABASE_URL}/rest/v1/timesheets` +
+            `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+            `&is_current=eq.true`,
+          {
+            method: 'PATCH',
+            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+            body: JSON.stringify({ manual_pdf_r2_key: pdfKey, updated_at: nowIso() })
+          }
+        ).catch(() => {});
+      }
+    } catch (e) {
+      return withCORS(env, req, serverError('Failed to prepare timesheet PDF for send'));
+    }
+  }
+
+  if (!pdfKey) return withCORS(env, req, serverError('No PDF available to send'));
 
   const scope = String(ts.sheet_scope || '').toUpperCase();
   const dateLabel =
@@ -49669,7 +49970,7 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
 
   if (!insert.ok) {
     const t = await insert.text().catch(() => '');
-    return withCORS(env, req, serverError(`Failed to queue resend email: ${t}`));
+    return withCORS(env, req, serverError(`Failed to queue QR email: ${t}`));
   }
 
   // Audit
