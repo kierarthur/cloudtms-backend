@@ -39,6 +39,14 @@ ALTER TABLE public.contracts
 -- =========================================================
 -- UPDATED: v_timesheets_summary_base + v_timesheets_summary
 -- (contract flags preferred; fallback to client_settings)
+--
+-- FIXES INCLUDED:
+--   1) Expose client_no_timesheet_required (and other effective fields)
+--      by APPENDING them at the END of v_timesheets_summary_base projection.
+--   2) Keep v_timesheets_summary column order stable by NOT using v.*,
+--      and by keeping the existing contract_id column position unchanged.
+--   3) Improve contract_id resolution for DAILY rows in v_timesheets_summary
+--      via COALESCE(timesheets.contract_id, contract_weeks.contract_id).
 -- =========================================================
 
 CREATE OR REPLACE VIEW public.v_timesheets_summary_base AS
@@ -693,15 +701,97 @@ SELECT
   hr_crosscheck_status,
   hr_crosscheck_issues,
   external_source_rows_json,
-  issue_codes
+  issue_codes,
+
+  -- ✅ APPENDED NEW COLUMNS (safe for CREATE OR REPLACE VIEW)
+  client_requires_hr,
+  client_no_timesheet_required,
+  client_is_nhsp,
+
+  client_pay_reference_required,
+  client_invoice_reference_required,
+  client_hr_validation_required,
+  client_ts_reference_required,
+
+  require_reference_to_pay,
+  require_reference_to_invoice
 FROM with_issues;
 
+
+-- IMPORTANT:
+-- We do NOT use "SELECT v.*, ..." here, because adding new columns to base would
+-- insert columns BEFORE the existing last column "contract_id" and break CREATE OR REPLACE.
+-- So we explicitly project the original columns in the original order,
+-- keep contract_id in the same position, then append new columns after.
 CREATE OR REPLACE VIEW public.v_timesheets_summary AS
 SELECT
-  v.*,
-  cw.contract_id
+  v.timesheet_id,
+  v.timesheet_status,
+  v.week_ending_date,
+  v.booking_id,
+  v.occupant_key_norm,
+  v.hospital_norm,
+  v.sheet_scope,
+  v.submission_mode,
+  v.authorised_at_server,
+  v.candidate_id,
+  v.client_id,
+  v.pay_method,
+  v.processing_status,
+  v.basis,
+  v.total_hours,
+  v.total_pay_ex_vat,
+  v.total_charge_ex_vat,
+  v.margin_ex_vat,
+  v.paid_at_utc,
+  v.pay_on_hold,
+  v.ready_to_pay,
+  v.locked_by_invoice_id,
+  v.candidate_name,
+  v.client_name,
+  v.nhsp_shift_count,
+  v.nhsp_shift_included_count,
+  v.nhsp_shift_deferred_count,
+  v.validation_status,
+  v.summary_stage,
+  v.route_type,
+  v.contract_week_id,
+  v.contract_week_ending_date,
+  v.contract_week_status,
+  v.additional_seq,
+  v.is_adjustment,
+  v.qr_status,
+  v.pay_adjustment_count,
+  v.has_pay_adjustments,
+  v.is_adjusted,
+  v.is_qr,
+  v.needs_attention,
+  v.client_autoprocess_hr,
+  v.has_rate_issue,
+  v.has_pay_channel_issue,
+  v.hr_crosscheck_status,
+  v.hr_crosscheck_issues,
+  v.external_source_rows_json,
+  v.issue_codes,
+
+  -- ✅ contract_id kept in the same position as before, but resolved for DAILY rows too
+  COALESCE(ts2.contract_id, cw.contract_id) AS contract_id,
+
+  -- ✅ appended new columns (safe)
+  v.client_requires_hr,
+  v.client_no_timesheet_required,
+  v.client_is_nhsp,
+
+  v.client_pay_reference_required,
+  v.client_invoice_reference_required,
+  v.client_hr_validation_required,
+  v.client_ts_reference_required,
+
+  v.require_reference_to_pay,
+  v.require_reference_to_invoice
 FROM public.v_timesheets_summary_base v
-LEFT JOIN public.contract_weeks cw ON cw.id = v.contract_week_id;
+LEFT JOIN public.contract_weeks cw ON cw.id = v.contract_week_id
+LEFT JOIN public.timesheets ts2 ON ts2.timesheet_id = v.timesheet_id;
 
 GRANT SELECT ON public.v_timesheets_summary_base TO service_role;
 GRANT SELECT ON public.v_timesheets_summary      TO service_role;
@@ -779,9 +869,13 @@ SELECT
     ELSE 'OK'::text
   END AS precheck_status
 FROM timesheets ts
-LEFT JOIN contracts c ON c.id = ts.contract_id;
+LEFT JOIN contract_weeks cw ON cw.timesheet_id = ts.timesheet_id
+LEFT JOIN contracts c ON c.id = COALESCE(ts.contract_id, cw.contract_id);
 
 GRANT SELECT ON public.v_ts_invoice_precheck TO service_role;
 GRANT SELECT ON public.v_ts_invoice_precheck TO authenticated;
+
+-- Ensure PostgREST sees new columns immediately after commit
+SELECT pg_notify('pgrst', 'reload schema');
 
 COMMIT;
