@@ -393,7 +393,7 @@ async function loadClientTimePolicy(env, clientId) {
   const sunStart   = parseHHMM(toHHMM(src.sun_start,   "00:00"));
   const sunEnd     = parseHHMM(toHHMM(src.sun_end,     "00:00"));
 
-  // BH window (00:00–00:00 = full BH day). Prefer client override, else global.
+  // ✅ BH window (00:00–00:00 = full BH day). Prefer client override, else global.
   const bhStart = parseHHMM(
     toHHMM(
       (cs && cs.bh_start) ||
@@ -411,10 +411,9 @@ async function loadClientTimePolicy(env, clientId) {
     )
   );
 
+  // ✅ BH LIST IS GLOBAL-ONLY (ignore client_settings.bh_list entirely)
   // Normalise BH list (array or JSON string → array → Set)
-  const rawBhList =
-    (cs && cs.bh_list != null ? cs.bh_list : defaults && defaults.bh_list) ??
-    [];
+  const rawBhList = (defaults && defaults.bh_list) ?? [];
 
   let bhListArr = [];
   if (Array.isArray(rawBhList)) {
@@ -444,6 +443,7 @@ async function loadClientTimePolicy(env, clientId) {
     bhList,
   };
 }
+
 
 // ─────────────────────────────────────────────────────────────
 // Shared helper: reference completeness (matches DB view truth)
@@ -681,17 +681,19 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array of 
   const acc = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
 
   // ✅ Self-contained date add helper (avoid relying on a global addDays())
+  // Hardening: always operate on YYYY-MM-DD (slice(0,10)) so BH matching is stable.
   const addDays = (ymd, days) => {
     try {
-      const d = new Date(`${String(ymd)}T00:00:00Z`);
-      if (!Number.isFinite(d.getTime())) return String(ymd || '');
+      const baseYmd = String(ymd || '').slice(0, 10);
+      const d = new Date(`${baseYmd}T00:00:00Z`);
+      if (!Number.isFinite(d.getTime())) return baseYmd || String(ymd || '');
       d.setUTCDate(d.getUTCDate() + Number(days || 0));
       const yyyy = d.getUTCFullYear();
       const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
       const dd   = String(d.getUTCDate()).padStart(2, '0');
       return `${yyyy}-${mm}-${dd}`;
     } catch {
-      return String(ymd || '');
+      return String(ymd || '').slice(0, 10);
     }
   };
 
@@ -712,6 +714,17 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array of 
     }
   };
 
+  // ✅ Date normaliser: enforce YYYY-MM-DD so BH comparisons are reliable.
+  // - Accepts "YYYY-MM-DD", "YYYY-MM-DDTHH:MM:SSZ", etc.
+  // - Returns '' if unusable (caller will skip).
+  const normYmd = (v) => {
+    const s = String(v || '').trim();
+    if (!s) return '';
+    const ymd = s.slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return '';
+    return ymd;
+  };
+
   // Log the policy + contract context once
   logBuckets('policy', {
     client_id: contract.client_id,
@@ -722,17 +735,21 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array of 
   for (const d of (actualDays || [])) {
     if (!d || !d.date || !d.start || !d.end) continue;
 
+    // ✅ Harden date: always bucket against YYYY-MM-DD
+    const ymd = normYmd(d.date);
+    if (!ymd) continue;
+
     const s = parseHHMM(d.start);
     const e = parseHHMM(d.end);
 
     if (s == null || e == null) {
-      throw new Error(`Invalid HH:MM in actual_schedule_json for ${d.date}`);
+      throw new Error(`Invalid HH:MM in actual_schedule_json for ${ymd}`);
     }
 
     const overnight = (e <= s);
 
     logBuckets('day-entry', {
-      date: d.date,
+      date: ymd,
       start: d.start,
       end: d.end,
       parsed_start_min: s,
@@ -743,10 +760,10 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array of 
     });
 
     // Build one or two chunks for this shift (handle overnight)
-    const chunk1 = { date: d.date, from: s, to: overnight ? 1440 : e };
+    const chunk1 = { date: ymd, from: s, to: overnight ? 1440 : e };
     const chunks = [chunk1];
     if (overnight) {
-      const next = addDays(d.date, 1);
+      const next = addDays(ymd, 1);
       chunks.push({ date: next, from: 0, to: e });
     }
 
@@ -778,16 +795,16 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array of 
         const be = parseHHMM(br.end);
         if (bs == null || be == null) {
           logBuckets('break-skip-invalid', {
-            date: d.date,
+            date: ymd,
             break: br
           });
           continue;
         }
 
         const bOver = (be <= bs);
-        const bChunk1 = { date: d.date, from: bs, to: bOver ? 1440 : be };
+        const bChunk1 = { date: ymd, from: bs, to: bOver ? 1440 : be };
         const bChunks = [bChunk1];
-        if (bOver) bChunks.push({ date: addDays(d.date, 1), from: 0, to: be });
+        if (bOver) bChunks.push({ date: addDays(ymd, 1), from: 0, to: be });
 
         // tmp holds break minutes per bucket for this break window
         const tmp = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
@@ -796,7 +813,7 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array of 
         }
 
         logBuckets('break-window', {
-          date: d.date,
+          date: ymd,
           break_start: br.start,
           break_end: br.end,
           parsed_start_min: bs,
@@ -819,7 +836,7 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array of 
         }
 
         logBuckets('break-applied', {
-          date: d.date,
+          date: ymd,
           delta_minutes: diffAfter,
           acc_after: afterAcc
         });
@@ -839,7 +856,7 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array of 
       }
 
       logBuckets('floating-break-applied', {
-        date: d.date,
+        date: ymd,
         break_minutes: mins,
         delta_minutes: diffAfter,
         acc_after: afterAcc
@@ -847,7 +864,7 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array of 
     }
 
     logBuckets('day-summary', {
-      date: d.date,
+      date: ymd,
       acc_after_day: { ...acc }
     });
   }
@@ -855,6 +872,7 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array of 
   logBuckets('final-accumulator', acc);
   return acc;
 }
+
 
 
 // Validate that, within a single timesheet schedule:
@@ -4630,7 +4648,8 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
 
   // ─────────────────────────────────────────────────────────────
   // Additional units (optional)
-  // Persist inside totals_json.additional_units_week (no dedicated column).
+  // Persist inside totals_json.additional_units_week + totals_json.additional_units_per_day
+  // (no dedicated columns).
   // ─────────────────────────────────────────────────────────────
   const normaliseUnitsWeek = (obj) => {
     if (!obj || typeof obj !== 'object') return {};
@@ -4645,7 +4664,92 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
     return out;
   };
 
-  let additionalUnitsWeek = undefined; // undefined = "no change"
+  // Build a Set of valid YYYY-MM-DD dates for this contract_week (for per-day validation)
+  const weekDateSet = (() => {
+    const we = String(cw.week_ending_date || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(we)) return null;
+
+    const addDaysYmd = (ymd, days) => {
+      try {
+        const base = new Date(`${String(ymd)}T00:00:00Z`);
+        if (Number.isNaN(base.getTime())) return null;
+        base.setUTCDate(base.getUTCDate() + Number(days || 0));
+        const yyyy = base.getUTCFullYear();
+        const mm = String(base.getUTCMonth() + 1).padStart(2, '0');
+        const dd = String(base.getUTCDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+      } catch {
+        return null;
+      }
+    };
+
+    const s = new Set();
+    for (let i = 6; i >= 0; i--) {
+      const d = addDaysYmd(we, -i);
+      if (d) s.add(d);
+    }
+    return s;
+  })();
+
+  const normaliseUnitsPerDay = (obj) => {
+    if (!obj || typeof obj !== 'object') return {};
+    const out = {};
+
+    for (const [kRaw, dayMap] of Object.entries(obj)) {
+      const code = String(kRaw || '').toUpperCase().trim();
+      if (!code) continue;
+
+      if (!dayMap || typeof dayMap !== 'object') continue;
+
+      const outDays = {};
+      for (const [dRaw, vRaw] of Object.entries(dayMap)) {
+        const ymd = String(dRaw || '').slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) {
+          throw new Error(`Invalid date '${ymd}' in additional_units_per_day.${code}`);
+        }
+        if (weekDateSet && !weekDateSet.has(ymd)) {
+          throw new Error(`Date '${ymd}' outside week in additional_units_per_day.${code}`);
+        }
+
+        const n = Number(vRaw == null ? 0 : vRaw);
+        if (!Number.isFinite(n) || n < 0) {
+          throw new Error(`Invalid units '${vRaw}' in additional_units_per_day.${code}.${ymd}`);
+        }
+        if (!n) continue; // strip zeros
+
+        outDays[ymd] = n;
+      }
+
+      if (Object.keys(outDays).length) out[code] = outDays;
+    }
+
+    return out;
+  };
+
+  const deriveWeekFromPerDay = (perDayObj) => {
+    const out = {};
+    if (!perDayObj || typeof perDayObj !== 'object') return out;
+
+    for (const [codeRaw, dayMap] of Object.entries(perDayObj)) {
+      const code = String(codeRaw || '').toUpperCase().trim();
+      if (!code) continue;
+      if (!dayMap || typeof dayMap !== 'object') continue;
+
+      let sum = 0;
+      for (const v of Object.values(dayMap)) {
+        const n = Number(v);
+        if (Number.isFinite(n) && n > 0) sum += n;
+      }
+      if (sum > 0) out[code] = sum;
+    }
+
+    return out;
+  };
+
+  let additionalUnitsWeek = undefined;   // undefined = "no change"
+  let additionalUnitsPerDay = undefined; // undefined = "no change"
+
+  // weekly
   if (body && Object.prototype.hasOwnProperty.call(body, 'additional_units_week')) {
     if (body.additional_units_week && typeof body.additional_units_week === 'object') {
       additionalUnitsWeek = normaliseUnitsWeek(body.additional_units_week);
@@ -4663,6 +4767,34 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
     }
   }
 
+  // per-day
+  if (body && Object.prototype.hasOwnProperty.call(body, 'additional_units_per_day')) {
+    if (body.additional_units_per_day && typeof body.additional_units_per_day === 'object') {
+      try {
+        additionalUnitsPerDay = normaliseUnitsPerDay(body.additional_units_per_day);
+      } catch (e) {
+        return withCORS(env, req, badRequest(e?.message || 'Invalid additional_units_per_day'));
+      }
+    } else if (body.additional_units_per_day === null) {
+      additionalUnitsPerDay = {}; // explicit clear
+    } else if (typeof body.additional_units_per_day === 'string') {
+      try {
+        const parsed = JSON.parse(body.additional_units_per_day);
+        if (parsed && typeof parsed === 'object') {
+          try {
+            additionalUnitsPerDay = normaliseUnitsPerDay(parsed);
+          } catch (e) {
+            return withCORS(env, req, badRequest(e?.message || 'Invalid additional_units_per_day'));
+          }
+        }
+      } catch {
+        additionalUnitsPerDay = undefined;
+      }
+    } else {
+      additionalUnitsPerDay = undefined;
+    }
+  }
+
   // Build patch
   const now = nowIso();
 
@@ -4674,8 +4806,11 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
     hours
   };
 
-  // overwrite only if key provided
-  if (additionalUnitsWeek !== undefined) {
+  // If per-day key is provided, derive weekly totals from per-day to keep coherence.
+  if (additionalUnitsPerDay !== undefined) {
+    totals_json.additional_units_per_day = additionalUnitsPerDay;
+    totals_json.additional_units_week = deriveWeekFromPerDay(additionalUnitsPerDay);
+  } else if (additionalUnitsWeek !== undefined) {
     totals_json.additional_units_week = additionalUnitsWeek;
   }
 
@@ -5428,15 +5563,18 @@ if (breaks.length) {
     return withCORS(env, req, badRequest('Missing rate(s) in contract for one or more entered hour buckets'));
   }
 
-  // Additional unit buckets – weekly totals (still supported)
+   // Additional unit buckets – weekly totals (still supported)
   const normaliseUnitsWeek = (obj) => {
     const out = {};
     const src = (obj && typeof obj === 'object') ? obj : {};
     for (const [kRaw, vRaw] of Object.entries(src)) {
       const code = String(kRaw || '').toUpperCase().trim();
       if (!code) continue;
-      const n = Number(vRaw || 0);
-      if (!Number.isFinite(n) || !n) continue;
+
+      const n = Number(vRaw);
+      // ✅ Only allow positive numbers (reject negatives + NaN + 0)
+      if (!Number.isFinite(n) || n <= 0) continue;
+
       out[code] = n;
     }
     return out;
@@ -5449,18 +5587,57 @@ if (breaks.length) {
       const code = String(kRaw || '').toUpperCase().trim();
       if (!code) continue;
       if (!per || typeof per !== 'object') continue;
-      out[code] = { ...per };
+
+      const days = {};
+      for (const [dRaw, vRaw] of Object.entries(per)) {
+        const ymd = String(dRaw || '').slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) continue;
+
+        const n = Number(vRaw);
+        // ✅ Only allow positive numbers (reject negatives + NaN + 0)
+        if (!Number.isFinite(n) || n <= 0) continue;
+
+        days[ymd] = n;
+      }
+
+      if (Object.keys(days).length) out[code] = days;
     }
     return out;
   };
 
-  let unitsWeek = hasUnitsWeekKey
-    ? ((body.additional_units_week && typeof body.additional_units_week === 'object') ? normaliseUnitsWeek(body.additional_units_week) : {})
-    : null;
+  const parseMaybeJsonObj = (v) => {
+    if (v == null) return null;
+    if (typeof v === 'object') return v;
+    if (typeof v === 'string') {
+      try {
+        const p = JSON.parse(v);
+        return (p && typeof p === 'object') ? p : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  };
 
-  let unitsPerDay = hasUnitsPerDayKey
-    ? ((body.additional_units_per_day && typeof body.additional_units_per_day === 'object') ? normaliseUnitsPerDay(body.additional_units_per_day) : {})
-    : null;
+  // ✅ Accept object or JSON string; allow null to mean "clear"
+  let unitsWeek = null;
+  if (hasUnitsWeekKey) {
+    if (body.additional_units_week === null) unitsWeek = {};
+    else {
+      const src = parseMaybeJsonObj(body.additional_units_week);
+      unitsWeek = src ? normaliseUnitsWeek(src) : {};
+    }
+  }
+
+  let unitsPerDay = null;
+  if (hasUnitsPerDayKey) {
+    if (body.additional_units_per_day === null) unitsPerDay = {};
+    else {
+      const src = parseMaybeJsonObj(body.additional_units_per_day);
+      unitsPerDay = src ? normaliseUnitsPerDay(src) : {};
+    }
+  }
+
 
   // If missing, reuse from the current timesheet (if any)
   if ((!hasUnitsWeekKey || !hasUnitsPerDayKey) && currentTimesheetIdForWeek) {
@@ -5533,6 +5710,63 @@ if (breaks.length) {
     if (freq === 'WEEKDAYS_EXCL_BH_ONLY') return !bh && dow >= 1 && dow <= 5;
     return false;
   };
+
+  // ✅ If per-day units were provided, restrict them to the 7 days of this week
+  //    and derive coherent weekly totals when weekly wasn't provided.
+  try {
+    const weekDateSet = new Set((weekDates || []).map(x => String(x.ymd || '').slice(0, 10)));
+
+    if (unitsPerDay && typeof unitsPerDay === 'object') {
+      const cleaned = {};
+      for (const [codeRaw, per] of Object.entries(unitsPerDay)) {
+        const code = String(codeRaw || '').toUpperCase().trim();
+        if (!code) continue;
+        if (!per || typeof per !== 'object') continue;
+
+        const days = {};
+        for (const [dRaw, vRaw] of Object.entries(per)) {
+          const ymd = String(dRaw || '').slice(0, 10);
+          if (!weekDateSet.has(ymd)) continue;
+
+          const n = Number(vRaw);
+          if (!Number.isFinite(n) || n <= 0) continue;
+
+          days[ymd] = n;
+        }
+
+        if (Object.keys(days).length) cleaned[code] = days;
+      }
+
+      unitsPerDay = cleaned;
+    }
+
+    // Derive weekly totals from per-day if weekly wasn't provided in this request
+    if (hasUnitsPerDayKey && !hasUnitsWeekKey) {
+      const derived = {};
+      for (const cfgRaw of (addlConfig || [])) {
+        if (!cfgRaw || typeof cfgRaw !== 'object') continue;
+        const code = String(cfgRaw.code || '').toUpperCase() || 'EX1';
+        const freq = normaliseFreq(cfgRaw.frequency);
+
+        if (freq === 'ONE_PER_WEEK') continue;
+
+        const perRaw = (unitsPerDay && unitsPerDay[code] && typeof unitsPerDay[code] === 'object') ? unitsPerDay[code] : {};
+        let sum = 0;
+
+        for (const meta of (weekDates || [])) {
+          if (!shouldIncludeDay(freq, meta)) continue;
+          const v = Number(perRaw[meta.ymd]);
+          if (!Number.isFinite(v) || v <= 0) continue;
+          sum += v;
+        }
+
+        if (sum > 0) derived[code] = sum;
+      }
+
+      unitsWeek = derived;
+    }
+  } catch {}
+
 
   let additional_units_json = {};
   let additional_pay_ex_vat = 0;
@@ -5844,8 +6078,12 @@ if (breaks.length) {
       patchBody.manual_pdf_rotation_degrees = manualPdfRotationDeg;
     }
 
-    if (hasUnitsWeekKey) patchBody.additional_units_week = unitsWeek || {};
+      if (hasUnitsWeekKey) patchBody.additional_units_week = unitsWeek || {};
     if (hasUnitsPerDayKey) patchBody.additional_units_per_day = unitsPerDay || {};
+
+    // ✅ Keep stored weekly totals coherent when per-day was provided
+    if (hasUnitsPerDayKey && !hasUnitsWeekKey) patchBody.additional_units_week = unitsWeek || {};
+
 
     // do NOT set day_references_json here (obsolete)
 
@@ -6088,16 +6326,23 @@ if (breaks.length) {
 
   await writeSnapshot(env, snap);
 
-  // Persist week totals + schedule + weekly extras (draft-per-day refs removed)
+    // Persist week totals + schedule + weekly extras (draft-per-day refs removed)
   const existingWeekTotals = (cw.totals_json && typeof cw.totals_json === 'object') ? cw.totals_json : {};
   const mergedWeekTotals = { ...existingWeekTotals, hours };
+
+  // ✅ Persist weekly totals if provided OR derived from per-day
   if (hasUnitsWeekKey) mergedWeekTotals.additional_units_week = unitsWeek || {};
+  if (hasUnitsPerDayKey && !hasUnitsWeekKey) mergedWeekTotals.additional_units_week = unitsWeek || {};
+
+  // ✅ Persist per-day units when provided
+  if (hasUnitsPerDayKey) mergedWeekTotals.additional_units_per_day = unitsPerDay || {};
 
   const weekPatch = {
     totals_json: mergedWeekTotals,
     planned_schedule_json: actual_schedule_json, // keep week schedule aligned for future view/processing
     updated_at: nowIso2
   };
+
 
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
@@ -45055,7 +45300,6 @@ async function loadCandidate(env, key_norm) {
   const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/candidates?key_norm=eq.${encodeURIComponent(key_norm)}&active=eq.true&select=*`);
   return rows[0] || null;
 }
-
 async function loadPolicy(env, client_id, workedDateYmd) {
   // ─────────────────────────────────────────────────────────────
   // Contract-driven compliance:
@@ -45213,7 +45457,8 @@ async function loadPolicy(env, client_id, workedDateYmd) {
 
   const tz = cs?.timezone_id || def?.timezone_id || "Europe/London";
 
-  const bh = cs ? normaliseBhList(cs.bh_list) : normaliseBhList(def?.bh_list);
+  // ✅ BH list is GLOBAL-ONLY (never client-derived)
+  const bh = normaliseBhList(def?.bh_list);
 
   // Attach-policy flags are client-level (no contract overrides exist here)
   const hr_attach_to_invoice =
