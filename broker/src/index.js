@@ -2465,38 +2465,61 @@ if (additionalRows.length > 0) {
   const addlBox = { x: contentX, y: yAfterTable, w: contentW, h: ADDL_H };
   drawRect(page, addlBox.x, addlBox.y, addlBox.w, addlBox.h, { lineWidth: 0.45 });
 
-      drawText(page, fontBold, "Additional rates / units", addlBox.x + 2, addlBox.y + Math.min(5.0, LAY.addlHeaderH - 0.8), Math.min(8.2, bodyFontSize + 0.5));
+// Title gets its own line ABOVE the column headers (guaranteed separation)
+const addlTitleY = addlBox.y + Math.min(2.0, LAY.addlHeaderH * 0.30);
+const addlColsY  = addlBox.y + (LAY.addlHeaderH - 1.4);
+
+
+drawText(page, fontBold, "Additional rates / units",
+  addlBox.x + 2,
+  addlTitleY,
+  Math.min(8.2, bodyFontSize + 0.5)
+);
+
 
       const aHeaderY = addlBox.y + LAY.addlHeaderH;
       drawLine(page, addlBox.x, aHeaderY, addlBox.x + addlBox.w, aHeaderY, 0.35);
 
-    const aCols = ["Date", "Quantity", "Unit"];
-const aW = [28, 22, 0];
+  const aCols = ["Rate Type", "Date", "Quantity", "Unit"];
+const aW = [70, 28, 22, 0];
 const aFixed = aW.slice(0, -1).reduce((a, b) => a + b, 0);
 aW[aW.length - 1] = Math.max(30, addlBox.w - aFixed);
 
 
-      let ax = addlBox.x;
-      for (let i = 0; i < aW.length; i++) {
-        if (i > 0) drawLine(page, ax, addlBox.y, ax, addlBox.y + addlBox.h, 0.3);
-        drawText(page, fontBold, aCols[i], ax + 1.2, addlBox.y + Math.min(5.0, LAY.addlHeaderH - 0.8), Math.min(7.2, headerFontSizeTable));
-        ax += aW[i];
-      }
+
+ // Divider under the title row (so title is "full width")
+const addlTitleDividerY = addlBox.y + Math.min(3.4, LAY.addlHeaderH * 0.55);
+drawLine(page, addlBox.x, addlTitleDividerY, addlBox.x + addlBox.w, addlTitleDividerY, 0.25);
+
+let ax = addlBox.x;
+for (let i = 0; i < aW.length; i++) {
+  if (i > 0) drawLine(page, ax, addlTitleDividerY, ax, addlBox.y + addlBox.h, 0.3);
+  drawText(page, fontBold, aCols[i], ax + 1.2,
+    addlColsY,
+    Math.min(7.2, headerFontSizeTable)
+  );
+  ax += aW[i];
+}
+
+
 
       // No (+N more): show as many as fit silently
       const maxRows = Math.max(0, Math.floor((addlBox.h - LAY.addlHeaderH) / LAY.addlRowH));
       const rowsToShow = additionalRows.slice(0, maxRows);
 
       let ry = aHeaderY + Math.min(3.8, LAY.addlRowH - 0.2);
-    for (const r of rowsToShow) {
+  for (const r of rowsToShow) {
+  // Rate Type (bucket)
+  drawText(page, font, safeStr(r.bucket), addlBox.x + 1.2, ry, Math.min(bodyFontSize, 7.2), { maxWidth: aW[0] - 2.4 });
   // Date
-  drawText(page, font, r.date ? fmtDmy(r.date) : "", addlBox.x + 1.2, ry, Math.min(bodyFontSize, 7.2), { maxWidth: aW[0] - 2.4 });
+  drawText(page, font, r.date ? fmtDmy(r.date) : "", addlBox.x + aW[0] + 1.2, ry, Math.min(bodyFontSize, 7.2), { maxWidth: aW[1] - 2.4 });
   // Quantity
-  drawText(page, font, safeStr(r.qty), addlBox.x + aW[0] + 1.2, ry, Math.min(bodyFontSize, 7.2), { maxWidth: aW[1] - 2.4 });
+  drawText(page, font, safeStr(r.qty), addlBox.x + aW[0] + aW[1] + 1.2, ry, Math.min(bodyFontSize, 7.2), { maxWidth: aW[2] - 2.4 });
   // Unit
-  drawText(page, font, safeStr(r.unit), addlBox.x + aW[0] + aW[1] + 1.2, ry, Math.min(bodyFontSize, 7.2), { maxWidth: aW[2] - 2.4 });
+  drawText(page, font, safeStr(r.unit), addlBox.x + aW[0] + aW[1] + aW[2] + 1.2, ry, Math.min(bodyFontSize, 7.2), { maxWidth: aW[3] - 2.4 });
   ry += LAY.addlRowH;
 }
+
 
 
     yAfterTable = addlBox.y + addlBox.h + LAY.addlGap;
