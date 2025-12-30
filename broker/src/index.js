@@ -1329,282 +1329,89 @@ function printableShortRef(s) {
 
 // Render a single timesheet to PDF, save to R2 (idempotent), return the R2 key.
 // Render a single timesheet to PDF, save to R2 (idempotent), return the R2 key.
-
-
-async function renderTimesheetPDFAndSave(env, timesheetId) {
+async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
   const bucket = env.R2_BUCKET || env.R2;
   if (!bucket?.get || !bucket?.put) throw new Error("Storage not configured");
 
-  const outKey = normalizeKey(`docs-pdf/timesheets/ts_${timesheetId}.pdf`);
-  if (await r2Exists(env, outKey)) return outKey;
+  // ---------- helpers (local, so this function is self-contained) ----------
+  const mmToPt = (mm) => (Number(mm) || 0) * 72 / 25.4;
 
-  // Load runtime layout (R2 → fallback)
-  const layout = await loadTsLayout(env);
+  // A4 landscape in mm
+  const PAGE_W = 297;
+  const PAGE_H = 210;
 
-  // Load TS row
-  const { rows: tsRows } = await sbFetch(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${encodeURIComponent(timesheetId)}&select=*`
-  );
-  const ts = tsRows?.[0];
-  if (!ts) throw new Error("Timesheet not found");
+  // PDF-lib uses bottom-left origin; we prefer top-left mm placement.
+  const yFromTop = (mmFromTop) => PAGE_H - (Number(mmFromTop) || 0);
 
-  const isWeekly = String(ts.sheet_scope || "").toUpperCase() === "WEEKLY";
+  const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
+  const safeStr = (v) => (v == null ? "" : String(v));
 
-  // Load TSFIN (extended so weekly can see additional_units, etc.)
-  const { rows: finRows } = await sbFetch(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-      `?timesheet_id=eq.${encodeURIComponent(timesheetId)}` +
-      `&is_current=eq.true` +
-      `&select=candidate_id,band,additional_units_json,invoice_breakdown_json`
-  );
-  const fin = finRows?.[0] || {};
-
-  // Candidate display
-  let candidateName = ts.occupant_key_norm || "";
-  if (fin.candidate_id) {
-    const { rows: cRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/candidates` +
-        `?id=eq.${encodeURIComponent(fin.candidate_id)}&select=display_name,first_name,last_name`
-    );
-    const c = cRows?.[0];
-    if (c) {
-      candidateName =
-        c.display_name ||
-        [c.first_name, c.last_name].filter(Boolean).join(" ") ||
-        candidateName;
-    }
-  }
-
-  // Agency name / logo from settings_defaults (non-fatal if missing)
-  let agencyName = null;
-  let agencyLogoUrl = null;
-  try {
-    const { rows: defRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=agency_name,agency_logo`
-    );
-    const def = defRows?.[0] || {};
-    agencyName = def.agency_name || null;
-    agencyLogoUrl = def.agency_logo || null;
-  } catch {
-    agencyName = null;
-    agencyLogoUrl = null;
-  }
-
-  // Load template (should already be landscape)
-  const templateKey = normalizeKey(
-    env.TIMESHEET_TEMPLATE_KEY || "Assets/Stationery/Timesheet/Blank Timesheet.pdf"
-  );
-  const templateBytes = await r2GetBytes(env, templateKey);
-  if (!templateBytes) throw new Error("Timesheet template not found in R2");
-
-  const pdfDoc = await PDFDocument.load(templateBytes);
-  const page =
-    pdfDoc.getPages()[0] ||
-    pdfDoc.addPage([mmToPt(layout.page.width_mm), mmToPt(layout.page.height_mm)]);
-
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const fz = layout.text?.fontSize || 10;
-
-  const drawText = (txt, mm, size = fz) => {
-    if (txt === undefined || txt === null) return;
-    if (!mm) return;
-    const s = String(txt);
-    if (!s) return;
-    page.drawText(s, {
-      x: mmToPt(mm.x_mm),
-      y: mmToPt(mm.y_mm),
-      size,
-      font,
-      color: rgb(0, 0, 0),
-    });
+  const fmtDmy = (ymd) => {
+    const s = safeStr(ymd).slice(0, 10);
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return "";
+    return `${m[3]}/${m[2]}/${m[1]}`;
   };
 
-  const drawTextLine = (txt, cellMm, lineIdx, lineSpacingMm, size = fz) => {
-    if (txt === undefined || txt === null) return;
-    if (!cellMm) return;
-    const s = String(txt);
-    if (!s) return;
-    const y = Number(cellMm.y_mm);
-    const dy = Number(lineSpacingMm || 0) * Number(lineIdx || 0);
-    drawText(s, { x_mm: cellMm.x_mm, y_mm: y - dy }, size);
+  const weekdayName = (ymd) => {
+    const s = safeStr(ymd).slice(0, 10);
+    const d = new Date(s + "T00:00:00Z");
+    if (Number.isNaN(d.getTime())) return "";
+    const names = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+    return names[d.getUTCDay()] || "";
   };
 
-  // ─────────────────────────────────────────────────────────────
-  // Common header: agency + core fields (for daily + weekly)
-  // ─────────────────────────────────────────────────────────────
-
-  if (agencyName && layout.fields && layout.fields.agency_name) {
-    drawText(agencyName, layout.fields.agency_name, layout.text?.agencyFontSize || fz + 2);
-  }
-
-  if (agencyLogoUrl && layout.fields && layout.fields.agency_logo) {
+  const buildWeekDates = (weekEndingYmd) => {
+    const out = [];
     try {
-      const logoKey = normalizeKey(agencyLogoUrl);
-      const logoObj = await bucket.get(logoKey);
-      if (logoObj) {
-        const logoBytes = new Uint8Array(await new Response(logoObj.body).arrayBuffer());
-        await drawImageInBox(
-          page,
-          pdfDoc,
-          logoBytes,
-          layout.fields.agency_logo,
-          logoObj.httpMetadata?.contentType || "image/png"
-        );
+      const base = new Date(String(weekEndingYmd) + "T00:00:00Z");
+      if (!Number.isNaN(base.getTime())) {
+        for (let offset = 6; offset >= 0; offset--) {
+          const d = new Date(base);
+          d.setUTCDate(base.getUTCDate() - offset);
+          const yyyy = d.getUTCFullYear();
+          const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+          const dd = String(d.getUTCDate()).padStart(2, "0");
+          const ymd = `${yyyy}-${mm}-${dd}`;
+          out.push({ ymd, dow: d.getUTCDay(), dowName: ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getUTCDay()] });
+        }
       }
-    } catch (e) {
-      console.warn("[TS_PDF] failed to draw agency logo", {
-        timesheet_id: timesheetId,
-        err: e?.message || String(e),
-      });
+    } catch {}
+    while (out.length < 7) out.push({ ymd: "", dow: null, dowName: "" });
+    return out;
+  };
+
+  // DAILY rule you specified: next Sunday (inclusive)
+  const nextSundayYmd = (ymd) => {
+    const s = safeStr(ymd).slice(0, 10);
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return "";
+    const dt = new Date(`${s}T00:00:00Z`);
+    if (Number.isNaN(dt.getTime())) return "";
+    const dow = dt.getUTCDay(); // 0=Sun
+    const add = (dow === 0) ? 0 : (7 - dow);
+    dt.setUTCDate(dt.getUTCDate() + add);
+    const yyyy = dt.getUTCFullYear();
+    const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(dt.getUTCDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  // FNV-1a 32-bit → 8 digits
+  const timesheetNumber8 = (id) => {
+    const s = safeStr(id);
+    let h = 0x811c9dc5;
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 0x01000193);
     }
-  }
-
-  if (layout.fields?.hospital) drawText(ts.hospital_norm || "", layout.fields.hospital);
-  if (layout.fields?.ward) drawText(ts.ward_norm || "", layout.fields.ward);
-  if (layout.fields?.candidate) drawText(candidateName || "", layout.fields.candidate);
-  if (layout.fields?.job_title) drawText(ts.job_title_norm || "", layout.fields.job_title);
-  if (layout.fields?.band) drawText(fin.band || "", layout.fields.band);
-  if (layout.fields?.booking_ref) drawText(ts.booking_id || "", layout.fields.booking_ref);
-  if (layout.fields?.week_ending) drawText(fmtUKDate(ts.week_ending_date), layout.fields.week_ending);
-  if (layout.fields?.ts_number) {
-    drawText(printableShortRef(ts.reference_number || "") || "", layout.fields.ts_number);
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // DAILY / ROTA PATH (unchanged)
-  // ─────────────────────────────────────────────────────────────
-  if (!isWeekly) {
-    const rowIdx =
-      typeof ts.worked_start_iso === "string" ? ukWeekdayIndexMon0(ts.worked_start_iso) : 0;
-    const row = (layout.rows && layout.rows[rowIdx]) || (layout.rows && layout.rows[0]);
-
-    if (row) {
-      drawText(fmtUKDate(ts.worked_start_iso), row.date);
-      drawText(fmtUKTime(ts.worked_start_iso), row.start);
-      drawText(fmtUKTime(ts.worked_end_iso), row.finish);
-      if (ts.break_start_iso && ts.break_end_iso) {
-        drawText(fmtUKTime(ts.break_start_iso), row.brkStart);
-        drawText(fmtUKTime(ts.break_end_iso), row.brkEnd);
-      } else if (typeof ts.break_minutes === "number") {
-        drawText(`${ts.break_minutes}m`, row.brkStart);
-      }
-      drawText(ts.job_title_norm || "", row.role);
-    }
-
-    if (ts.r2_nurse_key && layout.fields?.nurse_signature) {
-      const nk = normalizeKey(ts.r2_nurse_key);
-      const nurseObj = await bucket.get(nk);
-      if (nurseObj) {
-        const nurseBytes = new Uint8Array(await new Response(nurseObj.body).arrayBuffer());
-        await drawImageInBox(
-          page,
-          pdfDoc,
-          nurseBytes,
-          layout.fields.nurse_signature,
-          nurseObj.httpMetadata?.contentType || "image/png"
-        );
-      }
-    }
-    if (ts.r2_auth_key && layout.fields?.auth_signature) {
-      const ak = normalizeKey(ts.r2_auth_key);
-      const authObj = await bucket.get(ak);
-      if (authObj) {
-        const authBytes = new Uint8Array(await new Response(authObj.body).arrayBuffer());
-        await drawImageInBox(
-          page,
-          pdfDoc,
-          authBytes,
-          layout.fields.auth_signature,
-          authObj.httpMetadata?.contentType || "image/png"
-        );
-      }
-    }
-
-    if (ts.authorised_at_server && layout.fields?.auth_sign_date) {
-      drawText(fmtUKDate(ts.authorised_at_server), layout.fields.auth_sign_date);
-    }
-    if (layout.fields?.nurse_sign_date) {
-      drawText(fmtUKDate(ts.worked_end_iso || ts.worked_start_iso), layout.fields.nurse_sign_date);
-    }
-
-    drawDebugOverlay(page, font, layout);
-
-    const outBytes = await pdfDoc.save();
-    await bucket.put(outKey, outBytes, { httpMetadata: { contentType: "application/pdf" } });
-    return outKey;
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // WEEKLY PATH (UPDATED): ALWAYS 7 DAYS + MULTI-SHIFT PER DAY
-  // Date prints once per day, start/finish/break stack multiple lines.
-  // Week window is ALWAYS the 7-day window ending at week_ending_date
-  // (so if week ending is Fri, the window is Sat..Fri, etc).
-  // ─────────────────────────────────────────────────────────────
-
-  const weeklyLayout = layout.weekly || layout;
-  const weeklyRows = weeklyLayout.rows || layout.rows || [];
-
-  // Fallbacks / tunables
-  const lineSpacingMm = Number(
-    weeklyLayout.line_spacing_mm ||
-    weeklyLayout.lineSpacingMm ||
-    layout.text?.weeklyLineSpacingMm ||
-    3.6
-  );
-
-  // Build 7-day window based on week_ending_date (ALWAYS 7)
-  const weekDates = [];
-  try {
-    const base = new Date(String(ts.week_ending_date) + "T00:00:00Z");
-    if (!Number.isNaN(base.getTime())) {
-      for (let offset = 6; offset >= 0; offset--) {
-        const d = new Date(base);
-        d.setUTCDate(base.getUTCDate() - offset);
-        const yyyy = d.getUTCFullYear();
-        const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
-        const dd = String(d.getUTCDate()).padStart(2, "0");
-        weekDates.push(`${yyyy}-${mm}-${dd}`);
-      }
-    }
-  } catch {
-    // ignore
-  }
-  // Hard guarantee: if parsing failed, still output 7 placeholder days (date field will show blanks)
-  while (weekDates.length < 7) weekDates.push("");
-
-  // Group actual_schedule_json by date
-  const schedule = Array.isArray(ts.actual_schedule_json) ? ts.actual_schedule_json : [];
-  const groupedByDate = new Map();
-  for (const seg of schedule) {
-    const ymd = seg?.date || null;
-    if (!ymd) continue;
-    if (!groupedByDate.has(ymd)) groupedByDate.set(ymd, []);
-    groupedByDate.get(ymd).push(seg);
-  }
-
-  const getDisplayTimes = (seg) => {
-    if (!seg) return { startText: "", endText: "" };
-
-    // New shape: HH:MM strings
-    if (typeof seg.start === "string" && typeof seg.end === "string") {
-      return { startText: seg.start, endText: seg.end };
-    }
-
-    // Legacy shape: ISO strings
-    if (seg.start_utc && seg.end_utc) {
-      return { startText: fmtUKTime(seg.start_utc), endText: fmtUKTime(seg.end_utc) };
-    }
-
-    return { startText: "", endText: "" };
+    const n = (h >>> 0) % 100000000;
+    return String(n).padStart(8, "0");
   };
 
   const parseHHMM = (t) => {
-    if (typeof t !== "string") return null;
-    const m = t.trim().match(/^(\d{1,2}):(\d{2})$/);
+    const s = safeStr(t).trim();
+    const m = s.match(/^(\d{1,2}):(\d{2})$/);
     if (!m) return null;
     const hh = Number(m[1]);
     const mm = Number(m[2]);
@@ -1613,254 +1420,888 @@ async function renderTimesheetPDFAndSave(env, timesheetId) {
     return hh * 60 + mm;
   };
 
-  const sumBreakMinutes = (seg) => {
-    if (!seg || typeof seg !== "object") return 0;
+  // Convert a number 0..99 to words (upper)
+  const twoDigitWords = (n) => {
+    const ones = ["ZERO","ONE","TWO","THREE","FOUR","FIVE","SIX","SEVEN","EIGHT","NINE"];
+    const teens = ["TEN","ELEVEN","TWELVE","THIRTEEN","FOURTEEN","FIFTEEN","SIXTEEN","SEVENTEEN","EIGHTEEN","NINETEEN"];
+    const tens = ["","","TWENTY","THIRTY","FORTY","FIFTY","SIXTY","SEVENTY","EIGHTY","NINETY"];
+    if (n < 10) return ones[n];
+    if (n < 20) return teens[n - 10];
+    const t = Math.floor(n / 10);
+    const o = n % 10;
+    return o ? `${tens[t]} ${ones[o]}` : tens[t];
+  };
 
-    // Prefer explicit totals if present
-    if (seg.break_minutes != null) return Number(seg.break_minutes) || 0;
-    if (seg.break_mins != null) return Number(seg.break_mins) || 0;
+  const hoursToWordsUpper = (hours) => {
+    const h = Number(hours);
+    if (!Number.isFinite(h)) return "";
+    const whole = Math.floor(h + 1e-9);
+    const frac = h - whole;
 
-    // Otherwise sum breaks[]
-    const arr = Array.isArray(seg.breaks) ? seg.breaks : [];
-    let total = 0;
-    for (const b of arr) {
-      const s = parseHHMM(b?.start || "");
-      const e = parseHHMM(b?.end || "");
-      if (s == null || e == null) continue;
-      const mins = e - s;
-      if (mins > 0) total += mins;
+    const wholeWords = twoDigitWords(clamp(whole, 0, 99));
+    const hourWord = (whole === 1) ? "HOUR" : "HOURS";
+
+    const eps = 1e-6;
+    const isHalf = Math.abs(frac - 0.5) < eps;
+    const isQuarter = Math.abs(frac - 0.25) < eps;
+    const isThreeQuarter = Math.abs(frac - 0.75) < eps;
+
+    if (isHalf) return `${wholeWords} AND A HALF`;
+    if (isQuarter) return `${wholeWords} AND A QUARTER`;
+    if (isThreeQuarter) return `${wholeWords} AND THREE QUARTERS`;
+
+    const mins = Math.round(frac * 60);
+    if (!mins) return `${wholeWords} ${hourWord}`;
+    const minsWords = twoDigitWords(clamp(mins, 0, 59));
+    return `${wholeWords} ${hourWord} ${minsWords} MINUTES`;
+  };
+
+  // Determine display times for segment (supports either {start,end} or {start_utc,end_utc})
+  const getSegTimes = (seg) => {
+    if (!seg || typeof seg !== "object") return { start: "", end: "" };
+
+    if (typeof seg.start === "string" && typeof seg.end === "string") {
+      return { start: seg.start, end: seg.end };
     }
-    return total;
+
+    if (seg.start_utc && seg.end_utc) {
+      try {
+        if (typeof toLocalParts === "function") {
+          const a = toLocalParts(seg.start_utc, null);
+          const b = toLocalParts(seg.end_utc, null);
+          return { start: a?.hhmm || "", end: b?.hhmm || "" };
+        }
+      } catch {}
+      return {
+        start: safeStr(seg.start_utc).slice(11, 16),
+        end: safeStr(seg.end_utc).slice(11, 16),
+      };
+    }
+
+    return { start: "", end: "" };
   };
 
-  const getRowAnchorY = (row) => {
-    // Pick an anchor to measure row height
-    const c = row?.start || row?.finish || row?.brkStart || row?.role || row?.date;
-    const y = c?.y_mm;
-    return (typeof y === "number") ? y : null;
+  // Break rule:
+  // - If break_start + break_end exist -> show start/end
+  // - else if break_minutes -> show break length
+  // - else keep break columns blank (but still present)
+  const getBreakDisplay = (seg) => {
+    if (!seg || typeof seg !== "object") return { brkStart: "", brkEnd: "", brkLen: "" };
+
+    const bs = safeStr(seg.break_start || "");
+    const be = safeStr(seg.break_end || "");
+    if (bs && be) return { brkStart: bs, brkEnd: be, brkLen: "" };
+
+    const arr = Array.isArray(seg.breaks) ? seg.breaks : [];
+    if (arr.length) {
+      const b0 = arr.find(b => b && (safeStr(b.start).trim() || safeStr(b.end).trim())) || null;
+      const s = safeStr(b0?.start || "").trim();
+      const e = safeStr(b0?.end || "").trim();
+      if (s && e) return { brkStart: s, brkEnd: e, brkLen: "" };
+    }
+
+    const bm =
+      (seg.break_minutes != null) ? Number(seg.break_minutes) :
+      (seg.break_mins != null) ? Number(seg.break_mins) :
+      null;
+
+    if (Number.isFinite(bm) && bm > 0) return { brkStart: "", brkEnd: "", brkLen: `${Math.round(bm)}mins` };
+    return { brkStart: "", brkEnd: "", brkLen: "" };
   };
 
-  const calcMaxLinesForRow = (idx) => {
-    const row = weeklyRows[idx];
-    if (!row) return 1;
+  const computePaidHours = (seg) => {
+    const { start, end } = getSegTimes(seg);
+    const sMin0 = parseHHMM(start);
+    const eMin0 = parseHHMM(end);
+    if (sMin0 == null || eMin0 == null) return { paid: "", paidWords: "" };
 
-    // explicit override if you add it to layout later
-    const explicit = Number(row.max_lines_per_day || weeklyLayout.max_lines_per_day || 0);
-    if (explicit && explicit > 0) return Math.max(1, Math.floor(explicit));
+    let sMin = sMin0;
+    let eMin = eMin0;
+    if (eMin <= sMin) eMin += 1440; // overnight
 
-    const yThis = getRowAnchorY(row);
-    const yNext = (idx + 1 < weeklyRows.length) ? getRowAnchorY(weeklyRows[idx + 1]) : null;
+    let breakMins = 0;
+    const b = getBreakDisplay(seg);
 
-    if (typeof yThis === "number" && typeof yNext === "number") {
-      const rowHeight = yThis - yNext; // should be positive top→bottom
-      if (rowHeight > 0 && lineSpacingMm > 0) {
-        // small padding so we don't bleed into next row
-        const usable = Math.max(0, rowHeight - 0.8);
-        const max = Math.max(1, Math.floor(usable / lineSpacingMm));
-        return max;
+    if (b.brkStart && b.brkEnd) {
+      const bs0 = parseHHMM(b.brkStart);
+      const be0 = parseHHMM(b.brkEnd);
+      if (bs0 != null && be0 != null) {
+        let bs = bs0; let be = be0;
+        if (bs < sMin0) bs += 1440;
+        if (be <= bs0) be += 1440;
+        if (bs >= sMin && be <= eMin && be > bs) breakMins = (be - bs);
+      }
+    } else {
+      const m = (seg.break_minutes != null) ? Number(seg.break_minutes) :
+                (seg.break_mins != null) ? Number(seg.break_mins) : 0;
+      if (Number.isFinite(m) && m > 0) breakMins = Math.round(m);
+    }
+
+    const totalMins = eMin - sMin;
+    const paidMins = Math.max(0, totalMins - breakMins);
+    const paidH = Math.round((paidMins / 60) * 100) / 100;
+
+    return {
+      paid: paidH ? paidH.toFixed(2) : "",
+      paidWords: paidH ? hoursToWordsUpper(paidH) : ""
+    };
+  };
+
+  // Drawing primitives (coords in mm, y is "from top")
+  const drawRect = (page, x, yTop, w, h, opts = {}) => {
+    const lw = opts.lineWidth ?? 0.4;
+    page.drawRectangle({
+      x: mmToPt(x),
+      y: mmToPt(yFromTop(yTop + h)),
+      width: mmToPt(w),
+      height: mmToPt(h),
+      borderWidth: lw,
+      borderColor: opts.borderColor,
+      color: opts.fillColor,
+    });
+  };
+
+  const drawLine = (page, x1, yTop1, x2, yTop2, lw = 0.35) => {
+    page.drawLine({
+      start: { x: mmToPt(x1), y: mmToPt(yFromTop(yTop1)) },
+      end:   { x: mmToPt(x2), y: mmToPt(yFromTop(yTop2)) },
+      thickness: lw,
+    });
+  };
+
+  const drawText = (page, font, text, x, yTop, size, opts = {}) => {
+    const s = safeStr(text);
+    if (!s) return;
+    page.drawText(s, {
+      x: mmToPt(x),
+      y: mmToPt(yFromTop(yTop)),
+      size,
+      font,
+      color: opts.color,
+      maxWidth: opts.maxWidth ? mmToPt(opts.maxWidth) : undefined
+    });
+  };
+
+  const drawLabelValue = (page, font, label, value, box, sizes) => {
+    const { x, y, w, h } = box;
+    const labelSize = sizes.label;
+    const valueSize = sizes.value;
+    const padX = 1.6;
+    drawText(page, font, label, x + padX, y + 3.4, labelSize);
+    drawText(page, font, value, x + padX, y + 8.6, valueSize);
+    drawRect(page, x, y, w, h, { lineWidth: 0.35 });
+  };
+
+  // QR modules drawer (Option A: draw into a fixed box)
+  const drawQrInBox = async (page, qrText, box) => {
+    if (!qrText || !box) return;
+    if (typeof QRCode?.create !== "function") return;
+
+    const qr = QRCode.create(qrText, { errorCorrectionLevel: "M" });
+    const modules = qr?.modules;
+    const size = modules?.size;
+    const data = modules?.data;
+    if (!size || !data) return;
+
+    const marginModules = 2;
+    const grid = size + marginModules * 2;
+    const cell = Math.min(box.w / grid, box.h / grid);
+    if (!(cell > 0)) return;
+
+    const x0 = box.x + (box.w - cell * grid) / 2;
+    const y0 = box.y + (box.h - cell * grid) / 2;
+
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c < size; c++) {
+        const idx = r * size + c;
+        if (!data[idx]) continue;
+
+        const x = x0 + (c + marginModules) * cell;
+        const yTop = y0 + (r + marginModules) * cell;
+
+        page.drawRectangle({
+          x: mmToPt(x),
+          y: mmToPt(yFromTop(yTop + cell)),
+          width: mmToPt(cell),
+          height: mmToPt(cell),
+          color: rgb(0, 0, 0),
+          borderWidth: 0,
+        });
       }
     }
 
-    // Conservative default: two lines fits most templates
-    return 2;
+    drawRect(page, box.x, box.y, box.w, box.h, { lineWidth: 0.35 });
   };
 
-  // Render 7 days (ALWAYS): date always printed even if no shifts.
-  for (let idx = 0; idx < 7; idx++) {
-    const ymd = weekDates[idx] || "";
-    const row = weeklyRows[idx];
-    if (!row) continue;
+  // Local helpers for DAILY synthesis
+  const isoToLocalYmd = (iso) => {
+    const s = safeStr(iso);
+    if (!s) return "";
+    try {
+      if (typeof toLocalParts === "function") {
+        const p = toLocalParts(s, null);
+        if (p?.ymd) return String(p.ymd);
+      }
+    } catch {}
+    return s.slice(0, 10);
+  };
 
-    // ✅ ALWAYS print date (even if no shifts)
-    if (row.date) drawText(fmtUKDate(ymd), row.date);
+  const isoToLocalHHMM = (iso) => {
+    const s = safeStr(iso);
+    if (!s) return "";
+    try {
+      if (typeof toLocalParts === "function") {
+        const p = toLocalParts(s, null);
+        if (p?.hhmm) return String(p.hhmm);
+      }
+    } catch {}
+    return s.slice(11, 16);
+  };
 
-    // Segments for this day
-    const segsForDayRaw = (ymd && groupedByDate.get(ymd)) ? groupedByDate.get(ymd).slice() : [];
+  // ---------- fetch DB data ----------
+  const { rows: tsRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${encodeURIComponent(timesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=*` +
+      `&limit=1`
+  );
+  const ts = tsRows?.[0];
+  if (!ts) throw new Error("Timesheet not found");
 
-    // Keep only real shift segments (start+end present in either shape)
-    const segsForDay = segsForDayRaw.filter(seg => {
-      const t = getDisplayTimes(seg);
-      return !!(t.startText && t.endText);
-    });
+  const sheetScope = String(ts.sheet_scope || "").toUpperCase();
+  const isDaily = (sheetScope === "DAILY");
 
-    if (!segsForDay.length) continue;
+  const contract = ts.contract_id
+    ? await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/contracts` +
+          `?id=eq.${encodeURIComponent(ts.contract_id)}` +
+          `&select=id,role,band,display_site,client_id,candidate_id` +
+          `&limit=1`
+      )
+    : null;
 
-    // Sort by start time for clean display
-    segsForDay.sort((a, b) => {
-      const ta = getDisplayTimes(a).startText || "";
-      const tb = getDisplayTimes(b).startText || "";
+  const client = contract?.client_id
+    ? await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/clients` +
+          `?id=eq.${encodeURIComponent(contract.client_id)}` +
+          `&select=id,name` +
+          `&limit=1`
+      )
+    : null;
+
+  const cand = contract?.candidate_id
+    ? await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=eq.${encodeURIComponent(contract.candidate_id)}` +
+          `&select=id,first_name,last_name,surname,display_name,email` +
+          `&limit=1`
+      )
+    : null;
+
+  const fin = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?timesheet_id=eq.${encodeURIComponent(ts.timesheet_id)}` +
+      `&is_current=eq.true` +
+      `&select=additional_units_json,invoice_breakdown_json` +
+      `&limit=1`
+  );
+
+  const def = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/settings_defaults` +
+      `?id=eq.1` +
+      `&select=agency_name,agency_logo,timesheet_header_json,timesheet_footer_json` +
+      `&limit=1`
+  ).catch(() => null);
+
+  const agencyName = def?.agency_name ? String(def.agency_name) : "ARMS";
+  const agencyLogoKey = def?.agency_logo ? String(def.agency_logo) : null;
+
+  const headerJson = (def && def.timesheet_header_json) ? def.timesheet_header_json : null;
+  const footerJson = (def && def.timesheet_footer_json) ? def.timesheet_footer_json : null;
+
+  // ---------- DAILY synthesis (if actual_schedule_json is empty) ----------
+  let schedule = Array.isArray(ts.actual_schedule_json) ? ts.actual_schedule_json : [];
+
+  // Compute worked date/time for daily
+  const workedYmd = isDaily ? isoToLocalYmd(ts.worked_start_iso) : "";
+  const workedStartHHMM = isDaily ? isoToLocalHHMM(ts.worked_start_iso) : "";
+  const workedEndHHMM   = isDaily ? isoToLocalHHMM(ts.worked_end_iso)   : "";
+
+  // DAILY week ending rule: next Sunday (inclusive)
+  let weekEndingYmd = safeStr(ts.week_ending_date).slice(0, 10);
+  if (isDaily) {
+    const computed = nextSundayYmd(workedYmd);
+    weekEndingYmd = computed || weekEndingYmd || "";
+  }
+
+  // If daily and no schedule, synthesize one segment so the PDF isn’t blank
+  if (isDaily && (!Array.isArray(schedule) || schedule.length === 0)) {
+    const seg = {
+      date: workedYmd || "",
+
+      // Provide HH:MM strings for display
+      start: workedStartHHMM || "",
+      end: workedEndHHMM || "",
+
+      // Also provide ISO fallbacks if needed
+      start_utc: ts.worked_start_iso || null,
+      end_utc: ts.worked_end_iso || null
+    };
+
+    // Break window if present
+    if (ts.break_start_iso && ts.break_end_iso) {
+      const bs = isoToLocalHHMM(ts.break_start_iso);
+      const be = isoToLocalHHMM(ts.break_end_iso);
+      if (bs && be) {
+        seg.break_start = bs;
+        seg.break_end = be;
+        seg.breaks = [{ start: bs, end: be }];
+      }
+    }
+
+    // Break minutes fallback
+    if (seg.breaks == null && ts.break_minutes != null) {
+      seg.break_minutes = Number(ts.break_minutes) || 0;
+    }
+
+    schedule = [seg];
+  }
+
+  // ---------- derive week window ----------
+  const weekEndingDayName = weekdayName(weekEndingYmd);
+  const weekDates = buildWeekDates(weekEndingYmd);
+
+  // ---------- schedule grouping ----------
+  const byDate = new Map();
+  for (const seg of schedule) {
+    const ymd = safeStr(seg?.date).slice(0, 10);
+    if (!ymd) continue;
+    if (!byDate.has(ymd)) byDate.set(ymd, []);
+    byDate.get(ymd).push(seg);
+  }
+  for (const [ymd, arr] of byDate.entries()) {
+    arr.sort((a, b) => {
+      const ta = getSegTimes(a).start || "";
+      const tb = getSegTimes(b).start || "";
       return String(ta).localeCompare(String(tb));
     });
-
-    const maxLines = calcMaxLinesForRow(idx);
-    const visible = segsForDay.slice(0, Math.max(1, maxLines));
-    const overflow = segsForDay.length - visible.length;
-
-    for (let li = 0; li < visible.length; li++) {
-      const seg = visible[li];
-      const { startText, endText } = getDisplayTimes(seg);
-
-      const brkMin = sumBreakMinutes(seg);
-      const brkTxt = brkMin > 0 ? `${Math.round(brkMin)}m` : "";
-
-      const refTxt = (seg?.ref_num != null && String(seg.ref_num).trim())
-        ? String(seg.ref_num).trim()
-        : "";
-
-      // Role: keep consistent (template usually expects a single role)
-      let roleTxt = ts.job_title_norm || "";
-      if (!roleTxt && seg?.role) roleTxt = String(seg.role);
-
-      // If no dedicated ref column exists, optionally append ref to role on that line
-      // (only if you want refs visible on PDF without changing the template)
-      if (!row.ref && refTxt) {
-        roleTxt = roleTxt ? `${roleTxt} (Ref ${refTxt})` : `Ref ${refTxt}`;
-      }
-
-      // On the last visible line, show overflow indicator if we had to truncate
-      if (overflow > 0 && li === visible.length - 1) {
-        roleTxt = roleTxt ? `${roleTxt} (+${overflow} more)` : `(+${overflow} more)`;
-      }
-
-      if (row.start && startText) drawTextLine(startText, row.start, li, lineSpacingMm);
-      if (row.finish && endText) drawTextLine(endText, row.finish, li, lineSpacingMm);
-
-      // Weekly templates typically use brkStart for “break minutes” display.
-      if (row.brkStart && brkTxt) drawTextLine(brkTxt, row.brkStart, li, lineSpacingMm);
-
-      // If your weekly template also has a brkEnd column, leave blank (or you can use it for break detail later)
-      if (row.role) drawTextLine(roleTxt || "", row.role, li, lineSpacingMm);
-
-      // If you later add a dedicated ref cell to weekly layout, support it:
-      if (row.ref && refTxt) drawTextLine(refTxt, row.ref, li, lineSpacingMm);
-    }
   }
 
-  // Additional units block (if layout provides it and TSFIN has data)
-  let additionalUnits = {};
-  if (fin.additional_units_json) {
+  const lineCountForDay = (ymd) => {
+    const segs = byDate.get(ymd) || [];
+    const real = segs.filter(s => {
+      const t = getSegTimes(s);
+      return !!(t.start && t.end);
+    });
+    return Math.max(1, real.length);
+  };
+
+  // ---------- additional units flatten ----------
+  let additionalUnitsObj = {};
+  if (fin?.additional_units_json) {
     if (typeof fin.additional_units_json === "string") {
-      try {
-        additionalUnits = JSON.parse(fin.additional_units_json);
-      } catch {
-        additionalUnits = {};
-      }
+      try { additionalUnitsObj = JSON.parse(fin.additional_units_json); } catch { additionalUnitsObj = {}; }
     } else if (typeof fin.additional_units_json === "object") {
-      additionalUnits = fin.additional_units_json;
+      additionalUnitsObj = fin.additional_units_json;
     }
-  } else if (fin.invoice_breakdown_json?.additional?.units) {
-    additionalUnits = fin.invoice_breakdown_json.additional.units;
+  } else if (fin?.invoice_breakdown_json?.additional?.units) {
+    additionalUnitsObj = fin.invoice_breakdown_json.additional.units;
   }
 
-  if (additionalUnits && typeof additionalUnits === "object" && weeklyLayout.additional) {
-    const baseBox = weeklyLayout.additional; // { x_mm, y_mm, line_height_mm?, fontSize? }
-    const lineH = baseBox.line_height_mm || 4;
-    const fsExtra = baseBox.fontSize || fz;
-
-    let lineIdx = 0;
-    for (const [code, cfg] of Object.entries(additionalUnits)) {
+  const additionalRows = [];
+  if (additionalUnitsObj && typeof additionalUnitsObj === "object") {
+    for (const [code, cfg] of Object.entries(additionalUnitsObj)) {
       if (!cfg || typeof cfg !== "object") continue;
       const bucketName = cfg.bucket_name || code;
-      const units = Number(cfg.unit_count || 0);
-      const chargeEx = Number(cfg.charge_ex_vat || 0);
+      const unitName = cfg.unit_name || "";
+      const unitCount = Number(cfg.unit_count || 0);
+      const days = (cfg.days && typeof cfg.days === "object") ? cfg.days : null;
 
-      const txt = `${bucketName}: ${units} units, charge £${chargeEx.toFixed(2)}`;
-      const lineMm = { x_mm: baseBox.x_mm, y_mm: baseBox.y_mm - lineIdx * lineH };
-      drawText(txt, lineMm, fsExtra);
-      lineIdx++;
+      if (days && Object.keys(days).length) {
+        for (const [ymd, qtyRaw] of Object.entries(days)) {
+          const qty = Number(qtyRaw || 0);
+          if (!qty) continue;
+          additionalRows.push({ bucket: bucketName, date: ymd, qty, unit: unitName });
+        }
+      } else if (unitCount) {
+        additionalRows.push({ bucket: bucketName, date: "", qty: unitCount, unit: unitName });
+      }
     }
   }
 
-  // QR code image (for QR weekly routes) if we have a stored QR image key + layout slot
-  if (ts.qr_r2_key && weeklyLayout.qr_box) {
+  // ---------- Create PDF (blank landscape) ----------
+  const pdfDoc = await PDFDocument.create();
+  const page = pdfDoc.addPage([mmToPt(PAGE_W), mmToPt(PAGE_H)]);
+
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  // ---------- layout constants (mm, from top-left) ----------
+  const M = 8; // margin
+  const contentW = PAGE_W - M * 2;
+
+  // section heights
+  const HEADER_H = 44;
+  const HOURS_H  = 86;
+  const ADDL_H   = 22;
+  const DECL_H   = 32;
+  const FOOT_H   = PAGE_H - (M + HEADER_H + 2 + HOURS_H + 2 + ADDL_H + 2 + DECL_H + 2 + M);
+
+  const yHeader = M;
+  const yHours  = yHeader + HEADER_H + 2;
+  const yAddl   = yHours + HOURS_H + 2;
+  const yDecl   = yAddl + ADDL_H + 2;
+  const yFoot   = yDecl + DECL_H + 2;
+
+  // ---------- page border ----------
+  drawRect(page, M, M, contentW, PAGE_H - M * 2, { lineWidth: 0.6 });
+
+  // ---------- QR SAFE ZONE ----------
+  const QR_W = 30;
+  const QR_H = 30;
+  const QR_PAD = 3;
+
+  const qrBox = {
+    x: (M + contentW) - QR_PAD - QR_W,
+    y: yHeader + 2,
+    w: QR_W,
+    h: QR_H
+  };
+
+  const headerRightLimit = qrBox.x - QR_PAD;
+
+  // ---------- Logo box (top-left) + Agency name ----------
+  const logoBox = { x: M + 1, y: yHeader + 1, w: 42, h: 18 };
+  drawRect(page, logoBox.x, logoBox.y, logoBox.w, logoBox.h, { lineWidth: 0.35 });
+
+  if (agencyLogoKey) {
     try {
-      const qrKey = normalizeKey(ts.qr_r2_key);
-      const qrObj = await bucket.get(qrKey);
-      if (qrObj) {
-        const qrBytes = new Uint8Array(await new Response(qrObj.body).arrayBuffer());
-        await drawImageInBox(
-          page,
-          pdfDoc,
-          qrBytes,
-          weeklyLayout.qr_box,
-          qrObj.httpMetadata?.contentType || "image/png"
-        );
+      const key = normalizeKey(agencyLogoKey);
+      const obj = await bucket.get(key);
+      if (obj) {
+        const bytes = new Uint8Array(await new Response(obj.body).arrayBuffer());
+        const ct = (obj.httpMetadata?.contentType || "").toLowerCase();
+        const img = ct.includes("png") ? await pdfDoc.embedPng(bytes) : await pdfDoc.embedJpg(bytes);
+
+        const pad = 1.0;
+        const maxW = logoBox.w - pad * 2;
+        const maxH = logoBox.h - pad * 2;
+
+        const iw = img.width;
+        const ih = img.height;
+        const scale = Math.min(maxW / iw, maxH / ih);
+        const w = iw * scale;
+        const h = ih * scale;
+
+        const x = logoBox.x + (logoBox.w - w) / 2;
+        const y = logoBox.y + (logoBox.h - h) / 2;
+
+        page.drawImage(img, {
+          x: mmToPt(x),
+          y: mmToPt(yFromTop(y + h)),
+          width: mmToPt(w),
+          height: mmToPt(h)
+        });
       }
     } catch (e) {
-      console.warn("[TS_PDF] failed to draw QR image", {
-        timesheet_id: timesheetId,
-        err: e?.message || String(e),
-      });
+      console.warn("[TS_PDF_GEN] logo draw failed", e?.message || e);
     }
   }
 
-  // Signatures (same logic as daily)
-  if (ts.r2_nurse_key && layout.fields?.nurse_signature) {
-    const nk = normalizeKey(ts.r2_nurse_key);
-    const nurseObj = await bucket.get(nk);
-    if (nurseObj) {
-      const nurseBytes = new Uint8Array(await new Response(nurseObj.body).arrayBuffer());
-      await drawImageInBox(
-        page,
-        pdfDoc,
-        nurseBytes,
-        layout.fields.nurse_signature,
-        nurseObj.httpMetadata?.contentType || "image/png"
-      );
+  // Title area to the right
+  const titleX = logoBox.x + logoBox.w + 4;
+  drawText(page, fontBold, agencyName, titleX, yHeader + 6, 14);
+  drawText(page, fontBold, "TIMESHEET", titleX, yHeader + 14, 12);
+
+  // Timesheet no: auto-fit so it can never overlap QR safe zone
+  const tsNo = timesheetNumber8(ts.timesheet_id);
+  const tsNoText = `Timesheet No: ${tsNo}`;
+  const tsNoSize = 10;
+  const tsNoWidthPt = fontBold.widthOfTextAtSize(tsNoText, tsNoSize);
+  const tsNoWidthMm = tsNoWidthPt * 25.4 / 72;
+
+  const tsNoX = Math.max(titleX + 2, headerRightLimit - tsNoWidthMm);
+  drawText(page, fontBold, tsNoText, tsNoX, yHeader + 6, tsNoSize);
+
+  // Week ending line
+  const weLabel = weekEndingDayName ? `Week ending (${weekEndingDayName})` : "Week ending";
+  drawText(page, fontBold, `${weLabel}: ${fmtDmy(weekEndingYmd)}`, titleX, yHeader + 22, 10);
+
+  // ---------- Candidate/contract/client boxes ----------
+  const fieldTop = yHeader + 22;
+  const boxH = 12;
+  const gap = 2;
+
+  const col1X = titleX;
+  const col1W = 74;
+  const col2X = col1X + col1W + gap;
+  const col2W = 74;
+  const col3X = col2X + col2W + gap;
+
+  const col3W = Math.max(30, headerRightLimit - col3X);
+
+  const surname = safeStr(cand?.surname || cand?.last_name || "").toUpperCase();
+  const firstName = safeStr(cand?.first_name || "").toUpperCase();
+  const role = safeStr(contract?.role || "");
+  const clientName = safeStr(client?.name || "");
+  const siteWard = safeStr(contract?.display_site || ts?.ward_norm || "");
+  const band = safeStr(contract?.band || "");
+  const bookingRefDefault = safeStr(ts.booking_id || "");
+
+  drawLabelValue(page, font, "Surname", surname, { x: col1X, y: fieldTop, w: col1W, h: boxH }, { label: 6.5, value: 9 });
+  drawLabelValue(page, font, "First name", firstName, { x: col2X, y: fieldTop, w: col2W, h: boxH }, { label: 6.5, value: 9 });
+  drawLabelValue(page, font, "Job title", role, { x: col3X, y: fieldTop, w: col3W, h: boxH }, { label: 6.5, value: 9 });
+
+  const fieldTop2 = fieldTop + boxH + 2;
+
+  drawLabelValue(page, font, "Client / Hospital", clientName, { x: col1X, y: fieldTop2, w: col1W + col2W + gap, h: boxH }, { label: 6.5, value: 9 });
+  drawLabelValue(page, font, "Site / Ward", siteWard, { x: col3X, y: fieldTop2, w: col3W, h: boxH }, { label: 6.5, value: 9 });
+
+  const fieldTop3 = fieldTop2 + boxH + 2;
+
+  drawLabelValue(page, font, "Band", band, { x: col1X, y: fieldTop3, w: 22, h: boxH }, { label: 6.5, value: 9 });
+  drawLabelValue(page, font, "Booking reference", bookingRefDefault, { x: col1X + 22 + gap, y: fieldTop3, w: (col1W + col2W + gap) - (22 + gap), h: boxH }, { label: 6.5, value: 9 });
+  drawLabelValue(page, font, "Timesheet ID", safeStr(ts.timesheet_id), { x: col3X, y: fieldTop3, w: col3W, h: boxH }, { label: 6.5, value: 8 });
+
+  // ---------- HOURS TABLE ----------
+  const hoursBox = { x: M + 1, y: yHours, w: contentW - 2, h: HOURS_H };
+  drawRect(page, hoursBox.x, hoursBox.y, hoursBox.w, hoursBox.h, { lineWidth: 0.5 });
+
+  const colNames = [
+    "Day", "Date", "Start", "Finish", "Break Start", "Break End", "Break Length", "Paid hrs", "Paid hrs (words)", "Booking ref"
+  ];
+  const colW = [16, 22, 16, 16, 18, 18, 22, 18, 55, 0];
+
+  const fixedW = colW.slice(0, -1).reduce((a, b) => a + b, 0);
+  colW[colW.length - 1] = Math.max(24, hoursBox.w - fixedW);
+
+  const headerRowH = 7.5;
+  drawLine(page, hoursBox.x, hoursBox.y + headerRowH, hoursBox.x + hoursBox.w, hoursBox.y + headerRowH, 0.45);
+
+  let cx = hoursBox.x;
+  for (let i = 0; i < colW.length; i++) {
+    if (i > 0) drawLine(page, cx, hoursBox.y, cx, hoursBox.y + hoursBox.h, 0.35);
+    drawText(page, fontBold, colNames[i], cx + 1.2, hoursBox.y + 5.6, 7.2);
+    cx += colW[i];
+  }
+
+  const perDayLines = weekDates.map(d => lineCountForDay(d.ymd));
+  const totalLines = perDayLines.reduce((a, b) => a + b, 0);
+
+  const bodyH = hoursBox.h - headerRowH;
+  const unitH = clamp(bodyH / totalLines, 4.6, 8.0);
+
+  const maxLinesPerDay = (dayIdx) => {
+    const available = bodyH * (perDayLines[dayIdx] / totalLines);
+    return Math.max(1, Math.floor(available / unitH));
+  };
+
+  let yCursor = hoursBox.y + headerRowH;
+  for (let di = 0; di < 7; di++) {
+    const meta = weekDates[di];
+    const ymd = meta.ymd;
+    const maxLines = maxLinesPerDay(di);
+
+    const segs = (ymd && byDate.get(ymd)) ? byDate.get(ymd).slice() : [];
+    const realSegs = segs.filter(s => {
+      const t = getSegTimes(s);
+      return !!(t.start && t.end);
+    });
+
+    const visibleSegs = realSegs.slice(0, Math.max(1, maxLines));
+    const overflow = realSegs.length - visibleSegs.length;
+
+    const rowH = unitH * Math.max(1, visibleSegs.length || 1);
+    drawLine(page, hoursBox.x, yCursor + rowH, hoursBox.x + hoursBox.w, yCursor + rowH, 0.35);
+
+    const colX = [];
+    let xTmp = hoursBox.x;
+    for (let i = 0; i < colW.length; i++) { colX.push(xTmp); xTmp += colW[i]; }
+
+    drawText(page, font, meta.dowName || "", colX[0] + 1.2, yCursor + 5.6, 8.5);
+    drawText(page, font, fmtDmy(ymd), colX[1] + 1.2, yCursor + 5.6, 8.5);
+
+    for (let li = 0; li < visibleSegs.length; li++) {
+      const seg = visibleSegs[li];
+      const t = getSegTimes(seg);
+      const b = getBreakDisplay(seg);
+      const h = computePaidHours(seg);
+
+      const ref = safeStr(seg?.ref_num || "").trim() || safeStr(seg?.booking_ref || "").trim() || bookingRefDefault;
+      const lineY = yCursor + 5.6 + (li * unitH);
+
+      drawText(page, font, t.start, colX[2] + 1.2, lineY, 8.5);
+      drawText(page, font, t.end,   colX[3] + 1.2, lineY, 8.5);
+
+      drawText(page, font, b.brkStart, colX[4] + 1.2, lineY, 8.5);
+      drawText(page, font, b.brkEnd,   colX[5] + 1.2, lineY, 8.5);
+      drawText(page, font, b.brkLen,   colX[6] + 1.2, lineY, 8.5);
+
+      drawText(page, font, h.paid, colX[7] + 1.2, lineY, 8.5);
+      drawText(page, font, h.paidWords, colX[8] + 1.2, lineY, 8.0, { maxWidth: colW[8] - 2.4 });
+      drawText(page, font, ref, colX[9] + 1.2, lineY, 8.5);
     }
-  }
-  if (ts.r2_auth_key && layout.fields?.auth_signature) {
-    const ak = normalizeKey(ts.r2_auth_key);
-    const authObj = await bucket.get(ak);
-    if (authObj) {
-      const authBytes = new Uint8Array(await new Response(authObj.body).arrayBuffer());
-      await drawImageInBox(
-        page,
-        pdfDoc,
-        authBytes,
-        layout.fields.auth_signature,
-        authObj.httpMetadata?.contentType || "image/png"
-      );
+
+    if (overflow > 0) {
+      drawText(page, font, `(+${overflow} more)`, colX[9] + 1.2, yCursor + 5.6 + ((visibleSegs.length - 1) * unitH), 7.5);
     }
+
+    yCursor += rowH;
   }
 
-  // Sign dates (UK-local)
-  if (ts.authorised_at_server && layout.fields?.auth_sign_date) {
-    drawText(fmtUKDate(ts.authorised_at_server), layout.fields.auth_sign_date);
-  }
-  if (layout.fields?.nurse_sign_date) {
-    const nurseDateSrc = ts.worked_end_iso || ts.worked_start_iso || ts.week_ending_date;
-    if (nurseDateSrc) drawText(fmtUKDate(nurseDateSrc), layout.fields.nurse_sign_date);
+  // ---------- QR ----------
+  try {
+    const qrStatus = safeStr(ts.qr_status).toUpperCase();
+    const hasQr = (qrStatus === "PENDING") && ts.qr_payload_json && typeof ts.qr_payload_json === "object";
+    if (hasQr) {
+      const qrText = await buildTsq1String(ts.qr_payload_json, env);
+      await drawQrInBox(page, qrText, qrBox);
+    } else {
+      drawRect(page, qrBox.x, qrBox.y, qrBox.w, qrBox.h, { lineWidth: 0.35 });
+    }
+  } catch (e) {
+    console.warn("[TS_PDF_GEN] QR draw failed", e?.message || e);
+    drawRect(page, qrBox.x, qrBox.y, qrBox.w, qrBox.h, { lineWidth: 0.35 });
   }
 
-  // Debug overlay (calibration-only)
-  drawDebugOverlay(page, font, layout);
+  // ---------- ADDITIONAL RATES TABLE ----------
+  const addlBox = { x: M + 1, y: yAddl, w: contentW - 2, h: ADDL_H };
+  drawRect(page, addlBox.x, addlBox.y, addlBox.w, addlBox.h, { lineWidth: 0.5 });
 
+  drawText(page, fontBold, "Additional rates / units (if applicable)", addlBox.x + 1.5, addlBox.y + 5.4, 8.5);
+
+  const addlHeaderY = addlBox.y + 7.0;
+  drawLine(page, addlBox.x, addlHeaderY, addlBox.x + addlBox.w, addlHeaderY, 0.35);
+
+  const aCols = ["Bucket", "Date", "Quantity", "Unit name"];
+  const aW = [110, 28, 26, 0];
+  const aFixed = aW.slice(0, -1).reduce((a, b) => a + b, 0);
+  aW[aW.length - 1] = Math.max(30, addlBox.w - aFixed);
+
+  let ax = addlBox.x;
+  for (let i = 0; i < aW.length; i++) {
+    if (i > 0) drawLine(page, ax, addlBox.y, ax, addlBox.y + addlBox.h, 0.35);
+    drawText(page, fontBold, aCols[i], ax + 1.2, addlBox.y + 5.4, 7.8);
+    ax += aW[i];
+  }
+
+  const maxAddlRows = Math.max(0, Math.floor((addlBox.h - 7.0) / 4.8) - 1);
+  const rowsToShow = additionalRows.slice(0, maxAddlRows);
+  const addlOverflow = additionalRows.length - rowsToShow.length;
+
+  let ry = addlHeaderY + 4.6;
+  for (let i = 0; i < rowsToShow.length; i++) {
+    const r = rowsToShow[i];
+    const x0 = addlBox.x;
+
+    drawText(page, font, safeStr(r.bucket), x0 + 1.2, ry, 8.0, { maxWidth: aW[0] - 2.4 });
+    drawText(page, font, r.date ? fmtDmy(r.date) : "", x0 + aW[0] + 1.2, ry, 8.0);
+    drawText(page, font, safeStr(r.qty), x0 + aW[0] + aW[1] + 1.2, ry, 8.0);
+    drawText(page, font, safeStr(r.unit), x0 + aW[0] + aW[1] + aW[2] + 1.2, ry, 8.0, { maxWidth: aW[3] - 2.4 });
+
+    ry += 4.8;
+  }
+  if (addlOverflow > 0) {
+    drawText(page, font, `(+${addlOverflow} more)`, addlBox.x + addlBox.w - 24, addlBox.y + addlBox.h - 2.4, 7.2);
+  }
+
+  // ---------- DECLARATION + SIGNATURE BOXES ----------
+  const declBox = { x: M + 1, y: yDecl, w: contentW - 2, h: DECL_H };
+  drawRect(page, declBox.x, declBox.y, declBox.w, declBox.h, { lineWidth: 0.5 });
+
+  const headerLines =
+    (headerJson && typeof headerJson === "object" && Array.isArray(headerJson.lines))
+      ? headerJson.lines.map(safeStr)
+      : [];
+
+  const hdrFontSize = (headerJson && Number(headerJson.font_size)) ? Number(headerJson.font_size) : 8;
+  const hdrLineH = (headerJson && Number(headerJson.line_height_mm)) ? Number(headerJson.line_height_mm) : 3.8;
+
+  let txtY = declBox.y + 4.8;
+  if (headerLines.length) {
+    for (const line of headerLines) {
+      drawText(page, font, line, declBox.x + 2, txtY, hdrFontSize, { maxWidth: declBox.w - 4 });
+      txtY += hdrLineH;
+    }
+  } else {
+    drawText(page, font, "Client declaration:", declBox.x + 2, txtY, 8.5);
+    txtY += 4.0;
+  }
+
+  const sigTop = declBox.y + (headerLines.length ? (hdrLineH * headerLines.length + 6) : 8);
+  const sigH = declBox.y + declBox.h - sigTop - 2.0;
+  const sigGap = 6;
+  const sigW = (declBox.w - sigGap - 4) / 2;
+
+  const nurseBox = { x: declBox.x + 2, y: sigTop, w: sigW, h: sigH };
+  const clientBox = { x: nurseBox.x + sigW + sigGap, y: sigTop, w: sigW, h: sigH };
+
+  drawRect(page, nurseBox.x, nurseBox.y, nurseBox.w, nurseBox.h, { lineWidth: 0.35 });
+  drawRect(page, clientBox.x, clientBox.y, clientBox.w, clientBox.h, { lineWidth: 0.35 });
+
+  drawText(page, fontBold, "Temporary worker declaration", nurseBox.x + 2, nurseBox.y + 4.5, 8.5);
+  drawText(page, fontBold, "Client declaration", clientBox.x + 2, clientBox.y + 4.5, 8.5);
+
+  const lineY = nurseBox.y + nurseBox.h - 8;
+  drawLine(page, nurseBox.x + 2, lineY, nurseBox.x + nurseBox.w - 26, lineY, 0.35);
+  drawText(page, font, "Signature", nurseBox.x + 2, lineY - 1.2, 7.5);
+
+  drawLine(page, nurseBox.x + nurseBox.w - 24, lineY, nurseBox.x + nurseBox.w - 2, lineY, 0.35);
+  drawText(page, font, "Date", nurseBox.x + nurseBox.w - 24, lineY - 1.2, 7.5);
+
+  drawLine(page, clientBox.x + 2, lineY, clientBox.x + clientBox.w - 26, lineY, 0.35);
+  drawText(page, font, "Signature", clientBox.x + 2, lineY - 1.2, 7.5);
+
+  drawLine(page, clientBox.x + clientBox.w - 24, lineY, clientBox.x + clientBox.w - 2, lineY, 0.35);
+  drawText(page, font, "Date", clientBox.x + clientBox.w - 24, lineY - 1.2, 7.5);
+
+  // Optional: embed stored signature images (electronic path)
+  if (ts.r2_nurse_key) {
+    try {
+      const nk = normalizeKey(ts.r2_nurse_key);
+      const nurseObj = await bucket.get(nk);
+      if (nurseObj) {
+        const nurseBytes = new Uint8Array(await new Response(nurseObj.body).arrayBuffer());
+        const ct = (nurseObj.httpMetadata?.contentType || "").toLowerCase();
+        const img = ct.includes("png") ? await pdfDoc.embedPng(nurseBytes) : await pdfDoc.embedJpg(nurseBytes);
+
+        const imgBox = { x: nurseBox.x + 2, y: nurseBox.y + 8, w: nurseBox.w - 4, h: nurseBox.h - 18 };
+        const scale = Math.min(imgBox.w / img.width, imgBox.h / img.height);
+        const w = img.width * scale;
+        const h = img.height * scale;
+        const x = imgBox.x + (imgBox.w - w) / 2;
+        const y = imgBox.y + (imgBox.h - h) / 2;
+
+        page.drawImage(img, { x: mmToPt(x), y: mmToPt(yFromTop(y + h)), width: mmToPt(w), height: mmToPt(h) });
+      }
+    } catch {}
+  }
+
+  if (ts.r2_auth_key) {
+    try {
+      const ak = normalizeKey(ts.r2_auth_key);
+      const authObj = await bucket.get(ak);
+      if (authObj) {
+        const authBytes = new Uint8Array(await new Response(authObj.body).arrayBuffer());
+        const ct = (authObj.httpMetadata?.contentType || "").toLowerCase();
+        const img = ct.includes("png") ? await pdfDoc.embedPng(authBytes) : await pdfDoc.embedJpg(authBytes);
+
+        const imgBox = { x: clientBox.x + 2, y: clientBox.y + 8, w: clientBox.w - 4, h: clientBox.h - 18 };
+        const scale = Math.min(imgBox.w / img.width, imgBox.h / img.height);
+        const w = img.width * scale;
+        const h = img.height * scale;
+        const x = imgBox.x + (imgBox.w - w) / 2;
+        const y = imgBox.y + (imgBox.h - h) / 2;
+
+        page.drawImage(img, { x: mmToPt(x), y: mmToPt(yFromTop(y + h)), width: mmToPt(w), height: mmToPt(h) });
+      }
+    } catch {}
+  }
+
+  // ---------- FOOTER ----------
+  const footBox = { x: M + 1, y: yFoot, w: contentW - 2, h: FOOT_H };
+  drawRect(page, footBox.x, footBox.y, footBox.w, footBox.h, { lineWidth: 0.35 });
+
+  const footerLines =
+    (footerJson && typeof footerJson === "object" && Array.isArray(footerJson.lines))
+      ? footerJson.lines.map(safeStr)
+      : [];
+
+  const fSize = (footerJson && Number(footerJson.font_size)) ? Number(footerJson.font_size) : 7;
+  const fLineH = (footerJson && Number(footerJson.line_height_mm)) ? Number(footerJson.line_height_mm) : 3.6;
+
+  let fy = footBox.y + 3.8;
+  for (const line of footerLines) {
+    if (fy > footBox.y + footBox.h - 1.2) break;
+    drawText(page, font, line, footBox.x + 2, fy, fSize, { maxWidth: footBox.w - 4 });
+    fy += fLineH;
+  }
+
+  // ---------- save to R2 ----------
+  const outKey = normalizeKey(`docs-pdf/timesheets/ts_${timesheetId}.pdf`);
   const outBytes = await pdfDoc.save();
-  await bucket.put(outKey, outBytes, { httpMetadata: { contentType: "application/pdf" } });
+
+  await bucket.put(outKey, outBytes, {
+    httpMetadata: { contentType: "application/pdf" }
+  });
+
   return outKey;
 }
 
+async function renderTimesheetPDFAndSave(env, timesheetId) {
+  const bucket = env.R2_BUCKET || env.R2;
+  if (!bucket?.get || !bucket?.put) throw new Error("Storage not configured");
+
+  // Load TS row (CURRENT VERSION ONLY) so we can decide whether we must regenerate (QR pending)
+  const { rows: tsRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${encodeURIComponent(timesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=timesheet_id,qr_token,qr_status,qr_payload_json` +
+      `&limit=1`
+  );
+  const ts = tsRows?.[0];
+  if (!ts) throw new Error("Timesheet not found");
+
+  const outKey = normalizeKey(`docs-pdf/timesheets/ts_${timesheetId}.pdf`);
+
+  // Regenerate whenever QR is pending (reissue-safe). Otherwise we can reuse cached PDF.
+  const needsQrInPdf =
+    !!(ts.qr_token && String(ts.qr_token).trim()) &&
+    String(ts.qr_status || "").toUpperCase() === "PENDING" &&
+    ts.qr_payload_json && typeof ts.qr_payload_json === "object";
+
+  if (!needsQrInPdf && (await r2Exists(env, outKey))) return outKey;
+
+  // ✅ NO TEMPLATE: generate the entire PDF and overwrite outKey if needed
+  return await renderTimesheetPDFGeneratedAndSave(env, timesheetId);
+}
+
+
 // Ensure a TS PDF exists; return its key (render/snapshot if missing)
- async function ensureTimesheetPdf(env, timesheetId) {
-  // Prefer a manual uploaded PDF when present; else render from signatures.
-  // We return the key to the PDF in R2 (can be the manual key itself).
+
+async function ensureTimesheetPdf(env, timesheetId) {
   const enc = encodeURIComponent;
 
+  // Always look at CURRENT VERSION ONLY
   const ts = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
-    `?timesheet_id=eq.${enc(timesheetId)}&select=manual_pdf_r2_key`
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=manual_pdf_r2_key,qr_token,qr_status,qr_payload_json` +
+      `&limit=1`
   );
+
+  // If QR is pending and payload exists, we MUST return the generated printable PDF (not a manual scan),
+  // because the QR is part of the printable.
+  const needsQrPrintable =
+    !!(ts?.qr_token && String(ts.qr_token).trim()) &&
+    String(ts?.qr_status || "").toUpperCase() === "PENDING" &&
+    ts?.qr_payload_json && typeof ts.qr_payload_json === "object";
+
+  if (needsQrPrintable) {
+    return await renderTimesheetPDFAndSave(env, timesheetId);
+  }
+
+  // Prefer a manual uploaded PDF when present (scanned evidence path)
   if (ts?.manual_pdf_r2_key) {
     const mk = normalizeKey(ts.manual_pdf_r2_key);
-    if (await r2Exists(env, mk)) return mk; // use attached manual PDF directly
+    if (await r2Exists(env, mk)) return mk;
   }
 
   const key = normalizeKey(`docs-pdf/timesheets/ts_${timesheetId}.pdf`);
   if (await r2Exists(env, key)) return key;
 
-  // This now knows how to handle both daily and weekly (incl. QR weekly)
+  // Otherwise generate the system PDF
   return await renderTimesheetPDFAndSave(env, timesheetId);
 }
 
@@ -2009,7 +2450,7 @@ async function handleContractsCreate(env, req) {
       if (seen.has(code)) return;
       seen.add(code);
 
-       let bucketName = (row.bucket_name || '').trim();
+      let bucketName = (row.bucket_name || '').trim();
       const unitName   = (row.unit_name != null && String(row.unit_name).trim())
         ? String(row.unit_name).trim()
         : null;
@@ -2036,7 +2477,6 @@ async function handleContractsCreate(env, req) {
         pay_rate: pay,
         charge_rate: charge
       });
-
     });
 
     return out.length ? out : null;
@@ -2056,6 +2496,10 @@ async function handleContractsCreate(env, req) {
   const hasDailyCalc            = Object.prototype.hasOwnProperty.call(body, 'daily_calc_of_invoices') && body.daily_calc_of_invoices !== null;
   const hasGroupBuckets         = Object.prototype.hasOwnProperty.call(body, 'group_nightsat_sunbh') && body.group_nightsat_sunbh !== null;
   const hasSelfBill             = Object.prototype.hasOwnProperty.call(body, 'self_bill') && body.self_bill !== null;
+
+  // ✅ NEW: attachments (treat explicit null as "not supplied" so we can derive defaults)
+  const hasHrAttachToInvoice    = Object.prototype.hasOwnProperty.call(body, 'hr_attach_to_invoice') && body.hr_attach_to_invoice !== null;
+  const hasTsAttachToInvoice    = Object.prototype.hasOwnProperty.call(body, 'ts_attach_to_invoice') && body.ts_attach_to_invoice !== null;
 
   // Normalise booleans we already support
   if (hasRequireRefToPay)     body.require_reference_to_pay     = clampBool(body.require_reference_to_pay, false);
@@ -2089,7 +2533,7 @@ async function handleContractsCreate(env, req) {
   const std_hours_json = (derived_hours || body.std_hours_json || null);
 
   // Pre-fetch latest client_settings to use for week-ending snapshot and ref/submission defaults
-  // NEW: also fetch route/calc defaults and auto_invoice_default
+  // ✅ NEW: also fetch attachments defaults
   let clientSettings = null;
   try {
     const { rows: csRows } = await sbFetch(
@@ -2109,7 +2553,9 @@ async function handleContractsCreate(env, req) {
             'self_bill_no_invoices_sent',
             'daily_calc_of_invoices',
             'group_nightsat_sunbh',
-            'auto_invoice_default'
+            'auto_invoice_default',
+            'hr_attach_to_invoice',
+            'ts_attach_to_invoice'
           ].join(',') +
         `&order=effective_from.desc,created_at.desc&limit=1`
     );
@@ -2198,12 +2644,36 @@ async function handleContractsCreate(env, req) {
     ? clampBool(body.auto_invoice, false)
     : clampBool(clientSettings?.auto_invoice_default, false);
 
+  // ✅ NEW: derive attachments from body or client_settings (fallback false)
+  let hr_attach_to_invoice = hasHrAttachToInvoice
+    ? clampBool(body.hr_attach_to_invoice, false)
+    : clampBool(clientSettings?.hr_attach_to_invoice, false);
+
+  let ts_attach_to_invoice = hasTsAttachToInvoice
+    ? clampBool(body.ts_attach_to_invoice, false)
+    : clampBool(clientSettings?.ts_attach_to_invoice, false);
+
   // Friendly validation mirroring DB constraints
   if (is_nhsp === true && autoprocess_hr === true) {
     return withCORS(env, req, badRequest('Invalid contract route: is_nhsp=true and autoprocess_hr=true cannot both be true.'));
   }
   if (no_timesheet_required === true && autoprocess_hr !== true) {
     return withCORS(env, req, badRequest('Invalid contract route: no_timesheet_required=true requires autoprocess_hr=true.'));
+  }
+
+  // ✅ Canonical attachment rules on create (safe)
+  if (is_nhsp === true) {
+    hr_attach_to_invoice = false;
+    ts_attach_to_invoice = false;
+  }
+  if (autoprocess_hr !== true) {
+    // Manual route: HR attach false, TS attach true
+    hr_attach_to_invoice = false;
+    ts_attach_to_invoice = true;
+  }
+  if (no_timesheet_required === true) {
+    // HR no-timesheets: TS attach must be false
+    ts_attach_to_invoice = false;
   }
 
   // Mileage: accept from body, or derive from client.mileage_charge_rate if both omitted
@@ -2301,6 +2771,10 @@ async function handleContractsCreate(env, req) {
       daily_calc_of_invoices,
       group_nightsat_sunbh,
       self_bill,
+
+      // ✅ NEW: attachments
+      hr_attach_to_invoice,
+      ts_attach_to_invoice,
 
       pay_method_snapshot: pmSnap,
       rates_json: prunedRates,
@@ -2893,6 +3367,7 @@ async function handleContractsUpdate(env, req, contractId) {
   );
   if (!current) return withCORS(env, req, notFound('Contract not found'));
 
+  // "Real timesheets exist" = any row exists in timesheets for contract_id
   const hasSubmitted = !!(await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets?contract_id=eq.${enc(contractId)}&select=timesheet_id&limit=1`
@@ -2922,7 +3397,7 @@ async function handleContractsUpdate(env, req, contractId) {
       if (seen.has(code)) return;
       seen.add(code);
 
-      const bucketName = (row.bucket_name || '').trim();
+      let bucketName = (row.bucket_name || '').trim();
       const unitName   = (row.unit_name != null && String(row.unit_name).trim())
         ? String(row.unit_name).trim()
         : null;
@@ -2937,6 +3412,9 @@ async function handleContractsUpdate(env, req, contractId) {
 
       const hasAny = bucketName || pay != null || charge != null || unitName;
       if (!hasAny) return;
+
+      // ✅ Ensure bucket_name is never blank for a persisted row
+      if (!bucketName) bucketName = code;
 
       out.push({
         code,
@@ -3010,6 +3488,10 @@ async function handleContractsUpdate(env, req, contractId) {
   if ('daily_calc_of_invoices' in body) patch.daily_calc_of_invoices = boolOrNull(body.daily_calc_of_invoices, !!current.daily_calc_of_invoices);
   if ('group_nightsat_sunbh' in body)   patch.group_nightsat_sunbh = boolOrNull(body.group_nightsat_sunbh, !!current.group_nightsat_sunbh);
 
+  // ✅ NEW: attachments (tri-state)
+  if ('hr_attach_to_invoice' in body)   patch.hr_attach_to_invoice = boolOrNull(body.hr_attach_to_invoice, !!current.hr_attach_to_invoice);
+  if ('ts_attach_to_invoice' in body)   patch.ts_attach_to_invoice = boolOrNull(body.ts_attach_to_invoice, !!current.ts_attach_to_invoice);
+
   // Friendly validation mirroring DB constraints (validate resulting state: current + patch)
   const eff_is_nhsp = Object.prototype.hasOwnProperty.call(patch, 'is_nhsp') ? patch.is_nhsp : current.is_nhsp;
   const eff_autoprocess_hr = Object.prototype.hasOwnProperty.call(patch, 'autoprocess_hr') ? patch.autoprocess_hr : current.autoprocess_hr;
@@ -3020,6 +3502,21 @@ async function handleContractsUpdate(env, req, contractId) {
   }
   if (eff_no_ts === true && eff_autoprocess_hr !== true) {
     return withCORS(env, req, badRequest('Invalid contract route: no_timesheet_required=true requires autoprocess_hr=true.'));
+  }
+
+  // ✅ Attachment rules (consistent with your settings model)
+  const eff_hr_attach = Object.prototype.hasOwnProperty.call(patch, 'hr_attach_to_invoice') ? patch.hr_attach_to_invoice : current.hr_attach_to_invoice;
+  const eff_ts_attach = Object.prototype.hasOwnProperty.call(patch, 'ts_attach_to_invoice') ? patch.ts_attach_to_invoice : current.ts_attach_to_invoice;
+
+  if (eff_is_nhsp === true) {
+    if (eff_hr_attach === true || eff_ts_attach === true) {
+      return withCORS(env, req, badRequest('NHSP route: attachments must be disabled (hr_attach_to_invoice/ts_attach_to_invoice cannot be true).'));
+    }
+  }
+  if (eff_no_ts === true) {
+    if (eff_ts_attach === true) {
+      return withCORS(env, req, badRequest('No-timesheets route: ts_attach_to_invoice cannot be true.'));
+    }
   }
 
   if (hasSubmitted) {
@@ -3033,6 +3530,49 @@ async function handleContractsUpdate(env, req, contractId) {
     if ('additional_rates_json' in body) {
       return withCORS(env, req, badRequest('Cannot change additional rates after timesheets have been submitted'));
     }
+
+    // ✅ NEW: contract settings immutability once real timesheets exist
+    const changed = [];
+    const curTri = (v) => (v === undefined ? null : v);
+
+    const triKeys = [
+      'is_nhsp',
+      'autoprocess_hr',
+      'requires_hr',
+      'no_timesheet_required',
+      'self_bill',
+      'daily_calc_of_invoices',
+      'group_nightsat_sunbh',
+      'hr_attach_to_invoice',
+      'ts_attach_to_invoice'
+    ];
+
+    for (const k of triKeys) {
+      if (!Object.prototype.hasOwnProperty.call(body, k)) continue;
+      const desired = patch[k];
+      const cur = curTri(current[k]);
+      if (desired !== cur) changed.push(k);
+    }
+
+    const boolKeys = [
+      'auto_invoice',
+      'require_reference_to_pay',
+      'require_reference_to_invoice'
+    ];
+
+    for (const k of boolKeys) {
+      if (!Object.prototype.hasOwnProperty.call(body, k)) continue;
+      const desired = !!patch[k];
+      const cur = !!current[k];
+      if (desired !== cur) changed.push(k);
+    }
+
+    if (changed.length) {
+      return withCORS(env, req, badRequest(
+        `Cannot change contract settings because real timesheets already exist for this contract. Blocked fields: ${changed.join(', ')}`
+      ));
+    }
+
   } else {
     if ('candidate_id' in body) patch.candidate_id = body.candidate_id || null;
     if ('client_id'    in body) patch.client_id    = body.client_id || null;
@@ -3381,7 +3921,7 @@ async function handleContractsReplace(env, req, contractId) {
       if (seen.has(code)) return;
       seen.add(code);
 
-      const bucketName = (row.bucket_name || '').trim();
+      let bucketName = (row.bucket_name || '').trim();
       const unitName   = (row.unit_name != null && String(row.unit_name).trim())
         ? String(row.unit_name).trim()
         : null;
@@ -3396,6 +3936,9 @@ async function handleContractsReplace(env, req, contractId) {
 
       const hasAny = bucketName || pay != null || charge != null || unitName;
       if (!hasAny) return;
+
+      // ✅ Ensure bucket_name is never blank for a persisted row
+      if (!bucketName) bucketName = code;
 
       out.push({
         code,
@@ -3527,7 +4070,10 @@ async function handleContractsReplace(env, req, contractId) {
   }
 
   const dsm = String(body.default_submission_mode||'').toUpperCase();
-  if (!['ELECTRONIC','MANUAL'].includes(dsm)) return withCORS(env, req, badRequest('default_submission_mode must be ELECTRONIC or MANUAL'));
+  // ✅ Align with create/update: allow QR as well
+  if (!['ELECTRONIC','MANUAL','QR'].includes(dsm)) {
+    return withCORS(env, req, badRequest('default_submission_mode must be ELECTRONIC, MANUAL or QR'));
+  }
 
   const extraWarnings = [];
   let wew;
@@ -3623,6 +4169,10 @@ async function handleContractsReplace(env, req, contractId) {
     group_nightsat_sunbh:  ('group_nightsat_sunbh' in body)  ? boolOrNull(body.group_nightsat_sunbh, !!current.group_nightsat_sunbh) : (current.group_nightsat_sunbh ?? null),
     self_bill:             ('self_bill' in body)             ? boolOrNull(body.self_bill, !!current.self_bill) : (current.self_bill ?? null),
 
+    // ✅ NEW: attachments (tri-state)
+    hr_attach_to_invoice:  ('hr_attach_to_invoice' in body)  ? boolOrNull(body.hr_attach_to_invoice, !!current.hr_attach_to_invoice) : (current.hr_attach_to_invoice ?? null),
+    ts_attach_to_invoice:  ('ts_attach_to_invoice' in body)  ? boolOrNull(body.ts_attach_to_invoice, !!current.ts_attach_to_invoice) : (current.ts_attach_to_invoice ?? null),
+
     pay_method_snapshot: String(body.pay_method_snapshot||current.pay_method_snapshot).toUpperCase(),
     default_submission_mode: dsm,
     week_ending_weekday_snapshot: wew,
@@ -3630,9 +4180,12 @@ async function handleContractsReplace(env, req, contractId) {
     std_schedule_json,
     std_hours_json,
     bucket_labels_json: ('bucket_labels_json' in body) ? (body.bucket_labels_json || null) : (current.bucket_labels_json || null),
-    auto_invoice: clampBool(body.auto_invoice, current.auto_invoice),
-    require_reference_to_pay: clampBool(body.require_reference_to_pay, current.require_reference_to_pay),
-    require_reference_to_invoice: clampBool(body.require_reference_to_invoice, current.require_reference_to_invoice),
+
+    // ✅ Avoid accidental changes when keys omitted
+    auto_invoice: ('auto_invoice' in body) ? clampBool(body.auto_invoice, current.auto_invoice) : current.auto_invoice,
+    require_reference_to_pay: ('require_reference_to_pay' in body) ? clampBool(body.require_reference_to_pay, current.require_reference_to_pay) : current.require_reference_to_pay,
+    require_reference_to_invoice: ('require_reference_to_invoice' in body) ? clampBool(body.require_reference_to_invoice, current.require_reference_to_invoice) : current.require_reference_to_invoice,
+
     mileage_pay_rate: nextMileagePay,
     mileage_charge_rate: nextMileageCharge,
     updated_at: nowIso(),
@@ -3647,6 +4200,60 @@ async function handleContractsReplace(env, req, contractId) {
   }
   if (patch.no_timesheet_required === true && patch.autoprocess_hr !== true) {
     return withCORS(env, req, badRequest('Invalid contract route: no_timesheet_required=true requires autoprocess_hr=true.'));
+  }
+
+  // ✅ Attachment constraints aligned with route semantics
+  if (patch.is_nhsp === true) {
+    if (patch.hr_attach_to_invoice === true || patch.ts_attach_to_invoice === true) {
+      return withCORS(env, req, badRequest('NHSP route: attachments must be disabled (hr_attach_to_invoice/ts_attach_to_invoice cannot be true).'));
+    }
+  }
+  if (patch.no_timesheet_required === true) {
+    if (patch.ts_attach_to_invoice === true) {
+      return withCORS(env, req, badRequest('No-timesheets route: ts_attach_to_invoice cannot be true.'));
+    }
+  }
+
+  // ✅ NEW: settings immutability on replace if real timesheets exist
+  if (hasSubmitted) {
+    const changed = [];
+    const curTri = (v) => (v === undefined ? null : v);
+
+    const triKeys = [
+      'is_nhsp',
+      'autoprocess_hr',
+      'requires_hr',
+      'no_timesheet_required',
+      'self_bill',
+      'daily_calc_of_invoices',
+      'group_nightsat_sunbh',
+      'hr_attach_to_invoice',
+      'ts_attach_to_invoice'
+    ];
+
+    for (const k of triKeys) {
+      const desired = patch[k];
+      const cur = curTri(current[k]);
+      if (desired !== cur) changed.push(k);
+    }
+
+    const boolKeys = [
+      'auto_invoice',
+      'require_reference_to_pay',
+      'require_reference_to_invoice'
+    ];
+
+    for (const k of boolKeys) {
+      const desired = !!patch[k];
+      const cur = !!current[k];
+      if (desired !== cur) changed.push(k);
+    }
+
+    if (changed.length) {
+      return withCORS(env, req, badRequest(
+        `Cannot change contract settings because real timesheets already exist for this contract. Blocked fields: ${changed.join(', ')}`
+      ));
+    }
   }
 
   // Prune PAYE vs Umbrella buckets according to pay_method_snapshot
@@ -6965,7 +7572,7 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
   }
 }
 
- async function handleTimesheetPdf(env, req, timesheetId) {
+async function handleTimesheetPdf(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
   // Admin auth
@@ -6977,27 +7584,41 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
   }
 
   try {
+    // ✅ Stale-safe resolve (read path)
+    const resolved = await resolveTimesheetToCurrent(env, timesheetId);
+    if (!resolved?.current_timesheet_id) {
+      return withCORS(env, req, notFound('Timesheet not found'));
+    }
+
+    const currentTimesheetId = String(resolved.current_timesheet_id);
+
     // ensureTimesheetPdf will either:
-    // - render the TS to PDF and store in R2, or
-    // - reuse an existing manual/uploaded PDF
-    // It should return the R2 key (string).
-    const r2Key = await ensureTimesheetPdf(env, timesheetId);
+    // - return manual scanned evidence key (manual_pdf_r2_key) if present and allowed, OR
+    // - return the generated/system PDF key
+    const r2Key = await ensureTimesheetPdf(env, currentTimesheetId);
     if (!r2Key) {
       return withCORS(env, req, serverError('Failed to ensure timesheet PDF'));
     }
 
-    // Load rotation from timesheet if available
+    // ✅ Rotation: only apply to scanned/manual evidence PDFs
+    // (Generated/system PDFs should always be 0 rotation.)
     let rotationDeg = 0;
     try {
       const { rows: tsRows } = await sbFetch(
         env,
         `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=eq.${enc(timesheetId)}` +
-        `&select=manual_pdf_rotation_degrees` +
-        `&limit=1`
+          `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+          `&is_current=eq.true` +
+          `&select=manual_pdf_r2_key,manual_pdf_rotation_degrees` +
+          `&limit=1`
       );
       const ts = tsRows?.[0] || null;
-      if (ts && ts.manual_pdf_rotation_degrees != null) {
+
+      const manualKey = ts?.manual_pdf_r2_key ? normalizeKey(ts.manual_pdf_r2_key) : null;
+      const usedKey = r2Key ? normalizeKey(r2Key) : null;
+
+      // Only rotate if we're actually returning the manual scanned PDF
+      if (manualKey && usedKey && manualKey === usedKey) {
         const n = Number(ts.manual_pdf_rotation_degrees);
         if (Number.isFinite(n)) rotationDeg = n;
       }
@@ -7005,9 +7626,11 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
       rotationDeg = 0;
     }
 
-    // Frontend will use r2_key + rotation_degrees to render correctly
     return withCORS(env, req, ok({
-      timesheet_id: timesheetId,
+      requested_timesheet_id: resolved.requested_timesheet_id || timesheetId,
+      current_timesheet_id: currentTimesheetId,
+      was_stale: !!resolved.was_stale,
+
       r2_key: r2Key,
       rotation_degrees: rotationDeg
     }));
@@ -7019,6 +7642,7 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
     return withCORS(env, req, serverError('Failed to generate or locate timesheet PDF'));
   }
 }
+
 // BE FIX: expected guard + resolve CW-linked timesheet to CURRENT before mutating TS/TSFIN; strict 409 payload
 
 
@@ -7744,7 +8368,6 @@ async function handleTimesheetUnauthorise(env, req, timesheetId) {
     was_stale: !!guard.resolved.was_stale
   }));
 }
-
 
 async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
   const enc = encodeURIComponent;
@@ -8480,37 +9103,29 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     const now2 = nowIso();
 
     try {
-   // token FIRST
-qrToken = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
-  ? crypto.randomUUID()
-  : `${currentTimesheetId}:${Date.now()}`;
+      // token FIRST
+      qrToken = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+        ? crypto.randomUUID()
+        : `${currentTimesheetId}:${Date.now()}`;
 
-const qrRes = await generateAndStoreTimesheetQr(env, {
-  timesheet_id: currentTimesheetId,
-  contract_week_id: null,
-  contract_id: updatedTs?.contract_id || ts.contract_id || null,
-  candidate_id: updatedTs?.candidate_id || ts.candidate_id || null,
-  client_id: finAfter.client_id || updatedTs?.client_id || ts.client_id || null,
-  week_ending_ymd: null,
-  qr_token: qrToken
-});
-qr_r2_key = qrRes?.qr_r2_key || null;
-
-
-      const workedDateYmd =
-        updatedTs?.worked_start_iso ? (toLocalParts(updatedTs.worked_start_iso, null)?.ymd || String(updatedTs.worked_start_iso).slice(0,10))
-        : worked_date_ymd || null;
-
-      const qrPayload = {
-        kind: 'DAILY_QR_TIMESHEET',
-        token: qrToken,
+      const qrRes = await generateAndStoreTimesheetQr(env, {
         timesheet_id: currentTimesheetId,
-        worked_date: workedDateYmd,
+        contract_week_id: null,
+        contract_id: updatedTs?.contract_id || ts.contract_id || null,
         candidate_id: updatedTs?.candidate_id || ts.candidate_id || null,
         client_id: finAfter.client_id || updatedTs?.client_id || ts.client_id || null,
-        reason: (qrAction === 'REISSUE') ? 'REISSUE_AFTER_HOURS_CHANGE' : 'ISSUE_AFTER_ADMIN_EDIT'
-      };
+        week_ending_ymd: null,
+        qr_token: qrToken
+      });
+      qr_r2_key = qrRes?.qr_r2_key || null;
 
+      const workedDateYmd =
+        updatedTs?.worked_start_iso
+          ? (toLocalParts(updatedTs.worked_start_iso, null)?.ymd || String(updatedTs.worked_start_iso).slice(0,10))
+          : worked_date_ymd || null;
+
+      // ✅ IMPORTANT: Do NOT overwrite qr_payload_json here.
+      // generateAndStoreTimesheetQr already stored the TSQ1 payload on the current row.
       await fetch(
         `${env.SUPABASE_URL}/rest/v1/timesheets` +
           `?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
@@ -8522,26 +9137,33 @@ qr_r2_key = qrRes?.qr_r2_key || null;
             qr_status: 'PENDING',
             qr_generated_at: now2,
             qr_scanned_at: null,
-            qr_payload_json: qrPayload,
-            qr_r2_key,
+            qr_scan_info_json: null,
+            // ✅ leave qr_payload_json untouched
+            qr_r2_key: qr_r2_key || null,
             updated_at: now2
           })
         }
       ).catch(() => {});
 
-      pdfKey = await ensureTimesheetPdf(env, currentTimesheetId).catch(() => null);
+    pdfKey = await ensureTimesheetPdf(env, currentTimesheetId).catch(() => null);
 
-      if (pdfKey) {
-        await fetch(
-          `${env.SUPABASE_URL}/rest/v1/timesheets` +
-            `?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
-          {
-            method: 'PATCH',
-            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-            body: JSON.stringify({ manual_pdf_r2_key: pdfKey, updated_at: now2 })
-          }
-        ).catch(() => {});
-      }
+if (pdfKey) {
+  const patchUrl =
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+    `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+    `&is_current=eq.true` +
+    `&or=(manual_pdf_r2_key.is.null,manual_pdf_r2_key.eq.)`;
+
+  await fetch(
+    patchUrl,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+      body: JSON.stringify({ manual_pdf_r2_key: pdfKey, updated_at: now2 })
+    }
+  ).catch(() => {});
+}
+
 
       qrIssued = (qrAction === 'ISSUE');
       qrReissued = (qrAction === 'REISSUE');
@@ -8665,6 +9287,7 @@ qr_r2_key = qrRes?.qr_r2_key || null;
     qr_token: qrToken || null
   }));
 }
+
 
 async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
@@ -31651,20 +32274,34 @@ async function handleGetSettings(env, req) {
   if (!user) return unauthorized('Unauthorized');
 
   try {
+    // Explicit select list so new JSON fields are always included (and we avoid relying on select=*)
+    const select =
+      [
+        'id',
+        'agency_name',
+        'agency_logo',
+
+        // NEW: configurable header/footer text for generated timesheet PDFs
+        'timesheet_header_json',
+        'timesheet_footer_json'
+      ].join(',');
+
     const { rows } = await sbFetch(
       env,
-      `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=*`
+      `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=${select}`
     );
+
     if (!rows.length) {
       const { rows: alt } = await sbFetch(
         env,
-        `${env.SUPABASE_URL}/rest/v1/settings_defaults?select=*&limit=1`
+        `${env.SUPABASE_URL}/rest/v1/settings_defaults?select=${select}&limit=1`
       );
       if (!alt.length) return notFound("settings_defaults not found");
       const s2 = { ...alt[0] };
       delete s2.id;
       return withCORS(env, req, ok({ settings: s2 }));
     }
+
     const settings = { ...rows[0] };
     delete settings.id;
     return withCORS(env, req, ok({ settings }));
@@ -31672,6 +32309,7 @@ async function handleGetSettings(env, req) {
     return withCORS(env, req, serverError("Failed to fetch settings_defaults"));
   }
 }
+
 async function handleUpdateSettings(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized('Unauthorized');
@@ -35023,9 +35661,6 @@ async function handleTimesheetResolveClient(env, req, timesheetId) {
   }
 }
 
-
-
-
 async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -35033,18 +35668,15 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
   if (!user) return withCORS(env, req, unauthorized());
   if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
 
-  // ✅ Guarded write: require expected_timesheet_id
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
   const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
   if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
 
-  // ✅ Stale-safe resolve
   const resolved = await resolveTimesheetToCurrent(env, timesheetId);
   if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
   const currentTimesheetId = resolved.current_timesheet_id;
 
-  // ✅ Guard mismatch → 409 TIMESHEET_MOVED
   if (String(expected) !== String(currentTimesheetId)) {
     return withCORS(
       env,
@@ -35056,7 +35688,6 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
     );
   }
 
-  // Load timesheet (current version)
   const ts = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -35074,7 +35705,6 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
     return withCORS(env, req, badRequest('Timesheet is not DAILY; cannot generate daily QR'));
   }
 
-  // Load TSFIN to ensure not paid/invoiced and to adjust status
   const tsfin = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
@@ -35089,8 +35719,6 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
 
   const now = nowIso();
 
-  // ✅ Allow DAILY ELECTRONIC → QR without requiring pre-switch
-  // We flip submission_mode to MANUAL in-place (route switch does not require preserve).
   if (subMode !== 'MANUAL') {
     if (subMode !== 'ELECTRONIC') {
       return withCORS(env, req, badRequest('Unsupported submission_mode for DAILY QR'));
@@ -35105,7 +35733,6 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
           headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
           body: JSON.stringify({
             submission_mode: 'MANUAL',
-            // invalidate any electronic artefacts
             r2_auth_key: null,
             authorised_at_server: null,
             updated_at: now
@@ -35133,7 +35760,6 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
     }
   }
 
-  // Ensure TSFIN is AWAITING_MANUAL_SIGNATURE
   if (tsfin && String(tsfin.processing_status || '').toUpperCase() !== 'AWAITING_MANUAL_SIGNATURE') {
     try {
       await fetch(
@@ -35155,7 +35781,6 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
     }
   }
 
-  // Derive workedDateYmd from worked_start_iso for QR payload / subject label
   let workedDateYmd = null;
   if (ts.worked_start_iso) {
     try {
@@ -35166,7 +35791,6 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
     }
   }
 
-  // 0) Generate token FIRST so TSQ1 includes tok
   let qrToken;
   try {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -35178,7 +35802,6 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
     qrToken = `${currentTimesheetId}:${Date.now()}`;
   }
 
-  // 1) Generate / store a signed TSQ1 QR PNG in R2 (token embedded)
   let qr_r2_key = null;
   try {
     const res = await generateAndStoreTimesheetQr(env, {
@@ -35196,19 +35819,9 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
       timesheet_id: currentTimesheetId,
       err: e?.message || String(e)
     });
-    return withCORS(env, req, serverError('Failed to generate QR image'));
+    return withCORS(env, req, serverError('Failed to generate QR payload'));
   }
 
-  const qrPayload = {
-    kind: 'DAILY_QR_TIMESHEET',
-    token: qrToken,
-    timesheet_id: currentTimesheetId,
-    worked_date: workedDateYmd,
-    candidate_id: ts.candidate_id || null,
-    client_id: (tsfin && tsfin.client_id) || ts.client_id || null
-  };
-
-  // 2) Patch timesheet with QR metadata (and clear any previous scan)
   try {
     const patchRes = await fetch(
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -35222,7 +35835,6 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
           qr_generated_at: now,
           qr_scanned_at: null,
           qr_scan_info_json: null,
-          qr_payload_json: qrPayload,
           qr_r2_key: qr_r2_key || null,
           updated_at: now
         })
@@ -35246,14 +35858,19 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
     return withCORS(env, req, serverError('Failed to update timesheet QR fields'));
   }
 
-  // 3) Generate / ensure PDF (renderer should embed QR using ts.qr_r2_key)
   let pdfKey = null;
   try {
     pdfKey = await ensureTimesheetPdf(env, currentTimesheetId);
     if (pdfKey) {
-      await fetch(
+      // ✅ FIX: only set manual_pdf_r2_key if it is currently NULL/empty (do not overwrite scanned evidence)
+      const patchUrl =
         `${env.SUPABASE_URL}/rest/v1/timesheets` +
-          `?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&is_current=eq.true` +
+        `&or=(manual_pdf_r2_key.is.null,manual_pdf_r2_key.eq.)`;
+
+      await fetch(
+        patchUrl,
         {
           method: 'PATCH',
           headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
@@ -49353,9 +49970,6 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
   if (!contract) return withCORS(env, req, notFound('Contract not found'));
 
   // 1a) QR route allowed? (authoritative: client_settings.default_submission_mode)
-  // Policy:
-  // - ELECTRONIC => electronic OR QR is allowed
-  // - MANUAL     => QR is allowed (but electronic not)
   let defaultSubmissionMode = 'ELECTRONIC';
   try {
     if (contract.client_id) {
@@ -49395,7 +50009,6 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
   if (Array.isArray(body?.actual_schedule_json) && body.actual_schedule_json.length) {
     actual_schedule_json = body.actual_schedule_json;
 
-    // ✅ REQUIRED: validate schedule structure before bucket resolution / persistence
     try {
       validateScheduleStructure(actual_schedule_json);
     } catch (e) {
@@ -49428,11 +50041,7 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
       bh:    n(body.hours.bh)
     };
   } else {
-    return withCORS(
-      env,
-      req,
-      badRequest('Provide either actual_schedule_json or hours totals')
-    );
+    return withCORS(env, req, badRequest('Provide either actual_schedule_json or hours totals'));
   }
 
   // 2b) Rate guard
@@ -49445,11 +50054,7 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
     (h.bh    > 0 && ((P.bh    == null && P.bh    !== 0) || (C.bh    == null && C.bh    !== 0)));
 
   if (anyMissing(hours, pay, charge)) {
-    return withCORS(
-      env,
-      req,
-      badRequest('Missing rate(s) in contract for one or more entered hour buckets')
-    );
+    return withCORS(env, req, badRequest('Missing rate(s) in contract for one or more entered hour buckets'));
   }
 
   // 2c) Additional units as per weekly logic
@@ -49612,7 +50217,6 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
   let ts = null;
 
   if (cw.timesheet_id) {
-    // Load current version explicitly
     const existing = await sbGetOne(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -49626,25 +50230,18 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
 
     const scope = String(existing.sheet_scope || '').toUpperCase();
     if (scope && scope !== 'WEEKLY') {
-      return withCORS(
-        env,
-        req,
-        badRequest('Existing timesheet linked to this week is not WEEKLY; cannot use QR printable route')
-      );
+      return withCORS(env, req, badRequest('Existing timesheet linked to this week is not WEEKLY; cannot use QR printable route'));
     }
 
     const curFin = await sbGetOne(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-        `?timesheet_id=eq.${enc(existing.timesheet_id)}&is_current=eq.true` +
+        `?timesheet_id=eq.${enc(existing.timesheet_id)}` +
+        `&is_current=eq.true` +
         `&select=locked_by_invoice_id,paid_at_utc`
     );
     if (curFin?.locked_by_invoice_id || curFin?.paid_at_utc) {
-      return withCORS(
-        env,
-        req,
-        badRequest('Cannot generate QR printable: timesheet already invoiced or paid')
-      );
+      return withCORS(env, req, badRequest('Cannot generate QR printable: timesheet already invoiced or paid'));
     }
 
     const tsPatch = {
@@ -49654,7 +50251,6 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
       updated_at: now
     };
 
-    // ✅ Only overwrite schedule if caller supplied one
     if (Array.isArray(actual_schedule_json)) {
       tsPatch.actual_schedule_json = actual_schedule_json;
     }
@@ -49679,7 +50275,6 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
       booking_id,
       version: 1,
       is_current: true,
-      // ✅ IMPORTANT: must be a valid timesheet_status_enum (avoid 'SUBMITTED')
       status: 'RECEIVED',
       occupant_key_norm: occupant_norm,
       hospital_norm,
@@ -49696,7 +50291,6 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
       actual_schedule_json,
       authorised_at_server: null,
       sheet_scope: 'WEEKLY',
-      // QR schema NOT NULL constraint: keep as empty object on creation
       qr_payload_json: {},
       created_at: now,
       updated_at: now
@@ -49710,9 +50304,7 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
         body: JSON.stringify(tsPayload)
       }
     );
-    if (!tsIns.ok) {
-      return withCORS(env, req, serverError(await tsIns.text()));
-    }
+    if (!tsIns.ok) return withCORS(env, req, serverError(await tsIns.text()));
     ts = (await tsIns.json().catch(() => []))[0];
 
     await fetch(
@@ -49748,7 +50340,7 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
       ? Number(policySnapshot.holiday_pay_pct)
       : null;
 
-  // 4) TSFIN snapshot with AWAITING_MANUAL_SIGNATURE from the supplied hours
+  // 4) TSFIN snapshot
   const n2 = (x) => Number(x) || 0;
 
   const basePay    = +(
@@ -49891,7 +50483,7 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
     });
   });
 
-  // 5) Generate token FIRST (required for TSQ1 tok embedding + invalidation)
+  // 5) Generate token FIRST
   const qrToken = (typeof crypto !== 'undefined' && crypto.randomUUID)
     ? crypto.randomUUID()
     : `${ts.timesheet_id}:${Date.now()}`;
@@ -49918,20 +50510,7 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
     });
   }
 
-  // 7) Store app-level QR metadata on current timesheet
-  const qrPayload = {
-    kind: 'WEEKLY_QR_TIMESHEET',
-    token: qrToken,
-    timesheet_id: ts.timesheet_id,
-    contract_week_id: cw.id,
-    contract_id: contract.id,
-    candidate_id: contract.candidate_id || null,
-    client_id: contract.client_id || null,
-    week_ending_date: cw.week_ending_date,
-    hours,
-    additional_units_json
-  };
-
+  // 7) Store QR metadata on current timesheet (do NOT overwrite qr_payload_json)
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
     {
@@ -49944,14 +50523,13 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
         qr_generated_at: now,
         qr_scanned_at: null,
         qr_scan_info_json: null,
-        qr_payload_json: qrPayload, // NOT NULL
         qr_r2_key: qr_r2_key || null,
         updated_at: now
       })
     }
   ).catch(() => {});
 
-  // 8) Render PDF (weekly layout; renderer will draw QR via ts.qr_r2_key / payload)
+  // 8) Render PDF (generated)
   const pdfKey = await renderTimesheetPDFAndSave(env, ts.timesheet_id).catch((e) => {
     console.error('[QR_WEEKLY][GENERATE] renderTimesheetPDFAndSave failed', {
       timesheet_id: ts.timesheet_id,
@@ -49960,9 +50538,16 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
     return null;
   });
 
+  // ✅ FIX: only set manual_pdf_r2_key if it is currently NULL/empty (do not overwrite scanned evidence)
   if (pdfKey) {
+    const patchUrl =
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(ts.timesheet_id)}` +
+      `&is_current=eq.true` +
+      `&or=(manual_pdf_r2_key.is.null,manual_pdf_r2_key.eq.)`;
+
     await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
+      patchUrl,
       {
         method: 'PATCH',
         headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
@@ -49971,7 +50556,7 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
     ).catch(() => {});
   }
 
-  // 9) Email to candidate with PDF via mail_outbox (FIX: no more email_outbox)
+  // 9) Email to candidate with PDF via mail_outbox
   let emailQueued = false;
   try {
     const email = (candidate && candidate.email && String(candidate.email).trim()) || null;
@@ -50060,7 +50645,6 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
     email_queued: emailQueued
   }));
 }
-
 
 
  async function handleTimesheetBucketPreview(env, req) {
@@ -50483,49 +51067,32 @@ async function buildTsq1String(payloadObj, env) {
   const sigB64url = await signTsq1(payloadB64url, env);
   return `TSQ1.${payloadB64url}.${sigB64url}`;
 }
-
 /**
- * Generate a PNG Uint8Array for the given QR string using the `qrcode` lib.
+ * (Option A) PNG generation is disabled.
+ * QR codes must be drawn directly into the PDF from the TSQ1 string/modules.
  *
- * @param {string} qrText
- * @returns {Promise<Uint8Array>} PNG bytes
+ * This function is left intentionally to fail-fast if any legacy call site
+ * still tries to generate a PNG in a Worker (which requires canvas).
  */
 async function generateQrPng(qrText) {
-  // We use a data URL so this works in a Workers/bundled environment.
-  const dataUrl = await QRCode.toDataURL(qrText, {
-    errorCorrectionLevel: 'M',  // medium error correction
-    type: 'image/png',
-    margin: 2,                  // quiet zone
-    scale: 8                    // adjust for ~300x300+ pixels
-  });
-
-  // dataUrl looks like: "data:image/png;base64,AAAA..."
-  const base64 = dataUrl.split(',')[1] || '';
-  const binary = atob(base64);
-  const len = binary.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
+  void qrText;
+  throw new Error('generateQrPng is disabled under Option A. Draw QR modules into the PDF instead.');
 }
 
 /**
- * Generate a TSQ1 QR code for a weekly timesheet and store the PNG in R2.
- * Also patches timesheets.qr_r2_key.
- *
- * This helper does not create the timesheet itself; it assumes you already
- * have the IDs and week-ending date from the DB.
+ * Create a signed TSQ1 QR string and store ONLY the TSQ1 payload on the
+ * current timesheet version row (no PNG, no R2).
  *
  * @param {Object} env
  * @param {Object} args
  * @param {string} args.timesheet_id     - timesheets.timesheet_id
- * @param {string} args.contract_week_id - contract_weeks.id
+ * @param {string} args.contract_week_id - contract_weeks.id (or null for daily)
  * @param {string} args.contract_id      - contracts.id
  * @param {string} args.candidate_id     - contracts.candidate_id
  * @param {string} args.client_id        - contracts.client_id
- * @param {string} args.week_ending_ymd  - 'YYYY-MM-DD'
- * @returns {Promise<{ qrText: string, qr_r2_key: string }>}
+ * @param {string} args.week_ending_ymd  - 'YYYY-MM-DD' (or worked date ymd for daily)
+ * @param {string} args.qr_token         - REQUIRED (generate token first)
+ * @returns {Promise<{ qrText: string, qr_r2_key: null }>}
  */
 async function generateAndStoreTimesheetQr(env, {
   timesheet_id,
@@ -50540,7 +51107,7 @@ async function generateAndStoreTimesheetQr(env, {
     throw new Error('generateAndStoreTimesheetQr requires qr_token (generate token first)');
   }
 
-  // 1) Build payload (now includes tok)
+  // 1) Build payload (includes tok)
   const payload = buildTsq1Payload({
     timesheet_id,
     contract_week_id,
@@ -50554,21 +51121,7 @@ async function generateAndStoreTimesheetQr(env, {
   // 2) Build TSQ1.<payload_b64url>.<sig_b64url>
   const qrText = await buildTsq1String(payload, env);
 
-  // 3) Generate PNG bytes
-  const pngBytes = await generateQrPng(qrText);
-
-  // 4) Decide an R2 key to store this QR image
-  // Keeping a stable key is fine (we can always regenerate); this overwrites on reissue.
-  const qr_r2_key = normalizeKey(`timesheets/qr/${timesheet_id}.png`);
-
-  // 5) Store in R2
-  const bucket = env.R2_BUCKET || env.R2;
-  if (!bucket?.put) throw new Error('R2 bucket not configured for QR');
-  await bucket.put(qr_r2_key, pngBytes, {
-    httpMetadata: { contentType: 'image/png' }
-  });
-
-  // 6) Patch ONLY the current timesheet version row
+  // 3) Patch ONLY the current timesheet version row
   // IMPORTANT: timesheet_id is versioned; never PATCH by timesheet_id alone.
   const url =
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -50576,9 +51129,10 @@ async function generateAndStoreTimesheetQr(env, {
     `&is_current=eq.true`;
 
   const patchBody = {
-    qr_r2_key,
-    // Recommended: store the exact payload fields used to generate the QR
-    // (schema has qr_payload_json NOT NULL)
+    // Option A: no stored PNG key
+    qr_r2_key: null,
+
+    // Store the exact payload used to generate the QR (schema has qr_payload_json NOT NULL)
     qr_payload_json: payload
   };
 
@@ -50593,8 +51147,10 @@ async function generateAndStoreTimesheetQr(env, {
     throw new Error(`Failed to patch timesheets current row for QR: ${r.status} ${t}`);
   }
 
-  return { qrText, qr_r2_key };
+  return { qrText, qr_r2_key: null };
 }
+
+
 async function handleTimesheetQrResendEmail(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -50682,7 +51238,15 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
   const toEmail = cand?.email ? String(cand.email).trim() : null;
   if (!toEmail) return withCORS(env, req, badRequest('Candidate email not found'));
 
-  // ✅ Scenario 1: ISSUE first (create token + QR image + mark generated_at + keep qr_payload_json from TSQ1)
+  // Derive a label date for subject / attachment name
+  const scope = String(ts.sheet_scope || '').toUpperCase();
+  const dateLabel =
+    (scope === 'WEEKLY')
+      ? (ts.week_ending_date || '')
+      : (ts.worked_start_iso ? String(ts.worked_start_iso).slice(0, 10) : '');
+
+  // ✅ Scenario 1: ISSUE first (create token + store TSQ1 payload + mark generated_at)
+  // Option A: generateAndStoreTimesheetQr stores ONLY TSQ1 payload in qr_payload_json (no PNG/R2).
   if (isScenario1) {
     const now2 = nowIso();
 
@@ -50695,7 +51259,7 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
       qrToken = `${currentTimesheetId}:${Date.now()}`;
     }
 
-    // Generate/store QR PNG + patch qr_payload_json (TSQ1 payload) + qr_r2_key
+    // Generate/store TSQ1 payload on current timesheet (qr_payload_json); qr_r2_key will be null under Option A.
     let qrRes = null;
     try {
       qrRes = await generateAndStoreTimesheetQr(env, {
@@ -50704,9 +51268,7 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
         contract_id: contract.id,
         candidate_id: contract.candidate_id || null,
         client_id: contract.client_id || null,
-        week_ending_ymd: (String(ts.sheet_scope || '').toUpperCase() === 'WEEKLY')
-          ? (ts.week_ending_date || null)
-          : null,
+        week_ending_ymd: (scope === 'WEEKLY') ? (ts.week_ending_date || null) : (dateLabel || null),
         qr_token: qrToken
       });
     } catch (e) {
@@ -50728,13 +51290,13 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
           qr_generated_at: now2,
           qr_scanned_at: null,
           qr_scan_info_json: null,
-          qr_r2_key: qrRes?.qr_r2_key || null,
+          qr_r2_key: qrRes?.qr_r2_key || null, // null under Option A
           updated_at: now2
         })
       }
     ).catch(() => {});
 
-    // Reload TS so the downstream logic sees the issued state (optional but safer)
+    // Reload TS so downstream sees the issued state
     ts = await sbGetOne(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -50745,35 +51307,16 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
     );
   }
 
-  // Ensure we have a PDF to attach (now after issuance so QR can appear in PDF)
-  let pdfKey = ts.manual_pdf_r2_key || null;
-  if (!pdfKey) {
-    try {
-      pdfKey = await ensureTimesheetPdf(env, currentTimesheetId);
-      if (pdfKey) {
-        await fetch(
-          `${env.SUPABASE_URL}/rest/v1/timesheets` +
-            `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-            `&is_current=eq.true`,
-          {
-            method: 'PATCH',
-            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-            body: JSON.stringify({ manual_pdf_r2_key: pdfKey, updated_at: nowIso() })
-          }
-        ).catch(() => {});
-      }
-    } catch (e) {
-      return withCORS(env, req, serverError('Failed to prepare timesheet PDF for send'));
-    }
+  // ✅ Ensure we have a GENERATED printable PDF to attach (not an uploaded manual PDF).
+  // ensureTimesheetPdf can return manual_pdf_r2_key directly, so we avoid it here. :contentReference[oaicite:1]{index=1}
+  let pdfKey = null;
+  try {
+    pdfKey = await renderTimesheetPDFAndSave(env, currentTimesheetId);
+  } catch (e) {
+    return withCORS(env, req, serverError('Failed to prepare timesheet PDF for send'));
   }
 
   if (!pdfKey) return withCORS(env, req, serverError('No PDF available to send'));
-
-  const scope = String(ts.sheet_scope || '').toUpperCase();
-  const dateLabel =
-    (scope === 'WEEKLY')
-      ? (ts.week_ending_date || '')
-      : (ts.worked_start_iso ? String(ts.worked_start_iso).slice(0, 10) : '');
 
   const subject =
     (scope === 'WEEKLY')
