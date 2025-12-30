@@ -1425,7 +1425,7 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     return hh * 60 + mm;
   };
 
-  // 0..99 to words
+  // 0..99 to words (ALL CAPS) — FIXED: FORTY (not FOURTY)
   const twoDigitWords = (n) => {
     const ones = ["ZERO","ONE","TWO","THREE","FOUR","FIVE","SIX","SEVEN","EIGHT","NINE"];
     const teens = ["TEN","ELEVEN","TWELVE","THIRTEEN","FOURTEEN","FIFTEEN","SIXTEEN","SEVENTEEN","EIGHTEEN","NINETEEN"];
@@ -1437,22 +1437,52 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     return o ? `${tens[t]} ${ones[o]}` : tens[t];
   };
 
+  // NEW: scheme-based minutes → words (ALL CAPS)
+  // Examples:
+  // 455  -> SEVEN HRS THIRTY FIVE MINS
+  // 450  -> SEVEN AND A HALF HRS
+  // 30   -> THIRTY MINS
+  // 661  -> ELEVEN HRS ONE MINUTE
+  const minutesToWordsUpper = (totalMinutes) => {
+    const m = Math.round(Number(totalMinutes) || 0);
+    if (!Number.isFinite(m) || m <= 0) return "";
+
+    const hours = Math.floor(m / 60);
+    const mins  = m % 60;
+
+    const hW = twoDigitWords(clamp(hours, 0, 99));
+    const mW = twoDigitWords(clamp(mins, 0, 59));
+
+    // minutes-only
+    if (hours === 0) {
+      return `${mW} ${(mins === 1) ? "MINUTE" : "MINS"}`;
+    }
+
+    // exact hours
+    if (mins === 0) {
+      if (hours === 1) return "ONE HOUR";
+      if (hours === 2) return "TWO HOURS";
+      return `${hW} HRS`;
+    }
+
+    // half-hour form
+    if (mins === 30) {
+      return `${hW} AND A HALF HRS`;
+    }
+
+    const minLabel = (mins === 1) ? "MINUTE" : "MINS";
+
+    // keep your scheme: 1/2 use HOUR(S), 3+ use HRS
+    if (hours === 1) return `ONE HOUR ${mW} ${minLabel}`;
+    if (hours === 2) return `TWO HOURS ${mW} ${minLabel}`;
+    return `${hW} HRS ${mW} ${minLabel}`;
+  };
+
+  // Keep helper name, but make it scheme-consistent by delegating to minutesToWordsUpper
   const hoursToWordsUpper = (hours) => {
     const h = Number(hours);
-    if (!Number.isFinite(h)) return "";
-    const whole = Math.floor(h + 1e-9);
-    const frac = h - whole;
-    const wholeWords = twoDigitWords(clamp(whole, 0, 99));
-    const eps = 1e-6;
-
-    if (Math.abs(frac - 0.5) < eps) return `${wholeWords} AND A HALF`;
-    if (Math.abs(frac - 0.25) < eps) return `${wholeWords} AND A QUARTER`;
-    if (Math.abs(frac - 0.75) < eps) return `${wholeWords} AND THREE QUARTERS`;
-
-    const mins = Math.round(frac * 60);
-    if (!mins) return `${wholeWords}`;
-    const minsWords = twoDigitWords(clamp(mins, 0, 59));
-    return `${wholeWords} ${minsWords} MINUTES`;
+    if (!Number.isFinite(h) || h <= 0) return "";
+    return minutesToWordsUpper(Math.round(h * 60));
   };
 
   const getSegTimes = (seg) => {
@@ -1530,10 +1560,13 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     return Math.max(0, total - breakMins);
   };
 
+  // FIX: paidWords now uses exact minutes → scheme text
   const computePaidHours = (seg) => {
     const mins = computePaidMinutes(seg);
+    if (!mins) return { paid: "", paidWords: "" };
+
     const h = Math.round((mins / 60) * 100) / 100;
-    return { paid: h ? h.toFixed(2) : "", paidWords: h ? hoursToWordsUpper(h) : "" };
+    return { paid: h.toFixed(2), paidWords: minutesToWordsUpper(mins) };
   };
 
   // Drawing primitives
@@ -1625,6 +1658,7 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
   };
 
   // QR drawer — safe if QRCode not bundled
+  // (minor safety clamp to avoid stray filled rects outside box)
   const drawQrInBox = async (page, qrText, box) => {
     if (!qrText || !box) return;
     if (typeof QRCode === "undefined" || typeof QRCode.create !== "function") {
@@ -1647,6 +1681,9 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     const x0 = box.x + (box.w - cell * grid) / 2;
     const y0 = box.y + (box.h - cell * grid) / 2;
 
+    const xMax = box.x + box.w + 1e-6;
+    const yMax = box.y + box.h + 1e-6;
+
     for (let r = 0; r < size; r++) {
       for (let c = 0; c < size; c++) {
         const idx = r * size + c;
@@ -1654,6 +1691,10 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
 
         const x = x0 + (c + marginModules) * cell;
         const yTop = y0 + (r + marginModules) * cell;
+
+        // clamp to box (prevents “blob” if any drift happens)
+        if (x < box.x - 1e-6 || yTop < box.y - 1e-6) continue;
+        if (x + cell > xMax || yTop + cell > yMax) continue;
 
         page.drawRectangle({
           x: mmToPt(x),
@@ -2115,7 +2156,7 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     const fixedW = colW.slice(0, -1).reduce((a, b) => a + b, 0);
     colW[colW.length - 1] = Math.max(20, hoursBox.w - fixedW);
 
-    // Total-row boundary: stop vertical lines here (fixes “strange borders”)
+    // Total-row boundary: stop vertical lines here
     const bodyTop = hoursBox.y + headerRowH;
     const totalTop = bodyTop + bodyHUsed;
 
@@ -2197,7 +2238,8 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     const totalLabel = "Total overall hours claimed (excluding breaks):";
     drawText(page, fontBold, totalLabel, hoursBox.x + 2, totalTop + 5.4, 8.5, { maxWidth: hoursBox.w - 90 });
 
-    const totalTxt = `${totalPaidHours.toFixed(2)}  (${hoursToWordsUpper(totalPaidHours)})`;
+    // FIX: total words use exact minutes (not rounded hours)
+    const totalTxt = `${totalPaidHours.toFixed(2)}  (${minutesToWordsUpper(totalPaidMinutes)})`;
     drawText(page, fontBold, totalTxt, hoursBox.x + hoursBox.w - 88, totalTop + 5.4, 8.5, { maxWidth: 86 });
 
     // ---------- Additional units (ONLY if any rows) ----------
