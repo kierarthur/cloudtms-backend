@@ -1437,7 +1437,7 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     return o ? `${tens[t]} ${ones[o]}` : tens[t];
   };
 
-  // NEW: scheme-based minutes → words (ALL CAPS)
+  // scheme-based minutes → words (ALL CAPS)
   const minutesToWordsUpper = (totalMinutes) => {
     const m = Math.round(Number(totalMinutes) || 0);
     if (!Number.isFinite(m) || m <= 0) return "";
@@ -1448,26 +1448,19 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     const hW = twoDigitWords(clamp(hours, 0, 99));
     const mW = twoDigitWords(clamp(mins, 0, 59));
 
-    // minutes-only
     if (hours === 0) {
       return `${mW} ${(mins === 1) ? "MINUTE" : "MINS"}`;
     }
-
-    // exact hours
     if (mins === 0) {
       if (hours === 1) return "ONE HOUR";
       if (hours === 2) return "TWO HOURS";
       return `${hW} HRS`;
     }
-
-    // half-hour form
     if (mins === 30) {
       return `${hW} AND A HALF HRS`;
     }
 
     const minLabel = (mins === 1) ? "MINUTE" : "MINS";
-
-    // keep your scheme: 1/2 use HOUR(S), 3+ use HRS
     if (hours === 1) return `ONE HOUR ${mW} ${minLabel}`;
     if (hours === 2) return `TWO HOURS ${mW} ${minLabel}`;
     return `${hW} HRS ${mW} ${minLabel}`;
@@ -1554,7 +1547,7 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     return Math.max(0, total - breakMins);
   };
 
-  // FIX: paidWords now uses exact minutes → scheme text
+  // paidWords uses exact minutes
   const computePaidHours = (seg) => {
     const mins = computePaidMinutes(seg);
     if (!mins) return { paid: "", paidWords: "" };
@@ -1588,9 +1581,8 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
       };
     }
     const j = parseJsonMaybe(jsonVal);
- const lines = Array.isArray(j?.lines) ? j.lines.map(safeStr).filter(Boolean) : [];
-// Join into a single paragraph so there are no “paragraph gaps”
-const bodyText = lines.join(" ");
+    const lines = Array.isArray(j?.lines) ? j.lines.map(safeStr).filter(Boolean) : [];
+    const bodyText = lines.join(" ");
 
     return {
       title: safeStr(j?.title || fallbackTitle),
@@ -1684,9 +1676,7 @@ const bodyText = lines.join(" ");
         }
       }
       if (line) out.push(line);
-   // Do NOT insert blank line between paragraphs (prevents “double spacing” in declarations)
-// if (pi < paras.length - 1) out.push("");
-
+      // (no blank lines between paragraphs)
     }
 
     while (out.length && out[out.length - 1] === "") out.pop();
@@ -1701,7 +1691,7 @@ const bodyText = lines.join(" ");
       return;
     }
 
-    // Clear box interior to white (prevents any overdraw artifacts being visible)
+    // Clear box interior to white
     page.drawRectangle({
       x: mmToPt(box.x + 0.4),
       y: mmToPt(yFromTop(box.y + box.h - 0.4)),
@@ -1738,7 +1728,6 @@ const bodyText = lines.join(" ");
         const x = x0 + (c + marginModules) * cell;
         const yTop = y0 + (r + marginModules) * cell;
 
-        // hard clamp to box
         if (x < xMin || yTop < yMin) continue;
         if (x + cell > xMax || yTop + cell > yMax) continue;
 
@@ -1833,7 +1822,7 @@ const bodyText = lines.join(" ");
         `&limit=1`
     ).catch(() => null);
 
-    // settings_defaults: use select=* so missing/new columns never break rendering
+    // settings_defaults
     L("DB.LOAD.settings_defaults", {});
     const def = await sbGetOne(
       env,
@@ -1846,7 +1835,7 @@ const bodyText = lines.join(" ");
     const headerJson = def?.timesheet_header_json ?? null;
     const footerJson = def?.timesheet_footer_json ?? null;
 
-    // Declarations: TEXT (if present) + JSON fallback (your DB currently has *_declaration_json)
+    // Declarations: TEXT + JSON fallback
     const tempDeclText = def?.temporary_worker_declaration ?? null;
     const clientDeclText = def?.client_declaration ?? null;
     const tempDeclJson = def?.temporary_worker_declaration_json ?? null;
@@ -1854,17 +1843,6 @@ const bodyText = lines.join(" ");
 
     const tempDeclSpec = buildDeclSpec("Temporary Worker Declaration", tempDeclText, tempDeclJson);
     const clientDeclSpec = buildDeclSpec("Client Declaration", clientDeclText, clientDeclJson);
-
-    L("SETTINGS", {
-      agency_name: agencyName,
-      agency_logo_key: agencyLogoKey || null,
-      has_header_json: !!headerJson,
-      has_footer_json: !!footerJson,
-      temp_decl_text_len: safeStr(tempDeclText).trim().length,
-      client_decl_text_len: safeStr(clientDeclText).trim().length,
-      has_temp_decl_json: !!parseJsonMaybe(tempDeclJson),
-      has_client_decl_json: !!parseJsonMaybe(clientDeclJson)
-    });
 
     // ---------- SCHEDULE (weekly or synth daily) ----------
     let schedule = Array.isArray(ts.actual_schedule_json) ? ts.actual_schedule_json : [];
@@ -1903,8 +1881,6 @@ const bodyText = lines.join(" ");
 
       schedule = [seg];
       L("DAILY.SYNTHESIZED", { workedYmd, weekEndingYmd });
-    } else {
-      L("SCHEDULE.USING", { schedule_len: Array.isArray(schedule) ? schedule.length : 0, weekEndingYmd });
     }
 
     const weekEndingDayName = weekdayName(weekEndingYmd);
@@ -1954,110 +1930,141 @@ const bodyText = lines.join(" ");
         }
       }
     }
-    L("ADDL.UNITS", { rows: additionalRows.length });
 
-// ---------- LAYOUT PREFLIGHT (decide if we need compact mode) ----------
-const headerLinesCount =
-  (headerJson && typeof headerJson === "object" && Array.isArray(headerJson.lines))
-    ? headerJson.lines.map(safeStr).filter(Boolean).length
-    : 0;
+    // ---------- LAYOUT PREFLIGHT (NORMAL → COMPACT → ULTRA) ----------
+    const headerLinesCount =
+      (headerJson && typeof headerJson === "object" && Array.isArray(headerJson.lines))
+        ? headerJson.lines.map(safeStr).filter(Boolean).length
+        : 0;
 
-// how many schedule lines we actually need (1+ per day, plus extra shifts)
-const realCounts = weekDates.map(d => {
-  const segs = (d.ymd && byDate.get(d.ymd)) ? byDate.get(d.ymd) : [];
-  const real = segs.filter(s => {
-    const t = getSegTimes(s);
-    return !!(t.start && t.end);
-  });
-  return Math.max(1, real.length);
-});
-const totalLinesWanted = realCounts.reduce((a,b)=>a+b,0);
+    const realCounts = weekDates.map(d => {
+      const segs = (d.ymd && byDate.get(d.ymd)) ? byDate.get(d.ymd) : [];
+      const real = segs.filter(s => {
+        const t = getSegTimes(s);
+        return !!(t.start && t.end);
+      });
+      return Math.max(1, real.length);
+    });
+    const totalLinesWanted = realCounts.reduce((a,b)=>a+b,0);
+    const hasAddl = (additionalRows.length > 0);
 
-const hasAddl = (additionalRows.length > 0);
+    const NORMAL = {
+      logoW: 44, logoH: 30,
+      headerNameSize: 12, headerTitleSize: 12, headerMetaSize: 10, headerTsNoSize: 10,
+      detailsH: 26, detailsTitleSize: 9, detailsLabelSize: 8, detailsValueSize: 8,
+      headerFontSize: 8, headerLineH: 3.8,
+      declH: 50, declTitleSize: 8.8, declBodyTopPad: 9.8, declSigReserve: 12,
+      footerFontSize: 7.0, footerLineH: 3.6,
 
-// “normal” vs “compact” knobs (compact only used when needed)
-const NORMAL = {
-  logoW: 44, logoH: 30,
-  headerNameSize: 12, headerTitleSize: 12, headerMetaSize: 10, headerTsNoSize: 10,
-  detailsH: 26, detailsTitleSize: 9, detailsLabelSize: 8, detailsValueSize: 8,
-  headerFontSize: 8, headerLineH: 3.8,
-  declH: 50, declTitleSize: 8.8, declBodyTopPad: 9.8, declSigReserve: 12,
-  footerFontSize: 7.0, footerLineH: 3.6,
-  minLineH: 4.8,
+      // schedule table sizing
+      tsHeaderRowH: 7.5,
+      tsTotalRowH: 8.0,
+      tsHeaderFontSize: 7.0,
+      tsBodyFontSize: 8.0,
+      tsWordsFontSize: 7.3,
+      tsLineTextOffset: 5.2,
 
-  // keep preflight + render consistent
-  qrW: 30, qrH: 30, qrTopPad: 2, headerBottomPad: 2,
-  yCursorGap: 3.0, yCursorAfterHeaderPad: 1.5,
+      // fit heuristics
+      minLineH: 4.8,
 
-  // Additional rates sizing
-  addlH: 22,
-  addlGap: 3
-};
+      // consistency
+      qrW: 30, qrH: 30, qrTopPad: 2, headerBottomPad: 2,
+      yCursorGap: 3.0, yCursorAfterHeaderPad: 1.5,
 
+      // Additional rates sizing
+      addlH: 22,
+      addlGap: 3,
+      addlHeaderH: 7.0,
+      addlRowH: 4.8
+    };
 
+    const COMPACT = {
+      logoW: 34, logoH: 20,
+      headerNameSize: 10, headerTitleSize: 10, headerMetaSize: 9, headerTsNoSize: 9,
+      detailsH: 18, detailsTitleSize: 8.2, detailsLabelSize: 7.2, detailsValueSize: 7.2,
+      headerFontSize: 7.2, headerLineH: 3.0,
+      declH: 34, declTitleSize: 8.2, declBodyTopPad: 8.6, declSigReserve: 10,
+      footerFontSize: 6.6, footerLineH: 3.2,
 
-const COMPACT = {
-  // shrink boxes, keep text tiny, remove wasted gaps
-  logoW: 34, logoH: 20,
-  headerNameSize: 10, headerTitleSize: 10, headerMetaSize: 9, headerTsNoSize: 9,
-  detailsH: 18, detailsTitleSize: 8.2, detailsLabelSize: 7.2, detailsValueSize: 7.2,
-  headerFontSize: 7.2, headerLineH: 3.0,
-  declH: 34, declTitleSize: 8.2, declBodyTopPad: 8.6, declSigReserve: 10,
-  footerFontSize: 6.6, footerLineH: 3.2,
-  minLineH: 3.8,
+      tsHeaderRowH: 7.0,
+      tsTotalRowH: 7.4,
+      tsHeaderFontSize: 6.6,
+      tsBodyFontSize: 7.4,
+      tsWordsFontSize: 6.8,
+      tsLineTextOffset: 4.8,
 
-   // keep preflight + render consistent
-  qrW: 26, qrH: 26, qrTopPad: 1, headerBottomPad: 1,
-  yCursorGap: 1.6, yCursorAfterHeaderPad: 0.8,
+      minLineH: 3.8,
 
-  // Additional rates sizing (smaller in compact mode)
-  addlH: 16,
-  addlGap: 2
-};
+      qrW: 26, qrH: 26, qrTopPad: 1, headerBottomPad: 1,
+      yCursorGap: 1.6, yCursorAfterHeaderPad: 0.8,
 
+      addlH: 16,
+      addlGap: 2,
+      addlHeaderH: 6.0,
+      addlRowH: 4.0
+    };
 
+    const ULTRA = {
+      logoW: 28, logoH: 16,
+      headerNameSize: 9, headerTitleSize: 9, headerMetaSize: 8, headerTsNoSize: 8,
+      detailsH: 14, detailsTitleSize: 7.6, detailsLabelSize: 6.4, detailsValueSize: 6.4,
+      headerFontSize: 6.4, headerLineH: 2.6,
+      declH: 26, declTitleSize: 7.6, declBodyTopPad: 7.4, declSigReserve: 8,
+      footerFontSize: 6.0, footerLineH: 2.8,
 
-// compute how many lines a given layout can fit BEFORE we draw anything
-const maxLinesFitFor = (LAY) => {
-  const M = 8;
+      tsHeaderRowH: 6.2,
+      tsTotalRowH: 6.8,
+      tsHeaderFontSize: 6.0,
+      tsBodyFontSize: 6.8,
+      tsWordsFontSize: 6.0,
+      tsLineTextOffset: 4.0,
 
-  const headerBottom =
-    Math.max(
-      (M + LAY.qrTopPad + LAY.logoH),
-      (M + LAY.qrTopPad + LAY.qrH)
-    ) + LAY.headerBottomPad;
+      minLineH: 3.0,
 
-  const detailsTop = headerBottom + 1;
+      qrW: 22, qrH: 22, qrTopPad: 0, headerBottomPad: 0,
+      yCursorGap: 1.0, yCursorAfterHeaderPad: 0.6,
 
-  const yCursor =
-    detailsTop + LAY.detailsH + LAY.yCursorGap +
-    (headerLinesCount ? (headerLinesCount * LAY.headerLineH + LAY.yCursorAfterHeaderPad) : 0);
+      addlH: 14,
+      addlGap: 1,
+      addlHeaderH: 5.5,
+      addlRowH: 3.6
+    };
 
+    const maxLinesFitFor = (LAY) => {
+      const M = 8;
 
-   const reservedBottom =
-    LAY.declH +
-    14 +                              // footer strip reserve
-    (hasAddl ? (LAY.addlH + LAY.addlGap) : 0) +
-    8;
+      const headerBottom =
+        Math.max(
+          (M + LAY.qrTopPad + LAY.logoH),
+          (M + LAY.qrTopPad + LAY.qrH)
+        ) + LAY.headerBottomPad;
 
+      const detailsTop = headerBottom + 1;
 
-  const headerRowH = 7.5;
-  const totalRowH = 8.0;
+      const yCursor =
+        detailsTop + LAY.detailsH + LAY.yCursorGap +
+        (headerLinesCount ? (headerLinesCount * LAY.headerLineH + LAY.yCursorAfterHeaderPad) : 0);
 
-  const maxTableH = Math.max(60, (PAGE_H - M) - yCursor - reservedBottom);
-  const bodyMaxH = Math.max(30, maxTableH - headerRowH - totalRowH);
+      const reservedBottom =
+        LAY.declH +
+        14 +
+        (hasAddl ? (LAY.addlH + LAY.addlGap) : 0) +
+        8;
 
-  return Math.max(7, Math.floor(bodyMaxH / LAY.minLineH));
-};
+      const maxTableH = Math.max(60, (PAGE_H - M) - yCursor - reservedBottom);
+      const bodyMaxH = Math.max(30, maxTableH - LAY.tsHeaderRowH - LAY.tsTotalRowH);
 
-const maxLinesNormal = maxLinesFitFor(NORMAL);
-const needsCompact = (totalLinesWanted > maxLinesNormal);
+      return Math.max(7, Math.floor(bodyMaxH / LAY.minLineH));
+    };
 
-const LAY = needsCompact ? COMPACT : NORMAL;
+    const maxLinesNormal = maxLinesFitFor(NORMAL);
+    const maxLinesCompact = maxLinesFitFor(COMPACT);
 
-// only show (+N more) if even COMPACT still can’t fit
-const showOverflowMarker = (totalLinesWanted > maxLinesFitFor(COMPACT));
+    let LAY = NORMAL;
+    if (totalLinesWanted > maxLinesNormal) LAY = COMPACT;
+    if (totalLinesWanted > maxLinesCompact) LAY = ULTRA;
 
+    const needsCompact = (LAY !== NORMAL);
 
     // ---------- PDF CREATE ----------
     L("PDF.CREATE", {});
@@ -2069,11 +2076,10 @@ const showOverflowMarker = (totalLinesWanted > maxLinesFitFor(COMPACT));
 
     // ---------- layout ----------
     const M = 8;
-    const GAP = 3;
     const contentX = M;
     const contentW = PAGE_W - 2 * M;
 
-        // Header strip (use LAY so preflight + render can’t drift)
+    // Header strip (use LAY)
     const qrTop = M + LAY.qrTopPad;
     const QR_W  = LAY.qrW;
     const QR_H  = LAY.qrH;
@@ -2081,22 +2087,14 @@ const showOverflowMarker = (totalLinesWanted > maxLinesFitFor(COMPACT));
     const qrBox = { x: contentX + contentW - QR_W, y: qrTop, w: QR_W, h: QR_H };
     const headerRightLimit = qrBox.x - 3;
 
-
-
-       // Bigger logo (align top padding with QR in compact mode)
+    // Bigger logo (align top padding with QR)
     const logoBox = { x: contentX, y: M + LAY.qrTopPad, w: LAY.logoW, h: LAY.logoH };
-
 
     const titleX = logoBox.x + logoBox.w + 6;
     const titleMaxW = Math.max(30, headerRightLimit - titleX);
 
-         // header bottom Y (use LAY so it matches preflight)
+    // header bottom Y
     const headerBottom = Math.max(logoBox.y + logoBox.h, qrBox.y + qrBox.h) + LAY.headerBottomPad;
-
-
-
-    // No border around logo (per requirement)
-// (Do nothing here)
 
     // Draw logo safely (avoid CPU blowups)
     if (agencyLogoKey) {
@@ -2109,7 +2107,6 @@ const showOverflowMarker = (totalLinesWanted > maxLinesFitFor(COMPACT));
           const ct = (obj.httpMetadata?.contentType || "").toLowerCase();
           L("LOGO.OK", { contentType: ct || null, bytes: bytes.length });
 
-          // Hard cap to prevent CPU timeout if someone uploads a huge PNG
           const MAX_LOGO_BYTES = 250_000;
           if (bytes.length > MAX_LOGO_BYTES) {
             L("LOGO.SKIP", { reason: "logo too large (upload optimized logo)", bytes: bytes.length, max: MAX_LOGO_BYTES });
@@ -2134,31 +2131,26 @@ const showOverflowMarker = (totalLinesWanted > maxLinesFitFor(COMPACT));
               height: mmToPt(h)
             });
           }
-        } else {
-          L("LOGO.MISS", {});
         }
       } catch (e) {
         L("LOGO.FAIL", { err: e?.message || String(e) });
       }
-    } else {
-      L("LOGO.SKIP", { reason: "agency_logo not set" });
     }
 
     // Agency name + TIMESHEET
-   drawTextFit(page, fontBold, agencyName, titleX, logoBox.y + 2.5, titleMaxW, LAY.headerNameSize, 8.5);
-drawText(page, fontBold, "TIMESHEET", titleX, logoBox.y + (needsCompact ? 9.0 : 11), LAY.headerTitleSize);
+    drawTextFit(page, fontBold, agencyName, titleX, logoBox.y + 2.5, titleMaxW, LAY.headerNameSize, 8.5);
+    drawText(page, fontBold, "TIMESHEET", titleX, logoBox.y + (needsCompact ? 9.0 : 11), LAY.headerTitleSize);
 
-    // Timesheet No (keep) — DO NOT show timesheet_id
+    // Timesheet No (DO NOT show timesheet_id)
     const tsNo = timesheetNumber8(ts.timesheet_id);
     const tsNoText = `Time Sheet No. ${tsNo}`;
-const tsNoWmm = ptToMm(fontBold.widthOfTextAtSize(tsNoText, LAY.headerTsNoSize));
-const tsNoX = Math.max(titleX, headerRightLimit - tsNoWmm);
-drawText(page, fontBold, tsNoText, tsNoX, logoBox.y + 2.5, LAY.headerTsNoSize);
-
+    const tsNoWmm = ptToMm(fontBold.widthOfTextAtSize(tsNoText, LAY.headerTsNoSize));
+    const tsNoX = Math.max(titleX, headerRightLimit - tsNoWmm);
+    drawText(page, fontBold, tsNoText, tsNoX, logoBox.y + 2.5, LAY.headerTsNoSize);
 
     // Week ending
     const weLabel = weekEndingDayName ? `Week ending (${weekEndingDayName})` : "Week ending";
-   drawText(page, fontBold, `${weLabel}: ${fmtDmy(weekEndingYmd)}`, titleX, logoBox.y + (needsCompact ? 14.0 : 19.0), LAY.headerMetaSize);
+    drawText(page, fontBold, `${weLabel}: ${fmtDmy(weekEndingYmd)}`, titleX, logoBox.y + (needsCompact ? 14.0 : 19.0), LAY.headerMetaSize);
 
     // QR (header)
     drawRect(page, qrBox.x, qrBox.y, qrBox.w, qrBox.h, { lineWidth: 0.35 });
@@ -2166,7 +2158,6 @@ drawText(page, fontBold, tsNoText, tsNoX, logoBox.y + 2.5, LAY.headerTsNoSize);
       const qrStatus = safeStr(ts.qr_status).toUpperCase();
       const hasPayloadObj = ts.qr_payload_json && typeof ts.qr_payload_json === "object";
       const shouldDrawQr = (qrStatus === "PENDING") && hasPayloadObj;
-      L("QR.STATE", { qrStatus, shouldDrawQr });
 
       if (shouldDrawQr) {
         const qrText = await buildTsq1String(ts.qr_payload_json, env);
@@ -2178,7 +2169,7 @@ drawText(page, fontBold, tsNoText, tsNoX, logoBox.y + 2.5, LAY.headerTsNoSize);
 
     // ---------- Details strip ----------
     const detailsTop = headerBottom + 1;
-   const detailsH = LAY.detailsH;
+    const detailsH = LAY.detailsH;
     const detailsGap = 6;
     const detailsW = contentW;
     const detailsBoxW = (detailsW - detailsGap) / 2;
@@ -2189,8 +2180,8 @@ drawText(page, fontBold, tsNoText, tsNoX, logoBox.y + 2.5, LAY.headerTsNoSize);
     drawRect(page, nurseBox.x, nurseBox.y, nurseBox.w, nurseBox.h, { lineWidth: 0.45 });
     drawRect(page, clientBox.x, clientBox.y, clientBox.w, clientBox.h, { lineWidth: 0.45 });
 
-   drawCenteredText(page, fontBold, "Nurse Details", nurseBox.x, nurseBox.y + 4.6, nurseBox.w, LAY.detailsTitleSize);
-drawCenteredText(page, fontBold, "Client Details", clientBox.x, clientBox.y + 4.6, clientBox.w, LAY.detailsTitleSize);
+    drawCenteredText(page, fontBold, "Nurse Details", nurseBox.x, nurseBox.y + 4.6, nurseBox.w, LAY.detailsTitleSize);
+    drawCenteredText(page, fontBold, "Client Details", clientBox.x, clientBox.y + 4.6, clientBox.w, LAY.detailsTitleSize);
 
     const surname = safeStr(cand?.last_name || cand?.surname || "").toUpperCase();
     const firstName = safeStr(cand?.first_name || "").toUpperCase();
@@ -2200,30 +2191,27 @@ drawCenteredText(page, fontBold, "Client Details", clientBox.x, clientBox.y + 4.
     const siteWard = safeStr(contract?.display_site || ts?.ward_norm || "");
     const bandText = safeStr(contract?.band || "");
 
- const ndY1 = nurseBox.y + (needsCompact ? 9.6  : 10.8);
-const ndY2 = nurseBox.y + (needsCompact ? 13.4 : 18.0);
-const ndY3 = nurseBox.y + (needsCompact ? 17.2 : 24.0);
+    const ndY1 = nurseBox.y + (needsCompact ? 9.6  : 10.8);
+    const ndY2 = nurseBox.y + (needsCompact ? 13.4 : 18.0);
+    const ndY3 = nurseBox.y + (needsCompact ? 17.2 : 24.0);
 
-const cdY1 = clientBox.y + (needsCompact ? 10.8 : 14.0);
-const cdY2 = clientBox.y + (needsCompact ? 16.6 : 22.0);
+    const cdY1 = clientBox.y + (needsCompact ? 10.8 : 14.0);
+    const cdY2 = clientBox.y + (needsCompact ? 16.6 : 22.0);
 
-// Nurse
-drawText(page, fontBold, "Surname:", nurseBox.x + 2, ndY1, LAY.detailsLabelSize);
-drawText(page, font, surname, nurseBox.x + 20, ndY1, LAY.detailsValueSize, { maxWidth: nurseBox.w - 22 });
+    drawText(page, fontBold, "Surname:", nurseBox.x + 2, ndY1, LAY.detailsLabelSize);
+    drawText(page, font, surname, nurseBox.x + 20, ndY1, LAY.detailsValueSize, { maxWidth: nurseBox.w - 22 });
 
-drawText(page, fontBold, "First name:", nurseBox.x + 2, ndY2, LAY.detailsLabelSize);
-drawText(page, font, firstName, nurseBox.x + 20, ndY2, LAY.detailsValueSize, { maxWidth: nurseBox.w - 22 });
+    drawText(page, fontBold, "First name:", nurseBox.x + 2, ndY2, LAY.detailsLabelSize);
+    drawText(page, font, firstName, nurseBox.x + 20, ndY2, LAY.detailsValueSize, { maxWidth: nurseBox.w - 22 });
 
-drawText(page, fontBold, "Job Profile Title:", nurseBox.x + 2, ndY3, LAY.detailsLabelSize);
-drawText(page, font, role, nurseBox.x + 30, ndY3, LAY.detailsValueSize, { maxWidth: nurseBox.w - 32 });
+    drawText(page, fontBold, "Job Profile Title:", nurseBox.x + 2, ndY3, LAY.detailsLabelSize);
+    drawText(page, font, role, nurseBox.x + 30, ndY3, LAY.detailsValueSize, { maxWidth: nurseBox.w - 32 });
 
-// Client
-drawText(page, fontBold, "Client Name / Hospital:", clientBox.x + 2, cdY1, LAY.detailsLabelSize);
-drawText(page, font, clientName, clientBox.x + 36, cdY1, LAY.detailsValueSize, { maxWidth: clientBox.w - 38 });
+    drawText(page, fontBold, "Client Name / Hospital:", clientBox.x + 2, cdY1, LAY.detailsLabelSize);
+    drawText(page, font, clientName, clientBox.x + 36, cdY1, LAY.detailsValueSize, { maxWidth: clientBox.w - 38 });
 
-drawText(page, fontBold, "Site / Ward:", clientBox.x + 2, cdY2, LAY.detailsLabelSize);
-drawText(page, font, siteWard, clientBox.x + 20, cdY2, LAY.detailsValueSize, { maxWidth: clientBox.w - 22 });
-
+    drawText(page, fontBold, "Site / Ward:", clientBox.x + 2, cdY2, LAY.detailsLabelSize);
+    drawText(page, font, siteWard, clientBox.x + 20, cdY2, LAY.detailsValueSize, { maxWidth: clientBox.w - 22 });
 
     // ---------- Header statement block ----------
     const headerLines =
@@ -2231,27 +2219,24 @@ drawText(page, font, siteWard, clientBox.x + 20, cdY2, LAY.detailsValueSize, { m
         ? headerJson.lines.map(safeStr).filter(Boolean)
         : [];
 
- const headerFontSize =
-  needsCompact
-    ? LAY.headerFontSize
-    : ((headerJson && Number(headerJson.font_size)) ? Number(headerJson.font_size) : 8);
+    const headerFontSize =
+      needsCompact
+        ? LAY.headerFontSize
+        : ((headerJson && Number(headerJson.font_size)) ? Number(headerJson.font_size) : 8);
 
-const headerLineH =
-  needsCompact
-    ? LAY.headerLineH
-    : ((headerJson && Number(headerJson.line_height_mm)) ? Number(headerJson.line_height_mm) : 3.8);
+    const headerLineH =
+      needsCompact
+        ? LAY.headerLineH
+        : ((headerJson && Number(headerJson.line_height_mm)) ? Number(headerJson.line_height_mm) : 3.8);
 
-let yCursor = detailsTop + detailsH + LAY.yCursorGap;
-
-if (headerLines.length) {
-  for (const line of headerLines) {
-    drawText(page, font, line, contentX, yCursor, headerFontSize, { maxWidth: contentW });
-    yCursor += headerLineH;
-  }
-  yCursor += LAY.yCursorAfterHeaderPad;
-}
-
-
+    let yCursor = detailsTop + detailsH + LAY.yCursorGap;
+    if (headerLines.length) {
+      for (const line of headerLines) {
+        drawText(page, font, line, contentX, yCursor, headerFontSize, { maxWidth: contentW });
+        yCursor += headerLineH;
+      }
+      yCursor += LAY.yCursorAfterHeaderPad;
+    }
 
     // ---------- Totals ----------
     let totalPaidMinutes = 0;
@@ -2264,101 +2249,63 @@ if (headerLines.length) {
     }
     const totalPaidHours = Math.round((totalPaidMinutes / 60) * 100) / 100;
 
- 
-
     // Reserve bottom blocks (decl + footer + optional addl)
-  const DECL_H = LAY.declH;
-      const FOOT_H = 14;
+    const DECL_H = LAY.declH;
+    const FOOT_H = 14;
     const ADDL_H = (additionalRows.length > 0) ? LAY.addlH : 0;
     const reservedBottom = DECL_H + FOOT_H + (ADDL_H ? (ADDL_H + LAY.addlGap) : 0) + 8;
 
-
     const tableTop = yCursor;
-    const headerRowH = 7.5;
-    const totalRowH = 8.0;
 
     const maxTableH = Math.max(60, (PAGE_H - M) - tableTop - reservedBottom);
-    const bodyMaxH = Math.max(30, maxTableH - headerRowH - totalRowH);
+    const bodyMaxH = Math.max(30, maxTableH - LAY.tsHeaderRowH - LAY.tsTotalRowH);
 
-    const minLineH = LAY.minLineH;
-    const maxTotalLinesFit = Math.max(7, Math.floor(bodyMaxH / minLineH));
+    // NO TRUNCATION: always show all shifts; line height becomes whatever is needed to fit
+    const visibleLinesPerDay = realCounts.slice();
+    const totalLinesVisible = totalLinesWanted;
 
-    // Allocate visible lines per day
-    const visibleLinesPerDay = (() => {
-      if (totalLinesWanted <= maxTotalLinesFit) return realCounts.slice();
+    const idealLineH = (totalLinesVisible > 0) ? (bodyMaxH / totalLinesVisible) : bodyMaxH;
+    const lineH = Math.min(10.5, Math.max(1.2, idealLineH)); // allow very tight if needed
 
-      const need = realCounts.map(n => Math.max(1, n));
-      const base = 7;
-      let remaining = maxTotalLinesFit - base;
+    // Adjust schedule text sizes if lineH gets extremely small
+    const bodyFontSize = (lineH < 2.6) ? Math.min(LAY.tsBodyFontSize, 6.0) : LAY.tsBodyFontSize;
+    const wordsFontSize = (lineH < 2.6) ? Math.min(LAY.tsWordsFontSize, 5.4) : LAY.tsWordsFontSize;
+    const headerFontSizeTable = (lineH < 2.6) ? Math.min(LAY.tsHeaderFontSize, 5.6) : LAY.tsHeaderFontSize;
 
-      const extrasWanted = need.map(n => Math.max(0, n - 1));
-      const extrasSum = extrasWanted.reduce((a, b) => a + b, 0) || 1;
-
-      const alloc = need.map(() => 1);
-      for (let i = 0; i < 7; i++) {
-        const add = Math.min(extrasWanted[i], Math.floor(remaining * (extrasWanted[i] / extrasSum)));
-        alloc[i] += add;
-      }
-
-      let used = alloc.reduce((a, b) => a + b, 0);
-      while (used < maxTotalLinesFit) {
-        let bestIdx = -1;
-        let bestGap = 0;
-        for (let i = 0; i < 7; i++) {
-          const gap = need[i] - alloc[i];
-          if (gap > bestGap) { bestGap = gap; bestIdx = i; }
-        }
-        if (bestIdx < 0) break;
-        alloc[bestIdx] += 1;
-        used += 1;
-      }
-
-      return alloc.map((n, i) => Math.max(1, Math.min(n, need[i])));
-    })();
-
-    const totalLinesVisible = visibleLinesPerDay.reduce((a, b) => a + b, 0);
-    const lineH = clamp(bodyMaxH / totalLinesVisible, minLineH, 10.5);
     const bodyHUsed = lineH * totalLinesVisible;
-    const tableHUsed = headerRowH + bodyHUsed + totalRowH;
+    const tableHUsed = LAY.tsHeaderRowH + bodyHUsed + LAY.tsTotalRowH;
 
     const hoursBox = { x: contentX, y: tableTop, w: contentW, h: tableHUsed };
-
-    // Outer table box (kept)
     drawRect(page, hoursBox.x, hoursBox.y, hoursBox.w, hoursBox.h, { lineWidth: 0.5 });
 
-    // Explicit borders required by your feedback:
-    // - left border for Day column
-    // - top border above header row
-    // - right border for Booking Ref column
-    drawLine(page, hoursBox.x, hoursBox.y, hoursBox.x + hoursBox.w, hoursBox.y, 0.5); // header top border
-    drawLine(page, hoursBox.x, hoursBox.y, hoursBox.x, hoursBox.y + hoursBox.h, 0.5); // left border
-    drawLine(page, hoursBox.x + hoursBox.w, hoursBox.y, hoursBox.x + hoursBox.w, hoursBox.y + hoursBox.h, 0.5); // right border
+    // Explicit borders
+    drawLine(page, hoursBox.x, hoursBox.y, hoursBox.x + hoursBox.w, hoursBox.y, 0.5);
+    drawLine(page, hoursBox.x, hoursBox.y, hoursBox.x, hoursBox.y + hoursBox.h, 0.5);
+    drawLine(page, hoursBox.x + hoursBox.w, hoursBox.y, hoursBox.x + hoursBox.w, hoursBox.y + hoursBox.h, 0.5);
 
+    // Columns
     const colNames = ["Day","Date","Shift Start","Shift End","Break Start","Break End","Paid hrs","Paid hrs (words)","Band","Booking Ref"];
     const colW = [14, 22, 18, 18, 18, 18, 18, 52, 14, 0];
     const fixedW = colW.slice(0, -1).reduce((a, b) => a + b, 0);
     colW[colW.length - 1] = Math.max(20, hoursBox.w - fixedW);
 
-    const bodyTop = hoursBox.y + headerRowH;
+    const bodyTop = hoursBox.y + LAY.tsHeaderRowH;
     const totalTop = bodyTop + bodyHUsed;
 
     // Header divider + total divider
     drawLine(page, hoursBox.x, bodyTop, hoursBox.x + hoursBox.w, bodyTop, 0.4);
     drawLine(page, hoursBox.x, totalTop, hoursBox.x + hoursBox.w, totalTop, 0.45);
 
-    // verticals only through header+body (NOT into total row)
-    let cx = hoursBox.x;
-    for (let i = 0; i < colW.length; i++) {
-      if (i > 0) drawLine(page, cx, hoursBox.y, cx, totalTop, 0.3);
-
-      // Header labels MUST be bold
-      drawText(page, fontBold, colNames[i], cx + 1.0, hoursBox.y + 5.6, 7.0, { maxWidth: colW[i] - 2 });
-      cx += colW[i];
-    }
-
     const colX = [];
-    cx = hoursBox.x;
+    let cx = hoursBox.x;
     for (let i = 0; i < colW.length; i++) { colX.push(cx); cx += colW[i]; }
+
+    // Header labels (bold)
+    const headerTextY = hoursBox.y + (LAY.tsHeaderRowH - 1.9);
+    for (let i = 0; i < colW.length; i++) {
+      if (i > 0) drawLine(page, colX[i], hoursBox.y, colX[i], totalTop, 0.3);
+      drawText(page, fontBold, colNames[i], colX[i] + 1.0, headerTextY, headerFontSizeTable, { maxWidth: colW[i] - 2 });
+    }
 
     // Body rows
     let yRow = bodyTop;
@@ -2373,20 +2320,19 @@ if (headerLines.length) {
       });
 
       const maxLines = visibleLinesPerDay[di] || 1;
-      const visibleSegs = realSegs.slice(0, maxLines);
-      const overflow = Math.max(0, realSegs.length - visibleSegs.length);
+      const visibleSegs = realSegs; // NO TRUNCATION
 
-        const rowH = lineH * Math.max(1, maxLines);
+      const rowH = lineH * Math.max(1, maxLines);
       drawLine(page, hoursBox.x, yRow + rowH, hoursBox.x + hoursBox.w, yRow + rowH, 0.3);
 
-      drawText(page, font, meta.dowName || "", colX[0] + 1.2, yRow + 5.2, 8.0);
-      drawText(page, font, fmtDmy(ymd), colX[1] + 1.2, yRow + 5.2, 8.0);
+      // day/date once
+      drawText(page, font, meta.dowName || "", colX[0] + 1.2, yRow + LAY.tsLineTextOffset, bodyFontSize);
+      drawText(page, font, fmtDmy(ymd),        colX[1] + 1.2, yRow + LAY.tsLineTextOffset, bodyFontSize);
 
-      // NEW: internal separators between multiple shifts in the same day
-      // (only from Shift Start column through to Booking Ref)
+      // separators between shifts (Shift Start -> Booking Ref)
       if (visibleSegs.length > 1) {
-        const xSep1 = colX[2];                 // Shift Start col left
-        const xSep2 = colX[9] + colW[9];       // end of Booking Ref col
+        const xSep1 = colX[2];
+        const xSep2 = colX[9] + colW[9];
         for (let si = 1; si < visibleSegs.length; si++) {
           const ySep = yRow + (si * lineH);
           drawLine(page, xSep1, ySep, xSep2, ySep, 0.22);
@@ -2394,36 +2340,30 @@ if (headerLines.length) {
       }
 
       for (let li = 0; li < visibleSegs.length; li++) {
-
         const seg = visibleSegs[li];
         const t = getSegTimes(seg);
         const b = getBreakDisplay(seg);
         const ph = computePaidHours(seg);
 
-        let ref = (
+        // Booking ref: strictly per shift, never fallback
+        const ref =
           safeStr(seg?.ref_num || "").trim() ||
           safeStr(seg?.booking_ref || "").trim() ||
-          ""
-        );
+          "";
 
- // Only show overflow marker as last resort (when even compact layout can’t fit all shifts)
-if (showOverflowMarker && overflow > 0 && li === visibleSegs.length - 1) {
-  ref = ref ? `${ref} (+${overflow} more)` : `(+${overflow} more)`;
-}
+        const lineY = yRow + LAY.tsLineTextOffset + (li * lineH);
 
-        const lineY = yRow + 5.2 + (li * lineH);
+        drawText(page, font, t.start, colX[2] + 1.2, lineY, bodyFontSize);
+        drawText(page, font, t.end,   colX[3] + 1.2, lineY, bodyFontSize);
 
-        drawText(page, font, t.start, colX[2] + 1.2, lineY, 8.0);
-        drawText(page, font, t.end,   colX[3] + 1.2, lineY, 8.0);
+        drawText(page, font, b.brkStart, colX[4] + 1.2, lineY, bodyFontSize, { maxWidth: colW[4] - 2.4 });
+        drawText(page, font, b.brkEnd,   colX[5] + 1.2, lineY, bodyFontSize, { maxWidth: colW[5] - 2.4 });
 
-        drawText(page, font, b.brkStart, colX[4] + 1.2, lineY, 8.0, { maxWidth: colW[4] - 2.4 });
-        drawText(page, font, b.brkEnd,   colX[5] + 1.2, lineY, 8.0, { maxWidth: colW[5] - 2.4 });
+        drawText(page, font, ph.paid,      colX[6] + 1.2, lineY, bodyFontSize);
+        drawText(page, font, ph.paidWords, colX[7] + 1.2, lineY, wordsFontSize, { maxWidth: colW[7] - 2.4 });
 
-        drawText(page, font, ph.paid,      colX[6] + 1.2, lineY, 8.0);
-        drawText(page, font, ph.paidWords, colX[7] + 1.2, lineY, 7.3, { maxWidth: colW[7] - 2.4 });
-
-        drawText(page, font, bandText, colX[8] + 1.2, lineY, 8.0);
-        drawText(page, font, ref,      colX[9] + 1.2, lineY, 8.0, { maxWidth: colW[9] - 2.4 });
+        drawText(page, font, bandText, colX[8] + 1.2, lineY, bodyFontSize);
+        drawText(page, font, ref,      colX[9] + 1.2, lineY, bodyFontSize, { maxWidth: colW[9] - 2.4 });
       }
 
       yRow += rowH;
@@ -2431,10 +2371,11 @@ if (showOverflowMarker && overflow > 0 && li === visibleSegs.length - 1) {
 
     // TOTAL HOURS ROW
     const totalLabel = "Total overall hours claimed (excluding breaks):";
-    drawText(page, fontBold, totalLabel, hoursBox.x + 2, totalTop + 5.4, 8.5, { maxWidth: hoursBox.w - 90 });
+    const totalTextY = totalTop + (LAY.tsTotalRowH - 2.6);
+    drawText(page, fontBold, totalLabel, hoursBox.x + 2, totalTextY, Math.min(8.5, bodyFontSize + 0.5), { maxWidth: hoursBox.w - 90 });
 
     const totalTxt = `${totalPaidHours.toFixed(2)}  (${minutesToWordsUpper(totalPaidMinutes)})`;
-    drawText(page, fontBold, totalTxt, hoursBox.x + hoursBox.w - 88, totalTop + 5.4, 8.5, { maxWidth: 86 });
+    drawText(page, fontBold, totalTxt, hoursBox.x + hoursBox.w - 88, totalTextY, Math.min(8.5, bodyFontSize + 0.5), { maxWidth: 86 });
 
     // ---------- Additional units ----------
     let yAfterTable = hoursBox.y + hoursBox.h + 3;
@@ -2443,9 +2384,9 @@ if (showOverflowMarker && overflow > 0 && li === visibleSegs.length - 1) {
       const addlBox = { x: contentX, y: yAfterTable, w: contentW, h: ADDL_H };
       drawRect(page, addlBox.x, addlBox.y, addlBox.w, addlBox.h, { lineWidth: 0.45 });
 
-      drawText(page, fontBold, "Additional rates / units", addlBox.x + 2, addlBox.y + 5.2, 8.5);
+      drawText(page, fontBold, "Additional rates / units", addlBox.x + 2, addlBox.y + Math.min(5.2, LAY.addlHeaderH - 0.8), Math.min(8.5, bodyFontSize + 0.5));
 
-      const aHeaderY = addlBox.y + 7.0;
+      const aHeaderY = addlBox.y + LAY.addlHeaderH;
       drawLine(page, addlBox.x, aHeaderY, addlBox.x + addlBox.w, aHeaderY, 0.35);
 
       const aCols = ["Bucket", "Date", "Quantity", "Unit"];
@@ -2456,24 +2397,20 @@ if (showOverflowMarker && overflow > 0 && li === visibleSegs.length - 1) {
       let ax = addlBox.x;
       for (let i = 0; i < aW.length; i++) {
         if (i > 0) drawLine(page, ax, addlBox.y, ax, addlBox.y + addlBox.h, 0.3);
-        drawText(page, fontBold, aCols[i], ax + 1.2, addlBox.y + 5.2, 7.8);
+        drawText(page, fontBold, aCols[i], ax + 1.2, addlBox.y + Math.min(5.2, LAY.addlHeaderH - 0.8), Math.min(7.8, headerFontSizeTable));
         ax += aW[i];
       }
 
-      const maxRows = Math.max(0, Math.floor((addlBox.h - 7.0) / 4.8) - 1);
-      const rowsToShow = additionalRows.slice(0, maxRows);
-      const overflow = additionalRows.length - rowsToShow.length;
+      const maxRows = Math.max(0, Math.floor((addlBox.h - LAY.addlHeaderH) / LAY.addlRowH));
+      const rowsToShow = additionalRows.slice(0, maxRows); // NO (+N more)
 
-      let ry = aHeaderY + 4.6;
+      let ry = aHeaderY + Math.min(4.6, LAY.addlRowH - 0.2);
       for (const r of rowsToShow) {
-        drawText(page, font, safeStr(r.bucket), addlBox.x + 1.2, ry, 8.0, { maxWidth: aW[0] - 2.4 });
-        drawText(page, font, r.date ? fmtDmy(r.date) : "", addlBox.x + aW[0] + 1.2, ry, 8.0);
-        drawText(page, font, safeStr(r.qty), addlBox.x + aW[0] + aW[1] + 1.2, ry, 8.0);
-        drawText(page, font, safeStr(r.unit), addlBox.x + aW[0] + aW[1] + aW[2] + 1.2, ry, 8.0, { maxWidth: aW[3] - 2.4 });
-        ry += 4.8;
-      }
-      if (overflow > 0) {
-        drawText(page, font, `(+${overflow} more)`, addlBox.x + addlBox.w - 26, addlBox.y + addlBox.h - 2.2, 7.2);
+        drawText(page, font, safeStr(r.bucket), addlBox.x + 1.2, ry, bodyFontSize, { maxWidth: aW[0] - 2.4 });
+        drawText(page, font, r.date ? fmtDmy(r.date) : "", addlBox.x + aW[0] + 1.2, ry, bodyFontSize);
+        drawText(page, font, safeStr(r.qty), addlBox.x + aW[0] + aW[1] + 1.2, ry, bodyFontSize);
+        drawText(page, font, safeStr(r.unit), addlBox.x + aW[0] + aW[1] + aW[2] + 1.2, ry, bodyFontSize, { maxWidth: aW[3] - 2.4 });
+        ry += LAY.addlRowH;
       }
 
       yAfterTable = addlBox.y + addlBox.h + 3;
@@ -2486,7 +2423,6 @@ if (showOverflowMarker && overflow > 0 && li === visibleSegs.length - 1) {
     const leftDecl = { x: contentX, y: yAfterTable, w: declBoxW, h: DECL_H };
     const rightDecl = { x: contentX + declBoxW + declGap, y: yAfterTable, w: declBoxW, h: DECL_H };
 
-    // Borders MUST show reliably
     drawRect(page, leftDecl.x, leftDecl.y, leftDecl.w, leftDecl.h, { lineWidth: 0.45, borderColor: rgb(0,0,0) });
     drawRect(page, rightDecl.x, rightDecl.y, rightDecl.w, rightDecl.h, { lineWidth: 0.45, borderColor: rgb(0,0,0) });
 
@@ -2496,7 +2432,6 @@ if (showOverflowMarker && overflow > 0 && li === visibleSegs.length - 1) {
       if (!title) return;
       const y = box.y + (needsCompact ? 4.0 : 4.8);
       const size = LAY.declTitleSize;
-
 
       if (spec.title_align === "left") {
         drawText(page, titleFont, title, box.x + 2, y, size, { maxWidth: box.w - 4 });
@@ -2512,10 +2447,9 @@ if (showOverflowMarker && overflow > 0 && li === visibleSegs.length - 1) {
     drawDeclTitle(leftDecl, tempDeclSpec);
     drawDeclTitle(rightDecl, clientDeclSpec);
 
-       const declBodyTopPad = LAY.declBodyTopPad;
+    const declBodyTopPad = LAY.declBodyTopPad;
     const declBodyBottomReserve = LAY.declSigReserve;
     const maxBodyH = leftDecl.h - declBodyTopPad - declBodyBottomReserve;
-
 
     const renderDecl = (box, spec) => {
       const maxW = box.w - 4;
@@ -2523,9 +2457,8 @@ if (showOverflowMarker && overflow > 0 && li === visibleSegs.length - 1) {
       if (!baseText.trim()) return;
 
       let fontSize = Number(spec.font_size) || 7.0;
-         let lineH = Number(spec.line_height_mm) || 3.35;
+      let lineH = Number(spec.line_height_mm) || 3.35;
       if (needsCompact) lineH = Math.min(lineH, LAY.headerLineH);
-
 
       for (let attempt = 0; attempt < 4; attempt++) {
         const lines = wrapText(font, baseText, fontSize, maxW);
@@ -2540,25 +2473,23 @@ if (showOverflowMarker && overflow > 0 && li === visibleSegs.length - 1) {
           return;
         }
         fontSize = Math.max(6.0, fontSize - 0.4);
-        lineH = Math.max(3.0, lineH - 0.15);
+        lineH = Math.max(2.4, lineH - 0.15);
       }
 
       const lines = wrapText(font, baseText, 6.0, maxW);
-      const maxLines = Math.max(1, Math.floor(maxBodyH / 3.0));
-      const clipped = lines.slice(0, maxLines);
-      if (clipped.length) clipped[clipped.length - 1] = clipped[clipped.length - 1] + " …";
-
+      const maxLines = Math.max(1, Math.floor(maxBodyH / 2.6));
+      const clipped = lines.slice(0, maxLines); // no "+N more"
       let yT = box.y + declBodyTopPad;
       for (const ln of clipped) {
         drawText(page, font, ln, box.x + 2, yT, 6.0, { maxWidth: maxW });
-        yT += 3.0;
+        yT += 2.6;
       }
     };
 
     renderDecl(leftDecl, tempDeclSpec);
     renderDecl(rightDecl, clientDeclSpec);
 
-    // Signature lines (kept strictly inside each box)
+    // Signature lines
     const sigY = leftDecl.y + leftDecl.h - 6.5;
     const sigLineW = leftDecl.w - 28;
     drawLine(page, leftDecl.x + 2, sigY, leftDecl.x + 2 + sigLineW, sigY, 0.35);
@@ -2579,7 +2510,7 @@ if (showOverflowMarker && overflow > 0 && li === visibleSegs.length - 1) {
         ? footerJson.lines.map(safeStr).filter(Boolean)
         : [];
 
-      const fSize = needsCompact
+    const fSize = needsCompact
       ? LAY.footerFontSize
       : ((footerJson && Number(footerJson.font_size)) ? Number(footerJson.font_size) : 7.0);
 
@@ -2590,8 +2521,7 @@ if (showOverflowMarker && overflow > 0 && li === visibleSegs.length - 1) {
     const footerTop = yAfterTable + DECL_H + 3;
     drawLine(page, contentX, footerTop, contentX + contentW, footerTop, 0.35);
 
-     let fy = footerTop + 3.8;
-
+    let fy = footerTop + 3.8;
     for (const raw of footerLines) {
       if (fy > PAGE_H - M - 1) break;
 
@@ -2602,7 +2532,6 @@ if (showOverflowMarker && overflow > 0 && li === visibleSegs.length - 1) {
         fy += fLineH;
       }
     }
-
 
     // ---------- Save to R2 ----------
     const outKey = normalizeKey(`docs-pdf/timesheets/ts_${timesheetId}.pdf`);
@@ -2621,6 +2550,7 @@ if (showOverflowMarker && overflow > 0 && li === visibleSegs.length - 1) {
     throw e;
   }
 }
+
 
 async function renderTimesheetPDFAndSave(env, timesheetId) {
   const bucket = env.R2_BUCKET || env.R2;
