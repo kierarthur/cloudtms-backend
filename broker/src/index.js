@@ -2209,7 +2209,8 @@ drawTextFit(page, fontBold, agencyName, brandX, headerTop + 2.0, brandMaxW, LAY.
     drawRect(page, clientBox.x, clientBox.y, clientBox.w, clientBox.h, { lineWidth: 0.45 });
 
     // Nurse/Client titles
-    drawCenteredText(page, fontBold, "Nurse Details", nurseBox.x, nurseBox.y + 4.2, nurseBox.w, LAY.detailsTitleSize);
+   drawCenteredText(page, fontBold, "Temporary Worker Details", nurseBox.x, nurseBox.y + 4.2, nurseBox.w, LAY.detailsTitleSize);
+
     drawCenteredText(page, fontBold, "Client Details", clientBox.x, clientBox.y + 4.2, clientBox.w, LAY.detailsTitleSize);
 
     const surname = safeStr(cand?.last_name || cand?.surname || "").toUpperCase();
@@ -2466,8 +2467,9 @@ if (additionalRows.length > 0) {
   drawRect(page, addlBox.x, addlBox.y, addlBox.w, addlBox.h, { lineWidth: 0.45 });
 
 // Title gets its own line ABOVE the column headers (guaranteed separation)
-const addlTitleY = addlBox.y + Math.min(2.0, LAY.addlHeaderH * 0.30);
+const addlTitleY = addlBox.y + Math.min(2.8, LAY.addlHeaderH * 0.45);
 const addlColsY  = addlBox.y + (LAY.addlHeaderH - 1.4);
+
 
 
 drawText(page, fontBold, "Additional rates / units",
