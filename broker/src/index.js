@@ -1588,8 +1588,10 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
       };
     }
     const j = parseJsonMaybe(jsonVal);
-    const lines = Array.isArray(j?.lines) ? j.lines.map(safeStr).filter(Boolean) : [];
-    const bodyText = lines.join("\n");
+ const lines = Array.isArray(j?.lines) ? j.lines.map(safeStr).filter(Boolean) : [];
+// Join into a single paragraph so there are no “paragraph gaps”
+const bodyText = lines.join(" ");
+
     return {
       title: safeStr(j?.title || fallbackTitle),
       bodyText,
@@ -1682,7 +1684,9 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
         }
       }
       if (line) out.push(line);
-      if (pi < paras.length - 1) out.push("");
+   // Do NOT insert blank line between paragraphs (prevents “double spacing” in declarations)
+// if (pi < paras.length - 1) out.push("");
+
     }
 
     while (out.length && out[out.length - 1] === "") out.pop();
@@ -1952,6 +1956,98 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     }
     L("ADDL.UNITS", { rows: additionalRows.length });
 
+// ---------- LAYOUT PREFLIGHT (decide if we need compact mode) ----------
+const headerLinesCount =
+  (headerJson && typeof headerJson === "object" && Array.isArray(headerJson.lines))
+    ? headerJson.lines.map(safeStr).filter(Boolean).length
+    : 0;
+
+// how many schedule lines we actually need (1+ per day, plus extra shifts)
+const realCounts = weekDates.map(d => {
+  const segs = (d.ymd && byDate.get(d.ymd)) ? byDate.get(d.ymd) : [];
+  const real = segs.filter(s => {
+    const t = getSegTimes(s);
+    return !!(t.start && t.end);
+  });
+  return Math.max(1, real.length);
+});
+const totalLinesWanted = realCounts.reduce((a,b)=>a+b,0);
+
+const hasAddl = (additionalRows.length > 0);
+
+// “normal” vs “compact” knobs (compact only used when needed)
+const NORMAL = {
+  logoW: 44, logoH: 30,
+  headerNameSize: 12, headerTitleSize: 12, headerMetaSize: 10, headerTsNoSize: 10,
+  detailsH: 26, detailsTitleSize: 9, detailsLabelSize: 8, detailsValueSize: 8,
+  headerFontSize: 8, headerLineH: 3.8,
+  declH: 50, declTitleSize: 8.8, declBodyTopPad: 9.8, declSigReserve: 12,
+  footerFontSize: 7.0, footerLineH: 3.6,
+  minLineH: 4.8,
+
+  // keep preflight + render consistent
+  qrW: 30, qrH: 30, qrTopPad: 2, headerBottomPad: 2,
+  yCursorGap: 3.0, yCursorAfterHeaderPad: 1.5
+};
+
+
+const COMPACT = {
+  // shrink boxes, keep text tiny, remove wasted gaps
+  logoW: 34, logoH: 20,
+  headerNameSize: 10, headerTitleSize: 10, headerMetaSize: 9, headerTsNoSize: 9,
+  detailsH: 18, detailsTitleSize: 8.2, detailsLabelSize: 7.2, detailsValueSize: 7.2,
+  headerFontSize: 7.2, headerLineH: 3.0,
+  declH: 34, declTitleSize: 8.2, declBodyTopPad: 8.6, declSigReserve: 10,
+  footerFontSize: 6.6, footerLineH: 3.2,
+  minLineH: 3.8,
+
+  // keep preflight + render consistent
+  qrW: 26, qrH: 26, qrTopPad: 1, headerBottomPad: 1,
+  yCursorGap: 1.6, yCursorAfterHeaderPad: 0.8
+};
+
+
+// compute how many lines a given layout can fit BEFORE we draw anything
+const maxLinesFitFor = (LAY) => {
+  const M = 8;
+
+  const headerBottom =
+    Math.max(
+      (M + LAY.qrTopPad + LAY.logoH),
+      (M + LAY.qrTopPad + LAY.qrH)
+    ) + LAY.headerBottomPad;
+
+  const detailsTop = headerBottom + 1;
+
+  const yCursor =
+    detailsTop + LAY.detailsH + LAY.yCursorGap +
+    (headerLinesCount ? (headerLinesCount * LAY.headerLineH + LAY.yCursorAfterHeaderPad) : 0);
+
+
+  const reservedBottom =
+    LAY.declH +
+    14 +                         // footer strip reserve (keep same structural block)
+    (hasAddl ? (22 + 3) : 0) +    // addl block reserve if present (your existing sizes)
+    8;
+
+  const headerRowH = 7.5;
+  const totalRowH = 8.0;
+
+  const maxTableH = Math.max(60, (PAGE_H - M) - yCursor - reservedBottom);
+  const bodyMaxH = Math.max(30, maxTableH - headerRowH - totalRowH);
+
+  return Math.max(7, Math.floor(bodyMaxH / LAY.minLineH));
+};
+
+const maxLinesNormal = maxLinesFitFor(NORMAL);
+const needsCompact = (totalLinesWanted > maxLinesNormal);
+
+const LAY = needsCompact ? COMPACT : NORMAL;
+
+// only show (+N more) if even COMPACT still can’t fit
+const showOverflowMarker = (totalLinesWanted > maxLinesFitFor(COMPACT));
+
+
     // ---------- PDF CREATE ----------
     L("PDF.CREATE", {});
     const pdfDoc = await PDFDocument.create();
@@ -1966,21 +2062,30 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     const contentX = M;
     const contentW = PAGE_W - 2 * M;
 
-    // Header strip
-    const QR_W = 30, QR_H = 30;
-    const qrBox = { x: contentX + contentW - QR_W, y: M + 2, w: QR_W, h: QR_H };
+        // Header strip (use LAY so preflight + render can’t drift)
+    const qrTop = M + LAY.qrTopPad;
+    const QR_W  = LAY.qrW;
+    const QR_H  = LAY.qrH;
+
+    const qrBox = { x: contentX + contentW - QR_W, y: qrTop, w: QR_W, h: QR_H };
     const headerRightLimit = qrBox.x - 3;
 
-    // Bigger logo
-    const logoBox = { x: contentX, y: M + 2, w: 44, h: 30 };
+
+
+       // Bigger logo (align top padding with QR in compact mode)
+    const logoBox = { x: contentX, y: M + LAY.qrTopPad, w: LAY.logoW, h: LAY.logoH };
+
+
     const titleX = logoBox.x + logoBox.w + 6;
     const titleMaxW = Math.max(30, headerRightLimit - titleX);
 
-    // header bottom Y
-    const headerBottom = Math.max(logoBox.y + logoBox.h, qrBox.y + qrBox.h) + 2;
+         // header bottom Y (use LAY so it matches preflight)
+    const headerBottom = Math.max(logoBox.y + logoBox.h, qrBox.y + qrBox.h) + LAY.headerBottomPad;
 
-    // Draw logo box
-    drawRect(page, logoBox.x, logoBox.y, logoBox.w, logoBox.h, { lineWidth: 0.35 });
+
+
+    // No border around logo (per requirement)
+// (Do nothing here)
 
     // Draw logo safely (avoid CPU blowups)
     if (agencyLogoKey) {
@@ -2029,19 +2134,20 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     }
 
     // Agency name + TIMESHEET
-    drawTextFit(page, fontBold, agencyName, titleX, logoBox.y + 3, titleMaxW, 12, 9);
-    drawText(page, fontBold, "TIMESHEET", titleX, logoBox.y + 11, 12);
+   drawTextFit(page, fontBold, agencyName, titleX, logoBox.y + 2.5, titleMaxW, LAY.headerNameSize, 8.5);
+drawText(page, fontBold, "TIMESHEET", titleX, logoBox.y + (needsCompact ? 9.0 : 11), LAY.headerTitleSize);
 
     // Timesheet No (keep) — DO NOT show timesheet_id
     const tsNo = timesheetNumber8(ts.timesheet_id);
     const tsNoText = `Time Sheet No. ${tsNo}`;
-    const tsNoWmm = ptToMm(fontBold.widthOfTextAtSize(tsNoText, 10));
-    const tsNoX = Math.max(titleX, headerRightLimit - tsNoWmm);
-    drawText(page, fontBold, tsNoText, tsNoX, logoBox.y + 3, 10);
+const tsNoWmm = ptToMm(fontBold.widthOfTextAtSize(tsNoText, LAY.headerTsNoSize));
+const tsNoX = Math.max(titleX, headerRightLimit - tsNoWmm);
+drawText(page, fontBold, tsNoText, tsNoX, logoBox.y + 2.5, LAY.headerTsNoSize);
+
 
     // Week ending
     const weLabel = weekEndingDayName ? `Week ending (${weekEndingDayName})` : "Week ending";
-    drawText(page, fontBold, `${weLabel}: ${fmtDmy(weekEndingYmd)}`, titleX, logoBox.y + 19, 10);
+   drawText(page, fontBold, `${weLabel}: ${fmtDmy(weekEndingYmd)}`, titleX, logoBox.y + (needsCompact ? 14.0 : 19.0), LAY.headerMetaSize);
 
     // QR (header)
     drawRect(page, qrBox.x, qrBox.y, qrBox.w, qrBox.h, { lineWidth: 0.35 });
@@ -2061,7 +2167,7 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
 
     // ---------- Details strip ----------
     const detailsTop = headerBottom + 1;
-    const detailsH = 26;
+   const detailsH = LAY.detailsH;
     const detailsGap = 6;
     const detailsW = contentW;
     const detailsBoxW = (detailsW - detailsGap) / 2;
@@ -2072,8 +2178,8 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     drawRect(page, nurseBox.x, nurseBox.y, nurseBox.w, nurseBox.h, { lineWidth: 0.45 });
     drawRect(page, clientBox.x, clientBox.y, clientBox.w, clientBox.h, { lineWidth: 0.45 });
 
-    drawCenteredText(page, fontBold, "Nurse Details", nurseBox.x, nurseBox.y + 5, nurseBox.w, 9);
-    drawCenteredText(page, fontBold, "Client Details", clientBox.x, clientBox.y + 5, clientBox.w, 9);
+   drawCenteredText(page, fontBold, "Nurse Details", nurseBox.x, nurseBox.y + 4.6, nurseBox.w, LAY.detailsTitleSize);
+drawCenteredText(page, fontBold, "Client Details", clientBox.x, clientBox.y + 4.6, clientBox.w, LAY.detailsTitleSize);
 
     const surname = safeStr(cand?.last_name || cand?.surname || "").toUpperCase();
     const firstName = safeStr(cand?.first_name || "").toUpperCase();
@@ -2083,20 +2189,30 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     const siteWard = safeStr(contract?.display_site || ts?.ward_norm || "");
     const bandText = safeStr(contract?.band || "");
 
-    drawText(page, fontBold, "Surname:", nurseBox.x + 2, nurseBox.y + 12, 8);
-    drawText(page, font, surname, nurseBox.x + 20, nurseBox.y + 12, 8, { maxWidth: nurseBox.w - 22 });
+ const ndY1 = nurseBox.y + (needsCompact ? 9.6  : 10.8);
+const ndY2 = nurseBox.y + (needsCompact ? 13.4 : 18.0);
+const ndY3 = nurseBox.y + (needsCompact ? 17.2 : 24.0);
 
-    drawText(page, fontBold, "First name:", nurseBox.x + 2, nurseBox.y + 18, 8);
-    drawText(page, font, firstName, nurseBox.x + 20, nurseBox.y + 18, 8, { maxWidth: nurseBox.w - 22 });
+const cdY1 = clientBox.y + (needsCompact ? 10.8 : 14.0);
+const cdY2 = clientBox.y + (needsCompact ? 16.6 : 22.0);
 
-    drawText(page, fontBold, "Job Profile Title:", nurseBox.x + 2, nurseBox.y + 24, 8);
-    drawText(page, font, role, nurseBox.x + 30, nurseBox.y + 24, 8, { maxWidth: nurseBox.w - 32 });
+// Nurse
+drawText(page, fontBold, "Surname:", nurseBox.x + 2, ndY1, LAY.detailsLabelSize);
+drawText(page, font, surname, nurseBox.x + 20, ndY1, LAY.detailsValueSize, { maxWidth: nurseBox.w - 22 });
 
-    drawText(page, fontBold, "Client Name / Hospital:", clientBox.x + 2, clientBox.y + 14, 8);
-    drawText(page, font, clientName, clientBox.x + 36, clientBox.y + 14, 8, { maxWidth: clientBox.w - 38 });
+drawText(page, fontBold, "First name:", nurseBox.x + 2, ndY2, LAY.detailsLabelSize);
+drawText(page, font, firstName, nurseBox.x + 20, ndY2, LAY.detailsValueSize, { maxWidth: nurseBox.w - 22 });
 
-    drawText(page, fontBold, "Site / Ward:", clientBox.x + 2, clientBox.y + 22, 8);
-    drawText(page, font, siteWard, clientBox.x + 20, clientBox.y + 22, 8, { maxWidth: clientBox.w - 22 });
+drawText(page, fontBold, "Job Profile Title:", nurseBox.x + 2, ndY3, LAY.detailsLabelSize);
+drawText(page, font, role, nurseBox.x + 30, ndY3, LAY.detailsValueSize, { maxWidth: nurseBox.w - 32 });
+
+// Client
+drawText(page, fontBold, "Client Name / Hospital:", clientBox.x + 2, cdY1, LAY.detailsLabelSize);
+drawText(page, font, clientName, clientBox.x + 36, cdY1, LAY.detailsValueSize, { maxWidth: clientBox.w - 38 });
+
+drawText(page, fontBold, "Site / Ward:", clientBox.x + 2, cdY2, LAY.detailsLabelSize);
+drawText(page, font, siteWard, clientBox.x + 20, cdY2, LAY.detailsValueSize, { maxWidth: clientBox.w - 22 });
+
 
     // ---------- Header statement block ----------
     const headerLines =
@@ -2104,17 +2220,27 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
         ? headerJson.lines.map(safeStr).filter(Boolean)
         : [];
 
-    const headerFontSize = (headerJson && Number(headerJson.font_size)) ? Number(headerJson.font_size) : 8;
-    const headerLineH = (headerJson && Number(headerJson.line_height_mm)) ? Number(headerJson.line_height_mm) : 3.8;
+ const headerFontSize =
+  needsCompact
+    ? LAY.headerFontSize
+    : ((headerJson && Number(headerJson.font_size)) ? Number(headerJson.font_size) : 8);
 
-    let yCursor = detailsTop + detailsH + 3;
-    if (headerLines.length) {
-      for (const line of headerLines) {
-        drawText(page, font, line, contentX, yCursor, headerFontSize, { maxWidth: contentW });
-        yCursor += headerLineH;
-      }
-      yCursor += 1.5;
-    }
+const headerLineH =
+  needsCompact
+    ? LAY.headerLineH
+    : ((headerJson && Number(headerJson.line_height_mm)) ? Number(headerJson.line_height_mm) : 3.8);
+
+let yCursor = detailsTop + detailsH + LAY.yCursorGap;
+
+if (headerLines.length) {
+  for (const line of headerLines) {
+    drawText(page, font, line, contentX, yCursor, headerFontSize, { maxWidth: contentW });
+    yCursor += headerLineH;
+  }
+  yCursor += LAY.yCursorAfterHeaderPad;
+}
+
+
 
     // ---------- Totals ----------
     let totalPaidMinutes = 0;
@@ -2127,19 +2253,10 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     }
     const totalPaidHours = Math.round((totalPaidMinutes / 60) * 100) / 100;
 
-    const realCounts = weekDates.map(d => {
-      const segs = (d.ymd && byDate.get(d.ymd)) ? byDate.get(d.ymd) : [];
-      const real = segs.filter(s => {
-        const t = getSegTimes(s);
-        return !!(t.start && t.end);
-      });
-      return Math.max(1, real.length);
-    });
-
-    const totalLinesWanted = realCounts.reduce((a, b) => a + b, 0);
+ 
 
     // Reserve bottom blocks (decl + footer + optional addl)
-    const DECL_H = 50;
+  const DECL_H = LAY.declH;
     const FOOT_H = 14;
     const ADDL_H = (additionalRows.length > 0) ? 22 : 0;
     const reservedBottom = DECL_H + FOOT_H + (ADDL_H ? (ADDL_H + 3) : 0) + 8;
@@ -2151,7 +2268,7 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     const maxTableH = Math.max(60, (PAGE_H - M) - tableTop - reservedBottom);
     const bodyMaxH = Math.max(30, maxTableH - headerRowH - totalRowH);
 
-    const minLineH = 4.8;
+    const minLineH = LAY.minLineH;
     const maxTotalLinesFit = Math.max(7, Math.floor(bodyMaxH / minLineH));
 
     // Allocate visible lines per day
@@ -2265,9 +2382,10 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
           ""
         );
 
-        if (overflow > 0 && li === visibleSegs.length - 1) {
-          ref = ref ? `${ref} (+${overflow} more)` : `(+${overflow} more)`;
-        }
+ // Only show overflow marker as last resort (when even compact layout can’t fit all shifts)
+if (showOverflowMarker && overflow > 0 && li === visibleSegs.length - 1) {
+  ref = ref ? `${ref} (+${overflow} more)` : `(+${overflow} more)`;
+}
 
         const lineY = yRow + 5.2 + (li * lineH);
 
@@ -2352,9 +2470,9 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
       const titleFont = spec.title_bold ? fontBold : font;
       const title = safeStr(spec.title);
       if (!title) return;
+      const y = box.y + (needsCompact ? 4.0 : 4.8);
+      const size = LAY.declTitleSize;
 
-      const y = box.y + 4.8;
-      const size = 8.8;
 
       if (spec.title_align === "left") {
         drawText(page, titleFont, title, box.x + 2, y, size, { maxWidth: box.w - 4 });
@@ -2370,9 +2488,10 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     drawDeclTitle(leftDecl, tempDeclSpec);
     drawDeclTitle(rightDecl, clientDeclSpec);
 
-    const declBodyTopPad = 9.8;
-    const declBodyBottomReserve = 12;
+       const declBodyTopPad = LAY.declBodyTopPad;
+    const declBodyBottomReserve = LAY.declSigReserve;
     const maxBodyH = leftDecl.h - declBodyTopPad - declBodyBottomReserve;
+
 
     const renderDecl = (box, spec) => {
       const maxW = box.w - 4;
@@ -2380,7 +2499,9 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
       if (!baseText.trim()) return;
 
       let fontSize = Number(spec.font_size) || 7.0;
-      let lineH = Number(spec.line_height_mm) || 3.35;
+         let lineH = Number(spec.line_height_mm) || 3.35;
+      if (needsCompact) lineH = Math.min(lineH, LAY.headerLineH);
+
 
       for (let attempt = 0; attempt < 4; attempt++) {
         const lines = wrapText(font, baseText, fontSize, maxW);
@@ -2434,8 +2555,13 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
         ? footerJson.lines.map(safeStr).filter(Boolean)
         : [];
 
-    const fSize = (footerJson && Number(footerJson.font_size)) ? Number(footerJson.font_size) : 7.0;
-    const fLineH = (footerJson && Number(footerJson.line_height_mm)) ? Number(footerJson.line_height_mm) : 3.6;
+      const fSize = needsCompact
+      ? LAY.footerFontSize
+      : ((footerJson && Number(footerJson.font_size)) ? Number(footerJson.font_size) : 7.0);
+
+    const fLineH = needsCompact
+      ? LAY.footerLineH
+      : ((footerJson && Number(footerJson.line_height_mm)) ? Number(footerJson.line_height_mm) : 3.6);
 
     const footerTop = yAfterTable + DECL_H + 3;
     drawLine(page, contentX, footerTop, contentX + contentW, footerTop, 0.35);
