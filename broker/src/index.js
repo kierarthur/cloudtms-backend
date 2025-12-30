@@ -1438,11 +1438,6 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
   };
 
   // NEW: scheme-based minutes → words (ALL CAPS)
-  // Examples:
-  // 455  -> SEVEN HRS THIRTY FIVE MINS
-  // 450  -> SEVEN AND A HALF HRS
-  // 30   -> THIRTY MINS
-  // 661  -> ELEVEN HRS ONE MINUTE
   const minutesToWordsUpper = (totalMinutes) => {
     const m = Math.round(Number(totalMinutes) || 0);
     if (!Number.isFinite(m) || m <= 0) return "";
@@ -1478,7 +1473,6 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     return `${hW} HRS ${mW} ${minLabel}`;
   };
 
-  // Keep helper name, but make it scheme-consistent by delegating to minutesToWordsUpper
   const hoursToWordsUpper = (hours) => {
     const h = Number(hours);
     if (!Number.isFinite(h) || h <= 0) return "";
@@ -1569,16 +1563,54 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     return { paid: h.toFixed(2), paidWords: minutesToWordsUpper(mins) };
   };
 
-  // Drawing primitives
+  const parseJsonMaybe = (v) => {
+    if (!v) return null;
+    if (typeof v === "object") return v;
+    if (typeof v === "string") {
+      const s = v.trim();
+      if (!s) return null;
+      try { return JSON.parse(s); } catch { return null; }
+    }
+    return null;
+  };
+
+  // Declarations: prefer TEXT columns if present; else fall back to *_declaration_json
+  const buildDeclSpec = (fallbackTitle, textVal, jsonVal) => {
+    const txt = safeStr(textVal).trim();
+    if (txt) {
+      return {
+        title: fallbackTitle,
+        bodyText: txt,
+        title_align: "center",
+        title_bold: true,
+        font_size: 7.0,
+        line_height_mm: 3.35
+      };
+    }
+    const j = parseJsonMaybe(jsonVal);
+    const lines = Array.isArray(j?.lines) ? j.lines.map(safeStr).filter(Boolean) : [];
+    const bodyText = lines.join("\n");
+    return {
+      title: safeStr(j?.title || fallbackTitle),
+      bodyText,
+      title_align: safeStr(j?.title_align || "center").toLowerCase(),
+      title_bold: (j?.title_bold !== false),
+      font_size: Number(j?.font_size) || 7.0,
+      line_height_mm: Number(j?.line_height_mm) || 3.35
+    };
+  };
+
+  // Drawing primitives (force explicit black stroke so borders never “disappear”)
   const drawRect = (page, x, yTop, w, h, opts = {}) => {
     const lw = opts.lineWidth ?? 0.35;
+    const stroke = opts.borderColor ?? rgb(0, 0, 0);
     page.drawRectangle({
       x: mmToPt(x),
       y: mmToPt(yFromTop(yTop + h)),
       width: mmToPt(w),
       height: mmToPt(h),
       borderWidth: lw,
-      borderColor: opts.borderColor,
+      borderColor: stroke,
       color: opts.fillColor,
     });
   };
@@ -1588,6 +1620,7 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
       start: { x: mmToPt(x1), y: mmToPt(yFromTop(yTop1)) },
       end:   { x: mmToPt(x2), y: mmToPt(yFromTop(yTop2)) },
       thickness: lw,
+      color: rgb(0, 0, 0),
     });
   };
 
@@ -1649,16 +1682,14 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
         }
       }
       if (line) out.push(line);
-      if (pi < paras.length - 1) out.push(""); // blank line between paragraphs
+      if (pi < paras.length - 1) out.push("");
     }
 
-    // trim trailing blank lines
     while (out.length && out[out.length - 1] === "") out.pop();
     return out;
   };
 
-  // QR drawer — safe if QRCode not bundled
-  // (minor safety clamp to avoid stray filled rects outside box)
+  // QR drawer — clamp + clear background (reduces “blob” artifacts)
   const drawQrInBox = async (page, qrText, box) => {
     if (!qrText || !box) return;
     if (typeof QRCode === "undefined" || typeof QRCode.create !== "function") {
@@ -1666,7 +1697,16 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
       return;
     }
 
-    // Lower ECC helps reduce density (bigger modules)
+    // Clear box interior to white (prevents any overdraw artifacts being visible)
+    page.drawRectangle({
+      x: mmToPt(box.x + 0.4),
+      y: mmToPt(yFromTop(box.y + box.h - 0.4)),
+      width: mmToPt(Math.max(0, box.w - 0.8)),
+      height: mmToPt(Math.max(0, box.h - 0.8)),
+      color: rgb(1, 1, 1),
+      borderWidth: 0,
+    });
+
     const qr = QRCode.create(qrText, { errorCorrectionLevel: "L" });
     const modules = qr?.modules;
     const size = modules?.size;
@@ -1681,6 +1721,8 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     const x0 = box.x + (box.w - cell * grid) / 2;
     const y0 = box.y + (box.h - cell * grid) / 2;
 
+    const xMin = box.x - 1e-6;
+    const yMin = box.y - 1e-6;
     const xMax = box.x + box.w + 1e-6;
     const yMax = box.y + box.h + 1e-6;
 
@@ -1692,8 +1734,8 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
         const x = x0 + (c + marginModules) * cell;
         const yTop = y0 + (r + marginModules) * cell;
 
-        // clamp to box (prevents “blob” if any drift happens)
-        if (x < box.x - 1e-6 || yTop < box.y - 1e-6) continue;
+        // hard clamp to box
+        if (x < xMin || yTop < yMin) continue;
         if (x + cell > xMax || yTop + cell > yMax) continue;
 
         page.drawRectangle({
@@ -1707,7 +1749,7 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
       }
     }
 
-    drawRect(page, box.x, box.y, box.w, box.h, { lineWidth: 0.35 });
+    drawRect(page, box.x, box.y, box.w, box.h, { lineWidth: 0.35, borderColor: rgb(0,0,0) });
   };
 
   // Local helpers for DAILY synthesis
@@ -1800,17 +1842,24 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     const headerJson = def?.timesheet_header_json ?? null;
     const footerJson = def?.timesheet_footer_json ?? null;
 
-    // NEW text columns (preferred)
+    // Declarations: TEXT (if present) + JSON fallback (your DB currently has *_declaration_json)
     const tempDeclText = def?.temporary_worker_declaration ?? null;
     const clientDeclText = def?.client_declaration ?? null;
+    const tempDeclJson = def?.temporary_worker_declaration_json ?? null;
+    const clientDeclJson = def?.client_declaration_json ?? null;
+
+    const tempDeclSpec = buildDeclSpec("Temporary Worker Declaration", tempDeclText, tempDeclJson);
+    const clientDeclSpec = buildDeclSpec("Client Declaration", clientDeclText, clientDeclJson);
 
     L("SETTINGS", {
       agency_name: agencyName,
       agency_logo_key: agencyLogoKey || null,
       has_header_json: !!headerJson,
       has_footer_json: !!footerJson,
-      has_temp_decl: !!tempDeclText,
-      has_client_decl: !!clientDeclText
+      temp_decl_text_len: safeStr(tempDeclText).trim().length,
+      client_decl_text_len: safeStr(clientDeclText).trim().length,
+      has_temp_decl_json: !!parseJsonMaybe(tempDeclJson),
+      has_client_decl_json: !!parseJsonMaybe(clientDeclJson)
     });
 
     // ---------- SCHEDULE (weekly or synth daily) ----------
@@ -2010,8 +2059,8 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
       L("QR.FAIL", { err: e?.message || String(e) });
     }
 
-    // ---------- Details strip (aligned to table: contentX) ----------
-    const detailsTop = headerBottom + 1;     // moved UP closer to logo
+    // ---------- Details strip ----------
+    const detailsTop = headerBottom + 1;
     const detailsH = 26;
     const detailsGap = 6;
     const detailsW = contentW;
@@ -2034,7 +2083,6 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     const siteWard = safeStr(contract?.display_site || ts?.ward_norm || "");
     const bandText = safeStr(contract?.band || "");
 
-    // Nurse box fields
     drawText(page, fontBold, "Surname:", nurseBox.x + 2, nurseBox.y + 12, 8);
     drawText(page, font, surname, nurseBox.x + 20, nurseBox.y + 12, 8, { maxWidth: nurseBox.w - 22 });
 
@@ -2044,14 +2092,13 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     drawText(page, fontBold, "Job Profile Title:", nurseBox.x + 2, nurseBox.y + 24, 8);
     drawText(page, font, role, nurseBox.x + 30, nurseBox.y + 24, 8, { maxWidth: nurseBox.w - 32 });
 
-    // Client box fields
     drawText(page, fontBold, "Client Name / Hospital:", clientBox.x + 2, clientBox.y + 14, 8);
     drawText(page, font, clientName, clientBox.x + 36, clientBox.y + 14, 8, { maxWidth: clientBox.w - 38 });
 
     drawText(page, fontBold, "Site / Ward:", clientBox.x + 2, clientBox.y + 22, 8);
     drawText(page, font, siteWard, clientBox.x + 20, clientBox.y + 22, 8, { maxWidth: clientBox.w - 22 });
 
-    // ---------- Header statement block (must be ABOVE hours table) ----------
+    // ---------- Header statement block ----------
     const headerLines =
       (headerJson && typeof headerJson === "object" && Array.isArray(headerJson.lines))
         ? headerJson.lines.map(safeStr).filter(Boolean)
@@ -2069,7 +2116,7 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
       yCursor += 1.5;
     }
 
-    // ---------- Precompute totals + capacity for shifts ----------
+    // ---------- Totals ----------
     let totalPaidMinutes = 0;
     for (const segs of byDate.values()) {
       for (const s of segs) {
@@ -2105,9 +2152,9 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     const bodyMaxH = Math.max(30, maxTableH - headerRowH - totalRowH);
 
     const minLineH = 4.8;
-    const maxTotalLinesFit = Math.max(7, Math.floor(bodyMaxH / minLineH)); // at least 1 per day
+    const maxTotalLinesFit = Math.max(7, Math.floor(bodyMaxH / minLineH));
 
-    // Allocate visible lines per day (truncate if needed)
+    // Allocate visible lines per day
     const visibleLinesPerDay = (() => {
       if (totalLinesWanted <= maxTotalLinesFit) return realCounts.slice();
 
@@ -2124,7 +2171,6 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
         alloc[i] += add;
       }
 
-      // Fix rounding drift: distribute any leftover lines 1-by-1
       let used = alloc.reduce((a, b) => a + b, 0);
       while (used < maxTotalLinesFit) {
         let bestIdx = -1;
@@ -2141,32 +2187,42 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
       return alloc.map((n, i) => Math.max(1, Math.min(n, need[i])));
     })();
 
-    // Compute line height using FINAL visible lines (guarantees 1 page)
     const totalLinesVisible = visibleLinesPerDay.reduce((a, b) => a + b, 0);
     const lineH = clamp(bodyMaxH / totalLinesVisible, minLineH, 10.5);
     const bodyHUsed = lineH * totalLinesVisible;
     const tableHUsed = headerRowH + bodyHUsed + totalRowH;
 
     const hoursBox = { x: contentX, y: tableTop, w: contentW, h: tableHUsed };
+
+    // Outer table box (kept)
     drawRect(page, hoursBox.x, hoursBox.y, hoursBox.w, hoursBox.h, { lineWidth: 0.5 });
 
-    // Columns
+    // Explicit borders required by your feedback:
+    // - left border for Day column
+    // - top border above header row
+    // - right border for Booking Ref column
+    drawLine(page, hoursBox.x, hoursBox.y, hoursBox.x + hoursBox.w, hoursBox.y, 0.5); // header top border
+    drawLine(page, hoursBox.x, hoursBox.y, hoursBox.x, hoursBox.y + hoursBox.h, 0.5); // left border
+    drawLine(page, hoursBox.x + hoursBox.w, hoursBox.y, hoursBox.x + hoursBox.w, hoursBox.y + hoursBox.h, 0.5); // right border
+
     const colNames = ["Day","Date","Shift Start","Shift End","Break Start","Break End","Paid hrs","Paid hrs (words)","Band","Booking Ref"];
     const colW = [14, 22, 18, 18, 18, 18, 18, 52, 14, 0];
     const fixedW = colW.slice(0, -1).reduce((a, b) => a + b, 0);
     colW[colW.length - 1] = Math.max(20, hoursBox.w - fixedW);
 
-    // Total-row boundary: stop vertical lines here
     const bodyTop = hoursBox.y + headerRowH;
     const totalTop = bodyTop + bodyHUsed;
 
-    drawLine(page, hoursBox.x, bodyTop, hoursBox.x + hoursBox.w, bodyTop, 0.4);    // header divider
-    drawLine(page, hoursBox.x, totalTop, hoursBox.x + hoursBox.w, totalTop, 0.45); // total divider
+    // Header divider + total divider
+    drawLine(page, hoursBox.x, bodyTop, hoursBox.x + hoursBox.w, bodyTop, 0.4);
+    drawLine(page, hoursBox.x, totalTop, hoursBox.x + hoursBox.w, totalTop, 0.45);
 
     // verticals only through header+body (NOT into total row)
     let cx = hoursBox.x;
     for (let i = 0; i < colW.length; i++) {
       if (i > 0) drawLine(page, cx, hoursBox.y, cx, totalTop, 0.3);
+
+      // Header labels MUST be bold
       drawText(page, fontBold, colNames[i], cx + 1.0, hoursBox.y + 5.6, 7.0, { maxWidth: colW[i] - 2 });
       cx += colW[i];
     }
@@ -2194,7 +2250,6 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
       const rowH = lineH * Math.max(1, maxLines);
       drawLine(page, hoursBox.x, yRow + rowH, hoursBox.x + hoursBox.w, yRow + rowH, 0.3);
 
-      // day/date once
       drawText(page, font, meta.dowName || "", colX[0] + 1.2, yRow + 5.2, 8.0);
       drawText(page, font, fmtDmy(ymd), colX[1] + 1.2, yRow + 5.2, 8.0);
 
@@ -2204,14 +2259,12 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
         const b = getBreakDisplay(seg);
         const ph = computePaidHours(seg);
 
-        // IMPORTANT: NO fallback to ts.booking_id (bk_...)
         let ref = (
           safeStr(seg?.ref_num || "").trim() ||
           safeStr(seg?.booking_ref || "").trim() ||
           ""
         );
 
-        // If overflow exists, add (+N more) to last visible line
         if (overflow > 0 && li === visibleSegs.length - 1) {
           ref = ref ? `${ref} (+${overflow} more)` : `(+${overflow} more)`;
         }
@@ -2234,15 +2287,14 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
       yRow += rowH;
     }
 
-    // TOTAL HOURS ROW (merged-style)
+    // TOTAL HOURS ROW
     const totalLabel = "Total overall hours claimed (excluding breaks):";
     drawText(page, fontBold, totalLabel, hoursBox.x + 2, totalTop + 5.4, 8.5, { maxWidth: hoursBox.w - 90 });
 
-    // FIX: total words use exact minutes (not rounded hours)
     const totalTxt = `${totalPaidHours.toFixed(2)}  (${minutesToWordsUpper(totalPaidMinutes)})`;
     drawText(page, fontBold, totalTxt, hoursBox.x + hoursBox.w - 88, totalTop + 5.4, 8.5, { maxWidth: 86 });
 
-    // ---------- Additional units (ONLY if any rows) ----------
+    // ---------- Additional units ----------
     let yAfterTable = hoursBox.y + hoursBox.h + 3;
 
     if (additionalRows.length > 0) {
@@ -2285,32 +2337,50 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
       yAfterTable = addlBox.y + addlBox.h + 3;
     }
 
-    // ---------- Declarations strip (boxed + wrapped, NO overlap) ----------
+    // ---------- Declarations strip ----------
     const declGap = 6;
     const declBoxW = (contentW - declGap) / 2;
 
     const leftDecl = { x: contentX, y: yAfterTable, w: declBoxW, h: DECL_H };
     const rightDecl = { x: contentX + declBoxW + declGap, y: yAfterTable, w: declBoxW, h: DECL_H };
 
-    drawRect(page, leftDecl.x, leftDecl.y, leftDecl.w, leftDecl.h, { lineWidth: 0.45 });
-    drawRect(page, rightDecl.x, rightDecl.y, rightDecl.w, rightDecl.h, { lineWidth: 0.45 });
+    // Borders MUST show reliably
+    drawRect(page, leftDecl.x, leftDecl.y, leftDecl.w, leftDecl.h, { lineWidth: 0.45, borderColor: rgb(0,0,0) });
+    drawRect(page, rightDecl.x, rightDecl.y, rightDecl.w, rightDecl.h, { lineWidth: 0.45, borderColor: rgb(0,0,0) });
 
-    // Titles (bold + centred)
-    drawCenteredText(page, fontBold, "Temporary Worker Declaration", leftDecl.x, leftDecl.y + 4.8, leftDecl.w, 8.8);
-    drawCenteredText(page, fontBold, "Client Declaration", rightDecl.x, rightDecl.y + 4.8, rightDecl.w, 8.8);
+    const drawDeclTitle = (box, spec) => {
+      const titleFont = spec.title_bold ? fontBold : font;
+      const title = safeStr(spec.title);
+      if (!title) return;
 
-    // Wrapped body text with fit
+      const y = box.y + 4.8;
+      const size = 8.8;
+
+      if (spec.title_align === "left") {
+        drawText(page, titleFont, title, box.x + 2, y, size, { maxWidth: box.w - 4 });
+      } else if (spec.title_align === "right") {
+        const tw = titleFont.widthOfTextAtSize(title, size);
+        const xMm = box.x + box.w - 2 - ptToMm(tw);
+        drawText(page, titleFont, title, xMm, y, size, { maxWidth: box.w - 4 });
+      } else {
+        drawCenteredText(page, titleFont, title, box.x, y, box.w, size);
+      }
+    };
+
+    drawDeclTitle(leftDecl, tempDeclSpec);
+    drawDeclTitle(rightDecl, clientDeclSpec);
+
     const declBodyTopPad = 9.8;
-    const declBodyBottomReserve = 12; // signature area
+    const declBodyBottomReserve = 12;
     const maxBodyH = leftDecl.h - declBodyTopPad - declBodyBottomReserve;
 
-    const renderDecl = (box, rawText) => {
+    const renderDecl = (box, spec) => {
       const maxW = box.w - 4;
-      let fontSize = 7.0;
-      let lineH = 3.35;
+      const baseText = safeStr(spec.bodyText);
+      if (!baseText.trim()) return;
 
-      const baseText = safeStr(rawText);
-      if (!baseText) return;
+      let fontSize = Number(spec.font_size) || 7.0;
+      let lineH = Number(spec.line_height_mm) || 3.35;
 
       for (let attempt = 0; attempt < 4; attempt++) {
         const lines = wrapText(font, baseText, fontSize, maxW);
@@ -2328,7 +2398,6 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
         lineH = Math.max(3.0, lineH - 0.15);
       }
 
-      // last resort: truncate
       const lines = wrapText(font, baseText, 6.0, maxW);
       const maxLines = Math.max(1, Math.floor(maxBodyH / 3.0));
       const clipped = lines.slice(0, maxLines);
@@ -2341,10 +2410,10 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
       }
     };
 
-    renderDecl(leftDecl, tempDeclText);
-    renderDecl(rightDecl, clientDeclText);
+    renderDecl(leftDecl, tempDeclSpec);
+    renderDecl(rightDecl, clientDeclSpec);
 
-    // Signature lines
+    // Signature lines (kept strictly inside each box)
     const sigY = leftDecl.y + leftDecl.h - 6.5;
     const sigLineW = leftDecl.w - 28;
     drawLine(page, leftDecl.x + 2, sigY, leftDecl.x + 2 + sigLineW, sigY, 0.35);
