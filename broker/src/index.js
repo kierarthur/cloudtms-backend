@@ -1719,15 +1719,16 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
       : null;
 
     L("DB.LOAD.candidate", { candidate_id: contract?.candidate_id || null });
-    const cand = contract?.candidate_id
-      ? await sbGetOne(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/candidates` +
-            `?id=eq.${encodeURIComponent(contract.candidate_id)}` +
-            `&select=id,first_name,last_name,surname,display_name,email` +
-            `&limit=1`
-        )
-      : null;
+  const cand = contract?.candidate_id
+  ? await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/candidates` +
+        `?id=eq.${encodeURIComponent(contract.candidate_id)}` +
+        `&select=id,first_name,last_name,display_name,email` +
+        `&limit=1`
+    )
+  : null;
+
 
     L("DB.LOAD.tsfin", {});
     const fin = await sbGetOne(
@@ -1979,8 +1980,9 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     const col3X = col2X + col2W + gap;
     const col3W = Math.max(30, headerRightLimit - col3X);
 
-    const surname = safeStr(cand?.surname || cand?.last_name || "").toUpperCase();
-    const firstName = safeStr(cand?.first_name || "").toUpperCase();
+   const surname = safeStr(cand?.last_name || "").toUpperCase();
+const firstName = safeStr(cand?.first_name || "").toUpperCase();
+
     const role = safeStr(contract?.role || "");
     const clientName = safeStr(client?.name || "");
     const siteWard = safeStr(contract?.display_site || ts?.ward_norm || "");
