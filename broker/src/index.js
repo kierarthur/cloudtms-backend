@@ -1335,20 +1335,19 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
 
   const T0 = Date.now();
   const LOGP = `[TS_PDF_GEN][${timesheetId}]`;
-  const L = (step, obj) => {
-    try { console.log(`${LOGP} ${step}`, obj || {}); } catch {}
-  };
+  const L = (step, obj) => { try { console.log(`${LOGP} ${step}`, obj || {}); } catch {} };
 
   L("START", { tsid: timesheetId });
 
-  // ---------- helpers (local, so this function is self-contained) ----------
+  // ---------- helpers ----------
   const mmToPt = (mm) => (Number(mm) || 0) * 72 / 25.4;
+  const ptToMm = (pt) => (Number(pt) || 0) * 25.4 / 72;
 
   // A4 landscape in mm
   const PAGE_W = 297;
   const PAGE_H = 210;
 
-  // PDF-lib uses bottom-left origin; we prefer top-left mm placement.
+  // pdf-lib bottom-left origin; we use "mm from top"
   const yFromTop = (mmFromTop) => PAGE_H - (Number(mmFromTop) || 0);
 
   const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
@@ -1365,8 +1364,7 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     const s = safeStr(ymd).slice(0, 10);
     const d = new Date(s + "T00:00:00Z");
     if (Number.isNaN(d.getTime())) return "";
-    const names = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-    return names[d.getUTCDay()] || "";
+    return ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][d.getUTCDay()] || "";
   };
 
   const buildWeekDates = (weekEndingYmd) => {
@@ -1381,11 +1379,7 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
           const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
           const dd = String(d.getUTCDate()).padStart(2, "0");
           const ymd = `${yyyy}-${mm}-${dd}`;
-          out.push({
-            ymd,
-            dow: d.getUTCDay(),
-            dowName: ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getUTCDay()]
-          });
+          out.push({ ymd, dow: d.getUTCDay(), dowName: ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getUTCDay()] });
         }
       }
     } catch {}
@@ -1409,7 +1403,7 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     return `${yyyy}-${mm}-${dd}`;
   };
 
-  // FNV-1a 32-bit → 8 digits
+  // FNV-1a 32-bit → 8 digits (Timesheet No)
   const timesheetNumber8 = (id) => {
     const s = safeStr(id);
     let h = 0x811c9dc5;
@@ -1451,21 +1445,16 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     const frac = h - whole;
 
     const wholeWords = twoDigitWords(clamp(whole, 0, 99));
-    const hourWord = (whole === 1) ? "HOUR" : "HOURS";
-
     const eps = 1e-6;
-    const isHalf = Math.abs(frac - 0.5) < eps;
-    const isQuarter = Math.abs(frac - 0.25) < eps;
-    const isThreeQuarter = Math.abs(frac - 0.75) < eps;
 
-    if (isHalf) return `${wholeWords} AND A HALF`;
-    if (isQuarter) return `${wholeWords} AND A QUARTER`;
-    if (isThreeQuarter) return `${wholeWords} AND THREE QUARTERS`;
+    if (Math.abs(frac - 0.5) < eps) return `${wholeWords} AND A HALF`;
+    if (Math.abs(frac - 0.25) < eps) return `${wholeWords} AND A QUARTER`;
+    if (Math.abs(frac - 0.75) < eps) return `${wholeWords} AND THREE QUARTERS`;
 
     const mins = Math.round(frac * 60);
-    if (!mins) return `${wholeWords} ${hourWord}`;
+    if (!mins) return `${wholeWords}`;
     const minsWords = twoDigitWords(clamp(mins, 0, 59));
-    return `${wholeWords} ${hourWord} ${minsWords} MINUTES`;
+    return `${wholeWords} ${minsWords} MINUTES`;
   };
 
   const getSegTimes = (seg) => {
@@ -1483,28 +1472,28 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
           return { start: a?.hhmm || "", end: b?.hhmm || "" };
         }
       } catch {}
-      return {
-        start: safeStr(seg.start_utc).slice(11, 16),
-        end: safeStr(seg.end_utc).slice(11, 16),
-      };
+      return { start: safeStr(seg.start_utc).slice(11, 16), end: safeStr(seg.end_utc).slice(11, 16) };
     }
 
     return { start: "", end: "" };
   };
 
+  // Break rule:
+  // - If break_start + break_end exist -> show start/end
+  // - else if break_minutes -> show "30mins" in Break Start, leave Break End blank
   const getBreakDisplay = (seg) => {
-    if (!seg || typeof seg !== "object") return { brkStart: "", brkEnd: "", brkLen: "" };
+    if (!seg || typeof seg !== "object") return { brkStart: "", brkEnd: "" };
 
     const bs = safeStr(seg.break_start || "");
     const be = safeStr(seg.break_end || "");
-    if (bs && be) return { brkStart: bs, brkEnd: be, brkLen: "" };
+    if (bs && be) return { brkStart: bs, brkEnd: be };
 
     const arr = Array.isArray(seg.breaks) ? seg.breaks : [];
     if (arr.length) {
       const b0 = arr.find(b => b && (safeStr(b.start).trim() || safeStr(b.end).trim())) || null;
       const s = safeStr(b0?.start || "").trim();
       const e = safeStr(b0?.end || "").trim();
-      if (s && e) return { brkStart: s, brkEnd: e, brkLen: "" };
+      if (s && e) return { brkStart: s, brkEnd: e };
     }
 
     const bm =
@@ -1512,19 +1501,19 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
       (seg.break_mins != null) ? Number(seg.break_mins) :
       null;
 
-    if (Number.isFinite(bm) && bm > 0) return { brkStart: "", brkEnd: "", brkLen: `${Math.round(bm)}mins` };
-    return { brkStart: "", brkEnd: "", brkLen: "" };
+    if (Number.isFinite(bm) && bm > 0) return { brkStart: `${Math.round(bm)}mins`, brkEnd: "" };
+    return { brkStart: "", brkEnd: "" };
   };
 
-  const computePaidHours = (seg) => {
+  const computePaidMinutes = (seg) => {
     const { start, end } = getSegTimes(seg);
-    const sMin0 = parseHHMM(start);
-    const eMin0 = parseHHMM(end);
-    if (sMin0 == null || eMin0 == null) return { paid: "", paidWords: "" };
+    const s0 = parseHHMM(start);
+    const e0 = parseHHMM(end);
+    if (s0 == null || e0 == null) return 0;
 
-    let sMin = sMin0;
-    let eMin = eMin0;
-    if (eMin <= sMin) eMin += 1440;
+    let s = s0;
+    let e = e0;
+    if (e <= s) e += 1440; // overnight
 
     let breakMins = 0;
     const b = getBreakDisplay(seg);
@@ -1533,26 +1522,32 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
       const bs0 = parseHHMM(b.brkStart);
       const be0 = parseHHMM(b.brkEnd);
       if (bs0 != null && be0 != null) {
-        let bs = bs0; let be = be0;
-        if (bs < sMin0) bs += 1440;
+        let bs = bs0;
+        let be = be0;
+        if (bs < s0) bs += 1440;
         if (be <= bs0) be += 1440;
-        if (bs >= sMin && be <= eMin && be > bs) breakMins = (be - bs);
+        if (bs >= s && be <= e && be > bs) breakMins = (be - bs);
       }
     } else {
+      // if we used "30mins" string, parse from seg.break_minutes instead
       const m = (seg.break_minutes != null) ? Number(seg.break_minutes) :
                 (seg.break_mins != null) ? Number(seg.break_mins) : 0;
       if (Number.isFinite(m) && m > 0) breakMins = Math.round(m);
     }
 
-    const totalMins = eMin - sMin;
-    const paidMins = Math.max(0, totalMins - breakMins);
-    const paidH = Math.round((paidMins / 60) * 100) / 100;
-
-    return { paid: paidH ? paidH.toFixed(2) : "", paidWords: paidH ? hoursToWordsUpper(paidH) : "" };
+    const total = e - s;
+    return Math.max(0, total - breakMins);
   };
 
+  const computePaidHours = (seg) => {
+    const mins = computePaidMinutes(seg);
+    const h = Math.round((mins / 60) * 100) / 100;
+    return { paid: h ? h.toFixed(2) : "", paidWords: h ? hoursToWordsUpper(h) : "" };
+  };
+
+  // Drawing primitives
   const drawRect = (page, x, yTop, w, h, opts = {}) => {
-    const lw = opts.lineWidth ?? 0.4;
+    const lw = opts.lineWidth ?? 0.35;
     page.drawRectangle({
       x: mmToPt(x),
       y: mmToPt(yFromTop(yTop + h)),
@@ -1564,7 +1559,7 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     });
   };
 
-  const drawLine = (page, x1, yTop1, x2, yTop2, lw = 0.35) => {
+  const drawLine = (page, x1, yTop1, x2, yTop2, lw = 0.3) => {
     page.drawLine({
       start: { x: mmToPt(x1), y: mmToPt(yFromTop(yTop1)) },
       end:   { x: mmToPt(x2), y: mmToPt(yFromTop(yTop2)) },
@@ -1580,39 +1575,45 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
       y: mmToPt(yFromTop(yTop)),
       size,
       font,
-      color: opts.color,
       maxWidth: opts.maxWidth ? mmToPt(opts.maxWidth) : undefined
     });
   };
 
-  const drawLabelValue = (page, font, label, value, box, sizes) => {
-    const { x, y, w, h } = box;
-    const padX = 1.6;
-    drawText(page, font, label, x + padX, y + 3.4, sizes.label);
-    drawText(page, font, value, x + padX, y + 8.6, sizes.value);
-    drawRect(page, x, y, w, h, { lineWidth: 0.35 });
+  const drawCenteredText = (page, font, text, x, yTop, w, size) => {
+    const s = safeStr(text);
+    if (!s) return;
+    const tw = font.widthOfTextAtSize(s, size);
+    const xMm = x + (w - ptToMm(tw)) / 2;
+    drawText(page, font, s, xMm, yTop, size);
   };
 
-  // QR modules drawer — SAFE GUARD for undefined identifier
+  const drawTextFit = (page, font, text, x, yTop, maxWmm, sizeMax, sizeMin) => {
+    const s = safeStr(text);
+    if (!s) return;
+    let size = sizeMax;
+    while (size > sizeMin) {
+      const wPt = font.widthOfTextAtSize(s, size);
+      const wMm = ptToMm(wPt);
+      if (wMm <= maxWmm) break;
+      size -= 0.5;
+    }
+    drawText(page, font, s, x, yTop, size, { maxWidth: maxWmm });
+  };
+
+  // QR drawer — safe if QRCode not bundled
   const drawQrInBox = async (page, qrText, box) => {
     if (!qrText || !box) return;
-    if (typeof QRCode === "undefined") {
-      L("QR.SKIP", { reason: "QRCode global is undefined (not bundled)" });
-      return;
-    }
-    if (typeof QRCode.create !== "function") {
-      L("QR.SKIP", { reason: "QRCode.create is not a function" });
+    if (typeof QRCode === "undefined" || typeof QRCode.create !== "function") {
+      L("QR.SKIP", { reason: "QRCode not available in bundle" });
       return;
     }
 
+    // Lower ECC helps reduce density (bigger modules)
     const qr = QRCode.create(qrText, { errorCorrectionLevel: "L" });
     const modules = qr?.modules;
     const size = modules?.size;
     const data = modules?.data;
-    if (!size || !data) {
-      L("QR.SKIP", { reason: "no module data", size: size || null });
-      return;
-    }
+    if (!size || !data) return;
 
     const marginModules = 2;
     const grid = size + marginModules * 2;
@@ -1670,7 +1671,7 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
   };
 
   try {
-    // ---------- fetch DB data ----------
+    // ---------- DB LOAD ----------
     L("DB.LOAD.timesheets", {});
     const { rows: tsRows } = await sbFetch(
       env,
@@ -1719,16 +1720,15 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
       : null;
 
     L("DB.LOAD.candidate", { candidate_id: contract?.candidate_id || null });
-  const cand = contract?.candidate_id
-  ? await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/candidates` +
-        `?id=eq.${encodeURIComponent(contract.candidate_id)}` +
-        `&select=id,first_name,last_name,display_name,email` +
-        `&limit=1`
-    )
-  : null;
-
+    const cand = contract?.candidate_id
+      ? await sbGetOne(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/candidates` +
+            `?id=eq.${encodeURIComponent(contract.candidate_id)}` +
+            `&select=id,first_name,last_name,display_name,email` +
+            `&limit=1`
+        )
+      : null;
 
     L("DB.LOAD.tsfin", {});
     const fin = await sbGetOne(
@@ -1745,25 +1745,22 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
       env,
       `${env.SUPABASE_URL}/rest/v1/settings_defaults` +
         `?id=eq.1` +
-        `&select=agency_name,agency_logo,timesheet_header_json,timesheet_footer_json` +
+        `&select=agency_name,agency_logo,timesheet_header_json,timesheet_footer_json,temporary_worker_declaration_json,client_declaration_json` +
         `&limit=1`
     ).catch(() => null);
 
     const agencyName = def?.agency_name ? String(def.agency_name) : "ARMS";
-    const agencyLogoKeyRaw = def?.agency_logo ? String(def.agency_logo) : null;
-const agencyLogoKey = agencyLogoKeyRaw ? agencyLogoKeyRaw.trim() : null;
-    const headerJson = (def && def.timesheet_header_json) ? def.timesheet_header_json : null;
-    const footerJson = (def && def.timesheet_footer_json) ? def.timesheet_footer_json : null;
+    const agencyLogoKey = def?.agency_logo ? String(def.agency_logo).trim() : null;
 
-    L("SETTINGS", {
-      agency_name: agencyName,
-      agency_logo_key: agencyLogoKey || null,
-      has_header_json: !!headerJson,
-      has_footer_json: !!footerJson
-    });
+    // Header (above table) + footer (bottom) + declarations (inside boxes)
+    const headerJson = def?.timesheet_header_json ?? null;
+    const footerJson = def?.timesheet_footer_json ?? null;
+    const tempDeclJson = def?.temporary_worker_declaration_json ?? null;
+    const clientDeclJson = def?.client_declaration_json ?? null;
 
-    // ---------- DAILY synthesis ----------
+    // ---------- SCHEDULE (weekly or synth daily) ----------
     let schedule = Array.isArray(ts.actual_schedule_json) ? ts.actual_schedule_json : [];
+
     const workedYmd = isDaily ? isoToLocalYmd(ts.worked_start_iso) : "";
     const workedStartHHMM = isDaily ? isoToLocalHHMM(ts.worked_start_iso) : "";
     const workedEndHHMM   = isDaily ? isoToLocalHHMM(ts.worked_end_iso)   : "";
@@ -1797,22 +1794,15 @@ const agencyLogoKey = agencyLogoKeyRaw ? agencyLogoKeyRaw.trim() : null;
       }
 
       schedule = [seg];
-      L("DAILY.SYNTHESIZED", { workedYmd, weekEndingYmd, seg });
+      L("DAILY.SYNTHESIZED", { workedYmd, weekEndingYmd });
     } else {
       L("SCHEDULE.USING", { schedule_len: Array.isArray(schedule) ? schedule.length : 0, weekEndingYmd });
     }
 
-    // ---------- derive week window ----------
     const weekEndingDayName = weekdayName(weekEndingYmd);
     const weekDates = buildWeekDates(weekEndingYmd);
-    L("WEEK.WINDOW", {
-      weekEndingYmd,
-      weekEndingDayName,
-      firstDay: weekDates?.[0]?.ymd || null,
-      lastDay: weekDates?.[6]?.ymd || null
-    });
 
-    // ---------- schedule grouping ----------
+    // group schedule by ymd
     const byDate = new Map();
     for (const seg of schedule) {
       const ymd = safeStr(seg?.date).slice(0, 10);
@@ -1821,21 +1811,8 @@ const agencyLogoKey = agencyLogoKeyRaw ? agencyLogoKeyRaw.trim() : null;
       byDate.get(ymd).push(seg);
     }
     for (const [ymd, arr] of byDate.entries()) {
-      arr.sort((a, b) => {
-        const ta = getSegTimes(a).start || "";
-        const tb = getSegTimes(b).start || "";
-        return String(ta).localeCompare(String(tb));
-      });
+      arr.sort((a, b) => (getSegTimes(a).start || "").localeCompare(getSegTimes(b).start || ""));
     }
-
-    const lineCountForDay = (ymd) => {
-      const segs = byDate.get(ymd) || [];
-      const real = segs.filter(s => {
-        const t = getSegTimes(s);
-        return !!(t.start && t.end);
-      });
-      return Math.max(1, real.length);
-    };
 
     // ---------- additional units flatten ----------
     let additionalUnitsObj = {};
@@ -1871,7 +1848,7 @@ const agencyLogoKey = agencyLogoKeyRaw ? agencyLogoKeyRaw.trim() : null;
     }
     L("ADDL.UNITS", { rows: additionalRows.length });
 
-    // ---------- Create PDF (blank landscape) ----------
+    // ---------- PDF CREATE ----------
     L("PDF.CREATE", {});
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage([mmToPt(PAGE_W), mmToPt(PAGE_H)]);
@@ -1879,39 +1856,44 @@ const agencyLogoKey = agencyLogoKeyRaw ? agencyLogoKeyRaw.trim() : null;
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-    // ---------- layout constants ----------
+    // ---------- layout ----------
     const M = 8;
-    const contentW = PAGE_W - M * 2;
+    const GAP = 3;
+    const contentX = M;
+    const contentW = PAGE_W - 2 * M;
 
-    const HEADER_H = 44;
-    const HOURS_H  = 86;
-    const ADDL_H   = 22;
-    const DECL_H   = 32;
-    const FOOT_H   = PAGE_H - (M + HEADER_H + 2 + HOURS_H + 2 + ADDL_H + 2 + DECL_H + 2 + M);
+    // QR in top-right safe zone
+    const QR_W = 30, QR_H = 30;
+    const qrBox = { x: contentX + contentW - QR_W, y: M + 2, w: QR_W, h: QR_H };
+    const headerRightLimit = qrBox.x - 3;
 
-    const yHeader = M;
-    const yHours  = yHeader + HEADER_H + 2;
-    const yAddl   = yHours + HOURS_H + 2;
-    const yDecl   = yAddl + ADDL_H + 2;
-    const yFoot   = yDecl + DECL_H + 2;
+    // Bigger logo box
+    const logoBox = { x: contentX, y: M + 2, w: 36, h: 36 };
 
-    // Border
-    drawRect(page, M, M, contentW, PAGE_H - M * 2, { lineWidth: 0.6 });
+    // Title block (to the right of logo)
+    const titleX = logoBox.x + logoBox.w + 6;
+    const titleMaxW = Math.max(30, headerRightLimit - titleX);
 
-    // ---------- QR SAFE ZONE ----------
-    const QR_W = 30, QR_H = 30, QR_PAD = 3;
-    const qrBox = {
-      x: (M + contentW) - QR_PAD - QR_W,
-      y: yHeader + 2,
-      w: QR_W,
-      h: QR_H
-    };
-    const headerRightLimit = qrBox.x - QR_PAD;
+    // vertical cursor
+    let y = M + 4;
 
-    // ---------- Logo ----------
-    const logoBox = { x: M + 1, y: yHeader + 1, w: 42, h: 18 };
+    // Agency name + TIMESHEET
+    drawTextFit(page, fontBold, agencyName, titleX, y + 2, titleMaxW, 12, 9);
+    drawText(page, fontBold, "TIMESHEET", titleX, y + 10, 12);
+
+    // Timesheet No (keep) — DO NOT show timesheet_id
+    const tsNo = timesheetNumber8(ts.timesheet_id);
+    const tsNoText = `Time Sheet No. ${tsNo}`;
+    const tsNoWmm = ptToMm(fontBold.widthOfTextAtSize(tsNoText, 10));
+    const tsNoX = Math.max(titleX, headerRightLimit - tsNoWmm);
+    drawText(page, fontBold, tsNoText, tsNoX, y + 2, 10);
+
+    // Week ending
+    const weLabel = weekEndingDayName ? `Week ending (${weekEndingDayName})` : "Week ending";
+    drawText(page, fontBold, `${weLabel}: ${fmtDmy(weekEndingYmd)}`, titleX, y + 18, 10);
+
+    // Draw logo (guard against CPU timeout by skipping oversized images)
     drawRect(page, logoBox.x, logoBox.y, logoBox.w, logoBox.h, { lineWidth: 0.35 });
-
     if (agencyLogoKey) {
       try {
         const key = normalizeKey(agencyLogoKey);
@@ -1922,27 +1904,31 @@ const agencyLogoKey = agencyLogoKeyRaw ? agencyLogoKeyRaw.trim() : null;
           const ct = (obj.httpMetadata?.contentType || "").toLowerCase();
           L("LOGO.OK", { contentType: ct, bytes: bytes.length });
 
-          const img = ct.includes("png") ? await pdfDoc.embedPng(bytes) : await pdfDoc.embedJpg(bytes);
+          // IMPORTANT: prevent CPU blowups from large PNGs
+          const MAX_LOGO_BYTES = 250_000;
+          if (bytes.length > MAX_LOGO_BYTES) {
+            L("LOGO.SKIP", { reason: "logo too large (upload optimized logo)", bytes: bytes.length, max: MAX_LOGO_BYTES });
+          } else {
+            const img = ct.includes("png") ? await pdfDoc.embedPng(bytes) : await pdfDoc.embedJpg(bytes);
 
-          const pad = 1.0;
-          const maxW = logoBox.w - pad * 2;
-          const maxH = logoBox.h - pad * 2;
+            // fit in box with padding
+            const pad = 1.0;
+            const maxW = logoBox.w - pad * 2;
+            const maxH = logoBox.h - pad * 2;
+            const scale = Math.min(maxW / img.width, maxH / img.height);
 
-          const iw = img.width;
-          const ih = img.height;
-          const scale = Math.min(maxW / iw, maxH / ih);
-          const w = iw * scale;
-          const h = ih * scale;
+            const w = img.width * scale;
+            const h = img.height * scale;
+            const x = logoBox.x + (logoBox.w - w) / 2;
+            const yImg = logoBox.y + (logoBox.h - h) / 2;
 
-          const x = logoBox.x + (logoBox.w - w) / 2;
-          const y = logoBox.y + (logoBox.h - h) / 2;
-
-          page.drawImage(img, {
-            x: mmToPt(x),
-            y: mmToPt(yFromTop(y + h)),
-            width: mmToPt(w),
-            height: mmToPt(h)
-          });
+            page.drawImage(img, {
+              x: mmToPt(x),
+              y: mmToPt(yFromTop(yImg + h)),
+              width: mmToPt(w),
+              height: mmToPt(h)
+            });
+          }
         } else {
           L("LOGO.MISS", {});
         }
@@ -1953,78 +1939,72 @@ const agencyLogoKey = agencyLogoKeyRaw ? agencyLogoKeyRaw.trim() : null;
       L("LOGO.SKIP", { reason: "agency_logo not set" });
     }
 
-    // Header text
-    const titleX = logoBox.x + logoBox.w + 4;
-    drawText(page, fontBold, agencyName, titleX, yHeader + 6, 14);
-    drawText(page, fontBold, "TIMESHEET", titleX, yHeader + 14, 12);
+    // Details boxes (Nurse / Client) under title area
+    const detailsTop = M + 42;
+    const detailsH = 28;
+    const detailsX = titleX;
+    const detailsW = Math.max(40, headerRightLimit - detailsX);
+    const detailsGap = 6;
+    const boxW = (detailsW - detailsGap) / 2;
 
-    const tsNo = timesheetNumber8(ts.timesheet_id);
-    const tsNoText = `Timesheet No: ${tsNo}`;
-    const tsNoSize = 10;
-    const tsNoWidthPt = fontBold.widthOfTextAtSize(tsNoText, tsNoSize);
-    const tsNoWidthMm = tsNoWidthPt * 25.4 / 72;
-    const tsNoX = Math.max(titleX + 2, headerRightLimit - tsNoWidthMm);
-    drawText(page, fontBold, tsNoText, tsNoX, yHeader + 6, tsNoSize);
+    const nurseBox = { x: detailsX, y: detailsTop, w: boxW, h: detailsH };
+    const clientBox = { x: detailsX + boxW + detailsGap, y: detailsTop, w: boxW, h: detailsH };
 
-    const weLabel = weekEndingDayName ? `Week ending (${weekEndingDayName})` : "Week ending";
-    drawText(page, fontBold, `${weLabel}: ${fmtDmy(weekEndingYmd)}`, titleX, yHeader + 22, 10);
+    drawRect(page, nurseBox.x, nurseBox.y, nurseBox.w, nurseBox.h, { lineWidth: 0.45 });
+    drawRect(page, clientBox.x, clientBox.y, clientBox.w, clientBox.h, { lineWidth: 0.45 });
 
-    // Candidate/contract/client boxes
-    const fieldTop = yHeader + 22;
-    const boxH = 12;
-    const gap = 2;
+    drawCenteredText(page, fontBold, "Nurse Details", nurseBox.x, nurseBox.y + 5, nurseBox.w, 9);
+    drawCenteredText(page, fontBold, "Client Details", clientBox.x, clientBox.y + 5, clientBox.w, 9);
 
-    const col1X = titleX;
-    const col1W = 74;
-    const col2X = col1X + col1W + gap;
-    const col2W = 74;
-    const col3X = col2X + col2W + gap;
-    const col3W = Math.max(30, headerRightLimit - col3X);
-
-   const surname = safeStr(cand?.last_name || "").toUpperCase();
-const firstName = safeStr(cand?.first_name || "").toUpperCase();
-
+    const surname = safeStr(cand?.last_name || "").toUpperCase();
+    const firstName = safeStr(cand?.first_name || "").toUpperCase();
     const role = safeStr(contract?.role || "");
+
     const clientName = safeStr(client?.name || "");
     const siteWard = safeStr(contract?.display_site || ts?.ward_norm || "");
-    const band = safeStr(contract?.band || "");
-    const bookingRefDefault = safeStr(ts.booking_id || "");
 
-    drawLabelValue(page, font, "Surname", surname, { x: col1X, y: fieldTop, w: col1W, h: boxH }, { label: 6.5, value: 9 });
-    drawLabelValue(page, font, "First name", firstName, { x: col2X, y: fieldTop, w: col2W, h: boxH }, { label: 6.5, value: 9 });
-    drawLabelValue(page, font, "Job title", role, { x: col3X, y: fieldTop, w: col3W, h: boxH }, { label: 6.5, value: 9 });
+    // Nurse box fields
+    drawText(page, fontBold, "Surname:", nurseBox.x + 2, nurseBox.y + 11, 8);
+    drawText(page, font, surname, nurseBox.x + 20, nurseBox.y + 11, 8, { maxWidth: nurseBox.w - 22 });
 
-    const fieldTop2 = fieldTop + boxH + 2;
-    drawLabelValue(page, font, "Client / Hospital", clientName, { x: col1X, y: fieldTop2, w: col1W + col2W + gap, h: boxH }, { label: 6.5, value: 9 });
-    drawLabelValue(page, font, "Site / Ward", siteWard, { x: col3X, y: fieldTop2, w: col3W, h: boxH }, { label: 6.5, value: 9 });
+    drawText(page, fontBold, "First name:", nurseBox.x + 2, nurseBox.y + 17, 8);
+    drawText(page, font, firstName, nurseBox.x + 20, nurseBox.y + 17, 8, { maxWidth: nurseBox.w - 22 });
 
-    const fieldTop3 = fieldTop2 + boxH + 2;
-    drawLabelValue(page, font, "Band", band, { x: col1X, y: fieldTop3, w: 22, h: boxH }, { label: 6.5, value: 9 });
-    drawLabelValue(page, font, "Booking reference", bookingRefDefault, { x: col1X + 22 + gap, y: fieldTop3, w: (col1W + col2W + gap) - (22 + gap), h: boxH }, { label: 6.5, value: 9 });
-    drawLabelValue(page, font, "Timesheet ID", safeStr(ts.timesheet_id), { x: col3X, y: fieldTop3, w: col3W, h: boxH }, { label: 6.5, value: 8 });
+    drawText(page, fontBold, "Job Profile Title:", nurseBox.x + 2, nurseBox.y + 23, 8);
+    drawText(page, font, role, nurseBox.x + 30, nurseBox.y + 23, 8, { maxWidth: nurseBox.w - 32 });
 
-    // HOURS TABLE
-    const hoursBox = { x: M + 1, y: yHours, w: contentW - 2, h: HOURS_H };
-    drawRect(page, hoursBox.x, hoursBox.y, hoursBox.w, hoursBox.h, { lineWidth: 0.5 });
+    // Client box fields
+    drawText(page, fontBold, "Client Name / Hospital:", clientBox.x + 2, clientBox.y + 12, 8);
+    drawText(page, font, clientName, clientBox.x + 36, clientBox.y + 12, 8, { maxWidth: clientBox.w - 38 });
 
-    const colNames = ["Day","Date","Start","Finish","Break Start","Break End","Break Length","Paid hrs","Paid hrs (words)","Booking ref"];
-    const colW = [16,22,16,16,18,18,22,18,55,0];
-    const fixedW = colW.slice(0, -1).reduce((a, b) => a + b, 0);
-    colW[colW.length - 1] = Math.max(24, hoursBox.w - fixedW);
+    drawText(page, fontBold, "Site / Ward:", clientBox.x + 2, clientBox.y + 20, 8);
+    drawText(page, font, siteWard, clientBox.x + 20, clientBox.y + 20, 8, { maxWidth: clientBox.w - 22 });
 
-    const headerRowH = 7.5;
-    drawLine(page, hoursBox.x, hoursBox.y + headerRowH, hoursBox.x + hoursBox.w, hoursBox.y + headerRowH, 0.45);
+    // Header statement (timesheet_header_json) ABOVE hours table (fix for “header at bottom”)
+    const headerLines =
+      (headerJson && typeof headerJson === "object" && Array.isArray(headerJson.lines))
+        ? headerJson.lines.map(safeStr).filter(Boolean)
+        : [];
 
-    let cx2 = hoursBox.x;
-    for (let i = 0; i < colW.length; i++) {
-      if (i > 0) drawLine(page, cx2, hoursBox.y, cx2, hoursBox.y + hoursBox.h, 0.35);
-      drawText(page, fontBold, colNames[i], cx2 + 1.2, hoursBox.y + 5.6, 7.2);
-      cx2 += colW[i];
+    const headerFontSize = (headerJson && Number(headerJson.font_size)) ? Number(headerJson.font_size) : 8;
+    const headerLineH = (headerJson && Number(headerJson.line_height_mm)) ? Number(headerJson.line_height_mm) : 3.8;
+
+    let yAfterHeader = detailsTop + detailsH + 4;
+    if (headerLines.length) {
+      for (const line of headerLines) {
+        drawText(page, font, line, contentX, yAfterHeader, headerFontSize, { maxWidth: contentW });
+        yAfterHeader += headerLineH;
+      }
+      yAfterHeader += 1.5; // extra gap after header block
     }
 
+    // ---------- HOURS TABLE ----------
+    const bandText = safeStr(contract?.band || "");
+
+    // Precompute per-day line counts + total paid minutes (for Total row)
     const perDayLines = weekDates.map(d => {
       const ymd = d.ymd;
-      const segs = byDate.get(ymd) || [];
+      const segs = (ymd && byDate.get(ymd)) ? byDate.get(ymd) : [];
       const real = segs.filter(s => {
         const t = getSegTimes(s);
         return !!(t.start && t.end);
@@ -2033,19 +2013,65 @@ const firstName = safeStr(cand?.first_name || "").toUpperCase();
     });
     const totalLines = perDayLines.reduce((a, b) => a + b, 0);
 
-    const bodyH = hoursBox.h - headerRowH;
-    const unitH = clamp(bodyH / totalLines, 4.6, 8.0);
+    let totalPaidMinutes = 0;
+    for (const [ymd, segs] of byDate.entries()) {
+      for (const s of segs) {
+        const t = getSegTimes(s);
+        if (!t.start || !t.end) continue;
+        totalPaidMinutes += computePaidMinutes(s);
+      }
+    }
+    const totalPaidHours = Math.round((totalPaidMinutes / 60) * 100) / 100;
 
-    const maxLinesPerDay = (dayIdx) => {
-      const available = bodyH * (perDayLines[dayIdx] / totalLines);
-      return Math.max(1, Math.floor(available / unitH));
-    };
+    // Reserve bottom blocks (declarations + footer + optional additional)
+    const DECL_H = 46;
+    const FOOT_H = 16;
+    const ADDL_H = (additionalRows.length > 0) ? 22 : 0;
+    const reservedBottom = DECL_H + FOOT_H + (ADDL_H ? (ADDL_H + 3) : 0) + 6;
 
+    const tableTop = yAfterHeader;
+    const maxTableH = Math.max(55, (PAGE_H - M) - tableTop - reservedBottom);
+
+    const headerRowH = 7.5;
+    const totalRowH = 8.0;
+    const bodyMaxH = Math.max(30, maxTableH - headerRowH - totalRowH);
+
+    const minLineH = 4.8;
+    const maxLineH = 10.5;
+    const lineH = clamp(bodyMaxH / Math.max(1, totalLines), minLineH, maxLineH);
+    const bodyHUsed = lineH * Math.max(1, totalLines);
+    const tableHUsed = headerRowH + bodyHUsed + totalRowH;
+
+    const hoursBox = { x: contentX, y: tableTop, w: contentW, h: tableHUsed };
+    drawRect(page, hoursBox.x, hoursBox.y, hoursBox.w, hoursBox.h, { lineWidth: 0.5 });
+
+    // Columns (closer to your template)
+    const colNames = ["Day","Date","Shift Start","Shift End","Break Start","Break End","Paid hrs","Paid hrs (words)","Band","Booking Ref"];
+    const colW = [14, 22, 18, 18, 18, 18, 18, 52, 14, 0]; // last = remainder
+    const fixedW = colW.slice(0, -1).reduce((a, b) => a + b, 0);
+    colW[colW.length - 1] = Math.max(20, hoursBox.w - fixedW);
+
+    // header row bottom line
+    drawLine(page, hoursBox.x, hoursBox.y + headerRowH, hoursBox.x + hoursBox.w, hoursBox.y + headerRowH, 0.4);
+
+    // verticals + headers
+    let cx = hoursBox.x;
+    for (let i = 0; i < colW.length; i++) {
+      if (i > 0) drawLine(page, cx, hoursBox.y, cx, hoursBox.y + hoursBox.h, 0.3);
+      drawText(page, fontBold, colNames[i], cx + 1.0, hoursBox.y + 5.6, 7.0, { maxWidth: colW[i] - 2 });
+      cx += colW[i];
+    }
+
+    // col starts
+    const colX = [];
+    cx = hoursBox.x;
+    for (let i = 0; i < colW.length; i++) { colX.push(cx); cx += colW[i]; }
+
+    // body rows
     let yCursor = hoursBox.y + headerRowH;
     for (let di = 0; di < 7; di++) {
       const meta = weekDates[di];
       const ymd = meta.ymd;
-      const maxLines = maxLinesPerDay(di);
 
       const segs = (ymd && byDate.get(ymd)) ? byDate.get(ymd).slice() : [];
       const realSegs = segs.filter(s => {
@@ -2053,175 +2079,199 @@ const firstName = safeStr(cand?.first_name || "").toUpperCase();
         return !!(t.start && t.end);
       });
 
-      const visibleSegs = realSegs.slice(0, Math.max(1, maxLines));
-      const overflow = realSegs.length - visibleSegs.length;
+      const linesHere = Math.max(1, realSegs.length || 0);
+      const rowH = lineH * linesHere;
 
-      const rowH = unitH * Math.max(1, visibleSegs.length || 1);
-      drawLine(page, hoursBox.x, yCursor + rowH, hoursBox.x + hoursBox.w, yCursor + rowH, 0.35);
+      // row end line
+      drawLine(page, hoursBox.x, yCursor + rowH, hoursBox.x + hoursBox.w, yCursor + rowH, 0.3);
 
-      const colX = [];
-      let xTmp = hoursBox.x;
-      for (let i = 0; i < colW.length; i++) { colX.push(xTmp); xTmp += colW[i]; }
+      // Day + Date printed once
+      drawText(page, font, meta.dowName || "", colX[0] + 1.2, yCursor + 5.4, 8.0);
+      drawText(page, font, fmtDmy(ymd), colX[1] + 1.2, yCursor + 5.4, 8.0);
 
-      drawText(page, font, meta.dowName || "", colX[0] + 1.2, yCursor + 5.6, 8.5);
-      drawText(page, font, fmtDmy(ymd), colX[1] + 1.2, yCursor + 5.6, 8.5);
-
+      // Shifts
+      const visibleSegs = (realSegs.length ? realSegs : [null]);
       for (let li = 0; li < visibleSegs.length; li++) {
         const seg = visibleSegs[li];
+        if (!seg) continue;
+
         const t = getSegTimes(seg);
         const b = getBreakDisplay(seg);
-        const h = computePaidHours(seg);
+        const ph = computePaidHours(seg);
 
-        const ref =
+        // IMPORTANT: DO NOT default to ts.booking_id (that’s where bk_* came from)
+        const ref = (
           safeStr(seg?.ref_num || "").trim() ||
           safeStr(seg?.booking_ref || "").trim() ||
-          bookingRefDefault;
+          ""
+        );
 
-        const lineY = yCursor + 5.6 + (li * unitH);
+        const lineY = yCursor + 5.4 + (li * lineH);
 
-        drawText(page, font, t.start, colX[2] + 1.2, lineY, 8.5);
-        drawText(page, font, t.end,   colX[3] + 1.2, lineY, 8.5);
+        drawText(page, font, t.start, colX[2] + 1.2, lineY, 8.0);
+        drawText(page, font, t.end,   colX[3] + 1.2, lineY, 8.0);
 
-        drawText(page, font, b.brkStart, colX[4] + 1.2, lineY, 8.5);
-        drawText(page, font, b.brkEnd,   colX[5] + 1.2, lineY, 8.5);
-        drawText(page, font, b.brkLen,   colX[6] + 1.2, lineY, 8.5);
+        drawText(page, font, b.brkStart, colX[4] + 1.2, lineY, 8.0, { maxWidth: colW[4] - 2.4 });
+        drawText(page, font, b.brkEnd,   colX[5] + 1.2, lineY, 8.0, { maxWidth: colW[5] - 2.4 });
 
-        drawText(page, font, h.paid, colX[7] + 1.2, lineY, 8.5);
-        drawText(page, font, h.paidWords, colX[8] + 1.2, lineY, 8.0, { maxWidth: colW[8] - 2.4 });
-        drawText(page, font, ref, colX[9] + 1.2, lineY, 8.5);
-      }
+        drawText(page, font, ph.paid,      colX[6] + 1.2, lineY, 8.0);
+        drawText(page, font, ph.paidWords, colX[7] + 1.2, lineY, 7.3, { maxWidth: colW[7] - 2.4 });
 
-      if (overflow > 0) {
-        drawText(page, font, `(+${overflow} more)`, colX[9] + 1.2, yCursor + 5.6 + ((visibleSegs.length - 1) * unitH), 7.5);
+        drawText(page, font, bandText, colX[8] + 1.2, lineY, 8.0);
+        drawText(page, font, ref,      colX[9] + 1.2, lineY, 8.0, { maxWidth: colW[9] - 2.4 });
       }
 
       yCursor += rowH;
     }
 
-    // ---------- QR (safe) ----------
+    // TOTAL HOURS ROW (inside table, fixed)
+    const totalTop = hoursBox.y + headerRowH + bodyHUsed;
+    drawLine(page, hoursBox.x, totalTop, hoursBox.x + hoursBox.w, totalTop, 0.45);
+
+    const totalLabel = "Total overall hours claimed (excluding breaks):";
+    drawText(page, fontBold, totalLabel, hoursBox.x + 2, totalTop + 5.5, 8.5, { maxWidth: hoursBox.w - 60 });
+
+    const totalTxt = `${totalPaidHours.toFixed(2)}  (${hoursToWordsUpper(totalPaidHours)})`;
+    drawText(page, fontBold, totalTxt, hoursBox.x + hoursBox.w - 80, totalTop + 5.5, 8.5, { maxWidth: 78 });
+
+    // ---------- QR (top-right safe zone) ----------
     try {
       const qrStatus = safeStr(ts.qr_status).toUpperCase();
-      const hasQr = (qrStatus === "PENDING") && ts.qr_payload_json && typeof ts.qr_payload_json === "object";
-      L("QR.STATE", { qrStatus, hasQr, hasPayload: !!ts.qr_payload_json });
+      const hasPayloadObj = ts.qr_payload_json && typeof ts.qr_payload_json === "object";
+      const shouldDrawQr = (qrStatus === "PENDING") && hasPayloadObj;
 
-      if (hasQr) {
+      L("QR.STATE", { qrStatus, shouldDrawQr });
+
+      if (shouldDrawQr) {
         const qrText = await buildTsq1String(ts.qr_payload_json, env);
         await drawQrInBox(page, qrText, qrBox);
-        L("QR.DRAWN", { box: qrBox });
       } else {
         drawRect(page, qrBox.x, qrBox.y, qrBox.w, qrBox.h, { lineWidth: 0.35 });
-        L("QR.OUTLINE_ONLY", { box: qrBox });
       }
     } catch (e) {
       L("QR.FAIL", { err: e?.message || String(e) });
       drawRect(page, qrBox.x, qrBox.y, qrBox.w, qrBox.h, { lineWidth: 0.35 });
     }
 
-    // Additional + declaration + footer (unchanged from your logic)
-    // (I’m leaving them as-is to keep this focused on fixing the PDF failure.)
-    // -------------------------------
-    const addlBox = { x: M + 1, y: yAddl, w: contentW - 2, h: ADDL_H };
-    drawRect(page, addlBox.x, addlBox.y, addlBox.w, addlBox.h, { lineWidth: 0.5 });
-    drawText(page, fontBold, "Additional rates / units (if applicable)", addlBox.x + 1.5, addlBox.y + 5.4, 8.5);
+    // ---------- Additional units (ONLY if any rows) ----------
+    let yAfterTable = hoursBox.y + hoursBox.h + 4;
 
-    const addlHeaderY = addlBox.y + 7.0;
-    drawLine(page, addlBox.x, addlHeaderY, addlBox.x + addlBox.w, addlHeaderY, 0.35);
+    if (additionalRows.length > 0) {
+      const addlBox = { x: contentX, y: yAfterTable, w: contentW, h: ADDL_H };
+      drawRect(page, addlBox.x, addlBox.y, addlBox.w, addlBox.h, { lineWidth: 0.45 });
 
-    const aCols = ["Bucket", "Date", "Quantity", "Unit name"];
-    const aW = [110, 28, 26, 0];
-    const aFixed = aW.slice(0, -1).reduce((a, b) => a + b, 0);
-    aW[aW.length - 1] = Math.max(30, addlBox.w - aFixed);
+      drawText(page, fontBold, "Additional rates / units", addlBox.x + 2, addlBox.y + 5.2, 8.5);
 
-    let ax = addlBox.x;
-    for (let i = 0; i < aW.length; i++) {
-      if (i > 0) drawLine(page, ax, addlBox.y, ax, addlBox.y + addlBox.h, 0.35);
-      drawText(page, fontBold, aCols[i], ax + 1.2, addlBox.y + 5.4, 7.8);
-      ax += aW[i];
-    }
+      const aHeaderY = addlBox.y + 7.0;
+      drawLine(page, addlBox.x, aHeaderY, addlBox.x + addlBox.w, aHeaderY, 0.35);
 
-    const maxAddlRows = Math.max(0, Math.floor((addlBox.h - 7.0) / 4.8) - 1);
-    const rowsToShow = additionalRows.slice(0, maxAddlRows);
-    const addlOverflow = additionalRows.length - rowsToShow.length;
+      const aCols = ["Bucket", "Date", "Quantity", "Unit"];
+      const aW = [120, 28, 22, 0];
+      const aFixed = aW.slice(0, -1).reduce((a, b) => a + b, 0);
+      aW[aW.length - 1] = Math.max(30, addlBox.w - aFixed);
 
-    let ry = addlHeaderY + 4.6;
-    for (let i = 0; i < rowsToShow.length; i++) {
-      const r = rowsToShow[i];
-      const x0 = addlBox.x;
-
-      drawText(page, font, safeStr(r.bucket), x0 + 1.2, ry, 8.0, { maxWidth: aW[0] - 2.4 });
-      drawText(page, font, r.date ? fmtDmy(r.date) : "", x0 + aW[0] + 1.2, ry, 8.0);
-      drawText(page, font, safeStr(r.qty), x0 + aW[0] + aW[1] + 1.2, ry, 8.0);
-      drawText(page, font, safeStr(r.unit), x0 + aW[0] + aW[1] + aW[2] + 1.2, ry, 8.0, { maxWidth: aW[3] - 2.4 });
-      ry += 4.8;
-    }
-    if (addlOverflow > 0) drawText(page, font, `(+${addlOverflow} more)`, addlBox.x + addlBox.w - 24, addlBox.y + addlBox.h - 2.4, 7.2);
-
-    const declBox = { x: M + 1, y: yDecl, w: contentW - 2, h: DECL_H };
-    drawRect(page, declBox.x, declBox.y, declBox.w, declBox.h, { lineWidth: 0.5 });
-
-    const headerLines =
-      (headerJson && typeof headerJson === "object" && Array.isArray(headerJson.lines))
-        ? headerJson.lines.map(safeStr)
-        : [];
-    const hdrFontSize = (headerJson && Number(headerJson.font_size)) ? Number(headerJson.font_size) : 8;
-    const hdrLineH = (headerJson && Number(headerJson.line_height_mm)) ? Number(headerJson.line_height_mm) : 3.8;
-
-    let txtY = declBox.y + 4.8;
-    if (headerLines.length) {
-      for (const line of headerLines) {
-        drawText(page, font, line, declBox.x + 2, txtY, hdrFontSize, { maxWidth: declBox.w - 4 });
-        txtY += hdrLineH;
+      let ax = addlBox.x;
+      for (let i = 0; i < aW.length; i++) {
+        if (i > 0) drawLine(page, ax, addlBox.y, ax, addlBox.y + addlBox.h, 0.3);
+        drawText(page, fontBold, aCols[i], ax + 1.2, addlBox.y + 5.2, 7.8);
+        ax += aW[i];
       }
-    } else {
-      drawText(page, font, "Client declaration:", declBox.x + 2, txtY, 8.5);
-      txtY += 4.0;
+
+      const maxRows = Math.max(0, Math.floor((addlBox.h - 7.0) / 4.8) - 1);
+      const rowsToShow = additionalRows.slice(0, maxRows);
+
+      let ry = aHeaderY + 4.6;
+      for (const r of rowsToShow) {
+        drawText(page, font, safeStr(r.bucket), addlBox.x + 1.2, ry, 8.0, { maxWidth: aW[0] - 2.4 });
+        drawText(page, font, r.date ? fmtDmy(r.date) : "", addlBox.x + aW[0] + 1.2, ry, 8.0);
+        drawText(page, font, safeStr(r.qty), addlBox.x + aW[0] + aW[1] + 1.2, ry, 8.0);
+        drawText(page, font, safeStr(r.unit), addlBox.x + aW[0] + aW[1] + aW[2] + 1.2, ry, 8.0, { maxWidth: aW[3] - 2.4 });
+        ry += 4.8;
+      }
+
+      yAfterTable = addlBox.y + addlBox.h + 4;
     }
 
-    const sigTop = declBox.y + (headerLines.length ? (hdrLineH * headerLines.length + 6) : 8);
-    const sigH = declBox.y + declBox.h - sigTop - 2.0;
-    const sigGap = 6;
-    const sigW = (declBox.w - sigGap - 4) / 2;
+    // ---------- Declarations (from NEW settings_defaults columns) ----------
+    const parseDecl = (j, fallbackTitle) => {
+      if (!j || typeof j !== "object") return { title: fallbackTitle, lines: [], fontSize: 7.0, lineH: 3.4 };
+      const title = safeStr(j.title || fallbackTitle);
+      const fontSize = Number(j.font_size || 7.0);
+      const lineH = Number(j.line_height_mm || 3.4);
+      const lines = Array.isArray(j.lines) ? j.lines.map(safeStr).filter(Boolean) : [];
+      return { title, lines, fontSize, lineH };
+    };
 
-    const nurseBox = { x: declBox.x + 2, y: sigTop, w: sigW, h: sigH };
-    const clientBox = { x: nurseBox.x + sigW + sigGap, y: sigTop, w: sigW, h: sigH };
+    const tDecl = parseDecl(tempDeclJson, "Temporary Worker Declaration");
+    const cDecl = parseDecl(clientDeclJson, "Client Declaration");
 
-    drawRect(page, nurseBox.x, nurseBox.y, nurseBox.w, nurseBox.h, { lineWidth: 0.35 });
-    drawRect(page, clientBox.x, clientBox.y, clientBox.w, clientBox.h, { lineWidth: 0.35 });
+    const declTop = yAfterTable;
+    const declW = contentW;
+    const declGap = 6;
+    const declBoxW = (declW - declGap) / 2;
 
-    drawText(page, fontBold, "Temporary worker declaration", nurseBox.x + 2, nurseBox.y + 4.5, 8.5);
-    drawText(page, fontBold, "Client declaration", clientBox.x + 2, clientBox.y + 4.5, 8.5);
+    const leftDecl = { x: contentX, y: declTop, w: declBoxW, h: DECL_H };
+    const rightDecl = { x: contentX + declBoxW + declGap, y: declTop, w: declBoxW, h: DECL_H };
 
-    const lineY = nurseBox.y + nurseBox.h - 8;
-    drawLine(page, nurseBox.x + 2, lineY, nurseBox.x + nurseBox.w - 26, lineY, 0.35);
-    drawText(page, font, "Signature", nurseBox.x + 2, lineY - 1.2, 7.5);
+    drawRect(page, leftDecl.x, leftDecl.y, leftDecl.w, leftDecl.h, { lineWidth: 0.45 });
+    drawRect(page, rightDecl.x, rightDecl.y, rightDecl.w, rightDecl.h, { lineWidth: 0.45 });
 
-    drawLine(page, nurseBox.x + nurseBox.w - 24, lineY, nurseBox.x + nurseBox.w - 2, lineY, 0.35);
-    drawText(page, font, "Date", nurseBox.x + nurseBox.w - 24, lineY - 1.2, 7.5);
+    // Titles: centered + bold
+    drawCenteredText(page, fontBold, tDecl.title, leftDecl.x, leftDecl.y + 4.8, leftDecl.w, 8.8);
+    drawCenteredText(page, fontBold, cDecl.title, rightDecl.x, rightDecl.y + 4.8, rightDecl.w, 8.8);
 
-    drawLine(page, clientBox.x + 2, lineY, clientBox.x + clientBox.w - 26, lineY, 0.35);
-    drawText(page, font, "Signature", clientBox.x + 2, lineY - 1.2, 7.5);
+    // Body text
+    let ty = leftDecl.y + 9.5;
+    for (const line of tDecl.lines) {
+      if (ty > leftDecl.y + leftDecl.h - 14) break;
+      drawText(page, font, line, leftDecl.x + 2, ty, tDecl.fontSize, { maxWidth: leftDecl.w - 4 });
+      ty += tDecl.lineH;
+    }
 
-    drawLine(page, clientBox.x + clientBox.w - 24, lineY, clientBox.x + clientBox.w - 2, lineY, 0.35);
-    drawText(page, font, "Date", clientBox.x + clientBox.w - 24, lineY - 1.2, 7.5);
+    let cy = rightDecl.y + 9.5;
+    for (const line of cDecl.lines) {
+      if (cy > rightDecl.y + rightDecl.h - 14) break;
+      drawText(page, font, line, rightDecl.x + 2, cy, cDecl.fontSize, { maxWidth: rightDecl.w - 4 });
+      cy += cDecl.lineH;
+    }
 
-    const footBox = { x: M + 1, y: yFoot, w: contentW - 2, h: FOOT_H };
-    drawRect(page, footBox.x, footBox.y, footBox.w, footBox.h, { lineWidth: 0.35 });
+    // Signature lines
+    const sigY = leftDecl.y + leftDecl.h - 6.5;
+    const sigLineW = leftDecl.w - 28;
+    drawLine(page, leftDecl.x + 2, sigY, leftDecl.x + 2 + sigLineW, sigY, 0.35);
+    drawText(page, font, "Signature", leftDecl.x + 2, sigY - 1.2, 7.0);
+    drawLine(page, leftDecl.x + 2 + sigLineW + 4, sigY, leftDecl.x + leftDecl.w - 2, sigY, 0.35);
+    drawText(page, font, "Date", leftDecl.x + 2 + sigLineW + 4, sigY - 1.2, 7.0);
 
+    const sigY2 = rightDecl.y + rightDecl.h - 6.5;
+    const sigLineW2 = rightDecl.w - 28;
+    drawLine(page, rightDecl.x + 2, sigY2, rightDecl.x + 2 + sigLineW2, sigY2, 0.35);
+    drawText(page, font, "Signature", rightDecl.x + 2, sigY2 - 1.2, 7.0);
+    drawLine(page, rightDecl.x + 2 + sigLineW2 + 4, sigY2, rightDecl.x + rightDecl.w - 2, sigY2, 0.35);
+    drawText(page, font, "Date", rightDecl.x + 2 + sigLineW2 + 4, sigY2 - 1.2, 7.0);
+
+    // ---------- Footer (under declarations) ----------
     const footerLines =
       (footerJson && typeof footerJson === "object" && Array.isArray(footerJson.lines))
-        ? footerJson.lines.map(safeStr)
+        ? footerJson.lines.map(safeStr).filter(Boolean)
         : [];
-    const fSize = (footerJson && Number(footerJson.font_size)) ? Number(footerJson.font_size) : 7;
+
+    const fSize = (footerJson && Number(footerJson.font_size)) ? Number(footerJson.font_size) : 7.0;
     const fLineH = (footerJson && Number(footerJson.line_height_mm)) ? Number(footerJson.line_height_mm) : 3.6;
 
-    let fy = footBox.y + 3.8;
+    const footerTop = declTop + DECL_H + 4;
+
+    // separator line
+    drawLine(page, contentX, footerTop, contentX + contentW, footerTop, 0.35);
+
+    let fy = footerTop + 4.0;
     for (const line of footerLines) {
-      if (fy > footBox.y + footBox.h - 1.2) break;
-      drawText(page, font, line, footBox.x + 2, fy, fSize, { maxWidth: footBox.w - 4 });
+      if (fy > PAGE_H - M - 1) break;
+      drawText(page, font, line, contentX, fy, fSize, { maxWidth: contentW });
       fy += fLineH;
     }
 
-    // ---------- save to R2 ----------
+    // ---------- Save to R2 ----------
     const outKey = normalizeKey(`docs-pdf/timesheets/ts_${timesheetId}.pdf`);
     L("PDF.SAVE", { outKey });
 
@@ -2238,6 +2288,7 @@ const firstName = safeStr(cand?.first_name || "").toUpperCase();
     throw e;
   }
 }
+
 async function renderTimesheetPDFAndSave(env, timesheetId) {
   const bucket = env.R2_BUCKET || env.R2;
   if (!bucket?.get || !bucket?.put) throw new Error("Storage not configured");
