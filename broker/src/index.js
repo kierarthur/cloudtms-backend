@@ -1987,8 +1987,13 @@ const NORMAL = {
 
   // keep preflight + render consistent
   qrW: 30, qrH: 30, qrTopPad: 2, headerBottomPad: 2,
-  yCursorGap: 3.0, yCursorAfterHeaderPad: 1.5
+  yCursorGap: 3.0, yCursorAfterHeaderPad: 1.5,
+
+  // Additional rates sizing
+  addlH: 22,
+  addlGap: 3
 };
+
 
 
 const COMPACT = {
@@ -2001,10 +2006,15 @@ const COMPACT = {
   footerFontSize: 6.6, footerLineH: 3.2,
   minLineH: 3.8,
 
-  // keep preflight + render consistent
+   // keep preflight + render consistent
   qrW: 26, qrH: 26, qrTopPad: 1, headerBottomPad: 1,
-  yCursorGap: 1.6, yCursorAfterHeaderPad: 0.8
+  yCursorGap: 1.6, yCursorAfterHeaderPad: 0.8,
+
+  // Additional rates sizing (smaller in compact mode)
+  addlH: 16,
+  addlGap: 2
 };
+
 
 
 // compute how many lines a given layout can fit BEFORE we draw anything
@@ -2024,11 +2034,12 @@ const maxLinesFitFor = (LAY) => {
     (headerLinesCount ? (headerLinesCount * LAY.headerLineH + LAY.yCursorAfterHeaderPad) : 0);
 
 
-  const reservedBottom =
+   const reservedBottom =
     LAY.declH +
-    14 +                         // footer strip reserve (keep same structural block)
-    (hasAddl ? (22 + 3) : 0) +    // addl block reserve if present (your existing sizes)
+    14 +                              // footer strip reserve
+    (hasAddl ? (LAY.addlH + LAY.addlGap) : 0) +
     8;
+
 
   const headerRowH = 7.5;
   const totalRowH = 8.0;
@@ -2257,9 +2268,10 @@ if (headerLines.length) {
 
     // Reserve bottom blocks (decl + footer + optional addl)
   const DECL_H = LAY.declH;
-    const FOOT_H = 14;
-    const ADDL_H = (additionalRows.length > 0) ? 22 : 0;
-    const reservedBottom = DECL_H + FOOT_H + (ADDL_H ? (ADDL_H + 3) : 0) + 8;
+      const FOOT_H = 14;
+    const ADDL_H = (additionalRows.length > 0) ? LAY.addlH : 0;
+    const reservedBottom = DECL_H + FOOT_H + (ADDL_H ? (ADDL_H + LAY.addlGap) : 0) + 8;
+
 
     const tableTop = yCursor;
     const headerRowH = 7.5;
@@ -2364,13 +2376,25 @@ if (headerLines.length) {
       const visibleSegs = realSegs.slice(0, maxLines);
       const overflow = Math.max(0, realSegs.length - visibleSegs.length);
 
-      const rowH = lineH * Math.max(1, maxLines);
+        const rowH = lineH * Math.max(1, maxLines);
       drawLine(page, hoursBox.x, yRow + rowH, hoursBox.x + hoursBox.w, yRow + rowH, 0.3);
 
       drawText(page, font, meta.dowName || "", colX[0] + 1.2, yRow + 5.2, 8.0);
       drawText(page, font, fmtDmy(ymd), colX[1] + 1.2, yRow + 5.2, 8.0);
 
+      // NEW: internal separators between multiple shifts in the same day
+      // (only from Shift Start column through to Booking Ref)
+      if (visibleSegs.length > 1) {
+        const xSep1 = colX[2];                 // Shift Start col left
+        const xSep2 = colX[9] + colW[9];       // end of Booking Ref col
+        for (let si = 1; si < visibleSegs.length; si++) {
+          const ySep = yRow + (si * lineH);
+          drawLine(page, xSep1, ySep, xSep2, ySep, 0.22);
+        }
+      }
+
       for (let li = 0; li < visibleSegs.length; li++) {
+
         const seg = visibleSegs[li];
         const t = getSegTimes(seg);
         const b = getBreakDisplay(seg);
@@ -2566,12 +2590,19 @@ if (showOverflowMarker && overflow > 0 && li === visibleSegs.length - 1) {
     const footerTop = yAfterTable + DECL_H + 3;
     drawLine(page, contentX, footerTop, contentX + contentW, footerTop, 0.35);
 
-    let fy = footerTop + 3.8;
-    for (const line of footerLines) {
+     let fy = footerTop + 3.8;
+
+    for (const raw of footerLines) {
       if (fy > PAGE_H - M - 1) break;
-      drawText(page, font, line, contentX, fy, fSize, { maxWidth: contentW });
-      fy += fLineH;
+
+      const wrapped = wrapText(font, raw, fSize, contentW);
+      for (const ln of wrapped) {
+        if (fy > PAGE_H - M - 1) break;
+        drawText(page, font, ln, contentX, fy, fSize, { maxWidth: contentW });
+        fy += fLineH;
+      }
     }
+
 
     // ---------- Save to R2 ----------
     const outKey = normalizeKey(`docs-pdf/timesheets/ts_${timesheetId}.pdf`);
