@@ -1605,7 +1605,7 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
       return;
     }
 
-    const qr = QRCode.create(qrText, { errorCorrectionLevel: "M" });
+    const qr = QRCode.create(qrText, { errorCorrectionLevel: "L" });
     const modules = qr?.modules;
     const size = modules?.size;
     const data = modules?.data;
@@ -2238,20 +2238,17 @@ const firstName = safeStr(cand?.first_name || "").toUpperCase();
     throw e;
   }
 }
-
 async function renderTimesheetPDFAndSave(env, timesheetId) {
   const bucket = env.R2_BUCKET || env.R2;
   if (!bucket?.get || !bucket?.put) throw new Error("Storage not configured");
 
   const T0 = Date.now();
   const LOGP = `[TS_PDF][${timesheetId}]`;
-  const L = (step, obj) => {
-    try { console.log(`${LOGP} ${step}`, obj || {}); } catch {}
-  };
+  const L = (step, obj) => { try { console.log(`${LOGP} ${step}`, obj || {}); } catch {} };
 
   L("START", { timesheetId });
 
-  // Load TS row (CURRENT VERSION ONLY) so we can decide whether we must regenerate (QR pending)
+  // Load TS row (CURRENT VERSION ONLY)
   let ts = null;
   try {
     const { rows: tsRows } = await sbFetch(
@@ -2275,15 +2272,40 @@ async function renderTimesheetPDFAndSave(env, timesheetId) {
 
   const outKey = normalizeKey(`docs-pdf/timesheets/ts_${timesheetId}.pdf`);
 
-  const hasQrToken = !!(ts.qr_token && String(ts.qr_token).trim());
   const qrStatus = String(ts.qr_status || "").toUpperCase();
-  const qrPending = hasQrToken && qrStatus === "PENDING";
 
-  // Defensive: payload might be object, string, null — we log type only; renderer will handle missing payload gracefully.
+  // payload could be object, stringified JSON, null
+  let payloadObj = null;
   const payloadType = (ts.qr_payload_json === null) ? "null" : typeof ts.qr_payload_json;
 
-  // ✅ Regenerate whenever QR is pending (reissue-safe), EVEN if payload is missing.
-  // If QR isn't pending, we can reuse cached PDF if it exists.
+  if (ts.qr_payload_json && typeof ts.qr_payload_json === "object") {
+    payloadObj = ts.qr_payload_json;
+  } else if (typeof ts.qr_payload_json === "string") {
+    try {
+      payloadObj = JSON.parse(ts.qr_payload_json);
+    } catch (e) {
+      payloadObj = null;
+      L("PAYLOAD.PARSE_FAIL", { err: e?.message || String(e) });
+    }
+  }
+
+  const payloadTok = payloadObj && typeof payloadObj === "object"
+    ? String(payloadObj.tok || "").trim()
+    : "";
+
+  const qrToken = String(ts.qr_token || "").trim();
+  const hasAnyTok = !!(payloadTok || qrToken);
+
+  // ✅ Correct notion of “needs QR printable”
+  // We treat *any* PENDING QR as needing QR PDF behaviour, but we REQUIRE a token to avoid emailing blank/invalid QR.
+  const qrPending = (qrStatus === "PENDING");
+
+  if (qrPending && !hasAnyTok) {
+    L("DECIDE.ERROR", { qrStatus, payloadType, qrToken_present: !!qrToken, payloadTok_present: !!payloadTok });
+    throw new Error("QR is PENDING but no token found in qr_payload_json.tok or timesheets.qr_token");
+  }
+
+  // Check cache existence
   let exists = false;
   try {
     exists = await r2Exists(env, outKey);
@@ -2292,22 +2314,27 @@ async function renderTimesheetPDFAndSave(env, timesheetId) {
     exists = false;
   }
 
+  // Policy:
+  // - If NOT pending: reuse cached PDF if it exists
+  // - If pending: render (safe for reissue; guarantees current QR is embedded)
+  const action = (!qrPending && exists) ? "REUSE" : "RENDER";
+
   L("DECIDE", {
     outKey,
     qrStatus,
-    hasQrToken,
-    qrPending,
     payloadType,
+    payloadTok_present: !!payloadTok,
+    qrToken_present: !!qrToken,
     r2Exists: exists,
-    action: (!qrPending && exists) ? "REUSE" : "RENDER"
+    action
   });
 
-  if (!qrPending && exists) {
+  if (action === "REUSE") {
     L("REUSE", { outKey, ms: Date.now() - T0 });
     return outKey;
   }
 
-  // ✅ NO TEMPLATE: generate the entire PDF and overwrite outKey if needed
+  // Render (overwrite if exists)
   try {
     const key = await renderTimesheetPDFGeneratedAndSave(env, timesheetId);
     L("RENDER.OK", { outKey: key, ms: Date.now() - T0 });
@@ -51042,30 +51069,11 @@ function nowIso() {
  * @param {string} args.client_id
  * @param {string} args.week_ending_ymd  // 'YYYY-MM-DD'
  */
-function buildTsq1Payload({
-  timesheet_id,
-  contract_week_id,
-  contract_id,
-  candidate_id,
-  client_id,
-  week_ending_ymd,
-  qr_token // NEW
-}) {
-  return {
-    v: 1,
-    tsid: timesheet_id,
-    cwid: contract_week_id,
-    cid: contract_id,
-    cand: candidate_id,
-    cli: client_id,
-    we: week_ending_ymd,
+function buildTsq1Payload({ qr_token }) {
+  const tok = String(qr_token || '').trim();
+  if (!tok) throw new Error('buildTsq1Payload requires qr_token');
 
-    // NEW: token embedded in QR payload so reissue invalidates old printed codes
-    tok: qr_token || null,
-
-    nonce: randomNonceHex(16),
-    iat: nowIso()
-  };
+  return { v: 1, tok };
 }
 
 
@@ -52049,7 +52057,6 @@ async function loadWeeklyContext(env, ts) {
   return { cw, contract };
 }
 
-
 async function handleTimesheetQrScan(env, req) {
   const enc = encodeURIComponent;
 
@@ -52076,85 +52083,79 @@ async function handleTimesheetQrScan(env, req) {
     });
   } catch {}
 
+  // 1) Verify signature + parse payload
   const verification = await verifyTsq1(qrText, env);
   if (!verification?.ok) {
     return withCORS(env, req, badRequest(`Invalid QR: ${verification?.reason || 'UNKNOWN'}`));
   }
 
-  const p = verification.payload; // signed payload incl tok
+  const p = verification.payload || {};
+  const payloadToken = (p && typeof p.tok === 'string') ? p.tok.trim() : '';
 
+  // ✅ New minimal TSQ1 payload is { v, tok } only
+  if (!payloadToken) {
+    return withCORS(env, req, badRequest('Invalid QR: missing tok'));
+  }
+
+  // 2) Resolve timesheet by token (NOT by timesheet_id in payload anymore)
   const ts = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(p.tsid)}` +
+      `?qr_token=eq.${enc(payloadToken)}` +
       `&is_current=eq.true` +
       `&select=*` +
       `&limit=1`
   );
+
   if (!ts) {
-    return withCORS(env, req, notFound('Timesheet not found for QR'));
+    return withCORS(env, req, notFound('Timesheet not found for QR token'));
   }
 
   const sheetScope = String(ts.sheet_scope || '').toUpperCase();
 
   const qrStatusNow = String(ts.qr_status || '').toUpperCase();
   if (qrStatusNow !== 'PENDING') {
-    if (qrStatusNow === 'USED') {
-      return withCORS(env, req, badRequest('QR already used'));
-    }
-    if (qrStatusNow === 'CANCELLED') {
-      return withCORS(env, req, badRequest('QR cancelled; a new QR must be issued'));
-    }
-    if (qrStatusNow === 'EXPIRED') {
-      return withCORS(env, req, badRequest('QR expired; a new QR must be issued'));
-    }
+    if (qrStatusNow === 'USED')      return withCORS(env, req, badRequest('QR already used'));
+    if (qrStatusNow === 'CANCELLED') return withCORS(env, req, badRequest('QR cancelled; a new QR must be issued'));
+    if (qrStatusNow === 'EXPIRED')   return withCORS(env, req, badRequest('QR expired; a new QR must be issued'));
     return withCORS(env, req, badRequest(`QR invalid state (qr_status=${qrStatusNow || 'NULL'})`));
   }
 
-  // Token enforcement: REQUIRED ALWAYS now that TSQ1 includes tok
-  const payloadToken = p.tok || null;
-  const tsToken = ts.qr_token || null;
-
+  // 3) Token enforcement (reissue invalidation)
+  const tsToken = ts.qr_token ? String(ts.qr_token) : '';
   if (!tsToken) {
     return withCORS(env, req, badRequest('Timesheet has no active QR token; cannot accept scan'));
   }
-  if (!payloadToken || String(payloadToken) !== String(tsToken)) {
+  if (String(payloadToken) !== String(tsToken)) {
     return withCORS(env, req, badRequest('QR token is no longer valid for this timesheet'));
   }
 
   const now = nowIso();
 
+  // ─────────────────────────────────────────────────────────────
+  // WEEKLY
+  // ─────────────────────────────────────────────────────────────
   if (sheetScope === 'WEEKLY') {
+    // Best-effort: find contract_week by linked timesheet_id (payload no longer carries cwid)
     const cw = await sbGetOne(
       env,
       `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-        `?id=eq.${enc(p.cwid)}&select=*`
-    );
-    if (!cw) return withCORS(env, req, notFound('contract_week not found for QR'));
+        `?timesheet_id=eq.${enc(ts.timesheet_id)}` +
+        `&select=*` +
+        `&limit=1`
+    ).catch(() => null);
 
-    if (cw.timesheet_id && String(cw.timesheet_id) !== String(ts.timesheet_id)) {
-      return withCORS(env, req, badRequest('QR mismatch: contract_week.timesheet_id does not match payload.tsid'));
-    }
+    const contract = ts.contract_id
+      ? await sbGetOne(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/contracts` +
+            `?id=eq.${enc(ts.contract_id)}` +
+            `&select=*` +
+            `&limit=1`
+        )
+      : null;
 
-    const contract = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/contracts` +
-        `?id=eq.${enc(p.cid)}&select=*`
-    );
     if (!contract) return withCORS(env, req, notFound('Contract not found for QR'));
-
-    if (String(ts.contract_id || '') !== String(p.cid || '')) {
-      return withCORS(env, req, badRequest('QR mismatch: timesheet.contract_id does not match payload.cid'));
-    }
-    if (String(contract.candidate_id || '') !== String(p.cand || '')) {
-      return withCORS(env, req, badRequest('QR mismatch: contract.candidate_id does not match payload.cand'));
-    }
-    if (String(contract.client_id || '') !== String(p.cli || '')) {
-      return withCORS(env, req, badRequest('QR mismatch: contract.client_id does not match payload.cli'));
-    }
-    if (String(cw.week_ending_date || '') !== String(p.we || '')) {
-      return withCORS(env, req, badRequest('QR mismatch: week_ending_date does not match payload.we'));
-    }
 
     const fin = await sbGetOne(
       env,
@@ -52171,7 +52172,11 @@ async function handleTimesheetQrScan(env, req) {
 
     const finStatus = String(fin.processing_status || '').toUpperCase();
     if (finStatus !== 'AWAITING_MANUAL_SIGNATURE') {
-      return withCORS(env, req, badRequest(`Unexpected processing_status=${fin.processing_status}; expected AWAITING_MANUAL_SIGNATURE`));
+      return withCORS(
+        env,
+        req,
+        badRequest(`Unexpected processing_status=${fin.processing_status}; expected AWAITING_MANUAL_SIGNATURE`)
+      );
     }
 
     const tsPatchBase = { qr_status: 'USED', qr_scanned_at: now, updated_at: now };
@@ -52202,10 +52207,10 @@ async function handleTimesheetQrScan(env, req) {
         'WEEKLY_QR_SCANNED',
         {
           timesheet_id: ts.timesheet_id,
-          contract_week_id: cw.id,
+          contract_week_id: cw?.id || null,
           contract_id: contract.id,
           qr_text: qrText,
-          qr_payload: p,
+          qr_payload: p, // now minimal: {v,tok}
           image_r2_key,
           processing_status_from: fin.processing_status,
           processing_status_to: 'PENDING_AUTH'
@@ -52218,11 +52223,11 @@ async function handleTimesheetQrScan(env, req) {
 
     return withCORS(env, req, ok({
       timesheet_id: ts.timesheet_id,
-      contract_week_id: cw.id,
+      contract_week_id: cw?.id || null,
       contract_id: contract.id,
       candidate_id: contract.candidate_id || null,
       client_id: contract.client_id || null,
-      week_ending_date: cw.week_ending_date,
+      week_ending_date: cw?.week_ending_date || ts.week_ending_date || null,
       sheet_scope: 'WEEKLY',
       processing_status: 'PENDING_AUTH',
       qr_status: 'USED',
@@ -52230,6 +52235,9 @@ async function handleTimesheetQrScan(env, req) {
     }));
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // DAILY
+  // ─────────────────────────────────────────────────────────────
   if (sheetScope === 'DAILY') {
     const fin = await sbGetOne(
       env,
@@ -52246,7 +52254,11 @@ async function handleTimesheetQrScan(env, req) {
 
     const finStatus = String(fin.processing_status || '').toUpperCase();
     if (finStatus !== 'AWAITING_MANUAL_SIGNATURE') {
-      return withCORS(env, req, badRequest(`Unexpected processing_status=${fin.processing_status}; expected AWAITING_MANUAL_SIGNATURE`));
+      return withCORS(
+        env,
+        req,
+        badRequest(`Unexpected processing_status=${fin.processing_status}; expected AWAITING_MANUAL_SIGNATURE`)
+      );
     }
 
     const tsPatchBase = {
@@ -52293,7 +52305,7 @@ async function handleTimesheetQrScan(env, req) {
           timesheet_id: ts.timesheet_id,
           contract_id: contract?.id || ts.contract_id || null,
           qr_text: qrText,
-          qr_payload: p,
+          qr_payload: p, // minimal
           image_r2_key,
           processing_status_from: fin.processing_status,
           processing_status_to: 'PENDING_AUTH'
@@ -52318,6 +52330,7 @@ async function handleTimesheetQrScan(env, req) {
 
   return withCORS(env, req, badRequest('QR mismatch: unsupported sheet_scope for QR'));
 }
+
 
 async function verifyTsq1(qrText, env) {
   try {
