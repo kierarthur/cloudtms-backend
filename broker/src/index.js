@@ -2337,10 +2337,9 @@ async function ensureTimesheetPdf(env, timesheetId) {
 
   // If QR is pending and payload exists, we MUST return the generated printable PDF (not a manual scan),
   // because the QR is part of the printable.
-  const needsQrPrintable =
-    !!(ts?.qr_token && String(ts.qr_token).trim()) &&
-    String(ts?.qr_status || "").toUpperCase() === "PENDING" &&
-    ts?.qr_payload_json && typeof ts.qr_payload_json === "object";
+const needsQrPrintable =
+  String(ts?.qr_status || "").toUpperCase() === "PENDING" &&
+  ts?.qr_payload_json && typeof ts.qr_payload_json === "object";
 
   if (needsQrPrintable) {
     return await renderTimesheetPDFAndSave(env, timesheetId);
