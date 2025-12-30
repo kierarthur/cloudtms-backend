@@ -1750,7 +1750,8 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     ).catch(() => null);
 
     const agencyName = def?.agency_name ? String(def.agency_name) : "ARMS";
-    const agencyLogoKey = def?.agency_logo ? String(def.agency_logo) : null;
+    const agencyLogoKeyRaw = def?.agency_logo ? String(def.agency_logo) : null;
+const agencyLogoKey = agencyLogoKeyRaw ? agencyLogoKeyRaw.trim() : null;
     const headerJson = (def && def.timesheet_header_json) ? def.timesheet_header_json : null;
     const footerJson = (def && def.timesheet_footer_json) ? def.timesheet_footer_json : null;
 
