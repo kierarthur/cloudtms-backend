@@ -1980,11 +1980,13 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
       tsLineTextOffset: 5.2,
       minLineH: 4.8,
 
-      // additional
+        // additional
       addlH: 22,
       addlGap: 3,
+      blockGap: 3,
       addlHeaderH: 7.0,
       addlRowH: 4.8,
+
 
       // declarations + footer
       declH: 50,
@@ -2021,10 +2023,12 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
       tsLineTextOffset: 4.8,
       minLineH: 3.8,
 
-      addlH: 18,
+          addlH: 18,
       addlGap: 2,
+      blockGap: 2,
       addlHeaderH: 6.0,
       addlRowH: 4.0,
+
 
       declH: 34,
       declTitleSize: 8.2,
@@ -2060,10 +2064,12 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
       tsLineTextOffset: 4.0,
       minLineH: 3.0,
 
-      addlH: 16,
+          addlH: 16,
       addlGap: 1,
+      blockGap: 1,
       addlHeaderH: 5.5,
       addlRowH: 3.6,
+
 
       declH: 26,
       declTitleSize: 7.6,
@@ -2088,11 +2094,16 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
         detailsTop + detailsH + LAY.yCursorGap +
         (headerLinesCount ? (headerLinesCount * LAY.headerLineH + LAY.yCursorAfterHeaderPad) : 0);
 
-      const reservedBottom =
-        LAY.declH +
-        14 +
-        (hasAddl ? (LAY.addlH + LAY.addlGap) : 0) +
-        8;
+  const reservedBottom =
+  // gap immediately after the table:
+  (hasAddl ? LAY.addlGap : LAY.blockGap) +
+  // optional addl block + gap after addl:
+  (hasAddl ? (LAY.addlH + LAY.addlGap) : 0) +
+  // declarations + gap before footer line:
+  (LAY.declH + LAY.blockGap) +
+  // footer reserve + bottom pad:
+  (14 + 8);
+
 
       const maxTableH = Math.max(60, (PAGE_H - M) - yCursor - reservedBottom);
       const bodyMaxH = Math.max(30, maxTableH - LAY.tsHeaderRowH - LAY.tsTotalRowH);
@@ -2171,10 +2182,13 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     const weLabel = weekEndingDayName ? `Week ending (${weekEndingDayName})` : "Week ending";
     const headerRightText = `TIMESHEET   Time Sheet No. ${tsNo}   ${weLabel}: ${fmtDmy(weekEndingYmd)}`;
 
-    // If no logo, show agency name on left as fallback branding
-    if (!logoDrawn) {
-      drawTextFit(page, fontBold, agencyName, contentX, headerTop + 2.0, Math.max(60, contentW * 0.45), LAY.headerRowSize, 8.0);
-    }
+    // Always show agency name next to the logo (keeps branding even when logo is present)
+const brandX = logoBox.x + logoBox.w + 3;
+const brandMaxW = Math.max(60, (contentW * 0.45) - (logoBox.w + 3));
+drawTextFit(page, fontBold, agencyName, brandX, headerTop + 2.0, brandMaxW, LAY.headerRowSize, 8.0);
+
+// If the logo wasn't drawn, the name still renders in the same place (so no separate fallback block needed)
+
 
     // Right aligned header
     drawRightText(page, fontBold, headerRightText, contentRight, headerTop + 3.2, LAY.headerRowSize);
@@ -2287,11 +2301,21 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     }
     const totalPaidHours = Math.round((totalPaidMinutes / 60) * 100) / 100;
 
-    // Reserve bottom blocks (decl + footer + optional addl)
-    const DECL_H = LAY.declH;
-    const FOOT_H = 14;
-    const ADDL_H = (additionalRows.length > 0) ? LAY.addlH : 0;
-    const reservedBottom = DECL_H + FOOT_H + (ADDL_H ? (ADDL_H + LAY.addlGap) : 0) + 8;
+   // Reserve bottom blocks (decl + footer + optional addl)
+const DECL_H = LAY.declH;
+const FOOT_H = 14;
+const ADDL_H = (additionalRows.length > 0) ? LAY.addlH : 0;
+
+const reservedBottom =
+  // gap immediately after the table:
+  (additionalRows.length > 0 ? LAY.addlGap : LAY.blockGap) +
+  // optional addl block + gap after addl (before declarations):
+  (ADDL_H ? (ADDL_H + LAY.addlGap) : 0) +
+  // declarations + gap before footer line:
+  (DECL_H + LAY.blockGap) +
+  // footer reserve + bottom pad:
+  (FOOT_H + 8);
+
 
     const tableTop = yCursor;
 
@@ -2302,11 +2326,21 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     const visibleLinesPerDay = realCounts.slice();
     const totalLinesVisible = totalLinesWanted;
 
-    const idealLineH = (totalLinesVisible > 0) ? (bodyMaxH / totalLinesVisible) : bodyMaxH;
-    const lineH = Math.min(10.5, Math.max(1.4, idealLineH));
+   const idealLineH = (totalLinesVisible > 0) ? (bodyMaxH / totalLinesVisible) : bodyMaxH;
 
-    // Dynamic schedule text baseline offset so lines NEVER collide with text
-    const textOffset = Math.max(1.6, Math.min(LAY.tsLineTextOffset, lineH * 0.72));
+// Never force lineH above idealLineH (that’s what can push declarations off-page).
+// Let it get as small as needed to preserve the layout blocks below.
+const lineH = Math.min(10.5, idealLineH);
+
+
+   // Dynamic schedule text baseline offset so lines NEVER collide with text
+const textPad = Math.max(0.12, lineH * 0.10); // keep baseline safely inside the row
+const textOffset = Math.min(
+  LAY.tsLineTextOffset,
+  lineH * 0.72,
+  Math.max(0, lineH - textPad)               // hard cap: cannot exceed row height
+);
+
 
     // Dynamic font scaling for extreme compression
     const bodyFontSize = (lineH < 2.6) ? Math.min(LAY.tsBodyFontSize, 6.0) : LAY.tsBodyFontSize;
@@ -2422,22 +2456,25 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
     const totalTxt = `${totalPaidHours.toFixed(2)}  (${minutesToWordsUpper(totalPaidMinutes)})`;
     drawText(page, fontBold, totalTxt, hoursBox.x + hoursBox.w - 88, totalTextY, Math.min(8.5, bodyFontSize + 0.5), { maxWidth: 86 });
 
-    // ---------- Additional rates / units ----------
-    let yAfterTable = hoursBox.y + hoursBox.h + 3;
+   // ---------- Additional rates / units ----------
+let yAfterTable =
+  hoursBox.y + hoursBox.h + (additionalRows.length > 0 ? LAY.addlGap : LAY.blockGap);
 
-    if (additionalRows.length > 0) {
-      const addlBox = { x: contentX, y: yAfterTable, w: contentW, h: ADDL_H };
-      drawRect(page, addlBox.x, addlBox.y, addlBox.w, addlBox.h, { lineWidth: 0.45 });
+
+if (additionalRows.length > 0) {
+  const addlBox = { x: contentX, y: yAfterTable, w: contentW, h: ADDL_H };
+  drawRect(page, addlBox.x, addlBox.y, addlBox.w, addlBox.h, { lineWidth: 0.45 });
 
       drawText(page, fontBold, "Additional rates / units", addlBox.x + 2, addlBox.y + Math.min(5.0, LAY.addlHeaderH - 0.8), Math.min(8.2, bodyFontSize + 0.5));
 
       const aHeaderY = addlBox.y + LAY.addlHeaderH;
       drawLine(page, addlBox.x, aHeaderY, addlBox.x + addlBox.w, aHeaderY, 0.35);
 
-      const aCols = ["Bucket", "Date", "Quantity", "Unit"];
-      const aW = [120, 28, 22, 0];
-      const aFixed = aW.slice(0, -1).reduce((a, b) => a + b, 0);
-      aW[aW.length - 1] = Math.max(30, addlBox.w - aFixed);
+    const aCols = ["Date", "Quantity", "Unit"];
+const aW = [28, 22, 0];
+const aFixed = aW.slice(0, -1).reduce((a, b) => a + b, 0);
+aW[aW.length - 1] = Math.max(30, addlBox.w - aFixed);
+
 
       let ax = addlBox.x;
       for (let i = 0; i < aW.length; i++) {
@@ -2451,15 +2488,18 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
       const rowsToShow = additionalRows.slice(0, maxRows);
 
       let ry = aHeaderY + Math.min(3.8, LAY.addlRowH - 0.2);
-      for (const r of rowsToShow) {
-        drawText(page, font, safeStr(r.bucket), addlBox.x + 1.2, ry, Math.min(bodyFontSize, 7.2), { maxWidth: aW[0] - 2.4 });
-        drawText(page, font, r.date ? fmtDmy(r.date) : "", addlBox.x + aW[0] + 1.2, ry, Math.min(bodyFontSize, 7.2));
-        drawText(page, font, safeStr(r.qty), addlBox.x + aW[0] + aW[1] + 1.2, ry, Math.min(bodyFontSize, 7.2));
-        drawText(page, font, safeStr(r.unit), addlBox.x + aW[0] + aW[1] + aW[2] + 1.2, ry, Math.min(bodyFontSize, 7.2), { maxWidth: aW[3] - 2.4 });
-        ry += LAY.addlRowH;
-      }
+    for (const r of rowsToShow) {
+  // Date
+  drawText(page, font, r.date ? fmtDmy(r.date) : "", addlBox.x + 1.2, ry, Math.min(bodyFontSize, 7.2), { maxWidth: aW[0] - 2.4 });
+  // Quantity
+  drawText(page, font, safeStr(r.qty), addlBox.x + aW[0] + 1.2, ry, Math.min(bodyFontSize, 7.2), { maxWidth: aW[1] - 2.4 });
+  // Unit
+  drawText(page, font, safeStr(r.unit), addlBox.x + aW[0] + aW[1] + 1.2, ry, Math.min(bodyFontSize, 7.2), { maxWidth: aW[2] - 2.4 });
+  ry += LAY.addlRowH;
+}
 
-      yAfterTable = addlBox.y + addlBox.h + 3;
+
+    yAfterTable = addlBox.y + addlBox.h + LAY.addlGap;
     }
 
     // ---------- Declarations strip ----------
@@ -2559,8 +2599,10 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
       ? LAY.footerLineH
       : ((footerJson && Number(footerJson.line_height_mm)) ? Number(footerJson.line_height_mm) : 3.6);
 
-    const footerTop = yAfterTable + DECL_H + 3;
-    drawLine(page, contentX, footerTop, contentX + contentW, footerTop, 0.35);
+ const footerTop = yAfterTable + DECL_H + LAY.blockGap;
+drawLine(page, contentX, footerTop, contentX + contentW, footerTop, 0.35);
+
+
 
     let fy = footerTop + 3.2;
     for (const raw of footerLines) {
