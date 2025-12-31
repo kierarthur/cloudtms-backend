@@ -35,7 +35,6 @@ ALTER TABLE public.contracts
   );
 
 
-
 -- =========================================================
 -- UPDATED: v_timesheets_summary_base + v_timesheets_summary
 -- (contract flags preferred; fallback to client_settings)
@@ -47,6 +46,14 @@ ALTER TABLE public.contracts
 --      and by keeping the existing contract_id column position unchanged.
 --   3) Improve contract_id resolution for DAILY rows in v_timesheets_summary
 --      via COALESCE(timesheets.contract_id, contract_weeks.contract_id).
+--
+-- QR SUMMARY STAGE FIXES INCLUDED:
+--   4) Include qr_token, qr_generated_at, qr_scanned_at in the union sources,
+--      and APPEND them at the END of v_timesheets_summary_base projection
+--      (safe for reruns / CREATE OR REPLACE VIEW).
+--   5) Extend summary_stage with internal QR keys:
+--        - QR_NOT_ISSUED
+--        - QR_ISSUED_AWAITING_SIGNATURE
 -- =========================================================
 
 CREATE OR REPLACE VIEW public.v_timesheets_summary_base AS
@@ -170,6 +177,10 @@ ts_base AS (
     cw.is_adjustment,
 
     ts.qr_status,
+    ts.qr_token,
+    ts.qr_generated_at,
+    ts.qr_scanned_at,
+
     COALESCE(pa.pay_adjustment_count, 0) AS pay_adjustment_count,
 
     -- Effective route flags: contract override (if set) wins, else client_settings
@@ -294,6 +305,9 @@ planned_weeks AS (
     cw.is_adjustment,
 
     NULL::timesheet_qr_status_enum AS qr_status,
+    NULL::text AS qr_token,
+    NULL::timestamp with time zone AS qr_generated_at,
+    NULL::timestamp with time zone AS qr_scanned_at,
 
     0 AS pay_adjustment_count,
 
@@ -639,8 +653,25 @@ SELECT
         WHEN 'CANCELLED'::contract_week_status_enum THEN 'NEEDS_ATTENTION'::text
         ELSE 'UNKNOWN'::text
       END
+
     WHEN paid_at_utc IS NOT NULL THEN 'PAID'::text
     WHEN locked_by_invoice_id IS NOT NULL THEN 'INVOICED'::text
+
+    -- ✅ QR waiting stages (internal keys), QR-specific only
+    WHEN timesheet_id IS NOT NULL
+      AND qr_status = 'PENDING'::timesheet_qr_status_enum
+      AND (qr_token IS NULL OR length(btrim(qr_token)) = 0)
+      AND qr_generated_at IS NULL
+      THEN 'QR_NOT_ISSUED'::text
+
+    WHEN timesheet_id IS NOT NULL
+      AND qr_status = 'PENDING'::timesheet_qr_status_enum
+      AND (qr_token IS NOT NULL AND length(btrim(qr_token)) > 0)
+      AND qr_generated_at IS NOT NULL
+      AND qr_scanned_at IS NULL
+      THEN 'QR_ISSUED_AWAITING_SIGNATURE'::text
+
+    -- Existing processing stages
     WHEN processing_status = 'READY_FOR_INVOICE'::ts_fin_processing_status_enum THEN 'READY_FOR_INVOICE'::text
     WHEN processing_status = 'READY_FOR_HR'::ts_fin_processing_status_enum THEN 'READY_FOR_HR'::text
     WHEN processing_status = 'PENDING_AUTH'::ts_fin_processing_status_enum THEN 'PENDING_AUTH'::text
@@ -676,7 +707,9 @@ SELECT
   contract_week_status,
   additional_seq,
   is_adjustment,
+
   qr_status,
+
   pay_adjustment_count,
   pay_adjustment_count > 0 AS has_pay_adjustments,
   COALESCE(is_adjustment, false) OR pay_adjustment_count > 0 AS is_adjusted,
@@ -714,7 +747,12 @@ SELECT
   client_ts_reference_required,
 
   require_reference_to_pay,
-  require_reference_to_invoice
+  require_reference_to_invoice,
+
+  -- ✅ APPENDED QR FIELDS (safe for CREATE OR REPLACE VIEW)
+  qr_token,
+  qr_generated_at,
+  qr_scanned_at
 FROM with_issues;
 
 
@@ -797,7 +835,6 @@ GRANT SELECT ON public.v_timesheets_summary_base TO service_role;
 GRANT SELECT ON public.v_timesheets_summary      TO service_role;
 GRANT SELECT ON public.v_timesheets_summary_base TO authenticated;
 GRANT SELECT ON public.v_timesheets_summary      TO authenticated;
-
 
 
 -- =========================================================
