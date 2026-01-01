@@ -1,42 +1,14 @@
 -- ============================================================
 -- QR refusal + restore + planned-week delete + audit feed
--- ============================================================
---
--- FIXES (rotation-safe, booking_id is series key; timesheet_id is row PK):
--- 1) timesheet_qr_refuse_and_reset:
---    - Accepts a stale/historical p_timesheet_id.
---    - Resolves booking_id, locks CURRENT row, rotates CURRENT row to history.
---    - Inserts a NEW current row (new timesheet_id).
---    - Moves the CURRENT TSFIN row to the NEW timesheet_id and resets fields.
---    - Enqueues outbox for the NEW timesheet_id.
---    - Writes audit against the NEW current timesheet_id (and includes old id/version in before_json).
---
--- 2) timesheet_qr_restore_version:
---    - Accepts a stale/historical p_timesheet_id.
---    - Resolves booking_id, locks CURRENT row, promotes a chosen revoked version to current.
---    - Moves contract_weeks pointer (if present) to the restored timesheet_id.
---    - Moves the CURRENT TSFIN row to the restored timesheet_id and updates version marker.
---    - Enqueues outbox for the restored timesheet_id.
---    - Writes audit against the restored (new current) timesheet_id.
---
--- 3) contract_week_delete_planned:
---    - unchanged
---
--- 4) timesheet_audit_feed:
---    - Accepts any timesheet_id (stale or current).
---    - Resolves booking_id and returns audit for ALL timesheet_ids in that booking series.
---    - Also includes related contract_week audit (by current contract_weeks pointer).
---
--- NEW (Atomic concurrency guard inside SQL):
--- - timesheet_qr_refuse_and_reset now accepts p_expected_timesheet_id UUID and refuses (no side effects)
---   if expected != current, raising an exception with JSON:
---   {"error":"TIMESHEET_MOVED","current_timesheet_id":"<uuid>"}
---
--- - timesheet_qr_restore_version now accepts p_expected_timesheet_id UUID and behaves the same.
---
--- Safety: stable search_path for SECURITY DEFINER.
+-- FIX: avoid PL/pgSQL ambiguity with RETURNS TABLE timesheet_id
+-- by using ON CONFLICT ON CONSTRAINT uq_tsfin_outbox
 -- ============================================================
 
+begin;
+
+-- Optional safety cleanup: drop any legacy overloads (won’t error if absent)
+drop function if exists public.timesheet_qr_refuse_and_reset(uuid, text, uuid);
+drop function if exists public.timesheet_qr_restore_version(uuid, text, uuid);
 
 -- ------------------------------------------------------------
 -- 1) Refuse QR hours: rotate current TS to history + reset to
@@ -70,7 +42,7 @@ declare
 
   v_fin public.timesheets_financials%rowtype;
 
-  v_booking_id uuid;
+  v_booking_id text;          -- timesheets.booking_id is TEXT
   v_new_version int;
   v_new_timesheet_id uuid;
 begin
@@ -84,10 +56,10 @@ begin
   end if;
 
   -- 0) Resolve booking_id from ANY row (stale or current)
-  select *
+  select t.*
   into v_any
-  from public.timesheets
-  where timesheet_id = p_timesheet_id
+  from public.timesheets t
+  where t.timesheet_id = p_timesheet_id
   limit 1;
 
   if not found then
@@ -95,16 +67,16 @@ begin
   end if;
 
   v_booking_id := v_any.booking_id;
-  if v_booking_id is null then
+  if v_booking_id is null or btrim(v_booking_id) = '' then
     raise exception 'Timesheet booking_id is missing; cannot rotate versions';
   end if;
 
   -- 1) Lock CURRENT timesheet row for this booking_id
-  select *
+  select t.*
   into v_current
-  from public.timesheets
-  where booking_id = v_booking_id
-    and is_current = true
+  from public.timesheets t
+  where t.booking_id = v_booking_id
+    and t.is_current = true
   for update;
 
   if not found then
@@ -120,12 +92,12 @@ begin
       )::text;
   end if;
 
-  -- 2) Lock CURRENT TSFIN row (keyed to the CURRENT timesheet_id) and block if paid/invoiced
-  select *
+  -- 2) Lock CURRENT TSFIN row (keyed to CURRENT timesheet_id) and block if paid/invoiced
+  select f.*
   into v_fin
-  from public.timesheets_financials
-  where timesheet_id = v_current.timesheet_id
-    and is_current = true
+  from public.timesheets_financials f
+  where f.timesheet_id = v_current.timesheet_id
+    and f.is_current = true
   for update;
 
   if found then
@@ -136,8 +108,8 @@ begin
 
   v_new_version := coalesce(v_current.version, 1) + 1;
 
-  -- 3) Rotate CURRENT version -> history (invalidate QR on that historical version)
-  update public.timesheets
+  -- 3) Rotate CURRENT version -> history (invalidate QR on historical)
+  update public.timesheets as t
   set
     is_current      = false,
     status          = 'REVOKED'::public.timesheet_status_enum,
@@ -145,12 +117,11 @@ begin
     revoked_by      = case when p_actor_user_id is null then null else p_actor_user_id::text end,
     qr_status       = 'CANCELLED'::public.timesheet_qr_status_enum,
     updated_at      = v_now
-  where timesheet_id = v_current.timesheet_id
-    and is_current = true;
+  where t.timesheet_id = v_current.timesheet_id
+    and t.is_current = true;
 
-  -- 4) Insert NEW current version = "pre-hours-submitted" QR Scenario 1
-  --    NOTE: do NOT supply timesheet_id (row PK); let default generate it.
-  insert into public.timesheets (
+  -- 4) Insert NEW current version = Scenario 1
+  insert into public.timesheets as nt (
     booking_id,
     version,
     is_current,
@@ -169,25 +140,21 @@ begin
     shift_label_norm,
     week_ending_date,
 
-    -- Daily worked/break fields
     worked_start_iso,
     worked_end_iso,
     break_start_iso,
     break_end_iso,
     break_minutes,
 
-    -- Weekly schedule / extras
     actual_schedule_json,
     additional_units_week,
     additional_units_per_day,
 
-    -- Evidence / references / auth
     manual_pdf_r2_key,
     authorised_at_server,
     reference_number,
     day_references_json,
 
-    -- QR fields (Scenario 1)
     qr_token,
     qr_status,
     qr_payload_json,
@@ -218,25 +185,21 @@ begin
     v_current.shift_label_norm,
     v_current.week_ending_date,
 
-    -- Daily: clear all worked times/breaks
     null::timestamptz,
     null::timestamptz,
     null::timestamptz,
     null::timestamptz,
     null::int,
 
-    -- Weekly: clear schedule; keep additional units as empty objects if present
     null::jsonb,
     coalesce(v_current.additional_units_week, '{}'::jsonb),
     coalesce(v_current.additional_units_per_day, '{}'::jsonb),
 
-    -- Clear evidence + auth + refs for a clean re-submit
     null::text,
     null::timestamptz,
     null::text,
     null::jsonb,
 
-    -- QR Scenario 1
     null::text,
     'PENDING'::public.timesheet_qr_status_enum,
     '{}'::jsonb,
@@ -248,27 +211,26 @@ begin
     v_now,
     v_now
   )
-  returning timesheet_id into v_new_timesheet_id;
+  returning nt.timesheet_id into v_new_timesheet_id;
 
   if v_new_timesheet_id is null then
     raise exception 'Insert succeeded but no new timesheet_id returned';
   end if;
 
-  -- 5) Move contract_week pointer (if any) from OLD current id to NEW current id
-  update public.contract_weeks
+  -- 5) Move contract_week pointer (if any) from OLD current id -> NEW current id
+  update public.contract_weeks as cw
   set timesheet_id = v_new_timesheet_id,
       updated_at   = v_now
-  where timesheet_id = v_current.timesheet_id;
+  where cw.timesheet_id = v_current.timesheet_id;
 
-  -- 6) Reset TSFIN in-place, and MOVE it to the new timesheet_id
+  -- 6) Reset TSFIN in-place and MOVE it to new timesheet_id
   if v_fin.id is not null then
-    update public.timesheets_financials
+    update public.timesheets_financials as f
     set
       timesheet_id             = v_new_timesheet_id,
       timesheet_version        = v_new_version,
       processing_status        = 'UNASSIGNED'::public.ts_fin_processing_status_enum,
 
-      -- Hours MUST remain NOT NULL (set to 0 rather than NULL)
       hours_day                = 0,
       hours_night              = 0,
       hours_sat                = 0,
@@ -291,17 +253,17 @@ begin
       paid_by_user_id          = null,
       payment_reference        = null,
 
-      -- keep policy_snapshot_json / rate_source_refs_json as-is (NOT NULL constraints)
       updated_at               = v_now
-    where id = v_fin.id;
+    where f.id = v_fin.id;
 
-    -- 7) Enqueue TSFIN recompute (optional but useful) for NEW timesheet_id
+    -- 7) Enqueue TSFIN recompute (optional)
+    -- ✅ FIX: use constraint name to avoid ambiguous (timesheet_id, reason)
     insert into public.ts_financials_outbox(timesheet_id, reason, attempt_count, next_attempt_at, last_error, created_at)
     values (v_new_timesheet_id, 'REVOKED'::public.ts_fin_reason_enum, 0, v_now, null, v_now)
-    on conflict (timesheet_id, reason) do nothing;
+    on conflict on constraint uq_tsfin_outbox do nothing;
   end if;
 
-  -- 8) Audit event (timesheet) — write against NEW current id; include old in before_json
+  -- 8) Audit event
   insert into public.audit_events(
     object_type,
     object_id_text,
@@ -317,7 +279,7 @@ begin
     v_new_timesheet_id::text,
     'QR_HOURS_REFUSED',
     jsonb_build_object(
-      'booking_id', v_booking_id::text,
+      'booking_id', v_booking_id,
       'old_timesheet_id', v_current.timesheet_id::text,
       'old_version', v_current.version
     ),
@@ -330,7 +292,7 @@ begin
     v_now
   );
 
-  -- Return (timesheet_id = NEW current id)
+  -- Return
   timesheet_id := v_new_timesheet_id;
   old_version := v_current.version;
   new_version := v_new_version;
@@ -373,8 +335,7 @@ declare
   v_current public.timesheets%rowtype;
   v_restore public.timesheets%rowtype;
 
-  v_booking_id uuid;
-
+  v_booking_id text;          -- timesheets.booking_id is TEXT
   v_fin public.timesheets_financials%rowtype;
 begin
   if p_timesheet_id is null then
@@ -390,11 +351,11 @@ begin
     raise exception 'restore_kind must be PENDING or SIGNED';
   end if;
 
-  -- 0) Resolve booking_id from ANY row (stale or current)
-  select *
+  -- 0) Resolve booking_id from ANY row
+  select t.*
   into v_any
-  from public.timesheets
-  where timesheet_id = p_timesheet_id
+  from public.timesheets t
+  where t.timesheet_id = p_timesheet_id
   limit 1;
 
   if not found then
@@ -402,23 +363,22 @@ begin
   end if;
 
   v_booking_id := v_any.booking_id;
-  if v_booking_id is null then
+  if v_booking_id is null or btrim(v_booking_id) = '' then
     raise exception 'Timesheet booking_id is missing; cannot restore';
   end if;
 
-  -- 1) Lock CURRENT row for this booking_id
-  select *
+  -- 1) Lock CURRENT row for booking_id
+  select t.*
   into v_current
-  from public.timesheets
-  where booking_id = v_booking_id
-    and is_current = true
+  from public.timesheets t
+  where t.booking_id = v_booking_id
+    and t.is_current = true
   for update;
 
   if not found then
     raise exception 'Current timesheet not found for booking_id';
   end if;
 
-  -- ✅ ATOMIC expected-guard (no side effects beyond row lock)
   if p_expected_timesheet_id <> v_current.timesheet_id then
     raise exception '%',
       jsonb_build_object(
@@ -427,12 +387,12 @@ begin
       )::text;
   end if;
 
-  -- 2) Lock CURRENT TSFIN and block restore if invoiced/paid
-  select *
+  -- 2) Lock current TSFIN and block if invoiced/paid
+  select f.*
   into v_fin
-  from public.timesheets_financials
-  where timesheet_id = v_current.timesheet_id
-    and is_current = true
+  from public.timesheets_financials f
+  where f.timesheet_id = v_current.timesheet_id
+    and f.is_current = true
   for update;
 
   if found then
@@ -441,28 +401,26 @@ begin
     end if;
   end if;
 
-  -- 3) Pick the target version to restore (within booking_id series)
+  -- 3) Pick target revoked version
   if upper(p_restore_kind) = 'PENDING' then
-    -- "pending" = not scanned / not signed
-    select *
+    select t.*
     into v_restore
-    from public.timesheets
-    where booking_id = v_booking_id
-      and is_current = false
-      and status = 'REVOKED'::public.timesheet_status_enum
-      and qr_scanned_at is null
-    order by version desc
+    from public.timesheets t
+    where t.booking_id = v_booking_id
+      and t.is_current = false
+      and t.status = 'REVOKED'::public.timesheet_status_enum
+      and t.qr_scanned_at is null
+    order by t.version desc
     limit 1;
   else
-    -- "signed" = scanned_at present
-    select *
+    select t.*
     into v_restore
-    from public.timesheets
-    where booking_id = v_booking_id
-      and is_current = false
-      and status = 'REVOKED'::public.timesheet_status_enum
-      and qr_scanned_at is not null
-    order by version desc
+    from public.timesheets t
+    where t.booking_id = v_booking_id
+      and t.is_current = false
+      and t.status = 'REVOKED'::public.timesheet_status_enum
+      and t.qr_scanned_at is not null
+    order by t.version desc
     limit 1;
   end if;
 
@@ -471,41 +429,40 @@ begin
   end if;
 
   -- 4) Demote current -> not current
-  update public.timesheets
-  set
-    is_current = false,
-    updated_at = v_now
-  where timesheet_id = v_current.timesheet_id
-    and is_current = true;
+  update public.timesheets as t
+  set is_current = false,
+      updated_at = v_now
+  where t.timesheet_id = v_current.timesheet_id
+    and t.is_current = true;
 
-  -- 5) Promote restore -> current
-  update public.timesheets
-  set
-    is_current = true,
-    updated_at = v_now
-  where timesheet_id = v_restore.timesheet_id;
+  -- 5) Promote restored -> current
+  update public.timesheets as t
+  set is_current = true,
+      updated_at = v_now
+  where t.timesheet_id = v_restore.timesheet_id;
 
-  -- 6) Move contract_week pointer if it points at the old current row
-  update public.contract_weeks
+  -- 6) Move contract_week pointer if it points at old current row
+  update public.contract_weeks as cw
   set timesheet_id = v_restore.timesheet_id,
       updated_at   = v_now
-  where timesheet_id = v_current.timesheet_id;
+  where cw.timesheet_id = v_current.timesheet_id;
 
-  -- 7) Move TSFIN row to restored current id + update version marker + enqueue recompute
+  -- 7) Move TSFIN row + enqueue recompute
   if v_fin.id is not null then
-    update public.timesheets_financials
+    update public.timesheets_financials as f
     set
       timesheet_id      = v_restore.timesheet_id,
       timesheet_version = v_restore.version,
       updated_at        = v_now
-    where id = v_fin.id;
+    where f.id = v_fin.id;
 
+    -- ✅ FIX: use constraint name to avoid ambiguous (timesheet_id, reason)
     insert into public.ts_financials_outbox(timesheet_id, reason, attempt_count, next_attempt_at, last_error, created_at)
     values (v_restore.timesheet_id, 'VERSION_ROTATED'::public.ts_fin_reason_enum, 0, v_now, null, v_now)
-    on conflict (timesheet_id, reason) do nothing;
+    on conflict on constraint uq_tsfin_outbox do nothing;
   end if;
 
-  -- 8) Audit — write against restored (new current) timesheet_id
+  -- 8) Audit
   insert into public.audit_events(
     object_type, object_id_text, action, before_json, after_json, reason, actor_user_id, ts_utc
   )
@@ -514,7 +471,7 @@ begin
     v_restore.timesheet_id::text,
     'QR_RESTORED',
     jsonb_build_object(
-      'booking_id', v_booking_id::text,
+      'booking_id', v_booking_id,
       'from_timesheet_id', v_current.timesheet_id::text,
       'from_version', v_current.version
     ),
@@ -528,7 +485,7 @@ begin
     v_now
   );
 
-  -- Return (timesheet_id = restored current id)
+  -- Return
   timesheet_id := v_restore.timesheet_id;
   restored_version := v_restore.version;
   sheet_scope := v_restore.sheet_scope::text;
@@ -604,8 +561,6 @@ $$;
 
 -- ------------------------------------------------------------
 -- 4) Timesheet audit feed (timesheet + related contract_week)
---    FIX: resolve booking_id so it works even if p_timesheet_id is stale.
---    Also includes audit for ALL timesheet ids in the booking series.
 -- ------------------------------------------------------------
 create or replace function public.timesheet_audit_feed(
   p_timesheet_id uuid
@@ -632,35 +587,29 @@ security definer
 set search_path = public
 as $$
   with base as (
-    select
-      t.booking_id,
-      t.timesheet_id as any_timesheet_id
+    select t.booking_id
     from public.timesheets t
     where t.timesheet_id = p_timesheet_id
     limit 1
   ),
   cur as (
-    select
-      t.timesheet_id as current_timesheet_id
+    select t.timesheet_id as current_timesheet_id
     from public.timesheets t
     join base b on b.booking_id = t.booking_id
     where t.is_current = true
     limit 1
   ),
   ts_ids as (
-    -- all versions in the series (if booking_id known)
     select t.timesheet_id::text as ts_id_text
     from public.timesheets t
     join base b on b.booking_id = t.booking_id
 
     union all
 
-    -- fallback: if p_timesheet_id not in timesheets, still allow audit on that id
     select p_timesheet_id::text
     where not exists (select 1 from base)
   ),
   cw as (
-    -- contract_week is linked to CURRENT timesheet_id pointer (not necessarily the passed id)
     select id::text as cw_id_text
     from public.contract_weeks
     where timesheet_id = (select current_timesheet_id from cur)
@@ -699,3 +648,5 @@ as $$
   order by ae.ts_utc desc, ae.id desc
   limit 500;
 $$;
+
+commit;
