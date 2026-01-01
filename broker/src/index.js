@@ -12798,15 +12798,14 @@ async function handleTimesheetsSubmitWeekly(env, req) {
     });
     qr_r2_key = qrRes?.qr_r2_key || null;
 
-    // Patch QR fields on the timesheet
-    await fetch(
+    // Patch QR fields on the timesheet (⚠️ DO NOT include is_qr — it is not a column on timesheets)
+    const qrPatchRes = await fetch(
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
         `?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
       {
         method: 'PATCH',
         headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
         body: JSON.stringify({
-          is_qr: true,
           qr_token: qrToken,
           qr_status: 'PENDING',
           qr_generated_at: now,
@@ -12817,7 +12816,12 @@ async function handleTimesheetsSubmitWeekly(env, req) {
           updated_at: now
         })
       }
-    ).catch(() => {});
+    );
+
+    if (!qrPatchRes.ok) {
+      const t = await qrPatchRes.text().catch(() => '');
+      return withCORS(env, req, serverError(`Failed to set QR fields on timesheet: ${t}`));
+    }
 
     // Generate PDF
     try {
@@ -12974,6 +12978,7 @@ async function handleTimesheetsSubmitWeekly(env, req) {
     email_queued: wantsQR ? !!emailQueued : null
   }));
 }
+
 
 async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
   const enc = encodeURIComponent;
@@ -13556,6 +13561,7 @@ async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
   }));
 }
 
+
 async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -13678,9 +13684,8 @@ async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
     is_current: true,
     status: 'RECEIVED',
 
-    // ✅ still manual entry on system, but QR-enabled again
+    // ✅ still manual entry on system, but QR-enabled again (QR-ness is derived from qr_status, not an is_qr column)
     submission_mode: 'MANUAL',
-    is_qr: true,
 
     // ✅ clear any evidence/signature pointers on the new current row
     manual_pdf_r2_key: null,
@@ -14267,7 +14272,6 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
   }));
 }
 
-
 export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -14391,7 +14395,8 @@ export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
   ).catch(() => {});
 
   // 2) Promote electronic row to current by its PK
-  // ✅ NEW: clear QR fields/hashes so QR messaging does not appear on the restored ELECTRONIC version
+  // ✅ clear QR fields/hashes so QR messaging does not appear on the restored ELECTRONIC version
+  // ✅ IMPORTANT: do NOT write is_qr here (timesheets table does not have is_qr)
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
       `?timesheet_id=eq.${enc(elec.timesheet_id)}`,
@@ -14400,7 +14405,6 @@ export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
       headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
       body: JSON.stringify({
         is_current: true,
-        is_qr: false,
 
         qr_status: null,
         qr_token: null,
@@ -51960,7 +51964,6 @@ async function generateAndStoreTimesheetQr(env, {
 
   return { qrText, qr_r2_key: null };
 }
-
 async function handleTimesheetQrResendEmail(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -51990,6 +51993,24 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
       )
     );
   }
+
+  const patchTimesheetCurrentOrThrow = async (patchBody, label) => {
+    const url =
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true`;
+
+    const r = await fetch(url, {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+      body: JSON.stringify(patchBody)
+    });
+
+    if (!r.ok) {
+      const t = await r.text().catch(() => '');
+      throw new Error(`[QR_RESEND] timesheet patch failed (${label}): ${r.status} ${t}`);
+    }
+  };
 
   // Load current timesheet
   let ts = await sbGetOne(
@@ -52025,8 +52046,6 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
   }
 
   // ✅ Must have hours before sending
-  // Weekly: must have at least one scheduled segment with start+end.
-  // Daily: must have worked_start_iso + worked_end_iso.
   const hasHoursForSend = (() => {
     if (scope === 'WEEKLY') {
       const arr = Array.isArray(ts.actual_schedule_json) ? ts.actual_schedule_json : [];
@@ -52037,7 +52056,6 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
         return !!(s && e);
       });
     }
-    // DAILY (or anything else): require worked start/end
     const ws = ts.worked_start_iso ? String(ts.worked_start_iso).trim() : '';
     const we = ts.worked_end_iso   ? String(ts.worked_end_iso).trim()   : '';
     return !!(ws && we);
@@ -52047,7 +52065,7 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
     return withCORS(env, req, badRequest('Cannot send: no hours recorded yet'));
   }
 
-  // Resolve contract + candidate email first (needed for both issue + resend)
+  // Resolve contract + candidate email first
   if (!ts.contract_id) {
     return withCORS(env, req, badRequest('Cannot send: timesheet.contract_id is missing'));
   }
@@ -52074,8 +52092,7 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
   const toEmail = cand?.email ? String(cand.email).trim() : null;
   if (!toEmail) return withCORS(env, req, badRequest('Candidate email not found'));
 
-  // Optional: ensure TSFIN is not locked/paid (defence-in-depth)
-  // and keep status aligned to "awaiting signature upload" for QR workflows.
+  // TSFIN defence-in-depth
   try {
     const fin = await sbGetOne(
       env,
@@ -52104,11 +52121,8 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
         }
       ).catch(() => {});
     }
-  } catch {
-    // best-effort
-  }
+  } catch {}
 
-  // Derive a label date for subject / attachment name
   const dateLabel =
     (scope === 'WEEKLY')
       ? (ts.week_ending_date || '')
@@ -52127,25 +52141,20 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
     return v;
   };
 
-  // Only include fields that are known to exist in your codebase
-  // (these are read elsewhere in the backend for weekly/daily hours and references)
-  const hashObj = (() => {
-    const base = {
-      sheet_scope: scope || null,
-      week_ending_date: ts.week_ending_date || null,
-      worked_start_iso: ts.worked_start_iso || null,
-      worked_end_iso: ts.worked_end_iso || null,
-      break_start_iso: ts.break_start_iso || null,
-      break_end_iso: ts.break_end_iso || null,
-      break_minutes: (ts.break_minutes != null ? ts.break_minutes : null),
-      reference_number: ts.reference_number || null,
-      day_references_json: ts.day_references_json || null,
-      actual_schedule_json: ts.actual_schedule_json || null,
-      additional_units_week: ts.additional_units_week || null,
-      additional_units_per_day: ts.additional_units_per_day || null
-    };
-    return base;
-  })();
+  const hashObj = {
+    sheet_scope: scope || null,
+    week_ending_date: ts.week_ending_date || null,
+    worked_start_iso: ts.worked_start_iso || null,
+    worked_end_iso: ts.worked_end_iso || null,
+    break_start_iso: ts.break_start_iso || null,
+    break_end_iso: ts.break_end_iso || null,
+    break_minutes: (ts.break_minutes != null ? ts.break_minutes : null),
+    reference_number: ts.reference_number || null,
+    day_references_json: ts.day_references_json || null,
+    actual_schedule_json: ts.actual_schedule_json || null,
+    additional_units_week: ts.additional_units_week || null,
+    additional_units_per_day: ts.additional_units_per_day || null
+  };
 
   let current_hash = null;
   try {
@@ -52156,27 +52165,18 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
 
   const prev_last_sent_hash = (ts.qr_last_sent_hash != null) ? String(ts.qr_last_sent_hash) : '';
   const hasPrevHash = !!String(prev_last_sent_hash || '').trim();
-
-  // "Can resend same hours" is only true when we have a stored hash and it matches.
   const canResendSameHours = hasPrevHash && (String(prev_last_sent_hash) === String(current_hash));
 
-  // Decide whether this request results in:
-  // - NEW_ISSUED (first issue)
-  // - RESENT (same token, same hours)
-  // - REISSUED (new token because hours changed since last send OR legacy hash missing)
-  let result = null; // 'NEW_ISSUED' | 'RESENT' | 'REISSUED'
-
-  // If awaiting signature upload and we have a last_sent_hash that differs, force reissue.
   const mustReissueBecauseHoursChanged =
     awaitingSignatureUpload && hasPrevHash && !canResendSameHours;
 
-  // If awaiting signature upload but we have no prior hash (legacy rows), we cannot prove same-hours.
-  // In this case we force a new issue so the "Resend only if unchanged" rule becomes enforceable going forward.
   const mustReissueBecauseNoBaselineHash =
     awaitingSignatureUpload && !hasPrevHash;
 
+  let result = null; // 'NEW_ISSUED' | 'RESENT' | 'REISSUED'
+
   // ------------------------------------------------------------
-  // If we need a new token: create it, store payload, patch metadata now
+  // If we need a new token: create it + persist token/gen properly
   // ------------------------------------------------------------
   let qrTokenToUse = (ts.qr_token && String(ts.qr_token).trim()) ? String(ts.qr_token).trim() : null;
   let qr_r2_key = ts.qr_r2_key || null;
@@ -52193,7 +52193,7 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
       qrToken = `${currentTimesheetId}:${Date.now()}`;
     }
 
-    // Generate/store TSQ1 payload on current timesheet (qr_payload_json); qr_r2_key will be null under Option A.
+    // Store TSQ1 payload on current row
     let qrRes = null;
     try {
       qrRes = await generateAndStoreTimesheetQr(env, {
@@ -52212,30 +52212,25 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
     qrTokenToUse = qrToken;
     qr_r2_key = qrRes?.qr_r2_key || null;
 
-    // Patch QR metadata fields on current timesheet (do NOT overwrite qr_payload_json)
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-        `&is_current=eq.true`,
-      {
-        method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify({
-          is_qr: true,
-          qr_token: qrToken,
-          qr_status: 'PENDING',
-          qr_generated_at: now2,
-          qr_scanned_at: null,
-          qr_scan_info_json: null,
-          qr_r2_key: qr_r2_key || null,
-          updated_at: now2
-        })
-      }
-    ).catch(() => {});
+    // ✅ FIX: do NOT patch is_qr (it is not a column on timesheets)
+    // ✅ FIX: do NOT swallow patch failures (otherwise token/gen remain null and UI never updates)
+    try {
+      await patchTimesheetCurrentOrThrow({
+        qr_token: qrToken,
+        qr_status: 'PENDING',
+        qr_generated_at: now2,
+        qr_scanned_at: null,
+        qr_scan_info_json: null,
+        qr_r2_key: qr_r2_key || null,
+        updated_at: now2
+      }, 'issue_token');
+    } catch (e) {
+      return withCORS(env, req, serverError(e?.message || 'Failed to persist QR token'));
+    }
 
     result = notYetIssued ? 'NEW_ISSUED' : 'REISSUED';
 
-    // Reload TS so downstream sees the issued state + any previous hash values
+    // Reload so any subsequent logic sees the issued state
     ts = await sbGetOne(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -52245,18 +52240,16 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
         `&limit=1`
     );
   } else {
-    // awaitingSignatureUpload + hasPrevHash + match
     result = 'RESENT';
   }
 
-  // ✅ Ensure we have a GENERATED printable PDF to attach (not an uploaded manual PDF).
+  // ✅ Ensure we have a GENERATED printable PDF to attach
   let pdfKey = null;
   try {
     pdfKey = await renderTimesheetPDFAndSave(env, currentTimesheetId);
   } catch (e) {
     return withCORS(env, req, serverError('Failed to prepare timesheet PDF for send'));
   }
-
   if (!pdfKey) return withCORS(env, req, serverError('No PDF available to send'));
 
   const subject =
@@ -52274,7 +52267,6 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
   const body_text = lines.join('\n');
   const body_html = `<p>${lines.map(l => (l === '' ? '<br/>' : l)).join('<br/>')}</p>`;
 
-  // Queue in mail_outbox
   const insert = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
     method: 'POST',
     headers: { ...sbHeaders(env), Prefer: 'return=representation' },
@@ -52297,8 +52289,7 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
     return withCORS(env, req, serverError(`Failed to queue QR email: ${t}`));
   }
 
-  // After successful queue: persist last-sent hash + timestamp (requires the new columns).
-  // If the DB migration hasn't run yet, this PATCH will fail; we treat it as non-fatal but return the values.
+  // Persist last-sent hash + timestamp (non-fatal if migration not present)
   const nowSent = nowIso();
   try {
     await fetch(
@@ -52314,10 +52305,8 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
           updated_at: nowSent
         })
       }
-    );
-  } catch {
-    // best-effort
-  }
+    ).catch(() => {});
+  } catch {}
 
   // Audit
   try {
@@ -52331,15 +52320,12 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
         to: toEmail,
         result,
         current_hash,
-        prev_last_sent_hash: prev_last_sent_hash || null
+        prev_last_sent_hash: prev_last_sent_hash || null,
+        qr_token_written: !!(qrTokenToUse && String(qrTokenToUse).trim())
       },
       { entity: 'timesheets', subject_id: currentTimesheetId, req }
     );
   } catch {}
-
-  // After send, the "last sent hash" should now be current_hash (because we just queued it).
-  const qr_last_sent_hash_out = current_hash;
-  const qr_can_resend_same_hours_out = true;
 
   return withCORS(env, req, ok({
     queued: true,
@@ -52352,9 +52338,9 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
     pdf_key: pdfKey,
 
     // Action hints for UI
-    qr_can_resend_same_hours: qr_can_resend_same_hours_out,
+    qr_can_resend_same_hours: true,
     current_hash,
-    qr_last_sent_hash: qr_last_sent_hash_out
+    qr_last_sent_hash: current_hash
   }));
 }
 
