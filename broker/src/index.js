@@ -57061,148 +57061,82 @@ async function handleTimesheetSourcePrint(env, req, timesheetId) {
 }
 async function collectSourceRowsForTimesheet(env, timesheetId, opts = {}) {
   const enc = encodeURIComponent;
+
   const scope = (opts.scope || 'all').toLowerCase();
-  const filterShiftId = scope === 'shift' && opts.shift_id ? String(opts.shift_id) : null;
+  const filterShiftIdRaw = (scope === 'shift' && opts.shift_id) ? String(opts.shift_id).trim() : null;
   const includeExcluded = !!opts.include_excluded;
 
-  // ✅ Optional filter: only include rows for this import batch id
-  const filterImportId = (opts.import_id != null && String(opts.import_id).trim() !== '')
-    ? String(opts.import_id).trim()
-    : null;
+  // Optional filter: only include rows for this import batch id
+  const filterImportIdRaw =
+    (opts.import_id != null && String(opts.import_id).trim() !== '')
+      ? String(opts.import_id).trim()
+      : null;
 
-  // 1) Load current TSFIN
-  const { rows: finRows } = await sbFetch(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-    `?timesheet_id=eq.${enc(timesheetId)}` +
-    `&is_current=eq.true` +
-    `&select=timesheet_id,invoice_breakdown_json` +
-    `&limit=1`
-  );
-  const tsfin = finRows?.[0] || null;
-  if (!tsfin) {
-    return { imports: [] };
-  }
+  // RPC expects UUIDs for import_id and shift_id (nhsp_shifts.id)
+  const uuidRe =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-  const ib = tsfin.invoice_breakdown_json || {};
-  const segments = Array.isArray(ib.segments) ? ib.segments : [];
+  const p_shift_id  = (filterShiftIdRaw && uuidRe.test(filterShiftIdRaw)) ? filterShiftIdRaw : null;
+  const p_import_id = (filterImportIdRaw && uuidRe.test(filterImportIdRaw)) ? filterImportIdRaw : null;
 
-  // 2) Filter HR/NHSP segments for this timesheet
-  const shiftIds = new Set();
-  for (const seg of segments) {
-    const src = (seg.source_system || '').toUpperCase();
-    if (src !== 'NHSP' && src !== 'HEALTHROSTER') continue;
-
-    const sid = String(seg.segment_id || '');
-    // Only real shift segments; ignore synthetic adj segments
-    if (!sid.startsWith('nhsp:')) continue;
-    const idPart = sid.slice('nhsp:'.length).trim();
-    if (!idPart) continue;
-
-    if (!includeExcluded && seg.exclude_from_pay) continue;
-    if (filterShiftId && idPart !== filterShiftId) continue;
-
-    shiftIds.add(idPart);
-  }
-
-  if (!shiftIds.size) {
-    return { imports: [] };
-  }
-
-  // 3) Load nhsp_shifts for those ids
-  const allShiftIds = Array.from(shiftIds);
-  const shiftParam = allShiftIds.map(enc).join(',');
-  const { rows: shiftRows } = await sbFetch(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
-    `?id=in.(${shiftParam})` +
-    `&select=id,external_row_key,latest_import_id,source_system` +
-    `&order=work_date.asc,start_utc.asc`
-  );
-
-  let usefulShifts = (shiftRows || []).filter(s => s.latest_import_id && s.external_row_key);
-
-  // ✅ Optional filter: only return the requested import_id (if provided)
-  if (filterImportId) {
-    usefulShifts = usefulShifts.filter(s => String(s.latest_import_id) === String(filterImportId));
-  }
-
-  if (!usefulShifts.length) {
-    return { imports: [] };
-  }
-
-  // 4) Group by (source_system, latest_import_id)
-  const groups = new Map(); // key -> { source_system, import_id, keys:Set<string> }
-  for (const sh of usefulShifts) {
-    const sys = (sh.source_system || '').toUpperCase() || 'UNKNOWN';
-    const importId = sh.latest_import_id;
-
-    // defensive: ensure import_id matches filter (if present)
-    if (filterImportId && String(importId) !== String(filterImportId)) continue;
-
-    const gKey = `${sys}__${importId}`;
-    let g = groups.get(gKey);
-    if (!g) {
-      g = {
-        source_system: sys,
-        import_id: importId,
-        keys: new Set()
-      };
-      groups.set(gKey, g);
+  // Single-call: Postgres RPC resolves requested timesheet_id -> current timesheet_id (rotation-safe)
+  const rpcRes = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/rpc/timesheet_import_rows_for_timesheet_current`,
+    {
+      method: 'POST',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify({
+        p_timesheet_id: timesheetId,
+        p_include_excluded: !!includeExcluded,
+        p_import_id: p_import_id,
+        p_shift_id: p_shift_id
+      })
     }
-    g.keys.add(sh.external_row_key);
+  );
+
+  const txt = await rpcRes.text().catch(() => '');
+  if (!rpcRes.ok) {
+    throw new Error(txt || `RPC timesheet_import_rows_for_timesheet_current failed (${rpcRes.status})`);
   }
 
-  if (!groups.size) {
-    return { imports: [] };
+  let rpcRows = [];
+  try {
+    const json = txt ? JSON.parse(txt) : [];
+    rpcRows = Array.isArray(json) ? json : [];
+  } catch {
+    rpcRows = [];
   }
 
-  const imports = [];
+  // Map RPC rows into the same imports[] shape your FE expects from /source-print
+  const imports = rpcRows.map(r => {
+    const header_columns = Array.isArray(r?.header_columns)
+      ? r.header_columns
+      : (r?.header_columns && typeof r.header_columns === 'object')
+        ? r.header_columns
+        : [];
 
-  // 5) For each group, load header_columns + hr_rows
-  for (const g of groups.values()) {
-    const importId = g.import_id;
-    const sys = g.source_system;
+    // SQL returns rows as jsonb array of { raw_columns, payload }
+    const rowsJson = Array.isArray(r?.rows) ? r.rows : [];
 
-    // Get header_columns from hr_imports.parse_summary_json
-    const { rows: impRows2 } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/hr_imports` +
-      `?id=eq.${enc(importId)}` +
-      `&select=parse_summary_json` +
-      `&limit=1`
-    );
-    const impRec = impRows2?.[0] || {};
-    const parseSummary = impRec.parse_summary_json || {};
-    const header_columns = Array.isArray(parseSummary.header_columns)
-      ? parseSummary.header_columns
-      : [];
-
-    const ekParam = Array.from(g.keys).map(enc).join(',');
-    const { rows: hrRows2 } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/hr_rows` +
-      `?import_id=eq.${enc(importId)}` +
-      `&external_row_key=in.(${ekParam})` +
-      `&select=payload_json` +
-      `&order=id.asc`
-    );
-    const rows = (hrRows2 || []).map(r => {
-      const payload = r.payload_json || {};
-      const raw_cols = Array.isArray(payload.raw_columns) ? payload.raw_columns : null;
-      return {
-        raw_columns: raw_cols,
-        payload
-      };
+    const rows = rowsJson.map(x => {
+      const raw = Array.isArray(x?.raw_columns) ? x.raw_columns : null;
+      const payload = (x && typeof x === 'object' && x.payload != null) ? x.payload : (x || {});
+      return { raw_columns: raw, payload };
     });
 
-    imports.push({
-      source_system: sys,
-      import_id: importId,
+    return {
+      source_system: String(r?.source_system || '').toUpperCase() || 'UNKNOWN',
+      import_id: r?.import_id || null,
+
+      // Optional metadata (handy for future download buttons, not required for preview)
+      filename: r?.filename || null,
+      uploaded_at_utc: r?.uploaded_at_utc || null,
+      file_r2_key: r?.file_r2_key || null,
+
       header_columns,
       rows
-    });
-  }
+    };
+  });
 
   return { imports };
 }
