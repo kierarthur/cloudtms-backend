@@ -22195,9 +22195,7 @@ async function handleNhspApply(env, req, importId) {
     return withCORS(env, req, serverError("Failed to fetch NHSP rows"));
   }
 }
-
-
- async function handleHrAutoprocessImport(env, req) {
+async function handleHrAutoprocessImport(env, req) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
   const user = await requireUser(env, req, ['admin']);
@@ -22243,13 +22241,14 @@ async function handleNhspApply(env, req, importId) {
       source_system: 'HEALTHROSTER',
       client_id: clientId,
       file_r2_key: fileKey,
-      import_scope: 'HR_WEEKLY', // <-- NEW: explicitly mark this as a weekly HR autoprocess import
+      import_scope: 'HR_WEEKLY',
       parse_summary_json: {
         status: 'PENDING_PARSE',
         rows_total: 0,
         rows_parsed: 0,
         rows_skipped: 0,
-        notes: null
+        notes: null,
+        header_columns: []
       }
     };
 
@@ -22295,21 +22294,33 @@ async function handleNhspApply(env, req, importId) {
       rows_total: 0,
       rows_parsed: 0,
       rows_skipped: 0,
-      notes: null
+      notes: null,
+      header_columns: [],
+      error: false
     };
 
     try {
       if (typeof parseHealthRosterWorkbookIntoHrRows === 'function') {
-        summary = await parseHealthRosterWorkbookIntoHrRows(env, {
+        const parsed = await parseHealthRosterWorkbookIntoHrRows(env, {
           import_id: importId,
           file_key: fileKey,
           client_id: clientId,
           tz: tzAssumption
         });
+
+        if (parsed && typeof parsed === 'object') {
+          summary = {
+            ...summary,
+            ...parsed,
+            header_columns: Array.isArray(parsed.header_columns) ? parsed.header_columns : []
+          };
+        }
       } else {
+        summary.error = true;
         summary.notes = 'parseHealthRosterWorkbookIntoHrRows helper is not implemented.';
       }
     } catch (e) {
+      summary.error = true;
       summary.notes = `Parsing failed: ${e?.message || String(e)}`;
       if (LOG) {
         console.error('[HR_WEEKLY_IMPORT]', JSON.stringify({
@@ -22323,14 +22334,24 @@ async function handleNhspApply(env, req, importId) {
       }
     }
 
-    // 3) Update parse_summary_json on hr_imports
+    const prev = (rec.parse_summary_json && typeof rec.parse_summary_json === 'object')
+      ? rec.parse_summary_json
+      : {};
+
+    const headerCols = Array.isArray(summary.header_columns)
+      ? summary.header_columns.map(x => String(x ?? ''))
+      : [];
+
+    // 3) Update parse_summary_json on hr_imports (INCLUDING header_columns)
     const patchBody = {
       parse_summary_json: {
-        status: summary && !summary.error ? 'PARSED' : 'PARSE_FAILED',
+        ...prev,
+        status: summary.error ? 'PARSE_FAILED' : 'PARSED',
         rows_total: Number(summary.rows_total || 0),
         rows_parsed: Number(summary.rows_parsed || 0),
         rows_skipped: Number(summary.rows_skipped || 0),
-        notes: summary.notes || null
+        notes: summary.notes || null,
+        header_columns: headerCols
       }
     };
 
@@ -22386,6 +22407,7 @@ async function handleNhspApply(env, req, importId) {
     return withCORS(env, req, serverError("Failed to create HR autoprocess import"));
   }
 }
+
 
 async function handleHrAutoprocessApply(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
@@ -29859,8 +29881,7 @@ async function classifyWeeklyImportRowsLegacy(env, importId, { source_system }) 
   };
 }
 
-
- async function handleNhspImport(env, req) {
+async function handleNhspImport(env, req) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
   const user = await requireUser(env, req, ['admin']);
@@ -29898,13 +29919,13 @@ async function classifyWeeklyImportRowsLegacy(env, importId, { source_system }) 
       tz_assumption: tzAssumption,
       source_system: 'NHSP',
       file_r2_key: fileKey,
-      // initial parse summary – will be overwritten after parsing
       parse_summary_json: {
         status: 'PENDING_PARSE',
         rows_total: 0,
         rows_parsed: 0,
         rows_skipped: 0,
-        notes: null
+        notes: null,
+        header_columns: []
       }
     };
 
@@ -29948,20 +29969,32 @@ async function classifyWeeklyImportRowsLegacy(env, importId, { source_system }) 
       rows_total: 0,
       rows_parsed: 0,
       rows_skipped: 0,
-      notes: null
+      notes: null,
+      header_columns: [],
+      error: false
     };
 
     try {
       if (typeof parseNhspWorkbookIntoHrRows === 'function') {
-        summary = await parseNhspWorkbookIntoHrRows(env, {
+        const parsed = await parseNhspWorkbookIntoHrRows(env, {
           import_id: importId,
           file_key: fileKey,
           tz: tzAssumption
         });
+
+        if (parsed && typeof parsed === 'object') {
+          summary = {
+            ...summary,
+            ...parsed,
+            header_columns: Array.isArray(parsed.header_columns) ? parsed.header_columns : []
+          };
+        }
       } else {
+        summary.error = true;
         summary.notes = 'parseNhspWorkbookIntoHrRows helper is not implemented.';
       }
     } catch (e) {
+      summary.error = true;
       summary.notes = `Parsing failed: ${e?.message || String(e)}`;
       if (LOG) {
         console.error('[NHSP_IMPORT]', JSON.stringify({
@@ -29974,17 +30007,27 @@ async function classifyWeeklyImportRowsLegacy(env, importId, { source_system }) 
       }
     }
 
+    const prev = (rec.parse_summary_json && typeof rec.parse_summary_json === 'object')
+      ? rec.parse_summary_json
+      : {};
+
+    const headerCols = Array.isArray(summary.header_columns)
+      ? summary.header_columns.map(x => String(x ?? ''))
+      : [];
+
     const patchBody = {
       parse_summary_json: {
-        status: summary && !summary.error ? 'PARSED' : 'PARSE_FAILED',
+        ...prev,
+        status: summary.error ? 'PARSE_FAILED' : 'PARSED',
         rows_total: Number(summary.rows_total || 0),
         rows_parsed: Number(summary.rows_parsed || 0),
         rows_skipped: Number(summary.rows_skipped || 0),
-        notes: summary.notes || null
+        notes: summary.notes || null,
+        header_columns: headerCols
       }
     };
 
-    // 3) Update hr_imports.parse_summary_json with the real summary
+    // 3) Update hr_imports.parse_summary_json with the real summary (INCLUDING header_columns)
     await fetch(
       `${env.SUPABASE_URL}/rest/v1/hr_imports?id=eq.${encodeURIComponent(importId)}`,
       {
