@@ -6440,6 +6440,24 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
   if (!newKind) return withCORS(env, req, badRequest('kind is required'));
 
   try {
+    // ✅ NEW: Block evidence kind update if invoiced/paid (match QR scan + evidence add/delete rule)
+    try {
+      const fin = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=eq.${enc(currentTsId)}` +
+          `&is_current=eq.true` +
+          `&select=locked_by_invoice_id,paid_at_utc` +
+          `&limit=1`
+      );
+      if (fin && (fin.locked_by_invoice_id || fin.paid_at_utc)) {
+        return withCORS(env, req, badRequest('Timesheet already invoiced or paid; cannot update evidence kind'));
+      }
+    } catch (e) {
+      // If TSFIN lookup fails, do not silently allow mutation.
+      return withCORS(env, req, serverError(`Failed to validate timesheet financial lock state: ${e?.message || e}`));
+    }
+
     // Ensure evidence exists and belongs to this timesheet
     const { rows: evRows } = await sbFetch(
       env,
@@ -6515,24 +6533,62 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
     return withCORS(env, req, serverError(`Failed to update evidence kind: ${e?.message || e}`));
   }
 }
+ 
+async function handleContractWeekReplaceManualPdf(env, req, weekId) {
+  const enc = encodeURIComponent;
 
-
- async function handleContractWeekReplaceManualPdf(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
-  const cw = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=id,timesheet_id`);
+  const cw = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=id,timesheet_id,uploaded_pdf_r2_key`
+  );
   if (!cw) return withCORS(env, req, notFound('Week not found'));
+
+  // If already invoiced/paid, forbid replacement at this path
   if (cw.timesheet_id) {
-    const tsfin = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${enc(cw.timesheet_id)}&is_current=eq.true&select=locked_by_invoice_id`);
-    if (tsfin?.locked_by_invoice_id) return withCORS(env, req, badRequest('Invoiced; unissue first to replace PDF'));
+    const tsfin = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${enc(cw.timesheet_id)}&is_current=eq.true&select=locked_by_invoice_id,paid_at_utc`
+    );
+    if (tsfin?.locked_by_invoice_id || tsfin?.paid_at_utc) {
+      return withCORS(env, req, badRequest('Invoiced/paid; unissue/unpay first to replace PDF'));
+    }
   }
 
-  let body; try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+  let body;
+  try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
   if (!body?.r2_key) return withCORS(env, req, badRequest('r2_key is required'));
-  await patchContractWeekScan(env, weekId, String(body.r2_key));
-  return withCORS(env, req, ok({ replaced: true, r2_key: body.r2_key }));
+  const newKey = normalizeKey(String(body.r2_key));
+
+  // sanity check new key exists
+  const exists = await r2Exists(env, newKey).catch(() => false);
+  if (!exists) return withCORS(env, req, badRequest('r2_key does not exist in R2'));
+
+  const oldKey = cw.uploaded_pdf_r2_key ? normalizeKey(String(cw.uploaded_pdf_r2_key)) : null;
+
+  await patchContractWeekScan(env, weekId, newKey);
+
+  // ✅ NEW: delete old scan blob if replaced
+  try {
+    const bucket = env.R2_BUCKET || env.R2;
+    if (bucket && typeof bucket.delete === 'function') {
+      const o = String(oldKey || '').replace(/^\/+/, '').trim();
+      const n = String(newKey || '').replace(/^\/+/, '').trim();
+      if (o && n && o !== n) {
+        await bucket.delete(o).catch(() => {});
+      }
+    }
+  } catch {
+    // non-fatal
+  }
+
+  return withCORS(env, req, ok({ replaced: true, r2_key: newKey }));
 }
+
+
 
 async function handleContractWeekManualUpsert(env, req, weekId) {
   const enc = encodeURIComponent;
@@ -7109,7 +7165,7 @@ if (breaks.length) {
   }
 
   // Helper: rotate the current timesheet version (preserve old QR/signed evidence by revoking old current)
- const rotateTimesheetVersion = async (currentTs, revokeReason, qrActionForNew) => {
+const rotateTimesheetVersion = async (currentTs, revokeReason, qrActionForNew) => {
   if (!currentTs || !currentTs.timesheet_id) return currentTs;
 
   const bookingId = currentTs.booking_id || null;
@@ -7162,40 +7218,39 @@ if (breaks.length) {
   const newIsManualOnly =
     (act === 'REVOKE_TO_MANUAL');
 
-Object.assign(newRow, {
-  booking_id: bookingId,
-  version: nextVersion,
-  is_current: true,
-  status: 'RECEIVED',
-  revoked_reason: null,
-  revoked_by: null,
+  Object.assign(newRow, {
+    booking_id: bookingId,
+    version: nextVersion,
+    is_current: true,
+    status: 'RECEIVED',
+    revoked_reason: null,
+    revoked_by: null,
 
-  // ✅ New truth model:
-  // INVALIDATE/REISSUE/ISSUE => QR enabled but not issued (token/gen cleared, qr_status=PENDING)
-  // REVOKE_TO_MANUAL        => manual-only (qr fields cleared so QR UI won't show)
-  qr_token: null,
-  qr_status: newIsQrPending ? 'PENDING' : null,
-  qr_payload_json: {},
-  qr_generated_at: null,
-  qr_scanned_at: null,
-  qr_scan_info_json: null,
-  qr_r2_key: null,
+    // ✅ New truth model:
+    // INVALIDATE/REISSUE/ISSUE => QR enabled but not issued (token/gen cleared, qr_status=PENDING)
+    // REVOKE_TO_MANUAL        => manual-only (qr fields cleared so QR UI won't show)
+    qr_token: null,
+    qr_status: newIsQrPending ? 'PENDING' : null,
+    qr_payload_json: {},
+    qr_generated_at: null,
+    qr_scanned_at: null,
+    qr_scan_info_json: null,
+    qr_r2_key: null,
 
-  // ✅ Hash-truth fields (must exist in DB)
-  qr_last_sent_hash: null,
-  qr_last_sent_at_utc: null,
-  qr_signed_hash: null,
-  qr_signed_at_utc: null,
+    // ✅ Hash-truth fields (must exist in DB)
+    qr_last_sent_hash: null,
+    qr_last_sent_at_utc: null,
+    qr_signed_hash: null,
+    qr_signed_at_utc: null,
 
-  // ✅ Critical: a rotated "new current" must NOT keep any signed/manual evidence or authorisation.
-  // The old signed copy remains on the revoked version for audit/history.
-  manual_pdf_r2_key: null,
-  authorised_at_server: null,
+    // ✅ Critical: a rotated "new current" must NOT keep any signed/manual evidence or authorisation.
+    // The old signed copy remains on the revoked version for audit/history.
+    manual_pdf_r2_key: null,
+    authorised_at_server: null,
 
-  updated_at: now2,
-  created_at: now2
-});
-
+    updated_at: now2,
+    created_at: now2
+  });
 
   const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets`, {
     method: 'POST',
@@ -7209,8 +7264,22 @@ Object.assign(newRow, {
   }
 
   const created = (await ins.json().catch(() => []))[0] || null;
+
+  // ✅ NEW: Purge superseded versions immediately (best-effort; never blocks caller)
+  try {
+    await purgeSupersededTimesheetArtifactsForBooking(env, bookingId);
+  } catch (e) {
+    try {
+      console.warn('[ROTATE_TIMESHEET_VERSION] purge failed (non-fatal)', {
+        booking_id: bookingId,
+        err: e?.message || String(e)
+      });
+    } catch {}
+  }
+
   return created || null;
 };
+
 
 
   // Determine QR action (enum preferred, legacy booleans fallback)
@@ -9034,25 +9103,32 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
   const schedule_json_in    = has('schedule_json')    ? body.schedule_json    : undefined;
 
   // QR action hints from FE decision modal (legacy booleans still supported)
-const rawIssueQr        = body?.issue_qr === true;
-const rawDisableQr      = body?.disable_qr === true;
-const rawRevokeToManual = body?.revoke_to_manual === true;
-const rawRevokeQr       = body?.revoke_qr === true;   // legacy
-const rawReissueQr      = body?.reissue_qr === true;  // legacy
+  const rawIssueQr        = body?.issue_qr === true;
+  const rawDisableQr      = body?.disable_qr === true;
+  const rawRevokeToManual = body?.revoke_to_manual === true;
+  const rawRevokeQr       = body?.revoke_qr === true;   // legacy
+  const rawReissueQr      = body?.reissue_qr === true;  // legacy
 
-// ✅ NEW: preferred enum (from After-save decision modal)
-const qrActionEnumRaw = String(body?.qr_action || body?.qrAction || '').trim().toUpperCase();
-const enumOk = (x) => (
-  x === 'INVALIDATE' ||
-  x === 'REVOKE_TO_MANUAL' ||
-  x === 'REISSUE' ||
-  x === 'ISSUE' ||
-  x === 'DISABLE' ||
-  x === 'SAVE_WITHOUT_ISSUE'
-);
+  // ✅ NEW: preferred enum (from After-save decision modal)
+  const qrActionEnumRaw = String(body?.qr_action || body?.qrAction || '').trim().toUpperCase();
+  const enumOk = (x) => (
+    x === 'INVALIDATE' ||
+    x === 'REVOKE_TO_MANUAL' ||
+    x === 'REISSUE' ||
+    x === 'ISSUE' ||
+    x === 'DISABLE' ||
+    x === 'SAVE_WITHOUT_ISSUE'
+  );
 
-const now = nowIso();
+  const now = nowIso();
 
+  // ✅ FIX: daily-manual-upsert no longer issues/resends QR.
+  // These legacy variables must exist so the function does not throw ReferenceError.
+  const qrIssued   = false;
+  const qrReissued = false;
+  const qrToken    = null;
+  const qr_r2_key  = null;
+  const pdfKey     = null;
 
   // Helpers
   const normIso = (v) => {
@@ -9199,7 +9275,10 @@ const now = nowIso();
       if (!endYmd) return { error: 'Failed to compute overnight end date.' };
 
       worked_start_iso = localYmdHhmmToIsoUtc(ymdStr, startHHMM);
-      worked_end_iso   = localYmdHhmmToIsoUtc(endYmd, normaliseHHMM(`${Math.floor((shiftEndAdj % 1440) / 60)}:${String((shiftEndAdj % 1440) % 60).padStart(2,'0')}`));
+      worked_end_iso   = localYmdHhmmToIsoUtc(
+        endYmd,
+        normaliseHHMM(`${Math.floor((shiftEndAdj % 1440) / 60)}:${String((shiftEndAdj % 1440) % 60).padStart(2,'0')}`)
+      );
 
       if (!worked_start_iso || !worked_end_iso) return { error: 'Failed to convert schedule_json.start/end to ISO.' };
     }
@@ -9302,87 +9381,103 @@ const now = nowIso();
   };
 
   // Helper: rotate current TS -> history, insert new current version (restorable)
-const rotateTimesheetVersion = async (currentTs, revokeReason, qrActionForNew) => {
-  if (!currentTs || !currentTs.timesheet_id) return currentTs;
+  const rotateTimesheetVersion = async (currentTs, revokeReason, qrActionForNew) => {
+    if (!currentTs || !currentTs.timesheet_id) return currentTs;
 
-  const oldVersion = Number(currentTs.version || 1);
-  const newVersion = oldVersion + 1;
-  const now2 = nowIso();
+    const oldVersion = Number(currentTs.version || 1);
+    const newVersion = oldVersion + 1;
+    const now2 = nowIso();
 
-  await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(currentTs.timesheet_id)}` +
-      `&version=eq.${enc(oldVersion)}`,
-    {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-      body: JSON.stringify({
-        is_current: false,
-        status: 'REVOKED',
-        revoked_reason: revokeReason || null,
-        revoked_by: user?.id || null,
-        updated_at: now2
-      })
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(currentTs.timesheet_id)}` +
+        `&version=eq.${enc(oldVersion)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify({
+          is_current: false,
+          status: 'REVOKED',
+          revoked_reason: revokeReason || null,
+          revoked_by: user?.id || null,
+          updated_at: now2
+        })
+      }
+    );
+
+    const act = String(qrActionForNew || '').toUpperCase();
+    const newIsQrPending = (act === 'INVALIDATE' || act === 'REISSUE' || act === 'ISSUE');
+    const newIsManualOnly = (act === 'REVOKE_TO_MANUAL' || act === 'DISABLE');
+
+    const newRow = {
+      ...currentTs,
+      version: newVersion,
+      is_current: true,
+
+      status: currentTs.status || 'RECEIVED',
+
+      revoked_reason: null,
+      revoked_by: null,
+
+      // ✅ Recommended: new current should not inherit signed/manual evidence or authorisation after QR invalidate/reissue
+      manual_pdf_r2_key: (newIsQrPending ? null : null),
+      authorised_at_server: (newIsQrPending ? null : null),
+
+      // ✅ QR state:
+      // INVALIDATE/REISSUE/ISSUE => QR enabled but not issued (token/gen cleared, qr_status=PENDING)
+      // REVOKE_TO_MANUAL/DISABLE => manual-only (clear QR state so UI doesn't show QR)
+      qr_token: null,
+      qr_status: newIsQrPending ? 'PENDING' : null,
+      qr_payload_json: {},     // never null
+      qr_generated_at: null,
+      qr_scanned_at: null,
+      qr_scan_info_json: null,
+      qr_r2_key: null,
+
+      // ✅ Hash truth fields (must exist in DB)
+      qr_last_sent_hash: null,
+      qr_last_sent_at_utc: null,
+      qr_signed_hash: null,
+      qr_signed_at_utc: null,
+
+      updated_at: now2,
+      created_at: now2
+    };
+
+    delete newRow.id;
+    delete newRow.timesheet_id;
+
+    const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets`, {
+      method: 'POST',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify([newRow])
+    });
+
+    if (!ins.ok) {
+      const t = await ins.text().catch(() => '');
+      throw new Error(`Failed to rotate daily timesheet version: ${t}`);
     }
-  );
 
-  const act = String(qrActionForNew || '').toUpperCase();
-  const newIsQrPending = (act === 'INVALIDATE' || act === 'REISSUE' || act === 'ISSUE');
-  const newIsManualOnly = (act === 'REVOKE_TO_MANUAL' || act === 'DISABLE');
+    const created = (await ins.json().catch(() => []))[0] || null;
 
-  const newRow = {
-    ...currentTs,
-    version: newVersion,
-    is_current: true,
+    // ✅ NEW: purge superseded versions immediately (best-effort; never blocks caller)
+    // ✅ FIX: do NOT reference bookingId here (it is not in scope); only use values available here.
+    try {
+      const bid = (created?.booking_id || currentTs?.booking_id || null);
+      if (bid) {
+        await purgeSupersededTimesheetArtifactsForBooking(env, bid);
+      }
+    } catch (e) {
+      try {
+        console.warn('[DAILY_MANUAL_UPSERT][ROTATE] purge failed (non-fatal)', {
+          booking_id: (created?.booking_id || currentTs?.booking_id || null),
+          err: e?.message || String(e)
+        });
+      } catch {}
+    }
 
-    status: currentTs.status || 'RECEIVED',
-
-    revoked_reason: null,
-    revoked_by: null,
-
-    // ✅ Recommended: new current should not inherit signed/manual evidence or authorisation after QR invalidate/reissue
-    manual_pdf_r2_key: (newIsQrPending ? null : null),
-    authorised_at_server: (newIsQrPending ? null : null),
-
-    // ✅ QR state:
-    // INVALIDATE/REISSUE/ISSUE => QR enabled but not issued (token/gen cleared, qr_status=PENDING)
-    // REVOKE_TO_MANUAL/DISABLE => manual-only (clear QR state so UI doesn't show QR)
-    qr_token: null,
-    qr_status: newIsQrPending ? 'PENDING' : null,
-    qr_payload_json: {},     // never null
-    qr_generated_at: null,
-    qr_scanned_at: null,
-    qr_scan_info_json: null,
-    qr_r2_key: null,
-
-    // ✅ Hash truth fields (must exist in DB)
-    qr_last_sent_hash: null,
-    qr_last_sent_at_utc: null,
-    qr_signed_hash: null,
-    qr_signed_at_utc: null,
-
-    updated_at: now2,
-    created_at: now2
+    return created || { ...currentTs, version: newVersion, is_current: true };
   };
-
-  delete newRow.id;
-  delete newRow.timesheet_id;
-
-  const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets`, {
-    method: 'POST',
-    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-    body: JSON.stringify([newRow])
-  });
-
-  if (!ins.ok) {
-    const t = await ins.text().catch(() => '');
-    throw new Error(`Failed to rotate daily timesheet version: ${t}`);
-  }
-
-  const created = (await ins.json().catch(() => []))[0] || null;
-  return created || { ...currentTs, version: newVersion, is_current: true };
-};
-
 
   // 3) Load DAILY timesheet (current version) — use currentTimesheetId
   let ts = await sbGetOne(
@@ -9564,47 +9659,46 @@ const rotateTimesheetVersion = async (currentTs, revokeReason, qrActionForNew) =
   // ─────────────────────────────────────────────────────────────
   const tsBefore = { ...ts };
   const finBefore = { ...tsfin };
-const hadQrBefore = !!(
-  ts.qr_status ||
-  ts.qr_token ||
-  ts.qr_generated_at ||
-  ts.qr_scanned_at
-);
 
-// ✅ Decide requested QR action (enum preferred)
-let qrAction = null; // 'INVALIDATE' | 'REVOKE_TO_MANUAL' | 'REISSUE' | 'ISSUE' | 'DISABLE' | null
+  const hadQrBefore = !!(
+    ts.qr_status ||
+    ts.qr_token ||
+    ts.qr_generated_at ||
+    ts.qr_scanned_at
+  );
 
-if (enumOk(qrActionEnumRaw)) {
-  // SAVE_WITHOUT_ISSUE means "no QR side-effects here"
-  qrAction = (qrActionEnumRaw === 'SAVE_WITHOUT_ISSUE') ? null : qrActionEnumRaw;
-} else if (hadQrBefore) {
-  // Legacy fallback (only meaningful if the sheet already had QR activity)
-  if (rawReissueQr) qrAction = 'REISSUE';
-  else if (rawRevokeToManual || rawRevokeQr) qrAction = 'REVOKE_TO_MANUAL';
-  else if (rawDisableQr) qrAction = 'DISABLE';
-  else if (rawIssueQr) qrAction = 'ISSUE';
-}
+  // ✅ Decide requested QR action (enum preferred)
+  let qrAction = null; // 'INVALIDATE' | 'REVOKE_TO_MANUAL' | 'REISSUE' | 'ISSUE' | 'DISABLE' | null
 
+  if (enumOk(qrActionEnumRaw)) {
+    // SAVE_WITHOUT_ISSUE means "no QR side-effects here"
+    qrAction = (qrActionEnumRaw === 'SAVE_WITHOUT_ISSUE') ? null : qrActionEnumRaw;
+  } else if (hadQrBefore) {
+    // Legacy fallback (only meaningful if the sheet already had QR activity)
+    if (rawReissueQr) qrAction = 'REISSUE';
+    else if (rawRevokeToManual || rawRevokeQr) qrAction = 'REVOKE_TO_MANUAL';
+    else if (rawDisableQr) qrAction = 'DISABLE';
+    else if (rawIssueQr) qrAction = 'ISSUE';
+  }
 
   const preRotateVersion = Number(ts.version || 1);
   let rotated = false;
   let rotateReason = null;
 
- // Rotate for invalidate/revoke/disable/reissue so restore is possible and old evidence remains in history.
-if (hadQrBefore && (qrAction === 'INVALIDATE' || qrAction === 'REISSUE' || qrAction === 'REVOKE_TO_MANUAL' || qrAction === 'DISABLE')) {
-  const why =
-    (qrAction === 'INVALIDATE' || qrAction === 'REISSUE') ? 'QR_INVALIDATED_AFTER_CONTENT_CHANGE' :
-    (qrAction === 'REVOKE_TO_MANUAL') ? 'QR_REVOKED_TO_MANUAL' :
-    'QR_DISABLED_TO_MANUAL';
+  // Rotate for invalidate/revoke/disable/reissue so restore is possible and old evidence remains in history.
+  if (hadQrBefore && (qrAction === 'INVALIDATE' || qrAction === 'REISSUE' || qrAction === 'REVOKE_TO_MANUAL' || qrAction === 'DISABLE')) {
+    const why =
+      (qrAction === 'INVALIDATE' || qrAction === 'REISSUE') ? 'QR_INVALIDATED_AFTER_CONTENT_CHANGE' :
+      (qrAction === 'REVOKE_TO_MANUAL') ? 'QR_REVOKED_TO_MANUAL' :
+      'QR_DISABLED_TO_MANUAL';
 
-  rotateReason = why;
-  ts = await rotateTimesheetVersion(ts, why, qrAction);
-  rotated = true;
+    rotateReason = why;
+    ts = await rotateTimesheetVersion(ts, why, qrAction);
+    rotated = true;
 
-  // After rotation we are now operating on the new timesheet_id
-  currentTimesheetId = ts?.timesheet_id || currentTimesheetId;
-}
-
+    // After rotation we are now operating on the new timesheet_id
+    currentTimesheetId = ts?.timesheet_id || currentTimesheetId;
+  }
 
   // 5) Patch worked/break fields (on CURRENT timesheet id)
   const patchBody = { updated_at: now };
@@ -9733,68 +9827,67 @@ if (hadQrBefore && (qrAction === 'INVALIDATE' || qrAction === 'REISSUE' || qrAct
     } catch {}
   }
 
- // 8) QR state change for after-save actions (NEW)
-// - INVALIDATE / REISSUE: clear token/payload/scanned + clear hashes, keep qr_status='PENDING' (QR-enabled, not issued)
-// - REVOKE_TO_MANUAL / DISABLE: clear QR fields and hashes so QR UI does not show
-if (qrAction && finAfter && !finAfter.locked_by_invoice_id && !finAfter.paid_at_utc) {
-  const now2 = nowIso();
+  // 8) QR state change for after-save actions (NEW)
+  // - INVALIDATE / REISSUE: clear token/payload/scanned + clear hashes, keep qr_status='PENDING' (QR-enabled, not issued)
+  // - REVOKE_TO_MANUAL / DISABLE: clear QR fields and hashes so QR UI does not show
+  if (qrAction && finAfter && !finAfter.locked_by_invoice_id && !finAfter.paid_at_utc) {
+    const now2 = nowIso();
 
-  const act = String(qrAction || '').toUpperCase();
-  const qrEnablePending = (act === 'INVALIDATE' || act === 'REISSUE' || act === 'ISSUE');
-  const qrClearAll = (act === 'REVOKE_TO_MANUAL' || act === 'DISABLE');
+    const act = String(qrAction || '').toUpperCase();
+    const qrEnablePending = (act === 'INVALIDATE' || act === 'REISSUE' || act === 'ISSUE');
+    const qrClearAll = (act === 'REVOKE_TO_MANUAL' || act === 'DISABLE');
 
-  const tsPatch = {
-    updated_at: now2,
+    const tsPatch = {
+      updated_at: now2,
 
-    qr_token: null,
-    qr_generated_at: null,
-    qr_scanned_at: null,
-    qr_scan_info_json: null,
-    qr_r2_key: null,
-    qr_payload_json: {},
+      qr_token: null,
+      qr_generated_at: null,
+      qr_scanned_at: null,
+      qr_scan_info_json: null,
+      qr_r2_key: null,
+      qr_payload_json: {},
 
-    qr_last_sent_hash: null,
-    qr_last_sent_at_utc: null,
-    qr_signed_hash: null,
-    qr_signed_at_utc: null,
+      qr_last_sent_hash: null,
+      qr_last_sent_at_utc: null,
+      qr_signed_hash: null,
+      qr_signed_at_utc: null,
 
-    manual_pdf_r2_key: null,
-    authorised_at_server: null
-  };
+      manual_pdf_r2_key: null,
+      authorised_at_server: null
+    };
 
-  if (qrEnablePending) {
-    tsPatch.qr_status = 'PENDING';
-  } else if (qrClearAll) {
-    tsPatch.qr_status = null;
-  }
-
-  await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-      `&is_current=eq.true`,
-    {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-      body: JSON.stringify(tsPatch)
+    if (qrEnablePending) {
+      tsPatch.qr_status = 'PENDING';
+    } else if (qrClearAll) {
+      tsPatch.qr_status = null;
     }
-  ).catch(() => {});
 
-  const desired = 'AWAITING_MANUAL_SIGNATURE';
-  if (String(finAfter.processing_status || '').toUpperCase() !== desired) {
     await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(finAfter.id)}`,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&is_current=eq.true`,
       {
         method: 'PATCH',
         headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify({ processing_status: desired, updated_at: now2 })
+        body: JSON.stringify(tsPatch)
       }
     ).catch(() => {});
+
+    const desired = 'AWAITING_MANUAL_SIGNATURE';
+    if (String(finAfter.processing_status || '').toUpperCase() !== desired) {
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(finAfter.id)}`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+          body: JSON.stringify({ processing_status: desired, updated_at: now2 })
+        }
+      ).catch(() => {});
+    }
   }
-}
 
-// NOTE: We do NOT issue/send a QR from daily-manual-upsert anymore.
-// Sending happens via /api/timesheets/:id/qr-resend after save when the FE chooses “Send new now”.
-
+  // NOTE: We do NOT issue/send a QR from daily-manual-upsert anymore.
+  // Sending happens via /api/timesheets/:id/qr-resend after save when the FE chooses “Send new now”.
 
   // ─────────────────────────────────────────────────────────────
   // MINIMAL TIMESHEET AUDIT: QR events (only meaningful ones)
@@ -9834,37 +9927,10 @@ if (qrAction && finAfter && !finAfter.locked_by_invoice_id && !finAfter.paid_at_
       );
     }
 
-    if (qrIssued && qrToken) {
-      await writeAudit(
-        env,
-        user,
-        'TIMESHEET_QR_ISSUED',
-        {
-          timesheet_id: currentTimesheetId,
-          sheet_scope: 'DAILY',
-          qr_token: qrToken,
-          qr_r2_key: qr_r2_key || null,
-          pdf_r2_key: pdfKey || null
-        },
-        { entity: 'timesheets', subject_id: currentTimesheetId, req }
-      );
-    }
+    // ✅ FIX: Remove issuance/reissue audit blocks — daily-manual-upsert does not issue QR now.
+    // if (qrIssued && qrToken) { ... }
+    // if (qrReissued && qrToken) { ... }
 
-    if (qrReissued && qrToken) {
-      await writeAudit(
-        env,
-        user,
-        'TIMESHEET_QR_REISSUED',
-        {
-          timesheet_id: currentTimesheetId,
-          sheet_scope: 'DAILY',
-          qr_token: qrToken,
-          qr_r2_key: qr_r2_key || null,
-          pdf_r2_key: pdfKey || null
-        },
-        { entity: 'timesheets', subject_id: currentTimesheetId, req }
-      );
-    }
   } catch {}
 
   // ─────────────────────────────────────────────────────────────
@@ -10519,6 +10585,7 @@ async function handleTimesheetsEligibilityWeekly(env, req) {
 
 
 // GET /api/timesheets/:id/evidence
+// GET /api/timesheets/:id/evidence
 async function handleTimesheetEvidenceList(env, req, tsId) {
   const enc = encodeURIComponent;
 
@@ -10544,24 +10611,81 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
 
   try {
     // ─────────────────────────────────────────────────────────────
-    // 0) Load timesheet row (needed for QR system evidence + hashes)
+    // 0) Load timesheet row (QR evidence + electronic signature evidence)
+    //    NOTE: extended select to include booking_id + signature fields + qr_last_sent_at_utc
     // ─────────────────────────────────────────────────────────────
     const ts = await sbGetOne(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
         `?timesheet_id=eq.${enc(currentTsId)}` +
         `&is_current=eq.true` +
-        `&select=timesheet_id,sheet_scope,week_ending_date,worked_start_iso,worked_end_iso,break_start_iso,break_end_iso,break_minutes,reference_number,day_references_json,actual_schedule_json,manual_pdf_r2_key,qr_status,qr_token,qr_generated_at,qr_scanned_at,qr_last_sent_hash,qr_signed_hash,additional_units_week,additional_units_per_day` +
+        `&select=` +
+          [
+            'timesheet_id',
+            'booking_id',
+            'version',
+            'sheet_scope',
+            'week_ending_date',
+
+            // DAILY shift fields
+            'worked_start_iso',
+            'worked_end_iso',
+            'break_start_iso',
+            'break_end_iso',
+            'break_minutes',
+
+            // WEEKLY fields used for hashing + summary
+            'reference_number',
+            'day_references_json',
+            'actual_schedule_json',
+
+            // PDF pointer (manual + QR)
+            'manual_pdf_r2_key',
+
+            // QR state
+            'qr_status',
+            'qr_token',
+            'qr_generated_at',
+            'qr_scanned_at',
+            'qr_last_sent_hash',
+            'qr_last_sent_at_utc',
+            'qr_signed_hash',
+
+            // additional units (hashing)
+            'additional_units_week',
+            'additional_units_per_day',
+
+            // electronic signatures (no new storage)
+            'r2_nurse_key',
+            'r2_auth_key',
+            'auth_name',
+            'auth_job_title',
+            'authorised_at_server'
+          ].join(',') +
         `&limit=1`
     );
 
-    const scope = String(ts?.sheet_scope || '').toUpperCase();
+    const scope    = String(ts?.sheet_scope || '').toUpperCase();
     const qrStatus = String(ts?.qr_status || '').toUpperCase();
+
     const hasToken = !!(ts?.qr_token && String(ts.qr_token).trim());
     const hasGen   = !!ts?.qr_generated_at;
     const hasScan  = !!ts?.qr_scanned_at;
 
-    // Stable hashing helper (must match send/resend/scan)
+    const lastSentHash = (ts?.qr_last_sent_hash != null) ? String(ts.qr_last_sent_hash) : '';
+    const signedHash   = (ts?.qr_signed_hash != null) ? String(ts.qr_signed_hash) : '';
+
+    // ✅ IMPORTANT: match frontend “issued proof” logic:
+    // issued proof is (token+generated_at) OR qr_last_sent_hash
+    const hasIssuedProof = ((hasToken && hasGen) || !!(lastSentHash && String(lastSentHash).trim()));
+
+    // Awaiting signature upload = pending + issued proof + not scanned
+    const awaitingSignatureUpload = (qrStatus === 'PENDING') && hasIssuedProof && !hasScan;
+
+    // Signed received = used + scanned timestamp
+    const signedReceived = (qrStatus === 'USED') && hasScan;
+
+    // Stable hashing helper (used only to compute "matches_current" flags; we DO NOT hide evidence on mismatch)
     const stableClone = (v) => {
       if (Array.isArray(v)) return v.map(stableClone);
       if (v && typeof v === 'object') {
@@ -10606,7 +10730,7 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
     try {
       current_hash = ts ? await computeCurrentHash() : null;
     } catch (e) {
-      // Non-fatal: if hashing fails, we simply won’t show QR “current” evidence
+      // Non-fatal: if hashing fails, we just omit match flags
       current_hash = null;
       console.warn('[handleTimesheetEvidenceList] current hash compute failed (non-fatal)', {
         timesheet_id: currentTsId,
@@ -10614,20 +10738,29 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
       });
     }
 
-    const lastSentHash = (ts?.qr_last_sent_hash != null) ? String(ts.qr_last_sent_hash) : '';
-    const signedHash   = (ts?.qr_signed_hash != null) ? String(ts.qr_signed_hash) : '';
-
     const issuedStillMatches =
       !!current_hash && !!lastSentHash && (String(current_hash) === String(lastSentHash));
 
     const signedStillMatches =
       !!current_hash && !!signedHash && (String(current_hash) === String(signedHash));
 
-    const awaitingSignatureUpload =
-      (qrStatus === 'PENDING') && hasToken && hasGen && !hasScan;
-
-    const signedReceived =
-      (qrStatus === 'USED') && hasScan;
+    // ─────────────────────────────────────────────────────────────
+    // 0b) Load TSFIN lock state (so we can set can_delete correctly)
+    // ─────────────────────────────────────────────────────────────
+    let isLockedOrPaid = false;
+    try {
+      const fin = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=eq.${enc(currentTsId)}` +
+          `&is_current=eq.true` +
+          `&select=locked_by_invoice_id,paid_at_utc` +
+          `&limit=1`
+      );
+      isLockedOrPaid = !!(fin && (fin.locked_by_invoice_id || fin.paid_at_utc));
+    } catch {
+      isLockedOrPaid = false;
+    }
 
     // ─────────────────────────────────────────────────────────────
     // 1) User evidence rows (timesheet_evidence)
@@ -10644,7 +10777,10 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
       const out = { ...(ev || {}) };
       out.timesheet_id = currentTsId;
       out.system = false;
-      out.can_delete = true;
+
+      // ✅ Lock/paid means no delete from UI
+      out.can_delete = !isLockedOrPaid;
+
       if (!out.uploaded_at_utc && out.created_at) out.uploaded_at_utc = out.created_at;
       return out;
     });
@@ -10692,52 +10828,123 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
     });
 
     // ─────────────────────────────────────────────────────────────
-    // 2) System evidence rows (NHSP / HealthRoster + QR)
+    // 2) System evidence rows (QR + Imports + Electronic signatures)
     // ─────────────────────────────────────────────────────────────
     const systemEvidence = [];
 
     // 2A) QR system evidence
-    // "Issued" appears only when awaiting signature upload AND the issued content still matches
-    if (awaitingSignatureUpload && issuedStillMatches) {
-      // Prefer the generated PDF key pattern; fallback to manual_pdf_r2_key if that’s what you store.
-      const docsPdfKey = `docs-pdf/timesheets/ts_${currentTsId}.pdf`;
+    // ✅ Must return only one QR item:
+    // - Signed (if signedReceived + pdf key exists)
+    // - else Unsigned (if awaitingSignatureUpload)
+    //
+    // NOTE: we do NOT hide evidence based on hash mismatch; instead we include match flags in meta_json.
+    const docsPdfKey = `docs-pdf/timesheets/ts_${currentTsId}.pdf`;
+
+    if (signedReceived) {
       const storageKey = (ts?.manual_pdf_r2_key && String(ts.manual_pdf_r2_key).trim())
         ? String(ts.manual_pdf_r2_key).trim()
         : docsPdfKey;
 
+      // Only show signed if we have some key to view/download
+      if (storageKey) {
+        systemEvidence.push({
+          id: `SYS:QR:SIGNED:${currentTsId}`,
+          timesheet_id: currentTsId,
+          kind: 'QR',
+          display_name: 'QR Timesheet (Signed)',
+          storage_key: storageKey,
+          created_at: ts?.qr_scanned_at || null,
+          uploaded_at_utc: ts?.qr_scanned_at || null,
+          system: true,
+          can_delete: false,
+          preview_mode: 'PDF',
+          is_primary: true,
+          meta_json: {
+            qr_status: qrStatus || null,
+            matches_current: (signedStillMatches || null)
+          }
+        });
+      }
+    } else if (awaitingSignatureUpload) {
+      const storageKey = (ts?.manual_pdf_r2_key && String(ts.manual_pdf_r2_key).trim())
+        ? String(ts.manual_pdf_r2_key).trim()
+        : docsPdfKey;
+
+      // Prefer a meaningful timestamp:
+      const issuedAt = ts?.qr_last_sent_at_utc || ts?.qr_generated_at || null;
+
       systemEvidence.push({
-        id: `SYS:QR:ISSUED:${currentTsId}`,
+        id: `SYS:QR:UNSIGNED:${currentTsId}`,
         timesheet_id: currentTsId,
         kind: 'QR',
-        display_name: 'QR Timesheet (Issued)',
+        display_name: 'QR Timesheet (Unsigned)',
         storage_key: storageKey,
-        created_at: ts?.qr_generated_at || null,
-        uploaded_at_utc: ts?.qr_generated_at || null,
+        created_at: issuedAt,
+        uploaded_at_utc: issuedAt,
         system: true,
         can_delete: false,
         preview_mode: 'PDF',
-        is_primary: false
+        is_primary: false,
+        meta_json: {
+          qr_status: qrStatus || null,
+          matches_current: (issuedStillMatches || null)
+        }
       });
     }
 
-    // "Signed" appears only when signed exists AND the signed content still matches
-    if (signedReceived && (ts?.manual_pdf_r2_key && String(ts.manual_pdf_r2_key).trim()) && signedStillMatches) {
+    // 2B) Electronic signatures system evidence (no new storage)
+    // Condition: any signature artefact exists or authorised timestamp exists
+    const hasSig =
+      !!(ts && (
+        (ts.authorised_at_server) ||
+        (ts.r2_nurse_key && String(ts.r2_nurse_key).trim()) ||
+        (ts.r2_auth_key  && String(ts.r2_auth_key).trim())
+      ));
+
+    if (hasSig) {
+      const sigAt = ts?.authorised_at_server || null;
+
       systemEvidence.push({
-        id: `SYS:QR:SIGNED:${currentTsId}`,
+        id: `SYS:ELECTRONIC_SIGNATURES:${currentTsId}`,
         timesheet_id: currentTsId,
-        kind: 'QR',
-        display_name: 'QR Timesheet (Signed)',
-        storage_key: String(ts.manual_pdf_r2_key).trim(),
-        created_at: ts?.qr_scanned_at || null,
-        uploaded_at_utc: ts?.qr_scanned_at || null,
+        kind: 'ELECTRONIC_SIGNATURES',
+        display_name: 'Electronic submission evidence',
+        storage_key: null, // signatures are fetched via /signatures/presign-get/batch
+        created_at: sigAt,
+        uploaded_at_utc: sigAt,
         system: true,
         can_delete: false,
-        preview_mode: 'PDF',
-        is_primary: true
+        preview_mode: 'SIGNATURES',
+        is_primary: true,
+        meta_json: {
+          booking_id: ts?.booking_id || null,
+          version: (ts?.version != null ? Number(ts.version) : null),
+
+          authorised_at_server: ts?.authorised_at_server || null,
+          auth_name: ts?.auth_name || null,
+          auth_job_title: ts?.auth_job_title || null,
+
+          r2_nurse_key: (ts?.r2_nurse_key && String(ts.r2_nurse_key).trim()) ? String(ts.r2_nurse_key).trim() : null,
+          r2_auth_key:  (ts?.r2_auth_key  && String(ts.r2_auth_key).trim())  ? String(ts.r2_auth_key).trim()  : null,
+
+          sheet_scope: ts?.sheet_scope || null,
+          week_ending_date: ts?.week_ending_date || null,
+          reference_number: ts?.reference_number || null,
+
+          // Shift detail fields (DAILY)
+          worked_start_iso: ts?.worked_start_iso || null,
+          worked_end_iso: ts?.worked_end_iso || null,
+          break_start_iso: ts?.break_start_iso || null,
+          break_end_iso: ts?.break_end_iso || null,
+          break_minutes: (ts?.break_minutes != null ? ts.break_minutes : null),
+
+          // Schedule for WEEKLY (already loaded above)
+          actual_schedule_json: (ts?.actual_schedule_json != null ? ts.actual_schedule_json : null)
+        }
       });
     }
 
-    // 2B) NHSP / HealthRoster imports (table preview + full download key)
+    // 2C) NHSP / HealthRoster imports (unchanged logic; already working)
     const importIds = new Set();
 
     try {
@@ -10816,6 +11023,7 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
 
     const all = [...userEvidence, ...systemEvidence];
 
+    // Keep existing ordering: oldest -> newest
     const toTs = (x) => {
       const s = x && (x.uploaded_at_utc || x.created_at);
       if (!s) return 0;
@@ -10841,6 +11049,9 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
 }
 
 
+
+
+// POST /api/timesheets/:id/evidence
 // POST /api/timesheets/:id/evidence
 async function handleTimesheetEvidenceAdd(env, req, tsId) {
   const enc = encodeURIComponent;
@@ -10889,6 +11100,25 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
   if (!storageKey) return withCORS(env, req, badRequest('storage_key is required'));
 
   try {
+    // ✅ NEW: Block evidence add if invoiced/paid (match QR scan rule)
+    try {
+      const fin = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=eq.${enc(currentTsId)}` +
+          `&is_current=eq.true` +
+          `&select=locked_by_invoice_id,paid_at_utc` +
+          `&limit=1`
+      );
+      if (fin && (fin.locked_by_invoice_id || fin.paid_at_utc)) {
+        return withCORS(env, req, badRequest('Timesheet already invoiced or paid; cannot add evidence'));
+      }
+    } catch (e) {
+      // If TSFIN lookup fails, we do not silently allow mutation.
+      // Safer to stop than risk adding evidence post-invoice/paid.
+      return withCORS(env, req, serverError(`Failed to validate timesheet financial lock state: ${e?.message || e}`));
+    }
+
     // Ensure the timesheet exists (for audit context)
     const { rows: tsRows } = await sbFetch(
       env,
@@ -10978,12 +11208,11 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
 }
 
 
-
 // DELETE /api/timesheets/:id/evidence/:evidence_id
 
 
 
-
+// DELETE /api/timesheets/:id/evidence/:evidence_id
 async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
   const enc = encodeURIComponent;
 
@@ -11016,7 +11245,36 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
     );
   }
 
+  // Local R2 delete helper (so deletion actually cleans up storage even if global r2Delete is absent)
+  const r2DeleteLocal = async (key) => {
+    const bucket = env.R2_BUCKET || env.R2;
+    if (!bucket || typeof bucket.delete !== 'function') {
+      throw new Error('Storage not configured (expected env.R2 or env.R2_BUCKET with delete())');
+    }
+    const k = String(key || '').replace(/^\/+/, '').trim();
+    if (!k) return false;
+    await bucket.delete(k);
+    return true;
+  };
+
   try {
+    // ✅ NEW: Block evidence delete if invoiced/paid (match QR scan rule)
+    try {
+      const fin = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=eq.${enc(currentTsId)}` +
+          `&is_current=eq.true` +
+          `&select=locked_by_invoice_id,paid_at_utc` +
+          `&limit=1`
+      );
+      if (fin && (fin.locked_by_invoice_id || fin.paid_at_utc)) {
+        return withCORS(env, req, badRequest('Timesheet already invoiced or paid; cannot delete evidence'));
+      }
+    } catch (e) {
+      return withCORS(env, req, serverError(`Failed to validate timesheet financial lock state: ${e?.message || e}`));
+    }
+
     // Ensure evidence row exists and belongs to this timesheet
     const { rows: evRows } = await sbFetch(
       env,
@@ -11046,13 +11304,13 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
     const storageKeyRaw = ev.storage_key || null;
     const storageKeyForR2 = storageKeyRaw ? String(storageKeyRaw).trim().replace(/^\/+/, '') : null;
 
-    // Best-effort delete from R2
+    // Best-effort delete from R2 (now actually runs)
     try {
-      if (storageKeyForR2 && typeof r2Delete === 'function') {
-        await r2Delete(env, storageKeyForR2);
+      if (storageKeyForR2) {
+        await r2DeleteLocal(storageKeyForR2);
       }
     } catch (e) {
-      console.warn('[handleTimesheetEvidenceDelete] r2Delete failed (non-fatal)', {
+      console.warn('[handleTimesheetEvidenceDelete] R2 delete failed (non-fatal)', {
         storage_key: storageKeyForR2,
         err: e?.message || String(e)
       });
@@ -11100,7 +11358,6 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
     return withCORS(env, req, serverError(`Failed to delete timesheet evidence: ${e?.message || e}`));
   }
 }
-
 async function handleTimesheetReplaceManualPdf(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -11131,13 +11388,95 @@ async function handleTimesheetReplaceManualPdf(env, req, timesheetId) {
     );
   }
 
+  const normalize = (k) => normalizeKey(String(k || '')); // uses your existing helper
+  const cleanKey = (k) => String(k || '').replace(/^\/+/, '').trim();
+
   const newKeyRaw = body?.manual_pdf_r2_key ?? null;
-  const newKey = newKeyRaw ? normalizeKey(String(newKeyRaw)) : null;
+  const newKey = newKeyRaw ? normalize(String(newKeyRaw)) : null;
+
+  // ✅ Lock/paid enforcement (same rule as evidence add/delete + QR scan)
+  try {
+    const fin = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&is_current=eq.true` +
+        `&select=locked_by_invoice_id,paid_at_utc` +
+        `&limit=1`
+    );
+    if (fin && (fin.locked_by_invoice_id || fin.paid_at_utc)) {
+      return withCORS(env, req, badRequest('Timesheet already invoiced or paid; cannot replace manual PDF'));
+    }
+  } catch (e) {
+    return withCORS(env, req, serverError(`Failed to validate timesheet lock state: ${e?.message || e}`));
+  }
+
+  // Load current timesheet row to know the old pointer (so we can delete it)
+  const tsBefore = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=timesheet_id,manual_pdf_r2_key` +
+      `&limit=1`
+  );
+  if (!tsBefore) return withCORS(env, req, notFound('Timesheet not found'));
+
+  const oldKey = tsBefore?.manual_pdf_r2_key ? normalize(tsBefore.manual_pdf_r2_key) : null;
+
+  // Canonical deterministic key for this timesheet version
+  const canonicalPdfKey = cleanKey(`docs-pdf/timesheets/ts_${currentTimesheetId}.pdf`);
 
   // If a key is provided, sanity check it exists in R2
   if (newKey) {
     const exists = await r2Exists(env, newKey).catch(() => false);
     if (!exists) return withCORS(env, req, badRequest('manual_pdf_r2_key does not exist in R2'));
+  }
+
+  // R2 helpers (inline so this function is paste-ready)
+  const bucket = env.R2_BUCKET || env.R2;
+  const canGetPut = !!(bucket && typeof bucket.get === 'function' && typeof bucket.put === 'function');
+  const canDelete = !!(bucket && typeof bucket.delete === 'function');
+
+  const r2CopyOverwriteLocal = async (fromKey, toKey) => {
+    if (!canGetPut) throw new Error('Storage not configured for copy (need env.R2 or env.R2_BUCKET with get/put)');
+    const src = cleanKey(fromKey);
+    const dst = cleanKey(toKey);
+    const obj = await bucket.get(src);
+    if (!obj) throw new Error(`Source not found in R2: ${src}`);
+    const putOpts = {};
+    if (obj.httpMetadata) putOpts.httpMetadata = obj.httpMetadata;
+    if (obj.customMetadata) putOpts.customMetadata = obj.customMetadata;
+    await bucket.put(dst, obj.body, putOpts);
+    return true;
+  };
+
+  const r2DeleteBestEffort = async (k) => {
+    if (!canDelete) return false;
+    const kk = cleanKey(k);
+    if (!kk) return false;
+    try { await bucket.delete(kk); return true; } catch { return false; }
+  };
+
+  // Compute target key we will store on the timesheet:
+  // - If setting a new manual PDF: copy it into canonical key and point manual_pdf_r2_key to canonical.
+  // - If clearing: set manual_pdf_r2_key null.
+  let targetKey = null;
+
+  try {
+    if (newKey) {
+      // Copy uploaded scan to canonical key (overwrite canonical)
+      await r2CopyOverwriteLocal(newKey, canonicalPdfKey);
+
+      // Delete the uploaded scan key after copy (best-effort)
+      await r2DeleteBestEffort(newKey);
+
+      targetKey = canonicalPdfKey;
+    } else {
+      targetKey = null;
+    }
+  } catch (e) {
+    return withCORS(env, req, serverError(`Failed to store manual PDF: ${e?.message || e}`));
   }
 
   // Patch the CURRENT timesheet row's manual_pdf_r2_key
@@ -11147,7 +11486,7 @@ async function handleTimesheetReplaceManualPdf(env, req, timesheetId) {
       method: 'PATCH',
       headers: { ...sbHeaders(env), Prefer: 'return=representation' },
       body: JSON.stringify({
-        manual_pdf_r2_key: newKey,
+        manual_pdf_r2_key: targetKey,
         updated_at: new Date().toISOString()
       })
     }
@@ -11158,14 +11497,68 @@ async function handleTimesheetReplaceManualPdf(env, req, timesheetId) {
   const tsJson = await tsRes.json().catch(() => []);
   const row = (Array.isArray(tsJson) ? tsJson[0] : tsJson) || null;
 
-  // Insert timesheet_evidence row when a new manual PDF is set
-  if (newKey) {
+  // ✅ Purge previous MANUAL_PDF evidence rows for this timesheet version
+  // and delete their storage keys (but NEVER delete the canonical system PDF key).
+  try {
+    const { rows: evRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&kind=eq.MANUAL_PDF` +
+        `&select=id,storage_key` +
+        `&limit=10000`
+    );
+
+    const existing = Array.isArray(evRows) ? evRows : [];
+    for (const ev of existing) {
+      const k = ev?.storage_key ? normalize(ev.storage_key) : null;
+      if (!k) continue;
+
+      // never delete canonical system key
+      if (cleanKey(k) === canonicalPdfKey) continue;
+
+      // never delete the new target key (if we somehow stored it directly)
+      if (targetKey && cleanKey(k) === cleanKey(targetKey)) continue;
+
+      await r2DeleteBestEffort(k);
+    }
+
+    // Delete the evidence rows
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?timesheet_id=eq.${enc(currentTimesheetId)}&kind=eq.MANUAL_PDF`,
+      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return-minimal' } }
+    ).catch(() => {});
+  } catch (e) {
+    // Non-fatal: evidence cleanup shouldn’t block the replace action
+    console.warn('[handleTimesheetReplaceManualPdf] evidence cleanup failed (non-fatal)', {
+      timesheet_id: currentTimesheetId,
+      err: e?.message || String(e)
+    });
+  }
+
+  // ✅ Delete the old manual_pdf_r2_key object if it was a non-canonical blob
+  // (canonical should never be deleted here).
+  try {
+    if (oldKey) {
+      const oldClean = cleanKey(oldKey);
+      if (oldClean && oldClean !== canonicalPdfKey) {
+        // If we set a new targetKey, old is superseded
+        // If we cleared, old is also superseded
+        await r2DeleteBestEffort(oldClean);
+      }
+    }
+  } catch {
+    // non-fatal
+  }
+
+  // Insert a single MANUAL_PDF evidence row when a new manual PDF is set
+  if (targetKey) {
     try {
       const payload = [{
         timesheet_id: currentTimesheetId,
         kind: 'MANUAL_PDF',
         display_name: 'Scanned timesheet',
-        storage_key: newKey,
+        storage_key: cleanKey(targetKey),
         created_by: user.id || null
       }];
 
@@ -11193,7 +11586,7 @@ async function handleTimesheetReplaceManualPdf(env, req, timesheetId) {
       env,
       user,
       'TIMESHEET_MANUAL_PDF_REPLACED',
-      { manual_pdf_r2_key: newKey },
+      { manual_pdf_r2_key: targetKey },
       { entity: 'timesheets', subject_id: currentTimesheetId, req }
     );
   } catch {}
@@ -12978,7 +13371,206 @@ async function handleTimesheetsSubmitWeekly(env, req) {
     email_queued: wantsQR ? !!emailQueued : null
   }));
 }
+// ─────────────────────────────────────────────────────────────
+// NEW HELPER: purge superseded (non-current) timesheet artifacts
+// for a booking_id, while keeping restore candidates.
+// Keeps:
+//   - current version
+//   - most recent non-current version (undo safety)
+//   - most recent REVOKED+pending (qr_scanned_at is null) (restore PENDING)
+//   - most recent REVOKED+signed  (qr_scanned_at is not null) (restore SIGNED)
+//   - most recent non-current with authorised_at_server (electronic restore safety)
+// Purges all other non-current versions’ PDFs + evidence blobs.
+// ─────────────────────────────────────────────────────────────
+async function purgeSupersededTimesheetArtifactsForBooking(env, bookingId) {
+  const enc = encodeURIComponent;
+  const cleanKey = (k) => String(k || '').replace(/^\/+/, '').trim();
+  const bucket = env.R2_BUCKET || env.R2;
 
+  if (!bookingId || !String(bookingId).trim()) {
+    return { ok: false, reason: 'booking_id missing' };
+  }
+
+  // If bucket isn't configured, we can still clean DB evidence rows/keys,
+  // but we cannot actually reclaim R2 space.
+  const canR2 = !!(bucket && typeof bucket.delete === 'function');
+
+  // 1) Load all versions for this booking_id
+  const { rows: tsRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?booking_id=eq.${enc(String(bookingId))}` +
+      `&select=timesheet_id,is_current,version,status,qr_scanned_at,manual_pdf_r2_key,qr_r2_key,authorised_at_server,submission_mode` +
+      `&order=version.desc` +
+      `&limit=2000`
+  );
+
+  const rows = Array.isArray(tsRows) ? tsRows : [];
+  if (rows.length <= 1) {
+    return { ok: true, booking_id: String(bookingId), purged_timesheet_ids: [], deleted_keys: 0, deleted_evidence_rows: 0 };
+  }
+
+  // 2) Identify keep set
+  const keep = new Set();
+
+  let currentId = null;
+  let keepMostRecentNonCurrent = null;
+  let keepPendingRevoked = null;
+  let keepSignedRevoked = null;
+  let keepElectronicNonCurrent = null;
+
+  for (const r of rows) {
+    const id = r?.timesheet_id ? String(r.timesheet_id) : '';
+    if (!id) continue;
+
+    if (r?.is_current === true && !currentId) {
+      currentId = id;
+      keep.add(id);
+      continue;
+    }
+
+    if (r?.is_current === false) {
+      // most recent non-current safety net (highest version)
+      if (!keepMostRecentNonCurrent) {
+        keepMostRecentNonCurrent = id;
+        keep.add(id);
+      }
+
+      const status = String(r?.status || '').toUpperCase();
+      const hasScan = !!r?.qr_scanned_at;
+
+      // matches your SQL restore selectors: status='REVOKED' + scan null vs not null
+      if (status === 'REVOKED') {
+        if (!hasScan && !keepPendingRevoked) {
+          keepPendingRevoked = id;
+          keep.add(id);
+        }
+        if (hasScan && !keepSignedRevoked) {
+          keepSignedRevoked = id;
+          keep.add(id);
+        }
+      }
+
+      // electronic restore safety: authorised_at_server exists on a non-current version
+      if (!keepElectronicNonCurrent && r?.authorised_at_server) {
+        keepElectronicNonCurrent = id;
+        keep.add(id);
+      }
+    }
+  }
+
+  // If somehow no current id was found, do not purge (avoid accidental wipe)
+  if (!currentId) {
+    return { ok: false, booking_id: String(bookingId), reason: 'no current timesheet found for booking_id' };
+  }
+
+  // 3) Determine purge candidates (all other non-current)
+  const purgeRows = rows
+    .filter(r => r?.is_current === false)
+    .filter(r => {
+      const id = r?.timesheet_id ? String(r.timesheet_id) : '';
+      return id && !keep.has(id);
+    });
+
+  if (!purgeRows.length) {
+    return { ok: true, booking_id: String(bookingId), purged_timesheet_ids: [], deleted_keys: 0, deleted_evidence_rows: 0 };
+  }
+
+  const purgeIds = purgeRows.map(r => String(r.timesheet_id));
+  const purgeIdsParam = purgeIds.map(enc).join(',');
+
+  // 4) Gather R2 keys to delete (dedupe)
+  const keysToDelete = new Set();
+
+  for (const r of purgeRows) {
+    const tid = String(r.timesheet_id);
+    const canonical = cleanKey(`docs-pdf/timesheets/ts_${tid}.pdf`);
+    if (canonical) keysToDelete.add(canonical);
+
+    const manualKey = r?.manual_pdf_r2_key ? cleanKey(r.manual_pdf_r2_key) : '';
+    if (manualKey && manualKey !== canonical) keysToDelete.add(manualKey);
+
+    const qrKey = r?.qr_r2_key ? cleanKey(r.qr_r2_key) : '';
+    if (qrKey && qrKey !== canonical && qrKey !== manualKey) keysToDelete.add(qrKey);
+  }
+
+  // 5) Load and delete timesheet_evidence rows for purged versions, and delete their storage keys
+  let evidenceRows = [];
+  try {
+    const { rows: evRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
+        `?timesheet_id=in.(${purgeIdsParam})` +
+        `&select=id,timesheet_id,storage_key` +
+        `&limit=10000`
+    );
+    evidenceRows = Array.isArray(evRows) ? evRows : [];
+  } catch {
+    evidenceRows = [];
+  }
+
+  for (const ev of evidenceRows) {
+    const k = ev?.storage_key ? cleanKey(ev.storage_key) : '';
+    if (k) keysToDelete.add(k);
+  }
+
+  // 6) Best-effort delete R2 keys
+  let deletedKeys = 0;
+  let failedKeys = 0;
+
+  if (canR2) {
+    for (const k of keysToDelete) {
+      try {
+        await bucket.delete(k);
+        deletedKeys++;
+      } catch (e) {
+        failedKeys++;
+        try {
+          console.warn('[PURGE] R2 delete failed (non-fatal)', { booking_id: String(bookingId), key: k, err: e?.message || String(e) });
+        } catch {}
+      }
+    }
+  }
+
+  // 7) Delete evidence DB rows (so they don’t show up anywhere)
+  // (Even if R2 delete failed, removing DB rows avoids UI dangling pointers.)
+  let deletedEvidenceRows = 0;
+  try {
+    const delEvRes = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?timesheet_id=in.(${purgeIdsParam})`,
+      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return-minimal' } }
+    );
+    if (delEvRes.ok) deletedEvidenceRows = evidenceRows.length;
+  } catch {}
+
+  // 8) Null out blob pointers on those old timesheets (safety)
+  try {
+    const now = nowIso();
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=in.(${purgeIdsParam})&is_current=eq.false`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify({
+          manual_pdf_r2_key: null,
+          qr_r2_key: null,
+          updated_at: now
+        })
+      }
+    ).catch(() => {});
+  } catch {}
+
+  return {
+    ok: true,
+    booking_id: String(bookingId),
+    kept_timesheet_ids: Array.from(keep),
+    purged_timesheet_ids: purgeIds,
+    deleted_keys: deletedKeys,
+    failed_keys: failedKeys,
+    deleted_evidence_rows: deletedEvidenceRows,
+    r2_configured: canR2
+  };
+}
 
 async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
   const enc = encodeURIComponent;
@@ -13225,6 +13817,18 @@ async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
     );
   } catch {}
 
+  // ✅ NEW: Purge superseded versions immediately (best-effort; never blocks conversion)
+  try {
+    await purgeSupersededTimesheetArtifactsForBooking(env, bookingId);
+  } catch (e) {
+    try {
+      console.warn('[QR_CONVERT_TO_MANUAL] purge failed (non-fatal)', {
+        booking_id: bookingId,
+        err: e?.message || String(e)
+      });
+    } catch {}
+  }
+
   return withCORS(env, req, ok({
     converted: true,
     booking_id: bookingId,
@@ -13262,8 +13866,6 @@ async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
 
   return withCORS(env, req, ok({ key, upload_url, token, expires_in: 3600 }));
 }
-
-
 async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -13549,6 +14151,18 @@ async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
     );
   } catch {}
 
+  // ✅ NEW: Purge superseded versions immediately (best-effort; never blocks allow-electronic)
+  try {
+    await purgeSupersededTimesheetArtifactsForBooking(env, bookingId);
+  } catch (e) {
+    try {
+      console.warn('[ALLOW_ELECTRONIC_AGAIN] purge failed (non-fatal)', {
+        booking_id: bookingId,
+        err: e?.message || String(e)
+      });
+    } catch {}
+  }
+
   return withCORS(env, req, ok({
     ok: true,
     booking_id: bookingId,
@@ -13560,7 +14174,6 @@ async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
     was_stale: !!resolved.was_stale
   }));
 }
-
 
 async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
   const enc = encodeURIComponent;
@@ -13684,7 +14297,7 @@ async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
     is_current: true,
     status: 'RECEIVED',
 
-    // ✅ still manual entry on system, but QR-enabled again (QR-ness is derived from qr_status, not an is_qr column)
+    // ✅ still manual entry on system, but QR-enabled again
     submission_mode: 'MANUAL',
 
     // ✅ clear any evidence/signature pointers on the new current row
@@ -13783,6 +14396,18 @@ async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
       { entity: 'timesheets', subject_id: newTimesheetId, req }
     );
   } catch {}
+
+  // ✅ NEW: Purge superseded versions immediately (best-effort; never blocks allow-QR)
+  try {
+    await purgeSupersededTimesheetArtifactsForBooking(env, bookingId);
+  } catch (e) {
+    try {
+      console.warn('[ALLOW_QR_AGAIN] purge failed (non-fatal)', {
+        booking_id: bookingId,
+        err: e?.message || String(e)
+      });
+    } catch {}
+  }
 
   return withCORS(env, req, ok({
     ok: true,
@@ -14028,6 +14653,18 @@ async function handleTimesheetSwitchToManual(env, req, timesheetId) {
     );
   } catch {}
 
+  // ✅ NEW: Purge superseded versions immediately (best-effort; never blocks switch)
+  try {
+    await purgeSupersededTimesheetArtifactsForBooking(env, bookingId);
+  } catch (e) {
+    try {
+      console.warn('[WEEKLY_SWITCH_TO_MANUAL] purge failed (non-fatal)', {
+        booking_id: bookingId,
+        err: e?.message || String(e)
+      });
+    } catch {}
+  }
+
   return withCORS(env, req, ok({
     switched: true,
     booking_id: bookingId,
@@ -14258,6 +14895,18 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
     console.warn('[TS][DAILY_SWITCH_TO_MANUAL] audit failed', e?.message || e);
   }
 
+  // ✅ NEW: Purge superseded versions immediately (best-effort; never blocks switch)
+  try {
+    await purgeSupersededTimesheetArtifactsForBooking(env, bookingId);
+  } catch (e) {
+    try {
+      console.warn('[DAILY_SWITCH_TO_MANUAL] purge failed (non-fatal)', {
+        booking_id: bookingId,
+        err: e?.message || String(e)
+      });
+    } catch {}
+  }
+
   return withCORS(env, req, ok({
     switched: true,
     booking_id: bookingId,
@@ -14486,6 +15135,18 @@ export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
       { entity: 'timesheets', subject_id: elec.timesheet_id, req }
     );
   } catch {}
+
+  // ✅ NEW: Purge superseded versions immediately (best-effort; never blocks revert)
+  try {
+    await purgeSupersededTimesheetArtifactsForBooking(env, bookingId);
+  } catch (e) {
+    try {
+      console.warn('[REVERT_TO_ELECTRONIC] purge failed (non-fatal)', {
+        booking_id: bookingId,
+        err: e?.message || String(e)
+      });
+    } catch {}
+  }
 
   return withCORS(env, req, ok({
     reverted: true,
@@ -36441,6 +37102,7 @@ async function handleTimesheetResolveClient(env, req, timesheetId) {
 
 async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
   const enc = encodeURIComponent;
+  const cleanKey = (k) => String(k || '').replace(/^\/+/, '').trim();
 
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -36475,6 +37137,8 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
       `&limit=1`
   );
   if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
+
+  const oldQrKey = ts.qr_r2_key ? cleanKey(ts.qr_r2_key) : null;
 
   const scope = String(ts.sheet_scope || '').toUpperCase();
   let subMode = String(ts.submission_mode || '').toUpperCase();
@@ -36600,6 +37264,7 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
     return withCORS(env, req, serverError('Failed to generate QR payload'));
   }
 
+  // Patch QR fields
   try {
     const patchRes = await fetch(
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -36636,6 +37301,17 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
     return withCORS(env, req, serverError('Failed to update timesheet QR fields'));
   }
 
+  // ✅ NEW: delete old QR image key now that we replaced it (best-effort)
+  try {
+    const bucket = env.R2_BUCKET || env.R2;
+    const newQrKeyClean = qr_r2_key ? cleanKey(qr_r2_key) : null;
+    if (bucket && typeof bucket.delete === 'function' && oldQrKey && newQrKeyClean && oldQrKey !== newQrKeyClean) {
+      await bucket.delete(oldQrKey).catch(() => {});
+    }
+  } catch {
+    // non-fatal
+  }
+
   let pdfKey = null;
   try {
     pdfKey = await ensureTimesheetPdf(env, currentTimesheetId);
@@ -36668,7 +37344,7 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // ✅ NEW: compute + persist last-sent hash after PDF is ensured
+  // ✅ compute + persist last-sent hash after PDF is ensured
   // ─────────────────────────────────────────────────────────────
   try {
     const stableClone = (v) => {
@@ -36696,7 +37372,6 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
     const current_hash = await sha256Hex(JSON.stringify(stableClone(hashObj)));
     const sentAt = nowIso();
 
-    // Best-effort: if the migration hasn't run yet, this PATCH will fail (non-fatal)
     await fetch(
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
         `?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
@@ -36709,13 +37384,7 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
           updated_at: sentAt
         })
       }
-    ).catch(async (e) => {
-      // fetch() throws rarely here, but keep non-fatal
-      console.warn('[TS_DAILY_QR] failed to persist qr_last_sent_* (non-fatal)', {
-        timesheet_id: currentTimesheetId,
-        err: e?.message || String(e)
-      });
-    });
+    ).catch(() => {});
   } catch (e) {
     console.warn('[TS_DAILY_QR] hash compute/persist failed (non-fatal)', {
       timesheet_id: currentTimesheetId,
@@ -36723,7 +37392,7 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
     });
   }
 
-  // 4) Automatically queue email (daily should behave like weekly)
+  // Automatically queue email
   try {
     let email = null;
     let candName = null;
@@ -36784,7 +37453,7 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
     });
   }
 
-  // 5) Audit
+  // Audit
   try {
     await writeAudit(
       env,
@@ -36819,6 +37488,7 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
     pdf_key: pdfKey || null
   }));
 }
+
 
 
  async function handleHrRotaQueueTsoEmail(env, req) {
@@ -50772,6 +51442,7 @@ async function handleContractsUnplanRanges(env, req, contractId) {
 
 async function handleContractWeekGeneratePrintable(env, req, weekId) {
   const enc = encodeURIComponent;
+  const cleanKey = (k) => String(k || '').replace(/^\/+/, '').trim();
 
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -50788,7 +51459,6 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
     console.log('[QR_WEEKLY][GENERATE] incoming', { weekId, body });
   } catch {}
 
-  // 1) Load contract_week + contract
   const cw = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
@@ -50803,7 +51473,7 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
   );
   if (!contract) return withCORS(env, req, notFound('Contract not found'));
 
-  // 1a) QR route allowed? (authoritative: client_settings.default_submission_mode)
+  // 1a) QR route allowed?
   let defaultSubmissionMode = 'ELECTRONIC';
   try {
     if (contract.client_id) {
@@ -50831,7 +51501,6 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
       badRequest(`client_settings.default_submission_mode=${defaultSubmissionMode} is not supported`)
     );
   }
-  // For QR printable: BOTH ELECTRONIC and MANUAL allow QR route.
 
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
   const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
@@ -50891,7 +51560,7 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
     return withCORS(env, req, badRequest('Missing rate(s) in contract for one or more entered hour buckets'));
   }
 
-  // 2c) Additional units as per weekly logic
+  // additional units
   const unitsWeek  = (body.additional_units_week && typeof body.additional_units_week === 'object')
     ? body.additional_units_week
     : {};
@@ -50947,12 +51616,8 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
     const { ymd, dow } = meta;
     const bh = isBH(ymd);
     if (freq === 'ONE_PER_DAY') return true;
-    if (freq === 'WEEKENDS_AND_BH_ONLY') {
-      return bh || dow === 0 || dow === 6;
-    }
-    if (freq === 'WEEKDAYS_EXCL_BH_ONLY') {
-      return !bh && dow >= 1 && dow <= 5;
-    }
+    if (freq === 'WEEKENDS_AND_BH_ONLY') return bh || dow === 0 || dow === 6;
+    if (freq === 'WEEKDAYS_EXCL_BH_ONLY') return !bh && dow >= 1 && dow <= 5;
     return false;
   };
 
@@ -50972,9 +51637,7 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
       const u = Number(unitsWeek[code] || 0);
       if (u && Number.isFinite(u)) unitCount = u;
     } else {
-      const perRaw = (unitsPerDay[code] && typeof unitsPerDay[code] === 'object')
-        ? unitsPerDay[code]
-        : {};
+      const perRaw = (unitsPerDay[code] && typeof unitsPerDay[code] === 'object') ? unitsPerDay[code] : {};
       for (const meta of weekDates) {
         const raw = perRaw[meta.ymd];
         if (raw == null || raw === '') continue;
@@ -51021,23 +51684,14 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
 
   additional_pay_ex_vat    = +Number(additional_pay_ex_vat).toFixed(2);
   additional_charge_ex_vat = +Number(additional_charge_ex_vat).toFixed(2);
-  const additional_margin_ex_vat =
-    +Number(additional_charge_ex_vat - additional_pay_ex_vat).toFixed(2);
+  const additional_margin_ex_vat = +Number(additional_charge_ex_vat - additional_pay_ex_vat).toFixed(2);
 
-  // 3) Create or reuse WEEKLY TS
+  // Create/reuse timesheet
   const candidate = contract.candidate_id
-    ? await sbGetOne(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/candidates` +
-          `?id=eq.${enc(contract.candidate_id)}&select=id,display_name,email`
-      )
+    ? await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(contract.candidate_id)}&select=id,display_name,email`)
     : null;
   const client = contract.client_id
-    ? await sbGetOne(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/clients` +
-          `?id=eq.${enc(contract.client_id)}&select=id,name`
-      )
+    ? await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${enc(contract.client_id)}&select=id,name`)
     : null;
 
   const now = nowIso();
@@ -51053,57 +51707,30 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
   if (cw.timesheet_id) {
     const existing = await sbGetOne(
       env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=eq.${enc(cw.timesheet_id)}` +
-        `&is_current=eq.true` +
-        `&select=*`
+      `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(cw.timesheet_id)}&is_current=eq.true&select=*`
     );
-    if (!existing) {
-      return withCORS(env, req, serverError('Linked timesheet not found for contract_week (current version)'));
-    }
+    if (!existing) return withCORS(env, req, serverError('Linked timesheet not found for contract_week (current version)'));
 
     const scope = String(existing.sheet_scope || '').toUpperCase();
-    if (scope && scope !== 'WEEKLY') {
-      return withCORS(env, req, badRequest('Existing timesheet linked to this week is not WEEKLY; cannot use QR printable route'));
-    }
+    if (scope && scope !== 'WEEKLY') return withCORS(env, req, badRequest('Existing timesheet linked to this week is not WEEKLY; cannot use QR printable route'));
 
     const curFin = await sbGetOne(
       env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-        `?timesheet_id=eq.${enc(existing.timesheet_id)}` +
-        `&is_current=eq.true` +
-        `&select=locked_by_invoice_id,paid_at_utc`
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${enc(existing.timesheet_id)}&is_current=eq.true&select=locked_by_invoice_id,paid_at_utc`
     );
     if (curFin?.locked_by_invoice_id || curFin?.paid_at_utc) {
       return withCORS(env, req, badRequest('Cannot generate QR printable: timesheet already invoiced or paid'));
     }
 
-    const tsPatch = {
-      sheet_scope: 'WEEKLY',
-      submission_mode: 'MANUAL',
-      line_type: 'HOURS',
-      updated_at: now
-    };
-
-    if (Array.isArray(actual_schedule_json)) {
-      tsPatch.actual_schedule_json = actual_schedule_json;
-    }
+    const tsPatch = { sheet_scope: 'WEEKLY', submission_mode: 'MANUAL', line_type: 'HOURS', updated_at: now };
+    if (Array.isArray(actual_schedule_json)) tsPatch.actual_schedule_json = actual_schedule_json;
 
     await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=eq.${enc(existing.timesheet_id)}&is_current=eq.true`,
-      {
-        method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-        body: JSON.stringify(tsPatch)
-      }
+      `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(existing.timesheet_id)}&is_current=eq.true`,
+      { method: 'PATCH', headers: { ...sbHeaders(env), Prefer: 'return=minimal' }, body: JSON.stringify(tsPatch) }
     ).catch(() => {});
 
-    ts = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=eq.${enc(existing.timesheet_id)}&is_current=eq.true&select=*`
-    );
+    ts = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(existing.timesheet_id)}&is_current=eq.true&select=*`);
   } else {
     const tsPayload = [{
       booking_id,
@@ -51130,14 +51757,11 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
       updated_at: now
     }];
 
-    const tsIns = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheets`,
-      {
-        method: 'POST',
-        headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-        body: JSON.stringify(tsPayload)
-      }
-    );
+    const tsIns = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets`, {
+      method: 'POST',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify(tsPayload)
+    });
     if (!tsIns.ok) return withCORS(env, req, serverError(await tsIns.text()));
     ts = (await tsIns.json().catch(() => []))[0];
 
@@ -51156,11 +51780,11 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
     ).catch(() => {});
   }
 
-  if (!ts?.timesheet_id) {
-    return withCORS(env, req, serverError('Failed to create or load timesheet for QR weekly'));
-  }
+  if (!ts?.timesheet_id) return withCORS(env, req, serverError('Failed to create or load timesheet for QR weekly'));
 
-  // ✅ Policy snapshot (TSFIN requires non-null policy_snapshot_json)
+  const oldQrKey = ts.qr_r2_key ? cleanKey(ts.qr_r2_key) : null;
+
+  // Policy snapshot
   let policySnapshot = {};
   try {
     policySnapshot = await loadPolicy(env, contract.client_id || null, cw.week_ending_date);
@@ -51174,205 +51798,154 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
       ? Number(policySnapshot.holiday_pay_pct)
       : null;
 
-  // 4) TSFIN snapshot
+  // Snapshot build (unchanged)
   const n2 = (x) => Number(x) || 0;
 
-  const basePay    = +(
-    hours.day   * n2(pay.day)   +
-    hours.night * n2(pay.night) +
-    hours.sat   * n2(pay.sat)   +
-    hours.sun   * n2(pay.sun)   +
-    hours.bh    * n2(pay.bh)
-  ).toFixed(2);
+  const basePay = +(hours.day * n2(pay.day) + hours.night * n2(pay.night) + hours.sat * n2(pay.sat) + hours.sun * n2(pay.sun) + hours.bh * n2(pay.bh)).toFixed(2);
+  const baseCharge = +(hours.day * n2(charge.day) + hours.night * n2(charge.night) + hours.sat * n2(charge.sat) + hours.sun * n2(charge.sun) + hours.bh * n2(charge.bh)).toFixed(2);
 
-  const baseCharge = +(
-    hours.day   * n2(charge.day)   +
-    hours.night * n2(charge.night) +
-    hours.sat   * n2(charge.sat)   +
-    hours.sun   * n2(charge.sun)   +
-    hours.bh    * n2(charge.bh)
-  ).toFixed(2);
-
-  const totalPay    = +Number(basePay    + additional_pay_ex_vat).toFixed(2);
+  const totalPay = +Number(basePay + additional_pay_ex_vat).toFixed(2);
   const totalCharge = +Number(baseCharge + additional_charge_ex_vat).toFixed(2);
-  const margin      = +Number(totalCharge - totalPay).toFixed(2);
+  const margin = +Number(totalCharge - totalPay).toFixed(2);
 
   const invoice_breakdown_json = {
     mode: 'AGGREGATE',
     base_hours: {
-      day:   hours.day,
-      night: hours.night,
-      sat:   hours.sat,
-      sun:   hours.sun,
-      bh:    hours.bh,
-      pay_rates: {
-        day:   pay.day,
-        night: pay.night,
-        sat:   pay.sat,
-        sun:   pay.sun,
-        bh:    pay.bh
-      },
-      charge_rates: {
-        day:   charge.day,
-        night: charge.night,
-        sat:   charge.sat,
-        sun:   charge.sun,
-        bh:    charge.bh
-      },
-      pay_ex_vat:    basePay,
+      day: hours.day, night: hours.night, sat: hours.sat, sun: hours.sun, bh: hours.bh,
+      pay_rates: { day: pay.day, night: pay.night, sat: pay.sat, sun: pay.sun, bh: pay.bh },
+      charge_rates: { day: charge.day, night: charge.night, sat: charge.sat, sun: charge.sun, bh: charge.bh },
+      pay_ex_vat: basePay,
       charge_ex_vat: baseCharge
     },
     additional: {
       units: additional_units_json,
-      pay_ex_vat:    additional_pay_ex_vat,
+      pay_ex_vat: additional_pay_ex_vat,
       charge_ex_vat: additional_charge_ex_vat,
       margin_ex_vat: additional_margin_ex_vat
     },
-    totals: {
-      total_pay_ex_vat:    totalPay,
-      total_charge_ex_vat: totalCharge,
-      margin_ex_vat:       margin
-    }
+    totals: { total_pay_ex_vat: totalPay, total_charge_ex_vat: totalCharge, margin_ex_vat: margin }
   };
 
   const snapshot = {
     timesheet_id: ts.timesheet_id,
     timesheet_version: ts.version || 1,
     basis: 'CONTRACT_WEEKLY',
-
     candidate_id: contract.candidate_id || null,
     client_id: contract.client_id || null,
     role: contract.role || null,
     band: contract.band || null,
     pay_method: method,
-
     candidate_assignment: contract.candidate_id ? 'ASSIGNED' : 'UNASSIGNED',
     processing_status: 'AWAITING_MANUAL_SIGNATURE',
-
-    hours_day:   Number(hours.day   || 0),
+    hours_day: Number(hours.day || 0),
     hours_night: Number(hours.night || 0),
-    hours_sat:   Number(hours.sat   || 0),
-    hours_sun:   Number(hours.sun   || 0),
-    hours_bh:    Number(hours.bh    || 0),
-    total_hours: round2(
-      Number(hours.day   || 0) +
-      Number(hours.night || 0) +
-      Number(hours.sat   || 0) +
-      Number(hours.sun   || 0) +
-      Number(hours.bh    || 0)
-    ),
-
-    pay_day:   pay.day,
-    pay_night: pay.night,
-    pay_sat:   pay.sat,
-    pay_sun:   pay.sun,
-    pay_bh:    pay.bh,
-
-    charge_day:   charge.day,
-    charge_night: charge.night,
-    charge_sat:   charge.sat,
-    charge_sun:   charge.sun,
-    charge_bh:    charge.bh,
-
-    total_pay_ex_vat:    totalPay,
+    hours_sat: Number(hours.sat || 0),
+    hours_sun: Number(hours.sun || 0),
+    hours_bh: Number(hours.bh || 0),
+    total_hours: round2(Number(hours.day || 0) + Number(hours.night || 0) + Number(hours.sat || 0) + Number(hours.sun || 0) + Number(hours.bh || 0)),
+    pay_day: pay.day, pay_night: pay.night, pay_sat: pay.sat, pay_sun: pay.sun, pay_bh: pay.bh,
+    charge_day: charge.day, charge_night: charge.night, charge_sat: charge.sat, charge_sun: charge.sun, charge_bh: charge.bh,
+    total_pay_ex_vat: totalPay,
     total_charge_ex_vat: totalCharge,
-    margin_ex_vat:       margin,
-
+    margin_ex_vat: margin,
     additional_units_json,
     additional_pay_ex_vat,
     additional_charge_ex_vat,
     additional_margin_ex_vat,
-
     expenses_pay_ex_vat: 0,
     expenses_charge_ex_vat: 0,
     expenses_description: null,
     expenses_evidence_r2_key: null,
-
     mileage_pay_ex_vat: 0,
     mileage_charge_ex_vat: 0,
     mileage_evidence_r2_key: null,
     mileage_pay_rate: null,
     mileage_charge_rate: null,
-
     pay_on_hold: false,
     pay_on_hold_reason: null,
     pay_on_hold_since_utc: null,
-
     paid_at_utc: null,
     paid_by_user_id: null,
     payment_reference: null,
-
     policy_snapshot_json: policySnapshot,
     rate_source_refs_json: { mode: 'CONTRACT_RATES_JSON', contract_id: contract.id || null },
     pay_wtr_rate_pct_snapshot,
-
     created_at: now,
     invoice_breakdown_json
   };
 
   await writeSnapshot(env, snapshot).catch((e) => {
-    console.warn('[QR_WEEKLY][GENERATE] writeSnapshot failed', {
-      timesheet_id: ts.timesheet_id,
-      err: e?.message || String(e)
-    });
+    console.warn('[QR_WEEKLY][GENERATE] writeSnapshot failed', { timesheet_id: ts.timesheet_id, err: e?.message || String(e) });
   });
 
-  // 5) Generate token FIRST
+  // Generate token FIRST
   const qrToken = (typeof crypto !== 'undefined' && crypto.randomUUID)
     ? crypto.randomUUID()
     : `${ts.timesheet_id}:${Date.now()}`;
 
-  // 6) Generate signed TSQ1 QR with tok embedded and store it
+  // Generate QR + store
   let qrText = null;
   let qr_r2_key = null;
   try {
     const res = await generateAndStoreTimesheetQr(env, {
-      timesheet_id:     ts.timesheet_id,
+      timesheet_id: ts.timesheet_id,
       contract_week_id: cw.id,
-      contract_id:      contract.id,
-      candidate_id:     contract.candidate_id || null,
-      client_id:        contract.client_id || null,
-      week_ending_ymd:  cw.week_ending_date,
-      qr_token:         qrToken
+      contract_id: contract.id,
+      candidate_id: contract.candidate_id || null,
+      client_id: contract.client_id || null,
+      week_ending_ymd: cw.week_ending_date,
+      qr_token: qrToken
     });
     qrText = res?.qrText || null;
     qr_r2_key = res?.qr_r2_key || null;
   } catch (e) {
-    console.warn('[QR_WEEKLY][GENERATE] generateAndStoreTimesheetQr failed', {
-      timesheet_id: ts.timesheet_id,
-      err: e?.message || String(e)
-    });
+    console.warn('[QR_WEEKLY][GENERATE] generateAndStoreTimesheetQr failed', { timesheet_id: ts.timesheet_id, err: e?.message || String(e) });
   }
 
-  // 7) Store QR metadata on current timesheet (do NOT overwrite qr_payload_json)
-  await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
-    {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-      body: JSON.stringify({
-        sheet_scope: 'WEEKLY',
-        qr_token: qrToken,
-        qr_status: 'PENDING',
-        qr_generated_at: now,
-        qr_scanned_at: null,
-        qr_scan_info_json: null,
-        qr_r2_key: qr_r2_key || null,
-        updated_at: now
-      })
-    }
-  ).catch(() => {});
+  // Store QR metadata on current timesheet (capture success for safe delete)
+  let qrPatchOk = false;
+  try {
+    const resp = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify({
+          sheet_scope: 'WEEKLY',
+          qr_token: qrToken,
+          qr_status: 'PENDING',
+          qr_generated_at: now,
+          qr_scanned_at: null,
+          qr_scan_info_json: null,
+          qr_r2_key: qr_r2_key || null,
+          updated_at: now
+        })
+      }
+    );
+    qrPatchOk = !!resp.ok;
+  } catch {
+    qrPatchOk = false;
+  }
 
-  // 8) Render PDF (generated)
+  // ✅ NEW: delete old QR image key now that we replaced it (best-effort, only if DB patch succeeded)
+  if (qrPatchOk) {
+    try {
+      const bucket = env.R2_BUCKET || env.R2;
+      const newQrKeyClean = qr_r2_key ? cleanKey(qr_r2_key) : null;
+      if (bucket && typeof bucket.delete === 'function' && oldQrKey && newQrKeyClean && oldQrKey !== newQrKeyClean) {
+        await bucket.delete(oldQrKey).catch(() => {});
+      }
+    } catch {
+      // non-fatal
+    }
+  }
+
+  // Render PDF (generated)
   const pdfKey = await renderTimesheetPDFAndSave(env, ts.timesheet_id).catch((e) => {
-    console.error('[QR_WEEKLY][GENERATE] renderTimesheetPDFAndSave failed', {
-      timesheet_id: ts.timesheet_id,
-      err: e?.message || String(e)
-    });
+    console.error('[QR_WEEKLY][GENERATE] renderTimesheetPDFAndSave failed', { timesheet_id: ts.timesheet_id, err: e?.message || String(e) });
     return null;
   });
 
-  // ✅ FIX: only set manual_pdf_r2_key if it is currently NULL/empty (do not overwrite scanned evidence)
   if (pdfKey) {
     const patchUrl =
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -51390,7 +51963,7 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
     ).catch(() => {});
   }
 
-  // 9) Email to candidate with PDF via mail_outbox
+  // Email to candidate with PDF via mail_outbox
   let emailQueued = false;
   try {
     const email = (candidate && candidate.email && String(candidate.email).trim()) || null;
@@ -51416,11 +51989,7 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
         body_text: bodyText,
         body_html: bodyHtml,
         attachments: [
-          {
-            r2_key: pdfKey,
-            filename: `Timesheet_${cw.week_ending_date}.pdf`,
-            content_type: 'application/pdf'
-          }
+          { r2_key: pdfKey, filename: `Timesheet_${cw.week_ending_date}.pdf`, content_type: 'application/pdf' }
         ],
         status: 'QUEUED',
         reference: `timesheet_qr:weekly:${ts.timesheet_id}:${cw.week_ending_date}`,
@@ -51428,14 +51997,11 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
         created_at_utc: now
       };
 
-      const insOut = await fetch(
-        `${env.SUPABASE_URL}/rest/v1/mail_outbox`,
-        {
-          method: 'POST',
-          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-          body: JSON.stringify(outboxRow)
-        }
-      );
+      const insOut = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
+        method: 'POST',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        body: JSON.stringify(outboxRow)
+      });
 
       if (insOut.ok) emailQueued = true;
       else {
@@ -51447,7 +52013,7 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
     console.warn('[QR_WEEKLY][GENERATE] mail queue failed (non-fatal)', e?.message || e);
   }
 
-  // 10) Audit
+  // Audit
   try {
     await writeAudit(
       env,
@@ -51994,6 +52560,8 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
     );
   }
 
+  const cleanKey = (k) => String(k || '').replace(/^\/+/, '').trim();
+
   const patchTimesheetCurrentOrThrow = async (patchBody, label) => {
     const url =
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -52029,6 +52597,14 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
   let hasToken = !!(ts.qr_token && String(ts.qr_token).trim());
   let hasGeneratedAt = !!ts.qr_generated_at;
   let scannedAt = ts.qr_scanned_at || null;
+
+  // ✅ NEW: never allow resend/reissue if signed markers exist
+  const hasSignedMarkers =
+    !!ts.qr_scanned_at ||
+    !!(ts.qr_signed_hash && String(ts.qr_signed_hash).trim());
+  if (hasSignedMarkers) {
+    return withCORS(env, req, badRequest('Cannot resend/reissue: timesheet already has signed markers'));
+  }
 
   if (qrStatus === 'EXPIRED') {
     return withCORS(env, req, badRequest('QR is expired; reissue required'));
@@ -52181,6 +52757,9 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
   let qrTokenToUse = (ts.qr_token && String(ts.qr_token).trim()) ? String(ts.qr_token).trim() : null;
   let qr_r2_key = ts.qr_r2_key || null;
 
+  // ✅ NEW: remember old QR key so we can delete it if we reissue and successfully repoint
+  const oldQrKey = ts.qr_r2_key ? cleanKey(ts.qr_r2_key) : null;
+
   if (notYetIssued || mustReissueBecauseHoursChanged || mustReissueBecauseNoBaselineHash) {
     const now2 = nowIso();
 
@@ -52212,8 +52791,6 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
     qrTokenToUse = qrToken;
     qr_r2_key = qrRes?.qr_r2_key || null;
 
-    // ✅ FIX: do NOT patch is_qr (it is not a column on timesheets)
-    // ✅ FIX: do NOT swallow patch failures (otherwise token/gen remain null and UI never updates)
     try {
       await patchTimesheetCurrentOrThrow({
         qr_token: qrToken,
@@ -52226,6 +52803,17 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
       }, 'issue_token');
     } catch (e) {
       return withCORS(env, req, serverError(e?.message || 'Failed to persist QR token'));
+    }
+
+    // ✅ NEW: delete old QR image key now that we replaced it (best-effort)
+    try {
+      const bucket = env.R2_BUCKET || env.R2;
+      const newQrKey = qr_r2_key ? cleanKey(qr_r2_key) : null;
+      if (bucket && typeof bucket.delete === 'function' && oldQrKey && newQrKey && oldQrKey !== newQrKey) {
+        await bucket.delete(oldQrKey).catch(() => {});
+      }
+    } catch {
+      // non-fatal
     }
 
     result = notYetIssued ? 'NEW_ISSUED' : 'REISSUED';
@@ -52251,6 +52839,29 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
     return withCORS(env, req, serverError('Failed to prepare timesheet PDF for send'));
   }
   if (!pdfKey) return withCORS(env, req, serverError('No PDF available to send'));
+
+  // ✅ OPTIONAL: ensure manual_pdf_r2_key points to the generated PDF if blank (materialises evidence)
+  try {
+    const patchUrl =
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&or=(manual_pdf_r2_key.is.null,manual_pdf_r2_key.eq.)`;
+
+    await fetch(
+      patchUrl,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify({
+          manual_pdf_r2_key: pdfKey,
+          updated_at: nowIso()
+        })
+      }
+    ).catch(() => {});
+  } catch {
+    // non-fatal
+  }
 
   const subject =
     (scope === 'WEEKLY')
@@ -52343,11 +52954,6 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
     qr_last_sent_hash: current_hash
   }));
 }
-
-
-
-
-
 
 async function handleTimesheetQrRestore(env, req, timesheetId) {
   const enc = encodeURIComponent;
@@ -52456,12 +53062,6 @@ async function handleTimesheetQrRestore(env, req, timesheetId) {
 
   // ─────────────────────────────────────────────────────────────
   // ✅ NEW: reset / recompute QR hash fields for truth rules
-  //
-  // - Restore PENDING: keep qr_last_sent_hash as-is (if it existed on that historic version),
-  //   and clear signed hash fields (since it's not a signed state).
-  //
-  // - Restore SIGNED: keep qr_signed_hash if already present; if missing but the restored version
-  //   clearly has a signed scan + manual_pdf_r2_key, compute and set qr_signed_hash and qr_signed_at_utc.
   // ─────────────────────────────────────────────────────────────
   try {
     const now = nowIso();
@@ -52579,6 +53179,21 @@ async function handleTimesheetQrRestore(env, req, timesheetId) {
       `&select=*` +
       `&limit=1`
   );
+
+  // ✅ NEW: Purge superseded versions immediately (best-effort; never blocks restore)
+  try {
+    const bookingId = tsCur?.booking_id ? String(tsCur.booking_id) : '';
+    if (bookingId) {
+      await purgeSupersededTimesheetArtifactsForBooking(env, bookingId);
+    }
+  } catch (e) {
+    try {
+      console.warn('[QR_RESTORE] purge failed (non-fatal)', {
+        timesheet_id: afterId,
+        err: e?.message || String(e)
+      });
+    } catch {}
+  }
 
   return withCORS(env, req, ok({
     ok: true,
@@ -52806,6 +53421,21 @@ async function handleTimesheetQrRefuseAndReset(env, req, timesheetId) {
       `&limit=1`
   );
 
+  // ✅ NEW: Purge superseded versions immediately (best-effort; never blocks refusal)
+  try {
+    const bookingId = tsFull?.booking_id ? String(tsFull.booking_id) : '';
+    if (bookingId) {
+      await purgeSupersededTimesheetArtifactsForBooking(env, bookingId);
+    }
+  } catch (e) {
+    try {
+      console.warn('[QR_REFUSE] purge failed (non-fatal)', {
+        timesheet_id: afterId,
+        err: e?.message || String(e)
+      });
+    } catch {}
+  }
+
   return withCORS(env, req, ok({
     ok: true,
     timesheet_id: afterId,
@@ -52819,6 +53449,7 @@ async function handleTimesheetQrRefuseAndReset(env, req, timesheetId) {
     tsfin: fin || null
   }));
 }
+
 
 async function handleContractWeekDeletePlanned(env, req, contractWeekId) {
   const user = await requireUser(env, req, ['admin']);
@@ -53169,6 +53800,7 @@ async function loadWeeklyContext(env, ts) {
   return { cw, contract };
 }
 
+
 async function handleTimesheetQrScan(env, req) {
   const enc = encodeURIComponent;
 
@@ -53183,10 +53815,18 @@ async function handleTimesheetQrScan(env, req) {
   }
 
   const qrText = String(body?.qr_text || '').trim();
-  const image_r2_key = body?.image_r2_key ? String(body.image_r2_key) : null;
+  const image_r2_key_raw = body?.image_r2_key ? String(body.image_r2_key) : '';
 
   if (!qrText) {
     return withCORS(env, req, badRequest('qr_text is required'));
+  }
+
+  // ✅ For signed acceptance, we require the uploaded scan key.
+  // This endpoint is the “signed upload/scan acceptance” endpoint.
+  const cleanKey = (k) => String(k || '').replace(/^\/+/, '').trim();
+  const image_r2_key = cleanKey(image_r2_key_raw);
+  if (!image_r2_key) {
+    return withCORS(env, req, badRequest('image_r2_key is required'));
   }
 
   try {
@@ -53283,6 +53923,23 @@ async function handleTimesheetQrScan(env, req) {
     return await sha256Hex(JSON.stringify(stableClone(obj)));
   };
 
+  // ✅ Canonical deterministic PDF key (the “one PDF only” rule)
+  const canonicalPdfKey = cleanKey(`docs-pdf/timesheets/ts_${ts.timesheet_id}.pdf`);
+
+  // ✅ Step A: Copy the uploaded signed scan OVER the canonical key (overwrite).
+  // Do NOT patch DB if this fails.
+  try {
+    await r2CopyOverwrite(env, image_r2_key, canonicalPdfKey);
+  } catch (e) {
+    console.warn('[QR][SCAN] failed to copy signed scan to canonical key', {
+      timesheet_id: ts.timesheet_id,
+      from: image_r2_key,
+      to: canonicalPdfKey,
+      err: e?.message || String(e)
+    });
+    return withCORS(env, req, serverError(`Failed to store signed scan: ${e?.message || e}`));
+  }
+
   // ─────────────────────────────────────────────────────────────
   // WEEKLY
   // ─────────────────────────────────────────────────────────────
@@ -53329,7 +53986,7 @@ async function handleTimesheetQrScan(env, req) {
       );
     }
 
-    // ✅ NEW: compute signed hash at acceptance time
+    // ✅ Compute signed hash at acceptance time
     let signedHash = null;
     try {
       signedHash = await computeCurrentHash('WEEKLY', ts, fin);
@@ -53337,33 +53994,63 @@ async function handleTimesheetQrScan(env, req) {
       return withCORS(env, req, serverError(`Failed to compute signed hash: ${e?.message || e}`));
     }
 
-    const tsPatchBase = {
+    // ✅ Patch timesheet: point manual_pdf_r2_key to the CANONICAL key (not image_r2_key)
+    const tsPatch = {
       qr_status: 'USED',
       qr_scanned_at: now,
       qr_signed_hash: signedHash,
       qr_signed_at_utc: now,
+      manual_pdf_r2_key: canonicalPdfKey,
+      qr_scan_info_json: {
+        kind: 'WEEKLY_QR_TIMESHEET',
+        payload: p,
+        original_image_r2_key: image_r2_key,
+        canonical_pdf_r2_key: canonicalPdfKey
+      },
       updated_at: now
     };
 
-    const tsPatch = image_r2_key ? { ...tsPatchBase, manual_pdf_r2_key: image_r2_key } : tsPatchBase;
-
-    await fetch(
+    const tsRes = await fetch(
       `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
       {
         method: 'PATCH',
         headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
         body: JSON.stringify(tsPatch)
       }
-    ).catch((e) => console.warn('[QR_WEEKLY][SCAN] timesheet patch failed', e?.message || e));
+    );
 
-    await fetch(
+    if (!tsRes.ok) {
+      const t = await tsRes.text().catch(() => '');
+      return withCORS(env, req, serverError(`Failed to patch timesheet after QR scan: ${t}`));
+    }
+
+    const finRes = await fetch(
       `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
       {
         method: 'PATCH',
         headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
         body: JSON.stringify({ processing_status: 'PENDING_AUTH', updated_at: now })
       }
-    ).catch((e) => console.warn('[QR_WEEKLY][SCAN] TSFIN status update failed', e?.message || e));
+    );
+
+    if (!finRes.ok) {
+      const t = await finRes.text().catch(() => '');
+      return withCORS(env, req, serverError(`Failed to update TSFIN after QR scan: ${t}`));
+    }
+
+    // ✅ Best-effort delete original uploaded key (only if it differs from canonical)
+    try {
+      const bucket = env.R2_BUCKET || env.R2;
+      if (bucket && typeof bucket.delete === 'function' && image_r2_key !== canonicalPdfKey) {
+        await bucket.delete(image_r2_key);
+      }
+    } catch (e) {
+      console.warn('[QR_WEEKLY][SCAN] delete original image key failed (non-fatal)', {
+        timesheet_id: ts.timesheet_id,
+        original_image_r2_key: image_r2_key,
+        err: e?.message || String(e)
+      });
+    }
 
     try {
       await writeAudit(
@@ -53376,7 +54063,11 @@ async function handleTimesheetQrScan(env, req) {
           contract_id: contract.id,
           qr_text: qrText,
           qr_payload: p,
-          image_r2_key,
+
+          // record both keys explicitly
+          original_image_r2_key: image_r2_key,
+          canonical_pdf_r2_key: canonicalPdfKey,
+
           processing_status_from: fin.processing_status,
           processing_status_to: 'PENDING_AUTH',
           qr_signed_hash: signedHash
@@ -53397,7 +54088,12 @@ async function handleTimesheetQrScan(env, req) {
       sheet_scope: 'WEEKLY',
       processing_status: 'PENDING_AUTH',
       qr_status: 'USED',
-      image_r2_key
+
+      // keep old field for caller compatibility
+      image_r2_key,
+
+      // new: explicit canonical key
+      canonical_pdf_r2_key: canonicalPdfKey
     }));
   }
 
@@ -53427,7 +54123,7 @@ async function handleTimesheetQrScan(env, req) {
       );
     }
 
-    // ✅ NEW: compute signed hash at acceptance time
+    // ✅ Compute signed hash at acceptance time
     let signedHash = null;
     try {
       signedHash = await computeCurrentHash('DAILY', ts, fin);
@@ -53435,33 +54131,63 @@ async function handleTimesheetQrScan(env, req) {
       return withCORS(env, req, serverError(`Failed to compute signed hash: ${e?.message || e}`));
     }
 
-    const tsPatchBase = {
+    // ✅ Patch timesheet: point manual_pdf_r2_key to the CANONICAL key (not image_r2_key)
+    const tsPatch = {
       qr_status: 'USED',
       qr_scanned_at: now,
       updated_at: now,
       qr_signed_hash: signedHash,
       qr_signed_at_utc: now,
-      qr_scan_info_json: { kind: 'DAILY_QR_TIMESHEET', payload: p, image_r2_key }
+      manual_pdf_r2_key: canonicalPdfKey,
+      qr_scan_info_json: {
+        kind: 'DAILY_QR_TIMESHEET',
+        payload: p,
+        original_image_r2_key: image_r2_key,
+        canonical_pdf_r2_key: canonicalPdfKey
+      }
     };
-    const tsPatch = image_r2_key ? { ...tsPatchBase, manual_pdf_r2_key: image_r2_key } : tsPatchBase;
 
-    await fetch(
+    const tsRes = await fetch(
       `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
       {
         method: 'PATCH',
         headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
         body: JSON.stringify(tsPatch)
       }
-    ).catch((e) => console.warn('[QR_DAILY][SCAN] timesheet patch failed', e?.message || e));
+    );
 
-    await fetch(
+    if (!tsRes.ok) {
+      const t = await tsRes.text().catch(() => '');
+      return withCORS(env, req, serverError(`Failed to patch timesheet after QR scan: ${t}`));
+    }
+
+    const finRes = await fetch(
       `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
       {
         method: 'PATCH',
         headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
         body: JSON.stringify({ processing_status: 'PENDING_AUTH', updated_at: now })
       }
-    ).catch((e) => console.warn('[QR_DAILY][SCAN] TSFIN status update failed', e?.message || e));
+    );
+
+    if (!finRes.ok) {
+      const t = await finRes.text().catch(() => '');
+      return withCORS(env, req, serverError(`Failed to update TSFIN after QR scan: ${t}`));
+    }
+
+    // ✅ Best-effort delete original uploaded key (only if it differs from canonical)
+    try {
+      const bucket = env.R2_BUCKET || env.R2;
+      if (bucket && typeof bucket.delete === 'function' && image_r2_key !== canonicalPdfKey) {
+        await bucket.delete(image_r2_key);
+      }
+    } catch (e) {
+      console.warn('[QR_DAILY][SCAN] delete original image key failed (non-fatal)', {
+        timesheet_id: ts.timesheet_id,
+        original_image_r2_key: image_r2_key,
+        err: e?.message || String(e)
+      });
+    }
 
     let contract = null;
     if (ts.contract_id) {
@@ -53482,7 +54208,11 @@ async function handleTimesheetQrScan(env, req) {
           contract_id: contract?.id || ts.contract_id || null,
           qr_text: qrText,
           qr_payload: p,
-          image_r2_key,
+
+          // record both keys explicitly
+          original_image_r2_key: image_r2_key,
+          canonical_pdf_r2_key: canonicalPdfKey,
+
           processing_status_from: fin.processing_status,
           processing_status_to: 'PENDING_AUTH',
           qr_signed_hash: signedHash
@@ -53501,11 +54231,57 @@ async function handleTimesheetQrScan(env, req) {
       sheet_scope: 'DAILY',
       processing_status: 'PENDING_AUTH',
       qr_status: 'USED',
-      image_r2_key
+
+      // keep old field for caller compatibility
+      image_r2_key,
+
+      // new: explicit canonical key
+      canonical_pdf_r2_key: canonicalPdfKey
     }));
   }
 
   return withCORS(env, req, badRequest('QR mismatch: unsupported sheet_scope for QR'));
+}
+
+
+
+
+// NEW helper: copy an existing R2 object to another key (overwrite destination).
+// - Uses the same bucket selection style already present in your codebase: env.R2_BUCKET || env.R2
+// - Preserves httpMetadata/customMetadata when present.
+// - Throws on failure so caller can avoid patching DB on copy failure.
+async function r2CopyOverwrite(env, fromKey, toKey) {
+  const bucket = env.R2_BUCKET || env.R2;
+  if (!bucket || typeof bucket.get !== 'function' || typeof bucket.put !== 'function') {
+    throw new Error('Storage not configured (expected env.R2 or env.R2_BUCKET with get/put)');
+  }
+
+  const clean = (k) => String(k || '').replace(/^\/+/, '').trim();
+  const src = clean(fromKey);
+  const dst = clean(toKey);
+
+  if (!src) throw new Error('r2CopyOverwrite: fromKey is empty');
+  if (!dst) throw new Error('r2CopyOverwrite: toKey is empty');
+
+  const obj = await bucket.get(src).catch((e) => {
+    throw new Error(`r2CopyOverwrite: failed to get source key="${src}": ${e?.message || String(e)}`);
+  });
+
+  if (!obj) {
+    throw new Error(`r2CopyOverwrite: source not found key="${src}"`);
+  }
+
+  // Preserve metadata when available
+  const putOpts = {};
+  if (obj.httpMetadata) putOpts.httpMetadata = obj.httpMetadata;
+  if (obj.customMetadata) putOpts.customMetadata = obj.customMetadata;
+
+  // Overwrite destination with source body stream
+  await bucket.put(dst, obj.body, putOpts).catch((e) => {
+    throw new Error(`r2CopyOverwrite: failed to put dest key="${dst}": ${e?.message || String(e)}`);
+  });
+
+  return { ok: true, from: src, to: dst };
 }
 
 async function verifyTsq1(qrText, env) {
@@ -56239,12 +57015,60 @@ async function findOrCreateSelfBillInvoice(
   return invoice;
 }
 
+async function handleTimesheetSourcePrint(env, req, timesheetId) {
+  const enc = encodeURIComponent;
+  const url = new URL(req.url);
+  const q = (k) => url.searchParams.get(k);
 
- async function collectSourceRowsForTimesheet(env, timesheetId, opts = {}) {
+  // Admin auth
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  if (!timesheetId) {
+    return withCORS(env, req, badRequest('timesheet_id is required'));
+  }
+
+  const scopeRaw = (q('scope') || 'all').toLowerCase();
+  const scope = (scopeRaw === 'shift') ? 'shift' : 'all';
+  const shiftId = scope === 'shift' ? (q('shift_id') || '') : '';
+  const includeExcluded = (q('include_excluded') || '').toLowerCase() === 'true';
+
+  // ✅ Optional filter: only return rows for this import batch id
+  const importIdRaw = q('import_id');
+  const importId = (importIdRaw != null && String(importIdRaw).trim() !== '') ? String(importIdRaw).trim() : null;
+
+  try {
+    const data = await collectSourceRowsForTimesheet(env, timesheetId, {
+      scope,
+      shift_id: shiftId || null,
+      include_excluded: includeExcluded,
+      import_id: importId
+    });
+
+    return withCORS(env, req, ok({
+      timesheet_id: timesheetId,
+      scope,
+      includes_excluded: includeExcluded,
+      imports: data.imports || []
+    }));
+  } catch (e) {
+    console.error('[TIMESHEET_SOURCE_PRINT] error', {
+      timesheet_id: timesheetId,
+      err: e?.message || String(e)
+    });
+    return withCORS(env, req, serverError('Failed to collect source rows for timesheet'));
+  }
+}
+async function collectSourceRowsForTimesheet(env, timesheetId, opts = {}) {
   const enc = encodeURIComponent;
   const scope = (opts.scope || 'all').toLowerCase();
   const filterShiftId = scope === 'shift' && opts.shift_id ? String(opts.shift_id) : null;
   const includeExcluded = !!opts.include_excluded;
+
+  // ✅ Optional filter: only include rows for this import batch id
+  const filterImportId = (opts.import_id != null && String(opts.import_id).trim() !== '')
+    ? String(opts.import_id).trim()
+    : null;
 
   // 1) Load current TSFIN
   const { rows: finRows } = await sbFetch(
@@ -56295,7 +57119,13 @@ async function findOrCreateSelfBillInvoice(
     `&select=id,external_row_key,latest_import_id,source_system` +
     `&order=work_date.asc,start_utc.asc`
   );
-  const usefulShifts = (shiftRows || []).filter(s => s.latest_import_id && s.external_row_key);
+
+  let usefulShifts = (shiftRows || []).filter(s => s.latest_import_id && s.external_row_key);
+
+  // ✅ Optional filter: only return the requested import_id (if provided)
+  if (filterImportId) {
+    usefulShifts = usefulShifts.filter(s => String(s.latest_import_id) === String(filterImportId));
+  }
 
   if (!usefulShifts.length) {
     return { imports: [] };
@@ -56306,6 +57136,10 @@ async function findOrCreateSelfBillInvoice(
   for (const sh of usefulShifts) {
     const sys = (sh.source_system || '').toUpperCase() || 'UNKNOWN';
     const importId = sh.latest_import_id;
+
+    // defensive: ensure import_id matches filter (if present)
+    if (filterImportId && String(importId) !== String(filterImportId)) continue;
+
     const gKey = `${sys}__${importId}`;
     let g = groups.get(gKey);
     if (!g) {
@@ -56317,6 +57151,10 @@ async function findOrCreateSelfBillInvoice(
       groups.set(gKey, g);
     }
     g.keys.add(sh.external_row_key);
+  }
+
+  if (!groups.size) {
+    return { imports: [] };
   }
 
   const imports = [];
@@ -56369,45 +57207,6 @@ async function findOrCreateSelfBillInvoice(
   return { imports };
 }
 
- async function handleTimesheetSourcePrint(env, req, timesheetId) {
-  const enc = encodeURIComponent;
-  const url = new URL(req.url);
-  const q = (k) => url.searchParams.get(k);
-
-  // Admin auth
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  if (!timesheetId) {
-    return withCORS(env, req, badRequest('timesheet_id is required'));
-  }
-
-  const scopeRaw = (q('scope') || 'all').toLowerCase();
-  const scope = (scopeRaw === 'shift') ? 'shift' : 'all';
-  const shiftId = scope === 'shift' ? (q('shift_id') || '') : '';
-  const includeExcluded = (q('include_excluded') || '').toLowerCase() === 'true';
-
-  try {
-    const data = await collectSourceRowsForTimesheet(env, timesheetId, {
-      scope,
-      shift_id: shiftId || null,
-      include_excluded: includeExcluded
-    });
-
-    return withCORS(env, req, ok({
-      timesheet_id: timesheetId,
-      scope,
-      includes_excluded: includeExcluded,
-      imports: data.imports || []
-    }));
-  } catch (e) {
-    console.error('[TIMESHEET_SOURCE_PRINT] error', {
-      timesheet_id: timesheetId,
-      err: e?.message || String(e)
-    });
-    return withCORS(env, req, serverError('Failed to collect source rows for timesheet'));
-  }
-}
 
  async function collectSourceRowsForInvoice(env, invoiceId) {
   const enc = encodeURIComponent;
