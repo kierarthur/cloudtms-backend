@@ -32746,8 +32746,55 @@ async function r2Head(env, key) {
   try { return await env.R2.head(key); } catch { return null; }
 }
 
+
+
 async function r2Get(env, key) {
-  try { return await env.R2.get(key); } catch { return null; }
+  try {
+    const k = String(key || '').trim().replace(/^\/+/, ''); // ✅ strip leading slashes
+    return await env.R2.get(k);
+  } catch {
+    return null;
+  }
+}
+
+async function handleSignGet(env, req, url) {
+  const canon = (s) => String(s || "").trim().replace(/^\/+/, ""); // ✅ canonical key
+
+  const key_raw    = url.searchParams.get("key") || "";
+  const booking_id = url.searchParams.get("booking_id") || "";
+  const role       = url.searchParams.get("role") || "";
+  const token      = url.searchParams.get("token") || "";
+
+  const key = canon(key_raw);
+
+  const secret = env.UPLOAD_TOKEN_SECRET;
+  const ver = await verifyToken(secret, token);
+  if (!ver.ok) return unauthorized("Invalid token");
+
+  const p = ver.payload || {};
+
+  // ✅ compare canonical keys, not raw strings
+  if (
+    p.typ !== "dl" ||
+    String(p.booking_id || "") !== String(booking_id || "") ||
+    String(p.role || "") !== String(role || "") ||
+    canon(p.key) !== key
+  ) {
+    return unauthorized("Token mismatch");
+  }
+
+  const obj = await r2Get(env, key);
+  if (!obj) return notFound("Not found");
+
+  // ✅ better: use stored content-type if present (otherwise default png)
+  const ct = (obj.httpMetadata && obj.httpMetadata.contentType) ? obj.httpMetadata.contentType : "image/png";
+
+  const headers = new Headers({
+    "content-type": ct,
+    "cache-control": "private, max-age=300"
+  });
+
+  return new Response(obj.body, { status: 200, headers });
 }
 
 
@@ -33827,21 +33874,6 @@ async function handleSignPresignGetBatch(env, req) {
 }
 
 
-async function handleSignGet(env, req, url) {
-  const key = url.searchParams.get("key") || "";
-  const booking_id = url.searchParams.get("booking_id") || "";
-  const role = url.searchParams.get("role") || "";
-  const token = url.searchParams.get("token") || "";
-  const secret = env.UPLOAD_TOKEN_SECRET;
-  const ver = await verifyToken(secret, token);
-  if (!ver.ok) return unauthorized("Invalid token");
-  const p = ver.payload;
-  if (p.typ !== "dl" || p.booking_id !== booking_id || p.role !== role || p.key !== key) return unauthorized("Token mismatch");
-  const obj = await r2Get(env, key);
-  if (!obj) return notFound("Not found");
-  const headers = new Headers({ "content-type": "image/png", "cache-control": "private, max-age=300" });
-  return new Response(obj.body, { status: 200, headers });
-}
 // ====================== SETTINGS (DEFAULTS) ======================
 /**
  * @openapi
