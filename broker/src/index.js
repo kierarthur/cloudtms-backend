@@ -33707,69 +33707,125 @@ async function handleAuthorisedStatus(env, req) {
 
 // ---------------------- Signatures: presign GET + proxy GET ----------------------
 async function handleSignPresignGet(env, req) {
-  const body = await parseJSONBody(req);
-  if (!body) return badRequest("Invalid JSON");
-  const { booking_id, which = "nurse", version = null, expires_seconds = 180 } = body;
-  if (!booking_id || !["nurse", "authoriser"].includes(which)) return badRequest("booking_id and which required");
+  try {
+    const body = await parseJSONBody(req);
+    if (!body) return withCORS(env, req, badRequest("Invalid JSON"));
 
-  const row = version ? await sbGetTimesheetByVersion(env, booking_id, parseInt(version, 10))
-                      : await sbGetTimesheetCurrent(env, booking_id);
-  if (!row) return notFound("Timesheet not found");
-  const key = which === "nurse" ? row.r2_nurse_key : row.r2_auth_key;
-  if (!key) return notFound("Signature not found");
+    const {
+      booking_id,
+      which = "nurse",
+      version = null,
+      expires_seconds = 180
+    } = body;
 
-  const exp = Math.min(parseInt(expires_seconds, 10) || 180, 900);
-  const tokenExp = Math.floor(Date.now() / 1000) + exp;
-  const secret = env.UPLOAD_TOKEN_SECRET;
-  const token = await createToken(secret, { typ: "dl", booking_id, role: which, key, exp: tokenExp });
+    if (!booking_id || !["nurse", "authoriser"].includes(which)) {
+      return withCORS(env, req, badRequest("booking_id and which required"));
+    }
 
-  const u = new URL(req.url);
-  u.pathname = "/signatures/get"; u.search = "";
-  u.searchParams.set("key", key);
-  u.searchParams.set("booking_id", booking_id);
-  u.searchParams.set("role", which);
-  u.searchParams.set("token", token);
+    const row = version
+      ? await sbGetTimesheetByVersion(env, booking_id, parseInt(version, 10))
+      : await sbGetTimesheetCurrent(env, booking_id);
 
-  return ok({ booking_id, which, get_url: u.toString(), expires_at: new Date(tokenExp * 1000).toISOString() });
-}
+    if (!row) return withCORS(env, req, notFound("Timesheet not found"));
 
-async function handleSignPresignGetBatch(env, req) {
-  const body = await parseJSONBody(req);
-  if (!body || !Array.isArray(body.items) || !body.items.length) return badRequest("items array required");
-  const items = body.items.slice(0, 100);
-  const exp = Math.min(parseInt(body.expires_seconds || "300", 10) || 300, 900);
-  const secret = env.UPLOAD_TOKEN_SECRET;
+    const keyRaw = (which === "nurse" ? row.r2_nurse_key : row.r2_auth_key);
+    if (!keyRaw) return withCORS(env, req, notFound("Signature not found"));
 
-  const out = [];
-  const not_found = [];
+    // ✅ IMPORTANT: normalise leading slash
+    const key = String(keyRaw).trim().replace(/^\/+/, "");
+    if (!key) return withCORS(env, req, notFound("Signature not found"));
 
-  for (const it of items) {
-    const booking_id = it.booking_id;
-    const which = it.which || "nurse";
-    const version = it.version ? parseInt(it.version, 10) : null;
-    if (!booking_id || !["nurse", "authoriser"].includes(which)) continue;
-
-    const row = version ? await sbGetTimesheetByVersion(env, booking_id, version)
-                        : await sbGetTimesheetCurrent(env, booking_id);
-    if (!row) { not_found.push(booking_id); continue; }
-    const key = which === "nurse" ? row.r2_nurse_key : row.r2_auth_key;
-    if (!key) { not_found.push(booking_id); continue; }
-
+    const exp = Math.min(parseInt(expires_seconds, 10) || 180, 900);
     const tokenExp = Math.floor(Date.now() / 1000) + exp;
-    const token = await createToken(secret, { typ: "dl", booking_id, role: which, key, exp: tokenExp });
+
+    const secret = env.UPLOAD_TOKEN_SECRET;
+    const token = await createToken(secret, {
+      typ: "dl",
+      booking_id,
+      role: which,
+      key,
+      exp: tokenExp
+    });
 
     const u = new URL(req.url);
-    u.pathname = "/signatures/get"; u.search = "";
+    u.pathname = "/signatures/get";
+    u.search = "";
     u.searchParams.set("key", key);
     u.searchParams.set("booking_id", booking_id);
     u.searchParams.set("role", which);
     u.searchParams.set("token", token);
 
-    out.push({ booking_id, which, version: row.version, get_url: u.toString(), expires_at: new Date(tokenExp * 1000).toISOString() });
+    return withCORS(env, req, ok({
+      booking_id,
+      which,
+      get_url: u.toString(),
+      expires_at: new Date(tokenExp * 1000).toISOString()
+    }));
+  } catch (e) {
+    // ensure errors still return CORS
+    return withCORS(env, req, serverError(e?.message || "Failed to presign signature"));
   }
-
-  return ok({ links: out, not_found });
 }
+async function handleSignPresignGetBatch(env, req) {
+  try {
+    const body = await parseJSONBody(req);
+    if (!body || !Array.isArray(body.items) || !body.items.length) {
+      return withCORS(env, req, badRequest("items array required"));
+    }
+
+    const items = body.items.slice(0, 100);
+    const exp = Math.min(parseInt(body.expires_seconds || "300", 10) || 300, 900);
+    const secret = env.UPLOAD_TOKEN_SECRET;
+
+    const out = [];
+    const not_found = [];
+
+    for (const it of items) {
+      const booking_id = it?.booking_id;
+      const which = it?.which || "nurse";
+      const version = it?.version != null ? parseInt(it.version, 10) : null;
+
+      if (!booking_id || !["nurse", "authoriser"].includes(which)) continue;
+
+      const row = (Number.isFinite(version) && version != null)
+        ? await sbGetTimesheetByVersion(env, booking_id, version)
+        : await sbGetTimesheetCurrent(env, booking_id);
+
+      if (!row) { not_found.push(booking_id); continue; }
+
+      const keyRaw = (which === "nurse" ? row.r2_nurse_key : row.r2_auth_key);
+      if (!keyRaw) { not_found.push(booking_id); continue; }
+
+      // ✅ IMPORTANT: normalise leading slash (R2 keys must not start with "/")
+      const key = String(keyRaw).trim().replace(/^\/+/, "");
+      if (!key) { not_found.push(booking_id); continue; }
+
+      const tokenExp = Math.floor(Date.now() / 1000) + exp;
+      const token = await createToken(secret, { typ: "dl", booking_id, role: which, key, exp: tokenExp });
+
+      const u = new URL(req.url);
+      u.pathname = "/signatures/get";
+      u.search = "";
+      u.searchParams.set("key", key);
+      u.searchParams.set("booking_id", booking_id);
+      u.searchParams.set("role", which);
+      u.searchParams.set("token", token);
+
+      out.push({
+        booking_id,
+        which,
+        version: row.version,
+        get_url: u.toString(),
+        expires_at: new Date(tokenExp * 1000).toISOString()
+      });
+    }
+
+    return withCORS(env, req, ok({ links: out, not_found }));
+  } catch (e) {
+    return withCORS(env, req, serverError(e?.message || "Failed to presign signature batch"));
+  }
+}
+
 
 async function handleSignGet(env, req, url) {
   const key = url.searchParams.get("key") || "";
