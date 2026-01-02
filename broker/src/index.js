@@ -18582,8 +18582,6 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
   // Infer role_type_enum (RMN | HCA) from assignment / ward text
   function inferRoleTypeEnum(assignment, ward) {
     const s = `${assignment || ''} ${ward || ''}`.toLowerCase();
-
-    // crude but practical heuristics – anything clearly HCA-ish → HCA, else RMN
     if (
       s.includes('hca') ||
       s.includes('healthcare assistant') ||
@@ -18609,8 +18607,65 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
     }
   }
 
-  let headerRow = rows[headerIdx] || [];
-  const header_columns = headerRow.map(c => String(c ?? ''));
+  // ✅ FIX: NHSP has a 2-row header (row1 has Contract/Actual groups, row2 has Start/End/Break/Total)
+  const headerRow1 = Array.isArray(rows[headerIdx]) ? rows[headerIdx] : [];
+  const headerRow2 = Array.isArray(rows[headerIdx + 1]) ? rows[headerIdx + 1] : [];
+
+  const norm = (s) => String(s || '').trim().toLowerCase();
+
+  const row2Norm = headerRow2.map(norm);
+  const hasSubheaders =
+    row2Norm.filter(x => x === 'start').length >= 2 &&
+    row2Norm.filter(x => x === 'end').length   >= 2 &&
+    row2Norm.filter(x => x === 'total').length >= 2 &&
+    row2Norm.some(x => x.includes('break') && x.includes('minute'));
+
+  // Use a consistent column count across the file for header/raw alignment
+  // Prefer header widths, but also ensure we never truncate real row data.
+  let nCols = Math.max(headerRow1.length, hasSubheaders ? headerRow2.length : 0);
+  try {
+    // Ensure nCols covers the widest row we saw (defensive, supports "extra columns sometimes")
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      if (Array.isArray(r) && r.length > nCols) nCols = r.length;
+    }
+  } catch {}
+
+  // Build a single flattened header array aligned to raw_columns[].
+  // - For normal columns: take row1 value.
+  // - For Contract/Actual subcolumns: take row2 value (Start/End/Break/Total).
+  // This ensures FE can map and format times/money correctly.
+  const header_columns = [];
+  for (let i = 0; i < nCols; i++) {
+    const top = String(headerRow1[i] ?? '').trim();
+    const sub = hasSubheaders ? String(headerRow2[i] ?? '').trim() : '';
+
+    // If the top cell is a group label (Contract/Actual) and sub exists, use the sub label.
+    // If top is blank and sub exists, use sub.
+    const topNorm = norm(top);
+    if (hasSubheaders && sub) {
+      if (!top || topNorm === 'contract' || topNorm === 'actual') {
+        header_columns.push(sub);
+        continue;
+      }
+    }
+
+    if (top) header_columns.push(top);
+    else if (sub) header_columns.push(sub);
+    else header_columns.push(''); // keep blanks (do not drop; preserves alignment)
+  }
+
+  console.log('[NHSP_PARSE] header_detected', {
+    import_id,
+    headerIdx,
+    hasSubheaders,
+    nCols,
+    header_columns_preview: header_columns.slice(0, 30)
+  });
+
+  // IMPORTANT: Use a header row for matcher-based col detection that includes subheaders when present.
+  // (This is what allows us to find Start/End/Break even though row1 has merged blanks.)
+  const headerRowForFind = header_columns;
 
   // Load column aliases for NHSP assignment once per parse
   let assignmentAliases = [];
@@ -18627,8 +18682,22 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
   }
 
   const findCol = (fallbackIdx, matcher) => {
-    const idx = headerRow.findIndex(cell => matcher(String(cell || '').toLowerCase()));
+    const idx = headerRowForFind.findIndex(cell => matcher(String(cell || '').toLowerCase()));
     return idx >= 0 ? idx : fallbackIdx;
+  };
+
+  // Find the Nth matching column (1-based). Used to prefer ACTUAL columns in 2-level NHSP headers.
+  const findNthCol = (fallbackIdx, matcher, nth) => {
+    const want = Math.max(1, Number(nth || 1));
+    let seen = 0;
+    for (let i = 0; i < headerRowForFind.length; i++) {
+      const v = String(headerRowForFind[i] || '').toLowerCase();
+      if (matcher(v)) {
+        seen++;
+        if (seen === want) return i;
+      }
+    }
+    return fallbackIdx;
   };
 
   // Fallback local implementation in case helper isn't wired yet
@@ -18656,26 +18725,40 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
       ? findColByAliases
       : findColByAliasesLocal;
 
-  const dateColIdx       = findCol(0,  h => h.includes('date'));
-  const refColIdx        = findCol(1,  h => h.includes('ref'));
-  const staffColIdx      = findCol(2,  h => h.includes('staff') || h.includes('worker') || h.includes('name'));
-  const uniqueColIdx     = findCol(
+  const dateColIdx   = findCol(0,  h => h.includes('date'));
+  const refColIdx    = findCol(1,  h => h.includes('ref'));
+  const staffColIdx  = findCol(2,  h => h.includes('staff') || h.includes('worker') || h.includes('name'));
+  const uniqueColIdx = findCol(
     3,
     h =>
       h.includes('unique') ||
       h.includes('staff no') ||
       (h.includes('agency') && h.includes('id'))
   );
-  const trustColIdx      = findCol(4,  h => h.includes('hospital') || h.includes('trust') || h.includes('client'));
-  const wardColIdx       = findCol(5,  h => h.includes('ward') || h.includes('unit') || h.includes('dept'));
+  const trustColIdx  = findCol(4,  h => h.includes('hospital') || h.includes('trust') || h.includes('client'));
+  const wardColIdx   = findCol(5,  h => h.includes('ward') || h.includes('unit') || h.includes('dept'));
 
-  // ✅ CHANGED: assignment uses configured aliases first, then fallback to "assign"
-  const assignmentColIdx = findColByAliasesFn(headerRow, assignmentAliases, 6, h => h.includes('assign'));
+  // ✅ assignment uses configured aliases first, then fallback to "assign"
+  const assignmentColIdx = findColByAliasesFn(headerRowForFind, assignmentAliases, 6, h => h.includes('assign'));
 
-  const startColIdx      = findCol(11, h => h.includes('start'));
-  const endColIdx        = findCol(12, h => h.includes('end') || h.includes('finish'));
-  const breakColIdx      = findCol(13, h => h.includes('break'));
-  const hoursColIdx      = findCol(-1, h => h.includes('hours') && (h.includes('worked') || h.includes('actual')));
+  // ✅ FIX: For NHSP two-level header, prefer the SECOND occurrence of Start/End/Break/Total (the ACTUAL block),
+  // with fallback to your historical indices (11,12,13) so existing files still parse correctly.
+  const startColIdx =
+    hasSubheaders
+      ? findNthCol(11, h => h.includes('start'), 2)
+      : findCol(11, h => h.includes('start'));
+
+  const endColIdx =
+    hasSubheaders
+      ? findNthCol(12, h => (h.includes('end') || h.includes('finish')), 2)
+      : findCol(12, h => (h.includes('end') || h.includes('finish')));
+
+  const breakColIdx =
+    hasSubheaders
+      ? findNthCol(13, h => h.includes('break'), 2)
+      : findCol(13, h => h.includes('break'));
+
+  const hoursColIdx  = findCol(-1, h => h.includes('hours') && (h.includes('worked') || h.includes('actual')));
 
   let rows_total   = 0;
   let rows_parsed  = 0;
@@ -18683,10 +18766,13 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
 
   const hrRowsPayload = [];
 
+  // ✅ If we detected the NHSP subheader row, data starts AFTER BOTH header rows
+  const dataStartIdx = headerIdx + (hasSubheaders ? 2 : 1);
+
   // ─────────────────────────────────────────────────────────────
   // 4) Row loop → hr_rows payload (DB-compliant)
   // ─────────────────────────────────────────────────────────────
-  for (let i = headerIdx + 1; i < rows.length; i++) {
+  for (let i = dataStartIdx; i < rows.length; i++) {
     const row = rows[i];
     if (!row || row.length === 0) continue;
     rows_total++;
@@ -18747,8 +18833,8 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
 
     const refStr = normalizeStr(rawRef);
 
-    // Preserve the full row as raw_columns (for diagnostics)
-    const raw_columns = headerRow.map((_, idx) => row[idx]);
+    // ✅ FIX: Preserve the full row as raw_columns aligned to header_columns length (nCols)
+    const raw_columns = Array.from({ length: nCols }, (_, idx) => row[idx]);
 
     const payload_json = {
       type: 'NHSP_WEEKLY',
@@ -22195,6 +22281,7 @@ async function handleNhspApply(env, req, importId) {
     return withCORS(env, req, serverError("Failed to fetch NHSP rows"));
   }
 }
+
 async function handleHrAutoprocessImport(env, req) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
@@ -22248,7 +22335,7 @@ async function handleHrAutoprocessImport(env, req) {
         rows_parsed: 0,
         rows_skipped: 0,
         notes: null,
-        header_columns: []
+        header_columns: [] // ✅ ensure key exists from day 0
       }
     };
 
@@ -22295,32 +22382,21 @@ async function handleHrAutoprocessImport(env, req) {
       rows_parsed: 0,
       rows_skipped: 0,
       notes: null,
-      header_columns: [],
-      error: false
+      header_columns: []
     };
 
     try {
       if (typeof parseHealthRosterWorkbookIntoHrRows === 'function') {
-        const parsed = await parseHealthRosterWorkbookIntoHrRows(env, {
+        summary = await parseHealthRosterWorkbookIntoHrRows(env, {
           import_id: importId,
           file_key: fileKey,
           client_id: clientId,
           tz: tzAssumption
         });
-
-        if (parsed && typeof parsed === 'object') {
-          summary = {
-            ...summary,
-            ...parsed,
-            header_columns: Array.isArray(parsed.header_columns) ? parsed.header_columns : []
-          };
-        }
       } else {
-        summary.error = true;
         summary.notes = 'parseHealthRosterWorkbookIntoHrRows helper is not implemented.';
       }
     } catch (e) {
-      summary.error = true;
       summary.notes = `Parsing failed: ${e?.message || String(e)}`;
       if (LOG) {
         console.error('[HR_WEEKLY_IMPORT]', JSON.stringify({
@@ -22334,23 +22410,20 @@ async function handleHrAutoprocessImport(env, req) {
       }
     }
 
-    const prev = (rec.parse_summary_json && typeof rec.parse_summary_json === 'object')
-      ? rec.parse_summary_json
-      : {};
+    // ✅ FIX: persist header_columns into hr_imports.parse_summary_json
+    const headerCols =
+      (summary && Array.isArray(summary.header_columns))
+        ? summary.header_columns
+        : [];
 
-    const headerCols = Array.isArray(summary.header_columns)
-      ? summary.header_columns.map(x => String(x ?? ''))
-      : [];
-
-    // 3) Update parse_summary_json on hr_imports (INCLUDING header_columns)
+    // 3) Update parse_summary_json on hr_imports
     const patchBody = {
       parse_summary_json: {
-        ...prev,
-        status: summary.error ? 'PARSE_FAILED' : 'PARSED',
-        rows_total: Number(summary.rows_total || 0),
-        rows_parsed: Number(summary.rows_parsed || 0),
-        rows_skipped: Number(summary.rows_skipped || 0),
-        notes: summary.notes || null,
+        status: summary && !summary.error ? 'PARSED' : 'PARSE_FAILED',
+        rows_total: Number(summary?.rows_total || 0),
+        rows_parsed: Number(summary?.rows_parsed || 0),
+        rows_skipped: Number(summary?.rows_skipped || 0),
+        notes: summary?.notes || null,
         header_columns: headerCols
       }
     };
