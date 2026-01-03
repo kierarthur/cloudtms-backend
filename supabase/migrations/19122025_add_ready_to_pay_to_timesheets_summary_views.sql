@@ -1,59 +1,33 @@
-BEGIN;
+-- NOTE:
+-- This migration is written to be SAFE to re-run:
+--  - Adds the candidate_hint_text column if missing
+--  - (Re)applies the “must be JSON object” check constraint safely
+--  - CREATE OR REPLACE VIEW for both views (idempotent)
+--  - Re-applies GRANTs (idempotent)
+--  - Triggers PostgREST schema reload
 
 -- =========================================================
--- CONTRACT ROUTE OVERRIDES (minimal + non-duplicating)
+-- Ensure column exists + enforce JSON object shape
 -- =========================================================
+ALTER TABLE public.timesheets
+  ADD COLUMN IF NOT EXISTS candidate_hint_text jsonb;
 
-ALTER TABLE public.contracts
-  ADD COLUMN IF NOT EXISTS is_nhsp boolean,
-  ADD COLUMN IF NOT EXISTS autoprocess_hr boolean,
-  ADD COLUMN IF NOT EXISTS requires_hr boolean,
-  ADD COLUMN IF NOT EXISTS no_timesheet_required boolean,
-  ADD COLUMN IF NOT EXISTS daily_calc_of_invoices boolean,
-  ADD COLUMN IF NOT EXISTS group_nightsat_sunbh boolean;
+ALTER TABLE public.timesheets
+  DROP CONSTRAINT IF EXISTS timesheets_candidate_hint_text_is_object;
 
--- Optional sanity constraints (safe with NULLs; NULL treated as false)
-ALTER TABLE public.contracts
-  DROP CONSTRAINT IF EXISTS contracts_route_one_source_chk;
-
-ALTER TABLE public.contracts
-  ADD CONSTRAINT contracts_route_one_source_chk
+ALTER TABLE public.timesheets
+  ADD CONSTRAINT timesheets_candidate_hint_text_is_object
   CHECK (
-    (CASE WHEN COALESCE(is_nhsp, false) THEN 1 ELSE 0 END) +
-    (CASE WHEN COALESCE(autoprocess_hr, false) THEN 1 ELSE 0 END)
-    <= 1
+    candidate_hint_text IS NULL
+    OR jsonb_typeof(candidate_hint_text) = 'object'
   );
-
-ALTER TABLE public.contracts
-  DROP CONSTRAINT IF EXISTS contracts_no_ts_requires_hr_chk;
-
-ALTER TABLE public.contracts
-  ADD CONSTRAINT contracts_no_ts_requires_hr_chk
-  CHECK (
-    COALESCE(no_timesheet_required, false) = false
-    OR COALESCE(autoprocess_hr, false) = true
-  );
-
 
 -- =========================================================
 -- UPDATED: v_timesheets_summary_base + v_timesheets_summary
--- (contract flags preferred; fallback to client_settings)
---
--- FIXES INCLUDED:
---   1) Expose client_no_timesheet_required (and other effective fields)
---      by APPENDING them at the END of v_timesheets_summary_base projection.
---   2) Keep v_timesheets_summary column order stable by NOT using v.*,
---      and by keeping the existing contract_id column position unchanged.
---   3) Improve contract_id resolution for DAILY rows in v_timesheets_summary
---      via COALESCE(timesheets.contract_id, contract_weeks.contract_id).
---
--- QR SUMMARY STAGE FIXES INCLUDED:
---   4) Include qr_token, qr_generated_at, qr_scanned_at in the union sources,
---      and APPEND them at the END of v_timesheets_summary_base projection
---      (safe for reruns / CREATE OR REPLACE VIEW).
---   5) Extend summary_stage with internal QR keys:
---        - QR_NOT_ISSUED
---        - QR_ISSUED_AWAITING_SIGNATURE
+-- Adds support for:
+--   - timesheets.candidate_hint_text (jsonb) exposed to FE
+--   - candidate_name displays human hint when UNRESOLVED
+--     "Unresolved Timesheet - Firstname Surname, Email - email"
 -- =========================================================
 
 CREATE OR REPLACE VIEW public.v_timesheets_summary_base AS
@@ -161,7 +135,37 @@ ts_base AS (
     tf.pay_on_hold,
     tf.locked_by_invoice_id,
 
-    COALESCE(c.display_name, ts.occupant_key_norm) AS candidate_name,
+    -- ✅ UPDATED: show hint when unresolved (candidate_id null) and hint has useful fields
+    CASE
+      WHEN COALESCE(tf.candidate_id, ct.candidate_id) IS NULL
+        AND ts.candidate_hint_text IS NOT NULL
+        AND jsonb_typeof(ts.candidate_hint_text) = 'object'
+        AND (
+          nullif(btrim(concat_ws(' ',
+            nullif(btrim(ts.candidate_hint_text->>'first_name'), ''),
+            nullif(btrim(ts.candidate_hint_text->>'surname'), '')
+          )), '') IS NOT NULL
+          OR nullif(btrim(ts.candidate_hint_text->>'display_name'), '') IS NOT NULL
+          OR nullif(btrim(ts.candidate_hint_text->>'email'), '') IS NOT NULL
+        )
+      THEN
+        'Unresolved Timesheet - ' ||
+        COALESCE(
+          nullif(btrim(concat_ws(' ',
+            nullif(btrim(ts.candidate_hint_text->>'first_name'), ''),
+            nullif(btrim(ts.candidate_hint_text->>'surname'), '')
+          )), ''),
+          nullif(btrim(ts.candidate_hint_text->>'display_name'), ''),
+          'Candidate'
+        ) ||
+        CASE
+          WHEN nullif(btrim(ts.candidate_hint_text->>'email'), '') IS NOT NULL
+          THEN ', Email - ' || btrim(ts.candidate_hint_text->>'email')
+          ELSE ''
+        END
+      ELSE COALESCE(c.display_name, ts.occupant_key_norm)
+    END AS candidate_name,
+
     cli.name AS client_name,
 
     COALESCE(na.nhsp_shift_count, 0) AS nhsp_shift_count,
@@ -183,7 +187,6 @@ ts_base AS (
 
     COALESCE(pa.pay_adjustment_count, 0) AS pay_adjustment_count,
 
-    -- Effective route flags: contract override (if set) wins, else client_settings
     COALESCE(ct.autoprocess_hr, ch.autoprocess_hr, false) AS client_autoprocess_hr,
     COALESCE(ct.requires_hr, ch.requires_hr, false) AS client_requires_hr,
     COALESCE(ct.no_timesheet_required, ch.no_timesheet_required, false) AS client_no_timesheet_required,
@@ -204,7 +207,6 @@ ts_base AS (
     ts.reference_number,
     ts.day_references_json,
 
-    -- schedule JSON used for per-shift refs in WEEKLY MANUAL
     ts.actual_schedule_json,
 
     ts.r2_nurse_key,
@@ -223,7 +225,6 @@ ts_base AS (
     tf.mileage_evidence_r2_key,
     tf.mileage_evidence_manifest,
 
-    -- candidate + umbrella fields (used for ready_to_pay only)
     cand.pay_method      AS cand_pay_method,
     cand.account_holder  AS cand_account_holder,
     cand.sort_code       AS cand_sort_code,
@@ -233,7 +234,10 @@ ts_base AS (
     umb.enabled          AS umb_enabled,
     umb.name             AS umb_name,
     umb.sort_code        AS umb_sort_code,
-    umb.account_number   AS umb_account_number
+    umb.account_number   AS umb_account_number,
+
+    -- ✅ NEW (union compat): expose hint JSON from timesheets
+    ts.candidate_hint_text AS candidate_hint_text
 
   FROM timesheets ts
   LEFT JOIN contract_weeks cw ON cw.timesheet_id = ts.timesheet_id
@@ -247,7 +251,6 @@ ts_base AS (
   LEFT JOIN validations_latest vl ON vl.timesheet_id = ts.timesheet_id
   LEFT JOIN evidence_agg ea ON ea.timesheet_id = ts.timesheet_id
 
-  -- banking fields
   LEFT JOIN candidates cand ON cand.id = COALESCE(tf.candidate_id, ct.candidate_id)
   LEFT JOIN umbrellas umb ON umb.id = cand.umbrella_id
 
@@ -311,7 +314,6 @@ planned_weeks AS (
 
     0 AS pay_adjustment_count,
 
-    -- Effective route flags for planned stubs too
     COALESCE(ct.autoprocess_hr, ch.autoprocess_hr, false) AS client_autoprocess_hr,
     COALESCE(ct.requires_hr, ch.requires_hr, false) AS client_requires_hr,
     COALESCE(ct.no_timesheet_required, ch.no_timesheet_required, false) AS client_no_timesheet_required,
@@ -332,7 +334,6 @@ planned_weeks AS (
     NULL::text AS reference_number,
     NULL::jsonb AS day_references_json,
 
-    -- union compat (internal only)
     NULL::jsonb AS actual_schedule_json,
 
     NULL::text AS r2_nurse_key,
@@ -351,7 +352,6 @@ planned_weeks AS (
     NULL::text AS mileage_evidence_r2_key,
     NULL::jsonb AS mileage_evidence_manifest,
 
-    -- union compat
     NULL::text    AS cand_pay_method,
     NULL::text    AS cand_account_holder,
     NULL::text    AS cand_sort_code,
@@ -360,7 +360,10 @@ planned_weeks AS (
     NULL::boolean AS umb_enabled,
     NULL::text    AS umb_name,
     NULL::text    AS umb_sort_code,
-    NULL::text    AS umb_account_number
+    NULL::text    AS umb_account_number,
+
+    -- ✅ NEW (union compat)
+    NULL::jsonb AS candidate_hint_text
 
   FROM contract_weeks cw
   JOIN contracts ct ON ct.id = cw.contract_id
@@ -431,7 +434,7 @@ with_issues AS (
             AND ar.expenses_evidence_r2_key IS NULL
             AND (
               ar.expenses_evidence_manifest IS NULL
-              OR jsonb_typeof(ar.expenses_evidence_manifest) <> 'array'::text
+              OR jsonb_typeof(ar.expenses_evidence_manifest) <> 'array'
               OR jsonb_array_length(ar.expenses_evidence_manifest) = 0
             )
             THEN ARRAY['Expenses evidence'::text]
@@ -444,7 +447,7 @@ with_issues AS (
           AND ar.mileage_evidence_r2_key IS NULL
           AND (
             ar.mileage_evidence_manifest IS NULL
-            OR jsonb_typeof(ar.mileage_evidence_manifest) <> 'array'::text
+            OR jsonb_typeof(ar.mileage_evidence_manifest) <> 'array'
             OR jsonb_array_length(ar.mileage_evidence_manifest) = 0
           )
           THEN ARRAY['Mileage evidence'::text]
@@ -477,9 +480,9 @@ with_issues AS (
             ar.submission_mode = 'MANUAL'::submission_mode_enum
             AND (
               ar.actual_schedule_json IS NULL
-              OR jsonb_typeof(ar.actual_schedule_json) <> 'array'::text
+              OR jsonb_typeof(ar.actual_schedule_json) <> 'array'
               OR (
-                jsonb_typeof(ar.actual_schedule_json) = 'array'::text
+                jsonb_typeof(ar.actual_schedule_json) = 'array'
                 AND (
                   jsonb_array_length(ar.actual_schedule_json) = 0
                   OR EXISTS (
@@ -553,13 +556,11 @@ SELECT
   paid_at_utc,
   pay_on_hold,
 
-  -- ready_to_pay (mirrors backend pay-run eligibility gates)
   (
     timesheet_id IS NOT NULL
     AND paid_at_utc IS NULL
     AND COALESCE(pay_on_hold, false) = false
     AND authorised_at_server IS NOT NULL
-
     AND processing_status IS NOT NULL
     AND processing_status <> ALL (
       ARRAY[
@@ -571,7 +572,6 @@ SELECT
     )
     AND COALESCE(has_rate_issue, false) = false
     AND COALESCE(has_pay_channel_issue, false) = false
-
     AND (
       (
         UPPER(COALESCE(cand_pay_method, '')) = 'PAYE'
@@ -588,20 +588,18 @@ SELECT
         AND umb_account_number IS NOT NULL AND length(btrim(umb_account_number)) > 0
       )
     )
-
     AND (
       COALESCE(require_reference_to_pay, false) = false
       OR (
         CASE
           WHEN sheet_scope = 'DAILY'::timesheet_scope_enum THEN
             (reference_number IS NOT NULL AND length(btrim(reference_number)) > 0)
-
           WHEN sheet_scope = 'WEEKLY'::timesheet_scope_enum THEN
             CASE
               WHEN submission_mode = 'MANUAL'::submission_mode_enum THEN
                 (
                   actual_schedule_json IS NOT NULL
-                  AND jsonb_typeof(actual_schedule_json) = 'array'::text
+                  AND jsonb_typeof(actual_schedule_json) = 'array'
                   AND jsonb_array_length(actual_schedule_json) > 0
                   AND NOT EXISTS (
                     SELECT 1
@@ -626,7 +624,6 @@ SELECT
                   )
                 )
             END
-
           ELSE
             (reference_number IS NOT NULL AND length(btrim(reference_number)) > 0)
         END
@@ -645,36 +642,30 @@ SELECT
   CASE
     WHEN timesheet_id IS NULL THEN
       CASE contract_week_status
-        WHEN 'PLANNED'::contract_week_status_enum THEN 'PLANNED'::text
-        WHEN 'OPEN'::contract_week_status_enum THEN 'PLANNED'::text
-        WHEN 'SUBMITTED'::contract_week_status_enum THEN 'PENDING_AUTH'::text
-        WHEN 'AUTHORISED'::contract_week_status_enum THEN 'READY_FOR_INVOICE'::text
-        WHEN 'INVOICED'::contract_week_status_enum THEN 'INVOICED'::text
-        WHEN 'CANCELLED'::contract_week_status_enum THEN 'NEEDS_ATTENTION'::text
-        ELSE 'UNKNOWN'::text
+        WHEN 'PLANNED'::contract_week_status_enum THEN 'PLANNED'
+        WHEN 'OPEN'::contract_week_status_enum THEN 'PLANNED'
+        WHEN 'SUBMITTED'::contract_week_status_enum THEN 'PENDING_AUTH'
+        WHEN 'AUTHORISED'::contract_week_status_enum THEN 'READY_FOR_INVOICE'
+        WHEN 'INVOICED'::contract_week_status_enum THEN 'INVOICED'
+        WHEN 'CANCELLED'::contract_week_status_enum THEN 'NEEDS_ATTENTION'
+        ELSE 'UNKNOWN'
       END
-
-    WHEN paid_at_utc IS NOT NULL THEN 'PAID'::text
-    WHEN locked_by_invoice_id IS NOT NULL THEN 'INVOICED'::text
-
-    -- ✅ QR waiting stages (internal keys), QR-specific only
+    WHEN paid_at_utc IS NOT NULL THEN 'PAID'
+    WHEN locked_by_invoice_id IS NOT NULL THEN 'INVOICED'
     WHEN timesheet_id IS NOT NULL
       AND qr_status = 'PENDING'::timesheet_qr_status_enum
       AND (qr_token IS NULL OR length(btrim(qr_token)) = 0)
       AND qr_generated_at IS NULL
-      THEN 'QR_NOT_ISSUED'::text
-
+      THEN 'QR_NOT_ISSUED'
     WHEN timesheet_id IS NOT NULL
       AND qr_status = 'PENDING'::timesheet_qr_status_enum
       AND (qr_token IS NOT NULL AND length(btrim(qr_token)) > 0)
       AND qr_generated_at IS NOT NULL
       AND qr_scanned_at IS NULL
-      THEN 'QR_ISSUED_AWAITING_SIGNATURE'::text
-
-    -- Existing processing stages
-    WHEN processing_status = 'READY_FOR_INVOICE'::ts_fin_processing_status_enum THEN 'READY_FOR_INVOICE'::text
-    WHEN processing_status = 'READY_FOR_HR'::ts_fin_processing_status_enum THEN 'READY_FOR_HR'::text
-    WHEN processing_status = 'PENDING_AUTH'::ts_fin_processing_status_enum THEN 'PENDING_AUTH'::text
+      THEN 'QR_ISSUED_AWAITING_SIGNATURE'
+    WHEN processing_status = 'READY_FOR_INVOICE'::ts_fin_processing_status_enum THEN 'READY_FOR_INVOICE'
+    WHEN processing_status = 'READY_FOR_HR'::ts_fin_processing_status_enum THEN 'READY_FOR_HR'
+    WHEN processing_status = 'PENDING_AUTH'::ts_fin_processing_status_enum THEN 'PENDING_AUTH'
     WHEN processing_status = ANY (
       ARRAY[
         'UNASSIGNED'::ts_fin_processing_status_enum,
@@ -682,24 +673,20 @@ SELECT
         'RATE_MISSING'::ts_fin_processing_status_enum,
         'PAY_CHANNEL_MISSING'::ts_fin_processing_status_enum
       ]
-    ) THEN 'NEEDS_ATTENTION'::text
-    ELSE 'UNKNOWN'::text
+    ) THEN 'NEEDS_ATTENTION'
+    ELSE 'UNKNOWN'
   END AS summary_stage,
 
   CASE
-    WHEN sheet_scope = 'DAILY'::timesheet_scope_enum AND submission_mode = 'ELECTRONIC'::submission_mode_enum THEN 'DAILY_ELECTRONIC'::text
-    WHEN sheet_scope = 'DAILY'::timesheet_scope_enum AND submission_mode = 'MANUAL'::submission_mode_enum THEN 'DAILY_MANUAL'::text
-
-    WHEN sheet_scope = 'WEEKLY'::timesheet_scope_enum AND client_autoprocess_hr IS TRUE THEN 'WEEKLY_HEALTHROSTER'::text
-
-    WHEN sheet_scope = 'WEEKLY'::timesheet_scope_enum AND basis = 'NHSP_ADJUSTMENT'::timesheet_fin_basis_enum THEN 'WEEKLY_NHSP_ADJUSTMENT'::text
-    WHEN sheet_scope = 'WEEKLY'::timesheet_scope_enum AND basis = 'NHSP'::timesheet_fin_basis_enum THEN 'WEEKLY_NHSP'::text
-
-    WHEN sheet_scope = 'WEEKLY'::timesheet_scope_enum AND client_is_nhsp IS TRUE THEN 'WEEKLY_NHSP'::text
-
-    WHEN sheet_scope = 'WEEKLY'::timesheet_scope_enum AND submission_mode = 'ELECTRONIC'::submission_mode_enum THEN 'WEEKLY_ELECTRONIC'::text
-    WHEN sheet_scope = 'WEEKLY'::timesheet_scope_enum AND submission_mode = 'MANUAL'::submission_mode_enum THEN 'WEEKLY_MANUAL'::text
-    ELSE 'UNKNOWN'::text
+    WHEN sheet_scope = 'DAILY'::timesheet_scope_enum AND submission_mode = 'ELECTRONIC'::submission_mode_enum THEN 'DAILY_ELECTRONIC'
+    WHEN sheet_scope = 'DAILY'::timesheet_scope_enum AND submission_mode = 'MANUAL'::submission_mode_enum THEN 'DAILY_MANUAL'
+    WHEN sheet_scope = 'WEEKLY'::timesheet_scope_enum AND client_autoprocess_hr IS TRUE THEN 'WEEKLY_HEALTHROSTER'
+    WHEN sheet_scope = 'WEEKLY'::timesheet_scope_enum AND basis = 'NHSP_ADJUSTMENT'::timesheet_fin_basis_enum THEN 'WEEKLY_NHSP_ADJUSTMENT'
+    WHEN sheet_scope = 'WEEKLY'::timesheet_scope_enum AND basis = 'NHSP'::timesheet_fin_basis_enum THEN 'WEEKLY_NHSP'
+    WHEN sheet_scope = 'WEEKLY'::timesheet_scope_enum AND client_is_nhsp IS TRUE THEN 'WEEKLY_NHSP'
+    WHEN sheet_scope = 'WEEKLY'::timesheet_scope_enum AND submission_mode = 'ELECTRONIC'::submission_mode_enum THEN 'WEEKLY_ELECTRONIC'
+    WHEN sheet_scope = 'WEEKLY'::timesheet_scope_enum AND submission_mode = 'MANUAL'::submission_mode_enum THEN 'WEEKLY_MANUAL'
+    ELSE 'UNKNOWN'
   END AS route_type,
 
   contract_week_id,
@@ -724,8 +711,8 @@ SELECT
       ]
     )
   )
-  OR (hr_crosscheck_status IS NOT NULL AND hr_crosscheck_status <> 'OK'::text)
-  OR (hr_crosscheck_issues && ARRAY['DUPLICATE_CONTRACTS'::text])
+  OR (hr_crosscheck_status IS NOT NULL AND hr_crosscheck_status <> 'OK')
+  OR (hr_crosscheck_issues && ARRAY['DUPLICATE_CONTRACTS'])
   OR (issue_codes IS NOT NULL AND array_length(issue_codes, 1) > 0) AS needs_attention,
 
   client_autoprocess_hr,
@@ -736,7 +723,6 @@ SELECT
   external_source_rows_json,
   issue_codes,
 
-  -- ✅ APPENDED NEW COLUMNS (safe for CREATE OR REPLACE VIEW)
   client_requires_hr,
   client_no_timesheet_required,
   client_is_nhsp,
@@ -749,18 +735,15 @@ SELECT
   require_reference_to_pay,
   require_reference_to_invoice,
 
-  -- ✅ APPENDED QR FIELDS (safe for CREATE OR REPLACE VIEW)
   qr_token,
   qr_generated_at,
-  qr_scanned_at
+  qr_scanned_at,
+
+  -- ✅ APPENDED NEW COLUMN (safe)
+  candidate_hint_text
 FROM with_issues;
 
 
--- IMPORTANT:
--- We do NOT use "SELECT v.*, ..." here, because adding new columns to base would
--- insert columns BEFORE the existing last column "contract_id" and break CREATE OR REPLACE.
--- So we explicitly project the original columns in the original order,
--- keep contract_id in the same position, then append new columns after.
 CREATE OR REPLACE VIEW public.v_timesheets_summary AS
 SELECT
   v.timesheet_id,
@@ -812,10 +795,9 @@ SELECT
   v.external_source_rows_json,
   v.issue_codes,
 
-  -- ✅ contract_id kept in the same position as before, but resolved for DAILY rows too
+  -- contract_id kept in same position (resolved for DAILY too)
   COALESCE(ts2.contract_id, cw.contract_id) AS contract_id,
 
-  -- ✅ appended new columns (safe)
   v.client_requires_hr,
   v.client_no_timesheet_required,
   v.client_is_nhsp,
@@ -826,7 +808,10 @@ SELECT
   v.client_ts_reference_required,
 
   v.require_reference_to_pay,
-  v.require_reference_to_invoice
+  v.require_reference_to_invoice,
+
+  -- ✅ APPENDED NEW COLUMN (safe)
+  v.candidate_hint_text
 FROM public.v_timesheets_summary_base v
 LEFT JOIN public.contract_weeks cw ON cw.id = v.contract_week_id
 LEFT JOIN public.timesheets ts2 ON ts2.timesheet_id = v.timesheet_id;
@@ -836,83 +821,5 @@ GRANT SELECT ON public.v_timesheets_summary      TO service_role;
 GRANT SELECT ON public.v_timesheets_summary_base TO authenticated;
 GRANT SELECT ON public.v_timesheets_summary      TO authenticated;
 
-
--- =========================================================
--- UPDATED: v_ts_invoice_precheck
--- =========================================================
-
-CREATE OR REPLACE VIEW public.v_ts_invoice_precheck AS
-SELECT
-  ts.timesheet_id,
-  ts.week_ending_date,
-  ts.submission_mode,
-  ts.manual_pdf_r2_key,
-  ts.reference_number,
-  c.require_reference_to_invoice,
-  CASE
-    WHEN (ts.submission_mode = 'MANUAL'::submission_mode_enum)
-      AND (ts.manual_pdf_r2_key IS NULL)
-      THEN 'BLOCK_NO_PDF'::text
-
-    WHEN COALESCE(c.require_reference_to_invoice, false) = true
-      AND (
-        (
-          ts.sheet_scope = 'DAILY'::timesheet_scope_enum
-          AND (ts.reference_number IS NULL OR length(btrim(ts.reference_number)) = 0)
-        )
-        OR
-        (
-          ts.sheet_scope = 'WEEKLY'::timesheet_scope_enum
-          AND ts.submission_mode = 'MANUAL'::submission_mode_enum
-          AND (
-            ts.actual_schedule_json IS NULL
-            OR jsonb_typeof(ts.actual_schedule_json) <> 'array'::text
-            OR (
-              jsonb_typeof(ts.actual_schedule_json) = 'array'::text
-              AND (
-                jsonb_array_length(ts.actual_schedule_json) = 0
-                OR EXISTS (
-                  SELECT 1
-                  FROM jsonb_array_elements(ts.actual_schedule_json) seg
-                  WHERE
-                    coalesce(btrim(seg->>'start'), '') <> ''
-                    AND coalesce(btrim(seg->>'end'), '') <> ''
-                    AND coalesce(btrim(seg->>'ref_num'), '') = ''
-                )
-              )
-            )
-          )
-        )
-        OR
-        (
-          ts.sheet_scope = 'WEEKLY'::timesheet_scope_enum
-          AND ts.submission_mode <> 'MANUAL'::submission_mode_enum
-          AND (
-            (ts.reference_number IS NULL OR length(btrim(ts.reference_number)) = 0)
-            AND (
-              ts.day_references_json IS NULL
-              OR ts.day_references_json = '{}'::jsonb
-              OR NOT EXISTS (
-                SELECT 1
-                FROM jsonb_each_text(ts.day_references_json) j(k, v)
-                WHERE btrim(j.v) <> ''::text
-              )
-            )
-          )
-        )
-      )
-      THEN 'BLOCK_NO_REFERENCE'::text
-
-    ELSE 'OK'::text
-  END AS precheck_status
-FROM timesheets ts
-LEFT JOIN contract_weeks cw ON cw.timesheet_id = ts.timesheet_id
-LEFT JOIN contracts c ON c.id = COALESCE(ts.contract_id, cw.contract_id);
-
-GRANT SELECT ON public.v_ts_invoice_precheck TO service_role;
-GRANT SELECT ON public.v_ts_invoice_precheck TO authenticated;
-
 -- Ensure PostgREST sees new columns immediately after commit
 SELECT pg_notify('pgrst', 'reload schema');
-
-COMMIT;
