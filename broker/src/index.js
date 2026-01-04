@@ -37054,32 +37054,54 @@ async function handleTimesheetResolveCandidate(env, req, timesheetId) {
     const occNorm = String(rawOcc).trim().toLowerCase();
 
     // Helper: enqueue TSFIN + try to drain a little so UI updates immediately
-    const bumpTsfinNow = async () => {
-      try {
-        // Enqueue recompute for THIS timesheet (context change)
-        await sbRpc(env, 'enqueue_ts_financials', { timesheet_id: currentTimesheetId, reason: 'CONTEXT_CHANGED' });
-      } catch {}
+ const bumpTsfinNow = async () => {
+  // Build a targeted set: current TS + any other CURRENT timesheets sharing this occupant_key_norm
+  const targetIds = new Set([currentTimesheetId]);
 
-      // Best-effort immediate compute: drain a small batch a couple times.
-      // (This keeps UX snappy; queue still exists as fallback.)
-      try {
-        for (let i = 0; i < 3; i++) {
-          await runTsfinWorkerOnce(env, { limit: 50 });
+  try {
+    if (occNorm) {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?is_current=eq.true` +
+          `&occupant_key_norm=eq.${enc(occNorm)}` +
+          `&select=timesheet_id` +
+          `&limit=500`
+      );
+      for (const r of (rows || [])) {
+        if (r?.timesheet_id) targetIds.add(String(r.timesheet_id));
+      }
+    }
+  } catch {}
 
-          // If we can see TSFIN no longer UNASSIGNED, we’re done.
-          const fin = await sbGetOne(
-            env,
-            `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-              `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-              `&is_current=eq.true` +
-              `&select=processing_status` +
-              `&limit=1`
-          );
-          const p = String(fin?.processing_status || '').toUpperCase();
-          if (p && p !== 'UNASSIGNED') break;
-        }
-      } catch {}
-    };
+  const idsArr = Array.from(targetIds);
+
+  // ✅ Priority enqueue (your new SQL) — puts these at the front
+  try {
+    await sbRpc(env, 'enqueue_ts_financials_priority', {
+      _timesheet_ids: idsArr,
+      _reason: 'CONTEXT_CHANGED'
+    });
+  } catch {}
+
+  // ✅ Drain enough items to guarantee we pick our targets first
+  try {
+    const runLimit = Math.min(200, Math.max(10, idsArr.length));
+    await runTsfinWorkerOnce(env, { limit: runLimit });
+
+    // Confirm the specific TS moved off UNASSIGNED (best-effort)
+    const fin = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&is_current=eq.true` +
+        `&select=processing_status` +
+        `&limit=1`
+    );
+    // no throw: just best-effort confirmation
+  } catch {}
+};
+
 
     const sheetScope = String(ts.sheet_scope || '').toUpperCase();
     const subMode    = String(ts.submission_mode || '').toUpperCase();
@@ -37290,29 +37312,50 @@ async function handleTimesheetResolveClient(env, req, timesheetId) {
     };
 
     // Helper: enqueue TSFIN + try to drain a little so UI updates immediately
-    const bumpTsfinNow = async () => {
-      try {
-        await sbRpc(env, 'enqueue_ts_financials', { timesheet_id: currentTimesheetId, reason: 'CONTEXT_CHANGED' });
-      } catch {}
+ const bumpTsfinNow = async () => {
+  const targetIds = new Set([currentTimesheetId]);
 
-      try {
-        for (let i = 0; i < 3; i++) {
-          await runTsfinWorkerOnce(env, { limit: 50 });
+  try {
+    if (alias) {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?is_current=eq.true` +
+          `&hospital_norm=eq.${enc(alias)}` +
+          `&select=timesheet_id` +
+          `&limit=500`
+      );
+      for (const r of (rows || [])) {
+        if (r?.timesheet_id) targetIds.add(String(r.timesheet_id));
+      }
+    }
+  } catch {}
 
-          const fin = await sbGetOne(
-            env,
-            `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-              `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-              `&is_current=eq.true` +
-              `&select=processing_status,client_id` +
-              `&limit=1`
-          );
+  const idsArr = Array.from(targetIds);
 
-          // If client_id now resolved in TSFIN, we’re done.
-          if (fin?.client_id) break;
-        }
-      } catch {}
-    };
+  try {
+    await sbRpc(env, 'enqueue_ts_financials_priority', {
+      _timesheet_ids: idsArr,
+      _reason: 'CONTEXT_CHANGED'
+    });
+  } catch {}
+
+  try {
+    const runLimit = Math.min(200, Math.max(10, idsArr.length));
+    await runTsfinWorkerOnce(env, { limit: runLimit });
+
+    // Confirm best-effort: client_id now present in TSFIN for THIS timesheet
+    await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&is_current=eq.true` +
+        `&select=processing_status,client_id` +
+        `&limit=1`
+    );
+  } catch {}
+};
+
 
     // If there is no alias string at all, we can't teach alias mapping.
     // Still kick TSFIN (it will likely remain CLIENT_UNRESOLVED), but returns cleanly.
@@ -39693,16 +39736,21 @@ async function handleCreateCandidate(env, req) {
       }
     }
 
-    // ✅ Enqueue + immediate TSFIN run for any auto-assigned timesheets
-    const outboxItems = [];
-    for (const tsid of autoAssignedTimesheets) {
-      outboxItems.push({ timesheet_id: tsid, reason: 'CANDIDATE_CREATED_MATCH' });
-    }
+  // ✅ Priority enqueue + targeted drain for any auto-assigned timesheets
+if (autoAssignedTimesheets.length) {
+  try {
+    await sbRpc(env, 'enqueue_ts_financials_priority', {
+      _timesheet_ids: autoAssignedTimesheets.map(String),
+      _reason: 'CONTEXT_CHANGED'
+    });
+  } catch {}
 
-    const enq = await enqueueTsfinOutbox(outboxItems);
-    const ran = (enq.enqueued > 0)
-      ? await runTsfinImmediate(Math.min(80, Math.max(20, outboxItems.length)))
-      : { ran: false, picked: 0, ok: 0, fail: 0 };
+  try {
+    const runLimit = Math.min(200, Math.max(10, autoAssignedTimesheets.length));
+    await runTsfinWorkerOnce(env, { limit: runLimit });
+  } catch {}
+}
+
 
     return withCORS(env, req, ok({
       candidate,
@@ -40125,13 +40173,24 @@ async function handleUpdateCandidate(env, req, candidateId) {
       outboxItems.push({ timesheet_id: tsid, reason: 'GCK_ASSIGNED' });
     }
 
-    // 4C) Enqueue + IMMEDIATE best-effort run
-    const enq = await enqueueTsfinOutbox(outboxItems);
+  // 4C) Priority enqueue + targeted drain
+if (outboxItems.length) {
+  // de-dupe ids (priority fn takes one reason per call)
+  const ids = Array.from(new Set(outboxItems.map(x => x?.timesheet_id).filter(Boolean).map(String)));
 
-    // Try to process right now (keeps UI responsive)
-    const ran = (enq.enqueued > 0)
-      ? await runTsfinImmediate(Math.min(80, Math.max(20, outboxItems.length)))
-      : { ran: false, picked: 0, ok: 0, fail: 0 };
+  try {
+    await sbRpc(env, 'enqueue_ts_financials_priority', {
+      _timesheet_ids: ids,
+      _reason: 'CONTEXT_CHANGED'
+    });
+  } catch {}
+
+  try {
+    const runLimit = Math.min(200, Math.max(10, ids.length));
+    await runTsfinWorkerOnce(env, { limit: runLimit });
+  } catch {}
+}
+
 
     return withCORS(env, req, ok({
       candidate,
@@ -49741,6 +49800,90 @@ async function runTsfinWorkerOnce(env, { limit = 50 } = {}) {
   }
 
   return { picked: lease.length, ok, fail };
+}
+async function tsfinTargetedDrainNow(env, {
+  timesheetIds = [],
+  reason = 'CONTEXT_CHANGED',
+  chunkSize = 50
+} = {}) {
+  const enc = encodeURIComponent;
+
+  const uniq = Array.from(new Set((timesheetIds || [])
+    .map(x => String(x || '').trim())
+    .filter(Boolean)));
+
+  if (!uniq.length) return { enqueued: 0, ran: 0, picked: 0, ok: 0, fail: 0 };
+
+  let enq = 0, ran = 0, picked = 0, ok = 0, fail = 0;
+
+  for (let i = 0; i < uniq.length; i += chunkSize) {
+    const chunk = uniq.slice(i, i + chunkSize);
+
+    // 1) Priority enqueue (guarantees these are the first dequeued rows)
+    try {
+      await sbRpc(env, 'enqueue_ts_financials_priority', {
+        _timesheet_ids: chunk,
+        _reason: reason
+      });
+      enq += chunk.length;
+    } catch (e) {
+      console.warn('[TSFIN][TARGET] enqueue_ts_financials_priority failed', e?.message || e);
+      // If enqueue fails, draining is pointless for this chunk
+      continue;
+    }
+
+    // 2) Drain (best-effort). We run once, then optionally retry if our rows are still due.
+    try {
+      const res = await runTsfinWorkerOnce(env, { limit: chunk.length });
+      ran += 1;
+      picked += Number(res?.picked || 0);
+      ok += Number(res?.ok || 0);
+      fail += Number(res?.fail || 0);
+    } catch (e) {
+      console.warn('[TSFIN][TARGET] runTsfinWorkerOnce failed', e?.message || e);
+    }
+
+    // Optional: peek remaining outbox rows for this chunk (for debugging + optional retry)
+    try {
+      // ✅ FIX: do NOT encode the whole list; do NOT add quotes.
+      // PostgREST expects: timesheet_id=in.(uuid1,uuid2,...)
+      const inList = chunk.map(id => enc(id)).join(',');
+
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/ts_financials_outbox` +
+          `?timesheet_id=in.(${inList})` +
+          `&select=timesheet_id,reason,last_error,next_attempt_at,attempt_count`
+      );
+
+      const remaining = Array.isArray(rows) ? rows : [];
+      if (remaining.length) {
+        console.warn('[TSFIN][TARGET] remaining outbox rows after drain', remaining);
+
+        // ✅ If any are still DUE (next_attempt_at is null or <= now), try 1 more targeted drain.
+        const nowMs = Date.now();
+        const due = remaining.filter(r => {
+          if (!r?.next_attempt_at) return true;
+          const t = Date.parse(String(r.next_attempt_at));
+          return Number.isFinite(t) ? (t <= nowMs) : false;
+        });
+
+        if (due.length) {
+          try {
+            const res2 = await runTsfinWorkerOnce(env, { limit: due.length });
+            ran += 1;
+            picked += Number(res2?.picked || 0);
+            ok += Number(res2?.ok || 0);
+            fail += Number(res2?.fail || 0);
+          } catch (e2) {
+            console.warn('[TSFIN][TARGET] retry runTsfinWorkerOnce failed', e2?.message || e2);
+          }
+        }
+      }
+    } catch {}
+  }
+
+  return { enqueued: enq, ran, picked, ok, fail };
 }
 
 
