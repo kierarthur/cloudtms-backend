@@ -33969,16 +33969,45 @@ async function handleGetSettings(env, req) {
   if (!user) return unauthorized('Unauthorized');
 
   try {
-    // Explicit select list so new JSON fields are always included (and we avoid relying on select=*)
+    // ✅ Explicit select list so new fields are always included
+    // (and we avoid relying on select=*)
     const select =
       [
         'id',
+
+        // Agency branding
         'agency_name',
         'agency_logo',
 
-        // NEW: configurable header/footer text for generated timesheet PDFs
+        // Timesheet PDF text blocks
         'timesheet_header_json',
-        'timesheet_footer_json'
+        'timesheet_footer_json',
+
+        // Global shift patterns + timezone
+        'timezone_id',
+        'day_start','day_end',
+        'night_start','night_end',
+        'sat_start','sat_end',
+        'sun_start','sun_end',
+        'bh_start','bh_end',
+
+        // BH calendar config
+        'bh_source','bh_list','bh_feed_url',
+
+        // Finance defaults (✅ needed for PAYE margin via ERNI)
+        'vat_rate_pct',
+        'holiday_pay_pct',
+        'erni_pct',
+        'apply_holiday_to',
+        'apply_erni_to',
+        'margin_includes',
+        'effective_from',
+
+        // Global policy flags
+        'ts_reference_required',
+
+        // Optional: if you use it elsewhere
+        'import_config_json'
       ].join(',');
 
     const { rows } = await sbFetch(
@@ -34004,6 +34033,7 @@ async function handleGetSettings(env, req) {
     return withCORS(env, req, serverError("Failed to fetch settings_defaults"));
   }
 }
+
 
 async function handleUpdateSettings(env, req) {
   const user = await requireUser(env, req, ['admin']);
