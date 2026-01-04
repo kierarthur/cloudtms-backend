@@ -36847,7 +36847,7 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
     detail
   };
 }
- async function handleTimesheetsResolvePreview(env, req) {
+async function handleTimesheetsResolvePreview(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -36878,8 +36878,20 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
       env,
       `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
         `?timesheet_id=in.(${idsParam})` +
-        `&select=timesheet_id,sheet_scope,week_ending_date,candidate_id,client_id,` +
-        `processing_status,occupant_key_norm,hospital_norm`
+        `&select=` +
+          [
+            'timesheet_id',
+            'sheet_scope',
+            'week_ending_date',
+            'candidate_id',
+            'client_id',
+            'processing_status',
+            'occupant_key_norm',
+            'hospital_norm',
+            // ✅ NEW: needed for hint display + seeded best matches
+            'candidate_name',
+            'candidate_hint_text'
+          ].join(',')
     );
 
     const filtered = (rows || []).filter((r) => {
@@ -36929,7 +36941,7 @@ async function handleTimesheetResolveCandidate(env, req, timesheetId) {
   if (!resolved?.current_timesheet_id) {
     return withCORS(env, req, notFound('Timesheet not found'));
   }
-  const currentTimesheetId = String(resolved.current_timesheet_id);
+  const currentTimesheetId   = String(resolved.current_timesheet_id);
   const requestedTimesheetId = String(timesheetId);
   const wasStale = (currentTimesheetId !== requestedTimesheetId);
 
@@ -36971,7 +36983,7 @@ async function handleTimesheetResolveCandidate(env, req, timesheetId) {
       return withCORS(env, req, notFound('Candidate not found'));
     }
 
-    const rawOcc = ts.occupant_key_norm || '';
+    const rawOcc  = ts.occupant_key_norm || '';
     const occNorm = String(rawOcc).trim().toLowerCase();
 
     // Helper: patch CURRENT timesheet candidate_id
@@ -37019,7 +37031,7 @@ async function handleTimesheetResolveCandidate(env, req, timesheetId) {
     if (isDailyElectronic) {
       const gck = occNorm;
 
-      // ✅ New: prevent assigning a GCK already owned by a different candidate
+      // ✅ Prevent assigning a GCK already owned by a different candidate
       try {
         const other = await sbGetOne(
           env,
@@ -37046,9 +37058,10 @@ async function handleTimesheetResolveCandidate(env, req, timesheetId) {
           );
         }
       } catch {
-        // non-fatal; proceed, patch may still fail and will be logged
+        // non-fatal; proceed
       }
 
+      // ✅ Also block overwriting an existing different key_norm on THIS candidate
       const existingKey = String(cand.key_norm || '').trim().toLowerCase();
       if (existingKey && existingKey !== gck) {
         return withCORS(
@@ -37096,6 +37109,7 @@ async function handleTimesheetResolveCandidate(env, req, timesheetId) {
       // Patch timesheet candidate_id so UI updates immediately
       await patchTimesheetCandidateId();
 
+      // Candidate trigger will enqueue TSFIN recompute for any matching occupant_key_norm rows
       return withCORS(env, req, ok({
         ok: true,
         requested_timesheet_id: requestedTimesheetId,
@@ -37118,7 +37132,7 @@ async function handleTimesheetResolveCandidate(env, req, timesheetId) {
       alias
     ]);
 
-    // ✅ Change: preserve existing key_norm if present (avoid accidental lowercasing conflict)
+    // ✅ Preserve existing key_norm if present (do NOT lowercase/overwrite it)
     const keyNorm = cand.key_norm || alias;
 
     // Patch candidate with updated aliases (and key_norm if empty)
@@ -37201,7 +37215,7 @@ async function handleTimesheetResolveClient(env, req, timesheetId) {
   if (!resolved?.current_timesheet_id) {
     return withCORS(env, req, notFound('Timesheet not found'));
   }
-  const currentTimesheetId = String(resolved.current_timesheet_id);
+  const currentTimesheetId   = String(resolved.current_timesheet_id);
   const requestedTimesheetId = String(timesheetId);
   const wasStale = (currentTimesheetId !== requestedTimesheetId);
 
@@ -37227,14 +37241,11 @@ async function handleTimesheetResolveClient(env, req, timesheetId) {
         `&select=timesheet_id,hospital_norm,client_id,is_current` +
         `&limit=1`
     );
-    if (!ts) {
-      return withCORS(env, req, notFound('Timesheet not found'));
-    }
+    if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
 
-    const rawHosp = ts.hospital_norm || '';
-    const alias = String(rawHosp).trim().toLowerCase();
+    const alias = String(ts.hospital_norm || '').trim().toLowerCase();
 
-    // Helper: patch CURRENT timesheet client_id
+    // Helper: patch CURRENT timesheet client_id (UI immediacy)
     const patchTimesheetClientId = async () => {
       const res = await fetch(
         `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
@@ -37257,7 +37268,8 @@ async function handleTimesheetResolveClient(env, req, timesheetId) {
       }
     };
 
-    // If there is no alias string at all, attach client_id directly and return
+    // If there is no alias string at all, attach client_id directly and return.
+    // (Note: TSFIN client resolution is alias-based; this is still useful for UI context.)
     if (!alias) {
       await patchTimesheetClientId();
       return withCORS(env, req, ok({
@@ -37282,29 +37294,63 @@ async function handleTimesheetResolveClient(env, req, timesheetId) {
       return [];
     };
 
-    // ✅ Change: only treat a row as "existingRow" if it already contains this alias.
-    // Otherwise create a NEW row for this alias (prevents polluting unrelated hospital rows).
-    let rowWithAlias = null;
-
+    // ✅ NEW: enforce alias uniqueness across clients:
+    // - find any client_hospitals rows (any client) that already contain this alias
+    // - if they belong to a different client, remove the alias from those rows
+    // - ensure chosen client has the alias (insert row if none exists for chosen client)
     try {
-      const { rows: hospRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/client_hospitals` +
-          `?client_id=eq.${enc(clientId)}` +
-          `&select=id,hospital_name_norm` +
-          `&order=id.asc`
-      );
+      const aliasJson = JSON.stringify([alias]); // ["test hospital"]
+      let rowsWithAlias = [];
 
-      for (const h of (hospRows || [])) {
-        const aliases = normaliseList(h.hospital_name_norm).map(a => String(a || '').toLowerCase());
-        if (aliases.includes(alias)) {
-          rowWithAlias = h;
-          break;
+      try {
+        const { rows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/client_hospitals` +
+            `?hospital_name_norm=cs.${enc(aliasJson)}` +
+            `&select=id,client_id,hospital_name_norm` +
+            `&order=id.asc`
+        );
+        rowsWithAlias = Array.isArray(rows) ? rows : [];
+      } catch (e) {
+        // If cs query fails for any reason, fall back to scanning just this client (still safe).
+        rowsWithAlias = [];
+        console.warn('[TS_RESOLVE_CLIENT] client_hospitals cs lookup failed (fallback)', e?.message || e);
+      }
+
+      const ownedByChosen = rowsWithAlias.find(r => String(r.client_id) === String(clientId)) || null;
+      const ownedByOthers = rowsWithAlias.filter(r => String(r.client_id) !== String(clientId));
+
+      // 1) Remove alias from other clients (so resolver cannot pick the wrong client)
+      for (const r of ownedByOthers) {
+        const cur = normaliseList(r.hospital_name_norm);
+        const next = cur.filter(x => String(x || '').trim().toLowerCase() !== alias);
+
+        // Only patch if something actually changes
+        if (next.length !== cur.length) {
+          const res = await fetch(
+            `${env.SUPABASE_URL}/rest/v1/client_hospitals?id=eq.${enc(r.id)}`,
+            {
+              method: 'PATCH',
+              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+              body: JSON.stringify({ hospital_name_norm: next })
+            }
+          );
+          if (!res.ok) {
+            const txt = await res.text().catch(() => '');
+            console.warn('[TS_RESOLVE_CLIENT] client_hospitals de-alias failed', {
+              id: r.id,
+              from_client_id: r.client_id,
+              alias,
+              status: res.status,
+              body: txt
+            });
+          }
         }
       }
 
-      if (!rowWithAlias) {
-        // No row contains this alias → create new row specifically for it
+      // 2) Ensure chosen client has the alias
+      if (!ownedByChosen) {
+        // Create a dedicated row for this alias under the chosen client (keeps rows clean)
         const res = await fetch(
           `${env.SUPABASE_URL}/rest/v1/client_hospitals`,
           {
@@ -37326,9 +37372,9 @@ async function handleTimesheetResolveClient(env, req, timesheetId) {
           });
         }
       }
-      // If rowWithAlias exists, do nothing (already mapped).
+      // If ownedByChosen exists already, we do nothing.
     } catch (e) {
-      console.warn('[TS_RESOLVE_CLIENT] client_hospitals upsert failed (non-fatal)', {
+      console.warn('[TS_RESOLVE_CLIENT] client_hospitals alias enforcement failed (non-fatal)', {
         client_id: clientId,
         alias,
         err: e?.message || String(e)
@@ -37337,6 +37383,8 @@ async function handleTimesheetResolveClient(env, req, timesheetId) {
 
     // Attach client_id directly to CURRENT timesheet as well (UI + immediate context)
     await patchTimesheetClientId();
+
+    // ✅ client_hospitals trigger will enqueue TSFIN recompute for matching aliases
 
     return withCORS(env, req, ok({
       ok: true,
