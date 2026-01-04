@@ -36957,14 +36957,54 @@ async function handleTimesheetResolveCandidate(env, req, timesheetId) {
     );
   }
 
+  // Best-effort: enqueue TSFIN recompute for a timesheet_id
+  const enqueueTsfin = async (tsId, reason) => {
+    if (!tsId) return;
+    try {
+      const url =
+        `${env.SUPABASE_URL}/rest/v1/ts_financials_outbox` +
+        `?on_conflict=timesheet_id,reason`;
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { ...sbHeaders(env), Prefer: 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify([{
+          timesheet_id: tsId,
+          reason: reason || 'CONTEXT_CHANGED',
+          attempt_count: 0,
+          next_attempt_at: null,
+          last_error: null,
+          created_at: new Date().toISOString()
+        }])
+      });
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        console.warn('[TS_RESOLVE_CAND] enqueue tsfin_outbox failed', {
+          timesheet_id: tsId,
+          reason,
+          status: res.status,
+          body: txt
+        });
+      }
+    } catch (e) {
+      console.warn('[TS_RESOLVE_CAND] enqueue tsfin_outbox threw', {
+        timesheet_id: tsId,
+        reason,
+        err: e?.message || String(e)
+      });
+    }
+  };
+
   try {
     // Load CURRENT timesheet (not requested id)
+    // NOTE: timesheets has NO candidate_id column. Candidate link is via TSFIN snapshots.
     const ts = await sbGetOne(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
         `?timesheet_id=eq.${enc(currentTimesheetId)}` +
         `&is_current=eq.true` +
-        `&select=timesheet_id,occupant_key_norm,candidate_id,sheet_scope,submission_mode` +
+        `&select=timesheet_id,occupant_key_norm,sheet_scope,submission_mode` +
         `&limit=1`
     );
     if (!ts) {
@@ -36986,33 +37026,10 @@ async function handleTimesheetResolveCandidate(env, req, timesheetId) {
     const rawOcc  = ts.occupant_key_norm || '';
     const occNorm = String(rawOcc).trim().toLowerCase();
 
-    // Helper: patch CURRENT timesheet candidate_id
-    const patchTimesheetCandidateId = async () => {
-      const res = await fetch(
-        `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
-        {
-          method: 'PATCH',
-          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-          body: JSON.stringify({
-            candidate_id: candidateId,
-            updated_at: new Date().toISOString()
-          })
-        }
-      );
-
-      if (!res.ok) {
-        const txt = await res.text().catch(() => '');
-        console.warn('[TS_RESOLVE_CAND] patch timesheet candidate_id failed', {
-          timesheet_id: currentTimesheetId,
-          status: res.status,
-          body: txt
-        });
-      }
-    };
-
-    // If we have no occupant key, just set candidate_id and return
+    // If we have no occupant key, we can’t map anything meaningfully
     if (!occNorm) {
-      await patchTimesheetCandidateId();
+      // Still enqueue so TSFIN refresh runs (won’t resolve candidate, but keeps pipeline consistent)
+      await enqueueTsfin(currentTimesheetId, 'CONTEXT_CHANGED');
       return withCORS(env, req, ok({
         ok: true,
         requested_timesheet_id: requestedTimesheetId,
@@ -37026,7 +37043,8 @@ async function handleTimesheetResolveCandidate(env, req, timesheetId) {
     const isDailyElectronic = (sheetScope === 'DAILY' && subMode === 'ELECTRONIC');
 
     // ==========================================================
-    // ✅ DAILY/ELECTRONIC = occupant_key_norm is a GCK (NOT a name alias)
+    // ✅ DAILY/ELECTRONIC = occupant_key_norm is a GCK
+    // Map by setting candidates.key_norm = gck (do NOT touch aliases)
     // ==========================================================
     if (isDailyElectronic) {
       const gck = occNorm;
@@ -37080,7 +37098,7 @@ async function handleTimesheetResolveCandidate(env, req, timesheetId) {
         );
       }
 
-      // Patch candidate: set key_norm = gck (NO alias merge)
+      // Patch candidate: set key_norm = gck
       try {
         const res = await fetch(
           `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(candidateId)}`,
@@ -37106,10 +37124,10 @@ async function handleTimesheetResolveCandidate(env, req, timesheetId) {
         });
       }
 
-      // Patch timesheet candidate_id so UI updates immediately
-      await patchTimesheetCandidateId();
+      // Candidate trigger will enqueue TSFIN for matching occupant_key_norm rows,
+      // but also best-effort enqueue this timesheet immediately.
+      await enqueueTsfin(currentTimesheetId, 'CONTEXT_CHANGED');
 
-      // Candidate trigger will enqueue TSFIN recompute for any matching occupant_key_norm rows
       return withCORS(env, req, ok({
         ok: true,
         requested_timesheet_id: requestedTimesheetId,
@@ -37119,7 +37137,8 @@ async function handleTimesheetResolveCandidate(env, req, timesheetId) {
     }
 
     // ==========================================================
-    // Legacy behaviour: treat occupant_key_norm as a name alias
+    // Legacy behaviour: treat occupant_key_norm as a NAME ALIAS
+    // Merge into candidates.nhsp_hr_name_aliases (do NOT overwrite key_norm)
     // ==========================================================
     const alias = occNorm;
 
@@ -37132,10 +37151,7 @@ async function handleTimesheetResolveCandidate(env, req, timesheetId) {
       alias
     ]);
 
-    // ✅ Preserve existing key_norm if present (do NOT lowercase/overwrite it)
-    const keyNorm = cand.key_norm || alias;
-
-    // Patch candidate with updated aliases (and key_norm if empty)
+    // Patch candidate with updated aliases only
     try {
       const res = await fetch(
         `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(candidateId)}`,
@@ -37143,8 +37159,7 @@ async function handleTimesheetResolveCandidate(env, req, timesheetId) {
           method: 'PATCH',
           headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
           body: JSON.stringify({
-            nhsp_hr_name_aliases: mergedAliases,
-            key_norm: keyNorm
+            nhsp_hr_name_aliases: mergedAliases
           })
         }
       );
@@ -37164,8 +37179,9 @@ async function handleTimesheetResolveCandidate(env, req, timesheetId) {
       });
     }
 
-    // Patch CURRENT timesheet candidate_id
-    await patchTimesheetCandidateId();
+    // Candidate trigger will enqueue TSFIN for matching aliases;
+    // best-effort enqueue this timesheet immediately.
+    await enqueueTsfin(currentTimesheetId, 'CONTEXT_CHANGED');
 
     return withCORS(env, req, ok({
       ok: true,
