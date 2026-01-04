@@ -39651,38 +39651,30 @@ async function handleCreateCandidate(env, req) {
     }
   };
 
-  const assignTimesheetsByOccKey = async (occKeyLower, candId) => {
-    if (!occKeyLower || !candId) return [];
-    try {
-      const { rows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/timesheets` +
-          `?is_current=eq.true` +
-          `&candidate_id=is.null` +
-          `&occupant_key_norm=eq.${enc(occKeyLower)}` +
-          `&select=timesheet_id` +
-          `&limit=500`
-      );
-      const ids = (rows || []).map(r => r?.timesheet_id).filter(Boolean);
+ const assignTimesheetsByOccKey = async (occKeyLower, candId) => {
+  // candId is kept as a guard so callers don’t accidentally call with null,
+  // but we do NOT write candidate_id into timesheets (column does not exist).
+  if (!occKeyLower || !candId) return [];
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?is_current=eq.true` +
+        `&occupant_key_norm=eq.${enc(occKeyLower)}` +
+        `&select=timesheet_id` +
+        `&limit=500`
+    );
 
-      for (const tsid of ids) {
-        try {
-          await fetch(
-            `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(tsid)}&is_current=eq.true`,
-            {
-              method: 'PATCH',
-              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-              body: JSON.stringify({ candidate_id: candId, updated_at: new Date().toISOString() })
-            }
-          );
-        } catch {}
-      }
-      return ids;
-    } catch (e) {
-      console.warn('[CAND] assignTimesheetsByOccKey failed', e?.message || e);
-      return [];
-    }
-  };
+    const ids = (rows || []).map(r => r?.timesheet_id).filter(Boolean);
+
+    // ✅ Do NOT PATCH timesheets here (timesheets.candidate_id does not exist).
+    // TSFIN rebuild will populate candidate_id/client_id in timesheets_financials / v_timesheets_summary.
+    return ids;
+  } catch (e) {
+    console.warn('[CAND] assignTimesheetsByOccKey failed', e?.message || e);
+    return [];
+  }
+};
 
   try {
     // Insert candidate; set job_title_id to primary (or null)
@@ -39921,39 +39913,31 @@ async function handleUpdateCandidate(env, req, candidateId) {
     }
   };
 
-  const assignTimesheetsByOccKey = async (occKeyLower, candId) => {
-    if (!occKeyLower || !candId) return [];
-    try {
-      const { rows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/timesheets` +
-          `?is_current=eq.true` +
-          `&candidate_id=is.null` +
-          `&occupant_key_norm=eq.${enc(occKeyLower)}` +
-          `&select=timesheet_id` +
-          `&limit=500`
-      );
-      const ids = (rows || []).map(r => r?.timesheet_id).filter(Boolean);
+ const assignTimesheetsByOccKey = async (occKeyLower, candId) => {
+  // candId is kept as a guard so callers don’t accidentally call with null,
+  // but we do NOT write candidate_id into timesheets (column does not exist).
+  if (!occKeyLower || !candId) return [];
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?is_current=eq.true` +
+        `&occupant_key_norm=eq.${enc(occKeyLower)}` +
+        `&select=timesheet_id` +
+        `&limit=500`
+    );
 
-      // Patch CURRENT timesheets to set candidate_id (UI + TSFIN context)
-      for (const tsid of ids) {
-        try {
-          await fetch(
-            `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(tsid)}&is_current=eq.true`,
-            {
-              method: 'PATCH',
-              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-              body: JSON.stringify({ candidate_id: candId, updated_at: new Date().toISOString() })
-            }
-          );
-        } catch {}
-      }
-      return ids;
-    } catch (e) {
-      console.warn('[CAND] assignTimesheetsByOccKey failed', e?.message || e);
-      return [];
-    }
-  };
+    const ids = (rows || []).map(r => r?.timesheet_id).filter(Boolean);
+
+    // ✅ Do NOT PATCH timesheets here (timesheets.candidate_id does not exist).
+    // TSFIN rebuild will populate candidate_id/client_id in timesheets_financials / v_timesheets_summary.
+    return ids;
+  } catch (e) {
+    console.warn('[CAND] assignTimesheetsByOccKey failed', e?.message || e);
+    return [];
+  }
+};
+
 
   try {
     // 1) Load current candidate (include key_norm + aliases for diff + uniqueness)
