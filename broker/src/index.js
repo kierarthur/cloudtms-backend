@@ -1152,25 +1152,71 @@ async function loadTsLayout(env) {
 }
 
 // Draw an image inside a fixed box while preserving aspect ratio (no distortion).
+// Draw an image inside a fixed box (box is mm-from-top) while preserving aspect ratio.
 async function drawImageInBox(page, pdfDoc, bytesU8, box, contentType) {
+  if (!page || !pdfDoc) return;
   if (!bytesU8 || bytesU8.length === 0) return;
-  let img;
-  if (contentType && /png/i.test(contentType)) {
+  if (!box || typeof box !== 'object') return;
+
+  const mmToPt = (mm) => (Number(mm) || 0) * 72 / 25.4;
+
+  const pageH = Number(box.page_h_mm ?? 210) || 210;
+  const x_mm  = Number(box.x_mm ?? 0) || 0;
+  const w_mm  = Number(box.w_mm ?? 0) || 0;
+  const h_mm  = Number(box.h_mm ?? 0) || 0;
+
+  // We expect y_from_top_mm for your PDF generator (mm from top)
+  const yTop  = Number(box.y_from_top_mm ?? 0) || 0;
+
+  if (!(w_mm > 0 && h_mm > 0)) return;
+
+  // ✅ convert top-origin to bottom-origin (pdf-lib uses bottom-left origin)
+  const y_mm_bottom = Math.max(0, pageH - yTop - h_mm);
+
+  // ✅ signatures are PNG by design; embed as PNG to preserve alpha
+  let img = null;
+  try {
     img = await pdfDoc.embedPng(bytesU8);
-  } else {
-    // try JPG if not PNG
-    try { img = await pdfDoc.embedJpg(bytesU8); }
-    catch { img = await pdfDoc.embedPng(bytesU8); }
+  } catch {
+    // If you ever re-use this helper for non-signature images, keep a JPG fallback.
+    try { img = await pdfDoc.embedJpg(bytesU8); } catch { return; }
   }
+
   const { width, height } = img;
-  const boxW = mmToPt(box.w_mm);
-  const boxH = mmToPt(box.h_mm);
-  const scale = Math.min(boxW / width, boxH / height, 1); // never scale up
+
+  const boxWpt = mmToPt(w_mm);
+  const boxHpt = mmToPt(h_mm);
+
+  // ✅ never scale UP (prevents blur); scale down only to fit box
+  const scale = Math.min(boxWpt / width, boxHpt / height, 1);
+
   const drawW = width * scale;
   const drawH = height * scale;
-  const x = mmToPt(box.x_mm) + (boxW - drawW) / 2;
-  const y = mmToPt(box.y_mm) + (boxH - drawH) / 2;
+
+  const x = mmToPt(x_mm) + (boxWpt - drawW) / 2;
+  const y = mmToPt(y_mm_bottom) + (boxHpt - drawH) / 2;
+
+  // ✅ No background is drawn here; PNG alpha stays transparent over the PDF
   page.drawImage(img, { x, y, width: drawW, height: drawH });
+}
+
+async function drawSignatureKeyInBox(bucket, page, pdfDoc, keyRaw, box, pageH_mm = 210) {
+  const key = String(keyRaw || '').trim().replace(/^\/+/, '');
+  if (!key) return;
+
+  const obj = await bucket.get(key);
+  if (!obj) return;
+
+  const bytesU8 = new Uint8Array(await new Response(obj.body).arrayBuffer());
+
+  // box.{x,y,w,h} are mm-from-top in your generator
+  await drawImageInBox(page, pdfDoc, bytesU8, {
+    x_mm: box.x,
+    y_from_top_mm: box.y,
+    w_mm: box.w,
+    h_mm: box.h,
+    page_h_mm: pageH_mm
+  }, 'image/png');
 }
 
 // Basic R2 helpers
@@ -2655,8 +2701,9 @@ try {
     };
 
     // Draw signature images (aspect ratio preserved by drawImageInBox)
-    await drawImageInBox(pdfDoc, page, ts.r2_nurse_key, nurseSigBox);
-    await drawImageInBox(pdfDoc, page, ts.r2_auth_key, clientSigBox);
+await drawSignatureKeyInBox(bucket, page, pdfDoc, ts.r2_nurse_key, nurseSigBox, PAGE_H);
+await drawSignatureKeyInBox(bucket, page, pdfDoc, ts.r2_auth_key, clientSigBox, PAGE_H);
+
 
     // --- Date placement: fit-to-width within the date lane ---
     if (authDate) {
@@ -36905,7 +36952,7 @@ async function handleTimesheetResolveCandidate(env, req, timesheetId) {
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
         `?timesheet_id=eq.${enc(currentTimesheetId)}` +
         `&is_current=eq.true` +
-        `&select=timesheet_id,occupant_key_norm,candidate_id` +
+        `&select=timesheet_id,occupant_key_norm,candidate_id,sheet_scope,submission_mode` +
         `&limit=1`
     );
     if (!ts) {
@@ -36924,38 +36971,130 @@ async function handleTimesheetResolveCandidate(env, req, timesheetId) {
       return withCORS(env, req, notFound('Candidate not found'));
     }
 
-    const rawAlias = ts.occupant_key_norm || '';
-    const alias = String(rawAlias).trim().toLowerCase();
+    const rawOcc = ts.occupant_key_norm || '';
+    const occNorm = String(rawOcc).trim().toLowerCase();
 
-    // If we have no alias string, just set candidate_id and return (on CURRENT id)
-    if (!alias) {
+    // Helper: patch CURRENT timesheet candidate_id
+    const patchTimesheetCandidateId = async () => {
+      const res = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+          body: JSON.stringify({
+            candidate_id: candidateId,
+            updated_at: new Date().toISOString()
+          })
+        }
+      );
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        console.warn('[TS_RESOLVE_CAND] patch timesheet candidate_id failed', {
+          timesheet_id: currentTimesheetId,
+          status: res.status,
+          body: txt
+        });
+      }
+    };
+
+    // If we have no occupant key, just set candidate_id and return
+    if (!occNorm) {
+      await patchTimesheetCandidateId();
+      return withCORS(env, req, ok({
+        ok: true,
+        requested_timesheet_id: requestedTimesheetId,
+        current_timesheet_id: currentTimesheetId,
+        was_stale: wasStale
+      }));
+    }
+
+    const sheetScope = String(ts.sheet_scope || '').toUpperCase();
+    const subMode    = String(ts.submission_mode || '').toUpperCase();
+    const isDailyElectronic = (sheetScope === 'DAILY' && subMode === 'ELECTRONIC');
+
+    // ==========================================================
+    // ✅ DAILY/ELECTRONIC = occupant_key_norm is a GCK (NOT a name alias)
+    // ==========================================================
+    if (isDailyElectronic) {
+      const gck = occNorm;
+
+      // ✅ New: prevent assigning a GCK already owned by a different candidate
+      try {
+        const other = await sbGetOne(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/candidates` +
+            `?key_norm=eq.${enc(gck)}` +
+            `&id=neq.${enc(candidateId)}` +
+            `&select=id,key_norm` +
+            `&limit=1`
+        );
+        if (other?.id) {
+          return withCORS(
+            env,
+            req,
+            new Response(
+              JSON.stringify({
+                error: 'CANDIDATE_KEY_CONFLICT',
+                message: 'This GCK is already assigned to another candidate.',
+                candidate_id: candidateId,
+                conflicting_candidate_id: other.id,
+                attempted_key_norm: gck
+              }),
+              { status: 409, headers: { 'Content-Type': 'application/json' } }
+            )
+          );
+        }
+      } catch {
+        // non-fatal; proceed, patch may still fail and will be logged
+      }
+
+      const existingKey = String(cand.key_norm || '').trim().toLowerCase();
+      if (existingKey && existingKey !== gck) {
+        return withCORS(
+          env,
+          req,
+          new Response(
+            JSON.stringify({
+              error: 'CANDIDATE_KEY_CONFLICT',
+              message: 'This candidate already has a different key_norm; cannot assign this GCK.',
+              candidate_id: candidateId,
+              existing_key_norm: cand.key_norm,
+              attempted_key_norm: gck
+            }),
+            { status: 409, headers: { 'Content-Type': 'application/json' } }
+          )
+        );
+      }
+
+      // Patch candidate: set key_norm = gck (NO alias merge)
       try {
         const res = await fetch(
-          `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
+          `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(candidateId)}`,
           {
             method: 'PATCH',
             headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-            body: JSON.stringify({
-              candidate_id: candidateId,
-              updated_at: new Date().toISOString()
-            })
+            body: JSON.stringify({ key_norm: gck })
           }
         );
 
         if (!res.ok) {
           const txt = await res.text().catch(() => '');
-          console.warn('[TS_RESOLVE_CAND] patch timesheet candidate_id failed', {
-            timesheet_id: currentTimesheetId,
+          console.warn('[TS_RESOLVE_CAND] patch candidate key_norm failed', {
+            candidate_id: candidateId,
             status: res.status,
             body: txt
           });
         }
       } catch (e) {
-        console.warn('[TS_RESOLVE_CAND] patch timesheet candidate_id failed', {
-          timesheet_id: currentTimesheetId,
+        console.warn('[TS_RESOLVE_CAND] patch candidate key_norm failed', {
+          candidate_id: candidateId,
           err: e?.message || String(e)
         });
       }
+
+      // Patch timesheet candidate_id so UI updates immediately
+      await patchTimesheetCandidateId();
 
       return withCORS(env, req, ok({
         ok: true,
@@ -36965,7 +37104,11 @@ async function handleTimesheetResolveCandidate(env, req, timesheetId) {
       }));
     }
 
-    // Merge alias into nhsp_hr_name_aliases
+    // ==========================================================
+    // Legacy behaviour: treat occupant_key_norm as a name alias
+    // ==========================================================
+    const alias = occNorm;
+
     const existingAliases = Array.isArray(cand.nhsp_hr_name_aliases)
       ? cand.nhsp_hr_name_aliases
       : [];
@@ -36975,6 +37118,7 @@ async function handleTimesheetResolveCandidate(env, req, timesheetId) {
       alias
     ]);
 
+    // ✅ Change: preserve existing key_norm if present (avoid accidental lowercasing conflict)
     const keyNorm = cand.key_norm || alias;
 
     // Patch candidate with updated aliases (and key_norm if empty)
@@ -37007,35 +37151,7 @@ async function handleTimesheetResolveCandidate(env, req, timesheetId) {
     }
 
     // Patch CURRENT timesheet candidate_id
-    try {
-      const res = await fetch(
-        `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
-        {
-          method: 'PATCH',
-          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-          body: JSON.stringify({
-            candidate_id: candidateId,
-            updated_at: new Date().toISOString()
-          })
-        }
-      );
-
-      if (!res.ok) {
-        const txt = await res.text().catch(() => '');
-        console.warn('[TS_RESOLVE_CAND] patch timesheet candidate_id failed', {
-          timesheet_id: currentTimesheetId,
-          status: res.status,
-          body: txt
-        });
-      }
-    } catch (e) {
-      console.warn('[TS_RESOLVE_CAND] patch timesheet candidate_id failed', {
-        timesheet_id: currentTimesheetId,
-        err: e?.message || String(e)
-      });
-    }
-
-    // Triggers on candidates will enqueue TSFIN recompute for affected timesheets
+    await patchTimesheetCandidateId();
 
     return withCORS(env, req, ok({
       ok: true,
@@ -37118,154 +37234,8 @@ async function handleTimesheetResolveClient(env, req, timesheetId) {
     const rawHosp = ts.hospital_norm || '';
     const alias = String(rawHosp).trim().toLowerCase();
 
-    // If there is no alias string at all, we can at least attach client_id directly
-    if (!alias) {
-      try {
-        const res = await fetch(
-          `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
-          {
-            method: 'PATCH',
-            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-            body: JSON.stringify({
-              client_id: clientId,
-              updated_at: new Date().toISOString()
-            })
-          }
-        );
-        if (!res.ok) {
-          const txt = await res.text().catch(() => '');
-          console.warn('[TS_RESOLVE_CLIENT] patch timesheet.client_id failed', {
-            timesheet_id: currentTimesheetId,
-            status: res.status,
-            body: txt
-          });
-        }
-      } catch (e) {
-        console.warn('[TS_RESOLVE_CLIENT] patch timesheet.client_id failed', {
-          timesheet_id: currentTimesheetId,
-          err: e?.message || String(e)
-        });
-      }
-
-      return withCORS(env, req, ok({
-        ok: true,
-        requested_timesheet_id: requestedTimesheetId,
-        current_timesheet_id: currentTimesheetId,
-        was_stale: wasStale
-      }));
-    }
-
-    // Find / update client_hospitals for this client
-    const normaliseList = (val) => {
-      if (!val) return [];
-      if (Array.isArray(val)) return val;
-      if (typeof val === 'string') {
-        try {
-          const parsed = JSON.parse(val);
-          return Array.isArray(parsed) ? parsed : [val];
-        } catch {
-          return [val];
-        }
-      }
-      return [];
-    };
-
-    let existingRow = null;
-    try {
-      // Load existing hospitals for this client
-      const { rows: hospRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/client_hospitals` +
-          `?client_id=eq.${enc(clientId)}` +
-          `&select=id,hospital_name_norm` +
-          `&order=id.asc`
-      );
-      if (hospRows?.length) {
-        for (const h of hospRows) {
-          const aliases = normaliseList(h.hospital_name_norm);
-          if (aliases.map(a => String(a || '').toLowerCase()).includes(alias)) {
-            existingRow = h;   // alias already present; nothing more to add
-            break;
-          }
-        }
-        if (!existingRow && hospRows.length) {
-          existingRow = hospRows[0];
-        }
-      }
-    } catch (e) {
-      console.warn('[TS_RESOLVE_CLIENT] client_hospitals lookup failed (non-fatal)', {
-        client_id: clientId,
-        err: e?.message || String(e)
-      });
-    }
-
-    if (!existingRow) {
-      // No row for this client yet → create one with this alias
-      try {
-        const payload = [{
-          client_id: clientId,
-          hospital_name_norm: [alias]
-        }];
-        const res = await fetch(
-          `${env.SUPABASE_URL}/rest/v1/client_hospitals`,
-          {
-            method: 'POST',
-            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-            body: JSON.stringify(payload)
-          }
-        );
-        if (!res.ok) {
-          const txt = await res.text().catch(() => '');
-          console.warn('[TS_RESOLVE_CLIENT] client_hospitals insert failed', {
-            client_id: clientId,
-            alias,
-            status: res.status,
-            body: txt
-          });
-        }
-      } catch (e) {
-        console.warn('[TS_RESOLVE_CLIENT] client_hospitals insert failed', {
-          client_id: clientId,
-          alias,
-          err: e?.message || String(e)
-        });
-      }
-    } else {
-      // Append alias to existing hospital row if not already present
-      try {
-        const currentAliases = normaliseList(existingRow.hospital_name_norm);
-        const lowerSet = new Set(currentAliases.map(a => String(a || '').toLowerCase()));
-        if (!lowerSet.has(alias)) {
-          const updated = [...currentAliases, alias];
-          const res = await fetch(
-            `${env.SUPABASE_URL}/rest/v1/client_hospitals?id=eq.${enc(existingRow.id)}`,
-            {
-              method: 'PATCH',
-              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-              body: JSON.stringify({ hospital_name_norm: updated })
-            }
-          );
-          if (!res.ok) {
-            const txt = await res.text().catch(() => '');
-            console.warn('[TS_RESOLVE_CLIENT] client_hospitals patch failed', {
-              id: existingRow.id,
-              alias,
-              status: res.status,
-              body: txt
-            });
-          }
-        }
-      } catch (e) {
-        console.warn('[TS_RESOLVE_CLIENT] client_hospitals patch failed', {
-          id: existingRow.id,
-          alias,
-          err: e?.message || String(e)
-        });
-      }
-    }
-
-    // Attach client_id directly to CURRENT timesheet as well
-    try {
+    // Helper: patch CURRENT timesheet client_id
+    const patchTimesheetClientId = async () => {
       const res = await fetch(
         `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
         {
@@ -37285,14 +37255,88 @@ async function handleTimesheetResolveClient(env, req, timesheetId) {
           body: txt
         });
       }
+    };
+
+    // If there is no alias string at all, attach client_id directly and return
+    if (!alias) {
+      await patchTimesheetClientId();
+      return withCORS(env, req, ok({
+        ok: true,
+        requested_timesheet_id: requestedTimesheetId,
+        current_timesheet_id: currentTimesheetId,
+        was_stale: wasStale
+      }));
+    }
+
+    const normaliseList = (val) => {
+      if (!val) return [];
+      if (Array.isArray(val)) return val;
+      if (typeof val === 'string') {
+        try {
+          const parsed = JSON.parse(val);
+          return Array.isArray(parsed) ? parsed : [val];
+        } catch {
+          return [val];
+        }
+      }
+      return [];
+    };
+
+    // ✅ Change: only treat a row as "existingRow" if it already contains this alias.
+    // Otherwise create a NEW row for this alias (prevents polluting unrelated hospital rows).
+    let rowWithAlias = null;
+
+    try {
+      const { rows: hospRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/client_hospitals` +
+          `?client_id=eq.${enc(clientId)}` +
+          `&select=id,hospital_name_norm` +
+          `&order=id.asc`
+      );
+
+      for (const h of (hospRows || [])) {
+        const aliases = normaliseList(h.hospital_name_norm).map(a => String(a || '').toLowerCase());
+        if (aliases.includes(alias)) {
+          rowWithAlias = h;
+          break;
+        }
+      }
+
+      if (!rowWithAlias) {
+        // No row contains this alias → create new row specifically for it
+        const res = await fetch(
+          `${env.SUPABASE_URL}/rest/v1/client_hospitals`,
+          {
+            method: 'POST',
+            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+            body: JSON.stringify([{
+              client_id: clientId,
+              hospital_name_norm: [alias]
+            }])
+          }
+        );
+        if (!res.ok) {
+          const txt = await res.text().catch(() => '');
+          console.warn('[TS_RESOLVE_CLIENT] client_hospitals insert failed', {
+            client_id: clientId,
+            alias,
+            status: res.status,
+            body: txt
+          });
+        }
+      }
+      // If rowWithAlias exists, do nothing (already mapped).
     } catch (e) {
-      console.warn('[TS_RESOLVE_CLIENT] timesheet client_id patch failed', {
-        timesheet_id: currentTimesheetId,
+      console.warn('[TS_RESOLVE_CLIENT] client_hospitals upsert failed (non-fatal)', {
+        client_id: clientId,
+        alias,
         err: e?.message || String(e)
       });
     }
 
-    // DB trigger trg_tsfin_client_hospitals_wakeup_aiu enqueues TSFIN recompute for matching aliases
+    // Attach client_id directly to CURRENT timesheet as well (UI + immediate context)
+    await patchTimesheetClientId();
 
     return withCORS(env, req, ok({
       ok: true,
@@ -37308,6 +37352,7 @@ async function handleTimesheetResolveClient(env, req, timesheetId) {
     );
   }
 }
+
 
 async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
   const enc = encodeURIComponent;
