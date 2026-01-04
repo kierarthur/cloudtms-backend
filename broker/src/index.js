@@ -36957,54 +36957,14 @@ async function handleTimesheetResolveCandidate(env, req, timesheetId) {
     );
   }
 
-  // Best-effort: enqueue TSFIN recompute for a timesheet_id
-  const enqueueTsfin = async (tsId, reason) => {
-    if (!tsId) return;
-    try {
-      const url =
-        `${env.SUPABASE_URL}/rest/v1/ts_financials_outbox` +
-        `?on_conflict=timesheet_id,reason`;
-
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { ...sbHeaders(env), Prefer: 'resolution=merge-duplicates,return=minimal' },
-        body: JSON.stringify([{
-          timesheet_id: tsId,
-          reason: reason || 'CONTEXT_CHANGED',
-          attempt_count: 0,
-          next_attempt_at: null,
-          last_error: null,
-          created_at: new Date().toISOString()
-        }])
-      });
-
-      if (!res.ok) {
-        const txt = await res.text().catch(() => '');
-        console.warn('[TS_RESOLVE_CAND] enqueue tsfin_outbox failed', {
-          timesheet_id: tsId,
-          reason,
-          status: res.status,
-          body: txt
-        });
-      }
-    } catch (e) {
-      console.warn('[TS_RESOLVE_CAND] enqueue tsfin_outbox threw', {
-        timesheet_id: tsId,
-        reason,
-        err: e?.message || String(e)
-      });
-    }
-  };
-
   try {
-    // Load CURRENT timesheet (not requested id)
-    // NOTE: timesheets has NO candidate_id column. Candidate link is via TSFIN snapshots.
+    // Load CURRENT timesheet (NOTE: DO NOT select candidate_id — it doesn't exist on timesheets)
     const ts = await sbGetOne(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
         `?timesheet_id=eq.${enc(currentTimesheetId)}` +
         `&is_current=eq.true` +
-        `&select=timesheet_id,occupant_key_norm,sheet_scope,submission_mode` +
+        `&select=timesheet_id,occupant_key_norm,sheet_scope,submission_mode,authorised_at_server` +
         `&limit=1`
     );
     if (!ts) {
@@ -37026,37 +36986,52 @@ async function handleTimesheetResolveCandidate(env, req, timesheetId) {
     const rawOcc  = ts.occupant_key_norm || '';
     const occNorm = String(rawOcc).trim().toLowerCase();
 
-    // If we have no occupant key, we can’t map anything meaningfully
-    if (!occNorm) {
-      // Still enqueue so TSFIN refresh runs (won’t resolve candidate, but keeps pipeline consistent)
-      await enqueueTsfin(currentTimesheetId, 'CONTEXT_CHANGED');
-      return withCORS(env, req, ok({
-        ok: true,
-        requested_timesheet_id: requestedTimesheetId,
-        current_timesheet_id: currentTimesheetId,
-        was_stale: wasStale
-      }));
-    }
+    // Helper: enqueue TSFIN + try to drain a little so UI updates immediately
+    const bumpTsfinNow = async () => {
+      try {
+        // Enqueue recompute for THIS timesheet (context change)
+        await sbRpc(env, 'enqueue_ts_financials', { timesheet_id: currentTimesheetId, reason: 'CONTEXT_CHANGED' });
+      } catch {}
+
+      // Best-effort immediate compute: drain a small batch a couple times.
+      // (This keeps UX snappy; queue still exists as fallback.)
+      try {
+        for (let i = 0; i < 3; i++) {
+          await runTsfinWorkerOnce(env, { limit: 50 });
+
+          // If we can see TSFIN no longer UNASSIGNED, we’re done.
+          const fin = await sbGetOne(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+              `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+              `&is_current=eq.true` +
+              `&select=processing_status` +
+              `&limit=1`
+          );
+          const p = String(fin?.processing_status || '').toUpperCase();
+          if (p && p !== 'UNASSIGNED') break;
+        }
+      } catch {}
+    };
 
     const sheetScope = String(ts.sheet_scope || '').toUpperCase();
     const subMode    = String(ts.submission_mode || '').toUpperCase();
     const isDailyElectronic = (sheetScope === 'DAILY' && subMode === 'ELECTRONIC');
 
     // ==========================================================
-    // ✅ DAILY/ELECTRONIC = occupant_key_norm is a GCK
-    // Map by setting candidates.key_norm = gck (do NOT touch aliases)
+    // ✅ DAILY/ELECTRONIC = occupant_key_norm is a GCK (NOT a name alias)
     // ==========================================================
     if (isDailyElectronic) {
       const gck = occNorm;
 
-      // ✅ Prevent assigning a GCK already owned by a different candidate
+      // Block if this GCK belongs to a different candidate
       try {
         const other = await sbGetOne(
           env,
           `${env.SUPABASE_URL}/rest/v1/candidates` +
             `?key_norm=eq.${enc(gck)}` +
             `&id=neq.${enc(candidateId)}` +
-            `&select=id,key_norm` +
+            `&select=id` +
             `&limit=1`
         );
         if (other?.id) {
@@ -37075,11 +37050,9 @@ async function handleTimesheetResolveCandidate(env, req, timesheetId) {
             )
           );
         }
-      } catch {
-        // non-fatal; proceed
-      }
+      } catch {}
 
-      // ✅ Also block overwriting an existing different key_norm on THIS candidate
+      // Block overwriting an existing different key_norm on THIS candidate
       const existingKey = String(cand.key_norm || '').trim().toLowerCase();
       if (existingKey && existingKey !== gck) {
         return withCORS(
@@ -37098,96 +37071,70 @@ async function handleTimesheetResolveCandidate(env, req, timesheetId) {
         );
       }
 
-      // Patch candidate: set key_norm = gck
-      try {
-        const res = await fetch(
-          `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(candidateId)}`,
-          {
-            method: 'PATCH',
-            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-            body: JSON.stringify({ key_norm: gck })
-          }
-        );
-
-        if (!res.ok) {
-          const txt = await res.text().catch(() => '');
-          console.warn('[TS_RESOLVE_CAND] patch candidate key_norm failed', {
-            candidate_id: candidateId,
-            status: res.status,
-            body: txt
-          });
-        }
-      } catch (e) {
-        console.warn('[TS_RESOLVE_CAND] patch candidate key_norm failed', {
-          candidate_id: candidateId,
-          err: e?.message || String(e)
-        });
-      }
-
-      // Candidate trigger will enqueue TSFIN for matching occupant_key_norm rows,
-      // but also best-effort enqueue this timesheet immediately.
-      await enqueueTsfin(currentTimesheetId, 'CONTEXT_CHANGED');
-
-      return withCORS(env, req, ok({
-        ok: true,
-        requested_timesheet_id: requestedTimesheetId,
-        current_timesheet_id: currentTimesheetId,
-        was_stale: wasStale
-      }));
-    }
-
-    // ==========================================================
-    // Legacy behaviour: treat occupant_key_norm as a NAME ALIAS
-    // Merge into candidates.nhsp_hr_name_aliases (do NOT overwrite key_norm)
-    // ==========================================================
-    const alias = occNorm;
-
-    const existingAliases = Array.isArray(cand.nhsp_hr_name_aliases)
-      ? cand.nhsp_hr_name_aliases
-      : [];
-
-    const mergedAliases = normaliseAliasList([
-      ...existingAliases,
-      alias
-    ]);
-
-    // Patch candidate with updated aliases only
-    try {
+      // Patch candidate: set key_norm = gck (NO alias merge)
       const res = await fetch(
         `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(candidateId)}`,
         {
           method: 'PATCH',
           headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-          body: JSON.stringify({
-            nhsp_hr_name_aliases: mergedAliases
-          })
+          body: JSON.stringify({ key_norm: gck })
         }
       );
-
       if (!res.ok) {
         const txt = await res.text().catch(() => '');
-        console.warn('[TS_RESOLVE_CAND] patch candidate aliases failed', {
-          candidate_id: candidateId,
-          status: res.status,
-          body: txt
-        });
+        console.warn('[TS_RESOLVE_CAND] patch candidate key_norm failed', { candidate_id: candidateId, status: res.status, body: txt });
       }
-    } catch (e) {
-      console.warn('[TS_RESOLVE_CAND] patch candidate aliases failed', {
-        candidate_id: candidateId,
-        err: e?.message || String(e)
-      });
+
+      // ✅ immediate TSFIN bump so resolve UI moves to CLIENT_UNRESOLVED (or READY_*)
+      await bumpTsfinNow();
+
+    } else {
+      // ==========================================================
+      // Legacy behaviour: treat occupant_key_norm as a name alias
+      // ==========================================================
+      const alias = occNorm;
+
+      const existingAliases = Array.isArray(cand.nhsp_hr_name_aliases)
+        ? cand.nhsp_hr_name_aliases
+        : [];
+
+      const mergedAliases = normaliseAliasList([ ...existingAliases, alias ]);
+
+      // ✅ IMPORTANT: do NOT touch key_norm here (key_norm is reserved for GCK)
+      const res = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(candidateId)}`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+          body: JSON.stringify({ nhsp_hr_name_aliases: mergedAliases })
+        }
+      );
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        console.warn('[TS_RESOLVE_CAND] patch candidate aliases failed', { candidate_id: candidateId, status: res.status, body: txt });
+      }
+
+      await bumpTsfinNow();
     }
 
-    // Candidate trigger will enqueue TSFIN for matching aliases;
-    // best-effort enqueue this timesheet immediately.
-    await enqueueTsfin(currentTimesheetId, 'CONTEXT_CHANGED');
+    // Return updated summary row (so FE can repaint immediately)
+    let summaryRow = null;
+    try {
+      summaryRow = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
+          `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+          `&select=timesheet_id,processing_status,candidate_id,client_id,candidate_name,client_name` +
+          `&limit=1`
+      );
+    } catch {}
 
     return withCORS(env, req, ok({
       ok: true,
       requested_timesheet_id: requestedTimesheetId,
       current_timesheet_id: currentTimesheetId,
-      was_stale: wasStale
+      was_stale: wasStale,
+      summary: summaryRow || null
     }));
   } catch (e) {
     return withCORS(
@@ -37197,7 +37144,6 @@ async function handleTimesheetResolveCandidate(env, req, timesheetId) {
     );
   }
 }
-
 async function handleTimesheetResolveClient(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -37249,52 +37195,18 @@ async function handleTimesheetResolveClient(env, req, timesheetId) {
 
   try {
     // Load CURRENT timesheet to get hospital_norm
+    // NOTE: timesheets.client_id may or may not exist; we only need hospital_norm here.
     const ts = await sbGetOne(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
         `?timesheet_id=eq.${enc(currentTimesheetId)}` +
         `&is_current=eq.true` +
-        `&select=timesheet_id,hospital_norm,client_id,is_current` +
+        `&select=timesheet_id,hospital_norm,is_current` +
         `&limit=1`
     );
     if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
 
     const alias = String(ts.hospital_norm || '').trim().toLowerCase();
-
-    // Helper: patch CURRENT timesheet client_id (UI immediacy)
-    const patchTimesheetClientId = async () => {
-      const res = await fetch(
-        `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
-        {
-          method: 'PATCH',
-          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-          body: JSON.stringify({
-            client_id: clientId,
-            updated_at: new Date().toISOString()
-          })
-        }
-      );
-      if (!res.ok) {
-        const txt = await res.text().catch(() => '');
-        console.warn('[TS_RESOLVE_CLIENT] timesheet client_id patch failed', {
-          timesheet_id: currentTimesheetId,
-          status: res.status,
-          body: txt
-        });
-      }
-    };
-
-    // If there is no alias string at all, attach client_id directly and return.
-    // (Note: TSFIN client resolution is alias-based; this is still useful for UI context.)
-    if (!alias) {
-      await patchTimesheetClientId();
-      return withCORS(env, req, ok({
-        ok: true,
-        requested_timesheet_id: requestedTimesheetId,
-        current_timesheet_id: currentTimesheetId,
-        was_stale: wasStale
-      }));
-    }
 
     const normaliseList = (val) => {
       if (!val) return [];
@@ -37310,7 +37222,57 @@ async function handleTimesheetResolveClient(env, req, timesheetId) {
       return [];
     };
 
-    // ✅ NEW: enforce alias uniqueness across clients:
+    // Helper: enqueue TSFIN + try to drain a little so UI updates immediately
+    const bumpTsfinNow = async () => {
+      try {
+        await sbRpc(env, 'enqueue_ts_financials', { timesheet_id: currentTimesheetId, reason: 'CONTEXT_CHANGED' });
+      } catch {}
+
+      try {
+        for (let i = 0; i < 3; i++) {
+          await runTsfinWorkerOnce(env, { limit: 50 });
+
+          const fin = await sbGetOne(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+              `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+              `&is_current=eq.true` +
+              `&select=processing_status,client_id` +
+              `&limit=1`
+          );
+
+          // If client_id now resolved in TSFIN, we’re done.
+          if (fin?.client_id) break;
+        }
+      } catch {}
+    };
+
+    // If there is no alias string at all, we can't teach alias mapping.
+    // Still kick TSFIN (it will likely remain CLIENT_UNRESOLVED), but returns cleanly.
+    if (!alias) {
+      await bumpTsfinNow();
+
+      let summaryRow = null;
+      try {
+        summaryRow = await sbGetOne(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
+            `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+            `&select=timesheet_id,processing_status,candidate_id,client_id,candidate_name,client_name` +
+            `&limit=1`
+        );
+      } catch {}
+
+      return withCORS(env, req, ok({
+        ok: true,
+        requested_timesheet_id: requestedTimesheetId,
+        current_timesheet_id: currentTimesheetId,
+        was_stale: wasStale,
+        summary: summaryRow || null
+      }));
+    }
+
+    // ✅ Enforce alias uniqueness across clients:
     // - find any client_hospitals rows (any client) that already contain this alias
     // - if they belong to a different client, remove the alias from those rows
     // - ensure chosen client has the alias (insert row if none exists for chosen client)
@@ -37328,7 +37290,6 @@ async function handleTimesheetResolveClient(env, req, timesheetId) {
         );
         rowsWithAlias = Array.isArray(rows) ? rows : [];
       } catch (e) {
-        // If cs query fails for any reason, fall back to scanning just this client (still safe).
         rowsWithAlias = [];
         console.warn('[TS_RESOLVE_CLIENT] client_hospitals cs lookup failed (fallback)', e?.message || e);
       }
@@ -37336,12 +37297,11 @@ async function handleTimesheetResolveClient(env, req, timesheetId) {
       const ownedByChosen = rowsWithAlias.find(r => String(r.client_id) === String(clientId)) || null;
       const ownedByOthers = rowsWithAlias.filter(r => String(r.client_id) !== String(clientId));
 
-      // 1) Remove alias from other clients (so resolver cannot pick the wrong client)
+      // 1) Remove alias from other clients
       for (const r of ownedByOthers) {
         const cur = normaliseList(r.hospital_name_norm);
         const next = cur.filter(x => String(x || '').trim().toLowerCase() !== alias);
 
-        // Only patch if something actually changes
         if (next.length !== cur.length) {
           const res = await fetch(
             `${env.SUPABASE_URL}/rest/v1/client_hospitals?id=eq.${enc(r.id)}`,
@@ -37366,7 +37326,6 @@ async function handleTimesheetResolveClient(env, req, timesheetId) {
 
       // 2) Ensure chosen client has the alias
       if (!ownedByChosen) {
-        // Create a dedicated row for this alias under the chosen client (keeps rows clean)
         const res = await fetch(
           `${env.SUPABASE_URL}/rest/v1/client_hospitals`,
           {
@@ -37388,7 +37347,6 @@ async function handleTimesheetResolveClient(env, req, timesheetId) {
           });
         }
       }
-      // If ownedByChosen exists already, we do nothing.
     } catch (e) {
       console.warn('[TS_RESOLVE_CLIENT] client_hospitals alias enforcement failed (non-fatal)', {
         client_id: clientId,
@@ -37397,16 +37355,28 @@ async function handleTimesheetResolveClient(env, req, timesheetId) {
       });
     }
 
-    // Attach client_id directly to CURRENT timesheet as well (UI + immediate context)
-    await patchTimesheetClientId();
+    // ✅ Kick TSFIN immediately so the Resolve modal updates right away
+    // (and/or client_hospitals triggers will do it anyway)
+    await bumpTsfinNow();
 
-    // ✅ client_hospitals trigger will enqueue TSFIN recompute for matching aliases
+    // Return updated summary row (so FE can repaint immediately)
+    let summaryRow = null;
+    try {
+      summaryRow = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
+          `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+          `&select=timesheet_id,processing_status,candidate_id,client_id,candidate_name,client_name` +
+          `&limit=1`
+      );
+    } catch {}
 
     return withCORS(env, req, ok({
       ok: true,
       requested_timesheet_id: requestedTimesheetId,
       current_timesheet_id: currentTimesheetId,
-      was_stale: wasStale
+      was_stale: wasStale,
+      summary: summaryRow || null
     }));
   } catch (e) {
     return withCORS(
@@ -39456,6 +39426,8 @@ async function handleCreateCandidate(env, req) {
   // Strip any accidental CCR fields (immutable/minted by DB)
   const { tms_ref, ccr_num, job_titles, ...data } = dataRaw;
 
+  const enc = encodeURIComponent;
+
   // Normalise NHSP/HR name aliases (JSONB) if provided
   if (Object.prototype.hasOwnProperty.call(data, 'nhsp_hr_name_aliases')) {
     const rawAliases = data.nhsp_hr_name_aliases;
@@ -39469,7 +39441,6 @@ async function handleCreateCandidate(env, req) {
       const s = rawAliases.trim();
       if (s) {
         if (s.startsWith('[')) {
-          // Try to treat as JSON array string
           try {
             const arr = JSON.parse(s);
             if (Array.isArray(arr)) {
@@ -39478,14 +39449,12 @@ async function handleCreateCandidate(env, req) {
                 .filter(Boolean);
             }
           } catch {
-            // Fall back to CSV-style parsing
             aliases = s
               .split(',')
               .map((x) => x.trim().toLowerCase())
               .filter(Boolean);
           }
         } else {
-          // CSV or single value
           aliases = s
             .split(',')
             .map((x) => x.trim().toLowerCase())
@@ -39494,15 +39463,34 @@ async function handleCreateCandidate(env, req) {
       }
     } else if (rawAliases != null) {
       const s = String(rawAliases).trim();
-      if (s) {
-        aliases = [s.toLowerCase()];
-      }
+      if (s) aliases = [s.toLowerCase()];
     }
 
-    data.nhsp_hr_name_aliases = aliases;
+    data.nhsp_hr_name_aliases = Array.from(new Set(aliases));
   }
 
-  // Normalise pay_method: only PAYE/UMBRELLA; Unknown/other -> null
+  // ✅ Normalise key_norm (GCK) and allow empty -> null
+  if (Object.prototype.hasOwnProperty.call(data, 'key_norm')) {
+    const v = String(data.key_norm ?? '').trim();
+    data.key_norm = v ? v.toLowerCase() : null;
+  }
+
+  // ✅ Enforce key_norm uniqueness if provided
+  if (data.key_norm) {
+    const other = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/candidates` +
+        `?key_norm=eq.${enc(data.key_norm)}` +
+        `&select=id` +
+        `&limit=1`
+    ).catch(() => null);
+
+    if (other?.id) {
+      return withCORS(env, req, badRequest('Global Candidate Key (key_norm) is already assigned to another candidate.'));
+    }
+  }
+
+  // Normalise pay_method: only PAYE/UMBRELLA; Unknown/other -> "use DB default" (do not send)
   if (Object.prototype.hasOwnProperty.call(data, 'pay_method')) {
     let pm = (data.pay_method == null ? '' : String(data.pay_method)).trim().toUpperCase();
     if (pm === 'UNKNOWN' || pm === '') {
@@ -39521,6 +39509,71 @@ async function handleCreateCandidate(env, req) {
 
   const primaryJobTitleId = jtArray[0] || null;
 
+  const enqueueTsfinOutbox = async (items) => {
+    if (!Array.isArray(items) || !items.length) return { enqueued: 0 };
+    try {
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/ts_financials_outbox?on_conflict=timesheet_id,reason`,
+        {
+          method: "POST",
+          headers: { ...sbHeaders(env), "Prefer": "resolution=ignore-duplicates" },
+          body: JSON.stringify(items)
+        }
+      );
+      return { enqueued: items.length };
+    } catch (e) {
+      console.warn('[TSFIN] enqueue outbox failed', e?.message || e);
+      return { enqueued: 0 };
+    }
+  };
+
+  const runTsfinImmediate = async (limitHint) => {
+    try {
+      if (typeof runTsfinWorkerOnce !== 'function') {
+        return { ran: false, picked: 0, ok: 0, fail: 0 };
+      }
+      const limit = Math.min(Math.max(parseInt(limitHint || '50', 10) || 50, 1), 200);
+      const res = await runTsfinWorkerOnce(env, { limit });
+      return { ran: true, ...(res || {}) };
+    } catch (e) {
+      console.warn('[TSFIN] immediate run failed', e?.message || e);
+      return { ran: false, picked: 0, ok: 0, fail: 0 };
+    }
+  };
+
+  const assignTimesheetsByOccKey = async (occKeyLower, candId) => {
+    if (!occKeyLower || !candId) return [];
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?is_current=eq.true` +
+          `&candidate_id=is.null` +
+          `&occupant_key_norm=eq.${enc(occKeyLower)}` +
+          `&select=timesheet_id` +
+          `&limit=500`
+      );
+      const ids = (rows || []).map(r => r?.timesheet_id).filter(Boolean);
+
+      for (const tsid of ids) {
+        try {
+          await fetch(
+            `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(tsid)}&is_current=eq.true`,
+            {
+              method: 'PATCH',
+              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+              body: JSON.stringify({ candidate_id: candId, updated_at: new Date().toISOString() })
+            }
+          );
+        } catch {}
+      }
+      return ids;
+    } catch (e) {
+      console.warn('[CAND] assignTimesheetsByOccKey failed', e?.message || e);
+      return [];
+    }
+  };
+
   try {
     // Insert candidate; set job_title_id to primary (or null)
     const res = await fetch(`${env.SUPABASE_URL}/rest/v1/candidates`, {
@@ -39536,6 +39589,7 @@ async function handleCreateCandidate(env, req) {
       const err = await res.text();
       return withCORS(env, req, badRequest(`Candidate creation failed: ${err}`));
     }
+
     const json = await res.json().catch(() => ({}));
     const candidate = Array.isArray(json) ? json[0] : json;
     const candidateId = candidate?.id;
@@ -39560,16 +39614,46 @@ async function handleCreateCandidate(env, req) {
       if (!jtRes.ok) {
         const err = await jtRes.text().catch(() => 'insert candidate_job_titles failed');
         console.error('candidate_job_titles insert failed', err);
-        // Candidate is still returned; you can tighten this later if needed
       }
     }
 
-    return withCORS(env, req, ok({ candidate }));
+    // ✅ NEW: on candidate create, try to resolve any unassigned timesheets by key_norm
+    let autoAssignedTimesheets = [];
+    if (candidateId && candidate?.key_norm) {
+      const k = String(candidate.key_norm || '').trim().toLowerCase();
+      if (k) {
+        autoAssignedTimesheets = await assignTimesheetsByOccKey(k, candidateId);
+      }
+    }
+
+    // ✅ Enqueue + immediate TSFIN run for any auto-assigned timesheets
+    const outboxItems = [];
+    for (const tsid of autoAssignedTimesheets) {
+      outboxItems.push({ timesheet_id: tsid, reason: 'CANDIDATE_CREATED_MATCH' });
+    }
+
+    const enq = await enqueueTsfinOutbox(outboxItems);
+    const ran = (enq.enqueued > 0)
+      ? await runTsfinImmediate(Math.min(80, Math.max(20, outboxItems.length)))
+      : { ran: false, picked: 0, ok: 0, fail: 0 };
+
+    return withCORS(env, req, ok({
+      candidate,
+      tsfin: {
+        enqueued: enq.enqueued,
+        ran_now: ran.ran,
+        picked: ran.picked || 0,
+        ok: ran.ok || 0,
+        fail: ran.fail || 0,
+        auto_assigned_timesheets: autoAssignedTimesheets.length
+      }
+    }));
   } catch (e) {
     console.error('handleCreateCandidate failed', e);
     return withCORS(env, req, serverError("Failed to create candidate"));
   }
 }
+
 
 async function handleUpdateCandidate(env, req, candidateId) {
   const user = await requireUser(env, req, ['admin']);
@@ -39582,6 +39666,7 @@ async function handleUpdateCandidate(env, req, candidateId) {
   const { tms_ref, ccr_num, job_titles, ...data } = raw;
 
   // Normalise NHSP/HR name aliases (JSONB) if provided
+  let aliasesChanged = false;
   if (Object.prototype.hasOwnProperty.call(data, 'nhsp_hr_name_aliases')) {
     const rawAliases = data.nhsp_hr_name_aliases;
     let aliases = [];
@@ -39594,7 +39679,6 @@ async function handleUpdateCandidate(env, req, candidateId) {
       const s = rawAliases.trim();
       if (s) {
         if (s.startsWith('[')) {
-          // Try to treat as JSON array string
           try {
             const arr = JSON.parse(s);
             if (Array.isArray(arr)) {
@@ -39603,14 +39687,12 @@ async function handleUpdateCandidate(env, req, candidateId) {
                 .filter(Boolean);
             }
           } catch {
-            // Fall back to CSV-style parsing
             aliases = s
               .split(',')
               .map((x) => x.trim().toLowerCase())
               .filter(Boolean);
           }
         } else {
-          // CSV or single value
           aliases = s
             .split(',')
             .map((x) => x.trim().toLowerCase())
@@ -39619,23 +39701,37 @@ async function handleUpdateCandidate(env, req, candidateId) {
       }
     } else if (rawAliases != null) {
       const s = String(rawAliases).trim();
-      if (s) {
-        aliases = [s.toLowerCase()];
-      }
+      if (s) aliases = [s.toLowerCase()];
     }
 
+    // de-dupe
+    aliases = Array.from(new Set(aliases));
     data.nhsp_hr_name_aliases = aliases;
+    aliasesChanged = true; // we’ll compute exact diff after loading "before"
   }
 
-  // Normalise pay_method: only PAYE/UMBRELLA; Unknown/other -> null (no change)
+  // ✅ Normalise key_norm (GCK): allow clear -> null
+  let keyNormTouched = false;
+  if (Object.prototype.hasOwnProperty.call(data, 'key_norm')) {
+    keyNormTouched = true;
+    const v = String(data.key_norm ?? '').trim();
+    data.key_norm = v ? v.toLowerCase() : null;
+  }
+
+  // Normalise pay_method:
+  // - only PAYE/UMBRELLA are allowed
+  // - Unknown/empty/other => "no change" (do NOT PATCH null because DB is NOT NULL)
+  let payMethodAttemptedUnknown = false;
   if (Object.prototype.hasOwnProperty.call(data, 'pay_method')) {
     let pm = (data.pay_method == null ? '' : String(data.pay_method)).trim().toUpperCase();
     if (pm === 'UNKNOWN' || pm === '') {
-      data.pay_method = null;
+      payMethodAttemptedUnknown = true;
+      delete data.pay_method;
     } else if (pm === 'PAYE' || pm === 'UMBRELLA') {
       data.pay_method = pm;
     } else {
-      data.pay_method = null;
+      payMethodAttemptedUnknown = true;
+      delete data.pay_method;
     }
   }
 
@@ -39643,12 +39739,117 @@ async function handleUpdateCandidate(env, req, candidateId) {
   let jtArray = null;
   if (Array.isArray(job_titles)) {
     jtArray = job_titles.map((x) => String(x)).filter(Boolean);
-    // Primary is first entry (if any)
-    data.job_title_id = jtArray[0] || null;
+    data.job_title_id = jtArray[0] || null; // primary is first
   }
 
+  // helpers
+  const enc = encodeURIComponent;
+
+  const arraysEqual = (a, b) => {
+    const aa = Array.isArray(a) ? a.slice() : [];
+    const bb = Array.isArray(b) ? b.slice() : [];
+    if (aa.length !== bb.length) return false;
+    for (let i = 0; i < aa.length; i++) if (String(aa[i]) !== String(bb[i])) return false;
+    return true;
+  };
+
+  const normaliseAliasArr = (v) => {
+    try {
+      let out = [];
+      if (Array.isArray(v)) out = v;
+      else if (typeof v === 'string') {
+        const s = v.trim();
+        if (s.startsWith('[')) {
+          try {
+            const arr = JSON.parse(s);
+            out = Array.isArray(arr) ? arr : [];
+          } catch {
+            out = s.split(',');
+          }
+        } else {
+          out = s.split(',');
+        }
+      } else if (v != null) out = [v];
+      return Array.from(
+        new Set(
+          out
+            .map(x => String(x || '').trim().toLowerCase())
+            .filter(Boolean)
+        )
+      ).sort();
+    } catch {
+      return [];
+    }
+  };
+
+  const enqueueTsfinOutbox = async (items) => {
+    if (!Array.isArray(items) || !items.length) return { enqueued: 0 };
+    try {
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/ts_financials_outbox?on_conflict=timesheet_id,reason`,
+        {
+          method: "POST",
+          headers: { ...sbHeaders(env), "Prefer": "resolution=ignore-duplicates" },
+          body: JSON.stringify(items)
+        }
+      );
+      return { enqueued: items.length };
+    } catch (e) {
+      console.warn('[TSFIN] enqueue outbox failed', e?.message || e);
+      return { enqueued: 0 };
+    }
+  };
+
+  const runTsfinImmediate = async (limitHint) => {
+    try {
+      if (typeof runTsfinWorkerOnce !== 'function') {
+        return { ran: false, picked: 0, ok: 0, fail: 0 };
+      }
+      const limit = Math.min(Math.max(parseInt(limitHint || '50', 10) || 50, 1), 200);
+      const res = await runTsfinWorkerOnce(env, { limit });
+      return { ran: true, ...(res || {}) };
+    } catch (e) {
+      console.warn('[TSFIN] immediate run failed', e?.message || e);
+      return { ran: false, picked: 0, ok: 0, fail: 0 };
+    }
+  };
+
+  const assignTimesheetsByOccKey = async (occKeyLower, candId) => {
+    if (!occKeyLower || !candId) return [];
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?is_current=eq.true` +
+          `&candidate_id=is.null` +
+          `&occupant_key_norm=eq.${enc(occKeyLower)}` +
+          `&select=timesheet_id` +
+          `&limit=500`
+      );
+      const ids = (rows || []).map(r => r?.timesheet_id).filter(Boolean);
+
+      // Patch CURRENT timesheets to set candidate_id (UI + TSFIN context)
+      for (const tsid of ids) {
+        try {
+          await fetch(
+            `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(tsid)}&is_current=eq.true`,
+            {
+              method: 'PATCH',
+              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+              body: JSON.stringify({ candidate_id: candId, updated_at: new Date().toISOString() })
+            }
+          );
+        } catch {}
+      }
+      return ids;
+    } catch (e) {
+      console.warn('[CAND] assignTimesheetsByOccKey failed', e?.message || e);
+      return [];
+    }
+  };
+
   try {
-    // 1) Load current candidate to detect changes (pay, umbrella, bank, mileage)
+    // 1) Load current candidate (include key_norm + aliases for diff + uniqueness)
     const sel = [
       'pay_method',
       'mileage_pay_rate',
@@ -39656,13 +39857,17 @@ async function handleUpdateCandidate(env, req, candidateId) {
       'account_holder',
       'bank_name',
       'sort_code',
-      'account_number'
+      'account_number',
+      'key_norm',
+      'nhsp_hr_name_aliases'
     ].join(',');
+
     const { rows: beforeRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/candidates` +
-        `?id=eq.${encodeURIComponent(candidateId)}` +
-        `&select=${sel}`
+        `?id=eq.${enc(candidateId)}` +
+        `&select=${sel}` +
+        `&limit=1`
     );
     const before = beforeRows?.[0] || {};
 
@@ -39670,31 +39875,15 @@ async function handleUpdateCandidate(env, req, candidateId) {
       ? null
       : String(before.pay_method).toUpperCase();
 
-    // Determine target pay_method after normalisation
-    let newPayMethod = originalPayMethod;
-    if (Object.prototype.hasOwnProperty.call(data, 'pay_method')) {
-      newPayMethod =
-        data.pay_method == null
-          ? null
-          : String(data.pay_method).toUpperCase();
-    }
-
-    const isToUnknown =
-      (originalPayMethod === 'PAYE' || originalPayMethod === 'UMBRELLA') &&
-      Object.prototype.hasOwnProperty.call(data, 'pay_method') &&
-      newPayMethod === null;
-
-    if (isToUnknown) {
-      // Safety rule: once a candidate has any contracts at all,
-      // we do not allow reverting pay_method back to Unknown.
+    // If user attempted to set Unknown, enforce your rule (only allowed if NO contracts)
+    if (payMethodAttemptedUnknown && (originalPayMethod === 'PAYE' || originalPayMethod === 'UMBRELLA')) {
       const { rows: conRows } = await sbFetch(
         env,
         `${env.SUPABASE_URL}/rest/v1/contracts` +
-          `?candidate_id=eq.${encodeURIComponent(candidateId)}` +
+          `?candidate_id=eq.${enc(candidateId)}` +
           `&select=id&limit=1`
       );
       const hasAnyContract = Array.isArray(conRows) && conRows.length > 0;
-
       if (hasAnyContract) {
         return withCORS(
           env,
@@ -39705,12 +39894,43 @@ async function handleUpdateCandidate(env, req, candidateId) {
           )
         );
       }
+      // If no contracts, "Unknown" just means "no change" (we already deleted pay_method)
+    }
+
+    // ✅ Enforce key_norm uniqueness if it’s being set (non-null)
+    const beforeKey = (before.key_norm == null) ? null : String(before.key_norm).trim().toLowerCase();
+    const nextKey   = keyNormTouched ? (data.key_norm == null ? null : String(data.key_norm)) : beforeKey;
+
+    const keyNormChanged = keyNormTouched && (String(beforeKey || '') !== String(nextKey || ''));
+
+    if (keyNormTouched && nextKey) {
+      const other = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?key_norm=eq.${enc(nextKey)}` +
+          `&id=neq.${enc(candidateId)}` +
+          `&select=id` +
+          `&limit=1`
+      ).catch(() => null);
+
+      if (other?.id) {
+        return withCORS(env, req, badRequest('Global Candidate Key (key_norm) is already assigned to another candidate.'));
+      }
+    }
+
+    // Compute alias exact diff only if field was touched
+    let aliasesActuallyChanged = false;
+    if (aliasesChanged) {
+      const beforeAliases = normaliseAliasArr(before.nhsp_hr_name_aliases).sort();
+      const afterAliases  = normaliseAliasArr(data.nhsp_hr_name_aliases).sort();
+      aliasesActuallyChanged = !arraysEqual(beforeAliases, afterAliases);
     }
 
     // 2) Update candidate
     const url =
       `${env.SUPABASE_URL}/rest/v1/candidates` +
-      `?id=eq.${encodeURIComponent(candidateId)}`;
+      `?id=eq.${enc(candidateId)}`;
+
     const res = await fetch(url, {
       method: "PATCH",
       headers: { ...sbHeaders(env), "Prefer": "return=representation" },
@@ -39726,19 +39946,15 @@ async function handleUpdateCandidate(env, req, candidateId) {
     // 2b) Upsert candidate_job_titles if job_titles were explicitly provided
     if (jtArray !== null) {
       try {
-        // Load existing mapping
         const { rows: existingRows } = await sbFetch(
           env,
           `${env.SUPABASE_URL}/rest/v1/candidate_job_titles` +
-            `?candidate_id=eq.${encodeURIComponent(candidateId)}` +
+            `?candidate_id=eq.${enc(candidateId)}` +
             `&select=job_title_id`
         );
-        const existingIds = new Set(
-          (existingRows || []).map((r) => String(r.job_title_id))
-        );
+        const existingIds = new Set((existingRows || []).map((r) => String(r.job_title_id)));
         const newIds = new Set(jtArray.map(String));
 
-        // Determine deletions and insertions
         const toDelete = [];
         for (const r of existingRows || []) {
           const id = String(r.job_title_id);
@@ -39749,25 +39965,20 @@ async function handleUpdateCandidate(env, req, candidateId) {
           if (!existingIds.has(id)) toInsert.push(id);
         }
 
-        // Deletes
         for (const jobTitleId of toDelete) {
           const delUrl =
             `${env.SUPABASE_URL}/rest/v1/candidate_job_titles` +
-            `?candidate_id=eq.${encodeURIComponent(candidateId)}` +
-            `&job_title_id=eq.${encodeURIComponent(jobTitleId)}`;
-          await fetch(delUrl, {
-            method: 'DELETE',
-            headers: sbHeaders(env)
-          }).catch((e) => console.error('candidate_job_titles delete failed', e));
+            `?candidate_id=eq.${enc(candidateId)}` +
+            `&job_title_id=eq.${enc(jobTitleId)}`;
+          await fetch(delUrl, { method: 'DELETE', headers: sbHeaders(env) }).catch(() => {});
         }
 
-        // Inserts
         if (toInsert.length) {
           const nowIso = new Date().toISOString();
           const rows = toInsert.map((jobTitleId) => ({
             candidate_id: candidateId,
             job_title_id: jobTitleId,
-            is_primary: false, // will fix below
+            is_primary: false,
             created_at: nowIso,
             updated_at: nowIso
           }));
@@ -39775,38 +39986,36 @@ async function handleUpdateCandidate(env, req, candidateId) {
             method: 'POST',
             headers: { ...sbHeaders(env), "Prefer": "resolution=ignore-duplicates" },
             body: JSON.stringify(rows)
-          }).catch((e) => console.error('candidate_job_titles insert failed', e));
+          }).catch(() => {});
         }
 
-        // Update is_primary flags: all false, then primary true (if any)
         const clearPrimaryUrl =
           `${env.SUPABASE_URL}/rest/v1/candidate_job_titles` +
-          `?candidate_id=eq.${encodeURIComponent(candidateId)}`;
+          `?candidate_id=eq.${enc(candidateId)}`;
         await fetch(clearPrimaryUrl, {
           method: 'PATCH',
           headers: { ...sbHeaders(env), "Prefer": "return=minimal" },
           body: JSON.stringify({ is_primary: false, updated_at: new Date().toISOString() })
-        }).catch((e) => console.error('candidate_job_titles clear primary failed', e));
+        }).catch(() => {});
 
         const primaryId = jtArray[0] || null;
         if (primaryId) {
           const setPrimaryUrl =
             `${env.SUPABASE_URL}/rest/v1/candidate_job_titles` +
-            `?candidate_id=eq.${encodeURIComponent(candidateId)}` +
-            `&job_title_id=eq.${encodeURIComponent(primaryId)}`;
+            `?candidate_id=eq.${enc(candidateId)}` +
+            `&job_title_id=eq.${enc(primaryId)}`;
           await fetch(setPrimaryUrl, {
             method: 'PATCH',
             headers: { ...sbHeaders(env), "Prefer": "return=minimal" },
             body: JSON.stringify({ is_primary: true, updated_at: new Date().toISOString() })
-          }).catch((e) => console.error('candidate_job_titles set primary failed', e));
+          }).catch(() => {});
         }
       } catch (jtErr) {
         console.error('handleUpdateCandidate: candidate_job_titles upsert failed', jtErr);
-        // Candidate was updated; leave as is
       }
     }
 
-    // 3) Change detection (unchanged logic)
+    // 3) Change detection (existing + NEW key_norm/aliases)
     const payMethodChanged  = (data.pay_method != null) && data.pay_method !== before.pay_method;
     const umbrellaChanged   = (data.umbrella_id !== undefined) && data.umbrella_id !== before.umbrella_id;
     const mileagePayChanged = (data.mileage_pay_rate != null) && Number(data.mileage_pay_rate) !== Number(before.mileage_pay_rate);
@@ -39814,43 +40023,66 @@ async function handleUpdateCandidate(env, req, candidateId) {
     const bankKeys = ['account_holder','bank_name','sort_code','account_number'];
     const bankChanged = bankKeys.some(k => Object.prototype.hasOwnProperty.call(data, k) && data[k] !== before[k]);
 
-    // 4) Enqueue recompute for non-invoiced, current TSFIN for this candidate
-    if (payMethodChanged || umbrellaChanged || bankChanged || mileagePayChanged) {
+    // 4A) If key_norm changed, try to auto-assign matching unassigned timesheets now
+    let autoAssignedTimesheets = [];
+    if (keyNormChanged && nextKey) {
+      autoAssignedTimesheets = await assignTimesheetsByOccKey(nextKey, candidateId);
+    }
+
+    // 4B) Build TSFIN outbox items
+    const outboxItems = [];
+
+    // Existing behaviour: recompute for current TSFIN rows for this candidate
+    if (payMethodChanged || umbrellaChanged || bankChanged || mileagePayChanged || keyNormChanged || aliasesActuallyChanged) {
       const { rows: tsfins } = await sbFetch(
         env,
         `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
           `?select=timesheet_id` +
-          `&candidate_id=eq.${encodeURIComponent(candidateId)}` +
+          `&candidate_id=eq.${enc(candidateId)}` +
           `&is_current=eq.true` +
           `&locked_by_invoice_id=is.null`
       );
-      const items = [];
+
       for (const r of (tsfins || [])) {
-        if (payMethodChanged || umbrellaChanged || bankChanged) {
-          items.push({ timesheet_id: r.timesheet_id, reason: 'CONTEXT_CHANGED' });
+        if (payMethodChanged || umbrellaChanged || bankChanged || keyNormChanged || aliasesActuallyChanged) {
+          outboxItems.push({ timesheet_id: r.timesheet_id, reason: 'CONTEXT_CHANGED' });
         }
         if (mileagePayChanged) {
-          items.push({ timesheet_id: r.timesheet_id, reason: 'RATE_CHANGED' });
+          outboxItems.push({ timesheet_id: r.timesheet_id, reason: 'RATE_CHANGED' });
         }
-      }
-      if (items.length) {
-        await fetch(
-          `${env.SUPABASE_URL}/rest/v1/ts_financials_outbox?on_conflict=timesheet_id,reason`,
-          {
-            method: "POST",
-            headers: { ...sbHeaders(env), "Prefer": "resolution=ignore-duplicates" },
-            body: JSON.stringify(items)
-          }
-        );
       }
     }
 
-    return withCORS(env, req, ok({ candidate }));
+    // Also enqueue for any newly auto-assigned timesheets (so they become “resolved” immediately)
+    for (const tsid of autoAssignedTimesheets) {
+      outboxItems.push({ timesheet_id: tsid, reason: 'GCK_ASSIGNED' });
+    }
+
+    // 4C) Enqueue + IMMEDIATE best-effort run
+    const enq = await enqueueTsfinOutbox(outboxItems);
+
+    // Try to process right now (keeps UI responsive)
+    const ran = (enq.enqueued > 0)
+      ? await runTsfinImmediate(Math.min(80, Math.max(20, outboxItems.length)))
+      : { ran: false, picked: 0, ok: 0, fail: 0 };
+
+    return withCORS(env, req, ok({
+      candidate,
+      tsfin: {
+        enqueued: enq.enqueued,
+        ran_now: ran.ran,
+        picked: ran.picked || 0,
+        ok: ran.ok || 0,
+        fail: ran.fail || 0,
+        auto_assigned_timesheets: autoAssignedTimesheets.length
+      }
+    }));
   } catch (e) {
     console.error('handleUpdateCandidate failed', e);
     return withCORS(env, req, serverError("Failed to update candidate"));
   }
 }
+
 
 
 async function handleGetCandidate(env, req, candidateId) {
