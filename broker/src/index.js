@@ -39736,33 +39736,25 @@ async function handleCreateCandidate(env, req) {
       }
     }
 
-  // ✅ Priority enqueue + targeted drain for any auto-assigned timesheets
-if (autoAssignedTimesheets.length) {
-  try {
-    await sbRpc(env, 'enqueue_ts_financials_priority', {
-      _timesheet_ids: autoAssignedTimesheets.map(String),
-      _reason: 'CONTEXT_CHANGED'
-    });
-  } catch {}
+// ✅ Priority enqueue + targeted drain for any auto-assigned timesheets
+const tsfinRun = await tsfinTargetedDrainNow(env, {
+  timesheetIds: autoAssignedTimesheets,
+  reason: 'CONTEXT_CHANGED',
+  chunkSize: 50
+});
 
-  try {
-    const runLimit = Math.min(200, Math.max(10, autoAssignedTimesheets.length));
-    await runTsfinWorkerOnce(env, { limit: runLimit });
-  } catch {}
-}
+return withCORS(env, req, ok({
+  candidate,
+  tsfin: {
+    enqueued: tsfinRun.enqueued || 0,
+    ran_now: tsfinRun.ran || 0,
+    picked: tsfinRun.picked || 0,
+    ok: tsfinRun.ok || 0,
+    fail: tsfinRun.fail || 0,
+    auto_assigned_timesheets: autoAssignedTimesheets.length
+  }
+}));
 
-
-    return withCORS(env, req, ok({
-      candidate,
-      tsfin: {
-        enqueued: enq.enqueued,
-        ran_now: ran.ran,
-        picked: ran.picked || 0,
-        ok: ran.ok || 0,
-        fail: ran.fail || 0,
-        auto_assigned_timesheets: autoAssignedTimesheets.length
-      }
-    }));
   } catch (e) {
     console.error('handleCreateCandidate failed', e);
     return withCORS(env, req, serverError("Failed to create candidate"));
@@ -40173,36 +40165,29 @@ async function handleUpdateCandidate(env, req, candidateId) {
       outboxItems.push({ timesheet_id: tsid, reason: 'GCK_ASSIGNED' });
     }
 
-  // 4C) Priority enqueue + targeted drain
-if (outboxItems.length) {
-  // de-dupe ids (priority fn takes one reason per call)
-  const ids = Array.from(new Set(outboxItems.map(x => x?.timesheet_id).filter(Boolean).map(String)));
+ // 4C) Priority enqueue + targeted drain
+const ids = Array.from(
+  new Set(outboxItems.map(x => x?.timesheet_id).filter(Boolean).map(String))
+);
 
-  try {
-    await sbRpc(env, 'enqueue_ts_financials_priority', {
-      _timesheet_ids: ids,
-      _reason: 'CONTEXT_CHANGED'
-    });
-  } catch {}
+const tsfinRun = await tsfinTargetedDrainNow(env, {
+  timesheetIds: ids,
+  reason: 'CONTEXT_CHANGED',
+  chunkSize: 50
+});
 
-  try {
-    const runLimit = Math.min(200, Math.max(10, ids.length));
-    await runTsfinWorkerOnce(env, { limit: runLimit });
-  } catch {}
-}
+return withCORS(env, req, ok({
+  candidate,
+  tsfin: {
+    enqueued: tsfinRun.enqueued || 0,
+    ran_now: tsfinRun.ran || 0,
+    picked: tsfinRun.picked || 0,
+    ok: tsfinRun.ok || 0,
+    fail: tsfinRun.fail || 0,
+    auto_assigned_timesheets: autoAssignedTimesheets.length
+  }
+}));
 
-
-    return withCORS(env, req, ok({
-      candidate,
-      tsfin: {
-        enqueued: enq.enqueued,
-        ran_now: ran.ran,
-        picked: ran.picked || 0,
-        ok: ran.ok || 0,
-        fail: ran.fail || 0,
-        auto_assigned_timesheets: autoAssignedTimesheets.length
-      }
-    }));
   } catch (e) {
     console.error('handleUpdateCandidate failed', e);
     return withCORS(env, req, serverError("Failed to update candidate"));
