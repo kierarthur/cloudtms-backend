@@ -34233,6 +34233,22 @@ async function handleCreateClient(env, req) {
   const data = await parseJSONBody(req);
   if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
 
+  const TIME_KEYS = [
+    'day_start','day_end',
+    'night_start','night_end',
+    'sat_start','sat_end',
+    'sun_start','sun_end',
+    'bh_start','bh_end'
+  ];
+
+  const normTime = (v) => {
+    if (v == null) return null;
+    const s = String(v).trim();
+    if (!s) return null;
+    const m = s.match(/^(\d{2}:\d{2})/);
+    return m ? m[1] : s;
+  };
+
   // Small helper: accept true / "true" / "yes" / "1"
   const asBool = (v) => {
     if (v === true) return true;
@@ -34328,58 +34344,32 @@ async function handleCreateClient(env, req) {
       csInput.ts_attach_to_invoice = asBool(csInput.ts_attach_to_invoice ?? ts_attach_to_invoice);
     }
 
-        // Defaults if still unset:
-    // ─────────────────────────────────────────────────────────────
+    // ✅ Normalise any provided time keys ('' => null)
+    for (const k of TIME_KEYS) {
+      if (Object.prototype.hasOwnProperty.call(csInput, k)) {
+        csInput[k] = normTime(csInput[k]);
+      }
+    }
+
     // Desired "new client" baseline = Manual (None) + all flags false
-    // ─────────────────────────────────────────────────────────────
-
-    // Manual (None) baseline route flags
-    if (!Object.prototype.hasOwnProperty.call(csInput, 'is_nhsp')) {
-      csInput.is_nhsp = false;
-    }
-    if (!Object.prototype.hasOwnProperty.call(csInput, 'no_timesheet_required')) {
-      csInput.no_timesheet_required = false;
-    }
-    if (!Object.prototype.hasOwnProperty.call(csInput, 'self_bill_no_invoices_sent')) {
-      csInput.self_bill_no_invoices_sent = false;
-    }
-    if (!Object.prototype.hasOwnProperty.call(csInput, 'daily_calc_of_invoices')) {
-      csInput.daily_calc_of_invoices = false;
-    }
-    if (!Object.prototype.hasOwnProperty.call(csInput, 'group_nightsat_sunbh')) {
-      csInput.group_nightsat_sunbh = false;
-    }
-
-    // Reference requirements default OFF
-    if (!Object.prototype.hasOwnProperty.call(csInput, 'pay_reference_required')) {
-      csInput.pay_reference_required = false;
-    }
-    if (!Object.prototype.hasOwnProperty.call(csInput, 'invoice_reference_required')) {
-      csInput.invoice_reference_required = false;
-    }
-
-        // Defaults if still unset:
     const setDefaultBool = (key, val) => {
       if (!Object.prototype.hasOwnProperty.call(csInput, key)) csInput[key] = val;
     };
 
-    // Requirement: new client defaults should behave like "Manual (None)" route
-    // (i.e. not NHSP, not HR/no-timesheet, and no special invoice/self-bill flags)
     setDefaultBool('is_nhsp', false);
     setDefaultBool('self_bill_no_invoices_sent', false);
     setDefaultBool('daily_calc_of_invoices', false);
     setDefaultBool('no_timesheet_required', false);
     setDefaultBool('group_nightsat_sunbh', false);
 
-    // Requirement: reference flags default false
     setDefaultBool('hr_validation_required', false);
     setDefaultBool('ts_reference_required', false);
     setDefaultBool('pay_reference_required', false);
     setDefaultBool('invoice_reference_required', false);
 
-    // HR / attach defaults (keep existing behaviour)
     setDefaultBool('requires_hr', false);
     setDefaultBool('autoprocess_hr', false);
+
     if (!Object.prototype.hasOwnProperty.call(csInput, 'hr_attach_to_invoice')) {
       csInput.hr_attach_to_invoice = true;
     }
@@ -34387,54 +34377,44 @@ async function handleCreateClient(env, req) {
       csInput.ts_attach_to_invoice = true;
     }
 
-    // NEW: default auto_invoice_default to false if still unset
     if (!Object.prototype.hasOwnProperty.call(csInput, 'auto_invoice_default')) {
       csInput.auto_invoice_default = false;
     }
 
-    // If self-bill is enabled, auto-invoice default must be false (no invoices sent)
     if (asBool(csInput.self_bill_no_invoices_sent)) {
       csInput.auto_invoice_default = false;
     }
 
-    // Requirement: default times
-    // day 06:00-20:00, night 20:00-06:00, sat/sun/bh 00:00-00:00
-    const setDefaultTime = (key, val) => {
-      if (!Object.prototype.hasOwnProperty.call(csInput, key) || String(csInput[key] || '').trim() === '') {
-        csInput[key] = val;
-      }
+    // ✅ DEFAULT TIMES ONLY WHEN KEY IS ABSENT (blank/null explicitly provided must stay null)
+    const setDefaultTimeIfMissing = (key, val) => {
+      if (!Object.prototype.hasOwnProperty.call(csInput, key)) csInput[key] = val;
     };
 
-    setDefaultTime('day_start',   '06:00');
-    setDefaultTime('day_end',     '20:00');
-    setDefaultTime('night_start', '20:00');
-    setDefaultTime('night_end',   '06:00');
+    setDefaultTimeIfMissing('day_start',   '06:00');
+    setDefaultTimeIfMissing('day_end',     '20:00');
+    setDefaultTimeIfMissing('night_start', '20:00');
+    setDefaultTimeIfMissing('night_end',   '06:00');
 
-    setDefaultTime('sat_start', '00:00');
-    setDefaultTime('sat_end',   '00:00');
-    setDefaultTime('sun_start', '00:00');
-    setDefaultTime('sun_end',   '00:00');
-    setDefaultTime('bh_start',  '00:00');
-    setDefaultTime('bh_end',    '00:00');
+    setDefaultTimeIfMissing('sat_start', '00:00');
+    setDefaultTimeIfMissing('sat_end',   '00:00');
+    setDefaultTimeIfMissing('sun_start', '00:00');
+    setDefaultTimeIfMissing('sun_end',   '00:00');
+    setDefaultTimeIfMissing('bh_start',  '00:00');
+    setDefaultTimeIfMissing('bh_end',    '00:00');
 
     // Week ending day (0..6, default 0/Sun)
     const we = Number(csInput.week_ending_weekday);
     csInput.week_ending_weekday = (Number.isInteger(we) && we>=0 && we<=6) ? we : 0;
 
     // Default + normalise default_submission_mode
-    // Requirement: if FE provides no settings, default is ELECTRONIC.
     if (!Object.prototype.hasOwnProperty.call(csInput, 'default_submission_mode')) {
       csInput.default_submission_mode = 'ELECTRONIC';
     }
-
     {
       let dsm = String(csInput.default_submission_mode || '').toUpperCase();
       if (!['ELECTRONIC','MANUAL'].includes(dsm)) dsm = 'ELECTRONIC';
       csInput.default_submission_mode = dsm;
     }
-
-
-
 
     let client_settings;
     if (Object.keys(csInput).length) {
@@ -34444,6 +34424,7 @@ async function handleCreateClient(env, req) {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
+
       const csRes = await fetch(`${env.SUPABASE_URL}/rest/v1/client_settings`, {
         method: "POST",
         headers: { ...sbHeaders(env), "Prefer": "return=representation" },
@@ -34465,6 +34446,55 @@ async function handleCreateClient(env, req) {
 
 
 
+async function handleGetClient(env, req, clientId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  try {
+    // Client
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(clientId)}`
+    );
+    if (!rows.length) return withCORS(env, req, notFound("Client not found"));
+    const client = rows[0];
+
+    // Latest client_settings
+    const { rows: csRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/client_settings` +
+      `?client_id=eq.${encodeURIComponent(clientId)}` +
+      `&select=` +
+        [
+          'id','client_id',
+          'vat_rate_pct','holiday_pay_pct','erni_pct',
+          'apply_holiday_to','apply_erni_to','margin_includes',
+          'effective_from',
+          'timezone_id',
+          'day_start','day_end','night_start','night_end','sat_start','sat_end','sun_start','sun_end','bh_start','bh_end',
+          'bh_source','bh_list','bh_feed_url',
+          'hr_validation_required',
+          'ts_reference_required','pay_reference_required','invoice_reference_required',
+          'default_submission_mode',
+          'week_ending_weekday',
+          'is_nhsp','self_bill_no_invoices_sent','daily_calc_of_invoices',
+          'no_timesheet_required','group_nightsat_sunbh',
+          'auto_invoice_default',
+          'requires_hr','autoprocess_hr','hr_attach_to_invoice','ts_attach_to_invoice',
+          'created_at','updated_at'
+        ].join(',') +
+      `&order=effective_from.desc,created_at.desc&limit=1`
+    );
+
+    const client_settings = csRows?.[0] || null;
+
+    return withCORS(env, req, ok({ client, client_settings }));
+  } catch {
+    return withCORS(env, req, serverError("Failed to fetch client"));
+  }
+}
+
+
 /**
  * @openapi
  * /api/clients/{id}:
@@ -34479,53 +34509,8 @@ async function handleCreateClient(env, req) {
  *     security:
  *       - bearerAuth: []
  */
-async function handleGetClient(env, req, clientId) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
 
-  try {
-    // Client
-    const { rows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(clientId)}`
-    );
-    if (!rows.length) return withCORS(env, req, notFound("Client not found"));
-    const client = rows[0];
 
-    // Latest client_settings (include validation flags + new ref/submission fields + HR/attach flags)
-    const { rows: csRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/client_settings` +
-      `?client_id=eq.${encodeURIComponent(clientId)}` +
-      `&select=` +
-        [
-          'id','client_id',
-          'vat_rate_pct','holiday_pay_pct','erni_pct',
-          'apply_holiday_to','apply_erni_to','margin_includes',
-          'effective_from',
-          'timezone_id',
-          'day_start','day_end','night_start','night_end','sat_start','sat_end','sun_start','sun_end',
-          'bh_source','bh_list','bh_feed_url',
-          'hr_validation_required',
-          'ts_reference_required','pay_reference_required','invoice_reference_required',
-          'default_submission_mode',
-          'week_ending_weekday',
-          'is_nhsp','self_bill_no_invoices_sent','daily_calc_of_invoices',
-          'no_timesheet_required','group_nightsat_sunbh',
-          // NEW flags
-          'requires_hr','autoprocess_hr','hr_attach_to_invoice','ts_attach_to_invoice',
-          'created_at','updated_at'
-        ].join(',') +
-      `&order=effective_from.desc,created_at.desc&limit=1`
-    );
-
-    const client_settings = csRows?.[0] || null;
-
-    return withCORS(env, req, ok({ client, client_settings }));
-  } catch {
-    return withCORS(env, req, serverError("Failed to fetch client"));
-  }
-}
 
 
 // --------------------------------------------------
@@ -34545,12 +34530,38 @@ async function handleUpdateClient(env, req, clientId) {
   // Strip any accidental CLI fields (immutable/minted by DB)
   const { cli_ref, cli_num, ...data } = raw;
 
+  const TIME_KEYS = [
+    'day_start','day_end',
+    'night_start','night_end',
+    'sat_start','sat_end',
+    'sun_start','sun_end',
+    'bh_start','bh_end'
+  ];
+
   // Helper: normalise YES/NO/true/false
   const asBool = (v) => {
     if (v === true) return true;
     if (v === false || v == null) return false;
     const s = String(v).trim().toLowerCase();
     return s === 'true' || s === 'yes' || s === 'y' || s === '1';
+  };
+
+  // Normalise time-ish inputs:
+  // - '' or null => null (means "inherit global" when you resolve effective policy)
+  // - '06:00:00' => '06:00'
+  // - '06:00'    => '06:00'
+  const normTime = (v) => {
+    if (v == null) return null;
+    const s = String(v).trim();
+    if (!s) return null;
+    const m = s.match(/^(\d{2}:\d{2})/);
+    return m ? m[1] : s;
+  };
+
+  const sameTime = (a, b) => {
+    const na = normTime(a);
+    const nb = normTime(b);
+    return String(na ?? '') === String(nb ?? '');
   };
 
   // Server-side canonicalisation for the new gated weekly logic.
@@ -34680,7 +34691,7 @@ async function handleUpdateClient(env, req, clientId) {
           'no_timesheet_required','group_nightsat_sunbh',
           'auto_invoice_default',
           'effective_from','timezone_id',
-          'day_start','day_end','night_start','night_end','sat_start','sat_end','sun_start','sun_end',
+          'day_start','day_end','night_start','night_end','sat_start','sat_end','sun_start','sun_end','bh_start','bh_end',
           'bh_source','bh_list','bh_feed_url',
           'requires_hr','autoprocess_hr','hr_attach_to_invoice','ts_attach_to_invoice',
           'created_at','updated_at'
@@ -34741,6 +34752,13 @@ async function handleUpdateClient(env, req, clientId) {
     }
     if ('group_nightsat_sunbh' in data || 'group_nightsat_sunbh' in csInput) {
       csInput.group_nightsat_sunbh = asBool(csInput.group_nightsat_sunbh ?? data.group_nightsat_sunbh);
+    }
+
+    // ✅ Accept time keys at either level; '' => null to clear/inherit global
+    for (const k of TIME_KEYS) {
+      if ((k in data) || (k in csInput)) {
+        csInput[k] = normTime(csInput[k] ?? data[k]);
+      }
     }
 
     // Accept top-level week_ending_weekday or inside client_settings; validate 0..6 (default 0 if provided but invalid)
@@ -34825,12 +34843,27 @@ async function handleUpdateClient(env, req, clientId) {
       // Canonicalise server-side (enforces the gated weekly rules)
       const canon = canonicalizeClientSettingsServer(beforeCs, csInput);
 
+      // ✅ Ensure time fields are stored as either HH:MM or NULL (never '')
+      for (const k of TIME_KEYS) {
+        if (Object.prototype.hasOwnProperty.call(canon, k)) {
+          canon[k] = normTime(canon[k]); // already returns null for blank
+        }
+      }
+
       // Build a minimal PATCH (only fields that actually differ), but allow canon to force values
       const patch = {};
       if (hasBefore) {
         for (const [k, v] of Object.entries(canon)) {
           if (k === 'id' || k === 'client_id' || k === 'created_at' || k === 'updated_at') continue;
+
           const beforeV = beforeCs ? beforeCs[k] : undefined;
+
+          // For time keys, compare normalised HH:MM (prevents false diffs like 06:00 vs 06:00:00)
+          if (TIME_KEYS.includes(k)) {
+            if (!sameTime(beforeV, v)) patch[k] = v;
+            continue;
+          }
+
           if (JSON.stringify(beforeV) !== JSON.stringify(v)) patch[k] = v;
         }
         patch.updated_at = new Date().toISOString();
@@ -34871,7 +34904,7 @@ async function handleUpdateClient(env, req, clientId) {
         client_settings_updated = Array.isArray(csJson) ? csJson[0] : csJson;
       }
 
-      // TSFIN staleness detection (keep existing behaviour)
+      // TSFIN staleness detection (EXTENDED: include time boundary changes)
       const beforeHr      = !!(beforeCs?.hr_validation_required        ?? false);
       const beforeRef     = !!(beforeCs?.ts_reference_required         ?? false);
       const beforePayRef  = !!(beforeCs?.pay_reference_required        ?? false);
@@ -34882,15 +34915,18 @@ async function handleUpdateClient(env, req, clientId) {
       const nextPayRef    = !!(canon.pay_reference_required            ?? false);
       const nextInvRef    = !!(canon.invoice_reference_required        ?? false);
 
+      const timesChanged = TIME_KEYS.some(k => !sameTime(beforeCs?.[k], canon?.[k]));
+
       csChanged = (
         beforeHr     !== nextHr     ||
         beforeRef    !== nextRef    ||
         beforePayRef !== nextPayRef ||
-        beforeInvRef !== nextInvRef
+        beforeInvRef !== nextInvRef ||
+        timesChanged
       );
     }
 
-    // --- Change detection for timesheet financials staleness (unchanged core logic)
+    // --- Change detection for timesheet financials staleness
     const policyChanged =
       (data.vat_chargeable != null && !!data.vat_chargeable !== !!beforeClient.vat_chargeable) ||
       (data.payment_terms_days != null && Number(data.payment_terms_days) !== Number(beforeClient.payment_terms_days));
@@ -34943,6 +34979,7 @@ async function handleUpdateClient(env, req, clientId) {
     return withCORS(env, req, serverError("Failed to update client"));
   }
 }
+
 
 
 
@@ -38137,8 +38174,7 @@ async function handleCandidatesGet(env, req, candidateId) {
   return withCORS(env, req, ok(row));
 }
 
-
- async function handleClientsGet(env, req, clientId) {
+async function handleClientsGet(env, req, clientId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   if (!clientId) return withCORS(env, req, badRequest('client_id required'));
@@ -38150,7 +38186,7 @@ async function handleCandidatesGet(env, req, candidateId) {
   const client = (rows && rows[0]) || null;
   if (!client) return withCORS(env, req, notFound('Client not found'));
 
-  // Also return the latest client_settings (so FE can derive week-ending day and defaults)
+  // Also return the latest client_settings
   const { rows: csRows } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/client_settings` +
@@ -38167,11 +38203,9 @@ async function handleCandidatesGet(env, req, candidateId) {
           'self_bill_no_invoices_sent',
           'daily_calc_of_invoices',
           'no_timesheet_required',
-                'group_nightsat_sunbh',
+          'group_nightsat_sunbh',
           'auto_invoice_default',
-          // 🔹 NEW FLAGS (must be selected so FE sees their saved values)
           'requires_hr',
-
           'autoprocess_hr',
           'hr_attach_to_invoice',
           'ts_attach_to_invoice',
@@ -38185,6 +38219,8 @@ async function handleCandidatesGet(env, req, candidateId) {
           'sat_end',
           'sun_start',
           'sun_end',
+          'bh_start',
+          'bh_end',
           'bh_source',
           'bh_list',
           'bh_feed_url',
@@ -38196,13 +38232,14 @@ async function handleCandidatesGet(env, req, candidateId) {
   );
   const client_settings = (csRows && csRows[0]) || null;
 
-  // Surface week_ending_weekday at top-level for convenience, and include nested client_settings
+  // Surface week_ending_weekday at top-level for convenience
   const week_ending_weekday = (client_settings && Number.isInteger(Number(client_settings.week_ending_weekday)))
     ? Number(client_settings.week_ending_weekday)
     : (Number.isInteger(Number(client.week_ending_weekday)) ? Number(client.week_ending_weekday) : 0);
 
   return withCORS(env, req, ok({ ...client, week_ending_weekday, client_settings }));
 }
+
 
 async function handleUpdateHospital(env, req, clientId, hospitalId) {
   const user = await requireUser(env, req, ['admin']);
