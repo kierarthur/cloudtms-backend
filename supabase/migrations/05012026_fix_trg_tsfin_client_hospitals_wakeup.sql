@@ -7,7 +7,13 @@ begin
     SAFETY: Do NOT enqueue timesheets whose current TSFIN snapshot is locked by invoice
     or already paid.
 
-    Trigger is already wired:
+    UPDATED LOGIC:
+    - We now enqueue BOTH authorised and unauthorised current timesheets (no authorised_at_server filter),
+      so changes to client_hospitals aliases requeue TSFIN even before authorisation.
+    - We still exclude revoked timesheets.
+    - We still exclude locked/paid current TSFIN snapshots.
+
+    Trigger is wired:
       trg_tsfin_client_hospitals_wakeup_aiu
         AFTER INSERT OR UPDATE OF hospital_name_norm, client_id
         ON public.client_hospitals
@@ -33,7 +39,6 @@ begin
     on tf.timesheet_id = ts.timesheet_id
    and tf.is_current = true
   where ts.is_current = true
-    and ts.authorised_at_server is not null
     and ts.revoked_at is null
     and (
       tf.timesheet_id is null
