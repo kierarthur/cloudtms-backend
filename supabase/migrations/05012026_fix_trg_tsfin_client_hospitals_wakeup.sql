@@ -4,22 +4,19 @@ language plpgsql
 as $function$
 begin
   /*
-    client_hospitals.hospital_name_norm is JSONB (array of alias strings).
-    When aliases change, enqueue TSFIN for any current authorised timesheet where
-    timesheets.hospital_norm matches any alias in NEW or OLD.
+    SAFETY: Do NOT enqueue timesheets whose current TSFIN snapshot is locked by invoice
+    or already paid.
 
-    Trigger wiring already exists:
-    trg_tsfin_client_hospitals_wakeup_aiu
-      AFTER INSERT OR UPDATE OF hospital_name_norm, client_id
-      ON public.client_hospitals
-      EXECUTE FUNCTION public.trg_tsfin_client_hospitals_wakeup()
+    Trigger is already wired:
+      trg_tsfin_client_hospitals_wakeup_aiu
+        AFTER INSERT OR UPDATE OF hospital_name_norm, client_id
+        ON public.client_hospitals
+        EXECUTE FUNCTION public.trg_tsfin_client_hospitals_wakeup()
   */
 
   with alias_norms as (
     select distinct lower(btrim(x)) as norm
     from jsonb_array_elements_text(
-      -- INSERT: NEW aliases
-      -- UPDATE: NEW + OLD aliases
       case
         when tg_op = 'INSERT' then coalesce(new.hospital_name_norm, '[]'::jsonb)
         else coalesce(new.hospital_name_norm, '[]'::jsonb) || coalesce(old.hospital_name_norm, '[]'::jsonb)
@@ -32,9 +29,16 @@ begin
   from public.timesheets ts
   join alias_norms a
     on ts.hospital_norm = a.norm
+  left join public.timesheets_financials tf
+    on tf.timesheet_id = ts.timesheet_id
+   and tf.is_current = true
   where ts.is_current = true
     and ts.authorised_at_server is not null
     and ts.revoked_at is null
+    and (
+      tf.timesheet_id is null
+      or (tf.locked_by_invoice_id is null and tf.paid_at_utc is null)
+    )
   on conflict (timesheet_id, reason)
   do update set next_attempt_at = null;
 
