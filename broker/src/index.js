@@ -36507,173 +36507,193 @@ async function enqueueHrMismatchEmail(env, { timesheet_id, importId, row }) {
 }
 
 
-async function mapRequestGradeToRole(env, { client_id, candidate_id, gradeRaw, dateYmd }) {
+async function mapRequestGradeToRole(env, { client_id, candidate_id, gradeRaw, dateYmd, candidate_roles = null }) {
+  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
+  const L = (...a) => { if (LOG) console.log('[TSFIN][DAILY][mapRequestGradeToRole]', ...a); };
+
   const enc = encodeURIComponent;
   const norm = (s) => String(s || '').trim().toLowerCase();
   const squash = (s) => norm(s).replace(/[^a-z0-9]+/g, ' ').trim();
 
   if (!gradeRaw || !client_id || !candidate_id || !dateYmd) {
+    L('early return (missing inputs)', { gradeRaw, client_id, candidate_id, dateYmd });
     return null;
   }
 
   const rawLower = norm(gradeRaw);
   const squashed = squash(gradeRaw);
 
-  // Extract band number from grade text (e.g. "Band 5 RMN", "B5 RMN")
   let bandFromGrade = null;
   try {
     let m = rawLower.match(/band\s*([0-9]+)/i);
-    if (!m) m = rawLower.match(/\b(\d+)\b/); // crude fallback
+    if (!m) m = rawLower.match(/\bb\s*([0-9]+)\b/i);
+    if (!m) m = rawLower.match(/\b([0-9]+)\b/);
     if (m && m[1]) {
-      bandFromGrade = String(parseInt(m[1], 10));
+      bandFromGrade = `Band ${parseInt(m[1], 10)}`;
     }
   } catch {}
 
-  // Synonym map for role words
-  const synonyms = {
-    nurse: ['nurse', 'registered nurse', 'rn'],
-    rmn:   ['rmn', 'mental health', 'mental-health', 'mental health nurse'],
-    hca:   ['hca', 'health care assistant', 'healthcare assistant'],
-    rgn:   ['rgn', 'general nurse']
+  const mentions = {
+    rmn: rawLower.includes('rmn') || rawLower.includes('mental'),
+    hca: rawLower.includes('hca') || rawLower.includes('health care'),
+    rgn: rawLower.includes('rgn') || rawLower.includes('registered nurse'),
+    lead: rawLower.includes('lead')
   };
 
-  const hasSynonym = (needle, haystack) => {
-    const n = norm(needle);
-    const h = norm(haystack);
-    return h.includes(n);
-  };
+  const scoreRole = (roleStr) => {
+    const rNorm = squash(roleStr || '');
+    if (!rNorm) return 0;
 
-  const gradeTokens = squashed.split(/\s+/).filter(Boolean);
+    let score = 0;
 
-  const scoreRole = (role, band, titleNorm, label) => {
-    const rNorm   = squash(role || '');
-    const tNorm   = squash(titleNorm || '');
-    const labelN  = squash(label || '');
-    let score     = 0;
+    if (squashed.includes(rNorm)) score += 5;
 
-    // band match
-    if (bandFromGrade && band && String(bandFromGrade) === String(band)) {
-      score += 4;
-    }
-
-    // direct includes
-    if (rNorm && squashed.includes(rNorm)) score += 3;
-    if (tNorm && squashed.includes(tNorm)) score += 3;
-    if (labelN && squashed.includes(labelN)) score += 2;
-
-    // token overlaps
+    const gradeTokens = squashed.split(/\s+/).filter(Boolean);
     const rTokens = rNorm.split(/\s+/).filter(Boolean);
-    const tTokens = tNorm.split(/\s+/).filter(Boolean);
-    const lTokens = labelN.split(/\s+/).filter(Boolean);
+    score += rTokens.filter(t => gradeTokens.includes(t)).length;
 
-    const overlapTokens = (tokens) => tokens.filter(t => gradeTokens.includes(t)).length;
-    score += overlapTokens(rTokens);
-    score += overlapTokens(tTokens);
-    score += overlapTokens(lTokens);
-
-    // synonyms
-    const rAll = `${rNorm} ${tNorm} ${labelN}`;
-    if (hasSynonym('rmn', rAll) && (rawLower.includes('rmn') || rawLower.includes('mental'))) {
-      score += 3;
-    }
-    if (hasSynonym('hca', rAll) && rawLower.includes('hca')) {
-      score += 3;
-    }
-    if (hasSynonym('rgn', rAll) && rawLower.includes('rgn')) {
-      score += 2;
-    }
+    const joined = `${rNorm}`;
+    if (mentions.rmn && joined.includes('rmn')) score += 3;
+    if (mentions.hca && joined.includes('hca')) score += 3;
+    if (mentions.rgn && joined.includes('rgn')) score += 2;
+    if (mentions.lead && joined.includes('lead')) score += 1;
 
     return score;
   };
 
-  // 1) Try candidate job titles first
-  let best = { score: 0, role: null, band: null };
+  const normRoleOut = (s) =>
+    String(s || '')
+      .trim()
+      .replace(/\s+/g, ' ')
+      .toUpperCase();
 
-  try {
-    const { rows: jtRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/candidate_job_titles` +
-        `?candidate_id=eq.${enc(candidate_id)}` +
-        `&select=role,band,job_title_norm,label,client_id`
-    );
-    for (const jt of jtRows || []) {
-      // optionally prefer titles with same client_id if present
-      if (jt.client_id && client_id && String(jt.client_id) !== String(client_id)) {
-        // still consider, but maybe with lower weight if you want; for now we treat equally
+  let candRoles = Array.isArray(candidate_roles) ? candidate_roles : null;
+  if (!candRoles) {
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=eq.${enc(candidate_id)}` +
+          `&select=roles&limit=1`
+      );
+      const r0 = rows?.[0] || null;
+      let rolesVal = r0?.roles;
+      if (typeof rolesVal === 'string') {
+        try { rolesVal = JSON.parse(rolesVal); } catch {}
       }
-      const s = scoreRole(jt.role, jt.band, jt.job_title_norm, jt.label);
-      if (s > best.score) {
-        best = { score: s, role: jt.role || null, band: jt.band || null };
+      if (Array.isArray(rolesVal)) {
+        candRoles = rolesVal
+          .map(r => (r && typeof r === 'object') ? r.code : r)
+          .map(normRoleOut)
+          .filter(Boolean);
+      } else {
+        candRoles = [];
       }
+    } catch {
+      candRoles = [];
     }
-  } catch (e) {
-    console.warn('[GRADE→ROLE] candidate_job_titles lookup failed', {
-      client_id,
-      candidate_id,
-      err: e?.message || String(e)
-    });
   }
 
-  // If the candidate titles produced a decent score, accept
-  if (best.role && best.score >= 4) {
-    return { role: best.role, band: best.band || bandFromGrade || null };
+  L('ENTRY', { gradeRaw, squashed, bandFromGrade, candRoles, client_id, candidate_id, dateYmd });
+
+  if (candRoles.length) {
+    let best = { score: 0, role: null };
+    for (const r of candRoles) {
+      const s = scoreRole(r);
+      if (s > best.score) best = { score: s, role: r };
+    }
+
+    L('candidate-role scoring', { best });
+
+    if (best.role && best.score >= 2) {
+      const out = { role: best.role, band: bandFromGrade || null };
+      L('EXIT via candidate.roles', out);
+      return out;
+    }
+
+    if (candRoles.length === 1) {
+      const out = { role: candRoles[0], band: bandFromGrade || null };
+      L('EXIT via single candidate role fallback', out);
+      return out;
+    }
   }
 
-  // 2) Fallback to rates_client_defaults for this client + date
+  // Fallback: client default roles
   try {
     const date = encodeURIComponent(dateYmd);
     const url =
       `${env.SUPABASE_URL}/rest/v1/rates_client_defaults` +
       `?client_id=eq.${enc(client_id)}` +
       `&and=(date_from.lte.${date},or(date_to.is.null,date_to.gte.${date}))` +
+      `&disabled_at_utc=is.null` +
       `&select=role,band`;
+
+    L('fallback query client defaults', { url });
+
     const { rows: rateRows } = await sbFetch(env, url);
 
-    // Deduplicate by role+band
+    let best = { score: 0, role: null, band: null };
     const seen = new Set();
-    const uniqueRateRows = [];
     for (const r of rateRows || []) {
       const key = `${r.role || ''}__${r.band || ''}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      uniqueRateRows.push(r);
-    }
 
-    for (const r of uniqueRateRows) {
-      const s = scoreRole(r.role, r.band, r.role, null);
+      const s = scoreRole(r.role);
       if (s > best.score) {
         best = { score: s, role: r.role || null, band: r.band || null };
       }
     }
+
+    L('client-default scoring', { best });
+
+    if (best.role && best.score >= 3) {
+      const out = { role: best.role, band: best.band || bandFromGrade || null };
+      L('EXIT via client defaults', out);
+      return out;
+    }
   } catch (e) {
-    console.warn('[GRADE→ROLE] rates_client_defaults lookup failed', {
+    console.warn('[TSFIN][DAILY][mapRequestGradeToRole] rates_client_defaults lookup failed', {
       client_id,
       dateYmd,
       err: e?.message || String(e)
     });
+    L('fallback lookup failed', { err: String(e?.message || e) });
   }
 
-  if (best.role && best.score >= 3) {
-    return { role: best.role, band: best.band || bandFromGrade || null };
-  }
-
+  L('EXIT null (no mapping)');
   return null;
 }
 
-
 async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRates }) {
+  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
+  const L = (...a) => { if (LOG) console.log('[TSFIN][DAILY][validateDailyRotaRowAgainstTimesheet]', ...a); };
+
   const enc = encodeURIComponent;
-  const norm = (s) => String(s || '').trim().toLowerCase();
+
+  const normRole = (s) =>
+    String(s || '').trim().replace(/\s+/g, ' ').toUpperCase();
+
+  const normBand = (v) => {
+    const s = String(v || '').trim();
+    if (!s) return null;
+    let m = s.match(/^\s*band\s*([0-9]+)\s*$/i);
+    if (!m) m = s.match(/^\s*b\s*([0-9]+)\s*$/i);
+    if (!m) m = s.match(/^\s*([0-9]+)\s*$/);
+    if (m && m[1]) return `Band ${parseInt(m[1], 10)}`;
+    return s;
+  };
 
   const hrRequestId = hrRow?.hr_request_id || hrRow?.payload_json?.request_id || null;
   const dateLocal   = hrRow?.date_local || null;
+
+  L('START', { timesheet_id: ts?.timesheet_id, hr_request_id: hrRequestId, date_local: dateLocal });
 
   const pad2 = (n) => String(n).padStart(2, '0');
 
   const parseHhmm = (v) => {
     if (v == null || v === '') return null;
     if (typeof v === 'number') {
-      // treat as Excel time 0–1
       if (v >= 0 && v < 1) {
         const totalMinutes = Math.round(v * 24 * 60);
         const hh = Math.floor(totalMinutes / 60);
@@ -36685,7 +36705,6 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
     if (!s) return null;
     const m = s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
     if (!m) {
-      // maybe "0800" style
       const s2 = s.replace(':', '');
       if (/^\d{3,4}$/.test(s2)) {
         const hh = pad2(parseInt(s2.slice(0, -2), 10) || 0);
@@ -36706,12 +36725,9 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
 
   const parseActualHours = (v) => {
     if (v == null || v === '') return null;
-    if (typeof v === 'number') {
-      return Number(v);
-    }
+    if (typeof v === 'number') return Number(v);
     const s = String(v).trim();
     if (!s) return null;
-    // "11:30" style
     const m = s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
     if (m) {
       const h = parseInt(m[1], 10) || 0;
@@ -36731,7 +36747,7 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
   let shiftMinutes = null;
   if (hrStartMin != null && hrEndMin != null) {
     shiftMinutes = hrEndMin - hrStartMin;
-    if (shiftMinutes <= 0) shiftMinutes += 24 * 60; // overnight
+    if (shiftMinutes <= 0) shiftMinutes += 24 * 60;
   }
 
   const actualHoursRota =
@@ -36748,7 +36764,15 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
     breakMinutesRota = Math.max(0, shiftMinutes - paidMinutesRota);
   }
 
-  // === Timesheet data ===
+  L('rota parsed', {
+    hr_start_local: hrStartLocal,
+    hr_end_local: hrEndLocal,
+    shift_minutes: shiftMinutes,
+    actual_hours: actualHoursRota,
+    break_minutes: breakMinutesRota
+  });
+
+  // Timesheet time derivation
   const tsStartIso = ts.worked_start_iso || null;
   const tsEndIso   = ts.worked_end_iso   || null;
   let tsStartMin = null;
@@ -36767,12 +36791,10 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
         tsShiftMin = tsEndMin - tsStartMin;
         if (tsShiftMin <= 0) tsShiftMin += 24 * 60;
       }
-    } catch {
-      // fall back to null; we'll treat as mismatch if needed
-    }
+    } catch {}
   }
 
-  // Load TSFIN to get total hours and candidate/client for rate check
+  // Load TSFIN
   let tsfin = null;
   try {
     const { rows: finRows } = await sbFetch(
@@ -36804,59 +36826,98 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
     breakMinutesTs = b > 0 ? b : 0;
   }
 
-  // === Checks ===
+  L('timesheet/tsfin derived', {
+    ts_start_iso: tsStartIso,
+    ts_end_iso: tsEndIso,
+    ts_shift_minutes: tsShiftMin,
+    ts_break_minutes: breakMinutesTs,
+    tsfin_total_hours: totalHoursTsfin,
+    tsfin_candidate_id: tsfin?.candidate_id || null,
+    tsfin_client_id: tsfin?.client_id || null
+  });
+
   let reason = null;
 
-  // 1) Start/end mismatch (if we can compute both and difference > 1 min)
+  // 1) Start/end mismatch
   if (reason == null && hrStartMin != null && tsStartMin != null) {
     const diffStart = Math.abs(hrStartMin - tsStartMin);
-    const diffEnd   = (hrEndMin != null && tsEndMin != null)
-      ? Math.abs(hrEndMin - tsEndMin)
-      : 0;
-    if (diffStart > 1 || diffEnd > 1) {
-      reason = 'start_end_mismatch';
-    }
+    const diffEnd   = (hrEndMin != null && tsEndMin != null) ? Math.abs(hrEndMin - tsEndMin) : 0;
+    if (diffStart > 1 || diffEnd > 1) reason = 'start_end_mismatch';
+    L('check start/end', { diffStart, diffEnd, reason });
   }
 
-  // 2) Break minutes mismatch (tolerance e.g. 5 minutes)
+  // 2) Break minutes mismatch
   if (reason == null && breakMinutesRota != null && breakMinutesTs != null) {
     const diffBreak = Math.abs(breakMinutesRota - breakMinutesTs);
-    if (diffBreak > 5) {
-      reason = 'break_minutes_mismatch';
-    }
+    if (diffBreak > 5) reason = 'break_minutes_mismatch';
+    L('check breaks', { diffBreak, reason });
   }
 
-  // 3) Actual hours mismatch (tolerance 0.05 hours ~ 3 minutes)
+  // 3) Actual hours mismatch
   if (reason == null && actualHoursRota != null && totalHoursTsfin != null) {
     const diffHours = Math.abs(actualHoursRota - totalHoursTsfin);
-    if (diffHours > 0.05) {
-      reason = 'actual_hours_mismatch';
-    }
+    if (diffHours > 0.05) reason = 'actual_hours_mismatch';
+    L('check hours', { diffHours, reason });
   }
 
   // 4) Grade → rates existence
   if (reason == null) {
-    if (!roleForRates || !roleForRates.role) {
+    let rf = roleForRates && roleForRates.role
+      ? { role: normRole(roleForRates.role), band: normBand(roleForRates.band || null) }
+      : null;
+
+    L('roleForRates input', { rf_in: roleForRates || null, rf });
+
+    if (!rf) {
+      try {
+        const clientId     = tsfin?.client_id || null;
+        const candidateId  = tsfin?.candidate_id || null;
+        const gradeGuess =
+          hrRow?.grade ||
+          hrRow?.payload_json?.grade ||
+          ts.job_title_norm ||
+          null;
+
+        L('derive roleForRates (best-effort)', { clientId, candidateId, dateLocal, gradeGuess });
+
+        if (clientId && candidateId && dateLocal && gradeGuess) {
+          const mapped = await mapRequestGradeToRole(env, {
+            client_id: clientId,
+            candidate_id: candidateId,
+            gradeRaw: gradeGuess,
+            dateYmd: dateLocal
+          });
+          L('mapped grade->role', mapped || null);
+          if (mapped?.role) rf = { role: normRole(mapped.role), band: normBand(mapped.band || null) };
+        }
+      } catch (e) {
+        L('derive roleForRates failed', { err: String(e?.message || e) });
+      }
+    }
+
+    if (!rf || !rf.role) {
       reason = 'rate_missing_for_grade';
+      L('rate check: missing roleForRates', { reason });
     } else {
-      // Check that with roleForRates we can resolve pay/charge for used buckets
       try {
         const usedBuckets = {
-          day:   tsfin?.hours_day   || 0,
-          night: tsfin?.hours_night || 0,
-          sat:   tsfin?.hours_sat   || 0,
-          sun:   tsfin?.hours_sun   || 0,
-          bh:    tsfin?.hours_bh    || 0
+          day:   Number(tsfin?.hours_day   || 0),
+          night: Number(tsfin?.hours_night || 0),
+          sat:   Number(tsfin?.hours_sat   || 0),
+          sun:   Number(tsfin?.hours_sun   || 0),
+          bh:    Number(tsfin?.hours_bh    || 0)
         };
 
-        const clientId   = tsfin?.client_id || null;
-        const candidateId = tsfin?.candidate_id || null;
+        const clientId     = tsfin?.client_id || null;
+        const candidateId  = tsfin?.candidate_id || null;
+
+        L('rate check: resolveRates', { usedBuckets, clientId, candidateId, rf, dateLocal });
 
         const rates = await resolveRates(env, {
           candidate_id: candidateId,
           client_id: clientId,
-          role: roleForRates.role,
-          band: roleForRates.band || null,
+          role: rf.role,
+          band: rf.band || null,
           dateYmd: dateLocal || null
         });
 
@@ -36870,15 +36931,22 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
           (usedBuckets.sun   > 0 && (pay.sun   == null || chg.sun   == null)) ||
           (usedBuckets.bh    > 0 && (pay.bh    == null || chg.bh    == null));
 
-        if (anyMissing) {
-          reason = 'rate_missing_for_grade';
-        }
+        if (anyMissing) reason = 'rate_missing_for_grade';
+
+        L('rate check result', {
+          source: rates?.source || null,
+          pay,
+          charge: chg,
+          anyMissing,
+          reason
+        });
       } catch (e) {
         console.warn('[HR_DAILY_VALIDATE] resolveRates failed for grade role', {
           timesheet_id: ts.timesheet_id,
           err: e?.message || String(e)
         });
         reason = 'rate_missing_for_grade';
+        L('rate check exception', { err: String(e?.message || e), reason });
       }
     }
   }
@@ -36899,21 +36967,18 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
   };
 
   if (!reason) {
-    return {
-      ok: true,
-      reason_code: null,
-      hr_request_id: hrRequestId,
-      detail
-    };
+    L('EXIT OK', detail);
+    return { ok: true, reason_code: null, hr_request_id: hrRequestId, detail };
   }
 
-  return {
-    ok: false,
-    reason_code: reason,
-    hr_request_id: hrRequestId,
-    detail
-  };
+  L('EXIT FAIL', { reason, detail });
+  return { ok: false, reason_code: reason, hr_request_id: hrRequestId, detail };
 }
+
+
+
+
+
 async function handleTimesheetsResolvePreview(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -46062,82 +46127,139 @@ async function handleResolveRate(env, req) {
 
 // 1) Candidate override PAY (exact band → band-null)
 async function fetchActiveOverride(env, { candidate_id, client_id, role, band, date, rate_type }) {
-  // If we don't have a candidate, date, or rate_type, there cannot be a candidate override
+  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
+  const L = (...a) => { if (LOG) console.log('[TSFIN][DAILY][fetchActiveOverride]', ...a); };
+
+  const enc = encodeURIComponent;
+  const norm = (s) => String(s || '').trim();
+  const roleN = role ? norm(role).replace(/\s+/g, ' ').trim().toUpperCase() : null;
+
+  const normBand = (v) => {
+    const s = norm(v);
+    if (!s) return null;
+    let m = s.match(/^\s*band\s*([0-9]+)\s*$/i);
+    if (!m) m = s.match(/^\s*b\s*([0-9]+)\s*$/i);
+    if (!m) m = s.match(/^\s*([0-9]+)\s*$/);
+    if (m && m[1]) return `Band ${parseInt(m[1], 10)}`;
+    return s;
+  };
+
+  const bandN = normBand(band);
+
   if (!candidate_id || !date || !rate_type) {
+    L('early return (missing candidate/date/rate_type)', { candidate_id, date, rate_type });
     return null;
   }
 
-  // We still allow legacy rows with client_id NULL to match (if present), but creation now requires client_id.
-  let q =
-    `${env.SUPABASE_URL}/rest/v1/rates_candidate_overrides?select=*` +
-    `&candidate_id=eq.${encodeURIComponent(candidate_id)}` +
-    `&rate_type=eq.${encodeURIComponent(rate_type)}` +
-    `&date_from=lte.${encodeURIComponent(date)}` +
-    `&or=(date_to.gte.${encodeURIComponent(date)},date_to.is.null)` +
-    `&order=client_id.nullslast,role.nullslast,band.nullslast,date_from.desc&limit=1`;
+  const andParts = [
+    `candidate_id.eq.${enc(candidate_id)}`,
+    `rate_type.eq.${enc(rate_type)}`,
+    `date_from.lte.${enc(date)}`,
+    `or(date_to.is.null,date_to.gte.${enc(date)})`,
+  ];
 
-  if (client_id) {
-    // Prefer rows for this client, but allow legacy client_id NULL overrides
-    q += `&or=(client_id.eq.${encodeURIComponent(client_id)},client_id.is.null)`;
-  }
-  if (role) {
-    q += `&or=(role.eq.${encodeURIComponent(role)},role.is.null)`;
-  }
-  if (band != null) {
-    q += `&band=eq.${encodeURIComponent(band)}`;
-  }
-  // If band is null, prefer exact "band is null"; order handles precedence
+  if (client_id) andParts.push(`or(client_id.eq.${enc(client_id)},client_id.is.null)`);
+  if (roleN)      andParts.push(`or(role.eq.${enc(roleN)},role.is.null)`);
+
+  if (bandN != null) andParts.push(`or(band.eq.${enc(bandN)},band.is.null)`);
+  else               andParts.push(`band.is.null`);
+
+  const q =
+    `${env.SUPABASE_URL}/rest/v1/rates_candidate_overrides` +
+    `?select=*` +
+    `&and=(${andParts.join(',')})` +
+    `&order=client_id.nullslast,role.nullslast,band.nullslast,date_from.desc` +
+    `&limit=1`;
+
+  L('query', { q, roleN, bandN, client_id, candidate_id, date, rate_type });
 
   const { rows } = await sbFetch(env, q);
-  return rows && rows[0] ? rows[0] : null;
-}
+  const hit = rows && rows[0] ? rows[0] : null;
 
+  L('result', hit ? { id: hit.id, client_id: hit.client_id, role: hit.role, band: hit.band, rate_type: hit.rate_type } : null);
+  return hit;
+}
 // ─────────────────────────────────────────────────────────────────────────────
 // Rates: RESOLUTION HELPER (ENABLED-ONLY)
 // fetchUnifiedDefaultWindow → now ignores disabled rows for both exact-band and band-null
 // ─────────────────────────────────────────────────────────────────────────────
 
 // 2) Client default window for CHARGE (and PAY if needed)
+// NOTE: this is used by resolveRates; included here because role/band normalisation must match.
+
+
+
+
 async function fetchUnifiedDefaultWindow(env, { client_id, role, band, date }) {
-  // If we don't know client, role, or date, there is no sensible default window
-  if (!client_id || !role || !date) {
+  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
+  const L = (...a) => { if (LOG) console.log('[TSFIN][DAILY][fetchUnifiedDefaultWindow]', ...a); };
+
+  const norm = (s) => String(s || '').trim();
+  const normRole = (s) => norm(s).replace(/\s+/g, ' ').trim().toUpperCase();
+
+  const normBand = (v) => {
+    const s = norm(v);
+    if (!s) return null;
+    let m = s.match(/^\s*band\s*([0-9]+)\s*$/i);
+    if (!m) m = s.match(/^\s*b\s*([0-9]+)\s*$/i);
+    if (!m) m = s.match(/^\s*([0-9]+)\s*$/);
+    if (m && m[1]) return `Band ${parseInt(m[1], 10)}`;
+    return s;
+  };
+
+  const roleN = role ? normRole(role) : null;
+  const bandN = normBand(band);
+
+  if (!client_id || !roleN || !date) {
+    L('early return (missing client/role/date)', { client_id, roleN, date });
     return null;
   }
 
-  // Try exact band first
   let qExact =
     `${env.SUPABASE_URL}/rest/v1/rates_client_defaults` +
     `?client_id=eq.${encodeURIComponent(client_id)}` +
-    `&role=eq.${encodeURIComponent(role)}` +
-    (band == null ? `&band=is.null` : `&band=eq.${encodeURIComponent(band)}`) +
+    `&role=eq.${encodeURIComponent(roleN)}` +
+    (bandN == null ? `&band=is.null` : `&band=eq.${encodeURIComponent(bandN)}`) +
     `&date_from=lte.${encodeURIComponent(date)}` +
     `&or=(date_to.gte.${encodeURIComponent(date)},date_to.is.null)` +
-    `&disabled_at_utc=is.null` +                 // ignore disabled rows
+    `&disabled_at_utc=is.null` +
     `&select=*` +
     `&order=date_from.desc&limit=1`;
 
-  const { rows: exact } = await sbFetch(env, qExact);
-  if (exact && exact[0]) return exact[0];
+  L('query exact', { qExact, roleN, bandN, date });
 
-  // If we asked for a specific band and none found, fallback to band-null
-  if (band != null) {
+  const { rows: exact } = await sbFetch(env, qExact);
+  if (exact && exact[0]) {
+    L('hit exact', { id: exact[0].id, role: exact[0].role, band: exact[0].band, date_from: exact[0].date_from, date_to: exact[0].date_to });
+    return exact[0];
+  }
+
+  if (bandN != null) {
     let qNull =
       `${env.SUPABASE_URL}/rest/v1/rates_client_defaults` +
       `?client_id=eq.${encodeURIComponent(client_id)}` +
-      `&role=eq.${encodeURIComponent(role)}` +
+      `&role=eq.${encodeURIComponent(roleN)}` +
       `&band=is.null` +
       `&date_from=lte.${encodeURIComponent(date)}` +
       `&or=(date_to.gte.${encodeURIComponent(date)},date_to.is.null)` +
-      `&disabled_at_utc=is.null` +               // ignore disabled rows
+      `&disabled_at_utc=is.null` +
       `&select=*` +
       `&order=date_from.desc&limit=1`;
 
+    L('query band-null fallback', { qNull });
+
     const { rows: nullRows } = await sbFetch(env, qNull);
-    if (nullRows && nullRows[0]) return nullRows[0];
+    if (nullRows && nullRows[0]) {
+      L('hit band-null fallback', { id: nullRows[0].id, role: nullRows[0].role, band: nullRows[0].band, date_from: nullRows[0].date_from, date_to: nullRows[0].date_to });
+      return nullRows[0];
+    }
   }
 
+  L('miss');
   return null;
 }
+
+
 async function handleRelatedList(env, req, entity, id) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
@@ -48481,103 +48603,9 @@ function classifyMinutes(env, policy, segments) {
   };
 }
 // 3) Resolve combined PAY/CHARGE view
-async function resolveRates(env, { candidate_id, client_id, role, band, dateYmd }) {
-  // Determine effective rate_type from candidate if available
-  let rate_type = null;
-  if (candidate_id) {
-    try {
-      const { rows: cand } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/candidates` +
-        `?id=eq.${encodeURIComponent(candidate_id)}` +
-        `&select=pay_method&limit=1`
-      );
-      const pm = (cand && cand[0] && (cand[0].pay_method || '')).toUpperCase();
-      rate_type = (pm === 'PAYE' || pm === 'UMBRELLA') ? pm : 'UMBRELLA';
-    } catch {
-      // If anything goes wrong looking up the candidate, fall back to Umbrella
-      rate_type = 'UMBRELLA';
-    }
-  } else {
-    // No candidate: fall back to Umbrella semantics for pay
-    rate_type = 'UMBRELLA';
-  }
 
-  // 1) Candidate override PAY (exact band → band-null)
-  let override = null;
-  if (candidate_id && dateYmd) {
-    override = await fetchActiveOverride(env, {
-      candidate_id,
-      client_id,
-      role,
-      band,
-      date: dateYmd,
-      rate_type
-    });
-  }
 
-  // 2) Client default window for CHARGE (and PAY if needed)
-  let windowDef = null;
-  if (client_id && role && dateYmd) {
-    windowDef = await fetchUnifiedDefaultWindow(env, {
-      client_id,
-      role,
-      band,
-      date: dateYmd
-    });
-  }
 
-  // Compose result
-  const charge = windowDef
-    ? {
-        day:   windowDef.charge_day,
-        night: windowDef.charge_night,
-        sat:   windowDef.charge_sat,
-        sun:   windowDef.charge_sun,
-        bh:    windowDef.charge_bh
-      }
-    : null;
-
-  const pay = override
-    ? {
-        day:   override.pay_day,
-        night: override.pay_night,
-        sat:   override.pay_sat,
-        sun:   override.pay_sun,
-        bh:    override.pay_bh
-      }
-    : (windowDef
-        ? (
-            rate_type === 'PAYE'
-              ? {
-                  day:   windowDef.paye_day,
-                  night: windowDef.paye_night,
-                  sat:   windowDef.paye_sat,
-                  sun:   windowDef.paye_sun,
-                  bh:    windowDef.paye_bh
-                }
-              : {
-                  day:   windowDef.umb_day,
-                  night: windowDef.umb_night,
-                  sat:   windowDef.umb_sat,
-                  sun:   windowDef.umb_sun,
-                  bh:    windowDef.umb_bh
-                }
-          )
-        : null
-      );
-
-  return {
-    source: override
-      ? { kind: 'CANDIDATE_OVERRIDE', id: override.id, rate_type }
-      : (windowDef
-          ? { kind: 'CLIENT_DEFAULT', id: windowDef.id, rate_type }
-          : { kind: 'NONE', id: null, rate_type }
-        ),
-    pay,
-    charge
-  };
-}
 
 // ---------------------------
 // Rates resolution
@@ -48591,7 +48619,106 @@ async function resolveRates(env, { candidate_id, client_id, role, band, dateYmd 
 // Internal resolver used by the worker (UNIFIED DEFAULTS)
 // - Same logic as handleResolveRate but returns a plain object (no HTTP response)
 // ─────────────────────────────────────────────────────────────────────────────
+async function resolveRates(env, { candidate_id, client_id, role, band, dateYmd }) {
+  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
+  const L = (...a) => { if (LOG) console.log('[TSFIN][DAILY][resolveRates]', ...a); };
 
+  const norm = (s) => String(s || '').trim();
+  const normRole = (s) => norm(s).replace(/\s+/g, ' ').trim().toUpperCase();
+
+  const normBand = (v) => {
+    const s = norm(v);
+    if (!s) return null;
+    let m = s.match(/^\s*band\s*([0-9]+)\s*$/i);
+    if (!m) m = s.match(/^\s*b\s*([0-9]+)\s*$/i);
+    if (!m) m = s.match(/^\s*([0-9]+)\s*$/);
+    if (m && m[1]) return `Band ${parseInt(m[1], 10)}`;
+    return s;
+  };
+
+  const roleN = role ? normRole(role) : null;
+  const bandN = normBand(band);
+
+  L('ENTRY', { candidate_id, client_id, role_in: role, roleN, band_in: band, bandN, dateYmd });
+
+  // Determine effective rate_type from candidate if available
+  let rate_type = null;
+  if (candidate_id) {
+    try {
+      const { rows: cand } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/candidates` +
+        `?id=eq.${encodeURIComponent(candidate_id)}` +
+        `&select=pay_method&limit=1`
+      );
+      const pm = (cand && cand[0] && (cand[0].pay_method || '')).toUpperCase();
+      rate_type = (pm === 'PAYE' || pm === 'UMBRELLA') ? pm : 'UMBRELLA';
+      L('candidate pay_method', { pm, rate_type });
+    } catch (e) {
+      rate_type = 'UMBRELLA';
+      L('candidate pay_method lookup failed -> UMBRELLA', { err: String(e?.message || e) });
+    }
+  } else {
+    rate_type = 'UMBRELLA';
+    L('no candidate -> UMBRELLA');
+  }
+
+  if (!client_id || !roleN || !dateYmd) {
+    L('insufficient inputs -> NONE', { client_id, roleN, dateYmd });
+    return { source: { kind: 'NONE', id: null, rate_type }, pay: null, charge: null };
+  }
+
+  // 1) Candidate override PAY (exact band → band-null)
+  let override = null;
+  if (candidate_id) {
+    override = await fetchActiveOverride(env, {
+      candidate_id,
+      client_id,
+      role: roleN,
+      band: bandN,
+      date: dateYmd,
+      rate_type
+    });
+    L('override', override ? { id: override.id, role: override.role, band: override.band, rate_type: override.rate_type } : null);
+  }
+
+  // 2) Client default window for CHARGE (and PAY if needed)
+  const windowDef = await fetchUnifiedDefaultWindow(env, {
+    client_id,
+    role: roleN,
+    band: bandN,
+    date: dateYmd
+  });
+  L('client default window', windowDef ? { id: windowDef.id, role: windowDef.role, band: windowDef.band } : null);
+
+  const charge = windowDef
+    ? { day: windowDef.charge_day, night: windowDef.charge_night, sat: windowDef.charge_sat, sun: windowDef.charge_sun, bh: windowDef.charge_bh }
+    : null;
+
+  const pay = override
+    ? { day: override.pay_day, night: override.pay_night, sat: override.pay_sat, sun: override.pay_sun, bh: override.pay_bh }
+    : (windowDef
+        ? (rate_type === 'PAYE'
+            ? { day: windowDef.paye_day, night: windowDef.paye_night, sat: windowDef.paye_sat, sun: windowDef.paye_sun, bh: windowDef.paye_bh }
+            : { day: windowDef.umb_day, night: windowDef.umb_night, sat: windowDef.umb_sat, sun: windowDef.umb_sun, bh: windowDef.umb_bh }
+          )
+        : null
+      );
+
+  const out = {
+    source: override
+      ? { kind: 'CANDIDATE_OVERRIDE', id: override.id, rate_type }
+      : (windowDef
+          ? { kind: 'CLIENT_DEFAULT', id: windowDef.id, rate_type }
+          : { kind: 'NONE', id: null, rate_type }
+        ),
+    pay,
+    charge
+  };
+
+  L('EXIT', { source: out.source, pay: out.pay, charge: out.charge });
+  return out;
+}
 
 function anyMissingRates(hours, pay, charge) {
   const buckets = ['day', 'night', 'sat', 'sun', 'bh'];
@@ -50135,29 +50262,56 @@ async function applyWeeklyHealthRosterCrosscheck(env, { import_id }) {
   return { triples: triplesMap.size, timesheets_checked: timesheetsChecked };
 }
 
-
+// ======================= DAILY ONLY =======================
+// Build TSFIN snapshot for DAILY timesheets (app/self-reported).
+// Adds WRANGLER logging when: (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true)
 async function buildDailySnapshot(env, ts) {
+  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
+  const L = (...a) => { if (LOG) console.log('[TSFIN][DAILY][buildDailySnapshot]', ...a); };
+
   const occupantKey = ts.occupant_key_norm || null;
   const candidate   = await loadCandidate(env, occupantKey);
   const candidate_id = candidate?.id || null;
   const candidate_assignment = candidate ? "ASSIGNED" : "UNASSIGNED";
 
+  L('START', {
+    timesheet_id: ts?.timesheet_id,
+    occupant_key_norm: occupantKey,
+    job_title_norm: ts?.job_title_norm,
+    band: ts?.band ?? null,
+    hospital_norm: ts?.hospital_norm ?? null,
+    candidate_id
+  });
+
   // Client via alias-aware resolver
   const client_id = await resolveClientId(env, ts.hospital_norm || null);
+  L('resolved client_id', { client_id });
 
   // Worked date in local timezone for policy & rates
   const workedDateYmd = ts.worked_start_iso
     ? toLocalParts(ts.worked_start_iso, null).ymd
     : null;
 
+  L('workedDateYmd', { workedDateYmd, worked_start_iso: ts?.worked_start_iso, worked_end_iso: ts?.worked_end_iso });
+
   // TIME policy (day/night windows, BH list, holiday%, etc.)
   const policy = await loadPolicy(env, client_id, workedDateYmd);
+  L('loaded policy', {
+    client_id,
+    workedDateYmd,
+    timezone_id: policy?.timezone_id,
+    day_start: policy?.day_start,
+    day_end: policy?.day_end,
+    night_start: policy?.night_start,
+    night_end: policy?.night_end
+  });
 
   // Build base segments from worked_start / worked_end and subtract breaks
   let segments = [];
   if (ts.worked_start_iso && ts.worked_end_iso) {
     segments.push([ts.worked_start_iso, ts.worked_end_iso]);
   }
+
   segments = subtractBreak(
     segments,
     ts.break_start_iso || null,
@@ -50165,16 +50319,137 @@ async function buildDailySnapshot(env, ts) {
     ts.break_minutes   || null
   );
 
+  L('segments after subtractBreak', {
+    segCount: Array.isArray(segments) ? segments.length : 0,
+    break_minutes: ts?.break_minutes ?? null,
+    break_start_iso: ts?.break_start_iso ?? null,
+    break_end_iso: ts?.break_end_iso ?? null
+  });
+
   // Classify into day/night/sat/sun/bh hours
   const hours = classifyMinutes(env, policy, segments);
+  L('classified hours', hours);
+
+  // ---------- Role + band canonicalisation (DAILY) ----------
+  const norm = (s) => String(s || "").trim();
+  const normRole = (s) =>
+    norm(s)
+      .replace(/\s+/g, " ")
+      .trim()
+      .toUpperCase();
+
+  const normBand = (v) => {
+    const s = norm(v);
+    if (!s) return null;
+
+    let m = s.match(/^\s*band\s*([0-9]+)\s*$/i);
+    if (!m) m = s.match(/^\s*b\s*([0-9]+)\s*$/i);
+    if (!m) m = s.match(/^\s*([0-9]+)\s*$/);
+
+    if (m && m[1]) return `Band ${parseInt(m[1], 10)}`;
+
+    return s;
+  };
+
+  const parseCandidateRoleCodes = (rolesVal) => {
+    try {
+      let roles = rolesVal;
+      if (typeof roles === "string") {
+        roles = JSON.parse(roles);
+      }
+      if (!Array.isArray(roles)) return [];
+      return roles
+        .map((r) => (r && typeof r === "object" ? r.code : r))
+        .map((c) => normRole(c))
+        .filter(Boolean);
+    } catch {
+      return [];
+    }
+  };
+
+  const candidateRoleCodes = parseCandidateRoleCodes(candidate?.roles);
+  L('candidate roles parsed', {
+    candidate_id,
+    roles_raw_type: typeof candidate?.roles,
+    role_codes: candidateRoleCodes
+  });
+
+  // Timesheet-provided role/band
+  const tsRoleRaw = norm(ts.job_title_norm || "");
+  const tsRole    = tsRoleRaw ? normRole(tsRoleRaw) : null;
+  const tsBand    = normBand(ts.band);
+
+  L('timesheet role/band canonical', { tsRoleRaw, tsRole, tsBand });
+
+  // Map the timesheet grade/title onto a candidate role (+ optional band hint)
+  let roleForRates = null;
+  let bandForRates = tsBand;
+
+  if (candidate_id && client_id && workedDateYmd) {
+    if (tsRole && candidateRoleCodes.includes(tsRole)) {
+      roleForRates = tsRole;
+      L('role direct match via candidate.roles', { roleForRates });
+    } else {
+      L('role not direct-matched; invoking mapRequestGradeToRole', {
+        gradeRaw: tsRoleRaw || tsRole || null,
+        candidate_roles: candidateRoleCodes,
+        client_id,
+        candidate_id,
+        dateYmd: workedDateYmd
+      });
+
+      const mapped = await mapRequestGradeToRole(env, {
+        client_id,
+        candidate_id,
+        gradeRaw: tsRoleRaw || tsRole || null,
+        dateYmd: workedDateYmd,
+        candidate_roles: candidateRoleCodes
+      });
+
+      L('mapRequestGradeToRole result', mapped || null);
+
+      if (mapped?.role) {
+        const mappedRole = normRole(mapped.role);
+        const allowed = (!candidateRoleCodes.length || candidateRoleCodes.includes(mappedRole));
+        L('mapped role candidate-membership check', { mappedRole, allowed });
+
+        if (allowed) roleForRates = mappedRole;
+      }
+
+      // Only use mapped band if timesheet didn’t supply one
+      if (!bandForRates && mapped?.band) {
+        bandForRates = normBand(mapped.band);
+        L('band inferred from grade (timesheet had no band)', { bandForRates });
+      }
+    }
+  } else {
+    roleForRates = tsRole;
+    L('mapping skipped (missing candidate/client/date); using timesheet role', { roleForRates });
+  }
 
   // Resolve rates using candidate, client, role, band, date
+  L('calling resolveRates', {
+    candidate_id,
+    client_id,
+    role: roleForRates || null,
+    band: bandForRates || null,
+    dateYmd: workedDateYmd
+  });
+
   const rates = await resolveRates(env, {
     candidate_id: candidate_id,
     client_id,
-    role: ts.job_title_norm || null,
-    band: ts.band || null,
+    role: roleForRates || null,
+    band: bandForRates || null,
     dateYmd: workedDateYmd,
+  });
+
+  L('resolveRates result', {
+    source: rates?.source || null,
+    hasPay: !!rates?.pay,
+    hasCharge: !!rates?.charge,
+    pay: rates?.pay || null,
+    charge: rates?.charge || null
   });
 
   // Detect missing rates for any used bucket
@@ -50190,6 +50465,8 @@ async function buildDailySnapshot(env, ts) {
     rates.charge
   );
 
+  L('missingRates', { missingRates });
+
   // Determine pay_method for this snapshot
   const pay_method =
     candidate?.pay_method === "UMBRELLA"
@@ -50197,6 +50474,8 @@ async function buildDailySnapshot(env, ts) {
       : candidate?.pay_method === "PAYE"
       ? "PAYE"
       : ts.pay_method || null;
+
+  L('pay_method resolved', { pay_method, cand_pay_method: candidate?.pay_method ?? null, ts_pay_method: ts?.pay_method ?? null });
 
   // Pay-channel state via resolveEffectivePayChannel
   let payChannelBad = false;
@@ -50220,10 +50499,12 @@ async function buildDailySnapshot(env, ts) {
       });
 
       payChannelBad = !channel || channel.ok === false;
+      L('resolveEffectivePayChannel', { ok: channel?.ok ?? null, missing: channel?.missing ?? null, payChannelBad });
     }
   } catch (e) {
-    console.warn('[TSFIN][buildDailySnapshot] resolveEffectivePayChannel failed', e);
+    console.warn('[TSFIN][DAILY][buildDailySnapshot] resolveEffectivePayChannel failed', e);
     payChannelBad = true;
+    L('resolveEffectivePayChannel error -> payChannelBad=true', { err: String(e?.message || e) });
   }
 
   // ✅ Contract/effective requires_hr (NOT policy.requires_hr)
@@ -50253,9 +50534,9 @@ async function buildDailySnapshot(env, ts) {
   } catch {
     requiresHr = null;
   }
-
-  // If daily has no effective row (edge), fall back to policy’s client default
   if (requiresHr == null) requiresHr = !!policy?.requires_hr;
+
+  L('requiresHr resolved', { requiresHr });
 
   // ── ID-first ladder + issue flags ──
   let processing_status;
@@ -50284,6 +50565,8 @@ async function buildDailySnapshot(env, ts) {
     hasPayChannelIssue  = false;
   }
 
+  L('processing ladder result', { processing_status, hasRateIssue, hasPayChannelIssue });
+
   const pay = rates.pay || { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
   const charge = rates.charge || { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
 
@@ -50304,6 +50587,8 @@ async function buildDailySnapshot(env, ts) {
   );
 
   const margin_ex_vat = round2(total_charge_ex_vat - total_pay_ex_vat);
+
+  L('money totals', { total_pay_ex_vat, total_charge_ex_vat, margin_ex_vat });
 
   const paymentReadyLite = !!(
     pay_method === "PAYE" &&
@@ -50341,17 +50626,8 @@ async function buildDailySnapshot(env, ts) {
       pay_ex_vat:    total_pay_ex_vat,
       charge_ex_vat: total_charge_ex_vat,
     },
-    additional: {
-      units: {},
-      pay_ex_vat: 0,
-      charge_ex_vat: 0,
-      margin_ex_vat: 0,
-    },
-    totals: {
-      total_pay_ex_vat,
-      total_charge_ex_vat,
-      margin_ex_vat,
-    },
+    additional: { units: {}, pay_ex_vat: 0, charge_ex_vat: 0, margin_ex_vat: 0 },
+    totals: { total_pay_ex_vat, total_charge_ex_vat, margin_ex_vat },
   };
 
   const snapshot = {
@@ -50368,8 +50644,11 @@ async function buildDailySnapshot(env, ts) {
 
     candidate_id,
     client_id: client_id || null,
-    role: ts.job_title_norm || null,
-    band: ts.band || null,
+
+    // store canonical role+band used for resolution
+    role: roleForRates || null,
+    band: bandForRates || null,
+
     pay_method,
 
     policy_snapshot_json: policy,
@@ -50418,9 +50697,18 @@ async function buildDailySnapshot(env, ts) {
     invoice_breakdown_json,
   };
 
+  L('WRITE SNAPSHOT', {
+    timesheet_id: snapshot.timesheet_id,
+    role: snapshot.role,
+    band: snapshot.band,
+    candidate_id: snapshot.candidate_id,
+    client_id: snapshot.client_id,
+    processing_status: snapshot.processing_status,
+    source: snapshot.rate_source_refs_json
+  });
+
   await writeSnapshot(env, snapshot);
 }
-
 // ---------------------------
 // API: Manual drain
 // ---------------------------
