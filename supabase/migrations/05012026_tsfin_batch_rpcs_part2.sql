@@ -87,7 +87,8 @@ ctx as (
     to_jsonb(c)  as out_candidate,
     to_jsonb(u)  as out_umbrella,
 
-coalesce(te.client_id, tf.client_id, ch.client_id) as out_client_id,
+    cid.client_id as out_client_id,
+
 
 
     -- ✅ Expand “effective flags” for weekly consumers (still source-of-truth = v_timesheets_summary)
@@ -199,8 +200,26 @@ coalesce(te.client_id, tf.client_id, ch.client_id) as out_client_id,
     on tf.timesheet_id = te.effective_timesheet_id
    and tf.is_current = true
 
-  left join public.candidates c
-    on c.key_norm = te.occupant_key_norm
+left join lateral (
+  select c1.*
+  from public.candidates c1
+  where
+    (
+      c1.key_norm = te.occupant_key_norm
+      or (
+        te.occupant_key_norm is not null
+        and c1.nhsp_hr_name_aliases @> to_jsonb(array[te.occupant_key_norm]::text[])
+      )
+    )
+  order by
+    case
+      when c1.key_norm = te.occupant_key_norm then 0
+      else 1
+    end,
+    c1.updated_at desc nulls last,
+    c1.created_at desc nulls last
+  limit 1
+) c on true
 
   left join public.umbrellas u
     on (c.umbrella_id is not null and u.id = c.umbrella_id)
@@ -208,7 +227,7 @@ coalesce(te.client_id, tf.client_id, ch.client_id) as out_client_id,
   left join public.v_timesheets_summary v
     on v.timesheet_id = te.effective_timesheet_id
 
-  left join lateral (
+left join lateral (
     select ch.client_id
     from public.client_hospitals ch
     where te.hospital_norm is not null
@@ -216,11 +235,17 @@ coalesce(te.client_id, tf.client_id, ch.client_id) as out_client_id,
     limit 1
   ) ch on true
 
+-- ✅ Resolve a single client_id for this timesheet (works for WEEKLY and DAILY)
+left join lateral (
+  select coalesce(v.client_id, tf.client_id, ch.client_id) as client_id
+) cid on true
+
+
   left join lateral (
     select cs1.*
     from public.client_settings cs1
-    where ch.client_id is not null
-      and cs1.client_id = ch.client_id
+    where cid.client_id is not null
+      and cs1.client_id = cid.client_id
     order by
       case
         -- If we cannot anchor, pick newest row
