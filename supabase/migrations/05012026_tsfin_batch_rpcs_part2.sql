@@ -87,7 +87,8 @@ ctx as (
     to_jsonb(c)  as out_candidate,
     to_jsonb(u)  as out_umbrella,
 
-    ch.client_id as out_client_id,
+coalesce(te.client_id, tf.client_id, ch.client_id) as out_client_id,
+
 
     -- ✅ Expand “effective flags” for weekly consumers (still source-of-truth = v_timesheets_summary)
     jsonb_build_object(
