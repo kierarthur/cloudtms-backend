@@ -129,7 +129,6 @@ begin
      and tf.is_current = true
     where ts.is_current = true
       and ts.revoked_at is null
-      and ts.authorised_at_server is not null
       and ts.occupant_key_norm = v_norm
       -- safety: don't enqueue if current TSFIN is locked/paid
       and (
@@ -138,7 +137,6 @@ begin
       )
     limit p_limit
   )
-  -- priority path uses your existing bulk priority enqueue function
   select
     case
       when p_priority then public.enqueue_ts_financials_priority(array_agg(timesheet_id), p_reason)
@@ -151,7 +149,6 @@ begin
     return coalesce(v_cnt, 0);
   end if;
 
-  -- non-priority bulk upsert (created_at = now())
   insert into public.ts_financials_outbox (timesheet_id, reason, attempt_count, next_attempt_at, last_error, created_at)
   select p.timesheet_id, p_reason, 0, null, null, v_now
   from picked p
@@ -166,6 +163,7 @@ begin
   return v_cnt;
 end;
 $function$;
+
 
 -- ============================================================
 -- 2.7B: Bulk enqueue by hospital_norm alias with lock/paid safety
