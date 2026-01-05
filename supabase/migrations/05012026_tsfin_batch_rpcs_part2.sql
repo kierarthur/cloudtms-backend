@@ -68,6 +68,19 @@ def as (
 ctx as (
   select
     te.effective_timesheet_id,
+
+    -- ✅ Anchor date for "effective_from" selection:
+    -- DAILY: worked_start_iso local date
+    -- WEEKLY: week_ending_date (fallback)
+    coalesce(
+      case
+        when te.worked_start_iso is not null
+          then (te.worked_start_iso at time zone 'Europe/London')::date
+        else null
+      end,
+      te.week_ending_date::date
+    ) as anchor_date,
+
     to_jsonb(te) as out_timesheet,
 
     to_jsonb(tf) as out_cur_fin,
@@ -76,13 +89,34 @@ ctx as (
 
     ch.client_id as out_client_id,
 
+    -- ✅ Expand “effective flags” for weekly consumers (still source-of-truth = v_timesheets_summary)
     jsonb_build_object(
       'route_type',                    v.route_type,
+
+      'contract_id',                   v.contract_id,
+      'contract_week_id',              v.contract_week_id,
+      'contract_week_ending_date',     v.contract_week_ending_date,
+      'basis',                         v.basis,
+
       'client_requires_hr',            v.client_requires_hr,
       'client_autoprocess_hr',         v.client_autoprocess_hr,
-      'client_no_timesheet_required',  v.client_no_timesheet_required
+      'client_no_timesheet_required',  v.client_no_timesheet_required,
+      'client_is_nhsp',                v.client_is_nhsp,
+
+      'require_reference_to_pay',      v.require_reference_to_pay,
+      'require_reference_to_invoice',  v.require_reference_to_invoice,
+
+      'client_hr_validation_required', v.client_hr_validation_required,
+      'client_ts_reference_required',  v.client_ts_reference_required,
+      'client_pay_reference_required', v.client_pay_reference_required,
+      'client_invoice_reference_required', v.client_invoice_reference_required,
+
+      'pay_method',                    v.pay_method,
+      'processing_status',             v.processing_status,
+      'authorised_at_server',          v.authorised_at_server
     ) as out_effective_flags,
 
+    -- ✅ Policy = TIME+FINANCE policy + a couple of weekly helpers
     jsonb_build_object(
       'timezone_id', coalesce(cs.timezone_id, def.timezone_id, 'Europe/London'),
 
@@ -136,6 +170,7 @@ ctx as (
         )
       ),
 
+      -- ✅ BH list normalisation (global-only)
       'bh_list',
       case
         when def.bh_list is null then '[]'::jsonb
@@ -146,8 +181,13 @@ ctx as (
         else '[]'::jsonb
       end,
 
-      'hr_attach_to_invoice', coalesce(cs.hr_attach_to_invoice, true),
-      'ts_attach_to_invoice', coalesce(cs.ts_attach_to_invoice, true)
+      -- ✅ Attach flags: prefer cs, else defaults, else true
+      'hr_attach_to_invoice', coalesce(cs.hr_attach_to_invoice, def.hr_attach_to_invoice, true),
+      'ts_attach_to_invoice', coalesce(cs.ts_attach_to_invoice, def.ts_attach_to_invoice, true),
+
+      -- ✅ WEEKLY helpers (client-level)
+      'week_ending_weekday',   coalesce(cs.week_ending_weekday, 0),
+      'default_submission_mode', coalesce(cs.default_submission_mode, 'ELECTRONIC')
     ) as out_policy
 
   from t_eff te
@@ -181,14 +221,25 @@ ctx as (
       and cs1.client_id = ch.client_id
     order by
       case
-        when te.worked_start_iso is null then 0
+        -- If we cannot anchor, pick newest row
+        when coalesce(
+          case when te.worked_start_iso is not null then (te.worked_start_iso at time zone 'Europe/London')::date end,
+          te.week_ending_date::date
+        ) is null then 0
+
+        -- Prefer rows effective on/before anchor_date
         when cs1.effective_from is not null
-             and cs1.effective_from <= ((te.worked_start_iso at time zone 'Europe/London')::date)
-          then 0
+         and cs1.effective_from <= coalesce(
+           case when te.worked_start_iso is not null then (te.worked_start_iso at time zone 'Europe/London')::date end,
+           te.week_ending_date::date
+         ) then 0
+
+        -- Allow effective_from NULL as fallback
         when cs1.effective_from is null then 1
+
         else 2
       end,
-      cs1.effective_from desc nulls last,  -- ✅ FIXED HERE
+      cs1.effective_from desc nulls last,
       cs1.created_at desc
     limit 1
   ) cs on true
