@@ -194,7 +194,6 @@ begin
      and tf.is_current = true
     where ts.is_current = true
       and ts.revoked_at is null
-      and ts.authorised_at_server is not null
       and ts.hospital_norm = v_norm
       -- safety: don't enqueue if current TSFIN is locked/paid
       and (
@@ -229,3 +228,4 @@ begin
   return v_cnt;
 end;
 $function$;
+
