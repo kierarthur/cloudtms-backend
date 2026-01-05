@@ -445,7 +445,8 @@ begin
         coalesce(nullif(snap->>'basis','')::public.timesheet_fin_basis_enum,
                  'SELF_REPORTED'::public.timesheet_fin_basis_enum),
 
-        coalesce(nullif(snap->>'is_current','')::boolean, true),
+        true,
+
         coalesce(nullif(snap->>'is_stale','')::boolean, false),
         nullif(snap->>'stale_reason',''),
 
