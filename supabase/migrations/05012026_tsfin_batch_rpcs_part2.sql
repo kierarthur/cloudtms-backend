@@ -182,8 +182,9 @@ ctx as (
       end,
 
       -- ✅ Attach flags: prefer cs, else defaults, else true
-      'hr_attach_to_invoice', coalesce(cs.hr_attach_to_invoice, def.hr_attach_to_invoice, true),
-      'ts_attach_to_invoice', coalesce(cs.ts_attach_to_invoice, def.ts_attach_to_invoice, true),
+    'hr_attach_to_invoice', coalesce(cs.hr_attach_to_invoice, true),
+'ts_attach_to_invoice', coalesce(cs.ts_attach_to_invoice, true),
+
 
       -- ✅ WEEKLY helpers (client-level)
       'week_ending_weekday',   coalesce(cs.week_ending_weekday, 0),
