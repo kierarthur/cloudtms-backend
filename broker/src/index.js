@@ -9181,7 +9181,6 @@ async function handleTimesheetUpdateReference(env, req, timesheetId) {
     was_stale: !!guard.resolved.was_stale
   }));
 }
-
 async function handleTimesheetDetails(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -9318,60 +9317,45 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     );
     const shifts = shiftRows || [];
 
-    // ───────────────────── Policy snapshot (TIME policy only usage) ─────────────────────
-    const clientIdForPolicy =
-      tsfinRaw?.client_id ||
-      ts.client_id ||
-      contractWeek?.client_id ||
-      null;
-
-    let workedDateYmdForPolicy = null;
-    const scope = String(ts.sheet_scope || '').toUpperCase();
-
-    if (scope === 'DAILY' && ts.worked_start_iso) {
-      try {
-        const parts = toLocalParts(ts.worked_start_iso, null);
-        workedDateYmdForPolicy = parts && parts.ymd ? parts.ymd : null;
-      } catch {
-        workedDateYmdForPolicy = String(ts.worked_start_iso).slice(0, 10);
-      }
-    } else {
-      workedDateYmdForPolicy =
-        ts.week_ending_date ||
-        contractWeek?.week_ending_date ||
-        null;
-    }
-
+    // ───────────────────── Policy snapshot (SQL-first; avoids broken loadPolicy) ─────────────────────
+    // IMPORTANT:
+    // - Do NOT call legacy loadPolicy() here because it may still query removed settings_defaults columns.
+    // - Prefer TSFIN.policy_snapshot_json; else pull ctx.out_policy from tsfin_load_context_batch.
     let policy = null;
+    let supportsElectronicSubmission = false;
+
     try {
-      policy = await loadPolicy(env, clientIdForPolicy, workedDateYmdForPolicy);
+      const fromFin = tsfinRaw?.policy_snapshot_json;
+      if (fromFin && typeof fromFin === 'object') {
+        policy = fromFin;
+      } else if (typeof fromFin === 'string') {
+        try {
+          const parsed = JSON.parse(fromFin);
+          if (parsed && typeof parsed === 'object') policy = parsed;
+        } catch {}
+      }
+
+      if (!policy) {
+        // One RPC, SQL-computed policy (time + finance) aligned with your new settings model
+        const ctxRows = await sbRpc(env, 'tsfin_load_context_batch', { p_timesheet_ids: [currentTimesheetId] });
+        const ctx = Array.isArray(ctxRows) ? ctxRows[0] : (ctxRows || null);
+
+        let pol = ctx?.out_policy ?? null;
+        if (typeof pol === 'string') {
+          try { pol = JSON.parse(pol); } catch { pol = null; }
+        }
+        policy = (pol && typeof pol === 'object') ? pol : null;
+      }
+
+      const dsm = String(policy?.default_submission_mode || '').toUpperCase();
+      supportsElectronicSubmission = (dsm === 'ELECTRONIC');
     } catch (e) {
-      console.warn('[TIMESHEET_DETAILS] loadPolicy failed (non-fatal)', {
+      // Non-fatal: details view still loads even if policy can't be computed.
+      console.warn('[TIMESHEET_DETAILS] policy resolution failed (non-fatal)', {
         timesheet_id: currentTimesheetId,
-        client_id: clientIdForPolicy,
-        workedDateYmdForPolicy,
         err: e?.message || String(e)
       });
       policy = null;
-    }
-
-    // supports_electronic_submission (client default submission mode)
-    let supportsElectronicSubmission = false;
-    try {
-      if (clientIdForPolicy) {
-        const { rows: csRows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/client_settings` +
-            `?client_id=eq.${enc(clientIdForPolicy)}` +
-            `&select=default_submission_mode,updated_at,created_at` +
-            `&order=updated_at.desc.nullslast,created_at.desc.nullslast` +
-            `&limit=1`
-        );
-        const cs = csRows?.[0] || null;
-        const dsm = String(cs?.default_submission_mode || '').toUpperCase();
-        supportsElectronicSubmission = (dsm === 'ELECTRONIC');
-      }
-    } catch {
       supportsElectronicSubmission = false;
     }
 
@@ -9553,7 +9537,8 @@ async function handleTimesheetDetails(env, req, timesheetId) {
 
       contract_week_id: contractWeekId,
       contract_week: contractWeek,
-      policy,
+
+      policy,      // now SQL-first (tsfin snapshot or ctx RPC), no legacy settings_defaults columns
       evidence: [],
       action_flags
     }));
