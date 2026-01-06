@@ -130,8 +130,8 @@ resolved as (
   from norm n
 
   -- Candidate override (pay-only): exact client + exact role + exact rate_type.
-  -- Band rule:
-  --  - if band provided: allow exact band OR band is null, prefer exact band
+  -- Band rule (STRICT):
+  --  - if band provided: ONLY exact band
   --  - if band null: ONLY band is null (no guessing)
   left join lateral (
     select o.*
@@ -149,7 +149,7 @@ resolved as (
       and (
         (n.band is null and o.band is null)
         or
-        (n.band is not null and (o.band = n.band or o.band is null))
+        (n.band is not null and o.band = n.band)
       )
     order by
       case
@@ -164,9 +164,9 @@ resolved as (
 
   -- Client defaults (charge always, pay fallback if no override).
   -- Must be enabled: disabled_at_utc is null.
-  -- Band rule:
-  --  - if band provided: prefer exact band then band null
-  --  - if band null: only band null
+  -- Band rule (STRICT):
+  --  - if band provided: ONLY exact band
+  --  - if band null: ONLY band null
   left join lateral (
     select d.*
     from public.rates_client_defaults d
@@ -181,7 +181,7 @@ resolved as (
       and (
         (n.band is null and d.band is null)
         or
-        (n.band is not null and (d.band = n.band or d.band is null))
+        (n.band is not null and d.band = n.band)
       )
     order by
       case
