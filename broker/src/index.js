@@ -38094,15 +38094,15 @@ async function handleTimesheetResolveCandidate(env, req, timesheetId) {
       // Optionally include a few related IDs inline (only if we have an occKeyNorm and budget)
       if (occKeyNorm && maxInlineItems > 1) {
         try {
-          const { rows } = await sbFetch(
-            env,
-            `${env.SUPABASE_URL}/rest/v1/timesheets` +
-              `?is_current=eq.true` +
-              `&authorised_at_server=is.not.null` +
-              `&occupant_key_norm=eq.${enc(occKeyNorm)}` +
-              `&select=timesheet_id` +
-              `&limit=${Math.min(500, Math.max(1, maxInlineItems - 1) + 1)}`
-          );
+       const { rows } = await sbFetch(
+  env,
+  `${env.SUPABASE_URL}/rest/v1/timesheets` +
+    `?is_current=eq.true` +
+    `&occupant_key_norm=eq.${enc(occKeyNorm)}` +
+    `&select=timesheet_id` +
+    `&limit=${Math.min(500, Math.max(1, maxInlineItems - 1) + 1)}`
+);
+
           for (const r of (rows || [])) {
             const id = r?.timesheet_id ? String(r.timesheet_id) : '';
             if (!id || id === currentTimesheetId) continue;
@@ -38361,15 +38361,15 @@ async function handleTimesheetResolveClient(env, req, timesheetId) {
 
       if (hospitalNorm && maxInlineItems > 1) {
         try {
-          const { rows } = await sbFetch(
-            env,
-            `${env.SUPABASE_URL}/rest/v1/timesheets` +
-              `?is_current=eq.true` +
-              `&authorised_at_server=is.not.null` +
-              `&hospital_norm=eq.${enc(hospitalNorm)}` +
-              `&select=timesheet_id` +
-              `&limit=${Math.min(500, Math.max(1, maxInlineItems - 1) + 1)}`
-          );
+    const { rows } = await sbFetch(
+  env,
+  `${env.SUPABASE_URL}/rest/v1/timesheets` +
+    `?is_current=eq.true` +
+    `&hospital_norm=eq.${enc(hospitalNorm)}` +
+    `&select=timesheet_id` +
+    `&limit=${Math.min(500, Math.max(1, maxInlineItems - 1) + 1)}`
+);
+
           for (const r of (rows || [])) {
             const id = r?.timesheet_id ? String(r.timesheet_id) : '';
             if (!id || id === currentTimesheetId) continue;
