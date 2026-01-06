@@ -1,19 +1,12 @@
--- 05012026_tsfin_batch_rpcs_part2.sql
--- Implements:
--- 2.5 public.tsfin_load_context_batch(p_timesheet_ids uuid[])
--- 2.6 public.tsfin_write_snapshots_and_complete(p_rows jsonb)
---
--- Notes:
--- - Policy logic matches JS loadPolicy(): settings_defaults(id=1) + client_settings effective row.
--- - IMPORTANT: settings_defaults.bh_list and margin_includes may be stored as JSON-STRINGS inside jsonb
---   (e.g. '"[\"2024-01-01\", ...]"' and '"{\"expenses\": false}"'), so we normalise them here.
--- - Client ID resolved from hospital_norm via client_hospitals.hospital_name_norm JSONB alias array.
--- - Candidate resolved by occupant_key_norm via candidates.key_norm.
--- - Writes use tsfin_prepare_write (guards locked_by_invoice_id), and also guard paid snapshots.
--- - Restore-on-fail ensures we never leave a timesheet with no current TSFIN snapshot if insert fails.
-
 -- ============================================================
 -- 2.5: Batch context loader (one row per requested timesheet_id)
+-- UPDATED for new settings model:
+--   - settings_defaults is NON-FINANCE ONLY (explicit select list; no select *)
+--   - finance defaults (vat/erni/holiday/apply*/margin_includes) come from
+--     public.settings_finance_pick(p_date => finance_anchor_date)
+--   - time policy (shift windows) still comes from client_settings effective on WORKED/WEEK date
+--   - finance policy uses a FINANCE anchor date:
+--       authorised_at_server local date if present, else "today" local date
 -- ============================================================
 create or replace function public.tsfin_load_context_batch(p_timesheet_ids uuid[])
 returns table (
@@ -59,17 +52,25 @@ t_eff as (
   join public.timesheets te
     on te.timesheet_id = e.effective_timesheet_id
 ),
+-- settings_defaults is NON-FINANCE ONLY now (explicit select list; no select *)
 def as (
-  select *
+  select
+    timezone_id,
+    day_start, day_end,
+    night_start, night_end,
+    sat_start, sat_end,
+    sun_start, sun_end,
+    bh_start, bh_end,
+    bh_list
   from public.settings_defaults
   where id = 1
   limit 1
 ),
-ctx as (
+base as (
   select
     te.effective_timesheet_id,
 
-    -- ✅ Anchor date for "effective_from" selection:
+    -- TIME anchor date for client_settings.effective_from selection:
     -- DAILY: worked_start_iso local date
     -- WEEKLY: week_ending_date (fallback)
     coalesce(
@@ -79,7 +80,18 @@ ctx as (
         else null
       end,
       te.week_ending_date::date
-    ) as anchor_date,
+    ) as time_anchor_date,
+
+    -- FINANCE anchor date for finance windows:
+    -- authorised_at_server local date if present, else "today" local date
+    coalesce(
+      case
+        when te.authorised_at_server is not null
+          then (te.authorised_at_server at time zone 'Europe/London')::date
+        else null
+      end,
+      (now() at time zone 'Europe/London')::date
+    ) as finance_anchor_date,
 
     to_jsonb(te) as out_timesheet,
 
@@ -88,8 +100,6 @@ ctx as (
     to_jsonb(u)  as out_umbrella,
 
     cid.client_id as out_client_id,
-
-
 
     -- ✅ Expand “effective flags” for weekly consumers (still source-of-truth = v_timesheets_summary)
     jsonb_build_object(
@@ -118,81 +128,8 @@ ctx as (
       'authorised_at_server',          v.authorised_at_server
     ) as out_effective_flags,
 
-    -- ✅ Policy = TIME+FINANCE policy + a couple of weekly helpers
-    jsonb_build_object(
-      'timezone_id', coalesce(cs.timezone_id, def.timezone_id, 'Europe/London'),
-
-      'day_start',   coalesce(to_char(cs.day_start,   'HH24:MI:SS'), to_char(def.day_start,   'HH24:MI:SS'), '06:00:00'),
-      'day_end',     coalesce(to_char(cs.day_end,     'HH24:MI:SS'), to_char(def.day_end,     'HH24:MI:SS'), '20:00:00'),
-      'night_start', coalesce(to_char(cs.night_start, 'HH24:MI:SS'), to_char(def.night_start, 'HH24:MI:SS'), '20:00:00'),
-      'night_end',   coalesce(to_char(cs.night_end,   'HH24:MI:SS'), to_char(def.night_end,   'HH24:MI:SS'), '06:00:00'),
-
-      'sat_start',   coalesce(to_char(cs.sat_start, 'HH24:MI:SS'), to_char(def.sat_start, 'HH24:MI:SS'), '00:00:00'),
-      'sat_end',     coalesce(to_char(cs.sat_end,   'HH24:MI:SS'), to_char(def.sat_end,   'HH24:MI:SS'), '00:00:00'),
-      'sun_start',   coalesce(to_char(cs.sun_start, 'HH24:MI:SS'), to_char(def.sun_start, 'HH24:MI:SS'), '00:00:00'),
-      'sun_end',     coalesce(to_char(cs.sun_end,   'HH24:MI:SS'), to_char(def.sun_end,   'HH24:MI:SS'), '00:00:00'),
-
-      'bh_start',    coalesce(to_char(cs.bh_start, 'HH24:MI:SS'), to_char(def.bh_start, 'HH24:MI:SS'), '00:00:00'),
-      'bh_end',      coalesce(to_char(cs.bh_end,   'HH24:MI:SS'), to_char(def.bh_end,   'HH24:MI:SS'), '00:00:00'),
-
-      'vat_rate_pct',    coalesce(cs.vat_rate_pct, def.vat_rate_pct, 20::numeric),
-      'holiday_pay_pct', coalesce(cs.holiday_pay_pct, def.holiday_pay_pct, 12.07::numeric),
-
-      'erni_pct',        coalesce(def.erni_pct, 13.8::numeric),
-
-      'apply_holiday_to',  coalesce(cs.apply_holiday_to, def.apply_holiday_to, 'PAYE_ONLY'),
-      'apply_erni_to',     coalesce(cs.apply_erni_to,    def.apply_erni_to,    'PAYE_ONLY'),
-
-      'margin_includes', jsonb_build_object(
-        'expenses',
-        coalesce(
-          nullif((
-            case
-              when cs.margin_includes is null then null
-              when jsonb_typeof(cs.margin_includes) = 'object' then cs.margin_includes
-              when jsonb_typeof(cs.margin_includes) = 'string'
-                   and (cs.margin_includes #>> '{}') ~ '^\s*\{'
-                then (cs.margin_includes #>> '{}')::jsonb
-              else null
-            end
-          ) ->> 'expenses', '')::boolean,
-
-          nullif((
-            case
-              when def.margin_includes is null then null
-              when jsonb_typeof(def.margin_includes) = 'object' then def.margin_includes
-              when jsonb_typeof(def.margin_includes) = 'string'
-                   and (def.margin_includes #>> '{}') ~ '^\s*\{'
-                then (def.margin_includes #>> '{}')::jsonb
-              else null
-            end
-          ) ->> 'expenses', '')::boolean,
-
-          false
-        )
-      ),
-
-      -- ✅ BH list normalisation (global-only)
-      'bh_list',
-      case
-        when def.bh_list is null then '[]'::jsonb
-        when jsonb_typeof(def.bh_list) = 'array' then def.bh_list
-        when jsonb_typeof(def.bh_list) = 'string'
-             and (def.bh_list #>> '{}') ~ '^\s*\['
-          then (def.bh_list #>> '{}')::jsonb
-        else '[]'::jsonb
-      end,
-
-      -- ✅ Attach flags: prefer cs, else defaults, else true
-    'hr_attach_to_invoice', coalesce(cs.hr_attach_to_invoice, true),
-'ts_attach_to_invoice', coalesce(cs.ts_attach_to_invoice, true),
-
-
-      -- ✅ WEEKLY helpers (client-level)
-      'week_ending_weekday',   coalesce(cs.week_ending_weekday, 0),
-      'default_submission_mode', coalesce(cs.default_submission_mode, 'ELECTRONIC')
-    ) as out_policy
-
+    cs as cs_row,
+    def as def_row
   from t_eff te
   cross join def
 
@@ -200,26 +137,26 @@ ctx as (
     on tf.timesheet_id = te.effective_timesheet_id
    and tf.is_current = true
 
-left join lateral (
-  select c1.*
-  from public.candidates c1
-  where
-    (
-      c1.key_norm = te.occupant_key_norm
-      or (
-        te.occupant_key_norm is not null
-        and c1.nhsp_hr_name_aliases @> to_jsonb(array[te.occupant_key_norm]::text[])
+  left join lateral (
+    select c1.*
+    from public.candidates c1
+    where
+      (
+        c1.key_norm = te.occupant_key_norm
+        or (
+          te.occupant_key_norm is not null
+          and c1.nhsp_hr_name_aliases @> to_jsonb(array[te.occupant_key_norm]::text[])
+        )
       )
-    )
-  order by
-    case
-      when c1.key_norm = te.occupant_key_norm then 0
-      else 1
-    end,
-    c1.updated_at desc nulls last,
-    c1.created_at desc nulls last
-  limit 1
-) c on true
+    order by
+      case
+        when c1.key_norm = te.occupant_key_norm then 0
+        else 1
+      end,
+      c1.updated_at desc nulls last,
+      c1.created_at desc nulls last
+    limit 1
+  ) c on true
 
   left join public.umbrellas u
     on (c.umbrella_id is not null and u.id = c.umbrella_id)
@@ -227,7 +164,7 @@ left join lateral (
   left join public.v_timesheets_summary v
     on v.timesheet_id = te.effective_timesheet_id
 
-left join lateral (
+  left join lateral (
     select ch.client_id
     from public.client_hospitals ch
     where te.hospital_norm is not null
@@ -235,12 +172,12 @@ left join lateral (
     limit 1
   ) ch on true
 
--- ✅ Resolve a single client_id for this timesheet (works for WEEKLY and DAILY)
-left join lateral (
-  select coalesce(v.client_id, tf.client_id, ch.client_id) as client_id
-) cid on true
+  -- ✅ Resolve a single client_id for this timesheet (works for WEEKLY and DAILY)
+  left join lateral (
+    select coalesce(v.client_id, tf.client_id, ch.client_id) as client_id
+  ) cid on true
 
-
+  -- client_settings chosen by TIME anchor (work date / week ending)
   left join lateral (
     select cs1.*
     from public.client_settings cs1
@@ -248,20 +185,17 @@ left join lateral (
       and cs1.client_id = cid.client_id
     order by
       case
-        -- If we cannot anchor, pick newest row
-        when coalesce(
+        when (coalesce(
           case when te.worked_start_iso is not null then (te.worked_start_iso at time zone 'Europe/London')::date end,
           te.week_ending_date::date
-        ) is null then 0
+        )) is null then 0
 
-        -- Prefer rows effective on/before anchor_date
         when cs1.effective_from is not null
          and cs1.effective_from <= coalesce(
            case when te.worked_start_iso is not null then (te.worked_start_iso at time zone 'Europe/London')::date end,
            te.week_ending_date::date
          ) then 0
 
-        -- Allow effective_from NULL as fallback
         when cs1.effective_from is null then 1
 
         else 2
@@ -270,6 +204,105 @@ left join lateral (
       cs1.created_at desc
     limit 1
   ) cs on true
+),
+ctx as (
+  select
+    b.effective_timesheet_id,
+
+    b.out_timesheet,
+    b.out_cur_fin,
+    b.out_candidate,
+    b.out_umbrella,
+    b.out_client_id,
+    b.out_effective_flags,
+
+    -- Finance window row in-scope for FINANCE anchor date (authorised date else today)
+    -- NOTE: settings_finance_pick returns the active finance window row (or fallback).
+    jsonb_build_object(
+      'timezone_id', coalesce((b.cs_row).timezone_id, (b.def_row).timezone_id, 'Europe/London'),
+
+      'day_start',   coalesce(to_char((b.cs_row).day_start,   'HH24:MI:SS'), to_char((b.def_row).day_start,   'HH24:MI:SS'), '06:00:00'),
+      'day_end',     coalesce(to_char((b.cs_row).day_end,     'HH24:MI:SS'), to_char((b.def_row).day_end,     'HH24:MI:SS'), '20:00:00'),
+      'night_start', coalesce(to_char((b.cs_row).night_start, 'HH24:MI:SS'), to_char((b.def_row).night_start, 'HH24:MI:SS'), '20:00:00'),
+      'night_end',   coalesce(to_char((b.cs_row).night_end,   'HH24:MI:SS'), to_char((b.def_row).night_end,   'HH24:MI:SS'), '06:00:00'),
+
+      'sat_start',   coalesce(to_char((b.cs_row).sat_start, 'HH24:MI:SS'), to_char((b.def_row).sat_start, 'HH24:MI:SS'), '00:00:00'),
+      'sat_end',     coalesce(to_char((b.cs_row).sat_end,   'HH24:MI:SS'), to_char((b.def_row).sat_end,   'HH24:MI:SS'), '00:00:00'),
+      'sun_start',   coalesce(to_char((b.cs_row).sun_start, 'HH24:MI:SS'), to_char((b.def_row).sun_start, 'HH24:MI:SS'), '00:00:00'),
+      'sun_end',     coalesce(to_char((b.cs_row).sun_end,   'HH24:MI:SS'), to_char((b.def_row).sun_end,   'HH24:MI:SS'), '00:00:00'),
+
+      -- BH window (00:00–00:00 means “full BH day”)
+      'bh_start',    coalesce(to_char((b.cs_row).bh_start, 'HH24:MI:SS'), to_char((b.def_row).bh_start, 'HH24:MI:SS'), '00:00:00'),
+      'bh_end',      coalesce(to_char((b.cs_row).bh_end,   'HH24:MI:SS'), to_char((b.def_row).bh_end,   'HH24:MI:SS'), '00:00:00'),
+
+      -- FINANCE defaults now come from finance windows; client_settings can still override vat/wtr/apply*/margin_includes
+      'vat_rate_pct',
+      coalesce((b.cs_row).vat_rate_pct, fin.vat_rate_pct, 20::numeric),
+
+      'holiday_pay_pct',
+      coalesce((b.cs_row).holiday_pay_pct, fin.holiday_pay_pct, 12.07::numeric),
+
+      -- ERNI is global-only here (from finance window)
+      'erni_pct',
+      coalesce(fin.erni_pct, 13.8::numeric),
+
+      'apply_holiday_to',
+      coalesce((b.cs_row).apply_holiday_to, fin.apply_holiday_to, 'PAYE_ONLY'),
+
+      'apply_erni_to',
+      coalesce((b.cs_row).apply_erni_to, fin.apply_erni_to, 'PAYE_ONLY'),
+
+      -- margin_includes normalisation (supports jsonb object OR jsonb string containing JSON)
+      'margin_includes',
+      jsonb_build_object(
+        'expenses',
+        coalesce(
+          nullif((
+            case
+              when (b.cs_row).margin_includes is null then null
+              when jsonb_typeof((b.cs_row).margin_includes) = 'object' then (b.cs_row).margin_includes
+              when jsonb_typeof((b.cs_row).margin_includes) = 'string'
+                   and ((b.cs_row).margin_includes #>> '{}') ~ '^\s*\{'
+                then ((b.cs_row).margin_includes #>> '{}')::jsonb
+              else null
+            end
+          ) ->> 'expenses', '')::boolean,
+
+          nullif((
+            case
+              when fin.margin_includes is null then null
+              when jsonb_typeof(fin.margin_includes) = 'object' then fin.margin_includes
+              when jsonb_typeof(fin.margin_includes) = 'string'
+                   and (fin.margin_includes #>> '{}') ~ '^\s*\{'
+                then (fin.margin_includes #>> '{}')::jsonb
+              else null
+            end
+          ) ->> 'expenses', '')::boolean,
+
+          false
+        )
+      ),
+
+      -- ✅ BH list normalisation (global-only; from NON-FINANCE defaults)
+      'bh_list',
+      case
+        when (b.def_row).bh_list is null then '[]'::jsonb
+        when jsonb_typeof((b.def_row).bh_list) = 'array' then (b.def_row).bh_list
+        when jsonb_typeof((b.def_row).bh_list) = 'string'
+             and ((b.def_row).bh_list #>> '{}') ~ '^\s*\['
+          then ((b.def_row).bh_list #>> '{}')::jsonb
+        else '[]'::jsonb
+      end,
+
+      -- ✅ Attach flags: prefer client_settings, else defaults, else true
+    'hr_attach_to_invoice', coalesce((b.cs_row).hr_attach_to_invoice, true),
+'ts_attach_to_invoice', coalesce((b.cs_row).ts_attach_to_invoice, true),
+      -- ✅ WEEKLY helpers (client-level)
+      'week_ending_weekday',        coalesce((b.cs_row).week_ending_weekday, 0),
+      'default_submission_mode',    coalesce((b.cs_row).default_submission_mode, 'ELECTRONIC')
+    ) as out_policy
+  from base b
+  left join lateral public.settings_finance_pick(p_date => b.finance_anchor_date) fin on true
 )
 select
   effective_timesheet_id,
@@ -286,6 +319,7 @@ $$;
 
 -- ============================================================
 -- 2.6: Batch writer + outbox complete/fail (restore-on-fail safe)
+-- (UNCHANGED by settings migration; writer only persists snapshots)
 -- ============================================================
 create or replace function public.tsfin_write_snapshots_and_complete(p_rows jsonb)
 returns table (
