@@ -50,19 +50,21 @@ pick as (
 ),
 fallback as (
   select
-    gen_random_uuid() as id,
-    coalesce(sd.effective_from, date '1900-01-01') as date_from,
-    null::date as date_to,
-    coalesce(sd.vat_rate_pct, 20) as vat_rate_pct,
-    coalesce(sd.erni_pct, 0) as erni_pct,
-    coalesce(sd.holiday_pay_pct, 0) as holiday_pay_pct,
-    sd.apply_holiday_to,
-    sd.apply_erni_to,
-    sd.margin_includes,
-    'SETTINGS_DEFAULTS_FALLBACK'::text as source
-  from public.settings_defaults sd
-  where sd.id = 1
+    w.id,
+    w.date_from,
+    w.date_to,
+    w.vat_rate_pct,
+    w.erni_pct,
+    w.holiday_pay_pct,
+    w.apply_holiday_to,
+    w.apply_erni_to,
+    w.margin_includes,
+    'FINANCE_WINDOWS_EARLIEST_FALLBACK'::text as source
+  from public.settings_finance_windows w
+  order by w.date_from asc
+  limit 1
 )
+
 select * from pick
 union all
 select * from fallback
