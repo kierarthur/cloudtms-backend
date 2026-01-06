@@ -21913,36 +21913,37 @@ async function handleNhspApply(env, req, importId) {
 
     // VAT default from finance windows
     // Rule: VAT is the rate in force when we create/amend the invoice (i.e. “today”).
-    const loadFinanceVatDefaultPct = async (anchorYmd) => {
-      const k = String(anchorYmd || '');
-      if (_financeVatCache.has(k)) return _financeVatCache.get(k);
+const loadFinanceVatDefaultPct = async (anchorYmd) => {
+  const k = String(anchorYmd || '');
+  if (_financeVatCache.has(k)) return _financeVatCache.get(k);
 
-      let pct = 20; // safe fallback if finance windows not available
-      try {
-        const res = await fetch(
-          `${env.SUPABASE_URL}/rest/v1/rpc/settings_finance_pick`,
-          {
-            method: 'POST',
-            headers: { ...sbHeaders(env), 'content-type': 'application/json' },
-            // p_date = null => SQL uses “today (Europe/London)”
-            body: JSON.stringify({ p_date: null })
-          }
-        );
-
-        const txt = await res.text().catch(() => '');
-        if (res.ok) {
-          const j = txt ? JSON.parse(txt) : null;
-          const row = Array.isArray(j) ? j[0] : j;
-          const v = Number(row?.vat_rate_pct);
-          if (Number.isFinite(v)) pct = v;
-        }
-      } catch {
-        // keep fallback
+  let pct = 20; // safe fallback if finance windows not available
+  try {
+    const res = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/rpc/settings_finance_pick`,
+      {
+        method: 'POST',
+        headers: { ...sbHeaders(env), 'content-type': 'application/json' },
+        // ✅ Use the caller’s anchor date when provided; else null => SQL uses “today (Europe/London)”
+        body: JSON.stringify({ p_date: k || null })
       }
+    );
 
-      _financeVatCache.set(k, pct);
-      return pct;
-    };
+    const txt = await res.text().catch(() => '');
+    if (res.ok) {
+      const j = txt ? JSON.parse(txt) : null;
+      const row = Array.isArray(j) ? j[0] : j;
+      const v = Number(row?.vat_rate_pct);
+      if (Number.isFinite(v)) pct = v;
+    }
+  } catch {
+    // keep fallback
+  }
+
+  _financeVatCache.set(k, pct);
+  return pct;
+};
+
 
     // Client VAT override still applies, but default comes from finance windows (“today”)
     // Also: prevent future-dated client_settings rows from being applied early.
@@ -55349,10 +55350,33 @@ try {
   }));
 }
 
-
 async function handleTimesheetBucketPreview(env, req) {
   const enc    = encodeURIComponent;
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+  // ✅ YYYY-MM-DD in Europe/London (stable, no locale ordering assumptions)
+  const toLondonYmd = (dt) => {
+    try {
+      const d = (dt instanceof Date) ? dt : new Date(dt);
+      if (!d || Number.isNaN(d.getTime())) return null;
+
+      const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/London',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).formatToParts(d);
+
+      const y  = parts.find(p => p.type === 'year')?.value || '';
+      const m  = parts.find(p => p.type === 'month')?.value || '';
+      const dd = parts.find(p => p.type === 'day')?.value || '';
+      if (!y || !m || !dd) return null;
+
+      return `${y}-${m}-${dd}`;
+    } catch {
+      return null;
+    }
+  };
 
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -55417,9 +55441,29 @@ async function handleTimesheetBucketPreview(env, req) {
   }
 
   // ─────────────────────
-  // 0.5) Finance globals for TODAY (ERNI, apply_erni_to)
+  // 0.5) Finance globals (anchor aligned to TSFIN rules)
+  //   - authorised TS  -> authorised_at_server (London date)
+  //   - otherwise      -> today (London date)
   // ─────────────────────
-  const finance = await loadFinanceGlobals(env, null).catch(() => ({}));
+  let financeAnchorYmd  = null;
+  let financeAnchorKind = 'TODAY';
+
+  try {
+    const authIso = ts?.authorised_at_server || null;
+    const authYmd = authIso ? toLondonYmd(authIso) : null;
+    if (authYmd) {
+      financeAnchorYmd  = authYmd;
+      financeAnchorKind = 'AUTHORISED_AT_SERVER';
+    } else {
+      financeAnchorYmd  = toLondonYmd(new Date()) || null;
+      financeAnchorKind = 'TODAY';
+    }
+  } catch {
+    financeAnchorYmd  = toLondonYmd(new Date()) || null;
+    financeAnchorKind = 'TODAY';
+  }
+
+  const finance = await loadFinanceGlobals(env, financeAnchorYmd || null).catch(() => ({}));
 
   // Robust pct normaliser: accepts 15 or 0.15
   const pctToMultiplier = (pctMaybe) => {
@@ -55594,7 +55638,7 @@ async function handleTimesheetBucketPreview(env, req) {
     const payEx = round2(units * payRate);
     const chgEx = round2(units * chargeRate);
 
-    // ✅ PAYE margin must include ERNI (today’s finance window), when applicable
+    // ✅ PAYE margin must include ERNI (finance window by anchor), when applicable
     const payCostEx = erniApplies ? round2(payEx * erniMult) : payEx;
     const marEx     = round2(chgEx - payCostEx);
 
@@ -55667,13 +55711,14 @@ async function handleTimesheetBucketPreview(env, req) {
     pay,
     charge,
 
-    // finance context (today’s window)
+    // finance context (anchored to match TSFIN rules)
     finance: {
       apply_erni_to: applyErniTo,
       erni_pct: Number(erniPctRaw ?? 0),
       erni_multiplier: erniMult,
       erni_applies: !!erniApplies,
-      anchor: 'TODAY'
+      anchor: financeAnchorKind,
+      anchor_ymd: financeAnchorYmd
     },
 
     additional_units_json,
