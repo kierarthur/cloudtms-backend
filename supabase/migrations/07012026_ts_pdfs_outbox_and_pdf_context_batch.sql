@@ -146,26 +146,32 @@ as $$
 declare
   v_count int := 0;
 begin
-  if p_ids is null then return 0; end if;
+  if p_ids is null or coalesce(array_length(p_ids, 1), 0) = 0 then
+    return 0;
+  end if;
 
-  -- Mark the CURRENT timesheet row as having a generated PDF (no extra Worker calls)
-  update public.timesheets t
-  set generated_pdf_at_utc = now()
-  from public.ts_pdfs_outbox o
-  where o.id = any(p_ids)
-    and o.timesheet_id = t.timesheet_id
-    and t.is_current = true;
+  -- Atomically:
+  -- 1) delete outbox rows (the ACK)
+  -- 2) set generated_pdf_at_utc for the corresponding CURRENT timesheet rows
+  with gone as (
+    delete from public.ts_pdfs_outbox o
+    where o.id = any(p_ids)
+    returning o.timesheet_id
+  ),
+  upd as (
+    update public.timesheets t
+    set generated_pdf_at_utc = now()
+    from (select distinct timesheet_id from gone) g
+    where t.timesheet_id = g.timesheet_id
+      and t.is_current = true
+    returning 1
+  )
+  select count(*) into v_count
+  from gone;
 
-  -- Remove completed outbox rows
-  delete from public.ts_pdfs_outbox o
-  where o.id = any(p_ids);
-
-  get diagnostics v_count = row_count;
   return v_count;
 end;
 $$;
-
-
 
 -- ------------------------------------------------------------
 -- Bulk fail ack:
