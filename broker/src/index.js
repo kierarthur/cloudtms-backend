@@ -3440,47 +3440,52 @@ const role      = safeStr(resolvedRole).trim().toUpperCase();
     const declBodyBottomReserve = LAY.declSigReserve;
     const maxBodyH = leftDecl.h - declBodyTopPad - declBodyBottomReserve;
 
-    const renderDecl = (box, spec) => {
-      const maxW = box.w - 4;
-      const baseText = safeStr(spec.bodyText);
-      if (!baseText.trim()) return;
+   const renderDecl = (box, spec) => {
+  const maxW = box.w - 4;
+  const baseText = safeStr(spec.bodyText);
+  if (!baseText.trim()) return null;
 
-      let fontSize = Number(spec.font_size) || 7.0;
-      let lineH = Number(spec.line_height_mm) || 3.35;
+  let fontSize = Number(spec.font_size) || 7.0;
+  let lineH = Number(spec.line_height_mm) || 3.35;
 
-      if (isTight) {
-        fontSize = Math.min(fontSize, 6.6);
-        lineH = Math.min(lineH, LAY.headerLineH);
-      }
+  if (isTight) {
+    fontSize = Math.min(fontSize, 6.6);
+    lineH = Math.min(lineH, LAY.headerLineH);
+  }
 
-      for (let attempt = 0; attempt < 4; attempt++) {
-        const lines = wrapText(font, baseText, fontSize, maxW);
-        const neededH = lines.length * lineH;
-        if (neededH <= maxBodyH) {
-          let yT = box.y + declBodyTopPad;
-          for (const ln of lines) {
-            if (yT > box.y + box.h - declBodyBottomReserve - 0.5) break;
-            drawText(page, font, ln, box.x + 2, yT, fontSize, { maxWidth: maxW });
-            yT += lineH;
-          }
-          return;
-        }
-        fontSize = Math.max(5.8, fontSize - 0.4);
-        lineH = Math.max(2.4, lineH - 0.15);
-      }
-
-      // last resort: clip silently (no "+N more")
-      const lines = wrapText(font, baseText, 5.8, maxW);
-      const maxLines = Math.max(1, Math.floor(maxBodyH / 2.4));
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const lines = wrapText(font, baseText, fontSize, maxW);
+    const neededH = lines.length * lineH;
+    if (neededH <= maxBodyH) {
       let yT = box.y + declBodyTopPad;
-      for (const ln of lines.slice(0, maxLines)) {
-        drawText(page, font, ln, box.x + 2, yT, 5.8, { maxWidth: maxW });
-        yT += 2.4;
-      }
-    };
+ for (const ln of lines) {
+  if (yT > box.y + box.h - declBodyBottomReserve - 0.5) break;
+  drawText(page, font, ln, box.x + 2, yT, fontSize, { maxWidth: maxW });
+  yT += lineH;
+}
+return (yT > (box.y + declBodyTopPad)) ? (yT - lineH) : (box.y + declBodyTopPad);
 
-    renderDecl(leftDecl, tempDeclSpec);
-    renderDecl(rightDecl, clientDeclSpec);
+    }
+    fontSize = Math.max(5.8, fontSize - 0.4);
+    lineH = Math.max(2.4, lineH - 0.15);
+  }
+
+  // last resort: clip silently (no "+N more")
+  const lines = wrapText(font, baseText, 5.8, maxW);
+  const maxLines = Math.max(1, Math.floor(maxBodyH / 2.4));
+  let yT = box.y + declBodyTopPad;
+for (const ln of lines.slice(0, maxLines)) {
+  drawText(page, font, ln, box.x + 2, yT, 5.8, { maxWidth: maxW });
+  yT += 2.4;
+}
+return (yT > (box.y + declBodyTopPad)) ? (yT - 2.4) : (box.y + declBodyTopPad);
+
+};
+
+// ✅ capture where the declaration text ended (so signatures can use unused whitespace)
+const lastDeclBodyEndYLeft  = renderDecl(leftDecl, tempDeclSpec);
+const lastDeclBodyEndYRight = renderDecl(rightDecl, clientDeclSpec);
+
 
     // Signature lines (fixed inside each box)
     const sigY = leftDecl.y + leftDecl.h - 6.5;
@@ -3503,27 +3508,37 @@ const role      = safeStr(resolvedRole).trim().toUpperCase();
       if (submissionMode === "ELECTRONIC") {
         const authDate = fmtDmy(String(ts.authorised_at_server || "").slice(0, 10));
 
-  const sigMaxH = Math.max(6.0, (declBodyBottomReserve - 1.2 - 0.6)); // keep your existing sizing rule
+const sigMaxH = 18.0; // ✅ allow larger signatures when whitespace exists
 const sigLiftMm = 0.6; // "few pixels" ≈ 0.6mm
 
-// Top of the reserved signature zone (so we never draw into declaration text)
-const sigReserveTopLeft  = leftDecl.y  + leftDecl.h  - declBodyBottomReserve;
-const sigReserveTopRight = rightDecl.y + rightDecl.h - declBodyBottomReserve;
+// ✅ Use where the declaration body actually ended (if known), otherwise allow using the full body area.
+// This avoids the ~5–6mm trap caused by (leftDecl.h - declBodyBottomReserve).
+const sigTextPad = 0.8;
+
+const sigReserveTopLeft =
+  (typeof lastDeclBodyEndYLeft === 'number')
+    ? (lastDeclBodyEndYLeft + sigTextPad)
+    : (leftDecl.y + declBodyTopPad);
+
+const sigReserveTopRight =
+  (typeof lastDeclBodyEndYRight === 'number')
+    ? (lastDeclBodyEndYRight + sigTextPad)
+    : (rightDecl.y + declBodyTopPad);
 
 // We anchor the BOTTOM of the image to the signature LINE (minus lift)
 const nurseSigBottom  = sigY  - sigLiftMm;
 const clientSigBottom = sigY2 - sigLiftMm;
 
-// Height cannot exceed available space between reserve-top and the signature line
+// Height can now use *real whitespace*, not just the small reserved strip
 const nurseAvailH  = Math.max(2.0, nurseSigBottom  - sigReserveTopLeft);
 const clientAvailH = Math.max(2.0, clientSigBottom - sigReserveTopRight);
 
 const nurseSigH  = Math.min(sigMaxH, nurseAvailH);
 const clientSigH = Math.min(sigMaxH, clientAvailH);
 
-// Top is always computed from bottom - height (so bottom stays on the signature line)
-const nurseSigTopY  = nurseSigBottom  - nurseSigH;
-const clientSigTopY = clientSigBottom - clientSigH;
+// Top computed from bottom - height (bottom stays on the signature line)
+const nurseSigTopY  = Math.max(leftDecl.y + 2.0,  nurseSigBottom  - nurseSigH);
+const clientSigTopY = Math.max(rightDecl.y + 2.0, clientSigBottom - clientSigH);
 
 const nurseSigBox  = { x: leftDecl.x + 2,  y: nurseSigTopY,  w: sigLineW,  h: nurseSigH };
 const clientSigBox = { x: rightDecl.x + 2, y: clientSigTopY, w: sigLineW2, h: clientSigH };
