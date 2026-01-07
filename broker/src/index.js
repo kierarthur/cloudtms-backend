@@ -50414,65 +50414,7 @@ async function handleTsfinPatchPO(env, req, timesheetId) {
   }));
 }
 
-async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } = {}) {
-  // Local helpers used by both branches
-  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
-  const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
-  const enc = encodeURIComponent;
-
-  const chunk = (arr, n) => {
-    const out = [];
-    for (let i = 0; i < (arr?.length || 0); i += n) out.push(arr.slice(i, i + n));
-    return out;
-  };
-
-  // Helper: derive Mon–Sun week start from a week-ending date (ymd)
-  const computeWeekStartFromWeekEnding = (weYmd) => {
-    if (!weYmd) return null;
-    const d = new Date(`${weYmd}T00:00:00Z`);
-    if (Number.isNaN(d.getTime())) return weYmd;
-    d.setUTCDate(d.getUTCDate() - 6);
-    const yyyy = d.getUTCFullYear();
-    const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
-    const dd   = String(d.getUTCDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
-  };
-
-  // ─────────────────────────────────────────────────────────────
-  // Weekly helpers (contract-driven)
-  // ─────────────────────────────────────────────────────────────
-
-  // ✅ Updated: accepts policyOverride so it never triggers REST in resolveBucketsFromSchedule
-  async function computeWeeklyHours(env, ts, contract, policyOverride = null) {
-    const zeroHours = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
-
-    if (Array.isArray(ts.actual_schedule_json) && ts.actual_schedule_json.length) {
-      const minsByBucket = await resolveBucketsFromSchedule(env, contract, ts.actual_schedule_json, policyOverride);
-      const hours = {
-        day: +(asNumberLocal(minsByBucket.day) / 60).toFixed(2),
-        night: +(asNumberLocal(minsByBucket.night) / 60).toFixed(2),
-        sat: +(asNumberLocal(minsByBucket.sat) / 60).toFixed(2),
-        sun: +(asNumberLocal(minsByBucket.sun) / 60).toFixed(2),
-        bh: +(asNumberLocal(minsByBucket.bh) / 60).toFixed(2),
-      };
-      return hours;
-    }
-
-    const scope = String(ts.sheet_scope || "").toUpperCase();
-    if (scope === "WEEKLY") return zeroHours;
-
-    const n = (v) => (v == null ? 0 : Number(v) || 0);
-    return {
-      day: n(ts.hours_day),
-      night: n(ts.hours_night),
-      sat: n(ts.hours_sat),
-      sun: n(ts.hours_sun),
-      bh: n(ts.hours_bh),
-    };
-  }
-
-  // ✅ Updated: REST-free BH list (uses SQL policyOverride.bh_list)
-  async function computeWeeklyAdditionalFromTs(env, ts, cw, contract, policyOverride = null) {
+ async function computeWeeklyAdditionalFromTs(env, ts, cw, contract, policyOverride = null) {
     let additional_units_json = {};
     let additional_pay_ex_vat = 0;
     let additional_charge_ex_vat = 0;
@@ -50621,6 +50563,67 @@ return {
 };
 
   }
+
+
+async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } = {}) {
+  // Local helpers used by both branches
+  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+  const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
+  const enc = encodeURIComponent;
+
+  const chunk = (arr, n) => {
+    const out = [];
+    for (let i = 0; i < (arr?.length || 0); i += n) out.push(arr.slice(i, i + n));
+    return out;
+  };
+
+  // Helper: derive Mon–Sun week start from a week-ending date (ymd)
+  const computeWeekStartFromWeekEnding = (weYmd) => {
+    if (!weYmd) return null;
+    const d = new Date(`${weYmd}T00:00:00Z`);
+    if (Number.isNaN(d.getTime())) return weYmd;
+    d.setUTCDate(d.getUTCDate() - 6);
+    const yyyy = d.getUTCFullYear();
+    const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd   = String(d.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  // ─────────────────────────────────────────────────────────────
+  // Weekly helpers (contract-driven)
+  // ─────────────────────────────────────────────────────────────
+
+  // ✅ Updated: accepts policyOverride so it never triggers REST in resolveBucketsFromSchedule
+  async function computeWeeklyHours(env, ts, contract, policyOverride = null) {
+    const zeroHours = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
+
+    if (Array.isArray(ts.actual_schedule_json) && ts.actual_schedule_json.length) {
+      const minsByBucket = await resolveBucketsFromSchedule(env, contract, ts.actual_schedule_json, policyOverride);
+      const hours = {
+        day: +(asNumberLocal(minsByBucket.day) / 60).toFixed(2),
+        night: +(asNumberLocal(minsByBucket.night) / 60).toFixed(2),
+        sat: +(asNumberLocal(minsByBucket.sat) / 60).toFixed(2),
+        sun: +(asNumberLocal(minsByBucket.sun) / 60).toFixed(2),
+        bh: +(asNumberLocal(minsByBucket.bh) / 60).toFixed(2),
+      };
+      return hours;
+    }
+
+    const scope = String(ts.sheet_scope || "").toUpperCase();
+    if (scope === "WEEKLY") return zeroHours;
+
+    const n = (v) => (v == null ? 0 : Number(v) || 0);
+    return {
+      day: n(ts.hours_day),
+      night: n(ts.hours_night),
+      sat: n(ts.hours_sat),
+      sun: n(ts.hours_sun),
+      bh: n(ts.hours_bh),
+    };
+  }
+
+  // ✅ Updated: REST-free BH list (uses SQL policyOverride.bh_list)
+ 
 
   // ─────────────────────────────────────────────────────────────
   // DAILY helpers
@@ -51500,13 +51503,15 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
   // ✅ NEW GLOBAL RULE: never allow weekly to be READY_* unless authorised
   const processing_status = (!isAuthorised) ? 'PENDING_AUTH' : 'READY_FOR_INVOICE';
 
-  const actual = Array.isArray(ts?.actual_schedule_json) ? ts.actual_schedule_json : [];
+    const actualRaw = Array.isArray(ts?.actual_schedule_json) ? ts.actual_schedule_json : [];
+  const actual = normaliseScheduleBreakFields(actualRaw);
   if (!actual.length) {
     // ✅ Prefer SQL policy snapshot if provided (keeps weekly aligned with SQL-first design)
     let policy_snapshot_json = {};
     if (policy_override && typeof policy_override === 'object') {
       policy_snapshot_json = policy_override;
     }
+
 
     const snapshot = {
       timesheet_id: ts.timesheet_id,
@@ -55494,8 +55499,8 @@ async function handleTimesheetBucketPreview(env, req) {
   let actual_schedule_json = null;
 
   // 1a) FE schedule override from Lines
-  if (Array.isArray(body.actual_schedule_json) && body.actual_schedule_json.length) {
-    actual_schedule_json = body.actual_schedule_json;
+   if (Array.isArray(body.actual_schedule_json) && body.actual_schedule_json.length) {
+    actual_schedule_json = normaliseScheduleBreakFields(body.actual_schedule_json);
 
     try {
       validateScheduleStructure(actual_schedule_json);
@@ -55556,7 +55561,7 @@ async function handleTimesheetBucketPreview(env, req) {
       );
     }
 
-    actual_schedule_json = sched;
+     actual_schedule_json = normaliseScheduleBreakFields(sched);
 
     try {
       validateScheduleStructure(actual_schedule_json);
@@ -55567,6 +55572,7 @@ async function handleTimesheetBucketPreview(env, req) {
         badRequest(e.message || 'Invalid planned schedule (overlap/breaks).')
       );
     }
+
 
     try {
       const mins = await resolveBucketsFromSchedule(env, contract, actual_schedule_json);
@@ -55735,6 +55741,26 @@ async function handleTimesheetBucketPreview(env, req) {
   }));
 }
 
+function normaliseScheduleBreakFields(schedule = []) {
+  if (!Array.isArray(schedule)) return [];
+
+  return schedule.map(seg => {
+    const s = { ...(seg || {}) };
+
+    const hasBreakWindows =
+      (Array.isArray(s.breaks) && s.breaks.length > 0) ||
+      (s.break_start != null && String(s.break_start).trim()) ||
+      (s.break_end   != null && String(s.break_end).trim());
+
+    if (hasBreakWindows) {
+      // If we have explicit windows, drop summary break minutes
+      delete s.break_minutes;
+      delete s.break_mins;
+    }
+
+    return s;
+  });
+}
 
 // ─────────────────────────────────────────────────────────────
 // QR helpers (TSQ1 payload + HMAC + PNG generation + store)
