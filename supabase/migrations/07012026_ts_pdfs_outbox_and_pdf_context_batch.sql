@@ -148,6 +148,15 @@ declare
 begin
   if p_ids is null then return 0; end if;
 
+  -- Mark the CURRENT timesheet row as having a generated PDF (no extra Worker calls)
+  update public.timesheets t
+  set generated_pdf_at_utc = now()
+  from public.ts_pdfs_outbox o
+  where o.id = any(p_ids)
+    and o.timesheet_id = t.timesheet_id
+    and t.is_current = true;
+
+  -- Remove completed outbox rows
   delete from public.ts_pdfs_outbox o
   where o.id = any(p_ids);
 
@@ -155,6 +164,7 @@ begin
   return v_count;
 end;
 $$;
+
 
 
 -- ------------------------------------------------------------
