@@ -11970,7 +11970,7 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
     });
 
     // ─────────────────────────────────────────────────────────────
-    // 2) System evidence rows (QR + Imports + Electronic signatures)
+    // 2) System evidence rows (QR + Imports + Electronic signatures + Generated PDF)
     // ─────────────────────────────────────────────────────────────
     const systemEvidence = [];
 
@@ -12023,6 +12023,33 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
         meta_json: {
           qr_status: qrStatus || null,
           matches_current: (issuedStillMatches || null)
+        }
+      });
+    }
+
+    // 2A.2) ✅ Generated system PDF evidence (ELECTRONIC + generated_pdf_at_utc, but avoid duplicating QR entry)
+    const submissionMode = String(ts?.submission_mode || '').toUpperCase();
+    const hasGeneratedPdf = !!ts?.generated_pdf_at_utc;
+
+    // If QR evidence already shown, don't add a duplicate generated-PDF row (same docsPdfKey).
+    const qrEvidenceAlreadyShown = signedReceived || awaitingSignatureUpload;
+
+    if (!qrEvidenceAlreadyShown && submissionMode === 'ELECTRONIC' && hasGeneratedPdf) {
+      systemEvidence.push({
+        id: `SYS:PDF:GENERATED:${currentTsId}`,
+        timesheet_id: currentTsId,
+        kind: 'PDF',
+        display_name: 'Timesheet (Generated PDF)',
+        storage_key: docsPdfKey,
+        created_at: ts.generated_pdf_at_utc,
+        uploaded_at_utc: ts.generated_pdf_at_utc,
+        system: true,
+        can_delete: false,
+        preview_mode: 'PDF',
+        is_primary: true,
+        meta_json: {
+          generated_pdf_at_utc: ts.generated_pdf_at_utc,
+          submission_mode: submissionMode
         }
       });
     }
@@ -12177,7 +12204,6 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
     return withCORS(env, req, serverError(`Failed to list timesheet evidence: ${e?.message || e}`));
   }
 }
-
 
 
 
