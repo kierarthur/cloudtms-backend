@@ -3122,9 +3122,10 @@ if (agencyLogoKey) {
     drawCenteredText(page, fontBold, "Temporary Worker Details", nurseBox.x, nurseBox.y + 4.2, nurseBox.w, LAY.detailsTitleSize);
     drawCenteredText(page, fontBold, "Client Details", clientBox.x, clientBox.y + 4.2, clientBox.w, LAY.detailsTitleSize);
 
-    const surname = safeStr(resolvedSurname).toUpperCase();
-    const firstName = safeStr(resolvedFirstName).toUpperCase();
-    const role = safeStr(resolvedRole);
+ const surname   = safeStr(resolvedSurname).trim().toUpperCase();
+const firstName = safeStr(resolvedFirstName).trim().toUpperCase();
+const role      = safeStr(resolvedRole).trim().toUpperCase();
+
 
     const clientName = safeStr(resolvedClientName);
     const siteWard = safeStr(resolvedSiteWard);
@@ -3502,29 +3503,23 @@ if (agencyLogoKey) {
       if (submissionMode === "ELECTRONIC") {
         const authDate = fmtDmy(String(ts.authorised_at_server || "").slice(0, 10));
 
-        const bottomPad = 1.2; // mm above the bottom border
-        const sigZoneBottomLeft  = leftDecl.y + leftDecl.h - bottomPad;
-        const sigZoneBottomRight = rightDecl.y + rightDecl.h - bottomPad;
+      const sigMaxH = Math.max(6.0, (declBodyBottomReserve - 1.2 - 0.6)); // keep your existing sizing rule
+const sigH = sigMaxH;
 
-        const sigMaxH = Math.max(6.0, (declBodyBottomReserve - bottomPad - 0.6)); // mm
-        const sigH = sigMaxH;
+// Signature line Y (you already have sigY / sigY2 above)
+const sigLiftMm = 0.6; // "few pixels" ≈ 0.6mm
 
-        const sigYTopLowLeft  = sigZoneBottomLeft  - sigH;
-        const sigYTopLowRight = sigZoneBottomRight - sigH;
+// Top of the reserved signature zone
+const sigReserveTopLeft  = leftDecl.y  + leftDecl.h  - declBodyBottomReserve;
+const sigReserveTopRight = rightDecl.y + rightDecl.h - declBodyBottomReserve;
 
-        const nurseSigBox = {
-          x: leftDecl.x + 2,
-          y: sigYTopLowLeft,
-          w: sigLineW,
-          h: sigH
-        };
+// Place signature so its BOTTOM sits slightly above the line
+const nurseSigTopY  = Math.max(sigReserveTopLeft,  (sigY  - sigLiftMm) - sigH);
+const clientSigTopY = Math.max(sigReserveTopRight, (sigY2 - sigLiftMm) - sigH);
 
-        const clientSigBox = {
-          x: rightDecl.x + 2,
-          y: sigYTopLowRight,
-          w: sigLineW2,
-          h: sigH
-        };
+const nurseSigBox = { x: leftDecl.x + 2,  y: nurseSigTopY,  w: sigLineW,  h: sigH };
+const clientSigBox = { x: rightDecl.x + 2, y: clientSigTopY, w: sigLineW2, h: sigH };
+
 
         await drawSignatureKeyInBox(bucket, page, pdfDoc, ts.r2_nurse_key, nurseSigBox, PAGE_H);
         await drawSignatureKeyInBox(bucket, page, pdfDoc, ts.r2_auth_key, clientSigBox, PAGE_H);
@@ -3538,8 +3533,18 @@ if (agencyLogoKey) {
           const dateX2 = rightDecl.x + 2 + sigLineW2 + 4;
           const dateW2 = (rightDecl.x + rightDecl.w - 2) - dateX2;
 
-          drawTextFit(page, font, authDate, dateX1 + datePad, sigY - 1.2, Math.max(1, dateW1 - (datePad * 2)), 6.6, 4.8);
-          drawTextFit(page, font, authDate, dateX2 + datePad, sigY2 - 1.2, Math.max(1, dateW2 - (datePad * 2)), 6.6, 4.8);
+   const dateLabelSize = 7.0; // you draw "Date" at 7.0
+const dateLabelWmm  = ptToMm(font.widthOfTextAtSize("Date", dateLabelSize));
+const gapAfterLabel = 1.2; // mm
+
+const dateTextX1 = dateX1 + dateLabelWmm + gapAfterLabel;
+const dateTextW1 = Math.max(1, (dateX1 + dateW1) - dateTextX1 - 0.6);
+drawTextFit(page, font, authDate, dateTextX1, sigY - 1.2, dateTextW1, 6.6, 4.8);
+
+const dateTextX2 = dateX2 + dateLabelWmm + gapAfterLabel;
+const dateTextW2 = Math.max(1, (dateX2 + dateW2) - dateTextX2 - 0.6);
+drawTextFit(page, font, authDate, dateTextX2, sigY2 - 1.2, dateTextW2, 6.6, 4.8);
+
         }
       }
     } catch (e) {
