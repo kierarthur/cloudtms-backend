@@ -24,6 +24,7 @@ t as (
    and ts.is_current = true
 ),
 s as (
+  -- ONLY fields that actually exist on v_timesheets_summary and are needed for identity resolution
   select
     t.timesheet_id,
     vs.candidate_id,
@@ -65,11 +66,11 @@ select
     'timesheet_header_json', sd.timesheet_header_json,
     'timesheet_footer_json', sd.timesheet_footer_json,
 
-    -- These TEXT columns do NOT exist in your settings_defaults table:
+    -- TEXT declaration columns do NOT exist in settings_defaults (keep keys for renderer compatibility):
     'temporary_worker_declaration', null::text,
     'client_declaration', null::text,
 
-    -- These JSONB columns DO exist:
+    -- JSON declarations DO exist:
     'temporary_worker_declaration_json', sd.temporary_worker_declaration_json,
     'client_declaration_json', sd.client_declaration_json
   ) as out_def
