@@ -4399,7 +4399,9 @@ async function handleContractsCreate(env, req) {
 // handleContractsGet — embed names and flatten convenience fields for FE
 // (joins via FK: contracts.candidate_id → candidates.id, contracts.client_id → clients.id)
 
- async function handleContractsGet(env, req, contractId) {
+async function handleContractsGet(env, req, contractId) {
+  const enc = encodeURIComponent;
+
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   if (!contractId) return withCORS(env, req, badRequest('contract_id required'));
@@ -4456,6 +4458,167 @@ async function handleContractsCreate(env, req) {
     has_timesheets: hasTimesheets
   };
 
+  // ── Finance window (VAT/ERNI/etc) + server margin preview ─────────────────────────────
+  const toLondonYmd = (dt) => {
+    try {
+      const d = (dt instanceof Date) ? dt : new Date(dt);
+      if (!d || Number.isNaN(d.getTime())) return null;
+
+      const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/London',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).formatToParts(d);
+
+      const y  = parts.find(p => p.type === 'year')?.value || '';
+      const m  = parts.find(p => p.type === 'month')?.value || '';
+      const dd = parts.find(p => p.type === 'day')?.value || '';
+      if (!y || !m || !dd) return null;
+
+      return `${y}-${m}-${dd}`;
+    } catch {
+      return null;
+    }
+  };
+
+  const asYmd = (v) => {
+    if (!v) return null;
+    const s = String(v).trim();
+    if (!s) return null;
+    const ymd = s.slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(ymd) ? ymd : null;
+  };
+
+  const pctToMultiplier = (pctMaybe) => {
+    let p = Number(pctMaybe);
+    if (!Number.isFinite(p) || p <= 0) return 1;
+    if (p > 1) p = p / 100; // support 15 vs 0.15
+    const m = 1 + p;
+    return (Number.isFinite(m) && m > 0) ? m : 1;
+  };
+
+  const toNum = (v) => {
+    if (v === '' || v === null || v === undefined) return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+  // Anchor rule (matches your FE helper):
+  // - finished contract -> anchor = start_date
+  // - ongoing           -> anchor = today (London)
+  const todayYmd = toLondonYmd(new Date()) || null;
+  const startYmd = asYmd(contractOut?.start_date);
+  const endYmd   = asYmd(contractOut?.end_date);
+  const finished = !!(endYmd && todayYmd && endYmd < todayYmd);
+  const anchor_ymd  = (finished && startYmd) ? startYmd : (todayYmd || startYmd || null);
+  const anchor_kind = (finished && startYmd) ? 'CONTRACT_START' : 'TODAY';
+
+  let finance_window = null;
+  try {
+    const fwRows = await sbRpc(env, 'settings_finance_pick', { p_date: anchor_ymd || null });
+    const fw = Array.isArray(fwRows) ? fwRows[0] : fwRows;
+    finance_window = (fw && typeof fw === 'object') ? fw : null;
+  } catch (e) {
+    try { console.warn('[CONTRACTS][GET] settings_finance_pick failed', { contractId, anchor_ymd, err: String(e?.message || e) }); } catch {}
+    finance_window = null;
+  }
+
+  const apply_erni_to = String(finance_window?.apply_erni_to || 'PAYE_ONLY').toUpperCase();
+  const erni_pct      = (finance_window?.erni_pct ?? 0);
+  const erni_multiplier = pctToMultiplier(erni_pct);
+
+  const vat_rate_pct  = (finance_window?.vat_rate_pct ?? 0);
+  const vat_multiplier = pctToMultiplier(vat_rate_pct);
+
+  const pay_method_snapshot = String(contractOut?.pay_method_snapshot || 'PAYE').toUpperCase();
+
+  const erni_applies =
+    (apply_erni_to === 'ALL') ||
+    (apply_erni_to === 'PAYE_ONLY' && pay_method_snapshot === 'PAYE');
+
+  const payCost = (payEx) => (erni_applies ? round2(Number(payEx || 0) * erni_multiplier) : round2(Number(payEx || 0)));
+
+  // Compute per-bucket margin preview from rates_json
+  const R = (contractOut?.rates_json && typeof contractOut.rates_json === 'object') ? contractOut.rates_json : {};
+  const buckets = ['day','night','sat','sun','bh'];
+
+  const bucket_margins = {};
+  for (const b of buckets) {
+    const payRate =
+      (pay_method_snapshot === 'PAYE')
+        ? toNum(R[`paye_${b}`])
+        : toNum(R[`umb_${b}`]);
+
+    const chargeRate = toNum(R[`charge_${b}`]);
+
+    if (payRate == null || chargeRate == null) {
+      bucket_margins[b] = null;
+      continue;
+    }
+
+    const payCostRate = (erni_applies ? (payRate * erni_multiplier) : payRate);
+    bucket_margins[b] = round2(chargeRate - payCostRate);
+  }
+
+  // Mileage margin preview (per mile) if present
+  const mileage_charge_rate = toNum(contractOut?.mileage_charge_rate);
+  const mileage_pay_rate    = toNum(contractOut?.mileage_pay_rate);
+  const mileage_margin_per_unit =
+    (mileage_charge_rate == null || mileage_pay_rate == null)
+      ? null
+      : round2(mileage_charge_rate - (erni_applies ? (mileage_pay_rate * erni_multiplier) : mileage_pay_rate));
+
+  // Additional rates margin preview (per unit)
+  let additional_rates_margin_preview = [];
+  try {
+    const arr = Array.isArray(contractOut?.additional_rates_json) ? contractOut.additional_rates_json : [];
+    additional_rates_margin_preview = (arr || []).map(x => {
+      const code = String(x?.code || '').toUpperCase();
+      const pay_rate = toNum(x?.pay_rate);
+      const charge_rate = toNum(x?.charge_rate);
+      const margin_per_unit =
+        (pay_rate == null || charge_rate == null)
+          ? null
+          : round2(charge_rate - (erni_applies ? (pay_rate * erni_multiplier) : pay_rate));
+      return {
+        code: code || null,
+        bucket_name: x?.bucket_name ?? null,
+        unit_name: x?.unit_name ?? null,
+        frequency: x?.frequency ?? null,
+        pay_rate: (pay_rate == null ? null : round2(pay_rate)),
+        charge_rate: (charge_rate == null ? null : round2(charge_rate)),
+        margin_per_unit
+      };
+    });
+  } catch {
+    additional_rates_margin_preview = [];
+  }
+
+  const finance = {
+    anchor_ymd,
+    anchor_kind,
+
+    finance_window,
+
+    vat_rate_pct: round2(vat_rate_pct),
+    vat_multiplier,
+
+    apply_erni_to,
+    erni_pct: round2(erni_pct),
+    erni_multiplier,
+    erni_applies
+  };
+
+  const margins = {
+    pay_method_snapshot,
+    bucket_margins,
+    mileage_margin_per_unit,
+    additional_rates_margin_preview
+  };
+
   const warnings = await computePayMethodWarnings(env, contractOut);
 
   return withCORS(
@@ -4465,9 +4628,83 @@ async function handleContractsCreate(env, req) {
       contract: contractOut,
       counts,
       weeks: weeks || [],
-      warnings
+      warnings,
+      finance,
+      margins
     })
   );
+}
+
+async function handleContractsFinanceGlobals(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const toLondonYmd = (dt) => {
+    try {
+      const d = (dt instanceof Date) ? dt : new Date(dt);
+      if (!d || Number.isNaN(d.getTime())) return null;
+
+      const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/London',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).formatToParts(d);
+
+      const y  = parts.find(p => p.type === 'year')?.value || '';
+      const m  = parts.find(p => p.type === 'month')?.value || '';
+      const dd = parts.find(p => p.type === 'day')?.value || '';
+      if (!y || !m || !dd) return null;
+
+      return `${y}-${m}-${dd}`;
+    } catch {
+      return null;
+    }
+  };
+
+  const pctToMultiplier = (pctMaybe) => {
+    let p = Number(pctMaybe);
+    if (!Number.isFinite(p) || p <= 0) return 1;
+    if (p > 1) p = p / 100; // support 15 vs 0.15
+    const m = 1 + p;
+    return (Number.isFinite(m) && m > 0) ? m : 1;
+  };
+
+  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+  // For create: anchor is always TODAY (London)
+  const anchor_ymd  = toLondonYmd(new Date()) || null;
+  const anchor_kind = 'TODAY';
+
+  let finance_window = null;
+  try {
+    const fwRows = await sbRpc(env, 'settings_finance_pick', { p_date: anchor_ymd || null });
+    const fw = Array.isArray(fwRows) ? fwRows[0] : fwRows;
+    finance_window = (fw && typeof fw === 'object') ? fw : null;
+  } catch (e) {
+    try { console.warn('[CONTRACTS][FINANCE_GLOBALS] settings_finance_pick failed', { anchor_ymd, err: String(e?.message || e) }); } catch {}
+    finance_window = null;
+  }
+
+  const apply_erni_to = String(finance_window?.apply_erni_to || 'PAYE_ONLY').toUpperCase();
+  const erni_pct      = (finance_window?.erni_pct ?? 0);
+  const erni_multiplier = pctToMultiplier(erni_pct);
+
+  const vat_rate_pct  = (finance_window?.vat_rate_pct ?? 0);
+  const vat_multiplier = pctToMultiplier(vat_rate_pct);
+
+  return withCORS(env, req, ok({
+    finance: {
+      anchor_ymd,
+      anchor_kind,
+      finance_window,
+      vat_rate_pct: round2(vat_rate_pct),
+      vat_multiplier,
+      apply_erni_to,
+      erni_pct: round2(erni_pct),
+      erni_multiplier
+    }
+  }));
 }
 
 async function handleContractsUpdate(env, req, contractId) {
@@ -62310,7 +62547,8 @@ if (req.method === 'GET' && p === '/api/healthroster/autoprocess/clients') {
       // Contracts
       if (req.method === 'POST' && p === '/api/contracts') return handleContractsCreate(env, req);
       if (req.method === 'GET'  && p === '/api/contracts') return handleContractsList(env, req);
-      
+      if (req.method === 'GET' && p === '/api/contracts/finance-globals') return handleContractsFinanceGlobals(env, req);
+
       {
         const m = matchPath(p, '/api/contracts/:id/duplicate');
         if (m && req.method === 'POST') {
