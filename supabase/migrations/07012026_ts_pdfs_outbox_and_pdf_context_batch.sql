@@ -1,3 +1,196 @@
+-- ============================================================
+-- TS PDF Outbox (ELECTRONIC timesheets) — DB objects
+-- ============================================================
+
+-- Ensure gen_random_uuid() exists
+create extension if not exists pgcrypto;
+
+-- 1) Enum (idempotent)
+do $$
+begin
+  if not exists (select 1 from pg_type where typname = 'ts_pdf_reason_enum') then
+    create type public.ts_pdf_reason_enum as enum (
+      'READY_FOR_INVOICE',
+      'FORCE_REGEN'
+    );
+  end if;
+end $$;
+
+
+-- 2) Table
+create table if not exists public.ts_pdfs_outbox (
+  id uuid primary key default gen_random_uuid(),
+
+  timesheet_id uuid not null references public.timesheets(timesheet_id) on delete cascade,
+  reason public.ts_pdf_reason_enum not null,
+
+  attempt_count int not null default 0,
+  next_attempt_at timestamptz null,
+  last_error text null,
+
+  prefer_generated boolean not null default false,
+  force_regen boolean not null default false,
+
+  created_at timestamptz not null default now()
+);
+
+-- 3) Indexes
+create unique index if not exists uq_ts_pdfs_outbox_timesheet_reason
+  on public.ts_pdfs_outbox(timesheet_id, reason);
+
+create index if not exists idx_ts_pdfs_outbox_due
+  on public.ts_pdfs_outbox(next_attempt_at, created_at);
+
+-- ============================================================
+-- TS PDF Outbox RPCs (enqueue / dequeue / ack success / ack fail)
+-- ============================================================
+
+-- ------------------------------------------------------------
+-- Enqueue ELECTRONIC timesheets that are READY_FOR_INVOICE and
+-- have no manual scanned PDF (manual/QR evidence path)
+-- ------------------------------------------------------------
+create or replace function public.tspdf_enqueue_ready_for_invoice(p_limit int default 500)
+returns int
+language plpgsql
+as $$
+declare
+  v_ins int := 0;
+  v_lim int := greatest(1, least(coalesce(p_limit, 500), 2000));
+begin
+  with eligible as (
+  select t.timesheet_id
+  from public.timesheets t
+  join public.timesheets_financials tf
+    on tf.timesheet_id = t.timesheet_id
+   and tf.is_current = true
+  where t.is_current = true
+    and t.revoked_at is null
+    and t.submission_mode::text = 'ELECTRONIC'
+    and t.manual_pdf_r2_key is null
+    and t.r2_nurse_key is not null
+    and t.r2_auth_key  is not null
+    and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
+    and tf.locked_by_invoice_id is null
+  order by t.updated_at desc nulls last
+  limit v_lim
+),
+  ins as (
+    insert into public.ts_pdfs_outbox(timesheet_id, reason)
+    select e.timesheet_id, 'READY_FOR_INVOICE'::public.ts_pdf_reason_enum
+    from eligible e
+    on conflict (timesheet_id, reason) do nothing
+    returning 1
+  )
+  select count(*) into v_ins from ins;
+
+  return v_ins;
+end;
+$$;
+
+
+-- ------------------------------------------------------------
+-- Dequeue batch (lease rows deterministically, SKIP LOCKED)
+-- Returns leased rows to worker; increments attempt_count and
+-- schedules next_attempt_at for retry window.
+-- ------------------------------------------------------------
+create or replace function public.tspdf_dequeue_batch_ids(p_limit int default 10)
+returns table (
+  outbox_id uuid,
+  timesheet_id uuid,
+  reason public.ts_pdf_reason_enum,
+  attempt_count int,
+  next_attempt_at timestamptz,
+  created_at timestamptz,
+  prefer_generated boolean,
+  force_regen boolean
+)
+language plpgsql
+as $$
+declare
+  v_now timestamptz := now();
+  v_lim int := greatest(1, least(coalesce(p_limit, 10), 200));
+begin
+  return query
+  with picked as (
+    select o.id
+    from public.ts_pdfs_outbox o
+    where o.next_attempt_at is null or o.next_attempt_at <= v_now
+    order by o.next_attempt_at nulls first, o.created_at
+    limit v_lim
+    for update skip locked
+  )
+  update public.ts_pdfs_outbox o
+  set attempt_count   = o.attempt_count + 1,
+      next_attempt_at = v_now + interval '5 minutes'
+  where o.id in (select id from picked)
+  returning
+    o.id as outbox_id,
+    o.timesheet_id,
+    o.reason,
+    o.attempt_count,
+    o.next_attempt_at,
+    o.created_at,
+    o.prefer_generated,
+    o.force_regen;
+end;
+$$;
+
+
+-- ------------------------------------------------------------
+-- Bulk success ack: delete outbox rows
+-- ------------------------------------------------------------
+create or replace function public.tspdf_work_success_bulk(p_ids uuid[])
+returns int
+language plpgsql
+as $$
+declare
+  v_count int := 0;
+begin
+  if p_ids is null then return 0; end if;
+
+  delete from public.ts_pdfs_outbox o
+  where o.id = any(p_ids);
+
+  get diagnostics v_count = row_count;
+  return v_count;
+end;
+$$;
+
+
+-- ------------------------------------------------------------
+-- Bulk fail ack:
+-- p_rows is JSONB array of objects: [{ "outbox_id": "...", "error": "..." }, ...]
+-- ------------------------------------------------------------
+create or replace function public.tspdf_work_fail_bulk(p_rows jsonb)
+returns int
+language plpgsql
+as $$
+declare
+  v_now timestamptz := now();
+  v_count int := 0;
+  r record;
+begin
+  if p_rows is null then return 0; end if;
+
+  for r in
+    select
+      nullif(elem->>'outbox_id','')::uuid as outbox_id,
+      left(coalesce(elem->>'error',''), 4000) as err
+    from jsonb_array_elements(p_rows) as elem
+  loop
+    update public.ts_pdfs_outbox o
+    set last_error = r.err,
+        next_attempt_at = v_now + interval '30 minutes'
+    where o.id = r.outbox_id;
+
+    v_count := v_count + 1;
+  end loop;
+
+  return v_count;
+end;
+$$;
+
+
 create or replace function public.timesheet_pdf_load_context_batch(p_timesheet_ids uuid[])
 returns table (
   timesheet_id uuid,
