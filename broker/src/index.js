@@ -62798,9 +62798,10 @@ if (req.method === 'GET' && p === '/api/healthroster/autoprocess/clients') {
         if (m && req.method === 'POST')                                      return handleNhspShiftDefer(env, req, m.id);
       }
 
-if (req.method === 'POST' && pathname === '/api/tspdf/queue/drain') {
-  return handleTsPdfDrain(env, req);
+if (req.method === 'POST' && p === '/api/tspdf/queue/drain') {
+  return withCORS(env, req, await handleTsPdfDrain(env, req));
 }
+
 
       // Remittances
       if (req.method === 'POST' && p === '/api/remittances/email-for-candidate') {
@@ -63283,3 +63284,4 @@ if (req.method === 'POST' && pathname === '/api/tspdf/queue/drain') {
     }
   })());
 }
+};
