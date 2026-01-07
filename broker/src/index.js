@@ -1856,8 +1856,253 @@ function printableShortRef(s) {
 }
 
 // Render a single timesheet to PDF, save to R2 (idempotent), return the R2 key.
-// Render a single timesheet to PDF, save to R2 (idempotent), return the R2 key.
-async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
+
+// ─────────────────────────────────────────────────────────────
+// TS PDF outbox RPC helpers
+// ─────────────────────────────────────────────────────────────
+
+function _rows(v) {
+  if (Array.isArray(v)) return v;
+  if (v && Array.isArray(v.rows)) return v.rows;
+  return [];
+}
+
+async function rpcTspdfEnqueueReadyForInvoice(env, { limit = 500 } = {}) {
+  // returns int (count inserted) via RPC result shape
+  return await sbRpc(env, "tspdf_enqueue_ready_for_invoice", { p_limit: limit });
+}
+
+async function rpcTspdfDequeueBatchIds(env, { limit = 10 } = {}) {
+  const res = await sbRpc(env, "tspdf_dequeue_batch_ids", { p_limit: limit });
+  return _rows(res);
+}
+
+async function rpcTimesheetPdfLoadContextBatch(env, { timesheetIds = [] } = {}) {
+  if (!Array.isArray(timesheetIds) || timesheetIds.length === 0) return [];
+  const res = await sbRpc(env, "timesheet_pdf_load_context_batch", { p_timesheet_ids: timesheetIds });
+  return _rows(res);
+}
+
+async function rpcTspdfWorkSuccessBulk(env, { outboxIds = [] } = {}) {
+  if (!Array.isArray(outboxIds) || outboxIds.length === 0) return 0;
+  return await sbRpc(env, "tspdf_work_success_bulk", { p_ids: outboxIds });
+}
+
+async function rpcTspdfWorkFailBulk(env, { fails = [] } = {}) {
+  if (!Array.isArray(fails) || fails.length === 0) return 0;
+  // p_rows expects JSONB array [{outbox_id, error}, ...]
+  return await sbRpc(env, "tspdf_work_fail_bulk", { p_rows: fails });
+}
+
+// ─────────────────────────────────────────────────────────────
+// TS PDF Outbox worker (single batch runner)
+// Aligns with SQL RPCs:
+// - tspdf_enqueue_ready_for_invoice(p_limit)
+// - tspdf_dequeue_batch_ids(p_limit)
+// - timesheet_pdf_load_context_batch(p_timesheet_ids)
+// - tspdf_work_success_bulk(p_ids)
+// - tspdf_work_fail_bulk(p_rows)
+// ─────────────────────────────────────────────────────────────
+async function runTsPdfWorkerOnce(env, { limit = 5, enqueueFirst = true, enqueueLimit = 500 } = {}) {
+  const report = {
+    enqueued: 0,
+    picked: 0,
+    reused: 0,
+    rendered: 0,
+    ok: 0,
+    failed: 0
+  };
+
+  // 0) Optional enqueue (cheap, SQL-side filtering)
+  if (enqueueFirst) {
+    try {
+      const enqRes = await rpcTspdfEnqueueReadyForInvoice(env, { limit: enqueueLimit });
+      report.enqueued =
+        (typeof enqRes === "number") ? enqRes :
+        (typeof enqRes?.data === "number") ? enqRes.data :
+        (typeof enqRes?.rows?.[0] === "number") ? enqRes.rows[0] :
+        (typeof enqRes?.rows?.[0]?.tspdf_enqueue_ready_for_invoice === "number") ? enqRes.rows[0].tspdf_enqueue_ready_for_invoice :
+        0;
+    } catch {
+      report.enqueued = 0;
+    }
+  }
+
+  // 1) Dequeue a batch
+  const leased = await rpcTspdfDequeueBatchIds(env, { limit });
+  report.picked = leased.length;
+  if (leased.length === 0) return report;
+
+  // 2) Batch load PDF render context
+  const timesheetIds = leased.map(r => String(r.timesheet_id)).filter(Boolean);
+  const ctxRows = await rpcTimesheetPdfLoadContextBatch(env, { timesheetIds });
+
+  // Map timesheet_id -> ctx row
+  const ctxByTsId = new Map();
+  for (const row of ctxRows) {
+    const id = String(row?.timesheet_id || "");
+    if (id) ctxByTsId.set(id, row);
+  }
+
+  // 2b) Cache agency logo bytes ONCE per invocation (avoid 1x R2 GET per timesheet)
+  const bucket = env.R2_BUCKET || env.R2;
+  let cachedLogoKeyRaw = null;
+  let cachedLogoBytesU8 = null;
+  let cachedLogoContentType = null;
+
+  try {
+    if (bucket?.get) {
+      const def0 = ctxRows?.[0]?.out_def ?? null;
+      let defObj = def0;
+      if (typeof defObj === "string") {
+        try { defObj = JSON.parse(defObj); } catch { defObj = null; }
+      }
+
+      const logoKeyRaw = defObj?.agency_logo ? String(defObj.agency_logo).trim() : null;
+      const logoKey = logoKeyRaw ? normalizeKey(logoKeyRaw) : null;
+
+      if (logoKey) {
+        const obj = await bucket.get(logoKey).catch(() => null);
+        if (obj) {
+          const bytesU8 = new Uint8Array(await new Response(obj.body).arrayBuffer());
+
+          // match your renderer’s safety cap
+          const MAX_LOGO_BYTES = 250_000;
+          if (bytesU8.length <= MAX_LOGO_BYTES) {
+            const ct = String(obj.httpMetadata?.contentType || "").toLowerCase();
+            cachedLogoKeyRaw = logoKeyRaw;
+            cachedLogoBytesU8 = bytesU8;
+
+            // content-type fallback from extension if metadata missing
+            cachedLogoContentType =
+              ct ||
+              (logoKey.toLowerCase().endsWith(".png") ? "image/png" :
+               logoKey.toLowerCase().endsWith(".jpg") || logoKey.toLowerCase().endsWith(".jpeg") ? "image/jpeg" :
+               "application/octet-stream");
+          }
+        }
+      }
+    }
+  } catch {
+    cachedLogoKeyRaw = null;
+    cachedLogoBytesU8 = null;
+    cachedLogoContentType = null;
+  }
+
+  const okOutboxIds = [];
+  const fails = [];
+
+  // 3) For each leased outbox row: reuse (DB-flag) or render
+  for (const job of leased) {
+    const outboxId = job?.outbox_id ? String(job.outbox_id) : null;
+    const tsId = job?.timesheet_id ? String(job.timesheet_id) : null;
+    const forceRegen = !!job?.force_regen;
+
+    if (!outboxId || !tsId) {
+      fails.push({ outbox_id: outboxId || null, error: "Missing outbox_id or timesheet_id" });
+      continue;
+    }
+
+    try {
+      const ctx = ctxByTsId.get(tsId) || null;
+      if (!ctx) throw new Error("Missing batch context for timesheet_id");
+
+      // ✅ Avoid per-timesheet R2 head(): trust DB flag on timesheets row
+      const alreadyGeneratedAt = ctx?.out_ts?.generated_pdf_at_utc || null;
+      if (!forceRegen && alreadyGeneratedAt) {
+        report.reused++;
+        okOutboxIds.push(outboxId);
+        continue;
+      }
+
+      const preload = {
+        ts: ctx.out_ts || null,
+        summary: ctx.out_summary || null,
+        contract: ctx.out_contract || null,
+        client: ctx.out_client || null,
+        candidate: ctx.out_candidate || null,
+        fin: ctx.out_fin || null,
+        def: ctx.out_def || null,
+
+        // cached logo (renderer can use these to avoid bucket.get per timesheet)
+        logo_key: cachedLogoKeyRaw,
+        logo_bytes_u8: cachedLogoBytesU8,
+        logo_content_type: cachedLogoContentType
+      };
+
+      await renderTimesheetPDFGeneratedAndSave(env, tsId, preload);
+
+      report.rendered++;
+      okOutboxIds.push(outboxId);
+    } catch (e) {
+      fails.push({
+        outbox_id: outboxId,
+        error: e?.message || String(e || "Unknown error")
+      });
+    }
+  }
+
+  // 4) Bulk ACKs
+  if (okOutboxIds.length > 0) {
+    try {
+      await rpcTspdfWorkSuccessBulk(env, { outboxIds: okOutboxIds });
+      report.ok += okOutboxIds.length;
+    } catch {
+      // If ack fails, treat as failure (rows will retry later due to next_attempt_at)
+      report.failed += okOutboxIds.length;
+    }
+  }
+
+  if (fails.length > 0) {
+    try {
+      await rpcTspdfWorkFailBulk(env, { fails });
+      report.failed += fails.length;
+    } catch {
+      // If fail-ack fails, rows will retry later due to next_attempt_at already set on dequeue
+      report.failed += fails.length;
+    }
+  }
+
+  return report;
+}
+
+
+
+
+// ─────────────────────────────────────────────────────────────
+// Admin endpoint: drain TS PDF outbox once (manual ops/testing)
+// POST /api/tspdf/queue/drain
+// Body: { "limit": 5, "enqueue_first": true, "enqueue_limit": 500 }
+// ─────────────────────────────────────────────────────────────
+async function handleTsPdfDrain(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+
+  const limit = Math.max(1, Math.min(50, Number(body?.limit ?? 5) || 5));
+  const enqueueFirst = (body?.enqueue_first === false) ? false : true;
+  const enqueueLimit = Math.max(1, Math.min(2000, Number(body?.enqueue_limit ?? 500) || 500));
+
+  const report = await runTsPdfWorkerOnce(env, {
+    limit,
+    enqueueFirst,
+    enqueueLimit
+  });
+
+  return withCORS(env, req, ok({
+    ...report,
+    limit,
+    enqueue_first: enqueueFirst,
+    enqueue_limit: enqueueLimit
+  }));
+}
+
+
+
+
+async function renderTimesheetPDFGeneratedAndSave(env, timesheetId, preload = null) {
   const bucket = env.R2_BUCKET || env.R2;
   if (!bucket?.get || !bucket?.put) throw new Error("Storage not configured");
 
@@ -2301,17 +2546,36 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
 
   try {
     // ---------- DB LOAD ----------
-    L("DB.LOAD.timesheets", {});
-    const { rows: tsRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=eq.${encodeURIComponent(timesheetId)}` +
-        `&is_current=eq.true` +
-        `&select=*` +
-        `&limit=1`
-    );
-    const ts = tsRows?.[0];
-    if (!ts) throw new Error("Timesheet not found");
+    // preload shape expected (optional):
+    // { ts, summary, contract, client, candidate, fin, def }
+  const P = (preload && typeof preload === "object") ? preload : null;
+const preloadMode = !!P;
+
+let ts = P?.ts || null;
+let summary = P?.summary || null;
+let contract = P?.contract || null;
+let client = P?.client || null;
+let cand = P?.candidate || null;
+let fin = P?.fin || null;
+let def = P?.def || null;
+
+
+   // 1) Timesheet row (CURRENT)
+if (!ts) {
+  if (preloadMode) throw new Error("Preload missing ts (queued mode must pass ts)");
+  L("DB.LOAD.timesheets", {});
+  const { rows: tsRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${encodeURIComponent(timesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=*` +
+      `&limit=1`
+  );
+  ts = tsRows?.[0];
+}
+if (!ts) throw new Error("Timesheet not found");
+
 
     const sheetScope = String(ts.sheet_scope || "").toUpperCase();
     const isDaily = (sheetScope === "DAILY");
@@ -2326,23 +2590,45 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
       has_qr_payload: !!ts.qr_payload_json
     });
 
-    L("DB.LOAD.contract", { contract_id: ts.contract_id || null });
-    const contract = ts.contract_id
-      ? await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${encodeURIComponent(ts.contract_id)}&select=*`)
-      : null;
+  // AFTER (only query v_timesheets_summary when needed)
+//
+// Rule:
+// - If we already have a contract_id on the timesheet AND we are only going to use contract-based data,
+//   we skip the view.
+// - We fetch the view when contract_id is missing (DAILY) OR when we need a fallback for any key fields.
+// Only DAILY (no contract) needs v_timesheets_summary.
+// Weekly should remain contract-driven and not touch the view here.
+const needsSummary = !summary && !ts.contract_id;
+if (needsSummary) {
+  if (preloadMode) {
+    throw new Error("Preload missing summary for DAILY timesheet (queued mode must pass out_summary)");
+  }
+  try {
+    L("DB.LOAD.v_timesheets_summary", { reason: "daily_no_contract" });
+    summary = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
+        `?timesheet_id=eq.${encodeURIComponent(ts.timesheet_id)}` +
+        `&select=timesheet_id,candidate_id,client_id,candidate_name,client_name,contract_id` +
+        `&limit=1`
+    );
+  } catch {
+    summary = null;
+  }
+}
 
-    L("DB.LOAD.client", { client_id: contract?.client_id || null });
-    const client = contract?.client_id
-      ? await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(contract.client_id)}&select=*`)
-      : null;
 
-    L("DB.LOAD.candidate", { candidate_id: contract?.candidate_id || null });
-    const cand = contract?.candidate_id
-      ? await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(contract.candidate_id)}&select=*`)
-      : null;
 
+
+
+
+ // 3) TSFIN row (optional, used for additional units + possible fallback data)
+if (!fin) {
+  if (preloadMode) {
+    fin = null; // queued mode must pass fin if it needs it
+  } else {
     L("DB.LOAD.tsfin", {});
-    const fin = await sbGetOne(
+    fin = await sbGetOne(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
         `?timesheet_id=eq.${encodeURIComponent(ts.timesheet_id)}` +
@@ -2350,24 +2636,74 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId) {
         `&select=*` +
         `&limit=1`
     ).catch(() => null);
+  }
+}
 
-   // settings_defaults (NON-FINANCE ONLY — do not select *)
-// We only need branding + PDF blocks + declarations for this PDF generator.
-L("DB.LOAD.settings_defaults", {});
-const def = await sbGetOne(
-  env,
-  `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=` +
-    [
-      "agency_name",
-      "agency_logo",
-      "timesheet_header_json",
-      "timesheet_footer_json",
-      "temporary_worker_declaration",
-      "client_declaration",
-      "temporary_worker_declaration_json",
-      "client_declaration_json"
-    ].join(",")
-).catch(() => null);
+
+  // 4) Contract (weekly may have it; daily normally not)
+const contractIdEff = ts.contract_id || summary?.contract_id || null;
+if (!contract && contractIdEff) {
+  if (preloadMode) {
+    contract = null; // queued mode must pass contract if required
+  } else {
+    L("DB.LOAD.contract", { contract_id: contractIdEff });
+    contract = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${encodeURIComponent(contractIdEff)}&select=*`
+    ).catch(() => null);
+  }
+}
+
+
+    // 5) Resolve effective candidate/client IDs (DAILY uses summary; WEEKLY uses contract but summary works too)
+    const effCandidateId = contract?.candidate_id || summary?.candidate_id || null;
+    const effClientId    = contract?.client_id    || summary?.client_id    || null;
+
+ if (!client && effClientId) {
+  if (preloadMode) {
+    client = null; // queued mode must pass client if required
+  } else {
+    L("DB.LOAD.client", { client_id: effClientId });
+    client = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(effClientId)}&select=*`
+    ).catch(() => null);
+  }
+}
+
+if (!cand && effCandidateId) {
+  if (preloadMode) {
+    cand = null; // queued mode must pass candidate if required
+  } else {
+    L("DB.LOAD.candidate", { candidate_id: effCandidateId });
+    cand = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(effCandidateId)}&select=*`
+    ).catch(() => null);
+  }
+}
+
+
+    // 6) settings_defaults (NON-FINANCE ONLY — do not select *)
+if (!def) {
+  if (preloadMode) {
+    throw new Error("Preload missing def (queued mode must pass out_def as def)");
+  }
+  L("DB.LOAD.settings_defaults", {});
+  def = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=` +
+      [
+        "agency_name",
+        "agency_logo",
+        "timesheet_header_json",
+        "timesheet_footer_json",
+        "temporary_worker_declaration_json",
+        "client_declaration_json"
+      ].join(",")
+  ).catch(() => null);
+} // ✅ CLOSE the if-block
+
 
 const agencyName = def?.agency_name ? String(def.agency_name) : "ARMS";
 const agencyLogoKey = def?.agency_logo ? String(def.agency_logo).trim() : null;
@@ -2375,14 +2711,47 @@ const agencyLogoKey = def?.agency_logo ? String(def.agency_logo).trim() : null;
 const headerJson = def?.timesheet_header_json ?? null;
 const footerJson = def?.timesheet_footer_json ?? null;
 
-// Declarations: TEXT + JSON fallback
-const tempDeclText = def?.temporary_worker_declaration ?? null;
-const clientDeclText = def?.client_declaration ?? null;
+// Declarations: TEXT + JSON fallback (TEXT cols don't exist in your DB)
+const tempDeclText = null;
+const clientDeclText = null;
 const tempDeclJson = def?.temporary_worker_declaration_json ?? null;
 const clientDeclJson = def?.client_declaration_json ?? null;
 
 const tempDeclSpec = buildDeclSpec("Temporary Worker Declaration", tempDeclText, tempDeclJson);
 const clientDeclSpec = buildDeclSpec("Client Declaration", clientDeclText, clientDeclJson);
+
+
+    // Candidate/client fallbacks for DAILY (no contract)
+    const hint = parseJsonMaybe(ts?.candidate_hint_text) || null;
+
+    let resolvedFirstName = safeStr(cand?.first_name || hint?.first_name || hint?.first || "").toUpperCase();
+    let resolvedSurname   = safeStr(cand?.last_name || cand?.surname || hint?.surname || hint?.last_name || hint?.last || "").toUpperCase();
+
+    // If still missing, try summary.candidate_name as "First Last"
+    if (!resolvedFirstName && !resolvedSurname) {
+      const cn = safeStr(summary?.candidate_name).trim();
+      if (cn) {
+        const parts = cn.split(/\s+/).filter(Boolean);
+        if (parts.length === 1) {
+          resolvedSurname = parts[0].toUpperCase();
+        } else if (parts.length >= 2) {
+          resolvedFirstName = parts.shift().toUpperCase();
+          resolvedSurname = parts.join(" ").toUpperCase();
+        }
+      }
+    }
+
+    const resolvedClientName =
+      safeStr(client?.name || summary?.client_name || ts?.hospital_norm || "").trim();
+
+const resolvedRole =
+  safeStr(contract?.role || ts?.job_title_norm || "").trim();
+
+const resolvedSiteWard =
+  safeStr(contract?.display_site || ts?.ward_norm || ts?.hospital_norm || "").trim();
+
+const resolvedBandText =
+  safeStr(contract?.band || ts?.band || "").trim();
 
 
     // ---------- SCHEDULE (weekly or synth daily) ----------
@@ -2520,13 +2889,12 @@ const clientDeclSpec = buildDeclSpec("Client Declaration", clientDeclText, clien
       tsLineTextOffset: 5.2,
       minLineH: 4.8,
 
-        // additional
+      // additional
       addlH: 22,
       addlGap: 3,
       blockGap: 3,
       addlHeaderH: 7.0,
       addlRowH: 4.8,
-
 
       // declarations + footer
       declH: 50,
@@ -2563,12 +2931,11 @@ const clientDeclSpec = buildDeclSpec("Client Declaration", clientDeclText, clien
       tsLineTextOffset: 4.8,
       minLineH: 3.8,
 
-          addlH: 18,
+      addlH: 18,
       addlGap: 2,
       blockGap: 2,
       addlHeaderH: 6.0,
       addlRowH: 4.0,
-
 
       declH: 34,
       declTitleSize: 8.2,
@@ -2604,12 +2971,11 @@ const clientDeclSpec = buildDeclSpec("Client Declaration", clientDeclText, clien
       tsLineTextOffset: 4.0,
       minLineH: 3.0,
 
-          addlH: 16,
+      addlH: 16,
       addlGap: 1,
       blockGap: 1,
       addlHeaderH: 5.5,
       addlRowH: 3.6,
-
 
       declH: 26,
       declTitleSize: 7.6,
@@ -2634,16 +3000,11 @@ const clientDeclSpec = buildDeclSpec("Client Declaration", clientDeclText, clien
         detailsTop + detailsH + LAY.yCursorGap +
         (headerLinesCount ? (headerLinesCount * LAY.headerLineH + LAY.yCursorAfterHeaderPad) : 0);
 
-  const reservedBottom =
-  // gap immediately after the table:
-  (hasAddl ? LAY.addlGap : LAY.blockGap) +
-  // optional addl block + gap after addl:
-  (hasAddl ? (LAY.addlH + LAY.addlGap) : 0) +
-  // declarations + gap before footer line:
-  (LAY.declH + LAY.blockGap) +
-  // footer reserve + bottom pad:
-  (14 + 8);
-
+      const reservedBottom =
+        (hasAddl ? LAY.addlGap : LAY.blockGap) +
+        (hasAddl ? (LAY.addlH + LAY.addlGap) : 0) +
+        (LAY.declH + LAY.blockGap) +
+        (14 + 8);
 
       const maxTableH = Math.max(60, (PAGE_H - M) - yCursor - reservedBottom);
       const bodyMaxH = Math.max(30, maxTableH - LAY.tsHeaderRowH - LAY.tsTotalRowH);
@@ -2678,44 +3039,56 @@ const clientDeclSpec = buildDeclSpec("Client Declaration", clientDeclText, clien
     const headerTop = M + LAY.headerTopPad;
     const logoBox = { x: contentX, y: headerTop, w: LAY.logoW, h: LAY.logoH };
 
-    // Draw logo (no border)
-    let logoDrawn = false;
-    if (agencyLogoKey) {
-      try {
-        const key = normalizeKey(agencyLogoKey);
-        const obj = await bucket.get(key);
-        if (obj) {
-          const bytes = new Uint8Array(await new Response(obj.body).arrayBuffer());
-          const ct = (obj.httpMetadata?.contentType || "").toLowerCase();
+  // Draw logo (no border) — prefer preload cache, fallback to R2
+if (agencyLogoKey) {
+  try {
+    const P = (preload && typeof preload === "object") ? preload : null;
 
-          const MAX_LOGO_BYTES = 250_000;
-          if (bytes.length <= MAX_LOGO_BYTES) {
-            const isPng = ct.includes("png") || key.toLowerCase().endsWith(".png");
-            const img = isPng ? await pdfDoc.embedPng(bytes) : await pdfDoc.embedJpg(bytes);
+    let bytesU8 = null;
+    let ct = "";
 
-            const pad = 0.8;
-            const maxW = logoBox.w - pad * 2;
-            const maxH = logoBox.h - pad * 2;
-            const scale = Math.min(maxW / img.width, maxH / img.height);
-
-            const w = img.width * scale;
-            const h = img.height * scale;
-            const x = logoBox.x + (logoBox.w - w) / 2;
-            const yImg = logoBox.y + (logoBox.h - h) / 2;
-
-            page.drawImage(img, {
-              x: mmToPt(x),
-              y: mmToPt(yFromTop(yImg + h)),
-              width: mmToPt(w),
-              height: mmToPt(h)
-            });
-            logoDrawn = true;
-          }
-        }
-      } catch (e) {
-        L("LOGO.FAIL", { err: e?.message || String(e) });
+    // 1) Use cached logo bytes (from queue worker) if present
+    if (P?.logo_bytes_u8 && (P.logo_bytes_u8 instanceof Uint8Array) && P.logo_bytes_u8.length > 0) {
+      bytesU8 = P.logo_bytes_u8;
+      ct = String(P.logo_content_type || "").toLowerCase();
+    } else {
+      // 2) Fallback: fetch from R2 as before
+      const key = normalizeKey(agencyLogoKey);
+      const obj = await bucket.get(key);
+      if (obj) {
+        bytesU8 = new Uint8Array(await new Response(obj.body).arrayBuffer());
+        ct = String(obj.httpMetadata?.contentType || "").toLowerCase();
       }
     }
+
+    const MAX_LOGO_BYTES = 250_000;
+    if (bytesU8 && bytesU8.length <= MAX_LOGO_BYTES) {
+      const keyForExt = normalizeKey(agencyLogoKey);
+      const isPng = ct.includes("png") || keyForExt.toLowerCase().endsWith(".png");
+      const img = isPng ? await pdfDoc.embedPng(bytesU8) : await pdfDoc.embedJpg(bytesU8);
+
+      const pad = 0.8;
+      const maxW = logoBox.w - pad * 2;
+      const maxH = logoBox.h - pad * 2;
+      const scale = Math.min(maxW / img.width, maxH / img.height);
+
+      const w = img.width * scale;
+      const h = img.height * scale;
+      const x = logoBox.x + (logoBox.w - w) / 2;
+      const yImg = logoBox.y + (logoBox.h - h) / 2;
+
+      page.drawImage(img, {
+        x: mmToPt(x),
+        y: mmToPt(yFromTop(yImg + h)),
+        width: mmToPt(w),
+        height: mmToPt(h)
+      });
+    }
+  } catch (e) {
+    L("LOGO.FAIL", { err: e?.message || String(e) });
+  }
+}
+
 
     // Header right line: TIMESHEET | Time Sheet No | Week ending  (single line, top-right)
     const tsNo = timesheetNumber8(ts.timesheet_id);
@@ -2723,12 +3096,9 @@ const clientDeclSpec = buildDeclSpec("Client Declaration", clientDeclText, clien
     const headerRightText = `TIMESHEET   Time Sheet No. ${tsNo}   ${weLabel}: ${fmtDmy(weekEndingYmd)}`;
 
     // Always show agency name next to the logo (keeps branding even when logo is present)
-const brandX = logoBox.x + logoBox.w + 3;
-const brandMaxW = Math.max(60, (contentW * 0.45) - (logoBox.w + 3));
-drawTextFit(page, fontBold, agencyName, brandX, headerTop + 2.0, brandMaxW, LAY.headerRowSize, 8.0);
-
-// If the logo wasn't drawn, the name still renders in the same place (so no separate fallback block needed)
-
+    const brandX = logoBox.x + logoBox.w + 3;
+    const brandMaxW = Math.max(60, (contentW * 0.45) - (logoBox.w + 3));
+    drawTextFit(page, fontBold, agencyName, brandX, headerTop + 2.0, brandMaxW, LAY.headerRowSize, 8.0);
 
     // Right aligned header
     drawRightText(page, fontBold, headerRightText, contentRight, headerTop + 3.2, LAY.headerRowSize);
@@ -2749,17 +3119,16 @@ drawTextFit(page, fontBold, agencyName, brandX, headerTop + 2.0, brandMaxW, LAY.
     drawRect(page, clientBox.x, clientBox.y, clientBox.w, clientBox.h, { lineWidth: 0.45 });
 
     // Nurse/Client titles
-   drawCenteredText(page, fontBold, "Temporary Worker Details", nurseBox.x, nurseBox.y + 4.2, nurseBox.w, LAY.detailsTitleSize);
-
+    drawCenteredText(page, fontBold, "Temporary Worker Details", nurseBox.x, nurseBox.y + 4.2, nurseBox.w, LAY.detailsTitleSize);
     drawCenteredText(page, fontBold, "Client Details", clientBox.x, clientBox.y + 4.2, clientBox.w, LAY.detailsTitleSize);
 
-    const surname = safeStr(cand?.last_name || cand?.surname || "").toUpperCase();
-    const firstName = safeStr(cand?.first_name || "").toUpperCase();
-    const role = safeStr(contract?.role || "");
+    const surname = safeStr(resolvedSurname).toUpperCase();
+    const firstName = safeStr(resolvedFirstName).toUpperCase();
+    const role = safeStr(resolvedRole);
 
-    const clientName = safeStr(client?.name || "");
-    const siteWard = safeStr(contract?.display_site || ts?.ward_norm || "");
-    const bandText = safeStr(contract?.band || "");
+    const clientName = safeStr(resolvedClientName);
+    const siteWard = safeStr(resolvedSiteWard);
+    const bandText = safeStr(resolvedBandText);
 
     // Field Y positions inside Nurse/Client boxes (scaled to box height)
     const line1Y = nurseBox.y + (detailsH * 0.44);
@@ -2842,21 +3211,16 @@ drawTextFit(page, fontBold, agencyName, brandX, headerTop + 2.0, brandMaxW, LAY.
     }
     const totalPaidHours = Math.round((totalPaidMinutes / 60) * 100) / 100;
 
-   // Reserve bottom blocks (decl + footer + optional addl)
-const DECL_H = LAY.declH;
-const FOOT_H = 14;
-const ADDL_H = (additionalRows.length > 0) ? LAY.addlH : 0;
+    // Reserve bottom blocks (decl + footer + optional addl)
+    const DECL_H = LAY.declH;
+    const FOOT_H = 14;
+    const ADDL_H = (additionalRows.length > 0) ? LAY.addlH : 0;
 
-const reservedBottom =
-  // gap immediately after the table:
-  (additionalRows.length > 0 ? LAY.addlGap : LAY.blockGap) +
-  // optional addl block + gap after addl (before declarations):
-  (ADDL_H ? (ADDL_H + LAY.addlGap) : 0) +
-  // declarations + gap before footer line:
-  (DECL_H + LAY.blockGap) +
-  // footer reserve + bottom pad:
-  (FOOT_H + 8);
-
+    const reservedBottom =
+      (additionalRows.length > 0 ? LAY.addlGap : LAY.blockGap) +
+      (ADDL_H ? (ADDL_H + LAY.addlGap) : 0) +
+      (DECL_H + LAY.blockGap) +
+      (FOOT_H + 8);
 
     const tableTop = yCursor;
 
@@ -2867,21 +3231,19 @@ const reservedBottom =
     const visibleLinesPerDay = realCounts.slice();
     const totalLinesVisible = totalLinesWanted;
 
-   const idealLineH = (totalLinesVisible > 0) ? (bodyMaxH / totalLinesVisible) : bodyMaxH;
+    const idealLineH = (totalLinesVisible > 0) ? (bodyMaxH / totalLinesVisible) : bodyMaxH;
 
-// Never force lineH above idealLineH (that’s what can push declarations off-page).
-// Let it get as small as needed to preserve the layout blocks below.
-const lineH = Math.min(10.5, idealLineH);
+    // Never force lineH above idealLineH (that’s what can push declarations off-page).
+    // Let it get as small as needed to preserve the layout blocks below.
+    const lineH = Math.min(10.5, idealLineH);
 
-
-   // Dynamic schedule text baseline offset so lines NEVER collide with text
-const textPad = Math.max(0.12, lineH * 0.10); // keep baseline safely inside the row
-const textOffset = Math.min(
-  LAY.tsLineTextOffset,
-  lineH * 0.72,
-  Math.max(0, lineH - textPad)               // hard cap: cannot exceed row height
-);
-
+    // Dynamic schedule text baseline offset so lines NEVER collide with text
+    const textPad = Math.max(0.12, lineH * 0.10); // keep baseline safely inside the row
+    const textOffset = Math.min(
+      LAY.tsLineTextOffset,
+      lineH * 0.72,
+      Math.max(0, lineH - textPad)
+    );
 
     // Dynamic font scaling for extreme compression
     const bodyFontSize = (lineH < 2.6) ? Math.min(LAY.tsBodyFontSize, 6.0) : LAY.tsBodyFontSize;
@@ -2945,15 +3307,13 @@ const textOffset = Math.min(
       drawText(page, font, fmtDmy(ymd),        colX[1] + 1.2, yRow + textOffset, bodyFontSize);
 
       // INTERNAL separators (Shift Start -> Booking Ref) that NEVER cross text:
-      // draw near the bottom of each shift row, not at a fixed text offset.
       if (realSegs.length > 1) {
         const xSep1 = colX[2];
         const xSep2 = colX[9] + colW[9];
-        const sepPad = Math.max(0.10, Math.min(0.35, lineH * 0.10)); // keep away from text
+        const sepPad = Math.max(0.10, Math.min(0.35, lineH * 0.10));
         const sepLw = (lineH < 3.0) ? 0.15 : 0.22;
 
         for (let si = 1; si < realSegs.length; si++) {
-          // boundary between rows: yRow + si*lineH; shift slightly upward inside the previous row
           const ySep = yRow + (si * lineH) - sepPad;
           drawLine(page, xSep1, ySep, xSep2, ySep, sepLw);
         }
@@ -2997,74 +3357,60 @@ const textOffset = Math.min(
     const totalTxt = `${totalPaidHours.toFixed(2)}  (${minutesToWordsUpper(totalPaidMinutes)})`;
     drawText(page, fontBold, totalTxt, hoursBox.x + hoursBox.w - 88, totalTextY, Math.min(8.5, bodyFontSize + 0.5), { maxWidth: 86 });
 
-   // ---------- Additional rates / units ----------
-let yAfterTable =
-  hoursBox.y + hoursBox.h + (additionalRows.length > 0 ? LAY.addlGap : LAY.blockGap);
+    // ---------- Additional rates / units ----------
+    let yAfterTable =
+      hoursBox.y + hoursBox.h + (additionalRows.length > 0 ? LAY.addlGap : LAY.blockGap);
 
+    if (additionalRows.length > 0) {
+      const addlBox = { x: contentX, y: yAfterTable, w: contentW, h: ADDL_H };
+      drawRect(page, addlBox.x, addlBox.y, addlBox.w, addlBox.h, { lineWidth: 0.45 });
 
-if (additionalRows.length > 0) {
-  const addlBox = { x: contentX, y: yAfterTable, w: contentW, h: ADDL_H };
-  drawRect(page, addlBox.x, addlBox.y, addlBox.w, addlBox.h, { lineWidth: 0.45 });
+      // Title gets its own line ABOVE the column headers (guaranteed separation)
+      const addlTitleY = addlBox.y + Math.min(2.8, LAY.addlHeaderH * 0.45);
+      const addlColsY  = addlBox.y + (LAY.addlHeaderH - 1.4);
 
-// Title gets its own line ABOVE the column headers (guaranteed separation)
-const addlTitleY = addlBox.y + Math.min(2.8, LAY.addlHeaderH * 0.45);
-const addlColsY  = addlBox.y + (LAY.addlHeaderH - 1.4);
-
-
-
-drawText(page, fontBold, "Additional rates / units",
-  addlBox.x + 2,
-  addlTitleY,
-  Math.min(8.2, bodyFontSize + 0.5)
-);
-
+      drawText(page, fontBold, "Additional rates / units",
+        addlBox.x + 2,
+        addlTitleY,
+        Math.min(8.2, bodyFontSize + 0.5)
+      );
 
       const aHeaderY = addlBox.y + LAY.addlHeaderH;
       drawLine(page, addlBox.x, aHeaderY, addlBox.x + addlBox.w, aHeaderY, 0.35);
 
-  const aCols = ["Rate Type", "Date", "Quantity", "Unit"];
-const aW = [70, 28, 22, 0];
-const aFixed = aW.slice(0, -1).reduce((a, b) => a + b, 0);
-aW[aW.length - 1] = Math.max(30, addlBox.w - aFixed);
+      const aCols = ["Rate Type", "Date", "Quantity", "Unit"];
+      const aW = [70, 28, 22, 0];
+      const aFixed = aW.slice(0, -1).reduce((a, b) => a + b, 0);
+      aW[aW.length - 1] = Math.max(30, addlBox.w - aFixed);
 
+      // Divider under the title row (so title is "full width")
+      const addlTitleDividerY = addlBox.y + Math.min(3.4, LAY.addlHeaderH * 0.55);
+      drawLine(page, addlBox.x, addlTitleDividerY, addlBox.x + addlBox.w, addlTitleDividerY, 0.25);
 
-
- // Divider under the title row (so title is "full width")
-const addlTitleDividerY = addlBox.y + Math.min(3.4, LAY.addlHeaderH * 0.55);
-drawLine(page, addlBox.x, addlTitleDividerY, addlBox.x + addlBox.w, addlTitleDividerY, 0.25);
-
-let ax = addlBox.x;
-for (let i = 0; i < aW.length; i++) {
-  if (i > 0) drawLine(page, ax, addlTitleDividerY, ax, addlBox.y + addlBox.h, 0.3);
-  drawText(page, fontBold, aCols[i], ax + 1.2,
-    addlColsY,
-    Math.min(7.2, headerFontSizeTable)
-  );
-  ax += aW[i];
-}
-
-
+      let ax = addlBox.x;
+      for (let i = 0; i < aW.length; i++) {
+        if (i > 0) drawLine(page, ax, addlTitleDividerY, ax, addlBox.y + addlBox.h, 0.3);
+        drawText(page, fontBold, aCols[i], ax + 1.2,
+          addlColsY,
+          Math.min(7.2, headerFontSizeTable)
+        );
+        ax += aW[i];
+      }
 
       // No (+N more): show as many as fit silently
       const maxRows = Math.max(0, Math.floor((addlBox.h - LAY.addlHeaderH) / LAY.addlRowH));
       const rowsToShow = additionalRows.slice(0, maxRows);
 
       let ry = aHeaderY + Math.min(3.8, LAY.addlRowH - 0.2);
-  for (const r of rowsToShow) {
-  // Rate Type (bucket)
-  drawText(page, font, safeStr(r.bucket), addlBox.x + 1.2, ry, Math.min(bodyFontSize, 7.2), { maxWidth: aW[0] - 2.4 });
-  // Date
-  drawText(page, font, r.date ? fmtDmy(r.date) : "", addlBox.x + aW[0] + 1.2, ry, Math.min(bodyFontSize, 7.2), { maxWidth: aW[1] - 2.4 });
-  // Quantity
-  drawText(page, font, safeStr(r.qty), addlBox.x + aW[0] + aW[1] + 1.2, ry, Math.min(bodyFontSize, 7.2), { maxWidth: aW[2] - 2.4 });
-  // Unit
-  drawText(page, font, safeStr(r.unit), addlBox.x + aW[0] + aW[1] + aW[2] + 1.2, ry, Math.min(bodyFontSize, 7.2), { maxWidth: aW[3] - 2.4 });
-  ry += LAY.addlRowH;
-}
+      for (const r of rowsToShow) {
+        drawText(page, font, safeStr(r.bucket), addlBox.x + 1.2, ry, Math.min(bodyFontSize, 7.2), { maxWidth: aW[0] - 2.4 });
+        drawText(page, font, r.date ? fmtDmy(r.date) : "", addlBox.x + aW[0] + 1.2, ry, Math.min(bodyFontSize, 7.2), { maxWidth: aW[1] - 2.4 });
+        drawText(page, font, safeStr(r.qty), addlBox.x + aW[0] + aW[1] + 1.2, ry, Math.min(bodyFontSize, 7.2), { maxWidth: aW[2] - 2.4 });
+        drawText(page, font, safeStr(r.unit), addlBox.x + aW[0] + aW[1] + aW[2] + 1.2, ry, Math.min(bodyFontSize, 7.2), { maxWidth: aW[3] - 2.4 });
+        ry += LAY.addlRowH;
+      }
 
-
-
-    yAfterTable = addlBox.y + addlBox.h + LAY.addlGap;
+      yAfterTable = addlBox.y + addlBox.h + LAY.addlGap;
     }
 
     // ---------- Declarations strip ----------
@@ -3136,91 +3482,69 @@ for (let i = 0; i < aW.length; i++) {
     renderDecl(rightDecl, clientDeclSpec);
 
     // Signature lines (fixed inside each box)
-const sigY = leftDecl.y + leftDecl.h - 6.5;
-const sigLineW = leftDecl.w - 28;
-drawLine(page, leftDecl.x + 2, sigY, leftDecl.x + 2 + sigLineW, sigY, 0.35);
-drawText(page, font, "Signature", leftDecl.x + 2, sigY - 1.2, 7.0);
-drawLine(page, leftDecl.x + 2 + sigLineW + 4, sigY, leftDecl.x + leftDecl.w - 2, sigY, 0.35);
-drawText(page, font, "Date", leftDecl.x + 2 + sigLineW + 4, sigY - 1.2, 7.0);
+    const sigY = leftDecl.y + leftDecl.h - 6.5;
+    const sigLineW = leftDecl.w - 28;
+    drawLine(page, leftDecl.x + 2, sigY, leftDecl.x + 2 + sigLineW, sigY, 0.35);
+    drawText(page, font, "Signature", leftDecl.x + 2, sigY - 1.2, 7.0);
+    drawLine(page, leftDecl.x + 2 + sigLineW + 4, sigY, leftDecl.x + leftDecl.w - 2, sigY, 0.35);
+    drawText(page, font, "Date", leftDecl.x + 2 + sigLineW + 4, sigY - 1.2, 7.0);
 
-const sigY2 = rightDecl.y + rightDecl.h - 6.5;
-const sigLineW2 = rightDecl.w - 28;
-drawLine(page, rightDecl.x + 2, sigY2, rightDecl.x + 2 + sigLineW2, sigY2, 0.35);
-drawText(page, font, "Signature", rightDecl.x + 2, sigY2 - 1.2, 7.0);
-drawLine(page, rightDecl.x + 2 + sigLineW2 + 4, sigY2, rightDecl.x + rightDecl.w - 2, sigY2, 0.35);
-drawText(page, font, "Date", rightDecl.x + 2 + sigLineW2 + 4, sigY2 - 1.2, 7.0);
+    const sigY2 = rightDecl.y + rightDecl.h - 6.5;
+    const sigLineW2 = rightDecl.w - 28;
+    drawLine(page, rightDecl.x + 2, sigY2, rightDecl.x + 2 + sigLineW2, sigY2, 0.35);
+    drawText(page, font, "Signature", rightDecl.x + 2, sigY2 - 1.2, 7.0);
+    drawLine(page, rightDecl.x + 2 + sigLineW2 + 4, sigY2, rightDecl.x + rightDecl.w - 2, sigY2, 0.35);
+    drawText(page, font, "Date", rightDecl.x + 2 + sigLineW2 + 4, sigY2 - 1.2, 7.0);
 
-// ✅ NEW: render ELECTRONIC signatures + dates
-// - Signatures go into the reserved bottom area (between last declaration line and bottom border).
-// - Date text is fit into the narrow date lane (never spills outside).
-// - Signature aspect ratio is preserved by drawImageInBox (uniform scaling).
-try {
-  const submissionMode = String(ts.submission_mode || "").toUpperCase();
-  if (submissionMode === "ELECTRONIC") {
-    const authDate = fmtDmy(String(ts.authorised_at_server || "").slice(0, 10));
+    // ✅ render ELECTRONIC signatures + dates
+    try {
+      const submissionMode = String(ts.submission_mode || "").toUpperCase();
+      if (submissionMode === "ELECTRONIC") {
+        const authDate = fmtDmy(String(ts.authorised_at_server || "").slice(0, 10));
 
-    // --- Signature placement zone ---
-    // Your decl layout already reserves "declSigReserve" mm at the bottom for signatures/dates.
-    // We place the signature *inside that reserved zone*, as low as possible.
-    //
-    // Note: this may overlap slightly with the last declaration line if the body text ran long,
-    // which you said is acceptable.
-    const bottomPad = 1.2; // mm above the bottom border
-    const sigZoneTopLeft  = leftDecl.y + leftDecl.h - declBodyBottomReserve;   // top of reserved zone
-    const sigZoneTopRight = rightDecl.y + rightDecl.h - declBodyBottomReserve; // same height
-    const sigZoneBottomLeft  = leftDecl.y + leftDecl.h - bottomPad;
-    const sigZoneBottomRight = rightDecl.y + rightDecl.h - bottomPad;
+        const bottomPad = 1.2; // mm above the bottom border
+        const sigZoneBottomLeft  = leftDecl.y + leftDecl.h - bottomPad;
+        const sigZoneBottomRight = rightDecl.y + rightDecl.h - bottomPad;
 
-    // Signature height: use most of the reserved zone, but keep a little air so it’s readable
-    const sigMaxH = Math.max(6.0, (declBodyBottomReserve - bottomPad - 0.6)); // mm
-    const sigH = sigMaxH;
+        const sigMaxH = Math.max(6.0, (declBodyBottomReserve - bottomPad - 0.6)); // mm
+        const sigH = sigMaxH;
 
-    // Place signature so its bottom sits just above the bottom border pad.
-    const sigYTopLowLeft  = sigZoneBottomLeft  - sigH;
-    const sigYTopLowRight = sigZoneBottomRight - sigH;
+        const sigYTopLowLeft  = sigZoneBottomLeft  - sigH;
+        const sigYTopLowRight = sigZoneBottomRight - sigH;
 
-    // Signature lane (left part of each box): same width as the signature line
-    const nurseSigBox = {
-      x: leftDecl.x + 2,
-      y: sigYTopLowLeft,
-      w: sigLineW,
-      h: sigH
-    };
+        const nurseSigBox = {
+          x: leftDecl.x + 2,
+          y: sigYTopLowLeft,
+          w: sigLineW,
+          h: sigH
+        };
 
-    const clientSigBox = {
-      x: rightDecl.x + 2,
-      y: sigYTopLowRight,
-      w: sigLineW2,
-      h: sigH
-    };
+        const clientSigBox = {
+          x: rightDecl.x + 2,
+          y: sigYTopLowRight,
+          w: sigLineW2,
+          h: sigH
+        };
 
-    // Draw signature images (aspect ratio preserved by drawImageInBox)
-await drawSignatureKeyInBox(bucket, page, pdfDoc, ts.r2_nurse_key, nurseSigBox, PAGE_H);
-await drawSignatureKeyInBox(bucket, page, pdfDoc, ts.r2_auth_key, clientSigBox, PAGE_H);
+        await drawSignatureKeyInBox(bucket, page, pdfDoc, ts.r2_nurse_key, nurseSigBox, PAGE_H);
+        await drawSignatureKeyInBox(bucket, page, pdfDoc, ts.r2_auth_key, clientSigBox, PAGE_H);
 
+        if (authDate) {
+          const datePad = 0.6;
 
-    // --- Date placement: fit-to-width within the date lane ---
-    if (authDate) {
-      const datePad = 0.6;
+          const dateX1 = leftDecl.x + 2 + sigLineW + 4;
+          const dateW1 = (leftDecl.x + leftDecl.w - 2) - dateX1;
 
-      // Left date lane box
-      const dateX1 = leftDecl.x + 2 + sigLineW + 4;
-      const dateW1 = (leftDecl.x + leftDecl.w - 2) - dateX1;
+          const dateX2 = rightDecl.x + 2 + sigLineW2 + 4;
+          const dateW2 = (rightDecl.x + rightDecl.w - 2) - dateX2;
 
-      // Right date lane box
-      const dateX2 = rightDecl.x + 2 + sigLineW2 + 4;
-      const dateW2 = (rightDecl.x + rightDecl.w - 2) - dateX2;
-
-      // Fit the date text inside the lane, shrink if needed.
-      // Use a slightly smaller max size because the date lane is narrow.
-      drawTextFit(page, font, authDate, dateX1 + datePad, sigY - 1.2, Math.max(1, dateW1 - (datePad * 2)), 6.6, 4.8);
-      drawTextFit(page, font, authDate, dateX2 + datePad, sigY2 - 1.2, Math.max(1, dateW2 - (datePad * 2)), 6.6, 4.8);
+          drawTextFit(page, font, authDate, dateX1 + datePad, sigY - 1.2, Math.max(1, dateW1 - (datePad * 2)), 6.6, 4.8);
+          drawTextFit(page, font, authDate, dateX2 + datePad, sigY2 - 1.2, Math.max(1, dateW2 - (datePad * 2)), 6.6, 4.8);
+        }
+      }
+    } catch (e) {
+      L("SIG.FAIL", { err: e?.message || String(e) });
     }
-  }
-} catch (e) {
-  L("SIG.FAIL", { err: e?.message || String(e) });
-}
-
 
     // ---------- Footer under declarations ----------
     const footerLines =
@@ -3236,10 +3560,8 @@ await drawSignatureKeyInBox(bucket, page, pdfDoc, ts.r2_auth_key, clientSigBox, 
       ? LAY.footerLineH
       : ((footerJson && Number(footerJson.line_height_mm)) ? Number(footerJson.line_height_mm) : 3.6);
 
- const footerTop = yAfterTable + DECL_H + LAY.blockGap;
-drawLine(page, contentX, footerTop, contentX + contentW, footerTop, 0.35);
-
-
+    const footerTop = yAfterTable + DECL_H + LAY.blockGap;
+    drawLine(page, contentX, footerTop, contentX + contentW, footerTop, 0.35);
 
     let fy = footerTop + 3.2;
     for (const raw of footerLines) {
@@ -3270,7 +3592,6 @@ drawLine(page, contentX, footerTop, contentX + contentW, footerTop, 0.35);
     throw e;
   }
 }
-
 
 
 async function renderTimesheetPDFAndSave(env, timesheetId) {
@@ -11432,7 +11753,6 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
   try {
     // ─────────────────────────────────────────────────────────────
     // 0) Load timesheet row (QR evidence + electronic signature evidence)
-    //    NOTE: extended select to include booking_id + signature fields + qr_last_sent_at_utc
     // ─────────────────────────────────────────────────────────────
     const ts = await sbGetOne(
       env,
@@ -11480,7 +11800,13 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
             'r2_auth_key',
             'auth_name',
             'auth_job_title',
-            'authorised_at_server'
+            'authorised_at_server',
+
+            // ✅ NEW: PDF generation flag (system-generated)
+            'generated_pdf_at_utc',
+
+            // ✅ NEW: used to decide whether to show generated PDF item
+            'submission_mode'
           ].join(',') +
         `&limit=1`
     );
@@ -11550,7 +11876,6 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
     try {
       current_hash = ts ? await computeCurrentHash() : null;
     } catch (e) {
-      // Non-fatal: if hashing fails, we just omit match flags
       current_hash = null;
       console.warn('[handleTimesheetEvidenceList] current hash compute failed (non-fatal)', {
         timesheet_id: currentTsId,
@@ -11597,10 +11922,7 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
       const out = { ...(ev || {}) };
       out.timesheet_id = currentTsId;
       out.system = false;
-
-      // ✅ Lock/paid means no delete from UI
       out.can_delete = !isLockedOrPaid;
-
       if (!out.uploaded_at_utc && out.created_at) out.uploaded_at_utc = out.created_at;
       return out;
     });
@@ -11653,11 +11975,6 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
     const systemEvidence = [];
 
     // 2A) QR system evidence
-    // ✅ Must return only one QR item:
-    // - Signed (if signedReceived + pdf key exists)
-    // - else Unsigned (if awaitingSignatureUpload)
-    //
-    // NOTE: we do NOT hide evidence based on hash mismatch; instead we include match flags in meta_json.
     const docsPdfKey = `docs-pdf/timesheets/ts_${currentTsId}.pdf`;
 
     if (signedReceived) {
@@ -11665,7 +11982,6 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
         ? String(ts.manual_pdf_r2_key).trim()
         : docsPdfKey;
 
-      // Only show signed if we have some key to view/download
       if (storageKey) {
         systemEvidence.push({
           id: `SYS:QR:SIGNED:${currentTsId}`,
@@ -11690,7 +12006,6 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
         ? String(ts.manual_pdf_r2_key).trim()
         : docsPdfKey;
 
-      // Prefer a meaningful timestamp:
       const issuedAt = ts?.qr_last_sent_at_utc || ts?.qr_generated_at || null;
 
       systemEvidence.push({
@@ -11713,7 +12028,6 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
     }
 
     // 2B) Electronic signatures system evidence (no new storage)
-    // Condition: any signature artefact exists or authorised timestamp exists
     const hasSig =
       !!(ts && (
         (ts.authorised_at_server) ||
@@ -11729,7 +12043,7 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
         timesheet_id: currentTsId,
         kind: 'ELECTRONIC_SIGNATURES',
         display_name: 'Electronic submission evidence',
-        storage_key: null, // signatures are fetched via /signatures/presign-get/batch
+        storage_key: null,
         created_at: sigAt,
         uploaded_at_utc: sigAt,
         system: true,
@@ -11751,14 +12065,12 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
           week_ending_date: ts?.week_ending_date || null,
           reference_number: ts?.reference_number || null,
 
-          // Shift detail fields (DAILY)
           worked_start_iso: ts?.worked_start_iso || null,
           worked_end_iso: ts?.worked_end_iso || null,
           break_start_iso: ts?.break_start_iso || null,
           break_end_iso: ts?.break_end_iso || null,
           break_minutes: (ts?.break_minutes != null ? ts.break_minutes : null),
 
-          // Schedule for WEEKLY (already loaded above)
           actual_schedule_json: (ts?.actual_schedule_json != null ? ts.actual_schedule_json : null)
         }
       });
@@ -11843,7 +12155,6 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
 
     const all = [...userEvidence, ...systemEvidence];
 
-    // Keep existing ordering: oldest -> newest
     const toTs = (x) => {
       const s = x && (x.uploaded_at_utc || x.created_at);
       if (!s) return 0;
@@ -11861,7 +12172,6 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
       }));
     }
 
-    // Legacy response (array)
     return withCORS(env, req, ok(all));
   } catch (e) {
     return withCORS(env, req, serverError(`Failed to list timesheet evidence: ${e?.message || e}`));
@@ -12078,7 +12388,7 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
   };
 
   try {
-    // ✅ NEW: Block evidence delete if invoiced/paid (match QR scan rule)
+    // ✅ Block evidence delete if invoiced/paid (match QR scan rule)
     try {
       const fin = await sbGetOne(
         env,
@@ -12107,7 +12417,7 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
     const ev = evRows?.[0] || null;
     if (!ev) return withCORS(env, req, notFound('Evidence not found for this timesheet'));
 
-    // Load minimal TS context for audit
+    // Load minimal TS context for audit + optional cleanup of pointers
     let tsMeta = null;
     try {
       const { rows: tsRows } = await sbFetch(
@@ -12115,7 +12425,7 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
         `${env.SUPABASE_URL}/rest/v1/timesheets` +
           `?timesheet_id=eq.${enc(currentTsId)}` +
           `&is_current=eq.true` +
-          `&select=timesheet_id,contract_id,week_ending_date,sheet_scope,submission_mode` +
+          `&select=timesheet_id,contract_id,week_ending_date,sheet_scope,submission_mode,manual_pdf_r2_key,manual_pdf_rotation_degrees,generated_pdf_at_utc` +
           `&limit=1`
       );
       tsMeta = tsRows?.[0] || null;
@@ -12124,7 +12434,7 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
     const storageKeyRaw = ev.storage_key || null;
     const storageKeyForR2 = storageKeyRaw ? String(storageKeyRaw).trim().replace(/^\/+/, '') : null;
 
-    // Best-effort delete from R2 (now actually runs)
+    // 1) Best-effort delete from R2 (this deletes the actual file object)
     try {
       if (storageKeyForR2) {
         await r2DeleteLocal(storageKeyForR2);
@@ -12136,7 +12446,7 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
       });
     }
 
-    // Delete DB row
+    // 2) Delete DB evidence row (timesheet_evidence)
     const delRes = await fetch(
       `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(evidenceId)}`,
       { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return-minimal' } }
@@ -12145,6 +12455,53 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
     if (!delRes.ok) {
       const t = await delRes.text().catch(() => '');
       return withCORS(env, req, serverError(`Failed to delete timesheet evidence: ${t}`));
+    }
+
+    // 3) Optional: also clear any timesheet pointer fields that reference the same key
+    //    (prevents the timesheet record pointing at a deleted object).
+    //    This is still a single REST call, not a loop.
+    try {
+      const patches = {};
+
+      const mk = tsMeta?.manual_pdf_r2_key ? String(tsMeta.manual_pdf_r2_key).replace(/^\/+/, '').trim() : '';
+      const sk = storageKeyForR2 ? String(storageKeyForR2).trim() : '';
+
+      // If the deleted file was also the manual scan pointer, clear it
+      if (mk && sk && mk === sk) {
+        patches.manual_pdf_r2_key = null;
+        patches.manual_pdf_rotation_degrees = 0;
+      }
+
+      // If the deleted file was the system-generated PDF key, clear the generated flag
+      const generatedKey = `docs-pdf/timesheets/ts_${currentTsId}.pdf`;
+      if (sk && sk === generatedKey) {
+        patches.generated_pdf_at_utc = null;
+      }
+
+      if (Object.keys(patches).length) {
+        const updRes = await fetch(
+          `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTsId)}&is_current=eq.true`,
+          {
+            method: 'PATCH',
+            headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+            body: JSON.stringify(patches)
+          }
+        );
+
+        if (!updRes.ok) {
+          const txt = await updRes.text().catch(() => '');
+          console.warn('[handleTimesheetEvidenceDelete] timesheets pointer cleanup failed (non-fatal)', {
+            timesheet_id: currentTsId,
+            patches,
+            err: txt
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('[handleTimesheetEvidenceDelete] pointer cleanup failed (non-fatal)', {
+        timesheet_id: currentTsId,
+        err: e?.message || String(e)
+      });
     }
 
     // Audit
@@ -12178,6 +12535,7 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
     return withCORS(env, req, serverError(`Failed to delete timesheet evidence: ${e?.message || e}`));
   }
 }
+
 async function handleTimesheetReplaceManualPdf(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -62440,6 +62798,9 @@ if (req.method === 'GET' && p === '/api/healthroster/autoprocess/clients') {
         if (m && req.method === 'POST')                                      return handleNhspShiftDefer(env, req, m.id);
       }
 
+if (req.method === 'POST' && pathname === '/api/tspdf/queue/drain') {
+  return handleTsPdfDrain(env, req);
+}
 
       // Remittances
       if (req.method === 'POST' && p === '/api/remittances/email-for-candidate') {
@@ -62870,39 +63231,55 @@ if (req.method === 'GET' && p === '/api/healthroster/autoprocess/clients') {
 
   },
   /// Cron handler for TSFIN queue processing + Auto-invoice + Email outbox drain
-  async scheduled(event, env, ctx) {
-    const maxBatches      = parseInt(env.TSFIN_MAX_BATCHES || '10', 10);
-    const batchSize       = parseInt(env.TSFIN_BATCH_SIZE  || '50', 10);
-    const emailBatchLimit = parseInt(env.EMAIL_DRAIN_LIMIT_DEFAULT || '10', 10);
+ async scheduled(event, env, ctx) {
+  const maxBatches      = parseInt(env.TSFIN_MAX_BATCHES || '10', 10);
+  const batchSize       = parseInt(env.TSFIN_BATCH_SIZE  || '50', 10);
+  const emailBatchLimit = parseInt(env.EMAIL_DRAIN_LIMIT_DEFAULT || '10', 10);
 
-    // Run tasks in sequence inside one waitUntil:
-    // 1) drain TSFIN queue (may promote snapshots to READY_FOR_INVOICE)
-    // 2) auto-invoice (create HOURS-only invoices for auto_invoice=true contracts and issue them)
-    // 3) drain email outbox (send queued emails)
-    ctx.waitUntil((async () => {
-      try {
-        for (let i = 0; i < maxBatches; i++) {
-          const res = await runTsfinWorkerOnce(env, { limit: batchSize });
-          if (!res || res.picked === 0) break;
-        }
-      } catch (e) {
-        console.warn('[scheduled] TSFIN worker failed:', e?.message || e);
-      }
+  // TS PDF worker controls (new)
+  const tsPdfMaxBatches = parseInt(env.TSPDF_MAX_BATCHES || '5', 10);
+  const tsPdfBatchSize  = parseInt(env.TSPDF_BATCH_SIZE  || '5', 10);
+  const tsPdfEnqLimit   = parseInt(env.TSPDF_ENQUEUE_LIMIT || '500', 10);
 
-      try {
-        await runAutoInvoiceCycle(env);
-      } catch (e) {
-        console.warn('[scheduled] Auto-invoice cycle failed:', e?.message || e);
+  // Run tasks in sequence inside one waitUntil:
+  // 1) drain TSFIN queue (may promote snapshots to READY_FOR_INVOICE)
+  // 2) drain TS PDF queue (generate system PDFs for ELECTRONIC timesheets)
+  // 3) auto-invoice (create HOURS-only invoices for auto_invoice=true contracts and issue them)
+  // 4) drain email outbox (send queued emails)
+  ctx.waitUntil((async () => {
+    try {
+      for (let i = 0; i < maxBatches; i++) {
+        const res = await runTsfinWorkerOnce(env, { limit: batchSize });
+        if (!res || res.picked === 0) break;
       }
+    } catch (e) {
+      console.warn('[scheduled] TSFIN worker failed:', e?.message || e);
+    }
 
-      try {
-        await drainEmailOutboxOnce(env, { limit: emailBatchLimit });
-      } catch (e) {
-        console.warn('[scheduled] Email drain failed:', e?.message || e);
+    // NEW: TS PDF worker drain (after TSFIN, before invoices)
+    try {
+      for (let i = 0; i < tsPdfMaxBatches; i++) {
+        const res = await runTsPdfWorkerOnce(env, {
+          limit: tsPdfBatchSize,
+          enqueueFirst: true,
+          enqueueLimit: tsPdfEnqLimit
+        });
+        if (!res || res.picked === 0) break;
       }
-    })());
-  }
+    } catch (e) {
+      console.warn('[scheduled] TS PDF worker failed:', e?.message || e);
+    }
+
+    try {
+      await runAutoInvoiceCycle(env);
+    } catch (e) {
+      console.warn('[scheduled] Auto-invoice cycle failed:', e?.message || e);
+    }
+
+    try {
+      await drainEmailOutboxOnce(env, { limit: emailBatchLimit });
+    } catch (e) {
+      console.warn('[scheduled] Email drain failed:', e?.message || e);
+    }
+  })());
 }
-
-
-
