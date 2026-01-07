@@ -3503,22 +3503,30 @@ const role      = safeStr(resolvedRole).trim().toUpperCase();
       if (submissionMode === "ELECTRONIC") {
         const authDate = fmtDmy(String(ts.authorised_at_server || "").slice(0, 10));
 
-      const sigMaxH = Math.max(6.0, (declBodyBottomReserve - 1.2 - 0.6)); // keep your existing sizing rule
-const sigH = sigMaxH;
-
-// Signature line Y (you already have sigY / sigY2 above)
+  const sigMaxH = Math.max(6.0, (declBodyBottomReserve - 1.2 - 0.6)); // keep your existing sizing rule
 const sigLiftMm = 0.6; // "few pixels" ≈ 0.6mm
 
-// Top of the reserved signature zone
+// Top of the reserved signature zone (so we never draw into declaration text)
 const sigReserveTopLeft  = leftDecl.y  + leftDecl.h  - declBodyBottomReserve;
 const sigReserveTopRight = rightDecl.y + rightDecl.h - declBodyBottomReserve;
 
-// Place signature so its BOTTOM sits slightly above the line
-const nurseSigTopY  = Math.max(sigReserveTopLeft,  (sigY  - sigLiftMm) - sigH);
-const clientSigTopY = Math.max(sigReserveTopRight, (sigY2 - sigLiftMm) - sigH);
+// We anchor the BOTTOM of the image to the signature LINE (minus lift)
+const nurseSigBottom  = sigY  - sigLiftMm;
+const clientSigBottom = sigY2 - sigLiftMm;
 
-const nurseSigBox = { x: leftDecl.x + 2,  y: nurseSigTopY,  w: sigLineW,  h: sigH };
-const clientSigBox = { x: rightDecl.x + 2, y: clientSigTopY, w: sigLineW2, h: sigH };
+// Height cannot exceed available space between reserve-top and the signature line
+const nurseAvailH  = Math.max(2.0, nurseSigBottom  - sigReserveTopLeft);
+const clientAvailH = Math.max(2.0, clientSigBottom - sigReserveTopRight);
+
+const nurseSigH  = Math.min(sigMaxH, nurseAvailH);
+const clientSigH = Math.min(sigMaxH, clientAvailH);
+
+// Top is always computed from bottom - height (so bottom stays on the signature line)
+const nurseSigTopY  = nurseSigBottom  - nurseSigH;
+const clientSigTopY = clientSigBottom - clientSigH;
+
+const nurseSigBox  = { x: leftDecl.x + 2,  y: nurseSigTopY,  w: sigLineW,  h: nurseSigH };
+const clientSigBox = { x: rightDecl.x + 2, y: clientSigTopY, w: sigLineW2, h: clientSigH };
 
 
         await drawSignatureKeyInBox(bucket, page, pdfDoc, ts.r2_nurse_key, nurseSigBox, PAGE_H);
