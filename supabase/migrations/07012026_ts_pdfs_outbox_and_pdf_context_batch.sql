@@ -57,7 +57,7 @@ declare
   v_ins int := 0;
   v_lim int := greatest(1, least(coalesce(p_limit, 500), 2000));
 begin
-  with eligible as (
+with eligible as (
   select t.timesheet_id
   from public.timesheets t
   join public.timesheets_financials tf
@@ -67,6 +67,7 @@ begin
     and t.revoked_at is null
     and t.submission_mode::text = 'ELECTRONIC'
     and t.manual_pdf_r2_key is null
+    and t.generated_pdf_at_utc is null          -- ✅ FIX: don't re-enqueue already generated PDFs
     and t.r2_nurse_key is not null
     and t.r2_auth_key  is not null
     and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
@@ -74,6 +75,7 @@ begin
   order by t.updated_at desc nulls last
   limit v_lim
 ),
+
   ins as (
     insert into public.ts_pdfs_outbox(timesheet_id, reason)
     select e.timesheet_id, 'READY_FOR_INVOICE'::public.ts_pdf_reason_enum
