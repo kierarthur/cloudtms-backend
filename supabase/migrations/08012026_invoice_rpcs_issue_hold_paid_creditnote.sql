@@ -15,6 +15,20 @@
 --   - invoice_week_start computed from week_ending_date - 6 days
 -- Safe re-run: does NOT insert duplicates (NOT EXISTS predicate).
 -- ------------------------------------------------------------
+-- ------------------------------------------------------------
+-- CloudTMS: invoice_enqueue_ready_for_invoice(p_limit int)
+-- Re-scoped: AUTO-ENQUEUE ONLY (cron-safe)
+--
+-- Enqueues BY_WEEK jobs ONLY when:
+--   - TSFIN snapshot is READY_FOR_INVOICE and unlocked
+--   - timesheet is current + not revoked
+--   - v_ts_invoice_precheck.precheck_status = 'OK' (authoritative, includes PDF gating)
+--   - client_settings.auto_invoice_default (effective on London "today") = TRUE
+--
+-- NOTE:
+--   - For clients where auto_invoice_default = FALSE, the frontend should INSERT
+--     invoice_jobs_outbox rows directly when the user approves invoicing.
+-- ------------------------------------------------------------
 create or replace function public.invoice_enqueue_ready_for_invoice(p_limit int default 500)
 returns int
 language plpgsql
@@ -25,7 +39,10 @@ declare
   v_ins int := 0;
   v_lim int := greatest(1, least(coalesce(p_limit, 500), 5000));
 begin
-  with eligible_ts as (
+  with anchor as (
+    select (now() at time zone 'Europe/London')::date as anchor_ymd
+  ),
+  eligible_ts as (
     select
       tf.client_id,
       (pc.week_ending_date::date - interval '6 days')::date as invoice_week_start
@@ -35,11 +52,28 @@ begin
      and t.is_current = true
     join public.v_ts_invoice_precheck pc
       on pc.timesheet_id = tf.timesheet_id
+
+    -- client_settings (effective row on London "today")
+    left join lateral (
+      select
+        cs0.auto_invoice_default
+      from public.client_settings cs0
+      cross join anchor a
+      where cs0.client_id = tf.client_id
+        and (cs0.effective_from <= a.anchor_ymd or cs0.effective_from is null)
+      order by cs0.effective_from desc nulls last
+      limit 1
+    ) cs on true
+
     where tf.is_current = true
       and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
       and tf.locked_by_invoice_id is null
       and t.revoked_at is null
       and upper(coalesce(pc.precheck_status,'')) = 'OK'
+
+      -- ✅ auto-enqueue gate (client-led)
+      and coalesce(cs.auto_invoice_default, false) = true
+
     order by t.updated_at desc nulls last
     limit v_lim
   ),
@@ -75,6 +109,359 @@ begin
 end;
 $$;
 
+
+-- ============================================================
+-- CloudTMS: invoice_enqueue_auto_invoice_ready(p_limit int)
+-- NEW (cron-safe auto enqueue)
+--
+-- Enqueues BY_WEEK jobs only for timesheets that are:
+--   - TSFIN is_current + READY_FOR_INVOICE + unlocked
+--   - timesheets is_current + not revoked
+--   - v_ts_invoice_precheck.precheck_status = 'OK' (authoritative, includes PDF gating)
+--   - Auto-invoice eligible:
+--       COALESCE(contracts.auto_invoice, client_settings.auto_invoice_default, false) = true
+--
+-- Idempotent: will not enqueue duplicates for same (client_id, invoice_week_start).
+-- ============================================================
+create or replace function public.invoice_enqueue_auto_invoice_ready(p_limit int default 500)
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_ins int := 0;
+  v_lim int := greatest(1, least(coalesce(p_limit, 500), 5000));
+begin
+  with anchor as (
+    select (now() at time zone 'Europe/London')::date as anchor_ymd
+  ),
+  eligible_ts as (
+    select
+      tf.client_id,
+      (pc.week_ending_date::date - interval '6 days')::date as invoice_week_start
+    from public.timesheets_financials tf
+    join public.timesheets t
+      on t.timesheet_id = tf.timesheet_id
+     and t.is_current = true
+    join public.v_ts_invoice_precheck pc
+      on pc.timesheet_id = tf.timesheet_id
+    left join public.contract_weeks cw
+      on cw.timesheet_id = tf.timesheet_id
+    left join public.contracts c
+      on c.id = coalesce(t.contract_id, cw.contract_id)
+
+    -- client_settings (effective row on London "today")
+    left join lateral (
+      select
+        cs0.auto_invoice_default
+      from public.client_settings cs0
+      cross join anchor a
+      where cs0.client_id = tf.client_id
+        and (cs0.effective_from <= a.anchor_ymd or cs0.effective_from is null)
+      order by cs0.effective_from desc nulls last
+      limit 1
+    ) cs on true
+
+    where tf.is_current = true
+      and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
+      and tf.locked_by_invoice_id is null
+      and t.revoked_at is null
+      and upper(coalesce(pc.precheck_status,'')) = 'OK'
+
+      -- ✅ auto-invoice eligibility
+      and coalesce(c.auto_invoice, cs.auto_invoice_default, false) = true
+
+    order by t.updated_at desc nulls last
+    limit v_lim
+  ),
+  grouped as (
+    select distinct
+      e.client_id,
+      e.invoice_week_start
+    from eligible_ts e
+    where e.client_id is not null
+      and e.invoice_week_start is not null
+  ),
+  ins as (
+    insert into public.invoice_jobs_outbox(kind, payload)
+    select
+      'BY_WEEK'::text as kind,
+      jsonb_build_object(
+        'client_id', g.client_id::text,
+        'invoice_week_start', g.invoice_week_start::text
+      ) as payload
+    from grouped g
+    where not exists (
+      select 1
+      from public.invoice_jobs_outbox o
+      where o.kind = 'BY_WEEK'
+        and (o.payload->>'client_id') = g.client_id::text
+        and (o.payload->>'invoice_week_start') = g.invoice_week_start::text
+    )
+    returning 1
+  )
+  select count(*) into v_ins from ins;
+
+  return v_ins;
+end;
+$$;
+
+
+-- ============================================================
+-- CloudTMS: invoice_outbox_enqueue_hours(p_timesheet_ids, p_actor_user_id, p_meta)
+-- NEW (manual/front-end enqueue HOURS)
+--
+-- Inserts a single HOURS job with payload.timesheet_ids = [uuid...]
+-- Optional p_meta (if JSON object) is merged into payload (top-level).
+-- Stores actor_user_id into payload for downstream use if desired.
+--
+-- Idempotent: uses payload.timesheet_ids_sig to avoid duplicates.
+-- Returns the outbox_id (existing or newly inserted).
+-- ============================================================
+create or replace function public.invoice_outbox_enqueue_hours(
+  p_timesheet_ids uuid[],
+  p_actor_user_id uuid,
+  p_meta jsonb default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_ids uuid[];
+  v_sig text;
+  v_payload jsonb;
+  v_existing uuid;
+  v_new uuid;
+begin
+  if p_timesheet_ids is null or coalesce(array_length(p_timesheet_ids, 1), 0) = 0 then
+    raise exception 'timesheet_ids[] required';
+  end if;
+
+  select array_agg(x order by x::text)
+  into v_ids
+  from (
+    select distinct unnest(p_timesheet_ids) as x
+  ) q
+  where q.x is not null;
+
+  if v_ids is null or coalesce(array_length(v_ids, 1), 0) = 0 then
+    raise exception 'timesheet_ids[] required';
+  end if;
+
+  v_sig := md5(array_to_string(v_ids::text[], '|'));
+
+  v_payload := jsonb_build_object(
+    'timesheet_ids', to_jsonb(v_ids),
+    'timesheet_ids_sig', v_sig
+  );
+
+  if p_actor_user_id is not null then
+    v_payload := v_payload || jsonb_build_object('actor_user_id', p_actor_user_id::text);
+  end if;
+
+  if p_meta is not null then
+    if jsonb_typeof(p_meta) = 'object' then
+      v_payload := v_payload || p_meta;
+    else
+      v_payload := v_payload || jsonb_build_object('meta', p_meta);
+    end if;
+  end if;
+
+  select o.id
+  into v_existing
+  from public.invoice_jobs_outbox o
+  where o.kind = 'HOURS'
+    and (o.payload->>'timesheet_ids_sig') = v_sig
+  order by o.created_at desc
+  limit 1;
+
+  if v_existing is not null then
+    return v_existing;
+  end if;
+
+  insert into public.invoice_jobs_outbox(kind, payload)
+  values ('HOURS'::text, v_payload)
+  returning id into v_new;
+
+  return v_new;
+end;
+$$;
+
+
+-- ============================================================
+-- CloudTMS: invoice_outbox_enqueue_by_week(p_client_id, p_invoice_week_start, p_actor_user_id, p_meta)
+-- NEW (manual/front-end enqueue BY_WEEK)
+--
+-- Inserts a single BY_WEEK job with payload {client_id, invoice_week_start}.
+-- Optional p_meta (if JSON object) is merged into payload (top-level).
+-- Stores actor_user_id into payload for downstream use if desired.
+--
+-- Idempotent: will not create duplicates for same (client_id, invoice_week_start).
+-- Returns the outbox_id (existing or newly inserted).
+-- ============================================================
+create or replace function public.invoice_outbox_enqueue_by_week(
+  p_client_id uuid,
+  p_invoice_week_start date,
+  p_actor_user_id uuid,
+  p_meta jsonb default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_payload jsonb;
+  v_existing uuid;
+  v_new uuid;
+begin
+  if p_client_id is null then
+    raise exception 'client_id is required';
+  end if;
+
+  if p_invoice_week_start is null then
+    raise exception 'invoice_week_start is required';
+  end if;
+
+  v_payload := jsonb_build_object(
+    'client_id', p_client_id::text,
+    'invoice_week_start', p_invoice_week_start::text
+  );
+
+  if p_actor_user_id is not null then
+    v_payload := v_payload || jsonb_build_object('actor_user_id', p_actor_user_id::text);
+  end if;
+
+  if p_meta is not null then
+    if jsonb_typeof(p_meta) = 'object' then
+      v_payload := v_payload || p_meta;
+    else
+      v_payload := v_payload || jsonb_build_object('meta', p_meta);
+    end if;
+  end if;
+
+  select o.id
+  into v_existing
+  from public.invoice_jobs_outbox o
+  where o.kind = 'BY_WEEK'
+    and (o.payload->>'client_id') = p_client_id::text
+    and (o.payload->>'invoice_week_start') = p_invoice_week_start::text
+  order by o.created_at desc
+  limit 1;
+
+  if v_existing is not null then
+    return v_existing;
+  end if;
+
+  insert into public.invoice_jobs_outbox(kind, payload)
+  values ('BY_WEEK'::text, v_payload)
+  returning id into v_new;
+
+  return v_new;
+end;
+$$;
+
+-- ============================================================
+-- CloudTMS: invoice_outbox_enqueue(kind, payload, p_actor_user_id, p_meta)
+-- OPTIONAL generic enqueue wrapper
+--
+-- - Normalizes kind to UPPER
+-- - Merges p_meta into payload (top-level if object)
+-- - Stores actor_user_id into payload if provided
+-- - Best-effort idempotency:
+--     * BY_WEEK: (client_id, invoice_week_start)
+--     * HOURS:   (timesheet_ids_sig) if present
+--
+-- Returns the outbox_id (existing or newly inserted).
+-- ============================================================
+create or replace function public.invoice_outbox_enqueue(
+  p_kind text,
+  p_payload jsonb,
+  p_actor_user_id uuid default null,
+  p_meta jsonb default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_kind text := upper(btrim(coalesce(p_kind,'')));
+  v_payload jsonb := coalesce(p_payload, '{}'::jsonb);
+  v_existing uuid;
+  v_new uuid;
+  v_client_id text;
+  v_week_start text;
+  v_sig text;
+begin
+  if v_kind = '' then
+    raise exception 'kind is required';
+  end if;
+
+  if jsonb_typeof(v_payload) <> 'object' then
+    raise exception 'payload must be a jsonb object';
+  end if;
+
+  if p_actor_user_id is not null then
+    v_payload := v_payload || jsonb_build_object('actor_user_id', p_actor_user_id::text);
+  end if;
+
+  if p_meta is not null then
+    if jsonb_typeof(p_meta) = 'object' then
+      v_payload := v_payload || p_meta;
+    else
+      v_payload := v_payload || jsonb_build_object('meta', p_meta);
+    end if;
+  end if;
+
+  -- Best-effort idempotency
+  if v_kind = 'BY_WEEK' then
+    v_client_id := nullif(btrim(coalesce(v_payload->>'client_id','')), '');
+    v_week_start := nullif(btrim(coalesce(v_payload->>'invoice_week_start','')), '');
+
+    if v_client_id is not null and v_week_start is not null then
+      select o.id
+      into v_existing
+      from public.invoice_jobs_outbox o
+      where o.kind = 'BY_WEEK'
+        and (o.payload->>'client_id') = v_client_id
+        and (o.payload->>'invoice_week_start') = v_week_start
+      order by o.created_at desc
+      limit 1;
+
+      if v_existing is not null then
+        return v_existing;
+      end if;
+    end if;
+
+  elsif v_kind = 'HOURS' then
+    v_sig := nullif(btrim(coalesce(v_payload->>'timesheet_ids_sig','')), '');
+
+    if v_sig is not null then
+      select o.id
+      into v_existing
+      from public.invoice_jobs_outbox o
+      where o.kind = 'HOURS'
+        and (o.payload->>'timesheet_ids_sig') = v_sig
+      order by o.created_at desc
+      limit 1;
+
+      if v_existing is not null then
+        return v_existing;
+      end if;
+    end if;
+  end if;
+
+  insert into public.invoice_jobs_outbox(kind, payload)
+  values (v_kind, v_payload)
+  returning id into v_new;
+
+  return v_new;
+end;
+$$;
 
 -- ------------------------------------------------------------
 -- 3.2 Dequeue: invoice_dequeue_batch_ids(p_limit int)
@@ -1053,6 +1440,30 @@ as $$
 declare
   v_now timestamptz := now();
   v_shift_ids uuid[];
+
+  -- prev/new totals
+  v_prev_ex numeric := 0;
+  v_prev_vat numeric := 0;
+  v_prev_inc numeric := 0;
+  v_new_ex numeric := 0;
+  v_new_vat numeric := 0;
+  v_new_inc numeric := 0;
+
+  v_delta_ex numeric := 0;
+  v_delta_vat numeric := 0;
+  v_delta_inc numeric := 0;
+
+  v_invoice_no text := null;
+  v_prev_status text := null;
+  v_new_status text := null;
+
+  -- removed-lines detail
+  v_removed_ts_ids uuid[] := null;
+  v_removed_source_keys text[] := null;
+  v_removed_line_count int := 0;
+  v_removed_ex numeric := 0;
+  v_removed_vat numeric := 0;
+  v_removed_inc numeric := 0;
 begin
   if p_invoice_id is null then
     raise exception 'invoice_id is required';
@@ -1064,6 +1475,53 @@ begin
 
   v_shift_ids := (select array_agg(distinct x) from unnest(p_shift_ids) x where x is not null);
 
+  -- Capture invoice BEFORE
+  select
+    i.invoice_no,
+    i.status::text,
+    coalesce(i.subtotal_ex_vat,0)::numeric,
+    coalesce(i.vat_amount,0)::numeric,
+    coalesce(i.total_inc_vat,0)::numeric
+  into
+    v_invoice_no,
+    v_prev_status,
+    v_prev_ex,
+    v_prev_vat,
+    v_prev_inc
+  from public.invoices i
+  where i.id = p_invoice_id
+  limit 1;
+
+  -- Identify lines that will be removed (for audit detail)
+  with to_remove as (
+    select
+      l.timesheet_id,
+      l.source_key,
+      coalesce(l.total_charge_ex_vat,0)::numeric as ex,
+      coalesce(l.vat_amount,0)::numeric as vat,
+      coalesce(l.total_inc_vat,0)::numeric as inc
+    from public.invoice_lines l
+    where l.invoice_id = p_invoice_id
+      and (l.meta_json ? 'nhsp_shift_id')
+      and (l.meta_json->>'nhsp_shift_id') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      and (l.meta_json->>'nhsp_shift_id')::uuid = any(v_shift_ids)
+  )
+  select
+    array_agg(distinct timesheet_id),
+    array_agg(distinct source_key),
+    count(*)::int,
+    coalesce(sum(ex),0)::numeric,
+    coalesce(sum(vat),0)::numeric,
+    coalesce(sum(inc),0)::numeric
+  into
+    v_removed_ts_ids,
+    v_removed_source_keys,
+    v_removed_line_count,
+    v_removed_ex,
+    v_removed_vat,
+    v_removed_inc
+  from to_remove;
+
   -- 1) Unlink shifts (only those currently linked to this invoice)
   update public.nhsp_shifts s
   set invoice_status = 'PENDING',
@@ -1072,7 +1530,7 @@ begin
   where s.id = any(v_shift_ids)
     and s.invoice_id = p_invoice_id;
 
-   -- 2) Delete invoice lines referencing these shifts
+  -- 2) Delete invoice lines referencing these shifts
   delete from public.invoice_lines l
   where l.invoice_id = p_invoice_id
     and (l.meta_json ? 'nhsp_shift_id')
@@ -1110,17 +1568,112 @@ begin
         and l2.timesheet_id = tf.timesheet_id
     );
 
+  -- Capture invoice AFTER + compute delta
+  select
+    i.status::text,
+    coalesce(i.subtotal_ex_vat,0)::numeric,
+    coalesce(i.vat_amount,0)::numeric,
+    coalesce(i.total_inc_vat,0)::numeric
+  into
+    v_new_status,
+    v_new_ex,
+    v_new_vat,
+    v_new_inc
+  from public.invoices i
+  where i.id = p_invoice_id
+  limit 1;
 
+  v_delta_ex  := public._inv_round2(v_new_ex  - v_prev_ex);
+  v_delta_vat := public._inv_round2(v_new_vat - v_prev_vat);
+  v_delta_inc := public._inv_round2(v_new_inc - v_prev_inc);
+
+  -- Existing audit (kept), now with totals + timesheets + delta
   perform public._audit_insert(
     'invoice',
     p_invoice_id::text,
     'NHSP_INVOICE_SHIFT_REMOVED',
-    null,
-    jsonb_build_object('invoice_id', p_invoice_id::text, 'shift_ids', to_jsonb(v_shift_ids)),
+    jsonb_build_object(
+      'invoice_no', v_invoice_no,
+      'status', v_prev_status,
+      'subtotal_ex_vat', public._inv_round2(v_prev_ex),
+      'vat_amount', public._inv_round2(v_prev_vat),
+      'total_inc_vat', public._inv_round2(v_prev_inc)
+    ),
+    jsonb_build_object(
+      'invoice_id', p_invoice_id::text,
+      'invoice_no', v_invoice_no,
+      'shift_ids', to_jsonb(v_shift_ids),
+
+      'removed_line_count', coalesce(v_removed_line_count,0),
+      'removed_timesheet_ids', to_jsonb(coalesce(v_removed_ts_ids, array[]::uuid[])),
+      'removed_source_keys', to_jsonb(coalesce(v_removed_source_keys, array[]::text[])),
+
+      'removed_subtotal_ex_vat', public._inv_round2(v_removed_ex),
+      'removed_vat_amount', public._inv_round2(v_removed_vat),
+      'removed_total_inc_vat', public._inv_round2(v_removed_inc),
+
+      'invoice_status_before', v_prev_status,
+      'invoice_status_after', v_new_status,
+
+      'prev_subtotal_ex_vat', public._inv_round2(v_prev_ex),
+      'prev_vat_amount', public._inv_round2(v_prev_vat),
+      'prev_total_inc_vat', public._inv_round2(v_prev_inc),
+
+      'delta_subtotal_ex_vat', v_delta_ex,
+      'delta_vat_amount', v_delta_vat,
+      'delta_total_inc_vat', v_delta_inc,
+
+      'new_subtotal_ex_vat', public._inv_round2(v_new_ex),
+      'new_vat_amount', public._inv_round2(v_new_vat),
+      'new_total_inc_vat', public._inv_round2(v_new_inc),
+
+      'run_at_utc', public._inv_iso_utc(v_now),
+      'run_kind', 'REMOVE_NHSP_SHIFTS'
+    ),
     null,
     p_actor_user_id
   );
 
+  -- Generic “totals delta applied” audit (optional but recommended for unified reporting)
+  if (coalesce(v_delta_ex,0) <> 0 or coalesce(v_delta_vat,0) <> 0 or coalesce(v_delta_inc,0) <> 0) then
+    perform public._audit_insert(
+      'invoice',
+      p_invoice_id::text,
+      'INVOICE_TOTALS_DELTA_APPLIED',
+      jsonb_build_object(
+        'invoice_no', v_invoice_no,
+        'status', v_prev_status,
+        'subtotal_ex_vat', public._inv_round2(v_prev_ex),
+        'vat_amount', public._inv_round2(v_prev_vat),
+        'total_inc_vat', public._inv_round2(v_prev_inc)
+      ),
+      jsonb_build_object(
+        'invoice_id', p_invoice_id::text,
+        'invoice_no', v_invoice_no,
+        'run_at_utc', public._inv_iso_utc(v_now),
+        'run_kind', 'REMOVE_NHSP_SHIFTS',
+
+        'invoice_status_before', v_prev_status,
+        'invoice_status_after', v_new_status,
+
+        'delta_subtotal_ex_vat', v_delta_ex,
+        'delta_vat_amount', v_delta_vat,
+        'delta_total_inc_vat', v_delta_inc,
+
+        'new_subtotal_ex_vat', public._inv_round2(v_new_ex),
+        'new_vat_amount', public._inv_round2(v_new_vat),
+        'new_total_inc_vat', public._inv_round2(v_new_inc),
+
+        'timesheet_ids_this_run', to_jsonb(coalesce(v_removed_ts_ids, array[]::uuid[])),
+        'source_keys_this_run', to_jsonb(coalesce(v_removed_source_keys, array[]::text[])),
+        'line_count_this_run', coalesce(v_removed_line_count,0)
+      ),
+      null,
+      p_actor_user_id
+    );
+  end if;
+
+  -- Return updated invoice totals
   select u.id, u.subtotal_ex_vat, u.vat_amount, u.total_inc_vat
   into invoice_id, subtotal_ex_vat, vat_amount, total_inc_vat
   from public.invoices u
@@ -1129,7 +1682,6 @@ begin
   return next;
 end;
 $$;
-
 
 -- ------------------------------------------------------------
 -- 3.7 Render manifest: invoice_render_manifest(p_invoice_id)
@@ -1633,5 +2185,4 @@ create trigger trg_invoices_set_invoice_no_bi
 before insert on public.invoices
 for each row
 execute function public.trg_invoices_set_invoice_no();
-
 
