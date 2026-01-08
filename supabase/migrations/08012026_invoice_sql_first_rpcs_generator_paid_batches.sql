@@ -812,7 +812,6 @@ limit 1;
           if right(lower(v_stationery_key),4) = '.pdf' then
             v_stationery_key := left(v_stationery_key, length(v_stationery_key)-4) || '@300dpi.png';
           end if;
-
           v_header := jsonb_build_object(
             'client_id', v_client_id::text,
             'client_name', v_client.name,
@@ -836,10 +835,11 @@ limit 1;
 
             'attach_policy', jsonb_build_object(
               'requires_hr', coalesce(v_requires_hr_any,false),
-              'hr_attach_to_invoice', coalesce(v_hr_attach_any, v_hr_attach_default),
-              'ts_attach_to_invoice', coalesce(v_ts_attach_any, v_ts_attach_default)
+              'hr_attach_to_invoice', coalesce(v_hr_attach_default,true),
+              'ts_attach_to_invoice', coalesce(v_ts_attach_default,true)
             )
           );
+
 
           insert into public.invoices(
             client_id, status, issued_at_utc, due_at_utc,
@@ -1477,77 +1477,80 @@ where tf.timesheet_id = any(v_ts_ids_to_use)
             end loop;
           end if;
 
-          -- Cache HR/NHSP source rows for this invoice (mirror JS step 9)
-          -- Build shift_ids from segments where segment_id startswith 'nhsp:' and source_system in (NHSP, HEALTHROSTER)
-          delete from public.invoice_hr_source_rows where invoice_id = v_invoice_id;
+              -- Cache HR/NHSP source rows for this invoice (mirror JS step 9)
+          -- Only when client-led effective_hr_attach_to_invoice is TRUE
+          if coalesce(v_hr_attach_default, true) = true then
+            -- Build shift_ids from segments where segment_id startswith 'nhsp:' and source_system in (NHSP, HEALTHROSTER)
+            delete from public.invoice_hr_source_rows where invoice_id = v_invoice_id;
 
-          with segs as (
-            select
-              left(seg->>'segment_id', 5) as pfx,
-              upper(coalesce(seg->>'source_system','')) as src,
-              substr(seg->>'segment_id', 6) as id_part
-    from public.timesheets_financials tf
-cross join lateral jsonb_array_elements(coalesce(tf.invoice_breakdown_json->'segments','[]'::jsonb)) seg
-where tf.timesheet_id = any(v_ts_ids_to_use)
-  and tf.is_current = true
+            with segs as (
+              select
+                left(seg->>'segment_id', 5) as pfx,
+                upper(coalesce(seg->>'source_system','')) as src,
+                substr(seg->>'segment_id', 6) as id_part
+              from public.timesheets_financials tf
+              cross join lateral jsonb_array_elements(coalesce(tf.invoice_breakdown_json->'segments','[]'::jsonb)) seg
+              where tf.timesheet_id = any(v_ts_ids_to_use)
+                and tf.is_current = true
+            ),
+            shift_ids as (
+              select distinct (id_part)::uuid as shift_id
+              from segs
+              where pfx = 'nhsp:'
+                and src in ('NHSP','HEALTHROSTER')
+                and id_part ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            ),
+            useful as (
+              select
+                upper(coalesce(s.source_system::text,'UNKNOWN')) as source_system,
+                s.latest_import_id as import_id,
+                s.external_row_key
+              from public.nhsp_shifts s
+              where s.id in (select shift_id from shift_ids)
+                and s.latest_import_id is not null
+                and s.external_row_key is not null
+            ),
+            grouped as (
+              select
+                u.source_system,
+                u.import_id,
+                jsonb_agg(distinct u.external_row_key) as keys_json
+              from useful u
+              group by u.source_system, u.import_id
+            ),
+            hdr as (
+              select
+                g.source_system,
+                g.import_id,
+                case
+                  when jsonb_typeof(hi.parse_summary_json->'header_columns')='array'
+                    then (hi.parse_summary_json->'header_columns')
+                  else '[]'::jsonb
+                end as header_columns,
+                g.keys_json
+              from grouped g
+              join public.hr_imports hi on hi.id = g.import_id
+            ),
+            rows_agg as (
+              select
+                h.source_system,
+                h.import_id,
+                h.header_columns,
+                (
+                  select coalesce(jsonb_agg(r.payload_json order by r.id), '[]'::jsonb)
+                  from public.hr_rows r
+                  where r.import_id = h.import_id
+                    and r.external_row_key in (
+                      select jsonb_array_elements_text(h.keys_json)
+                    )
+                ) as rows_json
+              from hdr h
+            )
+            insert into public.invoice_hr_source_rows(invoice_id, source_system, import_id, header_columns, rows_json)
+            select v_invoice_id, r.source_system, r.import_id, r.header_columns, r.rows_json
+            from rows_agg r;
+          end if;
 
-          ),
-          shift_ids as (
-            select distinct (id_part)::uuid as shift_id
-            from segs
-            where pfx = 'nhsp:'
-              and src in ('NHSP','HEALTHROSTER')
-              and id_part ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-          ),
-          useful as (
-            select
-              upper(coalesce(s.source_system::text,'UNKNOWN')) as source_system,
-              s.latest_import_id as import_id,
-              s.external_row_key
-            from public.nhsp_shifts s
-            where s.id in (select shift_id from shift_ids)
-              and s.latest_import_id is not null
-              and s.external_row_key is not null
-          ),
-          grouped as (
-            select
-              u.source_system,
-              u.import_id,
-              jsonb_agg(distinct u.external_row_key) as keys_json
-            from useful u
-            group by u.source_system, u.import_id
-          ),
-          hdr as (
-            select
-              g.source_system,
-              g.import_id,
-              case
-                when jsonb_typeof(hi.parse_summary_json->'header_columns')='array'
-                  then (hi.parse_summary_json->'header_columns')
-                else '[]'::jsonb
-              end as header_columns,
-              g.keys_json
-            from grouped g
-            join public.hr_imports hi on hi.id = g.import_id
-          ),
-          rows_agg as (
-            select
-              h.source_system,
-              h.import_id,
-              h.header_columns,
-              (
-                select coalesce(jsonb_agg(r.payload_json order by r.id), '[]'::jsonb)
-                from public.hr_rows r
-                where r.import_id = h.import_id
-                  and r.external_row_key in (
-                    select jsonb_array_elements_text(h.keys_json)
-                  )
-              ) as rows_json
-            from hdr h
-          )
-          insert into public.invoice_hr_source_rows(invoice_id, source_system, import_id, header_columns, rows_json)
-          select v_invoice_id, r.source_system, r.import_id, r.header_columns, r.rows_json
-          from rows_agg r;
 
           -- SUCCESS: delete outbox row
           delete from public.invoice_jobs_outbox where id = v_outbox_id;
@@ -1959,7 +1962,7 @@ limit 1;
                 into sb_requires_hr, sb_hr_attach, sb_ts_attach
                 from cons;
 
-                v_header := jsonb_build_object(
+                          v_header := jsonb_build_object(
                   'client_id', v_client_id::text,
                   'client_name', v_client.name,
                   'client_invoice_address', v_client.invoice_address,
@@ -1987,10 +1990,11 @@ limit 1;
                   ),
                   'attach_policy', jsonb_build_object(
                     'requires_hr', coalesce(sb_requires_hr,false),
-                    'hr_attach_to_invoice', coalesce(sb_hr_attach,true),
-                    'ts_attach_to_invoice', coalesce(sb_ts_attach,true)
+                    'hr_attach_to_invoice', coalesce(v_hr_attach_default,true),
+                    'ts_attach_to_invoice', coalesce(v_ts_attach_default,true)
                   )
                 );
+
 
                 insert into public.invoices(
                   client_id, status, issued_at_utc, due_at_utc,
@@ -2012,23 +2016,24 @@ limit 1;
             end if;
 
             -- Ensure self-bill invoices carry attach_policy (patch best-effort like JS)
-            update public.invoices i
+                update public.invoices i
             set header_snapshot_json =
               jsonb_set(
                 coalesce(i.header_snapshot_json,'{}'::jsonb),
                 '{attach_policy}',
                 jsonb_build_object(
                   'requires_hr', coalesce(v_requires_hr_any,false),
-                  'hr_attach_to_invoice', coalesce(v_hr_attach_any, v_hr_attach_default),
-                  'ts_attach_to_invoice', coalesce(v_ts_attach_any, v_ts_attach_default)
+                  'hr_attach_to_invoice', coalesce(v_hr_attach_default,true),
+                  'ts_attach_to_invoice', coalesce(v_ts_attach_default,true)
                 ),
                 true
               ),
               updated_at = v_now
             where i.id = v_invoice_id;
+
           else
             -- Normal BY_WEEK invoice
-            v_header := jsonb_build_object(
+                     v_header := jsonb_build_object(
               'client_id', v_client_id::text,
               'client_name', v_client.name,
               'client_invoice_address', v_client.invoice_address,
@@ -2055,10 +2060,11 @@ limit 1;
               ),
               'attach_policy', jsonb_build_object(
                 'requires_hr', coalesce(v_requires_hr_any,false),
-                'hr_attach_to_invoice', coalesce(v_hr_attach_any, v_hr_attach_default),
-                'ts_attach_to_invoice', coalesce(v_ts_attach_any, v_ts_attach_default)
+                'hr_attach_to_invoice', coalesce(v_hr_attach_default,true),
+                'ts_attach_to_invoice', coalesce(v_ts_attach_default,true)
               )
             );
+
 
             insert into public.invoices(
               client_id, status, issued_at_utc, due_at_utc,
