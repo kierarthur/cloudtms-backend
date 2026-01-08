@@ -575,14 +575,34 @@ begin
           v_used_ts_ids uuid[];
           v_lock_iso text := public._inv_iso_utc(v_now);
 
-          v_sum_ex numeric := 0;
-          v_sum_vat numeric := 0;
-          v_sum_inc numeric := 0;
+              v_sum_ex numeric := 0;
+      v_sum_vat numeric := 0;
+      v_sum_inc numeric := 0;
 
-          s record;
-          t record;
-          c record;
-                    cand_display text;
+      -- run-level totals audit
+      v_prev_ex numeric := 0;
+      v_prev_vat numeric := 0;
+      v_prev_inc numeric := 0;
+      v_prev_status text := null;
+      v_prev_invoice_no text := null;
+
+      v_new_ex numeric := 0;
+      v_new_vat numeric := 0;
+      v_new_inc numeric := 0;
+
+      v_delta_ex numeric := 0;
+      v_delta_vat numeric := 0;
+      v_delta_inc numeric := 0;
+
+      v_run_ts_ids uuid[] := null;
+      v_run_source_keys text[] := null;
+      v_run_line_count int := 0;
+
+      s record;
+      t record;
+      c record;
+                cand_display text;
+
           contract_id uuid;
           labels jsonb;
 
@@ -841,37 +861,66 @@ limit 1;
           );
 
 
-          insert into public.invoices(
-            client_id, status, issued_at_utc, due_at_utc,
-            subtotal_ex_vat, vat_amount, total_inc_vat,
-            header_snapshot_json
-          )
-          values (
-            v_client_id,
-            'DRAFT'::public.invoice_status_enum,
-            v_now,
-            v_due_at,
-            0,0,0,
-            v_header
-          )
-          returning id into v_invoice_id;
+            insert into public.invoices(
+        client_id, status, issued_at_utc, due_at_utc,
+        subtotal_ex_vat, vat_amount, total_inc_vat,
+        header_snapshot_json
+      )
+      values (
+        v_client_id,
+        'DRAFT'::public.invoice_status_enum,
+        v_now,
+        v_due_at,
+        0,0,0,
+        v_header
+      )
+      returning id into v_invoice_id;
 
-          -- AUDIT: INVOICE_CREATED (entity 'invoices')
-          perform public._inv_write_audit(
-            p_actor_user_id,
-            'INVOICE_CREATED',
-            jsonb_build_object(
-              'invoice_id', v_invoice_id::text,
-              'client_id', v_client_id::text,
-              'timesheet_ids', to_jsonb(v_ts_ids_to_use),
-              'status', 'DRAFT'
-            ),
-            'invoices',
-            v_invoice_id::text,
-            null,
-            null,
-            v_ip, v_ua, v_corr
-          );
+      -- Track what THIS run actually inserted (so we can audit per-run delta)
+      create temporary table if not exists pg_temp._inv_run_lines (
+        timesheet_id uuid,
+        source_key text,
+        charge_ex numeric,
+        vat_amount numeric,
+        inc_amount numeric
+      ) on commit drop;
+
+      truncate pg_temp._inv_run_lines;
+
+      -- Capture invoice totals/status BEFORE this run applies any changes
+      select
+        i.invoice_no,
+        i.status::text,
+        coalesce(i.subtotal_ex_vat,0)::numeric,
+        coalesce(i.vat_amount,0)::numeric,
+        coalesce(i.total_inc_vat,0)::numeric
+      into
+        v_prev_invoice_no,
+        v_prev_status,
+        v_prev_ex,
+        v_prev_vat,
+        v_prev_inc
+      from public.invoices i
+      where i.id = v_invoice_id
+      limit 1;
+
+      -- AUDIT: INVOICE_CREATED (entity 'invoices')
+      perform public._inv_write_audit(
+        p_actor_user_id,
+        'INVOICE_CREATED',
+        jsonb_build_object(
+          'invoice_id', v_invoice_id::text,
+          'client_id', v_client_id::text,
+          'timesheet_ids', to_jsonb(v_ts_ids_to_use),
+          'status', 'DRAFT'
+        ),
+        'invoices',
+        v_invoice_id::text,
+        null,
+        null,
+        v_ip, v_ua, v_corr
+      );
+
 
           -- Build lines per eligible snap (mirror JS)
           for s in
@@ -1069,7 +1118,7 @@ limit 1;
 
                 source_key := 'TS:' || s.timesheet_id::text || ':HOURS:' || d_rec.ymd;
 
-                insert into public.invoice_lines(
+                              insert into public.invoice_lines(
                   invoice_id, timesheet_id, booking_id, description,
                   hours_day, hours_night, hours_sat, hours_sun, hours_bh,
                   pay_day, pay_night, pay_sat, pay_sun, pay_bh,
@@ -1094,6 +1143,12 @@ limit 1;
                   source_key
                 )
                 on conflict (invoice_id, source_key) do nothing;
+
+                if found then
+                  insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
+                  values (s.timesheet_id, source_key, charge_ex, vat_amt, inc_amt);
+                end if;
+
 
               end loop;
             else
@@ -1178,6 +1233,12 @@ limit 1;
                   source_key
                 )
                 on conflict (invoice_id, source_key) do nothing;
+
+                if found then
+                  insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
+                  values (s.timesheet_id, source_key, base_chg_ex, vat_amt, inc_amt);
+                end if;
+
 
               end if;
             end if;
@@ -1307,6 +1368,12 @@ limit 1;
                   )
                   on conflict (invoice_id, source_key) do nothing;
 
+                  if found then
+                    insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
+                    values (s.timesheet_id, source_key, charge_ex, vat_amt, inc_amt);
+                  end if;
+
+
                 end loop;
 
                 if any_daily_add then
@@ -1396,6 +1463,11 @@ limit 1;
               )
               on conflict (invoice_id, source_key) do nothing;
 
+              if found then
+                insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
+                values (s.timesheet_id, source_key, charge_ex, vat_amt, inc_amt);
+              end if;
+
 
             end loop; -- additional
           end loop; -- snaps
@@ -1406,21 +1478,92 @@ limit 1;
           end if;
 
           -- Update invoice totals from lines (matches final outcome)
-          update public.invoices i
-          set
-            subtotal_ex_vat = x.ex,
-            vat_amount = x.vat,
-            total_inc_vat = x.inc,
-            updated_at = now()
-          from (
-            select
-              coalesce(sum(l.total_charge_ex_vat),0)::numeric as ex,
-              coalesce(sum(l.vat_amount),0)::numeric as vat,
-              coalesce(sum(l.total_inc_vat),0)::numeric as inc
-            from public.invoice_lines l
-            where l.invoice_id = v_invoice_id
-          ) x
-          where i.id = v_invoice_id;
+
+      update public.invoices i
+      set
+        subtotal_ex_vat = x.ex,
+        vat_amount      = x.vat,
+        total_inc_vat   = x.inc,
+        updated_at      = now()
+      from (
+        select
+          coalesce(sum(l.total_charge_ex_vat),0)::numeric as ex,
+          coalesce(sum(l.vat_amount),0)::numeric as vat,
+          coalesce(sum(l.total_inc_vat),0)::numeric as inc
+        from public.invoice_lines l
+        where l.invoice_id = v_invoice_id
+      ) x
+      where i.id = v_invoice_id;
+
+      -- Compute NEW totals and delta (NEW - PREV)
+      select
+        coalesce(i.subtotal_ex_vat,0)::numeric,
+        coalesce(i.vat_amount,0)::numeric,
+        coalesce(i.total_inc_vat,0)::numeric
+      into v_new_ex, v_new_vat, v_new_inc
+      from public.invoices i
+      where i.id = v_invoice_id
+      limit 1;
+
+      v_delta_ex  := public._inv_round2(v_new_ex  - v_prev_ex);
+      v_delta_vat := public._inv_round2(v_new_vat - v_prev_vat);
+      v_delta_inc := public._inv_round2(v_new_inc - v_prev_inc);
+
+      select
+        array_agg(distinct rl.timesheet_id),
+        array_agg(distinct rl.source_key),
+        count(*)::int
+      into
+        v_run_ts_ids,
+        v_run_source_keys,
+        v_run_line_count
+      from pg_temp._inv_run_lines rl;
+
+      -- Write ONE audit row that proves this run + what changed
+      if (coalesce(v_delta_ex,0) <> 0 or coalesce(v_delta_vat,0) <> 0 or coalesce(v_delta_inc,0) <> 0) then
+        perform public._inv_write_audit(
+          p_actor_user_id,
+          'INVOICE_TOTALS_DELTA_APPLIED',
+          jsonb_build_object(
+            'outbox_id', v_outbox_id::text,
+            'job_kind', v_kind,
+            'run_at_utc', public._inv_iso_utc(v_now),
+
+            'invoice_id', v_invoice_id::text,
+            'invoice_no', v_prev_invoice_no,
+            'client_id', v_client_id::text,
+
+            'invoice_status_before', v_prev_status,
+            'invoice_status_after', (select i.status::text from public.invoices i where i.id = v_invoice_id limit 1),
+
+            'prev_subtotal_ex_vat', public._inv_round2(v_prev_ex),
+            'prev_vat_amount', public._inv_round2(v_prev_vat),
+            'prev_total_inc_vat', public._inv_round2(v_prev_inc),
+
+            'delta_subtotal_ex_vat', v_delta_ex,
+            'delta_vat_amount', v_delta_vat,
+            'delta_total_inc_vat', v_delta_inc,
+
+            'new_subtotal_ex_vat', public._inv_round2(v_new_ex),
+            'new_vat_amount', public._inv_round2(v_new_vat),
+            'new_total_inc_vat', public._inv_round2(v_new_inc),
+
+            'timesheet_ids_this_run', to_jsonb(coalesce(v_run_ts_ids, array[]::uuid[])),
+            'source_keys_this_run', to_jsonb(coalesce(v_run_source_keys, array[]::text[])),
+            'line_count_this_run', coalesce(v_run_line_count,0)
+          ),
+          'invoices',
+          v_invoice_id::text,
+          jsonb_build_object(
+            'subtotal_ex_vat', public._inv_round2(v_prev_ex),
+            'vat_amount', public._inv_round2(v_prev_vat),
+            'total_inc_vat', public._inv_round2(v_prev_inc)
+          ),
+          'RUN_TOTALS_DELTA',
+          v_ip, v_ua, v_corr
+        );
+      end if;
+
 
           -- Lock snapshots + lock all segments in breakdown_json (mirror JS step 7)
  if v_ts_ids_to_use is null or coalesce(array_length(v_ts_ids_to_use,1),0) = 0 then
@@ -1606,12 +1749,32 @@ where tf.timesheet_id = any(v_ts_ids_to_use)
           v_timesheet_ids uuid[];
           v_snap_ids uuid[];
 
-          v_sum_ex numeric := 0;
-          v_sum_vat numeric := 0;
-          v_sum_inc numeric := 0;
+            v_sum_ex numeric := 0;
+      v_sum_vat numeric := 0;
+      v_sum_inc numeric := 0;
 
-          -- already billed additional keys
-          billed record;
+      -- run-level totals audit
+      v_prev_ex numeric := 0;
+      v_prev_vat numeric := 0;
+      v_prev_inc numeric := 0;
+      v_prev_status text := null;
+      v_prev_invoice_no text := null;
+
+      v_new_ex numeric := 0;
+      v_new_vat numeric := 0;
+      v_new_inc numeric := 0;
+
+      v_delta_ex numeric := 0;
+      v_delta_vat numeric := 0;
+      v_delta_inc numeric := 0;
+
+      v_run_ts_ids uuid[] := null;
+      v_run_source_keys text[] := null;
+      v_run_line_count int := 0;
+
+      -- already billed additional keys
+      billed record;
+
 
    -- line build loop
 tsid uuid;
@@ -1919,15 +2082,20 @@ limit 1;
           v_mode := case when v_all_selfbill then 'SELF_BILL' else 'NORMAL' end;
 
           -- Obtain invoice (reuse or create)
-          if v_all_selfbill then
+                if v_all_selfbill then
             select *
             into v_invoice
             from public.invoices i
             where i.client_id = v_client_id
-              and i.status in ('DRAFT'::public.invoice_status_enum,'ON_HOLD'::public.invoice_status_enum)
+              and i.status in (
+                'DRAFT'::public.invoice_status_enum,
+                'ON_HOLD'::public.invoice_status_enum,
+                'ISSUED'::public.invoice_status_enum
+              )
               and (i.header_snapshot_json->'meta'->>'source') = 'TSFIN_SEGMENTS'
               and (i.header_snapshot_json->'meta'->>'invoice_week_start') = v_week_start::text
             limit 1;
+
 
             if found then
               v_created := false;
@@ -1996,14 +2164,21 @@ limit 1;
                 );
 
 
-                insert into public.invoices(
-                  client_id, status, issued_at_utc, due_at_utc,
-                  subtotal_ex_vat, vat_amount, total_inc_vat,
+                             insert into public.invoices(
+                  client_id,
+                  status,
+                  status_date_utc,
+                  issued_at_utc,
+                  due_at_utc,
+                  subtotal_ex_vat,
+                  vat_amount,
+                  total_inc_vat,
                   header_snapshot_json
                 )
                 values (
                   v_client_id,
-                  'DRAFT'::public.invoice_status_enum,
+                  'ISSUED'::public.invoice_status_enum,
+                  v_now,
                   v_now,
                   v_due_at,
                   0,0,0,
@@ -2011,12 +2186,12 @@ limit 1;
                 )
                 returning id into v_invoice_id;
 
+
                 v_created := true;
               end;
             end if;
-
             -- Ensure self-bill invoices carry attach_policy (patch best-effort like JS)
-                update public.invoices i
+            update public.invoices i
             set header_snapshot_json =
               jsonb_set(
                 coalesce(i.header_snapshot_json,'{}'::jsonb),
@@ -2030,6 +2205,38 @@ limit 1;
               ),
               updated_at = v_now
             where i.id = v_invoice_id;
+
+            -- Self-bill rule: if this invoice is still DRAFT, promote it to ISSUED immediately
+            -- (Do NOT override ON_HOLD)
+            update public.invoices i
+            set
+              status = 'ISSUED'::public.invoice_status_enum,
+              status_date_utc = v_now,
+              issued_at_utc = coalesce(i.issued_at_utc, v_now),
+              on_hold_reason = null,
+              updated_at = v_now
+            where i.id = v_invoice_id
+              and i.status = 'DRAFT'::public.invoice_status_enum;
+
+            if found then
+              perform public._inv_write_audit(
+                p_actor_user_id,
+                'INVOICE_SELF_BILL_ISSUED',
+                jsonb_build_object(
+                  'invoice_id', v_invoice_id::text,
+                  'client_id', v_client_id::text,
+                  'invoice_week_start', v_week_start::text,
+                  'mode', 'SELF_BILL',
+                  'issued_at_utc', public._inv_iso_utc(v_now)
+                ),
+                'invoices',
+                v_invoice_id::text,
+                null,
+                null,
+                v_ip, v_ua, v_corr
+              );
+            end if;
+
 
           else
             -- Normal BY_WEEK invoice
@@ -2080,32 +2287,61 @@ limit 1;
               v_header
             )
             returning id into v_invoice_id;
-
             v_created := true;
           end if;
 
-          -- AUDIT: invoice chosen/created
-      perform public._inv_write_audit(
-  p_actor_user_id,
-  case
-    when v_all_selfbill then 'INVOICE_USED_FOR_WEEK_RUN'
-    when v_created then 'INVOICE_CREATED'
-    else 'INVOICE_USED_FOR_WEEK_RUN'
-  end,
-  jsonb_build_object(
-    'invoice_id', v_invoice_id::text,
-    'client_id', v_client_id::text,
-    'invoice_week_start', v_week_start::text,
-    'mode', v_mode,
-    'timesheet_count', coalesce(array_length(v_timesheet_ids,1),0),
-    'segment_count', v_entry_count
-  ),
-  'invoices',
-  v_invoice_id::text,
-  null,
-  null,
-  v_ip, v_ua, v_corr
+      -- Track what THIS run actually inserted (so we can audit per-run delta)
+      create temporary table if not exists pg_temp._inv_run_lines (
+        timesheet_id uuid,
+        source_key text,
+        charge_ex numeric,
+        vat_amount numeric,
+        inc_amount numeric
+      ) on commit drop;
+
+
+      truncate pg_temp._inv_run_lines;
+
+      -- Capture invoice totals/status BEFORE this run applies any changes
+      select
+        i.invoice_no,
+        i.status::text,
+        coalesce(i.subtotal_ex_vat,0)::numeric,
+        coalesce(i.vat_amount,0)::numeric,
+        coalesce(i.total_inc_vat,0)::numeric
+      into
+        v_prev_invoice_no,
+        v_prev_status,
+        v_prev_ex,
+        v_prev_vat,
+        v_prev_inc
+      from public.invoices i
+      where i.id = v_invoice_id
+      limit 1;
+
+      -- AUDIT: invoice chosen/created
+  perform public._inv_write_audit(
+p_actor_user_id,
+case
+when v_all_selfbill then 'INVOICE_USED_FOR_WEEK_RUN'
+when v_created then 'INVOICE_CREATED'
+else 'INVOICE_USED_FOR_WEEK_RUN'
+end,
+jsonb_build_object(
+'invoice_id', v_invoice_id::text,
+'client_id', v_client_id::text,
+'invoice_week_start', v_week_start::text,
+'mode', v_mode,
+'timesheet_count', coalesce(array_length(v_timesheet_ids,1),0),
+'segment_count', v_entry_count
+),
+'invoices',
+v_invoice_id::text,
+null,
+null,
+v_ip, v_ua, v_corr
 );
+
 
 
           -- Temp table of already-billed additional keys (self-bill only)
@@ -2300,7 +2536,6 @@ limit 1;
                 );
 
                 source_key := 'TS:' || tsid::text || ':HOURS:' || bydate.ymd;
-
                 insert into public.invoice_lines(
                   invoice_id, timesheet_id, booking_id, description,
                   hours_day, hours_night, hours_sat, hours_sun, hours_bh,
@@ -2326,6 +2561,13 @@ limit 1;
                   source_key
                 )
                 on conflict (invoice_id, source_key) do nothing;
+
+                if found then
+                  insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
+                  values (tsid, source_key, chg_ex, vat_amt, inc_amt);
+                end if;
+
+
 
               end loop;
 
@@ -2421,7 +2663,6 @@ limit 1;
 
 
                   source_key := 'TS:' || tsid::text || ':ADD:' || code || ':' || left(bydate.ymd,10);
-
                   insert into public.invoice_lines(
                     invoice_id, timesheet_id, booking_id, description,
                     hours_day, hours_night, hours_sat, hours_sun, hours_bh,
@@ -2443,6 +2684,11 @@ limit 1;
                     source_key
                   )
                   on conflict (invoice_id, source_key) do nothing;
+
+                  if found then
+                    insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
+                    values (tsid, source_key, chg_ex, vat_amt, inc_amt);
+                  end if;
 
 
                 end loop;
@@ -2517,7 +2763,6 @@ if (chg_ex > 0) or ((coalesce(h_day,0)+coalesce(h_night,0)+coalesce(h_sat,0)+coa
 
 
   source_key := 'TS:' || tsid::text || ':HOURS:WEEK';
-
   insert into public.invoice_lines(
     invoice_id, timesheet_id, booking_id, description,
     hours_day, hours_night, hours_sat, hours_sun, hours_bh,
@@ -2539,6 +2784,13 @@ if (chg_ex > 0) or ((coalesce(h_day,0)+coalesce(h_night,0)+coalesce(h_sat,0)+coa
     source_key
   )
   on conflict (invoice_id, source_key) do nothing;
+
+  if found then
+    insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
+    values (tsid, source_key, chg_ex, vat_amt, inc_amt);
+  end if;
+
+
 
 end if;
 
@@ -2619,7 +2871,6 @@ end if;
               );
 
               source_key := 'TS:' || tsid::text || ':ADD:' || code || ':WEEK';
-
               insert into public.invoice_lines(
                 invoice_id, timesheet_id, booking_id, description,
                 hours_day, hours_night, hours_sat, hours_sun, hours_bh,
@@ -2642,6 +2893,12 @@ end if;
               )
               on conflict (invoice_id, source_key) do nothing;
 
+              if found then
+                insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
+                values (tsid, source_key, chg_ex, vat_amt, inc_amt);
+              end if;
+
+
 
             end loop;
 
@@ -2651,22 +2908,94 @@ end if;
             raise exception 'Nothing to invoice (all billable amounts are zero after daily/weekly rules).';
           end if;
 
-          -- Totals: recompute from all lines (matches end outcome; avoids additive drift)
-          update public.invoices i
-          set
-            subtotal_ex_vat = x.ex,
-            vat_amount = x.vat,
-            total_inc_vat = x.inc,
-            updated_at = v_now
-          from (
-            select
-              coalesce(sum(l.total_charge_ex_vat),0)::numeric as ex,
-              coalesce(sum(l.vat_amount),0)::numeric as vat,
-              coalesce(sum(l.total_inc_vat),0)::numeric as inc
-            from public.invoice_lines l
-            where l.invoice_id = v_invoice_id
-          ) x
-          where i.id = v_invoice_id;
+             -- Totals: recompute from all lines (matches end outcome; avoids additive drift)
+
+      update public.invoices i
+      set
+        subtotal_ex_vat = x.ex,
+        vat_amount      = x.vat,
+        total_inc_vat   = x.inc,
+        updated_at      = v_now
+      from (
+        select
+          coalesce(sum(l.total_charge_ex_vat),0)::numeric as ex,
+          coalesce(sum(l.vat_amount),0)::numeric as vat,
+          coalesce(sum(l.total_inc_vat),0)::numeric as inc
+        from public.invoice_lines l
+        where l.invoice_id = v_invoice_id
+      ) x
+      where i.id = v_invoice_id;
+
+      -- Compute NEW totals and delta (NEW - PREV)
+      select
+        coalesce(i.subtotal_ex_vat,0)::numeric,
+        coalesce(i.vat_amount,0)::numeric,
+        coalesce(i.total_inc_vat,0)::numeric
+      into v_new_ex, v_new_vat, v_new_inc
+      from public.invoices i
+      where i.id = v_invoice_id
+      limit 1;
+
+      v_delta_ex  := public._inv_round2(v_new_ex  - v_prev_ex);
+      v_delta_vat := public._inv_round2(v_new_vat - v_prev_vat);
+      v_delta_inc := public._inv_round2(v_new_inc - v_prev_inc);
+
+      select
+        array_agg(distinct rl.timesheet_id),
+        array_agg(distinct rl.source_key),
+        count(*)::int
+      into
+        v_run_ts_ids,
+        v_run_source_keys,
+        v_run_line_count
+      from pg_temp._inv_run_lines rl;
+
+      -- Write ONE audit row that proves this run + what changed (including later append runs)
+      if (coalesce(v_delta_ex,0) <> 0 or coalesce(v_delta_vat,0) <> 0 or coalesce(v_delta_inc,0) <> 0) then
+        perform public._inv_write_audit(
+          p_actor_user_id,
+          'INVOICE_TOTALS_DELTA_APPLIED',
+          jsonb_build_object(
+            'outbox_id', v_outbox_id::text,
+            'job_kind', v_kind,
+            'run_at_utc', public._inv_iso_utc(v_now),
+
+            'invoice_id', v_invoice_id::text,
+            'invoice_no', v_prev_invoice_no,
+            'client_id', v_client_id::text,
+            'invoice_week_start', v_week_start::text,
+            'mode', v_mode,
+
+            'invoice_status_before', v_prev_status,
+            'invoice_status_after', (select i.status::text from public.invoices i where i.id = v_invoice_id limit 1),
+
+            'prev_subtotal_ex_vat', public._inv_round2(v_prev_ex),
+            'prev_vat_amount', public._inv_round2(v_prev_vat),
+            'prev_total_inc_vat', public._inv_round2(v_prev_inc),
+
+            'delta_subtotal_ex_vat', v_delta_ex,
+            'delta_vat_amount', v_delta_vat,
+            'delta_total_inc_vat', v_delta_inc,
+
+            'new_subtotal_ex_vat', public._inv_round2(v_new_ex),
+            'new_vat_amount', public._inv_round2(v_new_vat),
+            'new_total_inc_vat', public._inv_round2(v_new_inc),
+
+            'timesheet_ids_this_run', to_jsonb(coalesce(v_run_ts_ids, array[]::uuid[])),
+            'source_keys_this_run', to_jsonb(coalesce(v_run_source_keys, array[]::text[])),
+            'line_count_this_run', coalesce(v_run_line_count,0)
+          ),
+          'invoices',
+          v_invoice_id::text,
+          jsonb_build_object(
+            'subtotal_ex_vat', public._inv_round2(v_prev_ex),
+            'vat_amount', public._inv_round2(v_prev_vat),
+            'total_inc_vat', public._inv_round2(v_prev_inc)
+          ),
+          'RUN_TOTALS_DELTA',
+          v_ip, v_ua, v_corr
+        );
+      end if;
 
           -- Lock segments (mirror JS lockSegmentsForInvoice) using segmentRefs built from entries
           select jsonb_agg(
