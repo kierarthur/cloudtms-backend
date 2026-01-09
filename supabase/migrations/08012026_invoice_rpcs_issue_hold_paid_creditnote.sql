@@ -2178,6 +2178,9 @@ begin
 end;
 $$;
 
+
+
+
 -- 4) Trigger: BEFORE INSERT on invoices
 drop trigger if exists trg_invoices_set_invoice_no_bi on public.invoices;
 
