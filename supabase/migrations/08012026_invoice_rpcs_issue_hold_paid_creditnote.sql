@@ -1808,25 +1808,6 @@ language plpgsql
 security definer
 set search_path = public
 as $$
-begin
-  raise exception
-    'invoice_create_credit_note_and_unlock not implemented: paste unredacted handleCreateCreditNoteTsfin so SQL can mirror VAT/headers/line-copy/unlock/requeue exactly.';
-end;
-$$;
-
-
-create or replace function public.invoice_create_credit_note_and_unlock(
-  p_invoice_id uuid,
-  p_actor_user_id uuid
-)
-returns table (
-  credit_note_id uuid,
-  unlocked_snapshots int
-)
-language plpgsql
-security definer
-set search_path = public
-as $$
 declare
   v_now timestamptz := now();
 
@@ -2188,4 +2169,3 @@ create trigger trg_invoices_set_invoice_no_bi
 before insert on public.invoices
 for each row
 execute function public.trg_invoices_set_invoice_no();
-
