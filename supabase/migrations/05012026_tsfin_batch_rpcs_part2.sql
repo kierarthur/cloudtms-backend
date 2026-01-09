@@ -253,7 +253,7 @@ ctx as (
       coalesce((b.cs_row).apply_erni_to, fin.apply_erni_to, 'PAYE_ONLY'),
 
       -- margin_includes normalisation (supports jsonb object OR jsonb string containing JSON)
-      'margin_includes',
+       'margin_includes',
       jsonb_build_object(
         'expenses',
         coalesce(
@@ -278,6 +278,33 @@ ctx as (
               else null
             end
           ) ->> 'expenses', '')::boolean,
+
+          false
+        ),
+
+        'mileage',
+        coalesce(
+          nullif((
+            case
+              when (b.cs_row).margin_includes is null then null
+              when jsonb_typeof((b.cs_row).margin_includes) = 'object' then (b.cs_row).margin_includes
+              when jsonb_typeof((b.cs_row).margin_includes) = 'string'
+                   and ((b.cs_row).margin_includes #>> '{}') ~ '^\s*\{'
+                then ((b.cs_row).margin_includes #>> '{}')::jsonb
+              else null
+            end
+          ) ->> 'mileage', '')::boolean,
+
+          nullif((
+            case
+              when fin.margin_includes is null then null
+              when jsonb_typeof(fin.margin_includes) = 'object' then fin.margin_includes
+              when jsonb_typeof(fin.margin_includes) = 'string'
+                   and (fin.margin_includes #>> '{}') ~ '^\s*\{'
+                then (fin.margin_includes #>> '{}')::jsonb
+              else null
+            end
+          ) ->> 'mileage', '')::boolean,
 
           false
         )
@@ -450,12 +477,14 @@ begin
         expenses_evidence_r2_key,
         expenses_evidence_manifest,
 
-        mileage_pay_ex_vat,
+             mileage_pay_ex_vat,
         mileage_charge_ex_vat,
+        mileage_units,
         mileage_evidence_r2_key,
         mileage_evidence_manifest,
         mileage_pay_rate,
         mileage_charge_rate,
+
 
         po_number,
 
@@ -562,12 +591,14 @@ begin
         nullif(snap->>'expenses_evidence_r2_key',''),
         coalesce(snap->'expenses_evidence_manifest', prev.expenses_evidence_manifest),
 
-        coalesce(nullif(snap->>'mileage_pay_ex_vat','')::numeric, 0),
+                coalesce(nullif(snap->>'mileage_pay_ex_vat','')::numeric, 0),
         coalesce(nullif(snap->>'mileage_charge_ex_vat','')::numeric, 0),
+        coalesce(nullif(snap->>'mileage_units','')::numeric, prev.mileage_units, 0),
         nullif(snap->>'mileage_evidence_r2_key',''),
         coalesce(snap->'mileage_evidence_manifest', prev.mileage_evidence_manifest),
         nullif(snap->>'mileage_pay_rate','')::numeric,
         nullif(snap->>'mileage_charge_rate','')::numeric,
+
 
         coalesce(nullif(snap->>'po_number',''), prev.po_number),
 
