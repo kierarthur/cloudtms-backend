@@ -1057,18 +1057,22 @@ limit 1;
                 from agg
                 order by ymd
               loop
-                -- ignore zero bucket days (no hours + no charge)
-                if (coalesce(d_rec.hours_day,0) + coalesce(d_rec.hours_night,0) + coalesce(d_rec.hours_sat,0) + coalesce(d_rec.hours_sun,0) + coalesce(d_rec.hours_bh,0)) <= 0
-                   and public._inv_round2(d_rec.chg_ex) <= 0
-                then
+                           -- Invoice rule: never emit an hours line with zero client charge
+                charge_ex := public._inv_round2(d_rec.chg_ex);
+                if charge_ex <= 0 then
+                  continue;
+                end if;
+
+                -- Defensive: also skip if total hours are zero
+                if (coalesce(d_rec.hours_day,0) + coalesce(d_rec.hours_night,0) + coalesce(d_rec.hours_sat,0) + coalesce(d_rec.hours_sun,0) + coalesce(d_rec.hours_bh,0)) <= 0 then
                   continue;
                 end if;
 
                 pay_ex := public._inv_round2(d_rec.pay_ex);
-                charge_ex := public._inv_round2(d_rec.chg_ex);
                 margin_ex := public._inv_round2(charge_ex - pay_ex);
                 vat_amt := public._inv_round2(charge_ex * v_vat_rate / 100);
                 inc_amt := public._inv_round2(charge_ex + vat_amt);
+
 
                               v_sum_ex := v_sum_ex + charge_ex;
                 v_sum_vat := v_sum_vat + vat_amt;
@@ -1150,98 +1154,113 @@ limit 1;
                 end if;
 
 
-              end loop;
+                    end loop;
             else
-              -- weekly fallback
-              base_pay_ex := public._inv_round2(coalesce(s.total_pay_ex_vat,0) - coalesce(s.additional_pay_ex_vat,0));
-              base_chg_ex := public._inv_round2(coalesce(s.total_charge_ex_vat,0) - coalesce(s.additional_charge_ex_vat,0));
-              margin_ex := public._inv_round2(base_chg_ex - base_pay_ex);
-              vat_amt := public._inv_round2(base_chg_ex * v_vat_rate / 100);
-              inc_amt := public._inv_round2(base_chg_ex + vat_amt);
+                         -- weekly fallback (CORE HOURS ONLY: exclude additional + expenses + mileage)
+              base_pay_ex := public._inv_round2(
+                coalesce(s.total_pay_ex_vat,0)
+                - coalesce(s.additional_pay_ex_vat,0)
+                - coalesce(s.expenses_pay_ex_vat,0)
+                - coalesce(s.mileage_pay_ex_vat,0)
+              );
 
-              if (coalesce(s.hours_day,0) + coalesce(s.hours_night,0) + coalesce(s.hours_sat,0) + coalesce(s.hours_sun,0) + coalesce(s.hours_bh,0)) <= 0
-                 and base_chg_ex <= 0
-              then
+
+              base_chg_ex := public._inv_round2(
+                coalesce(s.total_charge_ex_vat,0)
+                - coalesce(s.additional_charge_ex_vat,0)
+                - coalesce(s.expenses_charge_ex_vat,0)
+                - coalesce(s.mileage_charge_ex_vat,0)
+              );
+
+              -- Invoice rule: never emit an hours line with zero client charge
+              if base_chg_ex <= 0 then
                 -- allow additional-only below
               else
-                v_sum_ex := v_sum_ex + base_chg_ex;
-                v_sum_vat := v_sum_vat + vat_amt;
-                v_sum_inc := v_sum_inc + inc_amt;
+                -- Defensive: also skip if total hours are zero
+                if (coalesce(s.hours_day,0) + coalesce(s.hours_night,0) + coalesce(s.hours_sat,0) + coalesce(s.hours_sun,0) + coalesce(s.hours_bh,0)) <= 0 then
+                  -- allow additional-only below
+                else
+                  margin_ex := public._inv_round2(base_chg_ex - base_pay_ex);
+                  vat_amt := public._inv_round2(base_chg_ex * v_vat_rate / 100);
+                  inc_amt := public._inv_round2(base_chg_ex + vat_amt);
 
-                             line_desc := 'Timesheet ' || s.timesheet_id::text ||
-                        case when s.week_ending_date is not null then ' (W/E ' || s.week_ending_date::text || ')' else '' end;
+                  v_sum_ex := v_sum_ex + base_chg_ex;
+                  v_sum_vat := v_sum_vat + vat_amt;
+                  v_sum_inc := v_sum_inc + inc_amt;
 
-                              meta := jsonb_build_object(
-                  'line_type','HOURS',
-                  'timesheet_id', s.timesheet_id::text,
-                  'timesheet_version', s.timesheet_version,
-                  'booking_id', s.booking_id,
-                  'candidate_display', cand_display,
-                  'role', c_role,
-                  'hospital', c_display_site,
-                  'ward', c_ward_hint,
-                  'week_ending_date', s.week_ending_date::text,
-                  'ts_reference_number', s.reference_number,
-                  'schedule_ref_nums', schedule_refs,
-                  'schedule_ref_count', schedule_ref_count,
-                  'policy_snapshot_json', s.policy_snapshot_json,
-                  'rate_source_refs_json', s.rate_source_refs_json,
-                  'bucket_labels', labels,
-                  'hours_day', coalesce(s.hours_day,0),
-                  'hours_night', coalesce(s.hours_night,0),
-                  'hours_sat', coalesce(s.hours_sat,0),
-                  'hours_sun', coalesce(s.hours_sun,0),
-                  'hours_bh', coalesce(s.hours_bh,0),
-                  'breakdown', jsonb_build_object('hours', jsonb_build_object(
-                    'day', coalesce(s.hours_day,0),
-                    'night', coalesce(s.hours_night,0),
-                    'sat', coalesce(s.hours_sat,0),
-                    'sun', coalesce(s.hours_sun,0),
-                    'bh', coalesce(s.hours_bh,0)
-                  )),
-                  'totals', jsonb_build_object(
-                    'line_pay_ex_vat', base_pay_ex,
-                    'line_charge_ex_vat', base_chg_ex,
-                    'margin_ex_vat', margin_ex,
-                    'vat_rate_pct', v_vat_rate,
-                    'vat_amount', vat_amt,
-                    'total_inc_vat', inc_amt
+                  line_desc := 'Timesheet ' || s.timesheet_id::text ||
+                    case when s.week_ending_date is not null then ' (W/E ' || s.week_ending_date::text || ')' else '' end;
+
+                  meta := jsonb_build_object(
+                    'line_type','HOURS',
+                    'timesheet_id', s.timesheet_id::text,
+                    'timesheet_version', s.timesheet_version,
+                    'booking_id', s.booking_id,
+                    'candidate_display', cand_display,
+                    'role', c_role,
+                    'hospital', c_display_site,
+                    'ward', c_ward_hint,
+                    'week_ending_date', s.week_ending_date::text,
+                    'ts_reference_number', s.reference_number,
+                    'schedule_ref_nums', schedule_refs,
+                    'schedule_ref_count', schedule_ref_count,
+                    'policy_snapshot_json', s.policy_snapshot_json,
+                    'rate_source_refs_json', s.rate_source_refs_json,
+                    'bucket_labels', labels,
+                    'hours_day', coalesce(s.hours_day,0),
+                    'hours_night', coalesce(s.hours_night,0),
+                    'hours_sat', coalesce(s.hours_sat,0),
+                    'hours_sun', coalesce(s.hours_sun,0),
+                    'hours_bh', coalesce(s.hours_bh,0),
+                    'breakdown', jsonb_build_object('hours', jsonb_build_object(
+                      'day', coalesce(s.hours_day,0),
+                      'night', coalesce(s.hours_night,0),
+                      'sat', coalesce(s.hours_sat,0),
+                      'sun', coalesce(s.hours_sun,0),
+                      'bh', coalesce(s.hours_bh,0)
+                    )),
+                    'totals', jsonb_build_object(
+                      'line_pay_ex_vat', base_pay_ex,
+                      'line_charge_ex_vat', base_chg_ex,
+                      'margin_ex_vat', margin_ex,
+                      'vat_rate_pct', v_vat_rate,
+                      'vat_amount', vat_amt,
+                      'total_inc_vat', inc_amt
+                    )
+                  );
+
+                  source_key := 'TS:' || s.timesheet_id::text || ':HOURS:WEEK';
+
+                  insert into public.invoice_lines(
+                    invoice_id, timesheet_id, booking_id, description,
+                    hours_day, hours_night, hours_sat, hours_sun, hours_bh,
+                    pay_day, pay_night, pay_sat, pay_sun, pay_bh,
+                    charge_day, charge_night, charge_sat, charge_sun, charge_bh,
+                    total_pay_ex_vat, total_charge_ex_vat, margin_ex_vat,
+                    vat_rate_pct, vat_amount, total_inc_vat,
+                    paper_ts_r2_key, meta_json, source_key
                   )
-                );
+                  values (
+                    v_invoice_id, s.timesheet_id, s.booking_id, line_desc,
+                    coalesce(s.hours_day,0), coalesce(s.hours_night,0), coalesce(s.hours_sat,0), coalesce(s.hours_sun,0), coalesce(s.hours_bh,0),
+                    null,null,null,null,null,
+                    null,null,null,null,null,
+                    base_pay_ex, base_chg_ex, margin_ex,
+                    v_vat_rate, vat_amt, inc_amt,
+                    ('docs-pdf/timesheets/ts_' || s.timesheet_id::text || '.pdf'),
+                    meta,
+                    source_key
+                  )
+                  on conflict (invoice_id, source_key) do nothing;
 
-
-                source_key := 'TS:' || s.timesheet_id::text || ':HOURS:WEEK';
-
-                insert into public.invoice_lines(
-                  invoice_id, timesheet_id, booking_id, description,
-                  hours_day, hours_night, hours_sat, hours_sun, hours_bh,
-                  pay_day, pay_night, pay_sat, pay_sun, pay_bh,
-                  charge_day, charge_night, charge_sat, charge_sun, charge_bh,
-                  total_pay_ex_vat, total_charge_ex_vat, margin_ex_vat,
-                  vat_rate_pct, vat_amount, total_inc_vat,
-                  paper_ts_r2_key, meta_json, source_key
-                )
-                values (
-                  v_invoice_id, s.timesheet_id, s.booking_id, line_desc,
-                  coalesce(s.hours_day,0), coalesce(s.hours_night,0), coalesce(s.hours_sat,0), coalesce(s.hours_sun,0), coalesce(s.hours_bh,0),
-                  null,null,null,null,null,
-                  null,null,null,null,null,
-                  base_pay_ex, base_chg_ex, margin_ex,
-                  v_vat_rate, vat_amt, inc_amt,
-                  ('docs-pdf/timesheets/ts_' || s.timesheet_id::text || '.pdf'),
-                  meta,
-                  source_key
-                )
-                on conflict (invoice_id, source_key) do nothing;
-
-                if found then
-                  insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
-                  values (s.timesheet_id, source_key, base_chg_ex, vat_amt, inc_amt);
+                  if found then
+                    insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
+                    values (s.timesheet_id, source_key, base_chg_ex, vat_amt, inc_amt);
+                  end if;
                 end if;
-
-
               end if;
             end if;
+
 
             -- -------------------------
             -- ADDITIONAL lines
@@ -1380,14 +1399,17 @@ limit 1;
                   continue;
                 end if;
               end if;
-
               unit_count := coalesce((ex->>'unit_count')::numeric, 0);
               if unit_count <= 0 then
                 continue;
               end if;
 
-              charge_ex := coalesce((ex->>'charge_ex_vat')::numeric, 0);
-              pay_ex := coalesce((ex->>'pay_ex_vat')::numeric, 0);
+              charge_ex := public._inv_round2(coalesce((ex->>'charge_ex_vat')::numeric, 0));
+              if charge_ex <= 0 then
+                continue;
+              end if;
+
+              pay_ex := public._inv_round2(coalesce((ex->>'pay_ex_vat')::numeric, 0));
 
               margin_ex := public._inv_round2(charge_ex - pay_ex);
               vat_amt := public._inv_round2(charge_ex * v_vat_rate / 100);
@@ -1469,13 +1491,177 @@ limit 1;
               end if;
 
 
-            end loop; -- additional
+
+                  end loop; -- additional
+
+            -- -------------------------
+            -- EXPENSES line (one per timesheet, if charge>0)
+            -- -------------------------
+            if public._inv_round2(coalesce(s.expenses_charge_ex_vat,0)) > 0 then
+              pay_ex := public._inv_round2(coalesce(s.expenses_pay_ex_vat,0));
+              charge_ex := public._inv_round2(coalesce(s.expenses_charge_ex_vat,0));
+              margin_ex := public._inv_round2(charge_ex - pay_ex);
+              vat_amt := public._inv_round2(charge_ex * v_vat_rate / 100);
+              inc_amt := public._inv_round2(charge_ex + vat_amt);
+
+              v_sum_ex := v_sum_ex + charge_ex;
+              v_sum_vat := v_sum_vat + vat_amt;
+              v_sum_inc := v_sum_inc + inc_amt;
+
+                       line_desc :=
+                'Expenses – '
+                || coalesce(nullif(btrim(coalesce(s.expenses_description,'')), ''), 'Receipted')
+                || case when s.week_ending_date is not null then ' (W/E ' || s.week_ending_date::text || ')' else '' end;
+
+
+              meta := jsonb_build_object(
+                'line_type','EXPENSES',
+                'timesheet_id', s.timesheet_id::text,
+                'timesheet_version', s.timesheet_version,
+                'booking_id', s.booking_id,
+                'candidate_display', cand_display,
+                'role', c_role,
+                'hospital', c_display_site,
+                'ward', c_ward_hint,
+                'week_ending_date', s.week_ending_date::text,
+                'ts_reference_number', s.reference_number,
+                'policy_snapshot_json', s.policy_snapshot_json,
+                'rate_source_refs_json', s.rate_source_refs_json,
+                'expense', jsonb_build_object(
+                  'description', s.expenses_description,
+                  'evidence_r2_key', s.expenses_evidence_r2_key,
+                  'evidence_manifest', s.expenses_evidence_manifest
+                ),
+                'totals', jsonb_build_object(
+                  'line_pay_ex_vat', pay_ex,
+                  'line_charge_ex_vat', charge_ex,
+                  'margin_ex_vat', margin_ex,
+                  'vat_rate_pct', v_vat_rate,
+                  'vat_amount', vat_amt,
+                  'total_inc_vat', inc_amt
+                )
+              );
+
+              source_key := 'TS:' || s.timesheet_id::text || ':EXPENSES';
+
+              insert into public.invoice_lines(
+                invoice_id, timesheet_id, booking_id, description,
+                hours_day, hours_night, hours_sat, hours_sun, hours_bh,
+                pay_day, pay_night, pay_sat, pay_sun, pay_bh,
+                charge_day, charge_night, charge_sat, charge_sun, charge_bh,
+                total_pay_ex_vat, total_charge_ex_vat, margin_ex_vat,
+                vat_rate_pct, vat_amount, total_inc_vat,
+                paper_ts_r2_key, meta_json, source_key
+              )
+              values (
+                v_invoice_id, s.timesheet_id, s.booking_id, line_desc,
+                0,0,0,0,0,
+                null,null,null,null,null,
+                null,null,null,null,null,
+                pay_ex, charge_ex, margin_ex,
+                v_vat_rate, vat_amt, inc_amt,
+                ('docs-pdf/timesheets/ts_' || s.timesheet_id::text || '.pdf'),
+                meta,
+                source_key
+              )
+              on conflict (invoice_id, source_key) do nothing;
+
+              if found then
+                insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
+                values (s.timesheet_id, source_key, charge_ex, vat_amt, inc_amt);
+              end if;
+            end if;
+
+            -- -------------------------
+            -- MILEAGE line (one per timesheet, if charge>0)
+            -- -------------------------
+            if public._inv_round2(coalesce(s.mileage_charge_ex_vat,0)) > 0 then
+              unit_count := public._inv_round2(coalesce(s.mileage_units,0));
+              pay_rate := coalesce(s.mileage_pay_rate,0);
+              charge_rate := coalesce(s.mileage_charge_rate,0);
+
+              pay_ex := public._inv_round2(coalesce(s.mileage_pay_ex_vat,0));
+              charge_ex := public._inv_round2(coalesce(s.mileage_charge_ex_vat,0));
+              margin_ex := public._inv_round2(charge_ex - pay_ex);
+              vat_amt := public._inv_round2(charge_ex * v_vat_rate / 100);
+              inc_amt := public._inv_round2(charge_ex + vat_amt);
+
+              v_sum_ex := v_sum_ex + charge_ex;
+              v_sum_vat := v_sum_vat + vat_amt;
+              v_sum_inc := v_sum_inc + inc_amt;
+
+              line_desc :=
+                'Mileage – ' || unit_count::text || ' miles' ||
+                case when charge_rate is not null then ' @ £' || to_char(charge_rate::numeric, 'FM999999990.00') else '' end ||
+                case when s.week_ending_date is not null then ' (W/E ' || s.week_ending_date::text || ')' else '' end;
+
+              meta := jsonb_build_object(
+                'line_type','MILEAGE',
+                'timesheet_id', s.timesheet_id::text,
+                'timesheet_version', s.timesheet_version,
+                'booking_id', s.booking_id,
+                'candidate_display', cand_display,
+                'role', c_role,
+                'hospital', c_display_site,
+                'ward', c_ward_hint,
+                'week_ending_date', s.week_ending_date::text,
+                'ts_reference_number', s.reference_number,
+                'policy_snapshot_json', s.policy_snapshot_json,
+                'rate_source_refs_json', s.rate_source_refs_json,
+                'mileage', jsonb_build_object(
+                  'mileage_units', unit_count,
+                  'pay_rate', pay_rate,
+                  'charge_rate', charge_rate,
+                  'evidence_r2_key', s.mileage_evidence_r2_key,
+                  'evidence_manifest', s.mileage_evidence_manifest
+                ),
+                'totals', jsonb_build_object(
+                  'line_pay_ex_vat', pay_ex,
+                  'line_charge_ex_vat', charge_ex,
+                  'margin_ex_vat', margin_ex,
+                  'vat_rate_pct', v_vat_rate,
+                  'vat_amount', vat_amt,
+                  'total_inc_vat', inc_amt
+                )
+              );
+
+              source_key := 'TS:' || s.timesheet_id::text || ':MILEAGE';
+
+              insert into public.invoice_lines(
+                invoice_id, timesheet_id, booking_id, description,
+                hours_day, hours_night, hours_sat, hours_sun, hours_bh,
+                pay_day, pay_night, pay_sat, pay_sun, pay_bh,
+                charge_day, charge_night, charge_sat, charge_sun, charge_bh,
+                total_pay_ex_vat, total_charge_ex_vat, margin_ex_vat,
+                vat_rate_pct, vat_amount, total_inc_vat,
+                paper_ts_r2_key, meta_json, source_key
+              )
+              values (
+                v_invoice_id, s.timesheet_id, s.booking_id, line_desc,
+                0,0,0,0,0,
+                null,null,null,null,null,
+                null,null,null,null,null,
+                pay_ex, charge_ex, margin_ex,
+                v_vat_rate, vat_amt, inc_amt,
+                ('docs-pdf/timesheets/ts_' || s.timesheet_id::text || '.pdf'),
+                meta,
+                source_key
+              )
+              on conflict (invoice_id, source_key) do nothing;
+
+              if found then
+                insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
+                values (s.timesheet_id, source_key, charge_ex, vat_amt, inc_amt);
+              end if;
+            end if;
+
           end loop; -- snaps
 
           -- If no lines, fail job (matches JS)
           if not exists (select 1 from public.invoice_lines where invoice_id = v_invoice_id) then
             raise exception 'Nothing to invoice (all billable amounts are zero after daily/weekly rules).';
           end if;
+
 
           -- Update invoice totals from lines (matches final outcome)
 
@@ -2005,7 +2191,7 @@ limit 1;
                 coalesce(nullif(seg.value->>'invoice_target_week_start','')::date, (sn.week_ending_date - 6)) = v_week_start
               )
           ),
-          weekly_atomic as (
+             weekly_atomic as (
             select
               row_number() over () + 1000000 as entry_ord,
               sn.tsfin_id,
@@ -2014,15 +2200,44 @@ limit 1;
               sn.client_id,
               sn.basis,
               jsonb_build_object(
-                'segment_id', 'ts:' || sn.timesheet_id::text,
+                -- IMPORTANT: for non-segment snapshots, treat as "lock whole" later by leaving segment_id NULL
+                'segment_id', null,
                 'date', coalesce(sn.week_ending_date::text, v_week_start::text),
-                'pay_amount', coalesce((select (s2->>'total_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0),
-                'charge_amount', coalesce((select (s2->>'total_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0),
-                'margin_amount', public._inv_round2(
-                  coalesce((select (s2->>'total_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
-                  -
-                  coalesce((select (s2->>'total_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
-                ),
+
+                -- CORE ONLY: exclude additional + expenses + mileage (these become separate invoice lines)
+                'pay_amount',
+                  public._inv_round2(
+                    coalesce((select (s2->>'total_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
+                    - coalesce((select (s2->>'additional_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
+                    - coalesce((select (s2->>'expenses_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
+                    - coalesce((select (s2->>'mileage_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
+                  ),
+
+                'charge_amount',
+                  public._inv_round2(
+                    coalesce((select (s2->>'total_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
+                    - coalesce((select (s2->>'additional_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
+                    - coalesce((select (s2->>'expenses_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
+                    - coalesce((select (s2->>'mileage_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
+                  ),
+
+                'margin_amount',
+                  public._inv_round2(
+                    (
+                      coalesce((select (s2->>'total_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
+                      - coalesce((select (s2->>'additional_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
+                      - coalesce((select (s2->>'expenses_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
+                      - coalesce((select (s2->>'mileage_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
+                    )
+                    -
+                    (
+                      coalesce((select (s2->>'total_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
+                      - coalesce((select (s2->>'additional_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
+                      - coalesce((select (s2->>'expenses_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
+                      - coalesce((select (s2->>'mileage_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
+                    )
+                  ),
+
                 'invoice_target_week_start', v_week_start::text,
                 'invoice_locked_invoice_id', null
               ) as segment,
@@ -2033,6 +2248,7 @@ limit 1;
               and sn.locked_by_invoice_id is null
               and not (sn.ib is not null and jsonb_typeof(sn.ib)='object' and (sn.ib->>'mode')='SEGMENTS' and jsonb_typeof(sn.ib->'segments')='array')
           ),
+
           all_e as (
             select * from seg_entries
             union all
@@ -2491,16 +2707,18 @@ v_ip, v_ua, v_corr
                 )
                 select * from agg order by ymd
               loop
-                if (coalesce(bydate.hours_day,0)+coalesce(bydate.hours_night,0)+coalesce(bydate.hours_sat,0)+coalesce(bydate.hours_sun,0)+coalesce(bydate.hours_bh,0)) <= 0
-                   and public._inv_round2(bydate.chg_ex) <= 0
-                then
+                chg_ex := public._inv_round2(bydate.chg_ex);
+                if chg_ex <= 0 then
+                  continue;
+                end if;
+
+                if (coalesce(bydate.hours_day,0)+coalesce(bydate.hours_night,0)+coalesce(bydate.hours_sat,0)+coalesce(bydate.hours_sun,0)+coalesce(bydate.hours_bh,0)) <= 0 then
                   continue;
                 end if;
 
                 bydate_any := true;
 
                 pay_ex := public._inv_round2(bydate.pay_ex);
-                chg_ex := public._inv_round2(bydate.chg_ex);
                 margin_ex := public._inv_round2(chg_ex - pay_ex);
                 vat_amt := public._inv_round2(chg_ex * v_vat_rate / 100);
                 inc_amt := public._inv_round2(chg_ex + vat_amt);
@@ -2728,71 +2946,74 @@ v_ip, v_ua, v_corr
   public._inv_round2(h_bh)
 into pay_ex, chg_ex, h_day, h_night, h_sat, h_sun, h_bh
 from agg;
+if chg_ex <= 0 then
+  -- Invoice rule: never emit an hours line with zero client charge
+else
+  if (coalesce(h_day,0)+coalesce(h_night,0)+coalesce(h_sat,0)+coalesce(h_sun,0)+coalesce(h_bh,0)) <= 0 then
+    -- Defensive: also skip if hours are zero
+  else
+    margin_ex := public._inv_round2(chg_ex - pay_ex);
+    vat_amt := public._inv_round2(chg_ex * v_vat_rate / 100);
+    inc_amt := public._inv_round2(chg_ex + vat_amt);
 
-if (chg_ex > 0) or ((coalesce(h_day,0)+coalesce(h_night,0)+coalesce(h_sat,0)+coalesce(h_sun,0)+coalesce(h_bh,0)) > 0) then
-  margin_ex := public._inv_round2(chg_ex - pay_ex);
-  vat_amt := public._inv_round2(chg_ex * v_vat_rate / 100);
-  inc_amt := public._inv_round2(chg_ex + vat_amt);
+     line_desc := coalesce(cand_display, ('TS '||tsid::text)) || ' – W/E ' || coalesce(snap.week_ending_date::text,'');
 
-   line_desc := coalesce(cand_display, ('TS '||tsid::text)) || ' – W/E ' || coalesce(snap.week_ending_date::text,'');
+     meta := jsonb_build_object(
+      'line_type','HOURS_WEEKLY',
+      'timesheet_id', tsid::text,
+      'tsfin_id', snap.id::text,
+      'candidate_display', cand_display,
+      'role', con_role,
+      'hospital', con_display_site,
+      'ward', con_ward_hint,
+      'week_ending_date', snap.week_ending_date::text,
+      'bucket_labels', labels,
+      'hours_day', h_day,
+      'hours_night', h_night,
+      'hours_sat', h_sat,
+      'hours_sun', h_sun,
+      'hours_bh', h_bh,
+      'totals', jsonb_build_object(
+        'line_pay_ex_vat', pay_ex,
+        'line_charge_ex_vat', chg_ex,
+        'margin_ex_vat', margin_ex,
+        'vat_rate_pct', v_vat_rate,
+        'vat_amount', vat_amt,
+        'total_inc_vat', inc_amt
+      )
+    );
 
-   meta := jsonb_build_object(
-    'line_type','HOURS_WEEKLY',
-    'timesheet_id', tsid::text,
-    'tsfin_id', snap.id::text,
-    'candidate_display', cand_display,
-    'role', con_role,
-    'hospital', con_display_site,
-    'ward', con_ward_hint,
-    'week_ending_date', snap.week_ending_date::text,
-    'bucket_labels', labels,
-    'hours_day', h_day,
-    'hours_night', h_night,
-    'hours_sat', h_sat,
-    'hours_sun', h_sun,
-    'hours_bh', h_bh,
-    'totals', jsonb_build_object(
-      'line_pay_ex_vat', pay_ex,
-      'line_charge_ex_vat', chg_ex,
-      'margin_ex_vat', margin_ex,
-      'vat_rate_pct', v_vat_rate,
-      'vat_amount', vat_amt,
-      'total_inc_vat', inc_amt
+
+    source_key := 'TS:' || tsid::text || ':HOURS:WEEK';
+    insert into public.invoice_lines(
+      invoice_id, timesheet_id, booking_id, description,
+      hours_day, hours_night, hours_sat, hours_sun, hours_bh,
+      pay_day, pay_night, pay_sat, pay_sun, pay_bh,
+      charge_day, charge_night, charge_sat, charge_sun, charge_bh,
+      total_pay_ex_vat, total_charge_ex_vat, margin_ex_vat,
+      vat_rate_pct, vat_amount, total_inc_vat,
+      paper_ts_r2_key, meta_json, source_key
     )
-  );
+    values (
+      v_invoice_id, tsid, snap.booking_id, line_desc,
+      h_day, h_night, h_sat, h_sun, h_bh,
+      null,null,null,null,null,
+      null,null,null,null,null,
+      pay_ex, chg_ex, margin_ex,
+      v_vat_rate, vat_amt, inc_amt,
+      ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
+      meta,
+      source_key
+    )
+    on conflict (invoice_id, source_key) do nothing;
 
-
-  source_key := 'TS:' || tsid::text || ':HOURS:WEEK';
-  insert into public.invoice_lines(
-    invoice_id, timesheet_id, booking_id, description,
-    hours_day, hours_night, hours_sat, hours_sun, hours_bh,
-    pay_day, pay_night, pay_sat, pay_sun, pay_bh,
-    charge_day, charge_night, charge_sat, charge_sun, charge_bh,
-    total_pay_ex_vat, total_charge_ex_vat, margin_ex_vat,
-    vat_rate_pct, vat_amount, total_inc_vat,
-    paper_ts_r2_key, meta_json, source_key
-  )
-  values (
-    v_invoice_id, tsid, snap.booking_id, line_desc,
-    h_day, h_night, h_sat, h_sun, h_bh,
-    null,null,null,null,null,
-    null,null,null,null,null,
-    pay_ex, chg_ex, margin_ex,
-    v_vat_rate, vat_amt, inc_amt,
-    ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
-    meta,
-    source_key
-  )
-  on conflict (invoice_id, source_key) do nothing;
-
-  if found then
-    insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
-    values (tsid, source_key, chg_ex, vat_amt, inc_amt);
+    if found then
+      insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
+      values (tsid, source_key, chg_ex, vat_amt, inc_amt);
+    end if;
   end if;
-
-
-
 end if;
+
 
 
             -- WEEKLY additional rates (mirror JS)
@@ -2900,9 +3121,155 @@ end if;
 
 
 
-            end loop;
+                     end loop;
+
+            -- -------------------------
+            -- EXPENSES line (one per timesheet, if charge>0)
+            -- -------------------------
+            if public._inv_round2(coalesce(snap.expenses_charge_ex_vat,0)) > 0 then
+              pay_ex := public._inv_round2(coalesce(snap.expenses_pay_ex_vat,0));
+              chg_ex := public._inv_round2(coalesce(snap.expenses_charge_ex_vat,0));
+              margin_ex := public._inv_round2(chg_ex - pay_ex);
+              vat_amt := public._inv_round2(chg_ex * v_vat_rate / 100);
+              inc_amt := public._inv_round2(chg_ex + vat_amt);
+
+              line_desc :=
+                'Expenses – '
+                || coalesce(nullif(btrim(coalesce(snap.expenses_description,'')), ''), 'Receipted')
+                || case when snap.week_ending_date is not null then ' (W/E ' || snap.week_ending_date::text || ')' else '' end;
+
+
+              meta := jsonb_build_object(
+                'line_type','EXPENSES',
+                'timesheet_id', tsid::text,
+                'tsfin_id', snap.id::text,
+                'candidate_display', cand_display,
+                'role', con_role,
+                'hospital', con_display_site,
+                'ward', con_ward_hint,
+                'week_ending_date', snap.week_ending_date::text,
+                'expense', jsonb_build_object(
+                  'description', snap.expenses_description,
+                  'evidence_r2_key', snap.expenses_evidence_r2_key,
+                  'evidence_manifest', snap.expenses_evidence_manifest
+                ),
+                'totals', jsonb_build_object(
+                  'line_pay_ex_vat', pay_ex,
+                  'line_charge_ex_vat', chg_ex,
+                  'margin_ex_vat', margin_ex,
+                  'vat_rate_pct', v_vat_rate,
+                  'vat_amount', vat_amt,
+                  'total_inc_vat', inc_amt
+                )
+              );
+
+              source_key := 'TS:' || tsid::text || ':EXPENSES';
+
+              insert into public.invoice_lines(
+                invoice_id, timesheet_id, booking_id, description,
+                hours_day, hours_night, hours_sat, hours_sun, hours_bh,
+                pay_day, pay_night, pay_sat, pay_sun, pay_bh,
+                charge_day, charge_night, charge_sat, charge_sun, charge_bh,
+                total_pay_ex_vat, total_charge_ex_vat, margin_ex_vat,
+                vat_rate_pct, vat_amount, total_inc_vat,
+                paper_ts_r2_key, meta_json, source_key
+              )
+              values (
+                v_invoice_id, tsid, snap.booking_id, line_desc,
+                0,0,0,0,0,
+                null,null,null,null,null,
+                null,null,null,null,null,
+                pay_ex, chg_ex, margin_ex,
+                v_vat_rate, vat_amt, inc_amt,
+                ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
+                meta,
+                source_key
+              )
+              on conflict (invoice_id, source_key) do nothing;
+
+              if found then
+                insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
+                values (tsid, source_key, chg_ex, vat_amt, inc_amt);
+              end if;
+            end if;
+
+            -- -------------------------
+            -- MILEAGE line (one per timesheet, if charge>0)
+            -- -------------------------
+            if public._inv_round2(coalesce(snap.mileage_charge_ex_vat,0)) > 0 then
+              unit_count := public._inv_round2(coalesce(snap.mileage_units,0));
+              pay_rate := coalesce(snap.mileage_pay_rate,0);
+              charge_rate := coalesce(snap.mileage_charge_rate,0);
+
+              pay_ex := public._inv_round2(coalesce(snap.mileage_pay_ex_vat,0));
+              chg_ex := public._inv_round2(coalesce(snap.mileage_charge_ex_vat,0));
+              margin_ex := public._inv_round2(chg_ex - pay_ex);
+              vat_amt := public._inv_round2(chg_ex * v_vat_rate / 100);
+              inc_amt := public._inv_round2(chg_ex + vat_amt);
+
+              line_desc :=
+                'Mileage – ' || unit_count::text || ' miles' ||
+                case when charge_rate is not null then ' @ £' || to_char(charge_rate::numeric, 'FM999999990.00') else '' end ||
+                case when snap.week_ending_date is not null then ' (W/E ' || snap.week_ending_date::text || ')' else '' end;
+
+              meta := jsonb_build_object(
+                'line_type','MILEAGE',
+                'timesheet_id', tsid::text,
+                'tsfin_id', snap.id::text,
+                'candidate_display', cand_display,
+                'role', con_role,
+                'hospital', con_display_site,
+                'ward', con_ward_hint,
+                'week_ending_date', snap.week_ending_date::text,
+                'mileage', jsonb_build_object(
+                  'mileage_units', unit_count,
+                  'pay_rate', pay_rate,
+                  'charge_rate', charge_rate,
+                  'evidence_r2_key', snap.mileage_evidence_r2_key,
+                  'evidence_manifest', snap.mileage_evidence_manifest
+                ),
+                'totals', jsonb_build_object(
+                  'line_pay_ex_vat', pay_ex,
+                  'line_charge_ex_vat', chg_ex,
+                  'margin_ex_vat', margin_ex,
+                  'vat_rate_pct', v_vat_rate,
+                  'vat_amount', vat_amt,
+                  'total_inc_vat', inc_amt
+                )
+              );
+
+              source_key := 'TS:' || tsid::text || ':MILEAGE';
+
+              insert into public.invoice_lines(
+                invoice_id, timesheet_id, booking_id, description,
+                hours_day, hours_night, hours_sat, hours_sun, hours_bh,
+                pay_day, pay_night, pay_sat, pay_sun, pay_bh,
+                charge_day, charge_night, charge_sat, charge_sun, charge_bh,
+                total_pay_ex_vat, total_charge_ex_vat, margin_ex_vat,
+                vat_rate_pct, vat_amount, total_inc_vat,
+                paper_ts_r2_key, meta_json, source_key
+              )
+              values (
+                v_invoice_id, tsid, snap.booking_id, line_desc,
+                0,0,0,0,0,
+                null,null,null,null,null,
+                null,null,null,null,null,
+                pay_ex, chg_ex, margin_ex,
+                v_vat_rate, vat_amt, inc_amt,
+                ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
+                meta,
+                source_key
+              )
+              on conflict (invoice_id, source_key) do nothing;
+
+              if found then
+                insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
+                values (tsid, source_key, chg_ex, vat_amt, inc_amt);
+              end if;
+            end if;
 
           end loop; -- per timesheet
+
 
           if not exists (select 1 from public.invoice_lines where invoice_id = v_invoice_id) then
             raise exception 'Nothing to invoice (all billable amounts are zero after daily/weekly rules).';
