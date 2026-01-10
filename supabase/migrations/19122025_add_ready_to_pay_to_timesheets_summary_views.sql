@@ -3,6 +3,7 @@
 --  - Adds the candidate_hint_text column if missing
 --  - (Re)applies the “must be JSON object” check constraint safely
 --  - CREATE OR REPLACE VIEW for both views (idempotent)
+--    ✅ IMPORTANT: we APPEND new columns at the END so existing column order is unchanged
 --  - Re-applies GRANTs (idempotent)
 --  - Triggers PostgREST schema reload
 
@@ -27,7 +28,13 @@ ALTER TABLE public.timesheets
 -- Adds support for:
 --   - timesheets.candidate_hint_text (jsonb) exposed to FE
 --   - candidate_name displays human hint when UNRESOLVED
---     "Unresolved Timesheet - Firstname Surname, Email - email"
+--   - ✅ APPENDS (at end of view) the additional expenses/mileage fields:
+--       expenses_pay_ex_vat, expenses_description,
+--       mileage_units, mileage_pay_rate, mileage_charge_rate, mileage_pay_ex_vat
+--
+-- WHY APPEND:
+--   CREATE OR REPLACE VIEW cannot change existing column positions/names.
+--   So we keep all existing columns in the same order, and only add new ones at the end.
 -- =========================================================
 
 CREATE OR REPLACE VIEW public.v_timesheets_summary_base AS
@@ -52,12 +59,23 @@ WITH latest_tsfin AS (
     tf.hr_crosscheck_status,
     tf.hr_crosscheck_issues,
     tf.external_source_rows_json,
+
+    -- existing (already in your view)
     tf.expenses_charge_ex_vat,
     tf.expenses_evidence_r2_key,
     tf.expenses_evidence_manifest,
     tf.mileage_charge_ex_vat,
     tf.mileage_evidence_r2_key,
     tf.mileage_evidence_manifest,
+
+    -- ✅ NEW backing fields (not necessarily exposed until the end of the view)
+    tf.expenses_pay_ex_vat,
+    tf.expenses_description,
+    tf.mileage_units,
+    tf.mileage_pay_rate,
+    tf.mileage_charge_rate,
+    tf.mileage_pay_ex_vat,
+
     tf.computed_at_utc,
     tf.created_at
   FROM timesheets_financials tf
@@ -218,6 +236,7 @@ ts_base AS (
 
     COALESCE(ea.evidence_count, 0) AS evidence_count,
 
+    -- existing expense/mileage fields currently in your view
     tf.expenses_charge_ex_vat,
     tf.expenses_evidence_r2_key,
     tf.expenses_evidence_manifest,
@@ -236,8 +255,16 @@ ts_base AS (
     umb.sort_code        AS umb_sort_code,
     umb.account_number   AS umb_account_number,
 
-    -- ✅ NEW (union compat): expose hint JSON from timesheets
-    ts.candidate_hint_text AS candidate_hint_text
+    -- existing last column in your view
+    ts.candidate_hint_text AS candidate_hint_text,
+
+    -- ✅ NEW columns (added to union set; we will expose them at END of the view output)
+    tf.expenses_pay_ex_vat,
+    tf.expenses_description,
+    tf.mileage_units,
+    tf.mileage_pay_rate,
+    tf.mileage_charge_rate,
+    tf.mileage_pay_ex_vat
 
   FROM timesheets ts
   LEFT JOIN contract_weeks cw ON cw.timesheet_id = ts.timesheet_id
@@ -345,12 +372,13 @@ planned_weeks AS (
 
     0 AS evidence_count,
 
+    -- existing expense/mileage fields currently in your view
     NULL::numeric AS expenses_charge_ex_vat,
-    NULL::text AS expenses_evidence_r2_key,
-    NULL::jsonb AS expenses_evidence_manifest,
+    NULL::text    AS expenses_evidence_r2_key,
+    NULL::jsonb   AS expenses_evidence_manifest,
     NULL::numeric AS mileage_charge_ex_vat,
-    NULL::text AS mileage_evidence_r2_key,
-    NULL::jsonb AS mileage_evidence_manifest,
+    NULL::text    AS mileage_evidence_r2_key,
+    NULL::jsonb   AS mileage_evidence_manifest,
 
     NULL::text    AS cand_pay_method,
     NULL::text    AS cand_account_holder,
@@ -362,8 +390,16 @@ planned_weeks AS (
     NULL::text    AS umb_sort_code,
     NULL::text    AS umb_account_number,
 
-    -- ✅ NEW (union compat)
-    NULL::jsonb AS candidate_hint_text
+    -- existing last column in your view
+    NULL::jsonb AS candidate_hint_text,
+
+    -- ✅ NEW columns (union compat)
+    NULL::numeric AS expenses_pay_ex_vat,
+    NULL::text    AS expenses_description,
+    NULL::numeric AS mileage_units,
+    NULL::numeric AS mileage_pay_rate,
+    NULL::numeric AS mileage_charge_rate,
+    NULL::numeric AS mileage_pay_ex_vat
 
   FROM contract_weeks cw
   JOIN contracts ct ON ct.id = cw.contract_id
@@ -739,8 +775,16 @@ SELECT
   qr_generated_at,
   qr_scanned_at,
 
-  -- ✅ APPENDED NEW COLUMN (safe)
-  candidate_hint_text
+  -- existing last column in your view
+  candidate_hint_text,
+
+  -- ✅ NEW columns APPENDED AT END (safe for CREATE OR REPLACE)
+  expenses_pay_ex_vat,
+  expenses_description,
+  mileage_units,
+  mileage_pay_rate,
+  mileage_charge_rate,
+  mileage_pay_ex_vat
 FROM with_issues;
 
 
@@ -810,8 +854,17 @@ SELECT
   v.require_reference_to_pay,
   v.require_reference_to_invoice,
 
-  -- ✅ APPENDED NEW COLUMN (safe)
-  v.candidate_hint_text
+  -- existing last column in your view
+  v.candidate_hint_text,
+
+  -- ✅ NEW columns APPENDED AT END (safe for CREATE OR REPLACE)
+  v.expenses_pay_ex_vat,
+  v.expenses_description,
+  v.mileage_units,
+  v.mileage_pay_rate,
+  v.mileage_charge_rate,
+  v.mileage_pay_ex_vat
+
 FROM public.v_timesheets_summary_base v
 LEFT JOIN public.contract_weeks cw ON cw.id = v.contract_week_id
 LEFT JOIN public.timesheets ts2 ON ts2.timesheet_id = v.timesheet_id;
