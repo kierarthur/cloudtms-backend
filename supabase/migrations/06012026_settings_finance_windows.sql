@@ -5,9 +5,15 @@
 -- - Picks date_from <= date and (date_to is null or date_to >= date).
 -- - Prefers most recent date_from (desc).
 -- - Fallback: earliest finance window (date_from asc) if none match.
+--
+-- ✅ SAFE TO RE-RUN:
+-- Postgres cannot CREATE OR REPLACE when OUT rowtype changes.
+-- So we DROP by signature first, then CREATE.
 -- ============================================================
 
-create or replace function public.settings_finance_pick(p_date date default null)
+drop function if exists public.settings_finance_pick(date);
+
+create function public.settings_finance_pick(p_date date default null)
 returns table (
   id uuid,
   date_from date,
@@ -93,9 +99,14 @@ $$;
 -- RPC B: settings_finance_list()
 -- Returns all finance windows ordered newest-first (date_from desc).
 -- Intended for front-end management UI.
+--
+-- ✅ SAFE TO RE-RUN:
+-- Drop first, then create (avoid return-type mismatch errors).
 -- ============================================================
 
-create or replace function public.settings_finance_list()
+drop function if exists public.settings_finance_list();
+
+create function public.settings_finance_list()
 returns table (
   id uuid,
   date_from date,
