@@ -1,15 +1,10 @@
 -- ============================================================
 -- 2.5: Batch context loader (one row per requested timesheet_id)
--- UPDATED for new settings model:
---   - settings_defaults is NON-FINANCE ONLY (explicit select list; no select *)
---   - finance defaults (vat/erni/holiday/apply*/margin_includes + mileage defaults) come from
---     public.settings_finance_pick(p_date => finance_anchor_date)
---   - time policy (shift windows) still comes from client_settings effective on WORKED/WEEK date
---   - finance policy uses a FINANCE anchor date:
---       authorised_at_server local date if present, else "today" local date
+-- SAFE TO RE-RUN: CREATE OR REPLACE
 --
--- ✅ SAFE TO RE-RUN:
--- Return type unchanged; CREATE OR REPLACE is safe here.
+-- ✅ Includes new TSFIN category columns automatically via:
+--     out_cur_fin = to_jsonb(tf)
+-- because tf is a row from timesheets_financials and to_jsonb(row) includes all columns.
 -- ============================================================
 create or replace function public.tsfin_load_context_batch(p_timesheet_ids uuid[])
 returns table (
@@ -98,7 +93,9 @@ base as (
 
     to_jsonb(te) as out_timesheet,
 
+    -- ✅ This will now include travel_/accommodation_/other_ columns automatically
     to_jsonb(tf) as out_cur_fin,
+
     to_jsonb(c)  as out_candidate,
     to_jsonb(u)  as out_umbrella,
 
@@ -220,7 +217,6 @@ ctx as (
     b.out_effective_flags,
 
     -- Finance window row in-scope for FINANCE anchor date (authorised date else today)
-    -- NOTE: settings_finance_pick returns the active finance window row (or fallback).
     jsonb_build_object(
       'timezone_id', coalesce((b.cs_row).timezone_id, (b.def_row).timezone_id, 'Europe/London'),
 
@@ -234,23 +230,18 @@ ctx as (
       'sun_start',   coalesce(to_char((b.cs_row).sun_start, 'HH24:MI:SS'), to_char((b.def_row).sun_start, 'HH24:MI:SS'), '00:00:00'),
       'sun_end',     coalesce(to_char((b.cs_row).sun_end,   'HH24:MI:SS'), to_char((b.def_row).sun_end,   'HH24:MI:SS'), '00:00:00'),
 
-      -- BH window (00:00–00:00 means “full BH day”)
       'bh_start',    coalesce(to_char((b.cs_row).bh_start, 'HH24:MI:SS'), to_char((b.def_row).bh_start, 'HH24:MI:SS'), '00:00:00'),
       'bh_end',      coalesce(to_char((b.cs_row).bh_end,   'HH24:MI:SS'), to_char((b.def_row).bh_end,   'HH24:MI:SS'), '00:00:00'),
 
-      -- FINANCE defaults now come from finance windows; client_settings can still override vat/wtr/apply*/margin_includes
       'vat_rate_pct',
       coalesce((b.cs_row).vat_rate_pct, fin.vat_rate_pct, 20::numeric),
 
       'holiday_pay_pct',
       coalesce((b.cs_row).holiday_pay_pct, fin.holiday_pay_pct, 12.07::numeric),
 
-      -- ERNI is global-only here (from finance window)
       'erni_pct',
       coalesce(fin.erni_pct, 13.8::numeric),
 
-      -- ✅ NEW: date-linked mileage defaults (from finance window)
-      -- (kept as null if not configured; TSFIN/rate resolver can apply further fallbacks)
       'mileage_pay_defaults',
       fin.mileage_pay_defaults,
 
@@ -263,7 +254,6 @@ ctx as (
       'apply_erni_to',
       coalesce((b.cs_row).apply_erni_to, fin.apply_erni_to, 'PAYE_ONLY'),
 
-      -- margin_includes normalisation (supports jsonb object OR jsonb string containing JSON)
       'margin_includes',
       jsonb_build_object(
         'expenses',
@@ -321,7 +311,6 @@ ctx as (
         )
       ),
 
-      -- ✅ BH list normalisation (global-only; from NON-FINANCE defaults)
       'bh_list',
       case
         when (b.def_row).bh_list is null then '[]'::jsonb
@@ -332,11 +321,9 @@ ctx as (
         else '[]'::jsonb
       end,
 
-      -- ✅ Attach flags: prefer client_settings, else defaults, else true
       'hr_attach_to_invoice', coalesce((b.cs_row).hr_attach_to_invoice, true),
       'ts_attach_to_invoice', coalesce((b.cs_row).ts_attach_to_invoice, true),
 
-      -- ✅ WEEKLY helpers (client-level)
       'week_ending_weekday',     coalesce((b.cs_row).week_ending_weekday, 0),
       'default_submission_mode', coalesce((b.cs_row).default_submission_mode, 'ELECTRONIC')
     ) as out_policy
@@ -355,10 +342,16 @@ select
 from ctx;
 $$;
 
+grant execute on function public.tsfin_load_context_batch(uuid[]) to service_role;
+grant execute on function public.tsfin_load_context_batch(uuid[]) to authenticated;
+
+select pg_notify('pgrst', 'reload schema');
+
 
 -- ============================================================
 -- 2.6: Batch writer + outbox complete/fail (restore-on-fail safe)
--- (UNCHANGED by settings migration; writer only persists snapshots)
+-- UPDATED: persists new TSFIN category expense columns and preserves them
+-- SAFE TO RE-RUN: CREATE OR REPLACE
 -- ============================================================
 create or replace function public.tsfin_write_snapshots_and_complete(p_rows jsonb)
 returns table (
@@ -483,20 +476,28 @@ begin
         candidate_assignment,
         processing_status,
 
+        -- Totals + description + legacy evidence pointers
         expenses_pay_ex_vat,
         expenses_charge_ex_vat,
         expenses_description,
         expenses_evidence_r2_key,
         expenses_evidence_manifest,
 
-             mileage_pay_ex_vat,
+        -- ✅ NEW: category expense columns
+        travel_pay_ex_vat,
+        travel_charge_ex_vat,
+        accommodation_pay_ex_vat,
+        accommodation_charge_ex_vat,
+        other_pay_ex_vat,
+        other_charge_ex_vat,
+
+        mileage_pay_ex_vat,
         mileage_charge_ex_vat,
         mileage_units,
         mileage_evidence_r2_key,
         mileage_evidence_manifest,
         mileage_pay_rate,
         mileage_charge_rate,
-
 
         po_number,
 
@@ -597,20 +598,44 @@ begin
         coalesce(nullif(snap->>'processing_status','')::public.ts_fin_processing_status_enum,
                  'UNASSIGNED'::public.ts_fin_processing_status_enum),
 
-        coalesce(nullif(snap->>'expenses_pay_ex_vat','')::numeric, 0),
-        coalesce(nullif(snap->>'expenses_charge_ex_vat','')::numeric, 0),
+        -- expenses_pay_ex_vat:
+        -- prefer explicit total; else sum of category columns; else 0
+        coalesce(
+          nullif(snap->>'expenses_pay_ex_vat','')::numeric,
+          coalesce(nullif(snap->>'travel_pay_ex_vat','')::numeric, prev.travel_pay_ex_vat, 0)
+        + coalesce(nullif(snap->>'accommodation_pay_ex_vat','')::numeric, prev.accommodation_pay_ex_vat, 0)
+        + coalesce(nullif(snap->>'other_pay_ex_vat','')::numeric, prev.other_pay_ex_vat, 0),
+          0
+        ),
+
+        -- expenses_charge_ex_vat:
+        coalesce(
+          nullif(snap->>'expenses_charge_ex_vat','')::numeric,
+          coalesce(nullif(snap->>'travel_charge_ex_vat','')::numeric, prev.travel_charge_ex_vat, 0)
+        + coalesce(nullif(snap->>'accommodation_charge_ex_vat','')::numeric, prev.accommodation_charge_ex_vat, 0)
+        + coalesce(nullif(snap->>'other_charge_ex_vat','')::numeric, prev.other_charge_ex_vat, 0),
+          0
+        ),
+
         nullif(snap->>'expenses_description',''),
         nullif(snap->>'expenses_evidence_r2_key',''),
         coalesce(snap->'expenses_evidence_manifest', prev.expenses_evidence_manifest),
 
-                coalesce(nullif(snap->>'mileage_pay_ex_vat','')::numeric, 0),
+        -- ✅ NEW category columns (preserved from prev if absent in snapshot)
+        coalesce(nullif(snap->>'travel_pay_ex_vat','')::numeric, prev.travel_pay_ex_vat, 0),
+        coalesce(nullif(snap->>'travel_charge_ex_vat','')::numeric, prev.travel_charge_ex_vat, 0),
+        coalesce(nullif(snap->>'accommodation_pay_ex_vat','')::numeric, prev.accommodation_pay_ex_vat, 0),
+        coalesce(nullif(snap->>'accommodation_charge_ex_vat','')::numeric, prev.accommodation_charge_ex_vat, 0),
+        coalesce(nullif(snap->>'other_pay_ex_vat','')::numeric, prev.other_pay_ex_vat, 0),
+        coalesce(nullif(snap->>'other_charge_ex_vat','')::numeric, prev.other_charge_ex_vat, 0),
+
+        coalesce(nullif(snap->>'mileage_pay_ex_vat','')::numeric, 0),
         coalesce(nullif(snap->>'mileage_charge_ex_vat','')::numeric, 0),
         coalesce(nullif(snap->>'mileage_units','')::numeric, prev.mileage_units, 0),
         nullif(snap->>'mileage_evidence_r2_key',''),
         coalesce(snap->'mileage_evidence_manifest', prev.mileage_evidence_manifest),
         nullif(snap->>'mileage_pay_rate','')::numeric,
         nullif(snap->>'mileage_charge_rate','')::numeric,
-
 
         coalesce(nullif(snap->>'po_number',''), prev.po_number),
 
@@ -702,3 +727,8 @@ begin
   return next;
 end;
 $function$;
+
+grant execute on function public.tsfin_write_snapshots_and_complete(jsonb) to service_role;
+grant execute on function public.tsfin_write_snapshots_and_complete(jsonb) to authenticated;
+
+select pg_notify('pgrst', 'reload schema');
