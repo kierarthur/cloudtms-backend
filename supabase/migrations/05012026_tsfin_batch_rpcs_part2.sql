@@ -2,11 +2,14 @@
 -- 2.5: Batch context loader (one row per requested timesheet_id)
 -- UPDATED for new settings model:
 --   - settings_defaults is NON-FINANCE ONLY (explicit select list; no select *)
---   - finance defaults (vat/erni/holiday/apply*/margin_includes) come from
+--   - finance defaults (vat/erni/holiday/apply*/margin_includes + mileage defaults) come from
 --     public.settings_finance_pick(p_date => finance_anchor_date)
 --   - time policy (shift windows) still comes from client_settings effective on WORKED/WEEK date
 --   - finance policy uses a FINANCE anchor date:
 --       authorised_at_server local date if present, else "today" local date
+--
+-- ✅ SAFE TO RE-RUN:
+-- Return type unchanged; CREATE OR REPLACE is safe here.
 -- ============================================================
 create or replace function public.tsfin_load_context_batch(p_timesheet_ids uuid[])
 returns table (
@@ -246,6 +249,14 @@ ctx as (
       'erni_pct',
       coalesce(fin.erni_pct, 13.8::numeric),
 
+      -- ✅ NEW: date-linked mileage defaults (from finance window)
+      -- (kept as null if not configured; TSFIN/rate resolver can apply further fallbacks)
+      'mileage_pay_defaults',
+      fin.mileage_pay_defaults,
+
+      'mileage_charge_defaults',
+      fin.mileage_charge_defaults,
+
       'apply_holiday_to',
       coalesce((b.cs_row).apply_holiday_to, fin.apply_holiday_to, 'PAYE_ONLY'),
 
@@ -253,7 +264,7 @@ ctx as (
       coalesce((b.cs_row).apply_erni_to, fin.apply_erni_to, 'PAYE_ONLY'),
 
       -- margin_includes normalisation (supports jsonb object OR jsonb string containing JSON)
-       'margin_includes',
+      'margin_includes',
       jsonb_build_object(
         'expenses',
         coalesce(
@@ -322,11 +333,12 @@ ctx as (
       end,
 
       -- ✅ Attach flags: prefer client_settings, else defaults, else true
-    'hr_attach_to_invoice', coalesce((b.cs_row).hr_attach_to_invoice, true),
-'ts_attach_to_invoice', coalesce((b.cs_row).ts_attach_to_invoice, true),
+      'hr_attach_to_invoice', coalesce((b.cs_row).hr_attach_to_invoice, true),
+      'ts_attach_to_invoice', coalesce((b.cs_row).ts_attach_to_invoice, true),
+
       -- ✅ WEEKLY helpers (client-level)
-      'week_ending_weekday',        coalesce((b.cs_row).week_ending_weekday, 0),
-      'default_submission_mode',    coalesce((b.cs_row).default_submission_mode, 'ELECTRONIC')
+      'week_ending_weekday',     coalesce((b.cs_row).week_ending_weekday, 0),
+      'default_submission_mode', coalesce((b.cs_row).default_submission_mode, 'ELECTRONIC')
     ) as out_policy
   from base b
   left join lateral public.settings_finance_pick(p_date => b.finance_anchor_date) fin on true
