@@ -1,9 +1,10 @@
 -- NOTE:
--- This migration is written to be SAFE to re-run:
---  - Adds the candidate_hint_text column if missing
---  - (Re)applies the “must be JSON object” check constraint safely
---  - CREATE OR REPLACE VIEW for both views (idempotent)
---    ✅ IMPORTANT: we APPEND new columns at the END so existing column order is unchanged
+-- This migration is SAFE to re-run:
+--  - Adds candidate_hint_text column if missing + (re)applies JSON-object CHECK
+--  - Adds TSFIN category columns (travel/accommodation/other) if missing
+--  - Adds supporting index on (timesheet_id, kind) for evidence gating
+--  - CREATE OR REPLACE VIEW for: v_timesheets_summary_base, v_timesheets_summary, v_timesheets_details (idempotent)
+--    ✅ IMPORTANT: we only APPEND new columns at the END of each view output
 --  - Re-applies GRANTs (idempotent)
 --  - Triggers PostgREST schema reload
 
@@ -24,17 +25,38 @@ ALTER TABLE public.timesheets
   );
 
 -- =========================================================
+-- TSFIN: add per-category expense columns (Travel/Accommodation/Other)
+-- =========================================================
+ALTER TABLE public.timesheets_financials
+  ADD COLUMN IF NOT EXISTS travel_pay_ex_vat           numeric NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS travel_charge_ex_vat        numeric NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS accommodation_pay_ex_vat    numeric NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS accommodation_charge_ex_vat numeric NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS other_pay_ex_vat            numeric NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS other_charge_ex_vat         numeric NOT NULL DEFAULT 0;
+
+-- =========================================================
+-- Evidence performance: kind lookup index (needed for gating checks)
+-- =========================================================
+CREATE INDEX IF NOT EXISTS idx_timesheet_evidence_timesheet_kind
+  ON public.timesheet_evidence (timesheet_id, kind);
+
+-- =========================================================
 -- UPDATED: v_timesheets_summary_base + v_timesheets_summary
 -- Adds support for:
---   - timesheets.candidate_hint_text (jsonb) exposed to FE
---   - candidate_name displays human hint when UNRESOLVED
---   - ✅ APPENDS (at end of view) the additional expenses/mileage fields:
+--   - timesheets.candidate_hint_text exposed to FE
+--   - candidate_name shows hint when UNRESOLVED
+--   - ✅ APPENDS (at end of view) the additional expense/mileage fields already present:
 --       expenses_pay_ex_vat, expenses_description,
 --       mileage_units, mileage_pay_rate, mileage_charge_rate, mileage_pay_ex_vat
+--   - ✅ APPENDS (AFTER those) the NEW category columns:
+--       travel_pay_ex_vat, travel_charge_ex_vat,
+--       accommodation_pay_ex_vat, accommodation_charge_ex_vat,
+--       other_pay_ex_vat, other_charge_ex_vat
 --
--- WHY APPEND:
---   CREATE OR REPLACE VIEW cannot change existing column positions/names.
---   So we keep all existing columns in the same order, and only add new ones at the end.
+-- IMPORTANT:
+--   CREATE OR REPLACE VIEW cannot reorder existing columns.
+--   So we keep ALL existing columns in the same order, and only add new ones at the end.
 -- =========================================================
 
 CREATE OR REPLACE VIEW public.v_timesheets_summary_base AS
@@ -68,13 +90,21 @@ WITH latest_tsfin AS (
     tf.mileage_evidence_r2_key,
     tf.mileage_evidence_manifest,
 
-    -- ✅ NEW backing fields (not necessarily exposed until the end of the view)
+    -- existing backing fields (already appended previously)
     tf.expenses_pay_ex_vat,
     tf.expenses_description,
     tf.mileage_units,
     tf.mileage_pay_rate,
     tf.mileage_charge_rate,
     tf.mileage_pay_ex_vat,
+
+    -- ✅ NEW: category backing fields
+    tf.travel_pay_ex_vat,
+    tf.travel_charge_ex_vat,
+    tf.accommodation_pay_ex_vat,
+    tf.accommodation_charge_ex_vat,
+    tf.other_pay_ex_vat,
+    tf.other_charge_ex_vat,
 
     tf.computed_at_utc,
     tf.created_at
@@ -258,13 +288,21 @@ ts_base AS (
     -- existing last column in your view
     ts.candidate_hint_text AS candidate_hint_text,
 
-    -- ✅ NEW columns (added to union set; we will expose them at END of the view output)
+    -- existing appended columns (already in your view output)
     tf.expenses_pay_ex_vat,
     tf.expenses_description,
     tf.mileage_units,
     tf.mileage_pay_rate,
     tf.mileage_charge_rate,
-    tf.mileage_pay_ex_vat
+    tf.mileage_pay_ex_vat,
+
+    -- ✅ NEW columns (union compat; will be exposed at END of view output)
+    tf.travel_pay_ex_vat,
+    tf.travel_charge_ex_vat,
+    tf.accommodation_pay_ex_vat,
+    tf.accommodation_charge_ex_vat,
+    tf.other_pay_ex_vat,
+    tf.other_charge_ex_vat
 
   FROM timesheets ts
   LEFT JOIN contract_weeks cw ON cw.timesheet_id = ts.timesheet_id
@@ -393,13 +431,21 @@ planned_weeks AS (
     -- existing last column in your view
     NULL::jsonb AS candidate_hint_text,
 
-    -- ✅ NEW columns (union compat)
+    -- existing appended columns (already in your view output)
     NULL::numeric AS expenses_pay_ex_vat,
     NULL::text    AS expenses_description,
     NULL::numeric AS mileage_units,
     NULL::numeric AS mileage_pay_rate,
     NULL::numeric AS mileage_charge_rate,
-    NULL::numeric AS mileage_pay_ex_vat
+    NULL::numeric AS mileage_pay_ex_vat,
+
+    -- ✅ NEW appended columns (union compat)
+    NULL::numeric AS travel_pay_ex_vat,
+    NULL::numeric AS travel_charge_ex_vat,
+    NULL::numeric AS accommodation_pay_ex_vat,
+    NULL::numeric AS accommodation_charge_ex_vat,
+    NULL::numeric AS other_pay_ex_vat,
+    NULL::numeric AS other_charge_ex_vat
 
   FROM contract_weeks cw
   JOIN contracts ct ON ct.id = cw.contract_id
@@ -464,27 +510,51 @@ with_issues AS (
             ELSE ARRAY[]::text[]
           END
         ) ||
+
+        -- ✅ UPDATED: Expenses evidence based on category claims + timesheet_evidence.kind
         CASE
           WHEN ar.timesheet_id IS NOT NULL
-            AND COALESCE(ar.expenses_charge_ex_vat, 0::numeric) > 0::numeric
-            AND ar.expenses_evidence_r2_key IS NULL
             AND (
-              ar.expenses_evidence_manifest IS NULL
-              OR jsonb_typeof(ar.expenses_evidence_manifest) <> 'array'
-              OR jsonb_array_length(ar.expenses_evidence_manifest) = 0
+              (COALESCE(ar.travel_charge_ex_vat, 0) > 0 OR COALESCE(ar.travel_pay_ex_vat, 0) > 0)
+              OR (COALESCE(ar.accommodation_charge_ex_vat, 0) > 0 OR COALESCE(ar.accommodation_pay_ex_vat, 0) > 0)
+              OR (COALESCE(ar.other_charge_ex_vat, 0) > 0 OR COALESCE(ar.other_pay_ex_vat, 0) > 0)
+            )
+            AND (
+              ((COALESCE(ar.travel_charge_ex_vat, 0) > 0 OR COALESCE(ar.travel_pay_ex_vat, 0) > 0)
+                AND NOT EXISTS (
+                  SELECT 1 FROM public.timesheet_evidence te
+                  WHERE te.timesheet_id = ar.timesheet_id AND upper(te.kind) = 'TRAVEL'
+                )
+              )
+              OR ((COALESCE(ar.accommodation_charge_ex_vat, 0) > 0 OR COALESCE(ar.accommodation_pay_ex_vat, 0) > 0)
+                AND NOT EXISTS (
+                  SELECT 1 FROM public.timesheet_evidence te
+                  WHERE te.timesheet_id = ar.timesheet_id AND upper(te.kind) = 'ACCOMMODATION'
+                )
+              )
+              OR ((COALESCE(ar.other_charge_ex_vat, 0) > 0 OR COALESCE(ar.other_pay_ex_vat, 0) > 0)
+                AND NOT EXISTS (
+                  SELECT 1 FROM public.timesheet_evidence te
+                  WHERE te.timesheet_id = ar.timesheet_id AND upper(te.kind) = 'OTHER'
+                )
+              )
             )
             THEN ARRAY['Expenses evidence'::text]
           ELSE ARRAY[]::text[]
         END
       ) ||
+
+      -- ✅ UPDATED: Mileage evidence based on mileage claim + timesheet_evidence.kind
       CASE
         WHEN ar.timesheet_id IS NOT NULL
-          AND COALESCE(ar.mileage_charge_ex_vat, 0::numeric) > 0::numeric
-          AND ar.mileage_evidence_r2_key IS NULL
           AND (
-            ar.mileage_evidence_manifest IS NULL
-            OR jsonb_typeof(ar.mileage_evidence_manifest) <> 'array'
-            OR jsonb_array_length(ar.mileage_evidence_manifest) = 0
+            COALESCE(ar.mileage_units, 0) > 0
+            OR COALESCE(ar.mileage_charge_ex_vat, 0) > 0
+            OR COALESCE(ar.mileage_pay_ex_vat, 0) > 0
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM public.timesheet_evidence te
+            WHERE te.timesheet_id = ar.timesheet_id AND upper(te.kind) = 'MILEAGE'
           )
           THEN ARRAY['Mileage evidence'::text]
         ELSE ARRAY[]::text[]
@@ -778,13 +848,21 @@ SELECT
   -- existing last column in your view
   candidate_hint_text,
 
-  -- ✅ NEW columns APPENDED AT END (safe for CREATE OR REPLACE)
+  -- existing appended columns (already in your view)
   expenses_pay_ex_vat,
   expenses_description,
   mileage_units,
   mileage_pay_rate,
   mileage_charge_rate,
-  mileage_pay_ex_vat
+  mileage_pay_ex_vat,
+
+  -- ✅ NEW columns APPENDED AT END
+  travel_pay_ex_vat,
+  travel_charge_ex_vat,
+  accommodation_pay_ex_vat,
+  accommodation_charge_ex_vat,
+  other_pay_ex_vat,
+  other_charge_ex_vat
 FROM with_issues;
 
 
@@ -857,13 +935,21 @@ SELECT
   -- existing last column in your view
   v.candidate_hint_text,
 
-  -- ✅ NEW columns APPENDED AT END (safe for CREATE OR REPLACE)
+  -- existing appended columns (already in your view)
   v.expenses_pay_ex_vat,
   v.expenses_description,
   v.mileage_units,
   v.mileage_pay_rate,
   v.mileage_charge_rate,
-  v.mileage_pay_ex_vat
+  v.mileage_pay_ex_vat,
+
+  -- ✅ NEW columns APPENDED AT END
+  v.travel_pay_ex_vat,
+  v.travel_charge_ex_vat,
+  v.accommodation_pay_ex_vat,
+  v.accommodation_charge_ex_vat,
+  v.other_pay_ex_vat,
+  v.other_charge_ex_vat
 
 FROM public.v_timesheets_summary_base v
 LEFT JOIN public.contract_weeks cw ON cw.id = v.contract_week_id
@@ -874,27 +960,24 @@ GRANT SELECT ON public.v_timesheets_summary      TO service_role;
 GRANT SELECT ON public.v_timesheets_summary_base TO authenticated;
 GRANT SELECT ON public.v_timesheets_summary      TO authenticated;
 
--- Ensure PostgREST sees new columns immediately after commit
-SELECT pg_notify('pgrst', 'reload schema');
-
 -- ============================================================
 -- v_timesheets_details
 -- ✅ SAFE TO RE-RUN: CREATE OR REPLACE VIEW (idempotent)
 -- ✅ IMPORTANT: ONLY appends new columns at the END. No other changes.
 -- ============================================================
 
-create or replace view public.v_timesheets_details as
-with nhsp_agg as (
-  select
+CREATE OR REPLACE VIEW public.v_timesheets_details AS
+WITH nhsp_agg AS (
+  SELECT
     s.timesheet_id,
     count(*) as nhsp_shift_count,
     count(*) filter (where s.invoice_status = 'INCLUDED'::text) as nhsp_shift_included_count,
     count(*) filter (where s.invoice_status = 'DEFERRED'::text) as nhsp_shift_deferred_count
-  from nhsp_shifts s
-  where s.timesheet_id is not null
-  group by s.timesheet_id
+  FROM nhsp_shifts s
+  WHERE s.timesheet_id is not null
+  GROUP BY s.timesheet_id
 )
-select
+SELECT
   t.timesheet_id,
   t.booking_id,
   t.contract_id,
@@ -940,7 +1023,7 @@ select
   n.nhsp_shift_included_count,
   n.nhsp_shift_deferred_count,
 
-  -- ✅ appended columns (ONLY change)
+  -- existing appended columns (already in your view)
   tf.expenses_description,
   tf.expenses_evidence_r2_key,
   tf.expenses_evidence_manifest,
@@ -948,19 +1031,27 @@ select
   tf.mileage_pay_rate,
   tf.mileage_charge_rate,
   tf.mileage_evidence_r2_key,
-  tf.mileage_evidence_manifest
+  tf.mileage_evidence_manifest,
 
-from timesheets t
-  left join timesheets_financials tf
-    on tf.timesheet_id = t.timesheet_id
-   and tf.is_current = true
-  left join timesheet_validations tv
-    on tv.timesheet_id = t.timesheet_id
-  left join nhsp_agg n
-    on n.timesheet_id = t.timesheet_id;
+  -- ✅ NEW columns APPENDED AT END
+  tf.travel_pay_ex_vat,
+  tf.travel_charge_ex_vat,
+  tf.accommodation_pay_ex_vat,
+  tf.accommodation_charge_ex_vat,
+  tf.other_pay_ex_vat,
+  tf.other_charge_ex_vat
+
+FROM timesheets t
+LEFT JOIN timesheets_financials tf
+  ON tf.timesheet_id = t.timesheet_id
+ AND tf.is_current = true
+LEFT JOIN timesheet_validations tv
+  ON tv.timesheet_id = t.timesheet_id
+LEFT JOIN nhsp_agg n
+  ON n.timesheet_id = t.timesheet_id;
 
 GRANT SELECT ON public.v_timesheets_details TO service_role;
 GRANT SELECT ON public.v_timesheets_details TO authenticated;
 
 -- Ensure PostgREST sees new columns immediately after commit
-select pg_notify('pgrst', 'reload schema');
+SELECT pg_notify('pgrst', 'reload schema');
