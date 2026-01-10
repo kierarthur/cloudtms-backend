@@ -1,3 +1,10 @@
+-- ============================================================
+-- TSFIN wakeup triggers on settings_finance_windows
+-- UPDATED:
+-- - Treat mileage default changes as a "context change" that should re-enqueue TSFIN
+-- - This updates both trigger FUNCTIONS (change-detection) and the TRIGGER (UPDATE OF ...)
+-- ============================================================
+
 create or replace function public.trg_tsfin_finance_windows_erni_wakeup()
 returns trigger
 language plpgsql
@@ -7,10 +14,12 @@ declare
   v_to   date;
   v_end_of_year date;
 begin
-  -- Only care if ERNI-related values/range actually changed on UPDATE
+  -- Only care if relevant values/range actually changed on UPDATE
   if tg_op = 'UPDATE' then
     if new.erni_pct      is not distinct from old.erni_pct
        and new.apply_erni_to is not distinct from old.apply_erni_to
+       and new.mileage_pay_defaults is not distinct from old.mileage_pay_defaults
+       and new.mileage_charge_defaults is not distinct from old.mileage_charge_defaults
        and new.date_from = old.date_from
        and new.date_to   is not distinct from old.date_to
     then
@@ -57,10 +66,12 @@ as $$
 declare
   v_now timestamptz := now();
 begin
-  -- Only run if ERNI-related fields actually changed (for UPDATE)
+  -- Only run if relevant fields actually changed (for UPDATE)
   if tg_op = 'UPDATE' then
     if new.erni_pct is not distinct from old.erni_pct
        and new.apply_erni_to is not distinct from old.apply_erni_to
+       and new.mileage_pay_defaults is not distinct from old.mileage_pay_defaults
+       and new.mileage_charge_defaults is not distinct from old.mileage_charge_defaults
        and new.date_from = old.date_from
        and new.date_to is not distinct from old.date_to
     then
@@ -112,10 +123,13 @@ drop trigger if exists trg_tsfin_finance_windows_erni_wakeup_all_aiu
 on public.settings_finance_windows;
 
 create trigger trg_tsfin_finance_windows_erni_wakeup_all_aiu
-after insert or update of erni_pct, apply_erni_to, date_from, date_to
+after insert or update of
+  erni_pct,
+  apply_erni_to,
+  mileage_pay_defaults,
+  mileage_charge_defaults,
+  date_from,
+  date_to
 on public.settings_finance_windows
 for each row
 execute function public.trg_tsfin_finance_windows_erni_wakeup_all();
-
-
-
