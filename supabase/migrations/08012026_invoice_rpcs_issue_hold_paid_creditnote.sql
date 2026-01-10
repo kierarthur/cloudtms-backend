@@ -779,9 +779,15 @@ end;
 $$;
 
 
-
-
-
+-- ============================================================
+-- UPDATED: public.invoice_issue_one(p_invoice_id, p_actor_user_id)
+-- Reason: v_ts_invoice_precheck now returns additional blocker codes:
+--   - BLOCK_NO_MILEAGE_EVIDENCE
+--   - BLOCK_NO_EXPENSES_EVIDENCE
+-- and BLOCK_NO_PDF can mean either missing manual PDF OR missing generated PDF.
+--
+-- This update keeps the same signature + return columns (safe to re-run).
+-- ============================================================
 create or replace function public.invoice_issue_one(
   p_invoice_id uuid,
   p_actor_user_id uuid
@@ -840,7 +846,6 @@ begin
     end if;
   end;
 
-
   -- 1) Timesheets on invoice
   select array_agg(distinct l.timesheet_id)
   into v_ts_ids
@@ -852,16 +857,27 @@ begin
     raise exception 'Invoice has no timesheets to validate';
   end if;
 
-   -- 2) Precheck (authoritative)
+  -- 2) Precheck (authoritative)
   select array_agg(
     case
       when pc.timesheet_id is null
         then 'TS ' || x.timesheet_id::text || ': precheck missing'
-      when upper(coalesce(pc.precheck_status,'')) = 'OK' then null
+
+      when upper(coalesce(pc.precheck_status,'')) = 'OK'
+        then null
+
       when upper(coalesce(pc.precheck_status,'')) = 'BLOCK_NO_REFERENCE'
         then 'TS ' || pc.timesheet_id::text || ': missing reference/PO'
+
       when upper(coalesce(pc.precheck_status,'')) = 'BLOCK_NO_PDF'
-        then 'TS ' || pc.timesheet_id::text || ': manual PDF not attached'
+        then 'TS ' || pc.timesheet_id::text || ': missing timesheet PDF'
+
+      when upper(coalesce(pc.precheck_status,'')) = 'BLOCK_NO_MILEAGE_EVIDENCE'
+        then 'TS ' || pc.timesheet_id::text || ': missing mileage evidence'
+
+      when upper(coalesce(pc.precheck_status,'')) = 'BLOCK_NO_EXPENSES_EVIDENCE'
+        then 'TS ' || pc.timesheet_id::text || ': missing expenses evidence'
+
       else
         'TS ' || pc.timesheet_id::text || ': precheck blocker ' || upper(coalesce(pc.precheck_status,''))
     end
@@ -871,21 +887,17 @@ begin
   left join public.v_ts_invoice_precheck pc
     on pc.timesheet_id = x.timesheet_id;
 
-
   v_reasons := array_remove(v_reasons, null);
-
 
   if coalesce(array_length(v_reasons, 1), 0) > 0 then
     v_on_hold_reason := array_to_string(v_reasons, '; ');
 
-            update public.invoices
+    update public.invoices
     set status = 'ON_HOLD'::public.invoice_status_enum,
         status_date_utc = v_now,
         issued_at_utc = null,
         on_hold_reason = v_on_hold_reason
     where id = p_invoice_id;
-
-
 
     perform public._audit_insert(
       'invoice',
@@ -906,13 +918,12 @@ begin
   end if;
 
   -- No blockers => issue
-    update public.invoices
+  update public.invoices
   set status = 'ISSUED'::public.invoice_status_enum,
       status_date_utc = v_now,
       issued_at_utc = v_now,
       on_hold_reason = null
   where id = p_invoice_id;
-
 
   perform public._audit_insert(
     'invoice',
@@ -931,6 +942,7 @@ begin
   return next;
 end;
 $$;
+
 
 
 -- ------------------------------------------------------------
