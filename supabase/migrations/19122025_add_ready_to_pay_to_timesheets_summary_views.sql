@@ -876,3 +876,91 @@ GRANT SELECT ON public.v_timesheets_summary      TO authenticated;
 
 -- Ensure PostgREST sees new columns immediately after commit
 SELECT pg_notify('pgrst', 'reload schema');
+
+-- ============================================================
+-- v_timesheets_details
+-- ✅ SAFE TO RE-RUN: CREATE OR REPLACE VIEW (idempotent)
+-- ✅ IMPORTANT: ONLY appends new columns at the END. No other changes.
+-- ============================================================
+
+create or replace view public.v_timesheets_details as
+with nhsp_agg as (
+  select
+    s.timesheet_id,
+    count(*) as nhsp_shift_count,
+    count(*) filter (where s.invoice_status = 'INCLUDED'::text) as nhsp_shift_included_count,
+    count(*) filter (where s.invoice_status = 'DEFERRED'::text) as nhsp_shift_deferred_count
+  from nhsp_shifts s
+  where s.timesheet_id is not null
+  group by s.timesheet_id
+)
+select
+  t.timesheet_id,
+  t.booking_id,
+  t.contract_id,
+  tf.candidate_id,
+  tf.client_id,
+  t.week_ending_date,
+  t.sheet_scope,
+  t.submission_mode,
+  t.status as timesheet_status,
+  t.reference_number,
+  t.occupant_key_norm,
+  t.hospital_norm,
+  t.ward_norm,
+  t.job_title_norm,
+  t.shift_label_norm,
+  t.authorised_at_server,
+  tf.id as tsfin_id,
+  tf.basis as tsfin_basis,
+  tf.processing_status,
+  tf.pay_method,
+  tf.total_hours,
+  tf.hours_day,
+  tf.hours_night,
+  tf.hours_sat,
+  tf.hours_sun,
+  tf.hours_bh,
+  tf.total_pay_ex_vat,
+  tf.total_charge_ex_vat,
+  tf.margin_ex_vat,
+  tf.expenses_pay_ex_vat,
+  tf.expenses_charge_ex_vat,
+  tf.mileage_pay_ex_vat,
+  tf.mileage_charge_ex_vat,
+  tf.invoice_breakdown_json,
+  tf.locked_by_invoice_id,
+  tf.paid_at_utc,
+  tv.status as validation_status,
+  tv.reason_code as validation_reason_code,
+  tv.hr_request_id,
+  tv.validated_at_utc,
+  tv.last_source as validation_last_source_import_id,
+  n.nhsp_shift_count,
+  n.nhsp_shift_included_count,
+  n.nhsp_shift_deferred_count,
+
+  -- ✅ appended columns (ONLY change)
+  tf.expenses_description,
+  tf.expenses_evidence_r2_key,
+  tf.expenses_evidence_manifest,
+  tf.mileage_units,
+  tf.mileage_pay_rate,
+  tf.mileage_charge_rate,
+  tf.mileage_evidence_r2_key,
+  tf.mileage_evidence_manifest
+
+from timesheets t
+  left join timesheets_financials tf
+    on tf.timesheet_id = t.timesheet_id
+   and tf.is_current = true
+  left join timesheet_validations tv
+    on tv.timesheet_id = t.timesheet_id
+  left join nhsp_agg n
+    on n.timesheet_id = t.timesheet_id;
+
+GRANT SELECT ON public.v_timesheets_details TO service_role;
+GRANT SELECT ON public.v_timesheets_details TO authenticated;
+
+-- Ensure PostgREST sees new columns immediately after commit
+select pg_notify('pgrst', 'reload schema');
