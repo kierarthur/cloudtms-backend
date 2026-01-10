@@ -53189,6 +53189,110 @@ async function applyWeeklyHealthRosterCrosscheck(env, { import_id }) {
 
   return { triples: triplesMap.size, timesheets_checked: timesheetsChecked };
 }
+async function handleTimesheetGetDailyAdjustments(env, req, timesheetId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const enc = encodeURIComponent;
+
+  if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
+
+  // Resolve the requested timesheet to CURRENT (rotation-safe)
+  const resolved = await resolveTimesheetToCurrent(env, timesheetId);
+  if (!resolved || !resolved.current_timesheet_id) {
+    return withCORS(env, req, notFound('Timesheet not found'));
+  }
+
+  const currentId = String(resolved.current_timesheet_id);
+
+  // Load current row to see if this is already an adjustment with a parent_timesheet_id
+  const cur = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentId)}` +
+      `&is_current=eq.true` +
+      `&select=timesheet_id,booking_id,sheet_scope,is_adjustment,parent_timesheet_id`
+  );
+
+  if (!cur) return withCORS(env, req, notFound('Timesheet not found'));
+
+  const scope = String(cur.sheet_scope || '').toUpperCase();
+  if (scope !== 'DAILY') {
+    return withCORS(env, req, badRequest('This endpoint is only for DAILY timesheets'));
+  }
+
+  // If the current sheet is an adjustment, treat its parent as the root.
+  // Otherwise, the current sheet is the root.
+  const parentIdCandidate =
+    (cur.parent_timesheet_id && String(cur.parent_timesheet_id).trim())
+      ? String(cur.parent_timesheet_id)
+      : currentId;
+
+  // Resolve the parent candidate to CURRENT too (parent may have rotated)
+  const resolvedParent = await resolveTimesheetToCurrent(env, parentIdCandidate);
+  if (!resolvedParent || !resolvedParent.current_timesheet_id || !resolvedParent.booking_id) {
+    // If parent resolution fails, fall back to the current sheet as root
+    // (still better than hard failing).
+    // But keep response honest.
+  }
+
+  const rootTimesheetId = String(resolvedParent?.current_timesheet_id || currentId);
+  const rootBookingId   = String(resolvedParent?.booking_id || cur.booking_id || '');
+
+  if (!rootBookingId) {
+    return withCORS(env, req, serverError('Cannot resolve root booking_id for adjustment lookup'));
+  }
+
+  // Collect all root timesheet ids across rotations (same booking_id)
+  const { rows: rootVersions } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?booking_id=eq.${enc(rootBookingId)}` +
+      `&select=timesheet_id` +
+      `&order=created_at.desc` +
+      `&limit=100`
+  );
+
+  const rootIds = Array.from(new Set(
+    (Array.isArray(rootVersions) ? rootVersions : [])
+      .map(r => (r && r.timesheet_id) ? String(r.timesheet_id) : '')
+      .filter(Boolean)
+  ));
+
+  // If for some reason we couldn't fetch versions, at least include the root id.
+  if (!rootIds.length) rootIds.push(rootTimesheetId);
+
+  // Query: all CURRENT adjustment timesheets whose parent_timesheet_id matches ANY root id
+  // (covers adjustments created before parent rotated).
+  const inClause = `in.(${rootIds.join(',')})`;
+
+  const { rows: adjRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?parent_timesheet_id=${enc(inClause)}` +
+      `&is_adjustment=eq.true` +
+      `&is_current=eq.true` +
+      `&select=timesheet_id,parent_timesheet_id,created_at` +
+      `&order=created_at.desc` +
+      `&limit=200`
+  );
+
+  const list = Array.isArray(adjRows) ? adjRows : [];
+  const timesheet_ids = list
+    .map(r => (r && r.timesheet_id) ? String(r.timesheet_id) : '')
+    .filter(Boolean);
+
+  return withCORS(env, req, ok({
+    requested_timesheet_id: String(timesheetId),
+    current_timesheet_id: currentId,
+
+    root_timesheet_id: rootTimesheetId,
+    root_booking_id: rootBookingId,
+
+    count: timesheet_ids.length,
+    timesheet_ids
+  }));
+}
 
 
 // ======================= DAILY ONLY =======================
@@ -55023,7 +55127,6 @@ async function handleContractWeekCreateAdditionalWeeklyAdjustment(env, req, week
   }));
 }
 
-
 async function handleTimesheetCreateAdditionalDailyManual(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -55046,6 +55149,9 @@ async function handleTimesheetCreateAdditionalDailyManual(env, req, timesheetId)
   if (scope !== 'DAILY') {
     return withCORS(env, req, badRequest('Timesheet is not DAILY; additional daily manual only applies to DAILY sheets'));
   }
+
+  // ✅ NEW: parent linkage for adjustments (stable relationship to the original timesheet id)
+  const parent_timesheet_id = String(orig.timesheet_id || timesheetId || '').trim() || null;
 
   // Load original TSFIN snapshot (best-effort) to preserve policy/rates context
   let origFin = null;
@@ -55154,6 +55260,9 @@ async function handleTimesheetCreateAdditionalDailyManual(env, req, timesheetId)
     sheet_scope: 'DAILY',
     line_type: 'HOURS',
     is_adjustment: true,
+
+    // ✅ NEW: parent linkage
+    parent_timesheet_id,
 
     // No signatures/evidence on creation
     authorised_at_server: null,
@@ -55421,10 +55530,10 @@ async function handleTimesheetCreateAdditionalDailyManual(env, req, timesheetId)
   await writeSnapshot(env, snap);
 
   return withCORS(env, req, ok({
-    timesheet_id: createdTs.timesheet_id
+    timesheet_id: createdTs.timesheet_id,
+    parent_timesheet_id
   }));
 }
-
 
 
 
@@ -61215,6 +61324,10 @@ if (req.method === 'GET' && p === '/api/healthroster/autoprocess/clients') {
         const markPaid = matchPath(p, '/api/timesheets/:id/mark-paid');
         if (markPaid && req.method === 'PATCH')                              return handleTimesheetMarkPaid(env, req, markPaid.id);
       }
+{
+  const m = matchPath(p, '/api/timesheets/:id/adjustments');
+  if (m && req.method === 'GET') return handleTimesheetGetDailyAdjustments(env, req, m.id);
+}
 
       {
         const m = matchPath(p, '/api/timesheets/:id/revert-to-electronic');
