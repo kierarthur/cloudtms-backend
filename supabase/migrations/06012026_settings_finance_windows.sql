@@ -4,7 +4,7 @@
 -- - If p_date is null: uses "today" in Europe/London.
 -- - Picks date_from <= date and (date_to is null or date_to >= date).
 -- - Prefers most recent date_from (desc).
--- - Fallback: settings_defaults id=1 (as a single "window") if none exist.
+-- - Fallback: earliest finance window (date_from asc) if none match.
 -- ============================================================
 
 create or replace function public.settings_finance_pick(p_date date default null)
@@ -16,6 +16,10 @@ returns table (
   vat_rate_pct numeric,
   erni_pct numeric,
   holiday_pay_pct numeric,
+
+  -- ✅ NEW mileage default rates (global fallbacks)
+  mileage_pay_defaults numeric,
+  mileage_charge_defaults numeric,
 
   apply_holiday_to text,
   apply_erni_to text,
@@ -34,12 +38,19 @@ pick as (
     w.id,
     w.date_from,
     w.date_to,
+
     w.vat_rate_pct,
     w.erni_pct,
     w.holiday_pay_pct,
+
+    -- ✅ NEW
+    w.mileage_pay_defaults,
+    w.mileage_charge_defaults,
+
     w.apply_holiday_to,
     w.apply_erni_to,
     w.margin_includes,
+
     'FINANCE_WINDOWS'::text as source
   from public.settings_finance_windows w
   join params p on true
@@ -53,18 +64,24 @@ fallback as (
     w.id,
     w.date_from,
     w.date_to,
+
     w.vat_rate_pct,
     w.erni_pct,
     w.holiday_pay_pct,
+
+    -- ✅ NEW
+    w.mileage_pay_defaults,
+    w.mileage_charge_defaults,
+
     w.apply_holiday_to,
     w.apply_erni_to,
     w.margin_includes,
+
     'FINANCE_WINDOWS_EARLIEST_FALLBACK'::text as source
   from public.settings_finance_windows w
   order by w.date_from asc
   limit 1
 )
-
 select * from pick
 union all
 select * from fallback
@@ -88,6 +105,10 @@ returns table (
   erni_pct numeric,
   holiday_pay_pct numeric,
 
+  -- ✅ NEW mileage default rates (global fallbacks)
+  mileage_pay_defaults numeric,
+  mileage_charge_defaults numeric,
+
   apply_holiday_to text,
   apply_erni_to text,
   margin_includes jsonb,
@@ -102,12 +123,19 @@ select
   w.id,
   w.date_from,
   w.date_to,
+
   w.vat_rate_pct,
   w.erni_pct,
   w.holiday_pay_pct,
+
+  -- ✅ NEW
+  w.mileage_pay_defaults,
+  w.mileage_charge_defaults,
+
   w.apply_holiday_to,
   w.apply_erni_to,
   w.margin_includes,
+
   w.created_at,
   w.updated_at
 from public.settings_finance_windows w
