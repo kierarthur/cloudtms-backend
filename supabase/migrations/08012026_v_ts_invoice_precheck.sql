@@ -1,6 +1,6 @@
 -- ============================================================
--- CloudTMS: v_ts_invoice_precheck (VIEW) — client-led attach flags
--- Safe to re-run (keeps existing column order, appends new columns)
+-- CloudTMS: v_ts_invoice_precheck (VIEW) — client-led attach flags + evidence gating
+-- Safe to re-run (keeps existing column order; logic updated; appended columns unchanged)
 --
 -- Existing columns (UNCHANGED order):
 --   1) timesheet_id
@@ -11,7 +11,7 @@
 --   6) require_reference_to_invoice
 --   7) precheck_status
 --
--- Appended columns (NEW):
+-- Appended columns (NEW, unchanged):
 --   8) effective_ts_attach_to_invoice   (client_settings.ts_attach_to_invoice, default TRUE)
 --   9) effective_hr_attach_to_invoice   (client_settings.hr_attach_to_invoice, default TRUE)
 --  10) effective_auto_invoice_default   (client_settings.auto_invoice_default, default FALSE)
@@ -20,9 +20,16 @@
 --   MANUAL     => manual_pdf_r2_key IS NULL
 --   NON-MANUAL (incl NULL/ELECTRONIC) => generated_pdf_at_utc IS NULL
 --
--- NOTE:
---   - timesheets has no client_id, so client_id is derived from timesheets_financials
---     (is_current = true) for this timesheet_id.
+-- BLOCK_NO_REFERENCE logic (contract-led, unchanged)
+--
+-- ✅ NEW: Evidence gating (timesheet_evidence.kind) for claims:
+--   Mileage:   if mileage_units>0 OR mileage_(pay|charge)_ex_vat>0 => require kind = 'MILEAGE'
+--   Travel:    if travel_(pay|charge)_ex_vat>0 => require kind = 'TRAVEL'
+--   Accom:     if accommodation_(pay|charge)_ex_vat>0 => require kind = 'ACCOMMODATION'
+--   Other:     if other_(pay|charge)_ex_vat>0 => require kind = 'OTHER'
+--
+-- Note:
+--   - timesheets has no client_id, so client_id (and claim fields) are derived from current TSFIN
 --   - Anchor date for picking client_settings row: (now() Europe/London)::date
 -- ============================================================
 
@@ -101,6 +108,58 @@ select
      )
       then 'BLOCK_NO_REFERENCE'::text
 
+    -- -----------------------------
+    -- ✅ Mileage evidence gating (kind = MILEAGE)
+    -- -----------------------------
+    when (
+      (coalesce(tf.mileage_units, 0) > 0)
+      or (coalesce(tf.mileage_charge_ex_vat, 0) > 0)
+      or (coalesce(tf.mileage_pay_ex_vat, 0) > 0)
+    )
+    and not exists (
+      select 1
+      from public.timesheet_evidence te
+      where te.timesheet_id = ts.timesheet_id
+        and upper(te.kind) = 'MILEAGE'
+    )
+      then 'BLOCK_NO_MILEAGE_EVIDENCE'::text
+
+    -- -----------------------------
+    -- ✅ Expense category evidence gating (TRAVEL / ACCOMMODATION / OTHER)
+    -- -----------------------------
+    when (
+      (
+        (coalesce(tf.travel_pay_ex_vat, 0) > 0 or coalesce(tf.travel_charge_ex_vat, 0) > 0)
+        and not exists (
+          select 1
+          from public.timesheet_evidence te
+          where te.timesheet_id = ts.timesheet_id
+            and upper(te.kind) = 'TRAVEL'
+        )
+      )
+      or
+      (
+        (coalesce(tf.accommodation_pay_ex_vat, 0) > 0 or coalesce(tf.accommodation_charge_ex_vat, 0) > 0)
+        and not exists (
+          select 1
+          from public.timesheet_evidence te
+          where te.timesheet_id = ts.timesheet_id
+            and upper(te.kind) = 'ACCOMMODATION'
+        )
+      )
+      or
+      (
+        (coalesce(tf.other_pay_ex_vat, 0) > 0 or coalesce(tf.other_charge_ex_vat, 0) > 0)
+        and not exists (
+          select 1
+          from public.timesheet_evidence te
+          where te.timesheet_id = ts.timesheet_id
+            and upper(te.kind) = 'OTHER'
+        )
+      )
+    )
+      then 'BLOCK_NO_EXPENSES_EVIDENCE'::text
+
     else 'OK'::text
   end as precheck_status,
 
@@ -117,9 +176,23 @@ left join public.contract_weeks cw
 left join public.contracts c
   on c.id = coalesce(ts.contract_id, cw.contract_id)
 
--- derive client_id from the current TSFIN snapshot
+-- derive client_id + claim fields from the current TSFIN snapshot
 left join lateral (
-  select tf0.client_id
+  select
+    tf0.client_id,
+
+    -- mileage
+    tf0.mileage_units,
+    tf0.mileage_pay_ex_vat,
+    tf0.mileage_charge_ex_vat,
+
+    -- ✅ new category expenses
+    tf0.travel_pay_ex_vat,
+    tf0.travel_charge_ex_vat,
+    tf0.accommodation_pay_ex_vat,
+    tf0.accommodation_charge_ex_vat,
+    tf0.other_pay_ex_vat,
+    tf0.other_charge_ex_vat
   from public.timesheets_financials tf0
   where tf0.timesheet_id = ts.timesheet_id
     and tf0.is_current = true
