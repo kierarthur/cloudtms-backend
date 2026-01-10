@@ -23,7 +23,7 @@ returns table (
   erni_pct numeric,
   holiday_pay_pct numeric,
 
-  -- ✅ NEW mileage default rates (global fallbacks)
+  -- ✅ NEW date-linked mileage defaults (fallbacks)
   mileage_pay_defaults numeric,
   mileage_charge_defaults numeric,
 
@@ -116,7 +116,7 @@ returns table (
   erni_pct numeric,
   holiday_pay_pct numeric,
 
-  -- ✅ NEW mileage default rates (global fallbacks)
+  -- ✅ NEW date-linked mileage defaults (fallbacks)
   mileage_pay_defaults numeric,
   mileage_charge_defaults numeric,
 
