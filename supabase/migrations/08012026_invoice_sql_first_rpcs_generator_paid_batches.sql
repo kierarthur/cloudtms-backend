@@ -819,11 +819,16 @@ limit 1;
               )
 
           ),
-          cons as (
+               cons as (
             select ctr.*
             from public.contracts ctr
-            where ctr.id in (select distinct contract_id from ts_map where contract_id is not null)
+            where ctr.id in (
+              select distinct tm.contract_id
+              from ts_map tm
+              where tm.contract_id is not null
+            )
           )
+
           select
             bool_or(coalesce(cons.requires_hr,false)) as req_hr,
             case when count(*)=0 then null else bool_or(coalesce(cons.hr_attach_to_invoice,true)) end as hr_any,
@@ -2384,8 +2389,13 @@ limit 1;
           cons as (
             select ctr.*
             from public.contracts ctr
-            where ctr.id in (select distinct contract_id from eff where contract_id is not null)
+            where ctr.id in (
+              select distinct ef.contract_id
+              from eff ef
+              where ef.contract_id is not null
+            )
           )
+
           select
             bool_or(coalesce(cons.requires_hr,false)) as req_hr,
             case when count(*)=0 then null else bool_or(coalesce(cons.hr_attach_to_invoice,true)) end as hr_any,
@@ -2576,9 +2586,14 @@ limit 1;
                   left join public.contract_weeks cw on cw.timesheet_id = x.timesheet_id
                   where coalesce(ts.contract_id, cw.contract_id) is not null
                 ),
-                cons as (
-                  select * from public.contracts c where c.id in (select contract_id from con_ids)
+                           cons as (
+                  select * from public.contracts c
+                  where c.id in (
+                    select ci.contract_id
+                    from con_ids ci
+                  )
                 )
+
                 select
                   bool_or(coalesce(cons.requires_hr,false)) as req_hr,
                   bool_or(coalesce(cons.hr_attach_to_invoice,true)) as hr_any,
