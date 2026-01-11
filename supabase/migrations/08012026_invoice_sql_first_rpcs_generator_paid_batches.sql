@@ -796,7 +796,7 @@ limit 1;
 
           -- Contract mapping via contract_weeks only (matches JS HOURS endpoint)
           -- Aggregate attach policy and labels/daily_calc per contract
-          with ts_map as (
+           with ts_map as (
             select distinct tf.timesheet_id, cw.contract_id
             from public.timesheets_financials tf
             left join public.contract_weeks cw on cw.timesheet_id = tf.timesheet_id
@@ -820,9 +820,9 @@ limit 1;
 
           ),
           cons as (
-            select c.*
-            from public.contracts c
-            where c.id in (select distinct contract_id from ts_map where contract_id is not null)
+            select ctr.*
+            from public.contracts ctr
+            where ctr.id in (select distinct contract_id from ts_map where contract_id is not null)
           )
           select
             bool_or(coalesce(cons.requires_hr,false)) as req_hr,
@@ -830,6 +830,7 @@ limit 1;
             case when count(*)=0 then null else bool_or(coalesce(cons.ts_attach_to_invoice,true)) end as ts_any
           into v_requires_hr_any, v_hr_attach_any, v_ts_attach_any
           from cons;
+
 
           -- Stationery for HOURS: default key from your JS (with PDF→PNG swap), unless payload provides override
           v_stationery_key :=
@@ -2360,7 +2361,7 @@ limit 1;
           end if;
 
           -- Contract mapping: prefer timesheets.contract_id, fallback to contract_weeks (matches JS BY_WEEK)
-          with ts_ids as (
+               with ts_ids as (
             select distinct (s->>'timesheet_id')::uuid as timesheet_id,
                             nullif(s->>'week_ending_date','')::date as week_ending_date,
                             nullif(s->>'ts_contract_id','')::uuid as ts_contract_id,
@@ -2381,9 +2382,9 @@ limit 1;
             left join cw_map cw on cw.timesheet_id = t.timesheet_id
           ),
           cons as (
-            select c.*
-            from public.contracts c
-            where c.id in (select distinct contract_id from eff where contract_id is not null)
+            select ctr.*
+            from public.contracts ctr
+            where ctr.id in (select distinct contract_id from eff where contract_id is not null)
           )
           select
             bool_or(coalesce(cons.requires_hr,false)) as req_hr,
@@ -2391,6 +2392,7 @@ limit 1;
             case when count(*)=0 then null else bool_or(coalesce(cons.ts_attach_to_invoice,true)) end as ts_any
           into v_requires_hr_any, v_hr_attach_any, v_ts_attach_any
           from cons;
+
 
           -- Build entries (extractBillableSegmentsForWeek) into a jsonb array, preserving order with entry_ord
           with snaps as (
