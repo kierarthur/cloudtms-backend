@@ -2458,6 +2458,53 @@ limit 1;
                 'segment_id', null,
                 'date', coalesce(sn.week_ending_date::text, v_week_start::text),
 
+                -- ✅ include hours buckets for AGGREGATE snapshots (prevents zero-hours false negatives)
+                'hours_day',
+                  public._inv_round2(
+                    coalesce((
+                      select (s2->>'hours_day')::numeric
+                      from jsonb_array_elements(meta) s2
+                      where (s2->>'id')::uuid = sn.tsfin_id
+                      limit 1
+                    ), 0)
+                  ),
+                'hours_night',
+                  public._inv_round2(
+                    coalesce((
+                      select (s2->>'hours_night')::numeric
+                      from jsonb_array_elements(meta) s2
+                      where (s2->>'id')::uuid = sn.tsfin_id
+                      limit 1
+                    ), 0)
+                  ),
+                'hours_sat',
+                  public._inv_round2(
+                    coalesce((
+                      select (s2->>'hours_sat')::numeric
+                      from jsonb_array_elements(meta) s2
+                      where (s2->>'id')::uuid = sn.tsfin_id
+                      limit 1
+                    ), 0)
+                  ),
+                'hours_sun',
+                  public._inv_round2(
+                    coalesce((
+                      select (s2->>'hours_sun')::numeric
+                      from jsonb_array_elements(meta) s2
+                      where (s2->>'id')::uuid = sn.tsfin_id
+                      limit 1
+                    ), 0)
+                  ),
+                'hours_bh',
+                  public._inv_round2(
+                    coalesce((
+                      select (s2->>'hours_bh')::numeric
+                      from jsonb_array_elements(meta) s2
+                      where (s2->>'id')::uuid = sn.tsfin_id
+                      limit 1
+                    ), 0)
+                  ),
+
                 -- CORE ONLY: exclude additional + expenses + mileage (these become separate invoice lines)
                 'pay_amount',
                   public._inv_round2(
