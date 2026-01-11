@@ -2212,7 +2212,7 @@ where tf.timesheet_id = any(v_ts_ids_to_use)
    -- line build loop
 tsid uuid;
 snap record;
-ts record;
+ts_rec record;
 con record;
 cand_display text;
 labels jsonb;
