@@ -55141,6 +55141,9 @@ async function handleContractWeekCreateAdditionalWeeklyAdjustment(env, req, week
     week_ending_date: newWeek.week_ending_date,
     contract_id: contract.id,
 
+    // ✅ IMPORTANT: link the new timesheet row back to the new contract_week row
+    contract_week_id: newWeek.id,
+
     submission_mode: 'MANUAL',
     sheet_scope: 'WEEKLY',
 
@@ -55298,6 +55301,7 @@ async function handleContractWeekCreateAdditionalWeeklyAdjustment(env, req, week
     timesheet_id: ts.timesheet_id
   }));
 }
+
 
 async function handleTimesheetCreateAdditionalDailyManual(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
