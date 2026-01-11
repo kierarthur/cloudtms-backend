@@ -2234,8 +2234,7 @@ h_bh numeric;
 
 
           -- per-ts entries temp
-          e record;
-
+          e_rec record;
           wants_daily boolean;
           has_any_date boolean;
           can_daily boolean;
@@ -3200,13 +3199,13 @@ v_ip, v_ua, v_corr
               where (e->>'timesheet_id')::uuid = tsid
             )
          select
-  public._inv_round2(pay_ex),
-  public._inv_round2(chg_ex),
-  public._inv_round2(h_day),
-  public._inv_round2(h_night),
-  public._inv_round2(h_sat),
-  public._inv_round2(h_sun),
-  public._inv_round2(h_bh)
+  public._inv_round2(agg.pay_ex),
+  public._inv_round2(agg.chg_ex),
+  public._inv_round2(agg.h_day),
+  public._inv_round2(agg.h_night),
+  public._inv_round2(agg.h_sat),
+  public._inv_round2(agg.h_sun),
+  public._inv_round2(agg.h_bh)
 into pay_ex, chg_ex, h_day, h_night, h_sat, h_sun, h_bh
 from agg;
 if chg_ex <= 0 then
