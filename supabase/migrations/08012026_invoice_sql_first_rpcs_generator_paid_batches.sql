@@ -2877,7 +2877,7 @@ v_ip, v_ua, v_corr
             primary key(timesheet_id, code, suffix)
           ) on commit delete rows;
 
-          delete from pg_temp._inv_billed_add_keys;
+          delete from pg_temp._inv_billed_add_keys where true;
 
           if v_all_selfbill then
             insert into pg_temp._inv_billed_add_keys(timesheet_id, code, suffix)
