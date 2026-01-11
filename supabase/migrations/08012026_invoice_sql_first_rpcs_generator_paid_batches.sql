@@ -795,7 +795,7 @@ limit 1;
           v_due_at := v_now + make_interval(days => v_terms_days);
 
           -- Contract mapping via contract_weeks only (matches JS HOURS endpoint)
-          -- Aggregate attach policy and labels/daily_calc per contract
+          -- Aggregate requires_hr per contract (attach flags are client_settings-only)
            with ts_map as (
             select distinct tf.timesheet_id, cw.contract_id
             from public.timesheets_financials tf
@@ -830,11 +830,14 @@ limit 1;
           )
 
           select
-            bool_or(coalesce(cons.requires_hr,false)) as req_hr,
-            case when count(*)=0 then null else bool_or(coalesce(cons.hr_attach_to_invoice,true)) end as hr_any,
-            case when count(*)=0 then null else bool_or(coalesce(cons.ts_attach_to_invoice,true)) end as ts_any
-          into v_requires_hr_any, v_hr_attach_any, v_ts_attach_any
+            bool_or(coalesce(cons.requires_hr,false)) as req_hr
+          into v_requires_hr_any
           from cons;
+
+          -- ✅ Attach flags live in client_settings, not contracts.
+          v_hr_attach_any := coalesce(v_hr_attach_default, true);
+          v_ts_attach_any := coalesce(v_ts_attach_default, true);
+
 
 
           -- Stationery for HOURS: default key from your JS (with PDF→PNG swap), unless payload provides override
@@ -2364,7 +2367,6 @@ limit 1;
           if meta is null or jsonb_typeof(meta) <> 'array' or jsonb_array_length(meta)=0 then
             raise exception 'No eligible snapshots for this client.';
           end if;
-
           -- Contract mapping: prefer timesheets.contract_id, fallback to contract_weeks (matches JS BY_WEEK)
                with ts_ids as (
             select distinct (s->>'timesheet_id')::uuid as timesheet_id,
@@ -2397,11 +2399,14 @@ limit 1;
           )
 
           select
-            bool_or(coalesce(cons.requires_hr,false)) as req_hr,
-            case when count(*)=0 then null else bool_or(coalesce(cons.hr_attach_to_invoice,true)) end as hr_any,
-            case when count(*)=0 then null else bool_or(coalesce(cons.ts_attach_to_invoice,true)) end as ts_any
-          into v_requires_hr_any, v_hr_attach_any, v_ts_attach_any
+            bool_or(coalesce(cons.requires_hr,false)) as req_hr
+          into v_requires_hr_any
           from cons;
+
+          -- ✅ Attach flags live in client_settings, not contracts.
+          v_hr_attach_any := coalesce(v_hr_attach_default, true);
+          v_ts_attach_any := coalesce(v_ts_attach_default, true);
+
 
 
           -- Build entries (extractBillableSegmentsForWeek) into a jsonb array, preserving order with entry_ord
@@ -2568,12 +2573,12 @@ limit 1;
               v_invoice_id := v_invoice.id;
             else
               -- Create self-bill invoice header exactly like findOrCreateSelfBillInvoice
-              declare
+                declare
                 sb_requires_hr boolean := false;
                 sb_hr_attach boolean := true;
                 sb_ts_attach boolean := true;
 
-                -- derive from referenced contracts (NO client_settings fallback)
+                -- derive requires_hr from referenced contracts (contracts has requires_hr; attach flags are client_settings-only)
                 tmp record;
               begin
                 with ts_ids as (
@@ -2595,11 +2600,13 @@ limit 1;
                 )
 
                 select
-                  bool_or(coalesce(cons.requires_hr,false)) as req_hr,
-                  bool_or(coalesce(cons.hr_attach_to_invoice,true)) as hr_any,
-                  bool_or(coalesce(cons.ts_attach_to_invoice,true)) as ts_any
-                into sb_requires_hr, sb_hr_attach, sb_ts_attach
+                  bool_or(coalesce(cons.requires_hr,false)) as req_hr
+                into sb_requires_hr
                 from cons;
+
+                -- ✅ Attach flags live in client_settings, not contracts.
+                sb_hr_attach := coalesce(v_hr_attach_default, true);
+                sb_ts_attach := coalesce(v_ts_attach_default, true);
 
                           v_header := jsonb_build_object(
                   'client_id', v_client_id::text,
@@ -2633,6 +2640,7 @@ limit 1;
                     'ts_attach_to_invoice', coalesce(v_ts_attach_default,true)
                   )
                 );
+
 
 
                              insert into public.invoices(
