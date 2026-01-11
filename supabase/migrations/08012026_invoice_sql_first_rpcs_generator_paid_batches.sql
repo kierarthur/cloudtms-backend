@@ -650,7 +650,7 @@ begin
           vat_amt numeric;
           inc_amt numeric;
 
-          source_key text;
+          v_line_source_key text;
 
           disallowed boolean;
 
@@ -1139,7 +1139,7 @@ limit 1;
                   )
                 );
 
-                source_key := 'TS:' || s.timesheet_id::text || ':HOURS:' || d_rec.ymd;
+                v_line_source_key := 'TS:' || s.timesheet_id::text || ':HOURS:' || d_rec.ymd;
 
                               insert into public.invoice_lines(
                   invoice_id, timesheet_id, booking_id, description,
@@ -1163,13 +1163,13 @@ limit 1;
                   v_vat_rate, vat_amt, inc_amt,
                   ('docs-pdf/timesheets/ts_' || s.timesheet_id::text || '.pdf'),
                   meta,
-                  source_key
+                  v_line_source_key
                 )
                 on conflict (invoice_id, source_key) do nothing;
 
                 if found then
                   insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
-                  values (s.timesheet_id, source_key, charge_ex, vat_amt, inc_amt);
+                  values (s.timesheet_id, v_line_source_key, charge_ex, vat_amt, inc_amt);
                 end if;
 
 
@@ -1248,7 +1248,7 @@ limit 1;
                     )
                   );
 
-                  source_key := 'TS:' || s.timesheet_id::text || ':HOURS:WEEK';
+                  v_line_source_key := 'TS:' || s.timesheet_id::text || ':HOURS:WEEK';
 
                   insert into public.invoice_lines(
                     invoice_id, timesheet_id, booking_id, description,
@@ -1268,13 +1268,13 @@ limit 1;
                     v_vat_rate, vat_amt, inc_amt,
                     ('docs-pdf/timesheets/ts_' || s.timesheet_id::text || '.pdf'),
                     meta,
-                    source_key
+                    v_line_source_key
                   )
                   on conflict (invoice_id, source_key) do nothing;
 
                   if found then
                     insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
-                    values (s.timesheet_id, source_key, base_chg_ex, vat_amt, inc_amt);
+                    values (s.timesheet_id, v_line_source_key, base_chg_ex, vat_amt, inc_amt);
                   end if;
                 end if;
               end if;
@@ -1382,7 +1382,7 @@ limit 1;
 
 
 
-                  source_key := 'TS:' || s.timesheet_id::text || ':ADD:' || code || ':' || left(d_rec.ymd,10);
+                  v_line_source_key := 'TS:' || s.timesheet_id::text || ':ADD:' || code || ':' || left(d_rec.ymd,10);
 
                   insert into public.invoice_lines(
                     invoice_id, timesheet_id, booking_id, description,
@@ -1402,13 +1402,13 @@ limit 1;
                     v_vat_rate, vat_amt, inc_amt,
                     ('docs-pdf/timesheets/ts_' || s.timesheet_id::text || '.pdf'),
                     meta,
-                    source_key
+                    v_line_source_key
                   )
                   on conflict (invoice_id, source_key) do nothing;
 
                   if found then
                     insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
-                    values (s.timesheet_id, source_key, charge_ex, vat_amt, inc_amt);
+                    values (s.timesheet_id, v_line_source_key, charge_ex, vat_amt, inc_amt);
                   end if;
 
 
@@ -1480,7 +1480,7 @@ limit 1;
               );
 
 
-              source_key := 'TS:' || s.timesheet_id::text || ':ADD:' || code || ':WEEK';
+              v_line_source_key := 'TS:' || s.timesheet_id::text || ':ADD:' || code || ':WEEK';
 
               insert into public.invoice_lines(
                 invoice_id, timesheet_id, booking_id, description,
@@ -1500,13 +1500,13 @@ limit 1;
                 v_vat_rate, vat_amt, inc_amt,
                 ('docs-pdf/timesheets/ts_' || s.timesheet_id::text || '.pdf'),
                 meta,
-                source_key
+                v_line_source_key
               )
               on conflict (invoice_id, source_key) do nothing;
 
               if found then
                 insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
-                values (s.timesheet_id, source_key, charge_ex, vat_amt, inc_amt);
+                values (s.timesheet_id, v_line_source_key, charge_ex, vat_amt, inc_amt);
               end if;
 
 
@@ -1631,7 +1631,7 @@ limit 1;
                   )
                 );
 
-                source_key := 'TS:' || s.timesheet_id::text || ':EXP:TRAVEL';
+                v_line_source_key := 'TS:' || s.timesheet_id::text || ':EXP:TRAVEL';
 
                 insert into public.invoice_lines(
                   invoice_id, timesheet_id, booking_id, description,
@@ -1651,13 +1651,13 @@ limit 1;
                   v_vat_rate, vat_amt, inc_amt,
                   ('docs-pdf/timesheets/ts_' || s.timesheet_id::text || '.pdf'),
                   meta,
-                  source_key
+                  v_line_source_key
                 )
                 on conflict (invoice_id, source_key) do nothing;
 
                 if found then
                   insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
-                  values (s.timesheet_id, source_key, charge_ex, vat_amt, inc_amt);
+                  values (s.timesheet_id, v_line_source_key, charge_ex, vat_amt, inc_amt);
                 end if;
               end if;
 
@@ -1709,7 +1709,7 @@ limit 1;
                   )
                 );
 
-                source_key := 'TS:' || s.timesheet_id::text || ':EXP:ACCOMMODATION';
+                v_line_source_key := 'TS:' || s.timesheet_id::text || ':EXP:ACCOMMODATION';
 
                 insert into public.invoice_lines(
                   invoice_id, timesheet_id, booking_id, description,
@@ -1729,13 +1729,13 @@ limit 1;
                   v_vat_rate, vat_amt, inc_amt,
                   ('docs-pdf/timesheets/ts_' || s.timesheet_id::text || '.pdf'),
                   meta,
-                  source_key
+                  v_line_source_key
                 )
                 on conflict (invoice_id, source_key) do nothing;
 
                 if found then
                   insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
-                  values (s.timesheet_id, source_key, charge_ex, vat_amt, inc_amt);
+                  values (s.timesheet_id, v_line_source_key, charge_ex, vat_amt, inc_amt);
                 end if;
               end if;
 
@@ -1787,7 +1787,7 @@ limit 1;
                   )
                 );
 
-                source_key := 'TS:' || s.timesheet_id::text || ':EXP:OTHER';
+                v_line_source_key := 'TS:' || s.timesheet_id::text || ':EXP:OTHER';
 
                 insert into public.invoice_lines(
                   invoice_id, timesheet_id, booking_id, description,
@@ -1807,13 +1807,13 @@ limit 1;
                   v_vat_rate, vat_amt, inc_amt,
                   ('docs-pdf/timesheets/ts_' || s.timesheet_id::text || '.pdf'),
                   meta,
-                  source_key
+                  v_line_source_key
                 )
                 on conflict (invoice_id, source_key) do nothing;
 
                 if found then
                   insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
-                  values (s.timesheet_id, source_key, charge_ex, vat_amt, inc_amt);
+                  values (s.timesheet_id, v_line_source_key, charge_ex, vat_amt, inc_amt);
                 end if;
               end if;
             end;
@@ -1872,7 +1872,7 @@ limit 1;
                 )
               );
 
-              source_key := 'TS:' || s.timesheet_id::text || ':MILEAGE';
+              v_line_source_key := 'TS:' || s.timesheet_id::text || ':MILEAGE';
 
               insert into public.invoice_lines(
                 invoice_id, timesheet_id, booking_id, description,
@@ -1892,13 +1892,13 @@ limit 1;
                 v_vat_rate, vat_amt, inc_amt,
                 ('docs-pdf/timesheets/ts_' || s.timesheet_id::text || '.pdf'),
                 meta,
-                source_key
+                v_line_source_key
               )
               on conflict (invoice_id, source_key) do nothing;
 
               if found then
                 insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
-                values (s.timesheet_id, source_key, charge_ex, vat_amt, inc_amt);
+                values (s.timesheet_id, v_line_source_key, charge_ex, vat_amt, inc_amt);
               end if;
             end if;
 
@@ -2263,7 +2263,7 @@ h_bh numeric;
 
           line_desc text;
           meta jsonb;
-          source_key text;
+          v_line_source_key text;
 
           -- already billed set: temp table
 
@@ -3016,7 +3016,7 @@ v_ip, v_ua, v_corr
                   )
                 );
 
-                source_key := 'TS:' || tsid::text || ':HOURS:' || bydate.ymd;
+                v_line_source_key := 'TS:' || tsid::text || ':HOURS:' || bydate.ymd;
                 insert into public.invoice_lines(
                   invoice_id, timesheet_id, booking_id, description,
                   hours_day, hours_night, hours_sat, hours_sun, hours_bh,
@@ -3039,13 +3039,13 @@ v_ip, v_ua, v_corr
                   v_vat_rate, vat_amt, inc_amt,
                   ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
                   meta,
-                  source_key
+                  v_line_source_key
                 )
                 on conflict (invoice_id, source_key) do nothing;
 
                 if found then
                   insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
-                  values (tsid, source_key, chg_ex, vat_amt, inc_amt);
+                  values (tsid, v_line_source_key, chg_ex, vat_amt, inc_amt);
                 end if;
 
 
@@ -3143,7 +3143,7 @@ v_ip, v_ua, v_corr
 
 
 
-                  source_key := 'TS:' || tsid::text || ':ADD:' || code || ':' || left(bydate.ymd,10);
+                  v_line_source_key := 'TS:' || tsid::text || ':ADD:' || code || ':' || left(bydate.ymd,10);
                   insert into public.invoice_lines(
                     invoice_id, timesheet_id, booking_id, description,
                     hours_day, hours_night, hours_sat, hours_sun, hours_bh,
@@ -3162,13 +3162,13 @@ v_ip, v_ua, v_corr
                     v_vat_rate, vat_amt, inc_amt,
                     ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
                     meta,
-                    source_key
+                    v_line_source_key
                   )
                   on conflict (invoice_id, source_key) do nothing;
 
                   if found then
                     insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
-                    values (tsid, source_key, chg_ex, vat_amt, inc_amt);
+                    values (tsid, v_line_source_key, chg_ex, vat_amt, inc_amt);
                   end if;
 
 
@@ -3247,7 +3247,7 @@ else
     );
 
 
-    source_key := 'TS:' || tsid::text || ':HOURS:WEEK';
+    v_line_source_key := 'TS:' || tsid::text || ':HOURS:WEEK';
     insert into public.invoice_lines(
       invoice_id, timesheet_id, booking_id, description,
       hours_day, hours_night, hours_sat, hours_sun, hours_bh,
@@ -3266,13 +3266,13 @@ else
       v_vat_rate, vat_amt, inc_amt,
       ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
       meta,
-      source_key
+      v_line_source_key
     )
     on conflict (invoice_id, source_key) do nothing;
 
     if found then
       insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
-      values (tsid, source_key, chg_ex, vat_amt, inc_amt);
+      values (tsid, v_line_source_key, chg_ex, vat_amt, inc_amt);
     end if;
   end if;
 end if;
@@ -3354,7 +3354,7 @@ end if;
                 )
               );
 
-              source_key := 'TS:' || tsid::text || ':ADD:' || code || ':WEEK';
+              v_line_source_key := 'TS:' || tsid::text || ':ADD:' || code || ':WEEK';
               insert into public.invoice_lines(
                 invoice_id, timesheet_id, booking_id, description,
                 hours_day, hours_night, hours_sat, hours_sun, hours_bh,
@@ -3373,13 +3373,13 @@ end if;
                 v_vat_rate, vat_amt, inc_amt,
                 ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
                 meta,
-                source_key
+                v_line_source_key
               )
               on conflict (invoice_id, source_key) do nothing;
 
               if found then
                 insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
-                values (tsid, source_key, chg_ex, vat_amt, inc_amt);
+                values (tsid, v_line_source_key, chg_ex, vat_amt, inc_amt);
               end if;
 
 
@@ -3489,7 +3489,7 @@ end if;
                   )
                 );
 
-                source_key := 'TS:' || tsid::text || ':EXP:TRAVEL';
+                v_line_source_key := 'TS:' || tsid::text || ':EXP:TRAVEL';
 
                 insert into public.invoice_lines(
                   invoice_id, timesheet_id, booking_id, description,
@@ -3509,13 +3509,13 @@ end if;
                   v_vat_rate, vat_amt, inc_amt,
                   ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
                   meta,
-                  source_key
+                  v_line_source_key
                 )
                 on conflict (invoice_id, source_key) do nothing;
 
                 if found then
                   insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
-                  values (tsid, source_key, chg_ex, vat_amt, inc_amt);
+                  values (tsid, v_line_source_key, chg_ex, vat_amt, inc_amt);
                 end if;
               end if;
 
@@ -3557,7 +3557,7 @@ end if;
                   )
                 );
 
-                source_key := 'TS:' || tsid::text || ':EXP:ACCOMMODATION';
+                v_line_source_key := 'TS:' || tsid::text || ':EXP:ACCOMMODATION';
 
                 insert into public.invoice_lines(
                   invoice_id, timesheet_id, booking_id, description,
@@ -3577,13 +3577,13 @@ end if;
                   v_vat_rate, vat_amt, inc_amt,
                   ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
                   meta,
-                  source_key
+                  v_line_source_key
                 )
                 on conflict (invoice_id, source_key) do nothing;
 
                 if found then
                   insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
-                  values (tsid, source_key, chg_ex, vat_amt, inc_amt);
+                  values (tsid, v_line_source_key, chg_ex, vat_amt, inc_amt);
                 end if;
               end if;
 
@@ -3625,7 +3625,7 @@ end if;
                   )
                 );
 
-                source_key := 'TS:' || tsid::text || ':EXP:OTHER';
+                v_line_source_key := 'TS:' || tsid::text || ':EXP:OTHER';
 
                 insert into public.invoice_lines(
                   invoice_id, timesheet_id, booking_id, description,
@@ -3645,13 +3645,13 @@ end if;
                   v_vat_rate, vat_amt, inc_amt,
                   ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
                   meta,
-                  source_key
+                  v_line_source_key
                 )
                 on conflict (invoice_id, source_key) do nothing;
 
                 if found then
                   insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
-                  values (tsid, source_key, chg_ex, vat_amt, inc_amt);
+                  values (tsid, v_line_source_key, chg_ex, vat_amt, inc_amt);
                 end if;
               end if;
             end;
@@ -3702,7 +3702,7 @@ end if;
                 )
               );
 
-              source_key := 'TS:' || tsid::text || ':MILEAGE';
+              v_line_source_key := 'TS:' || tsid::text || ':MILEAGE';
 
               insert into public.invoice_lines(
                 invoice_id, timesheet_id, booking_id, description,
@@ -3722,13 +3722,13 @@ end if;
                 v_vat_rate, vat_amt, inc_amt,
                 ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
                 meta,
-                source_key
+                v_line_source_key
               )
               on conflict (invoice_id, source_key) do nothing;
 
               if found then
                 insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
-                values (tsid, source_key, chg_ex, vat_amt, inc_amt);
+                values (tsid, v_line_source_key, chg_ex, vat_amt, inc_amt);
               end if;
             end if;
 
