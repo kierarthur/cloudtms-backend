@@ -7619,152 +7619,7 @@ async function handleContractWeekPresignManualPdf(env, req, weekId) {
 
 // PATCH /api/timesheets/:id/evidence/:evidence_id
 // Body: { kind: "Timesheet" | "Mileage" | "Accommodation" | "Expenses" | "<custom>" }
-async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
-  const enc = encodeURIComponent;
 
-  // Auth: admin only
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-  if (!tsId) return withCORS(env, req, badRequest('timesheet_id is required'));
-  if (!evidenceId) return withCORS(env, req, badRequest('evidence_id is required'));
-
-  // Defensive: block synthetic/system ids
-  if (String(evidenceId).startsWith('SYS:')) {
-    return withCORS(env, req, badRequest('System evidence cannot be edited'));
-  }
-
-  // Defensive: evidence ids in timesheet_evidence are UUIDs
-  const uuidRe =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  if (!uuidRe.test(String(evidenceId))) {
-    return withCORS(env, req, badRequest('Invalid evidence_id'));
-  }
-
-  let body;
-  try {
-    body = await parseJSONBody(req);
-  } catch {
-    return withCORS(env, req, badRequest('Invalid JSON payload'));
-  }
-
-  // ✅ Guarded write
-  const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
-  if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
-
-  // ✅ Rotation-safe resolve
-  const resolved = await resolveTimesheetToCurrent(env, tsId);
-  if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
-  const currentTsId = resolved.current_timesheet_id;
-
-  // ✅ Guard mismatch → 409 TIMESHEET_MOVED
-  if (String(expected) !== String(currentTsId)) {
-    return withCORS(
-      env,
-      req,
-      new Response(
-        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTsId }),
-        { status: 409, headers: { 'Content-Type': 'application/json' } }
-      )
-    );
-  }
-
-  const newKind = body && body.kind != null ? String(body.kind).trim() : '';
-  if (!newKind) return withCORS(env, req, badRequest('kind is required'));
-
-  try {
-    // ✅ NEW: Block evidence kind update if invoiced/paid (match QR scan + evidence add/delete rule)
-    try {
-      const fin = await sbGetOne(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?timesheet_id=eq.${enc(currentTsId)}` +
-          `&is_current=eq.true` +
-          `&select=locked_by_invoice_id,paid_at_utc` +
-          `&limit=1`
-      );
-      if (fin && (fin.locked_by_invoice_id || fin.paid_at_utc)) {
-        return withCORS(env, req, badRequest('Timesheet already invoiced or paid; cannot update evidence kind'));
-      }
-    } catch (e) {
-      // If TSFIN lookup fails, do not silently allow mutation.
-      return withCORS(env, req, serverError(`Failed to validate timesheet financial lock state: ${e?.message || e}`));
-    }
-
-    // Ensure evidence exists and belongs to this timesheet
-    const { rows: evRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
-        `?id=eq.${enc(evidenceId)}` +
-        `&timesheet_id=eq.${enc(currentTsId)}` +
-        `&select=id,kind,display_name,storage_key,created_at,created_by` +
-        `&limit=1`
-    );
-
-    const ev = evRows?.[0] || null;
-    if (!ev) return withCORS(env, req, notFound('Evidence not found for this timesheet'));
-
-    const oldKind = ev.kind != null ? String(ev.kind) : '';
-    if (oldKind === newKind) {
-      return withCORS(env, req, ok({
-        ok: true,
-        requested_timesheet_id: resolved.requested_timesheet_id || tsId,
-        current_timesheet_id: currentTsId,
-        was_stale: !!resolved.was_stale,
-        evidence: ev
-      }));
-    }
-
-    const patchRes = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(evidenceId)}`,
-      {
-        method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-        body: JSON.stringify({ kind: newKind })
-      }
-    );
-
-    const txt = await patchRes.text().catch(() => '');
-    if (!patchRes.ok) {
-      return withCORS(env, req, serverError(`Failed to update evidence kind: ${txt}`));
-    }
-
-    let updated = null;
-    try {
-      const json = txt ? JSON.parse(txt) : [];
-      updated = Array.isArray(json) ? json[0] : json;
-    } catch {
-      updated = null;
-    }
-
-    // Audit
-    try {
-      await writeAudit(
-        env,
-        user,
-        'TIMESHEET_EVIDENCE_RECLASSIFIED',
-        {
-          timesheet_id: currentTsId,
-          evidence_id: evidenceId,
-          old_kind: oldKind || null,
-          new_kind: newKind,
-          storage_key: ev.storage_key || null,
-          display_name: ev.display_name || null
-        },
-        { entity: 'timesheets', subject_id: currentTsId, req }
-      );
-    } catch {}
-
-    return withCORS(env, req, ok({
-      ok: true,
-      requested_timesheet_id: resolved.requested_timesheet_id || tsId,
-      current_timesheet_id: currentTsId,
-      was_stale: !!resolved.was_stale,
-      evidence: updated || { ok: true }
-    }));
-  } catch (e) {
-    return withCORS(env, req, serverError(`Failed to update evidence kind: ${e?.message || e}`));
-  }
-}
  
 async function handleContractWeekReplaceManualPdf(env, req, weekId) {
   const enc = encodeURIComponent;
@@ -12371,159 +12226,6 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
 
 // POST /api/timesheets/:id/evidence
 // POST /api/timesheets/:id/evidence
-async function handleTimesheetEvidenceAdd(env, req, tsId) {
-  const enc = encodeURIComponent;
-
-  // Auth: admin only
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-  if (!tsId) return withCORS(env, req, badRequest('timesheet_id is required'));
-
-  let body;
-  try {
-    body = await parseJSONBody(req);
-  } catch {
-    return withCORS(env, req, badRequest('Invalid JSON payload'));
-  }
-
-  // ✅ Guarded write
-  const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
-  if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
-
-  // ✅ Rotation-safe resolve
-  const resolved = await resolveTimesheetToCurrent(env, tsId);
-  if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
-  const currentTsId = resolved.current_timesheet_id;
-
-  // ✅ Guard mismatch → 409 TIMESHEET_MOVED
-  if (String(expected) !== String(currentTsId)) {
-    return withCORS(
-      env,
-      req,
-      new Response(
-        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTsId }),
-        { status: 409, headers: { 'Content-Type': 'application/json' } }
-      )
-    );
-  }
-
-  const kind        = body && body.kind && String(body.kind).trim();
-  const displayName = body && body.display_name != null ? String(body.display_name).trim() : null;
-
-  // normalise storage_key (R2 keys must not start with "/")
-  const storageKeyRaw = body && body.storage_key && String(body.storage_key).trim();
-  const storageKey = storageKeyRaw ? storageKeyRaw.replace(/^\/+/, '') : '';
-
-  if (!kind) return withCORS(env, req, badRequest('kind is required'));
-  if (!storageKey) return withCORS(env, req, badRequest('storage_key is required'));
-
-  try {
-    // ✅ NEW: Block evidence add if invoiced/paid (match QR scan rule)
-    try {
-      const fin = await sbGetOne(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?timesheet_id=eq.${enc(currentTsId)}` +
-          `&is_current=eq.true` +
-          `&select=locked_by_invoice_id,paid_at_utc` +
-          `&limit=1`
-      );
-      if (fin && (fin.locked_by_invoice_id || fin.paid_at_utc)) {
-        return withCORS(env, req, badRequest('Timesheet already invoiced or paid; cannot add evidence'));
-      }
-    } catch (e) {
-      // If TSFIN lookup fails, we do not silently allow mutation.
-      // Safer to stop than risk adding evidence post-invoice/paid.
-      return withCORS(env, req, serverError(`Failed to validate timesheet financial lock state: ${e?.message || e}`));
-    }
-
-    // Ensure the timesheet exists (for audit context)
-    const { rows: tsRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=eq.${enc(currentTsId)}` +
-        `&is_current=eq.true` +
-        `&select=timesheet_id,contract_id,week_ending_date,sheet_scope,submission_mode` +
-        `&limit=1`
-    );
-    const ts = tsRows?.[0] || null;
-    if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
-
-    // Validate that the storage_key exists in R2 (best-effort)
-    try {
-      if (typeof r2Exists === 'function') {
-        const exists = await r2Exists(env, storageKey);
-        if (!exists) return withCORS(env, req, badRequest('storage_key does not exist in R2'));
-      }
-    } catch (e) {
-      console.warn('[handleTimesheetEvidenceAdd] r2Exists failed (non-fatal)', {
-        storage_key: storageKey,
-        err: e?.message || String(e)
-      });
-    }
-
-    const nowIso = new Date().toISOString();
-
-    const payload = [{
-      timesheet_id: currentTsId,
-      kind,
-      display_name: displayName || kind,
-      storage_key: storageKey,
-      created_at: nowIso,
-      created_by: user.id || null
-    }];
-
-    const insRes = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheet_evidence`, {
-      method: 'POST',
-      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-      body: JSON.stringify(payload)
-    });
-
-    const txt = await insRes.text().catch(() => '');
-    if (!insRes.ok) {
-      return withCORS(env, req, serverError(`Failed to add timesheet evidence: ${txt}`));
-    }
-
-    let row = null;
-    try {
-      const json = txt ? JSON.parse(txt) : [];
-      row = Array.isArray(json) ? json[0] : json;
-    } catch {
-      row = null;
-    }
-
-    // Audit
-    try {
-      await writeAudit(
-        env,
-        user,
-        'TIMESHEET_EVIDENCE_ADDED',
-        {
-          timesheet_id: currentTsId,
-          evidence_id: row?.id || null,
-          kind,
-          display_name: displayName || kind,
-          storage_key: storageKey,
-          contract_id: ts.contract_id || null,
-          week_ending_date: ts.week_ending_date || null,
-          sheet_scope: ts.sheet_scope || null,
-          submission_mode: ts.submission_mode || null
-        },
-        { entity: 'timesheets', subject_id: currentTsId, req }
-      );
-    } catch {}
-
-    return withCORS(env, req, ok({
-      ok: true,
-      requested_timesheet_id: resolved.requested_timesheet_id || tsId,
-      current_timesheet_id: currentTsId,
-      was_stale: !!resolved.was_stale,
-      evidence: row || null
-    }));
-  } catch (e) {
-    return withCORS(env, req, serverError(`Failed to add timesheet evidence: ${e?.message || e}`));
-  }
-}
 
 
 // DELETE /api/timesheets/:id/evidence/:evidence_id
@@ -36283,527 +35985,6 @@ async function handleGetClient(env, req, clientId) {
 // --------------------------------------------------
 
 // 3) PATCH/PUT /api/clients/:id (update client + upsert/patch latest client_settings)
-async function handleUpdateClient(env, req, clientId) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  const raw = await parseJSONBody(req);
-  if (!raw) return withCORS(env, req, badRequest("Invalid JSON"));
-
-  // Strip any accidental CLI fields (immutable/minted by DB)
-  const { cli_ref, cli_num, ...data } = raw;
-
-  const TIME_KEYS = [
-    'day_start','day_end',
-    'night_start','night_end',
-    'sat_start','sat_end',
-    'sun_start','sun_end',
-    'bh_start','bh_end'
-  ];
-
-  // Helper: normalise YES/NO/true/false
-  const asBool = (v) => {
-    if (v === true) return true;
-    if (v === false || v == null) return false;
-    const s = String(v).trim().toLowerCase();
-    return s === 'true' || s === 'yes' || s === 'y' || s === '1';
-  };
-
-  // Normalise time-ish inputs:
-  // - '' or null => null (means "inherit global" when you resolve effective policy)
-  // - '06:00:00' => '06:00'
-  // - '06:00'    => '06:00'
-  const normTime = (v) => {
-    if (v == null) return null;
-    const s = String(v).trim();
-    if (!s) return null;
-    const m = s.match(/^(\d{2}:\d{2})/);
-    return m ? m[1] : s;
-  };
-
-  const sameTime = (a, b) => {
-    const na = normTime(a);
-    const nb = normTime(b);
-    return String(na ?? '') === String(nb ?? '');
-  };
-
-  // NEW: normalise email-ish input ('' => null)
-  const normEmail = (v) => {
-    if (v == null) return null;
-    const s = String(v).trim();
-    return s ? s : null;
-  };
-
-  // Server-side canonicalisation for the gated weekly logic.
-  // Only applied when client_settings is being changed in this request.
-  const canonicalizeClientSettingsServer = (beforeCs, incomingPatch) => {
-    const merged = { ...(beforeCs || {}), ...(incomingPatch || {}) };
-
-    const b = (x, def = false) => {
-      if (typeof x === 'boolean') return x;
-      if (x === 'on' || x === 'true' || x === true || x === 1 || x === '1') return true;
-      if (x === 'false' || x === false || x === 0 || x === '0' || x == null || x === '') return false;
-      return def;
-    };
-
-    // Defaults (preserve existing if present; on insert fall back to sensible defaults)
-    const out = { ...merged };
-
-    // ✅ NEW: normalise the new fields (trim + nullify)
-    out.send_manual_invoices_to_different_email = b(out.send_manual_invoices_to_different_email, false);
-    out.manual_invoices_alt_email_address = normEmail(out.manual_invoices_alt_email_address);
-
-    // If toggle is off, always clear the email
-    if (!out.send_manual_invoices_to_different_email) {
-      out.manual_invoices_alt_email_address = null;
-    }
-
-    // NEW: normalise auto_invoice_default to a real boolean (default false)
-    out.auto_invoice_default = b(out.auto_invoice_default, false);
-
-    // Derive weekly mode from booleans
-    const isNhsp = b(out.is_nhsp, false);
-    const isHr   = b(out.autoprocess_hr, false);
-
-    if (isNhsp) {
-      out.is_nhsp = true;
-
-      out.autoprocess_hr = false;
-      out.requires_hr = false;
-      out.no_timesheet_required = false;
-
-      out.pay_reference_required = false;
-      out.invoice_reference_required = false;
-
-      out.self_bill_no_invoices_sent = true;
-      out.daily_calc_of_invoices = true;
-      out.group_nightsat_sunbh = false;
-
-      out.hr_attach_to_invoice = false;
-      out.ts_attach_to_invoice = false;
-
-      // NEW: NHSP is self-bill/no invoices -> auto-invoice default must be false
-      out.auto_invoice_default = false;
-
-      // ✅ NEW: NHSP is allowed to use the manual-adjustment email setting
-      // (keep whatever user set, but clear email if toggle is off)
-      out.send_manual_invoices_to_different_email = b(out.send_manual_invoices_to_different_email, false);
-      out.manual_invoices_alt_email_address = normEmail(out.manual_invoices_alt_email_address);
-      if (!out.send_manual_invoices_to_different_email) out.manual_invoices_alt_email_address = null;
-
-      return out;
-    }
-
-    if (!isHr) {
-      // Manual (NONE)
-      out.is_nhsp = false;
-
-      out.autoprocess_hr = false;
-      out.requires_hr = false;
-      out.no_timesheet_required = false;
-
-      out.hr_attach_to_invoice = false;
-      out.ts_attach_to_invoice = true;
-
-      // Other manual flags remain user-configurable (do not force)
-      // pay_reference_required, invoice_reference_required, self_bill_no_invoices_sent,
-      // daily_calc_of_invoices, group_nightsat_sunbh are left as-is.
-
-      // NEW: if self-bill is enabled (no invoices sent), auto-invoice default must be false
-      const selfBill = b(out.self_bill_no_invoices_sent, false);
-      if (selfBill) out.auto_invoice_default = false;
-
-      // ✅ NEW: manual clients do NOT get the alt-manual-email setting unless self-bill is enabled
-      if (!selfBill) {
-        out.send_manual_invoices_to_different_email = false;
-        out.manual_invoices_alt_email_address = null;
-      } else {
-        out.send_manual_invoices_to_different_email = b(out.send_manual_invoices_to_different_email, false);
-        out.manual_invoices_alt_email_address = normEmail(out.manual_invoices_alt_email_address);
-        if (!out.send_manual_invoices_to_different_email) out.manual_invoices_alt_email_address = null;
-      }
-
-      return out;
-    }
-
-    // HealthRoster
-    out.is_nhsp = false;
-    out.autoprocess_hr = true;
-
-    const createMode = b(out.no_timesheet_required, false);
-
-    // Enforce refs off for HR modes
-    out.pay_reference_required = false;
-    out.invoice_reference_required = false;
-
-    // Attach defaults if unset
-    if (out.hr_attach_to_invoice == null) out.hr_attach_to_invoice = true;
-    if (out.ts_attach_to_invoice == null) out.ts_attach_to_invoice = true;
-
-    if (createMode) {
-      // HR creates timesheets; no cross-check; do not attach timesheets
-      out.requires_hr = false;
-      out.no_timesheet_required = true;
-      out.ts_attach_to_invoice = false;
-
-      // NEW: if self-bill is enabled (no invoices sent), auto-invoice default must be false
-      if (b(out.self_bill_no_invoices_sent, false)) out.auto_invoice_default = false;
-
-      // ✅ NEW: HR is allowed to use the alt-manual-email setting
-      out.send_manual_invoices_to_different_email = b(out.send_manual_invoices_to_different_email, false);
-      out.manual_invoices_alt_email_address = normEmail(out.manual_invoices_alt_email_address);
-      if (!out.send_manual_invoices_to_different_email) out.manual_invoices_alt_email_address = null;
-
-      return out;
-    }
-
-    // HR verify mode
-    out.requires_hr = true;
-    out.no_timesheet_required = false;
-
-    // NEW: if self-bill is enabled (no invoices sent), auto-invoice default must be false
-    if (b(out.self_bill_no_invoices_sent, false)) out.auto_invoice_default = false;
-
-    // ✅ NEW: HR is allowed to use the alt-manual-email setting
-    out.send_manual_invoices_to_different_email = b(out.send_manual_invoices_to_different_email, false);
-    out.manual_invoices_alt_email_address = normEmail(out.manual_invoices_alt_email_address);
-    if (!out.send_manual_invoices_to_different_email) out.manual_invoices_alt_email_address = null;
-
-    return out;
-  };
-
-  try {
-    // --- Load existing client + latest client_settings for comparison
-    const { rows: beforeClientRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/clients` +
-      `?id=eq.${encodeURIComponent(clientId)}` +
-      `&select=id,name,invoice_address,primary_invoice_email,ap_phone,vat_chargeable,payment_terms_days,mileage_charge_rate,ts_queries_email,updated_at`
-    );
-    if (!beforeClientRows?.length) return withCORS(env, req, notFound("Client not found"));
-    const beforeClient = beforeClientRows[0];
-
-    const { rows: beforeCsRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/client_settings` +
-      `?client_id=eq.${encodeURIComponent(clientId)}` +
-      `&select=` +
-        [
-          'id',
-          'hr_validation_required','ts_reference_required','pay_reference_required','invoice_reference_required',
-          'default_submission_mode',
-          'week_ending_weekday',
-          'is_nhsp','self_bill_no_invoices_sent','daily_calc_of_invoices',
-          'no_timesheet_required','group_nightsat_sunbh',
-          'auto_invoice_default',
-          'effective_from','timezone_id',
-          'day_start','day_end','night_start','night_end','sat_start','sat_end','sun_start','sun_end','bh_start','bh_end',
-          'bh_source','bh_list','bh_feed_url',
-          'requires_hr','autoprocess_hr','hr_attach_to_invoice','ts_attach_to_invoice',
-
-          // ✅ NEW: manual adjustment email routing
-          'send_manual_invoices_to_different_email',
-          'manual_invoices_alt_email_address',
-
-          'created_at','updated_at'
-        ].join(',') +
-      `&order=effective_from.desc,created_at.desc&limit=1`
-    );
-
-    const beforeCs = beforeCsRows?.[0] || null;
-
-    // --- Split incoming payload between clients and client_settings
-    const csInput = {
-      ...(typeof data.client_settings === 'object' ? data.client_settings : {})
-    };
-
-    // Remove any UI-only helper keys if they arrive
-    delete csInput.weekly_mode;
-    delete csInput.hr_weekly_behaviour;
-    delete csInput.__from_ui;
-
-    // Existing flags in client_settings
-    if ('hr_validation_required' in data)        csInput.hr_validation_required        = !!data.hr_validation_required;
-    if ('ts_reference_required' in data)         csInput.ts_reference_required         = !!data.ts_reference_required;
-    if ('pay_reference_required' in data)        csInput.pay_reference_required        = !!data.pay_reference_required;
-    if ('invoice_reference_required' in data)    csInput.invoice_reference_required    = !!data.invoice_reference_required;
-    if ('default_submission_mode' in data)       csInput.default_submission_mode       = data.default_submission_mode;
-
-    // NEW: auto-invoice default (accept either top-level or nested client_settings)
-    if ('auto_invoice_default' in data || 'auto_invoice_default' in csInput) {
-      csInput.auto_invoice_default = asBool(csInput.auto_invoice_default ?? data.auto_invoice_default);
-    }
-
-    // HR / attach flags (accept either top-level or nested in client_settings)
-    if ('requires_hr' in data || 'requires_hr' in csInput) {
-      csInput.requires_hr = asBool(csInput.requires_hr ?? data.requires_hr);
-    }
-    if ('autoprocess_hr' in data || 'autoprocess_hr' in csInput) {
-      csInput.autoprocess_hr = asBool(csInput.autoprocess_hr ?? data.autoprocess_hr);
-    }
-    if ('hr_attach_to_invoice' in data || 'hr_attach_to_invoice' in csInput) {
-      csInput.hr_attach_to_invoice = asBool(csInput.hr_attach_to_invoice ?? data.hr_attach_to_invoice);
-    }
-    if ('ts_attach_to_invoice' in data || 'ts_attach_to_invoice' in csInput) {
-      csInput.ts_attach_to_invoice = asBool(csInput.ts_attach_to_invoice ?? data.ts_attach_to_invoice);
-    }
-
-    // Top-level flags: accept at either level
-    if ('is_nhsp' in data || 'is_nhsp' in csInput) {
-      csInput.is_nhsp = asBool(csInput.is_nhsp ?? data.is_nhsp);
-    }
-    if ('self_bill_no_invoices_sent' in data || 'self_bill_no_invoices_sent' in csInput) {
-      csInput.self_bill_no_invoices_sent = asBool(csInput.self_bill_no_invoices_sent ?? data.self_bill_no_invoices_sent);
-    }
-    if ('daily_calc_of_invoices' in data || 'daily_calc_of_invoices' in csInput) {
-      csInput.daily_calc_of_invoices = asBool(csInput.daily_calc_of_invoices ?? data.daily_calc_of_invoices);
-    }
-    if ('no_timesheet_required' in data || 'no_timesheet_required' in csInput) {
-      csInput.no_timesheet_required = asBool(csInput.no_timesheet_required ?? data.no_timesheet_required);
-    }
-    if ('group_nightsat_sunbh' in data || 'group_nightsat_sunbh' in csInput) {
-      csInput.group_nightsat_sunbh = asBool(csInput.group_nightsat_sunbh ?? data.group_nightsat_sunbh);
-    }
-
-    // ✅ NEW: manual adjustment email routing (accept either top-level or nested)
-    if ('send_manual_invoices_to_different_email' in data || 'send_manual_invoices_to_different_email' in csInput) {
-      csInput.send_manual_invoices_to_different_email =
-        asBool(csInput.send_manual_invoices_to_different_email ?? data.send_manual_invoices_to_different_email);
-    }
-    if ('manual_invoices_alt_email_address' in data || 'manual_invoices_alt_email_address' in csInput) {
-      csInput.manual_invoices_alt_email_address =
-        normEmail(csInput.manual_invoices_alt_email_address ?? data.manual_invoices_alt_email_address);
-    }
-
-    // ✅ Accept time keys at either level; '' => null to clear/inherit global
-    for (const k of TIME_KEYS) {
-      if ((k in data) || (k in csInput)) {
-        csInput[k] = normTime(csInput[k] ?? data[k]);
-      }
-    }
-
-    // Accept top-level week_ending_weekday or inside client_settings; validate 0..6 (default 0 if provided but invalid)
-    const weIn = (data.week_ending_weekday ?? csInput.week_ending_weekday);
-    if (weIn !== undefined) {
-      let we = Number(weIn);
-      if (!Number.isInteger(we) || we < 0 || we > 6) we = 0;
-      csInput.week_ending_weekday = we;
-    }
-
-    // Normalise default_submission_mode
-    if ('default_submission_mode' in csInput) {
-      let dsm = String(csInput.default_submission_mode || '').toUpperCase();
-      if (!['ELECTRONIC','MANUAL'].includes(dsm)) dsm = 'ELECTRONIC';
-      csInput.default_submission_mode = dsm;
-    }
-
-    const {
-      hr_validation_required,
-      ts_reference_required,
-      pay_reference_required,
-      invoice_reference_required,
-      default_submission_mode,
-      client_settings,
-      week_ending_weekday,
-
-      // flags pulled into csInput above
-      is_nhsp,
-      self_bill_no_invoices_sent,
-      daily_calc_of_invoices,
-      no_timesheet_required,
-      group_nightsat_sunbh,
-      auto_invoice_default,
-      requires_hr,
-      autoprocess_hr,
-      hr_attach_to_invoice,
-      ts_attach_to_invoice,
-
-      // ✅ NEW: ensure these never fall into clients table patch
-      send_manual_invoices_to_different_email,
-      manual_invoices_alt_email_address,
-
-      ...clientPatchRaw
-    } = data;
-
-    // Remove empty strings to avoid overwriting with ''
-    const clientPatch = {};
-    for (const [k, v] of Object.entries(clientPatchRaw)) {
-      if (v === '' || v === undefined) continue;
-      clientPatch[k] = v;
-    }
-
-    // --- Decide whether clients table actually needs a PATCH
-    const clientKeysToChange = Object.keys(clientPatch).filter(k => {
-      return JSON.stringify(clientPatch[k]) !== JSON.stringify(beforeClient[k]);
-    });
-
-    let client = beforeClient;
-
-    if (clientKeysToChange.length) {
-      clientPatch.updated_at = new Date().toISOString();
-
-      const res = await fetch(
-        `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(clientId)}`,
-        {
-          method: "PATCH",
-          headers: { ...sbHeaders(env), "Prefer": "return=representation" },
-          body: JSON.stringify(clientPatch)
-        }
-      );
-      if (!res.ok) {
-        const err = await res.text();
-        return withCORS(env, req, badRequest(`Update failed: ${err}`));
-      }
-      const json = await res.json().catch(() => ({}));
-      client = Array.isArray(json) ? json[0] : json;
-    }
-
-    // --- Upsert/patch client_settings if provided
-    let csChanged = false;
-    let client_settings_updated = null;
-
-    if (Object.keys(csInput).length) {
-      const hasBefore = !!beforeCs?.id;
-
-      // Canonicalise server-side (enforces the gated weekly rules + manual-adjustment email gating)
-      const canon = canonicalizeClientSettingsServer(beforeCs, csInput);
-
-      // ✅ Ensure time fields are stored as either HH:MM or NULL (never '')
-      for (const k of TIME_KEYS) {
-        if (Object.prototype.hasOwnProperty.call(canon, k)) {
-          canon[k] = normTime(canon[k]); // already returns null for blank
-        }
-      }
-
-      // Build a minimal PATCH (only fields that actually differ), but allow canon to force values
-      const patch = {};
-      if (hasBefore) {
-        for (const [k, v] of Object.entries(canon)) {
-          if (k === 'id' || k === 'client_id' || k === 'created_at' || k === 'updated_at') continue;
-
-          const beforeV = beforeCs ? beforeCs[k] : undefined;
-
-          // For time keys, compare normalised HH:MM (prevents false diffs like 06:00 vs 06:00:00)
-          if (TIME_KEYS.includes(k)) {
-            if (!sameTime(beforeV, v)) patch[k] = v;
-            continue;
-          }
-
-          if (JSON.stringify(beforeV) !== JSON.stringify(v)) patch[k] = v;
-        }
-        patch.updated_at = new Date().toISOString();
-
-        const csRes = await fetch(
-          `${env.SUPABASE_URL}/rest/v1/client_settings?id=eq.${encodeURIComponent(beforeCs.id)}`,
-          {
-            method: "PATCH",
-            headers: { ...sbHeaders(env), "Prefer": "return=representation" },
-            body: JSON.stringify(patch)
-          }
-        );
-        if (!csRes.ok) {
-          const err = await csRes.text();
-          return withCORS(env, req, badRequest(`Client settings update failed: ${err}`));
-        }
-        const csJson = await csRes.json().catch(() => ({}));
-        client_settings_updated = Array.isArray(csJson) ? csJson[0] : csJson;
-      } else {
-        const insertRow = {
-          client_id: clientId,
-          ...canon,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        };
-        delete insertRow.id;
-
-        const csRes = await fetch(`${env.SUPABASE_URL}/rest/v1/client_settings`, {
-          method: "POST",
-          headers: { ...sbHeaders(env), "Prefer": "return=representation" },
-          body: JSON.stringify(insertRow)
-        });
-        if (!csRes.ok) {
-          const err = await csRes.text();
-          return withCORS(env, req, badRequest(`Client settings insert failed: ${err}`));
-        }
-        const csJson = await csRes.json().catch(() => ({}));
-        client_settings_updated = Array.isArray(csJson) ? csJson[0] : csJson;
-      }
-
-      // TSFIN staleness detection (EXTENDED: include time boundary changes)
-      const beforeHr      = !!(beforeCs?.hr_validation_required        ?? false);
-      const beforeRef     = !!(beforeCs?.ts_reference_required         ?? false);
-      const beforePayRef  = !!(beforeCs?.pay_reference_required        ?? false);
-      const beforeInvRef  = !!(beforeCs?.invoice_reference_required    ?? false);
-
-      const nextHr        = !!(canon.hr_validation_required            ?? false);
-      const nextRef       = !!(canon.ts_reference_required             ?? false);
-      const nextPayRef    = !!(canon.pay_reference_required            ?? false);
-      const nextInvRef    = !!(canon.invoice_reference_required        ?? false);
-
-      const timesChanged = TIME_KEYS.some(k => !sameTime(beforeCs?.[k], canon?.[k]));
-
-      csChanged = (
-        beforeHr     !== nextHr     ||
-        beforeRef    !== nextRef    ||
-        beforePayRef !== nextPayRef ||
-        beforeInvRef !== nextInvRef ||
-        timesChanged
-      );
-    }
-
-    // --- Change detection for timesheet financials staleness
-    const policyChanged =
-      (data.vat_chargeable != null && !!data.vat_chargeable !== !!beforeClient.vat_chargeable) ||
-      (data.payment_terms_days != null && Number(data.payment_terms_days) !== Number(beforeClient.payment_terms_days));
-    const mileageChargeChanged =
-      (data.mileage_charge_rate != null && Number(data.mileage_charge_rate) !== Number(beforeClient.mileage_charge_rate));
-
-    if (policyChanged || mileageChargeChanged || csChanged) {
-      await fetch(
-        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?client_id=eq.${encodeURIComponent(clientId)}` +
-          `&is_current=eq.true` +
-          `&locked_by_invoice_id=is.null`,
-        {
-          method: "PATCH",
-          headers: { ...sbHeaders(env), "Prefer": "return=minimal" },
-          body: JSON.stringify({
-            is_stale: true,
-            stale_reason: 'CLIENT_SETTINGS_CHANGED',
-            updated_at: new Date().toISOString()
-          })
-        }
-      );
-
-      const { rows: tsfins } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?select=timesheet_id` +
-          `&client_id=eq.${encodeURIComponent(clientId)}` +
-          `&is_current=eq.true` +
-          `&locked_by_invoice_id=is.null`
-      );
-      const toEnqueue = (tsfins || []).map(r => ({ timesheet_id: r.timesheet_id, reason: 'POLICY_CHANGED' }));
-      if (toEnqueue.length) {
-        await fetch(
-          `${env.SUPABASE_URL}/rest/v1/ts_financials_outbox?on_conflict=timesheet_id,reason`,
-          {
-            method: "POST",
-            headers: { ...sbHeaders(env), "Prefer": "resolution=ignore-duplicates" },
-            body: JSON.stringify(toEnqueue)
-          }
-        );
-      }
-    }
-
-    return withCORS(env, req, ok({
-      client,
-      client_settings: client_settings_updated || beforeCs || null
-    }));
-  } catch {
-    return withCORS(env, req, serverError("Failed to update client"));
-  }
-}
 
 
 
@@ -37044,6 +36225,736 @@ async function handleUpdateClient(env, req, clientId) {
     parse_summary_json: mergedSummary
   }));
 }
+
+
+// ============================================================
+// UPDATED: handleTsfinPatchExpenses / handleTsfinPatchMileage / patchTsfinCommon
+// - Supports category expenses (TRAVEL/ACCOMMODATION/OTHER) + totals derived
+// - Enforces evidence via public.timesheet_evidence.kind (NOT TSFIN *_evidence_* fields)
+// - Mileage evidence enforced via timesheet_evidence.kind = 'MILEAGE'
+// - Stores expenses_description as notes/metadata only (string or JSON-stringified)
+// ============================================================
+
+async function handleTsfinPatchExpenses(env, req, timesheetId) {
+  const body = await parseJSONBody(req).catch(() => ({}));
+
+  // allow either top-level fields or nested { expenses: {...} }
+  const src = (body && typeof body.expenses === 'object' && body.expenses) ? body.expenses : body;
+
+  return withCORS(env, req, await patchTsfinCommon(env, req, timesheetId, {
+    expected_timesheet_id: body?.expected_timesheet_id ?? src?.expected_timesheet_id,
+    reason: body?.reason ?? src?.reason ?? null,
+    expenses: {
+      travel_pay_ex_vat: src?.travel_pay_ex_vat,
+      travel_charge_ex_vat: src?.travel_charge_ex_vat,
+
+      accommodation_pay_ex_vat: src?.accommodation_pay_ex_vat,
+      accommodation_charge_ex_vat: src?.accommodation_charge_ex_vat,
+
+      other_pay_ex_vat: src?.other_pay_ex_vat,
+      other_charge_ex_vat: src?.other_charge_ex_vat,
+
+      // notes/meta ONLY (string or object); stored into timesheets_financials.expenses_description
+      description: (src?.expenses_description ?? src?.description ?? src?.expenses_meta_json)
+    }
+  }));
+}
+
+// 4) PATCH /api/tsfin/:id/mileage  (mileage_units + pay/charge + rates)
+async function handleTsfinPatchMileage(env, req, timesheetId) {
+  const body = await parseJSONBody(req).catch(() => ({}));
+
+  // allow either top-level fields or nested { mileage: {...} }
+  const src = (body && typeof body.mileage === 'object' && body.mileage) ? body.mileage : body;
+
+  return withCORS(env, req, await patchTsfinCommon(env, req, timesheetId, {
+    expected_timesheet_id: body?.expected_timesheet_id ?? src?.expected_timesheet_id,
+    reason: body?.reason ?? src?.reason ?? null,
+    mileage: {
+      mileage_units: src?.mileage_units,
+      pay_ex_vat: src?.pay_ex_vat,
+      charge_ex_vat: src?.charge_ex_vat,
+      pay_rate: src?.pay_rate,
+      charge_rate: src?.charge_rate
+    }
+  }));
+}
+
+async function patchTsfinCommon(env, req, timesheetId, patch) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return unauthorized();
+
+  const enc = encodeURIComponent;
+
+  // ─────────────────────────────────────────────────────────────
+  // optimistic concurrency guard (expected current id required)
+  // ─────────────────────────────────────────────────────────────
+  const expected = (patch && patch.expected_timesheet_id) ? String(patch.expected_timesheet_id) : '';
+  if (!expected) {
+    return badRequest('expected_timesheet_id is required');
+  }
+
+  const resolved = await resolveTimesheetToCurrent(env, timesheetId);
+  if (!resolved || !resolved.current_timesheet_id) {
+    return notFound('Timesheet not found');
+  }
+
+  const currentTimesheetId = String(resolved.current_timesheet_id);
+  if (expected !== currentTimesheetId) {
+    const payload = {
+      error: 'TIMESHEET_MOVED',
+      booking_id: resolved.booking_id || null,
+      requested_timesheet_id: resolved.requested_timesheet_id || timesheetId || null,
+      current_timesheet_id: resolved.current_timesheet_id || null,
+      current_version: resolved.current_version != null ? resolved.current_version : null
+    };
+    return new Response(JSON.stringify(payload), {
+      status: 409,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  // From here on: ALWAYS use currentTimesheetId
+  const toNum = (v) => (v === null || v === undefined ? null : Number(v));
+  const nonneg = (n) => (n === null || n === undefined ? true : Number(n) >= 0);
+
+  const num0 = (v) => {
+    const n = toNum(v);
+    return (n == null || Number.isNaN(n)) ? 0 : n;
+  };
+
+  const normalizeExpensesDescription = (v) => {
+    if (v === undefined) return undefined; // not touched
+    if (v === null) return null;
+    if (typeof v === 'string') return v;
+    try {
+      if (typeof v === 'object') return JSON.stringify(v);
+    } catch {}
+    return String(v);
+  };
+
+  // Evidence kind aliases (accept legacy UI values too)
+  const KIND_ALIASES = {
+    MILEAGE: ['MILEAGE', 'Mileage', 'mileage'],
+    TRAVEL: ['TRAVEL', 'Travel', 'travel', 'EXPENSES', 'Expenses', 'expenses'],
+    ACCOMMODATION: ['ACCOMMODATION', 'Accommodation', 'accommodation'],
+    OTHER: ['OTHER', 'Other', 'other'],
+  };
+
+  const hasEvidenceForAnyKind = async (kinds) => {
+    const ks = Array.isArray(kinds) ? kinds.filter(Boolean) : [];
+    if (!ks.length) return false;
+
+    const inParam = `in.(${ks.join(',')})`;
+    const url =
+      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&kind=${enc(inParam)}` +
+      `&select=id` +
+      `&limit=1`;
+
+    try {
+      const { rows } = await sbFetch(env, url);
+      return !!(rows && rows[0] && rows[0].id);
+    } catch {
+      return false;
+    }
+  };
+
+  const evidenceError = (missingArr) => {
+    return new Response(JSON.stringify({
+      error: 'EVIDENCE_REQUIRED',
+      missing: missingArr
+    }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  };
+
+  // -------- basic numeric validations --------
+  if (patch.expenses) {
+    const xp = patch.expenses;
+
+    // Category numeric validation (>= 0)
+    if (!nonneg(xp.travel_pay_ex_vat) || !nonneg(xp.travel_charge_ex_vat) ||
+        !nonneg(xp.accommodation_pay_ex_vat) || !nonneg(xp.accommodation_charge_ex_vat) ||
+        !nonneg(xp.other_pay_ex_vat) || !nonneg(xp.other_charge_ex_vat)) {
+      return badRequest('Expense values must be >= 0');
+    }
+  }
+
+  if (patch.mileage) {
+    const ml = patch.mileage;
+
+    if (!nonneg(ml.mileage_units) || !nonneg(ml.pay_ex_vat) || !nonneg(ml.charge_ex_vat) || !nonneg(ml.pay_rate) || !nonneg(ml.charge_rate)) {
+      return badRequest('Mileage values must be >= 0');
+    }
+  }
+
+  // -------- load current snapshot --------
+  const before = await fetchCurrentTsfin(env, currentTimesheetId);
+  if (!before) return notFound('TSFIN current row not found');
+  if (before.locked_by_invoice_id) return conflict('Timesheet financials are locked by an invoice');
+
+  // -------- compute "after" values for evidence enforcement + totals coherency --------
+  let afterTravelPay = num0(before.travel_pay_ex_vat);
+  let afterTravelChg = num0(before.travel_charge_ex_vat);
+  let afterAccomPay  = num0(before.accommodation_pay_ex_vat);
+  let afterAccomChg  = num0(before.accommodation_charge_ex_vat);
+  let afterOtherPay  = num0(before.other_pay_ex_vat);
+  let afterOtherChg  = num0(before.other_charge_ex_vat);
+
+  let afterMileageUnits = num0(before.mileage_units);
+  let afterMileagePay   = num0(before.mileage_pay_ex_vat);
+  let afterMileageChg   = num0(before.mileage_charge_ex_vat);
+
+  if (patch.expenses) {
+    const xp = patch.expenses;
+
+    if (xp.travel_pay_ex_vat !== undefined)        afterTravelPay = num0(xp.travel_pay_ex_vat);
+    if (xp.travel_charge_ex_vat !== undefined)     afterTravelChg = num0(xp.travel_charge_ex_vat);
+
+    if (xp.accommodation_pay_ex_vat !== undefined)    afterAccomPay = num0(xp.accommodation_pay_ex_vat);
+    if (xp.accommodation_charge_ex_vat !== undefined) afterAccomChg = num0(xp.accommodation_charge_ex_vat);
+
+    if (xp.other_pay_ex_vat !== undefined)         afterOtherPay = num0(xp.other_pay_ex_vat);
+    if (xp.other_charge_ex_vat !== undefined)      afterOtherChg = num0(xp.other_charge_ex_vat);
+  }
+
+  if (patch.mileage) {
+    const ml = patch.mileage;
+    if (ml.mileage_units !== undefined)   afterMileageUnits = num0(ml.mileage_units);
+    if (ml.pay_ex_vat !== undefined)      afterMileagePay   = num0(ml.pay_ex_vat);
+    if (ml.charge_ex_vat !== undefined)   afterMileageChg   = num0(ml.charge_ex_vat);
+  }
+
+  // -------- evidence requirements (table-driven, deterministic) --------
+  const missing = [];
+
+  // Mileage evidence required if any mileage claim > 0
+  if (afterMileageUnits > 0 || afterMileagePay > 0 || afterMileageChg > 0) {
+    const ok = await hasEvidenceForAnyKind(KIND_ALIASES.MILEAGE);
+    if (!ok) missing.push({ category: 'mileage', required_kind: 'MILEAGE' });
+  }
+
+  // Travel evidence required if any travel claim > 0
+  if (afterTravelPay > 0 || afterTravelChg > 0) {
+    const ok = await hasEvidenceForAnyKind(KIND_ALIASES.TRAVEL);
+    if (!ok) missing.push({ category: 'travel', required_kind: 'TRAVEL' });
+  }
+
+  // Accommodation evidence required if any accommodation claim > 0
+  if (afterAccomPay > 0 || afterAccomChg > 0) {
+    const ok = await hasEvidenceForAnyKind(KIND_ALIASES.ACCOMMODATION);
+    if (!ok) missing.push({ category: 'accommodation', required_kind: 'ACCOMMODATION' });
+  }
+
+  // Other evidence required if any other claim > 0
+  if (afterOtherPay > 0 || afterOtherChg > 0) {
+    const ok = await hasEvidenceForAnyKind(KIND_ALIASES.OTHER);
+    if (!ok) missing.push({ category: 'other', required_kind: 'OTHER' });
+  }
+
+  if (missing.length) {
+    return evidenceError(missing);
+  }
+
+  // -------- construct update payload --------
+  const upd = {};
+  const nowISO = nowIso();
+
+  // Category expenses write + totals coherency
+  if (patch.expenses) {
+    const xp = patch.expenses;
+
+    // Only write explicit category columns when present in patch
+    if (xp.travel_pay_ex_vat !== undefined)        upd.travel_pay_ex_vat = afterTravelPay;
+    if (xp.travel_charge_ex_vat !== undefined)     upd.travel_charge_ex_vat = afterTravelChg;
+
+    if (xp.accommodation_pay_ex_vat !== undefined)    upd.accommodation_pay_ex_vat = afterAccomPay;
+    if (xp.accommodation_charge_ex_vat !== undefined) upd.accommodation_charge_ex_vat = afterAccomChg;
+
+    if (xp.other_pay_ex_vat !== undefined)         upd.other_pay_ex_vat = afterOtherPay;
+    if (xp.other_charge_ex_vat !== undefined)      upd.other_charge_ex_vat = afterOtherChg;
+
+    // Always keep totals coherent when the expenses patch path is used
+    const sumPay = num0(afterTravelPay) + num0(afterAccomPay) + num0(afterOtherPay);
+    const sumChg = num0(afterTravelChg) + num0(afterAccomChg) + num0(afterOtherChg);
+
+    upd.expenses_pay_ex_vat = sumPay;
+    upd.expenses_charge_ex_vat = sumChg;
+
+    const desc = normalizeExpensesDescription(xp.description);
+    if (desc !== undefined) upd.expenses_description = desc;
+  }
+
+  // Mileage write (NO TSFIN evidence pointer fields; evidence is in timesheet_evidence table)
+  if (patch.mileage) {
+    const ml = patch.mileage;
+
+    if (ml.mileage_units !== undefined) {
+      upd.mileage_units = afterMileageUnits;
+    }
+    if (ml.pay_ex_vat !== undefined)        upd.mileage_pay_ex_vat = afterMileagePay;
+    if (ml.charge_ex_vat !== undefined)     upd.mileage_charge_ex_vat = afterMileageChg;
+
+    if (ml.pay_rate !== undefined)          upd.mileage_pay_rate = (ml.pay_rate === null ? null : toNum(ml.pay_rate));
+    if (ml.charge_rate !== undefined)       upd.mileage_charge_rate = (ml.charge_rate === null ? null : toNum(ml.charge_rate));
+
+    // Backfill rates from candidate/client if not provided (preserve existing if present)
+    if (ml.pay_rate === undefined || ml.charge_rate === undefined) {
+      const needPay = ml.pay_rate === undefined;
+      const needChg = ml.charge_rate === undefined;
+      if (needPay || needChg) {
+        let candRate = null, clientRate = null;
+        try {
+          if (needPay && before.candidate_id) {
+            const { rows: candRows } = await sbFetch(
+              env,
+              `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(before.candidate_id)}&select=mileage_pay_rate&limit=1`
+            );
+            candRate = candRows?.[0]?.mileage_pay_rate ?? null;
+          }
+          if (needChg && before.client_id) {
+            const { rows: cliRows } = await sbFetch(
+              env,
+              `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(before.client_id)}&select=mileage_charge_rate&limit=1`
+            );
+            clientRate = cliRows?.[0]?.mileage_charge_rate ?? null;
+          }
+        } catch { /* ignore */ }
+        if (needPay) upd.mileage_pay_rate = toNum(before.mileage_pay_rate) ?? (candRate == null ? null : Number(candRate));
+        if (needChg) upd.mileage_charge_rate = toNum(before.mileage_charge_rate) ?? (clientRate == null ? null : Number(clientRate));
+      }
+    }
+  }
+
+  if (patch.po && patch.po.number !== undefined) {
+    upd.po_number = (patch.po.number ?? null);
+  }
+
+  if (!Object.keys(upd).length) {
+    return ok({ updated: false, tsfin: before });
+  }
+
+  upd.is_stale = true;
+  upd.updated_at = nowISO;
+
+  const url =
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+    `?timesheet_id=eq.${encodeURIComponent(currentTimesheetId)}` +
+    `&is_current=eq.true` +
+    `&locked_by_invoice_id=is.null`;
+
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
+    body: JSON.stringify(upd),
+  });
+
+  if (!res.ok) {
+    const t = await res.text();
+    return serverError(`TSFIN update failed: ${t}`);
+  }
+
+  const json = await res.json().catch(() => []);
+  const after = Array.isArray(json) ? json[0] : json;
+
+  await enqueueManualTsfinRecalc(env, currentTimesheetId).catch(() => {});
+
+  await insertAuditEvent(env, req, {
+    object_type: 'timesheets_financials',
+    object_id_text: currentTimesheetId,
+    action: 'PATCH',
+    reason: patch.reason ?? null,
+    before_json: {
+      expenses: {
+        travel_pay_ex_vat: before.travel_pay_ex_vat ?? 0,
+        travel_charge_ex_vat: before.travel_charge_ex_vat ?? 0,
+        accommodation_pay_ex_vat: before.accommodation_pay_ex_vat ?? 0,
+        accommodation_charge_ex_vat: before.accommodation_charge_ex_vat ?? 0,
+        other_pay_ex_vat: before.other_pay_ex_vat ?? 0,
+        other_charge_ex_vat: before.other_charge_ex_vat ?? 0,
+        expenses_pay_ex_vat: before.expenses_pay_ex_vat ?? 0,
+        expenses_charge_ex_vat: before.expenses_charge_ex_vat ?? 0,
+        expenses_description: before.expenses_description ?? null
+      },
+      mileage: {
+        mileage_units: before.mileage_units ?? 0,
+        pay_ex_vat: before.mileage_pay_ex_vat ?? 0,
+        charge_ex_vat: before.mileage_charge_ex_vat ?? 0,
+        pay_rate: before.mileage_pay_rate ?? null,
+        charge_rate: before.mileage_charge_rate ?? null
+      },
+      po: { number: before.po_number ?? null }
+    },
+    after_json: {
+      expenses: {
+        travel_pay_ex_vat: after?.travel_pay_ex_vat ?? 0,
+        travel_charge_ex_vat: after?.travel_charge_ex_vat ?? 0,
+        accommodation_pay_ex_vat: after?.accommodation_pay_ex_vat ?? 0,
+        accommodation_charge_ex_vat: after?.accommodation_charge_ex_vat ?? 0,
+        other_pay_ex_vat: after?.other_pay_ex_vat ?? 0,
+        other_charge_ex_vat: after?.other_charge_ex_vat ?? 0,
+        expenses_pay_ex_vat: after?.expenses_pay_ex_vat ?? 0,
+        expenses_charge_ex_vat: after?.expenses_charge_ex_vat ?? 0,
+        expenses_description: after?.expenses_description ?? null
+      },
+      mileage: {
+        mileage_units: after?.mileage_units ?? 0,
+        pay_ex_vat: after?.mileage_pay_ex_vat ?? 0,
+        charge_ex_vat: after?.mileage_charge_ex_vat ?? 0,
+        pay_rate: after?.mileage_pay_rate ?? null,
+        charge_rate: after?.mileage_charge_rate ?? null
+      },
+      po: { number: after?.po_number ?? null }
+    }
+  }).catch(() => {});
+
+  return ok({
+    updated: true,
+    tsfin: after,
+    booking_id: resolved.booking_id || null,
+    requested_timesheet_id: resolved.requested_timesheet_id || timesheetId || null,
+    current_timesheet_id: currentTimesheetId,
+    current_version: resolved.current_version ?? null,
+    was_stale: !!resolved.was_stale
+  });
+}
+
+
+// ============================================================
+// UPDATED: handleTimesheetEvidenceAdd / handleTimesheetEvidenceUpdateKind
+// - Normalizes kind to canonical set where applicable:
+//     MILEAGE, TRAVEL, ACCOMMODATION, OTHER, TIMESHEET
+// - Maps legacy UI "Expenses" -> TRAVEL
+// - Keeps other/system kinds as UPPER(TRIM(...))
+// ============================================================
+
+async function handleTimesheetEvidenceAdd(env, req, tsId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!tsId) return withCORS(env, req, badRequest('timesheet_id is required'));
+
+  let body;
+  try {
+    body = await parseJSONBody(req);
+  } catch {
+    return withCORS(env, req, badRequest('Invalid JSON payload'));
+  }
+
+  const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+
+  const resolved = await resolveTimesheetToCurrent(env, tsId);
+  if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
+  const currentTsId = resolved.current_timesheet_id;
+
+  if (String(expected) !== String(currentTsId)) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTsId }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
+
+  const rawKind = body && body.kind && String(body.kind).trim();
+  const displayNameIn = body && body.display_name != null ? String(body.display_name).trim() : null;
+
+  const normalizeKind = (k) => {
+    const s = String(k || '').trim();
+    if (!s) return '';
+    const u = s.toUpperCase();
+
+    if (u === 'EXPENSES' || u === 'EXPENSE') return 'TRAVEL';
+    if (u === 'TRAVEL') return 'TRAVEL';
+
+    if (u === 'MILEAGE' || u === 'MILES' || u === 'MILE') return 'MILEAGE';
+    if (u === 'ACCOMMODATION' || u === 'ACCOM') return 'ACCOMMODATION';
+    if (u === 'OTHER') return 'OTHER';
+    if (u === 'TIMESHEET' || u === 'TS') return 'TIMESHEET';
+
+    return u;
+  };
+
+  const prettyKind = (k) => {
+    const u = String(k || '').toUpperCase();
+    if (u === 'TRAVEL') return 'Travel';
+    if (u === 'MILEAGE') return 'Mileage';
+    if (u === 'ACCOMMODATION') return 'Accommodation';
+    if (u === 'OTHER') return 'Other';
+    if (u === 'TIMESHEET') return 'Timesheet';
+    return String(k || '');
+  };
+
+  const kind = normalizeKind(rawKind);
+
+  const storageKeyRaw = body && body.storage_key && String(body.storage_key).trim();
+  const storageKey = storageKeyRaw ? storageKeyRaw.replace(/^\/+/, '') : '';
+
+  if (!kind) return withCORS(env, req, badRequest('kind is required'));
+  if (!storageKey) return withCORS(env, req, badRequest('storage_key is required'));
+
+  try {
+    // Block evidence add if invoiced/paid
+    try {
+      const fin = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=eq.${enc(currentTsId)}` +
+          `&is_current=eq.true` +
+          `&select=locked_by_invoice_id,paid_at_utc` +
+          `&limit=1`
+      );
+      if (fin && (fin.locked_by_invoice_id || fin.paid_at_utc)) {
+        return withCORS(env, req, badRequest('Timesheet already invoiced or paid; cannot add evidence'));
+      }
+    } catch (e) {
+      return withCORS(env, req, serverError(`Failed to validate timesheet financial lock state: ${e?.message || e}`));
+    }
+
+    const { rows: tsRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(currentTsId)}` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,contract_id,week_ending_date,sheet_scope,submission_mode` +
+        `&limit=1`
+    );
+    const ts = tsRows?.[0] || null;
+    if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
+
+    // Validate storage_key exists in R2 (best-effort)
+    try {
+      if (typeof r2Exists === 'function') {
+        const exists = await r2Exists(env, storageKey);
+        if (!exists) return withCORS(env, req, badRequest('storage_key does not exist in R2'));
+      }
+    } catch (e) {
+      console.warn('[handleTimesheetEvidenceAdd] r2Exists failed (non-fatal)', {
+        storage_key: storageKey,
+        err: e?.message || String(e)
+      });
+    }
+
+    const nowIso = new Date().toISOString();
+
+    const payload = [{
+      timesheet_id: currentTsId,
+      kind,
+      display_name: (displayNameIn && displayNameIn.length ? displayNameIn : prettyKind(kind) || kind),
+      storage_key: storageKey,
+      created_at: nowIso,
+      created_by: user.id || null
+    }];
+
+    const insRes = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheet_evidence`, {
+      method: 'POST',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify(payload)
+    });
+
+    const txt = await insRes.text().catch(() => '');
+    if (!insRes.ok) {
+      return withCORS(env, req, serverError(`Failed to add timesheet evidence: ${txt}`));
+    }
+
+    let row = null;
+    try {
+      const json = txt ? JSON.parse(txt) : [];
+      row = Array.isArray(json) ? json[0] : json;
+    } catch {
+      row = null;
+    }
+
+    try {
+      await writeAudit(
+        env,
+        user,
+        'TIMESHEET_EVIDENCE_ADDED',
+        {
+          timesheet_id: currentTsId,
+          evidence_id: row?.id || null,
+          kind,
+          display_name: (displayNameIn && displayNameIn.length ? displayNameIn : prettyKind(kind) || kind),
+          storage_key: storageKey,
+          contract_id: ts.contract_id || null,
+          week_ending_date: ts.week_ending_date || null,
+          sheet_scope: ts.sheet_scope || null,
+          submission_mode: ts.submission_mode || null
+        },
+        { entity: 'timesheets', subject_id: currentTsId, req }
+      );
+    } catch {}
+
+    return withCORS(env, req, ok({
+      ok: true,
+      requested_timesheet_id: resolved.requested_timesheet_id || tsId,
+      current_timesheet_id: currentTsId,
+      was_stale: !!resolved.was_stale,
+      evidence: row || null
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError(`Failed to add timesheet evidence: ${e?.message || e}`));
+  }
+}
+
+async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!tsId) return withCORS(env, req, badRequest('timesheet_id is required'));
+  if (!evidenceId) return withCORS(env, req, badRequest('evidence_id is required'));
+
+  if (String(evidenceId).startsWith('SYS:')) {
+    return withCORS(env, req, badRequest('System evidence cannot be edited'));
+  }
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!uuidRe.test(String(evidenceId))) {
+    return withCORS(env, req, badRequest('Invalid evidence_id'));
+  }
+
+  let body;
+  try {
+    body = await parseJSONBody(req);
+  } catch {
+    return withCORS(env, req, badRequest('Invalid JSON payload'));
+  }
+
+  const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+
+  const resolved = await resolveTimesheetToCurrent(env, tsId);
+  if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
+  const currentTsId = resolved.current_timesheet_id;
+
+  if (String(expected) !== String(currentTsId)) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTsId }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
+
+  const normalizeKind = (k) => {
+    const s = String(k || '').trim();
+    if (!s) return '';
+    const u = s.toUpperCase();
+    if (u === 'EXPENSES' || u === 'EXPENSE') return 'TRAVEL';
+    if (u === 'TRAVEL') return 'TRAVEL';
+    if (u === 'MILEAGE' || u === 'MILES' || u === 'MILE') return 'MILEAGE';
+    if (u === 'ACCOMMODATION' || u === 'ACCOM') return 'ACCOMMODATION';
+    if (u === 'OTHER') return 'OTHER';
+    if (u === 'TIMESHEET' || u === 'TS') return 'TIMESHEET';
+    return u;
+  };
+
+  const newKindRaw = body && body.kind != null ? String(body.kind).trim() : '';
+  const newKind = normalizeKind(newKindRaw);
+  if (!newKind) return withCORS(env, req, badRequest('kind is required'));
+
+  try {
+    // Block evidence kind update if invoiced/paid
+    try {
+      const fin = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=eq.${enc(currentTsId)}` +
+          `&is_current=eq.true` +
+          `&select=locked_by_invoice_id,paid_at_utc` +
+          `&limit=1`
+      );
+      if (fin && (fin.locked_by_invoice_id || fin.paid_at_utc)) {
+        return withCORS(env, req, badRequest('Timesheet already invoiced or paid; cannot update evidence kind'));
+      }
+    } catch (e) {
+      return withCORS(env, req, serverError(`Failed to validate timesheet financial lock state: ${e?.message || e}`));
+    }
+
+    const { rows: evRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
+        `?id=eq.${enc(evidenceId)}` +
+        `&timesheet_id=eq.${enc(currentTsId)}` +
+        `&select=id,kind,display_name,storage_key,created_at,created_by` +
+        `&limit=1`
+    );
+
+    const ev = evRows?.[0] || null;
+    if (!ev) return withCORS(env, req, notFound('Evidence not found for this timesheet'));
+
+    const oldKind = ev.kind != null ? String(ev.kind) : '';
+    if (String(oldKind) === String(newKind)) {
+      return withCORS(env, req, ok({
+        ok: true,
+        requested_timesheet_id: resolved.requested_timesheet_id || tsId,
+        current_timesheet_id: currentTsId,
+        was_stale: !!resolved.was_stale,
+        evidence: ev
+      }));
+    }
+
+    const patchRes = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(evidenceId)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+        body: JSON.stringify({ kind: newKind })
+      }
+    );
+
+    const txt = await patchRes.text().catch(() => '');
+    if (!patchRes.ok) {
+      return withCORS(env, req, serverError(`Failed to update evidence kind: ${txt}`));
+    }
+
+    let updated = null;
+    try {
+      const json = txt ? JSON.parse(txt) : [];
+      updated = Array.isArray(json) ? json[0] : json;
+    } catch {
+      updated = null;
+    }
+
+    try {
+      await writeAudit(
+        env,
+        user,
+        'TIMESHEET_EVIDENCE_RECLASSIFIED',
+        {
+          timesheet_id: currentTsId,
+          evidence_id: evidenceId,
+          old_kind: oldKind || null,
+          new_kind: newKind,
+          storage_key: ev.storage_key || null,
+          display_name: ev.display_name || null
+        },
+        { entity: 'timesheets', subject_id: currentTsId, req }
+      );
+    } catch {}
+
+    return withCORS(env, req, ok({
+      ok: true,
+      requested_timesheet_id: resolved.requested_timesheet_id || tsId,
+      current_timesheet_id: currentTsId,
+      was_stale: !!resolved.was_stale,
+      evidence: updated || { ok: true }
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError(`Failed to update evidence kind: ${e?.message || e}`));
+  }
+}
+
 
 async function classifyHrRotaValidationImport(env, importId) {
   const enc   = encodeURIComponent;
@@ -47298,6 +47209,376 @@ async function handleUpdateClientDefault(env, req, id) {
   }
 }
 
+// ============================================================
+// UPDATED: handleUpdateClient
+// - Uses updated canonicalizeClientSettingsServer
+// - Validates manual invoice alt email: if toggle ON, email must be present
+// ============================================================
+
+async function handleUpdateClient(env, req, clientId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const raw = await parseJSONBody(req);
+  if (!raw) return withCORS(env, req, badRequest("Invalid JSON"));
+
+  const { cli_ref, cli_num, ...data } = raw;
+
+  const TIME_KEYS = [
+    'day_start','day_end',
+    'night_start','night_end',
+    'sat_start','sat_end',
+    'sun_start','sun_end',
+    'bh_start','bh_end'
+  ];
+
+  const asBool = (v) => {
+    if (v === true) return true;
+    if (v === false || v == null) return false;
+    const s = String(v).trim().toLowerCase();
+    return s === 'true' || s === 'yes' || s === 'y' || s === '1';
+  };
+
+  const normTime = (v) => {
+    if (v == null) return null;
+    const s = String(v).trim();
+    if (!s) return null;
+    const m = s.match(/^(\d{2}:\d{2})/);
+    return m ? m[1] : s;
+  };
+
+  const sameTime = (a, b) => {
+    const na = normTime(a);
+    const nb = normTime(b);
+    return String(na ?? '') === String(nb ?? '');
+  };
+
+  const normEmail = (v) => {
+    if (v == null) return null;
+    const s = String(v).trim();
+    return s ? s : null;
+  };
+
+  try {
+    const { rows: beforeClientRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/clients` +
+      `?id=eq.${encodeURIComponent(clientId)}` +
+      `&select=id,name,invoice_address,primary_invoice_email,ap_phone,vat_chargeable,payment_terms_days,mileage_charge_rate,ts_queries_email,updated_at`
+    );
+    if (!beforeClientRows?.length) return withCORS(env, req, notFound("Client not found"));
+    const beforeClient = beforeClientRows[0];
+
+    const { rows: beforeCsRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/client_settings` +
+      `?client_id=eq.${encodeURIComponent(clientId)}` +
+      `&select=` +
+        [
+          'id',
+          'hr_validation_required','ts_reference_required','pay_reference_required','invoice_reference_required',
+          'default_submission_mode',
+          'week_ending_weekday',
+          'is_nhsp','self_bill_no_invoices_sent','daily_calc_of_invoices',
+          'no_timesheet_required','group_nightsat_sunbh',
+          'auto_invoice_default',
+          'effective_from','timezone_id',
+          'day_start','day_end','night_start','night_end','sat_start','sat_end','sun_start','sun_end','bh_start','bh_end',
+          'bh_source','bh_list','bh_feed_url',
+          'requires_hr','autoprocess_hr','hr_attach_to_invoice','ts_attach_to_invoice',
+
+          // manual adjustment email routing
+          'send_manual_invoices_to_different_email',
+          'manual_invoices_alt_email_address',
+
+          'created_at','updated_at'
+        ].join(',') +
+      `&order=effective_from.desc,created_at.desc&limit=1`
+    );
+
+    const beforeCs = beforeCsRows?.[0] || null;
+
+    const csInput = {
+      ...(typeof data.client_settings === 'object' ? data.client_settings : {})
+    };
+
+    delete csInput.weekly_mode;
+    delete csInput.hr_weekly_behaviour;
+    delete csInput.__from_ui;
+
+    if ('hr_validation_required' in data)        csInput.hr_validation_required        = !!data.hr_validation_required;
+    if ('ts_reference_required' in data)         csInput.ts_reference_required         = !!data.ts_reference_required;
+    if ('pay_reference_required' in data)        csInput.pay_reference_required        = !!data.pay_reference_required;
+    if ('invoice_reference_required' in data)    csInput.invoice_reference_required    = !!data.invoice_reference_required;
+    if ('default_submission_mode' in data)       csInput.default_submission_mode       = data.default_submission_mode;
+
+    if ('auto_invoice_default' in data || 'auto_invoice_default' in csInput) {
+      csInput.auto_invoice_default = asBool(csInput.auto_invoice_default ?? data.auto_invoice_default);
+    }
+
+    if ('requires_hr' in data || 'requires_hr' in csInput) {
+      csInput.requires_hr = asBool(csInput.requires_hr ?? data.requires_hr);
+    }
+    if ('autoprocess_hr' in data || 'autoprocess_hr' in csInput) {
+      csInput.autoprocess_hr = asBool(csInput.autoprocess_hr ?? data.autoprocess_hr);
+    }
+    if ('hr_attach_to_invoice' in data || 'hr_attach_to_invoice' in csInput) {
+      csInput.hr_attach_to_invoice = asBool(csInput.hr_attach_to_invoice ?? data.hr_attach_to_invoice);
+    }
+    if ('ts_attach_to_invoice' in data || 'ts_attach_to_invoice' in csInput) {
+      csInput.ts_attach_to_invoice = asBool(csInput.ts_attach_to_invoice ?? data.ts_attach_to_invoice);
+    }
+
+    if ('is_nhsp' in data || 'is_nhsp' in csInput) {
+      csInput.is_nhsp = asBool(csInput.is_nhsp ?? data.is_nhsp);
+    }
+    if ('self_bill_no_invoices_sent' in data || 'self_bill_no_invoices_sent' in csInput) {
+      csInput.self_bill_no_invoices_sent = asBool(csInput.self_bill_no_invoices_sent ?? data.self_bill_no_invoices_sent);
+    }
+    if ('daily_calc_of_invoices' in data || 'daily_calc_of_invoices' in csInput) {
+      csInput.daily_calc_of_invoices = asBool(csInput.daily_calc_of_invoices ?? data.daily_calc_of_invoices);
+    }
+    if ('no_timesheet_required' in data || 'no_timesheet_required' in csInput) {
+      csInput.no_timesheet_required = asBool(csInput.no_timesheet_required ?? data.no_timesheet_required);
+    }
+    if ('group_nightsat_sunbh' in data || 'group_nightsat_sunbh' in csInput) {
+      csInput.group_nightsat_sunbh = asBool(csInput.group_nightsat_sunbh ?? data.group_nightsat_sunbh);
+    }
+
+    if ('send_manual_invoices_to_different_email' in data || 'send_manual_invoices_to_different_email' in csInput) {
+      csInput.send_manual_invoices_to_different_email =
+        asBool(csInput.send_manual_invoices_to_different_email ?? data.send_manual_invoices_to_different_email);
+    }
+    if ('manual_invoices_alt_email_address' in data || 'manual_invoices_alt_email_address' in csInput) {
+      csInput.manual_invoices_alt_email_address =
+        normEmail(csInput.manual_invoices_alt_email_address ?? data.manual_invoices_alt_email_address);
+    }
+
+    for (const k of TIME_KEYS) {
+      if ((k in data) || (k in csInput)) {
+        csInput[k] = normTime(csInput[k] ?? data[k]);
+      }
+    }
+
+    const weIn = (data.week_ending_weekday ?? csInput.week_ending_weekday);
+    if (weIn !== undefined) {
+      let we = Number(weIn);
+      if (!Number.isInteger(we) || we < 0 || we > 6) we = 0;
+      csInput.week_ending_weekday = we;
+    }
+
+    if ('default_submission_mode' in csInput) {
+      let dsm = String(csInput.default_submission_mode || '').toUpperCase();
+      if (!['ELECTRONIC','MANUAL'].includes(dsm)) dsm = 'ELECTRONIC';
+      csInput.default_submission_mode = dsm;
+    }
+
+    const {
+      hr_validation_required,
+      ts_reference_required,
+      pay_reference_required,
+      invoice_reference_required,
+      default_submission_mode,
+      client_settings,
+      week_ending_weekday,
+
+      is_nhsp,
+      self_bill_no_invoices_sent,
+      daily_calc_of_invoices,
+      no_timesheet_required,
+      group_nightsat_sunbh,
+      auto_invoice_default,
+      requires_hr,
+      autoprocess_hr,
+      hr_attach_to_invoice,
+      ts_attach_to_invoice,
+
+      // ensure these never fall into clients table patch
+      send_manual_invoices_to_different_email,
+      manual_invoices_alt_email_address,
+
+      ...clientPatchRaw
+    } = data;
+
+    const clientPatch = {};
+    for (const [k, v] of Object.entries(clientPatchRaw)) {
+      if (v === '' || v === undefined) continue;
+      clientPatch[k] = v;
+    }
+
+    const clientKeysToChange = Object.keys(clientPatch).filter(k => {
+      return JSON.stringify(clientPatch[k]) !== JSON.stringify(beforeClient[k]);
+    });
+
+    let client = beforeClient;
+
+    if (clientKeysToChange.length) {
+      clientPatch.updated_at = new Date().toISOString();
+
+      const res = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(clientId)}`,
+        {
+          method: "PATCH",
+          headers: { ...sbHeaders(env), "Prefer": "return=representation" },
+          body: JSON.stringify(clientPatch)
+        }
+      );
+      if (!res.ok) {
+        const err = await res.text();
+        return withCORS(env, req, badRequest(`Update failed: ${err}`));
+      }
+      const json = await res.json().catch(() => ({}));
+      client = Array.isArray(json) ? json[0] : json;
+    }
+
+    let csChanged = false;
+    let client_settings_updated = null;
+
+    if (Object.keys(csInput).length) {
+      const hasBefore = !!beforeCs?.id;
+
+      // Canonicalise server-side
+      const canon = canonicalizeClientSettingsServer(beforeCs, csInput);
+
+      // ✅ VALIDATION: if toggle ON, require email
+      if (canon.send_manual_invoices_to_different_email && !canon.manual_invoices_alt_email_address) {
+        return withCORS(env, req, badRequest('manual_invoices_alt_email_address is required when send_manual_invoices_to_different_email is true'));
+      }
+
+      for (const k of TIME_KEYS) {
+        if (Object.prototype.hasOwnProperty.call(canon, k)) {
+          canon[k] = normTime(canon[k]);
+        }
+      }
+
+      const patchObj = {};
+      if (hasBefore) {
+        for (const [k, v] of Object.entries(canon)) {
+          if (k === 'id' || k === 'client_id' || k === 'created_at' || k === 'updated_at') continue;
+
+          const beforeV = beforeCs ? beforeCs[k] : undefined;
+
+          if (TIME_KEYS.includes(k)) {
+            if (!sameTime(beforeV, v)) patchObj[k] = v;
+            continue;
+          }
+
+          if (JSON.stringify(beforeV) !== JSON.stringify(v)) patchObj[k] = v;
+        }
+        patchObj.updated_at = new Date().toISOString();
+
+        const csRes = await fetch(
+          `${env.SUPABASE_URL}/rest/v1/client_settings?id=eq.${encodeURIComponent(beforeCs.id)}`,
+          {
+            method: "PATCH",
+            headers: { ...sbHeaders(env), "Prefer": "return=representation" },
+            body: JSON.stringify(patchObj)
+          }
+        );
+        if (!csRes.ok) {
+          const err = await csRes.text();
+          return withCORS(env, req, badRequest(`Client settings update failed: ${err}`));
+        }
+        const csJson = await csRes.json().catch(() => ({}));
+        client_settings_updated = Array.isArray(csJson) ? csJson[0] : csJson;
+      } else {
+        const insertRow = {
+          client_id: clientId,
+          ...canon,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+        delete insertRow.id;
+
+        const csRes = await fetch(`${env.SUPABASE_URL}/rest/v1/client_settings`, {
+          method: "POST",
+          headers: { ...sbHeaders(env), "Prefer": "return=representation" },
+          body: JSON.stringify(insertRow)
+        });
+        if (!csRes.ok) {
+          const err = await csRes.text();
+          return withCORS(env, req, badRequest(`Client settings insert failed: ${err}`));
+        }
+        const csJson = await csRes.json().catch(() => ({}));
+        client_settings_updated = Array.isArray(csJson) ? csJson[0] : csJson;
+      }
+
+      const beforeHr      = !!(beforeCs?.hr_validation_required        ?? false);
+      const beforeRef     = !!(beforeCs?.ts_reference_required         ?? false);
+      const beforePayRef  = !!(beforeCs?.pay_reference_required        ?? false);
+      const beforeInvRef  = !!(beforeCs?.invoice_reference_required    ?? false);
+
+      const nextHr        = !!(canon.hr_validation_required            ?? false);
+      const nextRef       = !!(canon.ts_reference_required             ?? false);
+      const nextPayRef    = !!(canon.pay_reference_required            ?? false);
+      const nextInvRef    = !!(canon.invoice_reference_required        ?? false);
+
+      const timesChanged = TIME_KEYS.some(k => !sameTime(beforeCs?.[k], canon?.[k]));
+
+      csChanged = (
+        beforeHr     !== nextHr     ||
+        beforeRef    !== nextRef    ||
+        beforePayRef !== nextPayRef ||
+        beforeInvRef !== nextInvRef ||
+        timesChanged
+      );
+    }
+
+    const policyChanged =
+      (data.vat_chargeable != null && !!data.vat_chargeable !== !!beforeClient.vat_chargeable) ||
+      (data.payment_terms_days != null && Number(data.payment_terms_days) !== Number(beforeClient.payment_terms_days));
+
+    const mileageChargeChanged =
+      (data.mileage_charge_rate != null && Number(data.mileage_charge_rate) !== Number(beforeClient.mileage_charge_rate));
+
+    if (policyChanged || mileageChargeChanged || csChanged) {
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?client_id=eq.${encodeURIComponent(clientId)}` +
+          `&is_current=eq.true` +
+          `&locked_by_invoice_id=is.null`,
+        {
+          method: "PATCH",
+          headers: { ...sbHeaders(env), "Prefer": "return=minimal" },
+          body: JSON.stringify({
+            is_stale: true,
+            stale_reason: 'CLIENT_SETTINGS_CHANGED',
+            updated_at: new Date().toISOString()
+          })
+        }
+      );
+
+      const { rows: tsfins } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?select=timesheet_id` +
+          `&client_id=eq.${encodeURIComponent(clientId)}` +
+          `&is_current=eq.true` +
+          `&locked_by_invoice_id=is.null`
+      );
+      const toEnqueue = (tsfins || []).map(r => ({ timesheet_id: r.timesheet_id, reason: 'POLICY_CHANGED' }));
+      if (toEnqueue.length) {
+        await fetch(
+          `${env.SUPABASE_URL}/rest/v1/ts_financials_outbox?on_conflict=timesheet_id,reason`,
+          {
+            method: "POST",
+            headers: { ...sbHeaders(env), "Prefer": "resolution=ignore-duplicates" },
+            body: JSON.stringify(toEnqueue)
+          }
+        );
+      }
+    }
+
+    return withCORS(env, req, ok({
+      client,
+      client_settings: client_settings_updated || beforeCs || null
+    }));
+  } catch {
+    return withCORS(env, req, serverError("Failed to update client"));
+  }
+}
+
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Overrides: UPDATE (targeting now supports rate_type in the WHERE side)
 // Enqueue: RATE_CHANGED for current, unlocked TSFIN scoped by rate_type (if given)
@@ -50754,11 +51035,24 @@ async function fetchCurrentTsfin(env, timesheetId) {
     `&select=` + [
       'timesheet_id','timesheet_version','candidate_id','client_id',
       'processing_status','locked_by_invoice_id','is_current',
+
+      // ✅ NEW: category expense columns (required for patchTsfinCommon correctness)
+      'travel_pay_ex_vat','travel_charge_ex_vat',
+      'accommodation_pay_ex_vat','accommodation_charge_ex_vat',
+      'other_pay_ex_vat','other_charge_ex_vat',
+
+      // legacy totals + notes/meta (still used)
       'expenses_pay_ex_vat','expenses_charge_ex_vat','expenses_description','expenses_evidence_r2_key',
       'expenses_evidence_manifest',
-      'mileage_pay_ex_vat','mileage_charge_ex_vat','mileage_units','mileage_evidence_r2_key','mileage_evidence_manifest','mileage_pay_rate','mileage_charge_rate',
+
+      // mileage
+      'mileage_pay_ex_vat','mileage_charge_ex_vat','mileage_units',
+      'mileage_evidence_r2_key','mileage_evidence_manifest',
+      'mileage_pay_rate','mileage_charge_rate',
+
       'po_number'
     ].join(',');
+
   const { rows } = await sbFetch(env, q);
   return (rows || [])[0] || null;
 }
@@ -50812,266 +51106,6 @@ async function insertAuditEvent(env, req, args) {
   });
 }
 // 5) patchTsfinCommon(...) (now validates + writes mileage_units; audit includes it)
-async function patchTsfinCommon(env, req, timesheetId, patch) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return unauthorized();
-
-  const enc = encodeURIComponent;
-
-  // ─────────────────────────────────────────────────────────────
-  // NEW: optimistic concurrency guard (expected current id required)
-  // ─────────────────────────────────────────────────────────────
-  const expected = (patch && patch.expected_timesheet_id) ? String(patch.expected_timesheet_id) : '';
-  if (!expected) {
-    return badRequest('expected_timesheet_id is required');
-  }
-
-  const resolved = await resolveTimesheetToCurrent(env, timesheetId);
-  if (!resolved || !resolved.current_timesheet_id) {
-    return notFound('Timesheet not found');
-  }
-
-  const currentTimesheetId = String(resolved.current_timesheet_id);
-  if (expected !== currentTimesheetId) {
-    // Return 409 with the standard payload (no CORS here; caller wraps withCORS)
-    const payload = {
-      error: 'TIMESHEET_MOVED',
-      booking_id: resolved.booking_id || null,
-      requested_timesheet_id: resolved.requested_timesheet_id || timesheetId || null,
-      current_timesheet_id: resolved.current_timesheet_id || null,
-      current_version: resolved.current_version != null ? resolved.current_version : null
-    };
-    return new Response(JSON.stringify(payload), {
-      status: 409,
-      headers: { 'Content-Type': 'application/json' }
-    });
-  }
-
-  // From here on: ALWAYS use currentTimesheetId
-  const toNum = (v) => (v === null || v === undefined ? null : Number(v));
-  const nonneg = (n) => (n === null || n === undefined ? true : Number(n) >= 0);
-  const isNonEmptyArray = (v) => Array.isArray(v) && v.length > 0;
-  const normalizeManifest = (v) => {
-    if (v === undefined) return undefined;       // not touched
-    if (v === null) return null;                 // explicit clear
-    return isNonEmptyArray(v) ? v : null;        // empty array → null
-  };
-
-  // -------- basic numeric validations --------
-  if (patch.expenses) {
-    const xp = patch.expenses;
-    if (!nonneg(xp.pay_ex_vat) || !nonneg(xp.charge_ex_vat)) {
-      return badRequest('Expense values must be >= 0');
-    }
-  }
-  if (patch.mileage) {
-    const ml = patch.mileage;
-
-    // ✅ NEW: validate mileage_units too (null/undefined allowed; null treated as 0 when writing)
-    if (!nonneg(ml.mileage_units)) {
-      return badRequest('Mileage values must be >= 0');
-    }
-
-    if (!nonneg(ml.pay_ex_vat) || !nonneg(ml.charge_ex_vat) || !nonneg(ml.pay_rate) || !nonneg(ml.charge_rate)) {
-      return badRequest('Mileage values must be >= 0');
-    }
-  }
-
-  // -------- load current snapshot (may not include manifests) --------
-  const before = await fetchCurrentTsfin(env, currentTimesheetId);
-  if (!before) return notFound('TSFIN current row not found');
-  if (before.locked_by_invoice_id) return conflict('Timesheet financials are locked by an invoice');
-
-  // Helper: do we have acceptable evidence now or already on the row?
-  const ensureEvidencePresent = async (kind, chargeVal, patchObj) => {
-    if (chargeVal == null) return true;                 // not touching charge
-    const ch = Number(chargeVal);
-    if (!(ch > 0)) return true;                         // charge is zero / not positive ⇒ no evidence required
-
-    const keyField = `${kind}_evidence_r2_key`;         // e.g. expenses_evidence_r2_key
-    const manField = `${kind}_evidence_manifest`;       // e.g. expenses_evidence_manifest
-
-    // Any new evidence in payload?
-    if (patchObj?.evidence_r2_key) return true;
-    if (isNonEmptyArray(patchObj?.evidence_manifest)) return true;
-
-    // Any existing evidence on 'before'?
-    if (before[keyField]) return true;
-    if (typeof before[manField] !== 'undefined') {
-      if (isNonEmptyArray(before[manField])) return true;
-    } else {
-      // Lazily probe manifest fields if fetchCurrentTsfin didn't select them
-      try {
-        const { rows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true` +
-          `&select=${enc(keyField)},${enc(manField)}`
-        );
-        const r = (rows || [])[0] || {};
-        if (r[keyField]) return true;
-        if (isNonEmptyArray(r[manField])) return true;
-      } catch { /* ignore and fall through */ }
-    }
-
-    return false;
-  };
-
-  // -------- evidence requirements (accept key OR non-empty manifest) --------
-  if (patch.expenses) {
-    const okEv = await ensureEvidencePresent('expenses', patch.expenses.charge_ex_vat, patch.expenses);
-    if (!okEv) return unprocessable('Expenses charge requires evidence (single key or non-empty manifest)');
-  }
-  if (patch.mileage) {
-    const okEv = await ensureEvidencePresent('mileage', patch.mileage.charge_ex_vat, patch.mileage);
-    if (!okEv) return unprocessable('Mileage charge requires evidence (single key or non-empty manifest)');
-  }
-
-  // -------- construct update payload --------
-  const upd = {};
-
-  if (patch.expenses) {
-    const xp = patch.expenses;
-    if (xp.pay_ex_vat !== undefined)        upd.expenses_pay_ex_vat = toNum(xp.pay_ex_vat) ?? 0;
-    if (xp.charge_ex_vat !== undefined)     upd.expenses_charge_ex_vat = toNum(xp.charge_ex_vat) ?? 0;
-    if (xp.description !== undefined)       upd.expenses_description = (xp.description ?? null);
-    if (xp.evidence_r2_key !== undefined)   upd.expenses_evidence_r2_key = (xp.evidence_r2_key ?? null);
-    const xpMan = normalizeManifest(xp.evidence_manifest);
-    if (xpMan !== undefined)                upd.expenses_evidence_manifest = xpMan;
-  }
-
-  if (patch.mileage) {
-    const ml = patch.mileage;
-
-    // ✅ NEW: mileage_units (null => 0)
-    if (ml.mileage_units !== undefined) {
-      const mu = toNum(ml.mileage_units);
-      upd.mileage_units = (mu == null ? 0 : mu);
-    }
-
-    if (ml.pay_ex_vat !== undefined)        upd.mileage_pay_ex_vat = toNum(ml.pay_ex_vat) ?? 0;
-    if (ml.charge_ex_vat !== undefined)     upd.mileage_charge_ex_vat = toNum(ml.charge_ex_vat) ?? 0;
-    if (ml.evidence_r2_key !== undefined)   upd.mileage_evidence_r2_key = (ml.evidence_r2_key ?? null);
-    const mlMan = normalizeManifest(ml.evidence_manifest);
-    if (mlMan !== undefined)                upd.mileage_evidence_manifest = mlMan;
-
-    if (ml.pay_rate !== undefined)          upd.mileage_pay_rate = (ml.pay_rate === null ? null : toNum(ml.pay_rate));
-    if (ml.charge_rate !== undefined)       upd.mileage_charge_rate = (ml.charge_rate === null ? null : toNum(ml.charge_rate));
-
-    // Backfill rates from candidate/client if not provided in patch (preserve existing if present)
-    if (ml.pay_rate === undefined || ml.charge_rate === undefined) {
-      const needPay = ml.pay_rate === undefined;
-      const needChg = ml.charge_rate === undefined;
-      if (needPay || needChg) {
-        let candRate = null, clientRate = null;
-        try {
-          if (needPay && before.candidate_id) {
-            const { rows: candRows } = await sbFetch(
-              env,
-              `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(before.candidate_id)}&select=mileage_pay_rate&limit=1`
-            );
-            candRate = candRows?.[0]?.mileage_pay_rate ?? null;
-          }
-          if (needChg && before.client_id) {
-            const { rows: cliRows } = await sbFetch(
-              env,
-              `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(before.client_id)}&select=mileage_charge_rate&limit=1`
-            );
-            clientRate = cliRows?.[0]?.mileage_charge_rate ?? null;
-          }
-        } catch { /* ignore */ }
-        if (needPay) upd.mileage_pay_rate = toNum(before.mileage_pay_rate) ?? (candRate == null ? null : Number(candRate));
-        if (needChg) upd.mileage_charge_rate = toNum(before.mileage_charge_rate) ?? (clientRate == null ? null : Number(clientRate));
-      }
-    }
-  }
-
-  if (patch.po && patch.po.number !== undefined) {
-    upd.po_number = (patch.po.number ?? null);
-  }
-
-  if (!Object.keys(upd).length) {
-    return ok({ updated: false, tsfin: before });
-  }
-
-  upd.is_stale = true;
-  upd.updated_at = nowIso();
-
-  const url =
-    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-    `?timesheet_id=eq.${encodeURIComponent(currentTimesheetId)}` +
-    `&is_current=eq.true` +
-    `&locked_by_invoice_id=is.null`;
-
-  const res = await fetch(url, {
-    method: 'PATCH',
-    headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
-    body: JSON.stringify(upd),
-  });
-
-  if (!res.ok) {
-    const t = await res.text();
-    return serverError(`TSFIN update failed: ${t}`);
-  }
-  const json = await res.json().catch(() => []);
-  const after = Array.isArray(json) ? json[0] : json;
-
-  await enqueueManualTsfinRecalc(env, currentTimesheetId).catch(() => {});
-  await insertAuditEvent(env, req, {
-    object_type: 'timesheets_financials',
-    object_id_text: currentTimesheetId,
-    action: 'PATCH',
-    reason: patch.reason ?? null,
-    before_json: {
-      expenses: {
-        pay_ex_vat: before.expenses_pay_ex_vat,
-        charge_ex_vat: before.expenses_charge_ex_vat,
-        description: before.expenses_description,
-        evidence_r2_key: before.expenses_evidence_r2_key,
-        evidence_manifest: before.expenses_evidence_manifest ?? null,
-      },
-      mileage: {
-        mileage_units: before.mileage_units ?? 0, // ✅ NEW
-        pay_ex_vat: before.mileage_pay_ex_vat,
-        charge_ex_vat: before.mileage_charge_ex_vat,
-        evidence_r2_key: before.mileage_evidence_r2_key,
-        evidence_manifest: before.mileage_evidence_manifest ?? null,
-        pay_rate: before.mileage_pay_rate,
-        charge_rate: before.mileage_charge_rate,
-      },
-      po: { number: before.po_number },
-    },
-    after_json: {
-      expenses: {
-        pay_ex_vat: after?.expenses_pay_ex_vat,
-        charge_ex_vat: after?.expenses_charge_ex_vat,
-        description: after?.expenses_description,
-        evidence_r2_key: after?.expenses_evidence_r2_key,
-        evidence_manifest: after?.expenses_evidence_manifest ?? null,
-      },
-      mileage: {
-        mileage_units: after?.mileage_units ?? 0, // ✅ NEW
-        pay_ex_vat: after?.mileage_pay_ex_vat,
-        charge_ex_vat: after?.mileage_charge_ex_vat,
-        evidence_r2_key: after?.mileage_evidence_r2_key,
-        evidence_manifest: after?.mileage_evidence_manifest ?? null,
-        pay_rate: after?.mileage_pay_rate,
-        charge_rate: after?.mileage_charge_rate,
-      },
-      po: { number: after?.po_number },
-    }
-  }).catch(() => {});
-
-  return ok({
-    updated: true,
-    tsfin: after,
-    booking_id: resolved.booking_id || null,
-    requested_timesheet_id: resolved.requested_timesheet_id || timesheetId || null,
-    current_timesheet_id: currentTimesheetId,
-    current_version: resolved.current_version ?? null,
-    was_stale: !!resolved.was_stale
-  });
-}
 
 
 /**
@@ -51080,38 +51114,6 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
 
 // -------------------- public handlers --------------------
 
-
-async function handleTsfinPatchExpenses(env, req, timesheetId) {
-  const body = await parseJSONBody(req).catch(() => ({}));
-  return withCORS(env, req, await patchTsfinCommon(env, req, timesheetId, {
-    expected_timesheet_id: body?.expected_timesheet_id,
-    reason: body?.reason ?? null,
-    expenses: {
-      pay_ex_vat: body?.pay_ex_vat,
-      charge_ex_vat: body?.charge_ex_vat,
-      description: body?.description,
-      evidence_r2_key: body?.evidence_r2_key,
-      evidence_manifest: body?.evidence_manifest
-    }
-  }));
-}
-// 4) PATCH /api/tsfin/:id/mileage  (now includes mileage_units)
-async function handleTsfinPatchMileage(env, req, timesheetId) {
-  const body = await parseJSONBody(req).catch(() => ({}));
-  return withCORS(env, req, await patchTsfinCommon(env, req, timesheetId, {
-    expected_timesheet_id: body?.expected_timesheet_id,
-    reason: body?.reason ?? null,
-    mileage: {
-      mileage_units: body?.mileage_units,   // ✅ NEW
-      pay_ex_vat: body?.pay_ex_vat,
-      charge_ex_vat: body?.charge_ex_vat,
-      evidence_r2_key: body?.evidence_r2_key,
-      evidence_manifest: body?.evidence_manifest,
-      pay_rate: body?.pay_rate,
-      charge_rate: body?.charge_rate,
-    }
-  }));
-}
 
 
 async function handleTsfinPatchPO(env, req, timesheetId) {
@@ -53916,7 +53918,7 @@ async function handleTsfinFinancials(env, req) {
 // Input:
 //   - ctxRow: one row from tsfin_load_context_batch()
 //   - ratesRow: one row from tsfin_resolve_rates_batch() (matching k/effective_timesheet_id)
-// Output:
+// Output
 //   - snapshot object suitable for tsfin_write_snapshots_and_complete({ snapshot: ... })
 
 // ------------------------------------------------------
@@ -60497,6 +60499,14 @@ function __normAlias(s){
   return String(s || '').trim().toLowerCase();
 }
 
+// Back-compat wrappers for older router naming
+async function handleTsfinExpensesPatch(env, req, timesheetId) {
+  return handleTsfinPatchExpenses(env, req, timesheetId);
+}
+
+async function handleTsfinMileagePatch(env, req, timesheetId) {
+  return handleTsfinPatchMileage(env, req, timesheetId);
+}
 
 
 async function getImportColumnAliasesCached(env, systemType, fieldKey) {
@@ -61753,6 +61763,12 @@ if (req.method === 'POST' && p === '/api/tspdf/queue/drain') {
         const m = matchPath(p, '/api/timesheets/:id/tsfin/expenses');
         if (m && req.method === 'PATCH') return handleTsfinExpensesPatch(env, req, m.id);
       }
+
+    {
+  const m = matchPath(p, '/api/timesheets/:id/tsfin/mileage');
+  if (m && req.method === 'PATCH') return handleTsfinMileagePatch(env, req, m.id);
+}
+  
       {
         const m = matchPath(p, '/api/timesheets/:id/presign-expense-pdf');
         if (m && req.method === 'POST') return handleTimesheetPresignExpensePdf(env, req, m.id);
