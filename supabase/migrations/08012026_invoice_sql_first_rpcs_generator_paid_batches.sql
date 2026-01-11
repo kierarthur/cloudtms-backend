@@ -366,10 +366,10 @@ begin
     v_seg_ids := coalesce(v_seg_ids, array[]::text[]);
 
     -- Load snapshot
-    select id, basis, locked_by_invoice_id, invoice_breakdown_json
+    select tf.id, tf.basis, tf.locked_by_invoice_id, tf.invoice_breakdown_json
     into snap
-    from public.timesheets_financials
-    where id = v_tsfin_id;
+    from public.timesheets_financials tf
+    where tf.id = v_tsfin_id;
 
     if not found then
       continue;
