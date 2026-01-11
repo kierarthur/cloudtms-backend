@@ -35685,6 +35685,378 @@ async function handleListClients(env, req) {
   }));
 }
 
+async function handleUpdateClient(env, req, clientId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const raw = await parseJSONBody(req);
+  if (!raw) return withCORS(env, req, badRequest("Invalid JSON"));
+
+  const { cli_ref, cli_num, ...data } = raw;
+
+  const TIME_KEYS = [
+    'day_start','day_end',
+    'night_start','night_end',
+    'sat_start','sat_end',
+    'sun_start','sun_end',
+    'bh_start','bh_end'
+  ];
+
+  const asBool = (v) => {
+    if (v === true) return true;
+    if (v === false || v == null) return false;
+    const s = String(v).trim().toLowerCase();
+    return s === 'true' || s === 'yes' || s === 'y' || s === '1' || s === 'on';
+  };
+
+  const normTime = (v) => {
+    if (v == null) return null;
+    const s = String(v).trim();
+    if (!s) return null;
+    const m = s.match(/^(\d{2}:\d{2})/);
+    return m ? m[1] : s;
+  };
+
+  const sameTime = (a, b) => {
+    const na = normTime(a);
+    const nb = normTime(b);
+    return String(na ?? '') === String(nb ?? '');
+  };
+
+  const normEmail = (v) => {
+    if (v == null) return null;
+    const s = String(v).trim();
+    return s ? s : null;
+  };
+
+  try {
+    const { rows: beforeClientRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/clients` +
+      `?id=eq.${encodeURIComponent(clientId)}` +
+      `&select=id,name,invoice_address,primary_invoice_email,ap_phone,vat_chargeable,payment_terms_days,mileage_charge_rate,ts_queries_email,updated_at`
+    );
+    if (!beforeClientRows?.length) return withCORS(env, req, notFound("Client not found"));
+    const beforeClient = beforeClientRows[0];
+
+    const { rows: beforeCsRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/client_settings` +
+      `?client_id=eq.${encodeURIComponent(clientId)}` +
+      `&select=` +
+        [
+          'id',
+          'hr_validation_required','ts_reference_required','pay_reference_required','invoice_reference_required',
+          'default_submission_mode',
+          'week_ending_weekday',
+          'is_nhsp','self_bill_no_invoices_sent','daily_calc_of_invoices',
+          'no_timesheet_required','group_nightsat_sunbh',
+          'auto_invoice_default',
+          'effective_from','timezone_id',
+          'day_start','day_end','night_start','night_end','sat_start','sat_end','sun_start','sun_end','bh_start','bh_end',
+          'bh_source','bh_list','bh_feed_url',
+          'requires_hr','autoprocess_hr','hr_attach_to_invoice','ts_attach_to_invoice',
+
+          // manual adjustment email routing
+          'send_manual_invoices_to_different_email',
+          'manual_invoices_alt_email_address',
+
+          'created_at','updated_at'
+        ].join(',') +
+      `&order=effective_from.desc,created_at.desc&limit=1`
+    );
+
+    const beforeCs = beforeCsRows?.[0] || null;
+
+    // ✅ FIX: guard against null client_settings (typeof null === 'object')
+    const csInput = {
+      ...((data.client_settings && typeof data.client_settings === 'object') ? data.client_settings : {})
+    };
+
+    delete csInput.weekly_mode;
+    delete csInput.hr_weekly_behaviour;
+    delete csInput.__from_ui;
+
+    if ('hr_validation_required' in data)        csInput.hr_validation_required        = !!data.hr_validation_required;
+    if ('ts_reference_required' in data)         csInput.ts_reference_required         = !!data.ts_reference_required;
+    if ('pay_reference_required' in data)        csInput.pay_reference_required        = !!data.pay_reference_required;
+    if ('invoice_reference_required' in data)    csInput.invoice_reference_required    = !!data.invoice_reference_required;
+    if ('default_submission_mode' in data)       csInput.default_submission_mode       = data.default_submission_mode;
+
+    if ('auto_invoice_default' in data || 'auto_invoice_default' in csInput) {
+      csInput.auto_invoice_default = asBool(csInput.auto_invoice_default ?? data.auto_invoice_default);
+    }
+
+    if ('requires_hr' in data || 'requires_hr' in csInput) {
+      csInput.requires_hr = asBool(csInput.requires_hr ?? data.requires_hr);
+    }
+    if ('autoprocess_hr' in data || 'autoprocess_hr' in csInput) {
+      csInput.autoprocess_hr = asBool(csInput.autoprocess_hr ?? data.autoprocess_hr);
+    }
+    if ('hr_attach_to_invoice' in data || 'hr_attach_to_invoice' in csInput) {
+      csInput.hr_attach_to_invoice = asBool(csInput.hr_attach_to_invoice ?? data.hr_attach_to_invoice);
+    }
+    if ('ts_attach_to_invoice' in data || 'ts_attach_to_invoice' in csInput) {
+      csInput.ts_attach_to_invoice = asBool(csInput.ts_attach_to_invoice ?? data.ts_attach_to_invoice);
+    }
+
+    if ('is_nhsp' in data || 'is_nhsp' in csInput) {
+      csInput.is_nhsp = asBool(csInput.is_nhsp ?? data.is_nhsp);
+    }
+    if ('self_bill_no_invoices_sent' in data || 'self_bill_no_invoices_sent' in csInput) {
+      csInput.self_bill_no_invoices_sent = asBool(csInput.self_bill_no_invoices_sent ?? data.self_bill_no_invoices_sent);
+    }
+    if ('daily_calc_of_invoices' in data || 'daily_calc_of_invoices' in csInput) {
+      csInput.daily_calc_of_invoices = asBool(csInput.daily_calc_of_invoices ?? data.daily_calc_of_invoices);
+    }
+    if ('no_timesheet_required' in data || 'no_timesheet_required' in csInput) {
+      csInput.no_timesheet_required = asBool(csInput.no_timesheet_required ?? data.no_timesheet_required);
+    }
+    if ('group_nightsat_sunbh' in data || 'group_nightsat_sunbh' in csInput) {
+      csInput.group_nightsat_sunbh = asBool(csInput.group_nightsat_sunbh ?? data.group_nightsat_sunbh);
+    }
+
+    if ('send_manual_invoices_to_different_email' in data || 'send_manual_invoices_to_different_email' in csInput) {
+      csInput.send_manual_invoices_to_different_email =
+        asBool(csInput.send_manual_invoices_to_different_email ?? data.send_manual_invoices_to_different_email);
+    }
+    if ('manual_invoices_alt_email_address' in data || 'manual_invoices_alt_email_address' in csInput) {
+      csInput.manual_invoices_alt_email_address =
+        normEmail(csInput.manual_invoices_alt_email_address ?? data.manual_invoices_alt_email_address);
+    }
+
+    for (const k of TIME_KEYS) {
+      if ((k in data) || (k in csInput)) {
+        csInput[k] = normTime(csInput[k] ?? data[k]);
+      }
+    }
+
+    const weIn = (data.week_ending_weekday ?? csInput.week_ending_weekday);
+    if (weIn !== undefined) {
+      let we = Number(weIn);
+      if (!Number.isInteger(we) || we < 0 || we > 6) we = 0;
+      csInput.week_ending_weekday = we;
+    }
+
+    if ('default_submission_mode' in csInput) {
+      let dsm = String(csInput.default_submission_mode || '').toUpperCase();
+      if (!['ELECTRONIC','MANUAL'].includes(dsm)) dsm = 'ELECTRONIC';
+      csInput.default_submission_mode = dsm;
+    }
+
+    const {
+      hr_validation_required,
+      ts_reference_required,
+      pay_reference_required,
+      invoice_reference_required,
+      default_submission_mode,
+      client_settings,
+      week_ending_weekday,
+
+      is_nhsp,
+      self_bill_no_invoices_sent,
+      daily_calc_of_invoices,
+      no_timesheet_required,
+      group_nightsat_sunbh,
+      auto_invoice_default,
+      requires_hr,
+      autoprocess_hr,
+      hr_attach_to_invoice,
+      ts_attach_to_invoice,
+
+      // ensure these never fall into clients table patch
+      send_manual_invoices_to_different_email,
+      manual_invoices_alt_email_address,
+
+      ...clientPatchRaw
+    } = data;
+
+    const clientPatch = {};
+    for (const [k, v] of Object.entries(clientPatchRaw)) {
+      if (v === '' || v === undefined) continue;
+      clientPatch[k] = v;
+    }
+
+    const clientKeysToChange = Object.keys(clientPatch).filter(k => {
+      return JSON.stringify(clientPatch[k]) !== JSON.stringify(beforeClient[k]);
+    });
+
+    let client = beforeClient;
+
+    if (clientKeysToChange.length) {
+      clientPatch.updated_at = new Date().toISOString();
+
+      const res = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(clientId)}`,
+        {
+          method: "PATCH",
+          headers: { ...sbHeaders(env), "Prefer": "return=representation" },
+          body: JSON.stringify(clientPatch)
+        }
+      );
+      if (!res.ok) {
+        const err = await res.text();
+        return withCORS(env, req, badRequest(`Update failed: ${err}`));
+      }
+      const json = await res.json().catch(() => ({}));
+      client = Array.isArray(json) ? json[0] : json;
+    }
+
+    let csChanged = false;
+    let client_settings_updated = null;
+
+    if (Object.keys(csInput).length) {
+      const hasBefore = !!beforeCs?.id;
+
+      // Canonicalise server-side
+      const canon = canonicalizeClientSettingsServer(beforeCs, csInput);
+
+      // ✅ VALIDATION: if toggle ON, require email
+      if (canon.send_manual_invoices_to_different_email && !canon.manual_invoices_alt_email_address) {
+        return withCORS(env, req, badRequest('manual_invoices_alt_email_address is required when send_manual_invoices_to_different_email is true'));
+      }
+
+      for (const k of TIME_KEYS) {
+        if (Object.prototype.hasOwnProperty.call(canon, k)) {
+          canon[k] = normTime(canon[k]);
+        }
+      }
+
+      // ✅ VALIDATION: shift-time rule = either ALL blank or ALL filled
+      {
+        const filled = TIME_KEYS.filter(k => canon[k] != null && String(canon[k]).trim() !== '');
+        if (filled.length > 0 && filled.length < TIME_KEYS.length) {
+          return withCORS(env, req, badRequest('Shift times must be either all blank (inherit global) or all filled.'));
+        }
+      }
+
+      const patchObj = {};
+      if (hasBefore) {
+        for (const [k, v] of Object.entries(canon)) {
+          if (k === 'id' || k === 'client_id' || k === 'created_at' || k === 'updated_at') continue;
+
+          const beforeV = beforeCs ? beforeCs[k] : undefined;
+
+          if (TIME_KEYS.includes(k)) {
+            if (!sameTime(beforeV, v)) patchObj[k] = v;
+            continue;
+          }
+
+          if (JSON.stringify(beforeV) !== JSON.stringify(v)) patchObj[k] = v;
+        }
+        patchObj.updated_at = new Date().toISOString();
+
+        const csRes = await fetch(
+          `${env.SUPABASE_URL}/rest/v1/client_settings?id=eq.${encodeURIComponent(beforeCs.id)}`,
+          {
+            method: "PATCH",
+            headers: { ...sbHeaders(env), "Prefer": "return=representation" },
+            body: JSON.stringify(patchObj)
+          }
+        );
+        if (!csRes.ok) {
+          const err = await csRes.text();
+          return withCORS(env, req, badRequest(`Client settings update failed: ${err}`));
+        }
+        const csJson = await csRes.json().catch(() => ({}));
+        client_settings_updated = Array.isArray(csJson) ? csJson[0] : csJson;
+      } else {
+        const insertRow = {
+          client_id: clientId,
+          ...canon,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+        delete insertRow.id;
+
+        const csRes = await fetch(`${env.SUPABASE_URL}/rest/v1/client_settings`, {
+          method: "POST",
+          headers: { ...sbHeaders(env), "Prefer": "return=representation" },
+          body: JSON.stringify(insertRow)
+        });
+        if (!csRes.ok) {
+          const err = await csRes.text();
+          return withCORS(env, req, badRequest(`Client settings insert failed: ${err}`));
+        }
+        const csJson = await csRes.json().catch(() => ({}));
+        client_settings_updated = Array.isArray(csJson) ? csJson[0] : csJson;
+      }
+
+      const beforeHr      = !!(beforeCs?.hr_validation_required        ?? false);
+      const beforeRef     = !!(beforeCs?.ts_reference_required         ?? false);
+      const beforePayRef  = !!(beforeCs?.pay_reference_required        ?? false);
+      const beforeInvRef  = !!(beforeCs?.invoice_reference_required    ?? false);
+
+      const nextHr        = !!(canon.hr_validation_required            ?? false);
+      const nextRef       = !!(canon.ts_reference_required             ?? false);
+      const nextPayRef    = !!(canon.pay_reference_required            ?? false);
+      const nextInvRef    = !!(canon.invoice_reference_required        ?? false);
+
+      const timesChanged = TIME_KEYS.some(k => !sameTime(beforeCs?.[k], canon?.[k]));
+
+      csChanged = (
+        beforeHr     !== nextHr     ||
+        beforeRef    !== nextRef    ||
+        beforePayRef !== nextPayRef ||
+        beforeInvRef !== nextInvRef ||
+        timesChanged
+      );
+    }
+
+    const policyChanged =
+      (data.vat_chargeable != null && !!data.vat_chargeable !== !!beforeClient.vat_chargeable) ||
+      (data.payment_terms_days != null && Number(data.payment_terms_days) !== Number(beforeClient.payment_terms_days));
+
+    const mileageChargeChanged =
+      (data.mileage_charge_rate != null && Number(data.mileage_charge_rate) !== Number(beforeClient.mileage_charge_rate));
+
+    if (policyChanged || mileageChargeChanged || csChanged) {
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?client_id=eq.${encodeURIComponent(clientId)}` +
+          `&is_current=eq.true` +
+          `&locked_by_invoice_id=is.null`,
+        {
+          method: "PATCH",
+          headers: { ...sbHeaders(env), "Prefer": "return=minimal" },
+          body: JSON.stringify({
+            is_stale: true,
+            stale_reason: 'CLIENT_SETTINGS_CHANGED',
+            updated_at: new Date().toISOString()
+          })
+        }
+      );
+
+      const { rows: tsfins } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?select=timesheet_id` +
+          `&client_id=eq.${encodeURIComponent(clientId)}` +
+          `&is_current=eq.true` +
+          `&locked_by_invoice_id=is.null`
+      );
+      const toEnqueue = (tsfins || []).map(r => ({ timesheet_id: r.timesheet_id, reason: 'POLICY_CHANGED' }));
+      if (toEnqueue.length) {
+        await fetch(
+          `${env.SUPABASE_URL}/rest/v1/ts_financials_outbox?on_conflict=timesheet_id,reason`,
+          {
+            method: "POST",
+            headers: { ...sbHeaders(env), "Prefer": "resolution=ignore-duplicates" },
+            body: JSON.stringify(toEnqueue)
+          }
+        );
+      }
+    }
+
+    return withCORS(env, req, ok({
+      client,
+      client_settings: client_settings_updated || beforeCs || null
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError("Failed to update client"));
+  }
+}
+
 async function handleCreateClient(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -35708,12 +36080,18 @@ async function handleCreateClient(env, req) {
     return m ? m[1] : s;
   };
 
-  // Small helper: accept true / "true" / "yes" / "1"
+  // Small helper: accept true / "true" / "yes" / "1" / "on"
   const asBool = (v) => {
     if (v === true) return true;
     if (v === false || v == null) return false;
     const s = String(v).trim().toLowerCase();
-    return s === 'true' || s === 'yes' || s === 'y' || s === '1';
+    return s === 'true' || s === 'yes' || s === 'y' || s === '1' || s === 'on';
+  };
+
+  const normEmail = (v) => {
+    if (v == null) return null;
+    const s = String(v).trim();
+    return s ? s : null;
   };
 
   try {
@@ -35741,6 +36119,10 @@ async function handleCreateClient(env, req) {
       hr_attach_to_invoice,
       ts_attach_to_invoice,
 
+      // manual adjustment email routing (can be sent at top level)
+      send_manual_invoices_to_different_email,
+      manual_invoices_alt_email_address,
+
       ...clientOnly
     } = data || {};
 
@@ -35756,8 +36138,9 @@ async function handleCreateClient(env, req) {
     const clientJson = await clientRes.json().catch(() => ({}));
     const client = Array.isArray(clientJson) ? clientJson[0] : clientJson;
 
+    // ✅ FIX: guard against null client_settings (typeof null === 'object')
     const csInput = {
-      ...(typeof clientSettingsInput === 'object' ? clientSettingsInput : {}),
+      ...((clientSettingsInput && typeof clientSettingsInput === 'object') ? clientSettingsInput : {}),
     };
 
     // Existing flags → client_settings
@@ -35803,6 +36186,16 @@ async function handleCreateClient(env, req) {
       csInput.ts_attach_to_invoice = asBool(csInput.ts_attach_to_invoice ?? ts_attach_to_invoice);
     }
 
+    // ✅ manual adjustment email routing
+    if ('send_manual_invoices_to_different_email' in data || 'send_manual_invoices_to_different_email' in csInput) {
+      csInput.send_manual_invoices_to_different_email =
+        asBool(csInput.send_manual_invoices_to_different_email ?? send_manual_invoices_to_different_email);
+    }
+    if ('manual_invoices_alt_email_address' in data || 'manual_invoices_alt_email_address' in csInput) {
+      csInput.manual_invoices_alt_email_address =
+        normEmail(csInput.manual_invoices_alt_email_address ?? manual_invoices_alt_email_address);
+    }
+
     // ✅ Normalise any provided time keys ('' => null)
     for (const k of TIME_KEYS) {
       if (Object.prototype.hasOwnProperty.call(csInput, k)) {
@@ -35844,6 +36237,17 @@ async function handleCreateClient(env, req) {
       csInput.auto_invoice_default = false;
     }
 
+    // ✅ if manual-invoice toggle off => clear email
+    if (!asBool(csInput.send_manual_invoices_to_different_email)) {
+      csInput.send_manual_invoices_to_different_email = false;
+      csInput.manual_invoices_alt_email_address = null;
+    }
+
+    // ✅ VALIDATION: if toggle ON, require email
+    if (asBool(csInput.send_manual_invoices_to_different_email) && !csInput.manual_invoices_alt_email_address) {
+      return withCORS(env, req, badRequest('manual_invoices_alt_email_address is required when send_manual_invoices_to_different_email is true'));
+    }
+
     // ✅ DEFAULT TIMES ONLY WHEN KEY IS ABSENT (blank/null explicitly provided must stay null)
     const setDefaultTimeIfMissing = (key, val) => {
       if (!Object.prototype.hasOwnProperty.call(csInput, key)) csInput[key] = val;
@@ -35860,6 +36264,21 @@ async function handleCreateClient(env, req) {
     setDefaultTimeIfMissing('sun_end',   '00:00');
     setDefaultTimeIfMissing('bh_start',  '00:00');
     setDefaultTimeIfMissing('bh_end',    '00:00');
+
+    // ✅ VALIDATION: shift-time rule = either ALL blank or ALL filled
+    {
+      // re-normalise in case defaults were applied
+      for (const k of TIME_KEYS) {
+        if (Object.prototype.hasOwnProperty.call(csInput, k)) {
+          csInput[k] = normTime(csInput[k]);
+        }
+      }
+
+      const filled = TIME_KEYS.filter(k => csInput[k] != null && String(csInput[k]).trim() !== '');
+      if (filled.length > 0 && filled.length < TIME_KEYS.length) {
+        return withCORS(env, req, badRequest('Shift times must be either all blank (inherit global) or all filled.'));
+      }
+    }
 
     // Week ending day (0..6, default 0/Sun)
     const we = Number(csInput.week_ending_weekday);
@@ -35898,10 +36317,12 @@ async function handleCreateClient(env, req) {
     }
 
     return withCORS(env, req, ok({ client, client_settings }));
-  } catch {
+  } catch (e) {
     return withCORS(env, req, serverError("Failed to create client"));
   }
 }
+
+
 
 
 // 1) GET /api/clients/:id  (full client + latest client_settings)
@@ -47209,20 +47630,9 @@ async function handleUpdateClientDefault(env, req, id) {
   }
 }
 
-// ============================================================
-// UPDATED: handleUpdateClient
-// - Uses updated canonicalizeClientSettingsServer
-// - Validates manual invoice alt email: if toggle ON, email must be present
-// ============================================================
-
-async function handleUpdateClient(env, req, clientId) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  const raw = await parseJSONBody(req);
-  if (!raw) return withCORS(env, req, badRequest("Invalid JSON"));
-
-  const { cli_ref, cli_num, ...data } = raw;
+function canonicalizeClientSettingsServer(beforeCs, csInput) {
+  const before = (beforeCs && typeof beforeCs === 'object') ? beforeCs : {};
+  const in0    = (csInput && typeof csInput === 'object') ? csInput : {};
 
   const TIME_KEYS = [
     'day_start','day_end',
@@ -47236,21 +47646,15 @@ async function handleUpdateClient(env, req, clientId) {
     if (v === true) return true;
     if (v === false || v == null) return false;
     const s = String(v).trim().toLowerCase();
-    return s === 'true' || s === 'yes' || s === 'y' || s === '1';
+    return s === 'true' || s === 'yes' || s === 'y' || s === '1' || s === 'on';
   };
 
   const normTime = (v) => {
     if (v == null) return null;
     const s = String(v).trim();
     if (!s) return null;
-    const m = s.match(/^(\d{2}:\d{2})/);
+    const m = s.match(/^(\d{2}:\d{2})/); // accepts "06:00:00"
     return m ? m[1] : s;
-  };
-
-  const sameTime = (a, b) => {
-    const na = normTime(a);
-    const nb = normTime(b);
-    return String(na ?? '') === String(nb ?? '');
   };
 
   const normEmail = (v) => {
@@ -47259,324 +47663,90 @@ async function handleUpdateClient(env, req, clientId) {
     return s ? s : null;
   };
 
-  try {
-    const { rows: beforeClientRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/clients` +
-      `?id=eq.${encodeURIComponent(clientId)}` +
-      `&select=id,name,invoice_address,primary_invoice_email,ap_phone,vat_chargeable,payment_terms_days,mileage_charge_rate,ts_queries_email,updated_at`
-    );
-    if (!beforeClientRows?.length) return withCORS(env, req, notFound("Client not found"));
-    const beforeClient = beforeClientRows[0];
+  const out = {};
 
-    const { rows: beforeCsRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/client_settings` +
-      `?client_id=eq.${encodeURIComponent(clientId)}` +
-      `&select=` +
-        [
-          'id',
-          'hr_validation_required','ts_reference_required','pay_reference_required','invoice_reference_required',
-          'default_submission_mode',
-          'week_ending_weekday',
-          'is_nhsp','self_bill_no_invoices_sent','daily_calc_of_invoices',
-          'no_timesheet_required','group_nightsat_sunbh',
-          'auto_invoice_default',
-          'effective_from','timezone_id',
-          'day_start','day_end','night_start','night_end','sat_start','sat_end','sun_start','sun_end','bh_start','bh_end',
-          'bh_source','bh_list','bh_feed_url',
-          'requires_hr','autoprocess_hr','hr_attach_to_invoice','ts_attach_to_invoice',
+  // timezone_id (nullable; null => inherit global)
+  if (Object.prototype.hasOwnProperty.call(in0, 'timezone_id')) out.timezone_id = (String(in0.timezone_id || '').trim() || null);
+  else if (Object.prototype.hasOwnProperty.call(before, 'timezone_id')) out.timezone_id = (String(before.timezone_id || '').trim() || null);
 
-          // manual adjustment email routing
-          'send_manual_invoices_to_different_email',
-          'manual_invoices_alt_email_address',
-
-          'created_at','updated_at'
-        ].join(',') +
-      `&order=effective_from.desc,created_at.desc&limit=1`
-    );
-
-    const beforeCs = beforeCsRows?.[0] || null;
-
-    const csInput = {
-      ...(typeof data.client_settings === 'object' ? data.client_settings : {})
-    };
-
-    delete csInput.weekly_mode;
-    delete csInput.hr_weekly_behaviour;
-    delete csInput.__from_ui;
-
-    if ('hr_validation_required' in data)        csInput.hr_validation_required        = !!data.hr_validation_required;
-    if ('ts_reference_required' in data)         csInput.ts_reference_required         = !!data.ts_reference_required;
-    if ('pay_reference_required' in data)        csInput.pay_reference_required        = !!data.pay_reference_required;
-    if ('invoice_reference_required' in data)    csInput.invoice_reference_required    = !!data.invoice_reference_required;
-    if ('default_submission_mode' in data)       csInput.default_submission_mode       = data.default_submission_mode;
-
-    if ('auto_invoice_default' in data || 'auto_invoice_default' in csInput) {
-      csInput.auto_invoice_default = asBool(csInput.auto_invoice_default ?? data.auto_invoice_default);
-    }
-
-    if ('requires_hr' in data || 'requires_hr' in csInput) {
-      csInput.requires_hr = asBool(csInput.requires_hr ?? data.requires_hr);
-    }
-    if ('autoprocess_hr' in data || 'autoprocess_hr' in csInput) {
-      csInput.autoprocess_hr = asBool(csInput.autoprocess_hr ?? data.autoprocess_hr);
-    }
-    if ('hr_attach_to_invoice' in data || 'hr_attach_to_invoice' in csInput) {
-      csInput.hr_attach_to_invoice = asBool(csInput.hr_attach_to_invoice ?? data.hr_attach_to_invoice);
-    }
-    if ('ts_attach_to_invoice' in data || 'ts_attach_to_invoice' in csInput) {
-      csInput.ts_attach_to_invoice = asBool(csInput.ts_attach_to_invoice ?? data.ts_attach_to_invoice);
-    }
-
-    if ('is_nhsp' in data || 'is_nhsp' in csInput) {
-      csInput.is_nhsp = asBool(csInput.is_nhsp ?? data.is_nhsp);
-    }
-    if ('self_bill_no_invoices_sent' in data || 'self_bill_no_invoices_sent' in csInput) {
-      csInput.self_bill_no_invoices_sent = asBool(csInput.self_bill_no_invoices_sent ?? data.self_bill_no_invoices_sent);
-    }
-    if ('daily_calc_of_invoices' in data || 'daily_calc_of_invoices' in csInput) {
-      csInput.daily_calc_of_invoices = asBool(csInput.daily_calc_of_invoices ?? data.daily_calc_of_invoices);
-    }
-    if ('no_timesheet_required' in data || 'no_timesheet_required' in csInput) {
-      csInput.no_timesheet_required = asBool(csInput.no_timesheet_required ?? data.no_timesheet_required);
-    }
-    if ('group_nightsat_sunbh' in data || 'group_nightsat_sunbh' in csInput) {
-      csInput.group_nightsat_sunbh = asBool(csInput.group_nightsat_sunbh ?? data.group_nightsat_sunbh);
-    }
-
-    if ('send_manual_invoices_to_different_email' in data || 'send_manual_invoices_to_different_email' in csInput) {
-      csInput.send_manual_invoices_to_different_email =
-        asBool(csInput.send_manual_invoices_to_different_email ?? data.send_manual_invoices_to_different_email);
-    }
-    if ('manual_invoices_alt_email_address' in data || 'manual_invoices_alt_email_address' in csInput) {
-      csInput.manual_invoices_alt_email_address =
-        normEmail(csInput.manual_invoices_alt_email_address ?? data.manual_invoices_alt_email_address);
-    }
-
-    for (const k of TIME_KEYS) {
-      if ((k in data) || (k in csInput)) {
-        csInput[k] = normTime(csInput[k] ?? data[k]);
-      }
-    }
-
-    const weIn = (data.week_ending_weekday ?? csInput.week_ending_weekday);
-    if (weIn !== undefined) {
-      let we = Number(weIn);
-      if (!Number.isInteger(we) || we < 0 || we > 6) we = 0;
-      csInput.week_ending_weekday = we;
-    }
-
-    if ('default_submission_mode' in csInput) {
-      let dsm = String(csInput.default_submission_mode || '').toUpperCase();
-      if (!['ELECTRONIC','MANUAL'].includes(dsm)) dsm = 'ELECTRONIC';
-      csInput.default_submission_mode = dsm;
-    }
-
-    const {
-      hr_validation_required,
-      ts_reference_required,
-      pay_reference_required,
-      invoice_reference_required,
-      default_submission_mode,
-      client_settings,
-      week_ending_weekday,
-
-      is_nhsp,
-      self_bill_no_invoices_sent,
-      daily_calc_of_invoices,
-      no_timesheet_required,
-      group_nightsat_sunbh,
-      auto_invoice_default,
-      requires_hr,
-      autoprocess_hr,
-      hr_attach_to_invoice,
-      ts_attach_to_invoice,
-
-      // ensure these never fall into clients table patch
-      send_manual_invoices_to_different_email,
-      manual_invoices_alt_email_address,
-
-      ...clientPatchRaw
-    } = data;
-
-    const clientPatch = {};
-    for (const [k, v] of Object.entries(clientPatchRaw)) {
-      if (v === '' || v === undefined) continue;
-      clientPatch[k] = v;
-    }
-
-    const clientKeysToChange = Object.keys(clientPatch).filter(k => {
-      return JSON.stringify(clientPatch[k]) !== JSON.stringify(beforeClient[k]);
-    });
-
-    let client = beforeClient;
-
-    if (clientKeysToChange.length) {
-      clientPatch.updated_at = new Date().toISOString();
-
-      const res = await fetch(
-        `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(clientId)}`,
-        {
-          method: "PATCH",
-          headers: { ...sbHeaders(env), "Prefer": "return=representation" },
-          body: JSON.stringify(clientPatch)
-        }
-      );
-      if (!res.ok) {
-        const err = await res.text();
-        return withCORS(env, req, badRequest(`Update failed: ${err}`));
-      }
-      const json = await res.json().catch(() => ({}));
-      client = Array.isArray(json) ? json[0] : json;
-    }
-
-    let csChanged = false;
-    let client_settings_updated = null;
-
-    if (Object.keys(csInput).length) {
-      const hasBefore = !!beforeCs?.id;
-
-      // Canonicalise server-side
-      const canon = canonicalizeClientSettingsServer(beforeCs, csInput);
-
-      // ✅ VALIDATION: if toggle ON, require email
-      if (canon.send_manual_invoices_to_different_email && !canon.manual_invoices_alt_email_address) {
-        return withCORS(env, req, badRequest('manual_invoices_alt_email_address is required when send_manual_invoices_to_different_email is true'));
-      }
-
-      for (const k of TIME_KEYS) {
-        if (Object.prototype.hasOwnProperty.call(canon, k)) {
-          canon[k] = normTime(canon[k]);
-        }
-      }
-
-      const patchObj = {};
-      if (hasBefore) {
-        for (const [k, v] of Object.entries(canon)) {
-          if (k === 'id' || k === 'client_id' || k === 'created_at' || k === 'updated_at') continue;
-
-          const beforeV = beforeCs ? beforeCs[k] : undefined;
-
-          if (TIME_KEYS.includes(k)) {
-            if (!sameTime(beforeV, v)) patchObj[k] = v;
-            continue;
-          }
-
-          if (JSON.stringify(beforeV) !== JSON.stringify(v)) patchObj[k] = v;
-        }
-        patchObj.updated_at = new Date().toISOString();
-
-        const csRes = await fetch(
-          `${env.SUPABASE_URL}/rest/v1/client_settings?id=eq.${encodeURIComponent(beforeCs.id)}`,
-          {
-            method: "PATCH",
-            headers: { ...sbHeaders(env), "Prefer": "return=representation" },
-            body: JSON.stringify(patchObj)
-          }
-        );
-        if (!csRes.ok) {
-          const err = await csRes.text();
-          return withCORS(env, req, badRequest(`Client settings update failed: ${err}`));
-        }
-        const csJson = await csRes.json().catch(() => ({}));
-        client_settings_updated = Array.isArray(csJson) ? csJson[0] : csJson;
-      } else {
-        const insertRow = {
-          client_id: clientId,
-          ...canon,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        };
-        delete insertRow.id;
-
-        const csRes = await fetch(`${env.SUPABASE_URL}/rest/v1/client_settings`, {
-          method: "POST",
-          headers: { ...sbHeaders(env), "Prefer": "return=representation" },
-          body: JSON.stringify(insertRow)
-        });
-        if (!csRes.ok) {
-          const err = await csRes.text();
-          return withCORS(env, req, badRequest(`Client settings insert failed: ${err}`));
-        }
-        const csJson = await csRes.json().catch(() => ({}));
-        client_settings_updated = Array.isArray(csJson) ? csJson[0] : csJson;
-      }
-
-      const beforeHr      = !!(beforeCs?.hr_validation_required        ?? false);
-      const beforeRef     = !!(beforeCs?.ts_reference_required         ?? false);
-      const beforePayRef  = !!(beforeCs?.pay_reference_required        ?? false);
-      const beforeInvRef  = !!(beforeCs?.invoice_reference_required    ?? false);
-
-      const nextHr        = !!(canon.hr_validation_required            ?? false);
-      const nextRef       = !!(canon.ts_reference_required             ?? false);
-      const nextPayRef    = !!(canon.pay_reference_required            ?? false);
-      const nextInvRef    = !!(canon.invoice_reference_required        ?? false);
-
-      const timesChanged = TIME_KEYS.some(k => !sameTime(beforeCs?.[k], canon?.[k]));
-
-      csChanged = (
-        beforeHr     !== nextHr     ||
-        beforeRef    !== nextRef    ||
-        beforePayRef !== nextPayRef ||
-        beforeInvRef !== nextInvRef ||
-        timesChanged
-      );
-    }
-
-    const policyChanged =
-      (data.vat_chargeable != null && !!data.vat_chargeable !== !!beforeClient.vat_chargeable) ||
-      (data.payment_terms_days != null && Number(data.payment_terms_days) !== Number(beforeClient.payment_terms_days));
-
-    const mileageChargeChanged =
-      (data.mileage_charge_rate != null && Number(data.mileage_charge_rate) !== Number(beforeClient.mileage_charge_rate));
-
-    if (policyChanged || mileageChargeChanged || csChanged) {
-      await fetch(
-        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?client_id=eq.${encodeURIComponent(clientId)}` +
-          `&is_current=eq.true` +
-          `&locked_by_invoice_id=is.null`,
-        {
-          method: "PATCH",
-          headers: { ...sbHeaders(env), "Prefer": "return=minimal" },
-          body: JSON.stringify({
-            is_stale: true,
-            stale_reason: 'CLIENT_SETTINGS_CHANGED',
-            updated_at: new Date().toISOString()
-          })
-        }
-      );
-
-      const { rows: tsfins } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?select=timesheet_id` +
-          `&client_id=eq.${encodeURIComponent(clientId)}` +
-          `&is_current=eq.true` +
-          `&locked_by_invoice_id=is.null`
-      );
-      const toEnqueue = (tsfins || []).map(r => ({ timesheet_id: r.timesheet_id, reason: 'POLICY_CHANGED' }));
-      if (toEnqueue.length) {
-        await fetch(
-          `${env.SUPABASE_URL}/rest/v1/ts_financials_outbox?on_conflict=timesheet_id,reason`,
-          {
-            method: "POST",
-            headers: { ...sbHeaders(env), "Prefer": "resolution=ignore-duplicates" },
-            body: JSON.stringify(toEnqueue)
-          }
-        );
-      }
-    }
-
-    return withCORS(env, req, ok({
-      client,
-      client_settings: client_settings_updated || beforeCs || null
-    }));
-  } catch {
-    return withCORS(env, req, serverError("Failed to update client"));
+  // time keys: only override when key is present (null allowed to clear/inherit global)
+  for (const k of TIME_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(in0, k)) out[k] = normTime(in0[k]);
+    else if (Object.prototype.hasOwnProperty.call(before, k)) out[k] = normTime(before[k]);
   }
+
+  // booleans / flags (preserve if not provided)
+  const BOOL_KEYS = [
+    'hr_validation_required',
+    'ts_reference_required',
+    'pay_reference_required',
+    'invoice_reference_required',
+    'is_nhsp',
+    'self_bill_no_invoices_sent',
+    'daily_calc_of_invoices',
+    'no_timesheet_required',
+    'group_nightsat_sunbh',
+    'auto_invoice_default',
+    'requires_hr',
+    'autoprocess_hr',
+    'hr_attach_to_invoice',
+    'ts_attach_to_invoice',
+    'send_manual_invoices_to_different_email'
+  ];
+
+  for (const k of BOOL_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(in0, k)) out[k] = asBool(in0[k]);
+    else if (Object.prototype.hasOwnProperty.call(before, k)) out[k] = asBool(before[k]);
+  }
+
+  // manual invoices alt email routing
+  if (Object.prototype.hasOwnProperty.call(in0, 'manual_invoices_alt_email_address')) {
+    out.manual_invoices_alt_email_address = normEmail(in0.manual_invoices_alt_email_address);
+  } else if (Object.prototype.hasOwnProperty.call(before, 'manual_invoices_alt_email_address')) {
+    out.manual_invoices_alt_email_address = normEmail(before.manual_invoices_alt_email_address);
+  }
+
+  // week_ending_weekday
+  if (Object.prototype.hasOwnProperty.call(in0, 'week_ending_weekday')) {
+    const w = Number(in0.week_ending_weekday);
+    out.week_ending_weekday = (Number.isInteger(w) && w >= 0 && w <= 6) ? w : 0;
+  } else if (Object.prototype.hasOwnProperty.call(before, 'week_ending_weekday')) {
+    const w = Number(before.week_ending_weekday);
+    out.week_ending_weekday = (Number.isInteger(w) && w >= 0 && w <= 6) ? w : 0;
+  } else {
+    out.week_ending_weekday = 0;
+  }
+
+  // default_submission_mode
+  if (Object.prototype.hasOwnProperty.call(in0, 'default_submission_mode')) {
+    const d = String(in0.default_submission_mode || '').trim().toUpperCase();
+    out.default_submission_mode = (d === 'MANUAL' || d === 'ELECTRONIC') ? d : 'ELECTRONIC';
+  } else if (Object.prototype.hasOwnProperty.call(before, 'default_submission_mode')) {
+    const d = String(before.default_submission_mode || '').trim().toUpperCase();
+    out.default_submission_mode = (d === 'MANUAL' || d === 'ELECTRONIC') ? d : 'ELECTRONIC';
+  } else {
+    out.default_submission_mode = 'ELECTRONIC';
+  }
+
+  // policy: self-bill => auto-invoice forced false
+  if (out.self_bill_no_invoices_sent) out.auto_invoice_default = false;
+
+  // defaults for attach flags if still missing
+  if (!Object.prototype.hasOwnProperty.call(out, 'hr_attach_to_invoice')) out.hr_attach_to_invoice = true;
+  if (!Object.prototype.hasOwnProperty.call(out, 'ts_attach_to_invoice')) out.ts_attach_to_invoice = true;
+
+  // if manual-invoice toggle off => clear email
+  if (!out.send_manual_invoices_to_different_email) out.manual_invoices_alt_email_address = null;
+
+  return out;
 }
+
+// ============================================================
+// UPDATED: handleUpdateClient
+// - Uses updated canonicalizeClientSettingsServer
+// - Validates manual invoice alt email: if toggle ON, email must be present
+// ============================================================
+
 
 
 // ─────────────────────────────────────────────────────────────────────────────
