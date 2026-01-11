@@ -668,47 +668,57 @@ begin
 
           -- eligible snaps (locked null, is_current, READY_FOR_INVOICE) and precheck OK + schedule-aware refs if required
           -- disallow NHSP/HR self-bill bases
-               declare
-            v_snap_cnt int := 0;
-            v_client_cnt int := 0;
-            v_has_disallowed boolean := false;
-          begin
-            with snaps_all as (
-              select tf.*
-              from public.timesheets_financials tf
-              where tf.timesheet_id = any(v_ts_ids)
-                and tf.is_current = true
-                and tf.locked_by_invoice_id is null
-                and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
-            )
-            select
-              count(*)::int,
-              count(distinct client_id)::int,
-              min(client_id),
-              exists(
-                select 1
-                from snaps_all
-                where upper(coalesce(basis::text,'')) in ('NHSP','NHSP_ADJUSTMENT','HEALTHROSTER_SELF_BILL','HEALTHROSTER_ADJUSTMENT')
-              )
-            into v_snap_cnt, v_client_cnt, v_client_id, v_has_disallowed
-            from snaps_all;
+            declare
+  v_snap_cnt int := 0;
+  v_client_cnt int := 0;
+  v_has_disallowed boolean := false;
+begin
+  with snaps_all as (
+    select tf.*
+    from public.timesheets_financials tf
+    where tf.timesheet_id = any(v_ts_ids)
+      and tf.is_current = true
+      and tf.locked_by_invoice_id is null
+      and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
+  )
+  select
+    count(*)::int,
+    count(distinct client_id)::int,
 
-            if v_snap_cnt = 0 then
-              raise exception 'No eligible timesheets (need READY_FOR_INVOICE & unlocked).';
-            end if;
+    -- ✅ FIX: Postgres has no min(uuid). Pick a deterministic client_id instead.
+    (
+      select sa.client_id
+      from snaps_all sa
+      where sa.client_id is not null
+      order by sa.client_id asc
+      limit 1
+    ) as picked_client_id,
 
-            if v_has_disallowed then
-              raise exception 'This endpoint cannot invoice NHSP or HR self-bill timesheets (use BY_WEEK).';
-            end if;
+    exists(
+      select 1
+      from snaps_all
+      where upper(coalesce(basis::text,'')) in ('NHSP','NHSP_ADJUSTMENT','HEALTHROSTER_SELF_BILL','HEALTHROSTER_ADJUSTMENT')
+    )
+  into v_snap_cnt, v_client_cnt, v_client_id, v_has_disallowed
+  from snaps_all;
 
-            if v_client_cnt <> 1 then
-              raise exception 'Expected exactly one client across snapshots.';
-            end if;
+  if v_snap_cnt = 0 then
+    raise exception 'No eligible timesheets (need READY_FOR_INVOICE & unlocked).';
+  end if;
 
-            if v_client_id is null then
-              raise exception 'No eligible timesheets (need READY_FOR_INVOICE & unlocked).';
-            end if;
-                  end;
+  if v_has_disallowed then
+    raise exception 'This endpoint cannot invoice NHSP or HR self-bill timesheets (use BY_WEEK).';
+  end if;
+
+  if v_client_cnt <> 1 then
+    raise exception 'Expected exactly one client across snapshots.';
+  end if;
+
+  if v_client_id is null then
+    raise exception 'No eligible timesheets (need READY_FOR_INVOICE & unlocked).';
+  end if;
+end;
+
 
           select array_agg(distinct tf.timesheet_id)
           into v_ts_ids_to_use
