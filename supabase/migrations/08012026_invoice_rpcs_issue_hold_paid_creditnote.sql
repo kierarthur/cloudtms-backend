@@ -778,16 +778,21 @@ begin
 end;
 $$;
 
-
 -- ============================================================
 -- UPDATED: public.invoice_issue_one(p_invoice_id, p_actor_user_id)
--- Reason: v_ts_invoice_precheck now returns additional blocker codes:
---   - BLOCK_NO_MILEAGE_EVIDENCE
---   - BLOCK_NO_EXPENSES_EVIDENCE
--- and BLOCK_NO_PDF can mean either missing manual PDF OR missing generated PDF.
+-- ✅ SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
 --
--- This update keeps the same signature + return columns (safe to re-run).
+-- CHANGE: Adds HR validation hardening:
+--   - For each invoice timesheet:
+--       if v_timesheets_summary_base.hr_validation_required_for_invoice = true
+--       AND validation_status is NULL OR not in (VALIDATION_OK, OVERRIDDEN)
+--       => add blocker reason and place invoice ON_HOLD.
+--
+-- Note:
+--   - Uses v_timesheets_summary_base.hr_validation_required_for_invoice
+--     (your new appended boolean) as the policy switch.
 -- ============================================================
+
 create or replace function public.invoice_issue_one(
   p_invoice_id uuid,
   p_actor_user_id uuid
@@ -805,13 +810,18 @@ as $$
 declare
   v_now timestamptz := now();
   v_ts_ids uuid[];
+
   v_reasons text[] := array[]::text[];
+  v_precheck_reasons text[] := array[]::text[];
+  v_hr_reasons text[] := array[]::text[];
+
   v_on_hold_reason text := null;
 begin
   if p_invoice_id is null then
     raise exception 'invoice_id is required';
   end if;
 
+  -- Load invoice + basic guards
   declare
     v_inv record;
   begin
@@ -846,7 +856,7 @@ begin
     end if;
   end;
 
-  -- 1) Timesheets on invoice
+  -- Timesheets on invoice
   select array_agg(distinct l.timesheet_id)
   into v_ts_ids
   from public.invoice_lines l
@@ -857,7 +867,9 @@ begin
     raise exception 'Invoice has no timesheets to validate';
   end if;
 
-  -- 2) Precheck (authoritative)
+  -- ------------------------------------------------------------
+  -- 1) Precheck blockers (authoritative: PDF/reference/evidence)
+  -- ------------------------------------------------------------
   select array_agg(
     case
       when pc.timesheet_id is null
@@ -882,13 +894,46 @@ begin
         'TS ' || pc.timesheet_id::text || ': precheck blocker ' || upper(coalesce(pc.precheck_status,''))
     end
   )
-  into v_reasons
+  into v_precheck_reasons
   from unnest(v_ts_ids) as x(timesheet_id)
   left join public.v_ts_invoice_precheck pc
     on pc.timesheet_id = x.timesheet_id;
 
+  v_precheck_reasons := array_remove(v_precheck_reasons, null);
+
+  -- ------------------------------------------------------------
+  -- 2) OPTIONAL HARDENING: HR validation blockers
+  -- ------------------------------------------------------------
+  select array_agg(
+    case
+      when s.timesheet_id is null
+        then 'TS ' || x.timesheet_id::text || ': summary missing'
+
+      when coalesce(s.hr_validation_required_for_invoice, false) = true
+        and (
+          s.validation_status is null
+          or s.validation_status <> all (array[
+            'VALIDATION_OK'::public.validation_status_enum,
+            'OVERRIDDEN'::public.validation_status_enum
+          ])
+        )
+        then 'TS ' || x.timesheet_id::text || ': HR validation not passed'
+
+      else null
+    end
+  )
+  into v_hr_reasons
+  from unnest(v_ts_ids) as x(timesheet_id)
+  left join public.v_timesheets_summary_base s
+    on s.timesheet_id = x.timesheet_id;
+
+  v_hr_reasons := array_remove(v_hr_reasons, null);
+
+  -- Merge blockers
+  v_reasons := array_cat(v_precheck_reasons, v_hr_reasons);
   v_reasons := array_remove(v_reasons, null);
 
+  -- Any blockers => ON_HOLD
   if coalesce(array_length(v_reasons, 1), 0) > 0 then
     v_on_hold_reason := array_to_string(v_reasons, '; ');
 
@@ -942,7 +987,6 @@ begin
   return next;
 end;
 $$;
-
 
 
 -- ------------------------------------------------------------
