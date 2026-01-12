@@ -411,7 +411,7 @@ async function loadSettingsDefaults(env) {
     const { rows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/settings_defaults` +
-        `?select=timezone_id,import_config_json` +
+        `?select=timezone_id,import_config_json,finance_email,finance_email_settings,max_attachments_per_email` +
         `&id=eq.1` +
         `&limit=1`
     );
@@ -450,7 +450,29 @@ async function loadSettingsDefaults(env) {
       useRatesBatchRpc: _asBool(tsfinCfg.use_rates_batch_rpc, true),
     };
 
-    const out = { timezone_id: timezoneId, importConfig };
+    // ✅ NEW: finance email settings (db-driven)
+    const financeEmail = row.finance_email ? String(row.finance_email).trim() : null;
+
+    const fesRaw = row.finance_email_settings;
+    const financeEmailSettings = (typeof fesRaw === 'object' && fesRaw !== null)
+      ? fesRaw
+      : (_safeJsonParseMaybe(fesRaw, {}) || {});
+
+    const maxAttachments = (() => {
+      const n = Number(row.max_attachments_per_email);
+      const v = Number.isFinite(n) ? Math.trunc(n) : 30;
+      return (v >= 1 && v <= 100) ? v : 30;
+    })();
+
+    const out = {
+      timezone_id: timezoneId,
+      importConfig,
+
+      // ✅ NEW (cached)
+      finance_email: financeEmail,
+      finance_email_settings: financeEmailSettings,
+      max_attachments_per_email: maxAttachments
+    };
 
     // Store TTL cache
     __SETTINGS_DEFAULTS_CACHE = { ts: Date.now(), value: out };
@@ -459,7 +481,9 @@ async function loadSettingsDefaults(env) {
       console.log('[SETTINGS_DEFAULTS]', JSON.stringify({
         stage: 'loaded',
         timezone_id: timezoneId,
-        importConfig
+        importConfig,
+        finance_email: financeEmail,
+        max_attachments_per_email: maxAttachments
       }));
     }
 
@@ -472,7 +496,7 @@ async function loadSettingsDefaults(env) {
       }));
     }
 
-    // Safe fallbacks (match defaults above)
+    // Safe fallbacks
     const out = {
       timezone_id: 'Europe/London',
       importConfig: {
@@ -487,7 +511,12 @@ async function loadSettingsDefaults(env) {
           useWriteBatchRpc: true,
           useRatesBatchRpc: true,
         }
-      }
+      },
+
+      // ✅ NEW fallbacks
+      finance_email: null,
+      finance_email_settings: {},
+      max_attachments_per_email: 30
     };
 
     __SETTINGS_DEFAULTS_CACHE = { ts: Date.now(), value: out };
@@ -514,7 +543,6 @@ async function loadSettingsDefaults(env) {
 // - Adds finance_windows[] from RPC settings_finance_list() in the same response
 //   (no new GET endpoint needed for FE; single extra RPC call)
 // ============================================================================
-
 async function handleGetSettings(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized('Unauthorized');
@@ -550,7 +578,12 @@ async function handleGetSettings(env, req) {
         'import_config_json',
 
         // Bank details still live on settings_defaults
-        'bank_name','bank_sort_code','bank_account_number','vat_registration_number'
+        'bank_name','bank_sort_code','bank_account_number','vat_registration_number',
+
+        // ✅ NEW: Finance email settings (global)
+        'finance_email',
+        'finance_email_settings',
+        'max_attachments_per_email'
       ].join(',');
 
     const { rows } = await sbFetch(
@@ -594,13 +627,13 @@ async function handleGetSettings(env, req) {
     return withCORS(env, req, serverError("Failed to fetch settings_defaults"));
   }
 }
+
 // ============================================================================
 // UPDATE SETTINGS (UPDATED - OPTION A):
 // - Stops writing legacy finance fields on settings_defaults
 // - Keeps existing behaviour for non-finance fields (timezone, buckets, BH list, bank, import_config_json, etc.)
 // - Finance windows are managed via the new handler below
 // ============================================================================
-
 async function handleUpdateSettings(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized('Unauthorized');
@@ -608,8 +641,6 @@ async function handleUpdateSettings(env, req) {
   const data = await parseJSONBody(req);
   if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
 
-  // ✅ Removed legacy finance fields:
-  // vat_rate_pct, holiday_pay_pct, erni_pct, apply_holiday_to, apply_erni_to, margin_includes, effective_from
   const allowed = [
     'timezone_id',
     'day_start','day_end','night_start','night_end',
@@ -621,7 +652,12 @@ async function handleUpdateSettings(env, req) {
     'ts_reference_required',
 
     // ✅ Adaptability config
-    'import_config_json'
+    'import_config_json',
+
+    // ✅ NEW: global finance email settings
+    'finance_email',
+    'finance_email_settings',
+    'max_attachments_per_email'
   ];
 
   const payload = { updated_at: new Date().toISOString() };
@@ -630,11 +666,7 @@ async function handleUpdateSettings(env, req) {
     if (!(k in data)) continue;
 
     if (k === 'import_config_json') {
-      // Accept either:
-      // - an object (preferred)
-      // - a JSON string (parse it)
       const raw = data.import_config_json;
-
       let parsed = null;
 
       if (raw && typeof raw === 'object') {
@@ -642,7 +674,6 @@ async function handleUpdateSettings(env, req) {
       } else if (typeof raw === 'string') {
         parsed = _safeJsonParseMaybe(raw, null);
       } else if (raw == null) {
-        // allow clearing to {}
         parsed = {};
       }
 
@@ -651,6 +682,44 @@ async function handleUpdateSettings(env, req) {
       }
 
       payload.import_config_json = parsed;
+      continue;
+    }
+
+    if (k === 'finance_email_settings') {
+      const raw = data.finance_email_settings;
+      let parsed = null;
+
+      if (raw && typeof raw === 'object') {
+        parsed = raw;
+      } else if (typeof raw === 'string') {
+        parsed = _safeJsonParseMaybe(raw, null);
+      } else if (raw == null) {
+        parsed = {};
+      }
+
+      if (!parsed || typeof parsed !== 'object') {
+        return withCORS(env, req, badRequest("finance_email_settings must be a JSON object (or a JSON string that parses to an object)."));
+      }
+
+      payload.finance_email_settings = parsed;
+      continue;
+    }
+
+    if (k === 'max_attachments_per_email') {
+      const n = Number(data.max_attachments_per_email);
+      const v = Number.isFinite(n) ? Math.trunc(n) : NaN;
+
+      if (!(v >= 1 && v <= 100)) {
+        return withCORS(env, req, badRequest("max_attachments_per_email must be an integer between 1 and 100."));
+      }
+
+      payload.max_attachments_per_email = v;
+      continue;
+    }
+
+    if (k === 'finance_email') {
+      const v = (data.finance_email == null) ? null : String(data.finance_email).trim();
+      payload.finance_email = v && v.length ? v : null;
       continue;
     }
 
@@ -682,6 +751,7 @@ async function handleUpdateSettings(env, req) {
     return withCORS(env, req, serverError("Failed to update settings_defaults"));
   }
 }
+
 // ============================================================================
 // NEW HANDLER (OPTION A): Finance windows CRUD (global VAT/ERNI/Holiday Pay)
 // Suggested routes:
@@ -14962,6 +15032,262 @@ async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
     was_stale: !!resolved.was_stale
   }));
 }
+
+async function handleUsersList(env, req) {
+  const actor = await requireUser(env, req, ['admin']);
+  if (!actor) return unauthorized('Unauthorized');
+
+  const url = new URL(req.url);
+  const q = (url.searchParams.get('q') || '').trim();
+  const role = (url.searchParams.get('role') || '').trim();
+  const isActiveRaw = (url.searchParams.get('is_active') || '').trim();
+
+  const params = new URLSearchParams();
+
+  // NOTE: last_login_at_utc requires the SQL migration to exist.
+  params.set('select', [
+    'id',
+    'email',
+    'display_name',
+    'role',
+    'is_active',
+    'created_at',
+    'updated_at',
+    'last_login_at_utc',
+    'email_settings'
+  ].join(','));
+
+  params.set('order', 'created_at.desc');
+
+  // Optional filters
+  if (role) params.set('role', `eq.${role}`);
+
+  if (isActiveRaw) {
+    const v = isActiveRaw.toLowerCase();
+    if (v === 'true' || v === 'false') params.set('is_active', `eq.${v}`);
+  }
+
+  // q search: email OR display_name
+  if (q) {
+    const qq = q.replace(/[%*]/g, ''); // keep it simple/safe for ilike patterns
+    // PostgREST OR filter syntax
+    params.set('or', `(email.ilike.*${qq}*,display_name.ilike.*${qq}*)`);
+  }
+
+  const apiUrl = `${env.SUPABASE_URL}/rest/v1/${AUTH.USERS_TABLE}?${params.toString()}`;
+  const res = await fetch(apiUrl, { headers: sbAuthHeaders(env) });
+
+  if (!res.ok) {
+    const err = await res.text().catch(() => '');
+    return serverError(`Failed to list users (${res.status}): ${err}`);
+  }
+
+  const rows = await res.json().catch(() => []);
+  return ok({ ok: true, users: Array.isArray(rows) ? rows : [] });
+}
+
+
+async function handleUsersCreate(env, req) {
+  const actor = await requireUser(env, req, ['admin']);
+  if (!actor) return unauthorized('Unauthorized');
+
+  const body = await parseJSONBody(req);
+  if (!body) return badRequest('invalid_json');
+
+  const email = String(body.email || '').trim().toLowerCase();
+  const displayName = (body.display_name == null) ? null : String(body.display_name || '').trim();
+  const role = String(body.role || '').trim().toLowerCase();
+  const pw = String(body.password || '');
+  let emailSettings = body.email_settings;
+
+  if (!email) return badRequest('email_required');
+  if (!pw) return badRequest('password_required');
+
+  // minimal email sanity (consistent with your overall approach)
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return badRequest('invalid_email');
+
+  // roles currently supported
+  if (!(role === 'admin' || role === 'user')) return badRequest('invalid_role');
+
+  // strong password: same rules as /auth/reset
+  const strong = pw.length >= 8 && /[a-z]/.test(pw) && /[A-Z]/.test(pw) && /[0-9]/.test(pw);
+  if (!strong) return badRequest('WEAK_PASSWORD');
+
+  // email_settings must be an object (or omitted)
+  if (emailSettings == null) emailSettings = {};
+  if (typeof emailSettings !== 'object' || Array.isArray(emailSettings)) return badRequest('invalid_email_settings');
+
+  const hash = await pbkdf2Hash(pw);
+
+  const row = {
+    email,
+    display_name: displayName || null,
+    role,
+    is_active: true,
+    password_hash: hash,
+    session_version: 1,
+    email_settings: emailSettings
+  };
+
+  const apiUrl = `${env.SUPABASE_URL}/rest/v1/${AUTH.USERS_TABLE}`;
+  const res = await fetch(apiUrl, {
+    method: 'POST',
+    headers: { ...sbAuthHeaders(env), 'Prefer': 'return=representation' },
+    body: JSON.stringify(row)
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    // Uniqueness is enforced by tms_users_email_key
+    return badRequest(`Failed to create user (${res.status})`, errText);
+  }
+
+  const created = await res.json().catch(() => []);
+  const u = Array.isArray(created) && created[0] ? created[0] : null;
+  return ok({ ok: true, user: u });
+}
+
+async function handleUsersPatch(env, req, userId) {
+  const actor = await requireUser(env, req, ['admin']);
+  if (!actor) return unauthorized('Unauthorized');
+
+  // basic uuid sanity (prevents accidental routing issues)
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(userId || ''))) {
+    return badRequest('invalid_user_id');
+  }
+
+  const body = await parseJSONBody(req);
+  if (!body) return badRequest('invalid_json');
+
+  const patch = {};
+
+  if ('email' in body) {
+    const email = String(body.email || '').trim().toLowerCase();
+    if (!email) return badRequest('email_required');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return badRequest('invalid_email');
+    patch.email = email;
+  }
+
+  if ('display_name' in body) {
+    const dn = (body.display_name == null) ? null : String(body.display_name || '').trim();
+    patch.display_name = dn || null;
+  }
+
+  if ('role' in body) {
+    const role = String(body.role || '').trim().toLowerCase();
+    if (!(role === 'admin' || role === 'user')) return badRequest('invalid_role');
+    patch.role = role;
+  }
+
+  if ('is_active' in body) {
+    if (typeof body.is_active !== 'boolean') return badRequest('invalid_is_active');
+    patch.is_active = body.is_active;
+  }
+
+  if ('email_settings' in body) {
+    let s = body.email_settings;
+    if (s == null) s = {};
+    if (typeof s !== 'object' || Array.isArray(s)) return badRequest('invalid_email_settings');
+    patch.email_settings = s;
+  }
+
+  if (!Object.keys(patch).length) return badRequest('empty_patch');
+
+  const apiUrl = `${env.SUPABASE_URL}/rest/v1/${AUTH.USERS_TABLE}?id=eq.${encodeURIComponent(userId)}`;
+  const res = await fetch(apiUrl, {
+    method: 'PATCH',
+    headers: { ...sbAuthHeaders(env), 'Prefer': 'return=representation' },
+    body: JSON.stringify(patch)
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    return badRequest(`Failed to patch user (${res.status})`, errText);
+  }
+
+  const rows = await res.json().catch(() => []);
+  const u = Array.isArray(rows) && rows[0] ? rows[0] : null;
+  if (!u) return badRequest('user_not_found');
+
+  return ok({ ok: true, user: u });
+}
+
+async function handleUsersResetPassword(env, req, userId) {
+  const actor = await requireUser(env, req, ['admin']);
+  if (!actor) return unauthorized('Unauthorized');
+
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(userId || ''))) {
+    return badRequest('invalid_user_id');
+  }
+
+  const body = await parseJSONBody(req);
+  if (!body) return badRequest('invalid_json');
+
+  const newPw = String(body.new_password ?? body.password ?? '');
+  if (!newPw) return badRequest('new_password_required');
+
+  const strong = newPw.length >= 8 && /[a-z]/.test(newPw) && /[A-Z]/.test(newPw) && /[0-9]/.test(newPw);
+  if (!strong) return badRequest('WEAK_PASSWORD');
+
+  const newHash = await pbkdf2Hash(newPw);
+
+  try {
+    await sbUpdateUserPassword(env, userId, newHash); // updates hash + bumps session_version
+  } catch (e) {
+    return serverError(`Reset password failed: ${e?.message || e}`);
+  }
+
+  return ok({ ok: true });
+}
+
+async function handleUserChangePassword(env, req) {
+  const u = await requireUser(env, req); // any logged-in user
+  if (!u) return unauthorized('Unauthorized');
+
+  const body = await parseJSONBody(req);
+  if (!body) return badRequest('invalid_json');
+
+  const oldPw = String(body.old_password || '');
+  const newPw = String(body.new_password || '');
+  const newPw2 = String(body.new_password2 || '');
+
+  if (!oldPw || !newPw || !newPw2) return badRequest('old_and_new_password_required');
+  if (newPw !== newPw2) return badRequest('new_password_mismatch');
+
+  const strong = newPw.length >= 8 && /[a-z]/.test(newPw) && /[A-Z]/.test(newPw) && /[0-9]/.test(newPw);
+  if (!strong) return badRequest('WEAK_PASSWORD');
+
+  const userRow = await sbGetUserById(env, u.id); // includes password_hash per your current helper
+  if (!userRow || userRow.is_active !== true) return unauthorized('Unauthorized');
+
+  const okOld = await pbkdf2Verify(oldPw, userRow.password_hash || '');
+  if (!okOld) return unauthorized('Invalid credentials');
+
+  const newHash = await pbkdf2Hash(newPw);
+
+  try {
+    await sbUpdateUserPassword(env, u.id, newHash); // bumps session_version => tokens invalid
+  } catch (e) {
+    return serverError(`Change password failed: ${e?.message || e}`);
+  }
+
+  // Kill current KV session (best-effort)
+  try { if (u.sid) await kvDelSession(env, u.sid); } catch {}
+
+  // Clear refresh cookie to force logout (Option A)
+  const headers = new Headers(JSON_HEADERS);
+  setCookie(headers, cookieName(env), '', {
+    maxAgeSec: 0,
+    domain: env.COOKIE_DOMAIN || undefined,
+    sameSite: pickCookieSameSite(env),
+    secure: true,
+    httpOnly: true,
+    path: '/'
+  });
+
+  return new Response(JSON.stringify({ ok: true, logged_out: true }), { status: 200, headers });
+}
+
 
 // ----------------------------------------------------------------------------
 // D) Manual & Expenses (supplementary)
@@ -31702,7 +32028,7 @@ async function findCandidateByImportName(env, staffName, { trustNorm } = {}) {
 // ───────────────────────────────────────────────────────────────────────────────
 // SEARCH — Invoices (richer filters + csv/print)
 // ───────────────────────────────────────────────────────────────────────────────
- async function handleSearchInvoices(env, req) {
+async function handleSearchInvoices(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -31714,9 +32040,9 @@ async function findCandidateByImportName(env, staffName, { trustNorm } = {}) {
 
   const format = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
 
-  // NEW: explicit-ID selection support
-  const idInExpr = q('id');          // pass-through 'in.(...)' if provided
-  const idsRaw   = q('ids');         // optional "uuid1,uuid2,..."
+  // explicit-ID selection support
+  const idInExpr = q('id');
+  const idsRaw   = q('ids');
   let idFilterExpr = null;
   if (idInExpr && /^in\.\(.+\)$/.test(idInExpr)) {
     idFilterExpr = idInExpr;
@@ -31725,11 +32051,11 @@ async function findCandidateByImportName(env, staffName, { trustNorm } = {}) {
     if (list.length) idFilterExpr = `in.(${list.join(',')})`;
   }
 
-  // Filters (accepting arrays and extra ranges)
-  const statuses   = qa('status'); // repeated
+  // Filters
+  const statuses   = qa('status');
   const clientId   = q('client_id');
   const invNo      = q('invoice_no');
-  const invQ       = q('q');                   // partial match on invoice_no
+  const invQ       = q('q');
   const issuedFrom = q('issued_from');
   const issuedTo   = q('issued_to');
   const dueFrom    = q('due_from');
@@ -31739,10 +32065,17 @@ async function findCandidateByImportName(env, staffName, { trustNorm } = {}) {
 
   const orderBy = (q('order_by') || 'issued_at_utc').toLowerCase();
   const orderDir = (q('order_dir') || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
-  const orderAllowed = new Set(['issued_at_utc','invoice_no','total_inc_vat','subtotal_ex_vat','created_at']);
+  const orderAllowed = new Set(['issued_at_utc','invoice_no','total_inc_vat','subtotal_ex_vat','created_at','due_at_utc','status_date_utc']);
 
   let url = `${env.SUPABASE_URL}/rest/v1/invoices` +
-    `?select=id,invoice_no,client_id,status,issued_at_utc,due_at_utc,created_at,total_inc_vat,subtotal_ex_vat,vat_amount` +
+    `?select=` +
+    [
+      'id','invoice_no','client_id','status','status_date_utc',
+      'issued_at_utc','due_at_utc','created_at',
+      'total_inc_vat','subtotal_ex_vat','vat_amount',
+      'on_hold_reason',
+      'client:clients(name)'
+    ].join(',') +
     `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
 
   if (Array.isArray(statuses) && statuses.length) {
@@ -31759,7 +32092,6 @@ async function findCandidateByImportName(env, staffName, { trustNorm } = {}) {
   if (createdFrom) url += `&created_at=gte.${enc(createdFrom)}`;
   if (createdTo)   url += `&created_at=lte.${enc(createdTo)}`;
 
-  // NEW: explicit-ID selection applied to invoices.id
   if (idFilterExpr) url += `&id=${enc(idFilterExpr)}`;
 
   url += `&order=${orderAllowed.has(orderBy) ? enc(orderBy) : 'issued_at_utc'}.${orderDir}`;
@@ -31772,18 +32104,21 @@ async function findCandidateByImportName(env, staffName, { trustNorm } = {}) {
   }
 
   if (format === 'csv') {
-    const header = ['InvoiceNo','Status','IssuedAt','DueAt','CreatedAt','SubtotalExVAT','VAT','TotalIncVAT'];
+    const header = ['InvoiceNo','Client','Status','StatusDate','IssuedAt','DueAt','CreatedAt','SubtotalExVAT','VAT','TotalIncVAT','OnHoldReason'];
     const out = [csvJoin(header)];
     for (const r of rows || []) {
       out.push(csvJoin([
         r.invoice_no || '',
+        r.client?.name || '',
         r.status || '',
+        r.status_date_utc || '',
         r.issued_at_utc || '',
         r.due_at_utc || '',
         r.created_at || '',
         round2(r.subtotal_ex_vat || 0).toFixed(2),
         round2(r.vat_amount || 0).toFixed(2),
         round2(r.total_inc_vat || 0).toFixed(2),
+        r.on_hold_reason || ''
       ]));
     }
     return withCORS(env, req, ok({ csv: out.join('\n'), count: rows?.length || 0, page, page_size: pageSize }));
@@ -31793,21 +32128,24 @@ async function findCandidateByImportName(env, staffName, { trustNorm } = {}) {
     const rowsHtml = (rows || []).map(r => `
       <tr>
         <td>${r.invoice_no || ''}</td>
+        <td>${(r.client && r.client.name) ? r.client.name : ''}</td>
         <td>${r.status || ''}</td>
+        <td>${r.status_date_utc || ''}</td>
         <td>${r.issued_at_utc || ''}</td>
         <td>${r.due_at_utc || ''}</td>
         <td>${r.created_at || ''}</td>
         <td style="text-align:right">${round2(r.subtotal_ex_vat || 0).toFixed(2)}</td>
         <td style="text-align:right">${round2(r.vat_amount || 0).toFixed(2)}</td>
         <td style="text-align:right">${round2(r.total_inc_vat || 0).toFixed(2)}</td>
+        <td>${r.on_hold_reason || ''}</td>
       </tr>`).join('');
     const html = `
       <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif">
         <h3>Invoices — Search Results</h3>
         <table width="100%" cellspacing="0" cellpadding="6" style="border-collapse:collapse">
           <thead><tr style="background:#f5f5f5">
-            <th>Invoice No</th><th>Status</th><th>Issued At</th><th>Due At</th><th>Created At</th>
-            <th>Subtotal ex VAT</th><th>VAT</th><th>Total inc VAT</th>
+            <th>Invoice No</th><th>Client</th><th>Status</th><th>Status Date</th><th>Issued At</th><th>Due At</th><th>Created At</th>
+            <th>Subtotal ex VAT</th><th>VAT</th><th>Total inc VAT</th><th>On hold reason</th>
           </tr></thead>
           <tbody>${rowsHtml}</tbody>
         </table>
@@ -31817,6 +32155,277 @@ async function findCandidateByImportName(env, staffName, { trustNorm } = {}) {
 
   return withCORS(env, req, ok({ rows, page, page_size: pageSize, count: rows?.length || 0 }));
 }
+
+
+async function handleInvoiceRemoveTimesheetsTsfin(env, req, invoiceId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const enc = encodeURIComponent;
+
+  let body = {};
+  try { body = await parseJSONBody(req); } catch {}
+  const tsIdsRaw = Array.isArray(body?.timesheet_ids) ? body.timesheet_ids : null;
+
+  if (!tsIdsRaw || tsIdsRaw.length === 0) {
+    return withCORS(env, req, badRequest('timesheet_ids[] is required'));
+  }
+
+  const tsIds = Array.from(new Set(tsIdsRaw.map(String).map(s => s.trim()).filter(Boolean)));
+  if (!tsIds.length) return withCORS(env, req, badRequest('No valid timesheet_ids'));
+
+  try {
+    // 1) Load invoice guards (unissued + unpaid + not credit note)
+    const { rows: invRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/invoices` +
+        `?id=eq.${enc(invoiceId)}` +
+        `&select=id,type,status,paid_at_utc,invoice_pdf_r2_key` +
+        `&limit=1`,
+      false
+    );
+
+    const inv = invRows?.[0] || null;
+    if (!inv?.id) return withCORS(env, req, notFound('Invoice not found'));
+
+    const invType = String(inv.type || '').toUpperCase();
+    if (invType === 'CREDIT_NOTE') {
+      return withCORS(env, req, badRequest('Cannot remove timesheets from a CREDIT_NOTE'));
+    }
+
+    const invStatus = String(inv.status || '').toUpperCase();
+    if (!(invStatus === 'DRAFT' || invStatus === 'ON_HOLD')) {
+      return withCORS(env, req, badRequest('Invoice must be unissued (DRAFT/ON_HOLD). Unissue first if needed.'));
+    }
+
+    if (inv.paid_at_utc) {
+      return withCORS(env, req, badRequest('Invoice is PAID and cannot be modified.'));
+    }
+
+    // 2) Delete invoice_lines for these timesheets
+    const inList = tsIds.map(enc).join(',');
+    const delLines = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/invoice_lines` +
+        `?invoice_id=eq.${enc(invoiceId)}` +
+        `&timesheet_id=in.(${inList})`,
+      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
+    );
+    if (!delLines.ok) {
+      const t = await delLines.text();
+      return withCORS(env, req, serverError(`Failed to delete invoice lines: ${t}`));
+    }
+    try { await delLines.arrayBuffer(); } catch {}
+
+    // 3) Recompute invoice totals from remaining lines
+    const { rows: rem } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/invoice_lines` +
+        `?invoice_id=eq.${enc(invoiceId)}` +
+        `&select=total_charge_ex_vat,vat_amount,total_inc_vat`,
+      false
+    );
+
+    let sumEx = 0, sumVat = 0, sumInc = 0;
+    for (const r of (rem || [])) {
+      sumEx  += Number(r?.total_charge_ex_vat || 0);
+      sumVat += Number(r?.vat_amount || 0);
+      sumInc += Number(r?.total_inc_vat || 0);
+    }
+
+    const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+    // 4) Invalidate invoice PDF + update totals
+    const updInv = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${enc(invoiceId)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        body: JSON.stringify({
+          subtotal_ex_vat: round2(sumEx),
+          vat_amount: round2(sumVat),
+          total_inc_vat: round2(sumInc),
+          invoice_pdf_r2_key: null,          // ✅ invalidate pdf bundle
+          updated_at: nowIso()
+        })
+      }
+    );
+    if (!updInv.ok) {
+      const t = await updInv.text();
+      return withCORS(env, req, serverError(`Failed to update invoice totals: ${t}`));
+    }
+    try { await updInv.arrayBuffer(); } catch {}
+
+    // 5) Unlock TSFIN + reset to PRE-AUTH state
+    //    (do NOT touch paid_at_utc; keep pay history intact)
+    const patchFin = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?timesheet_id=in.(${inList})` +
+        `&is_current=eq.true` +
+        `&locked_by_invoice_id=eq.${enc(invoiceId)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        body: JSON.stringify({
+          locked_by_invoice_id: null,
+          locked_at_utc: null,
+
+          // ✅ return to pre-authorised state
+          processing_status: 'PENDING_AUTH',
+          authorised_at_utc: null,
+          authorised_by_user_id: null,
+
+          updated_at: nowIso()
+        })
+      }
+    );
+    if (!patchFin.ok) {
+      const t = await patchFin.text();
+      return withCORS(env, req, serverError(`Failed to unlock/reset TSFIN: ${t}`));
+    }
+    try { await patchFin.arrayBuffer(); } catch {}
+
+    // 6) Clear timesheets.authorised_at_server (pre-authorised)
+    const patchTs = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=in.(${inList})` +
+        `&is_current=eq.true`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        body: JSON.stringify({ authorised_at_server: null, updated_at: nowIso() })
+      }
+    );
+    if (!patchTs.ok) {
+      const t = await patchTs.text();
+      return withCORS(env, req, serverError(`Failed to clear authorised_at_server: ${t}`));
+    }
+    try { await patchTs.arrayBuffer(); } catch {}
+
+    // 7) Revert weekly contract weeks from INVOICED -> SUBMITTED (pre-auth state)
+    //    (safe even if some are daily — those won't have contract_weeks rows)
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?timesheet_id=in.(${inList})`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        body: JSON.stringify({ status: 'SUBMITTED', updated_at: nowIso() })
+      }
+    ).catch(() => {});
+
+    // 8) Audit
+    try {
+      await writeAudit(
+        env,
+        user,
+        'INVOICE_TIMESHEETS_REMOVED',
+        {
+          invoice_id: invoiceId,
+          removed_timesheet_ids: tsIds,
+          invoice_totals_after: { subtotal_ex_vat: round2(sumEx), vat_amount: round2(sumVat), total_inc_vat: round2(sumInc) },
+          returned_to: 'PENDING_AUTH'
+        },
+        { entity: 'invoice', subject_id: invoiceId, req }
+      );
+    } catch {}
+
+    return withCORS(env, req, ok({
+      ok: true,
+      invoice_id: invoiceId,
+      removed_timesheet_ids: tsIds,
+      invoice_totals_after: { subtotal_ex_vat: round2(sumEx), vat_amount: round2(sumVat), total_inc_vat: round2(sumInc) },
+      returned_to: 'PENDING_AUTH'
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+async function handleInvoiceDeleteOne(env, req, invoiceId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const enc = encodeURIComponent;
+
+  try {
+    // 1) Load invoice guards
+    const { rows: invRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/invoices` +
+        `?id=eq.${enc(invoiceId)}` +
+        `&select=id,type,status,paid_at_utc` +
+        `&limit=1`,
+      false
+    );
+
+    const inv = invRows?.[0] || null;
+    if (!inv?.id) return withCORS(env, req, notFound('Invoice not found'));
+
+    const invType = String(inv.type || '').toUpperCase();
+    if (invType === 'CREDIT_NOTE') {
+      return withCORS(env, req, badRequest('Cannot delete a CREDIT_NOTE via this route.'));
+    }
+
+    const invStatus = String(inv.status || '').toUpperCase();
+    if (!(invStatus === 'DRAFT' || invStatus === 'ON_HOLD')) {
+      return withCORS(env, req, badRequest('Invoice must be unissued (DRAFT/ON_HOLD). Unissue first if needed.'));
+    }
+
+    if (inv.paid_at_utc) {
+      return withCORS(env, req, badRequest('Invoice is PAID and cannot be deleted.'));
+    }
+
+    // 2) Ensure invoice has no remaining lines
+    const { rows: lineCheck } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/invoice_lines?invoice_id=eq.${enc(invoiceId)}&select=id&limit=1`,
+      false
+    );
+    if (lineCheck?.length) {
+      return withCORS(env, req, badRequest('Invoice still has lines. Remove all timesheets/lines before deleting.'));
+    }
+
+    // 3) Best-effort cleanup: invoice HR cache rows (if table exists)
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/invoice_hr_source_rows?invoice_id=eq.${enc(invoiceId)}`,
+      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
+    ).catch(() => {});
+
+    // 4) Best-effort cleanup: queued mail_outbox rows referencing this invoice
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/mail_outbox` +
+        `?reference=eq.${enc(`invoice:${invoiceId}`)}` +
+        `&status=eq.QUEUED`,
+      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
+    ).catch(() => {});
+
+    // 5) Delete invoice
+    const del = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${enc(invoiceId)}`,
+      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
+    );
+    if (!del.ok) {
+      const t = await del.text();
+      return withCORS(env, req, serverError(`Failed to delete invoice: ${t}`));
+    }
+    try { await del.arrayBuffer(); } catch {}
+
+    // 6) Audit
+    try {
+      await writeAudit(
+        env,
+        user,
+        'INVOICE_DELETED',
+        { invoice_id: invoiceId },
+        { entity: 'invoice', subject_id: invoiceId, req }
+      );
+    } catch {}
+
+    return withCORS(env, req, ok({ ok: true, deleted: true, invoice_id: invoiceId }));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
 
 
 // ───────────────────────────────────────────────────────────────────────────────
@@ -32724,14 +33333,39 @@ function base64FromArrayBuffer(buf) {
 // Provider integration (Power Automate)
 // ------------------------------
 async function postToPowerAutomate(env, payload) {
-  const url = env.POWER_AUTOMATE_EMAIL_WEBHOOK_URL;
+  // Primary source: settings_defaults.finance_email_settings.webhook_url (cached via loadSettingsDefaults)
+  let url = null;
+  let extraHeaders = null;
+
+  try {
+    const s = await loadSettingsDefaults(env);
+    const fes = s?.finance_email_settings;
+    if (fes && typeof fes === 'object') {
+      const u = (typeof fes.webhook_url === 'string') ? fes.webhook_url.trim() : '';
+      if (u) url = u;
+
+      // optional: allow a headers object (e.g. future auth headers)
+      if (fes.headers && typeof fes.headers === 'object') extraHeaders = fes.headers;
+    }
+  } catch {}
+
+  // Fallback: env
+  if (!url) url = env.POWER_AUTOMATE_EMAIL_WEBHOOK_URL;
+
   if (!isNonEmptyString(url)) {
-    return { ok: false, status: 0, body: 'POWER_AUTOMATE_EMAIL_WEBHOOK_URL not configured' };
+    return { ok: false, status: 0, body: 'Power Automate webhook URL not configured (settings_defaults.finance_email_settings.webhook_url or env.POWER_AUTOMATE_EMAIL_WEBHOOK_URL)' };
+  }
+
+  const headers = { 'Content-Type': 'application/json' };
+  if (extraHeaders && typeof extraHeaders === 'object') {
+    for (const [k, v] of Object.entries(extraHeaders)) {
+      if (typeof k === 'string' && k.trim() && v != null) headers[k] = String(v);
+    }
   }
 
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(payload),
   });
 
@@ -32739,7 +33373,7 @@ async function postToPowerAutomate(env, payload) {
   try { body = await res.text(); } catch { body = ''; }
 
   const ok = res.ok;
-  // transparently try to parse a provider_message_id if present in JSON
+
   let provider_message_id = undefined;
   try {
     const j = JSON.parse(body);
@@ -32814,13 +33448,52 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
   const err = validateEmailPayload(base);
   if (err) throw new Error(err);
 
-  // Resolve any R2 attachments to base64
+  // Pull finance sender config (for invoices/remittances)
+  let financeEmail = null;
+  try {
+    const s = await loadSettingsDefaults(env);
+    financeEmail = (typeof s?.finance_email === 'string') ? s.finance_email.trim() : null;
+  } catch {}
+
+  // Resolve attachments:
+  // - { contentBase64, name } -> pass-through
+  // - { r2_key, name } -> fetch bytes from R2
+  // - { invoice_id, filename } -> ensureInvoicePdf -> fetch from R2
   const resolved = [];
+
   for (const a of base.attachments) {
-    if (a.contentBase64 && a.name) { resolved.push(a); continue; }
+    if (!a) continue;
+
+    if (a.contentBase64 && a.name) {
+      resolved.push(a);
+      continue;
+    }
+
+    // invoice placeholder
+    if (a.invoice_id) {
+      const invId = String(a.invoice_id).trim();
+      if (!invId) throw new Error('Invalid invoice_id attachment');
+
+      // Ensure PDF exists (internal helper, no HTTP)
+      const ensured = await ensureInvoicePdf(env, invId, { req: outboxRow?._req || undefined, user: null });
+      if (!ensured?.ok || !ensured.invoice_pdf_r2_key) {
+        throw new Error(`PDF_NOT_READY: invoice ${invId}`);
+      }
+
+      const key = String(ensured.invoice_pdf_r2_key).trim();
+      const contentBase64 = await fetchAttachmentBase64FromR2(env, key);
+      resolved.push({ name: a.filename || a.name || `Invoice_${invId}.pdf`, contentBase64 });
+      continue;
+    }
+
+    // r2_key attachment
     if (a.r2_key) {
-      const contentBase64 = await fetchAttachmentBase64FromR2(env, a.r2_key);
-      resolved.push({ name: a.name || 'attachment', contentBase64 });
+      const key = String(a.r2_key).trim();
+      if (!key) throw new Error('Invalid r2_key attachment');
+
+      const contentBase64 = await fetchAttachmentBase64FromR2(env, key);
+      resolved.push({ name: a.name || a.filename || 'attachment', contentBase64 });
+      continue;
     }
   }
 
@@ -32835,14 +33508,19 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
     text: base.text,
     attachments: resolved,
     reference: base.reference,
-    // Include a type hint for easier templating in Power Automate
-    meta: { type: outboxRow.type, outbox_id: outboxRow.id }
+    meta: {
+      type: outboxRow.type,
+      outbox_id: outboxRow.id,
+      // finance emails use the finance mailbox (Flow can use this if configured)
+      fromMailbox: (outboxRow.type === 'INVOICE' || outboxRow.type === 'REMITTANCE') ? (financeEmail || null) : null
+    }
   };
 
-  // Trim or link heavy payloads
+  // Trim or link heavy payloads (kept)
   const sized = await limitOrLinkAttachments(env, payload);
   return sized.payload;
 }
+
 
 async function limitOrLinkAttachments(env, payload) {
   const limitBytes = Number(env.EMAIL_MAX_PAYLOAD_BYTES) || EMAIL_MAX_PAYLOAD_BYTES;
@@ -32917,7 +33595,6 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
             `&order=created_at_utc.asc` +
             `&limit=${take}`;
   if (typeFilter) {
-    // in.("A","B")
     const t = typeFilter.map((t) => `"${enc(t)}"`).join(',');
     url += `&type=in.(${t})`;
   }
@@ -32925,10 +33602,18 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
   const { rows } = await sbFetch(env, url, false);
   const picked = rows || [];
   if (picked.length === 0) {
-    return { picked: 0, sent: 0, failed: 0, errors: [] };
+    return { picked: 0, sent: 0, failed: 0, deferred: 0, errors: [] };
   }
 
-  let sent = 0; let failed = 0; const errors = [];
+  let sent = 0;
+  let failed = 0;
+  let deferred = 0;
+  const errors = [];
+
+  const nowPlusMinutesIso = (mins) => {
+    const ms = Date.now() + (Math.max(1, Number(mins) || 5) * 60 * 1000);
+    return new Date(ms).toISOString();
+  };
 
   for (const row of picked) {
     try {
@@ -32936,11 +33621,16 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
       const res = await postToPowerAutomate(env, payload);
 
       if (res.ok) {
-        // mark SENT
         const upd = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(row.id)}`, {
           method: 'PATCH',
           headers: sbHeaders(env),
-          body: JSON.stringify({ status: 'SENT', sent_at: nowIso(), provider_message_id: res.provider_message_id || null, last_error: null, failed_at: null })
+          body: JSON.stringify({
+            status: 'SENT',
+            sent_at: nowIso(),
+            provider_message_id: res.provider_message_id || null,
+            last_error: null,
+            failed_at: null
+          })
         });
         if (!upd.ok) {
           const errTxt = await upd.text();
@@ -32949,7 +33639,6 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
         sent += 1;
         await recordEmailAudit(env, null, 'EMAIL_SENT', { outbox_id: row.id, provider_message_id: res.provider_message_id, type: row.type });
       } else {
-        // mark FAILED
         const upd = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(row.id)}`, {
           method: 'PATCH', headers: sbHeaders(env),
           body: JSON.stringify({ status: 'FAILED', failed_at: nowIso(), last_error: String(res.body || res.status) })
@@ -32963,20 +33652,43 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
         await recordEmailAudit(env, null, 'EMAIL_FAILED', { outbox_id: row.id, error: res.body || `HTTP ${res.status}`, type: row.type });
       }
     } catch (e) {
-      // defensive failure
+      const msg = String(e?.message || e);
+
+      // ✅ RETRYABLE DEFERRAL: PDFs not ready yet
+      if (msg.startsWith('PDF_NOT_READY:')) {
+        try {
+          await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(row.id)}`, {
+            method: 'PATCH',
+            headers: sbHeaders(env),
+            body: JSON.stringify({
+              // keep QUEUED so it retries later
+              status: 'QUEUED',
+              last_error: msg,
+              // push it back in the queue to avoid hot-looping
+              created_at_utc: nowPlusMinutesIso(10)
+            })
+          });
+        } catch {}
+        deferred += 1;
+        errors.push({ id: row.id, error: msg, deferred: true });
+        await recordEmailAudit(env, null, 'EMAIL_DEFERRED', { outbox_id: row.id, reason: msg, type: row.type });
+        continue;
+      }
+
+      // defensive failure (non-retryable)
       try {
         await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(row.id)}`, {
           method: 'PATCH', headers: sbHeaders(env),
-          body: JSON.stringify({ status: 'FAILED', failed_at: nowIso(), last_error: String(e?.message || e) })
+          body: JSON.stringify({ status: 'FAILED', failed_at: nowIso(), last_error: msg })
         });
       } catch {}
       failed += 1;
-      errors.push({ id: row.id, error: String(e?.message || e) });
-      await recordEmailAudit(env, null, 'EMAIL_FAILED', { outbox_id: row.id, error: String(e?.message || e), type: row.type });
+      errors.push({ id: row.id, error: msg });
+      await recordEmailAudit(env, null, 'EMAIL_FAILED', { outbox_id: row.id, error: msg, type: row.type });
     }
   }
 
-  return { picked: picked.length, sent, failed, errors };
+  return { picked: picked.length, sent, failed, deferred, errors };
 }
 
 // ------------------------------
@@ -33780,7 +34492,7 @@ async function handleInvoiceEmail(env, req, invoiceId) {
       env,
       `${env.SUPABASE_URL}/rest/v1/invoices` +
         `?id=eq.${enc(invoiceId)}` +
-        `&select=id,client_id,invoice_no,invoice_pdf_r2_key,header_snapshot_json,client:clients(primary_invoice_email,name)`,
+        `&select=id,client_id,invoice_no,header_snapshot_json,client:clients(primary_invoice_email,name)`,
       false
     );
     if (!rows?.length) return withCORS(env, req, notFound('Invoice not found'));
@@ -33791,8 +34503,7 @@ async function handleInvoiceEmail(env, req, invoiceId) {
       : {};
     const meta = (header?.meta && typeof header.meta === 'object') ? header.meta : {};
 
-    // ✅ Hard-block self-bill invoices from being emailed
-    // (self-bill invoices are created/used under meta.source='TSFIN_SEGMENTS' with meta.self_bill=true)
+    // Hard-block self-bill invoices from being emailed
     const isSelfBill = (meta?.self_bill === true) || (String(meta?.source || '').toUpperCase() === 'TSFIN_SEGMENTS');
     if (isSelfBill) {
       return withCORS(env, req, badRequest('Self-bill invoices must not be emailed.'));
@@ -33822,8 +34533,7 @@ async function handleInvoiceEmail(env, req, invoiceId) {
       : null;
 
     // Determine whether THIS invoice relates to a manual/QR adjustment timesheet
-    // weekly adjustment: contract_weeks.is_adjustment = true for any included timesheet_id
-    // daily adjustment:  timesheets.is_adjustment = true for any included timesheet_id
+    // (kept as-is from your logic)
     let hasManualOrQrAdjustment = false;
 
     try {
@@ -33839,7 +34549,6 @@ async function handleInvoiceEmail(env, req, invoiceId) {
       );
 
       if (tsIds.length) {
-        // Fetch timesheets for submission_mode/qr/is_adjustment
         const chunkSize = 200;
 
         const tsById = new Map();
@@ -33857,7 +34566,6 @@ async function handleInvoiceEmail(env, req, invoiceId) {
           }
         }
 
-        // Fetch contract_weeks adjustment flags (weekly adjustments)
         const cwAdjSet = new Set();
         for (let i = 0; i < tsIds.length; i += chunkSize) {
           const chunk = tsIds.slice(i, i + chunkSize);
@@ -33868,13 +34576,10 @@ async function handleInvoiceEmail(env, req, invoiceId) {
               `&select=timesheet_id,is_adjustment`
           );
           for (const w of (cwRows || [])) {
-            if (w && w.timesheet_id && w.is_adjustment === true) {
-              cwAdjSet.add(String(w.timesheet_id));
-            }
+            if (w && w.timesheet_id && w.is_adjustment === true) cwAdjSet.add(String(w.timesheet_id));
           }
         }
 
-        // Evaluate: any adjustment timesheet that is manual or QR-related
         for (const tsId of tsIds) {
           const t = tsById.get(String(tsId)) || null;
 
@@ -33891,14 +34596,10 @@ async function handleInvoiceEmail(env, req, invoiceId) {
           const isAdj = (isDailyAdj || isWeeklyAdj);
           const isManualOrQr = (isManual || isQrish);
 
-          if (isAdj && isManualOrQr) {
-            hasManualOrQrAdjustment = true;
-            break;
-          }
+          if (isAdj && isManualOrQr) { hasManualOrQrAdjustment = true; break; }
         }
       }
     } catch {
-      // If we fail to detect, fall back to normal routing (do not block emailing)
       hasManualOrQrAdjustment = false;
     }
 
@@ -33916,8 +34617,7 @@ async function handleInvoiceEmail(env, req, invoiceId) {
 
     const actorUserId = (user && user.id) ? user.id : null;
 
-    // ✅ Issue at queue-time (A): attempt to issue BEFORE rendering/emailing
-    // so issued_at_utc is correct on the PDF and any precheck blockers hold the invoice.
+    // Issue before queueing (kept)
     const issueResp = await sbRpc(env, 'invoice_issue_one', {
       p_invoice_id: invoiceId,
       p_actor_user_id: actorUserId
@@ -33928,7 +34628,6 @@ async function handleInvoiceEmail(env, req, invoiceId) {
     const issueStatus = String(issue0?.status || '').toUpperCase();
 
     if (issueStatus === 'ON_HOLD') {
-      // Do NOT queue email if it failed precheck
       return withCORS(env, req, ok({
         status: 'ON_HOLD',
         reasons: issue0?.reasons || [],
@@ -33940,19 +34639,11 @@ async function handleInvoiceEmail(env, req, invoiceId) {
       return withCORS(env, req, serverError('Failed to issue invoice before emailing.'));
     }
 
-    // Ensure we have a PDF; if not, render now (render is DB-constant via manifest)
-    let pdfKey = inv.invoice_pdf_r2_key;
-    if (!pdfKey) {
-      const renderResp = await handleInvoiceRender(env, req, invoiceId);
-      if (!renderResp.ok) return renderResp;
-      const payload = await renderResp.json();
-      const dlUrl = new URL(payload.pdf_url);
-      pdfKey = dlUrl.searchParams.get('key');
-    }
+    // ✅ NON-BLOCKING: do NOT render here.
+    // Queue mail_outbox with invoice_id attachment placeholder; mail worker will ensure PDF.
+    const invNo = inv.invoice_no || invoiceId;
+    const subject = `Invoice ${invNo}`;
 
-    const subject = `Invoice ${inv.invoice_no}`;
-
-    // Queue in mail_outbox
     const out = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
       method: 'POST',
       headers: { ...sbHeaders(env), Prefer: 'return=representation' },
@@ -33961,8 +34652,8 @@ async function handleInvoiceEmail(env, req, invoiceId) {
         to,
         cc: null,
         subject,
-        body_text: `Please find Invoice ${inv.invoice_no} attached.`,
-        attachments: [{ r2_key: pdfKey, filename: `Invoice_${inv.invoice_no}.pdf` }],
+        body_text: `Please find Invoice ${invNo} attached.`,
+        attachments: [{ invoice_id: String(invoiceId), filename: `Invoice_${invNo}.pdf` }],
         status: 'QUEUED',
         reference: `invoice:${invoiceId}`,
         created_at_utc: nowIso(),
@@ -33979,7 +34670,6 @@ async function handleInvoiceEmail(env, req, invoiceId) {
     const mailRow = Array.isArray(outJson) ? outJson[0] : outJson;
     const mailId = mailRow?.id || null;
 
-    // Audit email queued (invoice issuance audit is already done inside invoice_issue_one)
     await writeAudit(
       env,
       user,
@@ -33987,8 +34677,8 @@ async function handleInvoiceEmail(env, req, invoiceId) {
       {
         to,
         subject,
-        invoice_pdf_r2_key: pdfKey,
         mail_id: mailId,
+        reference: `invoice:${invoiceId}`,
         routing: {
           used_alt_manual_email: !!(hasManualOrQrAdjustment && altEnabled),
           has_manual_or_qr_adjustment: !!hasManualOrQrAdjustment
@@ -34693,6 +35383,22 @@ async function handleAuthLogin(env, req) {
   const okPw = await pbkdf2Verify(pw, user.password_hash || '');
   if (!okPw) return unauthorized('Invalid credentials');
 
+  // ✅ Best-effort: stamp last_login_at_utc (non-fatal if column not deployed yet)
+  try {
+    const nowIso = new Date().toISOString();
+    const url = `${env.SUPABASE_URL}/rest/v1/${AUTH.USERS_TABLE}?id=eq.${encodeURIComponent(user.id)}`;
+    await fetch(url, {
+      method: 'PATCH',
+      headers: { ...sbAuthHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        last_login_at_utc: nowIso,
+        updated_at: nowIso
+      })
+    }).catch(() => {});
+  } catch (_) {
+    // ignore: never block login on telemetry update
+  }
+
   // Create KV session + tokens
   const sid = bufToBase64Url(crypto.getRandomValues(new Uint8Array(16)));
   const sv  = user.session_version|0 || 1;
@@ -34718,6 +35424,7 @@ async function handleAuthLogin(env, req) {
     user: { id: user.id, email: user.email, role: user.role }
   }), { status: 200, headers });
 }
+
 async function handleAuthRefresh(env, req) {
   const pre = preflightIfNeeded(env, req); if (pre) return pre;
   const cookies = parseCookies(req);
@@ -44186,51 +44893,154 @@ async function handleHRValidate(env, req, importId) {
 // ------------------------
 // LIST INVOICES (light UI)
 // ------------------------
- async function handleListInvoices(env, req) {
+ 
+async function handleListInvoices(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
   const sp = new URL(req.url).searchParams;
+  const enc = encodeURIComponent;
 
-  // Accept either exact enum or legacy "paid|unpaid"
-  const statusRaw   = (sp.get('status') || '').toUpperCase();
+  // Paging (support both styles: page/page_size OR limit/offset)
+  const pageRaw = sp.get('page');
+  const pageSizeRaw = sp.get('page_size');
+
+  const page = pageRaw ? Math.max(1, parseInt(pageRaw || '1', 10)) : null;
+  const pageSize = pageSizeRaw ? Math.max(1, Math.min(200, parseInt(pageSizeRaw || '50', 10))) : null;
+
+  const legacyLimit  = Math.min(parseInt(sp.get('limit')  || '50', 10), 200);
+  const legacyOffset = Math.max(0, parseInt(sp.get('offset') || '0', 10));
+
+  const limit = pageSize ?? legacyLimit;
+  const offset = (page && pageSize) ? ((page - 1) * pageSize) : legacyOffset;
+
+  const includeCount = sp.get('include_count') === 'true';
+
+  // Filters
   const clientId    = sp.get('client_id') || null;
-  const issuedFrom  = sp.get('issued_from') || null;
-  const issuedTo    = sp.get('issued_to')   || null;
-  const includeCount= sp.get('include_count') === 'true';
-  const limit  = Math.min(parseInt(sp.get('limit')  || '50', 10), 200);
-  const offset = Math.max(0, parseInt(sp.get('offset') || '0', 10));
+
+  // Status can be:
+  // - status=DRAFT (single)
+  // - status=DRAFT&status=ON_HOLD (repeated)
+  // - status=DRAFT,ON_HOLD (comma list)
+  // - status=paid|unpaid (legacy)
+  const statusParams = sp.getAll('status').map(s => (s || '').trim()).filter(Boolean);
+
+  // Search
+  const q = (sp.get('q') || '').trim(); // partial invoice_no
+
+  // Date filters
+  const issuedFrom   = sp.get('issued_from')  || null;
+  const issuedTo     = sp.get('issued_to')    || null;
+  const dueFrom      = sp.get('due_from')     || null;
+  const dueTo        = sp.get('due_to')       || null;
+  const createdFrom  = sp.get('created_from') || null;
+  const createdTo    = sp.get('created_to')   || null;
+
+  // Sort
+  const orderByRaw  = (sp.get('order_by') || 'issued_at_utc').toLowerCase();
+  const orderDirRaw = (sp.get('order_dir') || 'desc').toLowerCase();
+  const orderDir = (orderDirRaw === 'asc') ? 'asc' : 'desc';
+
+  const allowedSort = new Set([
+    'issued_at_utc',
+    'due_at_utc',
+    'created_at',
+    'status_date_utc',
+    'invoice_no',
+    'subtotal_ex_vat',
+    'vat_amount',
+    'total_inc_vat',
+    'status'
+  ]);
+
+  const orderBy = allowedSort.has(orderByRaw) ? orderByRaw : 'issued_at_utc';
 
   const select = [
-    'id','invoice_no','client_id','issued_at_utc','due_at_utc',
-    'status','subtotal_ex_vat','vat_amount','total_inc_vat',
-    'invoice_pdf_r2_key','header_snapshot_json','on_hold_reason','paid_at_utc'
+    'id',
+    'invoice_no',
+    'client_id',
+    'type',
+    'status',
+    'status_date_utc',
+    'issued_at_utc',
+    'due_at_utc',
+    'created_at',
+    'subtotal_ex_vat',
+    'vat_amount',
+    'total_inc_vat',
+    'paid_at_utc',
+    'on_hold_reason',
+    'invoice_pdf_r2_key',
+    'header_snapshot_json',
+    'client:clients(name,primary_invoice_email)'
   ].join(',');
 
-  let url = `${env.SUPABASE_URL}/rest/v1/invoices?select=${encodeURIComponent(select)}&order=issued_at_utc.desc&limit=${limit}&offset=${offset}`;
+  let url =
+    `${env.SUPABASE_URL}/rest/v1/invoices` +
+    `?select=${enc(select)}` +
+    `&limit=${limit}&offset=${offset}` +
+    `&order=${enc(orderBy)}.${orderDir},invoice_no.asc`;
 
-  if (statusRaw === 'DRAFT' || statusRaw === 'ISSUED' || statusRaw === 'ON_HOLD' || statusRaw === 'PAID') {
-    url += `&status=eq.${encodeURIComponent(statusRaw)}`;
-  } else {
-    // Legacy: 'paid' | 'unpaid'
-    const legacy = sp.get('status');
-    if (legacy === 'paid')   url += `&paid_at_utc=not.is.null`;
-    if (legacy === 'unpaid') url += `&paid_at_utc=is.null`;
+  // Status logic
+  const normStatuses = (() => {
+    if (!statusParams.length) return null;
+
+    // if someone passes a single "paid"/"unpaid" legacy value, honour it
+    if (statusParams.length === 1) {
+      const s0 = statusParams[0].toLowerCase();
+      if (s0 === 'paid' || s0 === 'unpaid') return [s0];
+    }
+
+    // Flatten comma lists
+    const out = [];
+    for (const s of statusParams) {
+      for (const part of String(s).split(',')) {
+        const v = part.trim();
+        if (v) out.push(v.toUpperCase());
+      }
+    }
+    return out.length ? out : null;
+  })();
+
+  if (normStatuses && normStatuses.length === 1 && (normStatuses[0] === 'PAID' || normStatuses[0] === 'UNPAID' || normStatuses[0] === 'paid' || normStatuses[0] === 'unpaid')) {
+    const s0 = normStatuses[0].toLowerCase();
+    if (s0 === 'paid') url += `&paid_at_utc=not.is.null`;
+    if (s0 === 'unpaid') url += `&paid_at_utc=is.null`;
+  } else if (normStatuses && normStatuses.length) {
+    // Allow list of enums (DRAFT/ISSUED/ON_HOLD/PAID)
+    const safe = normStatuses
+      .map(s => s.replace(/[(),]/g, ''))
+      .filter(s => s === 'DRAFT' || s === 'ISSUED' || s === 'ON_HOLD' || s === 'PAID');
+
+    if (safe.length === 1) url += `&status=eq.${enc(safe[0])}`;
+    if (safe.length > 1) url += `&status=in.(${safe.map(enc).join(',')})`;
   }
 
-  if (clientId)  url += `&client_id=eq.${encodeURIComponent(clientId)}`;
-  if (issuedFrom)url += `&issued_at_utc=gte.${encodeURIComponent(issuedFrom)}`;
-  if (issuedTo)  url += `&issued_at_utc=lte.${encodeURIComponent(issuedTo)}`;
+  if (clientId) url += `&client_id=eq.${enc(clientId)}`;
+
+  if (q) url += `&invoice_no=ilike.*${enc(q)}*`;
+
+  if (issuedFrom) url += `&issued_at_utc=gte.${enc(issuedFrom)}`;
+  if (issuedTo)   url += `&issued_at_utc=lte.${enc(issuedTo)}`;
+
+  if (dueFrom) url += `&due_at_utc=gte.${enc(dueFrom)}`;
+  if (dueTo)   url += `&due_at_utc=lte.${enc(dueTo)}`;
+
+  if (createdFrom) url += `&created_at=gte.${enc(createdFrom)}`;
+  if (createdTo)   url += `&created_at=lte.${enc(createdTo)}`;
 
   try {
     const { rows, total } = await sbFetch(env, url, includeCount);
-    const resp = includeCount ? { items: rows || [], count: total ?? undefined } : { items: rows || [] };
+    const resp = includeCount
+      ? { items: rows || [], count: total ?? undefined, page: page ?? undefined, page_size: pageSize ?? undefined, limit, offset }
+      : { items: rows || [], page: page ?? undefined, page_size: pageSize ?? undefined, limit, offset };
+
     return withCORS(env, req, ok(resp));
-  } catch {
-    return withCORS(env, req, serverError('Failed to list invoices'));
+  } catch (e) {
+    return withCORS(env, req, serverError(`Failed to list invoices: ${e?.message || e}`));
   }
 }
-
 
 // New: one-email-per-candidate remittance composer + queue + audit
 
@@ -44290,46 +45100,62 @@ async function handleHRValidate(env, req, importId) {
 // -------------------
 // GET INVOICE (+meta)
 // -------------------
- async function handleGetInvoice(env, req, invoiceId) {
+async function handleGetInvoice(env, req, invoiceId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
   try {
-    const { rows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/invoices` +
-      `?id=eq.${encodeURIComponent(invoiceId)}` +
-      `&select=*,client:clients(name,primary_invoice_email)`
-    );
-    if (!rows.length) return withCORS(env, req, notFound('Invoice not found'));
-    const invoice = rows[0]; // now includes on_hold_reason
+    // ✅ Single DB call for full invoice context
+    const man = await sbRpc(env, 'invoice_render_manifest', { p_invoice_id: invoiceId });
+    const manRows = Array.isArray(man) ? man : (man?.data || []);
+    const manifest = (manRows && manRows.length) ? manRows[0] : man;
 
-    const { rows: lineRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/invoice_lines` +
-      `?invoice_id=eq.${encodeURIComponent(invoiceId)}` +
-      `&select=` +
-      [
-        'id','invoice_id','timesheet_id','booking_id','description',
-        'hours_day','hours_night','hours_sat','hours_sun','hours_bh',
-        'pay_day','pay_night','pay_sat','pay_sun','pay_bh',
-        'charge_day','charge_night','charge_sat','charge_sun','charge_bh',
-        'total_pay_ex_vat','total_charge_ex_vat','margin_ex_vat',
-        'vat_rate_pct','vat_amount','total_inc_vat','paper_ts_r2_key',
-        'meta_json'
-      ].join(',')
-    );
+    if (!manifest || typeof manifest !== 'object') {
+      return withCORS(env, req, serverError('Failed to fetch invoice manifest'));
+    }
 
-    const items = (lineRows || []).map(l => ({
+    const invoice = manifest.invoice || manifest.invoice_row || null;
+    if (!invoice || !invoice.id) return withCORS(env, req, notFound('Invoice not found'));
+
+    const header_snapshot_json =
+      (manifest.header_snapshot_json && typeof manifest.header_snapshot_json === 'object')
+        ? manifest.header_snapshot_json
+        : (invoice.header_snapshot_json && typeof invoice.header_snapshot_json === 'object' ? invoice.header_snapshot_json : {});
+
+    const lineRows = Array.isArray(manifest.lines) ? manifest.lines : [];
+
+    // ✅ Include invoice_line_id + source_key + meta_json so UI can select lines/segments to remove
+    const items = lineRows.map(l => ({
+      invoice_line_id: l.id ?? null,
+      source_key: l.source_key ?? null,            // important for segment identity if you use it
       booking_id: l.booking_id ?? null,
       timesheet_id: l.timesheet_id ?? null,
-      qty: { day: l.hours_day, night: l.hours_night, sat: l.hours_sat, sun: l.hours_sun, bh: l.hours_bh },
-      rate: { day: l.charge_day, night: l.charge_night, sat: l.charge_sat, sun: l.charge_sun, bh: l.charge_bh },
-      total_ex_vat: l.total_charge_ex_vat,
-      description: l.description,
-      meta_json: l.meta_json ?? {}
+
+      qty: {
+        day: l.hours_day, night: l.hours_night, sat: l.hours_sat, sun: l.hours_sun, bh: l.hours_bh
+      },
+      pay_rate: {
+        day: l.pay_day, night: l.pay_night, sat: l.pay_sat, sun: l.pay_sun, bh: l.pay_bh
+      },
+      charge_rate: {
+        day: l.charge_day, night: l.charge_night, sat: l.charge_sat, sun: l.charge_sun, bh: l.charge_bh
+      },
+
+      total_pay_ex_vat: l.total_pay_ex_vat ?? null,
+      total_charge_ex_vat: l.total_charge_ex_vat ?? null,
+      margin_ex_vat: l.margin_ex_vat ?? null,
+
+      vat_rate_pct: l.vat_rate_pct ?? null,
+      vat_amount: l.vat_amount ?? null,
+      total_inc_vat: l.total_inc_vat ?? null,
+
+      description: l.description ?? null,
+      paper_ts_r2_key: l.paper_ts_r2_key ?? l.effective_paper_ts_r2_key ?? null,
+
+      meta_json: (l.meta_json && typeof l.meta_json === 'object') ? l.meta_json : {}
     }));
 
+    // Optional correspondence (kept as separate calls because it’s optional)
     const includeCorr = new URL(req.url).searchParams.get('include_correspondence');
     if (includeCorr) {
       let correspondence = [];
@@ -44366,25 +45192,126 @@ async function handleHRValidate(env, req, importId) {
       } catch {
         correspondence = [];
       }
-      return withCORS(env, req, ok({ invoice, items, header_snapshot_json: invoice.header_snapshot_json ?? {}, correspondence }));
+
+      return withCORS(env, req, ok({
+        invoice,
+        items,
+        header_snapshot_json,
+
+        // ✅ extra manifest payloads (useful later in invoice modal)
+        attach_policy: manifest.attach_policy ?? null,
+        evidence: Array.isArray(manifest.evidence) ? manifest.evidence : [],
+        hr_source_rows_cache: Array.isArray(manifest.hr_source_rows_cache) ? manifest.hr_source_rows_cache : [],
+        tsfin_external_source_rows: Array.isArray(manifest.tsfin_external_source_rows) ? manifest.tsfin_external_source_rows : [],
+
+        correspondence
+      }));
     }
 
-    return withCORS(env, req, ok({ invoice, items, header_snapshot_json: invoice.header_snapshot_json ?? {} }));
+    return withCORS(env, req, ok({
+      invoice,
+      items,
+      header_snapshot_json,
+
+      // ✅ extra manifest payloads (useful later in invoice modal)
+      attach_policy: manifest.attach_policy ?? null,
+      evidence: Array.isArray(manifest.evidence) ? manifest.evidence : [],
+      hr_source_rows_cache: Array.isArray(manifest.hr_source_rows_cache) ? manifest.hr_source_rows_cache : [],
+      tsfin_external_source_rows: Array.isArray(manifest.tsfin_external_source_rows) ? manifest.tsfin_external_source_rows : [],
+    }));
   } catch {
     return withCORS(env, req, serverError('Failed to fetch invoice'));
   }
 }
 
 
-// === AMENDMENT inside broker/src/index.js ===
-// Replace your existing handleInvoiceRender with this version
-
-async function handleInvoiceRender(env, req, invoiceId) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return unauthorized();
-
+// ============================================================================
+// NEW: ensureInvoicePdf(env, invoiceId, opts)
+// - Internal helper (NO auth check, NO HTTP self-call)
+// - If invoices.invoice_pdf_r2_key exists -> returns it
+// - Otherwise renders + stores using the same core code as handleInvoiceRender
+// - Re-reads invoice row afterwards and returns the updated key
+//
+// opts:
+//   - req: optional Request (used for presignR2Url + download URL base)
+//   - user: optional user object for audit attribution (can be null for system tasks)
+// ============================================================================
+async function ensureInvoicePdf(env, invoiceId, opts = {}) {
   const enc = encodeURIComponent;
-  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+  const req =
+    (opts && opts.req) ||
+    new Request((env.PUBLIC_DOWNLOAD_BASE_URL || 'https://localhost') + '/internal/ensure-invoice-pdf');
+
+  // 1) Fast path: key already exists
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${enc(invoiceId)}&select=id,invoice_pdf_r2_key&limit=1`
+    );
+    const inv0 = rows?.[0] || null;
+    const existingKey = inv0?.invoice_pdf_r2_key ? String(inv0.invoice_pdf_r2_key).trim() : null;
+    if (existingKey) {
+      return { ok: true, invoice_id: invoiceId, invoice_pdf_r2_key: existingKey, rendered: false };
+    }
+  } catch {
+    // fall through to render attempt
+  }
+
+  // 2) Render + store (shared core)
+  const core = await _renderInvoiceBundleAndStore(env, req, invoiceId, opts.user || null);
+  if (!core?.ok) {
+    return { ok: false, invoice_id: invoiceId, rendered: false, error: core?.error || 'RENDER_FAILED' };
+  }
+
+  // 3) Re-read invoice row (explicit requirement)
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${enc(invoiceId)}&select=id,invoice_pdf_r2_key&limit=1`
+    );
+    const inv1 = rows?.[0] || null;
+    const key1 = inv1?.invoice_pdf_r2_key ? String(inv1.invoice_pdf_r2_key).trim() : null;
+
+    if (!key1) {
+      return { ok: false, invoice_id: invoiceId, rendered: true, error: 'RENDERED_BUT_KEY_NOT_SAVED' };
+    }
+
+    return {
+      ok: true,
+      invoice_id: invoiceId,
+      invoice_pdf_r2_key: key1,
+      rendered: true,
+      attached_timesheets: core.attached_timesheets || 0,
+      attached_hr: !!core.attached_hr,
+      attached_nhsp: !!core.attached_nhsp,
+      attached_evidence: core.attached_evidence || 0
+    };
+  } catch {
+    // If re-read fails, still return key from core
+    return {
+      ok: true,
+      invoice_id: invoiceId,
+      invoice_pdf_r2_key: core.pdf_key,
+      rendered: true,
+      attached_timesheets: core.attached_timesheets || 0,
+      attached_hr: !!core.attached_hr,
+      attached_nhsp: !!core.attached_nhsp,
+      attached_evidence: core.attached_evidence || 0,
+      warning: 'RE_READ_FAILED'
+    };
+  }
+}
+
+
+// ============================================================================
+// INTERNAL CORE: _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit)
+// - Shared core logic for rendering + storing invoice bundle PDF
+// - Returns { ok, pdf_key, attached_* counts }
+// - Does NOT build a downloadUrl (that remains in handleInvoiceRender)
+// ============================================================================
+async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit) {
+  const enc = encodeURIComponent;
 
   function toMarginsObj(m) {
     const dflt = { top: 32, right: 12, bottom: 20, left: 12 };
@@ -44554,17 +45481,17 @@ async function handleInvoiceRender(env, req, invoiceId) {
   }
 
   try {
-    // ✅ 1) One DB call: manifest
+    // 1) Manifest (single RPC)
     const man = await sbRpc(env, 'invoice_render_manifest', { p_invoice_id: invoiceId });
     const manRows = Array.isArray(man) ? man : (man?.data || []);
     const manifest = (manRows && manRows.length) ? manRows[0] : man;
 
     if (!manifest || typeof manifest !== 'object') {
-      return withCORS(env, req, serverError('Failed to load invoice render manifest'));
+      return { ok: false, error: 'Failed to load invoice render manifest' };
     }
 
     const inv = manifest.invoice || manifest.invoice_row || null;
-    if (!inv || !inv.id) return withCORS(env, req, notFound('Invoice not found'));
+    if (!inv || !inv.id) return { ok: false, error: 'Invoice not found' };
 
     const header = (manifest.header_snapshot_json && typeof manifest.header_snapshot_json === 'object')
       ? manifest.header_snapshot_json
@@ -44574,7 +45501,6 @@ async function handleInvoiceRender(env, req, invoiceId) {
       ? manifest.attach_policy
       : (header.attach_policy && typeof header.attach_policy === 'object' ? header.attach_policy : null);
 
-    // DB-constant defaults if attach_policy missing
     const requiresHr = !!(attachPolicy && attachPolicy.requires_hr === true);
     const hrAttach = !!(attachPolicy && Object.prototype.hasOwnProperty.call(attachPolicy, 'hr_attach_to_invoice') && attachPolicy.hr_attach_to_invoice !== false);
     const tsAttach = (attachPolicy && Object.prototype.hasOwnProperty.call(attachPolicy, 'ts_attach_to_invoice'))
@@ -44621,11 +45547,11 @@ async function handleInvoiceRender(env, req, invoiceId) {
         total_inc_vat: Number(inv.total_inc_vat || 0),
       },
       items: (lineRows || []).map((l) => {
-        const meta = (l.meta_json && typeof l.meta_json === 'object') ? { ...l.meta_json } : {};
-        if (!meta.week_ending_date && meta.week_ending_date_local) meta.week_ending_date = meta.week_ending_date_local;
+        const meta0 = (l.meta_json && typeof l.meta_json === 'object') ? { ...l.meta_json } : {};
+        if (!meta0.week_ending_date && meta0.week_ending_date_local) meta0.week_ending_date = meta0.week_ending_date_local;
         return {
           description: l.description,
-          meta: meta,
+          meta: meta0,
           total_ex_vat: Number(l.total_charge_ex_vat || 0),
           vat_rate_pct: Number(l.vat_rate_pct || 0),
           vat_amount: Number(l.vat_amount || 0),
@@ -44634,7 +45560,7 @@ async function handleInvoiceRender(env, req, invoiceId) {
       }),
     };
 
-    // 2) Render invoice PDF
+    // Render base invoice pdf
     const html = buildHTML(invoiceData);
     const invoicePdfU8 = await withBrowser(env, async (browser) => {
       const page = await browser.newPage();
@@ -44648,7 +45574,7 @@ async function handleInvoiceRender(env, req, invoiceId) {
       return new Uint8Array(pdfArrayBuffer);
     });
 
-    // 3) Derive timesheet IDs + keys strictly from manifest (no ensureTimesheetPdf here)
+    // Timesheet keys from manifest
     const tsIds = [...new Set(lineRows.map(r => r?.timesheet_id).filter(Boolean))];
     const tsKeyByTsId = new Map();
     for (const l of lineRows) {
@@ -44659,10 +45585,10 @@ async function handleInvoiceRender(env, req, invoiceId) {
     }
     const tsKeys = tsIds.map(tsId => tsKeyByTsId.get(String(tsId)) || normalizeKey(`docs-pdf/timesheets/ts_${tsId}.pdf`));
 
-    // 4) Hard-fail if any required TS PDFs are missing (and audit)
+    // Hard fail missing artefacts
     const missing = [];
-
     const tsBytesList = [];
+
     if (tsAttach) {
       for (let i = 0; i < tsIds.length; i++) {
         const tsId = tsIds[i];
@@ -44676,7 +45602,6 @@ async function handleInvoiceRender(env, req, invoiceId) {
       }
     }
 
-    // Evidence PDFs (always “optional attachments” – but if a key exists in DB, we treat missing as fatal)
     const evidenceBytesList = [];
     for (const ev of evidenceRows) {
       const key = ev?.storage_key;
@@ -44692,32 +45617,30 @@ async function handleInvoiceRender(env, req, invoiceId) {
 
     if (missing.length) {
       try {
-        await writeAudit(
-          env,
-          user,
-          'INVOICE_RENDER_FAILED_MISSING_ARTEFACTS',
-          { invoice_id: invoiceId, missing },
-          { entity: 'invoice', subject_id: invoiceId, req }
-        );
+        if (userForAudit) {
+          await writeAudit(
+            env,
+            userForAudit,
+            'INVOICE_RENDER_FAILED_MISSING_ARTEFACTS',
+            { invoice_id: invoiceId, missing },
+            { entity: 'invoice', subject_id: invoiceId, req }
+          );
+        }
       } catch {}
-      return withCORS(env, req, serverError(`Invoice render failed: missing required artefacts (${missing.length}).`));
+      return { ok: false, error: `Invoice render failed: missing required artefacts (${missing.length}).` };
     }
 
-    // 5) Optional HR/NHSP reports (manifest-driven)
+    // Optional HR report
     let hrBytes = null;
     if (requiresHr && hrAttach) {
       const hrRows = [];
       if (hrCacheRows.length) {
-        // cache format: {source_system, import_id, header_columns, rows_json}
         for (const r of hrCacheRows) {
           if (String(r.source_system || '').toUpperCase() !== 'HEALTHROSTER') continue;
           const rows = Array.isArray(r.rows_json) ? r.rows_json : [];
-          for (const raw of rows) {
-            hrRows.push({ raw_row: raw });
-          }
+          for (const raw of rows) hrRows.push({ raw_row: raw });
         }
       } else {
-        // fallback to TSFIN external_source_rows_json.HR_WEEKLY
         for (const tf of tsfinRows) {
           const ext = (tf.external_source_rows_json && typeof tf.external_source_rows_json === 'object') ? tf.external_source_rows_json : {};
           const hrWeekly = Array.isArray(ext.HR_WEEKLY) ? ext.HR_WEEKLY : [];
@@ -44741,6 +45664,7 @@ async function handleInvoiceRender(env, req, invoiceId) {
       }
     }
 
+    // Optional NHSP breakdown report
     let nhspBytes = null;
     {
       const nhspRows = [];
@@ -44774,9 +45698,8 @@ async function handleInvoiceRender(env, req, invoiceId) {
       }
     }
 
-    // 6) Merge: invoice first, then HR, then NHSP, then TS (if tsAttach), then evidence
+    // Merge pdfs
     const merged = await PDFDocument.create();
-
     const invDoc = await PDFDocument.load(invoicePdfU8);
     (await merged.copyPages(invDoc, invDoc.getPageIndices())).forEach(p => merged.addPage(p));
 
@@ -44808,7 +45731,7 @@ async function handleInvoiceRender(env, req, invoiceId) {
 
     const combinedU8 = await merged.save();
 
-    // 7) Store combined in R2 and update invoice row (1× PATCH)
+    // Store combined PDF in R2 and patch invoice row
     const pdfKey = normalizeKey(`docs-pdf/invoices/invoice_${invoiceId}.pdf`);
     await r2Put(env, pdfKey, combinedU8, { httpMetadata: { contentType: "application/pdf" } });
 
@@ -44825,11 +45748,229 @@ async function handleInvoiceRender(env, req, invoiceId) {
       }
     );
 
+    return {
+      ok: true,
+      pdf_key: pdfKey,
+      attached_timesheets: attachedTsCount,
+      attached_hr: !!(hrBytes && hrBytes.length),
+      attached_nhsp: !!(nhspBytes && nhspBytes.length),
+      attached_evidence: attachedEvidenceCount
+    };
+  } catch {
+    return { ok: false, error: "Failed to render invoice bundle" };
+  }
+}
+
+async function handleInvoiceBatchGenerateCandidates(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const u = new URL(req.url);
+  const allowEarly = (() => {
+    const v = String(u.searchParams.get('allow_early') || '').trim().toLowerCase();
+    return (v === '1' || v === 'true' || v === 'yes' || v === 'y' || v === 'on');
+  })();
+
+  const limit = (() => {
+    const n = Number(u.searchParams.get('limit'));
+    const v = Number.isFinite(n) ? Math.trunc(n) : 5000;
+    return Math.max(1, Math.min(v, 20000));
+  })();
+
+  try {
+    const res = await sbRpc(env, 'invoice_batch_generate_candidates', {
+      p_allow_early: allowEarly,
+      p_limit: limit
+    });
+
+    // RPC returns JSONB; sbRpc may return object or array depending on wrapper
+    const groups = Array.isArray(res) ? res : (res?.data ?? res ?? []);
+    return withCORS(env, req, ok({ allow_early: allowEarly, limit, groups }));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+async function handleInvoiceBatchGenerateConfirm(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch {}
+  if (!body || typeof body !== 'object') return withCORS(env, req, badRequest('Invalid JSON'));
+
+  const allowEarly = (() => {
+    const v = body.allow_early;
+    if (v === true) return true;
+    if (v === false) return false;
+    const s = String(v || '').trim().toLowerCase();
+    return (s === '1' || s === 'true' || s === 'yes' || s === 'y' || s === 'on');
+  })();
+
+  const rows = body.rows;
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return withCORS(env, req, badRequest('rows[] is required'));
+  }
+
+  // Optional meta to store on the outbox payload
+  const meta = {
+    source: 'BATCH_UI',
+    requested_by_user_id: user?.id || null,
+    requested_at_utc: nowIso(),
+  };
+
+  try {
+    // 1) Enqueue selected BY_WEEK jobs (1 RPC)
+    const enq = await sbRpc(env, 'invoice_outbox_enqueue_by_week_selected', {
+      p_rows: rows,
+      p_actor_user_id: user?.id || null,
+      p_allow_early: allowEarly,
+      p_meta: meta
+    });
+
+    const enqRows = Array.isArray(enq) ? enq : (enq?.data || []);
+    const outboxIds = Array.from(new Set(enqRows.map(r => r?.outbox_id).filter(Boolean)));
+
+    if (!outboxIds.length) {
+      return withCORS(env, req, ok({
+        allow_early: allowEarly,
+        enqueued: 0,
+        generated: 0,
+        jobs: [],
+        generated_rows: []
+      }));
+    }
+
+    // 2) Generate invoices for those jobs (single RPC for the batch)
+    const gen = await sbRpc(env, 'invoice_generate_from_outbox_batch', {
+      p_outbox_ids: outboxIds,
+      p_actor_user_id: user?.id || null
+    });
+
+    const genRows = Array.isArray(gen) ? gen : (gen?.data || []);
+    const genByOutbox = new Map(genRows.map(r => [String(r?.outbox_id || ''), r]));
+
+    // Build job summary grouped by client/week from enqueue result
+    const jobs = enqRows.map(j => {
+      const oid = j?.outbox_id ? String(j.outbox_id) : '';
+      const g = genByOutbox.get(oid) || null;
+      const invoiceIds = Array.isArray(g?.invoice_ids) ? g.invoice_ids : [];
+      return {
+        client_id: j?.client_id || null,
+        invoice_week_start: j?.invoice_week_start || null,
+        outbox_id: j?.outbox_id || null,
+        enqueue_action: j?.action || null,
+        ok: !!g?.ok,
+        invoice_ids: invoiceIds,
+        warnings: g?.warnings ?? null
+      };
+    });
+
+    const allInvoices = [];
+    for (const r of jobs) {
+      for (const id of (r.invoice_ids || [])) allInvoices.push(id);
+    }
+
+    return withCORS(env, req, ok({
+      allow_early: allowEarly,
+      enqueued: outboxIds.length,
+      generated: allInvoices.length,
+      jobs,
+      generated_rows: genRows
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+async function handleInvoiceBatchIssueCandidates(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const u = new URL(req.url);
+  const allowEarly = (() => {
+    const v = String(u.searchParams.get('allow_early') || '').trim().toLowerCase();
+    return (v === '1' || v === 'true' || v === 'yes' || v === 'y' || v === 'on');
+  })();
+
+  const limit = (() => {
+    const n = Number(u.searchParams.get('limit'));
+    const v = Number.isFinite(n) ? Math.trunc(n) : 2000;
+    return Math.max(1, Math.min(v, 20000));
+  })();
+
+  try {
+    const res = await sbRpc(env, 'invoice_batch_issue_candidates', {
+      p_allow_early: allowEarly,
+      p_limit: limit
+    });
+
+    const groups = Array.isArray(res) ? res : (res?.data ?? res ?? []);
+    return withCORS(env, req, ok({ allow_early: allowEarly, limit, groups }));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+async function handleInvoiceBatchIssueConfirm(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch {}
+  if (!body || typeof body !== 'object') return withCORS(env, req, badRequest('Invalid JSON'));
+
+  const invoiceIds = body.invoice_ids;
+  if (!Array.isArray(invoiceIds) || invoiceIds.length === 0) {
+    return withCORS(env, req, badRequest('invoice_ids[] is required'));
+  }
+
+  const allowEarly = (() => {
+    const v = body.allow_early;
+    if (v === true) return true;
+    if (v === false) return false;
+    const s = String(v || '').trim().toLowerCase();
+    return (s === '1' || s === 'true' || s === 'yes' || s === 'y' || s === 'on');
+  })();
+
+  // Normalize/unique ids (strings are fine; PostgREST will cast to uuid)
+  const ids = Array.from(new Set(invoiceIds.map(String).filter(Boolean)));
+
+  try {
+    const res = await sbRpc(env, 'invoice_issue_and_queue_emails_batch', {
+      p_invoice_ids: ids,
+      p_actor_user_id: user?.id || null,
+      p_allow_early: allowEarly
+    });
+
+    const out = Array.isArray(res) ? (res[0] ?? res) : (res?.data ?? res);
+    return withCORS(env, req, ok(out));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+// ============================================================================
+// UPDATED: handleInvoiceRender(env, req, invoiceId)
+// - External admin handler remains
+// - Uses shared core (no logic duplication)
+// ============================================================================
+async function handleInvoiceRender(env, req, invoiceId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return unauthorized();
+
+  try {
+    const core = await _renderInvoiceBundleAndStore(env, req, invoiceId, user);
+    if (!core?.ok) {
+      return withCORS(env, req, serverError(core?.error || "Failed to render invoice bundle"));
+    }
+
+    const pdfKey = core.pdf_key;
+
     const token = await createToken(env.UPLOAD_TOKEN_SECRET, {
       typ: "dl",
       key: pdfKey,
       exp: Math.floor(Date.now() / 1000) + Number(env.PRESIGN_EXPIRES_SECONDS || 600),
     });
+
     const downloadUrl = new URL(
       env.PUBLIC_DOWNLOAD_BASE_URL ||
         new URL(new URL(req.url).origin + "/api/files/download").toString()
@@ -44839,12 +45980,12 @@ async function handleInvoiceRender(env, req, invoiceId) {
 
     return withCORS(env, req, ok({
       pdf_url: downloadUrl.toString(),
-      attached_timesheets: attachedTsCount,
-      attached_hr: !!(hrBytes && hrBytes.length),
-      attached_nhsp: !!(nhspBytes && nhspBytes.length),
-      attached_evidence: attachedEvidenceCount
+      attached_timesheets: core.attached_timesheets || 0,
+      attached_hr: !!core.attached_hr,
+      attached_nhsp: !!core.attached_nhsp,
+      attached_evidence: core.attached_evidence || 0
     }));
-  } catch (e) {
+  } catch {
     return withCORS(env, req, serverError("Failed to render invoice bundle"));
   }
 }
@@ -58732,7 +59873,6 @@ async function handleTimesheetAuditFeed(env, req, timesheetId) {
   return withCORS(env, req, ok({ items: rows || [] }));
 }
 
-
 async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -58758,7 +59898,7 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
     return (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on');
   };
 
-  // Load current TS + TSFIN (include QR hash fields + hour content fields for hashing)
+  // Load current TS + TSFIN
   const tsBefore = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -58788,7 +59928,7 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
           'qr_scanned_at',
           'version',
           'status'
-        ].join(',') ,
+        ].join(','),
   ).catch(() => null);
 
   const { rows: finRows } = await sbFetch(
@@ -58812,12 +59952,11 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
     return withCORS(env, req, badRequest('Cannot authorise: timesheet is locked or paid'));
   }
 
-  // ✅ BLOCK: unsigned QR outstanding
   if (finBeforeStatus === 'AWAITING_MANUAL_SIGNATURE') {
     return withCORS(env, req, badRequest('Cannot authorise: QR timesheet is awaiting signature'));
   }
 
-  // ✅ BLOCK: signed QR stale (signed hash exists but does not match current hash)
+  // Signed QR stale check (unchanged)
   try {
     const signedHash = (tsBefore?.qr_signed_hash != null) ? String(tsBefore.qr_signed_hash).trim() : '';
     const hasSignedHash = !!signedHash;
@@ -58859,11 +59998,7 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
       const currentHash = await sha256Hex(JSON.stringify(stableClone(currentObj)));
 
       if (String(currentHash) !== String(signedHash)) {
-        return withCORS(
-          env,
-          req,
-          badRequest('Cannot authorise: signed QR timesheet no longer matches current hours (revoke and request resubmission)')
-        );
+        return withCORS(env, req, badRequest('Cannot authorise: signed QR timesheet no longer matches current hours (revoke and request resubmission)'));
       }
     }
   } catch (e) {
@@ -58880,7 +60015,6 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
     }
   ).catch(() => {});
 
-  // ✅ Policy B: these bases are PENDING_AUTH until authorised, then READY_FOR_INVOICE
   const basisU = String(fin?.basis || '').toUpperCase();
   const forceReadyForInvoice =
     (basisU === 'NHSP' ||
@@ -58888,66 +60022,40 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
      basisU === 'HEALTHROSTER_SELF_BILL' ||
      basisU === 'HEALTHROSTER_ADJUSTMENT');
 
-  // ✅ Contract-resolved requires_hr (prefer v_timesheets_summary; falls back only if missing)
-  let requiresHr = false;
-
-  if (!forceReadyForInvoice) {
-    // 1) v_timesheets_summary (effective, contract-overrides + client fallback)
-    let eff = null;
-    try {
-      const { rows: eRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
-          `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-          `&select=client_requires_hr` +
-          `&limit=1`
-      );
-      eff = eRows?.[0] || null;
-    } catch {}
-
-    if (eff && Object.prototype.hasOwnProperty.call(eff, 'client_requires_hr')) {
-      requiresHr = boolish(eff.client_requires_hr);
-    } else {
-      // 2) contracts.requires_hr (if present and non-null), else fallback client_settings.requires_hr
-      let contractRequires = null;
-      try {
-        const contractId = tsBefore?.contract_id ? String(tsBefore.contract_id) : '';
-        if (contractId) {
-          const c = await sbGetOne(
-            env,
-            `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=requires_hr&limit=1`
-          );
-          if (c && Object.prototype.hasOwnProperty.call(c, 'requires_hr') && c.requires_hr !== null) {
-            contractRequires = !!c.requires_hr;
-          }
-        }
-      } catch {}
-
-      if (contractRequires != null) {
-        requiresHr = !!contractRequires;
-      } else if (fin.client_id) {
-        try {
-          const { rows: csRows } = await sbFetch(
-            env,
-            `${env.SUPABASE_URL}/rest/v1/client_settings` +
-              `?client_id=eq.${enc(fin.client_id)}` +
-              `&select=requires_hr` +
-              `&order=effective_from.desc&limit=1`
-          );
-          requiresHr = !!csRows?.[0]?.requires_hr;
-        } catch {
-          requiresHr = false;
-        }
-      }
-    }
+  // Fetch policy switch + validation status from v_timesheets_summary_base
+  let eff = null;
+  try {
+    const { rows: eRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary_base` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&select=client_requires_hr,hr_validation_required_for_invoice,validation_status` +
+        `&limit=1`
+    );
+    eff = eRows?.[0] || null;
+  } catch {
+    eff = null;
   }
+
+  const requiresHr = eff ? boolish(eff.client_requires_hr) : false;
+
+  const hrValidationRequiredForInvoice = eff ? boolish(eff.hr_validation_required_for_invoice) : false;
+  const validationStatus = (eff?.validation_status != null) ? String(eff.validation_status).toUpperCase() : '';
+  const validationOk = (validationStatus === 'VALIDATION_OK' || validationStatus === 'OVERRIDDEN');
+
+  // ✅ NEW gating: HR validation requirement blocks READY_FOR_INVOICE until OK/OVERRIDDEN
+  const mustHoldForHrValidation = (hrValidationRequiredForInvoice && !validationOk);
 
   let newStatus = fin.processing_status;
   const ps = finBeforeStatus;
   if (ps === 'PENDING_AUTH' || ps === 'READY_FOR_HR') {
-    newStatus = forceReadyForInvoice
-      ? 'READY_FOR_INVOICE'
-      : (requiresHr ? 'READY_FOR_HR' : 'READY_FOR_INVOICE');
+    if (mustHoldForHrValidation) {
+      newStatus = 'READY_FOR_HR';
+    } else {
+      newStatus = forceReadyForInvoice
+        ? 'READY_FOR_INVOICE'
+        : (requiresHr ? 'READY_FOR_HR' : 'READY_FOR_INVOICE');
+    }
   }
   finAfterStatus = newStatus;
 
@@ -58965,7 +60073,7 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
     }
   ).catch(() => {});
 
-  // Audit (meaningful only)
+  // Audit (kept)
   try {
     const wasAlreadyAuthorised = !!(tsBefore && tsBefore.authorised_at_server);
     const didPromoteStatus = String(finBeforeStatus || '') !== String(finAfterStatus || '').toUpperCase();
@@ -58979,7 +60087,9 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
           timesheet_id: currentTimesheetId,
           authorised_at_utc: now,
           tsfin_processing_status_before: finBeforeStatus || null,
-          tsfin_processing_status_after: finAfterStatus ? String(finAfterStatus).toUpperCase() : null
+          tsfin_processing_status_after: finAfterStatus ? String(finAfterStatus).toUpperCase() : null,
+          hr_validation_required_for_invoice: hrValidationRequiredForInvoice,
+          validation_status: validationStatus || null
         },
         {
           entity: 'timesheets',
@@ -59006,7 +60116,6 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
     was_stale: !!guard.resolved.was_stale
   }));
 }
-
 
 async function loadWeeklyContext(env, ts) {
   const enc = encodeURIComponent; // ✅ define here so global move is safe
@@ -61172,6 +62281,8 @@ export default {
       if (req.method === "POST" && p === "/signatures/presign-get/batch")   return handleSignPresignGetBatch(env, req);
       if (req.method === "GET"  && p === "/signatures/get")                 return handleSignGet(env, req, url);
 
+
+
       // ====================== ADMIN/BACKOFFICE API ROUTES ======================
 
 // Settings (singleton)
@@ -61577,6 +62688,17 @@ if (req.method === 'GET' && p === '/api/healthroster/autoprocess/clients') {
         if (inv && req.method === 'GET')                                     return handleGetInvoice(env, req, inv.invoice_id);
       }
 
+{
+  const m = matchPath(p, '/api/invoices/:invoice_id/remove-timesheets');
+  if (m && req.method === 'POST') return handleInvoiceRemoveTimesheetsTsfin(env, req, m.invoice_id);
+}
+
+{
+  const m = matchPath(p, '/api/invoices/:invoice_id');
+  if (m && req.method === 'DELETE') return handleInvoiceDeleteOne(env, req, m.invoice_id);
+}
+
+
       {
         const invSource = matchPath(p, '/api/invoices/:invoice_id/source-print');
         if (invSource && req.method === 'GET')                               return handleInvoiceSourcePrint(env, req, invSource.invoice_id);
@@ -61595,6 +62717,16 @@ if (req.method === 'GET' && p === '/api/healthroster/autoprocess/clients') {
         const m = matchPath(p, '/api/invoices/:invoice_id/unhold');
         if (m && req.method === 'POST')                                      return handleInvoiceUnhold(env, req, m.invoice_id);
       }
+
+      // =============================================================================
+// NEW ROUTES — Invoice batch modals
+// =============================================================================
+if (req.method === 'GET'  && p === '/api/invoices/batch-generate/candidates') return handleInvoiceBatchGenerateCandidates(env, req);
+if (req.method === 'POST' && p === '/api/invoices/batch-generate/confirm')    return handleInvoiceBatchGenerateConfirm(env, req);
+
+if (req.method === 'GET'  && p === '/api/invoices/batch-issue/candidates')    return handleInvoiceBatchIssueCandidates(env, req);
+if (req.method === 'POST' && p === '/api/invoices/batch-issue/confirm')       return handleInvoiceBatchIssueConfirm(env, req);
+
       {
         const m = matchPath(p, '/api/invoices/:invoice_id/unissue');
         if (m && req.method === 'POST') return handleInvoiceUnissue(env, req, m.invoice_id);
@@ -62074,6 +63206,38 @@ if (req.method === 'POST' && p === '/api/tspdf/queue/drain') {
       if (req.method === 'GET' && p === '/api/funnel/timesheets') return handleFunnelTimesheets(env, req);
       if (req.method === 'GET' && p === '/api/invoices/precheck') return handleInvoicesPrecheck(env, req);
 
+// ─────────────────────────────────────────────────────────────
+// Users (admin) + self-service password change
+// ─────────────────────────────────────────────────────────────
+
+// Logged-in user: change password (forces logout; Option A)
+if (req.method === 'POST' && p === '/api/users/me/change-password') {
+  return withCORS(env, req, await handleUserChangePassword(env, req));
+}
+
+// Admin: list + create users
+if (req.method === 'GET'  && p === '/api/users') {
+  return withCORS(env, req, await handleUsersList(env, req));
+}
+if (req.method === 'POST' && p === '/api/users') {
+  return withCORS(env, req, await handleUsersCreate(env, req));
+}
+
+// Admin: patch user + reset password (id routes)
+{
+  const parts = p.split('/').filter(Boolean); // e.g. ['api','users','<id>'] or ['api','users','<id>','reset-password']
+  const isUsers = (parts[0] === 'api' && parts[1] === 'users');
+
+  if (isUsers && req.method === 'PATCH' && parts.length === 3 && parts[2] !== 'me') {
+    const userId = parts[2];
+    return withCORS(env, req, await handleUsersPatch(env, req, userId));
+  }
+
+  if (isUsers && req.method === 'POST' && parts.length === 4 && parts[2] !== 'me' && parts[3] === 'reset-password') {
+    const userId = parts[2];
+    return withCORS(env, req, await handleUsersResetPassword(env, req, userId));
+  }
+}
 
       // FINAL: Not found – now CORS-safe
       return withCORS(env, req, new Response("Not found", {
@@ -62145,12 +63309,13 @@ async scheduled(event, env, ctx) {
     try {
       for (let i = 0; i < invMaxBatches; i++) {
         // 1) enqueue auto-invoice BY_WEEK jobs (cron-safe + idempotent)
-        // invoice_enqueue_ready_for_invoice is now scoped to AUTO-ENQUEUE ONLY
+        // ✅ Use the newer function that respects contracts.auto_invoice OR client_settings.auto_invoice_default
+        // ✅ Enqueue functions now also gate by "week has ended" (London date) in SQL
         if (invEnqueueFirst) {
           try {
-            await sbRpc(env, 'invoice_enqueue_ready_for_invoice', { p_limit: invEnqLimit });
+            await sbRpc(env, 'invoice_enqueue_auto_invoice_ready', { p_limit: invEnqLimit });
           } catch (e) {
-            console.warn('[scheduled] invoice_enqueue_ready_for_invoice failed:', e?.message || e);
+            console.warn('[scheduled] invoice_enqueue_auto_invoice_ready failed:', e?.message || e);
           }
         }
 
