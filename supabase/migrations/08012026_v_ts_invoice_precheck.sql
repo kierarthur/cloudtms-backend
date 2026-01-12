@@ -1,36 +1,13 @@
 -- ============================================================
--- CloudTMS: v_ts_invoice_precheck (VIEW) — client-led attach flags + evidence gating
--- Safe to re-run (keeps existing column order; logic updated; appended columns unchanged)
+-- CloudTMS: v_ts_invoice_precheck (VIEW)
+-- Client-led attach flags + reference gating + evidence gating
+-- SAFE TO RE-RUN: CREATE OR REPLACE VIEW (idempotent)
 --
--- Existing columns (UNCHANGED order):
---   1) timesheet_id
---   2) week_ending_date
---   3) submission_mode
---   4) manual_pdf_r2_key
---   5) reference_number
---   6) require_reference_to_invoice
---   7) precheck_status
---
--- Appended columns (NEW, unchanged):
---   8) effective_ts_attach_to_invoice   (client_settings.ts_attach_to_invoice, default TRUE)
---   9) effective_hr_attach_to_invoice   (client_settings.hr_attach_to_invoice, default TRUE)
---  10) effective_auto_invoice_default   (client_settings.auto_invoice_default, default FALSE)
---
--- BLOCK_NO_PDF logic (client-led, only when effective_ts_attach_to_invoice = TRUE):
---   MANUAL     => manual_pdf_r2_key IS NULL
---   NON-MANUAL (incl NULL/ELECTRONIC) => generated_pdf_at_utc IS NULL
---
--- BLOCK_NO_REFERENCE logic (contract-led, unchanged)
---
--- ✅ NEW: Evidence gating (timesheet_evidence.kind) for claims:
---   Mileage:   if mileage_units>0 OR mileage_(pay|charge)_ex_vat>0 => require kind = 'MILEAGE'
---   Travel:    if travel_(pay|charge)_ex_vat>0 => require kind = 'TRAVEL'
---   Accom:     if accommodation_(pay|charge)_ex_vat>0 => require kind = 'ACCOMMODATION'
---   Other:     if other_(pay|charge)_ex_vat>0 => require kind = 'OTHER'
---
--- Note:
---   - timesheets has no client_id, so client_id (and claim fields) are derived from current TSFIN
---   - Anchor date for picking client_settings row: (now() Europe/London)::date
+-- IMPORTANT:
+--  - Keeps existing column order for the first 7 columns
+--  - Appends the 3 "effective_*" columns at the end
+--  - Uses London anchor date for selecting the latest effective client_settings row
+--  - Derives client_id + claim fields from current TSFIN (timesheets has no client_id)
 -- ============================================================
 
 create or replace view public.v_ts_invoice_precheck as
@@ -58,7 +35,7 @@ select
       then 'BLOCK_NO_PDF'::text
 
     -- -----------------------------
-    -- Reference/PO gating (contract-led, unchanged)
+    -- Reference/PO gating (contract-led)
     -- -----------------------------
     when coalesce(c.require_reference_to_invoice, false) = true
      and (
@@ -109,7 +86,7 @@ select
       then 'BLOCK_NO_REFERENCE'::text
 
     -- -----------------------------
-    -- ✅ Mileage evidence gating (kind = MILEAGE)
+    -- Mileage evidence gating (kind = MILEAGE)
     -- -----------------------------
     when (
       (coalesce(tf.mileage_units, 0) > 0)
@@ -125,7 +102,8 @@ select
       then 'BLOCK_NO_MILEAGE_EVIDENCE'::text
 
     -- -----------------------------
-    -- ✅ Expense category evidence gating (TRAVEL / ACCOMMODATION / OTHER)
+    -- Expense category evidence gating
+    --  TRAVEL / ACCOMMODATION / OTHER
     -- -----------------------------
     when (
       (
@@ -164,7 +142,7 @@ select
   end as precheck_status,
 
   -- ------------------------------------------------------------
-  -- NEW appended columns (client-led effective flags)
+  -- Appended columns (effective client-led flags)
   -- ------------------------------------------------------------
   coalesce(cs.ts_attach_to_invoice, true)  as effective_ts_attach_to_invoice,
   coalesce(cs.hr_attach_to_invoice, true)  as effective_hr_attach_to_invoice,
@@ -186,7 +164,7 @@ left join lateral (
     tf0.mileage_pay_ex_vat,
     tf0.mileage_charge_ex_vat,
 
-    -- ✅ new category expenses
+    -- category expenses
     tf0.travel_pay_ex_vat,
     tf0.travel_charge_ex_vat,
     tf0.accommodation_pay_ex_vat,
@@ -200,7 +178,7 @@ left join lateral (
   limit 1
 ) tf on true
 
--- client_settings chosen by London "anchor" date
+-- choose client_settings row by London "anchor" date
 left join lateral (
   select
     cs0.client_id,
