@@ -71,6 +71,8 @@ begin
       and t.revoked_at is null
       and upper(coalesce(pc.precheck_status,'')) = 'OK'
 
+      and pc.week_ending_date < (select anchor_ymd from anchor)
+
       -- ✅ auto-enqueue gate (client-led)
       and coalesce(cs.auto_invoice_default, false) = true
 
@@ -168,6 +170,8 @@ begin
       and tf.locked_by_invoice_id is null
       and t.revoked_at is null
       and upper(coalesce(pc.precheck_status,'')) = 'OK'
+
+      and pc.week_ending_date < (select anchor_ymd from anchor)
 
       -- ✅ auto-invoice eligibility
       and coalesce(c.auto_invoice, cs.auto_invoice_default, false) = true
@@ -1829,26 +1833,7 @@ $$;
 -- STUBS (compile-safe) for the two RPCs that require your paste
 -- ============================================================
 
--- 3.3 Generator (needs unredacted JS parity source)
-create or replace function public.invoice_generate_from_outbox_batch__stub(
-  p_outbox_ids uuid[],
-  p_actor_user_id uuid
-)
-returns table (
-  outbox_id uuid,
-  ok boolean,
-  invoice_ids uuid[],
-  warnings jsonb
-)
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  raise exception
-    'invoice_generate_from_outbox_batch not implemented: your uploaded BACKEND FOR CLOUDTMS.js contains redacted "..." inside the invoice builders. Paste unredacted handleCreateInvoiceTsfin / handleCreateInvoiceTsfinByWeek / extractBillableSegmentsForWeek so SQL can be mirrored exactly.';
-end;
-$$;
+
 
 
 -- 3.6 Credit note + unlock (needs unredacted JS parity source)
