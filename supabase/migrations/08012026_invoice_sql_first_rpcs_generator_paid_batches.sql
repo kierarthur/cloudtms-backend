@@ -696,8 +696,8 @@ begin
 
     exists(
       select 1
-      from snaps_all
-      where upper(coalesce(basis::text,'')) in ('NHSP','NHSP_ADJUSTMENT','HEALTHROSTER_SELF_BILL','HEALTHROSTER_ADJUSTMENT')
+      from snaps_all sa
+      where upper(coalesce(sa.basis::text,'')) in ('NHSP','NHSP_ADJUSTMENT','HEALTHROSTER_SELF_BILL','HEALTHROSTER_ADJUSTMENT')
     )
   into v_snap_cnt, v_client_cnt, v_client_id, v_has_disallowed
   from snaps_all;
@@ -2151,6 +2151,13 @@ where tf.timesheet_id = any(v_ts_ids_to_use)
           v_client_id uuid;
           v_week_start date;
 
+          v_allow_early boolean := false;
+          v_week_end_ymd date;
+          v_next_attempt_at timestamptz;
+
+        -- Optional: selection restriction for Batch Generate (payload.timesheet_ids)
+        v_limit_ts_ids uuid[];
+
           v_client record;
           v_def record;
           v_cs record;
@@ -2278,6 +2285,70 @@ h_bh numeric;
             raise exception 'BY_WEEK job requires payload.invoice_week_start (YYYY-MM-DD)';
           end if;
 
+          -- ------------------------------------------------------------
+          -- Safety net: do not run BY_WEEK before the week ending date has
+          -- passed (Europe/London), unless payload.allow_early = true.
+          -- Week ending date = invoice_week_start + 6 days.
+          -- ------------------------------------------------------------
+          if (v_payload ? 'allow_early') and jsonb_typeof(v_payload->'allow_early') = 'boolean' then
+            v_allow_early := (v_payload->>'allow_early')::boolean;
+          elsif (v_payload ? 'allow_early') and jsonb_typeof(v_payload->'allow_early') = 'string' then
+            v_allow_early := (lower(btrim(coalesce(v_payload->>'allow_early','')) ) in ('true','1','yes','y'));
+          end if;
+
+          v_week_end_ymd := (v_week_start + 6);
+
+          if coalesce(v_allow_early, false) = false
+             and v_week_end_ymd >= v_anchor_ymd then
+
+            -- schedule the next attempt for 00:05 Europe/London on the day after week end
+            v_next_attempt_at := ((v_week_end_ymd + 1)::text || ' 00:05:00')::timestamp at time zone 'Europe/London';
+
+            update public.invoice_jobs_outbox
+            set next_attempt_at = v_next_attempt_at,
+                last_error = 'NOT_DUE_YET'
+            where id = v_outbox_id;
+
+            outbox_id := v_outbox_id;
+            ok := false;
+            invoice_ids := null;
+            warnings := jsonb_build_object(
+              'status', 'NOT_DUE_YET',
+              'invoice_week_start', v_week_start::text,
+              'week_ending_date', v_week_end_ymd::text,
+              'allow_early', coalesce(v_allow_early,false),
+              'next_attempt_at_utc', to_jsonb(v_next_attempt_at)
+            );
+            return next;
+            continue;
+          end if;
+
+
+          -- Optional: restrict BY_WEEK job to an explicit set of timesheet_ids (Batch Generate selection)
+          -- payload.timesheet_ids: JSON array of UUID strings
+          v_limit_ts_ids := null;
+
+          if (v_payload ? 'timesheet_ids')
+             and jsonb_typeof(v_payload->'timesheet_ids') = 'array' then
+
+            if jsonb_array_length(v_payload->'timesheet_ids') > 0 then
+              select array_agg(distinct x order by x::text)
+              into v_limit_ts_ids
+              from (
+                select (v)::uuid as x
+                from jsonb_array_elements_text(v_payload->'timesheet_ids') as t(v)
+                where t.v ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              ) q;
+            end if;
+
+            -- If a timesheet_ids filter was explicitly provided, it must resolve to at least one valid UUID,
+            -- otherwise we refuse to run to avoid accidentally invoicing the whole cohort.
+            if v_limit_ts_ids is null or coalesce(array_length(v_limit_ts_ids, 1), 0) = 0 then
+              raise exception 'BY_WEEK job payload.timesheet_ids provided but empty/invalid';
+            end if;
+          end if;
+
+
           -- Load client + defaults
           select id, name, invoice_address, primary_invoice_email, vat_chargeable, payment_terms_days
           into v_client
@@ -2343,6 +2414,8 @@ limit 1;
             join public.timesheets ts on ts.timesheet_id = tf.timesheet_id
             join public.v_ts_invoice_precheck pc on pc.timesheet_id = tf.timesheet_id
             where tf.client_id = v_client_id
+              and ts.week_ending_date::date = (v_week_start + 6)
+              and (v_limit_ts_ids is null or tf.timesheet_id = any(v_limit_ts_ids))
               and tf.is_current = true
               and tf.locked_by_invoice_id is null
               and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
