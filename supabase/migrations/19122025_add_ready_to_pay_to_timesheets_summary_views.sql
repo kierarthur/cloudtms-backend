@@ -947,17 +947,27 @@ SELECT
   v.mileage_charge_rate,
   v.mileage_pay_ex_vat,
 
-  -- ✅ NEW columns APPENDED AT END
+  -- existing appended columns
   v.travel_pay_ex_vat,
   v.travel_charge_ex_vat,
   v.accommodation_pay_ex_vat,
   v.accommodation_charge_ex_vat,
   v.other_pay_ex_vat,
-  v.other_charge_ex_vat
+  v.other_charge_ex_vat,
+
+  -- ✅ NEW (APPENDED AT END): distinguish drafted vs issued/paid invoice
+  CASE
+    WHEN v.locked_by_invoice_id IS NULL THEN NULL
+    WHEN inv.id IS NULL THEN 'INVOICED_NOT_ISSUED'
+    WHEN inv.status IN ('ISSUED'::public.invoice_status_enum, 'PAID'::public.invoice_status_enum) THEN 'INVOICED_ISSUED'
+    ELSE 'INVOICED_NOT_ISSUED'
+  END AS invoice_issue_stage
+
 
 FROM public.v_timesheets_summary_base v
 LEFT JOIN public.contract_weeks cw ON cw.id = v.contract_week_id
-LEFT JOIN public.timesheets ts2 ON ts2.timesheet_id = v.timesheet_id;
+LEFT JOIN public.timesheets ts2 ON ts2.timesheet_id = v.timesheet_id
+LEFT JOIN public.invoices inv ON inv.id = v.locked_by_invoice_id;
 
 GRANT SELECT ON public.v_timesheets_summary_base TO service_role;
 GRANT SELECT ON public.v_timesheets_summary      TO service_role;
