@@ -59,6 +59,13 @@ CREATE INDEX IF NOT EXISTS idx_timesheet_evidence_timesheet_kind
 --   So we keep ALL existing columns in the same order, and only add new ones at the end.
 -- =========================================================
 
+-- ============================================================
+-- v_timesheets_summary_base (REVISED)
+-- ✅ SAFE TO RE-RUN: CREATE OR REPLACE VIEW
+-- ✅ ONLY CHANGE: APPEND a new boolean column at the END of the view output:
+--     hr_validation_required_for_invoice
+-- ============================================================
+
 CREATE OR REPLACE VIEW public.v_timesheets_summary_base AS
 WITH latest_tsfin AS (
   SELECT DISTINCT ON (tf.timesheet_id)
@@ -98,7 +105,7 @@ WITH latest_tsfin AS (
     tf.mileage_charge_rate,
     tf.mileage_pay_ex_vat,
 
-    -- ✅ NEW: category backing fields
+    -- category backing fields
     tf.travel_pay_ex_vat,
     tf.travel_charge_ex_vat,
     tf.accommodation_pay_ex_vat,
@@ -183,7 +190,7 @@ ts_base AS (
     tf.pay_on_hold,
     tf.locked_by_invoice_id,
 
-    -- ✅ UPDATED: show hint when unresolved (candidate_id null) and hint has useful fields
+    -- show hint when unresolved (candidate_id null) and hint has useful fields
     CASE
       WHEN COALESCE(tf.candidate_id, ct.candidate_id) IS NULL
         AND ts.candidate_hint_text IS NOT NULL
@@ -266,7 +273,7 @@ ts_base AS (
 
     COALESCE(ea.evidence_count, 0) AS evidence_count,
 
-    -- existing expense/mileage fields currently in your view
+    -- existing expense/mileage fields
     tf.expenses_charge_ex_vat,
     tf.expenses_evidence_r2_key,
     tf.expenses_evidence_manifest,
@@ -296,7 +303,7 @@ ts_base AS (
     tf.mileage_charge_rate,
     tf.mileage_pay_ex_vat,
 
-    -- ✅ NEW columns (union compat; will be exposed at END of view output)
+    -- category backing fields (already appended in this revision)
     tf.travel_pay_ex_vat,
     tf.travel_charge_ex_vat,
     tf.accommodation_pay_ex_vat,
@@ -410,7 +417,6 @@ planned_weeks AS (
 
     0 AS evidence_count,
 
-    -- existing expense/mileage fields currently in your view
     NULL::numeric AS expenses_charge_ex_vat,
     NULL::text    AS expenses_evidence_r2_key,
     NULL::jsonb   AS expenses_evidence_manifest,
@@ -428,10 +434,8 @@ planned_weeks AS (
     NULL::text    AS umb_sort_code,
     NULL::text    AS umb_account_number,
 
-    -- existing last column in your view
     NULL::jsonb AS candidate_hint_text,
 
-    -- existing appended columns (already in your view output)
     NULL::numeric AS expenses_pay_ex_vat,
     NULL::text    AS expenses_description,
     NULL::numeric AS mileage_units,
@@ -439,7 +443,6 @@ planned_weeks AS (
     NULL::numeric AS mileage_charge_rate,
     NULL::numeric AS mileage_pay_ex_vat,
 
-    -- ✅ NEW appended columns (union compat)
     NULL::numeric AS travel_pay_ex_vat,
     NULL::numeric AS travel_charge_ex_vat,
     NULL::numeric AS accommodation_pay_ex_vat,
@@ -510,8 +513,6 @@ with_issues AS (
             ELSE ARRAY[]::text[]
           END
         ) ||
-
-        -- ✅ UPDATED: Expenses evidence based on category claims + timesheet_evidence.kind
         CASE
           WHEN ar.timesheet_id IS NOT NULL
             AND (
@@ -543,8 +544,6 @@ with_issues AS (
           ELSE ARRAY[]::text[]
         END
       ) ||
-
-      -- ✅ UPDATED: Mileage evidence based on mileage claim + timesheet_evidence.kind
       CASE
         WHEN ar.timesheet_id IS NOT NULL
           AND (
@@ -845,10 +844,8 @@ SELECT
   qr_generated_at,
   qr_scanned_at,
 
-  -- existing last column in your view
   candidate_hint_text,
 
-  -- existing appended columns (already in your view)
   expenses_pay_ex_vat,
   expenses_description,
   mileage_units,
@@ -856,15 +853,22 @@ SELECT
   mileage_charge_rate,
   mileage_pay_ex_vat,
 
-  -- ✅ NEW columns APPENDED AT END
   travel_pay_ex_vat,
   travel_charge_ex_vat,
   accommodation_pay_ex_vat,
   accommodation_charge_ex_vat,
   other_pay_ex_vat,
-  other_charge_ex_vat
-FROM with_issues;
+  other_charge_ex_vat,
 
+  -- ✅ NEW (APPENDED AT END): policy flag for “HR validation required before invoicing”
+  (
+    timesheet_id IS NOT NULL
+    AND COALESCE(client_hr_validation_required, false) = true
+    AND COALESCE(client_no_timesheet_required, false) = false
+    AND COALESCE(total_hours, 0::numeric) > 0::numeric
+  ) AS hr_validation_required_for_invoice
+
+FROM with_issues;
 
 CREATE OR REPLACE VIEW public.v_timesheets_summary AS
 SELECT
