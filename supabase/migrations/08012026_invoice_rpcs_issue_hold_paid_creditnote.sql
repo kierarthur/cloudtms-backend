@@ -1482,6 +1482,7 @@ $$;
 --   - unlock TSFIN where invoice has no remaining lines for those timesheets
 --   - audit NHSP_INVOICE_SHIFT_REMOVED
 -- ------------------------------------------------------------
+
 create or replace function public.invoice_remove_nhsp_shifts(
   p_invoice_id uuid,
   p_shift_ids uuid[],
@@ -1598,23 +1599,8 @@ begin
     and (l.meta_json->>'nhsp_shift_id')::uuid = any(v_shift_ids);
 
   -- 3) Recompute totals from remaining lines
-  update public.invoices i
-  set
-    subtotal_ex_vat = x.ex,
-    vat_amount      = x.vat,
-    total_inc_vat   = x.inc,
-    updated_at      = v_now
-  from (
-    select
-      coalesce(sum(l.total_charge_ex_vat),0)::numeric as ex,
-      coalesce(sum(l.vat_amount),0)::numeric as vat,
-      coalesce(sum(l.total_inc_vat),0)::numeric as inc
-    from public.invoice_lines l
-    where l.invoice_id = p_invoice_id
-  ) x
-  where i.id = p_invoice_id;
-
-  -- 4) Unlock TSFIN if a timesheet now has no remaining lines on this invoice
+  perform public.invoice_recompute_totals(p_invoice_id);
+-- 4) Unlock TSFIN if a timesheet now has no remaining lines on this invoice
   update public.timesheets_financials tf
   set locked_by_invoice_id = null,
       updated_at = v_now
