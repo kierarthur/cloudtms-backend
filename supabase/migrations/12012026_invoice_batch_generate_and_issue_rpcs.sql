@@ -251,10 +251,12 @@ begin
       raise exception 'row timesheet_ids must be a JSON array';
     end if;
 
-    select array_agg(distinct x order by x::text)
+    -- NOTE: Postgres disallows ORDER BY expressions in DISTINCT aggregates unless they are part of the DISTINCT argument list.
+    -- We dedupe in a subquery, then apply deterministic ordering in array_agg.
+    select array_agg(x order by x::text)
     into v_in_ids
     from (
-      select (val)::uuid as x
+      select distinct (val)::uuid as x
       from jsonb_array_elements_text(v_row->'timesheet_ids') as t(val)
       where t.val ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
     ) q;
@@ -264,22 +266,27 @@ begin
     end if;
 
     -- Validate that selected ids are eligible AND match (client, week)
-    select array_agg(distinct tf.timesheet_id order by tf.timesheet_id::text)
+    -- NOTE: Postgres disallows ORDER BY expressions in DISTINCT aggregates unless they are part of the DISTINCT argument list.
+    -- We dedupe in a subquery, then apply deterministic ordering in array_agg.
+    select array_agg(x order by x::text)
     into v_ok_ids
-    from public.timesheets_financials tf
-    join public.timesheets ts
-      on ts.timesheet_id = tf.timesheet_id
-     and ts.is_current = true
-    join public.v_ts_invoice_precheck pc
-      on pc.timesheet_id = tf.timesheet_id
-    where tf.is_current = true
-      and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
-      and tf.locked_by_invoice_id is null
-      and ts.revoked_at is null
-      and upper(coalesce(pc.precheck_status,'')) = 'OK'
-      and tf.client_id = v_client_id
-      and ts.week_ending_date::date = v_week_end
-      and tf.timesheet_id = any(v_in_ids);
+    from (
+      select distinct tf.timesheet_id as x
+      from public.timesheets_financials tf
+      join public.timesheets ts
+        on ts.timesheet_id = tf.timesheet_id
+       and ts.is_current = true
+      join public.v_ts_invoice_precheck pc
+        on pc.timesheet_id = tf.timesheet_id
+      where tf.is_current = true
+        and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
+        and tf.locked_by_invoice_id is null
+        and ts.revoked_at is null
+        and upper(coalesce(pc.precheck_status,'')) = 'OK'
+        and tf.client_id = v_client_id
+        and ts.week_ending_date::date = v_week_end
+        and tf.timesheet_id = any(v_in_ids)
+    ) q;
 
     if v_ok_ids is null or coalesce(array_length(v_ok_ids, 1), 0) = 0 then
       raise exception 'No eligible timesheets for client=% and week_end=%', v_client_id, v_week_end;
@@ -799,7 +806,7 @@ begin
     'Invoices – Week ending ' || coalesce(m.week_ending_date::text, ''),
     'Please find the attached invoices.',
     m.attachments,
-    'QUEUED'::text,
+    'QUEUED'::public.mail_status_enum,
     'invoice_batch:' || m.client_id::text || ':' || coalesce(m.week_ending_date::text,'') || ':part:' || (m.chunk_idx + 1)::text,
     v_now,
     p_actor_user_id
