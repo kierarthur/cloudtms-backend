@@ -459,6 +459,7 @@ begin
 end;
 $$;
 
+
 -- ============================================================
 -- FINAL RPC: invoice_generate_from_outbox_batch
 -- Supports outbox kinds:
