@@ -125,7 +125,6 @@ begin
   end loop;
 end;
 $$;
-
 create or replace function public.invoice_apply_edits(
   p_invoice_id uuid,
   p_payload jsonb,
@@ -957,18 +956,13 @@ begin
   from public.invoice_lines l
   where l.invoice_id = p_invoice_id;
 
-  update public.invoices
-  set
-    subtotal_ex_vat = v_new_ex,
-    vat_amount = v_new_vat,
-    total_inc_vat = v_new_inc,
-    invoice_pdf_r2_key = null,
-    updated_at = v_now
-  where id = p_invoice_id;
-
-  -- Return updated manifest
+  perform public.invoice_recompute_totals(p_invoice_id);
+-- Return updated manifest
   select public.invoice_render_manifest(p_invoice_id) into v_manifest;
   return coalesce(v_manifest, '{}'::jsonb);
 end;
 $$;
+
+
+
 
