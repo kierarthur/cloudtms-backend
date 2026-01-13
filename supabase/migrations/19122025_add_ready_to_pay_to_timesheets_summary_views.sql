@@ -866,9 +866,56 @@ SELECT
     AND COALESCE(client_hr_validation_required, false) = true
     AND COALESCE(client_no_timesheet_required, false) = false
     AND COALESCE(total_hours, 0::numeric) > 0::numeric
-  ) AS hr_validation_required_for_invoice
+  ) AS hr_validation_required_for_invoice,
 
-FROM with_issues;
+  -- ✅ NEW (APPENDED AT END): segment-aware invoice stage indicators
+  seg.seg_total    AS invoice_segments_total,
+  seg.seg_locked   AS invoice_segments_locked,
+  CASE
+    WHEN seg.seg_total IS NULL THEN NULL::int
+    ELSE GREATEST(seg.seg_total - COALESCE(seg.seg_locked,0), 0)
+  END AS invoice_segments_unlocked,
+  CASE
+    WHEN seg.seg_total IS NULL THEN NULL::text
+    WHEN COALESCE(seg.seg_locked,0) = 0 THEN 'NOT_INVOICED'
+    WHEN COALESCE(seg.seg_locked,0) >= seg.seg_total THEN 'FULLY_INVOICED'
+    ELSE 'PARTIALLY_INVOICED'
+  END AS invoice_segment_stage
+
+
+FROM with_issues wi
+LEFT JOIN LATERAL (
+  SELECT
+    -- Segment stats derived from current TSFIN snapshot JSON (when present)
+    CASE
+      WHEN wi.timesheet_id IS NULL THEN NULL::int
+      WHEN tf.invoice_breakdown_json IS NOT NULL
+        AND jsonb_typeof(tf.invoice_breakdown_json) = 'object'
+        AND coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
+        AND jsonb_typeof(tf.invoice_breakdown_json->'segments') = 'array'
+      THEN jsonb_array_length(tf.invoice_breakdown_json->'segments')
+      ELSE 1
+    END AS seg_total,
+
+    CASE
+      WHEN wi.timesheet_id IS NULL THEN NULL::int
+      WHEN tf.invoice_breakdown_json IS NOT NULL
+        AND jsonb_typeof(tf.invoice_breakdown_json) = 'object'
+        AND coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
+        AND jsonb_typeof(tf.invoice_breakdown_json->'segments') = 'array'
+      THEN (
+        SELECT count(*)::int
+        FROM jsonb_array_elements(tf.invoice_breakdown_json->'segments') s
+        WHERE nullif(btrim(coalesce(s->>'invoice_locked_invoice_id','')), '') IS NOT NULL
+      )
+      ELSE (CASE WHEN wi.locked_by_invoice_id IS NULL THEN 0 ELSE 1 END)
+    END AS seg_locked
+  FROM public.timesheets_financials tf
+  WHERE tf.is_current = true
+    AND tf.timesheet_id = wi.timesheet_id
+  ORDER BY tf.created_at DESC
+  LIMIT 1
+) seg ON true;
 
 CREATE OR REPLACE VIEW public.v_timesheets_summary AS
 SELECT
@@ -961,9 +1008,12 @@ SELECT
     WHEN inv.id IS NULL THEN 'INVOICED_NOT_ISSUED'
     WHEN inv.status IN ('ISSUED'::public.invoice_status_enum, 'PAID'::public.invoice_status_enum) THEN 'INVOICED_ISSUED'
     ELSE 'INVOICED_NOT_ISSUED'
-  END AS invoice_issue_stage
+  END AS invoice_issue_stage,
 
-
+  v.invoice_segments_total,
+  v.invoice_segments_locked,
+  v.invoice_segments_unlocked,
+  v.invoice_segment_stage
 FROM public.v_timesheets_summary_base v
 LEFT JOIN public.contract_weeks cw ON cw.id = v.contract_week_id
 LEFT JOIN public.timesheets ts2 ON ts2.timesheet_id = v.timesheet_id
