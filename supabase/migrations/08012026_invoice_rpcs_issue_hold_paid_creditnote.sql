@@ -1847,8 +1847,6 @@ $$;
 -- ============================================================
 
 
-
-
 -- 3.6 Credit note + unlock (needs unredacted JS parity source)
 create or replace function public.invoice_create_credit_note_and_unlock(
   p_invoice_id uuid,
@@ -2170,6 +2168,8 @@ begin
     from (select unnest(v_ts_ids) as timesheet_id) x
     on conflict on constraint uq_tsfin_outbox do nothing;
   end if;
+  -- ✅ keep original invoice totals/PDF consistent after unlock (idempotent)
+  perform public.invoice_recompute_totals(p_invoice_id);
 
   credit_note_id := v_credit_id;
   return next;
