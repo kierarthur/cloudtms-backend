@@ -1743,16 +1743,7 @@ begin
 end;
 $$;
 
--- ------------------------------------------------------------
--- 3.7 Render manifest: invoice_render_manifest(p_invoice_id)
--- Returns one JSON payload with:
---   - invoice row (selected fields) + header_snapshot_json
---   - invoice_lines (including paper_ts_r2_key)
---   - attach_policy (prefer header_snapshot_json.attach_policy)
---   - timesheet_evidence list
---   - cached invoice_hr_source_rows (if any)
---   - current TSFIN external_source_rows_json (for invoice timesheets)
--- ------------------------------------------------------------
+
 create or replace function public.invoice_render_manifest(p_invoice_id uuid)
 returns jsonb
 language sql
@@ -1773,8 +1764,10 @@ lines as (
     l.*,
     coalesce(
       l.paper_ts_r2_key,
-      case when l.timesheet_id is not null
-        then ('docs-pdf/timesheets/ts_' || l.timesheet_id::text || '.pdf')
+      case
+        when l.timesheet_id is not null
+          then ('docs-pdf/timesheets/ts_' || l.timesheet_id::text || '.pdf')
+        else null
       end
     ) as effective_paper_ts_r2_key
   from public.invoice_lines l
@@ -1814,19 +1807,53 @@ tsfin as (
   from public.timesheets_financials tf
   where tf.is_current = true
     and tf.timesheet_id in (select timesheet_id from ts_ids)
+),
+email_summary as (
+  select
+    count(*)::int as email_count,
+    max(m.created_at_utc) as last_email_at_utc
+  from public.mail_outbox m
+  where upper(coalesce(m.type,'')) = 'INVOICE'
+    and m.attachments is not null
+    and jsonb_typeof(m.attachments) = 'array'
+    and exists (
+      select 1
+      from jsonb_array_elements(m.attachments) a
+      where btrim(coalesce(a->>'invoice_id','')) = p_invoice_id::text
+    )
 )
 select jsonb_build_object(
   'invoice', to_jsonb(inv.*),
   'header_snapshot_json', coalesce((select inv.header_snapshot_json from inv), '{}'::jsonb),
   'attach_policy', coalesce((select inv.attach_policy from inv), null),
-  'lines', coalesce((select jsonb_agg(to_jsonb(l.*) || jsonb_build_object('paper_ts_r2_key', l.effective_paper_ts_r2_key) order by l.created_at) from lines l), '[]'::jsonb),
+
+  'lines', coalesce((
+    select jsonb_agg(
+      to_jsonb(l.*)
+      || jsonb_build_object('paper_ts_r2_key', l.effective_paper_ts_r2_key)
+      || jsonb_build_object('is_adjustment', (l.timesheet_id is null or upper(coalesce(l.meta_json->>'line_type','')) = 'ADJUSTMENT'))
+      || jsonb_build_object('line_type_norm', upper(coalesce(l.meta_json->>'line_type','')))
+      order by l.created_at
+    )
+    from lines l
+  ), '[]'::jsonb),
+
   'timesheet_ids', coalesce((select jsonb_agg(t.timesheet_id::text) from ts_ids t), '[]'::jsonb),
   'evidence', coalesce((select jsonb_agg(to_jsonb(ev.*)) from ev), '[]'::jsonb),
   'hr_source_rows_cache', coalesce((select jsonb_agg(to_jsonb(h.*)) from hr_cache h), '[]'::jsonb),
-  'tsfin_external_source_rows', coalesce((select jsonb_agg(to_jsonb(t.*)) from tsfin t), '[]'::jsonb)
+  'tsfin_external_source_rows', coalesce((select jsonb_agg(to_jsonb(t.*)) from tsfin t), '[]'::jsonb),
+
+  -- ✅ email summary for UI label (Email vs Re-email)
+  'email_summary', jsonb_build_object(
+    'emailed_once', (coalesce((select email_count from email_summary),0) > 0),
+    'email_count', coalesce((select email_count from email_summary),0),
+    'last_email_at_utc', (select last_email_at_utc from email_summary)
+  )
 )
 from inv;
 $$;
+
+
 
 
 -- ============================================================
