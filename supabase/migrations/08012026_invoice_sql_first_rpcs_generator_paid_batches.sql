@@ -672,6 +672,7 @@ begin
   v_snap_cnt int := 0;
   v_client_cnt int := 0;
   v_has_disallowed boolean := false;
+  v_has_segments_mode boolean := false;
 begin
   with snaps_all as (
     select tf.*
@@ -698,8 +699,14 @@ begin
       select 1
       from snaps_all sa
       where upper(coalesce(sa.basis::text,'')) in ('NHSP','NHSP_ADJUSTMENT','HEALTHROSTER_SELF_BILL','HEALTHROSTER_ADJUSTMENT')
+    ),
+
+    exists(
+      select 1
+      from snaps_all sa
+      where coalesce(sa.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
     )
-  into v_snap_cnt, v_client_cnt, v_client_id, v_has_disallowed
+  into v_snap_cnt, v_client_cnt, v_client_id, v_has_disallowed, v_has_segments_mode
   from snaps_all;
 
   if v_snap_cnt = 0 then
@@ -708,6 +715,10 @@ begin
 
   if v_has_disallowed then
     raise exception 'This endpoint cannot invoice NHSP or HR self-bill timesheets (use BY_WEEK).';
+  end if;
+
+  if v_has_segments_mode then
+    raise exception 'This endpoint cannot invoice SEGMENTS-mode timesheets (use BY_WEEK).';
   end if;
 
   if v_client_cnt <> 1 then
@@ -2152,6 +2163,7 @@ where tf.timesheet_id = any(v_ts_ids_to_use)
           v_week_start date;
 
           v_allow_early boolean := false;
+          v_has_due_delayed boolean := false;
           v_week_end_ymd date;
           v_next_attempt_at timestamptz;
 
@@ -2301,26 +2313,69 @@ h_bh numeric;
           if coalesce(v_allow_early, false) = false
              and v_week_end_ymd >= v_anchor_ymd then
 
-            -- schedule the next attempt for 00:05 Europe/London on the day after week end
-            v_next_attempt_at := ((v_week_end_ymd + 1)::text || ' 00:05:00')::timestamp at time zone 'Europe/London';
+            -- If the invoice week has not ended yet, we normally defer.
+            -- Exception: allow delayed segments (from other weeks) to be invoiced once their
+            -- invoice_target_week_start (week start) has arrived. allow_early does NOT control this.
+            select exists (
+              select 1
+              from public.timesheets_financials tf
+              join public.timesheets ts
+                on ts.timesheet_id = tf.timesheet_id
+               and ts.is_current = true
+              join public.v_ts_invoice_precheck pc
+                on pc.timesheet_id = tf.timesheet_id
+              where tf.client_id = v_client_id
+                and tf.is_current = true
+                and tf.locked_by_invoice_id is null
+                and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
+                and ts.revoked_at is null
+                and upper(coalesce(pc.precheck_status,'')) = 'OK'
+                -- if a selection list was provided, restrict to it
+                and (
+                  not (v_payload ? 'timesheet_ids' and jsonb_typeof(v_payload->'timesheet_ids') = 'array')
+                  or tf.timesheet_id in (
+                    select (v)::uuid
+                    from jsonb_array_elements_text(v_payload->'timesheet_ids') as t(v)
+                    where t.v ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                  )
+                )
+                and coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
+                and v_week_start <= v_anchor_ymd
+                and exists (
+                  select 1
+                  from jsonb_array_elements(coalesce(tf.invoice_breakdown_json->'segments','[]'::jsonb)) seg
+                  where nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') is null
+                    and nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date = v_week_start
+                    and nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date <> (ts.week_ending_date::date - 6)
+                    and (
+                      pc.require_reference_to_invoice is not true
+                      or btrim(coalesce(seg->>'ref_num','')) <> ''
+                    )
+                )
+            ) into v_has_due_delayed;
 
-            update public.invoice_jobs_outbox
-            set next_attempt_at = v_next_attempt_at,
-                last_error = 'NOT_DUE_YET'
-            where id = v_outbox_id;
+            if not coalesce(v_has_due_delayed,false) then
+              -- schedule the next attempt for 00:05 Europe/London on the day after week end
+              v_next_attempt_at := ((v_week_end_ymd + 1)::text || ' 00:05:00')::timestamp at time zone 'Europe/London';
 
-            outbox_id := v_outbox_id;
-            ok := false;
-            invoice_ids := null;
-            warnings := jsonb_build_object(
-              'status', 'NOT_DUE_YET',
-              'invoice_week_start', v_week_start::text,
-              'week_ending_date', v_week_end_ymd::text,
-              'allow_early', coalesce(v_allow_early,false),
-              'next_attempt_at_utc', to_jsonb(v_next_attempt_at)
-            );
-            return next;
-            continue;
+              update public.invoice_jobs_outbox
+              set next_attempt_at = v_next_attempt_at,
+                  last_error = 'NOT_DUE_YET'
+              where id = v_outbox_id;
+
+              outbox_id := v_outbox_id;
+              ok := false;
+              invoice_ids := null;
+              warnings := jsonb_build_object(
+                'status', 'NOT_DUE_YET',
+                'invoice_week_start', v_week_start::text,
+                'week_ending_date', v_week_end_ymd::text,
+                'allow_early', coalesce(v_allow_early,false),
+                'next_attempt_at_utc', to_jsonb(v_next_attempt_at)
+              );
+              return next;
+              continue;
+            end if;
           end if;
 
 
@@ -2332,10 +2387,11 @@ h_bh numeric;
              and jsonb_typeof(v_payload->'timesheet_ids') = 'array' then
 
             if jsonb_array_length(v_payload->'timesheet_ids') > 0 then
-              select array_agg(distinct x order by x::text)
+              -- NOTE: avoid DISTINCT+ORDER BY mismatch (42P10) by de-duping in a subquery then ordering in array_agg
+              select array_agg(x order by x::text)
               into v_limit_ts_ids
               from (
-                select (v)::uuid as x
+                select distinct (v)::uuid as x
                 from jsonb_array_elements_text(v_payload->'timesheet_ids') as t(v)
                 where t.v ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
               ) q;
@@ -2414,7 +2470,51 @@ limit 1;
             join public.timesheets ts on ts.timesheet_id = tf.timesheet_id
             join public.v_ts_invoice_precheck pc on pc.timesheet_id = tf.timesheet_id
             where tf.client_id = v_client_id
-              and ts.week_ending_date::date = (v_week_start + 6)
+              and (
+                -- Normal (non-delayed) cohort for this invoice week:
+                -- only include if the week has ended, unless allow_early=true.
+                (
+                  ts.week_ending_date::date = (v_week_start + 6)
+                  and (
+                    v_allow_early = true
+                    or (v_week_start + 6) < v_anchor_ymd
+                  )
+                  and (
+                    coalesce(tf.invoice_breakdown_json->>'mode','') <> 'SEGMENTS'
+                    or exists (
+                      select 1
+                      from jsonb_array_elements(coalesce(tf.invoice_breakdown_json->'segments','[]'::jsonb)) seg
+                      where nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') is null
+                        and coalesce(
+                              nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date,
+                              (ts.week_ending_date::date - 6)
+                            ) = v_week_start
+                        and (
+                          pc.require_reference_to_invoice is not true
+                          or btrim(coalesce(seg->>'ref_num','')) <> ''
+                        )
+                    )
+                  )
+                )
+                or
+                -- Delayed segments for this invoice week (from other weeks):
+                -- eligible once invoice_target_week_start has arrived (week start).
+                (
+                  coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
+                  and v_week_start <= v_anchor_ymd
+                  and exists (
+                    select 1
+                    from jsonb_array_elements(coalesce(tf.invoice_breakdown_json->'segments','[]'::jsonb)) seg
+                    where nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') is null
+                      and nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date = v_week_start
+                      and nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date <> (ts.week_ending_date::date - 6)
+                      and (
+                        pc.require_reference_to_invoice is not true
+                        or btrim(coalesce(seg->>'ref_num','')) <> ''
+                      )
+                  )
+                )
+              )
               and (v_limit_ts_ids is null or tf.timesheet_id = any(v_limit_ts_ids))
               and tf.is_current = true
               and tf.locked_by_invoice_id is null
