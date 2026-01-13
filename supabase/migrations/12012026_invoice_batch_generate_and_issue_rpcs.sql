@@ -29,12 +29,17 @@ as $$
 with anchor as (
   select (now() at time zone 'Europe/London')::date as anchor_ymd
 ),
-eligible as (
+
+-- ------------------------------------------------------------
+-- Base TSFIN rows that are "ready for invoice" at the timesheet level.
+-- Segment gating is applied later.
+-- ------------------------------------------------------------
+base as (
   select
     tf.timesheet_id,
     tf.client_id,
-    ts.week_ending_date::date as week_ending_date,
-    (ts.week_ending_date::date - interval '6 days')::date as invoice_week_start,
+    ts.week_ending_date::date as ts_week_ending_date,
+    (ts.week_ending_date::date - interval '6 days')::date as ts_invoice_week_start,
 
     s.client_name,
     s.candidate_name,
@@ -55,7 +60,9 @@ eligible as (
           'OVERRIDDEN'::public.validation_status_enum
         ])
       )
-    ) as blocked_by_hr_validation
+    ) as blocked_by_hr_validation,
+
+    tf.invoice_breakdown_json
 
   from public.timesheets_financials tf
   join public.timesheets ts
@@ -66,23 +73,155 @@ eligible as (
   left join public.v_timesheets_summary_base s
     on s.timesheet_id = tf.timesheet_id
 
-  cross join anchor a
-
   where tf.is_current = true
     and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
     and tf.locked_by_invoice_id is null
     and ts.revoked_at is null
     and upper(coalesce(pc.precheck_status,'')) = 'OK'
+),
 
-    -- default: only weeks already ended; UI override can include future weeks
+-- ------------------------------------------------------------
+-- SEGMENTS mode:
+-- Include ONLY unlocked segments.
+--
+-- Eligibility rules (as requested):
+--  A) If the parent timesheet week-ending has passed:
+--       include segments that are NOT delayed.
+--  B) If allow_early = true:
+--       include segments that are NOT delayed even if week-ending not passed.
+--  C) If a segment IS delayed (invoice_target_week_start differs from the
+--       timesheet's natural week start), include it only once its delay date
+--       has arrived: invoice_target_week_start <= LondonToday.
+--
+-- Grouping:
+--   invoice_week_start is the segment's target week (if set) else the
+--   timesheet's natural week start, so delayed segments appear in later weeks.
+-- ------------------------------------------------------------
+seg_rows as (
+  select
+    b.timesheet_id,
+    b.client_id,
+
+    coalesce(t.tgt_start, b.ts_invoice_week_start) as invoice_week_start,
+    (coalesce(t.tgt_start, b.ts_invoice_week_start) + interval '6 days')::date as week_ending_date,
+
+    b.client_name,
+    b.candidate_name,
+
+    coalesce(nullif(seg->>'charge_amount','')::numeric, 0) as seg_charge_ex_vat,
+
+    (
+      coalesce(nullif(seg->>'hours_day','')::numeric, 0) +
+      coalesce(nullif(seg->>'hours_night','')::numeric, 0) +
+      coalesce(nullif(seg->>'hours_sat','')::numeric, 0) +
+      coalesce(nullif(seg->>'hours_sun','')::numeric, 0) +
+      coalesce(nullif(seg->>'hours_bh','')::numeric, 0)
+    ) as seg_hours_total,
+
+    b.basis,
+    b.submission_mode,
+    b.validation_status,
+    b.hr_validation_required_for_invoice,
+    b.blocked_by_hr_validation
+
+  from base b
+  cross join lateral jsonb_array_elements(coalesce(b.invoice_breakdown_json->'segments','[]'::jsonb)) seg
+  cross join lateral (
+    select nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date as tgt_start
+  ) t
+  cross join anchor a
+
+  where coalesce(b.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
+    -- only segments not already locked to an invoice
+    and nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') is null
+    and (
+      -- NOT DELAYED: either no target week, or target week equals the natural week start
+      (
+        (t.tgt_start is null or t.tgt_start = b.ts_invoice_week_start)
+        and (
+          p_allow_early = true
+          or b.ts_week_ending_date < a.anchor_ymd
+        )
+      )
+      or
+      -- DELAYED: target week differs from natural week start; include only when delay date has arrived
+      (
+        t.tgt_start is not null
+        and t.tgt_start <> b.ts_invoice_week_start
+        and t.tgt_start <= a.anchor_ymd
+      )
+    )
+),
+
+seg_agg as (
+  select
+    r.timesheet_id,
+    r.client_id,
+    r.invoice_week_start,
+    r.week_ending_date,
+
+    r.client_name,
+    r.candidate_name,
+
+    round(coalesce(sum(r.seg_charge_ex_vat),0), 2) as total_charge_ex_vat,
+    round(coalesce(sum(r.seg_hours_total),0), 2) as total_hours,
+
+    r.basis,
+    r.submission_mode,
+    r.validation_status,
+    r.hr_validation_required_for_invoice,
+    r.blocked_by_hr_validation
+  from seg_rows r
+  group by
+    r.timesheet_id, r.client_id, r.invoice_week_start, r.week_ending_date,
+    r.client_name, r.candidate_name,
+    r.basis, r.submission_mode, r.validation_status,
+    r.hr_validation_required_for_invoice, r.blocked_by_hr_validation
+),
+
+-- ------------------------------------------------------------
+-- NON-SEGMENTS mode:
+-- allow_early controls whether future week-ending timesheets can be included.
+-- ------------------------------------------------------------
+nonseg as (
+  select
+    b.timesheet_id,
+    b.client_id,
+    b.ts_invoice_week_start as invoice_week_start,
+    b.ts_week_ending_date as week_ending_date,
+
+    b.client_name,
+    b.candidate_name,
+
+    b.total_charge_ex_vat,
+    b.total_hours,
+    b.basis,
+    b.submission_mode,
+    b.validation_status,
+    b.hr_validation_required_for_invoice,
+    b.blocked_by_hr_validation
+  from base b
+  cross join anchor a
+  where coalesce(b.invoice_breakdown_json->>'mode','') <> 'SEGMENTS'
     and (
       p_allow_early = true
-      or ts.week_ending_date::date < a.anchor_ymd
+      or b.ts_week_ending_date < a.anchor_ymd
     )
+),
 
-  order by ts.week_ending_date desc nulls last, s.client_name nulls last, s.candidate_name nulls last
+eligible as (
+  select * from seg_agg
+  union all
+  select * from nonseg
+),
+
+eligible_limited as (
+  select *
+  from eligible
+  order by week_ending_date desc nulls last, client_name nulls last, candidate_name nulls last
   limit greatest(1, least(coalesce(p_limit, 5000), 20000))
 ),
+
 weeks as (
   select
     e.client_id,
@@ -109,9 +248,10 @@ weeks as (
       order by e.candidate_name nulls last, e.timesheet_id::text
     ) as timesheets
 
-  from eligible e
+  from eligible_limited e
   group by e.client_id, e.invoice_week_start, e.week_ending_date
 ),
+
 clients as (
   select
     w.client_id,
@@ -129,6 +269,7 @@ clients as (
   from weeks w
   group by w.client_id
 )
+
 select coalesce(
   jsonb_agg(
     jsonb_build_object(
