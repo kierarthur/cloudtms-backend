@@ -17703,6 +17703,134 @@ async function getClientHolidayPctMap(env, clientIds, asOfYmd = null) {
   return withCORS(env, req, ok({ user: me }));
 }
 
+
+
+async function handleInvoiceSaveEdits(env, req, invoiceId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let payload = null;
+  try { payload = await parseJSONBody(req); } catch {}
+  if (!payload || typeof payload !== 'object') {
+    return withCORS(env, req, badRequest('Invalid JSON payload'));
+  }
+
+  try {
+    // ✅ Single atomic SQL transaction applies all edits + returns updated manifest
+    const manRes = await sbRpc(env, 'invoice_apply_edits', {
+      p_invoice_id: invoiceId,
+      p_payload: payload,
+      p_actor_user_id: user?.id || null
+    });
+
+    const manRows = Array.isArray(manRes) ? manRes : (manRes?.data || []);
+    const manifest = (manRows && manRows.length) ? manRows[0] : manRes;
+
+    if (!manifest || typeof manifest !== 'object') {
+      return withCORS(env, req, serverError('Failed to apply invoice edits (no manifest returned)'));
+    }
+
+    const invoice = manifest.invoice || manifest.invoice_row || null;
+    if (!invoice || !invoice.id) {
+      return withCORS(env, req, serverError('Failed to apply invoice edits (malformed manifest)'));
+    }
+
+    const header_snapshot_json =
+      (manifest.header_snapshot_json && typeof manifest.header_snapshot_json === 'object')
+        ? manifest.header_snapshot_json
+        : (invoice.header_snapshot_json && typeof invoice.header_snapshot_json === 'object' ? invoice.header_snapshot_json : {});
+
+    const lineRows = Array.isArray(manifest.lines) ? manifest.lines : [];
+
+    const items = lineRows.map(l => ({
+      invoice_line_id: l.id ?? null,
+      source_key: l.source_key ?? null,
+      booking_id: l.booking_id ?? null,
+      timesheet_id: l.timesheet_id ?? null,
+
+      // ✅ helpers for UI (timesheet vs adjustment)
+      is_adjustment: (l.is_adjustment != null)
+        ? !!l.is_adjustment
+        : (!l.timesheet_id || String(l?.meta_json?.line_type || '').toUpperCase() === 'ADJUSTMENT'),
+      line_type_norm: (typeof l.line_type_norm === 'string' && l.line_type_norm)
+        ? l.line_type_norm
+        : String(l?.meta_json?.line_type || '').toUpperCase(),
+
+      qty: {
+        day: l.hours_day, night: l.hours_night, sat: l.hours_sat, sun: l.hours_sun, bh: l.hours_bh
+      },
+      pay_rate: {
+        day: l.pay_day, night: l.pay_night, sat: l.pay_sat, sun: l.pay_sun, bh: l.pay_bh
+      },
+      charge_rate: {
+        day: l.charge_day, night: l.charge_night, sat: l.charge_sat, sun: l.charge_sun, bh: l.charge_bh
+      },
+
+      total_pay_ex_vat: l.total_pay_ex_vat ?? null,
+      total_charge_ex_vat: l.total_charge_ex_vat ?? null,
+      margin_ex_vat: l.margin_ex_vat ?? null,
+
+      vat_rate_pct: l.vat_rate_pct ?? null,
+      vat_amount: l.vat_amount ?? null,
+      total_inc_vat: l.total_inc_vat ?? null,
+
+      description: l.description ?? null,
+      paper_ts_r2_key: l.paper_ts_r2_key ?? null,
+
+      meta_json: (l.meta_json && typeof l.meta_json === 'object') ? l.meta_json : {}
+    }));
+
+    // Audit (best-effort)
+    try {
+      await writeAudit(
+        env,
+        user,
+        'INVOICE_EDITS_APPLIED',
+        { invoice_id: invoiceId, payload },
+        { entity: 'invoice', subject_id: invoiceId, req }
+      );
+    } catch {}
+
+    return withCORS(env, req, ok({
+      ok: true,
+      invoice,
+      items,
+      header_snapshot_json,
+      email_summary: manifest.email_summary ?? null,
+
+      // passthrough manifest payloads
+      attach_policy: manifest.attach_policy ?? null,
+      evidence: Array.isArray(manifest.evidence) ? manifest.evidence : [],
+      hr_source_rows_cache: Array.isArray(manifest.hr_source_rows_cache) ? manifest.hr_source_rows_cache : [],
+      tsfin_external_source_rows: Array.isArray(manifest.tsfin_external_source_rows) ? manifest.tsfin_external_source_rows : [],
+
+      // also return the raw manifest for any future UI needs
+      manifest
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+async function handleInvoiceEligibleTimesheets(env, req, invoiceId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  try {
+    const res = await sbRpc(env, 'invoice_eligible_timesheets_for_invoice', { p_invoice_id: invoiceId });
+
+    // RPC returns JSONB; sbRpc may return object or array depending on wrapper
+    const out = Array.isArray(res) ? (res[0] ?? res) : (res?.data ?? res);
+
+    return withCORS(env, req, ok(out));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+
+
+
 // ───────────────────────────────────────────────────────────────────────────────
 // 1) PAYMENTS & REMITTANCES
 // ───────────────────────────────────────────────────────────────────────────────
@@ -45131,6 +45259,14 @@ async function handleGetInvoice(env, req, invoiceId) {
       booking_id: l.booking_id ?? null,
       timesheet_id: l.timesheet_id ?? null,
 
+      // ✅ helpers for UI (timesheet vs adjustment)
+      is_adjustment: (l.is_adjustment != null)
+        ? !!l.is_adjustment
+        : (!l.timesheet_id || String(l?.meta_json?.line_type || '').toUpperCase() === 'ADJUSTMENT'),
+      line_type_norm: (typeof l.line_type_norm === 'string' && l.line_type_norm)
+        ? l.line_type_norm
+        : String(l?.meta_json?.line_type || '').toUpperCase(),
+
       qty: {
         day: l.hours_day, night: l.hours_night, sat: l.hours_sat, sun: l.hours_sun, bh: l.hours_bh
       },
@@ -45197,6 +45333,7 @@ async function handleGetInvoice(env, req, invoiceId) {
         invoice,
         items,
         header_snapshot_json,
+        email_summary: manifest.email_summary ?? null,
 
         // ✅ extra manifest payloads (useful later in invoice modal)
         attach_policy: manifest.attach_policy ?? null,
@@ -45212,6 +45349,7 @@ async function handleGetInvoice(env, req, invoiceId) {
       invoice,
       items,
       header_snapshot_json,
+      email_summary: manifest.email_summary ?? null,
 
       // ✅ extra manifest payloads (useful later in invoice modal)
       attach_policy: manifest.attach_policy ?? null,
@@ -62745,6 +62883,14 @@ if (req.method === 'POST' && p === '/api/invoices/batch-issue/confirm')       re
       {
         const invPaid = matchPath(p, '/api/invoices/:invoice_id/mark-paid');
         if (invPaid && req.method === 'POST')                                return handleInvoiceMarkPaid(env, req, invPaid.invoice_id);
+      }
+         {
+        const inv = matchPath(p, '/api/invoices/:invoice_id/save-edits');
+        if (inv && req.method === 'POST')                                    return handleInvoiceSaveEdits(env, req, inv.invoice_id);
+      }
+      {
+        const inv = matchPath(p, '/api/invoices/:invoice_id/eligible-timesheets');
+        if (inv && req.method === 'GET')                                     return handleInvoiceEligibleTimesheets(env, req, inv.invoice_id);
       }
       {
         const invUnpaid = matchPath(p, '/api/invoices/:invoice_id/mark-unpaid');
