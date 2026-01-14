@@ -294,22 +294,25 @@ begin
 end;
 $$;
 
-
 -- ============================================================
--- CloudTMS: invoice_outbox_enqueue_by_week(p_client_id, p_invoice_week_start, p_actor_user_id, p_meta)
--- NEW (manual/front-end enqueue BY_WEEK)
+-- CloudTMS: invoice_outbox_enqueue_by_week(p_client_id, p_invoice_week_start, p_actor_user_id, p_allow_early, p_meta)
+-- UPDATED: enqueue BY_WEEK with correct allow_early + delayed-segment eligibility
 --
--- Inserts a single BY_WEEK job with payload {client_id, invoice_week_start}.
--- Optional p_meta (if JSON object) is merged into payload (top-level).
--- Stores actor_user_id into payload for downstream use if desired.
+-- Core rules implemented:
+--  1) allow_early is ONLY about week-ending not yet passed (applies to SEGMENT + NON-SEGMENT)
+--  2) allow_early NEVER makes delayed segments eligible early
+--  3) delayed segments are eligible only when their invoice_target_week_start has been reached (<= London today)
 --
--- Idempotent: will not create duplicates for same (client_id, invoice_week_start).
--- Returns the outbox_id (existing or newly inserted).
+-- Safety:
+--  - Refuses enqueue if there are no due/invoiceable items for (client, invoice_week_start)
+--  - Preserves idempotency: reuses existing outbox row for same (client_id, invoice_week_start),
+--    but merges allow_early/actor/meta into payload for repeat calls.
 -- ============================================================
 create or replace function public.invoice_outbox_enqueue_by_week(
   p_client_id uuid,
   p_invoice_week_start date,
   p_actor_user_id uuid,
+  p_allow_early boolean default false,
   p_meta jsonb default null
 )
 returns uuid
@@ -321,6 +324,11 @@ declare
   v_payload jsonb;
   v_existing uuid;
   v_new uuid;
+
+  v_london_today date := (now() at time zone 'Europe/London')::date;
+  v_week_end date := (p_invoice_week_start + interval '6 days')::date;
+
+  v_has_due boolean := false;
 begin
   if p_client_id is null then
     raise exception 'client_id is required';
@@ -330,9 +338,96 @@ begin
     raise exception 'invoice_week_start is required';
   end if;
 
+  -- ------------------------------------------------------------
+  -- ✅ Due/invoiceable existence check (prevents preview/enqueue mismatch)
+  -- Implements the confirmed rules:
+  --   - allow_early applies to SEGMENTS + NON-SEGMENTS week-ending gate
+  --   - allow_early does NOT override delayed segments
+  --   - delayed segments eligible only once delay date reached (target week start <= today)
+  -- ------------------------------------------------------------
+  select exists (
+    -- NON-SEGMENTS (or SEGMENTS without per-segment delays): invoice week is natural week
+    select 1
+    from public.timesheets_financials tf
+    join public.timesheets ts
+      on ts.timesheet_id = tf.timesheet_id
+     and ts.is_current = true
+    join public.v_ts_invoice_precheck pc
+      on pc.timesheet_id = tf.timesheet_id
+    where tf.is_current = true
+      and tf.client_id = p_client_id
+      and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
+      and tf.locked_by_invoice_id is null
+      and ts.revoked_at is null
+      and upper(coalesce(pc.precheck_status,'')) = 'OK'
+      and coalesce(tf.invoice_breakdown_json->>'mode','') <> 'SEGMENTS'
+      and (ts.week_ending_date::date - 6) = p_invoice_week_start
+      and (p_allow_early = true or ts.week_ending_date::date < v_london_today)
+
+    union all
+
+    -- SEGMENTS mode: segment-level eligibility for this invoice week
+    select 1
+    from public.timesheets_financials tf
+    join public.timesheets ts
+      on ts.timesheet_id = tf.timesheet_id
+     and ts.is_current = true
+    join public.v_ts_invoice_precheck pc
+      on pc.timesheet_id = tf.timesheet_id
+    cross join lateral jsonb_array_elements(coalesce(tf.invoice_breakdown_json->'segments','[]'::jsonb)) seg
+    where tf.is_current = true
+      and tf.client_id = p_client_id
+      and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
+      and tf.locked_by_invoice_id is null
+      and ts.revoked_at is null
+      and upper(coalesce(pc.precheck_status,'')) = 'OK'
+      and coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
+      and nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') is null
+
+      -- segment belongs to this invoice_week_start (target week, else natural week)
+      and coalesce(
+            nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date,
+            (ts.week_ending_date::date - 6)
+          ) = p_invoice_week_start
+
+      and (
+        -- DELAYED segment:
+        -- invoice_target_week_start differs from natural week start
+        -- eligibility depends ONLY on delay reaching (<= today), NOT allow_early
+        (
+          nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '') is not null
+          and nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date <> (ts.week_ending_date::date - 6)
+          and nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date <= v_london_today
+        )
+        or
+        -- NON-DELAYED segment:
+        -- (target is null OR equals natural week start)
+        -- eligibility uses timesheet week-ending gate with allow_early
+        (
+          (
+            nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '') is null
+            or nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date = (ts.week_ending_date::date - 6)
+          )
+          and (p_allow_early = true or ts.week_ending_date::date < v_london_today)
+        )
+      )
+    limit 1
+  ) into v_has_due;
+
+  if not v_has_due then
+    -- Mirror existing UX: if week hasn't passed and allow_early is false, show that message.
+    if (p_allow_early is not true) and (v_week_end >= v_london_today) then
+      raise exception 'Week ending % has not passed (London today=%). Use allow_early to override.', v_week_end, v_london_today;
+    end if;
+
+    raise exception 'No invoiceable timesheets/segments for client=% and invoice_week_start=%', p_client_id, p_invoice_week_start;
+  end if;
+
+  -- Build payload
   v_payload := jsonb_build_object(
     'client_id', p_client_id::text,
-    'invoice_week_start', p_invoice_week_start::text
+    'invoice_week_start', p_invoice_week_start::text,
+    'allow_early', coalesce(p_allow_early, false)
   );
 
   if p_actor_user_id is not null then
@@ -347,6 +442,7 @@ begin
     end if;
   end if;
 
+  -- Idempotent: reuse existing outbox row if present
   select o.id
   into v_existing
   from public.invoice_jobs_outbox o
@@ -357,6 +453,11 @@ begin
   limit 1;
 
   if v_existing is not null then
+    -- Merge allow_early/actor/meta into existing payload so subsequent calls are consistent
+    update public.invoice_jobs_outbox o
+    set payload = coalesce(o.payload, '{}'::jsonb) || v_payload
+    where o.id = v_existing;
+
     return v_existing;
   end if;
 
@@ -367,6 +468,8 @@ begin
   return v_new;
 end;
 $$;
+
+
 
 -- ============================================================
 -- CloudTMS: invoice_outbox_enqueue(kind, payload, p_actor_user_id, p_meta)
