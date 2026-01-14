@@ -284,35 +284,17 @@ select coalesce(
 from clients c;
 $$;
 
-
 -- ============================================================
--- NEW: public.invoice_outbox_enqueue_by_week_selected(p_rows, p_actor_user_id, p_allow_early, p_meta)
--- Purpose:
---   - Enqueue 1 BY_WEEK outbox job per (client_id, invoice_week_start)
---   - Payload includes timesheet_ids restriction (selected-only invoicing)
---   - Includes allow_early boolean for whole modal run
+-- UPDATED: public.invoice_outbox_enqueue_by_week_selected(p_rows, p_actor_user_id, p_allow_early, p_meta)
 --
--- Safety:
---   - Validates all selected timesheets are eligible + match the specified (client, week)
---   - Default behaviour (p_allow_early=false): refuses future week-ending batches
---   - UI override (p_allow_early=true): allows future week-ending batches
+-- ✅ Logic implemented (as confirmed):
+--  - allow_early applies to BOTH segment and non-segment for the timesheet week-ending gate
+--  - allow_early NEVER makes delayed segments eligible
+--  - delayed segments are eligible only once their invoice_target_week_start (week start) has been reached (<= London today)
 --
--- Idempotency:
---   - If an outbox row already exists for (client_id, invoice_week_start), it UPDATEs payload by merge
---   - Otherwise inserts a new row
---
--- Input p_rows JSON format (array of objects):
---   [
---     {
---       "client_id": "<uuid>",
---       "invoice_week_start": "YYYY-MM-DD",
---       "timesheet_ids": ["<uuid>", ...]
---     },
---     ...
---   ]
---
--- Returns rows:
---   (client_id, invoice_week_start, outbox_id, action)
+-- Also fixes the earlier mismatch:
+--  - does NOT require ts.week_ending_date = invoice_week_end for SEGMENTS mode
+--  - validates selected timesheets based on segment-aware eligibility for the invoice_week_start
 -- ============================================================
 
 create or replace function public.invoice_outbox_enqueue_by_week_selected(
@@ -347,7 +329,6 @@ declare
 
   v_existing_id uuid;
   v_payload jsonb;
-  v_update_payload jsonb;
 begin
   if p_rows is null or jsonb_typeof(p_rows) <> 'array' then
     raise exception 'p_rows must be a JSON array';
@@ -378,11 +359,6 @@ begin
 
     v_week_end := (v_week_start + interval '6 days')::date;
 
-    -- default: do not allow future week-ending; UI override allows
-    if (p_allow_early is not true) and (v_week_end >= v_anchor_ymd) then
-      raise exception 'Week ending % has not passed (London today=%). Use allow_early to override.', v_week_end, v_anchor_ymd;
-    end if;
-
     -- parse timesheet_ids
     if not (v_row ? 'timesheet_ids') then
       raise exception 'row missing timesheet_ids';
@@ -392,8 +368,7 @@ begin
       raise exception 'row timesheet_ids must be a JSON array';
     end if;
 
-    -- NOTE: Postgres disallows ORDER BY expressions in DISTINCT aggregates unless they are part of the DISTINCT argument list.
-    -- We dedupe in a subquery, then apply deterministic ordering in array_agg.
+    -- NOTE: dedupe in a subquery, then apply deterministic ordering in array_agg.
     select array_agg(x order by x::text)
     into v_in_ids
     from (
@@ -406,9 +381,21 @@ begin
       raise exception 'row timesheet_ids empty/invalid';
     end if;
 
-    -- Validate that selected ids are eligible AND match (client, week)
-    -- NOTE: Postgres disallows ORDER BY expressions in DISTINCT aggregates unless they are part of the DISTINCT argument list.
-    -- We dedupe in a subquery, then apply deterministic ordering in array_agg.
+    -- ============================================================
+    -- ✅ Validate selected ids are eligible for (client, invoice_week_start),
+    -- applying the confirmed allow_early + delayed segment rules.
+    --
+    -- NON-SEGMENT (mode <> SEGMENTS):
+    --   eligible only when week has ended unless allow_early=true
+    --   matches invoice_week_start via (ts.week_ending_date - 6)
+    --
+    -- SEGMENTS:
+    --   eligible if there exists at least one UNLOCKED segment for this invoice_week_start
+    --   AND:
+    --     - if segment is delayed (target != natural): eligible only when target_week_start <= London today
+    --       (allow_early does NOT override this)
+    --     - if segment is not delayed (target null or == natural): uses week-ended gate unless allow_early=true
+    -- ============================================================
     select array_agg(x order by x::text)
     into v_ok_ids
     from (
@@ -425,16 +412,74 @@ begin
         and ts.revoked_at is null
         and upper(coalesce(pc.precheck_status,'')) = 'OK'
         and tf.client_id = v_client_id
-        and ts.week_ending_date::date = v_week_end
         and tf.timesheet_id = any(v_in_ids)
+        and (
+          -- ─────────────────────────────────────────────────────────────
+          -- NON-SEGMENTS path (week gate applies; allow_early overrides)
+          -- ─────────────────────────────────────────────────────────────
+          (
+            coalesce(tf.invoice_breakdown_json->>'mode','') <> 'SEGMENTS'
+            and (ts.week_ending_date::date - 6) = v_week_start
+            and (
+              p_allow_early = true
+              or ts.week_ending_date::date < v_anchor_ymd
+            )
+          )
+
+          or
+
+          -- ─────────────────────────────────────────────────────────────
+          -- SEGMENTS path (segment-aware; delayed segments ignore allow_early)
+          -- ─────────────────────────────────────────────────────────────
+          (
+            coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
+            and exists (
+              select 1
+              from jsonb_array_elements(coalesce(tf.invoice_breakdown_json->'segments','[]'::jsonb)) seg
+              where nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') is null
+                -- segment belongs to this invoice week (target if present else natural)
+                and coalesce(
+                      nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date,
+                      (ts.week_ending_date::date - 6)
+                    ) = v_week_start
+                and (
+                  -- DELAYED segment: target differs from natural; eligible only when delay has arrived (<= today)
+                  (
+                    nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '') is not null
+                    and nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date <> (ts.week_ending_date::date - 6)
+                    and nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date <= v_anchor_ymd
+                  )
+                  or
+                  -- NON-DELAYED segment: target null OR equals natural; week gate applies (allow_early overrides)
+                  (
+                    (
+                      nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '') is null
+                      or nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date = (ts.week_ending_date::date - 6)
+                    )
+                    and (
+                      p_allow_early = true
+                      or ts.week_ending_date::date < v_anchor_ymd
+                    )
+                  )
+                )
+            )
+          )
+        )
     ) q;
 
     if v_ok_ids is null or coalesce(array_length(v_ok_ids, 1), 0) = 0 then
-      raise exception 'No eligible timesheets for client=% and week_end=%', v_client_id, v_week_end;
+      -- If the week hasn't ended and allow_early is false, keep the UX message
+      if (p_allow_early is not true) and (v_week_end >= v_anchor_ymd) then
+        raise exception 'Week ending % has not passed (London today=%). Use allow_early to override.', v_week_end, v_anchor_ymd;
+      end if;
+
+      raise exception 'No eligible timesheets/segments for client=% and invoice_week_start=%', v_client_id, v_week_start;
     end if;
 
     if array_length(v_ok_ids, 1) <> array_length(v_in_ids, 1) then
-      raise exception 'Some selected timesheets are not eligible or do not match client/week (client=% week_end=%)', v_client_id, v_week_end;
+      -- Preserve the original strict behaviour: if user selected ids not eligible for this run, reject.
+      -- This can happen if some selected timesheets contain only delayed segments not yet due.
+      raise exception 'Some selected timesheets are not eligible or do not match client/week (client=% invoice_week_start=%)', v_client_id, v_week_start;
     end if;
 
     -- deterministic signature
@@ -472,7 +517,6 @@ begin
     limit 1;
 
     if v_existing_id is not null then
-      -- merge payload so we don't drop any existing keys; new keys override old
       update public.invoice_jobs_outbox o
       set payload = coalesce(o.payload, '{}'::jsonb) || v_payload
       where o.id = v_existing_id;
