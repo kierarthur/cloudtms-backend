@@ -2456,82 +2456,93 @@ limit 1;
 
           -- Load eligible TSFIN snaps for this client (matches JS)
           -- Apply v_ts_invoice_precheck OK + schedule-aware refs gating.
-          with snaps as (
-            select
-              tf.*,
-              ts.week_ending_date,
-              ts.booking_id,
-              ts.reference_number,
-              ts.contract_id as ts_contract_id,
-              ts.sheet_scope::text as sheet_scope,
-              coalesce(ts.submission_mode::text,'') as submission_mode,
-              ts.day_references_json,
-              ts.actual_schedule_json
-            from public.timesheets_financials tf
-            join public.timesheets ts on ts.timesheet_id = tf.timesheet_id
-            join public.v_ts_invoice_precheck pc on pc.timesheet_id = tf.timesheet_id
-            where tf.client_id = v_client_id
-              and (
-                -- Normal (non-delayed) cohort for this invoice week:
-                -- only include if the week has ended, unless allow_early=true.
+    with snaps as (
+  select
+    tf.*,
+    ts.week_ending_date,
+    ts.booking_id,
+    ts.reference_number,
+    ts.contract_id as ts_contract_id,
+    ts.sheet_scope::text as sheet_scope,
+    coalesce(ts.submission_mode::text,'') as submission_mode,
+    ts.day_references_json,
+    ts.actual_schedule_json
+  from public.timesheets_financials tf
+  join public.timesheets ts on ts.timesheet_id = tf.timesheet_id
+  join public.v_ts_invoice_precheck pc on pc.timesheet_id = tf.timesheet_id
+  where tf.client_id = v_client_id
+    and (
+      -- ─────────────────────────────────────────────────────────────
+      -- NON-SEGMENTS: natural week only; allow_early controls week-ending gate
+      -- ─────────────────────────────────────────────────────────────
+      (
+        coalesce(tf.invoice_breakdown_json->>'mode','') <> 'SEGMENTS'
+        and ts.week_ending_date::date = (v_week_start + 6)
+        and (
+          v_allow_early = true
+          or (v_week_start + 6) < v_anchor_ymd
+        )
+      )
+
+      or
+
+      -- ─────────────────────────────────────────────────────────────
+      -- SEGMENTS: segment-week driven; allow_early NEVER overrides delayed segments
+      -- ─────────────────────────────────────────────────────────────
+      (
+        coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
+        and exists (
+          select 1
+          from jsonb_array_elements(coalesce(tf.invoice_breakdown_json->'segments','[]'::jsonb)) seg
+          where nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') is null
+            and coalesce(
+                  nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date,
+                  (ts.week_ending_date::date - 6)
+                ) = v_week_start
+            and (
+              -- DELAYED segment: target differs from natural; eligible only once delay has arrived (<= today)
+              (
+                nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '') is not null
+                and nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date <> (ts.week_ending_date::date - 6)
+                and nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date <= v_anchor_ymd
+              )
+              or
+              -- NON-DELAYED segment: target null OR equals natural; week-ending gate uses allow_early
+              (
                 (
-                  ts.week_ending_date::date = (v_week_start + 6)
-                  and (
-                    v_allow_early = true
-                    or (v_week_start + 6) < v_anchor_ymd
-                  )
-                  and (
-                    coalesce(tf.invoice_breakdown_json->>'mode','') <> 'SEGMENTS'
-                    or exists (
-                      select 1
-                      from jsonb_array_elements(coalesce(tf.invoice_breakdown_json->'segments','[]'::jsonb)) seg
-                      where nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') is null
-                        and coalesce(
-                              nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date,
-                              (ts.week_ending_date::date - 6)
-                            ) = v_week_start
-                        and (
-                          pc.require_reference_to_invoice is not true
-                          or btrim(coalesce(seg->>'ref_num','')) <> ''
-                        )
-                    )
-                  )
+                  nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '') is null
+                  or nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date = (ts.week_ending_date::date - 6)
                 )
-                or
-                -- Delayed segments for this invoice week (from other weeks):
-                -- eligible once invoice_target_week_start has arrived (week start).
-                (
-                  coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
-                  and v_week_start <= v_anchor_ymd
-                  and exists (
-                    select 1
-                    from jsonb_array_elements(coalesce(tf.invoice_breakdown_json->'segments','[]'::jsonb)) seg
-                    where nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') is null
-                      and nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date = v_week_start
-                      and nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date <> (ts.week_ending_date::date - 6)
-                      and (
-                        pc.require_reference_to_invoice is not true
-                        or btrim(coalesce(seg->>'ref_num','')) <> ''
-                      )
-                  )
+                and (
+                  v_allow_early = true
+                  or (v_week_start + 6) < v_anchor_ymd
                 )
               )
-              and (v_limit_ts_ids is null or tf.timesheet_id = any(v_limit_ts_ids))
-              and tf.is_current = true
-              and tf.locked_by_invoice_id is null
-              and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
-              and upper(coalesce(pc.precheck_status,'')) = 'OK'
-              and (
-                pc.require_reference_to_invoice is not true
-                or public._inv_timesheet_has_invoice_reference(
-                      ts.sheet_scope::text,
-                      coalesce(ts.submission_mode::text,''),
-                      ts.reference_number,
-                      ts.day_references_json,
-                      ts.actual_schedule_json
-                   )
-              )
-          )
+            )
+            and (
+              pc.require_reference_to_invoice is not true
+              or btrim(coalesce(seg->>'ref_num','')) <> ''
+            )
+        )
+      )
+    )
+    and (v_limit_ts_ids is null or tf.timesheet_id = any(v_limit_ts_ids))
+    and tf.is_current = true
+    and tf.locked_by_invoice_id is null
+    and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
+    and upper(coalesce(pc.precheck_status,'')) = 'OK'
+    and (
+      pc.require_reference_to_invoice is not true
+      or public._inv_timesheet_has_invoice_reference(
+            ts.sheet_scope::text,
+            coalesce(ts.submission_mode::text,''),
+            ts.reference_number,
+            ts.day_references_json,
+            ts.actual_schedule_json
+         )
+    )
+)
+
           select
             jsonb_agg(to_jsonb(snaps)) as snaps_json
           into meta
