@@ -916,6 +916,11 @@ set search_path = public
 as $$
 declare
   v_now timestamptz := now();
+  v_terms_days int := null;
+  v_due_at timestamptz := null;
+  v_hdr jsonb := null;
+  v_client_id uuid := null;
+  v_cli record;
   v_ts_ids uuid[];
 
   v_reasons text[] := array[]::text[];
@@ -1070,10 +1075,44 @@ begin
   end if;
 
   -- No blockers => issue
-  update public.invoices
+  
+    -- Compute due_at_utc at issue time:
+    -- Prefer invoice header_snapshot_json.payment_terms_days; fallback to clients.payment_terms_days; default 30.
+    select i.client_id, i.header_snapshot_json
+    into v_client_id, v_hdr
+    from public.invoices i
+    where i.id = p_invoice_id;
+
+    begin
+      if v_hdr is not null
+         and jsonb_typeof(v_hdr) = 'object'
+         and (v_hdr ? 'payment_terms_days')
+      then
+        v_terms_days := (v_hdr->>'payment_terms_days')::int;
+      end if;
+    exception when others then
+      v_terms_days := null;
+    end;
+
+    if v_terms_days is null then
+      begin
+        select c.payment_terms_days
+        into v_terms_days
+        from public.clients c
+        where c.id = v_client_id;
+      exception when others then
+        v_terms_days := null;
+      end;
+    end if;
+
+    v_terms_days := coalesce(v_terms_days, 30);
+    v_due_at := v_now + make_interval(days => v_terms_days);
+
+update public.invoices
   set status = 'ISSUED'::public.invoice_status_enum,
       status_date_utc = v_now,
       issued_at_utc = v_now,
+      due_at_utc = v_due_at,
       on_hold_reason = null
   where id = p_invoice_id;
 
@@ -1221,7 +1260,11 @@ begin
   end;
 
   update public.invoices
-  set status = 'DRAFT'::public.invoice_status_enum,
+  set status = case
+        when paid_at_utc is not null then 'PAID'::public.invoice_status_enum
+        when issued_at_utc is not null then 'ISSUED'::public.invoice_status_enum
+        else 'DRAFT'::public.invoice_status_enum
+      end,
       status_date_utc = v_now,
       on_hold_reason = null
   where id = p_invoice_id;
@@ -1300,6 +1343,7 @@ begin
   set status = 'DRAFT'::public.invoice_status_enum,
       status_date_utc = v_now,
       issued_at_utc = null,
+      due_at_utc = null,
       on_hold_reason = null,
       invoice_pdf_r2_key = case when p_clear_pdf then null else invoice_pdf_r2_key end
   where id = p_invoice_id;
