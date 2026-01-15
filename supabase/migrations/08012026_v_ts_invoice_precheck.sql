@@ -8,6 +8,10 @@
 --  - Appends the 3 "effective_*" columns at the end
 --  - Uses London anchor date for selecting the latest effective client_settings row
 --  - Derives client_id + claim fields from current TSFIN (timesheets has no client_id)
+--
+-- UPDATED (per brief):
+--  - PDF gating (BLOCK_NO_PDF) does NOT apply when:
+--      total_hours = 0 AND (travel + accommodation + other + mileage charge totals) > 0
 -- ============================================================
 
 create or replace view public.v_ts_invoice_precheck as
@@ -31,6 +35,15 @@ select
        (ts.submission_mode = 'MANUAL'::submission_mode_enum and ts.manual_pdf_r2_key is null)
        or
        (ts.submission_mode is distinct from 'MANUAL'::submission_mode_enum and ts.generated_pdf_at_utc is null)
+     )
+     and not (
+       coalesce(tf.total_hours, 0) = 0
+       and (
+         coalesce(tf.travel_charge_ex_vat, 0)
+         + coalesce(tf.accommodation_charge_ex_vat, 0)
+         + coalesce(tf.other_charge_ex_vat, 0)
+         + coalesce(tf.mileage_charge_ex_vat, 0)
+       ) > 0
      )
       then 'BLOCK_NO_PDF'::text
 
@@ -158,6 +171,7 @@ left join public.contracts c
 left join lateral (
   select
     tf0.client_id,
+    tf0.total_hours,
 
     -- mileage
     tf0.mileage_units,
