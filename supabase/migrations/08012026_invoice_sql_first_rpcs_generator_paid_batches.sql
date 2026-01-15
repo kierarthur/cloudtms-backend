@@ -459,13 +459,10 @@ begin
 end;
 $$;
 
+-- Patch: populate pay_day/pay_night/pay_sat/pay_sun/pay_bh in invoice_lines
+-- Affects: public.invoice_generate_from_outbox_batch
+-- Generated from: 08012026_invoice_sql_first_rpcs_generator_paid_batches (9).sql
 
--- ============================================================
--- FINAL RPC: invoice_generate_from_outbox_batch
--- Supports outbox kinds:
---   - HOURS  (payload.timesheet_ids: uuid[])
---   - BY_WEEK (payload.client_id: uuid, payload.invoice_week_start: YYYY-MM-DD)
--- ============================================================
 create or replace function public.invoice_generate_from_outbox_batch(
   p_outbox_ids uuid[],
   p_actor_user_id uuid
@@ -1177,7 +1174,12 @@ limit 1;
                   public._inv_round2(d_rec.hours_sat),
                   public._inv_round2(d_rec.hours_sun),
                   public._inv_round2(d_rec.hours_bh),
-                  null,null,null,null,null,
+                  
+                    coalesce(s.pay_day,null),
+                    coalesce(s.pay_night,null),
+                    coalesce(s.pay_sat,null),
+                    coalesce(s.pay_sun,null),
+                    coalesce(s.pay_bh,null),
       coalesce(s.charge_day,null),
       coalesce(s.charge_night,null),
       coalesce(s.charge_sat,null),
@@ -1287,7 +1289,12 @@ limit 1;
                   values (
                     v_invoice_id, s.timesheet_id, s.booking_id, line_desc,
                     coalesce(s.hours_day,0), coalesce(s.hours_night,0), coalesce(s.hours_sat,0), coalesce(s.hours_sun,0), coalesce(s.hours_bh,0),
-                    null,null,null,null,null,
+                    
+                    coalesce(s.pay_day,null),
+                    coalesce(s.pay_night,null),
+                    coalesce(s.pay_sat,null),
+                    coalesce(s.pay_sun,null),
+                    coalesce(s.pay_bh,null),
       coalesce(s.charge_day,null),
       coalesce(s.charge_night,null),
       coalesce(s.charge_sat,null),
@@ -1426,7 +1433,12 @@ limit 1;
                   values (
                     v_invoice_id, s.timesheet_id, s.booking_id, line_desc,
                     0,0,0,0,0,
-                    null,null,null,null,null,
+                    
+                    coalesce(s.pay_day,null),
+                    coalesce(s.pay_night,null),
+                    coalesce(s.pay_sat,null),
+                    coalesce(s.pay_sun,null),
+                    coalesce(s.pay_bh,null),
       coalesce(s.charge_day,null),
       coalesce(s.charge_night,null),
       coalesce(s.charge_sat,null),
@@ -1529,7 +1541,12 @@ limit 1;
               values (
                 v_invoice_id, s.timesheet_id, s.booking_id, line_desc,
                 0,0,0,0,0,
-                null,null,null,null,null,
+                
+                    coalesce(s.pay_day,null),
+                    coalesce(s.pay_night,null),
+                    coalesce(s.pay_sat,null),
+                    coalesce(s.pay_sun,null),
+                    coalesce(s.pay_bh,null),
       coalesce(s.charge_day,null),
       coalesce(s.charge_night,null),
       coalesce(s.charge_sat,null),
@@ -1685,7 +1702,12 @@ limit 1;
                 values (
                   v_invoice_id, s.timesheet_id, s.booking_id, line_desc,
                   0,0,0,0,0,
-                  null,null,null,null,null,
+                  
+                    coalesce(s.pay_day,null),
+                    coalesce(s.pay_night,null),
+                    coalesce(s.pay_sat,null),
+                    coalesce(s.pay_sun,null),
+                    coalesce(s.pay_bh,null),
       coalesce(s.charge_day,null),
       coalesce(s.charge_night,null),
       coalesce(s.charge_sat,null),
@@ -1768,7 +1790,12 @@ limit 1;
                 values (
                   v_invoice_id, s.timesheet_id, s.booking_id, line_desc,
                   0,0,0,0,0,
-                  null,null,null,null,null,
+                  
+                    coalesce(s.pay_day,null),
+                    coalesce(s.pay_night,null),
+                    coalesce(s.pay_sat,null),
+                    coalesce(s.pay_sun,null),
+                    coalesce(s.pay_bh,null),
       coalesce(s.charge_day,null),
       coalesce(s.charge_night,null),
       coalesce(s.charge_sat,null),
@@ -1851,7 +1878,12 @@ limit 1;
                 values (
                   v_invoice_id, s.timesheet_id, s.booking_id, line_desc,
                   0,0,0,0,0,
-                  null,null,null,null,null,
+                  
+                    coalesce(s.pay_day,null),
+                    coalesce(s.pay_night,null),
+                    coalesce(s.pay_sat,null),
+                    coalesce(s.pay_sun,null),
+                    coalesce(s.pay_bh,null),
       coalesce(s.charge_day,null),
       coalesce(s.charge_night,null),
       coalesce(s.charge_sat,null),
@@ -1941,7 +1973,12 @@ limit 1;
               values (
                 v_invoice_id, s.timesheet_id, s.booking_id, line_desc,
                 0,0,0,0,0,
-                null,null,null,null,null,
+                
+                    coalesce(s.pay_day,null),
+                    coalesce(s.pay_night,null),
+                    coalesce(s.pay_sat,null),
+                    coalesce(s.pay_sun,null),
+                    coalesce(s.pay_bh,null),
       coalesce(s.charge_day,null),
       coalesce(s.charge_night,null),
       coalesce(s.charge_sat,null),
@@ -3423,7 +3460,12 @@ v_ip, v_ua, v_corr
                   public._inv_round2(bydate.hours_sat),
                   public._inv_round2(bydate.hours_sun),
                   public._inv_round2(bydate.hours_bh),
-                  null,null,null,null,null,
+                  
+                    coalesce(s.pay_day,null),
+                    coalesce(s.pay_night,null),
+                    coalesce(s.pay_sat,null),
+                    coalesce(s.pay_sun,null),
+                    coalesce(s.pay_bh,null),
       coalesce(s.charge_day,null),
       coalesce(s.charge_night,null),
       coalesce(s.charge_sat,null),
@@ -3551,7 +3593,12 @@ v_ip, v_ua, v_corr
                   values (
                     v_invoice_id, tsid, snap.booking_id, line_desc,
                     0,0,0,0,0,
-                    null,null,null,null,null,
+                    
+                    coalesce(s.pay_day,null),
+                    coalesce(s.pay_night,null),
+                    coalesce(s.pay_sat,null),
+                    coalesce(s.pay_sun,null),
+                    coalesce(s.pay_bh,null),
       coalesce(s.charge_day,null),
       coalesce(s.charge_night,null),
       coalesce(s.charge_sat,null),
@@ -3660,7 +3707,12 @@ else
     values (
       v_invoice_id, tsid, snap.booking_id, line_desc,
       h_day, h_night, h_sat, h_sun, h_bh,
-      null,null,null,null,null,
+      
+                    coalesce(snap.pay_day,null),
+                    coalesce(snap.pay_night,null),
+                    coalesce(snap.pay_sat,null),
+                    coalesce(snap.pay_sun,null),
+                    coalesce(snap.pay_bh,null),
       coalesce(snap.charge_day,null),
       coalesce(snap.charge_night,null),
       coalesce(snap.charge_sat,null),
@@ -3772,7 +3824,12 @@ end if;
               values (
                 v_invoice_id, tsid, snap.booking_id, line_desc,
                 0,0,0,0,0,
-                null,null,null,null,null,
+                
+                    coalesce(s.pay_day,null),
+                    coalesce(s.pay_night,null),
+                    coalesce(s.pay_sat,null),
+                    coalesce(s.pay_sun,null),
+                    coalesce(s.pay_bh,null),
       coalesce(s.charge_day,null),
       coalesce(s.charge_night,null),
       coalesce(s.charge_sat,null),
@@ -3913,7 +3970,12 @@ end if;
                 values (
                   v_invoice_id, tsid, snap.booking_id, line_desc,
                   0,0,0,0,0,
-                  null,null,null,null,null,
+                  
+                    coalesce(s.pay_day,null),
+                    coalesce(s.pay_night,null),
+                    coalesce(s.pay_sat,null),
+                    coalesce(s.pay_sun,null),
+                    coalesce(s.pay_bh,null),
       coalesce(s.charge_day,null),
       coalesce(s.charge_night,null),
       coalesce(s.charge_sat,null),
@@ -3986,7 +4048,12 @@ end if;
                 values (
                   v_invoice_id, tsid, snap.booking_id, line_desc,
                   0,0,0,0,0,
-                  null,null,null,null,null,
+                  
+                    coalesce(s.pay_day,null),
+                    coalesce(s.pay_night,null),
+                    coalesce(s.pay_sat,null),
+                    coalesce(s.pay_sun,null),
+                    coalesce(s.pay_bh,null),
       coalesce(s.charge_day,null),
       coalesce(s.charge_night,null),
       coalesce(s.charge_sat,null),
@@ -4059,7 +4126,12 @@ end if;
                 values (
                   v_invoice_id, tsid, snap.booking_id, line_desc,
                   0,0,0,0,0,
-                  null,null,null,null,null,
+                  
+                    coalesce(s.pay_day,null),
+                    coalesce(s.pay_night,null),
+                    coalesce(s.pay_sat,null),
+                    coalesce(s.pay_sun,null),
+                    coalesce(s.pay_bh,null),
       coalesce(s.charge_day,null),
       coalesce(s.charge_night,null),
       coalesce(s.charge_sat,null),
@@ -4141,7 +4213,12 @@ end if;
               values (
                 v_invoice_id, tsid, snap.booking_id, line_desc,
                 0,0,0,0,0,
-                null,null,null,null,null,
+                
+                    coalesce(s.pay_day,null),
+                    coalesce(s.pay_night,null),
+                    coalesce(s.pay_sat,null),
+                    coalesce(s.pay_sun,null),
+                    coalesce(s.pay_bh,null),
       coalesce(s.charge_day,null),
       coalesce(s.charge_night,null),
       coalesce(s.charge_sat,null),
