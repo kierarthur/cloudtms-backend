@@ -211,8 +211,10 @@ nonseg as (
 
 eligible as (
   select * from seg_agg
+  where round(coalesce(total_charge_ex_vat,0), 2) <> 0
   union all
   select * from nonseg
+  where round(coalesce(total_charge_ex_vat,0), 2) <> 0
 ),
 
 eligible_limited as (
@@ -250,12 +252,29 @@ weeks as (
 
   from eligible_limited e
   group by e.client_id, e.invoice_week_start, e.week_ending_date
+  having round(coalesce(sum(e.total_charge_ex_vat),0), 2) <> 0
 ),
 
 clients as (
   select
     w.client_id,
     max(w.client_name) as client_name,
+
+    coalesce(cs.invoice_consolidation_mode, 'NONE') as invoice_consolidation_mode,
+    case coalesce(cs.invoice_consolidation_mode, 'NONE')
+      when 'NONE' then 'One per timesheet'
+      when 'BY_WEEK' then 'Consolidated by week'
+      when 'ANY_WEEK' then 'Consolidated across weeks'
+      else 'One per timesheet'
+    end as consolidation_label,
+
+    case coalesce(cs.invoice_consolidation_mode, 'NONE')
+      when 'NONE' then coalesce(sum(jsonb_array_length(w.timesheets)), 0)
+      when 'BY_WEEK' then count(*)
+      when 'ANY_WEEK' then case when coalesce(sum(jsonb_array_length(w.timesheets)), 0) > 0 then 1 else 0 end
+      else coalesce(sum(jsonb_array_length(w.timesheets)), 0)
+    end as expected_invoice_count,
+
     jsonb_agg(
       jsonb_build_object(
         'invoice_week_start', w.invoice_week_start::text,
@@ -267,7 +286,16 @@ clients as (
       order by w.week_ending_date desc
     ) as weeks
   from weeks w
-  group by w.client_id
+  left join lateral (
+    select coalesce(cs0.invoice_consolidation_mode::text, 'NONE') as invoice_consolidation_mode
+    from public.client_settings cs0
+    cross join anchor a
+    where cs0.client_id = w.client_id
+      and (cs0.effective_from <= a.anchor_ymd or cs0.effective_from is null)
+    order by cs0.effective_from desc nulls last
+    limit 1
+  ) cs on true
+  group by w.client_id, cs.invoice_consolidation_mode
 )
 
 select coalesce(
@@ -275,6 +303,9 @@ select coalesce(
     jsonb_build_object(
       'client_id', c.client_id::text,
       'client_name', c.client_name,
+      'invoice_consolidation_mode', c.invoice_consolidation_mode,
+      'expected_invoice_count', c.expected_invoice_count,
+      'consolidation_label', c.consolidation_label,
       'weeks', c.weeks
     )
     order by c.client_name nulls last, c.client_id::text
@@ -321,6 +352,8 @@ declare
   v_client_id uuid;
   v_week_start date;
   v_week_end date;
+
+  v_invoice_consolidation_mode text;
 
   v_in_ids uuid[];
   v_ok_ids uuid[];
@@ -505,6 +538,32 @@ begin
         v_payload := v_payload || jsonb_build_object('meta', p_meta);
       end if;
     end if;
+
+    -- ------------------------------------------------------------
+    -- Store consolidation mode for traceability
+    -- (payload.meta.invoice_consolidation_mode)
+    -- ------------------------------------------------------------
+    select coalesce(cs0.invoice_consolidation_mode::text, 'NONE')
+      into v_invoice_consolidation_mode
+    from public.client_settings cs0
+    where cs0.client_id = v_client_id
+      and (cs0.effective_from <= v_anchor_ymd or cs0.effective_from is null)
+    order by cs0.effective_from desc nulls last
+    limit 1;
+
+    if v_invoice_consolidation_mode is null then
+      v_invoice_consolidation_mode := 'NONE';
+    end if;
+
+    v_payload := v_payload || jsonb_build_object(
+      'meta',
+      (
+        case
+          when jsonb_typeof(v_payload->'meta') = 'object' then coalesce(v_payload->'meta','{}'::jsonb)
+          else '{}'::jsonb
+        end
+      ) || jsonb_build_object('invoice_consolidation_mode', v_invoice_consolidation_mode)
+    );
 
     -- find existing outbox row for this (client, week)
     select o.id
