@@ -481,6 +481,12 @@ security definer
 set search_path = public
 as $$
 declare
+  v_consol_mode text := 'NONE';
+  v_outbox_invoice_ids uuid[] := array[]::uuid[];
+  v_outbox_warnings jsonb := '[]'::jsonb;
+  v_entries_all jsonb := '[]'::jsonb;
+  grp record;
+
   v_outbox_id uuid;
   v_job record;
 
@@ -784,7 +790,7 @@ limit 1;
 
 
           -- client_settings: HOURS uses effective_from<=anchor OR effective_from IS NULL (fallback row)
-          select cs.client_id, cs.vat_rate_pct, cs.hr_attach_to_invoice, cs.ts_attach_to_invoice, cs.effective_from
+          select cs.client_id, cs.vat_rate_pct, cs.hr_attach_to_invoice, cs.ts_attach_to_invoice, cs.invoice_consolidation_mode, cs.effective_from
           into v_cs
           from public.client_settings cs
           where cs.client_id = v_client_id
@@ -871,8 +877,8 @@ limit 1;
             'vat_chargeable', coalesce(v_client.vat_chargeable,true),
             'applied_vat_rate_pct', v_vat_rate,
             'payment_terms_days', v_terms_days,
-            'issued_at_utc', public._inv_iso_utc(v_now),
-            'due_at_utc', public._inv_iso_utc(v_due_at),
+            'issued_at_utc', null,
+            'due_at_utc', null,
             'stationery_key', v_stationery_key,
             'stationery_margins_mm', v_margins,
             'hide_bank_footer', v_hide_bank_footer,
@@ -900,14 +906,16 @@ limit 1;
       values (
         v_client_id,
         'DRAFT'::public.invoice_status_enum,
-        v_now,
-        v_due_at,
+        null,
+        null,
         0,0,0,
         v_header
       )
       returning id into v_invoice_id;
 
-      -- Track what THIS run actually inserted (so we can audit per-run delta)
+      -- record invoice for this outbox job
+      v_outbox_invoice_ids := array_append(v_outbox_invoice_ids, v_invoice_id);
+-- Track what THIS run actually inserted (so we can audit per-run delta)
       create temporary table if not exists pg_temp._inv_run_lines (
         timesheet_id uuid,
         source_key text,
@@ -1170,7 +1178,12 @@ limit 1;
                   public._inv_round2(d_rec.hours_sun),
                   public._inv_round2(d_rec.hours_bh),
                   null,null,null,null,null,
-                  null,null,null,null,null,
+      coalesce(s.charge_day,null),
+      coalesce(s.charge_night,null),
+      coalesce(s.charge_sat,null),
+      coalesce(s.charge_sun,null),
+      coalesce(s.charge_bh,null),
+
                   pay_ex, charge_ex, margin_ex,
                   v_vat_rate, vat_amt, inc_amt,
                   ('docs-pdf/timesheets/ts_' || s.timesheet_id::text || '.pdf'),
@@ -1275,7 +1288,12 @@ limit 1;
                     v_invoice_id, s.timesheet_id, s.booking_id, line_desc,
                     coalesce(s.hours_day,0), coalesce(s.hours_night,0), coalesce(s.hours_sat,0), coalesce(s.hours_sun,0), coalesce(s.hours_bh,0),
                     null,null,null,null,null,
-                    null,null,null,null,null,
+      coalesce(s.charge_day,null),
+      coalesce(s.charge_night,null),
+      coalesce(s.charge_sat,null),
+      coalesce(s.charge_sun,null),
+      coalesce(s.charge_bh,null),
+
                     base_pay_ex, base_chg_ex, margin_ex,
                     v_vat_rate, vat_amt, inc_amt,
                     ('docs-pdf/timesheets/ts_' || s.timesheet_id::text || '.pdf'),
@@ -1409,7 +1427,12 @@ limit 1;
                     v_invoice_id, s.timesheet_id, s.booking_id, line_desc,
                     0,0,0,0,0,
                     null,null,null,null,null,
-                    null,null,null,null,null,
+      coalesce(s.charge_day,null),
+      coalesce(s.charge_night,null),
+      coalesce(s.charge_sat,null),
+      coalesce(s.charge_sun,null),
+      coalesce(s.charge_bh,null),
+
                     pay_ex, charge_ex, margin_ex,
                     v_vat_rate, vat_amt, inc_amt,
                     ('docs-pdf/timesheets/ts_' || s.timesheet_id::text || '.pdf'),
@@ -1507,7 +1530,12 @@ limit 1;
                 v_invoice_id, s.timesheet_id, s.booking_id, line_desc,
                 0,0,0,0,0,
                 null,null,null,null,null,
-                null,null,null,null,null,
+      coalesce(s.charge_day,null),
+      coalesce(s.charge_night,null),
+      coalesce(s.charge_sat,null),
+      coalesce(s.charge_sun,null),
+      coalesce(s.charge_bh,null),
+
                 pay_ex, charge_ex, margin_ex,
                 v_vat_rate, vat_amt, inc_amt,
                 ('docs-pdf/timesheets/ts_' || s.timesheet_id::text || '.pdf'),
@@ -1658,7 +1686,12 @@ limit 1;
                   v_invoice_id, s.timesheet_id, s.booking_id, line_desc,
                   0,0,0,0,0,
                   null,null,null,null,null,
-                  null,null,null,null,null,
+      coalesce(s.charge_day,null),
+      coalesce(s.charge_night,null),
+      coalesce(s.charge_sat,null),
+      coalesce(s.charge_sun,null),
+      coalesce(s.charge_bh,null),
+
                   pay_ex, charge_ex, margin_ex,
                   v_vat_rate, vat_amt, inc_amt,
                   ('docs-pdf/timesheets/ts_' || s.timesheet_id::text || '.pdf'),
@@ -1736,7 +1769,12 @@ limit 1;
                   v_invoice_id, s.timesheet_id, s.booking_id, line_desc,
                   0,0,0,0,0,
                   null,null,null,null,null,
-                  null,null,null,null,null,
+      coalesce(s.charge_day,null),
+      coalesce(s.charge_night,null),
+      coalesce(s.charge_sat,null),
+      coalesce(s.charge_sun,null),
+      coalesce(s.charge_bh,null),
+
                   pay_ex, charge_ex, margin_ex,
                   v_vat_rate, vat_amt, inc_amt,
                   ('docs-pdf/timesheets/ts_' || s.timesheet_id::text || '.pdf'),
@@ -1814,7 +1852,12 @@ limit 1;
                   v_invoice_id, s.timesheet_id, s.booking_id, line_desc,
                   0,0,0,0,0,
                   null,null,null,null,null,
-                  null,null,null,null,null,
+      coalesce(s.charge_day,null),
+      coalesce(s.charge_night,null),
+      coalesce(s.charge_sat,null),
+      coalesce(s.charge_sun,null),
+      coalesce(s.charge_bh,null),
+
                   pay_ex, charge_ex, margin_ex,
                   v_vat_rate, vat_amt, inc_amt,
                   ('docs-pdf/timesheets/ts_' || s.timesheet_id::text || '.pdf'),
@@ -1899,7 +1942,12 @@ limit 1;
                 v_invoice_id, s.timesheet_id, s.booking_id, line_desc,
                 0,0,0,0,0,
                 null,null,null,null,null,
-                null,null,null,null,null,
+      coalesce(s.charge_day,null),
+      coalesce(s.charge_night,null),
+      coalesce(s.charge_sat,null),
+      coalesce(s.charge_sun,null),
+      coalesce(s.charge_bh,null),
+
                 pay_ex, charge_ex, margin_ex,
                 v_vat_rate, vat_amt, inc_amt,
                 ('docs-pdf/timesheets/ts_' || s.timesheet_id::text || '.pdf'),
@@ -2015,16 +2063,23 @@ limit 1;
   raise exception 'No eligible timesheets after contract-resolved invoice precheck/reference gating.';
 end if;
 
+
+-- Whole-timesheet lock (AGGREGATE only). For SEGMENTS, locking is handled by _inv_lock_segments_for_invoice.
 update public.timesheets_financials tf
 set
   locked_by_invoice_id = v_invoice_id,
   locked_at_utc = v_now,
-  updated_at = v_now,
-  invoice_breakdown_json = public._inv_lock_all_segments_json(tf.invoice_breakdown_json, v_invoice_id)
+  updated_at = v_now
 where tf.timesheet_id = any(v_ts_ids_to_use)
   and tf.is_current = true
   and tf.locked_by_invoice_id is null
-  and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum;
+  and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
+  and (
+    tf.invoice_breakdown_json is null
+    or jsonb_typeof(tf.invoice_breakdown_json) <> 'object'
+    or upper(coalesce(tf.invoice_breakdown_json->>'mode','')) <> 'SEGMENTS'
+  );
+
 
 
 
@@ -2140,12 +2195,13 @@ where tf.timesheet_id = any(v_ts_ids_to_use)
           end if;
 
 
-          -- SUCCESS: delete outbox row
+
+-- SUCCESS: delete outbox row
           delete from public.invoice_jobs_outbox where id = v_outbox_id;
 
           outbox_id := v_outbox_id;
           ok := true;
-          invoice_ids := array[v_invoice_id];
+          invoice_ids := v_outbox_invoice_ids;
           warnings := jsonb_build_object(
             'kind','HOURS',
             'invoice_id', v_invoice_id::text,
@@ -2170,6 +2226,10 @@ where tf.timesheet_id = any(v_ts_ids_to_use)
 
         -- Optional: selection restriction for Batch Generate (payload.timesheet_ids)
         v_limit_ts_ids uuid[];
+
+        -- Eligible timesheets after precheck/reference gating
+        v_ts_ids_to_use uuid[];
+
 
           v_client record;
           v_def record;
@@ -2432,7 +2492,7 @@ limit 1;
 
 
           -- client_settings: BY_WEEK uses effective_from <= anchorYmd (no NULL fallback)
-          select cs.client_id, cs.vat_rate_pct, cs.hr_attach_to_invoice, cs.ts_attach_to_invoice, cs.effective_from
+          select cs.client_id, cs.vat_rate_pct, cs.hr_attach_to_invoice, cs.ts_attach_to_invoice, cs.invoice_consolidation_mode, cs.effective_from
           into v_cs
           from public.client_settings cs
           where cs.client_id = v_client_id
@@ -2783,7 +2843,127 @@ limit 1;
 
           v_mode := case when v_all_selfbill then 'SELF_BILL' else 'NORMAL' end;
 
-          -- Obtain invoice (reuse or create)
+          -- 
+          -- Determine consolidation mode from client_settings (default NONE)
+          v_consol_mode := upper(coalesce(v_cs.invoice_consolidation_mode::text, 'NONE'));
+
+          -- Preserve original entries for splitting (NONE mode)
+          v_entries_all := v_entries;
+
+          -- Build per-invoice groups.
+          -- NONE  => one invoice per timesheet_id in this outbox job
+          -- BY_WEEK/ANY_WEEK => one invoice for the whole outbox job
+          create temporary table if not exists pg_temp._inv_groups(
+            ts_ids uuid[],
+            entries jsonb
+          ) on commit drop;
+
+          truncate pg_temp._inv_groups;
+
+          if v_consol_mode = 'NONE' then
+            insert into pg_temp._inv_groups(ts_ids, entries)
+            select
+              array[tsid]::uuid[] as ts_ids,
+              coalesce((
+                select jsonb_agg(e)
+                from jsonb_array_elements(v_entries_all) e
+                where nullif(coalesce(e->>'timesheet_id',''), '') is not null
+                  and (e->>'timesheet_id')::uuid = tsid
+              ), '[]'::jsonb) as entries
+            from unnest(v_ts_ids_to_use) tsid;
+          else
+            insert into pg_temp._inv_groups(ts_ids, entries)
+            values (v_ts_ids_to_use, v_entries_all);
+          end if;
+
+          -- Reset per-outbox accumulators
+          v_outbox_invoice_ids := array[]::uuid[];
+          v_outbox_warnings := '[]'::jsonb;
+
+          for grp in
+            select * from pg_temp._inv_groups
+          loop
+            -- apply group scope
+            v_ts_ids_to_use := grp.ts_ids;
+            v_timesheet_ids := grp.ts_ids;
+            v_entries := coalesce(grp.entries, '[]'::jsonb);
+            v_entry_count := coalesce(jsonb_array_length(v_entries), 0);
+
+            -- recompute allSelfBill check for this group
+            select bool_and(
+              upper(coalesce(e->>'basis','')) in (
+                'NHSP','NHSP_ADJUSTMENT','HEALTHROSTER_SELF_BILL','HEALTHROSTER_ADJUSTMENT'
+              )
+            )
+            into v_all_selfbill
+            from jsonb_array_elements(v_entries) e;
+
+            v_mode := case when v_all_selfbill then 'SELF_BILL' else 'NORMAL' end;
+
+            -- ensure header meta records consolidation mode
+
+                -- Obtain invoice (reuse or create)
+                -- Consolidation mode rules:
+                --   NONE    => always create a new invoice (one per timesheet group)
+                --   BY_WEEK => reuse an existing DRAFT/ON_HOLD invoice for this client+week, else create
+                --   ANY_WEEK=> reuse an existing DRAFT/ON_HOLD invoice for this client (week ignored), else create
+                --
+                -- NOTE: We never reuse ISSUED invoices. If an ISSUED invoice exists in ANY_WEEK mode, we append a warning
+                -- and create a fresh DRAFT invoice.
+
+                if v_consol_mode = 'ANY_WEEK' then
+                  declare v_issued_id uuid;
+                  begin
+                    select i.id
+                    into v_issued_id
+                    from public.invoices i
+                    where i.client_id = v_client_id
+                      and i.status = 'ISSUED'::public.invoice_status_enum
+                      and (i.header_snapshot_json->'meta'->>'source') = 'TSFIN_BY_WEEK'
+                    order by i.issued_at_utc desc nulls last
+                    limit 1;
+
+                    if found then
+                      v_outbox_warnings := v_outbox_warnings || jsonb_build_array(
+                        jsonb_build_object(
+                          'code','ISSUED_INVOICE_EXISTS_NEW_DRAFT',
+                          'message','Existing issued consolidated invoice found; a new draft invoice will be created for this batch.',
+                          'issued_invoice_id', v_issued_id::text
+                        )
+                      );
+                    end if;
+                  end;
+                end if;
+
+                if v_consol_mode <> 'NONE' then
+                  -- Try reuse for NORMAL (TSFIN_BY_WEEK)
+                  if not v_all_selfbill then
+                    select *
+                    into v_invoice
+                    from public.invoices i
+                    where i.client_id = v_client_id
+                      and i.status in (
+                        'DRAFT'::public.invoice_status_enum,
+                        'ON_HOLD'::public.invoice_status_enum
+                      )
+                      and (i.header_snapshot_json->'meta'->>'source') = 'TSFIN_BY_WEEK'
+                      and (
+                        (v_consol_mode = 'BY_WEEK' and (i.header_snapshot_json->'meta'->>'invoice_week_start') = v_week_start::text)
+                        or (v_consol_mode = 'ANY_WEEK')
+                      )
+                    order by i.created_at_utc desc nulls last
+                    limit 1;
+
+                    if found then
+                      v_created := false;
+                      v_invoice_id := v_invoice.id;
+                      v_outbox_invoice_ids := array_append(v_outbox_invoice_ids, v_invoice_id);
+                    end if;
+                  end if;
+                end if;
+
+                -- Self-bill and/or create path continues below
+
                 if v_all_selfbill then
             select *
             into v_invoice
@@ -2791,18 +2971,21 @@ limit 1;
             where i.client_id = v_client_id
               and i.status in (
                 'DRAFT'::public.invoice_status_enum,
-                'ON_HOLD'::public.invoice_status_enum,
-                'ISSUED'::public.invoice_status_enum
+                'ON_HOLD'::public.invoice_status_enum
               )
-              and (i.header_snapshot_json->'meta'->>'source') = 'TSFIN_SEGMENTS'
-              and (i.header_snapshot_json->'meta'->>'invoice_week_start') = v_week_start::text
+              and ((i.header_snapshot_json->'meta'->>'source') = 'TSFIN_SEGMENTS' or (i.header_snapshot_json->'meta'->>'source') = 'TSFIN_BY_WEEK')
+              and (
+              (v_consol_mode = 'BY_WEEK' and (i.header_snapshot_json->'meta'->>'invoice_week_start') = v_week_start::text)
+              or (v_consol_mode = 'ANY_WEEK')
+            )
             limit 1;
 
 
             if found then
               v_created := false;
               v_invoice_id := v_invoice.id;
-            else
+              v_outbox_invoice_ids := array_append(v_outbox_invoice_ids, v_invoice_id);
+else
               -- Create self-bill invoice header exactly like findOrCreateSelfBillInvoice
                 declare
                 sb_requires_hr boolean := false;
@@ -2847,8 +3030,8 @@ limit 1;
                   'vat_chargeable', coalesce(v_client.vat_chargeable,true),
                   'applied_vat_rate_pct', v_vat_rate,
                   'payment_terms_days', v_terms_days,
-                  'issued_at_utc', public._inv_iso_utc(v_now),
-                  'due_at_utc', public._inv_iso_utc(v_due_at),
+                  'issued_at_utc', null,
+                  'due_at_utc', null,
                   'stationery_key', nullif(btrim(coalesce(v_payload->>'stationery_key','')), ''),
                   'stationery_margins_mm', null,
                   'hide_bank_footer', null,
@@ -2887,17 +3070,18 @@ limit 1;
                 )
                 values (
                   v_client_id,
-                  'ISSUED'::public.invoice_status_enum,
+                  'DRAFT'::public.invoice_status_enum,
                   v_now,
-                  v_now,
-                  v_due_at,
+                  null,
+                  null,
                   0,0,0,
                   v_header
                 )
                 returning id into v_invoice_id;
 
-
-                v_created := true;
+      -- record invoice for this outbox job
+      v_outbox_invoice_ids := array_append(v_outbox_invoice_ids, v_invoice_id);
+v_created := true;
               end;
             end if;
             -- Ensure self-bill invoices carry attach_policy (patch best-effort like JS)
@@ -2915,37 +3099,7 @@ limit 1;
               ),
               updated_at = v_now
             where i.id = v_invoice_id;
-
-            -- Self-bill rule: if this invoice is still DRAFT, promote it to ISSUED immediately
-            -- (Do NOT override ON_HOLD)
-            update public.invoices i
-            set
-              status = 'ISSUED'::public.invoice_status_enum,
-              status_date_utc = v_now,
-              issued_at_utc = coalesce(i.issued_at_utc, v_now),
-              on_hold_reason = null,
-              updated_at = v_now
-            where i.id = v_invoice_id
-              and i.status = 'DRAFT'::public.invoice_status_enum;
-
-            if found then
-              perform public._inv_write_audit(
-                p_actor_user_id,
-                'INVOICE_SELF_BILL_ISSUED',
-                jsonb_build_object(
-                  'invoice_id', v_invoice_id::text,
-                  'client_id', v_client_id::text,
-                  'invoice_week_start', v_week_start::text,
-                  'mode', 'SELF_BILL',
-                  'issued_at_utc', public._inv_iso_utc(v_now)
-                ),
-                'invoices',
-                v_invoice_id::text,
-                null,
-                null,
-                v_ip, v_ua, v_corr
-              );
-            end if;
+            -- Self-bill auto-issue removed (invoices remain DRAFT until explicitly issued)
 
 
           else
@@ -2958,8 +3112,8 @@ limit 1;
               'vat_chargeable', coalesce(v_client.vat_chargeable,true),
               'applied_vat_rate_pct', v_vat_rate,
               'payment_terms_days', v_terms_days,
-              'issued_at_utc', public._inv_iso_utc(v_now),
-              'due_at_utc', public._inv_iso_utc(v_due_at),
+              'issued_at_utc', null,
+              'due_at_utc', null,
               'stationery_key', nullif(btrim(coalesce(v_payload->>'stationery_key','')), ''),
               'stationery_margins_mm', null,
               'hide_bank_footer', null,
@@ -2971,6 +3125,8 @@ limit 1;
               'vat_registration_number', v_def.vat_registration_number,
               'meta', jsonb_build_object(
                 'source','TSFIN_BY_WEEK',
+                'consolidation_mode', v_consol_mode,
+
                 'invoice_week_start', v_week_start::text,
                 'timesheet_count', coalesce(array_length(v_timesheet_ids,1),0),
                 'segment_count', v_entry_count
@@ -2989,15 +3145,18 @@ limit 1;
               header_snapshot_json
             )
             values (
-              v_client_id,
-              'DRAFT'::public.invoice_status_enum,
-              v_now,
-              v_due_at,
+        v_client_id,
+        'DRAFT'::public.invoice_status_enum,
+        null,
+        null,
               0,0,0,
               v_header
             )
             returning id into v_invoice_id;
-            v_created := true;
+
+      -- record invoice for this outbox job
+      v_outbox_invoice_ids := array_append(v_outbox_invoice_ids, v_invoice_id);
+v_created := true;
           end if;
 
       -- Track what THIS run actually inserted (so we can audit per-run delta)
@@ -3265,7 +3424,12 @@ v_ip, v_ua, v_corr
                   public._inv_round2(bydate.hours_sun),
                   public._inv_round2(bydate.hours_bh),
                   null,null,null,null,null,
-                  null,null,null,null,null,
+      coalesce(s.charge_day,null),
+      coalesce(s.charge_night,null),
+      coalesce(s.charge_sat,null),
+      coalesce(s.charge_sun,null),
+      coalesce(s.charge_bh,null),
+
                   pay_ex, chg_ex, margin_ex,
                   v_vat_rate, vat_amt, inc_amt,
                   ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
@@ -3388,7 +3552,12 @@ v_ip, v_ua, v_corr
                     v_invoice_id, tsid, snap.booking_id, line_desc,
                     0,0,0,0,0,
                     null,null,null,null,null,
-                    null,null,null,null,null,
+      coalesce(s.charge_day,null),
+      coalesce(s.charge_night,null),
+      coalesce(s.charge_sat,null),
+      coalesce(s.charge_sun,null),
+      coalesce(s.charge_bh,null),
+
                     pay_ex, chg_ex, margin_ex,
                     v_vat_rate, vat_amt, inc_amt,
                     ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
@@ -3492,7 +3661,12 @@ else
       v_invoice_id, tsid, snap.booking_id, line_desc,
       h_day, h_night, h_sat, h_sun, h_bh,
       null,null,null,null,null,
-      null,null,null,null,null,
+      coalesce(snap.charge_day,null),
+      coalesce(snap.charge_night,null),
+      coalesce(snap.charge_sat,null),
+      coalesce(snap.charge_sun,null),
+      coalesce(snap.charge_bh,null),
+
       pay_ex, chg_ex, margin_ex,
       v_vat_rate, vat_amt, inc_amt,
       ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
@@ -3599,7 +3773,12 @@ end if;
                 v_invoice_id, tsid, snap.booking_id, line_desc,
                 0,0,0,0,0,
                 null,null,null,null,null,
-                null,null,null,null,null,
+      coalesce(s.charge_day,null),
+      coalesce(s.charge_night,null),
+      coalesce(s.charge_sat,null),
+      coalesce(s.charge_sun,null),
+      coalesce(s.charge_bh,null),
+
                 pay_ex, chg_ex, margin_ex,
                 v_vat_rate, vat_amt, inc_amt,
                 ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
@@ -3735,7 +3914,12 @@ end if;
                   v_invoice_id, tsid, snap.booking_id, line_desc,
                   0,0,0,0,0,
                   null,null,null,null,null,
-                  null,null,null,null,null,
+      coalesce(s.charge_day,null),
+      coalesce(s.charge_night,null),
+      coalesce(s.charge_sat,null),
+      coalesce(s.charge_sun,null),
+      coalesce(s.charge_bh,null),
+
                   pay_ex, chg_ex, margin_ex,
                   v_vat_rate, vat_amt, inc_amt,
                   ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
@@ -3803,7 +3987,12 @@ end if;
                   v_invoice_id, tsid, snap.booking_id, line_desc,
                   0,0,0,0,0,
                   null,null,null,null,null,
-                  null,null,null,null,null,
+      coalesce(s.charge_day,null),
+      coalesce(s.charge_night,null),
+      coalesce(s.charge_sat,null),
+      coalesce(s.charge_sun,null),
+      coalesce(s.charge_bh,null),
+
                   pay_ex, chg_ex, margin_ex,
                   v_vat_rate, vat_amt, inc_amt,
                   ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
@@ -3871,7 +4060,12 @@ end if;
                   v_invoice_id, tsid, snap.booking_id, line_desc,
                   0,0,0,0,0,
                   null,null,null,null,null,
-                  null,null,null,null,null,
+      coalesce(s.charge_day,null),
+      coalesce(s.charge_night,null),
+      coalesce(s.charge_sat,null),
+      coalesce(s.charge_sun,null),
+      coalesce(s.charge_bh,null),
+
                   pay_ex, chg_ex, margin_ex,
                   v_vat_rate, vat_amt, inc_amt,
                   ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
@@ -3948,7 +4142,12 @@ end if;
                 v_invoice_id, tsid, snap.booking_id, line_desc,
                 0,0,0,0,0,
                 null,null,null,null,null,
-                null,null,null,null,null,
+      coalesce(s.charge_day,null),
+      coalesce(s.charge_night,null),
+      coalesce(s.charge_sat,null),
+      coalesce(s.charge_sun,null),
+      coalesce(s.charge_bh,null),
+
                 pay_ex, chg_ex, margin_ex,
                 v_vat_rate, vat_amt, inc_amt,
                 ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
@@ -4162,15 +4361,19 @@ end if;
             end loop;
           end if;
 
+          end loop;
           -- SUCCESS: delete outbox row
           delete from public.invoice_jobs_outbox where id = v_outbox_id;
 
           outbox_id := v_outbox_id;
           ok := true;
-          invoice_ids := array[v_invoice_id];
+          invoice_ids := v_outbox_invoice_ids;
           warnings := jsonb_build_object(
             'kind','BY_WEEK',
+            'invoice_ids', v_outbox_invoice_ids,
             'invoice_id', v_invoice_id::text,
+            'warnings', v_outbox_warnings,
+
             'client_id', v_client_id::text,
             'invoice_week_start', v_week_start::text,
             'mode', v_mode
