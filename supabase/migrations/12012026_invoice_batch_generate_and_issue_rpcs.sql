@@ -15,6 +15,12 @@
 -- Returns:
 --   jsonb array: [{client_id, client_name, weeks:[{invoice_week_start, week_ending_date, subtotal_ex_vat, total_hours, timesheets:[...]}]}]
 -- ============================================================
+-- ============================================================
+-- PATCH: invoice_batch_generate_candidates
+-- Adds precheck_status + has_timesheet_evidence_pdf to preview output.
+-- Requires: public.v_ts_invoice_precheck has column has_timesheet_evidence_pdf.
+-- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
+-- ============================================================
 
 create or replace function public.invoice_batch_generate_candidates(
   p_allow_early boolean default false,
@@ -61,6 +67,10 @@ base as (
         ])
       )
     ) as blocked_by_hr_validation,
+
+    -- Precheck diagnostics for UI
+    pc.precheck_status as precheck_status,
+    coalesce(pc.has_timesheet_evidence_pdf, false) as has_timesheet_evidence_pdf,
 
     tf.invoice_breakdown_json
 
@@ -122,7 +132,10 @@ seg_rows as (
     b.submission_mode,
     b.validation_status,
     b.hr_validation_required_for_invoice,
-    b.blocked_by_hr_validation
+    b.blocked_by_hr_validation,
+
+    b.precheck_status,
+    b.has_timesheet_evidence_pdf
 
   from base b
   cross join lateral jsonb_array_elements(coalesce(b.invoice_breakdown_json->'segments','[]'::jsonb)) seg
@@ -170,13 +183,17 @@ seg_agg as (
     r.submission_mode,
     r.validation_status,
     r.hr_validation_required_for_invoice,
-    r.blocked_by_hr_validation
+    r.blocked_by_hr_validation,
+
+    r.precheck_status,
+    r.has_timesheet_evidence_pdf
   from seg_rows r
   group by
     r.timesheet_id, r.client_id, r.invoice_week_start, r.week_ending_date,
     r.client_name, r.candidate_name,
     r.basis, r.submission_mode, r.validation_status,
-    r.hr_validation_required_for_invoice, r.blocked_by_hr_validation
+    r.hr_validation_required_for_invoice, r.blocked_by_hr_validation,
+    r.precheck_status, r.has_timesheet_evidence_pdf
 ),
 
 -- ------------------------------------------------------------
@@ -199,7 +216,10 @@ nonseg as (
     b.submission_mode,
     b.validation_status,
     b.hr_validation_required_for_invoice,
-    b.blocked_by_hr_validation
+    b.blocked_by_hr_validation,
+
+    b.precheck_status,
+    b.has_timesheet_evidence_pdf
   from base b
   cross join anchor a
   where coalesce(b.invoice_breakdown_json->>'mode','') <> 'SEGMENTS'
@@ -245,7 +265,10 @@ weeks as (
         'submission_mode', coalesce(e.submission_mode::text, ''),
         'validation_status', coalesce(e.validation_status::text, ''),
         'hr_validation_required_for_invoice', e.hr_validation_required_for_invoice,
-        'blocked_by_hr_validation', e.blocked_by_hr_validation
+        'blocked_by_hr_validation', e.blocked_by_hr_validation,
+        -- New: precheck diagnostics for UI
+        'precheck_status', coalesce(e.precheck_status::text, ''),
+        'has_timesheet_evidence_pdf', coalesce(e.has_timesheet_evidence_pdf, false)
       )
       order by e.candidate_name nulls last, e.timesheet_id::text
     ) as timesheets
