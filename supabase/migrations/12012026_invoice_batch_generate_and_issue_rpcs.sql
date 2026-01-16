@@ -682,25 +682,9 @@ begin
 end;
 $$;
 
-
--- ============================================================
--- NEW: public.invoice_batch_issue_candidates(p_allow_early, p_limit)
--- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
---
--- Returns JSON grouped by:
---   client -> week_ending_date -> invoices[]
---
--- Week ending derivation (robust):
---   1) Prefer MAX(timesheets.week_ending_date) from invoice_lines.timesheet_id
---   2) Fallback to header_snapshot_json meta.invoice_week_start + 6 days (if present)
---
--- Default: exclude weeks that have not ended yet (London date).
--- Override: p_allow_early=true includes future week-ending groups.
--- ============================================================
-
-create or replace function public.invoice_batch_issue_candidates(
+create or replace function public.invoice_batch_generate_candidates(
   p_allow_early boolean default false,
-  p_limit int default 2000
+  p_limit int default 5000
 )
 returns jsonb
 language sql
@@ -711,136 +695,326 @@ as $$
 with anchor as (
   select (now() at time zone 'Europe/London')::date as anchor_ymd
 ),
-inv_base as (
-  select
-    i.id as invoice_id,
-    i.client_id,
-    i.invoice_no,
-    i.status::text as status,
-    i.on_hold_reason,
-    coalesce(i.subtotal_ex_vat, 0)::numeric as subtotal_ex_vat,
-    coalesce(i.vat_amount, 0)::numeric as vat_amount,
-    coalesce(i.total_inc_vat, 0)::numeric as total_inc_vat,
-    i.header_snapshot_json,
 
-    -- detect self-bill from header meta (robust string test)
+-- ------------------------------------------------------------
+-- Base TSFIN rows that are "ready for invoice" at the timesheet level.
+-- Segment gating is applied later.
+-- ------------------------------------------------------------
+base as (
+  select
+    tf.timesheet_id,
+    tf.client_id,
+    ts.week_ending_date::date as ts_week_ending_date,
+    (ts.week_ending_date::date - interval '6 days')::date as ts_invoice_week_start,
+
+    s.client_name,
+    s.candidate_name,
+
+    tf.total_charge_ex_vat,
+    tf.total_hours,
+    tf.basis,
+    ts.submission_mode,
+    s.validation_status,
+
+    coalesce(s.hr_validation_required_for_invoice, false) as hr_validation_required_for_invoice,
     (
-      lower(coalesce(i.header_snapshot_json #>> '{meta,self_bill}', i.header_snapshot_json->>'self_bill', '')) in ('true','t','1','yes')
-    ) as is_self_bill,
+      coalesce(s.hr_validation_required_for_invoice, false) = true
+      and (
+        s.validation_status is null
+        or s.validation_status <> all (array[
+          'VALIDATION_OK'::public.validation_status_enum,
+          'OVERRIDDEN'::public.validation_status_enum
+        ])
+      )
+    ) as blocked_by_hr_validation,
 
-    -- week_start fallback from header meta (robust)
-    nullif(btrim(coalesce(i.header_snapshot_json #>> '{meta,invoice_week_start}',
-                          i.header_snapshot_json->>'invoice_week_start', '')), '') as hdr_week_start_txt
+    -- Precheck diagnostics for UI
+    pc.precheck_status as precheck_status,
+    coalesce(pc.has_timesheet_evidence_pdf, false) as has_timesheet_evidence_pdf,
 
-  from public.invoices i
-  where i.type::text = 'INVOICE'
-    and i.status::text in ('DRAFT','ON_HOLD')
-  order by i.created_at desc nulls last
-  limit greatest(1, least(coalesce(p_limit, 2000), 20000))
+    tf.invoice_breakdown_json
+
+  from public.timesheets_financials tf
+  join public.timesheets ts
+    on ts.timesheet_id = tf.timesheet_id
+   and ts.is_current = true
+  join public.v_ts_invoice_precheck pc
+    on pc.timesheet_id = tf.timesheet_id
+  left join public.v_timesheets_summary_base s
+    on s.timesheet_id = tf.timesheet_id
+
+  where tf.is_current = true
+    and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
+    and tf.locked_by_invoice_id is null
+    and ts.revoked_at is null
+    and upper(coalesce(pc.precheck_status,'')) = 'OK'
 ),
-inv_week as (
+
+-- ------------------------------------------------------------
+-- SEGMENTS mode:
+-- Include ONLY unlocked segments.
+-- ------------------------------------------------------------
+seg_rows as (
   select
-    b.invoice_id,
+    b.timesheet_id,
     b.client_id,
-    b.invoice_no,
-    b.status,
-    b.on_hold_reason,
-    b.subtotal_ex_vat,
-    b.vat_amount,
-    b.total_inc_vat,
-    b.is_self_bill,
-    b.header_snapshot_json,
 
-    -- compute week_start from header meta (if parseable)
-    case
-      when b.hdr_week_start_txt ~ '^\d{4}-\d{2}-\d{2}$' then b.hdr_week_start_txt::date
-      else null::date
-    end as invoice_week_start,
+    coalesce(t.tgt_start, b.ts_invoice_week_start) as invoice_week_start,
+    (coalesce(t.tgt_start, b.ts_invoice_week_start) + interval '6 days')::date as week_ending_date,
 
-    -- compute week_end:
-    --   prefer max(timesheets.week_ending_date), else week_start+6
-    coalesce(
-      max(ts.week_ending_date)::date,
-      case
-        when b.hdr_week_start_txt ~ '^\d{4}-\d{2}-\d{2}$'
-          then (b.hdr_week_start_txt::date + interval '6 days')::date
-        else null::date
-      end
-    ) as week_ending_date
+    b.client_name,
+    b.candidate_name,
 
-  from inv_base b
-  left join public.invoice_lines il
-    on il.invoice_id = b.invoice_id
-   and il.timesheet_id is not null
-  left join public.timesheets ts
-    on ts.timesheet_id = il.timesheet_id
+    coalesce(nullif(seg->>'charge_amount','')::numeric, 0) as seg_charge_ex_vat,
 
-  group by
-    b.invoice_id, b.client_id, b.invoice_no, b.status, b.on_hold_reason,
-    b.subtotal_ex_vat, b.vat_amount, b.total_inc_vat, b.is_self_bill, b.header_snapshot_json,
-    b.hdr_week_start_txt
-),
-filtered as (
-  select
-    w.*,
-    c.name as client_name
-  from inv_week w
-  join public.clients c on c.id = w.client_id
+    (
+      coalesce(nullif(seg->>'hours_day','')::numeric, 0) +
+      coalesce(nullif(seg->>'hours_night','')::numeric, 0) +
+      coalesce(nullif(seg->>'hours_sat','')::numeric, 0) +
+      coalesce(nullif(seg->>'hours_sun','')::numeric, 0) +
+      coalesce(nullif(seg->>'hours_bh','')::numeric, 0)
+    ) as seg_hours_total,
+
+    b.basis,
+    b.submission_mode,
+    b.validation_status,
+    b.hr_validation_required_for_invoice,
+    b.blocked_by_hr_validation,
+
+    b.precheck_status,
+    b.has_timesheet_evidence_pdf
+
+  from base b
+  cross join lateral jsonb_array_elements(coalesce(b.invoice_breakdown_json->'segments','[]'::jsonb)) seg
+  cross join lateral (
+    select nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date as tgt_start
+  ) t
   cross join anchor a
-  where
-    -- default: only weeks already ended
-    (p_allow_early = true)
-    or (w.week_ending_date is null)              -- if unknown week_end, don't block listing
-    or (w.week_ending_date < a.anchor_ymd)
+
+  where coalesce(b.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
+    -- only segments not already locked to an invoice
+    and nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') is null
+    and (
+      -- NOT DELAYED
+      (
+        (t.tgt_start is null or t.tgt_start = b.ts_invoice_week_start)
+        and (
+          p_allow_early = true
+          or b.ts_week_ending_date < a.anchor_ymd
+        )
+      )
+      or
+      -- DELAYED
+      (
+        t.tgt_start is not null
+        and t.tgt_start <> b.ts_invoice_week_start
+        and t.tgt_start <= a.anchor_ymd
+      )
+    )
 ),
+
+seg_agg as (
+  select
+    r.timesheet_id,
+    r.client_id,
+    r.invoice_week_start,
+    r.week_ending_date,
+
+    r.client_name,
+    r.candidate_name,
+
+    round(coalesce(sum(r.seg_charge_ex_vat),0), 2) as total_charge_ex_vat,
+    round(coalesce(sum(r.seg_hours_total),0), 2) as total_hours,
+
+    r.basis,
+    r.submission_mode,
+    r.validation_status,
+    r.hr_validation_required_for_invoice,
+    r.blocked_by_hr_validation,
+
+    r.precheck_status,
+    r.has_timesheet_evidence_pdf
+  from seg_rows r
+  group by
+    r.timesheet_id, r.client_id, r.invoice_week_start, r.week_ending_date,
+    r.client_name, r.candidate_name,
+    r.basis, r.submission_mode, r.validation_status,
+    r.hr_validation_required_for_invoice, r.blocked_by_hr_validation,
+    r.precheck_status, r.has_timesheet_evidence_pdf
+),
+
+-- ------------------------------------------------------------
+-- ✅ FIX: SEGMENTS mode but segments=[] (common for expenses-only, or legacy states)
+-- Treat as a synthetic single row at the natural week.
+-- Respect the same allow_early / week-ended gate as nonseg.
+-- ------------------------------------------------------------
+seg_empty_fallback as (
+  select
+    b.timesheet_id,
+    b.client_id,
+    b.ts_invoice_week_start as invoice_week_start,
+    b.ts_week_ending_date   as week_ending_date,
+
+    b.client_name,
+    b.candidate_name,
+
+    b.total_charge_ex_vat,
+    b.total_hours,
+
+    b.basis,
+    b.submission_mode,
+    b.validation_status,
+    b.hr_validation_required_for_invoice,
+    b.blocked_by_hr_validation,
+
+    b.precheck_status,
+    b.has_timesheet_evidence_pdf
+  from base b
+  cross join anchor a
+  where coalesce(b.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
+    and jsonb_array_length(coalesce(b.invoice_breakdown_json->'segments','[]'::jsonb)) = 0
+    and (
+      p_allow_early = true
+      or b.ts_week_ending_date < a.anchor_ymd
+    )
+),
+
+-- ------------------------------------------------------------
+-- NON-SEGMENTS mode:
+-- ------------------------------------------------------------
+nonseg as (
+  select
+    b.timesheet_id,
+    b.client_id,
+    b.ts_invoice_week_start as invoice_week_start,
+    b.ts_week_ending_date as week_ending_date,
+
+    b.client_name,
+    b.candidate_name,
+
+    b.total_charge_ex_vat,
+    b.total_hours,
+    b.basis,
+    b.submission_mode,
+    b.validation_status,
+    b.hr_validation_required_for_invoice,
+    b.blocked_by_hr_validation,
+
+    b.precheck_status,
+    b.has_timesheet_evidence_pdf
+  from base b
+  cross join anchor a
+  where coalesce(b.invoice_breakdown_json->>'mode','') <> 'SEGMENTS'
+    and (
+      p_allow_early = true
+      or b.ts_week_ending_date < a.anchor_ymd
+    )
+),
+
+eligible as (
+  select * from seg_agg
+  where round(coalesce(total_charge_ex_vat,0), 2) <> 0
+
+  union all
+  select * from seg_empty_fallback
+  where round(coalesce(total_charge_ex_vat,0), 2) <> 0
+
+  union all
+  select * from nonseg
+  where round(coalesce(total_charge_ex_vat,0), 2) <> 0
+),
+
+eligible_limited as (
+  select *
+  from eligible
+  order by week_ending_date desc nulls last, client_name nulls last, candidate_name nulls last
+  limit greatest(1, least(coalesce(p_limit, 5000), 20000))
+),
+
 weeks as (
   select
-    f.client_id,
-    max(f.client_name) as client_name,
-    f.week_ending_date,
-    f.invoice_week_start,
+    e.client_id,
+    max(e.client_name) as client_name,
+    e.invoice_week_start,
+    e.week_ending_date,
 
-    round(coalesce(sum(f.subtotal_ex_vat),0),2) as subtotal_ex_vat_sum,
-    round(coalesce(sum(f.total_inc_vat),0),2) as total_inc_vat_sum,
+    round(coalesce(sum(e.total_charge_ex_vat),0), 2) as subtotal_ex_vat,
+    round(coalesce(sum(e.total_hours),0), 2) as total_hours,
 
     jsonb_agg(
       jsonb_build_object(
-        'invoice_id', f.invoice_id::text,
-        'invoice_no', f.invoice_no,
-        'status', f.status,
-        'on_hold_reason', f.on_hold_reason,
-        'subtotal_ex_vat', round(coalesce(f.subtotal_ex_vat,0),2),
-        'vat_amount', round(coalesce(f.vat_amount,0),2),
-        'total_inc_vat', round(coalesce(f.total_inc_vat,0),2),
-        'is_self_bill', f.is_self_bill
+        'timesheet_id', e.timesheet_id::text,
+        'candidate_name', e.candidate_name,
+        'week_ending_date', e.week_ending_date::text,
+        'total_charge_ex_vat', round(coalesce(e.total_charge_ex_vat,0),2),
+        'total_hours', round(coalesce(e.total_hours,0),2),
+        'basis', e.basis::text,
+        'submission_mode', coalesce(e.submission_mode::text, ''),
+        'validation_status', coalesce(e.validation_status::text, ''),
+        'hr_validation_required_for_invoice', e.hr_validation_required_for_invoice,
+        'blocked_by_hr_validation', e.blocked_by_hr_validation,
+        'precheck_status', coalesce(e.precheck_status::text, ''),
+        'has_timesheet_evidence_pdf', coalesce(e.has_timesheet_evidence_pdf, false)
       )
-      order by f.status desc, f.invoice_no nulls last, f.invoice_id::text
-    ) as invoices
-  from filtered f
-  group by f.client_id, f.week_ending_date, f.invoice_week_start
+      order by e.candidate_name nulls last, e.timesheet_id::text
+    ) as timesheets
+
+  from eligible_limited e
+  group by e.client_id, e.invoice_week_start, e.week_ending_date
+  having round(coalesce(sum(e.total_charge_ex_vat),0), 2) <> 0
 ),
+
 clients as (
   select
     w.client_id,
     max(w.client_name) as client_name,
+
+    coalesce(cs.invoice_consolidation_mode, 'NONE') as invoice_consolidation_mode,
+    case coalesce(cs.invoice_consolidation_mode, 'NONE')
+      when 'NONE' then 'One per timesheet'
+      when 'BY_WEEK' then 'Consolidated by week'
+      when 'ANY_WEEK' then 'Consolidated across weeks'
+      else 'One per timesheet'
+    end as consolidation_label,
+
+    case coalesce(cs.invoice_consolidation_mode, 'NONE')
+      when 'NONE' then coalesce(sum(jsonb_array_length(w.timesheets)), 0)
+      when 'BY_WEEK' then count(*)
+      when 'ANY_WEEK' then case when coalesce(sum(jsonb_array_length(w.timesheets)), 0) > 0 then 1 else 0 end
+      else coalesce(sum(jsonb_array_length(w.timesheets)), 0)
+    end as expected_invoice_count,
+
     jsonb_agg(
       jsonb_build_object(
-        'invoice_week_start', case when w.invoice_week_start is null then null else w.invoice_week_start::text end,
-        'week_ending_date', case when w.week_ending_date is null then null else w.week_ending_date::text end,
-        'subtotal_ex_vat_sum', w.subtotal_ex_vat_sum,
-        'total_inc_vat_sum', w.total_inc_vat_sum,
-        'invoices', w.invoices
+        'invoice_week_start', w.invoice_week_start::text,
+        'week_ending_date', w.week_ending_date::text,
+        'subtotal_ex_vat', w.subtotal_ex_vat,
+        'total_hours', w.total_hours,
+        'timesheets', w.timesheets
       )
-      order by w.week_ending_date desc nulls last
+      order by w.week_ending_date desc
     ) as weeks
   from weeks w
-  group by w.client_id
+  left join lateral (
+    select coalesce(cs0.invoice_consolidation_mode::text, 'NONE') as invoice_consolidation_mode
+    from public.client_settings cs0
+    cross join anchor a
+    where cs0.client_id = w.client_id
+      and (cs0.effective_from <= a.anchor_ymd or cs0.effective_from is null)
+    order by cs0.effective_from desc nulls last
+    limit 1
+  ) cs on true
+  group by w.client_id, cs.invoice_consolidation_mode
 )
+
 select coalesce(
   jsonb_agg(
     jsonb_build_object(
       'client_id', c.client_id::text,
       'client_name', c.client_name,
+      'invoice_consolidation_mode', c.invoice_consolidation_mode,
+      'expected_invoice_count', c.expected_invoice_count,
+      'consolidation_label', c.consolidation_label,
       'weeks', c.weeks
     )
     order by c.client_name nulls last, c.client_id::text
@@ -849,6 +1023,7 @@ select coalesce(
 )
 from clients c;
 $$;
+
 
 -- ============================================================
 -- NEW: public.invoice_issue_and_queue_emails_batch(...)
