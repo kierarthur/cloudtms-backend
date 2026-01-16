@@ -473,6 +473,11 @@ $$;
 -- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
 -- ============================================================
 
+
+
+
+
+
 create or replace function public.invoice_generate_from_outbox_batch(
   p_outbox_ids uuid[],
   p_actor_user_id uuid
@@ -797,7 +802,7 @@ limit 1;
 
 
           -- client_settings: HOURS uses effective_from<=anchor OR effective_from IS NULL (fallback row)
-          select cs.client_id, cs.vat_rate_pct, cs.hr_attach_to_invoice, cs.ts_attach_to_invoice, cs.invoice_consolidation_mode, cs.group_nightsat_sunbh, cs.effective_from
+          select cs.client_id, cs.vat_rate_pct, cs.hr_attach_to_invoice, cs.ts_attach_to_invoice, cs.invoice_consolidation_mode, cs.effective_from
           into v_cs
           from public.client_settings cs
           where cs.client_id = v_client_id
@@ -895,7 +900,6 @@ limit 1;
               'account_number', v_def.bank_account_number
             ),
             'vat_registration_number', v_def.vat_registration_number,
-            'group_nightsat_sunbh', coalesce(v_cs.group_nightsat_sunbh,false),
             'meta', jsonb_build_object('source','TSFIN','timesheet_count', coalesce(array_length(v_ts_ids_to_use,1),0)),
 
             'attach_policy', jsonb_build_object(
@@ -1185,12 +1189,7 @@ limit 1;
                   public._inv_round2(d_rec.hours_sat),
                   public._inv_round2(d_rec.hours_sun),
                   public._inv_round2(d_rec.hours_bh),
-                  
-                    coalesce(s.pay_day,null),
-                    coalesce(s.pay_night,null),
-                    coalesce(s.pay_sat,null),
-                    coalesce(s.pay_sun,null),
-                    coalesce(s.pay_bh,null),
+                  null,null,null,null,null,
       coalesce(s.charge_day,null),
       coalesce(s.charge_night,null),
       coalesce(s.charge_sat,null),
@@ -1300,12 +1299,7 @@ limit 1;
                   values (
                     v_invoice_id, s.timesheet_id, s.booking_id, line_desc,
                     coalesce(s.hours_day,0), coalesce(s.hours_night,0), coalesce(s.hours_sat,0), coalesce(s.hours_sun,0), coalesce(s.hours_bh,0),
-                    
-                    coalesce(s.pay_day,null),
-                    coalesce(s.pay_night,null),
-                    coalesce(s.pay_sat,null),
-                    coalesce(s.pay_sun,null),
-                    coalesce(s.pay_bh,null),
+                    null,null,null,null,null,
       coalesce(s.charge_day,null),
       coalesce(s.charge_night,null),
       coalesce(s.charge_sat,null),
@@ -1407,9 +1401,6 @@ limit 1;
                     'policy_snapshot_json', s.policy_snapshot_json,
                     'rate_source_refs_json', s.rate_source_refs_json,
                     'bucket_labels', labels,
-                    'unit_label', bucket_name || ' - ' || unit_name,
-                    'qty', public._inv_round2(d_rec.units),
-                    'unit_charge_ex_vat', charge_rate,
                     'bucket', jsonb_build_object(
                       'code', code,
                       'bucket_name', coalesce(ex->>'bucket_name', bucket_name),
@@ -1447,12 +1438,7 @@ limit 1;
                   values (
                     v_invoice_id, s.timesheet_id, s.booking_id, line_desc,
                     0,0,0,0,0,
-                    
-                    coalesce(s.pay_day,null),
-                    coalesce(s.pay_night,null),
-                    coalesce(s.pay_sat,null),
-                    coalesce(s.pay_sun,null),
-                    coalesce(s.pay_bh,null),
+                    null,null,null,null,null,
       coalesce(s.charge_day,null),
       coalesce(s.charge_night,null),
       coalesce(s.charge_sat,null),
@@ -1519,9 +1505,6 @@ limit 1;
                 'policy_snapshot_json', s.policy_snapshot_json,
                 'rate_source_refs_json', s.rate_source_refs_json,
                 'bucket_labels', labels,
-                'unit_label', bucket_name || ' - ' || unit_name,
-                'qty', public._inv_round2(unit_count),
-                'unit_charge_ex_vat', charge_rate,
                 'bucket', jsonb_build_object(
                   'code', code,
                   'bucket_name', coalesce(ex->>'bucket_name', bucket_name),
@@ -1558,12 +1541,7 @@ limit 1;
               values (
                 v_invoice_id, s.timesheet_id, s.booking_id, line_desc,
                 0,0,0,0,0,
-                
-                    coalesce(s.pay_day,null),
-                    coalesce(s.pay_night,null),
-                    coalesce(s.pay_sat,null),
-                    coalesce(s.pay_sun,null),
-                    coalesce(s.pay_bh,null),
+                null,null,null,null,null,
       coalesce(s.charge_day,null),
       coalesce(s.charge_night,null),
       coalesce(s.charge_sat,null),
@@ -1689,9 +1667,6 @@ limit 1;
                   'ts_reference_number', s.reference_number,
                   'policy_snapshot_json', s.policy_snapshot_json,
                   'rate_source_refs_json', s.rate_source_refs_json,
-                  'unit_label', 'Expenses - Travel',
-                  'qty', 1,
-                  'unit_charge_ex_vat', charge_ex,
                   'expense', jsonb_build_object(
                     'category', 'TRAVEL',
                     'note', v_note_travel,
@@ -1722,12 +1697,7 @@ limit 1;
                 values (
                   v_invoice_id, s.timesheet_id, s.booking_id, line_desc,
                   0,0,0,0,0,
-                  
-                    coalesce(s.pay_day,null),
-                    coalesce(s.pay_night,null),
-                    coalesce(s.pay_sat,null),
-                    coalesce(s.pay_sun,null),
-                    coalesce(s.pay_bh,null),
+                  null,null,null,null,null,
       coalesce(s.charge_day,null),
       coalesce(s.charge_night,null),
       coalesce(s.charge_sat,null),
@@ -1780,9 +1750,6 @@ limit 1;
                   'ts_reference_number', s.reference_number,
                   'policy_snapshot_json', s.policy_snapshot_json,
                   'rate_source_refs_json', s.rate_source_refs_json,
-                  'unit_label', 'Expenses - Accommodation',
-                  'qty', 1,
-                  'unit_charge_ex_vat', charge_ex,
                   'expense', jsonb_build_object(
                     'category', 'ACCOMMODATION',
                     'note', v_note_accom,
@@ -1813,12 +1780,7 @@ limit 1;
                 values (
                   v_invoice_id, s.timesheet_id, s.booking_id, line_desc,
                   0,0,0,0,0,
-                  
-                    coalesce(s.pay_day,null),
-                    coalesce(s.pay_night,null),
-                    coalesce(s.pay_sat,null),
-                    coalesce(s.pay_sun,null),
-                    coalesce(s.pay_bh,null),
+                  null,null,null,null,null,
       coalesce(s.charge_day,null),
       coalesce(s.charge_night,null),
       coalesce(s.charge_sat,null),
@@ -1871,9 +1833,6 @@ limit 1;
                   'ts_reference_number', s.reference_number,
                   'policy_snapshot_json', s.policy_snapshot_json,
                   'rate_source_refs_json', s.rate_source_refs_json,
-                  'unit_label', 'Expenses - Other',
-                  'qty', 1,
-                  'unit_charge_ex_vat', charge_ex,
                   'expense', jsonb_build_object(
                     'category', 'OTHER',
                     'note', v_note_other,
@@ -1904,12 +1863,7 @@ limit 1;
                 values (
                   v_invoice_id, s.timesheet_id, s.booking_id, line_desc,
                   0,0,0,0,0,
-                  
-                    coalesce(s.pay_day,null),
-                    coalesce(s.pay_night,null),
-                    coalesce(s.pay_sat,null),
-                    coalesce(s.pay_sun,null),
-                    coalesce(s.pay_bh,null),
+                  null,null,null,null,null,
       coalesce(s.charge_day,null),
       coalesce(s.charge_night,null),
       coalesce(s.charge_sat,null),
@@ -1968,9 +1922,6 @@ limit 1;
                 'ts_reference_number', s.reference_number,
                 'policy_snapshot_json', s.policy_snapshot_json,
                 'rate_source_refs_json', s.rate_source_refs_json,
-                'unit_label', 'Expenses - Mileage',
-                'qty', unit_count,
-                'unit_charge_ex_vat', charge_rate,
                 'mileage', jsonb_build_object(
                   'mileage_units', unit_count,
                   'pay_rate', pay_rate,
@@ -2002,12 +1953,7 @@ limit 1;
               values (
                 v_invoice_id, s.timesheet_id, s.booking_id, line_desc,
                 0,0,0,0,0,
-                
-                    coalesce(s.pay_day,null),
-                    coalesce(s.pay_night,null),
-                    coalesce(s.pay_sat,null),
-                    coalesce(s.pay_sun,null),
-                    coalesce(s.pay_bh,null),
+                null,null,null,null,null,
       coalesce(s.charge_day,null),
       coalesce(s.charge_night,null),
       coalesce(s.charge_sat,null),
@@ -2558,7 +2504,7 @@ limit 1;
 
 
           -- client_settings: BY_WEEK uses effective_from <= anchorYmd (no NULL fallback)
-          select cs.client_id, cs.vat_rate_pct, cs.hr_attach_to_invoice, cs.ts_attach_to_invoice, cs.invoice_consolidation_mode, cs.group_nightsat_sunbh, cs.effective_from
+          select cs.client_id, cs.vat_rate_pct, cs.hr_attach_to_invoice, cs.ts_attach_to_invoice, cs.invoice_consolidation_mode, cs.effective_from
           into v_cs
           from public.client_settings cs
           where cs.client_id = v_client_id
@@ -2602,7 +2548,15 @@ limit 1;
       -- NON-SEGMENTS: natural week only; allow_early controls week-ending gate
       -- ─────────────────────────────────────────────────────────────
       (
-        coalesce(tf.invoice_breakdown_json->>'mode','') <> 'SEGMENTS'
+        (
+          coalesce(tf.invoice_breakdown_json->>'mode','') <> 'SEGMENTS'
+          or (
+            coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
+            and jsonb_typeof(tf.invoice_breakdown_json->'segments') = 'array'
+            and jsonb_array_length(tf.invoice_breakdown_json->'segments') = 0
+            and coalesce(tf.total_charge_ex_vat,0)::numeric <> 0
+          )
+        )
         and ts.week_ending_date::date = (v_week_start + 6)
         and (
           v_allow_early = true
@@ -2858,7 +2812,7 @@ limit 1;
             from snaps sn
             where (sn.week_ending_date - 6) = v_week_start
               and sn.locked_by_invoice_id is null
-              and not (sn.ib is not null and jsonb_typeof(sn.ib)='object' and (sn.ib->>'mode')='SEGMENTS' and jsonb_typeof(sn.ib->'segments')='array')
+              and not (sn.ib is not null and jsonb_typeof(sn.ib)='object' and (sn.ib->>'mode')='SEGMENTS' and jsonb_typeof(sn.ib->'segments')='array' and jsonb_array_length(sn.ib->'segments') > 0)
           ),
 
           all_e as (
@@ -3107,7 +3061,6 @@ else
                     'account_number', v_def.bank_account_number
                   ),
                   'vat_registration_number', v_def.vat_registration_number,
-            'group_nightsat_sunbh', coalesce(v_cs.group_nightsat_sunbh,false),
                   'meta', jsonb_build_object(
                     'source','TSFIN_SEGMENTS',
                     'self_bill', true,
@@ -3190,7 +3143,6 @@ v_created := true;
                 'account_number', v_def.bank_account_number
               ),
               'vat_registration_number', v_def.vat_registration_number,
-            'group_nightsat_sunbh', coalesce(v_cs.group_nightsat_sunbh,false),
               'meta', jsonb_build_object(
                 'source','TSFIN_BY_WEEK',
                 'consolidation_mode', v_consol_mode,
@@ -3491,12 +3443,7 @@ v_ip, v_ua, v_corr
                   public._inv_round2(bydate.hours_sat),
                   public._inv_round2(bydate.hours_sun),
                   public._inv_round2(bydate.hours_bh),
-                  
-                    coalesce(s.pay_day,null),
-                    coalesce(s.pay_night,null),
-                    coalesce(s.pay_sat,null),
-                    coalesce(s.pay_sun,null),
-                    coalesce(s.pay_bh,null),
+                  null,null,null,null,null,
       coalesce(s.charge_day,null),
       coalesce(s.charge_night,null),
       coalesce(s.charge_sat,null),
@@ -3588,9 +3535,6 @@ v_ip, v_ua, v_corr
                     'week_ending_date', snap.week_ending_date::text,
                     'date', left(bydate.ymd,10),
                     'bucket_labels', labels,
-                    'unit_label', bucket_name || ' - ' || unit_name,
-                    'qty', public._inv_round2(units),
-                    'unit_charge_ex_vat', charge_rate,
                     'bucket', jsonb_build_object(
                       'code', code,
                       'bucket_name', coalesce(ex->>'bucket_name', bucket_name),
@@ -3627,12 +3571,7 @@ v_ip, v_ua, v_corr
                   values (
                     v_invoice_id, tsid, snap.booking_id, line_desc,
                     0,0,0,0,0,
-                    
-                    coalesce(s.pay_day,null),
-                    coalesce(s.pay_night,null),
-                    coalesce(s.pay_sat,null),
-                    coalesce(s.pay_sun,null),
-                    coalesce(s.pay_bh,null),
+                    null,null,null,null,null,
       coalesce(s.charge_day,null),
       coalesce(s.charge_night,null),
       coalesce(s.charge_sat,null),
@@ -3741,12 +3680,7 @@ else
     values (
       v_invoice_id, tsid, snap.booking_id, line_desc,
       h_day, h_night, h_sat, h_sun, h_bh,
-      
-                    coalesce(snap.pay_day,null),
-                    coalesce(snap.pay_night,null),
-                    coalesce(snap.pay_sat,null),
-                    coalesce(snap.pay_sun,null),
-                    coalesce(snap.pay_bh,null),
+      null,null,null,null,null,
       coalesce(snap.charge_day,null),
       coalesce(snap.charge_night,null),
       coalesce(snap.charge_sat,null),
@@ -3823,9 +3757,6 @@ end if;
 
                 'week_ending_date', snap.week_ending_date::text,
                 'bucket_labels', labels,
-                'unit_label', bucket_name || ' - ' || unit_name,
-                'qty', public._inv_round2(unit_count),
-                'unit_charge_ex_vat', case when nullif(btrim(coalesce(ex->>'charge_rate','')), '') is not null then (ex->>'charge_rate')::numeric else public._inv_round2(chg_ex / unit_count) end,
                 'bucket', jsonb_build_object(
                   'code', code,
                   'bucket_name', coalesce(ex->>'bucket_name', bucket_name),
@@ -3861,12 +3792,7 @@ end if;
               values (
                 v_invoice_id, tsid, snap.booking_id, line_desc,
                 0,0,0,0,0,
-                
-                    coalesce(s.pay_day,null),
-                    coalesce(s.pay_night,null),
-                    coalesce(s.pay_sat,null),
-                    coalesce(s.pay_sun,null),
-                    coalesce(s.pay_bh,null),
+                null,null,null,null,null,
       coalesce(s.charge_day,null),
       coalesce(s.charge_night,null),
       coalesce(s.charge_sat,null),
@@ -3977,9 +3903,6 @@ end if;
                   'hospital', con_display_site,
                   'ward', con_ward_hint,
                   'week_ending_date', snap.week_ending_date::text,
-                  'unit_label', 'Expenses - Travel',
-                  'qty', 1,
-                  'unit_charge_ex_vat', chg_ex,
                   'expense', jsonb_build_object(
                     'category', 'TRAVEL',
                     'note', v_note_travel,
@@ -4010,12 +3933,7 @@ end if;
                 values (
                   v_invoice_id, tsid, snap.booking_id, line_desc,
                   0,0,0,0,0,
-                  
-                    coalesce(s.pay_day,null),
-                    coalesce(s.pay_night,null),
-                    coalesce(s.pay_sat,null),
-                    coalesce(s.pay_sun,null),
-                    coalesce(s.pay_bh,null),
+                  null,null,null,null,null,
       coalesce(s.charge_day,null),
       coalesce(s.charge_night,null),
       coalesce(s.charge_sat,null),
@@ -4058,9 +3976,6 @@ end if;
                   'hospital', con_display_site,
                   'ward', con_ward_hint,
                   'week_ending_date', snap.week_ending_date::text,
-                  'unit_label', 'Expenses - Accommodation',
-                  'qty', 1,
-                  'unit_charge_ex_vat', chg_ex,
                   'expense', jsonb_build_object(
                     'category', 'ACCOMMODATION',
                     'note', v_note_accom,
@@ -4091,12 +4006,7 @@ end if;
                 values (
                   v_invoice_id, tsid, snap.booking_id, line_desc,
                   0,0,0,0,0,
-                  
-                    coalesce(s.pay_day,null),
-                    coalesce(s.pay_night,null),
-                    coalesce(s.pay_sat,null),
-                    coalesce(s.pay_sun,null),
-                    coalesce(s.pay_bh,null),
+                  null,null,null,null,null,
       coalesce(s.charge_day,null),
       coalesce(s.charge_night,null),
       coalesce(s.charge_sat,null),
@@ -4139,9 +4049,6 @@ end if;
                   'hospital', con_display_site,
                   'ward', con_ward_hint,
                   'week_ending_date', snap.week_ending_date::text,
-                  'unit_label', 'Expenses - Other',
-                  'qty', 1,
-                  'unit_charge_ex_vat', chg_ex,
                   'expense', jsonb_build_object(
                     'category', 'OTHER',
                     'note', v_note_other,
@@ -4172,12 +4079,7 @@ end if;
                 values (
                   v_invoice_id, tsid, snap.booking_id, line_desc,
                   0,0,0,0,0,
-                  
-                    coalesce(s.pay_day,null),
-                    coalesce(s.pay_night,null),
-                    coalesce(s.pay_sat,null),
-                    coalesce(s.pay_sun,null),
-                    coalesce(s.pay_bh,null),
+                  null,null,null,null,null,
       coalesce(s.charge_day,null),
       coalesce(s.charge_night,null),
       coalesce(s.charge_sat,null),
@@ -4228,9 +4130,6 @@ end if;
                 'hospital', con_display_site,
                 'ward', con_ward_hint,
                 'week_ending_date', snap.week_ending_date::text,
-                'unit_label', 'Expenses - Mileage',
-                'qty', unit_count,
-                'unit_charge_ex_vat', charge_rate,
                 'mileage', jsonb_build_object(
                   'mileage_units', unit_count,
                   'pay_rate', pay_rate,
@@ -4262,12 +4161,7 @@ end if;
               values (
                 v_invoice_id, tsid, snap.booking_id, line_desc,
                 0,0,0,0,0,
-                
-                    coalesce(s.pay_day,null),
-                    coalesce(s.pay_night,null),
-                    coalesce(s.pay_sat,null),
-                    coalesce(s.pay_sun,null),
-                    coalesce(s.pay_bh,null),
+                null,null,null,null,null,
       coalesce(s.charge_day,null),
       coalesce(s.charge_night,null),
       coalesce(s.charge_sat,null),
@@ -4531,6 +4425,8 @@ where id = v_outbox_id;
   end loop;
 end;
 $$;
+
+
 
 
 create or replace function public.invoice_source_rows_collect(
