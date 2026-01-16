@@ -106,8 +106,13 @@ base as (
 -- Grouping:
 --   invoice_week_start is the segment's target week (if set) else the
 --   timesheet's natural week start, so delayed segments appear in later weeks.
+--
+-- ✅ FIX (edge case):
+--   SEGMENTS mode + segments=[] + non-zero total_charge_ex_vat
+--   => treat as a synthetic single-row "segment" for eligibility + grouping.
 -- ------------------------------------------------------------
 seg_rows as (
+  -- Normal SEGMENTS rows (one per unlocked segment)
   select
     b.timesheet_id,
     b.client_id,
@@ -138,7 +143,14 @@ seg_rows as (
     b.has_timesheet_evidence_pdf
 
   from base b
-  cross join lateral jsonb_array_elements(coalesce(b.invoice_breakdown_json->'segments','[]'::jsonb)) seg
+  cross join lateral (
+    select
+      case
+        when jsonb_typeof(b.invoice_breakdown_json->'segments') = 'array' then b.invoice_breakdown_json->'segments'
+        else '[]'::jsonb
+      end as segs_json
+  ) sj
+  cross join lateral jsonb_array_elements(sj.segs_json) seg
   cross join lateral (
     select nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date as tgt_start
   ) t
@@ -164,6 +176,48 @@ seg_rows as (
         and t.tgt_start <= a.anchor_ymd
       )
     )
+
+  union all
+
+  -- ✅ Synthetic SEGMENTS row when segments[] is empty but the timesheet has invoiceable charge.
+  select
+    b.timesheet_id,
+    b.client_id,
+
+    b.ts_invoice_week_start as invoice_week_start,
+    b.ts_week_ending_date as week_ending_date,
+
+    b.client_name,
+    b.candidate_name,
+
+    coalesce(b.total_charge_ex_vat, 0)::numeric as seg_charge_ex_vat,
+    coalesce(b.total_hours, 0)::numeric as seg_hours_total,
+
+    b.basis,
+    b.submission_mode,
+    b.validation_status,
+    b.hr_validation_required_for_invoice,
+    b.blocked_by_hr_validation,
+
+    b.precheck_status,
+    b.has_timesheet_evidence_pdf
+
+  from base b
+  cross join lateral (
+    select
+      case
+        when jsonb_typeof(b.invoice_breakdown_json->'segments') = 'array' then b.invoice_breakdown_json->'segments'
+        else '[]'::jsonb
+      end as segs_json
+  ) sj
+  cross join anchor a
+  where coalesce(b.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
+    and jsonb_array_length(sj.segs_json) = 0
+    and (
+      p_allow_early = true
+      or b.ts_week_ending_date < a.anchor_ymd
+    )
+    and round(coalesce(b.total_charge_ex_vat,0), 2) <> 0
 ),
 
 seg_agg as (
@@ -337,6 +391,9 @@ select coalesce(
 )
 from clients c;
 $$;
+
+
+
 
 -- ============================================================
 -- UPDATED: public.invoice_outbox_enqueue_by_week_selected(p_rows, p_actor_user_id, p_allow_early, p_meta)
