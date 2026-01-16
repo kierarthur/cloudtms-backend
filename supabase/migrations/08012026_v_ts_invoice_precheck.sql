@@ -5,13 +5,17 @@
 --
 -- IMPORTANT:
 --  - Keeps existing column order for the first 7 columns
---  - Appends the 3 "effective_*" columns at the end
+--  - Appends the 3 "effective_*" columns and 1 debug column at the end
 --  - Uses London anchor date for selecting the latest effective client_settings row
 --  - Derives client_id + claim fields from current TSFIN (timesheets has no client_id)
 --
--- UPDATED (per brief):
---  - PDF gating (BLOCK_NO_PDF) does NOT apply when:
---      total_hours = 0 AND (travel + accommodation + other + mileage charge totals) > 0
+-- UPDATED:
+--  - PDF gating (BLOCK_NO_PDF) is satisfied if a timesheet PDF exists via either:
+--      * timesheets.manual_pdf_r2_key (MANUAL)
+--      * timesheets.generated_pdf_at_utc (non-MANUAL)
+--      * timesheet_evidence(kind='TIMESHEET') (any)
+--  - Existing expense-only PDF exception retained.
+--  - Appends has_timesheet_evidence_pdf for UI/debug.
 -- ============================================================
 
 create or replace view public.v_ts_invoice_precheck as
@@ -32,9 +36,17 @@ select
     -- -----------------------------
     when coalesce(cs.ts_attach_to_invoice, true) = true
      and (
-       (ts.submission_mode = 'MANUAL'::submission_mode_enum and ts.manual_pdf_r2_key is null)
+       (
+         ts.submission_mode = 'MANUAL'::submission_mode_enum
+         and ts.manual_pdf_r2_key is null
+         and coalesce(tepdf.has_timesheet_evidence_pdf, false) = false
+       )
        or
-       (ts.submission_mode is distinct from 'MANUAL'::submission_mode_enum and ts.generated_pdf_at_utc is null)
+       (
+         ts.submission_mode is distinct from 'MANUAL'::submission_mode_enum
+         and ts.generated_pdf_at_utc is null
+         and coalesce(tepdf.has_timesheet_evidence_pdf, false) = false
+       )
      )
      and not (
        coalesce(tf.total_hours, 0) = 0
@@ -159,7 +171,12 @@ select
   -- ------------------------------------------------------------
   coalesce(cs.ts_attach_to_invoice, true)  as effective_ts_attach_to_invoice,
   coalesce(cs.hr_attach_to_invoice, true)  as effective_hr_attach_to_invoice,
-  coalesce(cs.auto_invoice_default, false) as effective_auto_invoice_default
+  coalesce(cs.auto_invoice_default, false) as effective_auto_invoice_default,
+
+  -- ------------------------------------------------------------
+  -- Appended debug column (evidence-based timesheet PDF)
+  -- ------------------------------------------------------------
+  coalesce(tepdf.has_timesheet_evidence_pdf, false) as has_timesheet_evidence_pdf
 
 from public.timesheets ts
 left join public.contract_weeks cw
@@ -191,6 +208,16 @@ left join lateral (
   order by tf0.updated_at desc nulls last
   limit 1
 ) tf on true
+
+-- timesheet evidence PDF presence (kind = TIMESHEET)
+left join lateral (
+  select exists(
+    select 1
+    from public.timesheet_evidence te
+    where te.timesheet_id = ts.timesheet_id
+      and upper(te.kind) = 'TIMESHEET'
+  ) as has_timesheet_evidence_pdf
+) tepdf on true
 
 -- choose client_settings row by London "anchor" date
 left join lateral (
