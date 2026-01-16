@@ -22,6 +22,7 @@
 -- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
 -- ============================================================
 
+
 create or replace function public.invoice_batch_generate_candidates(
   p_allow_early boolean default false,
   p_limit int default 5000
@@ -68,10 +69,6 @@ base as (
       )
     ) as blocked_by_hr_validation,
 
-    -- Precheck diagnostics for UI
-    pc.precheck_status as precheck_status,
-    coalesce(pc.has_timesheet_evidence_pdf, false) as has_timesheet_evidence_pdf,
-
     tf.invoice_breakdown_json
 
   from public.timesheets_financials tf
@@ -106,13 +103,8 @@ base as (
 -- Grouping:
 --   invoice_week_start is the segment's target week (if set) else the
 --   timesheet's natural week start, so delayed segments appear in later weeks.
---
--- ✅ FIX (edge case):
---   SEGMENTS mode + segments=[] + non-zero total_charge_ex_vat
---   => treat as a synthetic single-row "segment" for eligibility + grouping.
 -- ------------------------------------------------------------
 seg_rows as (
-  -- Normal SEGMENTS rows (one per unlocked segment)
   select
     b.timesheet_id,
     b.client_id,
@@ -137,20 +129,10 @@ seg_rows as (
     b.submission_mode,
     b.validation_status,
     b.hr_validation_required_for_invoice,
-    b.blocked_by_hr_validation,
-
-    b.precheck_status,
-    b.has_timesheet_evidence_pdf
+    b.blocked_by_hr_validation
 
   from base b
-  cross join lateral (
-    select
-      case
-        when jsonb_typeof(b.invoice_breakdown_json->'segments') = 'array' then b.invoice_breakdown_json->'segments'
-        else '[]'::jsonb
-      end as segs_json
-  ) sj
-  cross join lateral jsonb_array_elements(sj.segs_json) seg
+  cross join lateral jsonb_array_elements(coalesce(b.invoice_breakdown_json->'segments','[]'::jsonb)) seg
   cross join lateral (
     select nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date as tgt_start
   ) t
@@ -176,48 +158,6 @@ seg_rows as (
         and t.tgt_start <= a.anchor_ymd
       )
     )
-
-  union all
-
-  -- ✅ Synthetic SEGMENTS row when segments[] is empty but the timesheet has invoiceable charge.
-  select
-    b.timesheet_id,
-    b.client_id,
-
-    b.ts_invoice_week_start as invoice_week_start,
-    b.ts_week_ending_date as week_ending_date,
-
-    b.client_name,
-    b.candidate_name,
-
-    coalesce(b.total_charge_ex_vat, 0)::numeric as seg_charge_ex_vat,
-    coalesce(b.total_hours, 0)::numeric as seg_hours_total,
-
-    b.basis,
-    b.submission_mode,
-    b.validation_status,
-    b.hr_validation_required_for_invoice,
-    b.blocked_by_hr_validation,
-
-    b.precheck_status,
-    b.has_timesheet_evidence_pdf
-
-  from base b
-  cross join lateral (
-    select
-      case
-        when jsonb_typeof(b.invoice_breakdown_json->'segments') = 'array' then b.invoice_breakdown_json->'segments'
-        else '[]'::jsonb
-      end as segs_json
-  ) sj
-  cross join anchor a
-  where coalesce(b.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
-    and jsonb_array_length(sj.segs_json) = 0
-    and (
-      p_allow_early = true
-      or b.ts_week_ending_date < a.anchor_ymd
-    )
-    and round(coalesce(b.total_charge_ex_vat,0), 2) <> 0
 ),
 
 seg_agg as (
@@ -237,17 +177,13 @@ seg_agg as (
     r.submission_mode,
     r.validation_status,
     r.hr_validation_required_for_invoice,
-    r.blocked_by_hr_validation,
-
-    r.precheck_status,
-    r.has_timesheet_evidence_pdf
+    r.blocked_by_hr_validation
   from seg_rows r
   group by
     r.timesheet_id, r.client_id, r.invoice_week_start, r.week_ending_date,
     r.client_name, r.candidate_name,
     r.basis, r.submission_mode, r.validation_status,
-    r.hr_validation_required_for_invoice, r.blocked_by_hr_validation,
-    r.precheck_status, r.has_timesheet_evidence_pdf
+    r.hr_validation_required_for_invoice, r.blocked_by_hr_validation
 ),
 
 -- ------------------------------------------------------------
@@ -270,13 +206,18 @@ nonseg as (
     b.submission_mode,
     b.validation_status,
     b.hr_validation_required_for_invoice,
-    b.blocked_by_hr_validation,
-
-    b.precheck_status,
-    b.has_timesheet_evidence_pdf
+    b.blocked_by_hr_validation
   from base b
   cross join anchor a
-  where coalesce(b.invoice_breakdown_json->>'mode','') <> 'SEGMENTS'
+  where (
+    coalesce(b.invoice_breakdown_json->>'mode','') <> 'SEGMENTS'
+    or (
+      coalesce(b.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
+      and jsonb_typeof(b.invoice_breakdown_json->'segments') = 'array'
+      and jsonb_array_length(b.invoice_breakdown_json->'segments') = 0
+      and coalesce(b.total_charge_ex_vat,0)::numeric <> 0
+    )
+  )
     and (
       p_allow_early = true
       or b.ts_week_ending_date < a.anchor_ymd
@@ -319,10 +260,7 @@ weeks as (
         'submission_mode', coalesce(e.submission_mode::text, ''),
         'validation_status', coalesce(e.validation_status::text, ''),
         'hr_validation_required_for_invoice', e.hr_validation_required_for_invoice,
-        'blocked_by_hr_validation', e.blocked_by_hr_validation,
-        -- New: precheck diagnostics for UI
-        'precheck_status', coalesce(e.precheck_status::text, ''),
-        'has_timesheet_evidence_pdf', coalesce(e.has_timesheet_evidence_pdf, false)
+        'blocked_by_hr_validation', e.blocked_by_hr_validation
       )
       order by e.candidate_name nulls last, e.timesheet_id::text
     ) as timesheets
@@ -391,8 +329,6 @@ select coalesce(
 )
 from clients c;
 $$;
-
-
 
 
 -- ============================================================
