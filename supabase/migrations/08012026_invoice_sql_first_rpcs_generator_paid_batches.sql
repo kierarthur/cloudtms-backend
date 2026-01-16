@@ -463,6 +463,16 @@ $$;
 -- Affects: public.invoice_generate_from_outbox_batch
 -- Generated from: 08012026_invoice_sql_first_rpcs_generator_paid_batches (9).sql
 
+
+-- ============================================================
+-- PATCH: invoice_generate_from_outbox_batch
+-- Adds:
+--  - Snapshots client_settings.group_nightsat_sunbh into invoices.header_snapshot_json
+--  - Ensures additional/expense/mileage meta_json includes: unit_label, qty, unit_charge_ex_vat
+-- NOTE: This file contains the FULL function definition.
+-- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
+-- ============================================================
+
 create or replace function public.invoice_generate_from_outbox_batch(
   p_outbox_ids uuid[],
   p_actor_user_id uuid
@@ -787,7 +797,7 @@ limit 1;
 
 
           -- client_settings: HOURS uses effective_from<=anchor OR effective_from IS NULL (fallback row)
-          select cs.client_id, cs.vat_rate_pct, cs.hr_attach_to_invoice, cs.ts_attach_to_invoice, cs.invoice_consolidation_mode, cs.effective_from
+          select cs.client_id, cs.vat_rate_pct, cs.hr_attach_to_invoice, cs.ts_attach_to_invoice, cs.invoice_consolidation_mode, cs.group_nightsat_sunbh, cs.effective_from
           into v_cs
           from public.client_settings cs
           where cs.client_id = v_client_id
@@ -885,6 +895,7 @@ limit 1;
               'account_number', v_def.bank_account_number
             ),
             'vat_registration_number', v_def.vat_registration_number,
+            'group_nightsat_sunbh', coalesce(v_cs.group_nightsat_sunbh,false),
             'meta', jsonb_build_object('source','TSFIN','timesheet_count', coalesce(array_length(v_ts_ids_to_use,1),0)),
 
             'attach_policy', jsonb_build_object(
@@ -1396,6 +1407,9 @@ limit 1;
                     'policy_snapshot_json', s.policy_snapshot_json,
                     'rate_source_refs_json', s.rate_source_refs_json,
                     'bucket_labels', labels,
+                    'unit_label', bucket_name || ' - ' || unit_name,
+                    'qty', public._inv_round2(d_rec.units),
+                    'unit_charge_ex_vat', charge_rate,
                     'bucket', jsonb_build_object(
                       'code', code,
                       'bucket_name', coalesce(ex->>'bucket_name', bucket_name),
@@ -1505,6 +1519,9 @@ limit 1;
                 'policy_snapshot_json', s.policy_snapshot_json,
                 'rate_source_refs_json', s.rate_source_refs_json,
                 'bucket_labels', labels,
+                'unit_label', bucket_name || ' - ' || unit_name,
+                'qty', public._inv_round2(unit_count),
+                'unit_charge_ex_vat', charge_rate,
                 'bucket', jsonb_build_object(
                   'code', code,
                   'bucket_name', coalesce(ex->>'bucket_name', bucket_name),
@@ -1672,6 +1689,9 @@ limit 1;
                   'ts_reference_number', s.reference_number,
                   'policy_snapshot_json', s.policy_snapshot_json,
                   'rate_source_refs_json', s.rate_source_refs_json,
+                  'unit_label', 'Expenses - Travel',
+                  'qty', 1,
+                  'unit_charge_ex_vat', charge_ex,
                   'expense', jsonb_build_object(
                     'category', 'TRAVEL',
                     'note', v_note_travel,
@@ -1760,6 +1780,9 @@ limit 1;
                   'ts_reference_number', s.reference_number,
                   'policy_snapshot_json', s.policy_snapshot_json,
                   'rate_source_refs_json', s.rate_source_refs_json,
+                  'unit_label', 'Expenses - Accommodation',
+                  'qty', 1,
+                  'unit_charge_ex_vat', charge_ex,
                   'expense', jsonb_build_object(
                     'category', 'ACCOMMODATION',
                     'note', v_note_accom,
@@ -1848,6 +1871,9 @@ limit 1;
                   'ts_reference_number', s.reference_number,
                   'policy_snapshot_json', s.policy_snapshot_json,
                   'rate_source_refs_json', s.rate_source_refs_json,
+                  'unit_label', 'Expenses - Other',
+                  'qty', 1,
+                  'unit_charge_ex_vat', charge_ex,
                   'expense', jsonb_build_object(
                     'category', 'OTHER',
                     'note', v_note_other,
@@ -1942,6 +1968,9 @@ limit 1;
                 'ts_reference_number', s.reference_number,
                 'policy_snapshot_json', s.policy_snapshot_json,
                 'rate_source_refs_json', s.rate_source_refs_json,
+                'unit_label', 'Expenses - Mileage',
+                'qty', unit_count,
+                'unit_charge_ex_vat', charge_rate,
                 'mileage', jsonb_build_object(
                   'mileage_units', unit_count,
                   'pay_rate', pay_rate,
@@ -2529,7 +2558,7 @@ limit 1;
 
 
           -- client_settings: BY_WEEK uses effective_from <= anchorYmd (no NULL fallback)
-          select cs.client_id, cs.vat_rate_pct, cs.hr_attach_to_invoice, cs.ts_attach_to_invoice, cs.invoice_consolidation_mode, cs.effective_from
+          select cs.client_id, cs.vat_rate_pct, cs.hr_attach_to_invoice, cs.ts_attach_to_invoice, cs.invoice_consolidation_mode, cs.group_nightsat_sunbh, cs.effective_from
           into v_cs
           from public.client_settings cs
           where cs.client_id = v_client_id
@@ -3078,6 +3107,7 @@ else
                     'account_number', v_def.bank_account_number
                   ),
                   'vat_registration_number', v_def.vat_registration_number,
+            'group_nightsat_sunbh', coalesce(v_cs.group_nightsat_sunbh,false),
                   'meta', jsonb_build_object(
                     'source','TSFIN_SEGMENTS',
                     'self_bill', true,
@@ -3160,6 +3190,7 @@ v_created := true;
                 'account_number', v_def.bank_account_number
               ),
               'vat_registration_number', v_def.vat_registration_number,
+            'group_nightsat_sunbh', coalesce(v_cs.group_nightsat_sunbh,false),
               'meta', jsonb_build_object(
                 'source','TSFIN_BY_WEEK',
                 'consolidation_mode', v_consol_mode,
@@ -3557,6 +3588,9 @@ v_ip, v_ua, v_corr
                     'week_ending_date', snap.week_ending_date::text,
                     'date', left(bydate.ymd,10),
                     'bucket_labels', labels,
+                    'unit_label', bucket_name || ' - ' || unit_name,
+                    'qty', public._inv_round2(units),
+                    'unit_charge_ex_vat', charge_rate,
                     'bucket', jsonb_build_object(
                       'code', code,
                       'bucket_name', coalesce(ex->>'bucket_name', bucket_name),
@@ -3789,6 +3823,9 @@ end if;
 
                 'week_ending_date', snap.week_ending_date::text,
                 'bucket_labels', labels,
+                'unit_label', bucket_name || ' - ' || unit_name,
+                'qty', public._inv_round2(unit_count),
+                'unit_charge_ex_vat', case when nullif(btrim(coalesce(ex->>'charge_rate','')), '') is not null then (ex->>'charge_rate')::numeric else public._inv_round2(chg_ex / unit_count) end,
                 'bucket', jsonb_build_object(
                   'code', code,
                   'bucket_name', coalesce(ex->>'bucket_name', bucket_name),
@@ -3940,6 +3977,9 @@ end if;
                   'hospital', con_display_site,
                   'ward', con_ward_hint,
                   'week_ending_date', snap.week_ending_date::text,
+                  'unit_label', 'Expenses - Travel',
+                  'qty', 1,
+                  'unit_charge_ex_vat', chg_ex,
                   'expense', jsonb_build_object(
                     'category', 'TRAVEL',
                     'note', v_note_travel,
@@ -4018,6 +4058,9 @@ end if;
                   'hospital', con_display_site,
                   'ward', con_ward_hint,
                   'week_ending_date', snap.week_ending_date::text,
+                  'unit_label', 'Expenses - Accommodation',
+                  'qty', 1,
+                  'unit_charge_ex_vat', chg_ex,
                   'expense', jsonb_build_object(
                     'category', 'ACCOMMODATION',
                     'note', v_note_accom,
@@ -4096,6 +4139,9 @@ end if;
                   'hospital', con_display_site,
                   'ward', con_ward_hint,
                   'week_ending_date', snap.week_ending_date::text,
+                  'unit_label', 'Expenses - Other',
+                  'qty', 1,
+                  'unit_charge_ex_vat', chg_ex,
                   'expense', jsonb_build_object(
                     'category', 'OTHER',
                     'note', v_note_other,
@@ -4182,6 +4228,9 @@ end if;
                 'hospital', con_display_site,
                 'ward', con_ward_hint,
                 'week_ending_date', snap.week_ending_date::text,
+                'unit_label', 'Expenses - Mileage',
+                'qty', unit_count,
+                'unit_charge_ex_vat', charge_rate,
                 'mileage', jsonb_build_object(
                   'mileage_units', unit_count,
                   'pay_rate', pay_rate,
