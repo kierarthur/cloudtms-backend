@@ -26578,7 +26578,6 @@ async function applyWeeklyHoursCorrections(env, {
   }
 }
 
-
 async function handleTimesheetsSummary(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -26645,7 +26644,7 @@ async function handleTimesheetsSummary(env, req) {
     client_name:         'client_name',
     candidate_name:      'candidate_name',
     summary_stage:       'summary_stage',
-    processing_status:   'processing_status',   // ✅ NEW (server-side sorting support)
+    processing_status:   'processing_status',
     route_type:          'route_type',
     sheet_scope:         'sheet_scope',
     total_pay_ex_vat:    'total_pay_ex_vat',
@@ -26679,7 +26678,25 @@ async function handleTimesheetsSummary(env, req) {
 
   if (clientId)    api += `&client_id=eq.${enc(clientId)}`;
   if (candidateId) api += `&candidate_id=eq.${enc(candidateId)}`;
-  if (stage && stage.toUpperCase() !== 'ALL') api += `&summary_stage=eq.${enc(stage)}`;
+
+  // ✅ FIX: interpret the Tools "stage" dropdown as a UI stage alias, not a literal summary_stage equality.
+  const stageUp = stage ? String(stage).toUpperCase() : null;
+  if (stageUp && stageUp !== 'ALL') {
+    if (stageUp === 'UNPROCESSED') {
+      // planned stubs (no real timesheet yet)
+      api += `&timesheet_id=is.null`;
+    } else if (stageUp === 'PROCESSED') {
+      // real timesheets exist BUT not yet authorised
+      api += `&timesheet_id=is.not_null`;
+      api += `&authorised_at_server=is.null`;
+    } else if (stageUp === 'AUTHORISED') {
+      // authorised timesheets only
+      api += `&authorised_at_server=is.not_null`;
+    } else {
+      // fallback: genuine summary_stage match (if you pass other values)
+      api += `&summary_stage=eq.${enc(stageUp)}`;
+    }
+  }
 
   // Route handling (aggregated)
   if (routeType && routeType !== 'ALL') {
@@ -26710,7 +26727,6 @@ async function handleTimesheetsSummary(env, req) {
   if (needsAttention === 'true')  api += `&needs_attention=eq.true`;
   if (needsAttention === 'false') api += `&needs_attention=eq.false`;
 
-  // ✅ FIX: PostgREST syntax must be is.not_null (NOT is.not.null)
   if (candidatePaid === 'true')   api += `&paid_at_utc=is.not_null`;
   if (clientInvoiced === 'true')  api += `&locked_by_invoice_id=is.not_null`;
 
@@ -26749,7 +26765,7 @@ async function handleTimesheetsSummary(env, req) {
       const filters = {
         client_id: clientId || null,
         candidate_id: candidateId || null,
-        summary_stage: stage || null,
+        summary_stage: stageUp || null, // keep raw stage token for totals parity if your RPC uses it
         route_type: routeType || null,
         sheet_scope: sheetScope || null,
         qr_status: qrStatus || null,
