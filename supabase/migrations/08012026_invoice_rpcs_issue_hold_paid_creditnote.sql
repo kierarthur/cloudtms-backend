@@ -884,20 +884,11 @@ begin
   end loop;
 end;
 $$;
-
 -- ============================================================
--- UPDATED: public.invoice_issue_one(p_invoice_id, p_actor_user_id)
--- ✅ SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
---
--- CHANGE: Adds HR validation hardening:
---   - For each invoice timesheet:
---       if v_timesheets_summary_base.hr_validation_required_for_invoice = true
---       AND validation_status is NULL OR not in (VALIDATION_OK, OVERRIDDEN)
---       => add blocker reason and place invoice ON_HOLD.
---
--- Note:
---   - Uses v_timesheets_summary_base.hr_validation_required_for_invoice
---     (your new appended boolean) as the policy switch.
+-- PATCH: public.invoice_issue_one
+-- Snapshot client_settings.group_nightsat_sunbh into invoices.header_snapshot_json
+-- at issue time if missing (audit-stable render behaviour).
+-- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
 -- ============================================================
 
 create or replace function public.invoice_issue_one(
@@ -916,11 +907,15 @@ set search_path = public
 as $$
 declare
   v_now timestamptz := now();
+  v_anchor_ymd date := (now() at time zone 'Europe/London')::date;
+
   v_terms_days int := null;
   v_due_at timestamptz := null;
   v_hdr jsonb := null;
   v_client_id uuid := null;
-  v_cli record;
+
+  v_group_nightsat_sunbh boolean := null;
+
   v_ts_ids uuid[];
 
   v_reasons text[] := array[]::text[];
@@ -1074,46 +1069,64 @@ begin
     return;
   end if;
 
+  -- ------------------------------------------------------------
   -- No blockers => issue
-  
-    -- Compute due_at_utc at issue time:
-    -- Prefer invoice header_snapshot_json.payment_terms_days; fallback to clients.payment_terms_days; default 30.
-    select i.client_id, i.header_snapshot_json
-    into v_client_id, v_hdr
-    from public.invoices i
-    where i.id = p_invoice_id;
+  -- Compute due_at_utc at issue time:
+  -- Prefer invoice header_snapshot_json.payment_terms_days; fallback to clients.payment_terms_days; default 30.
+  -- Also snapshot group_nightsat_sunbh into header_snapshot_json if missing.
+  -- ------------------------------------------------------------
+  select i.client_id, i.header_snapshot_json
+  into v_client_id, v_hdr
+  from public.invoices i
+  where i.id = p_invoice_id;
 
+  -- Normalize header snapshot to an object
+  if v_hdr is null or jsonb_typeof(v_hdr) <> 'object' then
+    v_hdr := '{}'::jsonb;
+  end if;
+
+  -- Snapshot group_nightsat_sunbh if not already present
+  if not (v_hdr ? 'group_nightsat_sunbh') then
+    select cs0.group_nightsat_sunbh
+    into v_group_nightsat_sunbh
+    from public.client_settings cs0
+    where cs0.client_id = v_client_id
+      and (cs0.effective_from <= v_anchor_ymd or cs0.effective_from is null)
+    order by cs0.effective_from desc nulls last
+    limit 1;
+
+    v_hdr := v_hdr || jsonb_build_object('group_nightsat_sunbh', coalesce(v_group_nightsat_sunbh, false));
+  end if;
+
+  begin
+    if (v_hdr ? 'payment_terms_days') then
+      v_terms_days := (v_hdr->>'payment_terms_days')::int;
+    end if;
+  exception when others then
+    v_terms_days := null;
+  end;
+
+  if v_terms_days is null then
     begin
-      if v_hdr is not null
-         and jsonb_typeof(v_hdr) = 'object'
-         and (v_hdr ? 'payment_terms_days')
-      then
-        v_terms_days := (v_hdr->>'payment_terms_days')::int;
-      end if;
+      select c.payment_terms_days
+      into v_terms_days
+      from public.clients c
+      where c.id = v_client_id;
     exception when others then
       v_terms_days := null;
     end;
+  end if;
 
-    if v_terms_days is null then
-      begin
-        select c.payment_terms_days
-        into v_terms_days
-        from public.clients c
-        where c.id = v_client_id;
-      exception when others then
-        v_terms_days := null;
-      end;
-    end if;
+  v_terms_days := coalesce(v_terms_days, 30);
+  v_due_at := v_now + make_interval(days => v_terms_days);
 
-    v_terms_days := coalesce(v_terms_days, 30);
-    v_due_at := v_now + make_interval(days => v_terms_days);
-
-update public.invoices
+  update public.invoices
   set status = 'ISSUED'::public.invoice_status_enum,
       status_date_utc = v_now,
       issued_at_utc = v_now,
       due_at_utc = v_due_at,
-      on_hold_reason = null
+      on_hold_reason = null,
+      header_snapshot_json = v_hdr
   where id = p_invoice_id;
 
   perform public._audit_insert(
