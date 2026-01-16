@@ -331,19 +331,6 @@ from clients c;
 $$;
 
 
--- ============================================================
--- UPDATED: public.invoice_outbox_enqueue_by_week_selected(p_rows, p_actor_user_id, p_allow_early, p_meta)
---
--- ✅ Logic implemented (as confirmed):
---  - allow_early applies to BOTH segment and non-segment for the timesheet week-ending gate
---  - allow_early NEVER makes delayed segments eligible
---  - delayed segments are eligible only once their invoice_target_week_start (week start) has been reached (<= London today)
---
--- Also fixes the earlier mismatch:
---  - does NOT require ts.week_ending_date = invoice_week_end for SEGMENTS mode
---  - validates selected timesheets based on segment-aware eligibility for the invoice_week_start
--- ============================================================
-
 create or replace function public.invoice_outbox_enqueue_by_week_selected(
   p_rows jsonb,
   p_actor_user_id uuid,
@@ -467,7 +454,15 @@ begin
           -- NON-SEGMENTS path (week gate applies; allow_early overrides)
           -- ─────────────────────────────────────────────────────────────
           (
-            coalesce(tf.invoice_breakdown_json->>'mode','') <> 'SEGMENTS'
+            (
+              coalesce(tf.invoice_breakdown_json->>'mode','') <> 'SEGMENTS'
+              or (
+                coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
+                and jsonb_typeof(tf.invoice_breakdown_json->'segments') = 'array'
+                and jsonb_array_length(tf.invoice_breakdown_json->'segments') = 0
+                and coalesce(tf.total_charge_ex_vat,0)::numeric <> 0
+              )
+            )
             and (ts.week_ending_date::date - 6) = v_week_start
             and (
               p_allow_early = true
