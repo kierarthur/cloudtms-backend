@@ -1876,6 +1876,22 @@ begin
 end;
 $$;
 
+-- ============================================================
+-- CloudTMS Patch: invoice_render_manifest
+--
+-- Changes:
+-- 1) Join invoice_lines -> timesheets to expose timesheets.manual_pdf_r2_key
+-- 2) effective_paper_ts_r2_key priority:
+--      invoice_lines.paper_ts_r2_key
+--      timesheets.manual_pdf_r2_key
+--      docs-pdf/timesheets/ts_<timesheet_id>.pdf
+-- 3) Split evidence arrays (keep existing `evidence`):
+--      timesheet_evidence (kind = 'TIMESHEET')
+--      evidence_other     (kind <> 'TIMESHEET')
+-- 4) Ensure stable ordering by created_at asc in evidence aggregations
+--
+-- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
+-- ============================================================
 
 create or replace function public.invoice_render_manifest(p_invoice_id uuid)
 returns jsonb
@@ -1895,8 +1911,10 @@ with inv as (
 lines as (
   select
     l.*,
+    ts.manual_pdf_r2_key,
     coalesce(
       l.paper_ts_r2_key,
+      ts.manual_pdf_r2_key,
       case
         when l.timesheet_id is not null
           then ('docs-pdf/timesheets/ts_' || l.timesheet_id::text || '.pdf')
@@ -1904,6 +1922,8 @@ lines as (
       end
     ) as effective_paper_ts_r2_key
   from public.invoice_lines l
+  left join public.timesheets ts
+    on ts.timesheet_id = l.timesheet_id
   where l.invoice_id = p_invoice_id
   order by l.created_at asc
 ),
@@ -1972,7 +1992,26 @@ select jsonb_build_object(
   ), '[]'::jsonb),
 
   'timesheet_ids', coalesce((select jsonb_agg(t.timesheet_id::text) from ts_ids t), '[]'::jsonb),
-  'evidence', coalesce((select jsonb_agg(to_jsonb(ev.*)) from ev), '[]'::jsonb),
+
+  -- Backward compatible aggregate (all evidence)
+  'evidence', coalesce((
+    select jsonb_agg(to_jsonb(ev.*) order by ev.created_at)
+    from ev
+  ), '[]'::jsonb),
+
+  -- New explicit splits
+  'timesheet_evidence', coalesce((
+    select jsonb_agg(to_jsonb(ev.*) order by ev.created_at)
+    from ev
+    where upper(coalesce(ev.kind,'')) = 'TIMESHEET'
+  ), '[]'::jsonb),
+
+  'evidence_other', coalesce((
+    select jsonb_agg(to_jsonb(ev.*) order by ev.created_at)
+    from ev
+    where upper(coalesce(ev.kind,'')) <> 'TIMESHEET'
+  ), '[]'::jsonb),
+
   'hr_source_rows_cache', coalesce((select jsonb_agg(to_jsonb(h.*)) from hr_cache h), '[]'::jsonb),
   'tsfin_external_source_rows', coalesce((select jsonb_agg(to_jsonb(t.*)) from tsfin t), '[]'::jsonb),
 
@@ -1985,8 +2024,6 @@ select jsonb_build_object(
 )
 from inv;
 $$;
-
-
 
 
 -- ============================================================
