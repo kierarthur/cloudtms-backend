@@ -308,6 +308,8 @@ $$;
 --  - Preserves idempotency: reuses existing outbox row for same (client_id, invoice_week_start),
 --    but merges allow_early/actor/meta into payload for repeat calls.
 -- ============================================================
+
+
 create or replace function public.invoice_outbox_enqueue_by_week(
   p_client_id uuid,
   p_invoice_week_start date,
@@ -360,7 +362,15 @@ begin
       and tf.locked_by_invoice_id is null
       and ts.revoked_at is null
       and upper(coalesce(pc.precheck_status,'')) = 'OK'
-      and coalesce(tf.invoice_breakdown_json->>'mode','') <> 'SEGMENTS'
+      and (
+        coalesce(tf.invoice_breakdown_json->>'mode','') <> 'SEGMENTS'
+        or (
+          coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
+          and jsonb_typeof(tf.invoice_breakdown_json->'segments') = 'array'
+          and jsonb_array_length(tf.invoice_breakdown_json->'segments') = 0
+          and coalesce(tf.total_charge_ex_vat,0)::numeric <> 0
+        )
+      )
       and (ts.week_ending_date::date - 6) = p_invoice_week_start
       and (p_allow_early = true or ts.week_ending_date::date < v_london_today)
 
