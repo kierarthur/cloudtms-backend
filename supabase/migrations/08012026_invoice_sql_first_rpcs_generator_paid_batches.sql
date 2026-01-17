@@ -459,7 +459,6 @@ begin
 end;
 $$;
 
-
 create or replace function public.invoice_generate_from_outbox_batch(
   p_outbox_ids uuid[],
   p_actor_user_id uuid
@@ -2449,6 +2448,20 @@ h_bh numeric;
           meta jsonb;
           v_line_source_key text;
 
+          -- ======================================================
+          -- DEBUG (invoice_debug): extensive BY_WEEK trace
+          -- ======================================================
+          v_dbg_meta_count int := 0;
+          v_dbg_meta_sample jsonb := '[]'::jsonb;
+          v_dbg_entries_sample jsonb := '[]'::jsonb;
+          v_dbg_timesheet_ids_pre uuid[] := null;
+          v_dbg_ts_ids_to_use_pre uuid[] := null;
+          v_dbg_groups_count int := 0;
+          v_dbg_groups_rows jsonb := '[]'::jsonb;
+          v_dbg_groups_reason text := null;
+          v_dbg_groups_detail jsonb := '[]'::jsonb;
+          v_dbg_grp_i int := 0;
+
           -- already billed set: temp table
 
         begin
@@ -2767,6 +2780,34 @@ limit 1;
           if meta is null or jsonb_typeof(meta) <> 'array' or jsonb_array_length(meta)=0 then
             raise exception 'No eligible snapshots for this client.';
           end if;
+
+          if v_invoice_debug then
+            v_dbg_meta_count := jsonb_array_length(meta);
+
+            select coalesce(jsonb_agg(
+              jsonb_build_object(
+                'timesheet_id', s->>'timesheet_id',
+                'tsfin_id', s->>'id',
+                'basis', s->>'basis',
+                'processing_status', s->>'processing_status',
+                'total_charge_ex_vat', s->>'total_charge_ex_vat',
+                'total_pay_ex_vat', s->>'total_pay_ex_vat',
+                'locked_by_invoice_id', s->>'locked_by_invoice_id',
+                'invoice_mode', coalesce(s->'invoice_breakdown_json'->>'mode',''),
+                'segments_len', case
+                  when jsonb_typeof(s->'invoice_breakdown_json'->'segments')='array'
+                    then jsonb_array_length(s->'invoice_breakdown_json'->'segments')
+                  else null
+                end
+              )
+            ), '[]'::jsonb)
+            into v_dbg_meta_sample
+            from (
+              select value as s
+              from jsonb_array_elements(meta) as t(value)
+              limit 25
+            ) q;
+          end if;
           -- Contract mapping: prefer timesheets.contract_id, fallback to contract_weeks (matches JS BY_WEEK)
                with ts_ids as (
             select distinct (s->>'timesheet_id')::uuid as timesheet_id,
@@ -2987,6 +3028,37 @@ limit 1;
             raise exception 'Nothing to invoice for this week (after reference gating).';
           end if;
 
+          if v_invoice_debug then
+            select coalesce(jsonb_agg(
+              jsonb_build_object(
+                'entry_ord', coalesce(nullif(e->>'entry_ord','')::int, 0),
+                'timesheet_id', e->>'timesheet_id',
+                'tsfin_id', e->>'tsfin_id',
+                'basis', e->>'basis',
+                'pseudo', coalesce(nullif(e->>'pseudo','')::boolean, false),
+                'segment_index', nullif(e->>'segment_index','')::int,
+                'segment_id', e->'segment'->>'segment_id',
+                'invoice_target_week_start', e->'segment'->>'invoice_target_week_start',
+                'invoice_locked_invoice_id', e->'segment'->>'invoice_locked_invoice_id',
+                'ref_num', e->'segment'->>'ref_num',
+                'hours_day', e->'segment'->>'hours_day',
+                'hours_night', e->'segment'->>'hours_night',
+                'hours_sat', e->'segment'->>'hours_sat',
+                'hours_sun', e->'segment'->>'hours_sun',
+                'hours_bh', e->'segment'->>'hours_bh',
+                'pay_amount', e->'segment'->>'pay_amount',
+                'charge_amount', e->'segment'->>'charge_amount'
+              )
+              order by coalesce(nullif(e->>'entry_ord','')::int, 0)
+            ), '[]'::jsonb)
+            into v_dbg_entries_sample
+            from (
+              select value as e
+              from jsonb_array_elements(v_entries) as t(value)
+              limit 50
+            ) q;
+          end if;
+
           -- timesheet_ids used
           select array_agg(distinct (e->>'timesheet_id')::uuid)
           into v_timesheet_ids
@@ -3016,6 +3088,11 @@ limit 1;
 
           truncate pg_temp._inv_groups;
 
+          if v_invoice_debug then
+            v_dbg_timesheet_ids_pre := v_timesheet_ids;
+            v_dbg_ts_ids_to_use_pre := v_ts_ids_to_use;
+          end if;
+
           if v_consol_mode = 'NONE' then
             insert into pg_temp._inv_groups(ts_ids, entries)
             select
@@ -3030,6 +3107,36 @@ limit 1;
           else
             insert into pg_temp._inv_groups(ts_ids, entries)
             values (v_ts_ids_to_use, v_entries_all);
+          end if;
+
+          if v_invoice_debug then
+            select count(*)::int
+            into v_dbg_groups_count
+            from pg_temp._inv_groups;
+
+            select coalesce(jsonb_agg(
+              jsonb_build_object(
+                'ts_ids', to_jsonb(g.ts_ids),
+                'ts_id_count', coalesce(array_length(g.ts_ids,1),0),
+                'entry_count', case when g.entries is null then 0 else jsonb_array_length(g.entries) end
+              )
+            ), '[]'::jsonb)
+            into v_dbg_groups_rows
+            from (
+              select ts_ids, entries
+              from pg_temp._inv_groups
+              limit 50
+            ) g;
+
+            if coalesce(v_dbg_groups_count,0) = 0 then
+              if v_ts_ids_to_use is null then
+                v_dbg_groups_reason := 'GROUPS_EMPTY: v_ts_ids_to_use IS NULL (no rows from unnest)';
+              elsif coalesce(array_length(v_ts_ids_to_use,1),0) = 0 then
+                v_dbg_groups_reason := 'GROUPS_EMPTY: v_ts_ids_to_use IS EMPTY';
+              else
+                v_dbg_groups_reason := 'GROUPS_EMPTY: inserted 0 rows for unknown reason';
+              end if;
+            end if;
           end if;
 
           -- Reset per-outbox accumulators
@@ -4367,6 +4474,49 @@ end if;
         v_run_line_count
       from pg_temp._inv_run_lines rl;
 
+      if v_invoice_debug then
+        v_dbg_grp_i := coalesce(v_dbg_grp_i,0) + 1;
+        v_dbg_groups_detail := v_dbg_groups_detail || jsonb_build_array(
+          jsonb_build_object(
+            'group_index', v_dbg_grp_i,
+            'consolidation_mode', v_consol_mode,
+            'mode', v_mode,
+            'all_selfbill', coalesce(v_all_selfbill,false),
+
+            'ts_ids', to_jsonb(coalesce(v_ts_ids_to_use, array[]::uuid[])),
+            'ts_id_count', coalesce(array_length(v_ts_ids_to_use,1),0),
+            'entry_count', coalesce(v_entry_count,0),
+
+            'invoice_id', case when v_invoice_id is null then null else v_invoice_id::text end,
+            'invoice_created', coalesce(v_created,false),
+            'invoice_status_before', v_prev_status,
+            'invoice_status_after', (select i.status::text from public.invoices i where i.id = v_invoice_id limit 1),
+
+            'prev_totals', jsonb_build_object(
+              'subtotal_ex_vat', public._inv_round2(v_prev_ex),
+              'vat_amount', public._inv_round2(v_prev_vat),
+              'total_inc_vat', public._inv_round2(v_prev_inc)
+            ),
+            'new_totals', jsonb_build_object(
+              'subtotal_ex_vat', public._inv_round2(v_new_ex),
+              'vat_amount', public._inv_round2(v_new_vat),
+              'total_inc_vat', public._inv_round2(v_new_inc)
+            ),
+            'delta_totals', jsonb_build_object(
+              'subtotal_ex_vat', v_delta_ex,
+              'vat_amount', v_delta_vat,
+              'total_inc_vat', v_delta_inc
+            ),
+
+            'this_run', jsonb_build_object(
+              'timesheet_ids', to_jsonb(coalesce(v_run_ts_ids, array[]::uuid[])),
+              'source_keys', to_jsonb(coalesce(v_run_source_keys, array[]::text[])),
+              'line_count', coalesce(v_run_line_count,0)
+            )
+          )
+        );
+      end if;
+
       -- Write ONE audit row that proves this run + what changed (including later append runs)
       if (coalesce(v_delta_ex,0) <> 0 or coalesce(v_delta_vat,0) <> 0 or coalesce(v_delta_inc,0) <> 0) then
         perform public._inv_write_audit(
@@ -4551,6 +4701,15 @@ end if;
                         'limit_ts_ids', case when v_limit_ts_ids is null then null else to_jsonb(v_limit_ts_ids) end,
                         'entries_count', v_entry_count,
                         'entries_timesheet_ids', to_jsonb(v_timesheet_ids),
+                        'meta_count', coalesce(v_dbg_meta_count,0),
+                        'meta_sample', coalesce(v_dbg_meta_sample,'[]'::jsonb),
+                        'entries_sample', coalesce(v_dbg_entries_sample,'[]'::jsonb),
+                        'timesheet_ids_pre_grouping', to_jsonb(coalesce(v_dbg_timesheet_ids_pre, array[]::uuid[])),
+                        'ts_ids_to_use_pre_grouping', case when v_dbg_ts_ids_to_use_pre is null then null else to_jsonb(v_dbg_ts_ids_to_use_pre) end,
+                        'groups_count', coalesce(v_dbg_groups_count,0),
+                        'groups_rows', coalesce(v_dbg_groups_rows,'[]'::jsonb),
+                        'groups_reason', v_dbg_groups_reason,
+                        'groups_detail', coalesce(v_dbg_groups_detail,'[]'::jsonb),
                         'created_invoice_ids', to_jsonb(v_outbox_invoice_ids),
                         'invoice_summaries', (
                           select coalesce(jsonb_agg(
