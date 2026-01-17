@@ -373,33 +373,33 @@ begin
       -- Load snapshot + timesheet + precheck
       select
         tf.*,
-        ts.booking_id,
-        ts.week_ending_date,
-        ts.reference_number,
-        ts.sheet_scope::text as sheet_scope,
-        coalesce(ts.submission_mode::text,'') as submission_mode,
-        ts.day_references_json,
-        ts.actual_schedule_json,
+        tsr.booking_id,
+        tsr.week_ending_date,
+        tsr.reference_number,
+        tsr.sheet_scope::text as sheet_scope,
+        coalesce(tsr.submission_mode::text,'') as submission_mode,
+        tsr.day_references_json,
+        tsr.actual_schedule_json,
         cw.contract_id
       into snap
       from public.timesheets_financials tf
-      join public.timesheets ts on ts.timesheet_id = tf.timesheet_id and ts.is_current = true
+      join public.timesheets tsr on tsr.timesheet_id = tf.timesheet_id and tsr.is_current = true
       left join public.contract_weeks cw on cw.timesheet_id = tf.timesheet_id
-      join public.v_ts_invoice_precheck pc on pc.timesheet_id = tf.timesheet_id
+      join public.v_ts_invoice_precheck pcv on pcv.timesheet_id = tf.timesheet_id
       where tf.timesheet_id = tsid
         and tf.is_current = true
         and tf.locked_by_invoice_id is null
         and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
-        and upper(coalesce(pc.precheck_status,'')) = 'OK'
+        and upper(coalesce(pcv.precheck_status,'')) = 'OK'
         and tf.client_id = v_inv.client_id
         and (
-          pc.require_reference_to_invoice is not true
+          pcv.require_reference_to_invoice is not true
           or public._inv_timesheet_has_invoice_reference(
-                ts.sheet_scope::text,
-                coalesce(ts.submission_mode::text,''),
-                ts.reference_number,
-                ts.day_references_json,
-                ts.actual_schedule_json
+                tsr.sheet_scope::text,
+                coalesce(tsr.submission_mode::text,''),
+                tsr.reference_number,
+                tsr.day_references_json,
+                tsr.actual_schedule_json
              )
         )
       limit 1;
@@ -526,14 +526,14 @@ begin
           with rows as (
             select
               nullif(btrim(coalesce(seg->>'date','')), '') as ymd,
-              coalesce((seg->>'hours_day')::numeric,0)   as h_day,
-              coalesce((seg->>'hours_night')::numeric,0) as h_night,
-              coalesce((seg->>'hours_sat')::numeric,0)   as h_sat,
-              coalesce((seg->>'hours_sun')::numeric,0)   as h_sun,
-              coalesce((seg->>'hours_bh')::numeric,0)    as h_bh,
-              coalesce((seg->>'pay_amount')::numeric,0)  as pay_ex,
-              coalesce((seg->>'charge_amount')::numeric,0) as chg_ex
-            from jsonb_array_elements(segments) seg
+              coalesce((seg_el->>'hours_day')::numeric,0)   as h_day,
+              coalesce((seg_el->>'hours_night')::numeric,0) as h_night,
+              coalesce((seg_el->>'hours_sat')::numeric,0)   as h_sat,
+              coalesce((seg_el->>'hours_sun')::numeric,0)   as h_sun,
+              coalesce((seg_el->>'hours_bh')::numeric,0)    as h_bh,
+              coalesce((seg_el->>'pay_amount')::numeric,0)  as pay_ex,
+              coalesce((seg_el->>'charge_amount')::numeric,0) as chg_ex
+            from jsonb_array_elements(segments) seg_el
           ),
           agg as (
             select
@@ -606,15 +606,15 @@ begin
       else
         -- Weekly hours line
         select
-          public._inv_round2(coalesce(sum((seg->>'hours_day')::numeric),0)),
-          public._inv_round2(coalesce(sum((seg->>'hours_night')::numeric),0)),
-          public._inv_round2(coalesce(sum((seg->>'hours_sat')::numeric),0)),
-          public._inv_round2(coalesce(sum((seg->>'hours_sun')::numeric),0)),
-          public._inv_round2(coalesce(sum((seg->>'hours_bh')::numeric),0)),
-          public._inv_round2(coalesce(sum((seg->>'pay_amount')::numeric),0)),
-          public._inv_round2(coalesce(sum((seg->>'charge_amount')::numeric),0))
+          public._inv_round2(coalesce(sum((seg_el->>'hours_day')::numeric),0)),
+          public._inv_round2(coalesce(sum((seg_el->>'hours_night')::numeric),0)),
+          public._inv_round2(coalesce(sum((seg_el->>'hours_sat')::numeric),0)),
+          public._inv_round2(coalesce(sum((seg_el->>'hours_sun')::numeric),0)),
+          public._inv_round2(coalesce(sum((seg_el->>'hours_bh')::numeric),0)),
+          public._inv_round2(coalesce(sum((seg_el->>'pay_amount')::numeric),0)),
+          public._inv_round2(coalesce(sum((seg_el->>'charge_amount')::numeric),0))
         into h_day, h_night, h_sat, h_sun, h_bh, pay_ex, chg_ex
-        from jsonb_array_elements(segments) seg;
+        from jsonb_array_elements(segments) seg_el;
 
         if chg_ex > 0 and (coalesce(h_day,0)+coalesce(h_night,0)+coalesce(h_sat,0)+coalesce(h_sun,0)+coalesce(h_bh,0)) > 0 then
           margin_ex := public._inv_round2(chg_ex - pay_ex);
