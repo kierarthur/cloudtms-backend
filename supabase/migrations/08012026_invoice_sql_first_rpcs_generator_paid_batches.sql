@@ -3088,6 +3088,15 @@ limit 1;
 
           truncate pg_temp._inv_groups;
 
+          -- ✅ Ensure v_ts_ids_to_use is populated for grouping
+          -- Prefer payload-limited timesheets when provided; otherwise use all timesheets derived from entries.
+          if v_ts_ids_to_use is null or coalesce(array_length(v_ts_ids_to_use,1),0) = 0 then
+            v_ts_ids_to_use := case
+              when v_limit_ts_ids is not null and coalesce(array_length(v_limit_ts_ids,1),0) > 0 then v_limit_ts_ids
+              else v_timesheet_ids
+            end;
+          end if;
+
           if v_invoice_debug then
             v_dbg_timesheet_ids_pre := v_timesheet_ids;
             v_dbg_ts_ids_to_use_pre := v_ts_ids_to_use;
@@ -4840,6 +4849,7 @@ where id = v_outbox_id;
   end if;
 end;
 $$;
+
 
 
 create or replace function public.invoice_source_rows_collect(
