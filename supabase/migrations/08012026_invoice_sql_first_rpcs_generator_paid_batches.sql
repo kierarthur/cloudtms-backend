@@ -458,6 +458,8 @@ begin
   end loop;
 end;
 $$;
+
+
 create or replace function public.invoice_generate_from_outbox_batch(
   p_outbox_ids uuid[],
   p_actor_user_id uuid
@@ -3105,7 +3107,7 @@ limit 1;
                         (v_consol_mode = 'BY_WEEK' and (i.header_snapshot_json->'meta'->>'invoice_week_start') = v_week_start::text)
                         or (v_consol_mode = 'ANY_WEEK')
                       )
-                    order by i.created_at_utc desc nulls last
+                    order by i.created_at desc nulls last
                     limit 1;
 
                     if found then
@@ -4561,7 +4563,7 @@ end if;
                               'total_inc_vat', coalesce(i.total_inc_vat,0)::numeric,
                               'line_count', (select count(*) from public.invoice_lines l where l.invoice_id=i.id)
                             )
-                            order by i.created_at_utc desc nulls last
+                            order by i.created_at desc nulls last
                           ), '[]'::jsonb)
                           from public.invoices i
                           where i.id = any(v_outbox_invoice_ids)
