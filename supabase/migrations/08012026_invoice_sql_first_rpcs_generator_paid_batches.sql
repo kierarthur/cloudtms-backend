@@ -459,25 +459,6 @@ begin
 end;
 $$;
 
--- Patch: populate pay_day/pay_night/pay_sat/pay_sun/pay_bh in invoice_lines
--- Affects: public.invoice_generate_from_outbox_batch
--- Generated from: 08012026_invoice_sql_first_rpcs_generator_paid_batches (9).sql
-
-
--- ============================================================
--- PATCH: invoice_generate_from_outbox_batch
--- Adds:
---  - Snapshots client_settings.group_nightsat_sunbh into invoices.header_snapshot_json
---  - Ensures additional/expense/mileage meta_json includes: unit_label, qty, unit_charge_ex_vat
--- NOTE: This file contains the FULL function definition.
--- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
--- ============================================================
-
-
-
-
-
-
 create or replace function public.invoice_generate_from_outbox_batch(
   p_outbox_ids uuid[],
   p_actor_user_id uuid
@@ -2302,7 +2283,7 @@ where tf.timesheet_id = any(v_ts_ids_to_use)
 
 
    -- line build loop
-tsid uuid;
+v_ts_id uuid;
 snap record;
 ts_rec record;
 con record;
@@ -2883,14 +2864,14 @@ limit 1;
           if v_consol_mode = 'NONE' then
             insert into pg_temp._inv_groups(ts_ids, entries)
             select
-              array[tsid]::uuid[] as ts_ids,
+              array[tsid_item]::uuid[] as ts_ids,
               coalesce((
                 select jsonb_agg(e)
                 from jsonb_array_elements(v_entries_all) e
                 where nullif(coalesce(e->>'timesheet_id',''), '') is not null
-                  and (e->>'timesheet_id')::uuid = tsid
+                  and (e->>'timesheet_id')::uuid = tsid_item
               ), '[]'::jsonb) as entries
-            from unnest(v_ts_ids_to_use) tsid;
+            from unnest(v_ts_ids_to_use) tsid_item;
           else
             insert into pg_temp._inv_groups(ts_ids, entries)
             values (v_ts_ids_to_use, v_entries_all);
@@ -3262,7 +3243,7 @@ v_ip, v_ua, v_corr
           end if;
 
           -- Build per-timesheet sets from entries (preserve entry order with entry_ord)
-          for tsid in
+          for v_ts_id in
             select distinct (e->>'timesheet_id')::uuid
             from jsonb_array_elements(v_entries) e
           loop
@@ -3276,7 +3257,7 @@ v_ip, v_ua, v_corr
             into snap
             from public.timesheets_financials tf
             join public.timesheets ts on ts.timesheet_id = tf.timesheet_id
-            where tf.timesheet_id = tsid
+            where tf.timesheet_id = v_ts_id
               and tf.is_current = true;
 
             if not found then
@@ -3290,7 +3271,7 @@ v_ip, v_ua, v_corr
               select cw.contract_id
               into contract_id
               from public.contract_weeks cw
-              where cw.timesheet_id = tsid
+              where cw.timesheet_id = v_ts_id
               limit 1;
             end if;
 
@@ -3336,11 +3317,11 @@ v_ip, v_ua, v_corr
 
 
 
-            -- hasAnyDate from entries for this tsid
+            -- hasAnyDate from entries for this v_ts_id
             select exists(
               select 1
               from jsonb_array_elements(v_entries) e
-              where (e->>'timesheet_id')::uuid = tsid
+              where (e->>'timesheet_id')::uuid = v_ts_id
                 and left(coalesce((e->'segment'->>'date'),''),10) ~ '^\d{4}-\d{2}-\d{2}$'
             ) into has_any_date;
 
@@ -3362,7 +3343,7 @@ v_ip, v_ua, v_corr
                     coalesce((e->'segment'->>'pay_amount')::numeric,0) as pay_ex,
                     coalesce((e->'segment'->>'charge_amount')::numeric,0) as chg_ex
                   from jsonb_array_elements(v_entries) e
-                  where (e->>'timesheet_id')::uuid = tsid
+                  where (e->>'timesheet_id')::uuid = v_ts_id
                     and left(coalesce((e->'segment'->>'date'),''),10) ~ '^\d{4}-\d{2}-\d{2}$'
                 ),
                 agg as (
@@ -3396,12 +3377,12 @@ v_ip, v_ua, v_corr
                 vat_amt := public._inv_round2(chg_ex * v_vat_rate / 100);
                 inc_amt := public._inv_round2(chg_ex + vat_amt);
 
-                              line_desc := coalesce(cand_display, ('TS '||tsid::text)) ||
+                              line_desc := coalesce(cand_display, ('TS '||v_ts_id::text)) ||
                         ' – '|| bydate.ymd || ' – W/E '|| coalesce(snap.week_ending_date::text,'');
 
                 meta := jsonb_build_object(
                   'line_type','HOURS_DAILY',
-                  'timesheet_id', tsid::text,
+                  'timesheet_id', v_ts_id::text,
                   'tsfin_id', snap.id::text,
                   'candidate_display', cand_display,
                   'role', con_role,
@@ -3426,7 +3407,7 @@ v_ip, v_ua, v_corr
                   )
                 );
 
-                v_line_source_key := 'TS:' || tsid::text || ':HOURS:' || bydate.ymd;
+                v_line_source_key := 'TS:' || v_ts_id::text || ':HOURS:' || bydate.ymd;
                 insert into public.invoice_lines(
                   invoice_id, timesheet_id, booking_id, description,
                   hours_day, hours_night, hours_sat, hours_sun, hours_bh,
@@ -3437,7 +3418,7 @@ v_ip, v_ua, v_corr
                   paper_ts_r2_key, meta_json, source_key
                 )
                 values (
-                  v_invoice_id, tsid, snap.booking_id, line_desc,
+                  v_invoice_id, v_ts_id, snap.booking_id, line_desc,
                   public._inv_round2(bydate.hours_day),
                   public._inv_round2(bydate.hours_night),
                   public._inv_round2(bydate.hours_sat),
@@ -3452,7 +3433,7 @@ v_ip, v_ua, v_corr
 
                   pay_ex, chg_ex, margin_ex,
                   v_vat_rate, vat_amt, inc_amt,
-                  ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
+                  ('docs-pdf/timesheets/ts_' || v_ts_id::text || '.pdf'),
                   meta,
                   v_line_source_key
                 )
@@ -3460,7 +3441,7 @@ v_ip, v_ua, v_corr
 
                 if found then
                   insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
-                  values (tsid, v_line_source_key, chg_ex, vat_amt, inc_amt);
+                  values (v_ts_id, v_line_source_key, chg_ex, vat_amt, inc_amt);
                 end if;
 
 
@@ -3507,7 +3488,7 @@ v_ip, v_ua, v_corr
                   -- self-bill dedupe
                   if v_all_selfbill and exists(
                     select 1 from pg_temp._inv_billed_add_keys b
-                    where b.timesheet_id = tsid and b.code = code and b.suffix = left(bydate.ymd,10)
+                    where b.timesheet_id = v_ts_id and b.code = code and b.suffix = left(bydate.ymd,10)
                   ) then
                     continue;
                   end if;
@@ -3520,13 +3501,13 @@ v_ip, v_ua, v_corr
                   vat_amt := public._inv_round2(chg_ex * v_vat_rate / 100);
                   inc_amt := public._inv_round2(chg_ex + vat_amt);
 
-                                line_desc := coalesce(cand_display, ('TS '||tsid::text)) ||
+                                line_desc := coalesce(cand_display, ('TS '||v_ts_id::text)) ||
                           ' – '|| bucket_name || ' – '|| left(bydate.ymd,10) ||
                           ' – '|| units::text || ' '|| unit_name;
 
                                                  meta := jsonb_build_object(
                     'line_type','ADDITIONAL_RATE_DAILY',
-                    'timesheet_id', tsid::text,
+                    'timesheet_id', v_ts_id::text,
                     'tsfin_id', snap.id::text,
                     'candidate_display', cand_display,
                     'role', con_role,
@@ -3558,7 +3539,7 @@ v_ip, v_ua, v_corr
 
 
 
-                  v_line_source_key := 'TS:' || tsid::text || ':ADD:' || code || ':' || left(bydate.ymd,10);
+                  v_line_source_key := 'TS:' || v_ts_id::text || ':ADD:' || code || ':' || left(bydate.ymd,10);
                   insert into public.invoice_lines(
                     invoice_id, timesheet_id, booking_id, description,
                     hours_day, hours_night, hours_sat, hours_sun, hours_bh,
@@ -3569,7 +3550,7 @@ v_ip, v_ua, v_corr
                     paper_ts_r2_key, meta_json, source_key
                   )
                   values (
-                    v_invoice_id, tsid, snap.booking_id, line_desc,
+                    v_invoice_id, v_ts_id, snap.booking_id, line_desc,
                     0,0,0,0,0,
                     null,null,null,null,null,
       coalesce(s.charge_day,null),
@@ -3580,7 +3561,7 @@ v_ip, v_ua, v_corr
 
                     pay_ex, chg_ex, margin_ex,
                     v_vat_rate, vat_amt, inc_amt,
-                    ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
+                    ('docs-pdf/timesheets/ts_' || v_ts_id::text || '.pdf'),
                     meta,
                     v_line_source_key
                   )
@@ -3588,7 +3569,7 @@ v_ip, v_ua, v_corr
 
                   if found then
                     insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
-                    values (tsid, v_line_source_key, chg_ex, vat_amt, inc_amt);
+                    values (v_ts_id, v_line_source_key, chg_ex, vat_amt, inc_amt);
                   end if;
 
 
@@ -3599,7 +3580,7 @@ v_ip, v_ua, v_corr
               if exists(
                 select 1 from public.invoice_lines l
                 where l.invoice_id = v_invoice_id
-                  and l.timesheet_id = tsid
+                  and l.timesheet_id = v_ts_id
                   and upper(coalesce(l.meta_json->>'line_type','')) = 'HOURS_DAILY'
               ) then
                 continue;
@@ -3617,7 +3598,7 @@ v_ip, v_ua, v_corr
                 sum(coalesce((e->'segment'->>'pay_amount')::numeric,0)) as pay_ex,
                 sum(coalesce((e->'segment'->>'charge_amount')::numeric,0)) as chg_ex
               from jsonb_array_elements(v_entries) e
-              where (e->>'timesheet_id')::uuid = tsid
+              where (e->>'timesheet_id')::uuid = v_ts_id
             )
          select
   public._inv_round2(agg.pay_ex),
@@ -3639,11 +3620,11 @@ else
     vat_amt := public._inv_round2(chg_ex * v_vat_rate / 100);
     inc_amt := public._inv_round2(chg_ex + vat_amt);
 
-     line_desc := coalesce(cand_display, ('TS '||tsid::text)) || ' – W/E ' || coalesce(snap.week_ending_date::text,'');
+     line_desc := coalesce(cand_display, ('TS '||v_ts_id::text)) || ' – W/E ' || coalesce(snap.week_ending_date::text,'');
 
      meta := jsonb_build_object(
       'line_type','HOURS_WEEKLY',
-      'timesheet_id', tsid::text,
+      'timesheet_id', v_ts_id::text,
       'tsfin_id', snap.id::text,
       'candidate_display', cand_display,
       'role', con_role,
@@ -3667,7 +3648,7 @@ else
     );
 
 
-    v_line_source_key := 'TS:' || tsid::text || ':HOURS:WEEK';
+    v_line_source_key := 'TS:' || v_ts_id::text || ':HOURS:WEEK';
     insert into public.invoice_lines(
       invoice_id, timesheet_id, booking_id, description,
       hours_day, hours_night, hours_sat, hours_sun, hours_bh,
@@ -3678,7 +3659,7 @@ else
       paper_ts_r2_key, meta_json, source_key
     )
     values (
-      v_invoice_id, tsid, snap.booking_id, line_desc,
+      v_invoice_id, v_ts_id, snap.booking_id, line_desc,
       h_day, h_night, h_sat, h_sun, h_bh,
       null,null,null,null,null,
       coalesce(snap.charge_day,null),
@@ -3689,7 +3670,7 @@ else
 
       pay_ex, chg_ex, margin_ex,
       v_vat_rate, vat_amt, inc_amt,
-      ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
+      ('docs-pdf/timesheets/ts_' || v_ts_id::text || '.pdf'),
       meta,
       v_line_source_key
     )
@@ -3697,7 +3678,7 @@ else
 
     if found then
       insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
-      values (tsid, v_line_source_key, chg_ex, vat_amt, inc_amt);
+      values (v_ts_id, v_line_source_key, chg_ex, vat_amt, inc_amt);
     end if;
   end if;
 end if;
@@ -3723,7 +3704,7 @@ end if;
               -- self-bill dedupe
               if v_all_selfbill and exists(
                 select 1 from pg_temp._inv_billed_add_keys b
-                where b.timesheet_id = tsid and b.code = code and b.suffix = 'WEEK'
+                where b.timesheet_id = v_ts_id and b.code = code and b.suffix = 'WEEK'
               ) then
                 continue;
               end if;
@@ -3742,13 +3723,13 @@ end if;
               unit_name := nullif(btrim(coalesce(ex->>'unit_name','')), '');
               if unit_name is null then unit_name := 'units'; end if;
 
-                        line_desc := coalesce(cand_display, ('TS '||tsid::text)) ||
+                        line_desc := coalesce(cand_display, ('TS '||v_ts_id::text)) ||
                       ' – ' || bucket_name || ' – ' || unit_count::text || ' ' || unit_name ||
                       ' (W/E ' || coalesce(snap.week_ending_date::text,'') || ')';
 
               meta := jsonb_build_object(
                 'line_type','ADDITIONAL_RATE',
-                'timesheet_id', tsid::text,
+                'timesheet_id', v_ts_id::text,
                 'tsfin_id', snap.id::text,
                 'candidate_display', cand_display,
                                'role', con_role,
@@ -3779,7 +3760,7 @@ end if;
                 )
               );
 
-              v_line_source_key := 'TS:' || tsid::text || ':ADD:' || code || ':WEEK';
+              v_line_source_key := 'TS:' || v_ts_id::text || ':ADD:' || code || ':WEEK';
               insert into public.invoice_lines(
                 invoice_id, timesheet_id, booking_id, description,
                 hours_day, hours_night, hours_sat, hours_sun, hours_bh,
@@ -3790,7 +3771,7 @@ end if;
                 paper_ts_r2_key, meta_json, source_key
               )
               values (
-                v_invoice_id, tsid, snap.booking_id, line_desc,
+                v_invoice_id, v_ts_id, snap.booking_id, line_desc,
                 0,0,0,0,0,
                 null,null,null,null,null,
       coalesce(s.charge_day,null),
@@ -3801,7 +3782,7 @@ end if;
 
                 pay_ex, chg_ex, margin_ex,
                 v_vat_rate, vat_amt, inc_amt,
-                ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
+                ('docs-pdf/timesheets/ts_' || v_ts_id::text || '.pdf'),
                 meta,
                 v_line_source_key
               )
@@ -3809,7 +3790,7 @@ end if;
 
               if found then
                 insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
-                values (tsid, v_line_source_key, chg_ex, vat_amt, inc_amt);
+                values (v_ts_id, v_line_source_key, chg_ex, vat_amt, inc_amt);
               end if;
 
 
@@ -3896,7 +3877,7 @@ end if;
 
                 meta := jsonb_build_object(
                   'line_type','EXPENSE_TRAVEL',
-                  'timesheet_id', tsid::text,
+                  'timesheet_id', v_ts_id::text,
                   'tsfin_id', snap.id::text,
                   'candidate_display', cand_display,
                   'role', con_role,
@@ -3919,7 +3900,7 @@ end if;
                   )
                 );
 
-                v_line_source_key := 'TS:' || tsid::text || ':EXP:TRAVEL';
+                v_line_source_key := 'TS:' || v_ts_id::text || ':EXP:TRAVEL';
 
                 insert into public.invoice_lines(
                   invoice_id, timesheet_id, booking_id, description,
@@ -3931,7 +3912,7 @@ end if;
                   paper_ts_r2_key, meta_json, source_key
                 )
                 values (
-                  v_invoice_id, tsid, snap.booking_id, line_desc,
+                  v_invoice_id, v_ts_id, snap.booking_id, line_desc,
                   0,0,0,0,0,
                   null,null,null,null,null,
       coalesce(s.charge_day,null),
@@ -3942,7 +3923,7 @@ end if;
 
                   pay_ex, chg_ex, margin_ex,
                   v_vat_rate, vat_amt, inc_amt,
-                  ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
+                  ('docs-pdf/timesheets/ts_' || v_ts_id::text || '.pdf'),
                   meta,
                   v_line_source_key
                 )
@@ -3950,7 +3931,7 @@ end if;
 
                 if found then
                   insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
-                  values (tsid, v_line_source_key, chg_ex, vat_amt, inc_amt);
+                  values (v_ts_id, v_line_source_key, chg_ex, vat_amt, inc_amt);
                 end if;
               end if;
 
@@ -3969,7 +3950,7 @@ end if;
 
                 meta := jsonb_build_object(
                   'line_type','EXPENSE_ACCOMMODATION',
-                  'timesheet_id', tsid::text,
+                  'timesheet_id', v_ts_id::text,
                   'tsfin_id', snap.id::text,
                   'candidate_display', cand_display,
                   'role', con_role,
@@ -3992,7 +3973,7 @@ end if;
                   )
                 );
 
-                v_line_source_key := 'TS:' || tsid::text || ':EXP:ACCOMMODATION';
+                v_line_source_key := 'TS:' || v_ts_id::text || ':EXP:ACCOMMODATION';
 
                 insert into public.invoice_lines(
                   invoice_id, timesheet_id, booking_id, description,
@@ -4004,7 +3985,7 @@ end if;
                   paper_ts_r2_key, meta_json, source_key
                 )
                 values (
-                  v_invoice_id, tsid, snap.booking_id, line_desc,
+                  v_invoice_id, v_ts_id, snap.booking_id, line_desc,
                   0,0,0,0,0,
                   null,null,null,null,null,
       coalesce(s.charge_day,null),
@@ -4015,7 +3996,7 @@ end if;
 
                   pay_ex, chg_ex, margin_ex,
                   v_vat_rate, vat_amt, inc_amt,
-                  ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
+                  ('docs-pdf/timesheets/ts_' || v_ts_id::text || '.pdf'),
                   meta,
                   v_line_source_key
                 )
@@ -4023,7 +4004,7 @@ end if;
 
                 if found then
                   insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
-                  values (tsid, v_line_source_key, chg_ex, vat_amt, inc_amt);
+                  values (v_ts_id, v_line_source_key, chg_ex, vat_amt, inc_amt);
                 end if;
               end if;
 
@@ -4042,7 +4023,7 @@ end if;
 
                 meta := jsonb_build_object(
                   'line_type','EXPENSE_OTHER',
-                  'timesheet_id', tsid::text,
+                  'timesheet_id', v_ts_id::text,
                   'tsfin_id', snap.id::text,
                   'candidate_display', cand_display,
                   'role', con_role,
@@ -4065,7 +4046,7 @@ end if;
                   )
                 );
 
-                v_line_source_key := 'TS:' || tsid::text || ':EXP:OTHER';
+                v_line_source_key := 'TS:' || v_ts_id::text || ':EXP:OTHER';
 
                 insert into public.invoice_lines(
                   invoice_id, timesheet_id, booking_id, description,
@@ -4077,7 +4058,7 @@ end if;
                   paper_ts_r2_key, meta_json, source_key
                 )
                 values (
-                  v_invoice_id, tsid, snap.booking_id, line_desc,
+                  v_invoice_id, v_ts_id, snap.booking_id, line_desc,
                   0,0,0,0,0,
                   null,null,null,null,null,
       coalesce(s.charge_day,null),
@@ -4088,7 +4069,7 @@ end if;
 
                   pay_ex, chg_ex, margin_ex,
                   v_vat_rate, vat_amt, inc_amt,
-                  ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
+                  ('docs-pdf/timesheets/ts_' || v_ts_id::text || '.pdf'),
                   meta,
                   v_line_source_key
                 )
@@ -4096,7 +4077,7 @@ end if;
 
                 if found then
                   insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
-                  values (tsid, v_line_source_key, chg_ex, vat_amt, inc_amt);
+                  values (v_ts_id, v_line_source_key, chg_ex, vat_amt, inc_amt);
                 end if;
               end if;
             end;
@@ -4123,7 +4104,7 @@ end if;
 
               meta := jsonb_build_object(
                 'line_type','MILEAGE',
-                'timesheet_id', tsid::text,
+                'timesheet_id', v_ts_id::text,
                 'tsfin_id', snap.id::text,
                 'candidate_display', cand_display,
                 'role', con_role,
@@ -4147,7 +4128,7 @@ end if;
                 )
               );
 
-              v_line_source_key := 'TS:' || tsid::text || ':MILEAGE';
+              v_line_source_key := 'TS:' || v_ts_id::text || ':MILEAGE';
 
               insert into public.invoice_lines(
                 invoice_id, timesheet_id, booking_id, description,
@@ -4159,7 +4140,7 @@ end if;
                 paper_ts_r2_key, meta_json, source_key
               )
               values (
-                v_invoice_id, tsid, snap.booking_id, line_desc,
+                v_invoice_id, v_ts_id, snap.booking_id, line_desc,
                 0,0,0,0,0,
                 null,null,null,null,null,
       coalesce(s.charge_day,null),
@@ -4170,7 +4151,7 @@ end if;
 
                 pay_ex, chg_ex, margin_ex,
                 v_vat_rate, vat_amt, inc_amt,
-                ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
+                ('docs-pdf/timesheets/ts_' || v_ts_id::text || '.pdf'),
                 meta,
                 v_line_source_key
               )
@@ -4178,7 +4159,7 @@ end if;
 
               if found then
                 insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
-                values (tsid, v_line_source_key, chg_ex, vat_amt, inc_amt);
+                values (v_ts_id, v_line_source_key, chg_ex, vat_amt, inc_amt);
               end if;
             end if;
 
@@ -4293,7 +4274,7 @@ end if;
           perform public._inv_lock_segments_for_invoice(v_invoice_id, meta);
 
           -- AUDIT: TIMESHEET_SEGMENTS_INVOICED (per timesheet)
-          for tsid in
+          for v_ts_id in
             select distinct (e->>'timesheet_id')::uuid
             from jsonb_array_elements(v_entries) e
           loop
@@ -4305,14 +4286,14 @@ end if;
             into v_terms_days, chg_ex, pay_ex
             from public.invoice_lines l
             where l.invoice_id = v_invoice_id
-              and l.timesheet_id = tsid
+              and l.timesheet_id = v_ts_id
               and upper(coalesce(l.meta_json->>'line_type','')) in ('HOURS_DAILY','HOURS_WEEKLY');
 
             -- bases: DAILY if any HOURS_DAILY exists; else first basis in entries order for this ts
             select exists(
               select 1 from public.invoice_lines l
               where l.invoice_id = v_invoice_id
-                and l.timesheet_id = tsid
+                and l.timesheet_id = v_ts_id
                 and upper(coalesce(l.meta_json->>'line_type','')) = 'HOURS_DAILY'
             ) into bydate_any;
 
@@ -4322,7 +4303,7 @@ end if;
               select to_jsonb(array[ upper(coalesce(e->>'basis','WEEKLY')) ]::text[])
               into meta
               from jsonb_array_elements(v_entries) e
-              where (e->>'timesheet_id')::uuid = tsid
+              where (e->>'timesheet_id')::uuid = v_ts_id
               order by (e->>'entry_ord')::int asc
               limit 1;
             end if;
@@ -4331,7 +4312,7 @@ end if;
               p_actor_user_id,
               'TIMESHEET_SEGMENTS_INVOICED',
               jsonb_build_object(
-                'timesheet_id', tsid::text,
+                'timesheet_id', v_ts_id::text,
                 'invoice_id', v_invoice_id::text,
                 'invoice_week_start', v_week_start::text,
                 'segment_count', v_terms_days,
@@ -4340,7 +4321,7 @@ end if;
                 'bases', coalesce(meta, '[]'::jsonb)
               ),
               'timesheets',
-              tsid::text,
+              v_ts_id::text,
               null,
               null,
               v_ip, v_ua, v_corr
@@ -4361,19 +4342,19 @@ end if;
                 updated_at = v_now
             where timesheet_id = any(v_timesheet_ids);
 
-            for tsid in
+            for v_ts_id in
               select unnest(v_timesheet_ids)
             loop
               perform public._inv_write_audit(
                 p_actor_user_id,
                 'TIMESHEET_INVOICED',
                 jsonb_build_object(
-                  'timesheet_id', tsid::text,
+                  'timesheet_id', v_ts_id::text,
                   'invoice_id', v_invoice_id::text,
                   'invoice_week_start', v_week_start::text
                 ),
                 'timesheets',
-                tsid::text,
+                v_ts_id::text,
                 null,
                 'LOCKED_BY_INVOICE',
                 v_ip, v_ua, v_corr
@@ -4425,8 +4406,6 @@ where id = v_outbox_id;
   end loop;
 end;
 $$;
-
-
 
 
 create or replace function public.invoice_source_rows_collect(
