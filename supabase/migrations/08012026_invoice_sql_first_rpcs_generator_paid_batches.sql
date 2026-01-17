@@ -458,7 +458,6 @@ begin
   end loop;
 end;
 $$;
-
 create or replace function public.invoice_generate_from_outbox_batch(
   p_outbox_ids uuid[],
   p_actor_user_id uuid
@@ -3696,11 +3695,11 @@ v_ip, v_ua, v_corr
                   public._inv_round2(bydate.hours_sun),
                   public._inv_round2(bydate.hours_bh),
                   null,null,null,null,null,
-      coalesce(s.charge_day,null),
-      coalesce(s.charge_night,null),
-      coalesce(s.charge_sat,null),
-      coalesce(s.charge_sun,null),
-      coalesce(s.charge_bh,null),
+      coalesce(snap.charge_day,null),
+      coalesce(snap.charge_night,null),
+      coalesce(snap.charge_sat,null),
+      coalesce(snap.charge_sun,null),
+      coalesce(snap.charge_bh,null),
 
                   pay_ex, chg_ex, margin_ex,
                   v_vat_rate, vat_amt, inc_amt,
@@ -3824,11 +3823,11 @@ v_ip, v_ua, v_corr
                     v_invoice_id, v_ts_id, snap.booking_id, line_desc,
                     0,0,0,0,0,
                     null,null,null,null,null,
-      coalesce(s.charge_day,null),
-      coalesce(s.charge_night,null),
-      coalesce(s.charge_sat,null),
-      coalesce(s.charge_sun,null),
-      coalesce(s.charge_bh,null),
+      coalesce(snap.charge_day,null),
+      coalesce(snap.charge_night,null),
+      coalesce(snap.charge_sat,null),
+      coalesce(snap.charge_sun,null),
+      coalesce(snap.charge_bh,null),
 
                     pay_ex, chg_ex, margin_ex,
                     v_vat_rate, vat_amt, inc_amt,
@@ -4045,11 +4044,11 @@ end if;
                 v_invoice_id, v_ts_id, snap.booking_id, line_desc,
                 0,0,0,0,0,
                 null,null,null,null,null,
-      coalesce(s.charge_day,null),
-      coalesce(s.charge_night,null),
-      coalesce(s.charge_sat,null),
-      coalesce(s.charge_sun,null),
-      coalesce(s.charge_bh,null),
+      coalesce(snap.charge_day,null),
+      coalesce(snap.charge_night,null),
+      coalesce(snap.charge_sat,null),
+      coalesce(snap.charge_sun,null),
+      coalesce(snap.charge_bh,null),
 
                 pay_ex, chg_ex, margin_ex,
                 v_vat_rate, vat_amt, inc_amt,
@@ -4186,11 +4185,11 @@ end if;
                   v_invoice_id, v_ts_id, snap.booking_id, line_desc,
                   0,0,0,0,0,
                   null,null,null,null,null,
-      coalesce(s.charge_day,null),
-      coalesce(s.charge_night,null),
-      coalesce(s.charge_sat,null),
-      coalesce(s.charge_sun,null),
-      coalesce(s.charge_bh,null),
+      coalesce(snap.charge_day,null),
+      coalesce(snap.charge_night,null),
+      coalesce(snap.charge_sat,null),
+      coalesce(snap.charge_sun,null),
+      coalesce(snap.charge_bh,null),
 
                   pay_ex, chg_ex, margin_ex,
                   v_vat_rate, vat_amt, inc_amt,
@@ -4259,11 +4258,11 @@ end if;
                   v_invoice_id, v_ts_id, snap.booking_id, line_desc,
                   0,0,0,0,0,
                   null,null,null,null,null,
-      coalesce(s.charge_day,null),
-      coalesce(s.charge_night,null),
-      coalesce(s.charge_sat,null),
-      coalesce(s.charge_sun,null),
-      coalesce(s.charge_bh,null),
+      coalesce(snap.charge_day,null),
+      coalesce(snap.charge_night,null),
+      coalesce(snap.charge_sat,null),
+      coalesce(snap.charge_sun,null),
+      coalesce(snap.charge_bh,null),
 
                   pay_ex, chg_ex, margin_ex,
                   v_vat_rate, vat_amt, inc_amt,
@@ -4332,11 +4331,11 @@ end if;
                   v_invoice_id, v_ts_id, snap.booking_id, line_desc,
                   0,0,0,0,0,
                   null,null,null,null,null,
-      coalesce(s.charge_day,null),
-      coalesce(s.charge_night,null),
-      coalesce(s.charge_sat,null),
-      coalesce(s.charge_sun,null),
-      coalesce(s.charge_bh,null),
+      coalesce(snap.charge_day,null),
+      coalesce(snap.charge_night,null),
+      coalesce(snap.charge_sat,null),
+      coalesce(snap.charge_sun,null),
+      coalesce(snap.charge_bh,null),
 
                   pay_ex, chg_ex, margin_ex,
                   v_vat_rate, vat_amt, inc_amt,
@@ -4414,11 +4413,11 @@ end if;
                 v_invoice_id, v_ts_id, snap.booking_id, line_desc,
                 0,0,0,0,0,
                 null,null,null,null,null,
-      coalesce(s.charge_day,null),
-      coalesce(s.charge_night,null),
-      coalesce(s.charge_sat,null),
-      coalesce(s.charge_sun,null),
-      coalesce(s.charge_bh,null),
+      coalesce(snap.charge_day,null),
+      coalesce(snap.charge_night,null),
+      coalesce(snap.charge_sat,null),
+      coalesce(snap.charge_sun,null),
+      coalesce(snap.charge_bh,null),
 
                 pay_ex, chg_ex, margin_ex,
                 v_vat_rate, vat_amt, inc_amt,
@@ -4849,7 +4848,6 @@ where id = v_outbox_id;
   end if;
 end;
 $$;
-
 
 
 create or replace function public.invoice_source_rows_collect(
