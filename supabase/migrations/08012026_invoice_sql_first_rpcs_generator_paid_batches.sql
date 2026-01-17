@@ -458,7 +458,6 @@ begin
   end loop;
 end;
 $$;
-
 create or replace function public.invoice_generate_from_outbox_batch(
   p_outbox_ids uuid[],
   p_actor_user_id uuid
@@ -501,6 +500,22 @@ declare
   -- contract week enum sanity
   v_has_invoiced boolean;
 
+  -- ======================================================
+  -- DEBUG (optional): single audit row per RPC call
+  -- ======================================================
+  v_invoice_debug boolean := false;
+  v_dbg_run_started timestamptz := now();
+  v_dbg_results jsonb := '[]'::jsonb;
+
+  -- last loaded outbox row meta (avoid touching unassigned v_job record in exception paths)
+  v_dbg_job_attempt_count int := null;
+  v_dbg_job_next_attempt_at timestamptz := null;
+  v_dbg_job_last_error text := null;
+  v_dbg_job_created_at timestamptz := null;
+  v_dbg_first_ip text := null;
+  v_dbg_first_ua text := null;
+  v_dbg_first_corr text := null;
+
 begin
   if p_outbox_ids is null or coalesce(array_length(p_outbox_ids,1),0) = 0 then
     return;
@@ -513,11 +528,29 @@ begin
     raise exception 'contract_week_status_enum does not contain INVOICED; cannot mirror setWeeksInvoicedForTimesheets.';
   end if;
 
+  -- Load invoice_debug flag (safe even if column not yet present)
+  begin
+    select coalesce(sd.invoice_debug, false)
+    into v_invoice_debug
+    from public.settings_defaults sd
+    where sd.id = 1
+    limit 1;
+  exception when undefined_column then
+    v_invoice_debug := false;
+  end;
+
   foreach v_outbox_id in array p_outbox_ids loop
     begin
       v_invoice_id := null;
       v_now := now();
       v_anchor_ymd := (v_now at time zone 'Europe/London')::date;
+
+      -- reset per-outbox debug meta
+      v_dbg_job_attempt_count := null;
+      v_dbg_job_next_attempt_at := null;
+      v_dbg_job_last_error := null;
+      v_dbg_job_created_at := null;
+
 
       select *
       into v_job
@@ -530,12 +563,37 @@ begin
         ok := false;
         invoice_ids := null;
         warnings := jsonb_build_object('error','outbox row not found');
+        if v_invoice_debug then
+          v_dbg_results := v_dbg_results || jsonb_build_array(
+            jsonb_build_object(
+              'outbox_id', v_outbox_id::text,
+              'kind', null,
+              'payload', null,
+              'result', jsonb_build_object(
+                'ok', ok,
+                'invoice_ids', null,
+                'warnings', warnings
+              ),
+              'job_row', null,
+              'timing', jsonb_build_object(
+                'now_utc', public._inv_iso_utc(v_now),
+                'anchor_ymd', v_anchor_ymd::text
+              )
+            )
+          );
+        end if;
         return next;
         continue;
       end if;
 
       v_kind := upper(coalesce(v_job.kind,''));
       v_payload := coalesce(v_job.payload, '{}'::jsonb);
+
+      -- stash outbox row meta for debug (safe scalars)
+      v_dbg_job_attempt_count := v_job.attempt_count;
+      v_dbg_job_next_attempt_at := v_job.next_attempt_at;
+      v_dbg_job_last_error := v_job.last_error;
+      v_dbg_job_created_at := v_job.created_at;
 
       -- Optional audit meta from payload (SQL has no req headers)
       v_ip   := nullif(btrim(coalesce(v_payload->>'ip','')), '');
@@ -2200,6 +2258,58 @@ where tf.timesheet_id = any(v_ts_ids_to_use)
             'invoice_id', v_invoice_id::text,
             'client_id', v_client_id::text
           );
+                if v_invoice_debug then
+                  v_dbg_results := v_dbg_results || jsonb_build_array(
+                    jsonb_build_object(
+                      'outbox_id', v_outbox_id::text,
+                      'kind', coalesce(v_kind,''),
+                      'payload', coalesce(v_payload,'{}'::jsonb),
+                      'decision_trace', jsonb_build_object(
+                        'branch','HOURS',
+                        'ts_ids_in_payload', to_jsonb(v_ts_ids),
+                        'ts_ids_to_use', to_jsonb(v_ts_ids_to_use),
+                        'client_id', case when v_client_id is null then null else v_client_id::text end,
+                        'invoice_id', case when v_invoice_id is null then null else v_invoice_id::text end,
+                        'vat_rate_pct', v_vat_rate,
+                        'terms_days', v_terms_days,
+                        'due_at_utc', public._inv_iso_utc(v_due_at),
+                        'requires_hr_any', coalesce(v_requires_hr_any,false),
+                        'hr_attach_default', coalesce(v_hr_attach_default,true),
+                        'ts_attach_default', coalesce(v_ts_attach_default,true),
+                        'sum_subtotal_ex_vat_accum', public._inv_round2(v_sum_ex),
+                        'sum_vat_amount_accum', public._inv_round2(v_sum_vat),
+                        'sum_total_inc_vat_accum', public._inv_round2(v_sum_inc),
+                        'invoice_line_count', (select count(*) from public.invoice_lines l where l.invoice_id = v_invoice_id),
+                        'invoice_totals', (select jsonb_build_object('status', i.status::text, 'invoice_no', i.invoice_no, 'subtotal_ex_vat', coalesce(i.subtotal_ex_vat,0)::numeric, 'vat_amount', coalesce(i.vat_amount,0)::numeric, 'total_inc_vat', coalesce(i.total_inc_vat,0)::numeric) from public.invoices i where i.id = v_invoice_id limit 1),
+                        'tsfin_lock_count', (select count(*) from public.timesheets_financials tf where tf.timesheet_id = any(v_ts_ids_to_use) and tf.is_current=true and tf.locked_by_invoice_id = v_invoice_id)
+                      ),
+                      'result', jsonb_build_object(
+                        'ok', ok,
+                        'invoice_ids', case when invoice_ids is null then null else to_jsonb(invoice_ids) end,
+                        'warnings', warnings
+                      ),
+                      'job_row', jsonb_build_object(
+                        'attempt_count', coalesce(v_dbg_job_attempt_count,0),
+                        'next_attempt_at', to_jsonb(v_dbg_job_next_attempt_at),
+                        'last_error', v_dbg_job_last_error,
+                        'created_at', to_jsonb(v_dbg_job_created_at)
+                      ),
+                      'timing', jsonb_build_object(
+                        'now_utc', public._inv_iso_utc(v_now),
+                        'anchor_ymd', v_anchor_ymd::text
+                      ),
+                      'audit_meta', jsonb_build_object(
+                        'ip', v_ip,
+                        'user_agent', v_ua,
+                        'correlation_id', v_corr
+                      )
+                    )
+                  );
+
+                  if v_dbg_first_ip is null and v_ip is not null then v_dbg_first_ip := v_ip; end if;
+                  if v_dbg_first_ua is null and v_ua is not null then v_dbg_first_ua := v_ua; end if;
+                  if v_dbg_first_corr is null and v_corr is not null then v_dbg_first_corr := v_corr; end if;
+                end if;
           return next;
           continue;
         end;
@@ -2427,6 +2537,49 @@ h_bh numeric;
                 'allow_early', coalesce(v_allow_early,false),
                 'next_attempt_at_utc', to_jsonb(v_next_attempt_at)
               );
+                    if v_invoice_debug then
+                      v_dbg_results := v_dbg_results || jsonb_build_array(
+                        jsonb_build_object(
+                          'outbox_id', v_outbox_id::text,
+                          'kind', coalesce(v_kind,''),
+                          'payload', coalesce(v_payload,'{}'::jsonb),
+                          'decision_trace', jsonb_build_object(
+                            'branch','BY_WEEK_NOT_DUE_YET',
+                            'client_id', case when v_client_id is null then null else v_client_id::text end,
+                            'invoice_week_start', case when v_week_start is null then null else v_week_start::text end,
+                            'invoice_week_end', case when v_week_end_ymd is null then null else v_week_end_ymd::text end,
+                            'allow_early', coalesce(v_allow_early,false),
+                            'anchor_ymd', v_anchor_ymd::text,
+                            'has_due_delayed', coalesce(v_has_due_delayed,false),
+                            'scheduled_next_attempt_at_utc', case when v_next_attempt_at is null then null else public._inv_iso_utc(v_next_attempt_at) end
+                          ),
+                          'result', jsonb_build_object(
+                            'ok', ok,
+                            'invoice_ids', case when invoice_ids is null then null else to_jsonb(invoice_ids) end,
+                            'warnings', warnings
+                          ),
+                          'job_row', jsonb_build_object(
+                            'attempt_count', coalesce(v_dbg_job_attempt_count,0),
+                            'next_attempt_at', to_jsonb(v_dbg_job_next_attempt_at),
+                            'last_error', v_dbg_job_last_error,
+                            'created_at', to_jsonb(v_dbg_job_created_at)
+                          ),
+                          'timing', jsonb_build_object(
+                            'now_utc', public._inv_iso_utc(v_now),
+                            'anchor_ymd', v_anchor_ymd::text
+                          ),
+                          'audit_meta', jsonb_build_object(
+                            'ip', v_ip,
+                            'user_agent', v_ua,
+                            'correlation_id', v_corr
+                          )
+                        )
+                      );
+
+                      if v_dbg_first_ip is null and v_ip is not null then v_dbg_first_ip := v_ip; end if;
+                      if v_dbg_first_ua is null and v_ua is not null then v_dbg_first_ua := v_ua; end if;
+                      if v_dbg_first_corr is null and v_corr is not null then v_dbg_first_corr := v_corr; end if;
+                    end if;
               return next;
               continue;
             end if;
@@ -4379,6 +4532,68 @@ end if;
             'invoice_week_start', v_week_start::text,
             'mode', v_mode
           );
+                if v_invoice_debug then
+                  v_dbg_results := v_dbg_results || jsonb_build_array(
+                    jsonb_build_object(
+                      'outbox_id', v_outbox_id::text,
+                      'kind', coalesce(v_kind,''),
+                      'payload', coalesce(v_payload,'{}'::jsonb),
+                      'decision_trace', jsonb_build_object(
+                        'branch','BY_WEEK',
+                        'client_id', case when v_client_id is null then null else v_client_id::text end,
+                        'invoice_week_start', case when v_week_start is null then null else v_week_start::text end,
+                        'allow_early', coalesce(v_allow_early,false),
+                        'consolidation_mode', v_consol_mode,
+                        'all_selfbill', coalesce(v_all_selfbill,false),
+                        'mode', v_mode,
+                        'limit_ts_ids', case when v_limit_ts_ids is null then null else to_jsonb(v_limit_ts_ids) end,
+                        'entries_count', v_entry_count,
+                        'entries_timesheet_ids', to_jsonb(v_timesheet_ids),
+                        'created_invoice_ids', to_jsonb(v_outbox_invoice_ids),
+                        'invoice_summaries', (
+                          select coalesce(jsonb_agg(
+                            jsonb_build_object(
+                              'invoice_id', i.id::text,
+                              'invoice_no', i.invoice_no,
+                              'status', i.status::text,
+                              'subtotal_ex_vat', coalesce(i.subtotal_ex_vat,0)::numeric,
+                              'vat_amount', coalesce(i.vat_amount,0)::numeric,
+                              'total_inc_vat', coalesce(i.total_inc_vat,0)::numeric,
+                              'line_count', (select count(*) from public.invoice_lines l where l.invoice_id=i.id)
+                            )
+                            order by i.created_at_utc desc nulls last
+                          ), '[]'::jsonb)
+                          from public.invoices i
+                          where i.id = any(v_outbox_invoice_ids)
+                        )
+                      ),
+                      'result', jsonb_build_object(
+                        'ok', ok,
+                        'invoice_ids', case when invoice_ids is null then null else to_jsonb(invoice_ids) end,
+                        'warnings', warnings
+                      ),
+                      'job_row', jsonb_build_object(
+                        'attempt_count', coalesce(v_dbg_job_attempt_count,0),
+                        'next_attempt_at', to_jsonb(v_dbg_job_next_attempt_at),
+                        'last_error', v_dbg_job_last_error,
+                        'created_at', to_jsonb(v_dbg_job_created_at)
+                      ),
+                      'timing', jsonb_build_object(
+                        'now_utc', public._inv_iso_utc(v_now),
+                        'anchor_ymd', v_anchor_ymd::text
+                      ),
+                      'audit_meta', jsonb_build_object(
+                        'ip', v_ip,
+                        'user_agent', v_ua,
+                        'correlation_id', v_corr
+                      )
+                    )
+                  );
+
+                  if v_dbg_first_ip is null and v_ip is not null then v_dbg_first_ip := v_ip; end if;
+                  if v_dbg_first_ua is null and v_ua is not null then v_dbg_first_ua := v_ua; end if;
+                  if v_dbg_first_corr is null and v_corr is not null then v_dbg_first_corr := v_corr; end if;
+                end if;
           return next;
           continue;
         end;
@@ -4400,10 +4615,68 @@ where id = v_outbox_id;
       ok := false;
       invoice_ids := null;
       warnings := jsonb_build_object('error', sqlerrm);
+            if v_invoice_debug then
+              v_dbg_results := v_dbg_results || jsonb_build_array(
+                jsonb_build_object(
+                  'outbox_id', v_outbox_id::text,
+                  'kind', coalesce(v_kind,''),
+                  'payload', coalesce(v_payload,'{}'::jsonb),
+                  'decision_trace', jsonb_build_object(
+                    'branch','EXCEPTION',
+                    'sqlerrm', sqlerrm
+                  ),
+                  'result', jsonb_build_object(
+                    'ok', ok,
+                    'invoice_ids', case when invoice_ids is null then null else to_jsonb(invoice_ids) end,
+                    'warnings', warnings
+                  ),
+                  'job_row', jsonb_build_object(
+                    'attempt_count', coalesce(v_dbg_job_attempt_count,0),
+                    'next_attempt_at', to_jsonb(v_dbg_job_next_attempt_at),
+                    'last_error', v_dbg_job_last_error,
+                    'created_at', to_jsonb(v_dbg_job_created_at)
+                  ),
+                  'timing', jsonb_build_object(
+                    'now_utc', public._inv_iso_utc(v_now),
+                    'anchor_ymd', v_anchor_ymd::text
+                  ),
+                  'audit_meta', jsonb_build_object(
+                    'ip', v_ip,
+                    'user_agent', v_ua,
+                    'correlation_id', v_corr
+                  )
+                )
+              );
+
+              if v_dbg_first_ip is null and v_ip is not null then v_dbg_first_ip := v_ip; end if;
+              if v_dbg_first_ua is null and v_ua is not null then v_dbg_first_ua := v_ua; end if;
+              if v_dbg_first_corr is null and v_corr is not null then v_dbg_first_corr := v_corr; end if;
+            end if;
       return next;
       continue;
     end;
   end loop;
+  -- Write one debug audit row for the whole RPC call (if enabled)
+  if v_invoice_debug then
+    perform public._inv_write_audit(
+      p_actor_user_id,
+      'INVOICE_GENERATOR_DEBUG',
+      jsonb_build_object(
+        'run_started_at_utc', public._inv_iso_utc(v_dbg_run_started),
+        'run_finished_at_utc', public._inv_iso_utc(now()),
+        'outbox_ids', to_jsonb(p_outbox_ids),
+        'outbox_count', coalesce(array_length(p_outbox_ids,1),0),
+        'results', v_dbg_results
+      ),
+      'invoice_jobs_outbox',
+      ('batch:' || public._inv_iso_utc(v_dbg_run_started)),
+      null,
+      'INVOICE_DEBUG',
+      v_dbg_first_ip,
+      v_dbg_first_ua,
+      v_dbg_first_corr
+    );
+  end if;
 end;
 $$;
 
