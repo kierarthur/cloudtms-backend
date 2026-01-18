@@ -1760,13 +1760,45 @@ declare
   v_group_nightsat_sunbh boolean := null;
 
   v_ts_ids uuid[];
+  v_worked_ts_ids uuid[];
 
   v_reasons text[] := array[]::text[];
   v_precheck_reasons text[] := array[]::text[];
   v_hr_reasons text[] := array[]::text[];
+  v_issue_ref_reasons text[] := array[]::text[];
 
   v_on_hold_reason text := null;
+
+  -- ref-to-issue flag (client setting)
+  v_ref_required_to_issue boolean := false;
+
+  -- ======================================================
+  -- DEBUG (optional): single audit row per RPC call
+  -- ======================================================
+  v_invoice_debug boolean := false;
+  v_dbg_started timestamptz := now();
+  v_dbg_steps jsonb := '[]'::jsonb;
+  v_dbg_ts jsonb := '[]'::jsonb;
+
 begin
+  -- Load invoice_debug flag (safe even if column not yet present)
+  begin
+    select coalesce(sd.invoice_debug, false)
+    into v_invoice_debug
+    from public.settings_defaults sd
+    where sd.id = 1
+    limit 1;
+  exception when undefined_column then
+    v_invoice_debug := false;
+  end;
+
+  v_dbg_steps := v_dbg_steps || jsonb_build_array(jsonb_build_object(
+    'step','start',
+    'now_utc', public._inv_iso_utc(v_now),
+    'anchor_ymd', v_anchor_ymd::text,
+    'invoice_id', case when p_invoice_id is null then null else p_invoice_id::text end
+  ));
+
   if p_invoice_id is null then
     raise exception 'invoice_id is required';
   end if;
@@ -1797,6 +1829,30 @@ begin
       issued_at_utc := v_inv.issued_at_utc;
       on_hold_reason := v_inv.on_hold_reason;
       reasons := array[]::text[];
+
+      if v_invoice_debug then
+        begin
+          perform public._inv_write_audit(
+            p_actor_user_id,
+            'INVOICE_ISSUE_DEBUG',
+            jsonb_build_object(
+              'result','ALREADY_ISSUED',
+              'invoice_id', p_invoice_id::text,
+              'status', v_inv.status::text,
+              'issued_at_utc', to_jsonb(v_inv.issued_at_utc),
+              'steps', v_dbg_steps
+            ),
+            'invoices',
+            p_invoice_id::text,
+            null,
+            'INVOICE_DEBUG',
+            null, null, null
+          );
+        exception when others then
+          null;
+        end;
+      end if;
+
       return next;
       return;
     end if;
@@ -1805,6 +1861,32 @@ begin
       raise exception 'Only DRAFT/ON_HOLD invoices can be issued (current status=%)', v_inv.status::text;
     end if;
   end;
+
+  -- Invoice client_id (used for settings lookup)
+  select i.client_id
+  into v_client_id
+  from public.invoices i
+  where i.id = p_invoice_id
+  limit 1;
+
+  -- Load effective client_settings.reference_number_required_to_issue_invoice (safe if column not yet present)
+  begin
+    select coalesce(cs0.reference_number_required_to_issue_invoice, false)
+    into v_ref_required_to_issue
+    from public.client_settings cs0
+    where cs0.client_id = v_client_id
+      and (cs0.effective_from <= v_anchor_ymd or cs0.effective_from is null)
+    order by cs0.effective_from desc nulls last
+    limit 1;
+  exception when undefined_column then
+    v_ref_required_to_issue := false;
+  end;
+
+  v_dbg_steps := v_dbg_steps || jsonb_build_array(jsonb_build_object(
+    'step','loaded_client_setting',
+    'client_id', case when v_client_id is null then null else v_client_id::text end,
+    'reference_number_required_to_issue_invoice', v_ref_required_to_issue
+  ));
 
   -- Timesheets on invoice
   select array_agg(distinct l.timesheet_id)
@@ -1816,6 +1898,22 @@ begin
   if v_ts_ids is null or coalesce(array_length(v_ts_ids, 1), 0) = 0 then
     raise exception 'Invoice has no timesheets to validate';
   end if;
+
+  -- Timesheets that have WORKED content on this invoice (hours/additional only)
+  select array_agg(distinct l.timesheet_id)
+  into v_worked_ts_ids
+  from public.invoice_lines l
+  where l.invoice_id = p_invoice_id
+    and l.timesheet_id is not null
+    and upper(coalesce(l.meta_json->>'line_type','')) in (
+      'HOURS_DAILY','HOURS_WEEKLY','ADDITIONAL_RATE','ADDITIONAL_RATE_DAILY'
+    );
+
+  v_dbg_steps := v_dbg_steps || jsonb_build_array(jsonb_build_object(
+    'step','collected_timesheets',
+    'timesheet_count', coalesce(array_length(v_ts_ids,1),0),
+    'worked_timesheet_count', coalesce(array_length(v_worked_ts_ids,1),0)
+  ));
 
   -- ------------------------------------------------------------
   -- 1) Precheck blockers (authoritative: PDF/reference/evidence)
@@ -1879,9 +1977,67 @@ begin
 
   v_hr_reasons := array_remove(v_hr_reasons, null);
 
+  -- ------------------------------------------------------------
+  -- 3) ISSUE-TIME reference gating (NEW): only when enabled
+  --    - Only for worked content lines (hours/additional)
+  --    - Ignore expense/mileage-only lines
+  --    - Uses v_ts_invoice_precheck.issue_missing_reference(+count)
+  -- ------------------------------------------------------------
+  if v_ref_required_to_issue then
+    select array_agg(
+      case
+        when pc.timesheet_id is null
+          then 'TS ' || x.timesheet_id::text || ': precheck missing (issue refs)'
+
+        when coalesce(pc.issue_missing_reference, false) = true
+          then 'TS ' || pc.timesheet_id::text || ': missing reference/PO for ' || coalesce(pc.issue_missing_reference_count,0)::text || ' shift(s) (required to issue)'
+
+        else null
+      end
+    )
+    into v_issue_ref_reasons
+    from unnest(coalesce(v_worked_ts_ids, array[]::uuid[])) as x(timesheet_id)
+    left join public.v_ts_invoice_precheck pc
+      on pc.timesheet_id = x.timesheet_id;
+
+    v_issue_ref_reasons := array_remove(v_issue_ref_reasons, null);
+  end if;
+
   -- Merge blockers
   v_reasons := array_cat(v_precheck_reasons, v_hr_reasons);
+  v_reasons := array_cat(v_reasons, v_issue_ref_reasons);
   v_reasons := array_remove(v_reasons, null);
+
+  -- Debug per-timesheet snapshot (only if enabled)
+  if v_invoice_debug then
+    begin
+      select coalesce(jsonb_agg(
+        jsonb_build_object(
+          'timesheet_id', x.timesheet_id::text,
+          'has_worked_lines', (v_worked_ts_ids is not null and x.timesheet_id = any(v_worked_ts_ids)),
+          'precheck_status', coalesce(pc.precheck_status,'')::text,
+          'issue_missing_reference', coalesce(pc.issue_missing_reference,false),
+          'issue_missing_reference_count', coalesce(pc.issue_missing_reference_count,0),
+          'hr_required', coalesce(s.hr_validation_required_for_invoice,false),
+          'validation_status', case when s.validation_status is null then null else s.validation_status::text end
+        )
+      ), '[]'::jsonb)
+      into v_dbg_ts
+      from unnest(v_ts_ids) as x(timesheet_id)
+      left join public.v_ts_invoice_precheck pc on pc.timesheet_id = x.timesheet_id
+      left join public.v_timesheets_summary_base s on s.timesheet_id = x.timesheet_id;
+    exception when others then
+      v_dbg_ts := '[]'::jsonb;
+    end;
+  end if;
+
+  v_dbg_steps := v_dbg_steps || jsonb_build_array(jsonb_build_object(
+    'step','computed_blockers',
+    'precheck_reasons_count', coalesce(array_length(v_precheck_reasons,1),0),
+    'hr_reasons_count', coalesce(array_length(v_hr_reasons,1),0),
+    'issue_ref_reasons_count', coalesce(array_length(v_issue_ref_reasons,1),0),
+    'total_reasons_count', coalesce(array_length(v_reasons,1),0)
+  ));
 
   -- Any blockers => ON_HOLD
   if coalesce(array_length(v_reasons, 1), 0) > 0 then
@@ -1908,6 +2064,36 @@ begin
     issued_at_utc := null;
     on_hold_reason := v_on_hold_reason;
     reasons := v_reasons;
+
+    if v_invoice_debug then
+      begin
+        perform public._inv_write_audit(
+          p_actor_user_id,
+          'INVOICE_ISSUE_DEBUG',
+          jsonb_build_object(
+            'result','ON_HOLD',
+            'invoice_id', p_invoice_id::text,
+            'client_id', case when v_client_id is null then null else v_client_id::text end,
+            'reference_number_required_to_issue_invoice', v_ref_required_to_issue,
+            'timesheet_ids', to_jsonb(coalesce(v_ts_ids, array[]::uuid[])),
+            'worked_timesheet_ids', to_jsonb(coalesce(v_worked_ts_ids, array[]::uuid[])),
+            'reasons', to_jsonb(coalesce(v_reasons, array[]::text[])),
+            'timesheets_debug', v_dbg_ts,
+            'steps', v_dbg_steps,
+            'run_started_at_utc', public._inv_iso_utc(v_dbg_started),
+            'run_finished_at_utc', public._inv_iso_utc(now())
+          ),
+          'invoices',
+          p_invoice_id::text,
+          null,
+          'INVOICE_DEBUG',
+          null, null, null
+        );
+      exception when others then
+        null;
+      end;
+    end if;
+
     return next;
     return;
   end if;
@@ -1986,9 +2172,71 @@ begin
   issued_at_utc := v_now;
   on_hold_reason := null;
   reasons := array[]::text[];
+
+  if v_invoice_debug then
+    begin
+      perform public._inv_write_audit(
+        p_actor_user_id,
+        'INVOICE_ISSUE_DEBUG',
+        jsonb_build_object(
+          'result','ISSUED',
+          'invoice_id', p_invoice_id::text,
+          'client_id', case when v_client_id is null then null else v_client_id::text end,
+          'reference_number_required_to_issue_invoice', v_ref_required_to_issue,
+          'timesheet_ids', to_jsonb(coalesce(v_ts_ids, array[]::uuid[])),
+          'worked_timesheet_ids', to_jsonb(coalesce(v_worked_ts_ids, array[]::uuid[])),
+          'timesheets_debug', v_dbg_ts,
+          'steps', v_dbg_steps,
+          'run_started_at_utc', public._inv_iso_utc(v_dbg_started),
+          'run_finished_at_utc', public._inv_iso_utc(now())
+        ),
+        'invoices',
+        p_invoice_id::text,
+        null,
+        'INVOICE_DEBUG',
+        null, null, null
+      );
+    exception when others then
+      null;
+    end;
+  end if;
+
   return next;
+
+exception when others then
+  if v_invoice_debug then
+    begin
+      perform public._inv_write_audit(
+        p_actor_user_id,
+        'INVOICE_ISSUE_DEBUG',
+        jsonb_build_object(
+          'result','ERROR',
+          'invoice_id', case when p_invoice_id is null then null else p_invoice_id::text end,
+          'client_id', case when v_client_id is null then null else v_client_id::text end,
+          'reference_number_required_to_issue_invoice', v_ref_required_to_issue,
+          'sqlstate', sqlstate,
+          'error', sqlerrm,
+          'timesheet_ids', to_jsonb(coalesce(v_ts_ids, array[]::uuid[])),
+          'worked_timesheet_ids', to_jsonb(coalesce(v_worked_ts_ids, array[]::uuid[])),
+          'timesheets_debug', v_dbg_ts,
+          'steps', v_dbg_steps,
+          'run_started_at_utc', public._inv_iso_utc(v_dbg_started),
+          'run_finished_at_utc', public._inv_iso_utc(now())
+        ),
+        'invoices',
+        case when p_invoice_id is null then null else p_invoice_id::text end,
+        null,
+        'INVOICE_DEBUG',
+        null, null, null
+      );
+    exception when others then
+      null;
+    end;
+  end if;
+  raise;
 end;
 $$;
+
 
 
 -- ------------------------------------------------------------
