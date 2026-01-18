@@ -756,7 +756,14 @@ SELECT
         ELSE 'UNKNOWN'
       END
     WHEN paid_at_utc IS NOT NULL THEN 'PAID'
-    WHEN locked_by_invoice_id IS NOT NULL THEN 'INVOICED'
+    WHEN (
+      locked_by_invoice_id IS NOT NULL
+      OR (
+        seg.seg_total IS NOT NULL
+        AND seg.seg_total > 0
+        AND COALESCE(seg.seg_locked,0) >= seg.seg_total
+      )
+    ) THEN 'INVOICED'
     WHEN timesheet_id IS NOT NULL
       AND qr_status = 'PENDING'::timesheet_qr_status_enum
       AND (qr_token IS NULL OR length(btrim(qr_token)) = 0)
