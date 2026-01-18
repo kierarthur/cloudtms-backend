@@ -65,7 +65,6 @@ select
     -- Reference/PO gating (contract-led) with C6.1 issue-only bypass
     when coalesce(c.require_reference_to_invoice, false) = true
      and coalesce(refchk.missing_raw, false) = true
-     and coalesce(cs.reference_number_required_to_issue_invoice, false) = false
      and not (
     coalesce(tf.total_hours, 0) = 0
     and coalesce(tf.additional_pay_ex_vat, 0) = 0
@@ -360,4 +359,3 @@ left join lateral (
       end
     ) as missing_count
 ) refchk on true;
-
