@@ -430,3 +430,324 @@ exception when others then
   raise;
 end;
 $$;
+-- ============================================================
+-- CloudTMS Patch: public.invoice_reference_rows(p_invoice_id)
+-- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
+-- ============================================================
+
+create or replace function public.invoice_reference_rows(
+  p_invoice_id uuid
+)
+returns table (
+  timesheet_id uuid,
+  sheet_scope text,
+  submission_mode text,
+  ref_target text,
+  segment_id text,
+  day_ymd text,
+  start_utc text,
+  end_utc text,
+  current_reference text,
+  is_required boolean
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_now timestamptz := now();
+  v_anchor_ymd date := (v_now at time zone 'Europe/London')::date;
+  v_invoice_debug boolean := false;
+
+  v_ts_ids uuid[] := array[]::uuid[];
+
+  v_rows_out int := 0;
+  v_ts_out int := 0;
+
+  v_dbg_steps jsonb := '[]'::jsonb;
+
+  r_ts record;
+  r_seg record;
+  r_day record;
+
+  v_has_additional boolean;
+  v_worked_content boolean;
+  v_require_issue boolean;
+
+  v_tf_mode text;
+  v_segments_json jsonb;
+  v_sched_json jsonb;
+  v_dayrefs_json jsonb;
+
+  v_seg_locked text;
+
+  v_daykey text;
+  v_dayval text;
+
+  v_idx int;
+  v_start_local text;
+  v_end_local text;
+begin
+  if p_invoice_id is null then
+    raise exception 'invoice_id is required';
+  end if;
+
+  -- Load invoice_debug flag safely
+  begin
+    select coalesce(sd.invoice_debug, false)
+    into v_invoice_debug
+    from public.settings_defaults sd
+    where sd.id = 1
+    limit 1;
+  exception when undefined_column then
+    v_invoice_debug := false;
+  end;
+
+  select array_agg(distinct l.timesheet_id)
+  into v_ts_ids
+  from public.invoice_lines l
+  where l.invoice_id = p_invoice_id
+    and l.timesheet_id is not null;
+
+  if v_ts_ids is null or coalesce(array_length(v_ts_ids, 1), 0) = 0 then
+    return;
+  end if;
+
+  v_dbg_steps := v_dbg_steps || jsonb_build_array(jsonb_build_object(
+    'step', 'load_timesheets',
+    'timesheet_count', coalesce(array_length(v_ts_ids,1),0)
+  ));
+
+  for r_ts in
+    select
+      ts.timesheet_id as ts_id,
+      ts.sheet_scope as ts_sheet_scope,
+      ts.submission_mode as ts_submission_mode,
+      ts.reference_number as ts_reference_number,
+      ts.week_ending_date as ts_week_ending_date,
+      ts.worked_start_iso as ts_worked_start_iso,
+      ts.worked_end_iso as ts_worked_end_iso,
+      ts.scheduled_start_iso as ts_scheduled_start_iso,
+      ts.scheduled_end_iso as ts_scheduled_end_iso,
+      ts.actual_schedule_json as ts_actual_schedule_json,
+      ts.day_references_json as ts_day_references_json,
+      tf.total_hours as tf_total_hours,
+      tf.additional_units_json as tf_additional_units_json,
+      tf.invoice_breakdown_json as tf_invoice_breakdown_json,
+      pc.require_reference_to_invoice as pc_require_reference_to_invoice,
+      pc.reference_number_required_to_issue_invoice as pc_ref_to_issue
+    from public.timesheets ts
+    left join public.timesheets_financials tf
+      on tf.timesheet_id = ts.timesheet_id
+     and tf.is_current = true
+    left join public.v_ts_invoice_precheck pc
+      on pc.timesheet_id = ts.timesheet_id
+    where ts.timesheet_id = any(v_ts_ids)
+    order by ts.week_ending_date asc nulls last, ts.timesheet_id
+  loop
+    v_ts_out := v_ts_out + 1;
+
+    -- Determine whether this timesheet has any worked-shift or non-zero additional-unit content.
+    v_has_additional := false;
+    if r_ts.tf_additional_units_json is not null and jsonb_typeof(r_ts.tf_additional_units_json) = 'object' then
+      select exists(
+        select 1
+        from jsonb_each(r_ts.tf_additional_units_json) j(k,v)
+        where nullif(btrim(coalesce(v#>>'{}','')), '') is not null
+          and btrim(coalesce(v#>>'{}','')) not in ('0','0.0','0.00','0.000','0.0000')
+      ) into v_has_additional;
+    end if;
+
+    v_worked_content := (coalesce(r_ts.tf_total_hours, 0) > 0) or coalesce(v_has_additional,false);
+
+    -- Expenses-only => no reference rows required.
+    if not v_worked_content then
+      continue;
+    end if;
+
+    v_require_issue := coalesce(r_ts.pc_require_reference_to_invoice,false)
+                       and coalesce(r_ts.pc_ref_to_issue,false);
+
+    v_tf_mode := upper(coalesce(r_ts.tf_invoice_breakdown_json->>'mode',''));
+    v_segments_json := r_ts.tf_invoice_breakdown_json->'segments';
+    v_sched_json := r_ts.ts_actual_schedule_json;
+    v_dayrefs_json := r_ts.ts_day_references_json;
+
+    if v_tf_mode = 'SEGMENTS' and jsonb_typeof(v_segments_json) = 'array' then
+      for r_seg in
+        select value as seg
+        from jsonb_array_elements(v_segments_json) value
+      loop
+        v_seg_locked := nullif(btrim(coalesce(r_seg.seg->>'invoice_locked_invoice_id','')), '');
+        if v_seg_locked is null or v_seg_locked <> p_invoice_id::text then
+          continue;
+        end if;
+
+        timesheet_id := r_ts.ts_id;
+        sheet_scope := r_ts.ts_sheet_scope::text;
+        submission_mode := r_ts.ts_submission_mode::text;
+        ref_target := 'SEGMENT';
+        segment_id := nullif(btrim(coalesce(r_seg.seg->>'segment_id','')), '');
+        day_ymd := nullif(btrim(coalesce(r_seg.seg->>'date','')), '');
+        start_utc := nullif(btrim(coalesce(r_seg.seg->>'start_utc','')), '');
+        end_utc := nullif(btrim(coalesce(r_seg.seg->>'end_utc','')), '');
+        current_reference := nullif(btrim(coalesce(r_seg.seg->>'ref_num','')), '');
+        is_required := v_require_issue;
+
+        v_rows_out := v_rows_out + 1;
+        return next;
+      end loop;
+
+    elsif r_ts.ts_sheet_scope::text = 'WEEKLY'
+      and r_ts.ts_submission_mode::text = 'MANUAL'
+      and jsonb_typeof(v_sched_json) = 'array'
+    then
+      -- Weekly MANUAL without SEGMENTS mode: fall back to schedule entries.
+      for r_seg in
+        select value as seg, ordinality as idx
+        from jsonb_array_elements(v_sched_json) with ordinality
+      loop
+        v_start_local := nullif(btrim(coalesce(r_seg.seg->>'start','')), '');
+        v_end_local   := nullif(btrim(coalesce(r_seg.seg->>'end','')), '');
+        if v_start_local is null or v_end_local is null then
+          continue;
+        end if;
+
+        v_idx := (r_seg.idx - 1);
+
+        timesheet_id := r_ts.ts_id;
+        sheet_scope := r_ts.ts_sheet_scope::text;
+        submission_mode := r_ts.ts_submission_mode::text;
+        ref_target := 'SEGMENT';
+        segment_id := ('ts:' || r_ts.ts_id::text || ':' || v_idx::text);
+        day_ymd := nullif(btrim(coalesce(r_seg.seg->>'date','')), '');
+        start_utc := nullif(btrim(coalesce(r_seg.seg->>'start_utc','')), '');
+        end_utc := nullif(btrim(coalesce(r_seg.seg->>'end_utc','')), '');
+        current_reference := nullif(btrim(coalesce(r_seg.seg->>'ref_num','')), '');
+        is_required := v_require_issue;
+
+        v_rows_out := v_rows_out + 1;
+        return next;
+      end loop;
+
+    elsif r_ts.ts_sheet_scope::text = 'WEEKLY'
+      and r_ts.ts_submission_mode::text <> 'MANUAL'
+    then
+      -- Weekly non-MANUAL: use day_references_json when present; otherwise use timesheet reference_number.
+      if jsonb_typeof(v_dayrefs_json) = 'object'
+         and exists (select 1 from jsonb_each_text(v_dayrefs_json) t(k,v))
+      then
+        for r_day in
+          select key as k, value as v
+          from jsonb_each_text(v_dayrefs_json)
+        loop
+          v_daykey := nullif(btrim(coalesce(r_day.k,'')), '');
+          if v_daykey is null then
+            continue;
+          end if;
+
+          v_dayval := nullif(btrim(coalesce(r_day.v,'')), '');
+
+          timesheet_id := r_ts.ts_id;
+          sheet_scope := r_ts.ts_sheet_scope::text;
+          submission_mode := r_ts.ts_submission_mode::text;
+          ref_target := 'DAY';
+          segment_id := null;
+          day_ymd := v_daykey;
+          start_utc := null;
+          end_utc := null;
+          current_reference := v_dayval;
+          is_required := v_require_issue;
+
+          v_rows_out := v_rows_out + 1;
+          return next;
+        end loop;
+      else
+        timesheet_id := r_ts.ts_id;
+        sheet_scope := r_ts.ts_sheet_scope::text;
+        submission_mode := r_ts.ts_submission_mode::text;
+        ref_target := 'TIMESHEET';
+        segment_id := null;
+        day_ymd := coalesce(r_ts.ts_week_ending_date::text, null);
+        start_utc := null;
+        end_utc := null;
+        current_reference := nullif(btrim(coalesce(r_ts.ts_reference_number,'')), '');
+        is_required := v_require_issue;
+
+        v_rows_out := v_rows_out + 1;
+        return next;
+      end if;
+
+    else
+      -- DAILY or any other non-segment fallback: a single timesheet-level reference.
+      timesheet_id := r_ts.ts_id;
+      sheet_scope := r_ts.ts_sheet_scope::text;
+      submission_mode := r_ts.ts_submission_mode::text;
+      ref_target := 'TIMESHEET';
+      segment_id := null;
+      day_ymd := null;
+
+      if r_ts.ts_worked_start_iso is not null then
+        day_ymd := ((r_ts.ts_worked_start_iso at time zone 'Europe/London')::date)::text;
+      elsif r_ts.ts_scheduled_start_iso is not null then
+        day_ymd := ((r_ts.ts_scheduled_start_iso at time zone 'Europe/London')::date)::text;
+      elsif r_ts.ts_week_ending_date is not null then
+        day_ymd := r_ts.ts_week_ending_date::text;
+      end if;
+
+      start_utc := coalesce(r_ts.ts_worked_start_iso::text, r_ts.ts_scheduled_start_iso::text);
+      end_utc := coalesce(r_ts.ts_worked_end_iso::text, r_ts.ts_scheduled_end_iso::text);
+      current_reference := nullif(btrim(coalesce(r_ts.ts_reference_number,'')), '');
+      is_required := v_require_issue;
+
+      v_rows_out := v_rows_out + 1;
+      return next;
+    end if;
+  end loop;
+
+  if v_invoice_debug then
+    perform public._inv_write_audit(
+      null,
+      'INVOICE_REFERENCE_ROWS_DEBUG',
+      jsonb_build_object(
+        'invoice_id', p_invoice_id::text,
+        'anchor_ymd', v_anchor_ymd::text,
+        'timesheet_count', coalesce(array_length(v_ts_ids,1),0),
+        'timesheets_scanned', v_ts_out,
+        'rows_returned', v_rows_out,
+        'steps', v_dbg_steps
+      ),
+      'invoices',
+      p_invoice_id::text,
+      null,
+      'INVOICE_DEBUG',
+      null,
+      null,
+      null
+    );
+  end if;
+
+exception when others then
+  if v_invoice_debug then
+    perform public._inv_write_audit(
+      null,
+      'INVOICE_REFERENCE_ROWS_ERROR',
+      jsonb_build_object(
+        'invoice_id', p_invoice_id::text,
+        'anchor_ymd', v_anchor_ymd::text,
+        'sqlstate', sqlstate,
+        'error', sqlerrm,
+        'steps', v_dbg_steps
+      ),
+      'invoices',
+      p_invoice_id::text,
+      null,
+      'INVOICE_DEBUG',
+      null,
+      null,
+      null
+    );
+  end if;
+  raise;
+end;
+$$;
