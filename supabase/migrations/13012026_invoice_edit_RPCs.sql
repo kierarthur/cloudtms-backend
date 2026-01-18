@@ -716,7 +716,6 @@ exception when others then
   raise;
 end;
 $$;
-
 create or replace function public.invoice_apply_edits(
   p_invoice_id uuid,
   p_payload jsonb,
@@ -774,6 +773,30 @@ v_tsfin_id uuid;
 v_seg_id text;
 v_has_additional boolean;
 v_has_expense_or_mileage boolean;
+
+  -- reference updates (refs-to-issue)
+  v_reference_updates jsonb;
+  v_refupd jsonb;
+  v_refupd_ts_id uuid;
+  v_refupd_count int := 0;
+  v_refupd_applied int := 0;
+  v_refupd_set_refnum boolean;
+  v_refupd_set_dayrefs boolean;
+  v_refupd_set_sched boolean;
+  v_refupd_dayrefs jsonb;
+  v_refupd_sched jsonb;
+  v_refupd_refnum text;
+
+  -- audit (history) accumulators (NOT debug-only)
+  v_hist_adj jsonb := '[]'::jsonb;
+  v_hist_seg_add jsonb := '[]'::jsonb;
+  v_hist_seg_remove jsonb := '[]'::jsonb;
+  v_hist_lines_removed jsonb := '[]'::jsonb;
+  v_hist_add_ts jsonb := '[]'::jsonb;
+
+  -- contract week status touch set
+  v_cw_ts_ids uuid[] := array[]::uuid[];
+
   v_ts_ids_touched uuid[] := array[]::uuid[];
 
   v_vat_chargeable boolean := true;
@@ -977,6 +1000,17 @@ if p_payload is not null and jsonb_typeof(p_payload) = 'object' and (p_payload ?
   end if;
 end if;
 
+
+
+-- Parse reference_updates (timesheet reference edits)
+v_reference_updates := null;
+if p_payload is not null and jsonb_typeof(p_payload) = 'object' and (p_payload ? 'reference_updates') then
+  v_reference_updates := coalesce(p_payload->'reference_updates','[]'::jsonb);
+  if jsonb_typeof(v_reference_updates) <> 'array' then
+    v_reference_updates := '[]'::jsonb;
+  end if;
+  v_refupd_count := jsonb_array_length(coalesce(v_reference_updates,'[]'::jsonb));
+end if;
 v_has_seg_ops :=
   (v_remove_seg_refs is not null and jsonb_typeof(v_remove_seg_refs)='array' and jsonb_array_length(v_remove_seg_refs) > 0)
   or (v_add_seg_refs is not null and jsonb_typeof(v_add_seg_refs)='array' and jsonb_array_length(v_add_seg_refs) > 0);
@@ -995,14 +1029,92 @@ v_has_seg_ops :=
 
 
 
+
+
+  -- 0) Apply reference updates to timesheets (does NOT recompute TSFIN; it updates the source timesheet refs)
+  if v_reference_updates is not null and jsonb_typeof(v_reference_updates)='array' and jsonb_array_length(v_reference_updates) > 0 then
+    for v_refupd in
+      select value from jsonb_array_elements(v_reference_updates) value
+    loop
+      if v_refupd is null or jsonb_typeof(v_refupd) <> 'object' then
+        continue;
+      end if;
+
+      if nullif(btrim(coalesce(v_refupd->>'timesheet_id','')), '') is null then
+        continue;
+      end if;
+
+      v_refupd_ts_id := (v_refupd->>'timesheet_id')::uuid;
+
+      v_refupd_set_refnum := (v_refupd ? 'reference_number');
+      v_refupd_set_dayrefs := (v_refupd ? 'day_references_json');
+      v_refupd_set_sched := (v_refupd ? 'actual_schedule_json');
+
+      v_refupd_refnum := null;
+      if v_refupd_set_refnum then
+        v_refupd_refnum := nullif(btrim(coalesce(v_refupd->>'reference_number','')), '');
+      end if;
+
+      v_refupd_dayrefs := null;
+      if v_refupd_set_dayrefs then
+        v_refupd_dayrefs := v_refupd->'day_references_json';
+        if v_refupd_dayrefs is not null and jsonb_typeof(v_refupd_dayrefs) = 'null' then
+          v_refupd_dayrefs := null;
+        end if;
+      end if;
+
+      v_refupd_sched := null;
+      if v_refupd_set_sched then
+        v_refupd_sched := v_refupd->'actual_schedule_json';
+        if v_refupd_sched is not null and jsonb_typeof(v_refupd_sched) = 'null' then
+          v_refupd_sched := null;
+        end if;
+      end if;
+
+      update public.timesheets tsu
+      set
+        updated_at = v_now,
+        reference_number = case when v_refupd_set_refnum then v_refupd_refnum else tsu.reference_number end,
+        day_references_json = case when v_refupd_set_dayrefs then v_refupd_dayrefs else tsu.day_references_json end,
+        actual_schedule_json = case when v_refupd_set_sched then v_refupd_sched else tsu.actual_schedule_json end
+      where tsu.timesheet_id = v_refupd_ts_id
+        and tsu.is_current = true;
+
+      get diagnostics v_rc = row_count;
+      if coalesce(v_rc,0) > 0 then
+        v_refupd_applied := v_refupd_applied + 1;
+      end if;
+
+    end loop;
+
+    if v_invoice_debug then
+      v_dbg_steps := v_dbg_steps || jsonb_build_array(
+        jsonb_build_object('step','reference_updates_applied','count_requested',v_refupd_count,'count_applied',v_refupd_applied)
+      );
+    end if;
+  end if;
   -- 1) Removals (by invoice_line_id)
   if v_remove_ids is not null and coalesce(array_length(v_remove_ids,1),0) > 0 then
-    -- collect timesheet_ids touched
+    -- collect timesheet_ids touched (any)
     select array_agg(distinct l.timesheet_id) filter (where l.timesheet_id is not null)
     into v_ts_ids_touched
     from public.invoice_lines l
     where l.invoice_id = p_invoice_id
       and l.id = any(v_remove_ids);
+
+    -- record removed lines for history
+    v_hist_lines_removed := coalesce(p_payload->'remove_invoice_line_ids','[]'::jsonb);
+
+    -- Only unlock TSFIN when HOURS lines were removed (prevents accidental unlock when deleting only expenses/other lines)
+    -- IMPORTANT: compute BEFORE deletion because we match on the removed invoice_line ids.
+    select array_agg(distinct l.timesheet_id) filter (where l.timesheet_id is not null)
+    into v_cw_ts_ids
+    from public.invoice_lines l
+    where l.invoice_id = p_invoice_id
+      and l.id = any(v_remove_ids)
+      and upper(coalesce(l.meta_json->>'line_type','')) in ('HOURS_WEEKLY','HOURS_DAILY');
+
+    v_cw_ts_ids := coalesce(v_cw_ts_ids, array[]::uuid[]);
 
     delete from public.invoice_lines
     where invoice_id = p_invoice_id
@@ -1015,20 +1127,84 @@ v_has_seg_ops :=
         jsonb_build_object(
           'step','lines_removed',
           'rows_deleted', coalesce(v_rc,0),
-          'timesheets_touched', coalesce(array_length(v_ts_ids_touched,1),0)
+          'timesheets_touched', coalesce(array_length(v_ts_ids_touched,1),0),
+          'timesheets_to_unlock_count', coalesce(array_length(v_cw_ts_ids,1),0)
         )
       );
     end if;
 
-    if v_ts_ids_touched is not null and coalesce(array_length(v_ts_ids_touched,1),0) > 0 then
-      perform public._inv_unlock_segments_for_invoice(p_invoice_id, v_ts_ids_touched);
-      v_dbg_timesheets_unlocked := v_dbg_timesheets_unlocked + coalesce(array_length(v_ts_ids_touched,1),0);
+
+    v_cw_ts_ids := coalesce(v_cw_ts_ids, array[]::uuid[]);
+
+    if v_cw_ts_ids is not null and coalesce(array_length(v_cw_ts_ids,1),0) > 0 then
+      perform public._inv_unlock_segments_for_invoice(p_invoice_id, v_cw_ts_ids);
+      v_dbg_timesheets_unlocked := v_dbg_timesheets_unlocked + coalesce(array_length(v_cw_ts_ids,1),0);
+
+      -- Cleanup: if no segments remain on THIS invoice for a touched timesheet, remove ALL remaining invoice lines for that timesheet
+      foreach tsid in array v_cw_ts_ids loop
+        if tsid is null then continue; end if;
+
+        -- detect if any segments are still locked to THIS invoice
+        select tf.*
+        into snap
+        from public.timesheets_financials tf
+        where tf.is_current = true
+          and tf.timesheet_id = tsid
+        limit 1;
+
+        if not found then
+          continue;
+        end if;
+
+        segments := '[]'::jsonb;
+        if snap.invoice_breakdown_json is not null
+           and jsonb_typeof(snap.invoice_breakdown_json)='object'
+           and coalesce(snap.invoice_breakdown_json->>'mode','')='SEGMENTS'
+           and jsonb_typeof(snap.invoice_breakdown_json->'segments')='array'
+        then
+          for seg in
+            select value from jsonb_array_elements(snap.invoice_breakdown_json->'segments') value
+          loop
+            if seg is null or jsonb_typeof(seg) <> 'object' then
+              continue;
+            end if;
+            seg_locked := nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '');
+            if seg_locked = p_invoice_id::text then
+              segments := segments || jsonb_build_array(seg);
+            end if;
+          end loop;
+
+          if jsonb_array_length(coalesce(segments,'[]'::jsonb)) = 0 then
+            delete from public.invoice_lines
+            where invoice_id = p_invoice_id
+              and timesheet_id = tsid;
+          end if;
+        else
+          -- Non-segments: if snapshot is no longer locked to this invoice, remove all remaining invoice lines for this timesheet
+          if snap.locked_by_invoice_id is null then
+            delete from public.invoice_lines
+            where invoice_id = p_invoice_id
+              and timesheet_id = tsid;
+          end if;
+        end if;
+      end loop;
     end if;
+
+    -- History event (always)
+    perform public._audit_insert(
+      'invoices',
+      p_invoice_id::text,
+      'INVOICE_LINES_REMOVED',
+      null,
+      jsonb_build_object('remove_invoice_line_ids', v_hist_lines_removed, 'timesheet_ids_touched', coalesce(to_jsonb(v_ts_ids_touched), '[]'::jsonb)),
+      null,
+      p_actor_user_id
+    );
+
   end if;
 
 
-
--- 1b) Segment edits (SEGMENTS mode only)
+  -- 1b) Segment edits (SEGMENTS mode only)
 -- NOTE: Segment moves are NOT allowed when additional rates OR expenses/mileage exist on the TSFIN snapshot.
 -- Payload contract uses tsfin_id + segment_id.
 if v_has_seg_ops then
@@ -1231,6 +1407,31 @@ if v_has_seg_ops then
     -- Apply remove_segment_refs (unlock selected segments on THIS invoice)
     if v_remove_seg_refs is not null and jsonb_typeof(v_remove_seg_refs)='array' and jsonb_array_length(v_remove_seg_refs) > 0 then
       perform public._inv_unlock_segment_refs_for_invoice(p_invoice_id, v_remove_seg_refs);
+    end if;
+
+
+    -- History: segment ops (always)
+    if v_add_seg_refs is not null and jsonb_typeof(v_add_seg_refs)='array' and jsonb_array_length(v_add_seg_refs) > 0 then
+      perform public._audit_insert(
+        'invoices',
+        p_invoice_id::text,
+        'INVOICE_SEGMENTS_ADDED',
+        null,
+        jsonb_build_object('add_segment_refs', v_add_seg_refs),
+        null,
+        p_actor_user_id
+      );
+    end if;
+    if v_remove_seg_refs is not null and jsonb_typeof(v_remove_seg_refs)='array' and jsonb_array_length(v_remove_seg_refs) > 0 then
+      perform public._audit_insert(
+        'invoices',
+        p_invoice_id::text,
+        'INVOICE_SEGMENTS_REMOVED',
+        null,
+        jsonb_build_object('remove_segment_refs', v_remove_seg_refs),
+        null,
+        p_actor_user_id
+      );
     end if;
 
     -- Rebuild HOURS lines for touched timesheets on this invoice
@@ -1520,6 +1721,8 @@ end if;
           'vat_chargeable', v_vat_chargeable
         );
 
+        v_hist_adj := v_hist_adj || jsonb_build_array(v_meta);
+
         insert into public.invoice_lines(
           invoice_id, timesheet_id, booking_id, description,
           hours_day, hours_night, hours_sat, hours_sun, hours_bh,
@@ -1544,6 +1747,20 @@ end if;
       end loop;
     end if;
   end if;
+
+  -- History: adjustments added (always)
+  if jsonb_typeof(v_hist_adj)='array' and jsonb_array_length(v_hist_adj) > 0 then
+    perform public._audit_insert(
+      'invoices',
+      p_invoice_id::text,
+      'INVOICE_ADJUSTMENTS_ADDED',
+      null,
+      jsonb_build_object('adjustments', v_hist_adj),
+      null,
+      p_actor_user_id
+    );
+  end if;
+
 
   -- 3) Add timesheets (full parity: hours + additional + expenses + mileage), for THIS invoice week_start
   if v_add_ts_ids is not null and coalesce(array_length(v_add_ts_ids,1),0) > 0 then
@@ -2128,17 +2345,81 @@ end if;
     if jsonb_typeof(seg_refs) = 'array' and jsonb_array_length(seg_refs) > 0 then
       perform public._inv_lock_segments_for_invoice(p_invoice_id, seg_refs);
     end if;
-
-    -- Mark contract weeks INVOICED only when fully locked by this invoice
-    update public.contract_weeks cw
-    set status = 'INVOICED'::public.contract_week_status_enum
-    where cw.timesheet_id in (
-      select tf.timesheet_id
-      from public.timesheets_financials tf
-      where tf.is_current = true
-        and tf.locked_by_invoice_id = p_invoice_id
-    );
   end if;
+
+    -- History: timesheets added (always; includes requested ids)
+    perform public._audit_insert(
+      'invoices',
+      p_invoice_id::text,
+      'INVOICE_TIMESHEETS_ADDED',
+      null,
+      jsonb_build_object('add_timesheet_ids', coalesce(to_jsonb(v_add_ts_ids), '[]'::jsonb)),
+      null,
+      p_actor_user_id
+    );
+
+
+  -- 3c) Contract week status: set INVOICED only when timesheet is FULLY invoiced (segment-aware), and revert INVOICED -> AUTHORISED if no longer fully invoiced.
+  -- Touch set = union of: add_timesheet_ids, line-removal touched (hours), segment-op touched.
+  v_cw_ts_ids := array[]::uuid[];
+  if v_add_ts_ids is not null and coalesce(array_length(v_add_ts_ids,1),0) > 0 then
+    v_cw_ts_ids := v_cw_ts_ids || v_add_ts_ids;
+  end if;
+  if v_ts_ids_touched is not null and coalesce(array_length(v_ts_ids_touched,1),0) > 0 then
+    v_cw_ts_ids := v_cw_ts_ids || v_ts_ids_touched;
+  end if;
+  if v_seg_ts_ids is not null and coalesce(array_length(v_seg_ts_ids,1),0) > 0 then
+    v_cw_ts_ids := v_cw_ts_ids || v_seg_ts_ids;
+  end if;
+
+  -- de-dup
+  select array_agg(distinct x)
+  into v_cw_ts_ids
+  from unnest(coalesce(v_cw_ts_ids, array[]::uuid[])) x
+  where x is not null;
+
+  v_cw_ts_ids := coalesce(v_cw_ts_ids, array[]::uuid[]);
+
+  if coalesce(array_length(v_cw_ts_ids,1),0) > 0 then
+    with src as (
+      select
+        cw.timesheet_id,
+        cw.status as cw_status,
+        tf.locked_by_invoice_id,
+        tf.invoice_breakdown_json,
+        (
+          case
+            when tf.invoice_breakdown_json is not null
+             and jsonb_typeof(tf.invoice_breakdown_json)='object'
+             and coalesce(tf.invoice_breakdown_json->>'mode','')='SEGMENTS'
+             and jsonb_typeof(tf.invoice_breakdown_json->'segments')='array'
+             and jsonb_array_length(tf.invoice_breakdown_json->'segments') > 0
+            then
+              not exists (
+                select 1
+                from jsonb_array_elements(tf.invoice_breakdown_json->'segments') s(seg)
+                where nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') is null
+              )
+            else
+              (tf.locked_by_invoice_id is not null)
+          end
+        ) as fully_invoiced
+      from public.contract_weeks cw
+      join public.timesheets_financials tf
+        on tf.is_current = true
+       and tf.timesheet_id = cw.timesheet_id
+      where cw.timesheet_id = any(v_cw_ts_ids)
+    )
+    update public.contract_weeks cw
+    set status = case
+      when src.fully_invoiced then 'INVOICED'::public.contract_week_status_enum
+      when cw.status = 'INVOICED'::public.contract_week_status_enum then 'AUTHORISED'::public.contract_week_status_enum
+      else cw.status
+    end
+    from src
+    where cw.timesheet_id = src.timesheet_id;
+  end if;
+
 
   -- 4) Recompute invoice totals from invoice_lines and clear PDF key
   select
