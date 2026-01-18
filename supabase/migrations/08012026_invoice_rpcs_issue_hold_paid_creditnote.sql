@@ -2733,20 +2733,7 @@ end;
 $$;
 
 -- ============================================================
--- CloudTMS Patch: invoice_render_manifest
---
--- Changes:
--- 1) Join invoice_lines -> timesheets to expose timesheets.manual_pdf_r2_key
--- 2) effective_paper_ts_r2_key priority:
---      invoice_lines.paper_ts_r2_key
---      timesheets.manual_pdf_r2_key
---      docs-pdf/timesheets/ts_<timesheet_id>.pdf
--- 3) Split evidence arrays (keep existing `evidence`):
---      timesheet_evidence (kind = 'TIMESHEET')
---      evidence_other     (kind <> 'TIMESHEET')
--- 4) Ensure stable ordering by created_at asc in evidence aggregations
---
--- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
+-- CloudTMS Patch: invoice_render_manifest (UPDATED + FIXED v2)
 -- ============================================================
 
 create or replace function public.invoice_render_manifest(p_invoice_id uuid)
@@ -2817,6 +2804,60 @@ tsfin as (
   where tf.is_current = true
     and tf.timesheet_id in (select timesheet_id from ts_ids)
 ),
+tsfin_segments as (
+  select
+    tf.timesheet_id,
+    tf.invoice_breakdown_json
+  from public.timesheets_financials tf
+  where tf.is_current = true
+    and tf.timesheet_id in (select timesheet_id from ts_ids)
+),
+seg_stats as (
+  select
+    t.timesheet_id,
+
+    -- ONLY segments on THIS invoice
+    coalesce(
+      jsonb_agg(
+        s.seg
+        order by coalesce(s.seg->>'date',''), coalesce(s.seg->>'segment_id','')
+      ) filter (
+        where s.seg is not null
+          and s.locked_text = p_invoice_id::text
+      ),
+      '[]'::jsonb
+    ) as invoiced_segments,
+
+    -- counts (do not return the segments)
+    (count(*) filter (where s.seg is not null and s.locked_text is null))::int
+      as uninvoiced_segment_count,
+
+    (count(*) filter (where s.seg is not null and s.locked_text is not null and s.locked_text <> p_invoice_id::text))::int
+      as locked_elsewhere_segment_count
+
+  from tsfin_segments t
+
+  -- left join so SEGMENTS timesheets with empty segments[] still produce 0 counts + []
+  left join lateral (
+    select
+      value as seg,
+      nullif(btrim(coalesce(value->>'invoice_locked_invoice_id','')), '') as locked_text
+    from jsonb_array_elements(
+      case
+        when t.invoice_breakdown_json is not null
+          and jsonb_typeof(t.invoice_breakdown_json) = 'object'
+          and jsonb_typeof(t.invoice_breakdown_json->'segments') = 'array'
+        then t.invoice_breakdown_json->'segments'
+        else '[]'::jsonb
+      end
+    ) value
+  ) s on true
+
+  -- only consider SEGMENTS mode
+  where upper(coalesce(t.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+
+  group by t.timesheet_id
+),
 email_summary as (
   select
     count(*)::int as email_count,
@@ -2849,6 +2890,19 @@ select jsonb_build_object(
 
   'timesheet_ids', coalesce((select jsonb_agg(t.timesheet_id::text) from ts_ids t), '[]'::jsonb),
 
+  -- ✅ NEW: segment info for invoice modal expansion (SEGMENTS mode only)
+  'segments_by_timesheet', coalesce((
+    select jsonb_object_agg(
+      s.timesheet_id::text,
+      jsonb_build_object(
+        'invoiced_segments', coalesce(s.invoiced_segments, '[]'::jsonb),
+        'uninvoiced_segment_count', coalesce(s.uninvoiced_segment_count, 0),
+        'locked_elsewhere_segment_count', coalesce(s.locked_elsewhere_segment_count, 0)
+      )
+    )
+    from seg_stats s
+  ), '{}'::jsonb),
+
   -- Backward compatible aggregate (all evidence)
   'evidence', coalesce((
     select jsonb_agg(to_jsonb(ev.*) order by ev.created_at)
@@ -2871,7 +2925,6 @@ select jsonb_build_object(
   'hr_source_rows_cache', coalesce((select jsonb_agg(to_jsonb(h.*)) from hr_cache h), '[]'::jsonb),
   'tsfin_external_source_rows', coalesce((select jsonb_agg(to_jsonb(t.*)) from tsfin t), '[]'::jsonb),
 
-  -- ✅ email summary for UI label (Email vs Re-email)
   'email_summary', jsonb_build_object(
     'emailed_once', (coalesce((select email_count from email_summary),0) > 0),
     'email_count', coalesce((select email_count from email_summary),0),
