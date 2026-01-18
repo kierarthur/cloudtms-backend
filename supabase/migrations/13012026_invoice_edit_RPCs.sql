@@ -787,6 +787,31 @@ v_has_expense_or_mileage boolean;
   v_refupd_sched jsonb;
   v_refupd_refnum text;
 
+  -- reference update side-effects (meta refresh / segment ref sync)
+  v_refupd_ts_ids uuid[] := array[]::uuid[];
+  v_refupd_ts_ids_distinct uuid[] := array[]::uuid[];
+  v_refupd_meta_rows_updated int := 0;
+  v_refupd_tsfin_rows_updated int := 0;
+  v_refupd_tsfin_segments_updated int := 0;
+
+  -- temp vars for reference-derived meta and optional tsfin segment ref sync
+  v_ref_ts_id uuid;
+  v_ref_ts record;
+  v_ref_schedule_refs jsonb := '[]'::jsonb;
+  v_ref_schedule_refs_distinct jsonb := '[]'::jsonb;
+  v_ref_sched_map jsonb := '{}'::jsonb;
+  v_ref_sched_key text;
+  v_ref_sched_ref text;
+  v_ref_tsfin_id uuid;
+  v_ref_ib jsonb;
+  v_ref_new_segments jsonb := '[]'::jsonb;
+  v_ref_seg_obj jsonb;
+  v_ref_seg_start text;
+  v_ref_seg_end text;
+  v_ref_seg_cur_ref text;
+  v_ref_seg_new_ref text;
+  v_ref_seg_updates_this_ts int := 0;
+
   -- audit (history) accumulators (NOT debug-only)
   v_hist_adj jsonb := '[]'::jsonb;
   v_hist_seg_add jsonb := '[]'::jsonb;
@@ -1083,6 +1108,7 @@ v_has_seg_ops :=
       get diagnostics v_rc = row_count;
       if coalesce(v_rc,0) > 0 then
         v_refupd_applied := v_refupd_applied + 1;
+        v_refupd_ts_ids := v_refupd_ts_ids || v_refupd_ts_id;
       end if;
 
     end loop;
@@ -1093,6 +1119,195 @@ v_has_seg_ops :=
       );
     end if;
   end if;
+  -- 0b) After reference updates: refresh invoice_lines meta (ts_reference_number / schedule_ref_nums) and
+  -- (best-effort) sync tsfin SEGMENTS segment.ref_num from timesheets.actual_schedule_json
+  if v_refupd_ts_ids is not null and coalesce(array_length(v_refupd_ts_ids,1),0) > 0 then
+
+    select array_agg(distinct x)
+    into v_refupd_ts_ids_distinct
+    from unnest(v_refupd_ts_ids) x
+    where x is not null;
+
+    v_refupd_ts_ids_distinct := coalesce(v_refupd_ts_ids_distinct, array[]::uuid[]);
+
+    foreach v_ref_ts_id in array v_refupd_ts_ids_distinct loop
+      if v_ref_ts_id is null then
+        continue;
+      end if;
+
+      select tsu.*
+      into v_ref_ts
+      from public.timesheets tsu
+      where tsu.timesheet_id = v_ref_ts_id
+        and tsu.is_current = true
+      limit 1;
+
+      if not found then
+        continue;
+      end if;
+
+      -- Build schedule_ref_nums from timesheet-level ref, day refs, and manual schedule refs
+      v_ref_schedule_refs := '[]'::jsonb;
+
+      if nullif(btrim(coalesce(v_ref_ts.reference_number,'')), '') is not null then
+        v_ref_schedule_refs := v_ref_schedule_refs || jsonb_build_array(to_jsonb(nullif(btrim(v_ref_ts.reference_number),'')));
+      end if;
+
+      if v_ref_ts.day_references_json is not null and jsonb_typeof(v_ref_ts.day_references_json) = 'object' then
+        for kv in
+          select key as k, value as v
+          from jsonb_each_text(v_ref_ts.day_references_json)
+        loop
+          if nullif(btrim(coalesce(kv.v,'')), '') is not null then
+            v_ref_schedule_refs := v_ref_schedule_refs || jsonb_build_array(to_jsonb(nullif(btrim(kv.v),'')));
+          end if;
+        end loop;
+      end if;
+
+      if v_ref_ts.actual_schedule_json is not null and jsonb_typeof(v_ref_ts.actual_schedule_json) = 'array' then
+        for v_ref_seg_obj in
+          select value
+          from jsonb_array_elements(v_ref_ts.actual_schedule_json) value
+        loop
+          if v_ref_seg_obj is null or jsonb_typeof(v_ref_seg_obj) <> 'object' then
+            continue;
+          end if;
+          v_ref_sched_ref := nullif(btrim(coalesce(v_ref_seg_obj->>'ref_num','')), '');
+          if v_ref_sched_ref is not null then
+            v_ref_schedule_refs := v_ref_schedule_refs || jsonb_build_array(to_jsonb(v_ref_sched_ref));
+          end if;
+        end loop;
+      end if;
+
+      select coalesce(jsonb_agg(to_jsonb(x) order by x), '[]'::jsonb)
+      into v_ref_schedule_refs_distinct
+      from (
+        select distinct btrim(t.x) as x
+        from jsonb_array_elements_text(coalesce(v_ref_schedule_refs,'[]'::jsonb)) as t(x)
+        where nullif(btrim(coalesce(t.x,'')), '') is not null
+      ) q;
+
+      -- Refresh meta_json on all invoice lines for this timesheet
+      update public.invoice_lines ilu
+      set meta_json = coalesce(ilu.meta_json, '{}'::jsonb) || jsonb_build_object(
+        'ts_reference_number', nullif(btrim(coalesce(v_ref_ts.reference_number,'')), ''),
+        'schedule_ref_nums', coalesce(v_ref_schedule_refs_distinct, '[]'::jsonb),
+        'schedule_ref_count', jsonb_array_length(coalesce(v_ref_schedule_refs_distinct, '[]'::jsonb))
+      )
+      where ilu.invoice_id = p_invoice_id
+        and ilu.timesheet_id = v_ref_ts_id;
+
+      get diagnostics v_rc = row_count;
+      v_refupd_meta_rows_updated := v_refupd_meta_rows_updated + coalesce(v_rc,0);
+
+      -- Best-effort sync: update tsfin.invoice_breakdown_json segments[].ref_num by matching start/end fields
+      v_ref_seg_updates_this_ts := 0;
+      v_ref_tsfin_id := null;
+      v_ref_ib := null;
+
+      select tfu.id, tfu.invoice_breakdown_json
+      into v_ref_tsfin_id, v_ref_ib
+      from public.timesheets_financials tfu
+      where tfu.timesheet_id = v_ref_ts_id
+        and tfu.is_current = true
+      limit 1;
+
+      if v_ref_tsfin_id is not null
+         and v_ref_ib is not null
+         and jsonb_typeof(v_ref_ib) = 'object'
+         and upper(coalesce(v_ref_ib->>'mode','')) = 'SEGMENTS'
+         and jsonb_typeof(v_ref_ib->'segments') = 'array'
+         and v_ref_ts.actual_schedule_json is not null
+         and jsonb_typeof(v_ref_ts.actual_schedule_json) = 'array'
+      then
+        -- Build a map of "start|end" -> ref_num from actual_schedule_json
+        v_ref_sched_map := '{}'::jsonb;
+        for v_ref_seg_obj in
+          select value
+          from jsonb_array_elements(v_ref_ts.actual_schedule_json) value
+        loop
+          if v_ref_seg_obj is null or jsonb_typeof(v_ref_seg_obj) <> 'object' then
+            continue;
+          end if;
+
+          v_ref_seg_start := nullif(btrim(coalesce(v_ref_seg_obj->>'start_utc', v_ref_seg_obj->>'start', '')), '');
+          v_ref_seg_end := nullif(btrim(coalesce(v_ref_seg_obj->>'end_utc', v_ref_seg_obj->>'end', '')), '');
+          v_ref_sched_ref := nullif(btrim(coalesce(v_ref_seg_obj->>'ref_num','')), '');
+
+          if v_ref_seg_start is null or v_ref_seg_end is null or v_ref_sched_ref is null then
+            continue;
+          end if;
+
+          v_ref_sched_key := v_ref_seg_start || '|' || v_ref_seg_end;
+          v_ref_sched_map := jsonb_set(v_ref_sched_map, array[v_ref_sched_key], to_jsonb(v_ref_sched_ref), true);
+        end loop;
+
+        v_ref_new_segments := '[]'::jsonb;
+        for v_ref_seg_obj in
+          select value
+          from jsonb_array_elements(v_ref_ib->'segments') value
+        loop
+          if v_ref_seg_obj is null or jsonb_typeof(v_ref_seg_obj) <> 'object' then
+            v_ref_new_segments := v_ref_new_segments || jsonb_build_array(v_ref_seg_obj);
+            continue;
+          end if;
+
+          v_ref_seg_start := nullif(btrim(coalesce(v_ref_seg_obj->>'start_utc', v_ref_seg_obj->>'start', '')), '');
+          v_ref_seg_end := nullif(btrim(coalesce(v_ref_seg_obj->>'end_utc', v_ref_seg_obj->>'end', '')), '');
+
+          if v_ref_seg_start is null or v_ref_seg_end is null then
+            v_ref_new_segments := v_ref_new_segments || jsonb_build_array(v_ref_seg_obj);
+            continue;
+          end if;
+
+          v_ref_sched_key := v_ref_seg_start || '|' || v_ref_seg_end;
+          v_ref_seg_new_ref := null;
+
+          if v_ref_sched_map ? v_ref_sched_key then
+            v_ref_seg_new_ref := nullif(btrim(coalesce(v_ref_sched_map->>v_ref_sched_key,'')), '');
+          end if;
+
+          if v_ref_seg_new_ref is not null then
+            v_ref_seg_cur_ref := nullif(btrim(coalesce(v_ref_seg_obj->>'ref_num','')), '');
+            if v_ref_seg_cur_ref is distinct from v_ref_seg_new_ref then
+              v_ref_seg_obj := jsonb_set(v_ref_seg_obj, '{ref_num}', to_jsonb(v_ref_seg_new_ref), true);
+              v_ref_seg_updates_this_ts := v_ref_seg_updates_this_ts + 1;
+            end if;
+          end if;
+
+          v_ref_new_segments := v_ref_new_segments || jsonb_build_array(v_ref_seg_obj);
+        end loop;
+
+        if v_ref_seg_updates_this_ts > 0 then
+          update public.timesheets_financials tfu2
+          set invoice_breakdown_json = jsonb_set(coalesce(tfu2.invoice_breakdown_json, '{}'::jsonb), '{segments}', v_ref_new_segments, true)
+          where tfu2.id = v_ref_tsfin_id
+            and tfu2.is_current = true;
+
+          get diagnostics v_rc = row_count;
+          if coalesce(v_rc,0) > 0 then
+            v_refupd_tsfin_rows_updated := v_refupd_tsfin_rows_updated + 1;
+            v_refupd_tsfin_segments_updated := v_refupd_tsfin_segments_updated + v_ref_seg_updates_this_ts;
+          end if;
+        end if;
+
+      end if;
+
+    end loop;
+
+    if v_invoice_debug then
+      v_dbg_steps := v_dbg_steps || jsonb_build_array(
+        jsonb_build_object(
+          'step','reference_updates_meta_refreshed',
+          'timesheets_count', coalesce(array_length(v_refupd_ts_ids_distinct,1),0),
+          'invoice_line_rows_updated', v_refupd_meta_rows_updated,
+          'tsfin_rows_updated', v_refupd_tsfin_rows_updated,
+          'tsfin_segments_refnum_updated', v_refupd_tsfin_segments_updated
+        )
+      );
+    end if;
+  end if;
+
   -- 1) Removals (by invoice_line_id)
   if v_remove_ids is not null and coalesce(array_length(v_remove_ids,1),0) > 0 then
     -- collect timesheet_ids touched (any)
