@@ -225,7 +225,7 @@ begin
         on s.timesheet_id = tf.timesheet_id
       where tf.is_current = true
         and tf.client_id = v_client_id
-        and upper(coalesce(tf.processing_status, '')) = 'READY_FOR_INVOICE'
+        and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
         and tf.locked_by_invoice_id is null
         and ts.revoked_at is null
         and upper(coalesce(pc.precheck_status, '')) = 'OK'
@@ -335,6 +335,9 @@ begin
   );
 end;
 $$;
+
+
+
 
 create or replace function public.invoice_recompute_totals(
   p_invoice_id uuid
