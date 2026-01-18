@@ -2735,205 +2735,464 @@ $$;
 -- ============================================================
 -- CloudTMS Patch: invoice_render_manifest (UPDATED + FIXED v2)
 -- ============================================================
+-- ============================================================
+-- CloudTMS Patch: invoice_render_manifest (history + segments + invoice_debug)
+--
+-- Changes:
+-- 1) Join invoice_lines -> timesheets to expose timesheets.manual_pdf_r2_key
+-- 2) effective_paper_ts_r2_key priority:
+--      invoice_lines.paper_ts_r2_key
+--      timesheets.manual_pdf_r2_key
+--      docs-pdf/timesheets/ts_<timesheet_id>.pdf
+-- 3) Split evidence arrays (keep existing `evidence`):
+--      timesheet_evidence (kind = 'TIMESHEET')
+--      evidence_other     (kind <> 'TIMESHEET')
+-- 4) Ensure stable ordering by created_at asc in evidence aggregations
+-- 5) SEGMENTS support:
+--      segments_by_timesheet and segments_on_invoice_by_timesheet:
+--        - invoiced_segments: ONLY segments locked to this invoice
+--        - uninvoiced_segment_count
+--        - locked_elsewhere_segment_count
+-- 6) Invoice History:
+--      history: union of audit_events for this invoice and mail_outbox rows containing this invoice_id
+-- 7) Optional debug audit row:
+--      If settings_defaults.invoice_debug = true, write ONE audit_events row (extensive) via public._inv_write_audit
+--
+-- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
+-- ============================================================
 
 create or replace function public.invoice_render_manifest(p_invoice_id uuid)
 returns jsonb
-language sql
-stable
+language plpgsql
 security definer
 set search_path = public
 as $$
-with inv as (
-  select
-    i.*,
-    (i.header_snapshot_json->'attach_policy') as attach_policy
-  from public.invoices i
-  where i.id = p_invoice_id
-  limit 1
-),
-lines as (
-  select
-    l.*,
-    ts.manual_pdf_r2_key,
-    coalesce(
-      l.paper_ts_r2_key,
-      ts.manual_pdf_r2_key,
-      case
-        when l.timesheet_id is not null
-          then ('docs-pdf/timesheets/ts_' || l.timesheet_id::text || '.pdf')
-        else null
-      end
-    ) as effective_paper_ts_r2_key
-  from public.invoice_lines l
-  left join public.timesheets ts
-    on ts.timesheet_id = l.timesheet_id
-  where l.invoice_id = p_invoice_id
-  order by l.created_at asc
-),
-ts_ids as (
-  select distinct timesheet_id
-  from lines
-  where timesheet_id is not null
-),
-ev as (
-  select
-    e.timesheet_id,
-    e.kind,
-    e.display_name,
-    e.storage_key,
-    e.created_at
-  from public.timesheet_evidence e
-  where e.timesheet_id in (select timesheet_id from ts_ids)
-  order by e.created_at asc
-),
-hr_cache as (
-  select
-    r.invoice_id,
-    r.source_system,
-    r.import_id,
-    r.header_columns,
-    r.rows_json
-  from public.invoice_hr_source_rows r
-  where r.invoice_id = p_invoice_id
-),
-tsfin as (
-  select
-    tf.timesheet_id,
-    tf.external_source_rows_json
-  from public.timesheets_financials tf
-  where tf.is_current = true
-    and tf.timesheet_id in (select timesheet_id from ts_ids)
-),
-tsfin_segments as (
-  select
-    tf.timesheet_id,
-    tf.invoice_breakdown_json
-  from public.timesheets_financials tf
-  where tf.is_current = true
-    and tf.timesheet_id in (select timesheet_id from ts_ids)
-),
-seg_stats as (
-  select
-    t.timesheet_id,
+declare
+  v_invoice_debug boolean := false;
+  v_dbg_started timestamptz := now();
+  v_manifest jsonb := null;
 
-    -- ONLY segments on THIS invoice
-    coalesce(
-      jsonb_agg(
-        s.seg
-        order by coalesce(s.seg->>'date',''), coalesce(s.seg->>'segment_id','')
-      ) filter (
-        where s.seg is not null
-          and s.locked_text = p_invoice_id::text
-      ),
-      '[]'::jsonb
-    ) as invoiced_segments,
+  v_lines_count int := 0;
+  v_timesheet_ids_count int := 0;
+  v_evidence_count int := 0;
+  v_ts_evidence_count int := 0;
+  v_ev_other_count int := 0;
+  v_history_count int := 0;
+  v_seg_keys_count int := 0;
 
-    -- counts (do not return the segments)
-    (count(*) filter (where s.seg is not null and s.locked_text is null))::int
-      as uninvoiced_segment_count,
+  v_sqlstate text := null;
+  v_err text := null;
+begin
+  -- Load invoice_debug flag (safe even if column not yet present)
+  begin
+    select coalesce(sd.invoice_debug, false)
+    into v_invoice_debug
+    from public.settings_defaults sd
+    where sd.id = 1
+    limit 1;
+  exception when undefined_column then
+    v_invoice_debug := false;
+  end;
 
-    (count(*) filter (where s.seg is not null and s.locked_text is not null and s.locked_text <> p_invoice_id::text))::int
-      as locked_elsewhere_segment_count
-
-  from tsfin_segments t
-
-  -- left join so SEGMENTS timesheets with empty segments[] still produce 0 counts + []
-  left join lateral (
+  with inv as (
     select
-      value as seg,
-      nullif(btrim(coalesce(value->>'invoice_locked_invoice_id','')), '') as locked_text
-    from jsonb_array_elements(
-      case
-        when t.invoice_breakdown_json is not null
-          and jsonb_typeof(t.invoice_breakdown_json) = 'object'
-          and jsonb_typeof(t.invoice_breakdown_json->'segments') = 'array'
-        then t.invoice_breakdown_json->'segments'
-        else '[]'::jsonb
-      end
-    ) value
-  ) s on true
+      i.*,
+      (i.header_snapshot_json->'attach_policy') as attach_policy
+    from public.invoices i
+    where i.id = p_invoice_id
+    limit 1
+  ),
+  lines as (
+    select
+      l.*,
+      ts.manual_pdf_r2_key,
+      coalesce(
+        l.paper_ts_r2_key,
+        ts.manual_pdf_r2_key,
+        case
+          when l.timesheet_id is not null
+            then ('docs-pdf/timesheets/ts_' || l.timesheet_id::text || '.pdf')
+          else null
+        end
+      ) as effective_paper_ts_r2_key
+    from public.invoice_lines l
+    left join public.timesheets ts
+      on ts.timesheet_id = l.timesheet_id
+    where l.invoice_id = p_invoice_id
+    order by l.created_at asc
+  ),
+  ts_ids as (
+    select distinct timesheet_id
+    from lines
+    where timesheet_id is not null
+  ),
+  ev as (
+    select
+      e.timesheet_id,
+      e.kind,
+      e.display_name,
+      e.storage_key,
+      e.created_at
+    from public.timesheet_evidence e
+    where e.timesheet_id in (select timesheet_id from ts_ids)
+    order by e.created_at asc
+  ),
+  hr_cache as (
+    select
+      r.invoice_id,
+      r.source_system,
+      r.import_id,
+      r.header_columns,
+      r.rows_json
+    from public.invoice_hr_source_rows r
+    where r.invoice_id = p_invoice_id
+  ),
+  tsfin as (
+    select
+      tf.timesheet_id,
+      tf.external_source_rows_json
+    from public.timesheets_financials tf
+    where tf.is_current = true
+      and tf.timesheet_id in (select timesheet_id from ts_ids)
+  ),
+  tsfin_segments as (
+    select
+      tf.timesheet_id,
+      tf.invoice_breakdown_json
+    from public.timesheets_financials tf
+    where tf.is_current = true
+      and tf.timesheet_id in (select timesheet_id from ts_ids)
+  ),
+  seg_stats as (
+    select
+      t.timesheet_id,
 
-  -- only consider SEGMENTS mode
-  where upper(coalesce(t.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+      -- ONLY segments on THIS invoice
+      coalesce(
+        jsonb_agg(
+          s.seg
+          order by coalesce(s.seg->>'date',''), coalesce(s.seg->>'segment_id','')
+        ) filter (
+          where s.seg is not null
+            and s.locked_text = p_invoice_id::text
+        ),
+        '[]'::jsonb
+      ) as invoiced_segments,
 
-  group by t.timesheet_id
-),
-email_summary as (
-  select
-    count(*)::int as email_count,
-    max(m.created_at_utc) as last_email_at_utc
-  from public.mail_outbox m
-  where upper(coalesce(m.type,'')) = 'INVOICE'
-    and m.attachments is not null
-    and jsonb_typeof(m.attachments) = 'array'
-    and exists (
-      select 1
-      from jsonb_array_elements(m.attachments) a
-      where btrim(coalesce(a->>'invoice_id','')) = p_invoice_id::text
-    )
-)
-select jsonb_build_object(
-  'invoice', to_jsonb(inv.*),
-  'header_snapshot_json', coalesce((select inv.header_snapshot_json from inv), '{}'::jsonb),
-  'attach_policy', coalesce((select inv.attach_policy from inv), null),
+      -- counts (do not return the segments)
+      (count(*) filter (where s.seg is not null and s.locked_text is null))::int
+        as uninvoiced_segment_count,
 
-  'lines', coalesce((
-    select jsonb_agg(
-      to_jsonb(l.*)
-      || jsonb_build_object('paper_ts_r2_key', l.effective_paper_ts_r2_key)
-      || jsonb_build_object('is_adjustment', (l.timesheet_id is null or upper(coalesce(l.meta_json->>'line_type','')) = 'ADJUSTMENT'))
-      || jsonb_build_object('line_type_norm', upper(coalesce(l.meta_json->>'line_type','')))
-      order by l.created_at
-    )
-    from lines l
-  ), '[]'::jsonb),
+      (count(*) filter (where s.seg is not null and s.locked_text is not null and s.locked_text <> p_invoice_id::text))::int
+        as locked_elsewhere_segment_count
 
-  'timesheet_ids', coalesce((select jsonb_agg(t.timesheet_id::text) from ts_ids t), '[]'::jsonb),
+    from tsfin_segments t
 
-  -- ✅ NEW: segment info for invoice modal expansion (SEGMENTS mode only)
-  'segments_by_timesheet', coalesce((
-    select jsonb_object_agg(
-      s.timesheet_id::text,
-      jsonb_build_object(
-        'invoiced_segments', coalesce(s.invoiced_segments, '[]'::jsonb),
-        'uninvoiced_segment_count', coalesce(s.uninvoiced_segment_count, 0),
-        'locked_elsewhere_segment_count', coalesce(s.locked_elsewhere_segment_count, 0)
+    left join lateral (
+      select
+        value as seg,
+        nullif(btrim(coalesce(value->>'invoice_locked_invoice_id','')), '') as locked_text
+      from jsonb_array_elements(
+        case
+          when t.invoice_breakdown_json is not null
+            and jsonb_typeof(t.invoice_breakdown_json) = 'object'
+            and jsonb_typeof(t.invoice_breakdown_json->'segments') = 'array'
+          then t.invoice_breakdown_json->'segments'
+          else '[]'::jsonb
+        end
+      ) value
+    ) s on true
+
+    where upper(coalesce(t.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+
+    group by t.timesheet_id
+  ),
+  hist_audit as (
+    select
+      ae.id,
+      ae.ts_utc,
+      ae.actor_user_id,
+      coalesce(ae.actor_display, tu.display_name, tu.email, 'CloudTMS server') as actor_display,
+      coalesce(ae.actor_role_at_time, tu.role, 'system') as actor_role_at_time,
+      ae.object_type,
+      ae.object_id_text,
+      ae.action,
+      ae.before_json,
+      ae.after_json,
+      ae.reason,
+      ae.ip,
+      ae.user_agent,
+      ae.correlation_id
+    from public.audit_events ae
+    left join public.tms_users tu
+      on tu.id = ae.actor_user_id
+    where ae.object_type in ('invoice','invoices')
+      and ae.object_id_text = p_invoice_id::text
+    order by ae.ts_utc desc, ae.id desc
+    limit 500
+  ),
+  hist_mail as (
+    select
+      m.id as mail_outbox_id,
+      m.created_at_utc as ts_utc,
+      m.status,
+      m."to" as to_email,
+      m.subject,
+      m.reference
+    from public.mail_outbox m
+    where upper(coalesce(m.type,'')) = 'INVOICE'
+      and m.attachments is not null
+      and jsonb_typeof(m.attachments) = 'array'
+      and exists (
+        select 1
+        from jsonb_array_elements(m.attachments) a
+        where btrim(coalesce(a->>'invoice_id','')) = p_invoice_id::text
       )
-    )
-    from seg_stats s
-  ), '{}'::jsonb),
+    order by m.created_at_utc desc, m.id desc
+    limit 200
+  ),
+  history as (
+    select
+      jsonb_build_object(
+        'kind','AUDIT',
+        'id', ae.id::text,
+        'ts_utc', to_jsonb(ae.ts_utc),
+        'actor_user_id', case when ae.actor_user_id is null then null else ae.actor_user_id::text end,
+        'actor_display', ae.actor_display,
+        'actor_role_at_time', ae.actor_role_at_time,
+        'action', ae.action,
+        'reason', ae.reason,
+        'object_type', ae.object_type,
+        'object_id_text', ae.object_id_text,
+        'before_json', ae.before_json,
+        'after_json', ae.after_json,
+        'ip', ae.ip,
+        'user_agent', ae.user_agent,
+        'correlation_id', ae.correlation_id
+      ) as row_json,
+      ae.ts_utc as ts_sort
+    from hist_audit ae
 
-  -- Backward compatible aggregate (all evidence)
-  'evidence', coalesce((
-    select jsonb_agg(to_jsonb(ev.*) order by ev.created_at)
-    from ev
-  ), '[]'::jsonb),
+    union all
 
-  -- New explicit splits
-  'timesheet_evidence', coalesce((
-    select jsonb_agg(to_jsonb(ev.*) order by ev.created_at)
-    from ev
-    where upper(coalesce(ev.kind,'')) = 'TIMESHEET'
-  ), '[]'::jsonb),
-
-  'evidence_other', coalesce((
-    select jsonb_agg(to_jsonb(ev.*) order by ev.created_at)
-    from ev
-    where upper(coalesce(ev.kind,'')) <> 'TIMESHEET'
-  ), '[]'::jsonb),
-
-  'hr_source_rows_cache', coalesce((select jsonb_agg(to_jsonb(h.*)) from hr_cache h), '[]'::jsonb),
-  'tsfin_external_source_rows', coalesce((select jsonb_agg(to_jsonb(t.*)) from tsfin t), '[]'::jsonb),
-
-  'email_summary', jsonb_build_object(
-    'emailed_once', (coalesce((select email_count from email_summary),0) > 0),
-    'email_count', coalesce((select email_count from email_summary),0),
-    'last_email_at_utc', (select last_email_at_utc from email_summary)
+    select
+      jsonb_build_object(
+        'kind','EMAIL',
+        'mail_outbox_id', m.mail_outbox_id::text,
+        'ts_utc', to_jsonb(m.ts_utc),
+        'status', m.status::text,
+        'to', m.to_email,
+        'subject', m.subject,
+        'reference', m.reference
+      ) as row_json,
+      m.ts_utc as ts_sort
+    from hist_mail m
+  ),
+  email_summary as (
+    select
+      count(*)::int as email_count,
+      max(m.created_at_utc) as last_email_at_utc
+    from public.mail_outbox m
+    where upper(coalesce(m.type,'')) = 'INVOICE'
+      and m.attachments is not null
+      and jsonb_typeof(m.attachments) = 'array'
+      and exists (
+        select 1
+        from jsonb_array_elements(m.attachments) a
+        where btrim(coalesce(a->>'invoice_id','')) = p_invoice_id::text
+      )
   )
-)
-from inv;
-$$;
+  select jsonb_build_object(
+    'invoice', to_jsonb(inv.*),
+    'header_snapshot_json', coalesce((select inv.header_snapshot_json from inv), '{}'::jsonb),
+    'attach_policy', coalesce((select inv.attach_policy from inv), null),
 
+    'lines', coalesce((
+      select jsonb_agg(
+        to_jsonb(l.*)
+        || jsonb_build_object('paper_ts_r2_key', l.effective_paper_ts_r2_key)
+        || jsonb_build_object('is_adjustment', (l.timesheet_id is null or upper(coalesce(l.meta_json->>'line_type','')) = 'ADJUSTMENT'))
+        || jsonb_build_object('line_type_norm', upper(coalesce(l.meta_json->>'line_type','')))
+        order by l.created_at
+      )
+      from lines l
+    ), '[]'::jsonb),
+
+    'timesheet_ids', coalesce((select jsonb_agg(t.timesheet_id::text) from ts_ids t), '[]'::jsonb),
+
+    -- SEGMENTS: segment info for invoice modal expansion
+    'segments_by_timesheet', coalesce((
+      select jsonb_object_agg(
+        s.timesheet_id::text,
+        jsonb_build_object(
+          'invoiced_segments', coalesce(s.invoiced_segments, '[]'::jsonb),
+          'uninvoiced_segment_count', coalesce(s.uninvoiced_segment_count, 0),
+          'locked_elsewhere_segment_count', coalesce(s.locked_elsewhere_segment_count, 0)
+        )
+      )
+      from seg_stats s
+    ), '{}'::jsonb),
+
+    -- Alias required by brief
+    'segments_on_invoice_by_timesheet', coalesce((
+      select jsonb_object_agg(
+        s.timesheet_id::text,
+        jsonb_build_object(
+          'invoiced_segments', coalesce(s.invoiced_segments, '[]'::jsonb),
+          'uninvoiced_segment_count', coalesce(s.uninvoiced_segment_count, 0),
+          'locked_elsewhere_segment_count', coalesce(s.locked_elsewhere_segment_count, 0)
+        )
+      )
+      from seg_stats s
+    ), '{}'::jsonb),
+
+    -- Backward compatible aggregate (all evidence)
+    'evidence', coalesce((
+      select jsonb_agg(to_jsonb(ev.*) order by ev.created_at)
+      from ev
+    ), '[]'::jsonb),
+
+    -- New explicit splits
+    'timesheet_evidence', coalesce((
+      select jsonb_agg(to_jsonb(ev.*) order by ev.created_at)
+      from ev
+      where upper(coalesce(ev.kind,'')) = 'TIMESHEET'
+    ), '[]'::jsonb),
+
+    'evidence_other', coalesce((
+      select jsonb_agg(to_jsonb(ev.*) order by ev.created_at)
+      from ev
+      where upper(coalesce(ev.kind,'')) <> 'TIMESHEET'
+    ), '[]'::jsonb),
+
+    'hr_source_rows_cache', coalesce((select jsonb_agg(to_jsonb(h.*)) from hr_cache h), '[]'::jsonb),
+    'tsfin_external_source_rows', coalesce((select jsonb_agg(to_jsonb(t.*)) from tsfin t), '[]'::jsonb),
+
+    -- Invoice history
+    'history', coalesce((
+      select jsonb_agg(h.row_json order by h.ts_sort desc)
+      from history h
+    ), '[]'::jsonb),
+
+    -- email summary for UI label (Email vs Re-email)
+    'email_summary', jsonb_build_object(
+      'emailed_once', (coalesce((select email_count from email_summary),0) > 0),
+      'email_count', coalesce((select email_count from email_summary),0),
+      'last_email_at_utc', (select last_email_at_utc from email_summary)
+    )
+  )
+  into v_manifest
+  from inv;
+
+  if v_manifest is null then
+    v_manifest := '{}'::jsonb;
+  end if;
+
+  -- Extract simple counts for debug
+  begin
+    v_lines_count := coalesce(jsonb_array_length(coalesce(v_manifest->'lines','[]'::jsonb)), 0);
+  exception when others then
+    v_lines_count := 0;
+  end;
+
+  begin
+    v_timesheet_ids_count := coalesce(jsonb_array_length(coalesce(v_manifest->'timesheet_ids','[]'::jsonb)), 0);
+  exception when others then
+    v_timesheet_ids_count := 0;
+  end;
+
+  begin
+    v_evidence_count := coalesce(jsonb_array_length(coalesce(v_manifest->'evidence','[]'::jsonb)), 0);
+  exception when others then
+    v_evidence_count := 0;
+  end;
+
+  begin
+    v_ts_evidence_count := coalesce(jsonb_array_length(coalesce(v_manifest->'timesheet_evidence','[]'::jsonb)), 0);
+  exception when others then
+    v_ts_evidence_count := 0;
+  end;
+
+  begin
+    v_ev_other_count := coalesce(jsonb_array_length(coalesce(v_manifest->'evidence_other','[]'::jsonb)), 0);
+  exception when others then
+    v_ev_other_count := 0;
+  end;
+
+  begin
+    v_history_count := coalesce(jsonb_array_length(coalesce(v_manifest->'history','[]'::jsonb)), 0);
+  exception when others then
+    v_history_count := 0;
+  end;
+
+  begin
+    select coalesce(count(*),0)
+    into v_seg_keys_count
+    from jsonb_object_keys(coalesce(v_manifest->'segments_by_timesheet','{}'::jsonb)) k;
+  exception when others then
+    v_seg_keys_count := 0;
+  end;
+
+  if v_invoice_debug then
+    perform public._inv_write_audit(
+      null,
+      'INVOICE_RENDER_MANIFEST_DEBUG',
+      jsonb_build_object(
+        'invoice_id', p_invoice_id::text,
+        'run_started_at_utc', public._inv_iso_utc(v_dbg_started),
+        'run_finished_at_utc', public._inv_iso_utc(now()),
+        'counts', jsonb_build_object(
+          'lines', v_lines_count,
+          'timesheet_ids', v_timesheet_ids_count,
+          'evidence', v_evidence_count,
+          'timesheet_evidence', v_ts_evidence_count,
+          'evidence_other', v_ev_other_count,
+          'history', v_history_count,
+          'segments_by_timesheet_keys', v_seg_keys_count
+        )
+      ),
+      'invoices',
+      p_invoice_id::text,
+      null,
+      'INVOICE_DEBUG',
+      null,
+      null,
+      null
+    );
+  end if;
+
+  return v_manifest;
+
+exception when others then
+  v_sqlstate := sqlstate;
+  v_err := sqlerrm;
+
+  if v_invoice_debug then
+    perform public._inv_write_audit(
+      null,
+      'INVOICE_RENDER_MANIFEST_ERROR',
+      jsonb_build_object(
+        'invoice_id', p_invoice_id::text,
+        'run_started_at_utc', public._inv_iso_utc(v_dbg_started),
+        'run_failed_at_utc', public._inv_iso_utc(now()),
+        'error', jsonb_build_object(
+          'sqlstate', v_sqlstate,
+          'message', v_err
+        )
+      ),
+      'invoices',
+      p_invoice_id::text,
+      null,
+      'INVOICE_DEBUG',
+      null,
+      null,
+      null
+    );
+  end if;
+
+  raise;
+end;
+$$;
 
 -- ============================================================
 -- STUBS (compile-safe) for the two RPCs that require your paste
