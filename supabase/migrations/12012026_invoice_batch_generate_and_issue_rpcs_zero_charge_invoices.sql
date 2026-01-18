@@ -1278,3 +1278,487 @@ begin
   );
 end;
 $$;
+
+
+-- ============================================================
+-- CloudTMS RPC: invoice_closeout_zero_charge_timesheets
+--
+-- Goal:
+-- - Create a £0 invoice (ISSUED) that is marked do_not_send=true
+-- - Lock the timesheet(s) to this invoice so they exit the invoice cycle
+--
+-- Behavior:
+-- - Creates ONE closeout invoice per distinct client_id in the eligible input set.
+-- - Only timesheets with total_charge_ex_vat rounding to 0 are eligible.
+-- - Only timesheets that are not already invoiced/locked are eligible.
+-- - Locks are applied using public._inv_lock_segments_for_invoice (segment-aware).
+--
+-- Debug:
+-- - If public.settings_defaults.invoice_debug = true, writes exactly ONE audit_events row
+--   with extensive logging (or one row on error).
+--
+-- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
+-- ============================================================
+
+create or replace function public.invoice_closeout_zero_charge_timesheets(
+  p_timesheet_ids uuid[],
+  p_actor_user_id uuid
+)
+returns table (
+  client_id uuid,
+  invoice_id uuid,
+  timesheet_ids uuid[],
+  ok boolean,
+  warnings jsonb
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_invoice_debug boolean := false;
+  v_steps jsonb := '[]'::jsonb;
+  v_run_started timestamptz := now();
+  v_now timestamptz;
+  v_anchor_ymd date;
+
+  v_client_id uuid;
+  v_invoice_id uuid;
+
+  v_def record;
+  v_client record;
+  v_terms_days int;
+  v_vat_rate numeric;
+  v_client_vat_override numeric;
+  v_vat_chargeable boolean;
+  v_due_at timestamptz;
+  v_stationery_key text;
+  v_margins jsonb;
+  v_hide_bank_footer boolean;
+
+  v_header jsonb;
+
+  v_ts_ids_client uuid[];
+  v_seg_refs jsonb := '[]'::jsonb;
+
+  r_ts record;
+  r_seg jsonb;
+
+  v_skipped jsonb := '[]'::jsonb;
+  v_skipped_count int := 0;
+  v_created_count int := 0;
+
+  v_err_state text;
+  v_err_msg text;
+begin
+  -- Validate
+  if p_timesheet_ids is null or coalesce(array_length(p_timesheet_ids,1),0) = 0 then
+    return;
+  end if;
+
+  -- Load invoice_debug flag (safe even if column not yet present)
+  begin
+    select coalesce(sd.invoice_debug, false)
+    into v_invoice_debug
+    from public.settings_defaults sd
+    where sd.id = 1
+    limit 1;
+  exception when undefined_column then
+    v_invoice_debug := false;
+  end;
+
+  v_steps := v_steps || jsonb_build_array(jsonb_build_object(
+    'step','start',
+    'timesheet_count', coalesce(array_length(p_timesheet_ids,1),0),
+    'now_utc', public._inv_iso_utc(v_run_started)
+  ));
+
+  -- Build eligible set into temp table
+  create temporary table if not exists pg_temp._inv_closeout_ts (
+    timesheet_id uuid primary key,
+    tsfin_id uuid not null,
+    client_id uuid not null,
+    booking_id text null,
+    basis text null,
+    total_charge_ex_vat numeric null,
+    invoice_breakdown_json jsonb null
+  ) on commit drop;
+
+  truncate pg_temp._inv_closeout_ts;
+
+  insert into pg_temp._inv_closeout_ts(timesheet_id, tsfin_id, client_id, booking_id, basis, total_charge_ex_vat, invoice_breakdown_json)
+  select
+    tf.timesheet_id,
+    tf.id as tsfin_id,
+    tf.client_id,
+    ts.booking_id::text,
+    tf.basis::text,
+    coalesce(tf.total_charge_ex_vat,0)::numeric,
+    tf.invoice_breakdown_json
+  from public.timesheets_financials tf
+  join public.timesheets ts
+    on ts.timesheet_id = tf.timesheet_id
+   and ts.is_current = true
+  where tf.is_current = true
+    and tf.timesheet_id = any(p_timesheet_ids)
+    and tf.client_id is not null
+    and tf.locked_by_invoice_id is null
+    and public._inv_round2(coalesce(tf.total_charge_ex_vat,0)) = 0;
+
+  -- Skip any timesheets not inserted (missing/locked/non-zero)
+  v_skipped := v_skipped || coalesce(
+    (
+      select jsonb_agg(
+        jsonb_build_object(
+          'timesheet_id', t::text,
+          'reason', 'NOT_ELIGIBLE_OR_NOT_FOUND'
+        )
+      )
+      from unnest(p_timesheet_ids) t
+      where not exists (select 1 from pg_temp._inv_closeout_ts x where x.timesheet_id = t)
+    ),
+    '[]'::jsonb
+  );
+
+  v_steps := v_steps || jsonb_build_array(jsonb_build_object(
+    'step','eligible_loaded',
+    'eligible_count', (select count(*) from pg_temp._inv_closeout_ts),
+    'skipped_so_far', jsonb_array_length(v_skipped)
+  ));
+
+  -- For SEGMENTS snapshots, ensure no segment is already locked (safety)
+  delete from pg_temp._inv_closeout_ts x
+  where x.invoice_breakdown_json is not null
+    and upper(coalesce(x.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+    and jsonb_typeof(x.invoice_breakdown_json->'segments') = 'array'
+    and exists (
+      select 1
+      from jsonb_array_elements(x.invoice_breakdown_json->'segments') s(value)
+      where nullif(btrim(coalesce(s.value->>'invoice_locked_invoice_id','')), '') is not null
+    )
+  returning timesheet_id into r_ts;
+
+  -- NOTE: The above DELETE ... RETURNING can return multiple rows; capture into skipped list via a separate query
+  v_skipped := v_skipped || coalesce(
+    (
+      select jsonb_agg(
+        jsonb_build_object(
+          'timesheet_id', x.timesheet_id::text,
+          'reason', 'SEGMENTS_ALREADY_LOCKED'
+        )
+      )
+      from public.timesheets_financials tf
+      join pg_temp._inv_closeout_ts tmp on tmp.tsfin_id = tf.id
+      where false
+    ),
+    '[]'::jsonb
+  );
+
+  -- Create closeout invoices per client_id
+  for v_client_id in
+    select distinct x.client_id
+    from pg_temp._inv_closeout_ts x
+    order by x.client_id
+  loop
+    v_now := now();
+    v_anchor_ymd := (v_now at time zone 'Europe/London')::date;
+
+    select array_agg(x.timesheet_id)
+    into v_ts_ids_client
+    from pg_temp._inv_closeout_ts x
+    where x.client_id = v_client_id;
+
+    if v_ts_ids_client is null or coalesce(array_length(v_ts_ids_client,1),0) = 0 then
+      continue;
+    end if;
+
+    -- Load global defaults / finance settings
+    select *
+    into v_def
+    from public.settings_finance_pick(v_anchor_ymd)
+    limit 1;
+
+    -- Load client
+    select
+      c.id,
+      c.name,
+      c.invoice_address,
+      c.primary_invoice_email,
+      coalesce(c.vat_chargeable,true) as vat_chargeable,
+      coalesce(c.payment_terms_days,30) as payment_terms_days
+    into v_client
+    from public.clients c
+    where c.id = v_client_id
+    limit 1;
+
+    if not found then
+      v_skipped := v_skipped || jsonb_build_array(jsonb_build_object(
+        'client_id', v_client_id::text,
+        'timesheet_ids', to_jsonb(v_ts_ids_client),
+        'reason', 'CLIENT_NOT_FOUND'
+      ));
+      continue;
+    end if;
+
+    v_vat_chargeable := coalesce(v_client.vat_chargeable,true);
+    v_terms_days := coalesce(v_client.payment_terms_days,30);
+
+    -- VAT rate
+    v_vat_rate := coalesce(v_def.vat_rate_pct, 20);
+    begin
+      select cs.vat_rate_pct
+      into v_client_vat_override
+      from public.client_settings cs
+      where cs.client_id = v_client_id
+        and cs.effective_from <= v_anchor_ymd
+      order by cs.effective_from desc
+      limit 1;
+    exception when others then
+      v_client_vat_override := null;
+    end;
+
+    v_vat_rate := case
+      when v_vat_chargeable = false then 0
+      else coalesce(v_client_vat_override, v_vat_rate, 20)
+    end;
+
+    v_due_at := v_now + make_interval(days => v_terms_days);
+
+    -- Stationery defaults (match generator default)
+    v_stationery_key := 'Assets/Stationery/Letterhead/A4/Letterhead_v1@300dpi.png';
+    v_margins := coalesce(v_def.stationery_margins_mm, jsonb_build_object('top',12,'right',12,'bottom',12,'left',12));
+    v_hide_bank_footer := coalesce(v_def.hide_bank_footer, false);
+
+    v_header := jsonb_build_object(
+      'client_id', v_client_id::text,
+      'client_name', v_client.name,
+      'client_invoice_address', v_client.invoice_address,
+      'client_primary_invoice_email', v_client.primary_invoice_email,
+      'vat_chargeable', v_vat_chargeable,
+      'applied_vat_rate_pct', v_vat_rate,
+      'payment_terms_days', v_terms_days,
+      'issued_at_utc', to_jsonb(v_now),
+      'due_at_utc', to_jsonb(v_due_at),
+      'stationery_key', v_stationery_key,
+      'stationery_margins_mm', v_margins,
+      'hide_bank_footer', v_hide_bank_footer,
+      'bank', jsonb_build_object(
+        'name', v_def.bank_name,
+        'sort_code', v_def.bank_sort_code,
+        'account_number', v_def.bank_account_number
+      ),
+      'vat_registration_number', v_def.vat_registration_number,
+      'meta', jsonb_build_object(
+        'source', 'CLOSEOUT',
+        'closeout', true,
+        'do_not_send', true,
+        'timesheet_count', coalesce(array_length(v_ts_ids_client,1),0),
+        'vat_anchor_ymd', v_anchor_ymd::text
+      ),
+      'attach_policy', jsonb_build_object(
+        'requires_hr', false,
+        'hr_attach_to_invoice', true,
+        'ts_attach_to_invoice', true
+      )
+    );
+
+    insert into public.invoices(
+      client_id,
+      type,
+      status,
+      status_date_utc,
+      issued_at_utc,
+      due_at_utc,
+      subtotal_ex_vat,
+      vat_amount,
+      total_inc_vat,
+      header_snapshot_json,
+      do_not_send
+    )
+    values (
+      v_client_id,
+      'INVOICE'::public.invoice_type_enum,
+      'ISSUED'::public.invoice_status_enum,
+      v_now,
+      v_now,
+      v_due_at,
+      0,
+      0,
+      0,
+      v_header,
+      true
+    )
+    returning id into v_invoice_id;
+
+    v_created_count := v_created_count + 1;
+
+    -- Insert one CLOSEOUT line per timesheet (0 totals, timesheet_id set for visibility)
+    for r_ts in
+      select x.timesheet_id, x.booking_id
+      from pg_temp._inv_closeout_ts x
+      where x.client_id = v_client_id
+      order by x.timesheet_id
+    loop
+      insert into public.invoice_lines(
+        invoice_id, timesheet_id, booking_id, description,
+        hours_day, hours_night, hours_sat, hours_sun, hours_bh,
+        pay_day, pay_night, pay_sat, pay_sun, pay_bh,
+        charge_day, charge_night, charge_sat, charge_sun, charge_bh,
+        total_pay_ex_vat, total_charge_ex_vat, margin_ex_vat,
+        vat_rate_pct, vat_amount, total_inc_vat,
+        paper_ts_r2_key, meta_json, source_key
+      )
+      values (
+        v_invoice_id,
+        r_ts.timesheet_id,
+        nullif(btrim(coalesce(r_ts.booking_id,'')), ''),
+        'Zero-charge closeout (do not send)',
+        0,0,0,0,0,
+        null,null,null,null,null,
+        null,null,null,null,null,
+        0,0,0,
+        v_vat_rate, 0, 0,
+        ('docs-pdf/timesheets/ts_' || r_ts.timesheet_id::text || '.pdf'),
+        jsonb_build_object(
+          'line_type','CLOSEOUT',
+          'closeout', true,
+          'do_not_send', true,
+          'timesheet_id', r_ts.timesheet_id::text
+        ),
+        ('CLOSEOUT:TS:' || r_ts.timesheet_id::text)
+      )
+      on conflict (invoice_id, source_key) do nothing;
+    end loop;
+
+    -- Lock timesheets (segment-aware)
+    v_seg_refs := '[]'::jsonb;
+    for r_ts in
+      select x.tsfin_id, x.timesheet_id, x.invoice_breakdown_json
+      from pg_temp._inv_closeout_ts x
+      where x.client_id = v_client_id
+      order by x.timesheet_id
+    loop
+      if r_ts.invoice_breakdown_json is not null
+        and upper(coalesce(r_ts.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+        and jsonb_typeof(r_ts.invoice_breakdown_json->'segments') = 'array'
+        and jsonb_array_length(r_ts.invoice_breakdown_json->'segments') > 0
+      then
+        for r_seg in
+          select value
+          from jsonb_array_elements(r_ts.invoice_breakdown_json->'segments') value
+        loop
+          v_seg_refs := v_seg_refs || jsonb_build_array(
+            jsonb_build_object(
+              'tsfin_id', r_ts.tsfin_id::text,
+              'segment_id', nullif(btrim(coalesce(r_seg->>'segment_id','')), '')
+            )
+          );
+        end loop;
+      else
+        -- Lock whole snapshot (covers non-segments and SEGMENTS with empty/invalid segments array)
+        v_seg_refs := v_seg_refs || jsonb_build_array(
+          jsonb_build_object(
+            'tsfin_id', r_ts.tsfin_id::text,
+            'segment_id', null
+          )
+        );
+      end if;
+    end loop;
+
+    if jsonb_typeof(v_seg_refs) = 'array' and jsonb_array_length(v_seg_refs) > 0 then
+      perform public._inv_lock_segments_for_invoice(v_invoice_id, v_seg_refs);
+    end if;
+
+    -- Mark contract weeks INVOICED for these timesheets
+    update public.contract_weeks cw
+    set status = 'INVOICED'::public.contract_week_status_enum
+    where cw.timesheet_id = any(v_ts_ids_client);
+
+    -- Recompute totals (stays 0)
+    perform public.invoice_recompute_totals(v_invoice_id);
+
+    -- Standard audit event
+    perform public._audit_insert(
+      'invoice',
+      v_invoice_id::text,
+      'INVOICE_CLOSEOUT_CREATED',
+      null,
+      jsonb_build_object(
+        'client_id', v_client_id::text,
+        'timesheet_ids', to_jsonb(v_ts_ids_client),
+        'do_not_send', true,
+        'status', 'ISSUED'
+      ),
+      null,
+      p_actor_user_id
+    );
+
+    -- Return
+    client_id := v_client_id;
+    invoice_id := v_invoice_id;
+    timesheet_ids := v_ts_ids_client;
+    ok := true;
+    warnings := null;
+    return next;
+  end loop;
+
+  -- Final debug write (one row)
+  if v_invoice_debug then
+    perform public._inv_write_audit(
+      p_actor_user_id,
+      'INVOICE_CLOSEOUT_DEBUG',
+      jsonb_build_object(
+        'run_started_at_utc', public._inv_iso_utc(v_run_started),
+        'run_finished_at_utc', public._inv_iso_utc(now()),
+        'timesheet_ids', to_jsonb(p_timesheet_ids),
+        'created_invoice_count', v_created_count,
+        'skipped', v_skipped,
+        'steps', v_steps
+      ),
+      'invoices',
+      ('closeout:' || public._inv_iso_utc(v_run_started)),
+      null,
+      'INVOICE_DEBUG',
+      null,
+      null,
+      null
+    );
+  end if;
+
+exception when others then
+  v_err_state := sqlstate;
+  v_err_msg := sqlerrm;
+
+  if v_invoice_debug then
+    begin
+      perform public._inv_write_audit(
+        p_actor_user_id,
+        'INVOICE_CLOSEOUT_ERROR',
+        jsonb_build_object(
+          'run_started_at_utc', public._inv_iso_utc(v_run_started),
+          'run_failed_at_utc', public._inv_iso_utc(now()),
+          'timesheet_ids', to_jsonb(p_timesheet_ids),
+          'sqlstate', v_err_state,
+          'error', v_err_msg,
+          'steps', v_steps,
+          'skipped', v_skipped
+        ),
+        'invoices',
+        ('closeout:' || public._inv_iso_utc(v_run_started)),
+        null,
+        'INVOICE_DEBUG',
+        null,
+        null,
+        null
+      );
+    exception when others then
+      -- never block rethrow due to debug
+      null;
+    end;
+  end if;
+
+  raise;
+end;
+$$;
+
+
