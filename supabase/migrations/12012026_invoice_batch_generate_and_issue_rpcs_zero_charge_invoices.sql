@@ -955,34 +955,6 @@ select coalesce(
 from clients c;
 $$;
 
-
--- ============================================================
--- NEW: public.invoice_issue_and_queue_emails_batch(...)
--- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
---
--- Behaviour:
---  1) Applies week-ended gate unless p_allow_early=true:
---       week_ending_date < LondonToday
---     (week_ending derived from invoice_lines->timesheets, fallback header meta week_start+6)
---
---  2) Calls public.invoice_issue_batch(...) for allowed invoice_ids.
---     Any "not due yet" invoices are returned as failures with error='NOT_DUE_YET'.
---
---  3) For successfully issued invoices:
---     - Skips email enqueue if invoice is self-bill (header meta self_bill=true)
---     - Groups by (client_id, week_ending_date, to_email)
---     - Chunks attachments by settings_defaults.max_attachments_per_email (default 30)
---     - Inserts mail_outbox rows with attachments = [{invoice_id, filename}, ...]
---
--- Return:
---   jsonb object:
---     {
---       "invoice_results": [...],          -- per-invoice results (includes NOT_DUE_YET)
---       "email_outbox":   [...],           -- each queued email row summary
---       "max_attachments_per_email": N
---     }
--- ============================================================
-
 create or replace function public.invoice_issue_and_queue_emails_batch(
   p_invoice_ids uuid[],
   p_actor_user_id uuid,
@@ -1007,6 +979,11 @@ declare
   v_not_due_json jsonb := '[]'::jsonb;
   v_email_json jsonb := '[]'::jsonb;
 
+  v_debug boolean := false;
+  v_steps jsonb := '[]'::jsonb;
+  v_sqlstate text;
+  v_err text;
+
 begin
   if p_invoice_ids is null or coalesce(array_length(p_invoice_ids,1),0) = 0 then
     raise exception 'invoice_ids[] required';
@@ -1030,6 +1007,16 @@ begin
   from public.settings_defaults sd
   where sd.id = 1
   limit 1;
+
+  select coalesce(sd.invoice_debug,false)
+  into v_debug
+  from public.settings_defaults sd
+  where sd.id = 1
+  limit 1;
+
+  if coalesce(v_debug,false) = true then
+    v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','start','now_utc',v_now::text,'anchor_ymd',v_anchor_ymd::text,'allow_early',coalesce(p_allow_early,false)));
+  end if;
 
   if v_max_attach is null or v_max_attach < 1 then
     v_max_attach := 30;
@@ -1169,7 +1156,8 @@ begin
     on c.id = i.client_id
   where r.ok = true
     and upper(coalesce(r.status,'')) = 'ISSUED'
-    and coalesce(g.is_self_bill,false) = false;
+    and coalesce(g.is_self_bill,false) = false
+    and coalesce(i.do_not_send,false) = false;
 
   -- build queued mail_outbox rows in chunks
   create temporary table tmp_mail_rows on commit drop as
@@ -1270,15 +1258,74 @@ begin
       and reference like 'invoice_batch:%'
   ) o;
 
+
+  if coalesce(v_debug,false) = true then
+    v_steps := v_steps || jsonb_build_array(jsonb_build_object(
+      'step','before_return',
+      'allowed_count',coalesce(array_length(v_allowed,1),0),
+      'not_due_count',coalesce(array_length(v_not_due,1),0),
+      'max_attachments_per_email',v_max_attach
+    ));
+
+    perform public._inv_write_audit(
+      p_actor_user_id,
+      'INVOICE_ISSUE_AND_QUEUE_EMAILS_BATCH_DEBUG',
+      jsonb_build_object(
+        'allow_early', coalesce(p_allow_early,false),
+        'anchor_ymd', v_anchor_ymd::text,
+        'input_invoice_ids', to_jsonb(v_ids),
+        'allowed_invoice_ids', to_jsonb(coalesce(v_allowed, array[]::uuid[])),
+        'not_due_invoice_ids', to_jsonb(coalesce(v_not_due, array[]::uuid[])),
+        'issue_results', v_issue_json,
+        'not_due_results', v_not_due_json,
+        'email_outbox', v_email_json,
+        'max_attachments_per_email', v_max_attach,
+        'steps', v_steps
+      ),
+      'invoices',
+      null,
+      null,
+      null,
+      null, null, null
+    );
+  end if;
+
   return jsonb_build_object(
     'invoice_results', (v_issue_json || v_not_due_json),
     'email_outbox', v_email_json,
     'max_attachments_per_email', v_max_attach,
     'allow_early', coalesce(p_allow_early,false)
   );
+exception
+  when others then
+    get stacked diagnostics v_sqlstate = returned_sqlstate, v_err = message_text;
+
+    if coalesce(v_debug,false) = true then
+      perform public._inv_write_audit(
+        p_actor_user_id,
+        'INVOICE_ISSUE_AND_QUEUE_EMAILS_BATCH_ERROR',
+        jsonb_build_object(
+          'sqlstate', v_sqlstate,
+          'error', v_err,
+          'allow_early', coalesce(p_allow_early,false),
+          'anchor_ymd', v_anchor_ymd::text,
+          'input_invoice_ids', to_jsonb(coalesce(v_ids, array[]::uuid[])),
+          'allowed_invoice_ids', to_jsonb(coalesce(v_allowed, array[]::uuid[])),
+          'not_due_invoice_ids', to_jsonb(coalesce(v_not_due, array[]::uuid[])),
+          'max_attachments_per_email', v_max_attach,
+          'steps', v_steps
+        ),
+        'invoices',
+        null,
+        null,
+        null,
+        null, null, null
+      );
+    end if;
+
+    raise;
 end;
 $$;
-
 
 -- ============================================================
 -- CloudTMS RPC: invoice_closeout_zero_charge_timesheets
