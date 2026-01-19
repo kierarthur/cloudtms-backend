@@ -23,6 +23,31 @@
 -- C6.1: Refs required to ISSUE (not INVOICE)
 -- New columns appended at end: reference_number_required_to_issue_invoice, issue_missing_reference, issue_missing_reference_count
 
+-- ============================================================
+-- CloudTMS: v_ts_invoice_precheck (VIEW)
+-- Client-led attach flags + reference gating + evidence gating
+-- SAFE TO RE-RUN: CREATE OR REPLACE VIEW (idempotent)
+--
+-- IMPORTANT:
+--  - Keeps existing column order for the first 7 columns
+--  - Appends the 3 "effective_*" columns and 1 debug column at the end
+--  - Uses London anchor date for selecting the latest effective client_settings row
+--  - Derives client_id + claim fields from current TSFIN (timesheets has no client_id)
+--
+-- UPDATED:
+--  - PDF gating (BLOCK_NO_PDF) is satisfied if a timesheet PDF exists via either:
+--      * timesheets.manual_pdf_r2_key (MANUAL)
+--      * timesheets.generated_pdf_at_utc (non-MANUAL)
+--      * timesheet_evidence(kind='TIMESHEET') (any)
+--  - Existing expense-only PDF exception retained.
+--  - Appends has_timesheet_evidence_pdf for UI/debug.
+-- ============================================================
+
+-- CloudTMS: v_ts_invoice_precheck (VIEW)
+-- SAFE TO RE-RUN: CREATE OR REPLACE VIEW
+-- C6.1: Refs required to ISSUE (not INVOICE)
+-- New columns appended at end: reference_number_required_to_issue_invoice, issue_missing_reference, issue_missing_reference_count
+
 create or replace view public.v_ts_invoice_precheck as
 with anchor as (
   select (now() at time zone 'Europe/London')::date as anchor_ymd
@@ -62,7 +87,7 @@ select
      )
       then 'BLOCK_NO_PDF'::text
 
-    -- Reference/PO gating (contract-led) with C6.1 issue-only bypass
+    -- Reference/PO gating (contract-led): when require_reference_to_invoice=true, missing refs block invoice creation (worked-only bypass below).
     when coalesce(c.require_reference_to_invoice, false) = true
      and coalesce(refchk.missing_raw, false) = true
      and not (
@@ -149,7 +174,7 @@ select
   -- C6.1 appended columns (must be at the end)
   coalesce(cs.reference_number_required_to_issue_invoice, false) as reference_number_required_to_issue_invoice,
   (
-    coalesce(c.require_reference_to_invoice, false) = true
+    coalesce(cs.reference_number_required_to_issue_invoice, false) = true
     and coalesce(refchk.missing_raw, false) = true
     and not (
     coalesce(tf.total_hours, 0) = 0
@@ -198,7 +223,7 @@ select
     )
     )
   ) then 0
-      when coalesce(c.require_reference_to_invoice, false) = true
+      when coalesce(cs.reference_number_required_to_issue_invoice, false) = true
         then coalesce(refchk.missing_count, 0)
       else 0
     end
