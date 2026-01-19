@@ -3167,22 +3167,16 @@ begin
   return next;
 end;
 $$;
-
 -- ============================================================
--- STUBS (compile-safe) for the two RPCs that require your paste
+-- CloudTMS Patch: invoice_render_manifest (UPDATED + FIXED v4)
 -- ============================================================
--- ============================================================
--- CloudTMS Patch: invoice_render_manifest (UPDATED + FIXED v3)
--- ============================================================
--- CloudTMS Patch: invoice_render_manifest (history + segments + invoice_debug + TSFIN ID MAP)
+-- CloudTMS Patch: invoice_render_manifest
+--   (history + segments + invoice_debug + TSFIN ID MAP + reference_rows embedded)
 --
--- Changes vs v2:
--- 8) TSFIN mapping for segment edits:
---    - Add tsfin_id to SEGMENTS objects under:
---        segments_by_timesheet[timesheet_id].tsfin_id
---        segments_on_invoice_by_timesheet[timesheet_id].tsfin_id
---    - Add top-level map:
---        tsfin_id_by_timesheet_id: { "<timesheet_id>": "<tsfin_id>" }
+-- Changes vs v3:
+-- 9) Embed reference rows directly into manifest:
+--    - reference_rows: JSON array of atomic reference edit rows for this invoice
+--      (built from public.invoice_reference_rows(p_invoice_id))
 --
 -- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
 -- ============================================================
@@ -3458,6 +3452,32 @@ begin
       from tsfin t
     ), '{}'::jsonb),
 
+    -- ✅ NEW: embed reference edit rows for zero-subrequest ref modal
+    'reference_rows', coalesce((
+      select jsonb_agg(
+        jsonb_build_object(
+          'timesheet_id', r.timesheet_id::text,
+          'sheet_scope', r.sheet_scope,
+          'submission_mode', r.submission_mode,
+          'ref_target', r.ref_target,
+          'segment_id', r.segment_id,
+          'day_ymd', r.day_ymd,
+          'start_utc', r.start_utc,
+          'end_utc', r.end_utc,
+          'current_reference', r.current_reference,
+          'is_required', r.is_required
+        )
+        order by
+          r.timesheet_id::text,
+          r.ref_target,
+          r.day_ymd nulls last,
+          r.start_utc nulls last,
+          r.end_utc nulls last,
+          r.segment_id nulls last
+      )
+      from public.invoice_reference_rows(p_invoice_id) r
+    ), '[]'::jsonb),
+
     -- SEGMENTS: segment info for invoice modal expansion
     'segments_by_timesheet', coalesce((
       select jsonb_object_agg(
@@ -3633,7 +3653,6 @@ exception when others then
   raise;
 end;
 $$;
-
 
 -- 3.6 Credit note + unlock (needs unredacted JS parity source)
 create or replace function public.invoice_create_credit_note_and_unlock(
