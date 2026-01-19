@@ -3169,30 +3169,20 @@ end;
 $$;
 
 -- ============================================================
--- CloudTMS Patch: invoice_render_manifest (UPDATED + FIXED v2)
+-- STUBS (compile-safe) for the two RPCs that require your paste
 -- ============================================================
 -- ============================================================
--- CloudTMS Patch: invoice_render_manifest (history + segments + invoice_debug)
+-- CloudTMS Patch: invoice_render_manifest (UPDATED + FIXED v3)
+-- ============================================================
+-- CloudTMS Patch: invoice_render_manifest (history + segments + invoice_debug + TSFIN ID MAP)
 --
--- Changes:
--- 1) Join invoice_lines -> timesheets to expose timesheets.manual_pdf_r2_key
--- 2) effective_paper_ts_r2_key priority:
---      invoice_lines.paper_ts_r2_key
---      timesheets.manual_pdf_r2_key
---      docs-pdf/timesheets/ts_<timesheet_id>.pdf
--- 3) Split evidence arrays (keep existing `evidence`):
---      timesheet_evidence (kind = 'TIMESHEET')
---      evidence_other     (kind <> 'TIMESHEET')
--- 4) Ensure stable ordering by created_at asc in evidence aggregations
--- 5) SEGMENTS support:
---      segments_by_timesheet and segments_on_invoice_by_timesheet:
---        - invoiced_segments: ONLY segments locked to this invoice
---        - uninvoiced_segment_count
---        - locked_elsewhere_segment_count
--- 6) Invoice History:
---      history: union of audit_events for this invoice and mail_outbox rows containing this invoice_id
--- 7) Optional debug audit row:
---      If settings_defaults.invoice_debug = true, write ONE audit_events row (extensive) via public._inv_write_audit
+-- Changes vs v2:
+-- 8) TSFIN mapping for segment edits:
+--    - Add tsfin_id to SEGMENTS objects under:
+--        segments_by_timesheet[timesheet_id].tsfin_id
+--        segments_on_invoice_by_timesheet[timesheet_id].tsfin_id
+--    - Add top-level map:
+--        tsfin_id_by_timesheet_id: { "<timesheet_id>": "<tsfin_id>" }
 --
 -- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
 -- ============================================================
@@ -3285,6 +3275,7 @@ begin
   ),
   tsfin as (
     select
+      tf.id as tsfin_id,
       tf.timesheet_id,
       tf.external_source_rows_json
     from public.timesheets_financials tf
@@ -3293,6 +3284,7 @@ begin
   ),
   tsfin_segments as (
     select
+      tf.id as tsfin_id,
       tf.timesheet_id,
       tf.invoice_breakdown_json
     from public.timesheets_financials tf
@@ -3302,6 +3294,7 @@ begin
   seg_stats as (
     select
       t.timesheet_id,
+      t.tsfin_id,
 
       -- ONLY segments on THIS invoice
       coalesce(
@@ -3341,7 +3334,7 @@ begin
 
     where upper(coalesce(t.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
 
-    group by t.timesheet_id
+    group by t.timesheet_id, t.tsfin_id
   ),
   hist_audit as (
     select
@@ -3456,11 +3449,21 @@ begin
 
     'timesheet_ids', coalesce((select jsonb_agg(t.timesheet_id::text) from ts_ids t), '[]'::jsonb),
 
+    -- ✅ NEW: mapping needed for segment edits (tsfin_id is invoice_apply_edits input)
+    'tsfin_id_by_timesheet_id', coalesce((
+      select jsonb_object_agg(
+        t.timesheet_id::text,
+        t.tsfin_id::text
+      )
+      from tsfin t
+    ), '{}'::jsonb),
+
     -- SEGMENTS: segment info for invoice modal expansion
     'segments_by_timesheet', coalesce((
       select jsonb_object_agg(
         s.timesheet_id::text,
         jsonb_build_object(
+          'tsfin_id', case when s.tsfin_id is null then null else s.tsfin_id::text end,
           'invoiced_segments', coalesce(s.invoiced_segments, '[]'::jsonb),
           'uninvoiced_segment_count', coalesce(s.uninvoiced_segment_count, 0),
           'locked_elsewhere_segment_count', coalesce(s.locked_elsewhere_segment_count, 0)
@@ -3474,6 +3477,7 @@ begin
       select jsonb_object_agg(
         s.timesheet_id::text,
         jsonb_build_object(
+          'tsfin_id', case when s.tsfin_id is null then null else s.tsfin_id::text end,
           'invoiced_segments', coalesce(s.invoiced_segments, '[]'::jsonb),
           'uninvoiced_segment_count', coalesce(s.uninvoiced_segment_count, 0),
           'locked_elsewhere_segment_count', coalesce(s.locked_elsewhere_segment_count, 0)
@@ -3629,10 +3633,6 @@ exception when others then
   raise;
 end;
 $$;
-
--- ============================================================
--- STUBS (compile-safe) for the two RPCs that require your paste
--- ============================================================
 
 
 -- 3.6 Credit note + unlock (needs unredacted JS parity source)
