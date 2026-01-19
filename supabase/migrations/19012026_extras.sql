@@ -887,3 +887,305 @@ begin
 end;
 $$;
 
+-- ============================================================
+-- CloudTMS Patch (Option A)
+-- Segment-aware "invoiced" filtering for Timesheets search/report
+--
+-- Behaviour:
+-- - A timesheet is considered "invoiced" if:
+--     (A) timesheets_financials.locked_by_invoice_id IS NOT NULL
+--  OR (B) timesheets_financials.invoice_breakdown_json.mode = 'SEGMENTS'
+--         AND ANY segment has a non-empty invoice_locked_invoice_id
+--
+-- - "Partial invoiced" (some segments invoiced) counts as invoiced.
+--
+-- This patch adds two RPCs used by the Worker:
+--   1) public.tsfin_report_timesheets_v2(...)
+--   2) public.tsfin_search_timesheets_v2(...)
+--
+-- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
+-- ============================================================
+
+create or replace function public.tsfin_report_timesheets_v2(
+  p_week_ending_from date default null,
+  p_week_ending_to date default null,
+  p_pay_method text default null,
+  p_client_ids uuid[] default null,
+  p_candidate_ids uuid[] default null,
+  p_include_on_hold boolean default false,
+  p_paid boolean default null,
+  p_invoiced boolean default null
+)
+returns setof jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $$
+with base as (
+  select
+    tf.timesheet_id,
+    tf.candidate_id,
+    tf.client_id,
+    tf.pay_method,
+    tf.total_pay_ex_vat,
+    tf.total_charge_ex_vat,
+    tf.margin_ex_vat,
+    tf.expenses_charge_ex_vat,
+    tf.mileage_charge_ex_vat,
+    tf.paid_at_utc,
+    tf.pay_on_hold,
+    tf.locked_by_invoice_id,
+    ts.week_ending_date,
+    c.name as client_name,
+    (
+      tf.locked_by_invoice_id is not null
+      or (
+        upper(coalesce(tf.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+        and exists (
+          select 1
+          from jsonb_array_elements(coalesce(tf.invoice_breakdown_json->'segments','[]'::jsonb)) seg
+          where nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') is not null
+        )
+      )
+    ) as invoiced_any
+  from public.timesheets_financials tf
+  join public.timesheets ts
+    on ts.timesheet_id = tf.timesheet_id
+   and ts.is_current = true
+  left join public.clients c
+    on c.id = tf.client_id
+  where tf.is_current = true
+    and (p_week_ending_from is null or ts.week_ending_date::date >= p_week_ending_from)
+    and (p_week_ending_to is null or ts.week_ending_date::date <= p_week_ending_to)
+    and (p_pay_method is null or upper(coalesce(tf.pay_method,'')) = upper(p_pay_method))
+    and (p_include_on_hold or coalesce(tf.pay_on_hold,false) = false)
+    and (
+      p_client_ids is null
+      or array_length(p_client_ids,1) is null
+      or tf.client_id = any(p_client_ids)
+    )
+    and (
+      p_candidate_ids is null
+      or array_length(p_candidate_ids,1) is null
+      or tf.candidate_id = any(p_candidate_ids)
+    )
+    and (
+      p_paid is null
+      or (p_paid = true and tf.paid_at_utc is not null)
+      or (p_paid = false and tf.paid_at_utc is null)
+    )
+)
+select jsonb_build_object(
+  'timesheet_id', base.timesheet_id,
+  'candidate_id', base.candidate_id,
+  'client_id', base.client_id,
+  'pay_method', base.pay_method,
+  'locked_by_invoice_id', base.locked_by_invoice_id,
+  'total_pay_ex_vat', base.total_pay_ex_vat,
+  'total_charge_ex_vat', base.total_charge_ex_vat,
+  'margin_ex_vat', base.margin_ex_vat,
+  'expenses_charge_ex_vat', base.expenses_charge_ex_vat,
+  'mileage_charge_ex_vat', base.mileage_charge_ex_vat,
+  'paid_at_utc', base.paid_at_utc,
+  'pay_on_hold', base.pay_on_hold,
+  'invoiced_any', base.invoiced_any,
+  'timesheet', jsonb_build_object(
+    'week_ending_date', base.week_ending_date
+  ),
+  'client', jsonb_build_object(
+    'name', base.client_name
+  )
+)
+from base
+where (p_invoiced is null or base.invoiced_any = p_invoiced)
+order by
+  base.week_ending_date desc nulls last,
+  base.client_name asc nulls last,
+  base.timesheet_id::text asc;
+$$;
+
+
+create or replace function public.tsfin_search_timesheets_v2(
+  p_week_ending_from date default null,
+  p_week_ending_to date default null,
+  p_pay_method text default null,
+  p_client_id uuid default null,
+  p_candidate_id uuid default null,
+  p_include_on_hold boolean default false,
+  p_paid boolean default null,
+  p_invoiced boolean default null,
+  p_sheet_scope text default null,
+  p_qr_status text default null,
+  p_booking_id text default null,
+  p_occupant_key_norm text default null,
+  p_hospital_norm text default null,
+  p_worked_from timestamptz default null,
+  p_worked_to timestamptz default null,
+  p_created_from timestamptz default null,
+  p_created_to timestamptz default null,
+  p_statuses text[] default null,
+  p_timesheet_ids uuid[] default null,
+  p_order_by text default 'week_ending_date',
+  p_order_dir text default 'desc',
+  p_limit int default 50,
+  p_offset int default 0
+)
+returns setof jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $$
+with base as (
+  select
+    tf.timesheet_id,
+    tf.candidate_id,
+    tf.client_id,
+    tf.pay_method,
+    tf.processing_status,
+    tf.basis,
+    tf.total_charge_ex_vat,
+    tf.total_pay_ex_vat,
+    tf.margin_ex_vat,
+    tf.paid_at_utc,
+    tf.locked_by_invoice_id,
+    tf.pay_on_hold,
+    tf.created_at,
+    tf.worked_start_iso,
+    tf.worked_end_iso,
+
+    ts.week_ending_date,
+    ts.status as ts_status,
+    ts.booking_id,
+    ts.occupant_key_norm,
+    ts.hospital_norm,
+    ts.sheet_scope,
+    ts.submission_mode,
+    ts.qr_status,
+
+    c.name as client_name,
+
+    (
+      tf.locked_by_invoice_id is not null
+      or (
+        upper(coalesce(tf.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+        and exists (
+          select 1
+          from jsonb_array_elements(coalesce(tf.invoice_breakdown_json->'segments','[]'::jsonb)) seg
+          where nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') is not null
+        )
+      )
+    ) as invoiced_any
+
+  from public.timesheets_financials tf
+  join public.timesheets ts
+    on ts.timesheet_id = tf.timesheet_id
+   and ts.is_current = true
+  left join public.clients c
+    on c.id = tf.client_id
+  where tf.is_current = true
+
+    and (p_week_ending_from is null or ts.week_ending_date::date >= p_week_ending_from)
+    and (p_week_ending_to is null or ts.week_ending_date::date <= p_week_ending_to)
+
+    and (p_pay_method is null or upper(coalesce(tf.pay_method,'')) = upper(p_pay_method))
+
+    and (p_client_id is null or tf.client_id = p_client_id)
+    and (p_candidate_id is null or tf.candidate_id = p_candidate_id)
+
+    and (p_include_on_hold or coalesce(tf.pay_on_hold,false) = false)
+
+    and (
+      p_paid is null
+      or (p_paid = true and tf.paid_at_utc is not null)
+      or (p_paid = false and tf.paid_at_utc is null)
+    )
+
+    and (p_sheet_scope is null or upper(coalesce(ts.sheet_scope::text,'')) = upper(p_sheet_scope))
+    and (p_qr_status is null or upper(coalesce(ts.qr_status::text,'')) = upper(p_qr_status))
+
+    and (p_booking_id is null or coalesce(ts.booking_id::text,'') = p_booking_id)
+    and (p_occupant_key_norm is null or coalesce(ts.occupant_key_norm,'') = p_occupant_key_norm)
+    and (p_hospital_norm is null or coalesce(ts.hospital_norm,'') = p_hospital_norm)
+
+    and (p_worked_from is null or tf.worked_start_iso >= p_worked_from)
+    and (p_worked_to is null or tf.worked_end_iso <= p_worked_to)
+
+    and (p_created_from is null or tf.created_at >= p_created_from)
+    and (p_created_to is null or tf.created_at <= p_created_to)
+
+    and (
+      p_statuses is null
+      or array_length(p_statuses,1) is null
+      or upper(coalesce(ts.status::text,'')) = any (array(select upper(x) from unnest(p_statuses) x))
+    )
+
+    and (
+      p_timesheet_ids is null
+      or array_length(p_timesheet_ids,1) is null
+      or tf.timesheet_id = any(p_timesheet_ids)
+    )
+)
+select jsonb_build_object(
+  'timesheet_id', base.timesheet_id,
+  'candidate_id', base.candidate_id,
+  'client_id', base.client_id,
+  'pay_method', base.pay_method,
+  'processing_status', base.processing_status,
+  'basis', base.basis,
+  'total_charge_ex_vat', base.total_charge_ex_vat,
+  'total_pay_ex_vat', base.total_pay_ex_vat,
+  'margin_ex_vat', base.margin_ex_vat,
+  'paid_at_utc', base.paid_at_utc,
+  'locked_by_invoice_id', base.locked_by_invoice_id,
+  'pay_on_hold', base.pay_on_hold,
+  'created_at', base.created_at,
+  'invoiced_any', base.invoiced_any,
+  'timesheet', jsonb_build_object(
+    'week_ending_date', base.week_ending_date,
+    'status', base.ts_status,
+    'booking_id', base.booking_id,
+    'occupant_key_norm', base.occupant_key_norm,
+    'hospital_norm', base.hospital_norm,
+    'sheet_scope', base.sheet_scope,
+    'submission_mode', base.submission_mode,
+    'qr_status', base.qr_status
+  ),
+  'client', jsonb_build_object(
+    'name', base.client_name
+  )
+)
+from base
+where (p_invoiced is null or base.invoiced_any = p_invoiced)
+order by
+  -- week_ending_date
+  case when lower(coalesce(p_order_by,'')) in ('week_ending_date') and lower(coalesce(p_order_dir,'')) = 'asc'
+    then base.week_ending_date end asc nulls last,
+  case when lower(coalesce(p_order_by,'')) in ('week_ending_date') and lower(coalesce(p_order_dir,'')) <> 'asc'
+    then base.week_ending_date end desc nulls last,
+
+  -- margin
+  case when lower(coalesce(p_order_by,'')) in ('margin','margin_ex_vat') and lower(coalesce(p_order_dir,'')) = 'asc'
+    then base.margin_ex_vat end asc nulls last,
+  case when lower(coalesce(p_order_by,'')) in ('margin','margin_ex_vat') and lower(coalesce(p_order_dir,'')) <> 'asc'
+    then base.margin_ex_vat end desc nulls last,
+
+  -- charge
+  case when lower(coalesce(p_order_by,'')) in ('charge','total_charge_ex_vat') and lower(coalesce(p_order_dir,'')) = 'asc'
+    then base.total_charge_ex_vat end asc nulls last,
+  case when lower(coalesce(p_order_by,'')) in ('charge','total_charge_ex_vat') and lower(coalesce(p_order_dir,'')) <> 'asc'
+    then base.total_charge_ex_vat end desc nulls last,
+
+  -- pay
+  case when lower(coalesce(p_order_by,'')) in ('pay','total_pay_ex_vat') and lower(coalesce(p_order_dir,'')) = 'asc'
+    then base.total_pay_ex_vat end asc nulls last,
+  case when lower(coalesce(p_order_by,'')) in ('pay','total_pay_ex_vat') and lower(coalesce(p_order_dir,'')) <> 'asc'
+    then base.total_pay_ex_vat end desc nulls last,
+
+  -- stable fallback
+  base.week_ending_date desc nulls last,
+  base.timesheet_id::text asc
+limit greatest(1, least(coalesce(p_limit, 50), 200))
+offset greatest(coalesce(p_offset, 0), 0);
+$$;
