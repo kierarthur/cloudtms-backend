@@ -152,15 +152,23 @@ select
 from public.settings_finance_windows w
 order by w.date_from desc, w.created_at desc;
 $$;
-
--- 2026-01-13: Invoice edit support helpers
---   - public.invoice_eligible_timesheets_for_invoice(p_invoice_id uuid)
---   - public.invoice_recompute_totals(p_invoice_id uuid)
+-- ============================================================
+-- CloudTMS Patch: invoice_eligible_timesheets_for_invoice (Option B)
+-- ============================================================
+-- Purpose:
+--   Extend invoice_eligible_timesheets_for_invoice(...) to include
+--   eligible_segments[] per timesheet (SEGMENTS mode) so the frontend
+--   can expand a timesheet and select segments to add, without extra calls.
 --
 -- Notes:
---   * These helpers are designed to support the invoice modal “Add Timesheet to Invoice”
---     and any backend endpoints that mutate invoice_lines and need consistent totals/PDF invalidation.
---   * They are written to be rerunnable (CREATE OR REPLACE).
+--   - Only returns segments that are:
+--       * invoice_locked_invoice_id IS NULL
+--       * invoice_target_week_start (or default timesheet_week_start) = invoice header week_start
+--   - Non-SEGMENTS timesheets get eligible_segments = []
+--   - Includes tsfin_id so frontend can construct { tsfin_id, segment_id } refs.
+--
+-- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
+-- ============================================================
 
 create or replace function public.invoice_eligible_timesheets_for_invoice(
   p_invoice_id uuid
@@ -200,6 +208,7 @@ begin
   return (
     with base as (
       select
+        tf.id as tsfin_id,
         tf.timesheet_id,
         tf.client_id,
         tf.candidate_id,
@@ -252,8 +261,48 @@ begin
             ) = v_invoice_week_start
       group by b.timesheet_id
     ),
+    seg_list as (
+      select
+        b.timesheet_id,
+        coalesce(
+          jsonb_agg(
+            jsonb_build_object(
+              'segment_id', coalesce(nullif(btrim(coalesce(seg->>'segment_id','')), ''), null),
+              'date',        coalesce(nullif(btrim(coalesce(seg->>'date','')), ''), null),
+              'start_utc',   coalesce(nullif(btrim(coalesce(seg->>'start_utc','')), ''), null),
+              'end_utc',     coalesce(nullif(btrim(coalesce(seg->>'end_utc','')), ''), null),
+              'break_mins',  (coalesce(nullif(seg->>'break_mins',''), nullif(seg->>'break_minutes',''), '0'))::numeric,
+              'ref_num',     coalesce(nullif(btrim(coalesce(seg->>'ref_num','')), ''), null),
+              'charge_amount', (coalesce(nullif(seg->>'charge_amount',''), '0'))::numeric,
+              'pay_amount',    (coalesce(nullif(seg->>'pay_amount',''), '0'))::numeric,
+              'hours_day',   (coalesce(nullif(seg->>'hours_day',''), '0'))::numeric,
+              'hours_night', (coalesce(nullif(seg->>'hours_night',''), '0'))::numeric,
+              'hours_sat',   (coalesce(nullif(seg->>'hours_sat',''), '0'))::numeric,
+              'hours_sun',   (coalesce(nullif(seg->>'hours_sun',''), '0'))::numeric,
+              'hours_bh',    (coalesce(nullif(seg->>'hours_bh',''), '0'))::numeric,
+              'invoice_target_week_start', coalesce(nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), ''), null)
+            )
+            order by
+              coalesce(seg->>'date','') asc,
+              coalesce(seg->>'start_utc','') asc,
+              coalesce(seg->>'end_utc','') asc,
+              coalesce(seg->>'segment_id','') asc
+          ),
+          '[]'::jsonb
+        ) as eligible_segments
+      from base b
+      cross join lateral jsonb_array_elements(coalesce(b.invoice_breakdown_json->'segments', '[]'::jsonb)) seg
+      where upper(coalesce(b.invoice_breakdown_json->>'mode', '')) = 'SEGMENTS'
+        and nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id', '')), '') is null
+        and coalesce(
+              nullif(btrim(coalesce(seg->>'invoice_target_week_start', '')), '')::date,
+              b.timesheet_week_start
+            ) = v_invoice_week_start
+      group by b.timesheet_id
+    ),
     eligible as (
       select
+        b.tsfin_id,
         b.timesheet_id,
         b.client_id,
         b.candidate_id,
@@ -277,9 +326,11 @@ begin
             else coalesce(b.tsfin_total_charge_ex_vat, 0)
         end::numeric as invoiceable_charge_ex_vat,
         coalesce(sa.invoiceable_segments_count, 0) as invoiceable_segments_count,
+        coalesce(sl.eligible_segments, '[]'::jsonb) as eligible_segments,
         b.timesheet_week_ending_date
       from base b
       left join seg_agg sa on sa.timesheet_id = b.timesheet_id
+      left join seg_list sl on sl.timesheet_id = b.timesheet_id
       where
         (
           upper(coalesce(b.invoice_breakdown_json->>'mode', '')) = 'SEGMENTS'
@@ -300,6 +351,7 @@ begin
         select jsonb_agg(
           jsonb_build_object(
             'timesheet_id', e.timesheet_id::text,
+            'tsfin_id', case when e.tsfin_id is null then null else e.tsfin_id::text end,
             'candidate_id', e.candidate_id::text,
             'client_name', e.client_name,
             'candidate_name', e.candidate_name,
@@ -319,6 +371,9 @@ begin
             'invoiceable_charge_ex_vat', round(e.invoiceable_charge_ex_vat, 2),
             'invoice_breakdown_mode', e.invoice_breakdown_mode,
             'invoiceable_segments_count', e.invoiceable_segments_count,
+
+            -- ✅ Option B: eligible segments list for SEGMENTS mode (empty for non-SEGMENTS)
+            'eligible_segments', e.eligible_segments,
 
             -- HR validation signals for UI gating
             'hr_validation_required_for_invoice', e.hr_validation_required_for_invoice,
