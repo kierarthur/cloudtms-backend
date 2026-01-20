@@ -59,7 +59,9 @@ def as (
     sat_start, sat_end,
     sun_start, sun_end,
     bh_start, bh_end,
-    bh_list
+    bh_list,
+    hr_attach_to_invoice,
+    ts_attach_to_invoice
   from public.settings_defaults
   where id = 1
   limit 1
@@ -129,7 +131,8 @@ base as (
     ) as out_effective_flags,
 
     cs as cs_row,
-    def as def_row
+    def as def_row,
+    ct as ct_row
   from t_eff te
   cross join def
 
@@ -163,6 +166,9 @@ base as (
 
   left join public.v_timesheets_summary v
     on v.timesheet_id = te.effective_timesheet_id
+
+  left join public.contracts ct
+    on ct.id = te.contract_id
 
   left join lateral (
     select ch.client_id
@@ -321,8 +327,8 @@ ctx as (
         else '[]'::jsonb
       end,
 
-      'hr_attach_to_invoice', coalesce((b.cs_row).hr_attach_to_invoice, true),
-      'ts_attach_to_invoice', coalesce((b.cs_row).ts_attach_to_invoice, true),
+      'hr_attach_to_invoice', coalesce((b.ct_row).hr_attach_to_invoice, (b.cs_row).hr_attach_to_invoice, (b.def_row).hr_attach_to_invoice, true),
+      'ts_attach_to_invoice', coalesce((b.ct_row).ts_attach_to_invoice, (b.cs_row).ts_attach_to_invoice, (b.def_row).ts_attach_to_invoice, true),
 
       'week_ending_weekday',     coalesce((b.cs_row).week_ending_weekday, 0),
       'default_submission_mode', coalesce((b.cs_row).default_submission_mode, 'ELECTRONIC')
@@ -346,7 +352,6 @@ grant execute on function public.tsfin_load_context_batch(uuid[]) to service_rol
 grant execute on function public.tsfin_load_context_batch(uuid[]) to authenticated;
 
 select pg_notify('pgrst', 'reload schema');
-
 
 -- ============================================================
 -- 2.6: Batch writer + outbox complete/fail (restore-on-fail safe)
