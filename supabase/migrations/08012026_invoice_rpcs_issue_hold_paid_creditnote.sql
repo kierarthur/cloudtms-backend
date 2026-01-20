@@ -3168,15 +3168,14 @@ begin
 end;
 $$;
 -- ============================================================
--- CloudTMS Patch: invoice_render_manifest (UPDATED + FIXED v4)
+-- CloudTMS Patch: invoice_render_manifest (UPDATED + FIXED v5)
 -- ============================================================
--- CloudTMS Patch: invoice_render_manifest
---   (history + segments + invoice_debug + TSFIN ID MAP + reference_rows embedded)
---
--- Changes vs v3:
--- 9) Embed reference rows directly into manifest:
---    - reference_rows: JSON array of atomic reference edit rows for this invoice
---      (built from public.invoice_reference_rows(p_invoice_id))
+-- Adds:
+-- 10) timesheet_reference_sources_by_id: JSON object keyed by timesheet_id
+--     containing { reference_number, day_references_json, actual_schedule_json }
+--     built from:
+--       - all invoice line timesheets, PLUS
+--       - any additional timesheet_ids present in reference_rows
 --
 -- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
 -- ============================================================
@@ -3245,6 +3244,28 @@ begin
     select distinct timesheet_id
     from lines
     where timesheet_id is not null
+  ),
+  -- ✅ NEW: additional timesheet ids referenced by reference rows (may include ids not present in lines)
+  ref_ts_ids as (
+    select distinct r.timesheet_id
+    from public.invoice_reference_rows(p_invoice_id) r
+    where r.timesheet_id is not null
+  ),
+  -- ✅ NEW: union set for reference-source hydration
+  ts_ids_for_ref_sources as (
+    select timesheet_id from ts_ids
+    union
+    select timesheet_id from ref_ts_ids
+  ),
+  -- ✅ NEW: sources needed by FE to rebuild reference update payloads without extra calls
+  ts_reference_sources as (
+    select
+      t.timesheet_id,
+      t.reference_number,
+      t.day_references_json,
+      t.actual_schedule_json
+    from public.timesheets t
+    where t.timesheet_id in (select timesheet_id from ts_ids_for_ref_sources)
   ),
   ev as (
     select
@@ -3450,6 +3471,19 @@ begin
         t.tsfin_id::text
       )
       from tsfin t
+    ), '{}'::jsonb),
+
+    -- ✅ NEW: reference sources needed by FE to build reference update payloads with no extra calls
+    'timesheet_reference_sources_by_id', coalesce((
+      select jsonb_object_agg(
+        s.timesheet_id::text,
+        jsonb_build_object(
+          'reference_number', s.reference_number,
+          'day_references_json', s.day_references_json,
+          'actual_schedule_json', s.actual_schedule_json
+        )
+      )
+      from ts_reference_sources s
     ), '{}'::jsonb),
 
     -- ✅ NEW: embed reference edit rows for zero-subrequest ref modal
