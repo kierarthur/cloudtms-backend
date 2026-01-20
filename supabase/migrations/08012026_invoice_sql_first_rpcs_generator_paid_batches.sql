@@ -458,6 +458,10 @@ begin
   end loop;
 end;
 $$;
+
+
+
+
 create or replace function public.invoice_generate_from_outbox_batch(
   p_outbox_ids uuid[],
   p_actor_user_id uuid
@@ -825,10 +829,12 @@ end;
             raise exception 'Client not found for snapshots.';
           end if;
 
-          select bank_name, bank_sort_code, bank_account_number, vat_registration_number
+                   select bank_name, bank_sort_code, bank_account_number, vat_registration_number,
+                 hr_attach_to_invoice, ts_attach_to_invoice
           into v_def
           from public.settings_defaults
           where id = 1;
+
 
           -- Finance VAT (anchor is invoice creation time, Europe/London ymd)
         select coalesce(sf.vat_rate_pct, 20)
@@ -863,8 +869,8 @@ limit 1;
           v_terms_days := coalesce(v_client.payment_terms_days, 30);
           v_due_at := v_now + make_interval(days => v_terms_days);
 
-          -- Contract mapping via contract_weeks only (matches JS HOURS endpoint)
-          -- Aggregate requires_hr per contract (attach flags are client_settings-only)
+                   -- Contract mapping via contract_weeks only (matches JS HOURS endpoint)
+          -- Aggregate requires_hr per contract
            with ts_map as (
             select distinct tf.timesheet_id, cw.contract_id
             from public.timesheets_financials tf
@@ -899,13 +905,18 @@ limit 1;
           )
 
           select
-            bool_or(coalesce(cons.requires_hr,false)) as req_hr
-          into v_requires_hr_any
+            bool_or(coalesce(cons.requires_hr,false)) as req_hr,
+            coalesce(
+              bool_or(coalesce(cons.hr_attach_to_invoice, v_cs.hr_attach_to_invoice, v_def.hr_attach_to_invoice, true)),
+              coalesce(v_cs.hr_attach_to_invoice, v_def.hr_attach_to_invoice, true)
+            ) as hr_attach_any,
+            coalesce(
+              bool_or(coalesce(cons.ts_attach_to_invoice, v_cs.ts_attach_to_invoice, v_def.ts_attach_to_invoice, true)),
+              coalesce(v_cs.ts_attach_to_invoice, v_def.ts_attach_to_invoice, true)
+            ) as ts_attach_any
+          into v_requires_hr_any, v_hr_attach_any, v_ts_attach_any
           from cons;
 
-          -- ✅ Attach flags live in client_settings, not contracts.
-          v_hr_attach_any := coalesce(v_hr_attach_default, true);
-          v_ts_attach_any := coalesce(v_ts_attach_default, true);
 
 
 
@@ -920,7 +931,7 @@ limit 1;
           if right(lower(v_stationery_key),4) = '.pdf' then
             v_stationery_key := left(v_stationery_key, length(v_stationery_key)-4) || '@300dpi.png';
           end if;
-          v_header := jsonb_build_object(
+                 v_header := jsonb_build_object(
             'client_id', v_client_id::text,
             'client_name', v_client.name,
             'client_invoice_address', v_client.invoice_address,
@@ -943,10 +954,11 @@ limit 1;
 
             'attach_policy', jsonb_build_object(
               'requires_hr', coalesce(v_requires_hr_any,false),
-              'hr_attach_to_invoice', coalesce(v_hr_attach_default,true),
-              'ts_attach_to_invoice', coalesce(v_ts_attach_default,true)
+              'hr_attach_to_invoice', coalesce(v_hr_attach_any, true),
+              'ts_attach_to_invoice', coalesce(v_ts_attach_any, true)
             )
           );
+
 
 
             insert into public.invoices(
@@ -2171,9 +2183,9 @@ where tf.timesheet_id = any(v_ts_ids_to_use)
             end loop;
           end if;
 
-              -- Cache HR/NHSP source rows for this invoice (mirror JS step 9)
-          -- Only when client-led effective_hr_attach_to_invoice is TRUE
-          if coalesce(v_hr_attach_default, true) = true then
+                       -- Cache HR/NHSP source rows for this invoice (mirror JS step 9)
+          -- Only when effective_hr_attach_to_invoice is TRUE (contract → client_settings → defaults)
+          if coalesce(v_hr_attach_any, true) = true then
             -- Build shift_ids from segments where segment_id startswith 'nhsp:' and source_system in (NHSP, HEALTHROSTER)
             delete from public.invoice_hr_source_rows where invoice_id = v_invoice_id;
 
@@ -2183,9 +2195,12 @@ where tf.timesheet_id = any(v_ts_ids_to_use)
                 upper(coalesce(seg->>'source_system','')) as src,
                 substr(seg->>'segment_id', 6) as id_part
               from public.timesheets_financials tf
+              join public.v_ts_invoice_precheck pc
+                on pc.timesheet_id = tf.timesheet_id
               cross join lateral jsonb_array_elements(coalesce(tf.invoice_breakdown_json->'segments','[]'::jsonb)) seg
               where tf.timesheet_id = any(v_ts_ids_to_use)
                 and tf.is_current = true
+                and coalesce(pc.effective_hr_attach_to_invoice, true) = true
             ),
             shift_ids as (
               select distinct (id_part)::uuid as shift_id
@@ -2244,6 +2259,7 @@ where tf.timesheet_id = any(v_ts_ids_to_use)
             select v_invoice_id, r.source_system, r.import_id, r.header_columns, r.rows_json
             from rows_agg r;
           end if;
+
 
 
 
@@ -2636,10 +2652,12 @@ h_bh numeric;
             raise exception 'Client not found.';
           end if;
 
-          select bank_name, bank_sort_code, bank_account_number, vat_registration_number
+                 select bank_name, bank_sort_code, bank_account_number, vat_registration_number,
+                 hr_attach_to_invoice, ts_attach_to_invoice
           into v_def
           from public.settings_defaults
           where id = 1;
+
 
           -- VAT anchor: invoice create/amend time (now), Europe/London ymd
         select coalesce(sf.vat_rate_pct, 20)
@@ -2838,14 +2856,19 @@ limit 1;
             )
           )
 
-          select
-            bool_or(coalesce(cons.requires_hr,false)) as req_hr
-          into v_requires_hr_any
+                select
+            bool_or(coalesce(cons.requires_hr,false)) as req_hr,
+            coalesce(
+              bool_or(coalesce(cons.hr_attach_to_invoice, v_cs.hr_attach_to_invoice, v_def.hr_attach_to_invoice, true)),
+              coalesce(v_cs.hr_attach_to_invoice, v_def.hr_attach_to_invoice, true)
+            ) as hr_attach_any,
+            coalesce(
+              bool_or(coalesce(cons.ts_attach_to_invoice, v_cs.ts_attach_to_invoice, v_def.ts_attach_to_invoice, true)),
+              coalesce(v_cs.ts_attach_to_invoice, v_def.ts_attach_to_invoice, true)
+            ) as ts_attach_any
+          into v_requires_hr_any, v_hr_attach_any, v_ts_attach_any
           from cons;
 
-          -- ✅ Attach flags live in client_settings, not contracts.
-          v_hr_attach_any := coalesce(v_hr_attach_default, true);
-          v_ts_attach_any := coalesce(v_ts_attach_default, true);
 
 
 
@@ -3289,9 +3312,9 @@ else
                 into sb_requires_hr
                 from cons;
 
-                -- ✅ Attach flags live in client_settings, not contracts.
-                sb_hr_attach := coalesce(v_hr_attach_default, true);
-                sb_ts_attach := coalesce(v_ts_attach_default, true);
+                           -- Attach flags use precedence: contract → client_settings → settings_defaults → true
+                sb_hr_attach := coalesce(v_hr_attach_any, true);
+                sb_ts_attach := coalesce(v_ts_attach_any, true);
 
                           v_header := jsonb_build_object(
                   'client_id', v_client_id::text,
@@ -3321,10 +3344,11 @@ else
                   ),
                   'attach_policy', jsonb_build_object(
                     'requires_hr', coalesce(sb_requires_hr,false),
-                    'hr_attach_to_invoice', coalesce(v_hr_attach_default,true),
-                    'ts_attach_to_invoice', coalesce(v_ts_attach_default,true)
+                    'hr_attach_to_invoice', coalesce(sb_hr_attach,true),
+                    'ts_attach_to_invoice', coalesce(sb_ts_attach,true)
                   )
                 );
+
 
 
 
@@ -3356,20 +3380,21 @@ v_created := true;
               end;
             end if;
             -- Ensure self-bill invoices carry attach_policy (patch best-effort like JS)
-            update public.invoices i
+                     update public.invoices i
             set header_snapshot_json =
               jsonb_set(
                 coalesce(i.header_snapshot_json,'{}'::jsonb),
                 '{attach_policy}',
                 jsonb_build_object(
                   'requires_hr', coalesce(v_requires_hr_any,false),
-                  'hr_attach_to_invoice', coalesce(v_hr_attach_default,true),
-                  'ts_attach_to_invoice', coalesce(v_ts_attach_default,true)
+                  'hr_attach_to_invoice', coalesce(v_hr_attach_any,true),
+                  'ts_attach_to_invoice', coalesce(v_ts_attach_any,true)
                 ),
                 true
               ),
               updated_at = v_now
             where i.id = v_invoice_id;
+
             -- Self-bill auto-issue removed (invoices remain DRAFT until explicitly issued)
 
 
@@ -3402,12 +3427,13 @@ v_created := true;
                 'timesheet_count', coalesce(array_length(v_timesheet_ids,1),0),
                 'segment_count', v_entry_count
               ),
-              'attach_policy', jsonb_build_object(
+                    'attach_policy', jsonb_build_object(
                 'requires_hr', coalesce(v_requires_hr_any,false),
-                'hr_attach_to_invoice', coalesce(v_hr_attach_default,true),
-                'ts_attach_to_invoice', coalesce(v_ts_attach_default,true)
+                'hr_attach_to_invoice', coalesce(v_hr_attach_any,true),
+                'ts_attach_to_invoice', coalesce(v_ts_attach_any,true)
               )
             );
+
 
 
             insert into public.invoices(
