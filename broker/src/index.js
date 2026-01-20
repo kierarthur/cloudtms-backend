@@ -24015,7 +24015,7 @@ const loadFinanceVatDefaultPct = async (anchorYmd) => {
         }
       }
 
-      // Existing-holder safety check (missing TSFIN => safe)
+            // Existing-holder safety check (missing TSFIN => safe)
       const existingTsIds = [...new Set(grpShifts.map(s => s && s.timesheet_id).filter(Boolean).map(String))];
       const existingFinByTs = await loadTsfinLocks(existingTsIds);
 
@@ -24065,6 +24065,18 @@ const loadFinanceVatDefaultPct = async (anchorYmd) => {
         })
         .map(s => s.id);
 
+      // ✅ NEW: donor timesheets we actually moved shifts OFF (for TSFIN rebuild)
+      const movedFromTimesheetIds = new Set();
+      if (shiftIdsForTs.length) {
+        const movedShiftIdSet = new Set(shiftIdsForTs.map(x => String(x)));
+        for (const sh of grpShifts) {
+          if (!sh?.id) continue;
+          if (!movedShiftIdSet.has(String(sh.id))) continue;
+          const fromTsId = sh?.timesheet_id ? String(sh.timesheet_id) : null;
+          if (fromTsId && fromTsId !== String(ts.timesheet_id)) movedFromTimesheetIds.add(fromTsId);
+        }
+      }
+
       if (shiftIdsForTs.length) {
         const shParam = shiftIdsForTs.map(enc).join(',');
         await fetch(
@@ -24094,20 +24106,19 @@ const loadFinanceVatDefaultPct = async (anchorYmd) => {
         return String(s.timesheet_id || '') === String(ts.timesheet_id);
       });
 
-      // Rebuild TSFIN snapshot for the processed group
-      // (assumes you already patched snapshot builder(s) to preserve segment flags/locks)
+      // ✅ IMPORTANT: this is compute/validation-only (does NOT write TSFIN).
+      // TSFIN persistence is handled via tsfinTargetedDrainNow below.
       let snapRes = null;
       try {
-   snapRes = await buildNhspWeeklySnapshotCached(
-  env,
-  ts,
-  contract,
-  grpShiftsForSnapshot,
-  importId,
-  'NHSP',
-  getPolicyCached
-);
-
+        snapRes = await buildNhspWeeklySnapshotCached(
+          env,
+          ts,
+          contract,
+          grpShiftsForSnapshot,
+          importId,
+          'NHSP',
+          getPolicyCached
+        );
       } catch (e) {
         snapRes = { ok: false, reason: e?.message || String(e) };
       }
@@ -24176,8 +24187,38 @@ const loadFinanceVatDefaultPct = async (anchorYmd) => {
         logWarn({ stage: 'overpay_advance_logic_failed_non_fatal', import_id: importId, err: e?.message || String(e) });
       }
 
+      // ✅ FIX (Bug #1): enqueue TSFIN + targeted inline drain (base + donors we moved shifts off)
+      try {
+        const donorTsIds = Array.from(movedFromTimesheetIds);
+        const drainIds = [String(ts.timesheet_id), ...donorTsIds];
+
+        const drainRes = await tsfinTargetedDrainNow(env, {
+          timesheetIds: drainIds,
+          reason: 'CONTEXT_CHANGED',
+          chunkSize: 50
+        });
+
+        logInfo({
+          stage: 'tsfin_enqueued_and_drained',
+          import_id: importId,
+          preview_group_id: previewGroupId,
+          timesheet_id: ts.timesheet_id,
+          donor_timesheet_ids: donorTsIds,
+          drain: drainRes
+        });
+      } catch (e) {
+        logWarn({
+          stage: 'tsfin_enqueue_or_drain_failed_non_fatal',
+          import_id: importId,
+          preview_group_id: previewGroupId,
+          timesheet_id: ts?.timesheet_id || null,
+          err: e?.message || String(e)
+        });
+      }
+
       groups_succeeded++;
       logInfo({ stage: 'group_success', import_id: importId, preview_group_id: previewGroupId, timesheet_id: ts.timesheet_id });
+
     }
 
     logWarn({
@@ -25585,7 +25626,7 @@ const tsPayload = [{
         continue;
       }
 
-      // Move shifts to base, excluding skipped shifts (unless already on base)
+          // Move shifts to base, excluding skipped shifts (unless already on base)
       const shiftIdsForTs = grpShifts
         .filter(s => {
           const ek = s?.external_row_key ? String(s.external_row_key) : null;
@@ -25595,6 +25636,18 @@ const tsPayload = [{
         })
         .map(s => s.id)
         .filter(Boolean);
+
+      // ✅ NEW: donor timesheets we actually moved shifts OFF (for TSFIN rebuild)
+      const movedFromTimesheetIds = new Set();
+      if (shiftIdsForTs.length) {
+        const movedShiftIdSet = new Set(shiftIdsForTs.map(x => String(x)));
+        for (const sh of grpShifts) {
+          if (!sh?.id) continue;
+          if (!movedShiftIdSet.has(String(sh.id))) continue;
+          const fromTsId = sh?.timesheet_id ? String(sh.timesheet_id) : null;
+          if (fromTsId && fromTsId !== String(ts.timesheet_id)) movedFromTimesheetIds.add(fromTsId);
+        }
+      }
 
       if (shiftIdsForTs.length) {
         const shParam = shiftIdsForTs.map(enc).join(',');
@@ -25636,6 +25689,7 @@ const tsPayload = [{
 
       // Safe path: base unpaid/uninvoiced => rebuild snapshot from repaired shifts
       // (uses your patched snapshot builder that preserves per-segment flags/locks)
+      // ✅ IMPORTANT: this is compute/validation-only (does NOT persist TSFIN rows).
       const okSnap = await (async () => {
         try {
    const r = await buildNhspWeeklySnapshotCached(
@@ -25669,7 +25723,37 @@ const tsPayload = [{
         });
       } catch {}
 
+      // ✅ FIX (Bug #1): enqueue TSFIN + targeted inline drain (base + donors we moved shifts off)
+      try {
+        const donorTsIds = Array.from(movedFromTimesheetIds);
+        const drainIds = [String(ts.timesheet_id), ...donorTsIds];
+
+        const drainRes = await tsfinTargetedDrainNow(env, {
+          timesheetIds: drainIds,
+          reason: 'CONTEXT_CHANGED',
+          chunkSize: 50
+        });
+
+        logInfo({
+          stage: 'tsfin_enqueued_and_drained',
+          import_id: importId,
+          preview_group_id: previewGroupId,
+          timesheet_id: ts.timesheet_id,
+          donor_timesheet_ids: donorTsIds,
+          drain: drainRes
+        });
+      } catch (e) {
+        logWarn({
+          stage: 'tsfin_enqueue_or_drain_failed_non_fatal',
+          import_id: importId,
+          preview_group_id: previewGroupId,
+          timesheet_id: ts?.timesheet_id || null,
+          err: e?.message || String(e)
+        });
+      }
+
       groups_succeeded++;
+
     }
 
     // ─────────────────────────────────────────────
@@ -54902,11 +54986,26 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
 
     const scope = String(ts?.sheet_scope || '').toUpperCase();
 
-    if (scope === 'WEEKLY') {
+      if (scope === 'WEEKLY') {
       try {
         const basis = String(curFin?.basis || '').toUpperCase();
-        const isNhspBasis = (basis === 'NHSP' || basis === 'NHSP_ADJUSTMENT');
-        const isHrBasis = (basis === 'HEALTHROSTER_SELF_BILL' || basis === 'HEALTHROSTER_ADJUSTMENT');
+        const routeType = String(effFlags?.route_type || '').toUpperCase();
+
+        // ✅ Primary routing = effective flags from v_timesheets_summary
+        // (not existing TSFIN basis, which may be absent/wrong for new sheets)
+        const isNhspRoute =
+          (routeType === 'WEEKLY_NHSP' || routeType === 'WEEKLY_NHSP_ADJUSTMENT' || boolish(effFlags?.client_is_nhsp));
+
+        const isHrRoute =
+          (routeType === 'WEEKLY_HEALTHROSTER' || boolish(effFlags?.client_autoprocess_hr));
+
+        // ✅ Secondary routing = current snapshot basis (kept for backwards compatibility)
+        const isNhspBasis = isNhspRoute || (basis === 'NHSP' || basis === 'NHSP_ADJUSTMENT');
+        const isHrBasis = isHrRoute || (
+          basis === 'HEALTHROSTER_SELF_BILL' ||
+          basis === 'HEALTHROSTER_SELF_BILL_ADJUSTMENT' ||
+          basis === 'HEALTHROSTER_ADJUSTMENT'
+        );
 
         // ✅ No REST here. We’ll batch-load {contract_week, contract} AFTER the first pass.
         weeklyWork.push({
@@ -54917,7 +55016,10 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
           curFin,
           effFlags,
           policySql: (ctx.out_policy || null),
+          routeType,
           basis,
+          isNhspRoute,
+          isHrRoute,
           isNhspBasis,
           isHrBasis,
           cw: null,
@@ -54931,6 +55033,7 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
       }
       continue;
     }
+
 
     // ── DAILY / ROTA batch path (SQL context + SQL rates + batch write)
     try {
@@ -55073,9 +55176,24 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
   // ─────────────────────────────────────────────────────────────
   const rowsToWriteAll = [];
 
-  // --- WEEKLY snapshots (compute-only builders + enrich snapshot object, no TSFIN re-fetch) ---
+   // --- WEEKLY snapshots (compute-only builders + enrich snapshot object, no TSFIN re-fetch) ---
   for (const w of weeklyWork) {
-    const { outbox_id, extra_outbox_ids, ts, curFin, effFlags, cw, contract, basis, isNhspBasis, isHrBasis, policySql } = w;
+    const {
+      outbox_id,
+      extra_outbox_ids,
+      ts,
+      curFin,
+      effFlags,
+      cw,
+      contract,
+      routeType,
+      basis,
+      isNhspRoute,
+      isHrRoute,
+      isNhspBasis,
+      isHrBasis,
+      policySql
+    } = w;
 
     if (!outbox_id) {
       for (const ob of [outbox_id, ...(extra_outbox_ids || [])].filter(Boolean)) {
@@ -55097,8 +55215,9 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
     try {
       const tsid = ts?.timesheet_id ? String(ts.timesheet_id) : null;
       const preloadedShifts = tsid ? (shiftsByTsId.get(tsid) || []) : [];
+      const hasImportedShifts = Array.isArray(preloadedShifts) && preloadedShifts.length > 0;
 
-      // ✅ FIX (B): pass options object with policy_override + HR preloads.
+      // ✅ pass SQL policy through; and pass imported shifts for HR enrichment (same table for NHSP + HR)
       const weeklyOptions = {
         policy_override: policySql || null,
         hr_eff_flags: effFlags || null,
@@ -55109,35 +55228,42 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
 
       let buildRes = null;
 
-      if (isNhspBasis) {
-        if (Array.isArray(preloadedShifts) && preloadedShifts.length) {
-          // ✅ FIX (B): NHSP builder expects getPolicyCached function, not a policy object
-          const getPolicyFn =
-            (policySql && typeof policySql === 'object')
-              ? (_clientId, _date) => policySql
-              : (typeof getPolicyCached === 'function' ? getPolicyCached : async () => null);
+      // ✅ FIX: if we have imported shifts, we must build from them based on ROUTE,
+      // not based on existing snapshot basis (which may be missing/wrong).
+      if (hasImportedShifts && (isNhspRoute || isHrRoute || isNhspBasis || isHrBasis)) {
+        const routeU = String(routeType || '').toUpperCase();
+        const basisU = String(basis || '').toUpperCase();
 
-          buildRes = await buildNhspWeeklySnapshotCached(
-            env,
-            ts,
-            contract,
-            preloadedShifts,
-            curFin?.nhsp_import_id || null,
-            basis || 'NHSP',
-            getPolicyFn,
-            curFin,
-            weeklyOptions
-          );
-        } else {
-          buildRes = await rebuildFromExistingSegmentsEvidence(
-            env,
-            ts,
-            cw,
-            contract,
-            curFin,
-            weeklyOptions
-          );
-        }
+        const basisForBuild =
+          (isHrRoute || isHrBasis)
+            ? ((basisU && basisU.startsWith('HEALTHROSTER')) ? basisU : 'HEALTHROSTER_SELF_BILL')
+            : ((routeU === 'WEEKLY_NHSP_ADJUSTMENT' || basisU === 'NHSP_ADJUSTMENT') ? 'NHSP_ADJUSTMENT' : 'NHSP');
+
+        const getPolicyFn =
+          (policySql && typeof policySql === 'object')
+            ? (_clientId, _date) => policySql
+            : (typeof getPolicyCached === 'function' ? getPolicyCached : async () => null);
+
+        buildRes = await buildNhspWeeklySnapshotCached(
+          env,
+          ts,
+          contract,
+          preloadedShifts,
+          curFin?.nhsp_import_id || null,
+          basisForBuild,
+          getPolicyFn,
+          curFin,
+          weeklyOptions
+        );
+      } else if (isNhspBasis) {
+        buildRes = await rebuildFromExistingSegmentsEvidence(
+          env,
+          ts,
+          cw,
+          contract,
+          curFin,
+          weeklyOptions
+        );
       } else if (isHrBasis) {
         buildRes = await rebuildFromExistingSegmentsEvidence(
           env,
@@ -55190,6 +55316,7 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
       }
     }
   }
+
 
   // --- DAILY snapshots ---
   for (const w of dailyWork) {
