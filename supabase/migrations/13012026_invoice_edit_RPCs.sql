@@ -1619,10 +1619,11 @@ if v_has_seg_ops then
       end if;
     end if;
 
-    -- Apply remove_segment_refs (unlock selected segments on THIS invoice)
+      -- Apply remove_segment_refs (unlock selected segments on THIS invoice)
     if v_remove_seg_refs is not null and jsonb_typeof(v_remove_seg_refs)='array' and jsonb_array_length(v_remove_seg_refs) > 0 then
-      perform public._inv_unlock_segment_refs_for_invoice(p_invoice_id, v_remove_seg_refs);
+      perform public._inv_unlock_segment_refs_for_invoice(p_invoice_id, v_remove_seg_refs::jsonb, p_actor_user_id);
     end if;
+
 
 
     -- History: segment ops (always)
