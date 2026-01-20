@@ -850,7 +850,7 @@ v_has_expense_or_mileage boolean;
   c_ward_hint text := null;
 
   -- segment filtering
-  seg jsonb;
+  v_seg jsonb;
   segments jsonb := '[]'::jsonb;
   seg_target date;
   seg_date text;
@@ -1377,15 +1377,15 @@ v_has_seg_ops :=
            and coalesce(snap.invoice_breakdown_json->>'mode','')='SEGMENTS'
            and jsonb_typeof(snap.invoice_breakdown_json->'segments')='array'
         then
-          for seg in
+          for v_seg in
             select value from jsonb_array_elements(snap.invoice_breakdown_json->'segments') value
           loop
-            if seg is null or jsonb_typeof(seg) <> 'object' then
+            if v_seg is null or jsonb_typeof(v_seg) <> 'object' then
               continue;
             end if;
-            seg_locked := nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '');
+            seg_locked := nullif(btrim(coalesce(v_seg->>'invoice_locked_invoice_id','')), '');
             if seg_locked = p_invoice_id::text then
-              segments := segments || jsonb_build_array(seg);
+              segments := segments || jsonb_build_array(v_seg);
             end if;
           end loop;
 
@@ -1561,30 +1561,30 @@ if v_has_seg_ops then
         natural_start := (snap.week_ending_date::date - 6);
 
         -- Locate the segment object
-        seg := null;
-        for seg in
+        v_seg := null;
+        for v_seg in
           select value from jsonb_array_elements(snap.invoice_breakdown_json->'segments') value
         loop
-          if seg is null or jsonb_typeof(seg) <> 'object' then
+          if v_seg is null or jsonb_typeof(v_seg) <> 'object' then
             continue;
           end if;
-          if nullif(btrim(coalesce(seg->>'segment_id','')), '') = v_seg_id then
+          if nullif(btrim(coalesce(v_seg->>'segment_id','')), '') = v_seg_id then
             exit;
           end if;
-          seg := null;
+          v_seg := null;
         end loop;
 
-        if seg is null then
+        if v_seg is null then
           raise exception 'Segment not found (tsfin_id=% segment_id=%)', v_tsfin_id, v_seg_id;
         end if;
 
-        seg_locked := nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '');
+        seg_locked := nullif(btrim(coalesce(v_seg->>'invoice_locked_invoice_id','')), '');
         if seg_locked is not null then
           raise exception 'Segment already invoiced (tsfin_id=% segment_id=%)', v_tsfin_id, v_seg_id;
         end if;
 
-        seg_target := nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date;
-        seg_ref := btrim(coalesce(seg->>'ref_num',''));
+        seg_target := nullif(btrim(coalesce(v_seg->>'invoice_target_week_start','')), '')::date;
+        seg_ref := btrim(coalesce(v_seg->>'ref_num',''));
 
         -- segment-level ref gating if required
         select * into pc from public.v_ts_invoice_precheck where timesheet_id = snap.timesheet_id limit 1;
@@ -1723,16 +1723,16 @@ if v_has_seg_ops then
          and coalesce(snap.invoice_breakdown_json->>'mode','')='SEGMENTS'
          and jsonb_typeof(snap.invoice_breakdown_json->'segments')='array'
       then
-        for seg in
+        for v_seg in
           select value from jsonb_array_elements(snap.invoice_breakdown_json->'segments') value
         loop
-          if seg is null or jsonb_typeof(seg) <> 'object' then
+          if v_seg is null or jsonb_typeof(v_seg) <> 'object' then
             continue;
           end if;
 
-          seg_locked := nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '');
+          seg_locked := nullif(btrim(coalesce(v_seg->>'invoice_locked_invoice_id','')), '');
           if seg_locked = p_invoice_id::text then
-            segments := segments || jsonb_build_array(seg);
+            segments := segments || jsonb_build_array(v_seg);
           end if;
         end loop;
       end if;
@@ -2068,20 +2068,20 @@ end if;
          and coalesce(snap.invoice_breakdown_json->>'mode','')='SEGMENTS'
          and jsonb_typeof(snap.invoice_breakdown_json->'segments')='array'
       then
-        for seg in
+        for v_seg in
           select value from jsonb_array_elements(snap.invoice_breakdown_json->'segments') value
         loop
-          if seg is null or jsonb_typeof(seg) <> 'object' then
+          if v_seg is null or jsonb_typeof(v_seg) <> 'object' then
             continue;
           end if;
 
-          seg_locked := nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '');
+          seg_locked := nullif(btrim(coalesce(v_seg->>'invoice_locked_invoice_id','')), '');
           if seg_locked is not null then
             continue; -- already invoiced
           end if;
 
-          seg_target := nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date;
-          seg_ref := btrim(coalesce(seg->>'ref_num',''));
+          seg_target := nullif(btrim(coalesce(v_seg->>'invoice_target_week_start','')), '')::date;
+          seg_ref := btrim(coalesce(v_seg->>'ref_num',''));
 
           -- segment-level ref gating if required
           select * into pc from public.v_ts_invoice_precheck where timesheet_id = tsid limit 1;
@@ -2096,11 +2096,11 @@ end if;
               continue;
             end if;
             -- allow early is implicit for invoice edits (invoice is already being edited)
-            segments := segments || jsonb_build_array(seg);
+            segments := segments || jsonb_build_array(v_seg);
           else
             -- delayed: only if this invoice week matches target AND target has arrived (no early invoicing for delayed)
             if v_week_start = seg_target and seg_target <= v_anchor_ymd then
-              segments := segments || jsonb_build_array(seg);
+              segments := segments || jsonb_build_array(v_seg);
             end if;
           end if;
         end loop;
@@ -2533,17 +2533,17 @@ end if;
          and jsonb_typeof(snap.invoice_breakdown_json)='object'
          and coalesce(snap.invoice_breakdown_json->>'mode','')='SEGMENTS'
       then
-        for seg in
+        for v_seg in
           select value from jsonb_array_elements(segments) value
         loop
-          if seg is null or jsonb_typeof(seg) <> 'object' then
+          if v_seg is null or jsonb_typeof(v_seg) <> 'object' then
             continue;
           end if;
 
           seg_refs := seg_refs || jsonb_build_array(
             jsonb_build_object(
               'tsfin_id', snap.id::text,
-              'segment_id', nullif(btrim(coalesce(seg->>'segment_id','')), '')
+              'segment_id', nullif(btrim(coalesce(v_seg->>'segment_id','')), '')
             )
           );
         end loop;
@@ -2613,7 +2613,7 @@ end if;
               not exists (
                 select 1
                 from jsonb_array_elements(tf.invoice_breakdown_json->'segments') s(seg)
-                where nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') is null
+                where nullif(btrim(coalesce(s.seg->>'invoice_locked_invoice_id','')), '') is null
               )
             else
               (tf.locked_by_invoice_id is not null)
