@@ -7593,7 +7593,6 @@ async function handleContractWeekSwitchMode(env, req, weekId) {
 }
 
 
-
 async function handleContractWeekPresignManualPdf(env, req, weekId) {
   // Admin presign wrapper — MUST align with /api/files/presign-upload + /api/files/upload token/key rules
   const user = await requireUser(env, req, ['admin']);
@@ -7605,13 +7604,30 @@ async function handleContractWeekPresignManualPdf(env, req, weekId) {
   );
   if (!cw) return withCORS(env, req, notFound('Week not found'));
 
+  const hasAnySegmentInvoiceLock = (tf) => {
+    try {
+      const ib = tf?.invoice_breakdown_json;
+      if (!ib || typeof ib !== 'object') return false;
+      const mode = String(ib?.mode || '').toUpperCase();
+      if (mode !== 'SEGMENTS') return false;
+      const segs = Array.isArray(ib?.segments) ? ib.segments : [];
+      return segs.some(s => {
+        const v = s?.invoice_locked_invoice_id;
+        return v != null && String(v).trim() !== '';
+      });
+    } catch {
+      return false;
+    }
+  };
+
+
   // If already invoiced, forbid replacement at this path (use unissue flow first)
   if (cw.timesheet_id) {
     const tsfin = await sbGetOne(
       env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${enc(cw.timesheet_id)}&is_current=eq.true&select=locked_by_invoice_id`
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${enc(cw.timesheet_id)}&is_current=eq.true&select=locked_by_invoice_id,invoice_breakdown_json`
     );
-    if (tsfin?.locked_by_invoice_id) {
+    if (tsfin?.locked_by_invoice_id || hasAnySegmentInvoiceLock(tsfin)) {
       return withCORS(env, req, badRequest('Timesheet invoiced. Unissue invoice before replacing scan.'));
     }
   }
@@ -7690,10 +7706,8 @@ async function handleContractWeekPresignManualPdf(env, req, weekId) {
 // PATCH /api/timesheets/:id/evidence/:evidence_id
 // Body: { kind: "Timesheet" | "Mileage" | "Accommodation" | "Expenses" | "<custom>" }
 
- 
 async function handleContractWeekReplaceManualPdf(env, req, weekId) {
-  const enc = encodeURIComponent;
-
+ 
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -7703,13 +7717,30 @@ async function handleContractWeekReplaceManualPdf(env, req, weekId) {
   );
   if (!cw) return withCORS(env, req, notFound('Week not found'));
 
+  const hasAnySegmentInvoiceLock = (tf) => {
+    try {
+      const ib = tf?.invoice_breakdown_json;
+      if (!ib || typeof ib !== 'object') return false;
+      const mode = String(ib?.mode || '').toUpperCase();
+      if (mode !== 'SEGMENTS') return false;
+      const segs = Array.isArray(ib?.segments) ? ib.segments : [];
+      return segs.some(s => {
+        const v = s?.invoice_locked_invoice_id;
+        return v != null && String(v).trim() !== '';
+      });
+    } catch {
+      return false;
+    }
+  };
+
+
   // If already invoiced/paid, forbid replacement at this path
   if (cw.timesheet_id) {
     const tsfin = await sbGetOne(
       env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${enc(cw.timesheet_id)}&is_current=eq.true&select=locked_by_invoice_id,paid_at_utc`
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${enc(cw.timesheet_id)}&is_current=eq.true&select=locked_by_invoice_id,paid_at_utc,invoice_breakdown_json`
     );
-    if (tsfin?.locked_by_invoice_id || tsfin?.paid_at_utc) {
+    if (tsfin?.locked_by_invoice_id || hasAnySegmentInvoiceLock(tsfin) || tsfin?.paid_at_utc) {
       return withCORS(env, req, badRequest('Invoiced/paid; unissue/unpay first to replace PDF'));
     }
   }
@@ -7746,7 +7777,6 @@ async function handleContractWeekReplaceManualPdf(env, req, weekId) {
 }
 
 async function handleContractWeekManualUpsert(env, req, weekId) {
-  const enc = encodeURIComponent;
 
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -8300,6 +8330,24 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       )
     : null;
 
+
+
+  const hasAnySegmentInvoiceLock = (tf) => {
+    try {
+      const ib = tf?.invoice_breakdown_json;
+      if (!ib || typeof ib !== 'object') return false;
+      const mode = String(ib?.mode || '').toUpperCase();
+      if (mode !== 'SEGMENTS') return false;
+      const segs = Array.isArray(ib?.segments) ? ib.segments : [];
+      return segs.some(s => {
+        const v = s?.invoice_locked_invoice_id;
+        return v != null && String(v).trim() !== '';
+      });
+    } catch {
+      return false;
+    }
+  };
+
   // Lock enforcement: block changes if invoiced or paid
   let finLock = null;
   if (ts && ts.timesheet_id) {
@@ -8309,7 +8357,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
         `?timesheet_id=eq.${enc(ts.timesheet_id)}` +
         `&is_current=eq.true&select=*`
     );
-    if (finLock && (finLock.locked_by_invoice_id || finLock.paid_at_utc)) {
+    if (finLock && (finLock.locked_by_invoice_id || hasAnySegmentInvoiceLock(finLock) || finLock.paid_at_utc)) {
       return withCORS(env, req, badRequest('Timesheet already invoiced or paid; changes are blocked'));
     }
   }
@@ -8936,6 +8984,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     created_now: !!createdNow
   }));
 }
+
 
 
  async function handleManualTimesheetQueueEnqueue(env, req) {
@@ -9818,6 +9867,7 @@ async function handleTimesheetUpdateReference(env, req, timesheetId) {
     was_stale: !!guard.resolved.was_stale
   }));
 }
+
 async function handleTimesheetDetails(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -10130,6 +10180,78 @@ async function handleTimesheetDetails(env, req, timesheetId) {
         ? invoiceBreakdown.segments
         : [];
 
+    // ✅ NEW: invoice_no_by_invoice_id (segment-aware)
+    // - includes whole-timesheet locked_by_invoice_id
+    // - plus any segment.invoice_locked_invoice_id
+    const invoice_no_by_invoice_id = (() => Object.create(null))();
+    try {
+      const isUuid = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(s || '').trim());
+
+      const invIdSet = new Set();
+
+      const wholeInvId = tsfinOut?.locked_by_invoice_id != null ? String(tsfinOut.locked_by_invoice_id).trim() : '';
+      if (wholeInvId && isUuid(wholeInvId)) invIdSet.add(wholeInvId);
+
+      for (const seg of (Array.isArray(segments) ? segments : [])) {
+        if (!seg || typeof seg !== 'object') continue;
+        const segInvId = seg.invoice_locked_invoice_id != null ? String(seg.invoice_locked_invoice_id).trim() : '';
+        if (segInvId && isUuid(segInvId)) invIdSet.add(segInvId);
+      }
+
+      const allIds = Array.from(invIdSet);
+      if (allIds.length) {
+        const chunkSize = 200;
+
+        // Primary: invoices table (expects id + invoice_no)
+        let lookedUp = false;
+        try {
+          for (let i = 0; i < allIds.length; i += chunkSize) {
+            const chunk = allIds.slice(i, i + chunkSize);
+            const { rows: invRows } = await sbFetch(
+              env,
+              `${env.SUPABASE_URL}/rest/v1/invoices` +
+                `?select=id,invoice_no` +
+                `&id=in.(${chunk.map(encodeURIComponent).join(',')})`
+            );
+
+            for (const r of (invRows || [])) {
+              const id = r?.id != null ? String(r.id).trim() : '';
+              const no = (r?.invoice_no != null) ? String(r.invoice_no).trim() : '';
+              if (id && no) invoice_no_by_invoice_id[id] = no;
+            }
+          }
+          lookedUp = true;
+        } catch {
+          lookedUp = false;
+        }
+
+        // Fallback: try v_invoices_summary (if invoices table select fails)
+        if (!lookedUp) {
+          try {
+            for (let i = 0; i < allIds.length; i += chunkSize) {
+              const chunk = allIds.slice(i, i + chunkSize);
+              const { rows: invRows2 } = await sbFetch(
+                env,
+                `${env.SUPABASE_URL}/rest/v1/v_invoices_summary` +
+                  `?select=id,invoice_no` +
+                  `&id=in.(${chunk.map(encodeURIComponent).join(',')})`
+              );
+
+              for (const r of (invRows2 || [])) {
+                const id = r?.id != null ? String(r.id).trim() : '';
+                const no = (r?.invoice_no != null) ? String(r.invoice_no).trim() : '';
+                if (id && no) invoice_no_by_invoice_id[id] = no;
+              }
+            }
+          } catch {
+            // final fallback: leave map empty (do not fail timesheet details)
+          }
+        }
+      }
+    } catch {
+      // leave empty
+    }
+
     const action_flags = {
       can_restore_qr_pending: (!isHardLocked) && canRestoreQrPending,
       can_restore_qr_signed: (!isHardLocked) && canRestoreQrSigned,
@@ -10163,6 +10285,9 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       isSegmentsMode,
       segments,
 
+      // ✅ NEW (for FE “Invoiced – <invoice_no>” rendering)
+      invoice_no_by_invoice_id,
+
       validations,
       shifts,
 
@@ -10195,6 +10320,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     return withCORS(env, req, serverError('Failed to load timesheet details'));
   }
 }
+
 
 
 
@@ -11500,6 +11626,22 @@ async function handleTimesheetsPresignWeekly(env, req) {
   const candidateId = contract.candidate_id;
   const clientId = contract.client_id;
 
+  const hasAnySegmentInvoiceLock = (tf) => {
+    try {
+      const ib = tf?.invoice_breakdown_json;
+      if (!ib || typeof ib !== 'object') return false;
+      const mode = String(ib?.mode || '').toUpperCase();
+      if (mode !== 'SEGMENTS') return false;
+      const segs = Array.isArray(ib?.segments) ? ib.segments : [];
+      return segs.some(s => {
+        const v = s?.invoice_locked_invoice_id;
+        return v != null && String(v).trim() !== '';
+      });
+    } catch {
+      return false;
+    }
+  };
+
   // Authoritative: client_settings.default_submission_mode must be ELECTRONIC for electronic presign
   let supportsElectronic = false;
   try {
@@ -11541,13 +11683,13 @@ async function handleTimesheetsPresignWeekly(env, req) {
       `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
         `?timesheet_id=eq.${enc(tsid)}` +
         `&is_current=eq.true` +
-        `&select=paid_at_utc,locked_by_invoice_id`
+        `&select=paid_at_utc,locked_by_invoice_id,invoice_breakdown_json`
     );
 
     if (finCur?.paid_at_utc) {
       return withCORS(env, req, badRequest('Cannot presign: already paid'));
     }
-    if (finCur?.locked_by_invoice_id) {
+    if (finCur?.locked_by_invoice_id || hasAnySegmentInvoiceLock(finCur)) {
       return withCORS(env, req, badRequest('Cannot presign: invoiced'));
     }
 
@@ -11597,7 +11739,6 @@ async function handleTimesheetsPresignWeekly(env, req) {
   const nurseKey = `${base}/nurse.png`;
   const authKey  = `${base}/authoriser.png`;
 
-
   // Tokens – 10MB each
   const nurseToken = await createToken(env, 'UPLOAD', {
     key: nurseKey,
@@ -11635,7 +11776,6 @@ async function handleTimesheetsPresignWeekly(env, req) {
     }
   }));
 }
-
 async function handleTimesheetsEligibilityWeekly(env, req) {
   const enc = encodeURIComponent;
 
@@ -16364,7 +16504,6 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
     was_stale: !!resolved.was_stale
   }));
 }
-
 export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -16429,6 +16568,22 @@ export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
 
   if (!elec) return withCORS(env, req, badRequest('No electronic version exists for this timesheet'));
 
+  const hasAnySegmentInvoiceLock = (tf) => {
+    try {
+      const ib = tf?.invoice_breakdown_json;
+      if (!ib || typeof ib !== 'object') return false;
+      const mode = String(ib?.mode || '').toUpperCase();
+      if (mode !== 'SEGMENTS') return false;
+      const segs = Array.isArray(ib?.segments) ? ib.segments : [];
+      return segs.some(s => {
+        const v = s?.invoice_locked_invoice_id;
+        return v != null && String(v).trim() !== '';
+      });
+    } catch {
+      return false;
+    }
+  };
+
   // TSFIN lock check uses the CURRENT row id
   const tsfin = await sbGetOne(
     env,
@@ -16443,7 +16598,8 @@ export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
       !!tsfin.locked_by_invoice_id ||
       !!tsfin.locked_by_invoice ||
       !!tsfin.locked_by_invoice_line_id ||
-      !!tsfin.locked_by_invoice_at_utc;
+      !!tsfin.locked_by_invoice_at_utc ||
+      hasAnySegmentInvoiceLock(tsfin);
 
     if (hardLocked) {
       return withCORS(env, req, badRequest('Cannot revert: current timesheet is invoiced or paid'));
@@ -16558,10 +16714,11 @@ export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
     }
   } catch {}
 
+  // ✅ FIX: enqueue_ts_financials signature uses (_timesheet_id, _reason)
   try {
     await sbRpc(env, 'enqueue_ts_financials', {
-      timesheet_id: elec.timesheet_id,
-      reason: 'REVERT_TO_ELECTRONIC'
+      _timesheet_id: elec.timesheet_id,
+      _reason: 'REVERT_TO_ELECTRONIC'
     });
   } catch {}
 
@@ -16595,6 +16752,7 @@ export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
     was_stale: !!resolved.was_stale
   }));
 }
+
 
 
  async function handleTimesheetPresignExpensePdf(env, req, timesheetId) {
@@ -17751,6 +17909,13 @@ async function handleInvoiceSaveEdits(env, req, invoiceId) {
 
   try {
     // ✅ Single atomic SQL transaction applies all edits + returns updated manifest
+    // RPC supports:
+    // - remove_invoice_line_ids
+    // - add_timesheet_ids
+    // - add_adjustments
+    // - remove_segment_refs
+    // - add_segment_refs
+    // - reference_updates
     const manRes = await sbRpc(env, 'invoice_apply_edits', {
       p_invoice_id: invoiceId,
       p_payload: payload,
@@ -17776,7 +17941,7 @@ async function handleInvoiceSaveEdits(env, req, invoiceId) {
 
     const lineRows = Array.isArray(manifest.lines) ? manifest.lines : [];
 
-    const items = lineRows.map(l => ({
+    const items = lineRows.map(l => ( {
       invoice_line_id: l.id ?? null,
       source_key: l.source_key ?? null,
       booking_id: l.booking_id ?? null,
@@ -17809,12 +17974,29 @@ async function handleInvoiceSaveEdits(env, req, invoiceId) {
       total_inc_vat: l.total_inc_vat ?? null,
 
       description: l.description ?? null,
-      paper_ts_r2_key: l.paper_ts_r2_key ?? null,
+      paper_ts_r2_key: l.paper_ts_r2_key ?? l.effective_paper_ts_r2_key ?? null,
 
       meta_json: (l.meta_json && typeof l.meta_json === 'object') ? l.meta_json : {}
-    }));
+    } ));
 
-    // Audit (best-effort)
+    // ✅ Pass-through fields the FE expects to be “one-call” refreshed after apply
+    const segments_on_invoice_by_timesheet =
+      (manifest.segments_on_invoice_by_timesheet && typeof manifest.segments_on_invoice_by_timesheet === 'object')
+        ? manifest.segments_on_invoice_by_timesheet
+        : ((manifest.segments_by_timesheet && typeof manifest.segments_by_timesheet === 'object')
+            ? manifest.segments_by_timesheet
+            : {});
+
+    const history = Array.isArray(manifest.history) ? manifest.history : [];
+
+    const tsfin_id_by_timesheet_id =
+      (manifest.tsfin_id_by_timesheet_id && typeof manifest.tsfin_id_by_timesheet_id === 'object')
+        ? manifest.tsfin_id_by_timesheet_id
+        : {};
+
+    const reference_rows = Array.isArray(manifest.reference_rows) ? manifest.reference_rows : [];
+
+    // Audit (best-effort) — records expanded payload too (segments + references)
     try {
       await writeAudit(
         env,
@@ -17827,16 +18009,27 @@ async function handleInvoiceSaveEdits(env, req, invoiceId) {
 
     return withCORS(env, req, ok({
       ok: true,
+
       invoice,
       items,
       header_snapshot_json,
       email_summary: manifest.email_summary ?? null,
 
-      // passthrough manifest payloads
       attach_policy: manifest.attach_policy ?? null,
+
       evidence: Array.isArray(manifest.evidence) ? manifest.evidence : [],
+      timesheet_evidence: Array.isArray(manifest.timesheet_evidence) ? manifest.timesheet_evidence : [],
+      evidence_other: Array.isArray(manifest.evidence_other) ? manifest.evidence_other : [],
+
       hr_source_rows_cache: Array.isArray(manifest.hr_source_rows_cache) ? manifest.hr_source_rows_cache : [],
       tsfin_external_source_rows: Array.isArray(manifest.tsfin_external_source_rows) ? manifest.tsfin_external_source_rows : [],
+
+      // ✅ Segment expansion + invoice history + tsfin map + reference rows
+      segments_on_invoice_by_timesheet,
+      segments_by_timesheet: segments_on_invoice_by_timesheet,
+      history,
+      tsfin_id_by_timesheet_id,
+      reference_rows,
 
       // also return the raw manifest for any future UI needs
       manifest
@@ -17850,6 +18043,19 @@ async function handleInvoiceSaveEdits(env, req, invoiceId) {
     }
     if (/already paid/i.test(msg)) {
       return withCORS(env, req, conflict(msg));
+    }
+
+    // ✅ Segment-move gating errors (expected user-actionable)
+    if (/Segments cannot be moved when additional rates exist/i.test(msg)) {
+      return withCORS(env, req, conflict(msg));
+    }
+    if (/Segments cannot be moved when expenses or mileage exist/i.test(msg)) {
+      return withCORS(env, req, conflict(msg));
+    }
+
+    // ✅ Reference gating for segments can be user-actionable too
+    if (/missing reference number/i.test(msg)) {
+      return withCORS(env, req, badRequest(msg));
     }
 
     return withCORS(env, req, serverError(msg));
@@ -17872,7 +18078,6 @@ async function handleInvoiceEligibleTimesheets(env, req, invoiceId) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
-
 
 
 
@@ -18387,8 +18592,57 @@ async function handlePaymentsGenerateCsv(env, req) {
     );
   }
 
-  // ==== Audit summary for the run
+  // ==== Closeout: create £0 ISSUED do_not_send invoices for any zero-charge timesheets that were just paid
+  // IMPORTANT:
+  // - This is best-effort and must not fail the pay run.
+  // - We pass all affected timesheet_ids; SQL will filter to those eligible.
   const uniqueTsIds = [...new Set(affectedTsIds.filter(Boolean))];
+
+  let closeout = null;
+  if (uniqueTsIds.length) {
+    try {
+      // Chunk to avoid oversized RPC payloads
+      const chunkArr = (arr, n) => {
+        const out = [];
+        for (let i = 0; i < (arr || []).length; i += n) out.push(arr.slice(i, i + n));
+        return out;
+      };
+
+      const invoiceIds = [];
+      let okCount = 0;
+      let totalRows = 0;
+
+      for (const ch of chunkArr(uniqueTsIds, 200)) {
+        const r = await sbRpc(env, 'invoice_closeout_zero_charge_timesheets', {
+          p_timesheet_ids: ch,
+          p_actor_user_id: user.id || null
+        });
+
+        const rows = Array.isArray(r) ? r : (r ? [r] : []);
+        totalRows += rows.length;
+
+        for (const row of rows) {
+          if (row && row.ok === true) okCount++;
+          if (row && row.invoice_id) invoiceIds.push(row.invoice_id);
+        }
+      }
+
+      closeout = {
+        attempted: true,
+        ok_count: okCount,
+        total_rows: totalRows,
+        invoice_ids: invoiceIds
+      };
+    } catch (e) {
+      closeout = {
+        attempted: true,
+        ok: false,
+        error: (e && (e.message || String(e))) || 'CLOSEOUT_FAILED'
+      };
+    }
+  }
+
+  // ==== Audit summary for the run
   await writeAudit(
     env,
     user,
@@ -18400,7 +18654,8 @@ async function handlePaymentsGenerateCsv(env, req) {
       timesheets_count: uniqueTsIds.length,
       bank_transfer_lines: bankTransferLines,
       internal_settled_candidates: internalSettledCandidates,
-      skipped_candidates: skippedCandidates.slice(0, 50)
+      skipped_candidates: skippedCandidates.slice(0, 50),
+      closeout
     },
     { entity: 'timesheet', subject_id: null, reason: 'PAYMENT', correlation_id: payRunCorrelationId, req }
   );
@@ -18416,9 +18671,11 @@ async function handlePaymentsGenerateCsv(env, req) {
     paid_at_utc: nowIso,
     bank_transfer_lines: bankTransferLines,
     internal_settled_candidates: internalSettledCandidates,
-    skipped_candidates: skippedCandidates
+    skipped_candidates: skippedCandidates,
+    closeout
   }));
 }
+
 
 async function handleRemittancesSend(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -19276,15 +19533,37 @@ async function handleTimesheetMarkPaid(env, req, timesheetId) {
   const paid = body?.paid === true;
   const paymentRef = (body?.payment_reference || '').trim() || `MANUAL:${new Date().toISOString().slice(0,10)}`;
 
-  // Load current TSFIN row FOR CURRENT timesheet id
+  // Load current TSFIN row FOR CURRENT timesheet id (include charge + lock/segment state for closeout eligibility)
   const { rows } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials?is_current=eq.true&timesheet_id=eq.${enc(currentTimesheetId)}` +
-    `&select=id,candidate_id,client_id,pay_method,total_pay_ex_vat,expenses_pay_ex_vat,mileage_pay_ex_vat,policy_snapshot_json,` +
+    `&select=id,candidate_id,client_id,pay_method,total_pay_ex_vat,total_charge_ex_vat,locked_by_invoice_id,invoice_breakdown_json,` +
+    `expenses_pay_ex_vat,mileage_pay_ex_vat,policy_snapshot_json,` +
     `pay_wtr_rate_pct_snapshot,pay_vat_rate_pct_snapshot,pay_vat_amount_snapshot,pay_total_inc_vat_snapshot`
   );
   const row = rows?.[0];
   if (!row) return withCORS(env, req, notFound('Timesheet financial snapshot not found'));
+
+  // Closeout eligibility (zero client charge AND not already invoice-locked, incl. segment locks)
+  const chargeEx = Number(row.total_charge_ex_vat || 0);
+  const isZeroCharge = (round2(chargeEx) === 0);
+
+  const hasSummaryInvoiceLock = !!(row.locked_by_invoice_id);
+
+  const hasAnySegmentInvoiceLock = (() => {
+    const ib = (row?.invoice_breakdown_json && typeof row.invoice_breakdown_json === 'object') ? row.invoice_breakdown_json : null;
+    const mode = String(ib?.mode || '').toUpperCase();
+    if (mode !== 'SEGMENTS') return false;
+    const segs = Array.isArray(ib?.segments) ? ib.segments : [];
+    for (const s of segs) {
+      const v = (s && typeof s === 'object') ? s : null;
+      const invId = (v?.invoice_locked_invoice_id != null) ? String(v.invoice_locked_invoice_id).trim() : '';
+      if (invId) return true;
+    }
+    return false;
+  })();
+
+  const closeoutEligible = (paid && isZeroCharge && !hasSummaryInvoiceLock && !hasAnySegmentInvoiceLock);
 
   const patch = {};
   if (paid) {
@@ -19343,19 +19622,51 @@ async function handleTimesheetMarkPaid(env, req, timesheetId) {
   const json = await res.json().catch(() => []);
   const updated = Array.isArray(json) ? json[0] : json;
 
+  // If paid AND zero-charge, create a terminal £0 closeout invoice (ISSUED + do_not_send) and lock timesheet to it
+  // IMPORTANT: do not fail the paid update if closeout creation fails; return warning for operator visibility.
+  let closeout = null;
+  if (closeoutEligible) {
+    try {
+      const r = await sbRpc(env, 'invoice_closeout_zero_charge_timesheets', {
+        p_timesheet_ids: [currentTimesheetId],
+        p_actor_user_id: user.id || null
+      });
+
+      const rows = Array.isArray(r) ? r : (r ? [r] : []);
+      const first = rows[0] || null;
+
+      closeout = {
+        attempted: true,
+        ok: !!first?.ok,
+        invoice_id: first?.invoice_id || null,
+        warnings: first?.warnings ?? null
+      };
+    } catch (e) {
+      closeout = {
+        attempted: true,
+        ok: false,
+        invoice_id: null,
+        error: (e && (e.message || String(e))) || 'CLOSEOUT_FAILED'
+      };
+    }
+  }
+
   await writeAudit(env, user, paid ? 'MARK_PAID' : 'MARK_UNPAID', {
-    payment_reference: paymentRef
+    payment_reference: paymentRef,
+    closeout
   }, { entity: 'timesheet', subject_id: currentTimesheetId, reason: 'PAYMENT', correlation_id: null, req });
 
   // Optionally enqueue worker to re-evaluate eligibility on UNPAID
   if (!paid) {
     try {
-      await sbRpc(env, 'enqueue_ts_financials', { timesheet_id: currentTimesheetId, reason: 'CONTEXT_CHANGED' });
+      // NOTE: SQL signature is enqueue_ts_financials(_timesheet_id uuid, _reason ts_fin_reason_enum)
+      await sbRpc(env, 'enqueue_ts_financials', { _timesheet_id: currentTimesheetId, _reason: 'CONTEXT_CHANGED' });
     } catch { /* noop */ }
   }
 
   return withCORS(env, req, ok({
     updated,
+    closeout,
     // NEW: return resolution metadata so FE can adopt the current id if needed
     booking_id: guard.resolved.booking_id || null,
     requested_timesheet_id: guard.resolved.requested_timesheet_id || timesheetId,
@@ -19365,6 +19676,8 @@ async function handleTimesheetMarkPaid(env, req, timesheetId) {
   }));
 }
 
+
+
 // ───────────────────────────────────────────────────────────────────────────────
 // 3) REPORTS (screen/print/CSV) — minimal but complete implementations
 // ───────────────────────────────────────────────────────────────────────────────
@@ -19373,50 +19686,61 @@ async function handleTimesheetMarkPaid(env, req, timesheetId) {
 // REPORTS — Timesheets (unchanged; already supports print/csv)
 // ───────────────────────────────────────────────────────────────────────────────
 
- async function handleReportTimesheets(env, req) {
+async function handleReportTimesheets(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
   const urlObj = new URL(req.url);
   const q = (k) => urlObj.searchParams.get(k);
   const qs = (k) => urlObj.searchParams.getAll(k);
+
   const format = (q('format') || 'json').toLowerCase(); // 'json' | 'csv' | 'print'
   const includeOnHold = (q('include_on_hold') === 'true');
 
   const from = q('week_ending_from');
   const to = q('week_ending_to');
   const payMethod = q('pay_method') ? q('pay_method').toUpperCase() : null;
-  const clientIds = qs('client_id');
-  const candidateIds = qs('candidate_id');
+
+  const clientIdsRaw = qs('client_id');
+  const candidateIdsRaw = qs('candidate_id');
+
   const paid = q('paid'); // 'true' | 'false' | null
   const invoiced = q('invoiced'); // 'true' | 'false' | null
 
-  let url = `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-    `?select=` + [
-      'timesheet_id','candidate_id','client_id','pay_method','locked_by_invoice_id',
-      'total_pay_ex_vat','total_charge_ex_vat','margin_ex_vat',
-      'expenses_charge_ex_vat','mileage_charge_ex_vat',
-      'paid_at_utc','pay_on_hold',
-      'timesheet:timesheets(week_ending_date)',
-      'client:clients(name)',
-    ].join(',') +
-    `&is_current=eq.true`;
+  const parseTriBool = (v) => {
+    if (v === 'true') return true;
+    if (v === 'false') return false;
+    return null;
+  };
 
-  if (from) url += `&timesheet.week_ending_date=gte.${enc(from)}`;
-  if (to)   url += `&timesheet.week_ending_date=lte.${enc(to)}`;
-  if (payMethod) url += `&pay_method=eq.${enc(payMethod)}`;
-  if (clientIds.length) url += `&client_id=in.(${clientIds.map(enc).join(',')})`;
-  if (candidateIds.length) url += `&candidate_id=in.(${candidateIds.map(enc).join(',')})`;
-  if (!includeOnHold) url += `&pay_on_hold=eq.false`;
-  if (paid === 'true') url += `&paid_at_utc=not.is.null`;
-  if (paid === 'false') url += `&paid_at_utc=is.null`;
-  if (invoiced === 'true') url += `&locked_by_invoice_id=not.is.null`;
-  if (invoiced === 'false') url += `&locked_by_invoice_id=is.null`;
+  const paidBool = parseTriBool(paid);
+  const invoicedBool = parseTriBool(invoiced);
 
-  const { rows } = await sbFetch(env, url);
+  const uniq = (arr) => Array.from(new Set((arr || []).map(String).filter(Boolean)));
+  const clientIds = uniq(clientIdsRaw);
+  const candidateIds = uniq(candidateIdsRaw);
+
+  // ✅ single RPC call (segment-aware invoiced logic lives in SQL)
+  let rows = [];
+  try {
+    const r = await sbRpc(env, 'tsfin_report_timesheets_v2', {
+      p_week_ending_from: from || null,
+      p_week_ending_to: to || null,
+      p_pay_method: payMethod || null,
+      p_client_ids: clientIds.length ? clientIds : null,
+      p_candidate_ids: candidateIds.length ? candidateIds : null,
+      p_include_on_hold: !!includeOnHold,
+      p_paid: (paidBool === null ? null : !!paidBool),
+      p_invoiced: (invoicedBool === null ? null : !!invoicedBool)
+    });
+    rows = Array.isArray(r) ? r : (r ? [r] : []);
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+
   if (!rows?.length) return withCORS(env, req, ok({ rows: [], totals: {} }));
 
-  // Totals
+  // Totals (unchanged)
   const totals = rows.reduce((a, r) => {
     a.pay_ex_vat += Number(r.total_pay_ex_vat || 0);
     a.charge_ex_vat += Number(r.total_charge_ex_vat || 0);
@@ -19424,19 +19748,25 @@ async function handleTimesheetMarkPaid(env, req, timesheetId) {
     a.expenses_charge_ex_vat += Number(r.expenses_charge_ex_vat || 0);
     a.mileage_charge_ex_vat += Number(r.mileage_charge_ex_vat || 0);
     return a;
-  }, { pay_ex_vat:0, charge_ex_vat:0, margin_ex_vat:0, expenses_charge_ex_vat:0, mileage_charge_ex_vat:0 });
-  Object.keys(totals).forEach(k => totals[k] = round2(totals[k]));
+  }, { pay_ex_vat: 0, charge_ex_vat: 0, margin_ex_vat: 0, expenses_charge_ex_vat: 0, mileage_charge_ex_vat: 0 });
+  Object.keys(totals).forEach(k => { totals[k] = round2(totals[k]); });
+
+  const invoicedFlag = (r) => {
+    if (r && r.invoiced_any === true) return true;
+    return !!(r && r.locked_by_invoice_id);
+  };
 
   if (format === 'csv') {
     const header = ['WeekEnding','Client','PayMethod','Paid','Invoiced','PayExVAT','ChargeExVAT','MarginExVAT','ExpensesChargeExVAT','MileageChargeExVAT'];
     const out = [csvJoin(header)];
+
     for (const r of rows) {
       out.push(csvJoin([
         r?.timesheet?.week_ending_date || '',
         r?.client?.name || '',
         (r.pay_method || '').toUpperCase(),
         r.paid_at_utc ? 'Y' : 'N',
-        r.locked_by_invoice_id ? 'Y' : 'N',
+        invoicedFlag(r) ? 'Y' : 'N',
         round2(r.total_pay_ex_vat).toFixed(2),
         round2(r.total_charge_ex_vat).toFixed(2),
         round2(r.margin_ex_vat).toFixed(2),
@@ -19444,6 +19774,7 @@ async function handleTimesheetMarkPaid(env, req, timesheetId) {
         round2(r.mileage_charge_ex_vat).toFixed(2),
       ]));
     }
+
     return withCORS(env, req, ok({ csv: out.join('\n'), totals, count: rows.length }));
   }
 
@@ -19454,20 +19785,34 @@ async function handleTimesheetMarkPaid(env, req, timesheetId) {
         <td>${r?.client?.name || ''}</td>
         <td>${(r.pay_method || '').toUpperCase()}</td>
         <td>${r.paid_at_utc ? 'Y' : 'N'}</td>
-        <td>${r.locked_by_invoice_id ? 'Y' : 'N'}</td>
+        <td>${invoicedFlag(r) ? 'Y' : 'N'}</td>
         <td style="text-align:right">${round2(r.total_pay_ex_vat).toFixed(2)}</td>
         <td style="text-align:right">${round2(r.total_charge_ex_vat).toFixed(2)}</td>
         <td style="text-align:right">${round2(r.margin_ex_vat).toFixed(2)}</td>
-      </tr>`).join('');
+      </tr>`
+    ).join('');
+
     const html = `
       <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif">
         <h3>Timesheets Report</h3>
         <table width="100%" cellspacing="0" cellpadding="6" style="border-collapse:collapse">
-          <thead><tr style="background:#f5f5f5"><th>Week Ending</th><th>Client</th><th>Pay Method</th><th>Paid</th><th>Invoiced</th><th>Pay ex VAT</th><th>Charge ex VAT</th><th>Margin ex VAT</th></tr></thead>
+          <thead>
+            <tr style="background:#f5f5f5">
+              <th>Week Ending</th>
+              <th>Client</th>
+              <th>Pay Method</th>
+              <th>Paid</th>
+              <th>Invoiced</th>
+              <th>Pay ex VAT</th>
+              <th>Charge ex VAT</th>
+              <th>Margin ex VAT</th>
+            </tr>
+          </thead>
           <tbody>${rowsHtml}</tbody>
         </table>
         <p><strong>Totals —</strong> Pay ex VAT: ${totals.pay_ex_vat.toFixed(2)}, Charge ex VAT: ${totals.charge_ex_vat.toFixed(2)}, Margin ex VAT: ${totals.margin_ex_vat.toFixed(2)}</p>
       </div>`;
+
     return withCORS(env, req, ok({ html, totals, count: rows.length }));
   }
 
@@ -19791,37 +20136,32 @@ async function handleTimesheetMarkPaid(env, req, timesheetId) {
 // ───────────────────────────────────────────────────────────────────────────────
 // SEARCH — Timesheets (richer filters + csv/print)
 // ───────────────────────────────────────────────────────────────────────────────
- async function handleSearchTimesheets(env, req) {
+async function handleSearchTimesheets(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
-  const enc = encodeURIComponent;
   const urlObj = new URL(req.url);
   const q  = (k) => urlObj.searchParams.get(k);
-  const qa = (k) => urlObj.searchParams.getAll(k); // for repeated params (e.g., status)
+  const qa = (k) => urlObj.searchParams.getAll(k); // repeated params (e.g., status)
 
   const page     = Math.max(1, parseInt(q('page') || '1', 10));
   const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
 
   const format = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
 
-  // Existing booleans
   const includeOnHold = q('include_on_hold') === 'true';
-  const paid      = q('paid');         // 'true' | 'false' | null
-  const invoiced  = q('invoiced');     // 'true' | 'false' | null
+  const paid      = q('paid');     // 'true' | 'false' | null
+  const invoiced  = q('invoiced'); // 'true' | 'false' | null
 
-  // Existing range filters
   const weFrom      = q('week_ending_from');
   const weTo        = q('week_ending_to');
   const clientId    = q('client_id');
   const candidateId = q('candidate_id');
   const payMethod   = q('pay_method') ? q('pay_method').toUpperCase() : null;
 
-  // NEW filters for weekly / QR awareness
   const sheetScope  = q('sheet_scope') ? q('sheet_scope').toUpperCase() : null;
   const qrStatus    = q('qr_status')   ? q('qr_status').toUpperCase()   : null;
 
-  // NEW filters to match FE
   const bookingId   = q('booking_id');
   const occKey      = q('occupant_key_norm');
   const hospital    = q('hospital_norm');
@@ -19829,98 +20169,71 @@ async function handleTimesheetMarkPaid(env, req, timesheetId) {
   const workedTo    = q('worked_to');
   const createdFrom = q('created_from');
   const createdTo   = q('created_to');
-  const statuses    = qa('status'); // repeated: status=A&status=B
+  const statuses    = qa('status');
 
   // explicit-ID selection support (timesheet_ids)
-  const idInExpr = q('id');            // expect 'in.(uuid1,uuid2,...)' from FE
-  const idsRaw   = q('ids');           // optional friendlier "uuid1,uuid2,..."
-  let idFilterExpr = null;
-  if (idInExpr && /^in\.\(.+\)$/.test(idInExpr)) {
-    idFilterExpr = idInExpr;
+  const idInExpr = q('id');  // expect 'in.(uuid1,uuid2,...)'
+  const idsRaw   = q('ids'); // optional 'uuid1,uuid2,...'
+
+  let timesheetIds = [];
+  if (idInExpr && /^in\.(\(.+\))$/.test(idInExpr)) {
+    const inner = idInExpr.replace(/^in\.\(/, '').replace(/\)$/, '');
+    timesheetIds = inner.split(',').map(s => s.trim()).filter(Boolean);
   } else if (idsRaw) {
-    const list = idsRaw.split(',').map(s => s.trim()).filter(Boolean);
-    if (list.length) idFilterExpr = `in.(${list.join(',')})`;
+    timesheetIds = idsRaw.split(',').map(s => s.trim()).filter(Boolean);
   }
+  timesheetIds = Array.from(new Set(timesheetIds.map(String))).filter(Boolean);
 
   const orderBy = (q('order_by') || 'week_ending_date').toLowerCase();
   const orderDir = (q('order_dir') || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
 
-  // Allow both legacy keys (margin/charge/pay) and grid keys (margin_ex_vat, total_*_ex_vat)
-  const orderMap = {
-    week_ending_date:     'timesheet.week_ending_date',
-    margin:               'margin_ex_vat',
-    margin_ex_vat:        'margin_ex_vat',
-    charge:               'total_charge_ex_vat',
-    total_charge_ex_vat:  'total_charge_ex_vat',
-    pay:                  'total_pay_ex_vat',
-    total_pay_ex_vat:     'total_pay_ex_vat',
+  const parseTriBool = (v) => {
+    if (v === 'true') return true;
+    if (v === 'false') return false;
+    return null;
   };
-  const orderCol = orderMap[orderBy] || orderMap.week_ending_date;
 
-  // Base select – include processing_status + basis so FE can see NHSP / adjustment etc.
-  // UPDATED: include sheet_scope, submission_mode, qr_status from timesheets for weekly/QR awareness.
-  let url =
-    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-    `?select=` +
-    [
-      'timesheet_id',
-      'candidate_id',
-      'client_id',
-      'pay_method',
-      'processing_status',
-      'basis',
-      'total_charge_ex_vat',
-      'total_pay_ex_vat',
-      'margin_ex_vat',
-      'paid_at_utc',
-      'locked_by_invoice_id',
-      'pay_on_hold',
-      'created_at',
-      'timesheet:timesheets(week_ending_date,status,booking_id,occupant_key_norm,hospital_norm,sheet_scope,submission_mode,qr_status)',
-      'client:clients(name)'
-    ].join(',') +
-    `&is_current=eq.true`;
+  const paidBool = parseTriBool(paid);
+  const invoicedBool = parseTriBool(invoiced);
 
-  // Existing filters
-  if (weFrom)      url += `&timesheet.week_ending_date=gte.${enc(weFrom)}`;
-  if (weTo)        url += `&timesheet.week_ending_date=lte.${enc(weTo)}`;
-  if (clientId)    url += `&client_id=eq.${enc(clientId)}`;
-  if (candidateId) url += `&candidate_id=eq.${enc(candidateId)}`;
-  if (payMethod)   url += `&pay_method=eq.${enc(payMethod)}`;
-  if (!includeOnHold) url += `&pay_on_hold=eq.false`;
-  if (paid === 'true')  url += `&paid_at_utc=not.is.null`;
-  if (paid === 'false') url += `&paid_at_utc=is.null`;
-  if (invoiced === 'true')  url += `&locked_by_invoice_id=not.is.null`;
-  if (invoiced === 'false') url += `&locked_by_invoice_id=is.null`;
+  const statusList = Array.isArray(statuses)
+    ? statuses.map(s => String(s).toUpperCase().replace(/[(),]/g, '')).filter(Boolean)
+    : [];
 
-  // Extra filters aligned with FE buildSearchQS()
-  if (bookingId)    url += `&timesheet.booking_id=eq.${enc(bookingId)}`;
-  if (occKey)       url += `&timesheet.occupant_key_norm=eq.${enc(occKey)}`;
-  if (hospital)     url += `&timesheet.hospital_norm=eq.${enc(hospital)}`;
-  if (workedFrom)   url += `&worked_start_iso=gte.${enc(workedFrom)}`;
-  if (workedTo)     url += `&worked_end_iso=lte.${enc(workedTo)}`;
-  if (createdFrom)  url += `&created_at=gte.${enc(createdFrom)}`;
-  if (createdTo)    url += `&created_at=lte.${enc(createdTo)}`;
-  if (Array.isArray(statuses) && statuses.length) {
-    const inList = statuses
-      .map(s => String(s).toUpperCase().replace(/[(),]/g,''))
-      .filter(Boolean)
-      .join(',');
-    if (inList) url += `&timesheet.status=in.(${inList})`;
-  }
+  const offset = (page - 1) * pageSize;
 
-  // NEW: sheet_scope / qr_status filters for weekly / QR
-  if (sheetScope) url += `&timesheet.sheet_scope=eq.${enc(sheetScope)}`;
-  if (qrStatus)   url += `&timesheet.qr_status=eq.${enc(qrStatus)}`;
-
-  // explicit-ID selection applied to timesheet_id
-  if (idFilterExpr) url += `&timesheet_id=${enc(idFilterExpr)}`;
-
-  url += `&order=${enc(orderCol)}.${orderDir}&limit=${pageSize}&offset=${(page-1)*pageSize}`;
-
+  // ✅ single RPC call (segment-aware invoiced logic lives in SQL)
   let rows = [];
   try {
-    ({ rows } = await sbFetch(env, url));
+    const r = await sbRpc(env, 'tsfin_search_timesheets_v2', {
+      p_week_ending_from: weFrom || null,
+      p_week_ending_to: weTo || null,
+      p_client_id: clientId || null,
+      p_candidate_id: candidateId || null,
+      p_pay_method: payMethod || null,
+      p_include_on_hold: !!includeOnHold,
+      p_paid: (paidBool === null ? null : !!paidBool),
+      p_invoiced: (invoicedBool === null ? null : !!invoicedBool),
+
+      p_sheet_scope: sheetScope || null,
+      p_qr_status: qrStatus || null,
+
+      p_booking_id: bookingId || null,
+      p_occupant_key_norm: occKey || null,
+      p_hospital_norm: hospital || null,
+      p_worked_from: workedFrom || null,
+      p_worked_to: workedTo || null,
+      p_created_from: createdFrom || null,
+      p_created_to: createdTo || null,
+      p_statuses: statusList.length ? statusList : null,
+      p_timesheet_ids: timesheetIds.length ? timesheetIds : null,
+
+      p_order_by: orderBy || 'week_ending_date',
+      p_order_dir: orderDir || 'desc',
+      p_limit: pageSize,
+      p_offset: offset
+    });
+    rows = Array.isArray(r) ? r : (r ? [r] : []);
   } catch (err) {
     return withCORS(env, req, ok({
       error: String(err?.message || err),
@@ -19931,8 +20244,13 @@ async function handleTimesheetMarkPaid(env, req, timesheetId) {
     }));
   }
 
+  const invoicedFlag = (r) => {
+    if (r && r.invoiced_any === true) return true;
+    return !!(r && r.locked_by_invoice_id);
+  };
+
   // Local rounder reused in CSV/print
-  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+  const round2Local = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
   if (format === 'csv') {
     const header = [
@@ -19948,7 +20266,9 @@ async function handleTimesheetMarkPaid(env, req, timesheetId) {
       'ProcessingStatus',
       'Basis'
     ];
+
     const out = [csvJoin(header)];
+
     for (const r of rows || []) {
       out.push(csvJoin([
         r?.timesheet?.week_ending_date || '',
@@ -19956,14 +20276,15 @@ async function handleTimesheetMarkPaid(env, req, timesheetId) {
         (r.pay_method || '').toUpperCase(),
         r.pay_on_hold ? 'Y' : 'N',
         r.paid_at_utc ? 'Y' : 'N',
-        r.locked_by_invoice_id ? 'Y' : 'N',
-        round2(r.total_pay_ex_vat || 0).toFixed(2),
-        round2(r.total_charge_ex_vat || 0).toFixed(2),
-        round2(r.margin_ex_vat || 0).toFixed(2),
+        invoicedFlag(r) ? 'Y' : 'N',
+        round2Local(r.total_pay_ex_vat || 0).toFixed(2),
+        round2Local(r.total_charge_ex_vat || 0).toFixed(2),
+        round2Local(r.margin_ex_vat || 0).toFixed(2),
         (r.processing_status || '').toUpperCase(),
         (r.basis || '').toUpperCase()
       ]));
     }
+
     return withCORS(env, req, ok({
       csv: out.join('\n'),
       count: rows?.length || 0,
@@ -19980,10 +20301,10 @@ async function handleTimesheetMarkPaid(env, req, timesheetId) {
         <td>${(r.pay_method || '').toUpperCase()}</td>
         <td>${r.pay_on_hold ? 'Y' : 'N'}</td>
         <td>${r.paid_at_utc ? 'Y' : 'N'}</td>
-        <td>${r.locked_by_invoice_id ? 'Y' : 'N'}</td>
-        <td style="text-align:right">${round2(r.total_pay_ex_vat || 0).toFixed(2)}</td>
-        <td style="text-align:right">${round2(r.total_charge_ex_vat || 0).toFixed(2)}</td>
-        <td style="text-align:right">${round2(r.margin_ex_vat || 0).toFixed(2)}</td>
+        <td>${invoicedFlag(r) ? 'Y' : 'N'}</td>
+        <td style="text-align:right">${round2Local(r.total_pay_ex_vat || 0).toFixed(2)}</td>
+        <td style="text-align:right">${round2Local(r.total_charge_ex_vat || 0).toFixed(2)}</td>
+        <td style="text-align:right">${round2Local(r.margin_ex_vat || 0).toFixed(2)}</td>
         <td>${(r.processing_status || '').toUpperCase()}</td>
         <td>${(r.basis || '').toUpperCase()}</td>
       </tr>`).join('');
@@ -19992,12 +20313,14 @@ async function handleTimesheetMarkPaid(env, req, timesheetId) {
       <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif">
         <h3>Timesheets — Search Results</h3>
         <table width="100%" cellspacing="0" cellpadding="6" style="border-collapse:collapse">
-          <thead><tr style="background:#f5f5f5">
-            <th>Week Ending</th><th>Client</th><th>Pay Method</th>
-            <th>On Hold</th><th>Paid</th><th>Invoiced</th>
-            <th>Pay ex VAT</th><th>Charge ex VAT</th><th>Margin ex VAT</th>
-            <th>Status</th><th>Basis</th>
-          </tr></thead>
+          <thead>
+            <tr style="background:#f5f5f5">
+              <th>Week Ending</th><th>Client</th><th>Pay Method</th>
+              <th>On Hold</th><th>Paid</th><th>Invoiced</th>
+              <th>Pay ex VAT</th><th>Charge ex VAT</th><th>Margin ex VAT</th>
+              <th>Status</th><th>Basis</th>
+            </tr>
+          </thead>
           <tbody>${rowsHtml}</tbody>
         </table>
       </div>`;
@@ -21268,7 +21591,6 @@ async function parseHealthRosterWorkbookIntoHrRows(
     header_columns
   };
 }
-
 async function buildNhspWeeklySnapshot(
   env,
   ts,
@@ -21308,8 +21630,95 @@ async function buildNhspWeeklySnapshot(
   const candidate_id = contract.candidate_id || null;
   const client_id    = contract.client_id   || null;
 
+  // ---- Policy helper ----
+  // If policy_override is provided, we do not need getPolicyCached at all.
+  if (!hasPolicyOverride && typeof getPolicyCached !== 'function') {
+    throw new Error('buildNhspWeeklySnapshot: getPolicyCached must be provided (or pass options.policy_override)');
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // ✅ Stable segment identity helpers (NHSP weekly)
+  //
+  // Fixes delayed segment corruption by:
+  // - generating deterministic segment_id from immutable shift attributes (not sh.id)
+  // - preserving per-segment controls by mapping old→new using the same fingerprint
+  //
+  // NOTE: We intentionally do NOT include ref_num in identity (it may be amended later).
+  // ─────────────────────────────────────────────────────────────
+  const _normStr = (v) => (v == null ? '' : String(v).trim());
+  const _normNumInt = (v, d = 0) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : d;
+  };
+
+  // FNV-1a 32-bit hash (deterministic, fast, no async crypto)
+  const _hash32 = (s) => {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 0x01000193);
+    }
+    return (h >>> 0).toString(16).padStart(8, '0');
+  };
+
+  const _stableKeyFromParts = (dateYmd, startUtc, endUtc, breakMins, requestId) => {
+    const d = _normStr(dateYmd);
+    const s = _normStr(startUtc);
+    const e = _normStr(endUtc);
+    const b = _normNumInt(breakMins ?? 0, 0);
+    const r = _normStr(requestId); // optional but stable if present; safe to include
+    // If we have no useful timestamps, return empty => will fall back to legacy segment_id matching only.
+    if (!d && !s && !e) return '';
+    return `d:${d}|s:${s}|e:${e}|b:${b}|r:${r}`;
+  };
+
+  const _stableKeyFromShift = (sh) => {
+    if (!sh || typeof sh !== 'object') return '';
+    const workDate = _normStr(sh.work_date);
+    const startUtc = _normStr(sh.start_utc);
+    const endUtc   = _normStr(sh.end_utc);
+    const breakM   = _normNumInt(sh.break_mins ?? sh.break_minutes ?? 0, 0);
+    const reqId    = _normStr(sh.hr_request_id || sh.request_id || '');
+    return _stableKeyFromParts(workDate, startUtc, endUtc, breakM, reqId);
+  };
+
+  const _stableKeyFromExistingSegment = (s) => {
+    if (!s || typeof s !== 'object') return '';
+    const dateYmd = _normStr(s.date);
+    const startUtc = _normStr(s.start_utc || s.start_iso || '');
+    const endUtc   = _normStr(s.end_utc || s.end_iso || '');
+    const breakM   = _normNumInt(s.break_mins ?? s.break_minutes ?? 0, 0);
+    const reqId    = _normStr(s.request_id || '');
+    return _stableKeyFromParts(dateYmd, startUtc, endUtc, breakM, reqId);
+  };
+
+  const _stableSegId = (tsId, stableKey) => {
+    const k = _normStr(stableKey);
+    if (!k) return `nhsp:${tsId}:unknown`;
+    return `nhsp:${tsId}:${_hash32(k)}`;
+  };
+
+  // ✅ Policy snapshot: prefer override; else old behaviour (fetch by week-ending/first date)
+  // (Computed here so it is available for ERNI margin without any TDZ/ordering issues.)
+  let policy_snapshot_json = {};
+  if (hasPolicyOverride) {
+    policy_snapshot_json = policy_override;
+  } else {
+    try {
+      const we = (ts && ts.week_ending_date)
+        ? String(ts.week_ending_date)
+        : (shifts?.[0]?.work_date ? String(shifts[0].work_date) : null);
+      policy_snapshot_json = (we && client_id) ? (await getPolicyCached(client_id, we)) : {};
+      if (!policy_snapshot_json || typeof policy_snapshot_json !== 'object') policy_snapshot_json = {};
+    } catch {
+      policy_snapshot_json = {};
+    }
+  }
+
   // ---- Preserved fields: derive from current TSFIN evidence passed in (no DB fetch) ----
-  const preservedBySegmentId = new Map();
+  // ✅ Preserve by stable fingerprint (preferred) and by legacy segment_id (compat).
+  const preservedByKey = new Map();
+  const preservedByLegacyId = new Map();
   try {
     const ib = curFin?.invoice_breakdown_json || null;
     const mode = String(ib?.mode || '').toUpperCase();
@@ -21317,24 +21726,25 @@ async function buildNhspWeeklySnapshot(
     if (mode === 'SEGMENTS' && segs) {
       for (const s of segs) {
         const segment_id = s?.segment_id ? String(s.segment_id) : null;
-        if (!segment_id) continue;
-        preservedBySegmentId.set(segment_id, {
+
+        const meta = {
           exclude_from_pay:
             (typeof s.exclude_from_pay === 'boolean') ? s.exclude_from_pay : undefined,
           invoice_target_week_start:
             (s.invoice_target_week_start != null) ? String(s.invoice_target_week_start) : undefined,
           invoice_locked_invoice_id:
             (s.invoice_locked_invoice_id != null) ? String(s.invoice_locked_invoice_id) : undefined
-        });
+        };
+
+        // preserve by legacy id if present
+        if (segment_id) preservedByLegacyId.set(segment_id, meta);
+
+        // preserve by stable key if we can compute one from the stored segment fields
+        const key = _stableKeyFromExistingSegment(s);
+        if (key) preservedByKey.set(key, meta);
       }
     }
   } catch {}
-
-  // ---- Policy helper ----
-  // If policy_override is provided, we do not need getPolicyCached at all.
-  if (!hasPolicyOverride && typeof getPolicyCached !== 'function') {
-    throw new Error('buildNhspWeeklySnapshot: getPolicyCached must be provided (or pass options.policy_override)');
-  }
 
   const segments = [];
   let totalPayEx = 0, totalChgEx = 0;
@@ -21390,8 +21800,18 @@ async function buildNhspWeeklySnapshot(
     totalPayEx += payEx;
     totalChgEx += chgEx;
 
-    const segment_id = `nhsp:${sh.id}`;
-    const preserved  = preservedBySegmentId.get(segment_id) || null;
+    // ✅ Stable segment id (not index-based, not sh.id-based)
+    const stableKey = _stableKeyFromShift(sh);
+    const segment_id = _stableSegId(ts.timesheet_id, stableKey);
+
+    // Legacy id (compat): old snapshots used nhsp:<sh.id>
+    const legacy_segment_id = sh?.id != null ? `nhsp:${sh.id}` : null;
+
+    const preserved =
+      (stableKey && preservedByKey.get(stableKey)) ||
+      (legacy_segment_id && preservedByLegacyId.get(legacy_segment_id)) ||
+      preservedByLegacyId.get(segment_id) ||
+      null;
 
     const exclude_from_pay =
       (preserved && typeof preserved.exclude_from_pay === 'boolean') ? preserved.exclude_from_pay : false;
@@ -21433,34 +21853,33 @@ async function buildNhspWeeklySnapshot(
   if (!segments.length) return { ok: false, reason: 'NO_VALID_SEGMENTS' };
 
   totalPayEx = round2(totalPayEx);
-totalChgEx = round2(totalChgEx);
+  totalChgEx = round2(totalChgEx);
 
-// ✅ ERNI-aware margin (policy comes from SQL context via policy_override / policy_snapshot_json)
-const _polForMargin = (hasPolicyOverride ? policy_override : policy_snapshot_json) || {};
-const _applyErniTo  = String(_polForMargin?.apply_erni_to || 'PAYE_ONLY').toUpperCase();
-const _erniPctRaw   = Number(_polForMargin?.erni_pct ?? 0);
+  // ✅ ERNI-aware margin (policy comes from SQL context via policy_override / policy_snapshot_json)
+  const _polForMargin = (hasPolicyOverride ? policy_override : policy_snapshot_json) || {};
+  const _applyErniTo  = String(_polForMargin?.apply_erni_to || 'PAYE_ONLY').toUpperCase();
+  const _erniPctRaw   = Number(_polForMargin?.erni_pct ?? 0);
 
-let _erniMult = 1;
-if (Number.isFinite(_erniPctRaw) && _erniPctRaw > 0) {
-  // supports storing 15 or 0.15
-  const p = _erniPctRaw > 1 ? (_erniPctRaw / 100) : _erniPctRaw;
-  _erniMult = 1 + p;
-}
+  let _erniMult = 1;
+  if (Number.isFinite(_erniPctRaw) && _erniPctRaw > 0) {
+    // supports storing 15 or 0.15
+    const p = _erniPctRaw > 1 ? (_erniPctRaw / 100) : _erniPctRaw;
+    _erniMult = 1 + p;
+  }
 
-const _payMethodU = String(method || '').toUpperCase();
-const _erniApplies =
-  (_applyErniTo === 'ALL') ||
-  (_applyErniTo === 'PAYE_ONLY' && _payMethodU === 'PAYE');
+  const _payMethodU = String(method || '').toUpperCase();
+  const _erniApplies =
+    (_applyErniTo === 'ALL') ||
+    (_applyErniTo === 'PAYE_ONLY' && _payMethodU === 'PAYE');
 
-const _payCostEx = round2(_erniApplies ? (totalPayEx * _erniMult) : totalPayEx);
-const marginEx = round2(totalChgEx - _payCostEx);
+  const _payCostEx = round2(_erniApplies ? (totalPayEx * _erniMult) : totalPayEx);
+  const marginEx = round2(totalChgEx - _payCostEx);
 
-const invoice_breakdown_json = {
-  mode: 'SEGMENTS',
-  segments,
-  totals: { total_pay_ex_vat: totalPayEx, total_charge_ex_vat: totalChgEx, margin_ex_vat: marginEx }
-};
-
+  const invoice_breakdown_json = {
+    mode: 'SEGMENTS',
+    segments,
+    totals: { total_pay_ex_vat: totalPayEx, total_charge_ex_vat: totalChgEx, margin_ex_vat: marginEx }
+  };
 
   const hours_day   = round2(sumDay);
   const hours_night = round2(sumNight);
@@ -21468,22 +21887,6 @@ const invoice_breakdown_json = {
   const hours_sun   = round2(sumSun);
   const hours_bh    = round2(sumBh);
   const total_hours = round2(hours_day + hours_night + hours_sat + hours_sun + hours_bh);
-
-  // ✅ Policy snapshot: prefer override; else old behaviour (fetch by week-ending/first date)
-  let policy_snapshot_json = {};
-  if (hasPolicyOverride) {
-    policy_snapshot_json = policy_override;
-  } else {
-    try {
-      const we = (ts && ts.week_ending_date)
-        ? String(ts.week_ending_date)
-        : (shifts?.[0]?.work_date ? String(shifts[0].work_date) : null);
-      policy_snapshot_json = (we && client_id) ? (await getPolicyCached(client_id, we)) : {};
-      if (!policy_snapshot_json || typeof policy_snapshot_json !== 'object') policy_snapshot_json = {};
-    } catch {
-      policy_snapshot_json = {};
-    }
-  }
 
   const pay_wtr_rate_pct_snapshot =
     (String(method || '').toUpperCase() === 'PAYE')
@@ -21545,9 +21948,8 @@ const invoice_breakdown_json = {
 
     total_hours,
     total_pay_ex_vat: totalPayEx,
-total_charge_ex_vat: totalChgEx,
-margin_ex_vat: marginEx, // now ERNI-aware for PAYE
-
+    total_charge_ex_vat: totalChgEx,
+    margin_ex_vat: marginEx, // now ERNI-aware for PAYE
 
     pay_wtr_rate_pct_snapshot,
 
@@ -26577,7 +26979,6 @@ async function applyWeeklyHoursCorrections(env, {
     return withCORS(env, req, serverError(`NHSP confirm failed: ${e?.message || e}`));
   }
 }
-
 async function handleTimesheetsSummary(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -26593,7 +26994,11 @@ async function handleTimesheetsSummary(env, req) {
 
   const clientId    = q('client_id');
   const candidateId = q('candidate_id');
-  const stage       = q('summary_stage');
+
+  // ✅ Canonical stage filter token (matches v_timesheets_summary.summary_stage and FE dropdown)
+  // Expected values from FE: ALL | UNPROCESSED | READY_FOR_INVOICE | PROCESSED | INVOICED
+  const stage = q('summary_stage');
+  const stageUp = stage ? String(stage).toUpperCase() : null;
 
   const routeTypeRaw = q('route_type');
   const routeType    = routeTypeRaw ? routeTypeRaw.toUpperCase() : null;
@@ -26679,23 +27084,9 @@ async function handleTimesheetsSummary(env, req) {
   if (clientId)    api += `&client_id=eq.${enc(clientId)}`;
   if (candidateId) api += `&candidate_id=eq.${enc(candidateId)}`;
 
-  // ✅ FIX: interpret the Tools "stage" dropdown as a UI stage alias, not a literal summary_stage equality.
-  const stageUp = stage ? String(stage).toUpperCase() : null;
+  // ✅ Canonical stage filtering (NO legacy authorised/null logic)
   if (stageUp && stageUp !== 'ALL') {
-    if (stageUp === 'UNPROCESSED') {
-      // planned stubs (no real timesheet yet)
-      api += `&timesheet_id=is.null`;
-    } else if (stageUp === 'PROCESSED') {
-      // real timesheets exist BUT not yet authorised
-      api += `&timesheet_id=is.not_null`;
-      api += `&authorised_at_server=is.null`;
-    } else if (stageUp === 'AUTHORISED') {
-      // authorised timesheets only
-      api += `&authorised_at_server=is.not_null`;
-    } else {
-      // fallback: genuine summary_stage match (if you pass other values)
-      api += `&summary_stage=eq.${enc(stageUp)}`;
-    }
+    api += `&summary_stage=eq.${enc(stageUp)}`;
   }
 
   // Route handling (aggregated)
@@ -26765,7 +27156,10 @@ async function handleTimesheetsSummary(env, req) {
       const filters = {
         client_id: clientId || null,
         candidate_id: candidateId || null,
-        summary_stage: stageUp || null, // keep raw stage token for totals parity if your RPC uses it
+
+        // ✅ Canonical: only pass summary_stage when it’s a real filter
+        summary_stage: (stageUp && stageUp !== 'ALL') ? stageUp : null,
+
         route_type: routeType || null,
         sheet_scope: sheetScope || null,
         qr_status: qrStatus || null,
@@ -29288,7 +29682,7 @@ async function classifyWeeklyGroup(env, group, context, sourceSystem) {
     return withCORS(env, req, serverError(`Failed to summarise NHSP import: ${e?.message || e}`));
   }
 }
- async function handleTimesheetCreateManualNhspShift(env, req) {
+async function handleTimesheetCreateManualNhspShift(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -29555,7 +29949,8 @@ async function classifyWeeklyGroup(env, group, context, sourceSystem) {
 
     // 8) Optionally enqueue TSFIN recompute (worker will handle basis, hours, etc.)
     try {
-      await sbRpc(env, 'enqueue_ts_financials', { timesheet_id: ts.timesheet_id, reason: 'MANUAL_NHSP_SHIFT_ADDED' });
+      // ✅ FIX: enqueue_ts_financials signature uses (_timesheet_id, _reason)
+      await sbRpc(env, 'enqueue_ts_financials', { _timesheet_id: ts.timesheet_id, _reason: 'MANUAL_NHSP_SHIFT_ADDED' });
     } catch {
       // best-effort; triggers may already handle it
     }
@@ -32383,189 +32778,6 @@ async function handleSearchInvoices(env, req) {
   return withCORS(env, req, ok({ rows, page, page_size: pageSize, count: rows?.length || 0 }));
 }
 
-
-async function handleInvoiceRemoveTimesheetsTsfin(env, req, invoiceId) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  const enc = encodeURIComponent;
-
-  let body = {};
-  try { body = await parseJSONBody(req); } catch {}
-  const tsIdsRaw = Array.isArray(body?.timesheet_ids) ? body.timesheet_ids : null;
-
-  if (!tsIdsRaw || tsIdsRaw.length === 0) {
-    return withCORS(env, req, badRequest('timesheet_ids[] is required'));
-  }
-
-  const tsIds = Array.from(new Set(tsIdsRaw.map(String).map(s => s.trim()).filter(Boolean)));
-  if (!tsIds.length) return withCORS(env, req, badRequest('No valid timesheet_ids'));
-
-  try {
-    // 1) Load invoice guards (unissued + unpaid + not credit note)
-    const { rows: invRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/invoices` +
-        `?id=eq.${enc(invoiceId)}` +
-        `&select=id,type,status,paid_at_utc,invoice_pdf_r2_key` +
-        `&limit=1`,
-      false
-    );
-
-    const inv = invRows?.[0] || null;
-    if (!inv?.id) return withCORS(env, req, notFound('Invoice not found'));
-
-    const invType = String(inv.type || '').toUpperCase();
-    if (invType === 'CREDIT_NOTE') {
-      return withCORS(env, req, badRequest('Cannot remove timesheets from a CREDIT_NOTE'));
-    }
-
-    const invStatus = String(inv.status || '').toUpperCase();
-    if (!(invStatus === 'DRAFT' || invStatus === 'ON_HOLD')) {
-      return withCORS(env, req, badRequest('Invoice must be unissued (DRAFT/ON_HOLD). Unissue first if needed.'));
-    }
-
-    if (inv.paid_at_utc) {
-      return withCORS(env, req, badRequest('Invoice is PAID and cannot be modified.'));
-    }
-
-    // 2) Delete invoice_lines for these timesheets
-    const inList = tsIds.map(enc).join(',');
-    const delLines = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/invoice_lines` +
-        `?invoice_id=eq.${enc(invoiceId)}` +
-        `&timesheet_id=in.(${inList})`,
-      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
-    );
-    if (!delLines.ok) {
-      const t = await delLines.text();
-      return withCORS(env, req, serverError(`Failed to delete invoice lines: ${t}`));
-    }
-    try { await delLines.arrayBuffer(); } catch {}
-
-    // 3) Recompute invoice totals from remaining lines
-    const { rows: rem } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/invoice_lines` +
-        `?invoice_id=eq.${enc(invoiceId)}` +
-        `&select=total_charge_ex_vat,vat_amount,total_inc_vat`,
-      false
-    );
-
-    let sumEx = 0, sumVat = 0, sumInc = 0;
-    for (const r of (rem || [])) {
-      sumEx  += Number(r?.total_charge_ex_vat || 0);
-      sumVat += Number(r?.vat_amount || 0);
-      sumInc += Number(r?.total_inc_vat || 0);
-    }
-
-    const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
-
-    // 4) Invalidate invoice PDF + update totals
-    const updInv = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${enc(invoiceId)}`,
-      {
-        method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-        body: JSON.stringify({
-          subtotal_ex_vat: round2(sumEx),
-          vat_amount: round2(sumVat),
-          total_inc_vat: round2(sumInc),
-          invoice_pdf_r2_key: null,          // ✅ invalidate pdf bundle
-          updated_at: nowIso()
-        })
-      }
-    );
-    if (!updInv.ok) {
-      const t = await updInv.text();
-      return withCORS(env, req, serverError(`Failed to update invoice totals: ${t}`));
-    }
-    try { await updInv.arrayBuffer(); } catch {}
-
-    // 5) Unlock TSFIN + reset to PRE-AUTH state
-    //    (do NOT touch paid_at_utc; keep pay history intact)
-    const patchFin = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-        `?timesheet_id=in.(${inList})` +
-        `&is_current=eq.true` +
-        `&locked_by_invoice_id=eq.${enc(invoiceId)}`,
-      {
-        method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-        body: JSON.stringify({
-          locked_by_invoice_id: null,
-          locked_at_utc: null,
-
-          // ✅ return to pre-authorised state
-          processing_status: 'PENDING_AUTH',
-          authorised_at_utc: null,
-          authorised_by_user_id: null,
-
-          updated_at: nowIso()
-        })
-      }
-    );
-    if (!patchFin.ok) {
-      const t = await patchFin.text();
-      return withCORS(env, req, serverError(`Failed to unlock/reset TSFIN: ${t}`));
-    }
-    try { await patchFin.arrayBuffer(); } catch {}
-
-    // 6) Clear timesheets.authorised_at_server (pre-authorised)
-    const patchTs = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=in.(${inList})` +
-        `&is_current=eq.true`,
-      {
-        method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-        body: JSON.stringify({ authorised_at_server: null, updated_at: nowIso() })
-      }
-    );
-    if (!patchTs.ok) {
-      const t = await patchTs.text();
-      return withCORS(env, req, serverError(`Failed to clear authorised_at_server: ${t}`));
-    }
-    try { await patchTs.arrayBuffer(); } catch {}
-
-    // 7) Revert weekly contract weeks from INVOICED -> SUBMITTED (pre-auth state)
-    //    (safe even if some are daily — those won't have contract_weeks rows)
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/contract_weeks?timesheet_id=in.(${inList})`,
-      {
-        method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-        body: JSON.stringify({ status: 'SUBMITTED', updated_at: nowIso() })
-      }
-    ).catch(() => {});
-
-    // 8) Audit
-    try {
-      await writeAudit(
-        env,
-        user,
-        'INVOICE_TIMESHEETS_REMOVED',
-        {
-          invoice_id: invoiceId,
-          removed_timesheet_ids: tsIds,
-          invoice_totals_after: { subtotal_ex_vat: round2(sumEx), vat_amount: round2(sumVat), total_inc_vat: round2(sumInc) },
-          returned_to: 'PENDING_AUTH'
-        },
-        { entity: 'invoice', subject_id: invoiceId, req }
-      );
-    } catch {}
-
-    return withCORS(env, req, ok({
-      ok: true,
-      invoice_id: invoiceId,
-      removed_timesheet_ids: tsIds,
-      invoice_totals_after: { subtotal_ex_vat: round2(sumEx), vat_amount: round2(sumVat), total_inc_vat: round2(sumInc) },
-      returned_to: 'PENDING_AUTH'
-    }));
-  } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e)));
-  }
-}
 
 
 
@@ -36572,7 +36784,6 @@ async function handleListClients(env, req) {
     sample_id: rows?.[0]?.id || null
   }));
 }
-
 async function handleUpdateClient(env, req, clientId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -36617,6 +36828,18 @@ async function handleUpdateClient(env, req, clientId) {
     return s ? s : null;
   };
 
+  // ✅ NEW: canonical invoice consolidation mode (never write junk)
+  // Allowed: NONE | BY_WEEK | ANY_WEEK (UI may send ALL → ANY_WEEK)
+  const normInvoiceConsol = (v) => {
+    if (v == null) return null;
+    const s = String(v).trim().toUpperCase();
+    if (!s) return null;
+    if (s === 'ALL') return 'ANY_WEEK';
+    if (s === 'ANY') return 'ANY_WEEK';
+    if (s === 'NONE' || s === 'BY_WEEK' || s === 'ANY_WEEK') return s;
+    return '__INVALID__';
+  };
+
   try {
     const { rows: beforeClientRows } = await sbFetch(
       env,
@@ -36648,6 +36871,10 @@ async function handleUpdateClient(env, req, clientId) {
           // manual adjustment email routing
           'send_manual_invoices_to_different_email',
           'manual_invoices_alt_email_address',
+
+          // ✅ NEW: invoice settings
+          'invoice_consolidation_mode',
+          'reference_number_required_to_issue_invoice',
 
           'created_at','updated_at'
         ].join(',') +
@@ -36713,6 +36940,21 @@ async function handleUpdateClient(env, req, clientId) {
         normEmail(csInput.manual_invoices_alt_email_address ?? data.manual_invoices_alt_email_address);
     }
 
+    // ✅ NEW: accept + validate invoice_consolidation_mode (reject invalid; never write junk)
+    if ('invoice_consolidation_mode' in data || 'invoice_consolidation_mode' in csInput) {
+      const v = normInvoiceConsol(csInput.invoice_consolidation_mode ?? data.invoice_consolidation_mode);
+      if (v === '__INVALID__') {
+        return withCORS(env, req, badRequest('invoice_consolidation_mode must be one of NONE, BY_WEEK, ANY_WEEK (or ALL).'));
+      }
+      if (v != null) csInput.invoice_consolidation_mode = v;
+    }
+
+    // ✅ NEW: accept reference_number_required_to_issue_invoice boolean
+    if ('reference_number_required_to_issue_invoice' in data || 'reference_number_required_to_issue_invoice' in csInput) {
+      csInput.reference_number_required_to_issue_invoice =
+        asBool(csInput.reference_number_required_to_issue_invoice ?? data.reference_number_required_to_issue_invoice);
+    }
+
     for (const k of TIME_KEYS) {
       if ((k in data) || (k in csInput)) {
         csInput[k] = normTime(csInput[k] ?? data[k]);
@@ -36756,6 +36998,10 @@ async function handleUpdateClient(env, req, clientId) {
       send_manual_invoices_to_different_email,
       manual_invoices_alt_email_address,
 
+      // ✅ NEW: ensure these never fall into clients table patch
+      invoice_consolidation_mode,
+      reference_number_required_to_issue_invoice,
+
       ...clientPatchRaw
     } = data;
 
@@ -36798,6 +37044,18 @@ async function handleUpdateClient(env, req, clientId) {
 
       // Canonicalise server-side
       const canon = canonicalizeClientSettingsServer(beforeCs, csInput);
+
+      // ✅ Ensure new fields survive canonicaliser; never write junk
+      if (Object.prototype.hasOwnProperty.call(csInput, 'invoice_consolidation_mode')) {
+        const v = normInvoiceConsol(csInput.invoice_consolidation_mode);
+        if (v === '__INVALID__') {
+          return withCORS(env, req, badRequest('invoice_consolidation_mode must be one of NONE, BY_WEEK, ANY_WEEK (or ALL).'));
+        }
+        if (v != null) canon.invoice_consolidation_mode = v;
+      }
+      if (Object.prototype.hasOwnProperty.call(csInput, 'reference_number_required_to_issue_invoice')) {
+        canon.reference_number_required_to_issue_invoice = asBool(csInput.reference_number_required_to_issue_invoice);
+      }
 
       // ✅ VALIDATION: if toggle ON, require email
       if (canon.send_manual_invoices_to_different_email && !canon.manual_invoices_alt_email_address) {
@@ -36945,6 +37203,7 @@ async function handleUpdateClient(env, req, clientId) {
   }
 }
 
+
 async function handleCreateClient(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -36982,6 +37241,18 @@ async function handleCreateClient(env, req) {
     return s ? s : null;
   };
 
+  // ✅ NEW: strict canonical invoice consolidation mode (reject unknown; never write junk)
+  // Allowed: NONE | BY_WEEK | ANY_WEEK (UI may send ALL → ANY_WEEK)
+  const normInvoiceConsol = (v) => {
+    if (v == null) return null;
+    const s = String(v).trim().toUpperCase();
+    if (!s) return null;
+    if (s === 'ALL') return 'ANY_WEEK';
+    if (s === 'ANY') return 'ANY_WEEK';
+    if (s === 'NONE' || s === 'BY_WEEK' || s === 'ANY_WEEK') return s;
+    return '__INVALID__';
+  };
+
   try {
     const {
       cli_ref,
@@ -36995,6 +37266,10 @@ async function handleCreateClient(env, req) {
 
       // NEW: auto-invoice default at client_settings level (can be sent at top level)
       auto_invoice_default,
+
+      // ✅ NEW: invoice settings (can be sent at top level OR inside client_settings)
+      invoice_consolidation_mode,
+      reference_number_required_to_issue_invoice,
 
       // NEW flags (can be sent at top level)
       is_nhsp,
@@ -37031,6 +37306,11 @@ async function handleCreateClient(env, req) {
       ...((clientSettingsInput && typeof clientSettingsInput === 'object') ? clientSettingsInput : {}),
     };
 
+    // ✅ Strip UI helper keys that are not DB columns
+    delete csInput.weekly_mode;
+    delete csInput.hr_weekly_behaviour;
+    delete csInput.__from_ui;
+
     // Existing flags → client_settings
     if ('hr_validation_required' in data)        csInput.hr_validation_required        = !!hr_validation_required;
     if ('ts_reference_required' in data)         csInput.ts_reference_required         = !!ts_reference_required;
@@ -37041,6 +37321,20 @@ async function handleCreateClient(env, req) {
     // NEW: auto-invoice default (accept either top-level or inside client_settings)
     if ('auto_invoice_default' in data || 'auto_invoice_default' in csInput) {
       csInput.auto_invoice_default = asBool(csInput.auto_invoice_default ?? auto_invoice_default);
+    }
+
+    // ✅ NEW: invoice settings (strict)
+    if ('invoice_consolidation_mode' in data || 'invoice_consolidation_mode' in csInput) {
+      const v = normInvoiceConsol(csInput.invoice_consolidation_mode ?? invoice_consolidation_mode);
+      if (v === '__INVALID__') {
+        return withCORS(env, req, badRequest('invoice_consolidation_mode must be one of NONE, BY_WEEK, ANY_WEEK (or ALL).'));
+      }
+      if (v != null) csInput.invoice_consolidation_mode = v;
+    }
+
+    if ('reference_number_required_to_issue_invoice' in data || 'reference_number_required_to_issue_invoice' in csInput) {
+      csInput.reference_number_required_to_issue_invoice =
+        asBool(csInput.reference_number_required_to_issue_invoice ?? reference_number_required_to_issue_invoice);
     }
 
     // NEW flags (default to false/true as per policy)
@@ -37096,6 +37390,10 @@ async function handleCreateClient(env, req) {
       if (!Object.prototype.hasOwnProperty.call(csInput, key)) csInput[key] = val;
     };
 
+    const setDefaultTextIfMissing = (key, val) => {
+      if (!Object.prototype.hasOwnProperty.call(csInput, key)) csInput[key] = val;
+    };
+
     setDefaultBool('is_nhsp', false);
     setDefaultBool('self_bill_no_invoices_sent', false);
     setDefaultBool('daily_calc_of_invoices', false);
@@ -37119,6 +37417,23 @@ async function handleCreateClient(env, req) {
 
     if (!Object.prototype.hasOwnProperty.call(csInput, 'auto_invoice_default')) {
       csInput.auto_invoice_default = false;
+    }
+
+    // ✅ defaults for new invoice settings
+    if (!Object.prototype.hasOwnProperty.call(csInput, 'invoice_consolidation_mode')) {
+      csInput.invoice_consolidation_mode = 'NONE';
+    } else {
+      const v = normInvoiceConsol(csInput.invoice_consolidation_mode);
+      if (v === '__INVALID__') {
+        return withCORS(env, req, badRequest('invoice_consolidation_mode must be one of NONE, BY_WEEK, ANY_WEEK (or ALL).'));
+      }
+      csInput.invoice_consolidation_mode = v || 'NONE';
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(csInput, 'reference_number_required_to_issue_invoice')) {
+      csInput.reference_number_required_to_issue_invoice = false;
+    } else {
+      csInput.reference_number_required_to_issue_invoice = asBool(csInput.reference_number_required_to_issue_invoice);
     }
 
     if (asBool(csInput.self_bill_no_invoices_sent)) {
@@ -37211,8 +37526,6 @@ async function handleCreateClient(env, req) {
 }
 
 
-
-
 // 1) GET /api/clients/:id  (full client + latest client_settings)
 async function handleGetClient(env, req, clientId) {
   const user = await requireUser(env, req, ['admin']);
@@ -37249,6 +37562,10 @@ async function handleGetClient(env, req, clientId) {
           'no_timesheet_required','group_nightsat_sunbh',
           'auto_invoice_default',
           'requires_hr','autoprocess_hr','hr_attach_to_invoice','ts_attach_to_invoice',
+
+          // ✅ NEW: invoicing settings required by UI
+          'invoice_consolidation_mode',
+          'reference_number_required_to_issue_invoice',
 
           // ✅ NEW: manual adjustment email routing
           'send_manual_invoices_to_different_email',
@@ -37595,6 +37912,22 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
 
   const enc = encodeURIComponent;
 
+  const hasAnySegmentInvoiceLock = (tf) => {
+    try {
+      const ib = tf?.invoice_breakdown_json;
+      if (!ib || typeof ib !== 'object') return false;
+      const mode = String(ib?.mode || '').toUpperCase();
+      if (mode !== 'SEGMENTS') return false;
+      const segs = Array.isArray(ib?.segments) ? ib.segments : [];
+      return segs.some(s => {
+        const v = s?.invoice_locked_invoice_id;
+        return v != null && String(v).trim() !== '';
+      });
+    } catch {
+      return false;
+    }
+  };
+
   // ─────────────────────────────────────────────────────────────
   // optimistic concurrency guard (expected current id required)
   // ─────────────────────────────────────────────────────────────
@@ -37703,7 +38036,11 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
   // -------- load current snapshot --------
   const before = await fetchCurrentTsfin(env, currentTimesheetId);
   if (!before) return notFound('TSFIN current row not found');
-  if (before.locked_by_invoice_id) return conflict('Timesheet financials are locked by an invoice');
+
+  // Segment-aware lock: block expense/mileage/PO changes if ANY segment is invoiced
+  if (before.locked_by_invoice_id || hasAnySegmentInvoiceLock(before)) {
+    return conflict('Timesheet financials are locked by an invoice');
+  }
 
   // -------- compute "after" values for evidence enforcement + totals coherency --------
   let afterTravelPay = num0(before.travel_pay_ex_vat);
@@ -37930,7 +38267,6 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     was_stale: !!resolved.was_stale
   });
 }
-
 
 // ============================================================
 // UPDATED: handleTimesheetEvidenceAdd / handleTimesheetEvidenceUpdateKind
@@ -45128,6 +45464,42 @@ async function handleInvoiceBatchGenerateConfirm(env, req) {
     return withCORS(env, req, badRequest('rows[] is required'));
   }
 
+  const enc = encodeURIComponent;
+
+  const chunk = (arr, n) => {
+    const out = [];
+    for (let i = 0; i < (arr || []).length; i += n) out.push(arr.slice(i, i + n));
+    return out;
+  };
+
+  const parseYmd = (s) => {
+    const t = String(s || '').trim();
+    return (/^\d{4}-\d{2}-\d{2}$/.test(t)) ? t : null;
+  };
+
+  const addDaysYmd = (ymd, days) => {
+    const d0 = parseYmd(ymd);
+    if (!d0) return null;
+    const d = new Date(`${d0}T00:00:00Z`);
+    if (Number.isNaN(d.getTime())) return null;
+    d.setUTCDate(d.getUTCDate() + Number(days || 0));
+    const yyyy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const getInvoiceWeekStartFromHeader = (header) => {
+    if (!header || typeof header !== 'object') return null;
+    const meta = (header.meta && typeof header.meta === 'object') ? header.meta : null;
+    const v =
+      (meta && (meta.invoice_week_start || meta.invoiceWeekStart || meta.week_start || meta.weekStart)) ||
+      header.invoice_week_start ||
+      header.invoiceWeekStart ||
+      null;
+    return parseYmd(v);
+  };
+
   // Optional meta to store on the outbox payload
   const meta = {
     source: 'BATCH_UI',
@@ -45155,7 +45527,8 @@ async function handleInvoiceBatchGenerateConfirm(env, req) {
         invoice_ids: [],
         warnings: [],
         jobs: [],
-        generated_rows: []
+        generated_rows: [],
+        results_invoices: []
       }));
     }
 
@@ -45198,6 +45571,144 @@ async function handleInvoiceBatchGenerateConfirm(env, req) {
 
     const uniqueInvoices = Array.from(new Set(allInvoices.map(String))).filter(Boolean);
 
+    // ✅ 3.3: Enrich with display-ready invoice fields (one bulk fetch + optional 2 more bulk fetches)
+    const invoiceDisplayById = new Map();
+    const candidateNamesByInvoiceId = new Map();
+
+    if (uniqueInvoices.length) {
+      // 3.3a) Bulk fetch invoices + client name
+      for (const idChunk of chunk(uniqueInvoices, 200)) {
+        const { rows: invRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/invoices` +
+            `?id=in.(${idChunk.map(enc).join(',')})` +
+            `&select=id,invoice_no,client_id,do_not_send,header_snapshot_json,client:clients(name)`,
+          false
+        );
+
+        for (const r of (invRows || [])) {
+          if (!r?.id) continue;
+          const header = (r.header_snapshot_json && typeof r.header_snapshot_json === 'object') ? r.header_snapshot_json : {};
+          const weekStart = getInvoiceWeekStartFromHeader(header);
+          const weekEnd = weekStart ? addDaysYmd(weekStart, 6) : null;
+
+          invoiceDisplayById.set(String(r.id), {
+            invoice_id: String(r.id),
+            invoice_no: r.invoice_no || null,
+            client_id: r.client_id || null,
+            client_name: r.client?.name || null,
+            do_not_send: (r.do_not_send === true),
+            invoice_week_start: weekStart,
+            week_ending_date: weekEnd,
+            header_snapshot_json: header
+          });
+        }
+      }
+
+      // 3.3b) Bulk fetch invoice_lines (invoice_id + timesheet_id) for candidate derivation
+      const tsIds = new Set();
+      const tsIdsByInvoice = new Map(); // invoice_id -> Set(timesheet_id)
+      for (const idChunk of chunk(uniqueInvoices, 200)) {
+        const { rows: lineRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/invoice_lines` +
+            `?invoice_id=in.(${idChunk.map(enc).join(',')})` +
+            `&select=invoice_id,timesheet_id`,
+          false
+        );
+
+        for (const lr of (lineRows || [])) {
+          const iid = lr?.invoice_id ? String(lr.invoice_id) : '';
+          const tid = lr?.timesheet_id ? String(lr.timesheet_id) : '';
+          if (!iid || !tid) continue;
+          tsIds.add(tid);
+          let set = tsIdsByInvoice.get(iid);
+          if (!set) { set = new Set(); tsIdsByInvoice.set(iid, set); }
+          set.add(tid);
+        }
+      }
+
+      // 3.3c) Bulk fetch candidate_name from v_timesheets_summary_base for those timesheet_ids
+      const candByTs = new Map(); // timesheet_id -> candidate_name
+      const tsIdsArr = Array.from(tsIds);
+      for (const idChunk of chunk(tsIdsArr, 200)) {
+        const { rows: sRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary_base` +
+            `?timesheet_id=in.(${idChunk.map(enc).join(',')})` +
+            `&select=timesheet_id,candidate_name`,
+          false
+        );
+        for (const sr of (sRows || [])) {
+          if (!sr?.timesheet_id) continue;
+          candByTs.set(String(sr.timesheet_id), sr.candidate_name || null);
+        }
+      }
+
+      // Per-invoice candidate_name (single vs Multiple)
+      for (const [iid, set] of tsIdsByInvoice.entries()) {
+        const names = [];
+        for (const tid of set) {
+          const nm = candByTs.get(String(tid));
+          if (nm) names.push(String(nm));
+        }
+        const uniq = Array.from(new Set(names.map(s => s.trim()).filter(Boolean)));
+        const candidate_name = (uniq.length === 0) ? null : (uniq.length === 1 ? uniq[0] : 'Multiple');
+        candidateNamesByInvoiceId.set(iid, { candidate_name, candidate_names: uniq });
+      }
+    }
+
+    // Map invoice_id -> combined job diagnostics
+    const diagByInvoiceId = new Map();
+    for (const j of (jobs || [])) {
+      const invIds = Array.isArray(j?.invoice_ids) ? j.invoice_ids : [];
+      for (const invIdRaw of invIds) {
+        const iid = invIdRaw != null ? String(invIdRaw) : '';
+        if (!iid) continue;
+        const prev = diagByInvoiceId.get(iid) || { ok: true, warnings: [], outbox_ids: [], enqueue_actions: [], client_id: null, invoice_week_start: null };
+        // ok should be false if ANY job for this invoice reports ok=false
+        prev.ok = prev.ok && !!j.ok;
+        // warnings
+        if (Array.isArray(j.warnings)) prev.warnings.push(...j.warnings);
+        else if (j.warnings) prev.warnings.push(j.warnings);
+        // ids/actions
+        if (j.outbox_id) prev.outbox_ids.push(j.outbox_id);
+        if (j.enqueue_action) prev.enqueue_actions.push(j.enqueue_action);
+        if (!prev.client_id && j.client_id) prev.client_id = j.client_id;
+        if (!prev.invoice_week_start && j.invoice_week_start) prev.invoice_week_start = j.invoice_week_start;
+        diagByInvoiceId.set(iid, prev);
+      }
+    }
+    for (const [iid, d] of diagByInvoiceId.entries()) {
+      d.outbox_ids = Array.from(new Set((d.outbox_ids || []).map(String).filter(Boolean)));
+      d.enqueue_actions = Array.from(new Set((d.enqueue_actions || []).map(String).filter(Boolean)));
+      // keep warnings as-is (can include duplicates; UI may want full list)
+    }
+
+    const results_invoices = uniqueInvoices.map((iid) => {
+      const disp = invoiceDisplayById.get(String(iid)) || null;
+      const cand = candidateNamesByInvoiceId.get(String(iid)) || { candidate_name: null, candidate_names: [] };
+      const diag = diagByInvoiceId.get(String(iid)) || { ok: null, warnings: [], outbox_ids: [], enqueue_actions: [], client_id: null, invoice_week_start: null };
+
+      return {
+        invoice_id: String(iid),
+        invoice_no: disp?.invoice_no || null,
+        client_id: disp?.client_id || diag.client_id || null,
+        client_name: disp?.client_name || null,
+        do_not_send: (disp?.do_not_send === true),
+        invoice_week_start: disp?.invoice_week_start || (diag.invoice_week_start ? String(diag.invoice_week_start).slice(0, 10) : null),
+        week_ending_date: disp?.week_ending_date || null,
+
+        candidate_name: cand.candidate_name,
+        candidate_names: cand.candidate_names,
+
+        ok: (diag.ok === true),
+        warnings: diag.warnings || [],
+        outbox_ids: diag.outbox_ids || [],
+        enqueue_actions: diag.enqueue_actions || []
+      };
+    });
+
     return withCORS(env, req, ok({
       allow_early: allowEarly,
       enqueued: outboxIds.length,
@@ -45205,7 +45716,10 @@ async function handleInvoiceBatchGenerateConfirm(env, req) {
       invoice_ids: uniqueInvoices,
       warnings: allWarnings,
       jobs,
-      generated_rows: genRows
+      generated_rows: genRows,
+
+      // ✅ Display-ready rows for the frontend batch results modal
+      results_invoices
     }));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e)));
@@ -45934,7 +46448,6 @@ async function handleInvoiceRender(env, req, invoiceId) {
   }
 }
 
-
 async function handleInvoiceEmail(env, req, invoiceId) {
   const enc = encodeURIComponent;
 
@@ -45942,12 +46455,12 @@ async function handleInvoiceEmail(env, req, invoiceId) {
   if (!user) return withCORS(env, req, unauthorized());
 
   try {
-    // Load invoice basics + header meta (for self-bill guard) + client id + primary invoice email + status
+    // Load invoice basics + header meta (for self-bill guard) + client id + primary invoice email + status + do_not_send
     const { rows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/invoices` +
         `?id=eq.${enc(invoiceId)}` +
-        `&select=id,client_id,invoice_no,status,issued_at_utc,paid_at_utc,header_snapshot_json,client:clients(primary_invoice_email,name)` +
+        `&select=id,client_id,invoice_no,status,issued_at_utc,paid_at_utc,do_not_send,header_snapshot_json,client:clients(primary_invoice_email,name)` +
         `&limit=1`,
       false
     );
@@ -45955,6 +46468,11 @@ async function handleInvoiceEmail(env, req, invoiceId) {
 
     const inv = rows[0];
     const status = String(inv?.status || '').toUpperCase();
+
+    // ✅ Hard-block do_not_send invoices from being emailed
+    if (inv?.do_not_send === true) {
+      return withCORS(env, req, badRequest('This invoice is marked do_not_send and must not be emailed.'));
+    }
 
     // ✅ Require invoice already issued (do NOT issue automatically)
     if (status !== 'ISSUED' || !inv.issued_at_utc) {
@@ -46144,6 +46662,7 @@ async function handleInvoiceEmail(env, req, invoiceId) {
     return withCORS(env, req, serverError('Failed to queue invoice email'));
   }
 }
+
 
 
 async function handleInvoiceDeleteOne(env, req, invoiceId) {
@@ -46598,7 +47117,7 @@ async function handleGetInvoice(env, req, invoiceId) {
   if (!user) return unauthorized();
 
   try {
-    // ✅ Single DB call for full invoice context
+    // ✅ Single RPC call for full invoice context (manifest includes reference_rows + tsfin map + reference sources)
     const man = await sbRpc(env, 'invoice_render_manifest', { p_invoice_id: invoiceId });
     const manRows = Array.isArray(man) ? man : (man?.data || []);
     const manifest = (manRows && manRows.length) ? manRows[0] : man;
@@ -46698,7 +47217,77 @@ async function handleGetInvoice(env, req, invoiceId) {
       // omit diagnostics on failure
     }
 
-    // Optional correspondence
+    // ✅ Pass-through: segment structures + history from manifest (single-source-of-truth support)
+    const segments_on_invoice_by_timesheet =
+      (manifest.segments_on_invoice_by_timesheet && typeof manifest.segments_on_invoice_by_timesheet === 'object')
+        ? manifest.segments_on_invoice_by_timesheet
+        : ((manifest.segments_by_timesheet && typeof manifest.segments_by_timesheet === 'object')
+            ? manifest.segments_by_timesheet
+            : null);
+
+    const history = Array.isArray(manifest.history) ? manifest.history : [];
+
+    // ✅ Additional pass-throughs for frontend convenience (already present in manifest, but exposed top-level)
+    const tsfin_id_by_timesheet_id =
+      (manifest.tsfin_id_by_timesheet_id && typeof manifest.tsfin_id_by_timesheet_id === 'object')
+        ? manifest.tsfin_id_by_timesheet_id
+        : {};
+
+    const reference_rows = Array.isArray(manifest.reference_rows) ? manifest.reference_rows : [];
+
+    // ✅ UPDATED: take reference sources directly from the manifest (RPC now embeds this)
+    // Also: ensure any timesheet_ids mentioned by items/reference_rows have a key in the map.
+    const timesheet_reference_sources_by_id = (() => {
+      const out = Object.create(null);
+
+      try {
+        const src =
+          (manifest.timesheet_reference_sources_by_id && typeof manifest.timesheet_reference_sources_by_id === 'object')
+            ? manifest.timesheet_reference_sources_by_id
+            : null;
+
+        if (src) {
+          for (const [k, v] of Object.entries(src)) {
+            const tid = String(k || '').trim();
+            if (!tid) continue;
+
+            const obj = (v && typeof v === 'object') ? v : {};
+            out[tid] = {
+              reference_number: (obj.reference_number != null) ? obj.reference_number : null,
+              day_references_json: (obj.day_references_json != null) ? obj.day_references_json : null,
+              actual_schedule_json: (obj.actual_schedule_json != null) ? obj.actual_schedule_json : null
+            };
+          }
+        }
+
+        const idSet = new Set();
+
+        for (const it of (items || [])) {
+          const tid = it?.timesheet_id != null ? String(it.timesheet_id).trim() : '';
+          if (tid) idSet.add(tid);
+        }
+
+        for (const rr of (reference_rows || [])) {
+          if (!rr || typeof rr !== 'object') continue;
+          const tid = rr.timesheet_id != null ? String(rr.timesheet_id).trim() : '';
+          if (tid) idSet.add(tid);
+        }
+
+        for (const tid of idSet) {
+          if (!out[tid]) {
+            out[tid] = {
+              reference_number: null,
+              day_references_json: null,
+              actual_schedule_json: null
+            };
+          }
+        }
+      } catch {}
+
+      return out;
+    })();
+
+    // Optional correspondence (legacy query param)
     const includeCorr = new URL(req.url).searchParams.get('include_correspondence');
     if (includeCorr) {
       let correspondence = [];
@@ -46737,6 +47326,8 @@ async function handleGetInvoice(env, req, invoiceId) {
       }
 
       return withCORS(env, req, ok({
+        manifest,
+
         invoice,
         items,
         header_snapshot_json,
@@ -46751,11 +47342,22 @@ async function handleGetInvoice(env, req, invoiceId) {
         hr_source_rows_cache: Array.isArray(manifest.hr_source_rows_cache) ? manifest.hr_source_rows_cache : [],
         tsfin_external_source_rows: Array.isArray(manifest.tsfin_external_source_rows) ? manifest.tsfin_external_source_rows : [],
 
+        segments_on_invoice_by_timesheet,
+        segments_by_timesheet: segments_on_invoice_by_timesheet,
+        history,
+        tsfin_id_by_timesheet_id,
+        reference_rows,
+
+        // ✅ reference sources now come from the RPC (no extra DB reads here)
+        timesheet_reference_sources_by_id,
+
         correspondence
       }));
     }
 
     return withCORS(env, req, ok({
+      manifest,
+
       invoice,
       items,
       header_snapshot_json,
@@ -46769,6 +47371,15 @@ async function handleGetInvoice(env, req, invoiceId) {
 
       hr_source_rows_cache: Array.isArray(manifest.hr_source_rows_cache) ? manifest.hr_source_rows_cache : [],
       tsfin_external_source_rows: Array.isArray(manifest.tsfin_external_source_rows) ? manifest.tsfin_external_source_rows : [],
+
+      segments_on_invoice_by_timesheet,
+      segments_by_timesheet: segments_on_invoice_by_timesheet,
+      history,
+      tsfin_id_by_timesheet_id,
+      reference_rows,
+
+      // ✅ reference sources now come from the RPC (no extra DB reads here)
+      timesheet_reference_sources_by_id
     }));
   } catch {
     return withCORS(env, req, serverError('Failed to fetch invoice'));
@@ -46910,6 +47521,42 @@ async function handleInvoiceBatchIssueConfirm(env, req) {
     return (s === '1' || s === 'true' || s === 'yes' || s === 'y' || s === 'on');
   })();
 
+  const enc = encodeURIComponent;
+
+  const chunk = (arr, n) => {
+    const out = [];
+    for (let i = 0; i < (arr || []).length; i += n) out.push(arr.slice(i, i + n));
+    return out;
+  };
+
+  const parseYmd = (s) => {
+    const t = String(s || '').trim();
+    return (/^\d{4}-\d{2}-\d{2}$/.test(t)) ? t : null;
+  };
+
+  const addDaysYmd = (ymd, days) => {
+    const d0 = parseYmd(ymd);
+    if (!d0) return null;
+    const d = new Date(`${d0}T00:00:00Z`);
+    if (Number.isNaN(d.getTime())) return null;
+    d.setUTCDate(d.getUTCDate() + Number(days || 0));
+    const yyyy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const getInvoiceWeekStartFromHeader = (header) => {
+    if (!header || typeof header !== 'object') return null;
+    const meta = (header.meta && typeof header.meta === 'object') ? header.meta : null;
+    const v =
+      (meta && (meta.invoice_week_start || meta.invoiceWeekStart || meta.week_start || meta.weekStart)) ||
+      header.invoice_week_start ||
+      header.invoiceWeekStart ||
+      null;
+    return parseYmd(v);
+  };
+
   // Normalize/unique ids (strings are fine; PostgREST will cast to uuid)
   const ids = Array.from(new Set(invoiceIds.map(String).filter(Boolean)));
 
@@ -46921,12 +47568,138 @@ async function handleInvoiceBatchIssueConfirm(env, req) {
     });
 
     const out = Array.isArray(res) ? (res[0] ?? res) : (res?.data ?? res);
-    return withCORS(env, req, ok(out));
+
+    // Enrich per-invoice results with display fields (one bulk fetch + optional 2 more bulk fetches)
+    const invoiceDisplayById = new Map();
+    const candidateNamesByInvoiceId = new Map();
+
+    if (ids.length) {
+      // Bulk fetch invoices + client name
+      for (const idChunk of chunk(ids, 200)) {
+        const { rows: invRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/invoices` +
+            `?id=in.(${idChunk.map(enc).join(',')})` +
+            `&select=id,invoice_no,client_id,do_not_send,header_snapshot_json,client:clients(name)`,
+          false
+        );
+
+        for (const r of (invRows || [])) {
+          if (!r?.id) continue;
+          const header = (r.header_snapshot_json && typeof r.header_snapshot_json === 'object') ? r.header_snapshot_json : {};
+          const weekStart = getInvoiceWeekStartFromHeader(header);
+          const weekEnd = weekStart ? addDaysYmd(weekStart, 6) : null;
+
+          invoiceDisplayById.set(String(r.id), {
+            invoice_id: String(r.id),
+            invoice_no: r.invoice_no || null,
+            client_id: r.client_id || null,
+            client_name: r.client?.name || null,
+            do_not_send: (r.do_not_send === true),
+            invoice_week_start: weekStart,
+            week_ending_date: weekEnd,
+            header_snapshot_json: header
+          });
+        }
+      }
+
+      // Bulk fetch invoice_lines (invoice_id + timesheet_id) for candidate derivation
+      const tsIds = new Set();
+      const tsIdsByInvoice = new Map(); // invoice_id -> Set(timesheet_id)
+      for (const idChunk of chunk(ids, 200)) {
+        const { rows: lineRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/invoice_lines` +
+            `?invoice_id=in.(${idChunk.map(enc).join(',')})` +
+            `&select=invoice_id,timesheet_id`,
+          false
+        );
+
+        for (const lr of (lineRows || [])) {
+          const iid = lr?.invoice_id ? String(lr.invoice_id) : '';
+          const tid = lr?.timesheet_id ? String(lr.timesheet_id) : '';
+          if (!iid || !tid) continue;
+          tsIds.add(tid);
+          let set = tsIdsByInvoice.get(iid);
+          if (!set) { set = new Set(); tsIdsByInvoice.set(iid, set); }
+          set.add(tid);
+        }
+      }
+
+      // Bulk fetch candidate_name from v_timesheets_summary_base
+      const candByTs = new Map(); // timesheet_id -> candidate_name
+      const tsIdsArr = Array.from(tsIds);
+      for (const idChunk of chunk(tsIdsArr, 200)) {
+        const { rows: sRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary_base` +
+            `?timesheet_id=in.(${idChunk.map(enc).join(',')})` +
+            `&select=timesheet_id,candidate_name`,
+          false
+        );
+        for (const sr of (sRows || [])) {
+          if (!sr?.timesheet_id) continue;
+          candByTs.set(String(sr.timesheet_id), sr.candidate_name || null);
+        }
+      }
+
+      for (const [iid, set] of tsIdsByInvoice.entries()) {
+        const names = [];
+        for (const tid of set) {
+          const nm = candByTs.get(String(tid));
+          if (nm) names.push(String(nm));
+        }
+        const uniq = Array.from(new Set(names.map(s => s.trim()).filter(Boolean)));
+        const candidate_name = (uniq.length === 0) ? null : (uniq.length === 1 ? uniq[0] : 'Multiple');
+        candidateNamesByInvoiceId.set(iid, { candidate_name, candidate_names: uniq });
+      }
+    }
+
+    const invoice_results = Array.isArray(out?.invoice_results) ? out.invoice_results : [];
+    const invoice_results_enriched = invoice_results.map((r) => {
+      const iid = r?.invoice_id ? String(r.invoice_id) : '';
+      const disp = iid ? (invoiceDisplayById.get(iid) || null) : null;
+      const cand = iid ? (candidateNamesByInvoiceId.get(iid) || { candidate_name: null, candidate_names: [] }) : { candidate_name: null, candidate_names: [] };
+
+      return {
+        ...r,
+        invoice_no: disp?.invoice_no || null,
+        client_id: disp?.client_id || null,
+        client_name: disp?.client_name || null,
+        do_not_send: (disp?.do_not_send === true),
+        invoice_week_start: disp?.invoice_week_start || null,
+        week_ending_date: disp?.week_ending_date || null,
+        candidate_name: cand.candidate_name,
+        candidate_names: cand.candidate_names
+      };
+    });
+
+    // Keep backwards compatibility: preserve original out, but add enriched results + convenience invoice map
+    const invoice_map = {};
+    for (const [iid, disp] of invoiceDisplayById.entries()) {
+      const cand = candidateNamesByInvoiceId.get(iid) || { candidate_name: null, candidate_names: [] };
+      invoice_map[iid] = {
+        invoice_id: iid,
+        invoice_no: disp?.invoice_no || null,
+        client_id: disp?.client_id || null,
+        client_name: disp?.client_name || null,
+        do_not_send: (disp?.do_not_send === true),
+        invoice_week_start: disp?.invoice_week_start || null,
+        week_ending_date: disp?.week_ending_date || null,
+        candidate_name: cand.candidate_name,
+        candidate_names: cand.candidate_names
+      };
+    }
+
+    return withCORS(env, req, ok({
+      ...out,
+      invoice_results_enriched,
+      invoice_map
+    }));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
-
 // ============================================================================
 // UPDATED: handleInvoiceRender(env, req, invoiceId)
 // - External admin handler remains
@@ -49714,7 +50487,6 @@ async function handleUpdateClientDefault(env, req, id) {
     return withCORS(env, req, serverError('Failed to update client default'));
   }
 }
-
 function canonicalizeClientSettingsServer(beforeCs, csInput) {
   const before = (beforeCs && typeof beforeCs === 'object') ? beforeCs : {};
   const in0    = (csInput && typeof csInput === 'object') ? csInput : {};
@@ -49748,6 +50520,18 @@ function canonicalizeClientSettingsServer(beforeCs, csInput) {
     return s ? s : null;
   };
 
+  // ✅ NEW: canonical invoice consolidation mode (server policy: preserve existing if missing/invalid)
+  // Allowed: NONE | BY_WEEK | ANY_WEEK  (accept ALL -> ANY_WEEK)
+  const normInvoiceConsol = (v) => {
+    if (v == null) return null;
+    const s = String(v).trim().toUpperCase();
+    if (!s) return null;
+    if (s === 'ALL') return 'ANY_WEEK';
+    if (s === 'ANY') return 'ANY_WEEK';
+    if (s === 'NONE' || s === 'BY_WEEK' || s === 'ANY_WEEK') return s;
+    return '__INVALID__';
+  };
+
   const out = {};
 
   // timezone_id (nullable; null => inherit global)
@@ -49776,7 +50560,10 @@ function canonicalizeClientSettingsServer(beforeCs, csInput) {
     'autoprocess_hr',
     'hr_attach_to_invoice',
     'ts_attach_to_invoice',
-    'send_manual_invoices_to_different_email'
+    'send_manual_invoices_to_different_email',
+
+    // ✅ NEW: ref-to-issue
+    'reference_number_required_to_issue_invoice'
   ];
 
   for (const k of BOOL_KEYS) {
@@ -49813,6 +50600,27 @@ function canonicalizeClientSettingsServer(beforeCs, csInput) {
     out.default_submission_mode = 'ELECTRONIC';
   }
 
+  // ✅ NEW: invoice_consolidation_mode
+  // Server policy: if missing -> preserve existing; if invalid -> preserve existing; else set normalized.
+  {
+    const hasIn = Object.prototype.hasOwnProperty.call(in0, 'invoice_consolidation_mode');
+    const hasBefore = Object.prototype.hasOwnProperty.call(before, 'invoice_consolidation_mode');
+
+    if (hasIn) {
+      const nv = normInvoiceConsol(in0.invoice_consolidation_mode);
+      if (nv && nv !== '__INVALID__') {
+        out.invoice_consolidation_mode = nv;
+      } else if (hasBefore) {
+        const bv = normInvoiceConsol(before.invoice_consolidation_mode);
+        if (bv && bv !== '__INVALID__') out.invoice_consolidation_mode = bv;
+      }
+      // If invalid and no before, omit (caller may default)
+    } else if (hasBefore) {
+      const bv = normInvoiceConsol(before.invoice_consolidation_mode);
+      if (bv && bv !== '__INVALID__') out.invoice_consolidation_mode = bv;
+    }
+  }
+
   // policy: self-bill => auto-invoice forced false
   if (out.self_bill_no_invoices_sent) out.auto_invoice_default = false;
 
@@ -49825,6 +50633,7 @@ function canonicalizeClientSettingsServer(beforeCs, csInput) {
 
   return out;
 }
+
 
 // ============================================================
 // UPDATED: handleUpdateClient
@@ -50455,7 +51264,6 @@ async function fetchUnifiedDefaultWindow(env, { client_id, role, band, date }) {
   return null;
 }
 
-
 async function handleRelatedList(env, req, entity, id) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
@@ -50506,11 +51314,239 @@ async function handleRelatedList(env, req, entity, id) {
     return we || null;
   };
 
+  // RPC unwrap helper: supports PostgREST returning {fnname: ...} or [ {fnname: ...} ] or raw object.
+  const unwrapRpcJsonb = (r, fnName) => {
+    if (r == null) return null;
+
+    // sbRpc sometimes returns { data: ... }
+    if (r && typeof r === 'object' && !Array.isArray(r) && Object.prototype.hasOwnProperty.call(r, 'data')) {
+      return unwrapRpcJsonb(r.data, fnName);
+    }
+
+    if (Array.isArray(r)) {
+      if (r.length === 0) return null;
+      if (r.length === 1) {
+        const o = r[0];
+        if (o && typeof o === 'object' && fnName && Object.prototype.hasOwnProperty.call(o, fnName)) return o[fnName];
+        // single-row direct object
+        return o;
+      }
+      return r;
+    }
+
+    if (r && typeof r === 'object' && fnName && Object.prototype.hasOwnProperty.call(r, fnName)) {
+      return r[fnName];
+    }
+
+    return r;
+  };
+
+  const uuidLike = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(s || '').trim());
+
+  // ─────────────────────────────────────────────────────────────
+  // SEGMENTS-safe fallback helpers (used only if RPC path not taken)
+  // ─────────────────────────────────────────────────────────────
+  const fetchAllInvoiceLines = async (filterQs, selectCsv) => {
+    const chunk = 1000;
+    let off = 0;
+    const acc = [];
+
+    while (true) {
+      const api =
+        `${env.SUPABASE_URL}/rest/v1/invoice_lines` +
+        `?${filterQs}` +
+        `&select=${selectCsv}` +
+        `&limit=${chunk}&offset=${off}`;
+
+      const { rows } = await sbFetch(env, api);
+      const batch = rows || [];
+      acc.push(...batch);
+
+      if (batch.length < chunk) break;
+      off += chunk;
+
+      // hard safety
+      if (off > 500000) break;
+    }
+
+    return acc;
+  };
+
+  const distinctInvoiceIdsForTimesheetIds = async (tsIds) => {
+    const out = new Set();
+    const ids = Array.isArray(tsIds) ? tsIds.map(String).filter(Boolean) : [];
+    if (!ids.length) return out;
+
+    const chunkSize = 200;
+    for (let i = 0; i < ids.length; i += chunkSize) {
+      const chunk = ids.slice(i, i + chunkSize);
+      const filterQs = `timesheet_id=in.(${chunk.map(enc).join(',')})&invoice_id=not.is.null`;
+      const rows = await fetchAllInvoiceLines(filterQs, 'invoice_id');
+      for (const r of (rows || [])) {
+        const invId = r?.invoice_id != null ? String(r.invoice_id).trim() : '';
+        if (invId) out.add(invId);
+      }
+    }
+    return out;
+  };
+
+  const distinctTimesheetIdsForInvoiceId = async (invoiceId) => {
+    const out = new Set();
+    const invId = String(invoiceId || '').trim();
+    if (!invId) return out;
+
+    const filterQs = `invoice_id=eq.${enc(invId)}&timesheet_id=not.is.null`;
+    const rows = await fetchAllInvoiceLines(filterQs, 'timesheet_id');
+    for (const r of (rows || [])) {
+      const tsId = r?.timesheet_id != null ? String(r.timesheet_id).trim() : '';
+      if (tsId) out.add(tsId);
+    }
+    return out;
+  };
+
+  const fetchInvoicesByIds = async (invoiceIds) => {
+    const ids = Array.isArray(invoiceIds) ? invoiceIds.map(String).filter(Boolean) : [];
+    if (!ids.length) return [];
+
+    const sel = [
+      'id','invoice_no','client_id','issued_at_utc','due_at_utc',
+      'status','subtotal_ex_vat','vat_amount','total_inc_vat',
+      'invoice_pdf_r2_key','header_snapshot_json','on_hold_reason','paid_at_utc'
+    ].join(',');
+
+    const acc = [];
+    const chunkSize = 200;
+    for (let i = 0; i < ids.length; i += chunkSize) {
+      const chunk = ids.slice(i, i + chunkSize);
+      const invUrl =
+        `${env.SUPABASE_URL}/rest/v1/invoices` +
+        `?id=in.(${chunk.map(enc).join(',')})` +
+        `&select=${enc(sel)}`;
+      const { rows } = await sbFetch(env, invUrl);
+      acc.push(...(rows || []));
+    }
+
+    // Sort to match RPC ordering: issued_at_utc desc nulls last, id desc
+    acc.sort((a, b) => {
+      const aTs = a?.issued_at_utc ? String(a.issued_at_utc) : '';
+      const bTs = b?.issued_at_utc ? String(b.issued_at_utc) : '';
+
+      const aHas = !!aTs;
+      const bHas = !!bTs;
+
+      if (aHas && bHas) {
+        if (aTs !== bTs) return (aTs > bTs ? -1 : 1);
+      } else if (aHas !== bHas) {
+        // nulls last
+        return aHas ? -1 : 1;
+      }
+
+      const aId = a?.id ? String(a.id) : '';
+      const bId = b?.id ? String(b.id) : '';
+      if (aId === bId) return 0;
+      return aId > bId ? -1 : 1;
+    });
+
+    return acc;
+  };
+
+  const fetchTimesheetSummaryByIds = async (tsIds) => {
+    const ids = Array.isArray(tsIds) ? tsIds.map(String).filter(Boolean) : [];
+    if (!ids.length) return [];
+
+    const acc = [];
+    const chunkSize = 200;
+    for (let i = 0; i < ids.length; i += chunkSize) {
+      const chunk = ids.slice(i, i + chunkSize);
+      const tsUrl =
+        `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
+        `?select=*` +
+        `&timesheet_id=in.(${chunk.map(enc).join(',')})`;
+      const { rows } = await sbFetch(env, tsUrl);
+      acc.push(...(rows || []));
+    }
+
+    // Sort to match RPC ordering: week_ending_date desc nulls last, client_name asc, candidate_name asc, timesheet_id::text
+    acc.sort((a, b) => {
+      const aWe = a?.week_ending_date ? String(a.week_ending_date) : '';
+      const bWe = b?.week_ending_date ? String(b.week_ending_date) : '';
+
+      const aHas = !!aWe;
+      const bHas = !!bWe;
+
+      if (aHas && bHas && aWe !== bWe) return aWe > bWe ? -1 : 1;
+      if (aHas !== bHas) return aHas ? -1 : 1; // nulls last
+
+      const aCli = a?.client_name ? String(a.client_name) : '';
+      const bCli = b?.client_name ? String(b.client_name) : '';
+      if (aCli !== bCli) return aCli < bCli ? -1 : 1;
+
+      const aCand = a?.candidate_name ? String(a.candidate_name) : '';
+      const bCand = b?.candidate_name ? String(b.candidate_name) : '';
+      if (aCand !== bCand) return aCand < bCand ? -1 : 1;
+
+      const aId = a?.timesheet_id ? String(a.timesheet_id) : '';
+      const bId = b?.timesheet_id ? String(b.timesheet_id) : '';
+      if (aId === bId) return 0;
+      return aId < bId ? -1 : 1;
+    });
+
+    return acc;
+  };
+
   try {
+    // ------------------------------------------------------------
+    // ✅ SEGMENTS-safe list types via single-call RPC (related_list_v2)
+    // ------------------------------------------------------------
+    // This covers:
+    // - timesheet -> invoice(s)
+    // - invoice -> timesheets
+    // - candidate -> invoices
+    // - umbrella -> invoices
+    //
+    // Normalize some legacy single/plural cases:
+    // - candidate/umbrella: allow "invoice" as alias for "invoices"
+    const entityU = String(entity || '').toLowerCase();
+    const rawTypeU = String(type || '').toLowerCase();
+
+    const typeU =
+      (entityU === 'candidate' || entityU === 'umbrella') && rawTypeU === 'invoice'
+        ? 'invoices'
+        : rawTypeU;
+
+    const rpcSupported =
+      uuidLike(id) &&
+      (
+        (entityU === 'timesheet' && (typeU === 'invoice' || typeU === 'invoices')) ||
+        (entityU === 'invoice' && typeU === 'timesheets') ||
+        (entityU === 'candidate' && typeU === 'invoices') ||
+        (entityU === 'umbrella' && typeU === 'invoices')
+      );
+
+    if (rpcSupported) {
+      const r = await sbRpc(env, 'related_list_v2', {
+        p_entity: entityU,
+        p_id: id,
+        p_type: typeU,
+        p_limit: limit,
+        p_offset: offset
+      });
+
+      const payload = unwrapRpcJsonb(r, 'related_list_v2') || null;
+
+      const items = Array.isArray(payload?.items) ? payload.items : [];
+      const total =
+        (typeof payload?.total === 'number')
+          ? payload.total
+          : (Array.isArray(payload?.items) ? payload.items.length : 0);
+
+      return okList(items, total);
+    }
+
     // ───────────────────────── CANDIDATE ─────────────────────────
     if (entity === 'candidate') {
       // ---- Candidate → Timesheets (use v_timesheets_summary full shape) ----
-      if (type === 'timesheets') {
+      if (typeU === 'timesheets') {
         const tsUrl =
           `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
           `?select=*` +
@@ -50522,37 +51558,66 @@ async function handleRelatedList(env, req, entity, id) {
         return okList(rows || [], total ?? (rows || []).length);
       }
 
-      // ---- Candidate → Invoices (same shape as handleListInvoices) ----
-      if (type === 'invoices') {
-        const finQ =
-          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?candidate_id=eq.${enc(id)}` +
-          `&is_current=eq.true` +
-          `&locked_by_invoice_id=not.is.null` +
-          `&select=locked_by_invoice_id`;
-        const fin  = await sbFetch(env, finQ);
-        const invIds = [...new Set((fin.rows || []).map(r => r.locked_by_invoice_id).filter(Boolean))];
-        const total = invIds.length;
-        const pageIds = invIds.slice(offset, offset + limit);
-        if (!pageIds.length) return okList([], total);
+      // ---- Candidate → Invoices (SEGMENTS-safe fallback via invoice_lines) ----
+      if (typeU === 'invoices') {
+        // Gather candidate timesheet ids:
+        const tsIdSet = new Set();
 
-        const sel = [
-          'id','invoice_no','client_id','issued_at_utc','due_at_utc',
-          'status','subtotal_ex_vat','vat_amount','total_inc_vat',
-          'invoice_pdf_r2_key','header_snapshot_json','on_hold_reason','paid_at_utc'
-        ].join(',');
-        const invUrl =
-          `${env.SUPABASE_URL}/rest/v1/invoices` +
-          `?id=in.(${pageIds.map(enc).join(',')})` +
-          `&select=${enc(sel)}` +
-          `&order=issued_at_utc.desc`;
+        // current TSFIN timesheets
+        try {
+          const finQ =
+            `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+            `?candidate_id=eq.${enc(id)}` +
+            `&is_current=eq.true` +
+            `&timesheet_id=not.is.null` +
+            `&select=timesheet_id`;
+          const fin = await sbFetch(env, finQ);
+          (fin.rows || []).forEach(r => {
+            if (r?.timesheet_id) tsIdSet.add(String(r.timesheet_id));
+          });
+        } catch {}
 
-        const { rows } = await sbFetch(env, invUrl);
-        return okList(rows || [], total);
+        // timesheets via contracts (covers stale/non-current TSFIN)
+        try {
+          const conQ =
+            `${env.SUPABASE_URL}/rest/v1/contracts` +
+            `?candidate_id=eq.${enc(id)}` +
+            `&select=id`;
+          const conR = await sbFetch(env, conQ);
+          const contractIds = (conR.rows || []).map(r => r.id).filter(Boolean);
+
+          if (contractIds.length) {
+            const chunkSize = 200;
+            for (let i = 0; i < contractIds.length; i += chunkSize) {
+              const chunk = contractIds.slice(i, i + chunkSize);
+              const tsQ =
+                `${env.SUPABASE_URL}/rest/v1/timesheets` +
+                `?contract_id=in.(${chunk.map(enc).join(',')})` +
+                `&timesheet_id=not.is.null` +
+                `&select=timesheet_id`;
+              const tsR = await sbFetch(env, tsQ);
+              (tsR.rows || []).forEach(r => {
+                if (r?.timesheet_id) tsIdSet.add(String(r.timesheet_id));
+              });
+            }
+          }
+        } catch {}
+
+        const tsIds = Array.from(tsIdSet);
+        if (!tsIds.length) return okList([], 0);
+
+        const invSet = await distinctInvoiceIdsForTimesheetIds(tsIds);
+        const invIds = Array.from(invSet);
+        if (!invIds.length) return okList([], 0);
+
+        const allInv = await fetchInvoicesByIds(invIds);
+        const total = allInv.length;
+        const page = allInv.slice(offset, offset + limit);
+        return okList(page, total);
       }
 
       // ---- Candidate → Clients (TSFIN + Contracts, then full client rows) ----
-      if (type === 'clients') {
+      if (typeU === 'clients') {
         // TSFIN clients
         const finQ =
           `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
@@ -50590,7 +51655,7 @@ async function handleRelatedList(env, req, entity, id) {
       }
 
       // ---- Candidate → Umbrella (single, full umbrella row) ----
-      if (type === 'umbrella') {
+      if (typeU === 'umbrella') {
         const candQ =
           `${env.SUPABASE_URL}/rest/v1/candidates` +
           `?id=eq.${enc(id)}` +
@@ -50610,7 +51675,7 @@ async function handleRelatedList(env, req, entity, id) {
       }
 
       // ---- Candidate → Contracts (full contracts summary shape) ----
-      if (type === 'contracts') {
+      if (typeU === 'contracts') {
         const selectParts = [
           '*',
           'candidate:candidates(display_name,first_name,last_name)',
@@ -50653,7 +51718,7 @@ async function handleRelatedList(env, req, entity, id) {
     // ───────────────────────── TIMESHEET ─────────────────────────
     if (entity === 'timesheet') {
       // Timesheet → Candidate (full candidate row)
-      if (type === 'candidate') {
+      if (typeU === 'candidate') {
         // First try TSFIN by timesheet_id
         const curQ =
           `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
@@ -50689,30 +51754,30 @@ async function handleRelatedList(env, req, entity, id) {
         return okList(c ? [c] : [], c ? 1 : 0);
       }
 
-      // Timesheet → Invoice (full invoice row)
-      if (type === 'invoice') {
-        const curQ =
-          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?timesheet_id=eq.${enc(id)}&is_current=eq.true&select=locked_by_invoice_id&limit=1`;
-        const cur = await sbFetch(env, curQ);
-        const invId = (cur.rows || [])[0]?.locked_by_invoice_id;
-        if (!invId) return okList([], 0);
+      // Timesheet → Invoice(s) (SEGMENTS-safe fallback via invoice_lines)
+      if (typeU === 'invoice' || typeU === 'invoices') {
+        // If id is actually a contract_week.id (planned week), return none.
+        try {
+          const tQ =
+            `${env.SUPABASE_URL}/rest/v1/timesheets` +
+            `?timesheet_id=eq.${enc(id)}&select=timesheet_id&limit=1`;
+          const tR = await sbFetch(env, tQ);
+          const hasTs = !!((tR.rows || [])[0]?.timesheet_id);
+          if (!hasTs) return okList([], 0);
+        } catch {}
 
-        const sel = [
-          'id','invoice_no','client_id','issued_at_utc','due_at_utc',
-          'status','subtotal_ex_vat','vat_amount','total_inc_vat',
-          'invoice_pdf_r2_key','header_snapshot_json','on_hold_reason','paid_at_utc'
-        ].join(',');
-        const invUrl =
-          `${env.SUPABASE_URL}/rest/v1/invoices` +
-          `?id=eq.${enc(invId)}&select=${enc(sel)}`;
-        const ir = await sbFetch(env, invUrl);
-        const i = (ir.rows || [])[0];
-        return okList(i ? [i] : [], i ? 1 : 0);
+        const invSet = await distinctInvoiceIdsForTimesheetIds([String(id)]);
+        const invIds = Array.from(invSet);
+        if (!invIds.length) return okList([], 0);
+
+        const allInv = await fetchInvoicesByIds(invIds);
+        const total = allInv.length;
+        const page = allInv.slice(offset, offset + limit);
+        return okList(page, total);
       }
 
       // Timesheet → Client (full client row)
-      if (type === 'client') {
+      if (typeU === 'client') {
         // First try TSFIN by timesheet_id
         const curQ =
           `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
@@ -50749,7 +51814,7 @@ async function handleRelatedList(env, req, entity, id) {
       }
 
       // Timesheet → Umbrella (full umbrella row)
-      if (type === 'umbrella') {
+      if (typeU === 'umbrella') {
         // First try candidate from TSFIN
         const curQ =
           `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
@@ -50795,7 +51860,7 @@ async function handleRelatedList(env, req, entity, id) {
       }
 
       // Timesheet → Contract (full contracts summary shape for the one contract)
-      if (type === 'contract') {
+      if (typeU === 'contract') {
         // First try real timesheets row
         const tsQ =
           `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -50846,7 +51911,7 @@ async function handleRelatedList(env, req, entity, id) {
       }
 
       // Timesheet → Series (Adjustments) – keep existing CW + TSFIN logic
-      if (type === 'series') {
+      if (typeU === 'series') {
         const cwQ =
           `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
           `?timesheet_id=eq.${enc(id)}` +
@@ -50915,18 +51980,20 @@ async function handleRelatedList(env, req, entity, id) {
 
     // ───────────────────────── INVOICE ─────────────────────────
     if (entity === 'invoice') {
-      if (type === 'timesheets') {
-        const tsUrl =
-          `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
-          `?select=*` +
-          `&locked_by_invoice_id=eq.${enc(id)}` +
-          `&order=week_ending_date.desc,client_name.asc,candidate_name.asc` +
-          `&limit=${limit}&offset=${offset}`;
-        const { rows, total } = await sbFetch(env, tsUrl, true);
-        return okList(rows || [], total ?? (rows || []).length);
+      // Invoice → Timesheets (SEGMENTS-safe fallback via invoice_lines)
+      if (typeU === 'timesheets') {
+        const tsSet = await distinctTimesheetIdsForInvoiceId(id);
+        const tsIds = Array.from(tsSet);
+        if (!tsIds.length) return okList([], 0);
+
+        const allRows = await fetchTimesheetSummaryByIds(tsIds);
+        const total = allRows.length;
+        const page = allRows.slice(offset, offset + limit);
+        return okList(page, total);
       }
 
-      if (type === 'candidates') {
+      // NOTE: candidates/umbrellas branches remain legacy (TSFIN-based) and are out of scope for the v2 list RPC.
+      if (typeU === 'candidates') {
         const finQ =
           `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
           `?locked_by_invoice_id=eq.${enc(id)}` +
@@ -50946,7 +52013,7 @@ async function handleRelatedList(env, req, entity, id) {
         return okList(cr.rows || [], total);
       }
 
-      if (type === 'client') {
+      if (typeU === 'client') {
         const invQ =
           `${env.SUPABASE_URL}/rest/v1/invoices` +
           `?id=eq.${enc(id)}&select=client_id&limit=1`;
@@ -50962,7 +52029,7 @@ async function handleRelatedList(env, req, entity, id) {
         return okList(c ? [c] : [], c ? 1 : 0);
       }
 
-      if (type === 'umbrellas') {
+      if (typeU === 'umbrellas') {
         const finQ =
           `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
           `?locked_by_invoice_id=eq.${enc(id)}` +
@@ -50998,7 +52065,7 @@ async function handleRelatedList(env, req, entity, id) {
 
     // ───────────────────────── CLIENT ─────────────────────────
     if (entity === 'client') {
-      if (type === 'timesheets') {
+      if (typeU === 'timesheets') {
         const tsUrl =
           `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
           `?select=*` +
@@ -51009,7 +52076,7 @@ async function handleRelatedList(env, req, entity, id) {
         return okList(rows || [], total ?? (rows || []).length);
       }
 
-      if (type === 'invoices') {
+      if (typeU === 'invoices') {
         const sel = [
           'id','invoice_no','client_id','issued_at_utc','due_at_utc',
           'status','subtotal_ex_vat','vat_amount','total_inc_vat',
@@ -51025,7 +52092,7 @@ async function handleRelatedList(env, req, entity, id) {
         return okList(rows || [], total ?? (rows || []).length);
       }
 
-      if (type === 'candidates') {
+      if (typeU === 'candidates') {
         // Union candidates from TSFIN + contracts (to match counts)
         const finQ =
           `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
@@ -51059,7 +52126,7 @@ async function handleRelatedList(env, req, entity, id) {
         return okList(cr.rows || [], total);
       }
 
-      if (type === 'contracts') {
+      if (typeU === 'contracts') {
         const selectParts = [
           '*',
           'candidate:candidates(display_name,first_name,last_name)',
@@ -51107,7 +52174,7 @@ async function handleRelatedList(env, req, entity, id) {
       const candId  = conRow?.candidate_id || null;
       const clientId= conRow?.client_id    || null;
 
-      if (type === 'candidate') {
+      if (typeU === 'candidate') {
         if (!candId) return okList([], 0);
         const candUrl =
           `${env.SUPABASE_URL}/rest/v1/candidates` +
@@ -51117,7 +52184,7 @@ async function handleRelatedList(env, req, entity, id) {
         return okList(c ? [c] : [], c ? 1 : 0);
       }
 
-      if (type === 'client') {
+      if (typeU === 'client') {
         if (!clientId) return okList([], 0);
         const cliUrl =
           `${env.SUPABASE_URL}/rest/v1/clients` +
@@ -51127,7 +52194,7 @@ async function handleRelatedList(env, req, entity, id) {
         return okList(c ? [c] : [], c ? 1 : 0);
       }
 
-      if (type === 'timesheets') {
+      if (typeU === 'timesheets') {
         // All TS/contract-weeks for this contract via v_timesheets_summary
         const tsUrl =
           `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
@@ -51139,7 +52206,7 @@ async function handleRelatedList(env, req, entity, id) {
         return okList(rows || [], total ?? (rows || []).length);
       }
 
-      if (type === 'umbrella') {
+      if (typeU === 'umbrella') {
         if (!candId) return okList([], 0);
         const candQ =
           `${env.SUPABASE_URL}/rest/v1/candidates` +
@@ -51162,7 +52229,7 @@ async function handleRelatedList(env, req, entity, id) {
 
     // ───────────────────────── UMBRELLA ─────────────────────────
     if (entity === 'umbrella') {
-      if (type === 'candidates') {
+      if (typeU === 'candidates') {
         const candUrl =
           `${env.SUPABASE_URL}/rest/v1/candidates` +
           `?umbrella_id=eq.${enc(id)}` +
@@ -51174,7 +52241,7 @@ async function handleRelatedList(env, req, entity, id) {
         return okList(rows || [], total ?? (rows || []).length);
       }
 
-      if (type === 'timesheets') {
+      if (typeU === 'timesheets') {
         const candQ =
           `${env.SUPABASE_URL}/rest/v1/candidates` +
           `?umbrella_id=eq.${enc(id)}&select=id`;
@@ -51192,39 +52259,46 @@ async function handleRelatedList(env, req, entity, id) {
         return okList(rows || [], total ?? (rows || []).length);
       }
 
-      if (type === 'invoices') {
-        const candQ =
+      // Umbrella → Invoices (SEGMENTS-safe fallback via invoice_lines)
+      if (typeU === 'invoices') {
+        // candidate ids under umbrella + pay_method=UMBRELLA
+        const candUrl =
           `${env.SUPABASE_URL}/rest/v1/candidates` +
-          `?umbrella_id=eq.${enc(id)}&select=id`;
-        const candR = await sbFetch(env, candQ);
-        const candIds = (candR.rows || []).map(r => r.id);
+          `?umbrella_id=eq.${enc(id)}` +
+          `&pay_method=eq.UMBRELLA` +
+          `&select=id`;
+        const candR = await sbFetch(env, candUrl);
+        const candIds = (candR.rows || []).map(r => r.id).filter(Boolean);
         if (!candIds.length) return okList([], 0);
 
-        const candList = candIds.map(enc).join(',');
-        const tsQ =
-          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?candidate_id=in.(${candList})` +
-          `&is_current=eq.true` +
-          `&locked_by_invoice_id=not.is.null` +
-          `&select=locked_by_invoice_id`;
-        const tsR = await sbFetch(env, tsQ);
-        const invIds = [...new Set((tsR.rows || []).map(r => r.locked_by_invoice_id).filter(Boolean))];
-        const total   = invIds.length;
-        const pageIds = invIds.slice(offset, offset + limit);
-        if (!pageIds.length) return okList([], total);
+        // timesheet ids from current TSFIN for those candidates
+        const tsIdSet = new Set();
+        const chunkSize = 200;
+        for (let i = 0; i < candIds.length; i += chunkSize) {
+          const chunk = candIds.slice(i, i + chunkSize);
+          const finQ =
+            `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+            `?is_current=eq.true` +
+            `&timesheet_id=not.is.null` +
+            `&candidate_id=in.(${chunk.map(enc).join(',')})` +
+            `&select=timesheet_id`;
+          const finR = await sbFetch(env, finQ);
+          (finR.rows || []).forEach(r => {
+            if (r?.timesheet_id) tsIdSet.add(String(r.timesheet_id));
+          });
+        }
 
-        const sel = [
-          'id','invoice_no','client_id','issued_at_utc','due_at_utc',
-          'status','subtotal_ex_vat','vat_amount','total_inc_vat',
-          'invoice_pdf_r2_key','header_snapshot_json','on_hold_reason','paid_at_utc'
-        ].join(',');
-        const invUrl =
-          `${env.SUPABASE_URL}/rest/v1/invoices` +
-          `?id=in.(${pageIds.map(enc).join(',')})` +
-          `&select=${enc(sel)}` +
-          `&order=issued_at_utc.desc`;
-        const ir = await sbFetch(env, invUrl);
-        return okList(ir.rows || [], total);
+        const tsIds = Array.from(tsIdSet);
+        if (!tsIds.length) return okList([], 0);
+
+        const invSet = await distinctInvoiceIdsForTimesheetIds(tsIds);
+        const invIds = Array.from(invSet);
+        if (!invIds.length) return okList([], 0);
+
+        const allInv = await fetchInvoicesByIds(invIds);
+        const total = allInv.length;
+        const page = allInv.slice(offset, offset + limit);
+        return okList(page, total);
       }
 
       return withCORS(env, req, badRequest("Unsupported type for umbrella"));
@@ -51232,7 +52306,7 @@ async function handleRelatedList(env, req, entity, id) {
 
     // ───────────────────────── REMITTANCE ─────────────────────────
     if (entity === 'remittance') {
-      if (type === 'timesheets') {
+      if (typeU === 'timesheets') {
         const audQ =
           `${env.SUPABASE_URL}/rest/v1/audit_events` +
           `?correlation_id=eq.${enc(id)}` +
@@ -51255,7 +52329,7 @@ async function handleRelatedList(env, req, entity, id) {
         return okList(rows || [], total);
       }
 
-      if (type === 'candidate') {
+      if (typeU === 'candidate') {
         const audQ =
           `${env.SUPABASE_URL}/rest/v1/audit_events` +
           `?correlation_id=eq.${enc(id)}` +
@@ -51296,68 +52370,51 @@ async function handleRelatedList(env, req, entity, id) {
 }
 
 
-// ====================== RELATED: LIST (generic) ======================
-/**
- * @openapi
- * /api/related/{entity}/{id}/{type}:
- *   get:
- *     summary: List related records for an entity (candidate, timesheet, invoice, remittance)
- *     tags: [Related]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: entity
- *         required: true
- *         schema:
- *           type: string
- *           enum: [candidate, timesheet, invoice, remittance]
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *       - in: path
- *         name: type
- *         required: true
- *         schema:
- *           type: string
- *           description: >
- *             For candidate: timesheets | invoices | remittances
- *             For timesheet: candidate | invoice | remittances
- *             For invoice:   timesheets | candidates | correspondence
- *             For remittance: timesheets | candidate
- *       - in: query
- *         name: limit
- *         schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
- *       - in: query
- *         name: offset
- *         schema: { type: integer, minimum: 0, default: 0 }
- *     responses:
- *       200:
- *         description: A lightweight list of related records (shape depends on entity/type).
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 items:
- *                   type: array
- *                   items:
- *                     type: object
- *                 total:
- *                   type: integer
- */
-// UPDATED: handleRelatedList — fixes syntax error on candidate→clients branch and supports all related types per spec
-
+// UPDATED: handleRelatedCounts — now uses related_counts_v2 RPC for UUID-like ids (segment-safe) and falls back to legacy for remittance/non-UUID ids
 async function handleRelatedCounts(env, req, entity, id) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
   const enc = encodeURIComponent;
   const countOrLen = (res) => (typeof res.count === 'number' ? res.count : (res.rows?.length || 0));
+  const uuidLike = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(s || '').trim());
+
+  // RPC unwrap helper: supports PostgREST returning {fnname: ...} or [ {fnname: ...} ] or raw object.
+  const unwrapRpcJsonb = (r, fnName) => {
+    if (r == null) return null;
+    if (r && typeof r === 'object' && !Array.isArray(r) && Object.prototype.hasOwnProperty.call(r, 'data')) {
+      return unwrapRpcJsonb(r.data, fnName);
+    }
+    if (Array.isArray(r)) {
+      if (r.length === 0) return null;
+      if (r.length === 1) {
+        const o = r[0];
+        if (o && typeof o === 'object' && fnName && Object.prototype.hasOwnProperty.call(o, fnName)) return o[fnName];
+        return o;
+      }
+      return r;
+    }
+    if (r && typeof r === 'object' && fnName && Object.prototype.hasOwnProperty.call(r, fnName)) {
+      return r[fnName];
+    }
+    return r;
+  };
 
   try {
+    // Prefer single-call, segment-safe RPC for UUID-like ids.
+    // We keep remittance legacy behaviour because existing code treats the id as correlation_id (text),
+    // not necessarily a UUID.
+    const entityU = String(entity || '').toLowerCase();
+
+    if (entityU !== 'remittance' && uuidLike(id)) {
+      const r = await sbRpc(env, 'related_counts_v2', { p_entity: entityU, p_id: id });
+      const payload = unwrapRpcJsonb(r, 'related_counts_v2');
+      if (payload && typeof payload === 'object') {
+        return withCORS(env, req, ok(payload));
+      }
+      // If RPC returns null/unexpected, fall through to legacy.
+    }
+
     // ===== CANDIDATE =====
     if (entity === 'candidate') {
       // Base: TSFIN rows for this candidate
@@ -53282,6 +54339,7 @@ async function writeSnapshot(env, snapshot) {
 const toNum = (v) => (v === null || v === undefined ? null : Number(v));
 const nonneg = (n) => (n === null || n === undefined ? true : Number(n) >= 0);
 
+
 async function fetchCurrentTsfin(env, timesheetId) {
   const q =
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
@@ -53290,6 +54348,7 @@ async function fetchCurrentTsfin(env, timesheetId) {
     `&select=` + [
       'timesheet_id','timesheet_version','candidate_id','client_id',
       'processing_status','locked_by_invoice_id','is_current',
+      'invoice_breakdown_json',
 
       // ✅ NEW: category expense columns (required for patchTsfinCommon correctness)
       'travel_pay_ex_vat','travel_charge_ex_vat',
@@ -54460,6 +55519,79 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
     throw new Error('CONTRACT_RATES_MISSING');
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // ✅ Stable segment identity helpers
+  // - Fixes delayed segment corruption by avoiding index-based segment_id.
+  // - Uses a deterministic fingerprint derived from immutable segment attributes.
+  // - Preserves per-segment controls (invoice_target_week_start, exclude_from_pay, invoice_locked_invoice_id)
+  //   by mapping OLD → NEW using the same fingerprint.
+  //
+  // NOTE:
+  // - We deliberately DO NOT rely on array index ordering.
+  // - We prefer any stable upstream shift identifiers if present (e.g. shift_id/hr_shift_id/source_shift_id),
+  //   otherwise we fall back to date/start/end/break minutes.
+  // - `tsfin_prepare_write` (SQL) blocks writes if ANY segment is invoice-locked, so recompute should not occur
+  //   for invoiced/locked segments. This change primarily protects delayed (uninvoiced) segment metadata.
+  // ─────────────────────────────────────────────────────────────
+
+  const _normStr = (v) => (v == null ? '' : String(v).trim());
+  const _normNumInt = (v, d = 0) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : d;
+  };
+
+  // FNV-1a 32-bit hash (deterministic, fast, no async crypto)
+  const _hash32 = (s) => {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 0x01000193);
+    }
+    // unsigned
+    return (h >>> 0).toString(16).padStart(8, '0');
+  };
+
+  const _stableSegKey = (segObj) => {
+    if (!segObj || typeof segObj !== 'object') return '';
+
+    // Prefer stable upstream IDs if available
+    const shiftId =
+      _normStr(segObj.shift_id) ||
+      _normStr(segObj.hr_shift_id) ||
+      _normStr(segObj.source_shift_id) ||
+      _normStr(segObj.rota_shift_id) ||
+      _normStr(segObj.import_shift_id);
+
+    if (shiftId) return `shift:${shiftId}`;
+
+    const date = _normStr(segObj.date);
+
+    const start =
+      _normStr(segObj.start_utc) ||
+      _normStr(segObj.start_iso) ||
+      _normStr(segObj.start);
+
+    const end =
+      _normStr(segObj.end_utc) ||
+      _normStr(segObj.end_iso) ||
+      _normStr(segObj.end);
+
+    const breakMins = _normNumInt(segObj.break_mins ?? segObj.break_minutes ?? 0, 0);
+
+    // If we have no timestamps at all, we cannot build a meaningful stable key.
+    // Fall back to old segment_id if present (still better than empty).
+    const fallbackSid = _normStr(segObj.segment_id);
+    if (!start && !end && !date) return fallbackSid;
+
+    return `d:${date}|s:${start}|e:${end}|b:${breakMins}`;
+  };
+
+  const _stableSegId = (tsId, segKey) => {
+    const k = _normStr(segKey);
+    if (!k) return `ts:${tsId}:unknown`;
+    return `ts:${tsId}:${_hash32(k)}`;
+  };
+
   // ✅ POLICY B helper (HR-create/no-timesheet-required only)
   const basisU = String(curFin?.basis || 'CONTRACT_WEEKLY').toUpperCase();
   const isHrCreateNoTs =
@@ -54587,6 +55719,7 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
   }
 
   // Preserve per-segment controls if we have an existing SEGMENTS snapshot
+  // ✅ IMPORTANT: map by stable fingerprint (NOT by segment_id)
   const preserved = new Map();
   try {
     const ib = curFin?.invoice_breakdown_json || null;
@@ -54594,9 +55727,9 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
     const segs = Array.isArray(ib?.segments) ? ib.segments : null;
     if (mode === 'SEGMENTS' && segs) {
       for (const s of segs) {
-        const sid = s?.segment_id ? String(s.segment_id) : null;
-        if (!sid) continue;
-        preserved.set(sid, {
+        const key = _stableSegKey(s);
+        if (!key) continue;
+        preserved.set(key, {
           exclude_from_pay: (typeof s.exclude_from_pay === 'boolean') ? s.exclude_from_pay : undefined,
           invoice_target_week_start: (s.invoice_target_week_start != null) ? String(s.invoice_target_week_start) : undefined,
           invoice_locked_invoice_id: (s.invoice_locked_invoice_id != null) ? String(s.invoice_locked_invoice_id) : undefined
@@ -54642,8 +55775,11 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
     sumPay += payEx;
     sumChg += chgEx;
 
-    const sid = `ts:${ts.timesheet_id}:${i}`;
-    const p = preserved.get(sid) || null;
+    // ✅ Stable identity (no index-based ids)
+    const key = _stableSegKey(seg);
+    const sid = _stableSegId(ts.timesheet_id, key);
+
+    const p = preserved.get(key) || null;
 
     const exclude_from_pay =
       (p && typeof p.exclude_from_pay === 'boolean') ? p.exclude_from_pay : false;
@@ -60892,6 +62028,22 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
     return (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on');
   };
 
+  const hasAnySegmentInvoiceLock = (tf) => {
+    try {
+      const ib = tf?.invoice_breakdown_json;
+      if (!ib || typeof ib !== 'object') return false;
+      const mode = String(ib?.mode || '').toUpperCase();
+      if (mode !== 'SEGMENTS') return false;
+      const segs = Array.isArray(ib?.segments) ? ib.segments : [];
+      return segs.some(s => {
+        const v = s?.invoice_locked_invoice_id;
+        return v != null && String(v).trim() !== '';
+      });
+    } catch {
+      return false;
+    }
+  };
+
   // Load current TS + TSFIN
   const tsBefore = await sbGetOne(
     env,
@@ -60930,7 +62082,7 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
       `?timesheet_id=eq.${enc(currentTimesheetId)}` +
       `&is_current=eq.true` +
-      `&select=id,client_id,basis,processing_status,locked_by_invoice_id,paid_at_utc` +
+      `&select=id,client_id,basis,processing_status,locked_by_invoice_id,paid_at_utc,invoice_breakdown_json` +
       `&limit=1`
   );
   const fin = finRows?.[0] || null;
@@ -60942,7 +62094,7 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
     return withCORS(env, req, badRequest('Cannot authorise: no financial snapshot exists for this timesheet'));
   }
 
-  if (fin.locked_by_invoice_id || fin.paid_at_utc) {
+  if (fin.locked_by_invoice_id || fin.paid_at_utc || hasAnySegmentInvoiceLock(fin)) {
     return withCORS(env, req, badRequest('Cannot authorise: timesheet is locked or paid'));
   }
 
@@ -61110,6 +62262,7 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
     was_stale: !!guard.resolved.was_stale
   }));
 }
+
 
 async function loadWeeklyContext(env, ts) {
   const enc = encodeURIComponent; // ✅ define here so global move is safe
@@ -63706,10 +64859,6 @@ if (req.method === 'GET' && p === '/api/healthroster/autoprocess/clients') {
         if (inv && req.method === 'GET')                                     return handleGetInvoice(env, req, inv.invoice_id);
       }
 
-{
-  const m = matchPath(p, '/api/invoices/:invoice_id/remove-timesheets');
-  if (m && req.method === 'POST') return handleInvoiceRemoveTimesheetsTsfin(env, req, m.invoice_id);
-}
 
 {
   const m = matchPath(p, '/api/invoices/:invoice_id');
