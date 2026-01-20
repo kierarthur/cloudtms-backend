@@ -47,7 +47,6 @@
 -- SAFE TO RE-RUN: CREATE OR REPLACE VIEW
 -- C6.1: Refs required to ISSUE (not INVOICE)
 -- New columns appended at end: reference_number_required_to_issue_invoice, issue_missing_reference, issue_missing_reference_count
-
 create or replace view public.v_ts_invoice_precheck as
 with anchor as (
   select (now() at time zone 'Europe/London')::date as anchor_ymd
@@ -58,11 +57,11 @@ select
   ts.submission_mode,
   ts.manual_pdf_r2_key,
   ts.reference_number,
-  c.require_reference_to_invoice,
+  coalesce(c.require_reference_to_invoice, cs.invoice_reference_required, false) as require_reference_to_invoice,
 
   case
     -- PDF gating (client-led)
-    when coalesce(cs.ts_attach_to_invoice, true) = true
+    when coalesce(c.ts_attach_to_invoice, cs.ts_attach_to_invoice, sd.ts_attach_to_invoice, true) = true
      and (
        (
          ts.submission_mode = 'MANUAL'::submission_mode_enum
@@ -88,7 +87,7 @@ select
       then 'BLOCK_NO_PDF'::text
 
     -- Reference/PO gating (contract-led): when require_reference_to_invoice=true, missing refs block invoice creation (worked-only bypass below).
-    when coalesce(c.require_reference_to_invoice, false) = true
+    when coalesce(c.require_reference_to_invoice, cs.invoice_reference_required, false) = true
      and coalesce(refchk.missing_raw, false) = true
      and not (
     coalesce(tf.total_hours, 0) = 0
@@ -166,8 +165,8 @@ select
   end as precheck_status,
 
   -- existing appended columns (unchanged order)
-  coalesce(cs.ts_attach_to_invoice, true)  as effective_ts_attach_to_invoice,
-  coalesce(cs.hr_attach_to_invoice, true)  as effective_hr_attach_to_invoice,
+  coalesce(c.ts_attach_to_invoice, cs.ts_attach_to_invoice, sd.ts_attach_to_invoice, true)  as effective_ts_attach_to_invoice,
+  coalesce(c.hr_attach_to_invoice, cs.hr_attach_to_invoice, sd.hr_attach_to_invoice, true)  as effective_hr_attach_to_invoice,
   coalesce(cs.auto_invoice_default, false) as effective_auto_invoice_default,
   coalesce(tepdf.has_timesheet_evidence_pdf, false) as has_timesheet_evidence_pdf,
 
@@ -235,6 +234,9 @@ left join public.contract_weeks cw
 left join public.contracts c
   on c.id = coalesce(ts.contract_id, cw.contract_id)
 
+left join public.settings_defaults sd
+  on sd.id = 1
+
 -- derive client_id + claim fields from the current TSFIN snapshot
 left join lateral (
   select
@@ -282,7 +284,8 @@ left join lateral (
     cs0.auto_invoice_default,
     cs0.hr_attach_to_invoice,
     cs0.ts_attach_to_invoice,
-    cs0.reference_number_required_to_issue_invoice
+    cs0.reference_number_required_to_issue_invoice,
+    cs0.invoice_reference_required
   from public.client_settings cs0
   cross join anchor a
   where cs0.client_id = tf.client_id
@@ -384,3 +387,4 @@ left join lateral (
       end
     ) as missing_count
 ) refchk on true;
+
