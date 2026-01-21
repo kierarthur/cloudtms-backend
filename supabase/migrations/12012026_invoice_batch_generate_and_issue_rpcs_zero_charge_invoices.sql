@@ -1228,12 +1228,7 @@ begin
     'invoice_batch:' || m.client_id::text || ':' || coalesce(m.week_ending_date::text,'') || ':part:' || (m.chunk_idx + 1)::text,
     v_now,
     p_actor_user_id
-  from tmp_mail_rows m
-  returning
-    id,
-    reference,
-    "to",
-    subject;
+  from tmp_mail_rows m;
 
   -- collect email outbox rows as json
   select coalesce(
@@ -1257,7 +1252,6 @@ begin
       and type = 'INVOICE'
       and reference like 'invoice_batch:%'
   ) o;
-
 
   if coalesce(v_debug,false) = true then
     v_steps := v_steps || jsonb_build_array(jsonb_build_object(
@@ -1326,6 +1320,10 @@ exception
     raise;
 end;
 $$;
+
+
+
+
 
 -- ============================================================
 -- CloudTMS RPC: invoice_closeout_zero_charge_timesheets
