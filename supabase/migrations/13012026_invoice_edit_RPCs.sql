@@ -1535,13 +1535,14 @@ if v_has_seg_ops then
           raise exception 'add_segment_refs requires segment_id (tsfin_id=%)', v_tsfin_id;
         end if;
 
-        -- Load snapshot + timesheet + precheck (must be OK)
+          -- Load snapshot + timesheet + precheck (must be OK)
         select
           tf.*,
           tsr.sheet_scope::text as sheet_scope,
           coalesce(tsr.submission_mode::text,'') as submission_mode,
           tsr.day_references_json,
           tsr.actual_schedule_json,
+          tsr.week_ending_date,
           cw.contract_id
         into snap
         from public.timesheets_financials tf
@@ -2731,4 +2732,3 @@ exception when others then
   raise;
 end;
 $$;
-
