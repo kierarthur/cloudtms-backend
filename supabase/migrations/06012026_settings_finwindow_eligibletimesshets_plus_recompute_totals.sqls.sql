@@ -313,7 +313,11 @@ begin
         b.basis,
         b.validation_status,
         b.hr_validation_required_for_invoice,
-        (b.hr_validation_required_for_invoice and upper(coalesce(b.validation_status, '')) <> 'OK') as blocked_by_hr_validation,
+        (
+          b.hr_validation_required_for_invoice
+          and b.validation_status is distinct from 'VALIDATION_OK'::public.validation_status_enum
+          and b.validation_status is distinct from 'OVERRIDDEN'::public.validation_status_enum
+        ) as blocked_by_hr_validation,
         upper(coalesce(b.invoice_breakdown_json->>'mode', '')) as invoice_breakdown_mode,
         case
           when upper(coalesce(b.invoice_breakdown_json->>'mode', '')) = 'SEGMENTS'
@@ -333,15 +337,23 @@ begin
       left join seg_list sl on sl.timesheet_id = b.timesheet_id
       where
         (
-          upper(coalesce(b.invoice_breakdown_json->>'mode', '')) = 'SEGMENTS'
-          and (coalesce(sa.invoiceable_hours, 0) <> 0 or coalesce(sa.invoiceable_charge_ex_vat, 0) <> 0)
+          (
+            upper(coalesce(b.invoice_breakdown_json->>'mode', '')) = 'SEGMENTS'
+            and (coalesce(sa.invoiceable_hours, 0) <> 0 or coalesce(sa.invoiceable_charge_ex_vat, 0) <> 0)
+          )
+          or
+          (
+            upper(coalesce(b.invoice_breakdown_json->>'mode', '')) <> 'SEGMENTS'
+            and b.timesheet_week_start = v_invoice_week_start
+          )
         )
-        or
-        (
-          upper(coalesce(b.invoice_breakdown_json->>'mode', '')) <> 'SEGMENTS'
-          and b.timesheet_week_start = v_invoice_week_start
+        and not (
+          b.hr_validation_required_for_invoice
+          and b.validation_status is distinct from 'VALIDATION_OK'::public.validation_status_enum
+          and b.validation_status is distinct from 'OVERRIDDEN'::public.validation_status_enum
         )
     )
+
     select jsonb_build_object(
       'invoice_id', p_invoice_id,
       'client_id', v_client_id,
