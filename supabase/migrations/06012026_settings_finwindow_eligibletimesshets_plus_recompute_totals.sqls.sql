@@ -152,22 +152,17 @@ select
 from public.settings_finance_windows w
 order by w.date_from desc, w.created_at desc;
 $$;
+
+
 -- ============================================================
--- CloudTMS Patch: invoice_eligible_timesheets_for_invoice (Option B)
--- ============================================================
--- Purpose:
---   Extend invoice_eligible_timesheets_for_invoice(...) to include
---   eligible_segments[] per timesheet (SEGMENTS mode) so the frontend
---   can expand a timesheet and select segments to add, without extra calls.
+-- CloudTMS Patch: invoice_eligible_timesheets_for_invoice
+-- Debug logging ONLY (ZERO functional/output changes)
 --
--- Notes:
---   - Only returns segments that are:
---       * invoice_locked_invoice_id IS NULL
---       * invoice_target_week_start (or default timesheet_week_start) = invoice header week_start
---   - Non-SEGMENTS timesheets get eligible_segments = []
---   - Includes tsfin_id so frontend can construct { tsfin_id, segment_id } refs.
---
--- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
+-- Behaviour:
+--   - Output JSON is IDENTICAL to the current function.
+--   - When settings_defaults.invoice_debug = true, writes ONE audit row
+--     via public._inv_write_audit showing why rows/segments were excluded.
+--   - On error (and invoice_debug=true), writes an *_ERROR audit row.
 -- ============================================================
 
 create or replace function public.invoice_eligible_timesheets_for_invoice(
@@ -183,7 +178,40 @@ declare
   v_client_id uuid;
   v_invoice_week_start date;
   v_invoice_week_end date;
+
+  -- =====================================================
+  -- DEBUG (invoice_debug): single audit row per RPC call
+  -- =====================================================
+  v_invoice_debug boolean := false;
+  v_dbg_started_at timestamptz := now();
+  v_dbg_steps jsonb := '[]'::jsonb;
+  v_dbg_sqlstate text := null;
+  v_dbg_error text := null;
+  v_dbg_stats jsonb := '{}'::jsonb;
+
+  v_out jsonb := null;
 begin
+  -- Load invoice_debug flag (safe even if column not yet present)
+  begin
+    select coalesce(sd.invoice_debug, false)
+    into v_invoice_debug
+    from public.settings_defaults sd
+    where sd.id = 1
+    limit 1;
+  exception when undefined_column then
+    v_invoice_debug := false;
+  end;
+
+  if v_invoice_debug then
+    v_dbg_steps := v_dbg_steps || jsonb_build_array(
+      jsonb_build_object(
+        'step','start',
+        'at_utc', public._inv_iso_utc(v_dbg_started_at),
+        'invoice_id', coalesce(p_invoice_id::text,'')
+      )
+    );
+  end if;
+
   -- Load invoice context (client + invoice week)
   select
     i.client_id,
@@ -205,7 +233,22 @@ begin
 
   v_invoice_week_end := v_invoice_week_start + 6;
 
-  return (
+  if v_invoice_debug then
+    v_dbg_steps := v_dbg_steps || jsonb_build_array(
+      jsonb_build_object(
+        'step','invoice_loaded',
+        'invoice_id', p_invoice_id::text,
+        'client_id', coalesce(v_client_id::text,''),
+        'invoice_week_start', v_invoice_week_start::text,
+        'invoice_week_ending', v_invoice_week_end::text
+      )
+    );
+  end if;
+
+  -- =====================================================
+  -- MAIN RETURN (UNCHANGED)
+  -- =====================================================
+  v_out := (
     with base as (
       select
         tf.id as tsfin_id,
@@ -400,9 +443,268 @@ begin
       ), '[]'::jsonb)
     )
   );
+
+  -- =====================================================
+  -- DEBUG AUDIT (NO OUTPUT CHANGES)
+  -- =====================================================
+  if v_invoice_debug then
+    begin
+      -- Re-run the same core CTEs to explain exclusions (debug-only)
+      with base as (
+        select
+          tf.id as tsfin_id,
+          tf.timesheet_id,
+          tf.client_id,
+          tf.candidate_id,
+          ts.week_ending_date::date as timesheet_week_ending_date,
+          (ts.week_ending_date::date - 6) as timesheet_week_start,
+          ts.hospital_norm,
+          ts.submission_mode,
+          tf.basis,
+          tf.total_hours as tsfin_total_hours,
+          tf.total_charge_ex_vat as tsfin_total_charge_ex_vat,
+          tf.invoice_breakdown_json,
+          s.client_name,
+          s.candidate_name,
+          s.validation_status,
+          coalesce(s.hr_validation_required_for_invoice, false) as hr_validation_required_for_invoice
+        from public.timesheets_financials tf
+        join public.timesheets ts
+          on ts.timesheet_id = tf.timesheet_id
+         and ts.is_current = true
+        join public.v_ts_invoice_precheck pc
+          on pc.timesheet_id = tf.timesheet_id
+        left join public.v_timesheets_summary_base s
+          on s.timesheet_id = tf.timesheet_id
+        where tf.is_current = true
+          and tf.client_id = v_client_id
+          and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
+          and tf.locked_by_invoice_id is null
+          and ts.revoked_at is null
+          and upper(coalesce(pc.precheck_status, '')) = 'OK'
+      ),
+      seg_stats as (
+        select
+          b.timesheet_id,
+          count(*)::int as seg_total,
+          count(*) filter (
+            where nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') is null
+          )::int as seg_unlocked_total,
+          count(*) filter (
+            where nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') is null
+              and coalesce(
+                    case
+                      when nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '') ~ '^\d{4}-\d{2}-\d{2}$'
+                        then nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date
+                      else null
+                    end,
+                    b.timesheet_week_start
+                  ) = v_invoice_week_start
+          )::int as seg_unlocked_for_invoice_week,
+          count(*) filter (
+            where nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') is null
+              and coalesce(
+                    case
+                      when nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '') ~ '^\d{4}-\d{2}-\d{2}$'
+                        then nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date
+                      else null
+                    end,
+                    b.timesheet_week_start
+                  ) <> v_invoice_week_start
+          )::int as seg_unlocked_other_week,
+          count(*) filter (
+            where nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '') is not null
+              and nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '') !~ '^\d{4}-\d{2}-\d{2}$'
+          )::int as seg_bad_target_format
+        from base b
+        cross join lateral jsonb_array_elements(coalesce(b.invoice_breakdown_json->'segments','[]'::jsonb)) seg
+        where upper(coalesce(b.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+        group by b.timesheet_id
+      ),
+      seg_agg as (
+        select
+          b.timesheet_id,
+          sum((coalesce(nullif(seg->>'charge_amount', ''), '0'))::numeric) as invoiceable_charge_ex_vat,
+          sum(
+              (coalesce(nullif(seg->>'hours_day', ''), '0'))::numeric
+            + (coalesce(nullif(seg->>'hours_night', ''), '0'))::numeric
+            + (coalesce(nullif(seg->>'hours_sat', ''), '0'))::numeric
+            + (coalesce(nullif(seg->>'hours_sun', ''), '0'))::numeric
+            + (coalesce(nullif(seg->>'hours_bh', ''), '0'))::numeric
+          ) as invoiceable_hours,
+          count(*)::int as invoiceable_segments_count
+        from base b
+        cross join lateral jsonb_array_elements(coalesce(b.invoice_breakdown_json->'segments', '[]'::jsonb)) seg
+        where upper(coalesce(b.invoice_breakdown_json->>'mode', '')) = 'SEGMENTS'
+          and nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id', '')), '') is null
+          and coalesce(
+                nullif(btrim(coalesce(seg->>'invoice_target_week_start', '')), '')::date,
+                b.timesheet_week_start
+              ) = v_invoice_week_start
+        group by b.timesheet_id
+      ),
+      eligible_ids as (
+        select b.timesheet_id
+        from base b
+        left join seg_agg sa on sa.timesheet_id = b.timesheet_id
+        where
+          (
+            (
+              upper(coalesce(b.invoice_breakdown_json->>'mode', '')) = 'SEGMENTS'
+              and (coalesce(sa.invoiceable_hours, 0) <> 0 or coalesce(sa.invoiceable_charge_ex_vat, 0) <> 0)
+            )
+            or
+            (
+              upper(coalesce(b.invoice_breakdown_json->>'mode', '')) <> 'SEGMENTS'
+              and b.timesheet_week_start = v_invoice_week_start
+            )
+          )
+          and not (
+            b.hr_validation_required_for_invoice
+            and b.validation_status is distinct from 'VALIDATION_OK'::public.validation_status_enum
+            and b.validation_status is distinct from 'OVERRIDDEN'::public.validation_status_enum
+          )
+      ),
+      excluded as (
+        select
+          b.timesheet_id,
+          b.tsfin_id,
+          b.candidate_id,
+          b.candidate_name,
+          b.client_name,
+          upper(coalesce(b.invoice_breakdown_json->>'mode','')) as invoice_breakdown_mode,
+          b.timesheet_week_start,
+          b.timesheet_week_ending_date,
+          b.hr_validation_required_for_invoice,
+          b.validation_status,
+          coalesce(ss.seg_total,0) as seg_total,
+          coalesce(ss.seg_unlocked_total,0) as seg_unlocked_total,
+          coalesce(ss.seg_unlocked_for_invoice_week,0) as seg_unlocked_for_invoice_week,
+          coalesce(ss.seg_unlocked_other_week,0) as seg_unlocked_other_week,
+          coalesce(ss.seg_bad_target_format,0) as seg_bad_target_format,
+          case
+            when (
+              b.hr_validation_required_for_invoice
+              and b.validation_status is distinct from 'VALIDATION_OK'::public.validation_status_enum
+              and b.validation_status is distinct from 'OVERRIDDEN'::public.validation_status_enum
+            ) then 'HR_VALIDATION_BLOCKED'
+            when upper(coalesce(b.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+              and coalesce(ss.seg_unlocked_for_invoice_week,0) = 0 then 'NO_UNLOCKED_SEGMENTS_FOR_INVOICE_WEEK'
+            when upper(coalesce(b.invoice_breakdown_json->>'mode','')) <> 'SEGMENTS'
+              and b.timesheet_week_start <> v_invoice_week_start then 'NON_SEGMENTS_WEEK_MISMATCH'
+            else 'OTHER'
+          end as exclude_reason
+        from base b
+        left join seg_stats ss on ss.timesheet_id = b.timesheet_id
+        left join eligible_ids ei on ei.timesheet_id = b.timesheet_id
+        where ei.timesheet_id is null
+      )
+      select jsonb_build_object(
+        'invoice_id', p_invoice_id::text,
+        'client_id', coalesce(v_client_id::text,''),
+        'invoice_week_start', v_invoice_week_start::text,
+        'invoice_week_ending', v_invoice_week_end::text,
+        'counts', jsonb_build_object(
+          'base_timesheets', (select count(*)::int from base),
+          'base_segments_mode', (select count(*)::int from base where upper(coalesce(invoice_breakdown_json->>'mode',''))='SEGMENTS'),
+          'base_non_segments_mode', (select count(*)::int from base where upper(coalesce(invoice_breakdown_json->>'mode',''))<>'SEGMENTS'),
+          'eligible_timesheets', (select count(*)::int from eligible_ids),
+          'returned_timesheets', case
+            when v_out is not null and jsonb_typeof(v_out->'timesheets')='array' then jsonb_array_length(v_out->'timesheets')
+            else 0
+          end,
+          'excluded_timesheets', (select count(*)::int from excluded)
+        ),
+        'excluded_samples', coalesce((
+          select jsonb_agg(
+            jsonb_build_object(
+              'timesheet_id', e.timesheet_id::text,
+              'tsfin_id', case when e.tsfin_id is null then null else e.tsfin_id::text end,
+              'candidate_id', case when e.candidate_id is null then null else e.candidate_id::text end,
+              'candidate_name', e.candidate_name,
+              'client_name', e.client_name,
+              'invoice_breakdown_mode', e.invoice_breakdown_mode,
+              'timesheet_week_start', case when e.timesheet_week_start is null then null else e.timesheet_week_start::text end,
+              'timesheet_week_ending', case when e.timesheet_week_ending_date is null then null else e.timesheet_week_ending_date::text end,
+              'hr_validation_required_for_invoice', coalesce(e.hr_validation_required_for_invoice,false),
+              'validation_status', case when e.validation_status is null then null else e.validation_status::text end,
+              'seg_total', e.seg_total,
+              'seg_unlocked_total', e.seg_unlocked_total,
+              'seg_unlocked_for_invoice_week', e.seg_unlocked_for_invoice_week,
+              'seg_unlocked_other_week', e.seg_unlocked_other_week,
+              'seg_bad_target_format', e.seg_bad_target_format,
+              'exclude_reason', e.exclude_reason
+            )
+          ), '[]'::jsonb)
+          from (
+            select *
+            from excluded
+            order by candidate_name nulls last, timesheet_week_ending_date asc nulls last, timesheet_id::text
+            limit 50
+          ) e
+        ), '[]'::jsonb)
+      )
+      into v_dbg_stats;
+
+      v_dbg_steps := v_dbg_steps || jsonb_build_array(
+        jsonb_build_object(
+          'step','finish',
+          'at_utc', public._inv_iso_utc(now()),
+          'stats', coalesce(v_dbg_stats,'{}'::jsonb)
+        )
+      );
+
+      perform public._inv_write_audit(
+        null,
+        'INVOICE_ELIGIBLE_TIMESHEETS_DEBUG',
+        jsonb_build_object(
+          'invoice_id', p_invoice_id::text,
+          'stats', coalesce(v_dbg_stats,'{}'::jsonb),
+          'steps', v_dbg_steps
+        ),
+        'invoices',
+        p_invoice_id::text,
+        null,
+        'INVOICE_DEBUG',
+        null, null, null
+      );
+    exception when others then
+      null;
+    end;
+  end if;
+
+  return v_out;
+
+exception when others then
+  v_dbg_sqlstate := SQLSTATE;
+  v_dbg_error := SQLERRM;
+
+  if v_invoice_debug then
+    begin
+      perform public._inv_write_audit(
+        null,
+        'INVOICE_ELIGIBLE_TIMESHEETS_ERROR',
+        jsonb_build_object(
+          'invoice_id', coalesce(p_invoice_id::text,''),
+          'sqlstate', v_dbg_sqlstate,
+          'error', v_dbg_error,
+          'stats', coalesce(v_dbg_stats,'{}'::jsonb),
+          'steps', v_dbg_steps
+        ),
+        'invoices',
+        coalesce(p_invoice_id::text,''),
+        null,
+        'INVOICE_DEBUG',
+        null, null, null
+      );
+    exception when others then
+      null;
+    end;
+  end if;
+
+  raise;
 end;
 $$;
-
 
 
 
