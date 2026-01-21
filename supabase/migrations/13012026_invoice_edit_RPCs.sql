@@ -863,7 +863,7 @@ v_has_expense_or_mileage boolean;
   pay_ex numeric; chg_ex numeric; margin_ex numeric;
   vat_amt numeric; inc_amt numeric;
   line_desc text;
-  source_key text;
+  v_source_key text;
 
   -- daily aggregation record
   r_day record;
@@ -1814,7 +1814,7 @@ if v_has_seg_ops then
               'bucket_labels', c_bucket_labels
             );
   
-            source_key := 'TS:' || tsid::text || ':HOURS:' || r_day.ymd;
+            v_source_key := 'TS:' || tsid::text || ':HOURS:' || r_day.ymd;
   
             insert into public.invoice_lines(
               invoice_id, timesheet_id, booking_id, description,
@@ -1834,7 +1834,7 @@ if v_has_seg_ops then
               v_vat_rate, vat_amt, inc_amt,
               ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
               v_meta,
-              source_key
+              v_source_key
             )
             on conflict (invoice_id, source_key) do nothing;
           end loop;
@@ -1867,7 +1867,7 @@ if v_has_seg_ops then
               'bucket_labels', c_bucket_labels
             );
   
-            source_key := 'TS:' || tsid::text || ':HOURS:WEEK';
+            v_source_key := 'TS:' || tsid::text || ':HOURS:WEEK';
   
             insert into public.invoice_lines(
               invoice_id, timesheet_id, booking_id, description,
@@ -1887,7 +1887,7 @@ if v_has_seg_ops then
               v_vat_rate, vat_amt, inc_amt,
               ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
               v_meta,
-              source_key
+              v_source_key
             )
             on conflict (invoice_id, source_key) do nothing;
           end if;
@@ -2205,7 +2205,7 @@ end if;
             'bucket_labels', c_bucket_labels
           );
 
-          source_key := 'TS:' || tsid::text || ':HOURS:' || r_day.ymd;
+          v_source_key := 'TS:' || tsid::text || ':HOURS:' || r_day.ymd;
 
           insert into public.invoice_lines(
             invoice_id, timesheet_id, booking_id, description,
@@ -2225,7 +2225,7 @@ end if;
             v_vat_rate, vat_amt, inc_amt,
             ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
             v_meta,
-            source_key
+            v_source_key
           )
           on conflict (invoice_id, source_key) do nothing;
         end loop;
@@ -2258,7 +2258,7 @@ end if;
             'bucket_labels', c_bucket_labels
           );
 
-          source_key := 'TS:' || tsid::text || ':HOURS:WEEK';
+          v_source_key := 'TS:' || tsid::text || ':HOURS:WEEK';
 
           insert into public.invoice_lines(
             invoice_id, timesheet_id, booking_id, description,
@@ -2278,7 +2278,7 @@ end if;
             v_vat_rate, vat_amt, inc_amt,
             ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
             v_meta,
-            source_key
+            v_source_key
           )
           on conflict (invoice_id, source_key) do nothing;
         end if;
@@ -2327,7 +2327,7 @@ end if;
             'units', jsonb_build_object('unit_count', unit_count, 'unit_name', unit_name)
           );
 
-          source_key := 'TS:' || tsid::text || ':ADD:' || code || ':WEEK';
+          v_source_key := 'TS:' || tsid::text || ':ADD:' || code || ':WEEK';
 
           insert into public.invoice_lines(
             invoice_id, timesheet_id, booking_id, description,
@@ -2347,7 +2347,7 @@ end if;
             v_vat_rate, vat_amt, inc_amt,
             ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
             v_meta,
-            source_key
+            v_source_key
           )
           on conflict (invoice_id, source_key) do nothing;
         end loop;
@@ -2378,7 +2378,7 @@ end if;
           'week_ending_date', snap.week_ending_date::text
         );
 
-        source_key := 'TS:' || tsid::text || ':EXP:TRAVEL';
+        v_source_key := 'TS:' || tsid::text || ':EXP:TRAVEL';
 
         insert into public.invoice_lines(
           invoice_id, timesheet_id, booking_id, description,
@@ -2398,7 +2398,7 @@ end if;
           v_vat_rate, vat_amt, inc_amt,
           ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
           v_meta,
-          source_key
+          v_source_key
         )
         on conflict (invoice_id, source_key) do nothing;
       end if;
@@ -2420,7 +2420,7 @@ end if;
           'week_ending_date', snap.week_ending_date::text
         );
 
-        source_key := 'TS:' || tsid::text || ':EXP:ACCOM';
+        v_source_key := 'TS:' || tsid::text || ':EXP:ACCOM';
 
         insert into public.invoice_lines(
           invoice_id, timesheet_id, booking_id, description,
@@ -2440,7 +2440,7 @@ end if;
           v_vat_rate, vat_amt, inc_amt,
           ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
           v_meta,
-          source_key
+          v_source_key
         )
         on conflict (invoice_id, source_key) do nothing;
       end if;
@@ -2462,7 +2462,7 @@ end if;
           'week_ending_date', snap.week_ending_date::text
         );
 
-        source_key := 'TS:' || tsid::text || ':EXP:OTHER';
+        v_source_key := 'TS:' || tsid::text || ':EXP:OTHER';
 
         insert into public.invoice_lines(
           invoice_id, timesheet_id, booking_id, description,
@@ -2482,7 +2482,7 @@ end if;
           v_vat_rate, vat_amt, inc_amt,
           ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
           v_meta,
-          source_key
+          v_source_key
         )
         on conflict (invoice_id, source_key) do nothing;
       end if;
@@ -2504,7 +2504,7 @@ end if;
           'week_ending_date', snap.week_ending_date::text
         );
 
-        source_key := 'TS:' || tsid::text || ':MILEAGE';
+        v_source_key := 'TS:' || tsid::text || ':MILEAGE';
 
         insert into public.invoice_lines(
           invoice_id, timesheet_id, booking_id, description,
@@ -2524,7 +2524,7 @@ end if;
           v_vat_rate, vat_amt, inc_amt,
           ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
           v_meta,
-          source_key
+          v_source_key
         )
         on conflict (invoice_id, source_key) do nothing;
       end if;
