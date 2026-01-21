@@ -153,7 +153,6 @@ from public.settings_finance_windows w
 order by w.date_from desc, w.created_at desc;
 $$;
 
-
 -- ============================================================
 -- CloudTMS Patch: invoice_eligible_timesheets_for_invoice
 -- Debug logging ONLY (ZERO functional/output changes)
@@ -163,6 +162,10 @@ $$;
 --   - When settings_defaults.invoice_debug = true, writes ONE audit row
 --     via public._inv_write_audit showing why rows/segments were excluded.
 --   - On error (and invoice_debug=true), writes an *_ERROR audit row.
+--
+-- FIX INCLUDED:
+--   - Corrected a syntax error in the debug-only excluded_samples subquery
+--     (misplaced parenthesis/comma before the FROM (...) e block).
 -- ============================================================
 
 create or replace function public.invoice_eligible_timesheets_for_invoice(
@@ -396,7 +399,6 @@ begin
           and b.validation_status is distinct from 'OVERRIDDEN'::public.validation_status_enum
         )
     )
-
     select jsonb_build_object(
       'invoice_id', p_invoice_id,
       'client_id', v_client_id,
@@ -427,7 +429,7 @@ begin
             'invoice_breakdown_mode', e.invoice_breakdown_mode,
             'invoiceable_segments_count', e.invoiceable_segments_count,
 
-            -- ✅ Option B: eligible segments list for SEGMENTS mode (empty for non-SEGMENTS)
+            -- Option B: eligible segments list for SEGMENTS mode (empty for non-SEGMENTS)
             'eligible_segments', e.eligible_segments,
 
             -- HR validation signals for UI gating
@@ -635,7 +637,7 @@ begin
               'seg_bad_target_format', e.seg_bad_target_format,
               'exclude_reason', e.exclude_reason
             )
-          ), '[]'::jsonb)
+          )
           from (
             select *
             from excluded
@@ -705,7 +707,6 @@ exception when others then
   raise;
 end;
 $$;
-
 
 
 create or replace function public.invoice_recompute_totals(
