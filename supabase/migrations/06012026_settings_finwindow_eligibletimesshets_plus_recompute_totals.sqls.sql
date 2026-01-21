@@ -154,14 +154,12 @@ order by w.date_from desc, w.created_at desc;
 $$;
 -- ============================================================
 -- CloudTMS Patch: invoice_eligible_timesheets_for_invoice
--- Debug logging ONLY (ZERO functional/output changes)
+-- Make function VOLATILE so audit logging always persists
 --
--- Behaviour:
---   - Output JSON is IDENTICAL to the existing function.
---   - When settings_defaults.invoice_debug = true:
---       writes ONE audit row via public._inv_write_audit explaining exclusions.
---   - On error (and invoice_debug=true):
---       writes an *_ERROR audit row.
+-- ONLY CHANGE vs current installed body:
+--   - Function volatility: STABLE -> VOLATILE
+--
+-- Body/output logic is unchanged.
 -- ============================================================
 
 create or replace function public.invoice_eligible_timesheets_for_invoice(
@@ -169,7 +167,7 @@ create or replace function public.invoice_eligible_timesheets_for_invoice(
 )
 returns jsonb
 language plpgsql
-stable
+volatile
 security definer
 set search_path = public
 as $$
@@ -195,7 +193,6 @@ begin
     select coalesce(sd.invoice_debug, false)
     into v_invoice_debug
     from public.settings_defaults sd
-    where sd.id = 1
     limit 1;
   exception when undefined_column then
     v_invoice_debug := false;
@@ -679,7 +676,6 @@ exception when others then
   raise;
 end;
 $$;
-
 
 create or replace function public.invoice_recompute_totals(
   p_invoice_id uuid
