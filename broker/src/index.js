@@ -54673,6 +54673,58 @@ return {
 
   }
 
+async function rpcTsfinRepairMergeSegmentsLocked(env, {
+  timesheetId,
+  newSegments,
+  actorUserId = null,
+  correlationId = null
+} = {}) {
+  const p_timesheet_id = timesheetId ? String(timesheetId).trim() : '';
+  if (!p_timesheet_id) throw new Error('rpcTsfinRepairMergeSegmentsLocked: timesheetId is required');
+
+  const p_new_segments = Array.isArray(newSegments) ? newSegments : null;
+  if (!p_new_segments) throw new Error('rpcTsfinRepairMergeSegmentsLocked: newSegments must be an array');
+
+  const args = {
+    p_timesheet_id,
+    p_new_segments
+  };
+  if (actorUserId != null) args.p_actor_user_id = actorUserId;
+  if (correlationId != null) args.p_correlation_id = String(correlationId);
+
+  const unwrapRpcJsonb = (r, fnName) => {
+    if (r == null) return null;
+    if (Array.isArray(r)) {
+      if (r.length === 0) return null;
+      if (r.length === 1) {
+        const o = r[0];
+        if (o && typeof o === 'object' && fnName && Object.prototype.hasOwnProperty.call(o, fnName)) return o[fnName];
+        return o;
+      }
+      return r;
+    }
+    if (r && typeof r === 'object' && fnName && Object.prototype.hasOwnProperty.call(r, fnName)) {
+      return r[fnName];
+    }
+    return r;
+  };
+
+  _tsfinRpcLog('tsfin_repair_merge_segments_locked -> call', { timesheet_id: p_timesheet_id, seg_count: p_new_segments.length });
+  try {
+    const res = await sbRpc(env, 'tsfin_repair_merge_segments_locked', args);
+    const out = unwrapRpcJsonb(res, 'tsfin_repair_merge_segments_locked');
+    _tsfinRpcLog('tsfin_repair_merge_segments_locked -> ok', {
+      ok: out?.ok === true,
+      old_invalid_count: out?.old_invalid_count ?? null,
+      new_invalid_count: out?.new_invalid_count ?? null,
+      preserved_locked_count: out?.preserved_locked_count ?? null
+    });
+    return out;
+  } catch (e) {
+    _tsfinRpcLog('tsfin_repair_merge_segments_locked -> fail', { err: String(e?.message || e) });
+    throw e;
+  }
+}
 
 async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } = {}) {
   // Local helpers used by both branches
@@ -54946,11 +54998,15 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
 
   let ok = 0, fail = 0;
 
+  // ✅ Track primaries that fail BEFORE the batch writer runs (so we don't clear their duplicate outbox rows)
+  const preFailPrimaryOutboxSet = new Set();
+
   // weeklyWork items will be enriched via batch weekly context RPC later:
   // { ts, curFin, effFlags, policySql, cw, contract, ... }
   const weeklyWork = [];
   const dailyItemsForRates = [];
   const dailyWork = [];
+
 
   // 5) First pass: collect WEEKLY + DAILY work
   for (const effId of effIds) {
@@ -55176,7 +55232,7 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
   // ─────────────────────────────────────────────────────────────
   const rowsToWriteAll = [];
 
-   // --- WEEKLY snapshots (compute-only builders + enrich snapshot object, no TSFIN re-fetch) ---
+  // --- WEEKLY snapshots (compute-only builders + enrich snapshot object, no TSFIN re-fetch) ---
   for (const w of weeklyWork) {
     const {
       outbox_id,
@@ -55304,6 +55360,72 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
         await enrichTsfinWithHrCrosscheck(env, ts, snapshot, effFlags || null, preloadedShifts);
       } catch {}
 
+      // ✅ SELF-HEAL: If current SEGMENTS snapshot is (locked segments) + (invalid elements),
+      // merge-repair the current TSFIN segments in-place while preserving locked segment JSON exactly.
+      try {
+        const curIb0 = curFin?.invoice_breakdown_json || null;
+        const curMode0 = String(curIb0?.mode || '').toUpperCase();
+        const curSegs0 = Array.isArray(curIb0?.segments) ? curIb0.segments : null;
+
+        let invalidSegCount0 = 0;
+        let lockedSegCount0 = 0;
+
+        if (curMode0 === 'SEGMENTS' && Array.isArray(curSegs0)) {
+          for (const s0 of curSegs0) {
+            const isObj0 = !!(s0 && typeof s0 === 'object' && !Array.isArray(s0));
+            const segId0 = isObj0 ? String(s0.segment_id || '').trim() : '';
+            if (!isObj0 || !segId0) {
+              invalidSegCount0++;
+              continue;
+            }
+            const lockId0 = String(s0.invoice_locked_invoice_id || '').trim();
+            if (lockId0) lockedSegCount0++;
+          }
+        }
+
+        const needsHeal0 = (invalidSegCount0 > 0 && lockedSegCount0 > 0);
+
+        if (needsHeal0) {
+          const newSegs0 = snapshot?.invoice_breakdown_json?.segments;
+          const healRes0 = await rpcTsfinRepairMergeSegmentsLocked(env, {
+            timesheetId: ts.timesheet_id,
+            newSegments: Array.isArray(newSegs0) ? newSegs0 : [],
+            actorUserId: null,
+            correlationId: outbox_id ? `tsfin_selfheal:${String(outbox_id)}` : null
+          });
+
+          const okHeal0 =
+            !!(healRes0 && typeof healRes0 === 'object' && healRes0.ok === true && Number(healRes0.new_invalid_count || 0) === 0);
+
+          if (okHeal0) {
+            // Clear the primary outbox row now; duplicate outbox rows will be bulk-cleared later
+            await sbRpc(env, "tsfin_work_success", { p_id: outbox_id });
+            ok++;
+            continue;
+          } else {
+            const errMsg0 =
+              (healRes0 && typeof healRes0 === 'object' && healRes0.error) ? String(healRes0.error) :
+              'TSFIN_SELFHEAL_MERGE_FAILED';
+
+            // Fail all leased outbox rows for this effective timesheet
+            for (const ob0 of [outbox_id, ...(extra_outbox_ids || [])].filter(Boolean)) {
+              await sbRpc(env, "tsfin_work_fail", { p_id: ob0, p_error: errMsg0 });
+              fail++;
+            }
+            preFailPrimaryOutboxSet.add(String(outbox_id));
+            continue;
+          }
+        }
+      } catch (e0) {
+        const errMsg0 = `TSFIN_SELFHEAL_ERROR:${String(e0?.message || e0)}`;
+        for (const ob0 of [outbox_id, ...(extra_outbox_ids || [])].filter(Boolean)) {
+          await sbRpc(env, "tsfin_work_fail", { p_id: ob0, p_error: errMsg0 });
+          fail++;
+        }
+        preFailPrimaryOutboxSet.add(String(outbox_id));
+        continue;
+      }
+
       rowsToWriteAll.push({
         outbox_id,
         timesheet_id: ts.timesheet_id,
@@ -55316,6 +55438,7 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
       }
     }
   }
+
 
 
   // --- DAILY snapshots ---
@@ -55598,6 +55721,7 @@ const margin_ex_vat = round2(total_charge_ex_vat - payCostEx);
     const p = String(w?.outbox_id || '');
     if (!p) continue;
     if (failOutboxSet.has(p)) continue;
+    if (preFailPrimaryOutboxSet.has(p)) continue;
     for (const ob of (w.extra_outbox_ids || [])) {
       if (ob) extrasToClear.push(ob);
     }
@@ -55607,6 +55731,7 @@ const margin_ex_vat = round2(total_charge_ex_vat - payCostEx);
     const p = String(w?.outbox_id || '');
     if (!p) continue;
     if (failOutboxSet.has(p)) continue;
+    if (preFailPrimaryOutboxSet.has(p)) continue;
     for (const ob of (w.extra_outbox_ids || [])) {
       if (ob) extrasToClear.push(ob);
     }
