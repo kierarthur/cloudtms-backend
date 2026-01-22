@@ -1189,3 +1189,259 @@ order by
 limit greatest(1, least(coalesce(p_limit, 50), 200))
 offset greatest(coalesce(p_offset, 0), 0);
 $$;
+
+
+-- ------------------------------------------------------------
+-- CloudTMS: TSFIN self-heal helper
+-- Merge-repair SEGMENTS arrays for a timesheet where current TSFIN is
+-- "locked + invalid" (e.g. contains JSON null elements), without changing
+-- any invoice-locked segment objects.
+--
+-- Inputs:
+--   p_timesheet_id   - target timesheet (current tsfin row is located by timesheet_id + is_current=true)
+--   p_new_segments   - freshly computed segments array (jsonb array of objects with non-empty segment_id)
+--   p_actor_user_id  - optional (accepted for traceability; not required for core behaviour)
+--   p_correlation_id - optional (accepted for traceability; not required for core behaviour)
+--
+-- Returns:
+--   { ok: true, tsfin_id, merged_len, preserved_locked_count, old_invalid_count, new_invalid_count }
+--   or { ok: false, error, ... }
+-- ------------------------------------------------------------
+create or replace function public.tsfin_repair_merge_segments_locked(
+  p_timesheet_id uuid,
+  p_new_segments jsonb,
+  p_actor_user_id uuid default null,
+  p_correlation_id text default null
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = public
+as $$
+declare
+  v_tsfin_id uuid;
+  v_ib jsonb;
+  v_new_ib jsonb;
+
+  v_old_invalid int := 0;
+  v_new_invalid int := 0;
+
+  v_locked_map jsonb := '{}'::jsonb;
+  v_fresh_map  jsonb := '{}'::jsonb;
+
+  v_locked_ids text[] := array[]::text[];
+  v_missing_locked_ids text[] := array[]::text[];
+
+  v_preserved_locked_count int := 0;
+  v_merged_len int := 0;
+
+  e jsonb;
+  sid text;
+  lock_invoice_id text;
+  chosen jsonb;
+
+  v_merged_segments jsonb := '[]'::jsonb;
+
+  v_rows_updated int := 0;
+begin
+  if p_timesheet_id is null then
+    return jsonb_build_object('ok', false, 'error', 'TIMESHEET_ID_REQUIRED');
+  end if;
+
+  if p_new_segments is null or jsonb_typeof(p_new_segments) <> 'array' then
+    return jsonb_build_object('ok', false, 'error', 'NEW_SEGMENTS_MUST_BE_ARRAY');
+  end if;
+
+  -- Lock the current TSFIN row for this timesheet
+  select tf.id, tf.invoice_breakdown_json
+    into v_tsfin_id, v_ib
+  from public.timesheets_financials tf
+  where tf.timesheet_id = p_timesheet_id
+    and tf.is_current = true
+  for update;
+
+  if not found or v_tsfin_id is null then
+    return jsonb_build_object('ok', false, 'error', 'CURRENT_TSFIN_NOT_FOUND');
+  end if;
+
+  if v_ib is null or jsonb_typeof(v_ib) <> 'object' then
+    return jsonb_build_object(
+      'ok', false,
+      'error', 'CURRENT_INVOICE_BREAKDOWN_INVALID',
+      'tsfin_id', v_tsfin_id::text
+    );
+  end if;
+
+  if upper(coalesce(v_ib->>'mode','')) <> 'SEGMENTS' then
+    return jsonb_build_object(
+      'ok', false,
+      'error', 'CURRENT_NOT_SEGMENTS_MODE',
+      'tsfin_id', v_tsfin_id::text,
+      'mode', upper(coalesce(v_ib->>'mode',''))
+    );
+  end if;
+
+  if jsonb_typeof(v_ib->'segments') <> 'array' then
+    return jsonb_build_object(
+      'ok', false,
+      'error', 'CURRENT_SEGMENTS_NOT_ARRAY',
+      'tsfin_id', v_tsfin_id::text
+    );
+  end if;
+
+  -- Record old invalid count (for reporting)
+  v_old_invalid := public._tsfin_invalid_segment_count(v_ib);
+
+  -- Validate + build fresh_map from p_new_segments
+  for e in
+    select value from jsonb_array_elements(p_new_segments) value
+  loop
+    if e is null or jsonb_typeof(e) <> 'object' then
+      return jsonb_build_object(
+        'ok', false,
+        'error', 'NEW_SEGMENTS_CONTAINS_NON_OBJECT',
+        'tsfin_id', v_tsfin_id::text
+      );
+    end if;
+
+    sid := nullif(btrim(coalesce(e->>'segment_id','')), '');
+    if sid is null then
+      return jsonb_build_object(
+        'ok', false,
+        'error', 'NEW_SEGMENTS_MISSING_SEGMENT_ID',
+        'tsfin_id', v_tsfin_id::text
+      );
+    end if;
+
+    v_fresh_map := jsonb_set(v_fresh_map, array[sid], e, true);
+  end loop;
+
+  -- Build locked_map from current segments (preserve these objects exactly)
+  for e in
+    select value from jsonb_array_elements(v_ib->'segments') value
+  loop
+    if e is null or jsonb_typeof(e) <> 'object' then
+      continue;
+    end if;
+
+    sid := nullif(btrim(coalesce(e->>'segment_id','')), '');
+    if sid is null then
+      continue;
+    end if;
+
+    lock_invoice_id := nullif(btrim(coalesce(e->>'invoice_locked_invoice_id','')), '');
+    if lock_invoice_id is not null then
+      v_locked_map := jsonb_set(v_locked_map, array[sid], e, true);
+
+      if not (sid = any(v_locked_ids)) then
+        v_locked_ids := array_append(v_locked_ids, sid);
+      end if;
+    end if;
+  end loop;
+
+  v_preserved_locked_count := coalesce(array_length(v_locked_ids, 1), 0);
+
+  -- Safety check: every locked segment_id must exist in fresh_map
+  if v_locked_ids is not null and array_length(v_locked_ids, 1) is not null then
+    foreach sid in array v_locked_ids loop
+      if sid is null then
+        continue;
+      end if;
+
+      if not (v_fresh_map ? sid) then
+        v_missing_locked_ids := array_append(v_missing_locked_ids, sid);
+      end if;
+    end loop;
+  end if;
+
+  if v_missing_locked_ids is not null and array_length(v_missing_locked_ids, 1) is not null then
+    return jsonb_build_object(
+      'ok', false,
+      'error', 'MISSING_LOCKED_SEGMENTS_IN_NEW',
+      'tsfin_id', v_tsfin_id::text,
+      'missing_locked_segment_ids', to_jsonb(v_missing_locked_ids),
+      'preserved_locked_count', v_preserved_locked_count,
+      'old_invalid_count', v_old_invalid
+    );
+  end if;
+
+  -- Build merged segments in the same order as p_new_segments
+  v_merged_segments := '[]'::jsonb;
+
+  for e in
+    select value from jsonb_array_elements(p_new_segments) value
+  loop
+    sid := nullif(btrim(coalesce(e->>'segment_id','')), '');
+    -- sid already validated above; keep defensive
+    if sid is null then
+      continue;
+    end if;
+
+    if v_locked_map ? sid then
+      chosen := v_locked_map->sid;
+    else
+      chosen := e;
+    end if;
+
+    v_merged_segments := v_merged_segments || jsonb_build_array(chosen);
+  end loop;
+
+  -- Apply merged segments to the existing invoice_breakdown_json
+  v_new_ib := jsonb_set(v_ib, '{segments}', v_merged_segments, true);
+
+  v_new_invalid := public._tsfin_invalid_segment_count(v_new_ib);
+  if v_new_invalid > 0 then
+    return jsonb_build_object(
+      'ok', false,
+      'error', 'MERGE_RESULT_STILL_INVALID',
+      'tsfin_id', v_tsfin_id::text,
+      'old_invalid_count', v_old_invalid,
+      'new_invalid_count', v_new_invalid,
+      'preserved_locked_count', v_preserved_locked_count
+    );
+  end if;
+
+  -- Update only the segments list + updated_at (do NOT change lock summary fields)
+  update public.timesheets_financials tf
+  set
+    invoice_breakdown_json = v_new_ib,
+    updated_at = now()
+  where tf.id = v_tsfin_id
+    and tf.is_current = true;
+
+  get diagnostics v_rows_updated = row_count;
+
+  if v_rows_updated <> 1 then
+    return jsonb_build_object(
+      'ok', false,
+      'error', 'UPDATE_DID_NOT_APPLY',
+      'tsfin_id', v_tsfin_id::text,
+      'rows_updated', v_rows_updated
+    );
+  end if;
+
+  -- merged length (for reporting)
+  begin
+    v_merged_len := jsonb_array_length(v_merged_segments);
+  exception when others then
+    v_merged_len := null;
+  end;
+
+  return jsonb_build_object(
+    'ok', true,
+    'tsfin_id', v_tsfin_id::text,
+    'timesheet_id', p_timesheet_id::text,
+    'merged_len', v_merged_len,
+    'preserved_locked_count', v_preserved_locked_count,
+    'old_invalid_count', v_old_invalid,
+    'new_invalid_count', v_new_invalid,
+    'actor_user_id', case when p_actor_user_id is null then null else p_actor_user_id::text end,
+    'correlation_id', p_correlation_id
+  );
+end;
+$$;
+
+grant execute on function public.tsfin_repair_merge_segments_locked(uuid, jsonb, uuid, text) to service_role;
+
+select pg_notify('pgrst', 'reload schema');
