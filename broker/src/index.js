@@ -21768,8 +21768,12 @@ async function buildNhspWeeklySnapshot(
 
   // ---- Preserved fields: derive from current TSFIN evidence passed in (no DB fetch) ----
   // ✅ Preserve by stable fingerprint (preferred) and by legacy segment_id (compat).
+  // ✅ NEW: also preserve by nhsp_shift_id / external_row_key when present in existing segments.
   const preservedByKey = new Map();
   const preservedByLegacyId = new Map();
+  const preservedByNhspShiftId = new Map();
+  const preservedByExternalRowKey = new Map();
+
   try {
     const ib = curFin?.invoice_breakdown_json || null;
     const mode = String(ib?.mode || '').toUpperCase();
@@ -21793,6 +21797,12 @@ async function buildNhspWeeklySnapshot(
         // preserve by stable key if we can compute one from the stored segment fields
         const key = _stableKeyFromExistingSegment(s);
         if (key) preservedByKey.set(key, meta);
+
+        // ✅ NEW: preserve by source identity if present
+        const nhspShiftId = (s && s.nhsp_shift_id != null) ? String(s.nhsp_shift_id).trim() : '';
+        const extKey = (s && s.external_row_key != null) ? String(s.external_row_key).trim() : '';
+        if (nhspShiftId) preservedByNhspShiftId.set(nhspShiftId, meta);
+        if (extKey) preservedByExternalRowKey.set(extKey, meta);
       }
     }
   } catch {}
@@ -21858,7 +21868,13 @@ async function buildNhspWeeklySnapshot(
     // Legacy id (compat): old snapshots used nhsp:<sh.id>
     const legacy_segment_id = sh?.id != null ? `nhsp:${sh.id}` : null;
 
+    // ✅ NEW: stable source identity for bulletproof preservation/repair
+    const nhsp_shift_id = (sh && sh.id != null) ? String(sh.id) : null;
+    const external_row_key = (sh && sh.external_row_key != null) ? String(sh.external_row_key) : null;
+
     const preserved =
+      (nhsp_shift_id && preservedByNhspShiftId.get(String(nhsp_shift_id))) ||
+      (external_row_key && preservedByExternalRowKey.get(String(external_row_key))) ||
       (stableKey && preservedByKey.get(stableKey)) ||
       (legacy_segment_id && preservedByLegacyId.get(legacy_segment_id)) ||
       preservedByLegacyId.get(segment_id) ||
@@ -21875,6 +21891,11 @@ async function buildNhspWeeklySnapshot(
 
     segments.push({
       segment_id,
+
+      // ✅ NEW: embed stable source identity into segment JSON
+      nhsp_shift_id: nhsp_shift_id || null,
+      external_row_key: external_row_key || null,
+
       date: workDate,
       ward: sh.ward || null,
       start_utc: sh.start_utc,
@@ -22042,6 +22063,7 @@ async function buildNhspWeeklySnapshot(
 
   return { ok: true, snapshot };
 }
+
 
 async function buildNhspWeeklySnapshotCached(
   env,
