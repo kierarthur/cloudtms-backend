@@ -9928,15 +9928,67 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     const isAdjustment = !!(ts?.is_adjustment || contractWeek?.is_adjustment);
 
     // Current TSFIN snapshot (current TSFIN row keyed to current timesheet_id)
-    const { rows: finRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-        `&is_current=eq.true` +
-        `&select=*` +
-        `&limit=1`
-    );
-    const tsfinRaw = finRows?.[0] || null;
+    let tsfinRaw = null;
+    {
+      const { rows: finRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+          `&is_current=eq.true` +
+          `&select=*` +
+          `&limit=1`
+      );
+      tsfinRaw = finRows?.[0] || null;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // ✅ NEW: Repair-on-open for corrupt SEGMENTS snapshots
+    // If TSFIN has invalid segment elements, enqueue priority + run worker once for this timesheet,
+    // then re-fetch TSFIN before returning details.
+    // ─────────────────────────────────────────────────────────────
+    try {
+      const ib0 = tsfinRaw?.invoice_breakdown_json;
+      const segs0 =
+        (ib0 && typeof ib0 === 'object' && String(ib0.mode || '').toUpperCase() === 'SEGMENTS' && Array.isArray(ib0.segments))
+          ? ib0.segments
+          : null;
+
+      if (segs0 && segs0.length) {
+        let invalidCount0 = 0;
+        for (const s0 of segs0) {
+          const isObj0 = !!(s0 && typeof s0 === 'object' && !Array.isArray(s0));
+          const sid0 = isObj0 ? String(s0.segment_id || '').trim() : '';
+          if (!isObj0 || !sid0) invalidCount0++;
+        }
+
+        if (invalidCount0 > 0) {
+          // Enqueue TSFIN recompute with priority and run the worker once for this id
+          try {
+            await sbRpc(env, 'enqueue_ts_financials_priority', {
+              _timesheet_ids: [currentTimesheetId],
+              _reason: 'CONTEXT_CHANGED'
+            });
+          } catch {}
+
+          try {
+            await runTsfinWorkerOnce(env, { limit: 50, onlyTimesheetIds: [currentTimesheetId] });
+          } catch {}
+
+          // Re-fetch TSFIN after worker attempt
+          try {
+            const { rows: finRows2 } = await sbFetch(
+              env,
+              `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+                `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+                `&is_current=eq.true` +
+                `&select=*` +
+                `&limit=1`
+            );
+            tsfinRaw = finRows2?.[0] || tsfinRaw;
+          } catch {}
+        }
+      }
+    } catch {}
 
     // ─────────────────────────────────────────────────────────────
     // Contract-resolved EFFECTIVE flags (source of truth = v_timesheets_summary)
@@ -10320,7 +10372,6 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     return withCORS(env, req, serverError('Failed to load timesheet details'));
   }
 }
-
 
 
 
@@ -27524,11 +27575,25 @@ async function handleTsfinUpdateSegments(env, req, timesheetId) {
       if (!seg) continue; // ignore unknown ids silently (matches previous behaviour)
 
       if (seg.invoice_locked_invoice_id) {
-        return withCORS(
-          env,
-          req,
-          badRequest(`Segment ${sid} is already invoiced and cannot be moved`)
-        );
+        // ✅ No-op tolerant: allow if caller re-sent an equivalent target (no actual change)
+        const curTarget = String(seg.invoice_target_week_start || '').trim();
+        const reqTarget = String(upd.invoice_target_week_start || '').trim();
+
+        const noop =
+          (reqTarget === curTarget) ||
+          (!curTarget && naturalWeekStart && reqTarget === naturalWeekStart);
+
+        if (!noop) {
+          return withCORS(
+            env,
+            req,
+            badRequest(
+              `Segment ${sid} is attached to an invoice and cannot have invoice delay changed. Remove from invoice first.`
+            )
+          );
+        }
+
+        continue;
       }
 
       if (naturalWeekStart && upd.invoice_target_week_start < naturalWeekStart) {
@@ -27629,6 +27694,7 @@ async function handleTsfinUpdateSegments(env, req, timesheetId) {
     was_stale: !!guard.resolved.was_stale
   }));
 }
+
 
 async function handleNhspInvoiceCandidates(env, req) {
   const user = await requireUser(env, req, ['admin']);
