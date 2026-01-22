@@ -29,7 +29,6 @@ begin
       add column reference_number_required_to_issue_invoice boolean not null default false;
   end if;
 end $$;
-
 -- ------------------------------------------------------------
 -- 2) NEW helper: unlock selected segment refs for an invoice
 -- ------------------------------------------------------------
@@ -156,13 +155,17 @@ begin
     end loop;
 
     -- Recompute lock summary invariant
+    -- ✅ FIX: ignore invalid/non-object elements (and elements missing segment_id) so JSON nulls
+    -- cannot create "phantom unlocked" or affect whole-timesheet lock inference.
     select
       count(*)::int,
       bool_or(nullif(btrim(coalesce(e->>'invoice_locked_invoice_id','')), '') is null),
       array_agg(distinct nullif(btrim(coalesce(e->>'invoice_locked_invoice_id','')), ''))
         filter (where nullif(btrim(coalesce(e->>'invoice_locked_invoice_id','')), '') is not null)
       into v_total, v_has_unlocked, v_locked_ids
-    from jsonb_array_elements(v_out_segs) e;
+    from jsonb_array_elements(v_out_segs) e
+    where jsonb_typeof(e) = 'object'
+      and nullif(btrim(coalesce(e->>'segment_id','')), '') is not null;
 
     v_locked_by := null;
     v_locked_at := null;
@@ -184,7 +187,9 @@ begin
           select min((nullif(btrim(coalesce(e->>'invoice_locked_at_utc','')), ''))::timestamptz)
             into v_locked_at
           from jsonb_array_elements(v_out_segs) e
-          where nullif(btrim(coalesce(e->>'invoice_locked_invoice_id','')), '') = v_only_locked_text
+          where jsonb_typeof(e) = 'object'
+            and nullif(btrim(coalesce(e->>'segment_id','')), '') is not null
+            and nullif(btrim(coalesce(e->>'invoice_locked_invoice_id','')), '') = v_only_locked_text
             and nullif(btrim(coalesce(e->>'invoice_locked_at_utc','')), '') is not null;
         exception when others then
           v_locked_at := null;
