@@ -632,7 +632,6 @@ begin
   return v_new;
 end;
 $$;
-
 -- ============================================================
 -- CloudTMS: invoice_outbox_enqueue_by_week(p_client_id, p_invoice_week_start, p_actor_user_id, p_allow_early, p_meta)
 -- UPDATED: enqueue BY_WEEK with correct allow_early + delayed-segment eligibility
@@ -646,6 +645,11 @@ $$;
 --  - Refuses enqueue if there are no due/invoiceable items for (client, invoice_week_start)
 --  - Preserves idempotency: reuses existing outbox row for same (client_id, invoice_week_start),
 --    but merges allow_early/actor/meta into payload for repeat calls.
+--
+-- Additional safety (minimal / no intended behaviour change):
+--  - Ignore invalid segment entries (json null/non-object/missing segment_id) in SEGMENTS checks and debug.
+--  - Serialize enqueue per (client_id, invoice_week_start) using pg_advisory_xact_lock to prevent
+--    duplicate outbox rows from concurrent check+insert races.
 -- ============================================================
 
 
@@ -762,6 +766,8 @@ begin
       and ts.revoked_at is null
       and upper(coalesce(pc.precheck_status,'')) = 'OK'
       and coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
+      and jsonb_typeof(seg) = 'object'
+      and nullif(btrim(coalesce(seg->>'segment_id','')), '') is not null
       and nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') is null
 
       -- segment belongs to this invoice_week_start (target week, else natural week)
@@ -869,6 +875,8 @@ begin
           and ts.revoked_at is null
           and upper(coalesce(pc.precheck_status,'')) = 'OK'
           and coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
+          and jsonb_typeof(seg_el.value) = 'object'
+          and nullif(btrim(coalesce(seg_el.value->>'segment_id','')), '') is not null
           and nullif(btrim(coalesce(seg_el.value->>'invoice_locked_invoice_id','')), '') is null
           and coalesce(
                 nullif(btrim(coalesce(seg_el.value->>'invoice_target_week_start','')), '')::date,
@@ -981,6 +989,8 @@ begin
         where tf.is_current = true
           and tf.client_id = p_client_id
           and coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
+          and jsonb_typeof(seg_el.value) = 'object'
+          and nullif(btrim(coalesce(seg_el.value->>'segment_id','')), '') is not null
           and coalesce(
                 nullif(btrim(coalesce(seg_el.value->>'invoice_target_week_start','')), '')::date,
                 (ts.week_ending_date::date - 6)
@@ -1089,6 +1099,13 @@ begin
     end if;
   end if;
 
+  -- ✅ Concurrency guard: serialize enqueue per (client_id, invoice_week_start)
+  -- Prevents duplicate BY_WEEK outbox rows from concurrent check+insert races.
+  perform pg_advisory_xact_lock(
+    hashtext(p_client_id::text),
+    (p_invoice_week_start - date '2000-01-01')::int
+  );
+
   -- Idempotent: reuse existing outbox row if present
   select o.id
   into v_existing
@@ -1175,7 +1192,6 @@ begin
   return v_new;
 end;
 $$;
-
 
 
 -- ============================================================
