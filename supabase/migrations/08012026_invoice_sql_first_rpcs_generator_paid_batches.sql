@@ -298,7 +298,6 @@ begin
   return jsonb_set(p_ib, '{segments}', out_segs, true);
 end;
 $$;
-
 -- ------------------------------------------
 -- Helper: lock segments for BY_WEEK (exact mirror of lockSegmentsForInvoice JS)
 -- segmentRefs_json must be jsonb array of objects: {tsfin_id, segment_id}
@@ -365,11 +364,12 @@ begin
     v_lock_whole := coalesce(v_lock_whole,false);
     v_seg_ids := coalesce(v_seg_ids, array[]::text[]);
 
-    -- Load snapshot
+    -- Load snapshot (✅ FIX: lock the tsfin row to prevent concurrent lost-updates)
     select tf.id, tf.basis, tf.locked_by_invoice_id, tf.invoice_breakdown_json
     into snap
     from public.timesheets_financials tf
-    where tf.id = v_tsfin_id;
+    where tf.id = v_tsfin_id
+    for update;
 
     if not found then
       continue;
@@ -399,6 +399,14 @@ begin
       loop
         if seg is null or jsonb_typeof(seg) <> 'object' then
           segs_out := segs_out || jsonb_build_array(seg);
+
+          -- ✅ FIX (defensive, does not affect valid data):
+          -- If we are NOT explicitly locking whole, invalid segment elements must prevent
+          -- whole-timesheet lock inference (avoids marking locked_by_invoice_id due to JSON nulls).
+          if not v_lock_whole then
+            all_locked := false;
+          end if;
+
           continue;
         end if;
 
@@ -458,7 +466,6 @@ begin
   end loop;
 end;
 $$;
-
 
 
 
