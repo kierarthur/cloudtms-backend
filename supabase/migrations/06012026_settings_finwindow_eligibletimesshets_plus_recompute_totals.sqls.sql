@@ -156,10 +156,12 @@ $$;
 -- CloudTMS Patch: invoice_eligible_timesheets_for_invoice
 -- Make function VOLATILE so audit logging always persists
 --
--- ONLY CHANGE vs current installed body:
---   - Function volatility: STABLE -> VOLATILE
+-- Changes (minimal, intended-behaviour preserving):
+--   1) Keep VOLATILE (as you already set)
+--   2) Defensive: ignore invalid SEGMENTS elements (json null / non-object / missing segment_id)
+--      in seg_agg, seg_list, and debug seg_stats/seg_agg.
 --
--- Body/output logic is unchanged.
+-- For valid segment data, behaviour/output is unchanged.
 -- ============================================================
 
 create or replace function public.invoice_eligible_timesheets_for_invoice(
@@ -242,7 +244,7 @@ begin
   end if;
 
   -- =====================================================
-  -- MAIN RETURN (UNCHANGED)
+  -- MAIN RETURN (UNCHANGED OUTPUT SHAPE; defensive filter added)
   -- =====================================================
   v_out := (
     with base as (
@@ -293,6 +295,9 @@ begin
       from base b
       cross join lateral jsonb_array_elements(coalesce(b.invoice_breakdown_json->'segments', '[]'::jsonb)) seg
       where upper(coalesce(b.invoice_breakdown_json->>'mode', '')) = 'SEGMENTS'
+        -- ✅ Defensive: ignore invalid segment entries (json null/non-object/missing segment_id)
+        and jsonb_typeof(seg) = 'object'
+        and nullif(btrim(coalesce(seg->>'segment_id','')), '') is not null
         and nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id', '')), '') is null
         and coalesce(
               nullif(btrim(coalesce(seg->>'invoice_target_week_start', '')), '')::date,
@@ -332,6 +337,9 @@ begin
       from base b
       cross join lateral jsonb_array_elements(coalesce(b.invoice_breakdown_json->'segments', '[]'::jsonb)) seg
       where upper(coalesce(b.invoice_breakdown_json->>'mode', '')) = 'SEGMENTS'
+        -- ✅ Defensive: ignore invalid segment entries (json null/non-object/missing segment_id)
+        and jsonb_typeof(seg) = 'object'
+        and nullif(btrim(coalesce(seg->>'segment_id','')), '') is not null
         and nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id', '')), '') is null
         and coalesce(
               nullif(btrim(coalesce(seg->>'invoice_target_week_start', '')), '')::date,
@@ -492,6 +500,9 @@ begin
         from base b
         cross join lateral jsonb_array_elements(coalesce(b.invoice_breakdown_json->'segments','[]'::jsonb)) seg
         where upper(coalesce(b.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+          -- ✅ Defensive (debug too): only count valid segment objects
+          and jsonb_typeof(seg) = 'object'
+          and nullif(btrim(coalesce(seg->>'segment_id','')), '') is not null
         group by b.timesheet_id
       ),
       seg_agg as (
@@ -509,6 +520,9 @@ begin
         from base b
         cross join lateral jsonb_array_elements(coalesce(b.invoice_breakdown_json->'segments', '[]'::jsonb)) seg
         where upper(coalesce(b.invoice_breakdown_json->>'mode', '')) = 'SEGMENTS'
+          -- ✅ Defensive (debug too): ignore invalid segment entries
+          and jsonb_typeof(seg) = 'object'
+          and nullif(btrim(coalesce(seg->>'segment_id','')), '') is not null
           and nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id', '')), '') is null
           and coalesce(
                 nullif(btrim(coalesce(seg->>'invoice_target_week_start', '')), '')::date,
