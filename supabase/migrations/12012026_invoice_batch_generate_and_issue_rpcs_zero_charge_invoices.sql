@@ -962,7 +962,6 @@ select coalesce(
 )
 from clients c;
 $$;
-
 create or replace function public.invoice_issue_and_queue_emails_batch(
   p_invoice_ids uuid[],
   p_actor_user_id uuid,
@@ -991,6 +990,10 @@ declare
   v_steps jsonb := '[]'::jsonb;
   v_sqlstate text;
   v_err text;
+
+  -- ✅ NEW: email dedupe lock helpers (prevents duplicate mail_outbox rows on concurrent runs)
+  v_ref text;
+  m_lock record;
 
 begin
   if p_invoice_ids is null or coalesce(array_length(p_invoice_ids,1),0) = 0 then
@@ -1211,6 +1214,21 @@ begin
   )
   select * from chunked;
 
+  -- ✅ NEW: prevent duplicate emails when two users run batch issue concurrently.
+  -- We lock per (reference,to_email) and then insert only if that exact (type,reference,to) doesn't already exist.
+  for m_lock in
+    select m.client_id, m.week_ending_date, m.to_email, m.chunk_idx
+    from tmp_mail_rows m
+  loop
+    v_ref :=
+      'invoice_batch:' || m_lock.client_id::text || ':' || coalesce(m_lock.week_ending_date::text,'') || ':part:' || (m_lock.chunk_idx + 1)::text;
+
+    perform pg_advisory_xact_lock(
+      hashtext(v_ref),
+      hashtext(coalesce(m_lock.to_email,''))
+    );
+  end loop;
+
   -- insert into mail_outbox
   -- NOTE: attachments are invoice_id placeholders; worker will resolve PDFs at send time.
   insert into public.mail_outbox(
@@ -1236,9 +1254,17 @@ begin
     'invoice_batch:' || m.client_id::text || ':' || coalesce(m.week_ending_date::text,'') || ':part:' || (m.chunk_idx + 1)::text,
     v_now,
     p_actor_user_id
-  from tmp_mail_rows m;
+  from tmp_mail_rows m
+  where not exists (
+    select 1
+    from public.mail_outbox o2
+    where o2.type = 'INVOICE'
+      and o2.reference = ('invoice_batch:' || m.client_id::text || ':' || coalesce(m.week_ending_date::text,'') || ':part:' || (m.chunk_idx + 1)::text)
+      and o2."to" = m.to_email
+  );
 
   -- collect email outbox rows as json
+  -- ✅ NEW: return rows matching the intended (reference,to) for this run, whether inserted now or already present.
   select coalesce(
     jsonb_agg(
       jsonb_build_object(
@@ -1253,12 +1279,12 @@ begin
   )
   into v_email_json
   from (
-    select id, reference, "to", subject
-    from public.mail_outbox
-    where created_at_utc = v_now
-      and created_by is not distinct from p_actor_user_id
-      and type = 'INVOICE'
-      and reference like 'invoice_batch:%'
+    select o.id, o.reference, o."to", o.subject
+    from public.mail_outbox o
+    join tmp_mail_rows m
+      on o.type = 'INVOICE'
+     and o."to" = m.to_email
+     and o.reference = ('invoice_batch:' || m.client_id::text || ':' || coalesce(m.week_ending_date::text,'') || ':part:' || (m.chunk_idx + 1)::text)
   ) o;
 
   if coalesce(v_debug,false) = true then
@@ -1328,9 +1354,6 @@ exception
     raise;
 end;
 $$;
-
-
-
 
 
 -- ============================================================
