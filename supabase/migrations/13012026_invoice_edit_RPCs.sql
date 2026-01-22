@@ -921,6 +921,7 @@ end if;
   into v_inv
   from public.invoices i
   where i.id = p_invoice_id
+  for update
   limit 1;
 
   if not found then
@@ -935,6 +936,7 @@ end if;
   if v_inv.paid_at_utc is not null then
     raise exception 'Invoice is not editable (already paid)';
   end if;
+
 
 
 if v_invoice_debug then
