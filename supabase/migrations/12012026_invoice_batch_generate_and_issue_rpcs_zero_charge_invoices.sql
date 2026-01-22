@@ -330,7 +330,6 @@ select coalesce(
 from clients c;
 $$;
 
-
 create or replace function public.invoice_outbox_enqueue_by_week_selected(
   p_rows jsonb,
   p_actor_user_id uuid,
@@ -480,7 +479,9 @@ begin
             and exists (
               select 1
               from jsonb_array_elements(coalesce(tf.invoice_breakdown_json->'segments','[]'::jsonb)) seg
-              where nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') is null
+              where jsonb_typeof(seg) = 'object'
+                and nullif(btrim(coalesce(seg->>'segment_id','')), '') is not null
+                and nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') is null
                 -- segment belongs to this invoice week (target if present else natural)
                 and coalesce(
                       nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date,
@@ -574,6 +575,13 @@ begin
           else '{}'::jsonb
         end
       ) || jsonb_build_object('invoice_consolidation_mode', v_invoice_consolidation_mode)
+    );
+
+    -- ✅ Concurrency guard: serialize enqueue per (client_id, invoice_week_start)
+    -- This prevents duplicate outbox rows from check+insert races when two users enqueue the same client/week.
+    perform pg_advisory_xact_lock(
+      hashtext(v_client_id::text),
+      (v_week_start - date '2000-01-01')::int
     );
 
     -- find existing outbox row for this (client, week)
