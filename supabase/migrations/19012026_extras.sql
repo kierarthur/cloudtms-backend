@@ -1190,22 +1190,18 @@ limit greatest(1, least(coalesce(p_limit, 50), 200))
 offset greatest(coalesce(p_offset, 0), 0);
 $$;
 
-
 -- ------------------------------------------------------------
--- CloudTMS: TSFIN self-heal helper
+-- CloudTMS: TSFIN self-heal helper (UPDATED)
 -- Merge-repair SEGMENTS arrays for a timesheet where current TSFIN is
 -- "locked + invalid" (e.g. contains JSON null elements), without changing
 -- any invoice-locked segment objects.
 --
--- Inputs:
---   p_timesheet_id   - target timesheet (current tsfin row is located by timesheet_id + is_current=true)
---   p_new_segments   - freshly computed segments array (jsonb array of objects with non-empty segment_id)
---   p_actor_user_id  - optional (accepted for traceability; not required for core behaviour)
---   p_correlation_id - optional (accepted for traceability; not required for core behaviour)
---
--- Returns:
---   { ok: true, tsfin_id, merged_len, preserved_locked_count, old_invalid_count, new_invalid_count }
---   or { ok: false, error, ... }
+-- IMPORTANT UPDATE:
+--   - Prefer matching by nhsp_shift_id when present.
+--   - Else prefer matching by external_row_key when present.
+--   - Else fall back to stable signature:
+--       (date/work_date) + (start_utc normalized to UTC) + (ref_num)
+--   - Still FAILS CLOSED if keys are ambiguous or missing.
 -- ------------------------------------------------------------
 create or replace function public.tsfin_repair_merge_segments_locked(
   p_timesheet_id uuid,
@@ -1227,23 +1223,54 @@ declare
   v_old_invalid int := 0;
   v_new_invalid int := 0;
 
-  v_locked_map jsonb := '{}'::jsonb;
-  v_fresh_map  jsonb := '{}'::jsonb;
+  -- Locked maps (preserve these objects exactly)
+  v_locked_nhsp_map jsonb := '{}'::jsonb;  -- nhsp_shift_id -> locked seg json
+  v_locked_ext_map  jsonb := '{}'::jsonb;  -- external_row_key -> locked seg json
+  v_locked_sig_map  jsonb := '{}'::jsonb;  -- sig_key -> locked seg json
 
-  v_locked_ids text[] := array[]::text[];
+  -- Locked key -> locked segment_id (for error reporting)
+  v_locked_nhsp_idmap jsonb := '{}'::jsonb;
+  v_locked_ext_idmap  jsonb := '{}'::jsonb;
+  v_locked_sig_idmap  jsonb := '{}'::jsonb;
+
+  -- Fresh maps (built from p_new_segments)
+  v_fresh_nhsp_map jsonb := '{}'::jsonb;
+  v_fresh_ext_map  jsonb := '{}'::jsonb;
+  v_fresh_sig_map  jsonb := '{}'::jsonb;
+
+  v_need_sig boolean := false;
+
   v_missing_locked_ids text[] := array[]::text[];
 
   v_preserved_locked_count int := 0;
   v_merged_len int := 0;
 
   e jsonb;
+
   sid text;
   lock_invoice_id text;
+
+  v_date text;
+  v_ref  text;
+  v_start_ts timestamptz;
+  v_start_norm text;
+  v_sig_key text;
+
+  v_nhsp_id text;
+  v_ext_key text;
+
   chosen jsonb;
 
   v_merged_segments jsonb := '[]'::jsonb;
 
   v_rows_updated int := 0;
+
+  -- scratch
+  k text;
+  v_locked_count int := 0;
+
+  -- uuid regex test
+  is_uuid boolean;
 begin
   if p_timesheet_id is null then
     return jsonb_build_object('ok', false, 'error', 'TIMESHEET_ID_REQUIRED');
@@ -1293,7 +1320,131 @@ begin
   -- Record old invalid count (for reporting)
   v_old_invalid := public._tsfin_invalid_segment_count(v_ib);
 
-  -- Validate + build fresh_map from p_new_segments
+  -- ------------------------------------------------------------
+  -- Build locked maps from current segments (preserve these exactly)
+  -- Key precedence for locked segments:
+  --   1) nhsp_shift_id (if valid uuid)
+  --   2) external_row_key (if present)
+  --   3) signature (date + start_utc UTC + ref_num)
+  -- Fail closed if chosen key is missing or duplicated among locked segments.
+  -- ------------------------------------------------------------
+  for e in
+    select value from jsonb_array_elements(v_ib->'segments') value
+  loop
+    if e is null or jsonb_typeof(e) <> 'object' then
+      continue;
+    end if;
+
+    lock_invoice_id := nullif(btrim(coalesce(e->>'invoice_locked_invoice_id','')), '');
+    if lock_invoice_id is null then
+      continue;
+    end if;
+
+    v_locked_count := v_locked_count + 1;
+
+    sid := nullif(btrim(coalesce(e->>'segment_id','')), '');
+    if sid is null then
+      return jsonb_build_object(
+        'ok', false,
+        'error', 'LOCKED_SEGMENT_MISSING_SEGMENT_ID',
+        'tsfin_id', v_tsfin_id::text
+      );
+    end if;
+
+    -- optional identities
+    v_nhsp_id := nullif(btrim(coalesce(e->>'nhsp_shift_id','')), '');
+    v_ext_key := nullif(btrim(coalesce(e->>'external_row_key','')), '');
+
+    -- validate nhsp_shift_id looks like uuid
+    is_uuid := false;
+    if v_nhsp_id is not null then
+      if v_nhsp_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' then
+        is_uuid := true;
+      else
+        v_nhsp_id := null;
+      end if;
+    end if;
+
+    if v_nhsp_id is not null and is_uuid then
+      if v_locked_nhsp_map ? v_nhsp_id then
+        return jsonb_build_object(
+          'ok', false,
+          'error', 'DUPLICATE_LOCKED_NHSP_SHIFT_ID',
+          'tsfin_id', v_tsfin_id::text,
+          'nhsp_shift_id', v_nhsp_id,
+          'segment_id', sid
+        );
+      end if;
+
+      v_locked_nhsp_map := jsonb_set(v_locked_nhsp_map, array[v_nhsp_id], e, true);
+      v_locked_nhsp_idmap := jsonb_set(v_locked_nhsp_idmap, array[v_nhsp_id], to_jsonb(sid), true);
+      continue;
+    end if;
+
+    if v_ext_key is not null then
+      if v_locked_ext_map ? v_ext_key then
+        return jsonb_build_object(
+          'ok', false,
+          'error', 'DUPLICATE_LOCKED_EXTERNAL_ROW_KEY',
+          'tsfin_id', v_tsfin_id::text,
+          'external_row_key', v_ext_key,
+          'segment_id', sid
+        );
+      end if;
+
+      v_locked_ext_map := jsonb_set(v_locked_ext_map, array[v_ext_key], e, true);
+      v_locked_ext_idmap := jsonb_set(v_locked_ext_idmap, array[v_ext_key], to_jsonb(sid), true);
+      continue;
+    end if;
+
+    -- fallback signature key
+    v_need_sig := true;
+
+    v_date := nullif(btrim(coalesce(e->>'date', e->>'work_date', '')), '');
+    v_ref  := nullif(btrim(coalesce(e->>'ref_num', e->>'ref', e->>'reference', '')), '');
+
+    begin
+      v_start_ts := nullif(btrim(coalesce(e->>'start_utc','')), '')::timestamptz;
+    exception when others then
+      v_start_ts := null;
+    end;
+
+    if v_date is null or v_start_ts is null then
+      return jsonb_build_object(
+        'ok', false,
+        'error', 'LOCKED_SEGMENT_KEY_MISSING',
+        'tsfin_id', v_tsfin_id::text,
+        'segment_id', sid
+      );
+    end if;
+
+    v_start_norm := to_char(v_start_ts at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"');
+    v_sig_key := v_date || '|' || v_start_norm || '|' || coalesce(v_ref, '');
+
+    if v_locked_sig_map ? v_sig_key then
+      return jsonb_build_object(
+        'ok', false,
+        'error', 'DUPLICATE_LOCKED_SEGMENT_KEY',
+        'tsfin_id', v_tsfin_id::text,
+        'sig_key', v_sig_key,
+        'segment_id', sid
+      );
+    end if;
+
+    v_locked_sig_map := jsonb_set(v_locked_sig_map, array[v_sig_key], e, true);
+    v_locked_sig_idmap := jsonb_set(v_locked_sig_idmap, array[v_sig_key], to_jsonb(sid), true);
+  end loop;
+
+  v_preserved_locked_count := v_locked_count;
+
+  -- ------------------------------------------------------------
+  -- Build fresh maps from p_new_segments.
+  -- We build:
+  --   - nhsp_shift_id map (if present)
+  --   - external_row_key map (if present)
+  --   - signature map (only enforced if v_need_sig=true)
+  -- Fail closed on duplicates for any key type we actually use.
+  -- ------------------------------------------------------------
   for e in
     select value from jsonb_array_elements(p_new_segments) value
   loop
@@ -1314,43 +1465,111 @@ begin
       );
     end if;
 
-    v_fresh_map := jsonb_set(v_fresh_map, array[sid], e, true);
+    v_nhsp_id := nullif(btrim(coalesce(e->>'nhsp_shift_id','')), '');
+    v_ext_key := nullif(btrim(coalesce(e->>'external_row_key','')), '');
+
+    -- nhsp_shift_id map
+    if v_nhsp_id is not null and v_nhsp_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' then
+      if v_fresh_nhsp_map ? v_nhsp_id then
+        return jsonb_build_object(
+          'ok', false,
+          'error', 'DUPLICATE_NEW_NHSP_SHIFT_ID',
+          'tsfin_id', v_tsfin_id::text,
+          'nhsp_shift_id', v_nhsp_id
+        );
+      end if;
+      v_fresh_nhsp_map := jsonb_set(v_fresh_nhsp_map, array[v_nhsp_id], e, true);
+    end if;
+
+    -- external_row_key map
+    if v_ext_key is not null then
+      if v_fresh_ext_map ? v_ext_key then
+        return jsonb_build_object(
+          'ok', false,
+          'error', 'DUPLICATE_NEW_EXTERNAL_ROW_KEY',
+          'tsfin_id', v_tsfin_id::text,
+          'external_row_key', v_ext_key
+        );
+      end if;
+      v_fresh_ext_map := jsonb_set(v_fresh_ext_map, array[v_ext_key], e, true);
+    end if;
+
+    -- signature map (only if required)
+    if v_need_sig then
+      v_date := nullif(btrim(coalesce(e->>'date', e->>'work_date', '')), '');
+      v_ref  := nullif(btrim(coalesce(e->>'ref_num', e->>'ref', e->>'reference', '')), '');
+
+      begin
+        v_start_ts := nullif(btrim(coalesce(e->>'start_utc','')), '')::timestamptz;
+      exception when others then
+        v_start_ts := null;
+      end;
+
+      if v_date is null or v_start_ts is null then
+        return jsonb_build_object(
+          'ok', false,
+          'error', 'NEW_SEGMENT_KEY_MISSING',
+          'tsfin_id', v_tsfin_id::text,
+          'segment_id', sid
+        );
+      end if;
+
+      v_start_norm := to_char(v_start_ts at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"');
+      v_sig_key := v_date || '|' || v_start_norm || '|' || coalesce(v_ref, '');
+
+      if v_fresh_sig_map ? v_sig_key then
+        return jsonb_build_object(
+          'ok', false,
+          'error', 'DUPLICATE_NEW_SEGMENT_KEY',
+          'tsfin_id', v_tsfin_id::text,
+          'sig_key', v_sig_key
+        );
+      end if;
+
+      v_fresh_sig_map := jsonb_set(v_fresh_sig_map, array[v_sig_key], e, true);
+    end if;
   end loop;
 
-  -- Build locked_map from current segments (preserve these objects exactly)
-  for e in
-    select value from jsonb_array_elements(v_ib->'segments') value
-  loop
-    if e is null or jsonb_typeof(e) <> 'object' then
-      continue;
-    end if;
+  -- ------------------------------------------------------------
+  -- Safety check: every locked key must exist in new segments set.
+  -- Preserve original error name for compatibility.
+  -- ------------------------------------------------------------
 
-    sid := nullif(btrim(coalesce(e->>'segment_id','')), '');
-    if sid is null then
-      continue;
-    end if;
-
-    lock_invoice_id := nullif(btrim(coalesce(e->>'invoice_locked_invoice_id','')), '');
-    if lock_invoice_id is not null then
-      v_locked_map := jsonb_set(v_locked_map, array[sid], e, true);
-
-      if not (sid = any(v_locked_ids)) then
-        v_locked_ids := array_append(v_locked_ids, sid);
+  -- locked by nhsp_shift_id
+  if jsonb_typeof(v_locked_nhsp_map) = 'object' then
+    for k in select jsonb_object_keys(v_locked_nhsp_map)
+    loop
+      if not (v_fresh_nhsp_map ? k) then
+        v_missing_locked_ids := array_append(
+          v_missing_locked_ids,
+          coalesce(nullif(btrim(coalesce(v_locked_nhsp_idmap->>k,'')), ''), k)
+        );
       end if;
-    end if;
-  end loop;
+    end loop;
+  end if;
 
-  v_preserved_locked_count := coalesce(array_length(v_locked_ids, 1), 0);
-
-  -- Safety check: every locked segment_id must exist in fresh_map
-  if v_locked_ids is not null and array_length(v_locked_ids, 1) is not null then
-    foreach sid in array v_locked_ids loop
-      if sid is null then
-        continue;
+  -- locked by external_row_key
+  if jsonb_typeof(v_locked_ext_map) = 'object' then
+    for k in select jsonb_object_keys(v_locked_ext_map)
+    loop
+      if not (v_fresh_ext_map ? k) then
+        v_missing_locked_ids := array_append(
+          v_missing_locked_ids,
+          coalesce(nullif(btrim(coalesce(v_locked_ext_idmap->>k,'')), ''), k)
+        );
       end if;
+    end loop;
+  end if;
 
-      if not (v_fresh_map ? sid) then
-        v_missing_locked_ids := array_append(v_missing_locked_ids, sid);
+  -- locked by signature
+  if v_need_sig and jsonb_typeof(v_locked_sig_map) = 'object' then
+    for k in select jsonb_object_keys(v_locked_sig_map)
+    loop
+      if not (v_fresh_sig_map ? k) then
+        v_missing_locked_ids := array_append(
+          v_missing_locked_ids,
+          coalesce(nullif(btrim(coalesce(v_locked_sig_idmap->>k,'')), ''), k)
+        );
       end if;
     end loop;
   end if;
@@ -1366,21 +1585,58 @@ begin
     );
   end if;
 
-  -- Build merged segments in the same order as p_new_segments
+  -- ------------------------------------------------------------
+  -- Build merged segments in the same order as p_new_segments:
+  -- Prefer matching by nhsp_shift_id, then external_row_key, then signature (if needed).
+  -- If a match exists -> use locked JSON exactly, else use new JSON.
+  -- ------------------------------------------------------------
   v_merged_segments := '[]'::jsonb;
 
   for e in
     select value from jsonb_array_elements(p_new_segments) value
   loop
-    sid := nullif(btrim(coalesce(e->>'segment_id','')), '');
-    -- sid already validated above; keep defensive
-    if sid is null then
+    if e is null or jsonb_typeof(e) <> 'object' then
       continue;
     end if;
 
-    if v_locked_map ? sid then
-      chosen := v_locked_map->sid;
-    else
+    chosen := null;
+
+    v_nhsp_id := nullif(btrim(coalesce(e->>'nhsp_shift_id','')), '');
+    if v_nhsp_id is not null and v_nhsp_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' then
+      if v_locked_nhsp_map ? v_nhsp_id then
+        chosen := v_locked_nhsp_map->v_nhsp_id;
+      end if;
+    end if;
+
+    if chosen is null then
+      v_ext_key := nullif(btrim(coalesce(e->>'external_row_key','')), '');
+      if v_ext_key is not null then
+        if v_locked_ext_map ? v_ext_key then
+          chosen := v_locked_ext_map->v_ext_key;
+        end if;
+      end if;
+    end if;
+
+    if chosen is null and v_need_sig then
+      v_date := nullif(btrim(coalesce(e->>'date', e->>'work_date', '')), '');
+      v_ref  := nullif(btrim(coalesce(e->>'ref_num', e->>'ref', e->>'reference', '')), '');
+
+      begin
+        v_start_ts := nullif(btrim(coalesce(e->>'start_utc','')), '')::timestamptz;
+      exception when others then
+        v_start_ts := null;
+      end;
+
+      if v_date is not null and v_start_ts is not null then
+        v_start_norm := to_char(v_start_ts at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"');
+        v_sig_key := v_date || '|' || v_start_norm || '|' || coalesce(v_ref, '');
+        if v_locked_sig_map ? v_sig_key then
+          chosen := v_locked_sig_map->v_sig_key;
+        end if;
+      end if;
+    end if;
+
+    if chosen is null then
       chosen := e;
     end if;
 
@@ -1445,3 +1701,4 @@ $$;
 grant execute on function public.tsfin_repair_merge_segments_locked(uuid, jsonb, uuid, text) to service_role;
 
 select pg_notify('pgrst', 'reload schema');
+
