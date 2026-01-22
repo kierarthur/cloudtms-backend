@@ -1193,7 +1193,6 @@ begin
 end;
 $$;
 
-
 -- ============================================================
 -- CloudTMS: invoice_outbox_enqueue(kind, payload, p_actor_user_id, p_meta)
 -- OPTIONAL generic enqueue wrapper
@@ -1206,6 +1205,10 @@ $$;
 --     * HOURS:   (timesheet_ids_sig) if present
 --
 -- Returns the outbox_id (existing or newly inserted).
+--
+-- ✅ Fix fully implemented (minimal / no intended behaviour change):
+--   - Serialize BY_WEEK and HOURS idempotency check+insert using pg_advisory_xact_lock
+--     to prevent duplicate outbox rows from concurrent callers.
 -- ============================================================
 create or replace function public.invoice_outbox_enqueue(
   p_kind text,
@@ -1318,6 +1321,10 @@ begin
     v_week_start := nullif(btrim(coalesce(v_payload->>'invoice_week_start','')), '');
 
     if v_client_id is not null and v_week_start is not null then
+      -- ✅ Concurrency guard: serialize check+insert for (client_id, invoice_week_start)
+      -- Uses hashtext on both text keys to avoid new casting failures / behaviour changes.
+      perform pg_advisory_xact_lock(hashtext(v_client_id), hashtext(v_week_start));
+
       select o.id
       into v_existing
       from public.invoice_jobs_outbox o
@@ -1360,6 +1367,9 @@ begin
     v_sig := nullif(btrim(coalesce(v_payload->>'timesheet_ids_sig','')), '');
 
     if v_sig is not null then
+      -- ✅ Concurrency guard: serialize check+insert for (kind=HOURS, timesheet_ids_sig)
+      perform pg_advisory_xact_lock(hashtext(v_kind), hashtext(v_sig));
+
       select o.id
       into v_existing
       from public.invoice_jobs_outbox o
