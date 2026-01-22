@@ -2189,7 +2189,7 @@ where tf.timesheet_id = any(v_ts_ids_to_use)
             -- Build shift_ids from segments where segment_id startswith 'nhsp:' and source_system in (NHSP, HEALTHROSTER)
             delete from public.invoice_hr_source_rows where invoice_id = v_invoice_id;
 
-            with segs as (
+                   with segs as (
               select
                 left(seg->>'segment_id', 5) as pfx,
                 upper(coalesce(seg->>'source_system','')) as src,
@@ -2200,8 +2200,11 @@ where tf.timesheet_id = any(v_ts_ids_to_use)
               cross join lateral jsonb_array_elements(coalesce(tf.invoice_breakdown_json->'segments','[]'::jsonb)) seg
               where tf.timesheet_id = any(v_ts_ids_to_use)
                 and tf.is_current = true
+                and jsonb_typeof(seg) = 'object'
+                and nullif(btrim(coalesce(seg->>'segment_id','')), '') is not null
                 and coalesce(pc.effective_hr_attach_to_invoice, true) = true
             ),
+
             shift_ids as (
               select distinct (id_part)::uuid as shift_id
               from segs
@@ -2535,10 +2538,12 @@ h_bh numeric;
                 )
                 and coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
                 and v_week_start <= v_anchor_ymd
-                and exists (
+                        and exists (
                   select 1
                   from jsonb_array_elements(coalesce(tf.invoice_breakdown_json->'segments','[]'::jsonb)) seg
-                  where nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') is null
+                  where jsonb_typeof(seg) = 'object'
+                    and nullif(btrim(coalesce(seg->>'segment_id','')), '') is not null
+                    and nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') is null
                     and nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date = v_week_start
                     and nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date <> (ts.week_ending_date::date - 6)
                     and (
@@ -2546,6 +2551,7 @@ h_bh numeric;
                       or btrim(coalesce(seg->>'ref_num','')) <> ''
                     )
                 )
+
             ) into v_has_due_delayed;
 
             if not coalesce(v_has_due_delayed,false) then
@@ -2735,12 +2741,14 @@ limit 1;
       -- ─────────────────────────────────────────────────────────────
       -- SEGMENTS: segment-week driven; allow_early NEVER overrides delayed segments
       -- ─────────────────────────────────────────────────────────────
-      (
+          (
         coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
         and exists (
           select 1
           from jsonb_array_elements(coalesce(tf.invoice_breakdown_json->'segments','[]'::jsonb)) seg
-          where nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') is null
+          where jsonb_typeof(seg) = 'object'
+            and nullif(btrim(coalesce(seg->>'segment_id','')), '') is not null
+            and nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') is null
             and coalesce(
                   nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date,
                   (ts.week_ending_date::date - 6)
@@ -2771,6 +2779,7 @@ limit 1;
             )
         )
       )
+
     )
     and (v_limit_ts_ids is null or tf.timesheet_id = any(v_limit_ts_ids))
     and tf.is_current = true
@@ -2885,7 +2894,7 @@ limit 1;
               nullif(s->>'week_ending_date','')::date as week_ending_date
             from jsonb_array_elements(meta) s
           ),
-          seg_entries as (
+                  seg_entries as (
             select
               row_number() over () as entry_ord,
               sn.tsfin_id,
@@ -2904,11 +2913,14 @@ limit 1;
             where sn.ib is not null
               and jsonb_typeof(sn.ib)='object'
               and (sn.ib->>'mode')='SEGMENTS'
+              and jsonb_typeof(seg.value) = 'object'
+              and nullif(btrim(coalesce(seg.value->>'segment_id','')), '') is not null
               and nullif(coalesce(seg.value->>'invoice_locked_invoice_id',''), '') is null
               and (
                 coalesce(nullif(seg.value->>'invoice_target_week_start','')::date, (sn.week_ending_date - 6)) = v_week_start
               )
           ),
+
              weekly_atomic as (
             select
               row_number() over () + 1000000 as entry_ord,
