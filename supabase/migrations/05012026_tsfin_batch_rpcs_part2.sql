@@ -6,6 +6,35 @@
 --     out_cur_fin = to_jsonb(tf)
 -- because tf is a row from timesheets_financials and to_jsonb(row) includes all columns.
 -- ============================================================
+
+create or replace function public._tsfin_invalid_segment_count(invoice_breakdown_json jsonb)
+returns int
+language sql
+immutable
+as $$
+  select case
+    when invoice_breakdown_json is null then 0
+
+    -- invoice_breakdown_json should always be an object; if it's not, it's structurally invalid
+    when jsonb_typeof(invoice_breakdown_json) <> 'object' then 1
+
+    -- only validate segments in SEGMENTS mode
+    when upper(coalesce(invoice_breakdown_json->>'mode','')) <> 'SEGMENTS' then 0
+
+    -- SEGMENTS mode must have a segments array
+    when jsonb_typeof(invoice_breakdown_json->'segments') <> 'array' then 1
+
+    -- count invalid segment elements (JSON nulls or non-objects, or missing/blank segment_id)
+    else (
+      select count(*)::int
+      from jsonb_array_elements(invoice_breakdown_json->'segments') as seg(value)
+      where jsonb_typeof(seg.value) <> 'object'
+         or nullif(btrim(coalesce(seg.value->>'segment_id','')), '') is null
+    )
+  end;
+$$;
+
+
 create or replace function public.tsfin_load_context_batch(p_timesheet_ids uuid[])
 returns table (
   effective_timesheet_id uuid,
@@ -382,6 +411,10 @@ declare
 
   v_err text;
   did_prepare boolean;
+
+  -- ✅ NEW: validate segments JSON before writing
+  v_ib  jsonb;
+  v_bad int;
 begin
   if p_rows is null or jsonb_typeof(p_rows) <> 'array' then
     ok_count := 0;
@@ -432,6 +465,13 @@ begin
       limit 1;
 
       v_prev_id := prev.id;
+
+      -- ✅ NEW: validate invoice_breakdown_json (prevents persisting null/invalid segments)
+      v_ib  := coalesce(snap->'invoice_breakdown_json', '{}'::jsonb);
+      v_bad := public._tsfin_invalid_segment_count(v_ib);
+      if v_bad > 0 then
+        raise exception 'INVALID_SEGMENTS_JSON:%', v_bad;
+      end if;
 
       -- Guard + rotate current -> history (invoice-lock protected)
       perform public.tsfin_prepare_write(v_timesheet_id);
@@ -667,7 +707,8 @@ begin
         coalesce(nullif(snap->>'additional_charge_ex_vat','')::numeric, 0),
         coalesce(nullif(snap->>'additional_margin_ex_vat','')::numeric, 0),
 
-        coalesce(snap->'invoice_breakdown_json', '{}'::jsonb),
+        -- ✅ validated above (v_ib)
+        v_ib,
 
         nullif(snap->>'nhsp_import_id','')::uuid,
 
@@ -737,3 +778,4 @@ grant execute on function public.tsfin_write_snapshots_and_complete(jsonb) to se
 grant execute on function public.tsfin_write_snapshots_and_complete(jsonb) to authenticated;
 
 select pg_notify('pgrst', 'reload schema');
+
