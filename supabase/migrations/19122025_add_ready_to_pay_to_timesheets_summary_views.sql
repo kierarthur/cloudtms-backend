@@ -65,7 +65,6 @@ CREATE INDEX IF NOT EXISTS idx_timesheet_evidence_timesheet_kind
 -- ✅ ONLY CHANGE: APPEND a new boolean column at the END of the view output:
 --     hr_validation_required_for_invoice
 -- ============================================================
-
 CREATE OR REPLACE VIEW public.v_timesheets_summary_base AS
 WITH latest_tsfin AS (
   SELECT DISTINCT ON (tf.timesheet_id)
@@ -632,8 +631,7 @@ with_issues AS (
         AND ar.client_requires_hr
         AND NOT ar.client_autoprocess_hr
         AND ar.authorised_at_server IS NULL
-        AND (ar.processing_status = ANY (ARRAY['PENDING_AUTH'::ts_fin_processing_status_enum, 'READY_FOR_HR'::ts_fin_processing_status_enum]))
-        THEN ARRAY['Authorisation'::text]
+THEN ARRAY['Authorisation'::text]
       ELSE ARRAY[]::text[]
     END AS issue_codes
 
@@ -887,8 +885,78 @@ SELECT
     WHEN COALESCE(seg.seg_locked,0) = 0 THEN 'NOT_INVOICED'
     WHEN COALESCE(seg.seg_locked,0) >= seg.seg_total THEN 'FULLY_INVOICED'
     ELSE 'PARTIALLY_INVOICED'
-  END AS invoice_segment_stage
+  END AS invoice_segment_stage,
 
+  -- ✅ NEW (APPENDED AT END): canonical Tools Stage (pipeline) — 5 mutually exclusive states
+  CASE
+    WHEN timesheet_id IS NULL THEN 'UNPROCESSED'
+    WHEN (
+      locked_by_invoice_id IS NOT NULL
+      OR COALESCE(seg.seg_locked,0) > 0
+      OR (
+        seg.seg_total IS NOT NULL
+        AND COALESCE(seg.seg_locked,0) > 0
+      )
+    ) THEN 'INVOICED'
+    WHEN (
+      timesheet_id IS NOT NULL
+      AND COALESCE(client_requires_hr,false) = true
+      AND COALESCE(client_autoprocess_hr,false) = false
+      AND authorised_at_server IS NULL
+      AND array_length(issue_codes, 1) = 1
+      AND issue_codes @> ARRAY['Authorisation'::text]
+    ) THEN 'AWAITING_AUTHORISATION'
+    WHEN (
+      timesheet_id IS NOT NULL
+      AND COALESCE(array_length(issue_codes, 1), 0) = 0
+      AND (
+        authorised_at_server IS NOT NULL
+        OR NOT (COALESCE(client_requires_hr,false) = true AND COALESCE(client_autoprocess_hr,false) = false)
+      )
+    ) THEN 'AUTHORISED_FOR_INVOICING'
+    ELSE 'PROCESSING_DELAYED'
+  END AS tools_stage,
+
+  -- ✅ NEW (APPENDED AT END): user-facing Processing Status label (derived from Tools Stage, not TSFIN.processing_status)
+  CASE
+    WHEN timesheet_id IS NULL THEN 'Unprocessed'
+    WHEN (
+      locked_by_invoice_id IS NOT NULL
+      OR COALESCE(seg.seg_locked,0) > 0
+      OR (
+        seg.seg_total IS NOT NULL
+        AND COALESCE(seg.seg_locked,0) > 0
+      )
+    ) THEN (
+      CASE
+        WHEN seg.seg_total IS NOT NULL
+          AND COALESCE(seg.seg_locked,0) > 0
+          AND COALESCE(seg.seg_locked,0) < seg.seg_total
+          THEN 'Partially Invoiced'
+        ELSE 'Invoiced'
+      END
+    )
+    WHEN (
+      timesheet_id IS NOT NULL
+      AND COALESCE(client_requires_hr,false) = true
+      AND COALESCE(client_autoprocess_hr,false) = false
+      AND authorised_at_server IS NULL
+      AND array_length(issue_codes, 1) = 1
+      AND issue_codes @> ARRAY['Authorisation'::text]
+    ) THEN 'Awaiting Authorisation'
+    WHEN (
+      timesheet_id IS NOT NULL
+      AND COALESCE(array_length(issue_codes, 1), 0) = 0
+      AND (
+        authorised_at_server IS NOT NULL
+        OR NOT (COALESCE(client_requires_hr,false) = true AND COALESCE(client_autoprocess_hr,false) = false)
+      )
+    ) THEN 'Authorised for Invoicing'
+    ELSE 'Processing Delayed'
+  END AS processing_status_display,
+
+  -- ✅ NEW (APPENDED AT END): invoice-paid indicator (true if ANY linked invoice is PAID)
+  COALESCE(seg.invoice_paid_any, false) AS invoice_is_paid
 
 FROM with_issues wi
 LEFT JOIN LATERAL (
@@ -916,7 +984,35 @@ LEFT JOIN LATERAL (
         WHERE nullif(btrim(coalesce(s->>'invoice_locked_invoice_id','')), '') IS NOT NULL
       )
       ELSE (CASE WHEN wi.locked_by_invoice_id IS NULL THEN 0 ELSE 1 END)
-    END AS seg_locked
+    END AS seg_locked,
+
+    CASE
+      WHEN wi.timesheet_id IS NULL THEN NULL::boolean
+      WHEN tf.invoice_breakdown_json IS NOT NULL
+        AND jsonb_typeof(tf.invoice_breakdown_json) = 'object'
+        AND coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
+        AND jsonb_typeof(tf.invoice_breakdown_json->'segments') = 'array'
+      THEN EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements(tf.invoice_breakdown_json->'segments') s
+        JOIN public.invoices inv2
+          ON inv2.id = (
+            CASE
+              WHEN nullif(btrim(coalesce(s->>'invoice_locked_invoice_id','')), '') IS NOT NULL
+                AND (s->>'invoice_locked_invoice_id') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              THEN (s->>'invoice_locked_invoice_id')::uuid
+              ELSE NULL::uuid
+            END
+          )
+        WHERE inv2.status = 'PAID'::public.invoice_status_enum
+      )
+      ELSE EXISTS (
+        SELECT 1
+        FROM public.invoices inv2
+        WHERE inv2.id = wi.locked_by_invoice_id
+          AND inv2.status = 'PAID'::public.invoice_status_enum
+      )
+    END AS invoice_paid_any
   FROM public.timesheets_financials tf
   WHERE tf.is_current = true
     AND tf.timesheet_id = wi.timesheet_id
@@ -1020,7 +1116,12 @@ SELECT
   v.invoice_segments_total,
   v.invoice_segments_locked,
   v.invoice_segments_unlocked,
-  v.invoice_segment_stage
+  v.invoice_segment_stage,
+
+  -- ✅ NEW (APPENDED AT END): canonical Tools Stage + display label + invoice-paid flag
+  v.tools_stage,
+  v.processing_status_display,
+  v.invoice_is_paid
 FROM public.v_timesheets_summary_base v
 LEFT JOIN public.contract_weeks cw ON cw.id = v.contract_week_id
 LEFT JOIN public.timesheets ts2 ON ts2.timesheet_id = v.timesheet_id
