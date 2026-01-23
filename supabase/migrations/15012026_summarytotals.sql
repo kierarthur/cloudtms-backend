@@ -47,6 +47,10 @@ declare
   v_created_from timestamptz := null;
   v_created_to   timestamptz := null;
 
+  -- NEW: week-ending filters (date)
+  v_week_ending_from date := null;
+  v_week_ending_to   date := null;
+
   v_status_raw jsonb := null;
   v_status_list text[] := null;
   v_legacy_paid_filter text := null; -- 'paid' | 'unpaid' | null
@@ -73,6 +77,23 @@ begin
   begin if nullif(btrim(coalesce(p_filters->>'created_from','')), '') is not null then v_created_from := (p_filters->>'created_from')::timestamptz; end if; exception when others then v_created_from := null; end;
   begin if nullif(btrim(coalesce(p_filters->>'created_to','')), '') is not null then v_created_to := (p_filters->>'created_to')::timestamptz; end if; exception when others then v_created_to := null; end;
 
+  -- NEW: week ending (accept ISO date strings; ignore invalid)
+  begin
+    if nullif(btrim(coalesce(p_filters->>'week_ending_from','')), '') is not null then
+      v_week_ending_from := (p_filters->>'week_ending_from')::date;
+    end if;
+  exception when others then
+    v_week_ending_from := null;
+  end;
+
+  begin
+    if nullif(btrim(coalesce(p_filters->>'week_ending_to','')), '') is not null then
+      v_week_ending_to := (p_filters->>'week_ending_to')::date;
+    end if;
+  exception when others then
+    v_week_ending_to := null;
+  end;
+
   -- status logic:
   -- - p_filters.status may be array OR comma string OR single enum string OR 'paid'/'unpaid'
   if p_filters ? 'status' then
@@ -87,8 +108,14 @@ begin
       ) s
       where nullif(btrim(coalesce(x,'')), '') is not null;
     else
-      -- string / scalar
-      v_status_list := array_remove(string_to_array(upper(btrim(coalesce(v_status_raw::text,''))), ','), '');
+      -- string / scalar (trim JSON quotes safely)
+      v_status_list := array_remove(
+        string_to_array(
+          upper(btrim(trim(both '"' from coalesce(v_status_raw::text,'')))),
+          ','
+        ),
+        ''
+      );
     end if;
   end if;
 
@@ -108,10 +135,18 @@ begin
     select array_agg(s)
     into v_status_list
     from (
-      select distinct replace(replace(replace(upper(btrim(x)),'(',''),')',''),',','') as s
+      select distinct
+        replace(
+          replace(
+            replace(
+              replace(upper(btrim(x)),'(',''),')',''
+            ),',',''
+          ),'"',''
+        ) as s
       from unnest(v_status_list) x
     ) t
     where s in ('DRAFT','ISSUED','ON_HOLD','PAID');
+
     if v_status_list is null or coalesce(array_length(v_status_list,1),0) = 0 then
       v_status_list := null;
     end if;
@@ -141,6 +176,19 @@ begin
         v_status_list is null
         or i.status::text = any(v_status_list)
       )
+      -- NEW: Week ending range filter (matches list endpoint semantics: via invoice_lines → timesheets)
+      and (
+        (v_week_ending_from is null and v_week_ending_to is null)
+        or exists (
+          select 1
+          from public.invoice_lines l
+          join public.timesheets t
+            on t.timesheet_id = l.timesheet_id
+          where l.invoice_id = i.id
+            and (v_week_ending_from is null or t.week_ending_date >= v_week_ending_from)
+            and (v_week_ending_to   is null or t.week_ending_date <= v_week_ending_to)
+        )
+      )
   ),
   m as (
     select
@@ -157,6 +205,7 @@ begin
     coalesce(sum(coalesce(m.margin_sum,0)),0)::numeric as margin_ex_vat_sum
   from inv
   left join m on m.invoice_id = inv.id;
+
 end;
 $$;
 
