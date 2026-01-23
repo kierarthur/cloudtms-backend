@@ -27136,6 +27136,8 @@ async function applyWeeklyHoursCorrections(env, {
     return withCORS(env, req, serverError(`NHSP confirm failed: ${e?.message || e}`));
   }
 }
+
+
 async function handleTimesheetsSummary(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -27152,10 +27154,10 @@ async function handleTimesheetsSummary(env, req) {
   const clientId    = q('client_id');
   const candidateId = q('candidate_id');
 
-  // ✅ Canonical stage filter token (matches v_timesheets_summary.summary_stage and FE dropdown)
-  // Expected values from FE: ALL | UNPROCESSED | READY_FOR_INVOICE | PROCESSED | INVOICED
-  const stage = q('summary_stage');
-  const stageUp = stage ? String(stage).toUpperCase() : null;
+  // ✅ NEW: canonical Tools Stage filter token (from v_timesheets_summary.tools_stage)
+  // Expected values: ALL | UNPROCESSED | PROCESSING_DELAYED | AWAITING_AUTHORISATION | AUTHORISED_FOR_INVOICING | INVOICED
+  const toolsStageRaw = q('tools_stage');
+  const toolsStageUp  = toolsStageRaw ? String(toolsStageRaw).toUpperCase() : null;
 
   const routeTypeRaw = q('route_type');
   const routeType    = routeTypeRaw ? routeTypeRaw.toUpperCase() : null;
@@ -27166,65 +27168,156 @@ async function handleTimesheetsSummary(env, req) {
   const qrStatusRaw   = q('qr_status');
   const qrStatus      = qrStatusRaw ? qrStatusRaw.toUpperCase() : null;
 
-  const isAdjusted     = q('is_adjusted');
-  const isQr           = q('is_qr');
-  const needsAttention = q('needs_attention');
+  // Tools checkboxes
+  const candidatePaid = q('candidate_paid'); // paid_at_utc (candidate paid) checkbox only
+  const isAdjusted    = q('is_adjusted');    // adjusted checkbox (moved to Tools)
+  const isQr          = q('is_qr');          // keep existing route filter if still used
 
-  // Tools filters – candidate/client payment & invoicing
-  const candidatePaid   = q('candidate_paid');
-  const clientInvoiced  = q('client_invoiced');
+  // ✅ NEW: Issues dropdown (main summary controls)
+  // Expected values: ALL | NO_MATCH_ID | RATE_MISSING | PAY_CHAN_MISS | AWAITING_HR_VALIDATION | HR_HOURS_MISMATCH | HR_HOURS_MISSING
+  //                 | DUPLICATE_CONTRACTS | REFERENCE_MISSING | VALIDATION | AUTHORISATION | ON_HOLD | QR_NOT_ISSUED | QR_AWAITING_SIGNATURE
+  const issuesFilterRaw = q('issues_filter');
+  const issuesFilterUp  = issuesFilterRaw ? String(issuesFilterRaw).toUpperCase() : null;
 
-  // HR issue filter – e.g. 'HOURS_MISMATCH_HR'
+  // Legacy passthrough (until FE is fully migrated): allow old status_code to act as issues_filter if issues_filter not provided
+  const statusCodeRaw = q('status_code');
+  const statusCodeUp  = statusCodeRaw ? String(statusCodeRaw).toUpperCase() : null;
+
+  // HR issue filter – legacy param (can remain for power users; Issues dropdown covers this too)
   const hrIssueRaw = q('hr_issue');
   const hrIssue    = hrIssueRaw ? hrIssueRaw.toUpperCase() : null;
 
-  const weFrom      = q('week_ending_from');
-  const weTo        = q('week_ending_to');
+  const weFrom = q('week_ending_from');
+  const weTo   = q('week_ending_to');
 
   const orderByParam  = (q('order_by') || '').toLowerCase();
   const orderDirParam = (q('order_dir') || '').toLowerCase();
 
-  // processing_status filter
-  const procStatusParamRaw = q('processing_status');
-  let procStatusList = null;
-  if (procStatusParamRaw) {
-    const v = procStatusParamRaw.trim();
-    if (v && v.toUpperCase() !== 'ALL') {
-      procStatusList = v
-        .split(',')
-        .map(s => s.trim().toUpperCase())
-        .filter(Boolean);
-    }
-  }
-
-  // UI helper passthrough for totals parity
-  const statusCodeRaw = q('status_code');
-  const statusCode    = statusCodeRaw ? statusCodeRaw.toUpperCase() : null;
-
+  // Sort keys: map any request to sort by "processing_status" to processing_status_display
   const allowedSort = {
-    week_ending_date:    'week_ending_date',
-    client_name:         'client_name',
-    candidate_name:      'candidate_name',
-    summary_stage:       'summary_stage',
-    processing_status:   'processing_status',
-    route_type:          'route_type',
-    sheet_scope:         'sheet_scope',
-    total_pay_ex_vat:    'total_pay_ex_vat',
-    total_charge_ex_vat: 'total_charge_ex_vat',
-    margin_ex_vat:       'margin_ex_vat',
-    pay:                 'total_pay_ex_vat',
-    charge:              'total_charge_ex_vat',
-    margin:              'margin_ex_vat'
+    week_ending_date:         'week_ending_date',
+    client_name:              'client_name',
+    candidate_name:           'candidate_name',
+
+    // NEW: stage/signal columns
+    tools_stage:              'tools_stage',
+    processing_status:        'processing_status_display',
+    processing_status_display:'processing_status_display',
+
+    route_type:               'route_type',
+    sheet_scope:              'sheet_scope',
+
+    total_pay_ex_vat:         'total_pay_ex_vat',
+    total_charge_ex_vat:      'total_charge_ex_vat',
+    margin_ex_vat:            'margin_ex_vat',
+
+    pay:                      'total_pay_ex_vat',
+    charge:                   'total_charge_ex_vat',
+    margin:                   'margin_ex_vat'
   };
 
   const defaultOrderCol = 'week_ending_date';
   const orderCol = allowedSort[orderByParam] || defaultOrderCol;
   const orderDir = (orderDirParam === 'asc') ? 'asc' : 'desc';
 
+  // Helper: apply Issues filter to the PostgREST query
+  const applyIssuesFilter = (apiIn, tokenUp) => {
+    let api = apiIn;
+    const tok = tokenUp ? String(tokenUp).toUpperCase() : null;
+    if (!tok || tok === 'ALL') return api;
+
+    // PostgREST array-contains helper for text[]
+    const cs1 = (val) => `cs.{${enc(val)}}`;
+
+    switch (tok) {
+      case 'NO_MATCH_ID':
+        // Candidate or Client not resolved
+        api += `&or=${enc('(candidate_id.is.null,client_id.is.null)')}`;
+        return api;
+
+      case 'RATE_MISSING':
+        api += `&issue_codes=${cs1('Rate')}`;
+        return api;
+
+      case 'PAY_CHAN_MISS':
+      case 'PAY_CHANNEL_MISSING':
+        api += `&issue_codes=${cs1('Pay channel')}`;
+        return api;
+
+      case 'AWAITING_HR_VALIDATION':
+      case 'AWAITING_HR_VALIDATION_REQUIRED':
+        api += `&issue_codes=${cs1('HR validation')}`;
+        return api;
+
+      case 'HR_HOURS_MISMATCH':
+      case 'HOURS_MISMATCH_HR':
+        api += `&issue_codes=${cs1('Hours mismatch HR')}`;
+        return api;
+
+      case 'HR_HOURS_MISSING':
+        api += `&issue_codes=${cs1('HR hours missing')}`;
+        return api;
+
+      case 'DUPLICATE_CONTRACTS':
+        api += `&issue_codes=${cs1('Duplicate contracts')}`;
+        return api;
+
+      case 'REFERENCE_MISSING':
+        api += `&issue_codes=${cs1('Reference')}`;
+        return api;
+
+      case 'VALIDATION':
+        api += `&issue_codes=${cs1('Validation')}`;
+        return api;
+
+      case 'AUTHORISATION':
+        api += `&issue_codes=${cs1('Authorisation')}`;
+        return api;
+
+      case 'ON_HOLD':
+        api += `&issue_codes=${cs1('On hold')}`;
+        return api;
+
+      // QR issues are best filtered from the QR fields (issue_codes may not include QR)
+      case 'QR_NOT_ISSUED':
+        api += `&timesheet_id=is.not.null`;
+        api += `&qr_status=eq.PENDING`;
+        api += `&qr_token=is.null`;
+        api += `&qr_generated_at=is.null`;
+        return api;
+
+      case 'QR_AWAITING_SIGNATURE':
+      case 'QR_ISSUED_AWAITING_SIGNATURE':
+        api += `&timesheet_id=is.not.null`;
+        api += `&qr_status=eq.PENDING`;
+        api += `&qr_token=is.not.null`;
+        api += `&qr_generated_at=is.not.null`;
+        api += `&qr_scanned_at=is.null`;
+        return api;
+
+      default:
+        return api;
+    }
+  };
+
+  // Resolve the effective issues filter (prefer new issues_filter; fall back to legacy status_code if present)
+  let effectiveIssues = issuesFilterUp;
+  if ((!effectiveIssues || effectiveIssues === 'ALL') && statusCodeUp && statusCodeUp !== 'ALL') {
+    // Map old status_code to the nearest issue bucket
+    // (These are the exact existing values in the current FE dropdown.)
+    if (statusCodeUp === 'NO_MATCH_ID') effectiveIssues = 'NO_MATCH_ID';
+    else if (statusCodeUp === 'RATE_MISSING') effectiveIssues = 'RATE_MISSING';
+    else if (statusCodeUp === 'PAY_CHAN_MISS') effectiveIssues = 'PAY_CHAN_MISS';
+    else if (statusCodeUp === 'READY_FOR_HR') effectiveIssues = 'AWAITING_HR_VALIDATION';
+    else if (statusCodeUp === 'HR_HOURS_MISMATCH') effectiveIssues = 'HR_HOURS_MISMATCH';
+    // READY_FOR_INV is not an "issue" in the new model → no issues filter applied.
+  }
+
   let api =
     `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
     `?select=` + [
       '*',
+      // keep these explicit (harmless if duplicated) – used by FE
       'route_type',
       'client_no_timesheet_required',
       'client_autoprocess_hr',
@@ -27234,16 +27327,20 @@ async function handleTimesheetsSummary(env, req) {
       'timesheet_id',
       'sheet_scope',
       'submission_mode',
-      'basis'
+      'basis',
+      // NEW columns from the revised view
+      'tools_stage',
+      'processing_status_display',
+      'invoice_is_paid'
     ].join(',') +
-    `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
+    `&limit=${pageSize}&offset=${(page - 1) * pageSize}`;
 
   if (clientId)    api += `&client_id=eq.${enc(clientId)}`;
   if (candidateId) api += `&candidate_id=eq.${enc(candidateId)}`;
 
-  // ✅ Canonical stage filtering (NO legacy authorised/null logic)
-  if (stageUp && stageUp !== 'ALL') {
-    api += `&summary_stage=eq.${enc(stageUp)}`;
+  // ✅ NEW: Tools Stage filtering
+  if (toolsStageUp && toolsStageUp !== 'ALL') {
+    api += `&tools_stage=eq.${enc(toolsStageUp)}`;
   }
 
   // Route handling (aggregated)
@@ -27262,9 +27359,13 @@ async function handleTimesheetsSummary(env, req) {
   }
 
   if (sheetScope && sheetScope !== 'ALL') api += `&sheet_scope=eq.${enc(sheetScope)}`;
-  if (qrStatus)    api += `&qr_status=eq.${enc(qrStatus)}`;
-  if (weFrom)      api += `&week_ending_date=gte.${enc(weFrom)}`;
-  if (weTo)        api += `&week_ending_date=lte.${enc(weTo)}`;
+
+  // If the caller explicitly filters qr_status, respect it.
+  // (Issues QR filters may also set qr_status; this remains compatible.)
+  if (qrStatus) api += `&qr_status=eq.${enc(qrStatus)}`;
+
+  if (weFrom) api += `&week_ending_date=gte.${enc(weFrom)}`;
+  if (weTo)   api += `&week_ending_date=lte.${enc(weTo)}`;
 
   if (isAdjusted === 'true')  api += `&is_adjusted=eq.true`;
   if (isAdjusted === 'false') api += `&is_adjusted=eq.false`;
@@ -27272,22 +27373,16 @@ async function handleTimesheetsSummary(env, req) {
   if (isQr === 'true')        api += `&is_qr=eq.true`;
   if (isQr === 'false')       api += `&is_qr=eq.false`;
 
-  if (needsAttention === 'true')  api += `&needs_attention=eq.true`;
-  if (needsAttention === 'false') api += `&needs_attention=eq.false`;
+  // Candidate paid checkbox (paid_at_utc is the candidate-paid timestamp)
+  if (candidatePaid === 'true') api += `&paid_at_utc=is.not.null`;
 
-  if (candidatePaid === 'true')   api += `&paid_at_utc=is.not_null`;
-  if (clientInvoiced === 'true')  api += `&locked_by_invoice_id=is.not_null`;
-
+  // HR issue filter (legacy power filter)
   if (hrIssue) api += `&hr_crosscheck_issues=cs.{${enc(hrIssue)}}`;
 
-  if (procStatusList && procStatusList.length) {
-    if (procStatusList.length === 1) {
-      api += `&processing_status=eq.${enc(procStatusList[0])}`;
-    } else {
-      api += `&processing_status=in.(${procStatusList.map(enc).join(',')})`;
-    }
-  }
+  // ✅ NEW: Issues filter (main summary dropdown)
+  api = applyIssuesFilter(api, effectiveIssues);
 
+  // Ordering
   if (orderByParam && allowedSort[orderByParam]) {
     api += `&order=${enc(orderCol)}.${orderDir},client_name.asc,candidate_name.asc`;
   } else {
@@ -27303,6 +27398,10 @@ async function handleTimesheetsSummary(env, req) {
       if (!Object.prototype.hasOwnProperty.call(o, 'client_no_timesheet_required')) o.client_no_timesheet_required = null;
       if (!Object.prototype.hasOwnProperty.call(o, 'client_autoprocess_hr')) o.client_autoprocess_hr = null;
       if (!Object.prototype.hasOwnProperty.call(o, 'client_is_nhsp')) o.client_is_nhsp = null;
+      // New view columns (defensive)
+      if (!Object.prototype.hasOwnProperty.call(o, 'tools_stage')) o.tools_stage = null;
+      if (!Object.prototype.hasOwnProperty.call(o, 'processing_status_display')) o.processing_status_display = null;
+      if (!Object.prototype.hasOwnProperty.call(o, 'invoice_is_paid')) o.invoice_is_paid = null;
       return o;
     });
 
@@ -27314,27 +27413,31 @@ async function handleTimesheetsSummary(env, req) {
         client_id: clientId || null,
         candidate_id: candidateId || null,
 
-        // ✅ Canonical: only pass summary_stage when it’s a real filter
-        summary_stage: (stageUp && stageUp !== 'ALL') ? stageUp : null,
+        // ✅ NEW: totals parity keys
+        tools_stage: (toolsStageUp && toolsStageUp !== 'ALL') ? toolsStageUp : null,
+        issues_filter: (effectiveIssues && effectiveIssues !== 'ALL') ? effectiveIssues : null,
 
+        // Tools checkboxes
+        candidate_paid: candidatePaid || null,
+        is_adjusted: isAdjusted || null,
+
+        // existing filters
         route_type: routeType || null,
         sheet_scope: sheetScope || null,
         qr_status: qrStatus || null,
         week_ending_from: weFrom || null,
         week_ending_to: weTo || null,
-        is_adjusted: isAdjusted || null,
         is_qr: isQr || null,
-        needs_attention: needsAttention || null,
-        candidate_paid: candidatePaid || null,
-        client_invoiced: clientInvoiced || null,
-        hr_issue: hrIssue || null,
-        processing_status: (procStatusParamRaw || null),
-        status_code: statusCode || null
+
+        // keep optional power filter
+        hr_issue: hrIssue || null
       };
 
       const totRes = await sbRpc(env, 'timesheet_list_totals', { p_filters: filters });
       const totRows = Array.isArray(totRes) ? totRes : (totRes?.data || []);
-      totals = (totRows && totRows.length) ? totRows[0] : { count_all: 0, total_pay_ex_vat_sum: 0, margin_ex_vat_sum: 0 };
+      totals = (totRows && totRows.length)
+        ? totRows[0]
+        : { count_all: 0, total_pay_ex_vat_sum: 0, margin_ex_vat_sum: 0 };
 
       totalCount = Number(totals?.count_all || 0);
     }
@@ -27350,7 +27453,6 @@ async function handleTimesheetsSummary(env, req) {
     return withCORS(env, req, serverError(`Failed to fetch timesheets summary: ${e?.message || e}`));
   }
 }
-
 
 
 
