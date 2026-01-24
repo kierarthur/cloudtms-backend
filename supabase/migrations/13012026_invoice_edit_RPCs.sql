@@ -727,7 +727,6 @@ $$;
 
 
 
-
 create or replace function public.invoice_apply_edits(
   p_invoice_id uuid,
   p_payload jsonb,
@@ -1219,12 +1218,14 @@ v_has_seg_ops :=
       v_ref_tsfin_id := null;
       v_ref_ib := null;
 
-      select tfu.id, tfu.invoice_breakdown_json
+        select tfu.id, tfu.invoice_breakdown_json
       into v_ref_tsfin_id, v_ref_ib
       from public.timesheets_financials tfu
       where tfu.timesheet_id = v_ref_ts_id
         and tfu.is_current = true
-      limit 1;
+      limit 1
+      for update;
+
 
       if v_ref_tsfin_id is not null
          and v_ref_ib is not null
@@ -1293,10 +1294,11 @@ v_has_seg_ops :=
         end loop;
 
         if v_ref_seg_updates_this_ts > 0 then
-          update public.timesheets_financials tfu2
-          set invoice_breakdown_json = jsonb_set(coalesce(tfu2.invoice_breakdown_json, '{}'::jsonb), '{segments}', v_ref_new_segments, true)
+              update public.timesheets_financials tfu2
+          set invoice_breakdown_json = jsonb_set(v_ref_ib, '{segments}', v_ref_new_segments, true)
           where tfu2.id = v_ref_tsfin_id
             and tfu2.is_current = true;
+
 
           get diagnostics v_rc = row_count;
           if coalesce(v_rc,0) > 0 then
