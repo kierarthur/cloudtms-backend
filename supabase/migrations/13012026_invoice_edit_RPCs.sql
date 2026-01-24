@@ -133,8 +133,9 @@ begin
           end if;
         end if;
 
-        v_seg := jsonb_set(v_seg, '{invoice_locked_invoice_id}', to_jsonb(v_locked_text), true);
-        v_out_segs := v_out_segs || jsonb_build_array(v_seg);
+v_seg := jsonb_set(v_seg, '{invoice_locked_invoice_id}', coalesce(to_jsonb(v_locked_text), 'null'::jsonb), true);
+v_out_segs := v_out_segs || jsonb_build_array(v_seg);
+
       end loop;
 
       v_ib := jsonb_set(v_ib, '{segments}', v_out_segs, true);
