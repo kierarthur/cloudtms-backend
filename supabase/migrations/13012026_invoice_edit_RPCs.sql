@@ -486,6 +486,7 @@ $$;
 
 
 
+
 create or replace function public.invoice_apply_edits(
   p_invoice_id uuid,
   p_payload jsonb,
@@ -1956,9 +1957,9 @@ end if;
           select * from agg order by ymd
         loop
           chg_ex := public._inv_round2(r_day.chg_ex);
-          if chg_ex <= 0 then continue; end if;
+          if chg_ex = 0 then continue; end if;
 
-          if (coalesce(r_day.hours_day,0)+coalesce(r_day.hours_night,0)+coalesce(r_day.hours_sat,0)+coalesce(r_day.hours_sun,0)+coalesce(r_day.hours_bh,0)) <= 0 then
+          if (coalesce(r_day.hours_day,0)+coalesce(r_day.hours_night,0)+coalesce(r_day.hours_sat,0)+coalesce(r_day.hours_sun,0)+coalesce(r_day.hours_bh,0)) = 0 then
             continue;
           end if;
 
@@ -2020,7 +2021,7 @@ end if;
         into h_day, h_night, h_sat, h_sun, h_bh, pay_ex, chg_ex
         from jsonb_array_elements(segments) seg_el;
 
-        if chg_ex > 0 and (coalesce(h_day,0)+coalesce(h_night,0)+coalesce(h_sat,0)+coalesce(h_sun,0)+coalesce(h_bh,0)) > 0 then
+        if chg_ex <> 0 and (coalesce(h_day,0)+coalesce(h_night,0)+coalesce(h_sat,0)+coalesce(h_sun,0)+coalesce(h_bh,0)) <> 0 then
           margin_ex := public._inv_round2(chg_ex - pay_ex);
           vat_amt := public._inv_round2(chg_ex * v_vat_rate / 100);
           inc_amt := public._inv_round2(chg_ex + vat_amt);
