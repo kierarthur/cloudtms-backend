@@ -3318,11 +3318,17 @@ begin
     select
       tf.id as tsfin_id,
       tf.timesheet_id,
-      tf.external_source_rows_json
+      tf.external_source_rows_json,
+
+      -- ✅ Mileage fields for invoice itemisation
+      tf.mileage_units,
+      tf.mileage_pay_rate,
+      tf.mileage_charge_rate
     from public.timesheets_financials tf
     where tf.is_current = true
       and tf.timesheet_id in (select timesheet_id from ts_ids)
   ),
+
   tsfin_segments as (
     select
       tf.id as tsfin_id,
@@ -3498,6 +3504,20 @@ begin
       )
       from tsfin t
     ), '{}'::jsonb),
+
+    -- ✅ NEW: mileage units/rates per timesheet (for PDF builder / UI without scanning lines)
+    'mileage_by_timesheet_id', coalesce((
+      select jsonb_object_agg(
+        t.timesheet_id::text,
+        jsonb_build_object(
+          'mileage_units', t.mileage_units,
+          'mileage_pay_rate', t.mileage_pay_rate,
+          'mileage_charge_rate', t.mileage_charge_rate
+        )
+      )
+      from tsfin t
+    ), '{}'::jsonb),
+
 
     -- ✅ NEW: reference sources needed by FE to build reference update payloads with no extra calls
     'timesheet_reference_sources_by_id', coalesce((
