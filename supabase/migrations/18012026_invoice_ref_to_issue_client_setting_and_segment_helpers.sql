@@ -110,7 +110,7 @@ begin
       raise exception 'segment_refs contains no segment_id for tsfin_id %', v_tsfin_id;
     end if;
 
-    -- Lock the TSFIN row
+    -- ✅ FIX: Lock the TSFIN row at read time (prevents lost-update delay corruption)
     select tf.invoice_breakdown_json
       into v_ib
     from public.timesheets_financials tf
