@@ -1203,7 +1203,6 @@ $$;
 --       (date/work_date) + (start_utc normalized to UTC) + (ref_num)
 --   - Still FAILS CLOSED if keys are ambiguous or missing.
 -- ------------------------------------------------------------
-
 create or replace function public.tsfin_repair_merge_segments_locked(
   p_timesheet_id uuid,
   p_new_segments jsonb,
@@ -1238,6 +1237,11 @@ declare
   v_fresh_nhsp_map jsonb := '{}'::jsonb;
   v_fresh_ext_map  jsonb := '{}'::jsonb;
   v_fresh_sig_map  jsonb := '{}'::jsonb;
+
+  -- NEW: preserve delay overrides from the current TSFIN JSON (even for unlocked segments)
+  v_delay_by_segment_id jsonb := '{}'::jsonb; -- segment_id -> invoice_target_week_start (jsonb string)
+  v_delay_text text := null;
+  v_delays_reapplied int := 0;
 
   v_need_sig boolean := false;
 
@@ -1604,6 +1608,29 @@ begin
       )
     );
   end if;
+
+  -- ============================================================
+  -- NEW: Build delay map from current segments (preserve overrides)
+  -- We preserve only non-blank invoice_target_week_start, keyed by segment_id.
+  -- This fixes: delayed week being dropped during repair for unlocked segments.
+  -- ============================================================
+  for e in
+    select value from jsonb_array_elements(v_ib->'segments') value
+  loop
+    if e is null or jsonb_typeof(e) <> 'object' then
+      continue;
+    end if;
+
+    sid := nullif(btrim(coalesce(e->>'segment_id','')), '');
+    if sid is null then
+      continue;
+    end if;
+
+    v_delay_text := nullif(btrim(coalesce(e->>'invoice_target_week_start','')), '');
+    if v_delay_text is not null then
+      v_delay_by_segment_id := jsonb_set(v_delay_by_segment_id, array[sid], to_jsonb(v_delay_text), true);
+    end if;
+  end loop;
 
   -- ------------------------------------------------------------
   -- Build locked maps from current segments (preserve these exactly)
@@ -2177,6 +2204,7 @@ begin
   -- Build merged segments in the same order as p_new_segments:
   -- Prefer matching by nhsp_shift_id, then external_row_key, then signature (if needed).
   -- If a match exists -> use locked JSON exactly, else use new JSON.
+  -- NEW: re-apply invoice_target_week_start from current TSFIN (by segment_id)
   -- ------------------------------------------------------------
   v_merged_segments := '[]'::jsonb;
 
@@ -2226,6 +2254,15 @@ begin
 
     if chosen is null then
       chosen := e;
+    end if;
+
+    -- NEW: preserve delay override from current TSFIN JSON (segment_id match)
+    if chosen is not null and jsonb_typeof(chosen) = 'object' then
+      sid := nullif(btrim(coalesce(chosen->>'segment_id','')), '');
+      if sid is not null and (v_delay_by_segment_id ? sid) then
+        chosen := jsonb_set(chosen, '{invoice_target_week_start}', v_delay_by_segment_id->sid, true);
+        v_delays_reapplied := v_delays_reapplied + 1;
+      end if;
     end if;
 
     v_merged_segments := v_merged_segments || jsonb_build_array(chosen);
@@ -2337,6 +2374,7 @@ begin
     'preserved_locked_count', v_preserved_locked_count,
     'old_invalid_count', v_old_invalid,
     'new_invalid_count', v_new_invalid,
+    'delays_reapplied', v_delays_reapplied,
     'actor_user_id', case when p_actor_user_id is null then null else p_actor_user_id::text end,
     'correlation_id', p_correlation_id
   );
@@ -2356,7 +2394,8 @@ begin
         'new_segments_len', v_new_segments_len,
         'locked_preserved', v_preserved_locked_count,
         'merged_len', v_merged_len,
-        'rows_updated', v_rows_updated
+        'rows_updated', v_rows_updated,
+        'delays_reapplied', v_delays_reapplied
       );
 
       v_dbg_steps := v_dbg_steps || jsonb_build_array(
@@ -2410,7 +2449,8 @@ exception when others then
         'old_missing_segment_id_count', v_old_missing_segment_id_count,
         'old_invalid_samples', v_old_invalid_samples,
         'locked_count', v_locked_count,
-        'preserved_locked_count', v_preserved_locked_count
+        'preserved_locked_count', v_preserved_locked_count,
+        'delays_reapplied', v_delays_reapplied
       );
 
       perform public._inv_write_audit(
@@ -2446,6 +2486,7 @@ $$;
 grant execute on function public.tsfin_repair_merge_segments_locked(uuid, jsonb, uuid, text) to service_role;
 
 select pg_notify('pgrst', 'reload schema');
+
 
 create or replace function public.tsfin_update_segments_locked(
   p_timesheet_id uuid,
