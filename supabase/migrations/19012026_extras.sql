@@ -1203,6 +1203,7 @@ $$;
 --       (date/work_date) + (start_utc normalized to UTC) + (ref_num)
 --   - Still FAILS CLOSED if keys are ambiguous or missing.
 -- ------------------------------------------------------------
+
 create or replace function public.tsfin_repair_merge_segments_locked(
   p_timesheet_id uuid,
   p_new_segments jsonb,
@@ -1271,13 +1272,110 @@ declare
 
   -- uuid regex test
   is_uuid boolean;
+
+  -- =====================================================
+  -- DEBUG (invoice_debug): single audit row per RPC call
+  -- =====================================================
+  v_invoice_debug boolean := false;
+  v_dbg_started_at timestamptz := now();
+  v_dbg_steps jsonb := '[]'::jsonb;
+  v_dbg_sqlstate text := null;
+  v_dbg_error text := null;
+  v_dbg_stats jsonb := '{}'::jsonb;
+
+  -- corruption / diagnostics
+  v_old_segments_len int := 0;
+  v_old_non_object_count int := 0;
+  v_old_missing_segment_id_count int := 0;
+  v_old_locked_count int := 0;
+  v_old_unlocked_count int := 0;
+  v_old_unlocked_delayed_count int := 0;
+
+  v_new_segments_len int := 0;
+
+  v_old_invalid_samples jsonb := '[]'::jsonb;
+  v_old_invalid_samples_cap int := 10;
+
+  r record;
+
+  -- helper payload for early returns
+  v_ret jsonb;
 begin
+  -- Load invoice_debug flag (safe even if column not yet present)
+  begin
+    select coalesce(sd.invoice_debug, false)
+      into v_invoice_debug
+    from public.settings_defaults sd
+    where sd.id = 1
+    limit 1;
+  exception when undefined_column then
+    v_invoice_debug := false;
+  end;
+
+  if v_invoice_debug then
+    v_dbg_steps := v_dbg_steps || jsonb_build_array(
+      jsonb_build_object(
+        'step','start',
+        'at_utc', public._inv_iso_utc(v_dbg_started_at),
+        'timesheet_id', coalesce(p_timesheet_id::text,''),
+        'has_new_segments', (p_new_segments is not null),
+        'correlation_id', p_correlation_id
+      )
+    );
+  end if;
+
   if p_timesheet_id is null then
-    return jsonb_build_object('ok', false, 'error', 'TIMESHEET_ID_REQUIRED');
+    v_ret := jsonb_build_object('ok', false, 'error', 'TIMESHEET_ID_REQUIRED');
+
+    if v_invoice_debug then
+      begin
+        v_dbg_steps := v_dbg_steps || jsonb_build_array(
+          jsonb_build_object('step','return','at_utc', public._inv_iso_utc(now()), 'error','TIMESHEET_ID_REQUIRED')
+        );
+
+        perform public._inv_write_audit(
+          p_actor_user_id,
+          'TSFIN_REPAIR_MERGE_SEGMENTS_DEBUG',
+          jsonb_build_object('result', v_ret, 'steps', v_dbg_steps),
+          'timesheets_financials',
+          ('timesheet:' || coalesce(p_timesheet_id::text,'')),
+          null,
+          'INVOICE_DEBUG',
+          null, null, p_correlation_id
+        );
+      exception when others then
+        null;
+      end;
+    end if;
+
+    return v_ret;
   end if;
 
   if p_new_segments is null or jsonb_typeof(p_new_segments) <> 'array' then
-    return jsonb_build_object('ok', false, 'error', 'NEW_SEGMENTS_MUST_BE_ARRAY');
+    v_ret := jsonb_build_object('ok', false, 'error', 'NEW_SEGMENTS_MUST_BE_ARRAY');
+
+    if v_invoice_debug then
+      begin
+        v_dbg_steps := v_dbg_steps || jsonb_build_array(
+          jsonb_build_object('step','return','at_utc', public._inv_iso_utc(now()), 'error','NEW_SEGMENTS_MUST_BE_ARRAY')
+        );
+
+        perform public._inv_write_audit(
+          p_actor_user_id,
+          'TSFIN_REPAIR_MERGE_SEGMENTS_DEBUG',
+          jsonb_build_object('result', v_ret, 'steps', v_dbg_steps),
+          'timesheets_financials',
+          ('timesheet:' || p_timesheet_id::text),
+          null,
+          'INVOICE_DEBUG',
+          null, null, p_correlation_id
+        );
+      exception when others then
+        null;
+      end;
+    end if;
+
+    return v_ret;
   end if;
 
   -- Lock the current TSFIN row for this timesheet
@@ -1289,36 +1387,223 @@ begin
   for update;
 
   if not found or v_tsfin_id is null then
-    return jsonb_build_object('ok', false, 'error', 'CURRENT_TSFIN_NOT_FOUND');
+    v_ret := jsonb_build_object('ok', false, 'error', 'CURRENT_TSFIN_NOT_FOUND');
+
+    if v_invoice_debug then
+      begin
+        v_dbg_steps := v_dbg_steps || jsonb_build_array(
+          jsonb_build_object('step','return','at_utc', public._inv_iso_utc(now()), 'error','CURRENT_TSFIN_NOT_FOUND')
+        );
+
+        perform public._inv_write_audit(
+          p_actor_user_id,
+          'TSFIN_REPAIR_MERGE_SEGMENTS_DEBUG',
+          jsonb_build_object('result', v_ret, 'steps', v_dbg_steps),
+          'timesheets_financials',
+          ('timesheet:' || p_timesheet_id::text),
+          null,
+          'INVOICE_DEBUG',
+          null, null, p_correlation_id
+        );
+      exception when others then
+        null;
+      end;
+    end if;
+
+    return v_ret;
+  end if;
+
+  if v_invoice_debug then
+    v_dbg_steps := v_dbg_steps || jsonb_build_array(
+      jsonb_build_object('step','tsfin_locked','at_utc', public._inv_iso_utc(now()), 'tsfin_id', v_tsfin_id::text)
+    );
   end if;
 
   if v_ib is null or jsonb_typeof(v_ib) <> 'object' then
-    return jsonb_build_object(
+    v_ret := jsonb_build_object(
       'ok', false,
       'error', 'CURRENT_INVOICE_BREAKDOWN_INVALID',
       'tsfin_id', v_tsfin_id::text
     );
+
+    if v_invoice_debug then
+      begin
+        v_dbg_steps := v_dbg_steps || jsonb_build_array(
+          jsonb_build_object('step','return','at_utc', public._inv_iso_utc(now()), 'error','CURRENT_INVOICE_BREAKDOWN_INVALID')
+        );
+
+        perform public._inv_write_audit(
+          p_actor_user_id,
+          'TSFIN_REPAIR_MERGE_SEGMENTS_DEBUG',
+          jsonb_build_object('result', v_ret, 'steps', v_dbg_steps),
+          'timesheets_financials',
+          ('tsfin:' || v_tsfin_id::text),
+          null,
+          'INVOICE_DEBUG',
+          null, null, p_correlation_id
+        );
+      exception when others then
+        null;
+      end;
+    end if;
+
+    return v_ret;
   end if;
 
   if upper(coalesce(v_ib->>'mode','')) <> 'SEGMENTS' then
-    return jsonb_build_object(
+    v_ret := jsonb_build_object(
       'ok', false,
       'error', 'CURRENT_NOT_SEGMENTS_MODE',
       'tsfin_id', v_tsfin_id::text,
       'mode', upper(coalesce(v_ib->>'mode',''))
     );
+
+    if v_invoice_debug then
+      begin
+        v_dbg_steps := v_dbg_steps || jsonb_build_array(
+          jsonb_build_object('step','return','at_utc', public._inv_iso_utc(now()), 'error','CURRENT_NOT_SEGMENTS_MODE')
+        );
+
+        perform public._inv_write_audit(
+          p_actor_user_id,
+          'TSFIN_REPAIR_MERGE_SEGMENTS_DEBUG',
+          jsonb_build_object('result', v_ret, 'steps', v_dbg_steps),
+          'timesheets_financials',
+          ('tsfin:' || v_tsfin_id::text),
+          null,
+          'INVOICE_DEBUG',
+          null, null, p_correlation_id
+        );
+      exception when others then
+        null;
+      end;
+    end if;
+
+    return v_ret;
   end if;
 
   if jsonb_typeof(v_ib->'segments') <> 'array' then
-    return jsonb_build_object(
+    v_ret := jsonb_build_object(
       'ok', false,
       'error', 'CURRENT_SEGMENTS_NOT_ARRAY',
       'tsfin_id', v_tsfin_id::text
     );
+
+    if v_invoice_debug then
+      begin
+        v_dbg_steps := v_dbg_steps || jsonb_build_array(
+          jsonb_build_object('step','return','at_utc', public._inv_iso_utc(now()), 'error','CURRENT_SEGMENTS_NOT_ARRAY')
+        );
+
+        perform public._inv_write_audit(
+          p_actor_user_id,
+          'TSFIN_REPAIR_MERGE_SEGMENTS_DEBUG',
+          jsonb_build_object('result', v_ret, 'steps', v_dbg_steps),
+          'timesheets_financials',
+          ('tsfin:' || v_tsfin_id::text),
+          null,
+          'INVOICE_DEBUG',
+          null, null, p_correlation_id
+        );
+      exception when others then
+        null;
+      end;
+    end if;
+
+    return v_ret;
   end if;
 
   -- Record old invalid count (for reporting)
   v_old_invalid := public._tsfin_invalid_segment_count(v_ib);
+
+  -- Diagnostics: count what is "corrupted" in current segments (non-object/null/missing ids etc.)
+  begin
+    v_old_segments_len := jsonb_array_length(v_ib->'segments');
+  exception when others then
+    v_old_segments_len := 0;
+  end;
+
+  for r in
+    select value as seg, ordinality as ord
+    from jsonb_array_elements(v_ib->'segments') with ordinality
+  loop
+    if r.seg is null or jsonb_typeof(r.seg) <> 'object' then
+      v_old_non_object_count := v_old_non_object_count + 1;
+
+      if v_invoice_debug then
+        begin
+          if jsonb_array_length(v_old_invalid_samples) < v_old_invalid_samples_cap then
+            v_old_invalid_samples := v_old_invalid_samples || jsonb_build_array(
+              jsonb_build_object(
+                'ord', r.ord,
+                'kind', 'NON_OBJECT',
+                'type', coalesce(jsonb_typeof(r.seg), 'null')
+              )
+            );
+          end if;
+        exception when others then
+          null;
+        end;
+      end if;
+
+      continue;
+    end if;
+
+    sid := nullif(btrim(coalesce(r.seg->>'segment_id','')), '');
+    if sid is null then
+      v_old_missing_segment_id_count := v_old_missing_segment_id_count + 1;
+
+      if v_invoice_debug then
+        begin
+          if jsonb_array_length(v_old_invalid_samples) < v_old_invalid_samples_cap then
+            v_old_invalid_samples := v_old_invalid_samples || jsonb_build_array(
+              jsonb_build_object(
+                'ord', r.ord,
+                'kind', 'MISSING_SEGMENT_ID'
+              )
+            );
+          end if;
+        exception when others then
+          null;
+        end;
+      end if;
+    end if;
+
+    lock_invoice_id := nullif(btrim(coalesce(r.seg->>'invoice_locked_invoice_id','')), '');
+    if lock_invoice_id is not null then
+      v_old_locked_count := v_old_locked_count + 1;
+    else
+      v_old_unlocked_count := v_old_unlocked_count + 1;
+
+      if nullif(btrim(coalesce(r.seg->>'invoice_target_week_start','')), '') is not null then
+        v_old_unlocked_delayed_count := v_old_unlocked_delayed_count + 1;
+      end if;
+    end if;
+  end loop;
+
+  begin
+    v_new_segments_len := jsonb_array_length(p_new_segments);
+  exception when others then
+    v_new_segments_len := 0;
+  end;
+
+  if v_invoice_debug then
+    v_dbg_steps := v_dbg_steps || jsonb_build_array(
+      jsonb_build_object(
+        'step','loaded_current',
+        'at_utc', public._inv_iso_utc(now()),
+        'tsfin_id', v_tsfin_id::text,
+        'old_invalid_count', v_old_invalid,
+        'old_segments_len', v_old_segments_len,
+        'old_non_object_count', v_old_non_object_count,
+        'old_missing_segment_id_count', v_old_missing_segment_id_count,
+        'old_locked_count', v_old_locked_count,
+        'old_unlocked_count', v_old_unlocked_count,
+        'old_unlocked_delayed_count', v_old_unlocked_delayed_count,
+        'new_segments_len', v_new_segments_len
+      )
+    );
+  end if;
 
   -- ------------------------------------------------------------
   -- Build locked maps from current segments (preserve these exactly)
@@ -1344,11 +1629,34 @@ begin
 
     sid := nullif(btrim(coalesce(e->>'segment_id','')), '');
     if sid is null then
-      return jsonb_build_object(
+      v_ret := jsonb_build_object(
         'ok', false,
         'error', 'LOCKED_SEGMENT_MISSING_SEGMENT_ID',
         'tsfin_id', v_tsfin_id::text
       );
+
+      if v_invoice_debug then
+        begin
+          v_dbg_steps := v_dbg_steps || jsonb_build_array(
+            jsonb_build_object('step','return','at_utc', public._inv_iso_utc(now()), 'error','LOCKED_SEGMENT_MISSING_SEGMENT_ID')
+          );
+
+          perform public._inv_write_audit(
+            p_actor_user_id,
+            'TSFIN_REPAIR_MERGE_SEGMENTS_DEBUG',
+            jsonb_build_object('result', v_ret, 'stats', jsonb_build_object('locked_count', v_locked_count), 'steps', v_dbg_steps),
+            'timesheets_financials',
+            ('tsfin:' || v_tsfin_id::text),
+            null,
+            'INVOICE_DEBUG',
+            null, null, p_correlation_id
+          );
+        exception when others then
+          null;
+        end;
+      end if;
+
+      return v_ret;
     end if;
 
     -- optional identities
@@ -1367,13 +1675,36 @@ begin
 
     if v_nhsp_id is not null and is_uuid then
       if v_locked_nhsp_map ? v_nhsp_id then
-        return jsonb_build_object(
+        v_ret := jsonb_build_object(
           'ok', false,
           'error', 'DUPLICATE_LOCKED_NHSP_SHIFT_ID',
           'tsfin_id', v_tsfin_id::text,
           'nhsp_shift_id', v_nhsp_id,
           'segment_id', sid
         );
+
+        if v_invoice_debug then
+          begin
+            v_dbg_steps := v_dbg_steps || jsonb_build_array(
+              jsonb_build_object('step','return','at_utc', public._inv_iso_utc(now()), 'error','DUPLICATE_LOCKED_NHSP_SHIFT_ID', 'nhsp_shift_id', v_nhsp_id, 'segment_id', sid)
+            );
+
+            perform public._inv_write_audit(
+              p_actor_user_id,
+              'TSFIN_REPAIR_MERGE_SEGMENTS_DEBUG',
+              jsonb_build_object('result', v_ret, 'steps', v_dbg_steps),
+              'timesheets_financials',
+              ('tsfin:' || v_tsfin_id::text),
+              null,
+              'INVOICE_DEBUG',
+              null, null, p_correlation_id
+            );
+          exception when others then
+            null;
+          end;
+        end if;
+
+        return v_ret;
       end if;
 
       v_locked_nhsp_map := jsonb_set(v_locked_nhsp_map, array[v_nhsp_id], e, true);
@@ -1383,13 +1714,36 @@ begin
 
     if v_ext_key is not null then
       if v_locked_ext_map ? v_ext_key then
-        return jsonb_build_object(
+        v_ret := jsonb_build_object(
           'ok', false,
           'error', 'DUPLICATE_LOCKED_EXTERNAL_ROW_KEY',
           'tsfin_id', v_tsfin_id::text,
           'external_row_key', v_ext_key,
           'segment_id', sid
         );
+
+        if v_invoice_debug then
+          begin
+            v_dbg_steps := v_dbg_steps || jsonb_build_array(
+              jsonb_build_object('step','return','at_utc', public._inv_iso_utc(now()), 'error','DUPLICATE_LOCKED_EXTERNAL_ROW_KEY', 'external_row_key', v_ext_key, 'segment_id', sid)
+            );
+
+            perform public._inv_write_audit(
+              p_actor_user_id,
+              'TSFIN_REPAIR_MERGE_SEGMENTS_DEBUG',
+              jsonb_build_object('result', v_ret, 'steps', v_dbg_steps),
+              'timesheets_financials',
+              ('tsfin:' || v_tsfin_id::text),
+              null,
+              'INVOICE_DEBUG',
+              null, null, p_correlation_id
+            );
+          exception when others then
+            null;
+          end;
+        end if;
+
+        return v_ret;
       end if;
 
       v_locked_ext_map := jsonb_set(v_locked_ext_map, array[v_ext_key], e, true);
@@ -1410,25 +1764,71 @@ begin
     end;
 
     if v_date is null or v_start_ts is null then
-      return jsonb_build_object(
+      v_ret := jsonb_build_object(
         'ok', false,
         'error', 'LOCKED_SEGMENT_KEY_MISSING',
         'tsfin_id', v_tsfin_id::text,
         'segment_id', sid
       );
+
+      if v_invoice_debug then
+        begin
+          v_dbg_steps := v_dbg_steps || jsonb_build_array(
+            jsonb_build_object('step','return','at_utc', public._inv_iso_utc(now()), 'error','LOCKED_SEGMENT_KEY_MISSING', 'segment_id', sid)
+          );
+
+          perform public._inv_write_audit(
+            p_actor_user_id,
+            'TSFIN_REPAIR_MERGE_SEGMENTS_DEBUG',
+            jsonb_build_object('result', v_ret, 'steps', v_dbg_steps),
+            'timesheets_financials',
+            ('tsfin:' || v_tsfin_id::text),
+            null,
+            'INVOICE_DEBUG',
+            null, null, p_correlation_id
+          );
+        exception when others then
+          null;
+        end;
+      end if;
+
+      return v_ret;
     end if;
 
     v_start_norm := to_char(v_start_ts at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"');
     v_sig_key := v_date || '|' || v_start_norm || '|' || coalesce(v_ref, '');
 
     if v_locked_sig_map ? v_sig_key then
-      return jsonb_build_object(
+      v_ret := jsonb_build_object(
         'ok', false,
         'error', 'DUPLICATE_LOCKED_SEGMENT_KEY',
         'tsfin_id', v_tsfin_id::text,
         'sig_key', v_sig_key,
         'segment_id', sid
       );
+
+      if v_invoice_debug then
+        begin
+          v_dbg_steps := v_dbg_steps || jsonb_build_array(
+            jsonb_build_object('step','return','at_utc', public._inv_iso_utc(now()), 'error','DUPLICATE_LOCKED_SEGMENT_KEY', 'sig_key', v_sig_key, 'segment_id', sid)
+          );
+
+          perform public._inv_write_audit(
+            p_actor_user_id,
+            'TSFIN_REPAIR_MERGE_SEGMENTS_DEBUG',
+            jsonb_build_object('result', v_ret, 'steps', v_dbg_steps),
+            'timesheets_financials',
+            ('tsfin:' || v_tsfin_id::text),
+            null,
+            'INVOICE_DEBUG',
+            null, null, p_correlation_id
+          );
+        exception when others then
+          null;
+        end;
+      end if;
+
+      return v_ret;
     end if;
 
     v_locked_sig_map := jsonb_set(v_locked_sig_map, array[v_sig_key], e, true);
@@ -1436,6 +1836,17 @@ begin
   end loop;
 
   v_preserved_locked_count := v_locked_count;
+
+  if v_invoice_debug then
+    v_dbg_steps := v_dbg_steps || jsonb_build_array(
+      jsonb_build_object(
+        'step','locked_maps_built',
+        'at_utc', public._inv_iso_utc(now()),
+        'locked_count', v_locked_count,
+        'need_sig', v_need_sig
+      )
+    );
+  end if;
 
   -- ------------------------------------------------------------
   -- Build fresh maps from p_new_segments.
@@ -1449,20 +1860,66 @@ begin
     select value from jsonb_array_elements(p_new_segments) value
   loop
     if e is null or jsonb_typeof(e) <> 'object' then
-      return jsonb_build_object(
+      v_ret := jsonb_build_object(
         'ok', false,
         'error', 'NEW_SEGMENTS_CONTAINS_NON_OBJECT',
         'tsfin_id', v_tsfin_id::text
       );
+
+      if v_invoice_debug then
+        begin
+          v_dbg_steps := v_dbg_steps || jsonb_build_array(
+            jsonb_build_object('step','return','at_utc', public._inv_iso_utc(now()), 'error','NEW_SEGMENTS_CONTAINS_NON_OBJECT')
+          );
+
+          perform public._inv_write_audit(
+            p_actor_user_id,
+            'TSFIN_REPAIR_MERGE_SEGMENTS_DEBUG',
+            jsonb_build_object('result', v_ret, 'steps', v_dbg_steps),
+            'timesheets_financials',
+            ('tsfin:' || v_tsfin_id::text),
+            null,
+            'INVOICE_DEBUG',
+            null, null, p_correlation_id
+          );
+        exception when others then
+          null;
+        end;
+      end if;
+
+      return v_ret;
     end if;
 
     sid := nullif(btrim(coalesce(e->>'segment_id','')), '');
     if sid is null then
-      return jsonb_build_object(
+      v_ret := jsonb_build_object(
         'ok', false,
         'error', 'NEW_SEGMENTS_MISSING_SEGMENT_ID',
         'tsfin_id', v_tsfin_id::text
       );
+
+      if v_invoice_debug then
+        begin
+          v_dbg_steps := v_dbg_steps || jsonb_build_array(
+            jsonb_build_object('step','return','at_utc', public._inv_iso_utc(now()), 'error','NEW_SEGMENTS_MISSING_SEGMENT_ID')
+          );
+
+          perform public._inv_write_audit(
+            p_actor_user_id,
+            'TSFIN_REPAIR_MERGE_SEGMENTS_DEBUG',
+            jsonb_build_object('result', v_ret, 'steps', v_dbg_steps),
+            'timesheets_financials',
+            ('tsfin:' || v_tsfin_id::text),
+            null,
+            'INVOICE_DEBUG',
+            null, null, p_correlation_id
+          );
+        exception when others then
+          null;
+        end;
+      end if;
+
+      return v_ret;
     end if;
 
     v_nhsp_id := nullif(btrim(coalesce(e->>'nhsp_shift_id','')), '');
@@ -1471,12 +1928,35 @@ begin
     -- nhsp_shift_id map
     if v_nhsp_id is not null and v_nhsp_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' then
       if v_fresh_nhsp_map ? v_nhsp_id then
-        return jsonb_build_object(
+        v_ret := jsonb_build_object(
           'ok', false,
           'error', 'DUPLICATE_NEW_NHSP_SHIFT_ID',
           'tsfin_id', v_tsfin_id::text,
           'nhsp_shift_id', v_nhsp_id
         );
+
+        if v_invoice_debug then
+          begin
+            v_dbg_steps := v_dbg_steps || jsonb_build_array(
+              jsonb_build_object('step','return','at_utc', public._inv_iso_utc(now()), 'error','DUPLICATE_NEW_NHSP_SHIFT_ID', 'nhsp_shift_id', v_nhsp_id)
+            );
+
+            perform public._inv_write_audit(
+              p_actor_user_id,
+              'TSFIN_REPAIR_MERGE_SEGMENTS_DEBUG',
+              jsonb_build_object('result', v_ret, 'steps', v_dbg_steps),
+              'timesheets_financials',
+              ('tsfin:' || v_tsfin_id::text),
+              null,
+              'INVOICE_DEBUG',
+              null, null, p_correlation_id
+            );
+          exception when others then
+            null;
+          end;
+        end if;
+
+        return v_ret;
       end if;
       v_fresh_nhsp_map := jsonb_set(v_fresh_nhsp_map, array[v_nhsp_id], e, true);
     end if;
@@ -1484,12 +1964,35 @@ begin
     -- external_row_key map
     if v_ext_key is not null then
       if v_fresh_ext_map ? v_ext_key then
-        return jsonb_build_object(
+        v_ret := jsonb_build_object(
           'ok', false,
           'error', 'DUPLICATE_NEW_EXTERNAL_ROW_KEY',
           'tsfin_id', v_tsfin_id::text,
           'external_row_key', v_ext_key
         );
+
+        if v_invoice_debug then
+          begin
+            v_dbg_steps := v_dbg_steps || jsonb_build_array(
+              jsonb_build_object('step','return','at_utc', public._inv_iso_utc(now()), 'error','DUPLICATE_NEW_EXTERNAL_ROW_KEY', 'external_row_key', v_ext_key)
+            );
+
+            perform public._inv_write_audit(
+              p_actor_user_id,
+              'TSFIN_REPAIR_MERGE_SEGMENTS_DEBUG',
+              jsonb_build_object('result', v_ret, 'steps', v_dbg_steps),
+              'timesheets_financials',
+              ('tsfin:' || v_tsfin_id::text),
+              null,
+              'INVOICE_DEBUG',
+              null, null, p_correlation_id
+            );
+          exception when others then
+            null;
+          end;
+        end if;
+
+        return v_ret;
       end if;
       v_fresh_ext_map := jsonb_set(v_fresh_ext_map, array[v_ext_key], e, true);
     end if;
@@ -1506,29 +2009,81 @@ begin
       end;
 
       if v_date is null or v_start_ts is null then
-        return jsonb_build_object(
+        v_ret := jsonb_build_object(
           'ok', false,
           'error', 'NEW_SEGMENT_KEY_MISSING',
           'tsfin_id', v_tsfin_id::text,
           'segment_id', sid
         );
+
+        if v_invoice_debug then
+          begin
+            v_dbg_steps := v_dbg_steps || jsonb_build_array(
+              jsonb_build_object('step','return','at_utc', public._inv_iso_utc(now()), 'error','NEW_SEGMENT_KEY_MISSING', 'segment_id', sid)
+            );
+
+            perform public._inv_write_audit(
+              p_actor_user_id,
+              'TSFIN_REPAIR_MERGE_SEGMENTS_DEBUG',
+              jsonb_build_object('result', v_ret, 'steps', v_dbg_steps),
+              'timesheets_financials',
+              ('tsfin:' || v_tsfin_id::text),
+              null,
+              'INVOICE_DEBUG',
+              null, null, p_correlation_id
+            );
+          exception when others then
+            null;
+          end;
+        end if;
+
+        return v_ret;
       end if;
 
       v_start_norm := to_char(v_start_ts at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"');
       v_sig_key := v_date || '|' || v_start_norm || '|' || coalesce(v_ref, '');
 
       if v_fresh_sig_map ? v_sig_key then
-        return jsonb_build_object(
+        v_ret := jsonb_build_object(
           'ok', false,
           'error', 'DUPLICATE_NEW_SEGMENT_KEY',
           'tsfin_id', v_tsfin_id::text,
           'sig_key', v_sig_key
         );
+
+        if v_invoice_debug then
+          begin
+            v_dbg_steps := v_dbg_steps || jsonb_build_array(
+              jsonb_build_object('step','return','at_utc', public._inv_iso_utc(now()), 'error','DUPLICATE_NEW_SEGMENT_KEY', 'sig_key', v_sig_key)
+            );
+
+            perform public._inv_write_audit(
+              p_actor_user_id,
+              'TSFIN_REPAIR_MERGE_SEGMENTS_DEBUG',
+              jsonb_build_object('result', v_ret, 'steps', v_dbg_steps),
+              'timesheets_financials',
+              ('tsfin:' || v_tsfin_id::text),
+              null,
+              'INVOICE_DEBUG',
+              null, null, p_correlation_id
+            );
+          exception when others then
+            null;
+          end;
+        end if;
+
+        return v_ret;
       end if;
 
       v_fresh_sig_map := jsonb_set(v_fresh_sig_map, array[v_sig_key], e, true);
     end if;
   end loop;
+
+  if v_invoice_debug then
+    v_dbg_steps := v_dbg_steps || jsonb_build_array(
+      jsonb_build_object('step','fresh_maps_built','at_utc', public._inv_iso_utc(now()))
+    );
+  end if;
 
   -- ------------------------------------------------------------
   -- Safety check: every locked key must exist in new segments set.
@@ -1575,7 +2130,7 @@ begin
   end if;
 
   if v_missing_locked_ids is not null and array_length(v_missing_locked_ids, 1) is not null then
-    return jsonb_build_object(
+    v_ret := jsonb_build_object(
       'ok', false,
       'error', 'MISSING_LOCKED_SEGMENTS_IN_NEW',
       'tsfin_id', v_tsfin_id::text,
@@ -1583,6 +2138,39 @@ begin
       'preserved_locked_count', v_preserved_locked_count,
       'old_invalid_count', v_old_invalid
     );
+
+    if v_invoice_debug then
+      begin
+        v_dbg_steps := v_dbg_steps || jsonb_build_array(
+          jsonb_build_object('step','return','at_utc', public._inv_iso_utc(now()), 'error','MISSING_LOCKED_SEGMENTS_IN_NEW')
+        );
+
+        perform public._inv_write_audit(
+          p_actor_user_id,
+          'TSFIN_REPAIR_MERGE_SEGMENTS_DEBUG',
+          jsonb_build_object(
+            'result', v_ret,
+            'corruption', jsonb_build_object(
+              'old_invalid_count', v_old_invalid,
+              'old_segments_len', v_old_segments_len,
+              'old_non_object_count', v_old_non_object_count,
+              'old_missing_segment_id_count', v_old_missing_segment_id_count,
+              'old_invalid_samples', v_old_invalid_samples
+            ),
+            'steps', v_dbg_steps
+          ),
+          'timesheets_financials',
+          ('tsfin:' || v_tsfin_id::text),
+          null,
+          'INVOICE_DEBUG',
+          null, null, p_correlation_id
+        );
+      exception when others then
+        null;
+      end;
+    end if;
+
+    return v_ret;
   end if;
 
   -- ------------------------------------------------------------
@@ -1648,7 +2236,7 @@ begin
 
   v_new_invalid := public._tsfin_invalid_segment_count(v_new_ib);
   if v_new_invalid > 0 then
-    return jsonb_build_object(
+    v_ret := jsonb_build_object(
       'ok', false,
       'error', 'MERGE_RESULT_STILL_INVALID',
       'tsfin_id', v_tsfin_id::text,
@@ -1656,6 +2244,40 @@ begin
       'new_invalid_count', v_new_invalid,
       'preserved_locked_count', v_preserved_locked_count
     );
+
+    if v_invoice_debug then
+      begin
+        v_dbg_steps := v_dbg_steps || jsonb_build_array(
+          jsonb_build_object('step','return','at_utc', public._inv_iso_utc(now()), 'error','MERGE_RESULT_STILL_INVALID')
+        );
+
+        perform public._inv_write_audit(
+          p_actor_user_id,
+          'TSFIN_REPAIR_MERGE_SEGMENTS_DEBUG',
+          jsonb_build_object(
+            'result', v_ret,
+            'corruption', jsonb_build_object(
+              'old_invalid_count', v_old_invalid,
+              'new_invalid_count', v_new_invalid,
+              'old_segments_len', v_old_segments_len,
+              'old_non_object_count', v_old_non_object_count,
+              'old_missing_segment_id_count', v_old_missing_segment_id_count,
+              'old_invalid_samples', v_old_invalid_samples
+            ),
+            'steps', v_dbg_steps
+          ),
+          'timesheets_financials',
+          ('tsfin:' || v_tsfin_id::text),
+          null,
+          'INVOICE_DEBUG',
+          null, null, p_correlation_id
+        );
+      exception when others then
+        null;
+      end;
+    end if;
+
+    return v_ret;
   end if;
 
   -- Update only the segments list + updated_at (do NOT change lock summary fields)
@@ -1669,12 +2291,35 @@ begin
   get diagnostics v_rows_updated = row_count;
 
   if v_rows_updated <> 1 then
-    return jsonb_build_object(
+    v_ret := jsonb_build_object(
       'ok', false,
       'error', 'UPDATE_DID_NOT_APPLY',
       'tsfin_id', v_tsfin_id::text,
       'rows_updated', v_rows_updated
     );
+
+    if v_invoice_debug then
+      begin
+        v_dbg_steps := v_dbg_steps || jsonb_build_array(
+          jsonb_build_object('step','return','at_utc', public._inv_iso_utc(now()), 'error','UPDATE_DID_NOT_APPLY')
+        );
+
+        perform public._inv_write_audit(
+          p_actor_user_id,
+          'TSFIN_REPAIR_MERGE_SEGMENTS_DEBUG',
+          jsonb_build_object('result', v_ret, 'steps', v_dbg_steps),
+          'timesheets_financials',
+          ('tsfin:' || v_tsfin_id::text),
+          null,
+          'INVOICE_DEBUG',
+          null, null, p_correlation_id
+        );
+      exception when others then
+        null;
+      end;
+    end if;
+
+    return v_ret;
   end if;
 
   -- merged length (for reporting)
@@ -1684,7 +2329,7 @@ begin
     v_merged_len := null;
   end;
 
-  return jsonb_build_object(
+  v_ret := jsonb_build_object(
     'ok', true,
     'tsfin_id', v_tsfin_id::text,
     'timesheet_id', p_timesheet_id::text,
@@ -1695,6 +2340,106 @@ begin
     'actor_user_id', case when p_actor_user_id is null then null else p_actor_user_id::text end,
     'correlation_id', p_correlation_id
   );
+
+  if v_invoice_debug then
+    begin
+      v_dbg_stats := jsonb_build_object(
+        'tsfin_id', v_tsfin_id::text,
+        'old_invalid_count', v_old_invalid,
+        'new_invalid_count', v_new_invalid,
+        'old_segments_len', v_old_segments_len,
+        'old_non_object_count', v_old_non_object_count,
+        'old_missing_segment_id_count', v_old_missing_segment_id_count,
+        'old_locked_count', v_old_locked_count,
+        'old_unlocked_count', v_old_unlocked_count,
+        'old_unlocked_delayed_count', v_old_unlocked_delayed_count,
+        'new_segments_len', v_new_segments_len,
+        'locked_preserved', v_preserved_locked_count,
+        'merged_len', v_merged_len,
+        'rows_updated', v_rows_updated
+      );
+
+      v_dbg_steps := v_dbg_steps || jsonb_build_array(
+        jsonb_build_object(
+          'step','finish',
+          'at_utc', public._inv_iso_utc(now()),
+          'stats', v_dbg_stats
+        )
+      );
+
+      perform public._inv_write_audit(
+        p_actor_user_id,
+        'TSFIN_REPAIR_MERGE_SEGMENTS_DEBUG',
+        jsonb_build_object(
+          'result', v_ret,
+          'corruption', jsonb_build_object(
+            'old_invalid_count', v_old_invalid,
+            'old_segments_len', v_old_segments_len,
+            'old_non_object_count', v_old_non_object_count,
+            'old_missing_segment_id_count', v_old_missing_segment_id_count,
+            'old_invalid_samples', v_old_invalid_samples
+          ),
+          'stats', v_dbg_stats,
+          'steps', v_dbg_steps
+        ),
+        'timesheets_financials',
+        ('tsfin:' || v_tsfin_id::text),
+        null,
+        'INVOICE_DEBUG',
+        null, null, p_correlation_id
+      );
+    exception when others then
+      null;
+    end;
+  end if;
+
+  return v_ret;
+
+exception when others then
+  v_dbg_sqlstate := SQLSTATE;
+  v_dbg_error := SQLERRM;
+
+  if v_invoice_debug then
+    begin
+      v_dbg_stats := jsonb_build_object(
+        'tsfin_id', coalesce(v_tsfin_id::text,''),
+        'old_invalid_count', v_old_invalid,
+        'new_invalid_count', v_new_invalid,
+        'old_segments_len', v_old_segments_len,
+        'old_non_object_count', v_old_non_object_count,
+        'old_missing_segment_id_count', v_old_missing_segment_id_count,
+        'old_invalid_samples', v_old_invalid_samples,
+        'locked_count', v_locked_count,
+        'preserved_locked_count', v_preserved_locked_count
+      );
+
+      perform public._inv_write_audit(
+        p_actor_user_id,
+        'TSFIN_REPAIR_MERGE_SEGMENTS_ERROR',
+        jsonb_build_object(
+          'timesheet_id', coalesce(p_timesheet_id::text,''),
+          'tsfin_id', coalesce(v_tsfin_id::text,''),
+          'sqlstate', v_dbg_sqlstate,
+          'error', v_dbg_error,
+          'stats', v_dbg_stats,
+          'steps', v_dbg_steps,
+          'correlation_id', p_correlation_id
+        ),
+        'timesheets_financials',
+        case
+          when v_tsfin_id is null then ('timesheet:' || coalesce(p_timesheet_id::text,''))
+          else ('tsfin:' || v_tsfin_id::text)
+        end,
+        null,
+        'INVOICE_DEBUG',
+        null, null, p_correlation_id
+      );
+    exception when others then
+      null;
+    end;
+  end if;
+
+  raise;
 end;
 $$;
 
