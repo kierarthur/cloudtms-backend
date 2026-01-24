@@ -33735,7 +33735,8 @@ function buildHTML(payload) {
     issued_at_utc,
     due_at_utc,
     totals = { subtotal_ex_vat: 0, vat_amount: 0, total_inc_vat: 0 },
-    items = []
+    items = [],
+    reference_rows = []
   } = payload || {};
 
   // Snapshot fields (populated by your issuing worker)
@@ -33815,7 +33816,7 @@ function buildHTML(payload) {
 
   // Labels (use per-line labels if provided; fallback to defaults)
   const DEFAULT_LABELS = { day: "Day", night: "Night", sat: "Sat", sun: "Sun", bh: "BH" };
-  const bucketLabelOf = (labels, key) => escapeHtml((labels && labels[key]) || DEFAULT_LABELS[key] || key);
+  const bucketLabelOf = (labels, key) => String((labels && labels[key]) || DEFAULT_LABELS[key] || key);
 
   // ─────────────────────────────────────────────────────────────
   // Group items by timesheet_id, keep adjustments separate
@@ -33884,14 +33885,9 @@ function buildHTML(payload) {
       const q = num(qty);
       const u = num(unit);
       const c = round2(charge);
-      // Per your earlier rules: do not include rows with zero charge
-      if (round2(c) === 0) return;
-      rows.push({
-        desc,
-        qty: q,
-        unit: u,
-        charge: c
-      });
+      // Requirement: hide zero-subtotal rows, but show positive and negative rows.
+      if (c === 0) return;
+      rows.push({ desc: String(desc || ""), qty: q, unit: u, charge: c });
     };
 
     // HOURS breakdown
@@ -33911,26 +33907,67 @@ function buildHTML(payload) {
       }
     }
 
-    // Additional / mileage / expenses (non-hours)
+    // Additional rates / mileage / expenses (non-hours)
     for (const it of its) {
       const t = getLineTypeNorm(it);
       if (t === "HOURS") continue;
       if (t === "ADJUSTMENT") continue;
 
       const m = it.meta || {};
-      const unitLabel = String(m.unit_label || it.description || "").trim();
-
-      // qty/unit charge defaults:
-      // - prefer meta.qty and meta.unit_charge_ex_vat
-      // - else qty=1, unit=total_ex_vat
       const totalEx = num(it.total_ex_vat);
-      const qty = (m.qty != null) ? num(m.qty) : 1;
-      const unitCharge = (m.unit_charge_ex_vat != null)
-        ? num(m.unit_charge_ex_vat)
-        : (qty !== 0 ? totalEx / qty : totalEx);
 
-      // Only include when charge != 0 (handled by pushRow)
-      pushRow(escapeHtml(unitLabel || t), qty, unitCharge, totalEx);
+      // Default label (keep the human-friendly SQL-generated description where available)
+      const unitLabel = String(m.unit_label || it.description || t || "").trim() || t;
+
+      let qty = null;
+      let unitCharge = null;
+
+      // Mileage (miles + rate)
+      if (t === "MILEAGE") {
+        if (m?.mileage && m.mileage.mileage_units != null) qty = num(m.mileage.mileage_units);
+        else if (m.mileage_units != null) qty = num(m.mileage_units);
+        else if (m.qty != null) qty = num(m.qty);
+
+        if (m?.mileage && m.mileage.charge_rate != null) unitCharge = num(m.mileage.charge_rate);
+        else if (m.unit_charge_ex_vat != null) unitCharge = num(m.unit_charge_ex_vat);
+      }
+
+      // Additional units/rates
+      else if (t.startsWith("ADDITIONAL_RATE")) {
+        if (m?.units && m.units.unit_count != null) qty = num(m.units.unit_count);
+        else if (m.unit_count != null) qty = num(m.unit_count);
+        else if (m.qty != null) qty = num(m.qty);
+
+        if (m?.units && m.units.charge_rate != null) unitCharge = num(m.units.charge_rate);
+        else if (m.unit_charge_ex_vat != null) unitCharge = num(m.unit_charge_ex_vat);
+      }
+
+      // Expenses (travel / accommodation / other etc.)
+      else if (t.startsWith("EXPENSE")) {
+        qty = (m.qty != null) ? num(m.qty) : 1;
+        unitCharge = (m.unit_charge_ex_vat != null)
+          ? num(m.unit_charge_ex_vat)
+          : (qty !== 0 ? totalEx / qty : totalEx);
+      }
+
+      // Generic fallback
+      else {
+        qty = (m.qty != null) ? num(m.qty) : 1;
+        unitCharge = (m.unit_charge_ex_vat != null)
+          ? num(m.unit_charge_ex_vat)
+          : (qty !== 0 ? totalEx / qty : totalEx);
+      }
+
+      if (qty == null) qty = 1;
+
+      // Requirement: skip zero-qty rows (but DO show negative qty/charges)
+      if (round2(qty) === 0) continue;
+
+      if (unitCharge == null) {
+        unitCharge = (qty !== 0) ? (totalEx / qty) : totalEx;
+      }
+
+      pushRow(unitLabel, qty, unitCharge, totalEx);
     }
 
     if (!rows.length) return "";
@@ -33966,6 +34003,62 @@ function buildHTML(payload) {
   };
 
   // ─────────────────────────────────────────────────────────────
+
+  // ─────────────────────────────────────────────────────────────
+  // Booking reference rows (manifest.reference_rows)
+  // Rendered under each timesheet group (never show timesheet_id)
+  // ─────────────────────────────────────────────────────────────
+  const refsByTsId = new Map();
+  for (const r of (reference_rows || [])) {
+    const tsId = (r && r.timesheet_id != null) ? String(r.timesheet_id) : null;
+    if (!tsId) continue;
+    if (!refsByTsId.has(tsId)) refsByTsId.set(tsId, []);
+    refsByTsId.get(tsId).push(r);
+  }
+
+  const refsTableHtmlForTs = (tsId) => {
+    const refs = refsByTsId.get(String(tsId || "")) || [];
+    if (!refs.length) return "";
+
+    const rowsHtml = refs.map((r) => {
+      const day = r?.day_ymd ? fmtDateGB(r.day_ymd) : "";
+      const st = r?.start_utc ? fmtUKTime(r.start_utc) : "";
+      const en = r?.end_utc ? fmtUKTime(r.end_utc) : "";
+
+      const hasRef = (r?.current_reference != null) && String(r.current_reference).trim();
+      const refTxt = hasRef ? String(r.current_reference).trim() : (r?.is_required ? "MISSING" : "—");
+      const refCls = (!hasRef && r?.is_required) ? "ref-missing" : "";
+
+      return `
+        <tr>
+          <td class="r-day mono">${escapeHtml(day)}</td>
+          <td class="r-time mono">${escapeHtml(st)}</td>
+          <td class="r-time mono">${escapeHtml(en)}</td>
+          <td class="r-ref mono ${refCls}">${escapeHtml(refTxt)}</td>
+        </tr>
+      `;
+    }).join("");
+
+    return `
+      <div class="refs-wrap">
+        <div class="refs-title">Booking references</div>
+        <table class="refs">
+          <thead>
+            <tr>
+              <th class="r-day">Day</th>
+              <th class="r-time">Start</th>
+              <th class="r-time">End</th>
+              <th class="r-ref">Reference</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+      </div>
+    `;
+  };
+
   // Build main table rows:
   // - One row per timesheet group (with nested breakdown table)
   // - Optional adjustments section at the end
@@ -33990,6 +34083,7 @@ function buildHTML(payload) {
 
     const title = escapeHtml(metaFirst.candidate_display || metaFirst.candidate || `Timesheet ${idx + 1}`);
     const breakdown = groupBreakdownTableHtml(grp);
+    const refsHtml = refsTableHtmlForTs(grp.tsId);
 
     return `
       <tr class="line">
@@ -33998,6 +34092,7 @@ function buildHTML(payload) {
           <div class="desc-meta">
             ${escapeHtml(sublineParts)}
             ${breakdown ? `<div class="breakdown-wrap">${breakdown}</div>` : ""}
+            ${refsHtml || ""}
           </div>
         </td>
         <td class="money exvat">${fmtGBP(grpEx)}</td>
@@ -34146,6 +34241,34 @@ function buildHTML(payload) {
     table.breakdown .b-charge { text-align: right; white-space: nowrap; }
     table.breakdown .b-desc { text-align: left; }
 
+    /* Booking references table */
+    .refs-wrap { margin-top: 6px; }
+    .refs-title { font-weight: 600; margin: 2px 0 4px; color: #333; }
+    table.refs {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      overflow: hidden;
+      font-size: 10px;
+      background: #fff;
+    }
+    table.refs th, table.refs td {
+      border: 1px solid #e5e7eb;
+      padding: 6px 8px;
+      vertical-align: top;
+    }
+    table.refs thead th {
+      background: #f9fafb;
+      font-weight: 600;
+      text-align: left;
+    }
+    table.refs .r-day { width: 90px; white-space: nowrap; }
+    table.refs .r-time { width: 60px; white-space: nowrap; text-align: right; }
+    table.refs .r-ref { text-align: left; }
+    table.refs td.r-time { text-align: right; }
+    .ref-missing { color: #b91c1c; font-weight: 700; }
+
     /* New: adjustments section header */
     .section-row td {
       background: #f9fafb;
@@ -34237,6 +34360,7 @@ function buildHTML(payload) {
 </body>
 </html>`;
 }
+
 
 
 /*
@@ -46125,6 +46249,7 @@ async function handleInvoiceBatchGenerateConfirm(env, req) {
   }
 }
 
+
 async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, opts) {
   const enc = encodeURIComponent;
 
@@ -46235,68 +46360,149 @@ async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, o
     `;
   }
 
-  function buildNhspReportHTML(inv, header, nhspRows) {
+  function buildNhspReportHTML(inv, header, nhspData) {
     const safe = (v) => (v == null ? '' : String(v));
     const h = header || {};
     const clientName = safe(h.client_name || h.client || '');
     const invNo = safe(inv.invoice_no || '');
     const issued = safe(inv.issued_at_utc || '');
 
-    let columns = [];
-    const firstWithRaw = nhspRows.find(r => r.raw_row && typeof r.raw_row === 'object');
-    if (firstWithRaw) columns = Object.keys(firstWithRaw.raw_row);
+    // Normalize payload into one or more tables.
+    // If we have header_columns, we MUST preserve that exact column order.
+    // Row order must also be preserved exactly (no sorting).
+    const tables = [];
 
-    const hasRows = nhspRows.length > 0 && columns.length > 0;
+    const unwrapRow = (r) => {
+      if (!r) return null;
+      if (r.raw_row && typeof r.raw_row === 'object') return r.raw_row;
+      if (r.raw && typeof r.raw === 'object') return r.raw;
+      return r;
+    };
 
-    const headerHtml = hasRows
-      ? `<tr>${columns.map(col => `<th>${safe(col)}</th>`).join('')}</tr>`
-      : '';
+    if (Array.isArray(nhspData)) {
+      const rows = nhspData.map(unwrapRow).filter(r => r && typeof r === 'object');
+      if (rows.length) tables.push({ header_columns: [], rows });
+    } else if (nhspData && typeof nhspData === 'object') {
+      const tList = Array.isArray(nhspData.tables) ? nhspData.tables : [nhspData];
+      for (const t of tList) {
+        const headerCols = Array.isArray(t?.header_columns) ? t.header_columns.map(safe) : [];
+        const rowsRaw = Array.isArray(t?.rows_json)
+          ? t.rows_json
+          : (Array.isArray(t?.rows) ? t.rows : []);
+        const rows = rowsRaw.map(unwrapRow).filter(r => r && typeof r === 'object');
+        if (rows.length) tables.push({ header_columns: headerCols, rows });
+      }
+    }
 
-    const rowsHtml = hasRows
-      ? nhspRows.map(r => {
-          const raw = r.raw_row || {};
-          const cells = columns.map(col => `<td>${safe(raw[col])}</td>`).join('');
-          return `<tr>${cells}</tr>`;
-        }).join('')
-      : '';
+    const hasTables = tables.length > 0;
+
+    const renderTable = (t, idx) => {
+      const headerCols = Array.isArray(t.header_columns) ? t.header_columns : [];
+
+      // Prefer rendering using raw_columns (which maps 1:1 to header_columns).
+      const firstWithRawCols = t.rows.find(r => Array.isArray(r.raw_columns));
+      const rawLen = firstWithRawCols ? firstWithRawCols.raw_columns.length : 0;
+
+      // Column labels:
+      //  - If header_columns exist, use them exactly as imported.
+      //  - Else, if raw_columns exist, use generic Column 1..N (still preserves column ORDER).
+      //  - Else, fall back to object keys (best-effort).
+      const columns = (headerCols && headerCols.length)
+        ? headerCols
+        : (rawLen > 0
+            ? Array.from({ length: rawLen }, (_, i) => `Column ${i + 1}`)
+            : Object.keys(t.rows[0] || {}));
+
+      const headerHtml = `<tr>${columns.map(col => `<th>${escapeHtml(safe(col))}</th>`).join('')}</tr>`;
+
+      const rowsHtml = t.rows.map(r => {
+        let cells = [];
+
+        if (Array.isArray(r.raw_columns)) {
+          const arr = r.raw_columns;
+          for (let i = 0; i < columns.length; i++) {
+            const v = (i < arr.length) ? arr[i] : '';
+            cells.push(`<td>${escapeHtml(safe(v))}</td>`);
+          }
+        } else {
+          for (const col of columns) {
+            cells.push(`<td>${escapeHtml(safe(r?.[col]))}</td>`);
+          }
+        }
+
+        return `<tr>${cells.join('')}</tr>`;
+      }).join('');
+
+      const sep = (idx > 0) ? `<div class="page-break"></div>` : '';
+
+      return `${sep}
+        <table class="nhsp">
+          <thead>${headerHtml}</thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      `;
+    };
 
     return `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>NHSP Itemised Breakdown</title>
+  <title>NHSP Attachment</title>
   <style>
-    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 11px; margin: 24px; }
+    @page { size: A4 landscape; margin: 0; }
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 10px;
+      margin: 0;
+    }
     h1 { font-size: 18px; margin-bottom: 4px; }
     h2 { font-size: 13px; margin-top: 4px; margin-bottom: 12px; }
-    table { width: 100%; border-collapse: collapse; font-size: 8.5px; table-layout: fixed; }
-    th, td { border: 1px solid #ccc; padding: 2px 3px; text-align: left; word-wrap: break-word; }
-    th { background: #f2f2f2; }
     .meta { margin-bottom: 12px; font-size: 10px; }
     .meta span { display: inline-block; margin-right: 16px; }
+
+    .page-break { break-before: page; page-break-before: always; }
+
+    table.nhsp {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 8.5px;
+      table-layout: fixed;
+    }
+
+    table.nhsp thead { display: table-header-group; }
+
+    table.nhsp th,
+    table.nhsp td {
+      border: 1px solid #ccc;
+      padding: 2px 3px;
+      text-align: left;
+      vertical-align: top;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+
+    table.nhsp th { background: #f2f2f2; }
+
     .no-data { margin-top: 12px; font-style: italic; }
   </style>
 </head>
 <body>
-  <h1>NHSP itemised breakdown</h1>
-  <h2>Invoice ${invNo}</h2>
+  <h1>NHSP attachment</h1>
+  <h2>Invoice ${escapeHtml(invNo)}</h2>
   <div class="meta">
-    <span><strong>Client:</strong> ${clientName}</span>
-    <span><strong>Issued:</strong> ${issued}</span>
+    <span><strong>Client:</strong> ${escapeHtml(clientName)}</span>
+    <span><strong>Issued:</strong> ${escapeHtml(issued)}</span>
   </div>
-  ${hasRows ? `
-    <table>
-      <thead>${headerHtml}</thead>
-      <tbody>${rowsHtml}</tbody>
-    </table>
-  ` : `
-    <div class="no-data">No NHSP itemised rows captured for this invoice.</div>
+
+  ${hasTables ? tables.map(renderTable).join('') : `
+    <div class="no-data">No NHSP rows captured for this invoice.</div>
   `}
 </body>
 </html>
     `;
   }
+
 
   // Helpers local to this function
   const isTimesheetKind = (k) => String(k || '').toUpperCase() === 'TIMESHEET';
@@ -46396,24 +46602,10 @@ async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, o
     const hrCacheRows = Array.isArray(manifest.hr_source_rows_cache) ? manifest.hr_source_rows_cache : [];
 
     // Determine group_nightsat_sunbh for template:
-    let groupNightsat = (typeof header.group_nightsat_sunbh === 'boolean') ? header.group_nightsat_sunbh : null;
-    if (groupNightsat == null) {
-      try {
-        const clientId = inv.client_id;
-        if (clientId) {
-          const api =
-            `${env.SUPABASE_URL}/rest/v1/client_settings` +
-            `?select=group_nightsat_sunbh,effective_from` +
-            `&client_id=eq.${enc(clientId)}` +
-            `&order=effective_from.desc.nullslast` +
-            `&limit=1`;
-          const { rows: csRows } = await sbFetch(env, api);
-          const cs0 = (csRows && csRows.length) ? csRows[0] : null;
-          if (cs0 && typeof cs0.group_nightsat_sunbh === 'boolean') groupNightsat = cs0.group_nightsat_sunbh;
-        }
-      } catch {}
-    }
-    if (groupNightsat == null) groupNightsat = false;
+    // IMPORTANT: this should be snapped into header_snapshot_json at issue time.
+    let groupNightsat = false;
+    if (typeof header.group_nightsat_sunbh === 'boolean') groupNightsat = header.group_nightsat_sunbh;
+    else if (typeof header?.meta?.group_nightsat_sunbh === 'boolean') groupNightsat = header.meta.group_nightsat_sunbh;
 
     // Build invoiceData for buildHTML
     const invoiceData = {
@@ -46463,6 +46655,7 @@ async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, o
           total_inc_vat: Number(l.total_inc_vat || 0),
         };
       }),
+      reference_rows: Array.isArray(manifest.reference_rows) ? manifest.reference_rows : [],
     };
 
     // Render base invoice pdf
@@ -46498,29 +46691,36 @@ async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, o
     }
     const manualKeys = tsIds.map(tsId => manualKeyByTsId.get(tsId) || null).filter(Boolean);
 
-    // Determine expense-only timesheets (hours=0 & expense/mileage charge>0) so missing TS PDF is non-fatal
+    // Determine expense-only timesheets (no HOURS/ADDITIONAL lines on this invoice, but has EXPENSE/MILEAGE lines),
+    // so missing TS PDF is non-fatal (matches precheck behaviour) — computed from manifest lines (no extra RPCs).
     const expenseOnlySet = new Set();
     if ((tsAttach || manualKeys.length) && tsIds.length) {
-      const chunkSize = 200;
-      for (let i = 0; i < tsIds.length; i += chunkSize) {
-        const chunk = tsIds.slice(i, i + chunkSize).map(String);
-        const qs = chunk.map(enc).join(',');
-        const api =
-          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?select=timesheet_id,total_hours,travel_charge_ex_vat,accommodation_charge_ex_vat,other_charge_ex_vat,mileage_charge_ex_vat` +
-          `&is_current=eq.true` +
-          `&timesheet_id=in.(${qs})`;
-        const { rows: tfRows } = await sbFetch(env, api);
-        for (const tf of (tfRows || [])) {
-          const th = Number(tf?.total_hours || 0);
-          const exp =
-            Number(tf?.travel_charge_ex_vat || 0) +
-            Number(tf?.accommodation_charge_ex_vat || 0) +
-            Number(tf?.other_charge_ex_vat || 0) +
-            Number(tf?.mileage_charge_ex_vat || 0);
-          if (th === 0 && exp > 0 && tf?.timesheet_id) {
-            expenseOnlySet.add(String(tf.timesheet_id));
-          }
+      const byTs = new Map();
+      for (const l of (lineRows || [])) {
+        const tsId = l?.timesheet_id ? String(l.timesheet_id) : null;
+        if (!tsId) continue;
+        if (!byTs.has(tsId)) byTs.set(tsId, []);
+        byTs.get(tsId).push(l);
+      }
+
+      const typeOf = (l) => {
+        const m = (l?.meta_json && typeof l.meta_json === 'object') ? l.meta_json : {};
+        const t = String(l?.line_type_norm || m?.line_type_norm || m?.line_type || '').toUpperCase();
+        return t;
+      };
+
+      for (const tsId of tsIds) {
+        const lines = byTs.get(String(tsId)) || [];
+        if (!lines.length) continue;
+
+        const types = lines.map(typeOf);
+
+        const hasHours = types.includes('HOURS');
+        const hasAdditional = types.some(t => t.startsWith('ADDITIONAL_RATE'));
+        const hasExpenseOrMileage = types.some(t => t === 'MILEAGE' || t.startsWith('EXPENSE'));
+
+        if (!hasHours && !hasAdditional && hasExpenseOrMileage) {
+          expenseOnlySet.add(String(tsId));
         }
       }
     }
@@ -46650,31 +46850,54 @@ async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, o
     }
 
     // Optional NHSP breakdown report
-    let nhspBytes = null;
+    // Must preserve import column order + row order (render exactly as imported).
+    let nhspBytes = null
     {
-      const nhspRows = [];
+      const nhspTables = [];
+
+      // Preferred: invoice-level cache rows (already filtered for this invoice)
       if (hrCacheRows.length) {
         for (const r of hrCacheRows) {
           if (String(r.source_system || '').toUpperCase() !== 'NHSP') continue;
           const rows = Array.isArray(r.rows_json) ? r.rows_json : [];
-          for (const raw of rows) nhspRows.push({ raw_row: raw });
-        }
-      } else {
-        for (const tf of tsfinRows) {
-          const ext = (tf.external_source_rows_json && typeof tf.external_source_rows_json === 'object') ? tf.external_source_rows_json : {};
-          const nhspWeekly = Array.isArray(ext.NHSP_WEEKLY) ? ext.NHSP_WEEKLY : [];
-          for (const row of nhspWeekly) nhspRows.push(row);
+          if (!rows.length) continue;
+          const headerCols = Array.isArray(r.header_columns) ? r.header_columns : [];
+          nhspTables.push({
+            import_id: r.import_id || null,
+            header_columns: headerCols,
+            rows_json: rows
+          });
         }
       }
 
-      if (nhspRows.length) {
-        const nhspHtml = buildNhspReportHTML(inv, header, nhspRows);
+      // Fallback: per-timesheet snapshot external rows
+      if (!nhspTables.length) {
+        const fallbackRows = [];
+        for (const tf of tsfinRows) {
+          const ext = (tf.external_source_rows_json && typeof tf.external_source_rows_json === 'object')
+            ? tf.external_source_rows_json
+            : {};
+          const nhspWeekly = Array.isArray(ext.NHSP_WEEKLY) ? ext.NHSP_WEEKLY : [];
+          for (const row of nhspWeekly) fallbackRows.push(row);
+        }
+        if (fallbackRows.length) {
+          nhspTables.push({
+            import_id: null,
+            header_columns: [],
+            rows_json: fallbackRows
+          });
+        }
+      }
+
+      if (nhspTables.length) {
+        const nhspHtml = buildNhspReportHTML(inv, header, { tables: nhspTables });
         nhspBytes = await withBrowser(env, async (browser) => {
           const page = await browser.newPage();
           await page.setContent(nhspHtml, { waitUntil: 'networkidle0' });
           await page.emulateMediaType('screen');
           const pdfArrayBuffer = await page.pdf({
             format: 'a4',
+            landscape: true,
             printBackground: true,
             margin: { top: 24, right: 24, bottom: 24, left: 24 }
           });
@@ -46698,11 +46921,19 @@ async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, o
       (await merged.copyPages(doc, doc.getPageIndices())).forEach(p => merged.addPage(p));
     }
 
+    // Evidence PDFs (timesheet evidence + other evidence) must be appended before timesheet PDFs.
     let attachedTimesheetEvidenceCount = 0;
     for (const b of timesheetEvidenceBytesList) {
       const doc = await PDFDocument.load(b);
       (await merged.copyPages(doc, doc.getPageIndices())).forEach(p => merged.addPage(p));
       attachedTimesheetEvidenceCount++;
+    }
+
+    let attachedEvidenceCount = 0;
+    for (const b of evidenceBytesList) {
+      const doc = await PDFDocument.load(b);
+      (await merged.copyPages(doc, doc.getPageIndices())).forEach(p => merged.addPage(p));
+      attachedEvidenceCount++;
     }
 
     let attachedTsCount = 0;
@@ -46719,13 +46950,6 @@ async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, o
       const doc = await PDFDocument.load(b);
       (await merged.copyPages(doc, doc.getPageIndices())).forEach(p => merged.addPage(p));
       attachedManualTsCount++;
-    }
-
-    let attachedEvidenceCount = 0;
-    for (const b of evidenceBytesList) {
-      const doc = await PDFDocument.load(b);
-      (await merged.copyPages(doc, doc.getPageIndices())).forEach(p => merged.addPage(p));
-      attachedEvidenceCount++;
     }
 
     const combinedU8 = await merged.save();
@@ -46765,7 +46989,6 @@ async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, o
     return { ok: false, error: "Failed to render invoice bundle" };
   }
 }
-
 
 
 
