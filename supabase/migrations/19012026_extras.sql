@@ -1702,3 +1702,286 @@ grant execute on function public.tsfin_repair_merge_segments_locked(uuid, jsonb,
 
 select pg_notify('pgrst', 'reload schema');
 
+create or replace function public.tsfin_update_segments_locked(
+  p_timesheet_id uuid,
+  p_segment_updates jsonb,
+  p_actor_user_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_now timestamptz := now();
+
+  -- locked row
+  v_tf_id uuid;
+  v_basis text;
+  v_breakdown jsonb;
+  v_charge_ex_vat numeric;
+  v_week_ending date;
+  v_natural_week_start date;
+
+  v_allow_invoice_target_change boolean := false;
+
+  -- updates map: { "<segment_id>": {exclude_from_pay:bool?, invoice_target_week_start:text?}, ... }
+  v_updates jsonb := '{}'::jsonb;
+  v_elem jsonb;
+  v_sid text;
+  v_entry jsonb;
+  v_req_target text;
+
+  -- apply loop
+  v_segments jsonb;
+  v_seg jsonb;
+  v_out_segments jsonb := '[]'::jsonb;
+
+  v_exclude boolean;
+  v_new_total_pay numeric := 0;
+  v_new_margin numeric := 0;
+
+  -- validation helpers
+  v_locked_invoice_id_text text;
+  v_cur_target text;
+
+  v_updated_row jsonb;
+begin
+  if p_timesheet_id is null then
+    raise exception 'timesheet_id required';
+  end if;
+
+  if p_segment_updates is null or jsonb_typeof(p_segment_updates) <> 'array' then
+    raise exception 'segment_updates must be a json array';
+  end if;
+
+  -- 1) Lock the current TSFIN row (critical: prevents lost-update corruption)
+  select
+    tf.id,
+    upper(coalesce(tf.basis::text, '')) as basis,
+    tf.invoice_breakdown_json,
+    coalesce(tf.total_charge_ex_vat, 0)::numeric as total_charge_ex_vat,
+    ts.week_ending_date::date as week_ending_date
+  into
+    v_tf_id,
+    v_basis,
+    v_breakdown,
+    v_charge_ex_vat,
+    v_week_ending
+  from public.timesheets_financials tf
+  join public.timesheets ts
+    on ts.timesheet_id = tf.timesheet_id
+  where tf.timesheet_id = p_timesheet_id
+    and tf.is_current = true
+  order by tf.created_at desc
+  limit 1
+  for update;
+
+  if not found then
+    raise exception 'Current financial snapshot not found for timesheet_id %', p_timesheet_id;
+  end if;
+
+  if v_breakdown is null or jsonb_typeof(v_breakdown) <> 'object' then
+    raise exception 'No invoice_breakdown_json present on snapshot';
+  end if;
+
+  if upper(coalesce(v_breakdown->>'mode','')) <> 'SEGMENTS'
+     or jsonb_typeof(v_breakdown->'segments') <> 'array' then
+    raise exception 'This snapshot is not SEGMENTS-based; cannot update per-line settings';
+  end if;
+
+  v_segments := v_breakdown->'segments';
+
+  -- Allowed bases (match Worker)
+  v_allow_invoice_target_change :=
+    v_basis in ('NHSP','NHSP_ADJUSTMENT','HEALTHROSTER_SELF_BILL','HEALTHROSTER_ADJUSTMENT');
+
+  if v_week_ending is not null then
+    v_natural_week_start := (v_week_ending - 6);
+  else
+    v_natural_week_start := null;
+  end if;
+
+  -- 2) Build update map (last write wins)
+  for v_elem in
+    select value
+    from jsonb_array_elements(p_segment_updates) as t(value)
+  loop
+    if v_elem is null or jsonb_typeof(v_elem) <> 'object' then
+      continue;
+    end if;
+
+    v_sid := nullif(btrim(coalesce(v_elem->>'segment_id','')), '');
+    if v_sid is null then
+      continue;
+    end if;
+
+    v_entry := '{}'::jsonb;
+
+    if v_elem ? 'exclude_from_pay' then
+      v_entry := v_entry || jsonb_build_object('exclude_from_pay', v_elem->'exclude_from_pay');
+    end if;
+
+    if (v_elem ? 'invoice_target_week_start')
+       and nullif(btrim(coalesce(v_elem->>'invoice_target_week_start','')), '') is not null then
+      v_entry := v_entry || jsonb_build_object(
+        'invoice_target_week_start',
+        nullif(btrim(coalesce(v_elem->>'invoice_target_week_start','')), '')
+      );
+    end if;
+
+    -- merge into map
+    v_updates := v_updates || jsonb_build_object(v_sid, v_entry);
+  end loop;
+
+  if jsonb_typeof(v_updates) <> 'object' or v_updates = '{}'::jsonb then
+    raise exception 'No valid segment_id entries to update';
+  end if;
+
+  -- 3) Pre-validate invoice_target_week_start changes (match Worker semantics)
+  if not v_allow_invoice_target_change then
+    if exists (
+      select 1
+      from jsonb_each(v_updates) e(key, value)
+      where (e.value ? 'invoice_target_week_start')
+    ) then
+      raise exception 'invoice_target_week_start cannot be changed for this snapshot basis';
+    end if;
+  else
+    for v_sid, v_entry in
+      select key, value
+      from jsonb_each(v_updates)
+    loop
+      if v_entry is null or jsonb_typeof(v_entry) <> 'object' then
+        continue;
+      end if;
+
+      if not (v_entry ? 'invoice_target_week_start') then
+        continue;
+      end if;
+
+      v_req_target := nullif(btrim(coalesce(v_entry->>'invoice_target_week_start','')), '');
+      if v_req_target is null then
+        continue;
+      end if;
+
+      -- Find the current segment (objects only; unknown ids are ignored like Worker)
+      select
+        nullif(btrim(coalesce(seg.value->>'invoice_locked_invoice_id','')), '') as locked_inv,
+        nullif(btrim(coalesce(seg.value->>'invoice_target_week_start','')), '') as cur_target
+      into
+        v_locked_invoice_id_text,
+        v_cur_target
+      from jsonb_array_elements(v_segments) as seg(value)
+      where jsonb_typeof(seg.value) = 'object'
+        and nullif(btrim(coalesce(seg.value->>'segment_id','')), '') = v_sid
+      limit 1;
+
+      if v_locked_invoice_id_text is not null then
+        -- No-op tolerant rule (match Worker)
+        if not (
+          v_req_target = coalesce(v_cur_target, '')
+          or (v_cur_target is null and v_natural_week_start is not null and v_req_target = v_natural_week_start::text)
+        ) then
+          raise exception
+            'Segment % is attached to an invoice and cannot have invoice delay changed. Remove from invoice first.',
+            v_sid;
+        end if;
+        continue;
+      end if;
+
+      if v_natural_week_start is not null then
+        begin
+          if (v_req_target::date < v_natural_week_start) then
+            raise exception
+              'invoice_target_week_start for segment % cannot be earlier than natural week start %',
+              v_sid, v_natural_week_start::text;
+          end if;
+        exception when others then
+          raise exception 'invoice_target_week_start for segment % is invalid: %', v_sid, v_req_target;
+        end;
+      end if;
+    end loop;
+  end if;
+
+  -- 4) Apply updates + recompute total_pay_ex_vat / margin_ex_vat
+  v_new_total_pay := 0;
+  v_out_segments := '[]'::jsonb;
+
+  for v_seg in
+    select value
+    from jsonb_array_elements(v_segments) as t(value)
+  loop
+    if v_seg is null or jsonb_typeof(v_seg) <> 'object' then
+      v_out_segments := v_out_segments || jsonb_build_array(v_seg);
+      continue;
+    end if;
+
+    v_sid := nullif(btrim(coalesce(v_seg->>'segment_id','')), '');
+    if v_sid is null then
+      v_out_segments := v_out_segments || jsonb_build_array(v_seg);
+      continue;
+    end if;
+
+    v_entry := v_updates->v_sid;
+
+    -- exclude_from_pay
+    v_exclude := coalesce(
+      (nullif(btrim(coalesce(v_seg->>'exclude_from_pay','')), '')::boolean),
+      false
+    );
+
+    if v_entry is not null and jsonb_typeof(v_entry) = 'object' and (v_entry ? 'exclude_from_pay') then
+      v_exclude := coalesce(
+        (nullif(btrim(coalesce(v_entry->>'exclude_from_pay','')), '')::boolean),
+        false
+      );
+      v_seg := jsonb_set(v_seg, '{exclude_from_pay}', to_jsonb(v_exclude), true);
+    end if;
+
+    -- invoice_target_week_start (allowed bases only; unlocked segments only)
+    if v_allow_invoice_target_change
+       and v_entry is not null
+       and jsonb_typeof(v_entry) = 'object'
+       and (v_entry ? 'invoice_target_week_start') then
+      v_locked_invoice_id_text := nullif(btrim(coalesce(v_seg->>'invoice_locked_invoice_id','')), '');
+      if v_locked_invoice_id_text is null then
+        v_req_target := nullif(btrim(coalesce(v_entry->>'invoice_target_week_start','')), '');
+        if v_req_target is not null then
+          v_seg := jsonb_set(v_seg, '{invoice_target_week_start}', to_jsonb(v_req_target), true);
+        end if;
+      end if;
+    end if;
+
+    -- recompute pay sum (ignore numeric parse errors)
+    begin
+      if not v_exclude then
+        v_new_total_pay :=
+          v_new_total_pay
+          + coalesce(nullif(btrim(coalesce(v_seg->>'pay_amount','')), '')::numeric, 0);
+      end if;
+    exception when others then
+      null;
+    end;
+
+    v_out_segments := v_out_segments || jsonb_build_array(v_seg);
+  end loop;
+
+  v_new_total_pay := round(coalesce(v_new_total_pay, 0), 2);
+  v_new_margin    := round(coalesce(v_charge_ex_vat, 0) - v_new_total_pay, 2);
+
+  v_breakdown := jsonb_set(v_breakdown, '{segments}', v_out_segments, true);
+
+  update public.timesheets_financials tfu
+  set
+    invoice_breakdown_json = v_breakdown,
+    total_pay_ex_vat       = v_new_total_pay,
+    margin_ex_vat          = v_new_margin,
+    updated_at             = v_now
+  where tfu.id = v_tf_id
+  returning to_jsonb(tfu) into v_updated_row;
+
+  return jsonb_build_object('updated', v_updated_row);
+
+end;
+$$;
