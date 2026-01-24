@@ -483,8 +483,6 @@ end;
 $$;
 
 
-
-
 create or replace function public._inv_unlock_segment_refs_for_invoice(
   p_invoice_id uuid,
   p_segment_refs jsonb
@@ -568,11 +566,13 @@ begin
     v_unlock_whole := coalesce(v_unlock_whole,false);
     v_seg_ids := coalesce(v_seg_ids, array[]::text[]);
 
+    -- ✅ FIX: lock the TSFIN row at read time to prevent lost-update corruption
     select tf.*
     into r_tf
     from public.timesheets_financials tf
     where tf.id = v_tsfin_id
-    limit 1;
+    limit 1
+    for update;
 
     if not found then
       continue;
@@ -722,6 +722,12 @@ exception when others then
   raise;
 end;
 $$;
+
+
+
+
+
+
 create or replace function public.invoice_apply_edits(
   p_invoice_id uuid,
   p_payload jsonb,
