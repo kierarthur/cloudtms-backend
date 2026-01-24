@@ -17967,11 +17967,16 @@ async function handleInvoiceSaveEdits(env, req, invoiceId) {
     // - remove_segment_refs
     // - add_segment_refs
     // - reference_updates
-    const manRes = await sbRpc(env, 'invoice_apply_edits', {
-      p_invoice_id: invoiceId,
-      p_payload: payload,
-      p_actor_user_id: user?.id || null
-    });
+  const manRes = await sbRpc(
+  env,
+  'invoice_apply_edits',
+  {
+    p_invoice_id: invoiceId,
+    p_payload: payload,
+    p_actor_user_id: user?.id || null
+  },
+  { timeoutMs: 25000 } // ✅ avoid hanging forever on row locks
+);
 
     const manRows = Array.isArray(manRes) ? manRes : (manRes?.data || []);
     const manifest = (manRows && manRows.length) ? manRows[0] : manRes;
@@ -27623,7 +27628,6 @@ async function handleHrAutoprocessClients(env, req) {
     return withCORS(env, req, serverError('Failed to list HealthRoster autoprocess contracts'));
   }
 }
-
 async function handleTsfinUpdateSegments(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -27631,7 +27635,7 @@ async function handleTsfinUpdateSegments(env, req, timesheetId) {
 
   const body = await parseJSONBody(req).catch(() => null);
 
-  // NEW: guarded write (optimistic concurrency)
+  // NEW: guarded write (optimistic concurrency) — timesheet rotation safety
   const expectedTimesheetId = body?.expected_timesheet_id || null;
   const guard = await guardCurrentTimesheetWrite(env, req, timesheetId, expectedTimesheetId);
   if (!guard.ok) return guard.res;
@@ -27678,7 +27682,7 @@ async function handleTsfinUpdateSegments(env, req, timesheetId) {
     return withCORS(env, req, notFound('Current financial snapshot not found'));
   }
 
-  let breakdown = fin.invoice_breakdown_json || null;
+  const breakdown = fin.invoice_breakdown_json || null;
   if (!breakdown || typeof breakdown !== 'object') {
     return withCORS(env, req, badRequest('No invoice_breakdown_json present on snapshot'));
   }
@@ -27781,70 +27785,142 @@ async function handleTsfinUpdateSegments(env, req, timesheetId) {
     }
   }
 
-  // 2) Apply changes to segments, recompute total_pay_ex_vat and margin_ex_vat
-  let newTotalPay = 0;
-
-  const segments = (breakdown.segments || []).map((seg) => {
-    if (!seg || typeof seg !== 'object') return seg;
-    const sid = String(seg.segment_id || '').trim();
-    const upd = updateMap.get(sid) || {};
-
-    // Exclude from pay toggle
-    let exclude = !!seg.exclude_from_pay;
-    if (Object.prototype.hasOwnProperty.call(upd, 'exclude_from_pay')) {
-      exclude = !!upd.exclude_from_pay;
+  // 2) Apply changes via a LOCKED DB RPC (prevents lost updates / delay corruption)
+  //    Falls back to legacy REST PATCH only if the RPC doesn't exist yet.
+  const toRpcUpdates = () => {
+    const out = [];
+    for (const [sid, upd] of updateMap.entries()) {
+      const row = { segment_id: sid };
+      if (Object.prototype.hasOwnProperty.call(upd, 'exclude_from_pay')) {
+        row.exclude_from_pay = (upd.exclude_from_pay === true);
+      }
+      if (typeof upd.invoice_target_week_start === 'string' && upd.invoice_target_week_start.trim()) {
+        row.invoice_target_week_start = upd.invoice_target_week_start.trim();
+      }
+      out.push(row);
     }
-
-    // Invoice target week start (only for allowed bases and unlocked segments)
-    let invoiceTargetWeekStart = seg.invoice_target_week_start || null;
-    if (
-      allowInvoiceTargetChange &&
-      typeof upd.invoice_target_week_start === 'string' &&
-      !seg.invoice_locked_invoice_id
-    ) {
-      invoiceTargetWeekStart = upd.invoice_target_week_start;
-    }
-
-    const payAmt = Number(seg.pay_amount || 0);
-    if (!exclude) {
-      newTotalPay += payAmt;
-    }
-
-    return {
-      ...seg,
-      exclude_from_pay: exclude,
-      invoice_target_week_start: invoiceTargetWeekStart
-    };
-  });
-
-  newTotalPay = round2(newTotalPay);
-  const newMargin = round2(Number(fin.total_charge_ex_vat || 0) - newTotalPay);
-
-  const patch = {
-    invoice_breakdown_json: {
-      ...breakdown,
-      segments
-    },
-    total_pay_ex_vat: newTotalPay,
-    margin_ex_vat: newMargin,
-    updated_at: new Date().toISOString()
+    return out;
   };
 
-  // 3) Persist changes
-  const res = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
-    {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-      body: JSON.stringify(patch)
+  const unwrapRpcResult = (r) => {
+    if (r == null) return null;
+    if (r && typeof r === 'object' && !Array.isArray(r) && Object.prototype.hasOwnProperty.call(r, 'data')) {
+      return unwrapRpcResult(r.data);
     }
+    if (Array.isArray(r)) {
+      if (r.length === 0) return null;
+      if (r.length === 1) return r[0] || null;
+      return r[0] || null;
+    }
+    return r;
+  };
+
+  const isMissingRpc = (err) => {
+    const msg = String(err?.message || err || '');
+    return (
+      /Could not find the function/i.test(msg) ||
+      /function .* does not exist/i.test(msg) ||
+      /RPC tsfin_update_segments_locked failed 404/i.test(msg) ||
+      /RPC tsfin_update_segments_locked failed 400/i.test(msg)
+    );
+  };
+
+  let updated = null;
+  let usedLockedRpc = false;
+
+  try {
+  const rpcRes = await sbRpc(
+    env,
+    'tsfin_update_segments_locked',
+    {
+      p_timesheet_id: currentTimesheetId,
+      p_segment_updates: toRpcUpdates(),
+      p_actor_user_id: (user && user.id) ? user.id : null
+      // Optional future: p_expected_updated_at (if FE starts sending it)
+    },
+    { timeoutMs: 25000 } // ✅ avoid hanging forever on row locks
   );
-  if (!res.ok) {
-    const t = await res.text().catch(() => '');
-    return withCORS(env, req, serverError(`Failed to update segments: ${t}`));
+
+  const unwrapped = unwrapRpcResult(rpcRes);
+  // Allow either direct row return or {updated: row}
+  updated = (unwrapped && typeof unwrapped === 'object' && Object.prototype.hasOwnProperty.call(unwrapped, 'updated'))
+    ? unwrapped.updated
+    : unwrapped;
+
+  usedLockedRpc = true;
+} catch (e) {
+  if (!isMissingRpc(e)) throw e;
+  usedLockedRpc = false;
+}
+
+
+  // Legacy fallback (only if the locked RPC isn't deployed yet)
+  if (!usedLockedRpc) {
+    // 2b) Apply changes to segments, recompute total_pay_ex_vat and margin_ex_vat
+    let newTotalPay = 0;
+
+    const segments = (breakdown.segments || []).map((seg) => {
+      if (!seg || typeof seg !== 'object') return seg;
+      const sid = String(seg.segment_id || '').trim();
+      const upd = updateMap.get(sid) || {};
+
+      // Exclude from pay toggle
+      let exclude = !!seg.exclude_from_pay;
+      if (Object.prototype.hasOwnProperty.call(upd, 'exclude_from_pay')) {
+        exclude = !!upd.exclude_from_pay;
+      }
+
+      // Invoice target week start (only for allowed bases and unlocked segments)
+      let invoiceTargetWeekStart = seg.invoice_target_week_start || null;
+      if (
+        allowInvoiceTargetChange &&
+        typeof upd.invoice_target_week_start === 'string' &&
+        !seg.invoice_locked_invoice_id
+      ) {
+        invoiceTargetWeekStart = upd.invoice_target_week_start;
+      }
+
+      const payAmt = Number(seg.pay_amount || 0);
+      if (!exclude) {
+        newTotalPay += payAmt;
+      }
+
+      return {
+        ...seg,
+        exclude_from_pay: exclude,
+        invoice_target_week_start: invoiceTargetWeekStart
+      };
+    });
+
+    newTotalPay = round2(newTotalPay);
+    const newMargin = round2(Number(fin.total_charge_ex_vat || 0) - newTotalPay);
+
+    const patch = {
+      invoice_breakdown_json: {
+        ...breakdown,
+        segments
+      },
+      total_pay_ex_vat: newTotalPay,
+      margin_ex_vat: newMargin,
+      updated_at: new Date().toISOString()
+    };
+
+    // 3) Persist changes
+    const res = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+        body: JSON.stringify(patch)
+      }
+    );
+    if (!res.ok) {
+      const t = await res.text().catch(() => '');
+      return withCORS(env, req, serverError(`Failed to update segments: ${t}`));
+    }
+    const updatedArr = await res.json().catch(() => []);
+    updated = Array.isArray(updatedArr) ? updatedArr[0] : updatedArr;
   }
-  const updatedArr = await res.json().catch(() => []);
-  const updated = Array.isArray(updatedArr) ? updatedArr[0] : updatedArr;
 
   await writeAudit(
     env,
@@ -53825,16 +53901,59 @@ async function sbFetch(env, url, third, fourth) {
   return { rows, total };
 }
 
-
-async function sbRpc(env, fn, args) {
+async function sbRpc(env, fn, args, opts) {
   const url = `${env.SUPABASE_URL}/rest/v1/rpc/${encodeURIComponent(fn)}`;
-  const res = await fetch(url, { method: 'POST', headers: sbHeaders(env), body: JSON.stringify(args || {}) });
-  const txt = await res.text();
-  let json;
-  try { json = txt ? JSON.parse(txt) : null; } catch { json = null; }
-  if (!res.ok) throw new Error(`RPC ${fn} failed ${res.status}: ${txt}`);
-  return json;
+
+  const timeoutMs =
+    (opts && Number.isFinite(Number(opts.timeoutMs)) && Number(opts.timeoutMs) > 0)
+      ? Number(opts.timeoutMs)
+      : null;
+
+  const controller = timeoutMs ? new AbortController() : null;
+  const t = timeoutMs ? setTimeout(() => {
+    try { controller.abort(new Error(`RPC ${fn} timed out after ${timeoutMs}ms`)); } catch {}
+  }, timeoutMs) : null;
+
+  let res;
+  let txt = '';
+  let json = null;
+
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: sbHeaders(env),
+      body: JSON.stringify(args || {}),
+      signal: controller ? controller.signal : undefined
+    });
+
+    txt = await res.text().catch(() => '');
+    try { json = txt ? JSON.parse(txt) : null; } catch { json = null; }
+
+    if (!res.ok) {
+      const err = new Error(`RPC ${fn} failed ${res.status}: ${txt}`);
+      err.status = res.status;
+      err.body = txt;
+      err.json = json;
+      throw err;
+    }
+
+    return json;
+  } catch (e) {
+    // Preserve existing behaviour: throw the error.
+    // If this was an abort, normalize the message but keep it obvious.
+    if (e && (e.name === 'AbortError' || /timed out/i.test(String(e.message || '')))) {
+      const err = new Error(`RPC ${fn} failed 408: ${timeoutMs ? `timeout after ${timeoutMs}ms` : 'timeout'}`);
+      err.status = 408;
+      err.body = '';
+      err.json = null;
+      throw err;
+    }
+    throw e;
+  } finally {
+    if (t) clearTimeout(t);
+  }
 }
+
 
 // ---------------------------
 // Context loaders
