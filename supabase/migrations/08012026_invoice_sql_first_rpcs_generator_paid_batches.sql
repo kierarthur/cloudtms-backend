@@ -329,7 +329,43 @@ declare
   locked text;
 
   i int;
+
+  -- =====================================================
+  -- DEBUG (invoice_debug): single audit row per RPC call
+  -- =====================================================
+  v_invoice_debug boolean := false;
+  v_dbg_started_at timestamptz := now();
+  v_dbg_steps jsonb := '[]'::jsonb;
+  v_dbg_sqlstate text := null;
+  v_dbg_error text := null;
+  v_dbg_stats jsonb := '{}'::jsonb;
+
+  v_tsfins_seen int := 0;
+  v_tsfins_updated int := 0;
+  v_segments_newly_locked int := 0;
+  v_summaries_set int := 0;
 begin
+  -- Load invoice_debug flag (safe even if column not yet present)
+  begin
+    select coalesce(sd.invoice_debug, false)
+    into v_invoice_debug
+    from public.settings_defaults sd
+    where sd.id = 1
+    limit 1;
+  exception when undefined_column then
+    v_invoice_debug := false;
+  end;
+
+  if v_invoice_debug then
+    v_dbg_steps := v_dbg_steps || jsonb_build_array(
+      jsonb_build_object(
+        'step','start',
+        'at_utc', public._inv_iso_utc(v_dbg_started_at),
+        'invoice_id', coalesce(p_invoice_id::text,'')
+      )
+    );
+  end if;
+
   if p_segment_refs is null or jsonb_typeof(p_segment_refs) <> 'array' then
     return;
   end if;
@@ -353,6 +389,8 @@ begin
     from jsonb_array_elements(p_segment_refs) x
     where nullif(coalesce(x->>'tsfin_id',''), '') is not null
   loop
+    v_tsfins_seen := v_tsfins_seen + 1;
+
     -- Gather ref set for this tsfin_id
     select
       bool_or(nullif(coalesce(x->>'segment_id',''), '') is null) as lock_whole,
@@ -416,6 +454,7 @@ begin
         if v_lock_whole or (sid <> '' and sid = any(v_seg_ids)) then
           if locked is null then
             locked := p_invoice_id::text;
+            v_segments_newly_locked := v_segments_newly_locked + 1;
           end if;
         end if;
 
@@ -431,6 +470,10 @@ begin
     else
       -- No segments
       all_locked := (snap.locked_by_invoice_id is not null) or v_lock_whole;
+    end if;
+
+    if (not is_selfbill_or_nhsp) and all_locked then
+      v_summaries_set := v_summaries_set + 1;
     end if;
 
     -- Patch
@@ -463,10 +506,82 @@ begin
       where id = v_tsfin_id;
     end if;
 
+    v_tsfins_updated := v_tsfins_updated + 1;
   end loop;
+
+  if v_invoice_debug then
+    begin
+      v_dbg_stats := jsonb_build_object(
+        'tsfins_seen', v_tsfins_seen,
+        'tsfins_updated', v_tsfins_updated,
+        'segments_newly_locked', v_segments_newly_locked,
+        'summaries_set', v_summaries_set
+      );
+
+      v_dbg_steps := v_dbg_steps || jsonb_build_array(
+        jsonb_build_object(
+          'step','finish',
+          'at_utc', public._inv_iso_utc(now()),
+          'stats', v_dbg_stats
+        )
+      );
+
+      perform public._inv_write_audit(
+        null,
+        'INV_LOCK_SEGMENTS_DEBUG',
+        jsonb_build_object(
+          'invoice_id', coalesce(p_invoice_id::text,''),
+          'stats', v_dbg_stats,
+          'steps', v_dbg_steps
+        ),
+        'timesheets_financials',
+        ('invoice:' || coalesce(p_invoice_id::text,'')),
+        null,
+        'INVOICE_DEBUG',
+        null, null, null
+      );
+    exception when others then
+      null;
+    end;
+  end if;
+
+exception when others then
+  v_dbg_sqlstate := SQLSTATE;
+  v_dbg_error := SQLERRM;
+
+  if v_invoice_debug then
+    begin
+      v_dbg_stats := jsonb_build_object(
+        'tsfins_seen', v_tsfins_seen,
+        'tsfins_updated', v_tsfins_updated,
+        'segments_newly_locked', v_segments_newly_locked,
+        'summaries_set', v_summaries_set
+      );
+
+      perform public._inv_write_audit(
+        null,
+        'INV_LOCK_SEGMENTS_ERROR',
+        jsonb_build_object(
+          'invoice_id', coalesce(p_invoice_id::text,''),
+          'sqlstate', v_dbg_sqlstate,
+          'error', v_dbg_error,
+          'stats', v_dbg_stats,
+          'steps', v_dbg_steps
+        ),
+        'timesheets_financials',
+        ('invoice:' || coalesce(p_invoice_id::text,'')),
+        null,
+        'INVOICE_DEBUG',
+        null, null, null
+      );
+    exception when others then
+      null;
+    end;
+  end if;
+
+  raise;
 end;
 $$;
-
 
 
 create or replace function public.invoice_generate_from_outbox_batch(
