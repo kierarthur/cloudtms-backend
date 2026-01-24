@@ -485,6 +485,7 @@ $$;
 
 
 
+
 create or replace function public.invoice_apply_edits(
   p_invoice_id uuid,
   p_payload jsonb,
@@ -2262,7 +2263,7 @@ end if;
         on conflict (invoice_id, source_key) do nothing;
       end if;
 
-      -- Mileage (one per timesheet)
+           -- Mileage (one per timesheet)
       if public._inv_round2(coalesce(snap.mileage_charge_ex_vat,0)) > 0 then
         pay_ex := public._inv_round2(coalesce(snap.mileage_pay_ex_vat,0));
         chg_ex := public._inv_round2(coalesce(snap.mileage_charge_ex_vat,0));
@@ -2276,7 +2277,34 @@ end if;
           'line_type','MILEAGE',
           'timesheet_id', tsid::text,
           'tsfin_id', snap.id::text,
-          'week_ending_date', snap.week_ending_date::text
+          'week_ending_date', snap.week_ending_date::text,
+
+          -- Breakdown helpers for invoice/PDF rendering
+          -- qty = mileage units (miles), unit_* = per-mile rates (ex VAT)
+          'qty', public._inv_round2(coalesce(snap.mileage_units,0)),
+          'unit_label', 'Mileage',
+          'unit_name', 'miles',
+
+          'unit_pay_ex_vat',
+            case
+              when snap.mileage_pay_rate is not null then public._inv_round2(snap.mileage_pay_rate)
+              when coalesce(snap.mileage_units,0) <> 0 then public._inv_round2(pay_ex / snap.mileage_units)
+              else null
+            end,
+
+          'unit_charge_ex_vat',
+            case
+              when snap.mileage_charge_rate is not null then public._inv_round2(snap.mileage_charge_rate)
+              when coalesce(snap.mileage_units,0) <> 0 then public._inv_round2(chg_ex / snap.mileage_units)
+              else null
+            end,
+
+          -- Explicit fields (kept for clarity / downstream use)
+          'mileage_units', public._inv_round2(coalesce(snap.mileage_units,0)),
+          'mileage_pay_rate', snap.mileage_pay_rate,
+          'mileage_charge_rate', snap.mileage_charge_rate,
+          'pay_amount_ex_vat', pay_ex,
+          'charge_amount_ex_vat', chg_ex
         );
 
         v_source_key := 'TS:' || tsid::text || ':MILEAGE';
@@ -2303,6 +2331,7 @@ end if;
         )
         on conflict (invoice_id, source_key) do nothing;
       end if;
+
 
       -- Build segment refs to lock
       if snap.invoice_breakdown_json is not null
