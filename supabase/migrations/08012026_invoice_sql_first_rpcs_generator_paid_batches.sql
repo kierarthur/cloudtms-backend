@@ -462,7 +462,8 @@ begin
           all_locked := false;
         end if;
 
-        seg := jsonb_set(seg, '{invoice_locked_invoice_id}', to_jsonb(locked), true);
+    seg := jsonb_set(seg, '{invoice_locked_invoice_id}', coalesce(to_jsonb(locked), 'null'::jsonb), true);
+
         segs_out := segs_out || jsonb_build_array(seg);
       end loop;
 
