@@ -1562,12 +1562,13 @@ if v_has_seg_ops then
             )
             select * from agg order by ymd
           loop
-            chg_ex := public._inv_round2(r_day.chg_ex);
-            if chg_ex <= 0 then continue; end if;
-  
-            if (coalesce(r_day.hours_day,0)+coalesce(r_day.hours_night,0)+coalesce(r_day.hours_sat,0)+coalesce(r_day.hours_sun,0)+coalesce(r_day.hours_bh,0)) <= 0 then
-              continue;
-            end if;
+          chg_ex := public._inv_round2(r_day.chg_ex);
+if chg_ex = 0 then continue; end if;
+
+if (coalesce(r_day.hours_day,0)+coalesce(r_day.hours_night,0)+coalesce(r_day.hours_sat,0)+coalesce(r_day.hours_sun,0)+coalesce(r_day.hours_bh,0)) = 0 then
+  continue;
+end if;
+
   
             pay_ex := public._inv_round2(r_day.pay_ex);
             margin_ex := public._inv_round2(chg_ex - pay_ex);
@@ -1627,46 +1628,47 @@ if v_has_seg_ops then
           into h_day, h_night, h_sat, h_sun, h_bh, pay_ex, chg_ex
           from jsonb_array_elements(segments) seg_el;
   
-          if chg_ex > 0 and (coalesce(h_day,0)+coalesce(h_night,0)+coalesce(h_sat,0)+coalesce(h_sun,0)+coalesce(h_bh,0)) > 0 then
-            margin_ex := public._inv_round2(chg_ex - pay_ex);
-            vat_amt := public._inv_round2(chg_ex * v_vat_rate / 100);
-            inc_amt := public._inv_round2(chg_ex + vat_amt);
-  
-            line_desc := coalesce(nullif(btrim(coalesce(c_display_site,'')) ,''), ('TS '||tsid::text)) ||
-                         ' – W/E '|| coalesce(snap.week_ending_date::text,'');
-  
-            v_meta := jsonb_build_object(
-              'line_type','HOURS_WEEKLY',
-              'timesheet_id', tsid::text,
-              'tsfin_id', snap.id::text,
-              'week_ending_date', snap.week_ending_date::text,
-              'bucket_labels', c_bucket_labels
-            );
-  
-            v_source_key := 'TS:' || tsid::text || ':HOURS:WEEK';
-  
-            insert into public.invoice_lines(
-              invoice_id, timesheet_id, booking_id, description,
-              hours_day, hours_night, hours_sat, hours_sun, hours_bh,
-              pay_day, pay_night, pay_sat, pay_sun, pay_bh,
-              charge_day, charge_night, charge_sat, charge_sun, charge_bh,
-              total_pay_ex_vat, total_charge_ex_vat, margin_ex_vat,
-              vat_rate_pct, vat_amount, total_inc_vat,
-              paper_ts_r2_key, meta_json, source_key
-            )
-            values (
-              p_invoice_id, tsid, snap.booking_id, line_desc,
-              h_day, h_night, h_sat, h_sun, h_bh,
-              null,null,null,null,null,
-              null,null,null,null,null,
-              pay_ex, chg_ex, margin_ex,
-              v_vat_rate, vat_amt, inc_amt,
-              ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
-              v_meta,
-              v_source_key
-            )
-            on conflict (invoice_id, source_key) do nothing;
-          end if;
+       if chg_ex <> 0 and (coalesce(h_day,0)+coalesce(h_night,0)+coalesce(h_sat,0)+coalesce(h_sun,0)+coalesce(h_bh,0)) <> 0 then
+  margin_ex := public._inv_round2(chg_ex - pay_ex);
+  vat_amt := public._inv_round2(chg_ex * v_vat_rate / 100);
+  inc_amt := public._inv_round2(chg_ex + vat_amt);
+
+  line_desc := coalesce(nullif(btrim(coalesce(c_display_site,'')) ,''), ('TS '||tsid::text)) ||
+               ' – W/E '|| coalesce(snap.week_ending_date::text,'');
+
+  v_meta := jsonb_build_object(
+    'line_type','HOURS_WEEKLY',
+    'timesheet_id', tsid::text,
+    'tsfin_id', snap.id::text,
+    'week_ending_date', snap.week_ending_date::text,
+    'bucket_labels', c_bucket_labels
+  );
+
+  v_source_key := 'TS:' || tsid::text || ':HOURS:WEEK';
+
+  insert into public.invoice_lines(
+    invoice_id, timesheet_id, booking_id, description,
+    hours_day, hours_night, hours_sat, hours_sun, hours_bh,
+    pay_day, pay_night, pay_sat, pay_sun, pay_bh,
+    charge_day, charge_night, charge_sat, charge_sun, charge_bh,
+    total_pay_ex_vat, total_charge_ex_vat, margin_ex_vat,
+    vat_rate_pct, vat_amount, total_inc_vat,
+    paper_ts_r2_key, meta_json, source_key
+  )
+  values (
+    p_invoice_id, tsid, snap.booking_id, line_desc,
+    h_day, h_night, h_sat, h_sun, h_bh,
+    null,null,null,null,null,
+    null,null,null,null,null,
+    pay_ex, chg_ex, margin_ex,
+    v_vat_rate, vat_amt, inc_amt,
+    ('docs-pdf/timesheets/ts_' || tsid::text || '.pdf'),
+    v_meta,
+    v_source_key
+  )
+  on conflict (invoice_id, source_key) do nothing;
+end if;
+
         end if;
   
         -- Additional rates
@@ -2074,12 +2076,13 @@ end if;
           code := upper(btrim(coalesce(kv.k,'')));
           if code = '' then continue; end if;
 
-          unit_count := coalesce((ex->>'unit_count')::numeric, 0);
-          if unit_count <= 0 then continue; end if;
+   unit_count := coalesce((ex->>'unit_count')::numeric, 0);
+if unit_count = 0 then continue; end if;
 
-          pay_ex := public._inv_round2(coalesce((ex->>'pay_ex_vat')::numeric, 0));
-          chg_ex := public._inv_round2(coalesce((ex->>'charge_ex_vat')::numeric, 0));
-          if chg_ex <= 0 then continue; end if;
+pay_ex := public._inv_round2(coalesce((ex->>'pay_ex_vat')::numeric, 0));
+chg_ex := public._inv_round2(coalesce((ex->>'charge_ex_vat')::numeric, 0));
+if chg_ex = 0 then continue; end if;
+
 
           margin_ex := public._inv_round2(chg_ex - pay_ex);
           vat_amt := public._inv_round2(chg_ex * v_vat_rate / 100);
@@ -2138,7 +2141,8 @@ end if;
       end if;
 
       -- TRAVEL
-      if public._inv_round2(coalesce(snap.travel_charge_ex_vat,0)) > 0 then
+   if public._inv_round2(coalesce(snap.travel_charge_ex_vat,0)) <> 0 then
+
         pay_ex := public._inv_round2(coalesce(snap.travel_pay_ex_vat,0));
         chg_ex := public._inv_round2(coalesce(snap.travel_charge_ex_vat,0));
         margin_ex := public._inv_round2(chg_ex - pay_ex);
@@ -2180,7 +2184,8 @@ end if;
       end if;
 
       -- ACCOMMODATION
-      if public._inv_round2(coalesce(snap.accommodation_charge_ex_vat,0)) > 0 then
+    if public._inv_round2(coalesce(snap.accommodation_charge_ex_vat,0)) <> 0 then
+
         pay_ex := public._inv_round2(coalesce(snap.accommodation_pay_ex_vat,0));
         chg_ex := public._inv_round2(coalesce(snap.accommodation_charge_ex_vat,0));
         margin_ex := public._inv_round2(chg_ex - pay_ex);
@@ -2222,7 +2227,8 @@ end if;
       end if;
 
       -- OTHER
-      if public._inv_round2(coalesce(snap.other_charge_ex_vat,0)) > 0 then
+ if public._inv_round2(coalesce(snap.other_charge_ex_vat,0)) <> 0 then
+
         pay_ex := public._inv_round2(coalesce(snap.other_pay_ex_vat,0));
         chg_ex := public._inv_round2(coalesce(snap.other_charge_ex_vat,0));
         margin_ex := public._inv_round2(chg_ex - pay_ex);
@@ -2264,7 +2270,8 @@ end if;
       end if;
 
            -- Mileage (one per timesheet)
-      if public._inv_round2(coalesce(snap.mileage_charge_ex_vat,0)) > 0 then
+    if public._inv_round2(coalesce(snap.mileage_charge_ex_vat,0)) <> 0 then
+
         pay_ex := public._inv_round2(coalesce(snap.mileage_pay_ex_vat,0));
         chg_ex := public._inv_round2(coalesce(snap.mileage_charge_ex_vat,0));
         margin_ex := public._inv_round2(chg_ex - pay_ex);
