@@ -2071,6 +2071,17 @@ begin
       return;
     end if;
 
+    -- ✅ NEW HARD BLOCK:
+    -- If invoice is currently ON_HOLD, do not re-evaluate blockers; require UNHOLD first.
+    if v_inv.status::text = 'ON_HOLD' then
+      status := 'ON_HOLD';
+      issued_at_utc := null;
+      on_hold_reason := 'Unhold first';
+      reasons := array['Unhold first']::text[];
+      return next;
+      return;
+    end if;
+
     if v_inv.status::text not in ('DRAFT','ON_HOLD') then
       raise exception 'Only DRAFT/ON_HOLD invoices can be issued (current status=%)', v_inv.status::text;
     end if;
@@ -2192,10 +2203,7 @@ begin
   v_hr_reasons := array_remove(v_hr_reasons, null);
 
   -- ------------------------------------------------------------
-  -- 3) ISSUE-TIME reference gating (NEW): only when enabled
-  --    - Only for worked content lines (hours/additional)
-  --    - Ignore expense/mileage-only lines
-  --    - Uses v_ts_invoice_precheck.issue_missing_reference(+count)
+  -- 3) ISSUE-TIME reference gating: only when enabled
   -- ------------------------------------------------------------
   if v_ref_required_to_issue then
     select array_agg(
@@ -2314,21 +2322,16 @@ begin
 
   -- ------------------------------------------------------------
   -- No blockers => issue
-  -- Compute due_at_utc at issue time:
-  -- Prefer invoice header_snapshot_json.payment_terms_days; fallback to clients.payment_terms_days; default 30.
-  -- Also snapshot group_nightsat_sunbh into header_snapshot_json if missing.
   -- ------------------------------------------------------------
   select i.client_id, i.header_snapshot_json
   into v_client_id, v_hdr
   from public.invoices i
   where i.id = p_invoice_id;
 
-  -- Normalize header snapshot to an object
   if v_hdr is null or jsonb_typeof(v_hdr) <> 'object' then
     v_hdr := '{}'::jsonb;
   end if;
 
-  -- Snapshot group_nightsat_sunbh if not already present
   if not (v_hdr ? 'group_nightsat_sunbh') then
     select cs0.group_nightsat_sunbh
     into v_group_nightsat_sunbh
@@ -2450,8 +2453,6 @@ exception when others then
   raise;
 end;
 $$;
-
-
 
 -- ------------------------------------------------------------
 -- 3.4 Hold/Unhold/Unissue
@@ -2604,7 +2605,6 @@ end;
 $$;
 
 
-
 create or replace function public.invoice_unissue_one(
   p_invoice_id uuid,
   p_actor_user_id uuid,
@@ -2625,7 +2625,7 @@ begin
     raise exception 'invoice_id is required';
   end if;
 
-    declare
+  declare
     v_inv record;
   begin
     select *
@@ -2663,22 +2663,25 @@ begin
       issued_at_utc = null,
       due_at_utc = null,
       on_hold_reason = null,
-      invoice_pdf_r2_key = case when p_clear_pdf then null else invoice_pdf_r2_key end
+      invoice_pdf_r2_key = null,
+      invoice_pdf_generated_at_utc = null
   where id = p_invoice_id;
-
 
   perform public._audit_insert(
     'invoice',
     p_invoice_id::text,
     'INVOICE_UNISSUED',
     null,
-    jsonb_build_object('clear_pdf', p_clear_pdf),
+    jsonb_build_object(
+      'clear_pdf_requested', p_clear_pdf,
+      'clear_pdf_applied', true
+    ),
     null,
     p_actor_user_id
   );
 
   status := 'DRAFT';
-  cleared_pdf := p_clear_pdf;
+  cleared_pdf := true;
   return next;
 end;
 $$;
