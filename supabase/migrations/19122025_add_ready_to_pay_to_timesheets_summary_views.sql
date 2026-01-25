@@ -87,6 +87,7 @@ WITH latest_tsfin AS (
     tf.hr_crosscheck_status,
     tf.hr_crosscheck_issues,
     tf.external_source_rows_json,
+    tf.invoice_breakdown_json,
 
     -- existing (already in your view)
     tf.expenses_charge_ex_vat,
@@ -157,6 +158,7 @@ client_hr AS (
     bool_or(cs.no_timesheet_required) AS no_timesheet_required,
     bool_or(cs.pay_reference_required) AS pay_reference_required,
     bool_or(cs.invoice_reference_required) AS invoice_reference_required,
+    bool_or(cs.reference_number_required_to_issue_invoice) AS reference_number_required_to_issue_invoice,
     bool_or(cs.hr_validation_required) AS hr_validation_required,
     bool_or(cs.ts_reference_required) AS ts_reference_required,
     bool_or(cs.is_nhsp) AS is_nhsp
@@ -241,22 +243,23 @@ ts_base AS (
 
     COALESCE(pa.pay_adjustment_count, 0) AS pay_adjustment_count,
 
-    COALESCE(ct.autoprocess_hr, ch.autoprocess_hr, false) AS client_autoprocess_hr,
-    COALESCE(ct.requires_hr, ch.requires_hr, false) AS client_requires_hr,
-    COALESCE(ct.no_timesheet_required, ch.no_timesheet_required, false) AS client_no_timesheet_required,
+    COALESCE(CASE WHEN ct.overrideclientsettings THEN ct.autoprocess_hr END, ch.autoprocess_hr, false) AS client_autoprocess_hr,
+    COALESCE(CASE WHEN ct.overrideclientsettings THEN ct.requires_hr END, ch.requires_hr, false) AS client_requires_hr,
+    COALESCE(CASE WHEN ct.overrideclientsettings THEN ct.no_timesheet_required END, ch.no_timesheet_required, false) AS client_no_timesheet_required,
 
     COALESCE(ch.pay_reference_required, false) AS client_pay_reference_required,
     COALESCE(ch.invoice_reference_required, false) AS client_invoice_reference_required,
     COALESCE(ch.hr_validation_required, false) AS client_hr_validation_required,
     COALESCE(ch.ts_reference_required, false) AS client_ts_reference_required,
 
-    COALESCE(ct.is_nhsp, ch.is_nhsp, false) AS client_is_nhsp,
+    COALESCE(CASE WHEN ct.overrideclientsettings THEN ct.is_nhsp END, ch.is_nhsp, false) AS client_is_nhsp,
 
     tf.has_rate_issue,
     tf.has_pay_channel_issue,
     tf.hr_crosscheck_status,
     tf.hr_crosscheck_issues,
     tf.external_source_rows_json,
+    tf.invoice_breakdown_json,
 
     ts.reference_number,
     ts.day_references_json,
@@ -267,8 +270,8 @@ ts_base AS (
     ts.r2_auth_key,
     ts.manual_pdf_r2_key,
 
-    ct.require_reference_to_pay,
-    ct.require_reference_to_invoice,
+    COALESCE(CASE WHEN ct.overrideclientsettings THEN ct.require_reference_to_pay END, ch.pay_reference_required, false) AS require_reference_to_pay,
+    COALESCE(CASE WHEN ct.overrideclientsettings THEN ct.require_reference_to_invoice END, ch.invoice_reference_required, false) AS require_reference_to_invoice,
 
     COALESCE(ea.evidence_count, 0) AS evidence_count,
 
@@ -385,22 +388,23 @@ planned_weeks AS (
 
     0 AS pay_adjustment_count,
 
-    COALESCE(ct.autoprocess_hr, ch.autoprocess_hr, false) AS client_autoprocess_hr,
-    COALESCE(ct.requires_hr, ch.requires_hr, false) AS client_requires_hr,
-    COALESCE(ct.no_timesheet_required, ch.no_timesheet_required, false) AS client_no_timesheet_required,
+    COALESCE(CASE WHEN ct.overrideclientsettings THEN ct.autoprocess_hr END, ch.autoprocess_hr, false) AS client_autoprocess_hr,
+    COALESCE(CASE WHEN ct.overrideclientsettings THEN ct.requires_hr END, ch.requires_hr, false) AS client_requires_hr,
+    COALESCE(CASE WHEN ct.overrideclientsettings THEN ct.no_timesheet_required END, ch.no_timesheet_required, false) AS client_no_timesheet_required,
 
     COALESCE(ch.pay_reference_required, false) AS client_pay_reference_required,
     COALESCE(ch.invoice_reference_required, false) AS client_invoice_reference_required,
     COALESCE(ch.hr_validation_required, false) AS client_hr_validation_required,
     COALESCE(ch.ts_reference_required, false) AS client_ts_reference_required,
 
-    COALESCE(ct.is_nhsp, ch.is_nhsp, false) AS client_is_nhsp,
+    COALESCE(CASE WHEN ct.overrideclientsettings THEN ct.is_nhsp END, ch.is_nhsp, false) AS client_is_nhsp,
 
     false AS has_rate_issue,
     false AS has_pay_channel_issue,
     NULL::text AS hr_crosscheck_status,
     NULL::text[] AS hr_crosscheck_issues,
     NULL::jsonb AS external_source_rows_json,
+    NULL::jsonb AS invoice_breakdown_json,
 
     NULL::text AS reference_number,
     NULL::jsonb AS day_references_json,
@@ -411,8 +415,8 @@ planned_weeks AS (
     NULL::text AS r2_auth_key,
     NULL::text AS manual_pdf_r2_key,
 
-    ct.require_reference_to_pay,
-    ct.require_reference_to_invoice,
+    COALESCE(CASE WHEN ct.overrideclientsettings THEN ct.require_reference_to_pay END, ch.pay_reference_required, false) AS require_reference_to_pay,
+    COALESCE(CASE WHEN ct.overrideclientsettings THEN ct.require_reference_to_invoice END, ch.invoice_reference_required, false) AS require_reference_to_invoice,
 
     0 AS evidence_count,
 
@@ -561,7 +565,14 @@ with_issues AS (
     CASE
       WHEN ar.timesheet_id IS NOT NULL
         AND ar.sheet_scope = 'DAILY'::timesheet_scope_enum
-        AND (ar.client_ts_reference_required OR ar.client_pay_reference_required OR ar.client_invoice_reference_required)
+        AND COALESCE(ar.total_hours, 0::numeric) > 0::numeric
+        AND (
+          COALESCE(ar.require_reference_to_pay, false)
+          OR COALESCE(ar.require_reference_to_invoice, false)
+          OR ar.client_ts_reference_required
+          OR ar.client_pay_reference_required
+          OR ar.client_invoice_reference_required
+        )
         AND (ar.reference_number IS NULL OR length(btrim(ar.reference_number)) = 0)
         THEN ARRAY['Reference'::text]
       ELSE ARRAY[]::text[]
@@ -580,6 +591,28 @@ with_issues AS (
           )
         )
         AND (
+          -- SEGMENTS mode (per-shift refs; ignore already-invoiced segments; only positive segments)
+          (
+            ar.invoice_breakdown_json IS NOT NULL
+            AND jsonb_typeof(ar.invoice_breakdown_json) = 'object'
+            AND upper(coalesce(ar.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+            AND jsonb_typeof(ar.invoice_breakdown_json->'segments') = 'array'
+            AND EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements(ar.invoice_breakdown_json->'segments') s
+              WHERE nullif(btrim(coalesce(s->>'invoice_locked_invoice_id','')), '') IS NULL
+                AND (
+                  coalesce(nullif(s->>'hours_day','')::numeric,0)
+                  + coalesce(nullif(s->>'hours_night','')::numeric,0)
+                  + coalesce(nullif(s->>'hours_sat','')::numeric,0)
+                  + coalesce(nullif(s->>'hours_sun','')::numeric,0)
+                  + coalesce(nullif(s->>'hours_bh','')::numeric,0)
+                ) > 0
+                AND coalesce(btrim(s->>'ref_num'), '') = ''
+            )
+          )
+          OR
+          -- WEEKLY MANUAL (per shift in schedule)
           (
             ar.submission_mode = 'MANUAL'::submission_mode_enum
             AND (
@@ -602,15 +635,46 @@ with_issues AS (
             )
           )
           OR
+          -- WEEKLY non-MANUAL aggregate (at least one freeform/day ref; no legacy timesheet reference)
           (
             ar.submission_mode <> 'MANUAL'::submission_mode_enum
-            AND (
-              ar.day_references_json IS NULL
-              OR ar.day_references_json = '{}'::jsonb
-              OR NOT EXISTS (
+            AND NOT (
+              EXISTS (
                 SELECT 1
-                FROM jsonb_each_text(ar.day_references_json) j(k, v)
-                WHERE btrim(j.v) <> ''
+                FROM jsonb_array_elements_text(
+                  CASE
+                    WHEN ar.day_references_json IS NOT NULL
+                      AND jsonb_typeof(ar.day_references_json) = 'object'
+                      AND jsonb_typeof(ar.day_references_json->'__freeform_refs') = 'array'
+                    THEN ar.day_references_json->'__freeform_refs'
+                    WHEN ar.day_references_json IS NOT NULL
+                      AND jsonb_typeof(ar.day_references_json) = 'object'
+                      AND jsonb_typeof(ar.day_references_json->'__freeform') = 'array'
+                    THEN ar.day_references_json->'__freeform'
+                    WHEN ar.day_references_json IS NOT NULL
+                      AND jsonb_typeof(ar.day_references_json) = 'object'
+                      AND jsonb_typeof(ar.day_references_json->'__freeform_lines') = 'array'
+                    THEN ar.day_references_json->'__freeform_lines'
+                    WHEN ar.day_references_json IS NOT NULL
+                      AND jsonb_typeof(ar.day_references_json) = 'array'
+                    THEN ar.day_references_json
+                    ELSE '[]'::jsonb
+                  END
+                ) t(x)
+                WHERE nullif(btrim(coalesce(t.x,'')), '') IS NOT NULL
+              )
+              OR
+              EXISTS (
+                SELECT 1
+                FROM jsonb_each_text(
+                  CASE
+                    WHEN ar.day_references_json IS NOT NULL AND jsonb_typeof(ar.day_references_json) = 'object'
+                    THEN ar.day_references_json
+                    ELSE '{}'::jsonb
+                  END
+                ) j(k, v)
+                WHERE nullif(btrim(coalesce(j.v,'')), '') IS NOT NULL
+                  AND left(coalesce(j.k,''), 2) <> '__'
               )
             )
           )
@@ -693,42 +757,86 @@ SELECT
     )
     AND (
       COALESCE(require_reference_to_pay, false) = false
+      OR COALESCE(total_hours, 0::numeric) <= 0::numeric
       OR (
         CASE
-          WHEN sheet_scope = 'DAILY'::timesheet_scope_enum THEN
-            (reference_number IS NOT NULL AND length(btrim(reference_number)) > 0)
-          WHEN sheet_scope = 'WEEKLY'::timesheet_scope_enum THEN
-            CASE
-              WHEN submission_mode = 'MANUAL'::submission_mode_enum THEN
-                (
-                  actual_schedule_json IS NOT NULL
-                  AND jsonb_typeof(actual_schedule_json) = 'array'
-                  AND jsonb_array_length(actual_schedule_json) > 0
-                  AND NOT EXISTS (
-                    SELECT 1
-                    FROM jsonb_array_elements(actual_schedule_json) seg
-                    WHERE
-                      coalesce(btrim(seg->>'start'), '') <> ''
-                      AND coalesce(btrim(seg->>'end'), '') <> ''
-                      AND coalesce(btrim(seg->>'ref_num'), '') = ''
-                  )
-                )
-              ELSE
-                (
-                  (reference_number IS NOT NULL AND length(btrim(reference_number)) > 0)
-                  OR (
-                    day_references_json IS NOT NULL
-                    AND day_references_json <> '{}'::jsonb
-                    AND EXISTS (
-                      SELECT 1
-                      FROM jsonb_each_text(day_references_json) j(k, v)
-                      WHERE btrim(j.v) <> ''
-                    )
-                  )
-                )
-            END
+          WHEN invoice_breakdown_json IS NOT NULL
+            AND jsonb_typeof(invoice_breakdown_json) = 'object'
+            AND upper(coalesce(invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+            AND jsonb_typeof(invoice_breakdown_json->'segments') = 'array'
+          THEN NOT EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements(invoice_breakdown_json->'segments') s
+            WHERE (
+              coalesce(nullif(s->>'hours_day','')::numeric,0)
+              + coalesce(nullif(s->>'hours_night','')::numeric,0)
+              + coalesce(nullif(s->>'hours_sat','')::numeric,0)
+              + coalesce(nullif(s->>'hours_sun','')::numeric,0)
+              + coalesce(nullif(s->>'hours_bh','')::numeric,0)
+            ) > 0
+              AND coalesce(btrim(s->>'ref_num'), '') = ''
+          )
           ELSE
-            (reference_number IS NOT NULL AND length(btrim(reference_number)) > 0)
+            CASE
+              WHEN sheet_scope = 'DAILY'::timesheet_scope_enum THEN
+                (reference_number IS NOT NULL AND length(btrim(reference_number)) > 0)
+              WHEN sheet_scope = 'WEEKLY'::timesheet_scope_enum THEN
+                CASE
+                  WHEN submission_mode = 'MANUAL'::submission_mode_enum THEN
+                    (
+                      actual_schedule_json IS NOT NULL
+                      AND jsonb_typeof(actual_schedule_json) = 'array'
+                      AND jsonb_array_length(actual_schedule_json) > 0
+                      AND NOT EXISTS (
+                        SELECT 1
+                        FROM jsonb_array_elements(actual_schedule_json) seg
+                        WHERE
+                          coalesce(btrim(seg->>'start'), '') <> ''
+                          AND coalesce(btrim(seg->>'end'), '') <> ''
+                          AND coalesce(btrim(seg->>'ref_num'), '') = ''
+                      )
+                    )
+                  ELSE
+                    (
+                      EXISTS (
+                        SELECT 1
+                        FROM jsonb_array_elements_text(
+                          CASE
+                            WHEN day_references_json IS NOT NULL
+                              AND jsonb_typeof(day_references_json) = 'object'
+                              AND jsonb_typeof(day_references_json->'__freeform_refs') = 'array'
+                            THEN day_references_json->'__freeform_refs'
+                            WHEN day_references_json IS NOT NULL
+                              AND jsonb_typeof(day_references_json) = 'object'
+                              AND jsonb_typeof(day_references_json->'__freeform') = 'array'
+                            THEN day_references_json->'__freeform'
+                            WHEN day_references_json IS NOT NULL
+                              AND jsonb_typeof(day_references_json) = 'object'
+                              AND jsonb_typeof(day_references_json->'__freeform_lines') = 'array'
+                            THEN day_references_json->'__freeform_lines'
+                            WHEN day_references_json IS NOT NULL
+                              AND jsonb_typeof(day_references_json) = 'array'
+                            THEN day_references_json
+                            ELSE '[]'::jsonb
+                          END
+                        ) t(x)
+                        WHERE nullif(btrim(coalesce(t.x,'')), '') IS NOT NULL
+                      )
+                      OR (
+                        day_references_json IS NOT NULL
+                        AND jsonb_typeof(day_references_json) = 'object'
+                        AND EXISTS (
+                          SELECT 1
+                          FROM jsonb_each_text(day_references_json) j(k, v)
+                          WHERE nullif(btrim(coalesce(j.v,'')), '') IS NOT NULL
+                            AND left(coalesce(j.k,''), 2) <> '__'
+                        )
+                      )
+                    )
+                END
+              ELSE
+                (reference_number IS NOT NULL AND length(btrim(reference_number)) > 0)
+            END
         END
       )
     )
@@ -956,9 +1064,24 @@ SELECT
   END AS processing_status_display,
 
   -- ✅ NEW (APPENDED AT END): invoice-paid indicator (true if ANY linked invoice is PAID)
-  COALESCE(seg.invoice_paid_any, false) AS invoice_is_paid
+  COALESCE(seg.invoice_paid_any, false) AS invoice_is_paid,
+
+  -- ✅ NEW (APPENDED AT END): reference blockers for UI badges
+  (CASE WHEN wi.timesheet_id IS NOT NULL AND pc.precheck_status = 'BLOCK_NO_REFERENCE' THEN true ELSE false END) AS refs_block_invoicing,
+  (CASE WHEN wi.timesheet_id IS NOT NULL AND COALESCE(pc.issue_missing_reference, false) = true THEN true ELSE false END) AS refs_block_issuing_invoices,
+  (CASE WHEN wi.timesheet_id IS NOT NULL AND pc.precheck_status = 'BLOCK_NO_REFERENCE' AND COALESCE(pc.issue_missing_reference, false) = true THEN true ELSE false END) AS refs_block_invoice_and_issuing
 
 FROM with_issues wi
+LEFT JOIN LATERAL (
+  SELECT
+    pc0.precheck_status,
+    pc0.issue_missing_reference,
+    pc0.issue_missing_reference_count
+  FROM public.v_ts_invoice_precheck pc0
+  WHERE pc0.timesheet_id = wi.timesheet_id
+  LIMIT 1
+) pc ON true
+
 LEFT JOIN LATERAL (
   SELECT
     -- Segment stats derived from current TSFIN snapshot JSON (when present)
@@ -1019,6 +1142,7 @@ LEFT JOIN LATERAL (
   ORDER BY tf.created_at DESC
   LIMIT 1
 ) seg ON true;
+
 
 CREATE OR REPLACE VIEW public.v_timesheets_summary AS
 SELECT
@@ -1121,23 +1245,29 @@ SELECT
   -- ✅ NEW (APPENDED AT END): canonical Tools Stage + display label + invoice-paid flag
   v.tools_stage,
   v.processing_status_display,
-  v.invoice_is_paid
+  v.invoice_is_paid,
+
+  -- ✅ NEW (APPENDED AT END): reference blockers for UI badges
+  v.refs_block_invoicing,
+  v.refs_block_issuing_invoices,
+  v.refs_block_invoice_and_issuing
 FROM public.v_timesheets_summary_base v
 LEFT JOIN public.contract_weeks cw ON cw.id = v.contract_week_id
 LEFT JOIN public.timesheets ts2 ON ts2.timesheet_id = v.timesheet_id
 LEFT JOIN public.invoices inv ON inv.id = v.locked_by_invoice_id;
+
 
 GRANT SELECT ON public.v_timesheets_summary_base TO service_role;
 GRANT SELECT ON public.v_timesheets_summary      TO service_role;
 GRANT SELECT ON public.v_timesheets_summary_base TO authenticated;
 GRANT SELECT ON public.v_timesheets_summary      TO authenticated;
 
+
 -- ============================================================
 -- v_timesheets_details
 -- ✅ SAFE TO RE-RUN: CREATE OR REPLACE VIEW (idempotent)
 -- ✅ IMPORTANT: ONLY appends new columns at the END. No other changes.
 -- ============================================================
-
 CREATE OR REPLACE VIEW public.v_timesheets_details AS
 WITH nhsp_agg AS (
   SELECT
@@ -1211,7 +1341,12 @@ SELECT
   tf.accommodation_pay_ex_vat,
   tf.accommodation_charge_ex_vat,
   tf.other_pay_ex_vat,
-  tf.other_charge_ex_vat
+  tf.other_charge_ex_vat,
+
+  -- ✅ NEW (APPENDED AT END): reference blockers for UI badges
+  (CASE WHEN t.timesheet_id IS NOT NULL AND pc.precheck_status = 'BLOCK_NO_REFERENCE' THEN true ELSE false END) AS refs_block_invoicing,
+  (CASE WHEN t.timesheet_id IS NOT NULL AND COALESCE(pc.issue_missing_reference, false) = true THEN true ELSE false END) AS refs_block_issuing_invoices,
+  (CASE WHEN t.timesheet_id IS NOT NULL AND pc.precheck_status = 'BLOCK_NO_REFERENCE' AND COALESCE(pc.issue_missing_reference, false) = true THEN true ELSE false END) AS refs_block_invoice_and_issuing
 
 FROM timesheets t
 LEFT JOIN timesheets_financials tf
@@ -1220,10 +1355,14 @@ LEFT JOIN timesheets_financials tf
 LEFT JOIN timesheet_validations tv
   ON tv.timesheet_id = t.timesheet_id
 LEFT JOIN nhsp_agg n
-  ON n.timesheet_id = t.timesheet_id;
+  ON n.timesheet_id = t.timesheet_id
+LEFT JOIN public.v_ts_invoice_precheck pc
+  ON pc.timesheet_id = t.timesheet_id;
+
 
 GRANT SELECT ON public.v_timesheets_details TO service_role;
 GRANT SELECT ON public.v_timesheets_details TO authenticated;
 
 -- Ensure PostgREST sees new columns immediately after commit
 SELECT pg_notify('pgrst', 'reload schema');
+
