@@ -2771,3 +2771,137 @@ begin
 
 end;
 $$;
+
+
+begin;
+
+-- ============================================================
+-- Trigger function: enforce overrideclientsettings rules on contracts
+--
+-- Behaviour:
+-- 1) If overrideclientsettings = FALSE:
+--    - clear all governed override fields to NULL (including default_submission_mode)
+--
+-- 2) If overrideclientsettings = TRUE:
+--    - ensure all governed *boolean* fields are TRUE/FALSE (never NULL)
+--      by filling NULLs from the most recent client_settings row for that client,
+--      falling back to sensible defaults if no client_settings row exists.
+--    - if send_manual_invoices_to_different_email = TRUE:
+--        require manual_invoices_alt_email_address (fill from client_settings if possible,
+--        otherwise raise an exception).
+--
+-- Notes:
+-- - Picks client_settings row by (effective_from desc nulls last, updated_at desc).
+-- - Safe to rerun: CREATE OR REPLACE FUNCTION + DROP TRIGGER IF EXISTS + CREATE TRIGGER
+-- ============================================================
+
+create or replace function public.contracts_enforce_overrideclientsettings()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  cs record;
+begin
+  -- Normalise NULL -> false (shouldn't happen because column is NOT NULL, but safe)
+  new.overrideclientsettings := coalesce(new.overrideclientsettings, false);
+
+  -- ------------------------------------------------------------
+  -- If override is OFF: clear all governed override fields
+  -- ------------------------------------------------------------
+  if new.overrideclientsettings = false then
+    -- nullable policy flags in contracts (must be NULL when override is off)
+    new.no_timesheet_required   := null;
+    new.daily_calc_of_invoices  := null;
+    new.group_nightsat_sunbh    := null;
+    new.is_nhsp                 := null;
+    new.autoprocess_hr          := null;
+    new.requires_hr             := null;
+    new.hr_attach_to_invoice    := null;
+    new.ts_attach_to_invoice    := null;
+
+    -- new governed fields
+    new.reference_number_required_to_issue_invoice := null;
+    new.send_manual_invoices_to_different_email   := null;
+    new.manual_invoices_alt_email_address         := null;
+
+    -- default_submission_mode is governed; when override is off we store NULL (inherit)
+    new.default_submission_mode := null;
+
+    return new;
+  end if;
+
+  -- ------------------------------------------------------------
+  -- If override is ON: fill any NULL booleans from client_settings
+  -- ------------------------------------------------------------
+  select
+    cs.no_timesheet_required,
+    cs.daily_calc_of_invoices,
+    cs.group_nightsat_sunbh,
+    cs.is_nhsp,
+    cs.autoprocess_hr,
+    cs.requires_hr,
+    cs.hr_attach_to_invoice,
+    cs.ts_attach_to_invoice,
+
+    cs.reference_number_required_to_issue_invoice,
+    cs.send_manual_invoices_to_different_email,
+    cs.manual_invoices_alt_email_address
+  into cs
+  from public.client_settings cs
+  where cs.client_id = new.client_id
+  order by cs.effective_from desc nulls last, cs.updated_at desc
+  limit 1;
+
+  -- For booleans: never leave NULL when override is ON.
+  -- If no client_settings row exists, fall back to defaults that match client_settings defaults.
+  new.no_timesheet_required  := coalesce(new.no_timesheet_required,  cs.no_timesheet_required,  false);
+  new.daily_calc_of_invoices := coalesce(new.daily_calc_of_invoices, cs.daily_calc_of_invoices, false);
+  new.group_nightsat_sunbh   := coalesce(new.group_nightsat_sunbh,   cs.group_nightsat_sunbh,   false);
+  new.is_nhsp                := coalesce(new.is_nhsp,                cs.is_nhsp,                false);
+  new.autoprocess_hr         := coalesce(new.autoprocess_hr,         cs.autoprocess_hr,         false);
+  new.requires_hr            := coalesce(new.requires_hr,            cs.requires_hr,            false);
+
+  -- These default TRUE in client_settings
+  new.hr_attach_to_invoice   := coalesce(new.hr_attach_to_invoice,   cs.hr_attach_to_invoice,   true);
+  new.ts_attach_to_invoice   := coalesce(new.ts_attach_to_invoice,   cs.ts_attach_to_invoice,   true);
+
+  -- New governed issue/email flags (default FALSE in client_settings)
+  new.reference_number_required_to_issue_invoice :=
+    coalesce(new.reference_number_required_to_issue_invoice, cs.reference_number_required_to_issue_invoice, false);
+
+  new.send_manual_invoices_to_different_email :=
+    coalesce(new.send_manual_invoices_to_different_email, cs.send_manual_invoices_to_different_email, false);
+
+  -- If send_manual is TRUE, alt email must be present (try fill from client_settings first)
+  if new.send_manual_invoices_to_different_email = true then
+    if new.manual_invoices_alt_email_address is null or btrim(new.manual_invoices_alt_email_address) = '' then
+      new.manual_invoices_alt_email_address := cs.manual_invoices_alt_email_address;
+    end if;
+
+    if new.manual_invoices_alt_email_address is null or btrim(new.manual_invoices_alt_email_address) = '' then
+      raise exception 'manual_invoices_alt_email_address is required when send_manual_invoices_to_different_email is true';
+    end if;
+
+    -- Store trimmed version
+    new.manual_invoices_alt_email_address := btrim(new.manual_invoices_alt_email_address);
+  end if;
+
+  -- default_submission_mode:
+  -- You explicitly want contracts.default_submission_mode to be allowed NULL to inherit client settings.
+  -- Therefore we DO NOT auto-fill it here.
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_contracts_enforce_overrideclientsettings on public.contracts;
+
+create trigger trg_contracts_enforce_overrideclientsettings
+before insert or update on public.contracts
+for each row
+execute function public.contracts_enforce_overrideclientsettings();
+
+commit;
+
