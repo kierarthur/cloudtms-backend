@@ -2460,6 +2460,11 @@ if chg_ex = 0 then continue; end if;
 
   
   perform public.invoice_recompute_totals(p_invoice_id);
+  -- Ensure render cache invalidated (generated timestamp cleared as well)
+  update public.invoices
+  set invoice_pdf_generated_at_utc = null
+  where id = p_invoice_id;
+
 
   -- Return updated manifest
   select public.invoice_render_manifest(p_invoice_id) into v_manifest;
