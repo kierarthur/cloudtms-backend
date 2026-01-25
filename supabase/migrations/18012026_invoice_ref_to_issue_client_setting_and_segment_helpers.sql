@@ -439,7 +439,6 @@ $$;
 -- CloudTMS Patch: public.invoice_reference_rows(p_invoice_id)
 -- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
 -- ============================================================
-
 create or replace function public.invoice_reference_rows(
   p_invoice_id uuid
 )
@@ -475,10 +474,6 @@ declare
   r_seg record;
   r_day record;
 
-  v_has_additional boolean;
-  v_worked_content boolean;
-  v_require_issue boolean;
-
   v_tf_mode text;
   v_segments_json jsonb;
   v_sched_json jsonb;
@@ -486,12 +481,27 @@ declare
 
   v_seg_locked text;
 
-  v_daykey text;
-  v_dayval text;
-
   v_idx int;
   v_start_local text;
   v_end_local text;
+
+  -- invoice-level worked content (HOURS + ADDITIONAL only) for this timesheet on THIS invoice
+  v_inv_worked_charge_ex numeric := 0;
+  v_inv_worked_hours_sum numeric := 0;
+
+  -- required flag for UI display: true if refs required for either invoice or issue
+  v_is_required boolean := false;
+
+  -- FREEFORM rows (weekly non-manual aggregate)
+  v_ff_arr jsonb := null;
+  v_ff_line text;
+  v_ff_key text;
+  v_ff_val text;
+
+  -- per-segment positivity test
+  v_seg_hours_sum numeric := 0;
+  v_seg_charge_ex numeric := 0;
+
 begin
   if p_invoice_id is null then
     raise exception 'invoice_id is required';
@@ -536,8 +546,6 @@ begin
       ts.scheduled_end_iso as ts_scheduled_end_iso,
       ts.actual_schedule_json as ts_actual_schedule_json,
       ts.day_references_json as ts_day_references_json,
-      tf.total_hours as tf_total_hours,
-      tf.additional_units_json as tf_additional_units_json,
       tf.invoice_breakdown_json as tf_invoice_breakdown_json,
       pc.require_reference_to_invoice as pc_require_reference_to_invoice,
       pc.reference_number_required_to_issue_invoice as pc_ref_to_issue
@@ -552,32 +560,45 @@ begin
   loop
     v_ts_out := v_ts_out + 1;
 
-    -- Determine whether this timesheet has any worked-shift or non-zero additional-unit content.
-    v_has_additional := false;
-    if r_ts.tf_additional_units_json is not null and jsonb_typeof(r_ts.tf_additional_units_json) = 'object' then
-      select exists(
-        select 1
-        from jsonb_each(r_ts.tf_additional_units_json) j(k,v)
-        where nullif(btrim(coalesce(v#>>'{}','')), '') is not null
-          and btrim(coalesce(v#>>'{}','')) not in ('0','0.0','0.00','0.000','0.0000')
-      ) into v_has_additional;
-    end if;
+    -- Two independent policies: required-to-invoice and required-to-issue.
+    -- For UI display we mark required if either is true.
+    v_is_required := coalesce(r_ts.pc_require_reference_to_invoice,false)
+                     or coalesce(r_ts.pc_ref_to_issue,false);
 
-    v_worked_content := (coalesce(r_ts.tf_total_hours, 0) > 0) or coalesce(v_has_additional,false);
+    -- Invoice-level worked content on THIS invoice for this timesheet:
+    -- Only HOURS_* and ADDITIONAL_RATE* lines are considered "worked content".
+    -- If net worked content is <= 0, no references are required and no rows should be returned.
+    select
+      coalesce(sum(
+        case
+          when upper(coalesce(l.meta_json->>'line_type','')) in ('HOURS_DAILY','HOURS_WEEKLY','ADDITIONAL_RATE','ADDITIONAL_RATE_DAILY')
+            then coalesce(l.total_charge_ex_vat,0)
+          else 0
+        end
+      ),0),
+      coalesce(sum(
+        case
+          when upper(coalesce(l.meta_json->>'line_type','')) in ('HOURS_DAILY','HOURS_WEEKLY')
+            then coalesce(l.hours_day,0)+coalesce(l.hours_night,0)+coalesce(l.hours_sat,0)+coalesce(l.hours_sun,0)+coalesce(l.hours_bh,0)
+          else 0
+        end
+      ),0)
+    into v_inv_worked_charge_ex, v_inv_worked_hours_sum
+    from public.invoice_lines l
+    where l.invoice_id = p_invoice_id
+      and l.timesheet_id = r_ts.ts_id;
 
-    -- Expenses-only => no reference rows required.
-    if not v_worked_content then
+    -- Net worked content <= 0 => do not show reference rows and do not block invoice/issue.
+    if coalesce(v_inv_worked_charge_ex,0) <= 0 then
       continue;
     end if;
-
-    v_require_issue := coalesce(r_ts.pc_require_reference_to_invoice,false)
-                       and coalesce(r_ts.pc_ref_to_issue,false);
 
     v_tf_mode := upper(coalesce(r_ts.tf_invoice_breakdown_json->>'mode',''));
     v_segments_json := r_ts.tf_invoice_breakdown_json->'segments';
     v_sched_json := r_ts.ts_actual_schedule_json;
     v_dayrefs_json := r_ts.ts_day_references_json;
 
+    -- A) SEGMENTS mode: per-shift rows, only locked to this invoice and net-positive.
     if v_tf_mode = 'SEGMENTS' and jsonb_typeof(v_segments_json) = 'array' then
       for r_seg in
         select value as seg
@@ -585,6 +606,27 @@ begin
       loop
         v_seg_locked := nullif(btrim(coalesce(r_seg.seg->>'invoice_locked_invoice_id','')), '');
         if v_seg_locked is null or v_seg_locked <> p_invoice_id::text then
+          continue;
+        end if;
+
+        begin
+          v_seg_hours_sum :=
+            coalesce((r_seg.seg->>'hours_day')::numeric,0)
+          + coalesce((r_seg.seg->>'hours_night')::numeric,0)
+          + coalesce((r_seg.seg->>'hours_sat')::numeric,0)
+          + coalesce((r_seg.seg->>'hours_sun')::numeric,0)
+          + coalesce((r_seg.seg->>'hours_bh')::numeric,0);
+        exception when others then
+          v_seg_hours_sum := 0;
+        end;
+
+        begin
+          v_seg_charge_ex := coalesce((r_seg.seg->>'charge_amount')::numeric,0);
+        exception when others then
+          v_seg_charge_ex := 0;
+        end;
+
+        if coalesce(v_seg_hours_sum,0) <= 0 and coalesce(v_seg_charge_ex,0) <= 0 then
           continue;
         end if;
 
@@ -597,17 +639,17 @@ begin
         start_utc := nullif(btrim(coalesce(r_seg.seg->>'start_utc','')), '');
         end_utc := nullif(btrim(coalesce(r_seg.seg->>'end_utc','')), '');
         current_reference := nullif(btrim(coalesce(r_seg.seg->>'ref_num','')), '');
-        is_required := v_require_issue;
+        is_required := v_is_required;
 
         v_rows_out := v_rows_out + 1;
         return next;
       end loop;
 
+    -- B) WEEKLY MANUAL: schedule entries (start/end present)
     elsif r_ts.ts_sheet_scope::text = 'WEEKLY'
       and r_ts.ts_submission_mode::text = 'MANUAL'
       and jsonb_typeof(v_sched_json) = 'array'
     then
-      -- Weekly MANUAL without SEGMENTS mode: fall back to schedule entries.
       for r_seg in
         select value as seg, ordinality as idx
         from jsonb_array_elements(v_sched_json) with ordinality
@@ -629,62 +671,98 @@ begin
         start_utc := nullif(btrim(coalesce(r_seg.seg->>'start_utc','')), '');
         end_utc := nullif(btrim(coalesce(r_seg.seg->>'end_utc','')), '');
         current_reference := nullif(btrim(coalesce(r_seg.seg->>'ref_num','')), '');
-        is_required := v_require_issue;
+        is_required := v_is_required;
 
         v_rows_out := v_rows_out + 1;
         return next;
       end loop;
 
+    -- C) WEEKLY non-MANUAL aggregate: FREEFORM lines (no day/date columns)
     elsif r_ts.ts_sheet_scope::text = 'WEEKLY'
       and r_ts.ts_submission_mode::text <> 'MANUAL'
     then
-      -- Weekly non-MANUAL: use day_references_json when present; otherwise use timesheet reference_number.
-      if jsonb_typeof(v_dayrefs_json) = 'object'
-         and exists (select 1 from jsonb_each_text(v_dayrefs_json) t(k,v))
+      v_ff_arr := null;
+
+      if jsonb_typeof(v_dayrefs_json) = 'object' then
+        if jsonb_typeof(v_dayrefs_json->'__freeform_refs') = 'array' then
+          v_ff_arr := v_dayrefs_json->'__freeform_refs';
+        elsif jsonb_typeof(v_dayrefs_json->'__freeform') = 'array' then
+          v_ff_arr := v_dayrefs_json->'__freeform';
+        elsif jsonb_typeof(v_dayrefs_json->'__freeform_lines') = 'array' then
+          v_ff_arr := v_dayrefs_json->'__freeform_lines';
+        end if;
+      elsif jsonb_typeof(v_dayrefs_json) = 'array' then
+        v_ff_arr := v_dayrefs_json;
+      end if;
+
+      if v_ff_arr is not null and jsonb_typeof(v_ff_arr) = 'array' then
+        for r_day in
+          select value as v
+          from jsonb_array_elements(v_ff_arr) value
+        loop
+          v_ff_line := nullif(btrim(coalesce(r_day.v::text, '')), '');
+          if v_ff_line is not null and length(v_ff_line) >= 2 and left(v_ff_line,1) = '"' and right(v_ff_line,1) = '"' then
+            v_ff_line := substr(v_ff_line, 2, length(v_ff_line)-2);
+            v_ff_line := nullif(btrim(v_ff_line), '');
+          end if;
+
+          if v_ff_line is null then
+            continue;
+          end if;
+
+          timesheet_id := r_ts.ts_id;
+          sheet_scope := r_ts.ts_sheet_scope::text;
+          submission_mode := r_ts.ts_submission_mode::text;
+          ref_target := 'FREEFORM';
+          segment_id := null;
+          day_ymd := null;
+          start_utc := null;
+          end_utc := null;
+          current_reference := v_ff_line;
+          is_required := v_is_required;
+
+          v_rows_out := v_rows_out + 1;
+          return next;
+        end loop;
+
+      elsif jsonb_typeof(v_dayrefs_json) = 'object'
+        and exists (select 1 from jsonb_each_text(v_dayrefs_json) t(k,v))
       then
         for r_day in
           select key as k, value as v
           from jsonb_each_text(v_dayrefs_json)
         loop
-          v_daykey := nullif(btrim(coalesce(r_day.k,'')), '');
-          if v_daykey is null then
+          v_ff_key := nullif(btrim(coalesce(r_day.k,'')), '');
+          if v_ff_key is null then
             continue;
           end if;
 
-          v_dayval := nullif(btrim(coalesce(r_day.v,'')), '');
+          v_ff_val := nullif(btrim(coalesce(r_day.v,'')), '');
+
+          if v_ff_val is null then
+            v_ff_line := v_ff_key;
+          else
+            v_ff_line := v_ff_key || ': ' || v_ff_val;
+          end if;
 
           timesheet_id := r_ts.ts_id;
           sheet_scope := r_ts.ts_sheet_scope::text;
           submission_mode := r_ts.ts_submission_mode::text;
-          ref_target := 'DAY';
+          ref_target := 'FREEFORM';
           segment_id := null;
-          day_ymd := v_daykey;
+          day_ymd := null;
           start_utc := null;
           end_utc := null;
-          current_reference := v_dayval;
-          is_required := v_require_issue;
+          current_reference := v_ff_line;
+          is_required := v_is_required;
 
           v_rows_out := v_rows_out + 1;
           return next;
         end loop;
-      else
-        timesheet_id := r_ts.ts_id;
-        sheet_scope := r_ts.ts_sheet_scope::text;
-        submission_mode := r_ts.ts_submission_mode::text;
-        ref_target := 'TIMESHEET';
-        segment_id := null;
-        day_ymd := coalesce(r_ts.ts_week_ending_date::text, null);
-        start_utc := null;
-        end_utc := null;
-        current_reference := nullif(btrim(coalesce(r_ts.ts_reference_number,'')), '');
-        is_required := v_require_issue;
-
-        v_rows_out := v_rows_out + 1;
-        return next;
       end if;
 
+    -- D) DAILY or any other fallback: single timesheet-level ref
     else
-      -- DAILY or any other non-segment fallback: a single timesheet-level reference.
       timesheet_id := r_ts.ts_id;
       sheet_scope := r_ts.ts_sheet_scope::text;
       submission_mode := r_ts.ts_submission_mode::text;
@@ -703,7 +781,7 @@ begin
       start_utc := coalesce(r_ts.ts_worked_start_iso::text, r_ts.ts_scheduled_start_iso::text);
       end_utc := coalesce(r_ts.ts_worked_end_iso::text, r_ts.ts_scheduled_end_iso::text);
       current_reference := nullif(btrim(coalesce(r_ts.ts_reference_number,'')), '');
-      is_required := v_require_issue;
+      is_required := v_is_required;
 
       v_rows_out := v_rows_out + 1;
       return next;
@@ -756,3 +834,4 @@ exception when others then
   raise;
 end;
 $$;
+
