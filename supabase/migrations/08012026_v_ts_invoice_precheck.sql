@@ -58,11 +58,22 @@ select
   ts.submission_mode,
   ts.manual_pdf_r2_key,
   ts.reference_number,
-  coalesce(c.require_reference_to_invoice, cs.invoice_reference_required, false) as require_reference_to_invoice,
+
+  -- ✅ overrideclientsettings applied: contract policy only when overrideclientsettings=true
+  coalesce(
+    case when c.overrideclientsettings then c.require_reference_to_invoice end,
+    cs.invoice_reference_required,
+    false
+  ) as require_reference_to_invoice,
 
   case
-    -- PDF gating (client-led)
-    when coalesce(c.ts_attach_to_invoice, cs.ts_attach_to_invoice, sd.ts_attach_to_invoice, true) = true
+    -- PDF gating (client-led) — ✅ overrideclientsettings applied for ts_attach_to_invoice
+    when coalesce(
+           case when c.overrideclientsettings then c.ts_attach_to_invoice end,
+           cs.ts_attach_to_invoice,
+           sd.ts_attach_to_invoice,
+           true
+         ) = true
      and (
        (
          ts.submission_mode = 'MANUAL'::submission_mode_enum
@@ -87,10 +98,15 @@ select
      )
       then 'BLOCK_NO_PDF'::text
 
-    -- Reference/PO gating (contract-led):
-    -- Only HOURS require refs. Additional/expenses/mileage-only do not.
-    -- Net non-positive hours (<= 0) never block.
-    when coalesce(c.require_reference_to_invoice, cs.invoice_reference_required, false) = true
+    -- Reference/PO gating (invoicing):
+    -- ✅ Uses effective require_reference_to_invoice (overrideclientsettings-aware)
+    -- ✅ Only HOURS require refs; additional/expenses/mileage-only never require refs
+    -- ✅ Net non-positive hours (<= 0) never block
+    when coalesce(
+           case when c.overrideclientsettings then c.require_reference_to_invoice end,
+           cs.invoice_reference_required,
+           false
+         ) = true
      and coalesce(tf.total_hours, 0) > 0
      and coalesce(refchk.missing_raw, false) = true
       then 'BLOCK_NO_REFERENCE'::text
@@ -146,17 +162,38 @@ select
     else 'OK'::text
   end as precheck_status,
 
-  -- existing appended columns (unchanged order)
-  coalesce(c.ts_attach_to_invoice, cs.ts_attach_to_invoice, sd.ts_attach_to_invoice, true)  as effective_ts_attach_to_invoice,
-  coalesce(c.hr_attach_to_invoice, cs.hr_attach_to_invoice, sd.hr_attach_to_invoice, true)  as effective_hr_attach_to_invoice,
+  -- existing appended columns (unchanged order) — ✅ overrideclientsettings applied for attach flags
+  coalesce(
+    case when c.overrideclientsettings then c.ts_attach_to_invoice end,
+    cs.ts_attach_to_invoice,
+    sd.ts_attach_to_invoice,
+    true
+  ) as effective_ts_attach_to_invoice,
+
+  coalesce(
+    case when c.overrideclientsettings then c.hr_attach_to_invoice end,
+    cs.hr_attach_to_invoice,
+    sd.hr_attach_to_invoice,
+    true
+  ) as effective_hr_attach_to_invoice,
+
   coalesce(cs.auto_invoice_default, false) as effective_auto_invoice_default,
   coalesce(tepdf.has_timesheet_evidence_pdf, false) as has_timesheet_evidence_pdf,
 
   -- C6.1 appended columns (must be at the end)
-  coalesce(cs.reference_number_required_to_issue_invoice, false) as reference_number_required_to_issue_invoice,
+  -- ✅ overrideclientsettings applied: contract ref-to-issue only when overrideclientsettings=true, else client_settings
+  coalesce(
+    case when c.overrideclientsettings then c.reference_number_required_to_issue_invoice end,
+    cs.reference_number_required_to_issue_invoice,
+    false
+  ) as reference_number_required_to_issue_invoice,
 
   (
-    coalesce(cs.reference_number_required_to_issue_invoice, false) = true
+    coalesce(
+      case when c.overrideclientsettings then c.reference_number_required_to_issue_invoice end,
+      cs.reference_number_required_to_issue_invoice,
+      false
+    ) = true
     and coalesce(tf.total_hours, 0) > 0
     and coalesce(refchk.missing_raw, false) = true
   ) as issue_missing_reference,
@@ -164,7 +201,11 @@ select
   (
     case
       when coalesce(tf.total_hours, 0) <= 0 then 0
-      when coalesce(cs.reference_number_required_to_issue_invoice, false) = true
+      when coalesce(
+             case when c.overrideclientsettings then c.reference_number_required_to_issue_invoice end,
+             cs.reference_number_required_to_issue_invoice,
+             false
+           ) = true
         then coalesce(refchk.missing_count, 0)
       else 0
     end
@@ -306,7 +347,6 @@ left join lateral (
   weekly_nonmanual_has_any as (
     select
       (
-        -- freeform array: __freeform_refs (preferred) / __freeform / __freeform_lines
         exists (
           select 1
           from jsonb_array_elements_text(
@@ -332,7 +372,6 @@ left join lateral (
           where nullif(btrim(coalesce(t.x,'')), '') is not null
         )
         or
-        -- any non-empty day ref value on non-reserved keys
         exists (
           select 1
           from jsonb_each_text(
@@ -351,7 +390,6 @@ left join lateral (
   select
     (
       case
-        -- SEGMENTS mode takes precedence for WEEKLY (including imports): per-shift refs
         when tf.invoice_breakdown_json is not null
          and jsonb_typeof(tf.invoice_breakdown_json) = 'object'
          and upper(coalesce(tf.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
