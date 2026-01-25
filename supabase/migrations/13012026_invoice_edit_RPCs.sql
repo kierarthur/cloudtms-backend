@@ -485,7 +485,14 @@ $$;
 
 
 
-
+-- ============================================================
+-- CloudTMS: Updated public.invoice_apply_edits(p_invoice_id,p_payload,p_actor_user_id)
+-- Includes:
+--  - PDF invalidation: invoice_pdf_r2_key cleared via invoice_recompute_totals(), and invoice_pdf_generated_at_utc cleared in this RPC
+--  - Reference updates persist day_references_json (reserved freeform keys preserved)
+--  - Contract overrideclientsettings aware for daily_calc_of_invoices + bucket_labels_json (falls back to client setting when overrideclientsettings=false)
+-- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
+-- ============================================================
 
 create or replace function public.invoice_apply_edits(
   p_invoice_id uuid,
@@ -614,6 +621,10 @@ v_has_expense_or_mileage boolean;
   ts record;
   pc record;
   contract_id uuid;
+  v_client_daily_calc boolean := false;
+  v_contract_override boolean := false;
+  v_contract_daily_calc boolean;
+  v_contract_bucket_labels jsonb;
   c_daily_calc boolean := false;
   c_bucket_labels jsonb := null;
   c_role text := null;
@@ -741,6 +752,19 @@ if v_invoice_debug then
     )
   );
 end if;
+
+  -- Load effective client setting daily_calc_of_invoices (used when contract.overrideclientsettings=false)
+  begin
+    select coalesce(cs0.daily_calc_of_invoices,false)
+    into v_client_daily_calc
+    from public.client_settings cs0
+    where cs0.client_id = v_inv.client_id
+      and (cs0.effective_from <= v_anchor_ymd or cs0.effective_from is null)
+    order by cs0.effective_from desc nulls last
+    limit 1;
+  exception when others then
+    v_client_daily_calc := false;
+  end;
 
   -- VAT settings from invoice snapshot
   if jsonb_typeof(v_inv.header_snapshot_json->'vat_chargeable') = 'boolean' then
@@ -1480,14 +1504,18 @@ if v_has_seg_ops then
 
       if contract_id is not null then
         select
-          coalesce(daily_calc_of_invoices,false),
+          coalesce(overrideclientsettings,false),
+          daily_calc_of_invoices,
           bucket_labels_json,
           nullif(btrim(coalesce(display_site,'')), '')
         into
-          c_daily_calc, c_bucket_labels, c_display_site
+          v_contract_override, v_contract_daily_calc, v_contract_bucket_labels, c_display_site
         from public.contracts
         where id = contract_id
         limit 1;
+
+        c_daily_calc := case when v_contract_override then coalesce(v_contract_daily_calc,false) else v_client_daily_calc end;
+        c_bucket_labels := case when v_contract_override then v_contract_bucket_labels else null end;
       end if;
 
       if c_bucket_labels is null then
@@ -1822,16 +1850,20 @@ end if;
 
       if contract_id is not null then
         select
-          coalesce(daily_calc_of_invoices,false),
+          coalesce(overrideclientsettings,false),
+          daily_calc_of_invoices,
           bucket_labels_json,
           nullif(btrim(coalesce(role,'')), ''),
           nullif(btrim(coalesce(display_site,'')), ''),
           nullif(btrim(coalesce(ward_hint,'')), '')
         into
-          c_daily_calc, c_bucket_labels, c_role, c_display_site, c_ward_hint
+          v_contract_override, v_contract_daily_calc, v_contract_bucket_labels, c_role, c_display_site, c_ward_hint
         from public.contracts
         where id = contract_id
         limit 1;
+
+        c_daily_calc := case when v_contract_override then coalesce(v_contract_daily_calc,false) else v_client_daily_calc end;
+        c_bucket_labels := case when v_contract_override then v_contract_bucket_labels else null end;
       end if;
 
       if c_bucket_labels is null then
@@ -2548,3 +2580,4 @@ exception when others then
   raise;
 end;
 $$;
+
