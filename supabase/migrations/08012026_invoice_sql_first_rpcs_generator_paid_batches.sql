@@ -2496,10 +2496,12 @@ where tf.timesheet_id = any(v_ts_ids_to_use)
           v_entries jsonb := '[]'::jsonb; -- array of entry objects
           v_entry_count int := 0;
 
-          v_all_selfbill boolean := false;
+              v_all_selfbill boolean := false;
+          v_has_nhsp boolean := false;
           v_created boolean := false;
 
           v_mode text;
+
 
           v_invoice record;
           v_header jsonb;
@@ -3221,12 +3223,21 @@ limit 1;
           into v_timesheet_ids
           from jsonb_array_elements(v_entries) e;
 
-          -- allSelfBill check (matches JS)
+                 -- allSelfBill check (matches JS)
           select bool_and(upper(coalesce(e->>'basis','')) in ('NHSP','NHSP_ADJUSTMENT','HEALTHROSTER_SELF_BILL','HEALTHROSTER_ADJUSTMENT'))
           into v_all_selfbill
           from jsonb_array_elements(v_entries) e;
 
+          -- NHSP detection (NHSP invoices must NOT require timesheet PDFs)
+          select exists(
+            select 1
+            from jsonb_array_elements(v_entries) e
+            where upper(coalesce(e->>'basis','')) in ('NHSP','NHSP_ADJUSTMENT')
+          )
+          into v_has_nhsp;
+
           v_mode := case when v_all_selfbill then 'SELF_BILL' else 'NORMAL' end;
+
 
           -- 
           -- Determine consolidation mode from client_settings (default NONE)
@@ -3318,7 +3329,7 @@ limit 1;
             v_entries := coalesce(grp.entries, '[]'::jsonb);
             v_entry_count := coalesce(jsonb_array_length(v_entries), 0);
 
-            -- recompute allSelfBill check for this group
+                     -- recompute allSelfBill check for this group
             select bool_and(
               upper(coalesce(e->>'basis','')) in (
                 'NHSP','NHSP_ADJUSTMENT','HEALTHROSTER_SELF_BILL','HEALTHROSTER_ADJUSTMENT'
@@ -3327,7 +3338,16 @@ limit 1;
             into v_all_selfbill
             from jsonb_array_elements(v_entries) e;
 
+            -- NHSP detection (NHSP invoices must NOT require timesheet PDFs)
+            select exists(
+              select 1
+              from jsonb_array_elements(v_entries) e
+              where upper(coalesce(e->>'basis','')) in ('NHSP','NHSP_ADJUSTMENT')
+            )
+            into v_has_nhsp;
+
             v_mode := case when v_all_selfbill then 'SELF_BILL' else 'NORMAL' end;
+
 
             -- ensure header meta records consolidation mode
 
@@ -3447,9 +3467,16 @@ else
                 into sb_requires_hr
                 from cons;
 
-                           -- Attach flags use precedence: contract → client_settings → settings_defaults → true
+                                      -- Attach flags use precedence: contract → client_settings → settings_defaults → true
                 sb_hr_attach := coalesce(v_hr_attach_any, true);
-                sb_ts_attach := coalesce(v_ts_attach_any, true);
+
+                -- NHSP invoices must NOT require/attach timesheet PDFs
+                if v_has_nhsp then
+                  sb_ts_attach := false;
+                else
+                  sb_ts_attach := coalesce(v_ts_attach_any, true);
+                end if;
+
 
                           v_header := jsonb_build_object(
                   'client_id', v_client_id::text,
@@ -3514,7 +3541,7 @@ else
 v_created := true;
               end;
             end if;
-            -- Ensure self-bill invoices carry attach_policy (patch best-effort like JS)
+                  -- Ensure self-bill invoices carry attach_policy (patch best-effort like JS)
                      update public.invoices i
             set header_snapshot_json =
               jsonb_set(
@@ -3523,12 +3550,13 @@ v_created := true;
                 jsonb_build_object(
                   'requires_hr', coalesce(v_requires_hr_any,false),
                   'hr_attach_to_invoice', coalesce(v_hr_attach_any,true),
-                  'ts_attach_to_invoice', coalesce(v_ts_attach_any,true)
+                  'ts_attach_to_invoice', case when v_has_nhsp then false else coalesce(v_ts_attach_any,true) end
                 ),
                 true
               ),
               updated_at = v_now
             where i.id = v_invoice_id;
+
 
             -- Self-bill auto-issue removed (invoices remain DRAFT until explicitly issued)
 
@@ -3562,11 +3590,12 @@ v_created := true;
                 'timesheet_count', coalesce(array_length(v_timesheet_ids,1),0),
                 'segment_count', v_entry_count
               ),
-                    'attach_policy', jsonb_build_object(
+                                 'attach_policy', jsonb_build_object(
                 'requires_hr', coalesce(v_requires_hr_any,false),
                 'hr_attach_to_invoice', coalesce(v_hr_attach_any,true),
-                'ts_attach_to_invoice', coalesce(v_ts_attach_any,true)
+                'ts_attach_to_invoice', case when v_has_nhsp then false else coalesce(v_ts_attach_any,true) end
               )
+
             );
 
 
