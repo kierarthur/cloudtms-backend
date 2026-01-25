@@ -47,6 +47,7 @@
 -- SAFE TO RE-RUN: CREATE OR REPLACE VIEW
 -- C6.1: Refs required to ISSUE (not INVOICE)
 -- New columns appended at end: reference_number_required_to_issue_invoice, issue_missing_reference, issue_missing_reference_count
+
 create or replace view public.v_ts_invoice_precheck as
 with anchor as (
   select (now() at time zone 'Europe/London')::date as anchor_ymd
@@ -86,31 +87,12 @@ select
      )
       then 'BLOCK_NO_PDF'::text
 
-    -- Reference/PO gating (contract-led): when require_reference_to_invoice=true, missing refs block invoice creation (worked-only bypass below).
+    -- Reference/PO gating (contract-led):
+    -- Only HOURS require refs. Additional/expenses/mileage-only do not.
+    -- Net non-positive hours (<= 0) never block.
     when coalesce(c.require_reference_to_invoice, cs.invoice_reference_required, false) = true
+     and coalesce(tf.total_hours, 0) > 0
      and coalesce(refchk.missing_raw, false) = true
-     and not (
-    coalesce(tf.total_hours, 0) = 0
-    and coalesce(tf.additional_pay_ex_vat, 0) = 0
-    and coalesce(tf.additional_charge_ex_vat, 0) = 0
-    and (
-      tf.additional_units_json is null
-      or not exists (
-      select 1
-      from jsonb_each(
-        case
-          when tf.additional_units_json is not null and jsonb_typeof(tf.additional_units_json) = 'object'
-            then tf.additional_units_json
-          else '{}'::jsonb
-        end
-      ) kv(key, value)
-      where kv.value is not null
-        and kv.value::text <> 'null'
-        and kv.value::text <> '""'
-        and kv.value::text !~ '^"?0+(?:\.0+)?"?$'
-    )
-    )
-  )
       then 'BLOCK_NO_REFERENCE'::text
 
     -- Mileage evidence gating (kind = MILEAGE)
@@ -172,56 +154,16 @@ select
 
   -- C6.1 appended columns (must be at the end)
   coalesce(cs.reference_number_required_to_issue_invoice, false) as reference_number_required_to_issue_invoice,
+
   (
     coalesce(cs.reference_number_required_to_issue_invoice, false) = true
+    and coalesce(tf.total_hours, 0) > 0
     and coalesce(refchk.missing_raw, false) = true
-    and not (
-    coalesce(tf.total_hours, 0) = 0
-    and coalesce(tf.additional_pay_ex_vat, 0) = 0
-    and coalesce(tf.additional_charge_ex_vat, 0) = 0
-    and (
-      tf.additional_units_json is null
-      or not exists (
-      select 1
-      from jsonb_each(
-        case
-          when tf.additional_units_json is not null and jsonb_typeof(tf.additional_units_json) = 'object'
-            then tf.additional_units_json
-          else '{}'::jsonb
-        end
-      ) kv(key, value)
-      where kv.value is not null
-        and kv.value::text <> 'null'
-        and kv.value::text <> '""'
-        and kv.value::text !~ '^"?0+(?:\.0+)?"?$'
-    )
-    )
-  )
   ) as issue_missing_reference,
+
   (
     case
-      when (
-    coalesce(tf.total_hours, 0) = 0
-    and coalesce(tf.additional_pay_ex_vat, 0) = 0
-    and coalesce(tf.additional_charge_ex_vat, 0) = 0
-    and (
-      tf.additional_units_json is null
-      or not exists (
-      select 1
-      from jsonb_each(
-        case
-          when tf.additional_units_json is not null and jsonb_typeof(tf.additional_units_json) = 'object'
-            then tf.additional_units_json
-          else '{}'::jsonb
-        end
-      ) kv(key, value)
-      where kv.value is not null
-        and kv.value::text <> 'null'
-        and kv.value::text <> '""'
-        and kv.value::text !~ '^"?0+(?:\.0+)?"?$'
-    )
-    )
-  ) then 0
+      when coalesce(tf.total_hours, 0) <= 0 then 0
       when coalesce(cs.reference_number_required_to_issue_invoice, false) = true
         then coalesce(refchk.missing_count, 0)
       else 0
@@ -243,7 +185,10 @@ left join lateral (
     tf0.client_id,
     tf0.total_hours,
 
-    -- additional (used for expenses-only reference bypass)
+    -- invoice breakdown (needed for SEGMENTS ref checks)
+    tf0.invoice_breakdown_json,
+
+    -- additional (retained for other gating uses; refs do NOT depend on these)
     tf0.additional_units_json,
     tf0.additional_pay_ex_vat,
     tf0.additional_charge_ex_vat,
@@ -294,94 +239,163 @@ left join lateral (
   limit 1
 ) cs on true
 
--- compute missing reference boolean + count (independent of C6.1 gating)
+-- compute missing reference boolean + count (independent of require-to-invoice / require-to-issue gates)
 left join lateral (
+  with
+  -- SEGMENTS mode: count missing refs for segments that are (a) not already invoiced and (b) net positive
+  segs as (
+    select
+      seg,
+      nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') as locked_by,
+      nullif(btrim(coalesce(seg->>'ref_num','')), '') as ref_num,
+      (
+        coalesce(nullif(seg->>'hours_day','')::numeric,0)
+        + coalesce(nullif(seg->>'hours_night','')::numeric,0)
+        + coalesce(nullif(seg->>'hours_sat','')::numeric,0)
+        + coalesce(nullif(seg->>'hours_sun','')::numeric,0)
+        + coalesce(nullif(seg->>'hours_bh','')::numeric,0)
+      ) as hours_sum,
+      coalesce(nullif(seg->>'charge_amount','')::numeric,0) as charge_ex
+    from (
+      select value as seg
+      from jsonb_array_elements(
+        case
+          when tf.invoice_breakdown_json is not null
+           and jsonb_typeof(tf.invoice_breakdown_json) = 'object'
+           and upper(coalesce(tf.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+           and jsonb_typeof(tf.invoice_breakdown_json->'segments') = 'array'
+          then tf.invoice_breakdown_json->'segments'
+          else '[]'::jsonb
+        end
+      ) value
+    ) s
+    where jsonb_typeof(seg) = 'object'
+  ),
+  segs_pos as (
+    select *
+    from segs
+    where locked_by is null
+      and (coalesce(hours_sum,0) > 0 or coalesce(charge_ex,0) > 0)
+  ),
+  segs_missing as (
+    select count(*)::int as cnt
+    from segs_pos
+    where ref_num is null
+  ),
+
+  -- WEEKLY MANUAL: count missing refs per schedule entry with start/end present
+  weekly_manual_missing as (
+    select
+      case
+        when ts.actual_schedule_json is null
+          or jsonb_typeof(ts.actual_schedule_json) <> 'array'
+        then 1
+        when jsonb_array_length(ts.actual_schedule_json) = 0
+        then 1
+        else (
+          select count(*)::int
+          from jsonb_array_elements(ts.actual_schedule_json) seg(value)
+          where coalesce(btrim(seg.value->>'start'), '') <> ''
+            and coalesce(btrim(seg.value->>'end'), '') <> ''
+            and coalesce(btrim(seg.value->>'ref_num'), '') = ''
+        )
+      end as cnt
+  ),
+
+  -- WEEKLY non-MANUAL aggregate: require at least one ref (freeform array OR any non-empty day ref value)
+  weekly_nonmanual_has_any as (
+    select
+      (
+        -- freeform array: __freeform_refs (preferred) / __freeform / __freeform_lines
+        exists (
+          select 1
+          from jsonb_array_elements_text(
+            case
+              when ts.day_references_json is not null
+               and jsonb_typeof(ts.day_references_json) = 'object'
+               and jsonb_typeof(ts.day_references_json->'__freeform_refs') = 'array'
+              then ts.day_references_json->'__freeform_refs'
+              when ts.day_references_json is not null
+               and jsonb_typeof(ts.day_references_json) = 'object'
+               and jsonb_typeof(ts.day_references_json->'__freeform') = 'array'
+              then ts.day_references_json->'__freeform'
+              when ts.day_references_json is not null
+               and jsonb_typeof(ts.day_references_json) = 'object'
+               and jsonb_typeof(ts.day_references_json->'__freeform_lines') = 'array'
+              then ts.day_references_json->'__freeform_lines'
+              when ts.day_references_json is not null
+               and jsonb_typeof(ts.day_references_json) = 'array'
+              then ts.day_references_json
+              else '[]'::jsonb
+            end
+          ) t(x)
+          where nullif(btrim(coalesce(t.x,'')), '') is not null
+        )
+        or
+        -- any non-empty day ref value on non-reserved keys
+        exists (
+          select 1
+          from jsonb_each_text(
+            case
+              when ts.day_references_json is not null and jsonb_typeof(ts.day_references_json) = 'object'
+              then ts.day_references_json
+              else '{}'::jsonb
+            end
+          ) j(k,v)
+          where nullif(btrim(coalesce(j.v,'')), '') is not null
+            and left(coalesce(j.k,''), 2) <> '__'
+        )
+      ) as has_any
+  )
+
   select
     (
-      (
-        ts.sheet_scope = 'DAILY'::timesheet_scope_enum
-        and (ts.reference_number is null or length(btrim(ts.reference_number)) = 0)
-      )
-      or
-      (
-        ts.sheet_scope = 'WEEKLY'::timesheet_scope_enum
-        and ts.submission_mode = 'MANUAL'::submission_mode_enum
-        and (
-          ts.actual_schedule_json is null
-          or jsonb_typeof(ts.actual_schedule_json) <> 'array'::text
-          or (
-            jsonb_typeof(ts.actual_schedule_json) = 'array'::text
-            and (
-              jsonb_array_length(ts.actual_schedule_json) = 0
-              or exists (
-                select 1
-                from jsonb_array_elements(ts.actual_schedule_json) seg(value)
-                where coalesce(btrim(seg.value ->> 'start'::text), ''::text) <> ''::text
-                  and coalesce(btrim(seg.value ->> 'end'::text), ''::text) <> ''::text
-                  and coalesce(btrim(seg.value ->> 'ref_num'::text), ''::text) = ''::text
-              )
-            )
-          )
-        )
-      )
-      or
-      (
-        ts.sheet_scope = 'WEEKLY'::timesheet_scope_enum
-        and ts.submission_mode <> 'MANUAL'::submission_mode_enum
-        and (ts.reference_number is null or length(btrim(ts.reference_number)) = 0)
-        and (
-          ts.day_references_json is null
-          or ts.day_references_json = '{}'::jsonb
-          or not exists (
-            select 1
-            from jsonb_each_text(ts.day_references_json) j(k, v)
-            where btrim(j.v) <> ''::text
-          )
-        )
-      )
+      case
+        -- SEGMENTS mode takes precedence for WEEKLY (including imports): per-shift refs
+        when tf.invoice_breakdown_json is not null
+         and jsonb_typeof(tf.invoice_breakdown_json) = 'object'
+         and upper(coalesce(tf.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+         and coalesce((select cnt from segs_missing),0) > 0
+        then true
+
+        when tf.invoice_breakdown_json is not null
+         and jsonb_typeof(tf.invoice_breakdown_json) = 'object'
+         and upper(coalesce(tf.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+         and coalesce((select cnt from segs_missing),0) = 0
+        then false
+
+        when ts.sheet_scope = 'DAILY'::timesheet_scope_enum then
+          (ts.reference_number is null or length(btrim(ts.reference_number)) = 0)
+
+        when ts.sheet_scope = 'WEEKLY'::timesheet_scope_enum
+         and ts.submission_mode = 'MANUAL'::submission_mode_enum then
+          (coalesce((select cnt from weekly_manual_missing),0) > 0)
+
+        when ts.sheet_scope = 'WEEKLY'::timesheet_scope_enum
+         and ts.submission_mode <> 'MANUAL'::submission_mode_enum then
+          (coalesce((select has_any from weekly_nonmanual_has_any), false) = false)
+
+        else false
+      end
     ) as missing_raw,
 
     (
       case
+        when tf.invoice_breakdown_json is not null
+         and jsonb_typeof(tf.invoice_breakdown_json) = 'object'
+         and upper(coalesce(tf.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+        then coalesce((select cnt from segs_missing),0)
+
         when ts.sheet_scope = 'DAILY'::timesheet_scope_enum then
-          case
-            when (ts.reference_number is null or length(btrim(ts.reference_number)) = 0) then 1
-            else 0
-          end
+          case when (ts.reference_number is null or length(btrim(ts.reference_number)) = 0) then 1 else 0 end
 
         when ts.sheet_scope = 'WEEKLY'::timesheet_scope_enum
          and ts.submission_mode = 'MANUAL'::submission_mode_enum then
-          case
-            when ts.actual_schedule_json is null
-              or jsonb_typeof(ts.actual_schedule_json) <> 'array'::text
-              then 1
-            when jsonb_array_length(ts.actual_schedule_json) = 0
-              then 1
-            else (
-              select count(*)::int
-              from jsonb_array_elements(ts.actual_schedule_json) seg(value)
-              where coalesce(btrim(seg.value ->> 'start'::text), ''::text) <> ''::text
-                and coalesce(btrim(seg.value ->> 'end'::text), ''::text) <> ''::text
-                and coalesce(btrim(seg.value ->> 'ref_num'::text), ''::text) = ''::text
-            )
-          end
+          coalesce((select cnt from weekly_manual_missing),0)
 
         when ts.sheet_scope = 'WEEKLY'::timesheet_scope_enum
          and ts.submission_mode <> 'MANUAL'::submission_mode_enum then
-          case
-            when (ts.reference_number is not null and length(btrim(ts.reference_number)) > 0) then 0
-            when ts.day_references_json is null or ts.day_references_json = '{}'::jsonb then 1
-            when exists (
-              select 1
-              from jsonb_each_text(ts.day_references_json) j(k, v)
-              where btrim(j.v) <> ''::text
-            ) then 0
-            else (
-              select count(*)::int
-              from jsonb_each_text(ts.day_references_json) j(k, v)
-              where btrim(coalesce(j.v, ''::text)) = ''::text
-            )
-          end
+          case when coalesce((select has_any from weekly_nonmanual_has_any), false) = false then 1 else 0 end
 
         else 0
       end
