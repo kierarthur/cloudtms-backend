@@ -494,6 +494,17 @@ $$;
 -- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
 -- ============================================================
 
+
+
+-- ============================================================
+-- CloudTMS: Updated public.invoice_apply_edits(p_invoice_id,p_payload,p_actor_user_id)
+-- Includes:
+--  - PDF invalidation: invoice_pdf_r2_key cleared via invoice_recompute_totals(), and invoice_pdf_generated_at_utc cleared in this RPC
+--  - Reference updates persist day_references_json (reserved freeform keys preserved)
+--  - Contract overrideclientsettings aware for daily_calc_of_invoices + bucket_labels_json (falls back to client setting when overrideclientsettings=false)
+-- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
+-- ============================================================
+
 create or replace function public.invoice_apply_edits(
   p_invoice_id uuid,
   p_payload jsonb,
@@ -586,7 +597,8 @@ v_has_expense_or_mileage boolean;
   v_ref_seg_obj jsonb;
   v_ref_seg_start text;
   v_ref_seg_end text;
-  v_ref_seg_cur_ref text;
+    v_ref_seg_id text;
+v_ref_seg_cur_ref text;
   v_ref_seg_new_ref text;
   v_ref_seg_updates_this_ts int := 0;
 
@@ -1018,8 +1030,8 @@ v_has_seg_ops :=
          and jsonb_typeof(v_ref_ib->'segments') = 'array'
          and v_ref_ts.actual_schedule_json is not null
          and jsonb_typeof(v_ref_ts.actual_schedule_json) = 'array'
-      then
-        -- Build a map of "start|end" -> ref_num from actual_schedule_json
+       then
+         -- Build a map of segment_id (preferred) or start|end -> ref_num from actual_schedule_json
         v_ref_sched_map := '{}'::jsonb;
         for v_ref_seg_obj in
           select value
@@ -1029,15 +1041,25 @@ v_has_seg_ops :=
             continue;
           end if;
 
-          v_ref_seg_start := nullif(btrim(coalesce(v_ref_seg_obj->>'start_utc', v_ref_seg_obj->>'start', '')), '');
-          v_ref_seg_end := nullif(btrim(coalesce(v_ref_seg_obj->>'end_utc', v_ref_seg_obj->>'end', '')), '');
           v_ref_sched_ref := nullif(btrim(coalesce(v_ref_seg_obj->>'ref_num','')), '');
-
-          if v_ref_seg_start is null or v_ref_seg_end is null or v_ref_sched_ref is null then
+          if v_ref_sched_ref is null then
             continue;
           end if;
 
-          v_ref_sched_key := v_ref_seg_start || '|' || v_ref_seg_end;
+          v_ref_seg_id := nullif(btrim(coalesce(v_ref_seg_obj->>'segment_id','')), '');
+          if v_ref_seg_id is not null then
+            v_ref_sched_key := 'SID:' || v_ref_seg_id;
+            v_ref_sched_map := jsonb_set(v_ref_sched_map, array[v_ref_sched_key], to_jsonb(v_ref_sched_ref), true);
+            continue;
+          end if;
+
+          v_ref_seg_start := nullif(btrim(coalesce(v_ref_seg_obj->>'start_utc', v_ref_seg_obj->>'start', '')), '');
+          v_ref_seg_end := nullif(btrim(coalesce(v_ref_seg_obj->>'end_utc', v_ref_seg_obj->>'end', '')), '');
+          if v_ref_seg_start is null or v_ref_seg_end is null then
+            continue;
+          end if;
+
+          v_ref_sched_key := 'SE:' || v_ref_seg_start || '|' || v_ref_seg_end;
           v_ref_sched_map := jsonb_set(v_ref_sched_map, array[v_ref_sched_key], to_jsonb(v_ref_sched_ref), true);
         end loop;
 
@@ -1051,19 +1073,26 @@ v_has_seg_ops :=
             continue;
           end if;
 
-          v_ref_seg_start := nullif(btrim(coalesce(v_ref_seg_obj->>'start_utc', v_ref_seg_obj->>'start', '')), '');
-          v_ref_seg_end := nullif(btrim(coalesce(v_ref_seg_obj->>'end_utc', v_ref_seg_obj->>'end', '')), '');
-
-          if v_ref_seg_start is null or v_ref_seg_end is null then
-            v_ref_new_segments := v_ref_new_segments || jsonb_build_array(v_ref_seg_obj);
-            continue;
-          end if;
-
-          v_ref_sched_key := v_ref_seg_start || '|' || v_ref_seg_end;
           v_ref_seg_new_ref := null;
 
-          if v_ref_sched_map ? v_ref_sched_key then
-            v_ref_seg_new_ref := nullif(btrim(coalesce(v_ref_sched_map->>v_ref_sched_key,'')), '');
+          v_ref_seg_id := nullif(btrim(coalesce(v_ref_seg_obj->>'segment_id','')), '');
+          if v_ref_seg_id is not null then
+            v_ref_sched_key := 'SID:' || v_ref_seg_id;
+            if v_ref_sched_map ? v_ref_sched_key then
+              v_ref_seg_new_ref := nullif(btrim(coalesce(v_ref_sched_map->>v_ref_sched_key,'')), '');
+            end if;
+          end if;
+
+          if v_ref_seg_new_ref is null then
+            v_ref_seg_start := nullif(btrim(coalesce(v_ref_seg_obj->>'start_utc', v_ref_seg_obj->>'start', '')), '');
+            v_ref_seg_end := nullif(btrim(coalesce(v_ref_seg_obj->>'end_utc', v_ref_seg_obj->>'end', '')), '');
+
+            if v_ref_seg_start is not null and v_ref_seg_end is not null then
+              v_ref_sched_key := 'SE:' || v_ref_seg_start || '|' || v_ref_seg_end;
+              if v_ref_sched_map ? v_ref_sched_key then
+                v_ref_seg_new_ref := nullif(btrim(coalesce(v_ref_sched_map->>v_ref_sched_key,'')), '');
+              end if;
+            end if;
           end if;
 
           if v_ref_seg_new_ref is not null then
@@ -1076,6 +1105,7 @@ v_has_seg_ops :=
 
           v_ref_new_segments := v_ref_new_segments || jsonb_build_array(v_ref_seg_obj);
         end loop;
+
 
         if v_ref_seg_updates_this_ts > 0 then
               update public.timesheets_financials tfu2
@@ -2580,4 +2610,3 @@ exception when others then
   raise;
 end;
 $$;
-
