@@ -1444,6 +1444,60 @@ LEFT JOIN LATERAL (
 
             UNION ALL
 
+            -- SEGMENTS mode (NHSP/HealthRoster/import): invoice_breakdown_json.segments missing ref_num.
+            -- Supports multiple shifts per day via segment_id (preferred) and start/end.
+            SELECT jsonb_build_object(
+              'kind', 'SEGMENT',
+              'segment_index', (s.ord - 1),
+              'segment_id', NULLIF(btrim(COALESCE(s.seg->>'segment_id','')), ''),
+              'day_ymd', NULLIF(btrim(COALESCE(s.seg->>'date','')), ''),
+              'start_utc', NULLIF(btrim(COALESCE(s.seg->>'start_utc','')), ''),
+              'end_utc', NULLIF(btrim(COALESCE(s.seg->>'end_utc','')), ''),
+              'start', NULLIF(btrim(COALESCE(s.seg->>'start_utc','')), ''),
+              'end', NULLIF(btrim(COALESCE(s.seg->>'end_utc','')), ''),
+              'current_reference', NULLIF(btrim(COALESCE(s.seg->>'ref_num','')), ''),
+              'locked_by_invoice_id', NULLIF(btrim(COALESCE(s.seg->>'invoice_locked_invoice_id','')), ''),
+              'scope', CASE
+                WHEN NULLIF(btrim(COALESCE(s.seg->>'invoice_locked_invoice_id','')), '') IS NULL THEN 'INVOICING'
+                ELSE 'ISSUING'
+              END
+            ) AS item
+            FROM jsonb_array_elements(
+              CASE
+                WHEN tf.invoice_breakdown_json IS NOT NULL
+                  AND jsonb_typeof(tf.invoice_breakdown_json) = 'object'
+                  AND upper(coalesce(tf.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+                  AND jsonb_typeof(tf.invoice_breakdown_json->'segments') = 'array'
+                THEN tf.invoice_breakdown_json->'segments'
+                ELSE '[]'::jsonb
+              END
+            ) WITH ORDINALITY s(seg, ord)
+            WHERE jsonb_typeof(s.seg) = 'object'
+              AND (
+                (
+                  COALESCE(NULLIF(s.seg->>'hours_day','')::numeric, 0)
+                  + COALESCE(NULLIF(s.seg->>'hours_night','')::numeric, 0)
+                  + COALESCE(NULLIF(s.seg->>'hours_sat','')::numeric, 0)
+                  + COALESCE(NULLIF(s.seg->>'hours_sun','')::numeric, 0)
+                  + COALESCE(NULLIF(s.seg->>'hours_bh','')::numeric, 0)
+                ) > 0
+                OR COALESCE(NULLIF(s.seg->>'charge_amount','')::numeric, 0) > 0
+              )
+              AND COALESCE(btrim(COALESCE(s.seg->>'ref_num','')), '') = ''
+              AND (
+                (
+                  pc.precheck_status = 'BLOCK_NO_REFERENCE'
+                  AND NULLIF(btrim(COALESCE(s.seg->>'invoice_locked_invoice_id','')), '') IS NULL
+                )
+                OR
+                (
+                  COALESCE(pc.issue_missing_reference, false) = true
+                  AND NULLIF(btrim(COALESCE(s.seg->>'invoice_locked_invoice_id','')), '') IS NOT NULL
+                )
+              )
+
+            UNION ALL
+
             -- WEEKLY MANUAL (and other schedule-based): actual_schedule_json entries missing ref_num
             SELECT jsonb_build_object(
               'kind', 'SEGMENT',
