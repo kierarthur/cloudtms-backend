@@ -160,7 +160,6 @@ $function$;
 --
 -- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
 -- ============================================================
-
 create or replace function public.related_list_v2(
   p_entity text,
   p_id uuid,
@@ -187,7 +186,7 @@ begin
   end if;
 
   -- ------------------------------------------------------------
-  -- TIMESHEET -> INVOICES (segment-safe)
+  -- TIMESHEET -> INVOICES (segment-safe + ref/issue summary)
   -- ------------------------------------------------------------
   if v_entity = 'timesheet' and (v_type = 'invoice' or v_type = 'invoices') then
     with inv_ids as (
@@ -207,6 +206,59 @@ begin
       order by i.issued_at_utc desc nulls last, i.id desc
       limit v_limit offset v_offset
     ),
+    -- all timesheets on each invoice
+    inv_ts_all as (
+      select distinct il.invoice_id, il.timesheet_id
+      from public.invoice_lines il
+      where il.invoice_id in (select invoice_id from inv_ids)
+        and il.timesheet_id is not null
+    ),
+    -- worked timesheets on each invoice (hours/additional only)
+    inv_ts_worked as (
+      select distinct il.invoice_id, il.timesheet_id
+      from public.invoice_lines il
+      where il.invoice_id in (select invoice_id from inv_ids)
+        and il.timesheet_id is not null
+        and upper(coalesce(il.meta_json->>'line_type','')) in (
+          'HOURS_DAILY','HOURS_WEEKLY','ADDITIONAL_RATE','ADDITIONAL_RATE_DAILY'
+        )
+    ),
+    inv_ref_stats as (
+      select
+        x.invoice_id,
+
+        -- issue-time policy enabled for any worked TS (contract override aware)
+        coalesce(bool_or(coalesce(pc.reference_number_required_to_issue_invoice,false)), false) as refs_required_to_issue,
+
+        -- issue-time missing refs (contract override aware; uses LOCKED segment logic for SEGMENTS mode)
+        coalesce(bool_or(coalesce(pc.issue_missing_reference,false)), false) as issue_blocked_missing_refs,
+        coalesce(sum(case when coalesce(pc.issue_missing_reference,false) then coalesce(pc.issue_missing_reference_count,0) else 0 end),0)::int
+          as issue_missing_reference_count,
+        coalesce(
+          jsonb_agg(distinct pc.timesheet_id::text) filter (where coalesce(pc.issue_missing_reference,false)),
+          '[]'::jsonb
+        ) as issue_missing_timesheet_ids,
+
+        -- invoicing-time missing refs (precheck blocker; uses UNLOCKED segment logic for SEGMENTS mode)
+        coalesce(bool_or(upper(coalesce(pc_all.precheck_status,'')) = 'BLOCK_NO_REFERENCE'), false) as invoicing_blocked_missing_refs,
+        coalesce(
+          jsonb_agg(distinct pc_all.timesheet_id::text) filter (where upper(coalesce(pc_all.precheck_status,'')) = 'BLOCK_NO_REFERENCE'),
+          '[]'::jsonb
+        ) as invoicing_missing_timesheet_ids
+
+      from (select distinct invoice_id from inv_ids) x
+      left join inv_ts_worked w
+        on w.invoice_id = x.invoice_id
+      left join public.v_ts_invoice_precheck pc
+        on pc.timesheet_id = w.timesheet_id
+
+      left join inv_ts_all a
+        on a.invoice_id = x.invoice_id
+      left join public.v_ts_invoice_precheck pc_all
+        on pc_all.timesheet_id = a.timesheet_id
+
+      group by x.invoice_id
+    ),
     payload as (
       select
         (select total from inv_total) as total,
@@ -224,10 +276,20 @@ begin
             'invoice_pdf_r2_key', p.invoice_pdf_r2_key,
             'header_snapshot_json', p.header_snapshot_json,
             'on_hold_reason', p.on_hold_reason,
-            'paid_at_utc', p.paid_at_utc
+            'paid_at_utc', p.paid_at_utc,
+
+            -- ✅ new summary flags for UI consistency (segment-safe)
+            'refs_required_to_issue', coalesce(s.refs_required_to_issue,false),
+            'issue_blocked_missing_refs', coalesce(s.issue_blocked_missing_refs,false),
+            'issue_missing_reference_count', coalesce(s.issue_missing_reference_count,0),
+            'issue_missing_timesheet_ids', coalesce(s.issue_missing_timesheet_ids,'[]'::jsonb),
+            'invoicing_blocked_missing_refs', coalesce(s.invoicing_blocked_missing_refs,false),
+            'invoicing_missing_timesheet_ids', coalesce(s.invoicing_missing_timesheet_ids,'[]'::jsonb)
           )
         ), '[]'::jsonb) as items
       from page p
+      left join inv_ref_stats s
+        on s.invoice_id = p.id
     )
     select payload.total, payload.items
     into v_total, v_items
@@ -267,7 +329,7 @@ begin
   end if;
 
   -- ------------------------------------------------------------
-  -- CANDIDATE -> INVOICES (segment-safe)
+  -- CANDIDATE -> INVOICES (segment-safe + ref/issue summary)
   -- ------------------------------------------------------------
   if v_entity = 'candidate' and v_type = 'invoices' then
     with ts_ids as (
@@ -303,6 +365,53 @@ begin
       join inv_ids x on x.invoice_id = i.id
       order by i.issued_at_utc desc nulls last, i.id desc
       limit v_limit offset v_offset
+    ),
+    inv_ts_all as (
+      select distinct il.invoice_id, il.timesheet_id
+      from public.invoice_lines il
+      where il.invoice_id in (select invoice_id from inv_ids)
+        and il.timesheet_id is not null
+    ),
+    inv_ts_worked as (
+      select distinct il.invoice_id, il.timesheet_id
+      from public.invoice_lines il
+      where il.invoice_id in (select invoice_id from inv_ids)
+        and il.timesheet_id is not null
+        and upper(coalesce(il.meta_json->>'line_type','')) in (
+          'HOURS_DAILY','HOURS_WEEKLY','ADDITIONAL_RATE','ADDITIONAL_RATE_DAILY'
+        )
+    ),
+    inv_ref_stats as (
+      select
+        x.invoice_id,
+
+        coalesce(bool_or(coalesce(pc.reference_number_required_to_issue_invoice,false)), false) as refs_required_to_issue,
+        coalesce(bool_or(coalesce(pc.issue_missing_reference,false)), false) as issue_blocked_missing_refs,
+        coalesce(sum(case when coalesce(pc.issue_missing_reference,false) then coalesce(pc.issue_missing_reference_count,0) else 0 end),0)::int
+          as issue_missing_reference_count,
+        coalesce(
+          jsonb_agg(distinct pc.timesheet_id::text) filter (where coalesce(pc.issue_missing_reference,false)),
+          '[]'::jsonb
+        ) as issue_missing_timesheet_ids,
+
+        coalesce(bool_or(upper(coalesce(pc_all.precheck_status,'')) = 'BLOCK_NO_REFERENCE'), false) as invoicing_blocked_missing_refs,
+        coalesce(
+          jsonb_agg(distinct pc_all.timesheet_id::text) filter (where upper(coalesce(pc_all.precheck_status,'')) = 'BLOCK_NO_REFERENCE'),
+          '[]'::jsonb
+        ) as invoicing_missing_timesheet_ids
+
+      from (select distinct invoice_id from inv_ids) x
+      left join inv_ts_worked w
+        on w.invoice_id = x.invoice_id
+      left join public.v_ts_invoice_precheck pc
+        on pc.timesheet_id = w.timesheet_id
+
+      left join inv_ts_all a
+        on a.invoice_id = x.invoice_id
+      left join public.v_ts_invoice_precheck pc_all
+        on pc_all.timesheet_id = a.timesheet_id
+
+      group by x.invoice_id
     )
     select
       (select total from inv_total) as total,
@@ -320,17 +429,26 @@ begin
           'invoice_pdf_r2_key', p.invoice_pdf_r2_key,
           'header_snapshot_json', p.header_snapshot_json,
           'on_hold_reason', p.on_hold_reason,
-          'paid_at_utc', p.paid_at_utc
+          'paid_at_utc', p.paid_at_utc,
+
+          'refs_required_to_issue', coalesce(s.refs_required_to_issue,false),
+          'issue_blocked_missing_refs', coalesce(s.issue_blocked_missing_refs,false),
+          'issue_missing_reference_count', coalesce(s.issue_missing_reference_count,0),
+          'issue_missing_timesheet_ids', coalesce(s.issue_missing_timesheet_ids,'[]'::jsonb),
+          'invoicing_blocked_missing_refs', coalesce(s.invoicing_blocked_missing_refs,false),
+          'invoicing_missing_timesheet_ids', coalesce(s.invoicing_missing_timesheet_ids,'[]'::jsonb)
         )
       ), '[]'::jsonb) as items
     into v_total, v_items
-    from page p;
+    from page p
+    left join inv_ref_stats s
+      on s.invoice_id = p.id;
 
     return jsonb_build_object('items', v_items, 'total', coalesce(v_total, 0));
   end if;
 
   -- ------------------------------------------------------------
-  -- UMBRELLA -> INVOICES (segment-safe)
+  -- UMBRELLA -> INVOICES (segment-safe + ref/issue summary)
   -- ------------------------------------------------------------
   if v_entity = 'umbrella' and v_type = 'invoices' then
     with cand_ids as (
@@ -362,6 +480,53 @@ begin
       join inv_ids x on x.invoice_id = i.id
       order by i.issued_at_utc desc nulls last, i.id desc
       limit v_limit offset v_offset
+    ),
+    inv_ts_all as (
+      select distinct il.invoice_id, il.timesheet_id
+      from public.invoice_lines il
+      where il.invoice_id in (select invoice_id from inv_ids)
+        and il.timesheet_id is not null
+    ),
+    inv_ts_worked as (
+      select distinct il.invoice_id, il.timesheet_id
+      from public.invoice_lines il
+      where il.invoice_id in (select invoice_id from inv_ids)
+        and il.timesheet_id is not null
+        and upper(coalesce(il.meta_json->>'line_type','')) in (
+          'HOURS_DAILY','HOURS_WEEKLY','ADDITIONAL_RATE','ADDITIONAL_RATE_DAILY'
+        )
+    ),
+    inv_ref_stats as (
+      select
+        x.invoice_id,
+
+        coalesce(bool_or(coalesce(pc.reference_number_required_to_issue_invoice,false)), false) as refs_required_to_issue,
+        coalesce(bool_or(coalesce(pc.issue_missing_reference,false)), false) as issue_blocked_missing_refs,
+        coalesce(sum(case when coalesce(pc.issue_missing_reference,false) then coalesce(pc.issue_missing_reference_count,0) else 0 end),0)::int
+          as issue_missing_reference_count,
+        coalesce(
+          jsonb_agg(distinct pc.timesheet_id::text) filter (where coalesce(pc.issue_missing_reference,false)),
+          '[]'::jsonb
+        ) as issue_missing_timesheet_ids,
+
+        coalesce(bool_or(upper(coalesce(pc_all.precheck_status,'')) = 'BLOCK_NO_REFERENCE'), false) as invoicing_blocked_missing_refs,
+        coalesce(
+          jsonb_agg(distinct pc_all.timesheet_id::text) filter (where upper(coalesce(pc_all.precheck_status,'')) = 'BLOCK_NO_REFERENCE'),
+          '[]'::jsonb
+        ) as invoicing_missing_timesheet_ids
+
+      from (select distinct invoice_id from inv_ids) x
+      left join inv_ts_worked w
+        on w.invoice_id = x.invoice_id
+      left join public.v_ts_invoice_precheck pc
+        on pc.timesheet_id = w.timesheet_id
+
+      left join inv_ts_all a
+        on a.invoice_id = x.invoice_id
+      left join public.v_ts_invoice_precheck pc_all
+        on pc_all.timesheet_id = a.timesheet_id
+
+      group by x.invoice_id
     )
     select
       (select total from inv_total) as total,
@@ -379,11 +544,20 @@ begin
           'invoice_pdf_r2_key', p.invoice_pdf_r2_key,
           'header_snapshot_json', p.header_snapshot_json,
           'on_hold_reason', p.on_hold_reason,
-          'paid_at_utc', p.paid_at_utc
+          'paid_at_utc', p.paid_at_utc,
+
+          'refs_required_to_issue', coalesce(s.refs_required_to_issue,false),
+          'issue_blocked_missing_refs', coalesce(s.issue_blocked_missing_refs,false),
+          'issue_missing_reference_count', coalesce(s.issue_missing_reference_count,0),
+          'issue_missing_timesheet_ids', coalesce(s.issue_missing_timesheet_ids,'[]'::jsonb),
+          'invoicing_blocked_missing_refs', coalesce(s.invoicing_blocked_missing_refs,false),
+          'invoicing_missing_timesheet_ids', coalesce(s.invoicing_missing_timesheet_ids,'[]'::jsonb)
         )
       ), '[]'::jsonb) as items
     into v_total, v_items
-    from page p;
+    from page p
+    left join inv_ref_stats s
+      on s.invoice_id = p.id;
 
     return jsonb_build_object('items', v_items, 'total', coalesce(v_total, 0));
   end if;
@@ -391,7 +565,6 @@ begin
   raise exception 'related_list_v2: unsupported (entity=%, type=%)', p_entity, p_type;
 end;
 $$;
-
 
 -- ============================================================
 -- CloudTMS Patch: related_counts_v2 (SEGMENTS-safe, single-call)
