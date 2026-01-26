@@ -3208,7 +3208,6 @@ $$;
 --
 -- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
 -- ============================================================
-
 create or replace function public.invoice_render_manifest(p_invoice_id uuid)
 returns jsonb
 language plpgsql
@@ -3286,14 +3285,60 @@ begin
     union
     select timesheet_id from ref_ts_ids
   ),
-  -- ✅ NEW: sources needed by FE to rebuild reference update payloads without extra calls
+  -- ✅ NEW: TSFIN sources for timesheets that may have SEGMENTS refs (NHSP/HR/etc)
+  tsfin_ref_sources as (
+    select
+      tf.timesheet_id,
+      tf.invoice_breakdown_json
+    from public.timesheets_financials tf
+    where tf.is_current = true
+      and tf.timesheet_id in (select timesheet_id from ts_ids_for_ref_sources)
+  ),
+  -- ✅ UPDATED: sources needed by FE to rebuild reference update payloads without extra calls
+  --   - If timesheets.actual_schedule_json is present and non-empty, use it.
+  --   - Else if TSFIN is SEGMENTS mode, derive an editable schedule-like array from TSFIN segments
+  --     so multi-shift/day (NHSP/HR/manual) works via segment_id/start/end matching.
   ts_reference_sources as (
     select
       t.timesheet_id,
       t.reference_number,
       t.day_references_json,
-      t.actual_schedule_json
+      case
+        when t.actual_schedule_json is not null
+          and jsonb_typeof(t.actual_schedule_json) = 'array'
+          and jsonb_array_length(t.actual_schedule_json) > 0
+        then t.actual_schedule_json
+
+        when tf.invoice_breakdown_json is not null
+          and jsonb_typeof(tf.invoice_breakdown_json) = 'object'
+          and upper(coalesce(tf.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+          and jsonb_typeof(tf.invoice_breakdown_json->'segments') = 'array'
+        then coalesce((
+          select jsonb_agg(
+            jsonb_build_object(
+              'segment_id', seg->>'segment_id',
+              'date', seg->>'date',
+              'start_utc', seg->>'start_utc',
+              'end_utc', seg->>'end_utc',
+              -- legacy-friendly aliases (FE/DB matching may use either)
+              'start', seg->>'start_utc',
+              'end', seg->>'end_utc',
+              'ref_num', seg->>'ref_num',
+              'source_system', seg->>'source_system'
+            )
+            order by
+              coalesce(seg->>'date',''),
+              coalesce(seg->>'start_utc',''),
+              coalesce(seg->>'segment_id','')
+          )
+          from jsonb_array_elements(tf.invoice_breakdown_json->'segments') seg
+        ), '[]'::jsonb)
+
+        else '[]'::jsonb
+      end as actual_schedule_json
     from public.timesheets t
+    left join tsfin_ref_sources tf
+      on tf.timesheet_id = t.timesheet_id
     where t.timesheet_id in (select timesheet_id from ts_ids_for_ref_sources)
   ),
   ev as (
@@ -3521,8 +3566,10 @@ begin
       from tsfin t
     ), '{}'::jsonb),
 
-
-    -- ✅ NEW: reference sources needed by FE to build reference update payloads with no extra calls
+    -- ✅ UPDATED: reference sources needed by FE to build reference update payloads with no extra calls
+    -- actual_schedule_json is now "effective schedule":
+    --   - real manual schedule if present
+    --   - else derived from TSFIN SEGMENTS (NHSP/HR/etc) to support multi-shift/day edits by segment_id
     'timesheet_reference_sources_by_id', coalesce((
       select jsonb_object_agg(
         s.timesheet_id::text,
@@ -3535,10 +3582,20 @@ begin
       from ts_reference_sources s
     ), '{}'::jsonb),
 
-    -- ✅ NEW: embed reference edit rows for zero-subrequest ref modal
+    -- ✅ UPDATED: embed reference edit rows for zero-subrequest ref modal
+    -- Adds a deterministic row_key to stabilise FE staging identity.
     'reference_rows', coalesce((
       select jsonb_agg(
         jsonb_build_object(
+          'row_key', concat_ws(
+            '::',
+            r.timesheet_id::text,
+            r.ref_target,
+            coalesce(r.segment_id,''),
+            coalesce(r.day_ymd::text,''),
+            coalesce(r.start_utc::text,''),
+            coalesce(r.end_utc::text,'')
+          ),
           'timesheet_id', r.timesheet_id::text,
           'sheet_scope', r.sheet_scope,
           'submission_mode', r.submission_mode,
