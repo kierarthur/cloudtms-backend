@@ -3276,19 +3276,38 @@ begin
     from lines
     where timesheet_id is not null
   ),
-  -- ✅ NEW: additional timesheet ids referenced by reference rows (may include ids not present in lines)
+
+  -- ✅ UPDATED: reference rows joined to candidate display name (for UI display)
+  ref_rows_joined as (
+    select
+      r.*,
+      c.id as contract_id,
+      c.candidate_id,
+      cand.display_name as candidate_display
+    from public.invoice_reference_rows(p_invoice_id) r
+    left join public.timesheets ts
+      on ts.timesheet_id = r.timesheet_id
+    left join public.contracts c
+      on c.id = ts.contract_id
+    left join public.candidates cand
+      on cand.id = c.candidate_id
+  ),
+
+  -- ✅ additional timesheet ids referenced by reference rows (may include ids not present in lines)
   ref_ts_ids as (
     select distinct r.timesheet_id
-    from public.invoice_reference_rows(p_invoice_id) r
+    from ref_rows_joined r
     where r.timesheet_id is not null
   ),
-  -- ✅ NEW: union set for reference-source hydration
+
+  -- ✅ union set for reference-source hydration
   ts_ids_for_ref_sources as (
     select timesheet_id from ts_ids
     union
     select timesheet_id from ref_ts_ids
   ),
-  -- ✅ NEW: TSFIN sources for timesheets that may have SEGMENTS refs (NHSP/HR/etc)
+
+  -- ✅ TSFIN sources for timesheets that may have SEGMENTS refs (NHSP/HR/etc)
   tsfin_ref_sources as (
     select
       tf.timesheet_id,
@@ -3297,7 +3316,8 @@ begin
     where tf.is_current = true
       and tf.timesheet_id in (select timesheet_id from ts_ids_for_ref_sources)
   ),
-  -- ✅ UPDATED: sources needed by FE to rebuild reference update payloads without extra calls
+
+  -- ✅ sources needed by FE to rebuild reference update payloads without extra calls
   --   - If timesheets.actual_schedule_json is present and non-empty, use it.
   --   - Else if TSFIN is SEGMENTS mode, derive an editable schedule-like array from TSFIN segments
   --     so multi-shift/day (NHSP/HR/manual) works via segment_id/start/end matching.
@@ -3344,6 +3364,7 @@ begin
       on tf.timesheet_id = t.timesheet_id
     where t.timesheet_id in (select timesheet_id from ts_ids_for_ref_sources)
   ),
+
   ev as (
     select
       e.timesheet_id,
@@ -3547,7 +3568,7 @@ begin
 
     'timesheet_ids', coalesce((select jsonb_agg(t.timesheet_id::text) from ts_ids t), '[]'::jsonb),
 
-    -- ✅ NEW: mapping needed for segment edits (tsfin_id is invoice_apply_edits input)
+    -- ✅ mapping needed for segment edits (tsfin_id is invoice_apply_edits input)
     'tsfin_id_by_timesheet_id', coalesce((
       select jsonb_object_agg(
         t.timesheet_id::text,
@@ -3556,7 +3577,7 @@ begin
       from tsfin t
     ), '{}'::jsonb),
 
-    -- ✅ NEW: mileage units/rates per timesheet (for PDF builder / UI without scanning lines)
+    -- ✅ mileage units/rates per timesheet (for PDF builder / UI without scanning lines)
     'mileage_by_timesheet_id', coalesce((
       select jsonb_object_agg(
         t.timesheet_id::text,
@@ -3569,10 +3590,7 @@ begin
       from tsfin t
     ), '{}'::jsonb),
 
-    -- ✅ UPDATED: reference sources needed by FE to build reference update payloads with no extra calls
-    -- actual_schedule_json is now "effective schedule":
-    --   - real manual schedule if present
-    --   - else derived from TSFIN SEGMENTS (NHSP/HR/etc) to support multi-shift/day edits by segment_id
+    -- ✅ reference sources needed by FE to build reference update payloads with no extra calls
     'timesheet_reference_sources_by_id', coalesce((
       select jsonb_object_agg(
         s.timesheet_id::text,
@@ -3586,7 +3604,7 @@ begin
     ), '{}'::jsonb),
 
     -- ✅ UPDATED: embed reference edit rows for zero-subrequest ref modal
-    -- Adds a deterministic row_key to stabilise FE staging identity.
+    -- Adds candidate_display for UI rendering and deterministic row_key to stabilise FE staging identity.
     'reference_rows', coalesce((
       select jsonb_agg(
         jsonb_build_object(
@@ -3600,6 +3618,8 @@ begin
             coalesce(r.end_utc::text,'')
           ),
           'timesheet_id', r.timesheet_id::text,
+          'candidate_id', case when r.candidate_id is null then null else r.candidate_id::text end,
+          'candidate_display', r.candidate_display,
           'sheet_scope', r.sheet_scope,
           'submission_mode', r.submission_mode,
           'ref_target', r.ref_target,
@@ -3618,7 +3638,7 @@ begin
           r.end_utc nulls last,
           r.segment_id nulls last
       )
-      from public.invoice_reference_rows(p_invoice_id) r
+      from ref_rows_joined r
     ), '[]'::jsonb),
 
     -- SEGMENTS: segment info for invoice modal expansion
@@ -3796,6 +3816,7 @@ exception when others then
   raise;
 end;
 $$;
+
 
 -- 3.6 Credit note + unlock (needs unredacted JS parity source)
 create or replace function public.invoice_create_credit_note_and_unlock(
