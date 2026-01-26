@@ -602,6 +602,9 @@ begin
       for r_seg in
         select value as seg
         from jsonb_array_elements(v_segments_json) value
+        order by
+          coalesce(value->>'start_utc',''),
+          coalesce(value->>'segment_id','')
       loop
         v_seg_locked := nullif(btrim(coalesce(r_seg.seg->>'invoice_locked_invoice_id','')), '');
         if v_seg_locked is null or v_seg_locked <> p_invoice_id::text then
@@ -635,7 +638,6 @@ begin
         sheet_scope := r_ts.ts_sheet_scope::text;
         submission_mode := r_ts.ts_submission_mode::text;
         ref_target := 'SEGMENT';
-        segment_id := v_seg_id_local;
 
         day_ymd := nullif(btrim(coalesce(r_seg.seg->>'date','')), '');
         start_utc := nullif(btrim(coalesce(r_seg.seg->>'start_utc','')), '');
@@ -648,6 +650,12 @@ begin
           exception when others then
             day_ymd := null;
           end;
+        end if;
+
+        -- Fallback: if segment_id missing, produce stable identifier from start/end (used for UI row identity).
+        segment_id := v_seg_id_local;
+        if segment_id is null and start_utc is not null and end_utc is not null then
+          segment_id := 'SE:' || start_utc || '|' || end_utc;
         end if;
 
         -- SEGMENTS mode: current_reference is sourced from TSFIN segments (invoice_breakdown_json),
@@ -790,4 +798,3 @@ exception when others then
   raise;
 end;
 $$;
-
