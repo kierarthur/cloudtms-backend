@@ -1983,7 +1983,7 @@ declare
 
   v_on_hold_reason text := null;
 
-  -- ref-to-issue flag (client setting)
+  -- ref-to-issue flag (effective: contract override aware via v_ts_invoice_precheck)
   v_ref_required_to_issue boolean := false;
 
   -- ======================================================
@@ -2071,7 +2071,7 @@ begin
       return;
     end if;
 
-    -- ✅ NEW HARD BLOCK:
+    -- ✅ HARD BLOCK:
     -- If invoice is currently ON_HOLD, do not re-evaluate blockers; require UNHOLD first.
     if v_inv.status::text = 'ON_HOLD' then
       status := 'ON_HOLD';
@@ -2087,31 +2087,12 @@ begin
     end if;
   end;
 
-  -- Invoice client_id (used for settings lookup)
+  -- Invoice client_id (used for settings lookup and header snapshot)
   select i.client_id
   into v_client_id
   from public.invoices i
   where i.id = p_invoice_id
   limit 1;
-
-  -- Load effective client_settings.reference_number_required_to_issue_invoice (safe if column not yet present)
-  begin
-    select coalesce(cs0.reference_number_required_to_issue_invoice, false)
-    into v_ref_required_to_issue
-    from public.client_settings cs0
-    where cs0.client_id = v_client_id
-      and (cs0.effective_from <= v_anchor_ymd or cs0.effective_from is null)
-    order by cs0.effective_from desc nulls last
-    limit 1;
-  exception when undefined_column then
-    v_ref_required_to_issue := false;
-  end;
-
-  v_dbg_steps := v_dbg_steps || jsonb_build_array(jsonb_build_object(
-    'step','loaded_client_setting',
-    'client_id', case when v_client_id is null then null else v_client_id::text end,
-    'reference_number_required_to_issue_invoice', v_ref_required_to_issue
-  ));
 
   -- Timesheets on invoice
   select array_agg(distinct l.timesheet_id)
@@ -2138,6 +2119,23 @@ begin
     'step','collected_timesheets',
     'timesheet_count', coalesce(array_length(v_ts_ids,1),0),
     'worked_timesheet_count', coalesce(array_length(v_worked_ts_ids,1),0)
+  ));
+
+  -- ✅ Determine whether ref-to-issue is enabled for THIS invoice (contract override aware)
+  -- We treat this as: any worked timesheet on the invoice has reference_number_required_to_issue_invoice = true
+  begin
+    select coalesce(bool_or(coalesce(pc.reference_number_required_to_issue_invoice,false)), false)
+    into v_ref_required_to_issue
+    from unnest(coalesce(v_worked_ts_ids, array[]::uuid[])) as x(timesheet_id)
+    left join public.v_ts_invoice_precheck pc
+      on pc.timesheet_id = x.timesheet_id;
+  exception when others then
+    v_ref_required_to_issue := false;
+  end;
+
+  v_dbg_steps := v_dbg_steps || jsonb_build_array(jsonb_build_object(
+    'step','computed_issue_ref_policy',
+    'reference_number_required_to_issue_invoice', v_ref_required_to_issue
   ));
 
   -- ------------------------------------------------------------
@@ -2203,27 +2201,29 @@ begin
   v_hr_reasons := array_remove(v_hr_reasons, null);
 
   -- ------------------------------------------------------------
-  -- 3) ISSUE-TIME reference gating: only when enabled
+  -- 3) ISSUE-TIME reference gating (contract override aware, per-timesheet)
+  -- Uses v_ts_invoice_precheck.issue_missing_reference which is already:
+  --   (reference_number_required_to_issue_invoice = true)
+  --   AND (total_hours > 0)
+  --   AND (missing refs for LOCKED positive segments, or normal weekly/daily rules)
   -- ------------------------------------------------------------
-  if v_ref_required_to_issue then
-    select array_agg(
-      case
-        when pc.timesheet_id is null
-          then 'TS ' || x.timesheet_id::text || ': precheck missing (issue refs)'
+  select array_agg(
+    case
+      when pc.timesheet_id is null
+        then null
 
-        when coalesce(pc.issue_missing_reference, false) = true
-          then 'TS ' || pc.timesheet_id::text || ': missing reference/PO for ' || coalesce(pc.issue_missing_reference_count,0)::text || ' shift(s) (required to issue)'
+      when coalesce(pc.issue_missing_reference, false) = true
+        then 'TS ' || pc.timesheet_id::text || ': missing reference/PO for ' || coalesce(pc.issue_missing_reference_count,0)::text || ' shift(s) (required to issue)'
 
-        else null
-      end
-    )
-    into v_issue_ref_reasons
-    from unnest(coalesce(v_worked_ts_ids, array[]::uuid[])) as x(timesheet_id)
-    left join public.v_ts_invoice_precheck pc
-      on pc.timesheet_id = x.timesheet_id;
+      else null
+    end
+  )
+  into v_issue_ref_reasons
+  from unnest(coalesce(v_worked_ts_ids, array[]::uuid[])) as x(timesheet_id)
+  left join public.v_ts_invoice_precheck pc
+    on pc.timesheet_id = x.timesheet_id;
 
-    v_issue_ref_reasons := array_remove(v_issue_ref_reasons, null);
-  end if;
+  v_issue_ref_reasons := array_remove(v_issue_ref_reasons, null);
 
   -- Merge blockers
   v_reasons := array_cat(v_precheck_reasons, v_hr_reasons);
@@ -2238,6 +2238,7 @@ begin
           'timesheet_id', x.timesheet_id::text,
           'has_worked_lines', (v_worked_ts_ids is not null and x.timesheet_id = any(v_worked_ts_ids)),
           'precheck_status', coalesce(pc.precheck_status,'')::text,
+          'ref_required_to_issue_effective', coalesce(pc.reference_number_required_to_issue_invoice,false),
           'issue_missing_reference', coalesce(pc.issue_missing_reference,false),
           'issue_missing_reference_count', coalesce(pc.issue_missing_reference_count,0),
           'hr_required', coalesce(s.hr_validation_required_for_invoice,false),
@@ -2453,6 +2454,8 @@ exception when others then
   raise;
 end;
 $$;
+
+
 
 -- ------------------------------------------------------------
 -- 3.4 Hold/Unhold/Unissue
