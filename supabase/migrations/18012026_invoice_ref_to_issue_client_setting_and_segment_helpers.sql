@@ -631,10 +631,29 @@ begin
 
         v_seg_id_local := nullif(btrim(coalesce(r_seg.seg->>'segment_id','')), '');
 
-                -- SEGMENTS mode: current_reference is sourced from TSFIN segments (invoice_breakdown_json),
+        timesheet_id := r_ts.ts_id;
+        sheet_scope := r_ts.ts_sheet_scope::text;
+        submission_mode := r_ts.ts_submission_mode::text;
+        ref_target := 'SEGMENT';
+        segment_id := v_seg_id_local;
+
+        day_ymd := nullif(btrim(coalesce(r_seg.seg->>'date','')), '');
+        start_utc := nullif(btrim(coalesce(r_seg.seg->>'start_utc','')), '');
+        end_utc := nullif(btrim(coalesce(r_seg.seg->>'end_utc','')), '');
+
+        -- Fallback: derive day_ymd from start_utc (Europe/London) if missing
+        if day_ymd is null and start_utc is not null then
+          begin
+            day_ymd := (((start_utc::timestamptz) at time zone 'Europe/London')::date)::text;
+          exception when others then
+            day_ymd := null;
+          end;
+        end if;
+
+        -- SEGMENTS mode: current_reference is sourced from TSFIN segments (invoice_breakdown_json),
         -- which invoice_apply_edits keeps in sync when refs are edited.
         current_reference := nullif(btrim(coalesce(r_seg.seg->>'ref_num','')), '');
-is_required := v_is_required;
+        is_required := v_is_required;
 
         v_rows_out := v_rows_out + 1;
         return next;
