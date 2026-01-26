@@ -6259,8 +6259,7 @@ async function handleContractsReplace(env, req, contractId) {
   return withCORS(env, req, ok({ contract: updated, warnings }));
 }
 
-
- async function handleContractsDuplicate(env, req, contractId) {
+async function handleContractsDuplicate(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -6293,30 +6292,64 @@ async function handleContractsReplace(env, req, contractId) {
 
   const duplicates = [];
 
+  // Preserve nullable flags exactly as stored (null remains null)
+  const copyBoolOrNull = (v) => (v === null || v === undefined) ? null : !!v;
+
   for (let i = 0; i < count; i++) {
     const payload = {
       // 🔑 Explicitly unassigned
       candidate_id: null,
       client_id: src.client_id,
+
       role: src.role || null,
       band: src.band ?? null,
       display_site: src.display_site || null,
       ward_hint: src.ward_hint || null,
+
       start_date: src.start_date,
       end_date: src.end_date,
+
       pay_method_snapshot: String(src.pay_method_snapshot || 'PAYE').toUpperCase() === 'PAYE' ? 'PAYE' : 'UMBRELLA',
       rates_json: src.rates_json || {},
+
       std_schedule_json: src.std_schedule_json || null,
       std_hours_json: src.std_hours_json || null,
       bucket_labels_json: src.bucket_labels_json || null,
-      additional_rates_json: src.additional_rates_json || null,   // NEW
-      default_submission_mode: String(src.default_submission_mode || 'ELECTRONIC').toUpperCase(),
+      additional_rates_json: src.additional_rates_json || null,
+
+      // Allow NULL (do not force fallback)
+      default_submission_mode: (src.default_submission_mode == null) ? null : String(src.default_submission_mode).toUpperCase(),
       week_ending_weekday_snapshot: Number(src.week_ending_weekday_snapshot ?? 0),
+
+      // Existing core flags
       auto_invoice: !!src.auto_invoice,
       require_reference_to_pay: !!src.require_reference_to_pay,
       require_reference_to_invoice: !!src.require_reference_to_invoice,
+      self_bill: !!src.self_bill,
+
+      // Preserve weekly source (if used)
+      weekly_timesheet_source: (src.weekly_timesheet_source == null) ? null : src.weekly_timesheet_source,
+
+      // NEW: contract override flag + governed nullable booleans
+      overrideclientsettings: !!src.overrideclientsettings,
+
+      is_nhsp: copyBoolOrNull(src.is_nhsp),
+      autoprocess_hr: copyBoolOrNull(src.autoprocess_hr),
+      requires_hr: copyBoolOrNull(src.requires_hr),
+      no_timesheet_required: copyBoolOrNull(src.no_timesheet_required),
+      daily_calc_of_invoices: copyBoolOrNull(src.daily_calc_of_invoices),
+      group_nightsat_sunbh: copyBoolOrNull(src.group_nightsat_sunbh),
+      hr_attach_to_invoice: copyBoolOrNull(src.hr_attach_to_invoice),
+      ts_attach_to_invoice: copyBoolOrNull(src.ts_attach_to_invoice),
+
+      // NEW: reference and email routing fields (contract-level)
+      reference_number_required_to_issue_invoice: copyBoolOrNull(src.reference_number_required_to_issue_invoice),
+      send_manual_invoices_to_different_email: copyBoolOrNull(src.send_manual_invoices_to_different_email),
+      manual_invoices_alt_email_address: (src.manual_invoices_alt_email_address == null) ? null : String(src.manual_invoices_alt_email_address),
+
       mileage_pay_rate: src.mileage_pay_rate != null ? Number(src.mileage_pay_rate) : null,
       mileage_charge_rate: src.mileage_charge_rate != null ? Number(src.mileage_charge_rate) : null,
+
       created_at: nowIso(),
       updated_at: nowIso()
     };
@@ -6376,6 +6409,7 @@ async function handleContractsReplace(env, req, contractId) {
   }));
 }
 
+ 
 
 // Helper: returns ['PAY_METHOD_MISMATCH'] if candidate.pay_method != pay_method_snapshot
 async function computePayMethodWarnings(env, contractRow) {
@@ -6572,7 +6606,6 @@ function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEn
   // Unknown shape → nothing to render
   return [];
 }
-
 async function handleContractsCloneAndExtend(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -6633,6 +6666,12 @@ async function handleContractsCloneAndExtend(env, req, contractId) {
     return clampBool(v, fallbackBool);
   };
 
+  // NEW: Copy overrideclientsettings into successor (allow override if present)
+  const successor_overrideclientsettings =
+    ('overrideclientsettings' in ov)
+      ? clampBool(ov.overrideclientsettings, !!cur.overrideclientsettings)
+      : !!cur.overrideclientsettings;
+
   // Compose successor std_* (prefer explicit override → derived from schedule → inherit)
   let successor_std_schedule = ('std_schedule_json' in ov) ? (ov.std_schedule_json || null) : (cur.std_schedule_json || null);
   let successor_std_hours    = null;
@@ -6666,6 +6705,31 @@ async function handleContractsCloneAndExtend(env, req, contractId) {
   const successor_self_bill =
     ('self_bill' in ov) ? boolOrNull(ov.self_bill, !!cur.self_bill) : (cur.self_bill ?? null);
 
+  // NEW: Copy attachment + reference/email routing flags into successor (allow override if present)
+  const successor_hr_attach_to_invoice =
+    ('hr_attach_to_invoice' in ov) ? boolOrNull(ov.hr_attach_to_invoice, !!cur.hr_attach_to_invoice) : (cur.hr_attach_to_invoice ?? null);
+
+  const successor_ts_attach_to_invoice =
+    ('ts_attach_to_invoice' in ov) ? boolOrNull(ov.ts_attach_to_invoice, !!cur.ts_attach_to_invoice) : (cur.ts_attach_to_invoice ?? null);
+
+  const successor_reference_number_required_to_issue_invoice =
+    ('reference_number_required_to_issue_invoice' in ov)
+      ? boolOrNull(ov.reference_number_required_to_issue_invoice, !!cur.reference_number_required_to_issue_invoice)
+      : (cur.reference_number_required_to_issue_invoice ?? null);
+
+  const successor_send_manual_invoices_to_different_email =
+    ('send_manual_invoices_to_different_email' in ov)
+      ? boolOrNull(ov.send_manual_invoices_to_different_email, !!cur.send_manual_invoices_to_different_email)
+      : (cur.send_manual_invoices_to_different_email ?? null);
+
+  const successor_manual_invoices_alt_email_address =
+    ('manual_invoices_alt_email_address' in ov)
+      ? (ov.manual_invoices_alt_email_address == null ? null : String(ov.manual_invoices_alt_email_address))
+      : (cur.manual_invoices_alt_email_address ?? null);
+
+  const successor_weekly_timesheet_source =
+    ('weekly_timesheet_source' in ov) ? (ov.weekly_timesheet_source ?? null) : (cur.weekly_timesheet_source ?? null);
+
   // Friendly validation mirroring DB constraints (validate resulting successor state)
   if (successor_is_nhsp === true && successor_autoprocess_hr === true) {
     return withCORS(env, req, badRequest('Invalid contract route for successor: is_nhsp=true and autoprocess_hr=true cannot both be true.'));
@@ -6686,6 +6750,8 @@ async function handleContractsCloneAndExtend(env, req, contractId) {
     start_date: newStart,
     end_date:   newEnd,
 
+    overrideclientsettings: successor_overrideclientsettings,
+
     // NEW: route/calc/group flags copied into successor
     is_nhsp: successor_is_nhsp,
     autoprocess_hr: successor_autoprocess_hr,
@@ -6694,6 +6760,15 @@ async function handleContractsCloneAndExtend(env, req, contractId) {
     daily_calc_of_invoices: successor_daily_calc_of_invoices,
     group_nightsat_sunbh: successor_group_nightsat_sunbh,
     self_bill: successor_self_bill,
+
+    hr_attach_to_invoice: successor_hr_attach_to_invoice,
+    ts_attach_to_invoice: successor_ts_attach_to_invoice,
+
+    reference_number_required_to_issue_invoice: successor_reference_number_required_to_issue_invoice,
+    send_manual_invoices_to_different_email: successor_send_manual_invoices_to_different_email,
+    manual_invoices_alt_email_address: successor_manual_invoices_alt_email_address,
+
+    weekly_timesheet_source: successor_weekly_timesheet_source,
 
     pay_method_snapshot: ('pay_method_snapshot' in ov) ? ov.pay_method_snapshot : cur.pay_method_snapshot,
     rates_json:          ('rates_json'          in ov) ? ov.rates_json          : (cur.rates_json || {}),
@@ -6707,7 +6782,7 @@ async function handleContractsCloneAndExtend(env, req, contractId) {
     std_hours_json:    successor_std_hours,
 
     bucket_labels_json: ('bucket_labels_json' in ov) ? ov.bucket_labels_json : (cur.bucket_labels_json || null),
-    additional_rates_json: ('additional_rates_json' in ov) ? ov.additional_rates_json : (cur.additional_rates_json || null), // NEW
+    additional_rates_json: ('additional_rates_json' in ov) ? ov.additional_rates_json : (cur.additional_rates_json || null),
 
     // Keep existing contract-level flags as before (no override support unless you add it later)
     auto_invoice: cur.auto_invoice,
@@ -46249,7 +46324,6 @@ async function handleInvoiceBatchGenerateConfirm(env, req) {
   }
 }
 
-
 async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, opts) {
   const enc = encodeURIComponent;
 
@@ -46277,23 +46351,75 @@ async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, o
     return dflt;
   }
 
-  function buildHrReportHTML(inv, header, hrRows) {
-    const safe = (v) => (v == null ? '' : String(v));
-    const h = header || {};
-    const clientName = safe(h.client_name || h.client || '');
-    const invNo = safe(inv.invoice_no || '');
-    const issued = safe(inv.issued_at_utc || '');
+  // Date parsing used for HR/NHSP sorting.
+  // - Supports YYYY-MM-DD, ISO strings, and DD/MM/YYYY.
+  // - Invalid/missing => Infinity (sorted last).
+  function _parseSortDateToMs(v) {
+    if (v == null) return Number.POSITIVE_INFINITY;
+    const s0 = String(v).trim();
+    if (!s0) return Number.POSITIVE_INFINITY;
 
-    const rowsHtml = hrRows.map((r, idx) => {
-      const raw = r.raw_row || {};
-      const date      = safe(r.date || raw.work_date || '');
-      const staff     = safe(raw.staff_name || raw.worker || '');
-      const ward      = safe(raw.ward || '');
-      const start     = safe(raw.start_utc || '');
-      const end       = safe(raw.end_utc || '');
-      const breakMins = safe(raw.break_mins != null ? raw.break_mins : '');
-      const ref       = safe(r.reference || raw.reference || raw.ref_num || '');
-      return `
+    // DD/MM/YYYY
+    const m = s0.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m) {
+      const dd = Number(m[1]), mm = Number(m[2]), yyyy = Number(m[3]);
+      if (dd >= 1 && dd <= 31 && mm >= 1 && mm <= 12 && yyyy >= 1900 && yyyy <= 2100) {
+        const ms = Date.parse(`${yyyy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}T00:00:00Z`);
+        return Number.isFinite(ms) ? ms : Number.POSITIVE_INFINITY;
+      }
+    }
+
+    // YYYY-MM-DD (or ISO)
+    const ms = Date.parse(s0);
+    return Number.isFinite(ms) ? ms : Number.POSITIVE_INFINITY;
+  }
+
+  function _safeGetDateFromAnyRow(raw) {
+    if (!raw || typeof raw !== 'object') return '';
+    // common candidates
+    return (
+      raw.work_date ??
+      raw.WorkDate ??
+      raw.workDate ??
+      raw.date ??
+      raw.Date ??
+      raw.shift_date ??
+      raw.shiftDate ??
+      raw['Work Date'] ??
+      raw['WORK DATE'] ??
+      ''
+    );
+  }
+function buildHrReportHTML(inv, header, hrRows) {
+  const safe = (v) => (v == null ? '' : String(v));
+  const h = header || {};
+  const clientName = safe(h.client_name || h.client || '');
+  const invNo = safe(inv.invoice_no || '');
+  const issued = safe(inv.issued_at_utc || '');
+
+  // ✅ Sort rows oldest→newest by work_date/date; invalid dates last; stable by original idx.
+  const sortedRows = (Array.isArray(hrRows) ? hrRows : [])
+    .map((r, idx) => ({ r, idx }))
+    .sort((a, b) => {
+      const ra = a.r?.raw_row || a.r || {};
+      const rb = b.r?.raw_row || b.r || {};
+      const da = _parseSortDateToMs(a.r?.date || ra.work_date || ra.date || _safeGetDateFromAnyRow(ra));
+      const db = _parseSortDateToMs(b.r?.date || rb.work_date || rb.date || _safeGetDateFromAnyRow(rb));
+      if (da !== db) return da - db;
+      return a.idx - b.idx;
+    })
+    .map(x => x.r);
+
+  const rowsHtml = sortedRows.map((r, idx) => {
+    const raw = r.raw_row || {};
+    const date      = safe(r.date || raw.work_date || raw.date || '');
+    const staff     = safe(raw.staff_name || raw.worker || '');
+    const ward      = safe(raw.ward || '');
+    const start     = safe(raw.start_utc || '');
+    const end       = safe(raw.end_utc || '');
+    const breakMins = safe(raw.break_mins != null ? raw.break_mins : '');
+    const ref       = safe(r.reference || raw.reference || raw.ref_num || '');
+    return `
         <tr>
           <td>${idx + 1}</td>
           <td>${date}</td>
@@ -46305,11 +46431,11 @@ async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, o
           <td>${ref}</td>
         </tr>
       `;
-    }).join('');
+  }).join('');
 
-    const hasRows = hrRows.length > 0;
+  const hasRows = sortedRows.length > 0;
 
-    return `
+  return `
 <!DOCTYPE html>
 <html>
 <head>
@@ -46358,92 +46484,178 @@ async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, o
 </body>
 </html>
     `;
+}
+
+function buildNhspReportHTML(inv, header, nhspData) {
+  const safe = (v) => (v == null ? '' : String(v));
+  const h = header || {};
+  const clientName = safe(h.client_name || h.client || '');
+  const invNo = safe(inv.invoice_no || '');
+  const issued = safe(inv.issued_at_utc || '');
+
+  // Normalize payload into one or more tables.
+  // If we have header_columns, we MUST preserve that exact column order.
+  const tables = [];
+
+  const unwrapRow = (r) => {
+    if (!r) return null;
+    if (r.raw_row && typeof r.raw_row === 'object') return r.raw_row;
+    if (r.raw && typeof r.raw === 'object') return r.raw;
+    return r;
+  };
+
+  if (Array.isArray(nhspData)) {
+    const rows = nhspData.map(unwrapRow).filter(r => r && typeof r === 'object');
+    if (rows.length) tables.push({ header_columns: [], rows });
+  } else if (nhspData && typeof nhspData === 'object') {
+    const tList = Array.isArray(nhspData.tables) ? nhspData.tables : [nhspData];
+    for (const t of tList) {
+      const headerCols = Array.isArray(t?.header_columns) ? t.header_columns.map(safe) : [];
+      const rowsRaw = Array.isArray(t?.rows_json)
+        ? t.rows_json
+        : (Array.isArray(t?.rows) ? t.rows : []);
+      const rows = rowsRaw.map(unwrapRow).filter(r => r && typeof r === 'object');
+      if (rows.length) tables.push({ header_columns: headerCols, rows });
+    }
   }
 
-  function buildNhspReportHTML(inv, header, nhspData) {
-    const safe = (v) => (v == null ? '' : String(v));
-    const h = header || {};
-    const clientName = safe(h.client_name || h.client || '');
-    const invNo = safe(inv.invoice_no || '');
-    const issued = safe(inv.issued_at_utc || '');
+  // Best-effort date extraction for object rows
+  const safeGetDateFromAnyRow = (row) => {
+    if (!row || typeof row !== 'object') return '';
+    const candidates = [
+      row.work_date, row.workDate,
+      row.date, row.Date,
+      row.shift_date, row.shiftDate,
+      row.start_date, row.startDate
+    ];
+    for (const c of candidates) {
+      const s = (c == null ? '' : String(c)).trim();
+      if (s) return s;
+    }
+    return '';
+  };
 
-    // Normalize payload into one or more tables.
-    // If we have header_columns, we MUST preserve that exact column order.
-    // Row order must also be preserved exactly (no sorting).
-    const tables = [];
+  // Parse any date-ish string into ms for sorting.
+  // Invalid or empty => Infinity so these rows are pushed to the end.
+  const parseSortDateToMs = (v) => {
+    const s = (v == null ? '' : String(v)).trim();
+    if (!s) return Number.POSITIVE_INFINITY;
 
-    const unwrapRow = (r) => {
-      if (!r) return null;
-      if (r.raw_row && typeof r.raw_row === 'object') return r.raw_row;
-      if (r.raw && typeof r.raw === 'object') return r.raw;
-      return r;
-    };
-
-    if (Array.isArray(nhspData)) {
-      const rows = nhspData.map(unwrapRow).filter(r => r && typeof r === 'object');
-      if (rows.length) tables.push({ header_columns: [], rows });
-    } else if (nhspData && typeof nhspData === 'object') {
-      const tList = Array.isArray(nhspData.tables) ? nhspData.tables : [nhspData];
-      for (const t of tList) {
-        const headerCols = Array.isArray(t?.header_columns) ? t.header_columns.map(safe) : [];
-        const rowsRaw = Array.isArray(t?.rows_json)
-          ? t.rows_json
-          : (Array.isArray(t?.rows) ? t.rows : []);
-        const rows = rowsRaw.map(unwrapRow).filter(r => r && typeof r === 'object');
-        if (rows.length) tables.push({ header_columns: headerCols, rows });
-      }
+    // YYYY-MM-DD
+    const mYmd = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (mYmd) {
+      const y = Number(mYmd[1]), mo = Number(mYmd[2]) - 1, d = Number(mYmd[3]);
+      const t = Date.UTC(y, mo, d);
+      return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
     }
 
-    const hasTables = tables.length > 0;
+    // DD/MM/YYYY or DD/MM/YY
+    const mDmy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
+    if (mDmy) {
+      const dd = Number(mDmy[1]), mo = Number(mDmy[2]) - 1;
+      let y = Number(mDmy[3]);
+      if (mDmy[3].length === 2) y = (y >= 70 ? 1900 + y : 2000 + y);
+      const t = Date.UTC(y, mo, dd);
+      return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
+    }
 
-    const renderTable = (t, idx) => {
-      const headerCols = Array.isArray(t.header_columns) ? t.header_columns : [];
+    // Fallback: Date parse
+    const dt = new Date(s);
+    const t = dt.getTime();
+    return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
+  };
 
-      // Prefer rendering using raw_columns (which maps 1:1 to header_columns).
-      const firstWithRawCols = t.rows.find(r => Array.isArray(r.raw_columns));
-      const rawLen = firstWithRawCols ? firstWithRawCols.raw_columns.length : 0;
+  // If table rows are raw_columns, attempt to locate a date-like header so we can sort.
+  const findDateColIndex = (cols) => {
+    if (!Array.isArray(cols) || !cols.length) return -1;
+    const lc = cols.map(c => String(c || '').toLowerCase());
+    // prefer "work date" then "date"
+    let idx = lc.findIndex(s => s.includes('work') && s.includes('date'));
+    if (idx >= 0) return idx;
+    idx = lc.findIndex(s => s === 'date' || s.includes(' date'));
+    if (idx >= 0) return idx;
+    idx = lc.findIndex(s => s.includes('date'));
+    return idx;
+  };
 
-      // Column labels:
-      //  - If header_columns exist, use them exactly as imported.
-      //  - Else, if raw_columns exist, use generic Column 1..N (still preserves column ORDER).
-      //  - Else, fall back to object keys (best-effort).
-      const columns = (headerCols && headerCols.length)
-        ? headerCols
-        : (rawLen > 0
-            ? Array.from({ length: rawLen }, (_, i) => `Column ${i + 1}`)
-            : Object.keys(t.rows[0] || {}));
+  const sortRowsByDate = (headerCols, rows) => {
+    const cols = Array.isArray(headerCols) ? headerCols : [];
+    const dateIdx = findDateColIndex(cols);
 
-      const headerHtml = `<tr>${columns.map(col => `<th>${escapeHtml(safe(col))}</th>`).join('')}</tr>`;
+    return rows.map((r, idx) => ({ r, idx })).sort((a, b) => {
+      const ra = a.r;
+      const rb = b.r;
 
-      const rowsHtml = t.rows.map(r => {
-        let cells = [];
+      let da = '';
+      let db = '';
 
-        if (Array.isArray(r.raw_columns)) {
-          const arr = r.raw_columns;
-          for (let i = 0; i < columns.length; i++) {
-            const v = (i < arr.length) ? arr[i] : '';
-            cells.push(`<td>${escapeHtml(safe(v))}</td>`);
-          }
-        } else {
-          for (const col of columns) {
-            cells.push(`<td>${escapeHtml(safe(r?.[col]))}</td>`);
-          }
+      if (Array.isArray(ra?.raw_columns) && dateIdx >= 0) da = ra.raw_columns[dateIdx] ?? '';
+      else da = safeGetDateFromAnyRow(ra);
+
+      if (Array.isArray(rb?.raw_columns) && dateIdx >= 0) db = rb.raw_columns[dateIdx] ?? '';
+      else db = safeGetDateFromAnyRow(rb);
+
+      const ta = parseSortDateToMs(da);
+      const tb = parseSortDateToMs(db);
+      if (ta !== tb) return ta - tb;
+      return a.idx - b.idx; // stable
+    }).map(x => x.r);
+  };
+
+  for (const t of tables) {
+    t.rows = sortRowsByDate(t.header_columns, t.rows);
+  }
+
+  const hasTables = tables.length > 0;
+
+  const renderTable = (t, idx) => {
+    const headerCols = Array.isArray(t.header_columns) ? t.header_columns : [];
+
+    // Prefer rendering using raw_columns (which maps 1:1 to header_columns).
+    const firstWithRawCols = t.rows.find(r => Array.isArray(r.raw_columns));
+    const rawLen = firstWithRawCols ? firstWithRawCols.raw_columns.length : 0;
+
+    // Column labels:
+    //  - If header_columns exist, use them exactly as imported.
+    //  - Else, if raw_columns exist, use generic Column 1..N (still preserves column ORDER).
+    //  - Else, fall back to object keys (best-effort).
+    const columns = (headerCols && headerCols.length)
+      ? headerCols
+      : (rawLen > 0
+          ? Array.from({ length: rawLen }, (_, i) => `Column ${i + 1}`)
+          : Object.keys(t.rows[0] || {}));
+
+    const headerHtml = `<tr>${columns.map(col => `<th>${escapeHtml(safe(col))}</th>`).join('')}</tr>`;
+
+    const rowsHtml = t.rows.map(r => {
+      let cells = [];
+
+      if (Array.isArray(r.raw_columns)) {
+        const arr = r.raw_columns;
+        for (let i = 0; i < columns.length; i++) {
+          const v = (i < arr.length) ? arr[i] : '';
+          cells.push(`<td>${escapeHtml(safe(v))}</td>`);
         }
+      } else {
+        for (const col of columns) {
+          cells.push(`<td>${escapeHtml(safe(r?.[col]))}</td>`);
+        }
+      }
 
-        return `<tr>${cells.join('')}</tr>`;
-      }).join('');
+      return `<tr>${cells.join('')}</tr>`;
+    }).join('');
 
-      const sep = (idx > 0) ? `<div class="page-break"></div>` : '';
+    const sep = (idx > 0) ? `<div class="page-break"></div>` : '';
 
-      return `${sep}
+    return `${sep}
         <table class="nhsp">
           <thead>${headerHtml}</thead>
           <tbody>${rowsHtml}</tbody>
         </table>
       `;
-    };
+  };
 
-    return `
+  return `
 <!DOCTYPE html>
 <html>
 <head>
@@ -46501,7 +46713,688 @@ async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, o
 </body>
 </html>
     `;
+}
+
+// ==========================================================
+// UPDATED: buildHTML (render FREEFORM reference rows as single-column list/table)
+// ==========================================================
+function buildHTML(payload) {
+  const {
+    header = {},
+    meta: payloadMeta = {},
+    invoice_no = "",
+    issued_at_utc,
+    due_at_utc,
+    totals = { subtotal_ex_vat: 0, vat_amount: 0, total_inc_vat: 0 },
+    items = [],
+    reference_rows = []
+  } = payload || {};
+
+  // Snapshot fields (populated by your issuing worker)
+  const clientName = pick(header, "client_name", "");
+  const clientAddress = (pick(header, "client_invoice_address", "") || "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const vatChargeable = !!pick(header, "vat_chargeable", true);
+  const appliedVatPct = Number(pick(header, "applied_vat_rate_pct", 0)); // NOTE: never displayed
+  const termsDays = pick(header, "payment_terms_days", null);
+  const bank = pick(header, "bank", {}) || {};
+
+  // VAT reg: use settings value if present; otherwise fallback to hard-wired number
+  const DEFAULT_VAT_REG = "363 6805 80";
+  const vatReg = pick(header, "vat_registration_number", "") || DEFAULT_VAT_REG;
+
+  // Stationery (letterhead) — expects PNG/JPG URL (signed) + safe-area margins (mm)
+  const stationeryUrl = pick(header, "stationery_url", ""); // PNG/JPG URL or data: URI
+  const defaultMargins = stationeryUrl
+    ? { top: 32, right: 12, bottom: 20, left: 12 } // safe defaults with artwork
+    : { top: 18, right: 12, bottom: 34, left: 12 }; // plain layout defaults
+  const mgIn = pick(header, "stationery_margins_mm", {}) || {};
+  const mg = {
+    top: Number(pick(mgIn, "top", defaultMargins.top)),
+    right: Number(pick(mgIn, "right", defaultMargins.right)),
+    bottom: Number(pick(mgIn, "bottom", defaultMargins.bottom)),
+    left: Number(pick(mgIn, "left", defaultMargins.left))
+  };
+
+  // Hide transactional footer if your artwork already includes it
+  const hideBankFooter = !!pick(header, "hide_bank_footer", false);
+
+  // Header-level PO only if a single unique PO exists across header + all items
+  const headerPo = pick(header, "po_number", null);
+  const itemPos = items.map((i) => i?.meta?.po_number).filter(Boolean);
+  const uniquePos = Array.from(new Set([...(headerPo ? [headerPo] : []), ...itemPos]));
+  const poNo = uniquePos.length === 1 ? uniquePos[0] : "";
+
+  const showVatCols = vatChargeable && (appliedVatPct > 0 || Number(totals.vat_amount) > 0);
+
+  // ─────────────────────────────────────────────────────────────
+  // Helpers for breakdown rendering (keeps styling consistent)
+  // ─────────────────────────────────────────────────────────────
+  const num = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const round2 = (v) => Math.round(num(v) * 100) / 100;
+  const fmtQty = (v, decimals = 2) => {
+    const n = num(v);
+    if (Math.abs(n - Math.round(n)) < 1e-9) return String(Math.round(n));
+    return n.toFixed(decimals);
+  };
+  const eqRate = (a, b) => {
+    // Compare to 2dp to avoid tiny float drift; rates are normally stored as numeric
+    return round2(a) === round2(b);
+  };
+
+  const getLineTypeNorm = (it) => {
+    const m = it?.meta || {};
+    const s = String(m.line_type_norm || m.line_type || "").toUpperCase();
+    return s;
+  };
+
+  const getTimesheetId = (it) => {
+    return (it && it.timesheet_id != null) ? String(it.timesheet_id)
+      : (it?.meta?.timesheet_id != null ? String(it.meta.timesheet_id) : null);
+  };
+
+  const isAdjustmentItem = (it) => {
+    const t = getLineTypeNorm(it);
+    const tsId = getTimesheetId(it);
+    return (!tsId || t === "ADJUSTMENT");
+  };
+
+  // Labels (use per-line labels if provided; fallback to defaults)
+  const DEFAULT_LABELS = { day: "Day", night: "Night", sat: "Sat", sun: "Sun", bh: "BH" };
+  const bucketLabelOf = (labels, key) => String((labels && labels[key]) || DEFAULT_LABELS[key] || key);
+
+  // ─────────────────────────────────────────────────────────────
+  // Group items by timesheet_id, keep adjustments separate
+  // ─────────────────────────────────────────────────────────────
+  const groupMap = new Map(); // tsId -> { items: [], metaHint: {} }
+  const adjustments = [];
+
+  for (const it of (items || [])) {
+    if (isAdjustmentItem(it)) {
+      adjustments.push(it);
+      continue;
+    }
+    const tsId = getTimesheetId(it);
+    if (!tsId) {
+      adjustments.push(it);
+      continue;
+    }
+    if (!groupMap.has(tsId)) groupMap.set(tsId, { tsId, items: [] });
+    groupMap.get(tsId).items.push(it);
   }
+
+  // Sort groups deterministically by week ending then candidate
+  const groups = Array.from(groupMap.values()).sort((a, b) => {
+    const aMeta = (a.items.find(x => getLineTypeNorm(x) === "HOURS")?.meta) || a.items[0]?.meta || {};
+    const bMeta = (b.items.find(x => getLineTypeNorm(x) === "HOURS")?.meta) || b.items[0]?.meta || {};
+    const awe = String(aMeta.week_ending_date || aMeta.week_ending || aMeta.weekEnding || "");
+    const bwe = String(bMeta.week_ending_date || bMeta.week_ending || bMeta.weekEnding || "");
+    if (awe !== bwe) return awe < bwe ? 1 : -1; // desc
+    const ac = String(aMeta.candidate_display || aMeta.candidate || "");
+    const bc = String(bMeta.candidate_display || bMeta.candidate || "");
+    if (ac !== bc) return ac.localeCompare(bc);
+    return String(a.tsId).localeCompare(String(b.tsId));
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // Build breakdown rows for a single timesheet group
+  // Unit Description | Quantity | Unit Charge (ex VAT) | Charge (ex VAT)
+  // ─────────────────────────────────────────────────────────────
+  const groupBreakdownTableHtml = (grp) => {
+    const its = grp.items || [];
+    const hoursItem = its.find((x) => getLineTypeNorm(x) === "HOURS") || null;
+
+    // meta for display/header
+    const metaBase = (hoursItem?.meta || its[0]?.meta || {}) || {};
+    const labels = (metaBase.bucket_labels && typeof metaBase.bucket_labels === "object") ? metaBase.bucket_labels : DEFAULT_LABELS;
+
+    // Pull bucket hours/rates from meta (these are merged by _renderInvoiceBundleAndStore)
+    const hDay = num(metaBase.hours_day);
+    const hNgt = num(metaBase.hours_night);
+    const hSat = num(metaBase.hours_sat);
+    const hSun = num(metaBase.hours_sun);
+    const hBh  = num(metaBase.hours_bh);
+
+    const rDay = num(metaBase.charge_day);
+    const rNgt = num(metaBase.charge_night);
+    const rSat = num(metaBase.charge_sat);
+    const rSun = num(metaBase.charge_sun);
+    const rBh  = num(metaBase.charge_bh);
+
+    const groupFlag = !!pick(payloadMeta, "group_nightsat_sunbh", false);
+    const canMerge = groupFlag && eqRate(rNgt, rSat) && eqRate(rSun, rBh);
+
+    const rows = [];
+
+    const pushRow = (desc, qty, unit, charge) => {
+      const q = num(qty);
+      const u = num(unit);
+      const c = round2(charge);
+      // Requirement: hide zero-subtotal rows, but show positive and negative rows.
+      if (c === 0) return;
+      rows.push({ desc: String(desc || ""), qty: q, unit: u, charge: c });
+    };
+
+    // HOURS breakdown
+    if (hoursItem) {
+      if (canMerge) {
+        const nightSatQty = hNgt + hSat;
+        const sunBhQty = hSun + hBh;
+        pushRow(bucketLabelOf(labels, "day"), hDay, rDay, hDay * rDay);
+        pushRow(`${bucketLabelOf(labels, "night")}/${bucketLabelOf(labels, "sat")}`, nightSatQty, rNgt, nightSatQty * rNgt);
+        pushRow(`${bucketLabelOf(labels, "sun")}/${bucketLabelOf(labels, "bh")}`, sunBhQty, rSun, sunBhQty * rSun);
+      } else {
+        pushRow(bucketLabelOf(labels, "day"), hDay, rDay, hDay * rDay);
+        pushRow(bucketLabelOf(labels, "night"), hNgt, rNgt, hNgt * rNgt);
+        pushRow(bucketLabelOf(labels, "sat"), hSat, rSat, hSat * rSat);
+        pushRow(bucketLabelOf(labels, "sun"), hSun, rSun, hSun * rSun);
+        pushRow(bucketLabelOf(labels, "bh"), hBh, rBh, hBh * rBh);
+      }
+    }
+
+    // Additional rates / mileage / expenses (non-hours)
+    for (const it of its) {
+      const t = getLineTypeNorm(it);
+      if (t === "HOURS") continue;
+      if (t === "ADJUSTMENT") continue;
+
+      const m = it.meta || {};
+      const totalEx = num(it.total_ex_vat);
+
+      // Default label (keep the human-friendly SQL-generated description where available)
+      const unitLabel = String(m.unit_label || it.description || t || "").trim() || t;
+
+      let qty = null;
+      let unitCharge = null;
+
+      // Mileage (miles + rate)
+      if (t === "MILEAGE") {
+        if (m?.mileage && m.mileage.mileage_units != null) qty = num(m.mileage.mileage_units);
+        else if (m.mileage_units != null) qty = num(m.mileage_units);
+        else if (m.qty != null) qty = num(m.qty);
+
+        if (m?.mileage && m.mileage.charge_rate != null) unitCharge = num(m.mileage.charge_rate);
+        else if (m.unit_charge_ex_vat != null) unitCharge = num(m.unit_charge_ex_vat);
+      }
+
+      // Additional units/rates
+      else if (t.startsWith("ADDITIONAL_RATE")) {
+        if (m?.units && m.units.unit_count != null) qty = num(m.units.unit_count);
+        else if (m.unit_count != null) qty = num(m.unit_count);
+        else if (m.qty != null) qty = num(m.qty);
+
+        if (m?.units && m.units.charge_rate != null) unitCharge = num(m.units.charge_rate);
+        else if (m.unit_charge_ex_vat != null) unitCharge = num(m.unit_charge_ex_vat);
+      }
+
+      // Expenses (travel / accommodation / other etc.)
+      else if (t.startsWith("EXPENSE")) {
+        qty = (m.qty != null) ? num(m.qty) : 1;
+        unitCharge = (m.unit_charge_ex_vat != null)
+          ? num(m.unit_charge_ex_vat)
+          : (qty !== 0 ? totalEx / qty : totalEx);
+      }
+
+      // Generic fallback
+      else {
+        qty = (m.qty != null) ? num(m.qty) : 1;
+        unitCharge = (m.unit_charge_ex_vat != null)
+          ? num(m.unit_charge_ex_vat)
+          : (qty !== 0 ? totalEx / qty : totalEx);
+      }
+
+      if (qty == null) qty = 1;
+
+      // Requirement: skip zero-qty rows (but DO show negative qty/charges)
+      if (round2(qty) === 0) continue;
+
+      if (unitCharge == null) {
+        unitCharge = (qty !== 0) ? (totalEx / qty) : totalEx;
+      }
+
+      pushRow(unitLabel, qty, unitCharge, totalEx);
+    }
+
+    if (!rows.length) return "";
+
+    const head = `
+      <table class="breakdown">
+        <thead>
+          <tr>
+            <th class="b-desc">Unit Description</th>
+            <th class="b-qty">Quantity</th>
+            <th class="b-unit">Unit Charge (ex VAT)</th>
+            <th class="b-charge">Charge (ex VAT)</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    const body = rows.map(r => `
+      <tr>
+        <td class="b-desc">${escapeHtml(r.desc)}</td>
+        <td class="b-qty mono">${fmtQty(r.qty, 2)}</td>
+        <td class="b-unit mono">${fmtGBP(r.unit)}</td>
+        <td class="b-charge mono">${fmtGBP(r.charge)}</td>
+      </tr>
+    `).join("");
+
+    const tail = `
+        </tbody>
+      </table>
+    `;
+
+    return head + body + tail;
+  };
+
+  // ─────────────────────────────────────────────────────────────
+  // Booking reference rows (manifest.reference_rows)
+  // Rendered under each timesheet group (never show timesheet_id)
+  // - Structured rows (SEGMENT/DAY/TIMESHEET) => Day/Start/End/Reference table
+  // - Freeform rows (no day/start/end)        => single-column Reference table
+  // ─────────────────────────────────────────────────────────────
+  const refsByTsId = new Map();
+  for (const r of (reference_rows || [])) {
+    const tsId = (r && r.timesheet_id != null) ? String(r.timesheet_id) : null;
+    if (!tsId) continue;
+    if (!refsByTsId.has(tsId)) refsByTsId.set(tsId, []);
+    refsByTsId.get(tsId).push(r);
+  }
+
+  const refsTableHtmlForTs = (tsId) => {
+    const refs = refsByTsId.get(String(tsId || "")) || [];
+    if (!refs.length) return "";
+
+    const isStructured = (r) => {
+      const d = (r?.day_ymd != null) ? String(r.day_ymd).trim() : '';
+      const st = (r?.start_utc != null) ? String(r.start_utc).trim() : '';
+      const en = (r?.end_utc != null) ? String(r.end_utc).trim() : '';
+      return !!(d || st || en);
+    };
+
+    const structured = [];
+    const freeform = [];
+    refs.forEach((r) => {
+      (isStructured(r) ? structured : freeform).push(r);
+    });
+
+    const hasRefTxt = (r) => (r?.current_reference != null) && String(r.current_reference).trim();
+    const refText = (r) => hasRefTxt(r) ? String(r.current_reference).trim() : (r?.is_required ? "MISSING" : "—");
+    const refCls = (r) => (!hasRefTxt(r) && r?.is_required) ? "ref-missing" : "";
+
+    // Stable render (do not re-sort; reference_rows are already filtered and ordered server-side)
+    const structuredTable = structured.length ? (() => {
+      const rowsHtml = structured.map((r) => {
+        const day = r?.day_ymd ? fmtDateGB(r.day_ymd) : "";
+        const st = r?.start_utc ? fmtUKTime(r.start_utc) : "";
+        const en = r?.end_utc ? fmtUKTime(r.end_utc) : "";
+        return `
+        <tr>
+          <td class="r-day mono">${escapeHtml(day)}</td>
+          <td class="r-time mono">${escapeHtml(st)}</td>
+          <td class="r-time mono">${escapeHtml(en)}</td>
+          <td class="r-ref mono ${refCls(r)}">${escapeHtml(refText(r))}</td>
+        </tr>
+      `;
+      }).join("");
+
+      return `
+        <table class="refs">
+          <thead>
+            <tr>
+              <th class="r-day">Day</th>
+              <th class="r-time">Start</th>
+              <th class="r-time">End</th>
+              <th class="r-ref">Reference</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+      `;
+    })() : "";
+
+    const freeformTable = freeform.length ? (() => {
+      const rowsHtml = freeform.map((r) => `
+        <tr>
+          <td class="r-ref mono ${refCls(r)}">${escapeHtml(refText(r))}</td>
+        </tr>
+      `).join("");
+
+      return `
+        <table class="refs refs-freeform">
+          <thead>
+            <tr>
+              <th class="r-ref">Reference</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+      `;
+    })() : "";
+
+    return `
+      <div class="refs-wrap">
+        <div class="refs-title">Booking references</div>
+        ${structuredTable || ""}
+        ${freeformTable ? `<div style="height:6px;"></div>${freeformTable}` : ""}
+      </div>
+    `;
+  };
+
+  // ─────────────────────────────────────────────────────────────
+  // Build main table rows:
+  // - One row per timesheet group (with nested breakdown table)
+  // - Optional adjustments section at the end
+  // ─────────────────────────────────────────────────────────────
+  const groupRowsHtml = groups.map((grp, idx) => {
+    const its = grp.items || [];
+    const metaFirst = (its.find(x => getLineTypeNorm(x) === "HOURS")?.meta) || its[0]?.meta || {};
+    const we = metaFirst.week_ending_date || metaFirst.week_ending || metaFirst.weekEnding || null;
+
+    const sublineParts = [
+      metaFirst.candidate_display || metaFirst.candidate || null,
+      metaFirst.role || metaFirst.job_title || null,
+      metaFirst.hospital || metaFirst.hospital_norm || null,
+      metaFirst.ward || metaFirst.ward_norm || null,
+      we ? `W/E ${fmtDateGB(we)}` : null,
+      metaFirst.po_number ? `PO ${metaFirst.po_number}` : null
+    ].filter(Boolean).join(" • ");
+
+    const grpEx = round2(its.reduce((a, it) => a + num(it.total_ex_vat), 0));
+    const grpVat = round2(its.reduce((a, it) => a + num(it.vat_amount), 0));
+    const grpInc = round2(its.reduce((a, it) => a + num(it.total_inc_vat), 0));
+
+    const title = escapeHtml(metaFirst.candidate_display || metaFirst.candidate || `Timesheet ${idx + 1}`);
+    const breakdown = groupBreakdownTableHtml(grp);
+    const refsHtml = refsTableHtmlForTs(grp.tsId);
+
+    return `
+      <tr class="line">
+        <td class="desc">
+          <div class="desc-title">${title}</div>
+          <div class="desc-meta">
+            ${escapeHtml(sublineParts)}
+            ${breakdown ? `<div class="breakdown-wrap">${breakdown}</div>` : ""}
+            ${refsHtml || ""}
+          </div>
+        </td>
+        <td class="money exvat">${fmtGBP(grpEx)}</td>
+        ${showVatCols ? `<td class="money vat">${fmtGBP(grpVat)}</td>` : ""}
+        <td class="money totalinc">${fmtGBP(grpInc)}</td>
+      </tr>
+    `;
+  }).join("");
+
+  const adjustmentsRowsHtml = (adjustments && adjustments.length)
+    ? (() => {
+        const head = `
+          <tr class="section-row">
+            <td class="desc" colspan="${showVatCols ? 4 : 3}">
+              <div class="section-title">Adjustments</div>
+            </td>
+          </tr>
+        `;
+
+        const rows = adjustments.map((it, idx) => {
+          const meta = it.meta || {};
+          const desc = escapeHtml(it.description || meta.unit_label || `Adjustment ${idx + 1}`);
+          const sub = [
+            meta.po_number ? `PO ${meta.po_number}` : null
+          ].filter(Boolean).join(" • ");
+
+          return `
+            <tr class="line">
+              <td class="desc">
+                <div class="desc-title">${desc}</div>
+                ${sub ? `<div class="desc-meta">${escapeHtml(sub)}</div>` : ""}
+              </td>
+              <td class="money exvat">${fmtGBP(it.total_ex_vat)}</td>
+              ${showVatCols ? `<td class="money vat">${fmtGBP(it.vat_amount)}</td>` : ""}
+              <td class="money totalinc">${fmtGBP(it.total_inc_vat)}</td>
+            </tr>
+          `;
+        }).join("");
+
+        return head + rows;
+      })()
+    : "";
+
+  const lineRows = (groupRowsHtml || adjustmentsRowsHtml)
+    ? (groupRowsHtml + adjustmentsRowsHtml)
+    : "";
+
+  // Build full HTML (stationery background + reserved margins + fixed footer)
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Invoice ${escapeHtml(invoice_no || "")}</title>
+  <style>
+    /* Reserve safe areas so content never overlaps header/footer artwork */
+    @page { size: A4; margin: ${mg.top}mm ${mg.right}mm ${mg.bottom}mm ${mg.left}mm; }
+
+    html, body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+      color: #111;
+      font-size: 11px; /* fixed size per spec */
+      line-height: 1.35;
+      -webkit-print-color-adjust: exact;
+    }
+
+    /* Stationery (full page) */
+    .stationery {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      background-repeat: no-repeat;
+      background-position: center;
+      background-size: cover; /* A4 PNG should fill edge-to-edge */
+      opacity: 1;
+      pointer-events: none;
+    }
+
+    .wrap { position: relative; z-index: 1; width: 100%; }
+
+    .header {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .title { font-size: 20px; font-weight: 700; letter-spacing: .5px; }
+    .muted { color: #666; }
+    .mono { font-variant-numeric: tabular-nums; }
+    .panel { border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; }
+    .billto-title { font-weight: 600; margin-bottom: 4px; }
+    .billto { white-space: pre-wrap; }
+
+    .meta-table { width: 100%; border-collapse: collapse; }
+    .meta-table th { text-align: left; font-weight: 600; padding: 0 0 2px 0; }
+    .meta-table td { padding: 2px 0; }
+
+    .lines {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .lines thead th {
+      background: #f9fafb;
+      padding: 8px 10px;
+      text-align: left;
+      font-weight: 600;
+    }
+    .lines th, .lines td {
+      border: 1px solid #e5e7eb;  /* full grid */
+      padding: 8px 10px;
+      vertical-align: top;
+    }
+    .lines thead th.money, .lines td.money { text-align: right; }
+    .desc-title { font-weight: 600; margin-bottom: 2px; }
+    .desc-meta { color: #555; }
+    .money { font-variant-numeric: tabular-nums; }
+
+    .lines tfoot td { background: #fcfcfd; font-weight: 600; }
+    .lines tfoot .label { text-align: right; color: #333; font-weight: 600; }
+
+    /* New: neat nested breakdown table (keeps existing styling palette) */
+    .breakdown-wrap { margin-top: 6px; }
+    table.breakdown {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      overflow: hidden;
+      font-size: 10px;
+      background: #fff;
+    }
+    table.breakdown th, table.breakdown td {
+      border: 1px solid #e5e7eb;
+      padding: 6px 8px;
+      vertical-align: top;
+    }
+    table.breakdown thead th {
+      background: #f9fafb;
+      font-weight: 600;
+      text-align: left;
+    }
+    table.breakdown .b-qty,
+    table.breakdown .b-unit,
+    table.breakdown .b-charge { text-align: right; white-space: nowrap; }
+    table.breakdown .b-desc { text-align: left; }
+
+    /* Booking references table */
+    .refs-wrap { margin-top: 6px; }
+    .refs-title { font-weight: 600; margin: 2px 0 4px; color: #333; }
+    table.refs {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      overflow: hidden;
+      font-size: 10px;
+      background: #fff;
+    }
+    table.refs th, table.refs td {
+      border: 1px solid #e5e7eb;
+      padding: 6px 8px;
+      vertical-align: top;
+    }
+    table.refs thead th {
+      background: #f9fafb;
+      font-weight: 600;
+      text-align: left;
+    }
+    table.refs .r-day { width: 90px; white-space: nowrap; }
+    table.refs .r-time { width: 60px; white-space: nowrap; text-align: right; }
+    table.refs .r-ref { text-align: left; }
+    table.refs td.r-time { text-align: right; }
+    table.refs.refs-freeform .r-ref { width: auto; }
+    .ref-missing { color: #b91c1c; font-weight: 700; }
+
+    /* New: adjustments section header */
+    .section-row td {
+      background: #f9fafb;
+      border-left: 1px solid #e5e7eb;
+      border-right: 1px solid #e5e7eb;
+    }
+    .section-title { font-weight: 700; color: #333; }
+
+    /* Transactional footer pinned above bottom margin */
+    .footer {
+      position: fixed;
+      left: ${mg.left}mm; right: ${mg.right}mm; bottom: ${mg.bottom}mm;
+      font-size: 10px; color: #333;
+      display: ${hideBankFooter ? "none" : "grid"};
+      grid-template-columns: 2fr 1fr; gap: 12px;
+    }
+    .right { text-align: right; }
+  </style>
+</head>
+<body>
+  ${stationeryUrl ? `<div class="stationery" style="background-image:url('${escapeUrl(stationeryUrl)}');"></div>` : ""}
+
+  <div class="wrap">
+    <div class="header">
+      <div>
+        <div class="title">INVOICE ${invoice_no ? `<span class="muted mono">#${escapeHtml(invoice_no)}</span>` : ""}</div>
+        <div class="panel" style="margin-top:8px;">
+          <div class="billto-title">Bill To</div>
+          <div class="billto"><b>${escapeHtml(clientName)}</b>${clientAddress.length ? `<br>${clientAddress.map(escapeHtml).join("<br>")}` : ""}</div>
+        </div>
+      </div>
+      <div class="panel">
+        <table class="meta-table">
+          <tr><th>Issue date</th><td class="mono">${fmtDateGB(issued_at_utc)}</td></tr>
+          <tr><th>Due date</th><td class="mono">${fmtDateGB(due_at_utc)}</td></tr>
+          ${termsDays != null ? `<tr><th>Payment terms</th><td class="mono">${termsDays} days</td></tr>` : ""}
+          ${poNo ? `<tr><th>PO Number</th><td class="mono">${escapeHtml(poNo)}</td></tr>` : ""}
+          <!-- VAT % intentionally NOT displayed -->
+        </table>
+      </div>
+    </div>
+
+    <table class="lines">
+      <thead>
+        <tr>
+          <th>Description</th>
+          <th class="money">Ex VAT</th>
+          ${showVatCols ? `<th class="money">VAT</th>` : ""}
+          <th class="money">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${lineRows || `<tr><td colspan="${showVatCols ? 4 : 3}">No lines.</td></tr>`}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td class="label">Subtotal (ex VAT)</td>
+          <td class="money mono">${fmtGBP(totals.subtotal_ex_vat)}</td>
+          ${showVatCols ? `<td></td>` : ""}
+          <td></td>
+        </tr>
+        ${showVatCols ? `
+        <tr>
+          <td class="label">VAT</td>
+          <td></td>
+          <td class="money mono">${fmtGBP(totals.vat_amount)}</td>
+          <td></td>
+        </tr>` : ""}
+        <tr>
+          <td class="label"><b>Total due</b></td>
+          <td></td>
+          ${showVatCols ? `<td></td>` : ""}
+          <td class="money mono"><b>${fmtGBP(totals.total_inc_vat)}</b></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <div class="footer">
+    <div>
+      <div><b>BACS Payment Details</b></div>
+      <div>Banker: <span class="mono">${escapeHtml(pick(bank, "name", ""))}</span></div>
+      <div>Sort Code: <span class="mono">${escapeHtml(pick(bank, "sort_code", ""))}</span> &nbsp;&nbsp; Account No.: <span class="mono">${escapeHtml(pick(bank, "account_number", ""))}</span></div>
+    </div>
+    <div class="right">
+      ${vatReg ? `<div>VAT Reg: <b class="mono">${escapeHtml(vatReg)}</b></div>` : ""}
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
 
 
   // Helpers local to this function
@@ -46850,8 +47743,7 @@ async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, o
     }
 
     // Optional NHSP breakdown report
-    // Must preserve import column order + row order (render exactly as imported).
-    let nhspBytes = null
+    let nhspBytes = null;
     {
       const nhspTables = [];
 
@@ -46906,22 +47798,52 @@ async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, o
       }
     }
 
-    // Merge PDFs
+    // ==========================================================
+    // Merge PDFs (UPDATED ORDER):
+    // 1) Invoice
+    // 2) Timesheet PDFs (canonical, if tsAttach)
+    // 3) Manual/override Timesheet PDFs (always when present)
+    // 4) HR report (if present)
+    // 5) NHSP report (if present)
+    // 6) Evidence PDFs (timesheet evidence + other evidence)
+    // ==========================================================
     const merged = await PDFDocument.create();
+
+    // 1) Invoice
     const invDoc = await PDFDocument.load(invoicePdfU8);
     (await merged.copyPages(invDoc, invDoc.getPageIndices())).forEach(p => merged.addPage(p));
 
+    // 2) Timesheet PDFs (canonical)
+    let attachedTsCount = 0;
+    if (tsAttach) {
+      for (const b of tsBytesList) {
+        const doc = await PDFDocument.load(b);
+        (await merged.copyPages(doc, doc.getPageIndices())).forEach(p => merged.addPage(p));
+        attachedTsCount++;
+      }
+    }
+
+    // 3) Manual/override Timesheet PDFs (always included when present)
+    let attachedManualTsCount = 0;
+    for (const b of manualTsBytesList) {
+      const doc = await PDFDocument.load(b);
+      (await merged.copyPages(doc, doc.getPageIndices())).forEach(p => merged.addPage(p));
+      attachedManualTsCount++;
+    }
+
+    // 4) HR report
     if (hrBytes?.length) {
       const doc = await PDFDocument.load(hrBytes);
       (await merged.copyPages(doc, doc.getPageIndices())).forEach(p => merged.addPage(p));
     }
 
+    // 5) NHSP report
     if (nhspBytes?.length) {
       const doc = await PDFDocument.load(nhspBytes);
       (await merged.copyPages(doc, doc.getPageIndices())).forEach(p => merged.addPage(p));
     }
 
-    // Evidence PDFs (timesheet evidence + other evidence) must be appended before timesheet PDFs.
+    // 6) Evidence PDFs (timesheet evidence + other evidence)
     let attachedTimesheetEvidenceCount = 0;
     for (const b of timesheetEvidenceBytesList) {
       const doc = await PDFDocument.load(b);
@@ -46934,22 +47856,6 @@ async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, o
       const doc = await PDFDocument.load(b);
       (await merged.copyPages(doc, doc.getPageIndices())).forEach(p => merged.addPage(p));
       attachedEvidenceCount++;
-    }
-
-    let attachedTsCount = 0;
-    if (tsAttach) {
-      for (const b of tsBytesList) {
-        const doc = await PDFDocument.load(b);
-        (await merged.copyPages(doc, doc.getPageIndices())).forEach(p => merged.addPage(p));
-        attachedTsCount++;
-      }
-    }
-
-    let attachedManualTsCount = 0;
-    for (const b of manualTsBytesList) {
-      const doc = await PDFDocument.load(b);
-      (await merged.copyPages(doc, doc.getPageIndices())).forEach(p => merged.addPage(p));
-      attachedManualTsCount++;
     }
 
     const combinedU8 = await merged.save();
@@ -46967,9 +47873,9 @@ async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, o
         headers: sbHeaders(env),
         body: JSON.stringify({
           invoice_pdf_r2_key: pdfKey,
-          invoice_pdf_generated_at_utc: nowIso,   // ✅ NEW
+          invoice_pdf_generated_at_utc: nowIso,
           paper_ts_r2_manifest: docsKeys,
-          updated_at: nowIso,                     // keep consistent with generated_at
+          updated_at: nowIso,
         }),
       }
     );
@@ -46989,8 +47895,6 @@ async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, o
     return { ok: false, error: "Failed to render invoice bundle" };
   }
 }
-
-
 
 
 async function handleInvoiceRender(env, req, invoiceId) {
@@ -47115,7 +48019,7 @@ async function handleInvoiceEmail(env, req, invoiceId) {
     const clientId = inv?.client_id || null;
     if (!clientId) return withCORS(env, req, badRequest('Invoice client_id missing'));
 
-    // Load latest client_settings (for alternate manual-adjustment email routing)
+    // Load latest client_settings (fallback behaviour when no contract override applies)
     let cs = null;
     try {
       const { rows: csRows } = await sbFetch(
@@ -47135,8 +48039,10 @@ async function handleInvoiceEmail(env, req, invoiceId) {
       ? cs.manual_invoices_alt_email_address.trim()
       : null;
 
-    // Determine whether THIS invoice relates to a manual/QR adjustment timesheet (kept as-is)
+    // Determine whether THIS invoice relates to a manual/QR adjustment timesheet,
+    // and resolve any contract-level manual invoice email override(s).
     let hasManualOrQrAdjustment = false;
+    const contractAltEmails = new Map(); // email -> Set(contract_id)
 
     try {
       const { rows: lineRows } = await sbFetch(
@@ -47161,7 +48067,7 @@ async function handleInvoiceEmail(env, req, invoiceId) {
             `${env.SUPABASE_URL}/rest/v1/timesheets` +
               `?timesheet_id=in.(${chunk.map(enc).join(',')})` +
               `&is_current=eq.true` +
-              `&select=timesheet_id,submission_mode,sheet_scope,qr_status,qr_token,is_adjustment`
+              `&select=timesheet_id,submission_mode,sheet_scope,qr_status,qr_token,is_adjustment,contract_id`
           );
           for (const t of (tsRows || [])) {
             if (t && t.timesheet_id) tsById.set(String(t.timesheet_id), t);
@@ -47169,16 +48075,43 @@ async function handleInvoiceEmail(env, req, invoiceId) {
         }
 
         const cwAdjSet = new Set();
+        const cwContractByTsId = new Map();
         for (let i = 0; i < tsIds.length; i += chunkSize) {
           const chunk = tsIds.slice(i, i + chunkSize);
           const { rows: cwRows } = await sbFetch(
             env,
             `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
               `?timesheet_id=in.(${chunk.map(enc).join(',')})` +
-              `&select=timesheet_id,is_adjustment`
+              `&select=timesheet_id,is_adjustment,contract_id`
           );
           for (const w of (cwRows || [])) {
-            if (w && w.timesheet_id && w.is_adjustment === true) cwAdjSet.add(String(w.timesheet_id));
+            if (!w || !w.timesheet_id) continue;
+            const tid = String(w.timesheet_id);
+            if (w.is_adjustment === true) cwAdjSet.add(tid);
+            if (w.contract_id) cwContractByTsId.set(tid, String(w.contract_id));
+          }
+        }
+
+        // Load relevant contracts (for contract-level email override)
+        const contractIds = Array.from(new Set(tsIds.map((tsId) => {
+          const t = tsById.get(String(tsId)) || null;
+          const cid = t?.contract_id || cwContractByTsId.get(String(tsId)) || null;
+          return cid ? String(cid) : null;
+        }).filter(Boolean)));
+
+        const contractById = new Map();
+        if (contractIds.length) {
+          for (let i = 0; i < contractIds.length; i += chunkSize) {
+            const chunk = contractIds.slice(i, i + chunkSize);
+            const { rows: cRows } = await sbFetch(
+              env,
+              `${env.SUPABASE_URL}/rest/v1/contracts` +
+                `?id=in.(${chunk.map(enc).join(',')})` +
+                `&select=id,overrideclientsettings,send_manual_invoices_to_different_email,manual_invoices_alt_email_address`
+            );
+            for (const c of (cRows || [])) {
+              if (c && c.id) contractById.set(String(c.id), c);
+            }
           }
         }
 
@@ -47198,17 +48131,65 @@ async function handleInvoiceEmail(env, req, invoiceId) {
           const isAdj = (isDailyAdj || isWeeklyAdj);
           const isManualOrQr = (isManual || isQrish);
 
-          if (isAdj && isManualOrQr) { hasManualOrQrAdjustment = true; break; }
+          if (!(isAdj && isManualOrQr)) continue;
+
+          hasManualOrQrAdjustment = true;
+
+          const contractId = (t?.contract_id != null && String(t.contract_id))
+            ? String(t.contract_id)
+            : (cwContractByTsId.get(String(tsId)) || null);
+
+          if (!contractId) continue;
+
+          const cRow = contractById.get(String(contractId)) || null;
+
+          // Contract-level override applies only when overrideclientsettings=true AND the manual-email flag is enabled.
+          const contractOverrideEnabled =
+            !!(cRow && cRow.overrideclientsettings === true && cRow.send_manual_invoices_to_different_email === true);
+
+          if (!contractOverrideEnabled) continue;
+
+          const email = (cRow && typeof cRow.manual_invoices_alt_email_address === 'string')
+            ? cRow.manual_invoices_alt_email_address.trim()
+            : '';
+
+          if (!email) {
+            return withCORS(
+              env,
+              req,
+              badRequest(`Contract manual invoice email is enabled but no alternate email address is configured (contract_id=${contractId}).`)
+            );
+          }
+
+          if (!contractAltEmails.has(email)) contractAltEmails.set(email, new Set());
+          contractAltEmails.get(email).add(String(contractId));
         }
       }
     } catch {
       hasManualOrQrAdjustment = false;
+      contractAltEmails.clear();
     }
 
     // Decide recipient
     let to = inv.client?.primary_invoice_email || null;
 
-    if (hasManualOrQrAdjustment && altEnabled) {
+    // Prefer contract-level routing when present
+    if (contractAltEmails.size > 0) {
+      const emails = Array.from(contractAltEmails.keys());
+      if (emails.length > 1) {
+        const details = emails.map((em) => {
+          const ids = Array.from(contractAltEmails.get(em) || []);
+          return `${em} (contracts: ${ids.join(', ')})`;
+        }).join(' ; ');
+        return withCORS(
+          env,
+          req,
+          badRequest(`Multiple contract manual invoice email overrides apply to this invoice and they disagree: ${details}`)
+        );
+      }
+      to = emails[0];
+    } else if (hasManualOrQrAdjustment && altEnabled) {
+      // Fallback: client_settings manual-adjustment routing (legacy behaviour)
       if (!altEmail) {
         return withCORS(env, req, badRequest('Client manual adjustment email is enabled but no alternate email address is configured.'));
       }
@@ -47264,7 +48245,8 @@ async function handleInvoiceEmail(env, req, invoiceId) {
         mail_id: mailId,
         reference: `invoice:${invoiceId}`,
         routing: {
-          used_alt_manual_email: !!(hasManualOrQrAdjustment && altEnabled),
+          used_contract_alt_manual_email: contractAltEmails.size > 0,
+          used_alt_manual_email: !!(contractAltEmails.size === 0 && hasManualOrQrAdjustment && altEnabled),
           has_manual_or_qr_adjustment: !!hasManualOrQrAdjustment
         },
         render: {
@@ -47284,7 +48266,6 @@ async function handleInvoiceEmail(env, req, invoiceId) {
     return withCORS(env, req, serverError('Failed to queue invoice email'));
   }
 }
-
 
 
 async function handleInvoiceDeleteOne(env, req, invoiceId) {
