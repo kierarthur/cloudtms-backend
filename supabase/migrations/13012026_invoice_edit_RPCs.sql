@@ -483,7 +483,6 @@ $$;
 
 
 
-
 create or replace function public.invoice_apply_edits(
   p_invoice_id uuid,
   p_payload jsonb,
@@ -1025,7 +1024,7 @@ v_has_seg_ops :=
           v_ref_seg_id := nullif(btrim(coalesce(v_ref_seg_obj->>'segment_id','')), '');
           if v_ref_seg_id is not null then
             v_ref_sched_key := 'SID:' || v_ref_seg_id;
-            v_ref_sched_map := jsonb_set(v_ref_sched_map, array[v_ref_sched_key], to_jsonb(v_ref_sched_ref), true);
+            v_ref_sched_map := jsonb_set(v_ref_sched_map, array[v_ref_sched_key], case when v_ref_sched_ref is null then 'null'::jsonb else to_jsonb(v_ref_sched_ref) end, true);
             continue;
           end if;
 
@@ -1036,7 +1035,7 @@ v_has_seg_ops :=
           end if;
 
           v_ref_sched_key := 'SE:' || v_ref_seg_start || '|' || v_ref_seg_end;
-          v_ref_sched_map := jsonb_set(v_ref_sched_map, array[v_ref_sched_key], to_jsonb(v_ref_sched_ref), true);
+          v_ref_sched_map := jsonb_set(v_ref_sched_map, array[v_ref_sched_key], case when v_ref_sched_ref is null then 'null'::jsonb else to_jsonb(v_ref_sched_ref) end, true);
         end loop;
 
         v_ref_new_segments := '[]'::jsonb;
