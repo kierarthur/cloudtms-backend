@@ -195,7 +195,7 @@ select
       false
     ) = true
     and coalesce(tf.total_hours, 0) > 0
-    and coalesce(refchk.missing_raw, false) = true
+    and coalesce(refchk.issue_missing_raw, false) = true
   ) as issue_missing_reference,
 
   (
@@ -206,7 +206,7 @@ select
              cs.reference_number_required_to_issue_invoice,
              false
            ) = true
-        then coalesce(refchk.missing_count, 0)
+        then coalesce(refchk.issue_missing_count, 0)
       else 0
     end
   )::int as issue_missing_reference_count
@@ -283,7 +283,9 @@ left join lateral (
 -- compute missing reference boolean + count (independent of require-to-invoice / require-to-issue gates)
 left join lateral (
   with
-  -- SEGMENTS mode: count missing refs for segments that are (a) not already invoiced and (b) net positive
+  -- SEGMENTS mode: we compute two independent counts:
+  --   * missing refs on UNLOCKED positive segments (used for invoicing eligibility)
+  --   * missing refs on LOCKED positive segments (used for issuing invoice eligibility)
   segs as (
     select
       seg,
@@ -312,15 +314,26 @@ left join lateral (
     ) s
     where jsonb_typeof(seg) = 'object'
   ),
-  segs_pos as (
+  segs_pos_unlocked as (
     select *
     from segs
     where locked_by is null
       and (coalesce(hours_sum,0) > 0 or coalesce(charge_ex,0) > 0)
   ),
-  segs_missing as (
+  segs_pos_locked as (
+    select *
+    from segs
+    where locked_by is not null
+      and (coalesce(hours_sum,0) > 0 or coalesce(charge_ex,0) > 0)
+  ),
+  segs_missing_unlocked as (
     select count(*)::int as cnt
-    from segs_pos
+    from segs_pos_unlocked
+    where ref_num is null
+  ),
+  segs_missing_locked as (
+    select count(*)::int as cnt
+    from segs_pos_locked
     where ref_num is null
   ),
 
@@ -388,18 +401,20 @@ left join lateral (
   )
 
   select
+    -- missing_raw / missing_count:
+    -- for SEGMENTS mode, this is the "invoicing" check => UNLOCKED segments only
     (
       case
         when tf.invoice_breakdown_json is not null
          and jsonb_typeof(tf.invoice_breakdown_json) = 'object'
          and upper(coalesce(tf.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
-         and coalesce((select cnt from segs_missing),0) > 0
+         and coalesce((select cnt from segs_missing_unlocked),0) > 0
         then true
 
         when tf.invoice_breakdown_json is not null
          and jsonb_typeof(tf.invoice_breakdown_json) = 'object'
          and upper(coalesce(tf.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
-         and coalesce((select cnt from segs_missing),0) = 0
+         and coalesce((select cnt from segs_missing_unlocked),0) = 0
         then false
 
         when ts.sheet_scope = 'DAILY'::timesheet_scope_enum then
@@ -422,7 +437,7 @@ left join lateral (
         when tf.invoice_breakdown_json is not null
          and jsonb_typeof(tf.invoice_breakdown_json) = 'object'
          and upper(coalesce(tf.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
-        then coalesce((select cnt from segs_missing),0)
+        then coalesce((select cnt from segs_missing_unlocked),0)
 
         when ts.sheet_scope = 'DAILY'::timesheet_scope_enum then
           case when (ts.reference_number is null or length(btrim(ts.reference_number)) = 0) then 1 else 0 end
@@ -437,6 +452,59 @@ left join lateral (
 
         else 0
       end
-    ) as missing_count
-) refchk on true;
+    ) as missing_count,
 
+    -- issue_missing_raw / issue_missing_count:
+    -- for SEGMENTS mode, this is the "issuing invoice" check => LOCKED segments only
+    (
+      case
+        when tf.invoice_breakdown_json is not null
+         and jsonb_typeof(tf.invoice_breakdown_json) = 'object'
+         and upper(coalesce(tf.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+         and coalesce((select cnt from segs_missing_locked),0) > 0
+        then true
+
+        when tf.invoice_breakdown_json is not null
+         and jsonb_typeof(tf.invoice_breakdown_json) = 'object'
+         and upper(coalesce(tf.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+         and coalesce((select cnt from segs_missing_locked),0) = 0
+        then false
+
+        when ts.sheet_scope = 'DAILY'::timesheet_scope_enum then
+          (ts.reference_number is null or length(btrim(ts.reference_number)) = 0)
+
+        when ts.sheet_scope = 'WEEKLY'::timesheet_scope_enum
+         and ts.submission_mode = 'MANUAL'::submission_mode_enum then
+          (coalesce((select cnt from weekly_manual_missing),0) > 0)
+
+        when ts.sheet_scope = 'WEEKLY'::timesheet_scope_enum
+         and ts.submission_mode <> 'MANUAL'::submission_mode_enum then
+          (coalesce((select has_any from weekly_nonmanual_has_any), false) = false)
+
+        else false
+      end
+    ) as issue_missing_raw,
+
+    (
+      case
+        when tf.invoice_breakdown_json is not null
+         and jsonb_typeof(tf.invoice_breakdown_json) = 'object'
+         and upper(coalesce(tf.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+        then coalesce((select cnt from segs_missing_locked),0)
+
+        when ts.sheet_scope = 'DAILY'::timesheet_scope_enum then
+          case when (ts.reference_number is null or length(btrim(ts.reference_number)) = 0) then 1 else 0 end
+
+        when ts.sheet_scope = 'WEEKLY'::timesheet_scope_enum
+         and ts.submission_mode = 'MANUAL'::submission_mode_enum then
+          coalesce((select cnt from weekly_manual_missing),0)
+
+        when ts.sheet_scope = 'WEEKLY'::timesheet_scope_enum
+         and ts.submission_mode <> 'MANUAL'::submission_mode_enum then
+          case when coalesce((select has_any from weekly_nonmanual_has_any), false) = false then 1 else 0 end
+
+        else 0
+      end
+    ) as issue_missing_count
+
+) refchk on true;
