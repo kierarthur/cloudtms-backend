@@ -47,7 +47,6 @@
 -- SAFE TO RE-RUN: CREATE OR REPLACE VIEW
 -- C6.1: Refs required to ISSUE (not INVOICE)
 -- New columns appended at end: reference_number_required_to_issue_invoice, issue_missing_reference, issue_missing_reference_count
-
 create or replace view public.v_ts_invoice_precheck as
 with anchor as (
   select (now() at time zone 'Europe/London')::date as anchor_ymd
@@ -508,3 +507,4 @@ left join lateral (
     ) as issue_missing_count
 
 ) refchk on true;
+
