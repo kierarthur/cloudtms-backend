@@ -1092,16 +1092,16 @@ LEFT JOIN LATERAL (
             OR (COALESCE(wi.issue_codes, ARRAY[]::text[]) @> ARRAY['Reference'::text])
           )
           AND COALESCE(pc.issue_missing_reference, false) = true
-          THEN ARRAY['Refs - invoicing + issuing blocked'::text]
+          THEN ARRAY['Refs (Invoice and Issue Blocked)'::text]
         WHEN wi.timesheet_id IS NOT NULL
           AND (
             pc.precheck_status = 'BLOCK_NO_REFERENCE'
             OR (COALESCE(wi.issue_codes, ARRAY[]::text[]) @> ARRAY['Reference'::text])
           )
-          THEN ARRAY['Refs - invoicing blocked'::text]
+          THEN ARRAY['Refs (Invoicing Blocked)'::text]
         WHEN wi.timesheet_id IS NOT NULL
           AND COALESCE(pc.issue_missing_reference, false) = true
-          THEN ARRAY['Refs - issuing invoices blocked'::text]
+          THEN ARRAY['Refs (Issue Invoice Blocked)'::text]
         ELSE ARRAY[]::text[]
       END
       ||
@@ -1373,7 +1373,12 @@ SELECT
   -- ✅ NEW (APPENDED AT END): reference blockers for UI badges
   (CASE WHEN t.timesheet_id IS NOT NULL AND pc.precheck_status = 'BLOCK_NO_REFERENCE' THEN true ELSE false END) AS refs_block_invoicing,
   (CASE WHEN t.timesheet_id IS NOT NULL AND COALESCE(pc.issue_missing_reference, false) = true THEN true ELSE false END) AS refs_block_issuing_invoices,
-  (CASE WHEN t.timesheet_id IS NOT NULL AND pc.precheck_status = 'BLOCK_NO_REFERENCE' AND COALESCE(pc.issue_missing_reference, false) = true THEN true ELSE false END) AS refs_block_invoice_and_issuing
+  (CASE WHEN t.timesheet_id IS NOT NULL AND pc.precheck_status = 'BLOCK_NO_REFERENCE' AND COALESCE(pc.issue_missing_reference, false) = true THEN true ELSE false END) AS refs_block_invoice_and_issuing,
+
+  -- ✅ NEW (APPENDED AT END): missing booking reference detail for Timesheet Issues tab
+  refsdet.refs_missing_items_count AS refs_missing_items_count,
+  refsdet.refs_missing_items_json  AS refs_missing_items_json
+
 
 FROM timesheets t
 LEFT JOIN timesheets_financials tf
@@ -1384,7 +1389,107 @@ LEFT JOIN timesheet_validations tv
 LEFT JOIN nhsp_agg n
   ON n.timesheet_id = t.timesheet_id
 LEFT JOIN public.v_ts_invoice_precheck pc
-  ON pc.timesheet_id = t.timesheet_id;
+  ON pc.timesheet_id = t.timesheet_id
+LEFT JOIN LATERAL (
+  SELECT
+    x.items AS refs_missing_items_json,
+    COALESCE(jsonb_array_length(x.items), 0) AS refs_missing_items_count
+  FROM (
+    SELECT
+      CASE
+        WHEN t.timesheet_id IS NOT NULL
+          AND (
+            pc.precheck_status = 'BLOCK_NO_REFERENCE'
+            OR COALESCE(pc.issue_missing_reference, false) = true
+          )
+        THEN COALESCE((
+          SELECT jsonb_agg(item ORDER BY
+            (item->>'day_ymd') NULLS LAST,
+            (item->>'kind') NULLS LAST,
+            COALESCE(NULLIF(item->>'segment_index','')::int, 0)
+          )
+          FROM (
+            -- DAILY: timesheet-level reference number
+            SELECT jsonb_build_object(
+              'kind', 'TIMESHEET',
+              'day_ymd', to_char(((COALESCE(t.worked_start_iso, t.scheduled_start_iso))::timestamptz AT TIME ZONE 'Europe/London')::date, 'YYYY-MM-DD'),
+              'start_utc', COALESCE(t.worked_start_iso, t.scheduled_start_iso),
+              'end_utc', COALESCE(t.worked_end_iso, t.scheduled_end_iso),
+              'current_reference', NULLIF(btrim(COALESCE(t.reference_number, '')), '')
+            ) AS item
+            WHERE t.sheet_scope = 'DAILY'::timesheet_scope_enum
+              AND (t.reference_number IS NULL OR btrim(t.reference_number) = '')
+
+            UNION ALL
+
+            -- WEEKLY FREEFORM: day_references_json keys with blank values (ignore __meta keys)
+            SELECT jsonb_build_object(
+              'kind', 'FREEFORM',
+              'day_ymd', j.k,
+              'current_reference', NULLIF(btrim(COALESCE(j.v, '')), '')
+            ) AS item
+            FROM jsonb_each_text(
+              CASE
+                WHEN t.day_references_json IS NOT NULL AND jsonb_typeof(t.day_references_json) = 'object'
+                THEN t.day_references_json
+                ELSE '{}'::jsonb
+              END
+            ) j(k, v)
+            WHERE left(COALESCE(j.k,''), 2) <> '__'
+              AND (
+                j.v IS NULL
+                OR btrim(j.v) = ''
+                OR lower(btrim(j.v)) = 'null'
+              )
+
+            UNION ALL
+
+            -- WEEKLY MANUAL (and other schedule-based): actual_schedule_json entries missing ref_num
+            SELECT jsonb_build_object(
+              'kind', 'SEGMENT',
+              'segment_index', (s.ord - 1),
+              'day_ymd', CASE
+                WHEN (s.seg ? 'date_ymd') THEN NULLIF(btrim(COALESCE(s.seg->>'date_ymd','')), '')
+                WHEN substring(COALESCE(s.seg->>'start','') from 1 for 10) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                  THEN substring(COALESCE(s.seg->>'start','') from 1 for 10)
+                ELSE NULL
+              END,
+              'start', NULLIF(btrim(COALESCE(s.seg->>'start','')), ''),
+              'end', NULLIF(btrim(COALESCE(s.seg->>'end','')), ''),
+              'current_reference', NULLIF(btrim(COALESCE(s.seg->>'ref_num','')), '')
+            ) AS item
+            FROM jsonb_array_elements(
+              CASE
+                WHEN t.actual_schedule_json IS NOT NULL AND jsonb_typeof(t.actual_schedule_json) = 'array'
+                THEN t.actual_schedule_json
+                ELSE '[]'::jsonb
+              END
+            ) WITH ORDINALITY s(seg, ord)
+            WHERE COALESCE(btrim(COALESCE(s.seg->>'start','')), '') <> ''
+              AND COALESCE(btrim(COALESCE(s.seg->>'end','')), '') <> ''
+              AND COALESCE(btrim(COALESCE(s.seg->>'ref_num','')), '') = ''
+              AND (
+                NOT (
+                  (s.seg ? 'hours_day')
+                  OR (s.seg ? 'hours_night')
+                  OR (s.seg ? 'hours_sat')
+                  OR (s.seg ? 'hours_sun')
+                  OR (s.seg ? 'hours_bh')
+                )
+                OR (
+                  COALESCE(NULLIF(s.seg->>'hours_day','')::numeric, 0)
+                  + COALESCE(NULLIF(s.seg->>'hours_night','')::numeric, 0)
+                  + COALESCE(NULLIF(s.seg->>'hours_sat','')::numeric, 0)
+                  + COALESCE(NULLIF(s.seg->>'hours_sun','')::numeric, 0)
+                  + COALESCE(NULLIF(s.seg->>'hours_bh','')::numeric, 0)
+                ) > 0
+              )
+          ) q
+        ), '[]'::jsonb)
+        ELSE '[]'::jsonb
+      END AS items
+  ) x
+) refsdet ON true;
 
 
 GRANT SELECT ON public.v_timesheets_details TO service_role;
