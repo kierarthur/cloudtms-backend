@@ -481,7 +481,6 @@ exception when others then
 end;
 $$;
 
-
 create or replace function public.invoice_apply_edits(
   p_invoice_id uuid,
   p_payload jsonb,
@@ -1093,6 +1092,7 @@ v_has_seg_ops :=
         end loop;
 
 
+
         if v_ref_sched_map is not null
            and jsonb_typeof(v_ref_sched_map) = 'object'
            and v_ref_sched_map <> '{}'::jsonb
@@ -1101,8 +1101,6 @@ v_has_seg_ops :=
         then
           raise exception 'SEGMENTS reference sync failed: no segments matched schedule keys (timesheet_id=% tsfin_id=%)', v_ref_ts_id, v_ref_tsfin_id;
         end if;
-
-
 
         if v_ref_seg_updates_this_ts > 0 then
               update public.timesheets_financials tfu2
@@ -2607,4 +2605,3 @@ exception when others then
   raise;
 end;
 $$;
-
