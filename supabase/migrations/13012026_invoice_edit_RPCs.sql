@@ -1596,25 +1596,25 @@ if v_has_seg_ops then
             with rows as (
               select
                 nullif(btrim(coalesce(seg_el->>'date','')), '') as ymd,
-                coalesce((seg_el->>'hours_day')::numeric,0)   as h_day,
-                coalesce((seg_el->>'hours_night')::numeric,0) as h_night,
-                coalesce((seg_el->>'hours_sat')::numeric,0)   as h_sat,
-                coalesce((seg_el->>'hours_sun')::numeric,0)   as h_sun,
-                coalesce((seg_el->>'hours_bh')::numeric,0)    as h_bh,
-                coalesce((seg_el->>'pay_amount')::numeric,0)  as pay_ex,
-                coalesce((seg_el->>'charge_amount')::numeric,0) as chg_ex
+                coalesce((seg_el->>'hours_day')::numeric,0)   as row_h_day,
+                coalesce((seg_el->>'hours_night')::numeric,0) as row_h_night,
+                coalesce((seg_el->>'hours_sat')::numeric,0)   as row_h_sat,
+                coalesce((seg_el->>'hours_sun')::numeric,0)   as row_h_sun,
+                coalesce((seg_el->>'hours_bh')::numeric,0)    as row_h_bh,
+                coalesce((seg_el->>'pay_amount')::numeric,0)  as row_pay_ex,
+                coalesce((seg_el->>'charge_amount')::numeric,0) as row_chg_ex
               from jsonb_array_elements(segments) seg_el
             ),
             agg as (
               select
                 ymd,
-                sum(h_day)::numeric as hours_day,
-                sum(h_night)::numeric as hours_night,
-                sum(h_sat)::numeric as hours_sat,
-                sum(h_sun)::numeric as hours_sun,
-                sum(h_bh)::numeric as hours_bh,
-                sum(pay_ex)::numeric as pay_ex,
-                sum(chg_ex)::numeric as chg_ex
+                sum(row_h_day)::numeric as hours_day,
+                sum(row_h_night)::numeric as hours_night,
+                sum(row_h_sat)::numeric as hours_sat,
+                sum(row_h_sun)::numeric as hours_sun,
+                sum(row_h_bh)::numeric as hours_bh,
+                sum(row_pay_ex)::numeric as pay_ex,
+                sum(row_chg_ex)::numeric as chg_ex
               from rows
               where ymd is not null and ymd ~ '^\d{4}-\d{2}-\d{2}$'
               group by ymd
@@ -1993,25 +1993,25 @@ end if;
           with rows as (
             select
               nullif(btrim(coalesce(seg_el->>'date','')), '') as ymd,
-              coalesce((seg_el->>'hours_day')::numeric,0)   as h_day,
-              coalesce((seg_el->>'hours_night')::numeric,0) as h_night,
-              coalesce((seg_el->>'hours_sat')::numeric,0)   as h_sat,
-              coalesce((seg_el->>'hours_sun')::numeric,0)   as h_sun,
-              coalesce((seg_el->>'hours_bh')::numeric,0)    as h_bh,
-              coalesce((seg_el->>'pay_amount')::numeric,0)  as pay_ex,
-              coalesce((seg_el->>'charge_amount')::numeric,0) as chg_ex
+              coalesce((seg_el->>'hours_day')::numeric,0)   as row_h_day,
+              coalesce((seg_el->>'hours_night')::numeric,0) as row_h_night,
+              coalesce((seg_el->>'hours_sat')::numeric,0)   as row_h_sat,
+              coalesce((seg_el->>'hours_sun')::numeric,0)   as row_h_sun,
+              coalesce((seg_el->>'hours_bh')::numeric,0)    as row_h_bh,
+              coalesce((seg_el->>'pay_amount')::numeric,0)  as row_pay_ex,
+              coalesce((seg_el->>'charge_amount')::numeric,0) as row_chg_ex
             from jsonb_array_elements(segments) seg_el
           ),
           agg as (
             select
               ymd,
-              sum(h_day)::numeric as hours_day,
-              sum(h_night)::numeric as hours_night,
-              sum(h_sat)::numeric as hours_sat,
-              sum(h_sun)::numeric as hours_sun,
-              sum(h_bh)::numeric as hours_bh,
-              sum(pay_ex)::numeric as pay_ex,
-              sum(chg_ex)::numeric as chg_ex
+              sum(row_h_day)::numeric as hours_day,
+              sum(row_h_night)::numeric as hours_night,
+              sum(row_h_sat)::numeric as hours_sat,
+              sum(row_h_sun)::numeric as hours_sun,
+              sum(row_h_bh)::numeric as hours_bh,
+              sum(row_pay_ex)::numeric as pay_ex,
+              sum(row_chg_ex)::numeric as chg_ex
             from rows
             where ymd is not null and ymd ~ '^\d{4}-\d{2}-\d{2}$'
             group by ymd
