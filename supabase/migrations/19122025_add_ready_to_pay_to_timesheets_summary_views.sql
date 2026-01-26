@@ -1295,6 +1295,7 @@ GRANT SELECT ON public.v_timesheets_summary      TO authenticated;
 -- ✅ SAFE TO RE-RUN: CREATE OR REPLACE VIEW (idempotent)
 -- ✅ IMPORTANT: ONLY appends new columns at the END. No other changes.
 -- ============================================================
+
 CREATE OR REPLACE VIEW public.v_timesheets_details AS
 WITH nhsp_agg AS (
   SELECT
