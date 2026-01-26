@@ -931,7 +931,7 @@ SELECT
   )
   OR (hr_crosscheck_status IS NOT NULL AND hr_crosscheck_status <> 'OK')
   OR (hr_crosscheck_issues && ARRAY['DUPLICATE_CONTRACTS'])
-  OR (issue_codes IS NOT NULL AND array_length(issue_codes, 1) > 0) AS needs_attention,
+  OR (ic.issue_codes_final IS NOT NULL AND array_length(ic.issue_codes_final, 1) > 0) AS needs_attention,
 
   client_autoprocess_hr,
   has_rate_issue,
@@ -939,7 +939,7 @@ SELECT
   hr_crosscheck_status,
   hr_crosscheck_issues,
   external_source_rows_json,
-  issue_codes,
+  ic.issue_codes_final AS issue_codes,
 
   client_requires_hr,
   client_no_timesheet_required,
@@ -1011,12 +1011,12 @@ SELECT
       AND COALESCE(client_requires_hr,false) = true
       AND COALESCE(client_autoprocess_hr,false) = false
       AND authorised_at_server IS NULL
-      AND array_length(issue_codes, 1) = 1
-      AND issue_codes @> ARRAY['Authorisation'::text]
+      AND array_length(ic.issue_codes_final, 1) = 1
+      AND ic.issue_codes_final @> ARRAY['Authorisation'::text]
     ) THEN 'AWAITING_AUTHORISATION'
     WHEN (
       timesheet_id IS NOT NULL
-      AND COALESCE(array_length(issue_codes, 1), 0) = 0
+      AND COALESCE(array_length(ic.issue_codes_final, 1), 0) = 0
       AND (
         authorised_at_server IS NOT NULL
         OR NOT (COALESCE(client_requires_hr,false) = true AND COALESCE(client_autoprocess_hr,false) = false)
@@ -1049,12 +1049,12 @@ SELECT
       AND COALESCE(client_requires_hr,false) = true
       AND COALESCE(client_autoprocess_hr,false) = false
       AND authorised_at_server IS NULL
-      AND array_length(issue_codes, 1) = 1
-      AND issue_codes @> ARRAY['Authorisation'::text]
+      AND array_length(ic.issue_codes_final, 1) = 1
+      AND ic.issue_codes_final @> ARRAY['Authorisation'::text]
     ) THEN 'Awaiting Authorisation'
     WHEN (
       timesheet_id IS NOT NULL
-      AND COALESCE(array_length(issue_codes, 1), 0) = 0
+      AND COALESCE(array_length(ic.issue_codes_final, 1), 0) = 0
       AND (
         authorised_at_server IS NOT NULL
         OR NOT (COALESCE(client_requires_hr,false) = true AND COALESCE(client_autoprocess_hr,false) = false)
@@ -1081,6 +1081,33 @@ LEFT JOIN LATERAL (
   WHERE pc0.timesheet_id = wi.timesheet_id
   LIMIT 1
 ) pc ON true
+
+LEFT JOIN LATERAL (
+  SELECT
+    (
+      CASE
+        WHEN wi.timesheet_id IS NOT NULL
+          AND (
+            pc.precheck_status = 'BLOCK_NO_REFERENCE'
+            OR (COALESCE(wi.issue_codes, ARRAY[]::text[]) @> ARRAY['Reference'::text])
+          )
+          AND COALESCE(pc.issue_missing_reference, false) = true
+          THEN ARRAY['Refs - invoicing + issuing blocked'::text]
+        WHEN wi.timesheet_id IS NOT NULL
+          AND (
+            pc.precheck_status = 'BLOCK_NO_REFERENCE'
+            OR (COALESCE(wi.issue_codes, ARRAY[]::text[]) @> ARRAY['Reference'::text])
+          )
+          THEN ARRAY['Refs - invoicing blocked'::text]
+        WHEN wi.timesheet_id IS NOT NULL
+          AND COALESCE(pc.issue_missing_reference, false) = true
+          THEN ARRAY['Refs - issuing invoices blocked'::text]
+        ELSE ARRAY[]::text[]
+      END
+      ||
+      array_remove(COALESCE(wi.issue_codes, ARRAY[]::text[]), 'Reference'::text)
+    ) AS issue_codes_final
+) ic ON true
 
 LEFT JOIN LATERAL (
   SELECT
