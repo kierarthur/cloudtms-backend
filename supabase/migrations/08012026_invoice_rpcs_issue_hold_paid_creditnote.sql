@@ -2207,21 +2207,68 @@ begin
   --   AND (total_hours > 0)
   --   AND (missing refs for LOCKED positive segments, or normal weekly/daily rules)
   -- ------------------------------------------------------------
+  
+  -- 3) ISSUE-TIME reference gating (scoped to this invoice)
+  -- Only segments locked to THIS invoice can block issuing (so other-invoice segments never block).
   select array_agg(
     case
-      when pc.timesheet_id is null
-        then null
-
-      when coalesce(pc.issue_missing_reference, false) = true
-        then 'TS ' || pc.timesheet_id::text || ': missing reference/PO for ' || coalesce(pc.issue_missing_reference_count,0)::text || ' shift(s) (required to issue)'
-
+      when t.timesheet_id is null then null
+      when t.issue_missing_count > 0
+        then 'TS '||t.timesheet_id::text||': missing reference/PO for '||t.issue_missing_count::text||' shift(s) (required to issue)'
       else null
     end
   )
   into v_issue_ref_reasons
-  from unnest(coalesce(v_worked_ts_ids, array[]::uuid[])) as x(timesheet_id)
-  left join public.v_ts_invoice_precheck pc
-    on pc.timesheet_id = x.timesheet_id;
+  from (
+    select
+      x.timesheet_id,
+      case
+        when coalesce(pc.reference_number_required_to_issue_invoice,false) is not true then 0
+
+        when tf.invoice_breakdown_json is not null
+          and jsonb_typeof(tf.invoice_breakdown_json) = 'object'
+          and upper(coalesce(tf.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+          and jsonb_typeof(tf.invoice_breakdown_json->'segments') = 'array'
+        then (
+          select count(*)::int
+          from jsonb_array_elements(tf.invoice_breakdown_json->'segments') as s(seg)
+          where nullif(btrim(coalesce(s.seg->>'invoice_locked_invoice_id','')), '') = p_invoice_id::text
+            and (
+              (
+                (case when coalesce(s.seg->>'hours_day','') ~ '^[-]?[0-9]+(\.[0-9]+)?$' then (s.seg->>'hours_day')::numeric else 0 end)
+              + (case when coalesce(s.seg->>'hours_night','') ~ '^[-]?[0-9]+(\.[0-9]+)?$' then (s.seg->>'hours_night')::numeric else 0 end)
+              + (case when coalesce(s.seg->>'hours_sat','') ~ '^[-]?[0-9]+(\.[0-9]+)?$' then (s.seg->>'hours_sat')::numeric else 0 end)
+              + (case when coalesce(s.seg->>'hours_sun','') ~ '^[-]?[0-9]+(\.[0-9]+)?$' then (s.seg->>'hours_sun')::numeric else 0 end)
+              + (case when coalesce(s.seg->>'hours_bh','') ~ '^[-]?[0-9]+(\.[0-9]+)?$' then (s.seg->>'hours_bh')::numeric else 0 end)
+              ) > 0
+              or (case when coalesce(s.seg->>'charge_amount','') ~ '^[-]?[0-9]+(\.[0-9]+)?$' then (s.seg->>'charge_amount')::numeric else 0 end) > 0
+            )
+            and nullif(btrim(coalesce(s.seg->>'ref_num','')), '') is null
+        )
+
+        else (
+          case
+            when public._inv_timesheet_has_issue_reference(
+              ts.sheet_scope::text,
+              coalesce(ts.submission_mode::text,''),
+              ts.reference_number,
+              ts.day_references_json,
+              ts.actual_schedule_json
+            )
+            then 0 else 1 end
+        )
+      end as issue_missing_count
+    from unnest(coalesce(v_worked_ts_ids, array[]::uuid[])) as x(timesheet_id)
+    left join public.v_ts_invoice_precheck pc
+      on pc.timesheet_id = x.timesheet_id
+    left join public.timesheets ts
+      on ts.timesheet_id = x.timesheet_id
+     and ts.is_current = true
+    left join public.timesheets_financials tf
+      on tf.timesheet_id = x.timesheet_id
+     and tf.is_current = true
+  ) t;
+
 
   v_issue_ref_reasons := array_remove(v_issue_ref_reasons, null);
 
@@ -2239,8 +2286,82 @@ begin
           'has_worked_lines', (v_worked_ts_ids is not null and x.timesheet_id = any(v_worked_ts_ids)),
           'precheck_status', coalesce(pc.precheck_status,'')::text,
           'ref_required_to_issue_effective', coalesce(pc.reference_number_required_to_issue_invoice,false),
-          'issue_missing_reference', coalesce(pc.issue_missing_reference,false),
-          'issue_missing_reference_count', coalesce(pc.issue_missing_reference_count,0),
+          'issue_missing_reference_on_invoice', ((
+            case
+              when x.has_worked_lines is not true then 0
+              when coalesce(pc.reference_number_required_to_issue_invoice,false) is not true then 0
+
+              when s.invoice_breakdown_json is not null
+                and jsonb_typeof(s.invoice_breakdown_json) = 'object'
+                and upper(coalesce(s.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+                and jsonb_typeof(s.invoice_breakdown_json->'segments') = 'array'
+              then coalesce((
+                select count(*)::int
+                from jsonb_array_elements(s.invoice_breakdown_json->'segments') as sg(seg)
+                where nullif(btrim(coalesce(sg.seg->>'invoice_locked_invoice_id','')), '') = p_invoice_id::text
+                  and (
+                    (
+                      (case when coalesce(sg.seg->>'hours_day','') ~ '^[-]?[0-9]+(\.[0-9]+)?$' then (sg.seg->>'hours_day')::numeric else 0 end)
+                    + (case when coalesce(sg.seg->>'hours_night','') ~ '^[-]?[0-9]+(\.[0-9]+)?$' then (sg.seg->>'hours_night')::numeric else 0 end)
+                    + (case when coalesce(sg.seg->>'hours_sat','') ~ '^[-]?[0-9]+(\.[0-9]+)?$' then (sg.seg->>'hours_sat')::numeric else 0 end)
+                    + (case when coalesce(sg.seg->>'hours_sun','') ~ '^[-]?[0-9]+(\.[0-9]+)?$' then (sg.seg->>'hours_sun')::numeric else 0 end)
+                    + (case when coalesce(sg.seg->>'hours_bh','') ~ '^[-]?[0-9]+(\.[0-9]+)?$' then (sg.seg->>'hours_bh')::numeric else 0 end)
+                    ) > 0
+                    or (case when coalesce(sg.seg->>'charge_amount','') ~ '^[-]?[0-9]+(\.[0-9]+)?$' then (sg.seg->>'charge_amount')::numeric else 0 end) > 0
+                  )
+                  and nullif(btrim(coalesce(sg.seg->>'ref_num','')), '') is null
+              ),0)
+
+              else (
+                case
+                  when public._inv_timesheet_has_issue_reference(
+                    t0.sheet_scope::text,
+                    coalesce(t0.submission_mode::text,''),
+                    t0.reference_number,
+                    t0.day_references_json,
+                    t0.actual_schedule_json
+                  ) then 0 else 1 end
+              )
+            end
+          ) > 0),
+          'issue_missing_reference_on_invoice_count', (
+            case
+              when x.has_worked_lines is not true then 0
+              when coalesce(pc.reference_number_required_to_issue_invoice,false) is not true then 0
+
+              when s.invoice_breakdown_json is not null
+                and jsonb_typeof(s.invoice_breakdown_json) = 'object'
+                and upper(coalesce(s.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+                and jsonb_typeof(s.invoice_breakdown_json->'segments') = 'array'
+              then coalesce((
+                select count(*)::int
+                from jsonb_array_elements(s.invoice_breakdown_json->'segments') as sg(seg)
+                where nullif(btrim(coalesce(sg.seg->>'invoice_locked_invoice_id','')), '') = p_invoice_id::text
+                  and (
+                    (
+                      (case when coalesce(sg.seg->>'hours_day','') ~ '^[-]?[0-9]+(\.[0-9]+)?$' then (sg.seg->>'hours_day')::numeric else 0 end)
+                    + (case when coalesce(sg.seg->>'hours_night','') ~ '^[-]?[0-9]+(\.[0-9]+)?$' then (sg.seg->>'hours_night')::numeric else 0 end)
+                    + (case when coalesce(sg.seg->>'hours_sat','') ~ '^[-]?[0-9]+(\.[0-9]+)?$' then (sg.seg->>'hours_sat')::numeric else 0 end)
+                    + (case when coalesce(sg.seg->>'hours_sun','') ~ '^[-]?[0-9]+(\.[0-9]+)?$' then (sg.seg->>'hours_sun')::numeric else 0 end)
+                    + (case when coalesce(sg.seg->>'hours_bh','') ~ '^[-]?[0-9]+(\.[0-9]+)?$' then (sg.seg->>'hours_bh')::numeric else 0 end)
+                    ) > 0
+                    or (case when coalesce(sg.seg->>'charge_amount','') ~ '^[-]?[0-9]+(\.[0-9]+)?$' then (sg.seg->>'charge_amount')::numeric else 0 end) > 0
+                  )
+                  and nullif(btrim(coalesce(sg.seg->>'ref_num','')), '') is null
+              ),0)
+
+              else (
+                case
+                  when public._inv_timesheet_has_issue_reference(
+                    t0.sheet_scope::text,
+                    coalesce(t0.submission_mode::text,''),
+                    t0.reference_number,
+                    t0.day_references_json,
+                    t0.actual_schedule_json
+                  ) then 0 else 1 end
+              )
+            end
+          ),
           'hr_required', coalesce(s.hr_validation_required_for_invoice,false),
           'validation_status', case when s.validation_status is null then null else s.validation_status::text end
         )
