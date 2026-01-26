@@ -439,6 +439,7 @@ $$;
 -- CloudTMS Patch: public.invoice_reference_rows(p_invoice_id)
 -- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
 -- ============================================================
+
 create or replace function public.invoice_reference_rows(
   p_invoice_id uuid
 )
