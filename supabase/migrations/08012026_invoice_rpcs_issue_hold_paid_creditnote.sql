@@ -3327,11 +3327,6 @@ begin
       t.reference_number,
       t.day_references_json,
       case
-        when t.actual_schedule_json is not null
-          and jsonb_typeof(t.actual_schedule_json) = 'array'
-          and jsonb_array_length(t.actual_schedule_json) > 0
-        then t.actual_schedule_json
-
         when tf.invoice_breakdown_json is not null
           and jsonb_typeof(tf.invoice_breakdown_json) = 'object'
           and upper(coalesce(tf.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
@@ -3356,6 +3351,11 @@ begin
           )
           from jsonb_array_elements(tf.invoice_breakdown_json->'segments') seg
         ), '[]'::jsonb)
+
+        when t.actual_schedule_json is not null
+          and jsonb_typeof(t.actual_schedule_json) = 'array'
+          and jsonb_array_length(t.actual_schedule_json) > 0
+        then t.actual_schedule_json
 
         else '[]'::jsonb
       end as actual_schedule_json
@@ -3816,7 +3816,6 @@ exception when others then
   raise;
 end;
 $$;
-
 
 -- 3.6 Credit note + unlock (needs unredacted JS parity source)
 create or replace function public.invoice_create_credit_note_and_unlock(
