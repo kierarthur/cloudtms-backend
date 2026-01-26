@@ -3400,25 +3400,19 @@ begin
   ),
 
   -- ✅ UPDATED: reference rows joined to candidate display name (for UI display)
-  -- Added TSFIN candidate fallback so SEGMENTS/NHSP rows still render candidate when contract linkage is missing.
   ref_rows_joined as (
     select
       r.*,
-      con0.id as contract_id,
-      coalesce(con0.candidate_id, tf0.candidate_id) as candidate_id,
-      coalesce(cand_contract.display_name, cand_tf.display_name) as candidate_display
+      c.id as contract_id,
+      c.candidate_id,
+      nullif(btrim(coalesce(cand.display_name,'')), '') as candidate_display
     from public.invoice_reference_rows(p_invoice_id) r
-    left join public.timesheets ts0
-      on ts0.timesheet_id = r.timesheet_id
-    left join public.contracts con0
-      on con0.id = ts0.contract_id
-    left join public.timesheets_financials tf0
-      on tf0.timesheet_id = r.timesheet_id
-     and tf0.is_current = true
-    left join public.candidates cand_contract
-      on cand_contract.id = con0.candidate_id
-    left join public.candidates cand_tf
-      on cand_tf.id = tf0.candidate_id
+    left join public.timesheets ts
+      on ts.timesheet_id = r.timesheet_id
+    left join public.contracts c
+      on c.id = ts.contract_id
+    left join public.candidates cand
+      on cand.id = c.candidate_id
   ),
 
   -- ✅ additional timesheet ids referenced by reference rows (may include ids not present in lines)
