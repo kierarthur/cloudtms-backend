@@ -496,7 +496,7 @@ declare
   v_seg_hours_sum numeric := 0;
   v_seg_charge_ex numeric := 0;
 
-  -- SEGMENTS-mode: prefer current refs from timesheets.actual_schedule_json (when present)
+  -- SEGMENTS-mode: SEGMENT refs are sourced from TSFIN segments (invoice_breakdown_json)
   v_seg_id_local text;
   v_sched_ref text;
   v_sched_found boolean;
@@ -631,46 +631,10 @@ begin
 
         v_seg_id_local := nullif(btrim(coalesce(r_seg.seg->>'segment_id','')), '');
 
-        -- Prefer current_reference from timesheets.actual_schedule_json when that schedule contains this segment_id.
-        -- IMPORTANT: if schedule contains the segment but ref_num is blank/null, we must return blank (do NOT fall back).
-        v_sched_found := false;
-        v_sched_ref := null;
-
-        if v_seg_id_local is not null
-           and v_sched_json is not null
-           and jsonb_typeof(v_sched_json) = 'array' then
-          begin
-            select nullif(btrim(coalesce(sv->>'ref_num','')), '')
-              into v_sched_ref
-            from jsonb_array_elements(v_sched_json) sv
-            where nullif(btrim(coalesce(sv->>'segment_id','')), '') = v_seg_id_local
-            limit 1;
-
-            if found then
-              v_sched_found := true;
-            end if;
-          exception when others then
-            v_sched_found := false;
-            v_sched_ref := null;
-          end;
-        end if;
-
-        timesheet_id := r_ts.ts_id;
-        sheet_scope := r_ts.ts_sheet_scope::text;
-        submission_mode := r_ts.ts_submission_mode::text;
-        ref_target := 'SEGMENT';
-        segment_id := v_seg_id_local;
-        day_ymd := nullif(btrim(coalesce(r_seg.seg->>'date','')), '');
-        start_utc := nullif(btrim(coalesce(r_seg.seg->>'start_utc','')), '');
-        end_utc := nullif(btrim(coalesce(r_seg.seg->>'end_utc','')), '');
-
-        current_reference :=
-          case
-            when v_sched_found then v_sched_ref
-            else nullif(btrim(coalesce(r_seg.seg->>'ref_num','')), '')
-          end;
-
-        is_required := v_is_required;
+                -- SEGMENTS mode: current_reference is sourced from TSFIN segments (invoice_breakdown_json),
+        -- which invoice_apply_edits keeps in sync when refs are edited.
+        current_reference := nullif(btrim(coalesce(r_seg.seg->>'ref_num','')), '');
+is_required := v_is_required;
 
         v_rows_out := v_rows_out + 1;
         return next;
