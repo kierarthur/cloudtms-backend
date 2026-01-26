@@ -482,7 +482,6 @@ end;
 $$;
 
 
-
 create or replace function public.invoice_apply_edits(
   p_invoice_id uuid,
   p_payload jsonb,
@@ -580,6 +579,7 @@ v_ref_seg_cur_ref text;
   v_ref_seg_new_ref text;
   v_ref_seg_has_update boolean := false;
   v_ref_seg_updates_this_ts int := 0;
+  v_ref_seg_matches_this_ts int := 0;
 
   -- audit (history) accumulators (NOT debug-only)
   v_hist_adj jsonb := '[]'::jsonb;
@@ -990,6 +990,7 @@ v_has_seg_ops :=
 
       -- Best-effort sync: update tsfin.invoice_breakdown_json segments[].ref_num by matching start/end fields
       v_ref_seg_updates_this_ts := 0;
+      v_ref_seg_matches_this_ts := 0;
       v_ref_tsfin_id := null;
       v_ref_ib := null;
 
@@ -1057,6 +1058,7 @@ v_has_seg_ops :=
             if v_ref_sched_map ? v_ref_sched_key then
               v_ref_seg_new_ref := nullif(btrim(coalesce(v_ref_sched_map->>v_ref_sched_key,'')), '');
               v_ref_seg_has_update := true;
+              v_ref_seg_matches_this_ts := v_ref_seg_matches_this_ts + 1;
             end if;
           end if;
 
@@ -1069,6 +1071,7 @@ v_has_seg_ops :=
               if v_ref_sched_map ? v_ref_sched_key then
                 v_ref_seg_new_ref := nullif(btrim(coalesce(v_ref_sched_map->>v_ref_sched_key,'')), '');
                 v_ref_seg_has_update := true;
+                v_ref_seg_matches_this_ts := v_ref_seg_matches_this_ts + 1;
               end if;
             end if;
           end if;
@@ -1090,9 +1093,20 @@ v_has_seg_ops :=
         end loop;
 
 
+        if v_ref_sched_map is not null
+           and jsonb_typeof(v_ref_sched_map) = 'object'
+           and v_ref_sched_map <> '{}'::jsonb
+           and coalesce(jsonb_array_length(coalesce(v_ref_ib->'segments','[]'::jsonb)),0) > 0
+           and coalesce(v_ref_seg_matches_this_ts,0) = 0
+        then
+          raise exception 'SEGMENTS reference sync failed: no segments matched schedule keys (timesheet_id=% tsfin_id=%)', v_ref_ts_id, v_ref_tsfin_id;
+        end if;
+
+
+
         if v_ref_seg_updates_this_ts > 0 then
               update public.timesheets_financials tfu2
-          set invoice_breakdown_json = jsonb_set(v_ref_ib, '{segments}', v_ref_new_segments, true)
+          set invoice_breakdown_json = jsonb_set(coalesce(tfu2.invoice_breakdown_json, '{}'::jsonb), '{segments}', v_ref_new_segments, true)
           where tfu2.id = v_ref_tsfin_id
             and tfu2.is_current = true;
 
@@ -2593,3 +2607,4 @@ exception when others then
   raise;
 end;
 $$;
+
