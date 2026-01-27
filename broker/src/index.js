@@ -33802,6 +33802,7 @@ async function buildHealthRosterPdf(env, invoiceId) {
 
   return withCORS(env, req, ok({ deleted_id: id }));
 }
+
 function buildHTML(payload) {
   const {
     header = {},
@@ -33826,12 +33827,36 @@ function buildHTML(payload) {
   const termsDays = pick(header, "payment_terms_days", null);
   const bank = pick(header, "bank", {}) || {};
 
+  // Agency branding (passed via header snapshot)
+  const agencyName =
+    pick(header, "agency_name", "") ||
+    pick(header, "agency_display_name", "") ||
+    pick(header, "company_name", "") ||
+    "";
+
+  const agencyLogoUrl =
+    pick(header, "agency_logo_url", "") ||
+    pick(header, "logo_url", "") ||
+    "";
+
+  // Registered details (passed via header snapshot)
+  const registeredAddressLines = (pick(header, "registered_address", "") || "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const companyRegNumber =
+    pick(header, "company_reg_number", "") ||
+    pick(header, "company_registration_number", "") ||
+    "";
+
   // VAT reg: use settings value if present; otherwise fallback to hard-wired number
   const DEFAULT_VAT_REG = "363 6805 80";
   const vatReg = pick(header, "vat_registration_number", "") || DEFAULT_VAT_REG;
 
   // Stationery (letterhead) — expects PNG/JPG URL (signed) + safe-area margins (mm)
   const stationeryUrl = pick(header, "stationery_url", ""); // PNG/JPG URL or data: URI
+
   const defaultMargins = stationeryUrl
     ? { top: 32, right: 12, bottom: 20, left: 12 } // safe defaults with artwork
     : { top: 18, right: 12, bottom: 34, left: 12 }; // plain layout defaults
@@ -33872,17 +33897,16 @@ function buildHTML(payload) {
     return round2(a) === round2(b);
   };
 
- const getLineTypeNorm = (it) => {
-  const m = it?.meta || {};
-  const s = String(m.line_type_norm || m.line_type || "").toUpperCase();
-  return s;
-};
+  const getLineTypeNorm = (it) => {
+    const m = it?.meta || {};
+    const s = String(m.line_type_norm || m.line_type || "").toUpperCase();
+    return s;
+  };
 
-const isHoursLineType = (t) => {
-  const s = String(t || "").toUpperCase();
-  return (s === "HOURS" || s.startsWith("HOURS_"));
-};
-
+  const isHoursLineType = (t) => {
+    const s = String(t || "").toUpperCase();
+    return (s === "HOURS" || s.startsWith("HOURS_"));
+  };
 
   const getTimesheetId = (it) => {
     return (it && it.timesheet_id != null) ? String(it.timesheet_id)
@@ -33920,44 +33944,32 @@ const isHoursLineType = (t) => {
   }
 
   // Sort groups deterministically by week ending then candidate
- const groups = Array.from(groupMap.values()).sort((a, b) => {
-  const aMeta = (a.items.find(x => isHoursLineType(getLineTypeNorm(x)))?.meta) || a.items[0]?.meta || {};
-  const bMeta = (b.items.find(x => isHoursLineType(getLineTypeNorm(x)))?.meta) || b.items[0]?.meta || {};
-  const awe = String(aMeta.week_ending_date || aMeta.week_ending || aMeta.weekEnding || "");
-  const bwe = String(bMeta.week_ending_date || bMeta.week_ending || bMeta.weekEnding || "");
-  if (awe !== bwe) return awe < bwe ? 1 : -1; // desc
-  const ac = String(aMeta.candidate_display || aMeta.candidate || "");
-  const bc = String(bMeta.candidate_display || bMeta.candidate || "");
-  if (ac !== bc) return ac.localeCompare(bc);
-  return String(a.tsId).localeCompare(String(b.tsId));
-});
-
+  const groups = Array.from(groupMap.values()).sort((a, b) => {
+    const aMeta = (a.items.find(x => isHoursLineType(getLineTypeNorm(x)))?.meta) || a.items[0]?.meta || {};
+    const bMeta = (b.items.find(x => isHoursLineType(getLineTypeNorm(x)))?.meta) || b.items[0]?.meta || {};
+    const awe = String(aMeta.week_ending_date || aMeta.week_ending || aMeta.weekEnding || "");
+    const bwe = String(bMeta.week_ending_date || bMeta.week_ending || bMeta.weekEnding || "");
+    if (awe !== bwe) return awe < bwe ? 1 : -1; // desc
+    const ac = String(aMeta.candidate_display || aMeta.candidate || "");
+    const bc = String(bMeta.candidate_display || bMeta.candidate || "");
+    if (ac !== bc) return ac.localeCompare(bc);
+    return String(a.tsId).localeCompare(String(b.tsId));
+  });
 
   // ─────────────────────────────────────────────────────────────
   // Build breakdown rows for a single timesheet group
   // Unit Description | Quantity | Unit Charge (ex VAT) | Charge (ex VAT)
   // ─────────────────────────────────────────────────────────────
- const groupBreakdownTableHtml = (grp) => {
-  const its = grp.items || [];
-  const hoursItem = its.find((x) => isHoursLineType(getLineTypeNorm(x))) || null;
-// meta for display/header
-  const metaBase = (hoursItem?.meta || its[0]?.meta || {}) || {};
-  const labels = (metaBase.bucket_labels && typeof metaBase.bucket_labels === "object") ? metaBase.bucket_labels : DEFAULT_LABELS;
-    // Pull bucket hours/rates from meta (these are merged by _renderInvoiceBundleAndStore)
-    const hDay = num(metaBase.hours_day);
-    const hNgt = num(metaBase.hours_night);
-    const hSat = num(metaBase.hours_sat);
-    const hSun = num(metaBase.hours_sun);
-    const hBh  = num(metaBase.hours_bh);
+  const groupBreakdownTableHtml = (grp) => {
+    const its = grp.items || [];
 
-    const rDay = num(metaBase.charge_day);
-    const rNgt = num(metaBase.charge_night);
-    const rSat = num(metaBase.charge_sat);
-    const rSun = num(metaBase.charge_sun);
-    const rBh  = num(metaBase.charge_bh);
+    // Collect all HOURS* contributors (daily/weekly/etc.)
+    const hoursLines = its.filter((x) => isHoursLineType(getLineTypeNorm(x)));
+    const hoursItem = hoursLines.length ? hoursLines[0] : null;
 
-    const groupFlag = !!pick(payloadMeta, "group_nightsat_sunbh", false);
-    const canMerge = groupFlag && eqRate(rNgt, rSat) && eqRate(rSun, rBh);
+    // meta for display/header (labels etc.)
+    const metaBase = (hoursItem?.meta || its[0]?.meta || {}) || {};
+    const labels = (metaBase.bucket_labels && typeof metaBase.bucket_labels === "object") ? metaBase.bucket_labels : DEFAULT_LABELS;
 
     const rows = [];
 
@@ -33970,39 +33982,231 @@ const isHoursLineType = (t) => {
       rows.push({ desc: String(desc || ""), qty: q, unit: u, charge: c });
     };
 
-    // HOURS breakdown
-    if (hoursItem) {
-      if (canMerge) {
-        const nightSatQty = hNgt + hSat;
-        const sunBhQty = hSun + hBh;
-        pushRow(bucketLabelOf(labels, "day"), hDay, rDay, hDay * rDay);
-        pushRow(`${bucketLabelOf(labels, "night")}/${bucketLabelOf(labels, "sat")}`, nightSatQty, rNgt, nightSatQty * rNgt);
-        pushRow(`${bucketLabelOf(labels, "sun")}/${bucketLabelOf(labels, "bh")}`, sunBhQty, rSun, sunBhQty * rSun);
+    // Aggregate HOURS across ALL hour lines in the group.
+    // If a bucket has multiple rates, split into multiple rows by rate (desc includes rate).
+    const bucketAgg = (hourKey, rateKey) => {
+      const byRate = new Map(); // rate2dp(string) -> { rate, hours, charge }
+      let totalHours = 0;
+
+      for (const it of hoursLines) {
+        const m = it?.meta || {};
+        const h = num(m[hourKey]);
+        if (h === 0) continue;
+
+        const rate = num(m[rateKey]);
+        const r2 = round2(rate);
+        const rk = String(r2);
+
+        const cur = byRate.get(rk) || { rate: r2, hours: 0, charge: 0 };
+        cur.hours += h;
+        cur.charge += (h * rate);
+        byRate.set(rk, cur);
+
+        totalHours += h;
+      }
+
+      const groups = Array.from(byRate.values()).sort((a, b) => a.rate - b.rate);
+      const uniqueRates = new Set(groups.map(g => String(g.rate)));
+
+      return { groups, uniqueRates, totalHours };
+    };
+
+    const dayAgg   = bucketAgg("hours_day",   "charge_day");
+    const nightAgg = bucketAgg("hours_night", "charge_night");
+    const satAgg   = bucketAgg("hours_sat",   "charge_sat");
+    const sunAgg   = bucketAgg("hours_sun",   "charge_sun");
+    const bhAgg    = bucketAgg("hours_bh",    "charge_bh");
+
+    const groupFlag = !!pick(payloadMeta, "group_nightsat_sunbh", false);
+
+    // Only group if flag TRUE and (night/sat rates identical) AND (sun/bh rates identical).
+    const canMergeNightSat = (() => {
+      if (!groupFlag) return false;
+
+      const nHas = (nightAgg.totalHours !== 0);
+      const sHas = (satAgg.totalHours !== 0);
+
+      if (nHas && sHas) {
+        if (nightAgg.uniqueRates.size !== 1 || satAgg.uniqueRates.size !== 1) return false;
+        const rn = Number(Array.from(nightAgg.uniqueRates)[0]);
+        const rs = Number(Array.from(satAgg.uniqueRates)[0]);
+        return eqRate(rn, rs);
+      }
+
+      const populated = nHas ? nightAgg : (sHas ? satAgg : null);
+      if (!populated) return true; // both 0
+      return populated.uniqueRates.size === 1;
+    })();
+
+    const canMergeSunBh = (() => {
+      if (!groupFlag) return false;
+
+      const sHas = (sunAgg.totalHours !== 0);
+      const bHas = (bhAgg.totalHours !== 0);
+
+      if (sHas && bHas) {
+        if (sunAgg.uniqueRates.size !== 1 || bhAgg.uniqueRates.size !== 1) return false;
+        const rs = Number(Array.from(sunAgg.uniqueRates)[0]);
+        const rb = Number(Array.from(bhAgg.uniqueRates)[0]);
+        return eqRate(rs, rb);
+      }
+
+      const populated = sHas ? sunAgg : (bHas ? bhAgg : null);
+      if (!populated) return true;
+      return populated.uniqueRates.size === 1;
+    })();
+
+    // HOURS rows
+    if (hoursLines.length) {
+      // Day is never merged.
+      if (dayAgg.groups.length === 1) {
+        const g = dayAgg.groups[0];
+        pushRow(bucketLabelOf(labels, "day"), g.hours, g.rate, g.charge);
       } else {
-        pushRow(bucketLabelOf(labels, "day"), hDay, rDay, hDay * rDay);
-        pushRow(bucketLabelOf(labels, "night"), hNgt, rNgt, hNgt * rNgt);
-        pushRow(bucketLabelOf(labels, "sat"), hSat, rSat, hSat * rSat);
-        pushRow(bucketLabelOf(labels, "sun"), hSun, rSun, hSun * rSun);
-        pushRow(bucketLabelOf(labels, "bh"), hBh, rBh, hBh * rBh);
+        for (const g of dayAgg.groups) {
+          pushRow(`${bucketLabelOf(labels, "day")} @ ${fmtGBP(g.rate)}`, g.hours, g.rate, g.charge);
+        }
+      }
+
+      // Night/Sat
+      if (canMergeNightSat) {
+        const nh = nightAgg.groups.length ? nightAgg.groups.reduce((a, g) => (a + g.hours), 0) : 0;
+        const sh = satAgg.groups.length ? satAgg.groups.reduce((a, g) => (a + g.hours), 0) : 0;
+
+        const nc = nightAgg.groups.length ? nightAgg.groups.reduce((a, g) => (a + g.charge), 0) : 0;
+        const sc = satAgg.groups.length ? satAgg.groups.reduce((a, g) => (a + g.charge), 0) : 0;
+
+        const rate =
+          (nightAgg.groups.length === 1 ? nightAgg.groups[0].rate :
+            (satAgg.groups.length === 1 ? satAgg.groups[0].rate : (nh + sh !== 0 ? (nc + sc) / (nh + sh) : 0)));
+
+        pushRow(
+          `${bucketLabelOf(labels, "night")}/${bucketLabelOf(labels, "sat")}`,
+          (nh + sh),
+          rate,
+          (nc + sc)
+        );
+      } else {
+        if (nightAgg.groups.length === 1) {
+          const g = nightAgg.groups[0];
+          pushRow(bucketLabelOf(labels, "night"), g.hours, g.rate, g.charge);
+        } else {
+          for (const g of nightAgg.groups) {
+            pushRow(`${bucketLabelOf(labels, "night")} @ ${fmtGBP(g.rate)}`, g.hours, g.rate, g.charge);
+          }
+        }
+
+        if (satAgg.groups.length === 1) {
+          const g = satAgg.groups[0];
+          pushRow(bucketLabelOf(labels, "sat"), g.hours, g.rate, g.charge);
+        } else {
+          for (const g of satAgg.groups) {
+            pushRow(`${bucketLabelOf(labels, "sat")} @ ${fmtGBP(g.rate)}`, g.hours, g.rate, g.charge);
+          }
+        }
+      }
+
+      // Sun/BH
+      if (canMergeSunBh) {
+        const suh = sunAgg.groups.length ? sunAgg.groups.reduce((a, g) => (a + g.hours), 0) : 0;
+        const bhh = bhAgg.groups.length ? bhAgg.groups.reduce((a, g) => (a + g.hours), 0) : 0;
+
+        const suc = sunAgg.groups.length ? sunAgg.groups.reduce((a, g) => (a + g.charge), 0) : 0;
+        const bhc = bhAgg.groups.length ? bhAgg.groups.reduce((a, g) => (a + g.charge), 0) : 0;
+
+        const rate =
+          (sunAgg.groups.length === 1 ? sunAgg.groups[0].rate :
+            (bhAgg.groups.length === 1 ? bhAgg.groups[0].rate : (suh + bhh !== 0 ? (suc + bhc) / (suh + bhh) : 0)));
+
+        pushRow(
+          `${bucketLabelOf(labels, "sun")}/${bucketLabelOf(labels, "bh")}`,
+          (suh + bhh),
+          rate,
+          (suc + bhc)
+        );
+      } else {
+        if (sunAgg.groups.length === 1) {
+          const g = sunAgg.groups[0];
+          pushRow(bucketLabelOf(labels, "sun"), g.hours, g.rate, g.charge);
+        } else {
+          for (const g of sunAgg.groups) {
+            pushRow(`${bucketLabelOf(labels, "sun")} @ ${fmtGBP(g.rate)}`, g.hours, g.rate, g.charge);
+          }
+        }
+
+        if (bhAgg.groups.length === 1) {
+          const g = bhAgg.groups[0];
+          pushRow(bucketLabelOf(labels, "bh"), g.hours, g.rate, g.charge);
+        } else {
+          for (const g of bhAgg.groups) {
+            pushRow(`${bucketLabelOf(labels, "bh")} @ ${fmtGBP(g.rate)}`, g.hours, g.rate, g.charge);
+          }
+        }
       }
     }
-// Additional rates / mileage / expenses (non-hours)
-  for (const it of its) {
-    const t = getLineTypeNorm(it);
-    if (isHoursLineType(t)) continue;
-    if (t === "ADJUSTMENT") continue;
+
+    // Aggregate ADDITIONAL* rows across the group (e.g., daily split additional lines).
+    const additionalAgg = new Map(); // key(label||rate2) -> { label, qty, rate, charge }
+    for (const it of its) {
+      const t = getLineTypeNorm(it);
+      if (isHoursLineType(t)) continue;
+      if (t === "ADJUSTMENT") continue;
+      if (!t.startsWith("ADDITIONAL")) continue;
 
       const m = it.meta || {};
       const totalEx = num(it.total_ex_vat);
 
-      // Default label (keep the human-friendly SQL-generated description where available)
+      const unitLabel = String(m.unit_label || it.description || t || "").trim() || t;
+
+      let qty = null;
+      let unitCharge = null;
+
+      if (m?.units && m.units.unit_count != null) qty = num(m.units.unit_count);
+      else if (m.unit_count != null) qty = num(m.unit_count);
+      else if (m.qty != null) qty = num(m.qty);
+
+      if (m?.units && m.units.charge_rate != null) unitCharge = num(m.units.charge_rate);
+      else if (m.unit_charge_ex_vat != null) unitCharge = num(m.unit_charge_ex_vat);
+
+      if (qty == null) qty = 1;
+      if (round2(qty) === 0) continue;
+
+      if (unitCharge == null) {
+        unitCharge = (qty !== 0) ? (totalEx / qty) : totalEx;
+      }
+
+      const r2 = round2(unitCharge);
+      const key = `${unitLabel}||${String(r2)}`;
+      const cur = additionalAgg.get(key) || { label: unitLabel, qty: 0, rate: r2, charge: 0 };
+
+      cur.qty += qty;
+      cur.charge += totalEx;
+
+      additionalAgg.set(key, cur);
+    }
+
+    for (const g of Array.from(additionalAgg.values())) {
+      const rate = (g.qty !== 0) ? (g.charge / g.qty) : g.rate;
+      pushRow(g.label, g.qty, rate, g.charge);
+    }
+
+    // Mileage / expenses / other non-hours (exclude additional, which is aggregated above)
+    for (const it of its) {
+      const t = getLineTypeNorm(it);
+      if (isHoursLineType(t)) continue;
+      if (t === "ADJUSTMENT") continue;
+      if (t.startsWith("ADDITIONAL")) continue;
+
+      const m = it.meta || {};
+      const totalEx = num(it.total_ex_vat);
+
       const unitLabel = String(m.unit_label || it.description || t || "").trim() || t;
 
       let qty = null;
       let unitCharge = null;
 
       // Mileage (miles + rate)
-      if (t === "MILEAGE") {
+      if (t === "MILEAGE" || t.startsWith("MILEAGE")) {
         if (m?.mileage && m.mileage.mileage_units != null) qty = num(m.mileage.mileage_units);
         else if (m.mileage_units != null) qty = num(m.mileage_units);
         else if (m.qty != null) qty = num(m.qty);
@@ -34011,17 +34215,7 @@ const isHoursLineType = (t) => {
         else if (m.unit_charge_ex_vat != null) unitCharge = num(m.unit_charge_ex_vat);
       }
 
-      // Additional units/rates
-      else if (t.startsWith("ADDITIONAL_RATE")) {
-        if (m?.units && m.units.unit_count != null) qty = num(m.units.unit_count);
-        else if (m.unit_count != null) qty = num(m.unit_count);
-        else if (m.qty != null) qty = num(m.qty);
-
-        if (m?.units && m.units.charge_rate != null) unitCharge = num(m.units.charge_rate);
-        else if (m.unit_charge_ex_vat != null) unitCharge = num(m.unit_charge_ex_vat);
-      }
-
-      // Expenses (travel / accommodation / other etc.)
+      // Expenses
       else if (t.startsWith("EXPENSE")) {
         qty = (m.qty != null) ? num(m.qty) : 1;
         unitCharge = (m.unit_charge_ex_vat != null)
@@ -34038,8 +34232,6 @@ const isHoursLineType = (t) => {
       }
 
       if (qty == null) qty = 1;
-
-      // Requirement: skip zero-qty rows (but DO show negative qty/charges)
       if (round2(qty) === 0) continue;
 
       if (unitCharge == null) {
@@ -34082,10 +34274,10 @@ const isHoursLineType = (t) => {
   };
 
   // ─────────────────────────────────────────────────────────────
-
-  // ─────────────────────────────────────────────────────────────
   // Booking reference rows (manifest.reference_rows)
   // Rendered under each timesheet group (never show timesheet_id)
+  // - Structured rows (SEGMENT/DAY/TIMESHEET) => Day/Start/End/Reference table
+  // - Freeform rows (no day/start/end)        => single-column Reference table
   // ─────────────────────────────────────────────────────────────
   const refsByTsId = new Map();
   for (const r of (reference_rows || [])) {
@@ -34099,28 +34291,40 @@ const isHoursLineType = (t) => {
     const refs = refsByTsId.get(String(tsId || "")) || [];
     if (!refs.length) return "";
 
-    const rowsHtml = refs.map((r) => {
-      const day = r?.day_ymd ? fmtDateGB(r.day_ymd) : "";
-      const st = r?.start_utc ? fmtUKTime(r.start_utc) : "";
-      const en = r?.end_utc ? fmtUKTime(r.end_utc) : "";
+    const isStructured = (r) => {
+      const d = (r?.day_ymd != null) ? String(r.day_ymd).trim() : '';
+      const st = (r?.start_utc != null) ? String(r.start_utc).trim() : '';
+      const en = (r?.end_utc != null) ? String(r.end_utc).trim() : '';
+      return !!(d || st || en);
+    };
 
-      const hasRef = (r?.current_reference != null) && String(r.current_reference).trim();
-      const refTxt = hasRef ? String(r.current_reference).trim() : (r?.is_required ? "MISSING" : "—");
-      const refCls = (!hasRef && r?.is_required) ? "ref-missing" : "";
+    const structured = [];
+    const freeform = [];
+    refs.forEach((r) => {
+      (isStructured(r) ? structured : freeform).push(r);
+    });
 
-      return `
+    const hasRefTxt = (r) => (r?.current_reference != null) && String(r.current_reference).trim();
+    const refText = (r) => hasRefTxt(r) ? String(r.current_reference).trim() : (r?.is_required ? "MISSING" : "—");
+    const refCls = (r) => (!hasRefTxt(r) && r?.is_required) ? "ref-missing" : "";
+
+    // Stable render (do not re-sort; reference_rows are already filtered and ordered server-side)
+    const structuredTable = structured.length ? (() => {
+      const rowsHtml = structured.map((r) => {
+        const day = r?.day_ymd ? fmtDateGB(r.day_ymd) : "";
+        const st = r?.start_utc ? fmtUKTime(r.start_utc) : "";
+        const en = r?.end_utc ? fmtUKTime(r.end_utc) : "";
+        return `
         <tr>
           <td class="r-day mono">${escapeHtml(day)}</td>
           <td class="r-time mono">${escapeHtml(st)}</td>
           <td class="r-time mono">${escapeHtml(en)}</td>
-          <td class="r-ref mono ${refCls}">${escapeHtml(refTxt)}</td>
+          <td class="r-ref mono ${refCls(r)}">${escapeHtml(refText(r))}</td>
         </tr>
       `;
-    }).join("");
+      }).join("");
 
-    return `
-      <div class="refs-wrap">
-        <div class="refs-title">Booking references</div>
+      return `
         <table class="refs">
           <thead>
             <tr>
@@ -34134,10 +34338,40 @@ const isHoursLineType = (t) => {
             ${rowsHtml}
           </tbody>
         </table>
+      `;
+    })() : "";
+
+    const freeformTable = freeform.length ? (() => {
+      const rowsHtml = freeform.map((r) => `
+        <tr>
+          <td class="r-ref mono ${refCls(r)}">${escapeHtml(refText(r))}</td>
+        </tr>
+      `).join("");
+
+      return `
+        <table class="refs refs-freeform">
+          <thead>
+            <tr>
+              <th class="r-ref">Reference</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+      `;
+    })() : "";
+
+    return `
+      <div class="refs-wrap">
+        <div class="refs-title">Booking references</div>
+        ${structuredTable || ""}
+        ${freeformTable ? `<div style="height:6px;"></div>${freeformTable}` : ""}
       </div>
     `;
   };
 
+  // ─────────────────────────────────────────────────────────────
   // Build main table rows:
   // - One row per timesheet group (with nested breakdown table)
   // - Optional adjustments section at the end
@@ -34260,6 +34494,25 @@ const isHoursLineType = (t) => {
     .title { font-size: 20px; font-weight: 700; letter-spacing: .5px; }
     .muted { color: #666; }
     .mono { font-variant-numeric: tabular-nums; }
+
+    /* Agency brand header */
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+    .brand-logo {
+      height: 34px;
+      max-width: 180px;
+      object-fit: contain;
+    }
+    .brand-name {
+      font-weight: 700;
+      font-size: 13px;
+      line-height: 1.1;
+    }
+
     .panel { border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; }
     .billto-title { font-weight: 600; margin-bottom: 4px; }
     .billto { white-space: pre-wrap; }
@@ -34346,6 +34599,7 @@ const isHoursLineType = (t) => {
     table.refs .r-time { width: 60px; white-space: nowrap; text-align: right; }
     table.refs .r-ref { text-align: left; }
     table.refs td.r-time { text-align: right; }
+    table.refs.refs-freeform .r-ref { width: auto; }
     .ref-missing { color: #b91c1c; font-weight: 700; }
 
     /* New: adjustments section header */
@@ -34356,14 +34610,19 @@ const isHoursLineType = (t) => {
     }
     .section-title { font-weight: 700; color: #333; }
 
-    /* Transactional footer pinned above bottom margin */
+    /* Footer: brand/reg always shown; bank section optional */
     .footer {
       position: fixed;
       left: ${mg.left}mm; right: ${mg.right}mm; bottom: ${mg.bottom}mm;
       font-size: 10px; color: #333;
-      display: ${hideBankFooter ? "none" : "grid"};
+      display: grid;
       grid-template-columns: 2fr 1fr; gap: 12px;
     }
+    .footer-left { display: flex; flex-direction: column; gap: 6px; }
+    .footer-brand { display: flex; align-items: center; gap: 8px; }
+    .footer-logo { height: 18px; max-width: 120px; object-fit: contain; }
+    .footer-agency { font-weight: 700; }
+    .footer-bank { }
     .right { text-align: right; }
   </style>
 </head>
@@ -34373,7 +34632,13 @@ const isHoursLineType = (t) => {
   <div class="wrap">
     <div class="header">
       <div>
+        <div class="brand">
+          ${agencyLogoUrl ? `<img class="brand-logo" src="${escapeUrl(agencyLogoUrl)}" alt="Agency logo" />` : ""}
+          ${agencyName ? `<div class="brand-name">${escapeHtml(agencyName)}</div>` : ""}
+        </div>
+
         <div class="title">INVOICE ${invoice_no ? `<span class="muted mono">#${escapeHtml(invoice_no)}</span>` : ""}</div>
+
         <div class="panel" style="margin-top:8px;">
           <div class="billto-title">Bill To</div>
           <div class="billto"><b>${escapeHtml(clientName)}</b>${clientAddress.length ? `<br>${clientAddress.map(escapeHtml).join("<br>")}` : ""}</div>
@@ -34427,13 +34692,25 @@ const isHoursLineType = (t) => {
   </div>
 
   <div class="footer">
-    <div>
-      <div><b>BACS Payment Details</b></div>
-      <div>Banker: <span class="mono">${escapeHtml(pick(bank, "name", ""))}</span></div>
-      <div>Sort Code: <span class="mono">${escapeHtml(pick(bank, "sort_code", ""))}</span> &nbsp;&nbsp; Account No.: <span class="mono">${escapeHtml(pick(bank, "account_number", ""))}</span></div>
+    <div class="footer-left">
+      <div class="footer-brand">
+        ${agencyLogoUrl ? `<img class="footer-logo" src="${escapeUrl(agencyLogoUrl)}" alt="Agency logo" />` : ""}
+        ${agencyName ? `<div class="footer-agency">${escapeHtml(agencyName)}</div>` : ""}
+      </div>
+
+      ${hideBankFooter ? "" : `
+      <div class="footer-bank">
+        <div><b>BACS Payment Details</b></div>
+        <div>Banker: <span class="mono">${escapeHtml(pick(bank, "name", ""))}</span></div>
+        <div>Sort Code: <span class="mono">${escapeHtml(pick(bank, "sort_code", ""))}</span> &nbsp;&nbsp; Account No.: <span class="mono">${escapeHtml(pick(bank, "account_number", ""))}</span></div>
+      </div>
+      `}
     </div>
+
     <div class="right">
       ${vatReg ? `<div>VAT Reg: <b class="mono">${escapeHtml(vatReg)}</b></div>` : ""}
+      ${companyRegNumber ? `<div>Company Reg: <b class="mono">${escapeHtml(companyRegNumber)}</b></div>` : ""}
+      ${registeredAddressLines.length ? `<div style="margin-top:4px;">Registered address:<br>${registeredAddressLines.map(escapeHtml).join("<br>")}</div>` : ""}
     </div>
   </div>
 </body>
@@ -47641,86 +47918,109 @@ function buildHTML(payload) {
     const manualKeys = tsIds.map(tsId => manualKeyByTsId.get(tsId) || null).filter(Boolean);
 
     // Determine expense-only timesheets (no HOURS/ADDITIONAL lines on this invoice, but has EXPENSE/MILEAGE lines),
-    // so missing TS PDF is non-fatal (matches precheck behaviour) — computed from manifest lines (no extra RPCs).
-    const expenseOnlySet = new Set();
-    if ((tsAttach || manualKeys.length) && tsIds.length) {
-      const byTs = new Map();
-      for (const l of (lineRows || [])) {
-        const tsId = l?.timesheet_id ? String(l.timesheet_id) : null;
-        if (!tsId) continue;
-        if (!byTs.has(tsId)) byTs.set(tsId, []);
-        byTs.get(tsId).push(l);
-      }
-      const typeOf = (l) => {
-        const m = (l?.meta_json && typeof l.meta_json === 'object') ? l.meta_json : {};
-        const t = String(l?.line_type_norm || m?.line_type_norm || m?.line_type || '').toUpperCase();
-        return t;
-      };
+// so missing TS PDF is non-fatal (matches precheck behaviour) — computed from manifest lines (no extra RPCs).
+const expenseOnlySet = new Set();
 
-      const isHoursType = (t) => {
-        const x = String(t || '').toUpperCase();
-        return (x === 'HOURS' || x.startsWith('HOURS_'));
-      };
 
-      for (const tsId of tsIds) {
-        const lines = byTs.get(String(tsId)) || [];
-        if (!lines.length) continue;
+// Timesheets that should NOT require a physical timesheet PDF (e.g. NHSP / HealthRoster / no-timesheet-required).
+// If detected, missing TS PDF is non-fatal even when ts_attach_to_invoice defaults to true.
+const noPhysicalTimesheetSet = new Set();
+if ((tsAttach || manualKeys.length) && tsIds.length) {
+  const byTs = new Map();
+  for (const l of (lineRows || [])) {
+    const tsId = l?.timesheet_id ? String(l.timesheet_id) : null;
+    if (!tsId) continue;
+    if (!byTs.has(tsId)) byTs.set(tsId, []);
+    byTs.get(tsId).push(l);
+  }
 
-        const types = lines.map(typeOf);
+  // Detect import-authoritative / no-physical-timesheet cases per timesheet_id using line meta.
+  // This is intentionally tolerant of meta key names.
+  for (const [tsId, lines] of byTs.entries()) {
+    const metas = (lines || []).map(l => (l?.meta_json && typeof l.meta_json === 'object') ? l.meta_json : {});
+    const anyTrue = (key) => metas.some(m => m && m[key] === true);
 
-        const hasHours = types.some(isHoursType);
-        const hasAdditional = types.some(t => String(t || '').toUpperCase().startsWith('ADDITIONAL_RATE'));
-        const hasExpenseOrMileage = types.some(t => {
-          const x = String(t || '').toUpperCase();
-          return (x === 'MILEAGE' || x.startsWith('EXPENSE'));
-        });
+    const basisVals = metas.map(m => String(m?.basis || m?.cur_basis || m?.timesheet_basis || '').toUpperCase());
+    const routeVals = metas.map(m => String(m?.route_type || m?.route || '').toUpperCase());
 
-        if (!hasHours && !hasAdditional && hasExpenseOrMileage) {
-          expenseOnlySet.add(String(tsId));
-        }
-      }
+    const isNhsp = anyTrue('client_is_nhsp') || anyTrue('is_nhsp') || basisVals.includes('NHSP') || routeVals.some(v => v.includes('NHSP'));
+    const isHrImport = basisVals.includes('HEALTHROSTER') || routeVals.some(v => v.includes('HEALTHROSTER') || v.includes('HR_') || v === 'HR');
+    const noTsReq = anyTrue('no_timesheet_required') || anyTrue('client_no_timesheet_required') || anyTrue('contract_no_timesheet_required');
 
+    if (isNhsp || isHrImport || noTsReq) noPhysicalTimesheetSet.add(String(tsId));
+  }
+
+  const typeOf = (l) => {
+    const m = (l?.meta_json && typeof l.meta_json === 'object') ? l.meta_json : {};
+    const t = String(l?.line_type_norm || m?.line_type_norm || m?.line_type || '').toUpperCase();
+    return t;
+  };
+
+  const isHoursType = (t) => {
+    const x = String(t || '').toUpperCase();
+    return (x === 'HOURS' || x.startsWith('HOURS_'));
+  };
+
+  for (const tsId of tsIds) {
+    const lines = byTs.get(String(tsId)) || [];
+    if (!lines.length) continue;
+
+    const types = lines.map(typeOf);
+
+    const hasHours = types.some(isHoursType);
+    const hasAdditional = types.some(t => String(t || '').toUpperCase().startsWith('ADDITIONAL_RATE'));
+    const hasExpenseOrMileage = types.some(t => {
+      const x = String(t || '').toUpperCase();
+      return (x === 'MILEAGE' || x.startsWith('EXPENSE'));
+    });
+
+    if (!hasHours && !hasAdditional && hasExpenseOrMileage) {
+      expenseOnlySet.add(String(tsId));
     }
+  }
 
-    const missing = [];
-    const dedupeKeys = new Set();
-    const tsEvidenceFetchedSet = new Set();
+}
 
-    const timesheetEvidenceBytesList = [];
-    for (const ev of timesheetEvidenceRows) {
-      const key = ev?.storage_key;
-      if (!key) continue;
-      const norm = normalizeKey(String(key));
-      if (dedupeKeys.has(norm)) continue;
+const missing = [];
+const dedupeKeys = new Set();
+const tsEvidenceFetchedSet = new Set();
 
-      const bytes = await r2GetBytes(env, norm);
-      if (!bytes || !bytes.length) {
-        missing.push({ kind: 'TIMESHEET_EVIDENCE_PDF', timesheet_id: ev?.timesheet_id || null, storage_key: norm });
-        continue;
-      }
-      dedupeKeys.add(norm);
-      timesheetEvidenceBytesList.push(bytes);
-      if (ev?.timesheet_id) tsEvidenceFetchedSet.add(String(ev.timesheet_id));
+const timesheetEvidenceBytesList = [];
+for (const ev of timesheetEvidenceRows) {
+  const key = ev?.storage_key;
+  if (!key) continue;
+  const norm = normalizeKey(String(key));
+  if (dedupeKeys.has(norm)) continue;
+
+  const bytes = await r2GetBytes(env, norm);
+  if (!bytes || !bytes.length) {
+    missing.push({ kind: 'TIMESHEET_EVIDENCE_PDF', timesheet_id: ev?.timesheet_id || null, storage_key: norm });
+    continue;
+  }
+  dedupeKeys.add(norm);
+  timesheetEvidenceBytesList.push(bytes);
+  if (ev?.timesheet_id) tsEvidenceFetchedSet.add(String(ev.timesheet_id));
+}
+
+const tsBytesList = [];
+if (tsAttach) {
+  for (let i = 0; i < tsIds.length; i++) {
+    const tsId = tsIds[i];
+    const key = docsKeys[i];
+    const norm = normalizeKey(String(key));
+    if (dedupeKeys.has(norm)) continue;
+
+    const bytes = await r2GetBytes(env, norm);
+    if (!bytes || !bytes.length) {
+      if (expenseOnlySet.has(String(tsId)) || tsEvidenceFetchedSet.has(String(tsId)) || noPhysicalTimesheetSet.has(String(tsId))) continue;
+      missing.push({ kind: 'TIMESHEET_PDF', timesheet_id: tsId, storage_key: norm });
+      continue;
     }
+    dedupeKeys.add(norm);
+    tsBytesList.push(bytes);
+  }
+}
 
-    const tsBytesList = [];
-    if (tsAttach) {
-      for (let i = 0; i < tsIds.length; i++) {
-        const tsId = tsIds[i];
-        const key = docsKeys[i];
-        const norm = normalizeKey(String(key));
-        if (dedupeKeys.has(norm)) continue;
-
-        const bytes = await r2GetBytes(env, norm);
-        if (!bytes || !bytes.length) {
-          if (expenseOnlySet.has(String(tsId)) || tsEvidenceFetchedSet.has(String(tsId))) continue;
-          missing.push({ kind: 'TIMESHEET_PDF', timesheet_id: tsId, storage_key: norm });
-          continue;
-        }
-        dedupeKeys.add(norm);
-        tsBytesList.push(bytes);
-      }
-    }
 
     const manualTsBytesList = [];
     for (let i = 0; i < tsIds.length; i++) {
@@ -47773,38 +48073,40 @@ function buildHTML(payload) {
     }
 
     // Optional HR report
-    let hrBytes = null;
-    if (requiresHr && hrAttach) {
-      const hrRows = [];
-      if (hrCacheRows.length) {
-        for (const r of hrCacheRows) {
-          if (String(r.source_system || '').toUpperCase() !== 'HEALTHROSTER') continue;
-          const rows = Array.isArray(r.rows_json) ? r.rows_json : [];
-          for (const raw of rows) hrRows.push({ raw_row: raw });
-        }
-      } else {
-        for (const tf of tsfinRows) {
-          const ext = (tf.external_source_rows_json && typeof tf.external_source_rows_json === 'object') ? tf.external_source_rows_json : {};
-          const hrWeekly = Array.isArray(ext.HR_WEEKLY) ? ext.HR_WEEKLY : [];
-          for (const row of hrWeekly) hrRows.push(row);
-        }
-      }
-
-      if (hrRows.length) {
-        const hrHtml = buildHrReportHTML(inv, header, hrRows);
-        hrBytes = await withBrowser(env, async (browser) => {
-          const page = await browser.newPage();
-          await page.setContent(hrHtml, { waitUntil: 'networkidle0' });
-          await page.emulateMediaType('screen');
-          const pdfArrayBuffer = await page.pdf({
-            format: 'a4',
-            printBackground: true,
-            margin: { top: 24, right: 24, bottom: 24, left: 24 }
-          });
-          return new Uint8Array(pdfArrayBuffer);
-        });
-      }
+let hrBytes = null;
+{
+  // Attach HealthRoster report whenever HR rows are present for this invoice (even if attach_policy is missing).
+  const hrRows = [];
+  if (hrCacheRows.length) {
+    for (const r of hrCacheRows) {
+      if (String(r.source_system || '').toUpperCase() !== 'HEALTHROSTER') continue;
+      const rows = Array.isArray(r.rows_json) ? r.rows_json : [];
+      for (const raw of rows) hrRows.push({ raw_row: raw });
     }
+  } else {
+    for (const tf of tsfinRows) {
+      const ext = (tf.external_source_rows_json && typeof tf.external_source_rows_json === 'object') ? tf.external_source_rows_json : {};
+      const hrWeekly = Array.isArray(ext.HR_WEEKLY) ? ext.HR_WEEKLY : [];
+      for (const row of hrWeekly) hrRows.push(row);
+    }
+  }
+
+  if (hrRows.length) {
+    const hrHtml = buildHrReportHTML(inv, header, hrRows);
+    hrBytes = await withBrowser(env, async (browser) => {
+      const page = await browser.newPage();
+      await page.setContent(hrHtml, { waitUntil: 'networkidle0' });
+      await page.emulateMediaType('screen');
+      const pdfArrayBuffer = await page.pdf({
+        format: 'a4',
+        printBackground: true,
+        margin: { top: 24, right: 24, bottom: 24, left: 24 }
+      });
+      return new Uint8Array(pdfArrayBuffer);
+    });
+  }
+}
+
 
     // Optional NHSP breakdown report
     let nhspBytes = null;
