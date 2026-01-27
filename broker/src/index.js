@@ -198,50 +198,89 @@ async function withBrowser(env, fn) {
     }
   };
 
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  // Soft, best-effort in-isolate cooldown to avoid thrashing the BR pool on free plans.
+  const nowMs = Date.now();
+  const cooldownUntil = Number(globalThis.__BROWSER_COOLDOWN_UNTIL_MS || 0);
+  if (cooldownUntil && nowMs < cooldownUntil) {
+    const waitMs = Math.min(5000, Math.max(0, cooldownUntil - nowMs));
+    log('log', 'cooldown_wait', { wait_ms: waitMs });
+    if (waitMs > 0) await sleep(waitMs);
+  }
+
   const t0 = Date.now();
   let browser = null;
 
-  try {
-    log('log', 'launch_start');
-    browser = await puppeteer.launch(env.BROWSER); // <-- BROWSER binding from wrangler.toml
-    log('log', 'launch_ok', { ms: Date.now() - t0 });
+  const isNoBrowserAvailable = (err) => {
+    const msg = String(err?.message || err || '');
+    return /No browser available/i.test(msg) || /code:\s*503/i.test(msg) || /503/.test(msg);
+  };
 
-    // Best-effort lifecycle hints
-    try {
-      if (browser && typeof browser.on === 'function') {
-        browser.on('disconnected', () => {
-          log('error', 'browser_disconnected', { ms: Date.now() - t0 });
-        });
-      }
-    } catch {}
+  // Jittered backoff: short by default (free-plan friendly), only for 503/no-capacity.
+  const backoffMs = [250, 750, 1750]; // total worst-case ~2.8s + launch times
+  let lastErr = null;
 
-    const tFn0 = Date.now();
-    const out = await fn(browser);
-    log('log', 'fn_ok', { ms: Date.now() - tFn0, total_ms: Date.now() - t0 });
-    return out;
-  } catch (err) {
-    log('error', 'withBrowser_exception', {
-      ms: Date.now() - t0,
-      err_name: err?.name || null,
-      err_message: err?.message || String(err || ''),
-      err_stack: err?.stack || null
-    });
-    throw err;
-  } finally {
-    const tClose0 = Date.now();
+  for (let attempt = 0; attempt <= backoffMs.length; attempt++) {
     try {
-      if (browser) await browser.close();
-      log('log', 'close_ok', { ms: Date.now() - tClose0, total_ms: Date.now() - t0 });
-    } catch (errClose) {
-      log('error', 'close_failed', {
-        ms: Date.now() - tClose0,
-        total_ms: Date.now() - t0,
-        err_name: errClose?.name || null,
-        err_message: errClose?.message || String(errClose || ''),
-        err_stack: errClose?.stack || null
+      log('log', 'launch_start', { attempt });
+      browser = await puppeteer.launch(env.BROWSER); // <-- BROWSER binding from wrangler.toml
+      log('log', 'launch_ok', { ms: Date.now() - t0, attempt });
+
+      // Best-effort lifecycle hints
+      try {
+        if (browser && typeof browser.on === 'function') {
+          browser.on('disconnected', () => {
+            log('error', 'browser_disconnected', { ms: Date.now() - t0 });
+          });
+        }
+      } catch {}
+
+      const tFn0 = Date.now();
+      const out = await fn(browser);
+      log('log', 'fn_ok', { ms: Date.now() - tFn0, total_ms: Date.now() - t0, attempt });
+      return out;
+    } catch (err) {
+      lastErr = err;
+
+      const retriable = isNoBrowserAvailable(err);
+      log('error', 'withBrowser_exception', {
+        ms: Date.now() - t0,
+        attempt,
+        retriable,
+        err_name: err?.name || null,
+        err_message: err?.message || String(err || ''),
+        err_stack: err?.stack || null
       });
+
+      // Always close any partially-created browser
+      try { if (browser) await browser.close(); } catch {}
+      browser = null;
+
+      if (!retriable) break;
+
+      // Set a short cooldown to avoid hammering BR pool when saturated.
+      globalThis.__BROWSER_COOLDOWN_UNTIL_MS = Date.now() + 2000;
+
+      if (attempt < backoffMs.length) {
+        const base = backoffMs[attempt];
+        const jitter = Math.floor(Math.random() * 150);
+        const wait = base + jitter;
+        log('log', 'retry_wait', { attempt, wait_ms: wait });
+        await sleep(wait);
+        continue;
+      }
+
+      break;
+    } finally {
+      // If we had a successful browser and fn returned, we close in the outer finally below.
+      // For failed attempts we closed above.
     }
   }
+
+  // Ensure we throw the last error so callers can decide how to report it.
+  const errToThrow = lastErr || new Error('Unable to create new browser');
+  throw errToThrow;
 }
 
 
@@ -46661,1914 +46700,6 @@ async function handleInvoiceBatchGenerateConfirm(env, req) {
 }
 
 
-
-
-async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, opts) {
-  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
-  const log = (level, msg, extra) => {
-    if (!LOG) return;
-    try {
-      const payload = Object.assign(
-        {
-          tag: 'INVOICE_RENDER_BUNDLE',
-          at_utc: new Date().toISOString(),
-          cf_ray: req?.headers?.get?.('cf-ray') || null,
-          invoice_id: invoiceId || null,
-          step: step || null,
-          msg: String(msg || '')
-        },
-        (extra && typeof extra === 'object') ? extra : {}
-      );
-      (level === 'error' ? console.error : console.log)(JSON.stringify(payload));
-    } catch (e) {
-      try { (level === 'error' ? console.error : console.log)(msg); } catch {}
-    }
-  };
-
-  const enc = encodeURIComponent;
-  const t0 = Date.now();
-
-  const options = (opts && typeof opts === 'object') ? opts : {};
-  const forceRegen = !!(options.force_regen === true || options.forceRegen === true);
-
-  let step = 'INIT';
-  log('log', 'start', { force_regen: forceRegen });
-
-  function toMarginsObj(m) {
-    const dflt = { top: 32, right: 12, bottom: 20, left: 12 };
-    if (Array.isArray(m) && m.length === 4) {
-      return {
-        top: Number(m[0] ?? dflt.top),
-        right: Number(m[1] ?? dflt.right),
-        bottom: Number(m[2] ?? dflt.bottom),
-        left: Number(m[3] ?? dflt.left),
-      };
-    }
-    if (m && typeof m === "object") {
-      return {
-        top: Number(m.top ?? dflt.top),
-        right: Number(m.right ?? dflt.right),
-        bottom: Number(m.bottom ?? dflt.bottom),
-        left: Number(m.left ?? dflt.left),
-      };
-    }
-    return dflt;
-  }
-
-  // Date parsing used for HR/NHSP sorting.
-  // - Supports YYYY-MM-DD, ISO strings, and DD/MM/YYYY.
-  // - Invalid/missing => Infinity (sorted last).
-  function _parseSortDateToMs(v) {
-    if (v == null) return Number.POSITIVE_INFINITY;
-    const s0 = String(v).trim();
-    if (!s0) return Number.POSITIVE_INFINITY;
-
-    // DD/MM/YYYY
-    const m = s0.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-    if (m) {
-      const dd = Number(m[1]), mm = Number(m[2]), yyyy = Number(m[3]);
-      if (dd >= 1 && dd <= 31 && mm >= 1 && mm <= 12 && yyyy >= 1900 && yyyy <= 2100) {
-        const ms = Date.parse(`${yyyy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}T00:00:00Z`);
-        return Number.isFinite(ms) ? ms : Number.POSITIVE_INFINITY;
-      }
-    }
-
-    // YYYY-MM-DD (or ISO)
-    const ms = Date.parse(s0);
-    return Number.isFinite(ms) ? ms : Number.POSITIVE_INFINITY;
-  }
-
-  function _safeGetDateFromAnyRow(raw) {
-    if (!raw || typeof raw !== 'object') return '';
-    // common candidates
-    return (
-      raw.work_date ??
-      raw.WorkDate ??
-      raw.workDate ??
-      raw.date ??
-      raw.Date ??
-      raw.shift_date ??
-      raw.shiftDate ??
-      raw['Work Date'] ??
-      raw['WORK DATE'] ??
-      ''
-    );
-  }
-
-  function buildHrReportHTML(inv, header, hrRows) {
-    const safe = (v) => (v == null ? '' : String(v));
-    const h = header || {};
-    const clientName = safe(h.client_name || h.client || '');
-    const invNo = safe(inv.invoice_no || '');
-    const issued = safe(inv.issued_at_utc || '');
-
-    // ✅ Sort rows oldest→newest by work_date/date; invalid dates last; stable by original idx.
-    const sortedRows = (Array.isArray(hrRows) ? hrRows : [])
-      .map((r, idx) => ({ r, idx }))
-      .sort((a, b) => {
-        const ra = a.r?.raw_row || a.r || {};
-        const rb = b.r?.raw_row || b.r || {};
-        const da = _parseSortDateToMs(a.r?.date || ra.work_date || ra.date || _safeGetDateFromAnyRow(ra));
-        const db = _parseSortDateToMs(b.r?.date || rb.work_date || rb.date || _safeGetDateFromAnyRow(rb));
-        if (da !== db) return da - db;
-        return a.idx - b.idx;
-      })
-      .map(x => x.r);
-
-    const rowsHtml = sortedRows.map((r, idx) => {
-      const raw = r.raw_row || {};
-      const date      = safe(r.date || raw.work_date || raw.date || '');
-      const staff     = safe(raw.staff_name || raw.worker || '');
-      const ward      = safe(raw.ward || '');
-      const start     = safe(raw.start_utc || '');
-      const end       = safe(raw.end_utc || '');
-      const breakMins = safe(raw.break_mins != null ? raw.break_mins : '');
-      const ref       = safe(r.reference || raw.reference || raw.ref_num || '');
-      return `
-        <tr>
-          <td>${idx + 1}</td>
-          <td>${date}</td>
-          <td>${staff}</td>
-          <td>${ward}</td>
-          <td>${start}</td>
-          <td>${end}</td>
-          <td>${breakMins}</td>
-          <td>${ref}</td>
-        </tr>
-      `;
-    }).join('');
-
-    const hasRows = sortedRows.length > 0;
-
-    return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>HealthRoster Report</title>
-  <style>
-    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 11px; margin: 24px; }
-    h1 { font-size: 18px; margin-bottom: 4px; }
-    h2 { font-size: 13px; margin-top: 4px; margin-bottom: 12px; }
-    table { width: 100%; border-collapse: collapse; font-size: 9px; }
-    th, td { border: 1px solid #ccc; padding: 3px 4px; text-align: left; }
-    th { background: #f2f2f2; }
-    .meta { margin-bottom: 12px; font-size: 10px; }
-    .meta span { display: inline-block; margin-right: 16px; }
-    .no-data { margin-top: 12px; font-style: italic; }
-  </style>
-</head>
-<body>
-  <h1>HealthRoster report</h1>
-  <h2>Invoice ${invNo}</h2>
-  <div class="meta">
-    <span><strong>Client:</strong> ${clientName}</span>
-    <span><strong>Issued:</strong> ${issued}</span>
-  </div>
-  ${hasRows ? `
-    <table>
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Date</th>
-          <th>Staff</th>
-          <th>Ward</th>
-          <th>Start</th>
-          <th>End</th>
-          <th>Break (mins)</th>
-          <th>Reference</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rowsHtml}
-      </tbody>
-    </table>
-  ` : `
-    <div class="no-data">No HealthRoster rows captured for this invoice.</div>
-  `}
-</body>
-</html>
-    `;
-  }
-
-  function buildNhspReportHTML(inv, header, nhspData) {
-    const safe = (v) => (v == null ? '' : String(v));
-    const h = header || {};
-    const clientName = safe(h.client_name || h.client || '');
-    const invNo = safe(inv.invoice_no || '');
-    const issued = safe(inv.issued_at_utc || '');
-
-    // Normalize payload into one or more tables.
-    // If we have header_columns, we MUST preserve that exact column order.
-    const tables = [];
-
-    const unwrapRow = (r) => {
-      if (!r) return null;
-      if (r.raw_row && typeof r.raw_row === 'object') return r.raw_row;
-      if (r.raw && typeof r.raw === 'object') return r.raw;
-      return r;
-    };
-
-    if (Array.isArray(nhspData)) {
-      const rows = nhspData.map(unwrapRow).filter(r => r && typeof r === 'object');
-      if (rows.length) tables.push({ header_columns: [], rows });
-    } else if (nhspData && typeof nhspData === 'object') {
-      const tList = Array.isArray(nhspData.tables) ? nhspData.tables : [nhspData];
-      for (const t of tList) {
-        const headerCols = Array.isArray(t?.header_columns) ? t.header_columns.map(safe) : [];
-        const rowsRaw = Array.isArray(t?.rows_json)
-          ? t.rows_json
-          : (Array.isArray(t?.rows) ? t.rows : []);
-        const rows = rowsRaw.map(unwrapRow).filter(r => r && typeof r === 'object');
-        if (rows.length) tables.push({ header_columns: headerCols, rows });
-      }
-    }
-
-    // Best-effort date extraction for object rows
-    const safeGetDateFromAnyRow = (row) => {
-      if (!row || typeof row !== 'object') return '';
-      const candidates = [
-        row.work_date, row.workDate,
-        row.date, row.Date,
-        row.shift_date, row.shiftDate,
-        row.start_date, row.startDate
-      ];
-      for (const c of candidates) {
-        const s = (c == null ? '' : String(c)).trim();
-        if (s) return s;
-      }
-      return '';
-    };
-
-    // Parse any date-ish string into ms for sorting.
-    // Invalid or empty => Infinity so these rows are pushed to the end.
-    const parseSortDateToMs = (v) => {
-      const s = (v == null ? '' : String(v)).trim();
-      if (!s) return Number.POSITIVE_INFINITY;
-
-      // YYYY-MM-DD
-      const mYmd = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-      if (mYmd) {
-        const y = Number(mYmd[1]), mo = Number(mYmd[2]) - 1, d = Number(mYmd[3]);
-        const t = Date.UTC(y, mo, d);
-        return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
-      }
-
-      // DD/MM/YYYY or DD/MM/YY
-      const mDmy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
-      if (mDmy) {
-        const dd = Number(mDmy[1]), mo = Number(mDmy[2]) - 1;
-        let y = Number(mDmy[3]);
-        if (mDmy[3].length === 2) y = (y >= 70 ? 1900 + y : 2000 + y);
-        const t = Date.UTC(y, mo, dd);
-        return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
-      }
-
-      // Fallback: Date parse
-      const dt = new Date(s);
-      const t = dt.getTime();
-      return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
-    };
-
-    // If table rows are raw_columns, attempt to locate a date-like header so we can sort.
-    const findDateColIndex = (cols) => {
-      if (!Array.isArray(cols) || !cols.length) return -1;
-      const lc = cols.map(c => String(c || '').toLowerCase());
-      // prefer "work date" then "date"
-      let idx = lc.findIndex(s => s.includes('work') && s.includes('date'));
-      if (idx >= 0) return idx;
-      idx = lc.findIndex(s => s === 'date' || s.includes(' date'));
-      if (idx >= 0) return idx;
-      idx = lc.findIndex(s => s.includes('date'));
-      return idx;
-    };
-
-    const sortRowsByDate = (headerCols, rows) => {
-      const cols = Array.isArray(headerCols) ? headerCols : [];
-      const dateIdx = findDateColIndex(cols);
-
-      return rows.map((r, idx) => ({ r, idx })).sort((a, b) => {
-        const ra = a.r;
-        const rb = b.r;
-
-        let da = '';
-        let db = '';
-
-        if (Array.isArray(ra?.raw_columns) && dateIdx >= 0) da = ra.raw_columns[dateIdx] ?? '';
-        else da = safeGetDateFromAnyRow(ra);
-
-        if (Array.isArray(rb?.raw_columns) && dateIdx >= 0) db = rb.raw_columns[dateIdx] ?? '';
-        else db = safeGetDateFromAnyRow(rb);
-
-        const ta = parseSortDateToMs(da);
-        const tb = parseSortDateToMs(db);
-        if (ta !== tb) return ta - tb;
-        return a.idx - b.idx; // stable
-      }).map(x => x.r);
-    };
-
-    for (const t of tables) {
-      t.rows = sortRowsByDate(t.header_columns, t.rows);
-    }
-
-    const hasTables = tables.length > 0;
-
-    const renderTable = (t, idx) => {
-      const headerCols = Array.isArray(t.header_columns) ? t.header_columns : [];
-
-      // Prefer rendering using raw_columns (which maps 1:1 to header_columns).
-      const firstWithRawCols = t.rows.find(r => Array.isArray(r.raw_columns));
-      const rawLen = firstWithRawCols ? firstWithRawCols.raw_columns.length : 0;
-
-      // Column labels:
-      //  - If header_columns exist, use them exactly as imported.
-      //  - Else, if raw_columns exist, use generic Column 1..N (still preserves column ORDER).
-      //  - Else, fall back to object keys (best-effort).
-      const columns = (headerCols && headerCols.length)
-        ? headerCols
-        : (rawLen > 0
-            ? Array.from({ length: rawLen }, (_, i) => `Column ${i + 1}`)
-            : Object.keys(t.rows[0] || {}));
-
-      const headerHtml = `<tr>${columns.map(col => `<th>${escapeHtml(safe(col))}</th>`).join('')}</tr>`;
-
-      const rowsHtml = t.rows.map(r => {
-        let cells = [];
-
-        if (Array.isArray(r.raw_columns)) {
-          const arr = r.raw_columns;
-          for (let i = 0; i < columns.length; i++) {
-            const v = (i < arr.length) ? arr[i] : '';
-            cells.push(`<td>${escapeHtml(safe(v))}</td>`);
-          }
-        } else {
-          for (const col of columns) {
-            cells.push(`<td>${escapeHtml(safe(r?.[col]))}</td>`);
-          }
-        }
-
-        return `<tr>${cells.join('')}</tr>`;
-      }).join('');
-
-      const sep = (idx > 0) ? `<div class="page-break"></div>` : '';
-
-      return `${sep}
-        <table class="nhsp">
-          <thead>${headerHtml}</thead>
-          <tbody>${rowsHtml}</tbody>
-        </table>
-      `;
-    };
-
-    return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>NHSP Attachment</title>
-  <style>
-    @page { size: A4 landscape; margin: 0; }
-    body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      font-size: 10px;
-      margin: 0;
-    }
-    h1 { font-size: 18px; margin-bottom: 4px; }
-    h2 { font-size: 13px; margin-top: 4px; margin-bottom: 12px; }
-    .meta { margin-bottom: 12px; font-size: 10px; }
-    .meta span { display: inline-block; margin-right: 16px; }
-
-    .page-break { break-before: page; page-break-before: always; }
-
-    table.nhsp {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 8.5px;
-      table-layout: fixed;
-    }
-
-    table.nhsp thead { display: table-header-group; }
-
-    table.nhsp th,
-    table.nhsp td {
-      border: 1px solid #ccc;
-      padding: 2px 3px;
-      text-align: left;
-      vertical-align: top;
-      word-break: break-word;
-      overflow-wrap: anywhere;
-    }
-
-    table.nhsp th { background: #f2f2f2; }
-
-    .no-data { margin-top: 12px; font-style: italic; }
-  </style>
-</head>
-<body>
-  <h1>NHSP attachment</h1>
-  <h2>Invoice ${escapeHtml(invNo)}</h2>
-  <div class="meta">
-    <span><strong>Client:</strong> ${escapeHtml(clientName)}</span>
-    <span><strong>Issued:</strong> ${escapeHtml(issued)}</span>
-  </div>
-
-  ${hasTables ? tables.map(renderTable).join('') : `
-    <div class="no-data">No NHSP rows captured for this invoice.</div>
-  `}
-</body>
-</html>
-    `;
-  }
-
-  // ==========================================================
-  // UPDATED: buildHTML (render FREEFORM reference rows as single-column list/table)
-  // ==========================================================
-  function buildHTML(payload) {
-    const {
-      header = {},
-      meta: payloadMeta = {},
-      invoice_no = "",
-      issued_at_utc,
-      due_at_utc,
-      totals = { subtotal_ex_vat: 0, vat_amount: 0, total_inc_vat: 0 },
-      items = [],
-      reference_rows = []
-    } = payload || {};
-
-    // Snapshot fields (populated by your issuing worker)
-    const clientName = pick(header, "client_name", "");
-    const clientAddress = (pick(header, "client_invoice_address", "") || "")
-      .split("\n")
-      .map((l) => l.trim())
-      .filter(Boolean);
-
-    const vatChargeable = !!pick(header, "vat_chargeable", true);
-    const appliedVatPct = Number(pick(header, "applied_vat_rate_pct", 0)); // NOTE: never displayed
-    const termsDays = pick(header, "payment_terms_days", null);
-    const bank = pick(header, "bank", {}) || {};
-
-    // Agency branding (passed via header snapshot)
-    const agencyName =
-      pick(header, "agency_name", "") ||
-      pick(header, "agency_display_name", "") ||
-      pick(header, "company_name", "") ||
-      "";
-
-    const agencyLogoUrl =
-      pick(header, "agency_logo_url", "") ||
-      pick(header, "logo_url", "") ||
-      "";
-
-    // Registered details (passed via header snapshot)
-    const registeredAddressLines = (pick(header, "registered_address", "") || "")
-      .split("\n")
-      .map((l) => l.trim())
-      .filter(Boolean);
-
-    const companyRegNumber =
-      pick(header, "company_reg_number", "") ||
-      pick(header, "company_registration_number", "") ||
-      "";
-
-    // VAT reg: use settings value if present; otherwise fallback to hard-wired number
-    const DEFAULT_VAT_REG = "363 6805 80";
-    const vatReg = pick(header, "vat_registration_number", "") || DEFAULT_VAT_REG;
-
-    // Stationery (letterhead) — expects PNG/JPG URL (signed) + safe-area margins (mm)
-    const stationeryUrl = pick(header, "stationery_url", ""); // PNG/JPG URL or data: URI
-
-    const defaultMargins = stationeryUrl
-      ? { top: 32, right: 12, bottom: 20, left: 12 } // safe defaults with artwork
-      : { top: 18, right: 12, bottom: 34, left: 12 }; // plain layout defaults
-    const mgIn = pick(header, "stationery_margins_mm", {}) || {};
-    const mg = {
-      top: Number(pick(mgIn, "top", defaultMargins.top)),
-      right: Number(pick(mgIn, "right", defaultMargins.right)),
-      bottom: Number(pick(mgIn, "bottom", defaultMargins.bottom)),
-      left: Number(pick(mgIn, "left", defaultMargins.left))
-    };
-
-    // Hide transactional footer if your artwork already includes it
-    const hideBankFooter = !!pick(header, "hide_bank_footer", false);
-
-    // Header-level PO only if a single unique PO exists across header + all items
-    const headerPo = pick(header, "po_number", null);
-    const itemPos = items.map((i) => i?.meta?.po_number).filter(Boolean);
-    const uniquePos = Array.from(new Set([...(headerPo ? [headerPo] : []), ...itemPos]));
-    const poNo = uniquePos.length === 1 ? uniquePos[0] : "";
-
-    const showVatCols = vatChargeable && (appliedVatPct > 0 || Number(totals.vat_amount) > 0);
-
-    // ─────────────────────────────────────────────────────────────
-    // Helpers for breakdown rendering (keeps styling consistent)
-    // ─────────────────────────────────────────────────────────────
-    const num = (v) => {
-      const n = Number(v);
-      return Number.isFinite(n) ? n : 0;
-    };
-    const round2 = (v) => Math.round(num(v) * 100) / 100;
-    const fmtQty = (v, decimals = 2) => {
-      const n = num(v);
-      if (Math.abs(n - Math.round(n)) < 1e-9) return String(Math.round(n));
-      return n.toFixed(decimals);
-    };
-    const eqRate = (a, b) => {
-      // Compare to 2dp to avoid tiny float drift; rates are normally stored as numeric
-      return round2(a) === round2(b);
-    };
-
-    const getLineTypeNorm = (it) => {
-      const m = it?.meta || {};
-      const s = String(m.line_type_norm || m.line_type || "").toUpperCase();
-      return s;
-    };
-
-    const getTimesheetId = (it) => {
-      return (it && it.timesheet_id != null) ? String(it.timesheet_id)
-        : (it?.meta?.timesheet_id != null ? String(it.meta.timesheet_id) : null);
-    };
-
-    const isAdjustmentItem = (it) => {
-      const t = getLineTypeNorm(it);
-      const tsId = getTimesheetId(it);
-      return (!tsId || t === "ADJUSTMENT");
-    };
-
-    // Labels (use per-line labels if provided; fallback to defaults)
-    const DEFAULT_LABELS = { day: "Day", night: "Night", sat: "Sat", sun: "Sun", bh: "BH" };
-    const bucketLabelOf = (labels, key) => String((labels && labels[key]) || DEFAULT_LABELS[key] || key);
-
-    // ─────────────────────────────────────────────────────────────
-    // Group items by timesheet_id, keep adjustments separate
-    // ─────────────────────────────────────────────────────────────
-    const groupMap = new Map(); // tsId -> { items: [], metaHint: {} }
-    const adjustments = [];
-
-    for (const it of (items || [])) {
-      if (isAdjustmentItem(it)) {
-        adjustments.push(it);
-        continue;
-      }
-      const tsId = getTimesheetId(it);
-      if (!tsId) {
-        adjustments.push(it);
-        continue;
-      }
-      if (!groupMap.has(tsId)) groupMap.set(tsId, { tsId, items: [] });
-      groupMap.get(tsId).items.push(it);
-    }
-
-    // Sort groups deterministically by week ending then candidate
-    const groups = Array.from(groupMap.values()).sort((a, b) => {
-      const aMeta = (a.items.find(x => getLineTypeNorm(x) === "HOURS")?.meta) || a.items[0]?.meta || {};
-      const bMeta = (b.items.find(x => getLineTypeNorm(x) === "HOURS")?.meta) || b.items[0]?.meta || {};
-      const awe = String(aMeta.week_ending_date || aMeta.week_ending || aMeta.weekEnding || "");
-      const bwe = String(bMeta.week_ending_date || bMeta.week_ending || bMeta.weekEnding || "");
-      if (awe !== bwe) return awe < bwe ? 1 : -1; // desc
-      const ac = String(aMeta.candidate_display || aMeta.candidate || "");
-      const bc = String(bMeta.candidate_display || bMeta.candidate || "");
-      if (ac !== bc) return ac.localeCompare(bc);
-      return String(a.tsId).localeCompare(String(b.tsId));
-    });
-
-    // ─────────────────────────────────────────────────────────────
-    // Build breakdown rows for a single timesheet group
-    // Unit Description | Quantity | Unit Charge (ex VAT) | Charge (ex VAT)
-    // ─────────────────────────────────────────────────────────────
-    const groupBreakdownTableHtml = (grp) => {
-      const its = grp.items || [];
-      const hoursItem = its.find((x) => getLineTypeNorm(x) === "HOURS") || null;
-
-      // meta for display/header
-      const metaBase = (hoursItem?.meta || its[0]?.meta || {}) || {};
-      const labels = (metaBase.bucket_labels && typeof metaBase.bucket_labels === "object") ? metaBase.bucket_labels : DEFAULT_LABELS;
-
-      // Pull bucket hours/rates from meta (these are merged by _renderInvoiceBundleAndStore)
-      const hDay = num(metaBase.hours_day);
-      const hNgt = num(metaBase.hours_night);
-      const hSat = num(metaBase.hours_sat);
-      const hSun = num(metaBase.hours_sun);
-      const hBh  = num(metaBase.hours_bh);
-
-      const rDay = num(metaBase.charge_day);
-      const rNgt = num(metaBase.charge_night);
-      const rSat = num(metaBase.charge_sat);
-      const rSun = num(metaBase.charge_sun);
-      const rBh  = num(metaBase.charge_bh);
-
-      const groupFlag = !!pick(payloadMeta, "group_nightsat_sunbh", false);
-      const canMerge = groupFlag && eqRate(rNgt, rSat) && eqRate(rSun, rBh);
-
-      const rows = [];
-
-      const pushRow = (desc, qty, unit, charge) => {
-        const q = num(qty);
-        const u = num(unit);
-        const c = round2(charge);
-        // Requirement: hide zero-subtotal rows, but show positive and negative rows.
-        if (c === 0) return;
-        rows.push({ desc: String(desc || ""), qty: q, unit: u, charge: c });
-      };
-
-      // HOURS breakdown
-      if (hoursItem) {
-        if (canMerge) {
-          const nightSatQty = hNgt + hSat;
-          const sunBhQty = hSun + hBh;
-          pushRow(bucketLabelOf(labels, "day"), hDay, rDay, hDay * rDay);
-          pushRow(`${bucketLabelOf(labels, "night")}/${bucketLabelOf(labels, "sat")}`, nightSatQty, rNgt, nightSatQty * rNgt);
-          pushRow(`${bucketLabelOf(labels, "sun")}/${bucketLabelOf(labels, "bh")}`, sunBhQty, rSun, sunBhQty * rSun);
-        } else {
-          pushRow(bucketLabelOf(labels, "day"), hDay, rDay, hDay * rDay);
-          pushRow(bucketLabelOf(labels, "night"), hNgt, rNgt, hNgt * rNgt);
-          pushRow(bucketLabelOf(labels, "sat"), hSat, rSat, hSat * rSat);
-          pushRow(bucketLabelOf(labels, "sun"), hSun, rSun, hSun * rSun);
-          pushRow(bucketLabelOf(labels, "bh"), hBh, rBh, hBh * rBh);
-        }
-      }
-
-      // Additional rates / mileage / expenses (non-hours)
-      for (const it of its) {
-        const t = getLineTypeNorm(it);
-        if (t === "HOURS") continue;
-        if (t === "ADJUSTMENT") continue;
-
-        const m = it.meta || {};
-        const totalEx = num(it.total_ex_vat);
-
-        // Default label (keep the human-friendly SQL-generated description where available)
-        const unitLabel = String(m.unit_label || it.description || t || "").trim() || t;
-
-        let qty = null;
-        let unitCharge = null;
-
-        // Mileage (miles + rate)
-        if (t === "MILEAGE") {
-          if (m?.mileage && m.mileage.mileage_units != null) qty = num(m.mileage.mileage_units);
-          else if (m.mileage_units != null) qty = num(m.mileage_units);
-          else if (m.qty != null) qty = num(m.qty);
-
-          if (m?.mileage && m.mileage.charge_rate != null) unitCharge = num(m.mileage.charge_rate);
-          else if (m.unit_charge_ex_vat != null) unitCharge = num(m.unit_charge_ex_vat);
-        }
-
-        // Additional units/rates
-        else if (t.startsWith("ADDITIONAL_RATE")) {
-          if (m?.units && m.units.unit_count != null) qty = num(m.units.unit_count);
-          else if (m.unit_count != null) qty = num(m.unit_count);
-          else if (m.qty != null) qty = num(m.qty);
-
-          if (m?.units && m.units.charge_rate != null) unitCharge = num(m.units.charge_rate);
-          else if (m.unit_charge_ex_vat != null) unitCharge = num(m.unit_charge_ex_vat);
-        }
-
-        // Expenses (travel / accommodation / other etc.)
-        else if (t.startsWith("EXPENSE")) {
-          qty = (m.qty != null) ? num(m.qty) : 1;
-          unitCharge = (m.unit_charge_ex_vat != null)
-            ? num(m.unit_charge_ex_vat)
-            : (qty !== 0 ? totalEx / qty : totalEx);
-        }
-
-        // Generic fallback
-        else {
-          qty = (m.qty != null) ? num(m.qty) : 1;
-          unitCharge = (m.unit_charge_ex_vat != null)
-            ? num(m.unit_charge_ex_vat)
-            : (qty !== 0 ? totalEx / qty : totalEx);
-        }
-
-        if (qty == null) qty = 1;
-
-        // Requirement: skip zero-qty rows (but DO show negative qty/charges)
-        if (round2(qty) === 0) continue;
-
-        if (unitCharge == null) {
-          unitCharge = (qty !== 0) ? (totalEx / qty) : totalEx;
-        }
-
-        pushRow(unitLabel, qty, unitCharge, totalEx);
-      }
-
-      if (!rows.length) return "";
-
-      const head = `
-      <table class="breakdown">
-        <thead>
-          <tr>
-            <th class="b-desc">Unit Description</th>
-            <th class="b-qty">Quantity</th>
-            <th class="b-unit">Unit Charge (ex VAT)</th>
-            <th class="b-charge">Charge (ex VAT)</th>
-          </tr>
-        </thead>
-        <tbody>
-    `;
-
-      const body = rows.map(r => `
-      <tr>
-        <td class="b-desc">${escapeHtml(r.desc)}</td>
-        <td class="b-qty mono">${fmtQty(r.qty, 2)}</td>
-        <td class="b-unit mono">${fmtGBP(r.unit)}</td>
-        <td class="b-charge mono">${fmtGBP(r.charge)}</td>
-      </tr>
-    `).join("");
-
-      const tail = `
-        </tbody>
-      </table>
-    `;
-
-      return head + body + tail;
-    };
-
-    // ─────────────────────────────────────────────────────────────
-    // Booking reference rows (manifest.reference_rows)
-    // Rendered under each timesheet group (never show timesheet_id)
-    // ─────────────────────────────────────────────────────────────
-    const refsByTsId = new Map();
-    for (const r of (reference_rows || [])) {
-      const tsId = (r && r.timesheet_id != null) ? String(r.timesheet_id) : null;
-      if (!tsId) continue;
-      if (!refsByTsId.has(tsId)) refsByTsId.set(tsId, []);
-      refsByTsId.get(tsId).push(r);
-    }
-
-    const refsTableHtmlForTs = (tsId) => {
-      const refs = refsByTsId.get(String(tsId || "")) || [];
-      if (!refs.length) return "";
-
-      const isStructured = (r) => {
-        const d = (r?.day_ymd != null) ? String(r.day_ymd).trim() : '';
-        const st = (r?.start_utc != null) ? String(r.start_utc).trim() : '';
-        const en = (r?.end_utc != null) ? String(r.end_utc).trim() : '';
-        return !!(d || st || en);
-      };
-
-      const structured = [];
-      const freeform = [];
-      refs.forEach((r) => {
-        (isStructured(r) ? structured : freeform).push(r);
-      });
-
-      const hasRefTxt = (r) => (r?.current_reference != null) && String(r.current_reference).trim();
-      const refText = (r) => hasRefTxt(r) ? String(r.current_reference).trim() : (r?.is_required ? "MISSING" : "—");
-      const refCls = (r) => (!hasRefTxt(r) && r?.is_required) ? "ref-missing" : "";
-
-      // Stable render (do not re-sort; reference_rows are already filtered and ordered server-side)
-      const structuredTable = structured.length ? (() => {
-        const rowsHtml = structured.map((r) => {
-          const day = r?.day_ymd ? fmtDateGB(r.day_ymd) : "";
-          const st = r?.start_utc ? fmtUKTime(r.start_utc) : "";
-          const en = r?.end_utc ? fmtUKTime(r.end_utc) : "";
-          return `
-        <tr>
-          <td class="r-day mono">${escapeHtml(day)}</td>
-          <td class="r-time mono">${escapeHtml(st)}</td>
-          <td class="r-time mono">${escapeHtml(en)}</td>
-          <td class="r-ref mono ${refCls(r)}">${escapeHtml(refText(r))}</td>
-        </tr>
-      `;
-        }).join("");
-
-        return `
-        <table class="refs">
-          <thead>
-            <tr>
-              <th class="r-day">Day</th>
-              <th class="r-time">Start</th>
-              <th class="r-time">End</th>
-              <th class="r-ref">Reference</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rowsHtml}
-          </tbody>
-        </table>
-      `;
-      })() : "";
-
-      const freeformTable = freeform.length ? (() => {
-        const rowsHtml = freeform.map((r) => `
-        <tr>
-          <td class="r-ref mono ${refCls(r)}">${escapeHtml(refText(r))}</td>
-        </tr>
-      `).join("");
-
-        return `
-        <table class="refs refs-freeform">
-          <thead>
-            <tr>
-              <th class="r-ref">Reference</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rowsHtml}
-          </tbody>
-        </table>
-      `;
-      })() : "";
-
-      return `
-      <div class="refs-wrap">
-        <div class="refs-title">Booking references</div>
-        ${structuredTable || ""}
-        ${freeformTable ? `<div style="height:6px;"></div>${freeformTable}` : ""}
-      </div>
-    `;
-    };
-
-    // ─────────────────────────────────────────────────────────────
-    // Build main table rows:
-    // - One row per timesheet group (with nested breakdown table)
-    // - Optional adjustments section at the end
-    // ─────────────────────────────────────────────────────────────
-    const groupRowsHtml = groups.map((grp, idx) => {
-      const its = grp.items || [];
-      const metaFirst = (its.find(x => getLineTypeNorm(x) === "HOURS")?.meta) || its[0]?.meta || {};
-      const we = metaFirst.week_ending_date || metaFirst.week_ending || metaFirst.weekEnding || null;
-
-      const sublineParts = [
-        metaFirst.candidate_display || metaFirst.candidate || null,
-        metaFirst.role || metaFirst.job_title || null,
-        metaFirst.hospital || metaFirst.hospital_norm || null,
-        metaFirst.ward || metaFirst.ward_norm || null,
-        we ? `W/E ${fmtDateGB(we)}` : null,
-        metaFirst.po_number ? `PO ${metaFirst.po_number}` : null
-      ].filter(Boolean).join(" • ");
-
-      const grpEx = round2(its.reduce((a, it) => a + num(it.total_ex_vat), 0));
-      const grpVat = round2(its.reduce((a, it) => a + num(it.vat_amount), 0));
-      const grpInc = round2(its.reduce((a, it) => a + num(it.total_inc_vat), 0));
-
-      const title = escapeHtml(metaFirst.candidate_display || metaFirst.candidate || `Timesheet ${idx + 1}`);
-      const breakdown = groupBreakdownTableHtml(grp);
-      const refsHtml = refsTableHtmlForTs(grp.tsId);
-
-      return `
-      <tr class="line">
-        <td class="desc">
-          <div class="desc-title">${title}</div>
-          <div class="desc-meta">
-            ${escapeHtml(sublineParts)}
-            ${breakdown ? `<div class="breakdown-wrap">${breakdown}</div>` : ""}
-            ${refsHtml || ""}
-          </div>
-        </td>
-        <td class="money exvat">${fmtGBP(grpEx)}</td>
-        ${showVatCols ? `<td class="money vat">${fmtGBP(grpVat)}</td>` : ""}
-        <td class="money totalinc">${fmtGBP(grpInc)}</td>
-      </tr>
-    `;
-    }).join("");
-
-    const adjustmentsRowsHtml = (adjustments && adjustments.length)
-      ? (() => {
-          const head = `
-          <tr class="section-row">
-            <td class="desc" colspan="${showVatCols ? 4 : 3}">
-              <div class="section-title">Adjustments</div>
-            </td>
-          </tr>
-        `;
-
-          const rows = adjustments.map((it, idx) => {
-            const meta = it.meta || {};
-            const desc = escapeHtml(it.description || meta.unit_label || `Adjustment ${idx + 1}`);
-            const sub = [
-              meta.po_number ? `PO ${meta.po_number}` : null
-            ].filter(Boolean).join(" • ");
-
-            return `
-            <tr class="line">
-              <td class="desc">
-                <div class="desc-title">${desc}</div>
-                ${sub ? `<div class="desc-meta">${escapeHtml(sub)}</div>` : ""}
-              </td>
-              <td class="money exvat">${fmtGBP(it.total_ex_vat)}</td>
-              ${showVatCols ? `<td class="money vat">${fmtGBP(it.vat_amount)}</td>` : ""}
-              <td class="money totalinc">${fmtGBP(it.total_inc_vat)}</td>
-            </tr>
-          `;
-          }).join("");
-
-          return head + rows;
-        })()
-      : "";
-
-    const lineRows = (groupRowsHtml || adjustmentsRowsHtml)
-      ? (groupRowsHtml + adjustmentsRowsHtml)
-      : "";
-
-    // Build full HTML (stationery background + reserved margins + fixed footer)
-    return `<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>Invoice ${escapeHtml(invoice_no || "")}</title>
-  <style>
-    /* Reserve safe areas so content never overlaps header/footer artwork */
-    @page { size: A4; margin: ${mg.top}mm ${mg.right}mm ${mg.bottom}mm ${mg.left}mm; }
-
-    html, body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
-      color: #111;
-      font-size: 11px; /* fixed size per spec */
-      line-height: 1.35;
-      -webkit-print-color-adjust: exact;
-    }
-
-    /* Stationery (full page) */
-    .stationery {
-      position: fixed;
-      inset: 0;
-      z-index: 0;
-      background-repeat: no-repeat;
-      background-position: center;
-      background-size: cover; /* A4 PNG should fill edge-to-edge */
-      opacity: 1;
-      pointer-events: none;
-    }
-
-    .wrap { position: relative; z-index: 1; width: 100%; }
-
-    .header {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-      margin-bottom: 16px;
-    }
-      .title { font-size: 20px; font-weight: 700; letter-spacing: .5px; }
-    .muted { color: #666; }
-    .mono { font-variant-numeric: tabular-nums; }
-
-    /* Agency brand header */
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 6px;
-    }
-    .brand-logo {
-      height: 34px;
-      max-width: 180px;
-      object-fit: contain;
-    }
-    .brand-name {
-      font-weight: 700;
-      font-size: 13px;
-      line-height: 1.1;
-    }
-
-    .panel { border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; }
-    .billto-title { font-weight: 600; margin-bottom: 4px; }
-    .billto { white-space: pre-wrap; }
-
-    .meta-table { width: 100%; border-collapse: collapse; }
-    .meta-table th { text-align: left; font-weight: 600; padding: 0 0 2px 0; }
-    .meta-table td { padding: 2px 0; }
-
-    .lines {
-      width: 100%;
-      border-collapse: collapse;
-      border: 1px solid #e5e7eb;
-      border-radius: 10px;
-      overflow: hidden;
-    }
-    .lines thead th {
-      background: #f9fafb;
-      padding: 8px 10px;
-      text-align: left;
-      font-weight: 600;
-    }
-    .lines th, .lines td {
-      border: 1px solid #e5e7eb;  /* full grid */
-      padding: 8px 10px;
-      vertical-align: top;
-    }
-    .lines thead th.money, .lines td.money { text-align: right; }
-    .desc-title { font-weight: 600; margin-bottom: 2px; }
-    .desc-meta { color: #555; }
-    .money { font-variant-numeric: tabular-nums; }
-
-    .lines tfoot td { background: #fcfcfd; font-weight: 600; }
-    .lines tfoot .label { text-align: right; color: #333; font-weight: 600; }
-
-    /* New: neat nested breakdown table (keeps existing styling palette) */
-    .breakdown-wrap { margin-top: 6px; }
-    table.breakdown {
-      width: 100%;
-      border-collapse: collapse;
-      border: 1px solid #e5e7eb;
-      border-radius: 8px;
-      overflow: hidden;
-      font-size: 10px;
-      background: #fff;
-    }
-    table.breakdown th, table.breakdown td {
-      border: 1px solid #e5e7eb;
-      padding: 6px 8px;
-      vertical-align: top;
-    }
-    table.breakdown thead th {
-      background: #f9fafb;
-      font-weight: 600;
-      text-align: left;
-    }
-    table.breakdown .b-qty,
-    table.breakdown .b-unit,
-    table.breakdown .b-charge { text-align: right; white-space: nowrap; }
-    table.breakdown .b-desc { text-align: left; }
-
-    /* Booking references table */
-    .refs-wrap { margin-top: 6px; }
-    .refs-title { font-weight: 600; margin: 2px 0 4px; color: #333; }
-    table.refs {
-      width: 100%;
-      border-collapse: collapse;
-      border: 1px solid #e5e7eb;
-      border-radius: 8px;
-      overflow: hidden;
-      font-size: 10px;
-      background: #fff;
-    }
-    table.refs th, table.refs td {
-      border: 1px solid #e5e7eb;
-      padding: 6px 8px;
-      vertical-align: top;
-    }
-    table.refs thead th {
-      background: #f9fafb;
-      font-weight: 600;
-      text-align: left;
-    }
-    table.refs .r-day { width: 90px; white-space: nowrap; }
-    table.refs .r-time { width: 60px; white-space: nowrap; text-align: right; }
-    table.refs .r-ref { text-align: left; }
-    table.refs td.r-time { text-align: right; }
-    table.refs.refs-freeform .r-ref { width: auto; }
-    .ref-missing { color: #b91c1c; font-weight: 700; }
-
-    /* New: adjustments section header */
-    .section-row td {
-      background: #f9fafb;
-      border-left: 1px solid #e5e7eb;
-      border-right: 1px solid #e5e7eb;
-    }
-    .section-title { font-weight: 700; color: #333; }
-
-    /* Transactional footer pinned above bottom margin */
-    .footer {
-      position: fixed;
-      left: ${mg.left}mm; right: ${mg.right}mm; bottom: ${mg.bottom}mm;
-      font-size: 10px; color: #333;
-      display: ${hideBankFooter ? "none" : "grid"};
-      grid-template-columns: 2fr 1fr; gap: 12px;
-    }
-    .right { text-align: right; }
-  </style>
-</head>
-<body>
-  ${stationeryUrl ? `<div class="stationery" style="background-image:url('${escapeUrl(stationeryUrl)}');"></div>` : ""}
-
-  <div class="wrap">
-    <div class="header">
-      <div>
-           <div class="brand">
-          ${agencyLogoUrl ? `<img class="brand-logo" src="${escapeUrl(agencyLogoUrl)}" alt="Agency logo" />` : ""}
-          ${agencyName ? `<div class="brand-name">${escapeHtml(agencyName)}</div>` : ""}
-        </div>
-
-        <div class="title">INVOICE ${invoice_no ? `<span class="muted mono">#${escapeHtml(invoice_no)}</span>` : ""}</div>
-
-        <div class="panel" style="margin-top:8px;">
-          <div class="billto-title">Bill To</div>
-          <div class="billto"><b>${escapeHtml(clientName)}</b>${clientAddress.length ? `<br>${clientAddress.map(escapeHtml).join("<br>")}` : ""}</div>
-        </div>
-      </div>
-      <div class="panel">
-        <table class="meta-table">
-          <tr><th>Issue date</th><td class="mono">${fmtDateGB(issued_at_utc)}</td></tr>
-          <tr><th>Due date</th><td class="mono">${fmtDateGB(due_at_utc)}</td></tr>
-          ${termsDays != null ? `<tr><th>Payment terms</th><td class="mono">${termsDays} days</td></tr>` : ""}
-          ${poNo ? `<tr><th>PO Number</th><td class="mono">${escapeHtml(poNo)}</td></tr>` : ""}
-          <!-- VAT % intentionally NOT displayed -->
-        </table>
-      </div>
-    </div>
-
-    <table class="lines">
-      <thead>
-        <tr>
-          <th>Description</th>
-          <th class="money">Ex VAT</th>
-          ${showVatCols ? `<th class="money">VAT</th>` : ""}
-          <th class="money">Total</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${lineRows || `<tr><td colspan="${showVatCols ? 4 : 3}">No lines.</td></tr>`}
-      </tbody>
-      <tfoot>
-        <tr>
-          <td class="label">Subtotal (ex VAT)</td>
-          <td class="money mono">${fmtGBP(totals.subtotal_ex_vat)}</td>
-          ${showVatCols ? `<td></td>` : ""}
-          <td></td>
-        </tr>
-        ${showVatCols ? `
-        <tr>
-          <td class="label">VAT</td>
-          <td></td>
-          <td class="money mono">${fmtGBP(totals.vat_amount)}</td>
-          <td></td>
-        </tr>` : ""}
-        <tr>
-          <td class="label"><b>Total due</b></td>
-          <td></td>
-          ${showVatCols ? `<td></td>` : ""}
-          <td class="money mono"><b>${fmtGBP(totals.total_inc_vat)}</b></td>
-        </tr>
-      </tfoot>
-    </table>
-  </div>
-
-  <div class="footer">
-    <div>
-      <div><b>BACS Payment Details</b></div>
-      <div>Banker: <span class="mono">${escapeHtml(pick(bank, "name", ""))}</span></div>
-      <div>Sort Code: <span class="mono">${escapeHtml(pick(bank, "sort_code", ""))}</span> &nbsp;&nbsp; Account No.: <span class="mono">${escapeHtml(pick(bank, "account_number", ""))}</span></div>
-    </div>
-     <div class="right">
-      ${vatReg ? `<div>VAT Reg: <b class="mono">${escapeHtml(vatReg)}</b></div>` : ""}
-      ${companyRegNumber ? `<div>Company Reg: <b class="mono">${escapeHtml(companyRegNumber)}</b></div>` : ""}
-      ${registeredAddressLines.length ? `<div style="margin-top:4px;">Registered address:<br>${registeredAddressLines.map(escapeHtml).join("<br>")}</div>` : ""}
-    </div>
-
-  </div>
-</body>
-</html>`;
-  }
-
-  // Helpers local to this function
-  const isTimesheetKind = (k) => String(k || '').toUpperCase() === 'TIMESHEET';
-  const isDefaultDocsPdfKeyFor = (tsId, key) => {
-    if (!tsId || !key) return false;
-    const norm = normalizeKey(String(key));
-    return norm === normalizeKey(`docs-pdf/timesheets/ts_${String(tsId)}.pdf`);
-  };
-
-  const attachPageDebug = (page, label) => {
-    if (!LOG || !page) return;
-    try {
-      page.on('console', (m) => {
-        try {
-          const type = m?.type?.() || 'log';
-          const text = m?.text?.() || '';
-          if (type === 'error' || type === 'warning') {
-            log('error', 'page_console', { page: label, console_type: type, console_text: text });
-          } else {
-            log('log', 'page_console', { page: label, console_type: type, console_text: text });
-          }
-        } catch {}
-      });
-    } catch {}
-    try {
-      page.on('pageerror', (e) => {
-        log('error', 'pageerror', { page: label, err_message: e?.message || String(e || ''), err_stack: e?.stack || null });
-      });
-    } catch {}
-    try {
-      page.on('requestfailed', (r) => {
-        const url = r?.url?.() || null;
-        const failure = r?.failure?.() || null;
-        log('error', 'requestfailed', { page: label, url, failure });
-      });
-    } catch {}
-  };
-
-  try {
-    // 1) Manifest (single RPC)
-    step = 'MANIFEST_RPC';
-    const tMan0 = Date.now();
-    const man = await sbRpc(env, 'invoice_render_manifest', { p_invoice_id: invoiceId });
-    log('log', 'manifest_rpc_ok', { ms: Date.now() - tMan0 });
-
-    const manRows = Array.isArray(man) ? man : (man?.data || []);
-    const manifest = (manRows && manRows.length) ? manRows[0] : man;
-
-    if (!manifest || typeof manifest !== 'object') {
-      log('error', 'manifest_invalid', { ms: Date.now() - t0 });
-      return { ok: false, error: 'Failed to load invoice render manifest' };
-    }
-
-    const inv = manifest.invoice || manifest.invoice_row || null;
-    if (!inv || !inv.id) {
-      log('error', 'invoice_not_found_in_manifest', { ms: Date.now() - t0 });
-      return { ok: false, error: 'Invoice not found' };
-    }
-
-    log('log', 'manifest_counts', {
-      ms: Date.now() - t0,
-      lines_len: Array.isArray(manifest.lines) ? manifest.lines.length : 0,
-      evidence_len: Array.isArray(manifest.evidence) ? manifest.evidence.length : 0,
-      timesheet_evidence_len: Array.isArray(manifest.timesheet_evidence) ? manifest.timesheet_evidence.length : 0,
-      evidence_other_len: Array.isArray(manifest.evidence_other) ? manifest.evidence_other.length : 0,
-      tsfin_blocks: Array.isArray(manifest.tsfin_external_source_rows) ? manifest.tsfin_external_source_rows.length : 0,
-      hr_cache_blocks: Array.isArray(manifest.hr_source_rows_cache) ? manifest.hr_source_rows_cache.length : 0
-    });
-
-    // ✅ Cache short-circuit INSIDE render (covers email path too)
-    try {
-      if (!forceRegen) {
-        const key = (inv && typeof inv.invoice_pdf_r2_key === 'string') ? inv.invoice_pdf_r2_key.trim() : '';
-        const genAt = inv ? inv.invoice_pdf_generated_at_utc : null;
-        const updAt = inv ? inv.updated_at : null;
-
-        if (key && genAt && updAt) {
-          const tUpd = new Date(updAt).getTime();
-          const tGen = new Date(genAt).getTime();
-
-          if (Number.isFinite(tUpd) && Number.isFinite(tGen) && tUpd <= tGen) {
-            log('log', 'bundle_cache_hit', { ms: Date.now() - t0, pdf_key: key.replace(/^\/+/, '') });
-            return {
-              ok: true,
-              pdf_key: key.replace(/^\/+/, ''),
-              cached: true,
-              attached_timesheets: 0,
-              attached_hr: false,
-              attached_nhsp: false,
-              attached_evidence: 0,
-              attached_timesheet_evidence: 0,
-              attached_manual_timesheets: 0
-            };
-          }
-        }
-      }
-    } catch (errCache) {
-      log('error', 'bundle_cache_check_failed_nonfatal', {
-        ms: Date.now() - t0,
-        err_name: errCache?.name || null,
-        err_message: errCache?.message || String(errCache || ''),
-        err_stack: errCache?.stack || null
-      });
-      // non-fatal; proceed to render
-    }
-
-    step = 'READ_HEADER_ATTACH_POLICY';
-    const header = (manifest.header_snapshot_json && typeof manifest.header_snapshot_json === 'object')
-      ? manifest.header_snapshot_json
-      : (inv.header_snapshot_json && typeof inv.header_snapshot_json === 'object' ? inv.header_snapshot_json : {});
-
-    const attachPolicy = (manifest.attach_policy && typeof manifest.attach_policy === 'object')
-      ? manifest.attach_policy
-      : (header.attach_policy && typeof header.attach_policy === 'object' ? header.attach_policy : null);
-
-    const requiresHr = !!(attachPolicy && attachPolicy.requires_hr === true);
-    const hrAttach = !!(attachPolicy && Object.prototype.hasOwnProperty.call(attachPolicy, 'hr_attach_to_invoice') && attachPolicy.hr_attach_to_invoice !== false);
-    const hrAllowed = (requiresHr === true && hrAttach === true);
-
-    const tsAttach = (attachPolicy && Object.prototype.hasOwnProperty.call(attachPolicy, 'ts_attach_to_invoice'))
-      ? (attachPolicy.ts_attach_to_invoice !== false)
-      : true;
-
-    log('log', 'attach_policy_effective', {
-      requires_hr: requiresHr,
-      hr_attach_to_invoice: hrAttach,
-      hr_allowed: hrAllowed,
-      ts_attach_to_invoice: tsAttach,
-      attach_policy_present: !!attachPolicy
-    });
-
-    // Stationery resolution + presign
-    step = 'PRESIGN_STATIONERY';
-    let stationeryKey =
-      (typeof header.stationery_key === "string" && header.stationery_key.trim()) ||
-      env.INVOICE_STATIONERY_KEY ||
-      "Assets/Stationery/Letterhead/A4/Letterhead_v1@300dpi.png";
-    if (/\.pdf$/i.test(stationeryKey)) stationeryKey = stationeryKey.replace(/\.pdf$/i, "@300dpi.png");
-    stationeryKey = normalizeKey(stationeryKey);
-
-    const tPresign0 = Date.now();
-    const stationeryUrl = await presignR2Url(
-      env,
-      req,
-      stationeryKey,
-      Number(env.PRESIGN_EXPIRES_SECONDS || 600)
-    );
-    log('log', 'presign_ok', {
-      ms: Date.now() - tPresign0,
-      stationery_key: stationeryKey,
-      stationery_url_len: (stationeryUrl ? String(stationeryUrl).length : 0),
-      stationery_origin: (() => { try { return stationeryUrl ? (new URL(stationeryUrl)).origin : null; } catch { return null; } })()
-    });
-
-    const marginsObj = toMarginsObj(header.stationery_margins_mm);
-    const hideBankFooter = header.hide_bank_footer === true;
-
-    const lineRows = Array.isArray(manifest.lines) ? manifest.lines : [];
-
-    const evidenceAll = Array.isArray(manifest.evidence) ? manifest.evidence : [];
-    const timesheetEvidenceRows = Array.isArray(manifest.timesheet_evidence)
-      ? manifest.timesheet_evidence
-      : evidenceAll.filter(ev => isTimesheetKind(ev?.kind));
-    const otherEvidenceRows = Array.isArray(manifest.evidence_other)
-      ? manifest.evidence_other
-      : evidenceAll.filter(ev => !isTimesheetKind(ev?.kind));
-
-    const tsfinRows = Array.isArray(manifest.tsfin_external_source_rows) ? manifest.tsfin_external_source_rows : [];
-    const hrCacheRows = Array.isArray(manifest.hr_source_rows_cache) ? manifest.hr_source_rows_cache : [];
-
-    // Determine group_nightsat_sunbh for template:
-    // IMPORTANT: this should be snapped into header_snapshot_json at issue time.
-    let groupNightsat = false;
-    if (typeof header.group_nightsat_sunbh === 'boolean') groupNightsat = header.group_nightsat_sunbh;
-    else if (typeof header?.meta?.group_nightsat_sunbh === 'boolean') groupNightsat = header.meta.group_nightsat_sunbh;
-
-    // Build invoiceData for buildHTML
-    step = 'BUILD_INVOICE_HTML';
-    const invoiceData = {
-      header: {
-        ...header,
-        stationery_url: stationeryUrl,
-        stationery_margins_mm: marginsObj,
-        hide_bank_footer: hideBankFooter,
-      },
-      meta: {
-        kind: 'invoice',
-        generated_at_utc: new Date().toISOString(),
-        group_nightsat_sunbh: groupNightsat,
-      },
-      invoice_no: inv.invoice_no || null,
-      issued_at_utc: inv.issued_at_utc,
-      due_at_utc: inv.due_at_utc,
-      totals: {
-        subtotal_ex_vat: Number(inv.subtotal_ex_vat || 0),
-        vat_amount: Number(inv.vat_amount || 0),
-        total_inc_vat: Number(inv.total_inc_vat || 0),
-      },
-      items: (lineRows || []).map((l) => {
-        const meta0 = (l.meta_json && typeof l.meta_json === 'object') ? { ...l.meta_json } : {};
-        if (!meta0.week_ending_date && meta0.week_ending_date_local) meta0.week_ending_date = meta0.week_ending_date_local;
-
-        if (!meta0.line_type_norm && l.line_type_norm) meta0.line_type_norm = String(l.line_type_norm);
-        if (!meta0.line_type_norm) meta0.line_type_norm = String(meta0.line_type || '').toUpperCase();
-        if (meta0.timesheet_id == null && l.timesheet_id) meta0.timesheet_id = String(l.timesheet_id);
-
-        const hourKeys = ['hours_day','hours_night','hours_sat','hours_sun','hours_bh'];
-        for (const k of hourKeys) {
-          if (meta0[k] == null && l[k] != null) meta0[k] = Number(l[k] || 0);
-        }
-        const rateKeys = ['charge_day','charge_night','charge_sat','charge_sun','charge_bh'];
-        for (const k of rateKeys) {
-          if (meta0[k] == null && l[k] != null) meta0[k] = Number(l[k] || 0);
-        }
-
-        return {
-          description: l.description,
-          timesheet_id: l.timesheet_id || null,
-          meta: meta0,
-          total_ex_vat: Number(l.total_charge_ex_vat || 0),
-          vat_rate_pct: Number(l.vat_rate_pct || 0),
-          vat_amount: Number(l.vat_amount || 0),
-          total_inc_vat: Number(l.total_inc_vat || 0),
-        };
-      }),
-      reference_rows: Array.isArray(manifest.reference_rows) ? manifest.reference_rows : [],
-    };
-
-    const html = buildHTML(invoiceData);
-    log('log', 'invoice_html_built', {
-      ms: Date.now() - t0,
-      html_len: (html ? String(html).length : 0),
-      line_count: lineRows.length,
-      evidence_timesheet_count: timesheetEvidenceRows.length,
-      evidence_other_count: otherEvidenceRows.length
-    });
-
-    // Render base invoice pdf
-    step = 'PDF_INVOICE_BROWSER';
-    const tInvPdf0 = Date.now();
-    const invoicePdfU8 = await withBrowser(env, async (browser) => {
-      const page = await browser.newPage();
-      attachPageDebug(page, 'invoice');
-
-      try {
-        log('log', 'invoice_setContent_start', { ms: Date.now() - t0 });
-        await page.setContent(html, { waitUntil: "networkidle0" });
-        log('log', 'invoice_setContent_ok', { ms: Date.now() - t0 });
-
-        await page.emulateMediaType("screen");
-
-        log('log', 'invoice_pdf_start', { ms: Date.now() - t0 });
-        const pdfArrayBuffer = await page.pdf({
-          format: "a4",
-          printBackground: true,
-          margin: { top: 0, right: 0, bottom: 0, left: 0 },
-        });
-        log('log', 'invoice_pdf_ok', { ms: Date.now() - t0, pdf_bytes: (pdfArrayBuffer ? pdfArrayBuffer.byteLength : 0) });
-
-        return new Uint8Array(pdfArrayBuffer);
-      } finally {
-        try { await page.close(); } catch {}
-      }
-    });
-    log('log', 'invoice_pdf_done', { ms: Date.now() - tInvPdf0, invoice_pdf_u8_len: invoicePdfU8?.length || 0 });
-
-    // Timesheet IDs from invoice lines
-    step = 'COLLECT_TS_IDS';
-    const tsIds = [...new Set(lineRows.map(r => r?.timesheet_id).filter(Boolean).map(String))];
-    log('log', 'timesheets_collected', { ts_ids: tsIds.length });
-
-    // Canonical docs-pdf keys (only used when tsAttach=true)
-    const docsKeys = tsIds.map(tsId => normalizeKey(`docs-pdf/timesheets/ts_${tsId}.pdf`));
-
-    // Manual / override canonical keys (ALWAYS included)
-    const manualKeyByTsId = new Map();
-    for (const l of lineRows) {
-      const tsId = l?.timesheet_id ? String(l.timesheet_id) : null;
-      if (!tsId) continue;
-      const k = (l.paper_ts_r2_key || l.effective_paper_ts_r2_key || null);
-      if (!k) continue;
-      const nk = normalizeKey(String(k));
-      if (isDefaultDocsPdfKeyFor(tsId, nk)) continue;
-      if (!manualKeyByTsId.has(tsId)) manualKeyByTsId.set(tsId, nk);
-    }
-    const manualKeys = tsIds.map(tsId => manualKeyByTsId.get(tsId) || null).filter(Boolean);
-
-    // Determine expense-only timesheets (no HOURS/ADDITIONAL lines on this invoice, but has EXPENSE/MILEAGE lines),
-    // so missing TS PDF is non-fatal (matches precheck behaviour) — computed from manifest lines (no extra RPCs).
-    const expenseOnlySet = new Set();
-
-    // Timesheets that should NOT require a physical timesheet PDF (e.g. NHSP / HealthRoster / no-timesheet-required).
-    // If detected, missing TS PDF is non-fatal even when ts_attach_to_invoice defaults to true.
-    const noPhysicalTimesheetSet = new Set();
-    if ((tsAttach || manualKeys.length) && tsIds.length) {
-      const byTs = new Map();
-      for (const l of (lineRows || [])) {
-        const tsId = l?.timesheet_id ? String(l.timesheet_id) : null;
-        if (!tsId) continue;
-        if (!byTs.has(tsId)) byTs.set(tsId, []);
-        byTs.get(tsId).push(l);
-      }
-
-      // Detect import-authoritative / no-physical-timesheet cases per timesheet_id using line meta.
-      // This is intentionally tolerant of meta key names.
-      for (const [tsId, lines] of byTs.entries()) {
-        const metas = (lines || []).map(l => (l?.meta_json && typeof l.meta_json === 'object') ? l.meta_json : {});
-        const anyTrue = (key) => metas.some(m => m && m[key] === true);
-
-        const basisVals = metas.map(m => String(m?.basis || m?.cur_basis || m?.timesheet_basis || '').toUpperCase());
-        const routeVals = metas.map(m => String(m?.route_type || m?.route || '').toUpperCase());
-
-        const isNhsp = anyTrue('client_is_nhsp') || anyTrue('is_nhsp') || basisVals.includes('NHSP') || routeVals.some(v => v.includes('NHSP'));
-        const isHrImport = basisVals.includes('HEALTHROSTER') || routeVals.some(v => v.includes('HEALTHROSTER') || v.includes('HR_') || v === 'HR');
-        const noTsReq = anyTrue('no_timesheet_required') || anyTrue('client_no_timesheet_required') || anyTrue('contract_no_timesheet_required');
-
-        if (isNhsp || isHrImport || noTsReq) noPhysicalTimesheetSet.add(String(tsId));
-      }
-
-      const typeOf = (l) => {
-        const m = (l?.meta_json && typeof l.meta_json === 'object') ? l.meta_json : {};
-        const t = String(l?.line_type_norm || m?.line_type_norm || m?.line_type || '').toUpperCase();
-        return t;
-      };
-
-      const isHoursType = (t) => {
-        const x = String(t || '').toUpperCase();
-        return (x === 'HOURS' || x.startsWith('HOURS_'));
-      };
-
-      for (const tsId of tsIds) {
-        const lines = byTs.get(String(tsId)) || [];
-        if (!lines.length) continue;
-
-        const types = lines.map(typeOf);
-
-        const hasHours = types.some(isHoursType);
-        const hasAdditional = types.some(t => String(t || '').toUpperCase().startsWith('ADDITIONAL_RATE'));
-        const hasExpenseOrMileage = types.some(t => {
-          const x = String(t || '').toUpperCase();
-          return (x === 'MILEAGE' || x.startsWith('EXPENSE'));
-        });
-
-        if (!hasHours && !hasAdditional && hasExpenseOrMileage) {
-          expenseOnlySet.add(String(tsId));
-        }
-      }
-
-    }
-
-    log('log', 'timesheet_sets', {
-      expense_only_count: expenseOnlySet.size,
-      no_physical_count: noPhysicalTimesheetSet.size,
-      ts_attach_to_invoice: tsAttach
-    });
-
-    const missing = [];
-    const dedupeKeys = new Set();
-    const tsEvidenceFetchedSet = new Set();
-
-    step = 'FETCH_TIMESHEET_EVIDENCE';
-    const timesheetEvidenceBytesList = [];
-    for (const ev of timesheetEvidenceRows) {
-      const key = ev?.storage_key;
-      if (!key) continue;
-      const norm = normalizeKey(String(key));
-      if (dedupeKeys.has(norm)) continue;
-
-      const bytes = await r2GetBytes(env, norm);
-      if (!bytes || !bytes.length) {
-        missing.push({ kind: 'TIMESHEET_EVIDENCE_PDF', timesheet_id: ev?.timesheet_id || null, storage_key: norm });
-        continue;
-      }
-      dedupeKeys.add(norm);
-      timesheetEvidenceBytesList.push(bytes);
-      if (ev?.timesheet_id) tsEvidenceFetchedSet.add(String(ev.timesheet_id));
-    }
-
-    step = 'FETCH_TS_PDFS';
-    const tsBytesList = [];
-    if (tsAttach) {
-      for (let i = 0; i < tsIds.length; i++) {
-        const tsId = tsIds[i];
-        const key = docsKeys[i];
-        const norm = normalizeKey(String(key));
-        if (dedupeKeys.has(norm)) continue;
-
-        const bytes = await r2GetBytes(env, norm);
-        if (!bytes || !bytes.length) {
-          if (expenseOnlySet.has(String(tsId)) || tsEvidenceFetchedSet.has(String(tsId)) || noPhysicalTimesheetSet.has(String(tsId))) continue;
-          missing.push({ kind: 'TIMESHEET_PDF', timesheet_id: tsId, storage_key: norm });
-          continue;
-        }
-        dedupeKeys.add(norm);
-        tsBytesList.push(bytes);
-      }
-    }
-
-    step = 'FETCH_MANUAL_TS_PDFS';
-    const manualTsBytesList = [];
-    for (let i = 0; i < tsIds.length; i++) {
-      const tsId = tsIds[i];
-      const key = manualKeyByTsId.get(String(tsId));
-      if (!key) continue;
-
-      const norm = normalizeKey(String(key));
-      if (dedupeKeys.has(norm)) continue;
-
-      const bytes = await r2GetBytes(env, norm);
-      if (!bytes || !bytes.length) {
-        if (expenseOnlySet.has(String(tsId)) || tsEvidenceFetchedSet.has(String(tsId))) continue;
-        missing.push({ kind: 'MANUAL_TIMESHEET_PDF', timesheet_id: tsId, storage_key: norm });
-        continue;
-      }
-      dedupeKeys.add(norm);
-      manualTsBytesList.push(bytes);
-    }
-
-    step = 'FETCH_OTHER_EVIDENCE';
-    const evidenceBytesList = [];
-    for (const ev of otherEvidenceRows) {
-      const key = ev?.storage_key;
-      if (!key) continue;
-      const norm = normalizeKey(String(key));
-      if (dedupeKeys.has(norm)) continue;
-
-      const bytes = await r2GetBytes(env, norm);
-      if (!bytes || !bytes.length) {
-        missing.push({ kind: 'EVIDENCE_PDF', timesheet_id: ev?.timesheet_id || null, storage_key: norm });
-        continue;
-      }
-      dedupeKeys.add(norm);
-      evidenceBytesList.push(bytes);
-    }
-
-    log('log', 'artefact_fetch_summary', {
-      missing_count: missing.length,
-      timesheet_evidence_pdfs: timesheetEvidenceBytesList.length,
-      ts_pdfs: tsBytesList.length,
-      manual_ts_pdfs: manualTsBytesList.length,
-      other_evidence_pdfs: evidenceBytesList.length
-    });
-
-    if (missing.length) {
-      try {
-        if (userForAudit) {
-          await writeAudit(
-            env,
-            userForAudit,
-            'INVOICE_RENDER_FAILED_MISSING_ARTEFACTS',
-            { invoice_id: invoiceId, missing },
-            { entity: 'invoice', subject_id: invoiceId, req }
-          );
-        }
-      } catch (errAudit) {
-        log('error', 'writeAudit_missing_artefacts_failed', {
-          err_name: errAudit?.name || null,
-          err_message: errAudit?.message || String(errAudit || ''),
-          err_stack: errAudit?.stack || null
-        });
-      }
-      return { ok: false, error: `Invoice render failed: missing required artefacts (${missing.length}).` };
-    }
-
-    // Optional HR report
-    step = 'BUILD_HR_REPORT';
-    let hrBytes = null;
-    if (hrAllowed) {
-      // Attach HealthRoster report only when requires_hr && hr_attach_to_invoice, AND rows exist for this invoice.
-      const hrRows = [];
-      if (hrCacheRows.length) {
-        for (const r of hrCacheRows) {
-          if (String(r.source_system || '').toUpperCase() !== 'HEALTHROSTER') continue;
-          const rows = Array.isArray(r.rows_json) ? r.rows_json : [];
-          for (const raw of rows) hrRows.push({ raw_row: raw });
-        }
-      } else {
-        for (const tf of tsfinRows) {
-          const ext = (tf.external_source_rows_json && typeof tf.external_source_rows_json === 'object') ? tf.external_source_rows_json : {};
-          const hrWeekly = Array.isArray(ext.HR_WEEKLY) ? ext.HR_WEEKLY : [];
-          for (const row of hrWeekly) hrRows.push(row);
-        }
-      }
-
-      log('log', 'hr_rows_collected', { hr_rows: hrRows.length, hr_cache_blocks: hrCacheRows.length, tsfin_blocks: tsfinRows.length });
-
-      if (hrRows.length) {
-        const hrHtml = buildHrReportHTML(inv, header, hrRows);
-        log('log', 'hr_html_built', { hr_html_len: (hrHtml ? String(hrHtml).length : 0) });
-
-        step = 'PDF_HR_BROWSER';
-        hrBytes = await withBrowser(env, async (browser) => {
-          const page = await browser.newPage();
-          attachPageDebug(page, 'hr');
-
-          try {
-            log('log', 'hr_setContent_start');
-            await page.setContent(hrHtml, { waitUntil: 'networkidle0' });
-            log('log', 'hr_setContent_ok');
-
-            await page.emulateMediaType('screen');
-
-            log('log', 'hr_pdf_start');
-            const pdfArrayBuffer = await page.pdf({
-              format: 'a4',
-              printBackground: true,
-              margin: { top: 24, right: 24, bottom: 24, left: 24 }
-            });
-            log('log', 'hr_pdf_ok', { hr_pdf_bytes: (pdfArrayBuffer ? pdfArrayBuffer.byteLength : 0) });
-
-            return new Uint8Array(pdfArrayBuffer);
-          } finally {
-            try { await page.close(); } catch {}
-          }
-        });
-      }
-    } else {
-      log('log', 'hr_skipped_not_allowed', { requires_hr: requiresHr, hr_attach_to_invoice: hrAttach });
-    }
-
-    // Optional NHSP breakdown report
-    step = 'BUILD_NHSP_REPORT';
-    let nhspBytes = null;
-    {
-      const nhspTables = [];
-
-      // Preferred: invoice-level cache rows (already filtered for this invoice)
-      if (hrCacheRows.length) {
-        for (const r of hrCacheRows) {
-          if (String(r.source_system || '').toUpperCase() !== 'NHSP') continue;
-          const rows = Array.isArray(r.rows_json) ? r.rows_json : [];
-          if (!rows.length) continue;
-          const headerCols = Array.isArray(r.header_columns) ? r.header_columns : [];
-          nhspTables.push({
-            import_id: r.import_id || null,
-            header_columns: headerCols,
-            rows_json: rows
-          });
-        }
-      }
-
-      // Fallback: per-timesheet snapshot external rows
-      if (!nhspTables.length) {
-        const fallbackRows = [];
-        for (const tf of tsfinRows) {
-          const ext = (tf.external_source_rows_json && typeof tf.external_source_rows_json === 'object')
-            ? tf.external_source_rows_json
-            : {};
-          const nhspWeekly = Array.isArray(ext.NHSP_WEEKLY) ? ext.NHSP_WEEKLY : [];
-          for (const row of nhspWeekly) fallbackRows.push(row);
-        }
-        if (fallbackRows.length) {
-          nhspTables.push({
-            import_id: null,
-            header_columns: [],
-            rows_json: fallbackRows
-          });
-        }
-      }
-
-      log('log', 'nhsp_tables_collected', {
-        nhsp_tables: nhspTables.length,
-        nhsp_total_rows: nhspTables.reduce((a, t) => a + (Array.isArray(t.rows_json) ? t.rows_json.length : 0), 0),
-        nhsp_cache_blocks: hrCacheRows.length,
-        tsfin_blocks: tsfinRows.length
-      });
-
-      if (nhspTables.length) {
-        const nhspHtml = buildNhspReportHTML(inv, header, { tables: nhspTables });
-        log('log', 'nhsp_html_built', { nhsp_html_len: (nhspHtml ? String(nhspHtml).length : 0) });
-
-        step = 'PDF_NHSP_BROWSER';
-        nhspBytes = await withBrowser(env, async (browser) => {
-          const page = await browser.newPage();
-          attachPageDebug(page, 'nhsp');
-
-          try {
-            log('log', 'nhsp_setContent_start');
-            await page.setContent(nhspHtml, { waitUntil: 'networkidle0' });
-            log('log', 'nhsp_setContent_ok');
-
-            await page.emulateMediaType('screen');
-
-            log('log', 'nhsp_pdf_start');
-            const pdfArrayBuffer = await page.pdf({
-              format: 'a4',
-              landscape: true,
-              printBackground: true,
-              margin: { top: 24, right: 24, bottom: 24, left: 24 }
-            });
-            log('log', 'nhsp_pdf_ok', { nhsp_pdf_bytes: (pdfArrayBuffer ? pdfArrayBuffer.byteLength : 0) });
-
-            return new Uint8Array(pdfArrayBuffer);
-          } finally {
-            try { await page.close(); } catch {}
-          }
-        });
-      }
-    }
-
-    // ==========================================================
-    // Merge PDFs (UPDATED ORDER):
-    // 1) Invoice
-    // 2) Timesheet PDFs (canonical, if tsAttach)
-    // 3) Manual/override Timesheet PDFs (always when present)
-    // 4) HR report (if present)
-    // 5) NHSP report (if present)
-    // 6) Evidence PDFs (timesheet evidence + other evidence)
-    // ==========================================================
-    step = 'PDF_MERGE_START';
-    const merged = await PDFDocument.create();
-
-    // 1) Invoice
-    step = 'PDFLIB_LOAD_INVOICE';
-    const invDoc = await PDFDocument.load(invoicePdfU8);
-    (await merged.copyPages(invDoc, invDoc.getPageIndices())).forEach(p => merged.addPage(p));
-
-    // 2) Timesheet PDFs (canonical)
-    step = 'PDFLIB_ATTACH_TS_PDFS';
-    let attachedTsCount = 0;
-    if (tsAttach) {
-      for (const b of tsBytesList) {
-        const doc = await PDFDocument.load(b);
-        (await merged.copyPages(doc, doc.getPageIndices())).forEach(p => merged.addPage(p));
-        attachedTsCount++;
-      }
-    }
-
-    // 3) Manual/override Timesheet PDFs (always included when present)
-    step = 'PDFLIB_ATTACH_MANUAL_TS_PDFS';
-    let attachedManualTsCount = 0;
-    for (const b of manualTsBytesList) {
-      const doc = await PDFDocument.load(b);
-      (await merged.copyPages(doc, doc.getPageIndices())).forEach(p => merged.addPage(p));
-      attachedManualTsCount++;
-    }
-
-    // 4) HR report
-    step = 'PDFLIB_ATTACH_HR';
-    if (hrBytes?.length) {
-      const doc = await PDFDocument.load(hrBytes);
-      (await merged.copyPages(doc, doc.getPageIndices())).forEach(p => merged.addPage(p));
-    }
-
-    // 5) NHSP report
-    step = 'PDFLIB_ATTACH_NHSP';
-    if (nhspBytes?.length) {
-      const doc = await PDFDocument.load(nhspBytes);
-      (await merged.copyPages(doc, doc.getPageIndices())).forEach(p => merged.addPage(p));
-    }
-
-    // 6) Evidence PDFs (timesheet evidence + other evidence)
-    step = 'PDFLIB_ATTACH_TIMESHEET_EVIDENCE';
-    let attachedTimesheetEvidenceCount = 0;
-    for (const b of timesheetEvidenceBytesList) {
-      const doc = await PDFDocument.load(b);
-      (await merged.copyPages(doc, doc.getPageIndices())).forEach(p => merged.addPage(p));
-      attachedTimesheetEvidenceCount++;
-    }
-
-    step = 'PDFLIB_ATTACH_OTHER_EVIDENCE';
-    let attachedEvidenceCount = 0;
-    for (const b of evidenceBytesList) {
-      const doc = await PDFDocument.load(b);
-      (await merged.copyPages(doc, doc.getPageIndices())).forEach(p => merged.addPage(p));
-      attachedEvidenceCount++;
-    }
-
-    step = 'PDFLIB_SAVE_MERGED';
-    const combinedU8 = await merged.save();
-    log('log', 'merge_ok', {
-      combined_len: combinedU8?.length || 0,
-      attached_timesheets: attachedTsCount,
-      attached_manual_timesheets: attachedManualTsCount,
-      attached_timesheet_evidence: attachedTimesheetEvidenceCount,
-      attached_evidence: attachedEvidenceCount,
-      attached_hr: !!(hrBytes && hrBytes.length),
-      attached_nhsp: !!(nhspBytes && nhspBytes.length)
-    });
-
-    // Store combined PDF in R2 and patch invoice row
-    step = 'R2_PUT';
-    const pdfKey = normalizeKey(`docs-pdf/invoices/invoice_${invoiceId}.pdf`);
-    await r2Put(env, pdfKey, combinedU8, { httpMetadata: { contentType: "application/pdf" } });
-
-    const nowIso = new Date().toISOString();
-
-    step = 'DB_PATCH_INVOICE';
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${enc(invoiceId)}`,
-      {
-        method: "PATCH",
-        headers: sbHeaders(env),
-        body: JSON.stringify({
-          invoice_pdf_r2_key: pdfKey,
-          invoice_pdf_generated_at_utc: nowIso,
-          paper_ts_r2_manifest: docsKeys,
-          updated_at: nowIso,
-        }),
-      }
-    );
-
-    step = 'DONE';
-    log('log', 'success', { ms: Date.now() - t0, pdf_key: pdfKey });
-
-    return {
-      ok: true,
-      pdf_key: pdfKey,
-      cached: false,
-      attached_timesheets: attachedTsCount,
-      attached_hr: !!(hrBytes && hrBytes.length),
-      attached_nhsp: !!(nhspBytes && nhspBytes.length),
-      attached_evidence: attachedEvidenceCount,
-      attached_timesheet_evidence: attachedTimesheetEvidenceCount,
-      attached_manual_timesheets: attachedManualTsCount
-    };
-  } catch (err) {
-    const errMessage = err?.message || String(err || '');
-    const errStack = err?.stack || null;
-
-    log('error', 'exception', {
-      ms: Date.now() - t0,
-      err_name: err?.name || null,
-      err_message: errMessage,
-      err_stack: errStack
-    });
-
-    // Best-effort audit event with full context (non-fatal if audit fails)
-    try {
-      if (userForAudit) {
-        const stackStr = (errStack == null) ? null : String(errStack);
-        const stackTrim = (stackStr && stackStr.length > 8000) ? stackStr.slice(0, 8000) : stackStr;
-
-        await writeAudit(
-          env,
-          userForAudit,
-          'INVOICE_RENDER_BUNDLE_EXCEPTION',
-          {
-            invoice_id: invoiceId,
-            step,
-            err_name: err?.name || null,
-            err_message: errMessage,
-            err_stack: stackTrim,
-            ms: Date.now() - t0
-          },
-          { entity: 'invoice', subject_id: invoiceId, req }
-        );
-      }
-    } catch (errAudit) {
-      log('error', 'writeAudit_exception_failed', {
-        err_name: errAudit?.name || null,
-        err_message: errAudit?.message || String(errAudit || ''),
-        err_stack: errAudit?.stack || null
-      });
-    }
-
-    return { ok: false, error: "Failed to render invoice bundle" };
-  }
-}
-
 async function handleInvoiceRender(env, req, invoiceId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
   const log = (level, msg, extra) => {
@@ -48611,7 +46742,6 @@ async function handleInvoiceRender(env, req, invoiceId) {
 
   const enc = encodeURIComponent;
 
-  // Parse optional { force_regen: true }
   let forceRegen = false;
   try {
     const body = await req.clone().json();
@@ -48623,7 +46753,6 @@ async function handleInvoiceRender(env, req, invoiceId) {
   log('log', 'start', { force_regen: forceRegen, ms: Date.now() - t0 });
 
   try {
-    // ✅ Fast-path caching (skip render entirely if still valid and not force_regen)
     if (!forceRegen) {
       try {
         log('log', 'cache_check_start');
@@ -48681,7 +46810,6 @@ async function handleInvoiceRender(env, req, invoiceId) {
           err_message: err?.message || String(err || ''),
           err_stack: err?.stack || null
         });
-        // non-fatal: fall through to render
       }
     }
 
@@ -49824,12 +47952,1834 @@ async function ensureInvoicePdf(env, invoiceId, opts = {}) {
 }
 
 
+
 // ============================================================================
 // INTERNAL CORE: _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit)
 // - Shared core logic for rendering + storing invoice bundle PDF
 // - Returns { ok, pdf_key, attached_* counts }
 // - Does NOT build a downloadUrl (that remains in handleInvoiceRender)
 // ============================================================================
+
+
+async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, opts) {
+  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
+
+  const enc = encodeURIComponent;
+  const t0 = Date.now();
+
+  const options = (opts && typeof opts === 'object') ? opts : {};
+  const forceRegen = !!(options.force_regen === true || options.forceRegen === true);
+
+  let step = 'INIT';
+  const log = (level, msg, extra) => {
+    if (!LOG) return;
+    try {
+      const payload = Object.assign(
+        {
+          tag: 'INVOICE_RENDER_BUNDLE',
+          at_utc: new Date().toISOString(),
+          cf_ray: req?.headers?.get?.('cf-ray') || null,
+          invoice_id: invoiceId || null,
+          step: step || null,
+          msg: String(msg || '')
+        },
+        (extra && typeof extra === 'object') ? extra : {}
+      );
+      (level === 'error' ? console.error : console.log)(JSON.stringify(payload));
+    } catch (e) {
+      try { (level === 'error' ? console.error : console.log)(msg); } catch {}
+    }
+  };
+
+  log('log', 'start', { force_regen: forceRegen });
+
+  function toMarginsObj(m) {
+    const dflt = { top: 32, right: 12, bottom: 20, left: 12 };
+    if (Array.isArray(m) && m.length === 4) {
+      return {
+        top: Number(m[0] ?? dflt.top),
+        right: Number(m[1] ?? dflt.right),
+        bottom: Number(m[2] ?? dflt.bottom),
+        left: Number(m[3] ?? dflt.left),
+      };
+    }
+    if (m && typeof m === "object") {
+      return {
+        top: Number(m.top ?? dflt.top),
+        right: Number(m.right ?? dflt.right),
+        bottom: Number(m.bottom ?? dflt.bottom),
+        left: Number(m.left ?? dflt.left),
+      };
+    }
+    return dflt;
+  }
+
+  // Date parsing used for HR/NHSP sorting.
+  // - Supports YYYY-MM-DD, ISO strings, and DD/MM/YYYY.
+  // - Invalid/missing => Infinity (sorted last).
+  function _parseSortDateToMs(v) {
+    if (v == null) return Number.POSITIVE_INFINITY;
+    const s0 = String(v).trim();
+    if (!s0) return Number.POSITIVE_INFINITY;
+
+    // DD/MM/YYYY
+    const m = s0.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m) {
+      const dd = Number(m[1]), mm = Number(m[2]), yyyy = Number(m[3]);
+      if (dd >= 1 && dd <= 31 && mm >= 1 && mm <= 12 && yyyy >= 1900 && yyyy <= 2100) {
+        const ms = Date.parse(`${yyyy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}T00:00:00Z`);
+        return Number.isFinite(ms) ? ms : Number.POSITIVE_INFINITY;
+      }
+    }
+
+    // YYYY-MM-DD (or ISO)
+    const ms = Date.parse(s0);
+    return Number.isFinite(ms) ? ms : Number.POSITIVE_INFINITY;
+  }
+
+  function _safeGetDateFromAnyRow(raw) {
+    if (!raw || typeof raw !== 'object') return '';
+    return (
+      raw.work_date ??
+      raw.WorkDate ??
+      raw.workDate ??
+      raw.date ??
+      raw.Date ??
+      raw.shift_date ??
+      raw.shiftDate ??
+      raw['Work Date'] ??
+      raw['WORK DATE'] ??
+      ''
+    );
+  }
+
+  function buildHrReportHTML(inv, header, hrRows) {
+    const safe = (v) => (v == null ? '' : String(v));
+    const h = header || {};
+    const clientName = safe(h.client_name || h.client || '');
+    const invNo = safe(inv.invoice_no || '');
+    const issued = safe(inv.issued_at_utc || '');
+
+    const sortedRows = (Array.isArray(hrRows) ? hrRows : [])
+      .map((r, idx) => ({ r, idx }))
+      .sort((a, b) => {
+        const ra = a.r?.raw_row || a.r || {};
+        const rb = b.r?.raw_row || b.r || {};
+        const da = _parseSortDateToMs(a.r?.date || ra.work_date || ra.date || _safeGetDateFromAnyRow(ra));
+        const db = _parseSortDateToMs(b.r?.date || rb.work_date || rb.date || _safeGetDateFromAnyRow(rb));
+        if (da !== db) return da - db;
+        return a.idx - b.idx;
+      })
+      .map(x => x.r);
+
+    const rowsHtml = sortedRows.map((r, idx) => {
+      const raw = r.raw_row || {};
+      const date      = safe(r.date || raw.work_date || raw.date || '');
+      const staff     = safe(raw.staff_name || raw.worker || '');
+      const ward      = safe(raw.ward || '');
+      const start     = safe(raw.start_utc || '');
+      const end       = safe(raw.end_utc || '');
+      const breakMins = safe(raw.break_mins != null ? raw.break_mins : '');
+      const ref       = safe(r.reference || raw.reference || raw.ref_num || '');
+      return `
+        <tr>
+          <td>${idx + 1}</td>
+          <td>${date}</td>
+          <td>${staff}</td>
+          <td>${ward}</td>
+          <td>${start}</td>
+          <td>${end}</td>
+          <td>${breakMins}</td>
+          <td>${ref}</td>
+        </tr>
+      `;
+    }).join('');
+
+    const hasRows = sortedRows.length > 0;
+
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>HealthRoster Report</title>
+  <style>
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 11px; margin: 24px; }
+    h1 { font-size: 18px; margin-bottom: 4px; }
+    h2 { font-size: 13px; margin-top: 4px; margin-bottom: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: 9px; }
+    th, td { border: 1px solid #ccc; padding: 3px 4px; text-align: left; }
+    th { background: #f2f2f2; }
+    .meta { margin-bottom: 12px; font-size: 10px; }
+    .meta span { display: inline-block; margin-right: 16px; }
+    .no-data { margin-top: 12px; font-style: italic; }
+  </style>
+</head>
+<body>
+  <h1>HealthRoster report</h1>
+  <h2>Invoice ${invNo}</h2>
+  <div class="meta">
+    <span><strong>Client:</strong> ${clientName}</span>
+    <span><strong>Issued:</strong> ${issued}</span>
+  </div>
+  ${hasRows ? `
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Date</th>
+          <th>Staff</th>
+          <th>Ward</th>
+          <th>Start</th>
+          <th>End</th>
+          <th>Break (mins)</th>
+          <th>Reference</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml}
+      </tbody>
+    </table>
+  ` : `
+    <div class="no-data">No HealthRoster rows captured for this invoice.</div>
+  `}
+</body>
+</html>
+    `;
+  }
+
+  function buildNhspReportHTML(inv, header, nhspData) {
+    const safe = (v) => (v == null ? '' : String(v));
+    const h = header || {};
+    const clientName = safe(h.client_name || h.client || '');
+    const invNo = safe(inv.invoice_no || '');
+    const issued = safe(inv.issued_at_utc || '');
+
+    const tables = [];
+
+    const unwrapRow = (r) => {
+      if (!r) return null;
+      if (r.raw_row && typeof r.raw_row === 'object') return r.raw_row;
+      if (r.raw && typeof r.raw === 'object') return r.raw;
+      return r;
+    };
+
+    if (Array.isArray(nhspData)) {
+      const rows = nhspData.map(unwrapRow).filter(r => r && typeof r === 'object');
+      if (rows.length) tables.push({ header_columns: [], rows });
+    } else if (nhspData && typeof nhspData === 'object') {
+      const tList = Array.isArray(nhspData.tables) ? nhspData.tables : [nhspData];
+      for (const t of tList) {
+        const headerCols = Array.isArray(t?.header_columns) ? t.header_columns.map(safe) : [];
+        const rowsRaw = Array.isArray(t?.rows_json)
+          ? t.rows_json
+          : (Array.isArray(t?.rows) ? t.rows : []);
+        const rows = rowsRaw.map(unwrapRow).filter(r => r && typeof r === 'object');
+        if (rows.length) tables.push({ header_columns: headerCols, rows });
+      }
+    }
+
+    const safeGetDateFromAnyRow = (row) => {
+      if (!row || typeof row !== 'object') return '';
+      const candidates = [
+        row.work_date, row.workDate,
+        row.date, row.Date,
+        row.shift_date, row.shiftDate,
+        row.start_date, row.startDate
+      ];
+      for (const c of candidates) {
+        const s = (c == null ? '' : String(c)).trim();
+        if (s) return s;
+      }
+      return '';
+    };
+
+    const parseSortDateToMs = (v) => {
+      const s = (v == null ? '' : String(v)).trim();
+      if (!s) return Number.POSITIVE_INFINITY;
+
+      const mYmd = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (mYmd) {
+        const y = Number(mYmd[1]), mo = Number(mYmd[2]) - 1, d = Number(mYmd[3]);
+        const t = Date.UTC(y, mo, d);
+        return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
+      }
+
+      const mDmy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
+      if (mDmy) {
+        const dd = Number(mDmy[1]), mo = Number(mDmy[2]) - 1;
+        let y = Number(mDmy[3]);
+        if (mDmy[3].length === 2) y = (y >= 70 ? 1900 + y : 2000 + y);
+        const t = Date.UTC(y, mo, dd);
+        return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
+      }
+
+      const dt = new Date(s);
+      const t = dt.getTime();
+      return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
+    };
+
+    const findDateColIndex = (cols) => {
+      if (!Array.isArray(cols) || !cols.length) return -1;
+      const lc = cols.map(c => String(c || '').toLowerCase());
+      let idx = lc.findIndex(s => s.includes('work') && s.includes('date'));
+      if (idx >= 0) return idx;
+      idx = lc.findIndex(s => s === 'date' || s.includes(' date'));
+      if (idx >= 0) return idx;
+      idx = lc.findIndex(s => s.includes('date'));
+      return idx;
+    };
+
+    const sortRowsByDate = (headerCols, rows) => {
+      const cols = Array.isArray(headerCols) ? headerCols : [];
+      const dateIdx = findDateColIndex(cols);
+
+      return rows.map((r, idx) => ({ r, idx })).sort((a, b) => {
+        const ra = a.r;
+        const rb = b.r;
+
+        let da = '';
+        let db = '';
+
+        if (Array.isArray(ra?.raw_columns) && dateIdx >= 0) da = ra.raw_columns[dateIdx] ?? '';
+        else da = safeGetDateFromAnyRow(ra);
+
+        if (Array.isArray(rb?.raw_columns) && dateIdx >= 0) db = rb.raw_columns[dateIdx] ?? '';
+        else db = safeGetDateFromAnyRow(rb);
+
+        const ta = parseSortDateToMs(da);
+        const tb = parseSortDateToMs(db);
+        if (ta !== tb) return ta - tb;
+        return a.idx - b.idx;
+      }).map(x => x.r);
+    };
+
+    for (const t of tables) {
+      t.rows = sortRowsByDate(t.header_columns, t.rows);
+    }
+
+    const hasTables = tables.length > 0;
+
+    const renderTable = (t, idx) => {
+      const headerCols = Array.isArray(t.header_columns) ? t.header_columns : [];
+
+      const firstWithRawCols = t.rows.find(r => Array.isArray(r.raw_columns));
+      const rawLen = firstWithRawCols ? firstWithRawCols.raw_columns.length : 0;
+
+      const columns = (headerCols && headerCols.length)
+        ? headerCols
+        : (rawLen > 0
+            ? Array.from({ length: rawLen }, (_, i) => `Column ${i + 1}`)
+            : Object.keys(t.rows[0] || {}));
+
+      const headerHtml = `<tr>${columns.map(col => `<th>${escapeHtml(safe(col))}</th>`).join('')}</tr>`;
+
+      const rowsHtml = t.rows.map(r => {
+        let cells = [];
+
+        if (Array.isArray(r.raw_columns)) {
+          const arr = r.raw_columns;
+          for (let i = 0; i < columns.length; i++) {
+            const v = (i < arr.length) ? arr[i] : '';
+            cells.push(`<td>${escapeHtml(safe(v))}</td>`);
+          }
+        } else {
+          for (const col of columns) {
+            cells.push(`<td>${escapeHtml(safe(r?.[col]))}</td>`);
+          }
+        }
+
+        return `<tr>${cells.join('')}</tr>`;
+      }).join('');
+
+      const sep = (idx > 0) ? `<div class="page-break"></div>` : '';
+
+      return `${sep}
+        <table class="nhsp">
+          <thead>${headerHtml}</thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      `;
+    };
+
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>NHSP Attachment</title>
+  <style>
+    @page { size: A4 landscape; margin: 0; }
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 10px;
+      margin: 0;
+    }
+    h1 { font-size: 18px; margin-bottom: 4px; }
+    h2 { font-size: 13px; margin-top: 4px; margin-bottom: 12px; }
+    .meta { margin-bottom: 12px; font-size: 10px; }
+    .meta span { display: inline-block; margin-right: 16px; }
+
+    .page-break { break-before: page; page-break-before: always; }
+
+    table.nhsp {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 8.5px;
+      table-layout: fixed;
+    }
+
+    table.nhsp thead { display: table-header-group; }
+
+    table.nhsp th,
+    table.nhsp td {
+      border: 1px solid #ccc;
+      padding: 2px 3px;
+      text-align: left;
+      vertical-align: top;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+
+    table.nhsp th { background: #f2f2f2; }
+
+    .no-data { margin-top: 12px; font-style: italic; }
+  </style>
+</head>
+<body>
+  <h1>NHSP attachment</h1>
+  <h2>Invoice ${escapeHtml(invNo)}</h2>
+  <div class="meta">
+    <span><strong>Client:</strong> ${escapeHtml(clientName)}</span>
+    <span><strong>Issued:</strong> ${escapeHtml(issued)}</span>
+  </div>
+
+  ${hasTables ? tables.map(renderTable).join('') : `
+    <div class="no-data">No NHSP rows captured for this invoice.</div>
+  `}
+</body>
+</html>
+    `;
+  }
+
+  // ==========================================================
+  // UPDATED: buildHTML (render FREEFORM reference rows as single-column list/table)
+  // ==========================================================
+  function buildHTML(payload) {
+    const {
+      header = {},
+      meta: payloadMeta = {},
+      invoice_no = "",
+      issued_at_utc,
+      due_at_utc,
+      totals = { subtotal_ex_vat: 0, vat_amount: 0, total_inc_vat: 0 },
+      items = [],
+      reference_rows = []
+    } = payload || {};
+
+    const clientName = pick(header, "client_name", "");
+    const clientAddress = (pick(header, "client_invoice_address", "") || "")
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+    const vatChargeable = !!pick(header, "vat_chargeable", true);
+    const appliedVatPct = Number(pick(header, "applied_vat_rate_pct", 0));
+    const termsDays = pick(header, "payment_terms_days", null);
+    const bank = pick(header, "bank", {}) || {};
+
+    const agencyName =
+      pick(header, "agency_name", "") ||
+      pick(header, "agency_display_name", "") ||
+      pick(header, "company_name", "") ||
+      "";
+
+    const agencyLogoUrl =
+      pick(header, "agency_logo_url", "") ||
+      pick(header, "logo_url", "") ||
+      "";
+
+    const registeredAddressLines = (pick(header, "registered_address", "") || "")
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+    const companyRegNumber =
+      pick(header, "company_reg_number", "") ||
+      pick(header, "company_registration_number", "") ||
+      "";
+
+    const DEFAULT_VAT_REG = "363 6805 80";
+    const vatReg = pick(header, "vat_registration_number", "") || DEFAULT_VAT_REG;
+
+    const stationeryUrl = pick(header, "stationery_url", "");
+
+    const defaultMargins = stationeryUrl
+      ? { top: 32, right: 12, bottom: 20, left: 12 }
+      : { top: 18, right: 12, bottom: 34, left: 12 };
+    const mgIn = pick(header, "stationery_margins_mm", {}) || {};
+    const mg = {
+      top: Number(pick(mgIn, "top", defaultMargins.top)),
+      right: Number(pick(mgIn, "right", defaultMargins.right)),
+      bottom: Number(pick(mgIn, "bottom", defaultMargins.bottom)),
+      left: Number(pick(mgIn, "left", defaultMargins.left))
+    };
+
+    const hideBankFooter = !!pick(header, "hide_bank_footer", false);
+
+    const headerPo = pick(header, "po_number", null);
+    const itemPos = items.map((i) => i?.meta?.po_number).filter(Boolean);
+    const uniquePos = Array.from(new Set([...(headerPo ? [headerPo] : []), ...itemPos]));
+    const poNo = uniquePos.length === 1 ? uniquePos[0] : "";
+
+    const showVatCols = vatChargeable && (appliedVatPct > 0 || Number(totals.vat_amount) > 0);
+
+    const num = (v) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    };
+    const round2 = (v) => Math.round(num(v) * 100) / 100;
+    const fmtQty = (v, decimals = 2) => {
+      const n = num(v);
+      if (Math.abs(n - Math.round(n)) < 1e-9) return String(Math.round(n));
+      return n.toFixed(decimals);
+    };
+    const eqRate = (a, b) => round2(a) === round2(b);
+
+    const getLineTypeNorm = (it) => {
+      const m = it?.meta || {};
+      return String(m.line_type_norm || m.line_type || "").toUpperCase();
+    };
+
+    const getTimesheetId = (it) => {
+      return (it && it.timesheet_id != null) ? String(it.timesheet_id)
+        : (it?.meta?.timesheet_id != null ? String(it.meta.timesheet_id) : null);
+    };
+
+    const isAdjustmentItem = (it) => {
+      const t = getLineTypeNorm(it);
+      const tsId = getTimesheetId(it);
+      return (!tsId || t === "ADJUSTMENT");
+    };
+
+    const DEFAULT_LABELS = { day: "Day", night: "Night", sat: "Sat", sun: "Sun", bh: "BH" };
+    const bucketLabelOf = (labels, key) => String((labels && labels[key]) || DEFAULT_LABELS[key] || key);
+
+    const groupMap = new Map();
+    const adjustments = [];
+
+    for (const it of (items || [])) {
+      if (isAdjustmentItem(it)) {
+        adjustments.push(it);
+        continue;
+      }
+      const tsId = getTimesheetId(it);
+      if (!tsId) {
+        adjustments.push(it);
+        continue;
+      }
+      if (!groupMap.has(tsId)) groupMap.set(tsId, { tsId, items: [] });
+      groupMap.get(tsId).items.push(it);
+    }
+
+    const groups = Array.from(groupMap.values()).sort((a, b) => {
+      const aMeta = (a.items.find(x => getLineTypeNorm(x) === "HOURS")?.meta) || a.items[0]?.meta || {};
+      const bMeta = (b.items.find(x => getLineTypeNorm(x) === "HOURS")?.meta) || b.items[0]?.meta || {};
+      const awe = String(aMeta.week_ending_date || aMeta.week_ending || aMeta.weekEnding || "");
+      const bwe = String(bMeta.week_ending_date || bMeta.week_ending || bMeta.weekEnding || "");
+      if (awe !== bwe) return awe < bwe ? 1 : -1;
+      const ac = String(aMeta.candidate_display || aMeta.candidate || "");
+      const bc = String(bMeta.candidate_display || bMeta.candidate || "");
+      if (ac !== bc) return ac.localeCompare(bc);
+      return String(a.tsId).localeCompare(String(b.tsId));
+    });
+
+    const groupBreakdownTableHtml = (grp) => {
+      const its = grp.items || [];
+      const hoursItem = its.find((x) => getLineTypeNorm(x) === "HOURS") || null;
+
+      const metaBase = (hoursItem?.meta || its[0]?.meta || {}) || {};
+      const labels = (metaBase.bucket_labels && typeof metaBase.bucket_labels === "object") ? metaBase.bucket_labels : DEFAULT_LABELS;
+
+      const hDay = num(metaBase.hours_day);
+      const hNgt = num(metaBase.hours_night);
+      const hSat = num(metaBase.hours_sat);
+      const hSun = num(metaBase.hours_sun);
+      const hBh  = num(metaBase.hours_bh);
+
+      const rDay = num(metaBase.charge_day);
+      const rNgt = num(metaBase.charge_night);
+      const rSat = num(metaBase.charge_sat);
+      const rSun = num(metaBase.charge_sun);
+      const rBh  = num(metaBase.charge_bh);
+
+      const groupFlag = !!pick(payloadMeta, "group_nightsat_sunbh", false);
+      const canMerge = groupFlag && eqRate(rNgt, rSat) && eqRate(rSun, rBh);
+
+      const rows = [];
+
+      const pushRow = (desc, qty, unit, charge) => {
+        const q = num(qty);
+        const u = num(unit);
+        const c = round2(charge);
+        if (c === 0) return;
+        rows.push({ desc: String(desc || ""), qty: q, unit: u, charge: c });
+      };
+
+      if (hoursItem) {
+        if (canMerge) {
+          const nightSatQty = hNgt + hSat;
+          const sunBhQty = hSun + hBh;
+          pushRow(bucketLabelOf(labels, "day"), hDay, rDay, hDay * rDay);
+          pushRow(`${bucketLabelOf(labels, "night")}/${bucketLabelOf(labels, "sat")}`, nightSatQty, rNgt, nightSatQty * rNgt);
+          pushRow(`${bucketLabelOf(labels, "sun")}/${bucketLabelOf(labels, "bh")}`, sunBhQty, rSun, sunBhQty * rSun);
+        } else {
+          pushRow(bucketLabelOf(labels, "day"), hDay, rDay, hDay * rDay);
+          pushRow(bucketLabelOf(labels, "night"), hNgt, rNgt, hNgt * rNgt);
+          pushRow(bucketLabelOf(labels, "sat"), hSat, rSat, hSat * rSat);
+          pushRow(bucketLabelOf(labels, "sun"), hSun, rSun, hSun * rSun);
+          pushRow(bucketLabelOf(labels, "bh"), hBh, rBh, hBh * rBh);
+        }
+      }
+
+      for (const it of its) {
+        const t = getLineTypeNorm(it);
+        if (t === "HOURS") continue;
+        if (t === "ADJUSTMENT") continue;
+
+        const m = it.meta || {};
+        const totalEx = num(it.total_ex_vat);
+
+        const unitLabel = String(m.unit_label || it.description || t || "").trim() || t;
+
+        let qty = null;
+        let unitCharge = null;
+
+        if (t === "MILEAGE") {
+          if (m?.mileage && m.mileage.mileage_units != null) qty = num(m.mileage.mileage_units);
+          else if (m.mileage_units != null) qty = num(m.mileage_units);
+          else if (m.qty != null) qty = num(m.qty);
+
+          if (m?.mileage && m.mileage.charge_rate != null) unitCharge = num(m.mileage.charge_rate);
+          else if (m.unit_charge_ex_vat != null) unitCharge = num(m.unit_charge_ex_vat);
+        } else if (t.startsWith("ADDITIONAL_RATE")) {
+          if (m?.units && m.units.unit_count != null) qty = num(m.units.unit_count);
+          else if (m.unit_count != null) qty = num(m.unit_count);
+          else if (m.qty != null) qty = num(m.qty);
+
+          if (m?.units && m.units.charge_rate != null) unitCharge = num(m.units.charge_rate);
+          else if (m.unit_charge_ex_vat != null) unitCharge = num(m.unit_charge_ex_vat);
+        } else if (t.startsWith("EXPENSE")) {
+          qty = (m.qty != null) ? num(m.qty) : 1;
+          unitCharge = (m.unit_charge_ex_vat != null)
+            ? num(m.unit_charge_ex_vat)
+            : (qty !== 0 ? totalEx / qty : totalEx);
+        } else {
+          qty = (m.qty != null) ? num(m.qty) : 1;
+          unitCharge = (m.unit_charge_ex_vat != null)
+            ? num(m.unit_charge_ex_vat)
+            : (qty !== 0 ? totalEx / qty : totalEx);
+        }
+
+        if (qty == null) qty = 1;
+        if (round2(qty) === 0) continue;
+
+        if (unitCharge == null) unitCharge = (qty !== 0) ? (totalEx / qty) : totalEx;
+
+        pushRow(unitLabel, qty, unitCharge, totalEx);
+      }
+
+      if (!rows.length) return "";
+
+      const head = `
+      <table class="breakdown">
+        <thead>
+          <tr>
+            <th class="b-desc">Unit Description</th>
+            <th class="b-qty">Quantity</th>
+            <th class="b-unit">Unit Charge (ex VAT)</th>
+            <th class="b-charge">Charge (ex VAT)</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+      const body = rows.map(r => `
+      <tr>
+        <td class="b-desc">${escapeHtml(r.desc)}</td>
+        <td class="b-qty mono">${fmtQty(r.qty, 2)}</td>
+        <td class="b-unit mono">${fmtGBP(r.unit)}</td>
+        <td class="b-charge mono">${fmtGBP(r.charge)}</td>
+      </tr>
+    `).join("");
+
+      const tail = `
+        </tbody>
+      </table>
+    `;
+
+      return head + body + tail;
+    };
+
+    const refsByTsId = new Map();
+    for (const r of (reference_rows || [])) {
+      const tsId = (r && r.timesheet_id != null) ? String(r.timesheet_id) : null;
+      if (!tsId) continue;
+      if (!refsByTsId.has(tsId)) refsByTsId.set(tsId, []);
+      refsByTsId.get(tsId).push(r);
+    }
+
+    const refsTableHtmlForTs = (tsId) => {
+      const refs = refsByTsId.get(String(tsId || "")) || [];
+      if (!refs.length) return "";
+
+      const isStructured = (r) => {
+        const d = (r?.day_ymd != null) ? String(r.day_ymd).trim() : '';
+        const st = (r?.start_utc != null) ? String(r.start_utc).trim() : '';
+        const en = (r?.end_utc != null) ? String(r.end_utc).trim() : '';
+        return !!(d || st || en);
+      };
+
+      const structured = [];
+      const freeform = [];
+      refs.forEach((r) => {
+        (isStructured(r) ? structured : freeform).push(r);
+      });
+
+      const hasRefTxt = (r) => (r?.current_reference != null) && String(r.current_reference).trim();
+      const refText = (r) => hasRefTxt(r) ? String(r.current_reference).trim() : (r?.is_required ? "MISSING" : "—");
+      const refCls = (r) => (!hasRefTxt(r) && r?.is_required) ? "ref-missing" : "";
+
+      const structuredTable = structured.length ? (() => {
+        const rowsHtml = structured.map((r) => {
+          const day = r?.day_ymd ? fmtDateGB(r.day_ymd) : "";
+          const st = r?.start_utc ? fmtUKTime(r.start_utc) : "";
+          const en = r?.end_utc ? fmtUKTime(r.end_utc) : "";
+          return `
+        <tr>
+          <td class="r-day mono">${escapeHtml(day)}</td>
+          <td class="r-time mono">${escapeHtml(st)}</td>
+          <td class="r-time mono">${escapeHtml(en)}</td>
+          <td class="r-ref mono ${refCls(r)}">${escapeHtml(refText(r))}</td>
+        </tr>
+      `;
+        }).join("");
+
+        return `
+        <table class="refs">
+          <thead>
+            <tr>
+              <th class="r-day">Day</th>
+              <th class="r-time">Start</th>
+              <th class="r-time">End</th>
+              <th class="r-ref">Reference</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+      `;
+      })() : "";
+
+      const freeformTable = freeform.length ? (() => {
+        const rowsHtml = freeform.map((r) => `
+        <tr>
+          <td class="r-ref mono ${refCls(r)}">${escapeHtml(refText(r))}</td>
+        </tr>
+      `).join("");
+
+        return `
+        <table class="refs refs-freeform">
+          <thead>
+            <tr>
+              <th class="r-ref">Reference</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+      `;
+      })() : "";
+
+      return `
+      <div class="refs-wrap">
+        <div class="refs-title">Booking references</div>
+        ${structuredTable || ""}
+        ${freeformTable ? `<div style="height:6px;"></div>${freeformTable}` : ""}
+      </div>
+    `;
+    };
+
+    const groupRowsHtml = groups.map((grp, idx) => {
+      const its = grp.items || [];
+      const metaFirst = (its.find(x => getLineTypeNorm(x) === "HOURS")?.meta) || its[0]?.meta || {};
+      const we = metaFirst.week_ending_date || metaFirst.week_ending || metaFirst.weekEnding || null;
+
+      const sublineParts = [
+        metaFirst.candidate_display || metaFirst.candidate || null,
+        metaFirst.role || metaFirst.job_title || null,
+        metaFirst.hospital || metaFirst.hospital_norm || null,
+        metaFirst.ward || metaFirst.ward_norm || null,
+        we ? `W/E ${fmtDateGB(we)}` : null,
+        metaFirst.po_number ? `PO ${metaFirst.po_number}` : null
+      ].filter(Boolean).join(" • ");
+
+      const grpEx = round2(its.reduce((a, it) => a + num(it.total_ex_vat), 0));
+      const grpVat = round2(its.reduce((a, it) => a + num(it.vat_amount), 0));
+      const grpInc = round2(its.reduce((a, it) => a + num(it.total_inc_vat), 0));
+
+      const title = escapeHtml(metaFirst.candidate_display || metaFirst.candidate || `Timesheet ${idx + 1}`);
+      const breakdown = groupBreakdownTableHtml(grp);
+      const refsHtml = refsTableHtmlForTs(grp.tsId);
+
+      return `
+      <tr class="line">
+        <td class="desc">
+          <div class="desc-title">${title}</div>
+          <div class="desc-meta">
+            ${escapeHtml(sublineParts)}
+            ${breakdown ? `<div class="breakdown-wrap">${breakdown}</div>` : ""}
+            ${refsHtml || ""}
+          </div>
+        </td>
+        <td class="money exvat">${fmtGBP(grpEx)}</td>
+        ${showVatCols ? `<td class="money vat">${fmtGBP(grpVat)}</td>` : ""}
+        <td class="money totalinc">${fmtGBP(grpInc)}</td>
+      </tr>
+    `;
+    }).join("");
+
+    const adjustmentsRowsHtml = (adjustments && adjustments.length)
+      ? (() => {
+          const head = `
+          <tr class="section-row">
+            <td class="desc" colspan="${showVatCols ? 4 : 3}">
+              <div class="section-title">Adjustments</div>
+            </td>
+          </tr>
+        `;
+
+          const rows = adjustments.map((it, idx) => {
+            const meta = it.meta || {};
+            const desc = escapeHtml(it.description || meta.unit_label || `Adjustment ${idx + 1}`);
+            const sub = [
+              meta.po_number ? `PO ${meta.po_number}` : null
+            ].filter(Boolean).join(" • ");
+
+            return `
+            <tr class="line">
+              <td class="desc">
+                <div class="desc-title">${desc}</div>
+                ${sub ? `<div class="desc-meta">${escapeHtml(sub)}</div>` : ""}
+              </td>
+              <td class="money exvat">${fmtGBP(it.total_ex_vat)}</td>
+              ${showVatCols ? `<td class="money vat">${fmtGBP(it.vat_amount)}</td>` : ""}
+              <td class="money totalinc">${fmtGBP(it.total_inc_vat)}</b></td>
+            </tr>
+          `;
+          }).join("");
+
+          return head + rows;
+        })()
+      : "";
+
+    const lineRows = (groupRowsHtml || adjustmentsRowsHtml)
+      ? (groupRowsHtml + adjustmentsRowsHtml)
+      : "";
+
+    return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Invoice ${escapeHtml(invoice_no || "")}</title>
+  <style>
+    @page { size: A4; margin: ${mg.top}mm ${mg.right}mm ${mg.bottom}mm ${mg.left}mm; }
+    html, body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+      color: #111;
+      font-size: 11px;
+      line-height: 1.35;
+      -webkit-print-color-adjust: exact;
+    }
+    .stationery {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      background-repeat: no-repeat;
+      background-position: center;
+      background-size: cover;
+      opacity: 1;
+      pointer-events: none;
+    }
+    .wrap { position: relative; z-index: 1; width: 100%; }
+    .header {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .title { font-size: 20px; font-weight: 700; letter-spacing: .5px; }
+    .muted { color: #666; }
+    .mono { font-variant-numeric: tabular-nums; }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+    .brand-logo {
+      height: 34px;
+      max-width: 180px;
+      object-fit: contain;
+    }
+    .brand-name {
+      font-weight: 700;
+      font-size: 13px;
+      line-height: 1.1;
+    }
+    .panel { border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; }
+    .billto-title { font-weight: 600; margin-bottom: 4px; }
+    .billto { white-space: pre-wrap; }
+    .meta-table { width: 100%; border-collapse: collapse; }
+    .meta-table th { text-align: left; font-weight: 600; padding: 0 0 2px 0; }
+    .meta-table td { padding: 2px 0; }
+
+    .lines {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .lines thead th {
+      background: #f9fafb;
+      padding: 8px 10px;
+      text-align: left;
+      font-weight: 600;
+    }
+    .lines th, .lines td {
+      border: 1px solid #e5e7eb;
+      padding: 8px 10px;
+      vertical-align: top;
+    }
+    .lines thead th.money, .lines td.money { text-align: right; }
+    .desc-title { font-weight: 600; margin-bottom: 2px; }
+    .desc-meta { color: #555; }
+    .money { font-variant-numeric: tabular-nums; }
+    .lines tfoot td { background: #fcfcfd; font-weight: 600; }
+    .lines tfoot .label { text-align: right; color: #333; font-weight: 600; }
+
+    .breakdown-wrap { margin-top: 6px; }
+    table.breakdown {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      overflow: hidden;
+      font-size: 10px;
+      background: #fff;
+    }
+    table.breakdown th, table.breakdown td {
+      border: 1px solid #e5e7eb;
+      padding: 6px 8px;
+      vertical-align: top;
+    }
+    table.breakdown thead th {
+      background: #f9fafb;
+      font-weight: 600;
+      text-align: left;
+    }
+    table.breakdown .b-qty,
+    table.breakdown .b-unit,
+    table.breakdown .b-charge { text-align: right; white-space: nowrap; }
+    table.breakdown .b-desc { text-align: left; }
+
+    .refs-wrap { margin-top: 6px; }
+    .refs-title { font-weight: 600; margin: 2px 0 4px; color: #333; }
+    table.refs {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      overflow: hidden;
+      font-size: 10px;
+      background: #fff;
+    }
+    table.refs th, table.refs td {
+      border: 1px solid #e5e7eb;
+      padding: 6px 8px;
+      vertical-align: top;
+    }
+    table.refs thead th {
+      background: #f9fafb;
+      font-weight: 600;
+      text-align: left;
+    }
+    table.refs .r-day { width: 90px; white-space: nowrap; }
+    table.refs .r-time { width: 60px; white-space: nowrap; text-align: right; }
+    table.refs .r-ref { text-align: left; }
+    table.refs td.r-time { text-align: right; }
+    table.refs.refs-freeform .r-ref { width: auto; }
+    .ref-missing { color: #b91c1c; font-weight: 700; }
+
+    .section-row td {
+      background: #f9fafb;
+      border-left: 1px solid #e5e7eb;
+      border-right: 1px solid #e5e7eb;
+    }
+    .section-title { font-weight: 700; color: #333; }
+
+    .footer {
+      position: fixed;
+      left: ${mg.left}mm; right: ${mg.right}mm; bottom: ${mg.bottom}mm;
+      font-size: 10px; color: #333;
+      display: ${hideBankFooter ? "none" : "grid"};
+      grid-template-columns: 2fr 1fr; gap: 12px;
+    }
+    .right { text-align: right; }
+  </style>
+</head>
+<body>
+  ${stationeryUrl ? `<div class="stationery" style="background-image:url('${escapeUrl(stationeryUrl)}');"></div>` : ""}
+
+  <div class="wrap">
+    <div class="header">
+      <div>
+        <div class="brand">
+          ${agencyLogoUrl ? `<img class="brand-logo" src="${escapeUrl(agencyLogoUrl)}" alt="Agency logo" />` : ""}
+          ${agencyName ? `<div class="brand-name">${escapeHtml(agencyName)}</div>` : ""}
+        </div>
+
+        <div class="title">INVOICE ${invoice_no ? `<span class="muted mono">#${escapeHtml(invoice_no)}</span>` : ""}</div>
+
+        <div class="panel" style="margin-top:8px;">
+          <div class="billto-title">Bill To</div>
+          <div class="billto"><b>${escapeHtml(clientName)}</b>${clientAddress.length ? `<br>${clientAddress.map(escapeHtml).join("<br>")}` : ""}</div>
+        </div>
+      </div>
+      <div class="panel">
+        <table class="meta-table">
+          <tr><th>Issue date</th><td class="mono">${fmtDateGB(issued_at_utc)}</td></tr>
+          <tr><th>Due date</th><td class="mono">${fmtDateGB(due_at_utc)}</td></tr>
+          ${termsDays != null ? `<tr><th>Payment terms</th><td class="mono">${termsDays} days</td></tr>` : ""}
+          ${poNo ? `<tr><th>PO Number</th><td class="mono">${escapeHtml(poNo)}</td></tr>` : ""}
+        </table>
+      </div>
+    </div>
+
+    <table class="lines">
+      <thead>
+        <tr>
+          <th>Description</th>
+          <th class="money">Ex VAT</th>
+          ${showVatCols ? `<th class="money">VAT</th>` : ""}
+          <th class="money">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${lineRows || `<tr><td colspan="${showVatCols ? 4 : 3}">No lines.</td></tr>`}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td class="label">Subtotal (ex VAT)</td>
+          <td class="money mono">${fmtGBP(totals.subtotal_ex_vat)}</td>
+          ${showVatCols ? `<td></td>` : ""}
+          <td></td>
+        </tr>
+        ${showVatCols ? `
+        <tr>
+          <td class="label">VAT</td>
+          <td></td>
+          <td class="money mono">${fmtGBP(totals.vat_amount)}</td>
+          <td></td>
+        </tr>` : ""}
+        <tr>
+          <td class="label"><b>Total due</b></td>
+          <td></td>
+          ${showVatCols ? `<td></td>` : ""}
+          <td class="money mono"><b>${fmtGBP(totals.total_inc_vat)}</b></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <div class="footer">
+    <div>
+      <div><b>BACS Payment Details</b></div>
+      <div>Banker: <span class="mono">${escapeHtml(pick(bank, "name", ""))}</span></div>
+      <div>Sort Code: <span class="mono">${escapeHtml(pick(bank, "sort_code", ""))}</span> &nbsp;&nbsp; Account No.: <span class="mono">${escapeHtml(pick(bank, "account_number", ""))}</span></div>
+    </div>
+    <div class="right">
+      ${vatReg ? `<div>VAT Reg: <b class="mono">${escapeHtml(vatReg)}</b></div>` : ""}
+      ${companyRegNumber ? `<div>Company Reg: <b class="mono">${escapeHtml(companyRegNumber)}</b></div>` : ""}
+      ${registeredAddressLines.length ? `<div style="margin-top:4px;">Registered address:<br>${registeredAddressLines.map(escapeHtml).join("<br>")}</div>` : ""}
+    </div>
+  </div>
+</body>
+</html>`;
+  }
+
+  // Helpers local to this function
+  const isTimesheetKind = (k) => String(k || '').toUpperCase() === 'TIMESHEET';
+  const isDefaultDocsPdfKeyFor = (tsId, key) => {
+    if (!tsId || !key) return false;
+    const norm = normalizeKey(String(key));
+    return norm === normalizeKey(`docs-pdf/timesheets/ts_${String(tsId)}.pdf`);
+  };
+
+  const attachPageDebug = (page, label) => {
+    if (!LOG || !page) return;
+    try {
+      page.on('console', (m) => {
+        try {
+          const type = m?.type?.() || 'log';
+          const text = m?.text?.() || '';
+          if (type === 'error' || type === 'warning') {
+            log('error', 'page_console', { page: label, console_type: type, console_text: text });
+          } else {
+            log('log', 'page_console', { page: label, console_type: type, console_text: text });
+          }
+        } catch {}
+      });
+    } catch {}
+    try {
+      page.on('pageerror', (e) => {
+        log('error', 'pageerror', { page: label, err_message: e?.message || String(e || ''), err_stack: e?.stack || null });
+      });
+    } catch {}
+    try {
+      page.on('requestfailed', (r) => {
+        const url = r?.url?.() || null;
+        const failure = r?.failure?.() || null;
+        log('error', 'requestfailed', { page: label, url, failure });
+      });
+    } catch {}
+  };
+
+  try {
+    // 1) Manifest (single RPC)
+    step = 'MANIFEST_RPC';
+    const tMan0 = Date.now();
+    const man = await sbRpc(env, 'invoice_render_manifest', { p_invoice_id: invoiceId });
+    log('log', 'manifest_rpc_ok', { ms: Date.now() - tMan0 });
+
+    const manRows = Array.isArray(man) ? man : (man?.data || []);
+    const manifest = (manRows && manRows.length) ? manRows[0] : man;
+
+    if (!manifest || typeof manifest !== 'object') {
+      log('error', 'manifest_invalid', { ms: Date.now() - t0 });
+      return { ok: false, error: 'Failed to load invoice render manifest' };
+    }
+
+    const inv = manifest.invoice || manifest.invoice_row || null;
+    if (!inv || !inv.id) {
+      log('error', 'invoice_not_found_in_manifest', { ms: Date.now() - t0 });
+      return { ok: false, error: 'Invoice not found' };
+    }
+
+    log('log', 'manifest_counts', {
+      ms: Date.now() - t0,
+      lines_len: Array.isArray(manifest.lines) ? manifest.lines.length : 0,
+      evidence_len: Array.isArray(manifest.evidence) ? manifest.evidence.length : 0,
+      timesheet_evidence_len: Array.isArray(manifest.timesheet_evidence) ? manifest.timesheet_evidence.length : 0,
+      evidence_other_len: Array.isArray(manifest.evidence_other) ? manifest.evidence_other.length : 0,
+      tsfin_blocks: Array.isArray(manifest.tsfin_external_source_rows) ? manifest.tsfin_external_source_rows.length : 0,
+      hr_cache_blocks: Array.isArray(manifest.hr_source_rows_cache) ? manifest.hr_source_rows_cache.length : 0
+    });
+
+    // ✅ Cache short-circuit INSIDE render (covers email path too)
+    try {
+      if (!forceRegen) {
+        const key = (inv && typeof inv.invoice_pdf_r2_key === 'string') ? inv.invoice_pdf_r2_key.trim() : '';
+        const genAt = inv ? inv.invoice_pdf_generated_at_utc : null;
+        const updAt = inv ? inv.updated_at : null;
+
+        if (key && genAt && updAt) {
+          const tUpd = new Date(updAt).getTime();
+          const tGen = new Date(genAt).getTime();
+
+          if (Number.isFinite(tUpd) && Number.isFinite(tGen) && tUpd <= tGen) {
+            log('log', 'bundle_cache_hit', { ms: Date.now() - t0, pdf_key: key.replace(/^\/+/, '') });
+            return {
+              ok: true,
+              pdf_key: key.replace(/^\/+/, ''),
+              cached: true,
+              attached_timesheets: 0,
+              attached_hr: false,
+              attached_nhsp: false,
+              attached_evidence: 0,
+              attached_timesheet_evidence: 0,
+              attached_manual_timesheets: 0
+            };
+          }
+        }
+      }
+    } catch (errCache) {
+      log('error', 'bundle_cache_check_failed_nonfatal', {
+        ms: Date.now() - t0,
+        err_name: errCache?.name || null,
+        err_message: errCache?.message || String(errCache || ''),
+        err_stack: errCache?.stack || null
+      });
+    }
+
+    step = 'READ_HEADER_ATTACH_POLICY';
+    const header = (manifest.header_snapshot_json && typeof manifest.header_snapshot_json === 'object')
+      ? manifest.header_snapshot_json
+      : (inv.header_snapshot_json && typeof inv.header_snapshot_json === 'object' ? inv.header_snapshot_json : {});
+
+    const attachPolicy = (manifest.attach_policy && typeof manifest.attach_policy === 'object')
+      ? manifest.attach_policy
+      : (header.attach_policy && typeof header.attach_policy === 'object' ? header.attach_policy : null);
+
+    const requiresHr = !!(attachPolicy && attachPolicy.requires_hr === true);
+    const hrAttach = !!(attachPolicy && Object.prototype.hasOwnProperty.call(attachPolicy, 'hr_attach_to_invoice') && attachPolicy.hr_attach_to_invoice !== false);
+    const hrAllowed = (requiresHr === true && hrAttach === true);
+
+    const tsAttach = (attachPolicy && Object.prototype.hasOwnProperty.call(attachPolicy, 'ts_attach_to_invoice'))
+      ? (attachPolicy.ts_attach_to_invoice !== false)
+      : true;
+
+    log('log', 'attach_policy_effective', {
+      requires_hr: requiresHr,
+      hr_attach_to_invoice: hrAttach,
+      hr_allowed: hrAllowed,
+      ts_attach_to_invoice: tsAttach,
+      attach_policy_present: !!attachPolicy
+    });
+
+    // Stationery resolution + presign
+    step = 'PRESIGN_STATIONERY';
+    let stationeryKey =
+      (typeof header.stationery_key === "string" && header.stationery_key.trim()) ||
+      env.INVOICE_STATIONERY_KEY ||
+      "Assets/Stationery/Letterhead/A4/Letterhead_v1@300dpi.png";
+    if (/\.pdf$/i.test(stationeryKey)) stationeryKey = stationeryKey.replace(/\.pdf$/i, "@300dpi.png");
+    stationeryKey = normalizeKey(stationeryKey);
+
+    const tPresign0 = Date.now();
+    const stationeryUrl = await presignR2Url(
+      env,
+      req,
+      stationeryKey,
+      Number(env.PRESIGN_EXPIRES_SECONDS || 600)
+    );
+    log('log', 'presign_ok', {
+      ms: Date.now() - tPresign0,
+      stationery_key: stationeryKey,
+      stationery_url_len: (stationeryUrl ? String(stationeryUrl).length : 0),
+      stationery_origin: (() => { try { return stationeryUrl ? (new URL(stationeryUrl)).origin : null; } catch { return null; } })()
+    });
+
+    const marginsObj = toMarginsObj(header.stationery_margins_mm);
+    const hideBankFooter = header.hide_bank_footer === true;
+
+    const lineRows = Array.isArray(manifest.lines) ? manifest.lines : [];
+
+    const evidenceAll = Array.isArray(manifest.evidence) ? manifest.evidence : [];
+    const timesheetEvidenceRows = Array.isArray(manifest.timesheet_evidence)
+      ? manifest.timesheet_evidence
+      : evidenceAll.filter(ev => isTimesheetKind(ev?.kind));
+    const otherEvidenceRows = Array.isArray(manifest.evidence_other)
+      ? manifest.evidence_other
+      : evidenceAll.filter(ev => !isTimesheetKind(ev?.kind));
+
+    const tsfinRows = Array.isArray(manifest.tsfin_external_source_rows) ? manifest.tsfin_external_source_rows : [];
+    const hrCacheRows = Array.isArray(manifest.hr_source_rows_cache) ? manifest.hr_source_rows_cache : [];
+
+    let groupNightsat = false;
+    if (typeof header.group_nightsat_sunbh === 'boolean') groupNightsat = header.group_nightsat_sunbh;
+    else if (typeof header?.meta?.group_nightsat_sunbh === 'boolean') groupNightsat = header.meta.group_nightsat_sunbh;
+
+    // Build invoice HTML now (outside browser) for reuse
+    step = 'BUILD_INVOICE_HTML';
+    const invoiceData = {
+      header: {
+        ...header,
+        stationery_url: stationeryUrl,
+        stationery_margins_mm: marginsObj,
+        hide_bank_footer: hideBankFooter,
+      },
+      meta: {
+        kind: 'invoice',
+        generated_at_utc: new Date().toISOString(),
+        group_nightsat_sunbh: groupNightsat,
+      },
+      invoice_no: inv.invoice_no || null,
+      issued_at_utc: inv.issued_at_utc,
+      due_at_utc: inv.due_at_utc,
+      totals: {
+        subtotal_ex_vat: Number(inv.subtotal_ex_vat || 0),
+        vat_amount: Number(inv.vat_amount || 0),
+        total_inc_vat: Number(inv.total_inc_vat || 0),
+      },
+      items: (lineRows || []).map((l) => {
+        const meta0 = (l.meta_json && typeof l.meta_json === 'object') ? { ...l.meta_json } : {};
+        if (!meta0.week_ending_date && meta0.week_ending_date_local) meta0.week_ending_date = meta0.week_ending_date_local;
+
+        if (!meta0.line_type_norm && l.line_type_norm) meta0.line_type_norm = String(l.line_type_norm);
+        if (!meta0.line_type_norm) meta0.line_type_norm = String(meta0.line_type || '').toUpperCase();
+        if (meta0.timesheet_id == null && l.timesheet_id) meta0.timesheet_id = String(l.timesheet_id);
+
+        const hourKeys = ['hours_day','hours_night','hours_sat','hours_sun','hours_bh'];
+        for (const k of hourKeys) {
+          if (meta0[k] == null && l[k] != null) meta0[k] = Number(l[k] || 0);
+        }
+        const rateKeys = ['charge_day','charge_night','charge_sat','charge_sun','charge_bh'];
+        for (const k of rateKeys) {
+          if (meta0[k] == null && l[k] != null) meta0[k] = Number(l[k] || 0);
+        }
+
+        return {
+          description: l.description,
+          timesheet_id: l.timesheet_id || null,
+          meta: meta0,
+          total_ex_vat: Number(l.total_charge_ex_vat || 0),
+          vat_rate_pct: Number(l.vat_rate_pct || 0),
+          vat_amount: Number(l.vat_amount || 0),
+          total_inc_vat: Number(l.total_inc_vat || 0),
+        };
+      }),
+      reference_rows: Array.isArray(manifest.reference_rows) ? manifest.reference_rows : [],
+    };
+
+    const invoiceHtml = buildHTML(invoiceData);
+    log('log', 'invoice_html_built', {
+      ms: Date.now() - t0,
+      html_len: (invoiceHtml ? String(invoiceHtml).length : 0),
+      line_count: lineRows.length,
+      evidence_timesheet_count: timesheetEvidenceRows.length,
+      evidence_other_count: otherEvidenceRows.length
+    });
+
+    // Timesheet IDs from invoice lines
+    step = 'COLLECT_TS_IDS';
+    const tsIds = [...new Set(lineRows.map(r => r?.timesheet_id).filter(Boolean).map(String))];
+    log('log', 'timesheets_collected', { ts_ids: tsIds.length });
+
+    const docsKeys = tsIds.map(tsId => normalizeKey(`docs-pdf/timesheets/ts_${tsId}.pdf`));
+
+    const manualKeyByTsId = new Map();
+    for (const l of lineRows) {
+      const tsId = l?.timesheet_id ? String(l.timesheet_id) : null;
+      if (!tsId) continue;
+      const k = (l.paper_ts_r2_key || l.effective_paper_ts_r2_key || null);
+      if (!k) continue;
+      const nk = normalizeKey(String(k));
+      if (isDefaultDocsPdfKeyFor(tsId, nk)) continue;
+      if (!manualKeyByTsId.has(tsId)) manualKeyByTsId.set(tsId, nk);
+    }
+    const manualKeys = tsIds.map(tsId => manualKeyByTsId.get(tsId) || null).filter(Boolean);
+
+    const expenseOnlySet = new Set();
+    const noPhysicalTimesheetSet = new Set();
+
+    if ((tsAttach || manualKeys.length) && tsIds.length) {
+      const byTs = new Map();
+      for (const l of (lineRows || [])) {
+        const tsId = l?.timesheet_id ? String(l.timesheet_id) : null;
+        if (!tsId) continue;
+        if (!byTs.has(tsId)) byTs.set(tsId, []);
+        byTs.get(tsId).push(l);
+      }
+
+      for (const [tsId, lines] of byTs.entries()) {
+        const metas = (lines || []).map(l => (l?.meta_json && typeof l.meta_json === 'object') ? l.meta_json : {});
+        const anyTrue = (key) => metas.some(m => m && m[key] === true);
+
+        const basisVals = metas.map(m => String(m?.basis || m?.cur_basis || m?.timesheet_basis || '').toUpperCase());
+        const routeVals = metas.map(m => String(m?.route_type || m?.route || '').toUpperCase());
+
+        const isNhsp = anyTrue('client_is_nhsp') || anyTrue('is_nhsp') || basisVals.includes('NHSP') || routeVals.some(v => v.includes('NHSP'));
+        const isHrImport = basisVals.includes('HEALTHROSTER') || routeVals.some(v => v.includes('HEALTHROSTER') || v.includes('HR_') || v === 'HR');
+        const noTsReq = anyTrue('no_timesheet_required') || anyTrue('client_no_timesheet_required') || anyTrue('contract_no_timesheet_required');
+
+        if (isNhsp || isHrImport || noTsReq) noPhysicalTimesheetSet.add(String(tsId));
+      }
+
+      const typeOf = (l) => {
+        const m = (l?.meta_json && typeof l.meta_json === 'object') ? l.meta_json : {};
+        return String(l?.line_type_norm || m?.line_type_norm || m?.line_type || '').toUpperCase();
+      };
+
+      const isHoursType = (t) => {
+        const x = String(t || '').toUpperCase();
+        return (x === 'HOURS' || x.startsWith('HOURS_'));
+      };
+
+      for (const tsId of tsIds) {
+        const lines = byTs.get(String(tsId)) || [];
+        if (!lines.length) continue;
+
+        const types = lines.map(typeOf);
+
+        const hasHours = types.some(isHoursType);
+        const hasAdditional = types.some(t => String(t || '').toUpperCase().startsWith('ADDITIONAL_RATE'));
+        const hasExpenseOrMileage = types.some(t => {
+          const x = String(t || '').toUpperCase();
+          return (x === 'MILEAGE' || x.startsWith('EXPENSE'));
+        });
+
+        if (!hasHours && !hasAdditional && hasExpenseOrMileage) {
+          expenseOnlySet.add(String(tsId));
+        }
+      }
+    }
+
+    log('log', 'timesheet_sets', {
+      expense_only_count: expenseOnlySet.size,
+      no_physical_count: noPhysicalTimesheetSet.size,
+      ts_attach_to_invoice: tsAttach
+    });
+
+    const missing = [];
+    const dedupeKeys = new Set();
+    const tsEvidenceFetchedSet = new Set();
+
+    step = 'FETCH_TIMESHEET_EVIDENCE';
+    const timesheetEvidenceBytesList = [];
+    for (const ev of timesheetEvidenceRows) {
+      const key = ev?.storage_key;
+      if (!key) continue;
+      const norm = normalizeKey(String(key));
+      if (dedupeKeys.has(norm)) continue;
+
+      const bytes = await r2GetBytes(env, norm);
+      if (!bytes || !bytes.length) {
+        missing.push({ kind: 'TIMESHEET_EVIDENCE_PDF', timesheet_id: ev?.timesheet_id || null, storage_key: norm });
+        continue;
+      }
+      dedupeKeys.add(norm);
+      timesheetEvidenceBytesList.push(bytes);
+      if (ev?.timesheet_id) tsEvidenceFetchedSet.add(String(ev.timesheet_id));
+    }
+
+    step = 'FETCH_TS_PDFS';
+    const tsBytesList = [];
+    if (tsAttach) {
+      for (let i = 0; i < tsIds.length; i++) {
+        const tsId = tsIds[i];
+        const key = docsKeys[i];
+        const norm = normalizeKey(String(key));
+        if (dedupeKeys.has(norm)) continue;
+
+        const bytes = await r2GetBytes(env, norm);
+        if (!bytes || !bytes.length) {
+          if (expenseOnlySet.has(String(tsId)) || tsEvidenceFetchedSet.has(String(tsId)) || noPhysicalTimesheetSet.has(String(tsId))) continue;
+          missing.push({ kind: 'TIMESHEET_PDF', timesheet_id: tsId, storage_key: norm });
+          continue;
+        }
+        dedupeKeys.add(norm);
+        tsBytesList.push(bytes);
+      }
+    }
+
+    step = 'FETCH_MANUAL_TS_PDFS';
+    const manualTsBytesList = [];
+    for (let i = 0; i < tsIds.length; i++) {
+      const tsId = tsIds[i];
+      const key = manualKeyByTsId.get(String(tsId));
+      if (!key) continue;
+
+      const norm = normalizeKey(String(key));
+      if (dedupeKeys.has(norm)) continue;
+
+      const bytes = await r2GetBytes(env, norm);
+      if (!bytes || !bytes.length) {
+        if (expenseOnlySet.has(String(tsId)) || tsEvidenceFetchedSet.has(String(tsId))) continue;
+        missing.push({ kind: 'MANUAL_TIMESHEET_PDF', timesheet_id: tsId, storage_key: norm });
+        continue;
+      }
+      dedupeKeys.add(norm);
+      manualTsBytesList.push(bytes);
+    }
+
+    step = 'FETCH_OTHER_EVIDENCE';
+    const evidenceBytesList = [];
+    for (const ev of otherEvidenceRows) {
+      const key = ev?.storage_key;
+      if (!key) continue;
+      const norm = normalizeKey(String(key));
+      if (dedupeKeys.has(norm)) continue;
+
+      const bytes = await r2GetBytes(env, norm);
+      if (!bytes || !bytes.length) {
+        missing.push({ kind: 'EVIDENCE_PDF', timesheet_id: ev?.timesheet_id || null, storage_key: norm });
+        continue;
+      }
+      dedupeKeys.add(norm);
+      evidenceBytesList.push(bytes);
+    }
+
+    log('log', 'artefact_fetch_summary', {
+      missing_count: missing.length,
+      timesheet_evidence_pdfs: timesheetEvidenceBytesList.length,
+      ts_pdfs: tsBytesList.length,
+      manual_ts_pdfs: manualTsBytesList.length,
+      other_evidence_pdfs: evidenceBytesList.length
+    });
+
+    if (missing.length) {
+      try {
+        if (userForAudit) {
+          await writeAudit(
+            env,
+            userForAudit,
+            'INVOICE_RENDER_FAILED_MISSING_ARTEFACTS',
+            { invoice_id: invoiceId, missing },
+            { entity: 'invoice', subject_id: invoiceId, req }
+          );
+        }
+      } catch (errAudit) {
+        log('error', 'writeAudit_missing_artefacts_failed', {
+          err_name: errAudit?.name || null,
+          err_message: errAudit?.message || String(errAudit || ''),
+          err_stack: errAudit?.stack || null
+        });
+      }
+      return { ok: false, error: `Invoice render failed: missing required artefacts (${missing.length}).` };
+    }
+
+    // Build HR rows/html (outside browser)
+    step = 'BUILD_HR_REPORT';
+    let hrHtml = null;
+    if (hrAllowed) {
+      const hrRows = [];
+      if (hrCacheRows.length) {
+        for (const r of hrCacheRows) {
+          if (String(r.source_system || '').toUpperCase() !== 'HEALTHROSTER') continue;
+          const rows = Array.isArray(r.rows_json) ? r.rows_json : [];
+          for (const raw of rows) hrRows.push({ raw_row: raw });
+        }
+      } else {
+        for (const tf of tsfinRows) {
+          const ext = (tf.external_source_rows_json && typeof tf.external_source_rows_json === 'object') ? tf.external_source_rows_json : {};
+          const hrWeekly = Array.isArray(ext.HR_WEEKLY) ? ext.HR_WEEKLY : [];
+          for (const row of hrWeekly) hrRows.push(row);
+        }
+      }
+
+      log('log', 'hr_rows_collected', { hr_rows: hrRows.length, hr_cache_blocks: hrCacheRows.length, tsfin_blocks: tsfinRows.length });
+
+      if (hrRows.length) {
+        hrHtml = buildHrReportHTML(inv, header, hrRows);
+        log('log', 'hr_html_built', { hr_html_len: (hrHtml ? String(hrHtml).length : 0) });
+      }
+    } else {
+      log('log', 'hr_skipped_not_allowed', { requires_hr: requiresHr, hr_attach_to_invoice: hrAttach });
+    }
+
+    // Build NHSP tables/html (outside browser)
+    step = 'BUILD_NHSP_REPORT';
+    let nhspHtml = null;
+    {
+      const nhspTables = [];
+
+      if (hrCacheRows.length) {
+        for (const r of hrCacheRows) {
+          if (String(r.source_system || '').toUpperCase() !== 'NHSP') continue;
+          const rows = Array.isArray(r.rows_json) ? r.rows_json : [];
+          if (!rows.length) continue;
+          const headerCols = Array.isArray(r.header_columns) ? r.header_columns : [];
+          nhspTables.push({
+            import_id: r.import_id || null,
+            header_columns: headerCols,
+            rows_json: rows
+          });
+        }
+      }
+
+      if (!nhspTables.length) {
+        const fallbackRows = [];
+        for (const tf of tsfinRows) {
+          const ext = (tf.external_source_rows_json && typeof tf.external_source_rows_json === 'object')
+            ? tf.external_source_rows_json
+            : {};
+          const nhspWeekly = Array.isArray(ext.NHSP_WEEKLY) ? ext.NHSP_WEEKLY : [];
+          for (const row of nhspWeekly) fallbackRows.push(row);
+        }
+        if (fallbackRows.length) {
+          nhspTables.push({
+            import_id: null,
+            header_columns: [],
+            rows_json: fallbackRows
+          });
+        }
+      }
+
+      log('log', 'nhsp_tables_collected', {
+        nhsp_tables: nhspTables.length,
+        nhsp_total_rows: nhspTables.reduce((a, t) => a + (Array.isArray(t.rows_json) ? t.rows_json.length : 0), 0),
+        nhsp_cache_blocks: hrCacheRows.length,
+        tsfin_blocks: tsfinRows.length
+      });
+
+      if (nhspTables.length) {
+        nhspHtml = buildNhspReportHTML(inv, header, { tables: nhspTables });
+        log('log', 'nhsp_html_built', { nhsp_html_len: (nhspHtml ? String(nhspHtml).length : 0) });
+      }
+    }
+
+    // === EFFICIENCY FIX: single browser session per invoice render ===
+    step = 'BROWSER_RENDER_ALL';
+    const renderAll = await withBrowser(env, async (browser) => {
+      const out = { invoicePdfU8: null, hrBytes: null, nhspBytes: null };
+
+      // Invoice PDF
+      {
+        const page = await browser.newPage();
+        attachPageDebug(page, 'invoice');
+        try {
+          log('log', 'invoice_setContent_start', { ms: Date.now() - t0 });
+          await page.setContent(invoiceHtml, { waitUntil: "networkidle0" });
+          log('log', 'invoice_setContent_ok', { ms: Date.now() - t0 });
+
+          await page.emulateMediaType("screen");
+
+          log('log', 'invoice_pdf_start', { ms: Date.now() - t0 });
+          const pdfArrayBuffer = await page.pdf({
+            format: "a4",
+            printBackground: true,
+            margin: { top: 0, right: 0, bottom: 0, left: 0 },
+          });
+          log('log', 'invoice_pdf_ok', { ms: Date.now() - t0, pdf_bytes: (pdfArrayBuffer ? pdfArrayBuffer.byteLength : 0) });
+
+          out.invoicePdfU8 = new Uint8Array(pdfArrayBuffer);
+        } finally {
+          try { await page.close(); } catch {}
+        }
+      }
+
+      // HR PDF (only if allowed and rows exist)
+      if (hrHtml) {
+        const page = await browser.newPage();
+        attachPageDebug(page, 'hr');
+        try {
+          log('log', 'hr_setContent_start');
+          await page.setContent(hrHtml, { waitUntil: 'networkidle0' });
+          log('log', 'hr_setContent_ok');
+
+          await page.emulateMediaType('screen');
+
+          log('log', 'hr_pdf_start');
+          const pdfArrayBuffer = await page.pdf({
+            format: 'a4',
+            printBackground: true,
+            margin: { top: 24, right: 24, bottom: 24, left: 24 }
+          });
+          log('log', 'hr_pdf_ok', { hr_pdf_bytes: (pdfArrayBuffer ? pdfArrayBuffer.byteLength : 0) });
+
+          out.hrBytes = new Uint8Array(pdfArrayBuffer);
+        } finally {
+          try { await page.close(); } catch {}
+        }
+      }
+
+      // NHSP PDF (always if NHSP rows exist)
+      if (nhspHtml) {
+        const page = await browser.newPage();
+        attachPageDebug(page, 'nhsp');
+        try {
+          log('log', 'nhsp_setContent_start');
+          await page.setContent(nhspHtml, { waitUntil: 'networkidle0' });
+          log('log', 'nhsp_setContent_ok');
+
+          await page.emulateMediaType('screen');
+
+          log('log', 'nhsp_pdf_start');
+          const pdfArrayBuffer = await page.pdf({
+            format: 'a4',
+            landscape: true,
+            printBackground: true,
+            margin: { top: 24, right: 24, bottom: 24, left: 24 }
+          });
+          log('log', 'nhsp_pdf_ok', { nhsp_pdf_bytes: (pdfArrayBuffer ? pdfArrayBuffer.byteLength : 0) });
+
+          out.nhspBytes = new Uint8Array(pdfArrayBuffer);
+        } finally {
+          try { await page.close(); } catch {}
+        }
+      }
+
+      return out;
+    });
+
+    if (!renderAll || !renderAll.invoicePdfU8) {
+      return { ok: false, error: "Failed to render invoice bundle" };
+    }
+
+    const invoicePdfU8 = renderAll.invoicePdfU8;
+    const hrBytes = renderAll.hrBytes;
+    const nhspBytes = renderAll.nhspBytes;
+
+    log('log', 'browser_render_done', {
+      invoice_pdf_u8_len: invoicePdfU8?.length || 0,
+      hr_pdf_u8_len: hrBytes?.length || 0,
+      nhsp_pdf_u8_len: nhspBytes?.length || 0
+    });
+
+    // ==========================================================
+    // Merge PDFs (UPDATED ORDER):
+    // 1) Invoice
+    // 2) Timesheet PDFs (canonical, if tsAttach)
+    // 3) Manual/override Timesheet PDFs (always when present)
+    // 4) HR report (if present)
+    // 5) NHSP report (if present)
+    // 6) Evidence PDFs (timesheet evidence + other evidence)
+    // ==========================================================
+    step = 'PDF_MERGE_START';
+    const merged = await PDFDocument.create();
+
+    // 1) Invoice
+    step = 'PDFLIB_LOAD_INVOICE';
+    const invDoc = await PDFDocument.load(invoicePdfU8);
+    (await merged.copyPages(invDoc, invDoc.getPageIndices())).forEach(p => merged.addPage(p));
+
+    // 2) Timesheet PDFs (canonical)
+    step = 'PDFLIB_ATTACH_TS_PDFS';
+    let attachedTsCount = 0;
+    if (tsAttach) {
+      for (const b of tsBytesList) {
+        const doc = await PDFDocument.load(b);
+        (await merged.copyPages(doc, doc.getPageIndices())).forEach(p => merged.addPage(p));
+        attachedTsCount++;
+      }
+    }
+
+    // 3) Manual/override Timesheet PDFs (always included when present)
+    step = 'PDFLIB_ATTACH_MANUAL_TS_PDFS';
+    let attachedManualTsCount = 0;
+    for (const b of manualTsBytesList) {
+      const doc = await PDFDocument.load(b);
+      (await merged.copyPages(doc, doc.getPageIndices())).forEach(p => merged.addPage(p));
+      attachedManualTsCount++;
+    }
+
+    // 4) HR report
+    step = 'PDFLIB_ATTACH_HR';
+    if (hrBytes?.length) {
+      const doc = await PDFDocument.load(hrBytes);
+      (await merged.copyPages(doc, doc.getPageIndices())).forEach(p => merged.addPage(p));
+    }
+
+    // 5) NHSP report
+    step = 'PDFLIB_ATTACH_NHSP';
+    if (nhspBytes?.length) {
+      const doc = await PDFDocument.load(nhspBytes);
+      (await merged.copyPages(doc, doc.getPageIndices())).forEach(p => merged.addPage(p));
+    }
+
+    // 6) Evidence PDFs (timesheet evidence + other evidence)
+    step = 'PDFLIB_ATTACH_TIMESHEET_EVIDENCE';
+    let attachedTimesheetEvidenceCount = 0;
+    for (const b of timesheetEvidenceBytesList) {
+      const doc = await PDFDocument.load(b);
+      (await merged.copyPages(doc, doc.getPageIndices())).forEach(p => merged.addPage(p));
+      attachedTimesheetEvidenceCount++;
+    }
+
+    step = 'PDFLIB_ATTACH_OTHER_EVIDENCE';
+    let attachedEvidenceCount = 0;
+    for (const b of evidenceBytesList) {
+      const doc = await PDFDocument.load(b);
+      (await merged.copyPages(doc, doc.getPageIndices())).forEach(p => merged.addPage(p));
+      attachedEvidenceCount++;
+    }
+
+    step = 'PDFLIB_SAVE_MERGED';
+    const combinedU8 = await merged.save();
+    log('log', 'merge_ok', {
+      combined_len: combinedU8?.length || 0,
+      attached_timesheets: attachedTsCount,
+      attached_manual_timesheets: attachedManualTsCount,
+      attached_timesheet_evidence: attachedTimesheetEvidenceCount,
+      attached_evidence: attachedEvidenceCount,
+      attached_hr: !!(hrBytes && hrBytes.length),
+      attached_nhsp: !!(nhspBytes && nhspBytes.length)
+    });
+
+    // Store combined PDF in R2 and patch invoice row
+    step = 'R2_PUT';
+    const pdfKey = normalizeKey(`docs-pdf/invoices/invoice_${invoiceId}.pdf`);
+    await r2Put(env, pdfKey, combinedU8, { httpMetadata: { contentType: "application/pdf" } });
+
+    const nowIso = new Date().toISOString();
+
+    step = 'DB_PATCH_INVOICE';
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${enc(invoiceId)}`,
+      {
+        method: "PATCH",
+        headers: sbHeaders(env),
+        body: JSON.stringify({
+          invoice_pdf_r2_key: pdfKey,
+          invoice_pdf_generated_at_utc: nowIso,
+          paper_ts_r2_manifest: docsKeys,
+          updated_at: nowIso,
+        }),
+      }
+    );
+
+    step = 'DONE';
+    log('log', 'success', { ms: Date.now() - t0, pdf_key: pdfKey });
+
+    return {
+      ok: true,
+      pdf_key: pdfKey,
+      cached: false,
+      attached_timesheets: attachedTsCount,
+      attached_hr: !!(hrBytes && hrBytes.length),
+      attached_nhsp: !!(nhspBytes && nhspBytes.length),
+      attached_evidence: attachedEvidenceCount,
+      attached_timesheet_evidence: attachedTimesheetEvidenceCount,
+      attached_manual_timesheets: attachedManualTsCount
+    };
+  } catch (err) {
+    const errMessage = err?.message || String(err || '');
+    const errStack = err?.stack || null;
+
+    log('error', 'exception', {
+      ms: Date.now() - t0,
+      err_name: err?.name || null,
+      err_message: errMessage,
+      err_stack: errStack
+    });
+
+    try {
+      if (userForAudit) {
+        const stackStr = (errStack == null) ? null : String(errStack);
+        const stackTrim = (stackStr && stackStr.length > 8000) ? stackStr.slice(0, 8000) : stackStr;
+
+        await writeAudit(
+          env,
+          userForAudit,
+          'INVOICE_RENDER_BUNDLE_EXCEPTION',
+          {
+            invoice_id: invoiceId,
+            step,
+            err_name: err?.name || null,
+            err_message: errMessage,
+            err_stack: stackTrim,
+            ms: Date.now() - t0
+          },
+          { entity: 'invoice', subject_id: invoiceId, req }
+        );
+      }
+    } catch (errAudit) {
+      log('error', 'writeAudit_exception_failed', {
+        err_name: errAudit?.name || null,
+        err_message: errAudit?.message || String(errAudit || ''),
+        err_stack: errAudit?.stack || null
+      });
+    }
+
+    return { ok: false, error: "Failed to render invoice bundle" };
+  }
+}
+
+
 
 async function handleInvoiceBatchIssueCandidates(env, req) {
   const user = await requireUser(env, req, ['admin']);
