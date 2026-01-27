@@ -46662,67 +46662,6 @@ async function handleInvoiceBatchGenerateConfirm(env, req) {
 
 
 
-async function withBrowser(env, fn) {
-  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
-  const log = (level, msg, extra) => {
-    if (!LOG) return;
-    try {
-      const payload = Object.assign(
-        { tag: 'WITH_BROWSER', at_utc: new Date().toISOString(), msg: String(msg || '') },
-        (extra && typeof extra === 'object') ? extra : {}
-      );
-      (level === 'error' ? console.error : console.log)(JSON.stringify(payload));
-    } catch (e) {
-      try { (level === 'error' ? console.error : console.log)(msg); } catch {}
-    }
-  };
-
-  const t0 = Date.now();
-  let browser = null;
-
-  try {
-    log('log', 'launch_start');
-    browser = await puppeteer.launch(env.BROWSER); // <-- BROWSER binding from wrangler.toml
-    log('log', 'launch_ok', { ms: Date.now() - t0 });
-
-    // Best-effort lifecycle hints
-    try {
-      if (browser && typeof browser.on === 'function') {
-        browser.on('disconnected', () => {
-          log('error', 'browser_disconnected', { ms: Date.now() - t0 });
-        });
-      }
-    } catch {}
-
-    const tFn0 = Date.now();
-    const out = await fn(browser);
-    log('log', 'fn_ok', { ms: Date.now() - tFn0, total_ms: Date.now() - t0 });
-    return out;
-  } catch (err) {
-    log('error', 'withBrowser_exception', {
-      ms: Date.now() - t0,
-      err_name: err?.name || null,
-      err_message: err?.message || String(err || ''),
-      err_stack: err?.stack || null
-    });
-    throw err;
-  } finally {
-    const tClose0 = Date.now();
-    try {
-      if (browser) await browser.close();
-      log('log', 'close_ok', { ms: Date.now() - tClose0, total_ms: Date.now() - t0 });
-    } catch (errClose) {
-      log('error', 'close_failed', {
-        ms: Date.now() - tClose0,
-        total_ms: Date.now() - t0,
-        err_name: errClose?.name || null,
-        err_message: errClose?.message || String(errClose || ''),
-        err_stack: errClose?.stack || null
-      });
-    }
-  }
-}
-
 
 async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, opts) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
