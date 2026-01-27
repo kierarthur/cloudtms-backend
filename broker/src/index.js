@@ -184,9 +184,64 @@ import puppeteer from "@cloudflare/puppeteer";
 // --- Helpers ---------------------------------------------------------------
 
 async function withBrowser(env, fn) {
-  const browser = await puppeteer.launch(env.BROWSER); // <-- BROWSER binding from wrangler.toml
-  try { return await fn(browser); }
-  finally { await browser.close(); }
+  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
+  const log = (level, msg, extra) => {
+    if (!LOG) return;
+    try {
+      const payload = Object.assign(
+        { tag: 'WITH_BROWSER', at_utc: new Date().toISOString(), msg: String(msg || '') },
+        (extra && typeof extra === 'object') ? extra : {}
+      );
+      (level === 'error' ? console.error : console.log)(JSON.stringify(payload));
+    } catch (e) {
+      try { (level === 'error' ? console.error : console.log)(msg); } catch {}
+    }
+  };
+
+  const t0 = Date.now();
+  let browser = null;
+
+  try {
+    log('log', 'launch_start');
+    browser = await puppeteer.launch(env.BROWSER); // <-- BROWSER binding from wrangler.toml
+    log('log', 'launch_ok', { ms: Date.now() - t0 });
+
+    // Best-effort lifecycle hints
+    try {
+      if (browser && typeof browser.on === 'function') {
+        browser.on('disconnected', () => {
+          log('error', 'browser_disconnected', { ms: Date.now() - t0 });
+        });
+      }
+    } catch {}
+
+    const tFn0 = Date.now();
+    const out = await fn(browser);
+    log('log', 'fn_ok', { ms: Date.now() - tFn0, total_ms: Date.now() - t0 });
+    return out;
+  } catch (err) {
+    log('error', 'withBrowser_exception', {
+      ms: Date.now() - t0,
+      err_name: err?.name || null,
+      err_message: err?.message || String(err || ''),
+      err_stack: err?.stack || null
+    });
+    throw err;
+  } finally {
+    const tClose0 = Date.now();
+    try {
+      if (browser) await browser.close();
+      log('log', 'close_ok', { ms: Date.now() - tClose0, total_ms: Date.now() - t0 });
+    } catch (errClose) {
+      log('error', 'close_failed', {
+        ms: Date.now() - tClose0,
+        total_ms: Date.now() - t0,
+        err_name: errClose?.name || null,
+        err_message: errClose?.message || String(errClose || ''),
+        err_stack: errClose?.stack || null
+      });
+    }
+  }
 }
 
 
@@ -46605,11 +46660,259 @@ async function handleInvoiceBatchGenerateConfirm(env, req) {
   }
 }
 
-async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, opts) {
+async function handleInvoiceRender(env, req, invoiceId) {
+  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
+  const log = (level, msg, extra) => {
+    if (!LOG) return;
+    try {
+      const payload = Object.assign(
+        {
+          tag: 'INVOICE_RENDER_ROUTE',
+          at_utc: new Date().toISOString(),
+          cf_ray: req?.headers?.get?.('cf-ray') || null,
+          invoice_id: invoiceId || null,
+          msg: String(msg || '')
+        },
+        (extra && typeof extra === 'object') ? extra : {}
+      );
+      (level === 'error' ? console.error : console.log)(JSON.stringify(payload));
+    } catch (e) {
+      try { (level === 'error' ? console.error : console.log)(msg); } catch {}
+    }
+  };
+
+  const t0 = Date.now();
+
+  let user = null;
+  try {
+    user = await requireUser(env, req, ['admin']);
+    if (!user) {
+      log('error', 'unauthorized', { ms: Date.now() - t0 });
+      return unauthorized();
+    }
+  } catch (err) {
+    log('error', 'requireUser threw', {
+      ms: Date.now() - t0,
+      err_name: err?.name || null,
+      err_message: err?.message || String(err || ''),
+      err_stack: err?.stack || null
+    });
+    return unauthorized();
+  }
+
   const enc = encodeURIComponent;
+
+  // Parse optional { force_regen: true }
+  let forceRegen = false;
+  try {
+    const body = await req.clone().json();
+    forceRegen = !!(body && (body.force_regen === true || body.forceRegen === true));
+  } catch {
+    forceRegen = false;
+  }
+
+  log('log', 'start', { force_regen: forceRegen, ms: Date.now() - t0 });
+
+  try {
+    // ✅ Fast-path caching (skip render entirely if still valid and not force_regen)
+    if (!forceRegen) {
+      try {
+        log('log', 'cache_check_start');
+
+        const tCache0 = Date.now();
+        const { rows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/invoices` +
+            `?id=eq.${enc(invoiceId)}` +
+            `&select=invoice_pdf_r2_key,invoice_pdf_generated_at_utc,updated_at` +
+            `&limit=1`,
+          false
+        );
+
+        const inv = rows && rows.length ? rows[0] : null;
+        const key = (inv && typeof inv.invoice_pdf_r2_key === 'string') ? inv.invoice_pdf_r2_key.trim() : '';
+        const genAt = inv ? inv.invoice_pdf_generated_at_utc : null;
+        const updAt = inv ? inv.updated_at : null;
+
+        log('log', 'cache_check_result', {
+          ms: Date.now() - tCache0,
+          has_key: !!key,
+          gen_at_utc: genAt || null,
+          upd_at_utc: updAt || null
+        });
+
+        if (key && genAt && updAt) {
+          const tUpd = new Date(updAt).getTime();
+          const tGen = new Date(genAt).getTime();
+
+          log('log', 'cache_check_times', {
+            t_upd_ms: Number.isFinite(tUpd) ? tUpd : null,
+            t_gen_ms: Number.isFinite(tGen) ? tGen : null,
+            upd_le_gen: (Number.isFinite(tUpd) && Number.isFinite(tGen)) ? (tUpd <= tGen) : null
+          });
+
+          if (Number.isFinite(tUpd) && Number.isFinite(tGen) && tUpd <= tGen) {
+            log('log', 'cache_hit', { ms: Date.now() - t0, pdf_key: key.replace(/^\/+/, '') });
+            return withCORS(env, req, ok({
+              pdf_key: key.replace(/^\/+/, ''),
+              attached_timesheets: 0,
+              attached_hr: false,
+              attached_nhsp: false,
+              attached_evidence: 0,
+              attached_timesheet_evidence: 0,
+              attached_manual_timesheets: 0,
+              cached: true
+            }));
+          }
+        }
+      } catch (err) {
+        log('error', 'cache_check_failed_nonfatal', {
+          ms: Date.now() - t0,
+          err_name: err?.name || null,
+          err_message: err?.message || String(err || ''),
+          err_stack: err?.stack || null
+        });
+        // non-fatal: fall through to render
+      }
+    }
+
+    log('log', 'render_call_start', { force_regen: forceRegen });
+
+    const tRender0 = Date.now();
+    const core = await _renderInvoiceBundleAndStore(env, req, invoiceId, user, { force_regen: forceRegen });
+    log('log', 'render_call_end', { ms: Date.now() - tRender0, ok: !!core?.ok });
+
+    if (!core?.ok) {
+      log('error', 'render_failed', { ms: Date.now() - t0, core_error: core?.error || null });
+      return withCORS(env, req, serverError(core?.error || "Failed to render invoice bundle"));
+    }
+
+    log('log', 'render_success', {
+      ms: Date.now() - t0,
+      pdf_key: core.pdf_key || null,
+      cached: !!core.cached,
+      attached_timesheets: core.attached_timesheets || 0,
+      attached_manual_timesheets: core.attached_manual_timesheets || 0,
+      attached_timesheet_evidence: core.attached_timesheet_evidence || 0,
+      attached_evidence: core.attached_evidence || 0,
+      attached_hr: !!core.attached_hr,
+      attached_nhsp: !!core.attached_nhsp
+    });
+
+    return withCORS(env, req, ok({
+      pdf_key: core.pdf_key,
+      attached_timesheets: core.attached_timesheets || 0,
+      attached_hr: !!core.attached_hr,
+      attached_nhsp: !!core.attached_nhsp,
+      attached_evidence: core.attached_evidence || 0,
+      attached_timesheet_evidence: core.attached_timesheet_evidence || 0,
+      attached_manual_timesheets: core.attached_manual_timesheets || 0,
+      cached: !!core.cached
+    }));
+  } catch (err) {
+    log('error', 'route_exception', {
+      ms: Date.now() - t0,
+      err_name: err?.name || null,
+      err_message: err?.message || String(err || ''),
+      err_stack: err?.stack || null
+    });
+    return withCORS(env, req, serverError("Failed to render invoice bundle"));
+  }
+}
+
+
+async function withBrowser(env, fn) {
+  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
+  const log = (level, msg, extra) => {
+    if (!LOG) return;
+    try {
+      const payload = Object.assign(
+        { tag: 'WITH_BROWSER', at_utc: new Date().toISOString(), msg: String(msg || '') },
+        (extra && typeof extra === 'object') ? extra : {}
+      );
+      (level === 'error' ? console.error : console.log)(JSON.stringify(payload));
+    } catch (e) {
+      try { (level === 'error' ? console.error : console.log)(msg); } catch {}
+    }
+  };
+
+  const t0 = Date.now();
+  let browser = null;
+
+  try {
+    log('log', 'launch_start');
+    browser = await puppeteer.launch(env.BROWSER); // <-- BROWSER binding from wrangler.toml
+    log('log', 'launch_ok', { ms: Date.now() - t0 });
+
+    // Best-effort lifecycle hints
+    try {
+      if (browser && typeof browser.on === 'function') {
+        browser.on('disconnected', () => {
+          log('error', 'browser_disconnected', { ms: Date.now() - t0 });
+        });
+      }
+    } catch {}
+
+    const tFn0 = Date.now();
+    const out = await fn(browser);
+    log('log', 'fn_ok', { ms: Date.now() - tFn0, total_ms: Date.now() - t0 });
+    return out;
+  } catch (err) {
+    log('error', 'withBrowser_exception', {
+      ms: Date.now() - t0,
+      err_name: err?.name || null,
+      err_message: err?.message || String(err || ''),
+      err_stack: err?.stack || null
+    });
+    throw err;
+  } finally {
+    const tClose0 = Date.now();
+    try {
+      if (browser) await browser.close();
+      log('log', 'close_ok', { ms: Date.now() - tClose0, total_ms: Date.now() - t0 });
+    } catch (errClose) {
+      log('error', 'close_failed', {
+        ms: Date.now() - tClose0,
+        total_ms: Date.now() - t0,
+        err_name: errClose?.name || null,
+        err_message: errClose?.message || String(errClose || ''),
+        err_stack: errClose?.stack || null
+      });
+    }
+  }
+}
+
+
+async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, opts) {
+  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
+  const log = (level, msg, extra) => {
+    if (!LOG) return;
+    try {
+      const payload = Object.assign(
+        {
+          tag: 'INVOICE_RENDER_BUNDLE',
+          at_utc: new Date().toISOString(),
+          cf_ray: req?.headers?.get?.('cf-ray') || null,
+          invoice_id: invoiceId || null,
+          step: step || null,
+          msg: String(msg || '')
+        },
+        (extra && typeof extra === 'object') ? extra : {}
+      );
+      (level === 'error' ? console.error : console.log)(JSON.stringify(payload));
+    } catch (e) {
+      try { (level === 'error' ? console.error : console.log)(msg); } catch {}
+    }
+  };
+
+  const enc = encodeURIComponent;
+  const t0 = Date.now();
 
   const options = (opts && typeof opts === 'object') ? opts : {};
   const forceRegen = !!(options.force_regen === true || options.forceRegen === true);
+
+  let step = 'INIT';
+  log('log', 'start', { force_regen: forceRegen });
 
   function toMarginsObj(m) {
     const dflt = { top: 32, right: 12, bottom: 20, left: 12 };
@@ -46671,36 +46974,37 @@ async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, o
       ''
     );
   }
-function buildHrReportHTML(inv, header, hrRows) {
-  const safe = (v) => (v == null ? '' : String(v));
-  const h = header || {};
-  const clientName = safe(h.client_name || h.client || '');
-  const invNo = safe(inv.invoice_no || '');
-  const issued = safe(inv.issued_at_utc || '');
 
-  // ✅ Sort rows oldest→newest by work_date/date; invalid dates last; stable by original idx.
-  const sortedRows = (Array.isArray(hrRows) ? hrRows : [])
-    .map((r, idx) => ({ r, idx }))
-    .sort((a, b) => {
-      const ra = a.r?.raw_row || a.r || {};
-      const rb = b.r?.raw_row || b.r || {};
-      const da = _parseSortDateToMs(a.r?.date || ra.work_date || ra.date || _safeGetDateFromAnyRow(ra));
-      const db = _parseSortDateToMs(b.r?.date || rb.work_date || rb.date || _safeGetDateFromAnyRow(rb));
-      if (da !== db) return da - db;
-      return a.idx - b.idx;
-    })
-    .map(x => x.r);
+  function buildHrReportHTML(inv, header, hrRows) {
+    const safe = (v) => (v == null ? '' : String(v));
+    const h = header || {};
+    const clientName = safe(h.client_name || h.client || '');
+    const invNo = safe(inv.invoice_no || '');
+    const issued = safe(inv.issued_at_utc || '');
 
-  const rowsHtml = sortedRows.map((r, idx) => {
-    const raw = r.raw_row || {};
-    const date      = safe(r.date || raw.work_date || raw.date || '');
-    const staff     = safe(raw.staff_name || raw.worker || '');
-    const ward      = safe(raw.ward || '');
-    const start     = safe(raw.start_utc || '');
-    const end       = safe(raw.end_utc || '');
-    const breakMins = safe(raw.break_mins != null ? raw.break_mins : '');
-    const ref       = safe(r.reference || raw.reference || raw.ref_num || '');
-    return `
+    // ✅ Sort rows oldest→newest by work_date/date; invalid dates last; stable by original idx.
+    const sortedRows = (Array.isArray(hrRows) ? hrRows : [])
+      .map((r, idx) => ({ r, idx }))
+      .sort((a, b) => {
+        const ra = a.r?.raw_row || a.r || {};
+        const rb = b.r?.raw_row || b.r || {};
+        const da = _parseSortDateToMs(a.r?.date || ra.work_date || ra.date || _safeGetDateFromAnyRow(ra));
+        const db = _parseSortDateToMs(b.r?.date || rb.work_date || rb.date || _safeGetDateFromAnyRow(rb));
+        if (da !== db) return da - db;
+        return a.idx - b.idx;
+      })
+      .map(x => x.r);
+
+    const rowsHtml = sortedRows.map((r, idx) => {
+      const raw = r.raw_row || {};
+      const date      = safe(r.date || raw.work_date || raw.date || '');
+      const staff     = safe(raw.staff_name || raw.worker || '');
+      const ward      = safe(raw.ward || '');
+      const start     = safe(raw.start_utc || '');
+      const end       = safe(raw.end_utc || '');
+      const breakMins = safe(raw.break_mins != null ? raw.break_mins : '');
+      const ref       = safe(r.reference || raw.reference || raw.ref_num || '');
+      return `
         <tr>
           <td>${idx + 1}</td>
           <td>${date}</td>
@@ -46712,11 +47016,11 @@ function buildHrReportHTML(inv, header, hrRows) {
           <td>${ref}</td>
         </tr>
       `;
-  }).join('');
+    }).join('');
 
-  const hasRows = sortedRows.length > 0;
+    const hasRows = sortedRows.length > 0;
 
-  return `
+    return `
 <!DOCTYPE html>
 <html>
 <head>
@@ -46765,178 +47069,178 @@ function buildHrReportHTML(inv, header, hrRows) {
 </body>
 </html>
     `;
-}
-
-function buildNhspReportHTML(inv, header, nhspData) {
-  const safe = (v) => (v == null ? '' : String(v));
-  const h = header || {};
-  const clientName = safe(h.client_name || h.client || '');
-  const invNo = safe(inv.invoice_no || '');
-  const issued = safe(inv.issued_at_utc || '');
-
-  // Normalize payload into one or more tables.
-  // If we have header_columns, we MUST preserve that exact column order.
-  const tables = [];
-
-  const unwrapRow = (r) => {
-    if (!r) return null;
-    if (r.raw_row && typeof r.raw_row === 'object') return r.raw_row;
-    if (r.raw && typeof r.raw === 'object') return r.raw;
-    return r;
-  };
-
-  if (Array.isArray(nhspData)) {
-    const rows = nhspData.map(unwrapRow).filter(r => r && typeof r === 'object');
-    if (rows.length) tables.push({ header_columns: [], rows });
-  } else if (nhspData && typeof nhspData === 'object') {
-    const tList = Array.isArray(nhspData.tables) ? nhspData.tables : [nhspData];
-    for (const t of tList) {
-      const headerCols = Array.isArray(t?.header_columns) ? t.header_columns.map(safe) : [];
-      const rowsRaw = Array.isArray(t?.rows_json)
-        ? t.rows_json
-        : (Array.isArray(t?.rows) ? t.rows : []);
-      const rows = rowsRaw.map(unwrapRow).filter(r => r && typeof r === 'object');
-      if (rows.length) tables.push({ header_columns: headerCols, rows });
-    }
   }
 
-  // Best-effort date extraction for object rows
-  const safeGetDateFromAnyRow = (row) => {
-    if (!row || typeof row !== 'object') return '';
-    const candidates = [
-      row.work_date, row.workDate,
-      row.date, row.Date,
-      row.shift_date, row.shiftDate,
-      row.start_date, row.startDate
-    ];
-    for (const c of candidates) {
-      const s = (c == null ? '' : String(c)).trim();
-      if (s) return s;
-    }
-    return '';
-  };
+  function buildNhspReportHTML(inv, header, nhspData) {
+    const safe = (v) => (v == null ? '' : String(v));
+    const h = header || {};
+    const clientName = safe(h.client_name || h.client || '');
+    const invNo = safe(inv.invoice_no || '');
+    const issued = safe(inv.issued_at_utc || '');
 
-  // Parse any date-ish string into ms for sorting.
-  // Invalid or empty => Infinity so these rows are pushed to the end.
-  const parseSortDateToMs = (v) => {
-    const s = (v == null ? '' : String(v)).trim();
-    if (!s) return Number.POSITIVE_INFINITY;
+    // Normalize payload into one or more tables.
+    // If we have header_columns, we MUST preserve that exact column order.
+    const tables = [];
 
-    // YYYY-MM-DD
-    const mYmd = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (mYmd) {
-      const y = Number(mYmd[1]), mo = Number(mYmd[2]) - 1, d = Number(mYmd[3]);
-      const t = Date.UTC(y, mo, d);
-      return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
-    }
+    const unwrapRow = (r) => {
+      if (!r) return null;
+      if (r.raw_row && typeof r.raw_row === 'object') return r.raw_row;
+      if (r.raw && typeof r.raw === 'object') return r.raw;
+      return r;
+    };
 
-    // DD/MM/YYYY or DD/MM/YY
-    const mDmy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
-    if (mDmy) {
-      const dd = Number(mDmy[1]), mo = Number(mDmy[2]) - 1;
-      let y = Number(mDmy[3]);
-      if (mDmy[3].length === 2) y = (y >= 70 ? 1900 + y : 2000 + y);
-      const t = Date.UTC(y, mo, dd);
-      return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
+    if (Array.isArray(nhspData)) {
+      const rows = nhspData.map(unwrapRow).filter(r => r && typeof r === 'object');
+      if (rows.length) tables.push({ header_columns: [], rows });
+    } else if (nhspData && typeof nhspData === 'object') {
+      const tList = Array.isArray(nhspData.tables) ? nhspData.tables : [nhspData];
+      for (const t of tList) {
+        const headerCols = Array.isArray(t?.header_columns) ? t.header_columns.map(safe) : [];
+        const rowsRaw = Array.isArray(t?.rows_json)
+          ? t.rows_json
+          : (Array.isArray(t?.rows) ? t.rows : []);
+        const rows = rowsRaw.map(unwrapRow).filter(r => r && typeof r === 'object');
+        if (rows.length) tables.push({ header_columns: headerCols, rows });
+      }
     }
 
-    // Fallback: Date parse
-    const dt = new Date(s);
-    const t = dt.getTime();
-    return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
-  };
+    // Best-effort date extraction for object rows
+    const safeGetDateFromAnyRow = (row) => {
+      if (!row || typeof row !== 'object') return '';
+      const candidates = [
+        row.work_date, row.workDate,
+        row.date, row.Date,
+        row.shift_date, row.shiftDate,
+        row.start_date, row.startDate
+      ];
+      for (const c of candidates) {
+        const s = (c == null ? '' : String(c)).trim();
+        if (s) return s;
+      }
+      return '';
+    };
 
-  // If table rows are raw_columns, attempt to locate a date-like header so we can sort.
-  const findDateColIndex = (cols) => {
-    if (!Array.isArray(cols) || !cols.length) return -1;
-    const lc = cols.map(c => String(c || '').toLowerCase());
-    // prefer "work date" then "date"
-    let idx = lc.findIndex(s => s.includes('work') && s.includes('date'));
-    if (idx >= 0) return idx;
-    idx = lc.findIndex(s => s === 'date' || s.includes(' date'));
-    if (idx >= 0) return idx;
-    idx = lc.findIndex(s => s.includes('date'));
-    return idx;
-  };
+    // Parse any date-ish string into ms for sorting.
+    // Invalid or empty => Infinity so these rows are pushed to the end.
+    const parseSortDateToMs = (v) => {
+      const s = (v == null ? '' : String(v)).trim();
+      if (!s) return Number.POSITIVE_INFINITY;
 
-  const sortRowsByDate = (headerCols, rows) => {
-    const cols = Array.isArray(headerCols) ? headerCols : [];
-    const dateIdx = findDateColIndex(cols);
-
-    return rows.map((r, idx) => ({ r, idx })).sort((a, b) => {
-      const ra = a.r;
-      const rb = b.r;
-
-      let da = '';
-      let db = '';
-
-      if (Array.isArray(ra?.raw_columns) && dateIdx >= 0) da = ra.raw_columns[dateIdx] ?? '';
-      else da = safeGetDateFromAnyRow(ra);
-
-      if (Array.isArray(rb?.raw_columns) && dateIdx >= 0) db = rb.raw_columns[dateIdx] ?? '';
-      else db = safeGetDateFromAnyRow(rb);
-
-      const ta = parseSortDateToMs(da);
-      const tb = parseSortDateToMs(db);
-      if (ta !== tb) return ta - tb;
-      return a.idx - b.idx; // stable
-    }).map(x => x.r);
-  };
-
-  for (const t of tables) {
-    t.rows = sortRowsByDate(t.header_columns, t.rows);
-  }
-
-  const hasTables = tables.length > 0;
-
-  const renderTable = (t, idx) => {
-    const headerCols = Array.isArray(t.header_columns) ? t.header_columns : [];
-
-    // Prefer rendering using raw_columns (which maps 1:1 to header_columns).
-    const firstWithRawCols = t.rows.find(r => Array.isArray(r.raw_columns));
-    const rawLen = firstWithRawCols ? firstWithRawCols.raw_columns.length : 0;
-
-    // Column labels:
-    //  - If header_columns exist, use them exactly as imported.
-    //  - Else, if raw_columns exist, use generic Column 1..N (still preserves column ORDER).
-    //  - Else, fall back to object keys (best-effort).
-    const columns = (headerCols && headerCols.length)
-      ? headerCols
-      : (rawLen > 0
-          ? Array.from({ length: rawLen }, (_, i) => `Column ${i + 1}`)
-          : Object.keys(t.rows[0] || {}));
-
-    const headerHtml = `<tr>${columns.map(col => `<th>${escapeHtml(safe(col))}</th>`).join('')}</tr>`;
-
-    const rowsHtml = t.rows.map(r => {
-      let cells = [];
-
-      if (Array.isArray(r.raw_columns)) {
-        const arr = r.raw_columns;
-        for (let i = 0; i < columns.length; i++) {
-          const v = (i < arr.length) ? arr[i] : '';
-          cells.push(`<td>${escapeHtml(safe(v))}</td>`);
-        }
-      } else {
-        for (const col of columns) {
-          cells.push(`<td>${escapeHtml(safe(r?.[col]))}</td>`);
-        }
+      // YYYY-MM-DD
+      const mYmd = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (mYmd) {
+        const y = Number(mYmd[1]), mo = Number(mYmd[2]) - 1, d = Number(mYmd[3]);
+        const t = Date.UTC(y, mo, d);
+        return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
       }
 
-      return `<tr>${cells.join('')}</tr>`;
-    }).join('');
+      // DD/MM/YYYY or DD/MM/YY
+      const mDmy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
+      if (mDmy) {
+        const dd = Number(mDmy[1]), mo = Number(mDmy[2]) - 1;
+        let y = Number(mDmy[3]);
+        if (mDmy[3].length === 2) y = (y >= 70 ? 1900 + y : 2000 + y);
+        const t = Date.UTC(y, mo, dd);
+        return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
+      }
 
-    const sep = (idx > 0) ? `<div class="page-break"></div>` : '';
+      // Fallback: Date parse
+      const dt = new Date(s);
+      const t = dt.getTime();
+      return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
+    };
 
-    return `${sep}
+    // If table rows are raw_columns, attempt to locate a date-like header so we can sort.
+    const findDateColIndex = (cols) => {
+      if (!Array.isArray(cols) || !cols.length) return -1;
+      const lc = cols.map(c => String(c || '').toLowerCase());
+      // prefer "work date" then "date"
+      let idx = lc.findIndex(s => s.includes('work') && s.includes('date'));
+      if (idx >= 0) return idx;
+      idx = lc.findIndex(s => s === 'date' || s.includes(' date'));
+      if (idx >= 0) return idx;
+      idx = lc.findIndex(s => s.includes('date'));
+      return idx;
+    };
+
+    const sortRowsByDate = (headerCols, rows) => {
+      const cols = Array.isArray(headerCols) ? headerCols : [];
+      const dateIdx = findDateColIndex(cols);
+
+      return rows.map((r, idx) => ({ r, idx })).sort((a, b) => {
+        const ra = a.r;
+        const rb = b.r;
+
+        let da = '';
+        let db = '';
+
+        if (Array.isArray(ra?.raw_columns) && dateIdx >= 0) da = ra.raw_columns[dateIdx] ?? '';
+        else da = safeGetDateFromAnyRow(ra);
+
+        if (Array.isArray(rb?.raw_columns) && dateIdx >= 0) db = rb.raw_columns[dateIdx] ?? '';
+        else db = safeGetDateFromAnyRow(rb);
+
+        const ta = parseSortDateToMs(da);
+        const tb = parseSortDateToMs(db);
+        if (ta !== tb) return ta - tb;
+        return a.idx - b.idx; // stable
+      }).map(x => x.r);
+    };
+
+    for (const t of tables) {
+      t.rows = sortRowsByDate(t.header_columns, t.rows);
+    }
+
+    const hasTables = tables.length > 0;
+
+    const renderTable = (t, idx) => {
+      const headerCols = Array.isArray(t.header_columns) ? t.header_columns : [];
+
+      // Prefer rendering using raw_columns (which maps 1:1 to header_columns).
+      const firstWithRawCols = t.rows.find(r => Array.isArray(r.raw_columns));
+      const rawLen = firstWithRawCols ? firstWithRawCols.raw_columns.length : 0;
+
+      // Column labels:
+      //  - If header_columns exist, use them exactly as imported.
+      //  - Else, if raw_columns exist, use generic Column 1..N (still preserves column ORDER).
+      //  - Else, fall back to object keys (best-effort).
+      const columns = (headerCols && headerCols.length)
+        ? headerCols
+        : (rawLen > 0
+            ? Array.from({ length: rawLen }, (_, i) => `Column ${i + 1}`)
+            : Object.keys(t.rows[0] || {}));
+
+      const headerHtml = `<tr>${columns.map(col => `<th>${escapeHtml(safe(col))}</th>`).join('')}</tr>`;
+
+      const rowsHtml = t.rows.map(r => {
+        let cells = [];
+
+        if (Array.isArray(r.raw_columns)) {
+          const arr = r.raw_columns;
+          for (let i = 0; i < columns.length; i++) {
+            const v = (i < arr.length) ? arr[i] : '';
+            cells.push(`<td>${escapeHtml(safe(v))}</td>`);
+          }
+        } else {
+          for (const col of columns) {
+            cells.push(`<td>${escapeHtml(safe(r?.[col]))}</td>`);
+          }
+        }
+
+        return `<tr>${cells.join('')}</tr>`;
+      }).join('');
+
+      const sep = (idx > 0) ? `<div class="page-break"></div>` : '';
+
+      return `${sep}
         <table class="nhsp">
           <thead>${headerHtml}</thead>
           <tbody>${rowsHtml}</tbody>
         </table>
       `;
-  };
+    };
 
-  return `
+    return `
 <!DOCTYPE html>
 <html>
 <head>
@@ -46994,281 +47298,281 @@ function buildNhspReportHTML(inv, header, nhspData) {
 </body>
 </html>
     `;
-}
-
-// ==========================================================
-// UPDATED: buildHTML (render FREEFORM reference rows as single-column list/table)
-// ==========================================================
-function buildHTML(payload) {
-  const {
-    header = {},
-    meta: payloadMeta = {},
-    invoice_no = "",
-    issued_at_utc,
-    due_at_utc,
-    totals = { subtotal_ex_vat: 0, vat_amount: 0, total_inc_vat: 0 },
-    items = [],
-    reference_rows = []
-  } = payload || {};
-
-  // Snapshot fields (populated by your issuing worker)
-  const clientName = pick(header, "client_name", "");
-  const clientAddress = (pick(header, "client_invoice_address", "") || "")
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean);
-
-  const vatChargeable = !!pick(header, "vat_chargeable", true);
-  const appliedVatPct = Number(pick(header, "applied_vat_rate_pct", 0)); // NOTE: never displayed
-  const termsDays = pick(header, "payment_terms_days", null);
-  const bank = pick(header, "bank", {}) || {};
-
-   // Agency branding (passed via header snapshot)
-  const agencyName =
-    pick(header, "agency_name", "") ||
-    pick(header, "agency_display_name", "") ||
-    pick(header, "company_name", "") ||
-    "";
-
-  const agencyLogoUrl =
-    pick(header, "agency_logo_url", "") ||
-    pick(header, "logo_url", "") ||
-    "";
-
-  // Registered details (passed via header snapshot)
-  const registeredAddressLines = (pick(header, "registered_address", "") || "")
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean);
-
-  const companyRegNumber =
-    pick(header, "company_reg_number", "") ||
-    pick(header, "company_registration_number", "") ||
-    "";
-
-  // VAT reg: use settings value if present; otherwise fallback to hard-wired number
-  const DEFAULT_VAT_REG = "363 6805 80";
-  const vatReg = pick(header, "vat_registration_number", "") || DEFAULT_VAT_REG;
-
-  // Stationery (letterhead) — expects PNG/JPG URL (signed) + safe-area margins (mm)
-  const stationeryUrl = pick(header, "stationery_url", ""); // PNG/JPG URL or data: URI
-
-  const defaultMargins = stationeryUrl
-    ? { top: 32, right: 12, bottom: 20, left: 12 } // safe defaults with artwork
-    : { top: 18, right: 12, bottom: 34, left: 12 }; // plain layout defaults
-  const mgIn = pick(header, "stationery_margins_mm", {}) || {};
-  const mg = {
-    top: Number(pick(mgIn, "top", defaultMargins.top)),
-    right: Number(pick(mgIn, "right", defaultMargins.right)),
-    bottom: Number(pick(mgIn, "bottom", defaultMargins.bottom)),
-    left: Number(pick(mgIn, "left", defaultMargins.left))
-  };
-
-  // Hide transactional footer if your artwork already includes it
-  const hideBankFooter = !!pick(header, "hide_bank_footer", false);
-
-  // Header-level PO only if a single unique PO exists across header + all items
-  const headerPo = pick(header, "po_number", null);
-  const itemPos = items.map((i) => i?.meta?.po_number).filter(Boolean);
-  const uniquePos = Array.from(new Set([...(headerPo ? [headerPo] : []), ...itemPos]));
-  const poNo = uniquePos.length === 1 ? uniquePos[0] : "";
-
-  const showVatCols = vatChargeable && (appliedVatPct > 0 || Number(totals.vat_amount) > 0);
-
-  // ─────────────────────────────────────────────────────────────
-  // Helpers for breakdown rendering (keeps styling consistent)
-  // ─────────────────────────────────────────────────────────────
-  const num = (v) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : 0;
-  };
-  const round2 = (v) => Math.round(num(v) * 100) / 100;
-  const fmtQty = (v, decimals = 2) => {
-    const n = num(v);
-    if (Math.abs(n - Math.round(n)) < 1e-9) return String(Math.round(n));
-    return n.toFixed(decimals);
-  };
-  const eqRate = (a, b) => {
-    // Compare to 2dp to avoid tiny float drift; rates are normally stored as numeric
-    return round2(a) === round2(b);
-  };
-
-  const getLineTypeNorm = (it) => {
-    const m = it?.meta || {};
-    const s = String(m.line_type_norm || m.line_type || "").toUpperCase();
-    return s;
-  };
-
-  const getTimesheetId = (it) => {
-    return (it && it.timesheet_id != null) ? String(it.timesheet_id)
-      : (it?.meta?.timesheet_id != null ? String(it.meta.timesheet_id) : null);
-  };
-
-  const isAdjustmentItem = (it) => {
-    const t = getLineTypeNorm(it);
-    const tsId = getTimesheetId(it);
-    return (!tsId || t === "ADJUSTMENT");
-  };
-
-  // Labels (use per-line labels if provided; fallback to defaults)
-  const DEFAULT_LABELS = { day: "Day", night: "Night", sat: "Sat", sun: "Sun", bh: "BH" };
-  const bucketLabelOf = (labels, key) => String((labels && labels[key]) || DEFAULT_LABELS[key] || key);
-
-  // ─────────────────────────────────────────────────────────────
-  // Group items by timesheet_id, keep adjustments separate
-  // ─────────────────────────────────────────────────────────────
-  const groupMap = new Map(); // tsId -> { items: [], metaHint: {} }
-  const adjustments = [];
-
-  for (const it of (items || [])) {
-    if (isAdjustmentItem(it)) {
-      adjustments.push(it);
-      continue;
-    }
-    const tsId = getTimesheetId(it);
-    if (!tsId) {
-      adjustments.push(it);
-      continue;
-    }
-    if (!groupMap.has(tsId)) groupMap.set(tsId, { tsId, items: [] });
-    groupMap.get(tsId).items.push(it);
   }
 
-  // Sort groups deterministically by week ending then candidate
-  const groups = Array.from(groupMap.values()).sort((a, b) => {
-    const aMeta = (a.items.find(x => getLineTypeNorm(x) === "HOURS")?.meta) || a.items[0]?.meta || {};
-    const bMeta = (b.items.find(x => getLineTypeNorm(x) === "HOURS")?.meta) || b.items[0]?.meta || {};
-    const awe = String(aMeta.week_ending_date || aMeta.week_ending || aMeta.weekEnding || "");
-    const bwe = String(bMeta.week_ending_date || bMeta.week_ending || bMeta.weekEnding || "");
-    if (awe !== bwe) return awe < bwe ? 1 : -1; // desc
-    const ac = String(aMeta.candidate_display || aMeta.candidate || "");
-    const bc = String(bMeta.candidate_display || bMeta.candidate || "");
-    if (ac !== bc) return ac.localeCompare(bc);
-    return String(a.tsId).localeCompare(String(b.tsId));
-  });
+  // ==========================================================
+  // UPDATED: buildHTML (render FREEFORM reference rows as single-column list/table)
+  // ==========================================================
+  function buildHTML(payload) {
+    const {
+      header = {},
+      meta: payloadMeta = {},
+      invoice_no = "",
+      issued_at_utc,
+      due_at_utc,
+      totals = { subtotal_ex_vat: 0, vat_amount: 0, total_inc_vat: 0 },
+      items = [],
+      reference_rows = []
+    } = payload || {};
 
-  // ─────────────────────────────────────────────────────────────
-  // Build breakdown rows for a single timesheet group
-  // Unit Description | Quantity | Unit Charge (ex VAT) | Charge (ex VAT)
-  // ─────────────────────────────────────────────────────────────
-  const groupBreakdownTableHtml = (grp) => {
-    const its = grp.items || [];
-    const hoursItem = its.find((x) => getLineTypeNorm(x) === "HOURS") || null;
+    // Snapshot fields (populated by your issuing worker)
+    const clientName = pick(header, "client_name", "");
+    const clientAddress = (pick(header, "client_invoice_address", "") || "")
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean);
 
-    // meta for display/header
-    const metaBase = (hoursItem?.meta || its[0]?.meta || {}) || {};
-    const labels = (metaBase.bucket_labels && typeof metaBase.bucket_labels === "object") ? metaBase.bucket_labels : DEFAULT_LABELS;
+    const vatChargeable = !!pick(header, "vat_chargeable", true);
+    const appliedVatPct = Number(pick(header, "applied_vat_rate_pct", 0)); // NOTE: never displayed
+    const termsDays = pick(header, "payment_terms_days", null);
+    const bank = pick(header, "bank", {}) || {};
 
-    // Pull bucket hours/rates from meta (these are merged by _renderInvoiceBundleAndStore)
-    const hDay = num(metaBase.hours_day);
-    const hNgt = num(metaBase.hours_night);
-    const hSat = num(metaBase.hours_sat);
-    const hSun = num(metaBase.hours_sun);
-    const hBh  = num(metaBase.hours_bh);
+    // Agency branding (passed via header snapshot)
+    const agencyName =
+      pick(header, "agency_name", "") ||
+      pick(header, "agency_display_name", "") ||
+      pick(header, "company_name", "") ||
+      "";
 
-    const rDay = num(metaBase.charge_day);
-    const rNgt = num(metaBase.charge_night);
-    const rSat = num(metaBase.charge_sat);
-    const rSun = num(metaBase.charge_sun);
-    const rBh  = num(metaBase.charge_bh);
+    const agencyLogoUrl =
+      pick(header, "agency_logo_url", "") ||
+      pick(header, "logo_url", "") ||
+      "";
 
-    const groupFlag = !!pick(payloadMeta, "group_nightsat_sunbh", false);
-    const canMerge = groupFlag && eqRate(rNgt, rSat) && eqRate(rSun, rBh);
+    // Registered details (passed via header snapshot)
+    const registeredAddressLines = (pick(header, "registered_address", "") || "")
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean);
 
-    const rows = [];
+    const companyRegNumber =
+      pick(header, "company_reg_number", "") ||
+      pick(header, "company_registration_number", "") ||
+      "";
 
-    const pushRow = (desc, qty, unit, charge) => {
-      const q = num(qty);
-      const u = num(unit);
-      const c = round2(charge);
-      // Requirement: hide zero-subtotal rows, but show positive and negative rows.
-      if (c === 0) return;
-      rows.push({ desc: String(desc || ""), qty: q, unit: u, charge: c });
+    // VAT reg: use settings value if present; otherwise fallback to hard-wired number
+    const DEFAULT_VAT_REG = "363 6805 80";
+    const vatReg = pick(header, "vat_registration_number", "") || DEFAULT_VAT_REG;
+
+    // Stationery (letterhead) — expects PNG/JPG URL (signed) + safe-area margins (mm)
+    const stationeryUrl = pick(header, "stationery_url", ""); // PNG/JPG URL or data: URI
+
+    const defaultMargins = stationeryUrl
+      ? { top: 32, right: 12, bottom: 20, left: 12 } // safe defaults with artwork
+      : { top: 18, right: 12, bottom: 34, left: 12 }; // plain layout defaults
+    const mgIn = pick(header, "stationery_margins_mm", {}) || {};
+    const mg = {
+      top: Number(pick(mgIn, "top", defaultMargins.top)),
+      right: Number(pick(mgIn, "right", defaultMargins.right)),
+      bottom: Number(pick(mgIn, "bottom", defaultMargins.bottom)),
+      left: Number(pick(mgIn, "left", defaultMargins.left))
     };
 
-    // HOURS breakdown
-    if (hoursItem) {
-      if (canMerge) {
-        const nightSatQty = hNgt + hSat;
-        const sunBhQty = hSun + hBh;
-        pushRow(bucketLabelOf(labels, "day"), hDay, rDay, hDay * rDay);
-        pushRow(`${bucketLabelOf(labels, "night")}/${bucketLabelOf(labels, "sat")}`, nightSatQty, rNgt, nightSatQty * rNgt);
-        pushRow(`${bucketLabelOf(labels, "sun")}/${bucketLabelOf(labels, "bh")}`, sunBhQty, rSun, sunBhQty * rSun);
-      } else {
-        pushRow(bucketLabelOf(labels, "day"), hDay, rDay, hDay * rDay);
-        pushRow(bucketLabelOf(labels, "night"), hNgt, rNgt, hNgt * rNgt);
-        pushRow(bucketLabelOf(labels, "sat"), hSat, rSat, hSat * rSat);
-        pushRow(bucketLabelOf(labels, "sun"), hSun, rSun, hSun * rSun);
-        pushRow(bucketLabelOf(labels, "bh"), hBh, rBh, hBh * rBh);
-      }
-    }
+    // Hide transactional footer if your artwork already includes it
+    const hideBankFooter = !!pick(header, "hide_bank_footer", false);
 
-    // Additional rates / mileage / expenses (non-hours)
-    for (const it of its) {
+    // Header-level PO only if a single unique PO exists across header + all items
+    const headerPo = pick(header, "po_number", null);
+    const itemPos = items.map((i) => i?.meta?.po_number).filter(Boolean);
+    const uniquePos = Array.from(new Set([...(headerPo ? [headerPo] : []), ...itemPos]));
+    const poNo = uniquePos.length === 1 ? uniquePos[0] : "";
+
+    const showVatCols = vatChargeable && (appliedVatPct > 0 || Number(totals.vat_amount) > 0);
+
+    // ─────────────────────────────────────────────────────────────
+    // Helpers for breakdown rendering (keeps styling consistent)
+    // ─────────────────────────────────────────────────────────────
+    const num = (v) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    };
+    const round2 = (v) => Math.round(num(v) * 100) / 100;
+    const fmtQty = (v, decimals = 2) => {
+      const n = num(v);
+      if (Math.abs(n - Math.round(n)) < 1e-9) return String(Math.round(n));
+      return n.toFixed(decimals);
+    };
+    const eqRate = (a, b) => {
+      // Compare to 2dp to avoid tiny float drift; rates are normally stored as numeric
+      return round2(a) === round2(b);
+    };
+
+    const getLineTypeNorm = (it) => {
+      const m = it?.meta || {};
+      const s = String(m.line_type_norm || m.line_type || "").toUpperCase();
+      return s;
+    };
+
+    const getTimesheetId = (it) => {
+      return (it && it.timesheet_id != null) ? String(it.timesheet_id)
+        : (it?.meta?.timesheet_id != null ? String(it.meta.timesheet_id) : null);
+    };
+
+    const isAdjustmentItem = (it) => {
       const t = getLineTypeNorm(it);
-      if (t === "HOURS") continue;
-      if (t === "ADJUSTMENT") continue;
+      const tsId = getTimesheetId(it);
+      return (!tsId || t === "ADJUSTMENT");
+    };
 
-      const m = it.meta || {};
-      const totalEx = num(it.total_ex_vat);
+    // Labels (use per-line labels if provided; fallback to defaults)
+    const DEFAULT_LABELS = { day: "Day", night: "Night", sat: "Sat", sun: "Sun", bh: "BH" };
+    const bucketLabelOf = (labels, key) => String((labels && labels[key]) || DEFAULT_LABELS[key] || key);
 
-      // Default label (keep the human-friendly SQL-generated description where available)
-      const unitLabel = String(m.unit_label || it.description || t || "").trim() || t;
+    // ─────────────────────────────────────────────────────────────
+    // Group items by timesheet_id, keep adjustments separate
+    // ─────────────────────────────────────────────────────────────
+    const groupMap = new Map(); // tsId -> { items: [], metaHint: {} }
+    const adjustments = [];
 
-      let qty = null;
-      let unitCharge = null;
-
-      // Mileage (miles + rate)
-      if (t === "MILEAGE") {
-        if (m?.mileage && m.mileage.mileage_units != null) qty = num(m.mileage.mileage_units);
-        else if (m.mileage_units != null) qty = num(m.mileage_units);
-        else if (m.qty != null) qty = num(m.qty);
-
-        if (m?.mileage && m.mileage.charge_rate != null) unitCharge = num(m.mileage.charge_rate);
-        else if (m.unit_charge_ex_vat != null) unitCharge = num(m.unit_charge_ex_vat);
+    for (const it of (items || [])) {
+      if (isAdjustmentItem(it)) {
+        adjustments.push(it);
+        continue;
       }
-
-      // Additional units/rates
-      else if (t.startsWith("ADDITIONAL_RATE")) {
-        if (m?.units && m.units.unit_count != null) qty = num(m.units.unit_count);
-        else if (m.unit_count != null) qty = num(m.unit_count);
-        else if (m.qty != null) qty = num(m.qty);
-
-        if (m?.units && m.units.charge_rate != null) unitCharge = num(m.units.charge_rate);
-        else if (m.unit_charge_ex_vat != null) unitCharge = num(m.unit_charge_ex_vat);
+      const tsId = getTimesheetId(it);
+      if (!tsId) {
+        adjustments.push(it);
+        continue;
       }
-
-      // Expenses (travel / accommodation / other etc.)
-      else if (t.startsWith("EXPENSE")) {
-        qty = (m.qty != null) ? num(m.qty) : 1;
-        unitCharge = (m.unit_charge_ex_vat != null)
-          ? num(m.unit_charge_ex_vat)
-          : (qty !== 0 ? totalEx / qty : totalEx);
-      }
-
-      // Generic fallback
-      else {
-        qty = (m.qty != null) ? num(m.qty) : 1;
-        unitCharge = (m.unit_charge_ex_vat != null)
-          ? num(m.unit_charge_ex_vat)
-          : (qty !== 0 ? totalEx / qty : totalEx);
-      }
-
-      if (qty == null) qty = 1;
-
-      // Requirement: skip zero-qty rows (but DO show negative qty/charges)
-      if (round2(qty) === 0) continue;
-
-      if (unitCharge == null) {
-        unitCharge = (qty !== 0) ? (totalEx / qty) : totalEx;
-      }
-
-      pushRow(unitLabel, qty, unitCharge, totalEx);
+      if (!groupMap.has(tsId)) groupMap.set(tsId, { tsId, items: [] });
+      groupMap.get(tsId).items.push(it);
     }
 
-    if (!rows.length) return "";
+    // Sort groups deterministically by week ending then candidate
+    const groups = Array.from(groupMap.values()).sort((a, b) => {
+      const aMeta = (a.items.find(x => getLineTypeNorm(x) === "HOURS")?.meta) || a.items[0]?.meta || {};
+      const bMeta = (b.items.find(x => getLineTypeNorm(x) === "HOURS")?.meta) || b.items[0]?.meta || {};
+      const awe = String(aMeta.week_ending_date || aMeta.week_ending || aMeta.weekEnding || "");
+      const bwe = String(bMeta.week_ending_date || bMeta.week_ending || bMeta.weekEnding || "");
+      if (awe !== bwe) return awe < bwe ? 1 : -1; // desc
+      const ac = String(aMeta.candidate_display || aMeta.candidate || "");
+      const bc = String(bMeta.candidate_display || bMeta.candidate || "");
+      if (ac !== bc) return ac.localeCompare(bc);
+      return String(a.tsId).localeCompare(String(b.tsId));
+    });
 
-    const head = `
+    // ─────────────────────────────────────────────────────────────
+    // Build breakdown rows for a single timesheet group
+    // Unit Description | Quantity | Unit Charge (ex VAT) | Charge (ex VAT)
+    // ─────────────────────────────────────────────────────────────
+    const groupBreakdownTableHtml = (grp) => {
+      const its = grp.items || [];
+      const hoursItem = its.find((x) => getLineTypeNorm(x) === "HOURS") || null;
+
+      // meta for display/header
+      const metaBase = (hoursItem?.meta || its[0]?.meta || {}) || {};
+      const labels = (metaBase.bucket_labels && typeof metaBase.bucket_labels === "object") ? metaBase.bucket_labels : DEFAULT_LABELS;
+
+      // Pull bucket hours/rates from meta (these are merged by _renderInvoiceBundleAndStore)
+      const hDay = num(metaBase.hours_day);
+      const hNgt = num(metaBase.hours_night);
+      const hSat = num(metaBase.hours_sat);
+      const hSun = num(metaBase.hours_sun);
+      const hBh  = num(metaBase.hours_bh);
+
+      const rDay = num(metaBase.charge_day);
+      const rNgt = num(metaBase.charge_night);
+      const rSat = num(metaBase.charge_sat);
+      const rSun = num(metaBase.charge_sun);
+      const rBh  = num(metaBase.charge_bh);
+
+      const groupFlag = !!pick(payloadMeta, "group_nightsat_sunbh", false);
+      const canMerge = groupFlag && eqRate(rNgt, rSat) && eqRate(rSun, rBh);
+
+      const rows = [];
+
+      const pushRow = (desc, qty, unit, charge) => {
+        const q = num(qty);
+        const u = num(unit);
+        const c = round2(charge);
+        // Requirement: hide zero-subtotal rows, but show positive and negative rows.
+        if (c === 0) return;
+        rows.push({ desc: String(desc || ""), qty: q, unit: u, charge: c });
+      };
+
+      // HOURS breakdown
+      if (hoursItem) {
+        if (canMerge) {
+          const nightSatQty = hNgt + hSat;
+          const sunBhQty = hSun + hBh;
+          pushRow(bucketLabelOf(labels, "day"), hDay, rDay, hDay * rDay);
+          pushRow(`${bucketLabelOf(labels, "night")}/${bucketLabelOf(labels, "sat")}`, nightSatQty, rNgt, nightSatQty * rNgt);
+          pushRow(`${bucketLabelOf(labels, "sun")}/${bucketLabelOf(labels, "bh")}`, sunBhQty, rSun, sunBhQty * rSun);
+        } else {
+          pushRow(bucketLabelOf(labels, "day"), hDay, rDay, hDay * rDay);
+          pushRow(bucketLabelOf(labels, "night"), hNgt, rNgt, hNgt * rNgt);
+          pushRow(bucketLabelOf(labels, "sat"), hSat, rSat, hSat * rSat);
+          pushRow(bucketLabelOf(labels, "sun"), hSun, rSun, hSun * rSun);
+          pushRow(bucketLabelOf(labels, "bh"), hBh, rBh, hBh * rBh);
+        }
+      }
+
+      // Additional rates / mileage / expenses (non-hours)
+      for (const it of its) {
+        const t = getLineTypeNorm(it);
+        if (t === "HOURS") continue;
+        if (t === "ADJUSTMENT") continue;
+
+        const m = it.meta || {};
+        const totalEx = num(it.total_ex_vat);
+
+        // Default label (keep the human-friendly SQL-generated description where available)
+        const unitLabel = String(m.unit_label || it.description || t || "").trim() || t;
+
+        let qty = null;
+        let unitCharge = null;
+
+        // Mileage (miles + rate)
+        if (t === "MILEAGE") {
+          if (m?.mileage && m.mileage.mileage_units != null) qty = num(m.mileage.mileage_units);
+          else if (m.mileage_units != null) qty = num(m.mileage_units);
+          else if (m.qty != null) qty = num(m.qty);
+
+          if (m?.mileage && m.mileage.charge_rate != null) unitCharge = num(m.mileage.charge_rate);
+          else if (m.unit_charge_ex_vat != null) unitCharge = num(m.unit_charge_ex_vat);
+        }
+
+        // Additional units/rates
+        else if (t.startsWith("ADDITIONAL_RATE")) {
+          if (m?.units && m.units.unit_count != null) qty = num(m.units.unit_count);
+          else if (m.unit_count != null) qty = num(m.unit_count);
+          else if (m.qty != null) qty = num(m.qty);
+
+          if (m?.units && m.units.charge_rate != null) unitCharge = num(m.units.charge_rate);
+          else if (m.unit_charge_ex_vat != null) unitCharge = num(m.unit_charge_ex_vat);
+        }
+
+        // Expenses (travel / accommodation / other etc.)
+        else if (t.startsWith("EXPENSE")) {
+          qty = (m.qty != null) ? num(m.qty) : 1;
+          unitCharge = (m.unit_charge_ex_vat != null)
+            ? num(m.unit_charge_ex_vat)
+            : (qty !== 0 ? totalEx / qty : totalEx);
+        }
+
+        // Generic fallback
+        else {
+          qty = (m.qty != null) ? num(m.qty) : 1;
+          unitCharge = (m.unit_charge_ex_vat != null)
+            ? num(m.unit_charge_ex_vat)
+            : (qty !== 0 ? totalEx / qty : totalEx);
+        }
+
+        if (qty == null) qty = 1;
+
+        // Requirement: skip zero-qty rows (but DO show negative qty/charges)
+        if (round2(qty) === 0) continue;
+
+        if (unitCharge == null) {
+          unitCharge = (qty !== 0) ? (totalEx / qty) : totalEx;
+        }
+
+        pushRow(unitLabel, qty, unitCharge, totalEx);
+      }
+
+      if (!rows.length) return "";
+
+      const head = `
       <table class="breakdown">
         <thead>
           <tr>
@@ -47281,7 +47585,7 @@ function buildHTML(payload) {
         <tbody>
     `;
 
-    const body = rows.map(r => `
+      const body = rows.map(r => `
       <tr>
         <td class="b-desc">${escapeHtml(r.desc)}</td>
         <td class="b-qty mono">${fmtQty(r.qty, 2)}</td>
@@ -47290,56 +47594,54 @@ function buildHTML(payload) {
       </tr>
     `).join("");
 
-    const tail = `
+      const tail = `
         </tbody>
       </table>
     `;
 
-    return head + body + tail;
-  };
-
-  // ─────────────────────────────────────────────────────────────
-  // Booking reference rows (manifest.reference_rows)
-  // Rendered under each timesheet group (never show timesheet_id)
-  // - Structured rows (SEGMENT/DAY/TIMESHEET) => Day/Start/End/Reference table
-  // - Freeform rows (no day/start/end)        => single-column Reference table
-  // ─────────────────────────────────────────────────────────────
-  const refsByTsId = new Map();
-  for (const r of (reference_rows || [])) {
-    const tsId = (r && r.timesheet_id != null) ? String(r.timesheet_id) : null;
-    if (!tsId) continue;
-    if (!refsByTsId.has(tsId)) refsByTsId.set(tsId, []);
-    refsByTsId.get(tsId).push(r);
-  }
-
-  const refsTableHtmlForTs = (tsId) => {
-    const refs = refsByTsId.get(String(tsId || "")) || [];
-    if (!refs.length) return "";
-
-    const isStructured = (r) => {
-      const d = (r?.day_ymd != null) ? String(r.day_ymd).trim() : '';
-      const st = (r?.start_utc != null) ? String(r.start_utc).trim() : '';
-      const en = (r?.end_utc != null) ? String(r.end_utc).trim() : '';
-      return !!(d || st || en);
+      return head + body + tail;
     };
 
-    const structured = [];
-    const freeform = [];
-    refs.forEach((r) => {
-      (isStructured(r) ? structured : freeform).push(r);
-    });
+    // ─────────────────────────────────────────────────────────────
+    // Booking reference rows (manifest.reference_rows)
+    // Rendered under each timesheet group (never show timesheet_id)
+    // ─────────────────────────────────────────────────────────────
+    const refsByTsId = new Map();
+    for (const r of (reference_rows || [])) {
+      const tsId = (r && r.timesheet_id != null) ? String(r.timesheet_id) : null;
+      if (!tsId) continue;
+      if (!refsByTsId.has(tsId)) refsByTsId.set(tsId, []);
+      refsByTsId.get(tsId).push(r);
+    }
 
-    const hasRefTxt = (r) => (r?.current_reference != null) && String(r.current_reference).trim();
-    const refText = (r) => hasRefTxt(r) ? String(r.current_reference).trim() : (r?.is_required ? "MISSING" : "—");
-    const refCls = (r) => (!hasRefTxt(r) && r?.is_required) ? "ref-missing" : "";
+    const refsTableHtmlForTs = (tsId) => {
+      const refs = refsByTsId.get(String(tsId || "")) || [];
+      if (!refs.length) return "";
 
-    // Stable render (do not re-sort; reference_rows are already filtered and ordered server-side)
-    const structuredTable = structured.length ? (() => {
-      const rowsHtml = structured.map((r) => {
-        const day = r?.day_ymd ? fmtDateGB(r.day_ymd) : "";
-        const st = r?.start_utc ? fmtUKTime(r.start_utc) : "";
-        const en = r?.end_utc ? fmtUKTime(r.end_utc) : "";
-        return `
+      const isStructured = (r) => {
+        const d = (r?.day_ymd != null) ? String(r.day_ymd).trim() : '';
+        const st = (r?.start_utc != null) ? String(r.start_utc).trim() : '';
+        const en = (r?.end_utc != null) ? String(r.end_utc).trim() : '';
+        return !!(d || st || en);
+      };
+
+      const structured = [];
+      const freeform = [];
+      refs.forEach((r) => {
+        (isStructured(r) ? structured : freeform).push(r);
+      });
+
+      const hasRefTxt = (r) => (r?.current_reference != null) && String(r.current_reference).trim();
+      const refText = (r) => hasRefTxt(r) ? String(r.current_reference).trim() : (r?.is_required ? "MISSING" : "—");
+      const refCls = (r) => (!hasRefTxt(r) && r?.is_required) ? "ref-missing" : "";
+
+      // Stable render (do not re-sort; reference_rows are already filtered and ordered server-side)
+      const structuredTable = structured.length ? (() => {
+        const rowsHtml = structured.map((r) => {
+          const day = r?.day_ymd ? fmtDateGB(r.day_ymd) : "";
+          const st = r?.start_utc ? fmtUKTime(r.start_utc) : "";
+          const en = r?.end_utc ? fmtUKTime(r.end_utc) : "";
+          return `
         <tr>
           <td class="r-day mono">${escapeHtml(day)}</td>
           <td class="r-time mono">${escapeHtml(st)}</td>
@@ -47347,9 +47649,9 @@ function buildHTML(payload) {
           <td class="r-ref mono ${refCls(r)}">${escapeHtml(refText(r))}</td>
         </tr>
       `;
-      }).join("");
+        }).join("");
 
-      return `
+        return `
         <table class="refs">
           <thead>
             <tr>
@@ -47364,16 +47666,16 @@ function buildHTML(payload) {
           </tbody>
         </table>
       `;
-    })() : "";
+      })() : "";
 
-    const freeformTable = freeform.length ? (() => {
-      const rowsHtml = freeform.map((r) => `
+      const freeformTable = freeform.length ? (() => {
+        const rowsHtml = freeform.map((r) => `
         <tr>
           <td class="r-ref mono ${refCls(r)}">${escapeHtml(refText(r))}</td>
         </tr>
       `).join("");
 
-      return `
+        return `
         <table class="refs refs-freeform">
           <thead>
             <tr>
@@ -47385,45 +47687,45 @@ function buildHTML(payload) {
           </tbody>
         </table>
       `;
-    })() : "";
+      })() : "";
 
-    return `
+      return `
       <div class="refs-wrap">
         <div class="refs-title">Booking references</div>
         ${structuredTable || ""}
         ${freeformTable ? `<div style="height:6px;"></div>${freeformTable}` : ""}
       </div>
     `;
-  };
+    };
 
-  // ─────────────────────────────────────────────────────────────
-  // Build main table rows:
-  // - One row per timesheet group (with nested breakdown table)
-  // - Optional adjustments section at the end
-  // ─────────────────────────────────────────────────────────────
-  const groupRowsHtml = groups.map((grp, idx) => {
-    const its = grp.items || [];
-    const metaFirst = (its.find(x => getLineTypeNorm(x) === "HOURS")?.meta) || its[0]?.meta || {};
-    const we = metaFirst.week_ending_date || metaFirst.week_ending || metaFirst.weekEnding || null;
+    // ─────────────────────────────────────────────────────────────
+    // Build main table rows:
+    // - One row per timesheet group (with nested breakdown table)
+    // - Optional adjustments section at the end
+    // ─────────────────────────────────────────────────────────────
+    const groupRowsHtml = groups.map((grp, idx) => {
+      const its = grp.items || [];
+      const metaFirst = (its.find(x => getLineTypeNorm(x) === "HOURS")?.meta) || its[0]?.meta || {};
+      const we = metaFirst.week_ending_date || metaFirst.week_ending || metaFirst.weekEnding || null;
 
-    const sublineParts = [
-      metaFirst.candidate_display || metaFirst.candidate || null,
-      metaFirst.role || metaFirst.job_title || null,
-      metaFirst.hospital || metaFirst.hospital_norm || null,
-      metaFirst.ward || metaFirst.ward_norm || null,
-      we ? `W/E ${fmtDateGB(we)}` : null,
-      metaFirst.po_number ? `PO ${metaFirst.po_number}` : null
-    ].filter(Boolean).join(" • ");
+      const sublineParts = [
+        metaFirst.candidate_display || metaFirst.candidate || null,
+        metaFirst.role || metaFirst.job_title || null,
+        metaFirst.hospital || metaFirst.hospital_norm || null,
+        metaFirst.ward || metaFirst.ward_norm || null,
+        we ? `W/E ${fmtDateGB(we)}` : null,
+        metaFirst.po_number ? `PO ${metaFirst.po_number}` : null
+      ].filter(Boolean).join(" • ");
 
-    const grpEx = round2(its.reduce((a, it) => a + num(it.total_ex_vat), 0));
-    const grpVat = round2(its.reduce((a, it) => a + num(it.vat_amount), 0));
-    const grpInc = round2(its.reduce((a, it) => a + num(it.total_inc_vat), 0));
+      const grpEx = round2(its.reduce((a, it) => a + num(it.total_ex_vat), 0));
+      const grpVat = round2(its.reduce((a, it) => a + num(it.vat_amount), 0));
+      const grpInc = round2(its.reduce((a, it) => a + num(it.total_inc_vat), 0));
 
-    const title = escapeHtml(metaFirst.candidate_display || metaFirst.candidate || `Timesheet ${idx + 1}`);
-    const breakdown = groupBreakdownTableHtml(grp);
-    const refsHtml = refsTableHtmlForTs(grp.tsId);
+      const title = escapeHtml(metaFirst.candidate_display || metaFirst.candidate || `Timesheet ${idx + 1}`);
+      const breakdown = groupBreakdownTableHtml(grp);
+      const refsHtml = refsTableHtmlForTs(grp.tsId);
 
-    return `
+      return `
       <tr class="line">
         <td class="desc">
           <div class="desc-title">${title}</div>
@@ -47438,11 +47740,11 @@ function buildHTML(payload) {
         <td class="money totalinc">${fmtGBP(grpInc)}</td>
       </tr>
     `;
-  }).join("");
+    }).join("");
 
-  const adjustmentsRowsHtml = (adjustments && adjustments.length)
-    ? (() => {
-        const head = `
+    const adjustmentsRowsHtml = (adjustments && adjustments.length)
+      ? (() => {
+          const head = `
           <tr class="section-row">
             <td class="desc" colspan="${showVatCols ? 4 : 3}">
               <div class="section-title">Adjustments</div>
@@ -47450,14 +47752,14 @@ function buildHTML(payload) {
           </tr>
         `;
 
-        const rows = adjustments.map((it, idx) => {
-          const meta = it.meta || {};
-          const desc = escapeHtml(it.description || meta.unit_label || `Adjustment ${idx + 1}`);
-          const sub = [
-            meta.po_number ? `PO ${meta.po_number}` : null
-          ].filter(Boolean).join(" • ");
+          const rows = adjustments.map((it, idx) => {
+            const meta = it.meta || {};
+            const desc = escapeHtml(it.description || meta.unit_label || `Adjustment ${idx + 1}`);
+            const sub = [
+              meta.po_number ? `PO ${meta.po_number}` : null
+            ].filter(Boolean).join(" • ");
 
-          return `
+            return `
             <tr class="line">
               <td class="desc">
                 <div class="desc-title">${desc}</div>
@@ -47468,18 +47770,18 @@ function buildHTML(payload) {
               <td class="money totalinc">${fmtGBP(it.total_inc_vat)}</td>
             </tr>
           `;
-        }).join("");
+          }).join("");
 
-        return head + rows;
-      })()
-    : "";
+          return head + rows;
+        })()
+      : "";
 
-  const lineRows = (groupRowsHtml || adjustmentsRowsHtml)
-    ? (groupRowsHtml + adjustmentsRowsHtml)
-    : "";
+    const lineRows = (groupRowsHtml || adjustmentsRowsHtml)
+      ? (groupRowsHtml + adjustmentsRowsHtml)
+      : "";
 
-  // Build full HTML (stationery background + reserved margins + fixed footer)
-  return `<!doctype html>
+    // Build full HTML (stationery background + reserved margins + fixed footer)
+    return `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
@@ -47726,9 +48028,7 @@ function buildHTML(payload) {
   </div>
 </body>
 </html>`;
-}
-
-
+  }
 
   // Helpers local to this function
   const isTimesheetKind = (k) => String(k || '').toUpperCase() === 'TIMESHEET';
@@ -47738,18 +48038,65 @@ function buildHTML(payload) {
     return norm === normalizeKey(`docs-pdf/timesheets/ts_${String(tsId)}.pdf`);
   };
 
+  const attachPageDebug = (page, label) => {
+    if (!LOG || !page) return;
+    try {
+      page.on('console', (m) => {
+        try {
+          const type = m?.type?.() || 'log';
+          const text = m?.text?.() || '';
+          if (type === 'error' || type === 'warning') {
+            log('error', 'page_console', { page: label, console_type: type, console_text: text });
+          } else {
+            log('log', 'page_console', { page: label, console_type: type, console_text: text });
+          }
+        } catch {}
+      });
+    } catch {}
+    try {
+      page.on('pageerror', (e) => {
+        log('error', 'pageerror', { page: label, err_message: e?.message || String(e || ''), err_stack: e?.stack || null });
+      });
+    } catch {}
+    try {
+      page.on('requestfailed', (r) => {
+        const url = r?.url?.() || null;
+        const failure = r?.failure?.() || null;
+        log('error', 'requestfailed', { page: label, url, failure });
+      });
+    } catch {}
+  };
+
   try {
     // 1) Manifest (single RPC)
+    step = 'MANIFEST_RPC';
+    const tMan0 = Date.now();
     const man = await sbRpc(env, 'invoice_render_manifest', { p_invoice_id: invoiceId });
+    log('log', 'manifest_rpc_ok', { ms: Date.now() - tMan0 });
+
     const manRows = Array.isArray(man) ? man : (man?.data || []);
     const manifest = (manRows && manRows.length) ? manRows[0] : man;
 
     if (!manifest || typeof manifest !== 'object') {
+      log('error', 'manifest_invalid', { ms: Date.now() - t0 });
       return { ok: false, error: 'Failed to load invoice render manifest' };
     }
 
     const inv = manifest.invoice || manifest.invoice_row || null;
-    if (!inv || !inv.id) return { ok: false, error: 'Invoice not found' };
+    if (!inv || !inv.id) {
+      log('error', 'invoice_not_found_in_manifest', { ms: Date.now() - t0 });
+      return { ok: false, error: 'Invoice not found' };
+    }
+
+    log('log', 'manifest_counts', {
+      ms: Date.now() - t0,
+      lines_len: Array.isArray(manifest.lines) ? manifest.lines.length : 0,
+      evidence_len: Array.isArray(manifest.evidence) ? manifest.evidence.length : 0,
+      timesheet_evidence_len: Array.isArray(manifest.timesheet_evidence) ? manifest.timesheet_evidence.length : 0,
+      evidence_other_len: Array.isArray(manifest.evidence_other) ? manifest.evidence_other.length : 0,
+      tsfin_blocks: Array.isArray(manifest.tsfin_external_source_rows) ? manifest.tsfin_external_source_rows.length : 0,
+      hr_cache_blocks: Array.isArray(manifest.hr_source_rows_cache) ? manifest.hr_source_rows_cache.length : 0
+    });
 
     // ✅ Cache short-circuit INSIDE render (covers email path too)
     try {
@@ -47763,6 +48110,7 @@ function buildHTML(payload) {
           const tGen = new Date(genAt).getTime();
 
           if (Number.isFinite(tUpd) && Number.isFinite(tGen) && tUpd <= tGen) {
+            log('log', 'bundle_cache_hit', { ms: Date.now() - t0, pdf_key: key.replace(/^\/+/, '') });
             return {
               ok: true,
               pdf_key: key.replace(/^\/+/, ''),
@@ -47777,10 +48125,17 @@ function buildHTML(payload) {
           }
         }
       }
-    } catch {
+    } catch (errCache) {
+      log('error', 'bundle_cache_check_failed_nonfatal', {
+        ms: Date.now() - t0,
+        err_name: errCache?.name || null,
+        err_message: errCache?.message || String(errCache || ''),
+        err_stack: errCache?.stack || null
+      });
       // non-fatal; proceed to render
     }
 
+    step = 'READ_HEADER_ATTACH_POLICY';
     const header = (manifest.header_snapshot_json && typeof manifest.header_snapshot_json === 'object')
       ? manifest.header_snapshot_json
       : (inv.header_snapshot_json && typeof inv.header_snapshot_json === 'object' ? inv.header_snapshot_json : {});
@@ -47791,12 +48146,22 @@ function buildHTML(payload) {
 
     const requiresHr = !!(attachPolicy && attachPolicy.requires_hr === true);
     const hrAttach = !!(attachPolicy && Object.prototype.hasOwnProperty.call(attachPolicy, 'hr_attach_to_invoice') && attachPolicy.hr_attach_to_invoice !== false);
+    const hrAllowed = (requiresHr === true && hrAttach === true);
 
     const tsAttach = (attachPolicy && Object.prototype.hasOwnProperty.call(attachPolicy, 'ts_attach_to_invoice'))
       ? (attachPolicy.ts_attach_to_invoice !== false)
       : true;
 
+    log('log', 'attach_policy_effective', {
+      requires_hr: requiresHr,
+      hr_attach_to_invoice: hrAttach,
+      hr_allowed: hrAllowed,
+      ts_attach_to_invoice: tsAttach,
+      attach_policy_present: !!attachPolicy
+    });
+
     // Stationery resolution + presign
+    step = 'PRESIGN_STATIONERY';
     let stationeryKey =
       (typeof header.stationery_key === "string" && header.stationery_key.trim()) ||
       env.INVOICE_STATIONERY_KEY ||
@@ -47804,12 +48169,19 @@ function buildHTML(payload) {
     if (/\.pdf$/i.test(stationeryKey)) stationeryKey = stationeryKey.replace(/\.pdf$/i, "@300dpi.png");
     stationeryKey = normalizeKey(stationeryKey);
 
+    const tPresign0 = Date.now();
     const stationeryUrl = await presignR2Url(
       env,
       req,
       stationeryKey,
       Number(env.PRESIGN_EXPIRES_SECONDS || 600)
     );
+    log('log', 'presign_ok', {
+      ms: Date.now() - tPresign0,
+      stationery_key: stationeryKey,
+      stationery_url_len: (stationeryUrl ? String(stationeryUrl).length : 0),
+      stationery_origin: (() => { try { return stationeryUrl ? (new URL(stationeryUrl)).origin : null; } catch { return null; } })()
+    });
 
     const marginsObj = toMarginsObj(header.stationery_margins_mm);
     const hideBankFooter = header.hide_bank_footer === true;
@@ -47834,6 +48206,7 @@ function buildHTML(payload) {
     else if (typeof header?.meta?.group_nightsat_sunbh === 'boolean') groupNightsat = header.meta.group_nightsat_sunbh;
 
     // Build invoiceData for buildHTML
+    step = 'BUILD_INVOICE_HTML';
     const invoiceData = {
       header: {
         ...header,
@@ -47884,22 +48257,48 @@ function buildHTML(payload) {
       reference_rows: Array.isArray(manifest.reference_rows) ? manifest.reference_rows : [],
     };
 
-    // Render base invoice pdf
     const html = buildHTML(invoiceData);
-    const invoicePdfU8 = await withBrowser(env, async (browser) => {
-      const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: "networkidle0" });
-      await page.emulateMediaType("screen");
-      const pdfArrayBuffer = await page.pdf({
-        format: "a4",
-        printBackground: true,
-        margin: { top: 0, right: 0, bottom: 0, left: 0 },
-      });
-      return new Uint8Array(pdfArrayBuffer);
+    log('log', 'invoice_html_built', {
+      ms: Date.now() - t0,
+      html_len: (html ? String(html).length : 0),
+      line_count: lineRows.length,
+      evidence_timesheet_count: timesheetEvidenceRows.length,
+      evidence_other_count: otherEvidenceRows.length
     });
 
+    // Render base invoice pdf
+    step = 'PDF_INVOICE_BROWSER';
+    const tInvPdf0 = Date.now();
+    const invoicePdfU8 = await withBrowser(env, async (browser) => {
+      const page = await browser.newPage();
+      attachPageDebug(page, 'invoice');
+
+      try {
+        log('log', 'invoice_setContent_start', { ms: Date.now() - t0 });
+        await page.setContent(html, { waitUntil: "networkidle0" });
+        log('log', 'invoice_setContent_ok', { ms: Date.now() - t0 });
+
+        await page.emulateMediaType("screen");
+
+        log('log', 'invoice_pdf_start', { ms: Date.now() - t0 });
+        const pdfArrayBuffer = await page.pdf({
+          format: "a4",
+          printBackground: true,
+          margin: { top: 0, right: 0, bottom: 0, left: 0 },
+        });
+        log('log', 'invoice_pdf_ok', { ms: Date.now() - t0, pdf_bytes: (pdfArrayBuffer ? pdfArrayBuffer.byteLength : 0) });
+
+        return new Uint8Array(pdfArrayBuffer);
+      } finally {
+        try { await page.close(); } catch {}
+      }
+    });
+    log('log', 'invoice_pdf_done', { ms: Date.now() - tInvPdf0, invoice_pdf_u8_len: invoicePdfU8?.length || 0 });
+
     // Timesheet IDs from invoice lines
+    step = 'COLLECT_TS_IDS';
     const tsIds = [...new Set(lineRows.map(r => r?.timesheet_id).filter(Boolean).map(String))];
+    log('log', 'timesheets_collected', { ts_ids: tsIds.length });
 
     // Canonical docs-pdf keys (only used when tsAttach=true)
     const docsKeys = tsIds.map(tsId => normalizeKey(`docs-pdf/timesheets/ts_${tsId}.pdf`));
@@ -47918,110 +48317,117 @@ function buildHTML(payload) {
     const manualKeys = tsIds.map(tsId => manualKeyByTsId.get(tsId) || null).filter(Boolean);
 
     // Determine expense-only timesheets (no HOURS/ADDITIONAL lines on this invoice, but has EXPENSE/MILEAGE lines),
-// so missing TS PDF is non-fatal (matches precheck behaviour) — computed from manifest lines (no extra RPCs).
-const expenseOnlySet = new Set();
+    // so missing TS PDF is non-fatal (matches precheck behaviour) — computed from manifest lines (no extra RPCs).
+    const expenseOnlySet = new Set();
 
+    // Timesheets that should NOT require a physical timesheet PDF (e.g. NHSP / HealthRoster / no-timesheet-required).
+    // If detected, missing TS PDF is non-fatal even when ts_attach_to_invoice defaults to true.
+    const noPhysicalTimesheetSet = new Set();
+    if ((tsAttach || manualKeys.length) && tsIds.length) {
+      const byTs = new Map();
+      for (const l of (lineRows || [])) {
+        const tsId = l?.timesheet_id ? String(l.timesheet_id) : null;
+        if (!tsId) continue;
+        if (!byTs.has(tsId)) byTs.set(tsId, []);
+        byTs.get(tsId).push(l);
+      }
 
-// Timesheets that should NOT require a physical timesheet PDF (e.g. NHSP / HealthRoster / no-timesheet-required).
-// If detected, missing TS PDF is non-fatal even when ts_attach_to_invoice defaults to true.
-const noPhysicalTimesheetSet = new Set();
-if ((tsAttach || manualKeys.length) && tsIds.length) {
-  const byTs = new Map();
-  for (const l of (lineRows || [])) {
-    const tsId = l?.timesheet_id ? String(l.timesheet_id) : null;
-    if (!tsId) continue;
-    if (!byTs.has(tsId)) byTs.set(tsId, []);
-    byTs.get(tsId).push(l);
-  }
+      // Detect import-authoritative / no-physical-timesheet cases per timesheet_id using line meta.
+      // This is intentionally tolerant of meta key names.
+      for (const [tsId, lines] of byTs.entries()) {
+        const metas = (lines || []).map(l => (l?.meta_json && typeof l.meta_json === 'object') ? l.meta_json : {});
+        const anyTrue = (key) => metas.some(m => m && m[key] === true);
 
-  // Detect import-authoritative / no-physical-timesheet cases per timesheet_id using line meta.
-  // This is intentionally tolerant of meta key names.
-  for (const [tsId, lines] of byTs.entries()) {
-    const metas = (lines || []).map(l => (l?.meta_json && typeof l.meta_json === 'object') ? l.meta_json : {});
-    const anyTrue = (key) => metas.some(m => m && m[key] === true);
+        const basisVals = metas.map(m => String(m?.basis || m?.cur_basis || m?.timesheet_basis || '').toUpperCase());
+        const routeVals = metas.map(m => String(m?.route_type || m?.route || '').toUpperCase());
 
-    const basisVals = metas.map(m => String(m?.basis || m?.cur_basis || m?.timesheet_basis || '').toUpperCase());
-    const routeVals = metas.map(m => String(m?.route_type || m?.route || '').toUpperCase());
+        const isNhsp = anyTrue('client_is_nhsp') || anyTrue('is_nhsp') || basisVals.includes('NHSP') || routeVals.some(v => v.includes('NHSP'));
+        const isHrImport = basisVals.includes('HEALTHROSTER') || routeVals.some(v => v.includes('HEALTHROSTER') || v.includes('HR_') || v === 'HR');
+        const noTsReq = anyTrue('no_timesheet_required') || anyTrue('client_no_timesheet_required') || anyTrue('contract_no_timesheet_required');
 
-    const isNhsp = anyTrue('client_is_nhsp') || anyTrue('is_nhsp') || basisVals.includes('NHSP') || routeVals.some(v => v.includes('NHSP'));
-    const isHrImport = basisVals.includes('HEALTHROSTER') || routeVals.some(v => v.includes('HEALTHROSTER') || v.includes('HR_') || v === 'HR');
-    const noTsReq = anyTrue('no_timesheet_required') || anyTrue('client_no_timesheet_required') || anyTrue('contract_no_timesheet_required');
+        if (isNhsp || isHrImport || noTsReq) noPhysicalTimesheetSet.add(String(tsId));
+      }
 
-    if (isNhsp || isHrImport || noTsReq) noPhysicalTimesheetSet.add(String(tsId));
-  }
+      const typeOf = (l) => {
+        const m = (l?.meta_json && typeof l.meta_json === 'object') ? l.meta_json : {};
+        const t = String(l?.line_type_norm || m?.line_type_norm || m?.line_type || '').toUpperCase();
+        return t;
+      };
 
-  const typeOf = (l) => {
-    const m = (l?.meta_json && typeof l.meta_json === 'object') ? l.meta_json : {};
-    const t = String(l?.line_type_norm || m?.line_type_norm || m?.line_type || '').toUpperCase();
-    return t;
-  };
+      const isHoursType = (t) => {
+        const x = String(t || '').toUpperCase();
+        return (x === 'HOURS' || x.startsWith('HOURS_'));
+      };
 
-  const isHoursType = (t) => {
-    const x = String(t || '').toUpperCase();
-    return (x === 'HOURS' || x.startsWith('HOURS_'));
-  };
+      for (const tsId of tsIds) {
+        const lines = byTs.get(String(tsId)) || [];
+        if (!lines.length) continue;
 
-  for (const tsId of tsIds) {
-    const lines = byTs.get(String(tsId)) || [];
-    if (!lines.length) continue;
+        const types = lines.map(typeOf);
 
-    const types = lines.map(typeOf);
+        const hasHours = types.some(isHoursType);
+        const hasAdditional = types.some(t => String(t || '').toUpperCase().startsWith('ADDITIONAL_RATE'));
+        const hasExpenseOrMileage = types.some(t => {
+          const x = String(t || '').toUpperCase();
+          return (x === 'MILEAGE' || x.startsWith('EXPENSE'));
+        });
 
-    const hasHours = types.some(isHoursType);
-    const hasAdditional = types.some(t => String(t || '').toUpperCase().startsWith('ADDITIONAL_RATE'));
-    const hasExpenseOrMileage = types.some(t => {
-      const x = String(t || '').toUpperCase();
-      return (x === 'MILEAGE' || x.startsWith('EXPENSE'));
+        if (!hasHours && !hasAdditional && hasExpenseOrMileage) {
+          expenseOnlySet.add(String(tsId));
+        }
+      }
+
+    }
+
+    log('log', 'timesheet_sets', {
+      expense_only_count: expenseOnlySet.size,
+      no_physical_count: noPhysicalTimesheetSet.size,
+      ts_attach_to_invoice: tsAttach
     });
 
-    if (!hasHours && !hasAdditional && hasExpenseOrMileage) {
-      expenseOnlySet.add(String(tsId));
+    const missing = [];
+    const dedupeKeys = new Set();
+    const tsEvidenceFetchedSet = new Set();
+
+    step = 'FETCH_TIMESHEET_EVIDENCE';
+    const timesheetEvidenceBytesList = [];
+    for (const ev of timesheetEvidenceRows) {
+      const key = ev?.storage_key;
+      if (!key) continue;
+      const norm = normalizeKey(String(key));
+      if (dedupeKeys.has(norm)) continue;
+
+      const bytes = await r2GetBytes(env, norm);
+      if (!bytes || !bytes.length) {
+        missing.push({ kind: 'TIMESHEET_EVIDENCE_PDF', timesheet_id: ev?.timesheet_id || null, storage_key: norm });
+        continue;
+      }
+      dedupeKeys.add(norm);
+      timesheetEvidenceBytesList.push(bytes);
+      if (ev?.timesheet_id) tsEvidenceFetchedSet.add(String(ev.timesheet_id));
     }
-  }
 
-}
+    step = 'FETCH_TS_PDFS';
+    const tsBytesList = [];
+    if (tsAttach) {
+      for (let i = 0; i < tsIds.length; i++) {
+        const tsId = tsIds[i];
+        const key = docsKeys[i];
+        const norm = normalizeKey(String(key));
+        if (dedupeKeys.has(norm)) continue;
 
-const missing = [];
-const dedupeKeys = new Set();
-const tsEvidenceFetchedSet = new Set();
-
-const timesheetEvidenceBytesList = [];
-for (const ev of timesheetEvidenceRows) {
-  const key = ev?.storage_key;
-  if (!key) continue;
-  const norm = normalizeKey(String(key));
-  if (dedupeKeys.has(norm)) continue;
-
-  const bytes = await r2GetBytes(env, norm);
-  if (!bytes || !bytes.length) {
-    missing.push({ kind: 'TIMESHEET_EVIDENCE_PDF', timesheet_id: ev?.timesheet_id || null, storage_key: norm });
-    continue;
-  }
-  dedupeKeys.add(norm);
-  timesheetEvidenceBytesList.push(bytes);
-  if (ev?.timesheet_id) tsEvidenceFetchedSet.add(String(ev.timesheet_id));
-}
-
-const tsBytesList = [];
-if (tsAttach) {
-  for (let i = 0; i < tsIds.length; i++) {
-    const tsId = tsIds[i];
-    const key = docsKeys[i];
-    const norm = normalizeKey(String(key));
-    if (dedupeKeys.has(norm)) continue;
-
-    const bytes = await r2GetBytes(env, norm);
-    if (!bytes || !bytes.length) {
-      if (expenseOnlySet.has(String(tsId)) || tsEvidenceFetchedSet.has(String(tsId)) || noPhysicalTimesheetSet.has(String(tsId))) continue;
-      missing.push({ kind: 'TIMESHEET_PDF', timesheet_id: tsId, storage_key: norm });
-      continue;
+        const bytes = await r2GetBytes(env, norm);
+        if (!bytes || !bytes.length) {
+          if (expenseOnlySet.has(String(tsId)) || tsEvidenceFetchedSet.has(String(tsId)) || noPhysicalTimesheetSet.has(String(tsId))) continue;
+          missing.push({ kind: 'TIMESHEET_PDF', timesheet_id: tsId, storage_key: norm });
+          continue;
+        }
+        dedupeKeys.add(norm);
+        tsBytesList.push(bytes);
+      }
     }
-    dedupeKeys.add(norm);
-    tsBytesList.push(bytes);
-  }
-}
 
-
+    step = 'FETCH_MANUAL_TS_PDFS';
     const manualTsBytesList = [];
     for (let i = 0; i < tsIds.length; i++) {
       const tsId = tsIds[i];
@@ -48041,6 +48447,7 @@ if (tsAttach) {
       manualTsBytesList.push(bytes);
     }
 
+    step = 'FETCH_OTHER_EVIDENCE';
     const evidenceBytesList = [];
     for (const ev of otherEvidenceRows) {
       const key = ev?.storage_key;
@@ -48057,6 +48464,14 @@ if (tsAttach) {
       evidenceBytesList.push(bytes);
     }
 
+    log('log', 'artefact_fetch_summary', {
+      missing_count: missing.length,
+      timesheet_evidence_pdfs: timesheetEvidenceBytesList.length,
+      ts_pdfs: tsBytesList.length,
+      manual_ts_pdfs: manualTsBytesList.length,
+      other_evidence_pdfs: evidenceBytesList.length
+    });
+
     if (missing.length) {
       try {
         if (userForAudit) {
@@ -48068,47 +48483,74 @@ if (tsAttach) {
             { entity: 'invoice', subject_id: invoiceId, req }
           );
         }
-      } catch {}
+      } catch (errAudit) {
+        log('error', 'writeAudit_missing_artefacts_failed', {
+          err_name: errAudit?.name || null,
+          err_message: errAudit?.message || String(errAudit || ''),
+          err_stack: errAudit?.stack || null
+        });
+      }
       return { ok: false, error: `Invoice render failed: missing required artefacts (${missing.length}).` };
     }
 
     // Optional HR report
-let hrBytes = null;
-{
-  // Attach HealthRoster report whenever HR rows are present for this invoice (even if attach_policy is missing).
-  const hrRows = [];
-  if (hrCacheRows.length) {
-    for (const r of hrCacheRows) {
-      if (String(r.source_system || '').toUpperCase() !== 'HEALTHROSTER') continue;
-      const rows = Array.isArray(r.rows_json) ? r.rows_json : [];
-      for (const raw of rows) hrRows.push({ raw_row: raw });
-    }
-  } else {
-    for (const tf of tsfinRows) {
-      const ext = (tf.external_source_rows_json && typeof tf.external_source_rows_json === 'object') ? tf.external_source_rows_json : {};
-      const hrWeekly = Array.isArray(ext.HR_WEEKLY) ? ext.HR_WEEKLY : [];
-      for (const row of hrWeekly) hrRows.push(row);
-    }
-  }
+    step = 'BUILD_HR_REPORT';
+    let hrBytes = null;
+    if (hrAllowed) {
+      // Attach HealthRoster report only when requires_hr && hr_attach_to_invoice, AND rows exist for this invoice.
+      const hrRows = [];
+      if (hrCacheRows.length) {
+        for (const r of hrCacheRows) {
+          if (String(r.source_system || '').toUpperCase() !== 'HEALTHROSTER') continue;
+          const rows = Array.isArray(r.rows_json) ? r.rows_json : [];
+          for (const raw of rows) hrRows.push({ raw_row: raw });
+        }
+      } else {
+        for (const tf of tsfinRows) {
+          const ext = (tf.external_source_rows_json && typeof tf.external_source_rows_json === 'object') ? tf.external_source_rows_json : {};
+          const hrWeekly = Array.isArray(ext.HR_WEEKLY) ? ext.HR_WEEKLY : [];
+          for (const row of hrWeekly) hrRows.push(row);
+        }
+      }
 
-  if (hrRows.length) {
-    const hrHtml = buildHrReportHTML(inv, header, hrRows);
-    hrBytes = await withBrowser(env, async (browser) => {
-      const page = await browser.newPage();
-      await page.setContent(hrHtml, { waitUntil: 'networkidle0' });
-      await page.emulateMediaType('screen');
-      const pdfArrayBuffer = await page.pdf({
-        format: 'a4',
-        printBackground: true,
-        margin: { top: 24, right: 24, bottom: 24, left: 24 }
-      });
-      return new Uint8Array(pdfArrayBuffer);
-    });
-  }
-}
+      log('log', 'hr_rows_collected', { hr_rows: hrRows.length, hr_cache_blocks: hrCacheRows.length, tsfin_blocks: tsfinRows.length });
 
+      if (hrRows.length) {
+        const hrHtml = buildHrReportHTML(inv, header, hrRows);
+        log('log', 'hr_html_built', { hr_html_len: (hrHtml ? String(hrHtml).length : 0) });
+
+        step = 'PDF_HR_BROWSER';
+        hrBytes = await withBrowser(env, async (browser) => {
+          const page = await browser.newPage();
+          attachPageDebug(page, 'hr');
+
+          try {
+            log('log', 'hr_setContent_start');
+            await page.setContent(hrHtml, { waitUntil: 'networkidle0' });
+            log('log', 'hr_setContent_ok');
+
+            await page.emulateMediaType('screen');
+
+            log('log', 'hr_pdf_start');
+            const pdfArrayBuffer = await page.pdf({
+              format: 'a4',
+              printBackground: true,
+              margin: { top: 24, right: 24, bottom: 24, left: 24 }
+            });
+            log('log', 'hr_pdf_ok', { hr_pdf_bytes: (pdfArrayBuffer ? pdfArrayBuffer.byteLength : 0) });
+
+            return new Uint8Array(pdfArrayBuffer);
+          } finally {
+            try { await page.close(); } catch {}
+          }
+        });
+      }
+    } else {
+      log('log', 'hr_skipped_not_allowed', { requires_hr: requiresHr, hr_attach_to_invoice: hrAttach });
+    }
 
     // Optional NHSP breakdown report
+    step = 'BUILD_NHSP_REPORT';
     let nhspBytes = null;
     {
       const nhspTables = [];
@@ -48147,19 +48589,42 @@ let hrBytes = null;
         }
       }
 
+      log('log', 'nhsp_tables_collected', {
+        nhsp_tables: nhspTables.length,
+        nhsp_total_rows: nhspTables.reduce((a, t) => a + (Array.isArray(t.rows_json) ? t.rows_json.length : 0), 0),
+        nhsp_cache_blocks: hrCacheRows.length,
+        tsfin_blocks: tsfinRows.length
+      });
+
       if (nhspTables.length) {
         const nhspHtml = buildNhspReportHTML(inv, header, { tables: nhspTables });
+        log('log', 'nhsp_html_built', { nhsp_html_len: (nhspHtml ? String(nhspHtml).length : 0) });
+
+        step = 'PDF_NHSP_BROWSER';
         nhspBytes = await withBrowser(env, async (browser) => {
           const page = await browser.newPage();
-          await page.setContent(nhspHtml, { waitUntil: 'networkidle0' });
-          await page.emulateMediaType('screen');
-          const pdfArrayBuffer = await page.pdf({
-            format: 'a4',
-            landscape: true,
-            printBackground: true,
-            margin: { top: 24, right: 24, bottom: 24, left: 24 }
-          });
-          return new Uint8Array(pdfArrayBuffer);
+          attachPageDebug(page, 'nhsp');
+
+          try {
+            log('log', 'nhsp_setContent_start');
+            await page.setContent(nhspHtml, { waitUntil: 'networkidle0' });
+            log('log', 'nhsp_setContent_ok');
+
+            await page.emulateMediaType('screen');
+
+            log('log', 'nhsp_pdf_start');
+            const pdfArrayBuffer = await page.pdf({
+              format: 'a4',
+              landscape: true,
+              printBackground: true,
+              margin: { top: 24, right: 24, bottom: 24, left: 24 }
+            });
+            log('log', 'nhsp_pdf_ok', { nhsp_pdf_bytes: (pdfArrayBuffer ? pdfArrayBuffer.byteLength : 0) });
+
+            return new Uint8Array(pdfArrayBuffer);
+          } finally {
+            try { await page.close(); } catch {}
+          }
         });
       }
     }
@@ -48173,13 +48638,16 @@ let hrBytes = null;
     // 5) NHSP report (if present)
     // 6) Evidence PDFs (timesheet evidence + other evidence)
     // ==========================================================
+    step = 'PDF_MERGE_START';
     const merged = await PDFDocument.create();
 
     // 1) Invoice
+    step = 'PDFLIB_LOAD_INVOICE';
     const invDoc = await PDFDocument.load(invoicePdfU8);
     (await merged.copyPages(invDoc, invDoc.getPageIndices())).forEach(p => merged.addPage(p));
 
     // 2) Timesheet PDFs (canonical)
+    step = 'PDFLIB_ATTACH_TS_PDFS';
     let attachedTsCount = 0;
     if (tsAttach) {
       for (const b of tsBytesList) {
@@ -48190,6 +48658,7 @@ let hrBytes = null;
     }
 
     // 3) Manual/override Timesheet PDFs (always included when present)
+    step = 'PDFLIB_ATTACH_MANUAL_TS_PDFS';
     let attachedManualTsCount = 0;
     for (const b of manualTsBytesList) {
       const doc = await PDFDocument.load(b);
@@ -48198,18 +48667,21 @@ let hrBytes = null;
     }
 
     // 4) HR report
+    step = 'PDFLIB_ATTACH_HR';
     if (hrBytes?.length) {
       const doc = await PDFDocument.load(hrBytes);
       (await merged.copyPages(doc, doc.getPageIndices())).forEach(p => merged.addPage(p));
     }
 
     // 5) NHSP report
+    step = 'PDFLIB_ATTACH_NHSP';
     if (nhspBytes?.length) {
       const doc = await PDFDocument.load(nhspBytes);
       (await merged.copyPages(doc, doc.getPageIndices())).forEach(p => merged.addPage(p));
     }
 
     // 6) Evidence PDFs (timesheet evidence + other evidence)
+    step = 'PDFLIB_ATTACH_TIMESHEET_EVIDENCE';
     let attachedTimesheetEvidenceCount = 0;
     for (const b of timesheetEvidenceBytesList) {
       const doc = await PDFDocument.load(b);
@@ -48217,6 +48689,7 @@ let hrBytes = null;
       attachedTimesheetEvidenceCount++;
     }
 
+    step = 'PDFLIB_ATTACH_OTHER_EVIDENCE';
     let attachedEvidenceCount = 0;
     for (const b of evidenceBytesList) {
       const doc = await PDFDocument.load(b);
@@ -48224,14 +48697,26 @@ let hrBytes = null;
       attachedEvidenceCount++;
     }
 
+    step = 'PDFLIB_SAVE_MERGED';
     const combinedU8 = await merged.save();
+    log('log', 'merge_ok', {
+      combined_len: combinedU8?.length || 0,
+      attached_timesheets: attachedTsCount,
+      attached_manual_timesheets: attachedManualTsCount,
+      attached_timesheet_evidence: attachedTimesheetEvidenceCount,
+      attached_evidence: attachedEvidenceCount,
+      attached_hr: !!(hrBytes && hrBytes.length),
+      attached_nhsp: !!(nhspBytes && nhspBytes.length)
+    });
 
     // Store combined PDF in R2 and patch invoice row
+    step = 'R2_PUT';
     const pdfKey = normalizeKey(`docs-pdf/invoices/invoice_${invoiceId}.pdf`);
     await r2Put(env, pdfKey, combinedU8, { httpMetadata: { contentType: "application/pdf" } });
 
     const nowIso = new Date().toISOString();
 
+    step = 'DB_PATCH_INVOICE';
     await fetch(
       `${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${enc(invoiceId)}`,
       {
@@ -48246,6 +48731,9 @@ let hrBytes = null;
       }
     );
 
+    step = 'DONE';
+    log('log', 'success', { ms: Date.now() - t0, pdf_key: pdfKey });
+
     return {
       ok: true,
       pdf_key: pdfKey,
@@ -48257,15 +48745,89 @@ let hrBytes = null;
       attached_timesheet_evidence: attachedTimesheetEvidenceCount,
       attached_manual_timesheets: attachedManualTsCount
     };
-  } catch {
+  } catch (err) {
+    const errMessage = err?.message || String(err || '');
+    const errStack = err?.stack || null;
+
+    log('error', 'exception', {
+      ms: Date.now() - t0,
+      err_name: err?.name || null,
+      err_message: errMessage,
+      err_stack: errStack
+    });
+
+    // Best-effort audit event with full context (non-fatal if audit fails)
+    try {
+      if (userForAudit) {
+        const stackStr = (errStack == null) ? null : String(errStack);
+        const stackTrim = (stackStr && stackStr.length > 8000) ? stackStr.slice(0, 8000) : stackStr;
+
+        await writeAudit(
+          env,
+          userForAudit,
+          'INVOICE_RENDER_BUNDLE_EXCEPTION',
+          {
+            invoice_id: invoiceId,
+            step,
+            err_name: err?.name || null,
+            err_message: errMessage,
+            err_stack: stackTrim,
+            ms: Date.now() - t0
+          },
+          { entity: 'invoice', subject_id: invoiceId, req }
+        );
+      }
+    } catch (errAudit) {
+      log('error', 'writeAudit_exception_failed', {
+        err_name: errAudit?.name || null,
+        err_message: errAudit?.message || String(errAudit || ''),
+        err_stack: errAudit?.stack || null
+      });
+    }
+
     return { ok: false, error: "Failed to render invoice bundle" };
   }
 }
 
-
 async function handleInvoiceRender(env, req, invoiceId) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return unauthorized();
+  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
+  const log = (level, msg, extra) => {
+    if (!LOG) return;
+    try {
+      const payload = Object.assign(
+        {
+          tag: 'INVOICE_RENDER_ROUTE',
+          at_utc: new Date().toISOString(),
+          cf_ray: req?.headers?.get?.('cf-ray') || null,
+          invoice_id: invoiceId || null,
+          msg: String(msg || '')
+        },
+        (extra && typeof extra === 'object') ? extra : {}
+      );
+      (level === 'error' ? console.error : console.log)(JSON.stringify(payload));
+    } catch (e) {
+      try { (level === 'error' ? console.error : console.log)(msg); } catch {}
+    }
+  };
+
+  const t0 = Date.now();
+
+  let user = null;
+  try {
+    user = await requireUser(env, req, ['admin']);
+    if (!user) {
+      log('error', 'unauthorized', { ms: Date.now() - t0 });
+      return unauthorized();
+    }
+  } catch (err) {
+    log('error', 'requireUser threw', {
+      ms: Date.now() - t0,
+      err_name: err?.name || null,
+      err_message: err?.message || String(err || ''),
+      err_stack: err?.stack || null
+    });
+    return unauthorized();
+  }
 
   const enc = encodeURIComponent;
 
@@ -48278,10 +48840,15 @@ async function handleInvoiceRender(env, req, invoiceId) {
     forceRegen = false;
   }
 
+  log('log', 'start', { force_regen: forceRegen, ms: Date.now() - t0 });
+
   try {
     // ✅ Fast-path caching (skip render entirely if still valid and not force_regen)
     if (!forceRegen) {
       try {
+        log('log', 'cache_check_start');
+
+        const tCache0 = Date.now();
         const { rows } = await sbFetch(
           env,
           `${env.SUPABASE_URL}/rest/v1/invoices` +
@@ -48296,11 +48863,25 @@ async function handleInvoiceRender(env, req, invoiceId) {
         const genAt = inv ? inv.invoice_pdf_generated_at_utc : null;
         const updAt = inv ? inv.updated_at : null;
 
+        log('log', 'cache_check_result', {
+          ms: Date.now() - tCache0,
+          has_key: !!key,
+          gen_at_utc: genAt || null,
+          upd_at_utc: updAt || null
+        });
+
         if (key && genAt && updAt) {
           const tUpd = new Date(updAt).getTime();
           const tGen = new Date(genAt).getTime();
 
+          log('log', 'cache_check_times', {
+            t_upd_ms: Number.isFinite(tUpd) ? tUpd : null,
+            t_gen_ms: Number.isFinite(tGen) ? tGen : null,
+            upd_le_gen: (Number.isFinite(tUpd) && Number.isFinite(tGen)) ? (tUpd <= tGen) : null
+          });
+
           if (Number.isFinite(tUpd) && Number.isFinite(tGen) && tUpd <= tGen) {
+            log('log', 'cache_hit', { ms: Date.now() - t0, pdf_key: key.replace(/^\/+/, '') });
             return withCORS(env, req, ok({
               pdf_key: key.replace(/^\/+/, ''),
               attached_timesheets: 0,
@@ -48313,15 +48894,39 @@ async function handleInvoiceRender(env, req, invoiceId) {
             }));
           }
         }
-      } catch {
+      } catch (err) {
+        log('error', 'cache_check_failed_nonfatal', {
+          ms: Date.now() - t0,
+          err_name: err?.name || null,
+          err_message: err?.message || String(err || ''),
+          err_stack: err?.stack || null
+        });
         // non-fatal: fall through to render
       }
     }
 
+    log('log', 'render_call_start', { force_regen: forceRegen });
+
+    const tRender0 = Date.now();
     const core = await _renderInvoiceBundleAndStore(env, req, invoiceId, user, { force_regen: forceRegen });
+    log('log', 'render_call_end', { ms: Date.now() - tRender0, ok: !!core?.ok });
+
     if (!core?.ok) {
+      log('error', 'render_failed', { ms: Date.now() - t0, core_error: core?.error || null });
       return withCORS(env, req, serverError(core?.error || "Failed to render invoice bundle"));
     }
+
+    log('log', 'render_success', {
+      ms: Date.now() - t0,
+      pdf_key: core.pdf_key || null,
+      cached: !!core.cached,
+      attached_timesheets: core.attached_timesheets || 0,
+      attached_manual_timesheets: core.attached_manual_timesheets || 0,
+      attached_timesheet_evidence: core.attached_timesheet_evidence || 0,
+      attached_evidence: core.attached_evidence || 0,
+      attached_hr: !!core.attached_hr,
+      attached_nhsp: !!core.attached_nhsp
+    });
 
     return withCORS(env, req, ok({
       pdf_key: core.pdf_key,
@@ -48329,16 +48934,21 @@ async function handleInvoiceRender(env, req, invoiceId) {
       attached_hr: !!core.attached_hr,
       attached_nhsp: !!core.attached_nhsp,
       attached_evidence: core.attached_evidence || 0,
-
       attached_timesheet_evidence: core.attached_timesheet_evidence || 0,
       attached_manual_timesheets: core.attached_manual_timesheets || 0,
-
       cached: !!core.cached
     }));
-  } catch {
+  } catch (err) {
+    log('error', 'route_exception', {
+      ms: Date.now() - t0,
+      err_name: err?.name || null,
+      err_message: err?.message || String(err || ''),
+      err_stack: err?.stack || null
+    });
     return withCORS(env, req, serverError("Failed to render invoice bundle"));
   }
 }
+
 
 async function handleInvoiceEmail(env, req, invoiceId) {
   const enc = encodeURIComponent;
