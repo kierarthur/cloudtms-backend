@@ -33872,11 +33872,17 @@ function buildHTML(payload) {
     return round2(a) === round2(b);
   };
 
-  const getLineTypeNorm = (it) => {
-    const m = it?.meta || {};
-    const s = String(m.line_type_norm || m.line_type || "").toUpperCase();
-    return s;
-  };
+ const getLineTypeNorm = (it) => {
+  const m = it?.meta || {};
+  const s = String(m.line_type_norm || m.line_type || "").toUpperCase();
+  return s;
+};
+
+const isHoursLineType = (t) => {
+  const s = String(t || "").toUpperCase();
+  return (s === "HOURS" || s.startsWith("HOURS_"));
+};
+
 
   const getTimesheetId = (it) => {
     return (it && it.timesheet_id != null) ? String(it.timesheet_id)
@@ -33914,30 +33920,29 @@ function buildHTML(payload) {
   }
 
   // Sort groups deterministically by week ending then candidate
-  const groups = Array.from(groupMap.values()).sort((a, b) => {
-    const aMeta = (a.items.find(x => getLineTypeNorm(x) === "HOURS")?.meta) || a.items[0]?.meta || {};
-    const bMeta = (b.items.find(x => getLineTypeNorm(x) === "HOURS")?.meta) || b.items[0]?.meta || {};
-    const awe = String(aMeta.week_ending_date || aMeta.week_ending || aMeta.weekEnding || "");
-    const bwe = String(bMeta.week_ending_date || bMeta.week_ending || bMeta.weekEnding || "");
-    if (awe !== bwe) return awe < bwe ? 1 : -1; // desc
-    const ac = String(aMeta.candidate_display || aMeta.candidate || "");
-    const bc = String(bMeta.candidate_display || bMeta.candidate || "");
-    if (ac !== bc) return ac.localeCompare(bc);
-    return String(a.tsId).localeCompare(String(b.tsId));
-  });
+ const groups = Array.from(groupMap.values()).sort((a, b) => {
+  const aMeta = (a.items.find(x => isHoursLineType(getLineTypeNorm(x)))?.meta) || a.items[0]?.meta || {};
+  const bMeta = (b.items.find(x => isHoursLineType(getLineTypeNorm(x)))?.meta) || b.items[0]?.meta || {};
+  const awe = String(aMeta.week_ending_date || aMeta.week_ending || aMeta.weekEnding || "");
+  const bwe = String(bMeta.week_ending_date || bMeta.week_ending || bMeta.weekEnding || "");
+  if (awe !== bwe) return awe < bwe ? 1 : -1; // desc
+  const ac = String(aMeta.candidate_display || aMeta.candidate || "");
+  const bc = String(bMeta.candidate_display || bMeta.candidate || "");
+  if (ac !== bc) return ac.localeCompare(bc);
+  return String(a.tsId).localeCompare(String(b.tsId));
+});
+
 
   // ─────────────────────────────────────────────────────────────
   // Build breakdown rows for a single timesheet group
   // Unit Description | Quantity | Unit Charge (ex VAT) | Charge (ex VAT)
   // ─────────────────────────────────────────────────────────────
-  const groupBreakdownTableHtml = (grp) => {
-    const its = grp.items || [];
-    const hoursItem = its.find((x) => getLineTypeNorm(x) === "HOURS") || null;
-
-    // meta for display/header
-    const metaBase = (hoursItem?.meta || its[0]?.meta || {}) || {};
-    const labels = (metaBase.bucket_labels && typeof metaBase.bucket_labels === "object") ? metaBase.bucket_labels : DEFAULT_LABELS;
-
+ const groupBreakdownTableHtml = (grp) => {
+  const its = grp.items || [];
+  const hoursItem = its.find((x) => isHoursLineType(getLineTypeNorm(x))) || null;
+// meta for display/header
+  const metaBase = (hoursItem?.meta || its[0]?.meta || {}) || {};
+  const labels = (metaBase.bucket_labels && typeof metaBase.bucket_labels === "object") ? metaBase.bucket_labels : DEFAULT_LABELS;
     // Pull bucket hours/rates from meta (these are merged by _renderInvoiceBundleAndStore)
     const hDay = num(metaBase.hours_day);
     const hNgt = num(metaBase.hours_night);
@@ -33981,12 +33986,11 @@ function buildHTML(payload) {
         pushRow(bucketLabelOf(labels, "bh"), hBh, rBh, hBh * rBh);
       }
     }
-
-    // Additional rates / mileage / expenses (non-hours)
-    for (const it of its) {
-      const t = getLineTypeNorm(it);
-      if (t === "HOURS") continue;
-      if (t === "ADJUSTMENT") continue;
+// Additional rates / mileage / expenses (non-hours)
+  for (const it of its) {
+    const t = getLineTypeNorm(it);
+    if (isHoursLineType(t)) continue;
+    if (t === "ADJUSTMENT") continue;
 
       const m = it.meta || {};
       const totalEx = num(it.total_ex_vat);
@@ -46742,12 +46746,36 @@ function buildHTML(payload) {
   const termsDays = pick(header, "payment_terms_days", null);
   const bank = pick(header, "bank", {}) || {};
 
+   // Agency branding (passed via header snapshot)
+  const agencyName =
+    pick(header, "agency_name", "") ||
+    pick(header, "agency_display_name", "") ||
+    pick(header, "company_name", "") ||
+    "";
+
+  const agencyLogoUrl =
+    pick(header, "agency_logo_url", "") ||
+    pick(header, "logo_url", "") ||
+    "";
+
+  // Registered details (passed via header snapshot)
+  const registeredAddressLines = (pick(header, "registered_address", "") || "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const companyRegNumber =
+    pick(header, "company_reg_number", "") ||
+    pick(header, "company_registration_number", "") ||
+    "";
+
   // VAT reg: use settings value if present; otherwise fallback to hard-wired number
   const DEFAULT_VAT_REG = "363 6805 80";
   const vatReg = pick(header, "vat_registration_number", "") || DEFAULT_VAT_REG;
 
   // Stationery (letterhead) — expects PNG/JPG URL (signed) + safe-area margins (mm)
   const stationeryUrl = pick(header, "stationery_url", ""); // PNG/JPG URL or data: URI
+
   const defaultMargins = stationeryUrl
     ? { top: 32, right: 12, bottom: 20, left: 12 } // safe defaults with artwork
     : { top: 18, right: 12, bottom: 34, left: 12 }; // plain layout defaults
@@ -47211,9 +47239,28 @@ function buildHTML(payload) {
       gap: 16px;
       margin-bottom: 16px;
     }
-    .title { font-size: 20px; font-weight: 700; letter-spacing: .5px; }
+      .title { font-size: 20px; font-weight: 700; letter-spacing: .5px; }
     .muted { color: #666; }
     .mono { font-variant-numeric: tabular-nums; }
+
+    /* Agency brand header */
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+    .brand-logo {
+      height: 34px;
+      max-width: 180px;
+      object-fit: contain;
+    }
+    .brand-name {
+      font-weight: 700;
+      font-size: 13px;
+      line-height: 1.1;
+    }
+
     .panel { border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; }
     .billto-title { font-weight: 600; margin-bottom: 4px; }
     .billto { white-space: pre-wrap; }
@@ -47328,7 +47375,13 @@ function buildHTML(payload) {
   <div class="wrap">
     <div class="header">
       <div>
+           <div class="brand">
+          ${agencyLogoUrl ? `<img class="brand-logo" src="${escapeUrl(agencyLogoUrl)}" alt="Agency logo" />` : ""}
+          ${agencyName ? `<div class="brand-name">${escapeHtml(agencyName)}</div>` : ""}
+        </div>
+
         <div class="title">INVOICE ${invoice_no ? `<span class="muted mono">#${escapeHtml(invoice_no)}</span>` : ""}</div>
+
         <div class="panel" style="margin-top:8px;">
           <div class="billto-title">Bill To</div>
           <div class="billto"><b>${escapeHtml(clientName)}</b>${clientAddress.length ? `<br>${clientAddress.map(escapeHtml).join("<br>")}` : ""}</div>
@@ -47387,9 +47440,12 @@ function buildHTML(payload) {
       <div>Banker: <span class="mono">${escapeHtml(pick(bank, "name", ""))}</span></div>
       <div>Sort Code: <span class="mono">${escapeHtml(pick(bank, "sort_code", ""))}</span> &nbsp;&nbsp; Account No.: <span class="mono">${escapeHtml(pick(bank, "account_number", ""))}</span></div>
     </div>
-    <div class="right">
+     <div class="right">
       ${vatReg ? `<div>VAT Reg: <b class="mono">${escapeHtml(vatReg)}</b></div>` : ""}
+      ${companyRegNumber ? `<div>Company Reg: <b class="mono">${escapeHtml(companyRegNumber)}</b></div>` : ""}
+      ${registeredAddressLines.length ? `<div style="margin-top:4px;">Registered address:<br>${registeredAddressLines.map(escapeHtml).join("<br>")}</div>` : ""}
     </div>
+
   </div>
 </body>
 </html>`;
@@ -47595,11 +47651,15 @@ function buildHTML(payload) {
         if (!byTs.has(tsId)) byTs.set(tsId, []);
         byTs.get(tsId).push(l);
       }
-
       const typeOf = (l) => {
         const m = (l?.meta_json && typeof l.meta_json === 'object') ? l.meta_json : {};
         const t = String(l?.line_type_norm || m?.line_type_norm || m?.line_type || '').toUpperCase();
         return t;
+      };
+
+      const isHoursType = (t) => {
+        const x = String(t || '').toUpperCase();
+        return (x === 'HOURS' || x.startsWith('HOURS_'));
       };
 
       for (const tsId of tsIds) {
@@ -47608,14 +47668,18 @@ function buildHTML(payload) {
 
         const types = lines.map(typeOf);
 
-        const hasHours = types.includes('HOURS');
-        const hasAdditional = types.some(t => t.startsWith('ADDITIONAL_RATE'));
-        const hasExpenseOrMileage = types.some(t => t === 'MILEAGE' || t.startsWith('EXPENSE'));
+        const hasHours = types.some(isHoursType);
+        const hasAdditional = types.some(t => String(t || '').toUpperCase().startsWith('ADDITIONAL_RATE'));
+        const hasExpenseOrMileage = types.some(t => {
+          const x = String(t || '').toUpperCase();
+          return (x === 'MILEAGE' || x.startsWith('EXPENSE'));
+        });
 
         if (!hasHours && !hasAdditional && hasExpenseOrMileage) {
           expenseOnlySet.add(String(tsId));
         }
       }
+
     }
 
     const missing = [];
