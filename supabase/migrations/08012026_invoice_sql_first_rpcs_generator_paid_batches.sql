@@ -970,7 +970,7 @@ limit 1;
 
 
           -- client_settings: HOURS uses effective_from<=anchor OR effective_from IS NULL (fallback row)
-          select cs.client_id, cs.vat_rate_pct, cs.hr_attach_to_invoice, cs.ts_attach_to_invoice, cs.invoice_consolidation_mode, cs.effective_from
+          select cs.client_id, cs.vat_rate_pct, cs.requires_hr, cs.hr_attach_to_invoice, cs.ts_attach_to_invoice, cs.invoice_consolidation_mode, cs.effective_from
           into v_cs
           from public.client_settings cs
           where cs.client_id = v_client_id
@@ -1028,13 +1028,32 @@ limit 1;
           )
 
           select
-            bool_or(coalesce(cons.requires_hr,false)) as req_hr,
             coalesce(
-              bool_or(coalesce(cons.hr_attach_to_invoice, v_cs.hr_attach_to_invoice, v_def.hr_attach_to_invoice, true)),
+              bool_or(
+                case
+                  when cons.overrideclientsettings is true then coalesce(cons.requires_hr, false)
+                  else coalesce(v_cs.requires_hr, false)
+                end
+              ),
+              coalesce(v_cs.requires_hr, false),
+              false
+            ) as req_hr,
+            coalesce(
+              bool_or(
+                case
+                  when cons.overrideclientsettings is true then coalesce(cons.hr_attach_to_invoice, v_def.hr_attach_to_invoice, true)
+                  else coalesce(v_cs.hr_attach_to_invoice, v_def.hr_attach_to_invoice, true)
+                end
+              ),
               coalesce(v_cs.hr_attach_to_invoice, v_def.hr_attach_to_invoice, true)
             ) as hr_attach_any,
             coalesce(
-              bool_or(coalesce(cons.ts_attach_to_invoice, v_cs.ts_attach_to_invoice, v_def.ts_attach_to_invoice, true)),
+              bool_or(
+                case
+                  when cons.overrideclientsettings is true then coalesce(cons.ts_attach_to_invoice, v_def.ts_attach_to_invoice, true)
+                  else coalesce(v_cs.ts_attach_to_invoice, v_def.ts_attach_to_invoice, true)
+                end
+              ),
               coalesce(v_cs.ts_attach_to_invoice, v_def.ts_attach_to_invoice, true)
             ) as ts_attach_any
           into v_requires_hr_any, v_hr_attach_any, v_ts_attach_any
@@ -2306,9 +2325,11 @@ where tf.timesheet_id = any(v_ts_ids_to_use)
             end loop;
           end if;
 
-                       -- Cache HR/NHSP source rows for this invoice (mirror JS step 9)
-          -- Only when effective_hr_attach_to_invoice is TRUE (contract → client_settings → defaults)
-          if coalesce(v_hr_attach_any, true) = true then
+                       -- Cache NHSP/HealthRoster source rows for this invoice (NHSP always; HealthRoster only when requires_hr AND hr_attach_to_invoice)
+          -- Policy:
+          --  - Always include NHSP rows when NHSP segments exist in invoice_breakdown_json.
+          --  - Include HEALTHROSTER rows only when (v_requires_hr_any = true AND v_hr_attach_any = true).
+
             -- Build shift_ids from segments where segment_id startswith 'nhsp:' and source_system in (NHSP, HEALTHROSTER)
             delete from public.invoice_hr_source_rows where invoice_id = v_invoice_id;
 
@@ -2325,14 +2346,13 @@ where tf.timesheet_id = any(v_ts_ids_to_use)
                 and tf.is_current = true
                 and jsonb_typeof(seg) = 'object'
                 and nullif(btrim(coalesce(seg->>'segment_id','')), '') is not null
-                and coalesce(pc.effective_hr_attach_to_invoice, true) = true
-            ),
+),
 
             shift_ids as (
               select distinct (id_part)::uuid as shift_id
               from segs
               where pfx = 'nhsp:'
-                and src in ('NHSP','HEALTHROSTER')
+                and (src = 'NHSP' or (src = 'HEALTHROSTER' and coalesce(v_requires_hr_any,false) = true and coalesce(v_hr_attach_any,false) = true))
                 and id_part ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
             ),
             useful as (
@@ -2384,7 +2404,7 @@ where tf.timesheet_id = any(v_ts_ids_to_use)
             insert into public.invoice_hr_source_rows(invoice_id, source_system, import_id, header_columns, rows_json)
             select v_invoice_id, r.source_system, r.import_id, r.header_columns, r.rows_json
             from rows_agg r;
-          end if;
+
 
 
 
@@ -2801,7 +2821,7 @@ limit 1;
 
 
           -- client_settings: BY_WEEK uses effective_from <= anchorYmd (no NULL fallback)
-          select cs.client_id, cs.vat_rate_pct, cs.hr_attach_to_invoice, cs.ts_attach_to_invoice, cs.invoice_consolidation_mode, cs.effective_from
+          select cs.client_id, cs.vat_rate_pct, cs.requires_hr, cs.hr_attach_to_invoice, cs.ts_attach_to_invoice, cs.invoice_consolidation_mode, cs.effective_from
           into v_cs
           from public.client_settings cs
           where cs.client_id = v_client_id
@@ -2991,13 +3011,32 @@ limit 1;
           )
 
                 select
-            bool_or(coalesce(cons.requires_hr,false)) as req_hr,
             coalesce(
-              bool_or(coalesce(cons.hr_attach_to_invoice, v_cs.hr_attach_to_invoice, v_def.hr_attach_to_invoice, true)),
+              bool_or(
+                case
+                  when cons.overrideclientsettings is true then coalesce(cons.requires_hr, false)
+                  else coalesce(v_cs.requires_hr, false)
+                end
+              ),
+              coalesce(v_cs.requires_hr, false),
+              false
+            ) as req_hr,
+            coalesce(
+              bool_or(
+                case
+                  when cons.overrideclientsettings is true then coalesce(cons.hr_attach_to_invoice, v_def.hr_attach_to_invoice, true)
+                  else coalesce(v_cs.hr_attach_to_invoice, v_def.hr_attach_to_invoice, true)
+                end
+              ),
               coalesce(v_cs.hr_attach_to_invoice, v_def.hr_attach_to_invoice, true)
             ) as hr_attach_any,
             coalesce(
-              bool_or(coalesce(cons.ts_attach_to_invoice, v_cs.ts_attach_to_invoice, v_def.ts_attach_to_invoice, true)),
+              bool_or(
+                case
+                  when cons.overrideclientsettings is true then coalesce(cons.ts_attach_to_invoice, v_def.ts_attach_to_invoice, true)
+                  else coalesce(v_cs.ts_attach_to_invoice, v_def.ts_attach_to_invoice, true)
+                end
+              ),
               coalesce(v_cs.ts_attach_to_invoice, v_def.ts_attach_to_invoice, true)
             ) as ts_attach_any
           into v_requires_hr_any, v_hr_attach_any, v_ts_attach_any
@@ -3463,11 +3502,19 @@ else
                 )
 
                 select
-                  bool_or(coalesce(cons.requires_hr,false)) as req_hr
+                  coalesce(
+                    bool_or(
+                      case
+                        when cons.overrideclientsettings is true then coalesce(cons.requires_hr, false)
+                        else coalesce(v_cs.requires_hr, false)
+                      end
+                    ),
+                    coalesce(v_cs.requires_hr, false),
+                    false
+                  ) as req_hr
                 into sb_requires_hr
                 from cons;
-
-                                      -- Attach flags use precedence: contract → client_settings → settings_defaults → true
+-- Attach flags use precedence: contract → client_settings → settings_defaults → true
                 sb_hr_attach := coalesce(v_hr_attach_any, true);
 
                 -- NHSP invoices must NOT require/attach timesheet PDFs
@@ -5039,7 +5086,6 @@ where id = v_outbox_id;
 end;
 $$;
 
-
 create or replace function public.invoice_source_rows_collect(
   p_invoice_id uuid,
   p_force_refresh boolean default true
@@ -5056,10 +5102,30 @@ set search_path = public
 as $$
 declare
   v_has_cache boolean := false;
+  v_requires_hr boolean := false;
+  v_hr_attach_to_invoice boolean := true;
+  v_hr_allowed boolean := false;
 begin
   if p_invoice_id is null then
     raise exception 'invoice_id is required';
   end if;
+
+
+  -- Attachment policy gating (must match generator policy):
+  -- - NHSP rows are always eligible.
+  -- - HEALTHROSTER rows are eligible only when (requires_hr = true AND hr_attach_to_invoice = true).
+  select
+    coalesce((i.header_snapshot_json #>> '{attach_policy,requires_hr}')::boolean, false) as requires_hr,
+    coalesce((i.header_snapshot_json #>> '{attach_policy,hr_attach_to_invoice}')::boolean, true) as hr_attach_to_invoice
+  into v_requires_hr, v_hr_attach_to_invoice
+  from public.invoices i
+  where i.id = p_invoice_id;
+
+  if not found then
+    raise exception 'invoice not found';
+  end if;
+
+  v_hr_allowed := coalesce(v_requires_hr,false) = true and coalesce(v_hr_attach_to_invoice,false) = true;
 
   -- If cache exists and caller does NOT force refresh, return cache
   select exists(
@@ -5107,7 +5173,7 @@ begin
     select distinct (id_part)::uuid as shift_id
     from segs
     where pfx = 'nhsp:'
-      and source_system in ('NHSP','HEALTHROSTER')
+      and (source_system = 'NHSP' or (source_system = 'HEALTHROSTER' and v_hr_allowed = true))
       and id_part ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
   ),
   useful as (
