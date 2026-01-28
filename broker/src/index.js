@@ -35534,16 +35534,17 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
   const err = validateEmailPayload(base);
   if (err) throw new Error(err);
 
-  // Pull finance sender config (for invoices/remittances) + invpdf effective config
+  // Pull finance sender config (for invoices/remittances) + invpdf effective config (if present)
   let financeEmail = null;
   let invpdfEffective = null;
 
   try {
     const s = await loadSettingsDefaults(env);
     financeEmail = (typeof s?.finance_email === 'string') ? s.finance_email.trim() : null;
-    invpdfEffective = (s && s.importConfig && s.importConfig.invpdf_effective && typeof s.importConfig.invpdf_effective === 'object')
-      ? s.importConfig.invpdf_effective
-      : null;
+    invpdfEffective =
+      (s && s.importConfig && s.importConfig.invpdf_effective && typeof s.importConfig.invpdf_effective === 'object')
+        ? s.importConfig.invpdf_effective
+        : null;
   } catch {}
 
   const invpdfMode = String(invpdfEffective?.mode || 'free').trim().toLowerCase() === 'paid' ? 'paid' : 'free';
@@ -35555,8 +35556,8 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
   // - { contentBase64, name } -> pass-through
   // - { r2_key, name } -> fetch bytes from R2
   // - { invoice_id, filename } -> queue-first:
-  //     * free: DO NOT RENDER; only check invoices.invoice_pdf_r2_key exists; else throw PDF_NOT_READY
-  //     * paid (optional): if invpdf.email_worker_can_render === true, may call ensureInvoicePdf; else same as free
+  //     * free: DO NOT RENDER; only accept stored + fresh invoice_pdf_r2_key; else throw PDF_NOT_READY
+  //     * paid (optional): render inline ONLY if invpdf.email_worker_can_render === true; else same as free
   const resolved = [];
 
   for (const a of base.attachments) {
@@ -35582,21 +35583,32 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
         }
         pdfKey = String(ensured.invoice_pdf_r2_key).trim();
       } else {
-        // Free-mode (and paid-mode default): DO NOT RENDER. Only check stored invoice_pdf_r2_key exists.
+        // Free-mode (and paid-mode default): DO NOT RENDER. Only accept a stored + fresh PDF key.
         const { rows } = await sbFetch(
           env,
           `${env.SUPABASE_URL}/rest/v1/invoices` +
             `?id=eq.${enc(invId)}` +
-            `&select=invoice_pdf_r2_key` +
+            `&select=invoice_pdf_r2_key,invoice_pdf_generated_at_utc,updated_at` +
             `&limit=1`,
           false
         );
 
         const inv = rows && rows.length ? rows[0] : null;
         const key = (inv && typeof inv.invoice_pdf_r2_key === 'string') ? inv.invoice_pdf_r2_key.trim() : '';
-        if (!key) {
+        const genAt = inv ? inv.invoice_pdf_generated_at_utc : null;
+        const updAt = inv ? inv.updated_at : null;
+
+        const fresh = (() => {
+          if (!key || !genAt || !updAt) return false;
+          const tUpd = new Date(updAt).getTime();
+          const tGen = new Date(genAt).getTime();
+          return (Number.isFinite(tUpd) && Number.isFinite(tGen) && tUpd <= tGen);
+        })();
+
+        if (!fresh) {
           throw new Error(`PDF_NOT_READY: invoice ${invId}`);
         }
+
         pdfKey = key;
       }
 
@@ -47252,6 +47264,8 @@ async function handleInvoiceIssue(env, req, invoiceId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
+  const enc = encodeURIComponent;
+
   try {
     const actorUserId = (user && user.id) ? user.id : null;
 
@@ -47265,6 +47279,7 @@ async function handleInvoiceIssue(env, req, invoiceId) {
     if (!x) return withCORS(env, req, serverError('Issue RPC returned no result'));
 
     const st = String(x.status || '').toUpperCase();
+
     if (st === 'ON_HOLD') {
       return withCORS(env, req, ok({
         status: 'ON_HOLD',
@@ -47280,11 +47295,12 @@ async function handleInvoiceIssue(env, req, invoiceId) {
 
       try {
         const s = await loadSettingsDefaults(env);
-        const invpdf = (s && s.importConfig && s.importConfig.invpdf_effective && typeof s.importConfig.invpdf_effective === 'object')
-          ? s.importConfig.invpdf_effective
-          : null;
+        const invpdfEff =
+          (s && s.importConfig && s.importConfig.invpdf_effective && typeof s.importConfig.invpdf_effective === 'object')
+            ? s.importConfig.invpdf_effective
+            : null;
 
-        const queueOnIssue = (invpdf?.queue_on_issue !== false);
+        const queueOnIssue = (invpdfEff?.queue_on_issue !== false);
 
         if (queueOnIssue) {
           const enq = await sbRpc(env, 'invpdf_enqueue_one', {
@@ -47294,9 +47310,9 @@ async function handleInvoiceIssue(env, req, invoiceId) {
 
           const n =
             (typeof enq === 'number') ? enq :
-            (typeof enq?.data === 'number') ? enq.data :
             (Array.isArray(enq) && typeof enq[0] === 'number') ? enq[0] :
             (Array.isArray(enq?.data) && typeof enq.data[0] === 'number') ? enq.data[0] :
+            (typeof enq?.data === 'number') ? enq.data :
             0;
 
           pdf_rows_affected = Number.isFinite(Number(n)) ? Number(n) : 0;
@@ -47307,11 +47323,72 @@ async function handleInvoiceIssue(env, req, invoiceId) {
         pdf_rows_affected = 0;
       }
 
+      // ✅ Email eligibility (for frontend prompt)
+      let email_eligible = false;
+      let email_block_reason = null;
+      let email_to_suggest = null;
+
+      try {
+        const { rows: invRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/invoices` +
+            `?id=eq.${enc(String(invoiceId))}` +
+            `&select=id,do_not_send,header_snapshot_json,client:clients(primary_invoice_email,name)` +
+            `&limit=1`,
+          false
+        );
+
+        const inv = invRows?.[0] || null;
+        const doNotSend = (inv?.do_not_send === true);
+
+        const header = (inv?.header_snapshot_json && typeof inv.header_snapshot_json === 'object')
+          ? inv.header_snapshot_json
+          : {};
+
+        const meta = (header?.meta && typeof header.meta === 'object') ? header.meta : {};
+
+        const selfBillFlag = (() => {
+          const v = meta?.self_bill;
+          if (v === true) return true;
+          if (v === false) return false;
+          const s0 = String(v ?? '').trim().toLowerCase();
+          return (s0 === 'true' || s0 === '1' || s0 === 'yes' || s0 === 'y' || s0 === 'on');
+        })();
+
+        const src = String(meta?.source || '').trim().toUpperCase();
+        const isSelfBill = (selfBillFlag === true) || (src === 'TSFIN_SEGMENTS');
+
+        const hdrEmail = (typeof header?.client_primary_invoice_email === 'string') ? header.client_primary_invoice_email.trim() : '';
+        const cliEmail = (typeof inv?.client?.primary_invoice_email === 'string') ? inv.client.primary_invoice_email.trim() : '';
+
+        email_to_suggest = (hdrEmail || cliEmail) ? (hdrEmail || cliEmail) : null;
+
+        email_eligible = (!doNotSend && !isSelfBill && !!email_to_suggest);
+
+        if (!email_eligible) {
+          if (doNotSend) email_block_reason = 'DO_NOT_SEND';
+          else if (isSelfBill) email_block_reason = 'SELF_BILL';
+          else if (!email_to_suggest) email_block_reason = 'NO_CLIENT_EMAIL';
+          else email_block_reason = 'NOT_ELIGIBLE';
+        }
+      } catch {
+        email_eligible = false;
+        email_block_reason = 'ELIGIBILITY_CHECK_FAILED';
+        email_to_suggest = null;
+      }
+
       return withCORS(env, req, ok({
         status: 'ISSUED',
         issued_at_utc: x.issued_at_utc || null,
+
+        // invpdf
         pdf_queued: !!pdf_queued,
-        pdf_rows_affected: pdf_rows_affected
+        pdf_rows_affected: pdf_rows_affected,
+
+        // email prompt
+        email_eligible: !!email_eligible,
+        email_block_reason: email_block_reason,
+        email_to_suggest: email_to_suggest
       }));
     }
 
@@ -47686,25 +47763,24 @@ async function handleInvoiceRender(env, req, invoiceId) {
   }
 }
 
-
 async function handleInvoiceEmail(env, req, invoiceId) {
   const enc = encodeURIComponent;
 
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
-  // Load invpdf effective config (queue toggle)
-  let invpdf = null;
+  // invpdf effective config (queue toggle)
+  let invpdfEff = null;
   try {
     const s = await loadSettingsDefaults(env);
-    invpdf = (s && s.importConfig && s.importConfig.invpdf_effective && typeof s.importConfig.invpdf_effective === 'object')
-      ? s.importConfig.invpdf_effective
-      : null;
+    invpdfEff =
+      (s && s.importConfig && s.importConfig.invpdf_effective && typeof s.importConfig.invpdf_effective === 'object')
+        ? s.importConfig.invpdf_effective
+        : null;
   } catch {
-    invpdf = null;
+    invpdfEff = null;
   }
-
-  const queueOnEmail = (invpdf?.queue_on_email !== false);
+  const queueOnEmail = (invpdfEff?.queue_on_email !== false);
 
   try {
     // Load invoice basics + header meta (for self-bill guard) + client id + primary invoice email + status + do_not_send
@@ -47924,7 +48000,7 @@ async function handleInvoiceEmail(env, req, invoiceId) {
 
     if (!to) return withCORS(env, req, badRequest('Client invoice email not configured'));
 
-    // ✅ Queue email immediately (do NOT render inline)
+    // ✅ Queue mail_outbox (NO inline rendering here)
     const invNo = inv.invoice_no || invoiceId;
     const subject = `Invoice ${invNo}`;
 
@@ -47967,9 +48043,9 @@ async function handleInvoiceEmail(env, req, invoiceId) {
 
         const n =
           (typeof enq === 'number') ? enq :
-          (typeof enq?.data === 'number') ? enq.data :
           (Array.isArray(enq) && typeof enq[0] === 'number') ? enq[0] :
           (Array.isArray(enq?.data) && typeof enq.data[0] === 'number') ? enq.data[0] :
+          (typeof enq?.data === 'number') ? enq.data :
           0;
 
         pdf_rows_affected = Number.isFinite(Number(n)) ? Number(n) : 0;
@@ -48003,12 +48079,17 @@ async function handleInvoiceEmail(env, req, invoiceId) {
       { entity: 'invoice', subject_id: invoiceId, correlation_id: mailId, req }
     );
 
-    return withCORS(env, req, ok({ queued: true, mail_id: mailId, to, pdf_queued: !!pdf_queued }));
+    return withCORS(env, req, ok({
+      queued: true,
+      mail_id: mailId,
+      to,
+      pdf_queued: !!pdf_queued,
+      pdf_rows_affected: pdf_rows_affected
+    }));
   } catch (e) {
     return withCORS(env, req, serverError('Failed to queue invoice email'));
   }
 }
-
 
 
 async function handleInvoiceDeleteOne(env, req, invoiceId) {
