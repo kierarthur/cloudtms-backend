@@ -68569,6 +68569,12 @@ async scheduled(event, env, ctx) {
     ? String(env.INVOICE_ACTOR_USER_ID).trim()
     : null;
 
+  // Two crons in wrangler.toml:
+  // - "*/5 * * * *" => full pipeline
+  // - "* * * * *"   => invpdf drain only (keeps BR usage smooth on free plan)
+  const cronExpr = (event && typeof event.cron === 'string') ? event.cron : '';
+  const isInvpdfMinuteCron = (cronExpr === '* * * * *');
+
   // Determine invpdf limits from settings_defaults.import_config_json.invpdf_effective
   const getInvpdfLimits = async () => {
     let invpdf = null;
@@ -68609,11 +68615,83 @@ async scheduled(event, env, ctx) {
     return { mode, dequeueLimit, enqueueLimit, maxBatchesInvpdf, enqueueFirst };
   };
 
-  // IMPORTANT:
-  // - Scheduled does NOT issue invoices (ISSUED means “emailed/sent” for normal invoices).
-  // - Scheduled creates invoices and drains queues.
-  // - We now drain invoice_pdf_outbox BEFORE email drain to reduce PDF_NOT_READY churn.
+  const drainInvpdfOnce = async () => {
+    const lim = await getInvpdfLimits();
+
+    if (lim.enqueueFirst) {
+      try {
+        await sbRpc(env, 'invpdf_enqueue_ready_for_render', { p_limit: lim.enqueueLimit });
+      } catch (e) {
+        console.warn('[scheduled] invpdf_enqueue_ready_for_render failed:', e?.message || e);
+      }
+    }
+
+    const req = new Request((env.PUBLIC_DOWNLOAD_BASE_URL || 'https://localhost') + '/internal/invpdf-worker');
+
+    for (let b = 0; b < lim.maxBatchesInvpdf; b++) {
+      const dq = await sbRpc(env, 'invpdf_dequeue_batch_ids', { p_limit: lim.dequeueLimit });
+      const jobs = Array.isArray(dq) ? dq : (dq?.data || []);
+      if (!jobs.length) break;
+
+      const successIds = [];
+      const failRows = [];
+
+      for (const j of jobs) {
+        const outboxId = j?.outbox_id ? String(j.outbox_id) : null;
+        const invoiceId = j?.invoice_id ? String(j.invoice_id) : null;
+        const force = (j?.force_regen === true) || (String(j?.reason || '').toUpperCase() === 'FORCE_REGEN');
+
+        if (!outboxId || !invoiceId) {
+          if (outboxId) failRows.push({ outbox_id: outboxId, error: 'MALFORMED_OUTBOX_ROW' });
+          continue;
+        }
+
+        try {
+          const core = await _renderInvoiceBundleAndStore(env, req, invoiceId, null, { force_regen: !!force });
+
+          if (core?.ok && core?.pdf_key) {
+            successIds.push(outboxId);
+          } else {
+            failRows.push({ outbox_id: outboxId, error: core?.error || 'RENDER_FAILED' });
+          }
+        } catch (e) {
+          const msg = (e && e.message) ? String(e.message) : String(e || 'RENDER_EXCEPTION');
+          failRows.push({ outbox_id: outboxId, error: msg });
+        }
+      }
+
+      if (successIds.length) {
+        try {
+          await sbRpc(env, 'invpdf_work_success_bulk', { p_ids: successIds });
+        } catch (e) {
+          console.warn('[scheduled] invpdf_work_success_bulk failed:', e?.message || e);
+        }
+      }
+
+      if (failRows.length) {
+        try {
+          await sbRpc(env, 'invpdf_work_fail_bulk', { p_rows: failRows });
+        } catch (e) {
+          console.warn('[scheduled] invpdf_work_fail_bulk failed:', e?.message || e);
+        }
+      }
+
+      if (jobs.length < lim.dequeueLimit) break;
+    }
+  };
+
   ctx.waitUntil((async () => {
+    // Minute cron: invpdf drain only (keeps BR capacity stable on free plan)
+    if (isInvpdfMinuteCron) {
+      try {
+        await drainInvpdfOnce();
+      } catch (e) {
+        console.warn('[scheduled] Minute invpdf drain failed:', e?.message || e);
+      }
+      return;
+    }
+
+    // 5-minute cron: full pipeline
     try {
       for (let i = 0; i < maxBatches; i++) {
         const res = await runTsfinWorkerOnce(env, { limit: batchSize });
@@ -68664,80 +68742,14 @@ async scheduled(event, env, ctx) {
       console.warn('[scheduled] Invoice SQL worker failed:', e?.message || e);
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // NEW: Invoice PDF queue drain (before email drain)
-    // ─────────────────────────────────────────────────────────────
+    // Invoice PDF queue drain (before email drain to reduce PDF_NOT_READY churn)
     try {
-      const lim = await getInvpdfLimits();
-
-      if (lim.enqueueFirst) {
-        try {
-          await sbRpc(env, 'invpdf_enqueue_ready_for_render', { p_limit: lim.enqueueLimit });
-        } catch (e) {
-          console.warn('[scheduled] invpdf_enqueue_ready_for_render failed:', e?.message || e);
-        }
-      }
-
-      const req = new Request((env.PUBLIC_DOWNLOAD_BASE_URL || 'https://localhost') + '/internal/invpdf-worker');
-
-      for (let b = 0; b < lim.maxBatchesInvpdf; b++) {
-        const dq = await sbRpc(env, 'invpdf_dequeue_batch_ids', { p_limit: lim.dequeueLimit });
-        const jobs = Array.isArray(dq) ? dq : (dq?.data || []);
-        if (!jobs.length) break;
-
-        const successIds = [];
-        const failRows = [];
-
-        for (const j of jobs) {
-          const outboxId = j?.outbox_id ? String(j.outbox_id) : null;
-          const invoiceId = j?.invoice_id ? String(j.invoice_id) : null;
-          const force = (j?.force_regen === true) || (String(j?.reason || '').toUpperCase() === 'FORCE_REGEN');
-
-          if (!outboxId || !invoiceId) {
-            // If malformed row, mark fail (best-effort)
-            if (outboxId) failRows.push({ outbox_id: outboxId, error: 'MALFORMED_OUTBOX_ROW' });
-            continue;
-          }
-
-          try {
-            const core = await _renderInvoiceBundleAndStore(env, req, invoiceId, null, { force_regen: !!force });
-
-            if (core?.ok && core?.pdf_key) {
-              successIds.push(outboxId);
-            } else {
-              // Non-ok: mark fail (SQL sets next_attempt_at + 30 mins)
-              failRows.push({ outbox_id: outboxId, error: core?.error || 'RENDER_FAILED' });
-            }
-          } catch (e) {
-            const msg = (e && e.message) ? String(e.message) : String(e || 'RENDER_EXCEPTION');
-            failRows.push({ outbox_id: outboxId, error: msg });
-          }
-        }
-
-        if (successIds.length) {
-          try {
-            await sbRpc(env, 'invpdf_work_success_bulk', { p_ids: successIds });
-          } catch (e) {
-            console.warn('[scheduled] invpdf_work_success_bulk failed:', e?.message || e);
-          }
-        }
-
-        if (failRows.length) {
-          try {
-            await sbRpc(env, 'invpdf_work_fail_bulk', { p_rows: failRows });
-          } catch (e) {
-            console.warn('[scheduled] invpdf_work_fail_bulk failed:', e?.message || e);
-          }
-        }
-
-        // If we dequeued fewer than limit, likely drained.
-        if (jobs.length < lim.dequeueLimit) break;
-      }
+      await drainInvpdfOnce();
     } catch (e) {
       console.warn('[scheduled] Invoice PDF worker failed:', e?.message || e);
     }
 
-    // Email outbox drain (runs after invpdf drain to reduce PDF_NOT_READY churn)
+    // Email outbox drain (runs after invpdf drain)
     try {
       await drainEmailOutboxOnce(env, { limit: emailBatchLimit });
     } catch (e) {
@@ -68745,5 +68757,6 @@ async scheduled(event, env, ctx) {
     }
   })());
 }
+
 
 };
