@@ -5086,13 +5086,21 @@ where id = v_outbox_id;
 end;
 $$;
 
-create or replace function public.invoice_source_rows_collect(
+
+
+-- FIX: you cannot change the RETURNS TABLE shape of an existing function with CREATE OR REPLACE.
+-- Drop the old signature first, then recreate with the new OUT columns (adds header_rows).
+
+drop function if exists public.invoice_source_rows_collect(uuid, boolean);
+
+create function public.invoice_source_rows_collect(
   p_invoice_id uuid,
   p_force_refresh boolean default true
 )
 returns table (
   source_system text,
   import_id uuid,
+  header_rows jsonb,
   header_columns jsonb,
   rows_json jsonb
 )
@@ -5110,7 +5118,6 @@ begin
     raise exception 'invoice_id is required';
   end if;
 
-
   -- Attachment policy gating (must match generator policy):
   -- - NHSP rows are always eligible.
   -- - HEALTHROSTER rows are eligible only when (requires_hr = true AND hr_attach_to_invoice = true).
@@ -5125,11 +5132,14 @@ begin
     raise exception 'invoice not found';
   end if;
 
-  v_hr_allowed := coalesce(v_requires_hr,false) = true and coalesce(v_hr_attach_to_invoice,false) = true;
+  v_hr_allowed := coalesce(v_requires_hr,false) = true
+                  and coalesce(v_hr_attach_to_invoice,false) = true;
 
   -- If cache exists and caller does NOT force refresh, return cache
   select exists(
-    select 1 from public.invoice_hr_source_rows r where r.invoice_id = p_invoice_id
+    select 1
+    from public.invoice_hr_source_rows r
+    where r.invoice_id = p_invoice_id
   ) into v_has_cache;
 
   if v_has_cache and coalesce(p_force_refresh,false) = false then
@@ -5137,6 +5147,7 @@ begin
     select
       r.source_system,
       r.import_id,
+      r.header_rows,
       r.header_columns,
       r.rows_json
     from public.invoice_hr_source_rows r
@@ -5146,8 +5157,8 @@ begin
   end if;
 
   -- Recompute + refresh cache (safe even if cache is empty)
-  delete from public.invoice_hr_source_rows
-  where invoice_id = p_invoice_id;
+  delete from public.invoice_hr_source_rows r
+  where r.invoice_id = p_invoice_id;
 
   with ts_ids as (
     select distinct l.timesheet_id
@@ -5156,25 +5167,35 @@ begin
       and l.timesheet_id is not null
   ),
   fin as (
-    select tf.timesheet_id, tf.invoice_breakdown_json
+    select
+      tf.timesheet_id,
+      tf.invoice_breakdown_json
     from public.timesheets_financials tf
     where tf.is_current = true
-      and tf.timesheet_id in (select timesheet_id from ts_ids)
+      and tf.timesheet_id in (select t.timesheet_id from ts_ids t)
   ),
   segs as (
     select
       upper(coalesce(seg->>'source_system','')) as source_system,
-      left(coalesce(seg->>'segment_id',''), 5) as pfx,
-      substr(coalesce(seg->>'segment_id',''), 6) as id_part
-    from fin
-    cross join lateral jsonb_array_elements(coalesce(fin.invoice_breakdown_json->'segments','[]'::jsonb)) seg
+      nullif(btrim(coalesce(seg->>'segment_id','')), '') as segment_id,
+      nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') as locked_invoice_id_text
+    from fin f
+    cross join lateral jsonb_array_elements(coalesce(f.invoice_breakdown_json->'segments','[]'::jsonb)) seg
+    where jsonb_typeof(seg) = 'object'
   ),
   shift_ids as (
-    select distinct (id_part)::uuid as shift_id
-    from segs
-    where pfx = 'nhsp:'
-      and (source_system = 'NHSP' or (source_system = 'HEALTHROSTER' and v_hr_allowed = true))
-      and id_part ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    select distinct (substr(sg.segment_id, 6))::uuid as shift_id
+    from segs sg
+    where sg.segment_id is not null
+      and left(sg.segment_id, 5) = 'nhsp:'
+      -- ✅ Critical: ONLY rows/segments locked to THIS invoice
+      and sg.locked_invoice_id_text = p_invoice_id::text
+      -- Source-system gating: NHSP always; HealthRoster only when allowed by policy
+      and (
+        sg.source_system = 'NHSP'
+        or (sg.source_system = 'HEALTHROSTER' and v_hr_allowed = true)
+      )
+      and substr(sg.segment_id, 6) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
   ),
   useful as (
     select
@@ -5182,7 +5203,7 @@ begin
       s.latest_import_id as import_id,
       s.external_row_key
     from public.nhsp_shifts s
-    where s.id in (select shift_id from shift_ids)
+    where s.id in (select sh.shift_id from shift_ids sh)
       and s.latest_import_id is not null
       and s.external_row_key is not null
   ),
@@ -5198,49 +5219,76 @@ begin
     select
       g.source_system,
       g.import_id,
+      -- Prefer multi-row header if stored; else wrap single-row header_columns; else []
       case
-        when jsonb_typeof(hi.parse_summary_json->'header_columns')='array'
+        when jsonb_typeof(hi.parse_summary_json->'header_rows') = 'array'
+          then (hi.parse_summary_json->'header_rows')
+        when jsonb_typeof(hi.parse_summary_json->'header_columns') = 'array'
+          then jsonb_build_array(hi.parse_summary_json->'header_columns')
+        else '[]'::jsonb
+      end as header_rows,
+      case
+        when jsonb_typeof(hi.parse_summary_json->'header_columns') = 'array'
           then (hi.parse_summary_json->'header_columns')
         else '[]'::jsonb
       end as header_columns,
       g.keys_json
     from grouped g
-    join public.hr_imports hi on hi.id = g.import_id
+    join public.hr_imports hi
+      on hi.id = g.import_id
   ),
   rows_agg as (
     select
       h.source_system,
       h.import_id,
+      h.header_rows,
       h.header_columns,
       (
         select coalesce(jsonb_agg(r.payload_json order by r.id), '[]'::jsonb)
         from public.hr_rows r
         where r.import_id = h.import_id
-          and r.external_row_key in (select jsonb_array_elements_text(h.keys_json))
+          and r.external_row_key in (
+            select jsonb_array_elements_text(h.keys_json)
+          )
       ) as rows_json
     from hdr h
   )
-  insert into public.invoice_hr_source_rows(invoice_id, source_system, import_id, header_columns, rows_json)
+  insert into public.invoice_hr_source_rows(
+    invoice_id,
+    source_system,
+    import_id,
+    header_rows,
+    header_columns,
+    rows_json
+  )
   select
     p_invoice_id,
-    r.source_system,
-    r.import_id,
-    r.header_columns,
-    r.rows_json
-  from rows_agg r;
+    ra.source_system,
+    ra.import_id,
+    ra.header_rows,
+    ra.header_columns,
+    ra.rows_json
+  from rows_agg ra;
 
   -- Return refreshed cache
   return query
   select
     r.source_system,
     r.import_id,
+    r.header_rows,
     r.header_columns,
     r.rows_json
   from public.invoice_hr_source_rows r
   where r.invoice_id = p_invoice_id
   order by r.source_system, r.import_id;
+
 end;
 $$;
+
+
+
+
+
 
 create or replace function public.invoice_create_credit_note_and_unlock(
   p_invoice_id uuid,
