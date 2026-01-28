@@ -481,6 +481,8 @@ exception when others then
 end;
 $$;
 
+
+
 create or replace function public.invoice_apply_edits(
   p_invoice_id uuid,
   p_payload jsonb,
@@ -530,6 +532,7 @@ v_rc int := 0;
 v_remove_seg_refs jsonb;
 v_add_seg_refs jsonb;
 v_has_seg_ops boolean := false;
+v_refresh_hr_cache boolean := false;
 v_seg_tsfin_ids uuid[] := array[]::uuid[];
 v_seg_ts_ids uuid[] := array[]::uuid[];
 v_seg_refs_to_lock jsonb := '[]'::jsonb;
@@ -826,6 +829,8 @@ end if;
 v_has_seg_ops :=
   (v_remove_seg_refs is not null and jsonb_typeof(v_remove_seg_refs)='array' and jsonb_array_length(v_remove_seg_refs) > 0)
   or (v_add_seg_refs is not null and jsonb_typeof(v_add_seg_refs)='array' and jsonb_array_length(v_add_seg_refs) > 0);
+
+  v_refresh_hr_cache := (coalesce(array_length(v_add_ts_ids,1),0) > 0) or coalesce(v_has_seg_ops,false);
 
   if v_invoice_debug then
     v_dbg_stats := v_dbg_stats || jsonb_build_object(
@@ -1156,7 +1161,12 @@ v_has_seg_ops :=
 
     v_cw_ts_ids := coalesce(v_cw_ts_ids, array[]::uuid[]);
 
-    delete from public.invoice_lines
+    
+
+    if coalesce(array_length(v_cw_ts_ids,1),0) > 0 then
+      v_refresh_hr_cache := true;
+    end if;
+delete from public.invoice_lines
     where invoice_id = p_invoice_id
       and id = any(v_remove_ids);
     get diagnostics v_rc = row_count;
@@ -2523,7 +2533,14 @@ if chg_ex = 0 then continue; end if;
   where id = p_invoice_id;
 
 
-  -- Return updated manifest
+    -- Refresh invoice-level NHSP/HR cache after timesheet/segment changes
+  if coalesce(v_refresh_hr_cache,false) = true then
+    perform 1
+    from public.invoice_source_rows_collect(p_invoice_id, true) sr
+    limit 1;
+  end if;
+
+-- Return updated manifest
   select public.invoice_render_manifest(p_invoice_id) into v_manifest;
   v_manifest := coalesce(v_manifest, '{}'::jsonb);
 
@@ -2605,3 +2622,4 @@ exception when others then
   raise;
 end;
 $$;
+
