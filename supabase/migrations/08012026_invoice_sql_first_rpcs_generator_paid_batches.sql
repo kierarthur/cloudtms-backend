@@ -5100,6 +5100,8 @@ $$;
 -- FIX: you cannot change the RETURNS TABLE shape of an existing function with CREATE OR REPLACE.
 -- Drop the old signature first, then recreate with the new OUT columns (adds header_rows).
 
+
+
 drop function if exists public.invoice_source_rows_collect(uuid, boolean);
 
 create function public.invoice_source_rows_collect(
@@ -5186,17 +5188,16 @@ begin
   segs as (
     select
       upper(coalesce(seg->>'source_system','')) as source_system,
-      nullif(btrim(coalesce(seg->>'segment_id','')), '') as segment_id,
-      nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') as locked_invoice_id_text
+      nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') as locked_invoice_id_text,
+      nullif(btrim(coalesce(seg->>'nhsp_shift_id','')), '') as nhsp_shift_id_text
     from fin f
     cross join lateral jsonb_array_elements(coalesce(f.invoice_breakdown_json->'segments','[]'::jsonb)) seg
     where jsonb_typeof(seg) = 'object'
   ),
   shift_ids as (
-    select distinct (substr(sg.segment_id, 6))::uuid as shift_id
+    select distinct (sg.nhsp_shift_id_text)::uuid as shift_id
     from segs sg
-    where sg.segment_id is not null
-      and left(sg.segment_id, 5) = 'nhsp:'
+    where sg.nhsp_shift_id_text is not null
       -- ✅ Critical: ONLY rows/segments locked to THIS invoice
       and sg.locked_invoice_id_text = p_invoice_id::text
       -- Source-system gating: NHSP always; HealthRoster only when allowed by policy
@@ -5204,7 +5205,7 @@ begin
         sg.source_system = 'NHSP'
         or (sg.source_system = 'HEALTHROSTER' and v_hr_allowed = true)
       )
-      and substr(sg.segment_id, 6) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      and sg.nhsp_shift_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
   ),
   useful as (
     select
@@ -5293,8 +5294,6 @@ begin
 
 end;
 $$;
-
-
 
 
 
