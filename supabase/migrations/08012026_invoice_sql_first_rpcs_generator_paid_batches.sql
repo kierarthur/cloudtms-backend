@@ -586,7 +586,6 @@ $$;
 
 
 
-
 create or replace function public.invoice_generate_from_outbox_batch(
   p_outbox_ids uuid[],
   p_actor_user_id uuid
@@ -955,7 +954,8 @@ end;
           end if;
 
                    select bank_name, bank_sort_code, bank_account_number, vat_registration_number,
-                 hr_attach_to_invoice, ts_attach_to_invoice
+                 hr_attach_to_invoice, ts_attach_to_invoice,
+                 agency_name, agency_logo, registered_address, company_reg_number
           into v_def
           from public.settings_defaults
           where id = 1;
@@ -1080,6 +1080,12 @@ limit 1;
             'client_name', v_client.name,
             'client_invoice_address', v_client.invoice_address,
             'client_primary_invoice_email', v_client.primary_invoice_email,
+            'agency_name', v_def.agency_name,
+            'agency_logo', v_def.agency_logo,
+            'agency_logo_url', v_def.agency_logo,
+            'registered_address', v_def.registered_address,
+            'company_reg_number', v_def.company_reg_number,
+            'company_registration_number', v_def.company_reg_number,
             'vat_chargeable', coalesce(v_client.vat_chargeable,true),
             'applied_vat_rate_pct', v_vat_rate,
             'payment_terms_days', v_terms_days,
@@ -2339,8 +2345,7 @@ where tf.timesheet_id = any(v_ts_ids_to_use)
               select
                 left(seg->>'segment_id', 5) as pfx,
                 upper(coalesce(seg->>'source_system','')) as src,
-                nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') as locked_invoice_id_text,
-                nullif(btrim(coalesce(seg->>'nhsp_shift_id','')), '') as nhsp_shift_id_text
+                substr(seg->>'segment_id', 6) as id_part
               from public.timesheets_financials tf
               join public.v_ts_invoice_precheck pc
                 on pc.timesheet_id = tf.timesheet_id
@@ -2349,21 +2354,16 @@ where tf.timesheet_id = any(v_ts_ids_to_use)
                 and tf.is_current = true
                 and jsonb_typeof(seg) = 'object'
                 and nullif(btrim(coalesce(seg->>'segment_id','')), '') is not null
-            ),
+),
 
             shift_ids as (
-              select distinct (sg.nhsp_shift_id_text)::uuid as shift_id
-              from segs sg
-              where sg.pfx = 'nhsp:'
-                -- ✅ Critical: ONLY rows/segments locked to THIS invoice
-                and sg.locked_invoice_id_text = v_invoice_id::text
-                and (
-                  sg.src = 'NHSP'
-                  or (sg.src = 'HEALTHROSTER' and coalesce(v_requires_hr_any,false) = true and coalesce(v_hr_attach_any,false) = true)
-                )
-                and sg.nhsp_shift_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              select distinct (id_part)::uuid as shift_id
+              from segs
+              where pfx = 'nhsp:'
+                and (src = 'NHSP' or (src = 'HEALTHROSTER' and coalesce(v_requires_hr_any,false) = true and coalesce(v_hr_attach_any,false) = true))
+                and id_part ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
             ),
-useful as (
+            useful as (
               select
                 upper(coalesce(s.source_system::text,'UNKNOWN')) as source_system,
                 s.latest_import_id as import_id,
@@ -2812,7 +2812,8 @@ h_bh numeric;
           end if;
 
                  select bank_name, bank_sort_code, bank_account_number, vat_registration_number,
-                 hr_attach_to_invoice, ts_attach_to_invoice
+                 hr_attach_to_invoice, ts_attach_to_invoice,
+                 agency_name, agency_logo, registered_address, company_reg_number
           into v_def
           from public.settings_defaults
           where id = 1;
@@ -3538,6 +3539,12 @@ else
                   'client_name', v_client.name,
                   'client_invoice_address', v_client.invoice_address,
                   'client_primary_invoice_email', v_client.primary_invoice_email,
+            'agency_name', v_def.agency_name,
+            'agency_logo', v_def.agency_logo,
+            'agency_logo_url', v_def.agency_logo,
+            'registered_address', v_def.registered_address,
+            'company_reg_number', v_def.company_reg_number,
+            'company_registration_number', v_def.company_reg_number,
                   'vat_chargeable', coalesce(v_client.vat_chargeable,true),
                   'applied_vat_rate_pct', v_vat_rate,
                   'payment_terms_days', v_terms_days,
@@ -3623,6 +3630,12 @@ v_created := true;
               'client_name', v_client.name,
               'client_invoice_address', v_client.invoice_address,
               'client_primary_invoice_email', v_client.primary_invoice_email,
+            'agency_name', v_def.agency_name,
+            'agency_logo', v_def.agency_logo,
+            'agency_logo_url', v_def.agency_logo,
+            'registered_address', v_def.registered_address,
+            'company_reg_number', v_def.company_reg_number,
+            'company_registration_number', v_def.company_reg_number,
               'vat_chargeable', coalesce(v_client.vat_chargeable,true),
               'applied_vat_rate_pct', v_vat_rate,
               'payment_terms_days', v_terms_days,
