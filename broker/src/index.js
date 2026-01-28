@@ -182,9 +182,11 @@ const DEFAULT_GRID_PREFS = {
 import puppeteer from "@cloudflare/puppeteer";
 
 // --- Helpers ---------------------------------------------------------------
+// --- Helpers ---------------------------------------------------------------
 
 async function withBrowser(env, fn) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
+
   const log = (level, msg, extra) => {
     if (!LOG) return;
     try {
@@ -193,61 +195,134 @@ async function withBrowser(env, fn) {
         (extra && typeof extra === 'object') ? extra : {}
       );
       (level === 'error' ? console.error : console.log)(JSON.stringify(payload));
-    } catch (e) {
+    } catch {
       try { (level === 'error' ? console.error : console.log)(msg); } catch {}
     }
   };
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-  // Soft, best-effort in-isolate cooldown to avoid thrashing the BR pool on free plans.
+  // Config-driven backoff/cooldown (invpdf_effective), with safe fallbacks.
+  let invpdf = null;
+  try {
+    const s = await loadSettingsDefaults(env);
+    invpdf = (s && s.importConfig && s.importConfig.invpdf_effective && typeof s.importConfig.invpdf_effective === 'object')
+      ? s.importConfig.invpdf_effective
+      : null;
+  } catch {
+    invpdf = null;
+  }
+
+  const mode = String(invpdf?.mode || 'free').trim().toLowerCase() === 'paid' ? 'paid' : 'free';
+
+  const defaultCfg = (mode === 'paid')
+    ? {
+        cooldown_ms: 250,
+        retry_backoff_ms: [250, 750, 1750, 3500],
+        max_total_retry_ms: 15000,
+        retry_on_429: false
+      }
+    : {
+        cooldown_ms: 2000,
+        retry_backoff_ms: [750, 1750],
+        max_total_retry_ms: 6000,
+        retry_on_429: false
+      };
+
+  const cooldownMs = (() => {
+    const n = Number(invpdf?.cooldown_ms);
+    const v = Number.isFinite(n) ? Math.trunc(n) : defaultCfg.cooldown_ms;
+    return Math.max(0, Math.min(v, 60000));
+  })();
+
+  const retryBackoff = (() => {
+    const raw = invpdf?.retry_backoff_ms;
+    if (Array.isArray(raw) && raw.length) {
+      const arr = raw
+        .map((x) => Math.trunc(Number(x)))
+        .filter((x) => Number.isFinite(x) && x >= 0 && x <= 60000);
+      if (arr.length) return arr;
+    }
+    return defaultCfg.retry_backoff_ms;
+  })();
+
+  const maxTotalRetryMs = (() => {
+    const n = Number(invpdf?.max_total_retry_ms);
+    const v = Number.isFinite(n) ? Math.trunc(n) : defaultCfg.max_total_retry_ms;
+    return Math.max(0, Math.min(v, 120000));
+  })();
+
+  const retryOn429 = (invpdf?.retry_on_429 === true) ? true : defaultCfg.retry_on_429;
+
+  // Soft, best-effort in-isolate cooldown to avoid thrashing BR pool when saturated.
   const nowMs = Date.now();
   const cooldownUntil = Number(globalThis.__BROWSER_COOLDOWN_UNTIL_MS || 0);
   if (cooldownUntil && nowMs < cooldownUntil) {
-    const waitMs = Math.min(5000, Math.max(0, cooldownUntil - nowMs));
-    log('log', 'cooldown_wait', { wait_ms: waitMs });
-    if (waitMs > 0) await sleep(waitMs);
+    const waitMs = Math.min(60000, Math.max(0, cooldownUntil - nowMs));
+    if (waitMs > 0) {
+      log('log', 'cooldown_wait', { mode, wait_ms: waitMs });
+      await sleep(waitMs);
+    }
   }
 
   const t0 = Date.now();
   let browser = null;
+  let lastErr = null;
 
   const isNoBrowserAvailable = (err) => {
     const msg = String(err?.message || err || '');
-    return /No browser available/i.test(msg) || /code:\s*503/i.test(msg) || /503/.test(msg);
+    return /No browser available/i.test(msg) || /code:\s*503/i.test(msg) || /\b503\b/.test(msg);
   };
 
-  // Jittered backoff: short by default (free-plan friendly), only for 503/no-capacity.
-  const backoffMs = [250, 750, 1750]; // total worst-case ~2.8s + launch times
-  let lastErr = null;
+  const isRateLimited = (err) => {
+    const msg = String(err?.message || err || '');
+    return /Rate limit exceeded/i.test(msg) || /code:\s*429/i.test(msg) || /\b429\b/.test(msg);
+  };
 
-  for (let attempt = 0; attempt <= backoffMs.length; attempt++) {
+  const isRetriable = (err) => {
+    if (isNoBrowserAvailable(err)) return true;
+    if (isRateLimited(err)) return !!retryOn429;
+    return false;
+  };
+
+  // IMPORTANT: avoid rapid 503->429 escalation. We only retry on a small, spaced backoff,
+  // and we set a short isolate-level cooldown after a 503.
+  for (let attempt = 0; attempt <= retryBackoff.length; attempt++) {
     try {
-      log('log', 'launch_start', { attempt });
+      log('log', 'launch_start', { mode, attempt });
+
       browser = await puppeteer.launch(env.BROWSER); // <-- BROWSER binding from wrangler.toml
-      log('log', 'launch_ok', { ms: Date.now() - t0, attempt });
+
+      log('log', 'launch_ok', { mode, attempt, ms: Date.now() - t0 });
 
       // Best-effort lifecycle hints
       try {
         if (browser && typeof browser.on === 'function') {
           browser.on('disconnected', () => {
-            log('error', 'browser_disconnected', { ms: Date.now() - t0 });
+            log('error', 'browser_disconnected', { mode, ms: Date.now() - t0 });
           });
         }
       } catch {}
 
       const tFn0 = Date.now();
       const out = await fn(browser);
-      log('log', 'fn_ok', { ms: Date.now() - tFn0, total_ms: Date.now() - t0, attempt });
+
+      log('log', 'fn_ok', { mode, attempt, ms: Date.now() - tFn0, total_ms: Date.now() - t0 });
       return out;
     } catch (err) {
       lastErr = err;
 
-      const retriable = isNoBrowserAvailable(err);
+      const retriable = isRetriable(err);
+      const noBrowser = isNoBrowserAvailable(err);
+      const rateLimited = isRateLimited(err);
+
       log('error', 'withBrowser_exception', {
-        ms: Date.now() - t0,
+        mode,
         attempt,
         retriable,
+        no_browser: noBrowser,
+        rate_limited: rateLimited,
+        ms: Date.now() - t0,
         err_name: err?.name || null,
         err_message: err?.message || String(err || ''),
         err_stack: err?.stack || null
@@ -259,28 +334,191 @@ async function withBrowser(env, fn) {
 
       if (!retriable) break;
 
-      // Set a short cooldown to avoid hammering BR pool when saturated.
-      globalThis.__BROWSER_COOLDOWN_UNTIL_MS = Date.now() + 2000;
+      // If pool is empty, add cooldown to reduce contention
+      if (noBrowser) {
+        globalThis.__BROWSER_COOLDOWN_UNTIL_MS = Date.now() + cooldownMs;
+      }
 
-      if (attempt < backoffMs.length) {
-        const base = backoffMs[attempt];
+      const elapsed = Date.now() - t0;
+      if (elapsed >= maxTotalRetryMs) {
+        log('error', 'retry_budget_exhausted', { mode, attempt, elapsed_ms: elapsed, max_total_retry_ms: maxTotalRetryMs });
+        break;
+      }
+
+      if (attempt < retryBackoff.length) {
+        const base = retryBackoff[attempt];
         const jitter = Math.floor(Math.random() * 150);
-        const wait = base + jitter;
-        log('log', 'retry_wait', { attempt, wait_ms: wait });
+        const wait = Math.max(0, base + jitter);
+
+        log('log', 'retry_wait', { mode, attempt, wait_ms: wait });
         await sleep(wait);
         continue;
       }
 
       break;
     } finally {
-      // If we had a successful browser and fn returned, we close in the outer finally below.
-      // For failed attempts we closed above.
+      // If success path returned, finally won't execute.
+      // For failures, we already close browser above.
     }
   }
 
-  // Ensure we throw the last error so callers can decide how to report it.
-  const errToThrow = lastErr || new Error('Unable to create new browser');
-  throw errToThrow;
+  // Final close guard
+  try { if (browser) await browser.close(); } catch {}
+
+  throw (lastErr || new Error('Unable to create new browser'));
+}
+
+
+// ============================================================================
+// UPDATED: ensureInvoicePdf(env, invoiceId, opts)
+// - Accepts opts.force_regen
+// - Queue-first default on free mode (does NOT render unless opts.allow_render===true)
+// - Uses invpdf_enqueue_one RPC when PDF is missing/stale and we are not allowed to render
+//
+// opts:
+//   - req: optional Request (used for presignR2Url + download URL base)
+//   - user: optional user object for audit attribution (can be null for system tasks)
+//   - force_regen: boolean (default false)
+//   - allow_render: boolean (default false)  // intended for the invpdf worker
+// ============================================================================
+async function ensureInvoicePdf(env, invoiceId, opts = {}) {
+  const enc = encodeURIComponent;
+
+  const req =
+    (opts && opts.req) ||
+    new Request((env.PUBLIC_DOWNLOAD_BASE_URL || 'https://localhost') + '/internal/ensure-invoice-pdf');
+
+  const forceRegen = !!(opts && (opts.force_regen === true || opts.forceRegen === true));
+  const allowRenderOverride = !!(opts && opts.allow_render === true);
+
+  // Load invpdf effective config (free vs paid)
+  let invpdf = null;
+  try {
+    const s = await loadSettingsDefaults(env);
+    invpdf = (s && s.importConfig && s.importConfig.invpdf_effective && typeof s.importConfig.invpdf_effective === 'object')
+      ? s.importConfig.invpdf_effective
+      : null;
+  } catch {
+    invpdf = null;
+  }
+
+  const mode = String(invpdf?.mode || 'free').trim().toLowerCase() === 'paid' ? 'paid' : 'free';
+
+  // Policy:
+  // - free: do not render unless allow_render===true
+  // - paid: still do not render unless allow_render===true (keep deterministic worker ownership)
+  //         OR invpdf.ensure_can_render===true (optional knob)
+  const allowRender = allowRenderOverride || (invpdf?.ensure_can_render === true);
+
+  // 1) Fast path: key already exists AND is fresh (unless force_regen)
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/invoices` +
+        `?id=eq.${enc(invoiceId)}` +
+        `&select=id,invoice_pdf_r2_key,invoice_pdf_generated_at_utc,updated_at` +
+        `&limit=1`
+    );
+
+    const inv0 = rows?.[0] || null;
+
+    const key0 = inv0?.invoice_pdf_r2_key ? String(inv0.invoice_pdf_r2_key).trim() : '';
+    const genAt0 = inv0?.invoice_pdf_generated_at_utc || null;
+    const updAt0 = inv0?.updated_at || null;
+
+    const fresh = (() => {
+      if (!key0 || !genAt0 || !updAt0) return false;
+      const tUpd = new Date(updAt0).getTime();
+      const tGen = new Date(genAt0).getTime();
+      return (Number.isFinite(tUpd) && Number.isFinite(tGen) && tUpd <= tGen);
+    })();
+
+    if (!forceRegen && key0 && fresh) {
+      return { ok: true, invoice_id: invoiceId, invoice_pdf_r2_key: key0, rendered: false, cached: true };
+    }
+
+    // If key exists but stale / force requested and we cannot render: enqueue and return not-ready.
+    if (!allowRender) {
+      try {
+        await sbRpc(env, 'invpdf_enqueue_one', {
+          p_invoice_id: String(invoiceId),
+          p_force_regen: !!forceRegen
+        });
+      } catch {}
+
+      return {
+        ok: false,
+        invoice_id: invoiceId,
+        rendered: false,
+        error: (key0 ? 'PDF_STALE' : 'PDF_NOT_READY'),
+        mode,
+        queued: true
+      };
+    }
+  } catch {
+    // If we cannot read invoice, still fall through (render path may also fail; enqueue is best-effort)
+    if (!allowRender) {
+      try {
+        await sbRpc(env, 'invpdf_enqueue_one', {
+          p_invoice_id: String(invoiceId),
+          p_force_regen: !!forceRegen
+        });
+      } catch {}
+
+      return {
+        ok: false,
+        invoice_id: invoiceId,
+        rendered: false,
+        error: 'PDF_NOT_READY',
+        mode,
+        queued: true
+      };
+    }
+  }
+
+  // 2) Render + store (shared core) — ONLY when allowRender==true
+  const core = await _renderInvoiceBundleAndStore(env, req, invoiceId, opts.user || null, { force_regen: !!forceRegen });
+  if (!core?.ok) {
+    return { ok: false, invoice_id: invoiceId, rendered: false, error: core?.error || 'RENDER_FAILED' };
+  }
+
+  // 3) Re-read invoice row (explicit requirement)
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${enc(invoiceId)}&select=id,invoice_pdf_r2_key&limit=1`
+    );
+    const inv1 = rows?.[0] || null;
+    const key1 = inv1?.invoice_pdf_r2_key ? String(inv1.invoice_pdf_r2_key).trim() : null;
+
+    if (!key1) {
+      return { ok: false, invoice_id: invoiceId, rendered: true, error: 'RENDERED_BUT_KEY_NOT_SAVED' };
+    }
+
+    return {
+      ok: true,
+      invoice_id: invoiceId,
+      invoice_pdf_r2_key: key1,
+      rendered: true,
+      attached_timesheets: core.attached_timesheets || 0,
+      attached_hr: !!core.attached_hr,
+      attached_nhsp: !!core.attached_nhsp,
+      attached_evidence: core.attached_evidence || 0
+    };
+  } catch {
+    // If re-read fails, still return key from core
+    return {
+      ok: true,
+      invoice_id: invoiceId,
+      invoice_pdf_r2_key: core.pdf_key,
+      rendered: true,
+      attached_timesheets: core.attached_timesheets || 0,
+      attached_hr: !!core.attached_hr,
+      attached_nhsp: !!core.attached_nhsp,
+      attached_evidence: core.attached_evidence || 0,
+      warning: 'RE_READ_FAILED'
+    };
+  }
 }
 
 
@@ -544,6 +782,104 @@ async function loadSettingsDefaults(env) {
       useRatesBatchRpc: _asBool(tsfinCfg.use_rates_batch_rpc, true),
     };
 
+    // ─────────────────────────────────────────────────────────────
+    // ✅ NEW: invpdf knobs (nested under cfg.invpdf)
+    // Supports:
+    //  - cfg.invpdf as object OR JSON string
+    //  - cfg.invpdf.mode = 'free'|'paid'
+    //  - optional cfg.invpdf.free / cfg.invpdf.paid tier objects
+    //  - legacy keys: dequeue_limit_free/paid, enqueue_limit_free/paid at top-level invpdf
+    // Exposes: importConfig.invpdf_effective (tier-resolved)
+    // ─────────────────────────────────────────────────────────────
+    const invpdfCfgRaw0 = cfg.invpdf;
+    const invpdfCfg0 = (typeof invpdfCfgRaw0 === 'object' && invpdfCfgRaw0 !== null)
+      ? invpdfCfgRaw0
+      : (_safeJsonParseMaybe(invpdfCfgRaw0, {}) || {});
+
+    const invpdfModeRaw = String(invpdfCfg0.mode || invpdfCfg0.plan || invpdfCfg0.tier || 'free').trim().toLowerCase();
+    const invpdfMode = (invpdfModeRaw === 'paid') ? 'paid' : 'free';
+
+    const invpdfFreeRaw = invpdfCfg0.free;
+    const invpdfPaidRaw = invpdfCfg0.paid;
+
+    const invpdfFree = (typeof invpdfFreeRaw === 'object' && invpdfFreeRaw !== null)
+      ? invpdfFreeRaw
+      : (_safeJsonParseMaybe(invpdfFreeRaw, {}) || {});
+
+    const invpdfPaid = (typeof invpdfPaidRaw === 'object' && invpdfPaidRaw !== null)
+      ? invpdfPaidRaw
+      : (_safeJsonParseMaybe(invpdfPaidRaw, {}) || {});
+
+    const invpdfTier = (invpdfMode === 'paid') ? invpdfPaid : invpdfFree;
+
+    const _asIntArray = (v, dflt) => {
+      if (Array.isArray(v)) {
+        const out = [];
+        for (const x of v) {
+          const n = Number(x);
+          if (Number.isFinite(n) && n >= 0) out.push(Math.trunc(n));
+        }
+        return out.length ? out : dflt;
+      }
+      // JSON string?
+      const parsed = _safeJsonParseMaybe(v, null);
+      if (Array.isArray(parsed)) return _asIntArray(parsed, dflt);
+      return dflt;
+    };
+
+    const _tierOr = (tierVal, topVal, parseFn, dflt) => {
+      const v = (tierVal !== undefined) ? tierVal : topVal;
+      return parseFn(v, dflt);
+    };
+
+    const invpdfEffective = {
+      mode: invpdfMode,
+
+      // Behaviour toggles (tier can override)
+      queue_on_issue: _tierOr(invpdfTier.queue_on_issue, invpdfCfg0.queue_on_issue, _asBool, true),
+      queue_on_batch_issue: _tierOr(invpdfTier.queue_on_batch_issue, invpdfCfg0.queue_on_batch_issue, _asBool, true),
+      queue_on_render: _tierOr(invpdfTier.queue_on_render, invpdfCfg0.queue_on_render, _asBool, true),
+      queue_on_email: _tierOr(invpdfTier.queue_on_email, invpdfCfg0.queue_on_email, _asBool, true),
+
+      // Handler-side cap (tier can override)
+      max_enqueue_per_call: _tierOr(invpdfTier.max_enqueue_per_call, invpdfCfg0.max_enqueue_per_call, _asPosInt, 500),
+
+      // Worker knobs (tier can override). We support both:
+      //  - invpdf.{free|paid}.dequeue_limit / enqueue_sweep_limit
+      //  - legacy invpdf.dequeue_limit_free/paid and invpdf.enqueue_limit_free/paid
+      dequeue_limit: (() => {
+        const legacy = (invpdfMode === 'paid')
+          ? invpdfCfg0.dequeue_limit_paid
+          : invpdfCfg0.dequeue_limit_free;
+        return _tierOr(invpdfTier.dequeue_limit, legacy, _asPosInt, (invpdfMode === 'paid' ? 5 : 1));
+      })(),
+
+      enqueue_sweep_limit: (() => {
+        const legacy = (invpdfMode === 'paid')
+          ? invpdfCfg0.enqueue_limit_paid
+          : invpdfCfg0.enqueue_limit_free;
+        return _tierOr(invpdfTier.enqueue_sweep_limit, legacy, _asPosInt, (invpdfMode === 'paid' ? 2000 : 500));
+      })(),
+
+      // Optional toggles for paid-mode behaviour
+      allow_inline_render: _tierOr(invpdfTier.allow_inline_render, invpdfCfg0.allow_inline_render, _asBool, (invpdfMode === 'paid')),
+      email_worker_can_render: _tierOr(invpdfTier.email_worker_can_render, invpdfCfg0.email_worker_can_render, _asBool, false),
+
+      // Backoff/cooldown (used by withBrowser / worker). Tier can override.
+      cooldown_ms: _tierOr(invpdfTier.cooldown_ms, invpdfCfg0.cooldown_ms, _asPosInt, (invpdfMode === 'paid' ? 1500 : 4000)),
+      retry_backoff_ms: (() => {
+        const dflt = (invpdfMode === 'paid') ? [500, 1500, 3000] : [2000, 5000, 15000];
+        const tierVal = (invpdfTier.retry_backoff_ms !== undefined) ? invpdfTier.retry_backoff_ms : undefined;
+        const topVal = invpdfCfg0.retry_backoff_ms;
+        const chosen = (tierVal !== undefined) ? tierVal : topVal;
+        return _asIntArray(chosen, dflt);
+      })(),
+    };
+
+    // Expose invpdf config
+    importConfig.invpdf = invpdfCfg0;
+    importConfig.invpdf_effective = invpdfEffective;
+
     // ✅ NEW: finance email settings (db-driven)
     const financeEmail = row.finance_email ? String(row.finance_email).trim() : null;
 
@@ -604,6 +940,21 @@ async function loadSettingsDefaults(env) {
           useContextRpc: true,
           useWriteBatchRpc: true,
           useRatesBatchRpc: true,
+        },
+        invpdf: {},
+        invpdf_effective: {
+          mode: 'free',
+          queue_on_issue: true,
+          queue_on_batch_issue: true,
+          queue_on_render: true,
+          queue_on_email: true,
+          max_enqueue_per_call: 500,
+          dequeue_limit: 1,
+          enqueue_sweep_limit: 500,
+          allow_inline_render: false,
+          email_worker_can_render: false,
+          cooldown_ms: 4000,
+          retry_backoff_ms: [2000, 5000, 15000]
         }
       },
 
@@ -2342,6 +2693,200 @@ async function handleTsPdfDrain(env, req) {
 }
 
 
+// ─────────────────────────────────────────────────────────────
+// Invoice PDF outbox RPC helpers (mirror TS PDF outbox pattern)
+// Aligns with SQL RPCs:
+// - invpdf_enqueue_ready_for_render(p_limit)
+// - invpdf_dequeue_batch_ids(p_limit)
+// - invpdf_work_success_bulk(p_ids)
+// - invpdf_work_fail_bulk(p_rows)
+// ─────────────────────────────────────────────────────────────
+
+async function rpcInvpdfEnqueueReadyForRender(env, { limit = 500 } = {}) {
+  // returns int (count inserted) via RPC result shape
+  return await sbRpc(env, "invpdf_enqueue_ready_for_render", { p_limit: limit });
+}
+
+async function rpcInvpdfDequeueBatchIds(env, { limit = 10 } = {}) {
+  const res = await sbRpc(env, "invpdf_dequeue_batch_ids", { p_limit: limit });
+  return _rows(res);
+}
+
+async function rpcInvpdfWorkSuccessBulk(env, { outboxIds = [] } = {}) {
+  if (!Array.isArray(outboxIds) || outboxIds.length === 0) return 0;
+  return await sbRpc(env, "invpdf_work_success_bulk", { p_ids: outboxIds });
+}
+
+async function rpcInvpdfWorkFailBulk(env, { fails = [] } = {}) {
+  if (!Array.isArray(fails) || fails.length === 0) return 0;
+  // p_rows expects JSONB array [{outbox_id, error}, ...]
+  return await sbRpc(env, "invpdf_work_fail_bulk", { p_rows: fails });
+}
+
+// ─────────────────────────────────────────────────────────────
+// Invoice PDF Outbox worker (single batch runner)
+// NOTE: Designed for free-plan throttling (keep limit small, e.g. 1)
+// ─────────────────────────────────────────────────────────────
+async function runInvoicePdfWorkerOnce(env, { limit = 1, enqueueFirst = true, enqueueLimit = 500 } = {}) {
+  const report = {
+    enqueued: 0,
+    picked: 0,
+    reused: 0,
+    rendered: 0,
+    ok: 0,
+    failed: 0
+  };
+
+  const enc = encodeURIComponent;
+
+  // 0) Optional enqueue (cheap, SQL-side filtering)
+  if (enqueueFirst) {
+    try {
+      const enqRes = await rpcInvpdfEnqueueReadyForRender(env, { limit: enqueueLimit });
+      report.enqueued =
+        (typeof enqRes === "number") ? enqRes :
+        (typeof enqRes?.data === "number") ? enqRes.data :
+        (typeof enqRes?.rows?.[0] === "number") ? enqRes.rows[0] :
+        (typeof enqRes?.rows?.[0]?.invpdf_enqueue_ready_for_render === "number") ? enqRes.rows[0].invpdf_enqueue_ready_for_render :
+        0;
+    } catch {
+      report.enqueued = 0;
+    }
+  }
+
+  // 1) Dequeue a batch (leased rows)
+  const leased = await rpcInvpdfDequeueBatchIds(env, { limit });
+  report.picked = leased.length;
+  if (leased.length === 0) return report;
+
+  // 2) Batch pre-check: if invoice PDF is already current and job is not FORCE, reuse/ack success
+  const invoiceIds = leased.map(r => String(r?.invoice_id || "")).filter(Boolean);
+  const invById = new Map();
+
+  if (invoiceIds.length) {
+    try {
+      // limit is small (free plan), so single IN() fetch is fine
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/invoices` +
+          `?id=in.(${invoiceIds.map(enc).join(",")})` +
+          `&select=id,invoice_pdf_r2_key,invoice_pdf_generated_at_utc,updated_at` +
+          `&limit=${Math.max(1, Math.min(200, invoiceIds.length))}`,
+        false
+      );
+      for (const r of (rows || [])) {
+        if (r?.id) invById.set(String(r.id), r);
+      }
+    } catch {
+      // Non-fatal: if this fails we will just try to render.
+      invById.clear();
+    }
+  }
+
+  const okOutboxIds = [];
+  const fails = [];
+
+  // 3) Render each leased job (or reuse)
+  for (const job of leased) {
+    const outboxId = job?.outbox_id ? String(job.outbox_id) : null;
+    const invoiceId = job?.invoice_id ? String(job.invoice_id) : null;
+    const reason = job?.reason ? String(job.reason).toUpperCase() : "";
+    const forceRegen = (job?.force_regen === true) || (reason === "FORCE_REGEN");
+
+    if (!outboxId || !invoiceId) {
+      fails.push({ outbox_id: outboxId || null, error: "Missing outbox_id or invoice_id" });
+      continue;
+    }
+
+    try {
+      // reuse if already generated and current (unless force regen)
+      const inv = invById.get(invoiceId) || null;
+      const key = (inv && typeof inv.invoice_pdf_r2_key === "string") ? inv.invoice_pdf_r2_key.trim() : "";
+      const genAt = inv ? inv.invoice_pdf_generated_at_utc : null;
+      const updAt = inv ? inv.updated_at : null;
+
+      if (!forceRegen && key && genAt && updAt) {
+        const tUpd = new Date(updAt).getTime();
+        const tGen = new Date(genAt).getTime();
+        if (Number.isFinite(tUpd) && Number.isFinite(tGen) && tUpd <= tGen) {
+          report.reused++;
+          okOutboxIds.push(outboxId);
+          continue;
+        }
+      }
+
+      // Render (single browser session per invoice happens inside _renderInvoiceBundleAndStore)
+      const fakeReq = new Request("https://cloudtms.arthur-rai.co.uk/api/invpdf/worker", { method: "GET" });
+
+      const core = await _renderInvoiceBundleAndStore(env, fakeReq, invoiceId, null, {
+        force_regen: forceRegen
+      });
+
+      if (!core?.ok || !core?.pdf_key) {
+        throw new Error(core?.error || "Render failed");
+      }
+
+      report.rendered++;
+      okOutboxIds.push(outboxId);
+    } catch (e) {
+      fails.push({
+        outbox_id: outboxId,
+        error: e?.message || String(e || "Unknown error")
+      });
+    }
+  }
+
+  // 4) Bulk ACKs
+  if (okOutboxIds.length > 0) {
+    try {
+      await rpcInvpdfWorkSuccessBulk(env, { outboxIds: okOutboxIds });
+      report.ok += okOutboxIds.length;
+    } catch {
+      report.failed += okOutboxIds.length;
+    }
+  }
+
+  if (fails.length > 0) {
+    try {
+      await rpcInvpdfWorkFailBulk(env, { fails });
+      report.failed += fails.length;
+    } catch {
+      report.failed += fails.length;
+    }
+  }
+
+  return report;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Admin endpoint: drain Invoice PDF outbox once (manual ops/testing)
+// POST /api/invpdf/queue/drain
+// Body: { "limit": 1, "enqueue_first": true, "enqueue_limit": 500 }
+// ─────────────────────────────────────────────────────────────
+async function handleInvoicePdfDrain(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+
+  const limit = Math.max(1, Math.min(50, Number(body?.limit ?? 1) || 1));
+  const enqueueFirst = (body?.enqueue_first === false) ? false : true;
+  const enqueueLimit = Math.max(1, Math.min(2000, Number(body?.enqueue_limit ?? 500) || 500));
+
+  const report = await runInvoicePdfWorkerOnce(env, {
+    limit,
+    enqueueFirst,
+    enqueueLimit
+  });
+
+  return withCORS(env, req, ok({
+    ...report,
+    limit,
+    enqueue_first: enqueueFirst,
+    enqueue_limit: enqueueLimit
+  }));
+}
 
 
 async function renderTimesheetPDFGeneratedAndSave(env, timesheetId, preload = null) {
@@ -17375,43 +17920,7 @@ async function handleTimesheetDelete(env, req, timesheetId) {
   return withCORS(env, req, ok(rows || []));
 }
 
-async function handleInvoiceIssue(env, req, invoiceId) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
 
-  try {
-    const actorUserId = (user && user.id) ? user.id : null;
-
-    const r = await sbRpc(env, 'invoice_issue_one', {
-      p_invoice_id: invoiceId,
-      p_actor_user_id: actorUserId
-    });
-
-    const rows = Array.isArray(r) ? r : (r?.data || []);
-    const x = rows?.[0] || null;
-    if (!x) return withCORS(env, req, serverError('Issue RPC returned no result'));
-
-    const st = String(x.status || '').toUpperCase();
-    if (st === 'ON_HOLD') {
-      return withCORS(env, req, ok({
-        status: 'ON_HOLD',
-        reasons: x.reasons || [],
-        on_hold_reason: x.on_hold_reason || null
-      }));
-    }
-
-    if (st === 'ISSUED') {
-      return withCORS(env, req, ok({
-        status: 'ISSUED',
-        issued_at_utc: x.issued_at_utc || null
-      }));
-    }
-
-    return withCORS(env, req, serverError(`Unexpected issue status: ${x.status}`));
-  } catch (e) {
-    return withCORS(env, req, serverError('Failed to issue invoice'));
-  }
-}
 
 
  async function handleInvoicesPrecheck(env, req) {
@@ -35025,17 +35534,29 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
   const err = validateEmailPayload(base);
   if (err) throw new Error(err);
 
-  // Pull finance sender config (for invoices/remittances)
+  // Pull finance sender config (for invoices/remittances) + invpdf effective config
   let financeEmail = null;
+  let invpdfEffective = null;
+
   try {
     const s = await loadSettingsDefaults(env);
     financeEmail = (typeof s?.finance_email === 'string') ? s.finance_email.trim() : null;
+    invpdfEffective = (s && s.importConfig && s.importConfig.invpdf_effective && typeof s.importConfig.invpdf_effective === 'object')
+      ? s.importConfig.invpdf_effective
+      : null;
   } catch {}
+
+  const invpdfMode = String(invpdfEffective?.mode || 'free').trim().toLowerCase() === 'paid' ? 'paid' : 'free';
+  const emailWorkerCanRender = (invpdfMode === 'paid') && (invpdfEffective?.email_worker_can_render === true);
+
+  const enc = encodeURIComponent;
 
   // Resolve attachments:
   // - { contentBase64, name } -> pass-through
   // - { r2_key, name } -> fetch bytes from R2
-  // - { invoice_id, filename } -> ensureInvoicePdf -> fetch from R2
+  // - { invoice_id, filename } -> queue-first:
+  //     * free: DO NOT RENDER; only check invoices.invoice_pdf_r2_key exists; else throw PDF_NOT_READY
+  //     * paid (optional): if invpdf.email_worker_can_render === true, may call ensureInvoicePdf; else same as free
   const resolved = [];
 
   for (const a of base.attachments) {
@@ -35051,14 +35572,37 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
       const invId = String(a.invoice_id).trim();
       if (!invId) throw new Error('Invalid invoice_id attachment');
 
-      // Ensure PDF exists (internal helper, no HTTP)
-      const ensured = await ensureInvoicePdf(env, invId, { req: outboxRow?._req || undefined, user: null });
-      if (!ensured?.ok || !ensured.invoice_pdf_r2_key) {
-        throw new Error(`PDF_NOT_READY: invoice ${invId}`);
+      let pdfKey = null;
+
+      if (emailWorkerCanRender) {
+        // Paid-mode optional: allow inline ensure (may render) only when explicitly enabled
+        const ensured = await ensureInvoicePdf(env, invId, { req: outboxRow?._req || undefined, user: null });
+        if (!ensured?.ok || !ensured.invoice_pdf_r2_key) {
+          throw new Error(`PDF_NOT_READY: invoice ${invId}`);
+        }
+        pdfKey = String(ensured.invoice_pdf_r2_key).trim();
+      } else {
+        // Free-mode (and paid-mode default): DO NOT RENDER. Only check stored invoice_pdf_r2_key exists.
+        const { rows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/invoices` +
+            `?id=eq.${enc(invId)}` +
+            `&select=invoice_pdf_r2_key` +
+            `&limit=1`,
+          false
+        );
+
+        const inv = rows && rows.length ? rows[0] : null;
+        const key = (inv && typeof inv.invoice_pdf_r2_key === 'string') ? inv.invoice_pdf_r2_key.trim() : '';
+        if (!key) {
+          throw new Error(`PDF_NOT_READY: invoice ${invId}`);
+        }
+        pdfKey = key;
       }
 
-      const key = String(ensured.invoice_pdf_r2_key).trim();
-      const contentBase64 = await fetchAttachmentBase64FromR2(env, key);
+      if (!pdfKey) throw new Error(`PDF_NOT_READY: invoice ${invId}`);
+
+      const contentBase64 = await fetchAttachmentBase64FromR2(env, pdfKey);
       resolved.push({ name: a.filename || a.name || `Invoice_${invId}.pdf`, contentBase64 });
       continue;
     }
@@ -35089,7 +35633,11 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
       type: outboxRow.type,
       outbox_id: outboxRow.id,
       // finance emails use the finance mailbox (Flow can use this if configured)
-      fromMailbox: (outboxRow.type === 'INVOICE' || outboxRow.type === 'REMITTANCE') ? (financeEmail || null) : null
+      fromMailbox: (outboxRow.type === 'INVOICE' || outboxRow.type === 'REMITTANCE') ? (financeEmail || null) : null,
+      invpdf: {
+        mode: invpdfMode,
+        email_worker_can_render: !!emailWorkerCanRender
+      }
     }
   };
 
@@ -46700,48 +47248,351 @@ async function handleInvoiceBatchGenerateConfirm(env, req) {
 }
 
 
-async function handleInvoiceRender(env, req, invoiceId) {
-  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
-  const log = (level, msg, extra) => {
-    if (!LOG) return;
-    try {
-      const payload = Object.assign(
-        {
-          tag: 'INVOICE_RENDER_ROUTE',
-          at_utc: new Date().toISOString(),
-          cf_ray: req?.headers?.get?.('cf-ray') || null,
-          invoice_id: invoiceId || null,
-          msg: String(msg || '')
-        },
-        (extra && typeof extra === 'object') ? extra : {}
-      );
-      (level === 'error' ? console.error : console.log)(JSON.stringify(payload));
-    } catch (e) {
-      try { (level === 'error' ? console.error : console.log)(msg); } catch {}
-    }
-  };
+async function handleInvoiceIssue(env, req, invoiceId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
 
-  const t0 = Date.now();
-
-  let user = null;
   try {
-    user = await requireUser(env, req, ['admin']);
-    if (!user) {
-      log('error', 'unauthorized', { ms: Date.now() - t0 });
-      return unauthorized();
-    }
-  } catch (err) {
-    log('error', 'requireUser threw', {
-      ms: Date.now() - t0,
-      err_name: err?.name || null,
-      err_message: err?.message || String(err || ''),
-      err_stack: err?.stack || null
+    const actorUserId = (user && user.id) ? user.id : null;
+
+    const r = await sbRpc(env, 'invoice_issue_one', {
+      p_invoice_id: invoiceId,
+      p_actor_user_id: actorUserId
     });
-    return unauthorized();
+
+    const rows = Array.isArray(r) ? r : (r?.data || []);
+    const x = rows?.[0] || null;
+    if (!x) return withCORS(env, req, serverError('Issue RPC returned no result'));
+
+    const st = String(x.status || '').toUpperCase();
+    if (st === 'ON_HOLD') {
+      return withCORS(env, req, ok({
+        status: 'ON_HOLD',
+        reasons: x.reasons || [],
+        on_hold_reason: x.on_hold_reason || null
+      }));
+    }
+
+    if (st === 'ISSUED') {
+      // ✅ Enqueue invoice PDF render job via RPC (idempotent)
+      let pdf_queued = false;
+      let pdf_rows_affected = 0;
+
+      try {
+        const s = await loadSettingsDefaults(env);
+        const invpdf = (s && s.importConfig && s.importConfig.invpdf_effective && typeof s.importConfig.invpdf_effective === 'object')
+          ? s.importConfig.invpdf_effective
+          : null;
+
+        const queueOnIssue = (invpdf?.queue_on_issue !== false);
+
+        if (queueOnIssue) {
+          const enq = await sbRpc(env, 'invpdf_enqueue_one', {
+            p_invoice_id: String(invoiceId),
+            p_force_regen: false
+          });
+
+          const n =
+            (typeof enq === 'number') ? enq :
+            (typeof enq?.data === 'number') ? enq.data :
+            (Array.isArray(enq) && typeof enq[0] === 'number') ? enq[0] :
+            (Array.isArray(enq?.data) && typeof enq.data[0] === 'number') ? enq.data[0] :
+            0;
+
+          pdf_rows_affected = Number.isFinite(Number(n)) ? Number(n) : 0;
+          pdf_queued = (pdf_rows_affected > 0);
+        }
+      } catch {
+        pdf_queued = false;
+        pdf_rows_affected = 0;
+      }
+
+      return withCORS(env, req, ok({
+        status: 'ISSUED',
+        issued_at_utc: x.issued_at_utc || null,
+        pdf_queued: !!pdf_queued,
+        pdf_rows_affected: pdf_rows_affected
+      }));
+    }
+
+    return withCORS(env, req, serverError(`Unexpected issue status: ${x.status}`));
+  } catch (e) {
+    return withCORS(env, req, serverError('Failed to issue invoice'));
   }
+}
+
+
+async function handleInvoiceBatchIssueConfirm(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch {}
+  if (!body || typeof body !== 'object') return withCORS(env, req, badRequest('Invalid JSON'));
+
+  const invoiceIds = body.invoice_ids;
+  if (!Array.isArray(invoiceIds) || invoiceIds.length === 0) {
+    return withCORS(env, req, badRequest('invoice_ids[] is required'));
+  }
+
+  const allowEarly = (() => {
+    const v = body.allow_early;
+    if (v === true) return true;
+    if (v === false) return false;
+    const s = String(v || '').trim().toLowerCase();
+    return (s === '1' || s === 'true' || s === 'yes' || s === 'y' || s === 'on');
+  })();
 
   const enc = encodeURIComponent;
 
+  const chunk = (arr, n) => {
+    const out = [];
+    for (let i = 0; i < (arr || []).length; i += n) out.push(arr.slice(i, i + n));
+    return out;
+  };
+
+  const parseYmd = (s) => {
+    const t = String(s || '').trim();
+    return (/^\d{4}-\d{2}-\d{2}$/.test(t)) ? t : null;
+  };
+
+  const addDaysYmd = (ymd, days) => {
+    const d0 = parseYmd(ymd);
+    if (!d0) return null;
+    const d = new Date(`${d0}T00:00:00Z`);
+    if (Number.isNaN(d.getTime())) return null;
+    d.setUTCDate(d.getUTCDate() + Number(days || 0));
+    const yyyy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const getInvoiceWeekStartFromHeader = (header) => {
+    if (!header || typeof header !== 'object') return null;
+    const meta = (header.meta && typeof header.meta === 'object') ? header.meta : null;
+    const v =
+      (meta && (meta.invoice_week_start || meta.invoiceWeekStart || meta.week_start || meta.weekStart)) ||
+      header.invoice_week_start ||
+      header.invoiceWeekStart ||
+      null;
+    return parseYmd(v);
+  };
+
+  // Normalize/unique ids (strings are fine; PostgREST will cast to uuid)
+  const ids = Array.from(new Set(invoiceIds.map(String).filter(Boolean)));
+
+  try {
+    const res = await sbRpc(env, 'invoice_issue_and_queue_emails_batch', {
+      p_invoice_ids: ids,
+      p_actor_user_id: user?.id || null,
+      p_allow_early: allowEarly
+    });
+
+    const out = Array.isArray(res) ? (res[0] ?? res) : (res?.data ?? res);
+
+    // ─────────────────────────────────────────────────────────────
+    // ✅ Enqueue invoice PDF render jobs via RPC (idempotent)
+    // Note: SQL may already enqueue; this call is safe and just bumps next_attempt_at.
+    // ─────────────────────────────────────────────────────────────
+    let pdf_queue_attempted = 0;
+    let pdf_queue_rows_affected = 0;
+
+    try {
+      const s = await loadSettingsDefaults(env);
+      const invpdf = (s && s.importConfig && s.importConfig.invpdf_effective && typeof s.importConfig.invpdf_effective === 'object')
+        ? s.importConfig.invpdf_effective
+        : null;
+
+      const queueOnBatchIssue = (invpdf?.queue_on_batch_issue !== false);
+
+      if (queueOnBatchIssue) {
+        const maxEnqueue = Math.max(1, Math.min(2000, Number(invpdf?.max_enqueue_per_call || 500) || 500));
+
+        const invoice_results = Array.isArray(out?.invoice_results) ? out.invoice_results : [];
+        const issuedIds = [];
+
+        for (const r0 of invoice_results) {
+          const iid = r0?.invoice_id ? String(r0.invoice_id) : '';
+          if (!iid) continue;
+
+          const st = String(r0?.status || r0?.result_status || r0?.state || '').toUpperCase();
+          const issuedAt = r0?.issued_at_utc || r0?.issued_at || null;
+
+          if (st === 'ISSUED' || !!issuedAt) issuedIds.push(iid);
+        }
+
+        const uniqIssued = Array.from(new Set(issuedIds.filter(Boolean)));
+        const toEnqueue = (uniqIssued.length ? uniqIssued : ids).slice(0, maxEnqueue);
+
+        if (toEnqueue.length) {
+          pdf_queue_attempted = toEnqueue.length;
+
+          const enq = await sbRpc(env, 'invpdf_enqueue_many', {
+            p_invoice_ids: toEnqueue,
+            p_force_regen: false,
+            p_limit: toEnqueue.length
+          });
+
+          const n =
+            (typeof enq === 'number') ? enq :
+            (typeof enq?.data === 'number') ? enq.data :
+            (Array.isArray(enq) && typeof enq[0] === 'number') ? enq[0] :
+            (Array.isArray(enq?.data) && typeof enq.data[0] === 'number') ? enq.data[0] :
+            0;
+
+          pdf_queue_rows_affected = Number.isFinite(Number(n)) ? Number(n) : 0;
+        }
+      }
+    } catch {
+      pdf_queue_attempted = 0;
+      pdf_queue_rows_affected = 0;
+    }
+
+    // Enrich per-invoice results with display fields (one bulk fetch + optional 2 more bulk fetches)
+    const invoiceDisplayById = new Map();
+    const candidateNamesByInvoiceId = new Map();
+
+    if (ids.length) {
+      // Bulk fetch invoices + client name
+      for (const idChunk of chunk(ids, 200)) {
+        const { rows: invRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/invoices` +
+            `?id=in.(${idChunk.map(enc).join(',')})` +
+            `&select=id,invoice_no,client_id,do_not_send,header_snapshot_json,client:clients(name)`,
+          false
+        );
+
+        for (const r of (invRows || [])) {
+          if (!r?.id) continue;
+          const header = (r.header_snapshot_json && typeof r.header_snapshot_json === 'object') ? r.header_snapshot_json : {};
+          const weekStart = getInvoiceWeekStartFromHeader(header);
+          const weekEnd = weekStart ? addDaysYmd(weekStart, 6) : null;
+
+          invoiceDisplayById.set(String(r.id), {
+            invoice_id: String(r.id),
+            invoice_no: r.invoice_no || null,
+            client_id: r.client_id || null,
+            client_name: r.client?.name || null,
+            do_not_send: (r.do_not_send === true),
+            invoice_week_start: weekStart,
+            week_ending_date: weekEnd,
+            header_snapshot_json: header
+          });
+        }
+      }
+
+      // Bulk fetch invoice_lines (invoice_id + timesheet_id) for candidate derivation
+      const tsIds = new Set();
+      const tsIdsByInvoice = new Map(); // invoice_id -> Set(timesheet_id)
+      for (const idChunk of chunk(ids, 200)) {
+        const { rows: lineRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/invoice_lines` +
+            `?invoice_id=in.(${idChunk.map(enc).join(',')})` +
+            `&select=invoice_id,timesheet_id`,
+          false
+        );
+
+        for (const lr of (lineRows || [])) {
+          const iid = lr?.invoice_id ? String(lr.invoice_id) : '';
+          const tid = lr?.timesheet_id ? String(lr.timesheet_id) : '';
+          if (!iid || !tid) continue;
+          tsIds.add(tid);
+          let set = tsIdsByInvoice.get(iid);
+          if (!set) { set = new Set(); tsIdsByInvoice.set(iid, set); }
+          set.add(tid);
+        }
+      }
+
+      // Bulk fetch candidate_name from v_timesheets_summary_base
+      const candByTs = new Map(); // timesheet_id -> candidate_name
+      const tsIdsArr = Array.from(tsIds);
+      for (const idChunk of chunk(tsIdsArr, 200)) {
+        const { rows: sRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary_base` +
+            `?timesheet_id=in.(${idChunk.map(enc).join(',')})` +
+            `&select=timesheet_id,candidate_name`,
+          false
+        );
+        for (const sr of (sRows || [])) {
+          if (!sr?.timesheet_id) continue;
+          candByTs.set(String(sr.timesheet_id), sr.candidate_name || null);
+        }
+      }
+
+      for (const [iid, set] of tsIdsByInvoice.entries()) {
+        const names = [];
+        for (const tid of set) {
+          const nm = candByTs.get(String(tid));
+          if (nm) names.push(String(nm));
+        }
+        const uniq = Array.from(new Set(names.map(s => s.trim()).filter(Boolean)));
+        const candidate_name = (uniq.length === 0) ? null : (uniq.length === 1 ? uniq[0] : 'Multiple');
+        candidateNamesByInvoiceId.set(iid, { candidate_name, candidate_names: uniq });
+      }
+    }
+
+    const invoice_results = Array.isArray(out?.invoice_results) ? out.invoice_results : [];
+    const invoice_results_enriched = invoice_results.map((r) => {
+      const iid = r?.invoice_id ? String(r.invoice_id) : '';
+      const disp = iid ? (invoiceDisplayById.get(iid) || null) : null;
+      const cand = iid ? (candidateNamesByInvoiceId.get(iid) || { candidate_name: null, candidate_names: [] }) : { candidate_name: null, candidate_names: [] };
+
+      return {
+        ...r,
+        invoice_no: disp?.invoice_no || null,
+        client_id: disp?.client_id || null,
+        client_name: disp?.client_name || null,
+        do_not_send: (disp?.do_not_send === true),
+        invoice_week_start: disp?.invoice_week_start || null,
+        week_ending_date: disp?.week_ending_date || null,
+        candidate_name: cand.candidate_name,
+        candidate_names: cand.candidate_names
+      };
+    });
+
+    // Keep backwards compatibility: preserve original out, but add enriched results + convenience invoice map
+    const invoice_map = {};
+    for (const [iid, disp] of invoiceDisplayById.entries()) {
+      const cand = candidateNamesByInvoiceId.get(iid) || { candidate_name: null, candidate_names: [] };
+      invoice_map[iid] = {
+        invoice_id: iid,
+        invoice_no: disp?.invoice_no || null,
+        client_id: disp?.client_id || null,
+        client_name: disp?.client_name || null,
+        do_not_send: (disp?.do_not_send === true),
+        invoice_week_start: disp?.invoice_week_start || null,
+        week_ending_date: disp?.week_ending_date || null,
+        candidate_name: cand.candidate_name,
+        candidate_names: cand.candidate_names
+      };
+    }
+
+    return withCORS(env, req, ok({
+      ...out,
+      invoice_results_enriched,
+      invoice_map,
+
+      // NEW: PDF queue summary (best-effort, additive)
+      pdf_queue_attempted,
+      pdf_queue_rows_affected
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+
+async function handleInvoiceRender(env, req, invoiceId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const enc = encodeURIComponent;
+
+  // Parse optional { force_regen: true }
   let forceRegen = false;
   try {
     const body = await req.clone().json();
@@ -46750,14 +47601,25 @@ async function handleInvoiceRender(env, req, invoiceId) {
     forceRegen = false;
   }
 
-  log('log', 'start', { force_regen: forceRegen, ms: Date.now() - t0 });
+  // Load invpdf effective config (free vs paid)
+  let invpdf = null;
+  try {
+    const s = await loadSettingsDefaults(env);
+    invpdf = (s && s.importConfig && s.importConfig.invpdf_effective && typeof s.importConfig.invpdf_effective === 'object')
+      ? s.importConfig.invpdf_effective
+      : null;
+  } catch {
+    invpdf = null;
+  }
+
+  const mode = String(invpdf?.mode || 'free').trim().toLowerCase() === 'paid' ? 'paid' : 'free';
+  const allowInlineRender = (mode === 'paid') && (invpdf?.allow_inline_render === true);
+  const queueOnRender = (invpdf?.queue_on_render !== false);
 
   try {
+    // ✅ Fast-path caching (skip render entirely if still valid and not force_regen)
     if (!forceRegen) {
       try {
-        log('log', 'cache_check_start');
-
-        const tCache0 = Date.now();
         const { rows } = await sbFetch(
           env,
           `${env.SUPABASE_URL}/rest/v1/invoices` +
@@ -46772,88 +47634,55 @@ async function handleInvoiceRender(env, req, invoiceId) {
         const genAt = inv ? inv.invoice_pdf_generated_at_utc : null;
         const updAt = inv ? inv.updated_at : null;
 
-        log('log', 'cache_check_result', {
-          ms: Date.now() - tCache0,
-          has_key: !!key,
-          gen_at_utc: genAt || null,
-          upd_at_utc: updAt || null
-        });
-
         if (key && genAt && updAt) {
           const tUpd = new Date(updAt).getTime();
           const tGen = new Date(genAt).getTime();
 
-          log('log', 'cache_check_times', {
-            t_upd_ms: Number.isFinite(tUpd) ? tUpd : null,
-            t_gen_ms: Number.isFinite(tGen) ? tGen : null,
-            upd_le_gen: (Number.isFinite(tUpd) && Number.isFinite(tGen)) ? (tUpd <= tGen) : null
-          });
-
           if (Number.isFinite(tUpd) && Number.isFinite(tGen) && tUpd <= tGen) {
-            log('log', 'cache_hit', { ms: Date.now() - t0, pdf_key: key.replace(/^\/+/, '') });
             return withCORS(env, req, ok({
               pdf_key: key.replace(/^\/+/, ''),
-              attached_timesheets: 0,
-              attached_hr: false,
-              attached_nhsp: false,
-              attached_evidence: 0,
-              attached_timesheet_evidence: 0,
-              attached_manual_timesheets: 0,
               cached: true
             }));
           }
         }
-      } catch (err) {
-        log('error', 'cache_check_failed_nonfatal', {
-          ms: Date.now() - t0,
-          err_name: err?.name || null,
-          err_message: err?.message || String(err || ''),
-          err_stack: err?.stack || null
-        });
+      } catch {
+        // non-fatal: fall through
       }
     }
 
-    log('log', 'render_call_start', { force_regen: forceRegen });
-
-    const tRender0 = Date.now();
-    const core = await _renderInvoiceBundleAndStore(env, req, invoiceId, user, { force_regen: forceRegen });
-    log('log', 'render_call_end', { ms: Date.now() - tRender0, ok: !!core?.ok });
-
-    if (!core?.ok) {
-      log('error', 'render_failed', { ms: Date.now() - t0, core_error: core?.error || null });
-      return withCORS(env, req, serverError(core?.error || "Failed to render invoice bundle"));
+    // Paid-mode optional: attempt inline render (best-effort), but ALWAYS fall back to queue if it fails.
+    if (allowInlineRender) {
+      try {
+        const core = await _renderInvoiceBundleAndStore(env, req, invoiceId, user, { force_regen: forceRegen });
+        if (core?.ok && core?.pdf_key) {
+          return withCORS(env, req, ok({
+            pdf_key: String(core.pdf_key).replace(/^\/+/, ''),
+            cached: !!core.cached,
+            rendered_inline: true
+          }));
+        }
+      } catch {
+        // fall through to queue
+      }
     }
 
-    log('log', 'render_success', {
-      ms: Date.now() - t0,
-      pdf_key: core.pdf_key || null,
-      cached: !!core.cached,
-      attached_timesheets: core.attached_timesheets || 0,
-      attached_manual_timesheets: core.attached_manual_timesheets || 0,
-      attached_timesheet_evidence: core.attached_timesheet_evidence || 0,
-      attached_evidence: core.attached_evidence || 0,
-      attached_hr: !!core.attached_hr,
-      attached_nhsp: !!core.attached_nhsp
+    // Queue render job (free-plan safe default)
+    if (!queueOnRender) {
+      return withCORS(env, req, badRequest('Invoice render queueing is disabled by settings (invpdf.queue_on_render=false).'));
+    }
+
+    await sbRpc(env, 'invpdf_enqueue_one', {
+      p_invoice_id: String(invoiceId),
+      p_force_regen: !!forceRegen
     });
 
     return withCORS(env, req, ok({
-      pdf_key: core.pdf_key,
-      attached_timesheets: core.attached_timesheets || 0,
-      attached_hr: !!core.attached_hr,
-      attached_nhsp: !!core.attached_nhsp,
-      attached_evidence: core.attached_evidence || 0,
-      attached_timesheet_evidence: core.attached_timesheet_evidence || 0,
-      attached_manual_timesheets: core.attached_manual_timesheets || 0,
-      cached: !!core.cached
+      queued: true,
+      force_regen: !!forceRegen,
+      rendered_inline: false
     }));
-  } catch (err) {
-    log('error', 'route_exception', {
-      ms: Date.now() - t0,
-      err_name: err?.name || null,
-      err_message: err?.message || String(err || ''),
-      err_stack: err?.stack || null
-    });
-    return withCORS(env, req, serverError("Failed to render invoice bundle"));
+  } catch (e) {
+    return withCORS(env, req, serverError('Failed to render or enqueue invoice PDF'));
   }
 }
 
@@ -46863,6 +47692,19 @@ async function handleInvoiceEmail(env, req, invoiceId) {
 
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+
+  // Load invpdf effective config (queue toggle)
+  let invpdf = null;
+  try {
+    const s = await loadSettingsDefaults(env);
+    invpdf = (s && s.importConfig && s.importConfig.invpdf_effective && typeof s.importConfig.invpdf_effective === 'object')
+      ? s.importConfig.invpdf_effective
+      : null;
+  } catch {
+    invpdf = null;
+  }
+
+  const queueOnEmail = (invpdf?.queue_on_email !== false);
 
   try {
     // Load invoice basics + header meta (for self-bill guard) + client id + primary invoice email + status + do_not_send
@@ -47082,18 +47924,11 @@ async function handleInvoiceEmail(env, req, invoiceId) {
 
     if (!to) return withCORS(env, req, badRequest('Client invoice email not configured'));
 
-    // ✅ Ensure the bundled invoice PDF exists (includes TIMESHEET evidence + manual TS PDFs).
-    // This uses caching internally if invoice_pdf_generated_at_utc is up-to-date.
-    const core = await _renderInvoiceBundleAndStore(env, req, invoiceId, user, { force_regen: false });
-    if (!core?.ok || !core?.pdf_key) {
-      return withCORS(env, req, serverError(core?.error || 'Failed to render invoice PDF for emailing'));
-    }
-
-    // Queue mail_outbox with invoice_id attachment placeholder; mail worker will attach invoice_pdf_r2_key.
+    // ✅ Queue email immediately (do NOT render inline)
     const invNo = inv.invoice_no || invoiceId;
     const subject = `Invoice ${invNo}`;
 
-    const out = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
+    const outResp = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
       method: 'POST',
       headers: { ...sbHeaders(env), Prefer: 'return=representation' },
       body: JSON.stringify({
@@ -47110,14 +47945,40 @@ async function handleInvoiceEmail(env, req, invoiceId) {
       })
     });
 
-    if (!out.ok) {
-      const err = await out.text();
+    if (!outResp.ok) {
+      const err = await outResp.text();
       return withCORS(env, req, serverError(`Failed to queue email: ${err}`));
     }
 
-    const outJson = await out.json().catch(() => ({}));
+    const outJson = await outResp.json().catch(() => ({}));
     const mailRow = Array.isArray(outJson) ? outJson[0] : outJson;
     const mailId = mailRow?.id || null;
+
+    // ✅ Enqueue PDF job so queued email can complete soon (best-effort)
+    let pdf_queued = false;
+    let pdf_rows_affected = 0;
+
+    if (queueOnEmail) {
+      try {
+        const enq = await sbRpc(env, 'invpdf_enqueue_one', {
+          p_invoice_id: String(invoiceId),
+          p_force_regen: false
+        });
+
+        const n =
+          (typeof enq === 'number') ? enq :
+          (typeof enq?.data === 'number') ? enq.data :
+          (Array.isArray(enq) && typeof enq[0] === 'number') ? enq[0] :
+          (Array.isArray(enq?.data) && typeof enq.data[0] === 'number') ? enq.data[0] :
+          0;
+
+        pdf_rows_affected = Number.isFinite(Number(n)) ? Number(n) : 0;
+        pdf_queued = (pdf_rows_affected > 0);
+      } catch {
+        pdf_queued = false;
+        pdf_rows_affected = 0;
+      }
+    }
 
     await writeAudit(
       env,
@@ -47133,23 +47994,21 @@ async function handleInvoiceEmail(env, req, invoiceId) {
           used_alt_manual_email: !!(contractAltEmails.size === 0 && hasManualOrQrAdjustment && altEnabled),
           has_manual_or_qr_adjustment: !!hasManualOrQrAdjustment
         },
-        render: {
-          pdf_key: core.pdf_key,
-          cached: !!core.cached,
-          attached_timesheets: core.attached_timesheets || 0,
-          attached_timesheet_evidence: core.attached_timesheet_evidence || 0,
-          attached_manual_timesheets: core.attached_manual_timesheets || 0,
-          attached_evidence: core.attached_evidence || 0
+        invpdf: {
+          queued: !!pdf_queued,
+          rows_affected: pdf_rows_affected,
+          queue_on_email: !!queueOnEmail
         }
       },
       { entity: 'invoice', subject_id: invoiceId, correlation_id: mailId, req }
     );
 
-    return withCORS(env, req, ok({ queued: true, mail_id: mailId, to }));
+    return withCORS(env, req, ok({ queued: true, mail_id: mailId, to, pdf_queued: !!pdf_queued }));
   } catch (e) {
     return withCORS(env, req, serverError('Failed to queue invoice email'));
   }
 }
+
 
 
 async function handleInvoiceDeleteOne(env, req, invoiceId) {
@@ -47884,73 +48743,6 @@ async function handleGetInvoice(env, req, invoiceId) {
 //   - req: optional Request (used for presignR2Url + download URL base)
 //   - user: optional user object for audit attribution (can be null for system tasks)
 // ============================================================================
-async function ensureInvoicePdf(env, invoiceId, opts = {}) {
-  const enc = encodeURIComponent;
-
-  const req =
-    (opts && opts.req) ||
-    new Request((env.PUBLIC_DOWNLOAD_BASE_URL || 'https://localhost') + '/internal/ensure-invoice-pdf');
-
-  // 1) Fast path: key already exists
-  try {
-    const { rows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${enc(invoiceId)}&select=id,invoice_pdf_r2_key&limit=1`
-    );
-    const inv0 = rows?.[0] || null;
-    const existingKey = inv0?.invoice_pdf_r2_key ? String(inv0.invoice_pdf_r2_key).trim() : null;
-    if (existingKey) {
-      return { ok: true, invoice_id: invoiceId, invoice_pdf_r2_key: existingKey, rendered: false };
-    }
-  } catch {
-    // fall through to render attempt
-  }
-
-  // 2) Render + store (shared core)
-  const core = await _renderInvoiceBundleAndStore(env, req, invoiceId, opts.user || null);
-  if (!core?.ok) {
-    return { ok: false, invoice_id: invoiceId, rendered: false, error: core?.error || 'RENDER_FAILED' };
-  }
-
-  // 3) Re-read invoice row (explicit requirement)
-  try {
-    const { rows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/invoices?id=eq.${enc(invoiceId)}&select=id,invoice_pdf_r2_key&limit=1`
-    );
-    const inv1 = rows?.[0] || null;
-    const key1 = inv1?.invoice_pdf_r2_key ? String(inv1.invoice_pdf_r2_key).trim() : null;
-
-    if (!key1) {
-      return { ok: false, invoice_id: invoiceId, rendered: true, error: 'RENDERED_BUT_KEY_NOT_SAVED' };
-    }
-
-    return {
-      ok: true,
-      invoice_id: invoiceId,
-      invoice_pdf_r2_key: key1,
-      rendered: true,
-      attached_timesheets: core.attached_timesheets || 0,
-      attached_hr: !!core.attached_hr,
-      attached_nhsp: !!core.attached_nhsp,
-      attached_evidence: core.attached_evidence || 0
-    };
-  } catch {
-    // If re-read fails, still return key from core
-    return {
-      ok: true,
-      invoice_id: invoiceId,
-      invoice_pdf_r2_key: core.pdf_key,
-      rendered: true,
-      attached_timesheets: core.attached_timesheets || 0,
-      attached_hr: !!core.attached_hr,
-      attached_nhsp: !!core.attached_nhsp,
-      attached_evidence: core.attached_evidence || 0,
-      warning: 'RE_READ_FAILED'
-    };
-  }
-}
-
 
 
 // ============================================================================
@@ -49809,206 +50601,7 @@ async function handleInvoiceBatchIssueCandidates(env, req) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
-async function handleInvoiceBatchIssueConfirm(env, req) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
 
-  let body = null;
-  try { body = await parseJSONBody(req); } catch {}
-  if (!body || typeof body !== 'object') return withCORS(env, req, badRequest('Invalid JSON'));
-
-  const invoiceIds = body.invoice_ids;
-  if (!Array.isArray(invoiceIds) || invoiceIds.length === 0) {
-    return withCORS(env, req, badRequest('invoice_ids[] is required'));
-  }
-
-  const allowEarly = (() => {
-    const v = body.allow_early;
-    if (v === true) return true;
-    if (v === false) return false;
-    const s = String(v || '').trim().toLowerCase();
-    return (s === '1' || s === 'true' || s === 'yes' || s === 'y' || s === 'on');
-  })();
-
-  const enc = encodeURIComponent;
-
-  const chunk = (arr, n) => {
-    const out = [];
-    for (let i = 0; i < (arr || []).length; i += n) out.push(arr.slice(i, i + n));
-    return out;
-  };
-
-  const parseYmd = (s) => {
-    const t = String(s || '').trim();
-    return (/^\d{4}-\d{2}-\d{2}$/.test(t)) ? t : null;
-  };
-
-  const addDaysYmd = (ymd, days) => {
-    const d0 = parseYmd(ymd);
-    if (!d0) return null;
-    const d = new Date(`${d0}T00:00:00Z`);
-    if (Number.isNaN(d.getTime())) return null;
-    d.setUTCDate(d.getUTCDate() + Number(days || 0));
-    const yyyy = d.getUTCFullYear();
-    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-    const dd = String(d.getUTCDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
-  };
-
-  const getInvoiceWeekStartFromHeader = (header) => {
-    if (!header || typeof header !== 'object') return null;
-    const meta = (header.meta && typeof header.meta === 'object') ? header.meta : null;
-    const v =
-      (meta && (meta.invoice_week_start || meta.invoiceWeekStart || meta.week_start || meta.weekStart)) ||
-      header.invoice_week_start ||
-      header.invoiceWeekStart ||
-      null;
-    return parseYmd(v);
-  };
-
-  // Normalize/unique ids (strings are fine; PostgREST will cast to uuid)
-  const ids = Array.from(new Set(invoiceIds.map(String).filter(Boolean)));
-
-  try {
-    const res = await sbRpc(env, 'invoice_issue_and_queue_emails_batch', {
-      p_invoice_ids: ids,
-      p_actor_user_id: user?.id || null,
-      p_allow_early: allowEarly
-    });
-
-    const out = Array.isArray(res) ? (res[0] ?? res) : (res?.data ?? res);
-
-    // Enrich per-invoice results with display fields (one bulk fetch + optional 2 more bulk fetches)
-    const invoiceDisplayById = new Map();
-    const candidateNamesByInvoiceId = new Map();
-
-    if (ids.length) {
-      // Bulk fetch invoices + client name
-      for (const idChunk of chunk(ids, 200)) {
-        const { rows: invRows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/invoices` +
-            `?id=in.(${idChunk.map(enc).join(',')})` +
-            `&select=id,invoice_no,client_id,do_not_send,header_snapshot_json,client:clients(name)`,
-          false
-        );
-
-        for (const r of (invRows || [])) {
-          if (!r?.id) continue;
-          const header = (r.header_snapshot_json && typeof r.header_snapshot_json === 'object') ? r.header_snapshot_json : {};
-          const weekStart = getInvoiceWeekStartFromHeader(header);
-          const weekEnd = weekStart ? addDaysYmd(weekStart, 6) : null;
-
-          invoiceDisplayById.set(String(r.id), {
-            invoice_id: String(r.id),
-            invoice_no: r.invoice_no || null,
-            client_id: r.client_id || null,
-            client_name: r.client?.name || null,
-            do_not_send: (r.do_not_send === true),
-            invoice_week_start: weekStart,
-            week_ending_date: weekEnd,
-            header_snapshot_json: header
-          });
-        }
-      }
-
-      // Bulk fetch invoice_lines (invoice_id + timesheet_id) for candidate derivation
-      const tsIds = new Set();
-      const tsIdsByInvoice = new Map(); // invoice_id -> Set(timesheet_id)
-      for (const idChunk of chunk(ids, 200)) {
-        const { rows: lineRows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/invoice_lines` +
-            `?invoice_id=in.(${idChunk.map(enc).join(',')})` +
-            `&select=invoice_id,timesheet_id`,
-          false
-        );
-
-        for (const lr of (lineRows || [])) {
-          const iid = lr?.invoice_id ? String(lr.invoice_id) : '';
-          const tid = lr?.timesheet_id ? String(lr.timesheet_id) : '';
-          if (!iid || !tid) continue;
-          tsIds.add(tid);
-          let set = tsIdsByInvoice.get(iid);
-          if (!set) { set = new Set(); tsIdsByInvoice.set(iid, set); }
-          set.add(tid);
-        }
-      }
-
-      // Bulk fetch candidate_name from v_timesheets_summary_base
-      const candByTs = new Map(); // timesheet_id -> candidate_name
-      const tsIdsArr = Array.from(tsIds);
-      for (const idChunk of chunk(tsIdsArr, 200)) {
-        const { rows: sRows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary_base` +
-            `?timesheet_id=in.(${idChunk.map(enc).join(',')})` +
-            `&select=timesheet_id,candidate_name`,
-          false
-        );
-        for (const sr of (sRows || [])) {
-          if (!sr?.timesheet_id) continue;
-          candByTs.set(String(sr.timesheet_id), sr.candidate_name || null);
-        }
-      }
-
-      for (const [iid, set] of tsIdsByInvoice.entries()) {
-        const names = [];
-        for (const tid of set) {
-          const nm = candByTs.get(String(tid));
-          if (nm) names.push(String(nm));
-        }
-        const uniq = Array.from(new Set(names.map(s => s.trim()).filter(Boolean)));
-        const candidate_name = (uniq.length === 0) ? null : (uniq.length === 1 ? uniq[0] : 'Multiple');
-        candidateNamesByInvoiceId.set(iid, { candidate_name, candidate_names: uniq });
-      }
-    }
-
-    const invoice_results = Array.isArray(out?.invoice_results) ? out.invoice_results : [];
-    const invoice_results_enriched = invoice_results.map((r) => {
-      const iid = r?.invoice_id ? String(r.invoice_id) : '';
-      const disp = iid ? (invoiceDisplayById.get(iid) || null) : null;
-      const cand = iid ? (candidateNamesByInvoiceId.get(iid) || { candidate_name: null, candidate_names: [] }) : { candidate_name: null, candidate_names: [] };
-
-      return {
-        ...r,
-        invoice_no: disp?.invoice_no || null,
-        client_id: disp?.client_id || null,
-        client_name: disp?.client_name || null,
-        do_not_send: (disp?.do_not_send === true),
-        invoice_week_start: disp?.invoice_week_start || null,
-        week_ending_date: disp?.week_ending_date || null,
-        candidate_name: cand.candidate_name,
-        candidate_names: cand.candidate_names
-      };
-    });
-
-    // Keep backwards compatibility: preserve original out, but add enriched results + convenience invoice map
-    const invoice_map = {};
-    for (const [iid, disp] of invoiceDisplayById.entries()) {
-      const cand = candidateNamesByInvoiceId.get(iid) || { candidate_name: null, candidate_names: [] };
-      invoice_map[iid] = {
-        invoice_id: iid,
-        invoice_no: disp?.invoice_no || null,
-        client_id: disp?.client_id || null,
-        client_name: disp?.client_name || null,
-        do_not_send: (disp?.do_not_send === true),
-        invoice_week_start: disp?.invoice_week_start || null,
-        week_ending_date: disp?.week_ending_date || null,
-        candidate_name: cand.candidate_name,
-        candidate_names: cand.candidate_names
-      };
-    }
-
-    return withCORS(env, req, ok({
-      ...out,
-      invoice_results_enriched,
-      invoice_map
-    }));
-  } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e)));
-  }
-}
 // ============================================================================
 // UPDATED: handleInvoiceRender(env, req, invoiceId)
 // - External admin handler remains
@@ -67953,20 +68546,22 @@ if (req.method === 'POST' && p === '/api/users') {
 
   },
   /// Cron handler for TSFIN queue processing + Auto-invoice + Email outbox drain
+// Cron handler for TSFIN queue processing + Auto-invoice + TS PDF + INVOICE PDF + Email outbox drain
 async scheduled(event, env, ctx) {
   const maxBatches      = parseInt(env.TSFIN_MAX_BATCHES || '10', 10);
   const batchSize       = parseInt(env.TSFIN_BATCH_SIZE  || '50', 10);
+
   const emailBatchLimit = parseInt(env.EMAIL_DRAIN_LIMIT_DEFAULT || '10', 10);
 
-  // TS PDF worker controls (new)
+  // TS PDF worker controls (existing)
   const tsPdfMaxBatches = parseInt(env.TSPDF_MAX_BATCHES || '5', 10);
   const tsPdfBatchSize  = parseInt(env.TSPDF_BATCH_SIZE  || '5', 10);
   const tsPdfEnqLimit   = parseInt(env.TSPDF_ENQUEUE_LIMIT || '500', 10);
 
-  // Invoice SQL worker controls
+  // Invoice SQL worker controls (existing)
   const invMaxBatches   = parseInt(env.INVOICE_MAX_BATCHES || '10', 10);
-  const invBatchSize    = parseInt(env.INVOICE_BATCH_SIZE  || '10', 10);    // dequeue size (outbox rows)
-  const invEnqLimit     = parseInt(env.INVOICE_ENQUEUE_LIMIT || '500', 10); // enqueue limit
+  const invBatchSize    = parseInt(env.INVOICE_BATCH_SIZE  || '10', 10);
+  const invEnqLimit     = parseInt(env.INVOICE_ENQUEUE_LIMIT || '500', 10);
   const invEnqueueFirst = String(env.INVOICE_ENQUEUE_FIRST || 'true').toLowerCase() !== 'false';
 
   // Actor for audit (optional; SQL audit will fall back to "CloudTMS server" if null)
@@ -67974,10 +68569,50 @@ async scheduled(event, env, ctx) {
     ? String(env.INVOICE_ACTOR_USER_ID).trim()
     : null;
 
-  // IMPORTANT: We do NOT "issue" invoices in scheduled.
-  // In CloudTMS, ISSUED means "emailed/sent" for normal invoices.
-  // Self-bill invoices are handled in SQL generator logic (they can be issued immediately there).
-  // Scheduled only creates invoices and drains email outbox.
+  // Determine invpdf limits from settings_defaults.import_config_json.invpdf_effective
+  const getInvpdfLimits = async () => {
+    let invpdf = null;
+    try {
+      const s = await loadSettingsDefaults(env);
+      invpdf = (s && s.importConfig && s.importConfig.invpdf_effective && typeof s.importConfig.invpdf_effective === 'object')
+        ? s.importConfig.invpdf_effective
+        : null;
+    } catch {
+      invpdf = null;
+    }
+
+    const mode = String(invpdf?.mode || 'free').trim().toLowerCase() === 'paid' ? 'paid' : 'free';
+
+    const dequeueLimit = (() => {
+      const k = (mode === 'paid') ? invpdf?.dequeue_limit_paid : invpdf?.dequeue_limit_free;
+      const n = Number(k);
+      const v = Number.isFinite(n) ? Math.trunc(n) : (mode === 'paid' ? 5 : 1);
+      return Math.max(1, Math.min(v, 50));
+    })();
+
+    const enqueueLimit = (() => {
+      const k = (mode === 'paid') ? invpdf?.enqueue_limit_paid : invpdf?.enqueue_limit_free;
+      const n = Number(k);
+      const v = Number.isFinite(n) ? Math.trunc(n) : (mode === 'paid' ? 2000 : 500);
+      return Math.max(1, Math.min(v, 20000));
+    })();
+
+    const maxBatchesInvpdf = (() => {
+      const k = (mode === 'paid') ? invpdf?.max_batches_paid : invpdf?.max_batches_free;
+      const n = Number(k);
+      const v = Number.isFinite(n) ? Math.trunc(n) : (mode === 'paid' ? 3 : 1);
+      return Math.max(1, Math.min(v, 20));
+    })();
+
+    const enqueueFirst = (invpdf?.enqueue_before_drain !== false);
+
+    return { mode, dequeueLimit, enqueueLimit, maxBatchesInvpdf, enqueueFirst };
+  };
+
+  // IMPORTANT:
+  // - Scheduled does NOT issue invoices (ISSUED means “emailed/sent” for normal invoices).
+  // - Scheduled creates invoices and drains queues.
+  // - We now drain invoice_pdf_outbox BEFORE email drain to reduce PDF_NOT_READY churn.
   ctx.waitUntil((async () => {
     try {
       for (let i = 0; i < maxBatches; i++) {
@@ -68005,9 +68640,6 @@ async scheduled(event, env, ctx) {
     // Invoice SQL-first drain (minimal Supabase subrequests)
     try {
       for (let i = 0; i < invMaxBatches; i++) {
-        // 1) enqueue auto-invoice BY_WEEK jobs (cron-safe + idempotent)
-        // ✅ Use the newer function that respects contracts.auto_invoice OR client_settings.auto_invoice_default
-        // ✅ Enqueue functions now also gate by "week has ended" (London date) in SQL
         if (invEnqueueFirst) {
           try {
             await sbRpc(env, 'invoice_enqueue_auto_invoice_ready', { p_limit: invEnqLimit });
@@ -68016,7 +68648,6 @@ async scheduled(event, env, ctx) {
           }
         }
 
-        // 2) dequeue a batch of outbox rows (SKIP LOCKED leasing)
         const dq = await sbRpc(env, 'invoice_dequeue_batch_ids', { p_limit: invBatchSize });
         const jobs = Array.isArray(dq) ? dq : (dq?.data || []);
         if (!jobs.length) break;
@@ -68024,18 +68655,89 @@ async scheduled(event, env, ctx) {
         const outboxIds = jobs.map(r => r?.outbox_id).filter(Boolean);
         if (!outboxIds.length) break;
 
-        // 3) generate invoices for those jobs (single RPC for the whole batch)
         await sbRpc(env, 'invoice_generate_from_outbox_batch', {
           p_outbox_ids: outboxIds,
           p_actor_user_id: invActorUserId
         });
-
-        // NO AUTO-ISSUE HERE. Issuing is tied to emailing for normal invoices.
       }
     } catch (e) {
       console.warn('[scheduled] Invoice SQL worker failed:', e?.message || e);
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // NEW: Invoice PDF queue drain (before email drain)
+    // ─────────────────────────────────────────────────────────────
+    try {
+      const lim = await getInvpdfLimits();
+
+      if (lim.enqueueFirst) {
+        try {
+          await sbRpc(env, 'invpdf_enqueue_ready_for_render', { p_limit: lim.enqueueLimit });
+        } catch (e) {
+          console.warn('[scheduled] invpdf_enqueue_ready_for_render failed:', e?.message || e);
+        }
+      }
+
+      const req = new Request((env.PUBLIC_DOWNLOAD_BASE_URL || 'https://localhost') + '/internal/invpdf-worker');
+
+      for (let b = 0; b < lim.maxBatchesInvpdf; b++) {
+        const dq = await sbRpc(env, 'invpdf_dequeue_batch_ids', { p_limit: lim.dequeueLimit });
+        const jobs = Array.isArray(dq) ? dq : (dq?.data || []);
+        if (!jobs.length) break;
+
+        const successIds = [];
+        const failRows = [];
+
+        for (const j of jobs) {
+          const outboxId = j?.outbox_id ? String(j.outbox_id) : null;
+          const invoiceId = j?.invoice_id ? String(j.invoice_id) : null;
+          const force = (j?.force_regen === true) || (String(j?.reason || '').toUpperCase() === 'FORCE_REGEN');
+
+          if (!outboxId || !invoiceId) {
+            // If malformed row, mark fail (best-effort)
+            if (outboxId) failRows.push({ outbox_id: outboxId, error: 'MALFORMED_OUTBOX_ROW' });
+            continue;
+          }
+
+          try {
+            const core = await _renderInvoiceBundleAndStore(env, req, invoiceId, null, { force_regen: !!force });
+
+            if (core?.ok && core?.pdf_key) {
+              successIds.push(outboxId);
+            } else {
+              // Non-ok: mark fail (SQL sets next_attempt_at + 30 mins)
+              failRows.push({ outbox_id: outboxId, error: core?.error || 'RENDER_FAILED' });
+            }
+          } catch (e) {
+            const msg = (e && e.message) ? String(e.message) : String(e || 'RENDER_EXCEPTION');
+            failRows.push({ outbox_id: outboxId, error: msg });
+          }
+        }
+
+        if (successIds.length) {
+          try {
+            await sbRpc(env, 'invpdf_work_success_bulk', { p_ids: successIds });
+          } catch (e) {
+            console.warn('[scheduled] invpdf_work_success_bulk failed:', e?.message || e);
+          }
+        }
+
+        if (failRows.length) {
+          try {
+            await sbRpc(env, 'invpdf_work_fail_bulk', { p_rows: failRows });
+          } catch (e) {
+            console.warn('[scheduled] invpdf_work_fail_bulk failed:', e?.message || e);
+          }
+        }
+
+        // If we dequeued fewer than limit, likely drained.
+        if (jobs.length < lim.dequeueLimit) break;
+      }
+    } catch (e) {
+      console.warn('[scheduled] Invoice PDF worker failed:', e?.message || e);
+    }
+
+    // Email outbox drain (runs after invpdf drain to reduce PDF_NOT_READY churn)
     try {
       await drainEmailOutboxOnce(env, { limit: emailBatchLimit });
     } catch (e) {
@@ -68043,6 +68745,5 @@ async scheduled(event, env, ctx) {
     }
   })());
 }
-
 
 };
