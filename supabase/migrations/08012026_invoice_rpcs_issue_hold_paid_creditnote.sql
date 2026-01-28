@@ -2202,12 +2202,8 @@ begin
 
   -- ------------------------------------------------------------
   -- 3) ISSUE-TIME reference gating (contract override aware, per-timesheet)
-  -- Uses v_ts_invoice_precheck.issue_missing_reference which is already:
-  --   (reference_number_required_to_issue_invoice = true)
-  --   AND (total_hours > 0)
-  --   AND (missing refs for LOCKED positive segments, or normal weekly/daily rules)
   -- ------------------------------------------------------------
-  
+
   -- 3) ISSUE-TIME reference gating (scoped to this invoice)
   -- Only segments locked to THIS invoice can block issuing (so other-invoice segments never block).
   select array_agg(
@@ -2248,7 +2244,7 @@ begin
 
         else (
           case
-            when public._inv_timesheet_has_issue_reference(
+            when public._inv_timesheet_has_invoice_reference(
               ts.sheet_scope::text,
               coalesce(ts.submission_mode::text,''),
               ts.reference_number,
@@ -2268,7 +2264,6 @@ begin
       on tf.timesheet_id = x.timesheet_id
      and tf.is_current = true
   ) t;
-
 
   v_issue_ref_reasons := array_remove(v_issue_ref_reasons, null);
 
@@ -2314,7 +2309,7 @@ begin
 
               else (
                 case
-                  when public._inv_timesheet_has_issue_reference(
+                  when public._inv_timesheet_has_invoice_reference(
                     t0.sheet_scope::text,
                     coalesce(t0.submission_mode::text,''),
                     t0.reference_number,
@@ -2352,7 +2347,7 @@ begin
 
               else (
                 case
-                  when public._inv_timesheet_has_issue_reference(
+                  when public._inv_timesheet_has_invoice_reference(
                     t0.sheet_scope::text,
                     coalesce(t0.submission_mode::text,''),
                     t0.reference_number,
@@ -2575,6 +2570,7 @@ exception when others then
   raise;
 end;
 $$;
+
 
 
 
