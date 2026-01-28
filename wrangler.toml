@@ -41,7 +41,7 @@ preview_id = "6b8fb70351db4cac91583a9cc6c2074b"
 binding = "BROWSER"
 
 [triggers]
-crons = ["*/5 * * * *"]  # every 5 minutes
+crons = ["*/5 * * * *", "* * * * *"]  # every 5 minutes + every minute (invpdf drain cron)
 
 # =========================
 # Workers Logs (Observability)
