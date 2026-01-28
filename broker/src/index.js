@@ -49280,6 +49280,77 @@ function buildNhspReportHTML(inv, header, nhspData) {
   const invNo = safe(inv.invoice_no || '');
   const issued = safe(inv.issued_at_utc || '');
 
+  const pad2 = (n) => String(n).padStart(2, '0');
+
+  const toNum = (v) => {
+    if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+    const s = String(v ?? '').trim();
+    if (!s) return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  // Excel serial date (days since 1899-12-30, with Excel leap-year bug baked into that base)
+  const excelSerialToDmy = (v) => {
+    const n = toNum(v);
+    if (n == null) return safe(v);
+    // keep this conservative: serial dates are typically large (~45000+ for 2023+)
+    if (n < 20000 || n > 90000) return safe(v);
+
+    const base = Date.UTC(1899, 11, 30, 0, 0, 0, 0);
+    const ms = base + Math.round(n) * 86400000;
+    if (!Number.isFinite(ms)) return safe(v);
+
+    const d = new Date(ms);
+    if (Number.isNaN(d.getTime())) return safe(v);
+
+    const dd = pad2(d.getUTCDate());
+    const mm = pad2(d.getUTCMonth() + 1);
+    const yy = String(d.getUTCFullYear());
+    return `${dd}/${mm}/${yy}`;
+  };
+
+  // Excel day-fraction time/duration: 0.375 => 09:00, 0.3125 => 07:30
+  const excelFracToHHMM = (v) => {
+    const n = toNum(v);
+    if (n == null) {
+      const s = String(v ?? '').trim();
+      if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(s)) {
+        const parts = s.split(':');
+        const hh = pad2(Number(parts[0]) || 0);
+        const mm = pad2(Number(parts[1]) || 0);
+        return `${hh}:${mm}`;
+      }
+      return safe(v);
+    }
+    // treat 0..2 as fractions of a day (covers durations up to 48h)
+    if (n < 0 || n > 2) return safe(v);
+    const mins = Math.round(n * 1440);
+    const hh = Math.floor(mins / 60);
+    const mm = mins % 60;
+    return `${pad2(hh)}:${pad2(mm)}`;
+  };
+
+  const fmtInt = (v) => {
+    const n = toNum(v);
+    if (n == null) return safe(v);
+    return String(Math.round(n));
+  };
+
+  const fmtMoney = (v) => {
+    // If already a string like "50.7", keep it as-is per brief
+    if (typeof v === 'string') {
+      const s = v.trim();
+      if (s && Number.isFinite(Number(s))) return s;
+      return safe(v);
+    }
+    const n = toNum(v);
+    if (n == null) return safe(v);
+    return n.toFixed(2);
+  };
+
+  const normH = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
   const tables = [];
 
   const unwrapRow = (r) => {
@@ -49324,9 +49395,47 @@ function buildNhspReportHTML(inv, header, nhspData) {
     const firstWithRaw = (Array.isArray(rows) ? rows : []).find(r => Array.isArray(r?.raw_columns));
     if (firstWithRaw && Array.isArray(firstWithRaw.raw_columns)) return firstWithRaw.raw_columns.length;
 
-    // Last resort (only if raw_columns absent everywhere)
     const firstRow = (Array.isArray(rows) ? rows : [])[0];
     return firstRow && typeof firstRow === 'object' ? Object.keys(firstRow).length : 0;
+  };
+
+  const buildColumnMeta = (hdrRows, hdrCols, colCount, rows) => {
+    // Determine the effective column label per index:
+    // prefer the last non-empty cell across header_rows (bottom-up), else header_columns, else ''
+    const hdrRowsArr = Array.isArray(hdrRows) ? hdrRows : [];
+    const hdrColsArr = Array.isArray(hdrCols) ? hdrCols : [];
+
+    const labelAt = (i) => {
+      for (let r = hdrRowsArr.length - 1; r >= 0; r--) {
+        const row = hdrRowsArr[r];
+        if (!Array.isArray(row)) continue;
+        const v = (i < row.length) ? String(row[i] ?? '').trim() : '';
+        if (v) return v;
+      }
+      if (i < hdrColsArr.length) {
+        const v2 = String(hdrColsArr[i] ?? '').trim();
+        if (v2) return v2;
+      }
+      // last resort: generate "Column N" if raw_columns exist
+      const firstWithRaw = (Array.isArray(rows) ? rows : []).find(rr => Array.isArray(rr?.raw_columns));
+      if (firstWithRaw && colCount > 0) return `Column ${i + 1}`;
+      return '';
+    };
+
+    const meta = [];
+    for (let i = 0; i < colCount; i++) {
+      const label = labelAt(i);
+      const hn = normH(label);
+
+      let kind = 'text';
+      if (hn.includes('date')) kind = 'date';
+      else if (hn === 'start' || hn === 'end' || hn === 'total') kind = 'time';
+      else if (hn.includes('break') && hn.includes('minute')) kind = 'break';
+      else if (hn === 'commission' || hn.includes('commission') || hn === 'total cost' || hn.includes('total cost')) kind = 'money';
+
+      meta.push({ label, hn, kind });
+    }
+    return meta;
   };
 
   const renderThead = (hdrRows, hdrCols, colCount, rows) => {
@@ -49347,7 +49456,6 @@ function buildNhspReportHTML(inv, header, nhspData) {
       return `<thead><tr>${cells}</tr></thead>`;
     }
 
-    // If no stored headers, prefer "Column 1..N" when raw_columns exists (no object-key columns)
     const firstWithRaw = (Array.isArray(rows) ? rows : []).find(r => Array.isArray(r?.raw_columns));
     if (firstWithRaw && colCount > 0) {
       const cols = Array.from({ length: colCount }, (_, i) => `Column ${i + 1}`);
@@ -49355,36 +49463,43 @@ function buildNhspReportHTML(inv, header, nhspData) {
       return `<thead><tr>${cells}</tr></thead>`;
     }
 
-    // Absolute last resort: object keys (only when raw_columns is absent everywhere)
     const firstRow = (Array.isArray(rows) ? rows : [])[0] || {};
     const keys = Object.keys(firstRow);
     const cells = keys.map(col => `<th>${escapeHtml(safe(col))}</th>`).join('');
     return `<thead><tr>${cells}</tr></thead>`;
   };
 
-  const renderTbody = (rows, colCount) => {
+  const renderTbody = (rows, colCount, colMeta) => {
     const rowsHtml = (Array.isArray(rows) ? rows : []).map(r => {
-      // ✅ Mandatory: always render from raw_columns when present
       const arr = Array.isArray(r?.raw_columns)
         ? r.raw_columns
         : (Array.isArray(r?.payload_json?.raw_columns) ? r.payload_json.raw_columns : null);
 
+      const cells = [];
+
       if (arr) {
-        const cells = [];
         for (let i = 0; i < colCount; i++) {
-          const v = (i < arr.length) ? arr[i] : '';
-          cells.push(`<td>${escapeHtml(safe(v))}</td>`);
+          const v0 = (i < arr.length) ? arr[i] : '';
+          const k = colMeta?.[i]?.kind || 'text';
+
+          let out = '';
+          if (k === 'date') out = excelSerialToDmy(v0);
+          else if (k === 'time') out = excelFracToHHMM(v0);
+          else if (k === 'break') out = fmtInt(v0);
+          else if (k === 'money') out = fmtMoney(v0);
+          else out = safe(v0);
+
+          cells.push(`<td>${escapeHtml(out)}</td>`);
         }
         return `<tr>${cells.join('')}</tr>`;
       }
 
-      // Fallback only if raw_columns absent (legacy/unexpected)
+      // fallback only if raw_columns absent
       const keys = Object.keys(r || {});
-      const cells = [];
       for (let i = 0; i < colCount; i++) {
-        const k = keys[i];
-        const v = (k != null) ? (r?.[k]) : '';
-        cells.push(`<td>${escapeHtml(safe(v))}</td>`);
+        const kk = keys[i];
+        const vv = (kk != null) ? (r?.[kk]) : '';
+        cells.push(`<td>${escapeHtml(safe(vv))}</td>`);
       }
       return `<tr>${cells.join('')}</tr>`;
     }).join('');
@@ -49400,13 +49515,32 @@ function buildNhspReportHTML(inv, header, nhspData) {
 
     if (!rows.length) return '';
 
+    const colMeta = buildColumnMeta(hdrRows, hdrCols, colCount, rows);
+
+    // Widen Assignment + Commission columns (as requested) via colgroup.
+    // Keep everything else auto within table-layout: fixed.
+    const idxAssignment = colMeta.findIndex(m => m && m.hn === 'assignment');
+    const idxCommission = colMeta.findIndex(m => m && (m.hn === 'commission' || m.hn.includes('commission')));
+
+    const colgroup = (() => {
+      const cols = [];
+      for (let i = 0; i < colCount; i++) {
+        let w = '';
+        if (i === idxAssignment) w = '140px';
+        if (i === idxCommission) w = '90px';
+        cols.push(`<col${w ? ` style="width:${w};"` : ''}>`);
+      }
+      return `<colgroup>${cols.join('')}</colgroup>`;
+    })();
+
     const theadHtml = renderThead(hdrRows, hdrCols, colCount, rows);
-    const tbodyHtml = renderTbody(rows, colCount);
+    const tbodyHtml = renderTbody(rows, colCount, colMeta);
 
     const sep = (idx > 0) ? `<div class="page-break"></div>` : '';
 
     return `${sep}
       <table class="nhsp">
+        ${colgroup}
         ${theadHtml}
         ${tbodyHtml}
       </table>
@@ -49472,6 +49606,7 @@ function buildNhspReportHTML(inv, header, nhspData) {
 </html>
   `;
 }
+
 
   // ==========================================================
   // UPDATED: buildHTML (render FREEFORM reference rows as single-column list/table)
