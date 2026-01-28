@@ -49671,6 +49671,14 @@ function buildNhspReportHTML(inv, header, nhspData) {
       left: Number(pick(mgIn, "left", defaultMargins.left))
     };
 
+        // Reserve space so fixed header/footer NEVER collide with flowing content.
+    // Header repeats on every page; footer repeats when shown.
+    const FIXED_HEADER_MM = 52; // tuned for your header block height (logo/name + invoice + bill-to + meta)
+    const FIXED_FOOTER_MM = hideBankFooter ? 0 : 26;
+
+    const pageTopMm = Number(mg.top) + FIXED_HEADER_MM;
+    const pageBottomMm = Number(mg.bottom) + FIXED_FOOTER_MM;
+
     const hideBankFooter = !!pick(header, "hide_bank_footer", false);
 
     const headerPo = pick(header, "po_number", null);
@@ -50035,13 +50043,14 @@ function buildNhspReportHTML(inv, header, nhspData) {
       ? (groupRowsHtml + adjustmentsRowsHtml)
       : "";
 
-    return `<!doctype html>
+   return `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
   <title>Invoice ${escapeHtml(invoice_no || "")}</title>
   <style>
-    @page { size: A4; margin: ${mg.top}mm ${mg.right}mm ${mg.bottom}mm ${mg.left}mm; }
+    @page { size: A4; margin: ${pageTopMm}mm ${mg.right}mm ${pageBottomMm}mm ${mg.left}mm; }
+
     html, body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
       color: #111;
@@ -50049,6 +50058,7 @@ function buildNhspReportHTML(inv, header, nhspData) {
       line-height: 1.35;
       -webkit-print-color-adjust: exact;
     }
+
     .stationery {
       position: fixed;
       inset: 0;
@@ -50059,13 +50069,26 @@ function buildNhspReportHTML(inv, header, nhspData) {
       opacity: 1;
       pointer-events: none;
     }
-    .wrap { position: relative; z-index: 1; width: 100%; }
-    .header {
+
+    /* ===== Repeating invoice header (every page) ===== */
+    .inv-fixed-header {
+      position: fixed;
+      left: ${mg.left}mm;
+      right: ${mg.right}mm;
+      top: ${mg.top}mm;
+      z-index: 2;
+      background: transparent;
+    }
+
+    .inv-fixed-header .header {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 16px;
-      margin-bottom: 16px;
+      margin: 0; /* important: header spacing is now inside a fixed block */
     }
+
+    .wrap { position: relative; z-index: 1; width: 100%; }
+
     .title { font-size: 20px; font-weight: 700; letter-spacing: .5px; }
     .muted { color: #666; }
     .mono { font-variant-numeric: tabular-nums; }
@@ -50177,12 +50200,15 @@ function buildNhspReportHTML(inv, header, nhspData) {
     }
     .section-title { font-weight: 700; color: #333; }
 
+    /* ===== Repeating footer (every page, when enabled) ===== */
     .footer {
       position: fixed;
       left: ${mg.left}mm; right: ${mg.right}mm; bottom: ${mg.bottom}mm;
       font-size: 10px; color: #333;
       display: ${hideBankFooter ? "none" : "grid"};
       grid-template-columns: 2fr 1fr; gap: 12px;
+      z-index: 2;
+      background: transparent;
     }
     .right { text-align: right; }
   </style>
@@ -50190,7 +50216,8 @@ function buildNhspReportHTML(inv, header, nhspData) {
 <body>
   ${stationeryUrl ? `<div class="stationery" style="background-image:url('${escapeUrl(stationeryUrl)}');"></div>` : ""}
 
-  <div class="wrap">
+  <!-- Fixed repeating invoice header -->
+  <div class="inv-fixed-header">
     <div class="header">
       <div>
         <div class="brand">
@@ -50205,6 +50232,7 @@ function buildNhspReportHTML(inv, header, nhspData) {
           <div class="billto"><b>${escapeHtml(clientName)}</b>${clientAddress.length ? `<br>${clientAddress.map(escapeHtml).join("<br>")}` : ""}</div>
         </div>
       </div>
+
       <div class="panel">
         <table class="meta-table">
           <tr><th>Issue date</th><td class="mono">${fmtDateGB(issued_at_utc)}</td></tr>
@@ -50214,7 +50242,10 @@ function buildNhspReportHTML(inv, header, nhspData) {
         </table>
       </div>
     </div>
+  </div>
 
+  <!-- Flowing content starts AFTER reserved top margin, so it will not collide with the fixed header -->
+  <div class="wrap">
     <table class="lines">
       <thead>
         <tr>
@@ -50265,6 +50296,7 @@ function buildNhspReportHTML(inv, header, nhspData) {
   </div>
 </body>
 </html>`;
+
   }
 
   // Helpers local to this function
