@@ -35131,7 +35131,7 @@ function buildHTML(payload) {
   <title>Invoice ${escapeHtml(invoice_no || "")}</title>
   <style>
     /* Reserve safe areas so content never overlaps header/footer artwork */
-    @page { size: A4; margin: ${mg.top}mm ${mg.right}mm ${mg.bottom}mm ${mg.left}mm; }
+     @page { size: A4; margin: ${pageTopMm}mm ${mg.right}mm ${pageBottomMm}mm ${mg.left}mm; }
 
     html, body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
@@ -49671,15 +49671,15 @@ function buildNhspReportHTML(inv, header, nhspData) {
       left: Number(pick(mgIn, "left", defaultMargins.left))
     };
 
-        // Reserve space so fixed header/footer NEVER collide with flowing content.
+    const hideBankFooter = !!pick(header, "hide_bank_footer", false);
+
+    // Reserve space so fixed header/footer NEVER collide with flowing content.
     // Header repeats on every page; footer repeats when shown.
     const FIXED_HEADER_MM = 52; // tuned for your header block height (logo/name + invoice + bill-to + meta)
     const FIXED_FOOTER_MM = hideBankFooter ? 0 : 26;
 
     const pageTopMm = Number(mg.top) + FIXED_HEADER_MM;
     const pageBottomMm = Number(mg.bottom) + FIXED_FOOTER_MM;
-
-    const hideBankFooter = !!pick(header, "hide_bank_footer", false);
 
     const headerPo = pick(header, "po_number", null);
     const itemPos = items.map((i) => i?.meta?.po_number).filter(Boolean);
@@ -49748,9 +49748,12 @@ function buildNhspReportHTML(inv, header, nhspData) {
       return String(a.tsId).localeCompare(String(b.tsId));
     });
 
-    const groupBreakdownTableHtml = (grp) => {
+     const groupBreakdownTableHtml = (grp) => {
       const its = grp.items || [];
-      const hoursItem = its.find((x) => getLineTypeNorm(x) === "HOURS") || null;
+      const hoursItem = its.find((x) => {
+        const t = getLineTypeNorm(x);
+        return (t === "HOURS" || String(t || "").startsWith("HOURS_"));
+      }) || null;
 
       const metaBase = (hoursItem?.meta || its[0]?.meta || {}) || {};
       const labels = (metaBase.bucket_labels && typeof metaBase.bucket_labels === "object") ? metaBase.bucket_labels : DEFAULT_LABELS;
@@ -49985,8 +49988,17 @@ function buildNhspReportHTML(inv, header, nhspData) {
       const grpInc = round2(its.reduce((a, it) => a + num(it.total_inc_vat), 0));
 
       const title = escapeHtml(metaFirst.candidate_display || metaFirst.candidate || `Timesheet ${idx + 1}`);
-      const breakdown = groupBreakdownTableHtml(grp);
-      const refsHtml = refsTableHtmlForTs(grp.tsId);
+       const breakdown = groupBreakdownTableHtml(grp);
+
+      const isNhspGroup = (its || []).some((it) => {
+        const m = (it && it.meta && typeof it.meta === "object") ? it.meta : {};
+        const basis = String(m.basis || m.cur_basis || m.timesheet_basis || "").toUpperCase();
+        const route = String(m.route_type || m.route || "").toUpperCase();
+        const flagNhsp = (m.client_is_nhsp === true) || (m.is_nhsp === true);
+        return flagNhsp || basis === "NHSP" || basis === "NHSP_ADJUSTMENT" || route.includes("NHSP");
+      });
+
+      const refsHtml = isNhspGroup ? "" : refsTableHtmlForTs(grp.tsId);
 
       return `
       <tr class="line">
