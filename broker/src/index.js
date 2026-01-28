@@ -21170,6 +21170,7 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
       rows_parsed: 0,
       rows_skipped: 0,
       notes: 'No bytes returned from R2',
+      header_rows: [],
       header_columns: []
     };
   }
@@ -21267,6 +21268,7 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
       rows_parsed: 0,
       rows_skipped: 0,
       notes: 'No rows found in NHSP file (after HTML/XLSX parsing)',
+      header_rows: [],
       header_columns: []
     };
   }
@@ -21366,74 +21368,117 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
   // ─────────────────────────────────────────────────────────────
   // 3) Header detection (first row with "date" & "ref")
   // ─────────────────────────────────────────────────────────────
-  let headerIdx = 0;
+  let headerIdxMain = 0;
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i] || [];
     const lower = r.map(c => String(c || '').toLowerCase());
     if (lower.some(h => h.includes('date')) && lower.some(h => h.includes('ref'))) {
-      headerIdx = i;
+      headerIdxMain = i;
       break;
     }
   }
 
-  // ✅ FIX: NHSP has a 2-row header (row1 has Contract/Actual groups, row2 has Start/End/Break/Total)
-  const headerRow1 = Array.isArray(rows[headerIdx]) ? rows[headerIdx] : [];
-  const headerRow2 = Array.isArray(rows[headerIdx + 1]) ? rows[headerIdx + 1] : [];
-
   const norm = (s) => String(s || '').trim().toLowerCase();
+  const isGroupHeaderRow = (r) => {
+    const rr = Array.isArray(r) ? r : [];
+    const lower = rr.map(norm);
+    return lower.some(x => x.includes('contract') || x.includes('actual'));
+  };
 
-  const row2Norm = headerRow2.map(norm);
-  const hasSubheaders =
-    row2Norm.filter(x => x === 'start').length >= 2 &&
-    row2Norm.filter(x => x === 'end').length   >= 2 &&
-    row2Norm.filter(x => x === 'total').length >= 2 &&
-    row2Norm.some(x => x.includes('break') && x.includes('minute'));
+  // If a group header row exists immediately above the main header row, include it.
+  let headerStartIdx = headerIdxMain;
+  if (headerIdxMain > 0 && isGroupHeaderRow(rows[headerIdxMain - 1])) {
+    headerStartIdx = headerIdxMain - 1;
+  }
+
+  const headerRowA = Array.isArray(rows[headerStartIdx]) ? rows[headerStartIdx] : [];
+  const headerRowB = Array.isArray(rows[headerStartIdx + 1]) ? rows[headerStartIdx + 1] : [];
+  const headerRowC = Array.isArray(rows[headerStartIdx + 2]) ? rows[headerStartIdx + 2] : [];
+
+  const rowBNorm = headerRowB.map(norm);
+  const rowCNorm = headerRowC.map(norm);
+
+  const isSubheaderRow = (arrNorm) => {
+    if (!Array.isArray(arrNorm) || !arrNorm.length) return false;
+    const startCount = arrNorm.filter(x => x === 'start').length;
+    const endCount   = arrNorm.filter(x => x === 'end').length;
+    const totalCount = arrNorm.filter(x => x === 'total').length;
+    const hasBreak   = arrNorm.some(x => x.includes('break') && x.includes('minute'));
+    return startCount >= 2 && endCount >= 2 && totalCount >= 2 && hasBreak;
+  };
+
+  const hasSubheadersInB = isSubheaderRow(rowBNorm);
+  const hasSubheadersInC = isSubheaderRow(rowCNorm);
+
+  // Determine header row count: 1 (no subheader), 2 (subheader in next row), 3 (group + main + subheader)
+  let header_rows_count = 1;
+  if (hasSubheadersInC) header_rows_count = 3;
+  else if (hasSubheadersInB) header_rows_count = 2;
+  else if (headerStartIdx !== headerIdxMain) header_rows_count = 2; // group row + main row
 
   // Use a consistent column count across the file for header/raw alignment
   // Prefer header widths, but also ensure we never truncate real row data.
-  let nCols = Math.max(headerRow1.length, hasSubheaders ? headerRow2.length : 0);
+  let nCols = Math.max(headerRowA.length, headerRowB.length, headerRowC.length);
   try {
-    // Ensure nCols covers the widest row we saw (defensive, supports "extra columns sometimes")
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
       if (Array.isArray(r) && r.length > nCols) nCols = r.length;
     }
   } catch {}
 
-  // Build a single flattened header array aligned to raw_columns[].
-  // - For normal columns: take row1 value.
-  // - For Contract/Actual subcolumns: take row2 value (Start/End/Break/Total).
-  // This ensures FE can map and format times/money correctly.
+  const padHeaderCell = (v) => (v == null ? '' : String(v));
+  const padRowToN = (r) => {
+    const rr = Array.isArray(r) ? r : [];
+    return Array.from({ length: nCols }, (_, i) => padHeaderCell(rr[i]));
+  };
+
+  // ✅ Must return: header_rows (2–3 rows preserved & padded), plus header_columns (flattened)
+  const header_rows = [];
+  header_rows.push(padRowToN(headerRowA));
+  if (header_rows_count >= 2) header_rows.push(padRowToN(headerRowB));
+  if (header_rows_count >= 3) header_rows.push(padRowToN(headerRowC));
+
+  // Build flattened header array aligned to raw_columns[].
+  // - For normal columns: take the "main" header row cell.
+  // - For Contract/Actual subcolumns: take the subheader cell (Start/End/Break/Total) when available.
+  const groupRow = (header_rows_count === 3) ? headerRowA : headerRowA;
+  const mainRow  = (header_rows_count === 3) ? headerRowB : headerRowA;
+  const subRow   = (header_rows_count === 3) ? headerRowC : (hasSubheadersInB ? headerRowB : (hasSubheadersInC ? headerRowC : []));
+
   const header_columns = [];
   for (let i = 0; i < nCols; i++) {
-    const top = String(headerRow1[i] ?? '').trim();
-    const sub = hasSubheaders ? String(headerRow2[i] ?? '').trim() : '';
+    const group = String(groupRow[i] ?? '').trim();
+    const top   = String(mainRow[i] ?? '').trim();
+    const sub   = String(subRow[i] ?? '').trim();
 
-    // If the top cell is a group label (Contract/Actual) and sub exists, use the sub label.
-    // If top is blank and sub exists, use sub.
-    const topNorm = norm(top);
-    if (hasSubheaders && sub) {
-      if (!top || topNorm === 'contract' || topNorm === 'actual') {
+    const groupNorm = norm(group);
+    const topNorm   = norm(top);
+
+    if (sub) {
+      if (groupNorm === 'contract' || groupNorm === 'actual' || topNorm === 'contract' || topNorm === 'actual' || !top) {
         header_columns.push(sub);
         continue;
       }
     }
 
     if (top) header_columns.push(top);
+    else if (group) header_columns.push(group);
     else if (sub) header_columns.push(sub);
     else header_columns.push(''); // keep blanks (do not drop; preserves alignment)
   }
 
   console.log('[NHSP_PARSE] header_detected', {
     import_id,
-    headerIdx,
-    hasSubheaders,
+    headerStartIdx,
+    headerIdxMain,
+    header_rows_count,
+    hasSubheadersInB,
+    hasSubheadersInC,
     nCols,
     header_columns_preview: header_columns.slice(0, 30)
   });
 
   // IMPORTANT: Use a header row for matcher-based col detection that includes subheaders when present.
-  // (This is what allows us to find Start/End/Break even though row1 has merged blanks.)
   const headerRowForFind = header_columns;
 
   // Load column aliases for NHSP assignment once per parse
@@ -21484,7 +21529,6 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
       if (idx >= 0) return idx;
     }
 
-    // fallbackMatcher works on lowercased header string
     const idx2 = (hdrRow || []).findIndex(cell => fallbackMatcher(String(cell || '').toLowerCase()));
     return idx2 >= 0 ? idx2 : fallbackIdx;
   };
@@ -21507,25 +21551,14 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
   const trustColIdx  = findCol(4,  h => h.includes('hospital') || h.includes('trust') || h.includes('client'));
   const wardColIdx   = findCol(5,  h => h.includes('ward') || h.includes('unit') || h.includes('dept'));
 
-  // ✅ assignment uses configured aliases first, then fallback to "assign"
+  // assignment uses configured aliases first, then fallback to "assign"
   const assignmentColIdx = findColByAliasesFn(headerRowForFind, assignmentAliases, 6, h => h.includes('assign'));
 
-  // ✅ FIX: For NHSP two-level header, prefer the SECOND occurrence of Start/End/Break/Total (the ACTUAL block),
-  // with fallback to your historical indices (11,12,13) so existing files still parse correctly.
-  const startColIdx =
-    hasSubheaders
-      ? findNthCol(11, h => h.includes('start'), 2)
-      : findCol(11, h => h.includes('start'));
-
-  const endColIdx =
-    hasSubheaders
-      ? findNthCol(12, h => (h.includes('end') || h.includes('finish')), 2)
-      : findCol(12, h => (h.includes('end') || h.includes('finish')));
-
-  const breakColIdx =
-    hasSubheaders
-      ? findNthCol(13, h => h.includes('break'), 2)
-      : findCol(13, h => h.includes('break'));
+  // Prefer the SECOND occurrence of Start/End/Break/Total (the ACTUAL block),
+  // with fallback indices (11,12,13) so existing files still parse correctly.
+  const startColIdx = findNthCol(11, h => h.includes('start'), 2);
+  const endColIdx   = findNthCol(12, h => (h.includes('end') || h.includes('finish')), 2);
+  const breakColIdx = findNthCol(13, h => h.includes('break'), 2);
 
   const hoursColIdx  = findCol(-1, h => h.includes('hours') && (h.includes('worked') || h.includes('actual')));
 
@@ -21535,8 +21568,8 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
 
   const hrRowsPayload = [];
 
-  // ✅ If we detected the NHSP subheader row, data starts AFTER BOTH header rows
-  const dataStartIdx = headerIdx + (hasSubheaders ? 2 : 1);
+  // ✅ Data starts AFTER the detected header_rows block (1–3 rows)
+  const dataStartIdx = headerStartIdx + header_rows_count;
 
   // ─────────────────────────────────────────────────────────────
   // 4) Row loop → hr_rows payload (DB-compliant)
@@ -21602,8 +21635,8 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
 
     const refStr = normalizeStr(rawRef);
 
-    // ✅ FIX: Preserve the full row as raw_columns aligned to header_columns length (nCols)
-    const raw_columns = Array.from({ length: nCols }, (_, idx) => row[idx]);
+    // ✅ Preserve the full row as raw_columns aligned to header width (nCols), padded with blanks
+    const raw_columns = Array.from({ length: nCols }, (_, idx) => (row && idx < row.length && row[idx] != null) ? row[idx] : '');
 
     const payload_json = {
       type: 'NHSP_WEEKLY',
@@ -21615,7 +21648,7 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
       ref_num: refStr,
       unique_id: uniqueId,
 
-      // ✅ CHANGED: write both keys for stability
+      // write both keys for stability
       assignment,
       assignment_code: assignment,
 
@@ -21685,8 +21718,215 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
     rows_parsed,
     rows_skipped,
     notes: null,
+    header_rows,
     header_columns
   };
+}
+
+async function handleHrAutoprocessImport(env, req) {
+  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const body = await parseJSONBody(req).catch(() => null);
+  if (!body) return withCORS(env, req, badRequest("Invalid JSON"));
+
+  const filename = (body.original_name || body.file_key || '').trim();
+  const fileKey  = (body.file_key || '').trim();
+  const clientId = body.client_id && String(body.client_id).trim();
+
+  if (!filename) {
+    return withCORS(env, req, badRequest("original_name or file_key is required"));
+  }
+  if (!fileKey) {
+    return withCORS(env, req, badRequest("file_key is required for HealthRoster autoprocess import"));
+  }
+  if (!clientId) {
+    return withCORS(env, req, badRequest("client_id is required for HealthRoster autoprocess"));
+  }
+
+  if (LOG) {
+    console.log('[HR_WEEKLY_IMPORT]', JSON.stringify({
+      stage: 'start',
+      filename,
+      file_key: fileKey,
+      client_id: clientId,
+      tz_assumption: body.tz_assumption || 'Europe/London'
+    }));
+  }
+
+  try {
+    const nowIso = new Date().toISOString();
+    const tzAssumption = body.tz_assumption || 'Europe/London';
+
+    // 1) Create hr_imports row for this HealthRoster file
+    const payload = {
+      filename,
+      uploaded_by: user.id,
+      uploaded_at_utc: nowIso,
+      tz_assumption: tzAssumption,
+      source_system: 'HEALTHROSTER',
+      client_id: clientId,
+      file_r2_key: fileKey,
+      import_scope: 'HR_WEEKLY',
+      parse_summary_json: {
+        status: 'PENDING_PARSE',
+        rows_total: 0,
+        rows_parsed: 0,
+        rows_skipped: 0,
+        notes: null,
+        header_rows: [],     // ✅ ensure key exists from day 0
+        header_columns: []   // ✅ ensure key exists from day 0
+      }
+    };
+
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/hr_imports`, {
+      method: 'POST',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      if (LOG) {
+        console.error('[HR_WEEKLY_IMPORT]', JSON.stringify({
+          stage: 'hr_imports_insert_failed',
+          filename,
+          file_key: fileKey,
+          client_id: clientId,
+          error: err
+        }));
+      }
+      return withCORS(env, req, badRequest(`HR autoprocess import create failed: ${err}`));
+    }
+
+    const json = await res.json().catch(() => ([]));
+    const rec = Array.isArray(json) ? json[0] : json;
+
+    if (!rec || !rec.id) {
+      if (LOG) {
+        console.error('[HR_WEEKLY_IMPORT]', JSON.stringify({
+          stage: 'no_import_id',
+          filename,
+          file_key: fileKey,
+          client_id: clientId
+        }));
+      }
+      return withCORS(env, req, serverError("HR autoprocess import create returned no id"));
+    }
+
+    const importId = rec.id;
+
+    // 2) Parse the HealthRoster workbook into hr_rows
+    let summary = {
+      rows_total: 0,
+      rows_parsed: 0,
+      rows_skipped: 0,
+      notes: null,
+      header_rows: [],
+      header_columns: []
+    };
+
+    try {
+      if (typeof parseHealthRosterWorkbookIntoHrRows === 'function') {
+        summary = await parseHealthRosterWorkbookIntoHrRows(env, {
+          import_id: importId,
+          file_key: fileKey,
+          client_id: clientId,
+          tz: tzAssumption
+        });
+      } else {
+        summary.notes = 'parseHealthRosterWorkbookIntoHrRows helper is not implemented.';
+      }
+    } catch (e) {
+      summary.notes = `Parsing failed: ${e?.message || String(e)}`;
+      if (LOG) {
+        console.error('[HR_WEEKLY_IMPORT]', JSON.stringify({
+          stage: 'parse_failed',
+          import_id: importId,
+          filename,
+          file_key: fileKey,
+          client_id: clientId,
+          error: e?.message || String(e)
+        }));
+      }
+    }
+
+    const headerRows =
+      (summary && Array.isArray(summary.header_rows))
+        ? summary.header_rows
+        : [];
+
+    const headerCols =
+      (summary && Array.isArray(summary.header_columns))
+        ? summary.header_columns
+        : [];
+
+    // 3) Update parse_summary_json on hr_imports
+    const patchBody = {
+      parse_summary_json: {
+        status: summary && !summary.error ? 'PARSED' : 'PARSE_FAILED',
+        rows_total: Number(summary?.rows_total || 0),
+        rows_parsed: Number(summary?.rows_parsed || 0),
+        rows_skipped: Number(summary?.rows_skipped || 0),
+        notes: summary?.notes || null,
+        header_rows: headerRows,     // ✅ persist header_rows
+        header_columns: headerCols   // ✅ persist header_columns
+      }
+    };
+
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/hr_imports?id=eq.${encodeURIComponent(importId)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify(patchBody)
+      }
+    ).catch(() => { /* best effort */ });
+
+    if (LOG) {
+      console.log('[HR_WEEKLY_IMPORT]', JSON.stringify({
+        stage: 'after_parse',
+        import_id: importId,
+        filename,
+        file_key: fileKey,
+        client_id: clientId,
+        tz_assumption: tzAssumption,
+        parse_summary: patchBody.parse_summary_json
+      }));
+    }
+
+    // 4) Audit
+    await writeAudit(
+      env,
+      user,
+      'HR_AUTOPROC_IMPORT_CREATED',
+      {
+        import_id: importId,
+        filename,
+        client_id: clientId,
+        parse_summary: patchBody.parse_summary_json
+      },
+      { entity: 'hr_imports', subject_id: importId, req }
+    );
+
+    return withCORS(env, req, ok({
+      import_id: importId,
+      parse_summary: patchBody.parse_summary_json
+    }));
+  } catch (e) {
+    if (LOG) {
+      console.error('[HR_WEEKLY_IMPORT]', JSON.stringify({
+        stage: 'unexpected_error',
+        filename,
+        file_key: fileKey,
+        client_id: clientId,
+        error: e?.message || String(e)
+      }));
+    }
+    return withCORS(env, req, serverError("Failed to create HR autoprocess import"));
+  }
 }
 
 async function parseHealthRosterWorkbookIntoHrRows(
@@ -21833,6 +22073,7 @@ async function parseHealthRosterWorkbookIntoHrRows(
       rows_parsed: 0,
       rows_skipped: 0,
       notes: 'Empty HealthRoster sheet',
+      header_rows: [],
       header_columns: []
     };
   }
@@ -21936,19 +22177,31 @@ async function parseHealthRosterWorkbookIntoHrRows(
     headerRow = rows[1];
     headerIdx = 1;
   }
-  const header_columns = headerRow.map(c => String(c ?? ''));
+
+  // ✅ Ensure a stable header width across the file (columns may vary)
+  let nCols = Array.isArray(headerRow) ? headerRow.length : 0;
+  try {
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      if (Array.isArray(r) && r.length > nCols) nCols = r.length;
+    }
+  } catch {}
+
+  const header_columns = Array.from({ length: nCols }, (_, i) => String((headerRow && i < headerRow.length) ? (headerRow[i] ?? '') : ''));
+  const header_rows = [header_columns];
 
   if (LOG) {
     console.log('[HR_PARSE]', JSON.stringify({
       stage: 'header_detected',
       import_id,
       source_system: importSourceSystem,
+      nCols,
       header_columns
     }));
   }
 
   const findCol = (fallbackIdx, matcher) => {
-    const idx = headerRow.findIndex(cell => matcher(String(cell || '').toLowerCase()));
+    const idx = (headerRow || []).findIndex(cell => matcher(String(cell || '').toLowerCase()));
     return idx >= 0 ? idx : fallbackIdx;
   };
 
@@ -22012,7 +22265,7 @@ async function parseHealthRosterWorkbookIntoHrRows(
     const staffIdx       = findCol(-1, h => h.includes('staff') || h.includes('worker') || h.includes('name'));
     const unitIdx        = findCol(-1, h => h.includes('unit') || h.includes('ward') || h.includes('location'));
 
-    // ✅ CHANGED: grade column uses alias list first, then fallback to includes('grade')
+    // grade column uses alias list first, then fallback to includes('grade')
     const gradeIdx       = findColByAliasesFn(headerRow, gradeAliases, -1, h => h.includes('grade'));
 
     const startIdx       = findCol(-1, h => h.includes('start') || h.includes('from'));
@@ -22047,7 +22300,6 @@ async function parseHealthRosterWorkbookIntoHrRows(
       const rawStaff  = staffIdx       >= 0 ? row[staffIdx]       : null;
       const rawUnit   = unitIdx        >= 0 ? row[unitIdx]        : null;
 
-      // ✅ Uses gradeIdx computed via aliases
       const rawGrade  = gradeIdx       >= 0 ? row[gradeIdx]       : null;
 
       const rawStart  = startIdx       >= 0 ? row[startIdx]       : null;
@@ -22092,9 +22344,12 @@ async function parseHealthRosterWorkbookIntoHrRows(
       ];
       const external_row_key = normalizeKeyParts(keyParts);
 
+      // ✅ Preserve raw columns aligned to header width (nCols), padded with blanks
+      const raw_columns = Array.from({ length: nCols }, (_, idx) => (row && idx < row.length && row[idx] != null) ? row[idx] : '');
+
       const fullRow = {};
-      headerRow.forEach((col, idx) => {
-        fullRow[String(col || `col_${idx}`)] = row[idx];
+      header_columns.forEach((col, idx) => {
+        fullRow[String(col || `col_${idx}`)] = raw_columns[idx];
       });
       fullRow.date_local        = dateYmd;
       fullRow.start_time_local  = startHhmm;
@@ -22102,10 +22357,11 @@ async function parseHealthRosterWorkbookIntoHrRows(
       fullRow.request_id        = requestId;
       fullRow.staff_name        = staffRaw;
       fullRow.unit              = unitRaw;
-      fullRow.grade_raw         = gradeRaw;      // existing behaviour retained
+      fullRow.grade_raw         = gradeRaw;
       fullRow.actual_hours      = hoursWorked;
       fullRow.booked_hours      = rawBooked;
       fullRow.rate              = rawRate;
+      fullRow.raw_columns       = raw_columns;
 
       const roleType = inferRoleTypeFromText(gradeRaw, staffRaw);
 
@@ -22123,7 +22379,7 @@ async function parseHealthRosterWorkbookIntoHrRows(
         external_row_key,
         payload_json: fullRow,
         staff_raw: staffRaw || null,
-        assignment_grade_norm: gradeNorm, // existing behaviour retained
+        assignment_grade_norm: gradeNorm,
         hours_worked: typeof hoursWorked === 'number' ? hoursWorked : null
       });
 
@@ -22140,7 +22396,7 @@ async function parseHealthRosterWorkbookIntoHrRows(
     const dateColIdx      = findCol(4,  h => h.includes('date'));
     const wardColIdx      = findCol(5,  h => h.includes('unit') || h.includes('ward') || h.includes('location'));
 
-    // ✅ NEW: grade column index for weekly (aliases first, fallback to includes('grade'))
+    // grade column index for weekly (aliases first, fallback to includes('grade'))
     const gradeColIdx     = findColByAliasesFn(headerRow, gradeAliases, -1, h => h.includes('grade'));
 
     const startColIdx     = findCol(10, h => h.includes('start'));
@@ -22175,7 +22431,6 @@ async function parseHealthRosterWorkbookIntoHrRows(
       const rawDate      = row[dateColIdx];
       const rawWard      = row[wardColIdx];
 
-      // ✅ NEW: raw grade for weekly
       const rawGrade     = gradeColIdx >= 0 ? row[gradeColIdx] : null;
 
       const rawStart     = row[startColIdx];
@@ -22189,7 +22444,6 @@ async function parseHealthRosterWorkbookIntoHrRows(
       const workDateYmd = excelDateToYmd(rawDate);
       const ward        = normalizeStr(rawWard);
 
-      // ✅ NEW: grade raw/norm for weekly
       const gradeRaw    = normalizeStr(rawGrade);
       const gradeNorm   = gradeRaw ? gradeRaw.toLowerCase() : null;
 
@@ -22230,7 +22484,8 @@ async function parseHealthRosterWorkbookIntoHrRows(
       const keyParts  = [workDateYmd, staffNorm, wardNorm, String(client_id || ''), requestId];
       const external_row_key = normalizeKeyParts(keyParts);
 
-      const raw_columns = headerRow.map((_, idx) => row[idx]);
+      // ✅ Preserve raw columns aligned to header width (nCols), padded with blanks
+      const raw_columns = Array.from({ length: nCols }, (_, idx) => (row && idx < row.length && row[idx] != null) ? row[idx] : '');
 
       const payload_json = {
         type: 'HEALTHROSTER_WEEKLY',
@@ -22239,10 +22494,7 @@ async function parseHealthRosterWorkbookIntoHrRows(
         ward,
         client_id,
         request_id: requestId,
-
-        // ✅ NEW: store grade_raw in payload_json
         grade_raw: gradeRaw,
-
         start_local: startHhmm,
         end_local: endHhmm,
         break_mins: breakMins,
@@ -22269,10 +22521,7 @@ async function parseHealthRosterWorkbookIntoHrRows(
         external_row_key,
         payload_json,
         staff_raw: staffName || null,
-
-        // ✅ CHANGED: not null anymore when grade is present
         assignment_grade_norm: gradeNorm,
-
         hours_worked: typeof hoursWorked === 'number' ? hoursWorked : null
       });
 
@@ -22322,9 +22571,13 @@ async function parseHealthRosterWorkbookIntoHrRows(
     rows_parsed,
     rows_skipped,
     notes: null,
+    header_rows,
     header_columns
   };
 }
+
+
+
 async function buildNhspWeeklySnapshot(
   env,
   ts,
@@ -25133,7 +25386,8 @@ async function handleHrAutoprocessImport(env, req) {
         rows_parsed: 0,
         rows_skipped: 0,
         notes: null,
-        header_columns: [] // ✅ ensure key exists from day 0
+        header_rows: [],     // ✅ ensure key exists from day 0
+        header_columns: []   // ✅ ensure key exists from day 0
       }
     };
 
@@ -25180,6 +25434,7 @@ async function handleHrAutoprocessImport(env, req) {
       rows_parsed: 0,
       rows_skipped: 0,
       notes: null,
+      header_rows: [],
       header_columns: []
     };
 
@@ -25208,7 +25463,11 @@ async function handleHrAutoprocessImport(env, req) {
       }
     }
 
-    // ✅ FIX: persist header_columns into hr_imports.parse_summary_json
+    const headerRows =
+      (summary && Array.isArray(summary.header_rows))
+        ? summary.header_rows
+        : [];
+
     const headerCols =
       (summary && Array.isArray(summary.header_columns))
         ? summary.header_columns
@@ -25222,7 +25481,8 @@ async function handleHrAutoprocessImport(env, req) {
         rows_parsed: Number(summary?.rows_parsed || 0),
         rows_skipped: Number(summary?.rows_skipped || 0),
         notes: summary?.notes || null,
-        header_columns: headerCols
+        header_rows: headerRows,     // ✅ persist header_rows
+        header_columns: headerCols   // ✅ persist header_columns
       }
     };
 
@@ -25278,7 +25538,6 @@ async function handleHrAutoprocessImport(env, req) {
     return withCORS(env, req, serverError("Failed to create HR autoprocess import"));
   }
 }
-
 
 async function handleHrAutoprocessApply(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
@@ -49010,51 +49269,164 @@ async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, o
     );
   }
 
-  function buildHrReportHTML(inv, header, hrRows) {
-    const safe = (v) => (v == null ? '' : String(v));
-    const h = header || {};
-    const clientName = safe(h.client_name || h.client || '');
-    const invNo = safe(inv.invoice_no || '');
-    const issued = safe(inv.issued_at_utc || '');
+function buildHrReportHTML(inv, header, hrRows) {
+  const safe = (v) => (v == null ? '' : String(v));
+  const h = header || {};
+  const clientName = safe(h.client_name || h.client || '');
+  const invNo = safe(inv.invoice_no || '');
+  const issued = safe(inv.issued_at_utc || '');
 
-    const sortedRows = (Array.isArray(hrRows) ? hrRows : [])
-      .map((r, idx) => ({ r, idx }))
-      .sort((a, b) => {
-        const ra = a.r?.raw_row || a.r || {};
-        const rb = b.r?.raw_row || b.r || {};
-        const da = _parseSortDateToMs(a.r?.date || ra.work_date || ra.date || _safeGetDateFromAnyRow(ra));
-        const db = _parseSortDateToMs(b.r?.date || rb.work_date || rb.date || _safeGetDateFromAnyRow(rb));
-        if (da !== db) return da - db;
-        return a.idx - b.idx;
-      })
-      .map(x => x.r);
+  // Use global escapeHtml if present (it is used elsewhere), otherwise fall back safely.
+  const esc = (typeof escapeHtml === 'function')
+    ? (v) => escapeHtml(safe(v))
+    : (v) => safe(v)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 
-    const rowsHtml = sortedRows.map((r, idx) => {
-      const raw = r.raw_row || {};
-      const date      = safe(r.date || raw.work_date || raw.date || '');
-      const staff     = safe(raw.staff_name || raw.worker || '');
-      const ward      = safe(raw.ward || '');
-      const start     = safe(raw.start_utc || '');
-      const end       = safe(raw.end_utc || '');
-      const breakMins = safe(raw.break_mins != null ? raw.break_mins : '');
-      const ref       = safe(r.reference || raw.reference || raw.ref_num || '');
-      return `
-        <tr>
-          <td>${idx + 1}</td>
-          <td>${date}</td>
-          <td>${staff}</td>
-          <td>${ward}</td>
-          <td>${start}</td>
-          <td>${end}</td>
-          <td>${breakMins}</td>
-          <td>${ref}</td>
-        </tr>
-      `;
+  const tables = [];
+
+  const unwrapRow = (r) => {
+    if (!r) return null;
+    if (r.raw_row && typeof r.raw_row === 'object') return r.raw_row;
+    if (r.payload && typeof r.payload === 'object') return r.payload;
+    if (r.raw && typeof r.raw === 'object') return r.raw;
+    return r;
+  };
+
+  // Accept either legacy array form (hrRows = rows array) OR new form (hrRows = { tables: [...] }).
+  if (Array.isArray(hrRows)) {
+    const rows = hrRows.map(unwrapRow).filter(r => r && typeof r === 'object');
+    if (rows.length) tables.push({ header_rows: [], header_columns: [], rows });
+  } else if (hrRows && typeof hrRows === 'object') {
+    const tList = Array.isArray(hrRows.tables) ? hrRows.tables : [hrRows];
+    for (const t of tList) {
+      const headerRows = Array.isArray(t?.header_rows)
+        ? t.header_rows.map(row => Array.isArray(row) ? row.map(safe) : [])
+        : [];
+      const headerCols = Array.isArray(t?.header_columns) ? t.header_columns.map(safe) : [];
+
+      const rowsRaw = Array.isArray(t?.rows_json)
+        ? t.rows_json
+        : (Array.isArray(t?.rows) ? t.rows : []);
+      const rows = rowsRaw.map(unwrapRow).filter(r => r && typeof r === 'object');
+
+      if (rows.length) tables.push({ header_rows: headerRows, header_columns: headerCols, rows });
+    }
+  }
+
+  const hasTables = tables.length > 0;
+
+  const calcColCount = (hdrRows, hdrCols, rows) => {
+    let n = 0;
+
+    if (Array.isArray(hdrRows) && hdrRows.length) {
+      for (const r of hdrRows) {
+        if (Array.isArray(r)) n = Math.max(n, r.length);
+      }
+      if (n > 0) return n;
+    }
+
+    if (Array.isArray(hdrCols) && hdrCols.length) return hdrCols.length;
+
+    const firstWithRaw = (Array.isArray(rows) ? rows : []).find(r => Array.isArray(r?.raw_columns));
+    if (firstWithRaw && Array.isArray(firstWithRaw.raw_columns)) return firstWithRaw.raw_columns.length;
+
+    // Last resort: keys (only if no raw_columns exists anywhere)
+    const firstRow = (Array.isArray(rows) ? rows : [])[0];
+    return firstRow && typeof firstRow === 'object' ? Object.keys(firstRow).length : 0;
+  };
+
+  const renderThead = (hdrRows, hdrCols, colCount, rows) => {
+    if (Array.isArray(hdrRows) && hdrRows.length) {
+      const trs = hdrRows.map(rowArr => {
+        const cells = [];
+        for (let i = 0; i < colCount; i++) {
+          const v = (Array.isArray(rowArr) && i < rowArr.length) ? rowArr[i] : '';
+          cells.push(`<th>${esc(v)}</th>`);
+        }
+        return `<tr>${cells.join('')}</tr>`;
+      }).join('');
+      return `<thead>${trs}</thead>`;
+    }
+
+    if (Array.isArray(hdrCols) && hdrCols.length) {
+      const cells = hdrCols.map(c => `<th>${esc(c)}</th>`).join('');
+      return `<thead><tr>${cells}</tr></thead>`;
+    }
+
+    // If no stored headers, prefer "Column 1..N" when raw_columns exists
+    const firstWithRaw = (Array.isArray(rows) ? rows : []).find(r => Array.isArray(r?.raw_columns));
+    if (firstWithRaw && colCount > 0) {
+      const cols = Array.from({ length: colCount }, (_, i) => `Column ${i + 1}`);
+      const cells = cols.map(c => `<th>${esc(c)}</th>`).join('');
+      return `<thead><tr>${cells}</tr></thead>`;
+    }
+
+    // Absolute last resort: keys from first row
+    const firstRow = (Array.isArray(rows) ? rows : [])[0] || {};
+    const keys = Object.keys(firstRow);
+    const cells = keys.map(k => `<th>${esc(k)}</th>`).join('');
+    return `<thead><tr>${cells}</tr></thead>`;
+  };
+
+  const renderTbody = (rows, colCount) => {
+    const bodyRows = (Array.isArray(rows) ? rows : []).map(r => {
+      // Canonical: render from raw_columns if present
+      const arr = Array.isArray(r?.raw_columns)
+        ? r.raw_columns
+        : (Array.isArray(r?.payload_json?.raw_columns) ? r.payload_json.raw_columns : null);
+
+      if (arr) {
+        const cells = [];
+        for (let i = 0; i < colCount; i++) {
+          const v = (i < arr.length) ? arr[i] : '';
+          cells.push(`<td>${esc(v)}</td>`);
+        }
+        return `<tr>${cells.join('')}</tr>`;
+      }
+
+      // Fallback only if raw_columns absent (legacy/unexpected)
+      const keys = Object.keys(r || {});
+      const cells = [];
+      for (let i = 0; i < colCount; i++) {
+        const k = keys[i];
+        const v = (k != null) ? (r?.[k]) : '';
+        cells.push(`<td>${esc(v)}</td>`);
+      }
+      return `<tr>${cells.join('')}</tr>`;
     }).join('');
 
-    const hasRows = sortedRows.length > 0;
+    return `<tbody>${bodyRows}</tbody>`;
+  };
 
-    return `
+  const renderTable = (t, idx) => {
+    const hdrRows = Array.isArray(t.header_rows) ? t.header_rows : [];
+    const hdrCols = Array.isArray(t.header_columns) ? t.header_columns : [];
+    const rows = Array.isArray(t.rows) ? t.rows : [];
+    const colCount = calcColCount(hdrRows, hdrCols, rows);
+
+    const sep = (idx > 0) ? `<div class="page-break"></div>` : '';
+
+    if (rows.length === 0) return '';
+
+    const theadHtml = renderThead(hdrRows, hdrCols, colCount, rows);
+    const tbodyHtml = renderTbody(rows, colCount);
+
+    return `${sep}
+      <table class="hr">
+        ${theadHtml}
+        ${tbodyHtml}
+      </table>
+    `;
+  };
+
+  const tablesHtml = hasTables ? tables.map(renderTable).join('') : '';
+  const hasAnyRows = hasTables && tables.some(t => Array.isArray(t.rows) && t.rows.length > 0);
+
+  return `
 <!DOCTYPE html>
 <html>
 <head>
@@ -49064,202 +49436,176 @@ async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, o
     body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 11px; margin: 24px; }
     h1 { font-size: 18px; margin-bottom: 4px; }
     h2 { font-size: 13px; margin-top: 4px; margin-bottom: 12px; }
-    table { width: 100%; border-collapse: collapse; font-size: 9px; }
-    th, td { border: 1px solid #ccc; padding: 3px 4px; text-align: left; }
-    th { background: #f2f2f2; }
     .meta { margin-bottom: 12px; font-size: 10px; }
     .meta span { display: inline-block; margin-right: 16px; }
+
+    .page-break { break-before: page; page-break-before: always; }
+
+    table.hr { width: 100%; border-collapse: collapse; font-size: 9px; table-layout: fixed; }
+    table.hr thead { display: table-header-group; }
+    table.hr th, table.hr td { border: 1px solid #ccc; padding: 3px 4px; text-align: left; vertical-align: top; word-break: break-word; overflow-wrap: anywhere; }
+    table.hr th { background: #f2f2f2; }
+
     .no-data { margin-top: 12px; font-style: italic; }
   </style>
 </head>
 <body>
   <h1>HealthRoster report</h1>
-  <h2>Invoice ${invNo}</h2>
+  <h2>Invoice ${esc(invNo)}</h2>
   <div class="meta">
-    <span><strong>Client:</strong> ${clientName}</span>
-    <span><strong>Issued:</strong> ${issued}</span>
+    <span><strong>Client:</strong> ${esc(clientName)}</span>
+    <span><strong>Issued:</strong> ${esc(issued)}</span>
   </div>
-  ${hasRows ? `
-    <table>
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Date</th>
-          <th>Staff</th>
-          <th>Ward</th>
-          <th>Start</th>
-          <th>End</th>
-          <th>Break (mins)</th>
-          <th>Reference</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rowsHtml}
-      </tbody>
-    </table>
-  ` : `
+
+  ${hasAnyRows ? tablesHtml : `
     <div class="no-data">No HealthRoster rows captured for this invoice.</div>
   `}
 </body>
 </html>
-    `;
+  `;
+}
+
+function buildNhspReportHTML(inv, header, nhspData) {
+  const safe = (v) => (v == null ? '' : String(v));
+  const h = header || {};
+  const clientName = safe(h.client_name || h.client || '');
+  const invNo = safe(inv.invoice_no || '');
+  const issued = safe(inv.issued_at_utc || '');
+
+  const tables = [];
+
+  const unwrapRow = (r) => {
+    if (!r) return null;
+    if (r.raw_row && typeof r.raw_row === 'object') return r.raw_row;
+    if (r.raw && typeof r.raw === 'object') return r.raw;
+    return r;
+  };
+
+  if (Array.isArray(nhspData)) {
+    const rows = nhspData.map(unwrapRow).filter(r => r && typeof r === 'object');
+    if (rows.length) tables.push({ header_rows: [], header_columns: [], rows });
+  } else if (nhspData && typeof nhspData === 'object') {
+    const tList = Array.isArray(nhspData.tables) ? nhspData.tables : [nhspData];
+    for (const t of tList) {
+      const headerRows = Array.isArray(t?.header_rows)
+        ? t.header_rows.map(row => Array.isArray(row) ? row.map(safe) : [])
+        : [];
+      const headerCols = Array.isArray(t?.header_columns) ? t.header_columns.map(safe) : [];
+      const rowsRaw = Array.isArray(t?.rows_json)
+        ? t.rows_json
+        : (Array.isArray(t?.rows) ? t.rows : []);
+      const rows = rowsRaw.map(unwrapRow).filter(r => r && typeof r === 'object');
+      if (rows.length) tables.push({ header_rows: headerRows, header_columns: headerCols, rows });
+    }
   }
 
-  function buildNhspReportHTML(inv, header, nhspData) {
-    const safe = (v) => (v == null ? '' : String(v));
-    const h = header || {};
-    const clientName = safe(h.client_name || h.client || '');
-    const invNo = safe(inv.invoice_no || '');
-    const issued = safe(inv.issued_at_utc || '');
+  const hasTables = tables.length > 0;
 
-    const tables = [];
+  const calcColCount = (hdrRows, hdrCols, rows) => {
+    let n = 0;
 
-    const unwrapRow = (r) => {
-      if (!r) return null;
-      if (r.raw_row && typeof r.raw_row === 'object') return r.raw_row;
-      if (r.raw && typeof r.raw === 'object') return r.raw;
-      return r;
-    };
-
-    if (Array.isArray(nhspData)) {
-      const rows = nhspData.map(unwrapRow).filter(r => r && typeof r === 'object');
-      if (rows.length) tables.push({ header_columns: [], rows });
-    } else if (nhspData && typeof nhspData === 'object') {
-      const tList = Array.isArray(nhspData.tables) ? nhspData.tables : [nhspData];
-      for (const t of tList) {
-        const headerCols = Array.isArray(t?.header_columns) ? t.header_columns.map(safe) : [];
-        const rowsRaw = Array.isArray(t?.rows_json)
-          ? t.rows_json
-          : (Array.isArray(t?.rows) ? t.rows : []);
-        const rows = rowsRaw.map(unwrapRow).filter(r => r && typeof r === 'object');
-        if (rows.length) tables.push({ header_columns: headerCols, rows });
+    if (Array.isArray(hdrRows) && hdrRows.length) {
+      for (const r of hdrRows) {
+        if (Array.isArray(r)) n = Math.max(n, r.length);
       }
+      if (n > 0) return n;
     }
 
-    const safeGetDateFromAnyRow = (row) => {
-      if (!row || typeof row !== 'object') return '';
-      const candidates = [
-        row.work_date, row.workDate,
-        row.date, row.Date,
-        row.shift_date, row.shiftDate,
-        row.start_date, row.startDate
-      ];
-      for (const c of candidates) {
-        const s = (c == null ? '' : String(c)).trim();
-        if (s) return s;
-      }
-      return '';
-    };
+    if (Array.isArray(hdrCols) && hdrCols.length) return hdrCols.length;
 
-    const parseSortDateToMs = (v) => {
-      const s = (v == null ? '' : String(v)).trim();
-      if (!s) return Number.POSITIVE_INFINITY;
+    const firstWithRaw = (Array.isArray(rows) ? rows : []).find(r => Array.isArray(r?.raw_columns));
+    if (firstWithRaw && Array.isArray(firstWithRaw.raw_columns)) return firstWithRaw.raw_columns.length;
 
-      const mYmd = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-      if (mYmd) {
-        const y = Number(mYmd[1]), mo = Number(mYmd[2]) - 1, d = Number(mYmd[3]);
-        const t = Date.UTC(y, mo, d);
-        return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
-      }
+    // Last resort (only if raw_columns absent everywhere)
+    const firstRow = (Array.isArray(rows) ? rows : [])[0];
+    return firstRow && typeof firstRow === 'object' ? Object.keys(firstRow).length : 0;
+  };
 
-      const mDmy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
-      if (mDmy) {
-        const dd = Number(mDmy[1]), mo = Number(mDmy[2]) - 1;
-        let y = Number(mDmy[3]);
-        if (mDmy[3].length === 2) y = (y >= 70 ? 1900 + y : 2000 + y);
-        const t = Date.UTC(y, mo, dd);
-        return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
-      }
-
-      const dt = new Date(s);
-      const t = dt.getTime();
-      return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
-    };
-
-    const findDateColIndex = (cols) => {
-      if (!Array.isArray(cols) || !cols.length) return -1;
-      const lc = cols.map(c => String(c || '').toLowerCase());
-      let idx = lc.findIndex(s => s.includes('work') && s.includes('date'));
-      if (idx >= 0) return idx;
-      idx = lc.findIndex(s => s === 'date' || s.includes(' date'));
-      if (idx >= 0) return idx;
-      idx = lc.findIndex(s => s.includes('date'));
-      return idx;
-    };
-
-    const sortRowsByDate = (headerCols, rows) => {
-      const cols = Array.isArray(headerCols) ? headerCols : [];
-      const dateIdx = findDateColIndex(cols);
-
-      return rows.map((r, idx) => ({ r, idx })).sort((a, b) => {
-        const ra = a.r;
-        const rb = b.r;
-
-        let da = '';
-        let db = '';
-
-        if (Array.isArray(ra?.raw_columns) && dateIdx >= 0) da = ra.raw_columns[dateIdx] ?? '';
-        else da = safeGetDateFromAnyRow(ra);
-
-        if (Array.isArray(rb?.raw_columns) && dateIdx >= 0) db = rb.raw_columns[dateIdx] ?? '';
-        else db = safeGetDateFromAnyRow(rb);
-
-        const ta = parseSortDateToMs(da);
-        const tb = parseSortDateToMs(db);
-        if (ta !== tb) return ta - tb;
-        return a.idx - b.idx;
-      }).map(x => x.r);
-    };
-
-    for (const t of tables) {
-      t.rows = sortRowsByDate(t.header_columns, t.rows);
-    }
-
-    const hasTables = tables.length > 0;
-
-    const renderTable = (t, idx) => {
-      const headerCols = Array.isArray(t.header_columns) ? t.header_columns : [];
-
-      const firstWithRawCols = t.rows.find(r => Array.isArray(r.raw_columns));
-      const rawLen = firstWithRawCols ? firstWithRawCols.raw_columns.length : 0;
-
-      const columns = (headerCols && headerCols.length)
-        ? headerCols
-        : (rawLen > 0
-            ? Array.from({ length: rawLen }, (_, i) => `Column ${i + 1}`)
-            : Object.keys(t.rows[0] || {}));
-
-      const headerHtml = `<tr>${columns.map(col => `<th>${escapeHtml(safe(col))}</th>`).join('')}</tr>`;
-
-      const rowsHtml = t.rows.map(r => {
-        let cells = [];
-
-        if (Array.isArray(r.raw_columns)) {
-          const arr = r.raw_columns;
-          for (let i = 0; i < columns.length; i++) {
-            const v = (i < arr.length) ? arr[i] : '';
-            cells.push(`<td>${escapeHtml(safe(v))}</td>`);
-          }
-        } else {
-          for (const col of columns) {
-            cells.push(`<td>${escapeHtml(safe(r?.[col]))}</td>`);
-          }
+  const renderThead = (hdrRows, hdrCols, colCount, rows) => {
+    if (Array.isArray(hdrRows) && hdrRows.length) {
+      const trs = hdrRows.map(rowArr => {
+        const cells = [];
+        for (let i = 0; i < colCount; i++) {
+          const v = (Array.isArray(rowArr) && i < rowArr.length) ? rowArr[i] : '';
+          cells.push(`<th>${escapeHtml(safe(v))}</th>`);
         }
-
         return `<tr>${cells.join('')}</tr>`;
       }).join('');
+      return `<thead>${trs}</thead>`;
+    }
 
-      const sep = (idx > 0) ? `<div class="page-break"></div>` : '';
+    if (Array.isArray(hdrCols) && hdrCols.length) {
+      const cells = hdrCols.map(col => `<th>${escapeHtml(safe(col))}</th>`).join('');
+      return `<thead><tr>${cells}</tr></thead>`;
+    }
 
-      return `${sep}
-        <table class="nhsp">
-          <thead>${headerHtml}</thead>
-          <tbody>${rowsHtml}</tbody>
-        </table>
-      `;
-    };
+    // If no stored headers, prefer "Column 1..N" when raw_columns exists (no object-key columns)
+    const firstWithRaw = (Array.isArray(rows) ? rows : []).find(r => Array.isArray(r?.raw_columns));
+    if (firstWithRaw && colCount > 0) {
+      const cols = Array.from({ length: colCount }, (_, i) => `Column ${i + 1}`);
+      const cells = cols.map(col => `<th>${escapeHtml(safe(col))}</th>`).join('');
+      return `<thead><tr>${cells}</tr></thead>`;
+    }
 
-    return `
+    // Absolute last resort: object keys (only when raw_columns is absent everywhere)
+    const firstRow = (Array.isArray(rows) ? rows : [])[0] || {};
+    const keys = Object.keys(firstRow);
+    const cells = keys.map(col => `<th>${escapeHtml(safe(col))}</th>`).join('');
+    return `<thead><tr>${cells}</tr></thead>`;
+  };
+
+  const renderTbody = (rows, colCount) => {
+    const rowsHtml = (Array.isArray(rows) ? rows : []).map(r => {
+      // ✅ Mandatory: always render from raw_columns when present
+      const arr = Array.isArray(r?.raw_columns)
+        ? r.raw_columns
+        : (Array.isArray(r?.payload_json?.raw_columns) ? r.payload_json.raw_columns : null);
+
+      if (arr) {
+        const cells = [];
+        for (let i = 0; i < colCount; i++) {
+          const v = (i < arr.length) ? arr[i] : '';
+          cells.push(`<td>${escapeHtml(safe(v))}</td>`);
+        }
+        return `<tr>${cells.join('')}</tr>`;
+      }
+
+      // Fallback only if raw_columns absent (legacy/unexpected)
+      const keys = Object.keys(r || {});
+      const cells = [];
+      for (let i = 0; i < colCount; i++) {
+        const k = keys[i];
+        const v = (k != null) ? (r?.[k]) : '';
+        cells.push(`<td>${escapeHtml(safe(v))}</td>`);
+      }
+      return `<tr>${cells.join('')}</tr>`;
+    }).join('');
+
+    return `<tbody>${rowsHtml}</tbody>`;
+  };
+
+  const renderTable = (t, idx) => {
+    const hdrRows = Array.isArray(t.header_rows) ? t.header_rows : [];
+    const hdrCols = Array.isArray(t.header_columns) ? t.header_columns : [];
+    const rows = Array.isArray(t.rows) ? t.rows : [];
+    const colCount = calcColCount(hdrRows, hdrCols, rows);
+
+    if (!rows.length) return '';
+
+    const theadHtml = renderThead(hdrRows, hdrCols, colCount, rows);
+    const tbodyHtml = renderTbody(rows, colCount);
+
+    const sep = (idx > 0) ? `<div class="page-break"></div>` : '';
+
+    return `${sep}
+      <table class="nhsp">
+        ${theadHtml}
+        ${tbodyHtml}
+      </table>
+    `;
+  };
+
+  return `
 <!DOCTYPE html>
 <html>
 <head>
@@ -49316,8 +49662,8 @@ async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, o
   `}
 </body>
 </html>
-    `;
-  }
+  `;
+}
 
   // ==========================================================
   // UPDATED: buildHTML (render FREEFORM reference rows as single-column list/table)
@@ -50142,9 +50488,57 @@ async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, o
     const otherEvidenceRows = Array.isArray(manifest.evidence_other)
       ? manifest.evidence_other
       : evidenceAll.filter(ev => !isTimesheetKind(ev?.kind));
-
     const tsfinRows = Array.isArray(manifest.tsfin_external_source_rows) ? manifest.tsfin_external_source_rows : [];
     const hrCacheRows = Array.isArray(manifest.hr_source_rows_cache) ? manifest.hr_source_rows_cache : [];
+
+    // ----------------------------------------------------------
+    // ✅ Mandatory: NEVER use TSFIN external_source_rows_json fallback for NHSP/HR.
+    // If cache is empty OR missing headers, force-build invoice-scoped rows via RPC.
+    // ----------------------------------------------------------
+    function _hasUsableHeadersForBlock(b) {
+      if (!b || typeof b !== 'object') return false;
+      const rows = Array.isArray(b.rows_json) ? b.rows_json : [];
+      if (!rows.length) return true; // no rows => header presence not required for usability check
+      const hr = Array.isArray(b.header_rows) ? b.header_rows : null;
+      if (hr && hr.length > 0) return true;
+      const hc = Array.isArray(b.header_columns) ? b.header_columns : null;
+      return !!(hc && hc.length > 0);
+    }
+
+    function _cacheNeedsRefresh(blocks) {
+      const arr = Array.isArray(blocks) ? blocks : [];
+      if (arr.length === 0) return true;
+      // If ANY block that has rows lacks usable headers -> refresh
+      for (const b of arr) {
+        if (!_hasUsableHeadersForBlock(b)) return true;
+      }
+      return false;
+    }
+
+    let hrCacheRowsEffective = hrCacheRows;
+
+    if (_cacheNeedsRefresh(hrCacheRowsEffective)) {
+      step = 'HR_SOURCE_ROWS_COLLECT_RPC';
+      const tHr0 = Date.now();
+      const fresh0 = await sbRpc(env, 'invoice_source_rows_collect', { p_invoice_id: invoiceId, p_force_refresh: true });
+      const freshRows = Array.isArray(fresh0) ? fresh0 : (fresh0?.data || []);
+
+      hrCacheRowsEffective = Array.isArray(freshRows) ? freshRows : [];
+
+      log('log', 'invoice_source_rows_collect_done', {
+        ms: Date.now() - tHr0,
+        hr_cache_blocks_before: Array.isArray(hrCacheRows) ? hrCacheRows.length : 0,
+        hr_cache_blocks_after: hrCacheRowsEffective.length
+      });
+
+      // If still missing headers, treat as unusable (skip attachments later)
+      if (_cacheNeedsRefresh(hrCacheRowsEffective)) {
+        log('error', 'hr_source_rows_cache_still_missing_headers_or_empty', {
+          hr_cache_blocks_after: hrCacheRowsEffective.length
+        });
+        hrCacheRowsEffective = [];
+      }
+    }
 
     let groupNightsat = false;
     if (typeof header.group_nightsat_sunbh === 'boolean') groupNightsat = header.group_nightsat_sunbh;
@@ -50398,86 +50792,85 @@ async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, o
       }
       return { ok: false, error: `Invoice render failed: missing required artefacts (${missing.length}).` };
     }
-
     // Build HR rows/html (outside browser)
     step = 'BUILD_HR_REPORT';
     let hrHtml = null;
     if (hrAllowed) {
-      const hrRows = [];
-      if (hrCacheRows.length) {
-        for (const r of hrCacheRows) {
+      const hrTables = [];
+
+      if (hrCacheRowsEffective.length) {
+        for (const r of hrCacheRowsEffective) {
           if (String(r.source_system || '').toUpperCase() !== 'HEALTHROSTER') continue;
+
           const rows = Array.isArray(r.rows_json) ? r.rows_json : [];
-          for (const raw of rows) hrRows.push({ raw_row: raw });
-        }
-      } else {
-        for (const tf of tsfinRows) {
-          const ext = (tf.external_source_rows_json && typeof tf.external_source_rows_json === 'object') ? tf.external_source_rows_json : {};
-          const hrWeekly = Array.isArray(ext.HR_WEEKLY) ? ext.HR_WEEKLY : [];
-          for (const row of hrWeekly) hrRows.push(row);
+          if (!rows.length) continue;
+
+          hrTables.push({
+            import_id: r.import_id || null,
+            header_rows: Array.isArray(r.header_rows) ? r.header_rows : [],
+            header_columns: Array.isArray(r.header_columns) ? r.header_columns : [],
+            rows_json: rows
+          });
         }
       }
 
-      log('log', 'hr_rows_collected', { hr_rows: hrRows.length, hr_cache_blocks: hrCacheRows.length, tsfin_blocks: tsfinRows.length });
+      const totalRows = hrTables.reduce((a, t) => a + (Array.isArray(t.rows_json) ? t.rows_json.length : 0), 0);
 
-      if (hrRows.length) {
-        hrHtml = buildHrReportHTML(inv, header, hrRows);
+      log('log', 'hr_tables_collected', {
+        hr_tables: hrTables.length,
+        hr_total_rows: totalRows,
+        hr_cache_blocks: hrCacheRowsEffective.length
+      });
+
+      // ✅ Mandatory: if still no invoice-scoped rows, SKIP attachment (do NOT fall back to TSFIN snapshots)
+      if (hrTables.length && totalRows > 0) {
+        hrHtml = buildHrReportHTML(inv, header, { tables: hrTables }); // header_rows now passed through
         log('log', 'hr_html_built', { hr_html_len: (hrHtml ? String(hrHtml).length : 0) });
+      } else {
+        log('log', 'hr_skipped_no_invoice_scoped_rows', { hr_allowed: true, hr_tables: hrTables.length, hr_total_rows: totalRows });
       }
     } else {
       log('log', 'hr_skipped_not_allowed', { requires_hr: requiresHr, hr_attach_to_invoice: hrAttach });
     }
-
     // Build NHSP tables/html (outside browser)
     step = 'BUILD_NHSP_REPORT';
     let nhspHtml = null;
     {
       const nhspTables = [];
 
-      if (hrCacheRows.length) {
-        for (const r of hrCacheRows) {
+      if (hrCacheRowsEffective.length) {
+        for (const r of hrCacheRowsEffective) {
           if (String(r.source_system || '').toUpperCase() !== 'NHSP') continue;
+
           const rows = Array.isArray(r.rows_json) ? r.rows_json : [];
           if (!rows.length) continue;
-          const headerCols = Array.isArray(r.header_columns) ? r.header_columns : [];
+
           nhspTables.push({
             import_id: r.import_id || null,
-            header_columns: headerCols,
+            header_rows: Array.isArray(r.header_rows) ? r.header_rows : [],
+            header_columns: Array.isArray(r.header_columns) ? r.header_columns : [],
             rows_json: rows
           });
         }
       }
 
-      if (!nhspTables.length) {
-        const fallbackRows = [];
-        for (const tf of tsfinRows) {
-          const ext = (tf.external_source_rows_json && typeof tf.external_source_rows_json === 'object')
-            ? tf.external_source_rows_json
-            : {};
-          const nhspWeekly = Array.isArray(ext.NHSP_WEEKLY) ? ext.NHSP_WEEKLY : [];
-          for (const row of nhspWeekly) fallbackRows.push(row);
-        }
-        if (fallbackRows.length) {
-          nhspTables.push({
-            import_id: null,
-            header_columns: [],
-            rows_json: fallbackRows
-          });
-        }
-      }
+      const totalRows = nhspTables.reduce((a, t) => a + (Array.isArray(t.rows_json) ? t.rows_json.length : 0), 0);
 
       log('log', 'nhsp_tables_collected', {
         nhsp_tables: nhspTables.length,
-        nhsp_total_rows: nhspTables.reduce((a, t) => a + (Array.isArray(t.rows_json) ? t.rows_json.length : 0), 0),
-        nhsp_cache_blocks: hrCacheRows.length,
-        tsfin_blocks: tsfinRows.length
+        nhsp_total_rows: totalRows,
+        nhsp_cache_blocks: hrCacheRowsEffective.length
       });
 
-      if (nhspTables.length) {
-        nhspHtml = buildNhspReportHTML(inv, header, { tables: nhspTables });
+      // ✅ Mandatory: if still no invoice-scoped rows, SKIP attachment (do NOT fall back to TSFIN snapshots)
+      if (nhspTables.length && totalRows > 0) {
+        nhspHtml = buildNhspReportHTML(inv, header, { tables: nhspTables }); // header_rows now passed through
         log('log', 'nhsp_html_built', { nhsp_html_len: (nhspHtml ? String(nhspHtml).length : 0) });
+      } else {
+        log('log', 'nhsp_skipped_no_invoice_scoped_rows', { nhsp_tables: nhspTables.length, nhsp_total_rows: totalRows });
       }
     }
+
 
     // === EFFICIENCY FIX: single browser session per invoice render ===
     step = 'BROWSER_RENDER_ALL';
@@ -66957,6 +67350,12 @@ async function collectSourceRowsForTimesheet(env, timesheetId, opts = {}) {
 
   // Map RPC rows into the same imports[] shape your FE expects from /source-print
   const imports = rpcRows.map(r => {
+    const header_rows = Array.isArray(r?.header_rows)
+      ? r.header_rows
+      : (r?.header_rows && typeof r.header_rows === 'object')
+        ? r.header_rows
+        : [];
+
     const header_columns = Array.isArray(r?.header_columns)
       ? r.header_columns
       : (r?.header_columns && typeof r.header_columns === 'object')
@@ -66981,6 +67380,7 @@ async function collectSourceRowsForTimesheet(env, timesheetId, opts = {}) {
       uploaded_at_utc: r?.uploaded_at_utc || null,
       file_r2_key: r?.file_r2_key || null,
 
+      header_rows,
       header_columns,
       rows
     };
@@ -66988,6 +67388,7 @@ async function collectSourceRowsForTimesheet(env, timesheetId, opts = {}) {
 
   return { imports };
 }
+
 async function collectSourceRowsForInvoice(env, invoiceId) {
   const r = await sbRpc(env, 'invoice_source_rows_collect', {
     p_invoice_id: invoiceId,
@@ -67000,6 +67401,7 @@ async function collectSourceRowsForInvoice(env, invoiceId) {
   const imports = (rows || []).map(row => ({
     source_system: String(row?.source_system || '').toUpperCase(),
     import_id: row?.import_id || null,
+    header_rows: Array.isArray(row?.header_rows) ? row.header_rows : [],
     header_columns: Array.isArray(row?.header_columns) ? row.header_columns : [],
     rows: Array.isArray(row?.rows_json)
       ? row.rows_json.map(payload => ({
@@ -67011,6 +67413,7 @@ async function collectSourceRowsForInvoice(env, invoiceId) {
 
   return { imports };
 }
+
 async function handleInvoiceSourcePrint(env, req, invoiceId) {
   // Admin auth
   const user = await requireUser(env, req, ['admin']);
