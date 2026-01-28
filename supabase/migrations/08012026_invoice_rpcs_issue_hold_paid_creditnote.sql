@@ -3329,6 +3329,8 @@ $$;
 -- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
 -- ============================================================
 
+
+
 create or replace function public.invoice_render_manifest(p_invoice_id uuid)
 returns jsonb
 language plpgsql
@@ -3508,6 +3510,7 @@ begin
       r.invoice_id,
       r.source_system,
       r.import_id,
+      r.header_rows,
       r.header_columns,
       r.rows_json
     from public.invoice_hr_source_rows r
@@ -3943,6 +3946,7 @@ exception when others then
   raise;
 end;
 $$;
+
 
 
 
