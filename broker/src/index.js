@@ -35486,61 +35486,149 @@ async function fetchAttachmentBase64FromR2(env, r2Key) {
   return base64;
 }
 
+
+function _asEmailString(v) {
+  // Apps Script expects strings for to/cc/bcc/replyTo. :contentReference[oaicite:6]{index=6}
+  if (v == null) return '';
+  if (Array.isArray(v)) {
+    return v.map(x => String(x || '').trim()).filter(Boolean).join(', ');
+  }
+  return String(v || '').trim();
+}
+
 function normalizeEmailPayload(raw) {
-  const to = Array.isArray(raw.to) ? raw.to : splitCsvMaybe(raw.to);
-  const cc = Array.isArray(raw.cc) ? raw.cc : splitCsvMaybe(raw.cc);
-  const bcc = Array.isArray(raw.bcc) ? raw.bcc : splitCsvMaybe(raw.bcc);
-  const replyTo = Array.isArray(raw.replyTo) ? raw.replyTo : splitCsvMaybe(raw.replyTo);
+  // Match Apps Script: to/cc/bcc/replyTo are strings, not arrays. :contentReference[oaicite:7]{index=7}
+  const to = _asEmailString(raw.to);
+  const cc = _asEmailString(raw.cc);
+  const bcc = _asEmailString(raw.bcc);
+  const replyTo = _asEmailString(raw.replyTo);
 
-  const html = raw.html || raw.body_html || undefined;
-  const text = raw.text || raw.body_text || undefined;
+  const subject = String(raw.subject || '').trim();
 
-  let attachments = [];
-  // Support two shapes:
-  //  1) legacy: [{ r2_key, filename }]
-  //  2) direct: [{ name, contentBase64 }]
-  for (const a of toArray(raw.attachments)) {
+  // Apps Script uses htmlBody + body (Flow coalesce). :contentReference[oaicite:8]{index=8}
+  const htmlBodyStr =
+    raw.htmlBody != null ? String(raw.htmlBody) :
+    raw.html != null ? String(raw.html) :
+    raw.body_html != null ? String(raw.body_html) :
+    null;
+
+  const textBodyStr =
+    raw.textBody != null ? String(raw.textBody) :
+    raw.text != null ? String(raw.text) :
+    raw.body_text != null ? String(raw.body_text) :
+    null;
+
+  const actualBody =
+    htmlBodyStr != null ? htmlBodyStr :
+    textBodyStr != null ? textBodyStr :
+    String(raw.body || '');
+
+  const htmlBody = (htmlBodyStr != null ? htmlBodyStr : (actualBody || ''));
+  const body = (textBodyStr != null ? textBodyStr : (actualBody || ''));
+
+  // Attachments can arrive as:
+  // - attachmentsV2: [{Name,ContentBytes}] (already PA-ready)
+  // - attachments:   [{name,contentBase64}] or [{filename,contentBase64}] or placeholders
+  // - stringified JSON of the above
+  let attachmentsRaw = raw.attachmentsV2 ?? raw.attachments ?? [];
+  const parsed = _safeJsonParseMaybe(attachmentsRaw);
+  if (parsed != null) attachmentsRaw = parsed;
+
+  const attachments = [];
+  const arr = Array.isArray(attachmentsRaw) ? attachmentsRaw : (attachmentsRaw ? [attachmentsRaw] : []);
+
+  for (const a of arr) {
     if (!a) continue;
-    if (a.contentBase64 && a.name) {
-      attachments.push({ name: String(a.name), contentBase64: String(a.contentBase64) });
-    } else if (a.r2_key) {
-      attachments.push({ r2_key: String(a.r2_key), name: a.filename || 'attachment' });
+
+    // If a is a string (bad outbox normalisation), ignore safely
+    if (typeof a !== 'object') continue;
+
+    // Already in Apps Script "new" shape: { Name, ContentBytes } :contentReference[oaicite:9]{index=9}
+    if (a.ContentBytes && (a.Name || a.name || a.filename)) {
+      attachments.push({
+        name: String(a.Name || a.name || a.filename || 'attachment'),
+        contentBase64: String(a.ContentBytes)
+      });
+      continue;
+    }
+
+    // Direct base64: { name, contentBase64 } or { filename, contentBase64 }
+    if (a.contentBase64 && (a.name || a.filename)) {
+      attachments.push({
+        name: String(a.name || a.filename || 'attachment'),
+        contentBase64: String(a.contentBase64)
+      });
+      continue;
+    }
+
+    // R2 placeholder: { r2_key, filename/name }
+    if (a.r2_key) {
+      attachments.push({
+        r2_key: String(a.r2_key),
+        name: String(a.name || a.filename || 'attachment'),
+        filename: a.filename ? String(a.filename) : undefined
+      });
+      continue;
+    }
+
+    // Invoice placeholder: { invoice_id, filename/name }
+    if (a.invoice_id) {
+      attachments.push({
+        invoice_id: String(a.invoice_id),
+        filename: String(a.filename || a.name || `Invoice_${String(a.invoice_id)}.pdf`),
+        name: String(a.name || a.filename || `Invoice_${String(a.invoice_id)}.pdf`)
+      });
+      continue;
     }
   }
 
-  return { to, cc, bcc, replyTo, subject: raw.subject, html, text, attachments, reference: raw.reference };
+  return {
+    to,
+    cc: cc || '',
+    bcc: bcc || '',
+    replyTo: replyTo || '',
+    subject,
+    htmlBody,
+    body,
+    attachments,
+    metadata: raw.metadata ?? null
+  };
 }
-
-
 
 function validateEmailPayload(p) {
-  if (!Array.isArray(p.to) || p.to.length === 0) return 'Missing recipient(s)';
-  if (!isNonEmptyString(p.subject)) return 'Missing subject';
-  if (!isNonEmptyString(p.html) && !isNonEmptyString(p.text)) return 'Missing html/text body';
+  if (!p || typeof p !== 'object') return 'Missing payload';
+  if (!p.to || !String(p.to).trim()) return 'Recipient is required.';
+  if (!p.subject || !String(p.subject).trim()) return 'Subject is required.';
+  if (!((p.htmlBody && String(p.htmlBody).length) || (p.body && String(p.body).length))) {
+    return 'Email body is required.';
+  }
   return null;
 }
+
+// ---------- Build PA payload (single email) in Apps Script structure ----------
 
 async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
   const base = normalizeEmailPayload({
     to: outboxRow.to,
     cc: outboxRow.cc,
+    bcc: outboxRow.bcc,
+    replyTo: outboxRow.replyTo,
     subject: outboxRow.subject,
     body_html: outboxRow.body_html,
     body_text: outboxRow.body_text,
+    // IMPORTANT: outboxRow.attachments may be jsonb OR a JSON-string-in-text
     attachments: outboxRow.attachments,
-    reference: outboxRow.reference,
+    // Only include metadata if your Flow schema allows it (Apps Script only adds if provided). :contentReference[oaicite:10]{index=10}
+    // metadata: ...
   });
 
   const err = validateEmailPayload(base);
   if (err) throw new Error(err);
 
-  // Pull finance sender config (for invoices/remittances) + invpdf effective config (if present)
-  let financeEmail = null;
+  // Pull invpdf effective config (kept from your existing code)
   let invpdfEffective = null;
-
   try {
     const s = await loadSettingsDefaults(env);
-    financeEmail = (typeof s?.finance_email === 'string') ? s.finance_email.trim() : null;
     invpdfEffective =
       (s && s.importConfig && s.importConfig.invpdf_effective && typeof s.importConfig.invpdf_effective === 'object')
         ? s.importConfig.invpdf_effective
@@ -35552,23 +35640,22 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
 
   const enc = encodeURIComponent;
 
-  // Resolve attachments:
-  // - { contentBase64, name } -> pass-through
-  // - { r2_key, name } -> fetch bytes from R2
-  // - { invoice_id, filename } -> queue-first:
-  //     * free: DO NOT RENDER; only accept stored + fresh invoice_pdf_r2_key; else throw PDF_NOT_READY
-  //     * paid (optional): render inline ONLY if invpdf.email_worker_can_render === true; else same as free
-  const resolved = [];
+  // Resolve to Apps Script attachmentsV2: [{ Name, ContentBytes }] :contentReference[oaicite:11]{index=11}
+  const attachmentsV2 = [];
 
-  for (const a of base.attachments) {
+  for (const a of (base.attachments || [])) {
     if (!a) continue;
 
+    // Direct base64
     if (a.contentBase64 && a.name) {
-      resolved.push(a);
+      attachmentsV2.push({
+        Name: String(a.name || 'attachment'),
+        ContentBytes: String(a.contentBase64 || '')
+      });
       continue;
     }
 
-    // invoice placeholder
+    // Invoice placeholder -> fetch invoice_pdf_r2_key -> load from R2 -> base64
     if (a.invoice_id) {
       const invId = String(a.invoice_id).trim();
       if (!invId) throw new Error('Invalid invoice_id attachment');
@@ -35576,14 +35663,10 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
       let pdfKey = null;
 
       if (emailWorkerCanRender) {
-        // Paid-mode optional: allow inline ensure (may render) only when explicitly enabled
         const ensured = await ensureInvoicePdf(env, invId, { req: outboxRow?._req || undefined, user: null });
-        if (!ensured?.ok || !ensured.invoice_pdf_r2_key) {
-          throw new Error(`PDF_NOT_READY: invoice ${invId}`);
-        }
+        if (!ensured?.ok || !ensured.invoice_pdf_r2_key) throw new Error(`PDF_NOT_READY: invoice ${invId}`);
         pdfKey = String(ensured.invoice_pdf_r2_key).trim();
       } else {
-        // Free-mode (and paid-mode default): DO NOT RENDER. Only accept a stored + fresh PDF key.
         const { rows } = await sbFetch(
           env,
           `${env.SUPABASE_URL}/rest/v1/invoices` +
@@ -35605,17 +35688,19 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
           return (Number.isFinite(tUpd) && Number.isFinite(tGen) && tUpd <= tGen);
         })();
 
-        if (!fresh) {
-          throw new Error(`PDF_NOT_READY: invoice ${invId}`);
-        }
-
+        if (!fresh) throw new Error(`PDF_NOT_READY: invoice ${invId}`);
         pdfKey = key;
       }
 
       if (!pdfKey) throw new Error(`PDF_NOT_READY: invoice ${invId}`);
 
       const contentBase64 = await fetchAttachmentBase64FromR2(env, pdfKey);
-      resolved.push({ name: a.filename || a.name || `Invoice_${invId}.pdf`, contentBase64 });
+
+      attachmentsV2.push({
+        Name: String(a.filename || a.name || `Invoice_${invId}.pdf`),
+        ContentBytes: String(contentBase64 || '')
+      });
+
       continue;
     }
 
@@ -35625,38 +35710,37 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
       if (!key) throw new Error('Invalid r2_key attachment');
 
       const contentBase64 = await fetchAttachmentBase64FromR2(env, key);
-      resolved.push({ name: a.name || a.filename || 'attachment', contentBase64 });
+
+      attachmentsV2.push({
+        Name: String(a.name || a.filename || 'attachment'),
+        ContentBytes: String(contentBase64 || '')
+      });
+
       continue;
     }
   }
 
-  // Compose canonical payload expected by the Flow
-  let payload = {
-    to: base.to,
-    cc: base.cc,
-    bcc: base.bcc,
-    replyTo: base.replyTo,
-    subject: base.subject,
-    html: base.html,
-    text: base.text,
-    attachments: resolved,
-    reference: base.reference,
-    meta: {
-      type: outboxRow.type,
-      outbox_id: outboxRow.id,
-      // finance emails use the finance mailbox (Flow can use this if configured)
-      fromMailbox: (outboxRow.type === 'INVOICE' || outboxRow.type === 'REMITTANCE') ? (financeEmail || null) : null,
-      invpdf: {
-        mode: invpdfMode,
-        email_worker_can_render: !!emailWorkerCanRender
-      }
-    }
+  // Filter out empties (Apps Script does this too) :contentReference[oaicite:12]{index=12}
+  const attachmentsV2Clean = attachmentsV2.filter(x => x && x.ContentBytes);
+
+  // FINAL payload: match Apps Script keys exactly. :contentReference[oaicite:13]{index=13}
+  const payload = {
+    to: String(base.to).trim(),
+    subject: String(base.subject).trim(),
+    htmlBody: String(base.htmlBody || ''),
+    body: String(base.body || ''),
+    attachmentsV2: attachmentsV2Clean
   };
 
-  // Trim or link heavy payloads (kept)
-  const sized = await limitOrLinkAttachments(env, payload);
-  return sized.payload;
+  // Optional fields: only add if non-empty (Apps Script behaviour). :contentReference[oaicite:14]{index=14}
+  if (base.cc && String(base.cc).trim()) payload.cc = String(base.cc).trim();
+  if (base.bcc && String(base.bcc).trim()) payload.bcc = String(base.bcc).trim();
+  if (base.replyTo && String(base.replyTo).trim()) payload.replyTo = String(base.replyTo).trim();
+  if (base.metadata && typeof base.metadata === 'object') payload.metadata = base.metadata;
+
+  return payload;
 }
+
 
 
 async function limitOrLinkAttachments(env, payload) {
