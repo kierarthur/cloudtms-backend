@@ -962,6 +962,9 @@ select coalesce(
 )
 from clients c;
 $$;
+
+
+
 create or replace function public.invoice_issue_and_queue_emails_batch(
   p_invoice_ids uuid[],
   p_actor_user_id uuid,
@@ -994,6 +997,11 @@ declare
   -- ✅ NEW: email dedupe lock helpers (prevents duplicate mail_outbox rows on concurrent runs)
   v_ref text;
   m_lock record;
+
+  -- ✅ NEW: invoice-pdf outbox enqueue summary (Option A)
+  v_pdf_invoice_ids uuid[] := null;
+  v_pdf_invoice_count int := 0;
+  v_pdf_rows_affected int := 0;
 
 begin
   if p_invoice_ids is null or coalesce(array_length(p_invoice_ids,1),0) = 0 then
@@ -1142,6 +1150,33 @@ begin
   select coalesce(jsonb_agg(to_jsonb(t) order by t.invoice_id::text), '[]'::jsonb)
   into v_issue_json
   from tmp_issue t;
+
+  -- ✅ NEW (Option A): enqueue invoice PDF render jobs for successfully ISSUED invoices (idempotent)
+  select array_agg(x.invoice_id order by x.invoice_id::text)
+  into v_pdf_invoice_ids
+  from (
+    select distinct t.invoice_id
+    from tmp_issue t
+    where t.ok = true
+      and upper(coalesce(t.status,'')) = 'ISSUED'
+  ) x;
+
+  v_pdf_invoice_count := coalesce(array_length(v_pdf_invoice_ids, 1), 0);
+
+  if v_pdf_invoice_count > 0 then
+    -- p_limit is a safety cap; here we cap at the number of unique invoice_ids in this batch.
+    v_pdf_rows_affected := public.invpdf_enqueue_many(v_pdf_invoice_ids, false, v_pdf_invoice_count);
+  else
+    v_pdf_rows_affected := 0;
+  end if;
+
+  if coalesce(v_debug,false) = true then
+    v_steps := v_steps || jsonb_build_array(jsonb_build_object(
+      'step','invpdf_enqueued_after_issue',
+      'pdf_invoice_count', v_pdf_invoice_count,
+      'pdf_rows_affected', v_pdf_rows_affected
+    ));
+  end if;
 
   -- queue emails for successfully ISSUED invoices, excluding self-bill
   create temporary table tmp_to_email on commit drop as
@@ -1292,7 +1327,9 @@ begin
       'step','before_return',
       'allowed_count',coalesce(array_length(v_allowed,1),0),
       'not_due_count',coalesce(array_length(v_not_due,1),0),
-      'max_attachments_per_email',v_max_attach
+      'max_attachments_per_email',v_max_attach,
+      'pdf_invoice_count', v_pdf_invoice_count,
+      'pdf_rows_affected', v_pdf_rows_affected
     ));
 
     perform public._inv_write_audit(
@@ -1308,6 +1345,9 @@ begin
         'not_due_results', v_not_due_json,
         'email_outbox', v_email_json,
         'max_attachments_per_email', v_max_attach,
+        'pdf_invoice_ids', to_jsonb(coalesce(v_pdf_invoice_ids, array[]::uuid[])),
+        'pdf_invoice_count', v_pdf_invoice_count,
+        'pdf_rows_affected', v_pdf_rows_affected,
         'steps', v_steps
       ),
       'invoices',
@@ -1322,7 +1362,11 @@ begin
     'invoice_results', (v_issue_json || v_not_due_json),
     'email_outbox', v_email_json,
     'max_attachments_per_email', v_max_attach,
-    'allow_early', coalesce(p_allow_early,false)
+    'allow_early', coalesce(p_allow_early,false),
+
+    -- ✅ NEW: PDF enqueue summary (safe additive fields)
+    'pdf_invoice_count', v_pdf_invoice_count,
+    'pdf_rows_affected', v_pdf_rows_affected
   );
 exception
   when others then
@@ -1354,7 +1398,6 @@ exception
     raise;
 end;
 $$;
-
 
 -- ============================================================
 -- CloudTMS RPC: invoice_closeout_zero_charge_timesheets
