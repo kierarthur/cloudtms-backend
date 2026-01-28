@@ -33405,7 +33405,8 @@ async function handleNhspImport(env, req) {
         rows_parsed: 0,
         rows_skipped: 0,
         notes: null,
-        header_columns: []
+        header_rows: [],     // ✅ ensure key exists from day 0
+        header_columns: []   // ✅ ensure key exists from day 0
       }
     };
 
@@ -33450,6 +33451,7 @@ async function handleNhspImport(env, req) {
       rows_parsed: 0,
       rows_skipped: 0,
       notes: null,
+      header_rows: [],
       header_columns: [],
       error: false
     };
@@ -33466,6 +33468,7 @@ async function handleNhspImport(env, req) {
           summary = {
             ...summary,
             ...parsed,
+            header_rows: Array.isArray(parsed.header_rows) ? parsed.header_rows : [],
             header_columns: Array.isArray(parsed.header_columns) ? parsed.header_columns : []
           };
         }
@@ -33491,6 +33494,14 @@ async function handleNhspImport(env, req) {
       ? rec.parse_summary_json
       : {};
 
+    const headerRows = Array.isArray(summary.header_rows)
+      ? summary.header_rows.map(row => (
+          Array.isArray(row)
+            ? row.map(x => String(x ?? ''))
+            : []
+        ))
+      : [];
+
     const headerCols = Array.isArray(summary.header_columns)
       ? summary.header_columns.map(x => String(x ?? ''))
       : [];
@@ -33503,11 +33514,12 @@ async function handleNhspImport(env, req) {
         rows_parsed: Number(summary.rows_parsed || 0),
         rows_skipped: Number(summary.rows_skipped || 0),
         notes: summary.notes || null,
-        header_columns: headerCols
+        header_rows: headerRows,     // ✅ persist multi-row headers
+        header_columns: headerCols   // ✅ persist flat header row
       }
     };
 
-    // 3) Update hr_imports.parse_summary_json with the real summary (INCLUDING header_columns)
+    // 3) Update hr_imports.parse_summary_json with the real summary (INCLUDING header_rows + header_columns)
     await fetch(
       `${env.SUPABASE_URL}/rest/v1/hr_imports?id=eq.${encodeURIComponent(importId)}`,
       {
@@ -33557,6 +33569,7 @@ async function handleNhspImport(env, req) {
     return withCORS(env, req, serverError("Failed to create NHSP import"));
   }
 }
+
 
 
  async function handleNhspImportPreview(env, req, importId) {
