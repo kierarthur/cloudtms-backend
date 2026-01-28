@@ -585,6 +585,8 @@ end;
 $$;
 
 
+
+
 create or replace function public.invoice_generate_from_outbox_batch(
   p_outbox_ids uuid[],
   p_actor_user_id uuid
@@ -2337,8 +2339,8 @@ where tf.timesheet_id = any(v_ts_ids_to_use)
               select
                 left(seg->>'segment_id', 5) as pfx,
                 upper(coalesce(seg->>'source_system','')) as src,
-                substr(seg->>'segment_id', 6) as id_part,
-                nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') as locked_invoice_id_text
+                nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') as locked_invoice_id_text,
+                nullif(btrim(coalesce(seg->>'nhsp_shift_id','')), '') as nhsp_shift_id_text
               from public.timesheets_financials tf
               join public.v_ts_invoice_precheck pc
                 on pc.timesheet_id = tf.timesheet_id
@@ -2347,10 +2349,10 @@ where tf.timesheet_id = any(v_ts_ids_to_use)
                 and tf.is_current = true
                 and jsonb_typeof(seg) = 'object'
                 and nullif(btrim(coalesce(seg->>'segment_id','')), '') is not null
-),
+            ),
 
             shift_ids as (
-              select distinct (sg.id_part)::uuid as shift_id
+              select distinct (sg.nhsp_shift_id_text)::uuid as shift_id
               from segs sg
               where sg.pfx = 'nhsp:'
                 -- ✅ Critical: ONLY rows/segments locked to THIS invoice
@@ -2359,15 +2361,15 @@ where tf.timesheet_id = any(v_ts_ids_to_use)
                   sg.src = 'NHSP'
                   or (sg.src = 'HEALTHROSTER' and coalesce(v_requires_hr_any,false) = true and coalesce(v_hr_attach_any,false) = true)
                 )
-                and sg.id_part ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                and sg.nhsp_shift_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
             ),
-            useful as (
+useful as (
               select
                 upper(coalesce(s.source_system::text,'UNKNOWN')) as source_system,
                 s.latest_import_id as import_id,
                 s.external_row_key
               from public.nhsp_shifts s
-              where s.id in (select sh.shift_id from shift_ids sh)
+              where s.id in (select shift_id from shift_ids)
                 and s.latest_import_id is not null
                 and s.external_row_key is not null
             ),
@@ -2384,13 +2386,6 @@ where tf.timesheet_id = any(v_ts_ids_to_use)
                 g.source_system,
                 g.import_id,
                 case
-                  when jsonb_typeof(hi.parse_summary_json->'header_rows') = 'array'
-                    then (hi.parse_summary_json->'header_rows')
-                  when jsonb_typeof(hi.parse_summary_json->'header_columns') = 'array'
-                    then jsonb_build_array(hi.parse_summary_json->'header_columns')
-                  else '[]'::jsonb
-                end as header_rows,
-                case
                   when jsonb_typeof(hi.parse_summary_json->'header_columns')='array'
                     then (hi.parse_summary_json->'header_columns')
                   else '[]'::jsonb
@@ -2403,7 +2398,6 @@ where tf.timesheet_id = any(v_ts_ids_to_use)
               select
                 h.source_system,
                 h.import_id,
-                h.header_rows,
                 h.header_columns,
                 (
                   select coalesce(jsonb_agg(r.payload_json order by r.id), '[]'::jsonb)
@@ -2415,9 +2409,14 @@ where tf.timesheet_id = any(v_ts_ids_to_use)
                 ) as rows_json
               from hdr h
             )
-            insert into public.invoice_hr_source_rows(invoice_id, source_system, import_id, header_rows, header_columns, rows_json)
-            select v_invoice_id, ra.source_system, ra.import_id, ra.header_rows, ra.header_columns, ra.rows_json
-            from rows_agg ra;
+            insert into public.invoice_hr_source_rows(invoice_id, source_system, import_id, header_columns, rows_json)
+            select v_invoice_id, r.source_system, r.import_id, r.header_columns, r.rows_json
+            from rows_agg r;
+
+
+
+
+
 -- SUCCESS: delete outbox row
           delete from public.invoice_jobs_outbox where id = v_outbox_id;
 
