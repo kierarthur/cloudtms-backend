@@ -1,4 +1,6 @@
-create or replace function public.timesheet_import_rows_for_timesheet_current(
+drop function if exists public.timesheet_import_rows_for_timesheet_current(uuid, boolean, uuid, uuid);
+
+create function public.timesheet_import_rows_for_timesheet_current(
   p_timesheet_id uuid,
   p_include_excluded boolean default true,
   p_import_id uuid default null,
@@ -12,6 +14,7 @@ returns table (
   filename text,
   uploaded_at_utc timestamptz,
   file_r2_key text,
+  header_rows jsonb,
   header_columns jsonb,
   rows jsonb
 )
@@ -21,23 +24,27 @@ security definer
 set search_path = public
 as $$
   with req as (
-    select t.timesheet_id as requested_timesheet_id, t.booking_id
+    select
+      t.timesheet_id as requested_timesheet_id,
+      t.booking_id
     from public.timesheets t
     where t.timesheet_id = p_timesheet_id
     limit 1
   ),
   cur as (
-    select t.timesheet_id as current_timesheet_id
+    select
+      t.timesheet_id as current_timesheet_id
     from public.timesheets t
-    join req on req.booking_id = t.booking_id
+    join req
+      on req.booking_id = t.booking_id
     where t.is_current = true
     order by t.version desc
     limit 1
   ),
   use_id as (
     select
-      (select requested_timesheet_id from req) as requested_timesheet_id,
-      (select current_timesheet_id from cur)   as current_timesheet_id
+      (select req.requested_timesheet_id from req) as requested_timesheet_id,
+      (select cur.current_timesheet_id from cur)   as current_timesheet_id
   ),
   sh as (
     select
@@ -46,7 +53,7 @@ as $$
       ns.external_row_key as external_row_key,
       ns.invoice_status   as invoice_status
     from public.nhsp_shifts ns
-    where ns.timesheet_id = (select current_timesheet_id from use_id)
+    where ns.timesheet_id = (select u.current_timesheet_id from use_id u)
       and ns.latest_import_id is not null
       and ns.external_row_key is not null
       and (p_shift_id is null or ns.id = p_shift_id)
@@ -63,8 +70,23 @@ as $$
       hi.filename           as filename,
       hi.uploaded_at_utc    as uploaded_at_utc,
       hi.file_r2_key        as file_r2_key,
-      coalesce(hi.parse_summary_json->'header_columns', '[]'::jsonb) as header_columns
-    from (select distinct source_system, import_id from sh) s
+
+      -- Prefer multi-row headers if stored; else wrap single-row header_columns (only if non-empty); else []
+      case
+        when jsonb_typeof(hi.parse_summary_json->'header_rows') = 'array'
+          then (hi.parse_summary_json->'header_rows')
+        when jsonb_typeof(hi.parse_summary_json->'header_columns') = 'array'
+          and jsonb_array_length(hi.parse_summary_json->'header_columns') > 0
+          then jsonb_build_array(hi.parse_summary_json->'header_columns')
+        else '[]'::jsonb
+      end as header_rows,
+
+      case
+        when jsonb_typeof(hi.parse_summary_json->'header_columns') = 'array'
+          then (hi.parse_summary_json->'header_columns')
+        else '[]'::jsonb
+      end as header_columns
+    from (select distinct sh0.source_system, sh0.import_id from sh sh0) s
     left join public.hr_imports hi
       on hi.id = s.import_id
   ),
@@ -86,13 +108,14 @@ as $$
     group by s.source_system::text, s.import_id
   )
   select
-    (select requested_timesheet_id from use_id) as requested_timesheet_id,
-    (select current_timesheet_id from use_id)   as current_timesheet_id,
+    (select u.requested_timesheet_id from use_id u) as requested_timesheet_id,
+    (select u.current_timesheet_id from use_id u)   as current_timesheet_id,
     i.source_system,
     i.import_id,
     i.filename,
     i.uploaded_at_utc,
     i.file_r2_key,
+    i.header_rows,
     i.header_columns,
     coalesce(r.rows, '[]'::jsonb) as rows
   from imp i
