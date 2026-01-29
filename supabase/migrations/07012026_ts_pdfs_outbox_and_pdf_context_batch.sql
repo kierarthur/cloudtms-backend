@@ -209,6 +209,9 @@ end;
 $$;
 
 
+
+
+
 create or replace function public.timesheet_pdf_load_context_batch(p_timesheet_ids uuid[])
 returns table (
   timesheet_id uuid,
@@ -265,7 +268,11 @@ ids as (
 )
 select
   t.timesheet_id,
-  to_jsonb(t) as out_ts,
+  (to_jsonb(t) || jsonb_build_object(
+    'generated_pdf_refs_sig', t.generated_pdf_refs_sig,
+    'generated_pdf_refs_snapshot_json', t.generated_pdf_refs_snapshot_json,
+    'generated_pdf_refs_captured_at_utc', t.generated_pdf_refs_captured_at_utc
+  )) as out_ts,
   to_jsonb(s) as out_summary,
   to_jsonb(c) as out_contract,
   to_jsonb(cl) as out_client,
@@ -296,3 +303,4 @@ left join public.timesheets_financials tf
  and tf.is_current = true
 left join public.settings_defaults sd on sd.id = 1;
 $$;
+
