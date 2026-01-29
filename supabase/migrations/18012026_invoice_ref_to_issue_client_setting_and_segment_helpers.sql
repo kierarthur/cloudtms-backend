@@ -439,7 +439,6 @@ $$;
 -- CloudTMS Patch: public.invoice_reference_rows(p_invoice_id)
 -- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
 -- ============================================================
-
 create or replace function public.invoice_reference_rows(
   p_invoice_id uuid
 )
@@ -453,7 +452,8 @@ returns table (
   start_utc text,
   end_utc text,
   current_reference text,
-  is_required boolean
+  is_required boolean,
+  row_key text
 )
 language plpgsql
 security definer
@@ -664,6 +664,13 @@ begin
         current_reference := nullif(btrim(coalesce(r_seg.seg->>'ref_num','')), '');
         is_required := v_is_required;
 
+        row_key := r_ts.ts_id::text
+          || '|' || coalesce(ref_target,'')
+          || '|' || coalesce(segment_id,'')
+          || '|' || coalesce(day_ymd,'')
+          || '|' || coalesce(start_utc,'')
+          || '|' || coalesce(end_utc,'');
+
         v_rows_out := v_rows_out + 1;
         return next;
       end loop;
@@ -696,6 +703,13 @@ begin
         current_reference := nullif(btrim(coalesce(r_seg.seg->>'ref_num','')), '');
         is_required := v_is_required;
 
+        row_key := r_ts.ts_id::text
+          || '|' || coalesce(ref_target,'')
+          || '|' || coalesce(segment_id,'')
+          || '|' || coalesce(day_ymd,'')
+          || '|' || coalesce(start_utc,'')
+          || '|' || coalesce(end_utc,'');
+
         v_rows_out := v_rows_out + 1;
         return next;
       end loop;
@@ -722,6 +736,13 @@ begin
         current_reference := nullif(btrim(coalesce(r_day.v,'')), '');
         is_required := v_is_required;
 
+        row_key := r_ts.ts_id::text
+          || '|' || coalesce(ref_target,'')
+          || '|' || coalesce(segment_id,'')
+          || '|' || coalesce(day_ymd,'')
+          || '|' || coalesce(start_utc,'')
+          || '|' || coalesce(end_utc,'');
+
         v_rows_out := v_rows_out + 1;
         return next;
       end loop;
@@ -747,6 +768,13 @@ begin
       end_utc := coalesce(r_ts.ts_worked_end_iso::text, r_ts.ts_scheduled_end_iso::text);
       current_reference := nullif(btrim(coalesce(r_ts.ts_reference_number,'')), '');
       is_required := v_is_required;
+
+      row_key := r_ts.ts_id::text
+        || '|' || coalesce(ref_target,'')
+        || '|' || coalesce(segment_id,'')
+        || '|' || coalesce(day_ymd,'')
+        || '|' || coalesce(start_utc,'')
+        || '|' || coalesce(end_utc,'');
 
       v_rows_out := v_rows_out + 1;
       return next;
@@ -799,3 +827,4 @@ exception when others then
   raise;
 end;
 $$;
+
