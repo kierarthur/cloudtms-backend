@@ -2600,9 +2600,14 @@ async function runTsPdfWorkerOnce(env, { limit = 5, enqueueFirst = true, enqueue
       const ctx = ctxByTsId.get(tsId) || null;
       if (!ctx) throw new Error("Missing batch context for timesheet_id");
 
-      // ✅ Avoid per-timesheet R2 head(): trust DB flag on timesheets row
+         // ✅ Avoid per-timesheet R2 head(): trust DB flag on timesheets row
+      // Reuse only if we also have a stored refs signature; if signature is missing,
+      // render once to backfill generated_pdf_refs_* fields.
       const alreadyGeneratedAt = ctx?.out_ts?.generated_pdf_at_utc || null;
-      if (!forceRegen && alreadyGeneratedAt) {
+      const alreadyRefsSigRaw = ctx?.out_ts?.generated_pdf_refs_sig || null;
+      const hasRefsSig = !!String(alreadyRefsSigRaw || '').trim();
+
+      if (!forceRegen && alreadyGeneratedAt && hasRefsSig) {
         report.reused++;
         okOutboxIds.push(outboxId);
         continue;
@@ -4399,8 +4404,81 @@ drawTextFit(page, font, authDate, dateTextX2, sigY2 - 1.2, dateTextW2, 6.6, 4.8)
 
     await bucket.put(outKey, outBytes, { httpMetadata: { contentType: "application/pdf" } });
 
+    // ---------- Persist refs used in GENERATED PDF ----------
+    // Store exactly what is printed in the "Booking Ref" column (per shift)
+    try {
+      const stableClone = (v) => {
+        if (Array.isArray(v)) return v.map(stableClone);
+        if (v && typeof v === "object") {
+          const out = {};
+          for (const k of Object.keys(v).sort()) out[k] = stableClone(v[k]);
+          return out;
+        }
+        return v;
+      };
+
+      const refsPrinted = [];
+      for (const seg of (Array.isArray(schedule) ? schedule : [])) {
+        const t = getSegTimes(seg);
+        if (!t.start || !t.end) continue;
+
+        const ymd = safeStr(seg?.date).slice(0, 10);
+        const ref =
+          safeStr(seg?.ref_num || "").trim() ||
+          safeStr(seg?.booking_ref || "").trim() ||
+          "";
+
+        refsPrinted.push({
+          day_ymd: ymd || null,
+          start_utc: seg?.start_utc || null,
+          end_utc: seg?.end_utc || null,
+          start: t.start || null,
+          end: t.end || null,
+          current_reference: ref || null
+        });
+      }
+
+      refsPrinted.sort((a, b) => {
+        const ak = `${a.day_ymd || ""}|${a.start_utc || a.start || ""}|${a.end_utc || a.end || ""}|${a.current_reference || ""}`;
+        const bk = `${b.day_ymd || ""}|${b.start_utc || b.start || ""}|${b.end_utc || b.end || ""}|${b.current_reference || ""}`;
+        return ak.localeCompare(bk);
+      });
+
+      const refsSnapshot = stableClone({
+        timesheet_id: String(ts?.timesheet_id || timesheetId),
+        sheet_scope: String(ts?.sheet_scope || "").toUpperCase() || null,
+        week_ending_date: (weekEndingYmd || safeStr(ts?.week_ending_date).slice(0, 10) || null),
+        refs: refsPrinted
+      });
+
+      const refsSig = await sha256Hex(JSON.stringify(refsSnapshot));
+      const nowIso = new Date().toISOString();
+
+      await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?timesheet_id=eq.${encodeURIComponent(timesheetId)}` +
+          `&is_current=eq.true`,
+        {
+          method: "PATCH",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify({
+            generated_pdf_refs_snapshot_json: refsSnapshot,
+            generated_pdf_refs_sig: refsSig,
+            generated_pdf_refs_captured_at_utc: nowIso,
+            updated_at: nowIso
+          })
+        }
+      );
+
+      L("PDF.REFS_SAVED", { sig: refsSig, refs_count: refsPrinted.length });
+    } catch (e) {
+      L("PDF.REFS_SAVE_FAIL_NONFATAL", { err: e?.message || String(e) });
+    }
+
     L("DONE", { outKey, ms: Date.now() - T0 });
     return outKey;
+
 
   } catch (e) {
     L("FAIL", { err: e?.message || String(e), ms: Date.now() - T0 });
@@ -14560,7 +14638,6 @@ async function rebuildWeeklyTsfinForTimesheet(env, timesheetId, contract) {
   return { ok: true, mode: 'AGGREGATE_FALLBACK' };
 }
 
-
 async function handleTimesheetsSubmitWeekly(env, req) {
   // Public / broker: submit weekly timesheet (ELECTRONIC or QR intent)
   const enc = encodeURIComponent;
@@ -14942,7 +15019,6 @@ async function handleTimesheetsSubmitWeekly(env, req) {
   if (!wantsQR) {
     nurseKey = `Signatures/we=${weC}/${bookingId}/v${newVersion}/nurse.png`;
     authKey  = `Signatures/we=${weC}/${bookingId}/v${newVersion}/authoriser.png`;
-
 
     try {
       await r2Head(env, nurseKey);
@@ -15395,7 +15471,7 @@ async function handleTimesheetsSubmitWeekly(env, req) {
       });
     }
 
-    // ✅ NEW: when the email is queued, compute + persist last-sent hash
+    // ✅ UPDATED: when the email is queued, compute + persist last-sent hash AND QR refs snapshot (per-shift booking refs)
     if (emailQueued) {
       try {
         const stableClone = (v) => {
@@ -15421,6 +15497,57 @@ async function handleTimesheetsSubmitWeekly(env, req) {
         const current_hash = await sha256Hex(JSON.stringify(stableClone(hashObj)));
         const sentAt = nowIso();
 
+        // QR refs for WEEKLY = per-shift booking refs (the same field the PDF prints in "Booking Ref")
+        // Snapshot shape is intentionally compatible with a future manifest sha256 computation:
+        // an ordered list of { row_key, current_reference }.
+        const sched = Array.isArray(ts.actual_schedule_json)
+          ? ts.actual_schedule_json
+          : (Array.isArray(actual_schedule_json) ? actual_schedule_json : []);
+
+        const qrRefsRows = [];
+        for (let i = 0; i < sched.length; i++) {
+          const seg = sched[i];
+          if (!seg || typeof seg !== 'object') continue;
+
+          const sLocal = String(seg.start || '').trim();
+          const eLocal = String(seg.end || '').trim();
+          const sUtc = String(seg.start_utc || '').trim();
+          const eUtc = String(seg.end_utc || '').trim();
+
+          const hasLocal = !!(sLocal && eLocal);
+          const hasUtc = !!(sUtc && eUtc);
+          if (!hasLocal && !hasUtc) continue;
+
+          const dayYmd = String(seg.date || '').trim();
+
+          const segmentId = `ts:${ts.timesheet_id}:${i}`;
+
+          const ref = String(
+            (seg.ref_num != null ? seg.ref_num : (seg.booking_ref != null ? seg.booking_ref : '')) || ''
+          ).trim();
+
+          const row_key =
+            String(ts.timesheet_id) +
+            '|SEGMENT' +
+            '|' + segmentId +
+            '|' + (dayYmd || '') +
+            '|' + (sUtc || '') +
+            '|' + (eUtc || '');
+
+          qrRefsRows.push({ row_key, current_reference: ref });
+        }
+
+        qrRefsRows.sort((a, b) => String(a.row_key).localeCompare(String(b.row_key)));
+
+        const qrRefsSnapshot = stableClone(qrRefsRows);
+
+        let qrSentRefsSig = null;
+        try {
+          qrSentRefsSig = await sha256Hex(JSON.stringify(qrRefsSnapshot));
+        } catch {
+          qrSentRefsSig = null;
+        }
+
         await fetch(
           `${env.SUPABASE_URL}/rest/v1/timesheets` +
             `?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
@@ -15430,6 +15557,11 @@ async function handleTimesheetsSubmitWeekly(env, req) {
             body: JSON.stringify({
               qr_last_sent_hash: current_hash,
               qr_last_sent_at_utc: sentAt,
+
+              qr_sent_refs_snapshot_json: qrRefsSnapshot,
+              qr_sent_refs_sig: qrSentRefsSig,
+              qr_sent_refs_captured_at_utc: sentAt,
+
               updated_at: sentAt
             })
           }
@@ -15472,6 +15604,7 @@ async function handleTimesheetsSubmitWeekly(env, req) {
     email_queued: wantsQR ? !!emailQueued : null
   }));
 }
+
 // ─────────────────────────────────────────────────────────────
 // NEW HELPER: purge superseded (non-current) timesheet artifacts
 // for a booking_id, while keeping restore candidates.
@@ -42006,7 +42139,7 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
       candName = cand?.display_name || null;
     }
 
-    if (email && pdfKey) {
+     if (email && pdfKey) {
       const subject = workedDateYmd
         ? `Daily QR timesheet – ${workedDateYmd}`
         : `Daily QR timesheet`;
@@ -42023,7 +42156,7 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
       const bodyText = lines.join('\n');
       const bodyHtml = `<p>${lines.map(l => (l === '' ? '<br/>' : l)).join('<br/>')}</p>`;
 
-      await fetch(
+      const ins = await fetch(
         `${env.SUPABASE_URL}/rest/v1/mail_outbox`,
         {
           method: 'POST',
@@ -42044,8 +42177,55 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
             created_by: user?.id || null
           })
         }
-      ).catch(() => {});
+      ).catch(() => null);
+
+      // ✅ NEW: capture refs snapshot/signature at the moment the QR email is actually queued
+      if (ins && ins.ok) {
+        try {
+          const stableClone = (v) => {
+            if (Array.isArray(v)) return v.map(stableClone);
+            if (v && typeof v === 'object') {
+              const out = {};
+              for (const k of Object.keys(v).sort()) out[k] = stableClone(v[k]);
+              return out;
+            }
+            return v;
+          };
+
+          // Daily QR: persist reference-only snapshot (not schedule/units)
+          const refsSnapshot = stableClone({
+            timesheet_id: String(currentTimesheetId),
+            sheet_scope: 'DAILY',
+            reference_number: ts.reference_number || null,
+            day_references_json: ts.day_references_json || null
+          });
+
+          const refsSig = await sha256Hex(JSON.stringify(refsSnapshot));
+          const capAt = nowIso();
+
+          await fetch(
+            `${env.SUPABASE_URL}/rest/v1/timesheets` +
+              `?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
+            {
+              method: 'PATCH',
+              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+              body: JSON.stringify({
+                qr_sent_refs_snapshot_json: refsSnapshot,
+                qr_sent_refs_sig: refsSig,
+                qr_sent_refs_captured_at_utc: capAt,
+                updated_at: capAt
+              })
+            }
+          ).catch(() => {});
+        } catch (e2) {
+          console.warn('[TS_DAILY_QR] failed to persist qr_sent_refs_* (non-fatal)', {
+            timesheet_id: currentTimesheetId,
+            err: e2?.message || String(e2)
+          });
+        }
+      }
     }
+
   } catch (e) {
     console.warn('[TS_DAILY_QR] mail queue failed (non-fatal)', {
       timesheet_id: currentTimesheetId,
@@ -48708,9 +48888,12 @@ function buildNhspReportHTML(inv, header, nhspData) {
     totals = { subtotal_ex_vat: 0, vat_amount: 0, total_inc_vat: 0 },
     items = [],
     reference_rows = []
-  } = payload || {};
+   } = payload || {};
+
+  const isDraftInvoice = !(issued_at_utc && String(issued_at_utc).trim());
 
   const clientName = pick(header, "client_name", "");
+
   const clientAddress = (pick(header, "client_invoice_address", "") || "")
     .split("\n")
     .map((l) => l.trim())
@@ -49275,12 +49458,30 @@ function buildNhspReportHTML(inv, header, nhspData) {
       border-right: 1px solid #e5e7eb;
     }
     .section-title { font-weight: 700; color: #333; }
+    .draft-watermark {
+      position: fixed;
+      left: 0;
+      right: 0;
+      top: 45%;
+      text-align: center;
+      font-size: 64px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      color: rgba(0,0,0,0.12);
+      transform: rotate(-18deg);
+      z-index: 0;
+      pointer-events: none;
+      user-select: none;
+    }
   </style>
 </head>
 <body>
   ${stationeryUrl ? `<div class="stationery" style="background-image:url('${escapeUrl(stationeryUrl)}');"></div>` : ""}
 
+  ${isDraftInvoice ? `<div class="draft-watermark">DRAFT INVOICE</div>` : ""}
+
   <div class="wrap">
+
     <table class="lines">
       <thead>
         <tr>
@@ -49378,6 +49579,28 @@ function buildNhspReportHTML(inv, header, nhspData) {
       log('error', 'invoice_not_found_in_manifest', { ms: Date.now() - t0 });
       return { ok: false, error: 'Invoice not found' };
     }
+    const docFlagsById = (manifest && typeof manifest === 'object' && manifest.timesheet_doc_flags_by_id && typeof manifest.timesheet_doc_flags_by_id === 'object')
+      ? manifest.timesheet_doc_flags_by_id
+      : {};
+
+    const regenTimesheetIds = [];
+    const qrRefsChangedTimesheetIds = [];
+
+    try {
+      for (const [k, v] of Object.entries(docFlagsById)) {
+        const tsid = String(k || '').trim();
+        if (!tsid) continue;
+        const obj = (v && typeof v === 'object') ? v : {};
+        if (obj.electronic_pdf_regen_required === true || obj.electronic_refs_changed === true) {
+          regenTimesheetIds.push(tsid);
+        }
+        if (obj.qr_refs_changed === true) {
+          qrRefsChangedTimesheetIds.push(tsid);
+        }
+      }
+    } catch {}
+
+    const hasRegenRequired = (regenTimesheetIds.length > 0);
 
     log('log', 'manifest_counts', {
       ms: Date.now() - t0,
@@ -49386,12 +49609,15 @@ function buildNhspReportHTML(inv, header, nhspData) {
       timesheet_evidence_len: Array.isArray(manifest.timesheet_evidence) ? manifest.timesheet_evidence.length : 0,
       evidence_other_len: Array.isArray(manifest.evidence_other) ? manifest.evidence_other.length : 0,
       tsfin_blocks: Array.isArray(manifest.tsfin_external_source_rows) ? manifest.tsfin_external_source_rows.length : 0,
-      hr_cache_blocks: Array.isArray(manifest.hr_source_rows_cache) ? manifest.hr_source_rows_cache.length : 0
+      hr_cache_blocks: Array.isArray(manifest.hr_source_rows_cache) ? manifest.hr_source_rows_cache.length : 0,
+      regen_timesheets: regenTimesheetIds.length,
+      qr_refs_changed_timesheets: qrRefsChangedTimesheetIds.length
     });
 
-    // ✅ Cache short-circuit INSIDE render (covers email path too)
+      // ✅ Cache short-circuit INSIDE render (covers email path too)
+    // IMPORTANT: if any ELECTRONIC timesheet needs regen, do NOT return cached bundle
     try {
-      if (!forceRegen) {
+      if (!forceRegen && !hasRegenRequired) {
         const key = (inv && typeof inv.invoice_pdf_r2_key === 'string') ? inv.invoice_pdf_r2_key.trim() : '';
         const genAt = inv ? inv.invoice_pdf_generated_at_utc : null;
         const updAt = inv ? inv.updated_at : null;
@@ -49411,7 +49637,9 @@ function buildNhspReportHTML(inv, header, nhspData) {
               attached_nhsp: false,
               attached_evidence: 0,
               attached_timesheet_evidence: 0,
-              attached_manual_timesheets: 0
+              attached_manual_timesheets: 0,
+              regen_timesheet_ids: regenTimesheetIds,
+              qr_refs_changed_timesheet_ids: qrRefsChangedTimesheetIds
             };
           }
         }
@@ -49825,6 +50053,28 @@ const pdfMargins = {
     step = 'COLLECT_TS_IDS';
     const tsIds = [...new Set(lineRows.map(r => r?.timesheet_id).filter(Boolean).map(String))];
     log('log', 'timesheets_collected', { ts_ids: tsIds.length });
+
+    // ✅ Regen ELECTRONIC timesheet PDFs before attaching if manifest says refs changed
+    const regenToRun = (regenTimesheetIds || []).filter(tsid => tsIds.includes(String(tsid)));
+    if (regenToRun.length) {
+      step = 'REGEN_ELECTRONIC_TS_PDFS';
+      log('log', 'regen_timesheets_start', { count: regenToRun.length, ts_ids: regenToRun });
+
+      for (const tsId of regenToRun) {
+        try {
+          await ensureTimesheetPdf(env, tsId, { force_regen: true, prefer_generated: true });
+        } catch (eRegen) {
+          log('error', 'regen_timesheet_failed', {
+            timesheet_id: String(tsId),
+            err_name: eRegen?.name || null,
+            err_message: eRegen?.message || String(eRegen || ''),
+            err_stack: eRegen?.stack || null
+          });
+        }
+      }
+
+      log('log', 'regen_timesheets_done', { count: regenToRun.length });
+    }
 
     const docsKeys = tsIds.map(tsId => normalizeKey(`docs-pdf/timesheets/ts_${tsId}.pdf`));
 
@@ -64298,8 +64548,24 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
   }
 
   // Persist last-sent hash + timestamp (non-fatal if migration not present)
+  // ✅ ALSO persist qr_sent_refs_* snapshot/signature at the moment we queue the QR email
   const nowSent = nowIso();
   try {
+    const qrRefsSnapshot = stableClone({
+      sheet_scope: scope || null,
+      week_ending_date: ts?.week_ending_date || null,
+      reference_number: ts?.reference_number || null,
+      day_references_json: ts?.day_references_json || null,
+      actual_schedule_json: ts?.actual_schedule_json || null
+    });
+
+    let qrSentRefsSig = null;
+    try {
+      qrSentRefsSig = await sha256Hex(JSON.stringify(qrRefsSnapshot));
+    } catch {
+      qrSentRefsSig = null;
+    }
+
     await fetch(
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
         `?timesheet_id=eq.${enc(currentTimesheetId)}` +
@@ -64310,6 +64576,9 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
         body: JSON.stringify({
           qr_last_sent_hash: current_hash,
           qr_last_sent_at_utc: nowSent,
+          qr_sent_refs_snapshot_json: qrRefsSnapshot,
+          qr_sent_refs_sig: qrSentRefsSig,
+          qr_sent_refs_captured_at_utc: nowSent,
           updated_at: nowSent
         })
       }
@@ -64605,7 +64874,6 @@ async function handleTimesheetQrRestore(env, req, timesheetId) {
   }));
 }
 
-
 async function handleTimesheetQrRefuseAndReset(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -64709,6 +64977,9 @@ async function handleTimesheetQrRefuseAndReset(env, req, timesheetId) {
           qr_last_sent_at_utc: null,
           qr_signed_hash: null,
           qr_signed_at_utc: null,
+          qr_sent_refs_sig: null,
+          qr_sent_refs_snapshot_json: null,
+          qr_sent_refs_captured_at_utc: null,
           updated_at: now
         })
       }
@@ -64846,7 +65117,6 @@ async function handleTimesheetQrRefuseAndReset(env, req, timesheetId) {
     tsfin: fin || null
   }));
 }
-
 
 async function handleContractWeekDeletePlanned(env, req, contractWeekId) {
   const user = await requireUser(env, req, ['admin']);
