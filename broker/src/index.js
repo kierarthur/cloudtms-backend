@@ -3546,44 +3546,104 @@ const resolvedBandText =
   safeStr(contract?.band || ts?.band || "").trim();
 
 
-    // ---------- SCHEDULE (weekly or synth daily) ----------
-    let schedule = Array.isArray(ts.actual_schedule_json) ? ts.actual_schedule_json : [];
+  // ---------- SCHEDULE (weekly or synth daily) ----------
+let schedule = Array.isArray(ts.actual_schedule_json) ? ts.actual_schedule_json : [];
 
-    const workedYmd = isDaily ? isoToLocalYmd(ts.worked_start_iso) : "";
-    const workedStartHHMM = isDaily ? isoToLocalHHMM(ts.worked_start_iso) : "";
-    const workedEndHHMM   = isDaily ? isoToLocalHHMM(ts.worked_end_iso)   : "";
+const workedYmd = isDaily ? isoToLocalYmd(ts.worked_start_iso) : "";
+const workedStartHHMM = isDaily ? isoToLocalHHMM(ts.worked_start_iso) : "";
+const workedEndHHMM   = isDaily ? isoToLocalHHMM(ts.worked_end_iso)   : "";
 
-    let weekEndingYmd = safeStr(ts.week_ending_date).slice(0, 10);
-    if (isDaily) {
-      const computed = nextSundayYmd(workedYmd);
-      weekEndingYmd = computed || weekEndingYmd || "";
+let weekEndingYmd = safeStr(ts.week_ending_date).slice(0, 10);
+if (isDaily) {
+  const computed = nextSundayYmd(workedYmd);
+  weekEndingYmd = computed || weekEndingYmd || "";
+}
+
+if (isDaily && (!Array.isArray(schedule) || schedule.length === 0)) {
+  const seg = {
+    date: workedYmd || "",
+    start: workedStartHHMM || "",
+    end: workedEndHHMM || "",
+    start_utc: ts.worked_start_iso || null,
+    end_utc: ts.worked_end_iso || null,
+
+    // ✅ Daily mapping fix: ensure Booking Ref column prints the timesheet reference_number
+    ref_num: safeStr(ts.reference_number || "").trim()
+  };
+
+  if (ts.break_start_iso && ts.break_end_iso) {
+    const bs = isoToLocalHHMM(ts.break_start_iso);
+    const be = isoToLocalHHMM(ts.break_end_iso);
+    if (bs && be) {
+      seg.break_start = bs;
+      seg.break_end = be;
+      seg.breaks = [{ start: bs, end: be }];
     }
+  }
+  if (seg.breaks == null && ts.break_minutes != null) {
+    seg.break_minutes = Number(ts.break_minutes) || 0;
+  }
 
-    if (isDaily && (!Array.isArray(schedule) || schedule.length === 0)) {
-      const seg = {
-        date: workedYmd || "",
-        start: workedStartHHMM || "",
-        end: workedEndHHMM || "",
-        start_utc: ts.worked_start_iso || null,
-        end_utc: ts.worked_end_iso || null
+  schedule = [seg];
+  L("DAILY.SYNTHESIZED", { workedYmd, weekEndingYmd });
+}
+
+// ✅ SEGMENTS-mode fallback (robustness):
+// If schedule is empty AND TSFIN indicates SEGMENTS, build schedule from invoice_breakdown_json.segments
+if (!isDaily && (!Array.isArray(schedule) || schedule.length === 0)) {
+  const ibj = (fin && typeof fin.invoice_breakdown_json === "object" && fin.invoice_breakdown_json)
+    ? fin.invoice_breakdown_json
+    : null;
+
+  const mode = safeStr(ibj?.mode || "").toUpperCase();
+  const segs = Array.isArray(ibj?.segments) ? ibj.segments : [];
+
+  if (mode === "SEGMENTS" && segs.length > 0) {
+    schedule = segs.map((s) => {
+      const startUtc = s?.start_utc || null;
+      const endUtc   = s?.end_utc || null;
+
+      const ymd =
+        safeStr(s?.date).slice(0, 10) ||
+        (startUtc ? isoToLocalYmd(startUtc) : "");
+
+      const startHH = startUtc ? isoToLocalHHMM(startUtc) : "";
+      const endHH   = endUtc ? isoToLocalHHMM(endUtc) : "";
+
+      const sidRaw = safeStr(s?.segment_id || "").trim();
+      const sid = sidRaw || ((startUtc && endUtc) ? (`SE:${safeStr(startUtc)}|${safeStr(endUtc)}`) : "");
+
+      const out = {
+        date: ymd || "",
+        start: startHH || "",
+        end: endHH || "",
+        start_utc: startUtc,
+        end_utc: endUtc,
+
+        // booking ref source in SEGMENTS mode
+        ref_num: safeStr(s?.ref_num || "").trim(),
+
+        // stable segment identity when present
+        segment_id: sid || null
       };
 
-      if (ts.break_start_iso && ts.break_end_iso) {
-        const bs = isoToLocalHHMM(ts.break_start_iso);
-        const be = isoToLocalHHMM(ts.break_end_iso);
-        if (bs && be) {
-          seg.break_start = bs;
-          seg.break_end = be;
-          seg.breaks = [{ start: bs, end: be }];
-        }
-      }
-      if (seg.breaks == null && ts.break_minutes != null) {
-        seg.break_minutes = Number(ts.break_minutes) || 0;
+      // Optional break fields if present on TSFIN segments
+      if (s?.break_start && s?.break_end) {
+        out.break_start = safeStr(s.break_start);
+        out.break_end = safeStr(s.break_end);
+        out.breaks = [{ start: safeStr(s.break_start), end: safeStr(s.break_end) }];
+      } else if (s?.break_minutes != null) {
+        out.break_minutes = Number(s.break_minutes) || 0;
       }
 
-      schedule = [seg];
-      L("DAILY.SYNTHESIZED", { workedYmd, weekEndingYmd });
-    }
+      return out;
+    });
+
+    L("SEGMENTS.SCHEDULE_FALLBACK", { segments: schedule.length });
+  }
+}
+
+
 
     const weekEndingDayName = weekdayName(weekEndingYmd);
     const weekDates = buildWeekDates(weekEndingYmd);
@@ -4404,77 +4464,100 @@ drawTextFit(page, font, authDate, dateTextX2, sigY2 - 1.2, dateTextW2, 6.6, 4.8)
 
     await bucket.put(outKey, outBytes, { httpMetadata: { contentType: "application/pdf" } });
 
-    // ---------- Persist refs used in GENERATED PDF ----------
-    // Store exactly what is printed in the "Booking Ref" column (per shift)
-    try {
-      const stableClone = (v) => {
-        if (Array.isArray(v)) return v.map(stableClone);
-        if (v && typeof v === "object") {
-          const out = {};
-          for (const k of Object.keys(v).sort()) out[k] = stableClone(v[k]);
-          return out;
-        }
-        return v;
-      };
+   // ---------- Persist refs used in GENERATED PDF ----------
+// Store exactly what is printed in the "Booking Ref" column (per shift), but persist as:
+//   - snapshot: ordered [{ row_key, current_reference }]
+//   - sig: sha256 over raw string "row_key=ref||row_key=ref..."
+try {
+  const refRows = [];
 
-      const refsPrinted = [];
-      for (const seg of (Array.isArray(schedule) ? schedule : [])) {
-        const t = getSegTimes(seg);
-        if (!t.start || !t.end) continue;
+  const scopeUpper = String(ts?.sheet_scope || "").toUpperCase();
 
-        const ymd = safeStr(seg?.date).slice(0, 10);
-        const ref =
-          safeStr(seg?.ref_num || "").trim() ||
-          safeStr(seg?.booking_ref || "").trim() ||
-          "";
+  if (scopeUpper === "DAILY") {
+    // DAILY canonical row_key mirrors SQL: TIMESHEET target, blank segment_id
+    const dayYmd =
+      safeStr(workedYmd).slice(0, 10) ||
+      safeStr(isoToLocalYmd(ts?.worked_start_iso)).slice(0, 10) ||
+      safeStr(isoToLocalYmd(ts?.scheduled_start_iso)).slice(0, 10) ||
+      safeStr(ts?.week_ending_date).slice(0, 10) ||
+      "";
 
-        refsPrinted.push({
-          day_ymd: ymd || null,
-          start_utc: seg?.start_utc || null,
-          end_utc: seg?.end_utc || null,
-          start: t.start || null,
-          end: t.end || null,
-          current_reference: ref || null
-        });
-      }
+    const startUtc = safeStr(ts?.worked_start_iso || ts?.scheduled_start_iso || "");
+    const endUtc   = safeStr(ts?.worked_end_iso   || ts?.scheduled_end_iso   || "");
 
-      refsPrinted.sort((a, b) => {
-        const ak = `${a.day_ymd || ""}|${a.start_utc || a.start || ""}|${a.end_utc || a.end || ""}|${a.current_reference || ""}`;
-        const bk = `${b.day_ymd || ""}|${b.start_utc || b.start || ""}|${b.end_utc || b.end || ""}|${b.current_reference || ""}`;
-        return ak.localeCompare(bk);
-      });
+    const rowKey =
+      `${safeStr(ts?.timesheet_id || timesheetId)}|TIMESHEET||${dayYmd}|${startUtc}|${endUtc}`;
 
-      const refsSnapshot = stableClone({
-        timesheet_id: String(ts?.timesheet_id || timesheetId),
-        sheet_scope: String(ts?.sheet_scope || "").toUpperCase() || null,
-        week_ending_date: (weekEndingYmd || safeStr(ts?.week_ending_date).slice(0, 10) || null),
-        refs: refsPrinted
-      });
+    const refVal = safeStr(ts?.reference_number || "").trim();
 
-      const refsSig = await sha256Hex(JSON.stringify(refsSnapshot));
-      const nowIso = new Date().toISOString();
+    refRows.push({ row_key: rowKey, current_reference: refVal });
+  } else {
+    // WEEKLY/SEGMENT rows: per shift line, stable segment_id when present else ts:<id>:<idx>
+    const src = Array.isArray(schedule) ? schedule : [];
 
-      await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/timesheets` +
-          `?timesheet_id=eq.${encodeURIComponent(timesheetId)}` +
-          `&is_current=eq.true`,
-        {
-          method: "PATCH",
-          headers: { Prefer: "return=minimal" },
-          body: JSON.stringify({
-            generated_pdf_refs_snapshot_json: refsSnapshot,
-            generated_pdf_refs_sig: refsSig,
-            generated_pdf_refs_captured_at_utc: nowIso,
-            updated_at: nowIso
-          })
-        }
-      );
+    for (let i = 0; i < src.length; i++) {
+      const seg = src[i];
+      const t = getSegTimes(seg);
+      if (!t.start || !t.end) continue;
 
-      L("PDF.REFS_SAVED", { sig: refsSig, refs_count: refsPrinted.length });
-    } catch (e) {
-      L("PDF.REFS_SAVE_FAIL_NONFATAL", { err: e?.message || String(e) });
+      const ymd = safeStr(seg?.date).slice(0, 10);
+
+      const segId =
+        safeStr(seg?.segment_id || "").trim() ||
+        `ts:${safeStr(ts?.timesheet_id || timesheetId)}:${i}`;
+
+      const startUtc = safeStr(seg?.start_utc || "");
+      const endUtc   = safeStr(seg?.end_utc || "");
+
+      const rowKey =
+        `${safeStr(ts?.timesheet_id || timesheetId)}|SEGMENT|${segId}|${ymd}|${startUtc}|${endUtc}`;
+
+      const refVal =
+        safeStr(seg?.ref_num || "").trim() ||
+        safeStr(seg?.booking_ref || "").trim() ||
+        "";
+
+      refRows.push({ row_key: rowKey, current_reference: refVal });
     }
+  }
+
+  // Deterministic order
+  refRows.sort((a, b) => safeStr(a.row_key).localeCompare(safeStr(b.row_key)));
+
+  // Canonical raw signature string (matches SQL manifest model)
+  const rawSig = refRows
+    .map(r => `${safeStr(r.row_key)}=${safeStr(r.current_reference)}`)
+    .join("||");
+
+  const refsSig = await sha256Hex(rawSig);
+  const nowIso = new Date().toISOString();
+
+  await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${encodeURIComponent(timesheetId)}` +
+      `&is_current=eq.true`,
+    {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({
+        generated_pdf_refs_snapshot_json: refRows,
+        generated_pdf_refs_sig: refsSig,
+        generated_pdf_refs_captured_at_utc: nowIso,
+
+        // ✅ keep generated_pdf_at_utc in sync for non-worker renders
+        generated_pdf_at_utc: nowIso
+
+        // ❌ DO NOT touch updated_at here (PDF bookkeeping must not mutate business updated_at)
+      })
+    }
+  );
+
+  L("PDF.REFS_SAVED", { sig: refsSig, refs_count: refRows.length });
+} catch (e) {
+  L("PDF.REFS_SAVE_FAIL_NONFATAL", { err: e?.message || String(e) });
+}
+
 
     L("DONE", { outKey, ms: Date.now() - T0 });
     return outKey;
@@ -4487,7 +4570,7 @@ drawTextFit(page, font, authDate, dateTextX2, sigY2 - 1.2, dateTextW2, 6.6, 4.8)
 }
 
 
-async function renderTimesheetPDFAndSave(env, timesheetId) {
+async function renderTimesheetPDFAndSave(env, timesheetId, opts) {
   const bucket = env.R2_BUCKET || env.R2;
   if (!bucket?.get || !bucket?.put) throw new Error("Storage not configured");
 
@@ -4495,7 +4578,10 @@ async function renderTimesheetPDFAndSave(env, timesheetId) {
   const LOGP = `[TS_PDF][${timesheetId}]`;
   const L = (step, obj) => { try { console.log(`${LOGP} ${step}`, obj || {}); } catch {} };
 
-  L("START", { timesheetId });
+  const force_regen =
+    !!(opts && typeof opts === "object" && opts.force_regen);
+
+  L("START", { timesheetId, force_regen });
 
   // Load TS row (CURRENT VERSION ONLY)
   let ts = null;
@@ -4554,29 +4640,47 @@ async function renderTimesheetPDFAndSave(env, timesheetId) {
     throw new Error("QR is PENDING but no token found in qr_payload_json.tok or timesheets.qr_token");
   }
 
-  // Check cache existence
-  let exists = false;
-  try {
-    exists = await r2Exists(env, outKey);
-  } catch (e) {
-    L("R2.EXISTS_FAIL", { outKey, err: e?.message || String(e) });
-    exists = false;
-  }
-
   // Policy:
-  // - If NOT pending: reuse cached PDF if it exists
-  // - If pending: render (safe for reissue; guarantees current QR is embedded)
-  const action = (!qrPending && exists) ? "REUSE" : "RENDER";
+  // - If force_regen: ALWAYS render (skip cache checks)
+  // - Else if NOT pending: reuse cached PDF if it exists
+  // - Else if pending: render (safe for reissue; guarantees current QR is embedded)
+  let exists = false;
+  let action = "RENDER";
 
-  L("DECIDE", {
-    outKey,
-    qrStatus,
-    payloadType,
-    payloadTok_present: !!payloadTok,
-    qrToken_present: !!qrToken,
-    r2Exists: exists,
-    action
-  });
+  if (force_regen) {
+    action = "RENDER";
+    L("DECIDE", {
+      outKey,
+      qrStatus,
+      payloadType,
+      payloadTok_present: !!payloadTok,
+      qrToken_present: !!qrToken,
+      r2Exists: null,
+      action,
+      force_regen: true
+    });
+  } else {
+    // Check cache existence (only when not forcing regeneration)
+    try {
+      exists = await r2Exists(env, outKey);
+    } catch (e) {
+      L("R2.EXISTS_FAIL", { outKey, err: e?.message || String(e) });
+      exists = false;
+    }
+
+    action = (!qrPending && exists) ? "REUSE" : "RENDER";
+
+    L("DECIDE", {
+      outKey,
+      qrStatus,
+      payloadType,
+      payloadTok_present: !!payloadTok,
+      qrToken_present: !!qrToken,
+      r2Exists: exists,
+      action,
+      force_regen: false
+    });
+  }
 
   if (action === "REUSE") {
     L("REUSE", { outKey, ms: Date.now() - T0 });
@@ -4593,10 +4697,6 @@ async function renderTimesheetPDFAndSave(env, timesheetId) {
     throw e;
   }
 }
-
-
-
-// Ensure a TS PDF exists; return its key (render/snapshot if missing)
 
 async function ensureTimesheetPdf(env, timesheetId, opts) {
   const enc = encodeURIComponent;
@@ -4620,9 +4720,11 @@ async function ensureTimesheetPdf(env, timesheetId, opts) {
     String(ts?.qr_status || "").toUpperCase() === "PENDING" &&
     ts?.qr_payload_json && typeof ts.qr_payload_json === "object";
 
-  // ✅ NEW: force_regen / prefer_generated path
+  // ✅ Force-regenerate / prefer-generated / QR-printable path:
+  // - force_regen must bypass REUSE logic (handled by renderTimesheetPDFAndSave)
+  // - prefer_generated must bypass manual_pdf_r2_key
   if (force_regen || prefer_generated || needsQrPrintable) {
-    return await renderTimesheetPDFAndSave(env, timesheetId);
+    return await renderTimesheetPDFAndSave(env, timesheetId, { force_regen });
   }
 
   // Prefer a manual uploaded PDF when present (scanned evidence path)
@@ -4635,8 +4737,9 @@ async function ensureTimesheetPdf(env, timesheetId, opts) {
   if (await r2Exists(env, key)) return key;
 
   // Otherwise generate the system PDF
-  return await renderTimesheetPDFAndSave(env, timesheetId);
+  return await renderTimesheetPDFAndSave(env, timesheetId, { force_regen: false });
 }
+
 
 
 // ============================================================================
@@ -15471,108 +15574,112 @@ async function handleTimesheetsSubmitWeekly(env, req) {
       });
     }
 
-    // ✅ UPDATED: when the email is queued, compute + persist last-sent hash AND QR refs snapshot (per-shift booking refs)
-    if (emailQueued) {
-      try {
-        const stableClone = (v) => {
-          if (Array.isArray(v)) return v.map(stableClone);
-          if (v && typeof v === 'object') {
-            const out = {};
-            for (const k of Object.keys(v).sort()) out[k] = stableClone(v[k]);
-            return out;
-          }
-          return v;
-        };
-
-        const hashObj = {
-          sheet_scope: 'WEEKLY',
-          week_ending_date: cw.week_ending_date || null,
-          actual_schedule_json: actual_schedule_json || null,
-          reference_number: ts.reference_number || null,
-          day_references_json: ts.day_references_json || null,
-          additional_units_week: unitsWeek || {},
-          additional_units_per_day: unitsPerDay || {}
-        };
-
-        const current_hash = await sha256Hex(JSON.stringify(stableClone(hashObj)));
-        const sentAt = nowIso();
-
-        // QR refs for WEEKLY = per-shift booking refs (the same field the PDF prints in "Booking Ref")
-        // Snapshot shape is intentionally compatible with a future manifest sha256 computation:
-        // an ordered list of { row_key, current_reference }.
-        const sched = Array.isArray(ts.actual_schedule_json)
-          ? ts.actual_schedule_json
-          : (Array.isArray(actual_schedule_json) ? actual_schedule_json : []);
-
-        const qrRefsRows = [];
-        for (let i = 0; i < sched.length; i++) {
-          const seg = sched[i];
-          if (!seg || typeof seg !== 'object') continue;
-
-          const sLocal = String(seg.start || '').trim();
-          const eLocal = String(seg.end || '').trim();
-          const sUtc = String(seg.start_utc || '').trim();
-          const eUtc = String(seg.end_utc || '').trim();
-
-          const hasLocal = !!(sLocal && eLocal);
-          const hasUtc = !!(sUtc && eUtc);
-          if (!hasLocal && !hasUtc) continue;
-
-          const dayYmd = String(seg.date || '').trim();
-
-          const segmentId = `ts:${ts.timesheet_id}:${i}`;
-
-          const ref = String(
-            (seg.ref_num != null ? seg.ref_num : (seg.booking_ref != null ? seg.booking_ref : '')) || ''
-          ).trim();
-
-          const row_key =
-            String(ts.timesheet_id) +
-            '|SEGMENT' +
-            '|' + segmentId +
-            '|' + (dayYmd || '') +
-            '|' + (sUtc || '') +
-            '|' + (eUtc || '');
-
-          qrRefsRows.push({ row_key, current_reference: ref });
-        }
-
-        qrRefsRows.sort((a, b) => String(a.row_key).localeCompare(String(b.row_key)));
-
-        const qrRefsSnapshot = stableClone(qrRefsRows);
-
-        let qrSentRefsSig = null;
-        try {
-          qrSentRefsSig = await sha256Hex(JSON.stringify(qrRefsSnapshot));
-        } catch {
-          qrSentRefsSig = null;
-        }
-
-        await fetch(
-          `${env.SUPABASE_URL}/rest/v1/timesheets` +
-            `?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
-          {
-            method: 'PATCH',
-            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-            body: JSON.stringify({
-              qr_last_sent_hash: current_hash,
-              qr_last_sent_at_utc: sentAt,
-
-              qr_sent_refs_snapshot_json: qrRefsSnapshot,
-              qr_sent_refs_sig: qrSentRefsSig,
-              qr_sent_refs_captured_at_utc: sentAt,
-
-              updated_at: sentAt
-            })
-          }
-        ).catch(() => {});
-      } catch (e) {
-        console.warn('[WEEKLY_QR][SUBMIT] failed to persist qr_last_sent_* (non-fatal)', {
-          timesheet_id: ts.timesheet_id,
-          err: e?.message || String(e)
-        });
+   // ✅ UPDATED: when the email is queued, compute + persist last-sent hash AND QR refs snapshot (per-shift booking refs)
+// ✅ FIX: qr_sent_refs_sig now uses the canonical SQL-style signature:
+//   raw_sig = "row_key=ref||row_key=ref..." (ordered by row_key), sha256(raw_sig)
+if (emailQueued) {
+  try {
+    const stableClone = (v) => {
+      if (Array.isArray(v)) return v.map(stableClone);
+      if (v && typeof v === 'object') {
+        const out = {};
+        for (const k of Object.keys(v).sort()) out[k] = stableClone(v[k]);
+        return out;
       }
+      return v;
+    };
+
+    const hashObj = {
+      sheet_scope: 'WEEKLY',
+      week_ending_date: cw.week_ending_date || null,
+      actual_schedule_json: actual_schedule_json || null,
+      reference_number: ts.reference_number || null,
+      day_references_json: ts.day_references_json || null,
+      additional_units_week: unitsWeek || {},
+      additional_units_per_day: unitsPerDay || {}
+    };
+
+    const current_hash = await sha256Hex(JSON.stringify(stableClone(hashObj)));
+    const sentAt = nowIso();
+
+    // QR refs for WEEKLY = per-shift booking refs (the same field the PDF prints in "Booking Ref")
+    // Snapshot shape for DB: ordered list of { row_key, current_reference }.
+    const sched = Array.isArray(ts.actual_schedule_json)
+      ? ts.actual_schedule_json
+      : (Array.isArray(actual_schedule_json) ? actual_schedule_json : []);
+
+    const qrRefsRows = [];
+    for (let i = 0; i < sched.length; i++) {
+      const seg = sched[i];
+      if (!seg || typeof seg !== 'object') continue;
+
+      const sLocal = String(seg.start || '').trim();
+      const eLocal = String(seg.end || '').trim();
+      const sUtc = String(seg.start_utc || '').trim();
+      const eUtc = String(seg.end_utc || '').trim();
+
+      const hasLocal = !!(sLocal && eLocal);
+      const hasUtc = !!(sUtc && eUtc);
+      if (!hasLocal && !hasUtc) continue;
+
+      const dayYmd = String(seg.date || '').trim();
+
+      // ✅ Match SQL row model: prefer seg.segment_id, else stable fallback ts:<id>:<idx>
+      const segIdRaw = String(seg.segment_id || '').trim();
+      const segmentId = segIdRaw || `ts:${ts.timesheet_id}:${i}`;
+
+      const ref = String(
+        (seg.ref_num != null ? seg.ref_num : (seg.booking_ref != null ? seg.booking_ref : '')) || ''
+      ).trim();
+
+      const row_key =
+        String(ts.timesheet_id) +
+        '|SEGMENT' +
+        '|' + segmentId +
+        '|' + (dayYmd || '') +
+        '|' + (sUtc || '') +
+        '|' + (eUtc || '');
+
+      qrRefsRows.push({ row_key, current_reference: ref });
     }
+
+    qrRefsRows.sort((a, b) => String(a.row_key).localeCompare(String(b.row_key)));
+
+    const qrRefsSnapshot = stableClone(qrRefsRows);
+
+    // ✅ Canonical raw signature string (matches SQL manifest model)
+    const rawSig = qrRefsRows
+      .map(r => `${String(r.row_key)}=${String(r.current_reference ?? '')}`)
+      .join('||');
+
+    const qrSentRefsSig = await sha256Hex(rawSig);
+
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify({
+          qr_last_sent_hash: current_hash,
+          qr_last_sent_at_utc: sentAt,
+
+          qr_sent_refs_snapshot_json: qrRefsSnapshot,
+          qr_sent_refs_sig: qrSentRefsSig,
+          qr_sent_refs_captured_at_utc: sentAt,
+
+          updated_at: sentAt
+        })
+      }
+    ).catch(() => {});
+  } catch (e) {
+    console.warn('[WEEKLY_QR][SUBMIT] failed to persist qr_last_sent_* (non-fatal)', {
+      timesheet_id: ts.timesheet_id,
+      err: e?.message || String(e)
+    });
+  }
+}
+
 
     // ✅ audit: QR issued (includes pdf key)
     try {
@@ -42139,7 +42246,7 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
       candName = cand?.display_name || null;
     }
 
-     if (email && pdfKey) {
+    if (email && pdfKey) {
       const subject = workedDateYmd
         ? `Daily QR timesheet – ${workedDateYmd}`
         : `Daily QR timesheet`;
@@ -42179,28 +42286,33 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
         }
       ).catch(() => null);
 
-      // ✅ NEW: capture refs snapshot/signature at the moment the QR email is actually queued
+      // ✅ UPDATED: capture refs snapshot/signature at the moment the QR email is actually queued
+      // Canonical model matches SQL manifest:
+      //   - snapshot: ordered [{ row_key, current_reference }]
+      //   - sig: sha256 over "row_key=ref||row_key=ref..."
       if (ins && ins.ok) {
         try {
-          const stableClone = (v) => {
-            if (Array.isArray(v)) return v.map(stableClone);
-            if (v && typeof v === 'object') {
-              const out = {};
-              for (const k of Object.keys(v).sort()) out[k] = stableClone(v[k]);
-              return out;
-            }
-            return v;
-          };
+          const tsIdStr = String(currentTimesheetId);
 
-          // Daily QR: persist reference-only snapshot (not schedule/units)
-          const refsSnapshot = stableClone({
-            timesheet_id: String(currentTimesheetId),
-            sheet_scope: 'DAILY',
-            reference_number: ts.reference_number || null,
-            day_references_json: ts.day_references_json || null
-          });
+          const dayYmd =
+            (workedDateYmd ? String(workedDateYmd).slice(0, 10) : '') ||
+            (ts.worked_start_iso ? String(ts.worked_start_iso).slice(0, 10) : '') ||
+            (ts.scheduled_start_iso ? String(ts.scheduled_start_iso).slice(0, 10) : '') ||
+            (ts.week_ending_date ? String(ts.week_ending_date).slice(0, 10) : '') ||
+            '';
 
-          const refsSig = await sha256Hex(JSON.stringify(refsSnapshot));
+          const startUtc = String(ts.worked_start_iso || ts.scheduled_start_iso || '');
+          const endUtc   = String(ts.worked_end_iso   || ts.scheduled_end_iso   || '');
+
+          // DAILY row_key mirrors SQL: timesheet_id|TIMESHEET||day_ymd|start_utc|end_utc
+          const rowKey = `${tsIdStr}|TIMESHEET||${dayYmd}|${startUtc}|${endUtc}`;
+
+          const refVal = String(ts.reference_number || '').trim();
+          const refRows = [{ row_key: rowKey, current_reference: refVal }];
+
+          // Deterministic raw signature string
+          const rawSig = `${rowKey}=${refVal}`;
+          const refsSig = await sha256Hex(rawSig);
           const capAt = nowIso();
 
           await fetch(
@@ -42210,7 +42322,7 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
               method: 'PATCH',
               headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
               body: JSON.stringify({
-                qr_sent_refs_snapshot_json: refsSnapshot,
+                qr_sent_refs_snapshot_json: refRows,
                 qr_sent_refs_sig: refsSig,
                 qr_sent_refs_captured_at_utc: capAt,
                 updated_at: capAt
@@ -64547,43 +64659,104 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
     return withCORS(env, req, serverError(`Failed to queue QR email: ${t}`));
   }
 
-  // Persist last-sent hash + timestamp (non-fatal if migration not present)
-  // ✅ ALSO persist qr_sent_refs_* snapshot/signature at the moment we queue the QR email
-  const nowSent = nowIso();
-  try {
-    const qrRefsSnapshot = stableClone({
-      sheet_scope: scope || null,
-      week_ending_date: ts?.week_ending_date || null,
-      reference_number: ts?.reference_number || null,
-      day_references_json: ts?.day_references_json || null,
-      actual_schedule_json: ts?.actual_schedule_json || null
-    });
+ // Persist last-sent hash + timestamp (non-fatal if migration not present)
+// ✅ FIX: qr_sent_refs_* now uses canonical row_key/raw_sig signature model (matches SQL manifest)
+const nowSent = nowIso();
+try {
+  const tsIdStr = String(currentTimesheetId);
+  const scopeUpper = String(scope || '').toUpperCase();
 
-    let qrSentRefsSig = null;
-    try {
-      qrSentRefsSig = await sha256Hex(JSON.stringify(qrRefsSnapshot));
-    } catch {
-      qrSentRefsSig = null;
+  const qrRefsRows = [];
+
+  if (scopeUpper === 'DAILY') {
+    // DAILY: single TIMESHEET row, derived from worked/scheduled window
+    const dayYmd = (() => {
+      try {
+        if (typeof toLocalParts === 'function') {
+          const iso0 = ts?.worked_start_iso || ts?.scheduled_start_iso || null;
+          const p = iso0 ? toLocalParts(iso0, null) : null;
+          if (p && p.ymd) return String(p.ymd);
+        }
+      } catch {}
+      const isoFallback = String(ts?.worked_start_iso || ts?.scheduled_start_iso || '').slice(0, 10);
+      return isoFallback || String(ts?.week_ending_date || '').slice(0, 10) || '';
+    })();
+
+    const startUtc = String(ts?.worked_start_iso || ts?.scheduled_start_iso || '');
+    const endUtc   = String(ts?.worked_end_iso   || ts?.scheduled_end_iso   || '');
+
+    const rowKey = `${tsIdStr}|TIMESHEET||${dayYmd}|${startUtc}|${endUtc}`;
+    const refVal = String(ts?.reference_number || '').trim();
+
+    qrRefsRows.push({ row_key: rowKey, current_reference: refVal });
+  } else {
+    // WEEKLY: per-shift booking refs from schedule rows
+    const sched = Array.isArray(ts?.actual_schedule_json) ? ts.actual_schedule_json : [];
+
+    for (let i = 0; i < sched.length; i++) {
+      const seg = sched[i];
+      if (!seg || typeof seg !== 'object') continue;
+
+      const sLocal = String(seg.start || '').trim();
+      const eLocal = String(seg.end || '').trim();
+      const sUtc = String(seg.start_utc || '').trim();
+      const eUtc = String(seg.end_utc || '').trim();
+
+      const hasLocal = !!(sLocal && eLocal);
+      const hasUtc = !!(sUtc && eUtc);
+      if (!hasLocal && !hasUtc) continue;
+
+      const dayYmd = String(seg.date || '').trim();
+
+      // ✅ Match SQL row model: prefer seg.segment_id, else stable fallback ts:<id>:<idx>
+      const segIdRaw = String(seg.segment_id || '').trim();
+      const segmentId = segIdRaw || `ts:${tsIdStr}:${i}`;
+
+      const refVal =
+        String((seg.ref_num != null ? seg.ref_num : (seg.booking_ref != null ? seg.booking_ref : '')) || '').trim();
+
+      const rowKey =
+        tsIdStr +
+        '|SEGMENT' +
+        '|' + segmentId +
+        '|' + (dayYmd || '') +
+        '|' + (sUtc || '') +
+        '|' + (eUtc || '');
+
+      qrRefsRows.push({ row_key: rowKey, current_reference: refVal });
     }
+  }
 
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-        `&is_current=eq.true`,
-      {
-        method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify({
-          qr_last_sent_hash: current_hash,
-          qr_last_sent_at_utc: nowSent,
-          qr_sent_refs_snapshot_json: qrRefsSnapshot,
-          qr_sent_refs_sig: qrSentRefsSig,
-          qr_sent_refs_captured_at_utc: nowSent,
-          updated_at: nowSent
-        })
-      }
-    ).catch(() => {});
-  } catch {}
+  qrRefsRows.sort((a, b) => String(a.row_key).localeCompare(String(b.row_key)));
+
+  // Deterministic raw signature string (matches SQL manifest model)
+  const rawSig = qrRefsRows
+    .map(r => `${String(r.row_key)}=${String(r.current_reference ?? '')}`)
+    .join('||');
+
+  const qrSentRefsSig = await sha256Hex(rawSig);
+
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+      body: JSON.stringify({
+        qr_last_sent_hash: current_hash,
+        qr_last_sent_at_utc: nowSent,
+
+        qr_sent_refs_snapshot_json: qrRefsRows,
+        qr_sent_refs_sig: qrSentRefsSig,
+        qr_sent_refs_captured_at_utc: nowSent,
+
+        updated_at: nowSent
+      })
+    }
+  ).catch(() => {});
+} catch {}
+
 
   // Audit
   try {
