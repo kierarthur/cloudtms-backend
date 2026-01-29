@@ -49163,7 +49163,8 @@ function buildNhspReportHTML(inv, header, nhspData) {
   <style>
     /* Body must NOT reserve header/footer space here.
        Puppeteer displayHeaderFooter + pdf margins will handle that. */
-    @page { size: A4; margin: 0; }
+@page { size: A4; }
+
 
     html, body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
@@ -50110,8 +50111,7 @@ const pdfMargins = {
   displayHeaderFooter: true,
   headerTemplate,
   footerTemplate,
-  margin: pdfMargins,
-  preferCSSPageSize: true
+  margin: pdfMargins
 });
 
           log('log', 'invoice_pdf_ok', { ms: Date.now() - t0, pdf_bytes: (pdfArrayBuffer ? pdfArrayBuffer.byteLength : 0) });
