@@ -311,7 +311,13 @@ ts_base AS (
     tf.accommodation_pay_ex_vat,
     tf.accommodation_charge_ex_vat,
     tf.other_pay_ex_vat,
-    tf.other_charge_ex_vat
+    tf.other_charge_ex_vat,
+
+    -- refs/PDF baseline fields (used for 'Refs - Timesheet PDF invalid' issue)
+    ts.generated_pdf_at_utc,
+    ts.generated_pdf_refs_sig,
+    ts.qr_sent_refs_sig,
+    ts.qr_last_sent_hash
 
   FROM timesheets ts
   LEFT JOIN contract_weeks cw ON cw.timesheet_id = ts.timesheet_id
@@ -451,7 +457,13 @@ planned_weeks AS (
     NULL::numeric AS accommodation_pay_ex_vat,
     NULL::numeric AS accommodation_charge_ex_vat,
     NULL::numeric AS other_pay_ex_vat,
-    NULL::numeric AS other_charge_ex_vat
+    NULL::numeric AS other_charge_ex_vat,
+
+    -- refs/PDF baseline fields (used for 'Refs - Timesheet PDF invalid' issue)
+    NULL::timestamp with time zone AS generated_pdf_at_utc,
+    NULL::text AS generated_pdf_refs_sig,
+    NULL::text AS qr_sent_refs_sig,
+    NULL::text AS qr_last_sent_hash
 
   FROM contract_weeks cw
   JOIN contracts ct ON ct.id = cw.contract_id
@@ -1073,6 +1085,9 @@ SELECT
 
 FROM with_issues wi
 LEFT JOIN LATERAL (
+  SELECT public.timesheet_pdf_reference_sig(wi.timesheet_id) AS current_refs_sig
+) rs ON true
+LEFT JOIN LATERAL (
   SELECT
     pc0.precheck_status,
     pc0.issue_missing_reference,
@@ -1106,6 +1121,36 @@ LEFT JOIN LATERAL (
       END
       ||
       array_remove(COALESCE(wi.issue_codes, ARRAY[]::text[]), 'Reference'::text)
+      ||
+      (
+        CASE
+          WHEN wi.timesheet_id IS NOT NULL
+            AND COALESCE(wi.client_no_timesheet_required, false) = false
+            AND COALESCE(wi.client_is_nhsp, false) = false
+            AND (
+              (
+                wi.submission_mode = 'ELECTRONIC'::submission_mode_enum
+                AND wi.manual_pdf_r2_key IS NULL
+                AND wi.generated_pdf_at_utc IS NOT NULL
+                AND (
+                  wi.generated_pdf_refs_sig IS NULL
+                  OR (rs.current_refs_sig IS NOT NULL AND wi.generated_pdf_refs_sig <> rs.current_refs_sig)
+                )
+              )
+              OR
+              (
+                (
+                  (wi.qr_token IS NOT NULL AND wi.qr_generated_at IS NOT NULL)
+                  OR wi.qr_last_sent_hash IS NOT NULL
+                )
+                AND wi.qr_sent_refs_sig IS NOT NULL
+                AND (rs.current_refs_sig IS NOT NULL AND wi.qr_sent_refs_sig <> rs.current_refs_sig)
+              )
+            )
+          THEN ARRAY['Refs - Timesheet PDF invalid'::text]
+          ELSE ARRAY[]::text[]
+        END
+      )
     ) AS issue_codes_final
 ) ic ON true
 
