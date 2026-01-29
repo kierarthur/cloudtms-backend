@@ -3328,7 +3328,6 @@ $$;
 --
 -- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
 -- ============================================================
-
 create or replace function public.invoice_render_manifest(p_invoice_id uuid)
 returns jsonb
 language plpgsql
@@ -3493,38 +3492,48 @@ begin
   ),
 
   -- ✅ NEW: per-timesheet deterministic current refs signature (invoice-scoped)
-  ref_sig_by_timesheet as (
+   ref_sig_by_timesheet as (
     select
       r.timesheet_id,
-      md5(coalesce(string_agg(
-        (
-          concat_ws(
-            '|',
-            r.timesheet_id::text,
-            r.ref_target,
-            coalesce(r.segment_id,''),
-            coalesce(r.day_ymd,''),
-            coalesce(r.start_utc,''),
-            coalesce(r.end_utc,'')
-          )
-          || '=' || coalesce(r.current_reference,'')
+      encode(
+        extensions.digest(
+          coalesce(
+            string_agg(
+              (
+                concat_ws(
+                  '|',
+                  r.timesheet_id::text,
+                  r.ref_target,
+                  coalesce(r.segment_id,''),
+                  coalesce(r.day_ymd::text,''),
+                  coalesce(r.start_utc::text,''),
+                  coalesce(r.end_utc::text,'')
+                )
+                || '=' || coalesce(r.current_reference,'')
+              ),
+              '||'
+              ORDER BY
+                concat_ws(
+                  '|',
+                  r.timesheet_id::text,
+                  r.ref_target,
+                  coalesce(r.segment_id,''),
+                  coalesce(r.day_ymd::text,''),
+                  coalesce(r.start_utc::text,''),
+                  coalesce(r.end_utc::text,'')
+                )
+            ),
+            ''
+          ),
+          'sha256'
         ),
-        '||'
-        order by
-          concat_ws(
-            '|',
-            r.timesheet_id::text,
-            r.ref_target,
-            coalesce(r.segment_id,''),
-            coalesce(r.day_ymd,''),
-            coalesce(r.start_utc,''),
-            coalesce(r.end_utc,'')
-          )
-      ), '')) as current_refs_sig
+        'hex'
+      ) as current_refs_sig
     from ref_rows_joined r
     where r.timesheet_id is not null
     group by r.timesheet_id
   ),
+
 
   -- ✅ NEW: per-timesheet document flags (electronic regen + QR refs changed)
   timesheet_doc_flags as (
@@ -4042,7 +4051,6 @@ exception when others then
   raise;
 end;
 $$;
-
 
 
 
