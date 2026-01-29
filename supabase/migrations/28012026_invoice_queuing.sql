@@ -638,3 +638,191 @@ begin
   return v_sig;
 end;
 $$;
+-- ============================================================
+-- CloudTMS: trigger function
+-- Enqueue FORCE_REGEN when ELECTRONIC generated-PDF refs baseline exists
+-- and the stored generated_pdf_refs_sig is missing or mismatched.
+--
+-- IMPORTANT: Do NOT enqueue for routes that do not require a timesheet PDF
+-- (e.g. NHSP) or when client/contract is flagged no_timesheet_required.
+--
+-- Note: ts_pdfs_outbox has no "status"; we reset backoff by:
+--  - attempt_count=0, next_attempt_at=null, last_error=null
+-- and force render with force_regen=true.
+-- ============================================================
+create or replace function public.trg_timesheets_enqueue_pdf_regen_on_refs_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_current_sig text := null;
+
+  v_contract_id uuid := null;
+  v_client_id uuid := null;
+
+  v_overrideclientsettings boolean := false;
+  v_no_timesheet_required boolean := false;
+  v_is_nhsp boolean := false;
+begin
+  -- CURRENT only
+  if coalesce(new.is_current, false) is not true then
+    return new;
+  end if;
+
+  -- Ignore revoked
+  if new.revoked_at is not null then
+    return new;
+  end if;
+
+  -- ELECTRONIC only (generated PDF path)
+  if upper(coalesce(new.submission_mode::text, '')) <> 'ELECTRONIC' then
+    return new;
+  end if;
+
+  -- Manual PDF overrides mean we don't own the canonical generated PDF
+  if new.manual_pdf_r2_key is not null then
+    return new;
+  end if;
+
+  -- If no generated PDF baseline exists, do nothing (per your spec)
+  if new.generated_pdf_at_utc is null then
+    return new;
+  end if;
+
+  -- ------------------------------------------------------------
+  -- Exclusion: do not enqueue when timesheet PDF is not required
+  -- (NHSP / no_timesheet_required), respecting contract overrides.
+  -- Mirrors precedence used in your summary view logic:
+  --   if contracts.overrideclientsettings then use contract snapshot
+  --   else use aggregated client_settings flags.
+  -- ------------------------------------------------------------
+
+  -- Resolve contract_id (timesheets.contract_id or from contract_weeks)
+  v_contract_id := new.contract_id;
+
+  if v_contract_id is null then
+    select cw.contract_id
+      into v_contract_id
+    from public.contract_weeks cw
+    where cw.timesheet_id = new.timesheet_id
+    limit 1;
+  end if;
+
+  if v_contract_id is not null then
+    select
+      coalesce(ct.overrideclientsettings, false),
+      coalesce(ct.no_timesheet_required, false),
+      coalesce(ct.is_nhsp, false),
+      ct.client_id
+    into
+      v_overrideclientsettings,
+      v_no_timesheet_required,
+      v_is_nhsp,
+      v_client_id
+    from public.contracts ct
+    where ct.id = v_contract_id
+    limit 1;
+
+    if coalesce(v_overrideclientsettings, false) = true then
+      if coalesce(v_no_timesheet_required, false) = true
+         or coalesce(v_is_nhsp, false) = true
+      then
+        return new;
+      end if;
+    end if;
+  end if;
+
+  -- If not overridden by contract settings, check client_settings flags
+  if coalesce(v_overrideclientsettings, false) = false then
+    -- If client_id still unknown, fall back to current TSFIN client_id
+    if v_client_id is null then
+      select tf.client_id
+        into v_client_id
+      from public.timesheets_financials tf
+      where tf.timesheet_id = new.timesheet_id
+        and tf.is_current = true
+      order by tf.created_at desc
+      limit 1;
+    end if;
+
+    if v_client_id is not null then
+      select
+        coalesce(bool_or(cs.no_timesheet_required), false),
+        coalesce(bool_or(cs.is_nhsp), false)
+      into
+        v_no_timesheet_required,
+        v_is_nhsp
+      from public.client_settings cs
+      where cs.client_id = v_client_id;
+
+      if coalesce(v_no_timesheet_required, false) = true
+         or coalesce(v_is_nhsp, false) = true
+      then
+        return new;
+      end if;
+    end if;
+  end if;
+
+  -- Compute current canonical sig (matches invoice_render_manifest hashing model)
+  v_current_sig := public.timesheet_pdf_reference_sig(new.timesheet_id);
+
+  if v_current_sig is null then
+    return new;
+  end if;
+
+  -- If missing or mismatched, enqueue FORCE_REGEN (idempotent UPSERT)
+  if new.generated_pdf_refs_sig is null or new.generated_pdf_refs_sig <> v_current_sig then
+    insert into public.ts_pdfs_outbox(
+      timesheet_id,
+      reason,
+      attempt_count,
+      next_attempt_at,
+      last_error,
+      prefer_generated,
+      force_regen,
+      created_at
+    )
+    values (
+      new.timesheet_id,
+      'FORCE_REGEN'::public.ts_pdf_reason_enum,
+      0,
+      null,
+      null,
+      true,
+      true,
+      now()
+    )
+    on conflict (timesheet_id, reason)
+    do update
+      set attempt_count    = 0,
+          next_attempt_at  = null,
+          last_error       = null,
+          prefer_generated = true,
+          force_regen      = true;
+  end if;
+
+  return new;
+end;
+$$;
+
+
+-- ============================================================
+-- Trigger: fire when fields that affect printed refs can change
+-- ============================================================
+drop trigger if exists trg_timesheets_enqueue_pdf_regen_on_refs_change
+  on public.timesheets;
+
+create trigger trg_timesheets_enqueue_pdf_regen_on_refs_change
+after update of
+  reference_number,
+  actual_schedule_json,
+  worked_start_iso,
+  worked_end_iso,
+  scheduled_start_iso,
+  scheduled_end_iso
+on public.timesheets
+for each row
+execute function public.trg_timesheets_enqueue_pdf_regen_on_refs_change();
+
