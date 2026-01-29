@@ -48699,243 +48699,254 @@ function buildNhspReportHTML(inv, header, nhspData) {
   // UPDATED: buildHTML (render FREEFORM reference rows as single-column list/table)
   // ==========================================================
   function buildHTML(payload) {
-    const {
-      header = {},
-      meta: payloadMeta = {},
-      invoice_no = "",
-      issued_at_utc,
-      due_at_utc,
-      totals = { subtotal_ex_vat: 0, vat_amount: 0, total_inc_vat: 0 },
-      items = [],
-      reference_rows = []
-    } = payload || {};
+  const {
+    header = {},
+    meta: payloadMeta = {},
+    invoice_no = "",
+    issued_at_utc,
+    due_at_utc,
+    totals = { subtotal_ex_vat: 0, vat_amount: 0, total_inc_vat: 0 },
+    items = [],
+    reference_rows = []
+  } = payload || {};
 
-    const clientName = pick(header, "client_name", "");
-    const clientAddress = (pick(header, "client_invoice_address", "") || "")
-      .split("\n")
-      .map((l) => l.trim())
-      .filter(Boolean);
+  const clientName = pick(header, "client_name", "");
+  const clientAddress = (pick(header, "client_invoice_address", "") || "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
 
-    const vatChargeable = !!pick(header, "vat_chargeable", true);
-    const appliedVatPct = Number(pick(header, "applied_vat_rate_pct", 0));
-    const termsDays = pick(header, "payment_terms_days", null);
-    const bank = pick(header, "bank", {}) || {};
+  const vatChargeable = !!pick(header, "vat_chargeable", true);
+  const appliedVatPct = Number(pick(header, "applied_vat_rate_pct", 0));
+  const termsDays = pick(header, "payment_terms_days", null);
+  const bank = pick(header, "bank", {}) || {};
 
-    const agencyName =
-      pick(header, "agency_name", "") ||
-      pick(header, "agency_display_name", "") ||
-      pick(header, "company_name", "") ||
-      "";
+  const agencyName =
+    pick(header, "agency_name", "") ||
+    pick(header, "agency_display_name", "") ||
+    pick(header, "company_name", "") ||
+    "";
 
-    const agencyLogoUrl =
-      pick(header, "agency_logo_url", "") ||
-      pick(header, "logo_url", "") ||
-      "";
+  const agencyLogoUrl =
+    pick(header, "agency_logo_url", "") ||
+    pick(header, "logo_url", "") ||
+    "";
 
-    const registeredAddressLines = (pick(header, "registered_address", "") || "")
-      .split("\n")
-      .map((l) => l.trim())
-      .filter(Boolean);
+  const registeredAddressLines = (pick(header, "registered_address", "") || "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
 
-    const companyRegNumber =
-      pick(header, "company_reg_number", "") ||
-      pick(header, "company_registration_number", "") ||
-      "";
+  const companyRegNumber =
+    pick(header, "company_reg_number", "") ||
+    pick(header, "company_registration_number", "") ||
+    "";
 
-    const DEFAULT_VAT_REG = "363 6805 80";
-    const vatReg = pick(header, "vat_registration_number", "") || DEFAULT_VAT_REG;
+  const DEFAULT_VAT_REG = "363 6805 80";
+  const vatReg = pick(header, "vat_registration_number", "") || DEFAULT_VAT_REG;
 
-    const stationeryUrl = pick(header, "stationery_url", "");
+  const stationeryUrl = pick(header, "stationery_url", "");
 
-    const defaultMargins = stationeryUrl
-      ? { top: 32, right: 12, bottom: 20, left: 12 }
-      : { top: 18, right: 12, bottom: 34, left: 12 };
-    const mgIn = pick(header, "stationery_margins_mm", {}) || {};
-    const mg = {
-      top: Number(pick(mgIn, "top", defaultMargins.top)),
-      right: Number(pick(mgIn, "right", defaultMargins.right)),
-      bottom: Number(pick(mgIn, "bottom", defaultMargins.bottom)),
-      left: Number(pick(mgIn, "left", defaultMargins.left))
+  const defaultMargins = stationeryUrl
+    ? { top: 32, right: 12, bottom: 20, left: 12 }
+    : { top: 18, right: 12, bottom: 34, left: 12 };
+  const mgIn = pick(header, "stationery_margins_mm", {}) || {};
+  const mg = {
+    top: Number(pick(mgIn, "top", defaultMargins.top)),
+    right: Number(pick(mgIn, "right", defaultMargins.right)),
+    bottom: Number(pick(mgIn, "bottom", defaultMargins.bottom)),
+    left: Number(pick(mgIn, "left", defaultMargins.left))
+  };
+
+  const hideBankFooter = !!pick(header, "hide_bank_footer", false);
+
+  // Reserve space so fixed header/footer NEVER collide with flowing content.
+  // Header repeats on every page; footer repeats when shown.
+  const FIXED_HEADER_MM = 52; // tuned for your header block height (logo/name + invoice + bill-to + meta)
+  const FIXED_FOOTER_MM = hideBankFooter ? 0 : 26;
+
+  const pageTopMm = Number(mg.top) + FIXED_HEADER_MM;
+  const pageBottomMm = Number(mg.bottom) + FIXED_FOOTER_MM;
+
+  const headerPo = pick(header, "po_number", null);
+  const itemPos = items.map((i) => i?.meta?.po_number).filter(Boolean);
+  const uniquePos = Array.from(new Set([...(headerPo ? [headerPo] : []), ...itemPos]));
+  const poNo = uniquePos.length === 1 ? uniquePos[0] : "";
+
+  const showVatCols = vatChargeable && (appliedVatPct > 0 || Number(totals.vat_amount) > 0);
+
+  const num = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const round2 = (v) => Math.round(num(v) * 100) / 100;
+  const fmtQty = (v, decimals = 2) => {
+    const n = num(v);
+    if (Math.abs(n - Math.round(n)) < 1e-9) return String(Math.round(n));
+    return n.toFixed(decimals);
+  };
+  const eqRate = (a, b) => round2(a) === round2(b);
+
+  const getLineTypeNorm = (it) => {
+    const m = it?.meta || {};
+    return String(m.line_type_norm || m.line_type || "").toUpperCase();
+  };
+
+  // ===== AMENDMENT: treat HOURS_* as HOURS everywhere =====
+  const isHoursType = (t) => {
+    const tt = String(t || "").toUpperCase();
+    return tt === "HOURS" || tt.startsWith("HOURS_");
+  };
+  // ========================================================
+
+  const getTimesheetId = (it) => {
+    return (it && it.timesheet_id != null) ? String(it.timesheet_id)
+      : (it?.meta?.timesheet_id != null ? String(it.meta.timesheet_id) : null);
+  };
+
+  const isAdjustmentItem = (it) => {
+    const t = getLineTypeNorm(it);
+    const tsId = getTimesheetId(it);
+    return (!tsId || t === "ADJUSTMENT");
+  };
+
+  const DEFAULT_LABELS = { day: "Day", night: "Night", sat: "Sat", sun: "Sun", bh: "BH" };
+  const bucketLabelOf = (labels, key) => String((labels && labels[key]) || DEFAULT_LABELS[key] || key);
+
+  const groupMap = new Map();
+  const adjustments = [];
+
+  for (const it of (items || [])) {
+    if (isAdjustmentItem(it)) {
+      adjustments.push(it);
+      continue;
+    }
+    const tsId = getTimesheetId(it);
+    if (!tsId) {
+      adjustments.push(it);
+      continue;
+    }
+    if (!groupMap.has(tsId)) groupMap.set(tsId, { tsId, items: [] });
+    groupMap.get(tsId).items.push(it);
+  }
+
+  const groups = Array.from(groupMap.values()).sort((a, b) => {
+    // ===== AMENDMENT: find HOURS or HOURS_* meta for ordering =====
+    const aMeta = (a.items.find(x => isHoursType(getLineTypeNorm(x)))?.meta) || a.items[0]?.meta || {};
+    const bMeta = (b.items.find(x => isHoursType(getLineTypeNorm(x)))?.meta) || b.items[0]?.meta || {};
+    // =============================================================
+    const awe = String(aMeta.week_ending_date || aMeta.week_ending || aMeta.weekEnding || "");
+    const bwe = String(bMeta.week_ending_date || bMeta.week_ending || bMeta.weekEnding || "");
+    if (awe !== bwe) return awe < bwe ? 1 : -1;
+    const ac = String(aMeta.candidate_display || aMeta.candidate || "");
+    const bc = String(bMeta.candidate_display || bMeta.candidate || "");
+    if (ac !== bc) return ac.localeCompare(bc);
+    return String(a.tsId).localeCompare(String(b.tsId));
+  });
+
+  const groupBreakdownTableHtml = (grp) => {
+    const its = grp.items || [];
+    const hoursItem = its.find((x) => {
+      const t = getLineTypeNorm(x);
+      return (t === "HOURS" || String(t || "").startsWith("HOURS_"));
+    }) || null;
+
+    const metaBase = (hoursItem?.meta || its[0]?.meta || {}) || {};
+    const labels = (metaBase.bucket_labels && typeof metaBase.bucket_labels === "object") ? metaBase.bucket_labels : DEFAULT_LABELS;
+
+    const hDay = num(metaBase.hours_day);
+    const hNgt = num(metaBase.hours_night);
+    const hSat = num(metaBase.hours_sat);
+    const hSun = num(metaBase.hours_sun);
+    const hBh  = num(metaBase.hours_bh);
+
+    const rDay = num(metaBase.charge_day);
+    const rNgt = num(metaBase.charge_night);
+    const rSat = num(metaBase.charge_sat);
+    const rSun = num(metaBase.charge_sun);
+    const rBh  = num(metaBase.charge_bh);
+
+    const groupFlag = !!pick(payloadMeta, "group_nightsat_sunbh", false);
+    const canMerge = groupFlag && eqRate(rNgt, rSat) && eqRate(rSun, rBh);
+
+    const rows = [];
+
+    const pushRow = (desc, qty, unit, charge) => {
+      const q = num(qty);
+      const u = num(unit);
+      const c = round2(charge);
+      if (c === 0) return;
+      rows.push({ desc: String(desc || ""), qty: q, unit: u, charge: c });
     };
 
-    const hideBankFooter = !!pick(header, "hide_bank_footer", false);
-
-    // Reserve space so fixed header/footer NEVER collide with flowing content.
-    // Header repeats on every page; footer repeats when shown.
-    const FIXED_HEADER_MM = 52; // tuned for your header block height (logo/name + invoice + bill-to + meta)
-    const FIXED_FOOTER_MM = hideBankFooter ? 0 : 26;
-
-    const pageTopMm = Number(mg.top) + FIXED_HEADER_MM;
-    const pageBottomMm = Number(mg.bottom) + FIXED_FOOTER_MM;
-
-    const headerPo = pick(header, "po_number", null);
-    const itemPos = items.map((i) => i?.meta?.po_number).filter(Boolean);
-    const uniquePos = Array.from(new Set([...(headerPo ? [headerPo] : []), ...itemPos]));
-    const poNo = uniquePos.length === 1 ? uniquePos[0] : "";
-
-    const showVatCols = vatChargeable && (appliedVatPct > 0 || Number(totals.vat_amount) > 0);
-
-    const num = (v) => {
-      const n = Number(v);
-      return Number.isFinite(n) ? n : 0;
-    };
-    const round2 = (v) => Math.round(num(v) * 100) / 100;
-    const fmtQty = (v, decimals = 2) => {
-      const n = num(v);
-      if (Math.abs(n - Math.round(n)) < 1e-9) return String(Math.round(n));
-      return n.toFixed(decimals);
-    };
-    const eqRate = (a, b) => round2(a) === round2(b);
-
-    const getLineTypeNorm = (it) => {
-      const m = it?.meta || {};
-      return String(m.line_type_norm || m.line_type || "").toUpperCase();
-    };
-
-    const getTimesheetId = (it) => {
-      return (it && it.timesheet_id != null) ? String(it.timesheet_id)
-        : (it?.meta?.timesheet_id != null ? String(it.meta.timesheet_id) : null);
-    };
-
-    const isAdjustmentItem = (it) => {
-      const t = getLineTypeNorm(it);
-      const tsId = getTimesheetId(it);
-      return (!tsId || t === "ADJUSTMENT");
-    };
-
-    const DEFAULT_LABELS = { day: "Day", night: "Night", sat: "Sat", sun: "Sun", bh: "BH" };
-    const bucketLabelOf = (labels, key) => String((labels && labels[key]) || DEFAULT_LABELS[key] || key);
-
-    const groupMap = new Map();
-    const adjustments = [];
-
-    for (const it of (items || [])) {
-      if (isAdjustmentItem(it)) {
-        adjustments.push(it);
-        continue;
+    if (hoursItem) {
+      if (canMerge) {
+        const nightSatQty = hNgt + hSat;
+        const sunBhQty = hSun + hBh;
+        pushRow(bucketLabelOf(labels, "day"), hDay, rDay, hDay * rDay);
+        pushRow(`${bucketLabelOf(labels, "night")}/${bucketLabelOf(labels, "sat")}`, nightSatQty, rNgt, nightSatQty * rNgt);
+        pushRow(`${bucketLabelOf(labels, "sun")}/${bucketLabelOf(labels, "bh")}`, sunBhQty, rSun, sunBhQty * rSun);
+      } else {
+        pushRow(bucketLabelOf(labels, "day"), hDay, rDay, hDay * rDay);
+        pushRow(bucketLabelOf(labels, "night"), hNgt, rNgt, hNgt * rNgt);
+        pushRow(bucketLabelOf(labels, "sat"), hSat, rSat, hSat * rSat);
+        pushRow(bucketLabelOf(labels, "sun"), hSun, rSun, hSun * rSun);
+        pushRow(bucketLabelOf(labels, "bh"), hBh, rBh, hBh * rBh);
       }
-      const tsId = getTimesheetId(it);
-      if (!tsId) {
-        adjustments.push(it);
-        continue;
-      }
-      if (!groupMap.has(tsId)) groupMap.set(tsId, { tsId, items: [] });
-      groupMap.get(tsId).items.push(it);
     }
 
-    const groups = Array.from(groupMap.values()).sort((a, b) => {
-      const aMeta = (a.items.find(x => getLineTypeNorm(x) === "HOURS")?.meta) || a.items[0]?.meta || {};
-      const bMeta = (b.items.find(x => getLineTypeNorm(x) === "HOURS")?.meta) || b.items[0]?.meta || {};
-      const awe = String(aMeta.week_ending_date || aMeta.week_ending || aMeta.weekEnding || "");
-      const bwe = String(bMeta.week_ending_date || bMeta.week_ending || bMeta.weekEnding || "");
-      if (awe !== bwe) return awe < bwe ? 1 : -1;
-      const ac = String(aMeta.candidate_display || aMeta.candidate || "");
-      const bc = String(bMeta.candidate_display || bMeta.candidate || "");
-      if (ac !== bc) return ac.localeCompare(bc);
-      return String(a.tsId).localeCompare(String(b.tsId));
-    });
+    for (const it of its) {
+      const t = getLineTypeNorm(it);
+      // ===== AMENDMENT: skip HOURS and HOURS_* (prevents duplicate/incorrect rows) =====
+      if (isHoursType(t)) continue;
+      // ============================================================================
+      if (t === "ADJUSTMENT") continue;
 
-     const groupBreakdownTableHtml = (grp) => {
-      const its = grp.items || [];
-      const hoursItem = its.find((x) => {
-        const t = getLineTypeNorm(x);
-        return (t === "HOURS" || String(t || "").startsWith("HOURS_"));
-      }) || null;
+      const m = it.meta || {};
+      const totalEx = num(it.total_ex_vat);
 
-      const metaBase = (hoursItem?.meta || its[0]?.meta || {}) || {};
-      const labels = (metaBase.bucket_labels && typeof metaBase.bucket_labels === "object") ? metaBase.bucket_labels : DEFAULT_LABELS;
+      const unitLabel = String(m.unit_label || it.description || t || "").trim() || t;
 
-      const hDay = num(metaBase.hours_day);
-      const hNgt = num(metaBase.hours_night);
-      const hSat = num(metaBase.hours_sat);
-      const hSun = num(metaBase.hours_sun);
-      const hBh  = num(metaBase.hours_bh);
+      let qty = null;
+      let unitCharge = null;
 
-      const rDay = num(metaBase.charge_day);
-      const rNgt = num(metaBase.charge_night);
-      const rSat = num(metaBase.charge_sat);
-      const rSun = num(metaBase.charge_sun);
-      const rBh  = num(metaBase.charge_bh);
+      if (t === "MILEAGE") {
+        if (m?.mileage && m.mileage.mileage_units != null) qty = num(m.mileage.mileage_units);
+        else if (m.mileage_units != null) qty = num(m.mileage_units);
+        else if (m.qty != null) qty = num(m.qty);
 
-      const groupFlag = !!pick(payloadMeta, "group_nightsat_sunbh", false);
-      const canMerge = groupFlag && eqRate(rNgt, rSat) && eqRate(rSun, rBh);
+        if (m?.mileage && m.mileage.charge_rate != null) unitCharge = num(m.mileage.charge_rate);
+        else if (m.unit_charge_ex_vat != null) unitCharge = num(m.unit_charge_ex_vat);
+      } else if (t.startsWith("ADDITIONAL_RATE")) {
+        if (m?.units && m.units.unit_count != null) qty = num(m.units.unit_count);
+        else if (m.unit_count != null) qty = num(m.unit_count);
+        else if (m.qty != null) qty = num(m.qty);
 
-      const rows = [];
-
-      const pushRow = (desc, qty, unit, charge) => {
-        const q = num(qty);
-        const u = num(unit);
-        const c = round2(charge);
-        if (c === 0) return;
-        rows.push({ desc: String(desc || ""), qty: q, unit: u, charge: c });
-      };
-
-      if (hoursItem) {
-        if (canMerge) {
-          const nightSatQty = hNgt + hSat;
-          const sunBhQty = hSun + hBh;
-          pushRow(bucketLabelOf(labels, "day"), hDay, rDay, hDay * rDay);
-          pushRow(`${bucketLabelOf(labels, "night")}/${bucketLabelOf(labels, "sat")}`, nightSatQty, rNgt, nightSatQty * rNgt);
-          pushRow(`${bucketLabelOf(labels, "sun")}/${bucketLabelOf(labels, "bh")}`, sunBhQty, rSun, sunBhQty * rSun);
-        } else {
-          pushRow(bucketLabelOf(labels, "day"), hDay, rDay, hDay * rDay);
-          pushRow(bucketLabelOf(labels, "night"), hNgt, rNgt, hNgt * rNgt);
-          pushRow(bucketLabelOf(labels, "sat"), hSat, rSat, hSat * rSat);
-          pushRow(bucketLabelOf(labels, "sun"), hSun, rSun, hSun * rSun);
-          pushRow(bucketLabelOf(labels, "bh"), hBh, rBh, hBh * rBh);
-        }
+        if (m?.units && m.units.charge_rate != null) unitCharge = num(m.units.charge_rate);
+        else if (m.unit_charge_ex_vat != null) unitCharge = num(m.unit_charge_ex_vat);
+      } else if (t.startsWith("EXPENSE")) {
+        qty = (m.qty != null) ? num(m.qty) : 1;
+        unitCharge = (m.unit_charge_ex_vat != null)
+          ? num(m.unit_charge_ex_vat)
+          : (qty !== 0 ? totalEx / qty : totalEx);
+      } else {
+        qty = (m.qty != null) ? num(m.qty) : 1;
+        unitCharge = (m.unit_charge_ex_vat != null)
+          ? num(m.unit_charge_ex_vat)
+          : (qty !== 0 ? totalEx / qty : totalEx);
       }
 
-      for (const it of its) {
-        const t = getLineTypeNorm(it);
-        if (t === "HOURS") continue;
-        if (t === "ADJUSTMENT") continue;
+      if (qty == null) qty = 1;
+      if (round2(qty) === 0) continue;
 
-        const m = it.meta || {};
-        const totalEx = num(it.total_ex_vat);
+      if (unitCharge == null) unitCharge = (qty !== 0) ? (totalEx / qty) : totalEx;
 
-        const unitLabel = String(m.unit_label || it.description || t || "").trim() || t;
+      pushRow(unitLabel, qty, unitCharge, totalEx);
+    }
 
-        let qty = null;
-        let unitCharge = null;
+    if (!rows.length) return "";
 
-        if (t === "MILEAGE") {
-          if (m?.mileage && m.mileage.mileage_units != null) qty = num(m.mileage.mileage_units);
-          else if (m.mileage_units != null) qty = num(m.mileage_units);
-          else if (m.qty != null) qty = num(m.qty);
-
-          if (m?.mileage && m.mileage.charge_rate != null) unitCharge = num(m.mileage.charge_rate);
-          else if (m.unit_charge_ex_vat != null) unitCharge = num(m.unit_charge_ex_vat);
-        } else if (t.startsWith("ADDITIONAL_RATE")) {
-          if (m?.units && m.units.unit_count != null) qty = num(m.units.unit_count);
-          else if (m.unit_count != null) qty = num(m.unit_count);
-          else if (m.qty != null) qty = num(m.qty);
-
-          if (m?.units && m.units.charge_rate != null) unitCharge = num(m.units.charge_rate);
-          else if (m.unit_charge_ex_vat != null) unitCharge = num(m.unit_charge_ex_vat);
-        } else if (t.startsWith("EXPENSE")) {
-          qty = (m.qty != null) ? num(m.qty) : 1;
-          unitCharge = (m.unit_charge_ex_vat != null)
-            ? num(m.unit_charge_ex_vat)
-            : (qty !== 0 ? totalEx / qty : totalEx);
-        } else {
-          qty = (m.qty != null) ? num(m.qty) : 1;
-          unitCharge = (m.unit_charge_ex_vat != null)
-            ? num(m.unit_charge_ex_vat)
-            : (qty !== 0 ? totalEx / qty : totalEx);
-        }
-
-        if (qty == null) qty = 1;
-        if (round2(qty) === 0) continue;
-
-        if (unitCharge == null) unitCharge = (qty !== 0) ? (totalEx / qty) : totalEx;
-
-        pushRow(unitLabel, qty, unitCharge, totalEx);
-      }
-
-      if (!rows.length) return "";
-
-      const head = `
+    const head = `
       <table class="breakdown">
         <thead>
           <tr>
@@ -48948,7 +48959,7 @@ function buildNhspReportHTML(inv, header, nhspData) {
         <tbody>
     `;
 
-      const body = rows.map(r => `
+    const body = rows.map(r => `
       <tr>
         <td class="b-desc">${escapeHtml(r.desc)}</td>
         <td class="b-qty mono">${fmtQty(r.qty, 2)}</td>
@@ -48957,49 +48968,49 @@ function buildNhspReportHTML(inv, header, nhspData) {
       </tr>
     `).join("");
 
-      const tail = `
+    const tail = `
         </tbody>
       </table>
     `;
 
-      return head + body + tail;
+    return head + body + tail;
+  };
+
+  const refsByTsId = new Map();
+  for (const r of (reference_rows || [])) {
+    const tsId = (r && r.timesheet_id != null) ? String(r.timesheet_id) : null;
+    if (!tsId) continue;
+    if (!refsByTsId.has(tsId)) refsByTsId.set(tsId, []);
+    refsByTsId.get(tsId).push(r);
+  }
+
+  const refsTableHtmlForTs = (tsId) => {
+    const refs = refsByTsId.get(String(tsId || "")) || [];
+    if (!refs.length) return "";
+
+    const isStructured = (r) => {
+      const d = (r?.day_ymd != null) ? String(r.day_ymd).trim() : '';
+      const st = (r?.start_utc != null) ? String(r.start_utc).trim() : '';
+      const en = (r?.end_utc != null) ? String(r.end_utc).trim() : '';
+      return !!(d || st || en);
     };
 
-    const refsByTsId = new Map();
-    for (const r of (reference_rows || [])) {
-      const tsId = (r && r.timesheet_id != null) ? String(r.timesheet_id) : null;
-      if (!tsId) continue;
-      if (!refsByTsId.has(tsId)) refsByTsId.set(tsId, []);
-      refsByTsId.get(tsId).push(r);
-    }
+    const structured = [];
+    const freeform = [];
+    refs.forEach((r) => {
+      (isStructured(r) ? structured : freeform).push(r);
+    });
 
-    const refsTableHtmlForTs = (tsId) => {
-      const refs = refsByTsId.get(String(tsId || "")) || [];
-      if (!refs.length) return "";
+    const hasRefTxt = (r) => (r?.current_reference != null) && String(r.current_reference).trim();
+    const refText = (r) => hasRefTxt(r) ? String(r.current_reference).trim() : (r?.is_required ? "MISSING" : "—");
+    const refCls = (r) => (!hasRefTxt(r) && r?.is_required) ? "ref-missing" : "";
 
-      const isStructured = (r) => {
-        const d = (r?.day_ymd != null) ? String(r.day_ymd).trim() : '';
-        const st = (r?.start_utc != null) ? String(r.start_utc).trim() : '';
-        const en = (r?.end_utc != null) ? String(r.end_utc).trim() : '';
-        return !!(d || st || en);
-      };
-
-      const structured = [];
-      const freeform = [];
-      refs.forEach((r) => {
-        (isStructured(r) ? structured : freeform).push(r);
-      });
-
-      const hasRefTxt = (r) => (r?.current_reference != null) && String(r.current_reference).trim();
-      const refText = (r) => hasRefTxt(r) ? String(r.current_reference).trim() : (r?.is_required ? "MISSING" : "—");
-      const refCls = (r) => (!hasRefTxt(r) && r?.is_required) ? "ref-missing" : "";
-
-      const structuredTable = structured.length ? (() => {
-        const rowsHtml = structured.map((r) => {
-          const day = r?.day_ymd ? fmtDateGB(r.day_ymd) : "";
-          const st = r?.start_utc ? fmtUKTime(r.start_utc) : "";
-          const en = r?.end_utc ? fmtUKTime(r.end_utc) : "";
-          return `
+    const structuredTable = structured.length ? (() => {
+      const rowsHtml = structured.map((r) => {
+        const day = r?.day_ymd ? fmtDateGB(r.day_ymd) : "";
+        const st = r?.start_utc ? fmtUKTime(r.start_utc) : "";
+        const en = r?.end_utc ? fmtUKTime(r.end_utc) : "";
+        return `
         <tr>
           <td class="r-day mono">${escapeHtml(day)}</td>
           <td class="r-time mono">${escapeHtml(st)}</td>
@@ -49007,9 +49018,9 @@ function buildNhspReportHTML(inv, header, nhspData) {
           <td class="r-ref mono ${refCls(r)}">${escapeHtml(refText(r))}</td>
         </tr>
       `;
-        }).join("");
+      }).join("");
 
-        return `
+      return `
         <table class="refs">
           <thead>
             <tr>
@@ -49024,16 +49035,16 @@ function buildNhspReportHTML(inv, header, nhspData) {
           </tbody>
         </table>
       `;
-      })() : "";
+    })() : "";
 
-      const freeformTable = freeform.length ? (() => {
-        const rowsHtml = freeform.map((r) => `
+    const freeformTable = freeform.length ? (() => {
+      const rowsHtml = freeform.map((r) => `
         <tr>
           <td class="r-ref mono ${refCls(r)}">${escapeHtml(refText(r))}</td>
         </tr>
       `).join("");
 
-        return `
+      return `
         <table class="refs refs-freeform">
           <thead>
             <tr>
@@ -49045,49 +49056,51 @@ function buildNhspReportHTML(inv, header, nhspData) {
           </tbody>
         </table>
       `;
-      })() : "";
+    })() : "";
 
-      return `
+    return `
       <div class="refs-wrap">
         <div class="refs-title">Booking references</div>
         ${structuredTable || ""}
         ${freeformTable ? `<div style="height:6px;"></div>${freeformTable}` : ""}
       </div>
     `;
-    };
+  };
 
-    const groupRowsHtml = groups.map((grp, idx) => {
-      const its = grp.items || [];
-      const metaFirst = (its.find(x => getLineTypeNorm(x) === "HOURS")?.meta) || its[0]?.meta || {};
-      const we = metaFirst.week_ending_date || metaFirst.week_ending || metaFirst.weekEnding || null;
+  const groupRowsHtml = groups.map((grp, idx) => {
+    const its = grp.items || [];
+    // ===== AMENDMENT: metaFirst should prefer HOURS or HOURS_* =====
+    const metaFirst = (its.find(x => isHoursType(getLineTypeNorm(x)))?.meta) || its[0]?.meta || {};
+    // ============================================================
+    const we = metaFirst.week_ending_date || metaFirst.week_ending || metaFirst.weekEnding || null;
 
-      const sublineParts = [
-        metaFirst.candidate_display || metaFirst.candidate || null,
-        metaFirst.role || metaFirst.job_title || null,
-        metaFirst.hospital || metaFirst.hospital_norm || null,
-        metaFirst.ward || metaFirst.ward_norm || null,
-        we ? `W/E ${fmtDateGB(we)}` : null,
-        metaFirst.po_number ? `PO ${metaFirst.po_number}` : null
-      ].filter(Boolean).join(" • ");
+    const sublineParts = [
+      metaFirst.candidate_display || metaFirst.candidate || null,
+      metaFirst.role || metaFirst.job_title || null,
+      metaFirst.hospital || metaFirst.hospital_norm || null,
+      metaFirst.ward || metaFirst.ward_norm || null,
+      we ? `W/E ${fmtDateGB(we)}` : null,
+      metaFirst.po_number ? `PO ${metaFirst.po_number}` : null
+    ].filter(Boolean).join(" • ");
 
-      const grpEx = round2(its.reduce((a, it) => a + num(it.total_ex_vat), 0));
-      const grpVat = round2(its.reduce((a, it) => a + num(it.vat_amount), 0));
-      const grpInc = round2(its.reduce((a, it) => a + num(it.total_inc_vat), 0));
+    const grpEx = round2(its.reduce((a, it) => a + num(it.total_ex_vat), 0));
+    const grpVat = round2(its.reduce((a, it) => a + num(it.vat_amount), 0));
+    const grpInc = round2(its.reduce((a, it) => a + num(it.total_inc_vat), 0));
 
-      const title = escapeHtml(metaFirst.candidate_display || metaFirst.candidate || `Timesheet ${idx + 1}`);
-       const breakdown = groupBreakdownTableHtml(grp);
+    const title = escapeHtml(metaFirst.candidate_display || metaFirst.candidate || `Timesheet ${idx + 1}`);
+    const breakdown = groupBreakdownTableHtml(grp);
 
-      const isNhspGroup = (its || []).some((it) => {
-        const m = (it && it.meta && typeof it.meta === "object") ? it.meta : {};
-        const basis = String(m.basis || m.cur_basis || m.timesheet_basis || "").toUpperCase();
-        const route = String(m.route_type || m.route || "").toUpperCase();
-        const flagNhsp = (m.client_is_nhsp === true) || (m.is_nhsp === true);
-        return flagNhsp || basis === "NHSP" || basis === "NHSP_ADJUSTMENT" || route.includes("NHSP");
-      });
+    const isNhspGroup = (its || []).some((it) => {
+      const m = (it && it.meta && typeof it.meta === "object") ? it.meta : {};
+      const basis = String(m.basis || m.cur_basis || m.timesheet_basis || "").toUpperCase();
+      const route = String(m.route_type || m.route || "").toUpperCase();
+      const flagNhsp = (m.client_is_nhsp === true) || (m.is_nhsp === true);
+      return flagNhsp || basis === "NHSP" || basis === "NHSP_ADJUSTMENT" || route.includes("NHSP");
+    });
 
-      const refsHtml = isNhspGroup ? "" : refsTableHtmlForTs(grp.tsId);
+    const refsHtml = isNhspGroup ? "" : refsTableHtmlForTs(grp.tsId);
 
-      return `
+    return `
       <tr class="line">
         <td class="desc">
           <div class="desc-title">${title}</div>
@@ -49102,11 +49115,11 @@ function buildNhspReportHTML(inv, header, nhspData) {
         <td class="money totalinc">${fmtGBP(grpInc)}</td>
       </tr>
     `;
-    }).join("");
+  }).join("");
 
-    const adjustmentsRowsHtml = (adjustments && adjustments.length)
-      ? (() => {
-          const head = `
+  const adjustmentsRowsHtml = (adjustments && adjustments.length)
+    ? (() => {
+        const head = `
           <tr class="section-row">
             <td class="desc" colspan="${showVatCols ? 4 : 3}">
               <div class="section-title">Adjustments</div>
@@ -49114,14 +49127,14 @@ function buildNhspReportHTML(inv, header, nhspData) {
           </tr>
         `;
 
-          const rows = adjustments.map((it, idx) => {
-            const meta = it.meta || {};
-            const desc = escapeHtml(it.description || meta.unit_label || `Adjustment ${idx + 1}`);
-            const sub = [
-              meta.po_number ? `PO ${meta.po_number}` : null
-            ].filter(Boolean).join(" • ");
+        const rows = adjustments.map((it, idx) => {
+          const meta = it.meta || {};
+          const desc = escapeHtml(it.description || meta.unit_label || `Adjustment ${idx + 1}`);
+          const sub = [
+            meta.po_number ? `PO ${meta.po_number}` : null
+          ].filter(Boolean).join(" • ");
 
-            return `
+          return `
             <tr class="line">
               <td class="desc">
                 <div class="desc-title">${desc}</div>
@@ -49132,17 +49145,17 @@ function buildNhspReportHTML(inv, header, nhspData) {
               <td class="money totalinc">${fmtGBP(it.total_inc_vat)}</b></td>
             </tr>
           `;
-          }).join("");
+        }).join("");
 
-          return head + rows;
-        })()
-      : "";
+        return head + rows;
+      })()
+    : "";
 
-    const lineRows = (groupRowsHtml || adjustmentsRowsHtml)
-      ? (groupRowsHtml + adjustmentsRowsHtml)
-      : "";
+  const lineRows = (groupRowsHtml || adjustmentsRowsHtml)
+    ? (groupRowsHtml + adjustmentsRowsHtml)
+    : "";
 
-   return `<!doctype html>
+  return `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
@@ -49170,14 +49183,15 @@ function buildNhspReportHTML(inv, header, nhspData) {
     }
 
     /* ===== Repeating invoice header (every page) ===== */
-    .inv-fixed-header {
-      position: fixed;
-      left: ${mg.left}mm;
-      right: ${mg.right}mm;
-      top: ${mg.top}mm;
-      z-index: 2;
-      background: transparent;
-    }
+ .inv-fixed-header {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  padding: ${mg.top}mm ${mg.right}mm 0 ${mg.left}mm;
+  z-index: 2;
+  background: transparent;
+}
 
     .inv-fixed-header .header {
       display: grid;
@@ -49300,15 +49314,20 @@ function buildNhspReportHTML(inv, header, nhspData) {
     .section-title { font-weight: 700; color: #333; }
 
     /* ===== Repeating footer (every page, when enabled) ===== */
-    .footer {
-      position: fixed;
-      left: ${mg.left}mm; right: ${mg.right}mm; bottom: ${mg.bottom}mm;
-      font-size: 10px; color: #333;
-      display: ${hideBankFooter ? "none" : "grid"};
-      grid-template-columns: 2fr 1fr; gap: 12px;
-      z-index: 2;
-      background: transparent;
-    }
+  .footer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0 ${mg.right}mm ${mg.bottom}mm ${mg.left}mm;
+  font-size: 10px;
+  color: #333;
+  display: ${hideBankFooter ? "none" : "grid"};
+  grid-template-columns: 2fr 1fr;
+  gap: 12px;
+  z-index: 2;
+  background: transparent;
+}
     .right { text-align: right; }
   </style>
 </head>
@@ -49395,8 +49414,8 @@ function buildNhspReportHTML(inv, header, nhspData) {
   </div>
 </body>
 </html>`;
+}
 
-  }
 
   // Helpers local to this function
   const isTimesheetKind = (k) => String(k || '').toUpperCase() === 'TIMESHEET';
@@ -49527,31 +49546,74 @@ function buildNhspReportHTML(inv, header, nhspData) {
       attach_policy_present: !!attachPolicy
     });
 
-    // Stationery resolution + presign
-    step = 'PRESIGN_STATIONERY';
-    let stationeryKey =
-      (typeof header.stationery_key === "string" && header.stationery_key.trim()) ||
-      env.INVOICE_STATIONERY_KEY ||
-      "Assets/Stationery/Letterhead/A4/Letterhead_v1@300dpi.png";
-    if (/\.pdf$/i.test(stationeryKey)) stationeryKey = stationeryKey.replace(/\.pdf$/i, "@300dpi.png");
-    stationeryKey = normalizeKey(stationeryKey);
+  // Stationery resolution + presign
+step = 'PRESIGN_STATIONERY';
+let stationeryKey =
+  (typeof header.stationery_key === "string" && header.stationery_key.trim()) ||
+  env.INVOICE_STATIONERY_KEY ||
+  "Assets/Stationery/Letterhead/A4/Letterhead_v1@300dpi.png";
+if (/\.pdf$/i.test(stationeryKey)) stationeryKey = stationeryKey.replace(/\.pdf$/i, "@300dpi.png");
+stationeryKey = normalizeKey(stationeryKey);
 
-    const tPresign0 = Date.now();
-    const stationeryUrl = await presignR2Url(
+const tPresign0 = Date.now();
+const stationeryUrl = await presignR2Url(
+  env,
+  req,
+  stationeryKey,
+  Number(env.PRESIGN_EXPIRES_SECONDS || 600)
+);
+log('log', 'presign_ok', {
+  ms: Date.now() - tPresign0,
+  stationery_key: stationeryKey,
+  stationery_url_len: (stationeryUrl ? String(stationeryUrl).length : 0),
+  stationery_origin: (() => { try { return stationeryUrl ? (new URL(stationeryUrl)).origin : null; } catch { return null; } })()
+});
+
+// ✅ NEW: Logo presign (treat agency_logo_url/agency_logo as R2 key unless it already looks like a URL/data URI)
+step = 'PRESIGN_LOGO';
+try {
+  const rawLogo =
+    (typeof header.agency_logo_url === 'string' && header.agency_logo_url.trim()) ||
+    (typeof header.agency_logo === 'string' && header.agency_logo.trim()) ||
+    '';
+
+  const looksLikeRealUrl = (s) => {
+    const x = String(s || '').trim();
+    return /^https?:\/\//i.test(x) || /^data:/i.test(x);
+  };
+
+  if (rawLogo && !looksLikeRealUrl(rawLogo)) {
+    const logoKey = normalizeKey(rawLogo);
+    const tLogo0 = Date.now();
+    const logoUrl = await presignR2Url(
       env,
       req,
-      stationeryKey,
+      logoKey,
       Number(env.PRESIGN_EXPIRES_SECONDS || 600)
     );
-    log('log', 'presign_ok', {
-      ms: Date.now() - tPresign0,
-      stationery_key: stationeryKey,
-      stationery_url_len: (stationeryUrl ? String(stationeryUrl).length : 0),
-      stationery_origin: (() => { try { return stationeryUrl ? (new URL(stationeryUrl)).origin : null; } catch { return null; } })()
-    });
+    if (logoUrl) {
+      header.agency_logo_url = logoUrl; // this is what buildHTML() reads
+      log('log', 'presign_logo_ok', {
+        ms: Date.now() - tLogo0,
+        logo_key: logoKey,
+        logo_url_len: String(logoUrl).length,
+        logo_origin: (() => { try { return (new URL(logoUrl)).origin; } catch { return null; } })()
+      });
+    }
+  } else {
+    log('log', 'presign_logo_skip', { has_logo: !!rawLogo, looks_like_url: !!(rawLogo && looksLikeRealUrl(rawLogo)) });
+  }
+} catch (eLogo) {
+  log('error', 'presign_logo_failed_nonfatal', {
+    err_name: eLogo?.name || null,
+    err_message: eLogo?.message || String(eLogo || ''),
+    err_stack: eLogo?.stack || null
+  });
+}
 
-    const marginsObj = toMarginsObj(header.stationery_margins_mm);
-    const hideBankFooter = header.hide_bank_footer === true;
+const marginsObj = toMarginsObj(header.stationery_margins_mm);
+const hideBankFooter = header.hide_bank_footer === true;
+
 
     const lineRows = Array.isArray(manifest.lines) ? manifest.lines : [];
 
@@ -49963,11 +50025,12 @@ function buildNhspReportHTML(inv, header, nhspData) {
           await page.emulateMediaType("screen");
 
           log('log', 'invoice_pdf_start', { ms: Date.now() - t0 });
-          const pdfArrayBuffer = await page.pdf({
-            format: "a4",
-            printBackground: true,
-            margin: { top: 0, right: 0, bottom: 0, left: 0 },
-          });
+    const pdfArrayBuffer = await page.pdf({
+  format: "a4",
+  printBackground: true,
+  preferCSSPageSize: true
+});
+
           log('log', 'invoice_pdf_ok', { ms: Date.now() - t0, pdf_bytes: (pdfArrayBuffer ? pdfArrayBuffer.byteLength : 0) });
 
           out.invoicePdfU8 = new Uint8Array(pdfArrayBuffer);
