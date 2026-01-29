@@ -3329,8 +3329,6 @@ $$;
 -- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
 -- ============================================================
 
-
-
 create or replace function public.invoice_render_manifest(p_invoice_id uuid)
 returns jsonb
 language plpgsql
@@ -3492,6 +3490,95 @@ begin
     left join tsfin_ref_sources tf
       on tf.timesheet_id = t.timesheet_id
     where t.timesheet_id in (select timesheet_id from ts_ids_for_ref_sources)
+  ),
+
+  -- ✅ NEW: per-timesheet deterministic current refs signature (invoice-scoped)
+  ref_sig_by_timesheet as (
+    select
+      r.timesheet_id,
+      md5(coalesce(string_agg(
+        (
+          concat_ws(
+            '|',
+            r.timesheet_id::text,
+            r.ref_target,
+            coalesce(r.segment_id,''),
+            coalesce(r.day_ymd,''),
+            coalesce(r.start_utc,''),
+            coalesce(r.end_utc,'')
+          )
+          || '=' || coalesce(r.current_reference,'')
+        ),
+        '||'
+        order by
+          concat_ws(
+            '|',
+            r.timesheet_id::text,
+            r.ref_target,
+            coalesce(r.segment_id,''),
+            coalesce(r.day_ymd,''),
+            coalesce(r.start_utc,''),
+            coalesce(r.end_utc,'')
+          )
+      ), '')) as current_refs_sig
+    from ref_rows_joined r
+    where r.timesheet_id is not null
+    group by r.timesheet_id
+  ),
+
+  -- ✅ NEW: per-timesheet document flags (electronic regen + QR refs changed)
+  timesheet_doc_flags as (
+    select
+      ts.timesheet_id,
+      jsonb_build_object(
+        'electronic_refs_changed', flags.electronic_changed,
+        'electronic_pdf_regen_required', flags.electronic_changed,
+        'qr_refs_changed', flags.qr_changed,
+        'reasons', reasons.reasons_json
+      ) as flags_json
+    from ts_ids tid
+    join public.timesheets ts
+      on ts.timesheet_id = tid.timesheet_id
+    left join ref_sig_by_timesheet rs
+      on rs.timesheet_id = ts.timesheet_id
+    cross join lateral (
+      select
+        (
+          upper(coalesce(ts.submission_mode::text,'')) = 'ELECTRONIC'
+          and ts.manual_pdf_r2_key is null
+          and rs.current_refs_sig is not null
+          and (ts.generated_pdf_refs_sig is null or ts.generated_pdf_refs_sig <> rs.current_refs_sig)
+        ) as electronic_changed,
+
+        (
+          (
+            ts.qr_status is not null
+            or ts.qr_token is not null
+            or ts.qr_last_sent_hash is not null
+            or ts.qr_last_sent_at_utc is not null
+          )
+          and rs.current_refs_sig is not null
+          and (ts.qr_sent_refs_sig is null or ts.qr_sent_refs_sig <> rs.current_refs_sig)
+        ) as qr_changed
+    ) flags
+    cross join lateral (
+      select coalesce(jsonb_agg(z.reason) filter (where z.reason is not null), '[]'::jsonb) as reasons_json
+      from (
+        select
+          case
+            when flags.electronic_changed and ts.generated_pdf_refs_sig is null then 'ELECTRONIC_REFS_SIG_MISSING'
+            when flags.electronic_changed then 'ELECTRONIC_REFS_SIG_DIFFERENT'
+            else null
+          end as reason
+        union all
+        select
+          case
+            when flags.qr_changed and ts.qr_sent_refs_sig is null then 'QR_REFS_SIG_MISSING'
+            when flags.qr_changed then 'QR_REFS_SIG_DIFFERENT'
+            else null
+          end as reason
+      ) z
+    ) reasons
   ),
 
   ev as (
@@ -3697,6 +3784,15 @@ begin
     ), '[]'::jsonb),
 
     'timesheet_ids', coalesce((select jsonb_agg(t.timesheet_id::text) from ts_ids t), '[]'::jsonb),
+
+    -- ✅ NEW: per-timesheet document flags for renderer (electronic regen + QR refs changed)
+    'timesheet_doc_flags_by_id', coalesce((
+      select jsonb_object_agg(
+        f.timesheet_id::text,
+        f.flags_json
+      )
+      from timesheet_doc_flags f
+    ), '{}'::jsonb),
 
     -- ✅ mapping needed for segment edits (tsfin_id is invoice_apply_edits input)
     'tsfin_id_by_timesheet_id', coalesce((
@@ -3946,7 +4042,6 @@ exception when others then
   raise;
 end;
 $$;
-
 
 
 
