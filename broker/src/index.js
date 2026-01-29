@@ -49155,13 +49155,15 @@ function buildNhspReportHTML(inv, header, nhspData) {
     ? (groupRowsHtml + adjustmentsRowsHtml)
     : "";
 
-  return `<!doctype html>
+      return `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
   <title>Invoice ${escapeHtml(invoice_no || "")}</title>
   <style>
-    @page { size: A4; margin: ${pageTopMm}mm ${mg.right}mm ${pageBottomMm}mm ${mg.left}mm; }
+    /* Body must NOT reserve header/footer space here.
+       Puppeteer displayHeaderFooter + pdf margins will handle that. */
+    @page { size: A4; margin: 0; }
 
     html, body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
@@ -49169,6 +49171,8 @@ function buildNhspReportHTML(inv, header, nhspData) {
       font-size: 11px;
       line-height: 1.35;
       -webkit-print-color-adjust: exact;
+      margin: 0;
+      padding: 0;
     }
 
     .stationery {
@@ -49182,51 +49186,9 @@ function buildNhspReportHTML(inv, header, nhspData) {
       pointer-events: none;
     }
 
-    /* ===== Repeating invoice header (every page) ===== */
- .inv-fixed-header {
-  position: fixed;
-  left: 0;
-  right: 0;
-  top: 0;
-  padding: ${mg.top}mm ${mg.right}mm 0 ${mg.left}mm;
-  z-index: 2;
-  background: transparent;
-}
-
-    .inv-fixed-header .header {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-      margin: 0; /* important: header spacing is now inside a fixed block */
-    }
-
     .wrap { position: relative; z-index: 1; width: 100%; }
 
-    .title { font-size: 20px; font-weight: 700; letter-spacing: .5px; }
-    .muted { color: #666; }
     .mono { font-variant-numeric: tabular-nums; }
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 6px;
-    }
-    .brand-logo {
-      height: 34px;
-      max-width: 180px;
-      object-fit: contain;
-    }
-    .brand-name {
-      font-weight: 700;
-      font-size: 13px;
-      line-height: 1.1;
-    }
-    .panel { border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; }
-    .billto-title { font-weight: 600; margin-bottom: 4px; }
-    .billto { white-space: pre-wrap; }
-    .meta-table { width: 100%; border-collapse: collapse; }
-    .meta-table th { text-align: left; font-weight: 600; padding: 0 0 2px 0; }
-    .meta-table td { padding: 2px 0; }
 
     .lines {
       width: 100%;
@@ -49312,57 +49274,11 @@ function buildNhspReportHTML(inv, header, nhspData) {
       border-right: 1px solid #e5e7eb;
     }
     .section-title { font-weight: 700; color: #333; }
-
-    /* ===== Repeating footer (every page, when enabled) ===== */
-  .footer {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 0 ${mg.right}mm ${mg.bottom}mm ${mg.left}mm;
-  font-size: 10px;
-  color: #333;
-  display: ${hideBankFooter ? "none" : "grid"};
-  grid-template-columns: 2fr 1fr;
-  gap: 12px;
-  z-index: 2;
-  background: transparent;
-}
-    .right { text-align: right; }
   </style>
 </head>
 <body>
   ${stationeryUrl ? `<div class="stationery" style="background-image:url('${escapeUrl(stationeryUrl)}');"></div>` : ""}
 
-  <!-- Fixed repeating invoice header -->
-  <div class="inv-fixed-header">
-    <div class="header">
-      <div>
-        <div class="brand">
-          ${agencyLogoUrl ? `<img class="brand-logo" src="${escapeUrl(agencyLogoUrl)}" alt="Agency logo" />` : ""}
-          ${agencyName ? `<div class="brand-name">${escapeHtml(agencyName)}</div>` : ""}
-        </div>
-
-        <div class="title">INVOICE ${invoice_no ? `<span class="muted mono">#${escapeHtml(invoice_no)}</span>` : ""}</div>
-
-        <div class="panel" style="margin-top:8px;">
-          <div class="billto-title">Bill To</div>
-          <div class="billto"><b>${escapeHtml(clientName)}</b>${clientAddress.length ? `<br>${clientAddress.map(escapeHtml).join("<br>")}` : ""}</div>
-        </div>
-      </div>
-
-      <div class="panel">
-        <table class="meta-table">
-          <tr><th>Issue date</th><td class="mono">${fmtDateGB(issued_at_utc)}</td></tr>
-          <tr><th>Due date</th><td class="mono">${fmtDateGB(due_at_utc)}</td></tr>
-          ${termsDays != null ? `<tr><th>Payment terms</th><td class="mono">${termsDays} days</td></tr>` : ""}
-          ${poNo ? `<tr><th>PO Number</th><td class="mono">${escapeHtml(poNo)}</td></tr>` : ""}
-        </table>
-      </div>
-    </div>
-  </div>
-
-  <!-- Flowing content starts AFTER reserved top margin, so it will not collide with the fixed header -->
   <div class="wrap">
     <table class="lines">
       <thead>
@@ -49398,19 +49314,6 @@ function buildNhspReportHTML(inv, header, nhspData) {
         </tr>
       </tfoot>
     </table>
-  </div>
-
-  <div class="footer">
-    <div>
-      <div><b>BACS Payment Details</b></div>
-      <div>Banker: <span class="mono">${escapeHtml(pick(bank, "name", ""))}</span></div>
-      <div>Sort Code: <span class="mono">${escapeHtml(pick(bank, "sort_code", ""))}</span> &nbsp;&nbsp; Account No.: <span class="mono">${escapeHtml(pick(bank, "account_number", ""))}</span></div>
-    </div>
-    <div class="right">
-      ${vatReg ? `<div>VAT Reg: <b class="mono">${escapeHtml(vatReg)}</b></div>` : ""}
-      ${companyRegNumber ? `<div>Company Reg: <b class="mono">${escapeHtml(companyRegNumber)}</b></div>` : ""}
-      ${registeredAddressLines.length ? `<div style="margin-top:4px;">Registered address:<br>${registeredAddressLines.map(escapeHtml).join("<br>")}</div>` : ""}
-    </div>
   </div>
 </body>
 </html>`;
@@ -49568,13 +49471,14 @@ log('log', 'presign_ok', {
   stationery_url_len: (stationeryUrl ? String(stationeryUrl).length : 0),
   stationery_origin: (() => { try { return stationeryUrl ? (new URL(stationeryUrl)).origin : null; } catch { return null; } })()
 });
-
-// ✅ NEW: Logo presign (treat agency_logo_url/agency_logo as R2 key unless it already looks like a URL/data URI)
-step = 'PRESIGN_LOGO';
+// ✅ NEW: Logo embed (match timesheet robustness: bytes from R2 → data: URI; no Chromium fetch)
+step = 'EMBED_LOGO_DATA_URI';
 try {
+  const bucket = env.R2_BUCKET || env.R2;
+
   const rawLogo =
-    (typeof header.agency_logo_url === 'string' && header.agency_logo_url.trim()) ||
     (typeof header.agency_logo === 'string' && header.agency_logo.trim()) ||
+    (typeof header.agency_logo_url === 'string' && header.agency_logo_url.trim()) ||
     '';
 
   const looksLikeRealUrl = (s) => {
@@ -49582,34 +49486,55 @@ try {
     return /^https?:\/\//i.test(x) || /^data:/i.test(x);
   };
 
-  if (rawLogo && !looksLikeRealUrl(rawLogo)) {
-    const logoKey = normalizeKey(rawLogo);
-    const tLogo0 = Date.now();
-    const logoUrl = await presignR2Url(
-      env,
-      req,
-      logoKey,
-      Number(env.PRESIGN_EXPIRES_SECONDS || 600)
-    );
-    if (logoUrl) {
-      header.agency_logo_url = logoUrl; // this is what buildHTML() reads
-      log('log', 'presign_logo_ok', {
-        ms: Date.now() - tLogo0,
-        logo_key: logoKey,
-        logo_url_len: String(logoUrl).length,
-        logo_origin: (() => { try { return (new URL(logoUrl)).origin; } catch { return null; } })()
-      });
+  if (bucket?.get && rawLogo && !looksLikeRealUrl(rawLogo)) {
+    const logoKey = normalizeKey(String(rawLogo).trim());
+    const obj = await bucket.get(logoKey).catch(() => null);
+
+    if (obj) {
+      const bytesU8 = new Uint8Array(await new Response(obj.body).arrayBuffer());
+
+      // match timesheet renderer safety cap
+      const MAX_LOGO_BYTES = 250_000;
+
+      if (bytesU8.length > 0 && bytesU8.length <= MAX_LOGO_BYTES) {
+        const ct0 = String(obj.httpMetadata?.contentType || "").toLowerCase();
+
+        const ct =
+          ct0 ||
+          (logoKey.toLowerCase().endsWith(".png") ? "image/png" :
+           logoKey.toLowerCase().endsWith(".jpg") || logoKey.toLowerCase().endsWith(".jpeg") ? "image/jpeg" :
+           "application/octet-stream");
+
+        const dataUrl = `data:${ct};base64,${toBase64(bytesU8)}`;
+
+        // this is what buildHTML() and headerTemplate will read
+        header.agency_logo_url = dataUrl;
+
+        log('log', 'embed_logo_ok', {
+          logo_key: logoKey,
+          logo_bytes: bytesU8.length,
+          logo_ct: ct
+        });
+      } else {
+        log('error', 'embed_logo_skip_too_large_or_empty', {
+          logo_key: logoKey,
+          logo_bytes: bytesU8.length
+        });
+      }
+    } else {
+      log('error', 'embed_logo_not_found', { logo_key: logoKey });
     }
   } else {
-    log('log', 'presign_logo_skip', { has_logo: !!rawLogo, looks_like_url: !!(rawLogo && looksLikeRealUrl(rawLogo)) });
+    log('log', 'embed_logo_skip', { has_logo: !!rawLogo, looks_like_url: !!(rawLogo && looksLikeRealUrl(rawLogo)) });
   }
 } catch (eLogo) {
-  log('error', 'presign_logo_failed_nonfatal', {
+  log('error', 'embed_logo_failed_nonfatal', {
     err_name: eLogo?.name || null,
     err_message: eLogo?.message || String(eLogo || ''),
     err_stack: eLogo?.stack || null
   });
 }
+
 
 const marginsObj = toMarginsObj(header.stationery_margins_mm);
 const hideBankFooter = header.hide_bank_footer === true;
@@ -49733,6 +49658,160 @@ const hideBankFooter = header.hide_bank_footer === true;
     };
 
     const invoiceHtml = buildHTML(invoiceData);
+    // ==========================================================
+// Option A: Use Puppeteer header/footer templates to prevent collisions
+// Header at top, footer at bottom, body cannot overlap.
+// ==========================================================
+const headerForTemplate = invoiceData.header || {};
+const metaForTemplate = invoiceData.meta || {};
+
+const clientNameTpl = String(pick(headerForTemplate, "client_name", "") || "");
+const clientAddrLinesTpl = String(pick(headerForTemplate, "client_invoice_address", "") || "")
+  .split("\n")
+  .map(s => String(s || "").trim())
+  .filter(Boolean);
+const clientAddrHtmlTpl = clientAddrLinesTpl.length
+  ? `<br>${clientAddrLinesTpl.map(escapeHtml).join("<br>")}`
+  : "";
+
+const agencyNameTpl =
+  String(pick(headerForTemplate, "agency_name", "") ||
+  pick(headerForTemplate, "agency_display_name", "") ||
+  pick(headerForTemplate, "company_name", "") ||
+  "");
+
+const agencyLogoTpl =
+  String(pick(headerForTemplate, "agency_logo_url", "") || pick(headerForTemplate, "logo_url", "") || "");
+
+const termsDaysTpl = pick(headerForTemplate, "payment_terms_days", null);
+
+const issuedTxt = fmtDateGB(invoiceData.issued_at_utc);
+const dueTxt = fmtDateGB(invoiceData.due_at_utc);
+
+const headerPoTpl = pick(headerForTemplate, "po_number", null);
+const itemPosTpl = (invoiceData.items || []).map(i => i?.meta?.po_number).filter(Boolean);
+const uniquePosTpl = Array.from(new Set([...(headerPoTpl ? [headerPoTpl] : []), ...itemPosTpl]));
+const poNoTpl = uniquePosTpl.length === 1 ? String(uniquePosTpl[0]) : "";
+
+const bankTpl = (pick(headerForTemplate, "bank", {}) || {});
+const registeredAddressLinesTpl = String(pick(headerForTemplate, "registered_address", "") || "")
+  .split("\n").map(s => String(s || "").trim()).filter(Boolean);
+
+const companyRegNumberTpl =
+  String(pick(headerForTemplate, "company_reg_number", "") ||
+  pick(headerForTemplate, "company_registration_number", "") ||
+  "");
+
+const DEFAULT_VAT_REG = "363 6805 80";
+const vatRegTpl = String(pick(headerForTemplate, "vat_registration_number", "") || DEFAULT_VAT_REG);
+
+// Use same sizing as invoice HTML currently uses
+const headerTemplate = `
+<style>
+  .hdr-wrap {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+    font-size: 11px;
+    color: #111;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0 ${marginsObj.right}mm 0 ${marginsObj.left}mm;
+  }
+  .hdr {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    align-items: start;
+  }
+  .brand { display:flex; align-items:center; gap:10px; margin: 0 0 6px 0; }
+  .brand-logo { height: 34px; max-width: 180px; object-fit: contain; }
+  .brand-name { font-weight: 700; font-size: 13px; line-height: 1.1; }
+  .title { font-size: 20px; font-weight: 700; letter-spacing: .5px; margin: 0; }
+  .muted { color: #666; }
+  .mono { font-variant-numeric: tabular-nums; }
+  .panel { border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; }
+  .billto-title { font-weight: 600; margin-bottom: 4px; }
+  .billto { white-space: pre-wrap; }
+  .meta-table { width: 100%; border-collapse: collapse; }
+  .meta-table th { text-align: left; font-weight: 600; padding: 0 0 2px 0; }
+  .meta-table td { padding: 2px 0; }
+</style>
+<div class="hdr-wrap">
+  <div class="hdr">
+    <div>
+      <div class="brand">
+        ${agencyLogoTpl ? `<img class="brand-logo" src="${escapeUrl(agencyLogoTpl)}" />` : ""}
+        ${agencyNameTpl ? `<div class="brand-name">${escapeHtml(agencyNameTpl)}</div>` : ""}
+      </div>
+
+      <div class="title">INVOICE ${invoiceData.invoice_no ? `<span class="muted mono">#${escapeHtml(String(invoiceData.invoice_no))}</span>` : ""}</div>
+
+      <div class="panel" style="margin-top:8px;">
+        <div class="billto-title">Bill To</div>
+        <div class="billto"><b>${escapeHtml(clientNameTpl)}</b>${clientAddrHtmlTpl}</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <table class="meta-table">
+        <tr><th>Issue date</th><td class="mono">${escapeHtml(issuedTxt)}</td></tr>
+        <tr><th>Due date</th><td class="mono">${escapeHtml(dueTxt)}</td></tr>
+        ${termsDaysTpl != null ? `<tr><th>Payment terms</th><td class="mono">${escapeHtml(String(termsDaysTpl))} days</td></tr>` : ""}
+        ${poNoTpl ? `<tr><th>PO Number</th><td class="mono">${escapeHtml(poNoTpl)}</td></tr>` : ""}
+      </table>
+    </div>
+  </div>
+</div>
+`;
+
+const footerTemplate = hideBankFooter ? `<div></div>` : `
+<style>
+  .ftr-wrap {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+    font-size: 10px;
+    color: #333;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0 ${marginsObj.right}mm 0 ${marginsObj.left}mm;
+  }
+  .ftr {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 12px;
+    align-items: start;
+  }
+  .mono { font-variant-numeric: tabular-nums; }
+  .right { text-align: right; }
+</style>
+<div class="ftr-wrap">
+  <div class="ftr">
+    <div>
+      <div><b>BACS Payment Details</b></div>
+      <div>Banker: <span class="mono">${escapeHtml(pick(bankTpl, "name", ""))}</span></div>
+      <div>Sort Code: <span class="mono">${escapeHtml(pick(bankTpl, "sort_code", ""))}</span> &nbsp;&nbsp; Account No.: <span class="mono">${escapeHtml(pick(bankTpl, "account_number", ""))}</span></div>
+    </div>
+    <div class="right">
+      ${vatRegTpl ? `<div>VAT Reg: <b class="mono">${escapeHtml(vatRegTpl)}</b></div>` : ""}
+      ${companyRegNumberTpl ? `<div>Company Reg: <b class="mono">${escapeHtml(companyRegNumberTpl)}</b></div>` : ""}
+      ${registeredAddressLinesTpl.length ? `<div style="margin-top:4px;">Registered address:<br>${registeredAddressLinesTpl.map(escapeHtml).join("<br>")}</div>` : ""}
+    </div>
+  </div>
+</div>
+`;
+
+// Header/footer heights used by PDF margins.
+// Keep your existing tuned values.
+const FIXED_HEADER_MM = 52;
+const FIXED_FOOTER_MM = hideBankFooter ? 0 : 26;
+
+// IMPORTANT: Header at top of page (no extra blank band above header).
+// Body starts after header; footer sits at bottom; body cannot overlap.
+const pdfMargins = {
+  top: `${FIXED_HEADER_MM}mm`,
+  right: `${marginsObj.right}mm`,
+  bottom: `${FIXED_FOOTER_MM}mm`,
+  left: `${marginsObj.left}mm`
+};
+
     log('log', 'invoice_html_built', {
       ms: Date.now() - t0,
       html_len: (invoiceHtml ? String(invoiceHtml).length : 0),
@@ -50025,9 +50104,13 @@ const hideBankFooter = header.hide_bank_footer === true;
           await page.emulateMediaType("screen");
 
           log('log', 'invoice_pdf_start', { ms: Date.now() - t0 });
-    const pdfArrayBuffer = await page.pdf({
+ const pdfArrayBuffer = await page.pdf({
   format: "a4",
   printBackground: true,
+  displayHeaderFooter: true,
+  headerTemplate,
+  footerTemplate,
+  margin: pdfMargins,
   preferCSSPageSize: true
 });
 
