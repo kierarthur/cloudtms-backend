@@ -242,6 +242,7 @@ declare
   v_candidate_id uuid := null;
 
   v_summary_stage text := null;
+  v_tools_stage text := null;
 
   v_route_type text := null;
   v_sheet_scope text := null;
@@ -263,6 +264,8 @@ declare
   v_proc_list text[] := null;
 
   v_status_code text := null;
+
+  v_issues_filter text := null;
 begin
   if p_filters is null then p_filters := '{}'::jsonb; end if;
 
@@ -272,6 +275,14 @@ begin
 
   v_summary_stage := nullif(btrim(coalesce(p_filters->>'summary_stage','')), '');
   if v_summary_stage is not null and upper(v_summary_stage) = 'ALL' then v_summary_stage := null; end if;
+
+  v_tools_stage := nullif(btrim(coalesce(p_filters->>'tools_stage','')), '');
+  if v_tools_stage is not null then v_tools_stage := upper(v_tools_stage); end if;
+  if v_tools_stage = 'ALL' then v_tools_stage := null; end if;
+
+  v_issues_filter := nullif(btrim(coalesce(p_filters->>'issues_filter','')), '');
+  if v_issues_filter is not null then v_issues_filter := upper(v_issues_filter); end if;
+  if v_issues_filter = 'ALL' then v_issues_filter := null; end if;
 
   v_route_type := nullif(btrim(coalesce(p_filters->>'route_type','')), '');
   if v_route_type is not null then v_route_type := upper(v_route_type); end if;
@@ -314,6 +325,7 @@ begin
     where (v_client_id is null or v.client_id = v_client_id)
       and (v_candidate_id is null or v.candidate_id = v_candidate_id)
       and (v_summary_stage is null or upper(coalesce(v.summary_stage::text,'')) = upper(v_summary_stage))
+      and (v_tools_stage is null or upper(coalesce(v.tools_stage::text,'')) = v_tools_stage)
       and (v_we_from is null or v.week_ending_date >= v_we_from)
       and (v_we_to   is null or v.week_ending_date <= v_we_to)
 
@@ -365,6 +377,74 @@ begin
         v_proc_list is null
         or upper(coalesce(v.processing_status::text,'')) = any(v_proc_list)
       )
+
+      -- ✅ Issues filter (must mirror handleTimesheetsSummary.applyIssuesFilter)
+      and (
+        v_issues_filter is null
+        or (
+          v_issues_filter = 'NO_MATCH_ID'
+          and (v.candidate_id is null or v.client_id is null)
+        )
+        or (
+          v_issues_filter = 'RATE_MISSING'
+          and v.issue_codes @> array['Rate']::text[]
+        )
+        or (
+          v_issues_filter in ('PAY_CHAN_MISS','PAY_CHANNEL_MISSING')
+          and v.issue_codes @> array['Pay channel']::text[]
+        )
+        or (
+          v_issues_filter in ('AWAITING_HR_VALIDATION','AWAITING_HR_VALIDATION_REQUIRED')
+          and v.issue_codes @> array['HR validation']::text[]
+        )
+        or (
+          v_issues_filter in ('HR_HOURS_MISMATCH','HOURS_MISMATCH_HR')
+          and v.issue_codes @> array['Hours mismatch HR']::text[]
+        )
+        or (
+          v_issues_filter = 'HR_HOURS_MISSING'
+          and v.issue_codes @> array['HR hours missing']::text[]
+        )
+        or (
+          v_issues_filter = 'DUPLICATE_CONTRACTS'
+          and v.issue_codes @> array['Duplicate contracts']::text[]
+        )
+        or (
+          v_issues_filter = 'REFERENCE_MISSING'
+          and v.issue_codes @> array['Reference']::text[]
+        )
+        or (
+          v_issues_filter = 'VALIDATION'
+          and v.issue_codes @> array['Validation']::text[]
+        )
+        or (
+          v_issues_filter = 'AUTHORISATION'
+          and v.issue_codes @> array['Authorisation']::text[]
+        )
+        or (
+          v_issues_filter = 'ON_HOLD'
+          and v.issue_codes @> array['On hold']::text[]
+        )
+        or (
+          v_issues_filter = 'QR_NOT_ISSUED'
+          and v.timesheet_id is not null
+          and upper(coalesce(v.qr_status::text,'')) = 'PENDING'
+          and v.qr_token is null
+          and v.qr_generated_at is null
+        )
+        or (
+          v_issues_filter in ('QR_AWAITING_SIGNATURE','QR_ISSUED_AWAITING_SIGNATURE')
+          and v.timesheet_id is not null
+          and upper(coalesce(v.qr_status::text,'')) = 'PENDING'
+          and v.qr_token is not null
+          and v.qr_generated_at is not null
+          and v.qr_scanned_at is null
+        )
+        or (
+          v_issues_filter = 'REFS_PDF_INVALID'
+          and v.issue_codes @> array['Refs - Timesheet PDF invalid']::text[]
+        )
+      )
   ),
   effective as (
     select *
@@ -389,7 +469,6 @@ begin
   from effective e;
 end;
 $$;
-
 
 -- ============================================================
 -- 3) contract_list_count(filters jsonb)  (optional)
