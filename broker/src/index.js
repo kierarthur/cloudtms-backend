@@ -50070,7 +50070,8 @@ const headerTemplate = `
   }
 .brand { display:flex; align-items:center; gap:10px; margin: 0 0 6px 0; }
 .brand-logo { height: 68px; max-width: 360px; object-fit: contain; }
-.brand-name { font-weight: 700; font-size: 26px; line-height: 1.1; }
+.brand-name { font-weight: 700; font-size: 16.25px; line-height: 1.1; }
+
 
   .title { font-size: 20px; font-weight: 700; letter-spacing: .5px; margin: 0; }
   .muted { color: #666; }
