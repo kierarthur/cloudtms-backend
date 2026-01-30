@@ -49574,21 +49574,22 @@ function buildNhspReportHTML(inv, header, nhspData) {
       border-right: 1px solid #e5e7eb;
     }
     .section-title { font-weight: 700; color: #333; }
-    .draft-watermark {
-      position: fixed;
-      left: 0;
-      right: 0;
-      top: 45%;
-      text-align: center;
-      font-size: 64px;
-      font-weight: 800;
-      letter-spacing: 2px;
-      color: rgba(0,0,0,0.12);
-      transform: rotate(-18deg);
-      z-index: 0;
-      pointer-events: none;
-      user-select: none;
-    }
+ .draft-watermark {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 45%;
+  text-align: center;
+  font-size: 64px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: rgba(0,0,0,0.12);
+  transform: rotate(-18deg);
+  z-index: 2;
+  pointer-events: none;
+  user-select: none;
+}
+
   </style>
 </head>
 <body>
@@ -50067,9 +50068,10 @@ const headerTemplate = `
     gap: 16px;
     align-items: start;
   }
-  .brand { display:flex; align-items:center; gap:10px; margin: 0 0 6px 0; }
-  .brand-logo { height: 34px; max-width: 180px; object-fit: contain; }
-  .brand-name { font-weight: 700; font-size: 13px; line-height: 1.1; }
+.brand { display:flex; align-items:center; gap:10px; margin: 0 0 6px 0; }
+.brand-logo { height: 68px; max-width: 360px; object-fit: contain; }
+.brand-name { font-weight: 700; font-size: 26px; line-height: 1.1; }
+
   .title { font-size: 20px; font-weight: 700; letter-spacing: .5px; margin: 0; }
   .muted { color: #666; }
   .mono { font-variant-numeric: tabular-nums; }
