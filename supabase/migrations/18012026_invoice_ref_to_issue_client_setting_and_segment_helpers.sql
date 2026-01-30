@@ -764,8 +764,15 @@ begin
         day_ymd := r_ts.ts_week_ending_date::text;
       end if;
 
-      start_utc := coalesce(r_ts.ts_worked_start_iso::text, r_ts.ts_scheduled_start_iso::text);
-      end_utc := coalesce(r_ts.ts_worked_end_iso::text, r_ts.ts_scheduled_end_iso::text);
+      -- ✅ FIX: start_utc/end_utc use JSON timestamptz rendering (stable ISO) instead of timestamptz::text
+      start_utc := coalesce(
+        (to_jsonb(r_ts.ts_worked_start_iso)#>>'{}'),
+        (to_jsonb(r_ts.ts_scheduled_start_iso)#>>'{}')
+      );
+      end_utc := coalesce(
+        (to_jsonb(r_ts.ts_worked_end_iso)#>>'{}'),
+        (to_jsonb(r_ts.ts_scheduled_end_iso)#>>'{}')
+      );
       current_reference := nullif(btrim(coalesce(r_ts.ts_reference_number,'')), '');
       is_required := v_is_required;
 
