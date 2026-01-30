@@ -1947,7 +1947,6 @@ $$;
 -- at issue time if missing (audit-stable render behaviour).
 -- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
 -- ============================================================
-
 create or replace function public.invoice_issue_one(
   p_invoice_id uuid,
   p_actor_user_id uuid
@@ -1994,6 +1993,12 @@ declare
   v_dbg_steps jsonb := '[]'::jsonb;
   v_dbg_ts jsonb := '[]'::jsonb;
 
+  -- ======================================================
+  -- PDF invalidation helpers (optional columns; dynamic update)
+  -- ======================================================
+  v_has_updated_at boolean := false;
+  v_has_pdf_fresh boolean := false;
+
 begin
   -- Load invoice_debug flag (safe even if column not yet present)
   begin
@@ -2016,6 +2021,30 @@ begin
   if p_invoice_id is null then
     raise exception 'invoice_id is required';
   end if;
+
+  -- Detect optional invoice columns used to invalidate invoice PDF freshness on ISSUE
+  begin
+    select exists(
+      select 1
+      from information_schema.columns c
+      where c.table_schema = 'public'
+        and c.table_name = 'invoices'
+        and c.column_name = 'updated_at'
+    )
+    into v_has_updated_at;
+
+    select exists(
+      select 1
+      from information_schema.columns c
+      where c.table_schema = 'public'
+        and c.table_name = 'invoices'
+        and c.column_name = 'pdf_fresh'
+    )
+    into v_has_pdf_fresh;
+  exception when others then
+    v_has_updated_at := false;
+    v_has_pdf_fresh := false;
+  end;
 
   -- Load invoice + basic guards
   declare
@@ -2492,6 +2521,22 @@ begin
       header_snapshot_json = v_hdr
   where id = p_invoice_id;
 
+  -- ✅ FIX: invalidate invoice PDF freshness on ISSUE so invpdf regeneration will occur
+  -- (uses optional columns if present; never fails function creation)
+  begin
+    if v_has_updated_at then
+      execute 'update public.invoices set updated_at = $1 where id = $2'
+      using v_now, p_invoice_id;
+    end if;
+
+    if v_has_pdf_fresh then
+      execute 'update public.invoices set pdf_fresh = false where id = $1'
+      using p_invoice_id;
+    end if;
+  exception when others then
+    null;
+  end;
+
   perform public._audit_insert(
     'invoice',
     p_invoice_id::text,
@@ -2570,7 +2615,6 @@ exception when others then
   raise;
 end;
 $$;
-
 
 
 
