@@ -17898,9 +17898,11 @@ async function resolveImportAuthoritative(env, input = {}) {
 
 
 // POST /api/contracts/:id/truncate-tail
- async function handleContractsTruncateTailSafely(env, req, contractId) {
+async function handleContractsTruncateTailSafely(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+
+  const enc = encodeURIComponent;
 
   let body; try { body = await parseJSONBody(req); } catch { 
     return withCORS(env, req, badRequest('Invalid JSON')); 
@@ -17916,6 +17918,7 @@ async function resolveImportAuthoritative(env, input = {}) {
     `${env.SUPABASE_URL}/rest/v1/contracts`
       + `?id=eq.${enc(contractId)}&select=id,start_date,end_date`
   );
+
   if (!c) return withCORS(env, req, notFound('Contract not found'));
 
   // If desired_end >= current end, nothing to do
@@ -38121,27 +38124,47 @@ async function handleUpdateClient(env, req, clientId) {
         }
         const csJson = await csRes.json().catch(() => ({}));
         client_settings_updated = Array.isArray(csJson) ? csJson[0] : csJson;
-      } else {
-        const insertRow = {
-          client_id: clientId,
-          ...canon,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        };
-        delete insertRow.id;
+   } else {
+  const nowIso = new Date().toISOString();
 
-        const csRes = await fetch(`${env.SUPABASE_URL}/rest/v1/client_settings`, {
-          method: "POST",
-          headers: { ...sbHeaders(env), "Prefer": "return=representation" },
-          body: JSON.stringify(insertRow)
-        });
-        if (!csRes.ok) {
-          const err = await csRes.text();
-          return withCORS(env, req, badRequest(`Client settings insert failed: ${err}`));
-        }
-        const csJson = await csRes.json().catch(() => ({}));
-        client_settings_updated = Array.isArray(csJson) ? csJson[0] : csJson;
-      }
+  const ukTodayYmd = (() => {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/London',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).formatToParts(new Date(nowIso));
+    const m = {};
+    for (const p of parts) m[p.type] = p.value;
+    return `${m.year}-${m.month}-${m.day}`;
+  })();
+
+  const insertRow = {
+    client_id: clientId,
+    ...canon,
+    created_at: nowIso,
+    updated_at: nowIso
+  };
+  delete insertRow.id;
+
+  // ✅ Default effective_from only when inserting a new settings row
+  if (!Object.prototype.hasOwnProperty.call(insertRow, 'effective_from') || !String(insertRow.effective_from || '').trim()) {
+    insertRow.effective_from = ukTodayYmd;
+  }
+
+  const csRes = await fetch(`${env.SUPABASE_URL}/rest/v1/client_settings`, {
+    method: "POST",
+    headers: { ...sbHeaders(env), "Prefer": "return=representation" },
+    body: JSON.stringify(insertRow)
+  });
+  if (!csRes.ok) {
+    const err = await csRes.text();
+    return withCORS(env, req, badRequest(`Client settings insert failed: ${err}`));
+  }
+  const csJson = await csRes.json().catch(() => ({}));
+  client_settings_updated = Array.isArray(csJson) ? csJson[0] : csJson;
+}
+
 
       const beforeHr      = !!(beforeCs?.hr_validation_required        ?? false);
       const beforeRef     = !!(beforeCs?.ts_reference_required         ?? false);
@@ -38304,10 +38327,12 @@ async function handleCreateClient(env, req) {
       ...clientOnly
     } = data || {};
 
-    const clientRes = await fetch(`${env.SUPABASE_URL}/rest/v1/clients`, {
+    const nowIso = new Date().toISOString();
+
+const clientRes = await fetch(`${env.SUPABASE_URL}/rest/v1/clients`, {
       method: "POST",
       headers: { ...sbHeaders(env), "Prefer": "return=representation" },
-      body: JSON.stringify({ ...clientOnly, created_at: new Date().toISOString() })
+      body: JSON.stringify({ ...clientOnly, created_at: nowIso })
     });
     if (!clientRes.ok) {
       const err = await clientRes.text();
@@ -38514,11 +38539,26 @@ async function handleCreateClient(env, req) {
 
     let client_settings;
     if (Object.keys(csInput).length) {
+      const partsEf = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/London',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).formatToParts(new Date(nowIso));
+      const efMap = {};
+      for (const p of partsEf) efMap[p.type] = p.value;
+      const ukTodayYmd = `${efMap.year}-${efMap.month}-${efMap.day}`;
+
+      // ✅ DEFAULT: effective_from = UK-local today if missing/blank
+      if (!Object.prototype.hasOwnProperty.call(csInput, 'effective_from') || !String(csInput.effective_from || '').trim()) {
+        csInput.effective_from = ukTodayYmd;
+      }
+
       const csPayload = {
         client_id: client.id,
         ...csInput,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        created_at: nowIso,
+        updated_at: nowIso
       };
 
       const csRes = await fetch(`${env.SUPABASE_URL}/rest/v1/client_settings`, {
@@ -38533,6 +38573,7 @@ async function handleCreateClient(env, req) {
       const csJson = await csRes.json().catch(() => ({}));
       client_settings = Array.isArray(csJson) ? csJson[0] : csJson;
     }
+
 
     return withCORS(env, req, ok({ client, client_settings }));
   } catch (e) {
@@ -62271,6 +62312,8 @@ async function handleContractsPlanRanges(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
+  const enc = encodeURIComponent;
+
   let body;
   try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
 
@@ -62282,6 +62325,7 @@ async function handleContractsPlanRanges(env, req, contractId) {
     env,
     `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=id,candidate_id,client_id,start_date,end_date,default_submission_mode,week_ending_weekday_snapshot,std_schedule_json`
   );
+
   if (!c) return withCORS(env, req, badRequest('Contract not found'));
 
   if (extendWindow) {
@@ -62524,8 +62568,11 @@ async function handleContractsPlanRanges(env, req, contractId) {
     ranges: results
   }));
 }
+
 async function handleContractsUnplanRanges(env, req, contractId) {
   console.log('[UNPLAN][HIT]', 'handleContractsUnplanRanges called', { contractId });
+
+  const enc = encodeURIComponent;
 
   // ===== Correlation + entry log =====
   const corr = req.headers.get('X-Save-Corr') || `unplan:${contractId}:${Date.now()}`;
@@ -62548,6 +62595,8 @@ async function handleContractsUnplanRanges(env, req, contractId) {
   try {
     body = await parseJSONBody(req);
   } catch (e) {
+
+
     errl('Invalid JSON body', { error: String(e) });
     return withCORS(env, req, badRequest('Invalid JSON'));
   }
