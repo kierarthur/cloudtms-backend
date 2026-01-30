@@ -3492,7 +3492,7 @@ begin
   ),
 
   -- ✅ NEW: per-timesheet deterministic current refs signature (invoice-scoped)
-   ref_sig_by_timesheet as (
+  ref_sig_by_timesheet as (
     select
       r.timesheet_id,
       encode(
@@ -3534,8 +3534,18 @@ begin
     group by r.timesheet_id
   ),
 
+  -- ✅ NEW: summary-derived exclusion flags (NHSP / no_timesheet_required) per timesheet
+  ts_summary_flags as (
+    select
+      v.timesheet_id,
+      coalesce(v.client_is_nhsp, false) as client_is_nhsp,
+      coalesce(v.client_no_timesheet_required, false) as client_no_timesheet_required
+    from public.v_timesheets_summary_base v
+    where v.timesheet_id in (select timesheet_id from ts_ids)
+  ),
 
   -- ✅ NEW: per-timesheet document flags (electronic regen + QR refs changed)
+  -- ✅ FIX: exclude NHSP / no_timesheet_required from BOTH electronic and QR flags
   timesheet_doc_flags as (
     select
       ts.timesheet_id,
@@ -3550,25 +3560,38 @@ begin
       on ts.timesheet_id = tid.timesheet_id
     left join ref_sig_by_timesheet rs
       on rs.timesheet_id = ts.timesheet_id
+    left join ts_summary_flags sf
+      on sf.timesheet_id = ts.timesheet_id
     cross join lateral (
       select
         (
-          upper(coalesce(ts.submission_mode::text,'')) = 'ELECTRONIC'
+          (not x.is_excluded)
+          and upper(coalesce(ts.submission_mode::text,'')) = 'ELECTRONIC'
           and ts.manual_pdf_r2_key is null
           and rs.current_refs_sig is not null
           and (ts.generated_pdf_refs_sig is null or ts.generated_pdf_refs_sig <> rs.current_refs_sig)
         ) as electronic_changed,
 
         (
-          (
-            ts.qr_status is not null
-            or ts.qr_token is not null
-            or ts.qr_last_sent_hash is not null
-            or ts.qr_last_sent_at_utc is not null
+          (not x.is_excluded)
+          and (
+            (
+              ts.qr_status is not null
+              or ts.qr_token is not null
+              or ts.qr_last_sent_hash is not null
+              or ts.qr_last_sent_at_utc is not null
+            )
           )
           and rs.current_refs_sig is not null
           and (ts.qr_sent_refs_sig is null or ts.qr_sent_refs_sig <> rs.current_refs_sig)
         ) as qr_changed
+      from (
+        select
+          (
+            coalesce(sf.client_is_nhsp, false) = true
+            or coalesce(sf.client_no_timesheet_required, false) = true
+          ) as is_excluded
+      ) x
     ) flags
     cross join lateral (
       select coalesce(jsonb_agg(z.reason) filter (where z.reason is not null), '[]'::jsonb) as reasons_json
@@ -4051,7 +4074,6 @@ exception when others then
   raise;
 end;
 $$;
-
 
 
 -- 3.6 Credit note + unlock (needs unredacted JS parity source)
