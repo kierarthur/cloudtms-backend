@@ -28114,7 +28114,6 @@ async function applyWeeklyHoursCorrections(env, {
   }
 }
 
-
 async function handleTimesheetsSummary(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -28302,6 +28301,11 @@ async function handleTimesheetsSummary(env, req) {
         api += `&qr_token=is.not.null`;
         api += `&qr_generated_at=is.not.null`;
         api += `&qr_scanned_at=is.null`;
+        return api;
+
+      // ✅ FIX: Refs PDF invalid issue filter
+      case 'REFS_PDF_INVALID':
+        api += `&issue_codes=${cs1('Refs - Timesheet PDF invalid')}`;
         return api;
 
       default:
