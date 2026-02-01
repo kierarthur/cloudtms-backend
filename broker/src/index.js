@@ -62306,7 +62306,6 @@ async function handleTimesheetCreateAdditionalDailyManual(env, req, timesheetId)
 // Helper: mark linked weeks as INVOICED (used by both HOURS + EXPENSES creators)
 
 
-
 async function handleContractsPlanRanges(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -62322,11 +62321,64 @@ async function handleContractsPlanRanges(env, req, contractId) {
     const extendWindow = body?.extend_contract_window === true;
     if (!ranges.length) return withCORS(env, req, badRequest('ranges[] is required'));
 
+    // ✅ NOTE: include overrideclientsettings so we can decide where submission_mode comes from
     const c = await sbGetOne(
       env,
-      `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=id,candidate_id,client_id,start_date,end_date,default_submission_mode,week_ending_weekday_snapshot,std_schedule_json`
+      `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=` +
+        [
+          'id',
+          'candidate_id',
+          'client_id',
+          'start_date',
+          'end_date',
+          'default_submission_mode',
+          'overrideclientsettings',
+          'week_ending_weekday_snapshot',
+          'std_schedule_json'
+        ].join(',')
     );
     if (!c) return withCORS(env, req, badRequest('Contract not found'));
+
+    // ✅ Resolve submission_mode_snapshot:
+    // - If overrideclientsettings true → use contract.default_submission_mode (else fallback)
+    // - Else → use latest client_settings.default_submission_mode
+    const asBool = (v) => {
+      if (v === true) return true;
+      if (v === false || v == null) return false;
+      const s = String(v).trim().toLowerCase();
+      return s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on';
+    };
+
+    const normalizeSubmissionMode = (v) => {
+      const s = String(v || '').trim().toUpperCase();
+      if (s === 'ELECTRONIC' || s === 'MANUAL') return s;
+      return null;
+    };
+
+    let clientSettingsRow = null;
+    try {
+      clientSettingsRow = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/client_settings` +
+          `?client_id=eq.${enc(c.client_id)}` +
+          `&select=default_submission_mode,effective_from,created_at` +
+          `&order=effective_from.desc,created_at.desc` +
+          `&limit=1`
+      );
+    } catch {}
+
+    const clientDefaultMode = normalizeSubmissionMode(clientSettingsRow?.default_submission_mode);
+
+    let submissionModeSnapshot = null;
+
+    if (asBool(c.overrideclientsettings)) {
+      submissionModeSnapshot = normalizeSubmissionMode(c.default_submission_mode) || clientDefaultMode;
+    } else {
+      submissionModeSnapshot = clientDefaultMode;
+    }
+
+    // Final fallback to keep DB constraint safe
+    if (!submissionModeSnapshot) submissionModeSnapshot = 'ELECTRONIC';
 
     if (extendWindow) {
       const unionStart = ranges.reduce((m, r) => Math.min(m, Date.parse(toYmd(r.from || r.From || r.start))), Infinity);
@@ -62485,17 +62537,21 @@ async function handleContractsPlanRanges(env, req, contractId) {
 
     async function createWeek(contractId2, weYmd, additionalSeq = 0) {
       const today = toYmd(new Date());
-      const payload = [{
+      const payload = [ {
         contract_id: contractId2,
         week_ending_date: weYmd,
         additional_seq: Number(additionalSeq || 0),
         status: (weYmd <= today ? 'OPEN' : 'PLANNED'),
-        submission_mode_snapshot: c.default_submission_mode,
+
+        // ✅ FIX: do NOT use contracts.default_submission_mode when overrideclientsettings=false
+        // Use resolved submissionModeSnapshot instead.
+        submission_mode_snapshot: submissionModeSnapshot,
+
         timesheet_id: null,
         planned_schedule_json: [],
         created_at: nowIso(),
         updated_at: nowIso()
-      }];
+      } ];
 
       const ins = await fetch(
         `${env.SUPABASE_URL}/rest/v1/contract_weeks?on_conflict=contract_id,week_ending_date,additional_seq`,
@@ -62512,6 +62568,7 @@ async function handleContractsPlanRanges(env, req, contractId) {
       }
 
       const row = (await ins.json().catch(() => []))[0];
+      if (!row) throw new Error(`Failed to create contract week (WE ${weYmd}): empty response`);
       return row;
     }
 
@@ -62529,7 +62586,7 @@ async function handleContractsPlanRanges(env, req, contractId) {
 
       for (const [we, dayList] of byWe.entries()) {
         let siblings = await ensureWeek(c.id, we);
-        let base = siblings.find(x => x.additional_seq === 0);
+        let base = siblings.find(x => x && x.additional_seq === 0) || null;
 
         if (!base) {
           base = await createWeek(c.id, we, 0);
@@ -62540,7 +62597,7 @@ async function handleContractsPlanRanges(env, req, contractId) {
         let targetWeek = base;
         if (base.timesheet_id) {
           if (tsExistsPolicy === 'reject') { skippedDueTS += dayList.length; continue; }
-          const maxSeq = siblings.reduce((m, w) => Math.max(m, Number(w.additional_seq || 0)), 0);
+          const maxSeq = siblings.reduce((m, w) => Math.max(m, Number(w?.additional_seq || 0)), 0);
           targetWeek = await createWeek(c.id, we, maxSeq + 1);
           createdAdditionalWeeks += 1;
         }
@@ -62573,6 +62630,19 @@ async function handleContractsPlanRanges(env, req, contractId) {
 
           if (String(targetWeek.status || '').toUpperCase() === 'CANCELLED') {
             patch.status = statusIfReviving;
+          }
+
+          // ✅ Defensive: if DB row somehow has a null/invalid submission_mode_snapshot, set it on patch too.
+          // (This should be a no-op in normal cases; preserves not-null invariant.)
+          try {
+            const sms = String(targetWeek.submission_mode_snapshot || '').toUpperCase();
+            if (sms !== 'ELECTRONIC' && sms !== 'MANUAL') {
+              patch.submission_mode_snapshot = submissionModeSnapshot;
+            }
+          } catch {}
+
+          if (!targetWeek.id) {
+            throw new Error(`contract_weeks row missing id for WE ${we}`);
           }
 
           const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(targetWeek.id)}`, {
@@ -62923,8 +62993,11 @@ async function handleContractsUnplanRanges(env, req, contractId) {
         const dateSet = new Set(dates);
 
         for (const w of siblings) {
+          // ✅ extra safety: don't proceed with a malformed row
+          if (!w || !w.id) throw new Error(`contract_weeks row missing id (we=${String(we)})`);
+
           if (w.timesheet_id) {
-            const planArr = safeParseJsonArray(w.planned_schedule_json, `contract_weeks.planned_schedule_json (id=${String(w.id || '')})`);
+            const planArr = safeParseJsonArray(w.planned_schedule_json, `contract_weeks.planned_schedule_json (id=${String(w.id)})`);
             const overlapCount = planArr.filter(p => dateSet.has(p?.date)).length;
 
             if (overlapCount) {
@@ -62946,7 +63019,7 @@ async function handleContractsUnplanRanges(env, req, contractId) {
             continue;
           }
 
-          const plan = safeParseJsonArray(w.planned_schedule_json, `contract_weeks.planned_schedule_json (id=${String(w.id || '')})`);
+          const plan = safeParseJsonArray(w.planned_schedule_json, `contract_weeks.planned_schedule_json (id=${String(w.id)})`);
           const newPlan = plan.filter(p => !dateSet.has(p?.date));
           const removedHere = plan.length - newPlan.length;
 
@@ -63066,7 +63139,7 @@ async function handleContractsUnplanRanges(env, req, contractId) {
       const { rows: allWeeks } = await sbFetch(
         env,
         `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-        `?contract_id=eq.${enc(c.id)}&select=planned_schedule_json,week_ending_date,timesheet_id`
+        `?contract_id=eq.${enc(c.id)}&select=planned_schedule_json,week_ending_date,timesheet_id,id`
       );
       for (const w of (allWeeks || [])) {
         const arr = safeParseJsonArray(w?.planned_schedule_json, `contract_weeks.planned_schedule_json (id=${String(w?.id || '')})`);
@@ -63189,6 +63262,7 @@ async function handleContractsUnplanRanges(env, req, contractId) {
     return withCORS(env, req, serverError(e?.message || String(e || 'Failed to unplan ranges')));
   }
 }
+
 
 async function handleContractWeekGeneratePrintable(env, req, weekId) {
   const enc = encodeURIComponent;
