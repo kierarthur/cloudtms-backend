@@ -6082,7 +6082,6 @@ async function handleContractsUpdate(env, req, contractId) {
   );
   if (!current) return withCORS(env, req, notFound('Contract not found'));
 
-  // "Real timesheets exist" = any row exists in timesheets for contract_id
   const hasSubmitted = !!(await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets?contract_id=eq.${enc(contractId)}&select=timesheet_id&limit=1`
@@ -6128,7 +6127,6 @@ async function handleContractsUpdate(env, req, contractId) {
       const hasAny = bucketName || pay != null || charge != null || unitName;
       if (!hasAny) return;
 
-      // ✅ Ensure bucket_name is never blank for a persisted row
       if (!bucketName) bucketName = code;
 
       out.push({
@@ -6172,7 +6170,6 @@ async function handleContractsUpdate(env, req, contractId) {
     return clampBool(v, fallbackBool);
   };
 
-  // ✅ NEW: allow overrideclientsettings to be patched
   const hasOverrideClientSettings = Object.prototype.hasOwnProperty.call(body, 'overrideclientsettings');
   if (hasOverrideClientSettings) {
     patch.overrideclientsettings = clampBool(body.overrideclientsettings, !!current.overrideclientsettings);
@@ -6181,7 +6178,8 @@ async function handleContractsUpdate(env, req, contractId) {
   if ('display_site' in body) patch.display_site = (body.display_site ?? '').toString().trim();
   if ('ward_hint'    in body) patch.ward_hint    = (body.ward_hint ?? '').toString().trim();
 
-  // ✅ UPDATED: default_submission_mode is only persisted when overrideclientsettings=true
+  // ✅ UPDATED: default_submission_mode is only persisted when overrideclientsettings=true,
+  // and MUST NOT be implicitly cleared/changed when hasSubmitted=true.
   if ('default_submission_mode' in body) {
     const raw = body.default_submission_mode;
     const s = (raw == null) ? '' : String(raw).trim().toUpperCase();
@@ -6195,14 +6193,25 @@ async function handleContractsUpdate(env, req, contractId) {
       ? !!patch.overrideclientsettings
       : !!current.overrideclientsettings;
 
-    patch.default_submission_mode = effOverride ? desired : null;
+    if (!effOverride) {
+      // If contract inherits client settings:
+      // - If submitted TS exist: do NOT change stored value (legacy rows may have a value).
+      // - Else (no submitted TS): clear to NULL to align with brief.
+      if (!hasSubmitted) {
+        patch.default_submission_mode = null;
+      }
+    } else {
+      // overrideclientsettings=true → store desired (can be null to clear)
+      patch.default_submission_mode = desired;
+    }
   } else if (hasOverrideClientSettings) {
-    // If overrideclientsettings was explicitly toggled OFF, ensure we clear contracts.default_submission_mode.
+    // Only clear contracts.default_submission_mode when overrideclientsettings was toggled OFF
+    // AND there are no submitted timesheets.
     const effOverride = Object.prototype.hasOwnProperty.call(patch, 'overrideclientsettings')
       ? !!patch.overrideclientsettings
       : !!current.overrideclientsettings;
 
-    if (!effOverride && current.default_submission_mode != null) {
+    if (!hasSubmitted && !effOverride && current.default_submission_mode != null) {
       patch.default_submission_mode = null;
     }
   }
@@ -6219,7 +6228,6 @@ async function handleContractsUpdate(env, req, contractId) {
   if ('require_reference_to_pay' in body)     patch.require_reference_to_pay = clampBool(body.require_reference_to_pay, current.require_reference_to_pay);
   if ('require_reference_to_invoice' in body) patch.require_reference_to_invoice = clampBool(body.require_reference_to_invoice, current.require_reference_to_invoice);
 
-  // NEW: contract-level route/calc/group/self-bill overrides
   if ('self_bill' in body)               patch.self_bill = boolOrNull(body.self_bill, !!current.self_bill);
   if ('is_nhsp' in body)                patch.is_nhsp = boolOrNull(body.is_nhsp, !!current.is_nhsp);
   if ('autoprocess_hr' in body)         patch.autoprocess_hr = boolOrNull(body.autoprocess_hr, !!current.autoprocess_hr);
@@ -6228,11 +6236,9 @@ async function handleContractsUpdate(env, req, contractId) {
   if ('daily_calc_of_invoices' in body) patch.daily_calc_of_invoices = boolOrNull(body.daily_calc_of_invoices, !!current.daily_calc_of_invoices);
   if ('group_nightsat_sunbh' in body)   patch.group_nightsat_sunbh = boolOrNull(body.group_nightsat_sunbh, !!current.group_nightsat_sunbh);
 
-  // ✅ NEW: attachments (tri-state)
   if ('hr_attach_to_invoice' in body)   patch.hr_attach_to_invoice = boolOrNull(body.hr_attach_to_invoice, !!current.hr_attach_to_invoice);
   if ('ts_attach_to_invoice' in body)   patch.ts_attach_to_invoice = boolOrNull(body.ts_attach_to_invoice, !!current.ts_attach_to_invoice);
 
-  // Friendly validation mirroring DB constraints (validate resulting state: current + patch)
   const eff_is_nhsp = Object.prototype.hasOwnProperty.call(patch, 'is_nhsp') ? patch.is_nhsp : current.is_nhsp;
   const eff_autoprocess_hr = Object.prototype.hasOwnProperty.call(patch, 'autoprocess_hr') ? patch.autoprocess_hr : current.autoprocess_hr;
   const eff_no_ts = Object.prototype.hasOwnProperty.call(patch, 'no_timesheet_required') ? patch.no_timesheet_required : current.no_timesheet_required;
@@ -6244,7 +6250,6 @@ async function handleContractsUpdate(env, req, contractId) {
     return withCORS(env, req, badRequest('Invalid contract route: no_timesheet_required=true requires autoprocess_hr=true.'));
   }
 
-  // ✅ Attachment rules (consistent with your settings model)
   const eff_hr_attach = Object.prototype.hasOwnProperty.call(patch, 'hr_attach_to_invoice') ? patch.hr_attach_to_invoice : current.hr_attach_to_invoice;
   const eff_ts_attach = Object.prototype.hasOwnProperty.call(patch, 'ts_attach_to_invoice') ? patch.ts_attach_to_invoice : current.ts_attach_to_invoice;
 
@@ -6260,7 +6265,6 @@ async function handleContractsUpdate(env, req, contractId) {
   }
 
   if (hasSubmitted) {
-    // Existing rules for immutable fields after submission
     if ('candidate_id' in body || 'client_id' in body || 'rates_json' in body || 'pay_method_snapshot' in body) {
       return withCORS(env, req, badRequest('Cannot change candidate/client/rates/pay_method after timesheets have been submitted'));
     }
@@ -6271,7 +6275,6 @@ async function handleContractsUpdate(env, req, contractId) {
       return withCORS(env, req, badRequest('Cannot change additional rates after timesheets have been submitted'));
     }
 
-    // ✅ NEW: contract settings immutability once real timesheets exist
     const changed = [];
     const curTri = (v) => (v === undefined ? null : v);
 
@@ -6307,19 +6310,28 @@ async function handleContractsUpdate(env, req, contractId) {
       if (desired !== cur) changed.push(k);
     }
 
-    // ✅ Include overrideclientsettings/default_submission_mode as "settings" once real TS exist
     if (Object.prototype.hasOwnProperty.call(body, 'overrideclientsettings')) {
       const desired = !!patch.overrideclientsettings;
       const cur = !!current.overrideclientsettings;
       if (desired !== cur) changed.push('overrideclientsettings');
     }
+
+    // ✅ Only treat default_submission_mode as a "change" if:
+    // - the client tried to send it AND
+    // - overrideclientsettings=true AND
+    // - it would actually change the stored value.
     if (Object.prototype.hasOwnProperty.call(body, 'default_submission_mode')) {
-      // if overrideclientsettings is false, we always clear default_submission_mode (null)
-      const desired = Object.prototype.hasOwnProperty.call(patch, 'default_submission_mode')
-        ? patch.default_submission_mode
-        : current.default_submission_mode;
-      const cur = current.default_submission_mode ?? null;
-      if (desired !== cur) changed.push('default_submission_mode');
+      const effOverride = Object.prototype.hasOwnProperty.call(patch, 'overrideclientsettings')
+        ? !!patch.overrideclientsettings
+        : !!current.overrideclientsettings;
+
+      if (effOverride) {
+        const desired = Object.prototype.hasOwnProperty.call(patch, 'default_submission_mode')
+          ? (patch.default_submission_mode ?? null)
+          : (current.default_submission_mode ?? null);
+        const cur = current.default_submission_mode ?? null;
+        if (desired !== cur) changed.push('default_submission_mode');
+      }
     }
 
     if (changed.length) {
@@ -6327,10 +6339,10 @@ async function handleContractsUpdate(env, req, contractId) {
         `Cannot change contract settings because real timesheets already exist for this contract. Blocked fields: ${changed.join(', ')}`
       ));
     }
-
   } else {
     if ('candidate_id' in body) patch.candidate_id = body.candidate_id || null;
     if ('client_id'    in body) patch.client_id    = body.client_id || null;
+
     if ('rates_json'   in body) {
       const R = body.rates_json || {};
       const buckets = [
@@ -6345,11 +6357,13 @@ async function handleContractsUpdate(env, req, contractId) {
       }
       patch.rates_json = R;
     }
+
     if ('pay_method_snapshot' in body) {
       const pm = String(body.pay_method_snapshot||'').toUpperCase();
       if (!['PAYE','UMBRELLA'].includes(pm)) return withCORS(env, req, badRequest('pay_method_snapshot must be PAYE or UMBRELLA'));
       patch.pay_method_snapshot = pm;
     }
+
     if ('mileage_pay_rate' in body) {
       if (body.mileage_pay_rate === '' || body.mileage_pay_rate === null || body.mileage_pay_rate === undefined) {
         patch.mileage_pay_rate = null;
@@ -6361,6 +6375,7 @@ async function handleContractsUpdate(env, req, contractId) {
         patch.mileage_pay_rate = n;
       }
     }
+
     if ('mileage_charge_rate' in body) {
       if (body.mileage_charge_rate === '' || body.mileage_charge_rate === null || body.mileage_charge_rate === undefined) {
         patch.mileage_charge_rate = null;
@@ -6372,7 +6387,7 @@ async function handleContractsUpdate(env, req, contractId) {
         patch.mileage_charge_rate = n;
       }
     }
-    // NEW: additional_rates_json can be edited while no submitted TS exist
+
     if ('additional_rates_json' in body) {
       patch.additional_rates_json = normaliseAdditionalRates(body.additional_rates_json);
     }
@@ -6427,7 +6442,6 @@ async function handleContractsUpdate(env, req, contractId) {
     (('start_date' in body) && toYmd(body.start_date) !== (current.start_date || '')) ||
     (('end_date'   in body) && toYmd(body.end_date)   !== (current.end_date   || ''));
 
-  // Prune PAYE vs Umbrella buckets based on pay_method_snapshot
   const pmSnapUpdate = String((patch.pay_method_snapshot ?? current.pay_method_snapshot) || '').toUpperCase();
   if (patch.rates_json && pmSnapUpdate) {
     const keepPrefixesUpdate =
@@ -6495,8 +6509,6 @@ async function handleContractsUpdate(env, req, contractId) {
     }
   } catch {}
 
-  // ✅ UPDATED: always scan planned dates too, even if timesheets exist,
-  // so planned future dates can extend the contract window.
   let min_plan_date = null, max_plan_date = null;
   try {
     const { rows: wkRows } = await sbFetch(
@@ -6516,7 +6528,6 @@ async function handleContractsUpdate(env, req, contractId) {
   let normStart = updated?.start_date || newStart;
   let normEnd   = updated?.end_date   || newEnd;
 
-  // Merge envelopes: timesheets + planned (planned can extend beyond worked dates)
   if (min_ts_date)  normStart = (!normStart || min_ts_date < normStart) ? min_ts_date : normStart;
   if (max_ts_date)  normEnd   = (!normEnd   || max_ts_date > normEnd)   ? max_ts_date : normEnd;
   if (min_plan_date) normStart = (!normStart || min_plan_date < normStart) ? min_plan_date : normStart;
@@ -6537,7 +6548,6 @@ async function handleContractsUpdate(env, req, contractId) {
   const warnings = Array.isArray(warnings0) ? [...warnings0, ...extraWarnings] : [...extraWarnings];
   return withCORS(env, req, ok({ contract: updated, warnings }));
 }
-
 
 
 // Lightweight checker for FE: returns real-timesheet boundary info for proposed window
@@ -6629,7 +6639,6 @@ async function handleContractsUpdate(env, req, contractId) {
 // === Strict full-replace (PUT) ===
 
 // === Strict full-replace (PUT /api/contracts/:id) ===
-
 async function handleContractsReplace(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -6691,7 +6700,6 @@ async function handleContractsReplace(env, req, contractId) {
       const hasAny = bucketName || pay != null || charge != null || unitName;
       if (!hasAny) return;
 
-      // ✅ Ensure bucket_name is never blank for a persisted row
       if (!bucketName) bucketName = code;
 
       out.push({
@@ -6704,13 +6712,10 @@ async function handleContractsReplace(env, req, contractId) {
       });
     });
 
-    // ✅ deterministic ordering for safe comparison
     out.sort((a, b) => String(a.code).localeCompare(String(b.code)));
-
     return out.length ? out : null;
   };
 
-  // ✅ Normalise rates for “did they change?” checks (ignore irrelevant keysets/order)
   const normaliseRatesForCompare = (rawRates, payMethodSnapshot) => {
     const r = (rawRates && typeof rawRates === 'object') ? rawRates : {};
     const pm = String(payMethodSnapshot || '').toUpperCase();
@@ -6764,6 +6769,15 @@ async function handleContractsReplace(env, req, contractId) {
     ? clampBool(body.overrideclientsettings, !!current.overrideclientsettings)
     : !!current.overrideclientsettings;
 
+  // ✅ UPDATED: validate/normalise incoming default_submission_mode (if present)
+  // but do NOT treat it as a change unless overrideclientsettings=true AND it would actually change stored value.
+  const parseDefaultSubmissionMode = (raw) => {
+    const s = (raw == null) ? '' : String(raw).trim().toUpperCase();
+    if (!s || s === 'INHERIT') return null;
+    if (['ELECTRONIC','MANUAL','QR'].includes(s)) return s;
+    return '__INVALID__';
+  };
+
   // Mileage: normalise and validate before immutability checks
   let nextMileagePay    = ('mileage_pay_rate'    in body) ? body.mileage_pay_rate    : current.mileage_pay_rate;
   let nextMileageCharge = ('mileage_charge_rate' in body) ? body.mileage_charge_rate : current.mileage_charge_rate;
@@ -6792,15 +6806,24 @@ async function handleContractsReplace(env, req, contractId) {
     }
   }
 
+  // ✅ Validate default_submission_mode early if present (even if we might ignore it)
+  let desiredDefaultSubmissionMode = current.default_submission_mode ?? null;
+  if ('default_submission_mode' in body) {
+    const parsed = parseDefaultSubmissionMode(body.default_submission_mode);
+    if (parsed === '__INVALID__') {
+      return withCORS(env, req, badRequest('default_submission_mode must be ELECTRONIC, MANUAL or QR (or INHERIT/null to clear)'));
+    }
+    desiredDefaultSubmissionMode = parsed;
+  }
+
   if (hasSubmitted) {
-    // ✅ Treat omitted fields as “no change” (defensive)
+    // Treat omitted fields as “no change” (defensive)
     const effCandidateId = ('candidate_id' in body) ? body.candidate_id : current.candidate_id;
     const effClientId    = ('client_id'    in body) ? body.client_id    : current.client_id;
 
     if (effCandidateId !== current.candidate_id) return withCORS(env, req, badRequest('Cannot change candidate after timesheets have been submitted'));
     if (effClientId    !== current.client_id)    return withCORS(env, req, badRequest('Cannot change client after timesheets have been submitted'));
 
-    // ✅ FIX: compare normalised rates (ignore irrelevant keys / ordering)
     const pmBody = String(body.pay_method_snapshot || current.pay_method_snapshot || '').toUpperCase();
     const pmCur  = String(current.pay_method_snapshot || '').toUpperCase();
 
@@ -6819,7 +6842,6 @@ async function handleContractsReplace(env, req, contractId) {
       return withCORS(env, req, badRequest('Cannot change mileage rates after timesheets have been submitted'));
     }
 
-    // ✅ FIX: allow sending additional_rates_json if it’s unchanged; block only if it differs
     if ('additional_rates_json' in body) {
       const curA = normaliseAdditionalRates(current.additional_rates_json);
       const inA  = normaliseAdditionalRates(body.additional_rates_json);
@@ -6828,29 +6850,33 @@ async function handleContractsReplace(env, req, contractId) {
       }
     }
 
-    // ✅ Block changing overrideclientsettings / default_submission_mode once real TS exist
+    // Block changing overrideclientsettings once real TS exist
     if (hasOverrideClientSettings && overrideclientsettings !== !!current.overrideclientsettings) {
       return withCORS(env, req, badRequest('Cannot change overrideclientsettings after timesheets have been submitted'));
     }
-    if ('default_submission_mode' in body) {
-      return withCORS(env, req, badRequest('Cannot change default_submission_mode after timesheets have been submitted'));
+
+    // ✅ FIX: only block default_submission_mode when overrideclientsettings=true AND it would actually change stored value.
+    // If overrideclientsettings=false, treat it as INHERIT (ignored for behaviour) and do not error.
+    if ('default_submission_mode' in body && overrideclientsettings === true) {
+      const curDsm = current.default_submission_mode ?? null;
+      const nextDsm = desiredDefaultSubmissionMode ?? null;
+      if (nextDsm !== curDsm) {
+        return withCORS(env, req, badRequest('Cannot change default_submission_mode after timesheets have been submitted'));
+      }
     }
   }
 
-  // ✅ UPDATED: default_submission_mode only persisted when overrideclientsettings=true
-  let desiredDefaultSubmissionMode = null;
-  if ('default_submission_mode' in body) {
-    const raw = body.default_submission_mode;
-    const s = (raw == null) ? '' : String(raw).trim().toUpperCase();
-
-    if (!s || s === 'INHERIT') desiredDefaultSubmissionMode = null;
-    else if (['ELECTRONIC','MANUAL','QR'].includes(s)) desiredDefaultSubmissionMode = s;
-    else return withCORS(env, req, badRequest('default_submission_mode must be ELECTRONIC, MANUAL or QR (or INHERIT/null to clear)'));
+  // ✅ IMPORTANT:
+  // - If overrideclientsettings=true → store desiredDefaultSubmissionMode (can be null to clear).
+  // - If overrideclientsettings=false:
+  //     - When NO submitted TS: enforce NULL (align to brief / cleans legacy).
+  //     - When submitted TS exist: preserve whatever is currently stored to avoid “changing settings” on old legacy rows.
+  let default_submission_mode_to_store = null;
+  if (overrideclientsettings === true) {
+    default_submission_mode_to_store = desiredDefaultSubmissionMode ?? null;
   } else {
-    desiredDefaultSubmissionMode = current.default_submission_mode ?? null;
+    default_submission_mode_to_store = hasSubmitted ? (current.default_submission_mode ?? null) : null;
   }
-
-  const default_submission_mode_to_store = overrideclientsettings ? desiredDefaultSubmissionMode : null;
 
   const extraWarnings = [];
   let wew;
@@ -6898,7 +6924,6 @@ async function handleContractsReplace(env, req, contractId) {
     }
   }
 
-  // ✅ UPDATED: start/end optional (fallback to current)
   const newStart = ('start_date' in body) ? toYmd(body.start_date) : current.start_date;
   const newEnd   = ('end_date'   in body) ? toYmd(body.end_date)   : current.end_date;
 
@@ -6941,7 +6966,6 @@ async function handleContractsReplace(env, req, contractId) {
     start_date:   newStart,
     end_date:     newEnd,
 
-    // ✅ NEW: persist overrideclientsettings
     overrideclientsettings,
 
     is_nhsp:               ('is_nhsp' in body)               ? boolOrNull(body.is_nhsp, !!current.is_nhsp) : (current.is_nhsp ?? null),
@@ -6952,13 +6976,12 @@ async function handleContractsReplace(env, req, contractId) {
     group_nightsat_sunbh:  ('group_nightsat_sunbh' in body)  ? boolOrNull(body.group_nightsat_sunbh, !!current.group_nightsat_sunbh) : (current.group_nightsat_sunbh ?? null),
     self_bill:             ('self_bill' in body)             ? boolOrNull(body.self_bill, !!current.self_bill) : (current.self_bill ?? null),
 
-    // ✅ NEW: attachments (tri-state)
     hr_attach_to_invoice:  ('hr_attach_to_invoice' in body)  ? boolOrNull(body.hr_attach_to_invoice, !!current.hr_attach_to_invoice) : (current.hr_attach_to_invoice ?? null),
     ts_attach_to_invoice:  ('ts_attach_to_invoice' in body)  ? boolOrNull(body.ts_attach_to_invoice, !!current.ts_attach_to_invoice) : (current.ts_attach_to_invoice ?? null),
 
     pay_method_snapshot: String(body.pay_method_snapshot||current.pay_method_snapshot).toUpperCase(),
 
-    // ✅ IMPORTANT: only store when overrideclientsettings=true
+    // ✅ IMPORTANT: storage is gated by overrideclientsettings + hasSubmitted legacy preservation
     default_submission_mode: default_submission_mode_to_store,
 
     week_ending_weekday_snapshot: wew,
@@ -6967,7 +6990,6 @@ async function handleContractsReplace(env, req, contractId) {
     std_hours_json,
     bucket_labels_json: ('bucket_labels_json' in body) ? (body.bucket_labels_json || null) : (current.bucket_labels_json || null),
 
-    // ✅ Avoid accidental changes when keys omitted
     auto_invoice: ('auto_invoice' in body) ? clampBool(body.auto_invoice, current.auto_invoice) : current.auto_invoice,
     require_reference_to_pay: ('require_reference_to_pay' in body) ? clampBool(body.require_reference_to_pay, current.require_reference_to_pay) : current.require_reference_to_pay,
     require_reference_to_invoice: ('require_reference_to_invoice' in body) ? clampBool(body.require_reference_to_invoice, current.require_reference_to_invoice) : current.require_reference_to_invoice,
@@ -6980,7 +7002,6 @@ async function handleContractsReplace(env, req, contractId) {
       : (current.additional_rates_json || null)
   };
 
-  // Friendly validation mirroring DB constraints
   if (patch.is_nhsp === true && patch.autoprocess_hr === true) {
     return withCORS(env, req, badRequest('Invalid contract route: is_nhsp=true and autoprocess_hr=true cannot both be true.'));
   }
@@ -6988,7 +7009,6 @@ async function handleContractsReplace(env, req, contractId) {
     return withCORS(env, req, badRequest('Invalid contract route: no_timesheet_required=true requires autoprocess_hr=true.'));
   }
 
-  // ✅ Attachment constraints aligned with route semantics
   if (patch.is_nhsp === true) {
     if (patch.hr_attach_to_invoice === true || patch.ts_attach_to_invoice === true) {
       return withCORS(env, req, badRequest('NHSP route: attachments must be disabled (hr_attach_to_invoice/ts_attach_to_invoice cannot be true).'));
@@ -7000,7 +7020,6 @@ async function handleContractsReplace(env, req, contractId) {
     }
   }
 
-  // ✅ NEW: settings immutability on replace if real timesheets exist
   if (hasSubmitted) {
     const changed = [];
     const curTri = (v) => (v === undefined ? null : v);
@@ -7046,7 +7065,6 @@ async function handleContractsReplace(env, req, contractId) {
     }
   }
 
-  // Prune PAYE vs Umbrella buckets according to pay_method_snapshot
   const pmSnapReplace = String(patch.pay_method_snapshot || '').toUpperCase();
   if (patch.rates_json && pmSnapReplace) {
     const keepPrefixesReplace =
@@ -7062,7 +7080,6 @@ async function handleContractsReplace(env, req, contractId) {
     patch.rates_json = cleaned;
   }
 
-  // ✅ FIX: if submitted, never write rates/additional rates back (even if equivalent)
   if (hasSubmitted) {
     patch.candidate_id = current.candidate_id;
     patch.client_id    = current.client_id;
@@ -7124,7 +7141,6 @@ async function handleContractsReplace(env, req, contractId) {
     }
   } catch {}
 
-  // ✅ UPDATED: always scan planned dates too (even if timesheets exist)
   let min_plan_date = null, max_plan_date = null;
   try {
     const { rows: wkRows } = await sbFetch(
@@ -7165,6 +7181,7 @@ async function handleContractsReplace(env, req, contractId) {
   const warnings = Array.isArray(warnings0) ? [...warnings0, ...extraWarnings] : [...extraWarnings];
   return withCORS(env, req, ok({ contract: updated, warnings }));
 }
+
 
 async function handleContractsDuplicate(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
