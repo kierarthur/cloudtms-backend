@@ -3523,163 +3523,6 @@ $$;
 -- =========================================================
 -- A4.8 pay_unpay_batch(p_pay_batch_id, p_actor_user_id, p_reason, p_force boolean)
 -- =========================================================
-create or replace function public.pay_unpay_batch(
-  p_pay_batch_id uuid,
-  p_actor_user_id uuid,
-  p_reason text,
-  p_force boolean
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_now timestamptz := now();
-  v_batch record;
-  v_timesheet_id uuid;
-
-  v_aff_timesheets uuid[] := array[]::uuid[];
-
-  v_hist record;
-  v_latest record;
-
-  v_patch record;
-  v_old_outstanding numeric;
-  v_old_schedule jsonb;
-  v_old_next_due date;
-
-  v_reverted_adv int := 0;
-  v_removed_hist int := 0;
-  v_rebuilt_states int := 0;
-begin
-  if p_pay_batch_id is null then
-    raise exception 'pay_batch_id is required';
-  end if;
-
-  select
-    pb.id,
-    pb.status
-  into v_batch
-  from public.pay_batches pb
-  where pb.id = p_pay_batch_id
-  for update;
-
-  if v_batch.id is null then
-    raise exception 'pay_batch not found';
-  end if;
-
-  if v_batch.status in ('SETTLED','PARTIAL') and p_force is distinct from true then
-    raise exception 'UNPAY_REQUIRES_FORCE_FOR_SETTLED_BATCH';
-  end if;
-
-  -- Revert advances using patches
-  for v_patch in
-    select
-      pap.advance_id,
-      pap.old_outstanding_amount,
-      pap.old_schedule_json,
-      pap.old_next_due_week_start
-    from public.pay_advance_patches pap
-    where pap.pay_batch_id = p_pay_batch_id
-  loop
-    v_old_outstanding := v_patch.old_outstanding_amount;
-    v_old_schedule := v_patch.old_schedule_json;
-    v_old_next_due := v_patch.old_next_due_week_start;
-
-    update public.pay_advances pa
-    set
-      outstanding_amount = v_old_outstanding,
-      schedule_json = v_old_schedule,
-      next_due_week_start = v_old_next_due,
-      status = case when coalesce(v_old_outstanding,0) <= 0 then 'PAID_OFF'::pay_advance_status_enum else 'ACTIVE'::pay_advance_status_enum end,
-      updated_at = now()
-    where pa.id = v_patch.advance_id;
-
-    v_reverted_adv := v_reverted_adv + 1;
-  end loop;
-
-  -- Gather affected timesheets from history rows for this batch
-  select coalesce(array_agg(distinct h.timesheet_id), array[]::uuid[])
-  into v_aff_timesheets
-  from public.timesheet_pay_state_history h
-  where h.pay_batch_id = p_pay_batch_id;
-
-  -- Remove history rows for this batch
-  delete from public.timesheet_pay_state_history h
-  where h.pay_batch_id = p_pay_batch_id;
-
-  get diagnostics v_removed_hist = row_count;
-
-  -- Rebuild timesheet_pay_state for affected timesheets
-  foreach v_timesheet_id in array v_aff_timesheets
-  loop
-    select
-      h.timesheet_id,
-      h.pay_batch_id,
-      h.settled_at_utc,
-      h.snapshot_json,
-      h.signature
-    into v_latest
-    from public.timesheet_pay_state_history h
-    where h.timesheet_id = v_timesheet_id
-    order by h.settled_at_utc desc, h.id desc
-    limit 1;
-
-    if v_latest.timesheet_id is null then
-      delete from public.timesheet_pay_state tps
-      where tps.timesheet_id = v_timesheet_id;
-    else
-      insert into public.timesheet_pay_state(
-        timesheet_id,
-        last_settled_snapshot_json,
-        last_settled_signature,
-        last_settled_pay_batch_id,
-        last_settled_at_utc
-      )
-      values (
-        v_timesheet_id,
-        v_latest.snapshot_json,
-        v_latest.signature,
-        v_latest.pay_batch_id,
-        v_latest.settled_at_utc
-      )
-      on conflict (timesheet_id) do update
-      set
-        last_settled_snapshot_json = excluded.last_settled_snapshot_json,
-        last_settled_signature = excluded.last_settled_signature,
-        last_settled_pay_batch_id = excluded.last_settled_pay_batch_id,
-        last_settled_at_utc = excluded.last_settled_at_utc;
-    end if;
-
-    v_rebuilt_states := v_rebuilt_states + 1;
-  end loop;
-
-  -- Mark candidate rows as UNPAID
-  update public.pay_batch_candidates pbc
-  set
-    settlement_status = 'UNPAID',
-    settled_at_utc = null,
-    settled_via = null,
-    settled_note = coalesce(nullif(btrim(coalesce(p_reason,'')),''), 'UNPAID'),
-    paye_state = case when pbc.paye_state is null then null else 'READY' end
-  where pbc.pay_batch_id = p_pay_batch_id;
-
-  -- Mark batch as UNPAID (preserve audit; do not delete)
-  update public.pay_batches pb
-  set status = 'UNPAID'
-  where pb.id = p_pay_batch_id;
-
-  return jsonb_build_object(
-    'ok', true,
-    'pay_batch_id', p_pay_batch_id::text,
-    'action', 'UNPAID',
-    'reverted_advances', v_reverted_adv,
-    'deleted_history_rows', v_removed_hist,
-    'rebuilt_timesheet_states', v_rebuilt_states
-  );
-end;
-$$;
 
 -- =========================================================
 -- A4.9 pay_batches_list / pay_batch_get
@@ -4114,7 +3957,707 @@ $$;
 commit;
 
 
+begin;
 
+-- =========================================================
+-- A4.6 pay_settle_monzo(p_pay_batch_id, p_actor_user_id, p_confirmed bool)
+-- =========================================================
+create or replace function public.pay_settle_monzo(
+  p_pay_batch_id uuid,
+  p_actor_user_id uuid,
+  p_confirmed boolean
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_now timestamptz := now();
+  v_batch record;
+  v_week_start date;
+
+  v_timesheet_id uuid;
+  v_tf record;
+  v_ts record;
+
+  v_require_ref boolean;
+
+  v_base jsonb;
+  v_base_segments jsonb;
+  v_cur_segments jsonb;
+  v_new_segments jsonb;
+
+  v_cur_seg record;
+  v_base_seg record;
+
+  v_segment_ids text[];
+  v_seg_id text;
+
+  v_cur_pay numeric;
+  v_cur_excl boolean;
+  v_cur_ref text;
+
+  v_base_pay numeric;
+  v_base_excl boolean;
+
+  v_cur_payable numeric;
+  v_base_payable numeric;
+
+  v_blocked boolean;
+
+  v_adj jsonb;
+  v_snapshot jsonb;
+  v_sig text;
+
+  v_adv record;
+  v_adv_id uuid;
+  v_take_total numeric;
+  v_old_outstanding numeric;
+  v_new_outstanding numeric;
+  v_old_schedule jsonb;
+  v_new_schedule jsonb;
+  v_old_next_due date;
+  v_new_next_due date;
+
+  v_transfer_completed_count int := 0;
+  v_candidate_count int := 0;
+  v_timesheet_count int := 0;
+  v_advance_count int := 0;
+begin
+  if p_pay_batch_id is null then
+    raise exception 'pay_batch_id is required';
+  end if;
+
+  if p_confirmed is distinct from true then
+    raise exception 'CONFIRM_REQUIRED';
+  end if;
+
+  select
+    pb.id,
+    pb.pay_date,
+    pb.status,
+    pb.banking_system_snapshot,
+    pb.external_paye_system_snapshot
+  into v_batch
+  from public.pay_batches pb
+  where pb.id = p_pay_batch_id
+  for update;
+
+  if v_batch.id is null then
+    raise exception 'pay_batch not found';
+  end if;
+
+  if v_batch.status <> 'WAITING_BANK_CONFIRM' then
+    raise exception 'pay_batch must be WAITING_BANK_CONFIRM to settle (current=%)', v_batch.status;
+  end if;
+
+  if v_batch.banking_system_snapshot not in ('MONZO_CSV','REVOLUT_CSV') then
+    raise exception 'pay_settle_monzo only valid for MONZO_CSV/REVOLUT_CSV batches';
+  end if;
+
+  v_week_start := public._pay_week_start_monday(v_batch.pay_date);
+
+  update public.pay_bank_transfers pbt
+  set status = 'COMPLETED'
+  where pbt.pay_batch_id = p_pay_batch_id
+    and pbt.status = 'PENDING';
+
+  get diagnostics v_transfer_completed_count = row_count;
+
+  update public.pay_batch_candidates pbc
+  set
+    settlement_status = 'SETTLED',
+    settled_at_utc = v_now,
+    settled_via = v_batch.banking_system_snapshot,
+    settled_note = null,
+    paye_state = case when pbc.paye_state is null then null else 'SETTLED' end
+  where pbc.pay_batch_id = p_pay_batch_id;
+
+  get diagnostics v_candidate_count = row_count;
+
+  update public.pay_batches pb
+  set
+    status = 'SETTLED',
+    monzo_confirmed_at_utc = v_now,
+    monzo_confirmed_by_user_id = p_actor_user_id
+  where pb.id = p_pay_batch_id;
+
+  -- === Baseline updates for all timesheets referenced by pay_batch_items in this batch ===
+  for v_timesheet_id in
+    select distinct pbi.timesheet_id
+    from public.pay_batch_items pbi
+    join public.pay_batch_candidates pbc on pbc.id = pbi.pay_batch_candidate_id
+    where pbc.pay_batch_id = p_pay_batch_id
+      and pbi.timesheet_id is not null
+  loop
+    v_timesheet_count := v_timesheet_count + 1;
+
+    select
+      tf.timesheet_id,
+      tf.candidate_id,
+      tf.client_id,
+      tf.invoice_breakdown_json,
+      tf.total_pay_ex_vat,
+      tf.additional_pay_ex_vat,
+      tf.expenses_pay_ex_vat,
+      tf.travel_pay_ex_vat,
+      tf.accommodation_pay_ex_vat,
+      tf.other_pay_ex_vat,
+      tf.mileage_pay_ex_vat
+    into v_tf
+    from public.timesheets_financials tf
+    where tf.timesheet_id = v_timesheet_id
+      and tf.is_current = true
+    limit 1;
+
+    if v_tf.timesheet_id is null then
+      continue;
+    end if;
+
+    select
+      ts.timesheet_id,
+      ts.contract_id,
+      ts.reference_number
+    into v_ts
+    from public.timesheets ts
+    where ts.timesheet_id = v_timesheet_id
+      and ts.is_current = true
+    limit 1;
+
+    select
+      coalesce(
+        case when ct.overrideclientsettings then ct.require_reference_to_pay end,
+        cs.pay_reference_required,
+        false
+      )
+    into v_require_ref
+    from public.contracts ct
+    left join public.client_settings cs on cs.client_id = v_tf.client_id
+    where ct.id = v_ts.contract_id
+    limit 1;
+
+    -- baseline json (may be empty)
+    select coalesce(tps.last_settled_snapshot_json, '{}'::jsonb)
+    into v_base
+    from public.timesheet_pay_state tps
+    where tps.timesheet_id = v_timesheet_id
+    limit 1;
+
+    v_base_segments := coalesce(v_base->'segments','[]'::jsonb);
+
+    -- current segments
+    if v_tf.invoice_breakdown_json is not null
+       and jsonb_typeof(v_tf.invoice_breakdown_json) = 'object'
+       and upper(coalesce(v_tf.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+       and jsonb_typeof(v_tf.invoice_breakdown_json->'segments') = 'array' then
+      select coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'segment_id', nullif(btrim(coalesce(seg->>'segment_id','')), ''),
+            'pay_amount', round(coalesce(nullif(seg->>'pay_amount','')::numeric,0),2),
+            'exclude_from_pay', coalesce(nullif(seg->>'exclude_from_pay','')::boolean,false),
+            'ref_num', nullif(btrim(coalesce(seg->>'ref_num','')), '')
+          )
+        ),
+        '[]'::jsonb
+      )
+      into v_cur_segments
+      from jsonb_array_elements(v_tf.invoice_breakdown_json->'segments') seg
+      where seg is not null and jsonb_typeof(seg)='object';
+    else
+      v_cur_segments := jsonb_build_array(
+        jsonb_build_object(
+          'segment_id', ('ts:' || v_timesheet_id::text),
+          'pay_amount', round(coalesce(v_tf.total_pay_ex_vat,0),2),
+          'exclude_from_pay', false,
+          'ref_num', nullif(btrim(coalesce(v_ts.reference_number,'')), '')
+        )
+      );
+    end if;
+
+    -- union of segment ids
+    select coalesce(array_agg(distinct sid), array[]::text[])
+    into v_segment_ids
+    from (
+      select nullif(btrim(coalesce(s->>'segment_id','')),'') as sid
+      from jsonb_array_elements(v_cur_segments) s
+      where s is not null and jsonb_typeof(s)='object'
+      union
+      select nullif(btrim(coalesce(s->>'segment_id','')),'') as sid
+      from jsonb_array_elements(v_base_segments) s
+      where s is not null and jsonb_typeof(s)='object'
+    ) u
+    where u.sid is not null;
+
+    v_new_segments := '[]'::jsonb;
+
+    foreach v_seg_id in array v_segment_ids
+    loop
+      -- current segment fields
+      select
+        round(coalesce(nullif(s->>'pay_amount','')::numeric,0),2) as pay_amount,
+        coalesce(nullif(s->>'exclude_from_pay','')::boolean,false) as exclude_from_pay,
+        nullif(btrim(coalesce(s->>'ref_num','')), '') as ref_num
+      into v_cur_pay, v_cur_excl, v_cur_ref
+      from jsonb_array_elements(v_cur_segments) s
+      where nullif(btrim(coalesce(s->>'segment_id','')),'') = v_seg_id
+      limit 1;
+
+      if v_cur_pay is null then v_cur_pay := 0; end if;
+      if v_cur_excl is null then v_cur_excl := false; end if;
+
+      -- base segment fields
+      select
+        round(coalesce(nullif(s->>'pay_amount','')::numeric,0),2) as pay_amount,
+        coalesce(nullif(s->>'exclude_from_pay','')::boolean,false) as exclude_from_pay
+      into v_base_pay, v_base_excl
+      from jsonb_array_elements(v_base_segments) s
+      where nullif(btrim(coalesce(s->>'segment_id','')),'') = v_seg_id
+      limit 1;
+
+      if v_base_pay is null then v_base_pay := 0; end if;
+      if v_base_excl is null then v_base_excl := false; end if;
+
+      v_cur_payable := case when v_cur_excl then 0 else v_cur_pay end;
+      v_base_payable := case when v_base_excl then 0 else v_base_pay end;
+
+      v_blocked :=
+        (v_require_ref = true)
+        and (v_cur_excl = false)
+        and (nullif(btrim(coalesce(v_cur_ref,'')),'') is null)
+        and round(v_cur_payable - v_base_payable, 2) > 0;
+
+      if v_blocked then
+        -- preserve base values for blocked-positive segments
+        v_new_segments := v_new_segments || jsonb_build_array(
+          jsonb_build_object(
+            'segment_id', v_seg_id,
+            'pay_amount', round(v_base_pay,2),
+            'exclude_from_pay', v_base_excl,
+            'ref_num', v_cur_ref
+          )
+        );
+      else
+        v_new_segments := v_new_segments || jsonb_build_array(
+          jsonb_build_object(
+            'segment_id', v_seg_id,
+            'pay_amount', round(v_cur_pay,2),
+            'exclude_from_pay', v_cur_excl,
+            'ref_num', v_cur_ref
+          )
+        );
+      end if;
+    end loop;
+
+    -- current adjustments for this timesheet
+    select coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'id', a.id::text,
+          'delta_pay_ex_vat', round(coalesce(a.delta_pay_ex_vat,0),2)
+        )
+        order by a.created_at asc, a.id
+      ),
+      '[]'::jsonb
+    )
+    into v_adj
+    from public.ts_pay_adjustments a
+    where a.timesheet_id = v_timesheet_id
+      and a.as_advance = false;
+
+    v_snapshot := jsonb_build_object(
+      'segments', v_new_segments,
+      'additional_pay_ex_vat', round(coalesce(v_tf.additional_pay_ex_vat,0),2),
+      'expenses', jsonb_build_object(
+        'expenses_pay_ex_vat', round(coalesce(v_tf.expenses_pay_ex_vat,0),2),
+        'travel_pay_ex_vat', round(coalesce(v_tf.travel_pay_ex_vat,0),2),
+        'accommodation_pay_ex_vat', round(coalesce(v_tf.accommodation_pay_ex_vat,0),2),
+        'other_pay_ex_vat', round(coalesce(v_tf.other_pay_ex_vat,0),2),
+        'mileage_pay_ex_vat', round(coalesce(v_tf.mileage_pay_ex_vat,0),2)
+      ),
+      'adjustments', v_adj
+    );
+
+    v_sig := encode(digest(v_snapshot::text, 'sha256'), 'hex');
+
+    insert into public.timesheet_pay_state_history(
+      timesheet_id,
+      pay_batch_id,
+      settled_at_utc,
+      snapshot_json,
+      signature
+    )
+    values (
+      v_timesheet_id,
+      p_pay_batch_id,
+      v_now,
+      v_snapshot,
+      v_sig
+    );
+
+    insert into public.timesheet_pay_state(
+      timesheet_id,
+      last_settled_snapshot_json,
+      last_settled_signature,
+      last_settled_pay_batch_id,
+      last_settled_at_utc
+    )
+    values (
+      v_timesheet_id,
+      v_snapshot,
+      v_sig,
+      p_pay_batch_id,
+      v_now
+    )
+    on conflict (timesheet_id) do update
+    set
+      last_settled_snapshot_json = excluded.last_settled_snapshot_json,
+      last_settled_signature = excluded.last_settled_signature,
+      last_settled_pay_batch_id = excluded.last_settled_pay_batch_id,
+      last_settled_at_utc = excluded.last_settled_at_utc;
+  end loop;
+
+  -- === Apply loan/advance changes (record patches) ===
+  for v_adv in
+    select
+      (regexp_replace(pbi.source_ref, '^advance:', ''))::uuid as advance_id,
+      round(sum(abs(coalesce(pbi.amount_inc_vat, pbi.amount_ex_vat, 0))),2) as taken_total
+    from public.pay_batch_items pbi
+    join public.pay_batch_candidates pbc on pbc.id = pbi.pay_batch_candidate_id
+    where pbc.pay_batch_id = p_pay_batch_id
+      and pbi.item_type = 'LOAN_REPAYMENT'
+      and pbi.source_ref like 'advance:%'
+    group by (regexp_replace(pbi.source_ref, '^advance:', ''))::uuid
+  loop
+    v_adv_id := v_adv.advance_id;
+    v_take_total := round(coalesce(v_adv.taken_total,0),2);
+    if v_take_total <= 0 then
+      continue;
+    end if;
+
+    -- prevent duplicate patching for same batch+advance
+    if exists (
+      select 1 from public.pay_advance_patches pap
+      where pap.pay_batch_id = p_pay_batch_id
+        and pap.advance_id = v_adv_id
+      limit 1
+    ) then
+      continue;
+    end if;
+
+    select
+      pa.outstanding_amount,
+      pa.schedule_json,
+      pa.next_due_week_start
+    into v_old_outstanding, v_old_schedule, v_old_next_due
+    from public.pay_advances pa
+    where pa.id = v_adv_id
+      and pa.status::text = 'ACTIVE'
+    for update;
+
+    if v_old_schedule is null then
+      continue;
+    end if;
+
+    -- Update schedule entry for this pay week: amount := amount + taken_total (e.g. -100 + 60 = -40)
+    select coalesce(
+      jsonb_agg(
+        case
+          when nullif(e->>'week_start','')::date = v_week_start
+          then jsonb_set(e, '{amount}', to_jsonb(round(coalesce(nullif(e->>'amount','')::numeric,0) + v_take_total, 2)), true)
+          else e
+        end
+        order by ord
+      ),
+      '[]'::jsonb
+    )
+    into v_new_schedule
+    from jsonb_array_elements(v_old_schedule) with ordinality as t(e, ord);
+
+    v_new_outstanding := round(greatest(coalesce(v_old_outstanding,0) - v_take_total, 0), 2);
+
+    select min(nullif(x->>'week_start','')::date)
+    into v_new_next_due
+    from jsonb_array_elements(v_new_schedule) x
+    where coalesce(nullif(x->>'amount','')::numeric,0) < 0;
+
+    update public.pay_advances pa
+    set
+      schedule_json = v_new_schedule,
+      outstanding_amount = v_new_outstanding,
+      next_due_week_start = v_new_next_due,
+      status = case when v_new_outstanding <= 0 then 'PAID_OFF'::pay_advance_status_enum else pa.status end,
+      updated_at = now()
+    where pa.id = v_adv_id;
+
+    insert into public.pay_advance_patches(
+      advance_id,
+      pay_batch_id,
+      old_outstanding_amount,
+      new_outstanding_amount,
+      old_schedule_json,
+      new_schedule_json,
+      old_next_due_week_start,
+      new_next_due_week_start,
+      patched_at_utc
+    )
+    values (
+      v_adv_id,
+      p_pay_batch_id,
+      v_old_outstanding,
+      v_new_outstanding,
+      v_old_schedule,
+      v_new_schedule,
+      v_old_next_due,
+      v_new_next_due,
+      v_now
+    );
+
+    v_advance_count := v_advance_count + 1;
+  end loop;
+
+  return jsonb_build_object(
+    'ok', true,
+    'pay_batch_id', p_pay_batch_id::text,
+    'status', 'SETTLED',
+    'banking_system_snapshot', v_batch.banking_system_snapshot,
+    'completed_transfers_updated', v_transfer_completed_count,
+    'candidates_marked_settled', v_candidate_count,
+    'timesheets_baselined', v_timesheet_count,
+    'advances_patched', v_advance_count
+  );
+end;
+$$;
+
+-- =========================================================
+-- A4.7 pay_settle_revolut(p_pay_batch_id, p_settlement_json)
+-- settlement_json: array of {id|transfer_id, status, revolut_transaction_id?, revolut_state?}
+-- =========================================================
+
+-- =========================================================
+-- A4.8 pay_unpay_batch(p_pay_batch_id, p_actor_user_id, p_reason, p_force boolean)
+-- =========================================================
+create or replace function public.pay_unpay_batch(
+  p_pay_batch_id uuid,
+  p_actor_user_id uuid,
+  p_reason text,
+  p_force boolean
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_now timestamptz := now();
+  v_batch record;
+  v_timesheet_id uuid;
+
+  v_aff_timesheets uuid[] := array[]::uuid[];
+
+  v_hist record;
+  v_latest record;
+
+  v_patch record;
+  v_old_outstanding numeric;
+  v_old_schedule jsonb;
+  v_old_next_due date;
+
+  v_reverted_adv int := 0;
+  v_removed_hist int := 0;
+  v_rebuilt_states int := 0;
+begin
+  if p_pay_batch_id is null then
+    raise exception 'pay_batch_id is required';
+  end if;
+
+  select
+    pb.id,
+    pb.status
+  into v_batch
+  from public.pay_batches pb
+  where pb.id = p_pay_batch_id
+  for update;
+
+  if v_batch.id is null then
+    raise exception 'pay_batch not found';
+  end if;
+
+  if v_batch.status in ('SETTLED','PARTIAL') and p_force is distinct from true then
+    raise exception 'UNPAY_REQUIRES_FORCE_FOR_SETTLED_BATCH';
+  end if;
+
+  -- Revert advances using patches
+  for v_patch in
+    select
+      pap.advance_id,
+      pap.old_outstanding_amount,
+      pap.old_schedule_json,
+      pap.old_next_due_week_start
+    from public.pay_advance_patches pap
+    where pap.pay_batch_id = p_pay_batch_id
+  loop
+    v_old_outstanding := v_patch.old_outstanding_amount;
+    v_old_schedule := v_patch.old_schedule_json;
+    v_old_next_due := v_patch.old_next_due_week_start;
+
+    update public.pay_advances pa
+    set
+      outstanding_amount = v_old_outstanding,
+      schedule_json = v_old_schedule,
+      next_due_week_start = v_old_next_due,
+      status = case when coalesce(v_old_outstanding,0) <= 0 then 'PAID_OFF'::pay_advance_status_enum else 'ACTIVE'::pay_advance_status_enum end,
+      updated_at = now()
+    where pa.id = v_patch.advance_id;
+
+    v_reverted_adv := v_reverted_adv + 1;
+  end loop;
+
+  -- Gather affected timesheets from history rows for this batch
+  select coalesce(array_agg(distinct h.timesheet_id), array[]::uuid[])
+  into v_aff_timesheets
+  from public.timesheet_pay_state_history h
+  where h.pay_batch_id = p_pay_batch_id;
+
+  -- Remove history rows for this batch
+  delete from public.timesheet_pay_state_history h
+  where h.pay_batch_id = p_pay_batch_id;
+
+  get diagnostics v_removed_hist = row_count;
+
+  -- Rebuild timesheet_pay_state for affected timesheets
+  foreach v_timesheet_id in array v_aff_timesheets
+  loop
+    select
+      h.timesheet_id,
+      h.pay_batch_id,
+      h.settled_at_utc,
+      h.snapshot_json,
+      h.signature
+    into v_latest
+    from public.timesheet_pay_state_history h
+    where h.timesheet_id = v_timesheet_id
+    order by h.settled_at_utc desc, h.id desc
+    limit 1;
+
+    if v_latest.timesheet_id is null then
+      delete from public.timesheet_pay_state tps
+      where tps.timesheet_id = v_timesheet_id;
+    else
+      insert into public.timesheet_pay_state(
+        timesheet_id,
+        last_settled_snapshot_json,
+        last_settled_signature,
+        last_settled_pay_batch_id,
+        last_settled_at_utc
+      )
+      values (
+        v_timesheet_id,
+        v_latest.snapshot_json,
+        v_latest.signature,
+        v_latest.pay_batch_id,
+        v_latest.settled_at_utc
+      )
+      on conflict (timesheet_id) do update
+      set
+        last_settled_snapshot_json = excluded.last_settled_snapshot_json,
+        last_settled_signature = excluded.last_settled_signature,
+        last_settled_pay_batch_id = excluded.last_settled_pay_batch_id,
+        last_settled_at_utc = excluded.last_settled_at_utc;
+    end if;
+
+    v_rebuilt_states := v_rebuilt_states + 1;
+  end loop;
+
+  -- Mark candidate rows as UNPAID
+  update public.pay_batch_candidates pbc
+  set
+    settlement_status = 'UNPAID',
+    settled_at_utc = null,
+    settled_via = null,
+    settled_note = coalesce(nullif(btrim(coalesce(p_reason,'')),''), 'UNPAID'),
+    paye_state = case when pbc.paye_state is null then null else 'READY' end
+  where pbc.pay_batch_id = p_pay_batch_id;
+
+  -- Mark batch as UNPAID (preserve audit; do not delete)
+  update public.pay_batches pb
+  set status = 'UNPAID'
+  where pb.id = p_pay_batch_id;
+
+  return jsonb_build_object(
+    'ok', true,
+    'pay_batch_id', p_pay_batch_id::text,
+    'action', 'UNPAID',
+    'reverted_advances', v_reverted_adv,
+    'deleted_history_rows', v_removed_hist,
+    'rebuilt_timesheet_states', v_rebuilt_states
+  );
+end;
+$$;
+
+-- =========================================================
+-- A4.9 pay_batches_list / pay_batch_get
+-- =========================================================
+create or replace function public.pay_batches_list(
+  p_limit int default 50,
+  p_offset int default 0,
+  p_status text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_limit int := greatest(1, least(coalesce(p_limit,50), 500));
+  v_offset int := greatest(coalesce(p_offset,0), 0);
+  v_status text := upper(nullif(btrim(coalesce(p_status,'')), ''));
+  v_total int := 0;
+  v_rows jsonb := '[]'::jsonb;
+begin
+  select count(*)::int
+  into v_total
+  from public.pay_batches pb
+  where v_status is null or upper(coalesce(pb.status,'')) = v_status;
+
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'id', pb.id::text,
+        'pay_date', pb.pay_date::text,
+        'created_at_utc', pb.created_at_utc,
+        'created_by_user_id', case when pb.created_by_user_id is null then null else pb.created_by_user_id::text end,
+        'status', pb.status,
+        'banking_system_snapshot', pb.banking_system_snapshot,
+        'external_paye_system_snapshot', pb.external_paye_system_snapshot,
+        'revolut_draft_id', pb.revolut_draft_id,
+        'monzo_confirmed_at_utc', pb.monzo_confirmed_at_utc,
+        'total_bank_out', pb.total_bank_out,
+        'total_debt_created', pb.total_debt_created
+      )
+      order by pb.created_at_utc desc, pb.id desc
+    ),
+    '[]'::jsonb
+  )
+  into v_rows
+  from (
+    select pb0.*
+    from public.pay_batches pb0
+    where v_status is null or upper(coalesce(pb0.status,'')) = v_status
+    order by pb0.created_at_utc desc, pb0.id desc
+    limit v_limit offset v_offset
+  ) pb;
+
+  return jsonb_build_object(
+    'ok', true,
+    'total_count', v_total,
+    'limit', v_limit,
+    'offset', v_offset,
+    'rows', v_rows
+  );
+end;
+$$;
 
 
 
