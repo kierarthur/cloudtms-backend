@@ -4918,6 +4918,12 @@ async function handleContractsCreate(env, req) {
     return out.length ? out : null;
   };
 
+  // ✅ NEW: overrideclientsettings (default false)
+  const hasOverrideClientSettings = Object.prototype.hasOwnProperty.call(body, 'overrideclientsettings');
+  const overrideclientsettings = hasOverrideClientSettings
+    ? clampBool(body.overrideclientsettings, false)
+    : false;
+
   // Track whether flags were explicitly supplied so we can decide when to derive from client defaults
   const hasRequireRefToPay      = Object.prototype.hasOwnProperty.call(body, 'require_reference_to_pay');
   const hasRequireRefToInvoice  = Object.prototype.hasOwnProperty.call(body, 'require_reference_to_invoice');
@@ -5045,6 +5051,9 @@ async function handleContractsCreate(env, req) {
   if (!['ELECTRONIC','MANUAL','QR'].includes(defaultSubmissionMode)) {
     defaultSubmissionMode = 'ELECTRONIC';
   }
+
+  // ✅ IMPORTANT: do NOT persist contracts.default_submission_mode unless overrideclientsettings=true
+  const default_submission_mode_to_store = overrideclientsettings ? defaultSubmissionMode : null;
 
   // NEW: derive contract route/calc defaults from client_settings when not supplied
   const is_nhsp = hasIsNhsp
@@ -5199,6 +5208,9 @@ async function handleContractsCreate(env, req) {
       start_date: body.start_date,
       end_date: body.end_date,
 
+      // ✅ NEW: persist overrideclientsettings
+      overrideclientsettings,
+
       // NEW: contract route / calc overrides
       is_nhsp,
       autoprocess_hr,
@@ -5218,7 +5230,10 @@ async function handleContractsCreate(env, req) {
       std_hours_json,
       bucket_labels_json: bucketLabels,
       additional_rates_json,                    // NEW
-      default_submission_mode: defaultSubmissionMode,
+
+      // ✅ IMPORTANT: only store when overrideclientsettings=true
+      default_submission_mode: default_submission_mode_to_store,
+
       week_ending_weekday_snapshot: weekEndingSnapshot,
       auto_invoice,
       require_reference_to_pay: body.require_reference_to_pay,
@@ -6157,16 +6172,41 @@ async function handleContractsUpdate(env, req, contractId) {
     return clampBool(v, fallbackBool);
   };
 
+  // ✅ NEW: allow overrideclientsettings to be patched
+  const hasOverrideClientSettings = Object.prototype.hasOwnProperty.call(body, 'overrideclientsettings');
+  if (hasOverrideClientSettings) {
+    patch.overrideclientsettings = clampBool(body.overrideclientsettings, !!current.overrideclientsettings);
+  }
+
   if ('display_site' in body) patch.display_site = (body.display_site ?? '').toString().trim();
   if ('ward_hint'    in body) patch.ward_hint    = (body.ward_hint ?? '').toString().trim();
+
+  // ✅ UPDATED: default_submission_mode is only persisted when overrideclientsettings=true
   if ('default_submission_mode' in body) {
-    const dsm = String(body.default_submission_mode||'').toUpperCase();
-    // UPDATED: allow QR as well
-    if (!['ELECTRONIC','MANUAL','QR'].includes(dsm)) {
-      return withCORS(env, req, badRequest('default_submission_mode must be ELECTRONIC, MANUAL or QR'));
+    const raw = body.default_submission_mode;
+    const s = (raw == null) ? '' : String(raw).trim().toUpperCase();
+
+    let desired = null;
+    if (!s || s === 'INHERIT') desired = null;
+    else if (['ELECTRONIC','MANUAL','QR'].includes(s)) desired = s;
+    else return withCORS(env, req, badRequest('default_submission_mode must be ELECTRONIC, MANUAL or QR (or INHERIT/null to clear)'));
+
+    const effOverride = Object.prototype.hasOwnProperty.call(patch, 'overrideclientsettings')
+      ? !!patch.overrideclientsettings
+      : !!current.overrideclientsettings;
+
+    patch.default_submission_mode = effOverride ? desired : null;
+  } else if (hasOverrideClientSettings) {
+    // If overrideclientsettings was explicitly toggled OFF, ensure we clear contracts.default_submission_mode.
+    const effOverride = Object.prototype.hasOwnProperty.call(patch, 'overrideclientsettings')
+      ? !!patch.overrideclientsettings
+      : !!current.overrideclientsettings;
+
+    if (!effOverride && current.default_submission_mode != null) {
+      patch.default_submission_mode = null;
     }
-    patch.default_submission_mode = dsm;
   }
+
   if ('bucket_labels_json' in body) {
     const obj = body.bucket_labels_json;
     const keys = ['day','night','sat','sun','bh'];
@@ -6265,6 +6305,21 @@ async function handleContractsUpdate(env, req, contractId) {
       const desired = !!patch[k];
       const cur = !!current[k];
       if (desired !== cur) changed.push(k);
+    }
+
+    // ✅ Include overrideclientsettings/default_submission_mode as "settings" once real TS exist
+    if (Object.prototype.hasOwnProperty.call(body, 'overrideclientsettings')) {
+      const desired = !!patch.overrideclientsettings;
+      const cur = !!current.overrideclientsettings;
+      if (desired !== cur) changed.push('overrideclientsettings');
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'default_submission_mode')) {
+      // if overrideclientsettings is false, we always clear default_submission_mode (null)
+      const desired = Object.prototype.hasOwnProperty.call(patch, 'default_submission_mode')
+        ? patch.default_submission_mode
+        : current.default_submission_mode;
+      const cur = current.default_submission_mode ?? null;
+      if (desired !== cur) changed.push('default_submission_mode');
     }
 
     if (changed.length) {
@@ -6440,35 +6495,34 @@ async function handleContractsUpdate(env, req, contractId) {
     }
   } catch {}
 
+  // ✅ UPDATED: always scan planned dates too, even if timesheets exist,
+  // so planned future dates can extend the contract window.
   let min_plan_date = null, max_plan_date = null;
-  if (!min_ts_date && !max_ts_date) {
-    try {
-      const { rows: wkRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-        `?contract_id=eq.${enc(contractId)}&select=planned_schedule_json`
-      );
-      for (const w of (wkRows||[])) {
-        const arr = Array.isArray(w?.planned_schedule_json) ? w.planned_schedule_json : [];
-        for (const d of arr.map(x=>x?.date).filter(Boolean)) {
-          if (!min_plan_date || d < min_plan_date) min_plan_date = d;
-          if (!max_plan_date || d > max_plan_date) max_plan_date = d;
-        }
+  try {
+    const { rows: wkRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+      `?contract_id=eq.${enc(contractId)}&select=planned_schedule_json`
+    );
+    for (const w of (wkRows||[])) {
+      const arr = Array.isArray(w?.planned_schedule_json) ? w.planned_schedule_json : [];
+      for (const d of arr.map(x=>x?.date).filter(Boolean)) {
+        if (!min_plan_date || d < min_plan_date) min_plan_date = d;
+        if (!max_plan_date || d > max_plan_date) max_plan_date = d;
       }
-    } catch {}
-  }
+    }
+  } catch {}
 
   let normStart = updated?.start_date || newStart;
   let normEnd   = updated?.end_date   || newEnd;
-  if (min_ts_date && max_ts_date) {
-    normStart = min_ts_date;
-    normEnd   = max_ts_date;
-  } else if (min_plan_date && max_plan_date) {
-    normStart = min_plan_date;
-    normEnd   = max_plan_date;
-  } else if (normStart) {
-    normEnd = normStart;
-  }
+
+  // Merge envelopes: timesheets + planned (planned can extend beyond worked dates)
+  if (min_ts_date)  normStart = (!normStart || min_ts_date < normStart) ? min_ts_date : normStart;
+  if (max_ts_date)  normEnd   = (!normEnd   || max_ts_date > normEnd)   ? max_ts_date : normEnd;
+  if (min_plan_date) normStart = (!normStart || min_plan_date < normStart) ? min_plan_date : normStart;
+  if (max_plan_date) normEnd   = (!normEnd   || max_plan_date > normEnd)   ? max_plan_date : normEnd;
+
+  if (normStart) normEnd = normEnd || normStart;
 
   if ((normStart && normStart !== updated.start_date) || (normEnd && normEnd !== updated.end_date)) {
     const normRes = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {
@@ -6680,8 +6734,8 @@ async function handleContractsReplace(env, req, contractId) {
     return sorted;
   };
 
-  // 🔄 Relaxed: candidate_id no longer required in body (can be omitted/null)
-  const requiredKeys = ['client_id','start_date','end_date','pay_method_snapshot','default_submission_mode','week_ending_weekday_snapshot','rates_json'];
+  // ✅ UPDATED: start_date/end_date/default_submission_mode are no longer required (backend authoritative / FE may omit)
+  const requiredKeys = ['client_id','pay_method_snapshot','week_ending_weekday_snapshot','rates_json'];
   const missing = requiredKeys.filter(k => !(k in body));
   if (missing.length) return withCORS(env, req, badRequest(`Missing required fields: ${missing.join(', ')}`));
 
@@ -6703,6 +6757,12 @@ async function handleContractsReplace(env, req, contractId) {
     if (v === null) return null;
     return clampBool(v, fallbackBool);
   };
+
+  // ✅ NEW: overrideclientsettings (effective value for this write)
+  const hasOverrideClientSettings = Object.prototype.hasOwnProperty.call(body, 'overrideclientsettings');
+  const overrideclientsettings = hasOverrideClientSettings
+    ? clampBool(body.overrideclientsettings, !!current.overrideclientsettings)
+    : !!current.overrideclientsettings;
 
   // Mileage: normalise and validate before immutability checks
   let nextMileagePay    = ('mileage_pay_rate'    in body) ? body.mileage_pay_rate    : current.mileage_pay_rate;
@@ -6767,13 +6827,30 @@ async function handleContractsReplace(env, req, contractId) {
         return withCORS(env, req, badRequest('Cannot change additional rates after timesheets have been submitted'));
       }
     }
+
+    // ✅ Block changing overrideclientsettings / default_submission_mode once real TS exist
+    if (hasOverrideClientSettings && overrideclientsettings !== !!current.overrideclientsettings) {
+      return withCORS(env, req, badRequest('Cannot change overrideclientsettings after timesheets have been submitted'));
+    }
+    if ('default_submission_mode' in body) {
+      return withCORS(env, req, badRequest('Cannot change default_submission_mode after timesheets have been submitted'));
+    }
   }
 
-  const dsm = String(body.default_submission_mode||'').toUpperCase();
-  // ✅ Align with create/update: allow QR as well
-  if (!['ELECTRONIC','MANUAL','QR'].includes(dsm)) {
-    return withCORS(env, req, badRequest('default_submission_mode must be ELECTRONIC, MANUAL or QR'));
+  // ✅ UPDATED: default_submission_mode only persisted when overrideclientsettings=true
+  let desiredDefaultSubmissionMode = null;
+  if ('default_submission_mode' in body) {
+    const raw = body.default_submission_mode;
+    const s = (raw == null) ? '' : String(raw).trim().toUpperCase();
+
+    if (!s || s === 'INHERIT') desiredDefaultSubmissionMode = null;
+    else if (['ELECTRONIC','MANUAL','QR'].includes(s)) desiredDefaultSubmissionMode = s;
+    else return withCORS(env, req, badRequest('default_submission_mode must be ELECTRONIC, MANUAL or QR (or INHERIT/null to clear)'));
+  } else {
+    desiredDefaultSubmissionMode = current.default_submission_mode ?? null;
   }
+
+  const default_submission_mode_to_store = overrideclientsettings ? desiredDefaultSubmissionMode : null;
 
   const extraWarnings = [];
   let wew;
@@ -6821,7 +6898,10 @@ async function handleContractsReplace(env, req, contractId) {
     }
   }
 
-  const newStart = toYmd(body.start_date), newEnd = toYmd(body.end_date);
+  // ✅ UPDATED: start/end optional (fallback to current)
+  const newStart = ('start_date' in body) ? toYmd(body.start_date) : current.start_date;
+  const newEnd   = ('end_date'   in body) ? toYmd(body.end_date)   : current.end_date;
+
   let minWE = null, maxWE = null;
   try {
     const { rows: minRows } = await sbFetch(
@@ -6861,6 +6941,9 @@ async function handleContractsReplace(env, req, contractId) {
     start_date:   newStart,
     end_date:     newEnd,
 
+    // ✅ NEW: persist overrideclientsettings
+    overrideclientsettings,
+
     is_nhsp:               ('is_nhsp' in body)               ? boolOrNull(body.is_nhsp, !!current.is_nhsp) : (current.is_nhsp ?? null),
     autoprocess_hr:        ('autoprocess_hr' in body)        ? boolOrNull(body.autoprocess_hr, !!current.autoprocess_hr) : (current.autoprocess_hr ?? null),
     requires_hr:           ('requires_hr' in body)           ? boolOrNull(body.requires_hr, !!current.requires_hr) : (current.requires_hr ?? null),
@@ -6874,7 +6957,10 @@ async function handleContractsReplace(env, req, contractId) {
     ts_attach_to_invoice:  ('ts_attach_to_invoice' in body)  ? boolOrNull(body.ts_attach_to_invoice, !!current.ts_attach_to_invoice) : (current.ts_attach_to_invoice ?? null),
 
     pay_method_snapshot: String(body.pay_method_snapshot||current.pay_method_snapshot).toUpperCase(),
-    default_submission_mode: dsm,
+
+    // ✅ IMPORTANT: only store when overrideclientsettings=true
+    default_submission_mode: default_submission_mode_to_store,
+
     week_ending_weekday_snapshot: wew,
     rates_json: body.rates_json || current.rates_json || {},
     std_schedule_json,
@@ -6948,6 +7034,10 @@ async function handleContractsReplace(env, req, contractId) {
       const cur = !!current[k];
       if (desired !== cur) changed.push(k);
     }
+
+    // include overrideclientsettings / default_submission_mode
+    if (overrideclientsettings !== !!current.overrideclientsettings) changed.push('overrideclientsettings');
+    if ((current.default_submission_mode ?? null) !== (patch.default_submission_mode ?? null)) changed.push('default_submission_mode');
 
     if (changed.length) {
       return withCORS(env, req, badRequest(
@@ -7034,36 +7124,33 @@ async function handleContractsReplace(env, req, contractId) {
     }
   } catch {}
 
+  // ✅ UPDATED: always scan planned dates too (even if timesheets exist)
   let min_plan_date = null, max_plan_date = null;
-  if (!min_ts_date && !max_ts_date) {
-    try {
-      const { rows: wkRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-        `?contract_id=eq.${enc(contractId)}&select=planned_schedule_json`
-      );
-      for (const w of (wkRows||[])) {
-        const raw = w?.planned_schedule_json;
-        const arr = Array.isArray(raw) ? raw : (typeof raw === 'string' ? JSON.parse(raw) : []);
-        for (const d of arr.map(x=>x?.date).filter(Boolean)) {
-          if (!min_plan_date || d < min_plan_date) min_plan_date = d;
-          if (!max_plan_date || d > max_plan_date) max_plan_date = d;
-        }
+  try {
+    const { rows: wkRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+      `?contract_id=eq.${enc(contractId)}&select=planned_schedule_json`
+    );
+    for (const w of (wkRows||[])) {
+      const raw = w?.planned_schedule_json;
+      const arr = Array.isArray(raw) ? raw : (typeof raw === 'string' ? JSON.parse(raw) : []);
+      for (const d of arr.map(x=>x?.date).filter(Boolean)) {
+        if (!min_plan_date || d < min_plan_date) min_plan_date = d;
+        if (!max_plan_date || d > max_plan_date) max_plan_date = d;
       }
-    } catch {}
-  }
+    }
+  } catch {}
 
   let normStart = updated?.start_date || newStart;
   let normEnd   = updated?.end_date   || newEnd;
-  if (min_ts_date && max_ts_date) {
-    normStart = min_ts_date;
-    normEnd   = max_ts_date;
-  } else if (min_plan_date && max_plan_date) {
-    normStart = min_plan_date;
-    normEnd   = max_plan_date;
-  } else if (normStart) {
-    normEnd = normStart;
-  }
+
+  if (min_ts_date)  normStart = (!normStart || min_ts_date < normStart) ? min_ts_date : normStart;
+  if (max_ts_date)  normEnd   = (!normEnd   || max_ts_date > normEnd)   ? max_ts_date : normEnd;
+  if (min_plan_date) normStart = (!normStart || min_plan_date < normStart) ? min_plan_date : normStart;
+  if (max_plan_date) normEnd   = (!normEnd   || max_plan_date > normEnd)   ? max_plan_date : normEnd;
+
+  if (normStart) normEnd = normEnd || normStart;
 
   if ((normStart && normStart !== updated.start_date) || (normEnd && normEnd !== updated.end_date)) {
     const normRes = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {
@@ -7301,15 +7388,72 @@ async function computePayMethodWarnings(env, contractRow) {
   if (!res.ok) return withCORS(env, req, serverError(await res.text()));
   return withCORS(env, req, ok({ deleted: true }));
 }
- async function handleContractsGenerateWeeks(env, req, contractId) {
+async function handleContractsGenerateWeeks(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
+  const enc = encodeURIComponent;
+
+  // ✅ Load only the fields this function actually needs + the fields required
+  // to resolve submission_mode_snapshot correctly (overrideclientsettings + client_id)
   const c = await sbGetOne(
     env,
-    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=*`
+    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=` +
+      [
+        'id',
+        'client_id',
+        'start_date',
+        'end_date',
+        'week_ending_weekday_snapshot',
+        'std_schedule_json',
+        'default_submission_mode',
+        'overrideclientsettings'
+      ].join(',')
   );
   if (!c) return withCORS(env, req, notFound('Contract not found'));
+
+  // ✅ Resolve submission_mode_snapshot:
+  // - If overrideclientsettings=true → use contracts.default_submission_mode (if valid), else fallback to client_settings.default_submission_mode
+  // - Else → use client_settings.default_submission_mode
+  // - Final fallback: ELECTRONIC (to satisfy NOT NULL on contract_weeks.submission_mode_snapshot)
+  const asBool = (v) => {
+    if (v === true) return true;
+    if (v === false || v == null) return false;
+    const s = String(v).trim().toLowerCase();
+    return s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on';
+  };
+
+  const normalizeSubmissionMode = (v) => {
+    const s = String(v || '').trim().toUpperCase();
+    if (s === 'ELECTRONIC' || s === 'MANUAL' || s === 'QR') return s;
+    return null;
+  };
+
+  let clientSettingsRow = null;
+  try {
+    if (c.client_id) {
+      clientSettingsRow = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/client_settings` +
+          `?client_id=eq.${enc(c.client_id)}` +
+          `&select=default_submission_mode,effective_from,created_at` +
+          `&order=effective_from.desc,created_at.desc` +
+          `&limit=1`
+      );
+    }
+  } catch {
+    clientSettingsRow = null;
+  }
+
+  const clientDefaultMode = normalizeSubmissionMode(clientSettingsRow?.default_submission_mode);
+
+  let submissionModeSnapshot = null;
+  if (asBool(c.overrideclientsettings)) {
+    submissionModeSnapshot = normalizeSubmissionMode(c.default_submission_mode) || clientDefaultMode;
+  } else {
+    submissionModeSnapshot = clientDefaultMode;
+  }
+  if (!submissionModeSnapshot) submissionModeSnapshot = 'ELECTRONIC';
 
   const wew = Number(c.week_ending_weekday_snapshot || 0);
   const endWE = computeWeekEndingInclusive(c.end_date, wew);
@@ -7336,19 +7480,34 @@ async function computePayMethodWarnings(env, contractRow) {
     return withCORS(env, req, ok({ generated: 0 }));
   }
 
+  const isEmptyPlanned = (v) => {
+    if (v == null) return true;
+    if (Array.isArray(v)) return v.length === 0;
+    if (typeof v === 'object') return Object.keys(v).length === 0;
+    if (typeof v === 'string') return String(v).trim() === '';
+    return false;
+  };
+
   const rowsToInsert = missingWE.map(we => {
     let planned_schedule_json = null;
     try {
       const raw = buildPlannedScheduleFromTemplate(c.std_schedule_json || null, we);
       planned_schedule_json = clampPlannedToWindow(raw, we, wew, c.start_date, endWE, c.end_date);
-      if (planned_schedule_json && !Object.keys(planned_schedule_json).length) planned_schedule_json = null;
-    } catch {}
+      if (isEmptyPlanned(planned_schedule_json)) planned_schedule_json = null;
+    } catch {
+      planned_schedule_json = null;
+    }
+
     return {
       contract_id: c.id,
       week_ending_date: we,
       additional_seq: 0,
       status: (we <= todayYmd ? 'OPEN' : 'PLANNED'),
-      submission_mode_snapshot: c.default_submission_mode,
+
+      // ✅ FIX: do NOT use contracts.default_submission_mode when overrideclientsettings=false.
+      // Always write the resolved snapshot (never null).
+      submission_mode_snapshot: submissionModeSnapshot,
+
       timesheet_id: null,
       planned_schedule_json,
       created_at: nowIso(),
@@ -7366,6 +7525,7 @@ async function computePayMethodWarnings(env, contractRow) {
 
   return withCORS(env, req, ok({ generated: inserted.length }));
 }
+
 
 function computeWeekEndingInclusive(ymd, wew) {
   const d = new Date(ymd + 'T00:00:00Z');   // ymd → Date (UTC)
@@ -62351,7 +62511,7 @@ async function handleContractsPlanRanges(env, req, contractId) {
 
     const normalizeSubmissionMode = (v) => {
       const s = String(v || '').trim().toUpperCase();
-      if (s === 'ELECTRONIC' || s === 'MANUAL') return s;
+      if (s === 'ELECTRONIC' || s === 'MANUAL' || s === 'QR') return s;
       return null;
     };
 
@@ -62633,10 +62793,9 @@ async function handleContractsPlanRanges(env, req, contractId) {
           }
 
           // ✅ Defensive: if DB row somehow has a null/invalid submission_mode_snapshot, set it on patch too.
-          // (This should be a no-op in normal cases; preserves not-null invariant.)
           try {
             const sms = String(targetWeek.submission_mode_snapshot || '').toUpperCase();
-            if (sms !== 'ELECTRONIC' && sms !== 'MANUAL') {
+            if (sms !== 'ELECTRONIC' && sms !== 'MANUAL' && sms !== 'QR') {
               patch.submission_mode_snapshot = submissionModeSnapshot;
             }
           } catch {}
