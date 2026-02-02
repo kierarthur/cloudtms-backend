@@ -754,14 +754,6 @@ end$$;
 
 commit;
 
-
-
-begin;
-
--- =========================================================
--- Helpers: Ledger upsert from invoices
--- =========================================================
-
 create or replace function public.id_ledger_upsert_from_invoice_row(
   p_invoice_id uuid,
   p_set_zero boolean default false,
@@ -776,6 +768,7 @@ set search_path = public
 as $$
 declare
   v_inv record;
+
   v_invoice_no text;
   v_status_text text;
   v_type_text text;
@@ -784,6 +777,11 @@ declare
   v_vat numeric := 0;
   v_inc numeric := 0;
 begin
+  -- Defensive: avoid breaking triggers if called with NULL
+  if p_invoice_id is null then
+    return;
+  end if;
+
   -- Prefer reading the current invoices row when present (normal path).
   select
     i.invoice_no,
@@ -798,9 +796,9 @@ begin
   limit 1;
 
   if found then
-    v_invoice_no := v_inv.invoice_no;
-    v_status_text := v_inv.status_text;
-    v_type_text := v_inv.type_text;
+    v_invoice_no := nullif(btrim(coalesce(v_inv.invoice_no, '')), '');
+    v_status_text := nullif(btrim(coalesce(v_inv.status_text, '')), '');
+    v_type_text := nullif(btrim(coalesce(v_inv.type_text, '')), '');
 
     if p_set_zero then
       v_ex := 0; v_vat := 0; v_inc := 0;
@@ -808,12 +806,22 @@ begin
       v_ex := coalesce(v_inv.subtotal_ex_vat,0);
       v_vat := coalesce(v_inv.vat_amount,0);
       v_inc := coalesce(v_inv.total_inc_vat,0);
+
+      -- Safety: if a CREDIT_NOTE ever ends up stored as positive totals, force negative.
+      -- (If credit notes are already stored as signed totals, this is a no-op.)
+      if v_type_text = 'CREDIT_NOTE' then
+        if v_ex > 0 then v_ex := -1 * v_ex; end if;
+        if v_vat > 0 then v_vat := -1 * v_vat; end if;
+        if v_inc > 0 then v_inc := -1 * v_inc; end if;
+      end if;
     end if;
+
   else
     -- Invoice row not found (e.g. already deleted): use provided snapshots and zero totals.
-    v_invoice_no := p_invoice_no;
-    v_status_text := p_status_text;
-    v_type_text := p_type_text;
+    v_invoice_no := nullif(btrim(coalesce(p_invoice_no, '')), '');
+    v_status_text := nullif(btrim(coalesce(p_status_text, '')), '');
+    v_type_text := nullif(btrim(coalesce(p_type_text, '')), '');
+
     v_ex := 0; v_vat := 0; v_inc := 0;
   end if;
 
@@ -849,6 +857,14 @@ begin
 
 end;
 $$;
+
+
+begin;
+
+-- =========================================================
+-- Helpers: Ledger upsert from invoices
+-- =========================================================
+
 
 -- Recompute totals then upsert ledger.
 create or replace function public.id_ledger_recompute_and_sync_invoice(p_invoice_id uuid)
