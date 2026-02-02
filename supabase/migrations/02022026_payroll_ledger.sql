@@ -1,5 +1,674 @@
 begin;
 
+-- =========================================================
+-- Helpers (private)
+-- =========================================================
+
+-- Normalize percent: supports 20 or 0.2 -> returns 0.2
+create or replace function public._pay_pct_to_frac(p_pct numeric)
+returns numeric
+language plpgsql
+immutable
+as $$
+begin
+  if p_pct is null then return 0; end if;
+  if p_pct > 1 then return p_pct / 100; end if;
+  return p_pct;
+end;
+$$;
+
+-- 1 + pct (supports 15 or 0.15 -> 1.15)
+create or replace function public._pay_pct_to_mult(p_pct numeric)
+returns numeric
+language plpgsql
+immutable
+as $$
+declare
+  v_frac numeric;
+begin
+  v_frac := public._pay_pct_to_frac(p_pct);
+  return 1 + coalesce(v_frac, 0);
+end;
+$$;
+
+-- Monday week-start for a given date
+create or replace function public._pay_week_start_monday(p_date date)
+returns date
+language plpgsql
+immutable
+as $$
+declare
+  v_dow int;
+  v_offset int;
+begin
+  if p_date is null then return null; end if;
+  v_dow := extract(dow from p_date)::int;      -- 0=Sun..6=Sat
+  v_offset := (v_dow + 6) % 7;                 -- days since Monday
+  return (p_date - v_offset);
+end;
+$$;
+
+-- Umbrella VAT calc: returns {ex, vat, inc}
+create or replace function public._pay_umbrella_vat_calc(
+  p_ex numeric,
+  p_vat_rate_pct numeric,
+  p_vat_chargeable boolean
+)
+returns jsonb
+language plpgsql
+immutable
+as $$
+declare
+  v_ex numeric := coalesce(p_ex,0);
+  v_vat numeric := 0;
+  v_inc numeric := 0;
+  v_frac numeric := public._pay_pct_to_frac(p_vat_rate_pct);
+begin
+  if coalesce(p_vat_chargeable,false) then
+    v_vat := round(v_ex * v_frac, 2);
+    v_inc := round(v_ex + v_vat, 2);
+  else
+    v_vat := 0;
+    v_inc := round(v_ex, 2);
+  end if;
+
+  return jsonb_build_object(
+    'ex', round(v_ex,2),
+    'vat', round(v_vat,2),
+    'inc', round(v_inc,2)
+  );
+end;
+$$;
+
+-- Conversion: PAYE(ex) -> UMBRELLA (ex after ERNI, then VAT if chargeable)
+create or replace function public._pay_convert_paye_to_umbrella(
+  p_paye_ex numeric,
+  p_erni_pct numeric,
+  p_vat_rate_pct numeric,
+  p_vat_chargeable boolean
+)
+returns jsonb
+language plpgsql
+immutable
+as $$
+declare
+  v_erni_mult numeric := public._pay_pct_to_mult(p_erni_pct);
+  v_ex numeric := round(coalesce(p_paye_ex,0) * v_erni_mult, 2);
+begin
+  return public._pay_umbrella_vat_calc(v_ex, p_vat_rate_pct, p_vat_chargeable);
+end;
+$$;
+
+-- Conversion: UMBRELLA(ex) -> PAYE(ex) (reverse ERNI; VAT not applicable on PAYE)
+create or replace function public._pay_convert_umbrella_to_paye_ex(
+  p_umbrella_ex numeric,
+  p_erni_pct numeric
+)
+returns numeric
+language plpgsql
+immutable
+as $$
+declare
+  v_erni_mult numeric := public._pay_pct_to_mult(p_erni_pct);
+  v_ex numeric := coalesce(p_umbrella_ex,0);
+begin
+  if v_erni_mult <= 0 then v_erni_mult := 1; end if;
+  return round(v_ex / v_erni_mult, 2);
+end;
+$$;
+
+-- Robust CSV line parser (handles quoted fields, commas inside quotes)
+create or replace function public._pay_csv_parse_line(p_line text)
+returns text[]
+language plpgsql
+immutable
+as $$
+declare
+  v text := coalesce(p_line,'');
+  i int := 1;
+  ch text;
+  in_quotes boolean := false;
+  cur text := '';
+  out_arr text[] := array[]::text[];
+begin
+  while i <= char_length(v) loop
+    ch := substr(v, i, 1);
+
+    if ch = '"' then
+      -- Double quote escape inside quoted field
+      if in_quotes and i < char_length(v) and substr(v, i+1, 1) = '"' then
+        cur := cur || '"';
+        i := i + 1;
+      else
+        in_quotes := not in_quotes;
+      end if;
+
+    elsif ch = ',' and not in_quotes then
+      out_arr := out_arr || array[cur];
+      cur := '';
+
+    else
+      cur := cur || ch;
+    end if;
+
+    i := i + 1;
+  end loop;
+
+  out_arr := out_arr || array[cur];
+  return out_arr;
+end;
+$$;
+
+create or replace function public._pay_csv_trim_field(p_field text)
+returns text
+language plpgsql
+immutable
+as $$
+begin
+  return nullif(btrim(coalesce(p_field,'')), '');
+end;
+$$;
+
+
+
+-- =========================================================
+-- A4.3 pay_set_paye_net_from_sage(p_pay_batch_id, p_csv_raw, p_actor_user_id, p_source_filename)
+-- =========================================================
+create or replace function public.pay_set_paye_net_from_sage(
+  p_pay_batch_id uuid,
+  p_csv_raw text,
+  p_actor_user_id uuid,
+  p_source_filename text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_lines text[];
+  v_line text;
+  v_fields text[];
+
+  header_idx int := 0;
+  i int := 0;
+
+  works_col int := 0;
+  net_col int := 0;
+
+  works text;
+  net_raw text;
+  net_amt numeric;
+
+  dup_check jsonb := '[]'::jsonb;
+  unknown_check jsonb := '[]'::jsonb;
+
+begin
+  if p_pay_batch_id is null then
+    raise exception 'pay_batch_id is required';
+  end if;
+
+  -- Ensure batch exists
+  if not exists (select 1 from public.pay_batches pb where pb.id = p_pay_batch_id limit 1) then
+    raise exception 'pay_batch not found';
+  end if;
+
+  v_lines := regexp_split_to_array(coalesce(p_csv_raw,''), E'\\r?\\n');
+
+  -- Find header row containing Works Number and Net Pay
+  for i in 1..coalesce(array_length(v_lines,1),0) loop
+    v_line := coalesce(v_lines[i],'');
+    if btrim(v_line) = '' then continue; end if;
+
+    v_fields := public._pay_csv_parse_line(v_line);
+
+    works_col := 0;
+    net_col := 0;
+
+    for header_idx in 1..coalesce(array_length(v_fields,1),0) loop
+      if lower(btrim(coalesce(v_fields[header_idx],''))) = lower('Works Number') then
+        works_col := header_idx;
+      end if;
+      if lower(btrim(coalesce(v_fields[header_idx],''))) = lower('Net Pay') then
+        net_col := header_idx;
+      end if;
+    end loop;
+
+    if works_col > 0 and net_col > 0 then
+      header_idx := i;
+      exit;
+    end if;
+  end loop;
+
+  if header_idx = 0 then
+    raise exception 'SAGE_IMPORT_INVALID: header row with Works Number and Net Pay not found';
+  end if;
+
+  -- Parse rows after header
+  create temp table if not exists _tmp_sage_net (
+    works_number text,
+    net_amount numeric
+  ) on commit drop;
+
+  delete from _tmp_sage_net;
+
+  for i in (header_idx+1)..coalesce(array_length(v_lines,1),0) loop
+    v_line := coalesce(v_lines[i],'');
+    if btrim(v_line) = '' then continue; end if;
+
+    v_fields := public._pay_csv_parse_line(v_line);
+
+    works := public._pay_csv_trim_field(case when works_col <= array_length(v_fields,1) then v_fields[works_col] else null end);
+    if works is null then
+      continue; -- ignore blank works number
+    end if;
+
+    if lower(works) = 'totals' then
+      continue; -- ignore Totals row
+    end if;
+
+    net_raw := public._pay_csv_trim_field(case when net_col <= array_length(v_fields,1) then v_fields[net_col] else null end);
+    if net_raw is null then
+      raise exception 'SAGE_IMPORT_INVALID: Net Pay missing for Works Number %', works;
+    end if;
+
+    -- Normalize numeric: remove commas and currency symbols
+    net_raw := replace(net_raw, ',', '');
+    net_raw := regexp_replace(net_raw, '[^0-9\\.-]', '', 'g');
+
+    begin
+      net_amt := net_raw::numeric;
+    exception when others then
+      raise exception 'SAGE_IMPORT_INVALID: Net Pay not numeric for Works Number %', works;
+    end;
+
+    if net_amt < 0 then
+      raise exception 'SAGE_IMPORT_INVALID: Net Pay negative for Works Number %', works;
+    end if;
+
+    insert into _tmp_sage_net(works_number, net_amount)
+    values (works, round(net_amt,2));
+  end loop;
+
+  -- Validate duplicates
+  select coalesce(jsonb_agg(t.works_number), '[]'::jsonb)
+  into dup_check
+  from (
+    select works_number
+    from _tmp_sage_net
+    group by works_number
+    having count(*) > 1
+  ) t;
+
+  if jsonb_array_length(dup_check) > 0 then
+    raise exception 'SAGE_IMPORT_INVALID: duplicate Works Number(s) %', dup_check::text;
+  end if;
+
+  -- Validate mapping to candidates in this batch (works number == candidates.tms_ref exact after trim)
+  create temp table if not exists _tmp_batch_paye (
+    candidate_id uuid,
+    pay_batch_candidate_id uuid,
+    tms_ref text
+  ) on commit drop;
+
+  delete from _tmp_batch_paye;
+
+  insert into _tmp_batch_paye(candidate_id, pay_batch_candidate_id, tms_ref)
+  select
+    pbc.candidate_id,
+    pbc.id,
+    btrim(coalesce(pbc.candidate_tms_ref, c.tms_ref, '')) as tms_ref
+  from public.pay_batch_candidates pbc
+  join public.candidates c on c.id = pbc.candidate_id
+  where pbc.pay_batch_id = p_pay_batch_id
+    and pbc.paye_state is not null;
+
+  -- Unknown works numbers
+  select coalesce(jsonb_agg(s.works_number), '[]'::jsonb)
+  into unknown_check
+  from _tmp_sage_net s
+  left join _tmp_batch_paye bp
+    on bp.tms_ref = btrim(s.works_number)
+  where bp.candidate_id is null;
+
+  if jsonb_array_length(unknown_check) > 0 then
+    raise exception 'SAGE_IMPORT_INVALID: Works Number(s) not found in batch candidates %', unknown_check::text;
+  end if;
+
+  -- Apply (no partial): replace prior SAGE_IMPORT rows for this batch’s PAYE candidates
+  delete from public.pay_batch_paye_net_inputs pni
+  using public.pay_batch_candidates pbc
+  where pni.pay_batch_candidate_id = pbc.id
+    and pbc.pay_batch_id = p_pay_batch_id
+    and pni.source = 'SAGE_IMPORT';
+
+  insert into public.pay_batch_paye_net_inputs(
+    pay_batch_candidate_id, source, net_amount, imported_at_utc, file_name, file_hash
+  )
+  select
+    bp.pay_batch_candidate_id,
+    'SAGE_IMPORT',
+    s.net_amount,
+    now(),
+    p_source_filename,
+    null
+  from _tmp_sage_net s
+  join _tmp_batch_paye bp
+    on bp.tms_ref = btrim(s.works_number);
+
+  -- Set PAYE state READY
+  update public.pay_batch_candidates pbc
+  set paye_state = 'READY'
+  where pbc.pay_batch_id = p_pay_batch_id
+    and pbc.paye_state is not null;
+
+  return jsonb_build_object('ok', true, 'pay_batch_id', p_pay_batch_id::text, 'source', 'SAGE_IMPORT');
+end;
+$$;
+
+-- =========================================================
+-- A4.4 pay_set_paye_net_manual(p_pay_batch_id, p_entries_json, p_actor_user_id)
+-- =========================================================
+create or replace function public.pay_set_paye_net_manual(
+  p_pay_batch_id uuid,
+  p_entries_json jsonb,
+  p_actor_user_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_entries jsonb := coalesce(p_entries_json, '[]'::jsonb);
+  v_dup jsonb;
+begin
+  if p_pay_batch_id is null then
+    raise exception 'pay_batch_id is required';
+  end if;
+
+  if jsonb_typeof(v_entries) <> 'array' then
+    raise exception 'entries must be an array';
+  end if;
+
+  if not exists (select 1 from public.pay_batches pb where pb.id = p_pay_batch_id limit 1) then
+    raise exception 'pay_batch not found';
+  end if;
+
+  create temp table if not exists _tmp_manual_net (
+    candidate_id uuid,
+    tms_ref text,
+    net_amount numeric
+  ) on commit drop;
+
+  delete from _tmp_manual_net;
+
+  insert into _tmp_manual_net(candidate_id, tms_ref, net_amount)
+  select
+    nullif(e->>'candidate_id','')::uuid as candidate_id,
+    nullif(btrim(e->>'tms_ref'), '') as tms_ref,
+    round(coalesce(nullif(e->>'net_amount','')::numeric, 0),2) as net_amount
+  from jsonb_array_elements(v_entries) e
+  where e is not null and jsonb_typeof(e)='object';
+
+  -- Validate non-negative
+  if exists (select 1 from _tmp_manual_net t where t.net_amount < 0 limit 1) then
+    raise exception 'MANUAL_NET_INVALID: net_amount must be non-negative';
+  end if;
+
+  -- Validate duplicates (by candidate_id or tms_ref)
+  select coalesce(jsonb_agg(x), '[]'::jsonb)
+  into v_dup
+  from (
+    select to_jsonb(coalesce(candidate_id::text, tms_ref)) as x
+    from _tmp_manual_net
+    group by coalesce(candidate_id::text, tms_ref)
+    having count(*) > 1
+  ) d;
+
+  if jsonb_array_length(v_dup) > 0 then
+    raise exception 'MANUAL_NET_INVALID: duplicate entries %', v_dup::text;
+  end if;
+
+  -- Resolve candidates in this batch
+  create temp table if not exists _tmp_batch_paye2 (
+    pay_batch_candidate_id uuid,
+    candidate_id uuid,
+    tms_ref text
+  ) on commit drop;
+
+  delete from _tmp_batch_paye2;
+
+  insert into _tmp_batch_paye2(pay_batch_candidate_id, candidate_id, tms_ref)
+  select
+    pbc.id,
+    pbc.candidate_id,
+    btrim(coalesce(pbc.candidate_tms_ref, c.tms_ref, '')) as tms_ref
+  from public.pay_batch_candidates pbc
+  join public.candidates c on c.id = pbc.candidate_id
+  where pbc.pay_batch_id = p_pay_batch_id
+    and pbc.paye_state is not null;
+
+  -- Validate that each entry matches a batch PAYE candidate
+  if exists (
+    select 1
+    from _tmp_manual_net mn
+    left join _tmp_batch_paye2 bp
+      on (mn.candidate_id is not null and bp.candidate_id = mn.candidate_id)
+      or (mn.candidate_id is null and mn.tms_ref is not null and bp.tms_ref = mn.tms_ref)
+    where bp.pay_batch_candidate_id is null
+    limit 1
+  ) then
+    raise exception 'MANUAL_NET_INVALID: entry candidate not found in pay batch PAYE candidates';
+  end if;
+
+  -- Apply: replace prior MANUAL_ENTRY rows for those candidates
+  delete from public.pay_batch_paye_net_inputs pni
+  using _tmp_batch_paye2 bp
+  where pni.pay_batch_candidate_id = bp.pay_batch_candidate_id
+    and pni.source = 'MANUAL_ENTRY';
+
+  insert into public.pay_batch_paye_net_inputs(
+    pay_batch_candidate_id, source, net_amount, imported_at_utc, file_name, file_hash
+  )
+  select
+    bp.pay_batch_candidate_id,
+    'MANUAL_ENTRY',
+    mn.net_amount,
+    now(),
+    null,
+    null
+  from _tmp_manual_net mn
+  join _tmp_batch_paye2 bp
+    on (mn.candidate_id is not null and bp.candidate_id = mn.candidate_id)
+    or (mn.candidate_id is null and mn.tms_ref is not null and bp.tms_ref = mn.tms_ref);
+
+  update public.pay_batch_candidates pbc
+  set paye_state = 'READY'
+  where pbc.pay_batch_id = p_pay_batch_id
+    and pbc.paye_state is not null;
+
+  return jsonb_build_object('ok', true, 'pay_batch_id', p_pay_batch_id::text, 'source', 'MANUAL_ENTRY');
+end;
+$$;
+
+-- =========================================================
+-- A4.5 pay_execute_bank(p_pay_batch_id, p_pay_channel_scope, p_actor_user_id)
+-- =========================================================
+create or replace function public.pay_execute_bank(
+  p_pay_batch_id uuid,
+  p_pay_channel_scope text,
+  p_actor_user_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_scope text := upper(coalesce(p_pay_channel_scope,''));
+  v_batch record;
+
+  v_transfers jsonb := '[]'::jsonb;
+begin
+  if p_pay_batch_id is null then
+    raise exception 'pay_batch_id is required';
+  end if;
+  if v_scope not in ('PAYE','UMBRELLA','ALL') then
+    raise exception 'Invalid pay_channel_scope (PAYE|UMBRELLA|ALL)';
+  end if;
+
+  select
+    pb.id,
+    pb.status,
+    pb.banking_system_snapshot,
+    pb.external_paye_system_snapshot
+  into v_batch
+  from public.pay_batches pb
+  where pb.id = p_pay_batch_id
+  limit 1;
+
+  if v_batch.id is null then
+    raise exception 'pay_batch not found';
+  end if;
+  if v_batch.status <> 'DRAFT' then
+    raise exception 'pay_batch must be DRAFT to execute (current=%)', v_batch.status;
+  end if;
+
+  -- Validate PAYE net inputs if PAYE is being executed
+  if v_scope in ('PAYE','ALL') then
+    -- Ensure every PAYE candidate in this batch is READY and has a net input
+    if exists (
+      select 1
+      from public.pay_batch_candidates pbc
+      where pbc.pay_batch_id = p_pay_batch_id
+        and pbc.paye_state is not null
+        and pbc.paye_state <> 'READY'
+      limit 1
+    ) then
+      raise exception 'PAYE_NOT_READY: some PAYE candidates are not READY';
+    end if;
+
+    if exists (
+      select 1
+      from public.pay_batch_candidates pbc
+      left join lateral (
+        select pni.net_amount
+        from public.pay_batch_paye_net_inputs pni
+        where pni.pay_batch_candidate_id = pbc.id
+        order by pni.imported_at_utc desc
+        limit 1
+      ) ni on true
+      where pbc.pay_batch_id = p_pay_batch_id
+        and pbc.paye_state is not null
+        and ni.net_amount is null
+      limit 1
+    ) then
+      raise exception 'PAYE_NET_MISSING: missing net pay for one or more PAYE candidates';
+    end if;
+
+    -- Create pay_bank_transfers for PAYE (amount from net input; do not emit negative; omit zeros)
+    insert into public.pay_bank_transfers(
+      pay_batch_id, candidate_id, umbrella_id, pay_channel, amount, currency, status
+    )
+    select
+      p_pay_batch_id,
+      pbc.candidate_id,
+      null,
+      'PAYE',
+      round(ni.net_amount,2),
+      'GBP',
+      'PENDING'
+    from public.pay_batch_candidates pbc
+    join lateral (
+      select pni.net_amount
+      from public.pay_batch_paye_net_inputs pni
+      where pni.pay_batch_candidate_id = pbc.id
+      order by pni.imported_at_utc desc
+      limit 1
+    ) ni on true
+    where pbc.pay_batch_id = p_pay_batch_id
+      and pbc.paye_state is not null
+      and round(coalesce(ni.net_amount,0),2) > 0;
+  end if;
+
+  -- Create umbrella transfers if UMBRELLA is being executed
+  if v_scope in ('UMBRELLA','ALL') then
+    insert into public.pay_bank_transfers(
+      pay_batch_id, candidate_id, umbrella_id, pay_channel, amount, currency, status
+    )
+    select
+      p_pay_batch_id,
+      pbc.candidate_id,
+      c.umbrella_id,
+      'UMBRELLA',
+      round(greatest(coalesce(sum(pbi.amount_inc_vat),0),0),2),
+      'GBP',
+      'PENDING'
+    from public.pay_batch_candidates pbc
+    join public.candidates c on c.id = pbc.candidate_id
+    join public.pay_batch_items pbi
+      on pbi.pay_batch_candidate_id = pbc.id
+     and pbi.pay_channel = 'UMBRELLA'
+     and pbi.item_type <> 'DEBT_CREATED'
+    where pbc.pay_batch_id = p_pay_batch_id
+      and c.umbrella_id is not null
+    group by pbc.candidate_id, c.umbrella_id
+    having round(greatest(coalesce(sum(pbi.amount_inc_vat),0),0),2) > 0;
+  end if;
+
+  -- Update batch status based on banking system snapshot
+  update public.pay_batches pb
+  set status = case
+    when pb.banking_system_snapshot in ('MONZO_CSV','REVOLUT_CSV') then 'WAITING_BANK_CONFIRM'
+    when pb.banking_system_snapshot = 'REVOLUT_API' then 'DRAFT_CREATED'
+    else 'WAITING_BANK_CONFIRM'
+  end
+  where pb.id = p_pay_batch_id;
+
+  -- Return created transfers for this execution
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'id', pbt.id::text,
+        'pay_batch_id', pbt.pay_batch_id::text,
+        'candidate_id', case when pbt.candidate_id is null then null else pbt.candidate_id::text end,
+        'umbrella_id', case when pbt.umbrella_id is null then null else pbt.umbrella_id::text end,
+        'pay_channel', pbt.pay_channel,
+        'amount', pbt.amount,
+        'currency', pbt.currency,
+        'status', pbt.status
+      )
+      order by pbt.pay_channel, pbt.amount desc, pbt.id
+    ),
+    '[]'::jsonb
+  )
+  into v_transfers
+  from public.pay_bank_transfers pbt
+  where pbt.pay_batch_id = p_pay_batch_id
+    and (
+      v_scope = 'ALL'
+      or pbt.pay_channel = v_scope
+    );
+
+  return jsonb_build_object(
+    'ok', true,
+    'pay_batch_id', p_pay_batch_id::text,
+    'status', (select pb.status from public.pay_batches pb where pb.id = p_pay_batch_id),
+    'banking_system_snapshot', v_batch.banking_system_snapshot,
+    'external_paye_system_snapshot', v_batch.external_paye_system_snapshot,
+    'transfers', v_transfers
+  );
+end;
+$$;
+
+commit;
+
+
+
+
+begin;
+
 create table if not exists public.pay_item_snoozes (
   id uuid primary key default gen_random_uuid(),
 
@@ -2849,584 +3518,7 @@ $$;
 -- A4.7 pay_settle_revolut(p_pay_batch_id, p_settlement_json)
 -- settlement_json: array of {id|transfer_id, status, revolut_transaction_id?, revolut_state?}
 -- =========================================================
-create or replace function public.pay_settle_revolut(
-  p_pay_batch_id uuid,
-  p_settlement_json jsonb
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_now timestamptz := now();
-  v_batch record;
-  v_week_start date;
 
-  v_elem jsonb;
-  v_tid uuid;
-  v_status text;
-  v_txid text;
-  v_state text;
-
-  v_updated int := 0;
-
-  v_candidate record;
-  v_total int;
-  v_completed int;
-  v_failed int;
-  v_pending int;
-
-  v_new_status text;
-
-  v_settled_candidates uuid[] := array[]::uuid[];
-  v_candidate_id uuid;
-
-  v_timesheet_id uuid;
-  v_tf record;
-  v_ts record;
-  v_require_ref boolean;
-
-  v_base jsonb;
-  v_base_segments jsonb;
-  v_cur_segments jsonb;
-  v_new_segments jsonb;
-
-  v_segment_ids text[];
-  v_seg_id text;
-
-  v_cur_pay numeric;
-  v_cur_excl boolean;
-  v_cur_ref text;
-
-  v_base_pay numeric;
-  v_base_excl boolean;
-
-  v_cur_payable numeric;
-  v_base_payable numeric;
-
-  v_blocked boolean;
-
-  v_adj jsonb;
-  v_snapshot jsonb;
-  v_sig text;
-
-  v_adv record;
-  v_adv_id uuid;
-  v_take_total numeric;
-  v_old_outstanding numeric;
-  v_new_outstanding numeric;
-  v_old_schedule jsonb;
-  v_new_schedule jsonb;
-  v_old_next_due date;
-  v_new_next_due date;
-
-  v_batch_status text := null;
-  v_any_completed boolean := false;
-  v_any_failed boolean := false;
-  v_any_pending boolean := false;
-
-  v_timesheet_count int := 0;
-  v_advance_count int := 0;
-begin
-  if p_pay_batch_id is null then
-    raise exception 'pay_batch_id is required';
-  end if;
-
-  if p_settlement_json is null or jsonb_typeof(p_settlement_json) <> 'array' then
-    raise exception 'settlement_json must be an array';
-  end if;
-
-  select
-    pb.id,
-    pb.pay_date,
-    pb.status,
-    pb.banking_system_snapshot
-  into v_batch
-  from public.pay_batches pb
-  where pb.id = p_pay_batch_id
-  for update;
-
-  if v_batch.id is null then
-    raise exception 'pay_batch not found';
-  end if;
-
-  if v_batch.banking_system_snapshot <> 'REVOLUT_API' then
-    raise exception 'pay_settle_revolut only valid for REVOLUT_API batches';
-  end if;
-
-  v_week_start := public._pay_week_start_monday(v_batch.pay_date);
-
-  -- Apply transfer status updates
-  for v_elem in
-    select value
-    from jsonb_array_elements(p_settlement_json)
-  loop
-    v_tid := null;
-    v_status := null;
-    v_txid := null;
-    v_state := null;
-
-    if jsonb_typeof(v_elem) <> 'object' then
-      continue;
-    end if;
-
-    if (v_elem ? 'transfer_id') then
-      v_tid := nullif(v_elem->>'transfer_id','')::uuid;
-    elsif (v_elem ? 'id') then
-      v_tid := nullif(v_elem->>'id','')::uuid;
-    end if;
-
-    v_status := upper(coalesce(nullif(v_elem->>'status',''), nullif(v_elem->>'state',''), ''));
-    v_txid := nullif(v_elem->>'revolut_transaction_id','');
-    v_state := nullif(v_elem->>'revolut_state','');
-
-    if v_tid is null then
-      continue;
-    end if;
-
-    if v_status not in ('PENDING','COMPLETED','FAILED') then
-      continue;
-    end if;
-
-    update public.pay_bank_transfers pbt
-    set
-      status = v_status,
-      revolut_transaction_id = coalesce(v_txid, pbt.revolut_transaction_id),
-      revolut_state = coalesce(v_state, pbt.revolut_state)
-    where pbt.id = v_tid
-      and pbt.pay_batch_id = p_pay_batch_id;
-
-    get diagnostics v_updated = v_updated + row_count;
-  end loop;
-
-  -- Determine candidate settlement states from transfers
-  for v_candidate in
-    select
-      pbc.candidate_id
-    from public.pay_batch_candidates pbc
-    where pbc.pay_batch_id = p_pay_batch_id
-  loop
-    select
-      count(*)::int,
-      sum(case when pbt.status='COMPLETED' then 1 else 0 end)::int,
-      sum(case when pbt.status='FAILED' then 1 else 0 end)::int,
-      sum(case when pbt.status='PENDING' then 1 else 0 end)::int
-    into v_total, v_completed, v_failed, v_pending
-    from public.pay_bank_transfers pbt
-    where pbt.pay_batch_id = p_pay_batch_id
-      and pbt.candidate_id = v_candidate.candidate_id;
-
-    if v_total = 0 then
-      v_new_status := 'SETTLED';
-    elsif v_pending > 0 then
-      v_new_status := 'PENDING';
-    elsif v_failed > 0 and v_completed > 0 then
-      v_new_status := 'PARTIAL';
-    elsif v_failed > 0 then
-      v_new_status := 'FAILED';
-    else
-      v_new_status := 'SETTLED';
-    end if;
-
-    if v_new_status = 'SETTLED' then
-      v_any_completed := true;
-    elsif v_new_status = 'FAILED' or v_new_status = 'PARTIAL' then
-      v_any_failed := true;
-    elsif v_new_status = 'PENDING' then
-      v_any_pending := true;
-    end if;
-
-    -- If newly settled (was not settled and not already stamped), collect for baseline/advances
-    if v_new_status = 'SETTLED' then
-      if exists (
-        select 1
-        from public.pay_batch_candidates pbc
-        where pbc.pay_batch_id = p_pay_batch_id
-          and pbc.candidate_id = v_candidate.candidate_id
-          and (pbc.settled_at_utc is null or pbc.settlement_status is distinct from 'SETTLED')
-        limit 1
-      ) then
-        v_settled_candidates := v_settled_candidates || array[v_candidate.candidate_id];
-      end if;
-    end if;
-
-    update public.pay_batch_candidates pbc
-    set
-      settlement_status = v_new_status,
-      settled_at_utc = case when v_new_status='SETTLED' then coalesce(pbc.settled_at_utc, v_now) else pbc.settled_at_utc end,
-      settled_via = case when v_new_status='SETTLED' then coalesce(pbc.settled_via, 'REVOLUT_API') else pbc.settled_via end,
-      paye_state = case
-        when pbc.paye_state is null then null
-        when v_new_status='SETTLED' then 'SETTLED'
-        else pbc.paye_state
-      end
-    where pbc.pay_batch_id = p_pay_batch_id
-      and pbc.candidate_id = v_candidate.candidate_id;
-  end loop;
-
-  -- Determine batch status
-  if exists (select 1 from public.pay_bank_transfers pbt where pbt.pay_batch_id=p_pay_batch_id and pbt.status='PENDING' limit 1) then
-    v_batch_status := 'PARTIAL';
-  else
-    if exists (select 1 from public.pay_bank_transfers pbt where pbt.pay_batch_id=p_pay_batch_id and pbt.status='FAILED' limit 1) then
-      if exists (select 1 from public.pay_bank_transfers pbt where pbt.pay_batch_id=p_pay_batch_id and pbt.status='COMPLETED' limit 1) then
-        v_batch_status := 'PARTIAL';
-      else
-        v_batch_status := 'FAILED';
-      end if;
-    else
-      v_batch_status := 'SETTLED';
-    end if;
-  end if;
-
-  update public.pay_batches pb
-  set
-    status = v_batch_status,
-    last_status_checked_at_utc = v_now
-  where pb.id = p_pay_batch_id;
-
-  -- Apply baselines and advance patches ONLY for candidates newly settled
-  if array_length(v_settled_candidates,1) is not null and array_length(v_settled_candidates,1) > 0 then
-    -- Baselines
-    for v_timesheet_id in
-      select distinct pbi.timesheet_id
-      from public.pay_batch_items pbi
-      join public.pay_batch_candidates pbc on pbc.id = pbi.pay_batch_candidate_id
-      where pbc.pay_batch_id = p_pay_batch_id
-        and pbc.candidate_id = any(v_settled_candidates)
-        and pbi.timesheet_id is not null
-    loop
-      v_timesheet_count := v_timesheet_count + 1;
-
-      select
-        tf.timesheet_id,
-        tf.candidate_id,
-        tf.client_id,
-        tf.invoice_breakdown_json,
-        tf.total_pay_ex_vat,
-        tf.additional_pay_ex_vat,
-        tf.expenses_pay_ex_vat,
-        tf.travel_pay_ex_vat,
-        tf.accommodation_pay_ex_vat,
-        tf.other_pay_ex_vat,
-        tf.mileage_pay_ex_vat
-      into v_tf
-      from public.timesheets_financials tf
-      where tf.timesheet_id = v_timesheet_id
-        and tf.is_current = true
-      limit 1;
-
-      if v_tf.timesheet_id is null then
-        continue;
-      end if;
-
-      select
-        ts.timesheet_id,
-        ts.contract_id,
-        ts.reference_number
-      into v_ts
-      from public.timesheets ts
-      where ts.timesheet_id = v_timesheet_id
-        and ts.is_current = true
-      limit 1;
-
-      select
-        coalesce(
-          case when ct.overrideclientsettings then ct.require_reference_to_pay end,
-          cs.pay_reference_required,
-          false
-        )
-      into v_require_ref
-      from public.contracts ct
-      left join public.client_settings cs on cs.client_id = v_tf.client_id
-      where ct.id = v_ts.contract_id
-      limit 1;
-
-      select coalesce(tps.last_settled_snapshot_json, '{}'::jsonb)
-      into v_base
-      from public.timesheet_pay_state tps
-      where tps.timesheet_id = v_timesheet_id
-      limit 1;
-
-      v_base_segments := coalesce(v_base->'segments','[]'::jsonb);
-
-      if v_tf.invoice_breakdown_json is not null
-         and jsonb_typeof(v_tf.invoice_breakdown_json) = 'object'
-         and upper(coalesce(v_tf.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
-         and jsonb_typeof(v_tf.invoice_breakdown_json->'segments') = 'array' then
-        select coalesce(
-          jsonb_agg(
-            jsonb_build_object(
-              'segment_id', nullif(btrim(coalesce(seg->>'segment_id','')), ''),
-              'pay_amount', round(coalesce(nullif(seg->>'pay_amount','')::numeric,0),2),
-              'exclude_from_pay', coalesce(nullif(seg->>'exclude_from_pay','')::boolean,false),
-              'ref_num', nullif(btrim(coalesce(seg->>'ref_num','')), '')
-            )
-          ),
-          '[]'::jsonb
-        )
-        into v_cur_segments
-        from jsonb_array_elements(v_tf.invoice_breakdown_json->'segments') seg
-        where seg is not null and jsonb_typeof(seg)='object';
-      else
-        v_cur_segments := jsonb_build_array(
-          jsonb_build_object(
-            'segment_id', ('ts:' || v_timesheet_id::text),
-            'pay_amount', round(coalesce(v_tf.total_pay_ex_vat,0),2),
-            'exclude_from_pay', false,
-            'ref_num', nullif(btrim(coalesce(v_ts.reference_number,'')), '')
-          )
-        );
-      end if;
-
-      select coalesce(array_agg(distinct sid), array[]::text[])
-      into v_segment_ids
-      from (
-        select nullif(btrim(coalesce(s->>'segment_id','')),'') as sid
-        from jsonb_array_elements(v_cur_segments) s
-        where s is not null and jsonb_typeof(s)='object'
-        union
-        select nullif(btrim(coalesce(s->>'segment_id','')),'') as sid
-        from jsonb_array_elements(v_base_segments) s
-        where s is not null and jsonb_typeof(s)='object'
-      ) u
-      where u.sid is not null;
-
-      v_new_segments := '[]'::jsonb;
-
-      foreach v_seg_id in array v_segment_ids
-      loop
-        select
-          round(coalesce(nullif(s->>'pay_amount','')::numeric,0),2) as pay_amount,
-          coalesce(nullif(s->>'exclude_from_pay','')::boolean,false) as exclude_from_pay,
-          nullif(btrim(coalesce(s->>'ref_num','')), '') as ref_num
-        into v_cur_pay, v_cur_excl, v_cur_ref
-        from jsonb_array_elements(v_cur_segments) s
-        where nullif(btrim(coalesce(s->>'segment_id','')),'') = v_seg_id
-        limit 1;
-
-        if v_cur_pay is null then v_cur_pay := 0; end if;
-        if v_cur_excl is null then v_cur_excl := false; end if;
-
-        select
-          round(coalesce(nullif(s->>'pay_amount','')::numeric,0),2) as pay_amount,
-          coalesce(nullif(s->>'exclude_from_pay','')::boolean,false) as exclude_from_pay
-        into v_base_pay, v_base_excl
-        from jsonb_array_elements(v_base_segments) s
-        where nullif(btrim(coalesce(s->>'segment_id','')),'') = v_seg_id
-        limit 1;
-
-        if v_base_pay is null then v_base_pay := 0; end if;
-        if v_base_excl is null then v_base_excl := false; end if;
-
-        v_cur_payable := case when v_cur_excl then 0 else v_cur_pay end;
-        v_base_payable := case when v_base_excl then 0 else v_base_pay end;
-
-        v_blocked :=
-          (v_require_ref = true)
-          and (v_cur_excl = false)
-          and (nullif(btrim(coalesce(v_cur_ref,'')),'') is null)
-          and round(v_cur_payable - v_base_payable, 2) > 0;
-
-        if v_blocked then
-          v_new_segments := v_new_segments || jsonb_build_array(
-            jsonb_build_object(
-              'segment_id', v_seg_id,
-              'pay_amount', round(v_base_pay,2),
-              'exclude_from_pay', v_base_excl,
-              'ref_num', v_cur_ref
-            )
-          );
-        else
-          v_new_segments := v_new_segments || jsonb_build_array(
-            jsonb_build_object(
-              'segment_id', v_seg_id,
-              'pay_amount', round(v_cur_pay,2),
-              'exclude_from_pay', v_cur_excl,
-              'ref_num', v_cur_ref
-            )
-          );
-        end if;
-      end loop;
-
-      select coalesce(
-        jsonb_agg(
-          jsonb_build_object(
-            'id', a.id::text,
-            'delta_pay_ex_vat', round(coalesce(a.delta_pay_ex_vat,0),2)
-          )
-          order by a.created_at asc, a.id
-        ),
-        '[]'::jsonb
-      )
-      into v_adj
-      from public.ts_pay_adjustments a
-      where a.timesheet_id = v_timesheet_id
-        and a.as_advance = false;
-
-      v_snapshot := jsonb_build_object(
-        'segments', v_new_segments,
-        'additional_pay_ex_vat', round(coalesce(v_tf.additional_pay_ex_vat,0),2),
-        'expenses', jsonb_build_object(
-          'expenses_pay_ex_vat', round(coalesce(v_tf.expenses_pay_ex_vat,0),2),
-          'travel_pay_ex_vat', round(coalesce(v_tf.travel_pay_ex_vat,0),2),
-          'accommodation_pay_ex_vat', round(coalesce(v_tf.accommodation_pay_ex_vat,0),2),
-          'other_pay_ex_vat', round(coalesce(v_tf.other_pay_ex_vat,0),2),
-          'mileage_pay_ex_vat', round(coalesce(v_tf.mileage_pay_ex_vat,0),2)
-        ),
-        'adjustments', v_adj
-      );
-
-      v_sig := encode(digest(v_snapshot::text, 'sha256'), 'hex');
-
-      insert into public.timesheet_pay_state_history(
-        timesheet_id,
-        pay_batch_id,
-        settled_at_utc,
-        snapshot_json,
-        signature
-      )
-      values (
-        v_timesheet_id,
-        p_pay_batch_id,
-        v_now,
-        v_snapshot,
-        v_sig
-      );
-
-      insert into public.timesheet_pay_state(
-        timesheet_id,
-        last_settled_snapshot_json,
-        last_settled_signature,
-        last_settled_pay_batch_id,
-        last_settled_at_utc
-      )
-      values (
-        v_timesheet_id,
-        v_snapshot,
-        v_sig,
-        p_pay_batch_id,
-        v_now
-      )
-      on conflict (timesheet_id) do update
-      set
-        last_settled_snapshot_json = excluded.last_settled_snapshot_json,
-        last_settled_signature = excluded.last_settled_signature,
-        last_settled_pay_batch_id = excluded.last_settled_pay_batch_id,
-        last_settled_at_utc = excluded.last_settled_at_utc;
-    end loop;
-
-    -- Advances (only for newly settled candidates)
-    for v_adv in
-      select
-        (regexp_replace(pbi.source_ref, '^advance:', ''))::uuid as advance_id,
-        round(sum(abs(coalesce(pbi.amount_inc_vat, pbi.amount_ex_vat, 0))),2) as taken_total
-      from public.pay_batch_items pbi
-      join public.pay_batch_candidates pbc on pbc.id = pbi.pay_batch_candidate_id
-      where pbc.pay_batch_id = p_pay_batch_id
-        and pbc.candidate_id = any(v_settled_candidates)
-        and pbi.item_type = 'LOAN_REPAYMENT'
-        and pbi.source_ref like 'advance:%'
-      group by (regexp_replace(pbi.source_ref, '^advance:', ''))::uuid
-    loop
-      v_adv_id := v_adv.advance_id;
-      v_take_total := round(coalesce(v_adv.taken_total,0),2);
-      if v_take_total <= 0 then
-        continue;
-      end if;
-
-      if exists (
-        select 1 from public.pay_advance_patches pap
-        where pap.pay_batch_id = p_pay_batch_id
-          and pap.advance_id = v_adv_id
-        limit 1
-      ) then
-        continue;
-      end if;
-
-      select
-        pa.outstanding_amount,
-        pa.schedule_json,
-        pa.next_due_week_start
-      into v_old_outstanding, v_old_schedule, v_old_next_due
-      from public.pay_advances pa
-      where pa.id = v_adv_id
-        and pa.status::text = 'ACTIVE'
-      for update;
-
-      if v_old_schedule is null then
-        continue;
-      end if;
-
-      select coalesce(
-        jsonb_agg(
-          case
-            when nullif(e->>'week_start','')::date = v_week_start
-            then jsonb_set(e, '{amount}', to_jsonb(round(coalesce(nullif(e->>'amount','')::numeric,0) + v_take_total, 2)), true)
-            else e
-          end
-          order by ord
-        ),
-        '[]'::jsonb
-      )
-      into v_new_schedule
-      from jsonb_array_elements(v_old_schedule) with ordinality as t(e, ord);
-
-      v_new_outstanding := round(greatest(coalesce(v_old_outstanding,0) - v_take_total, 0), 2);
-
-      select min(nullif(x->>'week_start','')::date)
-      into v_new_next_due
-      from jsonb_array_elements(v_new_schedule) x
-      where coalesce(nullif(x->>'amount','')::numeric,0) < 0;
-
-      update public.pay_advances pa
-      set
-        schedule_json = v_new_schedule,
-        outstanding_amount = v_new_outstanding,
-        next_due_week_start = v_new_next_due,
-        status = case when v_new_outstanding <= 0 then 'PAID_OFF'::pay_advance_status_enum else pa.status end,
-        updated_at = now()
-      where pa.id = v_adv_id;
-
-      insert into public.pay_advance_patches(
-        advance_id,
-        pay_batch_id,
-        old_outstanding_amount,
-        new_outstanding_amount,
-        old_schedule_json,
-        new_schedule_json,
-        old_next_due_week_start,
-        new_next_due_week_start,
-        patched_at_utc
-      )
-      values (
-        v_adv_id,
-        p_pay_batch_id,
-        v_old_outstanding,
-        v_new_outstanding,
-        v_old_schedule,
-        v_new_schedule,
-        v_old_next_due,
-        v_new_next_due,
-        v_now
-      );
-
-      v_advance_count := v_advance_count + 1;
-    end loop;
-  end if;
-
-  return jsonb_build_object(
-    'ok', true,
-    'pay_batch_id', p_pay_batch_id::text,
-    'batch_status', v_batch_status,
-    'updated_transfers', v_updated,
-    'timesheets_baselined', v_timesheet_count,
-    'advances_patched', v_advance_count,
-    'newly_settled_candidate_count', coalesce(array_length(v_settled_candidates,1),0)
-  );
-end;
-$$;
 
 -- =========================================================
 -- A4.8 pay_unpay_batch(p_pay_batch_id, p_actor_user_id, p_reason, p_force boolean)
