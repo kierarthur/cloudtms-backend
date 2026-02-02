@@ -1081,3 +1081,326 @@ exception when others then
 end$$;
 
 commit;
+
+
+
+begin;
+
+-- =========================================================
+-- A3) Invoice Discounting RPCs
+--  - id_consolidation_preview()
+--  - id_consolidation_balance_now(p_actor_user_id uuid)
+--  - id_consolidation_runs_list(p_limit int, p_offset int)
+--  - id_consolidation_run_get(p_id_ref text)
+--
+-- Notes:
+--  - All functions are CREATE OR REPLACE (safe to rerun).
+--  - Balance-now locks the changed ledger rows FOR UPDATE to keep read/update consistent.
+--  - Returns are JSONB so you get {total, lines[]} in a single RPC response.
+-- =========================================================
+
+create or replace function public.id_consolidation_preview()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_lines jsonb;
+  v_total numeric(12,2);
+begin
+  -- Guard (gives an explicit error if migrations not applied)
+  if to_regclass('public.id_invoice_ledger') is null then
+    raise exception 'ID_LEDGER_MISSING';
+  end if;
+
+  with changed as (
+    select
+      l.invoice_id,
+      l.invoice_number,
+      l.invoice_status,
+      l.invoice_type,
+      (coalesce(l.current_inc_vat,0)::numeric(12,2) - coalesce(l.last_reported_inc_vat,0)::numeric(12,2))::numeric(12,2) as delta_inc_vat,
+      coalesce(l.current_inc_vat,0)::numeric(12,2) as current_inc_vat,
+      coalesce(l.last_reported_inc_vat,0)::numeric(12,2) as last_reported_inc_vat
+    from public.id_invoice_ledger l
+    where coalesce(l.current_inc_vat,0)::numeric(12,2) <> coalesce(l.last_reported_inc_vat,0)::numeric(12,2)
+  )
+  select
+    coalesce(sum(c.delta_inc_vat),0)::numeric(12,2),
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'invoice_id', c.invoice_id::text,
+          'invoice_number', c.invoice_number,
+          'invoice_status', c.invoice_status,
+          'invoice_type', c.invoice_type,
+          'current_inc_vat', c.current_inc_vat,
+          'last_reported_inc_vat', c.last_reported_inc_vat,
+          'delta_inc_vat', c.delta_inc_vat
+        )
+        order by
+          nullif(btrim(coalesce(c.invoice_number,'')),'') nulls last,
+          c.invoice_id
+      ),
+      '[]'::jsonb
+    )
+  into v_total, v_lines
+  from changed c;
+
+  return jsonb_build_object(
+    'total_delta_inc_vat', v_total,
+    'line_count', jsonb_array_length(v_lines),
+    'lines', v_lines
+  );
+end;
+$$;
+
+create or replace function public.id_consolidation_balance_now(p_actor_user_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_ref_num bigint;
+  v_id_ref text;
+  v_created_at timestamptz := now();
+
+  v_total numeric(12,2) := 0;
+  v_lines jsonb := '[]'::jsonb;
+begin
+  if to_regclass('public.id_ref_seq') is null then
+    raise exception 'ID_REF_SEQ_MISSING';
+  end if;
+  if to_regclass('public.id_invoice_ledger') is null then
+    raise exception 'ID_LEDGER_MISSING';
+  end if;
+  if to_regclass('public.id_consolidation_runs') is null
+     or to_regclass('public.id_consolidation_run_lines') is null then
+    raise exception 'ID_RUN_TABLES_MISSING';
+  end if;
+
+  -- Allocate new sequential ref and format as 6 digits
+  select nextval('public.id_ref_seq') into v_ref_num;
+  v_id_ref := lpad(v_ref_num::text, 6, '0');
+
+  -- Lock the changed ledger rows so the read + update are consistent.
+  -- (This prevents a mid-run change from being partially included.)
+  with changed as (
+    select
+      l.invoice_id,
+      l.invoice_number,
+      l.invoice_status,
+      l.invoice_type,
+      (coalesce(l.current_inc_vat,0)::numeric(12,2) - coalesce(l.last_reported_inc_vat,0)::numeric(12,2))::numeric(12,2) as delta_inc_vat,
+      coalesce(l.current_inc_vat,0)::numeric(12,2) as current_inc_vat
+    from public.id_invoice_ledger l
+    where coalesce(l.current_inc_vat,0)::numeric(12,2) <> coalesce(l.last_reported_inc_vat,0)::numeric(12,2)
+    for update
+  )
+  select
+    coalesce(sum(c.delta_inc_vat),0)::numeric(12,2),
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'invoice_id', c.invoice_id::text,
+          'invoice_number', c.invoice_number,
+          'invoice_status', c.invoice_status,
+          'invoice_type', c.invoice_type,
+          'delta_inc_vat', c.delta_inc_vat,
+          'current_inc_vat', c.current_inc_vat
+        )
+        order by
+          nullif(btrim(coalesce(c.invoice_number,'')),'') nulls last,
+          c.invoice_id
+      ),
+      '[]'::jsonb
+    )
+  into v_total, v_lines
+  from changed c;
+
+  -- Insert run header (always, even if total=0 and lines empty)
+  insert into public.id_consolidation_runs (
+    id_ref,
+    created_at_utc,
+    created_by_user_id,
+    total_delta_inc_vat
+  )
+  values (
+    v_id_ref,
+    v_created_at,
+    p_actor_user_id,
+    v_total
+  );
+
+  -- Insert run lines (only if there are any)
+  if jsonb_array_length(v_lines) > 0 then
+    insert into public.id_consolidation_run_lines (
+      id_ref,
+      invoice_id,
+      invoice_number,
+      invoice_status,
+      invoice_type,
+      delta_inc_vat,
+      current_inc_vat
+    )
+    select
+      v_id_ref,
+      (x->>'invoice_id')::uuid,
+      x->>'invoice_number',
+      x->>'invoice_status',
+      x->>'invoice_type',
+      coalesce(nullif(x->>'delta_inc_vat','')::numeric, 0)::numeric(12,2),
+      coalesce(nullif(x->>'current_inc_vat','')::numeric, 0)::numeric(12,2)
+    from jsonb_array_elements(v_lines) x;
+  end if;
+
+  -- Update ledger baselines so the next run only includes new deltas
+  update public.id_invoice_ledger l
+  set
+    last_reported_inc_vat = l.current_inc_vat,
+    updated_at_utc = now()
+  where l.invoice_id in (
+    select (x->>'invoice_id')::uuid
+    from jsonb_array_elements(v_lines) x
+  );
+
+  return jsonb_build_object(
+    'id_ref', v_id_ref,
+    'created_at_utc', v_created_at,
+    'total_delta_inc_vat', v_total,
+    'line_count', jsonb_array_length(v_lines),
+    'lines', v_lines
+  );
+end;
+$$;
+
+create or replace function public.id_consolidation_runs_list(
+  p_limit int default 50,
+  p_offset int default 0
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_limit int := greatest(1, least(coalesce(p_limit,50), 500));
+  v_offset int := greatest(coalesce(p_offset,0), 0);
+  v_total_count int;
+  v_runs jsonb;
+begin
+  if to_regclass('public.id_consolidation_runs') is null then
+    raise exception 'ID_RUNS_TABLE_MISSING';
+  end if;
+
+  select count(*)::int into v_total_count
+  from public.id_consolidation_runs r;
+
+  select
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'id_ref', r.id_ref,
+          'created_at_utc', r.created_at_utc,
+          'created_by_user_id', case when r.created_by_user_id is null then null else r.created_by_user_id::text end,
+          'total_delta_inc_vat', r.total_delta_inc_vat
+        )
+        order by r.created_at_utc desc, r.id_ref desc
+      ),
+      '[]'::jsonb
+    )
+  into v_runs
+  from (
+    select r0.*
+    from public.id_consolidation_runs r0
+    order by r0.created_at_utc desc, r0.id_ref desc
+    limit v_limit offset v_offset
+  ) r;
+
+  return jsonb_build_object(
+    'total_count', coalesce(v_total_count,0),
+    'limit', v_limit,
+    'offset', v_offset,
+    'runs', v_runs
+  );
+end;
+$$;
+
+create or replace function public.id_consolidation_run_get(p_id_ref text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_run record;
+  v_lines jsonb;
+begin
+  if to_regclass('public.id_consolidation_runs') is null
+     or to_regclass('public.id_consolidation_run_lines') is null then
+    raise exception 'ID_RUN_TABLES_MISSING';
+  end if;
+
+  if p_id_ref is null or p_id_ref !~ '^[0-9]{6}$' then
+    raise exception 'INVALID_ID_REF';
+  end if;
+
+  select
+    r.id_ref,
+    r.created_at_utc,
+    r.created_by_user_id,
+    r.total_delta_inc_vat
+  into v_run
+  from public.id_consolidation_runs r
+  where r.id_ref = p_id_ref
+  limit 1;
+
+  if not found then
+    raise exception 'ID_RUN_NOT_FOUND';
+  end if;
+
+  select
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'invoice_id', rl.invoice_id::text,
+          'invoice_number', rl.invoice_number,
+          'invoice_status', rl.invoice_status,
+          'invoice_type', rl.invoice_type,
+          'delta_inc_vat', rl.delta_inc_vat,
+          'current_inc_vat', rl.current_inc_vat
+        )
+        order by
+          nullif(btrim(coalesce(rl.invoice_number,'')),'') nulls last,
+          rl.invoice_id
+      ),
+      '[]'::jsonb
+    )
+  into v_lines
+  from public.id_consolidation_run_lines rl
+  where rl.id_ref = p_id_ref;
+
+  return jsonb_build_object(
+    'run', jsonb_build_object(
+      'id_ref', v_run.id_ref,
+      'created_at_utc', v_run.created_at_utc,
+      'created_by_user_id', case when v_run.created_by_user_id is null then null else v_run.created_by_user_id::text end,
+      'total_delta_inc_vat', v_run.total_delta_inc_vat
+    ),
+    'line_count', jsonb_array_length(v_lines),
+    'lines', v_lines
+  );
+end;
+$$;
+
+-- Optional PostgREST schema reload (safe wrapper)
+do $$
+begin
+  perform pg_notify('pgrst', 'reload schema');
+exception when others then
+  null;
+end$$;
+
+commit;
