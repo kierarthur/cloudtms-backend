@@ -753,3 +753,331 @@ exception when others then
 end$$;
 
 commit;
+
+
+
+begin;
+
+-- =========================================================
+-- Helpers: Ledger upsert from invoices
+-- =========================================================
+
+create or replace function public.id_ledger_upsert_from_invoice_row(
+  p_invoice_id uuid,
+  p_set_zero boolean default false,
+  p_invoice_no text default null,
+  p_status_text text default null,
+  p_type_text text default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_inv record;
+  v_invoice_no text;
+  v_status_text text;
+  v_type_text text;
+
+  v_ex numeric := 0;
+  v_vat numeric := 0;
+  v_inc numeric := 0;
+begin
+  -- Prefer reading the current invoices row when present (normal path).
+  select
+    i.invoice_no,
+    i.status::text as status_text,
+    i.type::text as type_text,
+    coalesce(i.subtotal_ex_vat,0)::numeric as subtotal_ex_vat,
+    coalesce(i.vat_amount,0)::numeric as vat_amount,
+    coalesce(i.total_inc_vat,0)::numeric as total_inc_vat
+  into v_inv
+  from public.invoices i
+  where i.id = p_invoice_id
+  limit 1;
+
+  if found then
+    v_invoice_no := v_inv.invoice_no;
+    v_status_text := v_inv.status_text;
+    v_type_text := v_inv.type_text;
+
+    if p_set_zero then
+      v_ex := 0; v_vat := 0; v_inc := 0;
+    else
+      v_ex := coalesce(v_inv.subtotal_ex_vat,0);
+      v_vat := coalesce(v_inv.vat_amount,0);
+      v_inc := coalesce(v_inv.total_inc_vat,0);
+    end if;
+  else
+    -- Invoice row not found (e.g. already deleted): use provided snapshots and zero totals.
+    v_invoice_no := p_invoice_no;
+    v_status_text := p_status_text;
+    v_type_text := p_type_text;
+    v_ex := 0; v_vat := 0; v_inc := 0;
+  end if;
+
+  insert into public.id_invoice_ledger (
+    invoice_id,
+    invoice_number,
+    invoice_status,
+    invoice_type,
+    current_ex_vat,
+    current_vat,
+    current_inc_vat,
+    updated_at_utc
+  )
+  values (
+    p_invoice_id,
+    v_invoice_no,
+    v_status_text,
+    v_type_text,
+    round(coalesce(v_ex,0)::numeric,2),
+    round(coalesce(v_vat,0)::numeric,2),
+    round(coalesce(v_inc,0)::numeric,2),
+    now()
+  )
+  on conflict (invoice_id) do update
+  set
+    invoice_number   = excluded.invoice_number,
+    invoice_status   = excluded.invoice_status,
+    invoice_type     = excluded.invoice_type,
+    current_ex_vat   = excluded.current_ex_vat,
+    current_vat      = excluded.current_vat,
+    current_inc_vat  = excluded.current_inc_vat,
+    updated_at_utc   = excluded.updated_at_utc;
+
+end;
+$$;
+
+-- Recompute totals then upsert ledger.
+create or replace function public.id_ledger_recompute_and_sync_invoice(p_invoice_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  -- Canonical totals recompute; this also clears invoice_pdf_r2_key. :contentReference[oaicite:3]{index=3}
+  begin
+    perform public.invoice_recompute_totals(p_invoice_id);
+  exception when others then
+    -- If invoice missing or recompute fails, fall back to a safe ledger upsert with zeros.
+    -- (We do NOT raise: ledger must not break invoice_lines operations.)
+    perform public.id_ledger_upsert_from_invoice_row(p_invoice_id, true, null, null, null);
+    return;
+  end;
+
+  perform public.id_ledger_upsert_from_invoice_row(p_invoice_id, false, null, null, null);
+end;
+$$;
+
+-- Metadata-only sync (no recompute). Used for invoices INSERT/UPDATE to keep status/type/invoice_no current.
+create or replace function public.id_ledger_sync_invoice_metadata(p_invoice_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform public.id_ledger_upsert_from_invoice_row(p_invoice_id, false, null, null, null);
+end;
+$$;
+
+-- =========================================================
+-- A2.1 invoice_lines triggers (AFTER INSERT/UPDATE/DELETE)
+-- Statement-level triggers with transition tables so we recompute ONCE per invoice per statement.
+-- =========================================================
+
+create or replace function public.trg_id_invoice_lines_ai_stmt()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_invoice_id uuid;
+begin
+  if to_regclass('public.id_invoice_ledger') is null then
+    return null;
+  end if;
+
+  for v_invoice_id in
+    select distinct nr.invoice_id
+    from new_rows nr
+    where nr.invoice_id is not null
+  loop
+    perform public.id_ledger_recompute_and_sync_invoice(v_invoice_id);
+  end loop;
+
+  return null;
+end;
+$$;
+
+create or replace function public.trg_id_invoice_lines_au_stmt()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_invoice_id uuid;
+begin
+  if to_regclass('public.id_invoice_ledger') is null then
+    return null;
+  end if;
+
+  for v_invoice_id in
+    with ids as (
+      select invoice_id from new_rows where invoice_id is not null
+      union
+      select invoice_id from old_rows where invoice_id is not null
+    )
+    select distinct invoice_id from ids
+  loop
+    perform public.id_ledger_recompute_and_sync_invoice(v_invoice_id);
+  end loop;
+
+  return null;
+end;
+$$;
+
+create or replace function public.trg_id_invoice_lines_ad_stmt()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_invoice_id uuid;
+begin
+  if to_regclass('public.id_invoice_ledger') is null then
+    return null;
+  end if;
+
+  for v_invoice_id in
+    select distinct orw.invoice_id
+    from old_rows orw
+    where orw.invoice_id is not null
+  loop
+    perform public.id_ledger_recompute_and_sync_invoice(v_invoice_id);
+  end loop;
+
+  return null;
+end;
+$$;
+
+-- Drop+recreate triggers (safe to rerun)
+drop trigger if exists trg_id_invoice_lines_ai on public.invoice_lines;
+drop trigger if exists trg_id_invoice_lines_au on public.invoice_lines;
+drop trigger if exists trg_id_invoice_lines_ad on public.invoice_lines;
+
+-- Create triggers only if invoice_lines exists
+do $$
+begin
+  if to_regclass('public.invoice_lines') is not null then
+
+    create trigger trg_id_invoice_lines_ai
+    after insert on public.invoice_lines
+    referencing new table as new_rows
+    for each statement
+    execute function public.trg_id_invoice_lines_ai_stmt();
+
+    create trigger trg_id_invoice_lines_au
+    after update on public.invoice_lines
+    referencing old table as old_rows new table as new_rows
+    for each statement
+    execute function public.trg_id_invoice_lines_au_stmt();
+
+    create trigger trg_id_invoice_lines_ad
+    after delete on public.invoice_lines
+    referencing old table as old_rows
+    for each statement
+    execute function public.trg_id_invoice_lines_ad_stmt();
+
+  end if;
+end$$;
+
+-- =========================================================
+-- A2.2 invoices metadata sync trigger (AFTER INSERT/UPDATE)
+-- Keeps invoice_no/status/type in ledger even when lines unchanged.
+-- =========================================================
+
+create or replace function public.trg_id_invoices_meta_aiu()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if to_regclass('public.id_invoice_ledger') is null then
+    return new;
+  end if;
+
+  perform public.id_ledger_sync_invoice_metadata(new.id);
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_id_invoices_meta_aiu on public.invoices;
+
+do $$
+begin
+  if to_regclass('public.invoices') is not null then
+    create trigger trg_id_invoices_meta_aiu
+    after insert or update on public.invoices
+    for each row
+    execute function public.trg_id_invoices_meta_aiu();
+  end if;
+end$$;
+
+-- =========================================================
+-- A2.3 invoices delete semantics (AFTER DELETE)
+-- Keep ledger row but set current_* = 0 (audit-safe).
+-- =========================================================
+
+create or replace function public.trg_id_invoices_after_delete()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if to_regclass('public.id_invoice_ledger') is null then
+    return old;
+  end if;
+
+  -- Force ledger current_* to zero, keep snapshots from OLD row.
+  perform public.id_ledger_upsert_from_invoice_row(
+    old.id,
+    true,
+    old.invoice_no,
+    old.status::text,
+    old.type::text
+  );
+
+  return old;
+end;
+$$;
+
+drop trigger if exists trg_id_invoices_ad on public.invoices;
+
+do $$
+begin
+  if to_regclass('public.invoices') is not null then
+    create trigger trg_id_invoices_ad
+    after delete on public.invoices
+    for each row
+    execute function public.trg_id_invoices_after_delete();
+  end if;
+end$$;
+
+-- Optional PostgREST schema reload (safe wrapper)
+do $$
+begin
+  perform pg_notify('pgrst', 'reload schema');
+exception when others then
+  null;
+end$$;
+
+commit;
