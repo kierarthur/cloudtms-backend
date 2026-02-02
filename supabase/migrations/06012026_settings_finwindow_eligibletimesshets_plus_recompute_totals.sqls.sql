@@ -704,6 +704,9 @@ declare
   v_subtotal_ex_vat numeric;
   v_vat_amount numeric;
   v_total_inc_vat numeric;
+
+  v_type_text text;
+  v_type_norm text;
 begin
   -- Lock the invoice row to avoid concurrent totals races.
   perform 1
@@ -715,6 +718,18 @@ begin
     raise exception 'invoice_recompute_totals: invoice % not found', p_invoice_id;
   end if;
 
+  -- Read invoice type (row already locked above).
+  select i.type::text
+  into v_type_text
+  from public.invoices i
+  where i.id = p_invoice_id
+  limit 1;
+
+  v_type_norm := upper(coalesce(v_type_text, ''));
+  v_type_norm := replace(v_type_norm, ' ', '_');
+  v_type_norm := replace(v_type_norm, '-', '_');
+
+  -- Sum line totals (as stored on invoice_lines).
   select
     coalesce(sum(l.total_charge_ex_vat), 0)::numeric,
     coalesce(sum(l.vat_amount), 0)::numeric,
@@ -729,6 +744,21 @@ begin
   v_subtotal_ex_vat := round(v_subtotal_ex_vat, 2);
   v_vat_amount := round(v_vat_amount, 2);
   v_total_inc_vat := round(v_total_inc_vat, 2);
+
+  -- OPTION A: enforce signed totals for CREDIT_NOTE at the canonical source-of-truth.
+  -- This is intentionally conservative:
+  -- - For CREDIT_NOTE: force negative (or zero) values, regardless of line sign.
+  -- - For INVOICE: leave computed totals as-is (do NOT abs), so discounts/negative lines still work normally.
+  if v_type_norm in ('CREDIT_NOTE', 'CREDITNOTE') then
+    v_subtotal_ex_vat := -abs(coalesce(v_subtotal_ex_vat, 0));
+    v_vat_amount := -abs(coalesce(v_vat_amount, 0));
+    v_total_inc_vat := -abs(coalesce(v_total_inc_vat, 0));
+
+    -- Re-round after abs/sign enforcement (keeps consistent 2dp storage)
+    v_subtotal_ex_vat := round(v_subtotal_ex_vat, 2);
+    v_vat_amount := round(v_vat_amount, 2);
+    v_total_inc_vat := round(v_total_inc_vat, 2);
+  end if;
 
   update public.invoices
   set
@@ -749,4 +779,5 @@ begin
   );
 end;
 $$;
+
 
