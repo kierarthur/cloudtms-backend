@@ -103,6 +103,7 @@ $function$;
 -- ============================================================
 -- 2.7A: Bulk enqueue by occupant_key_norm (GCK) with lock/paid safety
 -- ============================================================
+
 create or replace function public.enqueue_tsfin_for_occ_key(
   p_occ_key_norm text,
   p_reason public.ts_fin_reason_enum default 'CONTEXT_CHANGED',
@@ -130,11 +131,6 @@ begin
     where ts.is_current = true
       and ts.revoked_at is null
       and ts.occupant_key_norm = v_norm
-      -- safety: don't enqueue if current TSFIN is locked/paid
-      and (
-        tf.timesheet_id is null
-        or (tf.locked_by_invoice_id is null and tf.paid_at_utc is null)
-      )
     limit p_limit
   )
   select
@@ -165,9 +161,6 @@ end;
 $function$;
 
 
--- ============================================================
--- 2.7B: Bulk enqueue by hospital_norm alias with lock/paid safety
--- ============================================================
 create or replace function public.enqueue_tsfin_for_hospital_norm(
   p_hospital_norm text,
   p_reason public.ts_fin_reason_enum default 'CONTEXT_CHANGED',
@@ -195,11 +188,6 @@ begin
     where ts.is_current = true
       and ts.revoked_at is null
       and ts.hospital_norm = v_norm
-      -- safety: don't enqueue if current TSFIN is locked/paid
-      and (
-        tf.timesheet_id is null
-        or (tf.locked_by_invoice_id is null and tf.paid_at_utc is null)
-      )
     limit p_limit
   )
   select
