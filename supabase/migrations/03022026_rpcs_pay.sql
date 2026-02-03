@@ -349,6 +349,9 @@ declare
   v_credit_note_ids uuid[] := array[]::uuid[];
 
   v_pdf_jobs_enqueued int := 0;
+
+  v_import_source_system text;
+  v_shift_source_system text;
 begin
   -- Validate import exists (transactional safety)
   if not exists (
@@ -357,6 +360,17 @@ begin
     where hi.id = p_import_id
   ) then
     raise exception 'weekly_import_apply_cancellations: import % not found in hr_imports.', p_import_id;
+  end if;
+
+  -- Load import source system for cross-system safety guards
+  select upper(coalesce(hi2.source_system::text,''))
+  into v_import_source_system
+  from public.hr_imports hi2
+  where hi2.id = p_import_id
+  limit 1;
+
+  if v_import_source_system is null or v_import_source_system = '' then
+    raise exception 'weekly_import_apply_cancellations: import % has no source_system.', p_import_id;
   end if;
 
   -- Validate actions payload
@@ -401,19 +415,31 @@ begin
       raise exception 'weekly_import_apply_cancellations: item % has invalid shift_id "%".', v_idx, v_shift_id_text;
     end;
 
-    -- Lock shift row (serializes concurrent apply)
+    -- Lock shift row (serializes concurrent apply) + load source_system
     select
       ns.timesheet_id,
-      ns.invoice_id
+      ns.invoice_id,
+      upper(coalesce(ns.source_system::text,'')) as shift_source_system
     into
       v_timesheet_id,
-      v_invoice_id
+      v_invoice_id,
+      v_shift_source_system
     from public.nhsp_shifts ns
     where ns.id = v_shift_id
     for update;
 
     if not found then
       raise exception 'weekly_import_apply_cancellations: item % shift % not found in nhsp_shifts.', v_idx, v_shift_id;
+    end if;
+
+    -- Cross-system guard: cancellation must only operate on shifts from same source_system as the import
+    if v_shift_source_system is null or v_shift_source_system = '' then
+      raise exception 'weekly_import_apply_cancellations: item % shift % has no source_system.', v_idx, v_shift_id;
+    end if;
+
+    if v_shift_source_system <> v_import_source_system then
+      raise exception 'weekly_import_apply_cancellations: item % shift % source_system mismatch (import=% shift=%).',
+        v_idx, v_shift_id, v_import_source_system, v_shift_source_system;
     end if;
 
     -- Always record affected ids for return payload
@@ -540,7 +566,6 @@ begin
   );
 end;
 $$;
-
 
 create or replace function public.hr_weekly_validation_apply_send_emails(
   p_import_id uuid,
@@ -777,7 +802,6 @@ begin
   );
 end;
 $$;
-
 
 create or replace function public.hr_weekly_validation_preview(
   p_import_id uuid
@@ -1222,7 +1246,6 @@ begin
     from ts_entries_indexed t
     group by t.timesheet_id, t.work_date
   ),
-  -- Flatten HR entries for overlap matching
   hr_entries_flat as (
     select
       h.candidate_id,
@@ -1237,7 +1260,6 @@ begin
     from hr_with_we h
     where h.candidate_id is not null
   ),
-  -- For each worker entry, find HR matches by overlap >= 1 minute
   pairing_counts as (
     select
       w.timesheet_id,
@@ -1306,7 +1328,6 @@ begin
     from pairing_counts p
     group by p.timesheet_id, p.work_date
   ),
-  -- Day set = union of days present in HR import totals or worker schedule totals for this timesheet-week
   day_set as (
     select distinct
       tm.timesheet_id,
@@ -1468,7 +1489,7 @@ begin
       p.*,
       case
         when p.has_mismatch then
-          ('HEALTHROSTER_WEEKLY|validation|' || p_import_id::text || '|' || p.timesheet_id::text || '|' || p.week_ending_date::text || '|' || p.overall_status || '|' || coalesce(p.sig_text,''))
+          ('HEALTHROSTER_WEEKLY|validation|' || p.timesheet_id::text || '|' || p.week_ending_date::text || '|' || p.overall_status || '|' || coalesce(p.sig_text,''))
         else null
       end as issue_fingerprint
     from per_ts p
@@ -1491,6 +1512,7 @@ begin
           'candidate_name', ws.candidate_name,
           'week_ending_date', ws.week_ending_date::text,
           'timesheet_id', ws.timesheet_id::text,
+          'contract_id', tts.contract_id::text,
 
           'overall_status', ws.overall_status,
           'has_mismatch', ws.has_mismatch,
@@ -1498,7 +1520,7 @@ begin
 
           'issue_fingerprint', ws.issue_fingerprint,
           'emailed_already', ws.emailed_already,
-          'can_email', (ws.has_mismatch and v_recipient_email is not null and length(btrim(v_recipient_email)) > 0),
+          'can_email', (ws.has_mismatch and ws.timesheet_id is not null and v_recipient_email is not null and length(btrim(v_recipient_email)) > 0),
 
           'days', ws.days_json
         )
@@ -1507,7 +1529,10 @@ begin
       '[]'::jsonb
     )
   into v_rows
-  from with_sent ws;
+  from with_sent ws
+  left join public.timesheets tts
+    on tts.timesheet_id = ws.timesheet_id
+   and tts.is_current = true;
 
   select count(*)::int
   into v_unmapped_candidates
