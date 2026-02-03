@@ -32,6 +32,7 @@ as $$
   from input_ids i
   left join public.nhsp_shifts s
     on s.timesheet_id = i.timesheet_id
+   and s.cancelled_at_utc is null
   group by i.timesheet_id
   order by i.timesheet_id;
 $$;
