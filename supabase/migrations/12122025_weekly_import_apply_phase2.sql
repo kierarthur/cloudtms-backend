@@ -1,3 +1,4 @@
+
 create or replace function public.weekly_import_apply_phase2(
   p_import_id uuid,
   p_system_type text
@@ -36,7 +37,7 @@ begin
     from public.weekly_import_phase2(p_import_id, v_sys)
   ),
 
-  -- Current shift state + “safe to repair?” flags
+  -- Current shift state + informational finance flags (NOT used to block)
   cur as (
     select
       p2.hr_row_id,
@@ -59,19 +60,6 @@ begin
       fin.locked_by_invoice_id as fin_locked_by_invoice_id,
       fin.paid_at_utc          as fin_paid_at_utc,
 
-      -- if there is no current TSFIN row, treat as “safe/unlocked” for repair purposes
-      (fin.timesheet_id is null) as tsfin_missing,
-
-      -- Safe if:
-      --  - shift not linked to TS yet, OR
-      --  - no current TSFIN row exists, OR
-      --  - current TSFIN exists and is not paid and not invoice-locked
-      (
-        s.timesheet_id is null
-        or fin.timesheet_id is null
-        or (fin.locked_by_invoice_id is null and fin.paid_at_utc is null)
-      ) as safe_to_move,
-
       -- Only detach/reassign if anything differs vs Phase2
       (
         (s.candidate_id is distinct from p2.candidate_id)
@@ -89,33 +77,22 @@ begin
      and fin.is_current   = true
   ),
 
-  -- Apply Phase2 mapping into nhsp_shifts with safe repair:
-  -- - if safe_to_move AND needs_reassign: detach from old timesheet (timesheet_id=NULL) and overwrite ids/contract
-  -- - if NOT safe_to_move (paid/locked): do NOT change anything
+  -- Apply Phase2 mapping into nhsp_shifts:
+  -- POLICY: paid/locked does NOT block truth repair. If Phase2 says OK and needs_reassign, detach+overwrite.
   upd as (
     update public.nhsp_shifts s
     set
       updated_at = now(),
 
-      -- Only update mapping when safe (prevents moving paid/invoiced weeks implicitly)
-      contract_id = case
-        when coalesce(cur.safe_to_move,false) then cur.p2_contract_id
-        else s.contract_id
-      end,
+      -- Update mapping keys from Phase2
+      contract_id = cur.p2_contract_id,
 
-      candidate_id = case
-        when coalesce(cur.safe_to_move,false) then coalesce(cur.p2_candidate_id, s.candidate_id)
-        else s.candidate_id
-      end,
+      candidate_id = coalesce(cur.p2_candidate_id, s.candidate_id),
+      client_id    = coalesce(cur.p2_client_id, s.client_id),
 
-      client_id = case
-        when coalesce(cur.safe_to_move,false) then coalesce(cur.p2_client_id, s.client_id)
-        else s.client_id
-      end,
-
-      -- If we are changing any of the mapping keys AND it is safe, detach so Apply can re-link correctly
+      -- If mapping keys differ, detach so downstream relink/rebuild runs correctly
       timesheet_id = case
-        when coalesce(cur.safe_to_move,false) and coalesce(cur.needs_reassign,false) then null
+        when coalesce(cur.needs_reassign,false) then null
         else s.timesheet_id
       end
 
@@ -126,9 +103,7 @@ begin
       and s.external_row_key = cur.external_row_key
       and s.latest_import_id = p_import_id
       and s.source_system    = v_src
-      and coalesce(cur.safe_to_move,false) = true
       and (
-        -- only do work if something would actually change
         coalesce(cur.needs_reassign,false) = true
         or s.contract_id is distinct from cur.p2_contract_id
       )
@@ -145,22 +120,22 @@ begin
     cur.week_ending_date,
     cur.p2_contract_id  as contract_id,
 
-    -- Override action/reason when Phase2 says OK but we cannot safely detach/reassign
-    case
-      when cur.p2_action = 'OK'
-        and coalesce(cur.needs_reassign,false) = true
-        and coalesce(cur.safe_to_move,false) = false
-        and cur.shift_id is not null
-      then 'BLOCK_LOCKED_OR_PAID'
-      else cur.p2_action
-    end as action,
+    -- No paid/locked blocking in Phase2. Keep Phase2 action as-is.
+    cur.p2_action as action,
 
+    -- If we did a detach/reassign and it was paid/locked, provide an informational reason (not a block).
     case
       when cur.p2_action = 'OK'
         and coalesce(cur.needs_reassign,false) = true
-        and coalesce(cur.safe_to_move,false) = false
         and cur.shift_id is not null
-      then 'Shift is linked to a timesheet that is paid and/or invoice-locked; cannot reassign automatically.'
+        and (cur.fin_locked_by_invoice_id is not null or cur.fin_paid_at_utc is not null)
+      then
+        case
+          when nullif(btrim(coalesce(cur.p2_reason,'')),'') is null
+          then 'Shift was linked to a paid and/or invoice-locked timesheet; truth was updated and shift detached. Issued invoices remain immutable; any financial correction must be represented by standard reversal/adjustment artefacts.'
+          else cur.p2_reason || ' ' ||
+               'Shift was linked to a paid and/or invoice-locked timesheet; truth was updated and shift detached. Issued invoices remain immutable; any financial correction must be represented by standard reversal/adjustment artefacts.'
+        end
       else cur.p2_reason
     end as reason,
 
