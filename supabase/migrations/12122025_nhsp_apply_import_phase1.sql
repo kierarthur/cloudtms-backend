@@ -60,8 +60,9 @@ begin
 
   ----------------------------------------------------------------
   -- 1) Prepare / resolve all relevant hr_rows
-  -- NOTE: Selection is enforced by p_skip_external_row_keys / p_force_overwrite_external_row_keys.
-  -- We do not rely on group_key/selected_group_ids for correctness.
+  -- Selection enforced by:
+  --  - SKIP list for unticked rows
+  --  - FORCE list for ticked rows (when FORCE list provided)
   ----------------------------------------------------------------
   with raw as (
     select
@@ -115,6 +116,11 @@ begin
         or array_length(p_skip_external_row_keys, 1) is null
         or external_row_key is null
         or external_row_key <> all(p_skip_external_row_keys)
+      )
+      and (
+        p_force_overwrite_external_row_keys is null
+        or array_length(p_force_overwrite_external_row_keys, 1) is null
+        or (external_row_key is not null and external_row_key = any(p_force_overwrite_external_row_keys))
       )
   ),
   resolved as (
@@ -349,7 +355,6 @@ begin
     set
       latest_import_id = p_import_id,
 
-      -- metadata updates are always ok
       staff_name       = nullif(u.staff_name, ''),
       staff_norm       = nullif(lower(u.staff_name), ''),
       ward             = nullif(u.ward, ''),
@@ -360,18 +365,15 @@ begin
       source_system    = 'NHSP'::hr_source_enum,
       updated_at       = now(),
 
-      -- If the shift was previously cancelled, and this row is applied (not skipped), clear cancellation unconditionally
       cancelled_at_utc = null,
       cancelled_by_import_id = null,
       cancelled_reason = null,
 
-      -- time fields update when SAFE or (ticked) FORCE
       start_utc        = case when u.should_overwrite_time then u.start_utc else s.start_utc end,
       end_utc          = case when u.should_overwrite_time then u.end_utc   else s.end_utc   end,
       break_mins       = case when u.should_overwrite_time then coalesce(u.break_mins, 0) else s.break_mins end,
       pay_minutes      = case when u.should_overwrite_time then greatest(0, u.pay_minutes) else s.pay_minutes end,
 
-      -- candidate/client mapping remains safe-gated (unchanged behaviour)
       candidate_id     = case
                            when u.new_candidate_id is not null and u.safe_to_overwrite
                              then u.new_candidate_id
@@ -411,4 +413,3 @@ begin
   );
 end;
 $$;
-
