@@ -13,6 +13,23 @@
 --   - we still update metadata (latest_import_id, staff/ward/ref/assignment) and keep candidate/client mapping safe-gated.
 --
 -- Returns: jsonb summary with counts.
+-- nhsp_apply_import_phase1: Phase 1 of NHSP apply in Postgres
+-- - hr_rows (for given import_id)
+--   → nhsp_shifts (upsert)
+--   → auto candidate_id / client_id mapping
+--
+-- LOCKED CONTRACT (per your instruction):
+-- - Unticked rows → external_row_key must be included in p_skip_external_row_keys so Phase-1 does not touch them at all.
+-- - Ticked rows (incl RED) → external_row_key must be included in p_force_overwrite_external_row_keys.
+--   This is the technical representation of “user ticked apply”.
+--
+-- FINAL POLICY CHANGES IMPLEMENTED HERE:
+-- - Paid/locked/invoiced never block truth updates when ticked (i.e. when in FORCE list).
+-- - If an existing shift is currently cancelled (cancelled_at_utc is not null) and the row is applied (not skipped),
+--   Phase-1 clears cancelled_at_utc/cancelled_by_import_id/cancelled_reason unconditionally.
+-- - Phase-1 does NOT reattach timesheets; timesheet_id is not modified here.
+--
+-- Returns: jsonb summary with counts.
 
 create or replace function public.nhsp_apply_import_phase1(
   p_import_id uuid,
@@ -43,6 +60,8 @@ begin
 
   ----------------------------------------------------------------
   -- 1) Prepare / resolve all relevant hr_rows
+  -- NOTE: Selection is enforced by p_skip_external_row_keys / p_force_overwrite_external_row_keys.
+  -- We do not rely on group_key/selected_group_ids for correctness.
   ----------------------------------------------------------------
   with raw as (
     select
@@ -77,17 +96,12 @@ begin
       )                              as ref_num,
       coalesce(
         nullif((r.payload_json ->> 'assignment_code'), ''),
-        nullif((r.payload_json ->> 'assignment'), ''),          -- ✅ parser writes payload_json.assignment
+        nullif((r.payload_json ->> 'assignment'), ''),
         nullif((r.payload_json ->> 'Request_Grade'), ''),
         nullif(r.assignment_grade_norm, '')
-      )                              as assignment_code,
-      coalesce(
-        nullif((r.payload_json ->> 'group_key'), ''),
-        nullif((r.payload_json ->> 'group_id'), '')
-      )                              as group_key
+      )                              as assignment_code
     from public.hr_rows r
     where r.import_id = p_import_id
-      -- Only rows with usable dates/times
       and r.date_local is not null
       and (r.payload_json ->> 'start_utc') is not null
       and (r.payload_json ->> 'end_utc')   is not null
@@ -97,11 +111,6 @@ begin
     from raw
     where
       (
-        p_selected_group_ids is null
-        or array_length(p_selected_group_ids, 1) is null
-        or group_key = any(p_selected_group_ids)
-      )
-      and (
         p_skip_external_row_keys is null
         or array_length(p_skip_external_row_keys, 1) is null
         or external_row_key is null
@@ -116,21 +125,18 @@ begin
       n.trust_lc,
       n.trust_norm,
 
-      -- Compute pay_minutes (for completeness; not heavily used)
       greatest(
         0,
         (extract(epoch from (src.end_utc - src.start_utc)) / 60)::int
         - src.break_mins
       ) as pay_minutes,
 
-      -- Candidate mapping precedence:
       coalesce(
         cand_alias.id,
         cand_map.candidate_id,
         cand_exact_unique.candidate_id
       ) as candidate_id,
 
-      -- Client mapping:
       coalesce(
         cli_alias.client_id,
         cli_name.client_id
@@ -219,9 +225,6 @@ begin
     ) cli_name on (cli_alias.client_id is null)
   ),
 
-  ----------------------------------------------------------------
-  -- Current TSFIN state per timesheet
-  ----------------------------------------------------------------
   fin_current as (
     select distinct on (tf.timesheet_id)
       tf.timesheet_id,
@@ -259,9 +262,9 @@ begin
       p_import_id,
       'NHSP'::hr_source_enum,
       nullif(r.staff_name, ''),
-      nullif(lower(r.staff_name), ''),    -- keep existing stored format
+      nullif(lower(r.staff_name), ''),
       nullif(r.ward, ''),
-      nullif(lower(r.ward), ''),          -- keep existing stored format
+      nullif(lower(r.ward), ''),
       r.work_date,
       nullif(r.assignment_code, ''),
       nullif(r.ref_num, ''),
@@ -286,9 +289,6 @@ begin
       (client_id    is not null) as mapped_client
   ),
 
-  ----------------------------------------------------------------
-  -- Build update source rows with safe/blocked flags + force override
-  ----------------------------------------------------------------
   upd_src as (
     select
       s.external_row_key,
@@ -351,22 +351,27 @@ begin
 
       -- metadata updates are always ok
       staff_name       = nullif(u.staff_name, ''),
-      staff_norm       = nullif(lower(u.staff_name), ''),  -- keep existing stored format
+      staff_norm       = nullif(lower(u.staff_name), ''),
       ward             = nullif(u.ward, ''),
-      ward_norm        = nullif(lower(u.ward), ''),        -- keep existing stored format
+      ward_norm        = nullif(lower(u.ward), ''),
       work_date        = u.work_date,
       assignment_code  = nullif(u.assignment_code, ''),
       ref_num          = nullif(u.ref_num, ''),
       source_system    = 'NHSP'::hr_source_enum,
       updated_at       = now(),
 
-      -- IMPORTANT: time fields only update when SAFE or FORCED
+      -- If the shift was previously cancelled, and this row is applied (not skipped), clear cancellation unconditionally
+      cancelled_at_utc = null,
+      cancelled_by_import_id = null,
+      cancelled_reason = null,
+
+      -- time fields update when SAFE or (ticked) FORCE
       start_utc        = case when u.should_overwrite_time then u.start_utc else s.start_utc end,
       end_utc          = case when u.should_overwrite_time then u.end_utc   else s.end_utc   end,
       break_mins       = case when u.should_overwrite_time then coalesce(u.break_mins, 0) else s.break_mins end,
       pay_minutes      = case when u.should_overwrite_time then greatest(0, u.pay_minutes) else s.pay_minutes end,
 
-      -- candidate/client mapping remains safe-gated (we do not need forced mapping for hours-only workflow)
+      -- candidate/client mapping remains safe-gated (unchanged behaviour)
       candidate_id     = case
                            when u.new_candidate_id is not null and u.safe_to_overwrite
                              then u.new_candidate_id
@@ -406,3 +411,4 @@ begin
   );
 end;
 $$;
+
