@@ -322,12 +322,11 @@ security definer
 set search_path = public
 as $$
 declare
+  v_now timestamptz := now();
+
   v_actions jsonb := coalesce(p_actions, '[]'::jsonb);
 
-  v_cancelled int := 0;
-  v_blocked int := 0;
-
-  v_blocked_items jsonb := '[]'::jsonb;
+  v_cancelled_count int := 0;
 
   v_idx int;
   v_item jsonb;
@@ -335,49 +334,65 @@ declare
   v_shift_id_text text;
   v_shift_id uuid;
   v_reason text;
-  v_force boolean;
 
   v_timesheet_id uuid;
-
   v_invoice_id uuid;
-  v_invoice_status text;
 
-  v_tf_locked_by_invoice_id uuid;
-  v_tf_paid_at_utc timestamptz;
+  v_invoice_status text;
+  v_invoice_credit_mark timestamptz;
+
+  v_credit_note_id uuid;
+  v_unlocked_snapshots int;
+
+  v_timesheet_ids uuid[] := array[]::uuid[];
+  v_invoice_ids uuid[] := array[]::uuid[];
+  v_credit_note_ids uuid[] := array[]::uuid[];
+
+  v_pdf_jobs_enqueued int := 0;
 begin
-  -- basic validation
+  -- Validate import exists (transactional safety)
+  if not exists (
+    select 1
+    from public.hr_imports hi
+    where hi.id = p_import_id
+  ) then
+    raise exception 'weekly_import_apply_cancellations: import % not found in hr_imports.', p_import_id;
+  end if;
+
+  -- Validate actions payload
   if jsonb_typeof(v_actions) <> 'array' then
     raise exception 'weekly_import_apply_cancellations: p_actions must be a JSON array.';
   end if;
 
-  if not exists (select 1 from public.hr_imports hi where hi.id = p_import_id) then
-    raise exception 'weekly_import_apply_cancellations: import % not found in hr_imports.', p_import_id;
+  if jsonb_array_length(v_actions) = 0 then
+    return jsonb_build_object(
+      'import_id', p_import_id,
+      'cancelled_count', 0,
+      'affected_timesheet_ids', to_jsonb(array[]::uuid[]),
+      'affected_invoice_ids', to_jsonb(array[]::uuid[]),
+      'credit_note_ids_created', to_jsonb(array[]::uuid[]),
+      'invoice_pdf_jobs_enqueued', 0
+    );
   end if;
 
-  -- iterate with ordinality for better error messages
+  -- Apply is transactional: any invalid selected row fails the whole apply.
   for v_idx, v_item in
     select (e.ord)::int, e.value
     from jsonb_array_elements(v_actions) with ordinality as e(value, ord)
   loop
-    v_shift_id_text := nullif(btrim(v_item->>'shift_id'), '');
-    v_reason := nullif(btrim(v_item->>'reason'), '');
-    if v_reason is null then
-      raise exception 'weekly_import_apply_cancellations: item % missing "reason".', v_idx;
+    -- Policy: no "force" mechanism other than ticking RED rows in preview.
+    if (v_item ? 'force') then
+      raise exception 'weekly_import_apply_cancellations: item % contains disallowed field "force" (policy forbids force/override).', v_idx;
     end if;
 
-    -- force must be boolean if present; default false
-    if (v_item ? 'force') then
-      begin
-        v_force := (v_item->>'force')::boolean;
-      exception when others then
-        raise exception 'weekly_import_apply_cancellations: item % has invalid "force" value (must be true/false).', v_idx;
-      end;
-    else
-      v_force := false;
-    end if;
+    v_shift_id_text := nullif(btrim(coalesce(v_item->>'shift_id','')), '');
+    v_reason := nullif(btrim(coalesce(v_item->>'reason','')), '');
 
     if v_shift_id_text is null then
       raise exception 'weekly_import_apply_cancellations: item % missing "shift_id".', v_idx;
+    end if;
+    if v_reason is null then
+      raise exception 'weekly_import_apply_cancellations: item % missing "reason".', v_idx;
     end if;
 
     begin
@@ -386,15 +401,13 @@ begin
       raise exception 'weekly_import_apply_cancellations: item % has invalid shift_id "%".', v_idx, v_shift_id_text;
     end;
 
-    -- lock the shift row
+    -- Lock shift row (serializes concurrent apply)
     select
       ns.timesheet_id,
-      ns.invoice_id,
-      ns.invoice_status
+      ns.invoice_id
     into
       v_timesheet_id,
-      v_invoice_id,
-      v_invoice_status
+      v_invoice_id
     from public.nhsp_shifts ns
     where ns.id = v_shift_id
     for update;
@@ -403,63 +416,128 @@ begin
       raise exception 'weekly_import_apply_cancellations: item % shift % not found in nhsp_shifts.', v_idx, v_shift_id;
     end if;
 
-    -- gate invoiced shifts unless force
-    if v_invoice_id is not null and not v_force then
-      v_blocked := v_blocked + 1;
-      v_blocked_items := v_blocked_items || jsonb_build_object(
-        'shift_id', v_shift_id,
-        'blocked_reason', 'SHIFT_INVOICED',
-        'invoice_id', v_invoice_id,
-        'invoice_status', v_invoice_status
-      );
-      continue;
+    -- Always record affected ids for return payload
+    if v_timesheet_id is not null then
+      v_timesheet_ids := array_append(v_timesheet_ids, v_timesheet_id);
+    end if;
+    if v_invoice_id is not null then
+      v_invoice_ids := array_append(v_invoice_ids, v_invoice_id);
     end if;
 
-    -- gate locked/paid timesheets unless force
-    if v_timesheet_id is not null then
+    -- If shift is linked to an invoice, apply invoice policy:
+    -- - DRAFT/ON_HOLD: editable, so remove the shift from that invoice and force PDF regen.
+    -- - ISSUED/PAID: immutable, so create reversal-only artefact via full credit note + unlock (idempotent via marker).
+    if v_invoice_id is not null then
+      -- Lock invoice row and load status + credit marker
       select
-        tf.locked_by_invoice_id,
-        tf.paid_at_utc
+        i.status::text,
+        i.credit_note_created_at_utc
       into
-        v_tf_locked_by_invoice_id,
-        v_tf_paid_at_utc
-      from public.timesheets_financials tf
-      where tf.timesheet_id = v_timesheet_id
-        and tf.is_current = true
-      limit 1;
+        v_invoice_status,
+        v_invoice_credit_mark
+      from public.invoices i
+      where i.id = v_invoice_id
+      for update;
 
-      if (v_tf_locked_by_invoice_id is not null or v_tf_paid_at_utc is not null) and not v_force then
-        v_blocked := v_blocked + 1;
-        v_blocked_items := v_blocked_items || jsonb_build_object(
-          'shift_id', v_shift_id,
-          'blocked_reason', 'TIMESHEET_LOCKED_OR_PAID',
-          'timesheet_id', v_timesheet_id,
-          'locked_by_invoice_id', v_tf_locked_by_invoice_id,
-          'paid_at_utc', v_tf_paid_at_utc
-        );
-        continue;
+      if not found then
+        raise exception 'weekly_import_apply_cancellations: item % invoice % not found in invoices.', v_idx, v_invoice_id;
+      end if;
+
+      if v_invoice_status in ('ISSUED','PAID') then
+        -- Issued/paid invoices are immutable: create reversal-only credit artefact if not already done
+        if v_invoice_credit_mark is null then
+          select
+            x.credit_note_id,
+            x.unlocked_snapshots
+          into
+            v_credit_note_id,
+            v_unlocked_snapshots
+          from public.invoice_create_credit_note_and_unlock(v_invoice_id, p_actor_user_id) x
+          limit 1;
+
+          if v_credit_note_id is null then
+            raise exception 'weekly_import_apply_cancellations: credit note creation returned null (invoice_id=%).', v_invoice_id;
+          end if;
+
+          update public.invoices i2
+          set
+            credit_note_created_at_utc = v_now,
+            updated_at = v_now
+          where i2.id = v_invoice_id
+            and i2.credit_note_created_at_utc is null;
+
+          v_credit_note_ids := array_append(v_credit_note_ids, v_credit_note_id);
+        end if;
+
+      else
+        -- Draft/On-hold invoices are editable: remove the shift from the invoice now.
+        perform 1
+        from public.invoice_remove_nhsp_shifts(v_invoice_id, array[v_shift_id]::uuid[], p_actor_user_id);
+
+        -- Invalidate/regenerate invoice PDF + attachments (force)
+        -- Clear PDF keys to prevent stale bundles; enqueue FORCE_REGEN job.
+        update public.invoices i3
+        set
+          invoice_pdf_r2_key = null,
+          invoice_pdf_generated_at_utc = null,
+          updated_at = v_now
+        where i3.id = v_invoice_id;
+
+        v_pdf_jobs_enqueued := v_pdf_jobs_enqueued + public.invpdf_enqueue_one(v_invoice_id, true);
       end if;
     end if;
 
-    -- apply cancellation + detach from timesheet
-    update public.nhsp_shifts ns
+    -- Apply cancellation data state: mark cancelled + detach (no deletions)
+    update public.nhsp_shifts ns2
     set
-      cancelled_at_utc = now(),
+      cancelled_at_utc = v_now,
       cancelled_by_import_id = p_import_id,
       cancelled_reason = v_reason,
       timesheet_id = null
-    where ns.id = v_shift_id;
+    where ns2.id = v_shift_id;
 
-    v_cancelled := v_cancelled + 1;
+    v_cancelled_count := v_cancelled_count + 1;
+
+    -- TSFIN recompute is mandatory for any cancel/detach/change.
+    -- We mark current TSFIN stale and enqueue priority recompute.
+    if v_timesheet_id is not null then
+      update public.timesheets_financials tf
+      set
+        is_stale = true,
+        stale_reason = 'IMPORT_CANCEL_DETACH',
+        updated_at = v_now
+      where tf.is_current = true
+        and tf.timesheet_id = v_timesheet_id;
+
+      perform public.enqueue_ts_financials_priority(array[v_timesheet_id]::uuid[], 'CONTEXT_CHANGED'::public.ts_fin_reason_enum);
+    end if;
+
   end loop;
+
+  -- Deduplicate id arrays for output
+  select coalesce(array_agg(distinct x), array[]::uuid[])
+  into v_timesheet_ids
+  from unnest(v_timesheet_ids) x
+  where x is not null;
+
+  select coalesce(array_agg(distinct x), array[]::uuid[])
+  into v_invoice_ids
+  from unnest(v_invoice_ids) x
+  where x is not null;
+
+  select coalesce(array_agg(distinct x), array[]::uuid[])
+  into v_credit_note_ids
+  from unnest(v_credit_note_ids) x
+  where x is not null;
 
   return jsonb_build_object(
     'import_id', p_import_id,
-    'cancelled_count', v_cancelled,
-    'blocked_count', v_blocked,
-    'blocked_items', v_blocked_items
+    'cancelled_count', v_cancelled_count,
+    'affected_timesheet_ids', to_jsonb(v_timesheet_ids),
+    'affected_invoice_ids', to_jsonb(v_invoice_ids),
+    'credit_note_ids_created', to_jsonb(v_credit_note_ids),
+    'invoice_pdf_jobs_enqueued', v_pdf_jobs_enqueued
   );
 end;
 $$;
-
 
