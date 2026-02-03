@@ -13,9 +13,28 @@
 --
 -- Returns counts so the Worker can log/display summary.
 
+
+
+-- Phase 1 of HealthRoster autoprocess apply (REVISED):
+-- hr_rows (for given import_id) -> nhsp_shifts (source_system = 'HEALTHROSTER')
+-- + candidate_id auto-mapping.
+--
+-- LOCKED CONTRACT (per your instruction):
+-- - Unticked rows → external_row_key must be included in p_skip_external_row_keys so Phase-1 does not touch them at all.
+-- - Ticked rows (incl RED) → external_row_key must be included in p_force_overwrite_external_row_keys.
+--   This is the technical representation of “user ticked apply”.
+--
+-- FINAL POLICY CHANGES IMPLEMENTED HERE:
+-- - Paid/locked/invoiced never block truth updates when ticked (i.e. when in FORCE list).
+-- - If an existing shift is currently cancelled (cancelled_at_utc is not null) and the row is applied (not skipped),
+--   Phase-1 clears cancelled_at_utc/cancelled_by_import_id/cancelled_reason unconditionally.
+-- - Phase-1 does NOT reattach timesheets; timesheet_id is not modified here.
+--
+-- NOTE: selected_group_ids remains unused (row-level selection is enforced by skip/force lists).
+
 create or replace function public.hr_autoprocess_apply_phase1(
   import_id uuid,
-  selected_group_ids text[] default null,               -- currently unused, kept for symmetry/future
+  selected_group_ids text[] default null,
   p_skip_external_row_keys text[] default null,
   p_force_overwrite_external_row_keys text[] default null
 )
@@ -39,9 +58,6 @@ begin
     raise exception 'hr_autoprocess_apply_phase1: import % not found or not HEALTHROSTER', import_id;
   end if;
 
-  ----------------------------------------------------------------
-  -- src: normalise hr_rows + payload, join to hr_imports for client_id
-  ----------------------------------------------------------------
   with src as (
     select
       r.id          as hr_row_id,
@@ -49,14 +65,12 @@ begin
       hi.client_id  as client_id,
       r.date_local  as work_date,
 
-      /* Staff name: payload.staff_name, else staff_raw / staff_norm */
       coalesce(
         nullif((r.payload_json ->> 'staff_name'), ''),
         nullif(r.staff_raw, ''),
         nullif(r.staff_norm, '')
       ) as staff_name,
 
-      /* Ward: payload.ward, else hints from hr_rows */
       coalesce(
         nullif((r.payload_json ->> 'ward'), ''),
         nullif(r.unit_hint, ''),
@@ -67,7 +81,6 @@ begin
       (r.payload_json ->> 'end_utc')::timestamptz   as end_utc,
       coalesce((r.payload_json ->> 'break_mins')::int, 0) as break_mins,
 
-      /* Finalised flags & HR request id */
       coalesce(
         nullif((r.payload_json ->> 'finalized_date'), ''),
         nullif((r.payload_json ->> 'finalised_date'), '')
@@ -87,10 +100,7 @@ begin
       s.client_id,
       s.work_date,
       s.staff_name,
-
-      -- keep existing behaviour for staff_norm output (lower+trim)
       lower(trim(s.staff_name)) as staff_norm,
-
       s.ward,
       lower(trim(s.ward))       as ward_norm,
       s.start_utc,
@@ -102,7 +112,6 @@ begin
            else null
       end as held_back_reason,
 
-      -- Compute or reuse external_row_key (same recipe as JS):
       coalesce(
         s.external_row_key,
         case
@@ -119,7 +128,6 @@ begin
     from src s
   ),
 
-  -- Apply SKIP list after external_row_key has been computed
   normed_filtered as (
     select *
     from normed n
@@ -130,32 +138,22 @@ begin
       or n.external_row_key <> all(p_skip_external_row_keys)
   ),
 
-  ----------------------------------------------------------------
-  -- Candidate auto-mapping:
-  --  1) aliases (legacy lower/trim OR symbol/space stripped)
-  --  2) hr_name_mappings (legacy OR stripped)
-  --  3) UNIQUE exact match on candidates (first+last OR last+first), stripped
-  ----------------------------------------------------------------
   resolved as (
     select
       n.*,
-
       coalesce(
         cand_alias.id,
         cand_map.candidate_id,
         cand_exact_unique.candidate_id
       ) as candidate_id
-
     from normed_filtered n
 
-    -- normalisations used for matching
     cross join lateral (
       select
         nullif(lower(trim(coalesce(n.staff_name,''))), '') as staff_lc,
         nullif(regexp_replace(lower(coalesce(n.staff_name,'')), '[^a-z0-9]+', '', 'g'), '') as staff_norm2
     ) nx
 
-    -- 1) candidate aliases via nhsp_hr_name_aliases (support legacy + stripped)
     left join lateral (
       select c.id
       from public.candidates c
@@ -168,7 +166,6 @@ begin
       limit 1
     ) cand_alias on true
 
-    -- 2) fallback via hr_name_mappings.hr_name_norm (support legacy + stripped)
     left join lateral (
       select hm.candidate_id
       from public.hr_name_mappings hm
@@ -182,7 +179,6 @@ begin
       limit 1
     ) cand_map on (cand_alias.id is null)
 
-    -- 3) UNIQUE exact candidate fallback (first+last OR last+first), symbols/spaces removed
     left join lateral (
       with matches as (
         select c.id as candidate_id
@@ -204,9 +200,6 @@ begin
     ) cand_exact_unique on (cand_alias.id is null and cand_map.candidate_id is null)
   ),
 
-  ----------------------------------------------------------------
-  -- Current TSFIN state per timesheet (keyed by timesheet_id)
-  ----------------------------------------------------------------
   fin_current as (
     select distinct on (tf.timesheet_id)
       tf.timesheet_id,
@@ -217,9 +210,6 @@ begin
     order by tf.timesheet_id, tf.created_at desc
   ),
 
-  ----------------------------------------------------------------
-  -- Update hr_rows.external_row_key where it was previously null/different
-  ----------------------------------------------------------------
   ext_update as (
     update public.hr_rows r
     set external_row_key = res.external_row_key
@@ -230,9 +220,6 @@ begin
     returning 1
   ),
 
-  ----------------------------------------------------------------
-  -- Insert new HEALTHROSTER shifts
-  ----------------------------------------------------------------
   ins as (
     insert into public.nhsp_shifts (
       external_row_key,
@@ -282,9 +269,6 @@ begin
       (candidate_id is not null) as mapped_candidate
   ),
 
-  ----------------------------------------------------------------
-  -- Build update source rows + SAFE overwrite + FORCE overwrite (time fields only)
-  ----------------------------------------------------------------
   upd_src as (
     select
       s.external_row_key,
@@ -338,23 +322,23 @@ begin
       on fc.timesheet_id = s.timesheet_id
   ),
 
-  ----------------------------------------------------------------
-  -- Update existing shifts with latest HR data (+ SAFE overwrite of ids; SAFE/FORCE overwrite of times)
-  ----------------------------------------------------------------
   upd as (
     update public.nhsp_shifts s
     set
       latest_import_id = hr_autoprocess_apply_phase1.import_id,
       source_system    = 'HEALTHROSTER'::hr_source_enum,
 
-      -- Work date / ward / request / held-back reason update (metadata)
       work_date        = u.work_date,
       ward             = nullif(u.ward, ''),
       hr_request_id    = u.request_id,
       held_back_reason = u.held_back_reason,
       updated_at       = now(),
 
-      -- Time fields only update when SAFE or FORCED
+      -- If the shift was previously cancelled, and this row is applied (not skipped), clear cancellation unconditionally
+      cancelled_at_utc = null,
+      cancelled_by_import_id = null,
+      cancelled_reason = null,
+
       start_utc        = case when u.should_overwrite_time then u.start_utc else s.start_utc end,
       end_utc          = case when u.should_overwrite_time then u.end_utc   else s.end_utc   end,
       break_mins       = case when u.should_overwrite_time then coalesce(u.break_mins, 0) else s.break_mins end,
@@ -367,7 +351,6 @@ begin
                          else s.pay_minutes
                          end,
 
-      -- Client/candidate mapping remains SAFE-gated
       client_id        = case
                            when u.new_client_id is not null and u.safe_to_overwrite
                              then u.new_client_id
@@ -385,9 +368,6 @@ begin
       (u.old_candidate_id is null and u.new_candidate_id is not null and u.safe_to_overwrite) as mapped_candidate
   )
 
-  ----------------------------------------------------------------
-  -- Aggregate counts
-  ----------------------------------------------------------------
   select
     coalesce((select count(*) from ins), 0),
     coalesce((select count(*) from upd), 0),
