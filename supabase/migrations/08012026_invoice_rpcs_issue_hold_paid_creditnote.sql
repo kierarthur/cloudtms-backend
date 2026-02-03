@@ -3115,6 +3115,7 @@ $$;
 --   - audit NHSP_INVOICE_SHIFT_REMOVED
 -- ------------------------------------------------------------
 
+
 create or replace function public.invoice_remove_nhsp_shifts(
   p_invoice_id uuid,
   p_shift_ids uuid[],
@@ -3157,6 +3158,8 @@ declare
   v_removed_ex numeric := 0;
   v_removed_vat numeric := 0;
   v_removed_inc numeric := 0;
+
+  v_pdf_jobs_enqueued int := 0;
 begin
   if p_invoice_id is null then
     raise exception 'invoice_id is required';
@@ -3230,9 +3233,22 @@ begin
     and (l.meta_json->>'nhsp_shift_id') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
     and (l.meta_json->>'nhsp_shift_id')::uuid = any(v_shift_ids);
 
-  -- 3) Recompute totals from remaining lines
+  -- 3) Recompute totals from remaining lines (also clears invoice_pdf_r2_key)
   perform public.invoice_recompute_totals(p_invoice_id);
--- 4) Unlock TSFIN if a timesheet now has no remaining lines on this invoice
+
+  -- 3.1) Invalidate cached render artifacts explicitly (policy: draft/on-hold must regen bundle/attachments)
+  update public.invoices i0
+  set
+    invoice_pdf_generated_at_utc = null,
+    invoice_render_manifest = null,
+    paper_ts_r2_manifest = null,
+    updated_at = v_now
+  where i0.id = p_invoice_id;
+
+  -- 3.2) Enqueue FORCE_REGEN invoice PDF bundle job (idempotent)
+  v_pdf_jobs_enqueued := public.invpdf_enqueue_one(p_invoice_id, true);
+
+  -- 4) Unlock TSFIN if a timesheet now has no remaining lines on this invoice
   update public.timesheets_financials tf
   set locked_by_invoice_id = null,
       updated_at = v_now
@@ -3305,6 +3321,7 @@ begin
       'new_vat_amount', public._inv_round2(v_new_vat),
       'new_total_inc_vat', public._inv_round2(v_new_inc),
 
+      'invoice_pdf_force_regen_enqueued', v_pdf_jobs_enqueued,
       'run_at_utc', public._inv_iso_utc(v_now),
       'run_kind', 'REMOVE_NHSP_SHIFTS'
     ),
@@ -3344,7 +3361,9 @@ begin
 
         'timesheet_ids_this_run', to_jsonb(coalesce(v_removed_ts_ids, array[]::uuid[])),
         'source_keys_this_run', to_jsonb(coalesce(v_removed_source_keys, array[]::text[])),
-        'line_count_this_run', coalesce(v_removed_line_count,0)
+        'line_count_this_run', coalesce(v_removed_line_count,0),
+
+        'invoice_pdf_force_regen_enqueued', v_pdf_jobs_enqueued
       ),
       null,
       p_actor_user_id
@@ -3360,6 +3379,8 @@ begin
   return next;
 end;
 $$;
+
+
 -- ============================================================
 -- CloudTMS Patch: invoice_render_manifest (UPDATED + FIXED v5)
 -- ============================================================
@@ -4121,8 +4142,6 @@ $$;
 
 
 -- 3.6 Credit note + unlock (needs unredacted JS parity source)
-
-
 create or replace function public.invoice_create_credit_note_and_unlock(
   p_invoice_id uuid,
   p_actor_user_id uuid
@@ -4168,15 +4187,18 @@ declare
 
   v_ts_ids uuid[];
 
-  v_cn_has_lines boolean := false;
-
   v_has_credit_note_created_at boolean := false;
+  v_inserted_lines int := 0;
+
+  v_cn_ex numeric := 0;
+  v_cn_vat numeric := 0;
+  v_cn_inc numeric := 0;
 begin
   if p_invoice_id is null then
     raise exception 'invoice_id is required';
   end if;
 
-  -- Detect optional A4 marker column (safe if migration not yet applied)
+  -- A4 marker column detection (safe even if migration not applied yet)
   begin
     select exists(
       select 1
@@ -4190,7 +4212,7 @@ begin
     v_has_credit_note_created_at := false;
   end;
 
-  -- Lock original invoice row (prevents concurrent double-credit creation)
+  -- Lock original invoice (prevents concurrent double-credit)
   select i.*
   into v_inv
   from public.invoices i
@@ -4201,23 +4223,28 @@ begin
     raise exception 'Invoice not found';
   end if;
 
+  if v_inv.type::text = 'CREDIT_NOTE' then
+    raise exception 'Cannot credit a CREDIT_NOTE';
+  end if;
+
   if jsonb_typeof(v_inv.header_snapshot_json) = 'object' then
     v_base_hdr := v_inv.header_snapshot_json;
   end if;
 
-  -- Idempotence: if a credit note already exists for this invoice, reuse it
+  -- Idempotence: reuse an existing credit note for this original invoice (if any)
   select i2.id
   into v_existing_credit_id
   from public.invoices i2
   where i2.original_invoice_id = p_invoice_id
     and i2.type::text = 'CREDIT_NOTE'
   order by i2.issued_at_utc desc nulls last, i2.created_at desc, i2.id desc
-  limit 1;
+  limit 1
+  for update;
 
   if v_existing_credit_id is not null then
     v_credit_id := v_existing_credit_id;
 
-    -- If A4 marker exists, ensure it's set on original invoice (idempotent)
+    -- Ensure A4 marker is set on original invoice (idempotent)
     if v_has_credit_note_created_at then
       execute
         'update public.invoices set credit_note_created_at_utc = coalesce(credit_note_created_at_utc, $1), updated_at = $1 where id = $2'
@@ -4240,25 +4267,22 @@ begin
 
     v_anchor_ymd := (v_original_issued_at at time zone 'Europe/London')::date;
 
-    -- Stationery key: prefer snapshot.stationery_key; else fallback constant
+    -- Stationery key
     v_stationery_key := nullif(btrim(coalesce(v_base_hdr->>'stationery_key','')), '');
     if v_stationery_key is null then
       v_stationery_key := 'Assets/Stationery/Letterhead/A4/Letterhead_v1@300dpi.png';
     end if;
 
-    -- pdf → @300dpi.png
     if right(lower(v_stationery_key), 4) = '.pdf' then
       v_stationery_key := left(v_stationery_key, length(v_stationery_key) - 4) || '@300dpi.png';
     end if;
 
-    -- strip leading slashes
     while left(v_stationery_key, 1) = '/' loop
       v_stationery_key := substr(v_stationery_key, 2);
     end loop;
 
-    -- Margins: accept [t,r,b,l] array or {top,right,bottom,left} object; else default
+    -- Margins
     v_margins := v_base_hdr->'stationery_margins_mm';
-
     if jsonb_typeof(v_margins) = 'array' and jsonb_array_length(v_margins) = 4 then
       v_margins := jsonb_build_object(
         'top',    coalesce((v_margins->>0)::numeric, 32),
@@ -4277,14 +4301,14 @@ begin
       v_margins := jsonb_build_object('top',32,'right',12,'bottom',20,'left',12);
     end if;
 
-    -- hide_bank_footer: snapshot boolean else default TRUE
+    -- hide_bank_footer default TRUE
     if jsonb_typeof(v_base_hdr->'hide_bank_footer') = 'boolean' then
       v_hide_bank_footer := (v_base_hdr->>'hide_bank_footer')::boolean;
     else
       v_hide_bank_footer := true;
     end if;
 
-    -- Bank + VAT registration: prefer snapshot, else settings_defaults(id=1)
+    -- Bank + VAT registration
     if jsonb_typeof(v_base_hdr->'bank') = 'object' then
       v_bank := v_base_hdr->'bank';
     else
@@ -4317,7 +4341,7 @@ begin
       end;
     end if;
 
-    -- Client info: prefer snapshot; else clients table
+    -- Client info
     v_client_name  := nullif(btrim(coalesce(v_base_hdr->>'client_name','')), '');
     v_client_addr  := nullif(btrim(coalesce(v_base_hdr->>'client_invoice_address','')), '');
     v_client_email := nullif(btrim(coalesce(v_base_hdr->>'client_primary_invoice_email','')), '');
@@ -4362,8 +4386,7 @@ begin
       end;
     end if;
 
-    -- Applied VAT % for the credit note:
-    -- Prefer original snapshot applied_vat_rate_pct, else compute anchored to original issued date.
+    -- VAT % (prefer original snapshot applied_vat_rate_pct; else compute anchored)
     v_applied_vat := null;
     if (v_base_hdr ? 'applied_vat_rate_pct') then
       begin
@@ -4432,8 +4455,8 @@ begin
         'vat_chargeable', coalesce(v_vat_chargeable, true),
         'applied_vat_rate_pct', coalesce(v_applied_vat, 0),
         'payment_terms_days', coalesce(v_terms_days, 30),
-        'issued_at_utc', to_jsonb(v_now),
-        'due_at_utc', to_jsonb(v_due_at),
+        'issued_at_utc', public._inv_iso_utc(v_now),
+        'due_at_utc', public._inv_iso_utc(v_due_at),
         'stationery_key', v_stationery_key,
         'stationery_margins_mm', v_margins,
         'hide_bank_footer', v_hide_bank_footer,
@@ -4443,13 +4466,13 @@ begin
           'source', 'CREDIT_NOTE',
           'original_invoice_id', v_inv.id::text,
           'vat_anchor_ymd', v_anchor_ymd::text,
-          'original_invoice_issued_at_utc', to_jsonb(v_original_issued_at)
+          'original_invoice_issued_at_utc', public._inv_iso_utc(v_original_issued_at)
         )
       )
     )
     returning id into v_credit_id;
 
-    -- If A4 marker exists, set it on original invoice (idempotent)
+    -- Ensure A4 marker is set on original invoice (idempotent)
     if v_has_credit_note_created_at then
       execute
         'update public.invoices set credit_note_created_at_utc = coalesce(credit_note_created_at_utc, $1), updated_at = $1 where id = $2'
@@ -4457,19 +4480,13 @@ begin
     end if;
   end if;
 
-  -- ------------------------------------------------------------
-  -- Ensure the credit note has mirror lines (negative monetary totals).
-  -- IMPORTANT: Do NOT double-insert if lines already exist (prevents double-credit).
-  -- ------------------------------------------------------------
-  select exists(
+  -- Insert negative mirror lines IF the credit note currently has no lines (idempotent safety)
+  if not exists (
     select 1
-    from public.invoice_lines il
-    where il.invoice_id = v_credit_id
+    from public.invoice_lines ln
+    where ln.invoice_id = v_credit_id
     limit 1
-  )
-  into v_cn_has_lines;
-
-  if not v_cn_has_lines then
+  ) then
     insert into public.invoice_lines(
       invoice_id, timesheet_id, booking_id, description,
       hours_day, hours_night, hours_sat, hours_sun, hours_bh,
@@ -4490,20 +4507,20 @@ begin
       l.pay_day, l.pay_night, l.pay_sat, l.pay_sun, l.pay_bh,
       l.charge_day, l.charge_night, l.charge_sat, l.charge_sun, l.charge_bh,
 
-      round(-1 * coalesce(l.total_pay_ex_vat,0)::numeric, 2),
-      round(-1 * coalesce(l.total_charge_ex_vat,0)::numeric, 2),
-      round(-1 * coalesce(l.margin_ex_vat,0)::numeric, 2),
+      public._inv_round2(-1 * coalesce(l.total_pay_ex_vat,0)),
+      public._inv_round2(-1 * coalesce(l.total_charge_ex_vat,0)),
+      public._inv_round2(-1 * coalesce(l.margin_ex_vat,0)),
 
       l.vat_rate_pct,
-      round(-1 * coalesce(l.vat_amount,0)::numeric, 2),
-      round(-1 * coalesce(l.total_inc_vat,0)::numeric, 2),
+      public._inv_round2(-1 * coalesce(l.vat_amount,0)),
+      public._inv_round2(-1 * coalesce(l.total_inc_vat,0)),
 
       l.paper_ts_r2_key,
 
       (coalesce(l.meta_json,'{}'::jsonb) ||
         jsonb_build_object(
           'credit_note', true,
-          'original_invoice_id', p_invoice_id::text,
+          'original_invoice_id', v_inv.id::text,
           'original_invoice_line_id', l.id::text
         )
       ),
@@ -4512,14 +4529,46 @@ begin
     from public.invoice_lines l
     where l.invoice_id = p_invoice_id
     on conflict (invoice_id, source_key) do nothing;
+
+    get diagnostics v_inserted_lines = row_count;
   end if;
 
-  -- Canonical totals recompute for the CREDIT NOTE (signed negative, clears PDF key)
+  -- Canonical totals recompute (also clears invoice_pdf_r2_key and enforces signed CREDIT_NOTE totals)
   perform public.invoice_recompute_totals(v_credit_id);
 
-  -- ------------------------------------------------------------
+  -- Load totals for audit (from invoice row after recompute)
+  select
+    coalesce(i.subtotal_ex_vat,0)::numeric,
+    coalesce(i.vat_amount,0)::numeric,
+    coalesce(i.total_inc_vat,0)::numeric
+  into v_cn_ex, v_cn_vat, v_cn_inc
+  from public.invoices i
+  where i.id = v_credit_id
+  limit 1;
+
+  -- Audit credit note creation / completion (best-effort)
+  begin
+    perform public._audit_insert(
+      'invoice',
+      v_credit_id::text,
+      'CREDIT_NOTE_CREATED',
+      null,
+      jsonb_build_object(
+        'credit_note_id', v_credit_id::text,
+        'original_invoice_id', v_inv.id::text,
+        'subtotal_ex_vat', public._inv_round2(v_cn_ex),
+        'vat_amount', public._inv_round2(v_cn_vat),
+        'total_inc_vat', public._inv_round2(v_cn_inc),
+        'mirror_lines_inserted', coalesce(v_inserted_lines,0)
+      ),
+      null,
+      p_actor_user_id
+    );
+  exception when others then
+    null;
+  end;
+
   -- Unlock snapshots locked by the original invoice
-  -- ------------------------------------------------------------
   select array_agg(distinct tf.timesheet_id)
   into v_ts_ids
   from public.timesheets_financials tf
@@ -4540,7 +4589,7 @@ begin
     where tf.is_current = true
       and tf.locked_by_invoice_id = p_invoice_id;
 
-    -- Enqueue recompute (idempotent)
+    -- Enqueue recompute (batch, idempotent)
     insert into public.ts_financials_outbox(timesheet_id, reason, attempt_count, next_attempt_at, last_error, created_at)
     select
       x.timesheet_id,
@@ -4552,7 +4601,6 @@ begin
     from (select unnest(v_ts_ids) as timesheet_id) x
     on conflict on constraint uq_tsfin_outbox do nothing;
 
-    -- Audit hook (best-effort; must not break function if audit function missing)
     begin
       perform public._audit_insert(
         'invoice',
@@ -4561,7 +4609,7 @@ begin
         null,
         jsonb_build_object(
           'credit_note_id', v_credit_id::text,
-          'original_invoice_id', p_invoice_id::text,
+          'original_invoice_id', v_inv.id::text,
           'timesheet_ids', to_jsonb(coalesce(v_ts_ids, array[]::uuid[])),
           'unlocked_count', unlocked_snapshots
         ),
@@ -4572,9 +4620,6 @@ begin
       null;
     end;
   end if;
-
-  -- Keep original invoice totals/PDF consistent after unlock (idempotent)
-  perform public.invoice_recompute_totals(p_invoice_id);
 
   credit_note_id := v_credit_id;
   return next;
