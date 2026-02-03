@@ -669,156 +669,6 @@ commit;
 
 begin;
 
-create table if not exists public.pay_item_snoozes (
-  id uuid primary key default gen_random_uuid(),
-
-  -- Identity of the preview line we are snoozing
-  candidate_id uuid not null,
-  timesheet_id uuid null,
-  segment_id text null,
-  source_ref text null, -- used for non-segment blocked items or future-proofing
-  snooze_kind text not null default 'DO_NOT_PAY',  -- DO_NOT_PAY | BLOCKED
-
-  -- Snooze window
-  snooze_until_date date null, -- NULL = forever
-
-  -- Audit
-  created_at_utc timestamptz not null default now(),
-  created_by_user_id uuid null,
-  note text null,
-
-  cleared_at_utc timestamptz null,
-  cleared_by_user_id uuid null
-);
-
--- Foreign keys (guarded for rerun safety)
-do $$
-begin
-  if not exists (
-    select 1
-    from pg_constraint c
-    join pg_class t on t.oid = c.conrelid
-    join pg_namespace n on n.oid = t.relnamespace
-    where n.nspname='public' and t.relname='pay_item_snoozes'
-      and c.conname='pay_item_snoozes_candidate_id_fkey'
-  ) then
-    alter table public.pay_item_snoozes
-      add constraint pay_item_snoozes_candidate_id_fkey
-      foreign key (candidate_id) references public.candidates(id) on delete cascade;
-  end if;
-
-  if to_regclass('public.timesheets') is not null then
-    if not exists (
-      select 1
-      from pg_constraint c
-      join pg_class t on t.oid = c.conrelid
-      join pg_namespace n on n.oid = t.relnamespace
-      where n.nspname='public' and t.relname='pay_item_snoozes'
-        and c.conname='pay_item_snoozes_timesheet_id_fkey'
-    ) then
-      alter table public.pay_item_snoozes
-        add constraint pay_item_snoozes_timesheet_id_fkey
-        foreign key (timesheet_id) references public.timesheets(timesheet_id) on delete cascade;
-    end if;
-  end if;
-
-  if to_regclass('public.tms_users') is not null then
-    if not exists (
-      select 1
-      from pg_constraint c
-      join pg_class t on t.oid = c.conrelid
-      join pg_namespace n on n.oid = t.relnamespace
-      where n.nspname='public' and t.relname='pay_item_snoozes'
-        and c.conname='pay_item_snoozes_created_by_user_id_fkey'
-    ) then
-      alter table public.pay_item_snoozes
-        add constraint pay_item_snoozes_created_by_user_id_fkey
-        foreign key (created_by_user_id) references public.tms_users(id) on delete set null;
-    end if;
-
-    if not exists (
-      select 1
-      from pg_constraint c
-      join pg_class t on t.oid = c.conrelid
-      join pg_namespace n on n.oid = t.relnamespace
-      where n.nspname='public' and t.relname='pay_item_snoozes'
-        and c.conname='pay_item_snoozes_cleared_by_user_id_fkey'
-    ) then
-      alter table public.pay_item_snoozes
-        add constraint pay_item_snoozes_cleared_by_user_id_fkey
-        foreign key (cleared_by_user_id) references public.tms_users(id) on delete set null;
-    end if;
-  end if;
-end$$;
-
--- Update snooze_kind check constraint to allow BLOCKED as well
-alter table public.pay_item_snoozes
-  drop constraint if exists pay_item_snoozes_kind_check;
-
-do $$
-begin
-  if not exists (
-    select 1
-    from pg_constraint c
-    join pg_class t on t.oid = c.conrelid
-    join pg_namespace n on n.oid = t.relnamespace
-    where n.nspname='public' and t.relname='pay_item_snoozes'
-      and c.conname='pay_item_snoozes_kind_check'
-  ) then
-    alter table public.pay_item_snoozes
-      add constraint pay_item_snoozes_kind_check
-      check (snooze_kind in ('DO_NOT_PAY','BLOCKED'));
-  end if;
-end$$;
-
--- Basic integrity: must identify something (segment_id or source_ref)
-do $$
-begin
-  if not exists (
-    select 1
-    from pg_constraint c
-    join pg_class t on t.oid = c.conrelid
-    join pg_namespace n on n.oid = t.relnamespace
-    where n.nspname='public' and t.relname='pay_item_snoozes'
-      and c.conname='pay_item_snoozes_identity_check'
-  ) then
-    alter table public.pay_item_snoozes
-      add constraint pay_item_snoozes_identity_check
-      check (
-        (segment_id is not null and timesheet_id is not null)
-        or source_ref is not null
-      );
-  end if;
-end$$;
-
--- Lookup index used by pay_preview: active snoozes by candidate/timesheet/segment
-create index if not exists idx_pay_item_snoozes_lookup
-  on public.pay_item_snoozes (candidate_id, timesheet_id, segment_id, snooze_kind)
-  where cleared_at_utc is null;
-
--- NEW: lookup index for non-segment snoozes (blocked items keyed by source_ref)
-create index if not exists idx_pay_item_snoozes_lookup_source_ref
-  on public.pay_item_snoozes (candidate_id, timesheet_id, source_ref, snooze_kind)
-  where cleared_at_utc is null and source_ref is not null;
-
--- Uniqueness: only one ACTIVE snooze per item identity+kind
-create unique index if not exists uq_pay_item_snoozes_active
-  on public.pay_item_snoozes (candidate_id, timesheet_id, segment_id, source_ref, snooze_kind)
-  where cleared_at_utc is null;
-
--- Optional PostgREST schema reload (safe wrapper)
-do $$
-begin
-  perform pg_notify('pgrst', 'reload schema');
-exception when others then
-  null;
-end$$;
-
-commit;
-
-
-begin;
-
 -- =========================================================
 -- pay_snooze_upsert
 -- Creates a new active snooze, or updates the snooze_until_date/note for an existing ACTIVE snooze
@@ -3527,186 +3377,8 @@ $$;
 -- =========================================================
 -- A4.9 pay_batches_list / pay_batch_get
 -- =========================================================
-create or replace function public.pay_batches_list(
-  p_limit int default 50,
-  p_offset int default 0,
-  p_status text default null
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_limit int := greatest(1, least(coalesce(p_limit,50), 500));
-  v_offset int := greatest(coalesce(p_offset,0), 0);
-  v_status text := upper(nullif(btrim(coalesce(p_status,'')), ''));
-  v_total int := 0;
-  v_rows jsonb := '[]'::jsonb;
-begin
-  select count(*)::int
-  into v_total
-  from public.pay_batches pb
-  where v_status is null or upper(coalesce(pb.status,'')) = v_status;
 
-  select coalesce(
-    jsonb_agg(
-      jsonb_build_object(
-        'id', pb.id::text,
-        'pay_date', pb.pay_date::text,
-        'created_at_utc', pb.created_at_utc,
-        'created_by_user_id', case when pb.created_by_user_id is null then null else pb.created_by_user_id::text end,
-        'status', pb.status,
-        'banking_system_snapshot', pb.banking_system_snapshot,
-        'external_paye_system_snapshot', pb.external_paye_system_snapshot,
-        'revolut_draft_id', pb.revolut_draft_id,
-        'monzo_confirmed_at_utc', pb.monzo_confirmed_at_utc,
-        'total_bank_out', pb.total_bank_out,
-        'total_debt_created', pb.total_debt_created
-      )
-      order by pb.created_at_utc desc, pb.id desc
-    ),
-    '[]'::jsonb
-  )
-  into v_rows
-  from (
-    select pb0.*
-    from public.pay_batches pb0
-    where v_status is null or upper(coalesce(pb0.status,'')) = v_status
-    order by pb0.created_at_utc desc, pb0.id desc
-    limit v_limit offset v_offset
-  ) pb;
 
-  return jsonb_build_object(
-    'ok', true,
-    'total_count', v_total,
-    'limit', v_limit,
-    'offset', v_offset,
-    'rows', v_rows
-  );
-end;
-$$;
-
-create or replace function public.pay_batch_get(p_pay_batch_id uuid)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_batch record;
-  v_candidates jsonb := '[]'::jsonb;
-  v_transfers jsonb := '[]'::jsonb;
-  v_items jsonb := '[]'::jsonb;
-begin
-  if p_pay_batch_id is null then
-    raise exception 'pay_batch_id is required';
-  end if;
-
-  select
-    pb.*
-  into v_batch
-  from public.pay_batches pb
-  where pb.id = p_pay_batch_id
-  limit 1;
-
-  if v_batch.id is null then
-    raise exception 'pay_batch not found';
-  end if;
-
-  select coalesce(
-    jsonb_agg(
-      jsonb_build_object(
-        'id', pbc.id::text,
-        'candidate_id', pbc.candidate_id::text,
-        'candidate_tms_ref', pbc.candidate_tms_ref,
-        'candidate_display_name', pbc.candidate_display_name,
-        'paye_state', pbc.paye_state,
-        'mismatch_settlement_choice', pbc.mismatch_settlement_choice,
-        'gross_preview', pbc.gross_preview,
-        'net_bank_amount', pbc.net_bank_amount,
-        'debt_created', pbc.debt_created,
-        'loan_repayment_taken', pbc.loan_repayment_taken,
-        'settlement_status', pbc.settlement_status,
-        'settled_at_utc', pbc.settled_at_utc,
-        'settled_via', pbc.settled_via,
-        'settled_note', pbc.settled_note
-      )
-      order by pbc.candidate_display_name nulls last, pbc.candidate_tms_ref nulls last, pbc.candidate_id
-    ),
-    '[]'::jsonb
-  )
-  into v_candidates
-  from public.pay_batch_candidates pbc
-  where pbc.pay_batch_id = p_pay_batch_id;
-
-  select coalesce(
-    jsonb_agg(
-      jsonb_build_object(
-        'id', pbt.id::text,
-        'candidate_id', case when pbt.candidate_id is null then null else pbt.candidate_id::text end,
-        'umbrella_id', case when pbt.umbrella_id is null then null else pbt.umbrella_id::text end,
-        'pay_channel', pbt.pay_channel,
-        'amount', pbt.amount,
-        'currency', pbt.currency,
-        'status', pbt.status,
-        'revolut_transaction_id', pbt.revolut_transaction_id,
-        'revolut_state', pbt.revolut_state
-      )
-      order by pbt.pay_channel, pbt.amount desc, pbt.id
-    ),
-    '[]'::jsonb
-  )
-  into v_transfers
-  from public.pay_bank_transfers pbt
-  where pbt.pay_batch_id = p_pay_batch_id;
-
-  select coalesce(
-    jsonb_agg(
-      jsonb_build_object(
-        'id', pbi.id::text,
-        'pay_batch_candidate_id', pbi.pay_batch_candidate_id::text,
-        'item_type', pbi.item_type,
-        'timesheet_id', case when pbi.timesheet_id is null then null else pbi.timesheet_id::text end,
-        'segment_key', pbi.segment_key,
-        'source_ref', pbi.source_ref,
-        'description', pbi.description,
-        'amount_ex_vat', pbi.amount_ex_vat,
-        'amount_vat', pbi.amount_vat,
-        'amount_inc_vat', pbi.amount_inc_vat,
-        'pay_channel', pbi.pay_channel,
-        'umbrella_id', case when pbi.umbrella_id is null then null else pbi.umbrella_id::text end
-      )
-      order by pbi.pay_batch_candidate_id, pbi.id
-    ),
-    '[]'::jsonb
-  )
-  into v_items
-  from public.pay_batch_items pbi
-  join public.pay_batch_candidates pbc on pbc.id = pbi.pay_batch_candidate_id
-  where pbc.pay_batch_id = p_pay_batch_id;
-
-  return jsonb_build_object(
-    'ok', true,
-    'batch', jsonb_build_object(
-      'id', v_batch.id::text,
-      'pay_date', v_batch.pay_date::text,
-      'created_at_utc', v_batch.created_at_utc,
-      'created_by_user_id', case when v_batch.created_by_user_id is null then null else v_batch.created_by_user_id::text end,
-      'status', v_batch.status,
-      'banking_system_snapshot', v_batch.banking_system_snapshot,
-      'external_paye_system_snapshot', v_batch.external_paye_system_snapshot,
-      'monzo_confirmed_at_utc', v_batch.monzo_confirmed_at_utc,
-      'monzo_confirmed_by_user_id', case when v_batch.monzo_confirmed_by_user_id is null then null else v_batch.monzo_confirmed_by_user_id::text end,
-      'revolut_draft_id', v_batch.revolut_draft_id,
-      'last_status_checked_at_utc', v_batch.last_status_checked_at_utc
-    ),
-    'candidates', v_candidates,
-    'transfers', v_transfers,
-    'items', v_items
-  );
-end;
-$$;
 
 -- =========================================================
 -- A4.10 pay_timesheet_impact_preview(p_timesheet_id)
@@ -4599,6 +4271,354 @@ $$;
 -- =========================================================
 -- A4.9 pay_batches_list / pay_batch_get
 -- =========================================================
+
+create or replace function public.pay_execute_bank(
+  p_pay_batch_id uuid,
+  p_pay_channel_scope text,
+  p_actor_user_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_scope text := upper(coalesce(p_pay_channel_scope,''));
+  v_batch record;
+
+  v_bulk_ref_num int;
+  v_bulk_ref_date date;
+  v_bulk_reference text;
+
+  v_missing int := 0;
+
+  v_transfers jsonb := '[]'::jsonb;
+begin
+  if p_pay_batch_id is null then
+    raise exception 'pay_batch_id is required';
+  end if;
+  if v_scope not in ('PAYE','UMBRELLA','ALL') then
+    raise exception 'Invalid pay_channel_scope (PAYE|UMBRELLA|ALL)';
+  end if;
+
+  -- Lock the batch row to prevent concurrent execution / bulk ref allocation races
+  select
+    pb.id,
+    pb.status,
+    pb.pay_date,
+    pb.banking_system_snapshot,
+    pb.external_paye_system_snapshot,
+    pb.bulk_ref_num,
+    pb.bulk_ref_date,
+    pb.bulk_reference
+  into v_batch
+  from public.pay_batches pb
+  where pb.id = p_pay_batch_id
+  for update;
+
+  if v_batch.id is null then
+    raise exception 'pay_batch not found';
+  end if;
+  if v_batch.status <> 'DRAFT' then
+    raise exception 'pay_batch must be DRAFT to execute (current=%)', v_batch.status;
+  end if;
+
+  -- Allocate bulk reference ONCE per batch (digits-only canonical)
+  if v_batch.bulk_reference is null then
+    v_bulk_ref_num := v_batch.bulk_ref_num;
+    if v_bulk_ref_num is null then
+      v_bulk_ref_num := nextval('public.pay_bulk_ref_seq')::int;
+    end if;
+
+    v_bulk_ref_date := coalesce(v_batch.bulk_ref_date, v_batch.pay_date);
+    if v_bulk_ref_date is null then
+      raise exception 'pay_batch pay_date is required to allocate bulk_reference';
+    end if;
+
+    v_bulk_reference := to_char(v_bulk_ref_date, 'DDMMYYYY') || lpad(v_bulk_ref_num::text, 7, '0');
+
+    update public.pay_batches pb2
+    set bulk_ref_num = v_bulk_ref_num,
+        bulk_ref_date = v_bulk_ref_date,
+        bulk_reference = v_bulk_reference
+    where pb2.id = p_pay_batch_id;
+
+    v_batch.bulk_ref_num := v_bulk_ref_num;
+    v_batch.bulk_ref_date := v_bulk_ref_date;
+    v_batch.bulk_reference := v_bulk_reference;
+  else
+    v_bulk_ref_num := v_batch.bulk_ref_num;
+    v_bulk_ref_date := v_batch.bulk_ref_date;
+    v_bulk_reference := v_batch.bulk_reference;
+  end if;
+
+  -- Validate PAYE net inputs if PAYE is being executed
+  if v_scope in ('PAYE','ALL') then
+    -- Ensure every PAYE candidate in this batch is READY and has a net input
+    if exists (
+      select 1
+      from public.pay_batch_candidates pbc
+      where pbc.pay_batch_id = p_pay_batch_id
+        and pbc.paye_state is not null
+        and pbc.paye_state <> 'READY'
+      limit 1
+    ) then
+      raise exception 'PAYE_NOT_READY: some PAYE candidates are not READY';
+    end if;
+
+    if exists (
+      select 1
+      from public.pay_batch_candidates pbc
+      left join lateral (
+        select pni.net_amount
+        from public.pay_batch_paye_net_inputs pni
+        where pni.pay_batch_candidate_id = pbc.id
+        order by pni.imported_at_utc desc
+        limit 1
+      ) ni on true
+      where pbc.pay_batch_id = p_pay_batch_id
+        and pbc.paye_state is not null
+        and ni.net_amount is null
+      limit 1
+    ) then
+      raise exception 'PAYE_NET_MISSING: missing net pay for one or more PAYE candidates';
+    end if;
+
+    -- Create pay_bank_transfers for PAYE
+    insert into public.pay_bank_transfers(
+      pay_batch_id,
+      candidate_id,
+      umbrella_id,
+      pay_channel,
+      amount,
+      currency,
+      status,
+      payment_reference,
+      payee_name,
+      sort_code,
+      account_number,
+      account_type,
+      revolut_counterparty_id,
+      revolut_counterparty_account_id
+    )
+    select
+      p_pay_batch_id,
+      pbc.candidate_id,
+      null,
+      'PAYE',
+      round(ni.net_amount, 2),
+      'GBP',
+      'PENDING',
+
+      -- payment_reference (keep simple; candidate display name preferred)
+      nullif(btrim(coalesce(c.display_name, concat_ws(' ', c.first_name, c.last_name))), ''),
+
+      -- payee_name (account holder preferred)
+      nullif(btrim(coalesce(c.account_holder, c.display_name, concat_ws(' ', c.first_name, c.last_name))), ''),
+
+      -- sort_code normalised to NN-NN-NN when possible
+      case
+        when length(regexp_replace(coalesce(c.sort_code,''), '[^0-9]', '', 'g')) = 6 then
+          substr(regexp_replace(coalesce(c.sort_code,''), '[^0-9]', '', 'g'), 1, 2) || '-' ||
+          substr(regexp_replace(coalesce(c.sort_code,''), '[^0-9]', '', 'g'), 3, 2) || '-' ||
+          substr(regexp_replace(coalesce(c.sort_code,''), '[^0-9]', '', 'g'), 5, 2)
+        else null
+      end,
+
+      -- account_number digits only (preserves leading zeros)
+      nullif(regexp_replace(coalesce(c.account_number,''), '[^0-9]', '', 'g'), ''),
+
+      'Personal',
+
+      -- Revolut snapshot (only required in REVOLUT_API mode; safe to store always)
+      c.revolut_counterparty_id,
+      c.revolut_counterparty_account_id
+
+    from public.pay_batch_candidates pbc
+    join public.candidates c
+      on c.id = pbc.candidate_id
+    join lateral (
+      select pni.net_amount
+      from public.pay_batch_paye_net_inputs pni
+      where pni.pay_batch_candidate_id = pbc.id
+      order by pni.imported_at_utc desc
+      limit 1
+    ) ni on true
+    where pbc.pay_batch_id = p_pay_batch_id
+      and pbc.paye_state is not null
+      and round(coalesce(ni.net_amount,0),2) > 0;
+  end if;
+
+  -- Create umbrella transfers if UMBRELLA is being executed
+  if v_scope in ('UMBRELLA','ALL') then
+    insert into public.pay_bank_transfers(
+      pay_batch_id,
+      candidate_id,
+      umbrella_id,
+      pay_channel,
+      amount,
+      currency,
+      status,
+      payment_reference,
+      payee_name,
+      sort_code,
+      account_number,
+      account_type,
+      revolut_counterparty_id,
+      revolut_counterparty_account_id
+    )
+    select
+      p_pay_batch_id,
+      pbc.candidate_id,
+      c.umbrella_id,
+      'UMBRELLA',
+      round(greatest(coalesce(sum(pbi.amount_inc_vat),0),0),2),
+      'GBP',
+      'PENDING',
+
+      -- REQUIRED RULE: "Surname FirstName" truncated to 18 characters (crop end first)
+      left(
+        btrim(concat_ws(' ', nullif(btrim(c.last_name),''), nullif(btrim(c.first_name),''))),
+        18
+      ),
+
+      -- payee_name from umbrella (account_holder preferred, else name)
+      nullif(btrim(coalesce(u.account_holder, u.name)), ''),
+
+      -- sort_code normalised to NN-NN-NN when possible
+      case
+        when length(regexp_replace(coalesce(u.sort_code,''), '[^0-9]', '', 'g')) = 6 then
+          substr(regexp_replace(coalesce(u.sort_code,''), '[^0-9]', '', 'g'), 1, 2) || '-' ||
+          substr(regexp_replace(coalesce(u.sort_code,''), '[^0-9]', '', 'g'), 3, 2) || '-' ||
+          substr(regexp_replace(coalesce(u.sort_code,''), '[^0-9]', '', 'g'), 5, 2)
+        else null
+      end,
+
+      -- account_number digits only (preserves leading zeros)
+      nullif(regexp_replace(coalesce(u.account_number,''), '[^0-9]', '', 'g'), ''),
+
+      'Business',
+
+      -- Revolut snapshot (required in REVOLUT_API mode)
+      u.revolut_counterparty_id,
+      u.revolut_counterparty_account_id
+
+    from public.pay_batch_candidates pbc
+    join public.candidates c
+      on c.id = pbc.candidate_id
+    join public.umbrellas u
+      on u.id = c.umbrella_id
+    join public.pay_batch_items pbi
+      on pbi.pay_batch_candidate_id = pbc.id
+     and pbi.pay_channel = 'UMBRELLA'
+     and pbi.item_type <> 'DEBT_CREATED'
+    where pbc.pay_batch_id = p_pay_batch_id
+      and c.umbrella_id is not null
+    group by
+      pbc.candidate_id,
+      c.umbrella_id,
+      c.first_name,
+      c.last_name,
+      u.account_holder,
+      u.name,
+      u.sort_code,
+      u.account_number,
+      u.revolut_counterparty_id,
+      u.revolut_counterparty_account_id
+    having round(greatest(coalesce(sum(pbi.amount_inc_vat),0),0),2) > 0;
+  end if;
+
+  -- Validate required snapshot fields based on banking system
+  if v_batch.banking_system_snapshot in ('MONZO_CSV','REVOLUT_CSV') then
+    select count(*)::int
+    into v_missing
+    from public.pay_bank_transfers pbt_chk
+    where pbt_chk.pay_batch_id = p_pay_batch_id
+      and (v_scope = 'ALL' or pbt_chk.pay_channel = v_scope)
+      and pbt_chk.status = 'PENDING'
+      and (
+        pbt_chk.payment_reference is null
+        or pbt_chk.payee_name is null
+        or pbt_chk.sort_code is null
+        or pbt_chk.account_number is null
+        or pbt_chk.account_type is null
+      );
+
+    if v_missing > 0 then
+      raise exception 'BANK_DETAILS_MISSING: % transfer(s) missing payment_reference/payee_name/sort_code/account_number/account_type', v_missing;
+    end if;
+  end if;
+
+  if v_batch.banking_system_snapshot = 'REVOLUT_API' then
+    select count(*)::int
+    into v_missing
+    from public.pay_bank_transfers pbt_rv
+    where pbt_rv.pay_batch_id = p_pay_batch_id
+      and (v_scope = 'ALL' or pbt_rv.pay_channel = v_scope)
+      and pbt_rv.status = 'PENDING'
+      and (
+        pbt_rv.revolut_counterparty_id is null
+        or pbt_rv.revolut_counterparty_account_id is null
+      );
+
+    if v_missing > 0 then
+      raise exception 'REVOLUT_COUNTERPARTY_MISSING: % transfer(s) missing revolut_counterparty_id/revolut_counterparty_account_id', v_missing;
+    end if;
+  end if;
+
+  -- Update batch status based on banking system snapshot
+  update public.pay_batches pb3
+  set status = case
+    when pb3.banking_system_snapshot in ('MONZO_CSV','REVOLUT_CSV') then 'WAITING_BANK_CONFIRM'
+    when pb3.banking_system_snapshot = 'REVOLUT_API' then 'DRAFT_CREATED'
+    else 'WAITING_BANK_CONFIRM'
+  end
+  where pb3.id = p_pay_batch_id;
+
+  -- Return created transfers for this execution (including snapshot fields)
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'id', pbt.id::text,
+        'pay_batch_id', pbt.pay_batch_id::text,
+        'candidate_id', case when pbt.candidate_id is null then null else pbt.candidate_id::text end,
+        'umbrella_id', case when pbt.umbrella_id is null then null else pbt.umbrella_id::text end,
+        'pay_channel', pbt.pay_channel,
+        'amount', pbt.amount,
+        'currency', pbt.currency,
+        'status', pbt.status,
+        'payment_reference', pbt.payment_reference,
+        'payee_name', pbt.payee_name,
+        'sort_code', pbt.sort_code,
+        'account_number', pbt.account_number,
+        'account_type', pbt.account_type,
+        'revolut_counterparty_id', pbt.revolut_counterparty_id,
+        'revolut_counterparty_account_id', pbt.revolut_counterparty_account_id
+      )
+      order by pbt.pay_channel, pbt.amount desc, pbt.id
+    ),
+    '[]'::jsonb
+  )
+  into v_transfers
+  from public.pay_bank_transfers pbt
+  where pbt.pay_batch_id = p_pay_batch_id
+    and (v_scope = 'ALL' or pbt.pay_channel = v_scope);
+
+  return jsonb_build_object(
+    'ok', true,
+    'pay_batch_id', p_pay_batch_id::text,
+    'status', (select pb4.status from public.pay_batches pb4 where pb4.id = p_pay_batch_id),
+    'banking_system_snapshot', v_batch.banking_system_snapshot,
+    'external_paye_system_snapshot', v_batch.external_paye_system_snapshot,
+    'bulk_ref_num', v_bulk_ref_num,
+    'bulk_ref_date', case when v_bulk_ref_date is null then null else v_bulk_ref_date::text end,
+    'bulk_reference', v_bulk_reference,
+    'transfers', v_transfers
+  );
+end;
+$$;
+
+
 create or replace function public.pay_batches_list(
   p_limit int default 50,
   p_offset int default 0,
@@ -4634,7 +4654,12 @@ begin
         'revolut_draft_id', pb.revolut_draft_id,
         'monzo_confirmed_at_utc', pb.monzo_confirmed_at_utc,
         'total_bank_out', pb.total_bank_out,
-        'total_debt_created', pb.total_debt_created
+        'total_debt_created', pb.total_debt_created,
+
+        -- NEW: bulk payment reference fields
+        'bulk_ref_num', pb.bulk_ref_num,
+        'bulk_ref_date', case when pb.bulk_ref_date is null then null else pb.bulk_ref_date::text end,
+        'bulk_reference', pb.bulk_reference
       )
       order by pb.created_at_utc desc, pb.id desc
     ),
@@ -4660,5 +4685,163 @@ end;
 $$;
 
 
+create or replace function public.pay_batch_get(p_pay_batch_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_batch record;
+  v_candidates jsonb := '[]'::jsonb;
+  v_transfers jsonb := '[]'::jsonb;
+  v_items jsonb := '[]'::jsonb;
+begin
+  if p_pay_batch_id is null then
+    raise exception 'pay_batch_id is required';
+  end if;
+
+  select
+    pb.*
+  into v_batch
+  from public.pay_batches pb
+  where pb.id = p_pay_batch_id
+  limit 1;
+
+  if v_batch.id is null then
+    raise exception 'pay_batch not found';
+  end if;
+
+  -- Candidates + PAYE net input summary (latest per candidate)
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'id', pbc.id::text,
+        'candidate_id', pbc.candidate_id::text,
+        'candidate_tms_ref', pbc.candidate_tms_ref,
+        'candidate_display_name', pbc.candidate_display_name,
+        'paye_state', pbc.paye_state,
+        'mismatch_settlement_choice', pbc.mismatch_settlement_choice,
+        'gross_preview', pbc.gross_preview,
+        'net_bank_amount', pbc.net_bank_amount,
+        'debt_created', pbc.debt_created,
+        'loan_repayment_taken', pbc.loan_repayment_taken,
+        'settlement_status', pbc.settlement_status,
+        'settled_at_utc', pbc.settled_at_utc,
+        'settled_via', pbc.settled_via,
+        'settled_note', pbc.settled_note,
+
+        -- NEW: latest PAYE net input summary
+        'paye_net_amount', ni.net_amount,
+        'paye_net_source', ni.source,
+        'paye_net_imported_at_utc', ni.imported_at_utc,
+        'paye_net_file_name', ni.file_name
+      )
+      order by pbc.candidate_display_name nulls last, pbc.candidate_tms_ref nulls last, pbc.candidate_id
+    ),
+    '[]'::jsonb
+  )
+  into v_candidates
+  from public.pay_batch_candidates pbc
+  left join lateral (
+    select
+      pni.net_amount,
+      pni.source,
+      pni.imported_at_utc,
+      pni.file_name
+    from public.pay_batch_paye_net_inputs pni
+    where pni.pay_batch_candidate_id = pbc.id
+    order by pni.imported_at_utc desc
+    limit 1
+  ) ni on true
+  where pbc.pay_batch_id = p_pay_batch_id;
+
+  -- Transfers + snapshot fields + payment reference
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'id', pbt.id::text,
+        'candidate_id', case when pbt.candidate_id is null then null else pbt.candidate_id::text end,
+        'umbrella_id', case when pbt.umbrella_id is null then null else pbt.umbrella_id::text end,
+        'pay_channel', pbt.pay_channel,
+        'amount', pbt.amount,
+        'currency', pbt.currency,
+        'status', pbt.status,
+        'revolut_transaction_id', pbt.revolut_transaction_id,
+        'revolut_state', pbt.revolut_state,
+
+        -- NEW: snapshot fields
+        'payment_reference', pbt.payment_reference,
+        'payee_name', pbt.payee_name,
+        'sort_code', pbt.sort_code,
+        'account_number', pbt.account_number,
+        'account_type', pbt.account_type,
+        'revolut_counterparty_id', pbt.revolut_counterparty_id,
+        'revolut_counterparty_account_id', pbt.revolut_counterparty_account_id,
+        'created_at_utc', pbt.created_at_utc,
+        'completed_at_utc', pbt.completed_at_utc,
+        'failed_reason', pbt.failed_reason
+      )
+      order by pbt.pay_channel, pbt.amount desc, pbt.id
+    ),
+    '[]'::jsonb
+  )
+  into v_transfers
+  from public.pay_bank_transfers pbt
+  where pbt.pay_batch_id = p_pay_batch_id;
+
+  -- Items unchanged
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'id', pbi.id::text,
+        'pay_batch_candidate_id', pbi.pay_batch_candidate_id::text,
+        'item_type', pbi.item_type,
+        'timesheet_id', case when pbi.timesheet_id is null then null else pbi.timesheet_id::text end,
+        'segment_key', pbi.segment_key,
+        'source_ref', pbi.source_ref,
+        'description', pbi.description,
+        'amount_ex_vat', pbi.amount_ex_vat,
+        'amount_vat', pbi.amount_vat,
+        'amount_inc_vat', pbi.amount_inc_vat,
+        'pay_channel', pbi.pay_channel,
+        'umbrella_id', case when pbi.umbrella_id is null then null else pbi.umbrella_id::text end
+      )
+      order by pbi.pay_batch_candidate_id, pbi.id
+    ),
+    '[]'::jsonb
+  )
+  into v_items
+  from public.pay_batch_items pbi
+  join public.pay_batch_candidates pbc2
+    on pbc2.id = pbi.pay_batch_candidate_id
+  where pbc2.pay_batch_id = p_pay_batch_id;
+
+  return jsonb_build_object(
+    'ok', true,
+    'batch', jsonb_build_object(
+      'id', v_batch.id::text,
+      'pay_date', v_batch.pay_date::text,
+      'created_at_utc', v_batch.created_at_utc,
+      'created_by_user_id', case when v_batch.created_by_user_id is null then null else v_batch.created_by_user_id::text end,
+      'status', v_batch.status,
+      'banking_system_snapshot', v_batch.banking_system_snapshot,
+      'external_paye_system_snapshot', v_batch.external_paye_system_snapshot,
+      'monzo_confirmed_at_utc', v_batch.monzo_confirmed_at_utc,
+      'monzo_confirmed_by_user_id', case when v_batch.monzo_confirmed_by_user_id is null then null else v_batch.monzo_confirmed_by_user_id::text end,
+      'revolut_draft_id', v_batch.revolut_draft_id,
+      'last_status_checked_at_utc', v_batch.last_status_checked_at_utc,
+
+      -- NEW: bulk payment reference fields
+      'bulk_ref_num', v_batch.bulk_ref_num,
+      'bulk_ref_date', case when v_batch.bulk_ref_date is null then null else v_batch.bulk_ref_date::text end,
+      'bulk_reference', v_batch.bulk_reference
+    ),
+    'candidates', v_candidates,
+    'transfers', v_transfers,
+    'items', v_items
+  );
+end;
+$$;
 
 
