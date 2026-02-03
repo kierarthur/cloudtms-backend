@@ -32,6 +32,8 @@
 --
 -- NOTE: selected_group_ids remains unused (row-level selection is enforced by skip/force lists).
 
+
+
 create or replace function public.hr_autoprocess_apply_phase1(
   import_id uuid,
   selected_group_ids text[] default null,
@@ -128,14 +130,24 @@ begin
     from src s
   ),
 
+  -- Enforce row-level selection:
+  -- - Unticked rows must be in SKIP list → not present here
+  -- - Ticked rows must be in FORCE list → only rows in FORCE are processed when FORCE list provided
   normed_filtered as (
     select *
     from normed n
     where
-      p_skip_external_row_keys is null
-      or array_length(p_skip_external_row_keys, 1) is null
-      or n.external_row_key is null
-      or n.external_row_key <> all(p_skip_external_row_keys)
+      (
+        p_skip_external_row_keys is null
+        or array_length(p_skip_external_row_keys, 1) is null
+        or n.external_row_key is null
+        or n.external_row_key <> all(p_skip_external_row_keys)
+      )
+      and (
+        p_force_overwrite_external_row_keys is null
+        or array_length(p_force_overwrite_external_row_keys, 1) is null
+        or (n.external_row_key is not null and n.external_row_key = any(p_force_overwrite_external_row_keys))
+      )
   ),
 
   resolved as (
@@ -334,7 +346,6 @@ begin
       held_back_reason = u.held_back_reason,
       updated_at       = now(),
 
-      -- If the shift was previously cancelled, and this row is applied (not skipped), clear cancellation unconditionally
       cancelled_at_utc = null,
       cancelled_by_import_id = null,
       cancelled_reason = null,
@@ -386,3 +397,4 @@ begin
   );
 end;
 $$;
+
