@@ -433,7 +433,7 @@ $$;
 -- NOW FILTERED: returns ONLY requires_any_decision=true
 -- FIX: adds contract_self_bill + invoice_id_detected
 -- ---------------------------------------------------------
-create function public.weekly_import_changed_hours_phase3(
+create or replace function public.weekly_import_changed_hours_phase3(
   p_import_id uuid,
   p_system_type text
 )
@@ -500,13 +500,18 @@ rows_in as (
   select
     r.id as hr_row_id,
     r.external_row_key,
-    r.date_local as work_date,
-    (r.payload_json->>'start_utc')::timestamptz as new_start_utc,
-    (r.payload_json->>'end_utc')::timestamptz   as new_end_utc,
+
+    -- POLICY: shift "date" is derived from start time local date (Europe/London), not date_local.
+    ((date_trunc('minute', (r.payload_json->>'start_utc')::timestamptz) at time zone 'Europe/London')::date) as work_date,
+
+    date_trunc('minute', (r.payload_json->>'start_utc')::timestamptz) as new_start_utc,
+    date_trunc('minute', (r.payload_json->>'end_utc')::timestamptz)   as new_end_utc,
     coalesce((r.payload_json->>'break_mins')::int, 0) as new_break_mins
   from public.hr_rows r
   where r.import_id = $1
     and r.external_row_key is not null
+    and (r.payload_json->>'start_utc') is not null
+    and (r.payload_json->>'end_utc')   is not null
 ),
 matched as (
   select
@@ -518,10 +523,10 @@ matched as (
     s.contract_id,
     s.timesheet_id,
     s.week_ending_date,
-    s.work_date as old_work_date,
 
-    s.start_utc as old_start_utc,
-    s.end_utc   as old_end_utc,
+    -- old values truncated to minute precision for comparison + output consistency
+    date_trunc('minute', s.start_utc) as old_start_utc,
+    date_trunc('minute', s.end_utc)   as old_end_utc,
     coalesce(s.break_mins,0) as old_break_mins,
     coalesce(s.pay_minutes,0) as old_paid_minutes,
 
@@ -639,7 +644,8 @@ final_rows as (
 
     a.contract_self_bill,
 
-    coalesce(a.old_work_date, a.work_date) as work_date,
+    -- POLICY: shift date is start-date (already computed from new_start_utc), and we retain old week_ending_date from shift
+    a.work_date as work_date,
     a.week_ending_date,
 
     a.old_start_utc,
@@ -731,3 +737,4 @@ from final_rows
 where requires_any_decision = true
 order by work_date asc, external_row_key asc;
 $$;
+
