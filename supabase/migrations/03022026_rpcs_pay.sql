@@ -610,12 +610,13 @@ security definer
 set search_path = public
 as $$
 declare
-  v_now timestamptz := now();
   v_actions jsonb := coalesce(p_actions, '[]'::jsonb);
 
   v_import record;
+  v_client_id uuid;
 
   v_results jsonb := '[]'::jsonb;
+  v_ok_count int := 0;
 
   v_idx int;
   v_item jsonb;
@@ -632,11 +633,17 @@ declare
   v_work_date date;
 
   v_contract_id uuid;
-  v_client_id uuid;
   v_recipient_email text;
 
   v_already boolean := false;
 begin
+  -- ⚠️ UPDATED (locked architecture):
+  -- This RPC is now READ-ONLY job builder.
+  -- It MUST NOT write hr_issue_emails or any other state.
+  -- Transactional apply (hr_weekly_apply_transactional) performs hr_issue_emails upsert.
+  --
+  -- This function remains only as a safe helper to validate/resolve recipients and compute EMAIL vs REEMAIL.
+
   if p_import_id is null then
     raise exception 'hr_weekly_validation_apply_send_emails: import_id is required';
   end if;
@@ -659,8 +666,14 @@ begin
     raise exception 'hr_weekly_validation_apply_send_emails: import % is not HEALTHROSTER (source_system=%)', p_import_id, v_import.source_system;
   end if;
 
-  if upper(coalesce(v_import.import_scope::text,'')) <> 'HR_WEEKLY' then
+  -- Allow when import_scope is NULL (pre-apply); reject only if explicitly set to something else.
+  if v_import.import_scope is not null and upper(coalesce(v_import.import_scope::text,'')) <> 'HR_WEEKLY' then
     raise exception 'hr_weekly_validation_apply_send_emails: import % is not HR_WEEKLY (import_scope=%)', p_import_id, v_import.import_scope;
+  end if;
+
+  v_client_id := v_import.client_id;
+  if v_client_id is null then
+    raise exception 'hr_weekly_validation_apply_send_emails: import % has no client_id', p_import_id;
   end if;
 
   if jsonb_typeof(v_actions) <> 'array' then
@@ -693,7 +706,7 @@ begin
       raise exception 'hr_weekly_validation_apply_send_emails: item % missing issue_fingerprint', v_idx;
     end if;
     if v_reason_code is null then
-      v_reason_code := 'actual_hours_mismatch';
+      v_reason_code := 'HEALTHROSTER_WEEKLY';
     end if;
 
     begin
@@ -713,7 +726,8 @@ begin
     end;
 
     select exists(
-      select 1 from public.hr_issue_emails e
+      select 1
+      from public.hr_issue_emails e
       where e.issue_fingerprint = v_issue_fingerprint
     )
     into v_already;
@@ -736,26 +750,7 @@ begin
       continue;
     end if;
 
-    select
-      c.id,
-      c.client_id
-    into
-      v_contract_id,
-      v_client_id
-    from public.contracts c
-    where c.id = v_contract_id
-    limit 1;
-
-    if v_client_id is null then
-      v_results := v_results || jsonb_build_object(
-        'timesheet_id', v_timesheet_id::text,
-        'issue_fingerprint', v_issue_fingerprint,
-        'ok', false,
-        'error', 'CLIENT_NOT_FOUND'
-      );
-      continue;
-    end if;
-
+    -- Resolve recipient from client (locked: clients.ts_queries_email)
     select nullif(btrim(coalesce(cli.ts_queries_email,'')), '')
     into v_recipient_email
     from public.clients cli
@@ -772,48 +767,7 @@ begin
       continue;
     end if;
 
-    -- Upsert hr_issue_emails (unique on issue_fingerprint). Re-email updates last_sent_at.
-    insert into public.hr_issue_emails(
-      source_system,
-      import_id,
-      client_id,
-      timesheet_id,
-      hr_row_id,
-      staff_norm,
-      hospital_norm,
-      work_date,
-      reason_code,
-      issue_fingerprint,
-      last_sent_at,
-      created_at,
-      updated_at
-    )
-    values (
-      'HEALTHROSTER_WEEKLY',
-      p_import_id,
-      v_client_id,
-      v_timesheet_id,
-      null::uuid,
-      v_staff_norm,
-      v_hospital_norm,
-      v_work_date,
-      v_reason_code,
-      v_issue_fingerprint,
-      v_now,
-      v_now,
-      v_now
-    )
-    on conflict (issue_fingerprint)
-    do update set
-      last_sent_at = excluded.last_sent_at,
-      updated_at = excluded.updated_at,
-      import_id = excluded.import_id,
-      client_id = excluded.client_id,
-      timesheet_id = excluded.timesheet_id,
-      staff_norm = excluded.staff_norm,
-      hospital_norm = excluded.hospital_norm,
-      work_date = excluded.work_date,
-      reason_code = excluded.reason_code;
+    v_ok_count := v_ok_count + 1;
 
     -- Return a “job” for the backend to enqueue (backend will ensure PDF and insert mail_outbox)
     v_results := v_results || jsonb_build_object(
@@ -822,6 +776,9 @@ begin
       'recipient_email', v_recipient_email,
       'issue_fingerprint', v_issue_fingerprint,
       'reason_code', v_reason_code,
+      'staff_norm', v_staff_norm,
+      'hospital_norm', v_hospital_norm,
+      'work_date', case when v_work_date is null then null else v_work_date::text end,
       'email_kind', case when v_already then 'REEMAIL' else 'EMAIL' end,
       'ok', true
     );
@@ -829,11 +786,12 @@ begin
 
   return jsonb_build_object(
     'import_id', p_import_id::text,
-    'queued', jsonb_array_length(v_results),
+    'queued', v_ok_count,
     'results', v_results
   );
 end;
 $$;
+
 
 create or replace function public.hr_weekly_validation_preview(
   p_import_id uuid
@@ -875,7 +833,9 @@ begin
     raise exception 'hr_weekly_validation_preview: import % is not HEALTHROSTER (source_system=%)', p_import_id, v_import.source_system;
   end if;
 
-  if upper(coalesce(v_import.import_scope::text,'')) <> 'HR_WEEKLY' then
+  -- ✅ UPDATED (locked policy): allow running weekly validation before apply sets import_scope.
+  -- Only reject if import_scope is explicitly set to a different value.
+  if v_import.import_scope is not null and upper(coalesce(v_import.import_scope::text,'')) <> 'HR_WEEKLY' then
     raise exception 'hr_weekly_validation_preview: import % is not HR_WEEKLY (import_scope=%)', p_import_id, v_import.import_scope;
   end if;
 
@@ -1520,7 +1480,7 @@ begin
     select
       p.*,
       case
-        when p.has_mismatch then
+        when p.has_mismatch and p.timesheet_id is not null then
           ('HEALTHROSTER_WEEKLY|validation|' || p.timesheet_id::text || '|' || p.week_ending_date::text || '|' || p.overall_status || '|' || coalesce(p.sig_text,''))
         else null
       end as issue_fingerprint
@@ -1540,10 +1500,12 @@ begin
         jsonb_build_object(
           'client_id', v_client_id::text,
           'recipient_email', v_recipient_email,
+
           'candidate_id', ws.candidate_id::text,
           'candidate_name', ws.candidate_name,
           'week_ending_date', ws.week_ending_date::text,
           'timesheet_id', ws.timesheet_id::text,
+
           'contract_id', tts.contract_id::text,
 
           'overall_status', ws.overall_status,
