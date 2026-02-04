@@ -325,8 +325,10 @@ declare
   v_now timestamptz := now();
 
   v_actions jsonb := coalesce(p_actions, '[]'::jsonb);
-
   v_cancelled_count int := 0;
+
+  v_import_source_system text;
+  v_import_client_id uuid;
 
   v_idx int;
   v_item jsonb;
@@ -338,39 +340,43 @@ declare
   v_timesheet_id uuid;
   v_invoice_id uuid;
 
-  v_invoice_status text;
-  v_invoice_credit_mark timestamptz;
+  v_shift_source_system text;
+  v_shift_candidate_id uuid;
+  v_shift_client_id uuid;
+  v_shift_work_date date;
+  v_shift_cancelled_at timestamptz;
 
-  v_credit_note_id uuid;
-  v_unlocked_snapshots int;
+  v_has_any_rows_on_date boolean;
+  v_has_candidate_rows_on_date boolean;
+  v_ambiguous_rows_on_date int;
 
   v_timesheet_ids uuid[] := array[]::uuid[];
   v_invoice_ids uuid[] := array[]::uuid[];
   v_credit_note_ids uuid[] := array[]::uuid[];
-
   v_pdf_jobs_enqueued int := 0;
 
-  v_import_source_system text;
-  v_shift_source_system text;
 begin
-  -- Validate import exists (transactional safety)
-  if not exists (
-    select 1
-    from public.hr_imports hi
-    where hi.id = p_import_id
-  ) then
-    raise exception 'weekly_import_apply_cancellations: import % not found in hr_imports.', p_import_id;
-  end if;
-
-  -- Load import source system for cross-system safety guards
-  select upper(coalesce(hi2.source_system::text,''))
-  into v_import_source_system
-  from public.hr_imports hi2
-  where hi2.id = p_import_id
+  -- Validate import exists and is HEALTHROSTER (cancellations RPC is HR-only under locked policy)
+  select
+    upper(coalesce(hi.source_system, '')),
+    hi.client_id
+  into
+    v_import_source_system,
+    v_import_client_id
+  from public.hr_imports hi
+  where hi.id = p_import_id
   limit 1;
 
   if v_import_source_system is null or v_import_source_system = '' then
-    raise exception 'weekly_import_apply_cancellations: import % has no source_system.', p_import_id;
+    raise exception 'weekly_import_apply_cancellations: import % not found in hr_imports.', p_import_id;
+  end if;
+
+  if v_import_source_system <> 'HEALTHROSTER' then
+    raise exception 'weekly_import_apply_cancellations: import % source_system=%; expected HEALTHROSTER.', p_import_id, v_import_source_system;
+  end if;
+
+  if v_import_client_id is null then
+    raise exception 'weekly_import_apply_cancellations: import % has null client_id (cannot apply HR cancellations safely).', p_import_id;
   end if;
 
   -- Validate actions payload
@@ -388,6 +394,33 @@ begin
       'invoice_pdf_jobs_enqueued', 0
     );
   end if;
+
+  -- Preload Phase2 mapping joined to hr_rows.date_local so we can enforce:
+  -- - "day empty in file" using hr_rows file truth
+  -- - unresolved mapping on that day => ambiguous => reject cancellation
+  create temporary table tmp_p2_join on commit drop as
+  select
+    r.id as hr_row_id,
+    r.date_local as date_local,
+    p2.candidate_id as candidate_id,
+    p2.client_id as client_id,
+    p2.work_date as work_date,
+    upper(coalesce(p2.action::text, '')) as action
+  from public.hr_rows r
+  left join public.weekly_import_phase2(
+    p_import_id := p_import_id,
+    p_system_type := 'HR_WEEKLY'
+  ) as p2
+    on p2.hr_row_id = r.id
+  where r.import_id = p_import_id;
+
+  create temporary table tmp_date_stats on commit drop as
+  select
+    t.date_local as date_local,
+    count(*)::int as file_rows_count,
+    count(*) filter (where (t.candidate_id is null) or (t.client_id is null) or (t.work_date is null))::int as ambiguous_rows_count
+  from tmp_p2_join t
+  group by t.date_local;
 
   -- Apply is transactional: any invalid selected row fails the whole apply.
   for v_idx, v_item in
@@ -415,15 +448,23 @@ begin
       raise exception 'weekly_import_apply_cancellations: item % has invalid shift_id "%".', v_idx, v_shift_id_text;
     end;
 
-    -- Lock shift row (serializes concurrent apply) + load source_system
+    -- Lock shift row (serializes concurrent apply) + load fields required for policy checks
     select
       ns.timesheet_id,
       ns.invoice_id,
-      upper(coalesce(ns.source_system::text,'')) as shift_source_system
+      upper(coalesce(ns.source_system::text,'')) as shift_source_system,
+      ns.candidate_id,
+      ns.client_id,
+      ns.work_date,
+      ns.cancelled_at_utc
     into
       v_timesheet_id,
       v_invoice_id,
-      v_shift_source_system
+      v_shift_source_system,
+      v_shift_candidate_id,
+      v_shift_client_id,
+      v_shift_work_date,
+      v_shift_cancelled_at
     from public.nhsp_shifts ns
     where ns.id = v_shift_id
     for update;
@@ -432,14 +473,67 @@ begin
       raise exception 'weekly_import_apply_cancellations: item % shift % not found in nhsp_shifts.', v_idx, v_shift_id;
     end if;
 
-    -- Cross-system guard: cancellation must only operate on shifts from same source_system as the import
-    if v_shift_source_system is null or v_shift_source_system = '' then
-      raise exception 'weekly_import_apply_cancellations: item % shift % has no source_system.', v_idx, v_shift_id;
+    if v_shift_cancelled_at is not null then
+      raise exception 'weekly_import_apply_cancellations: item % shift % is already cancelled (cancelled_at_utc not null).', v_idx, v_shift_id;
     end if;
 
-    if v_shift_source_system <> v_import_source_system then
-      raise exception 'weekly_import_apply_cancellations: item % shift % source_system mismatch (import=% shift=%).',
-        v_idx, v_shift_id, v_import_source_system, v_shift_source_system;
+    -- Locked guard: cancellations RPC only operates on HEALTHROSTER shifts
+    if v_shift_source_system <> 'HEALTHROSTER' then
+      raise exception 'weekly_import_apply_cancellations: item % shift % source_system=%; expected HEALTHROSTER.',
+        v_idx, v_shift_id, v_shift_source_system;
+    end if;
+
+    -- Import/client safety: shift must belong to the import client
+    if v_shift_client_id is null or v_shift_client_id <> v_import_client_id then
+      raise exception 'weekly_import_apply_cancellations: item % shift % client_id mismatch (import_client_id=% shift_client_id=%).',
+        v_idx, v_shift_id, v_import_client_id, v_shift_client_id;
+    end if;
+
+    if v_shift_candidate_id is null or v_shift_work_date is null then
+      raise exception 'weekly_import_apply_cancellations: item % shift % missing candidate_id/work_date; cannot enforce day-empty policy.',
+        v_idx, v_shift_id;
+    end if;
+
+    -- Day-empty enforcement (file truth):
+    -- Allow cancellation only if we can deterministically prove the import file contains zero shifts
+    -- for this candidate+client+work_date. If mapping for that date is incomplete (ambiguous), reject.
+    select exists (
+      select 1
+      from tmp_date_stats ds
+      where ds.date_local = v_shift_work_date
+        and ds.file_rows_count > 0
+    )
+    into v_has_any_rows_on_date;
+
+    if v_has_any_rows_on_date then
+      -- If the file has any deterministically-mapped row for this candidate+client+date => not empty => reject.
+      select exists (
+        select 1
+        from tmp_p2_join pj
+        where pj.date_local = v_shift_work_date
+          and pj.candidate_id = v_shift_candidate_id
+          and pj.client_id = v_shift_client_id
+      )
+      into v_has_candidate_rows_on_date;
+
+      if v_has_candidate_rows_on_date then
+        raise exception
+          'weekly_import_apply_cancellations: item % shift % violates day-empty policy: import contains shift rows for candidate+client+date.',
+          v_idx, v_shift_id;
+      end if;
+
+      -- If any row on that date is not deterministically mapped (candidate/client/work_date missing), cancellation is ambiguous => reject.
+      select coalesce(ds.ambiguous_rows_count, 0)
+      into v_ambiguous_rows_on_date
+      from tmp_date_stats ds
+      where ds.date_local = v_shift_work_date
+      limit 1;
+
+      if v_ambiguous_rows_on_date > 0 then
+        raise exception
+          'weekly_import_apply_cancellations: item % shift % violates day-empty policy: import has % ambiguous row(s) on that date; resolve mappings first.',
+          v_idx, v_shift_id, v_ambiguous_rows_on_date;
+      end if;
     end if;
 
     -- Always record affected ids for return payload
@@ -448,69 +542,6 @@ begin
     end if;
     if v_invoice_id is not null then
       v_invoice_ids := array_append(v_invoice_ids, v_invoice_id);
-    end if;
-
-    -- If shift is linked to an invoice, apply invoice policy:
-    -- - DRAFT/ON_HOLD: editable, so remove the shift from that invoice and force PDF regen.
-    -- - ISSUED/PAID: immutable, so create reversal-only artefact via full credit note + unlock (idempotent via marker).
-    if v_invoice_id is not null then
-      -- Lock invoice row and load status + credit marker
-      select
-        i.status::text,
-        i.credit_note_created_at_utc
-      into
-        v_invoice_status,
-        v_invoice_credit_mark
-      from public.invoices i
-      where i.id = v_invoice_id
-      for update;
-
-      if not found then
-        raise exception 'weekly_import_apply_cancellations: item % invoice % not found in invoices.', v_idx, v_invoice_id;
-      end if;
-
-      if v_invoice_status in ('ISSUED','PAID') then
-        -- Issued/paid invoices are immutable: create reversal-only credit artefact if not already done
-        if v_invoice_credit_mark is null then
-          select
-            x.credit_note_id,
-            x.unlocked_snapshots
-          into
-            v_credit_note_id,
-            v_unlocked_snapshots
-          from public.invoice_create_credit_note_and_unlock(v_invoice_id, p_actor_user_id) x
-          limit 1;
-
-          if v_credit_note_id is null then
-            raise exception 'weekly_import_apply_cancellations: credit note creation returned null (invoice_id=%).', v_invoice_id;
-          end if;
-
-          update public.invoices i2
-          set
-            credit_note_created_at_utc = v_now,
-            updated_at = v_now
-          where i2.id = v_invoice_id
-            and i2.credit_note_created_at_utc is null;
-
-          v_credit_note_ids := array_append(v_credit_note_ids, v_credit_note_id);
-        end if;
-
-      else
-        -- Draft/On-hold invoices are editable: remove the shift from the invoice now.
-        perform 1
-        from public.invoice_remove_nhsp_shifts(v_invoice_id, array[v_shift_id]::uuid[], p_actor_user_id);
-
-        -- Invalidate/regenerate invoice PDF + attachments (force)
-        -- Clear PDF keys to prevent stale bundles; enqueue FORCE_REGEN job.
-        update public.invoices i3
-        set
-          invoice_pdf_r2_key = null,
-          invoice_pdf_generated_at_utc = null,
-          updated_at = v_now
-        where i3.id = v_invoice_id;
-
-        v_pdf_jobs_enqueued := v_pdf_jobs_enqueued + public.invpdf_enqueue_one(v_invoice_id, true);
-      end if;
     end if;
 
     -- Apply cancellation data state: mark cancelled + detach (no deletions)
@@ -525,7 +556,7 @@ begin
     v_cancelled_count := v_cancelled_count + 1;
 
     -- TSFIN recompute is mandatory for any cancel/detach/change.
-    -- We mark current TSFIN stale and enqueue priority recompute.
+    -- Mark current TSFIN stale and enqueue priority recompute.
     if v_timesheet_id is not null then
       update public.timesheets_financials tf
       set
@@ -551,10 +582,9 @@ begin
   from unnest(v_invoice_ids) x
   where x is not null;
 
-  select coalesce(array_agg(distinct x), array[]::uuid[])
-  into v_credit_note_ids
-  from unnest(v_credit_note_ids) x
-  where x is not null;
+  -- No credit notes are created by this RPC under locked policy
+  v_credit_note_ids := array[]::uuid[];
+  v_pdf_jobs_enqueued := 0;
 
   return jsonb_build_object(
     'import_id', p_import_id,
@@ -566,6 +596,8 @@ begin
   );
 end;
 $$;
+
+
 
 create or replace function public.hr_weekly_validation_apply_send_emails(
   p_import_id uuid,
