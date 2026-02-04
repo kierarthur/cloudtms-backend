@@ -1956,4 +1956,53 @@ begin
 end;
 $$;
 
+create or replace function public.tsfin_outbox_pending_summary(
+  p_timesheet_ids uuid[]
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_now timestamptz := now();
+  v_total int := 0;
+  v_ready int := 0;
+  v_next_attempt_at_min timestamptz := null;
+begin
+  if p_timesheet_ids is null or array_length(p_timesheet_ids, 1) is null then
+    return jsonb_build_object(
+      'total', 0,
+      'ready', 0,
+      'next_attempt_at_min', null,
+      'now', v_now
+    );
+  end if;
+
+  with wanted as (
+    select distinct unnest(p_timesheet_ids) as timesheet_id
+  ),
+  o as (
+    select o.*
+    from public.ts_financials_outbox o
+    join wanted w on w.timesheet_id = o.timesheet_id
+  )
+  select
+    count(*)::int as total,
+    coalesce(sum(case when (o.next_attempt_at is null or o.next_attempt_at <= v_now) then 1 else 0 end), 0)::int as ready,
+    min(o.next_attempt_at) filter (where o.next_attempt_at is not null and o.next_attempt_at > v_now) as next_attempt_at_min
+  into
+    v_total,
+    v_ready,
+    v_next_attempt_at_min
+  from o;
+
+  return jsonb_build_object(
+    'total', coalesce(v_total, 0),
+    'ready', coalesce(v_ready, 0),
+    'next_attempt_at_min', v_next_attempt_at_min,
+    'now', v_now
+  );
+end;
+$$;
 
