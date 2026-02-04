@@ -364,6 +364,7 @@ $$;
 
 
 
+
 create or replace function public.hr_weekly_phase3_apply_adjustment_truth(
   p_import_id uuid,
   p_selected_external_row_keys text[],
@@ -401,7 +402,6 @@ declare
   v_week_ending_date date;
 
   v_correction_id text;
-
   v_kind text;
 
   v_old_start_utc timestamptz;
@@ -429,11 +429,19 @@ declare
   v_booking_id text;
   v_hash_hex text;
 
-  v_next_additional_seq int;
-  v_cw_id uuid;
+  v_base_week_id uuid;
 
   v_existing_ts_id uuid;
-  v_existing_booking_id text;
+  v_existing_ts_is_current boolean;
+  v_existing_ts_version bigint;
+  v_existing_ts_status text;
+
+  v_existing_cw_id uuid;
+  v_existing_cw_seq int;
+  v_existing_cw_is_adjustment boolean;
+
+  v_next_additional_seq int;
+  v_cw_id uuid;
 
   v_ts_id uuid;
 
@@ -443,8 +451,6 @@ declare
 
   v_created_ts_ids uuid[] := '{}';
   v_updated_ts_ids uuid[] := '{}';
-
-  v_err text;
 
   -- fnv1a32 helper vars
   v_fnv_h bigint;
@@ -462,6 +468,7 @@ declare
   v_schedule jsonb;
   v_hint jsonb;
 
+  v_try int;
 begin
   -- ---- Validate import exists and is HEALTHROSTER ----
   select hi.source_system
@@ -498,6 +505,10 @@ begin
     );
   end if;
 
+  if jsonb_typeof(coalesce(p_decisions,'{}'::jsonb)) <> 'object' then
+    raise exception 'hr_weekly_phase3_apply_adjustment_truth: p_decisions must be a JSON object.';
+  end if;
+
   -- ---- Load Phase 3 rows as JSONB (schema-safe) ----
   select coalesce(jsonb_agg(to_jsonb(r)), '[]'::jsonb)
   into v_phase3_rows
@@ -530,19 +541,19 @@ begin
     where t.external_row_key = v_key;
 
     if v_row is null then
-      raise exception 'Phase 3 row not found for selected external_row_key=%', v_key;
+      raise exception 'hr_weekly_phase3_apply_adjustment_truth: Phase 3 row not found for selected external_row_key=%', v_key;
     end if;
 
     -- Validate decision object exists
     v_decision := coalesce(p_decisions->v_key, null);
 
     if v_decision is null or jsonb_typeof(v_decision) <> 'object' then
-      raise exception 'Missing/invalid decision object for external_row_key=%', v_key;
+      raise exception 'hr_weekly_phase3_apply_adjustment_truth: Missing/invalid decision object for external_row_key=%', v_key;
     end if;
 
     v_skip_text := v_decision->>'skip';
     if v_skip_text is null then
-      raise exception 'Decision missing skip boolean for external_row_key=%', v_key;
+      raise exception 'hr_weekly_phase3_apply_adjustment_truth: Decision missing skip boolean for external_row_key=%', v_key;
     end if;
 
     v_skip :=
@@ -553,7 +564,7 @@ begin
       end;
 
     if v_skip is null then
-      raise exception 'Decision skip is not boolean-like for external_row_key=% (skip=%)', v_key, v_skip_text;
+      raise exception 'hr_weekly_phase3_apply_adjustment_truth: Decision skip is not boolean-like for external_row_key=% (skip=%)', v_key, v_skip_text;
     end if;
 
     if v_skip then
@@ -561,12 +572,10 @@ begin
       continue;
     end if;
 
-    -- Determine invoiced flag (be defensive)
+    -- Determine invoiced flag (from Phase3 row)
     v_is_invoiced :=
       case
         when lower(coalesce(v_row->>'is_invoiced','')) in ('true','1') then true
-        when lower(coalesce(v_row->>'locked_by_invoice_id','')) in ('true','1') then true
-        when (v_row ? 'locked_by_invoice_id') and nullif(v_row->>'locked_by_invoice_id','') is not null then true
         else false
       end;
 
@@ -575,24 +584,23 @@ begin
       v_reinvoice_week_start := nullif(btrim(v_decision->>'reinvoice_week_start'), '');
 
       if v_credit_week_start is null or v_reinvoice_week_start is null then
-        raise exception 'Missing credit/reinvoice weeks for invoiced external_row_key=%', v_key;
+        raise exception 'hr_weekly_phase3_apply_adjustment_truth: Missing credit/reinvoice weeks for invoiced external_row_key=%', v_key;
       end if;
 
-      -- Validate date format + Monday (ISO dow = 1)
       begin
         if extract(isodow from (v_credit_week_start::date)) <> 1 then
-          raise exception 'credit_week_start must be Monday for external_row_key=% (value=%)', v_key, v_credit_week_start;
+          raise exception 'credit_week_start must be Monday';
         end if;
       exception when others then
-        raise exception 'Invalid credit_week_start for external_row_key=% (value=%)', v_key, v_credit_week_start;
+        raise exception 'hr_weekly_phase3_apply_adjustment_truth: Invalid credit_week_start for external_row_key=% (value=%)', v_key, v_credit_week_start;
       end;
 
       begin
         if extract(isodow from (v_reinvoice_week_start::date)) <> 1 then
-          raise exception 'reinvoice_week_start must be Monday for external_row_key=% (value=%)', v_key, v_reinvoice_week_start;
+          raise exception 'reinvoice_week_start must be Monday';
         end if;
       exception when others then
-        raise exception 'Invalid reinvoice_week_start for external_row_key=% (value=%)', v_key, v_reinvoice_week_start;
+        raise exception 'hr_weekly_phase3_apply_adjustment_truth: Invalid reinvoice_week_start for external_row_key=% (value=%)', v_key, v_reinvoice_week_start;
       end;
     else
       v_credit_week_start := null;
@@ -606,7 +614,7 @@ begin
       v_client_id := (v_row->>'client_id')::uuid;
       v_week_ending_date := (v_row->>'week_ending_date')::date;
     exception when others then
-      raise exception 'Phase 3 row missing contract_id/candidate_id/client_id/week_ending_date for external_row_key=%', v_key;
+      raise exception 'hr_weekly_phase3_apply_adjustment_truth: Phase 3 row missing contract_id/candidate_id/client_id/week_ending_date for external_row_key=%', v_key;
     end;
 
     -- Extract old/new shift times and break mins
@@ -616,11 +624,11 @@ begin
       v_new_start_utc := nullif(v_row->>'new_start_utc','')::timestamptz;
       v_new_end_utc   := nullif(v_row->>'new_end_utc','')::timestamptz;
     exception when others then
-      raise exception 'Phase 3 row has invalid timestamp fields for external_row_key=%', v_key;
+      raise exception 'hr_weekly_phase3_apply_adjustment_truth: Phase 3 row has invalid timestamp fields for external_row_key=%', v_key;
     end;
 
     if v_old_start_utc is null or v_old_end_utc is null or v_new_start_utc is null or v_new_end_utc is null then
-      raise exception 'Phase 3 row missing old/new start/end timestamps for external_row_key=%', v_key;
+      raise exception 'hr_weekly_phase3_apply_adjustment_truth: Phase 3 row missing old/new start/end timestamps for external_row_key=%', v_key;
     end if;
 
     v_old_break_mins := coalesce(nullif(v_row->>'old_break_mins','')::int, 0);
@@ -637,10 +645,10 @@ begin
       coalesce(v_row->>'old_break_mins','') || '|' ||
       coalesce(v_row->>'new_break_mins','');
 
-    v_fnv_h := 2166136261; -- 0x811c9dc5
+    v_fnv_h := 2166136261;
     for v_fnv_i in 1..char_length(v_fnv_s) loop
       v_fnv_h := (v_fnv_h # ascii(substring(v_fnv_s from v_fnv_i for 1)));
-      v_fnv_h := (v_fnv_h * 16777619) % 4294967296; -- 0x01000193, keep uint32
+      v_fnv_h := (v_fnv_h * 16777619) % 4294967296;
     end loop;
 
     v_fnv_hex := lpad(lower(to_hex(v_fnv_h)), 8, '0');
@@ -659,16 +667,6 @@ begin
     where c.id = v_contract_id
     limit 1;
 
-    if v_contract_display_site is null then
-      v_contract_display_site := v_client_id::text;
-    end if;
-    if v_contract_ward_hint is null then
-      v_contract_ward_hint := 'contract';
-    end if;
-    if v_contract_role is null then
-      v_contract_role := 'weekly';
-    end if;
-
     select cl.name
     into v_client_name
     from public.clients cl
@@ -681,7 +679,6 @@ begin
     where cand.id = v_candidate_id
     limit 1;
 
-    -- Build norms exactly like Worker "norm()" (trim->lower->collapse ws->strip chars)
     v_candidate_norm :=
       regexp_replace(
         regexp_replace(lower(trim(coalesce(v_candidate_tms_ref, v_candidate_display_name, v_candidate_id::text))), '\s+', ' ', 'g'),
@@ -714,6 +711,31 @@ begin
         'g'
       );
 
+    -- Ensure base contract_week exists (seq=0, is_adjustment=false); never duplicate
+    select cw0.id
+    into v_base_week_id
+    from public.contract_weeks cw0
+    where cw0.contract_id = v_contract_id
+      and cw0.week_ending_date = v_week_ending_date
+      and cw0.additional_seq = 0
+    for update;
+
+    if v_base_week_id is null then
+      insert into public.contract_weeks(
+        contract_id,
+        week_ending_date,
+        additional_seq,
+        is_adjustment
+      )
+      values (
+        v_contract_id,
+        v_week_ending_date,
+        0,
+        false
+      )
+      returning id into v_base_week_id;
+    end if;
+
     -- Apply two artefacts: REVERSAL and REPLACEMENT
     for v_kind in select unnest(array['CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT']) loop
 
@@ -727,10 +749,8 @@ begin
         v_seg_break_mins := greatest(0, v_new_break_mins);
       end if;
 
-      -- Shift date = start time date in Europe/London (cross-midnight belongs to start date)
       v_shift_date_ymd := to_char((v_seg_start_utc at time zone 'Europe/London')::date, 'YYYY-MM-DD');
 
-      -- Store credit/reinvoice weeks as metadata only (NOT used to generate invoices)
       v_hint := jsonb_build_object(
         'import_correction', jsonb_build_object(
           'import_id', p_import_id::text,
@@ -752,82 +772,209 @@ begin
           'g'
         );
 
-      -- Check if correction timesheet already exists (idempotent rerun safety)
-      select t.timesheet_id, t.booking_id
-      into v_existing_ts_id, v_existing_booking_id
-      from public.timesheets t
-      where t.correction_id = v_correction_id
-        and t.correction_kind = v_kind
-        and t.is_current = true
-      limit 1;
-
       v_schedule := jsonb_build_array(
         jsonb_build_object(
           'date', v_shift_date_ymd,
-          'ward', nullif(btrim(v_contract_ward_hint), ''),
+          'ward', nullif(btrim(coalesce(v_contract_ward_hint,'contract')), ''),
           'start_utc', v_seg_start_utc::text,
           'end_utc', v_seg_end_utc::text,
           'break_mins', v_seg_break_mins
         )
       );
 
+      -- Idempotency: reuse existing correction timesheet (unique on correction_id+kind)
+      v_existing_ts_id := null;
+      v_existing_ts_is_current := null;
+      v_existing_ts_version := null;
+      v_existing_ts_status := null;
+
+      select
+        t.timesheet_id,
+        t.is_current,
+        t.version,
+        t.status::text
+      into
+        v_existing_ts_id,
+        v_existing_ts_is_current,
+        v_existing_ts_version,
+        v_existing_ts_status
+      from public.timesheets t
+      where t.correction_id = v_correction_id
+        and t.correction_kind = v_kind
+      order by t.is_current desc, t.version desc
+      limit 1
+      for update;
+
       if v_existing_ts_id is not null then
-        update public.timesheets t
-          set actual_schedule_json = v_schedule,
-              candidate_id = v_candidate_id,
-              client_id = v_client_id,
-              contract_id = v_contract_id,
-              week_ending_date = v_week_ending_date,
-              is_adjustment = true,
-              adjustment_origin = 'IMPORT_CORRECTION',
-              candidate_hint_text = v_hint,
-              updated_at = v_now
-        where t.timesheet_id = v_existing_ts_id;
+        -- Ensure there is an adjustment contract_week linked; reuse it if present.
+        v_existing_cw_id := null;
+        v_existing_cw_seq := null;
+        v_existing_cw_is_adjustment := null;
+
+        select
+          cw.id,
+          cw.additional_seq,
+          cw.is_adjustment
+        into
+          v_existing_cw_id,
+          v_existing_cw_seq,
+          v_existing_cw_is_adjustment
+        from public.contract_weeks cw
+        where cw.timesheet_id = v_existing_ts_id
+          and cw.contract_id = v_contract_id
+          and cw.week_ending_date = v_week_ending_date
+        limit 1
+        for update;
+
+        if v_existing_cw_id is not null then
+          if v_existing_cw_is_adjustment is not true or coalesce(v_existing_cw_seq,0) <= 0 then
+            raise exception 'hr_weekly_phase3_apply_adjustment_truth: existing correction timesheet is linked to a non-adjustment contract_week (timesheet_id=%).', v_existing_ts_id;
+          end if;
+
+          update public.contract_weeks cw2
+          set
+            is_adjustment = true,
+            submission_mode_snapshot = 'MANUAL'::public.submission_mode_enum,
+            status = 'SUBMITTED'::public.contract_week_status_enum,
+            updated_at = v_now
+          where cw2.id = v_existing_cw_id;
+
+        else
+          -- Create a new adjustment contract_week safely and link it to the existing correction timesheet.
+          perform 1
+          from public.contract_weeks cwlock
+          where cwlock.contract_id = v_contract_id
+            and cwlock.week_ending_date = v_week_ending_date
+          for update;
+
+          v_try := 0;
+          loop
+            v_try := v_try + 1;
+            if v_try > 10 then
+              raise exception 'hr_weekly_phase3_apply_adjustment_truth: failed to allocate additional_seq after retries (contract_id=% week_ending=%).', v_contract_id, v_week_ending_date;
+            end if;
+
+            select coalesce(max(cwmax.additional_seq), 0) + 1
+            into v_next_additional_seq
+            from public.contract_weeks cwmax
+            where cwmax.contract_id = v_contract_id
+              and cwmax.week_ending_date = v_week_ending_date;
+
+            begin
+              insert into public.contract_weeks(
+                contract_id,
+                week_ending_date,
+                additional_seq,
+                is_adjustment,
+                submission_mode_snapshot,
+                status,
+                created_at,
+                updated_at,
+                timesheet_id
+              )
+              values (
+                v_contract_id,
+                v_week_ending_date,
+                v_next_additional_seq,
+                true,
+                'MANUAL'::public.submission_mode_enum,
+                'SUBMITTED'::public.contract_week_status_enum,
+                v_now,
+                v_now,
+                v_existing_ts_id
+              )
+              returning id into v_existing_cw_id;
+
+              exit;
+            exception when unique_violation then
+              -- another txn took the same seq; retry
+              v_existing_cw_id := null;
+            end;
+          end loop;
+        end if;
+
+        -- Update existing correction timesheet to ensure columns match locked contract
+        update public.timesheets t2
+        set
+          is_current = true,
+          status = 'RECEIVED'::public.timesheet_status_enum,
+          sheet_scope = 'WEEKLY'::public.timesheet_scope_enum,
+          submission_mode = 'MANUAL'::public.submission_mode_enum,
+          line_type = 'HOURS',
+          week_ending_date = v_week_ending_date,
+          contract_id = v_contract_id,
+          occupant_key_norm = lower(coalesce(v_candidate_tms_ref, v_candidate_display_name, v_candidate_id::text)),
+          hospital_norm = lower(coalesce(v_contract_display_site, v_client_name, v_client_id::text)),
+          ward_norm = lower(coalesce(v_contract_ward_hint,'contract')),
+          job_title_norm = lower(coalesce(v_contract_role,'weekly')),
+          shift_label_norm = v_shift_label_norm,
+          manual_pdf_r2_key = null,
+          actual_schedule_json = v_schedule,
+          additional_units_week = '{}'::jsonb,
+          additional_units_per_day = '{}'::jsonb,
+          day_references_json = null,
+          candidate_hint_text = v_hint,
+          is_adjustment = true,
+          correction_id = v_correction_id,
+          correction_kind = v_kind,
+          adjustment_origin = 'IMPORT_CORRECTION',
+          updated_at = v_now
+        where t2.timesheet_id = v_existing_ts_id;
 
         v_upd_count := v_upd_count + 1;
         v_updated_ts_ids := array_append(v_updated_ts_ids, v_existing_ts_id);
 
       else
-        -- Create contract_week adjustment row
-        select coalesce(max(cw.additional_seq), 0) + 1
-        into v_next_additional_seq
-        from public.contract_weeks cw
-        where cw.contract_id = v_contract_id
-          and cw.week_ending_date = v_week_ending_date;
+        -- Create a new adjustment contract_week (safe additional_seq) + a new correction timesheet linked to it.
 
-        insert into public.contract_weeks(
-          contract_id,
-          week_ending_date,
-          additional_seq,
-          status,
-          submission_mode_snapshot,
-          timesheet_id,
-          uploaded_pdf_r2_key,
-          day_entries_json,
-          totals_json,
-          created_at,
-          updated_at,
-          planned_schedule_json,
-          is_adjustment
-        )
-        values (
-          v_contract_id,
-          v_week_ending_date,
-          v_next_additional_seq,
-          'SUBMITTED'::public.contract_week_status_enum,
-          'MANUAL'::public.submission_mode_enum,
-          null,
-          null,
-          null,
-          null,
-          v_now,
-          v_now,
-          null,
-          true
-        )
-        returning id into v_cw_id;
+        perform 1
+        from public.contract_weeks cwlock2
+        where cwlock2.contract_id = v_contract_id
+          and cwlock2.week_ending_date = v_week_ending_date
+        for update;
 
-        -- booking_id must match makeWeeklyBookingId + correction_id influence (no suffix scheme)
+        v_try := 0;
+        loop
+          v_try := v_try + 1;
+          if v_try > 10 then
+            raise exception 'hr_weekly_phase3_apply_adjustment_truth: failed to allocate additional_seq after retries (contract_id=% week_ending=%).', v_contract_id, v_week_ending_date;
+          end if;
+
+          select coalesce(max(cwmax2.additional_seq), 0) + 1
+          into v_next_additional_seq
+          from public.contract_weeks cwmax2
+          where cwmax2.contract_id = v_contract_id
+            and cwmax2.week_ending_date = v_week_ending_date;
+
+          begin
+            insert into public.contract_weeks(
+              contract_id,
+              week_ending_date,
+              additional_seq,
+              is_adjustment,
+              submission_mode_snapshot,
+              status,
+              created_at,
+              updated_at
+            )
+            values (
+              v_contract_id,
+              v_week_ending_date,
+              v_next_additional_seq,
+              true,
+              'MANUAL'::public.submission_mode_enum,
+              'SUBMITTED'::public.contract_week_status_enum,
+              v_now,
+              v_now
+            )
+            returning id into v_cw_id;
+
+            exit;
+          exception when unique_violation then
+            v_cw_id := null;
+          end;
+        end loop;
+
         v_booking_base :=
           v_candidate_norm || '|' ||
           v_week_ending_date::text || '|' ||
@@ -844,92 +991,133 @@ begin
         v_hash_hex := encode(digest(convert_to(v_booking_base, 'utf8'), 'sha256'), 'hex');
         v_booking_id := 'bk_' || substr(v_hash_hex, 1, 16);
 
-        -- Insert timesheet (weekly manual adjustment)
-        insert into public.timesheets(
-          booking_id,
-          version,
-          is_current,
-          status,
-          occupant_key_norm,
-          hospital_norm,
-          ward_norm,
-          job_title_norm,
-          shift_label_norm,
-          week_ending_date,
-          contract_id,
-          sheet_scope,
-          submission_mode,
-          line_type,
-          manual_pdf_r2_key,
-          actual_schedule_json,
-          additional_units_week,
-          additional_units_per_day,
-          day_references_json,
-          qr_status,
-          qr_token,
-          qr_generated_at,
-          qr_scanned_at,
-          qr_scan_info_json,
-          qr_r2_key,
-          qr_payload_json,
-          created_at,
-          updated_at,
-          is_adjustment,
-          parent_timesheet_id,
-          candidate_id,
-          client_id,
-          candidate_hint_text,
-          correction_id,
-          correction_kind,
-          adjustment_origin
-        )
-        values (
-          v_booking_id,
-          1,
-          true,
-          'RECEIVED'::public.timesheet_status_enum,
-          lower(coalesce(v_candidate_tms_ref, v_candidate_display_name, v_candidate_id::text)),
-          lower(coalesce(v_contract_display_site, v_client_name, v_client_id::text)),
-          lower(coalesce(v_contract_ward_hint, 'contract')),
-          lower(coalesce(v_contract_role, 'weekly')),
-          v_shift_label_norm,
-          v_week_ending_date,
-          v_contract_id,
-          'WEEKLY'::public.timesheet_scope_enum,
-          'MANUAL'::public.submission_mode_enum,
-          'HOURS',
-          null,
-          v_schedule,
-          '{}'::jsonb,
-          '{}'::jsonb,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          '{}'::jsonb,
-          v_now,
-          v_now,
-          true,
-          null,
-          v_candidate_id,
-          v_client_id,
-          v_hint,
-          v_correction_id,
-          v_kind,
-          'IMPORT_CORRECTION'
-        )
-        returning timesheet_id into v_ts_id;
+        begin
+          insert into public.timesheets(
+            booking_id,
+            version,
+            is_current,
+            status,
+            occupant_key_norm,
+            hospital_norm,
+            ward_norm,
+            job_title_norm,
+            shift_label_norm,
+            week_ending_date,
+            contract_id,
+            sheet_scope,
+            submission_mode,
+            line_type,
+            manual_pdf_r2_key,
+            actual_schedule_json,
+            additional_units_week,
+            additional_units_per_day,
+            day_references_json,
+            qr_status,
+            qr_token,
+            qr_generated_at,
+            qr_scanned_at,
+            qr_scan_info_json,
+            qr_r2_key,
+            qr_payload_json,
+            created_at,
+            updated_at,
+            is_adjustment,
+            parent_timesheet_id,
+            candidate_hint_text,
+            correction_id,
+            correction_kind,
+            adjustment_origin
+          )
+          values (
+            v_booking_id,
+            1,
+            true,
+            'RECEIVED'::public.timesheet_status_enum,
+            lower(coalesce(v_candidate_tms_ref, v_candidate_display_name, v_candidate_id::text)),
+            lower(coalesce(v_contract_display_site, v_client_name, v_client_id::text)),
+            lower(coalesce(v_contract_ward_hint,'contract')),
+            lower(coalesce(v_contract_role,'weekly')),
+            v_shift_label_norm,
+            v_week_ending_date,
+            v_contract_id,
+            'WEEKLY'::public.timesheet_scope_enum,
+            'MANUAL'::public.submission_mode_enum,
+            'HOURS',
+            null,
+            v_schedule,
+            '{}'::jsonb,
+            '{}'::jsonb,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            '{}'::jsonb,
+            v_now,
+            v_now,
+            true,
+            null,
+            v_hint,
+            v_correction_id,
+            v_kind,
+            'IMPORT_CORRECTION'
+          )
+          returning timesheet_id into v_ts_id;
 
-        -- Link contract_week -> timesheet (mirror worker behaviour)
-        update public.contract_weeks cw
-          set timesheet_id = v_ts_id,
-              status = 'SUBMITTED'::public.contract_week_status_enum,
-              updated_at = v_now
-        where cw.id = v_cw_id;
+        exception when unique_violation then
+          -- If another txn created the same correction timesheet, fetch it and update instead.
+          select t3.timesheet_id
+          into v_ts_id
+          from public.timesheets t3
+          where t3.correction_id = v_correction_id
+            and t3.correction_kind = v_kind
+          order by t3.is_current desc, t3.version desc
+          limit 1
+          for update;
+
+          if v_ts_id is null then
+            raise exception 'hr_weekly_phase3_apply_adjustment_truth: unique_violation inserting correction timesheet but failed to find existing row (correction_id=% kind=%).', v_correction_id, v_kind;
+          end if;
+
+          update public.timesheets t4
+          set
+            is_current = true,
+            status = 'RECEIVED'::public.timesheet_status_enum,
+            sheet_scope = 'WEEKLY'::public.timesheet_scope_enum,
+            submission_mode = 'MANUAL'::public.submission_mode_enum,
+            line_type = 'HOURS',
+            week_ending_date = v_week_ending_date,
+            contract_id = v_contract_id,
+            occupant_key_norm = lower(coalesce(v_candidate_tms_ref, v_candidate_display_name, v_candidate_id::text)),
+            hospital_norm = lower(coalesce(v_contract_display_site, v_client_name, v_client_id::text)),
+            ward_norm = lower(coalesce(v_contract_ward_hint,'contract')),
+            job_title_norm = lower(coalesce(v_contract_role,'weekly')),
+            shift_label_norm = v_shift_label_norm,
+            manual_pdf_r2_key = null,
+            actual_schedule_json = v_schedule,
+            additional_units_week = '{}'::jsonb,
+            additional_units_per_day = '{}'::jsonb,
+            day_references_json = null,
+            candidate_hint_text = v_hint,
+            is_adjustment = true,
+            correction_id = v_correction_id,
+            correction_kind = v_kind,
+            adjustment_origin = 'IMPORT_CORRECTION',
+            updated_at = v_now
+          where t4.timesheet_id = v_ts_id;
+        end;
+
+        update public.contract_weeks cw3
+        set
+          timesheet_id = v_ts_id,
+          status = 'SUBMITTED'::public.contract_week_status_enum,
+          submission_mode_snapshot = 'MANUAL'::public.submission_mode_enum,
+          is_adjustment = true,
+          updated_at = v_now
+        where cw3.id = v_cw_id;
 
         v_ins_count := v_ins_count + 1;
         v_created_ts_ids := array_append(v_created_ts_ids, v_ts_id);
@@ -949,6 +1137,8 @@ begin
   );
 end;
 $$;
+
+
 
 
 create or replace function public.hr_weekly_apply_transactional(
