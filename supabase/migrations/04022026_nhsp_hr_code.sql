@@ -2005,4 +2005,297 @@ begin
   );
 end;
 $$;
+create or replace function public.nhsp_weekly_apply_cancellations(
+  p_import_id uuid,
+  p_actions jsonb,
+  p_actor_user_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_now timestamptz := now();
+
+  v_actions jsonb := coalesce(p_actions, '[]'::jsonb);
+  v_cancelled_count int := 0;
+
+  v_import_source_system text;
+  v_import_client_id uuid;
+
+  v_idx int;
+  v_item jsonb;
+
+  v_shift_id_text text;
+  v_shift_id uuid;
+  v_reason text;
+
+  v_timesheet_id uuid;
+  v_invoice_id uuid;
+
+  v_shift_source_system text;
+  v_shift_candidate_id uuid;
+  v_shift_client_id uuid;
+  v_shift_work_date date;
+  v_shift_cancelled_at timestamptz;
+
+  v_has_any_rows_on_date boolean;
+  v_has_candidate_rows_on_date boolean;
+  v_ambiguous_rows_on_date int;
+
+  v_import_has_any_mapped_rows_for_client boolean;
+
+  v_timesheet_ids uuid[] := array[]::uuid[];
+  v_invoice_ids uuid[] := array[]::uuid[];
+  v_credit_note_ids uuid[] := array[]::uuid[];
+  v_pdf_jobs_enqueued int := 0;
+
+begin
+  -- Validate import exists and is NHSP
+  select
+    upper(coalesce(hi.source_system, '')),
+    hi.client_id
+  into
+    v_import_source_system,
+    v_import_client_id
+  from public.hr_imports hi
+  where hi.id = p_import_id
+  limit 1;
+
+  if v_import_source_system is null or v_import_source_system = '' then
+    raise exception 'nhsp_weekly_apply_cancellations: import % not found in hr_imports.', p_import_id;
+  end if;
+
+  if v_import_source_system <> 'NHSP' then
+    raise exception 'nhsp_weekly_apply_cancellations: import % source_system=%; expected NHSP.', p_import_id, v_import_source_system;
+  end if;
+
+  -- Validate actions payload
+  if jsonb_typeof(v_actions) <> 'array' then
+    raise exception 'nhsp_weekly_apply_cancellations: p_actions must be a JSON array.';
+  end if;
+
+  if jsonb_array_length(v_actions) = 0 then
+    return jsonb_build_object(
+      'import_id', p_import_id,
+      'cancelled_count', 0,
+      'affected_timesheet_ids', to_jsonb(array[]::uuid[]),
+      'affected_invoice_ids', to_jsonb(array[]::uuid[]),
+      'credit_note_ids_created', to_jsonb(array[]::uuid[]),
+      'invoice_pdf_jobs_enqueued', 0
+    );
+  end if;
+
+  -- Preload Phase2 mapping joined to hr_rows.date_local so we can enforce:
+  -- - "day empty in file" using hr_rows file truth
+  -- - unresolved mapping on that day => ambiguous => reject cancellation
+  create temporary table tmp_p2_join on commit drop as
+  select
+    r.id as hr_row_id,
+    r.date_local as date_local,
+    p2.candidate_id as candidate_id,
+    p2.client_id as client_id,
+    p2.work_date as work_date,
+    upper(coalesce(p2.action::text, '')) as action
+  from public.hr_rows r
+  left join public.weekly_import_phase2(
+    p_import_id := p_import_id,
+    p_system_type := 'NHSP'
+  ) as p2
+    on p2.hr_row_id = r.id
+  where r.import_id = p_import_id;
+
+  create temporary table tmp_date_stats on commit drop as
+  select
+    t.date_local as date_local,
+    count(*)::int as file_rows_count,
+    count(*) filter (
+      where (t.candidate_id is null) or (t.client_id is null) or (t.work_date is null)
+    )::int as ambiguous_rows_count
+  from tmp_p2_join t
+  group by t.date_local;
+
+  -- Apply is transactional: any invalid selected row fails the whole apply.
+  for v_idx, v_item in
+    select (e.ord)::int, e.value
+    from jsonb_array_elements(v_actions) with ordinality as e(value, ord)
+  loop
+    -- Extract shift_id and reason
+    v_shift_id_text := nullif(btrim(coalesce(v_item->>'shift_id', '')), '');
+    v_reason := nullif(btrim(coalesce(v_item->>'reason', '')), '');
+
+    if v_shift_id_text is null then
+      raise exception 'nhsp_weekly_apply_cancellations: item % missing shift_id.', v_idx;
+    end if;
+
+    begin
+      v_shift_id := v_shift_id_text::uuid;
+    exception when others then
+      raise exception 'nhsp_weekly_apply_cancellations: item % invalid shift_id "%".', v_idx, v_shift_id_text;
+    end;
+
+    if v_reason is null then
+      v_reason := 'MISSING_FROM_IMPORT';
+    end if;
+
+    -- Load shift with row lock
+    select
+      ns.timesheet_id,
+      ns.invoice_id,
+      upper(coalesce(ns.source_system::text,'')) as shift_source_system,
+      ns.candidate_id,
+      ns.client_id,
+      ns.work_date,
+      ns.cancelled_at_utc
+    into
+      v_timesheet_id,
+      v_invoice_id,
+      v_shift_source_system,
+      v_shift_candidate_id,
+      v_shift_client_id,
+      v_shift_work_date,
+      v_shift_cancelled_at
+    from public.nhsp_shifts ns
+    where ns.id = v_shift_id
+    for update;
+
+    if not found then
+      raise exception 'nhsp_weekly_apply_cancellations: item % shift % not found in nhsp_shifts.', v_idx, v_shift_id;
+    end if;
+
+    if v_shift_cancelled_at is not null then
+      raise exception 'nhsp_weekly_apply_cancellations: item % shift % is already cancelled (cancelled_at_utc not null).', v_idx, v_shift_id;
+    end if;
+
+    -- Locked guard: cancellations RPC only operates on NHSP shifts
+    if v_shift_source_system <> 'NHSP' then
+      raise exception 'nhsp_weekly_apply_cancellations: item % shift % source_system=%; expected NHSP.',
+        v_idx, v_shift_id, v_shift_source_system;
+    end if;
+
+    if v_shift_candidate_id is null or v_shift_client_id is null or v_shift_work_date is null then
+      raise exception 'nhsp_weekly_apply_cancellations: item % shift % missing candidate_id/client_id/work_date; cannot enforce day-empty policy.',
+        v_idx, v_shift_id;
+    end if;
+
+    -- Import scope safety (NHSP imports may span multiple clients; do not rely on hr_imports.client_id):
+    -- Require the import has at least one deterministically-mapped row for this client_id anywhere in the file.
+    select exists (
+      select 1
+      from tmp_p2_join pj
+      where pj.client_id = v_shift_client_id
+        and pj.candidate_id is not null
+        and pj.work_date is not null
+    )
+    into v_import_has_any_mapped_rows_for_client;
+
+    if not v_import_has_any_mapped_rows_for_client then
+      raise exception
+        'nhsp_weekly_apply_cancellations: item % shift % client_id=% is out-of-scope for this import (no deterministically mapped rows for this client in file).',
+        v_idx, v_shift_id, v_shift_client_id;
+    end if;
+
+    -- Day-empty enforcement (file truth):
+    -- Allow cancellation only if we can deterministically prove the import contains zero shifts
+    -- for this candidate+client+work_date. If mapping for that date is incomplete (ambiguous), reject.
+    select exists (
+      select 1
+      from tmp_date_stats ds
+      where ds.date_local = v_shift_work_date
+        and ds.file_rows_count > 0
+    )
+    into v_has_any_rows_on_date;
+
+    if v_has_any_rows_on_date then
+      -- If the file has any deterministically-mapped row for this candidate+client+date => not empty => reject.
+      select exists (
+        select 1
+        from tmp_p2_join pj
+        where pj.date_local = v_shift_work_date
+          and pj.candidate_id = v_shift_candidate_id
+          and pj.client_id = v_shift_client_id
+      )
+      into v_has_candidate_rows_on_date;
+
+      if v_has_candidate_rows_on_date then
+        raise exception
+          'nhsp_weekly_apply_cancellations: item % shift % violates day-empty policy: import contains shift rows for candidate+client+date.',
+          v_idx, v_shift_id;
+      end if;
+
+      -- If any row on that date is not deterministically mapped (candidate/client/work_date missing), cancellation is ambiguous => reject.
+      select coalesce(ds.ambiguous_rows_count, 0)
+      into v_ambiguous_rows_on_date
+      from tmp_date_stats ds
+      where ds.date_local = v_shift_work_date
+      limit 1;
+
+      if v_ambiguous_rows_on_date > 0 then
+        raise exception
+          'nhsp_weekly_apply_cancellations: item % shift % violates day-empty policy: import has % ambiguous row(s) on that date; resolve mappings first.',
+          v_idx, v_shift_id, v_ambiguous_rows_on_date;
+      end if;
+    end if;
+
+    -- Always record affected ids for return payload
+    if v_timesheet_id is not null then
+      v_timesheet_ids := array_append(v_timesheet_ids, v_timesheet_id);
+    end if;
+    if v_invoice_id is not null then
+      v_invoice_ids := array_append(v_invoice_ids, v_invoice_id);
+    end if;
+
+    -- Apply cancellation data state: mark cancelled + detach (no deletions)
+    update public.nhsp_shifts ns2
+    set
+      cancelled_at_utc = v_now,
+      cancelled_by_import_id = p_import_id,
+      cancelled_reason = v_reason,
+      timesheet_id = null
+    where ns2.id = v_shift_id;
+
+    v_cancelled_count := v_cancelled_count + 1;
+
+    -- TSFIN recompute is mandatory for any cancel/detach/change.
+    -- Mark current TSFIN stale and enqueue priority recompute.
+    if v_timesheet_id is not null then
+      update public.timesheets_financials tf
+      set
+        is_stale = true,
+        stale_reason = 'IMPORT_CANCEL_DETACH',
+        updated_at = v_now
+      where tf.is_current = true
+        and tf.timesheet_id = v_timesheet_id;
+
+      perform public.enqueue_ts_financials_priority(array[v_timesheet_id]::uuid[], 'CONTEXT_CHANGED'::public.ts_fin_reason_enum);
+    end if;
+
+  end loop;
+
+  -- Deduplicate id arrays for output
+  select coalesce(array_agg(distinct x), array[]::uuid[])
+  into v_timesheet_ids
+  from unnest(v_timesheet_ids) x
+  where x is not null;
+
+  select coalesce(array_agg(distinct x), array[]::uuid[])
+  into v_invoice_ids
+  from unnest(v_invoice_ids) x
+  where x is not null;
+
+  -- No credit notes are created by this RPC under locked policy
+  v_credit_note_ids := array[]::uuid[];
+  v_pdf_jobs_enqueued := 0;
+
+  return jsonb_build_object(
+    'import_id', p_import_id,
+    'cancelled_count', v_cancelled_count,
+    'affected_timesheet_ids', to_jsonb(v_timesheet_ids),
+    'affected_invoice_ids', to_jsonb(v_invoice_ids),
+    'credit_note_ids_created', to_jsonb(v_credit_note_ids),
+    'invoice_pdf_jobs_enqueued', v_pdf_jobs_enqueued
+  );
+end;
+$$;
 
