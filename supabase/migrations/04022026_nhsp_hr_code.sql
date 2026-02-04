@@ -1138,7 +1138,6 @@ begin
 end;
 $$;
 
-
 create or replace function public.hr_weekly_apply_transactional(
   p_import_id uuid,
   p_payload jsonb,
@@ -1727,7 +1726,8 @@ begin
 
   -- ─────────────────────────────────────────────
   -- 9) Mode A weekly validation upserts (required, transactional)
-  --     FIX: Only upsert validations for MODE_A groups.
+  --     FIX: Mode A classification must use the candidate_id/contract_id/week_ending_date
+  --     from hr_weekly_validation_preview rows, joined directly to tmp_group_mode.
   -- ─────────────────────────────────────────────
   select public.hr_weekly_validation_preview(p_import_id := p_import_id)
   into v_weekly_val_payload;
@@ -1743,29 +1743,32 @@ begin
   create temporary table tmp_val_rows on commit drop as
   select
     nullif(btrim(r.value->>'timesheet_id'), '')::uuid as timesheet_id,
+    nullif(btrim(r.value->>'candidate_id'), '')::uuid as candidate_id,
+    nullif(btrim(r.value->>'contract_id'), '')::uuid as contract_id,
+    nullif(btrim(r.value->>'week_ending_date'), '')::date as week_ending_date,
+    nullif(btrim(r.value->>'client_id'), '')::uuid as client_id,
     upper(coalesce(r.value->>'overall_status','')) as overall_status,
     (lower(coalesce(r.value->>'has_mismatch','false')) in ('true','1')) as has_mismatch,
     nullif(btrim(r.value->>'issue_fingerprint'), '') as issue_fingerprint,
     nullif(btrim(r.value->>'recipient_email'), '') as recipient_email,
-    (lower(coalesce(r.value->>'emailed_already','false')) in ('true','1')) as emailed_already,
-    nullif(btrim(r.value->>'client_id'), '')::uuid as client_id
+    (lower(coalesce(r.value->>'emailed_already','false')) in ('true','1')) as emailed_already
   from jsonb_array_elements(v_weekly_val_payload->'rows') as r(value)
-  where nullif(btrim(r.value->>'timesheet_id'), '') is not null;
+  where nullif(btrim(r.value->>'timesheet_id'), '') is not null
+    and nullif(btrim(r.value->>'candidate_id'), '') is not null
+    and nullif(btrim(r.value->>'contract_id'), '') is not null
+    and nullif(btrim(r.value->>'week_ending_date'), '') is not null
+    and nullif(btrim(r.value->>'client_id'), '') is not null;
 
   create temporary table tmp_val_mode on commit drop as
   select
     vr.timesheet_id,
     gm.mode
   from tmp_val_rows vr
-  join public.timesheets ts
-    on ts.timesheet_id = vr.timesheet_id
-  join public.contracts ct
-    on ct.id = ts.contract_id
   join tmp_group_mode gm
-    on gm.contract_id = ts.contract_id
-   and gm.candidate_id = ct.candidate_id
-   and gm.week_ending_date = ts.week_ending_date
-   and gm.client_id = v_import_client_id;
+    on gm.contract_id = vr.contract_id
+   and gm.candidate_id = vr.candidate_id
+   and gm.week_ending_date = vr.week_ending_date
+   and gm.client_id = vr.client_id;
 
   insert into public.timesheet_validations(
     timesheet_id,
