@@ -35,6 +35,8 @@ as $$
 $$;
 
 
+
+
 create or replace function public.tsfin_load_context_batch(p_timesheet_ids uuid[])
 returns table (
   effective_timesheet_id uuid,
@@ -122,7 +124,14 @@ base as (
       (now() at time zone 'Europe/London')::date
     ) as finance_anchor_date,
 
-    to_jsonb(te) as out_timesheet,
+    -- ✅ Ensure new correction fields are always present in out_timesheet (even if null)
+    (to_jsonb(te)
+      || jsonb_build_object(
+        'correction_id', te.correction_id,
+        'correction_kind', te.correction_kind,
+        'adjustment_origin', te.adjustment_origin
+      )
+    ) as out_timesheet,
 
     -- ✅ This will now include travel_/accommodation_/other_ columns automatically
     to_jsonb(tf) as out_cur_fin,
@@ -381,6 +390,7 @@ grant execute on function public.tsfin_load_context_batch(uuid[]) to service_rol
 grant execute on function public.tsfin_load_context_batch(uuid[]) to authenticated;
 
 select pg_notify('pgrst', 'reload schema');
+
 
 -- ============================================================
 -- 2.6: Batch writer + outbox complete/fail (restore-on-fail safe)
