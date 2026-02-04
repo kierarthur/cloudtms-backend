@@ -951,4 +951,788 @@ end;
 $$;
 
 
+create or replace function public.hr_weekly_apply_transactional(
+  p_import_id uuid,
+  p_payload jsonb,
+  p_actor_user_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_now timestamptz := now();
+
+  -- import header
+  v_import_source_system text;
+  v_import_client_id uuid;
+
+  -- payload parts
+  v_payload jsonb := coalesce(p_payload, '{}'::jsonb);
+  v_actions_json jsonb := coalesce(v_payload->'selected_action_ids', '[]'::jsonb);
+  v_actions2_json jsonb := coalesce(v_payload->'selected_actions', '[]'::jsonb);
+  v_decisions jsonb := coalesce(v_payload->'decisions', '{}'::jsonb);
+  v_email_actions jsonb := coalesce(v_payload->'email_actions', '[]'::jsonb);
+
+  -- normalized selections
+  v_selected_action_ids text[] := array[]::text[];
+  v_selected_truth_keys text[] := array[]::text[];
+  v_selected_cancel_shift_ids uuid[] := array[]::uuid[];
+
+  -- derived mode key sets
+  v_mode_a_external_keys text[] := array[]::text[];
+  v_mode_b_external_keys text[] := array[]::text[];
+
+  -- selected truth keys constrained to MODE_B
+  v_selected_truth_keys_mode_b text[] := array[]::text[];
+
+  -- Mode B tick-only enforced lists
+  v_force_keys_final text[] := array[]::text[];
+  v_skip_keys_final text[] := array[]::text[];
+
+  -- Phase 3
+  v_phase3_proceed_keys text[] := array[]::text[];
+  v_phase3_skip_keys text[] := array[]::text[];
+
+  v_phase3_result jsonb := null;
+
+  -- Phase 1 / 1.5
+  v_phase1_result jsonb := null;
+  v_phase15_ok int := 0;
+  v_phase15_updated int := 0;
+
+  -- cancellations
+  v_cancel_actions jsonb := '[]'::jsonb;
+  v_cancellations_result jsonb := null;
+
+  -- mirror (Mode A)
+  v_mirror_result jsonb := null;
+
+  -- validation (Mode A)
+  v_weekly_val_payload jsonb := null;
+  v_validations_upserted int := 0;
+  v_mismatched_tsids uuid[] := array[]::uuid[];
+
+  -- email (Mode A best-effort later; log is transactional here)
+  v_email_jobs jsonb := '[]'::jsonb;
+
+  -- affected timesheets for TSFIN drain (Strategy A done in Worker post-commit)
+  v_affected_timesheet_ids uuid[] := array[]::uuid[];
+
+  -- policy A replacement-day
+  v_selected_cancel_shift_id_set text[] := array[]::text[];
+
+begin
+  -- ─────────────────────────────────────────────
+  -- 0) Validate import + header fields
+  -- ─────────────────────────────────────────────
+  select
+    upper(coalesce(hi.source_system::text, '')),
+    hi.client_id
+  into
+    v_import_source_system,
+    v_import_client_id
+  from public.hr_imports hi
+  where hi.id = p_import_id
+  limit 1;
+
+  if v_import_source_system is null or v_import_source_system = '' then
+    raise exception 'hr_weekly_apply_transactional: import % not found in hr_imports.', p_import_id;
+  end if;
+
+  if v_import_source_system <> 'HEALTHROSTER' then
+    raise exception 'hr_weekly_apply_transactional: import % source_system=%; expected HEALTHROSTER.', p_import_id, v_import_source_system;
+  end if;
+
+  if v_import_client_id is null then
+    raise exception 'hr_weekly_apply_transactional: import % missing client_id.', p_import_id;
+  end if;
+
+  -- ─────────────────────────────────────────────
+  -- 1) Parse and normalize selection payload (ROW:/CANCEL:)
+  -- ─────────────────────────────────────────────
+  if jsonb_typeof(v_actions_json) <> 'array' then
+    raise exception 'hr_weekly_apply_transactional: selected_action_ids must be a JSON array.';
+  end if;
+
+  if jsonb_typeof(v_actions2_json) <> 'array' then
+    raise exception 'hr_weekly_apply_transactional: selected_actions must be a JSON array.';
+  end if;
+
+  if jsonb_typeof(v_decisions) <> 'object' then
+    raise exception 'hr_weekly_apply_transactional: decisions must be a JSON object.';
+  end if;
+
+  if jsonb_typeof(v_email_actions) <> 'array' then
+    raise exception 'hr_weekly_apply_transactional: email_actions must be a JSON array.';
+  end if;
+
+  create temporary table tmp_sel_ids(
+    action_id text primary key
+  ) on commit drop;
+
+  insert into tmp_sel_ids(action_id)
+  select distinct nullif(btrim(x.value), '')
+  from jsonb_array_elements_text(v_actions_json) as x(value)
+  where nullif(btrim(x.value), '') is not null
+  on conflict do nothing;
+
+  insert into tmp_sel_ids(action_id)
+  select distinct nullif(btrim(a.value->>'action_id'), '')
+  from jsonb_array_elements(v_actions2_json) as a(value)
+  where nullif(btrim(a.value->>'action_id'), '') is not null
+  on conflict do nothing;
+
+  -- Validate action_id format
+  if exists (
+    select 1
+    from tmp_sel_ids s
+    where s.action_id !~ '^(ROW|CANCEL):'
+  ) then
+    raise exception 'hr_weekly_apply_transactional: invalid action_id in selection (expected ROW:<external_row_key> or CANCEL:<shift_id>).';
+  end if;
+
+  select coalesce(array_agg(s.action_id order by s.action_id), array[]::text[])
+  into v_selected_action_ids
+  from tmp_sel_ids s;
+
+  select coalesce(array_agg(distinct substring(s.action_id from 5) order by substring(s.action_id from 5)), array[]::text[])
+  into v_selected_truth_keys
+  from tmp_sel_ids s
+  where s.action_id like 'ROW:%';
+
+  select coalesce(array_agg(distinct (substring(s.action_id from 8))::uuid order by (substring(s.action_id from 8))::uuid), array[]::uuid[])
+  into v_selected_cancel_shift_ids
+  from tmp_sel_ids s
+  where s.action_id like 'CANCEL:%';
+
+  -- ─────────────────────────────────────────────
+  -- 2) Load weekly_import_phase2 + compute per-group MODE_A/MODE_B
+  --     MODE switch: effective_no_timesheet_required
+  -- ─────────────────────────────────────────────
+  create temporary table tmp_p2_all on commit drop as
+  select *
+  from public.weekly_import_phase2(p_import_id := p_import_id, p_system_type := 'HR_WEEKLY');
+
+  create temporary table tmp_p2_ok on commit drop as
+  select
+    p2.external_row_key,
+    p2.candidate_id,
+    p2.client_id,
+    p2.contract_id,
+    p2.week_ending_date,
+    p2.work_date,
+    upper(coalesce(p2.action::text,'')) as action
+  from tmp_p2_all p2
+  where upper(coalesce(p2.action::text,'')) = 'OK'
+    and p2.external_row_key is not null
+    and p2.contract_id is not null
+    and p2.candidate_id is not null
+    and p2.client_id is not null
+    and p2.week_ending_date is not null;
+
+  -- Group map (MODE derived per group)
+  create temporary table tmp_group_mode on commit drop as
+  select distinct
+    t.contract_id,
+    t.candidate_id,
+    t.client_id,
+    t.week_ending_date,
+    ('grp:' || t.contract_id::text || ':' || t.week_ending_date::text || ':' || t.candidate_id::text) as group_id,
+    case
+      when (
+        case
+          when (c.overrideclientsettings is true and c.no_timesheet_required is not null)
+            then c.no_timesheet_required
+          else coalesce(cs.no_timesheet_required, false)
+        end
+      ) is true then 'MODE_B'
+      else 'MODE_A'
+    end as mode
+  from (
+    select distinct p2.contract_id, p2.candidate_id, p2.client_id, p2.week_ending_date
+    from tmp_p2_ok p2
+  ) as t
+  join public.contracts c
+    on c.id = t.contract_id
+  left join lateral (
+    select cs2.no_timesheet_required
+    from public.client_settings cs2
+    where cs2.client_id = v_import_client_id
+      and (cs2.effective_from is null or cs2.effective_from <= t.week_ending_date)
+    order by cs2.effective_from desc nulls last, cs2.updated_at desc nulls last
+    limit 1
+  ) as cs on true;
+
+  create temporary table tmp_p2_ok_mode on commit drop as
+  select
+    p2.external_row_key,
+    p2.candidate_id,
+    p2.client_id,
+    p2.contract_id,
+    p2.week_ending_date,
+    p2.work_date,
+    gm.group_id,
+    gm.mode
+  from tmp_p2_ok p2
+  join tmp_group_mode gm
+    on gm.contract_id = p2.contract_id
+   and gm.candidate_id = p2.candidate_id
+   and gm.week_ending_date = p2.week_ending_date;
+
+  select coalesce(array_agg(distinct m.external_row_key order by m.external_row_key), array[]::text[])
+  into v_mode_a_external_keys
+  from tmp_p2_ok_mode m
+  where m.mode = 'MODE_A';
+
+  select coalesce(array_agg(distinct m.external_row_key order by m.external_row_key), array[]::text[])
+  into v_mode_b_external_keys
+  from tmp_p2_ok_mode m
+  where m.mode = 'MODE_B';
+
+  -- Validate any selected truth keys must be MODE_B
+  if exists (
+    select 1
+    from unnest(v_selected_truth_keys) as k(external_row_key)
+    left join (select distinct m.external_row_key from tmp_p2_ok_mode m where m.mode='MODE_B') as mb
+      on mb.external_row_key = k.external_row_key
+    where mb.external_row_key is null
+  ) then
+    raise exception 'hr_weekly_apply_transactional: selection includes ROW:<external_row_key> that is not MODE_B (timesheet required).';
+  end if;
+
+  select coalesce(array_agg(k.external_row_key order by k.external_row_key), array[]::text[])
+  into v_selected_truth_keys_mode_b
+  from (
+    select distinct k.external_row_key
+    from unnest(v_selected_truth_keys) as k(external_row_key)
+    join (select distinct m.external_row_key from tmp_p2_ok_mode m where m.mode='MODE_B') as mb
+      on mb.external_row_key = k.external_row_key
+  ) as k;
+
+  -- ─────────────────────────────────────────────
+  -- 3) Policy A replacement-day enforcement (MODE_B only)
+  -- ─────────────────────────────────────────────
+  if array_length(v_selected_truth_keys_mode_b, 1) is not null then
+    create temporary table tmp_sel_truth_p2 on commit drop as
+    select
+      m.external_row_key,
+      m.candidate_id,
+      m.client_id,
+      m.work_date as import_work_date
+    from tmp_p2_ok_mode m
+    where m.mode = 'MODE_B'
+      and m.external_row_key = any(v_selected_truth_keys_mode_b);
+
+    create temporary table tmp_existing_by_key on commit drop as
+    select distinct on (ns.external_row_key)
+      ns.external_row_key,
+      ns.id as shift_id,
+      ns.candidate_id as candidate_id,
+      ns.client_id as client_id,
+      ns.work_date as old_work_date
+    from public.nhsp_shifts ns
+    where ns.source_system = 'HEALTHROSTER'::public.hr_source_enum
+      and ns.client_id = v_import_client_id
+      and ns.cancelled_at_utc is null
+      and ns.external_row_key = any(v_selected_truth_keys_mode_b)
+      and ns.work_date is not null
+    order by ns.external_row_key, ns.updated_at desc nulls last, ns.created_at desc nulls last;
+
+    create temporary table tmp_selected_replacement_keys on commit drop as
+    select distinct
+      (coalesce(ex.candidate_id, st.candidate_id))::uuid as candidate_id,
+      (coalesce(ex.client_id, st.client_id))::uuid as client_id,
+      ex.old_work_date as old_work_date,
+      ((coalesce(ex.candidate_id, st.candidate_id))::text || '|' ||
+       (coalesce(ex.client_id, st.client_id))::text || '|' ||
+       (ex.old_work_date)::text) as replacement_day_key
+    from tmp_sel_truth_p2 st
+    join tmp_existing_by_key ex
+      on ex.external_row_key = st.external_row_key
+    where ex.old_work_date is not null
+      and st.import_work_date is not null
+      and ex.old_work_date <> st.import_work_date;
+
+    -- selected cancel ids set (as text) for membership checks
+    select coalesce(array_agg(x::text), array[]::text[])
+    into v_selected_cancel_shift_id_set
+    from unnest(v_selected_cancel_shift_ids) as x;
+
+    if exists (select 1 from tmp_selected_replacement_keys) then
+      create temporary table tmp_required_cancel_ids on commit drop as
+      select distinct
+        rk.replacement_day_key,
+        ns2.id as shift_id
+      from tmp_selected_replacement_keys rk
+      join public.nhsp_shifts ns2
+        on ns2.source_system = 'HEALTHROSTER'::public.hr_source_enum
+       and ns2.cancelled_at_utc is null
+       and ns2.candidate_id = rk.candidate_id
+       and ns2.client_id = rk.client_id
+       and ns2.work_date = rk.old_work_date;
+
+      if exists (
+        select 1
+        from tmp_required_cancel_ids rc
+        left join unnest(v_selected_cancel_shift_id_set) as sel(shift_id_text)
+          on sel.shift_id_text = rc.shift_id::text
+        where sel.shift_id_text is null
+      ) then
+        raise exception 'hr_weekly_apply_transactional: Policy A violation (replacement-day selected without selecting all required cancellations).';
+      end if;
+    end if;
+  end if;
+
+  -- ─────────────────────────────────────────────
+  -- 4) Phase 3 decisions validation (selection-aware) + derive force/skip keys
+  -- ─────────────────────────────────────────────
+  create temporary table tmp_p3_sel on commit drop as
+  select *
+  from public.weekly_import_changed_hours_phase3(p_import_id := p_import_id, p_system_type := 'HEALTHROSTER')
+  where external_row_key = any(v_selected_truth_keys_mode_b);
+
+  -- Reject decision keys that are not present in phase3 rows (within selected truth keys)
+  create temporary table tmp_decision_keys on commit drop as
+  select k.key_text as external_row_key
+  from (
+    select jsonb_object_keys(v_decisions) as key_text
+  ) as k
+  where k.key_text is not null and btrim(k.key_text) <> '';
+
+  if exists (
+    select 1
+    from tmp_decision_keys dk
+    left join tmp_p3_sel p3
+      on p3.external_row_key = dk.external_row_key
+    where p3.external_row_key is null
+  ) then
+    raise exception 'hr_weekly_apply_transactional: decisions include unknown external_row_key(s) for this selection (no phase3 row).';
+  end if;
+
+  create temporary table tmp_phase3_keys on commit drop as
+  select
+    p3.external_row_key,
+    (p3.requires_any_decision is true) as requires_any_decision,
+    (p3.is_invoiced is true) as is_invoiced
+  from tmp_p3_sel p3;
+
+  if exists (
+    select 1
+    from tmp_phase3_keys pk
+    where pk.requires_any_decision is true
+      and (v_decisions ? pk.external_row_key) is not true
+  ) then
+    raise exception 'hr_weekly_apply_transactional: missing decision object for one or more selected decision-required rows.';
+  end if;
+
+  create temporary table tmp_decision_eval on commit drop as
+  select
+    pk.external_row_key,
+    pk.is_invoiced,
+    case
+      when pk.requires_any_decision is not true then null
+      else
+        case
+          when jsonb_typeof(v_decisions->pk.external_row_key) <> 'object' then null
+          else
+            case
+              when lower(coalesce((v_decisions->pk.external_row_key)->>'skip','')) in ('true','1') then true
+              when lower(coalesce((v_decisions->pk.external_row_key)->>'skip','')) in ('false','0') then false
+              else null
+            end
+        end
+    end as skip_bool,
+    nullif(btrim((v_decisions->pk.external_row_key)->>'credit_week_start'), '') as credit_week_start,
+    nullif(btrim((v_decisions->pk.external_row_key)->>'reinvoice_week_start'), '') as reinvoice_week_start
+  from tmp_phase3_keys pk;
+
+  if exists (
+    select 1
+    from tmp_decision_eval de
+    where de.skip_bool is null
+      and exists (select 1 from tmp_phase3_keys pk2 where pk2.external_row_key = de.external_row_key and pk2.requires_any_decision is true)
+  ) then
+    raise exception 'hr_weekly_apply_transactional: invalid decision skip boolean for one or more keys.';
+  end if;
+
+  if exists (
+    select 1
+    from tmp_decision_eval de
+    where de.is_invoiced is true
+      and de.skip_bool is false
+      and (de.credit_week_start is null or de.reinvoice_week_start is null)
+  ) then
+    raise exception 'hr_weekly_apply_transactional: missing credit_week_start/reinvoice_week_start for invoiced PROCEED decision.';
+  end if;
+
+  if exists (
+    select 1
+    from tmp_decision_eval de
+    where de.is_invoiced is true
+      and de.skip_bool is false
+      and extract(isodow from de.credit_week_start::date) <> 1
+  ) then
+    raise exception 'hr_weekly_apply_transactional: credit_week_start must be a Monday for invoiced PROCEED decision.';
+  end if;
+
+  if exists (
+    select 1
+    from tmp_decision_eval de
+    where de.is_invoiced is true
+      and de.skip_bool is false
+      and extract(isodow from de.reinvoice_week_start::date) <> 1
+  ) then
+    raise exception 'hr_weekly_apply_transactional: reinvoice_week_start must be a Monday for invoiced PROCEED decision.';
+  end if;
+
+  select coalesce(array_agg(de.external_row_key order by de.external_row_key), array[]::text[])
+  into v_phase3_skip_keys
+  from tmp_decision_eval de
+  where de.skip_bool is true;
+
+  select coalesce(array_agg(k.external_row_key order by k.external_row_key), array[]::text[])
+  into v_force_keys_final
+  from (
+    select distinct st.external_row_key
+    from unnest(v_selected_truth_keys_mode_b) as st(external_row_key)
+    left join unnest(v_phase3_skip_keys) as sk(external_row_key)
+      on sk.external_row_key = st.external_row_key
+    where sk.external_row_key is null
+  ) as k;
+
+  select coalesce(array_agg(x.external_row_key order by x.external_row_key), array[]::text[])
+  into v_skip_keys_final
+  from (
+    select distinct allk.external_row_key
+    from (
+      select unnest(coalesce(v_mode_a_external_keys, array[]::text[])) as external_row_key
+      union all
+      select unnest(coalesce(v_mode_b_external_keys, array[]::text[])) as external_row_key
+    ) as allk
+    left join unnest(coalesce(v_force_keys_final, array[]::text[])) as fk(external_row_key)
+      on fk.external_row_key = allk.external_row_key
+    where fk.external_row_key is null
+  ) as x;
+
+  select coalesce(array_agg(de.external_row_key order by de.external_row_key), array[]::text[])
+  into v_phase3_proceed_keys
+  from tmp_decision_eval de
+  where de.skip_bool is false;
+
+  -- ─────────────────────────────────────────────
+  -- 5) Apply Phase 3 adjustment truth (selected PROCEED keys only)
+  -- ─────────────────────────────────────────────
+  if array_length(v_phase3_proceed_keys, 1) is not null then
+    select public.hr_weekly_phase3_apply_adjustment_truth(
+      p_import_id := p_import_id,
+      p_selected_external_row_keys := v_phase3_proceed_keys,
+      p_decisions := v_decisions,
+      p_actor_user_id := p_actor_user_id
+    )
+    into v_phase3_result;
+  end if;
+
+  -- ─────────────────────────────────────────────
+  -- 6) Mode B truth apply pipeline (Phase 1 + Phase 1.5)
+  -- ─────────────────────────────────────────────
+  if array_length(v_force_keys_final, 1) is not null then
+    select public.hr_autoprocess_apply_phase1(
+      import_id := p_import_id,
+      selected_group_ids := array[]::text[],
+      p_skip_external_row_keys := v_skip_keys_final,
+      p_force_overwrite_external_row_keys := v_force_keys_final
+    )
+    into v_phase1_result;
+
+    create temporary table tmp_phase15_rows on commit drop as
+    select *
+    from public.weekly_import_apply_phase2(p_import_id := p_import_id, p_system_type := 'HR_WEEKLY');
+
+    select count(*)::int
+    into v_phase15_ok
+    from tmp_phase15_rows r
+    where upper(coalesce(r.action::text,'')) = 'OK';
+
+    select count(*)::int
+    into v_phase15_updated
+    from tmp_phase15_rows r
+    where coalesce(r.shift_updated,false) is true;
+  end if;
+
+  -- ─────────────────────────────────────────────
+  -- 7) Apply selected cancellations (explicit shift_id only)
+  -- ─────────────────────────────────────────────
+  if array_length(v_selected_cancel_shift_ids, 1) is not null then
+    create temporary table tmp_cancel_meta on commit drop as
+    select
+      ns.id as shift_id,
+      ns.candidate_id,
+      ns.client_id,
+      ns.work_date
+    from public.nhsp_shifts ns
+    where ns.id = any(v_selected_cancel_shift_ids);
+
+    create temporary table tmp_selected_rep_keys_text on commit drop as
+    select distinct
+      rk.replacement_day_key
+    from (
+      select
+        (t.candidate_id::text || '|' || t.client_id::text || '|' || t.old_work_date::text) as replacement_day_key
+      from (
+        select distinct
+          ns2.candidate_id,
+          ns2.client_id,
+          ns2.work_date as old_work_date
+        from tmp_existing_by_key ebk
+        join tmp_sel_truth_p2 st2
+          on st2.external_row_key = ebk.external_row_key
+        join public.nhsp_shifts ns2
+          on ns2.external_row_key = ebk.external_row_key
+         and ns2.id = ebk.shift_id
+        where ebk.old_work_date is not null
+          and st2.import_work_date is not null
+          and ebk.old_work_date <> st2.import_work_date
+      ) as t
+    ) as rk;
+
+    select coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'shift_id', cm.shift_id::text,
+          'reason',
+            case
+              when exists (
+                select 1
+                from tmp_selected_rep_keys_text sr
+                where sr.replacement_day_key = (cm.candidate_id::text || '|' || cm.client_id::text || '|' || cm.work_date::text)
+              ) then 'REPLACEMENT_DAY'
+              else 'MISSING_FROM_IMPORT'
+            end
+        )
+      ),
+      '[]'::jsonb
+    )
+    into v_cancel_actions
+    from tmp_cancel_meta cm;
+
+    select public.weekly_import_apply_cancellations(
+      p_import_id := p_import_id,
+      p_actions := v_cancel_actions,
+      p_actor_user_id := p_actor_user_id
+    )
+    into v_cancellations_result;
+  end if;
+
+  -- ─────────────────────────────────────────────
+  -- 8) Mode A mirror ingestion (deterministic only; timesheet_id forced NULL inside mirror RPC)
+  -- ─────────────────────────────────────────────
+  if array_length(v_mode_a_external_keys, 1) is not null then
+    select public.hr_weekly_mirror_upsert_deterministic(
+      p_import_id := p_import_id,
+      p_external_row_keys := v_mode_a_external_keys,
+      p_actor_user_id := p_actor_user_id
+    )
+    into v_mirror_result;
+  end if;
+
+  -- ─────────────────────────────────────────────
+  -- 9) Mode A weekly validation upserts (required, transactional)
+  -- ─────────────────────────────────────────────
+  select public.hr_weekly_validation_preview(p_import_id := p_import_id)
+  into v_weekly_val_payload;
+
+  if v_weekly_val_payload is null or jsonb_typeof(v_weekly_val_payload) <> 'object' then
+    raise exception 'hr_weekly_apply_transactional: hr_weekly_validation_preview returned non-object payload.';
+  end if;
+
+  if jsonb_typeof(v_weekly_val_payload->'rows') <> 'array' then
+    raise exception 'hr_weekly_apply_transactional: hr_weekly_validation_preview payload missing rows array.';
+  end if;
+
+  create temporary table tmp_val_rows on commit drop as
+  select
+    nullif(btrim(r.value->>'timesheet_id'), '')::uuid as timesheet_id,
+    upper(coalesce(r.value->>'overall_status','')) as overall_status,
+    (lower(coalesce(r.value->>'has_mismatch','false')) in ('true','1')) as has_mismatch,
+    nullif(btrim(r.value->>'issue_fingerprint'), '') as issue_fingerprint,
+    nullif(btrim(r.value->>'recipient_email'), '') as recipient_email,
+    (lower(coalesce(r.value->>'emailed_already','false')) in ('true','1')) as emailed_already,
+    nullif(btrim(r.value->>'client_id'), '')::uuid as client_id
+  from jsonb_array_elements(v_weekly_val_payload->'rows') as r(value)
+  where nullif(btrim(r.value->>'timesheet_id'), '') is not null;
+
+  insert into public.timesheet_validations(
+    timesheet_id,
+    status,
+    reason_code,
+    validated_at_utc,
+    last_source,
+    updated_at
+  )
+  select
+    v.timesheet_id,
+    case when v.overall_status = 'OK' then 'VALIDATION_OK'::public.validation_status_enum else 'VALIDATION_ERROR'::public.validation_status_enum end,
+    'HEALTHROSTER_WEEKLY',
+    case when v.overall_status = 'OK' then v_now else null end,
+    p_import_id,
+    v_now
+  from tmp_val_rows v
+  on conflict (timesheet_id) do update
+    set status = excluded.status,
+        reason_code = excluded.reason_code,
+        validated_at_utc = excluded.validated_at_utc,
+        last_source = excluded.last_source,
+        updated_at = excluded.updated_at;
+
+  get diagnostics v_validations_upserted = row_count;
+
+  select coalesce(array_agg(distinct v.timesheet_id), array[]::uuid[])
+  into v_mismatched_tsids
+  from tmp_val_rows v
+  where v.has_mismatch is true
+    and v.timesheet_id is not null;
+
+  -- ─────────────────────────────────────────────
+  -- 10) Transactional hr_issue_emails upsert for requested email_actions
+  -- ─────────────────────────────────────────────
+  create temporary table tmp_email_actions on commit drop as
+  select
+    nullif(btrim(a.value->>'timesheet_id'), '')::uuid as timesheet_id,
+    nullif(btrim(a.value->>'issue_fingerprint'), '') as issue_fingerprint
+  from jsonb_array_elements(v_email_actions) as a(value)
+  where nullif(btrim(a.value->>'timesheet_id'), '') is not null
+    and nullif(btrim(a.value->>'issue_fingerprint'), '') is not null;
+
+  create temporary table tmp_email_join on commit drop as
+  select
+    ea.timesheet_id,
+    ea.issue_fingerprint,
+    vr.client_id,
+    vr.recipient_email,
+    vr.emailed_already
+  from tmp_email_actions ea
+  join tmp_val_rows vr
+    on vr.timesheet_id = ea.timesheet_id
+   and vr.issue_fingerprint = ea.issue_fingerprint;
+
+  insert into public.hr_issue_emails(
+    source_system,
+    import_id,
+    client_id,
+    timesheet_id,
+    reason_code,
+    issue_fingerprint,
+    last_sent_at,
+    created_at,
+    updated_at
+  )
+  select
+    'HEALTHROSTER',
+    p_import_id,
+    ej.client_id,
+    ej.timesheet_id,
+    'HEALTHROSTER_WEEKLY',
+    ej.issue_fingerprint,
+    v_now,
+    v_now,
+    v_now
+  from tmp_email_join ej
+  on conflict (issue_fingerprint) do update
+    set last_sent_at = excluded.last_sent_at,
+        updated_at = excluded.updated_at,
+        import_id = excluded.import_id,
+        client_id = excluded.client_id,
+        timesheet_id = excluded.timesheet_id;
+
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'timesheet_id', ej.timesheet_id::text,
+        'issue_fingerprint', ej.issue_fingerprint,
+        'recipient_email', ej.recipient_email,
+        'recipient_missing', (ej.recipient_email is null or length(btrim(ej.recipient_email)) = 0),
+        'email_kind', case when ej.emailed_already then 'REEMAIL' else 'EMAIL' end
+      )
+      order by ej.timesheet_id::text
+    ),
+    '[]'::jsonb
+  )
+  into v_email_jobs
+  from tmp_email_join ej;
+
+  -- ─────────────────────────────────────────────
+  -- 11) Compute affected_timesheet_ids for TSFIN Strategy A drain (Worker drains to completion)
+  -- ─────────────────────────────────────────────
+  create temporary table tmp_aff_ts on commit drop as
+  select distinct t.timesheet_id
+  from (
+    select (x.value)::uuid as timesheet_id
+    from jsonb_array_elements_text(coalesce(v_cancellations_result->'affected_timesheet_ids', '[]'::jsonb)) as x(value)
+
+    union all
+
+    select (x2.value)::uuid as timesheet_id
+    from jsonb_array_elements_text(coalesce(v_phase3_result->'created_timesheet_ids', '[]'::jsonb)) as x2(value)
+
+    union all
+
+    select (x3.value)::uuid as timesheet_id
+    from jsonb_array_elements_text(coalesce(v_phase3_result->'updated_timesheet_ids', '[]'::jsonb)) as x3(value)
+
+    union all
+
+    select ns.timesheet_id as timesheet_id
+    from public.nhsp_shifts ns
+    where ns.source_system = 'HEALTHROSTER'::public.hr_source_enum
+      and ns.client_id = v_import_client_id
+      and ns.cancelled_at_utc is null
+      and ns.external_row_key = any(coalesce(v_force_keys_final, array[]::text[]))
+      and ns.timesheet_id is not null
+  ) as t
+  where t.timesheet_id is not null;
+
+  select coalesce(array_agg(distinct a.timesheet_id order by a.timesheet_id), array[]::uuid[])
+  into v_affected_timesheet_ids
+  from tmp_aff_ts a;
+
+  if array_length(v_affected_timesheet_ids, 1) is not null then
+    perform public.enqueue_ts_financials_priority(v_affected_timesheet_ids, 'CONTEXT_CHANGED'::public.ts_fin_reason_enum);
+  end if;
+
+  -- ─────────────────────────────────────────────
+  -- 12) Mark import applied (inside transaction)
+  -- ─────────────────────────────────────────────
+  update public.hr_imports hi3
+  set
+    import_scope = 'HR_WEEKLY',
+    applied_at = v_now
+  where hi3.id = p_import_id;
+
+  return jsonb_build_object(
+    'import_id', p_import_id,
+    'client_id', v_import_client_id,
+    'mode_b', jsonb_build_object(
+      'selected_truth_keys', to_jsonb(coalesce(v_selected_truth_keys_mode_b, array[]::text[])),
+      'force_overwrite_external_row_keys', to_jsonb(coalesce(v_force_keys_final, array[]::text[])),
+      'skip_external_row_keys', to_jsonb(coalesce(v_skip_keys_final, array[]::text[])),
+      'phase1', v_phase1_result,
+      'phase15', jsonb_build_object(
+        'ok_rows', v_phase15_ok,
+        'shift_updated_rows', v_phase15_updated
+      ),
+      'phase3', v_phase3_result,
+      'cancellations', v_cancellations_result
+    ),
+    'mode_a', jsonb_build_object(
+      'mirror', v_mirror_result,
+      'validations_upserted', v_validations_upserted,
+      'mismatched_timesheet_ids', to_jsonb(coalesce(v_mismatched_tsids, array[]::uuid[]))
+    ),
+    'email_jobs', v_email_jobs,
+    'affected_timesheet_ids', to_jsonb(coalesce(v_affected_timesheet_ids, array[]::uuid[]))
+  );
+end;
+$$;
 
