@@ -2299,3 +2299,674 @@ begin
 end;
 $$;
 
+create or replace function public.nhsp_weekly_phase3_apply_adjustment_truth(
+  p_import_id uuid,
+  p_selected_external_row_keys text[],
+  p_decisions jsonb,
+  p_actor_user_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_now timestamptz := now();
+
+  v_src public.hr_source_enum;
+
+  v_selected_keys text[] := '{}';
+  v_key text;
+
+  v_phase3_rows jsonb := '[]'::jsonb;
+
+  v_decision jsonb;
+  v_skip_text text;
+  v_skip boolean;
+
+  v_row jsonb;
+  v_is_invoiced boolean;
+
+  v_credit_week_start text;
+  v_reinvoice_week_start text;
+
+  v_contract_id uuid;
+  v_candidate_id uuid;
+  v_client_id uuid;
+  v_week_ending_date date;
+
+  v_correction_id text;
+  v_kind text;
+
+  v_old_start_utc timestamptz;
+  v_old_end_utc   timestamptz;
+  v_new_start_utc timestamptz;
+  v_new_end_utc   timestamptz;
+  v_old_break_mins int;
+  v_new_break_mins int;
+
+  v_seg_start_utc timestamptz;
+  v_seg_end_utc timestamptz;
+  v_seg_break_mins int;
+
+  v_shift_date_ymd text;
+
+  v_contract_display_site text;
+  v_contract_ward_hint text;
+  v_contract_role text;
+
+  v_client_name text;
+  v_candidate_display_name text;
+  v_candidate_tms_ref text;
+
+  v_booking_base text;
+  v_booking_id text;
+  v_hash_hex text;
+
+  v_base_week_id uuid;
+
+  v_existing_ts_id uuid;
+  v_existing_ts_is_current boolean;
+  v_existing_ts_version bigint;
+  v_existing_ts_status text;
+
+  v_existing_cw_id uuid;
+  v_existing_cw_seq int;
+  v_existing_cw_is_adjustment boolean;
+
+  v_next_additional_seq int;
+  v_cw_id uuid;
+
+  v_ts_id uuid;
+
+  v_ins_count int := 0;
+  v_upd_count int := 0;
+  v_skipped_count int := 0;
+
+  v_created_ts_ids uuid[] := '{}';
+  v_updated_ts_ids uuid[] := '{}';
+
+  -- fnv1a32 helper vars
+  v_fnv_h bigint;
+  v_fnv_i int;
+  v_fnv_s text;
+  v_fnv_hex text;
+
+  v_candidate_norm text;
+  v_hospital_norm text;
+  v_ward_norm text;
+  v_role_norm text;
+  v_shift_label text;
+  v_shift_label_norm text;
+
+  v_schedule jsonb;
+  v_hint jsonb;
+
+  v_try int;
+begin
+  -- ---- Validate import exists and is NHSP ----
+  select hi.source_system
+  into v_src
+  from public.hr_imports hi
+  where hi.id = p_import_id
+  limit 1;
+
+  if v_src is null then
+    raise exception 'nhsp_weekly_phase3_apply_adjustment_truth: import_not_found (import_id=%)', p_import_id;
+  end if;
+
+  if v_src <> 'NHSP'::public.hr_source_enum then
+    raise exception
+      'nhsp_weekly_phase3_apply_adjustment_truth: source_system_mismatch (import_id=% actual=% expected=NHSP)',
+      p_import_id, v_src;
+  end if;
+
+  -- ---- Normalise selected keys ----
+  select coalesce(array_agg(distinct btrim(k)), '{}')
+  into v_selected_keys
+  from unnest(coalesce(p_selected_external_row_keys, '{}'::text[])) as k
+  where k is not null and btrim(k) <> '';
+
+  if array_length(v_selected_keys, 1) is null then
+    return jsonb_build_object(
+      'import_id', p_import_id,
+      'selected_count', 0,
+      'skipped_count', 0,
+      'inserted_count', 0,
+      'updated_count', 0,
+      'created_timesheet_ids', '[]'::jsonb,
+      'updated_timesheet_ids', '[]'::jsonb
+    );
+  end if;
+
+  if jsonb_typeof(coalesce(p_decisions,'{}'::jsonb)) <> 'object' then
+    raise exception 'nhsp_weekly_phase3_apply_adjustment_truth: p_decisions must be a JSON object.';
+  end if;
+
+  -- ---- Load Phase 3 rows as JSONB (schema-safe) ----
+  select coalesce(jsonb_agg(to_jsonb(r)), '[]'::jsonb)
+  into v_phase3_rows
+  from public.weekly_import_changed_hours_phase3(
+    p_import_id := p_import_id,
+    p_system_type := 'NHSP'
+  ) as r;
+
+  -- Build temp lookup for phase3 rows by external_row_key
+  create temporary table tmp_phase3_by_key(
+    external_row_key text primary key,
+    row_json jsonb not null
+  ) on commit drop;
+
+  insert into tmp_phase3_by_key(external_row_key, row_json)
+  select
+    nullif(btrim(x.row_json->>'external_row_key'), '') as external_row_key,
+    x.row_json
+  from (
+    select jsonb_array_elements(v_phase3_rows) as row_json
+  ) as x
+  where nullif(btrim(x.row_json->>'external_row_key'), '') is not null
+  on conflict (external_row_key) do nothing;
+
+  -- ---- Process each selected key ----
+  foreach v_key in array v_selected_keys loop
+    select t.row_json
+    into v_row
+    from tmp_phase3_by_key t
+    where t.external_row_key = v_key;
+
+    if v_row is null then
+      raise exception 'nhsp_weekly_phase3_apply_adjustment_truth: Phase 3 row not found for selected external_row_key=%', v_key;
+    end if;
+
+    -- Validate decision object exists
+    v_decision := coalesce(p_decisions->v_key, null);
+
+    if v_decision is null or jsonb_typeof(v_decision) <> 'object' then
+      raise exception 'nhsp_weekly_phase3_apply_adjustment_truth: Missing/invalid decision object for external_row_key=%', v_key;
+    end if;
+
+    v_skip_text := v_decision->>'skip';
+    if v_skip_text is null then
+      raise exception 'nhsp_weekly_phase3_apply_adjustment_truth: Decision missing skip boolean for external_row_key=%', v_key;
+    end if;
+
+    v_skip :=
+      case
+        when lower(v_skip_text) in ('true','1') then true
+        when lower(v_skip_text) in ('false','0') then false
+        else null
+      end;
+
+    if v_skip is null then
+      raise exception 'nhsp_weekly_phase3_apply_adjustment_truth: Decision skip is not boolean-like for external_row_key=% (skip=%)', v_key, v_skip_text;
+    end if;
+
+    if v_skip then
+      v_skipped_count := v_skipped_count + 1;
+      continue;
+    end if;
+
+    -- Determine invoiced flag (from Phase3 row)
+    v_is_invoiced :=
+      case
+        when lower(coalesce(v_row->>'is_invoiced','')) in ('true','1') then true
+        else false
+      end;
+
+    if v_is_invoiced then
+      v_credit_week_start := nullif(btrim(v_decision->>'credit_week_start'), '');
+      v_reinvoice_week_start := nullif(btrim(v_decision->>'reinvoice_week_start'), '');
+
+      if v_credit_week_start is null or v_reinvoice_week_start is null then
+        raise exception 'nhsp_weekly_phase3_apply_adjustment_truth: Missing credit/reinvoice weeks for invoiced external_row_key=%', v_key;
+      end if;
+
+      begin
+        if extract(isodow from (v_credit_week_start::date)) <> 1 then
+          raise exception 'credit_week_start must be Monday';
+        end if;
+      exception when others then
+        raise exception 'nhsp_weekly_phase3_apply_adjustment_truth: Invalid credit_week_start for external_row_key=% (value=%)', v_key, v_credit_week_start;
+      end;
+
+      begin
+        if extract(isodow from (v_reinvoice_week_start::date)) <> 1 then
+          raise exception 'reinvoice_week_start must be Monday';
+        end if;
+      exception when others then
+        raise exception 'nhsp_weekly_phase3_apply_adjustment_truth: Invalid reinvoice_week_start for external_row_key=% (value=%)', v_key, v_reinvoice_week_start;
+      end;
+    else
+      v_credit_week_start := null;
+      v_reinvoice_week_start := null;
+    end if;
+
+    -- Extract required mapping fields
+    begin
+      v_contract_id := (v_row->>'contract_id')::uuid;
+      v_candidate_id := (v_row->>'candidate_id')::uuid;
+      v_client_id := (v_row->>'client_id')::uuid;
+      v_week_ending_date := (v_row->>'week_ending_date')::date;
+    exception when others then
+      raise exception 'nhsp_weekly_phase3_apply_adjustment_truth: Phase 3 row missing contract_id/candidate_id/client_id/week_ending_date for external_row_key=%', v_key;
+    end;
+
+    -- Extract old/new shift times and break mins
+    begin
+      v_old_start_utc := nullif(v_row->>'old_start_utc','')::timestamptz;
+      v_old_end_utc   := nullif(v_row->>'old_end_utc','')::timestamptz;
+      v_new_start_utc := nullif(v_row->>'new_start_utc','')::timestamptz;
+      v_new_end_utc   := nullif(v_row->>'new_end_utc','')::timestamptz;
+    exception when others then
+      raise exception 'nhsp_weekly_phase3_apply_adjustment_truth: Phase 3 row has invalid timestamp fields for external_row_key=%', v_key;
+    end;
+
+    if v_old_start_utc is null or v_old_end_utc is null or v_new_start_utc is null or v_new_end_utc is null then
+      raise exception 'nhsp_weekly_phase3_apply_adjustment_truth: Phase 3 row missing old/new start/end timestamps for external_row_key=%', v_key;
+    end if;
+
+    v_old_break_mins := coalesce(nullif(v_row->>'old_break_mins','')::int, 0);
+    v_new_break_mins := coalesce(nullif(v_row->>'new_break_mins','')::int, 0);
+
+    -- Compute correction_id (must match JS makeWeeklyHoursCorrectionId)
+    v_fnv_s :=
+      coalesce(p_import_id::text,'') || '|' ||
+      coalesce(v_key,'') || '|' ||
+      coalesce(v_row->>'old_start_utc','') || '|' ||
+      coalesce(v_row->>'new_start_utc','') || '|' ||
+      coalesce(v_row->>'old_end_utc','') || '|' ||
+      coalesce(v_row->>'new_end_utc','') || '|' ||
+      coalesce(v_row->>'old_break_mins','') || '|' ||
+      coalesce(v_row->>'new_break_mins','');
+
+    v_fnv_h := 2166136261;
+    for v_fnv_i in 1..char_length(v_fnv_s) loop
+      v_fnv_h := (v_fnv_h # ascii(substring(v_fnv_s from v_fnv_i for 1)));
+      v_fnv_h := (v_fnv_h * 16777619) % 4294967296;
+    end loop;
+
+    v_fnv_hex := lpad(lower(to_hex(v_fnv_h)), 8, '0');
+    v_correction_id := 'chg:' || p_import_id::text || ':' || v_key || ':' || v_fnv_hex;
+
+    -- Load contract + optional client/candidate display context for norms
+    select
+      c.display_site,
+      c.ward_hint,
+      c.role
+    into
+      v_contract_display_site,
+      v_contract_ward_hint,
+      v_contract_role
+    from public.contracts c
+    where c.id = v_contract_id
+    limit 1;
+
+    select cl.name
+    into v_client_name
+    from public.clients cl
+    where cl.id = v_client_id
+    limit 1;
+
+    select cand.display_name, cand.tms_ref
+    into v_candidate_display_name, v_candidate_tms_ref
+    from public.candidates cand
+    where cand.id = v_candidate_id
+    limit 1;
+
+    -- Booking base follows existing scheme (stable + deterministic)
+    v_candidate_norm := lower(coalesce(v_candidate_tms_ref, v_candidate_display_name, v_candidate_id::text));
+    v_hospital_norm := lower(coalesce(v_contract_display_site, v_client_name, v_client_id::text));
+    v_ward_norm := lower(coalesce(v_contract_ward_hint, 'contract'));
+    v_role_norm := lower(coalesce(v_contract_role, 'weekly'));
+
+    v_booking_base :=
+      'scope=WEEKLY' || '|' ||
+      'client_id=' || coalesce(v_client_id::text,'') || '|' ||
+      'candidate_id=' || coalesce(v_candidate_id::text,'') || '|' ||
+      'contract_id=' || coalesce(v_contract_id::text,'') || '|' ||
+      'week_ending_date=' || coalesce(v_week_ending_date::text,'') || '|' ||
+      'hospital=' || v_hospital_norm || '|' ||
+      'ward=' || v_ward_norm || '|' ||
+      'role=' || v_role_norm;
+
+    -- Hash booking base (sha256) like makeBookingId; keep first 16 hex
+    v_hash_hex := substring(encode(digest(v_booking_base, 'sha256'), 'hex') from 1 for 16);
+    v_booking_id := 'bk_' || v_hash_hex;
+
+    -- Ensure base week exists (additional_seq=0, is_adjustment=false)
+    v_base_week_id := null;
+
+    select cw0.id
+    into v_base_week_id
+    from public.contract_weeks cw0
+    where cw0.contract_id = v_contract_id
+      and cw0.week_ending_date = v_week_ending_date
+      and cw0.is_adjustment is false
+      and coalesce(cw0.additional_seq, 0) = 0
+    limit 1
+    for update;
+
+    if v_base_week_id is null then
+      insert into public.contract_weeks(
+        contract_id,
+        week_ending_date,
+        additional_seq,
+        is_adjustment,
+        status,
+        created_at,
+        updated_at
+      )
+      values (
+        v_contract_id,
+        v_week_ending_date,
+        0,
+        false,
+        'SUBMITTED'::public.contract_week_status_enum,
+        v_now,
+        v_now
+      )
+      returning id into v_base_week_id;
+    end if;
+
+    -- Two correction kinds per proceed: reversal + replacement
+    foreach v_kind in array array['CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT'] loop
+
+      if v_kind = 'CHANGED_HOURS_REVERSAL' then
+        v_seg_start_utc := v_old_start_utc;
+        v_seg_end_utc := v_old_end_utc;
+        v_seg_break_mins := greatest(0, v_old_break_mins);
+      else
+        v_seg_start_utc := v_new_start_utc;
+        v_seg_end_utc := v_new_end_utc;
+        v_seg_break_mins := greatest(0, v_new_break_mins);
+      end if;
+
+      v_shift_date_ymd := to_char((v_seg_start_utc at time zone 'Europe/London')::date, 'YYYY-MM-DD');
+
+      v_hint := jsonb_build_object(
+        'import_correction', jsonb_build_object(
+          'import_id', p_import_id::text,
+          'external_row_key', v_key,
+          'correction_id', v_correction_id,
+          'correction_kind', v_kind,
+          'credit_week_start', v_credit_week_start,
+          'reinvoice_week_start', v_reinvoice_week_start
+        )
+      );
+
+      v_shift_label := 'weekly-correction-' || lower(v_kind) || '-' || v_correction_id;
+
+      v_shift_label_norm :=
+        regexp_replace(
+          regexp_replace(lower(trim(v_shift_label)), '\s+', ' ', 'g'),
+          '[^\w\s\-@&\/,:]',
+          '',
+          'g'
+        );
+
+      v_schedule := jsonb_build_array(
+        jsonb_build_object(
+          'date', v_shift_date_ymd,
+          'ward', nullif(btrim(coalesce(v_contract_ward_hint,'contract')), ''),
+          'start_utc', v_seg_start_utc::text,
+          'end_utc', v_seg_end_utc::text,
+          'break_mins', v_seg_break_mins
+        )
+      );
+
+      -- Idempotency: reuse existing correction timesheet (unique on correction_id+kind)
+      v_existing_ts_id := null;
+      v_existing_ts_is_current := null;
+      v_existing_ts_version := null;
+      v_existing_ts_status := null;
+
+      select
+        t.timesheet_id,
+        t.is_current,
+        t.version,
+        t.status::text
+      into
+        v_existing_ts_id,
+        v_existing_ts_is_current,
+        v_existing_ts_version,
+        v_existing_ts_status
+      from public.timesheets t
+      where t.correction_id = v_correction_id
+        and t.correction_kind = v_kind
+      order by t.is_current desc, t.version desc
+      limit 1
+      for update;
+
+      if v_existing_ts_id is not null then
+        -- Ensure there is an adjustment contract_week linked; reuse it if present.
+        v_existing_cw_id := null;
+        v_existing_cw_seq := null;
+        v_existing_cw_is_adjustment := null;
+
+        select
+          cw.id,
+          cw.additional_seq,
+          cw.is_adjustment
+        into
+          v_existing_cw_id,
+          v_existing_cw_seq,
+          v_existing_cw_is_adjustment
+        from public.contract_weeks cw
+        where cw.timesheet_id = v_existing_ts_id
+          and cw.contract_id = v_contract_id
+          and cw.week_ending_date = v_week_ending_date
+        limit 1
+        for update;
+
+        if v_existing_cw_id is not null then
+          if v_existing_cw_is_adjustment is not true or coalesce(v_existing_cw_seq,0) <= 0 then
+            update public.contract_weeks cw2
+            set
+              is_adjustment = true,
+              status = 'SUBMITTED'::public.contract_week_status_enum,
+              updated_at = v_now
+            where cw2.id = v_existing_cw_id;
+          end if;
+
+          -- Update timesheet schedule + hint only; keep idempotent identity
+          update public.timesheets t2
+          set
+            actual_schedule_json = v_schedule,
+            qr_payload_json = v_hint,
+            updated_at = v_now
+          where t2.timesheet_id = v_existing_ts_id;
+
+          v_upd_count := v_upd_count + 1;
+          v_updated_ts_ids := array_append(v_updated_ts_ids, v_existing_ts_id);
+
+          continue;
+        end if;
+
+        -- If we have an existing correction timesheet but no linked contract_week, create one.
+        v_next_additional_seq := null;
+
+        select coalesce(max(cw3.additional_seq), 0) + 1
+        into v_next_additional_seq
+        from public.contract_weeks cw3
+        where cw3.contract_id = v_contract_id
+          and cw3.week_ending_date = v_week_ending_date
+          and cw3.is_adjustment is true;
+
+        insert into public.contract_weeks(
+          contract_id,
+          week_ending_date,
+          additional_seq,
+          is_adjustment,
+          status,
+          timesheet_id,
+          created_at,
+          updated_at
+        )
+        values (
+          v_contract_id,
+          v_week_ending_date,
+          v_next_additional_seq,
+          true,
+          'SUBMITTED'::public.contract_week_status_enum,
+          v_existing_ts_id,
+          v_now,
+          v_now
+        )
+        returning id into v_existing_cw_id;
+
+        update public.timesheets t2b
+        set
+          actual_schedule_json = v_schedule,
+          qr_payload_json = v_hint,
+          updated_at = v_now
+        where t2b.timesheet_id = v_existing_ts_id;
+
+        v_upd_count := v_upd_count + 1;
+        v_updated_ts_ids := array_append(v_updated_ts_ids, v_existing_ts_id);
+
+        continue;
+      end if;
+
+      -- No existing correction timesheet: create new adjustment contract_week + timesheet
+      v_ts_id := null;
+      v_cw_id := null;
+
+      -- Allocate additional_seq with retry to avoid collisions
+      for v_try in 1..5 loop
+        select coalesce(max(cw4.additional_seq), 0) + 1
+        into v_next_additional_seq
+        from public.contract_weeks cw4
+        where cw4.contract_id = v_contract_id
+          and cw4.week_ending_date = v_week_ending_date
+          and cw4.is_adjustment is true
+        for update;
+
+        begin
+          insert into public.timesheets(
+            booking_id,
+            version,
+            is_current,
+            status,
+            occupant_key_norm,
+            hospital_norm,
+            ward_norm,
+            job_title_norm,
+            shift_label_norm,
+            week_ending_date,
+            contract_id,
+            sheet_scope,
+            submission_mode,
+            line_type,
+            manual_pdf_r2_key,
+            actual_schedule_json,
+            additional_units_week,
+            additional_units_per_day,
+            day_references_json,
+            qr_status,
+            qr_token,
+            qr_generated_at,
+            qr_scanned_at,
+            qr_scan_info_json,
+            qr_r2_key,
+            qr_payload_json,
+            created_at,
+            updated_at,
+            is_adjustment,
+            parent_timesheet_id,
+            candidate_hint_text,
+            correction_id,
+            correction_kind,
+            adjustment_origin
+          )
+          values (
+            v_booking_id,
+            1,
+            true,
+            'RECEIVED'::public.timesheet_status_enum,
+            lower(coalesce(v_candidate_tms_ref, v_candidate_display_name, v_candidate_id::text)),
+            lower(coalesce(v_contract_display_site, v_client_name, v_client_id::text)),
+            lower(coalesce(v_contract_ward_hint,'contract')),
+            lower(coalesce(v_contract_role,'weekly')),
+            v_shift_label_norm,
+            v_week_ending_date,
+            v_contract_id,
+            'WEEKLY'::public.timesheet_scope_enum,
+            'MANUAL'::public.timesheet_submission_mode_enum,
+            'HOURS'::public.timesheet_line_type_enum,
+            null,
+            v_schedule,
+            '{}'::jsonb,
+            '{}'::jsonb,
+            '{}'::jsonb,
+            null,
+            null,
+            null,
+            null,
+            '{}'::jsonb,
+            null,
+            v_hint,
+            v_now,
+            v_now,
+            true,
+            null,
+            coalesce(v_candidate_display_name, v_candidate_tms_ref, v_candidate_id::text),
+            v_correction_id,
+            v_kind,
+            'IMPORT_CORRECTION'
+          )
+          returning timesheet_id into v_ts_id;
+
+          insert into public.contract_weeks(
+            contract_id,
+            week_ending_date,
+            additional_seq,
+            is_adjustment,
+            status,
+            timesheet_id,
+            created_at,
+            updated_at
+          )
+          values (
+            v_contract_id,
+            v_week_ending_date,
+            v_next_additional_seq,
+            true,
+            'SUBMITTED'::public.contract_week_status_enum,
+            v_ts_id,
+            v_now,
+            v_now
+          )
+          returning id into v_cw_id;
+
+          v_ins_count := v_ins_count + 1;
+          v_created_ts_ids := array_append(v_created_ts_ids, v_ts_id);
+
+          exit;
+        exception
+          when unique_violation then
+            -- retry allocation
+            v_ts_id := null;
+            v_cw_id := null;
+        end;
+
+        exit when v_ts_id is not null;
+      end loop;
+
+      if v_ts_id is null then
+        raise exception 'nhsp_weekly_phase3_apply_adjustment_truth: Failed to allocate correction timesheet/contract_week after retries (external_row_key=% kind=%)', v_key, v_kind;
+      end if;
+
+    end loop; -- kind loop
+  end loop; -- selected keys loop
+
+  return jsonb_build_object(
+    'import_id', p_import_id,
+    'selected_count', coalesce(array_length(v_selected_keys, 1), 0),
+    'skipped_count', v_skipped_count,
+    'inserted_count', v_ins_count,
+    'updated_count', v_upd_count,
+    'created_timesheet_ids', to_jsonb(coalesce(v_created_ts_ids, '{}'::uuid[])),
+    'updated_timesheet_ids', to_jsonb(coalesce(v_updated_ts_ids, '{}'::uuid[]))
+  );
+end;
+$$;
