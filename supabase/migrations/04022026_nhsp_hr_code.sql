@@ -1139,8 +1139,6 @@ end;
 $$;
 
 
-
-
 create or replace function public.hr_weekly_apply_transactional(
   p_import_id uuid,
   p_payload jsonb,
@@ -1729,6 +1727,7 @@ begin
 
   -- ─────────────────────────────────────────────
   -- 9) Mode A weekly validation upserts (required, transactional)
+  --     FIX: Only upsert validations for MODE_A groups.
   -- ─────────────────────────────────────────────
   select public.hr_weekly_validation_preview(p_import_id := p_import_id)
   into v_weekly_val_payload;
@@ -1753,6 +1752,21 @@ begin
   from jsonb_array_elements(v_weekly_val_payload->'rows') as r(value)
   where nullif(btrim(r.value->>'timesheet_id'), '') is not null;
 
+  create temporary table tmp_val_mode on commit drop as
+  select
+    vr.timesheet_id,
+    gm.mode
+  from tmp_val_rows vr
+  join public.timesheets ts
+    on ts.timesheet_id = vr.timesheet_id
+  join public.contracts ct
+    on ct.id = ts.contract_id
+  join tmp_group_mode gm
+    on gm.contract_id = ts.contract_id
+   and gm.candidate_id = ct.candidate_id
+   and gm.week_ending_date = ts.week_ending_date
+   and gm.client_id = v_import_client_id;
+
   insert into public.timesheet_validations(
     timesheet_id,
     status,
@@ -1762,13 +1776,19 @@ begin
     updated_at
   )
   select
-    v.timesheet_id,
-    case when v.overall_status = 'OK' then 'VALIDATION_OK'::public.validation_status_enum else 'VALIDATION_ERROR'::public.validation_status_enum end,
+    vr.timesheet_id,
+    case
+      when vr.overall_status = 'OK' then 'VALIDATION_OK'::public.validation_status_enum
+      else 'VALIDATION_ERROR'::public.validation_status_enum
+    end,
     'HEALTHROSTER_WEEKLY',
-    case when v.overall_status = 'OK' then v_now else null end,
+    case when vr.overall_status = 'OK' then v_now else null end,
     p_import_id,
     v_now
-  from tmp_val_rows v
+  from tmp_val_rows vr
+  join tmp_val_mode vm
+    on vm.timesheet_id = vr.timesheet_id
+  where vm.mode = 'MODE_A'
   on conflict (timesheet_id) do update
     set status = excluded.status,
         reason_code = excluded.reason_code,
@@ -1778,14 +1798,18 @@ begin
 
   get diagnostics v_validations_upserted = row_count;
 
-  select coalesce(array_agg(distinct v.timesheet_id), array[]::uuid[])
+  select coalesce(array_agg(distinct vr.timesheet_id), array[]::uuid[])
   into v_mismatched_tsids
-  from tmp_val_rows v
-  where v.has_mismatch is true
-    and v.timesheet_id is not null;
+  from tmp_val_rows vr
+  join tmp_val_mode vm
+    on vm.timesheet_id = vr.timesheet_id
+  where vm.mode = 'MODE_A'
+    and vr.has_mismatch is true
+    and vr.timesheet_id is not null;
 
   -- ─────────────────────────────────────────────
   -- 10) Transactional hr_issue_emails upsert for requested email_actions
+  --      (Email/Re-email state; actual send is post-commit)
   -- ─────────────────────────────────────────────
   create temporary table tmp_email_actions on commit drop as
   select
@@ -1805,7 +1829,10 @@ begin
   from tmp_email_actions ea
   join tmp_val_rows vr
     on vr.timesheet_id = ea.timesheet_id
-   and vr.issue_fingerprint = ea.issue_fingerprint;
+   and vr.issue_fingerprint = ea.issue_fingerprint
+  join tmp_val_mode vm
+    on vm.timesheet_id = vr.timesheet_id
+  where vm.mode = 'MODE_A';
 
   insert into public.hr_issue_emails(
     source_system,
@@ -1925,4 +1952,5 @@ begin
   );
 end;
 $$;
+
 
