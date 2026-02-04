@@ -485,256 +485,275 @@ returns table (
   requires_invoice_decision boolean,
   requires_any_decision boolean
 )
-language sql
+language plpgsql
 stable
+security definer
+set search_path = public
 as $$
-with wanted as (
-  select
+declare
+  v_sys public.hr_source_enum;
+begin
+  v_sys :=
     case
-      when upper(coalesce($2,'')) = 'NHSP' then 'NHSP'::hr_source_enum
-      when upper(coalesce($2,'')) = 'HEALTHROSTER' then 'HEALTHROSTER'::hr_source_enum
-      else null::hr_source_enum
-    end as sys
-),
-rows_in as (
-  select
-    r.id as hr_row_id,
-    r.external_row_key,
+      when upper(coalesce(p_system_type,'')) = 'NHSP' then 'NHSP'::public.hr_source_enum
+      when upper(coalesce(p_system_type,'')) = 'HEALTHROSTER' then 'HEALTHROSTER'::public.hr_source_enum
+      else null::public.hr_source_enum
+    end;
 
-    -- POLICY: shift "date" is derived from start time local date (Europe/London), not date_local.
-    ((date_trunc('minute', (r.payload_json->>'start_utc')::timestamptz) at time zone 'Europe/London')::date) as work_date,
+  if v_sys is null then
+    raise exception 'weekly_import_changed_hours_phase3: invalid p_system_type "%". Expected NHSP or HEALTHROSTER.', p_system_type;
+  end if;
 
-    date_trunc('minute', (r.payload_json->>'start_utc')::timestamptz) as new_start_utc,
-    date_trunc('minute', (r.payload_json->>'end_utc')::timestamptz)   as new_end_utc,
-    coalesce((r.payload_json->>'break_mins')::int, 0) as new_break_mins
-  from public.hr_rows r
-  where r.import_id = $1
-    and r.external_row_key is not null
-    and (r.payload_json->>'start_utc') is not null
-    and (r.payload_json->>'end_utc')   is not null
-),
-matched as (
-  select
-    ri.*,
-    s.id as shift_id,
-    s.source_system::text as source_system,
-    s.candidate_id,
-    s.client_id,
-    s.contract_id,
-    s.timesheet_id,
-    s.week_ending_date,
+  return query
+  with rows_in as (
+    select
+      r.id as hr_row_id,
+      r.external_row_key,
 
-    -- old values truncated to minute precision for comparison + output consistency
-    date_trunc('minute', s.start_utc) as old_start_utc,
-    date_trunc('minute', s.end_utc)   as old_end_utc,
-    coalesce(s.break_mins,0) as old_break_mins,
-    coalesce(s.pay_minutes,0) as old_paid_minutes,
+      -- POLICY: shift "date" is derived from start time local date (Europe/London), not date_local.
+      ((date_trunc('minute', (r.payload_json->>'start_utc')::timestamptz) at time zone 'Europe/London')::date) as work_date,
 
-    s.invoice_id as shift_invoice_id,
+      date_trunc('minute', (r.payload_json->>'start_utc')::timestamptz) as new_start_utc,
+      date_trunc('minute', (r.payload_json->>'end_utc')::timestamptz)   as new_end_utc,
+      case
+        when (r.payload_json ? 'break_mins') and ((r.payload_json->>'break_mins') ~ '^[0-9]+$')
+          then (r.payload_json->>'break_mins')::int
+        else 0
+      end as new_break_mins
+    from public.hr_rows r
+    where r.import_id = p_import_id
+      and r.external_row_key is not null
+      and (r.payload_json->>'start_utc') is not null
+      and (r.payload_json->>'end_utc')   is not null
+  ),
+  matched as (
+    select
+      ri.*,
+      s.id as shift_id,
+      s.source_system::text as source_system,
+      s.candidate_id,
+      s.client_id,
+      s.contract_id,
+      s.timesheet_id,
+      s.week_ending_date,
 
-    c.self_bill as contract_self_bill
-  from rows_in ri
-  join wanted w on true
-  left join public.nhsp_shifts s
-    on s.external_row_key = ri.external_row_key
-   and (w.sys is null or s.source_system = w.sys)
-  left join public.contracts c
-    on c.id = s.contract_id
-),
-fin as (
-  select
-    m.*,
-    tf.id as tsfin_id,
-    tf.paid_at_utc,
-    tf.locked_by_invoice_id,
-    tf.invoice_breakdown_json,
-    tf.policy_snapshot_json,
-    tf.pay_day, tf.pay_night, tf.pay_sat, tf.pay_sun, tf.pay_bh,
-    tf.charge_day, tf.charge_night, tf.charge_sat, tf.charge_sun, tf.charge_bh
-  from matched m
-  left join public.timesheets_financials tf
-    on tf.timesheet_id = m.timesheet_id
-   and tf.is_current = true
-),
-seg_old as (
-  select
-    f.*,
-    (seg->>'pay_amount')::numeric     as seg_old_pay_ex,
-    (seg->>'charge_amount')::numeric  as seg_old_charge_ex,
-    nullif(seg->>'invoice_locked_invoice_id','')::uuid as seg_invoice_id
-  from fin f
-  left join lateral (
-    select seg
-    from jsonb_array_elements(coalesce(f.invoice_breakdown_json->'segments','[]'::jsonb)) as t(seg)
-    where (seg->>'segment_id') = ('nhsp:' || f.shift_id::text)
-    limit 1
-  ) x on true
-),
-invline_old as (
-  select
-    s.*,
-    case
-      when s.source_system = 'NHSP' then (
-        select max(il.total_charge_ex_vat)
-        from public.invoice_lines il
-        where il.meta_json->>'nhsp_shift_id' = s.shift_id::text
+      -- old values truncated to minute precision for comparison + output consistency
+      date_trunc('minute', s.start_utc) as old_start_utc,
+      date_trunc('minute', s.end_utc)   as old_end_utc,
+      coalesce(s.break_mins,0) as old_break_mins,
+      coalesce(s.pay_minutes,0) as old_paid_minutes,
+
+      s.invoice_id as shift_invoice_id,
+
+      c.self_bill as contract_self_bill
+    from rows_in ri
+    left join public.nhsp_shifts s
+      on s.external_row_key = ri.external_row_key
+     and s.source_system = v_sys
+     and s.cancelled_at_utc is null
+    left join public.contracts c
+      on c.id = s.contract_id
+  ),
+  fin as (
+    select
+      m.*,
+      tf.id as tsfin_id,
+      tf.paid_at_utc,
+      tf.locked_by_invoice_id,
+      tf.invoice_breakdown_json,
+      tf.policy_snapshot_json,
+      tf.pay_day, tf.pay_night, tf.pay_sat, tf.pay_sun, tf.pay_bh,
+      tf.charge_day, tf.charge_night, tf.charge_sat, tf.charge_sun, tf.charge_bh
+    from matched m
+    left join public.timesheets_financials tf
+      on tf.timesheet_id = m.timesheet_id
+     and tf.is_current = true
+  ),
+  seg_old as (
+    select
+      f.*,
+      (seg->>'pay_amount')::numeric     as seg_old_pay_ex,
+      (seg->>'charge_amount')::numeric  as seg_old_charge_ex,
+      nullif(seg->>'invoice_locked_invoice_id','')::uuid as seg_invoice_id
+    from fin f
+    left join lateral (
+      select t.seg
+      from jsonb_array_elements(coalesce(f.invoice_breakdown_json->'segments','[]'::jsonb)) as t(seg)
+      where (
+        (t.seg->>'nhsp_shift_id') = f.shift_id::text
+        or (t.seg->>'external_row_key') = f.external_row_key
       )
-      else null
-    end as invline_old_charge_ex
-  from seg_old s
-),
-new_hours as (
-  select
-    a.*,
-    h.hours_day, h.hours_night, h.hours_sat, h.hours_sun, h.hours_bh, h.total_hours,
-    greatest(
-      0,
-      (extract(epoch from (a.new_end_utc - a.new_start_utc))/60)::int - coalesce(a.new_break_mins,0)
-    ) as new_paid_minutes
-  from invline_old a
-  left join lateral public._wkimp_bucket_hours_from_policy(
-    coalesce(a.policy_snapshot_json, '{}'::jsonb),
-    a.new_start_utc,
-    a.new_end_utc,
-    a.new_break_mins
-  ) h on true
-),
-amounts as (
-  select
-    n.*,
+      order by
+        case when (t.seg->>'nhsp_shift_id') = f.shift_id::text then 0 else 1 end
+      limit 1
+    ) x(seg) on true
+  ),
+  invline_old as (
+    select
+      s.*,
+      case
+        when upper(coalesce(s.source_system,'')) = 'NHSP' then (
+          select max(il.total_charge_ex_vat)
+          from public.invoice_lines il
+          where il.meta_json->>'nhsp_shift_id' = s.shift_id::text
+        )
+        else null
+      end as invline_old_charge_ex
+    from seg_old s
+  ),
+  new_hours as (
+    select
+      a.*,
+      h.hours_day, h.hours_night, h.hours_sat, h.hours_sun, h.hours_bh, h.total_hours,
+      greatest(
+        0,
+        (extract(epoch from (a.new_end_utc - a.new_start_utc))/60)::int - coalesce(a.new_break_mins,0)
+      ) as new_paid_minutes
+    from invline_old a
+    left join lateral public._wkimp_bucket_hours_from_policy(
+      coalesce(a.policy_snapshot_json, '{}'::jsonb),
+      a.new_start_utc,
+      a.new_end_utc,
+      a.new_break_mins
+    ) h on true
+  ),
+  amounts as (
+    select
+      n.*,
 
-    coalesce(n.seg_old_pay_ex, null) as old_pay_ex,
-    coalesce(n.seg_old_charge_ex, n.invline_old_charge_ex, null) as old_charge_ex,
+      coalesce(n.seg_old_pay_ex, null) as old_pay_ex,
+      coalesce(n.seg_old_charge_ex, n.invline_old_charge_ex, null) as old_charge_ex,
 
-    case
-      when n.policy_snapshot_json is null then null
-      else round(
-        coalesce(n.hours_day,0)   * coalesce(n.pay_day,0) +
-        coalesce(n.hours_night,0) * coalesce(n.pay_night,0) +
-        coalesce(n.hours_sat,0)   * coalesce(n.pay_sat,0) +
-        coalesce(n.hours_sun,0)   * coalesce(n.pay_sun,0) +
-        coalesce(n.hours_bh,0)    * coalesce(n.pay_bh,0)
-      , 2)
-    end as new_pay_ex,
+      case
+        when n.policy_snapshot_json is null then null
+        else round(
+          coalesce(n.hours_day,0)   * coalesce(n.pay_day,0) +
+          coalesce(n.hours_night,0) * coalesce(n.pay_night,0) +
+          coalesce(n.hours_sat,0)   * coalesce(n.pay_sat,0) +
+          coalesce(n.hours_sun,0)   * coalesce(n.pay_sun,0) +
+          coalesce(n.hours_bh,0)    * coalesce(n.pay_bh,0)
+        , 2)
+      end as new_pay_ex,
 
-    case
-      when n.policy_snapshot_json is null then null
-      else round(
-        coalesce(n.hours_day,0)   * coalesce(n.charge_day,0) +
-        coalesce(n.hours_night,0) * coalesce(n.charge_night,0) +
-        coalesce(n.hours_sat,0)   * coalesce(n.charge_sat,0) +
-        coalesce(n.hours_sun,0)   * coalesce(n.charge_sun,0) +
-        coalesce(n.hours_bh,0)    * coalesce(n.charge_bh,0)
-      , 2)
-    end as new_charge_ex
-  from new_hours n
-),
-final_rows as (
-  select
-    a.hr_row_id,
-    a.external_row_key,
+      case
+        when n.policy_snapshot_json is null then null
+        else round(
+          coalesce(n.hours_day,0)   * coalesce(n.charge_day,0) +
+          coalesce(n.hours_night,0) * coalesce(n.charge_night,0) +
+          coalesce(n.hours_sat,0)   * coalesce(n.charge_sat,0) +
+          coalesce(n.hours_sun,0)   * coalesce(n.charge_sun,0) +
+          coalesce(n.hours_bh,0)    * coalesce(n.charge_bh,0)
+        , 2)
+      end as new_charge_ex
+    from new_hours n
+  ),
+  final_rows as (
+    select
+      a.hr_row_id,
+      a.external_row_key,
 
-    a.shift_id,
-    a.source_system,
+      a.shift_id,
+      a.source_system,
 
-    a.candidate_id,
-    a.client_id,
-    a.contract_id,
-    a.timesheet_id,
+      a.candidate_id,
+      a.client_id,
+      a.contract_id,
+      a.timesheet_id,
 
-    a.contract_self_bill,
+      a.contract_self_bill,
 
-    -- POLICY: shift date is start-date (already computed from new_start_utc), and we retain old week_ending_date from shift
-    a.work_date as work_date,
-    a.week_ending_date,
+      -- POLICY: shift date is start-date (already computed from new_start_utc), and we retain old week_ending_date from shift
+      a.work_date as work_date,
+      a.week_ending_date,
 
-    a.old_start_utc,
-    a.old_end_utc,
-    a.old_break_mins,
+      a.old_start_utc,
+      a.old_end_utc,
+      a.old_break_mins,
 
-    a.new_start_utc,
-    a.new_end_utc,
-    a.new_break_mins,
+      a.new_start_utc,
+      a.new_end_utc,
+      a.new_break_mins,
 
-    a.old_paid_minutes,
-    a.new_paid_minutes,
+      a.old_paid_minutes,
+      a.new_paid_minutes,
 
-    (
-      a.shift_id is not null
-      and (
-        a.old_start_utc is distinct from a.new_start_utc
-        or a.old_end_utc is distinct from a.new_end_utc
-        or coalesce(a.old_break_mins,0) <> coalesce(a.new_break_mins,0)
-      )
-    ) as is_changed_hours,
-
-    (a.paid_at_utc is not null) as is_paid,
-
-    (
-      a.seg_invoice_id is not null
-      or a.locked_by_invoice_id is not null
-      or a.shift_invoice_id is not null
-    ) as is_invoiced,
-
-    coalesce(a.seg_invoice_id, a.locked_by_invoice_id, a.shift_invoice_id) as invoice_id_detected,
-
-    a.old_pay_ex,
-    a.old_charge_ex,
-
-    a.new_pay_ex,
-    a.new_charge_ex,
-
-    case when a.new_pay_ex is null or a.old_pay_ex is null then null else round(a.new_pay_ex - a.old_pay_ex, 2) end as delta_pay_ex,
-    case when a.new_charge_ex is null or a.old_charge_ex is null then null else round(a.new_charge_ex - a.old_charge_ex, 2) end as delta_charge_ex,
-
-    (
-      (a.paid_at_utc is not null)
-      and (
+      (
         a.shift_id is not null
         and (
           a.old_start_utc is distinct from a.new_start_utc
           or a.old_end_utc is distinct from a.new_end_utc
           or coalesce(a.old_break_mins,0) <> coalesce(a.new_break_mins,0)
         )
-      )
-    ) as requires_pay_decision,
+      ) as is_changed_hours,
 
-    (
+      (a.paid_at_utc is not null) as is_paid,
+
       (
         a.seg_invoice_id is not null
         or a.locked_by_invoice_id is not null
         or a.shift_invoice_id is not null
-      )
-      and (
-        a.shift_id is not null
-        and (
-          a.old_start_utc is distinct from a.new_start_utc
-          or a.old_end_utc is distinct from a.new_end_utc
-          or coalesce(a.old_break_mins,0) <> coalesce(a.new_break_mins,0)
-        )
-      )
-    ) as requires_invoice_decision,
+      ) as is_invoiced,
 
-    (
+      coalesce(a.seg_invoice_id, a.locked_by_invoice_id, a.shift_invoice_id) as invoice_id_detected,
+
+      a.old_pay_ex,
+      a.old_charge_ex,
+
+      a.new_pay_ex,
+      a.new_charge_ex,
+
+      case when a.new_pay_ex is null or a.old_pay_ex is null then null else round(a.new_pay_ex - a.old_pay_ex, 2) end as delta_pay_ex,
+      case when a.new_charge_ex is null or a.old_charge_ex is null then null else round(a.new_charge_ex - a.old_charge_ex, 2) end as delta_charge_ex,
+
       (
         (a.paid_at_utc is not null)
-        or
-        (a.seg_invoice_id is not null or a.locked_by_invoice_id is not null or a.shift_invoice_id is not null)
-      )
-      and (
-        a.shift_id is not null
         and (
-          a.old_start_utc is distinct from a.new_start_utc
-          or a.old_end_utc is distinct from a.new_end_utc
-          or coalesce(a.old_break_mins,0) <> coalesce(a.new_break_mins,0)
+          a.shift_id is not null
+          and (
+            a.old_start_utc is distinct from a.new_start_utc
+            or a.old_end_utc is distinct from a.new_end_utc
+            or coalesce(a.old_break_mins,0) <> coalesce(a.new_break_mins,0)
+          )
         )
-      )
-    ) as requires_any_decision
-  from amounts a
-)
-select *
-from final_rows
-where requires_any_decision = true
-order by work_date asc, external_row_key asc;
-$$;
+      ) as requires_pay_decision,
 
+      (
+        (
+          a.seg_invoice_id is not null
+          or a.locked_by_invoice_id is not null
+          or a.shift_invoice_id is not null
+        )
+        and (
+          a.shift_id is not null
+          and (
+            a.old_start_utc is distinct from a.new_start_utc
+            or a.old_end_utc is distinct from a.new_end_utc
+            or coalesce(a.old_break_mins,0) <> coalesce(a.new_break_mins,0)
+          )
+        )
+      ) as requires_invoice_decision,
+
+      (
+        (
+          (a.paid_at_utc is not null)
+          or
+          (a.seg_invoice_id is not null or a.locked_by_invoice_id is not null or a.shift_invoice_id is not null)
+        )
+        and (
+          a.shift_id is not null
+          and (
+            a.old_start_utc is distinct from a.new_start_utc
+            or a.old_end_utc is distinct from a.new_end_utc
+            or coalesce(a.old_break_mins,0) <> coalesce(a.new_break_mins,0)
+          )
+        )
+      ) as requires_any_decision
+    from amounts a
+  )
+  select *
+  from final_rows
+  where requires_any_decision = true
+  order by work_date asc, external_row_key asc;
+
+end;
+$$;
