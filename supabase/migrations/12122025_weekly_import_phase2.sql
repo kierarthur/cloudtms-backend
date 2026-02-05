@@ -12,16 +12,41 @@ returns table (
   week_ending_date  date,
   contract_id       uuid,
   action            text,
-  reason            text
+  reason            text,
+
+  -- ✅ NEW: existing-match + diff fields (for preview classification)
+  matched_shift_id    uuid,
+  old_start_utc       timestamptz,
+  old_end_utc         timestamptz,
+  old_break_mins      int,
+  old_paid_minutes    int,
+  old_cancelled_at_utc timestamptz,
+
+  new_start_utc       timestamptz,
+  new_end_utc         timestamptz,
+  new_break_mins      int,
+  new_paid_minutes    int,
+
+  delta_paid_minutes  int,
+  is_new              boolean,
+  is_noop             boolean,
+  is_changed          boolean
 )
 language plpgsql
 as $$
 declare
   v_sys text := upper(trim(coalesce(p_system_type,'')));
+  v_src public.hr_source_enum;
 begin
   if v_sys not in ('NHSP','HR_WEEKLY') then
     raise exception 'weekly_import_phase2: invalid p_system_type=% (expected NHSP or HR_WEEKLY)', p_system_type;
   end if;
+
+  v_src :=
+    case
+      when v_sys = 'NHSP' then 'NHSP'::public.hr_source_enum
+      else 'HEALTHROSTER'::public.hr_source_enum
+    end;
 
   return query
   with imp as (
@@ -63,15 +88,38 @@ begin
         nullif(r.unit_raw, '')
       ) as trust_raw,
 
-      (r.payload_json ->> 'start_utc')::timestamptz as start_utc,
-      (r.payload_json ->> 'end_utc')::timestamptz   as end_utc,
+      -- ✅ minute-truncated new values (stable comparisons)
+      date_trunc('minute', (r.payload_json ->> 'start_utc')::timestamptz) as new_start_utc,
+      date_trunc('minute', (r.payload_json ->> 'end_utc')::timestamptz)   as new_end_utc,
 
-      coalesce(
-        (r.payload_json ->> 'break_mins')::int,
-        (r.payload_json ->> 'break_minutes')::int,
-        (r.payload_json ->> 'actual_break_minutes')::int,
-        0
-      ) as break_mins,
+      greatest(
+        0,
+        coalesce(
+          (r.payload_json ->> 'break_mins')::int,
+          (r.payload_json ->> 'break_minutes')::int,
+          (r.payload_json ->> 'actual_break_minutes')::int,
+          0
+        )
+      ) as new_break_mins,
+
+      greatest(
+        0,
+        (floor(extract(epoch from (
+          date_trunc('minute', (r.payload_json ->> 'end_utc')::timestamptz)
+          -
+          date_trunc('minute', (r.payload_json ->> 'start_utc')::timestamptz)
+        )) / 60.0))::int
+        -
+        greatest(
+          0,
+          coalesce(
+            (r.payload_json ->> 'break_mins')::int,
+            (r.payload_json ->> 'break_minutes')::int,
+            (r.payload_json ->> 'actual_break_minutes')::int,
+            0
+          )
+        )
+      ) as new_paid_minutes,
 
       -- incoming_code depends on system_type:
       case
@@ -106,9 +154,6 @@ begin
       n.trust_key,
 
       -- candidate mapping precedence:
-      -- 1) candidates.nhsp_hr_name_aliases contains staff_lc OR staff_key
-      -- 2) hr_name_mappings.hr_name_norm equals staff_lc OR staff_key
-      -- 3) UNIQUE exact candidate match on (first+last) OR (last+first) using staff_key
       coalesce(
         cand_alias.id,
         cand_map.candidate_id,
@@ -116,8 +161,6 @@ begin
       ) as candidate_id,
 
       -- client mapping:
-      -- NHSP: trust → client_hospitals alias (trust_lc OR trust_key) → UNIQUE fallback clients.name (key)
-      -- HR_WEEKLY: client_id comes from hr_imports.client_id
       case
         when v_sys = 'NHSP' then coalesce(cli_alias.client_id, cli_name.client_id)
         else imp.hr_client_id
@@ -126,7 +169,6 @@ begin
     from raw src
     join imp on true
 
-    -- shared normalisations (strip spaces/symbols; keep only [a-z0-9])
     cross join lateral (
       select
         nullif(lower(trim(coalesce(src.staff_name,''))), '') as staff_lc,
@@ -135,7 +177,6 @@ begin
         nullif(regexp_replace(lower(coalesce(src.trust_raw,'')), '[^a-z0-9]+', '', 'g'), '') as trust_key
     ) n
 
-    -- 1) candidate alias match (support legacy + key)
     left join lateral (
       select c.id
       from public.candidates c
@@ -148,7 +189,6 @@ begin
       limit 1
     ) cand_alias on true
 
-    -- 2) hr_name_mappings match (support legacy + key)
     left join lateral (
       select hm.candidate_id
       from public.hr_name_mappings hm
@@ -162,7 +202,6 @@ begin
       limit 1
     ) cand_map on (cand_alias.id is null)
 
-    -- 3) UNIQUE exact candidate fallback: key matches first+last OR last+first (NO ambiguous col names, NO max(uuid))
     left join lateral (
       with matches as (
         select c.id as cid
@@ -183,7 +222,6 @@ begin
       from matches
     ) cand_exact_unique on (cand_alias.id is null and cand_map.candidate_id is null)
 
-    -- NHSP client alias match (support legacy + key)
     left join lateral (
       select ch.client_id
       from public.client_hospitals ch
@@ -197,7 +235,6 @@ begin
       limit 1
     ) cli_alias on (v_sys = 'NHSP')
 
-    -- NHSP UNIQUE fallback: trust_key == clients.name key (NO max(uuid))
     left join lateral (
       with matches as (
         select cl.id as clid
@@ -218,17 +255,14 @@ begin
     select
       r.*,
 
-      -- week ending weekday from latest client_settings; default 0 (Sunday)
       coalesce(cs.week_ending_weekday, 0)::int as we_dow,
 
-      -- compute week_ending_date by moving forward to we_dow
       (r.work_date
         + (
             (coalesce(cs.week_ending_weekday, 0)::int - extract(dow from r.work_date)::int + 7) % 7
           )
       )::date as week_ending_date,
 
-      -- normalised incoming_code for mapping joins
       lower(trim(coalesce(r.incoming_code_raw,''))) as code_norm
 
     from resolved_ids r
@@ -319,45 +353,104 @@ begin
       order by c.start_date desc nulls last, c.id desc
       limit 1
     ) cc on true
+  ),
+  matched_shift as (
+    select
+      w.*,
+
+      s.id as matched_shift_id,
+      date_trunc('minute', s.start_utc) as old_start_utc,
+      date_trunc('minute', s.end_utc)   as old_end_utc,
+      coalesce(s.break_mins, 0)::int    as old_break_mins,
+      coalesce(s.pay_minutes, 0)::int   as old_paid_minutes,
+      s.cancelled_at_utc               as old_cancelled_at_utc
+
+    from chosen_contract w
+    left join public.nhsp_shifts s
+      on s.external_row_key = w.external_row_key
+     and s.source_system = v_src
   )
   select
-    w.hr_row_id,
-    w.external_row_key,
-    w.work_date,
-    nullif(trim(coalesce(w.incoming_code_raw,'')),'') as incoming_code,
-    w.candidate_id,
-    w.client_id,
-    w.week_ending_date,
-    w.contract_id,
+    ms.hr_row_id,
+    ms.external_row_key,
+    ms.work_date,
+    nullif(trim(coalesce(ms.incoming_code_raw,'')),'') as incoming_code,
+    ms.candidate_id,
+    ms.client_id,
+    ms.week_ending_date,
+    ms.contract_id,
+
     case
       when (select count(*) from imp) = 0 then 'REJECT_IMPORT_NOT_FOUND'
-      when v_sys = 'NHSP' and (select source_system from imp) <> 'NHSP'::hr_source_enum then 'REJECT_SOURCE_SYSTEM_MISMATCH'
-      when v_sys = 'HR_WEEKLY' and (select source_system from imp) <> 'HEALTHROSTER'::hr_source_enum then 'REJECT_SOURCE_SYSTEM_MISMATCH'
-      when w.candidate_id is null then 'REJECT_NO_CANDIDATE'
-      when w.client_id is null then 'REJECT_NO_CLIENT'
-      when w.code_norm = '' then 'REJECT_BAD_ROW'
-      when w.in_range_count = 0 then 'REJECT_NO_CONTRACT'
-      when w.band_patterns is null then 'REJECT_NO_CONTRACT_BAND_MISMATCH'
-      when w.contract_id is null then 'REJECT_NO_CONTRACT_BAND_MISMATCH'
+      when v_sys = 'NHSP' and (select imp.source_system from imp) <> 'NHSP'::public.hr_source_enum then 'REJECT_SOURCE_SYSTEM_MISMATCH'
+      when v_sys = 'HR_WEEKLY' and (select imp.source_system from imp) <> 'HEALTHROSTER'::public.hr_source_enum then 'REJECT_SOURCE_SYSTEM_MISMATCH'
+      when ms.candidate_id is null then 'REJECT_NO_CANDIDATE'
+      when ms.client_id is null then 'REJECT_NO_CLIENT'
+      when ms.code_norm = '' then 'REJECT_BAD_ROW'
+      when ms.in_range_count = 0 then 'REJECT_NO_CONTRACT'
+      when ms.band_patterns is null then 'REJECT_NO_CONTRACT_BAND_MISMATCH'
+      when ms.contract_id is null then 'REJECT_NO_CONTRACT_BAND_MISMATCH'
       else 'OK'
     end as action,
+
     case
       when (select count(*) from imp) = 0 then 'Import not found'
-      when v_sys = 'NHSP' and (select source_system from imp) <> 'NHSP'::hr_source_enum
+      when v_sys = 'NHSP' and (select imp.source_system from imp) <> 'NHSP'::public.hr_source_enum
         then 'Import source_system is not NHSP'
-      when v_sys = 'HR_WEEKLY' and (select source_system from imp) <> 'HEALTHROSTER'::hr_source_enum
+      when v_sys = 'HR_WEEKLY' and (select imp.source_system from imp) <> 'HEALTHROSTER'::public.hr_source_enum
         then 'Import source_system is not HEALTHROSTER'
-      when w.candidate_id is null then 'No candidate mapping found for staff name'
-      when w.client_id is null then 'No client mapping found'
-      when w.code_norm = '' then 'Missing incoming_code (assignment/grade)'
-      when w.in_range_count = 0 then 'No active contract for candidate/client on this date'
-      when w.band_patterns is null
+      when ms.candidate_id is null then 'No candidate mapping found for staff name'
+      when ms.client_id is null then 'No client mapping found'
+      when ms.code_norm = '' then 'Missing incoming_code (assignment/grade)'
+      when ms.in_range_count = 0 then 'No active contract for candidate/client on this date'
+      when ms.band_patterns is null
         then 'No band mapping rows exist for this incoming_code at candidate/client/global scope'
-      when w.contract_id is null
+      when ms.contract_id is null
         then 'No contract band matches incoming_code according to mapping table'
       else ''
-    end as reason
-  from chosen_contract w;
+    end as reason,
+
+    -- diff fields
+    ms.matched_shift_id,
+    ms.old_start_utc,
+    ms.old_end_utc,
+    ms.old_break_mins,
+    ms.old_paid_minutes,
+    ms.old_cancelled_at_utc,
+
+    ms.new_start_utc,
+    ms.new_end_utc,
+    ms.new_break_mins,
+    ms.new_paid_minutes,
+
+    case
+      when ms.matched_shift_id is null then null::int
+      else (ms.new_paid_minutes - ms.old_paid_minutes)
+    end as delta_paid_minutes,
+
+    (ms.matched_shift_id is null) as is_new,
+
+    (
+      ms.matched_shift_id is not null
+      and ms.old_cancelled_at_utc is null
+      and ms.old_start_utc = ms.new_start_utc
+      and ms.old_end_utc   = ms.new_end_utc
+      and ms.old_break_mins = ms.new_break_mins
+    ) as is_noop,
+
+    (
+      ms.matched_shift_id is not null
+      and not (
+        ms.matched_shift_id is not null
+        and ms.old_cancelled_at_utc is null
+        and ms.old_start_utc = ms.new_start_utc
+        and ms.old_end_utc   = ms.new_end_utc
+        and ms.old_break_mins = ms.new_break_mins
+      )
+    ) as is_changed
+
+  from matched_shift ms;
 
 end;
 $$;
+
