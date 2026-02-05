@@ -433,6 +433,7 @@ $$;
 -- NOW FILTERED: returns ONLY requires_any_decision=true
 -- FIX: adds contract_self_bill + invoice_id_detected
 -- ---------------------------------------------------------
+
 create or replace function public.weekly_import_changed_hours_phase3(
   p_import_id uuid,
   p_system_type text
@@ -750,10 +751,11 @@ begin
       ) as requires_any_decision
     from amounts a
   )
-  select *
-  from final_rows
-  where requires_any_decision = true
-  order by work_date asc, external_row_key asc;
+  select fr.*
+  from final_rows fr
+  where fr.requires_any_decision = true
+  order by fr.work_date asc, fr.external_row_key asc;
 
 end;
 $$;
+
