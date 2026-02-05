@@ -24170,6 +24170,29 @@ async function handleNhspImportPreview(env, req, importId) {
 
   const uniq = (arr) => Array.from(new Set((arr || []).filter(Boolean)));
 
+  const asBool = (v) => (v === true || v === 'true' || v === 1 || v === '1');
+
+  // ✅ Duration formatting for minutes → "7 hrs 30 mins", "7 hrs", "1 hr", "30 mins"
+  const fmtDurationFromMinutes = (minsAbs) => {
+    const m0 = Math.max(0, Math.floor(Number(minsAbs) || 0));
+    const h = Math.floor(m0 / 60);
+    const m = m0 % 60;
+
+    const hrPart = h > 0 ? `${h} hr${h === 1 ? '' : 's'}` : '';
+    const minPart = m > 0 ? `${m} min${m === 1 ? '' : 's'}` : '';
+
+    if (hrPart && minPart) return `${hrPart} ${minPart}`;
+    if (hrPart) return hrPart;
+    return minPart || '0 mins';
+  };
+
+  const fmtDeltaReason = (deltaMinutes) => {
+    const d = Math.trunc(Number(deltaMinutes) || 0);
+    if (d > 0) return `Hours increased (${fmtDurationFromMinutes(d)})`;
+    if (d < 0) return `Hours decreased (${fmtDurationFromMinutes(Math.abs(d))})`;
+    return 'Shift details changed';
+  };
+
   try {
     // Load import header (source_system check only; NHSP imports may span multiple clients)
     const { rows: impRows } = await sbFetch(
@@ -24203,6 +24226,7 @@ async function handleNhspImportPreview(env, req, importId) {
     }
 
     // Phase2 mapping (candidate_id/client_id/work_date/week_ending/contract_id per external_row_key)
+    // ✅ Now includes diff fields: matched_shift_id, old/new timings, delta_paid_minutes, is_new/is_noop/is_changed
     let p2 = [];
     try {
       const res = await fetch(
@@ -24230,16 +24254,13 @@ async function handleNhspImportPreview(env, req, importId) {
 
     const p2OkRows = (p2 || []).filter(r => r && String(r.action || '').toUpperCase() === 'OK');
 
-    // Map ext -> first OK row
+    // Map ext -> first OK row (for replacement-day logic joins)
     const p2ByExternalKey = new Map();
     for (const r of p2OkRows) {
       const ext = r?.external_row_key ? String(r.external_row_key) : null;
       if (!ext) continue;
       if (!p2ByExternalKey.has(ext)) p2ByExternalKey.set(ext, r);
     }
-
-    // Build action-level apply list
-    const actions = [];
 
     // Build file-truth day stats (hr_rows + p2 joined by hr_row_id) for day-empty and ambiguity blocking
     const dateStats = new Map(); // date_local -> { fileRows: int, ambiguousRows: int }
@@ -24268,14 +24289,14 @@ async function handleNhspImportPreview(env, req, importId) {
           `&limit=${pageSize}` +
           `&offset=${offset}`;
 
-        const { rows, total: t } = await sbFetch(env, url, offset === 0);
+        const { rows: pageRows, total: t } = await sbFetch(env, url, offset === 0);
         if (offset === 0 && typeof t === 'number') total = t;
 
-        if (Array.isArray(rows) && rows.length) all = all.concat(rows);
+        if (Array.isArray(pageRows) && pageRows.length) all = all.concat(pageRows);
 
         offset += pageSize;
 
-        if (!rows || rows.length < pageSize) break;
+        if (!pageRows || pageRows.length < pageSize) break;
         if (total != null && all.length >= total) break;
 
         if (offset > 200000) break;
@@ -24359,8 +24380,26 @@ async function handleNhspImportPreview(env, req, importId) {
       return true;
     };
 
-    // Build ROW actions from OK rows (applyable truth rows)
-    const modeExternalKeys = [];
+    // ─────────────────────────────────────────────────────────────
+    // ✅ NEW model:
+    // - actions[] contains ONLY:
+    //    * EXISTING shifts that would be UPDATED (changed) and need review
+    //    * CANCELLATIONS (missing-from-import / replacement-day) when proposed
+    // - NEW shifts are NOT shown, but returned as auto_apply_action_ids
+    // - NO_OP shifts are not returned at all
+    // ─────────────────────────────────────────────────────────────
+    const actions = [];
+    const auto_apply_action_ids = [];
+
+    // Track counts for log/meta
+    let hiddenNewCount = 0;
+    let hiddenNoopCount = 0;
+    let shownChangedCount = 0;
+
+    // Build base action objects from phase2 OK rows using diff flags
+    const extAll = [];
+    const extToActionIndex = new Map(); // ext -> idx in actions (only for shown row actions)
+
     for (const r of p2OkRows) {
       const ext = r?.external_row_key ? String(r.external_row_key) : null;
       const cid = r?.candidate_id ? String(r.candidate_id) : null;
@@ -24368,35 +24407,89 @@ async function handleNhspImportPreview(env, req, importId) {
       const wd  = r?.work_date ? String(r.work_date) : null;
       const co  = r?.contract_id ? String(r.contract_id) : null;
       const we  = r?.week_ending_date ? String(r.week_ending_date) : null;
+
       if (!ext || !cid || !cli || !wd || !co || !we) continue;
 
-      modeExternalKeys.push(ext);
+      extAll.push(ext);
+
+      const matchedShiftId = r?.matched_shift_id ? String(r.matched_shift_id) : null;
+
+      const isNew  = asBool(r?.is_new);
+      const isNoop = asBool(r?.is_noop);
+      const isChanged = asBool(r?.is_changed);
+
+      // NEW shift → auto apply (hidden)
+      if (isNew || !matchedShiftId) {
+        auto_apply_action_ids.push(`ROW:${ext}`);
+        hiddenNewCount += 1;
+        continue;
+      }
+
+      // NO-OP existing shift → suppress entirely
+      if (isNoop && !isChanged) {
+        hiddenNoopCount += 1;
+        continue;
+      }
+
+      // EXISTING changed shift → show as RED row for review
+      const delta = Number(r?.delta_paid_minutes);
+      const reasonText = fmtDeltaReason(delta);
 
       actions.push({
         action_id: `ROW:${ext}`,
-        action_kind: 'TRUTH_ROW',
+        action_kind: 'SHIFT_CHANGED',
         external_row_key: ext,
-        shift_id: null,
-        reason: null,
+        shift_id: matchedShiftId,
         candidate_id: cid,
         client_id: cli,
         contract_id: co,
         week_ending_date: we,
         work_date: wd,
+
+        // Replacement-day key may be filled later by replacement-day detection.
         replacement_day_key: null,
+
         is_new_shift: false,
         is_cancellation: false,
         is_red: true,
         default_checked: false,
-        label: 'Apply roster row'
+
+        // Machine + human reasons
+        reason: (delta > 0 ? 'HOURS_INCREASED' : (delta < 0 ? 'HOURS_DECREASED' : 'SHIFT_DETAILS_CHANGED')),
+        reason_text: reasonText,
+
+        // Display label
+        label: 'Update existing shift',
+
+        // Helpful details for UI rendering
+        details: {
+          old_start_utc: r?.old_start_utc || null,
+          old_end_utc: r?.old_end_utc || null,
+          old_break_mins: (r?.old_break_mins != null ? Number(r.old_break_mins) : null),
+          old_paid_minutes: (r?.old_paid_minutes != null ? Number(r.old_paid_minutes) : null),
+
+          new_start_utc: r?.new_start_utc || null,
+          new_end_utc: r?.new_end_utc || null,
+          new_break_mins: (r?.new_break_mins != null ? Number(r.new_break_mins) : null),
+          new_paid_minutes: (r?.new_paid_minutes != null ? Number(r.new_paid_minutes) : null),
+
+          delta_paid_minutes: Number.isFinite(delta) ? delta : null,
+          delta_display: (Number.isFinite(delta) ? fmtDurationFromMinutes(Math.abs(delta)) : null),
+          old_hours_display: (r?.old_paid_minutes != null ? fmtDurationFromMinutes(Number(r.old_paid_minutes)) : null),
+          new_hours_display: (r?.new_paid_minutes != null ? fmtDurationFromMinutes(Number(r.new_paid_minutes)) : null)
+        }
       });
+
+      extToActionIndex.set(ext, actions.length - 1);
+      shownChangedCount += 1;
     }
 
-    const extUniq = uniq(modeExternalKeys);
-
+    // ─────────────────────────────────────────────────────────────
     // Replacement-day detection and REPLACEMENT_DAY cancellation candidates
-    // For each ext, if existing active NHSP shift has different old work_date than import work_date, mark the ROW action.
-    // Then propose CANCEL actions for ALL active NHSP shifts for that candidate+client+old_work_date if day-empty guard allows.
+    // (kept from prior logic; marks the ROW action's replacement_day_key)
+    // ─────────────────────────────────────────────────────────────
+    const extUniq = uniq(extAll);
+
     const replacementDayKeys = new Set(); // `${candidate_id}|${client_id}|${old_work_date}`
     if (extUniq.length) {
       for (const keyChunk of chunk(extUniq, 150)) {
@@ -24426,18 +24519,26 @@ async function handleNhspImportPreview(env, req, importId) {
             if (!cid || !cli) continue;
 
             const repKey = `${cid}|${cli}|${oldWd}`;
+            replacementDayKeys.add(repKey);
 
-            // Mark the ROW action as replacement-day new shift
-            const idx = actions.findIndex(a => a && a.external_row_key === ext);
-            if (idx >= 0) {
+            // Mark the ROW action (if present in the visible list) as replacement-day new shift
+            const idx = extToActionIndex.get(ext);
+            if (typeof idx === 'number' && idx >= 0 && actions[idx]) {
               actions[idx] = {
                 ...actions[idx],
                 is_new_shift: true,
-                replacement_day_key: repKey
+                replacement_day_key: repKey,
+                // Ensure reason_text remains user-friendly even if delta is 0
+                reason: actions[idx].reason || 'SHIFT_DETAILS_CHANGED',
+                reason_text: actions[idx].reason_text || 'Shift details changed',
+                label: 'Update existing shift'
               };
+            } else {
+              // If it was suppressed (noop) or hidden (new), ensure it is at least auto-applied
+              // so the system truth aligns, and Policy A can be satisfied via cancellations.
+              auto_apply_action_ids.push(`ROW:${ext}`);
+              hiddenNewCount += 0; // already counted elsewhere; do not double count
             }
-
-            replacementDayKeys.add(repKey);
           }
         }
       }
@@ -24446,7 +24547,7 @@ async function handleNhspImportPreview(env, req, importId) {
     const cancelShiftIdSet = new Set();
 
     // Emit REPLACEMENT_DAY cancellation actions for all active shifts in each replacement-day key,
-    // but only if the day-empty guard would allow cancellation and client is in-scope for this import.
+    // but only if day-empty guard allows and client is in-scope for this import.
     if (replacementDayKeys.size && minWd && maxWd) {
       for (const repKey of replacementDayKeys) {
         const [cid, cli, oldWd] = String(repKey).split('|');
@@ -24483,25 +24584,33 @@ async function handleNhspImportPreview(env, req, importId) {
             action_kind: 'SHIFT_CANCEL',
             shift_id: sid,
             external_row_key: null,
-            reason: 'REPLACEMENT_DAY',
+
+            // Machine + human reasons
+            reason: 'SHIFT_NO_LONGER_WORKED',
+            reason_text: 'Shift no longer worked',
+
             candidate_id: String(sh.candidate_id),
             client_id: String(sh.client_id),
+
             contract_id: null,
             week_ending_date: null,
             work_date: String(sh.work_date),
+
             replacement_day_key: repKey,
+
             is_new_shift: false,
             is_cancellation: true,
             is_red: true,
             default_checked: false,
-            label: 'Cancel existing shift (replacement-day)'
+
+            label: 'Cancel shift',
+            details: { cancel_kind: 'REPLACEMENT_DAY' }
           });
         }
       }
     }
 
     // Missing-from-import cancellation candidates (day-level)
-    // Only for candidates that appear in OK mapped rows, within the file truth date range.
     const candIdsInImport = new Set();
     for (const r of p2OkRows) {
       const cid = r?.candidate_id ? String(r.candidate_id) : null;
@@ -24546,21 +24655,99 @@ async function handleNhspImportPreview(env, req, importId) {
             action_kind: 'SHIFT_CANCEL',
             shift_id: sid,
             external_row_key: null,
-            reason: 'MISSING_FROM_IMPORT',
+
+            // Machine + human reasons
+            reason: 'SHIFT_NO_LONGER_WORKED',
+            reason_text: 'Shift no longer worked',
+
             candidate_id: cid,
             client_id: cli,
+
             contract_id: null,
             week_ending_date: null,
             work_date: wd,
+
             replacement_day_key: dayKey,
+
             is_new_shift: false,
             is_cancellation: true,
             is_red: true,
             default_checked: false,
-            label: 'Cancel existing shift (missing from import)'
+
+            label: 'Cancel shift',
+            details: { cancel_kind: 'MISSING_FROM_IMPORT' }
           });
         }
       }
+    }
+
+    // De-dupe auto_apply_action_ids
+    const autoUniq = uniq((auto_apply_action_ids || []).map(String).filter(Boolean));
+
+    // Optional: enrich with candidate/client display names (for a user-friendly UI)
+    const candidateIdSet = new Set();
+    const clientIdSet = new Set();
+    for (const a of (actions || [])) {
+      const cid = a?.candidate_id ? String(a.candidate_id) : '';
+      const cli = a?.client_id ? String(a.client_id) : '';
+      if (cid) candidateIdSet.add(cid);
+      if (cli) clientIdSet.add(cli);
+    }
+
+    const candidateNameById = new Map();
+    if (candidateIdSet.size) {
+      for (const idChunk of chunk(Array.from(candidateIdSet), 150)) {
+        try {
+          const { rows: cRows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/candidates` +
+              `?id=in.(${idChunk.map(enc).join(',')})&select=id,display_name,tms_ref`
+          );
+          for (const c of (cRows || [])) {
+            const id = c?.id ? String(c.id) : '';
+            if (!id) continue;
+            const nm = c?.display_name != null ? String(c.display_name).trim() : '';
+            const ref = c?.tms_ref != null ? String(c.tms_ref).trim() : '';
+            candidateNameById.set(id, { display_name: (nm || null), tms_ref: (ref || null) });
+          }
+        } catch {}
+      }
+    }
+
+    const clientNameById = new Map();
+    if (clientIdSet.size) {
+      for (const idChunk of chunk(Array.from(clientIdSet), 150)) {
+        try {
+          const { rows: clRows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/clients` +
+              `?id=in.(${idChunk.map(enc).join(',')})&select=id,name`
+          );
+          for (const c of (clRows || [])) {
+            const id = c?.id ? String(c.id) : '';
+            if (!id) continue;
+            const nm = c?.name != null ? String(c.name).trim() : '';
+            clientNameById.set(id, nm || null);
+          }
+        } catch {}
+      }
+    }
+
+    // Attach names (non-breaking optional fields)
+    for (let i = 0; i < actions.length; i++) {
+      const a = actions[i];
+      const cid = a?.candidate_id ? String(a.candidate_id) : '';
+      const cli = a?.client_id ? String(a.client_id) : '';
+
+      const cn = cid ? (candidateNameById.get(cid) || null) : null;
+      const cln = cli ? (clientNameById.get(cli) || null) : null;
+
+      actions[i] = {
+        ...a,
+        candidate_name: cn ? (cn.display_name || null) : null,
+        candidate_tms_ref: cn ? (cn.tms_ref || null) : null,
+        client_name: cln || null
+      };
     }
 
     if (LOG) {
@@ -24572,7 +24759,11 @@ async function handleNhspImportPreview(env, req, importId) {
         import_id: importId,
         summary: result.summary || null,
         total_groups: groups.length,
-        actions: actions.length,
+        actions_total: actions.length,
+        actions_changed_rows: shownChangedCount,
+        actions_cancel: actions.filter(a => a && a.action_kind === 'SHIFT_CANCEL').length,
+        auto_apply_new_rows: autoUniq.length,
+        hidden_noop_rows: hiddenNoopCount,
         file_date_min: minWd,
         file_date_max: maxWd,
         hr_rows_loaded: (hrRows || []).length
@@ -24583,12 +24774,22 @@ async function handleNhspImportPreview(env, req, importId) {
     return withCORS(env, req, ok({
       ...result,
       import_id: String(importId),
+
+      // ✅ Visible actions (ONLY changed existing + cancellations)
       actions,
+
+      // ✅ Hidden-but-auto-applied actions (NEW shifts)
+      auto_apply_action_ids: autoUniq,
+
       truth_meta: {
         file_date_min: minWd,
         file_date_max: maxWd,
         hr_rows_loaded: (hrRows || []).length,
-        cancellations_computable: !!((hrRows || []).length && minWd && maxWd)
+        cancellations_computable: !!((hrRows || []).length && minWd && maxWd),
+
+        // helpful meta for UI/debug
+        hidden_new_rows: hiddenNewCount,
+        hidden_noop_rows: hiddenNoopCount
       }
     }));
   } catch (e) {
@@ -24602,6 +24803,7 @@ async function handleNhspImportPreview(env, req, importId) {
     return withCORS(env, req, serverError(`NHSP preview failed: ${e?.message || e}`));
   }
 }
+
 
 async function handleNhspApply(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
@@ -31944,10 +32146,6 @@ async function handleNhspImport(env, req) {
   }
 }
 
-
-
-
-
 async function handleHrAutoprocessPreview(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
   const enc = encodeURIComponent;
@@ -31960,6 +32158,26 @@ async function handleHrAutoprocessPreview(env, req, importId) {
   }
 
   const boolish = (v) => (v === true || v === 'true' || v === 1 || v === '1');
+
+  const fmtDurationFromMinutes = (minsAbs) => {
+    const m0 = Math.max(0, Math.floor(Number(minsAbs) || 0));
+    const h = Math.floor(m0 / 60);
+    const m = m0 % 60;
+
+    const hrPart = h > 0 ? `${h} hr${h === 1 ? '' : 's'}` : '';
+    const minPart = m > 0 ? `${m} min${m === 1 ? '' : 's'}` : '';
+
+    if (hrPart && minPart) return `${hrPart} ${minPart}`;
+    if (hrPart) return hrPart;
+    return minPart || '0 mins';
+  };
+
+  const fmtDeltaReasonText = (deltaMinutes) => {
+    const d = Math.trunc(Number(deltaMinutes) || 0);
+    if (d > 0) return `Hours increased (${fmtDurationFromMinutes(d)})`;
+    if (d < 0) return `Hours decreased (${fmtDurationFromMinutes(Math.abs(d))})`;
+    return 'Shift details changed';
+  };
 
   const asYmd = (v) => {
     if (!v) return null;
@@ -31992,10 +32210,6 @@ async function handleHrAutoprocessPreview(env, req, importId) {
   };
 
   const unwrapRpcJsonb = (raw, fnName) => {
-    // PostgREST may return:
-    //  - [{ "<fnName>": <jsonb> }]
-    //  - [{ ...jsonb... }]
-    //  - <jsonb>
     const j = raw;
     if (Array.isArray(j)) {
       const row0 = j[0];
@@ -32054,6 +32268,7 @@ async function handleHrAutoprocessPreview(env, req, importId) {
     }
 
     // 2) Get phase2 mapping (candidate_id/client_id/work_date/week_ending/contract_id per external_row_key)
+    // ✅ Now includes diff fields and flags (matched_shift_id, old/new, delta_paid_minutes, is_new/is_noop/is_changed)
     let p2 = [];
     try {
       const res = await fetch(
@@ -32082,14 +32297,14 @@ async function handleHrAutoprocessPreview(env, req, importId) {
     // 3) Load client_settings history for precedence evaluation
     let clientSettingsRows = [];
     try {
-      const { rows } = await sbFetch(
+      const { rows: csRows } = await sbFetch(
         env,
         `${env.SUPABASE_URL}/rest/v1/client_settings` +
           `?client_id=eq.${enc(imp.client_id)}` +
           `&select=client_id,effective_from,no_timesheet_required,autoprocess_hr,updated_at` +
           `&order=effective_from.desc.nullslast,updated_at.desc.nullslast`
       );
-      clientSettingsRows = Array.isArray(rows) ? rows : [];
+      clientSettingsRows = Array.isArray(csRows) ? csRows : [];
     } catch {
       clientSettingsRows = [];
     }
@@ -32099,13 +32314,13 @@ async function handleHrAutoprocessPreview(env, req, importId) {
     const contractById = new Map();
     for (const idChunk of chunk(contractIds, 150)) {
       try {
-        const { rows } = await sbFetch(
+        const { rows: cRows } = await sbFetch(
           env,
           `${env.SUPABASE_URL}/rest/v1/contracts` +
             `?id=in.(${idChunk.map(enc).join(',')})` +
             `&select=id,overrideclientsettings,no_timesheet_required,autoprocess_hr`
         );
-        for (const c of (rows || [])) {
+        for (const c of (cRows || [])) {
           if (c && c.id) contractById.set(String(c.id), c);
         }
       } catch {
@@ -32151,7 +32366,7 @@ async function handleHrAutoprocessPreview(env, req, importId) {
     const modeAGroupIds = new Set([...modeByGroupId.entries()].filter(([,m]) => m === 'MODE_A').map(([gid]) => gid));
     const modeBGroupIds = new Set([...modeByGroupId.entries()].filter(([,m]) => m === 'MODE_B').map(([gid]) => gid));
 
-    // 6) Load weekly validation preview (Mode A rows; uses hr_rows(import) truth; includes contract_id/can_email/fingerprint)
+    // 6) Load weekly validation preview (Mode A rows)
     let weeklyValPayload = null;
     try {
       const res = await fetch(
@@ -32194,18 +32409,18 @@ async function handleHrAutoprocessPreview(env, req, importId) {
       }
     }
 
-    const candidateNameById = new Map();
+    const missingCandNameById = new Map();
     if (missingTriples.length) {
       const candIds = uniq(missingTriples.map(x => x.candidate_id).filter(Boolean));
       for (const idChunk of chunk(candIds, 150)) {
         try {
-          const { rows } = await sbFetch(
+          const { rows: cRows } = await sbFetch(
             env,
             `${env.SUPABASE_URL}/rest/v1/candidates` +
               `?id=in.(${idChunk.map(enc).join(',')})&select=id,display_name`
           );
-          for (const c of (rows || [])) {
-            if (c && c.id) candidateNameById.set(String(c.id), String(c.display_name || '').trim());
+          for (const c of (cRows || [])) {
+            if (c && c.id) missingCandNameById.set(String(c.id), String(c.display_name || '').trim());
           }
         } catch {
           // ignore
@@ -32233,7 +32448,7 @@ async function handleHrAutoprocessPreview(env, req, importId) {
     }
 
     for (const mt of missingTriples) {
-      const candName = candidateNameById.get(mt.candidate_id) || null;
+      const candName = missingCandNameById.get(mt.candidate_id) || null;
       validation_groups.push({
         mode: 'MODE_A',
         client_id: String(mt.client_id),
@@ -32264,8 +32479,13 @@ async function handleHrAutoprocessPreview(env, req, importId) {
       if (modeBGroupIds.has(pid)) action_groups.push({ ...g, mode: 'MODE_B' });
     }
 
-    // 8) Build Mode B actions[] for apply
+    // 8) Build Mode B actions[] for apply (changes only) + auto-apply list (new shifts)
     const actions = [];
+    const auto_apply_action_ids = [];
+
+    let hiddenNewCount = 0;
+    let hiddenNoopCount = 0;
+    let shownChangedCount = 0;
 
     const p2OkRows = p2.filter(r => r && String(r.action || '').toUpperCase() === 'OK');
 
@@ -32277,6 +32497,7 @@ async function handleHrAutoprocessPreview(env, req, importId) {
     }
 
     const modeBExternalKeys = [];
+    const extToActionIndex = new Map(); // ext -> visible action index (changed rows only)
 
     for (const r of p2OkRows) {
       const cid = r?.candidate_id ? String(r.candidate_id) : null;
@@ -32286,27 +32507,74 @@ async function handleHrAutoprocessPreview(env, req, importId) {
       const we  = r?.week_ending_date ? String(r.week_ending_date) : null;
       const ext = r?.external_row_key ? String(r.external_row_key) : null;
       if (!cid || !cli || !wd || !co || !we || !ext) continue;
+
       const gid = `grp:${co}:${we}:${cid}`;
       if (!modeBGroupIds.has(gid)) continue;
 
       modeBExternalKeys.push(ext);
 
-      actions.push({
+      const matchedShiftId = r?.matched_shift_id ? String(r.matched_shift_id) : null;
+      const isNew = boolish(r?.is_new) || !matchedShiftId;
+      const isNoop = boolish(r?.is_noop);
+      const isChanged = boolish(r?.is_changed);
+
+      if (isNew) {
+        auto_apply_action_ids.push(`ROW:${ext}`);
+        hiddenNewCount += 1;
+        continue;
+      }
+
+      if (isNoop && !isChanged) {
+        hiddenNoopCount += 1;
+        continue;
+      }
+
+      // Existing changed shift → show
+      const delta = Number(r?.delta_paid_minutes);
+      const reasonText = fmtDeltaReasonText(delta);
+
+      const newPaid = (r?.new_paid_minutes != null) ? Number(r.new_paid_minutes) : null;
+      const oldPaid = (r?.old_paid_minutes != null) ? Number(r.old_paid_minutes) : null;
+
+      const rowAction = {
         action_id: `ROW:${ext}`,
-        action_kind: 'TRUTH_ROW',
+        action_kind: 'SHIFT_CHANGED',
         external_row_key: ext,
-        shift_id: null,
-        reason: null,
+        shift_id: matchedShiftId,
+        reason: (delta > 0 ? 'HOURS_INCREASED' : (delta < 0 ? 'HOURS_DECREASED' : 'SHIFT_DETAILS_CHANGED')),
+        reason_text: reasonText,
         candidate_id: cid,
         client_id: cli,
+        contract_id: co,
+        week_ending_date: we,
         work_date: wd,
         replacement_day_key: null,
         is_new_shift: false,
         is_cancellation: false,
         is_red: true,
         default_checked: false,
-        label: 'Apply roster row'
-      });
+        label: 'Update existing shift',
+        details: {
+          old_start_utc: r?.old_start_utc || null,
+          old_end_utc: r?.old_end_utc || null,
+          old_break_mins: (r?.old_break_mins != null ? Number(r.old_break_mins) : null),
+          old_paid_minutes: (oldPaid != null && Number.isFinite(oldPaid)) ? oldPaid : null,
+          old_hours_display: (oldPaid != null && Number.isFinite(oldPaid)) ? fmtDurationFromMinutes(oldPaid) : null,
+
+          new_start_utc: r?.new_start_utc || null,
+          new_end_utc: r?.new_end_utc || null,
+          new_break_mins: (r?.new_break_mins != null ? Number(r.new_break_mins) : null),
+          new_paid_minutes: (newPaid != null && Number.isFinite(newPaid)) ? newPaid : null,
+          new_hours_display: (newPaid != null && Number.isFinite(newPaid)) ? fmtDurationFromMinutes(newPaid) : null,
+
+          delta_paid_minutes: Number.isFinite(delta) ? Math.trunc(delta) : null,
+          delta_display: Number.isFinite(delta) ? fmtDurationFromMinutes(Math.abs(delta)) : null
+        }
+      };
+
+      actions.push(rowAction);
+      extToActionIndex.set(ext, actions.length - 1);
+      shownChangedCount += 1;
     }
 
     const modeBExternalKeysUniq = uniq(modeBExternalKeys);
@@ -32337,14 +32605,14 @@ async function handleHrAutoprocessPreview(env, req, importId) {
           `&limit=${pageSize}` +
           `&offset=${offset}`;
 
-        const { rows, total: t } = await sbFetch(env, url, offset === 0);
+        const { rows: pageRows, total: t } = await sbFetch(env, url, offset === 0);
         if (offset === 0 && typeof t === 'number') total = t;
 
-        if (Array.isArray(rows) && rows.length) all = all.concat(rows);
+        if (Array.isArray(pageRows) && pageRows.length) all = all.concat(pageRows);
 
         offset += pageSize;
 
-        if (!rows || rows.length < pageSize) break;
+        if (!pageRows || pageRows.length < pageSize) break;
         if (total != null && all.length >= total) break;
 
         if (offset > 200000) break;
@@ -32370,7 +32638,7 @@ async function handleHrAutoprocessPreview(env, req, importId) {
       hrRowsFetchOk = false;
     }
 
-    // ✅ file_date_min/max grounded in file truth (hr_rows.date_local). Fallback to phase2 OK work_date if needed.
+    // file_date_min/max grounded in file truth
     let minWd = null;
     let maxWd = null;
 
@@ -32463,13 +32731,16 @@ async function handleHrAutoprocessPreview(env, req, importId) {
 
             const repKey = `${cid}|${cli}|${oldWd}`;
 
-            const truthIdx = actions.findIndex(a => a && a.external_row_key === ext);
-            if (truthIdx >= 0) {
+            // Mark visible ROW action if present; otherwise ensure it is auto-applied for truth alignment
+            const truthIdx = extToActionIndex.get(ext);
+            if (typeof truthIdx === 'number' && truthIdx >= 0 && actions[truthIdx]) {
               actions[truthIdx] = {
                 ...actions[truthIdx],
                 is_new_shift: true,
                 replacement_day_key: repKey
               };
+            } else {
+              auto_apply_action_ids.push(`ROW:${ext}`);
             }
 
             if (!minWd || !maxWd || (oldWd < minWd || oldWd > maxWd)) {
@@ -32487,16 +32758,20 @@ async function handleHrAutoprocessPreview(env, req, importId) {
               action_kind: 'SHIFT_CANCEL',
               shift_id: String(sh.id),
               external_row_key: null,
-              reason: 'REPLACEMENT_DAY',
+              reason: 'SHIFT_NO_LONGER_WORKED',
+              reason_text: 'Shift no longer worked',
               candidate_id: cid,
               client_id: cli,
+              contract_id: null,
+              week_ending_date: null,
               work_date: oldWd,
               replacement_day_key: repKey,
               is_new_shift: false,
               is_cancellation: true,
               is_red: true,
               default_checked: false,
-              label: 'Cancel existing shift (replacement-day)'
+              label: 'Cancel shift',
+              details: { cancel_kind: 'REPLACEMENT_DAY' }
             });
           }
         }
@@ -32549,23 +32824,80 @@ async function handleHrAutoprocessPreview(env, req, importId) {
             action_kind: 'SHIFT_CANCEL',
             shift_id: String(sh.id),
             external_row_key: null,
-            reason: 'MISSING_FROM_IMPORT',
+            reason: 'SHIFT_NO_LONGER_WORKED',
+            reason_text: 'Shift no longer worked',
             candidate_id: cid,
             client_id: cli,
+            contract_id: null,
+            week_ending_date: null,
             work_date: wd,
             replacement_day_key: dayKey,
             is_new_shift: false,
             is_cancellation: true,
             is_red: true,
             default_checked: false,
-            label: 'Cancel existing shift (missing from import)'
+            label: 'Cancel shift',
+            details: { cancel_kind: 'MISSING_FROM_IMPORT' }
           });
         }
       }
     }
 
-    const cancellationsComputable =
-      !!(hrRowsFetchOk && minWd && maxWd);
+    // De-dupe auto-apply list
+    const autoUniq = uniq((auto_apply_action_ids || []).map(String).filter(Boolean));
+
+    // Enrich actions with candidate/client display names (user-friendly UI)
+    const candidateIdSet = new Set();
+    for (const a of (actions || [])) {
+      const cid = a?.candidate_id ? String(a.candidate_id) : '';
+      if (cid) candidateIdSet.add(cid);
+    }
+
+    const candMetaById = new Map();
+    if (candidateIdSet.size) {
+      for (const idChunk of chunk(Array.from(candidateIdSet), 150)) {
+        try {
+          const { rows: cRows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/candidates` +
+              `?id=in.(${idChunk.map(enc).join(',')})&select=id,display_name,tms_ref`
+          );
+          for (const c of (cRows || [])) {
+            const id = c?.id ? String(c.id) : '';
+            if (!id) continue;
+            const nm = c?.display_name != null ? String(c.display_name).trim() : '';
+            const ref = c?.tms_ref != null ? String(c.tms_ref).trim() : '';
+            candMetaById.set(id, { display_name: (nm || null), tms_ref: (ref || null) });
+          }
+        } catch {}
+      }
+    }
+
+    let clientName = null;
+    try {
+      const { rows: cliRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${enc(String(imp.client_id))}&select=id,name&limit=1`
+      );
+      const row0 = cliRows && cliRows[0] ? cliRows[0] : null;
+      if (row0 && row0.name != null) clientName = String(row0.name).trim() || null;
+    } catch {
+      clientName = null;
+    }
+
+    for (let i = 0; i < actions.length; i++) {
+      const a = actions[i];
+      const cid = a?.candidate_id ? String(a.candidate_id) : '';
+      const cm = cid ? (candMetaById.get(cid) || null) : null;
+      actions[i] = {
+        ...a,
+        candidate_name: cm ? (cm.display_name || null) : null,
+        candidate_tms_ref: cm ? (cm.tms_ref || null) : null,
+        client_name: clientName
+      };
+    }
+
+    const cancellationsComputable = !!(hrRowsFetchOk && minWd && maxWd);
 
     if (LOG) {
       console.log('[HR_WEEKLY_PREVIEW]', JSON.stringify({
@@ -32573,8 +32905,11 @@ async function handleHrAutoprocessPreview(env, req, importId) {
         client_id: String(imp.client_id),
         validation_groups: validation_groups.length,
         action_groups: action_groups.length,
-        actions: actions.length,
-        mode_b_external_keys: modeBExternalKeysUniq.length,
+        actions_total: actions.length,
+        actions_changed_rows: shownChangedCount,
+        actions_cancel: actions.filter(a => a && a.action_kind === 'SHIFT_CANCEL').length,
+        auto_apply_new_rows: autoUniq.length,
+        hidden_noop_rows: hiddenNoopCount,
         hr_rows_loaded: (hrRows || []).length,
         file_date_min: minWd,
         file_date_max: maxWd,
@@ -32582,24 +32917,36 @@ async function handleHrAutoprocessPreview(env, req, importId) {
       }));
     }
 
-    // ✅ FIX: include file_date_min/file_date_max/cancellations_computable in truth_meta for FE
     return withCORS(env, req, ok({
       import_id: String(importId),
       client_id: String(imp.client_id),
+
       validation_groups,
       action_groups,
+
+      // ✅ Visible actions: ONLY changed existing shifts + cancellations
       actions,
+
+      // ✅ Hidden auto-applied rows (NEW shifts)
+      auto_apply_action_ids: autoUniq,
+
       validation_meta: {
         recipient_email: weeklyValPayload?.recipient_email || null,
         unmatched_timesheet_triples: weeklyValPayload?.unmatched_timesheet_triples ?? null,
         unmapped_candidate_rows: weeklyValPayload?.unmapped_candidate_rows ?? null
       },
+
       truth_meta: {
         summary: cls?.summary || null,
         options: cls?.options || null,
         cancellations_computable: cancellationsComputable,
         file_date_min: minWd || null,
-        file_date_max: maxWd || null
+        file_date_max: maxWd || null,
+        hr_rows_loaded: (hrRows || []).length,
+
+        // helpful counts for UI/debug
+        hidden_new_rows: hiddenNewCount,
+        hidden_noop_rows: hiddenNoopCount
       }
     }));
   } catch (e) {
@@ -32613,6 +32960,8 @@ async function handleHrAutoprocessPreview(env, req, importId) {
     return withCORS(env, req, serverError(`HealthRoster preview failed: ${e?.message || e}`));
   }
 }
+
+
 
 async function handleHrAutoprocessApply(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
