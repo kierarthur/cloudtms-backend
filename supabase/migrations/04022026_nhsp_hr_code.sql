@@ -4853,3 +4853,602 @@ begin
   end;
 end;
 $$;
+
+
+
+create or replace function public.weekly_import_create_cancellation_corrections(
+  p_shift_id uuid,
+  p_import_id uuid,
+  p_actor_user_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_now timestamptz := now();
+
+  -- Shift fields
+  v_shift_source_system public.hr_source_enum;
+  v_shift_candidate_id uuid;
+  v_shift_client_id uuid;
+  v_shift_contract_id uuid;
+  v_shift_timesheet_id uuid;
+  v_shift_work_date date;
+
+  v_shift_start_utc timestamptz;
+  v_shift_end_utc timestamptz;
+  v_shift_break_mins int;
+  v_shift_pay_minutes int;
+
+  v_shift_ref_num text;
+  v_shift_hr_request_id text;
+  v_shift_external_row_key text;
+  v_shift_week_ending_date date;
+
+  -- Week ending resolution
+  v_week_ending_date date;
+  v_base_ts_week_ending date;
+  v_contract_week_ending_weekday_snapshot int := 0;
+
+  -- Correction identity
+  v_kind text := 'CANCEL_SHIFT_REVERSAL'; -- contains REVERSAL
+  v_correction_id text;
+
+  -- fnv1a32 helper vars (deterministic correction_id)
+  v_fnv_h bigint;
+  v_fnv_i int;
+  v_fnv_s text;
+  v_fnv_hex text;
+
+  -- Display / norms
+  v_contract_display_site text;
+  v_contract_ward_hint text;
+  v_contract_role text;
+
+  v_client_name text;
+  v_candidate_display_name text;
+  v_candidate_tms_ref text;
+
+  v_shift_label text;
+  v_shift_label_norm text;
+
+  v_booking_base text;
+  v_booking_id text;
+  v_hash_hex text;
+
+  v_schedule jsonb;
+  v_hint jsonb;
+
+  -- Contract weeks + timesheet creation
+  v_base_week_id uuid;
+  v_existing_ts_id uuid;
+  v_existing_cw_id uuid;
+
+  v_cw_id uuid;
+  v_next_additional_seq int;
+  v_try int;
+
+  v_ts_id uuid;
+
+  v_created_timesheet_ids uuid[] := array[]::uuid[];
+
+  v_sqlstate text;
+  v_err text;
+begin
+  -- Load shift and lock it (serializes concurrent correction creation for same shift)
+  select
+    ns.source_system,
+    ns.candidate_id,
+    ns.client_id,
+    ns.contract_id,
+    ns.timesheet_id,
+    ns.work_date,
+    ns.start_utc,
+    ns.end_utc,
+    ns.break_mins,
+    ns.pay_minutes,
+    ns.ref_num,
+    ns.hr_request_id,
+    ns.external_row_key,
+    ns.week_ending_date
+  into
+    v_shift_source_system,
+    v_shift_candidate_id,
+    v_shift_client_id,
+    v_shift_contract_id,
+    v_shift_timesheet_id,
+    v_shift_work_date,
+    v_shift_start_utc,
+    v_shift_end_utc,
+    v_shift_break_mins,
+    v_shift_pay_minutes,
+    v_shift_ref_num,
+    v_shift_hr_request_id,
+    v_shift_external_row_key,
+    v_shift_week_ending_date
+  from public.nhsp_shifts ns
+  where ns.id = p_shift_id
+  for update;
+
+  if not found then
+    raise exception 'weekly_import_create_cancellation_corrections: shift_not_found (shift_id=%)', p_shift_id;
+  end if;
+
+  if v_shift_contract_id is null or v_shift_candidate_id is null or v_shift_client_id is null then
+    raise exception 'weekly_import_create_cancellation_corrections: shift missing contract_id/candidate_id/client_id (shift_id=%)', p_shift_id;
+  end if;
+
+  if v_shift_work_date is null then
+    raise exception 'weekly_import_create_cancellation_corrections: shift missing work_date (shift_id=%)', p_shift_id;
+  end if;
+
+  if v_shift_start_utc is null or v_shift_end_utc is null then
+    raise exception 'weekly_import_create_cancellation_corrections: shift missing start_utc/end_utc (shift_id=%)', p_shift_id;
+  end if;
+
+  v_shift_break_mins := greatest(0, coalesce(v_shift_break_mins, 0));
+  v_shift_pay_minutes := greatest(0, coalesce(v_shift_pay_minutes, 0));
+
+  -- Resolve week_ending_date for the correction timesheet (never assume Sunday)
+  v_week_ending_date := null;
+  v_base_ts_week_ending := null;
+
+  if v_shift_timesheet_id is not null then
+    select t.week_ending_date
+    into v_base_ts_week_ending
+    from public.timesheets t
+    where t.timesheet_id = v_shift_timesheet_id
+    limit 1;
+
+    if v_base_ts_week_ending is not null then
+      v_week_ending_date := v_base_ts_week_ending;
+    end if;
+  end if;
+
+  if v_week_ending_date is null and v_shift_week_ending_date is not null then
+    v_week_ending_date := v_shift_week_ending_date;
+  end if;
+
+  if v_week_ending_date is null then
+    select coalesce(c.week_ending_weekday_snapshot, 0)
+    into v_contract_week_ending_weekday_snapshot
+    from public.contracts c
+    where c.id = v_shift_contract_id
+    limit 1;
+
+    v_week_ending_date :=
+      (v_shift_work_date + (((v_contract_week_ending_weekday_snapshot - extract(dow from v_shift_work_date)::int + 7) % 7))::int)::date;
+  end if;
+
+  if v_week_ending_date is null then
+    raise exception 'weekly_import_create_cancellation_corrections: failed to resolve week_ending_date (shift_id=% contract_id=% work_date=%)',
+      p_shift_id, v_shift_contract_id, v_shift_work_date;
+  end if;
+
+  -- Deterministic correction_id (fnv1a32 over stable string)
+  v_fnv_s :=
+    coalesce(p_import_id::text,'') || '|' ||
+    coalesce(p_shift_id::text,'') || '|' ||
+    coalesce(coalesce(v_shift_external_row_key,''),'') || '|' ||
+    coalesce(coalesce(v_shift_ref_num,''),'') || '|' ||
+    coalesce(coalesce(v_shift_hr_request_id,''),'') || '|' ||
+    coalesce(v_shift_start_utc::text,'') || '|' ||
+    coalesce(v_shift_end_utc::text,'') || '|' ||
+    coalesce(v_shift_break_mins::text,'') || '|' ||
+    coalesce(v_week_ending_date::text,'');
+
+  v_fnv_h := 2166136261;
+  for v_fnv_i in 1..char_length(v_fnv_s) loop
+    v_fnv_h := (v_fnv_h # ascii(substring(v_fnv_s from v_fnv_i for 1)));
+    v_fnv_h := (v_fnv_h * 16777619) % 4294967296;
+  end loop;
+  v_fnv_hex := lpad(lower(to_hex(v_fnv_h)), 8, '0');
+
+  v_correction_id := 'can:' || p_import_id::text || ':' || p_shift_id::text || ':' || v_fnv_hex;
+
+  -- Load display context for norms (best-effort)
+  select
+    c2.display_site,
+    c2.ward_hint,
+    c2.role
+  into
+    v_contract_display_site,
+    v_contract_ward_hint,
+    v_contract_role
+  from public.contracts c2
+  where c2.id = v_shift_contract_id
+  limit 1;
+
+  select cl.name
+  into v_client_name
+  from public.clients cl
+  where cl.id = v_shift_client_id
+  limit 1;
+
+  select cand.display_name, cand.tms_ref
+  into v_candidate_display_name, v_candidate_tms_ref
+  from public.candidates cand
+  where cand.id = v_shift_candidate_id
+  limit 1;
+
+  -- Build schedule + hint (no “zero timesheet”; reversal only)
+  v_schedule := jsonb_build_array(
+    jsonb_build_object(
+      'date', v_shift_work_date::text,
+      'ward', nullif(btrim(coalesce(v_shift_ward, v_contract_ward_hint, '')), ''),
+      'start_utc', v_shift_start_utc::text,
+      'end_utc', v_shift_end_utc::text,
+      'break_mins', v_shift_break_mins,
+      'pay_minutes', v_shift_pay_minutes,
+      'ref_num', nullif(btrim(coalesce(v_shift_ref_num,'')), ''),
+      'hr_request_id', nullif(btrim(coalesce(v_shift_hr_request_id,'')), ''),
+      'shift_id', p_shift_id::text,
+      'external_row_key', v_shift_external_row_key
+    )
+  );
+
+  v_hint := jsonb_build_object(
+    'import_cancellation', jsonb_build_object(
+      'import_id', p_import_id::text,
+      'shift_id', p_shift_id::text,
+      'ref_num', nullif(btrim(coalesce(v_shift_ref_num,'')), ''),
+      'hr_request_id', nullif(btrim(coalesce(v_shift_hr_request_id,'')), ''),
+      'external_row_key', v_shift_external_row_key,
+      'correction_id', v_correction_id,
+      'correction_kind', v_kind,
+      'adjustment_origin', 'IMPORT_CANCELLATION'
+    )
+  );
+
+  v_shift_label := 'weekly-cancel-reversal-' || v_correction_id;
+
+  v_shift_label_norm :=
+    regexp_replace(
+      regexp_replace(lower(trim(v_shift_label)), '\s+', ' ', 'g'),
+      '[^\w\s\-@&\/,:]',
+      '',
+      'g'
+    );
+
+  v_booking_base :=
+    'scope=WEEKLY' || '|' ||
+    'contract_id=' || coalesce(v_shift_contract_id::text,'') || '|' ||
+    'candidate_id=' || coalesce(v_shift_candidate_id::text,'') || '|' ||
+    'client_id=' || coalesce(v_shift_client_id::text,'') || '|' ||
+    'week_ending_date=' || coalesce(v_week_ending_date::text,'') || '|' ||
+    'correction_id=' || coalesce(v_correction_id,'') || '|' ||
+    'correction_kind=' || v_kind;
+
+  v_hash_hex := substring(encode(digest(convert_to(v_booking_base, 'utf8'), 'sha256'), 'hex') from 1 for 16);
+  v_booking_id := 'bk_' || v_hash_hex;
+
+  -- Ensure base contract_week exists (seq=0) without altering defaults
+  insert into public.contract_weeks(contract_id, week_ending_date, additional_seq)
+  values (v_shift_contract_id, v_week_ending_date, 0)
+  on conflict (contract_id, week_ending_date, additional_seq) do nothing;
+
+  select cw0.id
+  into v_base_week_id
+  from public.contract_weeks cw0
+  where cw0.contract_id = v_shift_contract_id
+    and cw0.week_ending_date = v_week_ending_date
+    and cw0.additional_seq = 0
+  limit 1
+  for update;
+
+  if v_base_week_id is null then
+    raise exception 'weekly_import_create_cancellation_corrections: failed to ensure base contract_week exists (contract_id=% week_ending=%).',
+      v_shift_contract_id, v_week_ending_date;
+  end if;
+
+  -- Idempotency: reuse existing correction timesheet (uq_timesheets_correction_id_kind)
+  v_existing_ts_id := null;
+
+  select t.timesheet_id
+  into v_existing_ts_id
+  from public.timesheets t
+  where t.correction_id = v_correction_id
+    and t.correction_kind = v_kind
+  order by t.is_current desc, t.version desc
+  limit 1
+  for update;
+
+  if v_existing_ts_id is not null then
+    -- Ensure an adjustment contract_week exists and points at this timesheet
+    v_existing_cw_id := null;
+
+    select cw.id
+    into v_existing_cw_id
+    from public.contract_weeks cw
+    where cw.timesheet_id = v_existing_ts_id
+      and cw.contract_id = v_shift_contract_id
+      and cw.week_ending_date = v_week_ending_date
+    limit 1
+    for update;
+
+    if v_existing_cw_id is null then
+      perform 1
+      from public.contract_weeks cwlock
+      where cwlock.contract_id = v_shift_contract_id
+        and cwlock.week_ending_date = v_week_ending_date
+      for update;
+
+      v_try := 0;
+      loop
+        v_try := v_try + 1;
+        if v_try > 10 then
+          raise exception 'weekly_import_create_cancellation_corrections: failed to allocate additional_seq after retries (contract_id=% week_ending=%).',
+            v_shift_contract_id, v_week_ending_date;
+        end if;
+
+        select coalesce(max(cwmax.additional_seq), 0) + 1
+        into v_next_additional_seq
+        from public.contract_weeks cwmax
+        where cwmax.contract_id = v_shift_contract_id
+          and cwmax.week_ending_date = v_week_ending_date;
+
+        begin
+          insert into public.contract_weeks(
+            contract_id,
+            week_ending_date,
+            additional_seq,
+            is_adjustment,
+            submission_mode_snapshot,
+            status,
+            created_at,
+            updated_at,
+            timesheet_id
+          )
+          values (
+            v_shift_contract_id,
+            v_week_ending_date,
+            v_next_additional_seq,
+            true,
+            'MANUAL'::public.submission_mode_enum,
+            'SUBMITTED'::public.contract_week_status_enum,
+            v_now,
+            v_now,
+            v_existing_ts_id
+          )
+          returning id into v_existing_cw_id;
+
+          exit;
+        exception when unique_violation then
+          v_existing_cw_id := null;
+        end;
+      end loop;
+    end if;
+
+    -- Refresh correction timesheet fields (keeps idempotent identity)
+    update public.timesheets t2
+    set
+      booking_id = v_booking_id,
+      is_current = true,
+      status = 'RECEIVED'::public.timesheet_status_enum,
+      sheet_scope = 'WEEKLY'::public.timesheet_scope_enum,
+      submission_mode = 'MANUAL'::public.submission_mode_enum,
+      line_type = 'HOURS'::public.timesheet_line_type_enum,
+      week_ending_date = v_week_ending_date,
+      contract_id = v_shift_contract_id,
+      occupant_key_norm = lower(coalesce(v_candidate_tms_ref, v_candidate_display_name, v_shift_candidate_id::text)),
+      hospital_norm = lower(coalesce(v_contract_display_site, v_client_name, v_shift_client_id::text)),
+      ward_norm = lower(coalesce(v_contract_ward_hint,'contract')),
+      job_title_norm = lower(coalesce(v_contract_role,'weekly')),
+      shift_label_norm = v_shift_label_norm,
+      manual_pdf_r2_key = null,
+      actual_schedule_json = v_schedule,
+      additional_units_week = '{}'::jsonb,
+      additional_units_per_day = '{}'::jsonb,
+      day_references_json = null,
+      qr_payload_json = v_hint,
+      candidate_hint_text = v_hint,
+      is_adjustment = true,
+      parent_timesheet_id = null,
+      correction_id = v_correction_id,
+      correction_kind = v_kind,
+      adjustment_origin = 'IMPORT_CANCELLATION',
+      updated_at = v_now
+    where t2.timesheet_id = v_existing_ts_id;
+
+    v_created_timesheet_ids := array_append(v_created_timesheet_ids, v_existing_ts_id);
+
+  else
+    -- Create new adjustment contract_week (safe additional_seq) then a new correction timesheet linked to it.
+    perform 1
+    from public.contract_weeks cwlock2
+    where cwlock2.contract_id = v_shift_contract_id
+      and cwlock2.week_ending_date = v_week_ending_date
+    for update;
+
+    v_try := 0;
+    loop
+      v_try := v_try + 1;
+      if v_try > 10 then
+        raise exception 'weekly_import_create_cancellation_corrections: failed to allocate additional_seq after retries (contract_id=% week_ending=%).',
+          v_shift_contract_id, v_week_ending_date;
+      end if;
+
+      select coalesce(max(cwmax2.additional_seq), 0) + 1
+      into v_next_additional_seq
+      from public.contract_weeks cwmax2
+      where cwmax2.contract_id = v_shift_contract_id
+        and cwmax2.week_ending_date = v_week_ending_date;
+
+      begin
+        insert into public.contract_weeks(
+          contract_id,
+          week_ending_date,
+          additional_seq,
+          is_adjustment,
+          submission_mode_snapshot,
+          status,
+          created_at,
+          updated_at
+        )
+        values (
+          v_shift_contract_id,
+          v_week_ending_date,
+          v_next_additional_seq,
+          true,
+          'MANUAL'::public.submission_mode_enum,
+          'SUBMITTED'::public.contract_week_status_enum,
+          v_now,
+          v_now
+        )
+        returning id into v_cw_id;
+
+        exit;
+      exception when unique_violation then
+        v_cw_id := null;
+      end;
+    end loop;
+
+    insert into public.timesheets(
+      booking_id,
+      version,
+      is_current,
+      status,
+      occupant_key_norm,
+      hospital_norm,
+      ward_norm,
+      job_title_norm,
+      shift_label_norm,
+      week_ending_date,
+      contract_id,
+      sheet_scope,
+      submission_mode,
+      line_type,
+      manual_pdf_r2_key,
+      actual_schedule_json,
+      additional_units_week,
+      additional_units_per_day,
+      day_references_json,
+      qr_status,
+      qr_token,
+      qr_generated_at,
+      qr_scanned_at,
+      qr_scan_info_json,
+      qr_r2_key,
+      qr_payload_json,
+      created_at,
+      updated_at,
+      is_adjustment,
+      parent_timesheet_id,
+      candidate_hint_text,
+      correction_id,
+      correction_kind,
+      adjustment_origin
+    )
+    values (
+      v_booking_id,
+      1,
+      true,
+      'RECEIVED'::public.timesheet_status_enum,
+      lower(coalesce(v_candidate_tms_ref, v_candidate_display_name, v_shift_candidate_id::text)),
+      lower(coalesce(v_contract_display_site, v_client_name, v_shift_client_id::text)),
+      lower(coalesce(v_contract_ward_hint,'contract')),
+      lower(coalesce(v_contract_role,'weekly')),
+      v_shift_label_norm,
+      v_week_ending_date,
+      v_shift_contract_id,
+      'WEEKLY'::public.timesheet_scope_enum,
+      'MANUAL'::public.submission_mode_enum,
+      'HOURS'::public.timesheet_line_type_enum,
+      null,
+      v_schedule,
+      '{}'::jsonb,
+      '{}'::jsonb,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      v_hint,
+      v_now,
+      v_now,
+      true,
+      null,
+      v_hint,
+      v_correction_id,
+      v_kind,
+      'IMPORT_CANCELLATION'
+    )
+    returning timesheet_id into v_ts_id;
+
+    update public.contract_weeks cwlink
+    set
+      timesheet_id = v_ts_id,
+      status = 'SUBMITTED'::public.contract_week_status_enum,
+      submission_mode_snapshot = 'MANUAL'::public.submission_mode_enum,
+      is_adjustment = true,
+      updated_at = v_now
+    where cwlink.id = v_cw_id;
+
+    v_created_timesheet_ids := array_append(v_created_timesheet_ids, v_ts_id);
+  end if;
+
+  -- Deduplicate created ids
+  select coalesce(array_agg(distinct x), array[]::uuid[])
+  into v_created_timesheet_ids
+  from unnest(v_created_timesheet_ids) x
+  where x is not null;
+
+  perform public._imp_debug_audit(
+    p_actor_user_id,
+    'WEEKLY_CANCEL_CORRECTION_CREATE_DEBUG',
+    jsonb_build_object(
+      'import_id', p_import_id::text,
+      'shift_id', p_shift_id::text,
+      'correction_id', v_correction_id,
+      'correction_kind', v_kind,
+      'week_ending_date', v_week_ending_date::text,
+      'created_timesheet_ids', to_jsonb(v_created_timesheet_ids)
+    ),
+    'nhsp_shifts',
+    p_shift_id::text,
+    null,
+    null,
+    null,
+    null
+  );
+
+  return jsonb_build_object(
+    'import_id', p_import_id,
+    'shift_id', p_shift_id,
+    'correction_id', v_correction_id,
+    'correction_kind', v_kind,
+    'created_timesheet_ids', to_jsonb(v_created_timesheet_ids)
+  );
+
+exception when others then
+  get stacked diagnostics v_sqlstate = returned_sqlstate, v_err = message_text;
+
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'WEEKLY_CANCEL_CORRECTION_CREATE_ERROR',
+      jsonb_build_object(
+        'import_id', p_import_id::text,
+        'shift_id', p_shift_id::text,
+        'sqlstate', v_sqlstate,
+        'error', v_err
+      ),
+      'nhsp_shifts',
+      p_shift_id::text,
+      null,
+      null,
+      null,
+      null
+    );
+  exception when others then
+    null;
+  end;
+
+  raise;
+end;
+$$;
