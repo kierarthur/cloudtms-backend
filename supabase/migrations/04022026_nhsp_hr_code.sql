@@ -365,10 +365,10 @@ $$;
 
 
 
+
 create or replace function public.hr_weekly_phase3_apply_adjustment_truth(
   p_import_id uuid,
   p_selected_external_row_keys text[],
-  p_decisions jsonb,
   p_actor_user_id uuid
 )
 returns jsonb
@@ -383,23 +383,25 @@ declare
 
   v_selected_keys text[] := '{}';
   v_key text;
-
-  v_phase3_rows jsonb := '[]'::jsonb;
-
-  v_decision jsonb;
-  v_skip_text text;
-  v_skip boolean;
+  v_last_key text := null;
 
   v_row jsonb;
-  v_is_invoiced boolean;
 
-  v_credit_week_start text;
-  v_reinvoice_week_start text;
+  v_is_invoiced boolean := false;
+  v_invoice_id_detected uuid := null;
 
   v_contract_id uuid;
   v_candidate_id uuid;
   v_client_id uuid;
+  v_work_date date;
+
+  -- Week ending date (contract-driven / base-timesheet driven; never assumed Sunday)
   v_week_ending_date date;
+  v_base_timesheet_id uuid := null;
+  v_base_week_ending_date date := null;
+  v_contract_week_ending_weekday_snapshot int := 0;
+  v_work_dow int := 0;
+  v_we_delta int := 0;
 
   v_correction_id text;
   v_kind text;
@@ -432,9 +434,6 @@ declare
   v_base_week_id uuid;
 
   v_existing_ts_id uuid;
-  v_existing_ts_is_current boolean;
-  v_existing_ts_version bigint;
-  v_existing_ts_status text;
 
   v_existing_cw_id uuid;
   v_existing_cw_seq int;
@@ -469,6 +468,15 @@ declare
   v_hint jsonb;
 
   v_try int;
+
+  -- debug sample (invoice_debug gated inside _imp_debug_audit)
+  v_sample jsonb := '[]'::jsonb;
+  v_sample_n int := 0;
+  v_key_ts jsonb;
+  v_kind_op text;
+
+  v_sqlstate text;
+  v_err text;
 begin
   -- ---- Validate import exists and is HEALTHROSTER ----
   select hi.source_system
@@ -505,19 +513,7 @@ begin
     );
   end if;
 
-  if jsonb_typeof(coalesce(p_decisions,'{}'::jsonb)) <> 'object' then
-    raise exception 'hr_weekly_phase3_apply_adjustment_truth: p_decisions must be a JSON object.';
-  end if;
-
-  -- ---- Load Phase 3 rows as JSONB (schema-safe) ----
-  select coalesce(jsonb_agg(to_jsonb(r)), '[]'::jsonb)
-  into v_phase3_rows
-  from public.weekly_import_changed_hours_phase3(
-    p_import_id := p_import_id,
-    p_system_type := 'HEALTHROSTER'
-  ) as r;
-
-  -- Build temp lookup for phase3 rows by external_row_key
+  -- ---- Load Phase 3 rows for selected keys into a lookup ----
   create temporary table tmp_phase3_by_key(
     external_row_key text primary key,
     row_json jsonb not null
@@ -525,16 +521,19 @@ begin
 
   insert into tmp_phase3_by_key(external_row_key, row_json)
   select
-    nullif(btrim(x.row_json->>'external_row_key'), '') as external_row_key,
-    x.row_json
-  from (
-    select jsonb_array_elements(v_phase3_rows) as row_json
-  ) as x
-  where nullif(btrim(x.row_json->>'external_row_key'), '') is not null
+    r.external_row_key,
+    to_jsonb(r) as row_json
+  from public.weekly_import_changed_hours_phase3(
+    p_import_id := p_import_id,
+    p_system_type := 'HEALTHROSTER'
+  ) as r
+  where r.external_row_key = any(v_selected_keys)
   on conflict (external_row_key) do nothing;
 
   -- ---- Process each selected key ----
   foreach v_key in array v_selected_keys loop
+    v_last_key := v_key;
+
     select t.row_json
     into v_row
     from tmp_phase3_by_key t
@@ -544,78 +543,79 @@ begin
       raise exception 'hr_weekly_phase3_apply_adjustment_truth: Phase 3 row not found for selected external_row_key=%', v_key;
     end if;
 
-    -- Validate decision object exists
-    v_decision := coalesce(p_decisions->v_key, null);
-
-    if v_decision is null or jsonb_typeof(v_decision) <> 'object' then
-      raise exception 'hr_weekly_phase3_apply_adjustment_truth: Missing/invalid decision object for external_row_key=%', v_key;
-    end if;
-
-    v_skip_text := v_decision->>'skip';
-    if v_skip_text is null then
-      raise exception 'hr_weekly_phase3_apply_adjustment_truth: Decision missing skip boolean for external_row_key=%', v_key;
-    end if;
-
-    v_skip :=
-      case
-        when lower(v_skip_text) in ('true','1') then true
-        when lower(v_skip_text) in ('false','0') then false
-        else null
-      end;
-
-    if v_skip is null then
-      raise exception 'hr_weekly_phase3_apply_adjustment_truth: Decision skip is not boolean-like for external_row_key=% (skip=%)', v_key, v_skip_text;
-    end if;
-
-    if v_skip then
-      v_skipped_count := v_skipped_count + 1;
-      continue;
-    end if;
-
-    -- Determine invoiced flag (from Phase3 row)
+    -- Determine invoiced flag (from Phase3 row) for logging only
     v_is_invoiced :=
       case
         when lower(coalesce(v_row->>'is_invoiced','')) in ('true','1') then true
         else false
       end;
 
-    if v_is_invoiced then
-      v_credit_week_start := nullif(btrim(v_decision->>'credit_week_start'), '');
-      v_reinvoice_week_start := nullif(btrim(v_decision->>'reinvoice_week_start'), '');
-
-      if v_credit_week_start is null or v_reinvoice_week_start is null then
-        raise exception 'hr_weekly_phase3_apply_adjustment_truth: Missing credit/reinvoice weeks for invoiced external_row_key=%', v_key;
-      end if;
-
-      begin
-        if extract(isodow from (v_credit_week_start::date)) <> 1 then
-          raise exception 'credit_week_start must be Monday';
-        end if;
-      exception when others then
-        raise exception 'hr_weekly_phase3_apply_adjustment_truth: Invalid credit_week_start for external_row_key=% (value=%)', v_key, v_credit_week_start;
-      end;
-
-      begin
-        if extract(isodow from (v_reinvoice_week_start::date)) <> 1 then
-          raise exception 'reinvoice_week_start must be Monday';
-        end if;
-      exception when others then
-        raise exception 'hr_weekly_phase3_apply_adjustment_truth: Invalid reinvoice_week_start for external_row_key=% (value=%)', v_key, v_reinvoice_week_start;
-      end;
-    else
-      v_credit_week_start := null;
-      v_reinvoice_week_start := null;
-    end if;
+    begin
+      v_invoice_id_detected := nullif(btrim(coalesce(v_row->>'invoice_id_detected','')), '')::uuid;
+    exception when others then
+      v_invoice_id_detected := null;
+    end;
 
     -- Extract required mapping fields
     begin
       v_contract_id := (v_row->>'contract_id')::uuid;
       v_candidate_id := (v_row->>'candidate_id')::uuid;
       v_client_id := (v_row->>'client_id')::uuid;
-      v_week_ending_date := (v_row->>'week_ending_date')::date;
+      v_work_date := (v_row->>'work_date')::date;
     exception when others then
-      raise exception 'hr_weekly_phase3_apply_adjustment_truth: Phase 3 row missing contract_id/candidate_id/client_id/week_ending_date for external_row_key=%', v_key;
+      raise exception 'hr_weekly_phase3_apply_adjustment_truth: Phase 3 row missing/invalid contract_id/candidate_id/client_id/work_date for external_row_key=%', v_key;
     end;
+
+    -- ---- Resolve week_ending_date (DO NOT assume Sunday) ----
+    v_week_ending_date := null;
+    v_base_timesheet_id := null;
+    v_base_week_ending_date := null;
+
+    -- 1) Prefer base timesheet week_ending_date when timesheet_id exists (authoritative)
+    begin
+      v_base_timesheet_id := nullif(btrim(coalesce(v_row->>'timesheet_id','')), '')::uuid;
+    exception when others then
+      v_base_timesheet_id := null;
+    end;
+
+    if v_base_timesheet_id is not null then
+      select ts.week_ending_date
+      into v_base_week_ending_date
+      from public.timesheets ts
+      where ts.timesheet_id = v_base_timesheet_id
+        and ts.is_current = true
+      limit 1;
+
+      if v_base_week_ending_date is not null then
+        v_week_ending_date := v_base_week_ending_date;
+      end if;
+    end if;
+
+    -- 2) Next: use week_ending_date present on Phase3 row if provided
+    if v_week_ending_date is null then
+      begin
+        v_week_ending_date := nullif(btrim(coalesce(v_row->>'week_ending_date','')), '')::date;
+      exception when others then
+        v_week_ending_date := null;
+      end;
+    end if;
+
+    -- 3) Final fallback: derive from contracts.week_ending_weekday_snapshot (0=Sun) and work_date
+    if v_week_ending_date is null then
+      select coalesce(ct.week_ending_weekday_snapshot, 0)
+      into v_contract_week_ending_weekday_snapshot
+      from public.contracts ct
+      where ct.id = v_contract_id
+      limit 1;
+
+      v_work_dow := extract(dow from v_work_date)::int; -- 0=Sun..6=Sat
+      v_we_delta := ((v_contract_week_ending_weekday_snapshot - v_work_dow + 7) % 7);
+      v_week_ending_date := (v_work_date + v_we_delta)::date;
+    end if;
+
+    if v_week_ending_date is null then
+      raise exception 'hr_weekly_phase3_apply_adjustment_truth: Failed to resolve week_ending_date for external_row_key=% (contract_id=% work_date=%)', v_key, v_contract_id, v_work_date;
+    end if;
 
     -- Extract old/new shift times and break mins
     begin
@@ -631,10 +631,19 @@ begin
       raise exception 'hr_weekly_phase3_apply_adjustment_truth: Phase 3 row missing old/new start/end timestamps for external_row_key=%', v_key;
     end if;
 
-    v_old_break_mins := coalesce(nullif(v_row->>'old_break_mins','')::int, 0);
-    v_new_break_mins := coalesce(nullif(v_row->>'new_break_mins','')::int, 0);
+    begin
+      v_old_break_mins := coalesce(nullif(v_row->>'old_break_mins','')::int, 0);
+    exception when others then
+      v_old_break_mins := 0;
+    end;
 
-    -- Compute correction_id (must match JS makeWeeklyHoursCorrectionId)
+    begin
+      v_new_break_mins := coalesce(nullif(v_row->>'new_break_mins','')::int, 0);
+    exception when others then
+      v_new_break_mins := 0;
+    end;
+
+    -- Compute correction_id (stable + deterministic)
     v_fnv_s :=
       coalesce(p_import_id::text,'') || '|' ||
       coalesce(v_key,'') || '|' ||
@@ -718,6 +727,8 @@ begin
     where cw0.contract_id = v_contract_id
       and cw0.week_ending_date = v_week_ending_date
       and cw0.additional_seq = 0
+      and cw0.is_adjustment = false
+    limit 1
     for update;
 
     if v_base_week_id is null then
@@ -736,8 +747,11 @@ begin
       returning id into v_base_week_id;
     end if;
 
+    v_key_ts := '[]'::jsonb;
+
     -- Apply two artefacts: REVERSAL and REPLACEMENT
     for v_kind in select unnest(array['CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT']) loop
+      v_kind_op := null;
 
       if v_kind = 'CHANGED_HOURS_REVERSAL' then
         v_seg_start_utc := v_old_start_utc;
@@ -756,9 +770,7 @@ begin
           'import_id', p_import_id::text,
           'external_row_key', v_key,
           'correction_id', v_correction_id,
-          'correction_kind', v_kind,
-          'credit_week_start', v_credit_week_start,
-          'reinvoice_week_start', v_reinvoice_week_start
+          'correction_kind', v_kind
         )
       );
 
@@ -784,20 +796,9 @@ begin
 
       -- Idempotency: reuse existing correction timesheet (unique on correction_id+kind)
       v_existing_ts_id := null;
-      v_existing_ts_is_current := null;
-      v_existing_ts_version := null;
-      v_existing_ts_status := null;
 
-      select
-        t.timesheet_id,
-        t.is_current,
-        t.version,
-        t.status::text
-      into
-        v_existing_ts_id,
-        v_existing_ts_is_current,
-        v_existing_ts_version,
-        v_existing_ts_status
+      select t.timesheet_id
+      into v_existing_ts_id
       from public.timesheets t
       where t.correction_id = v_correction_id
         and t.correction_kind = v_kind
@@ -887,7 +888,6 @@ begin
 
               exit;
             exception when unique_violation then
-              -- another txn took the same seq; retry
               v_existing_cw_id := null;
             end;
           end loop;
@@ -923,6 +923,13 @@ begin
 
         v_upd_count := v_upd_count + 1;
         v_updated_ts_ids := array_append(v_updated_ts_ids, v_existing_ts_id);
+        v_kind_op := 'UPDATED';
+
+        v_key_ts := v_key_ts || jsonb_build_array(jsonb_build_object(
+          'kind', v_kind,
+          'timesheet_id', v_existing_ts_id::text,
+          'op', v_kind_op
+        ));
 
       else
         -- Create a new adjustment contract_week (safe additional_seq) + a new correction timesheet linked to it.
@@ -1121,10 +1128,51 @@ begin
 
         v_ins_count := v_ins_count + 1;
         v_created_ts_ids := array_append(v_created_ts_ids, v_ts_id);
+        v_kind_op := 'CREATED';
+
+        v_key_ts := v_key_ts || jsonb_build_array(jsonb_build_object(
+          'kind', v_kind,
+          'timesheet_id', v_ts_id::text,
+          'op', v_kind_op
+        ));
       end if;
 
     end loop; -- kind loop
+
+    if v_sample_n < 20 then
+      v_sample := v_sample || jsonb_build_array(jsonb_build_object(
+        'external_row_key', v_key,
+        'is_invoiced', v_is_invoiced,
+        'invoice_id_detected', case when v_invoice_id_detected is null then null else v_invoice_id_detected::text end,
+        'week_ending_date', v_week_ending_date::text,
+        'base_timesheet_id', case when v_base_timesheet_id is null then null else v_base_timesheet_id::text end,
+        'correction_id', v_correction_id,
+        'timesheets', v_key_ts
+      ));
+      v_sample_n := v_sample_n + 1;
+    end if;
+
   end loop; -- selected keys loop
+
+  perform public._imp_debug_audit(
+    p_actor_user_id,
+    'HR_CORRECTION_SERIES_DEBUG',
+    jsonb_build_object(
+      'import_id', p_import_id::text,
+      'selected_count', coalesce(array_length(v_selected_keys, 1), 0),
+      'inserted_count', v_ins_count,
+      'updated_count', v_upd_count,
+      'created_timesheet_ids_count', coalesce(array_length(v_created_ts_ids, 1), 0),
+      'updated_timesheet_ids_count', coalesce(array_length(v_updated_ts_ids, 1), 0),
+      'sample', v_sample
+    ),
+    'hr_imports',
+    p_import_id::text,
+    null,
+    null,
+    null,
+    null
+  );
 
   return jsonb_build_object(
     'import_id', p_import_id,
@@ -1135,8 +1183,38 @@ begin
     'created_timesheet_ids', to_jsonb(coalesce(v_created_ts_ids, '{}'::uuid[])),
     'updated_timesheet_ids', to_jsonb(coalesce(v_updated_ts_ids, '{}'::uuid[]))
   );
+
+exception when others then
+  get stacked diagnostics v_sqlstate = returned_sqlstate, v_err = message_text;
+
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'HR_CORRECTION_SERIES_ERROR',
+      jsonb_build_object(
+        'import_id', p_import_id::text,
+        'last_external_row_key', v_last_key,
+        'selected_count', coalesce(array_length(v_selected_keys, 1), 0),
+        'inserted_count', v_ins_count,
+        'updated_count', v_upd_count,
+        'sqlstate', v_sqlstate,
+        'error', v_err
+      ),
+      'hr_imports',
+      p_import_id::text,
+      null,
+      null,
+      null,
+      null
+    );
+  exception when others then
+    null;
+  end;
+
+  raise;
 end;
 $$;
+
 
 create or replace function public.hr_weekly_apply_transactional(
   p_import_id uuid,
