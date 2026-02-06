@@ -753,9 +753,11 @@ begin
   )
   select fr.*
   from final_rows fr
-  where fr.requires_any_decision = true
+  where fr.is_changed_hours = true
   order by fr.work_date asc, fr.external_row_key asc;
 
 end;
 $$;
+
+
 
