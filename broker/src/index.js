@@ -29857,144 +29857,1224 @@ async function handleCreateHospital(env, req, clientId) {
 // and candidate aliases for staff name→candidate.
 // ─────────────────────────────────────────────────────────────
 
-// Load contract_weeks for this contract/week (from batched map)
-const pairKey = `${contract_id}__${week_ending_date}`;
-const weeks = (weeksByPair.get(pairKey) || []).slice();
+async function classifyWeeklyImportRows(env, importId, { source_system }) {
+  const enc   = encodeURIComponent;
+  const norm  = (s) => String(s || '').trim().toLowerCase();
+  const upper = (s) => String(s || '').trim().toUpperCase();
+  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+  const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
 
-const baseWeek = weeks.find(w => !w.is_adjustment && Number(w.additional_seq || 0) === 0) || null;
-const adjWeeks = weeks.filter(w => !!w.is_adjustment);
-
-const tsIdsLocal = weeks.map(w => w.timesheet_id).filter(Boolean);
-
-// ✅ Phase2 authoritative “no change” signal for this group
-const p2Key = `${candidate_id}__${client_id}__${contract_id}__${week_ending_date}`;
-const p2Agg = p2AggByGroupKey.get(p2Key) || null;
-const allNoopInFile =
-  !!(p2Agg &&
-     Number(p2Agg.ok_rows || 0) > 0 &&
-     Number(p2Agg.ok_new_rows || 0) === 0 &&
-     Number(p2Agg.ok_changed_rows || 0) === 0);
-
-// Current totals from existing TSFIN (missing TSFIN rows count as 0)
-let currentPayRaw = 0;
-let currentChgRaw = 0;
-
-for (const tsId of tsIdsLocal) {
-  const fin = finByTsId.get(tsId);
-  if (!fin) continue;
-  currentPayRaw += Number(fin.total_pay_ex_vat || 0);
-  currentChgRaw += Number(fin.total_charge_ex_vat || 0);
-}
-
-const currentPay = round2(currentPayRaw);
-const currentChg = round2(currentChgRaw);
-
-// Determine base/latest adjustment timesheet ids (for UI)
-const baseTsId = baseWeek?.timesheet_id || null;
-
-let latestAdjWeek = null;
-if (adjWeeks.length) {
-  latestAdjWeek = adjWeeks.reduce((m, w) =>
-    Number(w.additional_seq || 0) > Number(m.additional_seq || 0) ? w : m,
-    adjWeeks[0]
-  );
-}
-const latestAdjTsId = latestAdjWeek?.timesheet_id || null;
-
-// ✅ HARD FIX:
-// If Phase2 says every OK row in this group is NOOP (and none are NEW/CHANGED),
-// then this group must be “Already processed” — do not emit UPDATE_* / “overwrite”.
-if (baseTsId && allNoopInFile) {
-  return {
-    level: 'group',
-    preview_group_id: `grp:${contract_id}:${week_ending_date}:${candidate_id}`,
-    import_id: importId,
-    source_system,
-    candidate_id,
-    candidate_name: g.candidate_name,
-    client_id,
-    client_name: g.client_name,
-    contract_id,
-    week_ending_date,
-    incoming_code: (g.incoming_codes.length === 1 ? g.incoming_codes[0] : g.incoming_codes.join(', ')),
-    assignment_code: (source_system === 'NHSP' ? (g.incoming_codes.length === 1 ? g.incoming_codes[0] : null) : null),
-    grade_raw: (source_system === 'HEALTHROSTER' ? (g.incoming_codes.length === 1 ? g.incoming_codes[0] : null) : null),
-    self_bill: (source_system === 'HEALTHROSTER') ? !!contract.self_bill : null,
-    has_unfinalised: !!g.has_unfinalised,
-    hr_row_ids: g.hr_row_ids.slice(),
-
-    // Treat truth=current for display; delta is 0 (because Phase2 proved NOOP)
-    truth_pay_ex_vat: currentPay,
-    truth_charge_ex_vat: currentChg,
-    current_pay_ex_vat: currentPay,
-    current_charge_ex_vat: currentChg,
-    delta_pay_ex_vat: 0,
-    delta_charge_ex_vat: 0,
-
-    base_timesheet_id: baseTsId,
-    latest_adjustment_timesheet_id: latestAdjTsId,
-
-    action: 'SKIP_ALREADY_PROCESSED',
-    reason: 'All mapped import rows are unchanged (Phase2 NOOP) — nothing to apply.',
-    default_selected: false,
-
-    changed_shifts_count: 0,
-    changed_shifts_decision_needed_count: 0,
-    changed_shifts_external_row_keys: []
-  };
-}
-
-// ─────────────────────────────────────────────
-// Otherwise compute truth totals from import shifts using contract rates
-// (keep your existing logic below as-is)
-// ─────────────────────────────────────────────
-let truthPayRaw = 0;
-let truthChgRaw = 0;
-
-const missingPayBuckets = new Set();
-const missingChgBuckets = new Set();
-
-for (const sh of g.shifts) {
-  const policy = await getPolicyCached(client_id, sh.work_date);
-
-  let segs = [[sh.start_utc, sh.end_utc]];
-  segs = subtractBreak(segs, null, null, sh.break_mins || 0);
-
-  const hours = classifyMinutes(env, policy, segs);
-
-  const used = {
-    day:   (hours.hours_day   || 0),
-    night: (hours.hours_night || 0),
-    sat:   (hours.hours_sat   || 0),
-    sun:   (hours.hours_sun   || 0),
-    bh:    (hours.hours_bh    || 0),
+  const chunk = (arr, n) => {
+    const out = [];
+    for (let i = 0; i < (arr || []).length; i += n) out.push(arr.slice(i, i + n));
+    return out;
   };
 
-  for (const k of ['day','night','sat','sun','bh']) {
-    if ((used[k] || 0) > 0) {
-      const pv = pay[k];
-      const cv = chg[k];
-      if (pv == null || pv === '' || !Number.isFinite(Number(pv))) missingPayBuckets.add(k);
-      if (cv == null || cv === '' || !Number.isFinite(Number(cv))) missingChgBuckets.add(k);
+  console.log('[WEEKLY_CLASSIFY] start', { importId, source_system });
+
+  // ─────────────────────────────────────────────────────────────
+  // 0) Build shared context (import + hr_rows + settings)
+  // ─────────────────────────────────────────────────────────────
+  const ctx = await buildWeeklyImportContext(env, importId, source_system);
+  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
+
+  if (ctx.error === 'import_not_found') {
+    if (LOG) {
+      console.warn('[WEEKLY_CLASSIFY]', JSON.stringify({
+        stage: 'import_not_found',
+        import_id: importId
+      }));
+    }
+    return { error: 'import_not_found', import_id: importId, source_system, rows: [] };
+  }
+  if (ctx.error === 'source_system_mismatch') {
+    if (LOG) {
+      console.warn('[WEEKLY_CLASSIFY]', JSON.stringify({
+        stage: 'source_system_mismatch',
+        import_id: importId,
+        expected: ctx.expected_source_system,
+        actual: ctx.source_system
+      }));
+    }
+    return {
+      error: 'source_system_mismatch',
+      import_id: importId,
+      expected_source_system: source_system,
+      actual_source_system: ctx.source_system,
+      rows: []
+    };
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 0.5) Decide batched vs legacy based on settings
+  // ─────────────────────────────────────────────────────────────
+  const useBatched =
+    !!(ctx.settings &&
+       ctx.settings.importConfig &&
+       ctx.settings.importConfig.useBatchedClassification);
+
+  if (LOG) {
+    console.log('[WEEKLY_CLASSIFY]', JSON.stringify({
+      stage: 'context_loaded',
+      import_id: importId,
+      source_system: ctx.source_system,
+      hr_row_count: (ctx.hrRows || []).length,
+      use_batched_classification: useBatched
+    }));
+  }
+
+  if (!useBatched) {
+    return await classifyWeeklyImportRowsLegacy(env, importId, { source_system });
+  }
+
+  // From here down is the batched implementation
+  const imp    = ctx.imp;
+  const hrRows = ctx.hrRows || [];
+
+  if (!hrRows.length) {
+    console.log('[WEEKLY_CLASSIFY] no hr_rows', { import_id: importId });
+    return { import_id: importId, source_system, rows: [] };
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 1) Phase1 SQL mapping calls (KEEP, as requested)
+  //     - NHSP: nhsp_preview_mappings_phase1
+  //     - HR weekly: hr_weekly_preview_mappings_phase1
+  // ─────────────────────────────────────────────────────────────
+  let nhspMappingByHrRowId = null;
+  let hrPreviewMappingByHrRowId = null;
+
+  if (source_system === 'NHSP') {
+    try {
+      const rpcBody = { p_import_id: importId };
+      const res = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/rpc/nhsp_preview_mappings_phase1`,
+        {
+          method: 'POST',
+          headers: { ...sbHeaders(env), 'content-type': 'application/json' },
+          body: JSON.stringify(rpcBody)
+        }
+      );
+
+      const txt = await res.text().catch(() => '');
+      let json;
+      try { json = txt ? JSON.parse(txt) : []; } catch { json = []; }
+
+      if (Array.isArray(json) && json.length) {
+        nhspMappingByHrRowId = new Map();
+        for (const row of json) {
+          if (row && row.hr_row_id) nhspMappingByHrRowId.set(String(row.hr_row_id), row);
+        }
+      }
+
+      if (LOG) {
+        console.log('[WEEKLY_CLASSIFY]', JSON.stringify({
+          stage: 'nhsp_preview_mappings_loaded',
+          import_id: importId,
+          rows: Array.isArray(json) ? json.length : 0
+        }));
+      }
+    } catch (e) {
+      console.warn('[WEEKLY_CLASSIFY] nhsp_preview_mappings_phase1 failed (non-fatal)', e);
+      nhspMappingByHrRowId = null;
     }
   }
 
-  const segPay =
-    (used.day   || 0) * asNumberLocal(pay.day)   +
-    (used.night || 0) * asNumberLocal(pay.night) +
-    (used.sat   || 0) * asNumberLocal(pay.sat)   +
-    (used.sun   || 0) * asNumberLocal(pay.sun)   +
-    (used.bh    || 0) * asNumberLocal(pay.bh);
+  if (source_system === 'HEALTHROSTER') {
+    try {
+      const rpcBody = { p_import_id: importId };
+      const res = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/rpc/hr_weekly_preview_mappings_phase1`,
+        {
+          method: 'POST',
+          headers: { ...sbHeaders(env), 'content-type': 'application/json' },
+          body: JSON.stringify(rpcBody)
+        }
+      );
 
-  const segChg =
-    (used.day   || 0) * asNumberLocal(chg.day)   +
-    (used.night || 0) * asNumberLocal(chg.night) +
-    (used.sat   || 0) * asNumberLocal(chg.sat)   +
-    (used.sun   || 0) * asNumberLocal(chg.sun)   +
-    (used.bh    || 0) * asNumberLocal(chg.bh);
+      const txt = await res.text().catch(() => '');
+      let json;
+      try { json = txt ? JSON.parse(txt) : []; } catch { json = []; }
 
-  truthPayRaw += (Number(segPay) || 0);
-  truthChgRaw += (Number(segChg) || 0);
+      if (Array.isArray(json) && json.length) {
+        hrPreviewMappingByHrRowId = new Map();
+        for (const row of json) {
+          if (row && row.hr_row_id) hrPreviewMappingByHrRowId.set(String(row.hr_row_id), row);
+        }
+      }
+
+      if (LOG) {
+        console.log('[WEEKLY_CLASSIFY]', JSON.stringify({
+          stage: 'hr_preview_mappings_loaded',
+          import_id: importId,
+          rows: Array.isArray(json) ? json.length : 0
+        }));
+      }
+    } catch (e) {
+      console.warn('[WEEKLY_CLASSIFY] hr_weekly_preview_mappings_phase1 failed (non-fatal)', e);
+      hrPreviewMappingByHrRowId = null;
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 2) Phase2 SQL (existing): candidate/client/contract + band/grade mapping + week ending
+  //     weekly_import_phase2(p_import_id uuid, p_system_type text)
+  // ─────────────────────────────────────────────────────────────
+  const systemType =
+    (source_system === 'NHSP') ? 'NHSP' :
+    (source_system === 'HEALTHROSTER') ? 'HR_WEEKLY' :
+    null;
+
+  if (!systemType) {
+    return {
+      error: 'unsupported_source_system',
+      import_id: importId,
+      source_system,
+      rows: [{
+        level: 'row',
+        preview_row_id: 'row:unsupported',
+        hr_row_id: null,
+        import_id: importId,
+        source_system,
+        action: 'REJECT_UNSUPPORTED_SOURCE',
+        reason: `Unsupported source_system=${source_system}`,
+        default_selected: false
+      }]
+    };
+  }
+
+ let phase2ByHrRowId = new Map();
+
+// ✅ Keep the raw Phase2 rows as well (needed for group NOOP aggregation)
+let phase2Rows = [];
+
+// ✅ Phase2 per-group aggregation: authoritative “no changes” signal
+const p2AggByGroupKey = new Map();
+const p2GroupKey = (cid, cli, con, we) => `${cid}__${cli}__${con}__${we}`;
+const p2Bool = (v) => (v === true || v === 'true' || v === 1 || v === '1');
+
+try {
+  const rpcBody = { p_import_id: importId, p_system_type: systemType };
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/rpc/weekly_import_phase2`,
+    {
+      method: 'POST',
+      headers: { ...sbHeaders(env), 'content-type': 'application/json' },
+      body: JSON.stringify(rpcBody)
+    }
+  );
+
+  const txt = await res.text().catch(() => '');
+  let json;
+  try { json = txt ? JSON.parse(txt) : []; } catch { json = []; }
+  if (!Array.isArray(json)) json = [];
+
+  phase2Rows = json;
+
+  phase2ByHrRowId = new Map();
+  for (const row of phase2Rows) {
+    if (row && row.hr_row_id) phase2ByHrRowId.set(String(row.hr_row_id), row);
+  }
+
+  // ✅ Build per-group “NOOP/CHANGED/NEW” counters from Phase2 OK rows
+  for (const r of phase2Rows) {
+    const act = String(r?.action || '').toUpperCase();
+    if (act !== 'OK') continue;
+
+    const cid = r?.candidate_id ? String(r.candidate_id) : '';
+    const cli = r?.client_id ? String(r.client_id) : '';
+    const con = r?.contract_id ? String(r.contract_id) : '';
+    const we  = r?.week_ending_date ? String(r.week_ending_date) : '';
+    if (!cid || !cli || !con || !we) continue;
+
+    const gk = p2GroupKey(cid, cli, con, we);
+    const agg = p2AggByGroupKey.get(gk) || {
+      ok_rows: 0,
+      ok_new_rows: 0,
+      ok_noop_rows: 0,
+      ok_changed_rows: 0
+    };
+
+    agg.ok_rows += 1;
+
+    const isNew = p2Bool(r?.is_new);
+    const isNoop = p2Bool(r?.is_noop);
+    const isChanged = p2Bool(r?.is_changed);
+
+    if (isNew) agg.ok_new_rows += 1;
+    if (isNoop) agg.ok_noop_rows += 1;
+    if (isChanged) agg.ok_changed_rows += 1;
+
+    p2AggByGroupKey.set(gk, agg);
+  }
+
+  if (LOG) {
+    console.log('[WEEKLY_CLASSIFY]', JSON.stringify({
+      stage: 'phase2_loaded',
+      import_id: importId,
+      system_type: systemType,
+      rows: phase2Rows.length
+    }));
+  }
+} catch (e) {
+  console.error('[WEEKLY_CLASSIFY] weekly_import_phase2 failed (FATAL)', e);
+  return {
+    error: 'phase2_rpc_failed',
+    import_id: importId,
+    source_system,
+    message: 'weekly_import_phase2 RPC failed; cannot perform SQL-first weekly classification.',
+    rows: []
+  };
+}
+
+
+  // ─────────────────────────────────────────────────────────────
+  // 2.5) Phase3 SQL (NEW): changed hours detection + paid/invoiced flags + deltas
+  //     weekly_import_changed_hours_phase3(p_import_id uuid, p_system_type text)
+  //
+  // IMPORTANT: Phase3 expects p_system_type in {'NHSP','HEALTHROSTER'} (NOT 'HR_WEEKLY')
+  // ─────────────────────────────────────────────────────────────
+  const phase3SystemType =
+    (source_system === 'NHSP') ? 'NHSP' :
+    (source_system === 'HEALTHROSTER') ? 'HEALTHROSTER' :
+    null;
+
+  let changedShifts = [];
+  let changedByExternalRowKey = new Map();
+  let changedAggByGroupKey = new Map();
+
+  const safeBool = (v) => (v === true || v === 'true' || v === 1 || v === '1');
+
+  const loadPhase3 = async () => {
+    if (!phase3SystemType) return [];
+    try {
+      const rpcBody = { p_import_id: importId, p_system_type: phase3SystemType };
+      const res = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/rpc/weekly_import_changed_hours_phase3`,
+        {
+          method: 'POST',
+          headers: { ...sbHeaders(env), 'content-type': 'application/json' },
+          body: JSON.stringify(rpcBody)
+        }
+      );
+
+      const txt = await res.text().catch(() => '');
+      let json;
+      try { json = txt ? JSON.parse(txt) : []; } catch { json = []; }
+
+      if (!Array.isArray(json)) json = [];
+
+      if (LOG) {
+        console.log('[WEEKLY_CLASSIFY]', JSON.stringify({
+          stage: 'phase3_loaded',
+          import_id: importId,
+          phase3_system_type: phase3SystemType,
+          rows: json.length
+        }));
+      }
+
+      return json;
+    } catch (e) {
+      console.warn('[WEEKLY_CLASSIFY] weekly_import_changed_hours_phase3 failed (non-fatal)', e);
+      return [];
+    }
+  };
+
+  // Fetch Phase 3 once (SQL is authoritative for "changed hours")
+  changedShifts = await loadPhase3();
+
+  // Normalise + index Phase3 output (keyed by external_row_key)
+  if (Array.isArray(changedShifts) && changedShifts.length) {
+    const normRow = (r) => {
+      const out = { ...(r || {}) };
+
+      // Normalise booleans (RPC should return booleans but be defensive)
+      out.is_paid = safeBool(out.is_paid ?? out.paid ?? out.paid_at_utc);
+      out.is_invoiced = safeBool(out.is_invoiced ?? out.invoiced ?? out.locked_by_invoice_id);
+
+      out.requires_pay_decision = safeBool(out.requires_pay_decision);
+      out.requires_invoice_decision = safeBool(out.requires_invoice_decision);
+      out.requires_any_decision = safeBool(out.requires_any_decision);
+
+      // Common alias keys (keep raw too)
+      if (!out.external_row_key && out.external_row_key !== '') out.external_row_key = null;
+      if (!out.hr_row_id) out.hr_row_id = null;
+
+      return out;
+    };
+
+    changedShifts = changedShifts.map(normRow);
+
+    changedByExternalRowKey = new Map();
+    for (const r of changedShifts) {
+      const k = r && r.external_row_key ? String(r.external_row_key) : '';
+      if (!k) continue;
+      if (!changedByExternalRowKey.has(k)) changedByExternalRowKey.set(k, []);
+      changedByExternalRowKey.get(k).push(r);
+    }
+
+    // Pre-compute group aggregates keyed by candidate_id__client_id__contract_id__week_ending_date
+    changedAggByGroupKey = new Map();
+    for (const r of changedShifts) {
+      const cid = r?.candidate_id || null;
+      const cli = r?.client_id || null;
+      const con = r?.contract_id || null;
+      const we  = r?.week_ending_date || null;
+      const ek  = r?.external_row_key ? String(r.external_row_key) : null;
+
+      if (!cid || !cli || !con || !we) continue;
+      const gk = `${cid}__${cli}__${con}__${we}`;
+
+      const agg = changedAggByGroupKey.get(gk) || {
+        changed_shifts_count: 0,
+        changed_shifts_decision_needed_count: 0,
+        external_row_keys: []
+      };
+
+      agg.changed_shifts_count += 1;
+      if (r?.requires_any_decision) agg.changed_shifts_decision_needed_count += 1;
+      if (ek) {
+        if (!agg.external_row_keys.includes(ek)) agg.external_row_keys.push(ek);
+      }
+
+      changedAggByGroupKey.set(gk, agg);
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 3) Row-level classification using Phase2 results
+  //    - If Phase2 says REJECT_... => emit row preview and skip
+  //    - Else => group by (candidate_id, client_id, contract_id, week_ending_date)
+  // ─────────────────────────────────────────────────────────────
+  const previewRows = [];
+  const groupMap = new Map();
+
+  const pushUnique = (arr, v) => {
+    if (v == null) return;
+    const s = String(v);
+    if (!arr.includes(s)) arr.push(s);
+  };
+
+  for (const hrRow of hrRows) {
+    const payload = hrRow.payload_json || {};
+    const preview_row_id = `row:${hrRow.id}`;
+
+    // Extract display fields (for UI)
+    let staffName = '';
+    let workDate  = '';
+    let ward      = '';
+    let startIso  = null;
+    let endIso    = null;
+    let breakMins = 0;
+
+    let finalised = '';         // HR weekly only
+    let requestId = '';         // HR weekly
+    let refNum    = '';         // NHSP
+    let trustRaw  = '';         // NHSP trust/hospital string
+
+    let assignmentCode = '';    // NHSP
+    let gradeRaw = '';          // HR weekly
+
+    if (source_system === 'NHSP') {
+      staffName = String(payload.worker_name || payload.name || payload.staff_name || '').trim();
+      workDate  = String(payload.work_date || payload.date || '').trim();
+      ward      = String(payload.ward || payload.unit || '').trim();
+      trustRaw  = String(payload.trust || payload.hospital_or_trust || payload.client || '').trim();
+      startIso  = payload.start_utc || payload.actual_start_iso || payload.actual_start || null;
+      endIso    = payload.end_utc   || payload.actual_end_iso   || payload.actual_end   || null;
+      breakMins = Number(payload.break_mins ?? payload.break_minutes ?? payload.actual_break_minutes ?? 0) || 0;
+      assignmentCode = String(payload.assignment_code || payload.assignment || '').trim();
+      refNum    = String(payload.ref_num || payload.reference || '').trim();
+    } else {
+      // HEALTHROSTER weekly
+      staffName = String(payload.staff_name || payload.worker_name || '').trim();
+      workDate  = String(payload.work_date || payload.date || '').trim();
+      ward      = String(payload.ward || payload.unit || '').trim();
+      startIso  = payload.start_utc || null;
+      endIso    = payload.end_utc   || null;
+      breakMins = Number(payload.break_mins ?? 0) || 0;
+      finalised = String(payload.finalised_date || payload.finalized_date || '').trim();
+      requestId = String(payload.request_id || '').trim();
+      gradeRaw  = String(payload.grade_raw || '').trim();
+    }
+
+    const isUnfinalised = (source_system === 'HEALTHROSTER' && !finalised);
+
+    // Basic field sanity (we still reject BAD_ROW here for clarity)
+    if (!workDate || !startIso || !endIso) {
+      previewRows.push({
+        level: 'row',
+        preview_row_id,
+        hr_row_id: hrRow.id,
+        import_id: importId,
+        source_system,
+        staff_name: staffName,
+        work_date: workDate,
+        ward,
+        assignment_code: (source_system === 'NHSP' ? assignmentCode : null),
+        grade_raw: (source_system === 'HEALTHROSTER' ? gradeRaw : null),
+        incoming_code: (source_system === 'NHSP' ? assignmentCode : gradeRaw),
+        request_id: requestId || null,
+        ref_num: refNum || null,
+        action: 'REJECT_BAD_ROW',
+        reason: 'Missing date or start/end times in payload',
+        default_selected: false
+      });
+      continue;
+    }
+
+    // Phase2 lookup (SQL does candidate/client/contract/week ending + band/grade mapping)
+    const p2 = (phase2ByHrRowId instanceof Map) ? (phase2ByHrRowId.get(String(hrRow.id)) || null) : null;
+
+    if (!p2) {
+      previewRows.push({
+        level: 'row',
+        preview_row_id,
+        hr_row_id: hrRow.id,
+        import_id: importId,
+        source_system,
+        staff_name: staffName,
+        work_date: workDate,
+        ward,
+        assignment_code: (source_system === 'NHSP' ? assignmentCode : null),
+        grade_raw: (source_system === 'HEALTHROSTER' ? gradeRaw : null),
+        incoming_code: (source_system === 'NHSP' ? assignmentCode : gradeRaw),
+        request_id: requestId || null,
+        ref_num: refNum || null,
+        action: 'REJECT_PHASE2_MISSING',
+        reason: 'No Phase2 row returned for hr_row_id (weekly_import_phase2)',
+        default_selected: false
+      });
+      continue;
+    }
+
+    const action = String(p2.action || '').toUpperCase();
+    const reason = String(p2.reason || '').trim();
+
+    // If Phase2 rejected it, emit a row-level preview and skip grouping
+    if (action.startsWith('REJECT_')) {
+      previewRows.push({
+        level: 'row',
+        preview_row_id,
+        hr_row_id: hrRow.id,
+        import_id: importId,
+        source_system,
+        staff_name: staffName,
+        work_date: workDate,
+        ward,
+        trust_raw: (source_system === 'NHSP' ? trustRaw : null),
+
+        candidate_id: p2.candidate_id || null,
+        client_id: p2.client_id || null,
+        contract_id: p2.contract_id || null,
+        week_ending_date: p2.week_ending_date || null,
+
+        assignment_code: (source_system === 'NHSP' ? (p2.incoming_code || assignmentCode) : null),
+        grade_raw: (source_system === 'HEALTHROSTER' ? (p2.incoming_code || gradeRaw) : null),
+        incoming_code: p2.incoming_code || (source_system === 'NHSP' ? assignmentCode : gradeRaw),
+
+        request_id: requestId || null,
+        ref_num: refNum || null,
+        action,
+        reason: reason || 'Rejected by Phase2',
+        default_selected: false
+      });
+      continue;
+    }
+
+    // Otherwise Phase2 gives the chosen contract/week, group it
+    const candidateId = p2.candidate_id || null;
+    const clientId    = p2.client_id || null;
+    const contractId  = p2.contract_id || null;
+    const we          = p2.week_ending_date || null;
+    const incomingCode = String(p2.incoming_code || (source_system === 'NHSP' ? assignmentCode : gradeRaw) || '').trim();
+
+    if (!candidateId || !clientId || !contractId || !we) {
+      previewRows.push({
+        level: 'row',
+        preview_row_id,
+        hr_row_id: hrRow.id,
+        import_id: importId,
+        source_system,
+        staff_name: staffName,
+        work_date: workDate,
+        ward,
+        assignment_code: (source_system === 'NHSP' ? assignmentCode : null),
+        grade_raw: (source_system === 'HEALTHROSTER' ? gradeRaw : null),
+        incoming_code: incomingCode,
+        request_id: requestId || null,
+        ref_num: refNum || null,
+        action: 'REJECT_PHASE2_INCOMPLETE',
+        reason: 'Phase2 returned incomplete mapping (missing candidate/client/contract/week_ending_date)',
+        default_selected: false
+      });
+      continue;
+    }
+
+    const groupKey = `${candidateId}__${clientId}__${contractId}__${we}`;
+    let g = groupMap.get(groupKey);
+    if (!g) {
+      // Use Phase1 names when available (nice for UI)
+      let candidateName = null;
+      let clientName = null;
+
+      if (source_system === 'NHSP' && nhspMappingByHrRowId instanceof Map) {
+        const m1 = nhspMappingByHrRowId.get(String(hrRow.id)) || null;
+        if (m1) {
+          candidateName = m1.candidate_name || null;
+          clientName = m1.client_name || null;
+        }
+      } else if (source_system === 'HEALTHROSTER' && hrPreviewMappingByHrRowId instanceof Map) {
+        const m1 = hrPreviewMappingByHrRowId.get(String(hrRow.id)) || null;
+        if (m1) {
+          candidateName = m1.candidate_name || null;
+          clientName = m1.client_name || null;
+        }
+      }
+
+      g = {
+        candidate_id: candidateId,
+        candidate_name: candidateName,
+        client_id: clientId,
+        client_name: clientName,
+        contract_id: contractId,
+        week_ending_date: we,
+
+        // store multiple incoming codes if they vary within group
+        incoming_codes: [],
+
+        // NHSP only (kept for UI consistency)
+        assignment_code: (source_system === 'NHSP' ? incomingCode : null),
+        grade_raw: (source_system === 'HEALTHROSTER' ? incomingCode : null),
+
+        shifts: [],
+        hr_row_ids: [],
+        has_unfinalised: false
+      };
+      groupMap.set(groupKey, g);
+    }
+
+    pushUnique(g.incoming_codes, incomingCode);
+
+    if (isUnfinalised && source_system === 'HEALTHROSTER') {
+      g.has_unfinalised = true;
+    }
+
+    g.shifts.push({
+      hr_row_id: hrRow.id,
+      staff_name: staffName,
+      work_date: workDate,
+      ward,
+      start_utc: startIso,
+      end_utc: endIso,
+      break_mins: breakMins,
+      assignment_code: (source_system === 'NHSP' ? incomingCode : null),
+      grade_raw: (source_system === 'HEALTHROSTER' ? incomingCode : null),
+      request_id: requestId || null,
+      ref_num: refNum || null,
+      is_unfinalised: isUnfinalised
+    });
+    g.hr_row_ids.push(hrRow.id);
+  }
+
+  console.log('[WEEKLY_CLASSIFY] grouping complete', {
+    import_id: importId,
+    source_system,
+    group_count: groupMap.size,
+    preview_row_count: previewRows.length
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // 4) Batch fetch contracts (rates_json required for payChargeFromContract)
+  // ─────────────────────────────────────────────────────────────
+  const groups = Array.from(groupMap.values());
+  const contractIds = Array.from(new Set(groups.map(g => g.contract_id)));
+
+  const contractById = new Map();
+  if (contractIds.length) {
+    // keep URL lengths safe
+    for (const cids of chunk(contractIds, 150)) {
+      const url =
+        `${env.SUPABASE_URL}/rest/v1/contracts` +
+        `?id=in.(${cids.map(enc).join(',')})` +
+        `&select=id,candidate_id,client_id,role,band,pay_method_snapshot,self_bill,rates_json`;
+
+      const { rows: cRows } = await sbFetch(env, url);
+      for (const c of (cRows || [])) contractById.set(c.id, c);
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 5) Batch fetch contract_weeks for all relevant contract_ids + week_ending_dates
+  //    (We fetch superset and filter in JS to avoid OR explosion)
+  // ─────────────────────────────────────────────────────────────
+  const weekEndingDates = Array.from(new Set(groups.map(g => g.week_ending_date)));
+  const weeksByPair = new Map(); // key=contract_id__week_ending_date -> weeks[]
+
+  if (contractIds.length && weekEndingDates.length) {
+    for (const cids of chunk(contractIds, 150)) {
+      for (const weds of chunk(weekEndingDates, 150)) {
+        const url =
+          `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+          `?contract_id=in.(${cids.map(enc).join(',')})` +
+          `&week_ending_date=in.(${weds.map(enc).join(',')})` +
+          `&select=contract_id,week_ending_date,id,timesheet_id,additional_seq,is_adjustment` +
+          `&order=additional_seq.asc`;
+
+        const { rows: cwRows } = await sbFetch(env, url);
+        for (const w of (cwRows || [])) {
+          const key = `${w.contract_id}__${w.week_ending_date}`;
+          const arr = weeksByPair.get(key) || [];
+          arr.push(w);
+          weeksByPair.set(key, arr);
+        }
+      }
+    }
+  }
+
+  // Batch fetch timesheets + current financials
+  const allTsIds = [];
+  for (const arr of weeksByPair.values()) {
+    for (const w of arr) {
+      if (w.timesheet_id) allTsIds.push(w.timesheet_id);
+    }
+  }
+  const tsIds = Array.from(new Set(allTsIds));
+
+  let tsById = new Map();
+  if (tsIds.length) {
+    for (const tidChunk of chunk(tsIds, 200)) {
+      const { rows: tsRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=in.(${tidChunk.map(enc).join(',')})` +
+        `&select=timesheet_id,submission_mode,status`
+      );
+      for (const t of (tsRows || [])) tsById.set(t.timesheet_id, t);
+    }
+  }
+
+  let finByTsId = new Map();
+  if (tsIds.length) {
+    for (const tidChunk of chunk(tsIds, 200)) {
+      const { rows: finRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?timesheet_id=in.(${tidChunk.map(enc).join(',')})` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,total_pay_ex_vat,total_charge_ex_vat,basis,paid_at_utc,locked_by_invoice_id`
+      );
+      for (const f of (finRows || [])) finByTsId.set(f.timesheet_id, f);
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 6) Group-level classification (existing)
+  // ─────────────────────────────────────────────────────────────
+  const policyCache = new Map(); // key=client_id__dateYmd -> policy
+  const getPolicyCached = async (client_id, dateYmd) => {
+    const k = `${client_id}__${dateYmd}`;
+    if (policyCache.has(k)) return policyCache.get(k);
+    const p = await loadPolicy(env, client_id, dateYmd);
+    policyCache.set(k, p);
+    return p;
+  };
+
+  const classifyGroup = async (g) => {
+    const { candidate_id, client_id, contract_id, week_ending_date } = g;
+
+    const contract = contractById.get(contract_id) || null;
+    if (!contract) {
+      return {
+        level: 'group',
+        preview_group_id: `grp:${contract_id}:${week_ending_date}:${candidate_id}`,
+        import_id: importId,
+        source_system,
+        candidate_id,
+        candidate_name: g.candidate_name,
+        client_id,
+        client_name: g.client_name,
+        contract_id,
+        week_ending_date,
+        incoming_code: (g.incoming_codes.length === 1 ? g.incoming_codes[0] : g.incoming_codes.join(', ')),
+        assignment_code: (source_system === 'NHSP' ? (g.incoming_codes.length === 1 ? g.incoming_codes[0] : null) : null),
+        grade_raw: (source_system === 'HEALTHROSTER' ? (g.incoming_codes.length === 1 ? g.incoming_codes[0] : null) : null),
+        self_bill: null,
+        has_unfinalised: !!g.has_unfinalised,
+        hr_row_ids: g.hr_row_ids.slice(),
+        truth_pay_ex_vat: 0,
+        truth_charge_ex_vat: 0,
+        current_pay_ex_vat: 0,
+        current_charge_ex_vat: 0,
+        delta_pay_ex_vat: 0,
+        delta_charge_ex_vat: 0,
+        base_timesheet_id: null,
+        latest_adjustment_timesheet_id: null,
+        action: 'REJECT_NO_CONTRACT',
+        reason: 'Contract not found (batch fetch) at classify stage',
+        default_selected: false
+      };
+    }
+
+    // Resolve pay/charge from contract rates_json (weekly rule)
+    const pc = payChargeFromContract(contract);
+    const pay = pc?.pay || null;
+    const chg = pc?.charge || null;
+
+    if (!pay || !chg) {
+      return {
+        level: 'group',
+        preview_group_id: `grp:${contract_id}:${week_ending_date}:${candidate_id}`,
+        import_id: importId,
+        source_system,
+        candidate_id,
+        candidate_name: g.candidate_name,
+        client_id,
+        client_name: g.client_name,
+        contract_id,
+        week_ending_date,
+        incoming_code: (g.incoming_codes.length === 1 ? g.incoming_codes[0] : g.incoming_codes.join(', ')),
+        assignment_code: (source_system === 'NHSP' ? (g.incoming_codes.length === 1 ? g.incoming_codes[0] : null) : null),
+        grade_raw: (source_system === 'HEALTHROSTER' ? (g.incoming_codes.length === 1 ? g.incoming_codes[0] : null) : null),
+        self_bill: (source_system === 'HEALTHROSTER') ? !!contract.self_bill : null,
+        has_unfinalised: !!g.has_unfinalised,
+        hr_row_ids: g.hr_row_ids.slice(),
+        truth_pay_ex_vat: 0,
+        truth_charge_ex_vat: 0,
+        current_pay_ex_vat: 0,
+        current_charge_ex_vat: 0,
+        delta_pay_ex_vat: 0,
+        delta_charge_ex_vat: 0,
+        base_timesheet_id: null,
+        latest_adjustment_timesheet_id: null,
+        action: 'REJECT_RATE_MISSING_CONTRACT',
+        reason: 'Contract rates_json is missing or pay/charge buckets could not be derived (payChargeFromContract).',
+        default_selected: false
+      };
+    }
+
+    // Load contract_weeks for this contract/week (from batched map)
+    const pairKey = `${contract_id}__${week_ending_date}`;
+    const weeks = (weeksByPair.get(pairKey) || []).slice();
+
+    const baseWeek = weeks.find(w => !w.is_adjustment && Number(w.additional_seq || 0) === 0) || null;
+    const adjWeeks = weeks.filter(w => !!w.is_adjustment);
+
+    const tsIdsLocal = weeks.map(w => w.timesheet_id).filter(Boolean);
+
+    // Compute truth totals from import shifts using contract rates
+    // ✅ FIX: accumulate unrounded and only round at end, to reduce false deltas/“overwrite” when nothing changed.
+    let truthPayRaw = 0;
+    let truthChgRaw = 0;
+
+    const missingPayBuckets = new Set();
+    const missingChgBuckets = new Set();
+
+    for (const sh of g.shifts) {
+      const policy = await getPolicyCached(client_id, sh.work_date);
+
+      let segs = [[sh.start_utc, sh.end_utc]];
+      segs = subtractBreak(segs, null, null, sh.break_mins || 0);
+
+      const hours = classifyMinutes(env, policy, segs);
+
+      const used = {
+        day:   (hours.hours_day   || 0),
+        night: (hours.hours_night || 0),
+        sat:   (hours.hours_sat   || 0),
+        sun:   (hours.hours_sun   || 0),
+        bh:    (hours.hours_bh    || 0),
+      };
+
+      // Missing bucket detection (strict for weekly imports)
+      for (const k of ['day','night','sat','sun','bh']) {
+        if ((used[k] || 0) > 0) {
+          const pv = pay[k];
+          const cv = chg[k];
+          if (pv == null || pv === '' || !Number.isFinite(Number(pv))) missingPayBuckets.add(k);
+          if (cv == null || cv === '' || !Number.isFinite(Number(cv))) missingChgBuckets.add(k);
+        }
+      }
+
+      // NOTE: do NOT round per-shift; only round at end.
+      const segPay =
+        (used.day   || 0) * asNumberLocal(pay.day)   +
+        (used.night || 0) * asNumberLocal(pay.night) +
+        (used.sat   || 0) * asNumberLocal(pay.sat)   +
+        (used.sun   || 0) * asNumberLocal(pay.sun)   +
+        (used.bh    || 0) * asNumberLocal(pay.bh);
+
+      const segChg =
+        (used.day   || 0) * asNumberLocal(chg.day)   +
+        (used.night || 0) * asNumberLocal(chg.night) +
+        (used.sat   || 0) * asNumberLocal(chg.sat)   +
+        (used.sun   || 0) * asNumberLocal(chg.sun)   +
+        (used.bh    || 0) * asNumberLocal(chg.bh);
+
+      truthPayRaw += (Number(segPay) || 0);
+      truthChgRaw += (Number(segChg) || 0);
+    }
+
+    if (missingPayBuckets.size || missingChgBuckets.size) {
+      const mp = Array.from(missingPayBuckets);
+      const mc = Array.from(missingChgBuckets);
+      return {
+        level: 'group',
+        preview_group_id: `grp:${contract_id}:${week_ending_date}:${candidate_id}`,
+        import_id: importId,
+        source_system,
+        candidate_id,
+        candidate_name: g.candidate_name,
+        client_id,
+        client_name: g.client_name,
+        contract_id,
+        week_ending_date,
+        incoming_code: (g.incoming_codes.length === 1 ? g.incoming_codes[0] : g.incoming_codes.join(', ')),
+        assignment_code: (source_system === 'NHSP' ? (g.incoming_codes.length === 1 ? g.incoming_codes[0] : null) : null),
+        grade_raw: (source_system === 'HEALTHROSTER' ? (g.incoming_codes.length === 1 ? g.incoming_codes[0] : null) : null),
+        self_bill: (source_system === 'HEALTHROSTER') ? !!contract.self_bill : null,
+        has_unfinalised: !!g.has_unfinalised,
+        hr_row_ids: g.hr_row_ids.slice(),
+        truth_pay_ex_vat: 0,
+        truth_charge_ex_vat: 0,
+        current_pay_ex_vat: 0,
+        current_charge_ex_vat: 0,
+        delta_pay_ex_vat: 0,
+        delta_charge_ex_vat: 0,
+        base_timesheet_id: baseWeek?.timesheet_id || null,
+        latest_adjustment_timesheet_id: null,
+        action: 'REJECT_RATE_MISSING_CONTRACT',
+        reason: `Contract rates_json missing required buckets for this week's shifts. Missing pay buckets: ${mp.join(', ') || 'none'}; missing charge buckets: ${mc.join(', ') || 'none'}.`,
+        default_selected: false
+      };
+    }
+
+    const truthPay = round2(truthPayRaw);
+    const truthChg = round2(truthChgRaw);
+
+    // Current totals from existing TSFIN (missing TSFIN rows count as 0)
+    let currentPayRaw = 0;
+    let currentChgRaw = 0;
+
+    for (const tsId of tsIdsLocal) {
+      const fin = finByTsId.get(tsId);
+      if (!fin) continue;
+      currentPayRaw += Number(fin.total_pay_ex_vat || 0);
+      currentChgRaw += Number(fin.total_charge_ex_vat || 0);
+    }
+
+    const currentPay = round2(currentPayRaw);
+    const currentChg = round2(currentChgRaw);
+
+    // ✅ FIX: compare raw deltas (pre-rounding) to avoid false “needs overwrite” classification.
+    const deltaPayRaw = (Number(truthPayRaw) || 0) - (Number(currentPayRaw) || 0);
+    const deltaChgRaw = (Number(truthChgRaw) || 0) - (Number(currentChgRaw) || 0);
+
+    const deltaPay = round2(truthPay - currentPay);
+    const deltaChg = round2(truthChg - currentChg);
+
+    // ✅ Slightly more tolerant than 0.01 to avoid rounding noise causing UPDATE_* when nothing actually changed.
+    const tol = 0.02;
+
+    const baseTsId = baseWeek?.timesheet_id || null;
+    const baseTs   = baseTsId ? tsById.get(baseTsId) : null;
+    const baseFin  = baseTsId ? finByTsId.get(baseTsId) : null;
+
+    let latestAdjWeek = null;
+    if (adjWeeks.length) {
+      latestAdjWeek = adjWeeks.reduce((m, w) =>
+        Number(w.additional_seq || 0) > Number(m.additional_seq || 0) ? w : m,
+        adjWeeks[0]
+      );
+    }
+    const latestAdjTsId = latestAdjWeek?.timesheet_id || null;
+    const latestAdjFin  = latestAdjTsId ? finByTsId.get(latestAdjTsId) : null;
+
+    const anyAdj = !!latestAdjWeek;
+
+    // ✅ IMPORTANT FIX:
+    // If base timesheet exists but there is NO current TSFIN row, treat the base as
+    // "unpaid + uninvoiced + safe to rebuild" for classification purposes.
+    const baseFinMissing = !!baseTsId && !baseFin;
+
+    const baseUnpaidUnlocked =
+      baseFinMissing ||
+      !!(baseFin && !baseFin.paid_at_utc && !baseFin.locked_by_invoice_id);
+
+    // Keep adjustment-unpaid logic strict: only consider it "unpaid/unlocked" if its TSFIN exists and is unlocked.
+    const latestAdjUnpaidUnlocked =
+      !!(latestAdjFin && !latestAdjFin.paid_at_utc && !latestAdjFin.locked_by_invoice_id);
+
+    const isPaid     = !!(baseFin && baseFin.paid_at_utc);
+    const isInvoiced = !!(baseFin && baseFin.locked_by_invoice_id);
+
+    const selfBill   = (source_system === 'HEALTHROSTER') ? !!contract.self_bill : null;
+    const hasUnfinal = !!g.has_unfinalised;
+
+    let result = {
+      level: 'group',
+      preview_group_id: `grp:${contract_id}:${week_ending_date}:${candidate_id}`,
+      import_id: importId,
+      source_system,
+      candidate_id,
+      candidate_name: g.candidate_name,
+      client_id,
+      client_name: g.client_name,
+      contract_id,
+      week_ending_date,
+      incoming_code: (g.incoming_codes.length === 1 ? g.incoming_codes[0] : g.incoming_codes.join(', ')),
+      assignment_code: (source_system === 'NHSP' ? (g.incoming_codes.length === 1 ? g.incoming_codes[0] : null) : null),
+      grade_raw: (source_system === 'HEALTHROSTER' ? (g.incoming_codes.length === 1 ? g.incoming_codes[0] : null) : null),
+      self_bill: selfBill,
+      has_unfinalised: hasUnfinal,
+      hr_row_ids: g.hr_row_ids.slice(),
+      truth_pay_ex_vat: truthPay,
+      truth_charge_ex_vat: truthChg,
+      current_pay_ex_vat: currentPay,
+      current_charge_ex_vat: currentChg,
+      delta_pay_ex_vat: deltaPay,
+      delta_charge_ex_vat: deltaChg,
+      base_timesheet_id: baseTsId,
+      latest_adjustment_timesheet_id: latestAdjTsId,
+      action: 'UNKNOWN',
+      reason: 'Unable to classify this weekly group – please review manually.',
+      default_selected: false,
+
+      // NEW: placeholders for Phase3 aggregates (filled post-pass)
+      changed_shifts_count: 0,
+      changed_shifts_decision_needed_count: 0,
+      changed_shifts_external_row_keys: []
+    };
+
+    // No base timesheet yet
+    if (!baseTsId) {
+      if (Math.abs(deltaPayRaw) < tol && Math.abs(deltaChgRaw) < tol) {
+        result.action = 'SKIP_ALREADY_PROCESSED';
+        result.reason = 'No weekly timesheet yet and truth totals are zero – nothing to create.';
+        result.default_selected = false;
+      } else {
+        result.action = 'NEW_AUTOPROC_TIMESHEET';
+        result.reason = 'No existing weekly timesheet – a new weekly timesheet will be created from the import.';
+        result.default_selected = !hasUnfinal;
+      }
+      return result;
+    }
+
+  // ✅ Phase2 NOOP short-circuit: if Phase2 says there are zero changes and zero new rows for this group,
+// we treat it as already processed even if totals show tiny drift/noise.
+const p2gk = `${candidate_id}__${client_id}__${contract_id}__${week_ending_date}`;
+const p2agg = p2AggByGroupKey.get(p2gk) || null;
+
+if (p2agg &&
+    Number(p2agg.ok_rows || 0) > 0 &&
+    Number(p2agg.ok_changed_rows || 0) === 0 &&
+    Number(p2agg.ok_new_rows || 0) === 0) {
+  result.action = 'SKIP_ALREADY_PROCESSED';
+  result.reason = `All ${Number(p2agg.ok_rows || 0)} import shift(s) match existing shifts (no changes).`;
+  result.default_selected = false;
+  return result;
+}
+
+// Base TS exists: if totals already match, skip
+if (Math.abs(deltaPayRaw) < tol && Math.abs(deltaChgRaw) < tol) {
+  result.action = 'SKIP_ALREADY_PROCESSED';
+  result.reason = 'Timesheet and existing adjustments already match NHSP/HealthRoster – nothing further to do.';
+  result.default_selected = false;
+  return result;
+}
+
+
+    // ─────────────────────────────────────────────────────────────
+    // DECISION: manual vs autoproc
+    // ─────────────────────────────────────────────────────────────
+    const submissionMode = String(baseTs?.submission_mode || '').toUpperCase();
+    const treatAsManualWeek = (submissionMode === 'MANUAL' && !baseFinMissing);
+
+    // Manual base (true manual workflow)
+    if (treatAsManualWeek) {
+      if (baseUnpaidUnlocked && !anyAdj) {
+        result.action = 'UPDATE_MANUAL_WEEK';
+        result.reason = 'Existing manual weekly timesheet (unpaid/uninvoiced) will be overwritten with updated import hours for this week.';
+        result.default_selected = !hasUnfinal;
+        return result;
+      }
+
+      if (latestAdjUnpaidUnlocked) {
+        result.action = 'UPDATE_ADJUSTMENT_TS';
+        result.reason = 'Existing unpaid/uninvoiced adjustment timesheet will be updated to reflect the new changes.';
+        result.default_selected = !hasUnfinal;
+        return result;
+      }
+
+      result.action = 'CREATE_ADJUSTMENT_TS';
+      result.reason = 'Existing timesheet/adjustments appear paid or invoiced; a new sequential adjustment timesheet will be created for the changes.';
+      result.default_selected = !hasUnfinal;
+      return result;
+    }
+
+    // Autoproc/import base (NHSP and HR_WEEKLY import routes)
+    if (source_system === 'NHSP' || (source_system === 'HEALTHROSTER' && selfBill)) {
+      if (baseUnpaidUnlocked && !anyAdj) {
+        result.action = 'UPDATE_AUTOPROC_TS';
+        result.reason =
+          baseFinMissing
+            ? 'Base timesheet exists but has no current financial snapshot (TSFIN). Snapshot will be rebuilt from import shifts (safe/unpaid/uninvoiced).'
+            : 'Existing weekly timesheet (unpaid/uninvoiced) will be updated with corrected import hours for this week.';
+        result.default_selected = !hasUnfinal;
+        return result;
+      }
+
+      if (latestAdjUnpaidUnlocked) {
+        result.action = 'UPDATE_ADJUSTMENT_TS';
+        result.reason = 'Existing unpaid/uninvoiced adjustment timesheet will be updated to reflect the new changes.';
+        result.default_selected = !hasUnfinal;
+        return result;
+      }
+
+      result.action = 'CREATE_ADJUSTMENT_TS';
+      result.reason = 'Timesheet and previous adjustments appear paid/invoiced; a new sequential adjustment timesheet will be created for the amended hours.';
+      result.default_selected = !hasUnfinal;
+      return result;
+    }
+
+    // HEALTHROSTER, self_bill = false → special HR logic
+    if (source_system === 'HEALTHROSTER' && selfBill === false) {
+      // If TSFIN is missing, we must treat it as not-paid/not-invoiced so we can rebuild it (this is the fix).
+      if (!isPaid && !isInvoiced) {
+        result.action = 'UPDATE_AUTOPROC_TS';
+        result.reason =
+          baseFinMissing
+            ? 'Base timesheet exists but has no current financial snapshot (TSFIN). Snapshot will be rebuilt from import shifts (safe/unpaid/uninvoiced).'
+            : 'HR weekly timesheet will be overwritten with modified hours for this week (unpaid/uninvoiced).';
+        result.default_selected = !hasUnfinal;
+        return result;
+      }
+
+      if (isInvoiced) {
+        result.action = 'BLOCK_INVOICE_ISSUED';
+        result.reason = 'HR Timesheet invoice already issued – unissue the invoice before applying these HR changes.';
+        result.default_selected = false;
+        return result;
+      }
+
+      if (isPaid && !isInvoiced) {
+        result.action = 'CREATE_PAY_ADJUSTMENT_ONLY';
+        result.reason = 'HR - Candidate already paid (not invoiced yet) – a pay-only adjustment will be created; invoice will reflect full HR hours.';
+        result.default_selected = !hasUnfinal;
+        return result;
+      }
+
+      result.action = 'UNKNOWN';
+      result.reason = 'HR weekly (self-bill=false): unhandled state – please review manually.';
+      result.default_selected = false;
+      return result;
+    }
+
+    result.action = 'UNKNOWN';
+    result.reason = 'Unable to classify this weekly group – please review manually.';
+    result.default_selected = !hasUnfinal;
+    return result;
+  };
+
+  for (const g of groupMap.values()) {
+    const gp = await classifyGroup(g);
+    previewRows.push(gp);
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 6.5) Attach Phase3 aggregates to group rows (optional but helpful UX)
+  // ─────────────────────────────────────────────────────────────
+  if (changedAggByGroupKey instanceof Map && changedAggByGroupKey.size) {
+    for (const pr of previewRows) {
+      if (!pr || String(pr.level || '').toLowerCase() !== 'group') continue;
+
+      const cid = pr.candidate_id || null;
+      const cli = pr.client_id || null;
+      const con = pr.contract_id || null;
+      const we  = pr.week_ending_date || null;
+      if (!cid || !cli || !con || !we) continue;
+
+      const gk = `${cid}__${cli}__${con}__${we}`;
+      const agg = changedAggByGroupKey.get(gk);
+      if (!agg) continue;
+
+      pr.changed_shifts_count = Number(agg.changed_shifts_count || 0) || 0;
+      pr.changed_shifts_decision_needed_count = Number(agg.changed_shifts_decision_needed_count || 0) || 0;
+      pr.changed_shifts_external_row_keys = Array.isArray(agg.external_row_keys) ? agg.external_row_keys.slice() : [];
+    }
+  }
+
+  console.log('[WEEKLY_CLASSIFY] done', {
+    import_id: importId,
+    source_system,
+    preview_rows: previewRows.length
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // 7) Post-process previewRows with mapping fields for FE
+  // ─────────────────────────────────────────────────────────────
+  for (const pr of previewRows) {
+    const lvl = String(pr.level || '').toLowerCase();
+
+    if (lvl === 'row') {
+      const staffRaw = pr.staff_name || '';
+      const ward     = pr.ward || '';
+      const trust    = pr.trust_raw || pr.trust || pr.hospital_or_trust || '';
+      const hosp     = ward || trust;
+
+      pr.staff_raw         = staffRaw;
+      pr.staff_norm        = norm(staffRaw);
+      pr.hospital_or_trust = hosp;
+      pr.trust_norm        = norm(hosp);
+
+      if (!Object.prototype.hasOwnProperty.call(pr, 'candidate_id')) pr.candidate_id = null;
+      if (!Object.prototype.hasOwnProperty.call(pr, 'client_id')) pr.client_id = null;
+
+      const act = String(pr.action || '').toUpperCase();
+      if (!pr.resolution_status) {
+        if (act === 'REJECT_NO_CANDIDATE') pr.resolution_status = 'NO_CANDIDATE';
+        else if (act === 'REJECT_NO_CLIENT') pr.resolution_status = 'NO_CLIENT';
+        else if (act === 'REJECT_BAD_ROW' || act === 'REJECT_BAD_ROW2') pr.resolution_status = 'BAD_ROW';
+        else if (act.startsWith('REJECT_')) pr.resolution_status = act;
+        else pr.resolution_status = 'OK';
+      }
+    } else if (lvl === 'group') {
+      if (!Object.prototype.hasOwnProperty.call(pr, 'staff_raw')) pr.staff_raw = null;
+      if (!Object.prototype.hasOwnProperty.call(pr, 'staff_norm')) pr.staff_norm = null;
+      if (!Object.prototype.hasOwnProperty.call(pr, 'hospital_or_trust')) pr.hospital_or_trust = null;
+      if (!Object.prototype.hasOwnProperty.call(pr, 'trust_norm')) pr.trust_norm = null;
+      if (!pr.resolution_status) pr.resolution_status = pr.action || 'UNKNOWN';
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 8) Return payload: include Phase3 output in BOTH top-level and summary
+  // ─────────────────────────────────────────────────────────────
+  const changedCount = Array.isArray(changedShifts) ? changedShifts.length : 0;
+  const decisionNeededCount = Array.isArray(changedShifts)
+    ? changedShifts.reduce((a, r) => a + (r && r.requires_any_decision ? 1 : 0), 0)
+    : 0;
+
+  const summary = {
+    total_hr_rows: hrRows.length,
+    preview_rows: previewRows.length,
+    changed_shifts_count: changedCount,
+    changed_shifts_decision_needed_count: decisionNeededCount,
+
+    // IMPORTANT: put the full list here too so FE survives summary-only render paths
+    changed_shifts: Array.isArray(changedShifts) ? changedShifts : []
+  };
+
+  return {
+    import_id: importId,
+    source_system,
+
+    // IMPORTANT: top-level list as well (FE can read either)
+    changed_shifts: Array.isArray(changedShifts) ? changedShifts : [],
+
+    summary,
+    rows: previewRows
+  };
 }
 
 
