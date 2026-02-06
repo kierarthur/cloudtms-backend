@@ -310,7 +310,6 @@ begin
   return v_csv;
 end;
 $$;
-
 create or replace function public.weekly_import_apply_cancellations(
   p_import_id uuid,
   p_actions jsonb,
@@ -337,26 +336,99 @@ declare
   v_shift_id uuid;
   v_reason text;
 
+  -- shift fields
   v_timesheet_id uuid;
-  v_invoice_id uuid;
+  v_shift_invoice_id uuid;
 
   v_shift_source_system text;
   v_shift_candidate_id uuid;
   v_shift_client_id uuid;
+  v_shift_contract_id uuid;
   v_shift_work_date date;
   v_shift_cancelled_at timestamptz;
 
-  v_has_any_rows_on_date boolean;
-  v_has_candidate_rows_on_date boolean;
-  v_ambiguous_rows_on_date int;
+  v_shift_external_row_key text;
+  v_shift_hr_request_id text;
+  v_shift_request_norm text;
 
+  v_shift_start_utc timestamptz;
+  v_shift_end_utc timestamptz;
+  v_shift_break_mins int;
+  v_shift_ward text;
+  v_shift_week_ending_date date;
+
+  -- file request-id set
+  v_file_request_count int := 0;
+  v_present_in_file boolean := false;
+
+  -- invoiced-at-all detection (segment-level)
+  v_tf_locked_by_invoice_id uuid;
+  v_tf_invoice_breakdown_json jsonb;
+  v_seg_invoice_id uuid;
+  v_invoice_id_detected uuid := null;
+  v_invoiced_detected boolean := false;
+
+  v_branch text := null;
+
+  -- correction timesheet creation
+  v_base_ts_week_ending date;
+  v_contract_week_ending_weekday_snapshot int := 0;
+  v_week_ending_date date;
+
+  v_contract_display_site text;
+  v_contract_ward_hint text;
+  v_contract_role text;
+
+  v_client_name text;
+  v_candidate_display_name text;
+  v_candidate_tms_ref text;
+
+  v_correction_id text;
+  v_kind text := 'CANCEL_SHIFT_REVERSAL';
+
+  v_shift_label text;
+  v_shift_label_norm text;
+
+  v_booking_base text;
+  v_booking_id text;
+  v_hash_hex text;
+
+  v_schedule jsonb;
+  v_hint jsonb;
+
+  v_base_week_id uuid; -- ✅ FIX: was used later but not declared
+
+  v_existing_ts_id uuid;
+  v_existing_cw_id uuid;
+
+  v_cw_id uuid;
+  v_next_additional_seq int;
+  v_try int;
+
+  v_ts_id uuid;
+  v_correction_ts_id uuid;
+
+  -- fnv1a32 helper vars (deterministic correction_id)
+  v_fnv_h bigint;
+  v_fnv_i int;
+  v_fnv_s text;
+  v_fnv_hex text;
+
+  -- return arrays
   v_timesheet_ids uuid[] := array[]::uuid[];
   v_invoice_ids uuid[] := array[]::uuid[];
   v_credit_note_ids uuid[] := array[]::uuid[];
   v_pdf_jobs_enqueued int := 0;
 
+  -- debug sample
+  v_sample jsonb := '[]'::jsonb;
+  v_sample_n int := 0;
+  v_last_shift_id uuid := null;
+
+  v_sqlstate text;
+  v_err text;
 begin
-  -- Validate import exists and is HEALTHROSTER (cancellations RPC is HR-only under locked policy)
+  -- Validate import exists and is HEALTHROSTER + has client_id (Guard B)
   select
     upper(coalesce(hi.source_system, '')),
     hi.client_id
@@ -395,39 +467,43 @@ begin
     );
   end if;
 
-  -- Preload Phase2 mapping joined to hr_rows.date_local so we can enforce:
-  -- - "day empty in file" using hr_rows file truth
-  -- - unresolved mapping on that day => ambiguous => reject cancellation
-  create temporary table tmp_p2_join on commit drop as
-  select
-    r.id as hr_row_id,
-    r.date_local as date_local,
-    p2.candidate_id as candidate_id,
-    p2.client_id as client_id,
-    p2.work_date as work_date,
-    upper(coalesce(p2.action::text, '')) as action
-  from public.hr_rows r
-  left join public.weekly_import_phase2(
-    p_import_id := p_import_id,
-    p_system_type := 'HR_WEEKLY'
-  ) as p2
-    on p2.hr_row_id = r.id
-  where r.import_id = p_import_id;
+  -- Build file request-id set (identity key = HR Request ID)
+  create temporary table tmp_file_request_set(
+    req_norm text primary key,
+    req_raw  text
+  ) on commit drop;
 
-  create temporary table tmp_date_stats on commit drop as
+  insert into tmp_file_request_set(req_norm, req_raw)
   select
-    t.date_local as date_local,
-    count(*)::int as file_rows_count,
-    count(*) filter (where (t.candidate_id is null) or (t.client_id is null) or (t.work_date is null))::int as ambiguous_rows_count
-  from tmp_p2_join t
-  group by t.date_local;
+    lower(regexp_replace(btrim(src.req_raw), '\s+', ' ', 'g')) as req_norm,
+    src.req_raw as req_raw
+  from (
+    select distinct
+      nullif(
+        btrim(
+          coalesce(
+            nullif(r.hr_request_id, ''),
+            nullif(r.payload_json->>'request_id','')
+          )
+        ),
+        ''
+      ) as req_raw
+    from public.hr_rows r
+    where r.import_id = p_import_id
+  ) as src
+  where src.req_raw is not null
+  on conflict (req_norm) do nothing;
 
-  -- Apply is transactional: any invalid selected row fails the whole apply.
+  select count(*)::int
+  into v_file_request_count
+  from tmp_file_request_set;
+
+  -- Apply is transactional: any invalid selected row fails whole apply.
   for v_idx, v_item in
     select (e.ord)::int, e.value
     from jsonb_array_elements(v_actions) with ordinality as e(value, ord)
   loop
-    -- Policy: no "force" mechanism other than ticking RED rows in preview.
+    -- Policy: no force
     if (v_item ? 'force') then
       raise exception 'weekly_import_apply_cancellations: item % contains disallowed field "force" (policy forbids force/override).', v_idx;
     end if;
@@ -448,23 +524,41 @@ begin
       raise exception 'weekly_import_apply_cancellations: item % has invalid shift_id "%".', v_idx, v_shift_id_text;
     end;
 
-    -- Lock shift row (serializes concurrent apply) + load fields required for policy checks
+    v_last_shift_id := v_shift_id;
+
+    -- Lock shift row + load required fields
     select
       ns.timesheet_id,
       ns.invoice_id,
       upper(coalesce(ns.source_system::text,'')) as shift_source_system,
       ns.candidate_id,
       ns.client_id,
+      ns.contract_id,
       ns.work_date,
-      ns.cancelled_at_utc
+      ns.cancelled_at_utc,
+      ns.external_row_key,
+      ns.hr_request_id,
+      ns.start_utc,
+      ns.end_utc,
+      ns.break_mins,
+      ns.ward,
+      ns.week_ending_date
     into
       v_timesheet_id,
-      v_invoice_id,
+      v_shift_invoice_id,
       v_shift_source_system,
       v_shift_candidate_id,
       v_shift_client_id,
+      v_shift_contract_id,
       v_shift_work_date,
-      v_shift_cancelled_at
+      v_shift_cancelled_at,
+      v_shift_external_row_key,
+      v_shift_hr_request_id,
+      v_shift_start_utc,
+      v_shift_end_utc,
+      v_shift_break_mins,
+      v_shift_ward,
+      v_shift_week_ending_date
     from public.nhsp_shifts ns
     where ns.id = v_shift_id
     for update;
@@ -477,101 +571,591 @@ begin
       raise exception 'weekly_import_apply_cancellations: item % shift % is already cancelled (cancelled_at_utc not null).', v_idx, v_shift_id;
     end if;
 
-    -- Locked guard: cancellations RPC only operates on HEALTHROSTER shifts
+    -- Guard: cancellations RPC only operates on HEALTHROSTER shifts
     if v_shift_source_system <> 'HEALTHROSTER' then
       raise exception 'weekly_import_apply_cancellations: item % shift % source_system=%; expected HEALTHROSTER.',
         v_idx, v_shift_id, v_shift_source_system;
     end if;
 
-    -- Import/client safety: shift must belong to the import client
+    -- Guard B: shift must belong to the import client
     if v_shift_client_id is null or v_shift_client_id <> v_import_client_id then
       raise exception 'weekly_import_apply_cancellations: item % shift % client_id mismatch (import_client_id=% shift_client_id=%).',
         v_idx, v_shift_id, v_import_client_id, v_shift_client_id;
     end if;
 
-    if v_shift_candidate_id is null or v_shift_work_date is null then
-      raise exception 'weekly_import_apply_cancellations: item % shift % missing candidate_id/work_date; cannot enforce day-empty policy.',
+    if v_shift_contract_id is null then
+      raise exception 'weekly_import_apply_cancellations: item % shift % missing contract_id.', v_idx, v_shift_id;
+    end if;
+
+    if v_shift_candidate_id is null then
+      raise exception 'weekly_import_apply_cancellations: item % shift % missing candidate_id.', v_idx, v_shift_id;
+    end if;
+
+    if v_shift_work_date is null then
+      raise exception 'weekly_import_apply_cancellations: item % shift % missing work_date.', v_idx, v_shift_id;
+    end if;
+
+    -- Guard A: require non-empty nhsp_shifts.hr_request_id
+    if nullif(btrim(coalesce(v_shift_hr_request_id,'')), '') is null then
+      raise exception
+        'weekly_import_apply_cancellations: item % shift % has empty hr_request_id; cannot use request-id cancellation identity.',
         v_idx, v_shift_id;
     end if;
 
-    -- Day-empty enforcement (file truth):
-    -- Allow cancellation only if we can deterministically prove the import file contains zero shifts
-    -- for this candidate+client+work_date. If mapping for that date is incomplete (ambiguous), reject.
+    v_shift_request_norm := lower(regexp_replace(btrim(v_shift_hr_request_id), '\s+', ' ', 'g'));
+
+    -- Presence test: if request id is present in file, cancellation is not eligible
     select exists (
       select 1
-      from tmp_date_stats ds
-      where ds.date_local = v_shift_work_date
-        and ds.file_rows_count > 0
+      from tmp_file_request_set fr
+      where fr.req_norm = v_shift_request_norm
     )
-    into v_has_any_rows_on_date;
+    into v_present_in_file;
 
-    if v_has_any_rows_on_date then
-      -- If the file has any deterministically-mapped row for this candidate+client+date => not empty => reject.
-      select exists (
-        select 1
-        from tmp_p2_join pj
-        where pj.date_local = v_shift_work_date
-          and pj.candidate_id = v_shift_candidate_id
-          and pj.client_id = v_shift_client_id
-      )
-      into v_has_candidate_rows_on_date;
+    if v_present_in_file then
+      raise exception
+        'weekly_import_apply_cancellations: item % shift % hr_request_id is present in the import file; cancellation rejected (not missing).',
+        v_idx, v_shift_id;
+    end if;
 
-      if v_has_candidate_rows_on_date then
-        raise exception
-          'weekly_import_apply_cancellations: item % shift % violates day-empty policy: import contains shift rows for candidate+client+date.',
-          v_idx, v_shift_id;
-      end if;
+    -- ─────────────────────────────────────────────
+    -- Invoiced-at-all detection (segment-level authoritative)
+    -- ─────────────────────────────────────────────
+    v_tf_locked_by_invoice_id := null;
+    v_tf_invoice_breakdown_json := null;
+    v_seg_invoice_id := null;
+    v_invoice_id_detected := null;
+    v_invoiced_detected := false;
 
-      -- If any row on that date is not deterministically mapped (candidate/client/work_date missing), cancellation is ambiguous => reject.
-      select coalesce(ds.ambiguous_rows_count, 0)
-      into v_ambiguous_rows_on_date
-      from tmp_date_stats ds
-      where ds.date_local = v_shift_work_date
+    if v_timesheet_id is not null then
+      select
+        tf.locked_by_invoice_id,
+        tf.invoice_breakdown_json
+      into
+        v_tf_locked_by_invoice_id,
+        v_tf_invoice_breakdown_json
+      from public.timesheets_financials tf
+      where tf.timesheet_id = v_timesheet_id
+        and tf.is_current = true
       limit 1;
 
-      if v_ambiguous_rows_on_date > 0 then
-        raise exception
-          'weekly_import_apply_cancellations: item % shift % violates day-empty policy: import has % ambiguous row(s) on that date; resolve mappings first.',
-          v_idx, v_shift_id, v_ambiguous_rows_on_date;
-      end if;
+      begin
+        select
+          nullif(seg2.seg->>'invoice_locked_invoice_id','')::uuid
+        into v_seg_invoice_id
+        from (
+          select s2.seg
+          from jsonb_array_elements(
+            case
+              when v_tf_invoice_breakdown_json is not null
+               and jsonb_typeof(v_tf_invoice_breakdown_json) = 'object'
+               and upper(coalesce(v_tf_invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+               and jsonb_typeof(v_tf_invoice_breakdown_json->'segments') = 'array'
+              then v_tf_invoice_breakdown_json->'segments'
+              else '[]'::jsonb
+            end
+          ) as s2(seg)
+          where
+            (s2.seg->>'nhsp_shift_id') = v_shift_id::text
+            or (
+              v_shift_external_row_key is not null
+              and (s2.seg->>'external_row_key') = v_shift_external_row_key
+            )
+          order by
+            case when (s2.seg->>'nhsp_shift_id') = v_shift_id::text then 0 else 1 end
+          limit 1
+        ) seg2;
+      exception when others then
+        v_seg_invoice_id := null;
+      end;
     end if;
 
-    -- Always record affected ids for return payload
-    if v_timesheet_id is not null then
-      v_timesheet_ids := array_append(v_timesheet_ids, v_timesheet_id);
+    v_invoice_id_detected := coalesce(v_seg_invoice_id, v_tf_locked_by_invoice_id, v_shift_invoice_id);
+    v_invoiced_detected := (v_invoice_id_detected is not null);
+
+    if v_invoice_id_detected is not null then
+      v_invoice_ids := array_append(v_invoice_ids, v_invoice_id_detected);
     end if;
-    if v_invoice_id is not null then
-      v_invoice_ids := array_append(v_invoice_ids, v_invoice_id);
-    end if;
 
-    -- Apply cancellation data state: mark cancelled + detach (no deletions)
-    update public.nhsp_shifts ns2
-    set
-      cancelled_at_utc = v_now,
-      cancelled_by_import_id = p_import_id,
-      cancelled_reason = v_reason,
-      timesheet_id = null
-    where ns2.id = v_shift_id;
+    -- ─────────────────────────────────────────────
+    -- Branch: INPLACE vs CORRECTION
+    -- ─────────────────────────────────────────────
+    if v_invoiced_detected = false then
+      v_branch := 'INPLACE';
 
-    v_cancelled_count := v_cancelled_count + 1;
-
-    -- TSFIN recompute is mandatory for any cancel/detach/change.
-    -- Mark current TSFIN stale and enqueue priority recompute.
-    if v_timesheet_id is not null then
-      update public.timesheets_financials tf
+      -- Cancel truth + detach
+      update public.nhsp_shifts ns2
       set
-        is_stale = true,
-        stale_reason = 'IMPORT_CANCEL_DETACH',
-        updated_at = v_now
-      where tf.is_current = true
-        and tf.timesheet_id = v_timesheet_id;
+        cancelled_at_utc = v_now,
+        cancelled_by_import_id = p_import_id,
+        cancelled_reason = v_reason,
+        timesheet_id = null
+      where ns2.id = v_shift_id;
 
-      perform public.enqueue_ts_financials_priority(array[v_timesheet_id]::uuid[], 'CONTEXT_CHANGED'::public.ts_fin_reason_enum);
+      v_cancelled_count := v_cancelled_count + 1;
+
+      -- TSFIN recompute required for base timesheet
+      if v_timesheet_id is not null then
+        v_timesheet_ids := array_append(v_timesheet_ids, v_timesheet_id);
+
+        update public.timesheets_financials tfu
+        set
+          is_stale = true,
+          stale_reason = 'IMPORT_CANCEL_DETACH',
+          updated_at = v_now
+        where tfu.is_current = true
+          and tfu.timesheet_id = v_timesheet_id;
+
+        perform public.enqueue_ts_financials_priority(array[v_timesheet_id]::uuid[], 'CONTEXT_CHANGED'::public.ts_fin_reason_enum);
+      end if;
+
+      v_correction_ts_id := null;
+
+    else
+      v_branch := 'CORRECTION';
+
+      -- Resolve week_ending_date for correction (never assume Sunday)
+      v_week_ending_date := null;
+      v_base_ts_week_ending := null;
+
+      if v_timesheet_id is not null then
+        select t.week_ending_date
+        into v_base_ts_week_ending
+        from public.timesheets t
+        where t.timesheet_id = v_timesheet_id
+        limit 1;
+
+        if v_base_ts_week_ending is not null then
+          v_week_ending_date := v_base_ts_week_ending;
+        end if;
+      end if;
+
+      if v_week_ending_date is null and v_shift_week_ending_date is not null then
+        v_week_ending_date := v_shift_week_ending_date;
+      end if;
+
+      if v_week_ending_date is null then
+        select coalesce(c.week_ending_weekday_snapshot, 0)
+        into v_contract_week_ending_weekday_snapshot
+        from public.contracts c
+        where c.id = v_shift_contract_id
+        limit 1;
+
+        v_week_ending_date :=
+          (v_shift_work_date + (((v_contract_week_ending_weekday_snapshot - extract(dow from v_shift_work_date)::int + 7) % 7))::int)::date;
+      end if;
+
+      if v_week_ending_date is null then
+        raise exception 'weekly_import_apply_cancellations: shift % cannot resolve week_ending_date for correction.', v_shift_id;
+      end if;
+
+      -- Deterministic correction id (fnv1a32 over stable string)
+      v_fnv_s :=
+        coalesce(p_import_id::text,'') || '|' ||
+        coalesce(v_shift_id::text,'') || '|' ||
+        coalesce(v_shift_hr_request_id,'') || '|' ||
+        coalesce(coalesce(v_shift_external_row_key,''),'') || '|' ||
+        coalesce(coalesce(v_shift_start_utc::text,''),'') || '|' ||
+        coalesce(coalesce(v_shift_end_utc::text,''),'') || '|' ||
+        coalesce(coalesce(v_shift_break_mins,0)::text,'');
+
+      v_fnv_h := 2166136261;
+      for v_fnv_i in 1..char_length(v_fnv_s) loop
+        v_fnv_h := (v_fnv_h # ascii(substring(v_fnv_s from v_fnv_i for 1)));
+        v_fnv_h := (v_fnv_h * 16777619) % 4294967296;
+      end loop;
+      v_fnv_hex := lpad(lower(to_hex(v_fnv_h)), 8, '0');
+
+      v_correction_id := 'hrcan:' || p_import_id::text || ':' || v_shift_id::text || ':' || v_fnv_hex;
+
+      -- Load contract display fields (best-effort; may be null)
+      select
+        c2.display_site,
+        c2.ward_hint,
+        c2.role
+      into
+        v_contract_display_site,
+        v_contract_ward_hint,
+        v_contract_role
+      from public.contracts c2
+      where c2.id = v_shift_contract_id
+      limit 1;
+
+      select cl.name
+      into v_client_name
+      from public.clients cl
+      where cl.id = v_shift_client_id
+      limit 1;
+
+      select cand.display_name, cand.tms_ref
+      into v_candidate_display_name, v_candidate_tms_ref
+      from public.candidates cand
+      where cand.id = v_shift_candidate_id
+      limit 1;
+
+      v_schedule := jsonb_build_array(
+        jsonb_build_object(
+          'date', v_shift_work_date::text,
+          'ward', nullif(btrim(coalesce(v_shift_ward, v_contract_ward_hint, '')), ''),
+          'start_utc', v_shift_start_utc::text,
+          'end_utc', v_shift_end_utc::text,
+          'break_mins', greatest(0, coalesce(v_shift_break_mins, 0)),
+          'hr_request_id', nullif(btrim(coalesce(v_shift_hr_request_id,'')), ''),
+          'shift_id', v_shift_id::text,
+          'external_row_key', v_shift_external_row_key
+        )
+      );
+
+      v_hint := jsonb_build_object(
+        'import_cancellation', jsonb_build_object(
+          'import_id', p_import_id::text,
+          'key_type', 'HR_REQUEST_ID',
+          'hr_request_id', nullif(btrim(coalesce(v_shift_hr_request_id,'')), ''),
+          'shift_id', v_shift_id::text,
+          'correction_id', v_correction_id,
+          'correction_kind', v_kind,
+          'invoice_id_detected', v_invoice_id_detected::text
+        )
+      );
+
+      v_shift_label := 'weekly-hr-cancel-reversal-' || v_correction_id;
+
+      v_shift_label_norm :=
+        regexp_replace(
+          regexp_replace(lower(trim(v_shift_label)), '\s+', ' ', 'g'),
+          '[^\w\s\-@&\/,:]',
+          '',
+          'g'
+        );
+
+      v_booking_base :=
+        'scope=WEEKLY' || '|' ||
+        'contract_id=' || coalesce(v_shift_contract_id::text,'') || '|' ||
+        'candidate_id=' || coalesce(v_shift_candidate_id::text,'') || '|' ||
+        'client_id=' || coalesce(v_shift_client_id::text,'') || '|' ||
+        'week_ending_date=' || coalesce(v_week_ending_date::text,'') || '|' ||
+        'correction_id=' || coalesce(v_correction_id,'') || '|' ||
+        'correction_kind=' || v_kind;
+
+      v_hash_hex := substring(encode(digest(convert_to(v_booking_base, 'utf8'), 'sha256'), 'hex') from 1 for 16);
+      v_booking_id := 'bk_' || v_hash_hex;
+
+      -- Ensure base contract_week exists (seq=0). Do not overwrite if it exists.
+      insert into public.contract_weeks(
+        contract_id,
+        week_ending_date,
+        additional_seq,
+        status,
+        submission_mode_snapshot,
+        timesheet_id,
+        planned_schedule_json,
+        created_at,
+        updated_at,
+        is_adjustment
+      )
+      values (
+        v_shift_contract_id,
+        v_week_ending_date,
+        0,
+        'OPEN'::public.contract_week_status_enum,
+        'MANUAL'::public.submission_mode_enum,
+        null,
+        null,
+        v_now,
+        v_now,
+        false
+      )
+      on conflict (contract_id, week_ending_date, additional_seq) do nothing;
+
+      select cw0.id
+      into v_base_week_id
+      from public.contract_weeks cw0
+      where cw0.contract_id = v_shift_contract_id
+        and cw0.week_ending_date = v_week_ending_date
+        and cw0.additional_seq = 0
+      limit 1
+      for update;
+
+      if v_base_week_id is null then
+        raise exception 'weekly_import_apply_cancellations: failed to ensure base contract_week exists (contract_id=% week_ending=%).',
+          v_shift_contract_id, v_week_ending_date;
+      end if;
+
+      -- Idempotency: reuse existing correction timesheet (correction_id+kind)
+      v_existing_ts_id := null;
+
+      select t2.timesheet_id
+      into v_existing_ts_id
+      from public.timesheets t2
+      where t2.correction_id = v_correction_id
+        and t2.correction_kind = v_kind
+      order by t2.is_current desc, t2.version desc
+      limit 1
+      for update;
+
+      if v_existing_ts_id is not null then
+        v_correction_ts_id := v_existing_ts_id;
+
+        -- Ensure adjustment contract_week exists and links to the correction timesheet
+        v_existing_cw_id := null;
+
+        select cw2.id
+        into v_existing_cw_id
+        from public.contract_weeks cw2
+        where cw2.timesheet_id = v_existing_ts_id
+          and cw2.contract_id = v_shift_contract_id
+          and cw2.week_ending_date = v_week_ending_date
+        limit 1
+        for update;
+
+        if v_existing_cw_id is null then
+          perform 1
+          from public.contract_weeks cwlock
+          where cwlock.contract_id = v_shift_contract_id
+            and cwlock.week_ending_date = v_week_ending_date
+          for update;
+
+          v_try := 0;
+          loop
+            v_try := v_try + 1;
+            if v_try > 10 then
+              raise exception 'weekly_import_apply_cancellations: failed to allocate additional_seq after retries (contract_id=% week_ending=%).',
+                v_shift_contract_id, v_week_ending_date;
+            end if;
+
+            select coalesce(max(cwmax.additional_seq), 0) + 1
+            into v_next_additional_seq
+            from public.contract_weeks cwmax
+            where cwmax.contract_id = v_shift_contract_id
+              and cwmax.week_ending_date = v_week_ending_date;
+
+            begin
+              insert into public.contract_weeks(
+                contract_id,
+                week_ending_date,
+                additional_seq,
+                is_adjustment,
+                submission_mode_snapshot,
+                status,
+                created_at,
+                updated_at,
+                timesheet_id
+              )
+              values (
+                v_shift_contract_id,
+                v_week_ending_date,
+                v_next_additional_seq,
+                true,
+                'MANUAL'::public.submission_mode_enum,
+                'SUBMITTED'::public.contract_week_status_enum,
+                v_now,
+                v_now,
+                v_existing_ts_id
+              )
+              returning id into v_existing_cw_id;
+
+              exit;
+            exception when unique_violation then
+              v_existing_cw_id := null;
+            end;
+          end loop;
+        end if;
+
+        -- Update existing correction timesheet
+        update public.timesheets tu
+        set
+          booking_id = v_booking_id,
+          version = 1,
+          is_current = true,
+          status = 'RECEIVED'::public.timesheet_status_enum,
+          sheet_scope = 'WEEKLY'::public.timesheet_scope_enum,
+          submission_mode = 'MANUAL'::public.submission_mode_enum,
+          line_type = 'HOURS'::public.timesheet_line_type_enum,
+          authorised_at_server = null,
+          occupant_key_norm = lower(coalesce(v_candidate_tms_ref, v_candidate_display_name, v_shift_candidate_id::text)),
+          hospital_norm = lower(coalesce(v_contract_display_site, v_client_name, v_shift_client_id::text)),
+          ward_norm = lower(coalesce(v_contract_ward_hint, 'contract')),
+          job_title_norm = lower(coalesce(v_contract_role, 'weekly')),
+          shift_label_norm = v_shift_label_norm,
+          week_ending_date = v_week_ending_date,
+          contract_id = v_shift_contract_id,
+          manual_pdf_r2_key = null,
+          actual_schedule_json = v_schedule,
+          qr_payload_json = v_hint,
+          candidate_hint_text = v_hint,
+          is_adjustment = true,
+          correction_id = v_correction_id,
+          correction_kind = v_kind,
+          adjustment_origin = 'IMPORT_CANCELLATION',
+          updated_at = v_now
+        where tu.timesheet_id = v_existing_ts_id;
+
+      else
+        -- Create a new adjustment contract_week and new correction timesheet linked to it
+        perform 1
+        from public.contract_weeks cwlock2
+        where cwlock2.contract_id = v_shift_contract_id
+          and cwlock2.week_ending_date = v_week_ending_date
+        for update;
+
+        v_try := 0;
+        loop
+          v_try := v_try + 1;
+          if v_try > 10 then
+            raise exception 'weekly_import_apply_cancellations: failed to allocate additional_seq after retries (contract_id=% week_ending=%).',
+              v_shift_contract_id, v_week_ending_date;
+          end if;
+
+          select coalesce(max(cwmax2.additional_seq), 0) + 1
+          into v_next_additional_seq
+          from public.contract_weeks cwmax2
+          where cwmax2.contract_id = v_shift_contract_id
+            and cwmax2.week_ending_date = v_week_ending_date;
+
+          begin
+            insert into public.contract_weeks(
+              contract_id,
+              week_ending_date,
+              additional_seq,
+              is_adjustment,
+              submission_mode_snapshot,
+              status,
+              created_at,
+              updated_at
+            )
+            values (
+              v_shift_contract_id,
+              v_week_ending_date,
+              v_next_additional_seq,
+              true,
+              'MANUAL'::public.submission_mode_enum,
+              'SUBMITTED'::public.contract_week_status_enum,
+              v_now,
+              v_now
+            )
+            returning id into v_cw_id;
+
+            exit;
+          exception when unique_violation then
+            v_cw_id := null;
+          end;
+        end loop;
+
+        v_ts_id := null;
+
+        insert into public.timesheets(
+          booking_id,
+          version,
+          is_current,
+          status,
+          occupant_key_norm,
+          hospital_norm,
+          ward_norm,
+          job_title_norm,
+          shift_label_norm,
+          week_ending_date,
+          contract_id,
+          submission_mode,
+          manual_pdf_r2_key,
+          line_type,
+          sheet_scope,
+          actual_schedule_json,
+          additional_units_week,
+          additional_units_per_day,
+          day_references_json,
+          authorised_at_server,
+          qr_payload_json,
+          is_adjustment,
+          candidate_hint_text,
+          correction_id,
+          correction_kind,
+          adjustment_origin,
+          created_at,
+          updated_at
+        )
+        values (
+          v_booking_id,
+          1,
+          true,
+          'RECEIVED'::public.timesheet_status_enum,
+          lower(coalesce(v_candidate_tms_ref, v_candidate_display_name, v_shift_candidate_id::text)),
+          lower(coalesce(v_contract_display_site, v_client_name, v_shift_client_id::text)),
+          lower(coalesce(v_contract_ward_hint, 'contract')),
+          lower(coalesce(v_contract_role, 'weekly')),
+          v_shift_label_norm,
+          v_week_ending_date,
+          v_shift_contract_id,
+          'MANUAL'::public.submission_mode_enum,
+          null,
+          'HOURS'::public.timesheet_line_type_enum,
+          'WEEKLY'::public.timesheet_scope_enum,
+          v_schedule,
+          '{}'::jsonb,
+          '{}'::jsonb,
+          null,
+          null,
+          v_hint,
+          true,
+          v_hint,
+          v_correction_id,
+          v_kind,
+          'IMPORT_CANCELLATION',
+          v_now,
+          v_now
+        )
+        returning timesheet_id into v_ts_id;
+
+        v_correction_ts_id := v_ts_id;
+
+        update public.contract_weeks cwlink
+        set
+          timesheet_id = v_correction_ts_id,
+          status = 'SUBMITTED'::public.contract_week_status_enum,
+          submission_mode_snapshot = 'MANUAL'::public.submission_mode_enum,
+          is_adjustment = true,
+          updated_at = v_now
+        where cwlink.id = v_cw_id;
+
+      end if;
+
+      -- Enqueue TSFIN for correction timesheet only
+      if v_correction_ts_id is not null then
+        v_timesheet_ids := array_append(v_timesheet_ids, v_correction_ts_id);
+        perform public.enqueue_ts_financials_priority(array[v_correction_ts_id]::uuid[], 'CONTEXT_CHANGED'::public.ts_fin_reason_enum);
+      end if;
+
+      -- Update truth (cancel) + detach; do NOT recompute base TSFIN here
+      update public.nhsp_shifts ns3
+      set
+        cancelled_at_utc = v_now,
+        cancelled_by_import_id = p_import_id,
+        cancelled_reason = v_reason,
+        timesheet_id = null
+      where ns3.id = v_shift_id;
+
+      v_cancelled_count := v_cancelled_count + 1;
+
+    end if;
+
+    -- Debug sample (cap 30)
+    if v_sample_n < 30 then
+      v_sample := v_sample || jsonb_build_array(jsonb_build_object(
+        'shift_id', v_shift_id::text,
+        'key_type', 'HR_REQUEST_ID',
+        'hr_request_id', v_shift_hr_request_id,
+        'present_in_file', v_present_in_file,
+        'timesheet_id', case when v_timesheet_id is null then null else v_timesheet_id::text end,
+        'invoice_id_detected', case when v_invoice_id_detected is null then null else v_invoice_id_detected::text end,
+        'invoiced_detected', v_invoiced_detected,
+        'branch', v_branch,
+        'correction_timesheet_id', case when v_correction_ts_id is null then null else v_correction_ts_id::text end
+      ));
+      v_sample_n := v_sample_n + 1;
     end if;
 
   end loop;
 
-  -- Deduplicate id arrays for output
+  -- Deduplicate arrays
   select coalesce(array_agg(distinct x), array[]::uuid[])
   into v_timesheet_ids
   from unnest(v_timesheet_ids) x
@@ -582,7 +1166,28 @@ begin
   from unnest(v_invoice_ids) x
   where x is not null;
 
-  -- No credit notes are created by this RPC under locked policy
+  -- Debug audit (invoice_debug gated inside _imp_debug_audit)
+  perform public._imp_debug_audit(
+    p_actor_user_id,
+    'HR_CANCEL_APPLY_DEBUG',
+    jsonb_build_object(
+      'import_id', p_import_id::text,
+      'key_type', 'HR_REQUEST_ID',
+      'selected_count', jsonb_array_length(v_actions),
+      'cancelled_count', v_cancelled_count,
+      'file_request_count', v_file_request_count,
+      'affected_timesheet_ids_count', coalesce(array_length(v_timesheet_ids, 1), 0),
+      'affected_invoice_ids_count', coalesce(array_length(v_invoice_ids, 1), 0),
+      'sample', v_sample
+    ),
+    'hr_imports',
+    p_import_id::text,
+    null,
+    null,
+    null,
+    null
+  );
+
   v_credit_note_ids := array[]::uuid[];
   v_pdf_jobs_enqueued := 0;
 
@@ -594,9 +1199,38 @@ begin
     'credit_note_ids_created', to_jsonb(v_credit_note_ids),
     'invoice_pdf_jobs_enqueued', v_pdf_jobs_enqueued
   );
+
+exception when others then
+  get stacked diagnostics v_sqlstate = returned_sqlstate, v_err = message_text;
+
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'HR_CANCEL_APPLY_ERROR',
+      jsonb_build_object(
+        'import_id', p_import_id::text,
+        'key_type', 'HR_REQUEST_ID',
+        'last_shift_id', case when v_last_shift_id is null then null else v_last_shift_id::text end,
+        'selected_count', case when jsonb_typeof(v_actions) = 'array' then jsonb_array_length(v_actions) else null end,
+        'cancelled_count', v_cancelled_count,
+        'file_request_count', v_file_request_count,
+        'sqlstate', v_sqlstate,
+        'error', v_err
+      ),
+      'hr_imports',
+      p_import_id::text,
+      null,
+      null,
+      null,
+      null
+    );
+  exception when others then
+    null;
+  end;
+
+  raise;
 end;
 $$;
-
 
 
 create or replace function public.hr_weekly_validation_apply_send_emails(
