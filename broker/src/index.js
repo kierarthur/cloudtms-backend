@@ -32145,7 +32145,6 @@ async function handleNhspImport(env, req) {
     return withCORS(env, req, serverError("Failed to create NHSP import"));
   }
 }
-
 async function handleHrAutoprocessPreview(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
   const enc = encodeURIComponent;
@@ -32190,8 +32189,8 @@ async function handleHrAutoprocessPreview(env, req, importId) {
       const d = new Date(v);
       if (Number.isNaN(d.getTime())) return null;
       const yyyy = d.getUTCFullYear();
-      const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
-      const dd   = String(d.getUTCDate()).padStart(2, '0');
+      const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const dd = String(d.getUTCDate()).padStart(2, '0');
       return `${yyyy}-${mm}-${dd}`;
     } catch {
       return null;
@@ -32231,6 +32230,9 @@ async function handleHrAutoprocessPreview(env, req, importId) {
   };
 
   const uniq = (arr) => Array.from(new Set((arr || []).filter(Boolean)));
+
+  // ✅ Identity-key normaliser: trim + collapse whitespace + lower
+  const normKey = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
 
   try {
     // Load import header (client_id / source_system checks)
@@ -32579,17 +32581,10 @@ async function handleHrAutoprocessPreview(env, req, importId) {
 
     const modeBExternalKeysUniq = uniq(modeBExternalKeys);
 
-    // Build file-truth day stats for this import (hr_rows + phase2 join by hr_row_id)
-    const dateStats = new Map(); // date_local -> { fileRows: int, ambiguousRows: int }
-    const candidateDayMapped = new Set(); // `${candidate_id}|${client_id}|${date_local}`
-
-    const p2ByHrRowId = new Map();
-    for (const r of (p2 || [])) {
-      const hrRowId = r?.hr_row_id ? String(r.hr_row_id) : null;
-      if (!hrRowId) continue;
-      if (!p2ByHrRowId.has(hrRowId)) p2ByHrRowId.set(hrRowId, r);
-    }
-
+    // ─────────────────────────────────────────────────────────────
+    // Build file request-id set (identity key = Request ID) + file date range
+    //   - from hr_rows.hr_request_id OR payload_json.request_id
+    // ─────────────────────────────────────────────────────────────
     const fetchHrRowsPaged = async () => {
       const pageSize = 1000;
       let offset = 0;
@@ -32600,7 +32595,7 @@ async function handleHrAutoprocessPreview(env, req, importId) {
         const url =
           `${env.SUPABASE_URL}/rest/v1/hr_rows` +
           `?import_id=eq.${enc(importId)}` +
-          `&select=id,date_local` +
+          `&select=id,date_local,hr_request_id,payload_json` +
           `&order=id.asc` +
           `&limit=${pageSize}` +
           `&offset=${offset}`;
@@ -32642,13 +32637,21 @@ async function handleHrAutoprocessPreview(env, req, importId) {
     let minWd = null;
     let maxWd = null;
 
+    const fileRequestSet = new Set();
     for (const r of (hrRows || [])) {
       const d = r?.date_local ? String(r.date_local) : null;
-      if (!d) continue;
-      if (!minWd || d < minWd) minWd = d;
-      if (!maxWd || d > maxWd) maxWd = d;
+      if (d) {
+        if (!minWd || d < minWd) minWd = d;
+        if (!maxWd || d > maxWd) maxWd = d;
+      }
+
+      const payload = r?.payload_json || {};
+      const rawReq = (r?.hr_request_id != null ? String(r.hr_request_id) : '') || (payload?.request_id != null ? String(payload.request_id) : '');
+      const reqNorm = normKey(rawReq);
+      if (reqNorm) fileRequestSet.add(reqNorm);
     }
 
+    // fallback to p2 OK work_date if hr_rows not available
     if (!minWd || !maxWd) {
       for (const r of p2OkRows) {
         const wd = r?.work_date ? String(r.work_date) : null;
@@ -32658,49 +32661,20 @@ async function handleHrAutoprocessPreview(env, req, importId) {
       }
     }
 
-    for (const r of (hrRows || [])) {
-      const hrRowId = r?.id ? String(r.id) : null;
-      const dateLocal = r?.date_local ? String(r.date_local) : null;
-      if (!hrRowId || !dateLocal) continue;
-
-      const ds = dateStats.get(dateLocal) || { fileRows: 0, ambiguousRows: 0 };
-      ds.fileRows += 1;
-
-      const p2r = p2ByHrRowId.get(hrRowId) || null;
-
-      const candId = p2r?.candidate_id ? String(p2r.candidate_id) : null;
-      const cliId  = p2r?.client_id ? String(p2r.client_id) : null;
-      const wkDate = p2r?.work_date ? String(p2r.work_date) : null;
-
-      const isAmbiguous = !(candId && cliId && wkDate);
-      if (isAmbiguous) {
-        ds.ambiguousRows += 1;
-      } else {
-        candidateDayMapped.add(`${candId}|${cliId}|${dateLocal}`);
-      }
-
-      dateStats.set(dateLocal, ds);
-    }
-
-    const isDayEmptyForCandidate = (candidateId, clientId, ymd) => {
-      if (!candidateId || !clientId || !ymd) return false;
-
-      const ds = dateStats.get(ymd);
-      const fileRows = ds ? Number(ds.fileRows || 0) : 0;
-
-      if (!ds || fileRows === 0) return true;
-
-      const amb = Number(ds.ambiguousRows || 0);
-      if (amb > 0) return false;
-
-      if (candidateDayMapped.has(`${candidateId}|${clientId}|${ymd}`)) return false;
-
-      return true;
-    };
-
-    // Replacement-day cancellations
-    const replacementCancelShiftIds = new Set();
-
+    // ─────────────────────────────────────────────────────────────
+    // Replacement-day detection:
+    //  - detect moved-date (external_row_key exists, old work_date != import work_date)
+    //  - mark the ROW action's replacement_day_key
+    //  - emit cancellations for the old day by identity-key scan (HR request id missing from file)
+    //
+    // ✅ Standardise:
+    //   reason: 'REPLACEMENT_DAY'
+    //   details.cancel_kind: 'REPLACEMENT_DAY'
+    // ✅ Only confirmed shifts: timesheet_id is not null, cancelled_at_utc is null
+    // ✅ Guard B: client_id must equal import.client_id
+    // ✅ No day-empty gating
+    // ─────────────────────────────────────────────────────────────
+    const replacementDayKeys = new Set(); // `${candidate_id}|${client_id}|${old_work_date}`
     if (modeBExternalKeysUniq.length) {
       for (const keyChunk of chunk(modeBExternalKeysUniq, 150)) {
         const { rows: sRows } = await sbFetch(
@@ -32730,8 +32704,9 @@ async function handleHrAutoprocessPreview(env, req, importId) {
             if (!cid || !cli) continue;
 
             const repKey = `${cid}|${cli}|${oldWd}`;
+            replacementDayKeys.add(repKey);
 
-            // Mark visible ROW action if present; otherwise ensure it is auto-applied for truth alignment
+            // Mark visible ROW action if present; otherwise ensure truth alignment
             const truthIdx = extToActionIndex.get(ext);
             if (typeof truthIdx === 'number' && truthIdx >= 0 && actions[truthIdx]) {
               actions[truthIdx] = {
@@ -32742,104 +32717,149 @@ async function handleHrAutoprocessPreview(env, req, importId) {
             } else {
               auto_apply_action_ids.push(`ROW:${ext}`);
             }
-
-            if (!minWd || !maxWd || (oldWd < minWd || oldWd > maxWd)) {
-              continue;
-            }
-
-            if (!isDayEmptyForCandidate(cid, cli, oldWd)) {
-              continue;
-            }
-
-            replacementCancelShiftIds.add(String(sh.id));
-
-            actions.push({
-              action_id: `CANCEL:${String(sh.id)}`,
-              action_kind: 'SHIFT_CANCEL',
-              shift_id: String(sh.id),
-              external_row_key: null,
-              reason: 'SHIFT_NO_LONGER_WORKED',
-              reason_text: 'Shift no longer worked',
-              candidate_id: cid,
-              client_id: cli,
-              contract_id: null,
-              week_ending_date: null,
-              work_date: oldWd,
-              replacement_day_key: repKey,
-              is_new_shift: false,
-              is_cancellation: true,
-              is_red: true,
-              default_checked: false,
-              label: 'Cancel shift',
-              details: { cancel_kind: 'REPLACEMENT_DAY' }
-            });
           }
         }
       }
     }
 
-    // Missing-from-import cancellation candidates (day-level; must match DB guard)
-    const candIdsInImport = new Set();
-    for (const r of p2OkRows) {
-      const cid = r?.candidate_id ? String(r.candidate_id) : null;
-      const cli = r?.client_id ? String(r.client_id) : null;
-      const wd  = r?.work_date ? String(r.work_date) : null;
-      const co  = r?.contract_id ? String(r.contract_id) : null;
-      const we  = r?.week_ending_date ? String(r.week_ending_date) : null;
-      if (!cid || !cli || !wd || !co || !we) continue;
-      const gid = `grp:${co}:${we}:${cid}`;
-      if (!modeBGroupIds.has(gid)) continue;
-      candIdsInImport.add(cid);
-    }
+    const cancelShiftIdSet = new Set();
 
-    if (candIdsInImport.size && minWd && maxWd) {
-      for (const idChunk of chunk([...candIdsInImport], 100)) {
+    if (replacementDayKeys.size && minWd && maxWd) {
+      for (const repKey of replacementDayKeys) {
+        const [cid, cli, oldWd] = String(repKey).split('|');
+        if (!cid || !cli || !oldWd) continue;
+
+        if (oldWd < minWd || oldWd > maxWd) continue;
+
+        // Guard B already implicit for HR: cli must match import client id
+        if (String(cli) !== String(imp.client_id)) continue;
+
         const { rows: sRows } = await sbFetch(
           env,
           `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
             `?source_system=eq.HEALTHROSTER` +
             `&client_id=eq.${enc(imp.client_id)}` +
             `&cancelled_at_utc=is.null` +
-            `&candidate_id=in.(${idChunk.map(enc).join(',')})` +
-            `&work_date=gte.${enc(minWd)}` +
-            `&work_date=lte.${enc(maxWd)}` +
-            `&select=id,candidate_id,client_id,work_date`
+            `&timesheet_id=not.is.null` +
+            `&candidate_id=eq.${enc(cid)}` +
+            `&client_id=eq.${enc(cli)}` +
+            `&work_date=eq.${enc(oldWd)}` +
+            `&select=id,candidate_id,client_id,work_date,hr_request_id,timesheet_id`
         );
 
         for (const sh of (sRows || [])) {
-          if (!sh || !sh.id || !sh.candidate_id || !sh.client_id || !sh.work_date) continue;
+          const sid = sh?.id ? String(sh.id) : null;
+          if (!sid) continue;
+          if (cancelShiftIdSet.has(sid)) continue;
 
-          const cid = String(sh.candidate_id);
-          const cli = String(sh.client_id);
-          const wd  = String(sh.work_date);
+          const reqRaw = sh?.hr_request_id != null ? String(sh.hr_request_id) : '';
+          const reqNorm = normKey(reqRaw);
+          if (!reqNorm) continue; // Guard A: request id must exist
 
-          if (replacementCancelShiftIds.has(String(sh.id))) continue;
+          // If request id still present in file, not missing => do not cancel
+          if (fileRequestSet.has(reqNorm)) continue;
 
-          if (!isDayEmptyForCandidate(cid, cli, wd)) continue;
-
-          const dayKey = `${cid}|${cli}|${wd}`;
+          cancelShiftIdSet.add(sid);
 
           actions.push({
-            action_id: `CANCEL:${String(sh.id)}`,
+            action_id: `CANCEL:${sid}`,
             action_kind: 'SHIFT_CANCEL',
-            shift_id: String(sh.id),
+            shift_id: sid,
             external_row_key: null,
-            reason: 'SHIFT_NO_LONGER_WORKED',
-            reason_text: 'Shift no longer worked',
-            candidate_id: cid,
-            client_id: cli,
+
+            reason: 'REPLACEMENT_DAY',
+            reason_text: 'Replacement day cancellation',
+
+            candidate_id: String(sh.candidate_id),
+            client_id: String(sh.client_id),
+
             contract_id: null,
             week_ending_date: null,
-            work_date: wd,
-            replacement_day_key: dayKey,
+            work_date: String(sh.work_date),
+
+            replacement_day_key: repKey,
+
             is_new_shift: false,
             is_cancellation: true,
             is_red: true,
             default_checked: false,
             label: 'Cancel shift',
-            details: { cancel_kind: 'MISSING_FROM_IMPORT' }
+            details: { cancel_kind: 'REPLACEMENT_DAY' }
           });
         }
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Missing-from-import cancellations (identity-key scan)
+    //
+    // ✅ Replace old "day-empty + candidate-in-import" logic.
+    // ✅ HR identity key: nhsp_shifts.hr_request_id
+    // ✅ Compare against fileRequestSet
+    // ✅ Only confirmed shifts: timesheet_id is not null, cancelled_at_utc is null
+    // ✅ Guard B: shift.client_id must equal import.client_id
+    // ✅ Range: file min/max
+    // ✅ Standardise:
+    //   reason: 'MISSING_FROM_IMPORT'
+    //   details.cancel_kind: 'MISSING_FROM_IMPORT'
+    // ─────────────────────────────────────────────────────────────
+    if (minWd && maxWd) {
+      const { rows: sRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
+          `?source_system=eq.HEALTHROSTER` +
+          `&client_id=eq.${enc(imp.client_id)}` +
+          `&cancelled_at_utc=is.null` +
+          `&timesheet_id=not.is.null` +
+          `&work_date=gte.${enc(minWd)}` +
+          `&work_date=lte.${enc(maxWd)}` +
+          `&select=id,candidate_id,client_id,work_date,hr_request_id,timesheet_id`
+      );
+
+      for (const sh of (sRows || [])) {
+        if (!sh || !sh.id || !sh.candidate_id || !sh.client_id || !sh.work_date) continue;
+
+        const sid = String(sh.id);
+        if (cancelShiftIdSet.has(sid)) continue;
+
+        const reqRaw = sh?.hr_request_id != null ? String(sh.hr_request_id) : '';
+        const reqNorm = normKey(reqRaw);
+        if (!reqNorm) continue; // Guard A
+
+        if (fileRequestSet.has(reqNorm)) continue; // present in file => not missing
+
+        cancelShiftIdSet.add(sid);
+
+        const cid = String(sh.candidate_id);
+        const cli = String(sh.client_id);
+        const wd = String(sh.work_date);
+        const dayKey = `${cid}|${cli}|${wd}`;
+
+        actions.push({
+          action_id: `CANCEL:${sid}`,
+          action_kind: 'SHIFT_CANCEL',
+          shift_id: sid,
+          external_row_key: null,
+
+          reason: 'MISSING_FROM_IMPORT',
+          reason_text: 'Missing from import',
+
+          candidate_id: cid,
+          client_id: cli,
+
+          contract_id: null,
+          week_ending_date: null,
+          work_date: wd,
+
+          replacement_day_key: dayKey,
+
+          is_new_shift: false,
+          is_cancellation: true,
+          is_red: true,
+          default_checked: false,
+          label: 'Cancel shift',
+          details: { cancel_kind: 'MISSING_FROM_IMPORT' }
+        });
       }
     }
 
@@ -32913,7 +32933,8 @@ async function handleHrAutoprocessPreview(env, req, importId) {
         hr_rows_loaded: (hrRows || []).length,
         file_date_min: minWd,
         file_date_max: maxWd,
-        cancellations_computable: cancellationsComputable
+        cancellations_computable: cancellationsComputable,
+        file_request_keys_count: fileRequestSet.size
       }));
     }
 
