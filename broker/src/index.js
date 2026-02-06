@@ -30622,8 +30622,9 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
     const tsIdsLocal = weeks.map(w => w.timesheet_id).filter(Boolean);
 
     // Compute truth totals from import shifts using contract rates
-    let truthPay = 0;
-    let truthChg = 0;
+    // ✅ FIX: accumulate unrounded and only round at end, to reduce false deltas/“overwrite” when nothing changed.
+    let truthPayRaw = 0;
+    let truthChgRaw = 0;
 
     const missingPayBuckets = new Set();
     const missingChgBuckets = new Set();
@@ -30654,23 +30655,23 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
         }
       }
 
-      const segPay = round2(
+      // NOTE: do NOT round per-shift; only round at end.
+      const segPay =
         (used.day   || 0) * asNumberLocal(pay.day)   +
         (used.night || 0) * asNumberLocal(pay.night) +
         (used.sat   || 0) * asNumberLocal(pay.sat)   +
         (used.sun   || 0) * asNumberLocal(pay.sun)   +
-        (used.bh    || 0) * asNumberLocal(pay.bh)
-      );
-      const segChg = round2(
+        (used.bh    || 0) * asNumberLocal(pay.bh);
+
+      const segChg =
         (used.day   || 0) * asNumberLocal(chg.day)   +
         (used.night || 0) * asNumberLocal(chg.night) +
         (used.sat   || 0) * asNumberLocal(chg.sat)   +
         (used.sun   || 0) * asNumberLocal(chg.sun)   +
-        (used.bh    || 0) * asNumberLocal(chg.bh)
-      );
+        (used.bh    || 0) * asNumberLocal(chg.bh);
 
-      truthPay += segPay;
-      truthChg += segChg;
+      truthPayRaw += (Number(segPay) || 0);
+      truthChgRaw += (Number(segChg) || 0);
     }
 
     if (missingPayBuckets.size || missingChgBuckets.size) {
@@ -30707,25 +30708,32 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
       };
     }
 
-    truthPay = round2(truthPay);
-    truthChg = round2(truthChg);
+    const truthPay = round2(truthPayRaw);
+    const truthChg = round2(truthChgRaw);
 
     // Current totals from existing TSFIN (missing TSFIN rows count as 0)
-    let currentPay = 0;
-    let currentChg = 0;
+    let currentPayRaw = 0;
+    let currentChgRaw = 0;
 
     for (const tsId of tsIdsLocal) {
       const fin = finByTsId.get(tsId);
       if (!fin) continue;
-      currentPay += Number(fin.total_pay_ex_vat || 0);
-      currentChg += Number(fin.total_charge_ex_vat || 0);
+      currentPayRaw += Number(fin.total_pay_ex_vat || 0);
+      currentChgRaw += Number(fin.total_charge_ex_vat || 0);
     }
-    currentPay = round2(currentPay);
-    currentChg = round2(currentChg);
+
+    const currentPay = round2(currentPayRaw);
+    const currentChg = round2(currentChgRaw);
+
+    // ✅ FIX: compare raw deltas (pre-rounding) to avoid false “needs overwrite” classification.
+    const deltaPayRaw = (Number(truthPayRaw) || 0) - (Number(currentPayRaw) || 0);
+    const deltaChgRaw = (Number(truthChgRaw) || 0) - (Number(currentChgRaw) || 0);
 
     const deltaPay = round2(truthPay - currentPay);
     const deltaChg = round2(truthChg - currentChg);
-    const tol = 0.01;
+
+    // ✅ Slightly more tolerant than 0.01 to avoid rounding noise causing UPDATE_* when nothing actually changed.
+    const tol = 0.02;
 
     const baseTsId = baseWeek?.timesheet_id || null;
     const baseTs   = baseTsId ? tsById.get(baseTsId) : null;
@@ -30799,7 +30807,7 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
 
     // No base timesheet yet
     if (!baseTsId) {
-      if (Math.abs(truthPay) < tol && Math.abs(truthChg) < tol) {
+      if (Math.abs(deltaPayRaw) < tol && Math.abs(deltaChgRaw) < tol) {
         result.action = 'SKIP_ALREADY_PROCESSED';
         result.reason = 'No weekly timesheet yet and truth totals are zero – nothing to create.';
         result.default_selected = false;
@@ -30811,9 +30819,8 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
       return result;
     }
 
-    // Base TS exists: if totals already match, skip
-    // NOTE: If TSFIN is missing, current totals are 0 so this condition won't trigger; we'll classify as UPDATE_* and rebuild.
-    if (Math.abs(deltaPay) < tol && Math.abs(deltaChg) < tol) {
+    // ✅ Base TS exists: if totals already match, skip (raw compare avoids rounding noise)
+    if (Math.abs(deltaPayRaw) < tol && Math.abs(deltaChgRaw) < tol) {
       result.action = 'SKIP_ALREADY_PROCESSED';
       result.reason = 'Timesheet and existing adjustments already match NHSP/HealthRoster – nothing further to do.';
       result.default_selected = false;
@@ -31012,7 +31019,6 @@ async function classifyWeeklyImportRows(env, importId, { source_system }) {
     rows: previewRows
   };
 }
-
 
 
 async function classifyWeeklyImportRowsLegacy(env, importId, { source_system }) {
