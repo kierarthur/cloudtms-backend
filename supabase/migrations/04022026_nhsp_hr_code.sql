@@ -995,8 +995,9 @@ begin
             'g'
           );
 
-        v_hash_hex := encode(digest(convert_to(v_booking_base, 'utf8'), 'sha256'), 'hex');
-        v_booking_id := 'bk_' || substr(v_hash_hex, 1, 16);
+v_hash_hex := encode(extensions.digest(convert_to(v_booking_base, 'utf8'), 'sha256'::text), 'hex');
+v_booking_id := 'bk_' || substr(v_hash_hex, 1, 16);
+
 
         begin
           insert into public.timesheets(
@@ -2929,8 +2930,9 @@ begin
         'correction_id=' || coalesce(v_correction_id,'') || '|' ||
         'correction_kind=' || v_kind;
 
-      v_hash_hex := substring(encode(digest(convert_to(v_booking_base, 'utf8'), 'sha256'), 'hex') from 1 for 16);
-      v_booking_id := 'bk_' || v_hash_hex;
+  v_hash_hex := substring(encode(extensions.digest(convert_to(v_booking_base, 'utf8'), 'sha256'::text), 'hex') from 1 for 16);
+v_booking_id := 'bk_' || v_hash_hex;
+
 
       -- Ensure base week exists (seq=0) for this contract/week (do not assume it exists)
       insert into public.contract_weeks(
@@ -3726,8 +3728,9 @@ begin
       'role=' || v_role_norm;
 
     -- Use convert_to(...,'utf8') to ensure digest input is bytea (pgcrypto-safe)
-    v_hash_hex := substring(encode(digest(convert_to(v_booking_base, 'utf8'), 'sha256'), 'hex') from 1 for 16);
-    v_booking_id := 'bk_' || v_hash_hex;
+v_hash_hex := substring(encode(extensions.digest(convert_to(v_booking_base, 'utf8'), 'sha256'::text), 'hex') from 1 for 16);
+v_booking_id := 'bk_' || v_hash_hex;
+
 
     -- Ensure base week exists (additional_seq=0, is_adjustment=false)
     v_base_week_id := null;
@@ -5693,8 +5696,9 @@ begin
     'correction_id=' || coalesce(v_correction_id,'') || '|' ||
     'correction_kind=' || v_kind;
 
-  v_hash_hex := substring(encode(digest(convert_to(v_booking_base, 'utf8'), 'sha256'), 'hex') from 1 for 16);
-  v_booking_id := 'bk_' || v_hash_hex;
+v_hash_hex := substring(encode(extensions.digest(convert_to(v_booking_base, 'utf8'), 'sha256'::text), 'hex') from 1 for 16);
+v_booking_id := 'bk_' || v_hash_hex;
+
 
   -- Ensure base contract_week exists (seq=0) without altering defaults
   insert into public.contract_weeks(contract_id, week_ending_date, additional_seq)
