@@ -1214,7 +1214,6 @@ exception when others then
   raise;
 end;
 $$;
-
 create or replace function public.hr_weekly_apply_transactional(
   p_import_id uuid,
   p_payload jsonb,
@@ -1316,13 +1315,27 @@ declare
 
   v_sample_force_keys jsonb := '[]'::jsonb;
   v_sample_cancel_shift_ids jsonb := '[]'::jsonb;
+  v_selected_action_ids_sample jsonb := '[]'::jsonb;
+
+  v_mode_b_phase1_called boolean := false;
+  v_mode_b_phase15_called boolean := false;
+  v_mode_b_cancellations_called boolean := false;
+  v_mode_b_phase3_called boolean := false;
+
+  v_mode_b_should_run_phase1 boolean := false;
+  v_mode_b_should_run_phase15 boolean := false;
+  v_mode_b_should_run_cancellations boolean := false;
+  v_mode_b_should_run_phase3 boolean := false;
+
+  v_phase1_shifts_created int := null;
+  v_phase1_shifts_updated int := null;
 
   v_last_shift_id uuid := null;
 
   v_sqlstate text;
   v_err text;
 begin
-  v_steps := v_steps || jsonb_build_array('START');
+  v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','START'));
 
   -- ─────────────────────────────────────────────
   -- 0) Validate import + header fields
@@ -1349,7 +1362,7 @@ begin
     raise exception 'hr_weekly_apply_transactional: import % missing client_id.', p_import_id;
   end if;
 
-  v_steps := v_steps || jsonb_build_array('IMPORT_OK');
+  v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','IMPORT_OK','client_id',v_import_client_id::text));
 
   -- ─────────────────────────────────────────────
   -- 1) Parse and normalize selection payload (ROW:/CANCEL:)
@@ -1407,10 +1420,27 @@ begin
   v_selected_action_ids_count := coalesce(array_length(v_selected_action_ids, 1), 0);
   v_selected_row_keys_count := coalesce(array_length(v_selected_truth_keys, 1), 0);
   v_selected_cancel_shift_ids_count := coalesce(array_length(v_selected_cancel_shift_ids, 1), 0);
-
   v_email_actions_count := jsonb_array_length(v_email_actions);
 
-  v_steps := v_steps || jsonb_build_array('SELECTION_PARSED');
+  select to_jsonb(coalesce(array_agg(x.a), array[]::text[]))
+  into v_selected_action_ids_sample
+  from (
+    select a as a
+    from unnest(coalesce(v_selected_action_ids, array[]::text[])) as a
+    order by a
+    limit 20
+  ) as x;
+
+  v_steps := v_steps || jsonb_build_array(
+    jsonb_build_object(
+      'step','SELECTION_PARSED',
+      'selected_action_ids_count', v_selected_action_ids_count,
+      'selected_row_keys_count', v_selected_row_keys_count,
+      'selected_cancel_shift_ids_count', v_selected_cancel_shift_ids_count,
+      'email_actions_count', v_email_actions_count,
+      'selected_action_ids_sample', v_selected_action_ids_sample
+    )
+  );
 
   -- ─────────────────────────────────────────────
   -- 2) Load weekly_import_phase2 + compute per-group MODE_A/MODE_B
@@ -1519,7 +1549,13 @@ begin
       on mb.external_row_key = k.external_row_key
   ) as k;
 
-  v_steps := v_steps || jsonb_build_array('PHASE2_OK_LOADED');
+  v_steps := v_steps || jsonb_build_array(
+    jsonb_build_object(
+      'step','PHASE2_OK_LOADED',
+      'mode_a_ok_keys_total', v_mode_a_ok_keys_total,
+      'mode_b_ok_keys_total', v_mode_b_ok_keys_total
+    )
+  );
 
   -- ─────────────────────────────────────────────
   -- 3) MODE_B tick = PROCEED (no decisions)
@@ -1540,212 +1576,321 @@ begin
 
   v_force_keys_count := coalesce(array_length(v_force_keys_final, 1), 0);
   v_skip_keys_count := coalesce(array_length(v_skip_keys_final, 1), 0);
-
-  v_steps := v_steps || jsonb_build_array('TICK_PROCEED_KEYS_READY');
-
-  -- ─────────────────────────────────────────────
-  -- 4) Partition invoiced vs non-invoiced changed-hours keys (selected MODE_B keys only)
-  -- ─────────────────────────────────────────────
-  create temporary table tmp_changed_sel on commit drop as
-  select
-    ch.external_row_key,
-    ch.is_invoiced
-  from public.weekly_import_changed_hours_phase3(p_import_id := p_import_id, p_system_type := 'HEALTHROSTER') as ch
-  where ch.external_row_key = any(coalesce(v_force_keys_final, array[]::text[]));
-
-  select coalesce(array_agg(cs.external_row_key order by cs.external_row_key), array[]::text[])
-  into v_invoiced_changed_keys
-  from tmp_changed_sel cs
-  where cs.is_invoiced is true;
-
-  select coalesce(array_agg(cs.external_row_key order by cs.external_row_key), array[]::text[])
-  into v_not_invoiced_changed_keys
-  from tmp_changed_sel cs
-  where cs.is_invoiced is false;
-
-  v_invoiced_changed_keys_count := coalesce(array_length(v_invoiced_changed_keys, 1), 0);
-  v_not_invoiced_changed_keys_count := coalesce(array_length(v_not_invoiced_changed_keys, 1), 0);
-
-  v_steps := v_steps || jsonb_build_array('CHANGED_HOURS_PARTITIONED');
-
-  -- ─────────────────────────────────────────────
-  -- 5) Policy A replacement-day enforcement (MODE_B only)
-  -- ─────────────────────────────────────────────
-  create temporary table tmp_selected_replacement_keys(
-    candidate_id uuid,
-    client_id uuid,
-    old_work_date date,
-    replacement_day_key text
-  ) on commit drop;
-
-  if array_length(v_force_keys_final, 1) is not null then
-    create temporary table tmp_sel_truth_p2 on commit drop as
-    select
-      m.external_row_key,
-      m.candidate_id,
-      m.client_id,
-      m.work_date as import_work_date
-    from tmp_p2_ok_mode m
-    where m.mode = 'MODE_B'
-      and m.external_row_key = any(v_force_keys_final);
-
-    create temporary table tmp_existing_by_key on commit drop as
-    select distinct on (ns.external_row_key)
-      ns.external_row_key,
-      ns.id as shift_id,
-      ns.candidate_id as candidate_id,
-      ns.client_id as client_id,
-      ns.work_date as old_work_date
-    from public.nhsp_shifts ns
-    where ns.source_system = 'HEALTHROSTER'::public.hr_source_enum
-      and ns.client_id = v_import_client_id
-      and ns.cancelled_at_utc is null
-      and ns.external_row_key = any(v_force_keys_final)
-      and ns.work_date is not null
-    order by ns.external_row_key, ns.updated_at desc nulls last, ns.created_at desc nulls last;
-
-    insert into tmp_selected_replacement_keys(candidate_id, client_id, old_work_date, replacement_day_key)
-    select distinct
-      (coalesce(ex.candidate_id, st.candidate_id))::uuid as candidate_id,
-      (coalesce(ex.client_id, st.client_id))::uuid as client_id,
-      ex.old_work_date as old_work_date,
-      ((coalesce(ex.candidate_id, st.candidate_id))::text || '|' ||
-       (coalesce(ex.client_id, st.client_id))::text || '|' ||
-       (ex.old_work_date)::text) as replacement_day_key
-    from tmp_sel_truth_p2 st
-    join tmp_existing_by_key ex
-      on ex.external_row_key = st.external_row_key
-    where ex.old_work_date is not null
-      and st.import_work_date is not null
-      and ex.old_work_date <> st.import_work_date;
-
-    select coalesce(array_agg(x::text), array[]::text[])
-    into v_selected_cancel_shift_id_set
-    from unnest(v_selected_cancel_shift_ids) as x;
-
-    if exists (select 1 from tmp_selected_replacement_keys) then
-      create temporary table tmp_required_cancel_ids on commit drop as
-      select distinct
-        rk.replacement_day_key,
-        ns2.id as shift_id
-      from tmp_selected_replacement_keys rk
-      join public.nhsp_shifts ns2
-        on ns2.source_system = 'HEALTHROSTER'::public.hr_source_enum
-       and ns2.client_id = v_import_client_id
-       and ns2.cancelled_at_utc is null
-       and ns2.candidate_id = rk.candidate_id
-       and ns2.client_id = rk.client_id
-       and ns2.work_date = rk.old_work_date;
-
-      if exists (
-        select 1
-        from tmp_required_cancel_ids rc
-        left join unnest(v_selected_cancel_shift_id_set) as sel(shift_id_text)
-          on sel.shift_id_text = rc.shift_id::text
-        where sel.shift_id_text is null
-      ) then
-        raise exception 'hr_weekly_apply_transactional: Policy A violation (replacement-day selected without selecting all required cancellations).';
-      end if;
-    end if;
-  end if;
-
-  v_steps := v_steps || jsonb_build_array('POLICY_A_OK');
-
-  -- ─────────────────────────────────────────────
-  -- 6) Changed-hours correction series (MODE_B): invoiced changed keys only
-  -- ─────────────────────────────────────────────
-  if array_length(v_invoiced_changed_keys, 1) is not null then
-    select public.hr_weekly_phase3_apply_adjustment_truth(
-      p_import_id := p_import_id,
-      p_selected_external_row_keys := v_invoiced_changed_keys,
-      p_actor_user_id := p_actor_user_id
-    )
-    into v_phase3_result;
-  end if;
-
-  v_phase3_created_count := jsonb_array_length(coalesce(v_phase3_result->'created_timesheet_ids', '[]'::jsonb));
-  v_phase3_updated_count := jsonb_array_length(coalesce(v_phase3_result->'updated_timesheet_ids', '[]'::jsonb));
-
-  v_steps := v_steps || jsonb_build_array('PHASE3_CORRECTIONS_DONE');
-
-  -- ─────────────────────────────────────────────
-  -- 7) MODE_B Phase 1 + Phase 1.5 (import-authoritative apply)
-  -- ─────────────────────────────────────────────
-  if array_length(v_force_keys_final, 1) is not null then
-    select public.hr_autoprocess_apply_phase1(
-      import_id := p_import_id,
-      selected_group_ids := array[]::text[],
-      p_skip_external_row_keys := v_skip_keys_final,
-      p_force_overwrite_external_row_keys := v_force_keys_final
-    )
-    into v_phase1_result;
-
-    create temporary table tmp_phase15_rows on commit drop as
-    select *
-    from public.weekly_import_apply_phase2(p_import_id := p_import_id, p_system_type := 'HR_WEEKLY');
-
-    select count(*)::int
-    into v_phase15_ok
-    from tmp_phase15_rows r
-    where upper(coalesce(r.action::text,'')) = 'OK';
-
-    select count(*)::int
-    into v_phase15_updated
-    from tmp_phase15_rows r
-    where coalesce(r.shift_updated,false) is true;
-  end if;
-
-  v_steps := v_steps || jsonb_build_array('PHASE1_PHASE15_DONE');
-
-  -- ─────────────────────────────────────────────
-  -- 8) MODE_B Cancellations: explicit selected shift_ids only
-  -- ─────────────────────────────────────────────
   v_cancellations_count := coalesce(array_length(v_selected_cancel_shift_ids, 1), 0);
 
-  if array_length(v_selected_cancel_shift_ids, 1) is not null then
-    create temporary table tmp_cancel_meta on commit drop as
+  v_mode_b_should_run_phase1 := (v_force_keys_count > 0);
+  v_mode_b_should_run_phase15 := (v_force_keys_count > 0);
+  v_mode_b_should_run_cancellations := (v_cancellations_count > 0);
+
+  v_steps := v_steps || jsonb_build_array(
+    jsonb_build_object(
+      'step','TICK_PROCEED_KEYS_READY',
+      'mode_b_force_keys_count', v_force_keys_count,
+      'mode_b_skip_keys_count', v_skip_keys_count,
+      'mode_b_cancellations_count', v_cancellations_count
+    )
+  );
+
+  -- ─────────────────────────────────────────────
+  -- 4) MODE_B: do NOT run truth mutation work when there is nothing to apply
+  --     (no selected ROW keys and no selected cancellations)
+  -- ─────────────────────────────────────────────
+  if (v_mode_b_should_run_phase1 is false) and (v_mode_b_should_run_cancellations is false) then
+    -- No MODE_B apply, but MODE_A validations + email state still run.
+    v_steps := v_steps || jsonb_build_array(
+      jsonb_build_object(
+        'step','MODE_B_NOOP_GUARD',
+        'reason','NO_SELECTION_NO_CANCELLATION => SKIP_MODE_B_TRUTH_MUTATION',
+        'should_run_phase1', false,
+        'should_run_phase15', false,
+        'should_run_phase3', false,
+        'should_run_cancellations', false
+      )
+    );
+  else
+    -- ─────────────────────────────────────────────
+    -- 4.1) Partition invoiced vs non-invoiced changed-hours keys (selected MODE_B keys only)
+    -- ─────────────────────────────────────────────
+    create temporary table tmp_changed_sel on commit drop as
     select
-      ns.id as shift_id,
-      ns.candidate_id,
-      ns.client_id,
-      ns.work_date
-    from public.nhsp_shifts ns
-    where ns.id = any(v_selected_cancel_shift_ids);
+      ch.external_row_key,
+      ch.is_invoiced
+    from public.weekly_import_changed_hours_phase3(p_import_id := p_import_id, p_system_type := 'HEALTHROSTER') as ch
+    where ch.external_row_key = any(coalesce(v_force_keys_final, array[]::text[]));
 
-    create temporary table tmp_selected_rep_keys_text on commit drop as
-    select distinct
-      rk.replacement_day_key
-    from tmp_selected_replacement_keys rk;
+    select coalesce(array_agg(cs.external_row_key order by cs.external_row_key), array[]::text[])
+    into v_invoiced_changed_keys
+    from tmp_changed_sel cs
+    where cs.is_invoiced is true;
 
-    select coalesce(
-      jsonb_agg(
-        jsonb_build_object(
-          'shift_id', cm.shift_id::text,
-          'reason',
-            case
-              when exists (
-                select 1
-                from tmp_selected_rep_keys_text sr
-                where sr.replacement_day_key = (cm.candidate_id::text || '|' || cm.client_id::text || '|' || cm.work_date::text)
-              ) then 'REPLACEMENT_DAY'
-              else 'MISSING_FROM_IMPORT'
-            end
-        )
-      ),
-      '[]'::jsonb
-    )
-    into v_cancel_actions
-    from tmp_cancel_meta cm;
+    select coalesce(array_agg(cs.external_row_key order by cs.external_row_key), array[]::text[])
+    into v_not_invoiced_changed_keys
+    from tmp_changed_sel cs
+    where cs.is_invoiced is false;
 
-    select public.weekly_import_apply_cancellations(
-      p_import_id := p_import_id,
-      p_actions := v_cancel_actions,
-      p_actor_user_id := p_actor_user_id
-    )
-    into v_cancellations_result;
+    v_invoiced_changed_keys_count := coalesce(array_length(v_invoiced_changed_keys, 1), 0);
+    v_not_invoiced_changed_keys_count := coalesce(array_length(v_not_invoiced_changed_keys, 1), 0);
+
+    v_mode_b_should_run_phase3 := (v_invoiced_changed_keys_count > 0);
+
+    v_steps := v_steps || jsonb_build_array(
+      jsonb_build_object(
+        'step','CHANGED_HOURS_PARTITIONED',
+        'invoiced_changed_keys_count', v_invoiced_changed_keys_count,
+        'not_invoiced_changed_keys_count', v_not_invoiced_changed_keys_count
+      )
+    );
+
+    -- ─────────────────────────────────────────────
+    -- 4.2) Policy A replacement-day enforcement (MODE_B only)
+    -- ─────────────────────────────────────────────
+    create temporary table tmp_selected_replacement_keys(
+      candidate_id uuid,
+      client_id uuid,
+      old_work_date date,
+      replacement_day_key text
+    ) on commit drop;
+
+    if array_length(v_force_keys_final, 1) is not null then
+      create temporary table tmp_sel_truth_p2 on commit drop as
+      select
+        m.external_row_key,
+        m.candidate_id,
+        m.client_id,
+        m.work_date as import_work_date
+      from tmp_p2_ok_mode m
+      where m.mode = 'MODE_B'
+        and m.external_row_key = any(v_force_keys_final);
+
+      create temporary table tmp_existing_by_key on commit drop as
+      select distinct on (ns.external_row_key)
+        ns.external_row_key,
+        ns.id as shift_id,
+        ns.candidate_id as candidate_id,
+        ns.client_id as client_id,
+        ns.work_date as old_work_date
+      from public.nhsp_shifts ns
+      where ns.source_system = 'HEALTHROSTER'::public.hr_source_enum
+        and ns.client_id = v_import_client_id
+        and ns.cancelled_at_utc is null
+        and ns.external_row_key = any(v_force_keys_final)
+        and ns.work_date is not null
+      order by ns.external_row_key, ns.updated_at desc nulls last, ns.created_at desc nulls last;
+
+      insert into tmp_selected_replacement_keys(candidate_id, client_id, old_work_date, replacement_day_key)
+      select distinct
+        (coalesce(ex.candidate_id, st.candidate_id))::uuid as candidate_id,
+        (coalesce(ex.client_id, st.client_id))::uuid as client_id,
+        ex.old_work_date as old_work_date,
+        ((coalesce(ex.candidate_id, st.candidate_id))::text || '|' ||
+         (coalesce(ex.client_id, st.client_id))::text || '|' ||
+         (ex.old_work_date)::text) as replacement_day_key
+      from tmp_sel_truth_p2 st
+      join tmp_existing_by_key ex
+        on ex.external_row_key = st.external_row_key
+      where ex.old_work_date is not null
+        and st.import_work_date is not null
+        and ex.old_work_date <> st.import_work_date;
+
+      select coalesce(array_agg(x::text), array[]::text[])
+      into v_selected_cancel_shift_id_set
+      from unnest(v_selected_cancel_shift_ids) as x;
+
+      if exists (select 1 from tmp_selected_replacement_keys) then
+        create temporary table tmp_required_cancel_ids on commit drop as
+        select distinct
+          rk.replacement_day_key,
+          ns2.id as shift_id
+        from tmp_selected_replacement_keys rk
+        join public.nhsp_shifts ns2
+          on ns2.source_system = 'HEALTHROSTER'::public.hr_source_enum
+         and ns2.client_id = v_import_client_id
+         and ns2.cancelled_at_utc is null
+         and ns2.candidate_id = rk.candidate_id
+         and ns2.client_id = rk.client_id
+         and ns2.work_date = rk.old_work_date;
+
+        if exists (
+          select 1
+          from tmp_required_cancel_ids rc
+          left join unnest(v_selected_cancel_shift_id_set) as sel(shift_id_text)
+            on sel.shift_id_text = rc.shift_id::text
+          where sel.shift_id_text is null
+        ) then
+          raise exception 'hr_weekly_apply_transactional: Policy A violation (replacement-day selected without selecting all required cancellations).';
+        end if;
+      end if;
+    end if;
+
+    v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','POLICY_A_OK'));
+
+    -- ─────────────────────────────────────────────
+    -- 4.3) Changed-hours correction series (MODE_B): invoiced changed keys only
+    -- ─────────────────────────────────────────────
+    if v_mode_b_should_run_phase3 then
+      select public.hr_weekly_phase3_apply_adjustment_truth(
+        p_import_id := p_import_id,
+        p_selected_external_row_keys := v_invoiced_changed_keys,
+        p_actor_user_id := p_actor_user_id
+      )
+      into v_phase3_result;
+
+      v_mode_b_phase3_called := true;
+    end if;
+
+    v_phase3_created_count := jsonb_array_length(coalesce(v_phase3_result->'created_timesheet_ids', '[]'::jsonb));
+    v_phase3_updated_count := jsonb_array_length(coalesce(v_phase3_result->'updated_timesheet_ids', '[]'::jsonb));
+
+    v_steps := v_steps || jsonb_build_array(
+      jsonb_build_object(
+        'step','PHASE3_CORRECTIONS_DONE',
+        'phase3_called', v_mode_b_phase3_called,
+        'phase3_created_count', v_phase3_created_count,
+        'phase3_updated_count', v_phase3_updated_count
+      )
+    );
+
+    -- ─────────────────────────────────────────────
+    -- 4.4) MODE_B Phase 1 + Phase 1.5 (import-authoritative apply)
+    -- ─────────────────────────────────────────────
+    if v_mode_b_should_run_phase1 then
+      select to_jsonb(coalesce(array_agg(x.k), array[]::text[]))
+      into v_sample_force_keys
+      from (
+        select k as k
+        from unnest(coalesce(v_force_keys_final, array[]::text[])) as k
+        order by k
+        limit 20
+      ) as x;
+
+      select public.hr_autoprocess_apply_phase1(
+        import_id := p_import_id,
+        selected_group_ids := array[]::text[],
+        p_skip_external_row_keys := v_skip_keys_final,
+        p_force_overwrite_external_row_keys := v_force_keys_final
+      )
+      into v_phase1_result;
+
+      v_mode_b_phase1_called := true;
+
+      v_phase1_shifts_created :=
+        case
+          when v_phase1_result is not null
+           and jsonb_typeof(v_phase1_result) = 'object'
+           and (v_phase1_result ? 'shifts_created')
+           and (v_phase1_result->>'shifts_created') ~ '^[0-9]+$'
+          then (v_phase1_result->>'shifts_created')::int
+          else null
+        end;
+
+      v_phase1_shifts_updated :=
+        case
+          when v_phase1_result is not null
+           and jsonb_typeof(v_phase1_result) = 'object'
+           and (v_phase1_result ? 'shifts_updated')
+           and (v_phase1_result->>'shifts_updated') ~ '^[0-9]+$'
+          then (v_phase1_result->>'shifts_updated')::int
+          else null
+        end;
+
+      if v_mode_b_should_run_phase15 then
+        create temporary table tmp_phase15_rows on commit drop as
+        select *
+        from public.weekly_import_apply_phase2(p_import_id := p_import_id, p_system_type := 'HR_WEEKLY');
+
+        select count(*)::int
+        into v_phase15_ok
+        from tmp_phase15_rows r
+        where upper(coalesce(r.action::text,'')) = 'OK';
+
+        select count(*)::int
+        into v_phase15_updated
+        from tmp_phase15_rows r
+        where coalesce(r.shift_updated,false) is true;
+
+        v_mode_b_phase15_called := true;
+      end if;
+    end if;
+
+    v_steps := v_steps || jsonb_build_array(
+      jsonb_build_object(
+        'step','PHASE1_PHASE15_DONE',
+        'phase1_called', v_mode_b_phase1_called,
+        'phase15_called', v_mode_b_phase15_called,
+        'phase1_shifts_created', v_phase1_shifts_created,
+        'phase1_shifts_updated', v_phase1_shifts_updated,
+        'phase15_ok_rows', v_phase15_ok,
+        'phase15_shift_updated_rows', v_phase15_updated,
+        'phase1_force_keys_sample', v_sample_force_keys
+      )
+    );
+
+    -- ─────────────────────────────────────────────
+    -- 4.5) MODE_B Cancellations: explicit selected shift_ids only
+    -- ─────────────────────────────────────────────
+    if v_mode_b_should_run_cancellations then
+      create temporary table tmp_cancel_meta on commit drop as
+      select
+        ns.id as shift_id,
+        ns.candidate_id,
+        ns.client_id,
+        ns.work_date
+      from public.nhsp_shifts ns
+      where ns.id = any(v_selected_cancel_shift_ids);
+
+      create temporary table tmp_selected_rep_keys_text on commit drop as
+      select distinct
+        rk.replacement_day_key
+      from tmp_selected_replacement_keys rk;
+
+      select coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'shift_id', cm.shift_id::text,
+            'reason',
+              case
+                when exists (
+                  select 1
+                  from tmp_selected_rep_keys_text sr
+                  where sr.replacement_day_key = (cm.candidate_id::text || '|' || cm.client_id::text || '|' || cm.work_date::text)
+                ) then 'REPLACEMENT_DAY'
+                else 'MISSING_FROM_IMPORT'
+              end
+          )
+        ),
+        '[]'::jsonb
+      )
+      into v_cancel_actions
+      from tmp_cancel_meta cm;
+
+      select public.weekly_import_apply_cancellations(
+        p_import_id := p_import_id,
+        p_actions := v_cancel_actions,
+        p_actor_user_id := p_actor_user_id
+      )
+      into v_cancellations_result;
+
+      v_mode_b_cancellations_called := true;
+    end if;
+
+    select to_jsonb(coalesce(array_agg(y.s), array[]::text[]))
+    into v_sample_cancel_shift_ids
+    from (
+      select s::text as s
+      from unnest(coalesce(v_selected_cancel_shift_ids, array[]::uuid[])) as s
+      order by s::text
+      limit 20
+    ) as y;
+
+    v_steps := v_steps || jsonb_build_array(
+      jsonb_build_object(
+        'step','CANCELLATIONS_DONE',
+        'cancellations_called', v_mode_b_cancellations_called,
+        'selected_cancel_shift_ids_count', v_cancellations_count,
+        'sample_cancel_shift_ids', v_sample_cancel_shift_ids
+      )
+    );
   end if;
-
-  v_steps := v_steps || jsonb_build_array('CANCELLATIONS_DONE');
 
   -- ─────────────────────────────────────────────
   -- 9) MODE_A mirror ingestion (unchanged)
@@ -1759,7 +1904,7 @@ begin
     into v_mirror_result;
   end if;
 
-  v_steps := v_steps || jsonb_build_array('MODE_A_MIRROR_DONE');
+  v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','MODE_A_MIRROR_DONE'));
 
   -- ─────────────────────────────────────────────
   -- 10) MODE_A weekly validation upserts + email state (unchanged behaviour)
@@ -1920,85 +2065,99 @@ begin
 
   v_email_jobs_count := jsonb_array_length(coalesce(v_email_jobs, '[]'::jsonb));
 
-  v_steps := v_steps || jsonb_build_array('MODE_A_VALIDATIONS_DONE');
+  v_steps := v_steps || jsonb_build_array(
+    jsonb_build_object(
+      'step','MODE_A_VALIDATIONS_DONE',
+      'val_rows_count', v_val_rows_count,
+      'validations_upserted', v_validations_upserted,
+      'mismatched_timesheet_ids_count', coalesce(array_length(v_mismatched_tsids, 1), 0),
+      'email_actions_count', v_email_actions_count,
+      'email_jobs_count', v_email_jobs_count
+    )
+  );
 
   -- ─────────────────────────────────────────────
   -- 11) Compute affected_timesheet_ids (MODE_B only)
-  --     Include:
-  --       - correction timesheets (phase3 + cancellation corrections)
-  --       - base timesheets affected by in-place cancellation/detach
-  --       - base timesheets for selected non-invoiced changed rows
-  --     Exclude:
-  --       - base timesheets for invoiced changed rows (use correction timesheets instead)
   -- ─────────────────────────────────────────────
-  select coalesce(array_agg(k.external_row_key order by k.external_row_key), array[]::text[])
-  into v_force_keys_non_invoiced
-  from (
-    select distinct fk.external_row_key
-    from unnest(coalesce(v_force_keys_final, array[]::text[])) as fk(external_row_key)
-    left join unnest(coalesce(v_invoiced_changed_keys, array[]::text[])) as ik(external_row_key)
-      on ik.external_row_key = fk.external_row_key
-    where ik.external_row_key is null
-  ) as k;
-
-  create temporary table tmp_aff_ts(timesheet_id uuid) on commit drop;
-
-  insert into tmp_aff_ts(timesheet_id)
-  select (x.value)::uuid
-  from jsonb_array_elements_text(coalesce(v_cancellations_result->'affected_timesheet_ids', '[]'::jsonb)) as x(value)
-  where nullif(btrim(x.value), '') is not null;
-
-  insert into tmp_aff_ts(timesheet_id)
-  select (x2.value)::uuid
-  from jsonb_array_elements_text(coalesce(v_phase3_result->'created_timesheet_ids', '[]'::jsonb)) as x2(value)
-  where nullif(btrim(x2.value), '') is not null;
-
-  insert into tmp_aff_ts(timesheet_id)
-  select (x3.value)::uuid
-  from jsonb_array_elements_text(coalesce(v_phase3_result->'updated_timesheet_ids', '[]'::jsonb)) as x3(value)
-  where nullif(btrim(x3.value), '') is not null;
-
-  insert into tmp_aff_ts(timesheet_id)
-  select distinct ns.timesheet_id
-  from public.nhsp_shifts ns
-  where ns.source_system = 'HEALTHROSTER'::public.hr_source_enum
-    and ns.client_id = v_import_client_id
-    and ns.cancelled_at_utc is null
-    and ns.external_row_key = any(coalesce(v_force_keys_non_invoiced, array[]::text[]))
-    and ns.timesheet_id is not null;
-
-  select coalesce(array_agg(distinct a.timesheet_id order by a.timesheet_id), array[]::uuid[])
-  into v_affected_timesheet_ids
-  from tmp_aff_ts a
-  where a.timesheet_id is not null;
-
-  if array_length(v_affected_timesheet_ids, 1) is not null then
-    perform public.enqueue_ts_financials_priority(v_affected_timesheet_ids, 'CONTEXT_CHANGED'::public.ts_fin_reason_enum);
-  end if;
-
-  -- cancellation correction count (best-effort): count cancellation affected timesheets that are adjustments
-  if jsonb_array_length(coalesce(v_cancellations_result->'affected_timesheet_ids', '[]'::jsonb)) > 0 then
-    create temporary table tmp_cancel_aff_ts(ts_id uuid primary key) on commit drop;
-
-    insert into tmp_cancel_aff_ts(ts_id)
-    select distinct (x4.value)::uuid
-    from jsonb_array_elements_text(coalesce(v_cancellations_result->'affected_timesheet_ids', '[]'::jsonb)) as x4(value)
-    where nullif(btrim(x4.value), '') is not null
-    on conflict do nothing;
-
-    select count(*)::int
-    into v_cancel_adjustment_count
-    from tmp_cancel_aff_ts cts
-    join public.timesheets tts
-      on tts.timesheet_id = cts.ts_id
-    where tts.is_adjustment is true;
+  if (v_mode_b_should_run_phase1 is false) and (v_mode_b_should_run_cancellations is false) then
+    v_affected_timesheet_ids := array[]::uuid[];
+    v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','AFFECTED_TS_SKIPPED_MODE_B_NOOP'));
   else
-    v_cancel_adjustment_count := 0;
+    select coalesce(array_agg(k.external_row_key order by k.external_row_key), array[]::text[])
+    into v_force_keys_non_invoiced
+    from (
+      select distinct fk.external_row_key
+      from unnest(coalesce(v_force_keys_final, array[]::text[])) as fk(external_row_key)
+      left join unnest(coalesce(v_invoiced_changed_keys, array[]::text[])) as ik(external_row_key)
+        on ik.external_row_key = fk.external_row_key
+      where ik.external_row_key is null
+    ) as k;
+
+    create temporary table tmp_aff_ts(timesheet_id uuid) on commit drop;
+
+    insert into tmp_aff_ts(timesheet_id)
+    select (x.value)::uuid
+    from jsonb_array_elements_text(coalesce(v_cancellations_result->'affected_timesheet_ids', '[]'::jsonb)) as x(value)
+    where nullif(btrim(x.value), '') is not null;
+
+    insert into tmp_aff_ts(timesheet_id)
+    select (x2.value)::uuid
+    from jsonb_array_elements_text(coalesce(v_phase3_result->'created_timesheet_ids', '[]'::jsonb)) as x2(value)
+    where nullif(btrim(x2.value), '') is not null;
+
+    insert into tmp_aff_ts(timesheet_id)
+    select (x3.value)::uuid
+    from jsonb_array_elements_text(coalesce(v_phase3_result->'updated_timesheet_ids', '[]'::jsonb)) as x3(value)
+    where nullif(btrim(x3.value), '') is not null;
+
+    insert into tmp_aff_ts(timesheet_id)
+    select distinct ns.timesheet_id
+    from public.nhsp_shifts ns
+    where ns.source_system = 'HEALTHROSTER'::public.hr_source_enum
+      and ns.client_id = v_import_client_id
+      and ns.cancelled_at_utc is null
+      and ns.external_row_key = any(coalesce(v_force_keys_non_invoiced, array[]::text[]))
+      and ns.timesheet_id is not null;
+
+    select coalesce(array_agg(distinct a.timesheet_id order by a.timesheet_id), array[]::uuid[])
+    into v_affected_timesheet_ids
+    from tmp_aff_ts a
+    where a.timesheet_id is not null;
+
+    if array_length(v_affected_timesheet_ids, 1) is not null then
+      perform public.enqueue_ts_financials_priority(v_affected_timesheet_ids, 'CONTEXT_CHANGED'::public.ts_fin_reason_enum);
+    end if;
+
+    if jsonb_array_length(coalesce(v_cancellations_result->'affected_timesheet_ids', '[]'::jsonb)) > 0 then
+      create temporary table tmp_cancel_aff_ts(ts_id uuid primary key) on commit drop;
+
+      insert into tmp_cancel_aff_ts(ts_id)
+      select distinct (x4.value)::uuid
+      from jsonb_array_elements_text(coalesce(v_cancellations_result->'affected_timesheet_ids', '[]'::jsonb)) as x4(value)
+      where nullif(btrim(x4.value), '') is not null
+      on conflict do nothing;
+
+      select count(*)::int
+      into v_cancel_adjustment_count
+      from tmp_cancel_aff_ts cts
+      join public.timesheets tts
+        on tts.timesheet_id = cts.ts_id
+      where tts.is_adjustment is true;
+    else
+      v_cancel_adjustment_count := 0;
+    end if;
+
+    v_correction_timesheets_created_count := (v_phase3_created_count + v_phase3_updated_count + coalesce(v_cancel_adjustment_count, 0));
+
+    v_steps := v_steps || jsonb_build_array(
+      jsonb_build_object(
+        'step','AFFECTED_TS_DONE',
+        'affected_timesheet_ids_count', coalesce(array_length(v_affected_timesheet_ids, 1), 0),
+        'cancel_adjustment_count', v_cancel_adjustment_count,
+        'correction_timesheets_created_count', v_correction_timesheets_created_count
+      )
+    );
   end if;
-
-  v_correction_timesheets_created_count := (v_phase3_created_count + v_phase3_updated_count + coalesce(v_cancel_adjustment_count, 0));
-
-  v_steps := v_steps || jsonb_build_array('AFFECTED_TS_DONE');
 
   -- ─────────────────────────────────────────────
   -- 12) Mark import applied (inside transaction)
@@ -2009,12 +2168,10 @@ begin
     applied_at = v_now
   where hi3.id = p_import_id;
 
-  v_steps := v_steps || jsonb_build_array('IMPORT_APPLIED');
+  v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','IMPORT_APPLIED'));
 
   -- ─────────────────────────────────────────────
   -- 13) Logging (invoice_debug only, via _imp_debug_audit)
-  --     - Validations debug
-  --     - Apply debug
   -- ─────────────────────────────────────────────
   perform public._imp_debug_audit(
     p_actor_user_id,
@@ -2060,10 +2217,12 @@ begin
     jsonb_build_object(
       'import_id', p_import_id::text,
       'client_id', v_import_client_id::text,
+      'steps', v_steps,
 
       'selected_action_ids_count', v_selected_action_ids_count,
       'selected_row_keys_count', v_selected_row_keys_count,
       'selected_cancel_shift_ids_count', v_selected_cancel_shift_ids_count,
+      'selected_action_ids_sample', v_selected_action_ids_sample,
 
       'mode_a_ok_keys_total', v_mode_a_ok_keys_total,
       'mode_b_ok_keys_total', v_mode_b_ok_keys_total,
@@ -2075,6 +2234,14 @@ begin
       'not_invoiced_changed_keys_count', v_not_invoiced_changed_keys_count,
 
       'cancellations_count', v_cancellations_count,
+
+      'phase3_called', v_mode_b_phase3_called,
+      'phase1_called', v_mode_b_phase1_called,
+      'phase15_called', v_mode_b_phase15_called,
+      'cancellations_called', v_mode_b_cancellations_called,
+
+      'phase1_shifts_created', v_phase1_shifts_created,
+      'phase1_shifts_updated', v_phase1_shifts_updated,
 
       'phase3_created_count', v_phase3_created_count,
       'phase3_updated_count', v_phase3_updated_count,
@@ -2147,7 +2314,6 @@ exception when others then
   raise;
 end;
 $$;
-
 
 
 
