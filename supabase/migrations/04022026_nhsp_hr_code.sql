@@ -3849,7 +3849,6 @@ exception when others then
 end;
 $$;
 
-
 create or replace function public.nhsp_weekly_apply_transactional(
   p_import_id uuid,
   p_payload jsonb,
@@ -3870,7 +3869,6 @@ declare
   v_payload jsonb := coalesce(p_payload, '{}'::jsonb);
   v_actions_json jsonb := coalesce(v_payload->'selected_action_ids', '[]'::jsonb);
   v_actions2_json jsonb := coalesce(v_payload->'selected_actions', '[]'::jsonb);
-  v_decisions jsonb := coalesce(v_payload->'decisions', '{}'::jsonb);
 
   -- normalized selections
   v_selected_action_ids text[] := array[]::text[];
@@ -3887,17 +3885,17 @@ declare
   v_force_keys_final text[] := array[]::text[];
   v_skip_keys_final text[] := array[]::text[];
 
-  -- phase3 decisions (selection-aware)
-  v_phase3_skip_keys text[] := array[]::text[];
-  v_phase3_proceed_keys text[] := array[]::text[];
-  v_phase3_result jsonb := null;
+  -- changed-hours partition (selected keys only)
+  v_invoiced_changed_keys text[] := array[]::text[];
+  v_not_invoiced_changed_keys text[] := array[]::text[];
 
-  -- phase1 / phase1.5
+  -- phase3 / phase1 / phase1.5
+  v_phase3_result jsonb := null;
   v_phase1_result jsonb := null;
   v_phase15_ok int := 0;
   v_phase15_updated int := 0;
 
-  -- policy A replacement-day enforcement
+  -- policy A replacement-day enforcement + cancellation reasoning
   v_selected_cancel_shift_id_set text[] := array[]::text[];
 
   -- cancellations
@@ -3906,8 +3904,36 @@ declare
 
   -- affected timesheets
   v_affected_timesheet_ids uuid[] := array[]::uuid[];
+  v_force_keys_non_invoiced text[] := array[]::text[];
 
+  -- debug / audit
+  v_sample_keys jsonb := '[]'::jsonb;
+  v_sample_shift_ids jsonb := '[]'::jsonb;
+  v_steps jsonb := '[]'::jsonb;
+
+  v_selected_action_ids_count int := 0;
+  v_selected_row_keys_count int := 0;
+  v_selected_cancel_shift_ids_count int := 0;
+
+  v_ok_keys_total int := 0;
+  v_force_keys_count int := 0;
+  v_skip_keys_count int := 0;
+
+  v_invoiced_changed_keys_count int := 0;
+  v_not_invoiced_changed_keys_count int := 0;
+
+  v_cancellations_count int := 0;
+
+  v_phase3_created_count int := 0;
+  v_phase3_updated_count int := 0;
+  v_cancel_adjustment_count int := 0;
+  v_correction_timesheets_created_count int := 0;
+
+  v_sqlstate text;
+  v_err text;
 begin
+  v_steps := v_steps || jsonb_build_array('START');
+
   -- ─────────────────────────────────────────────
   -- 0) Validate import exists and is NHSP
   -- ─────────────────────────────────────────────
@@ -3925,6 +3951,8 @@ begin
     raise exception 'nhsp_weekly_apply_transactional: import % source_system=%; expected NHSP.', p_import_id, v_import_source_system;
   end if;
 
+  v_steps := v_steps || jsonb_build_array('IMPORT_OK');
+
   -- ─────────────────────────────────────────────
   -- 1) Parse and normalize selection payload (ROW:/CANCEL:)
   -- ─────────────────────────────────────────────
@@ -3934,10 +3962,6 @@ begin
 
   if jsonb_typeof(v_actions2_json) <> 'array' then
     raise exception 'nhsp_weekly_apply_transactional: selected_actions must be a JSON array.';
-  end if;
-
-  if jsonb_typeof(v_decisions) <> 'object' then
-    raise exception 'nhsp_weekly_apply_transactional: decisions must be a JSON object.';
   end if;
 
   create temporary table tmp_sel_ids(
@@ -3978,6 +4002,12 @@ begin
   from tmp_sel_ids s
   where s.action_id like 'CANCEL:%';
 
+  v_selected_action_ids_count := coalesce(array_length(v_selected_action_ids, 1), 0);
+  v_selected_row_keys_count := coalesce(array_length(v_selected_truth_keys, 1), 0);
+  v_selected_cancel_shift_ids_count := coalesce(array_length(v_selected_cancel_shift_ids, 1), 0);
+
+  v_steps := v_steps || jsonb_build_array('SELECTION_PARSED');
+
   -- ─────────────────────────────────────────────
   -- 2) Load weekly_import_phase2 for NHSP and constrain selection to OK rows
   -- ─────────────────────────────────────────────
@@ -3993,7 +4023,6 @@ begin
     p2.candidate_id,
     p2.client_id,
     p2.contract_id,
-    p2.week_ending_date,
     upper(coalesce(p2.action::text,'')) as action
   from tmp_p2_all p2
   where upper(coalesce(p2.action::text,'')) = 'OK'
@@ -4001,12 +4030,13 @@ begin
     and p2.candidate_id is not null
     and p2.client_id is not null
     and p2.contract_id is not null
-    and p2.week_ending_date is not null
     and p2.work_date is not null;
 
   select coalesce(array_agg(distinct p2.external_row_key order by p2.external_row_key), array[]::text[])
   into v_all_ok_external_keys
   from tmp_p2_ok p2;
+
+  v_ok_keys_total := coalesce(array_length(v_all_ok_external_keys, 1), 0);
 
   -- selected truth keys must be present in OK universe
   if exists (
@@ -4028,121 +4058,8 @@ begin
       on okk.external_row_key = k.external_row_key
   ) as k;
 
-  -- ─────────────────────────────────────────────
-  -- 3) Phase 3 decision validation (selection-aware) + derive skip/proceed keys
-  --     NOTE: weekly_import_changed_hours_phase3 is already filtered to requires_any_decision=true rows.
-  -- ─────────────────────────────────────────────
-  create temporary table tmp_p3_sel on commit drop as
-  select *
-  from public.weekly_import_changed_hours_phase3(p_import_id := p_import_id, p_system_type := 'NHSP')
-  where external_row_key = any(v_selected_truth_keys_ok);
-
-  -- Reject decision keys that are not present in phase3 rows within the selected truth keys
-  create temporary table tmp_decision_keys on commit drop as
-  select k.key_text as external_row_key
-  from (
-    select jsonb_object_keys(v_decisions) as key_text
-  ) as k
-  where k.key_text is not null and btrim(k.key_text) <> '';
-
-  if exists (
-    select 1
-    from tmp_decision_keys dk
-    left join tmp_p3_sel p3
-      on p3.external_row_key = dk.external_row_key
-    where p3.external_row_key is null
-  ) then
-    raise exception 'nhsp_weekly_apply_transactional: decisions include unknown external_row_key(s) for this selection (no phase3 row).';
-  end if;
-
-  -- For every phase3 row in selection, require a decision object
-  if exists (
-    select 1
-    from tmp_p3_sel p3req
-    where (v_decisions ? p3req.external_row_key) is not true
-  ) then
-    raise exception 'nhsp_weekly_apply_transactional: missing decision object for one or more selected decision-required rows.';
-  end if;
-
-  create temporary table tmp_decision_eval on commit drop as
-  select
-    p3.external_row_key,
-    (p3.is_invoiced is true) as is_invoiced,
-    case
-      when jsonb_typeof(v_decisions->p3.external_row_key) <> 'object' then null
-      else
-        case
-          when lower(coalesce((v_decisions->p3.external_row_key)->>'skip','')) in ('true','1') then true
-          when lower(coalesce((v_decisions->p3.external_row_key)->>'skip','')) in ('false','0') then false
-          else null
-        end
-    end as skip_bool,
-    nullif(btrim((v_decisions->p3.external_row_key)->>'credit_week_start'), '') as credit_week_start,
-    nullif(btrim((v_decisions->p3.external_row_key)->>'reinvoice_week_start'), '') as reinvoice_week_start
-  from tmp_p3_sel p3;
-
-  if exists (
-    select 1
-    from tmp_decision_eval de
-    where de.skip_bool is null
-  ) then
-    raise exception 'nhsp_weekly_apply_transactional: invalid decision skip boolean for one or more keys.';
-  end if;
-
-  if exists (
-    select 1
-    from tmp_decision_eval de
-    where de.is_invoiced is true
-      and de.skip_bool is false
-      and (de.credit_week_start is null or de.reinvoice_week_start is null)
-  ) then
-    raise exception 'nhsp_weekly_apply_transactional: missing credit_week_start/reinvoice_week_start for invoiced PROCEED decision.';
-  end if;
-
-  if exists (
-    select 1
-    from tmp_decision_eval de
-    where de.is_invoiced is true
-      and de.skip_bool is false
-      and extract(isodow from de.credit_week_start::date) <> 1
-  ) then
-    raise exception 'nhsp_weekly_apply_transactional: credit_week_start must be a Monday for invoiced PROCEED decision.';
-  end if;
-
-  if exists (
-    select 1
-    from tmp_decision_eval de
-    where de.is_invoiced is true
-      and de.skip_bool is false
-      and extract(isodow from de.reinvoice_week_start::date) <> 1
-  ) then
-    raise exception 'nhsp_weekly_apply_transactional: reinvoice_week_start must be a Monday for invoiced PROCEED decision.';
-  end if;
-
-  select coalesce(array_agg(de.external_row_key order by de.external_row_key), array[]::text[])
-  into v_phase3_skip_keys
-  from tmp_decision_eval de
-  where de.skip_bool is true;
-
-  select coalesce(array_agg(de.external_row_key order by de.external_row_key), array[]::text[])
-  into v_phase3_proceed_keys
-  from tmp_decision_eval de
-  where de.skip_bool is false;
-
-  -- ─────────────────────────────────────────────
-  -- 4) Compute force/skip keys for Phase 1 (tick-only + skip decisions)
-  --     - force keys = selected ROW keys minus phase3 skip keys
-  --     - skip keys  = all OK keys in import minus force keys
-  -- ─────────────────────────────────────────────
-  select coalesce(array_agg(k.external_row_key order by k.external_row_key), array[]::text[])
-  into v_force_keys_final
-  from (
-    select distinct st.external_row_key
-    from unnest(v_selected_truth_keys_ok) as st(external_row_key)
-    left join unnest(v_phase3_skip_keys) as sk(external_row_key)
-      on sk.external_row_key = st.external_row_key
-    where sk.external_row_key is null
-  ) as k;
+  -- Tick = PROCEED semantics
+  v_force_keys_final := coalesce(v_selected_truth_keys_ok, array[]::text[]);
 
   select coalesce(array_agg(x.external_row_key order by x.external_row_key), array[]::text[])
   into v_skip_keys_final
@@ -4154,10 +4071,48 @@ begin
     where fk.external_row_key is null
   ) as x;
 
+  v_force_keys_count := coalesce(array_length(v_force_keys_final, 1), 0);
+  v_skip_keys_count := coalesce(array_length(v_skip_keys_final, 1), 0);
+
+  v_steps := v_steps || jsonb_build_array('PHASE2_OK_LOADED');
+
   -- ─────────────────────────────────────────────
-  -- 5) Policy A replacement-day enforcement (NHSP)
+  -- 3) Snapshot changed-hours rows for selected keys BEFORE any truth mutation
+  --     and partition invoiced vs non-invoiced for correction series
+  -- ─────────────────────────────────────────────
+  create temporary table tmp_changed_sel on commit drop as
+  select
+    ch.external_row_key,
+    ch.is_invoiced
+  from public.weekly_import_changed_hours_phase3(p_import_id := p_import_id, p_system_type := 'NHSP') as ch
+  where ch.external_row_key = any(coalesce(v_force_keys_final, array[]::text[]));
+
+  select coalesce(array_agg(cs.external_row_key order by cs.external_row_key), array[]::text[])
+  into v_invoiced_changed_keys
+  from tmp_changed_sel cs
+  where cs.is_invoiced is true;
+
+  select coalesce(array_agg(cs.external_row_key order by cs.external_row_key), array[]::text[])
+  into v_not_invoiced_changed_keys
+  from tmp_changed_sel cs
+  where cs.is_invoiced is false;
+
+  v_invoiced_changed_keys_count := coalesce(array_length(v_invoiced_changed_keys, 1), 0);
+  v_not_invoiced_changed_keys_count := coalesce(array_length(v_not_invoiced_changed_keys, 1), 0);
+
+  v_steps := v_steps || jsonb_build_array('CHANGED_HOURS_PARTITIONED');
+
+  -- ─────────────────────────────────────────────
+  -- 4) Policy A replacement-day enforcement (NHSP)
   --     If any selected PROCEED truth row moves date, require all cancels for old day.
   -- ─────────────────────────────────────────────
+  create temporary table tmp_selected_replacement_keys(
+    candidate_id uuid,
+    client_id uuid,
+    old_work_date date,
+    replacement_day_key text
+  ) on commit drop;
+
   if array_length(v_force_keys_final, 1) is not null then
     create temporary table tmp_sel_truth_p2 on commit drop as
     select
@@ -4182,7 +4137,7 @@ begin
       and ns.work_date is not null
     order by ns.external_row_key, ns.updated_at desc nulls last, ns.created_at desc nulls last;
 
-    create temporary table tmp_selected_replacement_keys on commit drop as
+    insert into tmp_selected_replacement_keys(candidate_id, client_id, old_work_date, replacement_day_key)
     select distinct
       (coalesce(ex.candidate_id, st.candidate_id))::uuid as candidate_id,
       (coalesce(ex.client_id, st.client_id))::uuid as client_id,
@@ -4226,21 +4181,27 @@ begin
     end if;
   end if;
 
+  v_steps := v_steps || jsonb_build_array('POLICY_A_OK');
+
   -- ─────────────────────────────────────────────
-  -- 6) Apply Phase 3 adjustment truth (selected PROCEED keys only; NHSP)
+  -- 5) Changed-hours correction series for invoiced keys (BEFORE Phase 1)
   -- ─────────────────────────────────────────────
-  if array_length(v_phase3_proceed_keys, 1) is not null then
+  if array_length(v_invoiced_changed_keys, 1) is not null then
     select public.nhsp_weekly_phase3_apply_adjustment_truth(
       p_import_id := p_import_id,
-      p_selected_external_row_keys := v_phase3_proceed_keys,
-      p_decisions := v_decisions,
+      p_selected_external_row_keys := v_invoiced_changed_keys,
       p_actor_user_id := p_actor_user_id
     )
     into v_phase3_result;
   end if;
 
+  v_phase3_created_count := jsonb_array_length(coalesce(v_phase3_result->'created_timesheet_ids', '[]'::jsonb));
+  v_phase3_updated_count := jsonb_array_length(coalesce(v_phase3_result->'updated_timesheet_ids', '[]'::jsonb));
+
+  v_steps := v_steps || jsonb_build_array('PHASE3_CORRECTIONS_DONE');
+
   -- ─────────────────────────────────────────────
-  -- 7) Phase 1 upsert (NHSP) with tick-only skip/force
+  -- 6) Phase 1 upsert (NHSP) with tick-only skip/force
   -- ─────────────────────────────────────────────
   if array_length(v_all_ok_external_keys, 1) is not null then
     select public.nhsp_apply_import_phase1(
@@ -4252,8 +4213,10 @@ begin
     into v_phase1_result;
   end if;
 
+  v_steps := v_steps || jsonb_build_array('PHASE1_DONE');
+
   -- ─────────────────────────────────────────────
-  -- 8) Phase 1.5 repair (NHSP)
+  -- 7) Phase 1.5 repair (NHSP)
   -- ─────────────────────────────────────────────
   create temporary table tmp_phase15_rows on commit drop as
   select *
@@ -4269,9 +4232,13 @@ begin
   from tmp_phase15_rows r
   where coalesce(r.shift_updated,false) is true;
 
+  v_steps := v_steps || jsonb_build_array('PHASE15_DONE');
+
   -- ─────────────────────────────────────────────
-  -- 9) Apply selected cancellations (explicit shift_id only; NHSP)
+  -- 8) Apply selected cancellations (explicit shift_id only; NHSP)
   -- ─────────────────────────────────────────────
+  v_cancellations_count := coalesce(array_length(v_selected_cancel_shift_ids, 1), 0);
+
   if array_length(v_selected_cancel_shift_ids, 1) is not null then
     create temporary table tmp_cancel_meta on commit drop as
     select
@@ -4285,17 +4252,7 @@ begin
     create temporary table tmp_selected_rep_keys_text on commit drop as
     select distinct
       rk.replacement_day_key
-    from (
-      select
-        (t.candidate_id::text || '|' || t.client_id::text || '|' || t.old_work_date::text) as replacement_day_key
-      from (
-        select distinct
-          rk2.candidate_id,
-          rk2.client_id,
-          rk2.old_work_date
-        from tmp_selected_replacement_keys rk2
-      ) as t
-    ) as rk;
+    from tmp_selected_replacement_keys rk;
 
     select coalesce(
       jsonb_agg(
@@ -4325,52 +4282,154 @@ begin
     into v_cancellations_result;
   end if;
 
+  v_steps := v_steps || jsonb_build_array('CANCELLATIONS_DONE');
+
   -- ─────────────────────────────────────────────
-  -- 10) Compute affected_timesheet_ids for TSFIN Strategy A drain (Worker drains to completion)
+  -- 9) Compute affected_timesheet_ids
+  --     Include:
+  --       - correction timesheets (phase3 + cancellation corrections)
+  --       - base timesheets for in-place cancels
+  --       - base timesheets for all selected keys EXCLUDING invoiced-changed keys
   -- ─────────────────────────────────────────────
-  create temporary table tmp_aff_ts on commit drop as
-  select distinct t.timesheet_id
+  select coalesce(array_agg(k.external_row_key order by k.external_row_key), array[]::text[])
+  into v_force_keys_non_invoiced
   from (
-    select (x.value)::uuid as timesheet_id
-    from jsonb_array_elements_text(coalesce(v_cancellations_result->'affected_timesheet_ids', '[]'::jsonb)) as x(value)
+    select distinct fk.external_row_key
+    from unnest(coalesce(v_force_keys_final, array[]::text[])) as fk(external_row_key)
+    left join unnest(coalesce(v_invoiced_changed_keys, array[]::text[])) as ik(external_row_key)
+      on ik.external_row_key = fk.external_row_key
+    where ik.external_row_key is null
+  ) as k;
 
-    union all
+  create temporary table tmp_aff_ts(timesheet_id uuid) on commit drop;
 
-    select (x2.value)::uuid as timesheet_id
-    from jsonb_array_elements_text(coalesce(v_phase3_result->'created_timesheet_ids', '[]'::jsonb)) as x2(value)
+  -- cancellation affected ids (includes base for in-place cancels and correction for invoiced cancels)
+  insert into tmp_aff_ts(timesheet_id)
+  select (x.value)::uuid
+  from jsonb_array_elements_text(coalesce(v_cancellations_result->'affected_timesheet_ids', '[]'::jsonb)) as x(value)
+  where nullif(btrim(x.value), '') is not null;
 
-    union all
+  -- phase3 correction timesheets
+  insert into tmp_aff_ts(timesheet_id)
+  select (x2.value)::uuid
+  from jsonb_array_elements_text(coalesce(v_phase3_result->'created_timesheet_ids', '[]'::jsonb)) as x2(value)
+  where nullif(btrim(x2.value), '') is not null;
 
-    select (x3.value)::uuid as timesheet_id
-    from jsonb_array_elements_text(coalesce(v_phase3_result->'updated_timesheet_ids', '[]'::jsonb)) as x3(value)
+  insert into tmp_aff_ts(timesheet_id)
+  select (x3.value)::uuid
+  from jsonb_array_elements_text(coalesce(v_phase3_result->'updated_timesheet_ids', '[]'::jsonb)) as x3(value)
+  where nullif(btrim(x3.value), '') is not null;
 
-    union all
-
-    select ns.timesheet_id as timesheet_id
-    from public.nhsp_shifts ns
-    where ns.source_system = 'NHSP'::public.hr_source_enum
-      and ns.cancelled_at_utc is null
-      and ns.external_row_key = any(coalesce(v_force_keys_final, array[]::text[]))
-      and ns.timesheet_id is not null
-  ) as t
-  where t.timesheet_id is not null;
+  -- base timesheets for selected keys excluding invoiced-changed keys
+  insert into tmp_aff_ts(timesheet_id)
+  select distinct ns.timesheet_id
+  from public.nhsp_shifts ns
+  where ns.source_system = 'NHSP'::public.hr_source_enum
+    and ns.cancelled_at_utc is null
+    and ns.external_row_key = any(coalesce(v_force_keys_non_invoiced, array[]::text[]))
+    and ns.timesheet_id is not null;
 
   select coalesce(array_agg(distinct a.timesheet_id order by a.timesheet_id), array[]::uuid[])
   into v_affected_timesheet_ids
-  from tmp_aff_ts a;
+  from tmp_aff_ts a
+  where a.timesheet_id is not null;
 
   if array_length(v_affected_timesheet_ids, 1) is not null then
     perform public.enqueue_ts_financials_priority(v_affected_timesheet_ids, 'CONTEXT_CHANGED'::public.ts_fin_reason_enum);
   end if;
 
+  -- cancellation correction count (best-effort): count cancellation affected timesheets that are adjustments
+  if jsonb_array_length(coalesce(v_cancellations_result->'affected_timesheet_ids', '[]'::jsonb)) > 0 then
+    create temporary table tmp_cancel_aff_ts(ts_id uuid primary key) on commit drop;
+
+    insert into tmp_cancel_aff_ts(ts_id)
+    select distinct (x4.value)::uuid
+    from jsonb_array_elements_text(coalesce(v_cancellations_result->'affected_timesheet_ids', '[]'::jsonb)) as x4(value)
+    where nullif(btrim(x4.value), '') is not null
+    on conflict do nothing;
+
+    select count(*)::int
+    into v_cancel_adjustment_count
+    from tmp_cancel_aff_ts cts
+    join public.timesheets tts
+      on tts.timesheet_id = cts.ts_id
+    where tts.is_adjustment is true;
+  else
+    v_cancel_adjustment_count := 0;
+  end if;
+
+  v_correction_timesheets_created_count := (v_phase3_created_count + v_phase3_updated_count + coalesce(v_cancel_adjustment_count, 0));
+
+  v_steps := v_steps || jsonb_build_array('AFFECTED_TS_DONE');
+
   -- ─────────────────────────────────────────────
-  -- 11) Mark import applied (inside transaction)
+  -- 10) Mark import applied (inside transaction)
   -- ─────────────────────────────────────────────
   update public.hr_imports hi3
   set
     import_scope = 'NHSP',
     applied_at = v_now
   where hi3.id = p_import_id;
+
+  v_steps := v_steps || jsonb_build_array('IMPORT_APPLIED');
+
+  -- ─────────────────────────────────────────────
+  -- 11) Debug audit (invoice_debug gated inside _imp_debug_audit)
+  -- ─────────────────────────────────────────────
+  select to_jsonb(coalesce(array_agg(x.k), array[]::text[]))
+  into v_sample_keys
+  from (
+    select k as k
+    from unnest(coalesce(v_force_keys_final, array[]::text[])) as k
+    order by k
+    limit 20
+  ) as x;
+
+  select to_jsonb(coalesce(array_agg(y.s), array[]::text[]))
+  into v_sample_shift_ids
+  from (
+    select s::text as s
+    from unnest(coalesce(v_selected_cancel_shift_ids, array[]::uuid[])) as s
+    order by s::text
+    limit 20
+  ) as y;
+
+  perform public._imp_debug_audit(
+    p_actor_user_id,
+    'NHSP_WEEKLY_APPLY_DEBUG',
+    jsonb_build_object(
+      'import_id', p_import_id::text,
+
+      'selected_action_ids_count', v_selected_action_ids_count,
+      'selected_row_keys_count', v_selected_row_keys_count,
+      'selected_cancel_shift_ids_count', v_selected_cancel_shift_ids_count,
+
+      'ok_keys_total', v_ok_keys_total,
+      'force_keys_count', v_force_keys_count,
+      'skip_keys_count', v_skip_keys_count,
+
+      'invoiced_changed_keys_count', v_invoiced_changed_keys_count,
+      'not_invoiced_changed_keys_count', v_not_invoiced_changed_keys_count,
+
+      'cancellations_count', v_cancellations_count,
+
+      'phase3_created_count', v_phase3_created_count,
+      'phase3_updated_count', v_phase3_updated_count,
+      'cancel_adjustment_count', v_cancel_adjustment_count,
+      'correction_timesheets_created_count', v_correction_timesheets_created_count,
+
+      'affected_timesheet_ids_count', coalesce(array_length(v_affected_timesheet_ids, 1), 0),
+
+      'sample_force_keys', v_sample_keys,
+      'sample_cancel_shift_ids', v_sample_shift_ids
+    ),
+    'hr_imports',
+    p_import_id::text,
+    null,
+    null,
+    null,
+    null
+  );
 
   return jsonb_build_object(
     'import_id', p_import_id,
@@ -4388,9 +4447,38 @@ begin
     ),
     'affected_timesheet_ids', to_jsonb(coalesce(v_affected_timesheet_ids, array[]::uuid[]))
   );
+
+exception when others then
+  get stacked diagnostics v_sqlstate = returned_sqlstate, v_err = message_text;
+
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'NHSP_WEEKLY_APPLY_ERROR',
+      jsonb_build_object(
+        'import_id', p_import_id::text,
+        'steps', v_steps,
+        'sqlstate', v_sqlstate,
+        'error', v_err,
+
+        'selected_action_ids_count', v_selected_action_ids_count,
+        'selected_row_keys_count', v_selected_row_keys_count,
+        'selected_cancel_shift_ids_count', v_selected_cancel_shift_ids_count
+      ),
+      'hr_imports',
+      p_import_id::text,
+      null,
+      null,
+      null,
+      null
+    );
+  exception when others then
+    null;
+  end;
+
+  raise;
 end;
 $$;
-
 
 
 create or replace function public.hr_issue_emails_touch(
