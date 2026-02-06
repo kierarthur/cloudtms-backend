@@ -1350,6 +1350,7 @@ begin
   where hi.id = p_import_id
   limit 1;
 
+
   if v_import_source_system is null or v_import_source_system = '' then
     raise exception 'hr_weekly_apply_transactional: import % not found in hr_imports.', p_import_id;
   end if;
