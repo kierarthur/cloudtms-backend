@@ -433,7 +433,6 @@ $$;
 -- NOW FILTERED: returns ONLY requires_any_decision=true
 -- FIX: adds contract_self_bill + invoice_id_detected
 -- ---------------------------------------------------------
-
 create or replace function public.weekly_import_changed_hours_phase3(
   p_import_id uuid,
   p_system_type text
@@ -536,7 +535,39 @@ begin
       s.client_id,
       s.contract_id,
       s.timesheet_id,
-      s.week_ending_date,
+
+      -- week_ending_date resolution (DO NOT assume Sunday):
+      -- 1) base timesheet week_ending_date (authoritative) if present
+      -- 2) nhsp_shifts.week_ending_date if present
+      -- 3) derived from contracts.week_ending_weekday_snapshot (0=Sun) and basis_date (old shift start local date, else import work_date)
+      coalesce(
+        ts.week_ending_date,
+        s.week_ending_date,
+        (
+          coalesce(
+            (date_trunc('minute', s.start_utc) at time zone 'Europe/London')::date,
+            ri.work_date
+          )
+          +
+          (
+            (
+              (
+                case
+                  when c.week_ending_weekday_snapshot is null then 0
+                  when c.week_ending_weekday_snapshot between 0 and 6 then c.week_ending_weekday_snapshot
+                  else 0
+                end
+                -
+                extract(dow from coalesce(
+                  (date_trunc('minute', s.start_utc) at time zone 'Europe/London')::date,
+                  ri.work_date
+                ))::int
+                + 7
+              ) % 7
+            )::int
+          )
+        )::date
+      ) as week_ending_date,
 
       -- old values truncated to minute precision for comparison + output consistency
       date_trunc('minute', s.start_utc) as old_start_utc,
@@ -554,6 +585,9 @@ begin
      and s.cancelled_at_utc is null
     left join public.contracts c
       on c.id = s.contract_id
+    left join public.timesheets ts
+      on ts.timesheet_id = s.timesheet_id
+     and ts.is_current = true
   ),
   fin as (
     select
@@ -663,9 +697,9 @@ begin
 
       a.contract_self_bill,
 
-      -- POLICY: shift date is start-date (already computed from new_start_utc), and we retain old week_ending_date from shift
+      -- POLICY: shift date is start-date (computed from new_start_utc).
       a.work_date as work_date,
-      a.week_ending_date,
+      a.week_ending_date as week_ending_date,
 
       a.old_start_utc,
       a.old_end_utc,
