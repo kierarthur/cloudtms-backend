@@ -24193,6 +24193,9 @@ async function handleNhspImportPreview(env, req, importId) {
     return 'Shift details changed';
   };
 
+  // ✅ Identity-key normaliser (matches our SQL-side intention: trim + collapse whitespace + lower)
+  const normKey = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
   try {
     // Load import header (source_system check only; NHSP imports may span multiple clients)
     const { rows: impRows } = await sbFetch(
@@ -24262,10 +24265,13 @@ async function handleNhspImportPreview(env, req, importId) {
       if (!p2ByExternalKey.has(ext)) p2ByExternalKey.set(ext, r);
     }
 
-    // Build file-truth day stats (hr_rows + p2 joined by hr_row_id) for day-empty and ambiguity blocking
+    // Build file-truth day stats (hr_rows + p2 joined by hr_row_id) for ambiguity tracking and file date range,
+    // PLUS build NHSP identity-key file set for cancellation detection:
+    // coalesce(payload_json->>'ref_num', payload_json->>'Reference', hr_request_id)
     const dateStats = new Map(); // date_local -> { fileRows: int, ambiguousRows: int }
     const candidateDayMapped = new Set(); // `${candidate_id}|${client_id}|${date_local}`
     const clientMappedSet = new Set();    // client_id values that appear deterministically in this import
+    const fileRefSet = new Set();         // normalized ref keys present in file truth
 
     const p2ByHrRowId = new Map();
     for (const r of (p2 || [])) {
@@ -24284,7 +24290,7 @@ async function handleNhspImportPreview(env, req, importId) {
         const url =
           `${env.SUPABASE_URL}/rest/v1/hr_rows` +
           `?import_id=eq.${enc(importId)}` +
-          `&select=id,date_local` +
+          `&select=id,date_local,hr_request_id,payload_json` +
           `&order=id.asc` +
           `&limit=${pageSize}` +
           `&offset=${offset}`;
@@ -24361,9 +24367,20 @@ async function handleNhspImportPreview(env, req, importId) {
         clientMappedSet.add(cliId);
       }
 
+      // Build NHSP file identity key set (ref_num / Reference / hr_request_id)
+      const payload = r?.payload_json || {};
+      const rawRef =
+        (payload && (payload.ref_num || payload.Reference || payload.reference)) ||
+        r?.hr_request_id ||
+        null;
+
+      const refNorm = rawRef ? normKey(rawRef) : '';
+      if (refNorm) fileRefSet.add(refNorm);
+
       dateStats.set(dateLocal, ds);
     }
 
+    // Keep helper for replacement-day gating if you ever need it again; not used for MISSING_FROM_IMPORT now.
     const isDayEmptyForCandidate = (candidateId, clientId, ymd) => {
       if (!candidateId || !clientId || !ymd) return false;
 
@@ -24486,7 +24503,9 @@ async function handleNhspImportPreview(env, req, importId) {
 
     // ─────────────────────────────────────────────────────────────
     // Replacement-day detection and REPLACEMENT_DAY cancellation candidates
-    // (kept from prior logic; marks the ROW action's replacement_day_key)
+    // ✅ Standardise reason + cancel_kind AND use identity-key presence test (ref_num missing in file)
+    // ✅ Only scan confirmed shifts (timesheet_id is not null, cancelled_at_utc is null)
+    // ✅ Only scan in-scope clients (clientMappedSet) and within file date range
     // ─────────────────────────────────────────────────────────────
     const extUniq = uniq(extAll);
 
@@ -24535,9 +24554,7 @@ async function handleNhspImportPreview(env, req, importId) {
               };
             } else {
               // If it was suppressed (noop) or hidden (new), ensure it is at least auto-applied
-              // so the system truth aligns, and Policy A can be satisfied via cancellations.
               auto_apply_action_ids.push(`ROW:${ext}`);
-              hiddenNewCount += 0; // already counted elsewhere; do not double count
             }
           }
         }
@@ -24546,8 +24563,7 @@ async function handleNhspImportPreview(env, req, importId) {
 
     const cancelShiftIdSet = new Set();
 
-    // Emit REPLACEMENT_DAY cancellation actions for all active shifts in each replacement-day key,
-    // but only if day-empty guard allows and client is in-scope for this import.
+    // Emit REPLACEMENT_DAY cancellation actions for all confirmed shifts in each replacement-day key
     if (replacementDayKeys.size && minWd && maxWd) {
       for (const repKey of replacementDayKeys) {
         const [cid, cli, oldWd] = String(repKey).split('|');
@@ -24556,27 +24572,33 @@ async function handleNhspImportPreview(env, req, importId) {
         // range guard grounded in file truth
         if (oldWd < minWd || oldWd > maxWd) continue;
 
-        // import scope guard: do not propose cancels for clients not deterministically present in file
+        // import scope guard: only propose cancels for clients deterministically present in file
         if (!clientMappedSet.has(cli)) continue;
-
-        // day-empty guard
-        if (!isDayEmptyForCandidate(cid, cli, oldWd)) continue;
 
         const { rows: sRows } = await sbFetch(
           env,
           `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
             `?source_system=eq.NHSP` +
             `&cancelled_at_utc=is.null` +
+            `&timesheet_id=not.is.null` +
             `&candidate_id=eq.${enc(cid)}` +
             `&client_id=eq.${enc(cli)}` +
             `&work_date=eq.${enc(oldWd)}` +
-            `&select=id,candidate_id,client_id,work_date`
+            `&select=id,candidate_id,client_id,work_date,ref_num,timesheet_id`
         );
 
         for (const sh of (sRows || [])) {
           const sid = sh?.id ? String(sh.id) : null;
           if (!sid) continue;
           if (cancelShiftIdSet.has(sid)) continue;
+
+          const ref = sh?.ref_num ? String(sh.ref_num) : '';
+          const refNorm = normKey(ref);
+          if (!refNorm) continue; // Guard A (NHSP ref required)
+
+          // Identity-key test: if ref is still present in file, do not propose cancel
+          if (fileRefSet.has(refNorm)) continue;
+
           cancelShiftIdSet.add(sid);
 
           actions.push({
@@ -24585,9 +24607,9 @@ async function handleNhspImportPreview(env, req, importId) {
             shift_id: sid,
             external_row_key: null,
 
-            // Machine + human reasons
-            reason: 'SHIFT_NO_LONGER_WORKED',
-            reason_text: 'Shift no longer worked',
+            // ✅ Standardised reasons for replacement-day
+            reason: 'REPLACEMENT_DAY',
+            reason_text: 'Replacement day cancellation',
 
             candidate_id: String(sh.candidate_id),
             client_id: String(sh.client_id),
@@ -24610,43 +24632,50 @@ async function handleNhspImportPreview(env, req, importId) {
       }
     }
 
-    // Missing-from-import cancellation candidates (day-level)
-    const candIdsInImport = new Set();
-    for (const r of p2OkRows) {
-      const cid = r?.candidate_id ? String(r.candidate_id) : null;
-      if (cid) candIdsInImport.add(cid);
-    }
+    // ─────────────────────────────────────────────────────────────
+    // Missing-from-import cancellation candidates (identity-key scan)
+    //
+    // ✅ Replace old "day-empty + candidate-in-import" logic.
+    // ✅ NHSP identity key: nhsp_shifts.ref_num
+    // ✅ Compare against fileRefSet (ref_num / Reference / hr_request_id)
+    // ✅ Only confirmed shifts: timesheet_id is not null, cancelled_at_utc is null
+    // ✅ Scope: only clients deterministically present in file (clientMappedSet)
+    // ✅ Range: file min/max dates
+    // ─────────────────────────────────────────────────────────────
+    if (clientMappedSet.size && minWd && maxWd) {
+      const clientsInScope = Array.from(clientMappedSet);
 
-    if (candIdsInImport.size && minWd && maxWd) {
-      for (const idChunk of chunk([...candIdsInImport], 100)) {
+      for (const cliChunk of chunk(clientsInScope, 40)) {
         const { rows: sRows } = await sbFetch(
           env,
           `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
             `?source_system=eq.NHSP` +
             `&cancelled_at_utc=is.null` +
-            `&candidate_id=in.(${idChunk.map(enc).join(',')})` +
+            `&timesheet_id=not.is.null` +
+            `&client_id=in.(${cliChunk.map(enc).join(',')})` +
             `&work_date=gte.${enc(minWd)}` +
             `&work_date=lte.${enc(maxWd)}` +
-            `&select=id,candidate_id,client_id,work_date`
+            `&select=id,candidate_id,client_id,work_date,ref_num,timesheet_id`
         );
 
         for (const sh of (sRows || [])) {
           if (!sh || !sh.id || !sh.candidate_id || !sh.client_id || !sh.work_date) continue;
 
           const sid = String(sh.id);
+          if (cancelShiftIdSet.has(sid)) continue;
+
+          const ref = sh?.ref_num ? String(sh.ref_num) : '';
+          const refNorm = normKey(ref);
+          if (!refNorm) continue; // Guard A (NHSP ref required)
+
+          // If present in file, do not cancel
+          if (fileRefSet.has(refNorm)) continue;
+
+          cancelShiftIdSet.add(sid);
+
           const cid = String(sh.candidate_id);
           const cli = String(sh.client_id);
           const wd  = String(sh.work_date);
-
-          if (cancelShiftIdSet.has(sid)) continue;
-
-          // import scope guard: only propose cancels for clients deterministically present in file
-          if (!clientMappedSet.has(cli)) continue;
-
-          // day-empty + ambiguity guard
-          if (!isDayEmptyForCandidate(cid, cli, wd)) continue;
-
-          cancelShiftIdSet.add(sid);
 
           const dayKey = `${cid}|${cli}|${wd}`;
 
@@ -24656,9 +24685,9 @@ async function handleNhspImportPreview(env, req, importId) {
             shift_id: sid,
             external_row_key: null,
 
-            // Machine + human reasons
-            reason: 'SHIFT_NO_LONGER_WORKED',
-            reason_text: 'Shift no longer worked',
+            // ✅ Standardised missing-from-import reason
+            reason: 'MISSING_FROM_IMPORT',
+            reason_text: 'Missing from import',
 
             candidate_id: cid,
             client_id: cli,
@@ -24766,7 +24795,9 @@ async function handleNhspImportPreview(env, req, importId) {
         hidden_noop_rows: hiddenNoopCount,
         file_date_min: minWd,
         file_date_max: maxWd,
-        hr_rows_loaded: (hrRows || []).length
+        hr_rows_loaded: (hrRows || []).length,
+        file_ref_keys_count: fileRefSet.size,
+        in_scope_clients_count: clientMappedSet.size
       }));
     }
 
@@ -24803,6 +24834,7 @@ async function handleNhspImportPreview(env, req, importId) {
     return withCORS(env, req, serverError(`NHSP preview failed: ${e?.message || e}`));
   }
 }
+
 
 
 async function handleNhspApply(env, req, importId) {
