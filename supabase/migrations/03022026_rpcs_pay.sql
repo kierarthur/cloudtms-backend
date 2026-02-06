@@ -430,7 +430,7 @@ declare
 begin
   -- Validate import exists and is HEALTHROSTER + has client_id (Guard B)
   select
-    upper(coalesce(hi.source_system, '')),
+    upper(coalesce(hi.source_system::text, '')),
     hi.client_id
   into
     v_import_source_system,
@@ -438,6 +438,7 @@ begin
   from public.hr_imports hi
   where hi.id = p_import_id
   limit 1;
+
 
   if v_import_source_system is null or v_import_source_system = '' then
     raise exception 'weekly_import_apply_cancellations: import % not found in hr_imports.', p_import_id;
