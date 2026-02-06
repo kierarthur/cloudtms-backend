@@ -3966,6 +3966,8 @@ exception when others then
 end;
 $$;
 
+
+
 create or replace function public.nhsp_weekly_apply_transactional(
   p_import_id uuid,
   p_payload jsonb,
@@ -3986,6 +3988,7 @@ declare
   v_payload jsonb := coalesce(p_payload, '{}'::jsonb);
   v_actions_json jsonb := coalesce(v_payload->'selected_action_ids', '[]'::jsonb);
   v_actions2_json jsonb := coalesce(v_payload->'selected_actions', '[]'::jsonb);
+  v_auto_apply_json jsonb := coalesce(v_payload->'auto_apply_action_ids', '[]'::jsonb); -- optional / forward-compatible
 
   -- normalized selections
   v_selected_action_ids text[] := array[]::text[];
@@ -4024,8 +4027,10 @@ declare
   v_force_keys_non_invoiced text[] := array[]::text[];
 
   -- debug / audit
-  v_sample_keys jsonb := '[]'::jsonb;
-  v_sample_shift_ids jsonb := '[]'::jsonb;
+  v_sample_selected_action_ids jsonb := '[]'::jsonb;
+  v_sample_force_keys jsonb := '[]'::jsonb;
+  v_sample_skip_keys jsonb := '[]'::jsonb;
+  v_sample_cancel_shift_ids jsonb := '[]'::jsonb;
   v_steps jsonb := '[]'::jsonb;
 
   v_selected_action_ids_count int := 0;
@@ -4041,15 +4046,23 @@ declare
 
   v_cancellations_count int := 0;
 
+  v_phase1_shifts_created int := 0;
+  v_phase1_shifts_updated int := 0;
+
   v_phase3_created_count int := 0;
   v_phase3_updated_count int := 0;
   v_cancel_adjustment_count int := 0;
   v_correction_timesheets_created_count int := 0;
 
+  v_should_run_phase1 boolean := false;
+  v_should_run_phase15 boolean := false;
+  v_should_run_phase3 boolean := false;
+  v_should_run_cancellations boolean := false;
+
   v_sqlstate text;
   v_err text;
 begin
-  v_steps := v_steps || jsonb_build_array('START');
+  v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','START'));
 
   -- ─────────────────────────────────────────────
   -- 0) Validate import exists and is NHSP
@@ -4068,7 +4081,7 @@ begin
     raise exception 'nhsp_weekly_apply_transactional: import % source_system=%; expected NHSP.', p_import_id, v_import_source_system;
   end if;
 
-  v_steps := v_steps || jsonb_build_array('IMPORT_OK');
+  v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','IMPORT_OK'));
 
   -- ─────────────────────────────────────────────
   -- 1) Parse and normalize selection payload (ROW:/CANCEL:)
@@ -4079,6 +4092,10 @@ begin
 
   if jsonb_typeof(v_actions2_json) <> 'array' then
     raise exception 'nhsp_weekly_apply_transactional: selected_actions must be a JSON array.';
+  end if;
+
+  if jsonb_typeof(v_auto_apply_json) <> 'array' then
+    raise exception 'nhsp_weekly_apply_transactional: auto_apply_action_ids must be a JSON array when provided.';
   end if;
 
   create temporary table tmp_sel_ids(
@@ -4095,6 +4112,13 @@ begin
   select distinct nullif(btrim(a.value->>'action_id'), '')
   from jsonb_array_elements(v_actions2_json) as a(value)
   where nullif(btrim(a.value->>'action_id'), '') is not null
+  on conflict do nothing;
+
+  -- Forward-compatible: allow FE to pass auto_apply_action_ids explicitly (same ROW:/CANCEL: contract)
+  insert into tmp_sel_ids(action_id)
+  select distinct nullif(btrim(x2.value), '')
+  from jsonb_array_elements_text(v_auto_apply_json) as x2(value)
+  where nullif(btrim(x2.value), '') is not null
   on conflict do nothing;
 
   if exists (
@@ -4123,7 +4147,22 @@ begin
   v_selected_row_keys_count := coalesce(array_length(v_selected_truth_keys, 1), 0);
   v_selected_cancel_shift_ids_count := coalesce(array_length(v_selected_cancel_shift_ids, 1), 0);
 
-  v_steps := v_steps || jsonb_build_array('SELECTION_PARSED');
+  v_steps := v_steps || jsonb_build_array(jsonb_build_object(
+    'step','SELECTION_PARSED',
+    'selected_action_ids_count', v_selected_action_ids_count,
+    'selected_row_keys_count', v_selected_row_keys_count,
+    'selected_cancel_shift_ids_count', v_selected_cancel_shift_ids_count
+  ));
+
+  -- sample selected action ids (cap 40)
+  select coalesce(jsonb_agg(x.action_id), '[]'::jsonb)
+  into v_sample_selected_action_ids
+  from (
+    select s.action_id
+    from unnest(coalesce(v_selected_action_ids, array[]::text[])) as s(action_id)
+    order by s.action_id
+    limit 40
+  ) as x;
 
   -- ─────────────────────────────────────────────
   -- 2) Load weekly_import_phase2 for NHSP and constrain selection to OK rows
@@ -4158,7 +4197,7 @@ begin
   -- selected truth keys must be present in OK universe
   if exists (
     select 1
-    from unnest(v_selected_truth_keys) as k(external_row_key)
+    from unnest(coalesce(v_selected_truth_keys, array[]::text[])) as k(external_row_key)
     left join (select distinct p2.external_row_key from tmp_p2_ok p2) as okk
       on okk.external_row_key = k.external_row_key
     where okk.external_row_key is null
@@ -4170,7 +4209,7 @@ begin
   into v_selected_truth_keys_ok
   from (
     select distinct k.external_row_key
-    from unnest(v_selected_truth_keys) as k(external_row_key)
+    from unnest(coalesce(v_selected_truth_keys, array[]::text[])) as k(external_row_key)
     join (select distinct p2.external_row_key from tmp_p2_ok p2) as okk
       on okk.external_row_key = k.external_row_key
   ) as k;
@@ -4190,8 +4229,137 @@ begin
 
   v_force_keys_count := coalesce(array_length(v_force_keys_final, 1), 0);
   v_skip_keys_count := coalesce(array_length(v_skip_keys_final, 1), 0);
+  v_cancellations_count := coalesce(array_length(v_selected_cancel_shift_ids, 1), 0);
 
-  v_steps := v_steps || jsonb_build_array('PHASE2_OK_LOADED');
+  v_steps := v_steps || jsonb_build_array(jsonb_build_object(
+    'step','PHASE2_OK_LOADED',
+    'ok_keys_total', v_ok_keys_total,
+    'force_keys_count', v_force_keys_count,
+    'skip_keys_count', v_skip_keys_count,
+    'cancellations_count', v_cancellations_count
+  ));
+
+  -- samples (cap 40 each)
+  select coalesce(jsonb_agg(x.k), '[]'::jsonb)
+  into v_sample_force_keys
+  from (
+    select k as k
+    from unnest(coalesce(v_force_keys_final, array[]::text[])) as k
+    order by k
+    limit 40
+  ) as x;
+
+  select coalesce(jsonb_agg(x.k), '[]'::jsonb)
+  into v_sample_skip_keys
+  from (
+    select k as k
+    from unnest(coalesce(v_skip_keys_final, array[]::text[])) as k
+    order by k
+    limit 40
+  ) as x;
+
+  select coalesce(jsonb_agg(y.s), '[]'::jsonb)
+  into v_sample_cancel_shift_ids
+  from (
+    select s::text as s
+    from unnest(coalesce(v_selected_cancel_shift_ids, array[]::uuid[])) as s
+    order by s::text
+    limit 40
+  ) as y;
+
+  -- ─────────────────────────────────────────────
+  -- ✅ FIX: No-op apply guard
+  -- If there are NO selected ROW keys and NO selected CANCEL ids, this apply must not mutate truth.
+  -- We still mark the import as applied (user explicitly finalised), but we do NOT run Phase1/Phase15/cancellations.
+  -- ─────────────────────────────────────────────
+  v_should_run_phase1 := (v_force_keys_count > 0);
+  v_should_run_phase15 := v_should_run_phase1;
+  v_should_run_cancellations := (v_cancellations_count > 0);
+
+  v_steps := v_steps || jsonb_build_array(jsonb_build_object(
+    'step','NOOP_GUARD_EVAL',
+    'should_run_phase1', v_should_run_phase1,
+    'should_run_phase15', v_should_run_phase15,
+    'should_run_cancellations', v_should_run_cancellations,
+    'reason',
+      case
+        when (v_should_run_phase1 is false and v_should_run_cancellations is false)
+          then 'NO_SELECTION_NO_AUTONEW_NO_CANCELLATION => SKIP_TRUTH_MUTATION'
+        when (v_should_run_phase1 is true and v_should_run_cancellations is false)
+          then 'HAS_SELECTED_ROWS'
+        when (v_should_run_phase1 is false and v_should_run_cancellations is true)
+          then 'HAS_SELECTED_CANCELLATIONS'
+        else 'HAS_SELECTED_ROWS_AND_CANCELLATIONS'
+      end
+  ));
+
+  -- If pure no-op, skip all mutation work.
+  if (v_should_run_phase1 is false and v_should_run_cancellations is false) then
+    -- mark import applied (no truth mutation)
+    update public.hr_imports hi_noop
+    set
+      import_scope = 'NHSP',
+      applied_at = v_now
+    where hi_noop.id = p_import_id;
+
+    v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','IMPORT_APPLIED_NOOP'));
+
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'NHSP_WEEKLY_APPLY_DEBUG',
+      jsonb_build_object(
+        'import_id', p_import_id::text,
+        'steps', v_steps,
+
+        'selected_action_ids_count', v_selected_action_ids_count,
+        'selected_row_keys_count', v_selected_row_keys_count,
+        'selected_cancel_shift_ids_count', v_selected_cancel_shift_ids_count,
+
+        'selected_action_ids_sample', v_sample_selected_action_ids,
+
+        'ok_keys_total', v_ok_keys_total,
+        'force_keys_count', v_force_keys_count,
+        'skip_keys_count', v_skip_keys_count,
+
+        'phase1_called', false,
+        'phase1_force_keys_sample', v_sample_force_keys,
+        'phase1_skip_keys_sample', v_sample_skip_keys,
+
+        'cancellations_called', false,
+        'sample_cancel_shift_ids', v_sample_cancel_shift_ids,
+
+        'invoiced_changed_keys_count', 0,
+        'not_invoiced_changed_keys_count', 0,
+        'phase3_created_count', 0,
+        'phase3_updated_count', 0,
+        'cancel_adjustment_count', 0,
+        'correction_timesheets_created_count', 0,
+        'affected_timesheet_ids_count', 0
+      ),
+      'hr_imports',
+      p_import_id::text,
+      null,
+      null,
+      null,
+      null
+    );
+
+    return jsonb_build_object(
+      'import_id', p_import_id,
+      'mode_b', jsonb_build_object(
+        'selected_truth_keys', to_jsonb(array[]::text[]),
+        'force_overwrite_external_row_keys', to_jsonb(array[]::text[]),
+        'skip_external_row_keys', to_jsonb(coalesce(v_all_ok_external_keys, array[]::text[])),
+        'phase3', null,
+        'phase1', null,
+        'phase15', jsonb_build_object('ok_rows', 0, 'shift_updated_rows', 0),
+        'cancellations', null
+      ),
+      'affected_timesheet_ids', to_jsonb(array[]::uuid[])
+    );
+  end if;
+
+  v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','NOOP_GUARD_PASSED'));
 
   -- ─────────────────────────────────────────────
   -- 3) Snapshot changed-hours rows for selected keys BEFORE any truth mutation
@@ -4217,11 +4385,17 @@ begin
   v_invoiced_changed_keys_count := coalesce(array_length(v_invoiced_changed_keys, 1), 0);
   v_not_invoiced_changed_keys_count := coalesce(array_length(v_not_invoiced_changed_keys, 1), 0);
 
-  v_steps := v_steps || jsonb_build_array('CHANGED_HOURS_PARTITIONED');
+  v_should_run_phase3 := (v_invoiced_changed_keys_count > 0);
+
+  v_steps := v_steps || jsonb_build_array(jsonb_build_object(
+    'step','CHANGED_HOURS_PARTITIONED',
+    'invoiced_changed_keys_count', v_invoiced_changed_keys_count,
+    'not_invoiced_changed_keys_count', v_not_invoiced_changed_keys_count,
+    'phase3_should_run', v_should_run_phase3
+  ));
 
   -- ─────────────────────────────────────────────
   -- 4) Policy A replacement-day enforcement (NHSP)
-  --     If any selected PROCEED truth row moves date, require all cancels for old day.
   -- ─────────────────────────────────────────────
   create temporary table tmp_selected_replacement_keys(
     candidate_id uuid,
@@ -4271,7 +4445,7 @@ begin
 
     select coalesce(array_agg(x::text), array[]::text[])
     into v_selected_cancel_shift_id_set
-    from unnest(v_selected_cancel_shift_ids) as x;
+    from unnest(coalesce(v_selected_cancel_shift_ids, array[]::uuid[])) as x;
 
     if exists (select 1 from tmp_selected_replacement_keys) then
       create temporary table tmp_required_cancel_ids on commit drop as
@@ -4298,12 +4472,12 @@ begin
     end if;
   end if;
 
-  v_steps := v_steps || jsonb_build_array('POLICY_A_OK');
+  v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','POLICY_A_OK'));
 
   -- ─────────────────────────────────────────────
   -- 5) Changed-hours correction series for invoiced keys (BEFORE Phase 1)
   -- ─────────────────────────────────────────────
-  if array_length(v_invoiced_changed_keys, 1) is not null then
+  if v_should_run_phase3 then
     select public.nhsp_weekly_phase3_apply_adjustment_truth(
       p_import_id := p_import_id,
       p_selected_external_row_keys := v_invoiced_changed_keys,
@@ -4315,12 +4489,18 @@ begin
   v_phase3_created_count := jsonb_array_length(coalesce(v_phase3_result->'created_timesheet_ids', '[]'::jsonb));
   v_phase3_updated_count := jsonb_array_length(coalesce(v_phase3_result->'updated_timesheet_ids', '[]'::jsonb));
 
-  v_steps := v_steps || jsonb_build_array('PHASE3_CORRECTIONS_DONE');
+  v_steps := v_steps || jsonb_build_array(jsonb_build_object(
+    'step','PHASE3_CORRECTIONS_DONE',
+    'phase3_called', v_should_run_phase3,
+    'phase3_created_count', v_phase3_created_count,
+    'phase3_updated_count', v_phase3_updated_count
+  ));
 
   -- ─────────────────────────────────────────────
   -- 6) Phase 1 upsert (NHSP) with tick-only skip/force
+  --     ✅ FIX: call Phase1 ONLY if there are force keys (selected truth rows or auto-new rows)
   -- ─────────────────────────────────────────────
-  if array_length(v_all_ok_external_keys, 1) is not null then
+  if v_should_run_phase1 then
     select public.nhsp_apply_import_phase1(
       p_import_id := p_import_id,
       p_selected_group_ids := array[]::text[],
@@ -4328,35 +4508,54 @@ begin
       p_force_overwrite_external_row_keys := v_force_keys_final
     )
     into v_phase1_result;
+  else
+    v_phase1_result := null;
   end if;
 
-  v_steps := v_steps || jsonb_build_array('PHASE1_DONE');
+  v_phase1_shifts_created := coalesce(nullif((coalesce(v_phase1_result,'{}'::jsonb)->>'shifts_created')::int, null), 0);
+  v_phase1_shifts_updated := coalesce(nullif((coalesce(v_phase1_result,'{}'::jsonb)->>'shifts_updated')::int, null), 0);
+
+  v_steps := v_steps || jsonb_build_array(jsonb_build_object(
+    'step','PHASE1_DONE',
+    'phase1_called', v_should_run_phase1,
+    'phase1_shifts_created', v_phase1_shifts_created,
+    'phase1_shifts_updated', v_phase1_shifts_updated
+  ));
 
   -- ─────────────────────────────────────────────
   -- 7) Phase 1.5 repair (NHSP)
+  --     ✅ FIX: run only if Phase1 ran
   -- ─────────────────────────────────────────────
-  create temporary table tmp_phase15_rows on commit drop as
-  select *
-  from public.weekly_import_apply_phase2(p_import_id := p_import_id, p_system_type := 'NHSP');
+  if v_should_run_phase15 then
+    create temporary table tmp_phase15_rows on commit drop as
+    select *
+    from public.weekly_import_apply_phase2(p_import_id := p_import_id, p_system_type := 'NHSP');
 
-  select count(*)::int
-  into v_phase15_ok
-  from tmp_phase15_rows r
-  where upper(coalesce(r.action::text,'')) = 'OK';
+    select count(*)::int
+    into v_phase15_ok
+    from tmp_phase15_rows r
+    where upper(coalesce(r.action::text,'')) = 'OK';
 
-  select count(*)::int
-  into v_phase15_updated
-  from tmp_phase15_rows r
-  where coalesce(r.shift_updated,false) is true;
+    select count(*)::int
+    into v_phase15_updated
+    from tmp_phase15_rows r
+    where coalesce(r.shift_updated,false) is true;
+  else
+    v_phase15_ok := 0;
+    v_phase15_updated := 0;
+  end if;
 
-  v_steps := v_steps || jsonb_build_array('PHASE15_DONE');
+  v_steps := v_steps || jsonb_build_array(jsonb_build_object(
+    'step','PHASE15_DONE',
+    'phase15_called', v_should_run_phase15,
+    'phase15_ok_rows', v_phase15_ok,
+    'phase15_shift_updated_rows', v_phase15_updated
+  ));
 
   -- ─────────────────────────────────────────────
   -- 8) Apply selected cancellations (explicit shift_id only; NHSP)
   -- ─────────────────────────────────────────────
-  v_cancellations_count := coalesce(array_length(v_selected_cancel_shift_ids, 1), 0);
-
-  if array_length(v_selected_cancel_shift_ids, 1) is not null then
+  if v_should_run_cancellations then
     create temporary table tmp_cancel_meta on commit drop as
     select
       ns.id as shift_id,
@@ -4397,16 +4596,17 @@ begin
       p_actor_user_id := p_actor_user_id
     )
     into v_cancellations_result;
+  else
+    v_cancellations_result := null;
   end if;
 
-  v_steps := v_steps || jsonb_build_array('CANCELLATIONS_DONE');
+  v_steps := v_steps || jsonb_build_array(jsonb_build_object(
+    'step','CANCELLATIONS_DONE',
+    'cancellations_called', v_should_run_cancellations
+  ));
 
   -- ─────────────────────────────────────────────
   -- 9) Compute affected_timesheet_ids
-  --     Include:
-  --       - correction timesheets (phase3 + cancellation corrections)
-  --       - base timesheets for in-place cancels
-  --       - base timesheets for all selected keys EXCLUDING invoiced-changed keys
   -- ─────────────────────────────────────────────
   select coalesce(array_agg(k.external_row_key order by k.external_row_key), array[]::text[])
   into v_force_keys_non_invoiced
@@ -4420,13 +4620,11 @@ begin
 
   create temporary table tmp_aff_ts(timesheet_id uuid) on commit drop;
 
-  -- cancellation affected ids (includes base for in-place cancels and correction for invoiced cancels)
   insert into tmp_aff_ts(timesheet_id)
   select (x.value)::uuid
   from jsonb_array_elements_text(coalesce(v_cancellations_result->'affected_timesheet_ids', '[]'::jsonb)) as x(value)
   where nullif(btrim(x.value), '') is not null;
 
-  -- phase3 correction timesheets
   insert into tmp_aff_ts(timesheet_id)
   select (x2.value)::uuid
   from jsonb_array_elements_text(coalesce(v_phase3_result->'created_timesheet_ids', '[]'::jsonb)) as x2(value)
@@ -4437,7 +4635,6 @@ begin
   from jsonb_array_elements_text(coalesce(v_phase3_result->'updated_timesheet_ids', '[]'::jsonb)) as x3(value)
   where nullif(btrim(x3.value), '') is not null;
 
-  -- base timesheets for selected keys excluding invoiced-changed keys
   insert into tmp_aff_ts(timesheet_id)
   select distinct ns.timesheet_id
   from public.nhsp_shifts ns
@@ -4477,7 +4674,12 @@ begin
 
   v_correction_timesheets_created_count := (v_phase3_created_count + v_phase3_updated_count + coalesce(v_cancel_adjustment_count, 0));
 
-  v_steps := v_steps || jsonb_build_array('AFFECTED_TS_DONE');
+  v_steps := v_steps || jsonb_build_array(jsonb_build_object(
+    'step','AFFECTED_TS_DONE',
+    'affected_timesheet_ids_count', coalesce(array_length(v_affected_timesheet_ids, 1), 0),
+    'cancel_adjustment_count', v_cancel_adjustment_count,
+    'correction_timesheets_created_count', v_correction_timesheets_created_count
+  ));
 
   -- ─────────────────────────────────────────────
   -- 10) Mark import applied (inside transaction)
@@ -4488,57 +4690,51 @@ begin
     applied_at = v_now
   where hi3.id = p_import_id;
 
-  v_steps := v_steps || jsonb_build_array('IMPORT_APPLIED');
+  v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','IMPORT_APPLIED'));
 
   -- ─────────────────────────────────────────────
   -- 11) Debug audit (invoice_debug gated inside _imp_debug_audit)
   -- ─────────────────────────────────────────────
-  select to_jsonb(coalesce(array_agg(x.k), array[]::text[]))
-  into v_sample_keys
-  from (
-    select k as k
-    from unnest(coalesce(v_force_keys_final, array[]::text[])) as k
-    order by k
-    limit 20
-  ) as x;
-
-  select to_jsonb(coalesce(array_agg(y.s), array[]::text[]))
-  into v_sample_shift_ids
-  from (
-    select s::text as s
-    from unnest(coalesce(v_selected_cancel_shift_ids, array[]::uuid[])) as s
-    order by s::text
-    limit 20
-  ) as y;
-
   perform public._imp_debug_audit(
     p_actor_user_id,
     'NHSP_WEEKLY_APPLY_DEBUG',
     jsonb_build_object(
       'import_id', p_import_id::text,
+      'steps', v_steps,
 
       'selected_action_ids_count', v_selected_action_ids_count,
       'selected_row_keys_count', v_selected_row_keys_count,
       'selected_cancel_shift_ids_count', v_selected_cancel_shift_ids_count,
+      'selected_action_ids_sample', v_sample_selected_action_ids,
 
       'ok_keys_total', v_ok_keys_total,
-      'force_keys_count', v_force_keys_count,
-      'skip_keys_count', v_skip_keys_count,
+
+      'phase1_called', v_should_run_phase1,
+      'phase1_force_keys_count', v_force_keys_count,
+      'phase1_skip_keys_count', v_skip_keys_count,
+      'phase1_force_keys_sample', v_sample_force_keys,
+      'phase1_skip_keys_sample', v_sample_skip_keys,
+      'phase1_shifts_created', v_phase1_shifts_created,
+      'phase1_shifts_updated', v_phase1_shifts_updated,
+
+      'phase15_called', v_should_run_phase15,
+      'phase15_ok_rows', v_phase15_ok,
+      'phase15_shift_updated_rows', v_phase15_updated,
 
       'invoiced_changed_keys_count', v_invoiced_changed_keys_count,
       'not_invoiced_changed_keys_count', v_not_invoiced_changed_keys_count,
-
-      'cancellations_count', v_cancellations_count,
-
+      'phase3_called', v_should_run_phase3,
       'phase3_created_count', v_phase3_created_count,
       'phase3_updated_count', v_phase3_updated_count,
+
+      'cancellations_called', v_should_run_cancellations,
+      'cancellations_count', v_cancellations_count,
+      'sample_cancel_shift_ids', v_sample_cancel_shift_ids,
+
       'cancel_adjustment_count', v_cancel_adjustment_count,
       'correction_timesheets_created_count', v_correction_timesheets_created_count,
 
-      'affected_timesheet_ids_count', coalesce(array_length(v_affected_timesheet_ids, 1), 0),
-
-      'sample_force_keys', v_sample_keys,
-      'sample_cancel_shift_ids', v_sample_shift_ids
+      'affected_timesheet_ids_count', coalesce(array_length(v_affected_timesheet_ids, 1), 0)
     ),
     'hr_imports',
     p_import_id::text,
@@ -4580,7 +4776,8 @@ exception when others then
 
         'selected_action_ids_count', v_selected_action_ids_count,
         'selected_row_keys_count', v_selected_row_keys_count,
-        'selected_cancel_shift_ids_count', v_selected_cancel_shift_ids_count
+        'selected_cancel_shift_ids_count', v_selected_cancel_shift_ids_count,
+        'selected_action_ids_sample', v_sample_selected_action_ids
       ),
       'hr_imports',
       p_import_id::text,
@@ -4596,6 +4793,8 @@ exception when others then
   raise;
 end;
 $$;
+
+
 
 
 create or replace function public.hr_issue_emails_touch(
