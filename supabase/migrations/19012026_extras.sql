@@ -14,38 +14,21 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.tsfin_prepare_write(p_timesheet_id uuid)
 RETURNS void
 LANGUAGE plpgsql
 AS $function$
 BEGIN
-  -- Guard: if current snapshot is locked by an invoice, refuse writes.
-  -- IMPORTANT: In SEGMENTS mode, locked_by_invoice_id may be NULL even when some segments are invoiced
-  -- (e.g. split across multiple invoices). So we must also block if ANY segment has invoice_locked_invoice_id.
+  -- Guard: refuse writes if the current snapshot is paid OR whole-timesheet locked by an invoice.
+  -- IMPORTANT: Do NOT block just because some SEGMENTS are invoice-locked; partial recompute is allowed.
   IF EXISTS (
     SELECT 1
     FROM public.timesheets_financials tf
     WHERE tf.timesheet_id = p_timesheet_id
       AND tf.is_current = true
       AND (
-        tf.locked_by_invoice_id IS NOT NULL
-        OR (
-          upper(coalesce(tf.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
-          AND EXISTS (
-            SELECT 1
-            FROM jsonb_array_elements(
-              CASE
-                WHEN tf.invoice_breakdown_json IS NOT NULL
-                  AND jsonb_typeof(tf.invoice_breakdown_json) = 'object'
-                  AND jsonb_typeof(tf.invoice_breakdown_json->'segments') = 'array'
-                THEN tf.invoice_breakdown_json->'segments'
-                ELSE '[]'::jsonb
-              END
-            ) AS seg(value)
-            WHERE nullif(btrim(coalesce(seg.value->>'invoice_locked_invoice_id','')), '') IS NOT NULL
-          )
-        )
+        tf.paid_at_utc IS NOT NULL
+        OR tf.locked_by_invoice_id IS NOT NULL
       )
   ) THEN
     RAISE EXCEPTION 'TSFIN_LOCKED';
@@ -58,6 +41,7 @@ BEGIN
     AND tfu.is_current = true;
 END;
 $function$;
+
 
 
 CREATE OR REPLACE FUNCTION public.tsfin_work_success(p_id uuid)
