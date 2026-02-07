@@ -343,6 +343,7 @@ begin
           and lower(trim(m.incoming_code)) = w.code_norm
           and m.candidate_id is null
           and m.client_id is null
+          and m.client_id is null
       ),
       mx as (select max(spec) as m from maps)
       select
@@ -384,12 +385,17 @@ begin
       date_trunc('minute', s.end_utc)   as old_end_utc,
       coalesce(s.break_mins, 0)::int    as old_break_mins,
       coalesce(s.pay_minutes, 0)::int   as old_paid_minutes,
-      s.cancelled_at_utc               as old_cancelled_at_utc
+      s.cancelled_at_utc               as old_cancelled_at_utc,
+
+      s.timesheet_id                   as old_timesheet_id,
+      (t.timesheet_id is not null)     as old_timesheet_exists
 
     from chosen_contract w
     left join public.nhsp_shifts s
       on s.external_row_key = w.external_row_key
      and s.source_system = v_src
+    left join public.timesheets t
+      on t.timesheet_id = s.timesheet_id
   )
   select
     ms.hr_row_id,
@@ -457,6 +463,10 @@ begin
       and ms.old_start_utc = ms.new_start_utc
       and ms.old_end_utc   = ms.new_end_utc
       and ms.old_break_mins = ms.new_break_mins
+      and (
+        v_sys <> 'NHSP'
+        or (ms.old_timesheet_id is not null and ms.old_timesheet_exists is true)
+      )
     ) as is_noop,
 
     (
@@ -467,6 +477,10 @@ begin
         and ms.old_start_utc = ms.new_start_utc
         and ms.old_end_utc   = ms.new_end_utc
         and ms.old_break_mins = ms.new_break_mins
+        and (
+          v_sys <> 'NHSP'
+          or (ms.old_timesheet_id is not null and ms.old_timesheet_exists is true)
+        )
       )
     ) as is_changed
 
@@ -758,11 +772,15 @@ begin
             date_trunc('minute', s.end_utc)   as old_end_utc,
             coalesce(s.break_mins, 0)::int    as old_break_mins,
             coalesce(s.pay_minutes, 0)::int   as old_paid_minutes,
-            s.cancelled_at_utc               as old_cancelled_at_utc
+            s.cancelled_at_utc               as old_cancelled_at_utc,
+            s.timesheet_id                   as old_timesheet_id,
+            (t.timesheet_id is not null)     as old_timesheet_exists
           from chosen_contract w
           left join public.nhsp_shifts s
             on s.external_row_key = w.external_row_key
            and s.source_system = v_src
+          left join public.timesheets t
+            on t.timesheet_id = s.timesheet_id
         )
         select
           ms.hr_row_id,
@@ -785,6 +803,8 @@ begin
             else 'OK'
           end as action,
           ms.matched_shift_id,
+          ms.old_timesheet_id,
+          ms.old_timesheet_exists,
           (ms.matched_shift_id is null) as is_new,
           (
             ms.matched_shift_id is not null
@@ -792,6 +812,10 @@ begin
             and ms.old_start_utc = ms.new_start_utc
             and ms.old_end_utc   = ms.new_end_utc
             and ms.old_break_mins = ms.new_break_mins
+            and (
+              v_sys <> 'NHSP'
+              or (ms.old_timesheet_id is not null and ms.old_timesheet_exists is true)
+            )
           ) as is_noop,
           (
             ms.matched_shift_id is not null
@@ -801,6 +825,10 @@ begin
               and ms.old_start_utc = ms.new_start_utc
               and ms.old_end_utc   = ms.new_end_utc
               and ms.old_break_mins = ms.new_break_mins
+              and (
+                v_sys <> 'NHSP'
+                or (ms.old_timesheet_id is not null and ms.old_timesheet_exists is true)
+              )
             )
           ) as is_changed
         from matched_shift ms
@@ -817,6 +845,21 @@ begin
         'ok_new_rows', count(*) filter (where fr.action = 'OK' and fr.is_new is true)::int,
         'ok_noop_rows', count(*) filter (where fr.action = 'OK' and fr.is_noop is true)::int,
         'ok_changed_rows', count(*) filter (where fr.action = 'OK' and fr.is_changed is true)::int,
+
+        -- ✅ NEW debug: attach-needed rows (NHSP) are those that would otherwise be noop but linkage is missing
+        'ok_attach_needed_rows',
+          count(*) filter (
+            where fr.action = 'OK'
+              and v_sys = 'NHSP'
+              and fr.is_new is false
+              and fr.is_noop is false
+              and fr.is_changed is true
+              and fr.matched_shift_id is not null
+              and (
+                fr.old_timesheet_id is null
+                or fr.old_timesheet_exists is false
+              )
+          )::int,
 
         'missing_external_row_key_rows', count(*) filter (where fr.external_row_key is null)::int,
         'missing_candidate_rows', count(*) filter (where fr.candidate_id is null)::int,
