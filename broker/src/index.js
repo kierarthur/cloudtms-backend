@@ -24535,7 +24535,7 @@ async function handleNhspImportPreview(env, req, importId) {
     let shownChangedCount = 0;
     let shownAttachCount = 0;
 
-    // Collect all external keys early so we can load existing truth linkage once.
+       // Collect all external keys early (still needed for replacement-day logic + later scans).
     const extAll = [];
     for (const r of p2OkRows) {
       const ext = r?.external_row_key ? String(r.external_row_key) : null;
@@ -24543,28 +24543,42 @@ async function handleNhspImportPreview(env, req, importId) {
     }
     const extUniq = uniq(extAll.map(String).filter(Boolean));
 
-    // Load existing shifts for these keys (for linkage + replacement-day old-work-date checks)
-    const shiftByExternalKey = new Map(); // ext -> shift row
-    if (extUniq.length) {
-      for (const keyChunk of chunk(extUniq, 150)) {
+    // ✅ Load existing truth linkage by matched_shift_id (UUID) to avoid PostgREST in.(...) parsing issues
+    // with external_row_key values that contain pipes/parentheses/spaces.
+    const matchedShiftIdsAll = [];
+    for (const r of p2OkRows) {
+      const sid = r?.matched_shift_id ? String(r.matched_shift_id) : null;
+      if (sid) matchedShiftIdsAll.push(sid);
+    }
+    const matchedShiftIdsUniq = uniq(matchedShiftIdsAll.map(String).filter(Boolean));
+
+    // Maps for linkage + later logic
+    const shiftById = new Map();           // shift_id -> shift row
+    const shiftByExternalKey = new Map();  // ext -> shift row
+
+    if (matchedShiftIdsUniq.length) {
+      for (const idChunk of chunk(matchedShiftIdsUniq, 150)) {
         try {
           const { rows: sRows } = await sbFetch(
             env,
             `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
               `?source_system=eq.NHSP` +
               `&cancelled_at_utc=is.null` +
-              `&external_row_key=in.(${keyChunk.map(enc).join(',')})` +
+              `&id=in.(${idChunk.map(enc).join(',')})` +
               `&select=id,external_row_key,candidate_id,client_id,work_date,timesheet_id,ref_num`
           );
+
           for (const sh of (sRows || [])) {
-            const ext = sh?.external_row_key ? String(sh.external_row_key) : null;
-            if (!ext) continue;
-            if (!shiftByExternalKey.has(ext)) shiftByExternalKey.set(ext, sh);
-
             const sid = sh?.id ? String(sh.id) : null;
-            const tid = sh?.timesheet_id ? String(sh.timesheet_id) : null;
+            if (!sid) continue;
 
-            if (sid && !tid) {
+            shiftById.set(sid, sh);
+
+            const ext = sh?.external_row_key ? String(sh.external_row_key) : null;
+            if (ext && !shiftByExternalKey.has(ext)) shiftByExternalKey.set(ext, sh);
+
+            const tid = sh?.timesheet_id ? String(sh.timesheet_id) : null;
+            if (!tid) {
               detachedActiveShiftIdSet.add(sid);
               if (detachedActiveShiftSample.length < 15) detachedActiveShiftSample.push(sid);
             }
@@ -24573,9 +24587,9 @@ async function handleNhspImportPreview(env, req, importId) {
           if (LOG) {
             console.warn('[NHSP_PREVIEW]', JSON.stringify({
               import_id: importId,
-              stage: 'truth_shift_fetch_failed_non_fatal',
+              stage: 'truth_shift_fetch_by_id_failed_non_fatal',
               err: e?.message || String(e),
-              chunk_size: keyChunk.length
+              chunk_size: idChunk.length
             }));
           }
         }
@@ -24585,11 +24599,12 @@ async function handleNhspImportPreview(env, req, importId) {
     // Load timesheet existence for referenced timesheet_ids (detect deleted timesheet rows)
     const tsMetaById = new Map(); // timesheet_id -> { exists, is_current, status, sheet_scope }
     const tsIds = [];
-    for (const sh of shiftByExternalKey.values()) {
+    for (const sh of shiftById.values()) {
       const tid = sh?.timesheet_id ? String(sh.timesheet_id) : null;
       if (tid) tsIds.push(tid);
     }
     const tsIdsUniq = uniq(tsIds);
+
 
     if (tsIdsUniq.length) {
       for (const idChunk of chunk(tsIdsUniq, 150)) {
