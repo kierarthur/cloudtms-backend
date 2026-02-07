@@ -1752,8 +1752,90 @@ function applyDurationBreak(acc, breakMin) {
 
 // Resolve hours (minutes) by bucket from an actual_schedule_json array
 async function resolveBucketsFromSchedule(env, contract, actualDays /* array */, policyOverride = null) {
+  // ─────────────────────────────────────────────────────────────
+  // ✅ Normalise schedule so TSFIN can handle both schemas:
+  // - Manual/weekly: { date, start, end, break_minutes/breaks }
+  // - NHSP/Corrections: { date, start_utc, end_utc, break_mins }
+  //
+  // We ensure:
+  // - start/end (HH:MM) exist when start_utc/end_utc exist
+  // - break_minutes is populated from break_mins when needed
+  // ─────────────────────────────────────────────────────────────
+  const toIso = (v) => {
+    const s0 = String(v ?? '').trim();
+    if (!s0) return '';
+    if (s0.includes('T')) return s0;
+
+    // Common Postgres-ish: "YYYY-MM-DD HH:MM:SS+00" or "YYYY-MM-DD HH:MM:SS+00:00"
+    let s = s0.replace(' ', 'T');
+
+    // "+00" => "+00:00"
+    if (s.endsWith('+00')) s = s + ':00';
+
+    // "+HH" => "+HH:00"
+    if (/[\+\-]\d{2}$/.test(s)) s = s + ':00';
+
+    // "+HHMM" => "+HH:MM"
+    if (/[\+\-]\d{4}$/.test(s)) s = s.replace(/([\+\-]\d{2})(\d{2})$/, '$1:$2');
+
+    return s;
+  };
+
+  const hhmmLondonFromUtc = (utcLike) => {
+    const iso = toIso(utcLike);
+    if (!iso) return '';
+    const dt = new Date(iso);
+    if (!Number.isFinite(dt.getTime())) return '';
+
+    try {
+      const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/London',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      }).formatToParts(dt);
+
+      const hh = parts.find(p => p.type === 'hour')?.value || '';
+      const mm = parts.find(p => p.type === 'minute')?.value || '';
+      return (hh && mm) ? `${hh}:${mm}` : '';
+    } catch {
+      // Fallback: UTC HH:MM (should be rare in Workers)
+      const hh = String(dt.getUTCHours()).padStart(2, '0');
+      const mm = String(dt.getUTCMinutes()).padStart(2, '0');
+      return `${hh}:${mm}`;
+    }
+  };
+
+  const normDays = (Array.isArray(actualDays) ? actualDays : []).map((d) => {
+    if (!d || typeof d !== 'object') return d;
+    const out = { ...d };
+
+    // Promote start_utc/end_utc -> start/end (HH:MM) if missing
+    if ((!out.start || !String(out.start).trim()) && out.start_utc) {
+      out.start = hhmmLondonFromUtc(out.start_utc);
+    }
+    if ((!out.end || !String(out.end).trim()) && out.end_utc) {
+      out.end = hhmmLondonFromUtc(out.end_utc);
+    }
+
+    // Promote break_mins -> break_minutes if missing (bucketer subtracts break_minutes)
+    const bm =
+      (out.break_minutes != null && String(out.break_minutes).trim() !== '')
+        ? Number(out.break_minutes)
+        : (out.break_mins != null && String(out.break_mins).trim() !== '')
+          ? Number(out.break_mins)
+          : null;
+
+    if (Number.isFinite(bm) && bm > 0) {
+      // store canonical float-break key the resolver expects
+      out.break_minutes = Math.floor(bm);
+    }
+
+    return out;
+  });
+
   // ✅ Ensure schedule has no internal overlaps / bad breaks before bucketing
-  validateScheduleStructure(actualDays);
+  validateScheduleStructure(normDays);
 
   // If caller provides SQL policy (string times + bh_list), derive numeric policy
   const toNumericPolicyFromSql = (p) => {
@@ -1829,7 +1911,7 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array */,
 
   logBuckets('policy', { client_id: contract.client_id, contract_id: contract.id, policy });
 
-  for (const d of (actualDays || [])) {
+  for (const d of (normDays || [])) {
     if (!d || !d.date || !d.start || !d.end) continue;
 
     const ymd = normYmd(d.date);
