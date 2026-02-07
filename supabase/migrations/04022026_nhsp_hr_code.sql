@@ -4139,6 +4139,7 @@ $$;
 
 
 
+
 create or replace function public.nhsp_weekly_apply_transactional(
   p_import_id uuid,
   p_payload jsonb,
@@ -4230,6 +4231,60 @@ declare
   v_should_run_phase3 boolean := false;
   v_should_run_cancellations boolean := false;
 
+  -- ENSURE BASE WEEKLY TIMESHEET + ATTACH ACTIVE SHIFTS (invariant)
+  v_ensure_pairs_count int := 0;
+  v_ensure_pairs_skipped_no_active int := 0;
+
+  v_ensure_base_week_created_count int := 0;
+  v_ensure_base_week_existing_count int := 0;
+
+  v_ensure_timesheet_created_count int := 0;
+  v_ensure_timesheet_reused_count int := 0;
+  v_ensure_timesheet_missing_reference_count int := 0;
+
+  v_ensure_shifts_attached_count int := 0;
+  v_ensure_shifts_relinked_invalid_ts_count int := 0;
+  v_ensure_remaining_active_detached_count int := 0;
+
+  v_ensure_sample_pairs jsonb := '[]'::jsonb;
+  v_ensure_sample_created_ts_ids jsonb := '[]'::jsonb;
+
+  -- loop vars for ensure
+  v_pair_contract_id uuid;
+  v_pair_candidate_id uuid;
+  v_pair_client_id uuid;
+  v_pair_week_ending_date date;
+
+  v_active_count int := 0;
+
+  v_base_week_id uuid := null;
+  v_base_week_ts_id uuid := null;
+
+  v_ts_exists boolean := false;
+
+  v_candidate_display_name text := null;
+  v_candidate_tms_ref text := null;
+  v_client_name text := null;
+  v_contract_display_site text := null;
+  v_contract_ward_hint text := null;
+  v_contract_role text := null;
+
+  v_occupant_norm text := null;
+  v_hospital_norm text := null;
+  v_ward_norm text := null;
+  v_role_norm text := null;
+
+  v_booking_base text := null;
+  v_hash_hex text := null;
+  v_booking_id text := null;
+  v_shift_label_norm text := null;
+
+  v_new_ts_id uuid := null;
+
+  v_attached_null_count int := 0;
+  v_relinked_invalid_count int := 0;
+
+  -- shared error
   v_sqlstate text;
   v_err text;
 begin
@@ -4294,25 +4349,25 @@ begin
 
   if exists (
     select 1
-    from tmp_sel_ids s
-    where s.action_id !~ '^(ROW|CANCEL):'
+    from tmp_sel_ids tsi
+    where tsi.action_id !~ '^(ROW|CANCEL):'
   ) then
     raise exception 'nhsp_weekly_apply_transactional: invalid action_id in selection (expected ROW:<external_row_key> or CANCEL:<shift_id>).';
   end if;
 
-  select coalesce(array_agg(s.action_id order by s.action_id), array[]::text[])
+  select coalesce(array_agg(tsi.action_id order by tsi.action_id), array[]::text[])
   into v_selected_action_ids
-  from tmp_sel_ids s;
+  from tmp_sel_ids tsi;
 
-  select coalesce(array_agg(distinct substring(s.action_id from 5) order by substring(s.action_id from 5)), array[]::text[])
+  select coalesce(array_agg(distinct substring(tsi.action_id from 5) order by substring(tsi.action_id from 5)), array[]::text[])
   into v_selected_truth_keys
-  from tmp_sel_ids s
-  where s.action_id like 'ROW:%';
+  from tmp_sel_ids tsi
+  where tsi.action_id like 'ROW:%';
 
-  select coalesce(array_agg(distinct (substring(s.action_id from 8))::uuid order by (substring(s.action_id from 8))::uuid), array[]::uuid[])
+  select coalesce(array_agg(distinct (substring(tsi.action_id from 8))::uuid order by (substring(tsi.action_id from 8))::uuid), array[]::uuid[])
   into v_selected_cancel_shift_ids
-  from tmp_sel_ids s
-  where s.action_id like 'CANCEL:%';
+  from tmp_sel_ids tsi
+  where tsi.action_id like 'CANCEL:%';
 
   v_selected_action_ids_count := coalesce(array_length(v_selected_action_ids, 1), 0);
   v_selected_row_keys_count := coalesce(array_length(v_selected_truth_keys, 1), 0);
@@ -4347,6 +4402,7 @@ begin
     p2.hr_row_id,
     p2.external_row_key,
     p2.work_date,
+    p2.week_ending_date,
     p2.candidate_id,
     p2.client_id,
     p2.contract_id,
@@ -4357,7 +4413,8 @@ begin
     and p2.candidate_id is not null
     and p2.client_id is not null
     and p2.contract_id is not null
-    and p2.work_date is not null;
+    and p2.work_date is not null
+    and p2.week_ending_date is not null;
 
   select coalesce(array_agg(distinct p2.external_row_key order by p2.external_row_key), array[]::text[])
   into v_all_ok_external_keys
@@ -4466,7 +4523,6 @@ begin
 
   -- If pure no-op, skip all mutation work.
   if (v_should_run_phase1 is false and v_should_run_cancellations is false) then
-    -- mark import applied (no truth mutation)
     update public.hr_imports hi_noop
     set
       import_scope = 'NHSP',
@@ -4669,7 +4725,6 @@ begin
 
   -- ─────────────────────────────────────────────
   -- 6) Phase 1 upsert (NHSP) with tick-only skip/force
-  --     ✅ FIX: call Phase1 ONLY if there are force keys (selected truth rows or auto-new rows)
   -- ─────────────────────────────────────────────
   if v_should_run_phase1 then
     select public.nhsp_apply_import_phase1(
@@ -4695,7 +4750,6 @@ begin
 
   -- ─────────────────────────────────────────────
   -- 7) Phase 1.5 repair (NHSP)
-  --     ✅ FIX: run only if Phase1 ran
   -- ─────────────────────────────────────────────
   if v_should_run_phase15 then
     create temporary table tmp_phase15_rows on commit drop as
@@ -4777,7 +4831,417 @@ begin
   ));
 
   -- ─────────────────────────────────────────────
-  -- 9) Compute affected_timesheet_ids
+  -- ✅ 8.5) ENSURE BASE WEEKLY TIMESHEET EXISTS + ATTACH ACTIVE NHSP SHIFTS
+  -- Invariant: after apply, there must be NO active NHSP shifts with timesheet_id NULL or referencing missing timesheet rows.
+  -- ─────────────────────────────────────────────
+  v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','ENSURE_BASE_WEEKLY_START'));
+
+  create temporary table tmp_ensure_pairs(
+    contract_id uuid,
+    candidate_id uuid,
+    client_id uuid,
+    week_ending_date date
+  ) on commit drop;
+
+  -- pairs from selected/forced row keys (resolved OK universe)
+  insert into tmp_ensure_pairs(contract_id, candidate_id, client_id, week_ending_date)
+  select distinct
+    p2ok.contract_id,
+    p2ok.candidate_id,
+    p2ok.client_id,
+    p2ok.week_ending_date
+  from tmp_p2_ok p2ok
+  where p2ok.external_row_key = any(coalesce(v_force_keys_final, array[]::text[]));
+
+  -- pairs from cancellations (even if cancellations-only apply)
+  if array_length(v_selected_cancel_shift_ids, 1) is not null then
+    insert into tmp_ensure_pairs(contract_id, candidate_id, client_id, week_ending_date)
+    select distinct
+      ns.contract_id,
+      ns.candidate_id,
+      ns.client_id,
+      ns.week_ending_date
+    from public.nhsp_shifts ns
+    where ns.id = any(v_selected_cancel_shift_ids)
+      and ns.contract_id is not null
+      and ns.client_id is not null
+      and ns.candidate_id is not null
+      and ns.week_ending_date is not null;
+  end if;
+
+  -- de-dupe
+  create temporary table tmp_ensure_pairs_u on commit drop as
+  select distinct
+    tep.contract_id,
+    tep.candidate_id,
+    tep.client_id,
+    tep.week_ending_date
+  from tmp_ensure_pairs tep
+  where tep.contract_id is not null
+    and tep.client_id is not null
+    and tep.candidate_id is not null
+    and tep.week_ending_date is not null;
+
+  select count(*)::int
+  into v_ensure_pairs_count
+  from tmp_ensure_pairs_u teu;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'contract_id', teu.contract_id::text,
+    'week_ending_date', teu.week_ending_date::text
+  )), '[]'::jsonb)
+  into v_ensure_sample_pairs
+  from (
+    select teu.contract_id, teu.week_ending_date
+    from tmp_ensure_pairs_u teu
+    order by teu.contract_id::text, teu.week_ending_date::text
+    limit 20
+  ) as teu;
+
+  -- ids of newly created base timesheets (for audit)
+  create temporary table tmp_ensure_created_ts_ids(
+    timesheet_id uuid primary key
+  ) on commit drop;
+
+  for v_pair_contract_id, v_pair_candidate_id, v_pair_client_id, v_pair_week_ending_date in
+    select teu.contract_id, teu.candidate_id, teu.client_id, teu.week_ending_date
+    from tmp_ensure_pairs_u teu
+    order by teu.contract_id::text, teu.week_ending_date::text
+  loop
+    -- If there are no active shifts left after cancellations, do not create a base week/timesheet.
+    select count(*)::int
+    into v_active_count
+    from public.nhsp_shifts ns_active
+    where ns_active.source_system = 'NHSP'::public.hr_source_enum
+      and ns_active.cancelled_at_utc is null
+      and ns_active.contract_id = v_pair_contract_id
+      and ns_active.week_ending_date = v_pair_week_ending_date;
+
+    if coalesce(v_active_count, 0) <= 0 then
+      v_ensure_pairs_skipped_no_active := v_ensure_pairs_skipped_no_active + 1;
+      continue;
+    end if;
+
+    v_base_week_id := null;
+    v_base_week_ts_id := null;
+
+    -- lock existing base contract_week
+    select cw0.id, cw0.timesheet_id
+    into v_base_week_id, v_base_week_ts_id
+    from public.contract_weeks cw0
+    where cw0.contract_id = v_pair_contract_id
+      and cw0.week_ending_date = v_pair_week_ending_date
+      and cw0.is_adjustment is false
+      and coalesce(cw0.additional_seq, 0) = 0
+    limit 1
+    for update;
+
+    if v_base_week_id is null then
+      insert into public.contract_weeks(
+        contract_id,
+        week_ending_date,
+        additional_seq,
+        status,
+        submission_mode_snapshot,
+        timesheet_id,
+        planned_schedule_json,
+        created_at,
+        updated_at,
+        is_adjustment
+      )
+      values (
+        v_pair_contract_id,
+        v_pair_week_ending_date,
+        0,
+        'SUBMITTED'::public.contract_week_status_enum,
+        'MANUAL'::public.submission_mode_enum,
+        null,
+        null,
+        v_now,
+        v_now,
+        false
+      )
+      returning id into v_base_week_id;
+
+      v_ensure_base_week_created_count := v_ensure_base_week_created_count + 1;
+      v_base_week_ts_id := null;
+    else
+      v_ensure_base_week_existing_count := v_ensure_base_week_existing_count + 1;
+    end if;
+
+    -- If base week references a timesheet_id, verify the timesheet row exists. If not, clear the link.
+    if v_base_week_ts_id is not null then
+      select exists(
+        select 1
+        from public.timesheets tchk
+        where tchk.timesheet_id = v_base_week_ts_id
+        limit 1
+      )
+      into v_ts_exists;
+
+      if v_ts_exists is not true then
+        update public.contract_weeks cw0u
+        set
+          timesheet_id = null,
+          updated_at = v_now
+        where cw0u.id = v_base_week_id;
+
+        v_ensure_timesheet_missing_reference_count := v_ensure_timesheet_missing_reference_count + 1;
+        v_base_week_ts_id := null;
+      end if;
+    end if;
+
+    -- Load norms from contract/candidate/client (for timesheet creation or normalization)
+    select ct.display_site, ct.ward_hint, ct.role
+    into v_contract_display_site, v_contract_ward_hint, v_contract_role
+    from public.contracts ct
+    where ct.id = v_pair_contract_id
+    limit 1;
+
+    select cand.display_name, cand.tms_ref
+    into v_candidate_display_name, v_candidate_tms_ref
+    from public.candidates cand
+    where cand.id = v_pair_candidate_id
+    limit 1;
+
+    select cli.name
+    into v_client_name
+    from public.clients cli
+    where cli.id = v_pair_client_id
+    limit 1;
+
+    v_occupant_norm := lower(coalesce(v_candidate_tms_ref, v_candidate_display_name, v_pair_candidate_id::text));
+    v_hospital_norm := lower(coalesce(v_contract_display_site, v_client_name, v_pair_client_id::text));
+    v_ward_norm := lower(coalesce(v_contract_ward_hint, 'contract'));
+    v_role_norm := lower(coalesce(v_contract_role, 'weekly'));
+
+    -- base weekly label and deterministic booking id
+    v_shift_label_norm := 'weekly-0';
+
+    v_booking_base :=
+      v_occupant_norm || '|' ||
+      v_pair_week_ending_date::text || '|' ||
+      v_hospital_norm || '|' ||
+      v_ward_norm || '|' ||
+      v_role_norm || '|' ||
+      v_shift_label_norm;
+
+    v_hash_hex := encode(extensions.digest(convert_to(v_booking_base, 'utf8'), 'sha256'::text), 'hex');
+    v_booking_id := 'bk_' || substr(v_hash_hex, 1, 16);
+
+    -- Create timesheet if missing
+    if v_base_week_ts_id is null then
+      v_new_ts_id := null;
+
+      insert into public.timesheets(
+        booking_id,
+        version,
+        is_current,
+        status,
+
+        sheet_scope,
+        submission_mode,
+        line_type,
+        authorised_at_server,
+
+        occupant_key_norm,
+        hospital_norm,
+        ward_norm,
+        job_title_norm,
+        shift_label_norm,
+
+        week_ending_date,
+        contract_id,
+
+        manual_pdf_r2_key,
+        actual_schedule_json,
+
+        qr_payload_json,
+        candidate_hint_text,
+
+        is_adjustment,
+        parent_timesheet_id,
+        correction_id,
+        correction_kind,
+        adjustment_origin,
+
+        created_at,
+        updated_at
+      )
+      values (
+        v_booking_id,
+        1,
+        true,
+        'RECEIVED'::public.timesheet_status_enum,
+
+        'WEEKLY'::public.timesheet_scope_enum,
+        'MANUAL'::public.submission_mode_enum,
+        'HOURS'::public.timesheet_line_type_enum,
+        null,
+
+        v_occupant_norm,
+        v_hospital_norm,
+        v_ward_norm,
+        v_role_norm,
+        v_shift_label_norm,
+
+        v_pair_week_ending_date,
+        v_pair_contract_id,
+
+        null,
+        '[]'::jsonb,
+
+        '{}'::jsonb,
+        null,
+
+        false,
+        null,
+        null,
+        null,
+        null,
+
+        v_now,
+        v_now
+      )
+      returning timesheet_id into v_new_ts_id;
+
+      v_ensure_timesheet_created_count := v_ensure_timesheet_created_count + 1;
+      v_base_week_ts_id := v_new_ts_id;
+
+      insert into tmp_ensure_created_ts_ids(timesheet_id)
+      values (v_new_ts_id)
+      on conflict do nothing;
+
+      update public.contract_weeks cw0link
+      set
+        timesheet_id = v_new_ts_id,
+        status = 'SUBMITTED'::public.contract_week_status_enum,
+        submission_mode_snapshot = 'MANUAL'::public.submission_mode_enum,
+        updated_at = v_now
+      where cw0link.id = v_base_week_id;
+
+    else
+      v_ensure_timesheet_reused_count := v_ensure_timesheet_reused_count + 1;
+
+      -- Ensure contract_week links stay consistent
+      update public.contract_weeks cw0keep
+      set
+        status = 'SUBMITTED'::public.contract_week_status_enum,
+        submission_mode_snapshot = 'MANUAL'::public.submission_mode_enum,
+        updated_at = v_now
+      where cw0keep.id = v_base_week_id;
+
+      -- Ensure the linked timesheet is normalized as a WEEKLY MANUAL HOURS row
+      update public.timesheets tnorm
+      set
+        is_current = true,
+        status = 'RECEIVED'::public.timesheet_status_enum,
+        sheet_scope = 'WEEKLY'::public.timesheet_scope_enum,
+        submission_mode = 'MANUAL'::public.submission_mode_enum,
+        line_type = 'HOURS'::public.timesheet_line_type_enum,
+        week_ending_date = v_pair_week_ending_date,
+        contract_id = v_pair_contract_id,
+        occupant_key_norm = v_occupant_norm,
+        hospital_norm = v_hospital_norm,
+        ward_norm = v_ward_norm,
+        job_title_norm = v_role_norm,
+        shift_label_norm = v_shift_label_norm,
+        updated_at = v_now
+      where tnorm.timesheet_id = v_base_week_ts_id;
+    end if;
+
+    -- Attach ACTIVE shifts with NULL timesheet_id to base weekly timesheet
+    update public.nhsp_shifts nsu0
+    set
+      timesheet_id = v_base_week_ts_id,
+      updated_at = v_now
+    where nsu0.source_system = 'NHSP'::public.hr_source_enum
+      and nsu0.cancelled_at_utc is null
+      and nsu0.contract_id = v_pair_contract_id
+      and nsu0.week_ending_date = v_pair_week_ending_date
+      and nsu0.timesheet_id is null;
+
+    get diagnostics v_attached_null_count = row_count;
+    v_ensure_shifts_attached_count := v_ensure_shifts_attached_count + coalesce(v_attached_null_count, 0);
+
+    -- Relink ACTIVE shifts that reference a missing timesheet row (deleted timesheet) to base weekly timesheet
+    update public.nhsp_shifts nsu1
+    set
+      timesheet_id = v_base_week_ts_id,
+      updated_at = v_now
+    where nsu1.source_system = 'NHSP'::public.hr_source_enum
+      and nsu1.cancelled_at_utc is null
+      and nsu1.contract_id = v_pair_contract_id
+      and nsu1.week_ending_date = v_pair_week_ending_date
+      and nsu1.timesheet_id is not null
+      and not exists (
+        select 1
+        from public.timesheets tmiss
+        where tmiss.timesheet_id = nsu1.timesheet_id
+        limit 1
+      );
+
+    get diagnostics v_relinked_invalid_count = row_count;
+    v_ensure_shifts_relinked_invalid_ts_count := v_ensure_shifts_relinked_invalid_ts_count + coalesce(v_relinked_invalid_count, 0);
+
+    -- Assert invariant for this pair: no active detached or missing-timesheet-linked shifts remain
+    select count(*)::int
+    into v_active_count
+    from public.nhsp_shifts nscheck
+    where nscheck.source_system = 'NHSP'::public.hr_source_enum
+      and nscheck.cancelled_at_utc is null
+      and nscheck.contract_id = v_pair_contract_id
+      and nscheck.week_ending_date = v_pair_week_ending_date
+      and (
+        nscheck.timesheet_id is null
+        or not exists (
+          select 1
+          from public.timesheets tchk2
+          where tchk2.timesheet_id = nscheck.timesheet_id
+          limit 1
+        )
+      );
+
+    if coalesce(v_active_count, 0) > 0 then
+      v_ensure_remaining_active_detached_count := v_ensure_remaining_active_detached_count + v_active_count;
+      raise exception
+        'nhsp_weekly_apply_transactional: ENSURE invariant failed (active NHSP shifts remain detached or linked to missing timesheets) contract_id=% week_ending_date=% remaining=%.',
+        v_pair_contract_id, v_pair_week_ending_date, v_active_count;
+    end if;
+
+    -- Ensure ensured base timesheet is included in affected set (for TSFIN drain)
+    insert into tmp_aff_ts(timesheet_id)
+    values (v_base_week_ts_id)
+    on conflict do nothing;
+
+  end loop;
+
+  select coalesce(jsonb_agg(x.ts_id), '[]'::jsonb)
+  into v_ensure_sample_created_ts_ids
+  from (
+    select tct.timesheet_id::text as ts_id
+    from tmp_ensure_created_ts_ids tct
+    order by tct.timesheet_id::text
+    limit 20
+  ) as x;
+
+  v_steps := v_steps || jsonb_build_array(jsonb_build_object(
+    'step','ENSURE_BASE_WEEKLY_DONE',
+    'ensure_pairs_count', v_ensure_pairs_count,
+    'ensure_pairs_skipped_no_active', v_ensure_pairs_skipped_no_active,
+    'base_week_created_count', v_ensure_base_week_created_count,
+    'base_week_existing_count', v_ensure_base_week_existing_count,
+    'base_timesheet_created_count', v_ensure_timesheet_created_count,
+    'base_timesheet_reused_count', v_ensure_timesheet_reused_count,
+    'missing_timesheet_reference_count', v_ensure_timesheet_missing_reference_count,
+    'shifts_attached_null_count', v_ensure_shifts_attached_count,
+    'shifts_relinked_invalid_ts_count', v_ensure_shifts_relinked_invalid_ts_count,
+    'sample_pairs', v_ensure_sample_pairs,
+    'sample_created_ts_ids', v_ensure_sample_created_ts_ids
+  ));
+
+  -- ─────────────────────────────────────────────
+  -- 9) Compute affected_timesheet_ids (union of ensure + corrections + cancellations + non-invoiced updates)
   -- ─────────────────────────────────────────────
   select coalesce(array_agg(k.external_row_key order by k.external_row_key), array[]::text[])
   into v_force_keys_non_invoiced
@@ -4789,7 +5253,13 @@ begin
     where ik.external_row_key is null
   ) as k;
 
-  create temporary table tmp_aff_ts(timesheet_id uuid) on commit drop;
+  -- tmp_aff_ts already exists (created earlier); it may already contain ensured base timesheets
+  -- ensure tmp_aff_ts exists (defensive): if not created (older versions), create it now
+  begin
+    perform 1 from tmp_aff_ts limit 1;
+  exception when undefined_table then
+    create temporary table tmp_aff_ts(timesheet_id uuid) on commit drop;
+  end;
 
   insert into tmp_aff_ts(timesheet_id)
   select (x.value)::uuid
@@ -4902,6 +5372,19 @@ begin
       'cancellations_count', v_cancellations_count,
       'sample_cancel_shift_ids', v_sample_cancel_shift_ids,
 
+      -- ensure stats
+      'ensure_pairs_count', v_ensure_pairs_count,
+      'ensure_pairs_skipped_no_active', v_ensure_pairs_skipped_no_active,
+      'ensure_base_week_created_count', v_ensure_base_week_created_count,
+      'ensure_base_week_existing_count', v_ensure_base_week_existing_count,
+      'ensure_timesheet_created_count', v_ensure_timesheet_created_count,
+      'ensure_timesheet_reused_count', v_ensure_timesheet_reused_count,
+      'ensure_timesheet_missing_reference_count', v_ensure_timesheet_missing_reference_count,
+      'ensure_shifts_attached_null_count', v_ensure_shifts_attached_count,
+      'ensure_shifts_relinked_invalid_ts_count', v_ensure_shifts_relinked_invalid_ts_count,
+      'ensure_sample_pairs', v_ensure_sample_pairs,
+      'ensure_sample_created_ts_ids', v_ensure_sample_created_ts_ids,
+
       'cancel_adjustment_count', v_cancel_adjustment_count,
       'correction_timesheets_created_count', v_correction_timesheets_created_count,
 
@@ -4964,7 +5447,6 @@ exception when others then
   raise;
 end;
 $$;
-
 
 
 
