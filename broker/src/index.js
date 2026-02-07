@@ -24219,6 +24219,29 @@ async function handleNhspImportPreview(env, req, importId) {
     return withCORS(env, req, badRequest('import_id is required'));
   }
 
+  const actorUserId = user?.id ? String(user.id) : null;
+  const ip = req?.headers?.get('cf-connecting-ip') || req?.headers?.get('x-forwarded-for') || null;
+  const userAgent = req?.headers?.get('user-agent') || null;
+  const correlationId = req?.headers?.get('cf-ray') || null;
+
+  const safeImpDebugAudit = async (action, afterJson) => {
+    try {
+      await sbRpc(env, "_imp_debug_audit", {
+        p_actor_user_id: actorUserId,
+        p_action: String(action || 'NHSP_PREVIEW_DEBUG'),
+        p_after_json: afterJson || {},
+        p_entity: 'hr_imports',
+        p_subject_id: String(importId || ''),
+        p_before_json: null,
+        p_ip: ip,
+        p_user_agent: userAgent,
+        p_correlation_id: correlationId
+      });
+    } catch {
+      // Never break preview for debug logging.
+    }
+  };
+
   const unwrapRpcJsonb = (raw, fnName) => {
     const j = raw;
     if (Array.isArray(j)) {
@@ -24269,6 +24292,8 @@ async function handleNhspImportPreview(env, req, importId) {
   const normKey = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
 
   try {
+    const t0 = Date.now();
+
     // Load import header (source_system check only; NHSP imports may span multiple clients)
     const { rows: impRows } = await sbFetch(
       env,
@@ -24300,9 +24325,13 @@ async function handleNhspImportPreview(env, req, importId) {
       return withCORS(env, req, badRequest(`Import ${importId} has source_system=${result.actual_source_system}, expected NHSP`));
     }
 
+    const t1 = Date.now();
+
     // Phase2 mapping (candidate_id/client_id/work_date/week_ending/contract_id per external_row_key)
     // ✅ Now includes diff fields: matched_shift_id, old/new timings, delta_paid_minutes, is_new/is_noop/is_changed
     let p2 = [];
+    let p2FetchOk = false;
+    let p2FetchErr = null;
     try {
       const res = await fetch(
         `${env.SUPABASE_URL}/rest/v1/rpc/weekly_import_phase2`,
@@ -24316,12 +24345,15 @@ async function handleNhspImportPreview(env, req, importId) {
       if (!res.ok) throw new Error(txt || `weekly_import_phase2 ${res.status}`);
       const j = txt ? JSON.parse(txt) : null;
       p2 = Array.isArray(j) ? j : [];
+      p2FetchOk = true;
     } catch (e) {
+      p2FetchOk = false;
+      p2FetchErr = e?.message || String(e);
       if (LOG) {
         console.warn('[NHSP_PREVIEW]', JSON.stringify({
           import_id: importId,
           stage: 'weekly_import_phase2_failed_non_fatal',
-          err: e?.message || String(e)
+          err: p2FetchErr
         }));
       }
       p2 = [];
@@ -24329,13 +24361,23 @@ async function handleNhspImportPreview(env, req, importId) {
 
     const p2OkRows = (p2 || []).filter(r => r && String(r.action || '').toUpperCase() === 'OK');
 
-    // Map ext -> first OK row (for replacement-day logic joins)
+    // Map ext -> first OK row (for joins)
     const p2ByExternalKey = new Map();
     for (const r of p2OkRows) {
       const ext = r?.external_row_key ? String(r.external_row_key) : null;
       if (!ext) continue;
       if (!p2ByExternalKey.has(ext)) p2ByExternalKey.set(ext, r);
     }
+
+    // Build hr_row_id -> p2 row mapping
+    const p2ByHrRowId = new Map();
+    for (const r of (p2 || [])) {
+      const hrRowId = r?.hr_row_id ? String(r.hr_row_id) : null;
+      if (!hrRowId) continue;
+      if (!p2ByHrRowId.has(hrRowId)) p2ByHrRowId.set(hrRowId, r);
+    }
+
+    const t2 = Date.now();
 
     // Build file-truth day stats (hr_rows + p2 joined by hr_row_id) for ambiguity tracking and file date range,
     // PLUS build NHSP identity-key file set for cancellation detection:
@@ -24344,13 +24386,6 @@ async function handleNhspImportPreview(env, req, importId) {
     const candidateDayMapped = new Set(); // `${candidate_id}|${client_id}|${date_local}`
     const clientMappedSet = new Set();    // client_id values that appear deterministically in this import
     const fileRefSet = new Set();         // normalized ref keys present in file truth
-
-    const p2ByHrRowId = new Map();
-    for (const r of (p2 || [])) {
-      const hrRowId = r?.hr_row_id ? String(r.hr_row_id) : null;
-      if (!hrRowId) continue;
-      if (!p2ByHrRowId.has(hrRowId)) p2ByHrRowId.set(hrRowId, r);
-    }
 
     const fetchHrRowsPaged = async () => {
       const pageSize = 1000;
@@ -24384,14 +24419,19 @@ async function handleNhspImportPreview(env, req, importId) {
     };
 
     let hrRows = [];
+    let hrRowsFetchOk = false;
+    let hrRowsFetchErr = null;
     try {
       hrRows = await fetchHrRowsPaged();
+      hrRowsFetchOk = true;
     } catch (e) {
+      hrRowsFetchOk = false;
+      hrRowsFetchErr = e?.message || String(e);
       if (LOG) {
         console.warn('[NHSP_PREVIEW]', JSON.stringify({
           import_id: importId,
           stage: 'hr_rows_fetch_failed',
-          err: e?.message || String(e)
+          err: hrRowsFetchErr
         }));
       }
       hrRows = [];
@@ -24469,26 +24509,138 @@ async function handleNhspImportPreview(env, req, importId) {
       return true;
     };
 
+    const t3 = Date.now();
+
     // ─────────────────────────────────────────────────────────────
     // ✅ NEW model:
-    // - actions[] contains ONLY:
+    // - actions[] contains:
     //    * EXISTING shifts that would be UPDATED (changed) and need review
     //    * CANCELLATIONS (missing-from-import / replacement-day) when proposed
+    //    * ✅ ATTACH actions when an existing shift is present in truth but is DETACHED / missing timesheet row
     // - NEW shifts are NOT shown, but returned as auto_apply_action_ids
-    // - NO_OP shifts are not returned at all
+    // - NO_OP shifts are not returned at all UNLESS attach is required
     // ─────────────────────────────────────────────────────────────
     const actions = [];
     const auto_apply_action_ids = [];
+
+    const warnings = [];
+    const detachedActiveShiftIdSet = new Set();     // active shifts with timesheet_id NULL found during preview scans
+    const missingTimesheetRowIdSet = new Set();     // timesheet_id references that do not exist in timesheets
+    const detachedActiveShiftSample = [];
+    const missingTimesheetRowSample = [];
 
     // Track counts for log/meta
     let hiddenNewCount = 0;
     let hiddenNoopCount = 0;
     let shownChangedCount = 0;
+    let shownAttachCount = 0;
 
-    // Build base action objects from phase2 OK rows using diff flags
+    // Collect all external keys early so we can load existing truth linkage once.
     const extAll = [];
+    for (const r of p2OkRows) {
+      const ext = r?.external_row_key ? String(r.external_row_key) : null;
+      if (ext) extAll.push(ext);
+    }
+    const extUniq = uniq(extAll.map(String).filter(Boolean));
+
+    // Load existing shifts for these keys (for linkage + replacement-day old-work-date checks)
+    const shiftByExternalKey = new Map(); // ext -> shift row
+    if (extUniq.length) {
+      for (const keyChunk of chunk(extUniq, 150)) {
+        try {
+          const { rows: sRows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
+              `?source_system=eq.NHSP` +
+              `&cancelled_at_utc=is.null` +
+              `&external_row_key=in.(${keyChunk.map(enc).join(',')})` +
+              `&select=id,external_row_key,candidate_id,client_id,work_date,timesheet_id,ref_num`
+          );
+          for (const sh of (sRows || [])) {
+            const ext = sh?.external_row_key ? String(sh.external_row_key) : null;
+            if (!ext) continue;
+            if (!shiftByExternalKey.has(ext)) shiftByExternalKey.set(ext, sh);
+
+            const sid = sh?.id ? String(sh.id) : null;
+            const tid = sh?.timesheet_id ? String(sh.timesheet_id) : null;
+
+            if (sid && !tid) {
+              detachedActiveShiftIdSet.add(sid);
+              if (detachedActiveShiftSample.length < 15) detachedActiveShiftSample.push(sid);
+            }
+          }
+        } catch (e) {
+          if (LOG) {
+            console.warn('[NHSP_PREVIEW]', JSON.stringify({
+              import_id: importId,
+              stage: 'truth_shift_fetch_failed_non_fatal',
+              err: e?.message || String(e),
+              chunk_size: keyChunk.length
+            }));
+          }
+        }
+      }
+    }
+
+    // Load timesheet existence for referenced timesheet_ids (detect deleted timesheet rows)
+    const tsMetaById = new Map(); // timesheet_id -> { exists, is_current, status, sheet_scope }
+    const tsIds = [];
+    for (const sh of shiftByExternalKey.values()) {
+      const tid = sh?.timesheet_id ? String(sh.timesheet_id) : null;
+      if (tid) tsIds.push(tid);
+    }
+    const tsIdsUniq = uniq(tsIds);
+
+    if (tsIdsUniq.length) {
+      for (const idChunk of chunk(tsIdsUniq, 150)) {
+        try {
+          const { rows: tRows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/timesheets` +
+              `?timesheet_id=in.(${idChunk.map(enc).join(',')})&select=timesheet_id,is_current,status,sheet_scope`
+          );
+          const found = new Set();
+          for (const t of (tRows || [])) {
+            const id = t?.timesheet_id ? String(t.timesheet_id) : null;
+            if (!id) continue;
+            found.add(id);
+            tsMetaById.set(id, {
+              exists: true,
+              is_current: (t?.is_current === true),
+              status: (t?.status != null ? String(t.status) : null),
+              sheet_scope: (t?.sheet_scope != null ? String(t.sheet_scope) : null)
+            });
+          }
+          // For any ids in the chunk not found, mark as missing
+          for (const id of idChunk) {
+            const sid = String(id);
+            if (!found.has(sid) && !tsMetaById.has(sid)) {
+              tsMetaById.set(sid, { exists: false, is_current: false, status: null, sheet_scope: null });
+
+              missingTimesheetRowIdSet.add(sid);
+              if (missingTimesheetRowSample.length < 15) missingTimesheetRowSample.push(sid);
+            }
+          }
+        } catch (e) {
+          if (LOG) {
+            console.warn('[NHSP_PREVIEW]', JSON.stringify({
+              import_id: importId,
+              stage: 'timesheets_fetch_failed_non_fatal',
+              err: e?.message || String(e),
+              chunk_size: idChunk.length
+            }));
+          }
+        }
+      }
+    }
+
+    const attachExtSample = [];
+    const attachTsMissingSample = [];
+
+    // Visible row actions index (for replacement-day marking)
     const extToActionIndex = new Map(); // ext -> idx in actions (only for shown row actions)
 
+    // Build base action objects from phase2 OK rows using diff flags + linkage detection
     for (const r of p2OkRows) {
       const ext = r?.external_row_key ? String(r.external_row_key) : null;
       const cid = r?.candidate_id ? String(r.candidate_id) : null;
@@ -24499,13 +24651,42 @@ async function handleNhspImportPreview(env, req, importId) {
 
       if (!ext || !cid || !cli || !wd || !co || !we) continue;
 
-      extAll.push(ext);
-
       const matchedShiftId = r?.matched_shift_id ? String(r.matched_shift_id) : null;
 
       const isNew  = asBool(r?.is_new);
       const isNoop = asBool(r?.is_noop);
       const isChanged = asBool(r?.is_changed);
+
+      // Determine linkage state for existing truth (only meaningful when matched shift exists)
+      const existingShift = shiftByExternalKey.get(ext) || null;
+      const existingShiftId = existingShift?.id ? String(existingShift.id) : null;
+      const existingTimesheetId = existingShift?.timesheet_id ? String(existingShift.timesheet_id) : null;
+
+      let existingTimesheetExists = null;
+      let existingTimesheetIsCurrent = null;
+      let existingTimesheetStatus = null;
+      let existingTimesheetScope = null;
+
+      if (existingTimesheetId) {
+        const meta = tsMetaById.get(existingTimesheetId) || null;
+        if (meta) {
+          existingTimesheetExists = meta.exists === true;
+          existingTimesheetIsCurrent = meta.is_current === true;
+          existingTimesheetStatus = meta.status || null;
+          existingTimesheetScope = meta.sheet_scope || null;
+        } else {
+          // If we failed to load meta, treat as unknown (do not force attach solely on this)
+          existingTimesheetExists = null;
+          existingTimesheetIsCurrent = null;
+        }
+      }
+
+      const needsAttach =
+        !!matchedShiftId &&
+        (
+          !existingTimesheetId ||
+          (existingTimesheetId && existingTimesheetExists === false)
+        );
 
       // NEW shift → auto apply (hidden)
       if (isNew || !matchedShiftId) {
@@ -24514,9 +24695,68 @@ async function handleNhspImportPreview(env, req, importId) {
         continue;
       }
 
-      // NO-OP existing shift → suppress entirely
+      // NO-OP existing shift → suppress unless attach is required
       if (isNoop && !isChanged) {
-        hiddenNoopCount += 1;
+        if (!needsAttach) {
+          hiddenNoopCount += 1;
+          continue;
+        }
+
+        // Track warning samples on attach-needed situations
+        if (existingShiftId && !existingTimesheetId) {
+          detachedActiveShiftIdSet.add(existingShiftId);
+          if (detachedActiveShiftSample.length < 15) detachedActiveShiftSample.push(existingShiftId);
+        }
+        if (existingTimesheetId && existingTimesheetExists === false) {
+          missingTimesheetRowIdSet.add(existingTimesheetId);
+          if (missingTimesheetRowSample.length < 15) missingTimesheetRowSample.push(existingTimesheetId);
+        }
+
+        // ✅ ATTACH action for detached/missing timesheet linkage
+        actions.push({
+          action_id: `ROW:${ext}`,
+          action_kind: 'SHIFT_ATTACH',
+          external_row_key: ext,
+          shift_id: matchedShiftId,
+          candidate_id: cid,
+          client_id: cli,
+          contract_id: co,
+          week_ending_date: we,
+          work_date: wd,
+
+          replacement_day_key: null,
+
+          is_new_shift: false,
+          is_cancellation: false,
+          is_red: true,
+
+          // ✅ default checked: user has a path to proceed even if nothing else is “changed”
+          default_checked: true,
+
+          reason: 'TIMESHEET_MISSING_OR_DETACHED',
+          reason_text: 'Timesheet missing or shift detached',
+
+          label: 'Reattach shift to weekly timesheet',
+
+          details: {
+            attach_kind: 'ATTACH_TO_WEEKLY_TIMESHEET',
+            matched_shift_id: matchedShiftId,
+            existing_shift_id: existingShiftId,
+            existing_timesheet_id: existingTimesheetId,
+            existing_timesheet_exists: existingTimesheetExists,
+            existing_timesheet_is_current: existingTimesheetIsCurrent,
+            existing_timesheet_status: existingTimesheetStatus,
+            existing_timesheet_scope: existingTimesheetScope
+          }
+        });
+
+        extToActionIndex.set(ext, actions.length - 1);
+        shownAttachCount += 1;
+
+        if (attachExtSample.length < 15) attachExtSample.push(ext);
+        if (existingTimesheetId && existingTimesheetExists === false && attachTsMissingSample.length < 15) {
+          attachTsMissingSample.push(existingTimesheetId);
+        }
         continue;
       }
 
@@ -24550,7 +24790,7 @@ async function handleNhspImportPreview(env, req, importId) {
         // Display label
         label: 'Update existing shift',
 
-        // Helpful details for UI rendering
+        // Helpful details for UI rendering + linkage visibility
         details: {
           old_start_utc: r?.old_start_utc || null,
           old_end_utc: r?.old_end_utc || null,
@@ -24565,7 +24805,16 @@ async function handleNhspImportPreview(env, req, importId) {
           delta_paid_minutes: Number.isFinite(delta) ? delta : null,
           delta_display: (Number.isFinite(delta) ? fmtDurationFromMinutes(Math.abs(delta)) : null),
           old_hours_display: (r?.old_paid_minutes != null ? fmtDurationFromMinutes(Number(r.old_paid_minutes)) : null),
-          new_hours_display: (r?.new_paid_minutes != null ? fmtDurationFromMinutes(Number(r.new_paid_minutes)) : null)
+          new_hours_display: (r?.new_paid_minutes != null ? fmtDurationFromMinutes(Number(r.new_paid_minutes)) : null),
+
+          // linkage debug (helps isolate unexpected orphans)
+          needs_attach: needsAttach,
+          existing_shift_id: existingShiftId,
+          existing_timesheet_id: existingTimesheetId,
+          existing_timesheet_exists: existingTimesheetExists,
+          existing_timesheet_is_current: existingTimesheetIsCurrent,
+          existing_timesheet_status: existingTimesheetStatus,
+          existing_timesheet_scope: existingTimesheetScope
         }
       });
 
@@ -24573,61 +24822,50 @@ async function handleNhspImportPreview(env, req, importId) {
       shownChangedCount += 1;
     }
 
+    const t4 = Date.now();
+
     // ─────────────────────────────────────────────────────────────
     // Replacement-day detection and REPLACEMENT_DAY cancellation candidates
     // ✅ Standardise reason + cancel_kind AND use identity-key presence test (ref_num missing in file)
-    // ✅ Only scan confirmed shifts (timesheet_id is not null, cancelled_at_utc is null)
+    // ✅ Scan ACTIVE shifts regardless of timesheet_id so detached truth cannot evade cancellations
     // ✅ Only scan in-scope clients (clientMappedSet) and within file date range
     // ─────────────────────────────────────────────────────────────
-    const extUniq = uniq(extAll);
-
     const replacementDayKeys = new Set(); // `${candidate_id}|${client_id}|${old_work_date}`
+
     if (extUniq.length) {
-      for (const keyChunk of chunk(extUniq, 150)) {
-        const { rows: sRows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
-            `?source_system=eq.NHSP` +
-            `&cancelled_at_utc=is.null` +
-            `&external_row_key=in.(${keyChunk.map(enc).join(',')})` +
-            `&select=id,external_row_key,candidate_id,client_id,work_date`
-        );
+      for (const ext of extUniq) {
+        const sh = shiftByExternalKey.get(ext);
+        if (!sh || !sh.work_date) continue;
 
-        for (const sh of (sRows || [])) {
-          if (!sh || !sh.external_row_key || !sh.work_date) continue;
+        const p2r = p2ByExternalKey.get(ext);
+        if (!p2r) continue;
 
-          const ext = String(sh.external_row_key);
-          const p2r = p2ByExternalKey.get(ext);
-          if (!p2r) continue;
+        const importWd = p2r.work_date ? String(p2r.work_date) : null;
+        const oldWd = sh.work_date ? String(sh.work_date) : null;
+        if (!importWd || !oldWd) continue;
 
-          const importWd = p2r.work_date ? String(p2r.work_date) : null;
-          const oldWd = sh.work_date ? String(sh.work_date) : null;
-          if (!importWd || !oldWd) continue;
+        if (oldWd !== importWd) {
+          const cid = sh.candidate_id ? String(sh.candidate_id) : (p2r.candidate_id ? String(p2r.candidate_id) : null);
+          const cli = sh.client_id ? String(sh.client_id) : (p2r.client_id ? String(p2r.client_id) : null);
+          if (!cid || !cli) continue;
 
-          if (oldWd !== importWd) {
-            const cid = sh.candidate_id ? String(sh.candidate_id) : (p2r.candidate_id ? String(p2r.candidate_id) : null);
-            const cli = sh.client_id ? String(sh.client_id) : (p2r.client_id ? String(p2r.client_id) : null);
-            if (!cid || !cli) continue;
+          const repKey = `${cid}|${cli}|${oldWd}`;
+          replacementDayKeys.add(repKey);
 
-            const repKey = `${cid}|${cli}|${oldWd}`;
-            replacementDayKeys.add(repKey);
-
-            // Mark the ROW action (if present in the visible list) as replacement-day new shift
-            const idx = extToActionIndex.get(ext);
-            if (typeof idx === 'number' && idx >= 0 && actions[idx]) {
-              actions[idx] = {
-                ...actions[idx],
-                is_new_shift: true,
-                replacement_day_key: repKey,
-                // Ensure reason_text remains user-friendly even if delta is 0
-                reason: actions[idx].reason || 'SHIFT_DETAILS_CHANGED',
-                reason_text: actions[idx].reason_text || 'Shift details changed',
-                label: 'Update existing shift'
-              };
-            } else {
-              // If it was suppressed (noop) or hidden (new), ensure it is at least auto-applied
-              auto_apply_action_ids.push(`ROW:${ext}`);
-            }
+          // Mark the ROW action (if present in the visible list) as replacement-day new shift
+          const idx = extToActionIndex.get(ext);
+          if (typeof idx === 'number' && idx >= 0 && actions[idx]) {
+            actions[idx] = {
+              ...actions[idx],
+              is_new_shift: true,
+              replacement_day_key: repKey,
+              reason: actions[idx].reason || 'SHIFT_DETAILS_CHANGED',
+              reason_text: actions[idx].reason_text || 'Shift details changed',
+              label: actions[idx].label || 'Update existing shift'
+            };
+          } else {
+            // If it was suppressed (noop/new), ensure it is at least auto-applied
+            auto_apply_action_ids.push(`ROW:${ext}`);
           }
         }
       }
@@ -24635,7 +24873,7 @@ async function handleNhspImportPreview(env, req, importId) {
 
     const cancelShiftIdSet = new Set();
 
-    // Emit REPLACEMENT_DAY cancellation actions for all confirmed shifts in each replacement-day key
+    // Emit REPLACEMENT_DAY cancellation actions for all active shifts in each replacement-day key
     if (replacementDayKeys.size && minWd && maxWd) {
       for (const repKey of replacementDayKeys) {
         const [cid, cli, oldWd] = String(repKey).split('|');
@@ -24652,7 +24890,6 @@ async function handleNhspImportPreview(env, req, importId) {
           `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
             `?source_system=eq.NHSP` +
             `&cancelled_at_utc=is.null` +
-            `&timesheet_id=not.is.null` +
             `&candidate_id=eq.${enc(cid)}` +
             `&client_id=eq.${enc(cli)}` +
             `&work_date=eq.${enc(oldWd)}` +
@@ -24663,6 +24900,12 @@ async function handleNhspImportPreview(env, req, importId) {
           const sid = sh?.id ? String(sh.id) : null;
           if (!sid) continue;
           if (cancelShiftIdSet.has(sid)) continue;
+
+          const tid = sh?.timesheet_id ? String(sh.timesheet_id) : null;
+          if (!tid) {
+            detachedActiveShiftIdSet.add(sid);
+            if (detachedActiveShiftSample.length < 15) detachedActiveShiftSample.push(sid);
+          }
 
           const ref = sh?.ref_num ? String(sh.ref_num) : '';
           const refNorm = normKey(ref);
@@ -24698,7 +24941,7 @@ async function handleNhspImportPreview(env, req, importId) {
             default_checked: false,
 
             label: 'Cancel shift',
-            details: { cancel_kind: 'REPLACEMENT_DAY' }
+            details: { cancel_kind: 'REPLACEMENT_DAY', existing_timesheet_id: tid || null }
           });
         }
       }
@@ -24707,10 +24950,8 @@ async function handleNhspImportPreview(env, req, importId) {
     // ─────────────────────────────────────────────────────────────
     // Missing-from-import cancellation candidates (identity-key scan)
     //
-    // ✅ Replace old "day-empty + candidate-in-import" logic.
-    // ✅ NHSP identity key: nhsp_shifts.ref_num
     // ✅ Compare against fileRefSet (ref_num / Reference / hr_request_id)
-    // ✅ Only confirmed shifts: timesheet_id is not null, cancelled_at_utc is null
+    // ✅ Scan ACTIVE shifts regardless of timesheet_id so detached truth cannot evade cancellations
     // ✅ Scope: only clients deterministically present in file (clientMappedSet)
     // ✅ Range: file min/max dates
     // ─────────────────────────────────────────────────────────────
@@ -24723,7 +24964,6 @@ async function handleNhspImportPreview(env, req, importId) {
           `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
             `?source_system=eq.NHSP` +
             `&cancelled_at_utc=is.null` +
-            `&timesheet_id=not.is.null` +
             `&client_id=in.(${cliChunk.map(enc).join(',')})` +
             `&work_date=gte.${enc(minWd)}` +
             `&work_date=lte.${enc(maxWd)}` +
@@ -24735,6 +24975,12 @@ async function handleNhspImportPreview(env, req, importId) {
 
           const sid = String(sh.id);
           if (cancelShiftIdSet.has(sid)) continue;
+
+          const tid = sh?.timesheet_id ? String(sh.timesheet_id) : null;
+          if (!tid) {
+            detachedActiveShiftIdSet.add(sid);
+            if (detachedActiveShiftSample.length < 15) detachedActiveShiftSample.push(sid);
+          }
 
           const ref = sh?.ref_num ? String(sh.ref_num) : '';
           const refNorm = normKey(ref);
@@ -24776,14 +25022,53 @@ async function handleNhspImportPreview(env, req, importId) {
             default_checked: false,
 
             label: 'Cancel shift',
-            details: { cancel_kind: 'MISSING_FROM_IMPORT' }
+            details: { cancel_kind: 'MISSING_FROM_IMPORT', existing_timesheet_id: tid || null }
           });
         }
       }
     }
 
+    const t5 = Date.now();
+
     // De-dupe auto_apply_action_ids
     const autoUniq = uniq((auto_apply_action_ids || []).map(String).filter(Boolean));
+
+    // Also report which visible actions are default-checked (attach actions are default-checked)
+    const defaultCheckedActionIds = actions.filter(a => a && a.default_checked === true).map(a => String(a.action_id));
+
+    // Build warnings for UI + logging (strong signal)
+    const detachedCount = detachedActiveShiftIdSet.size;
+    const missingTsRowCount = missingTimesheetRowIdSet.size;
+
+    if (detachedCount > 0) {
+      warnings.push({
+        code: 'DETACHED_ACTIVE_SHIFTS_PRESENT',
+        severity: 'WARN',
+        message: 'Active NHSP shifts exist with no timesheet_id. This should not occur after apply; investigate if seen before finalise.',
+        detached_active_shift_count: detachedCount,
+        detached_active_shift_ids_sample: detachedActiveShiftSample.slice(0, 15)
+      });
+    }
+
+    if (missingTsRowCount > 0) {
+      warnings.push({
+        code: 'MISSING_TIMESHEET_ROWS_REFERENCED',
+        severity: 'WARN',
+        message: 'NHSP shifts reference timesheet_id values that do not exist in timesheets. This indicates deleted timesheets or inconsistent data.',
+        missing_timesheet_row_count: missingTsRowCount,
+        missing_timesheet_ids_sample: missingTimesheetRowSample.slice(0, 15)
+      });
+    }
+
+    if (LOG && (detachedCount > 0 || missingTsRowCount > 0)) {
+      console.warn('[NHSP_PREVIEW][DETACHED_WARNING]', JSON.stringify({
+        import_id: importId,
+        detached_active_shift_count: detachedCount,
+        missing_timesheet_row_count: missingTsRowCount,
+        detached_active_shift_ids_sample: detachedActiveShiftSample.slice(0, 15),
+        missing_timesheet_ids_sample: missingTimesheetRowSample.slice(0, 15)
+      }));
+    }
 
     // Optional: enrich with candidate/client display names (for a user-friendly UI)
     const candidateIdSet = new Set();
@@ -24851,6 +25136,9 @@ async function handleNhspImportPreview(env, req, importId) {
       };
     }
 
+    const t6 = Date.now();
+
+    // Wrangler log for controlled import monitoring
     if (LOG) {
       const groups = Array.isArray(result.groups)
         ? result.groups
@@ -24858,31 +25146,108 @@ async function handleNhspImportPreview(env, req, importId) {
 
       console.log('[NHSP_PREVIEW]', JSON.stringify({
         import_id: importId,
+        timings_ms: {
+          total: (Date.now() - t0),
+          classifyWeeklyImportRows: (t1 - t0),
+          weekly_import_phase2: (t2 - t1),
+          hr_rows_parse_join: (t3 - t2),
+          truth_linkage_load: (t4 - t3),
+          cancellations_build: (t5 - t4),
+          enrich_names: (t6 - t5)
+        },
+        p2_fetch_ok: p2FetchOk,
+        p2_fetch_err: p2FetchOk ? null : p2FetchErr,
+        hr_rows_fetch_ok: hrRowsFetchOk,
+        hr_rows_fetch_err: hrRowsFetchOk ? null : hrRowsFetchErr,
         summary: result.summary || null,
         total_groups: groups.length,
         actions_total: actions.length,
+        actions_attach: shownAttachCount,
         actions_changed_rows: shownChangedCount,
         actions_cancel: actions.filter(a => a && a.action_kind === 'SHIFT_CANCEL').length,
+        actions_default_checked: defaultCheckedActionIds.length,
         auto_apply_new_rows: autoUniq.length,
+        hidden_new_rows: hiddenNewCount,
         hidden_noop_rows: hiddenNoopCount,
         file_date_min: minWd,
         file_date_max: maxWd,
         hr_rows_loaded: (hrRows || []).length,
         file_ref_keys_count: fileRefSet.size,
-        in_scope_clients_count: clientMappedSet.size
+        in_scope_clients_count: clientMappedSet.size,
+        attach_ext_sample: attachExtSample,
+        attach_missing_timesheet_ids_sample: attachTsMissingSample,
+        detached_active_shift_count: detachedCount,
+        missing_timesheet_row_count: missingTsRowCount
       }));
     }
 
-    // Preserve existing preview output, add action-level apply contract
+    // Audit events (invoice_debug gated)
+    await safeImpDebugAudit('NHSP_WEEKLY_PREVIEW_DEBUG', {
+      import_id: String(importId),
+      p2_fetch_ok: p2FetchOk,
+      p2_fetch_err: p2FetchOk ? null : String(p2FetchErr || ''),
+      hr_rows_fetch_ok: hrRowsFetchOk,
+      hr_rows_fetch_err: hrRowsFetchOk ? null : String(hrRowsFetchErr || ''),
+      file_date_min: minWd,
+      file_date_max: maxWd,
+      hr_rows_loaded: Number((hrRows || []).length || 0),
+      p2_ok_rows: Number(p2OkRows.length || 0),
+      actions_total: Number(actions.length || 0),
+      actions_attach: Number(shownAttachCount || 0),
+      actions_changed_rows: Number(shownChangedCount || 0),
+      actions_cancel: Number(actions.filter(a => a && a.action_kind === 'SHIFT_CANCEL').length || 0),
+      actions_default_checked: Number(defaultCheckedActionIds.length || 0),
+      auto_apply_new_rows: Number(autoUniq.length || 0),
+      hidden_new_rows: Number(hiddenNewCount || 0),
+      hidden_noop_rows: Number(hiddenNoopCount || 0),
+      in_scope_clients_count: Number(clientMappedSet.size || 0),
+      file_ref_keys_count: Number(fileRefSet.size || 0),
+      attach_ext_sample: attachExtSample.slice(0, 15),
+      attach_missing_timesheet_ids_sample: attachTsMissingSample.slice(0, 15),
+      detached_active_shift_count: detachedCount,
+      detached_active_shift_ids_sample: detachedActiveShiftSample.slice(0, 15),
+      missing_timesheet_row_count: missingTsRowCount,
+      missing_timesheet_ids_sample: missingTimesheetRowSample.slice(0, 15),
+      correlation_id: correlationId || null,
+      timings_ms: {
+        total: Number(Date.now() - t0),
+        classifyWeeklyImportRows: Number(t1 - t0),
+        weekly_import_phase2: Number(t2 - t1),
+        hr_rows_parse_join: Number(t3 - t2),
+        truth_linkage_load: Number(t4 - t3),
+        cancellations_build: Number(t5 - t4),
+        enrich_names: Number(t6 - t5)
+      }
+    });
+
+    if (warnings.length) {
+      await safeImpDebugAudit('NHSP_WEEKLY_PREVIEW_WARNINGS', {
+        import_id: String(importId),
+        warnings
+      });
+    }
+
+    // Preserve existing preview output, add action-level apply contract + UI warnings + detached metadata
     return withCORS(env, req, ok({
       ...result,
       import_id: String(importId),
 
-      // ✅ Visible actions (ONLY changed existing + cancellations)
+      // ✅ Visible actions (changed existing + cancellations + attach)
       actions,
 
       // ✅ Hidden-but-auto-applied actions (NEW shifts)
       auto_apply_action_ids: autoUniq,
+
+      // ✅ Apply contract hints for controlled runs (non-breaking additions)
+      action_contract: {
+        selected_action_ids_must_include_auto_apply_action_ids: true,
+        default_checked_action_ids: defaultCheckedActionIds,
+        auto_apply_action_ids: autoUniq,
+        can_apply: !!(actions.length || autoUniq.length)
+      },
+
+      // ✅ UI warnings: surfaced to the front-end to display during controlled runs
+      warnings,
 
       truth_meta: {
         file_date_min: minWd,
@@ -24892,7 +25257,21 @@ async function handleNhspImportPreview(env, req, importId) {
 
         // helpful meta for UI/debug
         hidden_new_rows: hiddenNewCount,
-        hidden_noop_rows: hiddenNoopCount
+        hidden_noop_rows: hiddenNoopCount,
+
+        // ✅ attach visibility
+        attach_actions_count: shownAttachCount,
+        attach_ext_sample: attachExtSample.slice(0, 15),
+
+        // apply visibility
+        auto_apply_new_rows: autoUniq.length,
+        default_checked_actions_count: defaultCheckedActionIds.length,
+
+        // ✅ detached/missing-timesheet signals for UI + diagnostics
+        detached_active_shift_count: detachedCount,
+        detached_active_shift_ids_sample: detachedActiveShiftSample.slice(0, 15),
+        missing_timesheet_row_count: missingTsRowCount,
+        missing_timesheet_ids_sample: missingTimesheetRowSample.slice(0, 15)
       }
     }));
   } catch (e) {
@@ -24903,10 +25282,29 @@ async function handleNhspImportPreview(env, req, importId) {
         error: e?.message || String(e)
       }));
     }
+
+    // invoice_debug-gated audit log for unexpected preview errors
+    try {
+      await sbRpc(env, "_imp_debug_audit", {
+        p_actor_user_id: (user?.id ? String(user.id) : null),
+        p_action: "NHSP_WEEKLY_PREVIEW_ERROR",
+        p_after_json: {
+          import_id: String(importId || ''),
+          error: (e?.message || String(e) || ''),
+          correlation_id: (req?.headers?.get('cf-ray') || null)
+        },
+        p_entity: "hr_imports",
+        p_subject_id: String(importId || ''),
+        p_before_json: null,
+        p_ip: (req?.headers?.get('cf-connecting-ip') || req?.headers?.get('x-forwarded-for') || null),
+        p_user_agent: (req?.headers?.get('user-agent') || null),
+        p_correlation_id: (req?.headers?.get('cf-ray') || null)
+      });
+    } catch {}
+
     return withCORS(env, req, serverError(`NHSP preview failed: ${e?.message || e}`));
   }
 }
-
 
 
 async function handleNhspApply(env, req, importId) {
@@ -24919,6 +25317,29 @@ async function handleNhspApply(env, req, importId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   if (!importId) return withCORS(env, req, badRequest('import_id is required'));
+
+  const actorUserId = user?.id ? String(user.id) : null;
+  const ip = req?.headers?.get('cf-connecting-ip') || req?.headers?.get('x-forwarded-for') || null;
+  const userAgent = req?.headers?.get('user-agent') || null;
+  const correlationId = req?.headers?.get('cf-ray') || null;
+
+  const safeImpDebugAudit = async (action, afterJson) => {
+    try {
+      await sbRpc(env, "_imp_debug_audit", {
+        p_actor_user_id: actorUserId,
+        p_action: String(action || 'NHSP_APPLY_DEBUG'),
+        p_after_json: afterJson || {},
+        p_entity: 'hr_imports',
+        p_subject_id: String(importId || ''),
+        p_before_json: null,
+        p_ip: ip,
+        p_user_agent: userAgent,
+        p_correlation_id: correlationId
+      });
+    } catch {
+      // Never break apply for debug logging.
+    }
+  };
 
   let body;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -24954,22 +25375,41 @@ async function handleNhspApply(env, req, importId) {
     return out;
   };
 
+  const capArr = (arr, n) => {
+    const a = Array.isArray(arr) ? arr : [];
+    const lim = Math.max(0, Number(n) || 0);
+    if (!lim) return [];
+    return a.slice(0, lim);
+  };
+
+  const t0 = Date.now();
+
   // Inputs (new contract)
   const selectedActionIdsIn = Array.isArray(body.selected_action_ids) ? body.selected_action_ids : [];
-  const selectedActionIds = uniqStrings(selectedActionIdsIn);
+  let selectedActionIds = uniqStrings(selectedActionIdsIn);
 
   const selectedActionsIn = Array.isArray(body.selected_actions) ? body.selected_actions : [];
   const selectedActions = selectedActionsIn
     .filter(x => x && typeof x === 'object' && !Array.isArray(x))
     .map(x => ({ ...x }));
 
+  // Optional safety: if caller sends auto_apply_action_ids, merge them (auto-applied new shifts).
+  // This does NOT override user ticks; it only ensures hidden auto-applied actions are included.
+  const autoApplyIdsIn = Array.isArray(body.auto_apply_action_ids) ? body.auto_apply_action_ids : [];
+  if (autoApplyIdsIn.length) {
+    const autoApplyIds = uniqStrings(autoApplyIdsIn);
+    selectedActionIds = uniqStrings([ ...selectedActionIds, ...autoApplyIds ]);
+  }
+
   // Legacy cancellation_actions support: allow shift_id → CANCEL:<shift_id> (explicit shift IDs only)
   const cancellationActionsIn = Array.isArray(body.cancellation_actions) ? body.cancellation_actions : [];
-  for (const a of cancellationActionsIn) {
-    const sid = a && a.shift_id ? String(a.shift_id).trim() : '';
-    if (!sid) continue;
-    const aid = `CANCEL:${sid}`;
-    if (!selectedActionIds.includes(aid)) selectedActionIds.push(aid);
+  if (cancellationActionsIn.length) {
+    for (const a of cancellationActionsIn) {
+      const sid = a && a.shift_id ? String(a.shift_id).trim() : '';
+      if (!sid) continue;
+      const aid = `CANCEL:${sid}`;
+      if (!selectedActionIds.includes(aid)) selectedActionIds.push(aid);
+    }
   }
 
   // Legacy selected_group_ids is NOT supported in apply anymore (no Worker-side expansion).
@@ -24987,7 +25427,7 @@ async function handleNhspApply(env, req, importId) {
     );
   }
 
-  // Decisions map (Phase 3)
+  // Decisions map (Phase 3) — kept for backward compatibility, but selection is authoritative (“tick = proceed”).
   const decisions =
     (body.decisions && typeof body.decisions === 'object' && !Array.isArray(body.decisions))
       ? body.decisions
@@ -25001,11 +25441,27 @@ async function handleNhspApply(env, req, importId) {
     decisions_keys_count: Object.keys(decisions || {}).length
   });
 
+  await safeImpDebugAudit('NHSP_WEEKLY_APPLY_START', {
+    import_id: String(importId),
+    selected_action_ids_count: Number(selectedActionIds.length || 0),
+    selected_action_ids_sample: capArr(selectedActionIds, 25),
+    selected_actions_count: Number(selectedActions.length || 0),
+    decisions_keys_count: Number(Object.keys(decisions || {}).length || 0),
+    legacy_group_ids_count: Number(legacyGroupIds.length || 0),
+    legacy_cancellation_actions_count: Number((cancellationActionsIn || []).length || 0),
+    auto_apply_action_ids_in_body_count: Number((autoApplyIdsIn || []).length || 0),
+    correlation_id: correlationId || null
+  });
+
   // ─────────────────────────────────────────────
   // 1) Single transactional DB apply RPC (ALL required DB writes)
   // ─────────────────────────────────────────────
   let applyPayload;
+  let rpcMs = null;
+
   try {
+    const tRpc0 = Date.now();
+
     const rpcRaw = await sbRpc(env, 'nhsp_weekly_apply_transactional', {
       p_import_id: importId,
       p_payload: {
@@ -25016,17 +25472,34 @@ async function handleNhspApply(env, req, importId) {
       p_actor_user_id: user.id
     });
 
+    rpcMs = Date.now() - tRpc0;
     applyPayload = unwrapRpcJsonb(rpcRaw, 'nhsp_weekly_apply_transactional');
   } catch (e) {
+    const errMsg = String(e?.message || e || '');
     logError({
       stage: 'apply_rpc_failed',
       import_id: importId,
-      err: String(e?.message || e || '')
+      err: errMsg
     });
+
+    await safeImpDebugAudit('NHSP_WEEKLY_APPLY_RPC_FAILED', {
+      import_id: String(importId),
+      error: errMsg,
+      rpc_ms: (rpcMs != null ? Number(rpcMs) : null),
+      selected_action_ids_count: Number(selectedActionIds.length || 0),
+      selected_action_ids_sample: capArr(selectedActionIds, 25),
+      correlation_id: correlationId || null
+    });
+
     return withCORS(env, req, serverError(`NHSP apply failed: ${e?.message || String(e)}`));
   }
 
   if (!applyPayload || typeof applyPayload !== 'object') {
+    await safeImpDebugAudit('NHSP_WEEKLY_APPLY_INVALID_RPC_PAYLOAD', {
+      import_id: String(importId),
+      rpc_ms: (rpcMs != null ? Number(rpcMs) : null),
+      correlation_id: correlationId || null
+    });
     return withCORS(env, req, serverError('NHSP apply returned invalid payload'));
   }
 
@@ -25034,11 +25507,31 @@ async function handleNhspApply(env, req, importId) {
     ? uniqStrings(applyPayload.affected_timesheet_ids)
     : [];
 
+  logInfo({
+    stage: 'apply_rpc_ok',
+    import_id: importId,
+    rpc_ms: rpcMs,
+    affected_timesheet_ids_count: affectedTimesheetIds.length
+  });
+
+  await safeImpDebugAudit('NHSP_WEEKLY_APPLY_RPC_OK', {
+    import_id: String(importId),
+    rpc_ms: (rpcMs != null ? Number(rpcMs) : null),
+    affected_timesheet_ids_count: Number(affectedTimesheetIds.length || 0),
+    affected_timesheet_ids_sample: capArr(affectedTimesheetIds, 25),
+    // Keep payload small & diagnostic-focused (applyPayload may contain nested structures)
+    apply_payload_keys: Object.keys(applyPayload || {}).slice(0, 50),
+    correlation_id: correlationId || null
+  });
+
   // ─────────────────────────────────────────────
   // 2) Post-commit: TSFIN Strategy A drain-to-completion (hard requirement)
   // ─────────────────────────────────────────────
   let tsfinDrain = null;
+  let tsfinMs = null;
+
   if (affectedTimesheetIds.length) {
+    const tTs0 = Date.now();
     try {
       tsfinDrain = await tsfinTargetedDrainNow(env, {
         timesheetIds: affectedTimesheetIds,
@@ -25052,11 +25545,62 @@ async function handleNhspApply(env, req, importId) {
         error: String(e?.message || e || '')
       };
     }
+    tsfinMs = Date.now() - tTs0;
 
     const doneOk = !!(tsfinDrain && tsfinDrain.drain_all === true && tsfinDrain.done === true && Number(tsfinDrain.fail || 0) === 0);
 
+    logInfo({
+      stage: 'tsfin_drain_done',
+      import_id: importId,
+      tsfin_ms: tsfinMs,
+      done_ok: doneOk,
+      fail: (tsfinDrain ? Number(tsfinDrain.fail || 0) : null),
+      pending: (tsfinDrain ? Number(tsfinDrain.pending || 0) : null)
+    });
+
+    await safeImpDebugAudit('NHSP_WEEKLY_APPLY_TSFIN_DRAIN', {
+      import_id: String(importId),
+      tsfin_ms: (tsfinMs != null ? Number(tsfinMs) : null),
+      done_ok: doneOk,
+      tsfin_drain: {
+        drain_all: (tsfinDrain ? !!tsfinDrain.drain_all : null),
+        done: (tsfinDrain ? !!tsfinDrain.done : null),
+        ok: (tsfinDrain ? Number(tsfinDrain.ok || 0) : null),
+        fail: (tsfinDrain ? Number(tsfinDrain.fail || 0) : null),
+        pending: (tsfinDrain ? Number(tsfinDrain.pending || 0) : null),
+        error: (tsfinDrain && tsfinDrain.error ? String(tsfinDrain.error) : null),
+        pending_next_attempt_at_min: (tsfinDrain && tsfinDrain.pending_next_attempt_at_min != null ? tsfinDrain.pending_next_attempt_at_min : null)
+      },
+      affected_timesheet_ids_count: Number(affectedTimesheetIds.length || 0),
+      affected_timesheet_ids_sample: capArr(affectedTimesheetIds, 25),
+      correlation_id: correlationId || null
+    });
+
     if (!doneOk) {
       const retryAfterSeconds = 30;
+
+      // Best-effort audit write even on failure response
+      try {
+        await writeAudit(
+          env,
+          user,
+          'NHSP_APPLY_TRANSACTIONAL_TSFIN_FAILED',
+          {
+            import_id: importId,
+            apply: applyPayload,
+            tsfin_drain: tsfinDrain,
+            affected_timesheet_ids: affectedTimesheetIds
+          },
+          { entity: 'hr_imports', subject_id: importId, req }
+        );
+      } catch (e) {
+        logWarn({
+          stage: 'writeAudit_failed_non_fatal',
+          import_id: importId,
+          err: String(e?.message || e || '')
+        });
+      }
+
       const resp = {
         error: 'TSFIN_REFRESH_FAILED_AFTER_APPLY',
         message:
@@ -25078,6 +25622,14 @@ async function handleNhspApply(env, req, importId) {
         headers: { 'content-type': 'application/json' }
       }));
     }
+  } else {
+    await safeImpDebugAudit('NHSP_WEEKLY_APPLY_NO_AFFECTED_TIMESHEETS', {
+      import_id: String(importId),
+      selected_action_ids_count: Number(selectedActionIds.length || 0),
+      selected_action_ids_sample: capArr(selectedActionIds, 25),
+      rpc_ms: (rpcMs != null ? Number(rpcMs) : null),
+      correlation_id: correlationId || null
+    });
   }
 
   // ─────────────────────────────────────────────
@@ -25091,7 +25643,12 @@ async function handleNhspApply(env, req, importId) {
       {
         import_id: importId,
         apply: applyPayload,
-        tsfin_drain: tsfinDrain
+        tsfin_drain: tsfinDrain,
+        timings_ms: {
+          total: Number(Date.now() - t0),
+          apply_rpc: (rpcMs != null ? Number(rpcMs) : null),
+          tsfin_drain: (tsfinMs != null ? Number(tsfinMs) : null)
+        }
       },
       { entity: 'hr_imports', subject_id: importId, req }
     );
@@ -25102,6 +25659,18 @@ async function handleNhspApply(env, req, importId) {
       err: String(e?.message || e || '')
     });
   }
+
+  await safeImpDebugAudit('NHSP_WEEKLY_APPLY_COMPLETED', {
+    import_id: String(importId),
+    affected_timesheet_ids_count: Number(affectedTimesheetIds.length || 0),
+    affected_timesheet_ids_sample: capArr(affectedTimesheetIds, 25),
+    timings_ms: {
+      total: Number(Date.now() - t0),
+      apply_rpc: (rpcMs != null ? Number(rpcMs) : null),
+      tsfin_drain: (tsfinMs != null ? Number(tsfinMs) : null)
+    },
+    correlation_id: correlationId || null
+  });
 
   // ─────────────────────────────────────────────
   // 4) Response
@@ -26323,8 +26892,12 @@ function validateWeeklyImportDecisions(phase3, decisions, opts = {}) {
   return { byKey, skipKeys, forceKeys, proceedRows };
 }
 
-
 async function handleNhspImportConfirm(env, req, importId) {
+  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
+
+  const logWarn  = (obj) => { if (LOG) console.warn('[NHSP_CONFIRM]', JSON.stringify(obj)); };
+  const logError = (obj) => { if (LOG) console.error('[NHSP_CONFIRM]', JSON.stringify(obj)); };
+
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   if (!importId) return withCORS(env, req, badRequest('import_id is required'));
@@ -26342,10 +26915,12 @@ async function handleNhspImportConfirm(env, req, importId) {
     return withCORS(env, req, badRequest('Invalid JSON body'));
   }
 
+  // ✅ Action-level payload includes auto_apply_action_ids (NEW shifts hidden in UI but still applied)
   const hasActionLevel =
     Array.isArray(body.selected_action_ids) ||
     Array.isArray(body.selected_actions) ||
     Array.isArray(body.cancellation_actions) ||
+    Array.isArray(body.auto_apply_action_ids) ||
     (body.decisions && typeof body.decisions === 'object' && !Array.isArray(body.decisions));
 
   const legacyGroupIds = Array.isArray(body.selected_group_ids)
@@ -26357,7 +26932,7 @@ async function handleNhspImportConfirm(env, req, importId) {
     return withCORS(
       env,
       req,
-      badRequest('Confirm/apply now requires action-level payload (selected_action_ids with ROW:/CANCEL:). selected_group_ids is no longer accepted.')
+      badRequest('Confirm/apply now requires action-level payload (selected_action_ids with ROW:/CANCEL: or auto_apply_action_ids). selected_group_ids is no longer accepted.')
     );
   }
 
@@ -26366,7 +26941,7 @@ async function handleNhspImportConfirm(env, req, importId) {
     return withCORS(
       env,
       req,
-      badRequest('No selection provided. Confirm/apply requires action-level payload (selected_action_ids with ROW:/CANCEL:).')
+      badRequest('No selection provided. Confirm/apply requires action-level payload (selected_action_ids with ROW:/CANCEL: or auto_apply_action_ids).')
     );
   }
 
@@ -26374,6 +26949,11 @@ async function handleNhspImportConfirm(env, req, importId) {
   try {
     return await handleNhspApply(env, req, importId);
   } catch (e) {
+    logError({
+      stage: 'delegate_apply_failed',
+      import_id: importId,
+      err: String(e?.message || e || '')
+    });
     return withCORS(env, req, serverError(`NHSP confirm failed: ${e?.message || e}`));
   }
 }
