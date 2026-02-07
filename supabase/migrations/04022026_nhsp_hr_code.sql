@@ -3990,9 +3990,10 @@ v_booking_id := 'bk_' || v_hash_hex;
             v_shift_label_norm,
             v_week_ending_date,
             v_contract_id,
-            'WEEKLY'::public.timesheet_scope_enum,
-            'MANUAL'::public.timesheet_submission_mode_enum,
-            'HOURS'::public.timesheet_line_type_enum,
+       'WEEKLY'::public.timesheet_scope_enum,
+'MANUAL'::public.submission_mode_enum,
+'HOURS'::public.timesheet_line_type_enum,
+
             null,
             v_schedule,
             '{}'::jsonb,
