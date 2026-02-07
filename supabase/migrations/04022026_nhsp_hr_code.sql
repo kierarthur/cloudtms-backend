@@ -3877,14 +3877,14 @@ v_booking_id := 'bk_' || v_hash_hex;
           continue;
         end if;
 
-        -- If we have an existing correction timesheet but no linked contract_week, create one.
+              -- If we have an existing correction timesheet but no linked contract_week, create one.
+        -- NOTE: Postgres forbids FOR UPDATE on aggregate queries; locking is provided by the base week row FOR UPDATE earlier.
         select coalesce(max(cw3.additional_seq), 0) + 1
         into v_next_additional_seq
         from public.contract_weeks cw3
         where cw3.contract_id = v_contract_id
           and cw3.week_ending_date = v_week_ending_date
-          and cw3.is_adjustment is true
-        for update;
+          and cw3.is_adjustment is true;
 
         insert into public.contract_weeks(
           contract_id,
@@ -3907,6 +3907,7 @@ v_booking_id := 'bk_' || v_hash_hex;
           v_now
         )
         returning id into v_existing_cw_id;
+
 
         update public.timesheets t2b
         set
@@ -3932,13 +3933,13 @@ v_booking_id := 'bk_' || v_hash_hex;
       v_ts_id := null;
 
       for v_try in 1..5 loop
+        -- NOTE: Postgres forbids FOR UPDATE on aggregate queries; locking is provided by the base week row FOR UPDATE earlier.
         select coalesce(max(cw4.additional_seq), 0) + 1
         into v_next_additional_seq
         from public.contract_weeks cw4
         where cw4.contract_id = v_contract_id
           and cw4.week_ending_date = v_week_ending_date
-          and cw4.is_adjustment is true
-        for update;
+          and cw4.is_adjustment is true;
 
         begin
           insert into public.timesheets(
@@ -4054,6 +4055,7 @@ v_booking_id := 'bk_' || v_hash_hex;
 
         exit when v_ts_id is not null;
       end loop;
+
 
       if v_ts_id is null then
         raise exception 'nhsp_weekly_phase3_apply_adjustment_truth: Failed to allocate correction timesheet/contract_week after retries (external_row_key=% kind=%)', v_key, v_kind;
