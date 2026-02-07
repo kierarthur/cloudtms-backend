@@ -59445,9 +59445,28 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
   const milUnits = round2(asNumberLocal(curFin?.mileage_units ?? 0));
   const milPay   = round2(asNumberLocal(curFin?.mileage_pay_ex_vat ?? 0));
   const milChg   = round2(asNumberLocal(curFin?.mileage_charge_ex_vat ?? 0));
-
   const actualRaw = Array.isArray(ts?.actual_schedule_json) ? ts.actual_schedule_json : [];
-  const actual = normaliseScheduleBreakFields(actualRaw);
+  const actualNorm = normaliseScheduleBreakFields(actualRaw);
+
+  // ✅ Preserve ref_num through normalisation (NHSP corrections store ref_num on schedule entries)
+  const actual = (Array.isArray(actualNorm) ? actualNorm : []).map((seg, idx) => {
+    if (!seg || typeof seg !== 'object') return seg;
+
+    const raw = (Array.isArray(actualRaw) && actualRaw[idx] && typeof actualRaw[idx] === 'object')
+      ? actualRaw[idx]
+      : null;
+
+    const v =
+      seg.ref_num ?? seg.ref ?? seg.reference ?? seg.refNum ??
+      raw?.ref_num ?? raw?.ref ?? raw?.reference ?? raw?.refNum ??
+      null;
+
+    const s = (v == null) ? '' : String(v).trim();
+    if (!s) return seg;
+
+    return { ...seg, ref_num: s };
+  });
+
 
   if (!actual.length) {
     // Prefer SQL policy snapshot if provided (keeps weekly aligned with SQL-first design)
@@ -59631,13 +59650,22 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
     const invoice_locked_invoice_id =
       (p && p.invoice_locked_invoice_id != null) ? p.invoice_locked_invoice_id : undefined;
 
+      const segRefNum = (() => {
+      const v = seg?.ref_num ?? seg?.ref ?? seg?.reference ?? seg?.refNum ?? null;
+      const s = (v == null) ? '' : String(v).trim();
+      return s ? s : null;
+    })();
+
     segments.push({
       segment_id: sid,
       date: seg.date || null,
       start_utc: seg.start_utc || seg.start_iso || null,
       end_utc: seg.end_utc || seg.end_iso || null,
       break_mins: Number(seg.break_mins ?? seg.break_minutes ?? 0) || 0,
-      ref_num: (seg.ref_num != null && String(seg.ref_num).trim()) ? String(seg.ref_num).trim() : null,
+
+      // ✅ Ensure ref flows into TSFIN segments for correction timesheets
+      ref_num: segRefNum,
+
       breaks: Array.isArray(seg.breaks) ? seg.breaks : [],
 
       // ✅ signed bucket quantities
@@ -59658,6 +59686,7 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
       ...(invoice_target_week_start != null ? { invoice_target_week_start } : {}),
       ...(invoice_locked_invoice_id != null ? { invoice_locked_invoice_id } : {})
     });
+
   }
 
   const hours = {
