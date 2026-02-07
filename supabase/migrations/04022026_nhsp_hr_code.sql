@@ -3717,7 +3717,7 @@ begin
     v_ward_norm := lower(coalesce(v_contract_ward_hint, 'contract'));
     v_role_norm := lower(coalesce(v_contract_role, 'weekly'));
 
-    v_booking_base :=
+      v_booking_base :=
       'scope=WEEKLY' || '|' ||
       'client_id=' || coalesce(v_client_id::text,'') || '|' ||
       'candidate_id=' || coalesce(v_candidate_id::text,'') || '|' ||
@@ -3726,10 +3726,6 @@ begin
       'hospital=' || v_hospital_norm || '|' ||
       'ward=' || v_ward_norm || '|' ||
       'role=' || v_role_norm;
-
-    -- Use convert_to(...,'utf8') to ensure digest input is bytea (pgcrypto-safe)
-v_hash_hex := substring(encode(extensions.digest(convert_to(v_booking_base, 'utf8'), 'sha256'::text), 'hex') from 1 for 16);
-v_booking_id := 'bk_' || v_hash_hex;
 
 
     -- Ensure base week exists (additional_seq=0, is_adjustment=false)
@@ -3794,7 +3790,7 @@ v_booking_id := 'bk_' || v_hash_hex;
         )
       );
 
-      v_shift_label := 'weekly-correction-' || lower(v_kind) || '-' || v_correction_id;
+         v_shift_label := 'weekly-correction-' || lower(v_kind) || '-' || v_correction_id;
 
       v_shift_label_norm :=
         regexp_replace(
@@ -3803,6 +3799,23 @@ v_booking_id := 'bk_' || v_hash_hex;
           '',
           'g'
         );
+
+      -- ✅ booking_id must be UNIQUE per correction kind (REVERSAL vs REPLACEMENT)
+      -- Use shift_label_norm (already includes v_kind + v_correction_id) to make the hash distinct.
+      v_hash_hex := substring(
+        encode(
+          extensions.digest(
+            convert_to(
+              (v_booking_base || '|shift_label_norm=' || coalesce(v_shift_label_norm, '')),
+              'utf8'
+            ),
+            'sha256'::text
+          ),
+          'hex'
+        )
+        from 1 for 16
+      );
+      v_booking_id := 'bk_' || v_hash_hex;
 
       v_schedule := jsonb_build_array(
         jsonb_build_object(
@@ -3813,6 +3826,7 @@ v_booking_id := 'bk_' || v_hash_hex;
           'break_mins', v_seg_break_mins
         )
       );
+
 
       -- Idempotency: reuse existing correction timesheet (unique on correction_id+kind)
       v_existing_ts_id := null;
@@ -3990,7 +4004,7 @@ v_booking_id := 'bk_' || v_hash_hex;
             v_shift_label_norm,
             v_week_ending_date,
             v_contract_id,
-       'WEEKLY'::public.timesheet_scope_enum,
+          'WEEKLY'::public.timesheet_scope_enum,
 'MANUAL'::public.submission_mode_enum,
 'HOURS'::public.timesheet_line_type_enum,
 
@@ -4139,6 +4153,7 @@ exception when others then
   raise;
 end;
 $$;
+
 
 
 create or replace function public.nhsp_weekly_apply_transactional(
