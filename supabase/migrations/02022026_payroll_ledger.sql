@@ -3044,7 +3044,8 @@ begin
         'adjustments', v_adj
       );
 
-      v_sig := encode(digest(v_snapshot::text, 'sha256'), 'hex');
+v_sig := encode(extensions.digest(convert_to(v_snapshot::text, 'utf8'), 'sha256'::text), 'hex');
+
 
       insert into public.timesheet_pay_state_history(
         timesheet_id,
@@ -3782,7 +3783,7 @@ begin
       'adjustments', v_adj
     );
 
-    v_sig := encode(digest(v_snapshot::text, 'sha256'), 'hex');
+v_sig := encode(extensions.digest(convert_to(v_snapshot::text, 'utf8'), 'sha256'::text), 'hex');
 
     insert into public.timesheet_pay_state_history(
       timesheet_id,
