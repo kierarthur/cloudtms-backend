@@ -2368,6 +2368,8 @@ begin
   );
 end;
 $$;
+
+
 create or replace function public.nhsp_weekly_apply_cancellations(
   p_import_id uuid,
   p_actions jsonb,
@@ -2411,6 +2413,7 @@ declare
   v_shift_start_utc timestamptz;
   v_shift_end_utc timestamptz;
   v_shift_break_mins int;
+  v_shift_pay_minutes int;
   v_shift_ward text;
   v_shift_week_ending_date date;
 
@@ -2424,9 +2427,17 @@ declare
   -- invoiced-at-all detection (segment-level)
   v_tf_locked_by_invoice_id uuid;
   v_tf_invoice_breakdown_json jsonb;
+
+  v_seg_json jsonb := null;
   v_seg_invoice_id uuid;
+  v_seg_pay_amount numeric := null;
+  v_seg_charge_amount numeric := null;
+
   v_invoiced_detected boolean := false;
   v_invoice_id_detected uuid := null;
+
+  -- invoice number (best-effort; MUST NOT break apply)
+  v_invoice_number_text text := null;
 
   -- cancellation correction timesheet (for invoiced-at-all)
   v_branch text := null;
@@ -2465,13 +2476,24 @@ declare
   v_existing_cw_id uuid;
 
   v_correction_ts_id uuid;
-  v_ts_id uuid; -- ✅ FIX: used in INSERT ... RETURNING timesheet_id INTO v_ts_id
+  v_ts_id uuid;
 
   -- fnv1a32 helper vars (needed for deterministic correction_id)
   v_fnv_h bigint;
   v_fnv_i int;
   v_fnv_s text;
   v_fnv_hex text;
+
+  -- user-facing audit helpers (minutes + amounts)
+  v_old_paid_minutes int := 0;
+  v_new_paid_minutes int := 0;
+  v_delta_paid_minutes int := 0;
+
+  v_old_pay_amount_ex_vat numeric := null;
+  v_old_charge_amount_ex_vat numeric := null;
+
+  v_reversal_pay_amount_ex_vat numeric := null;
+  v_reversal_charge_amount_ex_vat numeric := null;
 
   -- return arrays
   v_timesheet_ids uuid[] := array[]::uuid[];
@@ -2498,7 +2520,6 @@ begin
   from public.hr_imports hi
   where hi.id = p_import_id
   limit 1;
-
 
   if v_import_source_system is null or v_import_source_system = '' then
     raise exception 'nhsp_weekly_apply_cancellations: import % not found in hr_imports.', p_import_id;
@@ -2545,7 +2566,6 @@ begin
 
   -- ─────────────────────────────────────────────
   -- 2) Build file ref set (identity key = booking ref)
-  --     NHSP uses nhsp_shifts.ref_num; file may store it in payload or hr_request_id.
   --     Spec: coalesce(payload_json->>'ref_num', payload_json->>'Reference', hr_request_id)
   -- ─────────────────────────────────────────────
   create temporary table tmp_file_ref_set(
@@ -2605,6 +2625,26 @@ begin
       v_reason := 'MISSING_FROM_IMPORT';
     end if;
 
+    -- reset per-item helpers
+    v_tf_locked_by_invoice_id := null;
+    v_tf_invoice_breakdown_json := null;
+    v_seg_json := null;
+    v_seg_invoice_id := null;
+    v_seg_pay_amount := null;
+    v_seg_charge_amount := null;
+
+    v_invoice_id_detected := null;
+    v_invoiced_detected := false;
+    v_invoice_number_text := null;
+
+    v_old_paid_minutes := 0;
+    v_new_paid_minutes := 0;
+    v_delta_paid_minutes := 0;
+    v_old_pay_amount_ex_vat := null;
+    v_old_charge_amount_ex_vat := null;
+    v_reversal_pay_amount_ex_vat := null;
+    v_reversal_charge_amount_ex_vat := null;
+
     -- Lock shift row + load required fields
     select
       ns.timesheet_id,
@@ -2620,6 +2660,7 @@ begin
       ns.start_utc,
       ns.end_utc,
       ns.break_mins,
+      ns.pay_minutes,
       ns.ward,
       ns.week_ending_date
     into
@@ -2636,6 +2677,7 @@ begin
       v_shift_start_utc,
       v_shift_end_utc,
       v_shift_break_mins,
+      v_shift_pay_minutes,
       v_shift_ward,
       v_shift_week_ending_date
     from public.nhsp_shifts ns
@@ -2668,12 +2710,11 @@ begin
       raise exception 'nhsp_weekly_apply_cancellations: item % shift % missing work_date.', v_idx, v_shift_id;
     end if;
 
-    -- Import scope safety (NHSP imports may span multiple clients; do not rely on hr_imports.client_id):
-    -- shift.client_id must be present deterministically in the file.
     if v_shift_client_id is null then
       raise exception 'nhsp_weekly_apply_cancellations: item % shift % missing client_id.', v_idx, v_shift_id;
     end if;
 
+    -- Import scope safety: shift.client_id must be present deterministically in file.
     select exists (
       select 1
       from tmp_import_client_scope sc
@@ -2713,12 +2754,6 @@ begin
     -- ─────────────────────────────────────────────
     -- Invoiced-at-all detection (segment-level authoritative)
     -- ─────────────────────────────────────────────
-    v_tf_locked_by_invoice_id := null;
-    v_tf_invoice_breakdown_json := null;
-    v_seg_invoice_id := null;
-    v_invoice_id_detected := null;
-    v_invoiced_detected := false;
-
     if v_timesheet_id is not null then
       select
         tf.locked_by_invoice_id,
@@ -2731,11 +2766,9 @@ begin
         and tf.is_current = true
       limit 1;
 
-      -- Find matching segment (prefer nhsp_shift_id match)
       begin
-        select
-          nullif(seg2.seg->>'invoice_locked_invoice_id','')::uuid
-        into v_seg_invoice_id
+        select s2.seg
+        into v_seg_json
         from (
           select s2.seg
           from jsonb_array_elements(
@@ -2757,10 +2790,30 @@ begin
           order by
             case when (s2.seg->>'nhsp_shift_id') = v_shift_id::text then 0 else 1 end
           limit 1
-        ) seg2;
+        ) as s2;
       exception when others then
-        v_seg_invoice_id := null;
+        v_seg_json := null;
       end;
+
+      if v_seg_json is not null then
+        begin
+          v_seg_invoice_id := nullif(btrim(coalesce(v_seg_json->>'invoice_locked_invoice_id','')), '')::uuid;
+        exception when others then
+          v_seg_invoice_id := null;
+        end;
+
+        begin
+          v_seg_pay_amount := nullif(btrim(coalesce(v_seg_json->>'pay_amount','')), '')::numeric;
+        exception when others then
+          v_seg_pay_amount := null;
+        end;
+
+        begin
+          v_seg_charge_amount := nullif(btrim(coalesce(v_seg_json->>'charge_amount','')), '')::numeric;
+        exception when others then
+          v_seg_charge_amount := null;
+        end;
+      end if;
     end if;
 
     v_invoice_id_detected := coalesce(v_seg_invoice_id, v_tf_locked_by_invoice_id, v_shift_invoice_id);
@@ -2768,6 +2821,67 @@ begin
 
     if v_invoice_id_detected is not null then
       v_invoice_ids := array_append(v_invoice_ids, v_invoice_id_detected);
+
+      -- Best-effort invoice number lookup; MUST NOT break apply
+      begin
+        select nullif(btrim(coalesce(i.invoice_no::text,'')), '')
+        into v_invoice_number_text
+        from public.invoices i
+        where i.id = v_invoice_id_detected
+        limit 1;
+      exception when undefined_table then
+        v_invoice_number_text := null;
+      when undefined_column then
+        begin
+          select nullif(btrim(coalesce(i.invoice_number::text,'')), '')
+          into v_invoice_number_text
+          from public.invoices i
+          where i.id = v_invoice_id_detected
+          limit 1;
+        exception when undefined_table then
+          v_invoice_number_text := null;
+        when undefined_column then
+          begin
+            select nullif(btrim(coalesce(i.number::text,'')), '')
+            into v_invoice_number_text
+            from public.invoices i
+            where i.id = v_invoice_id_detected
+            limit 1;
+          exception when others then
+            v_invoice_number_text := null;
+          end;
+        when others then
+          v_invoice_number_text := null;
+        end;
+      when others then
+        v_invoice_number_text := null;
+      end;
+    end if;
+
+    -- Audit minute/amount helpers
+    if v_shift_pay_minutes is not null then
+      v_old_paid_minutes := greatest(0, v_shift_pay_minutes);
+    elsif v_shift_start_utc is not null and v_shift_end_utc is not null then
+      v_old_paid_minutes := greatest(
+        0,
+        (extract(epoch from (v_shift_end_utc - v_shift_start_utc)) / 60)::int - greatest(0, coalesce(v_shift_break_mins, 0))
+      );
+    else
+      v_old_paid_minutes := 0;
+    end if;
+
+    v_new_paid_minutes := 0;
+    v_delta_paid_minutes := (0 - v_old_paid_minutes);
+
+    v_old_pay_amount_ex_vat := v_seg_pay_amount;
+    v_old_charge_amount_ex_vat := v_seg_charge_amount;
+
+    if v_old_pay_amount_ex_vat is not null then
+      v_reversal_pay_amount_ex_vat := (0 - v_old_pay_amount_ex_vat);
+    end if;
+
+    if v_old_charge_amount_ex_vat is not null then
+      v_reversal_charge_amount_ex_vat := (0 - v_old_charge_amount_ex_vat);
     end if;
 
     -- ─────────────────────────────────────────────
@@ -2803,6 +2917,35 @@ begin
       end if;
 
       v_correction_ts_id := null;
+
+      -- ✅ User-facing audit (UNGATED) for in-place cancellation (timesheet + contract_week if resolvable)
+      begin
+        if v_timesheet_id is not null then
+          perform public._audit_insert(
+            'timesheets',
+            v_timesheet_id::text,
+            'NHSP_IMPORT_CANCELLATION_APPLIED',
+            null,
+            jsonb_build_object(
+              'import_id', p_import_id::text,
+              'branch', v_branch,
+              'shift_id', v_shift_id::text,
+              'work_date', v_shift_work_date::text,
+              'ref_num', nullif(btrim(coalesce(v_shift_ref_num,'')), ''),
+              'cancel_reason', v_reason,
+              'old_paid_minutes', v_old_paid_minutes,
+              'new_paid_minutes', 0,
+              'delta_paid_minutes', v_delta_paid_minutes,
+              'old_pay_amount_ex_vat', v_old_pay_amount_ex_vat,
+              'old_charge_amount_ex_vat', v_old_charge_amount_ex_vat
+            ),
+            'IMPORT_CANCEL_DETACH',
+            p_actor_user_id
+          );
+        end if;
+      exception when others then
+        null;
+      end;
 
     else
       v_branch := 'CORRECTION';
@@ -2840,6 +2983,11 @@ begin
 
       if v_week_ending_date is null then
         raise exception 'nhsp_weekly_apply_cancellations: shift % cannot resolve week_ending_date for correction.', v_shift_id;
+      end if;
+
+      -- Require shift start/end for schedule-driven correction artefact
+      if v_shift_start_utc is null or v_shift_end_utc is null then
+        raise exception 'nhsp_weekly_apply_cancellations: shift % missing start_utc/end_utc; cannot create schedule-driven cancellation correction.', v_shift_id;
       end if;
 
       -- Build correction_id (stable + deterministic)
@@ -2886,13 +3034,16 @@ begin
       where cand.id = v_shift_candidate_id
       limit 1;
 
-      -- Schedule entry (non-negative; TSFIN applies sign by correction_kind includes 'REVERSAL')
+      -- Schedule entry
+      -- ✅ IMPORTANT: include BOTH start_utc/end_utc AND start/end (HH:MM) so TSFIN schedule validation never fails.
       v_schedule := jsonb_build_array(
         jsonb_build_object(
           'date', v_shift_work_date::text,
           'ward', nullif(btrim(coalesce(v_shift_ward, v_contract_ward_hint, '')), ''),
           'start_utc', v_shift_start_utc::text,
           'end_utc', v_shift_end_utc::text,
+          'start', to_char((v_shift_start_utc at time zone 'Europe/London')::time, 'HH24:MI'),
+          'end', to_char((v_shift_end_utc at time zone 'Europe/London')::time, 'HH24:MI'),
           'break_mins', greatest(0, coalesce(v_shift_break_mins, 0)),
           'ref_num', nullif(btrim(coalesce(v_shift_ref_num,'')), ''),
           'shift_id', v_shift_id::text,
@@ -2907,7 +3058,7 @@ begin
           'ref_num', nullif(btrim(coalesce(v_shift_ref_num,'')), ''),
           'correction_id', v_correction_id,
           'correction_kind', v_kind,
-          'invoice_id_detected', v_invoice_id_detected::text
+          'invoice_id_detected', case when v_invoice_id_detected is null then null else v_invoice_id_detected::text end
         )
       );
 
@@ -2930,11 +3081,10 @@ begin
         'correction_id=' || coalesce(v_correction_id,'') || '|' ||
         'correction_kind=' || v_kind;
 
-  v_hash_hex := substring(encode(extensions.digest(convert_to(v_booking_base, 'utf8'), 'sha256'::text), 'hex') from 1 for 16);
-v_booking_id := 'bk_' || v_hash_hex;
+      v_hash_hex := substring(encode(extensions.digest(convert_to(v_booking_base, 'utf8'), 'sha256'::text), 'hex') from 1 for 16);
+      v_booking_id := 'bk_' || v_hash_hex;
 
-
-      -- Ensure base week exists (seq=0) for this contract/week (do not assume it exists)
+      -- Ensure base week exists (seq=0)
       insert into public.contract_weeks(
         contract_id,
         week_ending_date,
@@ -3299,6 +3449,89 @@ v_booking_id := 'bk_' || v_hash_hex;
 
       v_cancelled_count := v_cancelled_count + 1;
 
+      -- ✅ User-facing audit (UNGATED): correction timesheet + base contract_week + invoice
+      begin
+        if v_correction_ts_id is not null then
+          perform public._audit_insert(
+            'timesheets',
+            v_correction_ts_id::text,
+            'NHSP_IMPORT_CANCELLATION_CORRECTION_CREATED',
+            null,
+            jsonb_build_object(
+              'import_id', p_import_id::text,
+              'branch', v_branch,
+              'shift_id', v_shift_id::text,
+              'work_date', v_shift_work_date::text,
+              'ref_num', nullif(btrim(coalesce(v_shift_ref_num,'')), ''),
+              'cancel_reason', v_reason,
+              'invoice_id', case when v_invoice_id_detected is null then null else v_invoice_id_detected::text end,
+              'invoice_no', v_invoice_number_text,
+              'old_paid_minutes', v_old_paid_minutes,
+              'new_paid_minutes', 0,
+              'delta_paid_minutes', v_delta_paid_minutes,
+              'old_pay_amount_ex_vat', v_old_pay_amount_ex_vat,
+              'old_charge_amount_ex_vat', v_old_charge_amount_ex_vat,
+              'reversal_pay_amount_ex_vat', v_reversal_pay_amount_ex_vat,
+              'reversal_charge_amount_ex_vat', v_reversal_charge_amount_ex_vat,
+              'correction_id', v_correction_id,
+              'correction_kind', v_kind
+            ),
+            'IMPORT_CANCELLATION_CORRECTION',
+            p_actor_user_id
+          );
+        end if;
+
+        if v_base_week_id is not null then
+          perform public._audit_insert(
+            'contract_weeks',
+            v_base_week_id::text,
+            'NHSP_IMPORT_CANCELLATION_CORRECTION_CREATED',
+            null,
+            jsonb_build_object(
+              'import_id', p_import_id::text,
+              'shift_id', v_shift_id::text,
+              'work_date', v_shift_work_date::text,
+              'ref_num', nullif(btrim(coalesce(v_shift_ref_num,'')), ''),
+              'invoice_id', case when v_invoice_id_detected is null then null else v_invoice_id_detected::text end,
+              'invoice_no', v_invoice_number_text,
+              'correction_timesheet_id', case when v_correction_ts_id is null then null else v_correction_ts_id::text end,
+              'old_paid_minutes', v_old_paid_minutes,
+              'delta_paid_minutes', v_delta_paid_minutes,
+              'old_pay_amount_ex_vat', v_old_pay_amount_ex_vat,
+              'old_charge_amount_ex_vat', v_old_charge_amount_ex_vat
+            ),
+            'IMPORT_CANCELLATION_CORRECTION',
+            p_actor_user_id
+          );
+        end if;
+
+        if v_invoice_id_detected is not null then
+          perform public._audit_insert(
+            'invoices',
+            v_invoice_id_detected::text,
+            'NHSP_IMPORT_CANCELLATION_CORRECTION_CREATED',
+            null,
+            jsonb_build_object(
+              'import_id', p_import_id::text,
+              'shift_id', v_shift_id::text,
+              'work_date', v_shift_work_date::text,
+              'ref_num', nullif(btrim(coalesce(v_shift_ref_num,'')), ''),
+              'invoice_id', v_invoice_id_detected::text,
+              'invoice_no', v_invoice_number_text,
+              'correction_timesheet_id', case when v_correction_ts_id is null then null else v_correction_ts_id::text end,
+              'old_paid_minutes', v_old_paid_minutes,
+              'delta_paid_minutes', v_delta_paid_minutes,
+              'reversal_pay_amount_ex_vat', v_reversal_pay_amount_ex_vat,
+              'reversal_charge_amount_ex_vat', v_reversal_charge_amount_ex_vat
+            ),
+            'IMPORT_CANCELLATION_CORRECTION',
+            p_actor_user_id
+          );
+        end if;
+      exception when others then
+        null;
+      end;
+
     end if;
 
     -- Debug sample (cap 30)
@@ -3309,6 +3542,7 @@ v_booking_id := 'bk_' || v_hash_hex;
         'present_in_file', v_present_in_file,
         'timesheet_id', case when v_timesheet_id is null then null else v_timesheet_id::text end,
         'invoice_id_detected', case when v_invoice_id_detected is null then null else v_invoice_id_detected::text end,
+        'invoice_no', v_invoice_number_text,
         'invoiced_detected', v_invoiced_detected,
         'branch', v_branch,
         'correction_timesheet_id', case when v_correction_ts_id is null then null else v_correction_ts_id::text end
