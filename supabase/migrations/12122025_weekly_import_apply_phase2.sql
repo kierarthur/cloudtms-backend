@@ -45,7 +45,7 @@ begin
       p2r.incoming_code,
       p2r.candidate_id as p2_candidate_id,
       p2r.client_id    as p2_client_id,
-      p2r.week_ending_date,
+      p2r.week_ending_date as p2_week_ending_date,
       p2r.contract_id  as p2_contract_id,
       p2r.action       as p2_action,
       p2r.reason       as p2_reason,
@@ -55,6 +55,7 @@ begin
       s.candidate_id  as existing_candidate_id,
       s.client_id     as existing_client_id,
       s.contract_id   as existing_contract_id,
+      s.week_ending_date as existing_week_ending_date,
 
       (ts.timesheet_id is not null) as existing_timesheet_exists,
 
@@ -67,6 +68,11 @@ begin
         or (s.client_id  is distinct from p2r.client_id)
         or (s.contract_id is distinct from p2r.contract_id)
       ) as needs_reassign,
+
+      -- Ensure week_ending_date is persisted (required by ensure+attach stage)
+      (
+        s.week_ending_date is distinct from p2r.week_ending_date
+      ) as needs_week_ending_update,
 
       -- Also detach if the shift points at a missing/deleted timesheet row
       (
@@ -112,6 +118,9 @@ begin
     set
       updated_at = now(),
 
+      -- ✅ Persist week_ending_date computed by Phase2 (client_settings-driven)
+      week_ending_date = cur.p2_week_ending_date,
+
       -- Update mapping keys from Phase2
       contract_id = cur.p2_contract_id,
       candidate_id = coalesce(cur.p2_candidate_id, su.candidate_id),
@@ -127,6 +136,7 @@ begin
     where cur.p2_action = 'OK'
       and cur.p2_contract_id is not null
       and cur.external_row_key is not null
+      and cur.p2_week_ending_date is not null
       and su.external_row_key = cur.external_row_key
       and su.latest_import_id = p_import_id
       and su.source_system    = v_src
@@ -135,6 +145,7 @@ begin
         or su.contract_id is distinct from cur.p2_contract_id
         or su.candidate_id is distinct from cur.p2_candidate_id
         or su.client_id is distinct from cur.p2_client_id
+        or su.week_ending_date is distinct from cur.p2_week_ending_date
       )
     returning su.external_row_key
   )
@@ -146,16 +157,19 @@ begin
     cur.incoming_code,
     cur.p2_candidate_id as candidate_id,
     cur.p2_client_id    as client_id,
-    cur.week_ending_date,
+    cur.p2_week_ending_date as week_ending_date,
     cur.p2_contract_id  as contract_id,
 
     -- No paid/locked blocking in Phase2. Keep Phase2 action as-is.
     cur.p2_action as action,
 
-    -- Informational reason stitching for detach scenarios (no blocking)
+    -- Informational reason stitching for detach/week-ending update scenarios (no blocking)
     case
       when cur.p2_action = 'OK'
-        and coalesce(cur.needs_detach,false) = true
+        and (
+          coalesce(cur.needs_detach,false) = true
+          or coalesce(cur.needs_week_ending_update,false) = true
+        )
         and cur.shift_id is not null
       then
         (
@@ -173,7 +187,9 @@ begin
               then 'Shift mapping changed; truth was updated and shift detached for relink.'
             when coalesce(cur.needs_relink_missing_timesheet,false) is true
               then 'Shift was linked to a missing/deleted timesheet; truth was updated and shift detached for relink.'
-            else 'Truth was updated and shift detached for relink.'
+            when coalesce(cur.needs_week_ending_update,false) is true
+              then 'Shift week_ending_date was updated from Phase2 to keep weekly attachment deterministic.'
+            else 'Truth was updated.'
           end
         )
         ||
