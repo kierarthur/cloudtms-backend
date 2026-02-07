@@ -13,7 +13,6 @@ BEGIN
       created_at      = now();
 END;
 $function$;
-
 CREATE OR REPLACE FUNCTION public.tsfin_prepare_write(p_timesheet_id uuid)
 RETURNS void
 LANGUAGE plpgsql
@@ -41,7 +40,6 @@ BEGIN
     AND tfu.is_current = true;
 END;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public.tsfin_work_success(p_id uuid)
