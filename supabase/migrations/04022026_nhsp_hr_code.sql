@@ -4138,8 +4138,6 @@ end;
 $$;
 
 
-
-
 create or replace function public.nhsp_weekly_apply_transactional(
   p_import_id uuid,
   p_payload jsonb,
@@ -4885,7 +4883,6 @@ begin
   select count(*)::int
   into v_ensure_pairs_count
   from tmp_ensure_pairs_u teu;
-
   select coalesce(jsonb_agg(jsonb_build_object(
     'contract_id', teu.contract_id::text,
     'week_ending_date', teu.week_ending_date::text
@@ -4898,6 +4895,12 @@ begin
     limit 20
   ) as teu;
 
+  -- ✅ ENSURE: tmp_aff_ts must exist BEFORE ENSURE loop inserts into it
+  drop table if exists pg_temp.tmp_aff_ts;
+  create temporary table tmp_aff_ts(
+    timesheet_id uuid primary key
+  ) on commit drop;
+
   -- ids of newly created base timesheets (for audit)
   create temporary table tmp_ensure_created_ts_ids(
     timesheet_id uuid primary key
@@ -4908,6 +4911,7 @@ begin
     from tmp_ensure_pairs_u teu
     order by teu.contract_id::text, teu.week_ending_date::text
   loop
+
     -- If there are no active shifts left after cancellations, do not create a base week/timesheet.
     select count(*)::int
     into v_active_count
@@ -5253,28 +5257,24 @@ begin
     where ik.external_row_key is null
   ) as k;
 
-  -- tmp_aff_ts already exists (created earlier); it may already contain ensured base timesheets
-  -- ensure tmp_aff_ts exists (defensive): if not created (older versions), create it now
-  begin
-    perform 1 from tmp_aff_ts limit 1;
-  exception when undefined_table then
-    create temporary table tmp_aff_ts(timesheet_id uuid) on commit drop;
-  end;
-
+    -- tmp_aff_ts exists (created before ENSURE loop) — merge other sources with dedupe
   insert into tmp_aff_ts(timesheet_id)
   select (x.value)::uuid
   from jsonb_array_elements_text(coalesce(v_cancellations_result->'affected_timesheet_ids', '[]'::jsonb)) as x(value)
-  where nullif(btrim(x.value), '') is not null;
+  where nullif(btrim(x.value), '') is not null
+  on conflict do nothing;
 
   insert into tmp_aff_ts(timesheet_id)
   select (x2.value)::uuid
   from jsonb_array_elements_text(coalesce(v_phase3_result->'created_timesheet_ids', '[]'::jsonb)) as x2(value)
-  where nullif(btrim(x2.value), '') is not null;
+  where nullif(btrim(x2.value), '') is not null
+  on conflict do nothing;
 
   insert into tmp_aff_ts(timesheet_id)
   select (x3.value)::uuid
   from jsonb_array_elements_text(coalesce(v_phase3_result->'updated_timesheet_ids', '[]'::jsonb)) as x3(value)
-  where nullif(btrim(x3.value), '') is not null;
+  where nullif(btrim(x3.value), '') is not null
+  on conflict do nothing;
 
   insert into tmp_aff_ts(timesheet_id)
   select distinct ns.timesheet_id
@@ -5282,7 +5282,9 @@ begin
   where ns.source_system = 'NHSP'::public.hr_source_enum
     and ns.cancelled_at_utc is null
     and ns.external_row_key = any(coalesce(v_force_keys_non_invoiced, array[]::text[]))
-    and ns.timesheet_id is not null;
+    and ns.timesheet_id is not null
+  on conflict do nothing;
+
 
   select coalesce(array_agg(distinct a.timesheet_id order by a.timesheet_id), array[]::uuid[])
   into v_affected_timesheet_ids
@@ -5447,7 +5449,6 @@ exception when others then
   raise;
 end;
 $$;
-
 
 
 create or replace function public.hr_issue_emails_touch(
