@@ -838,8 +838,9 @@ begin
         'correction_id=' || coalesce(v_correction_id,'') || '|' ||
         'correction_kind=' || v_kind;
 
-      v_hash_hex := substring(encode(digest(convert_to(v_booking_base, 'utf8'), 'sha256'), 'hex') from 1 for 16);
-      v_booking_id := 'bk_' || v_hash_hex;
+v_hash_hex := substring(encode(extensions.digest(convert_to(v_booking_base, 'utf8'), 'sha256'::text), 'hex') from 1 for 16);
+v_booking_id := 'bk_' || v_hash_hex;
+
 
       -- Ensure base contract_week exists (seq=0). Do not overwrite if it exists.
       insert into public.contract_weeks(
