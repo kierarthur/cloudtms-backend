@@ -313,9 +313,6 @@ $$;
 
 
 
-
-
-
 create or replace function public.weekly_import_apply_cancellations(
   p_import_id uuid,
   p_actions jsonb,
@@ -363,7 +360,7 @@ declare
   v_shift_ward text;
   v_shift_week_ending_date date;
 
-  -- ✅ evidence pointer: previous import id for this shift (raw row source)
+  -- ✅ evidence pointer: shift.latest_import_id (may be overridden by anchor evidence)
   v_shift_latest_import_id uuid;
 
   -- file request-id set
@@ -373,6 +370,8 @@ declare
   -- invoiced-at-all detection (segment-level)
   v_tf_locked_by_invoice_id uuid;
   v_tf_invoice_breakdown_json jsonb;
+
+  v_seg_json jsonb := null;
   v_seg_invoice_id uuid;
   v_invoice_id_detected uuid := null;
   v_invoiced_detected boolean := false;
@@ -436,6 +435,27 @@ declare
 
   v_sqlstate text;
   v_err text;
+
+  -- ✅ Cancellation anchor (what we reverse)
+  v_anchor_start_utc timestamptz := null;
+  v_anchor_end_utc timestamptz := null;
+  v_anchor_break_mins int := 0;
+  v_anchor_import_id uuid := null;
+
+  -- ✅ Detect invoiced replacement (POS) to decide anchor
+  v_pos_ts_id uuid := null;
+  v_pos_schedule jsonb := null;
+  v_pos_tf_locked_by_invoice_id uuid := null;
+  v_pos_tf_invoice_breakdown_json jsonb := null;
+  v_pos_seg_invoice_id uuid := null;
+  v_pos_is_invoiced boolean := false;
+
+  -- ✅ Base evidence import via existing CHANGED_HOURS_REVERSAL schedule (when POS is NOT invoiced)
+  v_base_evidence_import_id uuid := null;
+
+  -- ✅ Cleanup: remove uninvoiced CHANGED_HOURS corrections when cancelling (POS not invoiced)
+  v_cleanup_ts_ids uuid[] := array[]::uuid[];
+  v_cleanup_count int := 0;
 begin
   -- Validate import exists and is HEALTHROSTER + has client_id (Guard B)
   select
@@ -512,6 +532,27 @@ begin
     select (e.ord)::int, e.value
     from jsonb_array_elements(v_actions) with ordinality as e(value, ord)
   loop
+    -- reset per-item
+    v_anchor_start_utc := null;
+    v_anchor_end_utc := null;
+    v_anchor_break_mins := 0;
+    v_anchor_import_id := null;
+
+    v_pos_ts_id := null;
+    v_pos_schedule := null;
+    v_pos_tf_locked_by_invoice_id := null;
+    v_pos_tf_invoice_breakdown_json := null;
+    v_pos_seg_invoice_id := null;
+    v_pos_is_invoiced := false;
+
+    v_base_evidence_import_id := null;
+
+    v_cleanup_ts_ids := array[]::uuid[];
+    v_cleanup_count := 0;
+
+    v_seg_json := null;
+    v_seg_invoice_id := null;
+
     -- Policy: no force
     if (v_item ? 'force') then
       raise exception 'weekly_import_apply_cancellations: item % contains disallowed field "force" (policy forbids force/override).', v_idx;
@@ -629,8 +670,26 @@ begin
         v_idx, v_shift_id;
     end if;
 
+    -- Derive week_ending_date for cleanup/pos lookup
+    v_week_ending_date := v_shift_week_ending_date;
+    if v_week_ending_date is null then
+      select coalesce(c.week_ending_weekday_snapshot, 0)
+      into v_contract_week_ending_weekday_snapshot
+      from public.contracts c
+      where c.id = v_shift_contract_id
+      limit 1;
+
+      v_week_ending_date :=
+        (v_shift_work_date + (((v_contract_week_ending_weekday_snapshot - extract(dow from v_shift_work_date)::int + 7) % 7))::int)::date;
+    end if;
+
+    if v_week_ending_date is null then
+      raise exception 'weekly_import_apply_cancellations: shift % cannot resolve week_ending_date.', v_shift_id;
+    end if;
+
     -- ─────────────────────────────────────────────
     -- Invoiced-at-all detection (segment-level authoritative)
+    -- Also capture matched segment JSON for anchor when POS not invoiced
     -- ─────────────────────────────────────────────
     v_tf_locked_by_invoice_id := null;
     v_tf_invoice_breakdown_json := null;
@@ -651,9 +710,8 @@ begin
       limit 1;
 
       begin
-        select
-          nullif(seg2.seg->>'invoice_locked_invoice_id','')::uuid
-        into v_seg_invoice_id
+        select s2.seg
+        into v_seg_json
         from (
           select s2.seg
           from jsonb_array_elements(
@@ -675,10 +733,18 @@ begin
           order by
             case when (s2.seg->>'nhsp_shift_id') = v_shift_id::text then 0 else 1 end
           limit 1
-        ) seg2;
+        ) as s2;
       exception when others then
-        v_seg_invoice_id := null;
+        v_seg_json := null;
       end;
+
+      if v_seg_json is not null then
+        begin
+          v_seg_invoice_id := nullif(btrim(coalesce(v_seg_json->>'invoice_locked_invoice_id','')), '')::uuid;
+        exception when others then
+          v_seg_invoice_id := null;
+        end;
+      end if;
     end if;
 
     v_invoice_id_detected := coalesce(v_seg_invoice_id, v_tf_locked_by_invoice_id, v_shift_invoice_id);
@@ -722,99 +788,192 @@ begin
 
       v_correction_ts_id := null;
 
-      -- ✅ User-facing audit (UNGATED): in-place cancellation (timesheet + shift)
-      begin
-        if v_timesheet_id is not null then
-          perform public._audit_insert(
-            'timesheets',
-            v_timesheet_id::text,
-            'HR_IMPORT_CANCELLATION_APPLIED',
-            null,
-            jsonb_build_object(
-              'import_id', p_import_id::text,
-              'branch', v_branch,
-              'shift_id', v_shift_id::text,
-              'work_date', v_shift_work_date::text,
-              'external_row_key', v_shift_external_row_key,
-              'hr_request_id', nullif(btrim(coalesce(v_shift_hr_request_id,'')), ''),
-              'ref_num', nullif(btrim(coalesce(v_shift_hr_request_id,'')), ''),
-              'cancel_reason', v_reason
-            ),
-            'IMPORT_CANCELLATION',
-            p_actor_user_id
-          );
-        end if;
-
-        perform public._audit_insert(
-          'nhsp_shifts',
-          v_shift_id::text,
-          'HR_IMPORT_CANCELLATION_APPLIED',
-          null,
-          jsonb_build_object(
-            'import_id', p_import_id::text,
-            'branch', v_branch,
-            'shift_id', v_shift_id::text,
-            'work_date', v_shift_work_date::text,
-            'external_row_key', v_shift_external_row_key,
-            'hr_request_id', nullif(btrim(coalesce(v_shift_hr_request_id,'')), ''),
-            'ref_num', nullif(btrim(coalesce(v_shift_hr_request_id,'')), ''),
-            'cancel_reason', v_reason,
-            'timesheet_id', case when v_timesheet_id is null then null else v_timesheet_id::text end
-          ),
-          'IMPORT_CANCELLATION',
-          p_actor_user_id
-        );
-      exception when others then
-        null;
-      end;
-
     else
       v_branch := 'CORRECTION';
 
-      -- Resolve week_ending_date for correction (never assume Sunday)
-      v_week_ending_date := null;
-      v_base_ts_week_ending := null;
+      -- ✅ Determine cancellation anchor:
+      -- Default anchor = current shift truth (fallback only)
+      v_anchor_start_utc := v_shift_start_utc;
+      v_anchor_end_utc := v_shift_end_utc;
+      v_anchor_break_mins := greatest(0, coalesce(v_shift_break_mins, 0));
+      v_anchor_import_id := v_shift_latest_import_id;
 
-      if v_timesheet_id is not null then
-        select t.week_ending_date
-        into v_base_ts_week_ending
-        from public.timesheets t
-        where t.timesheet_id = v_timesheet_id
+      -- Find latest POS (replacement) correction timesheet for this shift/week
+      begin
+        select
+          tpos.timesheet_id,
+          tpos.actual_schedule_json
+        into
+          v_pos_ts_id,
+          v_pos_schedule
+        from public.timesheets tpos
+        where tpos.is_adjustment is true
+          and tpos.is_current is true
+          and tpos.correction_kind = 'CHANGED_HOURS_REPLACEMENT'
+          and tpos.contract_id = v_shift_contract_id
+          and tpos.week_ending_date = v_week_ending_date
+          and jsonb_typeof(tpos.actual_schedule_json) = 'array'
+          and (
+            tpos.actual_schedule_json @> jsonb_build_array(jsonb_build_object('shift_id', v_shift_id::text))
+            or (
+              v_shift_external_row_key is not null
+              and tpos.actual_schedule_json @> jsonb_build_array(jsonb_build_object('external_row_key', v_shift_external_row_key))
+            )
+          )
+        order by tpos.updated_at desc nulls last, tpos.created_at desc nulls last
+        limit 1
+        for update;
+      exception when others then
+        v_pos_ts_id := null;
+        v_pos_schedule := null;
+      end;
+
+      if v_pos_ts_id is not null then
+        select
+          tf.locked_by_invoice_id,
+          tf.invoice_breakdown_json
+        into
+          v_pos_tf_locked_by_invoice_id,
+          v_pos_tf_invoice_breakdown_json
+        from public.timesheets_financials tf
+        where tf.timesheet_id = v_pos_ts_id
+          and tf.is_current = true
+        order by tf.created_at desc
         limit 1;
 
-        if v_base_ts_week_ending is not null then
-          v_week_ending_date := v_base_ts_week_ending;
+        begin
+          select
+            nullif(btrim(coalesce(s2.seg->>'invoice_locked_invoice_id','')), '')::uuid
+          into v_pos_seg_invoice_id
+          from (
+            select s2.seg
+            from jsonb_array_elements(
+              case
+                when v_pos_tf_invoice_breakdown_json is not null
+                 and jsonb_typeof(v_pos_tf_invoice_breakdown_json)='object'
+                 and jsonb_typeof(v_pos_tf_invoice_breakdown_json->'segments')='array'
+                then v_pos_tf_invoice_breakdown_json->'segments'
+                else '[]'::jsonb
+              end
+            ) s2(seg)
+            where nullif(btrim(coalesce(s2.seg->>'invoice_locked_invoice_id','')), '') is not null
+            limit 1
+          ) as s2;
+        exception when others then
+          v_pos_seg_invoice_id := null;
+        end;
+
+        v_pos_is_invoiced :=
+          (v_pos_tf_locked_by_invoice_id is not null)
+          or (v_pos_seg_invoice_id is not null);
+
+        -- If POS is invoiced, reverse POS (anchor = POS schedule)
+        if v_pos_is_invoiced is true and v_pos_schedule is not null and jsonb_typeof(v_pos_schedule) = 'array' then
+          begin
+            v_anchor_start_utc := nullif(btrim(coalesce((v_pos_schedule->0)->>'start_utc','')), '')::timestamptz;
+          exception when others then
+            v_anchor_start_utc := v_shift_start_utc;
+          end;
+
+          begin
+            v_anchor_end_utc := nullif(btrim(coalesce((v_pos_schedule->0)->>'end_utc','')), '')::timestamptz;
+          exception when others then
+            v_anchor_end_utc := v_shift_end_utc;
+          end;
+
+          begin
+            v_anchor_break_mins := greatest(
+              0,
+              coalesce(nullif(btrim(coalesce((v_pos_schedule->0)->>'break_mins','')), '')::int, 0)
+            );
+          exception when others then
+            v_anchor_break_mins := greatest(0, coalesce(v_shift_break_mins, 0));
+          end;
+
+          begin
+            if ((v_pos_schedule->0) ? 'import_id')
+              and nullif(btrim(coalesce((v_pos_schedule->0)->>'import_id','')), '') is not null
+              and (v_pos_schedule->0)->>'import_id' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            then
+              v_anchor_import_id := ((v_pos_schedule->0)->>'import_id')::uuid;
+            end if;
+          exception when others then
+            null;
+          end;
         end if;
       end if;
 
-      if v_week_ending_date is null and v_shift_week_ending_date is not null then
-        v_week_ending_date := v_shift_week_ending_date;
+      -- If POS is NOT invoiced, anchor to base locked segment (and use base evidence import_id when available)
+      if v_pos_is_invoiced is not true then
+        -- Base evidence import id: from CHANGED_HOURS_REVERSAL schedule if present
+        begin
+          select
+            nullif(btrim(coalesce((tneg.actual_schedule_json->0)->>'import_id','')), '')::uuid
+          into v_base_evidence_import_id
+          from public.timesheets tneg
+          where tneg.is_adjustment is true
+            and tneg.is_current is true
+            and tneg.correction_kind = 'CHANGED_HOURS_REVERSAL'
+            and tneg.contract_id = v_shift_contract_id
+            and tneg.week_ending_date = v_week_ending_date
+            and jsonb_typeof(tneg.actual_schedule_json)='array'
+            and (
+              tneg.actual_schedule_json @> jsonb_build_array(jsonb_build_object('shift_id', v_shift_id::text))
+              or (
+                v_shift_external_row_key is not null
+                and tneg.actual_schedule_json @> jsonb_build_array(jsonb_build_object('external_row_key', v_shift_external_row_key))
+              )
+            )
+          order by tneg.updated_at desc nulls last, tneg.created_at desc nulls last
+          limit 1;
+        exception when others then
+          v_base_evidence_import_id := null;
+        end;
+
+        if v_base_evidence_import_id is not null then
+          v_anchor_import_id := v_base_evidence_import_id;
+        end if;
+
+        if v_seg_json is not null then
+          begin
+            if nullif(btrim(coalesce(v_seg_json->>'start_utc','')), '') is not null then
+              v_anchor_start_utc := (v_seg_json->>'start_utc')::timestamptz;
+            end if;
+          exception when others then
+            null;
+          end;
+
+          begin
+            if nullif(btrim(coalesce(v_seg_json->>'end_utc','')), '') is not null then
+              v_anchor_end_utc := (v_seg_json->>'end_utc')::timestamptz;
+            end if;
+          exception when others then
+            null;
+          end;
+
+          begin
+            if nullif(btrim(coalesce(v_seg_json->>'break_mins','')), '') is not null then
+              v_anchor_break_mins := greatest(0, (v_seg_json->>'break_mins')::int);
+            end if;
+          exception when others then
+            null;
+          end;
+        end if;
       end if;
 
-      if v_week_ending_date is null then
-        select coalesce(c.week_ending_weekday_snapshot, 0)
-        into v_contract_week_ending_weekday_snapshot
-        from public.contracts c
-        where c.id = v_shift_contract_id
-        limit 1;
-
-        v_week_ending_date :=
-          (v_shift_work_date + (((v_contract_week_ending_weekday_snapshot - extract(dow from v_shift_work_date)::int + 7) % 7))::int)::date;
+      if v_anchor_start_utc is null or v_anchor_end_utc is null then
+        raise exception 'weekly_import_apply_cancellations: shift % missing anchor start/end; cannot create schedule-driven cancellation correction.', v_shift_id;
       end if;
 
-      if v_week_ending_date is null then
-        raise exception 'weekly_import_apply_cancellations: shift % cannot resolve week_ending_date for correction.', v_shift_id;
-      end if;
-
-      -- Deterministic correction id (fnv1a32 over stable string)
+      -- Deterministic correction id (fnv1a32 over stable string using anchor times)
       v_fnv_s :=
         coalesce(p_import_id::text,'') || '|' ||
         coalesce(v_shift_id::text,'') || '|' ||
         coalesce(v_shift_hr_request_id,'') || '|' ||
         coalesce(coalesce(v_shift_external_row_key,''),'') || '|' ||
-        coalesce(coalesce(v_shift_start_utc::text,''),'') || '|' ||
-        coalesce(coalesce(v_shift_end_utc::text,''),'') || '|' ||
-        coalesce(coalesce(v_shift_break_mins,0)::text,'');
+        coalesce(coalesce(v_anchor_start_utc::text,''),'') || '|' ||
+        coalesce(coalesce(v_anchor_end_utc::text,''),'') || '|' ||
+        coalesce(coalesce(v_anchor_break_mins,0)::text,'');
 
       v_fnv_h := 2166136261;
       for v_fnv_i in 1..char_length(v_fnv_s) loop
@@ -850,28 +1009,29 @@ begin
       where cand.id = v_shift_candidate_id
       limit 1;
 
-      -- ✅ Schedule now includes ref_num + evidence import_id (previous shift import)
+      -- Schedule entry (anchor-based) + evidence import_id
       v_schedule := jsonb_build_array(
         jsonb_build_object(
           'date', v_shift_work_date::text,
           'ward', nullif(btrim(coalesce(v_shift_ward, v_contract_ward_hint, '')), ''),
-          'start_utc', v_shift_start_utc::text,
-          'end_utc', v_shift_end_utc::text,
-          'break_mins', greatest(0, coalesce(v_shift_break_mins, 0)),
+          'start_utc', v_anchor_start_utc::text,
+          'end_utc', v_anchor_end_utc::text,
+          'start', to_char((v_anchor_start_utc at time zone 'Europe/London')::time, 'HH24:MI'),
+          'end', to_char((v_anchor_end_utc at time zone 'Europe/London')::time, 'HH24:MI'),
+          'break_mins', greatest(0, coalesce(v_anchor_break_mins, 0)),
           'hr_request_id', nullif(btrim(coalesce(v_shift_hr_request_id,'')), ''),
           'ref_num', nullif(btrim(coalesce(v_shift_hr_request_id,'')), ''),
           'shift_id', v_shift_id::text,
           'external_row_key', v_shift_external_row_key,
-          'import_id', case when v_shift_latest_import_id is null then null else v_shift_latest_import_id::text end
+          'import_id', case when v_anchor_import_id is null then null else v_anchor_import_id::text end
         )
       );
 
-      -- ✅ Hint includes trigger + evidence import ids (evidence should use schedule import_id; hint is trace/audit)
       v_hint := jsonb_build_object(
         'import_cancellation', jsonb_build_object(
           'import_id', p_import_id::text,
           'trigger_import_id', p_import_id::text,
-          'evidence_import_id', case when v_shift_latest_import_id is null then null else v_shift_latest_import_id::text end,
+          'evidence_import_id', case when v_anchor_import_id is null then null else v_anchor_import_id::text end,
           'key_type', 'HR_REQUEST_ID',
           'hr_request_id', nullif(btrim(coalesce(v_shift_hr_request_id,'')), ''),
           'ref_num', nullif(btrim(coalesce(v_shift_hr_request_id,'')), ''),
@@ -879,7 +1039,8 @@ begin
           'shift_id', v_shift_id::text,
           'correction_id', v_correction_id,
           'correction_kind', v_kind,
-          'invoice_id_detected', v_invoice_id_detected::text
+          'invoice_id_detected', case when v_invoice_id_detected is null then null else v_invoice_id_detected::text end,
+          'anchor_mode', case when v_pos_is_invoiced is true then 'INVOICED_REPLACEMENT' else 'BASE_LOCKED' end
         )
       );
 
@@ -1200,7 +1361,82 @@ begin
 
       v_cancelled_count := v_cancelled_count + 1;
 
-      -- ✅ User-facing audit (UNGATED): correction timesheet + base contract_week + invoice history
+      -- ✅ Cleanup: if POS is NOT invoiced, delete any uninvoiced CHANGED_HOURS corrections for this shift/week
+      begin
+        create temporary table tmp_cleanup_candidates(timesheet_id uuid primary key) on commit drop;
+
+        insert into tmp_cleanup_candidates(timesheet_id)
+        select distinct t.timesheet_id
+        from public.timesheets t
+        where t.is_adjustment is true
+          and t.is_current is true
+          and t.correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT')
+          and t.contract_id = v_shift_contract_id
+          and t.week_ending_date = v_week_ending_date
+          and jsonb_typeof(t.actual_schedule_json)='array'
+          and (
+            t.actual_schedule_json @> jsonb_build_array(jsonb_build_object('shift_id', v_shift_id::text))
+            or (
+              v_shift_external_row_key is not null
+              and t.actual_schedule_json @> jsonb_build_array(jsonb_build_object('external_row_key', v_shift_external_row_key))
+            )
+          )
+        on conflict do nothing;
+
+        create temporary table tmp_cleanup_delete(timesheet_id uuid primary key) on commit drop;
+
+        insert into tmp_cleanup_delete(timesheet_id)
+        select c.timesheet_id
+        from tmp_cleanup_candidates c
+        left join public.timesheets_financials tf
+          on tf.timesheet_id = c.timesheet_id
+         and tf.is_current = true
+        where coalesce(tf.locked_by_invoice_id, null) is null
+          and not exists (
+            select 1
+            from jsonb_array_elements(
+              case
+                when tf.invoice_breakdown_json is not null
+                 and jsonb_typeof(tf.invoice_breakdown_json)='object'
+                 and jsonb_typeof(tf.invoice_breakdown_json->'segments')='array'
+                then tf.invoice_breakdown_json->'segments'
+                else '[]'::jsonb
+              end
+            ) s(seg)
+            where nullif(btrim(coalesce(s.seg->>'invoice_locked_invoice_id','')), '') is not null
+          )
+        on conflict do nothing;
+
+        select coalesce(array_agg(d.timesheet_id), array[]::uuid[])
+        into v_cleanup_ts_ids
+        from tmp_cleanup_delete d;
+
+        v_cleanup_count := coalesce(array_length(v_cleanup_ts_ids, 1), 0);
+
+        if v_pos_is_invoiced is not true and v_cleanup_count > 0 then
+          delete from public.hr_issue_emails hie where hie.timesheet_id = any(v_cleanup_ts_ids);
+          delete from public.timesheet_validations tv where tv.timesheet_id = any(v_cleanup_ts_ids);
+
+          delete from public.pay_item_snoozes ps where ps.timesheet_id = any(v_cleanup_ts_ids);
+          delete from public.pay_batch_items pbi where pbi.timesheet_id = any(v_cleanup_ts_ids);
+          delete from public.ts_pay_adjustments tpa where tpa.timesheet_id = any(v_cleanup_ts_ids);
+          delete from public.timesheet_pay_state_history tpsh where tpsh.timesheet_id = any(v_cleanup_ts_ids);
+          delete from public.timesheet_pay_state tps where tps.timesheet_id = any(v_cleanup_ts_ids);
+
+          delete from public.timesheet_evidence te where te.timesheet_id = any(v_cleanup_ts_ids);
+          delete from public.manual_timesheet_queue mtq where mtq.timesheet_id = any(v_cleanup_ts_ids);
+          delete from public.ts_pdfs_outbox tpo where tpo.timesheet_id = any(v_cleanup_ts_ids);
+          delete from public.ts_financials_outbox tfo where tfo.timesheet_id = any(v_cleanup_ts_ids);
+
+          delete from public.timesheets_financials tfz where tfz.timesheet_id = any(v_cleanup_ts_ids);
+          delete from public.contract_weeks cwz where cwz.timesheet_id = any(v_cleanup_ts_ids);
+          delete from public.timesheets tz where tz.timesheet_id = any(v_cleanup_ts_ids);
+        end if;
+      exception when others then
+        null;
+      end;
+
+      -- ✅ User-facing audit (UNGATED): correction timesheet + invoice history
       begin
         if v_correction_ts_id is not null then
           perform public._audit_insert(
@@ -1210,7 +1446,7 @@ begin
             null,
             jsonb_build_object(
               'trigger_import_id', p_import_id::text,
-              'evidence_import_id', case when v_shift_latest_import_id is null then null else v_shift_latest_import_id::text end,
+              'evidence_import_id', case when v_anchor_import_id is null then null else v_anchor_import_id::text end,
               'branch', v_branch,
               'shift_id', v_shift_id::text,
               'work_date', v_shift_work_date::text,
@@ -1220,29 +1456,10 @@ begin
               'cancel_reason', v_reason,
               'invoice_id', case when v_invoice_id_detected is null then null else v_invoice_id_detected::text end,
               'correction_id', v_correction_id,
-              'correction_kind', v_kind
-            ),
-            'IMPORT_CANCELLATION_CORRECTION',
-            p_actor_user_id
-          );
-        end if;
-
-        if v_base_week_id is not null then
-          perform public._audit_insert(
-            'contract_weeks',
-            v_base_week_id::text,
-            'HR_IMPORT_CANCELLATION_CORRECTION_CREATED',
-            null,
-            jsonb_build_object(
-              'trigger_import_id', p_import_id::text,
-              'evidence_import_id', case when v_shift_latest_import_id is null then null else v_shift_latest_import_id::text end,
-              'shift_id', v_shift_id::text,
-              'work_date', v_shift_work_date::text,
-              'external_row_key', v_shift_external_row_key,
-              'hr_request_id', nullif(btrim(coalesce(v_shift_hr_request_id,'')), ''),
-              'ref_num', nullif(btrim(coalesce(v_shift_hr_request_id,'')), ''),
-              'invoice_id', case when v_invoice_id_detected is null then null else v_invoice_id_detected::text end,
-              'correction_timesheet_id', case when v_correction_ts_id is null then null else v_correction_ts_id::text end
+              'correction_kind', v_kind,
+              'anchor_mode', case when v_pos_is_invoiced is true then 'INVOICED_REPLACEMENT' else 'BASE_LOCKED' end,
+              'cleanup_deleted_changed_hours_count', v_cleanup_count,
+              'cleanup_deleted_timesheet_ids', to_jsonb(coalesce(v_cleanup_ts_ids, array[]::uuid[]))
             ),
             'IMPORT_CANCELLATION_CORRECTION',
             p_actor_user_id
@@ -1255,7 +1472,7 @@ begin
             'HR_IMPORT_CANCELLATION_CORRECTION_CREATED',
             jsonb_build_object(
               'trigger_import_id', p_import_id::text,
-              'evidence_import_id', case when v_shift_latest_import_id is null then null else v_shift_latest_import_id::text end,
+              'evidence_import_id', case when v_anchor_import_id is null then null else v_anchor_import_id::text end,
               'shift_id', v_shift_id::text,
               'work_date', v_shift_work_date::text,
               'external_row_key', v_shift_external_row_key,
@@ -1264,7 +1481,9 @@ begin
               'invoice_id', v_invoice_id_detected::text,
               'correction_timesheet_id', case when v_correction_ts_id is null then null else v_correction_ts_id::text end,
               'correction_id', v_correction_id,
-              'correction_kind', v_kind
+              'correction_kind', v_kind,
+              'anchor_mode', case when v_pos_is_invoiced is true then 'INVOICED_REPLACEMENT' else 'BASE_LOCKED' end,
+              'cleanup_deleted_changed_hours_count', v_cleanup_count
             ),
             'invoices',
             v_invoice_id_detected::text,
@@ -1292,7 +1511,9 @@ begin
         'invoice_id_detected', case when v_invoice_id_detected is null then null else v_invoice_id_detected::text end,
         'invoiced_detected', v_invoiced_detected,
         'branch', v_branch,
-        'correction_timesheet_id', case when v_correction_ts_id is null then null else v_correction_ts_id::text end
+        'correction_timesheet_id', case when v_correction_ts_id is null then null else v_correction_ts_id::text end,
+        'anchor_mode', case when v_pos_is_invoiced is true then 'INVOICED_REPLACEMENT' else 'BASE_LOCKED' end,
+        'cleanup_deleted_changed_hours_count', v_cleanup_count
       ));
       v_sample_n := v_sample_n + 1;
     end if;
