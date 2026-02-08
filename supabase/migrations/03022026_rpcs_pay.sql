@@ -310,6 +310,12 @@ begin
   return v_csv;
 end;
 $$;
+
+
+
+
+
+
 create or replace function public.weekly_import_apply_cancellations(
   p_import_id uuid,
   p_actions jsonb,
@@ -357,6 +363,9 @@ declare
   v_shift_ward text;
   v_shift_week_ending_date date;
 
+  -- ✅ evidence pointer: previous import id for this shift (raw row source)
+  v_shift_latest_import_id uuid;
+
   -- file request-id set
   v_file_request_count int := 0;
   v_present_in_file boolean := false;
@@ -396,7 +405,7 @@ declare
   v_schedule jsonb;
   v_hint jsonb;
 
-  v_base_week_id uuid; -- ✅ FIX: was used later but not declared
+  v_base_week_id uuid;
 
   v_existing_ts_id uuid;
   v_existing_cw_id uuid;
@@ -438,7 +447,6 @@ begin
   from public.hr_imports hi
   where hi.id = p_import_id
   limit 1;
-
 
   if v_import_source_system is null or v_import_source_system = '' then
     raise exception 'weekly_import_apply_cancellations: import % not found in hr_imports.', p_import_id;
@@ -543,7 +551,8 @@ begin
       ns.end_utc,
       ns.break_mins,
       ns.ward,
-      ns.week_ending_date
+      ns.week_ending_date,
+      ns.latest_import_id
     into
       v_timesheet_id,
       v_shift_invoice_id,
@@ -559,7 +568,8 @@ begin
       v_shift_end_utc,
       v_shift_break_mins,
       v_shift_ward,
-      v_shift_week_ending_date
+      v_shift_week_ending_date,
+      v_shift_latest_import_id
     from public.nhsp_shifts ns
     where ns.id = v_shift_id
     for update;
@@ -712,6 +722,52 @@ begin
 
       v_correction_ts_id := null;
 
+      -- ✅ User-facing audit (UNGATED): in-place cancellation (timesheet + shift)
+      begin
+        if v_timesheet_id is not null then
+          perform public._audit_insert(
+            'timesheets',
+            v_timesheet_id::text,
+            'HR_IMPORT_CANCELLATION_APPLIED',
+            null,
+            jsonb_build_object(
+              'import_id', p_import_id::text,
+              'branch', v_branch,
+              'shift_id', v_shift_id::text,
+              'work_date', v_shift_work_date::text,
+              'external_row_key', v_shift_external_row_key,
+              'hr_request_id', nullif(btrim(coalesce(v_shift_hr_request_id,'')), ''),
+              'ref_num', nullif(btrim(coalesce(v_shift_hr_request_id,'')), ''),
+              'cancel_reason', v_reason
+            ),
+            'IMPORT_CANCELLATION',
+            p_actor_user_id
+          );
+        end if;
+
+        perform public._audit_insert(
+          'nhsp_shifts',
+          v_shift_id::text,
+          'HR_IMPORT_CANCELLATION_APPLIED',
+          null,
+          jsonb_build_object(
+            'import_id', p_import_id::text,
+            'branch', v_branch,
+            'shift_id', v_shift_id::text,
+            'work_date', v_shift_work_date::text,
+            'external_row_key', v_shift_external_row_key,
+            'hr_request_id', nullif(btrim(coalesce(v_shift_hr_request_id,'')), ''),
+            'ref_num', nullif(btrim(coalesce(v_shift_hr_request_id,'')), ''),
+            'cancel_reason', v_reason,
+            'timesheet_id', case when v_timesheet_id is null then null else v_timesheet_id::text end
+          ),
+          'IMPORT_CANCELLATION',
+          p_actor_user_id
+        );
+      exception when others then
+        null;
+      end;
+
     else
       v_branch := 'CORRECTION';
 
@@ -794,6 +850,7 @@ begin
       where cand.id = v_shift_candidate_id
       limit 1;
 
+      -- ✅ Schedule now includes ref_num + evidence import_id (previous shift import)
       v_schedule := jsonb_build_array(
         jsonb_build_object(
           'date', v_shift_work_date::text,
@@ -802,16 +859,23 @@ begin
           'end_utc', v_shift_end_utc::text,
           'break_mins', greatest(0, coalesce(v_shift_break_mins, 0)),
           'hr_request_id', nullif(btrim(coalesce(v_shift_hr_request_id,'')), ''),
+          'ref_num', nullif(btrim(coalesce(v_shift_hr_request_id,'')), ''),
           'shift_id', v_shift_id::text,
-          'external_row_key', v_shift_external_row_key
+          'external_row_key', v_shift_external_row_key,
+          'import_id', case when v_shift_latest_import_id is null then null else v_shift_latest_import_id::text end
         )
       );
 
+      -- ✅ Hint includes trigger + evidence import ids (evidence should use schedule import_id; hint is trace/audit)
       v_hint := jsonb_build_object(
         'import_cancellation', jsonb_build_object(
           'import_id', p_import_id::text,
+          'trigger_import_id', p_import_id::text,
+          'evidence_import_id', case when v_shift_latest_import_id is null then null else v_shift_latest_import_id::text end,
           'key_type', 'HR_REQUEST_ID',
           'hr_request_id', nullif(btrim(coalesce(v_shift_hr_request_id,'')), ''),
+          'ref_num', nullif(btrim(coalesce(v_shift_hr_request_id,'')), ''),
+          'external_row_key', v_shift_external_row_key,
           'shift_id', v_shift_id::text,
           'correction_id', v_correction_id,
           'correction_kind', v_kind,
@@ -838,9 +902,8 @@ begin
         'correction_id=' || coalesce(v_correction_id,'') || '|' ||
         'correction_kind=' || v_kind;
 
-v_hash_hex := substring(encode(extensions.digest(convert_to(v_booking_base, 'utf8'), 'sha256'::text), 'hex') from 1 for 16);
-v_booking_id := 'bk_' || v_hash_hex;
-
+      v_hash_hex := substring(encode(extensions.digest(convert_to(v_booking_base, 'utf8'), 'sha256'::text), 'hex') from 1 for 16);
+      v_booking_id := 'bk_' || v_hash_hex;
 
       -- Ensure base contract_week exists (seq=0). Do not overwrite if it exists.
       insert into public.contract_weeks(
@@ -1137,6 +1200,85 @@ v_booking_id := 'bk_' || v_hash_hex;
 
       v_cancelled_count := v_cancelled_count + 1;
 
+      -- ✅ User-facing audit (UNGATED): correction timesheet + base contract_week + invoice history
+      begin
+        if v_correction_ts_id is not null then
+          perform public._audit_insert(
+            'timesheets',
+            v_correction_ts_id::text,
+            'HR_IMPORT_CANCELLATION_CORRECTION_CREATED',
+            null,
+            jsonb_build_object(
+              'trigger_import_id', p_import_id::text,
+              'evidence_import_id', case when v_shift_latest_import_id is null then null else v_shift_latest_import_id::text end,
+              'branch', v_branch,
+              'shift_id', v_shift_id::text,
+              'work_date', v_shift_work_date::text,
+              'external_row_key', v_shift_external_row_key,
+              'hr_request_id', nullif(btrim(coalesce(v_shift_hr_request_id,'')), ''),
+              'ref_num', nullif(btrim(coalesce(v_shift_hr_request_id,'')), ''),
+              'cancel_reason', v_reason,
+              'invoice_id', case when v_invoice_id_detected is null then null else v_invoice_id_detected::text end,
+              'correction_id', v_correction_id,
+              'correction_kind', v_kind
+            ),
+            'IMPORT_CANCELLATION_CORRECTION',
+            p_actor_user_id
+          );
+        end if;
+
+        if v_base_week_id is not null then
+          perform public._audit_insert(
+            'contract_weeks',
+            v_base_week_id::text,
+            'HR_IMPORT_CANCELLATION_CORRECTION_CREATED',
+            null,
+            jsonb_build_object(
+              'trigger_import_id', p_import_id::text,
+              'evidence_import_id', case when v_shift_latest_import_id is null then null else v_shift_latest_import_id::text end,
+              'shift_id', v_shift_id::text,
+              'work_date', v_shift_work_date::text,
+              'external_row_key', v_shift_external_row_key,
+              'hr_request_id', nullif(btrim(coalesce(v_shift_hr_request_id,'')), ''),
+              'ref_num', nullif(btrim(coalesce(v_shift_hr_request_id,'')), ''),
+              'invoice_id', case when v_invoice_id_detected is null then null else v_invoice_id_detected::text end,
+              'correction_timesheet_id', case when v_correction_ts_id is null then null else v_correction_ts_id::text end
+            ),
+            'IMPORT_CANCELLATION_CORRECTION',
+            p_actor_user_id
+          );
+        end if;
+
+        if v_invoice_id_detected is not null then
+          perform public._inv_write_audit(
+            p_actor_user_id,
+            'HR_IMPORT_CANCELLATION_CORRECTION_CREATED',
+            jsonb_build_object(
+              'trigger_import_id', p_import_id::text,
+              'evidence_import_id', case when v_shift_latest_import_id is null then null else v_shift_latest_import_id::text end,
+              'shift_id', v_shift_id::text,
+              'work_date', v_shift_work_date::text,
+              'external_row_key', v_shift_external_row_key,
+              'hr_request_id', nullif(btrim(coalesce(v_shift_hr_request_id,'')), ''),
+              'ref_num', nullif(btrim(coalesce(v_shift_hr_request_id,'')), ''),
+              'invoice_id', v_invoice_id_detected::text,
+              'correction_timesheet_id', case when v_correction_ts_id is null then null else v_correction_ts_id::text end,
+              'correction_id', v_correction_id,
+              'correction_kind', v_kind
+            ),
+            'invoices',
+            v_invoice_id_detected::text,
+            null,
+            'IMPORT_CANCELLATION_CORRECTION',
+            null,
+            null,
+            null
+          );
+        end if;
+      exception when others then
+        null;
+      end;
+
     end if;
 
     -- Debug sample (cap 30)
@@ -1233,6 +1375,10 @@ exception when others then
   raise;
 end;
 $$;
+
+
+
+
 
 
 create or replace function public.hr_weekly_validation_apply_send_emails(
