@@ -27883,9 +27883,18 @@ async function handleTsfinUpdateSegments(env, req, timesheetId) {
     if ('exclude_from_pay' in u) {
       existing.exclude_from_pay = (u.exclude_from_pay === true);
     }
-    if (typeof u.invoice_target_week_start === 'string' && u.invoice_target_week_start.trim()) {
-      existing.invoice_target_week_start = u.invoice_target_week_start.trim();
+
+    // ✅ FIX: support explicit clear for invoice_target_week_start (key present with null/blank)
+    if ('invoice_target_week_start' in u) {
+      const raw = u.invoice_target_week_start;
+      if (typeof raw === 'string') {
+        const t = raw.trim();
+        existing.invoice_target_week_start = t ? t : null;
+      } else if (raw == null) {
+        existing.invoice_target_week_start = null;
+      }
     }
+
     updateMap.set(sid, existing);
   }
 
@@ -27897,7 +27906,7 @@ async function handleTsfinUpdateSegments(env, req, timesheetId) {
   if (!allowInvoiceTargetChange) {
     // If this basis isn't allowed to move invoice weeks, reject any attempt to set invoice_target_week_start
     const anyInvoiceTargetChange = Array.from(updateMap.values()).some(
-      u => typeof u.invoice_target_week_start === 'string'
+      u => u && Object.prototype.hasOwnProperty.call(u, 'invoice_target_week_start')
     );
     if (anyInvoiceTargetChange) {
       return withCORS(
@@ -27915,18 +27924,30 @@ async function handleTsfinUpdateSegments(env, req, timesheetId) {
     );
 
     for (const [sid, upd] of updateMap.entries()) {
-      if (!upd || typeof upd.invoice_target_week_start !== 'string') continue;
+      if (!upd || !Object.prototype.hasOwnProperty.call(upd, 'invoice_target_week_start')) continue;
+
       const seg = segById.get(sid);
       if (!seg) continue; // ignore unknown ids silently (matches previous behaviour)
+
+      const reqTarget =
+        (typeof upd.invoice_target_week_start === 'string' && upd.invoice_target_week_start.trim())
+          ? upd.invoice_target_week_start.trim()
+          : null; // explicit clear
 
       if (seg.invoice_locked_invoice_id) {
         // ✅ No-op tolerant: allow if caller re-sent an equivalent target (no actual change)
         const curTarget = String(seg.invoice_target_week_start || '').trim();
-        const reqTarget = String(upd.invoice_target_week_start || '').trim();
 
         const noop =
-          (reqTarget === curTarget) ||
-          (!curTarget && naturalWeekStart && reqTarget === naturalWeekStart);
+          // normal set no-op
+          (reqTarget != null && reqTarget === curTarget) ||
+          // "implicit natural" no-op
+          (reqTarget != null && !curTarget && naturalWeekStart && reqTarget === naturalWeekStart) ||
+          // ✅ clear no-op (only if there is no explicit delay, or it is already at natural)
+          (reqTarget == null && (
+            !curTarget ||
+            (naturalWeekStart && curTarget === naturalWeekStart)
+          ));
 
         if (!noop) {
           return withCORS(
@@ -27941,7 +27962,8 @@ async function handleTsfinUpdateSegments(env, req, timesheetId) {
         continue;
       }
 
-      if (naturalWeekStart && upd.invoice_target_week_start < naturalWeekStart) {
+      // Only validate floor when setting a real target (clears skip)
+      if (reqTarget != null && naturalWeekStart && reqTarget < naturalWeekStart) {
         return withCORS(
           env,
           req,
@@ -27962,9 +27984,14 @@ async function handleTsfinUpdateSegments(env, req, timesheetId) {
       if (Object.prototype.hasOwnProperty.call(upd, 'exclude_from_pay')) {
         row.exclude_from_pay = (upd.exclude_from_pay === true);
       }
-      if (typeof upd.invoice_target_week_start === 'string' && upd.invoice_target_week_start.trim()) {
-        row.invoice_target_week_start = upd.invoice_target_week_start.trim();
+
+      // ✅ FIX: pass explicit clear through to RPC (key present → include null)
+      if (Object.prototype.hasOwnProperty.call(upd, 'invoice_target_week_start')) {
+        const v = upd.invoice_target_week_start;
+        if (typeof v === 'string' && v.trim()) row.invoice_target_week_start = v.trim();
+        else row.invoice_target_week_start = null;
       }
+
       out.push(row);
     }
     return out;
@@ -27997,30 +28024,29 @@ async function handleTsfinUpdateSegments(env, req, timesheetId) {
   let usedLockedRpc = false;
 
   try {
-  const rpcRes = await sbRpc(
-    env,
-    'tsfin_update_segments_locked',
-    {
-      p_timesheet_id: currentTimesheetId,
-      p_segment_updates: toRpcUpdates(),
-      p_actor_user_id: (user && user.id) ? user.id : null
-      // Optional future: p_expected_updated_at (if FE starts sending it)
-    },
-    { timeoutMs: 25000 } // ✅ avoid hanging forever on row locks
-  );
+    const rpcRes = await sbRpc(
+      env,
+      'tsfin_update_segments_locked',
+      {
+        p_timesheet_id: currentTimesheetId,
+        p_segment_updates: toRpcUpdates(),
+        p_actor_user_id: (user && user.id) ? user.id : null
+        // Optional future: p_expected_updated_at (if FE starts sending it)
+      },
+      { timeoutMs: 25000 } // ✅ avoid hanging forever on row locks
+    );
 
-  const unwrapped = unwrapRpcResult(rpcRes);
-  // Allow either direct row return or {updated: row}
-  updated = (unwrapped && typeof unwrapped === 'object' && Object.prototype.hasOwnProperty.call(unwrapped, 'updated'))
-    ? unwrapped.updated
-    : unwrapped;
+    const unwrapped = unwrapRpcResult(rpcRes);
+    // Allow either direct row return or {updated: row}
+    updated = (unwrapped && typeof unwrapped === 'object' && Object.prototype.hasOwnProperty.call(unwrapped, 'updated'))
+      ? unwrapped.updated
+      : unwrapped;
 
-  usedLockedRpc = true;
-} catch (e) {
-  if (!isMissingRpc(e)) throw e;
-  usedLockedRpc = false;
-}
-
+    usedLockedRpc = true;
+  } catch (e) {
+    if (!isMissingRpc(e)) throw e;
+    usedLockedRpc = false;
+  }
 
   // Legacy fallback (only if the locked RPC isn't deployed yet)
   if (!usedLockedRpc) {
@@ -28039,18 +28065,43 @@ async function handleTsfinUpdateSegments(env, req, timesheetId) {
       }
 
       // Invoice target week start (only for allowed bases and unlocked segments)
+      const hasInvoiceTargetKey = Object.prototype.hasOwnProperty.call(upd, 'invoice_target_week_start');
+
+      const reqTarget =
+        (typeof upd.invoice_target_week_start === 'string' && upd.invoice_target_week_start.trim())
+          ? upd.invoice_target_week_start.trim()
+          : null;
+
+      const isClear = hasInvoiceTargetKey && (reqTarget == null);
+
       let invoiceTargetWeekStart = seg.invoice_target_week_start || null;
       if (
         allowInvoiceTargetChange &&
-        typeof upd.invoice_target_week_start === 'string' &&
+        hasInvoiceTargetKey &&
         !seg.invoice_locked_invoice_id
       ) {
-        invoiceTargetWeekStart = upd.invoice_target_week_start;
+        invoiceTargetWeekStart = reqTarget; // may be null (explicit clear)
       }
 
       const payAmt = Number(seg.pay_amount || 0);
       if (!exclude) {
         newTotalPay += payAmt;
+      }
+
+      // ✅ Keep legacy fallback consistent: explicit clear removes the key entirely
+      if (
+        allowInvoiceTargetChange &&
+        hasInvoiceTargetKey &&
+        isClear &&
+        !seg.invoice_locked_invoice_id
+      ) {
+        const outSeg = {
+          ...seg,
+          exclude_from_pay: exclude
+        };
+        // remove key
+        if ('invoice_target_week_start' in outSeg) delete outSeg.invoice_target_week_start;
+        return outSeg;
       }
 
       return {
