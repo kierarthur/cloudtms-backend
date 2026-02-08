@@ -74,8 +74,6 @@ as $$
     and b.end_utc_txt   ~ '^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?(Z|[+-]\d{2}:?\d{2})$'
 $$;
 
-
-
 create or replace function public.hr_weekly_mirror_upsert_deterministic(
   p_import_id uuid,
   p_external_row_keys text[],
@@ -224,7 +222,7 @@ begin
       r.staff_norm as staff_norm,
       nullif(lower(coalesce(r.unit_raw, r.payload_json->>'ward', '')), '') as ward_norm,
       r.assignment_grade_norm as assignment_code,
-      null::text as ref_num,
+      nullif(btrim(r.hr_request_id), '') as ref_num,
       d.week_ending_date,
       null::timestamptz as cancelled_at_utc,
       null::uuid as cancelled_by_import_id,
@@ -314,6 +312,7 @@ begin
             break_mins = excluded.break_mins,
             pay_minutes = excluded.pay_minutes,
             hr_request_id = excluded.hr_request_id,
+            ref_num = excluded.ref_num,
             staff_name = excluded.staff_name,
             staff_norm = excluded.staff_norm,
             ward_norm = excluded.ward_norm,
@@ -361,7 +360,6 @@ begin
   );
 end;
 $$;
-
 
 
 
