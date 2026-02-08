@@ -364,6 +364,7 @@ $$;
 
 
 
+
 create or replace function public.hr_weekly_phase3_apply_adjustment_truth(
   p_import_id uuid,
   p_selected_external_row_keys text[],
@@ -410,6 +411,10 @@ declare
   v_new_end_utc   timestamptz;
   v_old_break_mins int;
   v_new_break_mins int;
+
+  v_old_paid_minutes int := null;
+  v_new_paid_minutes int := null;
+  v_delta_paid_minutes int := null;
 
   v_seg_start_utc timestamptz;
   v_seg_end_utc timestamptz;
@@ -475,6 +480,19 @@ declare
 
   v_sqlstate text;
   v_err text;
+
+  -- ✅ Evidence + reference linkage
+  v_shift_id uuid := null;
+  v_shift_prev_import_id uuid := null;
+  v_shift_hr_request_id text := null;
+  v_ref_num text := null;
+  v_schedule_import_id uuid := null;
+
+  -- ✅ Per-key artefacts for user-facing audit
+  v_rev_ts_id uuid := null;
+  v_rep_ts_id uuid := null;
+  v_rev_cw_id uuid := null;
+  v_rep_cw_id uuid := null;
 begin
   -- ---- Validate import exists and is HEALTHROSTER ----
   select hi.source_system
@@ -532,6 +550,12 @@ begin
   foreach v_key in array v_selected_keys loop
     v_last_key := v_key;
 
+    -- reset per-key ids for user-facing audit
+    v_rev_ts_id := null;
+    v_rep_ts_id := null;
+    v_rev_cw_id := null;
+    v_rep_cw_id := null;
+
     select t.row_json
     into v_row
     from tmp_phase3_by_key t
@@ -563,6 +587,40 @@ begin
     exception when others then
       raise exception 'hr_weekly_phase3_apply_adjustment_truth: Phase 3 row missing/invalid contract_id/candidate_id/client_id/work_date for external_row_key=%', v_key;
     end;
+
+    -- ✅ Resolve shift_id + previous import id + request id (ref)
+    begin
+      v_shift_id := nullif(btrim(coalesce(v_row->>'shift_id','')), '')::uuid;
+    exception when others then
+      v_shift_id := null;
+    end;
+
+    if v_shift_id is null then
+      select ns.id
+      into v_shift_id
+      from public.nhsp_shifts ns
+      where ns.external_row_key = v_key
+        and ns.source_system = 'HEALTHROSTER'::public.hr_source_enum
+        and ns.cancelled_at_utc is null
+      order by ns.updated_at desc nulls last, ns.created_at desc nulls last
+      limit 1;
+    end if;
+
+    if v_shift_id is null then
+      raise exception 'hr_weekly_phase3_apply_adjustment_truth: Failed to resolve shift_id for external_row_key=% (required for evidence/audit).', v_key;
+    end if;
+
+    select
+      ns2.latest_import_id,
+      ns2.hr_request_id
+    into
+      v_shift_prev_import_id,
+      v_shift_hr_request_id
+    from public.nhsp_shifts ns2
+    where ns2.id = v_shift_id
+    limit 1;
+
+    v_ref_num := nullif(btrim(coalesce(v_shift_hr_request_id, '')), '');
 
     -- ---- Resolve week_ending_date (DO NOT assume Sunday) ----
     v_week_ending_date := null;
@@ -640,6 +698,39 @@ begin
     exception when others then
       v_new_break_mins := 0;
     end;
+
+    -- Paid minutes (prefer Phase3 values, fallback to computed)
+    begin
+      v_old_paid_minutes := nullif(btrim(coalesce(v_row->>'old_paid_minutes','')), '')::int;
+    exception when others then
+      v_old_paid_minutes := null;
+    end;
+
+    begin
+      v_new_paid_minutes := nullif(btrim(coalesce(v_row->>'new_paid_minutes','')), '')::int;
+    exception when others then
+      v_new_paid_minutes := null;
+    end;
+
+    if v_old_paid_minutes is null then
+      v_old_paid_minutes :=
+        greatest(
+          0,
+          (floor(extract(epoch from (v_old_end_utc - v_old_start_utc)) / 60.0))::int
+          - greatest(0, coalesce(v_old_break_mins,0))
+        );
+    end if;
+
+    if v_new_paid_minutes is null then
+      v_new_paid_minutes :=
+        greatest(
+          0,
+          (floor(extract(epoch from (v_new_end_utc - v_new_start_utc)) / 60.0))::int
+          - greatest(0, coalesce(v_new_break_mins,0))
+        );
+    end if;
+
+    v_delta_paid_minutes := coalesce(v_new_paid_minutes,0) - coalesce(v_old_paid_minutes,0);
 
     -- Compute correction_id (stable + deterministic)
     v_fnv_s :=
@@ -755,10 +846,12 @@ begin
         v_seg_start_utc := v_old_start_utc;
         v_seg_end_utc := v_old_end_utc;
         v_seg_break_mins := greatest(0, v_old_break_mins);
+        v_schedule_import_id := v_shift_prev_import_id;
       else
         v_seg_start_utc := v_new_start_utc;
         v_seg_end_utc := v_new_end_utc;
         v_seg_break_mins := greatest(0, v_new_break_mins);
+        v_schedule_import_id := p_import_id;
       end if;
 
       v_shift_date_ymd := to_char((v_seg_start_utc at time zone 'Europe/London')::date, 'YYYY-MM-DD');
@@ -782,13 +875,18 @@ begin
           'g'
         );
 
+      -- ✅ Schedule now carries ref_num + evidence linkage (external_row_key/shift_id/import_id)
       v_schedule := jsonb_build_array(
         jsonb_build_object(
           'date', v_shift_date_ymd,
           'ward', nullif(btrim(coalesce(v_contract_ward_hint,'contract')), ''),
           'start_utc', v_seg_start_utc::text,
           'end_utc', v_seg_end_utc::text,
-          'break_mins', v_seg_break_mins
+          'break_mins', v_seg_break_mins,
+          'ref_num', v_ref_num,
+          'external_row_key', v_key,
+          'shift_id', v_shift_id::text,
+          'import_id', case when v_schedule_import_id is null then null else v_schedule_import_id::text end
         )
       );
 
@@ -923,6 +1021,14 @@ begin
         v_updated_ts_ids := array_append(v_updated_ts_ids, v_existing_ts_id);
         v_kind_op := 'UPDATED';
 
+        if v_kind = 'CHANGED_HOURS_REVERSAL' then
+          v_rev_ts_id := v_existing_ts_id;
+          v_rev_cw_id := v_existing_cw_id;
+        else
+          v_rep_ts_id := v_existing_ts_id;
+          v_rep_cw_id := v_existing_cw_id;
+        end if;
+
         v_key_ts := v_key_ts || jsonb_build_array(jsonb_build_object(
           'kind', v_kind,
           'timesheet_id', v_existing_ts_id::text,
@@ -993,9 +1099,8 @@ begin
             'g'
           );
 
-v_hash_hex := encode(extensions.digest(convert_to(v_booking_base, 'utf8'), 'sha256'::text), 'hex');
-v_booking_id := 'bk_' || substr(v_hash_hex, 1, 16);
-
+        v_hash_hex := encode(extensions.digest(convert_to(v_booking_base, 'utf8'), 'sha256'::text), 'hex');
+        v_booking_id := 'bk_' || substr(v_hash_hex, 1, 16);
 
         begin
           insert into public.timesheets(
@@ -1129,6 +1234,14 @@ v_booking_id := 'bk_' || substr(v_hash_hex, 1, 16);
         v_created_ts_ids := array_append(v_created_ts_ids, v_ts_id);
         v_kind_op := 'CREATED';
 
+        if v_kind = 'CHANGED_HOURS_REVERSAL' then
+          v_rev_ts_id := v_ts_id;
+          v_rev_cw_id := v_cw_id;
+        else
+          v_rep_ts_id := v_ts_id;
+          v_rep_cw_id := v_cw_id;
+        end if;
+
         v_key_ts := v_key_ts || jsonb_build_array(jsonb_build_object(
           'kind', v_kind,
           'timesheet_id', v_ts_id::text,
@@ -1137,6 +1250,146 @@ v_booking_id := 'bk_' || substr(v_hash_hex, 1, 16);
       end if;
 
     end loop; -- kind loop
+
+    -- ─────────────────────────────────────────────
+    -- ✅ User-facing audit entries (timesheet modal + invoice history)
+    -- ─────────────────────────────────────────────
+    begin
+      -- Timesheet audit: reversal
+      if v_rev_ts_id is not null then
+        perform public._audit_insert(
+          'timesheets',
+          v_rev_ts_id::text,
+          'HR_IMPORT_CORRECTION_APPLIED',
+          null,
+          jsonb_build_object(
+            'trigger_import_id', p_import_id::text,
+            'evidence_import_id', case when v_shift_prev_import_id is null then null else v_shift_prev_import_id::text end,
+            'external_row_key', v_key,
+            'shift_id', v_shift_id::text,
+            'ref_num', v_ref_num,
+            'invoice_id_detected', case when v_invoice_id_detected is null then null else v_invoice_id_detected::text end,
+            'correction_id', v_correction_id,
+            'correction_kind', 'CHANGED_HOURS_REVERSAL',
+            'old_start_utc', v_old_start_utc::text,
+            'old_end_utc', v_old_end_utc::text,
+            'old_break_mins', v_old_break_mins,
+            'new_start_utc', v_new_start_utc::text,
+            'new_end_utc', v_new_end_utc::text,
+            'new_break_mins', v_new_break_mins,
+            'old_paid_minutes', v_old_paid_minutes,
+            'new_paid_minutes', v_new_paid_minutes,
+            'delta_paid_minutes', v_delta_paid_minutes,
+            'counterpart_timesheet_id', case when v_rep_ts_id is null then null else v_rep_ts_id::text end
+          ),
+          'IMPORT_CORRECTION',
+          p_actor_user_id
+        );
+      end if;
+
+      -- Timesheet audit: replacement
+      if v_rep_ts_id is not null then
+        perform public._audit_insert(
+          'timesheets',
+          v_rep_ts_id::text,
+          'HR_IMPORT_CORRECTION_APPLIED',
+          null,
+          jsonb_build_object(
+            'trigger_import_id', p_import_id::text,
+            'evidence_import_id', p_import_id::text,
+            'external_row_key', v_key,
+            'shift_id', v_shift_id::text,
+            'ref_num', v_ref_num,
+            'invoice_id_detected', case when v_invoice_id_detected is null then null else v_invoice_id_detected::text end,
+            'correction_id', v_correction_id,
+            'correction_kind', 'CHANGED_HOURS_REPLACEMENT',
+            'old_start_utc', v_old_start_utc::text,
+            'old_end_utc', v_old_end_utc::text,
+            'old_break_mins', v_old_break_mins,
+            'new_start_utc', v_new_start_utc::text,
+            'new_end_utc', v_new_end_utc::text,
+            'new_break_mins', v_new_break_mins,
+            'old_paid_minutes', v_old_paid_minutes,
+            'new_paid_minutes', v_new_paid_minutes,
+            'delta_paid_minutes', v_delta_paid_minutes,
+            'counterpart_timesheet_id', case when v_rev_ts_id is null then null else v_rev_ts_id::text end
+          ),
+          'IMPORT_CORRECTION',
+          p_actor_user_id
+        );
+      end if;
+
+      -- Optional: contract_week audit
+      if v_rev_cw_id is not null then
+        perform public._audit_insert(
+          'contract_weeks',
+          v_rev_cw_id::text,
+          'HR_IMPORT_CORRECTION_APPLIED',
+          null,
+          jsonb_build_object(
+            'trigger_import_id', p_import_id::text,
+            'external_row_key', v_key,
+            'shift_id', v_shift_id::text,
+            'ref_num', v_ref_num,
+            'correction_id', v_correction_id,
+            'correction_kind', 'CHANGED_HOURS_REVERSAL',
+            'timesheet_id', case when v_rev_ts_id is null then null else v_rev_ts_id::text end
+          ),
+          'IMPORT_CORRECTION',
+          p_actor_user_id
+        );
+      end if;
+
+      if v_rep_cw_id is not null then
+        perform public._audit_insert(
+          'contract_weeks',
+          v_rep_cw_id::text,
+          'HR_IMPORT_CORRECTION_APPLIED',
+          null,
+          jsonb_build_object(
+            'trigger_import_id', p_import_id::text,
+            'external_row_key', v_key,
+            'shift_id', v_shift_id::text,
+            'ref_num', v_ref_num,
+            'correction_id', v_correction_id,
+            'correction_kind', 'CHANGED_HOURS_REPLACEMENT',
+            'timesheet_id', case when v_rep_ts_id is null then null else v_rep_ts_id::text end
+          ),
+          'IMPORT_CORRECTION',
+          p_actor_user_id
+        );
+      end if;
+
+      -- Invoice history entry (ungated)
+      if v_invoice_id_detected is not null then
+        perform public._inv_write_audit(
+          p_actor_user_id,
+          'HR_IMPORT_CORRECTION_APPLIED',
+          jsonb_build_object(
+            'trigger_import_id', p_import_id::text,
+            'external_row_key', v_key,
+            'shift_id', v_shift_id::text,
+            'ref_num', v_ref_num,
+            'invoice_id', v_invoice_id_detected::text,
+            'correction_id', v_correction_id,
+            'old_paid_minutes', v_old_paid_minutes,
+            'new_paid_minutes', v_new_paid_minutes,
+            'delta_paid_minutes', v_delta_paid_minutes,
+            'reversal_timesheet_id', case when v_rev_ts_id is null then null else v_rev_ts_id::text end,
+            'replacement_timesheet_id', case when v_rep_ts_id is null then null else v_rep_ts_id::text end
+          ),
+          'invoices',
+          v_invoice_id_detected::text,
+          null,
+          'IMPORT_CORRECTION',
+          null,
+          null,
+          null
+        );
+      end if;
+    exception when others then
+      null;
+    end;
 
     if v_sample_n < 20 then
       v_sample := v_sample || jsonb_build_array(jsonb_build_object(
@@ -1153,6 +1406,7 @@ v_booking_id := 'bk_' || substr(v_hash_hex, 1, 16);
 
   end loop; -- selected keys loop
 
+  -- Debug audit (invoice_debug gated inside _imp_debug_audit)
   perform public._imp_debug_audit(
     p_actor_user_id,
     'HR_CORRECTION_SERIES_DEBUG',
@@ -1213,6 +1467,11 @@ exception when others then
   raise;
 end;
 $$;
+
+
+
+
+
 create or replace function public.hr_weekly_apply_transactional(
   p_import_id uuid,
   p_payload jsonb,
