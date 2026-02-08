@@ -1,6 +1,6 @@
 drop function if exists public.timesheet_import_rows_for_timesheet_current(uuid, boolean, uuid, uuid);
 
-create function public.timesheet_import_rows_for_timesheet_current(
+create or replace function public.timesheet_import_rows_for_timesheet_current(
   p_timesheet_id uuid,
   p_include_excluded boolean default true,
   p_import_id uuid default null,
@@ -46,6 +46,8 @@ as $$
       (select req.requested_timesheet_id from req) as requested_timesheet_id,
       (select cur.current_timesheet_id from cur)   as current_timesheet_id
   ),
+
+  -- Existing evidence source: attached shifts (unchanged)
   sh as (
     select
       ns.source_system    as source_system,
@@ -63,15 +65,86 @@ as $$
         or coalesce(ns.invoice_status,'') <> 'DEFERRED'
       )
   ),
+
+  -- NEW evidence source: schedule entries (correction timesheets)
+  -- Extract (import_id, external_row_key) pairs from timesheets.actual_schedule_json
+  sched_raw as (
+    select
+      s.elem as seg
+    from public.timesheets t
+    join use_id u
+      on u.current_timesheet_id = t.timesheet_id
+    cross join lateral jsonb_array_elements(
+      case
+        when jsonb_typeof(t.actual_schedule_json) = 'array' then t.actual_schedule_json
+        else '[]'::jsonb
+      end
+    ) as s(elem)
+  ),
+  sched_keys as (
+    select
+      case
+        when (sr.seg ? 'import_id')
+         and (sr.seg->>'import_id') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          then (sr.seg->>'import_id')::uuid
+        else null
+      end as import_id,
+      nullif(btrim(coalesce(sr.seg->>'external_row_key','')), '') as external_row_key,
+      case
+        when (sr.seg ? 'shift_id')
+         and (sr.seg->>'shift_id') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          then (sr.seg->>'shift_id')::uuid
+        else null
+      end as shift_id
+    from sched_raw sr
+  ),
+  sched_filtered as (
+    select
+      sk.import_id,
+      sk.external_row_key
+    from sched_keys sk
+    where sk.import_id is not null
+      and sk.external_row_key is not null
+      and (p_import_id is null or sk.import_id = p_import_id)
+      and (p_shift_id is null or sk.shift_id = p_shift_id)
+  ),
+
+  -- Combine evidence keys from both sources and de-dupe by (import_id, external_row_key)
+  keys_union as (
+    select
+      sh0.import_id as import_id,
+      sh0.external_row_key as external_row_key,
+      sh0.source_system::text as source_system_hint
+    from sh sh0
+
+    union all
+
+    select
+      sf.import_id as import_id,
+      sf.external_row_key as external_row_key,
+      null::text as source_system_hint
+    from sched_filtered sf
+  ),
+  keys as (
+    select distinct on (ku.import_id, ku.external_row_key)
+      ku.import_id,
+      ku.external_row_key,
+      ku.source_system_hint
+    from keys_union ku
+    where ku.import_id is not null
+      and ku.external_row_key is not null
+    order by ku.import_id, ku.external_row_key, (ku.source_system_hint is null) asc
+  ),
+
+  -- Import header per import_id (source_system is taken from hr_imports where possible)
   imp as (
     select
-      s.source_system::text as source_system,
-      s.import_id           as import_id,
-      hi.filename           as filename,
-      hi.uploaded_at_utc    as uploaded_at_utc,
-      hi.file_r2_key        as file_r2_key,
+      coalesce(hi.source_system::text, k.any_source_system) as source_system,
+      k.import_id as import_id,
+      hi.filename as filename,
+      hi.uploaded_at_utc as uploaded_at_utc,
+      hi.file_r2_key as file_r2_key,
 
-      -- Prefer multi-row headers if stored; else wrap single-row header_columns (only if non-empty); else []
       case
         when jsonb_typeof(hi.parse_summary_json->'header_rows') = 'array'
           then (hi.parse_summary_json->'header_rows')
@@ -86,14 +159,21 @@ as $$
           then (hi.parse_summary_json->'header_columns')
         else '[]'::jsonb
       end as header_columns
-    from (select distinct sh0.source_system, sh0.import_id from sh sh0) s
+    from (
+      select
+        k0.import_id,
+        min(k0.source_system_hint) as any_source_system
+      from keys k0
+      group by k0.import_id
+    ) as k
     left join public.hr_imports hi
-      on hi.id = s.import_id
+      on hi.id = k.import_id
   ),
+
+  -- Rows per import_id, joining hr_rows by (import_id, external_row_key)
   r as (
     select
-      s.source_system::text as source_system,
-      s.import_id           as import_id,
+      k.import_id as import_id,
       jsonb_agg(
         jsonb_build_object(
           'raw_columns', hr.payload_json->'raw_columns',
@@ -101,12 +181,13 @@ as $$
         )
         order by hr.id
       ) as rows
-    from sh s
+    from keys k
     join public.hr_rows hr
-      on hr.import_id = s.import_id
-     and hr.external_row_key = s.external_row_key
-    group by s.source_system::text, s.import_id
+      on hr.import_id = k.import_id
+     and hr.external_row_key = k.external_row_key
+    group by k.import_id
   )
+
   select
     (select u.requested_timesheet_id from use_id u) as requested_timesheet_id,
     (select u.current_timesheet_id from use_id u)   as current_timesheet_id,
@@ -120,7 +201,7 @@ as $$
     coalesce(r.rows, '[]'::jsonb) as rows
   from imp i
   left join r
-    on r.source_system = i.source_system
-   and r.import_id     = i.import_id
+    on r.import_id = i.import_id
   order by i.source_system, i.uploaded_at_utc nulls last, i.import_id;
 $$;
+
