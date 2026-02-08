@@ -13186,6 +13186,59 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
     wantMeta = false;
   }
 
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const asUuidStringOrNull = (v) => {
+    if (v == null) return null;
+    const s = String(v).trim();
+    return (s && UUID_RE.test(s)) ? s : null;
+  };
+
+  const safeJsonParse = (v) => {
+    if (v == null) return null;
+    if (typeof v === 'object') return v;
+    const s = String(v).trim();
+    if (!s) return null;
+    try { return JSON.parse(s); } catch { return null; }
+  };
+
+  // Extract UUID-like import ids from arbitrary object (best-effort legacy fallback)
+  const collectImportIdsFromObject = (obj, outSet) => {
+    if (!obj || typeof obj !== 'object') return;
+
+    const tryAdd = (val) => {
+      const u = asUuidStringOrNull(val);
+      if (u) outSet.add(u);
+    };
+
+    // common patterns (new + legacy)
+    // Top-level possibilities
+    tryAdd(obj.import_id);
+    tryAdd(obj.evidence_import_id);
+    tryAdd(obj.trigger_import_id);
+    tryAdd(obj.old_import_id);
+    tryAdd(obj.new_import_id);
+    tryAdd(obj.base_import_id);
+
+    // Nested structures we use in hints
+    if (obj.import_correction && typeof obj.import_correction === 'object') {
+      tryAdd(obj.import_correction.import_id);
+      tryAdd(obj.import_correction.evidence_import_id);
+      tryAdd(obj.import_correction.trigger_import_id);
+      tryAdd(obj.import_correction.base_import_id);
+      tryAdd(obj.import_correction.old_import_id);
+      tryAdd(obj.import_correction.new_import_id);
+    }
+
+    if (obj.import_cancellation && typeof obj.import_cancellation === 'object') {
+      tryAdd(obj.import_cancellation.import_id);
+      tryAdd(obj.import_cancellation.evidence_import_id);
+      tryAdd(obj.import_cancellation.trigger_import_id);
+      tryAdd(obj.import_cancellation.base_import_id);
+      tryAdd(obj.import_cancellation.old_import_id);
+      tryAdd(obj.import_cancellation.new_import_id);
+    }
+  };
+
   try {
     // ─────────────────────────────────────────────────────────────
     // 0) Load timesheet row (QR evidence + electronic signature evidence)
@@ -13214,6 +13267,9 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
             'reference_number',
             'day_references_json',
             'actual_schedule_json',
+
+            // ✅ NEW: allow legacy fallback from hint JSON
+            'candidate_hint_text',
 
             // PDF pointer (manual + QR)
             'manual_pdf_r2_key',
@@ -13539,9 +13595,12 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
       });
     }
 
-    // 2C) NHSP / HealthRoster imports (unchanged logic; already working)
+    // 2C) NHSP / HealthRoster imports
+    // ✅ Updated: include schedule-derived import ids (correction timesheets)
+    // ✅ Optional: legacy fallback from candidate_hint_text (if JSON)
     const importIds = new Set();
 
+    // 2C.1) From attached shifts (existing behaviour)
     try {
       const { rows: shiftRows } = await sbFetch(
         env,
@@ -13556,6 +13615,7 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
       }
     } catch {}
 
+    // 2C.2) From validation last_source (existing behaviour)
     try {
       const { rows: valRows } = await sbFetch(
         env,
@@ -13572,6 +13632,25 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
       }
     } catch {}
 
+    // 2C.3) ✅ From schedule (correction timesheets)
+    try {
+      const sched = (ts?.actual_schedule_json != null) ? ts.actual_schedule_json : null;
+      const schedObj = safeJsonParse(sched);
+      const arr = Array.isArray(schedObj) ? schedObj : [];
+      for (const seg of arr) {
+        if (!seg || typeof seg !== 'object') continue;
+        const iid = asUuidStringOrNull(seg.import_id);
+        if (iid) importIds.add(iid);
+      }
+    } catch {}
+
+    // 2C.4) ✅ Optional legacy fallback: parse candidate_hint_text JSON and add any import ids found
+    try {
+      const hintObj = safeJsonParse(ts?.candidate_hint_text);
+      if (hintObj) collectImportIdsFromObject(hintObj, importIds);
+    } catch {}
+
+    // 2C.5) Render IMPORT_TABLE system evidence items (unchanged contract)
     if (importIds.size) {
       try {
         const idParam = Array.from(importIds).map(enc).join(',');
@@ -13640,7 +13719,6 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
     return withCORS(env, req, serverError(`Failed to list timesheet evidence: ${e?.message || e}`));
   }
 }
-
 
 
 // POST /api/timesheets/:id/evidence
@@ -23195,7 +23273,9 @@ async function buildNhspWeeklySnapshot(
       exclude_from_pay,
       ...(invoice_target_week_start != null ? { invoice_target_week_start } : {}),
 
-      ref_num: (sh.nhsp_ref_num || sh.ref_num || null) || null,
+      // ✅ UPDATED: HealthRoster fallback uses hr_request_id / request_id as ref_num when missing
+      // (does NOT affect segment identity; ref_num intentionally excluded from identity)
+      ref_num: (sh.nhsp_ref_num || sh.ref_num || sh.hr_request_id || sh.request_id || null) || null,
       request_id: (sh.hr_request_id || sh.request_id || null) || null,
       held_back_reason: sh.held_back_reason || null,
       source_system: sh.source_system || null
@@ -23368,7 +23448,6 @@ async function buildNhspWeeklySnapshot(
 
   return { ok: true, snapshot };
 }
-
 
 
 async function buildNhspWeeklySnapshotCached(
@@ -32989,6 +33068,7 @@ async function handleNhspImport(env, req) {
     return withCORS(env, req, serverError("Failed to create NHSP import"));
   }
 }
+
 async function handleHrAutoprocessPreview(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
   const enc = encodeURIComponent;
@@ -33077,6 +33157,9 @@ async function handleHrAutoprocessPreview(env, req, importId) {
 
   // ✅ Identity-key normaliser: trim + collapse whitespace + lower
   const normKey = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+  // ✅ UUID guard for safe id-based querying
+  const isUuid = (v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v || '').trim());
 
   try {
     // Load import header (client_id / source_system checks)
@@ -33345,6 +33428,10 @@ async function handleHrAutoprocessPreview(env, req, importId) {
     const modeBExternalKeys = [];
     const extToActionIndex = new Map(); // ext -> visible action index (changed rows only)
 
+    // ✅ New: matched_shift_id map for safe replacement-day detection (id-based)
+    const modeBMatchedShiftIds = [];
+    const p2ByShiftId = new Map(); // shift_id (uuid) -> p2 row
+
     for (const r of p2OkRows) {
       const cid = r?.candidate_id ? String(r.candidate_id) : null;
       const cli = r?.client_id ? String(r.client_id) : null;
@@ -33359,10 +33446,18 @@ async function handleHrAutoprocessPreview(env, req, importId) {
 
       modeBExternalKeys.push(ext);
 
-      const matchedShiftId = r?.matched_shift_id ? String(r.matched_shift_id) : null;
+      const matchedShiftIdRaw = r?.matched_shift_id ? String(r.matched_shift_id) : '';
+      const matchedShiftId = isUuid(matchedShiftIdRaw) ? matchedShiftIdRaw : null;
+
+      // keep existing semantics for "new" detection, but use uuid-safe ids for lookups
       const isNew = boolish(r?.is_new) || !matchedShiftId;
       const isNoop = boolish(r?.is_noop);
       const isChanged = boolish(r?.is_changed);
+
+      if (matchedShiftId) {
+        p2ByShiftId.set(matchedShiftId, r);
+        modeBMatchedShiftIds.push(matchedShiftId);
+      }
 
       if (isNew) {
         auto_apply_action_ids.push(`ROW:${ext}`);
@@ -33386,7 +33481,7 @@ async function handleHrAutoprocessPreview(env, req, importId) {
         action_id: `ROW:${ext}`,
         action_kind: 'SHIFT_CHANGED',
         external_row_key: ext,
-        shift_id: matchedShiftId,
+        shift_id: matchedShiftIdRaw ? String(matchedShiftIdRaw) : null,
         reason: (delta > 0 ? 'HOURS_INCREASED' : (delta < 0 ? 'HOURS_DECREASED' : 'SHIFT_DETAILS_CHANGED')),
         reason_text: reasonText,
         candidate_id: cid,
@@ -33424,6 +33519,7 @@ async function handleHrAutoprocessPreview(env, req, importId) {
     }
 
     const modeBExternalKeysUniq = uniq(modeBExternalKeys);
+    const modeBMatchedShiftIdsUniq = uniq(modeBMatchedShiftIds);
 
     // ─────────────────────────────────────────────────────────────
     // Build file request-id set (identity key = Request ID) + file date range
@@ -33505,47 +33601,42 @@ async function handleHrAutoprocessPreview(env, req, importId) {
       }
     }
 
-    // ─────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────
     // Replacement-day detection:
-    //  - detect moved-date (external_row_key exists, old work_date != import work_date)
-    //  - mark the ROW action's replacement_day_key
-    //  - emit cancellations for the old day by identity-key scan (HR request id missing from file)
-    //
-    // ✅ Standardise:
-    //   reason: 'REPLACEMENT_DAY'
-    //   details.cancel_kind: 'REPLACEMENT_DAY'
-    // ✅ Only confirmed shifts: timesheet_id is not null, cancelled_at_utc is null
-    // ✅ Guard B: client_id must equal import.client_id
-    // ✅ No day-empty gating
-    // ─────────────────────────────────────────────────────────────
+    // ✅ FIX: DO NOT query nhsp_shifts by external_row_key=in.(...)
+    // Instead, fetch existing shifts by id=in.(matched_shift_id...) (UUID-safe).
+    // Compare existingShift.work_date vs phase2Row.work_date.
+    // ─────────────────────────────────────────────
     const replacementDayKeys = new Set(); // `${candidate_id}|${client_id}|${old_work_date}`
-    if (modeBExternalKeysUniq.length) {
-      for (const keyChunk of chunk(modeBExternalKeysUniq, 150)) {
+
+    if (modeBMatchedShiftIdsUniq.length) {
+      for (const idChunk of chunk(modeBMatchedShiftIdsUniq, 150)) {
         const { rows: sRows } = await sbFetch(
           env,
           `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
-            `?source_system=eq.HEALTHROSTER` +
+            `?id=in.(${idChunk.map(enc).join(',')})` +
+            `&source_system=eq.HEALTHROSTER` +
             `&client_id=eq.${enc(imp.client_id)}` +
-            `&external_row_key=in.(${keyChunk.map(enc).join(',')})` +
             `&select=id,external_row_key,candidate_id,client_id,work_date,cancelled_at_utc`
         );
 
         for (const sh of (sRows || [])) {
-          if (!sh || !sh.external_row_key || !sh.work_date) continue;
+          if (!sh || !sh.id || !sh.work_date) continue;
           if (sh.cancelled_at_utc) continue;
 
-          const ext = String(sh.external_row_key);
-          const p2r = p2ByExternalKey.get(ext);
+          const sid = String(sh.id);
+          const p2r = p2ByShiftId.get(sid);
           if (!p2r) continue;
 
-          const importWd = p2r.work_date ? String(p2r.work_date) : null;
+          const importWd = p2r?.work_date ? String(p2r.work_date) : null;
           const oldWd = sh.work_date ? String(sh.work_date) : null;
           if (!importWd || !oldWd) continue;
 
           if (oldWd !== importWd) {
             const cid = sh.candidate_id ? String(sh.candidate_id) : (p2r.candidate_id ? String(p2r.candidate_id) : null);
             const cli = sh.client_id ? String(sh.client_id) : (p2r.client_id ? String(p2r.client_id) : null);
-            if (!cid || !cli) continue;
+            const ext = p2r.external_row_key ? String(p2r.external_row_key) : (sh.external_row_key ? String(sh.external_row_key) : null);
+            if (!cid || !cli || !ext) continue;
 
             const repKey = `${cid}|${cli}|${oldWd}`;
             replacementDayKeys.add(repKey);
@@ -33634,19 +33725,9 @@ async function handleHrAutoprocessPreview(env, req, importId) {
       }
     }
 
-    // ─────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────
     // Missing-from-import cancellations (identity-key scan)
-    //
-    // ✅ Replace old "day-empty + candidate-in-import" logic.
-    // ✅ HR identity key: nhsp_shifts.hr_request_id
-    // ✅ Compare against fileRequestSet
-    // ✅ Only confirmed shifts: timesheet_id is not null, cancelled_at_utc is null
-    // ✅ Guard B: shift.client_id must equal import.client_id
-    // ✅ Range: file min/max
-    // ✅ Standardise:
-    //   reason: 'MISSING_FROM_IMPORT'
-    //   details.cancel_kind: 'MISSING_FROM_IMPORT'
-    // ─────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────
     if (minWd && maxWd) {
       const { rows: sRows } = await sbFetch(
         env,
@@ -33825,7 +33906,6 @@ async function handleHrAutoprocessPreview(env, req, importId) {
     return withCORS(env, req, serverError(`HealthRoster preview failed: ${e?.message || e}`));
   }
 }
-
 
 
 async function handleHrAutoprocessApply(env, req, importId) {
