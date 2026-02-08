@@ -2642,7 +2642,6 @@ grant execute on function public.tsfin_repair_merge_segments_locked(uuid, jsonb,
 
 select pg_notify('pgrst', 'reload schema');
 
-
 create or replace function public.tsfin_update_segments_locked(
   p_timesheet_id uuid,
   p_segment_updates jsonb,
@@ -2685,6 +2684,8 @@ declare
   -- validation helpers
   v_locked_invoice_id_text text;
   v_cur_target text;
+  v_cur_target_has boolean;
+  v_clear_requested boolean;
 
   v_updated_row jsonb;
 begin
@@ -2763,12 +2764,16 @@ begin
       v_entry := v_entry || jsonb_build_object('exclude_from_pay', v_elem->'exclude_from_pay');
     end if;
 
-    if (v_elem ? 'invoice_target_week_start')
-       and nullif(btrim(coalesce(v_elem->>'invoice_target_week_start','')), '') is not null then
-      v_entry := v_entry || jsonb_build_object(
-        'invoice_target_week_start',
-        nullif(btrim(coalesce(v_elem->>'invoice_target_week_start','')), '')
-      );
+    -- ✅ FIX: support explicit clear (key present with null/blank) by carrying a json null in the update map
+    if (v_elem ? 'invoice_target_week_start') then
+      if nullif(btrim(coalesce(v_elem->>'invoice_target_week_start','')), '') is not null then
+        v_entry := v_entry || jsonb_build_object(
+          'invoice_target_week_start',
+          nullif(btrim(coalesce(v_elem->>'invoice_target_week_start','')), '')
+        );
+      else
+        v_entry := v_entry || jsonb_build_object('invoice_target_week_start', null);
+      end if;
     end if;
 
     -- merge into map
@@ -2802,23 +2807,37 @@ begin
       end if;
 
       v_req_target := nullif(btrim(coalesce(v_entry->>'invoice_target_week_start','')), '');
-      if v_req_target is null then
-        continue;
-      end if;
+      v_clear_requested := (v_req_target is null);
 
       -- Find the current segment (objects only; unknown ids are ignored like Worker)
       select
         nullif(btrim(coalesce(seg.value->>'invoice_locked_invoice_id','')), '') as locked_inv,
-        nullif(btrim(coalesce(seg.value->>'invoice_target_week_start','')), '') as cur_target
+        nullif(btrim(coalesce(seg.value->>'invoice_target_week_start','')), '') as cur_target,
+        (seg.value ? 'invoice_target_week_start') as has_target
       into
         v_locked_invoice_id_text,
-        v_cur_target
+        v_cur_target,
+        v_cur_target_has
       from jsonb_array_elements(v_segments) as seg(value)
       where jsonb_typeof(seg.value) = 'object'
         and nullif(btrim(coalesce(seg.value->>'segment_id','')), '') = v_sid
       limit 1;
 
       if v_locked_invoice_id_text is not null then
+        -- ✅ FIX: explicit clear must be treated as a change unless it is a no-op
+        if v_clear_requested then
+          if not (
+            (v_cur_target_has is not true) or
+            (v_cur_target is null) or
+            (v_natural_week_start is not null and v_cur_target = v_natural_week_start::text)
+          ) then
+            raise exception
+              'Segment % is attached to an invoice and cannot have invoice delay changed. Remove from invoice first.',
+              v_sid;
+          end if;
+          continue;
+        end if;
+
         -- No-op tolerant rule (match Worker)
         if not (
           v_req_target = coalesce(v_cur_target, '')
@@ -2828,6 +2847,11 @@ begin
             'Segment % is attached to an invoice and cannot have invoice delay changed. Remove from invoice first.',
             v_sid;
         end if;
+        continue;
+      end if;
+
+      -- For unlocked segments: only validate when setting an actual date (clears skip validation)
+      if v_clear_requested then
         continue;
       end if;
 
@@ -2890,6 +2914,9 @@ begin
         v_req_target := nullif(btrim(coalesce(v_entry->>'invoice_target_week_start','')), '');
         if v_req_target is not null then
           v_seg := jsonb_set(v_seg, '{invoice_target_week_start}', to_jsonb(v_req_target), true);
+        else
+          -- ✅ FIX: explicit clear removes the key entirely
+          v_seg := v_seg - 'invoice_target_week_start';
         end if;
       end if;
     end if;
@@ -2926,7 +2953,6 @@ begin
 
 end;
 $$;
-
 
 begin;
 
