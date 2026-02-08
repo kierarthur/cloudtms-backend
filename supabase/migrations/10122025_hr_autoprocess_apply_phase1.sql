@@ -32,8 +32,6 @@
 --
 -- NOTE: selected_group_ids remains unused (row-level selection is enforced by skip/force lists).
 
-
-
 create or replace function public.hr_autoprocess_apply_phase1(
   import_id uuid,
   selected_group_ids text[] default null,
@@ -245,6 +243,7 @@ begin
       pay_minutes,
       client_id,
       hr_request_id,
+      ref_num,
       held_back_reason,
       candidate_id,
       created_at,
@@ -265,6 +264,7 @@ begin
         - coalesce(r.break_mins, 0)
       ) as pay_minutes,
       r.client_id,
+      r.request_id,
       r.request_id,
       r.held_back_reason,
       r.candidate_id,
@@ -343,6 +343,11 @@ begin
       work_date        = u.work_date,
       ward             = nullif(u.ward, ''),
       hr_request_id    = u.request_id,
+      ref_num          = case
+                           when u.safe_to_overwrite and u.request_id is not null
+                             then u.request_id
+                           else s.ref_num
+                         end,
       held_back_reason = u.held_back_reason,
       updated_at       = now(),
 
