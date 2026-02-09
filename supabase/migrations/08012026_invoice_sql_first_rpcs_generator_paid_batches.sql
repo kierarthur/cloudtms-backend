@@ -586,6 +586,7 @@ $$;
 
 
 
+
 create or replace function public.invoice_generate_from_outbox_batch(
   p_outbox_ids uuid[],
   p_actor_user_id uuid
@@ -1309,16 +1310,8 @@ limit 1;
                 from agg
                 order by ymd
               loop
-                           -- Invoice rule: never emit an hours line with zero client charge
+                -- Allow zero/negative charges and hours: adjustment/reversal lines must be invoiceable
                 charge_ex := public._inv_round2(d_rec.chg_ex);
-                if charge_ex <= 0 then
-                  continue;
-                end if;
-
-                -- Defensive: also skip if total hours are zero
-                if (coalesce(d_rec.hours_day,0) + coalesce(d_rec.hours_night,0) + coalesce(d_rec.hours_sat,0) + coalesce(d_rec.hours_sun,0) + coalesce(d_rec.hours_bh,0)) <= 0 then
-                  continue;
-                end if;
 
                 pay_ex := public._inv_round2(d_rec.pay_ex);
                 margin_ex := public._inv_round2(charge_ex - pay_ex);
@@ -1427,16 +1420,7 @@ limit 1;
                 - coalesce(s.additional_charge_ex_vat,0)
                 - coalesce(s.expenses_charge_ex_vat,0)
                 - coalesce(s.mileage_charge_ex_vat,0)
-              );
-
-              -- Invoice rule: never emit an hours line with zero client charge
-              if base_chg_ex <= 0 then
-                -- allow additional-only below
-              else
-                -- Defensive: also skip if total hours are zero
-                if (coalesce(s.hours_day,0) + coalesce(s.hours_night,0) + coalesce(s.hours_sat,0) + coalesce(s.hours_sun,0) + coalesce(s.hours_bh,0)) <= 0 then
-                  -- allow additional-only below
-                else
+              );              -- Core HOURS line must be invoiceable even when charge/hours are zero or negative (adjustments/reversals)
                   margin_ex := public._inv_round2(base_chg_ex - base_pay_ex);
                   vat_amt := public._inv_round2(base_chg_ex * v_vat_rate / 100);
                   inc_amt := public._inv_round2(base_chg_ex + vat_amt);
@@ -1518,10 +1502,8 @@ limit 1;
                   if found then
                     insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
                     values (s.timesheet_id, v_line_source_key, base_chg_ex, vat_amt, inc_amt);
-                  end if;
-                end if;
-              end if;
             end if;
+            end if; -- can_daily
 
 
             -- -------------------------
@@ -1561,18 +1543,10 @@ limit 1;
                   where left(key,10) ~ '^\d{4}-\d{2}-\d{2}$'
                   order by key
                 loop
-                  if coalesce(d_rec.units,0) <= 0 then
-                    continue;
-                  end if;
-
                   any_daily_add := true;
 
                   pay_ex := public._inv_round2(d_rec.units * pay_rate);
                   charge_ex := public._inv_round2(d_rec.units * charge_rate);
-                  if charge_ex <= 0 then
-                    continue;
-                  end if;
-
                   margin_ex := public._inv_round2(charge_ex - pay_ex);
                   vat_amt := public._inv_round2(charge_ex * v_vat_rate / 100);
                   inc_amt := public._inv_round2(charge_ex + vat_amt);
@@ -1667,14 +1641,8 @@ limit 1;
                 end if;
               end if;
               unit_count := coalesce((ex->>'unit_count')::numeric, 0);
-              if unit_count <= 0 then
-                continue;
-              end if;
 
               charge_ex := public._inv_round2(coalesce((ex->>'charge_ex_vat')::numeric, 0));
-              if charge_ex <= 0 then
-                continue;
-              end if;
 
               pay_ex := public._inv_round2(coalesce((ex->>'pay_ex_vat')::numeric, 0));
 
@@ -1839,7 +1807,7 @@ limit 1;
               -- -------------------------
               -- TRAVEL
               -- -------------------------
-              if public._inv_round2(coalesce(s.travel_charge_ex_vat,0)) > 0 then
+              if coalesce(s.travel_charge_ex_vat,0) <> 0 or coalesce(s.travel_pay_ex_vat,0) <> 0 then
                 pay_ex := public._inv_round2(coalesce(s.travel_pay_ex_vat,0));
                 charge_ex := public._inv_round2(coalesce(s.travel_charge_ex_vat,0));
                 margin_ex := public._inv_round2(charge_ex - pay_ex);
@@ -1922,7 +1890,7 @@ limit 1;
               -- -------------------------
               -- ACCOMMODATION
               -- -------------------------
-              if public._inv_round2(coalesce(s.accommodation_charge_ex_vat,0)) > 0 then
+              if coalesce(s.accommodation_charge_ex_vat,0) <> 0 or coalesce(s.accommodation_pay_ex_vat,0) <> 0 then
                 pay_ex := public._inv_round2(coalesce(s.accommodation_pay_ex_vat,0));
                 charge_ex := public._inv_round2(coalesce(s.accommodation_charge_ex_vat,0));
                 margin_ex := public._inv_round2(charge_ex - pay_ex);
@@ -2005,7 +1973,7 @@ limit 1;
               -- -------------------------
               -- OTHER
               -- -------------------------
-              if public._inv_round2(coalesce(s.other_charge_ex_vat,0)) > 0 then
+              if coalesce(s.other_charge_ex_vat,0) <> 0 or coalesce(s.other_pay_ex_vat,0) <> 0 then
                 pay_ex := public._inv_round2(coalesce(s.other_pay_ex_vat,0));
                 charge_ex := public._inv_round2(coalesce(s.other_charge_ex_vat,0));
                 margin_ex := public._inv_round2(charge_ex - pay_ex);
@@ -2090,7 +2058,7 @@ limit 1;
             -- -------------------------
             -- MILEAGE line (one per timesheet, if charge>0)
             -- -------------------------
-            if public._inv_round2(coalesce(s.mileage_charge_ex_vat,0)) > 0 then
+            if coalesce(s.mileage_units,0) <> 0 or coalesce(s.mileage_charge_ex_vat,0) <> 0 or coalesce(s.mileage_pay_ex_vat,0) <> 0 then
               unit_count := public._inv_round2(coalesce(s.mileage_units,0));
               pay_rate := coalesce(s.mileage_pay_rate,0);
               charge_rate := coalesce(s.mileage_charge_rate,0);
@@ -2632,6 +2600,11 @@ h_bh numeric;
           v_dbg_groups_reason text := null;
           v_dbg_groups_detail jsonb := '[]'::jsonb;
           v_dbg_grp_i int := 0;
+
+          -- Option A partial-failure tracking (BY_WEEK + consolidation NONE)
+          v_failed_ts_ids uuid[] := array[]::uuid[];
+          v_failed_groups jsonb := '[]'::jsonb;
+          v_succeeded_any boolean := false;
 
           -- already billed set: temp table
 
@@ -3371,7 +3344,13 @@ limit 1;
           for grp in
             select * from pg_temp._inv_groups
           loop
-            -- apply group scope
+            -- Option A: isolate group failures when consolidation mode is NONE (one invoice per timesheet)
+            declare
+              v_grp_invoice_ids_before uuid[] := v_outbox_invoice_ids;
+              v_grp_warnings_before jsonb := v_outbox_warnings;
+              v_grp_invoice_id_before uuid := v_invoice_id;
+            begin
+              -- apply group scope
             v_ts_ids_to_use := grp.ts_ids;
             v_timesheet_ids := grp.ts_ids;
             v_entries := coalesce(grp.entries, '[]'::jsonb);
@@ -3889,14 +3868,8 @@ v_ip, v_ua, v_corr
                 )
                 select * from agg order by ymd
               loop
+                -- Allow zero/negative charges and hours: adjustment/reversal lines must be invoiceable
                 chg_ex := public._inv_round2(bydate.chg_ex);
-                if chg_ex <= 0 then
-                  continue;
-                end if;
-
-                if (coalesce(bydate.hours_day,0)+coalesce(bydate.hours_night,0)+coalesce(bydate.hours_sat,0)+coalesce(bydate.hours_sun,0)+coalesce(bydate.hours_bh,0)) <= 0 then
-                  continue;
-                end if;
 
                 bydate_any := true;
 
@@ -4011,7 +3984,6 @@ v_ip, v_ua, v_corr
                   order by key
                 loop
                   units := coalesce(bydate.units,0);
-                  if units <= 0 then continue; end if;
 
                   -- self-bill dedupe
                   if v_all_selfbill and exists(
@@ -4023,7 +3995,6 @@ v_ip, v_ua, v_corr
 
                   pay_ex := public._inv_round2(units * pay_rate);
                   chg_ex := public._inv_round2(units * charge_rate);
-                  if chg_ex <= 0 then continue; end if;
 
                   margin_ex := public._inv_round2(chg_ex - pay_ex);
                   vat_amt := public._inv_round2(chg_ex * v_vat_rate / 100);
@@ -4138,12 +4109,7 @@ v_ip, v_ua, v_corr
   public._inv_round2(agg.h_bh)
 into pay_ex, chg_ex, h_day, h_night, h_sat, h_sun, h_bh
 from agg;
-if chg_ex <= 0 then
-  -- Invoice rule: never emit an hours line with zero client charge
-else
-  if (coalesce(h_day,0)+coalesce(h_night,0)+coalesce(h_sat,0)+coalesce(h_sun,0)+coalesce(h_bh,0)) <= 0 then
-    -- Defensive: also skip if hours are zero
-  else
+-- Core HOURS line must be invoiceable even when charge/hours are zero or negative (adjustments/reversals)
     margin_ex := public._inv_round2(chg_ex - pay_ex);
     vat_amt := public._inv_round2(chg_ex * v_vat_rate / 100);
     inc_amt := public._inv_round2(chg_ex + vat_amt);
@@ -4208,11 +4174,6 @@ else
       insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
       values (v_ts_id, v_line_source_key, chg_ex, vat_amt, inc_amt);
     end if;
-  end if;
-end if;
-
-
-
             -- WEEKLY additional rates (mirror JS)
             for kv in
               select key as k, value as v
@@ -4227,7 +4188,6 @@ end if;
               if code = '' then continue; end if;
 
               unit_count := coalesce((ex->>'unit_count')::numeric, 0);
-              if unit_count <= 0 then continue; end if;
 
               -- self-bill dedupe
               if v_all_selfbill and exists(
@@ -4239,7 +4199,6 @@ end if;
 
               pay_ex := coalesce((ex->>'pay_ex_vat')::numeric, 0);
               chg_ex := coalesce((ex->>'charge_ex_vat')::numeric, 0);
-              if chg_ex <= 0 then continue; end if;
 
               margin_ex := public._inv_round2(chg_ex - pay_ex);
               vat_amt := public._inv_round2(chg_ex * v_vat_rate / 100);
@@ -4391,7 +4350,7 @@ end if;
               end if;
 
               -- TRAVEL
-              if public._inv_round2(coalesce(snap.travel_charge_ex_vat,0)) > 0 then
+              if coalesce(snap.travel_charge_ex_vat,0) <> 0 or coalesce(snap.travel_pay_ex_vat,0) <> 0 then
                 pay_ex := public._inv_round2(coalesce(snap.travel_pay_ex_vat,0));
                 chg_ex := public._inv_round2(coalesce(snap.travel_charge_ex_vat,0));
                 margin_ex := public._inv_round2(chg_ex - pay_ex);
@@ -4464,7 +4423,7 @@ end if;
               end if;
 
               -- ACCOMMODATION
-              if public._inv_round2(coalesce(snap.accommodation_charge_ex_vat,0)) > 0 then
+              if coalesce(snap.accommodation_charge_ex_vat,0) <> 0 or coalesce(snap.accommodation_pay_ex_vat,0) <> 0 then
                 pay_ex := public._inv_round2(coalesce(snap.accommodation_pay_ex_vat,0));
                 chg_ex := public._inv_round2(coalesce(snap.accommodation_charge_ex_vat,0));
                 margin_ex := public._inv_round2(chg_ex - pay_ex);
@@ -4537,7 +4496,7 @@ end if;
               end if;
 
               -- OTHER
-              if public._inv_round2(coalesce(snap.other_charge_ex_vat,0)) > 0 then
+              if coalesce(snap.other_charge_ex_vat,0) <> 0 or coalesce(snap.other_pay_ex_vat,0) <> 0 then
                 pay_ex := public._inv_round2(coalesce(snap.other_pay_ex_vat,0));
                 chg_ex := public._inv_round2(coalesce(snap.other_charge_ex_vat,0));
                 margin_ex := public._inv_round2(chg_ex - pay_ex);
@@ -4614,7 +4573,7 @@ end if;
             -- -------------------------
             -- MILEAGE line (one per timesheet, if charge>0)
             -- -------------------------
-            if public._inv_round2(coalesce(snap.mileage_charge_ex_vat,0)) > 0 then
+            if coalesce(snap.mileage_units,0) <> 0 or coalesce(snap.mileage_charge_ex_vat,0) <> 0 or coalesce(snap.mileage_pay_ex_vat,0) <> 0 then
               unit_count := public._inv_round2(coalesce(snap.mileage_units,0));
               pay_rate := coalesce(snap.mileage_pay_rate,0);
               charge_rate := coalesce(snap.mileage_charge_rate,0);
@@ -4933,7 +4892,89 @@ end if;
             end loop;
           end if;
 
+              -- group completed successfully
+              v_succeeded_any := true;
+            exception when others then
+              if v_consol_mode <> 'NONE' then
+                raise;
+              end if;
+
+              -- restore outer-scope accumulators (DB changes are rolled back automatically for this group)
+              v_outbox_invoice_ids := v_grp_invoice_ids_before;
+              v_outbox_warnings := v_grp_warnings_before;
+              v_invoice_id := v_grp_invoice_id_before;
+
+              v_failed_ts_ids := array_cat(v_failed_ts_ids, grp.ts_ids);
+
+              v_failed_groups := v_failed_groups || jsonb_build_array(
+                jsonb_build_object(
+                  'ts_ids', to_jsonb(grp.ts_ids),
+                  'error', sqlerrm
+                )
+              );
+
+              v_outbox_warnings := v_outbox_warnings || jsonb_build_array(
+                jsonb_build_object(
+                  'kind','GROUP_FAILED',
+                  'ts_ids', to_jsonb(grp.ts_ids),
+                  'error', sqlerrm
+                )
+              );
+
+              continue;
+            end;
           end loop;
+          -- Option A: partial failures allowed only when consolidation mode is NONE (one invoice per timesheet)
+          if v_consol_mode = 'NONE' and coalesce(array_length(v_failed_ts_ids,1),0) > 0 then
+
+            -- de-duplicate failed ids (defensive)
+            select coalesce(array_agg(distinct x), array[]::uuid[])
+            into v_failed_ts_ids
+            from unnest(v_failed_ts_ids) x;
+
+            update public.invoice_jobs_outbox o
+            set
+              payload = jsonb_set(coalesce(o.payload,'{}'::jsonb), '{timesheet_ids}', to_jsonb(v_failed_ts_ids), true),
+              next_attempt_at = now() + interval '5 minutes',
+              last_error = 'PARTIAL_FAILURE'
+            where o.id = v_outbox_id;
+
+            outbox_id := v_outbox_id;
+            ok := false;
+            invoice_ids := v_outbox_invoice_ids;
+            warnings := jsonb_build_object(
+              'kind','BY_WEEK',
+              'partial_failure', true,
+              'succeeded_any', v_succeeded_any,
+              'failed', v_failed_groups,
+              'created_invoice_ids', v_outbox_invoice_ids,
+              'warnings', v_outbox_warnings,
+              'client_id', v_client_id::text,
+              'invoice_week_start', v_week_start::text,
+              'mode', v_mode
+            );
+
+            if v_invoice_debug then
+              v_dbg_results := v_dbg_results || jsonb_build_array(
+                jsonb_build_object(
+                  'outbox_id', v_outbox_id::text,
+                  'kind', coalesce(v_kind,''),
+                  'client_id', coalesce(v_client_id::text,''),
+                  'mode', coalesce(v_mode,''),
+                  'debug', jsonb_build_object(
+                    'partial_failure', true,
+                    'failed_ts_ids', to_jsonb(v_failed_ts_ids),
+                    'failed_groups', v_failed_groups,
+                    'created_invoice_ids', v_outbox_invoice_ids
+                  )
+                )
+              );
+            end if;
+
+            return next;
+            continue;
+          end if;
+
           -- SUCCESS: delete outbox row
           delete from public.invoice_jobs_outbox where id = v_outbox_id;
 
@@ -5106,6 +5147,9 @@ where id = v_outbox_id;
   end if;
 end;
 $$;
+
+
+
 
 
 
