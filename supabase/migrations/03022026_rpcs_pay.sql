@@ -1795,7 +1795,6 @@ begin
 end;
 $$;
 
-
 create or replace function public.hr_weekly_validation_preview(
   p_import_id uuid
 )
@@ -2112,12 +2111,12 @@ begin
     from ts_schedule s
     cross join lateral (
       select
-        (day_ymd)::date as work_date,
-        start_hhmm,
-        end_hhmm,
-        start_minute,
-        end_minute,
-        break_mins
+        outx.work_date as work_date,
+        outx.start_hhmm as start_hhmm,
+        outx.end_hhmm as end_hhmm,
+        outx.start_minute as start_minute,
+        outx.end_minute as end_minute,
+        outx.break_mins as break_mins
       from (
         select
           nullif(btrim(coalesce((e.elem->>'date')::text, '')), '') as day_ymd,
