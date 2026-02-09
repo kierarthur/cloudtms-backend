@@ -67030,155 +67030,236 @@ async function handleTimesheetDeletePreview(env, req, timesheetId) {
 
   const enc = encodeURIComponent;
 
-  // ✅ stale-safe resolve (accept historical/stale ids)
-  const resolved = await resolveTimesheetToCurrent(env, timesheetId);
-  if (!resolved || !resolved.current_timesheet_id) {
-    return withCORS(env, req, notFound('Timesheet not found'));
-  }
+  const traceId = (() => {
+    try {
+      if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') {
+        return globalThis.crypto.randomUUID();
+      }
+    } catch {}
+    return `tsdelprev_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  })();
 
-  const currentTimesheetId = String(resolved.current_timesheet_id);
+  const fail = (status, stage, message, details) => {
+    try {
+      console.error('[TS][DELETE_PREVIEW][FAIL]', {
+        traceId,
+        stage,
+        status,
+        message: String(message || ''),
+        requested_timesheet_id: String(timesheetId || ''),
+        details: details && typeof details === 'object' ? details : null
+      });
+    } catch {}
 
-  // Load current row (we only need classification fields + week context)
-  const cur = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-      `&select=timesheet_id,booking_id,sheet_scope,is_adjustment,adjustment_origin,correction_id,correction_kind,contract_id,week_ending_date,status` +
-      `&limit=1`
-  );
-  if (!cur) return withCORS(env, req, notFound('Timesheet not found'));
+    const payload = {
+      error: 'DELETE_PREVIEW_FAILED',
+      trace_id: traceId,
+      stage: String(stage || 'unknown'),
+      message: String(message || 'Delete preview failed')
+    };
 
-  const sheetScope = String(cur.sheet_scope || '').toUpperCase();
-  const isWeekly = sheetScope === 'WEEKLY';
-  const isAdjustment = cur.is_adjustment === true;
+    // Include safe details if present (helps UI without leaking internals)
+    if (details != null) payload.details = details;
 
-  const originUpper = String(cur.adjustment_origin || '').trim().toUpperCase();
-  const hasCorrectionId = !!String(cur.correction_id || '').trim();
-  const hasCorrectionKind = !!String(cur.correction_kind || '').trim();
-
-  // Import-derived adjustment detection (NHSP/HR children)
-  const isImportDerivedChild =
-    isWeekly &&
-    isAdjustment &&
-    (
-      originUpper === 'IMPORT_CORRECTION' ||
-      originUpper === 'IMPORT_CANCELLATION' ||
-      hasCorrectionId ||
-      hasCorrectionKind
+    return withCORS(
+      env,
+      req,
+      new Response(JSON.stringify(payload), {
+        status: Number(status || 500),
+        headers: { 'Content-Type': 'application/json' }
+      })
     );
-
-  // Helper: TSFIN snapshot for totals + hard-lock signal (kept inline for single-function request)
-  const tsfin = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-      `&is_current=eq.true` +
-      `&select=timesheet_id,total_hours,total_pay_ex_vat,total_charge_ex_vat,paid_at_utc,locked_by_invoice_id,locked_by_invoice,locked_by_invoice_line_id,locked_by_invoice_at_utc` +
-      `&limit=1`
-  );
-
-  const hardLocked =
-    !!(tsfin && (
-      tsfin.paid_at_utc ||
-      tsfin.locked_by_invoice_id ||
-      tsfin.locked_by_invoice ||
-      tsfin.locked_by_invoice_line_id ||
-      tsfin.locked_by_invoice_at_utc
-    ));
-
-  const baseDeleteItem = {
-    timesheet_id: String(cur.timesheet_id),
-    booking_id: String(cur.booking_id || ''),
-    week_ending_date: cur.week_ending_date ? String(cur.week_ending_date) : null,
-    status: cur.status ? String(cur.status) : null,
-    is_adjustment: !!cur.is_adjustment,
-    adjustment_origin: cur.adjustment_origin ?? null,
-    correction_id: cur.correction_id ?? null,
-    correction_kind: cur.correction_kind ?? null,
-    display_role: isImportDerivedChild ? 'IMPORT_CHILD_ADJUSTMENT' : (isAdjustment ? 'ADJUSTMENT' : 'STANDARD'),
-    total_hours: tsfin && tsfin.total_hours != null ? Number(tsfin.total_hours) : 0,
-    total_pay_ex_vat: tsfin && tsfin.total_pay_ex_vat != null ? Number(tsfin.total_pay_ex_vat) : 0,
-    total_charge_ex_vat: tsfin && tsfin.total_charge_ex_vat != null ? Number(tsfin.total_charge_ex_vat) : 0
   };
 
-  // 1) Hard-block import-derived NHSP/HR child adjustments (preview must show "can't delete")
-  if (isImportDerivedChild) {
+  let stage = 'start';
+
+  try {
+    stage = 'resolve_timesheet_to_current';
+    const resolved = await resolveTimesheetToCurrent(env, timesheetId);
+    if (!resolved || !resolved.current_timesheet_id) {
+      return withCORS(env, req, notFound('Timesheet not found'));
+    }
+
+    const currentTimesheetId = String(resolved.current_timesheet_id);
+
+    stage = 'load_timesheet_row';
+    const cur = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&select=timesheet_id,booking_id,sheet_scope,is_adjustment,adjustment_origin,correction_id,correction_kind,contract_id,week_ending_date,status` +
+        `&limit=1`
+    );
+    if (!cur) return withCORS(env, req, notFound('Timesheet not found'));
+
+    const sheetScope = String(cur.sheet_scope || '').toUpperCase();
+    const isWeekly = sheetScope === 'WEEKLY';
+    const isAdjustment = cur.is_adjustment === true;
+
+    const originUpper = String(cur.adjustment_origin || '').trim().toUpperCase();
+    const hasCorrectionId = !!String(cur.correction_id || '').trim();
+    const hasCorrectionKind = !!String(cur.correction_kind || '').trim();
+
+    const isImportDerivedChild =
+      isWeekly &&
+      isAdjustment &&
+      (
+        originUpper === 'IMPORT_CORRECTION' ||
+        originUpper === 'IMPORT_CANCELLATION' ||
+        hasCorrectionId ||
+        hasCorrectionKind
+      );
+
+    stage = 'load_tsfin_snapshot';
+    const tsfin = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,total_hours,total_pay_ex_vat,total_charge_ex_vat,paid_at_utc,locked_by_invoice_id,locked_by_invoice,locked_by_invoice_line_id,locked_by_invoice_at_utc` +
+        `&limit=1`
+    );
+
+    const hardLocked =
+      !!(tsfin && (
+        tsfin.paid_at_utc ||
+        tsfin.locked_by_invoice_id ||
+        tsfin.locked_by_invoice ||
+        tsfin.locked_by_invoice_line_id ||
+        tsfin.locked_by_invoice_at_utc
+      ));
+
+    const baseDeleteItem = {
+      timesheet_id: String(cur.timesheet_id),
+      booking_id: String(cur.booking_id || ''),
+      week_ending_date: cur.week_ending_date ? String(cur.week_ending_date) : null,
+      status: cur.status ? String(cur.status) : null,
+      is_adjustment: !!cur.is_adjustment,
+      adjustment_origin: cur.adjustment_origin ?? null,
+      correction_id: cur.correction_id ?? null,
+      correction_kind: cur.correction_kind ?? null,
+      display_role: isImportDerivedChild ? 'IMPORT_CHILD_ADJUSTMENT' : (isAdjustment ? 'ADJUSTMENT' : 'STANDARD'),
+      total_hours: tsfin && tsfin.total_hours != null ? Number(tsfin.total_hours) : 0,
+      total_pay_ex_vat: tsfin && tsfin.total_pay_ex_vat != null ? Number(tsfin.total_pay_ex_vat) : 0,
+      total_charge_ex_vat: tsfin && tsfin.total_charge_ex_vat != null ? Number(tsfin.total_charge_ex_vat) : 0
+    };
+
+    // 1) Hard-block import-derived NHSP/HR child adjustments
+    if (isImportDerivedChild) {
+      return withCORS(env, req, ok({
+        kind: 'IMPORT_CHILD_ADJUSTMENT',
+        requested_timesheet_id: String(timesheetId),
+        current_timesheet_id: String(currentTimesheetId),
+        was_stale: !!resolved.was_stale,
+        eligible: false,
+        blocked_reasons: [
+          {
+            code: 'IMPORT_DERIVED_CHILD',
+            message: 'This is an NHSP/HR import adjustment child timesheet and cannot be deleted directly. Delete via the parent timesheet (if eligible).'
+          }
+        ],
+        delete_items: [baseDeleteItem]
+      }));
+    }
+
+    // Helper: normalize RPC outputs (sbRpc wrappers vary)
+    const normalizeRpc = (v) => {
+      try {
+        if (v == null) return null;
+        if (Array.isArray(v)) return (v[0] ?? v);
+        if (typeof v === 'object' && Object.prototype.hasOwnProperty.call(v, 'data')) return v.data;
+        return v;
+      } catch {
+        return v;
+      }
+    };
+
+    // 2) Weekly parent → chain preview RPC
+    if (isWeekly && !isAdjustment) {
+      stage = 'rpc_chain_preview';
+      try {
+        const outRaw = await sbRpc(env, 'timesheet_weekly_chain_delete_preview', {
+          p_timesheet_id: String(currentTimesheetId),
+          p_actor_user_id: String(user.id)
+        });
+        const out = normalizeRpc(outRaw);
+
+        if (!out || typeof out !== 'object') {
+          return fail(
+            500,
+            stage,
+            'Delete preview RPC returned an unexpected response.',
+            { requested_timesheet_id: String(timesheetId), current_timesheet_id: String(currentTimesheetId) }
+          );
+        }
+
+        return withCORS(env, req, ok({
+          requested_timesheet_id: String(timesheetId),
+          current_timesheet_id: String(currentTimesheetId),
+          was_stale: !!resolved.was_stale,
+          ...out
+        }));
+      } catch (e) {
+        // Ensure error is visible to UI (and always has CORS)
+        const msg = e?.message ? String(e.message) : String(e || 'RPC failed');
+        const detail = e?.json || e?.body || null;
+        return fail(400, stage, `Delete preview failed: ${msg}`, detail);
+      }
+    }
+
+    // 3) Weekly manual adjustment → manual adjustment preview RPC
+    if (isWeekly && isAdjustment) {
+      stage = 'rpc_manual_adjustment_preview';
+      try {
+        const outRaw = await sbRpc(env, 'timesheet_weekly_manual_adjustment_delete_preview', {
+          p_timesheet_id: String(currentTimesheetId),
+          p_actor_user_id: String(user.id)
+        });
+        const out = normalizeRpc(outRaw);
+
+        if (!out || typeof out !== 'object') {
+          return fail(
+            500,
+            stage,
+            'Delete preview RPC returned an unexpected response.',
+            { requested_timesheet_id: String(timesheetId), current_timesheet_id: String(currentTimesheetId) }
+          );
+        }
+
+        return withCORS(env, req, ok({
+          requested_timesheet_id: String(timesheetId),
+          current_timesheet_id: String(currentTimesheetId),
+          was_stale: !!resolved.was_stale,
+          ...out
+        }));
+      } catch (e) {
+        const msg = e?.message ? String(e.message) : String(e || 'RPC failed');
+        const detail = e?.json || e?.body || null;
+        return fail(400, stage, `Delete preview failed: ${msg}`, detail);
+      }
+    }
+
+    // 4) Non-weekly / other cases → preserve existing policy (only TSFIN hard lock blocks)
+    const eligible = !hardLocked;
+    const blocked = eligible
+      ? []
+      : [{ code: 'TSFIN_LOCK_OR_PAID', message: 'Cannot delete: invoiced or paid.' }];
+
     return withCORS(env, req, ok({
-      kind: 'IMPORT_CHILD_ADJUSTMENT',
+      kind: 'STANDARD_DELETE',
       requested_timesheet_id: String(timesheetId),
       current_timesheet_id: String(currentTimesheetId),
       was_stale: !!resolved.was_stale,
-      eligible: false,
-      blocked_reasons: [
-        {
-          code: 'IMPORT_DERIVED_CHILD',
-          message: 'This is an NHSP/HR import adjustment child timesheet and cannot be deleted directly. Delete via the parent timesheet (if eligible).'
-        }
-      ],
+      eligible,
+      blocked_reasons: blocked,
       delete_items: [baseDeleteItem]
     }));
+  } catch (e) {
+    // ✅ This is the critical fix for your CORS/500 symptom:
+    // ensure ALL unexpected throws return via withCORS, with a UI-visible JSON error.
+    const msg = e?.message ? String(e.message) : String(e || 'Unhandled error');
+    return fail(500, stage || 'unknown', msg, null);
   }
-
-  // 2) Weekly parent → use chain preview RPC
-  if (isWeekly && !isAdjustment) {
-    try {
-      const out = await sbRpc(env, 'timesheet_weekly_chain_delete_preview', {
-        p_timesheet_id: String(currentTimesheetId),
-        p_actor_user_id: String(user.id)
-      });
-
-      // Ensure response includes required top-level resolve context (without mutating RPC payload)
-      return withCORS(env, req, ok({
-        requested_timesheet_id: String(timesheetId),
-        current_timesheet_id: String(currentTimesheetId),
-        was_stale: !!resolved.was_stale,
-        ...out
-      }));
-    } catch (e) {
-      return withCORS(env, req, badRequest(
-        'Delete preview failed: ' + (e?.message || String(e)),
-        e?.json || e?.body || null
-      ));
-    }
-  }
-
-  // 3) Weekly manual adjustment → use manual adjustment preview RPC
-  if (isWeekly && isAdjustment) {
-    try {
-      const out = await sbRpc(env, 'timesheet_weekly_manual_adjustment_delete_preview', {
-        p_timesheet_id: String(currentTimesheetId),
-        p_actor_user_id: String(user.id)
-      });
-
-      return withCORS(env, req, ok({
-        requested_timesheet_id: String(timesheetId),
-        current_timesheet_id: String(currentTimesheetId),
-        was_stale: !!resolved.was_stale,
-        ...out
-      }));
-    } catch (e) {
-      return withCORS(env, req, badRequest(
-        'Delete preview failed: ' + (e?.message || String(e)),
-        e?.json || e?.body || null
-      ));
-    }
-  }
-
-  // 4) Non-weekly / other cases → preserve existing policy (only TSFIN hard lock blocks)
-  const eligible = !hardLocked;
-  const blocked = eligible
-    ? []
-    : [{ code: 'TSFIN_LOCK_OR_PAID', message: 'Cannot delete: invoiced or paid.' }];
-
-  return withCORS(env, req, ok({
-    kind: 'STANDARD_DELETE',
-    requested_timesheet_id: String(timesheetId),
-    current_timesheet_id: String(currentTimesheetId),
-    was_stale: !!resolved.was_stale,
-    eligible,
-    blocked_reasons: blocked,
-    delete_items: [baseDeleteItem]
-  }));
 }
 
 
