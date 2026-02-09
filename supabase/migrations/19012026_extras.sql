@@ -599,7 +599,7 @@ begin
   -- ------------------------------------------------------------
   -- CANDIDATE
   -- ------------------------------------------------------------
-  if v_entity = 'candidate' then
+   if v_entity = 'candidate' then
     return (
       with tsfin_rows as (
         select tf.timesheet_id, tf.client_id
@@ -607,45 +607,64 @@ begin
         where tf.is_current = true
           and tf.candidate_id = p_id
       ),
-      tsfin_ts_ids as (
-        select distinct timesheet_id
-        from tsfin_rows
-        where timesheet_id is not null
-      ),
       contract_rows as (
         select c.id as contract_id, c.client_id
         from public.contracts c
         where c.candidate_id = p_id
       ),
       contract_ids as (
-        select contract_id from contract_rows
+        select cr.contract_id
+        from contract_rows cr
       ),
       contract_weeks as (
-        select cw.id as contract_week_id, cw.timesheet_id
+        select cw.id as contract_week_id, cw.timesheet_id, cw.contract_id
         from public.contract_weeks cw
-        where cw.contract_id in (select contract_id from contract_ids)
+        where cw.contract_id in (select ci.contract_id from contract_ids ci)
       ),
-      extra_timesheets as (
-        select count(*)::int as extra_count
+
+      -- ✅ Real timesheets in scope (distinct), including adjustments:
+      -- - current TSFIN timesheets for the candidate
+      -- - any timesheets linked via candidate's contracts
+      -- - any timesheets referenced by contract_weeks for candidate's contracts (defensive)
+      real_timesheet_ids as (
+        select distinct tf.timesheet_id
+        from public.timesheets_financials tf
+        where tf.is_current = true
+          and tf.candidate_id = p_id
+          and tf.timesheet_id is not null
+        union
+        select distinct ts.timesheet_id
+        from public.timesheets ts
+        join public.contracts c on c.id = ts.contract_id
+        where c.candidate_id = p_id
+          and ts.timesheet_id is not null
+        union
+        select distinct cw.timesheet_id
+        from contract_weeks cw
+        where cw.timesheet_id is not null
+      ),
+
+      -- ✅ Planned contract_weeks (including adjustments) that do NOT have a timesheet yet
+      planned_contract_week_ids as (
+        select distinct cw.contract_week_id
         from contract_weeks cw
         where cw.timesheet_id is null
-           or cw.timesheet_id not in (select timesheet_id from tsfin_ts_ids)
       ),
-      base_tsfin_count as (
-        select count(*)::int as base_count
-        from tsfin_rows
-      ),
+
       timesheets_total as (
-        select (select base_count from base_tsfin_count) + (select extra_count from extra_timesheets) as total
+        select
+          (select count(*)::int from real_timesheet_ids) +
+          (select count(*)::int from planned_contract_week_ids) as total
       ),
+
       clients_distinct as (
-        select distinct client_id
-        from tsfin_rows
-        where client_id is not null
+        select distinct tr.client_id
+        from tsfin_rows tr
+        where tr.client_id is not null
         union
-        select distinct client_id
-        from contract_rows
-        where client_id is not null
+        select distinct cr.client_id
+        from contract_rows cr
+        where cr.client_id is not null
       ),
       contracts_total as (
         select count(*)::int as total
@@ -661,24 +680,11 @@ begin
         where c.id = p_id
         limit 1
       ),
-      cand_timesheet_ids as (
-        -- union TS IDs from current TSFIN and any timesheets linked via contracts
-        select distinct tf.timesheet_id
-        from public.timesheets_financials tf
-        where tf.is_current = true
-          and tf.candidate_id = p_id
-          and tf.timesheet_id is not null
-        union
-        select distinct ts.timesheet_id
-        from public.timesheets ts
-        join public.contracts c on c.id = ts.contract_id
-        where c.candidate_id = p_id
-          and ts.timesheet_id is not null
-      ),
+
       invoice_ids as (
         select distinct il.invoice_id
         from public.invoice_lines il
-        where il.timesheet_id in (select timesheet_id from cand_timesheet_ids)
+        where il.timesheet_id in (select rti.timesheet_id from real_timesheet_ids rti)
           and il.invoice_id is not null
       )
       select jsonb_build_object(
@@ -690,6 +696,7 @@ begin
       )
     );
   end if;
+
 
   -- ------------------------------------------------------------
   -- TIMESHEET (segment-safe invoice count)
@@ -843,45 +850,64 @@ begin
         where tf.is_current = true
           and tf.client_id = p_id
       ),
-      tsfin_ts_ids as (
-        select distinct timesheet_id
-        from tsfin_rows
-        where timesheet_id is not null
-      ),
       contract_rows as (
         select c.id as contract_id, c.candidate_id
         from public.contracts c
         where c.client_id = p_id
       ),
       contract_ids as (
-        select contract_id from contract_rows
+        select cr.contract_id
+        from contract_rows cr
       ),
       contract_weeks as (
-        select cw.id as contract_week_id, cw.timesheet_id
+        select cw.id as contract_week_id, cw.timesheet_id, cw.contract_id
         from public.contract_weeks cw
-        where cw.contract_id in (select contract_id from contract_ids)
+        where cw.contract_id in (select ci.contract_id from contract_ids ci)
       ),
-      extra_timesheets as (
-        select count(*)::int as extra_count
+
+      -- ✅ Real timesheets in scope (distinct), including adjustments:
+      -- - current TSFIN timesheets for this client
+      -- - any timesheets linked via this client's contracts
+      -- - any timesheets referenced by contract_weeks for this client's contracts (defensive)
+      real_timesheet_ids as (
+        select distinct tf.timesheet_id
+        from public.timesheets_financials tf
+        where tf.is_current = true
+          and tf.client_id = p_id
+          and tf.timesheet_id is not null
+        union
+        select distinct ts.timesheet_id
+        from public.timesheets ts
+        join public.contracts c on c.id = ts.contract_id
+        where c.client_id = p_id
+          and ts.timesheet_id is not null
+        union
+        select distinct cw.timesheet_id
+        from contract_weeks cw
+        where cw.timesheet_id is not null
+      ),
+
+      -- ✅ Planned contract_weeks (including adjustments) that do NOT have a timesheet yet
+      planned_contract_week_ids as (
+        select distinct cw.contract_week_id
         from contract_weeks cw
         where cw.timesheet_id is null
-           or cw.timesheet_id not in (select timesheet_id from tsfin_ts_ids)
       ),
-      base_tsfin_count as (
-        select count(*)::int as base_count
-        from tsfin_rows
-      ),
+
       timesheets_total as (
-        select (select base_count from base_tsfin_count) + (select extra_count from extra_timesheets) as total
+        select
+          (select count(*)::int from real_timesheet_ids) +
+          (select count(*)::int from planned_contract_week_ids) as total
       ),
+
       cand_distinct as (
-        select distinct candidate_id
-        from tsfin_rows
-        where candidate_id is not null
+        select distinct tr.candidate_id
+        from tsfin_rows tr
+        where tr.candidate_id is not null
         union
-        select distinct candidate_id
-        from contract_rows
-        where candidate_id is not null
+        select distinct cr.candidate_id
+        from contract_rows cr
+        where cr.candidate_id is not null
       ),
       contracts_total as (
         select count(*)::int as total
@@ -900,6 +926,7 @@ begin
       )
     );
   end if;
+
 
   -- ------------------------------------------------------------
   -- CONTRACT
@@ -939,7 +966,7 @@ begin
   -- ------------------------------------------------------------
   -- UMBRELLA (segment-safe invoice count)
   -- ------------------------------------------------------------
-  if v_entity = 'umbrella' then
+   if v_entity = 'umbrella' then
     return (
       with cand_ids as (
         select distinct c.id as candidate_id
@@ -950,47 +977,60 @@ begin
         select count(*)::int as total
         from cand_ids
       ),
-      tsfin_rows as (
-        select tf.timesheet_id
-        from public.timesheets_financials tf
-        where tf.is_current = true
-          and tf.candidate_id in (select candidate_id from cand_ids)
-          and tf.timesheet_id is not null
-      ),
-      tsfin_ts_ids as (
-        select distinct timesheet_id
-        from tsfin_rows
-      ),
       contract_rows as (
         select c.id as contract_id
         from public.contracts c
-        where c.candidate_id in (select candidate_id from cand_ids)
+        where c.candidate_id in (select ci.candidate_id from cand_ids ci)
       ),
       contract_ids as (
-        select contract_id from contract_rows
+        select cr.contract_id
+        from contract_rows cr
       ),
       contract_weeks as (
-        select cw.id as contract_week_id, cw.timesheet_id
+        select cw.id as contract_week_id, cw.timesheet_id, cw.contract_id
         from public.contract_weeks cw
-        where cw.contract_id in (select contract_id from contract_ids)
+        where cw.contract_id in (select cd.contract_id from contract_ids cd)
       ),
-      extra_timesheets as (
-        select count(*)::int as extra_count
+
+      -- ✅ Real timesheets in scope (distinct), including adjustments:
+      -- - current TSFIN timesheets for umbrella candidates
+      -- - any timesheets linked via those candidates' contracts
+      -- - any timesheets referenced by contract_weeks for those contracts (defensive)
+      real_timesheet_ids as (
+        select distinct tf.timesheet_id
+        from public.timesheets_financials tf
+        where tf.is_current = true
+          and tf.candidate_id in (select ci.candidate_id from cand_ids ci)
+          and tf.timesheet_id is not null
+        union
+        select distinct ts.timesheet_id
+        from public.timesheets ts
+        join public.contracts c on c.id = ts.contract_id
+        where c.candidate_id in (select ci2.candidate_id from cand_ids ci2)
+          and ts.timesheet_id is not null
+        union
+        select distinct cw.timesheet_id
+        from contract_weeks cw
+        where cw.timesheet_id is not null
+      ),
+
+      -- ✅ Planned contract_weeks (including adjustments) that do NOT have a timesheet yet
+      planned_contract_week_ids as (
+        select distinct cw.contract_week_id
         from contract_weeks cw
         where cw.timesheet_id is null
-           or cw.timesheet_id not in (select timesheet_id from tsfin_ts_ids)
       ),
-      base_tsfin_count as (
-        select count(*)::int as base_count
-        from tsfin_rows
-      ),
+
       timesheets_total as (
-        select (select base_count from base_tsfin_count) + (select extra_count from extra_timesheets) as total
+        select
+          (select count(*)::int from real_timesheet_ids) +
+          (select count(*)::int from planned_contract_week_ids) as total
       ),
+
       inv_ids as (
         select distinct il.invoice_id
         from public.invoice_lines il
-        where il.timesheet_id in (select timesheet_id from tsfin_ts_ids)
+        where il.timesheet_id in (select rti.timesheet_id from real_timesheet_ids rti)
           and il.invoice_id is not null
       ),
       invoices_total as (
@@ -1004,6 +1044,7 @@ begin
       )
     );
   end if;
+
 
   -- ------------------------------------------------------------
   -- REMITTANCE
