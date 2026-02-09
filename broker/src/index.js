@@ -27880,56 +27880,244 @@ async function handleTimesheetsSummary(env, req) {
 }
 
 
-
-
 async function handleHrAutoprocessClients(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
   const enc = encodeURIComponent;
 
-  try {
-    // ✅ Contract-driven list (contracts.autoprocess_hr), return contract IDs
-    const { rows: conRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/contracts` +
-        `?autoprocess_hr=eq.true` +
-        `&select=id,client_id,role,band` +
-        `&limit=10000`
-    );
+  // London "today" (YYYY-MM-DD) for effective_from evaluation
+  const todayYmd = (() => {
+    try {
+      const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/London',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).formatToParts(new Date());
+      const y = parts.find(p => p.type === 'year')?.value || '';
+      const m = parts.find(p => p.type === 'month')?.value || '';
+      const d = parts.find(p => p.type === 'day')?.value || '';
+      const ymd = `${y}-${m}-${d}`;
+      return /^\d{4}-\d{2}-\d{2}$/.test(ymd) ? ymd : new Date().toISOString().slice(0, 10);
+    } catch {
+      return new Date().toISOString().slice(0, 10);
+    }
+  })();
 
-    const contracts = Array.isArray(conRows) ? conRows : [];
-    if (!contracts.length) return withCORS(env, req, ok({ items: [] }));
+  const pickEffectiveSettingsRow = (rows, asOfYmd) => {
+    const list = Array.isArray(rows) ? rows : [];
+    if (!list.length) return null;
 
-    const clientIds = [...new Set(contracts.map(c => c.client_id).filter(Boolean).map(String))];
-    const clientById = new Map();
+    // Prefer the most recent row whose effective_from <= asOfYmd.
+    // If none qualify, fall back to the most recent row overall (by effective_from/updated_at ordering).
+    let bestEligible = null;
+    for (const r of list) {
+      if (!r || typeof r !== 'object') continue;
 
-    if (clientIds.length) {
-      const cliParam = clientIds.map(enc).join(',');
-      const { rows: cliRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/clients?id=in.(${cliParam})&select=id,name`
-      );
-      for (const c of (cliRows || [])) clientById.set(String(c.id), c);
+      const efRaw = r.effective_from != null ? String(r.effective_from).slice(0, 10) : '';
+      const ef = /^\d{4}-\d{2}-\d{2}$/.test(efRaw) ? efRaw : '';
+
+      if (ef && ef > asOfYmd) continue; // future row
+
+      if (!bestEligible) {
+        bestEligible = r;
+        continue;
+      }
+
+      const bestEfRaw = bestEligible.effective_from != null ? String(bestEligible.effective_from).slice(0, 10) : '';
+      const bestEf = /^\d{4}-\d{2}-\d{2}$/.test(bestEfRaw) ? bestEfRaw : '';
+
+      // Higher effective_from wins
+      if (ef && (!bestEf || ef > bestEf)) {
+        bestEligible = r;
+        continue;
+      }
+
+      if (ef === bestEf) {
+        const ua = r.updated_at != null ? String(r.updated_at) : '';
+        const ub = bestEligible.updated_at != null ? String(bestEligible.updated_at) : '';
+        if (ua && (!ub || ua > ub)) bestEligible = r;
+      }
     }
 
-    const items = contracts.map(c => {
-      const cli = c.client_id ? clientById.get(String(c.client_id)) : null;
-      return {
-        contract_id: c.id,
-        client_id: c.client_id,
-        client_name: (cli && cli.name) ? cli.name : '(unnamed client)',
-        role: c.role || null,
-        band: c.band || null
-      };
+    if (bestEligible) return bestEligible;
+
+    // No eligible row (all future) -> pick the most recent overall by effective_from then updated_at
+    let bestAny = null;
+    for (const r of list) {
+      if (!r || typeof r !== 'object') continue;
+
+      if (!bestAny) {
+        bestAny = r;
+        continue;
+      }
+
+      const efA = r.effective_from != null ? String(r.effective_from).slice(0, 10) : '';
+      const efB = bestAny.effective_from != null ? String(bestAny.effective_from).slice(0, 10) : '';
+
+      const aOk = /^\d{4}-\d{2}-\d{2}$/.test(efA) ? efA : '';
+      const bOk = /^\d{4}-\d{2}-\d{2}$/.test(efB) ? efB : '';
+
+      if (aOk && (!bOk || aOk > bOk)) {
+        bestAny = r;
+        continue;
+      }
+
+      if (aOk === bOk) {
+        const ua = r.updated_at != null ? String(r.updated_at) : '';
+        const ub = bestAny.updated_at != null ? String(bestAny.updated_at) : '';
+        if (ua && (!ub || ua > ub)) bestAny = r;
+      }
+    }
+
+    return bestAny;
+  };
+
+  try {
+    // ─────────────────────────────────────────────────────────────
+    // Source A: Contract-level overrides (ONLY when overrideclientsettings=true)
+    // A client is eligible if ANY contract has overrideclientsettings=true AND autoprocess_hr=true.
+    // ─────────────────────────────────────────────────────────────
+    let overrideClientIds = [];
+    try {
+      const { rows: conRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/contracts` +
+          `?overrideclientsettings=eq.true` +
+          `&autoprocess_hr=eq.true` +
+          `&client_id=not.is.null` +
+          `&select=client_id` +
+          `&limit=10000`
+      );
+      overrideClientIds = Array.from(
+        new Set((conRows || []).map(r => (r && r.client_id) ? String(r.client_id) : '').filter(Boolean))
+      );
+    } catch (e) {
+      // non-fatal; we can still return client_settings driven list
+      console.warn('[HR_AUTOPROC_CLIENTS] override contract scan failed', e?.message || e);
+      overrideClientIds = [];
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Source B: Client settings (current/effective row per client)
+    // We must avoid historical "true" rows incorrectly enabling a client.
+    // Strategy:
+    //   1) Find candidate clients that have EVER had autoprocess_hr=true (cheap).
+    //   2) For those candidates, load their settings history and evaluate effective row as-of today.
+    // ─────────────────────────────────────────────────────────────
+    let candidateFromSettings = [];
+    try {
+      const { rows: csTrueRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/client_settings` +
+          `?autoprocess_hr=eq.true` +
+          `&client_id=not.is.null` +
+          `&select=client_id` +
+          `&limit=20000`
+      );
+      candidateFromSettings = Array.from(
+        new Set((csTrueRows || []).map(r => (r && r.client_id) ? String(r.client_id) : '').filter(Boolean))
+      );
+    } catch (e) {
+      console.warn('[HR_AUTOPROC_CLIENTS] client_settings candidate scan failed', e?.message || e);
+      candidateFromSettings = [];
+    }
+
+    const candidateClientIds = Array.from(new Set([...(overrideClientIds || []), ...(candidateFromSettings || [])]));
+    if (!candidateClientIds.length) {
+      return withCORS(env, req, ok({ items: [] }));
+    }
+
+    // Load client_settings history for candidate clients
+    const settingsByClient = new Map();
+    try {
+      const chunkSize = 150;
+      for (let i = 0; i < candidateClientIds.length; i += chunkSize) {
+        const chunk = candidateClientIds.slice(i, i + chunkSize);
+        const inList = chunk.map(enc).join(',');
+
+        const { rows: csRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/client_settings` +
+            `?client_id=in.(${inList})` +
+            `&select=client_id,effective_from,autoprocess_hr,updated_at` +
+            `&order=client_id.asc,effective_from.desc.nullslast,updated_at.desc.nullslast` +
+            `&limit=20000`
+        );
+
+        for (const r of (csRows || [])) {
+          const cid = r?.client_id != null ? String(r.client_id) : '';
+          if (!cid) continue;
+          if (!settingsByClient.has(cid)) settingsByClient.set(cid, []);
+          settingsByClient.get(cid).push(r);
+        }
+      }
+    } catch (e) {
+      console.warn('[HR_AUTOPROC_CLIENTS] client_settings history load failed', e?.message || e);
+      // If we fail to load settings history, we can still allow override-enabled clients.
+    }
+
+    const enabledViaClientSettings = new Set();
+    try {
+      for (const [cid, rows] of settingsByClient.entries()) {
+        const eff = pickEffectiveSettingsRow(rows, todayYmd);
+        if (eff && eff.autoprocess_hr === true) enabledViaClientSettings.add(String(cid));
+      }
+    } catch {}
+
+    // Final eligible client set:
+    // - always include override-enabled clients
+    // - include client-settings-enabled clients (effective as-of today)
+    const eligibleClientIds = Array.from(new Set([...(overrideClientIds || []), ...Array.from(enabledViaClientSettings)]));
+
+    if (!eligibleClientIds.length) {
+      return withCORS(env, req, ok({ items: [] }));
+    }
+
+    // Fetch client names for eligible clients (deduped) and return sorted list
+    const clientRows = [];
+    const chunkSize = 200;
+    for (let i = 0; i < eligibleClientIds.length; i += chunkSize) {
+      const chunk = eligibleClientIds.slice(i, i + chunkSize);
+      const inList = chunk.map(enc).join(',');
+      const { rows: cliRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/clients` +
+          `?id=in.(${inList})` +
+          `&select=id,name` +
+          `&limit=10000`
+      );
+      clientRows.push(...(cliRows || []));
+    }
+
+    const seen = new Set();
+    const items = [];
+    for (const c of clientRows) {
+      const id = c?.id != null ? String(c.id) : '';
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      items.push({
+        client_id: id,
+        client_name: (c && c.name) ? String(c.name) : '(unnamed client)'
+      });
+    }
+
+    items.sort((a, b) => {
+      const an = String(a.client_name || '').toLowerCase();
+      const bn = String(b.client_name || '').toLowerCase();
+      if (an === bn) return String(a.client_id).localeCompare(String(b.client_id));
+      return an.localeCompare(bn);
     });
 
     return withCORS(env, req, ok({ items }));
   } catch (e) {
     console.error('[HR_AUTOPROC_CLIENTS] failed', { err: e?.message || String(e) });
-    return withCORS(env, req, serverError('Failed to list HealthRoster autoprocess contracts'));
+    return withCORS(env, req, serverError('Failed to list HealthRoster autoprocess clients'));
   }
 }
+
+
 async function handleTsfinUpdateSegments(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -48360,7 +48548,6 @@ async function handleInvoiceDeleteOne(env, req, invoiceId) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
-
 async function handleListInvoices(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
@@ -48389,6 +48576,41 @@ async function handleListInvoices(env, req) {
 
   const statusParams = sp.getAll('status').map(s => (s || '').trim()).filter(Boolean);
   const q = (sp.get('q') || '').trim(); // partial invoice_no
+
+  // ✅ NEW: ids filter (comma-separated OR repeated ids params)
+  const idsParams = sp.getAll('ids').map(s => String(s || '').trim()).filter(Boolean);
+  const idsCsv = idsParams.length ? idsParams.join(',') : '';
+
+  const parseUuidList = (csv) => {
+    const out = [];
+    const seen = new Set();
+    const re = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+    for (const part of String(csv || '').split(',')) {
+      const v = String(part || '').trim();
+      if (!v) continue;
+      if (!re.test(v)) continue;
+      if (seen.has(v)) continue;
+      seen.add(v);
+      out.push(v);
+    }
+    return out;
+  };
+
+  let idsFilter = null;
+  if (idsCsv) {
+    const ids = parseUuidList(idsCsv);
+    if (!ids.length) {
+      const empty = { items: [], page: page ?? undefined, page_size: pageSize ?? undefined, limit, offset };
+      if (includeCount) empty.count = 0;
+      if (includeTotals) empty.totals = { count_all: 0, subtotal_ex_vat_sum: 0, total_inc_vat_sum: 0, margin_ex_vat_sum: 0 };
+      return withCORS(env, req, ok(empty));
+    }
+    if (ids.length > 600) {
+      return withCORS(env, req, serverError(`ids filter contained too many ids (${ids.length}). Narrow the selection.`));
+    }
+    idsFilter = ids;
+  }
 
   // Date filters
   const issuedFrom   = sp.get('issued_from')  || null;
@@ -48509,7 +48731,6 @@ async function handleListInvoices(env, req) {
       const tsIds = Array.from(new Set((tsRows || []).map(r => r?.timesheet_id).filter(Boolean).map(String)));
 
       if (!tsIds.length) {
-        // No timesheets in range => empty result set
         const empty = { items: [], page: page ?? undefined, page_size: pageSize ?? undefined, limit, offset };
         if (includeCount) empty.count = 0;
         if (includeTotals) empty.totals = { count_all: 0, subtotal_ex_vat_sum: 0, total_inc_vat_sum: 0, margin_ex_vat_sum: 0 };
@@ -48536,21 +48757,37 @@ async function handleListInvoices(env, req) {
         return withCORS(env, req, ok(empty));
       }
 
-      // Apply invoice_id filter (cap for URL safety; typical week range stays small)
       invoiceIdFilter = invIds;
     } catch (e) {
       return withCORS(env, req, serverError(`Failed week-ending invoice filter: ${e?.message || e}`));
     }
   }
 
+  // ✅ Combine week-ending derived ids with explicit ids filter (intersection if both present)
+  let finalIdFilter = null;
+  if (invoiceIdFilter && idsFilter) {
+    const s = new Set(idsFilter);
+    finalIdFilter = invoiceIdFilter.filter(x => s.has(String(x)));
+  } else if (invoiceIdFilter) {
+    finalIdFilter = invoiceIdFilter;
+  } else if (idsFilter) {
+    finalIdFilter = idsFilter;
+  }
+
+  if (finalIdFilter && !finalIdFilter.length) {
+    const empty = { items: [], page: page ?? undefined, page_size: pageSize ?? undefined, limit, offset };
+    if (includeCount) empty.count = 0;
+    if (includeTotals) empty.totals = { count_all: 0, subtotal_ex_vat_sum: 0, total_inc_vat_sum: 0, margin_ex_vat_sum: 0 };
+    return withCORS(env, req, ok(empty));
+  }
+
   // Build final URL with paging + optional id filter
   let url = urlBase + `&limit=${limit}&offset=${offset}`;
-  if (invoiceIdFilter && invoiceIdFilter.length) {
-    // For safety, cap in-list length; if ever exceeds, you should move this to a dedicated SQL RPC.
-    if (invoiceIdFilter.length > 600) {
-      return withCORS(env, req, serverError(`Week-ending filter matched too many invoices (${invoiceIdFilter.length}). Narrow the range.`));
+  if (finalIdFilter && finalIdFilter.length) {
+    if (finalIdFilter.length > 600) {
+      return withCORS(env, req, serverError(`Filter matched too many invoices (${finalIdFilter.length}). Narrow the selection.`));
     }
-    url += `&id=in.(${invoiceIdFilter.map(enc).join(',')})`;
+    url += `&id=in.(${finalIdFilter.map(enc).join(',')})`;
   }
 
   // Totals helper
@@ -48565,7 +48802,6 @@ async function handleListInvoices(env, req) {
     if (dueTo) f.due_to = dueTo;
     if (createdFrom) f.created_from = createdFrom;
     if (createdTo) f.created_to = createdTo;
-    // week ending handled externally via id filter (not in totals RPC)
     return f;
   };
 
@@ -48578,14 +48814,14 @@ async function handleListInvoices(env, req) {
 
     // ✅ 3.7 totals
     if (includeTotals) {
-      if (!invoiceIdFilter) {
-        // no week filter => can use SQL totals RPC directly
+      if (!finalIdFilter) {
+        // no id filter => can use SQL totals RPC directly
         const totRes = await sbRpc(env, 'invoice_list_totals', { p_filters: buildInvoiceTotalsFilters() });
         const totRows = Array.isArray(totRes) ? totRes : (totRes?.data || []);
         resp.totals = (totRows && totRows.length) ? totRows[0] : { count_all: 0, subtotal_ex_vat_sum: 0, total_inc_vat_sum: 0, margin_ex_vat_sum: 0 };
       } else {
-        // week filter => compute totals from the filtered invoice ids to remain accurate
-        const allInvIds = invoiceIdFilter;
+        // id filter => compute totals from the filtered invoice ids to remain accurate
+        const allInvIds = finalIdFilter;
         if (!allInvIds.length) {
           resp.totals = { count_all: 0, subtotal_ex_vat_sum: 0, total_inc_vat_sum: 0, margin_ex_vat_sum: 0 };
         } else {
@@ -48595,7 +48831,7 @@ async function handleListInvoices(env, req) {
             `&id=in.(${allInvIds.map(enc).join(',')})` +
             `&limit=20000&offset=0`;
 
-          // Re-apply same filters that were applied to list (except paging and q which is invoice_no filter on invoices)
+          // Re-apply same filters that were applied to list (except paging)
           if (clientId) invFetchUrl += `&client_id=eq.${enc(clientId)}`;
           if (q) invFetchUrl += `&invoice_no=ilike.*${enc(q)}*`;
           if (issuedFrom) invFetchUrl += `&issued_at_utc=gte.${enc(issuedFrom)}`;
@@ -55240,18 +55476,28 @@ async function handleRelatedList(env, req, entity, id) {
 
     // ───────────────────────── CANDIDATE ─────────────────────────
     if (entity === 'candidate') {
-      // ---- Candidate → Timesheets (use v_timesheets_summary full shape) ----
+          // ---- Candidate → Timesheets (use v_timesheets_summary full shape) ----
       if (typeU === 'timesheets') {
-        const tsUrl =
+        const toolsStageRaw = (url.searchParams.get('tools_stage') || '').trim();
+
+        let tsUrl =
           `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
           `?select=*` +
-          `&candidate_id=eq.${enc(id)}` +
+          `&candidate_id=eq.${enc(id)}`;
+
+        // ✅ NEW: support related-mode stage filtering (same param as summary: tools_stage)
+        if (toolsStageRaw) {
+          tsUrl += `&tools_stage=eq.${enc(toolsStageRaw)}`;
+        }
+
+        tsUrl +=
           `&order=week_ending_date.desc,client_name.asc,candidate_name.asc` +
           `&limit=${limit}&offset=${offset}`;
 
         const { rows, total } = await sbFetch(env, tsUrl, true);
         return okList(rows || [], total ?? (rows || []).length);
       }
+
 
       // ---- Candidate → Invoices (SEGMENTS-safe fallback via invoice_lines) ----
       if (typeU === 'invoices') {
@@ -55605,7 +55851,7 @@ async function handleRelatedList(env, req, entity, id) {
         return okList(out, out.length);
       }
 
-      // Timesheet → Series (Adjustments) – keep existing CW + TSFIN logic
+         // Timesheet → Series (Adjustments) – return canonical v_timesheets_summary rows (preserves grid prefs)
       if (typeU === 'series') {
         const cwQ =
           `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
@@ -55630,45 +55876,17 @@ async function handleRelatedList(env, req, entity, id) {
         const tsIds = [...new Set(cwSiblings.map(r => r.timesheet_id).filter(Boolean))];
         if (!tsIds.length) return okList([], 0);
 
-        const finQ =
-          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?timesheet_id=in.(${tsIds.map(enc).join(',')})` +
-          `&is_current=eq.true` +
-          `&select=timesheet_id,total_hours,total_pay_ex_vat,processing_status,basis`;
-        const finR = await sbFetch(env, finQ);
-        const finRows = finR.rows || [];
-        const finByTs = {};
-        finRows.forEach(r => { finByTs[r.timesheet_id] = r; });
-
-        let items = cwSiblings.map(r => {
-          const f = finByTs[r.timesheet_id] || {};
-          return {
-            timesheet_id:     r.timesheet_id,
-            is_current:       String(r.timesheet_id) === String(id),
-            additional_seq:   r.additional_seq,
-            is_adjustment:    !!r.is_adjustment,
-            contract_week_status: r.status || null,
-            total_hours:      f.total_hours ?? null,
-            total_pay_ex_vat: f.total_pay_ex_vat ?? null,
-            processing_status:f.processing_status || null,
-            basis:            f.basis || null
-          };
-        });
+        // ✅ Canonical rows (full summary shape) so user column config remains correct
+        const allRows = await fetchTimesheetSummaryByIds(tsIds);
 
         // Exclude the current TS itself so list = "other adjustments"
-        items = items.filter(it => String(it.timesheet_id) !== String(id));
-
-        items.sort((a, b) => {
-          const aSeq = a.additional_seq == null ? 0 : a.additional_seq;
-          const bSeq = b.additional_seq == null ? 0 : b.additional_seq;
-          if (aSeq === bSeq) return 0;
-          return aSeq < bSeq ? -1 : 1;
-        });
+        const items = (allRows || []).filter(r => String(r?.timesheet_id || '') !== String(id));
 
         const total = items.length;
         const page  = items.slice(offset, offset + limit);
         return okList(page, total);
       }
+
 
       return withCORS(env, req, badRequest("Unsupported type for timesheet"));
     }
