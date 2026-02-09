@@ -18328,7 +18328,6 @@ async function handleContractsTruncateTailSafely(env, req, contractId) {
 
   return withCORS(env, req, ok({ ok:true, safe_end: safeEnd, clamped }));
 }
-
 async function handleTimesheetDelete(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -18345,7 +18344,7 @@ async function handleTimesheetDelete(env, req, timesheetId) {
   // ✅ stale-safe resolve
   const resolved = await resolveTimesheetToCurrent(env, timesheetId);
   if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
-  const currentTimesheetId = resolved.current_timesheet_id;
+  const currentTimesheetId = String(resolved.current_timesheet_id);
 
   // ✅ Guard mismatch → 409 TIMESHEET_MOVED
   if (String(expected) !== String(currentTimesheetId)) {
@@ -18360,21 +18359,21 @@ async function handleTimesheetDelete(env, req, timesheetId) {
   }
 
   // Guard: current TSFIN must not be paid or invoiced (and respect other hard locks defensively)
+  // ✅ NOTE: schema-aligned columns only (locked_by_invoice_id, locked_at_utc, paid_at_utc)
   const tsfin = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
       `?timesheet_id=eq.${enc(currentTimesheetId)}` +
       `&is_current=eq.true` +
-      `&select=*`
+      `&select=timesheet_id,paid_at_utc,locked_by_invoice_id,locked_at_utc` +
+      `&limit=1`
   );
 
   if (tsfin) {
     const hardLocked =
       !!tsfin.paid_at_utc ||
       !!tsfin.locked_by_invoice_id ||
-      !!tsfin.locked_by_invoice ||
-      !!tsfin.locked_by_invoice_line_id ||
-      !!tsfin.locked_by_invoice_at_utc;
+      !!tsfin.locked_at_utc;
 
     if (hardLocked) return withCORS(env, req, badRequest('Cannot delete: invoiced or paid'));
   }
@@ -67022,7 +67021,6 @@ async function handleTimesheetQrScan(env, req) {
 
   return withCORS(env, req, badRequest('QR mismatch: unsupported sheet_scope for QR'));
 }
-
 async function handleTimesheetDeletePreview(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -67058,7 +67056,6 @@ async function handleTimesheetDeletePreview(env, req, timesheetId) {
       message: String(message || 'Delete preview failed')
     };
 
-    // Include safe details if present (helps UI without leaking internals)
     if (details != null) payload.details = details;
 
     return withCORS(
@@ -67111,22 +67108,23 @@ async function handleTimesheetDeletePreview(env, req, timesheetId) {
       );
 
     stage = 'load_tsfin_snapshot';
+
+    // ✅ DB-verified columns on public.timesheets_financials used here:
+    // timesheet_id,total_hours,total_pay_ex_vat,total_charge_ex_vat,paid_at_utc,locked_by_invoice_id
     const tsfin = await sbGetOne(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
         `?timesheet_id=eq.${enc(currentTimesheetId)}` +
         `&is_current=eq.true` +
-        `&select=timesheet_id,total_hours,total_pay_ex_vat,total_charge_ex_vat,paid_at_utc,locked_by_invoice_id,locked_by_invoice,locked_by_invoice_line_id,locked_by_invoice_at_utc` +
+        `&select=timesheet_id,total_hours,total_pay_ex_vat,total_charge_ex_vat,paid_at_utc,locked_by_invoice_id` +
         `&limit=1`
     );
 
+    // ✅ Align with actual schema (no locked_by_invoice*, only locked_by_invoice_id + paid_at_utc)
     const hardLocked =
       !!(tsfin && (
         tsfin.paid_at_utc ||
-        tsfin.locked_by_invoice_id ||
-        tsfin.locked_by_invoice ||
-        tsfin.locked_by_invoice_line_id ||
-        tsfin.locked_by_invoice_at_utc
+        tsfin.locked_by_invoice_id
       ));
 
     const baseDeleteItem = {
@@ -67200,7 +67198,6 @@ async function handleTimesheetDeletePreview(env, req, timesheetId) {
           ...out
         }));
       } catch (e) {
-        // Ensure error is visible to UI (and always has CORS)
         const msg = e?.message ? String(e.message) : String(e || 'RPC failed');
         const detail = e?.json || e?.body || null;
         return fail(400, stage, `Delete preview failed: ${msg}`, detail);
@@ -67255,12 +67252,11 @@ async function handleTimesheetDeletePreview(env, req, timesheetId) {
       delete_items: [baseDeleteItem]
     }));
   } catch (e) {
-    // ✅ This is the critical fix for your CORS/500 symptom:
-    // ensure ALL unexpected throws return via withCORS, with a UI-visible JSON error.
     const msg = e?.message ? String(e.message) : String(e || 'Unhandled error');
     return fail(500, stage || 'unknown', msg, null);
   }
 }
+
 
 
 
