@@ -612,49 +612,18 @@ begin
         from public.contracts c
         where c.candidate_id = p_id
       ),
-      contract_ids as (
-        select cr.contract_id
-        from contract_rows cr
-      ),
-      contract_weeks as (
-        select cw.id as contract_week_id, cw.timesheet_id, cw.contract_id
-        from public.contract_weeks cw
-        where cw.contract_id in (select ci.contract_id from contract_ids ci)
-      ),
-
-      -- ✅ Real timesheets in scope (distinct), including adjustments:
-      -- - current TSFIN timesheets for the candidate
-      -- - any timesheets linked via candidate's contracts
-      -- - any timesheets referenced by contract_weeks for candidate's contracts (defensive)
-      real_timesheet_ids as (
-        select distinct tf.timesheet_id
-        from public.timesheets_financials tf
-        where tf.is_current = true
-          and tf.candidate_id = p_id
-          and tf.timesheet_id is not null
-        union
-        select distinct ts.timesheet_id
-        from public.timesheets ts
-        join public.contracts c on c.id = ts.contract_id
-        where c.candidate_id = p_id
-          and ts.timesheet_id is not null
-        union
-        select distinct cw.timesheet_id
-        from contract_weeks cw
-        where cw.timesheet_id is not null
-      ),
-
-      -- ✅ Planned contract_weeks (including adjustments) that do NOT have a timesheet yet
-      planned_contract_week_ids as (
-        select distinct cw.contract_week_id
-        from contract_weeks cw
-        where cw.timesheet_id is null
+          -- ✅ Timesheets count MUST match the related list source (v_timesheets_summary),
+      -- otherwise contract_weeks can point at revoked/non-current timesheet_ids and overcount.
+      ts_view as (
+        select v.timesheet_id, v.client_id
+        from public.v_timesheets_summary v
+        where v.candidate_id = p_id
       ),
 
       timesheets_total as (
-        select
-          (select count(*)::int from real_timesheet_ids) +
-          (select count(*)::int from planned_contract_week_ids) as total
+        select count(*)::int as total
+        from public.v_timesheets_summary v2
+        where v2.candidate_id = p_id
       ),
 
       clients_distinct as (
@@ -666,10 +635,12 @@ begin
         from contract_rows cr
         where cr.client_id is not null
       ),
+
       contracts_total as (
         select count(*)::int as total
         from contract_rows
       ),
+
       umbrella_count as (
         select
           case
@@ -681,12 +652,19 @@ begin
         limit 1
       ),
 
+      invoice_timesheet_ids as (
+        select distinct tv.timesheet_id
+        from ts_view tv
+        where tv.timesheet_id is not null
+      ),
+
       invoice_ids as (
         select distinct il.invoice_id
         from public.invoice_lines il
-        where il.timesheet_id in (select rti.timesheet_id from real_timesheet_ids rti)
+        where il.timesheet_id in (select iti.timesheet_id from invoice_timesheet_ids iti)
           and il.invoice_id is not null
       )
+
       select jsonb_build_object(
         'timesheets', coalesce((select total from timesheets_total), 0),
         'invoices',   coalesce((select count(*)::int from invoice_ids), 0),
@@ -855,49 +833,12 @@ begin
         from public.contracts c
         where c.client_id = p_id
       ),
-      contract_ids as (
-        select cr.contract_id
-        from contract_rows cr
-      ),
-      contract_weeks as (
-        select cw.id as contract_week_id, cw.timesheet_id, cw.contract_id
-        from public.contract_weeks cw
-        where cw.contract_id in (select ci.contract_id from contract_ids ci)
-      ),
-
-      -- ✅ Real timesheets in scope (distinct), including adjustments:
-      -- - current TSFIN timesheets for this client
-      -- - any timesheets linked via this client's contracts
-      -- - any timesheets referenced by contract_weeks for this client's contracts (defensive)
-      real_timesheet_ids as (
-        select distinct tf.timesheet_id
-        from public.timesheets_financials tf
-        where tf.is_current = true
-          and tf.client_id = p_id
-          and tf.timesheet_id is not null
-        union
-        select distinct ts.timesheet_id
-        from public.timesheets ts
-        join public.contracts c on c.id = ts.contract_id
-        where c.client_id = p_id
-          and ts.timesheet_id is not null
-        union
-        select distinct cw.timesheet_id
-        from contract_weeks cw
-        where cw.timesheet_id is not null
-      ),
-
-      -- ✅ Planned contract_weeks (including adjustments) that do NOT have a timesheet yet
-      planned_contract_week_ids as (
-        select distinct cw.contract_week_id
-        from contract_weeks cw
-        where cw.timesheet_id is null
-      ),
-
+           -- ✅ Timesheets count MUST match the related list source (v_timesheets_summary),
+      -- otherwise contract_weeks can point at revoked/non-current timesheet_ids and overcount.
       timesheets_total as (
-        select
-          (select count(*)::int from real_timesheet_ids) +
-          (select count(*)::int from planned_contract_week_ids) as total
+        select count(*)::int as total
+        from public.v_timesheets_summary v
+        where v.client_id = p_id
       ),
 
       cand_distinct as (
@@ -909,6 +850,7 @@ begin
         from contract_rows cr
         where cr.candidate_id is not null
       ),
+
       contracts_total as (
         select count(*)::int as total
         from contract_rows
@@ -992,47 +934,28 @@ begin
         where cw.contract_id in (select cd.contract_id from contract_ids cd)
       ),
 
-      -- ✅ Real timesheets in scope (distinct), including adjustments:
-      -- - current TSFIN timesheets for umbrella candidates
-      -- - any timesheets linked via those candidates' contracts
-      -- - any timesheets referenced by contract_weeks for those contracts (defensive)
-      real_timesheet_ids as (
-        select distinct tf.timesheet_id
-        from public.timesheets_financials tf
-        where tf.is_current = true
-          and tf.candidate_id in (select ci.candidate_id from cand_ids ci)
-          and tf.timesheet_id is not null
-        union
-        select distinct ts.timesheet_id
-        from public.timesheets ts
-        join public.contracts c on c.id = ts.contract_id
-        where c.candidate_id in (select ci2.candidate_id from cand_ids ci2)
-          and ts.timesheet_id is not null
-        union
-        select distinct cw.timesheet_id
-        from contract_weeks cw
-        where cw.timesheet_id is not null
-      ),
-
-      -- ✅ Planned contract_weeks (including adjustments) that do NOT have a timesheet yet
-      planned_contract_week_ids as (
-        select distinct cw.contract_week_id
-        from contract_weeks cw
-        where cw.timesheet_id is null
-      ),
-
+        -- ✅ Timesheets count MUST match the related list source (v_timesheets_summary),
+      -- otherwise contract_weeks can point at revoked/non-current timesheet_ids and overcount.
       timesheets_total as (
-        select
-          (select count(*)::int from real_timesheet_ids) +
-          (select count(*)::int from planned_contract_week_ids) as total
+        select count(*)::int as total
+        from public.v_timesheets_summary v
+        where v.candidate_id in (select ci.candidate_id from cand_ids ci)
+      ),
+
+      invoice_timesheet_ids as (
+        select distinct v2.timesheet_id
+        from public.v_timesheets_summary v2
+        where v2.candidate_id in (select ci2.candidate_id from cand_ids ci2)
+          and v2.timesheet_id is not null
       ),
 
       inv_ids as (
         select distinct il.invoice_id
         from public.invoice_lines il
-        where il.timesheet_id in (select rti.timesheet_id from real_timesheet_ids rti)
+        where il.timesheet_id in (select iti.timesheet_id from invoice_timesheet_ids iti)
           and il.invoice_id is not null
       ),
+
       invoices_total as (
         select count(*)::int as total
         from inv_ids
@@ -3126,4 +3049,3 @@ for each row
 execute function public.contracts_enforce_overrideclientsettings();
 
 commit;
-
