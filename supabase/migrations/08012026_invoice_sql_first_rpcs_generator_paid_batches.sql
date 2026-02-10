@@ -586,24 +586,23 @@ $$;
 
 
 
+-- CloudTMS
+-- Updated RPC: public.invoice_generate_from_outbox_batch
+-- Fixes:
+--  1) Reuse eligible DRAFT invoices under consolidation even when invoice has no invoice_lines (no timesheets yet)
+--  2) Adjustment timesheets inherit invoice stream (SELF_BILL vs NORMAL) from their parent timesheet
+--  3) Consolidation mode source of truth: payload.meta.invoice_consolidation_mode overrides client_settings
+-- Generated: 2026-02-10
 
-
-create or replace function public.invoice_generate_from_outbox_batch(
-  p_outbox_ids uuid[],
-  p_actor_user_id uuid
-)
-returns table (
-  outbox_id uuid,
-  ok boolean,
-  invoice_ids uuid[],
-  warnings jsonb
-)
-language plpgsql
-security definer
-set search_path = public
-as $$
+CREATE OR REPLACE FUNCTION public.invoice_generate_from_outbox_batch(p_outbox_ids uuid[], p_actor_user_id uuid)
+ RETURNS TABLE(outbox_id uuid, ok boolean, invoice_ids uuid[], warnings jsonb)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
 declare
   v_consol_mode text := 'NONE';
+  v_payload_consol_mode text := null;
   v_outbox_invoice_ids uuid[] := array[]::uuid[];
   v_outbox_warnings jsonb := '[]'::jsonb;
   v_entries_all jsonb := '[]'::jsonb;
@@ -3263,8 +3262,34 @@ limit 1;
 
 
           -- 
-          -- Determine consolidation mode from client_settings (default NONE)
-          v_consol_mode := upper(coalesce(v_cs.invoice_consolidation_mode::text, 'NONE'));
+          -- Determine consolidation mode:
+          --   Prefer payload.meta.invoice_consolidation_mode (stable between enqueue and generate)
+          --   Fallback to client_settings.invoice_consolidation_mode
+          v_payload_consol_mode := null;
+
+          begin
+            if jsonb_typeof(v_payload->'meta') = 'object' then
+              v_payload_consol_mode := nullif(btrim(coalesce(v_payload->'meta'->>'invoice_consolidation_mode','')), '');
+            end if;
+          exception when others then
+            v_payload_consol_mode := null;
+          end;
+
+          if v_payload_consol_mode is null then
+            v_payload_consol_mode := nullif(btrim(coalesce(v_payload->>'invoice_consolidation_mode','')), '');
+          end if;
+
+          v_payload_consol_mode := upper(coalesce(v_payload_consol_mode, ''));
+
+          if v_payload_consol_mode = 'ALL' then
+            v_payload_consol_mode := 'ANY_WEEK';
+          end if;
+
+          if v_payload_consol_mode in ('NONE','BY_WEEK','ANY_WEEK') then
+            v_consol_mode := v_payload_consol_mode;
+          else
+            v_consol_mode := upper(coalesce(v_cs.invoice_consolidation_mode::text, 'NONE'));
+          end if;
 
           -- Preserve original entries for splitting (NONE mode)
           v_entries_all := v_entries;
@@ -3302,6 +3327,21 @@ limit 1;
             insert into pg_temp._inv_groups(stream_mode, week_ending_date, ts_ids, entries)
             select
               case
+                -- ✅ Adjustment timesheets inherit stream from their parent timesheet (NHSP/HR self-bill)
+                when coalesce(ts.is_adjustment, false) = true
+                 and ts.parent_timesheet_id is not null
+                 and ptf.timesheet_id is not null
+                then
+                  case
+                    when upper(coalesce(ptf.basis::text, '')) in (
+                      'NHSP',
+                      'NHSP_ADJUSTMENT',
+                      'HEALTHROSTER_SELF_BILL',
+                      'HEALTHROSTER_ADJUSTMENT'
+                    ) then 'SELF_BILL'
+                    else 'NORMAL'
+                  end
+                -- default: classify by this timesheet's own basis
                 when upper(coalesce(tf.basis::text, '')) in (
                   'NHSP',
                   'NHSP_ADJUSTMENT',
@@ -3323,7 +3363,10 @@ limit 1;
               on tf.timesheet_id = u.tid
              and tf.is_current
             left join public.timesheets ts
-              on ts.timesheet_id = u.tid;
+              on ts.timesheet_id = u.tid
+            left join public.timesheets_financials ptf
+              on ptf.timesheet_id = ts.parent_timesheet_id
+             and ptf.is_current;
 
           elsif v_consol_mode = 'BY_WEEK' then
             -- Mode BY_WEEK: one invoice per week-ending date per stream.
@@ -3347,23 +3390,54 @@ limit 1;
                 from e
               )
             ),
-            e2 as (
-              select
-                e.entry,
-                e.timesheet_id,
-                ts.week_ending_date,
+            adj as (
+              -- ✅ Adjustment timesheets inherit SELF_BILL vs NORMAL stream classification from the parent timesheet
+              select distinct on (t.timesheet_id)
+                t.timesheet_id,
                 case
-                  when e.basis in (
+                  when ptf.timesheet_id is null then null
+                  when upper(coalesce(ptf.basis::text, '')) in (
                     'NHSP',
                     'NHSP_ADJUSTMENT',
                     'HEALTHROSTER_SELF_BILL',
                     'HEALTHROSTER_ADJUSTMENT'
                   ) then 'SELF_BILL'
                   else 'NORMAL'
-                end as stream_mode
+                end as parent_stream_mode
+              from public.timesheets t
+              left join public.timesheets_financials ptf
+                on ptf.timesheet_id = t.parent_timesheet_id
+               and ptf.is_current
+              where t.timesheet_id in (
+                select distinct e.timesheet_id
+                from e
+              )
+                and t.is_adjustment is true
+                and t.parent_timesheet_id is not null
+              order by t.timesheet_id, t.is_current desc, t.updated_at desc nulls last
+            ),
+            e2 as (
+              select
+                e.entry,
+                e.timesheet_id,
+                ts.week_ending_date,
+                coalesce(
+                  adj.parent_stream_mode,
+                  case
+                    when e.basis in (
+                      'NHSP',
+                      'NHSP_ADJUSTMENT',
+                      'HEALTHROSTER_SELF_BILL',
+                      'HEALTHROSTER_ADJUSTMENT'
+                    ) then 'SELF_BILL'
+                    else 'NORMAL'
+                  end
+                ) as stream_mode
               from e
               left join ts
                 on ts.timesheet_id = e.timesheet_id
+              left join adj
+                on adj.timesheet_id = e.timesheet_id
             )
             insert into pg_temp._inv_groups(stream_mode, week_ending_date, ts_ids, entries)
             select
@@ -3386,20 +3460,51 @@ limit 1;
               from jsonb_array_elements(v_entries_all) as x(value)
               where nullif(coalesce(x.value->>'timesheet_id',''), '') is not null
             ),
-            e2 as (
-              select
-                e.entry,
-                e.timesheet_id,
+            adj as (
+              -- ✅ Adjustment timesheets inherit SELF_BILL vs NORMAL stream classification from the parent timesheet
+              select distinct on (t.timesheet_id)
+                t.timesheet_id,
                 case
-                  when e.basis in (
+                  when ptf.timesheet_id is null then null
+                  when upper(coalesce(ptf.basis::text, '')) in (
                     'NHSP',
                     'NHSP_ADJUSTMENT',
                     'HEALTHROSTER_SELF_BILL',
                     'HEALTHROSTER_ADJUSTMENT'
                   ) then 'SELF_BILL'
                   else 'NORMAL'
-                end as stream_mode
+                end as parent_stream_mode
+              from public.timesheets t
+              left join public.timesheets_financials ptf
+                on ptf.timesheet_id = t.parent_timesheet_id
+               and ptf.is_current
+              where t.timesheet_id in (
+                select distinct e.timesheet_id
+                from e
+              )
+                and t.is_adjustment is true
+                and t.parent_timesheet_id is not null
+              order by t.timesheet_id, t.is_current desc, t.updated_at desc nulls last
+            ),
+            e2 as (
+              select
+                e.entry,
+                e.timesheet_id,
+                coalesce(
+                  adj.parent_stream_mode,
+                  case
+                    when e.basis in (
+                      'NHSP',
+                      'NHSP_ADJUSTMENT',
+                      'HEALTHROSTER_SELF_BILL',
+                      'HEALTHROSTER_ADJUSTMENT'
+                    ) then 'SELF_BILL'
+                    else 'NORMAL'
+                  end
+                ) as stream_mode
               from e
+              left join adj
+                on adj.timesheet_id = e.timesheet_id
             )
             insert into pg_temp._inv_groups(stream_mode, week_ending_date, ts_ids, entries)
             select
@@ -5289,7 +5394,8 @@ where id = v_outbox_id;
     );
   end if;
 end;
-$$;
+$function$;
+
 
 
 
