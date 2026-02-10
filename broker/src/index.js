@@ -34243,6 +34243,17 @@ async function handleHrAutoprocessPreview(env, req, importId) {
       validation_groups,
       action_groups,
 
+         return withCORS(env, req, ok({
+      import_id: String(importId),
+      client_id: String(imp.client_id),
+
+      // ✅ NEW: expose classification output at top level for the summary modal
+      rows: Array.isArray(cls?.rows) ? cls.rows : [],
+      summary: cls?.summary || null,
+
+      validation_groups,
+      action_groups,
+
       // ✅ Visible actions: ONLY changed existing shifts + cancellations
       actions,
 
@@ -34268,6 +34279,7 @@ async function handleHrAutoprocessPreview(env, req, importId) {
         hidden_noop_rows: hiddenNoopCount
       }
     }));
+
   } catch (e) {
     if (LOG) {
       console.error('[HR_WEEKLY_PREVIEW]', JSON.stringify({
