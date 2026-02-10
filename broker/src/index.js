@@ -59826,8 +59826,6 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
   return { picked: lease.length, ok, fail, write: wr };
 }
 
-
-
 async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin, options = {}) {
   const pc = payChargeFromContract(contract);
   const pay = pc?.pay || null;
@@ -59918,8 +59916,50 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
   const isReversal = isCorrection && corrKindU.includes('REVERSAL');
   const sign = isReversal ? -1 : 1;
 
+  // ✅ Basis normalisation for correction timesheets:
+  // ensure import corrections follow the parent stream (NHSP/HR) so invoicing consolidates correctly.
+  const boolishLocal = (v) => {
+    if (v === true) return true;
+    if (v === false) return false;
+    if (v == null) return false;
+    const s = String(v).trim().toLowerCase();
+    return (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on' || s === 't');
+  };
+
+  const routeTypeU = String(hr_eff_flags?.route_type || '').trim().toUpperCase();
+  const isNhspRoute =
+    routeTypeU === 'WEEKLY_NHSP' ||
+    routeTypeU === 'WEEKLY_NHSP_ADJUSTMENT' ||
+    boolishLocal(hr_eff_flags?.client_is_nhsp);
+
+  const isHrRoute =
+    routeTypeU === 'WEEKLY_HEALTHROSTER' ||
+    boolishLocal(hr_eff_flags?.client_autoprocess_hr);
+
+  const effective_basis = (() => {
+    const cur = (curFin?.basis || 'CONTRACT_WEEKLY');
+    const curU = String(cur).trim().toUpperCase();
+
+    if (!isCorrection) return cur;
+
+    // If the route is NHSP, corrections must stay in NHSP stream for consolidation.
+    if (isNhspRoute) {
+      if (curU === 'NHSP' || curU === 'NHSP_ADJUSTMENT') return cur;
+      return 'NHSP_ADJUSTMENT';
+    }
+
+    // If the route is HealthRoster weekly, corrections must stay in HR stream for consolidation.
+    if (isHrRoute) {
+      if (curU.startsWith('HEALTHROSTER')) return cur;
+      return 'HEALTHROSTER_ADJUSTMENT';
+    }
+
+    // Default: preserve existing basis (e.g., pure CONTRACT_WEEKLY corrections).
+    return cur;
+  })();
+
   // ✅ POLICY B helper (HR-create/no-timesheet-required only)
-  const basisU = String(curFin?.basis || 'CONTRACT_WEEKLY').toUpperCase();
+  const basisU = String(effective_basis || 'CONTRACT_WEEKLY').toUpperCase();
   const isHrCreateNoTs =
     (basisU === 'HEALTHROSTER_SELF_BILL' || basisU === 'HEALTHROSTER_ADJUSTMENT');
 
@@ -59954,7 +59994,6 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
 
     return { ...seg, ref_num: s };
   });
-
 
   if (!actual.length) {
     // Prefer SQL policy snapshot if provided (keeps weekly aligned with SQL-first design)
@@ -59993,7 +60032,7 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
     const snapshot = {
       timesheet_id: ts.timesheet_id,
       timesheet_version: ts.version || 1,
-      basis: (curFin?.basis || 'CONTRACT_WEEKLY'),
+      basis: (effective_basis || 'CONTRACT_WEEKLY'),
       candidate_id: contract?.candidate_id || null,
       client_id: contract?.client_id || null,
       role: contract?.role || null,
@@ -60138,7 +60177,7 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
     const invoice_locked_invoice_id =
       (p && p.invoice_locked_invoice_id != null) ? p.invoice_locked_invoice_id : undefined;
 
-      const segRefNum = (() => {
+    const segRefNum = (() => {
       const v = seg?.ref_num ?? seg?.ref ?? seg?.reference ?? seg?.refNum ?? null;
       const s = (v == null) ? '' : String(v).trim();
       return s ? s : null;
@@ -60174,7 +60213,6 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
       ...(invoice_target_week_start != null ? { invoice_target_week_start } : {}),
       ...(invoice_locked_invoice_id != null ? { invoice_locked_invoice_id } : {})
     });
-
   }
 
   const hours = {
@@ -60242,7 +60280,7 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
     timesheet_id: ts.timesheet_id,
     timesheet_version: ts.version || 1,
 
-    basis: (curFin?.basis || 'CONTRACT_WEEKLY'),
+    basis: (effective_basis || 'CONTRACT_WEEKLY'),
     candidate_id: contract?.candidate_id || null,
     client_id: contract?.client_id || null,
     role: contract?.role || null,
