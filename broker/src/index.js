@@ -34236,14 +34236,7 @@ async function handleHrAutoprocessPreview(env, req, importId) {
       }));
     }
 
-    return withCORS(env, req, ok({
-      import_id: String(importId),
-      client_id: String(imp.client_id),
-
-      validation_groups,
-      action_groups,
-
-         return withCORS(env, req, ok({
+       return withCORS(env, req, ok({
       import_id: String(importId),
       client_id: String(imp.client_id),
 
