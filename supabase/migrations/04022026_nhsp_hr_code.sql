@@ -362,17 +362,12 @@ end;
 $$;
 
 
-
-create or replace function public.hr_weekly_phase3_apply_adjustment_truth(
-  p_import_id uuid,
-  p_selected_external_row_keys text[],
-  p_actor_user_id uuid
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
+CREATE OR REPLACE FUNCTION public.hr_weekly_phase3_apply_adjustment_truth(p_import_id uuid, p_selected_external_row_keys text[], p_actor_user_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
 declare
   v_now timestamptz := now();
 
@@ -396,6 +391,7 @@ declare
   v_week_ending_date date;
   v_base_timesheet_id uuid := null;
   v_base_week_ending_date date := null;
+  v_effective_submission_mode public.submission_mode_enum := 'MANUAL'::public.submission_mode_enum;
   v_contract_week_ending_weekday_snapshot int := 0;
   v_work_dow int := 0;
   v_we_delta int := 0;
@@ -694,6 +690,7 @@ begin
     v_week_ending_date := null;
     v_base_timesheet_id := null;
     v_base_week_ending_date := null;
+    v_effective_submission_mode := 'MANUAL'::public.submission_mode_enum;
 
     -- 1) Prefer base timesheet week_ending_date when timesheet_id exists (authoritative)
     begin
@@ -703,12 +700,16 @@ begin
     end;
 
     if v_base_timesheet_id is not null then
-      select ts.week_ending_date
-      into v_base_week_ending_date
+      select ts.week_ending_date, ts.submission_mode
+      into v_base_week_ending_date, v_effective_submission_mode
       from public.timesheets ts
       where ts.timesheet_id = v_base_timesheet_id
         and ts.is_current = true
       limit 1;
+
+      if v_effective_submission_mode is null then
+        v_effective_submission_mode := 'MANUAL'::public.submission_mode_enum;
+      end if;
 
       if v_base_week_ending_date is not null then
         v_week_ending_date := v_base_week_ending_date;
@@ -1224,8 +1225,18 @@ begin
         actual_schedule_json = v_schedule,
         qr_payload_json = v_hint,
         candidate_hint_text = v_hint,
+        parent_timesheet_id = v_base_timesheet_id,
+        submission_mode = v_effective_submission_mode,
         updated_at = v_now
       where tup.timesheet_id = v_existing_pos_ts_id;
+
+      -- Keep contract_week snapshot in sync with the effective submission mode
+      update public.contract_weeks cw_sm
+      set submission_mode_snapshot = v_effective_submission_mode,
+          updated_at = v_now
+      where cw_sm.timesheet_id = v_existing_pos_ts_id
+        and cw_sm.contract_id = v_contract_id
+        and cw_sm.week_ending_date = v_week_ending_date;
 
       v_rep_ts_id := v_existing_pos_ts_id;
       v_rep_cw_id := null;
@@ -1397,7 +1408,7 @@ begin
             update public.contract_weeks cw2
             set
               is_adjustment = true,
-              submission_mode_snapshot = 'MANUAL'::public.submission_mode_enum,
+              submission_mode_snapshot = v_effective_submission_mode,
               status = 'SUBMITTED'::public.contract_week_status_enum,
               updated_at = v_now
             where cw2.id = v_existing_cw_id;
@@ -1440,7 +1451,7 @@ begin
                   v_week_ending_date,
                   v_next_additional_seq,
                   true,
-                  'MANUAL'::public.submission_mode_enum,
+                  v_effective_submission_mode,
                   'SUBMITTED'::public.contract_week_status_enum,
                   v_now,
                   v_now,
@@ -1461,7 +1472,7 @@ begin
             is_current = true,
             status = 'RECEIVED'::public.timesheet_status_enum,
             sheet_scope = 'WEEKLY'::public.timesheet_scope_enum,
-            submission_mode = 'MANUAL'::public.submission_mode_enum,
+            submission_mode = v_effective_submission_mode,
             line_type = 'HOURS',
             week_ending_date = v_week_ending_date,
             contract_id = v_contract_id,
@@ -1477,6 +1488,7 @@ begin
             day_references_json = null,
             candidate_hint_text = v_hint,
             is_adjustment = true,
+            parent_timesheet_id = v_base_timesheet_id,
             correction_id = v_correction_id,
             correction_kind = v_kind,
             adjustment_origin = 'IMPORT_CORRECTION',
@@ -1538,7 +1550,7 @@ begin
                 v_week_ending_date,
                 v_next_additional_seq,
                 true,
-                'MANUAL'::public.submission_mode_enum,
+                v_effective_submission_mode,
                 'SUBMITTED'::public.contract_week_status_enum,
                 v_now,
                 v_now
@@ -1617,7 +1629,7 @@ begin
               v_week_ending_date,
               v_contract_id,
               'WEEKLY'::public.timesheet_scope_enum,
-              'MANUAL'::public.submission_mode_enum,
+              v_effective_submission_mode,
               'HOURS',
               null,
               v_schedule,
@@ -1635,7 +1647,7 @@ begin
               v_now,
               v_now,
               true,
-              null,
+              v_base_timesheet_id,
               v_hint,
               v_correction_id,
               v_kind,
@@ -1662,7 +1674,7 @@ begin
               is_current = true,
               status = 'RECEIVED'::public.timesheet_status_enum,
               sheet_scope = 'WEEKLY'::public.timesheet_scope_enum,
-              submission_mode = 'MANUAL'::public.submission_mode_enum,
+              submission_mode = v_effective_submission_mode,
               line_type = 'HOURS',
               week_ending_date = v_week_ending_date,
               contract_id = v_contract_id,
@@ -1678,6 +1690,7 @@ begin
               day_references_json = null,
               candidate_hint_text = v_hint,
               is_adjustment = true,
+              parent_timesheet_id = v_base_timesheet_id,
               correction_id = v_correction_id,
               correction_kind = v_kind,
               adjustment_origin = 'IMPORT_CORRECTION',
@@ -1689,7 +1702,7 @@ begin
           set
             timesheet_id = v_ts_id,
             status = 'SUBMITTED'::public.contract_week_status_enum,
-            submission_mode_snapshot = 'MANUAL'::public.submission_mode_enum,
+            submission_mode_snapshot = v_effective_submission_mode,
             is_adjustment = true,
             updated_at = v_now
           where cw3.id = v_cw_id;
@@ -1943,8 +1956,7 @@ exception when others then
 
   raise;
 end;
-$$;
-
+$function$;
 
 
 
