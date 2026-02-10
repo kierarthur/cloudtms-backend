@@ -391,8 +391,13 @@ declare
   v_week_ending_date date;
   v_base_timesheet_id uuid := null;
   v_base_week_ending_date date := null;
+
+  -- ✅ NEW: inherit policy identity from parent/base timesheet
+  v_effective_sheet_scope public.timesheet_scope_enum := 'WEEKLY'::public.timesheet_scope_enum;
   v_effective_submission_mode public.submission_mode_enum := 'MANUAL'::public.submission_mode_enum;
+
   v_contract_week_ending_weekday_snapshot int := 0;
+
   v_work_dow int := 0;
   v_we_delta int := 0;
 
@@ -690,6 +695,9 @@ begin
     v_week_ending_date := null;
     v_base_timesheet_id := null;
     v_base_week_ending_date := null;
+
+    -- ✅ reset inherited policy identity defaults for this key
+    v_effective_sheet_scope := 'WEEKLY'::public.timesheet_scope_enum;
     v_effective_submission_mode := 'MANUAL'::public.submission_mode_enum;
 
     -- 1) Prefer base timesheet week_ending_date when timesheet_id exists (authoritative)
@@ -699,13 +707,23 @@ begin
       v_base_timesheet_id := null;
     end;
 
-    if v_base_timesheet_id is not null then
-      select ts.week_ending_date, ts.submission_mode
-      into v_base_week_ending_date, v_effective_submission_mode
+     if v_base_timesheet_id is not null then
+      select
+        ts.week_ending_date,
+        ts.sheet_scope,
+        ts.submission_mode
+      into
+        v_base_week_ending_date,
+        v_effective_sheet_scope,
+        v_effective_submission_mode
       from public.timesheets ts
       where ts.timesheet_id = v_base_timesheet_id
         and ts.is_current = true
       limit 1;
+
+      if v_effective_sheet_scope is null then
+        v_effective_sheet_scope := 'WEEKLY'::public.timesheet_scope_enum;
+      end if;
 
       if v_effective_submission_mode is null then
         v_effective_submission_mode := 'MANUAL'::public.submission_mode_enum;
@@ -1220,15 +1238,20 @@ begin
       where tlock.timesheet_id = v_existing_pos_ts_id
       for update;
 
-      update public.timesheets tup
+         update public.timesheets tup
       set
         actual_schedule_json = v_schedule,
         qr_payload_json = v_hint,
         candidate_hint_text = v_hint,
         parent_timesheet_id = v_base_timesheet_id,
+
+        -- ✅ inherit policy identity from base timesheet
+        sheet_scope = v_effective_sheet_scope,
         submission_mode = v_effective_submission_mode,
+
         updated_at = v_now
       where tup.timesheet_id = v_existing_pos_ts_id;
+
 
       -- Keep contract_week snapshot in sync with the effective submission mode
       update public.contract_weeks cw_sm
@@ -1252,9 +1275,28 @@ begin
         'op', 'UPDATED_IN_PLACE'
       ));
     end if;
-
     -- ✅ If latest POS IS invoiced, re-base old values to POS (so NEG reverses POS)
     if v_updated_existing_replacement is false and v_existing_pos_ts_id is not null and v_existing_pos_is_invoiced is true then
+
+      -- ✅ Treat the invoiced POS as the effective parent for policy inheritance
+      v_base_timesheet_id := v_existing_pos_ts_id;
+
+      select
+        coalesce(ts.sheet_scope, 'WEEKLY'::public.timesheet_scope_enum),
+        coalesce(ts.submission_mode, 'MANUAL'::public.submission_mode_enum)
+      into
+        v_effective_sheet_scope,
+        v_effective_submission_mode
+      from public.timesheets ts
+      where ts.timesheet_id = v_base_timesheet_id
+        and ts.is_current = true
+      limit 1;
+
+      if not found then
+        v_effective_sheet_scope := 'WEEKLY'::public.timesheet_scope_enum;
+        v_effective_submission_mode := 'MANUAL'::public.submission_mode_enum;
+      end if;
+
       if v_existing_pos_old_start_str is not null then
         begin
           v_old_start_utc := v_existing_pos_old_start_str::timestamptz;
@@ -1262,6 +1304,7 @@ begin
           null;
         end;
       end if;
+
 
       if v_existing_pos_old_end_str is not null then
         begin
@@ -1467,13 +1510,14 @@ begin
           end if;
 
           -- Update existing correction timesheet to ensure columns match locked contract
-          update public.timesheets t2
+             update public.timesheets t2
           set
             is_current = true,
             status = 'RECEIVED'::public.timesheet_status_enum,
-            sheet_scope = 'WEEKLY'::public.timesheet_scope_enum,
+            sheet_scope = v_effective_sheet_scope,
             submission_mode = v_effective_submission_mode,
             line_type = 'HOURS',
+
             week_ending_date = v_week_ending_date,
             contract_id = v_contract_id,
             occupant_key_norm = lower(coalesce(v_candidate_tms_ref, v_candidate_display_name, v_candidate_id::text)),
@@ -1628,9 +1672,10 @@ begin
               v_shift_label_norm,
               v_week_ending_date,
               v_contract_id,
-              'WEEKLY'::public.timesheet_scope_enum,
+              v_effective_sheet_scope,
               v_effective_submission_mode,
               'HOURS',
+
               null,
               v_schedule,
               '{}'::jsonb,
@@ -1669,13 +1714,14 @@ begin
               raise exception 'hr_weekly_phase3_apply_adjustment_truth: unique_violation inserting correction timesheet but failed to find existing row (correction_id=% kind=%).', v_correction_id, v_kind;
             end if;
 
-            update public.timesheets t4
+                     update public.timesheets t4
             set
               is_current = true,
               status = 'RECEIVED'::public.timesheet_status_enum,
-              sheet_scope = 'WEEKLY'::public.timesheet_scope_enum,
+              sheet_scope = v_effective_sheet_scope,
               submission_mode = v_effective_submission_mode,
               line_type = 'HOURS',
+
               week_ending_date = v_week_ending_date,
               contract_id = v_contract_id,
               occupant_key_norm = lower(coalesce(v_candidate_tms_ref, v_candidate_display_name, v_candidate_id::text)),
@@ -1957,6 +2003,7 @@ exception when others then
   raise;
 end;
 $function$;
+
 
 
 
@@ -5121,6 +5168,9 @@ $$;
 
 
 
+
+
+
 create or replace function public.nhsp_weekly_phase3_apply_adjustment_truth(
   p_import_id uuid,
   p_selected_external_row_keys text[],
@@ -5154,6 +5204,11 @@ declare
   v_week_ending_date date;
   v_base_timesheet_id uuid := null;
   v_base_week_ending_date date := null;
+
+  -- ✅ NEW: inherit policy identity from the parent/base timesheet (so adjustments follow parent stream)
+  v_parent_sheet_scope public.timesheet_scope_enum := 'WEEKLY'::public.timesheet_scope_enum;
+  v_parent_submission_mode public.submission_mode_enum := 'MANUAL'::public.submission_mode_enum;
+
   v_contract_week_ending_weekday_snapshot int := 0;
   v_work_dow int := 0;
   v_we_delta int := 0;
@@ -5413,16 +5468,25 @@ begin
     v_base_timesheet_id := null;
     v_base_week_ending_date := null;
 
+    -- ✅ reset inherited policy identity defaults for this key (avoid leaking previous key’s parent settings)
+    v_parent_sheet_scope := 'WEEKLY'::public.timesheet_scope_enum;
+    v_parent_submission_mode := 'MANUAL'::public.submission_mode_enum;
+
     -- 1) Prefer base timesheet week_ending_date when timesheet_id exists (authoritative)
     begin
       v_base_timesheet_id := nullif(btrim(coalesce(v_row->>'timesheet_id','')), '')::uuid;
     exception when others then
       v_base_timesheet_id := null;
     end;
-
     if v_base_timesheet_id is not null then
-      select ts.week_ending_date
-      into v_base_week_ending_date
+      select
+        ts.week_ending_date,
+        ts.sheet_scope,
+        ts.submission_mode
+      into
+        v_base_week_ending_date,
+        v_parent_sheet_scope,
+        v_parent_submission_mode
       from public.timesheets ts
       where ts.timesheet_id = v_base_timesheet_id
         and ts.is_current = true
@@ -5883,13 +5947,32 @@ begin
       end if;
     end if;
 
-    -- If the latest POS is invoiced, the new series must reverse POS (not the original base).
+        -- If the latest POS is invoiced, the new series must reverse POS (not the original base).
     if v_existing_pos_ts_id is not null and v_existing_pos_is_invoiced is true then
       v_existing_pos_seg := null;
       v_existing_pos_old_start_str := null;
       v_existing_pos_old_end_str := null;
       v_existing_pos_old_break_str := null;
       v_existing_pos_import_id := null;
+
+      -- ✅ Treat the invoiced POS as the effective parent for policy inheritance
+      v_base_timesheet_id := v_existing_pos_ts_id;
+
+      select
+        coalesce(ts.sheet_scope, 'WEEKLY'::public.timesheet_scope_enum),
+        coalesce(ts.submission_mode, 'MANUAL'::public.submission_mode_enum)
+      into
+        v_parent_sheet_scope,
+        v_parent_submission_mode
+      from public.timesheets ts
+      where ts.timesheet_id = v_base_timesheet_id
+        and ts.is_current = true
+      limit 1;
+
+      if not found then
+        v_parent_sheet_scope := 'WEEKLY'::public.timesheet_scope_enum;
+        v_parent_submission_mode := 'MANUAL'::public.submission_mode_enum;
+      end if;
 
       if v_existing_pos_schedule is not null and jsonb_typeof(v_existing_pos_schedule) = 'array' then
         v_existing_pos_seg := v_existing_pos_schedule->0;
@@ -5899,6 +5982,7 @@ begin
         v_existing_pos_old_start_str := nullif(btrim(coalesce(v_existing_pos_seg->>'start_utc','')), '');
         v_existing_pos_old_end_str   := nullif(btrim(coalesce(v_existing_pos_seg->>'end_utc','')), '');
         v_existing_pos_old_break_str := nullif(btrim(coalesce(v_existing_pos_seg->>'break_mins','')), '');
+
 
         begin
           if (v_existing_pos_seg ? 'import_id')
@@ -6085,6 +6169,12 @@ begin
         actual_schedule_json = v_schedule,
         qr_payload_json = v_hint,
         candidate_hint_text = v_hint,
+
+        -- ✅ inherit policy identity from base timesheet
+        sheet_scope = v_parent_sheet_scope,
+        submission_mode = v_parent_submission_mode,
+        parent_timesheet_id = v_base_timesheet_id,
+
         updated_at = v_now
       where tup.timesheet_id = v_existing_pos_ts_id;
 
@@ -6213,10 +6303,16 @@ begin
               where cw2.id = v_existing_cw_id;
             end if;
 
-            update public.timesheets t2
+             update public.timesheets t2
             set
               actual_schedule_json = v_schedule,
               qr_payload_json = v_hint,
+
+              -- ✅ inherit policy identity from base timesheet
+              sheet_scope = v_parent_sheet_scope,
+              submission_mode = v_parent_submission_mode,
+              parent_timesheet_id = v_base_timesheet_id,
+
               updated_at = v_now
             where t2.timesheet_id = v_existing_ts_id;
 
@@ -6268,11 +6364,16 @@ begin
             v_now
           )
           returning id into v_existing_cw_id;
-
           update public.timesheets t2b
           set
             actual_schedule_json = v_schedule,
             qr_payload_json = v_hint,
+
+            -- ✅ inherit policy identity from base timesheet
+            sheet_scope = v_parent_sheet_scope,
+            submission_mode = v_parent_submission_mode,
+            parent_timesheet_id = v_base_timesheet_id,
+
             updated_at = v_now
           where t2b.timesheet_id = v_existing_ts_id;
 
@@ -6307,7 +6408,7 @@ begin
             and cw4.is_adjustment is true;
 
           begin
-            insert into public.timesheets(
+               insert into public.timesheets(
               booking_id,
               version,
               is_current,
@@ -6355,8 +6456,11 @@ begin
               v_shift_label_norm,
               v_week_ending_date,
               v_contract_id,
-              'WEEKLY'::public.timesheet_scope_enum,
-              'MANUAL'::public.submission_mode_enum,
+
+              -- ✅ inherit policy identity from base timesheet
+              v_parent_sheet_scope,
+              v_parent_submission_mode,
+
               'HOURS'::public.timesheet_line_type_enum,
               null,
               v_schedule,
@@ -6373,13 +6477,17 @@ begin
               v_now,
               v_now,
               true,
-              null,
+
+              -- ✅ link to parent/base timesheet (may be null if not provided)
+              v_base_timesheet_id,
+
               v_hint,
               v_correction_id,
               v_kind,
               'IMPORT_CORRECTION'
             )
             returning timesheet_id into v_ts_id;
+
 
             if v_kind = 'CHANGED_HOURS_REVERSAL' then
               v_rev_ts_id := v_ts_id;
