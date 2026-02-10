@@ -587,6 +587,7 @@ $$;
 
 
 
+
 create or replace function public.invoice_generate_from_outbox_batch(
   p_outbox_ids uuid[],
   p_actor_user_id uuid
@@ -2600,6 +2601,7 @@ h_bh numeric;
           v_dbg_groups_reason text := null;
           v_dbg_groups_detail jsonb := '[]'::jsonb;
           v_dbg_grp_i int := 0;
+          v_dbg_reused_invoice_id uuid := null;
 
           -- Option A partial-failure tracking (BY_WEEK + consolidation NONE)
           v_failed_ts_ids uuid[] := array[]::uuid[];
@@ -3271,6 +3273,8 @@ limit 1;
           -- NONE  => one invoice per timesheet_id in this outbox job
           -- BY_WEEK/ANY_WEEK => one invoice for the whole outbox job
           create temporary table if not exists pg_temp._inv_groups(
+            stream_mode text not null,
+            week_ending_date date,
             ts_ids uuid[],
             entries jsonb
           ) on commit drop;
@@ -3292,19 +3296,120 @@ limit 1;
           end if;
 
           if v_consol_mode = 'NONE' then
-            insert into pg_temp._inv_groups(ts_ids, entries)
+            -- Mode NONE: one invoice per timesheet (baseline), still split by stream invariants.
+            truncate table pg_temp._inv_groups;
+
+            insert into pg_temp._inv_groups(stream_mode, week_ending_date, ts_ids, entries)
             select
-              array[tsid_item]::uuid[] as ts_ids,
+              case
+                when upper(coalesce(tf.basis::text, '')) in (
+                  'NHSP',
+                  'NHSP_ADJUSTMENT',
+                  'HEALTHROSTER_SELF_BILL',
+                  'HEALTHROSTER_ADJUSTMENT'
+                ) then 'SELF_BILL'
+                else 'NORMAL'
+              end as stream_mode,
+              ts.week_ending_date::date as week_ending_date,
+              array[u.tid]::uuid[] as ts_ids,
               coalesce((
-                select jsonb_agg(e)
-                from jsonb_array_elements(v_entries_all) e
-                where nullif(coalesce(e->>'timesheet_id',''), '') is not null
-                  and (e->>'timesheet_id')::uuid = tsid_item
+                select jsonb_agg(e.value order by (e.value->>'entry_ord')::int)
+                from jsonb_array_elements(v_entries_all) as e(value)
+                where nullif(coalesce(e.value->>'timesheet_id',''), '') is not null
+                  and (e.value->>'timesheet_id')::uuid = u.tid
               ), '[]'::jsonb) as entries
-            from unnest(v_ts_ids_to_use) tsid_item;
+            from unnest(v_ts_ids_to_use) as u(tid)
+            left join public.timesheets_financials tf
+              on tf.timesheet_id = u.tid
+             and tf.is_current
+            left join public.timesheets ts
+              on ts.timesheet_id = u.tid;
+
+          elsif v_consol_mode = 'BY_WEEK' then
+            -- Mode BY_WEEK: one invoice per week-ending date per stream.
+            truncate table pg_temp._inv_groups;
+
+            with e as (
+              select
+                (x.value->>'timesheet_id')::uuid as timesheet_id,
+                upper(coalesce(x.value->>'basis','')) as basis,
+                x.value as entry
+              from jsonb_array_elements(v_entries_all) as x(value)
+              where nullif(coalesce(x.value->>'timesheet_id',''), '') is not null
+            ),
+            ts as (
+              select
+                t.timesheet_id,
+                t.week_ending_date::date as week_ending_date
+              from public.timesheets t
+              where t.timesheet_id in (
+                select distinct e.timesheet_id
+                from e
+              )
+            ),
+            e2 as (
+              select
+                e.entry,
+                e.timesheet_id,
+                ts.week_ending_date,
+                case
+                  when e.basis in (
+                    'NHSP',
+                    'NHSP_ADJUSTMENT',
+                    'HEALTHROSTER_SELF_BILL',
+                    'HEALTHROSTER_ADJUSTMENT'
+                  ) then 'SELF_BILL'
+                  else 'NORMAL'
+                end as stream_mode
+              from e
+              left join ts
+                on ts.timesheet_id = e.timesheet_id
+            )
+            insert into pg_temp._inv_groups(stream_mode, week_ending_date, ts_ids, entries)
+            select
+              e2.stream_mode,
+              e2.week_ending_date,
+              array_agg(distinct e2.timesheet_id) as ts_ids,
+              jsonb_agg(e2.entry order by (e2.entry->>'entry_ord')::int) as entries
+            from e2
+            group by e2.stream_mode, e2.week_ending_date;
+
           else
-            insert into pg_temp._inv_groups(ts_ids, entries)
-            values (v_ts_ids_to_use, v_entries_all);
+            -- Mode ANY_WEEK: one invoice across all week-ending dates per stream.
+            truncate table pg_temp._inv_groups;
+
+            with e as (
+              select
+                (x.value->>'timesheet_id')::uuid as timesheet_id,
+                upper(coalesce(x.value->>'basis','')) as basis,
+                x.value as entry
+              from jsonb_array_elements(v_entries_all) as x(value)
+              where nullif(coalesce(x.value->>'timesheet_id',''), '') is not null
+            ),
+            e2 as (
+              select
+                e.entry,
+                e.timesheet_id,
+                case
+                  when e.basis in (
+                    'NHSP',
+                    'NHSP_ADJUSTMENT',
+                    'HEALTHROSTER_SELF_BILL',
+                    'HEALTHROSTER_ADJUSTMENT'
+                  ) then 'SELF_BILL'
+                  else 'NORMAL'
+                end as stream_mode
+              from e
+            )
+            insert into pg_temp._inv_groups(stream_mode, week_ending_date, ts_ids, entries)
+            select
+              e2.stream_mode,
+              null::date as week_ending_date,
+              array_agg(distinct e2.timesheet_id) as ts_ids,
+              jsonb_agg(e2.entry order by (e2.entry->>'entry_ord')::int) as entries
+            from e2
+            group by e2.stream_mode;
+
           end if;
 
           if v_invoice_debug then
@@ -3356,14 +3461,8 @@ limit 1;
             v_entries := coalesce(grp.entries, '[]'::jsonb);
             v_entry_count := coalesce(jsonb_array_length(v_entries), 0);
 
-                     -- recompute allSelfBill check for this group
-            select bool_and(
-              upper(coalesce(e->>'basis','')) in (
-                'NHSP','NHSP_ADJUSTMENT','HEALTHROSTER_SELF_BILL','HEALTHROSTER_ADJUSTMENT'
-              )
-            )
-            into v_all_selfbill
-            from jsonb_array_elements(v_entries) e;
+                     -- Stream invariant: invoice_mode (SELF_BILL vs NORMAL)
+            v_all_selfbill := (grp.stream_mode = 'SELF_BILL');
 
             -- NHSP detection (NHSP invoices must NOT require timesheet PDFs)
             select exists(
@@ -3379,90 +3478,134 @@ limit 1;
             -- ensure header meta records consolidation mode
 
                 -- Obtain invoice (reuse or create)
-                -- Consolidation mode rules:
-                --   NONE    => always create a new invoice (one per timesheet group)
-                --   BY_WEEK => reuse an existing DRAFT/ON_HOLD invoice for this client+week, else create
-                --   ANY_WEEK=> reuse an existing DRAFT/ON_HOLD invoice for this client (week ignored), else create
-                --
-                -- NOTE: We never reuse ISSUED invoices. If an ISSUED invoice exists in ANY_WEEK mode, we append a warning
-                -- and create a fresh DRAFT invoice.
+                v_created := false;
 
-                if v_consol_mode = 'ANY_WEEK' then
-                  declare v_issued_id uuid;
-                  begin
-                    select i.id
-                    into v_issued_id
+                -- If ANY_WEEK, warn if there is already an ISSUED invoice in this stream (non-reusable).
+                if v_consol_mode = 'ANY_WEEK' and (not v_all_selfbill) then
+                  if exists (
+                    select 1
                     from public.invoices i
                     where i.client_id = v_client_id
                       and i.status = 'ISSUED'::public.invoice_status_enum
                       and (i.header_snapshot_json->'meta'->>'source') = 'TSFIN_BY_WEEK'
-                    order by i.issued_at_utc desc nulls last
-                    limit 1;
-
-                    if found then
-                      v_outbox_warnings := v_outbox_warnings || jsonb_build_array(
-                        jsonb_build_object(
-                          'code','ISSUED_INVOICE_EXISTS_NEW_DRAFT',
-                          'message','Existing issued consolidated invoice found; a new draft invoice will be created for this batch.',
-                          'issued_invoice_id', v_issued_id::text
-                        )
-                      );
-                    end if;
-                  end;
+                      and coalesce(i.header_snapshot_json->'meta'->>'self_bill','false') <> 'true'
+                  ) then
+                    v_outbox_warnings := v_outbox_warnings || jsonb_build_array(
+                      jsonb_build_object(
+                        'code','ISSUED_INVOICE_EXISTS_NEW_DRAFT',
+                        'message','Client has issued invoice(s) while invoice_consolidation_mode=ANY_WEEK; issued invoices are not reusable and a DRAFT invoice will be reused/created instead.'
+                      )
+                    );
+                  end if;
                 end if;
 
-                if v_consol_mode <> 'NONE' then
-                  -- Try reuse for NORMAL (TSFIN_BY_WEEK)
-                  if not v_all_selfbill then
+                -- Reuse policy:
+                --   - Status must be DRAFT (ON_HOLD is NOT eligible for reuse).
+                --   - Streams never mix: SELF_BILL vs NORMAL are hard-split.
+                --   - BY_WEEK requires the candidate invoice contents to contain only this same week_ending_date.
+                if v_consol_mode <> 'NONE' and (not v_all_selfbill) then
+                  -- NORMAL stream reuse (TSFIN_BY_WEEK only)
+                  if v_consol_mode = 'BY_WEEK' then
                     select *
                     into v_invoice
                     from public.invoices i
                     where i.client_id = v_client_id
-                      and i.status in (
-                        'DRAFT'::public.invoice_status_enum,
-                        'ON_HOLD'::public.invoice_status_enum
-                      )
+                      and i.status = 'DRAFT'::public.invoice_status_enum
                       and (i.header_snapshot_json->'meta'->>'source') = 'TSFIN_BY_WEEK'
-                      and (
-                        (v_consol_mode = 'BY_WEEK' and (i.header_snapshot_json->'meta'->>'invoice_week_start') = v_week_start::text)
-                        or (v_consol_mode = 'ANY_WEEK')
+                      and coalesce(i.header_snapshot_json->'meta'->>'self_bill','false') <> 'true'
+                      and grp.week_ending_date is not null
+                      and not exists (
+                        select 1
+                        from public.invoice_lines il
+                        left join public.timesheets ts
+                          on ts.timesheet_id = il.timesheet_id
+                        where il.invoice_id = i.id
+                          and il.timesheet_id is not null
+                          and (
+                            ts.timesheet_id is null
+                            or ts.week_ending_date is null
+                            or ts.week_ending_date::date <> grp.week_ending_date
+                          )
                       )
                     order by i.created_at desc nulls last
                     limit 1;
+                  else
+                    -- ANY_WEEK: allow mixed week-ending dates, reuse any DRAFT invoice in this stream
+                    select *
+                    into v_invoice
+                    from public.invoices i
+                    where i.client_id = v_client_id
+                      and i.status = 'DRAFT'::public.invoice_status_enum
+                      and (i.header_snapshot_json->'meta'->>'source') = 'TSFIN_BY_WEEK'
+                      and coalesce(i.header_snapshot_json->'meta'->>'self_bill','false') <> 'true'
+                    order by i.created_at desc nulls last
+                    limit 1;
+                  end if;
 
-                    if found then
-                      v_created := false;
-                      v_invoice_id := v_invoice.id;
-                      v_outbox_invoice_ids := array_append(v_outbox_invoice_ids, v_invoice_id);
+                  if found then
+                    v_created := false;
+                    v_invoice_id := v_invoice.id;
+                    v_outbox_invoice_ids := array_append(v_outbox_invoice_ids, v_invoice_id);
+                    if v_invoice_debug then
+                      v_dbg_reused_invoice_id := v_invoice_id;
                     end if;
                   end if;
                 end if;
 
-                -- Self-bill and/or create path continues below
-
                 if v_all_selfbill then
-            select *
-            into v_invoice
-            from public.invoices i
-            where i.client_id = v_client_id
-              and i.status in (
-                'DRAFT'::public.invoice_status_enum,
-                'ON_HOLD'::public.invoice_status_enum
-              )
-              and ((i.header_snapshot_json->'meta'->>'source') = 'TSFIN_SEGMENTS' or (i.header_snapshot_json->'meta'->>'source') = 'TSFIN_BY_WEEK')
-              and (
-              (v_consol_mode = 'BY_WEEK' and (i.header_snapshot_json->'meta'->>'invoice_week_start') = v_week_start::text)
-              or (v_consol_mode = 'ANY_WEEK')
-            )
-            limit 1;
+                  -- SELF_BILL stream reuse (DRAFT only)
+                  if v_consol_mode <> 'NONE' then
+                    if v_consol_mode = 'BY_WEEK' then
+                      select *
+                      into v_invoice
+                      from public.invoices i
+                      where i.client_id = v_client_id
+                        and i.status = 'DRAFT'::public.invoice_status_enum
+                        and (
+                          (i.header_snapshot_json->'meta'->>'self_bill') = 'true'
+                          or (i.header_snapshot_json->'meta'->>'source') = 'TSFIN_SEGMENTS'
+                        )
+                        and grp.week_ending_date is not null
+                        and not exists (
+                          select 1
+                          from public.invoice_lines il
+                          left join public.timesheets ts
+                            on ts.timesheet_id = il.timesheet_id
+                          where il.invoice_id = i.id
+                            and il.timesheet_id is not null
+                            and (
+                              ts.timesheet_id is null
+                              or ts.week_ending_date is null
+                              or ts.week_ending_date::date <> grp.week_ending_date
+                            )
+                        )
+                      order by i.created_at desc nulls last
+                      limit 1;
+                    else
+                      -- ANY_WEEK: allow mixed week-ending dates, reuse any DRAFT invoice in this stream
+                      select *
+                      into v_invoice
+                      from public.invoices i
+                      where i.client_id = v_client_id
+                        and i.status = 'DRAFT'::public.invoice_status_enum
+                        and (
+                          (i.header_snapshot_json->'meta'->>'self_bill') = 'true'
+                          or (i.header_snapshot_json->'meta'->>'source') = 'TSFIN_SEGMENTS'
+                        )
+                      order by i.created_at desc nulls last
+                      limit 1;
+                    end if;
+                  end if;
 
-
-            if found then
-              v_created := false;
-              v_invoice_id := v_invoice.id;
-              v_outbox_invoice_ids := array_append(v_outbox_invoice_ids, v_invoice_id);
-else
-              -- Create self-bill invoice header exactly like findOrCreateSelfBillInvoice
+                  if found then
+                    v_created := false;
+                    v_invoice_id := v_invoice.id;
+                    v_outbox_invoice_ids := array_append(v_outbox_invoice_ids, v_invoice_id);
+                    if v_invoice_debug then
+                      v_dbg_reused_invoice_id := v_invoice_id;
+                    end if;
+                  else
+                  -- Create self-bill invoice header exactly like findOrCreateSelfBillInvoice
                 declare
                 sb_requires_hr boolean := false;
                 sb_hr_attach boolean := true;
@@ -5147,8 +5290,6 @@ where id = v_outbox_id;
   end if;
 end;
 $$;
-
-
 
 
 
