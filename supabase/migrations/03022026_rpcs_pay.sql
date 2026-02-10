@@ -1795,14 +1795,13 @@ begin
 end;
 $$;
 
-create or replace function public.hr_weekly_validation_preview(
-  p_import_id uuid
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
+
+CREATE OR REPLACE FUNCTION public.hr_weekly_validation_preview(p_import_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
 declare
   v_import record;
   v_client_id uuid;
@@ -2523,30 +2522,26 @@ begin
         order by ws.week_ending_date asc, ws.candidate_name nulls last, ws.timesheet_id::text
       ),
       '[]'::jsonb
-    )
-  into v_rows
+    ),
+    (select count(*)::int
+     from (
+       select 1
+       from hr_with_we h
+       where h.candidate_id is null
+       limit 1000000
+     ) x),
+    (select count(*)::int
+     from (
+       select 1
+       from ts_matches tm
+       where tm.timesheet_id is null
+       limit 1000000
+     ) y)
+  into v_rows, v_unmapped_candidates, v_unmatched_timesheets
   from with_sent ws
   left join public.timesheets tts
     on tts.timesheet_id = ws.timesheet_id
    and tts.is_current = true;
-
-  select count(*)::int
-  into v_unmapped_candidates
-  from (
-    select 1
-    from hr_with_we h
-    where h.candidate_id is null
-    limit 1000000
-  ) x;
-
-  select count(*)::int
-  into v_unmatched_timesheets
-  from (
-    select 1
-    from ts_matches tm
-    where tm.timesheet_id is null
-    limit 1000000
-  ) y;
 
   return jsonb_build_object(
     'import_id', p_import_id::text,
@@ -2558,5 +2553,8 @@ begin
     'rows', v_rows
   );
 end;
-$$;
+$function$;
+
+
+
 
