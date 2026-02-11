@@ -22437,8 +22437,6 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
   };
 }
 
-
-
 async function parseHealthRosterWorkbookIntoHrRows(
   env,
   { import_id, file_key, client_id, tz = 'Europe/London' }
@@ -22632,6 +22630,53 @@ async function parseHealthRosterWorkbookIntoHrRows(
     const HH = pad2(Number(m[1]));
     const MM = pad2(Number(m[2]));
     return `${HH}:${MM}`;
+  }
+
+  // Break parsing:
+  // - HealthRoster weekly exports typically provide break mins as an integer (e.g. 30, 0)
+  // - Some exports may provide an Excel time fraction (e.g. 0.0208333 = 30 mins)
+  // - Some may provide HH:MM
+  function excelBreakToMinutes(v) {
+    if (v === '' || v == null) return null;
+
+    if (typeof v === 'number') {
+      const n = v;
+      if (!Number.isFinite(n)) return null;
+
+      // If it's a small fraction, treat as fraction-of-day → minutes
+      // (e.g. 0.0208333 ≈ 30 mins)
+      if (n > 0 && n < 1) {
+        const mins = Math.round(n * 24 * 60);
+        return Number.isFinite(mins) ? Math.max(0, mins) : null;
+      }
+
+      // Otherwise assume it's already minutes (common HR weekly export)
+      return Math.max(0, Math.round(n));
+    }
+
+    const s = String(v).trim();
+    if (!s) return null;
+
+    // HH:MM
+    const m = s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if (m) {
+      const hh = Number(m[1]);
+      const mm = Number(m[2]);
+      if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+      return Math.max(0, hh * 60 + mm);
+    }
+
+    // Numeric string minutes
+    const n = Number(s);
+    if (Number.isFinite(n)) {
+      if (n > 0 && n < 1) {
+        const mins = Math.round(n * 24 * 60);
+        return Number.isFinite(mins) ? Math.max(0, mins) : null;
+      }
+      return Math.max(0, Math.round(n));
+    }
+
+    return null;
   }
 
   function localToUtcIso(ymd, hhmm, tzName, addDays = 0) {
@@ -22911,7 +22956,14 @@ async function parseHealthRosterWorkbookIntoHrRows(
 
     const startColIdx     = findCol(10, h => h.includes('start'));
     const endColIdx       = findCol(11, h => h.includes('end') || h.includes('finish'));
-    const breakColIdx     = findCol(12, h => h.includes('break'));
+
+    // ✅ Break handling:
+    //   - Booked break is usually the "Break" column
+    //   - Actual break is the "Actual Break" column
+    //   - Canonical break_mins must use Actual Break when present, fallback to Break
+    const bookedBreakColIdx = findCol(9,  h => h === 'break' || (h.includes('break') && !h.includes('actual')));
+    const actualBreakColIdx = findCol(12, h => h.includes('actual') && h.includes('break'));
+
     const hoursColIdx     = findCol(13, h => h.includes('hours') && h.includes('actual'));
     const finalisedColIdx = findCol(15, h => h.includes('finalis') || h.includes('finaliz'));
 
@@ -22925,7 +22977,8 @@ async function parseHealthRosterWorkbookIntoHrRows(
         gradeColIdx,
         startColIdx,
         endColIdx,
-        breakColIdx,
+        bookedBreakColIdx,
+        actualBreakColIdx,
         hoursColIdx,
         finalisedColIdx
       }));
@@ -22945,7 +22998,10 @@ async function parseHealthRosterWorkbookIntoHrRows(
 
       const rawStart     = row[startColIdx];
       const rawEnd       = row[endColIdx];
-      const rawBreak     = row[breakColIdx];
+
+      const rawBookedBreak = bookedBreakColIdx >= 0 ? row[bookedBreakColIdx] : null;
+      const rawActualBreak = actualBreakColIdx >= 0 ? row[actualBreakColIdx] : null;
+
       const rawHours     = hoursColIdx >= 0 ? row[hoursColIdx] : null;
       const rawFinalised = finalisedColIdx >= 0 ? row[finalisedColIdx] : null;
 
@@ -22959,7 +23015,14 @@ async function parseHealthRosterWorkbookIntoHrRows(
 
       const startHhmm   = excelTimeToHhmm(rawStart);
       const endHhmm     = excelTimeToHhmm(rawEnd);
-      const breakMins   = Number(rawBreak || 0) || 0;
+
+      // ✅ Prefer Actual Break when present; fallback to booked Break
+      const bookedBreakMins = excelBreakToMinutes(rawBookedBreak);
+      const actualBreakMins = excelBreakToMinutes(rawActualBreak);
+      const breakMins = (actualBreakMins != null)
+        ? actualBreakMins
+        : (bookedBreakMins != null ? bookedBreakMins : 0);
+
       const finalised   = normalizeStr(rawFinalised);
 
       if (!staffName || !workDateYmd || !startHhmm || !endHhmm) {
@@ -23007,7 +23070,14 @@ async function parseHealthRosterWorkbookIntoHrRows(
         grade_raw: gradeRaw,
         start_local: startHhmm,
         end_local: endHhmm,
+
+        // ✅ Canonical break: actual break when present, else booked break
         break_mins: breakMins,
+
+        // ✅ Preserve both values for audit/debug (helps future diffing and troubleshooting)
+        booked_break_mins: (bookedBreakMins != null ? bookedBreakMins : null),
+        actual_break_mins: (actualBreakMins != null ? actualBreakMins : null),
+
         start_utc: startUtcIso,
         end_utc: endUtcIso,
         hours_worked: hoursWorked,
