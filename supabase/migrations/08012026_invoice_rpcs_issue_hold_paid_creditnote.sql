@@ -653,6 +653,8 @@ $$;
 -- ============================================================
 
 
+
+
 create or replace function public.invoice_outbox_enqueue_by_week(
   p_client_id uuid,
   p_invoice_week_start date,
@@ -720,9 +722,11 @@ begin
   --   - allow_early applies to SEGMENTS + NON-SEGMENTS week-ending gate
   --   - allow_early does NOT override delayed segments
   --   - delayed segments eligible only once delay date reached (target week start <= today)
+  --   - SEGMENTS-empty (expense-only) is invoiceable when ANY expense/mileage/additional-charge evidence exists,
+  --     even if total_charge_ex_vat is accidentally 0 (defensive fallback).
   -- ------------------------------------------------------------
   select exists (
-    -- NON-SEGMENTS (or SEGMENTS without per-segment delays): invoice week is natural week
+    -- NON-SEGMENTS (or SEGMENTS-empty treated as NON-SEGMENTS): invoice week is natural week
     select 1
     from public.timesheets_financials tf
     join public.timesheets ts
@@ -742,7 +746,22 @@ begin
           coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
           and jsonb_typeof(tf.invoice_breakdown_json->'segments') = 'array'
           and jsonb_array_length(tf.invoice_breakdown_json->'segments') = 0
-          and coalesce(tf.total_charge_ex_vat,0)::numeric <> 0
+          and (
+               coalesce(tf.total_charge_ex_vat,0)::numeric <> 0
+            or coalesce(tf.expenses_charge_ex_vat,0)::numeric <> 0
+            or coalesce(tf.travel_charge_ex_vat,0)::numeric <> 0
+            or coalesce(tf.accommodation_charge_ex_vat,0)::numeric <> 0
+            or coalesce(tf.other_charge_ex_vat,0)::numeric <> 0
+            or coalesce(tf.mileage_charge_ex_vat,0)::numeric <> 0
+            or (
+              case
+                when nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '') is null then 0::numeric
+                when nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+                  then (nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '')::numeric)
+                else 0::numeric
+              end
+            ) <> 0
+          )
         )
       )
       and (ts.week_ending_date::date - 6) = p_invoice_week_start
@@ -803,7 +822,7 @@ begin
   -- DEBUG: capture due breakdown (no effect unless enabled)
   if v_invoice_debug then
     begin
-      -- NON-SEGMENTS (or segments mode with empty segments array but non-zero total)
+      -- NON-SEGMENTS (or segments mode with empty segments array but invoiceable via totals/expenses/mileage/additional)
       select
         count(*)::int,
         coalesce(jsonb_agg(s) filter (where rn <= 25), '[]'::jsonb)
@@ -818,6 +837,17 @@ begin
           pc.precheck_status as precheck_status,
           coalesce(tf.invoice_breakdown_json->>'mode','') as invoice_mode,
           coalesce(tf.total_charge_ex_vat,0)::numeric as total_charge_ex_vat,
+          coalesce(tf.expenses_charge_ex_vat,0)::numeric as expenses_charge_ex_vat,
+          coalesce(tf.travel_charge_ex_vat,0)::numeric as travel_charge_ex_vat,
+          coalesce(tf.accommodation_charge_ex_vat,0)::numeric as accommodation_charge_ex_vat,
+          coalesce(tf.other_charge_ex_vat,0)::numeric as other_charge_ex_vat,
+          coalesce(tf.mileage_charge_ex_vat,0)::numeric as mileage_charge_ex_vat,
+          case
+            when nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '') is null then 0::numeric
+            when nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+              then (nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '')::numeric)
+            else 0::numeric
+          end as additional_charge_ex_vat,
           row_number() over (order by ts.updated_at desc nulls last) as rn
         from public.timesheets_financials tf
         join public.timesheets ts
@@ -839,7 +869,22 @@ begin
               coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
               and jsonb_typeof(tf.invoice_breakdown_json->'segments') = 'array'
               and jsonb_array_length(tf.invoice_breakdown_json->'segments') = 0
-              and coalesce(tf.total_charge_ex_vat,0)::numeric <> 0
+              and (
+                   coalesce(tf.total_charge_ex_vat,0)::numeric <> 0
+                or coalesce(tf.expenses_charge_ex_vat,0)::numeric <> 0
+                or coalesce(tf.travel_charge_ex_vat,0)::numeric <> 0
+                or coalesce(tf.accommodation_charge_ex_vat,0)::numeric <> 0
+                or coalesce(tf.other_charge_ex_vat,0)::numeric <> 0
+                or coalesce(tf.mileage_charge_ex_vat,0)::numeric <> 0
+                or (
+                  case
+                    when nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '') is null then 0::numeric
+                    when nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+                      then (nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '')::numeric)
+                    else 0::numeric
+                  end
+                ) <> 0
+              )
             )
           )
       ) s;
@@ -917,16 +962,45 @@ begin
           pc.precheck_status as precheck_status,
           coalesce(tf.invoice_breakdown_json->>'mode','') as invoice_mode,
           jsonb_typeof(tf.invoice_breakdown_json->'segments') as segments_type,
+          coalesce(tf.total_charge_ex_vat,0)::numeric as total_charge_ex_vat,
+          coalesce(tf.expenses_charge_ex_vat,0)::numeric as expenses_charge_ex_vat,
+          coalesce(tf.travel_charge_ex_vat,0)::numeric as travel_charge_ex_vat,
+          coalesce(tf.accommodation_charge_ex_vat,0)::numeric as accommodation_charge_ex_vat,
+          coalesce(tf.other_charge_ex_vat,0)::numeric as other_charge_ex_vat,
+          coalesce(tf.mileage_charge_ex_vat,0)::numeric as mileage_charge_ex_vat,
+          case
+            when nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '') is null then 0::numeric
+            when nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+              then (nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '')::numeric)
+            else 0::numeric
+          end as additional_charge_ex_vat,
           case
             when tf.processing_status <> 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum then 'NOT_READY_FOR_INVOICE'
             when tf.locked_by_invoice_id is not null then 'LOCKED_BY_INVOICE'
             when ts.revoked_at is not null then 'REVOKED'
             when upper(coalesce(pc.precheck_status,'')) <> 'OK' then 'PRECHECK_NOT_OK'
             when (p_allow_early is not true) and (ts.week_ending_date::date >= v_london_today) then 'WEEK_NOT_PASSED'
-            when (coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
-                  and jsonb_typeof(tf.invoice_breakdown_json->'segments') = 'array'
-                  and jsonb_array_length(tf.invoice_breakdown_json->'segments') = 0
-                  and coalesce(tf.total_charge_ex_vat,0)::numeric = 0) then 'SEGMENTS_EMPTY_AND_ZERO_TOTAL'
+            when (
+              (coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
+               and jsonb_typeof(tf.invoice_breakdown_json->'segments') = 'array'
+               and jsonb_array_length(tf.invoice_breakdown_json->'segments') = 0)
+              and (
+                   coalesce(tf.total_charge_ex_vat,0)::numeric = 0
+               and coalesce(tf.expenses_charge_ex_vat,0)::numeric = 0
+               and coalesce(tf.travel_charge_ex_vat,0)::numeric = 0
+               and coalesce(tf.accommodation_charge_ex_vat,0)::numeric = 0
+               and coalesce(tf.other_charge_ex_vat,0)::numeric = 0
+               and coalesce(tf.mileage_charge_ex_vat,0)::numeric = 0
+               and (
+                 case
+                   when nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '') is null then 0::numeric
+                   when nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+                     then (nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '')::numeric)
+                   else 0::numeric
+                 end
+               ) = 0
+              )
+            ) then 'SEGMENTS_EMPTY_AND_ZERO_TOTAL'
             else 'OTHER'
           end as fail_reason,
           row_number() over (order by ts.updated_at desc nulls last) as rn
@@ -1059,11 +1133,11 @@ begin
             'seg_due_count', v_dbg_seg_due_count,
             'nonseg_due_sample', v_dbg_nonseg_due_sample,
             'seg_due_sample', v_dbg_seg_due_sample,
-              'nonseg_any_count', v_dbg_nonseg_any_count,
-              'seg_any_count', v_dbg_seg_any_count,
-              'seg_delayed_not_due_count', v_dbg_seg_delayed_not_due_count,
-              'nonseg_fail_sample', v_dbg_nonseg_fail_sample,
-              'seg_fail_sample', v_dbg_seg_fail_sample,
+            'nonseg_any_count', v_dbg_nonseg_any_count,
+            'seg_any_count', v_dbg_seg_any_count,
+            'seg_delayed_not_due_count', v_dbg_seg_delayed_not_due_count,
+            'nonseg_fail_sample', v_dbg_nonseg_fail_sample,
+            'seg_fail_sample', v_dbg_seg_fail_sample,
             'run_started_at_utc', public._inv_iso_utc(v_dbg_run_started),
             'run_finished_at_utc', public._inv_iso_utc(now())
           ),
@@ -1192,6 +1266,8 @@ begin
   return v_new;
 end;
 $$;
+
+
 
 -- ============================================================
 -- CloudTMS: invoice_outbox_enqueue(kind, payload, p_actor_user_id, p_meta)
