@@ -2010,6 +2010,8 @@ exception when others then
 end;
 $function$;
 
+
+
 create or replace function public.hr_daily_apply_transactional(
   p_import_id uuid,
   p_payload jsonb,
@@ -2037,7 +2039,7 @@ declare
 
   v_email_selected_count int := 0;
 
-  -- ✅ NEW: TSFIN recompute support (validation changes + reference updates)
+  -- ✅ TSFIN recompute support (validation changes + reference updates)
   v_daily_validation_changed_timesheet_ids uuid[] := array[]::uuid[];
   v_ref_updated_timesheet_ids uuid[] := array[]::uuid[];
   v_affected_timesheet_ids uuid[] := array[]::uuid[];
@@ -2112,11 +2114,15 @@ begin
   from tmp_val_raw vr
   group by vr.timesheet_id;
 
-  -- ✅ NEW: compute which timesheets will have a meaningful validation row change (before upsert)
+  -- ✅ compute which timesheets will have a meaningful validation row change (before upsert)
   create temporary table tmp_val_upsert on commit drop as
   select
     vt.timesheet_id,
-    case when vt.has_error then 'VALIDATION_ERROR'::public.validation_status_enum else 'VALIDATION_OK'::public.validation_status_enum end as new_status,
+    case
+      when vt.has_error
+        then 'VALIDATION_ERROR'::public.validation_status_enum
+      else 'VALIDATION_OK'::public.validation_status_enum
+    end as new_status,
     vt.chosen_reason_code as new_reason_code,
     case when vt.has_error then null else v_now end as new_validated_at_utc,
     p_import_id as new_last_source,
@@ -2176,27 +2182,15 @@ begin
 
   get diagnostics v_validations_upserted = row_count;
 
-  -- 4) Match existing daily behaviour: when VALIDATION_OK and hr_request_id present, set timesheets.reference_number
-  update public.timesheets ts
-     set reference_number = vt.chosen_hr_request_id,
-         updated_at = v_now
-    from tmp_val_by_ts vt
-   where ts.timesheet_id = vt.timesheet_id
-     and ts.is_current = true
-     and vt.has_error is false
-     and vt.chosen_hr_request_id is not null
-     and (ts.reference_number is distinct from vt.chosen_hr_request_id)
-  returning ts.timesheet_id
-  into v_new_ts_id;
-
-  -- The above "RETURNING into scalar" is not valid for multiple rows, so we collect updated ids explicitly:
-  -- (do this safely and non-ambiguously via a temp table)
+  -- 4) Daily behaviour: when VALIDATION_OK and hr_request_id present, set timesheets.reference_number
+  -- ✅ Fix: do NOT use UPDATE ... RETURNING ... INTO (multi-row + undeclared var).
+  -- Instead, collect target ids first, then apply deterministic update once.
   create temporary table tmp_ref_updated_ids(
     timesheet_id uuid primary key
   ) on commit drop;
 
   insert into tmp_ref_updated_ids(timesheet_id)
-  select ts2.timesheet_id
+  select distinct ts2.timesheet_id
   from public.timesheets ts2
   join tmp_val_by_ts vt2
     on vt2.timesheet_id = ts2.timesheet_id
@@ -2205,14 +2199,16 @@ begin
     and vt2.chosen_hr_request_id is not null
     and (ts2.reference_number is distinct from vt2.chosen_hr_request_id);
 
-  -- Now perform the update (again) deterministically based on tmp_ref_updated_ids
   update public.timesheets tsu
      set reference_number = vt3.chosen_hr_request_id,
          updated_at = v_now
     from tmp_val_by_ts vt3
    where tsu.timesheet_id = vt3.timesheet_id
      and tsu.is_current = true
-     and tsu.timesheet_id in (select tri.timesheet_id from tmp_ref_updated_ids tri);
+     and tsu.timesheet_id in (
+       select tri.timesheet_id
+       from tmp_ref_updated_ids tri
+     );
 
   get diagnostics v_timesheets_ref_updated = row_count;
 
@@ -2244,7 +2240,9 @@ begin
   where nullif(btrim(e.value->>'timesheet_id'), '') is not null
     and nullif(btrim(e.value->>'issue_fingerprint'), '') is not null;
 
-  select count(*) into v_email_selected_count from tmp_email_actions;
+  select count(*)::int
+  into v_email_selected_count
+  from tmp_email_actions;
 
   create temporary table tmp_email_enriched on commit drop as
   select
@@ -2255,10 +2253,8 @@ begin
     ea.staff_norm,
     ea.hospital_norm,
     ea.work_date,
-
     coalesce(tf.client_id, ct.client_id) as client_id,
     cli.ts_queries_email as recipient_email,
-
     exists(
       select 1
       from public.hr_issue_emails hie
@@ -2341,7 +2337,7 @@ begin
   into v_email_jobs
   from tmp_email_enriched te;
 
-  -- ✅ NEW: build affected_timesheet_ids = (validation changed) ∪ (reference updated)
+  -- ✅ build affected_timesheet_ids = (validation changed) ∪ (reference updated)
   select coalesce(array_agg(distinct a.tsid order by a.tsid), array[]::uuid[])
   into v_affected_timesheet_ids
   from (
@@ -2351,9 +2347,12 @@ begin
   ) as a
   where a.tsid is not null;
 
-  -- ✅ NEW: enqueue TSFIN priority for affected timesheets (if any)
+  -- ✅ enqueue TSFIN priority for affected timesheets (if any)
   if array_length(v_affected_timesheet_ids, 1) is not null then
-    perform public.enqueue_ts_financials_priority(v_affected_timesheet_ids, 'CONTEXT_CHANGED'::public.ts_fin_reason_enum);
+    perform public.enqueue_ts_financials_priority(
+      v_affected_timesheet_ids,
+      'CONTEXT_CHANGED'::public.ts_fin_reason_enum
+    );
   end if;
 
   -- 6) Mark import applied (inside transaction)
