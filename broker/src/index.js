@@ -33511,7 +33511,6 @@ async function handleNhspImport(env, req) {
     return withCORS(env, req, serverError("Failed to create NHSP import"));
   }
 }
-
 async function handleHrAutoprocessPreview(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
   const enc = encodeURIComponent;
@@ -34287,10 +34286,16 @@ async function handleHrAutoprocessPreview(env, req, importId) {
 
     const cancellationsComputable = !!(hrRowsFetchOk && minWd && maxWd);
 
+    // ✅ NEW: explicit mode summary for FE (prevents "actions count == 0" ambiguity)
+    const hasModeA = Array.isArray(validation_groups) && validation_groups.length > 0;
+    const hasModeB = Array.isArray(action_groups) && action_groups.length > 0;
+    const mode_summary = (hasModeA && hasModeB) ? 'MIXED' : (hasModeA ? 'MODE_A_ONLY' : 'MODE_B_ONLY');
+
     if (LOG) {
       console.log('[HR_WEEKLY_PREVIEW]', JSON.stringify({
         import_id: importId,
         client_id: String(imp.client_id),
+        mode_summary,
         validation_groups: validation_groups.length,
         action_groups: action_groups.length,
         actions_total: actions.length,
@@ -34306,9 +34311,12 @@ async function handleHrAutoprocessPreview(env, req, importId) {
       }));
     }
 
-       return withCORS(env, req, ok({
+    return withCORS(env, req, ok({
       import_id: String(importId),
       client_id: String(imp.client_id),
+
+      // ✅ NEW: explicit mode for UI
+      mode_summary,
 
       // ✅ NEW: expose classification output at top level for the summary modal
       rows: Array.isArray(cls?.rows) ? cls.rows : [],
@@ -34454,6 +34462,9 @@ async function handleHrAutoprocessApply(env, req, importId) {
     }))
     .filter(a => !!(a.timesheet_id && a.issue_fingerprint));
 
+  // ✅ Important: Mode A-only apply MUST be allowed even when selected_action_ids is empty.
+  // We always call the transactional RPC; it decides what work (Mode A vs Mode B) applies.
+
   logInfo({
     stage: 'start',
     import_id: importId,
@@ -34494,9 +34505,16 @@ async function handleHrAutoprocessApply(env, req, importId) {
   }
 
   const emailJobs = Array.isArray(applyPayload.email_jobs) ? applyPayload.email_jobs : [];
-  const affectedTimesheetIds = Array.isArray(applyPayload.affected_timesheet_ids)
-    ? uniqStrings(applyPayload.affected_timesheet_ids)
+
+  // ✅ TSFIN drain must include validation-changed timesheets as well.
+  // The RPC should already include these in affected_timesheet_ids, but we union defensively so
+  // older RPC payload shapes cannot cause "Validation OK but HR Hours Missing".
+  const affectedBase = Array.isArray(applyPayload.affected_timesheet_ids) ? applyPayload.affected_timesheet_ids : [];
+  const affectedValTop = Array.isArray(applyPayload.validation_affected_timesheet_ids) ? applyPayload.validation_affected_timesheet_ids : [];
+  const affectedValModeA = Array.isArray(applyPayload?.mode_a?.validation_affected_timesheet_ids)
+    ? applyPayload.mode_a.validation_affected_timesheet_ids
     : [];
+  const affectedTimesheetIds = uniqStrings([...(affectedBase || []), ...(affectedValTop || []), ...(affectedValModeA || [])]);
 
   // ─────────────────────────────────────────────
   // 2) Post-commit: queue emails best-effort (PDF ensure + mail_outbox insert)
@@ -34759,7 +34777,6 @@ async function handleHrAutoprocessApply(env, req, importId) {
     }
   }));
 }
-
 
 
 
@@ -42643,562 +42660,6 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
 
 
 
-async function handleHrRotaValidationPreview(env, req, importId) {
-  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
-
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-  if (!importId) {
-    return withCORS(env, req, badRequest('import_id is required'));
-  }
-
-  const enc = encodeURIComponent;
-  const EMAIL_REASON_CODES = new Set([
-    'actual_hours_mismatch',
-    'start_end_mismatch',
-    'break_minutes_mismatch'
-  ]);
-
-  // ✅ Stable across imports: MUST NOT include import_id or hr_row_id (row IDs change each import)
-  const makeIssueFingerprint = (row) => {
-    const reasonCode = String(row.reason_code || '').toLowerCase();
-    const tsId       = row.timesheet_id || '';
-
-    const detail = row.details || row.detail || {};
-    const hrStart = detail.start_local  || detail.hr_start        || '';
-    const hrEnd   = detail.end_local    || detail.hr_end          || '';
-    const hrHours = detail.hr_hours     || detail.hr_actual_hours || detail.hours_worked || '';
-    const tsHours = detail.ts_hours     || detail.ts_total_hours  || '';
-
-    const dateLocal = row.date_local || row.date || row.shift_date || '';
-    const hrRequestId = row.hr_request_id || row.hrRequestId || '';
-
-    const staffNorm = (row.staff_norm || row.staff_name || row.staff_raw || '')
-      .toLowerCase()
-      .trim();
-    const unitNorm  = (row.unit_norm || row.unit || row.hospital_or_trust || row.hospital_norm || '')
-      .toLowerCase()
-      .trim();
-
-    return [
-      'HEALTHROSTER_DAILY',
-      reasonCode,
-      tsId,
-      hrRequestId,
-      staffNorm,
-      unitNorm,
-      dateLocal,
-      hrStart,
-      hrEnd,
-      hrHours,
-      tsHours
-    ].join('|');
-  };
-
-  try {
-    const result = await classifyHrRotaValidationImport(env, importId);
-    if (result.error) {
-      if (LOG) {
-        console.warn('[HR_DAILY_PREVIEW]', JSON.stringify({
-          import_id: importId,
-          stage: 'classification_error',
-          error: result.error
-        }));
-      }
-      // propagate error in body but still 200 (FE handles it)
-      return withCORS(env, req, ok(result));
-    }
-
-    const rows = Array.isArray(result.rows) ? result.rows : [];
-
-    // ── Resolve recipient_email per client_id (clients.ts_queries_email) ─────
-    const clientIdSet = new Set();
-    for (const row of rows) {
-      const cid = row?.client_id ? String(row.client_id) : '';
-      if (cid) clientIdSet.add(cid);
-    }
-
-    const clientToTsQueriesEmail = new Map();
-    if (clientIdSet.size) {
-      try {
-        const ids = Array.from(clientIdSet);
-        const inList = ids.map(enc).join(',');
-        const { rows: cRows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/clients` +
-            `?id=in.(${inList})&select=id,ts_queries_email`
-        );
-        for (const c of (cRows || [])) {
-          const id = c?.id ? String(c.id) : '';
-          if (!id) continue;
-          const em = (c?.ts_queries_email != null) ? String(c.ts_queries_email).trim() : '';
-          clientToTsQueriesEmail.set(id, em || null);
-        }
-      } catch (e) {
-        if (LOG) {
-          console.warn('[HR_DAILY_PREVIEW]', JSON.stringify({
-            stage: 'clients_ts_queries_email_lookup_failed',
-            import_id: importId,
-            err: e?.message || String(e)
-          }));
-        }
-      }
-    }
-
-    // ── Precompute fingerprints for rows that *could* ever have an email ─────
-    const fingerprints = [];
-    const rowFingerprints = new Array(rows.length).fill(null);
-
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
-      const reasonCode = String(row.reason_code || '').toLowerCase();
-      const tsId       = row.timesheet_id || null;
-
-      const canEmailBase =
-        !!tsId &&
-        !!reasonCode &&
-        EMAIL_REASON_CODES.has(reasonCode);
-
-      if (!canEmailBase) {
-        rowFingerprints[i] = null;
-        continue;
-      }
-
-      const fp = makeIssueFingerprint(row);
-      rowFingerprints[i] = fp;
-      if (fp) fingerprints.push(fp);
-    }
-
-    // ── Look up which fingerprints already have an email row ────────────────
-    let alreadySentSet = new Set();
-    if (fingerprints.length) {
-      try {
-        const uniqueFps = Array.from(new Set(fingerprints));
-        const { rows: sentRows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/hr_issue_emails` +
-            `?issue_fingerprint=in.(${uniqueFps.map(enc).join(',')})` +
-            `&select=issue_fingerprint`
-        );
-        alreadySentSet = new Set((sentRows || []).map(r => r.issue_fingerprint));
-      } catch (e) {
-        if (LOG) {
-          console.warn('[HR_DAILY_PREVIEW]', JSON.stringify({
-            stage: 'hr_issue_emails_lookup_failed',
-            import_id: importId,
-            err: e?.message || String(e)
-          }));
-        }
-      }
-    }
-
-    const decoratedRows = rows.map((row, idx) => {
-      const reasonCode = String(row.reason_code || '').toLowerCase();
-      const tsId       = row.timesheet_id || null;
-
-      const emailEligible =
-        !!tsId &&
-        !!reasonCode &&
-        EMAIL_REASON_CODES.has(reasonCode);
-
-      const fp = rowFingerprints[idx];
-      const alreadySent = fp ? alreadySentSet.has(fp) : false;
-
-      const clientId = row?.client_id ? String(row.client_id) : '';
-      const recipientEmail = clientId ? (clientToTsQueriesEmail.get(clientId) || null) : null;
-
-      const recipientMissing = !(recipientEmail && String(recipientEmail).trim());
-      const canEmail =
-        !!fp &&
-        emailEligible &&
-        !recipientMissing;
-
-      return {
-        ...row,
-        issue_fingerprint: fp || null,
-        recipient_email: recipientEmail || null,
-        recipient_missing: recipientMissing,
-        can_email: canEmail,
-        email_eligible: emailEligible,
-        email_already_sent: alreadySent
-      };
-    });
-
-    if (LOG) {
-      const summary = result.summary || {};
-      const sampleFails = decoratedRows
-        .filter(r => String(r.status || '').toUpperCase() !== 'VALIDATION_OK')
-        .slice(0, 10)
-        .map(r => ({
-          hr_row_id: r.hr_row_id,
-          timesheet_id: r.timesheet_id,
-          status: r.status,
-          reason_code: r.reason_code,
-          details: (r.details && r.details.reason) || (r.detail && r.detail.reason) || null,
-          can_email: !!r.can_email,
-          recipient_missing: !!r.recipient_missing
-        }));
-
-      console.log('[HR_DAILY_PREVIEW]', JSON.stringify({
-        import_id: result.import_id,
-        source_system: result.source_system,
-        summary,
-        total_rows: decoratedRows.length,
-        sample_failures: sampleFails
-      }));
-    }
-
-    return withCORS(env, req, ok({
-      import_id: result.import_id,
-      source_system: result.source_system,
-      summary: result.summary,
-      rows: decoratedRows
-    }));
-  } catch (e) {
-    console.error('[HR_ROTA_PREVIEW] error', {
-      import_id: importId,
-      err: e?.message || String(e)
-    });
-    return withCORS(
-      env,
-      req,
-      serverError(`Failed to classify HR daily rota import: ${e?.message || e}`)
-    );
-  }
-}
-
-
-async function handleHrRotaValidationApply(env, req, importId) {
-  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
-
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-  if (!importId) {
-    return withCORS(env, req, badRequest('import_id is required'));
-  }
-
-  let body;
-  try {
-    body = await parseJSONBody(req);
-  } catch {
-    body = null;
-  }
-
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    return withCORS(env, req, badRequest('Invalid JSON body'));
-  }
-
-  const send_email_row_ids = Array.isArray(body?.send_email_row_ids)
-    ? body.send_email_row_ids
-    : [];
-  const emailRowIdSet = new Set(send_email_row_ids.map(String));
-
-  const EMAIL_REASON_CODES = new Set([
-    'actual_hours_mismatch',
-    'start_end_mismatch',
-    'break_minutes_mismatch'
-  ]);
-
-  // ✅ Stable across imports: MUST NOT include import_id or hr_row_id
-  const makeIssueFingerprint = (row) => {
-    const reasonCode = String(row.reason_code || '').toLowerCase();
-    const tsId       = row.timesheet_id || '';
-
-    const detail = row.details || row.detail || {};
-    const hrStart = detail.start_local  || detail.hr_start        || '';
-    const hrEnd   = detail.end_local    || detail.hr_end          || '';
-    const hrHours = detail.hr_hours     || detail.hr_actual_hours || detail.hours_worked || '';
-    const tsHours = detail.ts_hours     || detail.ts_total_hours  || '';
-
-    const dateLocal = row.date_local || row.date || row.shift_date || '';
-    const hrRequestId = row.hr_request_id || row.hrRequestId || '';
-
-    const staffNorm = (row.staff_norm || row.staff_name || row.staff_raw || '')
-      .toLowerCase()
-      .trim();
-    const unitNorm  = (row.unit_norm || row.unit || row.hospital_or_trust || row.hospital_norm || '')
-      .toLowerCase()
-      .trim();
-
-    return [
-      'HEALTHROSTER_DAILY',
-      reasonCode,
-      tsId,
-      hrRequestId,
-      staffNorm,
-      unitNorm,
-      dateLocal,
-      hrStart,
-      hrEnd,
-      hrHours,
-      tsHours
-    ].join('|');
-  };
-
-  const unwrapRpcJsonb = (raw, fnName) => {
-    const j = raw;
-    if (Array.isArray(j)) {
-      const row0 = j[0];
-      if (row0 && typeof row0 === 'object' && fnName && Object.prototype.hasOwnProperty.call(row0, fnName)) {
-        return row0[fnName];
-      }
-      return row0;
-    }
-    if (j && typeof j === 'object' && fnName && Object.prototype.hasOwnProperty.call(j, fnName)) {
-      return j[fnName];
-    }
-    return j;
-  };
-
-  if (LOG) {
-    console.log('[HR_DAILY_APPLY]', JSON.stringify({
-      stage: 'start',
-      import_id: importId,
-      send_email_row_ids_count: send_email_row_ids.length
-    }));
-  }
-
-  // 1) Classification is read-only and drives the payload we send to the transactional RPC
-  let classification;
-  try {
-    classification = await classifyHrRotaValidationImport(env, importId);
-  } catch (e) {
-    console.error('[HR_DAILY_APPLY] classify failed', {
-      import_id: importId,
-      err: e?.message || String(e)
-    });
-    return withCORS(
-      env,
-      req,
-      serverError(`Failed to classify HR daily rota import: ${e?.message || e}`)
-    );
-  }
-
-  if (classification?.error) {
-    if (LOG) {
-      console.warn('[HR_DAILY_APPLY]', JSON.stringify({
-        stage: 'classification_error',
-        import_id: importId,
-        error: classification.error
-      }));
-    }
-    // FE expects classification errors in-body (200)
-    return withCORS(env, req, ok(classification));
-  }
-
-  const rows = Array.isArray(classification?.rows) ? classification.rows : [];
-
-  // 2) Build RPC payload (validation_rows + email_actions)
-  const validation_rows = [];
-  const email_actions = [];
-
-  for (const row of rows) {
-    const timesheetId = row?.timesheet_id || null;
-    if (!timesheetId) continue;
-
-    const statusU = String(row?.status || '').toUpperCase();
-    const reasonCodeRaw = String(row?.reason_code || '').toLowerCase();
-
-    const isOk = (statusU === 'VALIDATION_OK' || statusU === 'OK' || statusU === 'PASS' || statusU === 'VALID');
-
-    // Validation rows: one per timesheet_id (RPC dedupes by timesheet_id anyway)
-    validation_rows.push({
-      timesheet_id: String(timesheetId),
-      status: isOk ? 'VALIDATION_OK' : 'VALIDATION_ERROR',
-      reason_code: isOk ? 'HEALTHROSTER_DAILY' : (reasonCodeRaw || 'actual_hours_mismatch'),
-      hr_request_id: row?.hr_request_id || row?.hrRequestId || null
-    });
-
-    // Email actions: only for selected hr_row_ids, and only for eligible mismatch reason codes
-    const hrRowId = row?.hr_row_id ? String(row.hr_row_id) : null;
-    if (!hrRowId) continue;
-    if (!emailRowIdSet.has(hrRowId)) continue;
-
-    if (isOk) continue;
-    if (!EMAIL_REASON_CODES.has(reasonCodeRaw)) continue;
-
-    const fp = makeIssueFingerprint(row);
-    if (!fp) continue;
-
-    const workDate = row?.date_local || row?.date || row?.shift_date || null;
-    const staffNorm = (row?.staff_norm || row?.staff_name || row?.staff_raw || '')
-      .toLowerCase()
-      .trim() || null;
-    const hospitalNorm = (row?.unit_norm || row?.unit || row?.hospital_or_trust || row?.hospital_norm || '')
-      .toLowerCase()
-      .trim() || null;
-
-    email_actions.push({
-      timesheet_id: String(timesheetId),
-      issue_fingerprint: fp,
-      reason_code: reasonCodeRaw || 'actual_hours_mismatch',
-      hr_row_id: hrRowId,
-      staff_norm: staffNorm,
-      hospital_norm: hospitalNorm,
-      work_date: workDate
-    });
-  }
-
-  // 3) Single transactional RPC does:
-  // - validations upsert (required)
-  // - timesheets.reference_number update on OK (if hr_request_id present)
-  // - hr_issue_emails upsert for selected email_actions (deterministic Email/Re-email state)
-  // Returns email_jobs for post-commit sending.
-  let rpcPayload;
-  try {
-    const rpcRaw = await sbRpc(env, 'hr_daily_apply_transactional', {
-      p_import_id: importId,
-      p_payload: { validation_rows, email_actions },
-      p_actor_user_id: user.id
-    });
-    rpcPayload = unwrapRpcJsonb(rpcRaw, 'hr_daily_apply_transactional');
-  } catch (e) {
-    console.error('[HR_DAILY_APPLY] hr_daily_apply_transactional failed', {
-      import_id: importId,
-      err: e?.message || String(e)
-    });
-    return withCORS(env, req, serverError(`Daily apply failed: ${e?.message || e}`));
-  }
-
-  if (!rpcPayload || typeof rpcPayload !== 'object') {
-    return withCORS(env, req, serverError('Daily apply returned invalid RPC payload'));
-  }
-
-  const emailJobs = Array.isArray(rpcPayload?.email_jobs) ? rpcPayload.email_jobs : [];
-
-  // 4) Post-commit best-effort: queue emails (ensure PDF then mail_outbox)
-  let emailsQueued = 0;
-  const emailFailures = [];
-  const seenJobKey = new Set();
-
-  for (const job of emailJobs) {
-    const tsId = job?.timesheet_id ? String(job.timesheet_id).trim() : '';
-    const fp   = job?.issue_fingerprint ? String(job.issue_fingerprint).trim() : '';
-    const recipientEmail = job?.recipient_email ? String(job.recipient_email).trim() : '';
-
-    const jobKey = `${tsId}__${fp}`;
-    if (!tsId || !fp) {
-      emailFailures.push({ timesheet_id: tsId || null, issue_fingerprint: fp || null, reason: 'INVALID_JOB' });
-      continue;
-    }
-    if (seenJobKey.has(jobKey)) continue;
-    seenJobKey.add(jobKey);
-
-    if (!recipientEmail) {
-      emailFailures.push({ timesheet_id: tsId, issue_fingerprint: fp, reason: 'RECIPIENT_MISSING' });
-      continue;
-    }
-
-    let pdfKey = null;
-    try {
-      pdfKey = await ensureTimesheetPdf(env, tsId);
-    } catch (e) {
-      emailFailures.push({ timesheet_id: tsId, issue_fingerprint: fp, reason: 'PDF_GENERATION_FAILED', err: String(e?.message || e) });
-      continue;
-    }
-    if (!pdfKey) {
-      emailFailures.push({ timesheet_id: tsId, issue_fingerprint: fp, reason: 'PDF_MISSING' });
-      continue;
-    }
-
-    const reasonCode = job?.reason_code ? String(job.reason_code) : 'actual_hours_mismatch';
-    const workDate   = job?.work_date ? String(job.work_date) : null;
-
-    const subject = `Timesheet query – HealthRoster daily validation – ${workDate || ''}${workDate ? ' – ' : ''}${tsId}`;
-    const bodyLines = [
-      `Dear Temporary Staffing,`,
-      ``,
-      `Please find the attached timesheet PDF.`,
-      `This email relates to a HealthRoster daily validation mismatch.`,
-      workDate ? `Work date: ${workDate}` : null,
-      `Reason: ${reasonCode}`,
-      `Issue fingerprint: ${fp}`,
-      ``,
-      `Kind regards,`,
-      `CloudTMS`
-    ].filter(Boolean);
-
-    const body_text = bodyLines.join('\n');
-    const body_html = `<p>${bodyLines.map(l => (l === '' ? '<br/>' : l)).join('<br/>')}</p>`;
-
-    try {
-      const res = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
-        method: 'POST',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify({
-          type: 'TSO_FAILURE',
-          to: recipientEmail,
-          cc: null,
-          subject,
-          body_html,
-          body_text,
-          attachments: [{ r2_key: pdfKey, filename: `Timesheet_${tsId}.pdf` }],
-          status: 'QUEUED',
-          reference: `hr_daily_validation:${importId}:${tsId}`,
-          correlation_id: `HR_DAILY_VALIDATION:${importId}:${tsId}:${fp}`,
-          created_by: user?.id || null
-        })
-      });
-
-      if (!res.ok) {
-        const t = await res.text().catch(() => '');
-        throw new Error(t || `mail_outbox ${res.status}`);
-      }
-
-      emailsQueued += 1;
-    } catch (e) {
-      emailFailures.push({ timesheet_id: tsId, issue_fingerprint: fp, reason: 'MAIL_OUTBOX_INSERT_FAILED', err: String(e?.message || e) });
-    }
-  }
-
-  // 5) Audit best-effort
-  try {
-    await writeAudit(
-      env,
-      user,
-      'HR_DAILY_APPLY_TRANSACTIONAL_COMPLETED',
-      {
-        import_id: importId,
-        rpc: {
-          validations_upserted: rpcPayload?.validations_upserted ?? null,
-          timesheets_reference_updated: rpcPayload?.timesheets_reference_updated ?? null,
-          email_actions_received: rpcPayload?.email_actions_received ?? null,
-          email_logs_upserted: rpcPayload?.email_logs_upserted ?? null
-        },
-        emails_queued: emailsQueued,
-        email_failures: emailFailures.slice(0, 50)
-      },
-      { entity: 'hr_imports', subject_id: importId, req }
-    );
-  } catch (e) {
-    if (LOG) {
-      console.warn('[HR_DAILY_APPLY] audit failed (non-fatal)', {
-        import_id: importId,
-        err: e?.message || String(e)
-      });
-    }
-  }
-
-  if (LOG) {
-    console.log('[HR_DAILY_APPLY]', JSON.stringify({
-      stage: 'completed',
-      import_id: importId,
-      validations_upserted: rpcPayload?.validations_upserted ?? null,
-      emails_queued: emailsQueued,
-      email_failures_count: emailFailures.length
-    }));
-  }
-
-  return withCORS(env, req, ok({
-    import_id: importId,
-    apply: rpcPayload,
-    post_commit: {
-      emails_queued: emailsQueued,
-      email_failures: emailFailures
-    }
-  }));
-}
-
 async function handleHrRotaQueueTsoEmail(env, req) {
   const enc = encodeURIComponent;
 
@@ -46729,76 +46190,7 @@ async function findAuthorisedTimesheet(env, { candidate_id, ymd, start_hhmm, end
   return null;
 }
 
-async function upsertValidation(env, user, { timesheet_id, status, reason, hr_reference, import_id }) {
-  const enc    = encodeURIComponent;
-  const nowIso = new Date().toISOString();
 
-  // Only stamp validated_at_utc for "OK / PASS / VALID" statuses
-  const shouldStamp =
-    typeof status === 'string' && /ok|pass|valid/i.test(status);
-
-  // HR request triple (id + set_at + source) must be all-null or all-non-null
-  let hr_request_id          = hr_reference || null;
-  let hr_request_set_at_utc  = null;
-  let hr_request_source      = null;
-
-  if (hr_request_id) {
-    hr_request_set_at_utc = nowIso;
-
-    // Try to infer source from hr_imports if import_id is present
-    if (import_id) {
-      try {
-        const { rows: impRows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/hr_imports` +
-            `?id=eq.${enc(import_id)}` +
-            `&select=source_system` +
-            `&limit=1`
-        );
-        const imp = impRows?.[0] || null;
-        if (imp && imp.source_system) {
-          // e.g. 'HEALTHROSTER_DAILY', 'HEALTHROSTER', 'NHSP'
-          hr_request_source = String(imp.source_system);
-        } else {
-          hr_request_source = 'HR_IMPORT';
-        }
-      } catch (e) {
-        console.warn('[upsertValidation] failed to resolve hr_request_source from hr_imports', {
-          import_id,
-          err: e?.message || String(e)
-        });
-        hr_request_source = 'HR_IMPORT';
-      }
-    } else {
-      // No import_id → manual/other source
-      hr_request_source = 'MANUAL';
-    }
-  }
-
-  const payload = {
-    timesheet_id,
-    status,
-    reason_code:    reason || null,
-    hr_request_id,
-    hr_request_set_at_utc,
-    hr_request_source,
-    validated_at_utc: shouldStamp ? nowIso : null,
-    last_source: import_id || null
-  };
-
-  const res = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheet_validations?on_conflict=timesheet_id`,
-    {
-      method: 'POST',
-      headers: { ...sbHeaders(env), 'Prefer': 'resolution=merge-duplicates,return=minimal' },
-      body: JSON.stringify(payload)
-    }
-  );
-  if (!res.ok) {
-    const err = await res.text().catch(() => '');
-    throw new Error(`timesheet_validations upsert failed: ${err}`);
-  }
-}
 
 async function handleHrRotaResolveMappings(env, req, importId) {
   const enc   = encodeURIComponent;
