@@ -15,11 +15,11 @@ returns table (
   reason            text,
 
   -- ✅ NEW: existing-match + diff fields (for preview classification)
-  matched_shift_id    uuid,
-  old_start_utc       timestamptz,
-  old_end_utc         timestamptz,
-  old_break_mins      int,
-  old_paid_minutes    int,
+  matched_shift_id     uuid,
+  old_start_utc        timestamptz,
+  old_end_utc          timestamptz,
+  old_break_mins       int,
+  old_paid_minutes     int,
   old_cancelled_at_utc timestamptz,
 
   new_start_utc       timestamptz,
@@ -113,12 +113,14 @@ begin
       date_trunc('minute', (r.payload_json ->> 'start_utc')::timestamptz) as new_start_utc,
       date_trunc('minute', (r.payload_json ->> 'end_utc')::timestamptz)   as new_end_utc,
 
+      -- ✅ FIX: HealthRoster uses Actual Break as authoritative (priority: actual_break_* then break_* then 0)
       greatest(
         0,
         coalesce(
-          (r.payload_json ->> 'break_mins')::int,
-          (r.payload_json ->> 'break_minutes')::int,
-          (r.payload_json ->> 'actual_break_minutes')::int,
+          nullif(btrim(coalesce(r.payload_json ->> 'actual_break_mins','')), '')::int,
+          nullif(btrim(coalesce(r.payload_json ->> 'actual_break_minutes','')), '')::int,
+          nullif(btrim(coalesce(r.payload_json ->> 'break_mins','')), '')::int,
+          nullif(btrim(coalesce(r.payload_json ->> 'break_minutes','')), '')::int,
           0
         )
       ) as new_break_mins,
@@ -134,9 +136,10 @@ begin
         greatest(
           0,
           coalesce(
-            (r.payload_json ->> 'break_mins')::int,
-            (r.payload_json ->> 'break_minutes')::int,
-            (r.payload_json ->> 'actual_break_minutes')::int,
+            nullif(btrim(coalesce(r.payload_json ->> 'actual_break_mins','')), '')::int,
+            nullif(btrim(coalesce(r.payload_json ->> 'actual_break_minutes','')), '')::int,
+            nullif(btrim(coalesce(r.payload_json ->> 'break_mins','')), '')::int,
+            nullif(btrim(coalesce(r.payload_json ->> 'break_minutes','')), '')::int,
             0
           )
         )
@@ -526,15 +529,19 @@ begin
             ) as trust_raw,
             date_trunc('minute', (r.payload_json ->> 'start_utc')::timestamptz) as new_start_utc,
             date_trunc('minute', (r.payload_json ->> 'end_utc')::timestamptz)   as new_end_utc,
+
+            -- ✅ keep debug aligned with live logic: actual_break_* then break_* then 0
             greatest(
               0,
               coalesce(
-                (r.payload_json ->> 'break_mins')::int,
-                (r.payload_json ->> 'break_minutes')::int,
-                (r.payload_json ->> 'actual_break_minutes')::int,
+                nullif(btrim(coalesce(r.payload_json ->> 'actual_break_mins','')), '')::int,
+                nullif(btrim(coalesce(r.payload_json ->> 'actual_break_minutes','')), '')::int,
+                nullif(btrim(coalesce(r.payload_json ->> 'break_mins','')), '')::int,
+                nullif(btrim(coalesce(r.payload_json ->> 'break_minutes','')), '')::int,
                 0
               )
             ) as new_break_mins,
+
             greatest(
               0,
               (floor(extract(epoch from (
@@ -546,13 +553,15 @@ begin
               greatest(
                 0,
                 coalesce(
-                  (r.payload_json ->> 'break_mins')::int,
-                  (r.payload_json ->> 'break_minutes')::int,
-                  (r.payload_json ->> 'actual_break_minutes')::int,
+                  nullif(btrim(coalesce(r.payload_json ->> 'actual_break_mins','')), '')::int,
+                  nullif(btrim(coalesce(r.payload_json ->> 'actual_break_minutes','')), '')::int,
+                  nullif(btrim(coalesce(r.payload_json ->> 'break_mins','')), '')::int,
+                  nullif(btrim(coalesce(r.payload_json ->> 'break_minutes','')), '')::int,
                   0
                 )
               )
             ) as new_paid_minutes,
+
             case
               when v_sys = 'NHSP' then coalesce(
                 nullif((r.payload_json ->> 'assignment_code'), ''),
@@ -768,13 +777,12 @@ begin
           select
             w.*,
             s.id as matched_shift_id,
+            s.timesheet_id as old_timesheet_id,
+            (t.timesheet_id is not null) as old_timesheet_exists,
+            s.cancelled_at_utc as old_cancelled_at_utc,
             date_trunc('minute', s.start_utc) as old_start_utc,
-            date_trunc('minute', s.end_utc)   as old_end_utc,
-            coalesce(s.break_mins, 0)::int    as old_break_mins,
-            coalesce(s.pay_minutes, 0)::int   as old_paid_minutes,
-            s.cancelled_at_utc               as old_cancelled_at_utc,
-            s.timesheet_id                   as old_timesheet_id,
-            (t.timesheet_id is not null)     as old_timesheet_exists
+            date_trunc('minute', s.end_utc) as old_end_utc,
+            coalesce(s.break_mins,0)::int as old_break_mins
           from chosen_contract w
           left join public.nhsp_shifts s
             on s.external_row_key = w.external_row_key
