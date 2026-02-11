@@ -29,6 +29,8 @@
 --   - For clients where auto_invoice_default = FALSE, the frontend should INSERT
 --     invoice_jobs_outbox rows directly when the user approves invoicing.
 -- ------------------------------------------------------------
+
+
 create or replace function public.invoice_enqueue_ready_for_invoice(p_limit int default 500)
 returns int
 language plpgsql
@@ -38,7 +40,6 @@ as $$
 declare
   v_ins int := 0;
   v_lim int := greatest(1, least(coalesce(p_limit, 500), 5000));
-
 
   -- ======================================================
   -- DEBUG (optional): single audit row per RPC call
@@ -62,7 +63,7 @@ begin
     v_invoice_debug := false;
   end;
 
-with anchor as (
+  with anchor as (
     select (now() at time zone 'Europe/London')::date as anchor_ymd
   ),
   eligible_ts as (
@@ -75,6 +76,10 @@ with anchor as (
      and t.is_current = true
     join public.v_ts_invoice_precheck pc
       on pc.timesheet_id = tf.timesheet_id
+
+    -- HR validation context (per-timesheet)
+    join public.v_timesheets_summary_base vts
+      on vts.timesheet_id = tf.timesheet_id
 
     -- client_settings (effective row on London "today")
     left join lateral (
@@ -93,11 +98,21 @@ with anchor as (
       and tf.locked_by_invoice_id is null
       and t.revoked_at is null
       and upper(coalesce(pc.precheck_status,'')) = 'OK'
-
-      and pc.week_ending_date < (select anchor_ymd from anchor)
+      and pc.week_ending_date < (select a.anchor_ymd from anchor a)
 
       -- ✅ auto-enqueue gate (client-led)
       and coalesce(cs.auto_invoice_default, false) = true
+
+      -- ✅ HR validation gating (only when validation is required)
+      -- If validation is required, only allow VALIDATION_OK or OVERRIDDEN.
+      -- If validation_status is NULL, treat as blocked.
+      and (
+        coalesce(vts.client_hr_validation_required, false) = false
+        or vts.validation_status = any(array[
+          'VALIDATION_OK'::public.validation_status_enum,
+          'OVERRIDDEN'::public.validation_status_enum
+        ])
+      )
 
     order by t.updated_at desc nulls last
     limit v_lim
@@ -146,6 +161,11 @@ with anchor as (
          and t.is_current = true
         join public.v_ts_invoice_precheck pc
           on pc.timesheet_id = tf.timesheet_id
+
+        -- HR validation context (per-timesheet)
+        join public.v_timesheets_summary_base vts
+          on vts.timesheet_id = tf.timesheet_id
+
         left join lateral (
           select cs0.auto_invoice_default
           from public.client_settings cs0
@@ -160,8 +180,18 @@ with anchor as (
           and tf.locked_by_invoice_id is null
           and t.revoked_at is null
           and upper(coalesce(pc.precheck_status,'')) = 'OK'
-          and pc.week_ending_date < (select anchor_ymd from anchor)
+          and pc.week_ending_date < (select a.anchor_ymd from anchor a)
           and coalesce(cs.auto_invoice_default, false) = true
+
+          -- ✅ HR validation gating (mirror main path)
+          and (
+            coalesce(vts.client_hr_validation_required, false) = false
+            or vts.validation_status = any(array[
+              'VALIDATION_OK'::public.validation_status_enum,
+              'OVERRIDDEN'::public.validation_status_enum
+            ])
+          )
+
         order by t.updated_at desc nulls last
         limit v_lim
       ),
@@ -183,11 +213,11 @@ with anchor as (
         )
       )
       select
-        (select anchor_ymd from anchor),
+        (select a.anchor_ymd from anchor a),
         (select count(*)::int from eligible_ts),
         (select count(*)::int from grouped),
         v_ins,
-        (select n from already)
+        (select a2.n from already a2)
       into
         v_dbg_anchor_ymd,
         v_dbg_eligible_ts_count,
@@ -225,220 +255,10 @@ end;
 $$;
 
 
--- ============================================================
--- CloudTMS: invoice_enqueue_auto_invoice_ready(p_limit int)
--- NEW (cron-safe auto enqueue)
---
--- Enqueues BY_WEEK jobs only for timesheets that are:
---   - TSFIN is_current + READY_FOR_INVOICE + unlocked
---   - timesheets is_current + not revoked
---   - v_ts_invoice_precheck.precheck_status = 'OK' (authoritative, includes PDF gating)
---   - Auto-invoice eligible:
---       COALESCE(contracts.auto_invoice, client_settings.auto_invoice_default, false) = true
---
--- Idempotent: will not enqueue duplicates for same (client_id, invoice_week_start).
--- ============================================================
-create or replace function public.invoice_enqueue_auto_invoice_ready(p_limit int default 500)
-returns int
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_ins int := 0;
-  v_lim int := greatest(1, least(coalesce(p_limit, 500), 5000));
 
 
-  -- ======================================================
-  -- DEBUG (optional): single audit row per RPC call
-  -- ======================================================
-  v_invoice_debug boolean := false;
-  v_dbg_run_started timestamptz := now();
-  v_dbg_anchor_ymd date := null;
-  v_dbg_eligible_ts_count int := null;
-  v_dbg_grouped_count int := null;
-  v_dbg_inserted_count int := null;
-  v_dbg_already_queued_count int := null;
-begin
-  -- Load invoice_debug flag (safe even if column not yet present)
-  begin
-    select coalesce(sd.invoice_debug, false)
-    into v_invoice_debug
-    from public.settings_defaults sd
-    where sd.id = 1
-    limit 1;
-  exception when undefined_column then
-    v_invoice_debug := false;
-  end;
 
-with anchor as (
-    select (now() at time zone 'Europe/London')::date as anchor_ymd
-  ),
-  eligible_ts as (
-    select
-      tf.client_id,
-      (pc.week_ending_date::date - interval '6 days')::date as invoice_week_start
-    from public.timesheets_financials tf
-    join public.timesheets t
-      on t.timesheet_id = tf.timesheet_id
-     and t.is_current = true
-    join public.v_ts_invoice_precheck pc
-      on pc.timesheet_id = tf.timesheet_id
-    left join public.contract_weeks cw
-      on cw.timesheet_id = tf.timesheet_id
-    left join public.contracts c
-      on c.id = coalesce(t.contract_id, cw.contract_id)
 
-    -- client_settings (effective row on London "today")
-    left join lateral (
-      select
-        cs0.auto_invoice_default
-      from public.client_settings cs0
-      cross join anchor a
-      where cs0.client_id = tf.client_id
-        and (cs0.effective_from <= a.anchor_ymd or cs0.effective_from is null)
-      order by cs0.effective_from desc nulls last
-      limit 1
-    ) cs on true
-
-    where tf.is_current = true
-      and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
-      and tf.locked_by_invoice_id is null
-      and t.revoked_at is null
-      and upper(coalesce(pc.precheck_status,'')) = 'OK'
-
-      and pc.week_ending_date < (select anchor_ymd from anchor)
-
-      -- ✅ auto-invoice eligibility
-      and coalesce(c.auto_invoice, cs.auto_invoice_default, false) = true
-
-    order by t.updated_at desc nulls last
-    limit v_lim
-  ),
-  grouped as (
-    select distinct
-      e.client_id,
-      e.invoice_week_start
-    from eligible_ts e
-    where e.client_id is not null
-      and e.invoice_week_start is not null
-  ),
-  ins as (
-    insert into public.invoice_jobs_outbox(kind, payload)
-    select
-      'BY_WEEK'::text as kind,
-      jsonb_build_object(
-        'client_id', g.client_id::text,
-        'invoice_week_start', g.invoice_week_start::text
-      ) as payload
-    from grouped g
-    where not exists (
-      select 1
-      from public.invoice_jobs_outbox o
-      where o.kind = 'BY_WEEK'
-        and (o.payload->>'client_id') = g.client_id::text
-        and (o.payload->>'invoice_week_start') = g.invoice_week_start::text
-    )
-    returning 1
-  )
-  select count(*) into v_ins from ins;
-
-  -- DEBUG: compute counts and write one audit row (no effect unless enabled)
-  if v_invoice_debug then
-    begin
-      with anchor as (
-        select (now() at time zone 'Europe/London')::date as anchor_ymd
-      ),
-      eligible_ts as (
-        select
-          tf.client_id,
-          (pc.week_ending_date::date - interval '6 days')::date as invoice_week_start
-        from public.timesheets_financials tf
-        join public.timesheets t
-          on t.timesheet_id = tf.timesheet_id
-         and t.is_current = true
-        join public.v_ts_invoice_precheck pc
-          on pc.timesheet_id = tf.timesheet_id
-        left join public.contract_weeks cw
-          on cw.timesheet_id = tf.timesheet_id
-        left join public.contracts c
-          on c.id = coalesce(t.contract_id, cw.contract_id)
-        left join lateral (
-          select cs0.auto_invoice_default
-          from public.client_settings cs0
-          cross join anchor a
-          where cs0.client_id = tf.client_id
-            and (cs0.effective_from <= a.anchor_ymd or cs0.effective_from is null)
-          order by cs0.effective_from desc nulls last
-          limit 1
-        ) cs on true
-        where tf.is_current = true
-          and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
-          and tf.locked_by_invoice_id is null
-          and t.revoked_at is null
-          and upper(coalesce(pc.precheck_status,'')) = 'OK'
-          and pc.week_ending_date < (select anchor_ymd from anchor)
-          and coalesce(c.auto_invoice, cs.auto_invoice_default, false) = true
-        order by t.updated_at desc nulls last
-        limit v_lim
-      ),
-      grouped as (
-        select distinct e.client_id, e.invoice_week_start
-        from eligible_ts e
-        where e.client_id is not null
-          and e.invoice_week_start is not null
-      ),
-      already as (
-        select count(*)::int as n
-        from grouped g
-        where exists (
-          select 1
-          from public.invoice_jobs_outbox o
-          where o.kind = 'BY_WEEK'
-            and (o.payload->>'client_id') = g.client_id::text
-            and (o.payload->>'invoice_week_start') = g.invoice_week_start::text
-        )
-      )
-      select
-        (select anchor_ymd from anchor),
-        (select count(*)::int from eligible_ts),
-        (select count(*)::int from grouped),
-        v_ins,
-        (select n from already)
-      into
-        v_dbg_anchor_ymd,
-        v_dbg_eligible_ts_count,
-        v_dbg_grouped_count,
-        v_dbg_inserted_count,
-        v_dbg_already_queued_count;
-
-      perform public._inv_write_audit(
-        null,
-        'INVOICE_ENQUEUE_AUTO_READY_DEBUG',
-        jsonb_build_object(
-          'run_started_at_utc', public._inv_iso_utc(v_dbg_run_started),
-          'run_finished_at_utc', public._inv_iso_utc(now()),
-          'limit', v_lim,
-          'anchor_ymd', v_dbg_anchor_ymd::text,
-          'eligible_ts_rows', v_dbg_eligible_ts_count,
-          'distinct_groups', v_dbg_grouped_count,
-          'inserted_groups', v_dbg_inserted_count,
-          'already_queued_groups', v_dbg_already_queued_count
-        ),
-        'invoice_jobs_outbox',
-        ('cron:' || public._inv_iso_utc(v_dbg_run_started)),
-        null,
-        'INVOICE_DEBUG',
-        null, null, null
-      );
-    exception when others then
-      null;
-    end;
-  end if;
-
-  return v_ins;
-end;
-$$;
 
 
 -- ============================================================
@@ -452,209 +272,6 @@ $$;
 -- Idempotent: uses payload.timesheet_ids_sig to avoid duplicates.
 -- Returns the outbox_id (existing or newly inserted).
 -- ============================================================
-create or replace function public.invoice_outbox_enqueue_hours(
-  p_timesheet_ids uuid[],
-  p_actor_user_id uuid,
-  p_meta jsonb default null
-)
-returns uuid
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_ids uuid[];
-  v_sig text;
-  v_payload jsonb;
-  v_existing uuid;
-  v_new uuid;
-
-  -- ======================================================
-  -- DEBUG (optional): single audit row per RPC call
-  -- ======================================================
-  v_invoice_debug boolean := false;
-  v_dbg_run_started timestamptz := now();
-  v_dbg_details jsonb := '{}'::jsonb;
-
-begin
-  -- Load invoice_debug flag (safe even if column not yet present)
-  begin
-    select coalesce(sd.invoice_debug, false)
-    into v_invoice_debug
-    from public.settings_defaults sd
-    where sd.id = 1
-    limit 1;
-  exception when undefined_column then
-    v_invoice_debug := false;
-  end;
-
-  if p_timesheet_ids is null or coalesce(array_length(p_timesheet_ids, 1), 0) = 0 then
-    if v_invoice_debug then
-      begin
-        perform public._inv_write_audit(
-          p_actor_user_id,
-          'INVOICE_OUTBOX_ENQUEUE_HOURS_REJECTED',
-          jsonb_build_object(
-            'reason', 'timesheet_ids_empty',
-            'input_ids', to_jsonb(p_timesheet_ids),
-            'meta', p_meta,
-            'run_started_at_utc', public._inv_iso_utc(v_dbg_run_started),
-            'run_finished_at_utc', public._inv_iso_utc(now())
-          ),
-          'invoice_jobs_outbox',
-          ('hours:' || public._inv_iso_utc(v_dbg_run_started)),
-          null,
-          'INVOICE_DEBUG',
-          null, null, null
-        );
-      exception when others then
-        null;
-      end;
-    end if;
-    raise exception 'timesheet_ids[] required';
-  end if;
-
-  select array_agg(x order by x::text)
-  into v_ids
-  from (
-    select distinct unnest(p_timesheet_ids) as x
-  ) q
-  where q.x is not null;
-
-  if v_ids is null or coalesce(array_length(v_ids, 1), 0) = 0 then
-    if v_invoice_debug then
-      begin
-        perform public._inv_write_audit(
-          p_actor_user_id,
-          'INVOICE_OUTBOX_ENQUEUE_HOURS_REJECTED',
-          jsonb_build_object(
-            'reason', 'timesheet_ids_empty',
-            'input_ids', to_jsonb(p_timesheet_ids),
-            'meta', p_meta,
-            'run_started_at_utc', public._inv_iso_utc(v_dbg_run_started),
-            'run_finished_at_utc', public._inv_iso_utc(now())
-          ),
-          'invoice_jobs_outbox',
-          ('hours:' || public._inv_iso_utc(v_dbg_run_started)),
-          null,
-          'INVOICE_DEBUG',
-          null, null, null
-        );
-      exception when others then
-        null;
-      end;
-    end if;
-    raise exception 'timesheet_ids[] required';
-  end if;
-
-  v_sig := md5(array_to_string(v_ids::text[], '|'));
-
-  v_payload := jsonb_build_object(
-    'timesheet_ids', to_jsonb(v_ids),
-    'timesheet_ids_sig', v_sig
-  );
-
-  if p_actor_user_id is not null then
-    v_payload := v_payload || jsonb_build_object('actor_user_id', p_actor_user_id::text);
-  end if;
-
-  if p_meta is not null then
-    if jsonb_typeof(p_meta) = 'object' then
-      v_payload := v_payload || p_meta;
-    else
-      v_payload := v_payload || jsonb_build_object('meta', p_meta);
-    end if;
-  end if;
-
-  select o.id
-  into v_existing
-  from public.invoice_jobs_outbox o
-  where o.kind = 'HOURS'
-    and (o.payload->>'timesheet_ids_sig') = v_sig
-  order by o.created_at desc
-  limit 1;
-
-  if v_existing is not null then
-    if v_invoice_debug then
-      begin
-        perform public._inv_write_audit(
-          p_actor_user_id,
-          'INVOICE_OUTBOX_ENQUEUE_HOURS_REUSED',
-          jsonb_build_object(
-            'run_started_at_utc', public._inv_iso_utc(v_dbg_run_started),
-            'run_finished_at_utc', public._inv_iso_utc(now()),
-            'timesheet_ids_count', coalesce(array_length(v_ids,1),0),
-            'timesheet_ids_sig', v_sig,
-            'existing_outbox_id', v_existing::text,
-            'payload', v_payload
-          ),
-          'invoice_jobs_outbox',
-          v_existing::text,
-          null,
-          'INVOICE_DEBUG',
-          null, null, null
-        );
-      exception when others then
-        null;
-      end;
-    end if;
-    return v_existing;
-  end if;
-
-  insert into public.invoice_jobs_outbox(kind, payload)
-  values ('HOURS'::text, v_payload)
-  returning id into v_new;
-
-  if v_invoice_debug then
-    begin
-      perform public._inv_write_audit(
-        p_actor_user_id,
-        'INVOICE_OUTBOX_ENQUEUE_HOURS_INSERTED',
-        jsonb_build_object(
-          'run_started_at_utc', public._inv_iso_utc(v_dbg_run_started),
-          'run_finished_at_utc', public._inv_iso_utc(now()),
-          'timesheet_ids_count', coalesce(array_length(v_ids,1),0),
-          'timesheet_ids_sig', v_sig,
-          'new_outbox_id', v_new::text,
-          'payload', v_payload
-        ),
-        'invoice_jobs_outbox',
-        v_new::text,
-        null,
-        'INVOICE_DEBUG',
-        null, null, null
-      );
-    exception when others then
-      null;
-    end;
-  end if;
-
-  return v_new;
-end;
-$$;
--- ============================================================
--- CloudTMS: invoice_outbox_enqueue_by_week(p_client_id, p_invoice_week_start, p_actor_user_id, p_allow_early, p_meta)
--- UPDATED: enqueue BY_WEEK with correct allow_early + delayed-segment eligibility
---
--- Core rules implemented:
---  1) allow_early is ONLY about week-ending not yet passed (applies to SEGMENT + NON-SEGMENT)
---  2) allow_early NEVER makes delayed segments eligible early
---  3) delayed segments are eligible only when their invoice_target_week_start has been reached (<= London today)
---
--- Safety:
---  - Refuses enqueue if there are no due/invoiceable items for (client, invoice_week_start)
---  - Preserves idempotency: reuses existing outbox row for same (client_id, invoice_week_start),
---    but merges allow_early/actor/meta into payload for repeat calls.
---
--- Additional safety (minimal / no intended behaviour change):
---  - Ignore invalid segment entries (json null/non-object/missing segment_id) in SEGMENTS checks and debug.
---  - Serialize enqueue per (client_id, invoice_week_start) using pg_advisory_xact_lock to prevent
---    duplicate outbox rows from concurrent check+insert races.
--- ============================================================
-
-
-
-
 create or replace function public.invoice_outbox_enqueue_by_week(
   p_client_id uuid,
   p_invoice_week_start date,
@@ -724,6 +341,10 @@ begin
   --   - delayed segments eligible only once delay date reached (target week start <= today)
   --   - SEGMENTS-empty (expense-only) is invoiceable when ANY expense/mileage/additional-charge evidence exists,
   --     even if total_charge_ex_vat is accidentally 0 (defensive fallback).
+  --
+  -- ✅ HR validation gating:
+  --   If hr_validation_required_for_invoice is true, validation_status must be VALIDATION_OK or OVERRIDDEN.
+  --   NULL validation_status is treated as blocked when required.
   -- ------------------------------------------------------------
   select exists (
     -- NON-SEGMENTS (or SEGMENTS-empty treated as NON-SEGMENTS): invoice week is natural week
@@ -734,12 +355,22 @@ begin
      and ts.is_current = true
     join public.v_ts_invoice_precheck pc
       on pc.timesheet_id = tf.timesheet_id
+    left join public.v_timesheets_summary_base vts
+      on vts.timesheet_id = tf.timesheet_id
     where tf.is_current = true
       and tf.client_id = p_client_id
       and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
       and tf.locked_by_invoice_id is null
       and ts.revoked_at is null
       and upper(coalesce(pc.precheck_status,'')) = 'OK'
+
+      -- ✅ HR validation gate
+      and not (
+        coalesce(vts.hr_validation_required_for_invoice, false)
+        and vts.validation_status is distinct from 'VALIDATION_OK'::public.validation_status_enum
+        and vts.validation_status is distinct from 'OVERRIDDEN'::public.validation_status_enum
+      )
+
       and (
         coalesce(tf.invoice_breakdown_json->>'mode','') <> 'SEGMENTS'
         or (
@@ -777,6 +408,8 @@ begin
      and ts.is_current = true
     join public.v_ts_invoice_precheck pc
       on pc.timesheet_id = tf.timesheet_id
+    left join public.v_timesheets_summary_base vts
+      on vts.timesheet_id = tf.timesheet_id
     cross join lateral jsonb_array_elements(coalesce(tf.invoice_breakdown_json->'segments','[]'::jsonb)) seg
     where tf.is_current = true
       and tf.client_id = p_client_id
@@ -784,6 +417,14 @@ begin
       and tf.locked_by_invoice_id is null
       and ts.revoked_at is null
       and upper(coalesce(pc.precheck_status,'')) = 'OK'
+
+      -- ✅ HR validation gate
+      and not (
+        coalesce(vts.hr_validation_required_for_invoice, false)
+        and vts.validation_status is distinct from 'VALIDATION_OK'::public.validation_status_enum
+        and vts.validation_status is distinct from 'OVERRIDDEN'::public.validation_status_enum
+      )
+
       and coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
       and jsonb_typeof(seg) = 'object'
       and nullif(btrim(coalesce(seg->>'segment_id','')), '') is not null
@@ -825,7 +466,7 @@ begin
       -- NON-SEGMENTS (or segments mode with empty segments array but invoiceable via totals/expenses/mileage/additional)
       select
         count(*)::int,
-        coalesce(jsonb_agg(s) filter (where rn <= 25), '[]'::jsonb)
+        coalesce(jsonb_agg(s) filter (where s.rn <= 25), '[]'::jsonb)
       into
         v_dbg_nonseg_due_count,
         v_dbg_nonseg_due_sample
@@ -842,6 +483,8 @@ begin
           coalesce(tf.accommodation_charge_ex_vat,0)::numeric as accommodation_charge_ex_vat,
           coalesce(tf.other_charge_ex_vat,0)::numeric as other_charge_ex_vat,
           coalesce(tf.mileage_charge_ex_vat,0)::numeric as mileage_charge_ex_vat,
+          coalesce(vts.hr_validation_required_for_invoice, false) as hr_validation_required_for_invoice,
+          vts.validation_status::text as validation_status,
           case
             when nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '') is null then 0::numeric
             when nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
@@ -855,12 +498,22 @@ begin
          and ts.is_current = true
         join public.v_ts_invoice_precheck pc
           on pc.timesheet_id = tf.timesheet_id
+        left join public.v_timesheets_summary_base vts
+          on vts.timesheet_id = tf.timesheet_id
         where tf.is_current = true
           and tf.client_id = p_client_id
           and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
           and tf.locked_by_invoice_id is null
           and ts.revoked_at is null
           and upper(coalesce(pc.precheck_status,'')) = 'OK'
+
+          -- ✅ HR validation gate (mirror v_has_due)
+          and not (
+            coalesce(vts.hr_validation_required_for_invoice, false)
+            and vts.validation_status is distinct from 'VALIDATION_OK'::public.validation_status_enum
+            and vts.validation_status is distinct from 'OVERRIDDEN'::public.validation_status_enum
+          )
+
           and (ts.week_ending_date::date - 6) = p_invoice_week_start
           and (p_allow_early = true or ts.week_ending_date::date < v_london_today)
           and (
@@ -892,7 +545,7 @@ begin
       -- SEGMENTS mode (segment-level eligibility)
       select
         count(*)::int,
-        coalesce(jsonb_agg(s) filter (where rn <= 25), '[]'::jsonb)
+        coalesce(jsonb_agg(s) filter (where s.rn <= 25), '[]'::jsonb)
       into
         v_dbg_seg_due_count,
         v_dbg_seg_due_sample
@@ -905,6 +558,8 @@ begin
           coalesce(seg_el.value->>'segment_type','') as segment_type,
           coalesce(seg_el.value->>'label','') as label,
           coalesce(seg_el.value->>'charge_ex_vat','') as charge_ex_vat,
+          coalesce(vts.hr_validation_required_for_invoice, false) as hr_validation_required_for_invoice,
+          vts.validation_status::text as validation_status,
           row_number() over (order by ts.updated_at desc nulls last) as rn
         from public.timesheets_financials tf
         join public.timesheets ts
@@ -912,6 +567,8 @@ begin
          and ts.is_current = true
         join public.v_ts_invoice_precheck pc
           on pc.timesheet_id = tf.timesheet_id
+        left join public.v_timesheets_summary_base vts
+          on vts.timesheet_id = tf.timesheet_id
         cross join lateral jsonb_array_elements(coalesce(tf.invoice_breakdown_json->'segments','[]'::jsonb)) seg_el(value)
         where tf.is_current = true
           and tf.client_id = p_client_id
@@ -919,6 +576,14 @@ begin
           and tf.locked_by_invoice_id is null
           and ts.revoked_at is null
           and upper(coalesce(pc.precheck_status,'')) = 'OK'
+
+          -- ✅ HR validation gate (mirror v_has_due)
+          and not (
+            coalesce(vts.hr_validation_required_for_invoice, false)
+            and vts.validation_status is distinct from 'VALIDATION_OK'::public.validation_status_enum
+            and vts.validation_status is distinct from 'OVERRIDDEN'::public.validation_status_enum
+          )
+
           and coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
           and jsonb_typeof(seg_el.value) = 'object'
           and nullif(btrim(coalesce(seg_el.value->>'segment_id','')), '') is not null
@@ -948,7 +613,7 @@ begin
       -- NON-SEGMENTS candidates (natural week start = invoice_week_start)
       select
         count(*)::int,
-        coalesce(jsonb_agg(s) filter (where rn <= 25), '[]'::jsonb)
+        coalesce(jsonb_agg(s) filter (where s.rn <= 25), '[]'::jsonb)
       into
         v_dbg_nonseg_any_count,
         v_dbg_nonseg_fail_sample
@@ -968,6 +633,8 @@ begin
           coalesce(tf.accommodation_charge_ex_vat,0)::numeric as accommodation_charge_ex_vat,
           coalesce(tf.other_charge_ex_vat,0)::numeric as other_charge_ex_vat,
           coalesce(tf.mileage_charge_ex_vat,0)::numeric as mileage_charge_ex_vat,
+          coalesce(vts.hr_validation_required_for_invoice, false) as hr_validation_required_for_invoice,
+          vts.validation_status::text as validation_status,
           case
             when nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '') is null then 0::numeric
             when nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
@@ -979,6 +646,11 @@ begin
             when tf.locked_by_invoice_id is not null then 'LOCKED_BY_INVOICE'
             when ts.revoked_at is not null then 'REVOKED'
             when upper(coalesce(pc.precheck_status,'')) <> 'OK' then 'PRECHECK_NOT_OK'
+            when (
+              coalesce(vts.hr_validation_required_for_invoice, false)
+              and vts.validation_status is distinct from 'VALIDATION_OK'::public.validation_status_enum
+              and vts.validation_status is distinct from 'OVERRIDDEN'::public.validation_status_enum
+            ) then 'HR_VALIDATION_BLOCKED'
             when (p_allow_early is not true) and (ts.week_ending_date::date >= v_london_today) then 'WEEK_NOT_PASSED'
             when (
               (coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
@@ -1010,6 +682,8 @@ begin
          and ts.is_current = true
         join public.v_ts_invoice_precheck pc
           on pc.timesheet_id = tf.timesheet_id
+        left join public.v_timesheets_summary_base vts
+          on vts.timesheet_id = tf.timesheet_id
         where tf.is_current = true
           and tf.client_id = p_client_id
           and (ts.week_ending_date::date - 6) = p_invoice_week_start
@@ -1018,8 +692,8 @@ begin
       -- SEGMENTS candidates for this invoice_week_start (segment-level), including delayed-not-due reasons
       select
         count(*)::int,
-        coalesce(jsonb_agg(s) filter (where rn <= 25), '[]'::jsonb),
-        count(*) filter (where fail_reason = 'DELAYED_NOT_DUE')::int
+        coalesce(jsonb_agg(s) filter (where s.rn <= 25), '[]'::jsonb),
+        count(*) filter (where s.fail_reason = 'DELAYED_NOT_DUE')::int
       into
         v_dbg_seg_any_count,
         v_dbg_seg_fail_sample,
@@ -1033,11 +707,18 @@ begin
           coalesce(seg_el.value->>'segment_type','') as segment_type,
           coalesce(seg_el.value->>'label','') as label,
           coalesce(seg_el.value->>'charge_ex_vat','') as charge_ex_vat,
+          coalesce(vts.hr_validation_required_for_invoice, false) as hr_validation_required_for_invoice,
+          vts.validation_status::text as validation_status,
           case
             when tf.processing_status <> 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum then 'NOT_READY_FOR_INVOICE'
             when tf.locked_by_invoice_id is not null then 'LOCKED_BY_INVOICE'
             when ts.revoked_at is not null then 'REVOKED'
             when upper(coalesce(pc.precheck_status,'')) <> 'OK' then 'PRECHECK_NOT_OK'
+            when (
+              coalesce(vts.hr_validation_required_for_invoice, false)
+              and vts.validation_status is distinct from 'VALIDATION_OK'::public.validation_status_enum
+              and vts.validation_status is distinct from 'OVERRIDDEN'::public.validation_status_enum
+            ) then 'HR_VALIDATION_BLOCKED'
             when nullif(btrim(coalesce(seg_el.value->>'invoice_locked_invoice_id','')), '') is not null then 'SEGMENT_LOCKED'
             when (
               nullif(btrim(coalesce(seg_el.value->>'invoice_target_week_start','')), '') is not null
@@ -1059,6 +740,8 @@ begin
          and ts.is_current = true
         join public.v_ts_invoice_precheck pc
           on pc.timesheet_id = tf.timesheet_id
+        left join public.v_timesheets_summary_base vts
+          on vts.timesheet_id = tf.timesheet_id
         cross join lateral jsonb_array_elements(coalesce(tf.invoice_breakdown_json->'segments','[]'::jsonb)) seg_el(value)
         where tf.is_current = true
           and tf.client_id = p_client_id
@@ -1266,6 +949,504 @@ begin
   return v_new;
 end;
 $$;
+
+create or replace function public.invoice_outbox_enqueue_hours(
+  p_timesheet_ids uuid[],
+  p_actor_user_id uuid,
+  p_meta jsonb default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_ids uuid[];
+  v_sig text;
+  v_payload jsonb;
+  v_existing uuid;
+  v_new uuid;
+
+  -- ✅ HR validation gating
+  v_blocked_ids uuid[];
+
+  -- ======================================================
+  -- DEBUG (optional): single audit row per RPC call
+  -- ======================================================
+  v_invoice_debug boolean := false;
+  v_dbg_run_started timestamptz := now();
+  v_dbg_details jsonb := '{}'::jsonb;
+
+begin
+  -- Load invoice_debug flag (safe even if column not yet present)
+  begin
+    select coalesce(sd.invoice_debug, false)
+    into v_invoice_debug
+    from public.settings_defaults sd
+    where sd.id = 1
+    limit 1;
+  exception when undefined_column then
+    v_invoice_debug := false;
+  end;
+
+  if p_timesheet_ids is null or coalesce(array_length(p_timesheet_ids, 1), 0) = 0 then
+    if v_invoice_debug then
+      begin
+        perform public._inv_write_audit(
+          p_actor_user_id,
+          'INVOICE_OUTBOX_ENQUEUE_HOURS_REJECTED',
+          jsonb_build_object(
+            'reason', 'timesheet_ids_empty',
+            'input_ids', to_jsonb(p_timesheet_ids),
+            'meta', p_meta,
+            'run_started_at_utc', public._inv_iso_utc(v_dbg_run_started),
+            'run_finished_at_utc', public._inv_iso_utc(now())
+          ),
+          'invoice_jobs_outbox',
+          ('hours:' || public._inv_iso_utc(v_dbg_run_started)),
+          null,
+          'INVOICE_DEBUG',
+          null, null, null
+        );
+      exception when others then
+        null;
+      end;
+    end if;
+    raise exception 'timesheet_ids[] required';
+  end if;
+
+  select array_agg(q.x order by q.x::text)
+  into v_ids
+  from (
+    select distinct unnest(p_timesheet_ids) as x
+  ) q
+  where q.x is not null;
+
+  if v_ids is null or coalesce(array_length(v_ids, 1), 0) = 0 then
+    if v_invoice_debug then
+      begin
+        perform public._inv_write_audit(
+          p_actor_user_id,
+          'INVOICE_OUTBOX_ENQUEUE_HOURS_REJECTED',
+          jsonb_build_object(
+            'reason', 'timesheet_ids_empty',
+            'input_ids', to_jsonb(p_timesheet_ids),
+            'meta', p_meta,
+            'run_started_at_utc', public._inv_iso_utc(v_dbg_run_started),
+            'run_finished_at_utc', public._inv_iso_utc(now())
+          ),
+          'invoice_jobs_outbox',
+          ('hours:' || public._inv_iso_utc(v_dbg_run_started)),
+          null,
+          'INVOICE_DEBUG',
+          null, null, null
+        );
+      exception when others then
+        null;
+      end;
+    end if;
+    raise exception 'timesheet_ids[] required';
+  end if;
+
+  -- ------------------------------------------------------------
+  -- ✅ HR validation gating (reject entire request if any selected timesheet is blocked)
+  -- Rule:
+  --   If hr_validation_required_for_invoice = true, validation_status must be VALIDATION_OK or OVERRIDDEN.
+  --   NULL validation_status is treated as blocked when required.
+  -- ------------------------------------------------------------
+  select array_agg(b.timesheet_id order by b.timesheet_id::text)
+  into v_blocked_ids
+  from (
+    select vts.timesheet_id
+    from public.v_timesheets_summary_base vts
+    where vts.timesheet_id = any(v_ids)
+      and coalesce(vts.hr_validation_required_for_invoice, false)
+      and vts.validation_status is distinct from 'VALIDATION_OK'::public.validation_status_enum
+      and vts.validation_status is distinct from 'OVERRIDDEN'::public.validation_status_enum
+  ) b;
+
+  if v_blocked_ids is not null and coalesce(array_length(v_blocked_ids, 1), 0) > 0 then
+    if v_invoice_debug then
+      begin
+        perform public._inv_write_audit(
+          p_actor_user_id,
+          'INVOICE_OUTBOX_ENQUEUE_HOURS_REJECTED',
+          jsonb_build_object(
+            'reason', 'hr_validation_not_passed',
+            'blocked_timesheet_ids', to_jsonb(v_blocked_ids),
+            'input_timesheet_ids', to_jsonb(v_ids),
+            'meta', p_meta,
+            'run_started_at_utc', public._inv_iso_utc(v_dbg_run_started),
+            'run_finished_at_utc', public._inv_iso_utc(now())
+          ),
+          'invoice_jobs_outbox',
+          ('hours:' || public._inv_iso_utc(v_dbg_run_started)),
+          null,
+          'INVOICE_DEBUG',
+          null, null, null
+        );
+      exception when others then
+        null;
+      end;
+    end if;
+
+    raise exception 'HR validation not passed for timesheet_ids: %', array_to_string(v_blocked_ids::text[], ',');
+  end if;
+
+  v_sig := md5(array_to_string(v_ids::text[], '|'));
+
+  v_payload := jsonb_build_object(
+    'timesheet_ids', to_jsonb(v_ids),
+    'timesheet_ids_sig', v_sig
+  );
+
+  if p_actor_user_id is not null then
+    v_payload := v_payload || jsonb_build_object('actor_user_id', p_actor_user_id::text);
+  end if;
+
+  if p_meta is not null then
+    if jsonb_typeof(p_meta) = 'object' then
+      v_payload := v_payload || p_meta;
+    else
+      v_payload := v_payload || jsonb_build_object('meta', p_meta);
+    end if;
+  end if;
+
+  select o.id
+  into v_existing
+  from public.invoice_jobs_outbox o
+  where o.kind = 'HOURS'
+    and (o.payload->>'timesheet_ids_sig') = v_sig
+  order by o.created_at desc
+  limit 1;
+
+  if v_existing is not null then
+    if v_invoice_debug then
+      begin
+        perform public._inv_write_audit(
+          p_actor_user_id,
+          'INVOICE_OUTBOX_ENQUEUE_HOURS_REUSED',
+          jsonb_build_object(
+            'run_started_at_utc', public._inv_iso_utc(v_dbg_run_started),
+            'run_finished_at_utc', public._inv_iso_utc(now()),
+            'timesheet_ids_count', coalesce(array_length(v_ids,1),0),
+            'timesheet_ids_sig', v_sig,
+            'existing_outbox_id', v_existing::text,
+            'payload', v_payload
+          ),
+          'invoice_jobs_outbox',
+          v_existing::text,
+          null,
+          'INVOICE_DEBUG',
+          null, null, null
+        );
+      exception when others then
+        null;
+      end;
+    end if;
+    return v_existing;
+  end if;
+
+  insert into public.invoice_jobs_outbox(kind, payload)
+  values ('HOURS'::text, v_payload)
+  returning id into v_new;
+
+  if v_invoice_debug then
+    begin
+      perform public._inv_write_audit(
+        p_actor_user_id,
+        'INVOICE_OUTBOX_ENQUEUE_HOURS_INSERTED',
+        jsonb_build_object(
+          'run_started_at_utc', public._inv_iso_utc(v_dbg_run_started),
+          'run_finished_at_utc', public._inv_iso_utc(now()),
+          'timesheet_ids_count', coalesce(array_length(v_ids,1),0),
+          'timesheet_ids_sig', v_sig,
+          'new_outbox_id', v_new::text,
+          'payload', v_payload
+        ),
+        'invoice_jobs_outbox',
+        v_new::text,
+        null,
+        'INVOICE_DEBUG',
+        null, null, null
+      );
+    exception when others then
+      null;
+    end;
+  end if;
+
+  return v_new;
+end;
+$$;
+
+
+-- ============================================================
+-- CloudTMS: invoice_outbox_enqueue_by_week(p_client_id, p_invoice_week_start, p_actor_user_id, p_allow_early, p_meta)
+-- UPDATED: enqueue BY_WEEK with correct allow_early + delayed-segment eligibility
+--
+-- Core rules implemented:
+--  1) allow_early is ONLY about week-ending not yet passed (applies to SEGMENT + NON-SEGMENT)
+--  2) allow_early NEVER makes delayed segments eligible early
+--  3) delayed segments are eligible only when their invoice_target_week_start has been reached (<= London today)
+--
+-- Safety:
+--  - Refuses enqueue if there are no due/invoiceable items for (client, invoice_week_start)
+--  - Preserves idempotency: reuses existing outbox row for same (client_id, invoice_week_start),
+--    but merges allow_early/actor/meta into payload for repeat calls.
+--
+-- Additional safety (minimal / no intended behaviour change):
+--  - Ignore invalid segment entries (json null/non-object/missing segment_id) in SEGMENTS checks and debug.
+--  - Serialize enqueue per (client_id, invoice_week_start) using pg_advisory_xact_lock to prevent
+--    duplicate outbox rows from concurrent check+insert races.
+-- ============================================================
+
+-- ============================================================
+-- CloudTMS: invoice_enqueue_auto_invoice_ready(p_limit int)
+-- NEW (cron-safe auto enqueue)
+--
+-- Enqueues BY_WEEK jobs only for timesheets that are:
+--   - TSFIN is_current + READY_FOR_INVOICE + unlocked
+--   - timesheets is_current + not revoked
+--   - v_ts_invoice_precheck.precheck_status = 'OK' (authoritative, includes PDF gating)
+--   - Auto-invoice eligible:
+--       COALESCE(contracts.auto_invoice, client_settings.auto_invoice_default, false) = true
+--   - ✅ HR validation gating (when hr_validation_required_for_invoice = true):
+--       validation_status must be VALIDATION_OK or OVERRIDDEN (NULL treated as blocked)
+--
+-- Idempotent: will not enqueue duplicates for same (client_id, invoice_week_start).
+-- ============================================================
+create or replace function public.invoice_enqueue_auto_invoice_ready(p_limit int default 500)
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_ins int := 0;
+  v_lim int := greatest(1, least(coalesce(p_limit, 500), 5000));
+
+  -- ======================================================
+  -- DEBUG (optional): single audit row per RPC call
+  -- ======================================================
+  v_invoice_debug boolean := false;
+  v_dbg_run_started timestamptz := now();
+  v_dbg_anchor_ymd date := null;
+  v_dbg_eligible_ts_count int := null;
+  v_dbg_grouped_count int := null;
+  v_dbg_inserted_count int := null;
+  v_dbg_already_queued_count int := null;
+begin
+  -- Load invoice_debug flag (safe even if column not yet present)
+  begin
+    select coalesce(sd.invoice_debug, false)
+    into v_invoice_debug
+    from public.settings_defaults sd
+    where sd.id = 1
+    limit 1;
+  exception when undefined_column then
+    v_invoice_debug := false;
+  end;
+
+  with anchor as (
+    select (now() at time zone 'Europe/London')::date as anchor_ymd
+  ),
+  eligible_ts as (
+    select
+      tf.client_id,
+      (pc.week_ending_date::date - interval '6 days')::date as invoice_week_start
+    from public.timesheets_financials tf
+    join public.timesheets t
+      on t.timesheet_id = tf.timesheet_id
+     and t.is_current = true
+    join public.v_ts_invoice_precheck pc
+      on pc.timesheet_id = tf.timesheet_id
+
+    -- HR validation context
+    join public.v_timesheets_summary_base vts
+      on vts.timesheet_id = tf.timesheet_id
+
+    left join public.contract_weeks cw
+      on cw.timesheet_id = tf.timesheet_id
+    left join public.contracts c
+      on c.id = coalesce(t.contract_id, cw.contract_id)
+
+    -- client_settings (effective row on London "today")
+    left join lateral (
+      select
+        cs0.auto_invoice_default
+      from public.client_settings cs0
+      cross join anchor a
+      where cs0.client_id = tf.client_id
+        and (cs0.effective_from <= a.anchor_ymd or cs0.effective_from is null)
+      order by cs0.effective_from desc nulls last
+      limit 1
+    ) cs on true
+
+    where tf.is_current = true
+      and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
+      and tf.locked_by_invoice_id is null
+      and t.revoked_at is null
+      and upper(coalesce(pc.precheck_status,'')) = 'OK'
+
+      and pc.week_ending_date < (select a.anchor_ymd from anchor a)
+
+      -- ✅ auto-invoice eligibility
+      and coalesce(c.auto_invoice, cs.auto_invoice_default, false) = true
+
+      -- ✅ HR validation gating (NULL treated as blocked when required)
+      and not (
+        coalesce(vts.hr_validation_required_for_invoice, false)
+        and vts.validation_status is distinct from 'VALIDATION_OK'::public.validation_status_enum
+        and vts.validation_status is distinct from 'OVERRIDDEN'::public.validation_status_enum
+      )
+
+    order by t.updated_at desc nulls last
+    limit v_lim
+  ),
+  grouped as (
+    select distinct
+      e.client_id,
+      e.invoice_week_start
+    from eligible_ts e
+    where e.client_id is not null
+      and e.invoice_week_start is not null
+  ),
+  ins as (
+    insert into public.invoice_jobs_outbox(kind, payload)
+    select
+      'BY_WEEK'::text as kind,
+      jsonb_build_object(
+        'client_id', g.client_id::text,
+        'invoice_week_start', g.invoice_week_start::text
+      ) as payload
+    from grouped g
+    where not exists (
+      select 1
+      from public.invoice_jobs_outbox o
+      where o.kind = 'BY_WEEK'
+        and (o.payload->>'client_id') = g.client_id::text
+        and (o.payload->>'invoice_week_start') = g.invoice_week_start::text
+    )
+    returning 1
+  )
+  select count(*) into v_ins from ins;
+
+  -- DEBUG: compute counts and write one audit row (no effect unless enabled)
+  if v_invoice_debug then
+    begin
+      with anchor as (
+        select (now() at time zone 'Europe/London')::date as anchor_ymd
+      ),
+      eligible_ts as (
+        select
+          tf.client_id,
+          (pc.week_ending_date::date - interval '6 days')::date as invoice_week_start
+        from public.timesheets_financials tf
+        join public.timesheets t
+          on t.timesheet_id = tf.timesheet_id
+         and t.is_current = true
+        join public.v_ts_invoice_precheck pc
+          on pc.timesheet_id = tf.timesheet_id
+
+        -- HR validation context
+        join public.v_timesheets_summary_base vts
+          on vts.timesheet_id = tf.timesheet_id
+
+        left join public.contract_weeks cw
+          on cw.timesheet_id = tf.timesheet_id
+        left join public.contracts c
+          on c.id = coalesce(t.contract_id, cw.contract_id)
+
+        left join lateral (
+          select cs0.auto_invoice_default
+          from public.client_settings cs0
+          cross join anchor a
+          where cs0.client_id = tf.client_id
+            and (cs0.effective_from <= a.anchor_ymd or cs0.effective_from is null)
+          order by cs0.effective_from desc nulls last
+          limit 1
+        ) cs on true
+
+        where tf.is_current = true
+          and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
+          and tf.locked_by_invoice_id is null
+          and t.revoked_at is null
+          and upper(coalesce(pc.precheck_status,'')) = 'OK'
+          and pc.week_ending_date < (select a.anchor_ymd from anchor a)
+          and coalesce(c.auto_invoice, cs.auto_invoice_default, false) = true
+
+          -- ✅ HR validation gating (mirror main path)
+          and not (
+            coalesce(vts.hr_validation_required_for_invoice, false)
+            and vts.validation_status is distinct from 'VALIDATION_OK'::public.validation_status_enum
+            and vts.validation_status is distinct from 'OVERRIDDEN'::public.validation_status_enum
+          )
+
+        order by t.updated_at desc nulls last
+        limit v_lim
+      ),
+      grouped as (
+        select distinct e.client_id, e.invoice_week_start
+        from eligible_ts e
+        where e.client_id is not null
+          and e.invoice_week_start is not null
+      ),
+      already as (
+        select count(*)::int as n
+        from grouped g
+        where exists (
+          select 1
+          from public.invoice_jobs_outbox o
+          where o.kind = 'BY_WEEK'
+            and (o.payload->>'client_id') = g.client_id::text
+            and (o.payload->>'invoice_week_start') = g.invoice_week_start::text
+        )
+      )
+      select
+        (select a.anchor_ymd from anchor a),
+        (select count(*)::int from eligible_ts),
+        (select count(*)::int from grouped),
+        v_ins,
+        (select a2.n from already a2)
+      into
+        v_dbg_anchor_ymd,
+        v_dbg_eligible_ts_count,
+        v_dbg_grouped_count,
+        v_dbg_inserted_count,
+        v_dbg_already_queued_count;
+
+      perform public._inv_write_audit(
+        null,
+        'INVOICE_ENQUEUE_AUTO_READY_DEBUG',
+        jsonb_build_object(
+          'run_started_at_utc', public._inv_iso_utc(v_dbg_run_started),
+          'run_finished_at_utc', public._inv_iso_utc(now()),
+          'limit', v_lim,
+          'anchor_ymd', v_dbg_anchor_ymd::text,
+          'eligible_ts_rows', v_dbg_eligible_ts_count,
+          'distinct_groups', v_dbg_grouped_count,
+          'inserted_groups', v_dbg_inserted_count,
+          'already_queued_groups', v_dbg_already_queued_count
+        ),
+        'invoice_jobs_outbox',
+        ('cron:' || public._inv_iso_utc(v_dbg_run_started)),
+        null,
+        'INVOICE_DEBUG',
+        null, null, null
+      );
+    exception when others then
+      null;
+    end;
+  end if;
+
+  return v_ins;
+end;
+$$;
+
+
+
+
+
 
 
 
