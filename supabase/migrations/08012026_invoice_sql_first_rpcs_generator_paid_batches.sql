@@ -601,6 +601,14 @@ $$;
 --  3) Consolidation mode source of truth: payload.meta.invoice_consolidation_mode overrides client_settings
 --  4) Fix BY_WEEK + consolidation NONE + SELF_BILL: avoid using FOUND with an unassigned record (v_invoice)
 -- Generated: 2026-02-10
+-- CloudTMS
+-- Updated RPC: public.invoice_generate_from_outbox_batch
+-- Fixes:
+--  1) Reuse eligible DRAFT invoices under consolidation even when invoice has no invoice_lines (no timesheets yet)
+--  2) Adjustment timesheets inherit invoice stream (SELF_BILL vs NORMAL) from their parent timesheet
+--  3) Consolidation mode source of truth: payload.meta.invoice_consolidation_mode overrides client_settings
+--  4) Fix BY_WEEK + consolidation NONE + SELF_BILL: avoid using FOUND with an unassigned record (v_invoice)
+-- Generated: 2026-02-10
 
 CREATE OR REPLACE FUNCTION public.invoice_generate_from_outbox_batch(p_outbox_ids uuid[], p_actor_user_id uuid)
  RETURNS TABLE(outbox_id uuid, ok boolean, invoice_ids uuid[], warnings jsonb)
@@ -2591,6 +2599,9 @@ h_bh numeric;
           vat_amt numeric;
           inc_amt numeric;
 
+          -- track whether any EXP category line was written (for expenses_total fallback)
+          v_any_expense_line boolean := false;
+
           line_desc text;
           meta jsonb;
           v_line_source_key text;
@@ -2862,7 +2873,25 @@ limit 1;
             coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
             and jsonb_typeof(tf.invoice_breakdown_json->'segments') = 'array'
             and jsonb_array_length(tf.invoice_breakdown_json->'segments') = 0
-            and coalesce(tf.total_charge_ex_vat,0)::numeric <> 0
+            and (
+              coalesce(tf.total_charge_ex_vat,0)::numeric <> 0
+              or coalesce(tf.total_pay_ex_vat,0)::numeric <> 0
+              or coalesce(tf.additional_charge_ex_vat,0)::numeric <> 0
+              or coalesce(tf.additional_pay_ex_vat,0)::numeric <> 0
+              or coalesce(tf.expenses_charge_ex_vat,0)::numeric <> 0
+              or coalesce(tf.expenses_pay_ex_vat,0)::numeric <> 0
+              or coalesce(tf.travel_charge_ex_vat,0)::numeric <> 0
+              or coalesce(tf.travel_pay_ex_vat,0)::numeric <> 0
+              or coalesce(tf.accommodation_charge_ex_vat,0)::numeric <> 0
+              or coalesce(tf.accommodation_pay_ex_vat,0)::numeric <> 0
+              or coalesce(tf.other_charge_ex_vat,0)::numeric <> 0
+              or coalesce(tf.other_pay_ex_vat,0)::numeric <> 0
+              or coalesce(tf.mileage_charge_ex_vat,0)::numeric <> 0
+              or coalesce(tf.mileage_pay_ex_vat,0)::numeric <> 0
+              or coalesce(tf.mileage_units,0)::numeric <> 0
+              or coalesce(nullif(btrim(coalesce(tf.invoice_breakdown_json->'additional'->>'charge_ex_vat','')), '')::numeric, 0) <> 0
+              or coalesce(nullif(btrim(coalesce(tf.invoice_breakdown_json->'additional'->>'pay_ex_vat','')), '')::numeric, 0) <> 0
+            )
           )
         )
         and ts.week_ending_date::date = (v_week_start + 6)
@@ -3139,35 +3168,95 @@ limit 1;
                 -- CORE ONLY: exclude additional + expenses + mileage (these become separate invoice lines)
                 'pay_amount',
                   public._inv_round2(
-                    coalesce((select (s2->>'total_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
-                    - coalesce((select (s2->>'additional_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
-                    - coalesce((select (s2->>'expenses_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
-                    - coalesce((select (s2->>'mileage_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
+                    case
+                      -- If totals are zero but non-core components exist (expenses/mileage/additional),
+                      -- treat core as zero to avoid creating a negative/positive balancing core line.
+                      when coalesce((select (s2->>'total_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0) = 0
+                        and (
+                          coalesce((select (s2->>'additional_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0) <> 0
+                          or coalesce((select (s2->>'expenses_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0) <> 0
+                          or coalesce((select (s2->>'travel_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0) <> 0
+                          or coalesce((select (s2->>'accommodation_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0) <> 0
+                          or coalesce((select (s2->>'other_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0) <> 0
+                          or coalesce((select (s2->>'mileage_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0) <> 0
+                          or coalesce((select (s2->>'mileage_units')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0) <> 0
+                        )
+                        then 0
+                      else
+                        coalesce((select (s2->>'total_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0)
+                        - coalesce((select (s2->>'additional_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0)
+                        - coalesce((select (s2->>'expenses_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0)
+                        - coalesce((select (s2->>'mileage_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0)
+                    end
                   ),
 
                 'charge_amount',
                   public._inv_round2(
-                    coalesce((select (s2->>'total_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
-                    - coalesce((select (s2->>'additional_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
-                    - coalesce((select (s2->>'expenses_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
-                    - coalesce((select (s2->>'mileage_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
+                    case
+                      -- If totals are zero but non-core components exist (expenses/mileage/additional),
+                      -- treat core as zero to avoid creating a negative/positive balancing core line.
+                      when coalesce((select (s2->>'total_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0) = 0
+                        and (
+                          coalesce((select (s2->>'additional_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0) <> 0
+                          or coalesce((select (s2->>'expenses_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0) <> 0
+                          or coalesce((select (s2->>'travel_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0) <> 0
+                          or coalesce((select (s2->>'accommodation_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0) <> 0
+                          or coalesce((select (s2->>'other_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0) <> 0
+                          or coalesce((select (s2->>'mileage_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0) <> 0
+                          or coalesce((select (s2->>'mileage_units')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0) <> 0
+                        )
+                        then 0
+                      else
+                        coalesce((select (s2->>'total_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0)
+                        - coalesce((select (s2->>'additional_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0)
+                        - coalesce((select (s2->>'expenses_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0)
+                        - coalesce((select (s2->>'mileage_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0)
+                    end
                   ),
 
                 'margin_amount',
                   public._inv_round2(
-                    (
-                      coalesce((select (s2->>'total_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
-                      - coalesce((select (s2->>'additional_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
-                      - coalesce((select (s2->>'expenses_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
-                      - coalesce((select (s2->>'mileage_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
-                    )
-                    -
-                    (
-                      coalesce((select (s2->>'total_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
-                      - coalesce((select (s2->>'additional_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
-                      - coalesce((select (s2->>'expenses_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
-                      - coalesce((select (s2->>'mileage_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid=sn.tsfin_id limit 1),0)
-                    )
+                    case
+                      -- If totals are zero but non-core components exist, core margin should be zero.
+                      when (
+                        coalesce((select (s2->>'total_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0) = 0
+                        and (
+                          coalesce((select (s2->>'additional_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0) <> 0
+                          or coalesce((select (s2->>'expenses_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0) <> 0
+                          or coalesce((select (s2->>'travel_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0) <> 0
+                          or coalesce((select (s2->>'accommodation_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0) <> 0
+                          or coalesce((select (s2->>'other_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0) <> 0
+                          or coalesce((select (s2->>'mileage_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0) <> 0
+                          or coalesce((select (s2->>'mileage_units')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0) <> 0
+                        )
+                      ) or (
+                        coalesce((select (s2->>'total_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0) = 0
+                        and (
+                          coalesce((select (s2->>'additional_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0) <> 0
+                          or coalesce((select (s2->>'expenses_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0) <> 0
+                          or coalesce((select (s2->>'travel_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0) <> 0
+                          or coalesce((select (s2->>'accommodation_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0) <> 0
+                          or coalesce((select (s2->>'other_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0) <> 0
+                          or coalesce((select (s2->>'mileage_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0) <> 0
+                          or coalesce((select (s2->>'mileage_units')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0) <> 0
+                        )
+                      )
+                        then 0
+                      else
+                        (
+                          coalesce((select (s2->>'total_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0)
+                          - coalesce((select (s2->>'additional_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0)
+                          - coalesce((select (s2->>'expenses_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0)
+                          - coalesce((select (s2->>'mileage_charge_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0)
+                        )
+                        -
+                        (
+                          coalesce((select (s2->>'total_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0)
+                          - coalesce((select (s2->>'additional_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0)
+                          - coalesce((select (s2->>'expenses_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0)
+                          - coalesce((select (s2->>'mileage_pay_ex_vat')::numeric from jsonb_array_elements(meta) s2 where (s2->>'id')::uuid = sn.tsfin_id limit 1), 0)
+                        )
+                    end
                   ),
 
                 'invoice_target_week_start', v_week_start::text,
@@ -4037,6 +4126,9 @@ v_ip, v_ua, v_corr
               continue;
             end if;
 
+            -- reset per-timesheet expense-line tracker
+            v_any_expense_line := false;
+
                      -- contract resolution
             contract_id := snap.ts_contract_id;
 
@@ -4408,37 +4500,49 @@ from agg;
     );
 
 
-    v_line_source_key := 'TS:' || v_ts_id::text || ':HOURS:WEEK';
-    insert into public.invoice_lines(
-      invoice_id, timesheet_id, booking_id, description,
-      hours_day, hours_night, hours_sat, hours_sun, hours_bh,
-      pay_day, pay_night, pay_sat, pay_sun, pay_bh,
-      charge_day, charge_night, charge_sat, charge_sun, charge_bh,
-      total_pay_ex_vat, total_charge_ex_vat, margin_ex_vat,
-      vat_rate_pct, vat_amount, total_inc_vat,
-      paper_ts_r2_key, meta_json, source_key
-    )
-    values (
-      v_invoice_id, v_ts_id, snap.booking_id, line_desc,
-      h_day, h_night, h_sat, h_sun, h_bh,
-      null,null,null,null,null,
-      coalesce(snap.charge_day,null),
-      coalesce(snap.charge_night,null),
-      coalesce(snap.charge_sat,null),
-      coalesce(snap.charge_sun,null),
-      coalesce(snap.charge_bh,null),
+    -- Skip writing a zero-value weekly HOURS line (common for expenses-only timesheets).
+    if not (
+      coalesce(h_day,0) = 0
+      and coalesce(h_night,0) = 0
+      and coalesce(h_sat,0) = 0
+      and coalesce(h_sun,0) = 0
+      and coalesce(h_bh,0) = 0
+      and coalesce(pay_ex,0) = 0
+      and coalesce(chg_ex,0) = 0
+    ) then
+      v_line_source_key := 'TS:' || v_ts_id::text || ':HOURS:WEEK';
 
-      pay_ex, chg_ex, margin_ex,
-      v_vat_rate, vat_amt, inc_amt,
-      ('docs-pdf/timesheets/ts_' || v_ts_id::text || '.pdf'),
-      meta,
-      v_line_source_key
-    )
-    on conflict (invoice_id, source_key) do nothing;
+      insert into public.invoice_lines(
+        invoice_id, timesheet_id, booking_id, description,
+        hours_day, hours_night, hours_sat, hours_sun, hours_bh,
+        pay_day, pay_night, pay_sat, pay_sun, pay_bh,
+        charge_day, charge_night, charge_sat, charge_sun, charge_bh,
+        total_pay_ex_vat, total_charge_ex_vat, margin_ex_vat,
+        vat_rate_pct, vat_amount, total_inc_vat,
+        paper_ts_r2_key, meta_json, source_key
+      )
+      values (
+        v_invoice_id, v_ts_id, snap.booking_id, line_desc,
+        h_day, h_night, h_sat, h_sun, h_bh,
+        null,null,null,null,null,
+        coalesce(snap.charge_day,null),
+        coalesce(snap.charge_night,null),
+        coalesce(snap.charge_sat,null),
+        coalesce(snap.charge_sun,null),
+        coalesce(snap.charge_bh,null),
 
-    if found then
-      insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
-      values (v_ts_id, v_line_source_key, chg_ex, vat_amt, inc_amt);
+        pay_ex, chg_ex, margin_ex,
+        v_vat_rate, vat_amt, inc_amt,
+        ('docs-pdf/timesheets/ts_' || v_ts_id::text || '.pdf'),
+        meta,
+        v_line_source_key
+      )
+      on conflict (invoice_id, source_key) do nothing;
+
+      if found then
+        insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
+        values (v_ts_id, v_line_source_key, chg_ex, vat_amt, inc_amt);
+      end if;
     end if;
             -- WEEKLY additional rates (mirror JS)
             for kv in
@@ -4617,6 +4721,7 @@ from agg;
 
               -- TRAVEL
               if coalesce(snap.travel_charge_ex_vat,0) <> 0 or coalesce(snap.travel_pay_ex_vat,0) <> 0 then
+                v_any_expense_line := true;
                 pay_ex := public._inv_round2(coalesce(snap.travel_pay_ex_vat,0));
                 chg_ex := public._inv_round2(coalesce(snap.travel_charge_ex_vat,0));
                 margin_ex := public._inv_round2(chg_ex - pay_ex);
@@ -4690,6 +4795,7 @@ from agg;
 
               -- ACCOMMODATION
               if coalesce(snap.accommodation_charge_ex_vat,0) <> 0 or coalesce(snap.accommodation_pay_ex_vat,0) <> 0 then
+                v_any_expense_line := true;
                 pay_ex := public._inv_round2(coalesce(snap.accommodation_pay_ex_vat,0));
                 chg_ex := public._inv_round2(coalesce(snap.accommodation_charge_ex_vat,0));
                 margin_ex := public._inv_round2(chg_ex - pay_ex);
@@ -4763,6 +4869,7 @@ from agg;
 
               -- OTHER
               if coalesce(snap.other_charge_ex_vat,0) <> 0 or coalesce(snap.other_pay_ex_vat,0) <> 0 then
+                v_any_expense_line := true;
                 pay_ex := public._inv_round2(coalesce(snap.other_pay_ex_vat,0));
                 chg_ex := public._inv_round2(coalesce(snap.other_charge_ex_vat,0));
                 margin_ex := public._inv_round2(chg_ex - pay_ex);
@@ -4820,6 +4927,85 @@ from agg;
       coalesce(snap.charge_sun,null),
       coalesce(snap.charge_bh,null),
 
+                  pay_ex, chg_ex, margin_ex,
+                  v_vat_rate, vat_amt, inc_amt,
+                  ('docs-pdf/timesheets/ts_' || v_ts_id::text || '.pdf'),
+                  meta,
+                  v_line_source_key
+                )
+                on conflict (invoice_id, source_key) do nothing;
+
+                if found then
+                  insert into pg_temp._inv_run_lines(timesheet_id, source_key, charge_ex, vat_amount, inc_amount)
+                  values (v_ts_id, v_line_source_key, chg_ex, vat_amt, inc_amt);
+                end if;
+              end if;
+
+              -- EXPENSES TOTAL (fallback): if we have expenses totals but no category lines,
+              -- write a single aggregate expense line so expenses-only timesheets can invoice.
+              if v_any_expense_line is false and (coalesce(snap.expenses_charge_ex_vat,0) <> 0 or coalesce(snap.expenses_pay_ex_vat,0) <> 0) then
+                pay_ex := public._inv_round2(coalesce(snap.expenses_pay_ex_vat,0));
+                chg_ex := public._inv_round2(coalesce(snap.expenses_charge_ex_vat,0));
+                margin_ex := public._inv_round2(chg_ex - pay_ex);
+                vat_amt := public._inv_round2(chg_ex * v_vat_rate / 100);
+                inc_amt := public._inv_round2(chg_ex + vat_amt);
+
+                line_desc :=
+                  'Expenses'
+                  || case
+                       when nullif(btrim(coalesce(snap.expenses_description,'')), '') is not null then ' – ' || nullif(btrim(coalesce(snap.expenses_description,'')), '')
+                       when v_note_global is not null then ' – ' || v_note_global
+                       else ''
+                     end
+                  || case when snap.week_ending_date is not null then ' (W/E ' || snap.week_ending_date::text || ')' else '' end;
+
+                meta := jsonb_build_object(
+                  'line_type','EXPENSES_TOTAL',
+                  'timesheet_id', v_ts_id::text,
+                  'tsfin_id', snap.id::text,
+                  'candidate_display', cand_display,
+                  'role', con_role,
+                  'hospital', con_display_site,
+                  'ward', con_ward_hint,
+                  'week_ending_date', snap.week_ending_date::text,
+                  'expense', jsonb_build_object(
+                    'category', 'EXPENSES',
+                    'note', nullif(btrim(coalesce(snap.expenses_description,'')), ''),
+                    'pay_ex_vat', pay_ex,
+                    'charge_ex_vat', chg_ex,
+                    'evidence_r2_key', snap.expenses_evidence_r2_key,
+                    'evidence_manifest', snap.expenses_evidence_manifest
+                  ),
+                  'totals', jsonb_build_object(
+                    'line_pay_ex_vat', pay_ex,
+                    'line_charge_ex_vat', chg_ex,
+                    'margin_ex_vat', margin_ex,
+                    'vat_rate_pct', v_vat_rate,
+                    'vat_amount', vat_amt,
+                    'total_inc_vat', inc_amt
+                  )
+                );
+
+                v_line_source_key := 'TS:' || v_ts_id::text || ':EXP:TOTAL';
+
+                insert into public.invoice_lines(
+                  invoice_id, timesheet_id, booking_id, description,
+                  hours_day, hours_night, hours_sat, hours_sun, hours_bh,
+                  pay_day, pay_night, pay_sat, pay_sun, pay_bh,
+                  charge_day, charge_night, charge_sat, charge_sun, charge_bh,
+                  total_pay_ex_vat, total_charge_ex_vat, margin_ex_vat,
+                  vat_rate_pct, vat_amount, total_inc_vat,
+                  paper_ts_r2_key, meta_json, source_key
+                )
+                values (
+                  v_invoice_id, v_ts_id, snap.booking_id, line_desc,
+                  0,0,0,0,0,
+                  null,null,null,null,null,
+                  coalesce(snap.charge_day,null),
+                  coalesce(snap.charge_night,null),
+                  coalesce(snap.charge_sat,null),
+                  coalesce(snap.charge_sun,null),
+                  coalesce(snap.charge_bh,null),
                   pay_ex, chg_ex, margin_ex,
                   v_vat_rate, vat_amt, inc_amt,
                   ('docs-pdf/timesheets/ts_' || v_ts_id::text || '.pdf'),
@@ -5413,8 +5599,6 @@ where id = v_outbox_id;
   end if;
 end;
 $function$;
-
-
 
 
 -- FIX: you cannot change the RETURNS TABLE shape of an existing function with CREATE OR REPLACE.
