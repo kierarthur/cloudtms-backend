@@ -31,7 +31,6 @@
 -- - Phase-1 does NOT reattach timesheets; timesheet_id is not modified here.
 --
 -- NOTE: selected_group_ids remains unused (row-level selection is enforced by skip/force lists).
-
 create or replace function public.hr_autoprocess_apply_phase1(
   import_id uuid,
   selected_group_ids text[] default null,
@@ -79,13 +78,56 @@ begin
 
       (r.payload_json ->> 'start_utc')::timestamptz as start_utc,
       (r.payload_json ->> 'end_utc')::timestamptz   as end_utc,
-      coalesce((r.payload_json ->> 'break_mins')::int, 0) as break_mins,
+
+      -- ✅ Break minutes priority:
+      --  1) payload actual_break_mins / actual_break_minutes
+      --  2) payload break_mins / break_minutes (canonical/fallback)
+      --  3) 0
+      greatest(
+        0,
+        coalesce(
+          case
+            when (r.payload_json ? 'actual_break_mins')
+             and nullif(btrim(coalesce(r.payload_json ->> 'actual_break_mins','')), '') is not null
+             and (r.payload_json ->> 'actual_break_mins') ~ '^[0-9]+$'
+            then (r.payload_json ->> 'actual_break_mins')::int
+            else null
+          end,
+          case
+            when (r.payload_json ? 'actual_break_minutes')
+             and nullif(btrim(coalesce(r.payload_json ->> 'actual_break_minutes','')), '') is not null
+             and (r.payload_json ->> 'actual_break_minutes') ~ '^[0-9]+$'
+            then (r.payload_json ->> 'actual_break_minutes')::int
+            else null
+          end,
+          case
+            when nullif(btrim(coalesce(r.payload_json ->> 'break_mins','')), '') is not null
+             and (r.payload_json ->> 'break_mins') ~ '^[0-9]+$'
+            then (r.payload_json ->> 'break_mins')::int
+            else null
+          end,
+          case
+            when nullif(btrim(coalesce(r.payload_json ->> 'break_minutes','')), '') is not null
+             and (r.payload_json ->> 'break_minutes') ~ '^[0-9]+$'
+            then (r.payload_json ->> 'break_minutes')::int
+            else null
+          end,
+          0
+        )
+      ) as break_mins,
 
       coalesce(
         nullif((r.payload_json ->> 'finalized_date'), ''),
         nullif((r.payload_json ->> 'finalised_date'), '')
       ) as finalized_raw,
-      nullif((r.payload_json ->> 'request_id'), '') as request_id
+
+      -- ✅ Request id priority:
+      --  1) hr_rows.hr_request_id (canonical column used elsewhere)
+      --  2) payload_json.request_id (fallback)
+      coalesce(
+        nullif(btrim(coalesce(r.hr_request_id,'')), ''),
+        nullif((r.payload_json ->> 'request_id'), '')
+      ) as request_id
     from public.hr_rows r
     join public.hr_imports hi
       on hi.id = r.import_id
@@ -402,4 +444,5 @@ begin
   );
 end;
 $$;
+
 
