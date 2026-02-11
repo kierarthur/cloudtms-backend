@@ -1623,7 +1623,7 @@ begin
           v_hash_hex := encode(extensions.digest(convert_to(v_booking_base, 'utf8'), 'sha256'::text), 'hex');
           v_booking_id := 'bk_' || substr(v_hash_hex, 1, 16);
 
-          begin
+     begin
             insert into public.timesheets(
               booking_id,
               version,
@@ -1686,8 +1686,6 @@ begin
               null,
               null,
               null,
-              null,
-              null,
               '{}'::jsonb,
               v_now,
               v_now,
@@ -1699,6 +1697,7 @@ begin
               'IMPORT_CORRECTION'
             )
             returning timesheet_id into v_ts_id;
+
 
           exception when unique_violation then
             select t3.timesheet_id
@@ -2003,6 +2002,7 @@ exception when others then
   raise;
 end;
 $function$;
+
 
 
 
