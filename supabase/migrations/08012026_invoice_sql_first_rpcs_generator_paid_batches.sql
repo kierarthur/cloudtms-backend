@@ -593,6 +593,14 @@ $$;
 --  2) Adjustment timesheets inherit invoice stream (SELF_BILL vs NORMAL) from their parent timesheet
 --  3) Consolidation mode source of truth: payload.meta.invoice_consolidation_mode overrides client_settings
 -- Generated: 2026-02-10
+-- CloudTMS
+-- Updated RPC: public.invoice_generate_from_outbox_batch
+-- Fixes:
+--  1) Reuse eligible DRAFT invoices under consolidation even when invoice has no invoice_lines (no timesheets yet)
+--  2) Adjustment timesheets inherit invoice stream (SELF_BILL vs NORMAL) from their parent timesheet
+--  3) Consolidation mode source of truth: payload.meta.invoice_consolidation_mode overrides client_settings
+--  4) Fix BY_WEEK + consolidation NONE + SELF_BILL: avoid using FOUND with an unassigned record (v_invoice)
+-- Generated: 2026-02-10
 
 CREATE OR REPLACE FUNCTION public.invoice_generate_from_outbox_batch(p_outbox_ids uuid[], p_actor_user_id uuid)
  RETURNS TABLE(outbox_id uuid, ok boolean, invoice_ids uuid[], warnings jsonb)
@@ -3559,7 +3567,15 @@ limit 1;
               v_grp_invoice_ids_before uuid[] := v_outbox_invoice_ids;
               v_grp_warnings_before jsonb := v_outbox_warnings;
               v_grp_invoice_id_before uuid := v_invoice_id;
+              -- Track whether we selected a reusable invoice row into v_invoice in THIS group iteration.
+              -- Avoid relying on FOUND across unrelated SQL statements (prevents "record v_invoice is not assigned yet").
+              v_invoice_selected boolean := false;
             begin
+              -- Reset per-group state to avoid cross-group leakage
+              v_invoice_id := null;
+              v_invoice_selected := false;
+              v_dbg_reused_invoice_id := null;
+
               -- apply group scope
             v_ts_ids_to_use := grp.ts_ids;
             v_timesheet_ids := grp.ts_ids;
@@ -3659,6 +3675,7 @@ limit 1;
 
                 if v_all_selfbill then
                   -- SELF_BILL stream reuse (DRAFT only)
+                  v_invoice_selected := false;
                   if v_consol_mode <> 'NONE' then
                     if v_consol_mode = 'BY_WEEK' then
                       select *
@@ -3700,9 +3717,10 @@ limit 1;
                       order by i.created_at desc nulls last
                       limit 1;
                     end if;
+                    v_invoice_selected := found;
                   end if;
 
-                  if found then
+                  if v_invoice_selected then
                     v_created := false;
                     v_invoice_id := v_invoice.id;
                     v_outbox_invoice_ids := array_append(v_outbox_invoice_ids, v_invoice_id);
@@ -5395,7 +5413,6 @@ where id = v_outbox_id;
   end if;
 end;
 $function$;
-
 
 
 
