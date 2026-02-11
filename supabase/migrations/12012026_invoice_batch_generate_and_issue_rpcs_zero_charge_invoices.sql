@@ -23,6 +23,7 @@
 -- ============================================================
 
 
+
 create or replace function public.invoice_batch_generate_candidates(
   p_allow_early boolean default false,
   p_limit int default 5000
@@ -88,21 +89,7 @@ base as (
 ),
 
 -- ------------------------------------------------------------
--- SEGMENTS mode:
--- Include ONLY unlocked segments.
---
--- Eligibility rules (as requested):
---  A) If the parent timesheet week-ending has passed:
---       include segments that are NOT delayed.
---  B) If allow_early = true:
---       include segments that are NOT delayed even if week-ending not passed.
---  C) If a segment IS delayed (invoice_target_week_start differs from the
---       timesheet's natural week start), include it only once its delay date
---       has arrived: invoice_target_week_start <= LondonToday.
---
--- Grouping:
---   invoice_week_start is the segment's target week (if set) else the
---   timesheet's natural week start, so delayed segments appear in later weeks.
+-- SEGMENTS mode: include ONLY unlocked segments, with delayed rules.
 -- ------------------------------------------------------------
 seg_rows as (
   select
@@ -139,10 +126,8 @@ seg_rows as (
   cross join anchor a
 
   where coalesce(b.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
-    -- only segments not already locked to an invoice
     and nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') is null
     and (
-      -- NOT DELAYED: either no target week, or target week equals the natural week start
       (
         (t.tgt_start is null or t.tgt_start = b.ts_invoice_week_start)
         and (
@@ -151,7 +136,6 @@ seg_rows as (
         )
       )
       or
-      -- DELAYED: target week differs from natural week start; include only when delay date has arrived
       (
         t.tgt_start is not null
         and t.tgt_start <> b.ts_invoice_week_start
@@ -187,8 +171,7 @@ seg_agg as (
 ),
 
 -- ------------------------------------------------------------
--- NON-SEGMENTS mode:
--- allow_early controls whether future week-ending timesheets can be included.
+-- NON-SEGMENTS mode: allow_early controls week-ending gate.
 -- ------------------------------------------------------------
 nonseg as (
   select
@@ -224,50 +207,121 @@ nonseg as (
     )
 ),
 
-eligible as (
-  select * from seg_agg
-  where round(coalesce(total_charge_ex_vat,0), 2) <> 0
+-- ------------------------------------------------------------
+-- Collect all invoiceable (non-zero charge) rows first, then apply HR validation gating.
+-- ------------------------------------------------------------
+eligible_all as (
+  select sa.*
+  from seg_agg sa
+  where round(coalesce(sa.total_charge_ex_vat,0), 2) <> 0
+
   union all
-  select * from nonseg
-  where round(coalesce(total_charge_ex_vat,0), 2) <> 0
+
+  select ns.*
+  from nonseg ns
+  where round(coalesce(ns.total_charge_ex_vat,0), 2) <> 0
+),
+
+-- ✅ Eligible list MUST exclude HR-validation-blocked rows
+eligible as (
+  select ea.*
+  from eligible_all ea
+  where coalesce(ea.blocked_by_hr_validation, false) = false
+),
+
+-- ✅ Explicit excluded list (HR validation blocked) with reason for UI explanation
+excluded_hr_validation as (
+  select
+    ea.timesheet_id,
+    ea.client_id,
+    ea.invoice_week_start,
+    ea.week_ending_date,
+    ea.client_name,
+    ea.candidate_name,
+    ea.total_charge_ex_vat,
+    ea.total_hours,
+    ea.basis,
+    ea.submission_mode,
+    ea.validation_status,
+    ea.hr_validation_required_for_invoice,
+    ea.blocked_by_hr_validation,
+    'HR_VALIDATION_BLOCKED'::text as exclude_reason
+  from eligible_all ea
+  where coalesce(ea.blocked_by_hr_validation, false) = true
 ),
 
 eligible_limited as (
-  select *
-  from eligible
-  order by week_ending_date desc nulls last, client_name nulls last, candidate_name nulls last
+  select e.*
+  from eligible e
+  order by e.week_ending_date desc nulls last, e.client_name nulls last, e.candidate_name nulls last
   limit greatest(1, least(coalesce(p_limit, 5000), 20000))
 ),
 
 weeks as (
   select
-    e.client_id,
-    max(e.client_name) as client_name,
-    e.invoice_week_start,
-    e.week_ending_date,
+    el.client_id,
+    max(el.client_name) as client_name,
+    el.invoice_week_start,
+    el.week_ending_date,
 
-    round(coalesce(sum(e.total_charge_ex_vat),0), 2) as subtotal_ex_vat,
-    round(coalesce(sum(e.total_hours),0), 2) as total_hours,
+    round(coalesce(sum(el.total_charge_ex_vat),0), 2) as subtotal_ex_vat,
+    round(coalesce(sum(el.total_hours),0), 2) as total_hours,
 
     jsonb_agg(
       jsonb_build_object(
-        'timesheet_id', e.timesheet_id::text,
-        'candidate_name', e.candidate_name,
-        'week_ending_date', e.week_ending_date::text,
-        'total_charge_ex_vat', round(coalesce(e.total_charge_ex_vat,0),2),
-        'total_hours', round(coalesce(e.total_hours,0),2),
-        'basis', e.basis::text,
-        'submission_mode', coalesce(e.submission_mode::text, ''),
-        'validation_status', coalesce(e.validation_status::text, ''),
-        'hr_validation_required_for_invoice', e.hr_validation_required_for_invoice,
-        'blocked_by_hr_validation', e.blocked_by_hr_validation
+        'timesheet_id', el.timesheet_id::text,
+        'candidate_name', el.candidate_name,
+        'week_ending_date', el.week_ending_date::text,
+        'total_charge_ex_vat', round(coalesce(el.total_charge_ex_vat,0),2),
+        'total_hours', round(coalesce(el.total_hours,0),2),
+        'basis', el.basis::text,
+        'submission_mode', coalesce(el.submission_mode::text, ''),
+        'validation_status', coalesce(el.validation_status::text, ''),
+        'hr_validation_required_for_invoice', el.hr_validation_required_for_invoice,
+        'blocked_by_hr_validation', el.blocked_by_hr_validation
       )
-      order by e.candidate_name nulls last, e.timesheet_id::text
-    ) as timesheets
+      order by el.candidate_name nulls last, el.timesheet_id::text
+    ) as timesheets,
 
-  from eligible_limited e
-  group by e.client_id, e.invoice_week_start, e.week_ending_date
-  having round(coalesce(sum(e.total_charge_ex_vat),0), 2) <> 0
+    -- Optional: excluded items (HR validation blocked) for UI explanation
+    coalesce(ex.excluded_count, 0) as excluded_by_hr_validation_count,
+    coalesce(ex.excluded_timesheets, '[]'::jsonb) as excluded_by_hr_validation
+
+  from eligible_limited el
+  left join lateral (
+    select
+      count(*)::int as excluded_count,
+      coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'timesheet_id', x.timesheet_id::text,
+            'candidate_name', x.candidate_name,
+            'week_ending_date', x.week_ending_date::text,
+            'total_charge_ex_vat', round(coalesce(x.total_charge_ex_vat,0),2),
+            'total_hours', round(coalesce(x.total_hours,0),2),
+            'basis', x.basis::text,
+            'submission_mode', coalesce(x.submission_mode::text, ''),
+            'validation_status', coalesce(x.validation_status::text, ''),
+            'hr_validation_required_for_invoice', x.hr_validation_required_for_invoice,
+            'blocked_by_hr_validation', x.blocked_by_hr_validation,
+            'exclude_reason', x.exclude_reason
+          )
+          order by x.candidate_name nulls last, x.timesheet_id::text
+        ),
+        '[]'::jsonb
+      ) as excluded_timesheets
+    from (
+      select exh.*
+      from excluded_hr_validation exh
+      where exh.client_id = el.client_id
+        and exh.invoice_week_start = el.invoice_week_start
+      order by exh.candidate_name nulls last, exh.timesheet_id::text
+      limit 200
+    ) as x
+  ) ex on true
+
+  group by el.client_id, el.invoice_week_start, el.week_ending_date, ex.excluded_count, ex.excluded_timesheets
+  having round(coalesce(sum(el.total_charge_ex_vat),0), 2) <> 0
 ),
 
 clients as (
@@ -296,7 +350,9 @@ clients as (
         'week_ending_date', w.week_ending_date::text,
         'subtotal_ex_vat', w.subtotal_ex_vat,
         'total_hours', w.total_hours,
-        'timesheets', w.timesheets
+        'timesheets', w.timesheets,
+        'excluded_by_hr_validation_count', w.excluded_by_hr_validation_count,
+        'excluded_by_hr_validation', w.excluded_by_hr_validation
       )
       order by w.week_ending_date desc
     ) as weeks
@@ -329,6 +385,9 @@ select coalesce(
 )
 from clients c;
 $$;
+
+
+
 
 create or replace function public.invoice_outbox_enqueue_by_week_selected(
   p_rows jsonb,
