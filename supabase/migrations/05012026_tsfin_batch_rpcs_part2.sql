@@ -398,6 +398,7 @@ select pg_notify('pgrst', 'reload schema');
 -- SAFE TO RE-RUN: CREATE OR REPLACE
 -- ============================================================
 
+
 create or replace function public.tsfin_write_snapshots_and_complete(p_rows jsonb)
 returns table (
   ok_count integer,
@@ -435,7 +436,7 @@ declare
   v_exp_pay numeric;
   v_exp_charge numeric;
 
-  -- ✅ NEW: additional + mileage rollup + patched totals/breakdown
+  -- ✅ additional + mileage rollup + patched totals/breakdown
   v_add_units_json jsonb;
   v_add_pay numeric;
   v_add_charge numeric;
@@ -460,13 +461,23 @@ declare
   v_seg jsonb;
   v_exclude boolean;
 
+  -- ✅ ERNI policy (PAYE only; NEVER applies to expenses/mileage)
   v_policy jsonb;
   v_apply_to text;
   v_erni_pct_raw numeric;
   v_erni_mult numeric;
   v_pay_method_u text;
   v_erni_applies boolean;
+
+  v_wage_pay numeric;
+  v_wage_pay_cost numeric;
+  v_reimb_pay numeric;
   v_pay_cost numeric;
+
+  v_nonseg_wage_pay numeric;
+  v_nonseg_wage_pay_cost numeric;
+  v_nonseg_reimb_pay numeric;
+  v_nonseg_pay_cost numeric;
 
   v_processing_status public.ts_fin_processing_status_enum;
   v_candidate_assignment public.candidate_assignment_enum;
@@ -588,7 +599,7 @@ begin
       v_exp_pay := round(coalesce(v_exp_pay,0), 2);
       v_exp_charge := round(coalesce(v_exp_charge,0), 2);
 
-      -- ✅ NEW: additional + mileage rollup (snap → prev fallback)
+      -- ✅ additional + mileage rollup (snap → prev fallback)
       v_add_units_json := coalesce(snap->'additional_units_json', prev.additional_units_json, '{}'::jsonb);
 
       v_add_pay := coalesce(nullif(snap->>'additional_pay_ex_vat','')::numeric, prev.additional_pay_ex_vat, 0);
@@ -602,11 +613,11 @@ begin
       v_mil_pay := round(coalesce(v_mil_pay,0), 2);
       v_mil_charge := round(coalesce(v_mil_charge,0), 2);
 
+      -- Non-segment totals (additional + expenses + mileage)
       v_nonseg_pay := round(v_add_pay + v_exp_pay + v_mil_pay, 2);
       v_nonseg_charge := round(v_add_charge + v_exp_charge + v_mil_charge, 2);
-      v_nonseg_margin := round(v_nonseg_charge - v_nonseg_pay, 2);
 
-      -- ✅ NEW: recompute core totals from breakdown (SEGMENTS sums; else base_hours)
+      -- ✅ recompute core totals from breakdown (SEGMENTS sums; else base_hours)
       v_core_pay := 0;
       v_core_charge := 0;
 
@@ -662,10 +673,14 @@ begin
       v_core_pay := round(coalesce(v_core_pay,0), 2);
       v_core_charge := round(coalesce(v_core_charge,0), 2);
 
+      -- Totals (pay/charge) are pure ex-vat figures (NO ERNI in totals)
       v_total_pay := round(v_core_pay + v_nonseg_pay, 2);
       v_total_charge := round(v_core_charge + v_nonseg_charge, 2);
 
-      -- ✅ NEW: ERNI-aware margin (align with existing snapshot builders; safest when policy includes erni_pct)
+      -- ✅ ERNI-aware margin:
+      -- - ERNI applies ONLY to PAYE candidates
+      -- - ERNI uplifts ONLY wage-like pay (core pay + additional pay)
+      -- - ERNI NEVER applies to expenses or mileage
       v_policy := coalesce(snap->'policy_snapshot_json', prev.policy_snapshot_json, '{}'::jsonb);
       if v_policy is null or jsonb_typeof(v_policy) <> 'object' then
         v_policy := '{}'::jsonb;
@@ -698,18 +713,36 @@ begin
           )
         );
 
+      -- IMPORTANT: PAYE only. apply_erni_to can be ALL/PAYE_ONLY but never makes it apply to non-PAYE.
       v_erni_applies :=
-        (v_apply_to = 'ALL')
-        or (v_apply_to = 'PAYE_ONLY' and v_pay_method_u = 'PAYE');
+        (v_pay_method_u = 'PAYE')
+        and (v_apply_to = 'ALL' or v_apply_to = 'PAYE_ONLY');
 
-      v_pay_cost := v_total_pay;
+      -- overall margin cost:
+      v_wage_pay := round(v_core_pay + v_add_pay, 2);         -- wage-like pay only
+      v_reimb_pay := round(v_exp_pay + v_mil_pay, 2);         -- reimbursements (never ERNI)
+
+      v_wage_pay_cost := v_wage_pay;
       if v_erni_applies then
-        v_pay_cost := v_total_pay * v_erni_mult;
+        v_wage_pay_cost := round(v_wage_pay * v_erni_mult, 2);
       end if;
 
+      v_pay_cost := round(v_wage_pay_cost + v_reimb_pay, 2);
       v_margin := round(v_total_charge - v_pay_cost, 2);
 
-      -- ✅ NEW: patch invoice_breakdown_json.additional (preserve units if present; else set from stored additional_units_json)
+      -- non-segment contribution margin (apply ERNI only to additional pay; never to expenses/mileage)
+      v_nonseg_wage_pay := v_add_pay;
+      v_nonseg_reimb_pay := round(v_exp_pay + v_mil_pay, 2);
+
+      v_nonseg_wage_pay_cost := v_nonseg_wage_pay;
+      if v_erni_applies then
+        v_nonseg_wage_pay_cost := round(v_nonseg_wage_pay * v_erni_mult, 2);
+      end if;
+
+      v_nonseg_pay_cost := round(v_nonseg_wage_pay_cost + v_nonseg_reimb_pay, 2);
+      v_nonseg_margin := round(v_nonseg_charge - v_nonseg_pay_cost, 2);
+
+      -- ✅ patch invoice_breakdown_json.additional (preserve units if present; else set from stored additional_units_json)
       v_add_obj := case
         when v_ib ? 'additional' and jsonb_typeof(v_ib->'additional') = 'object' then v_ib->'additional'
         else '{}'::jsonb
@@ -722,13 +755,14 @@ begin
         v_add_obj := jsonb_set(v_add_obj, '{units}', v_add_units_json, true);
       end if;
 
+      -- additional now represents combined non-segment totals (additional + expenses + mileage)
       v_add_obj := jsonb_set(v_add_obj, '{pay_ex_vat}', to_jsonb(v_nonseg_pay), true);
       v_add_obj := jsonb_set(v_add_obj, '{charge_ex_vat}', to_jsonb(v_nonseg_charge), true);
       v_add_obj := jsonb_set(v_add_obj, '{margin_ex_vat}', to_jsonb(v_nonseg_margin), true);
 
       v_ib := jsonb_set(v_ib, '{additional}', v_add_obj, true);
 
-      -- ✅ NEW: patch invoice_breakdown_json.totals to match computed totals
+      -- ✅ patch invoice_breakdown_json.totals to match computed totals (margin includes PAYE-only ERNI on wage pay)
       v_tot_obj := case
         when v_ib ? 'totals' and jsonb_typeof(v_ib->'totals') = 'object' then v_ib->'totals'
         else '{}'::jsonb
@@ -740,7 +774,7 @@ begin
 
       v_ib := jsonb_set(v_ib, '{totals}', v_tot_obj, true);
 
-      -- ✅ NEW: stale flag tie-off (clear stale on a successful READY_FOR_INVOICE snapshot)
+      -- ✅ stale flag tie-off (clear stale on a successful READY_FOR_INVOICE snapshot)
       v_is_stale := coalesce(nullif(snap->>'is_stale','')::boolean, false);
       v_stale_reason := nullif(snap->>'stale_reason','');
 
@@ -900,9 +934,11 @@ begin
 
         coalesce(nullif(snap->>'total_hours','')::numeric, 0),
 
-        -- ✅ NEW: totals are computed from core + (additional + expenses + mileage)
+        -- totals are computed from core + (additional + expenses + mileage) (NO ERNI in totals)
         coalesce(v_total_pay, 0),
         coalesce(v_total_charge, 0),
+
+        -- margin includes PAYE-only ERNI on wage pay (core + additional), never on expenses/mileage
         coalesce(v_margin, 0),
 
         now(),
@@ -929,7 +965,7 @@ begin
         coalesce(nullif(snap->>'other_pay_ex_vat','')::numeric, prev.other_pay_ex_vat, 0),
         coalesce(nullif(snap->>'other_charge_ex_vat','')::numeric, prev.other_charge_ex_vat, 0),
 
-        -- ✅ NEW: preserve mileage pay/charge from prev if absent
+        -- preserve mileage pay/charge from prev if absent
         coalesce(nullif(snap->>'mileage_pay_ex_vat','')::numeric, prev.mileage_pay_ex_vat, 0),
         coalesce(nullif(snap->>'mileage_charge_ex_vat','')::numeric, prev.mileage_charge_ex_vat, 0),
 
@@ -959,15 +995,15 @@ begin
         coalesce(nullif(snap->>'authorised_by_user_id','')::uuid, prev.authorised_by_user_id),
         coalesce(nullif(snap->>'authorised_at_utc','')::timestamptz, prev.authorised_at_utc),
 
-        -- ✅ NEW: preserve additional units from prev if absent
+        -- preserve additional units from prev if absent
         coalesce(snap->'additional_units_json', prev.additional_units_json, '{}'::jsonb),
 
-        -- ✅ NEW: preserve additional pay/charge/margin from prev if absent
+        -- preserve additional pay/charge/margin from prev if absent
         coalesce(nullif(snap->>'additional_pay_ex_vat','')::numeric, prev.additional_pay_ex_vat, 0),
         coalesce(nullif(snap->>'additional_charge_ex_vat','')::numeric, prev.additional_charge_ex_vat, 0),
         coalesce(nullif(snap->>'additional_margin_ex_vat','')::numeric, prev.additional_margin_ex_vat, 0),
 
-        -- ✅ NEW: patched breakdown (additional + totals updated)
+        -- patched breakdown (additional + totals updated)
         v_ib,
 
         nullif(snap->>'nhsp_import_id','')::uuid,
@@ -1038,5 +1074,6 @@ grant execute on function public.tsfin_write_snapshots_and_complete(jsonb) to se
 grant execute on function public.tsfin_write_snapshots_and_complete(jsonb) to authenticated;
 
 select pg_notify('pgrst', 'reload schema');
+
 
 
