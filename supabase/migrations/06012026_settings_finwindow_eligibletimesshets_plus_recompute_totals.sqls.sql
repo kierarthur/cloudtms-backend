@@ -164,6 +164,7 @@ $$;
 -- For valid segment data, behaviour/output is unchanged.
 -- ============================================================
 
+
 create or replace function public.invoice_eligible_timesheets_for_invoice(
   p_invoice_id uuid
 )
@@ -244,7 +245,7 @@ begin
   end if;
 
   -- =====================================================
-  -- MAIN RETURN (UNCHANGED OUTPUT SHAPE; defensive filter added)
+  -- MAIN RETURN (UNCHANGED OUTPUT SHAPE; SEGMENTS-empty supported)
   -- =====================================================
   v_out := (
     with base as (
@@ -261,6 +262,13 @@ begin
         tf.total_hours as tsfin_total_hours,
         tf.total_charge_ex_vat as tsfin_total_charge_ex_vat,
         tf.invoice_breakdown_json,
+        upper(coalesce(tf.invoice_breakdown_json->>'mode','')) as invoice_breakdown_mode,
+        case
+          when upper(coalesce(tf.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+           and jsonb_typeof(tf.invoice_breakdown_json->'segments') = 'array'
+            then jsonb_array_length(tf.invoice_breakdown_json->'segments')
+          else 0
+        end as segments_len,
         s.client_name,
         s.candidate_name,
         s.validation_status,
@@ -294,7 +302,7 @@ begin
         count(*)::int as invoiceable_segments_count
       from base b
       cross join lateral jsonb_array_elements(coalesce(b.invoice_breakdown_json->'segments', '[]'::jsonb)) seg
-      where upper(coalesce(b.invoice_breakdown_json->>'mode', '')) = 'SEGMENTS'
+      where b.invoice_breakdown_mode = 'SEGMENTS'
         -- ✅ Defensive: ignore invalid segment entries (json null/non-object/missing segment_id)
         and jsonb_typeof(seg) = 'object'
         and nullif(btrim(coalesce(seg->>'segment_id','')), '') is not null
@@ -336,7 +344,7 @@ begin
         ) as eligible_segments
       from base b
       cross join lateral jsonb_array_elements(coalesce(b.invoice_breakdown_json->'segments', '[]'::jsonb)) seg
-      where upper(coalesce(b.invoice_breakdown_json->>'mode', '')) = 'SEGMENTS'
+      where b.invoice_breakdown_mode = 'SEGMENTS'
         -- ✅ Defensive: ignore invalid segment entries (json null/non-object/missing segment_id)
         and jsonb_typeof(seg) = 'object'
         and nullif(btrim(coalesce(seg->>'segment_id','')), '') is not null
@@ -365,32 +373,51 @@ begin
           and b.validation_status is distinct from 'VALIDATION_OK'::public.validation_status_enum
           and b.validation_status is distinct from 'OVERRIDDEN'::public.validation_status_enum
         ) as blocked_by_hr_validation,
-        upper(coalesce(b.invoice_breakdown_json->>'mode', '')) as invoice_breakdown_mode,
+        b.invoice_breakdown_mode as invoice_breakdown_mode,
         case
-          when upper(coalesce(b.invoice_breakdown_json->>'mode', '')) = 'SEGMENTS'
+          when b.invoice_breakdown_mode = 'SEGMENTS' and b.segments_len > 0
             then coalesce(sa.invoiceable_hours, 0)
-            else coalesce(b.tsfin_total_hours, 0)
+          else coalesce(b.tsfin_total_hours, 0)
         end::numeric as invoiceable_hours,
         case
-          when upper(coalesce(b.invoice_breakdown_json->>'mode', '')) = 'SEGMENTS'
+          when b.invoice_breakdown_mode = 'SEGMENTS' and b.segments_len > 0
             then coalesce(sa.invoiceable_charge_ex_vat, 0)
-            else coalesce(b.tsfin_total_charge_ex_vat, 0)
+          else coalesce(b.tsfin_total_charge_ex_vat, 0)
         end::numeric as invoiceable_charge_ex_vat,
-        coalesce(sa.invoiceable_segments_count, 0) as invoiceable_segments_count,
-        coalesce(sl.eligible_segments, '[]'::jsonb) as eligible_segments,
+        case
+          when b.invoice_breakdown_mode = 'SEGMENTS' and b.segments_len > 0
+            then coalesce(sa.invoiceable_segments_count, 0)
+          else 0
+        end as invoiceable_segments_count,
+        case
+          when b.invoice_breakdown_mode = 'SEGMENTS' and b.segments_len > 0
+            then coalesce(sl.eligible_segments, '[]'::jsonb)
+          else '[]'::jsonb
+        end as eligible_segments,
         b.timesheet_week_ending_date
       from base b
       left join seg_agg sa on sa.timesheet_id = b.timesheet_id
       left join seg_list sl on sl.timesheet_id = b.timesheet_id
       where
         (
+          -- SEGMENTS with real segments (existing behaviour)
           (
-            upper(coalesce(b.invoice_breakdown_json->>'mode', '')) = 'SEGMENTS'
+            b.invoice_breakdown_mode = 'SEGMENTS'
+            and b.segments_len > 0
             and (coalesce(sa.invoiceable_hours, 0) <> 0 or coalesce(sa.invoiceable_charge_ex_vat, 0) <> 0)
           )
+          -- ✅ NEW: SEGMENTS-empty fallback (expense-only / no segments)
           or
           (
-            upper(coalesce(b.invoice_breakdown_json->>'mode', '')) <> 'SEGMENTS'
+            b.invoice_breakdown_mode = 'SEGMENTS'
+            and b.segments_len = 0
+            and b.timesheet_week_start = v_invoice_week_start
+            and (coalesce(b.tsfin_total_hours, 0) <> 0 or coalesce(b.tsfin_total_charge_ex_vat, 0) <> 0)
+          )
+          -- Non-SEGMENTS (existing behaviour)
+          or
+          (
+            b.invoice_breakdown_mode <> 'SEGMENTS'
             and b.timesheet_week_start = v_invoice_week_start
           )
         )
@@ -456,7 +483,16 @@ begin
           tf.candidate_id,
           ts.week_ending_date::date as timesheet_week_ending_date,
           (ts.week_ending_date::date - 6) as timesheet_week_start,
+          tf.total_hours as tsfin_total_hours,
+          tf.total_charge_ex_vat as tsfin_total_charge_ex_vat,
           tf.invoice_breakdown_json,
+          upper(coalesce(tf.invoice_breakdown_json->>'mode','')) as invoice_breakdown_mode,
+          case
+            when upper(coalesce(tf.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+             and jsonb_typeof(tf.invoice_breakdown_json->'segments') = 'array'
+              then jsonb_array_length(tf.invoice_breakdown_json->'segments')
+            else 0
+          end as segments_len,
           s.client_name,
           s.candidate_name,
           s.validation_status,
@@ -499,7 +535,7 @@ begin
           )::int as seg_unlocked_other_week
         from base b
         cross join lateral jsonb_array_elements(coalesce(b.invoice_breakdown_json->'segments','[]'::jsonb)) seg
-        where upper(coalesce(b.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+        where b.invoice_breakdown_mode = 'SEGMENTS'
           -- ✅ Defensive (debug too): only count valid segment objects
           and jsonb_typeof(seg) = 'object'
           and nullif(btrim(coalesce(seg->>'segment_id','')), '') is not null
@@ -519,7 +555,7 @@ begin
           count(*)::int as invoiceable_segments_count
         from base b
         cross join lateral jsonb_array_elements(coalesce(b.invoice_breakdown_json->'segments', '[]'::jsonb)) seg
-        where upper(coalesce(b.invoice_breakdown_json->>'mode', '')) = 'SEGMENTS'
+        where b.invoice_breakdown_mode = 'SEGMENTS'
           -- ✅ Defensive (debug too): ignore invalid segment entries
           and jsonb_typeof(seg) = 'object'
           and nullif(btrim(coalesce(seg->>'segment_id','')), '') is not null
@@ -537,12 +573,20 @@ begin
         where
           (
             (
-              upper(coalesce(b.invoice_breakdown_json->>'mode', '')) = 'SEGMENTS'
+              b.invoice_breakdown_mode = 'SEGMENTS'
+              and b.segments_len > 0
               and (coalesce(sa.invoiceable_hours, 0) <> 0 or coalesce(sa.invoiceable_charge_ex_vat, 0) <> 0)
             )
             or
             (
-              upper(coalesce(b.invoice_breakdown_json->>'mode', '')) <> 'SEGMENTS'
+              b.invoice_breakdown_mode = 'SEGMENTS'
+              and b.segments_len = 0
+              and b.timesheet_week_start = v_invoice_week_start
+              and (coalesce(b.tsfin_total_hours, 0) <> 0 or coalesce(b.tsfin_total_charge_ex_vat, 0) <> 0)
+            )
+            or
+            (
+              b.invoice_breakdown_mode <> 'SEGMENTS'
               and b.timesheet_week_start = v_invoice_week_start
             )
           )
@@ -559,7 +603,8 @@ begin
           b.candidate_id,
           b.candidate_name,
           b.client_name,
-          upper(coalesce(b.invoice_breakdown_json->>'mode','')) as invoice_breakdown_mode,
+          b.invoice_breakdown_mode,
+          b.segments_len,
           b.timesheet_week_start,
           b.timesheet_week_ending_date,
           b.hr_validation_required_for_invoice,
@@ -574,9 +619,13 @@ begin
               and b.validation_status is distinct from 'VALIDATION_OK'::public.validation_status_enum
               and b.validation_status is distinct from 'OVERRIDDEN'::public.validation_status_enum
             ) then 'HR_VALIDATION_BLOCKED'
-            when upper(coalesce(b.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+            when b.invoice_breakdown_mode = 'SEGMENTS' and b.segments_len = 0
+              and b.timesheet_week_start <> v_invoice_week_start then 'SEGMENTS_EMPTY_WEEK_MISMATCH'
+            when b.invoice_breakdown_mode = 'SEGMENTS' and b.segments_len = 0
+              and (coalesce(b.tsfin_total_hours,0) = 0 and coalesce(b.tsfin_total_charge_ex_vat,0) = 0) then 'SEGMENTS_EMPTY_ZERO_TOTALS'
+            when b.invoice_breakdown_mode = 'SEGMENTS'
               and coalesce(ss.seg_unlocked_for_invoice_week,0) = 0 then 'NO_UNLOCKED_SEGMENTS_FOR_INVOICE_WEEK'
-            when upper(coalesce(b.invoice_breakdown_json->>'mode','')) <> 'SEGMENTS'
+            when b.invoice_breakdown_mode <> 'SEGMENTS'
               and b.timesheet_week_start <> v_invoice_week_start then 'NON_SEGMENTS_WEEK_MISMATCH'
             else 'OTHER'
           end as exclude_reason
@@ -609,6 +658,7 @@ begin
                 'candidate_name', e.candidate_name,
                 'client_name', e.client_name,
                 'invoice_breakdown_mode', e.invoice_breakdown_mode,
+                'segments_len', e.segments_len,
                 'timesheet_week_start', case when e.timesheet_week_start is null then null else e.timesheet_week_start::text end,
                 'timesheet_week_ending', case when e.timesheet_week_ending_date is null then null else e.timesheet_week_ending_date::text end,
                 'hr_validation_required_for_invoice', coalesce(e.hr_validation_required_for_invoice,false),
@@ -690,6 +740,10 @@ exception when others then
   raise;
 end;
 $$;
+
+
+
+
 
 create or replace function public.invoice_recompute_totals(
   p_invoice_id uuid
