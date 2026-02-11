@@ -39815,6 +39815,8 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     return (n == null || Number.isNaN(n)) ? 0 : n;
   };
 
+  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
   const normalizeExpensesDescription = (v) => {
     if (v === undefined) return undefined; // not touched
     if (v === null) return null;
@@ -40033,7 +40035,121 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     return ok({ updated: false, tsfin: before });
   }
 
-  upd.is_stale = true;
+  // ─────────────────────────────────────────────────────────────
+  // ✅ Strategy A: make patch immediately consistent (no stale window)
+  // - recompute invoice_breakdown_json.additional + totals from:
+  //   core (segments/base_hours) + current additional + updated expenses/mileage
+  // - totals remain pure ex VAT (NO ERNI)
+  // - margin includes PAYE-only ERNI on wage pay only (core + additional), never on expenses/mileage
+  // ─────────────────────────────────────────────────────────────
+  const afterExpPay = round2(num0(upd.expenses_pay_ex_vat !== undefined ? upd.expenses_pay_ex_vat : before.expenses_pay_ex_vat));
+  const afterExpChg = round2(num0(upd.expenses_charge_ex_vat !== undefined ? upd.expenses_charge_ex_vat : before.expenses_charge_ex_vat));
+
+  const afterMilPay = round2(num0(upd.mileage_pay_ex_vat !== undefined ? upd.mileage_pay_ex_vat : before.mileage_pay_ex_vat));
+  const afterMilChg = round2(num0(upd.mileage_charge_ex_vat !== undefined ? upd.mileage_charge_ex_vat : before.mileage_charge_ex_vat));
+
+  const addPay = round2(num0(before.additional_pay_ex_vat));
+  const addChg = round2(num0(before.additional_charge_ex_vat));
+
+  // core from breakdown (preferred)
+  let corePay = 0;
+  let coreChg = 0;
+
+  try {
+    const ib = before?.invoice_breakdown_json;
+    const mode = String(ib?.mode || '').toUpperCase();
+
+    if (mode === 'SEGMENTS' && Array.isArray(ib?.segments)) {
+      for (const seg of ib.segments) {
+        if (!seg || typeof seg !== 'object') continue;
+        const chg = num0(seg.charge_amount);
+        const pay = num0(seg.pay_amount);
+        const excl = !!seg.exclude_from_pay;
+        coreChg += chg;
+        if (!excl) corePay += pay;
+      }
+    } else {
+      const bhPay = num0(ib?.base_hours?.pay_ex_vat);
+      const bhChg = num0(ib?.base_hours?.charge_ex_vat);
+      corePay = bhPay;
+      coreChg = bhChg;
+    }
+  } catch {
+    corePay = 0;
+    coreChg = 0;
+  }
+
+  corePay = round2(corePay);
+  coreChg = round2(coreChg);
+
+  const nonsegPay = round2(addPay + afterExpPay + afterMilPay);
+  const nonsegChg = round2(addChg + afterExpChg + afterMilChg);
+
+  const totalPay = round2(corePay + nonsegPay);
+  const totalChg = round2(coreChg + nonsegChg);
+
+  // ERNI policy (PAYE-only; wage pay only)
+  const pol = (before.policy_snapshot_json && typeof before.policy_snapshot_json === 'object') ? before.policy_snapshot_json : {};
+  const applyTo = String(pol.apply_erni_to || 'PAYE_ONLY').toUpperCase();
+  const erniPctRaw = Number(pol.erni_pct ?? 0);
+
+  let erniMult = 1;
+  if (Number.isFinite(erniPctRaw) && erniPctRaw > 0) {
+    const p = erniPctRaw > 1 ? (erniPctRaw / 100) : erniPctRaw;
+    erniMult = 1 + p;
+  }
+
+  const payMethodU = String(before.pay_method || '').toUpperCase();
+  const erniApplies = (payMethodU === 'PAYE') && (applyTo === 'ALL' || applyTo === 'PAYE_ONLY');
+
+  const wagePay = round2(corePay + addPay);
+  const reimbPay = round2(afterExpPay + afterMilPay);
+  const wageCost = round2(erniApplies ? (wagePay * erniMult) : wagePay);
+  const payCost = round2(wageCost + reimbPay);
+
+  const margin = round2(totalChg - payCost);
+
+  const addlWageCost = round2(erniApplies ? (addPay * erniMult) : addPay);
+  const nonsegPayCost = round2(addlWageCost + reimbPay);
+  const nonsegMargin = round2(nonsegChg - nonsegPayCost);
+
+  // patch breakdown JSON in-place
+  const patchedBreakdown = (() => {
+    const ib0 = (before.invoice_breakdown_json && typeof before.invoice_breakdown_json === 'object') ? before.invoice_breakdown_json : {};
+    const out = { ...ib0 };
+
+    // preserve additional.units if present
+    const priorAdd = (ib0.additional && typeof ib0.additional === 'object') ? ib0.additional : {};
+    const units = (priorAdd.units && typeof priorAdd.units === 'object') ? priorAdd.units : (before.additional_units_json && typeof before.additional_units_json === 'object' ? before.additional_units_json : {});
+
+    out.additional = {
+      ...priorAdd,
+      units,
+      pay_ex_vat: nonsegPay,
+      charge_ex_vat: nonsegChg,
+      margin_ex_vat: nonsegMargin
+    };
+
+    const priorTot = (ib0.totals && typeof ib0.totals === 'object') ? ib0.totals : {};
+    out.totals = {
+      ...priorTot,
+      total_pay_ex_vat: totalPay,
+      total_charge_ex_vat: totalChg,
+      margin_ex_vat: margin
+    };
+
+    return out;
+  })();
+
+  upd.total_pay_ex_vat = totalPay;
+  upd.total_charge_ex_vat = totalChg;
+  upd.margin_ex_vat = margin;
+  upd.invoice_breakdown_json = patchedBreakdown;
+
+  // Clear stale because we wrote a consistent snapshot
+  upd.is_stale = false;
+  upd.stale_reason = null;
+
   upd.updated_at = nowISO;
 
   const url =
@@ -40056,6 +40172,7 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
   const json = await res.json().catch(() => []);
   const after = Array.isArray(json) ? json[0] : json;
 
+  // Still enqueue a recompute for safety (should be idempotent & match), but no stale UI window.
   await enqueueManualTsfinRecalc(env, currentTimesheetId).catch(() => {});
 
   await insertAuditEvent(env, req, {
@@ -60446,7 +60563,7 @@ async function rebuildFromExistingSegmentsEvidence(env, ts, cw, contract, curFin
     hr_eff_flags = null,
     hr_preloaded_shifts = null,
 
-    // ✅ NEW: allow caller to pass SQL policy (ctx.out_policy) to avoid REST
+    // ✅ allow caller to pass SQL policy (ctx.out_policy) to avoid REST
     policy_override = null
   } = (options && typeof options === 'object') ? options : {};
 
@@ -60462,7 +60579,7 @@ async function rebuildFromExistingSegmentsEvidence(env, ts, cw, contract, curFin
     (basisU === 'HEALTHROSTER_SELF_BILL' || basisU === 'HEALTHROSTER_ADJUSTMENT');
 
   const isAuthorised = !!(ts && ts.authorised_at_server);
-  // ✅ NEW GLOBAL RULE: never allow weekly to be READY_* unless authorised
+  // ✅ GLOBAL RULE: never allow weekly to be READY_* unless authorised
   const processing_status = (!isAuthorised) ? 'PENDING_AUTH' : 'READY_FOR_INVOICE';
 
   // ✅ Policy snapshot: prefer SQL policy_override; fallback to getPolicyCached only if missing
@@ -60482,11 +60599,43 @@ async function rebuildFromExistingSegmentsEvidence(env, ts, cw, contract, curFin
     }
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // ✅ Option A expense rollup (travel+accom+other, fallback to expenses_*)
+  // ─────────────────────────────────────────────────────────────
+  const catPay = round2(
+    asNumberLocal(curFin?.travel_pay_ex_vat ?? 0) +
+    asNumberLocal(curFin?.accommodation_pay_ex_vat ?? 0) +
+    asNumberLocal(curFin?.other_pay_ex_vat ?? 0)
+  );
+  const catChg = round2(
+    asNumberLocal(curFin?.travel_charge_ex_vat ?? 0) +
+    asNumberLocal(curFin?.accommodation_charge_ex_vat ?? 0) +
+    asNumberLocal(curFin?.other_charge_ex_vat ?? 0)
+  );
+
+  const expPayEff = round2((catPay !== 0) ? catPay : asNumberLocal(curFin?.expenses_pay_ex_vat ?? 0));
+  const expChgEff = round2((catChg !== 0) ? catChg : asNumberLocal(curFin?.expenses_charge_ex_vat ?? 0));
+
+  const milUnits = round2(asNumberLocal(curFin?.mileage_units ?? 0));
+  const milPay = round2(asNumberLocal(curFin?.mileage_pay_ex_vat ?? 0));
+  const milChg = round2(asNumberLocal(curFin?.mileage_charge_ex_vat ?? 0));
+
+  // Preserve additional (wage-like) fields from current snapshot
+  const addlUnitsJson =
+    (curFin?.additional_units_json && typeof curFin.additional_units_json === 'object')
+      ? curFin.additional_units_json
+      : {};
+
+  const addlPay = round2(asNumberLocal(curFin?.additional_pay_ex_vat ?? 0));
+  const addlChg = round2(asNumberLocal(curFin?.additional_charge_ex_vat ?? 0));
+  const addlMar = round2(asNumberLocal(curFin?.additional_margin_ex_vat ?? (addlChg - addlPay)));
+
   const staleReason = (curFin && curFin.stale_reason != null) ? String(curFin.stale_reason) : '';
   const dropUnlockedBecauseCantRebuildTruth = (staleReason === 'IMPORT_CANCEL_DETACH');
 
   let sumDay = 0, sumNight = 0, sumSat = 0, sumSun = 0, sumBh = 0;
-  let totalPayEx = 0, totalChgEx = 0;
+  let segPaySum = 0;    // pay totals must respect exclude_from_pay
+  let segChgSum = 0;
 
   const nextSegments = [];
   for (const s of segs) {
@@ -60508,13 +60657,15 @@ async function rebuildFromExistingSegmentsEvidence(env, ts, cw, contract, curFin
 
     sumDay += hDay; sumNight += hNight; sumSat += hSat; sumSun += hSun; sumBh += hBh;
 
+    const excludeFromPay = !!s.exclude_from_pay;
+
     if (isLocked) {
       // ✅ Locked segment evidence is immutable: do NOT recalc, keep segment unchanged.
       const payExLocked = asNumberLocal(s.pay_amount);
       const chgExLocked = asNumberLocal(s.charge_amount);
 
-      totalPayEx += payExLocked;
-      totalChgEx += chgExLocked;
+      if (!excludeFromPay) segPaySum += payExLocked;
+      segChgSum += chgExLocked;
 
       nextSegments.push(s);
       continue;
@@ -60537,8 +60688,8 @@ async function rebuildFromExistingSegmentsEvidence(env, ts, cw, contract, curFin
       hBh    * asNumberLocal(chg.bh)
     );
 
-    totalPayEx += payEx;
-    totalChgEx += chgEx;
+    if (!excludeFromPay) segPaySum += payEx;
+    segChgSum += chgEx;
 
     nextSegments.push({
       ...s,
@@ -60547,27 +60698,46 @@ async function rebuildFromExistingSegmentsEvidence(env, ts, cw, contract, curFin
     });
   }
 
-  totalPayEx = round2(totalPayEx);
-  totalChgEx = round2(totalChgEx);
+  segPaySum = round2(segPaySum);
+  segChgSum = round2(segChgSum);
 
-  // ✅ ERNI-aware margin (prefer SQL policy_override via policy_snapshot_json)
-  const _polForMargin = (policy_snapshot_json && typeof policy_snapshot_json === 'object') ? policy_snapshot_json : {};
-  const _applyErniTo  = String(_polForMargin?.apply_erni_to || 'PAYE_ONLY').toUpperCase();
-  const _erniPctRaw   = Number(_polForMargin?.erni_pct ?? 0);
+  // ✅ Totals include non-segment amounts (additional + expenses + mileage)
+  const nonsegPay = round2(addlPay + expPayEff + milPay);
+  const nonsegChg = round2(addlChg + expChgEff + milChg);
 
-  let _erniMult = 1;
-  if (Number.isFinite(_erniPctRaw) && _erniPctRaw > 0) {
-    const p = _erniPctRaw > 1 ? (_erniPctRaw / 100) : _erniPctRaw;
-    _erniMult = 1 + p;
+  const totalPayEx = round2(segPaySum + nonsegPay);
+  const totalChgEx = round2(segChgSum + nonsegChg);
+
+  // ✅ ERNI-aware margin (PAYE only; wage pay only; NEVER on expenses/mileage)
+  const pol = (policy_snapshot_json && typeof policy_snapshot_json === 'object') ? policy_snapshot_json : {};
+  const applyTo = String(pol.apply_erni_to || 'PAYE_ONLY').toUpperCase();
+  const erniPctRaw = Number(pol.erni_pct ?? 0);
+
+  let erniMult = 1;
+  if (Number.isFinite(erniPctRaw) && erniPctRaw > 0) {
+    const p = erniPctRaw > 1 ? (erniPctRaw / 100) : erniPctRaw;
+    erniMult = 1 + p;
   }
 
-  const _payMethodU = String(method || '').toUpperCase();
-  const _erniApplies =
-    (_applyErniTo === 'ALL') ||
-    (_applyErniTo === 'PAYE_ONLY' && _payMethodU === 'PAYE');
+  const payMethodU = String(method || '').toUpperCase();
 
-  const _payCostEx = round2(_erniApplies ? (totalPayEx * _erniMult) : totalPayEx);
-  const marginEx = round2(totalChgEx - _payCostEx);
+  // PAYE only (apply_erni_to does NOT override pay method)
+  const erniApplies =
+    (payMethodU === 'PAYE') &&
+    (applyTo === 'ALL' || applyTo === 'PAYE_ONLY');
+
+  const wagePay = round2(segPaySum + addlPay);      // wage pay only
+  const reimbPay = round2(expPayEff + milPay);      // reimbursements only (never ERNI)
+
+  const wageCost = round2(erniApplies ? (wagePay * erniMult) : wagePay);
+  const payCostEx = round2(wageCost + reimbPay);
+
+  const marginEx = round2(totalChgEx - payCostEx);
+
+  // ✅ Non-seg margin: ERNI only on additional pay, never on expenses/mileage
+  const addlWageCost = round2(erniApplies ? (addlPay * erniMult) : addlPay);
+  const nonsegPayCost = round2(addlWageCost + reimbPay);
+  const nonsegMar = round2(nonsegChg - nonsegPayCost);
 
   const hours_day   = round2(sumDay);
   const hours_night = round2(sumNight);
@@ -60575,6 +60745,12 @@ async function rebuildFromExistingSegmentsEvidence(env, ts, cw, contract, curFin
   const hours_sun   = round2(sumSun);
   const hours_bh    = round2(sumBh);
   const total_hours = round2(hours_day + hours_night + hours_sat + hours_sun + hours_bh);
+
+  // Preserve units object if it exists in prior breakdown.additional.units, else use current additional_units_json
+  const priorUnits =
+    (ib && typeof ib === 'object' && ib.additional && typeof ib.additional === 'object' && ib.additional.units && typeof ib.additional.units === 'object')
+      ? ib.additional.units
+      : addlUnitsJson;
 
   const snapshot = {
     timesheet_id: ts.timesheet_id,
@@ -60600,14 +60776,38 @@ async function rebuildFromExistingSegmentsEvidence(env, ts, cw, contract, curFin
     pay_day: pay.day, pay_night: pay.night, pay_sat: pay.sat, pay_sun: pay.sun, pay_bh: pay.bh,
     charge_day: chg.day, charge_night: chg.night, charge_sat: chg.sat, charge_sun: chg.sun, charge_bh: chg.bh,
 
-    additional_units_json: {},
-    additional_pay_ex_vat: 0,
-    additional_charge_ex_vat: 0,
-    additional_margin_ex_vat: 0,
+    // Preserve wage-like additional (not combined)
+    additional_units_json: addlUnitsJson,
+    additional_pay_ex_vat: addlPay,
+    additional_charge_ex_vat: addlChg,
+    additional_margin_ex_vat: addlMar,
 
+    // Totals include additional + expenses + mileage
     total_pay_ex_vat: totalPayEx,
     total_charge_ex_vat: totalChgEx,
     margin_ex_vat: marginEx,
+
+    // Preserve expense + mileage fields (with Option A rollup for expenses totals)
+    expenses_pay_ex_vat: expPayEff,
+    expenses_charge_ex_vat: expChgEff,
+    expenses_description: curFin?.expenses_description ?? null,
+    expenses_evidence_r2_key: curFin?.expenses_evidence_r2_key ?? null,
+    expenses_evidence_manifest: curFin?.expenses_evidence_manifest ?? null,
+
+    travel_pay_ex_vat: round2(asNumberLocal(curFin?.travel_pay_ex_vat ?? 0)),
+    travel_charge_ex_vat: round2(asNumberLocal(curFin?.travel_charge_ex_vat ?? 0)),
+    accommodation_pay_ex_vat: round2(asNumberLocal(curFin?.accommodation_pay_ex_vat ?? 0)),
+    accommodation_charge_ex_vat: round2(asNumberLocal(curFin?.accommodation_charge_ex_vat ?? 0)),
+    other_pay_ex_vat: round2(asNumberLocal(curFin?.other_pay_ex_vat ?? 0)),
+    other_charge_ex_vat: round2(asNumberLocal(curFin?.other_charge_ex_vat ?? 0)),
+
+    mileage_units: milUnits,
+    mileage_pay_ex_vat: milPay,
+    mileage_charge_ex_vat: milChg,
+    mileage_evidence_r2_key: curFin?.mileage_evidence_r2_key ?? null,
+    mileage_evidence_manifest: curFin?.mileage_evidence_manifest ?? null,
+    mileage_pay_rate: curFin?.mileage_pay_rate ?? null,
+    mileage_charge_rate: curFin?.mileage_charge_rate ?? null,
 
     candidate_assignment: (contract.candidate_id ? 'ASSIGNED' : 'UNASSIGNED'),
     processing_status,
@@ -60615,6 +60815,12 @@ async function rebuildFromExistingSegmentsEvidence(env, ts, cw, contract, curFin
     invoice_breakdown_json: {
       mode: 'SEGMENTS',
       segments: nextSegments,
+      additional: {
+        units: priorUnits || {},
+        pay_ex_vat: nonsegPay,
+        charge_ex_vat: nonsegChg,
+        margin_ex_vat: nonsegMar
+      },
       totals: {
         total_pay_ex_vat: totalPayEx,
         total_charge_ex_vat: totalChgEx,
@@ -67933,7 +68139,7 @@ async function handleCreateInvoiceTsfin(env, req) {
 }
 
 
-function extractBillableSegmentsForWeek(snaps, weekStart) {
+function extractBillableSegmentsForWeek(snaps, weekStart, allowEarly = false) {
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
   const computeWeekStartFromWeekEnding = (weYmd) => {
@@ -67947,6 +68153,26 @@ function extractBillableSegmentsForWeek(snaps, weekStart) {
     return `${yyyy}-${mm}-${dd}`;
   };
 
+  const getLondonTodayYmd = () => {
+    try {
+      const s = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Europe/London',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).format(new Date());
+      return String(s || '').slice(0, 10);
+    } catch {
+      // fallback: UTC date (still ISO ymd)
+      return new Date().toISOString().slice(0, 10);
+    }
+  };
+
+  const londonToday = getLondonTodayYmd();
+
+  const toNum = (v) => (v == null ? 0 : Number(v) || 0);
+  const nonZero = (n) => (Number(n) || 0) !== 0;
+
   const entries = [];
   const tsIdsUsed = new Set();
   const tsfinIdsUsed = new Set();
@@ -67956,19 +68182,108 @@ function extractBillableSegmentsForWeek(snaps, weekStart) {
     const basis = String(s.basis || '').toUpperCase();
     const ib = s.invoice_breakdown_json || {};
     const tsMeta = s.timesheet || {};
-    const naturalWeekStart = tsMeta.week_ending_date
-      ? computeWeekStartFromWeekEnding(tsMeta.week_ending_date)
-      : null;
 
+    const weekEnding = tsMeta.week_ending_date ? String(tsMeta.week_ending_date).slice(0, 10) : null;
+    const naturalWeekStart = weekEnding ? computeWeekStartFromWeekEnding(weekEnding) : null;
+
+    const weekPassed = weekEnding ? (String(weekEnding) < String(londonToday)) : false;
+
+    // ─────────────────────────────────────────────────────────────
+    // SEGMENTS mode (including SEGMENTS-empty fallback)
+    // ─────────────────────────────────────────────────────────────
     if (ib && ib.mode === 'SEGMENTS' && Array.isArray(ib.segments)) {
       const segs = ib.segments || [];
+
+      // ✅ SEGMENTS-empty fallback: treat as atomic if invoiceable amounts exist
+      if (segs.length === 0) {
+        // must belong to natural week
+        if (!naturalWeekStart || naturalWeekStart !== weekStart) continue;
+
+        // week-ending gate (like SQL): allowEarly controls natural-week eligibility
+        if (!allowEarly && !weekPassed) continue;
+
+        // determine invoiceable amounts (prefer totals; fallback to components if totals are 0)
+        const totalPay = toNum(s.total_pay_ex_vat);
+        const totalChg = toNum(s.total_charge_ex_vat);
+
+        const addPay = toNum(s.additional_pay_ex_vat);
+        const addChg = toNum(s.additional_charge_ex_vat);
+
+        const expChg = toNum(s.expenses_charge_ex_vat);
+        const trChg = toNum(s.travel_charge_ex_vat);
+        const acChg = toNum(s.accommodation_charge_ex_vat);
+        const otChg = toNum(s.other_charge_ex_vat);
+        const milChg = toNum(s.mileage_charge_ex_vat);
+
+        const expPay = toNum(s.expenses_pay_ex_vat);
+        const trPay = toNum(s.travel_pay_ex_vat);
+        const acPay = toNum(s.accommodation_pay_ex_vat);
+        const otPay = toNum(s.other_pay_ex_vat);
+        const milPay = toNum(s.mileage_pay_ex_vat);
+
+        const ibAddChg = toNum(ib?.additional?.charge_ex_vat);
+        const ibAddPay = toNum(ib?.additional?.pay_ex_vat);
+
+        const hasAnything =
+          nonZero(totalChg) || nonZero(totalPay) ||
+          nonZero(addChg) || nonZero(addPay) ||
+          nonZero(expChg) || nonZero(expPay) ||
+          nonZero(trChg) || nonZero(trPay) ||
+          nonZero(acChg) || nonZero(acPay) ||
+          nonZero(otChg) || nonZero(otPay) ||
+          nonZero(milChg) || nonZero(milPay) ||
+          nonZero(ibAddChg) || nonZero(ibAddPay);
+
+        if (!hasAnything) continue;
+
+        const payUse = nonZero(totalPay) ? totalPay : (nonZero(ibAddPay) ? ibAddPay : (addPay + expPay + milPay));
+        const chgUse = nonZero(totalChg) ? totalChg : (nonZero(ibAddChg) ? ibAddChg : (addChg + expChg + milChg));
+        const marginUse = round2(chgUse - payUse);
+
+        const pseudoSeg = {
+          segment_id: null, // lock-whole sentinel
+          date: weekEnding || weekStart,
+          pay_amount: round2(payUse),
+          charge_amount: round2(chgUse),
+          margin_amount: marginUse,
+          invoice_target_week_start: weekStart,
+          invoice_locked_invoice_id: null
+        };
+
+        entries.push({
+          tsfin_id: s.id,
+          timesheet_id: s.timesheet_id,
+          candidate_id: s.candidate_id,
+          client_id: s.client_id,
+          basis,
+          segment: pseudoSeg,
+          segment_index: -1,
+          pseudo: true
+        });
+
+        tsIdsUsed.add(s.timesheet_id);
+        tsfinIdsUsed.add(s.id);
+        continue;
+      }
+
+      // Normal SEGMENTS flow (real segments)
       for (let idx = 0; idx < segs.length; idx++) {
         const seg = segs[idx];
         if (!seg || typeof seg !== 'object') continue;
         if (seg.invoice_locked_invoice_id) continue;
 
-        const targetWeek = seg.invoice_target_week_start || naturalWeekStart;
-        if (!targetWeek || targetWeek !== weekStart) continue;
+        const segTarget = seg.invoice_target_week_start || naturalWeekStart;
+        if (!segTarget || segTarget !== weekStart) continue;
+
+        const isDelayed = !!(seg.invoice_target_week_start && naturalWeekStart && String(seg.invoice_target_week_start) !== String(naturalWeekStart));
+
+        // delayed segment eligibility depends on target week start reaching today (<= londonToday), not allowEarly
+        if (isDelayed) {
+          if (String(segTarget) > String(londonToday)) continue;
+        } else {
+          // non-delayed segments: week-ending gate uses allowEarly
+          if (!allowEarly && !weekPassed) continue;
+        }
 
         entries.push({
           tsfin_id: s.id,
@@ -67983,38 +68298,44 @@ function extractBillableSegmentsForWeek(snaps, weekStart) {
         tsIdsUsed.add(s.timesheet_id);
         tsfinIdsUsed.add(s.id);
       }
-    } else {
-      // WEEKLY_BUCKETS / AGGREGATE: treat as atomic for this week
-      if (!naturalWeekStart || naturalWeekStart !== weekStart) continue;
-      if (s.locked_by_invoice_id) continue;
-
-      const pay = Number(s.total_pay_ex_vat || 0);
-      const chg = Number(s.total_charge_ex_vat || 0);
-      const margin = round2(chg - pay);
-
-      const pseudoSeg = {
-        segment_id: `ts:${s.timesheet_id}`,
-        date: tsMeta.week_ending_date || weekStart,
-        pay_amount: pay,
-        charge_amount: chg,
-        margin_amount: margin,
-        invoice_target_week_start: weekStart,
-        invoice_locked_invoice_id: s.locked_by_invoice_id || null
-      };
-
-      entries.push({
-        tsfin_id: s.id,
-        timesheet_id: s.timesheet_id,
-        candidate_id: s.candidate_id,
-        client_id: s.client_id,
-        basis,
-        segment: pseudoSeg,
-        segment_index: -1,
-        pseudo: true
-      });
-      tsIdsUsed.add(s.timesheet_id);
-      tsfinIdsUsed.add(s.id);
+      continue;
     }
+
+    // ─────────────────────────────────────────────────────────────
+    // WEEKLY_BUCKETS / AGGREGATE: treat as atomic for this week
+    // ─────────────────────────────────────────────────────────────
+    if (!naturalWeekStart || naturalWeekStart !== weekStart) continue;
+    if (s.locked_by_invoice_id) continue;
+
+    // week-ending gate uses allowEarly
+    if (!allowEarly && !weekPassed) continue;
+
+    const pay = Number(s.total_pay_ex_vat || 0);
+    const chg = Number(s.total_charge_ex_vat || 0);
+    const margin = round2(chg - pay);
+
+    const pseudoSeg = {
+      segment_id: `ts:${s.timesheet_id}`,
+      date: weekEnding || weekStart,
+      pay_amount: pay,
+      charge_amount: chg,
+      margin_amount: margin,
+      invoice_target_week_start: weekStart,
+      invoice_locked_invoice_id: s.locked_by_invoice_id || null
+    };
+
+    entries.push({
+      tsfin_id: s.id,
+      timesheet_id: s.timesheet_id,
+      candidate_id: s.candidate_id,
+      client_id: s.client_id,
+      basis,
+      segment: pseudoSeg,
+      segment_index: -1,
+      pseudo: true
+    });
+    tsIdsUsed.add(s.timesheet_id);
+    tsfinIdsUsed.add(s.id);
   }
 
   return {
@@ -68023,6 +68344,7 @@ function extractBillableSegmentsForWeek(snaps, weekStart) {
     tsfin_ids: [...tsfinIdsUsed]
   };
 }
+
 
 async function lockSegmentsForInvoice(env, invoiceId, segmentRefs) {
   const enc = encodeURIComponent;
