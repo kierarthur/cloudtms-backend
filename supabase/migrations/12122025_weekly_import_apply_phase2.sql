@@ -1,18 +1,28 @@
-
-CREATE OR REPLACE FUNCTION public.weekly_import_phase2(p_import_id uuid, p_system_type text)
- RETURNS TABLE(hr_row_id uuid, external_row_key text, work_date date, incoming_code text, candidate_id uuid, client_id uuid, week_ending_date date, contract_id uuid, action text, reason text, matched_shift_id uuid, is_new boolean, is_noop boolean, is_changed boolean, old_start_utc timestamp with time zone, old_end_utc timestamp with time zone, old_break_mins integer, old_paid_minutes integer, new_start_utc timestamp with time zone, new_end_utc timestamp with time zone, new_break_mins integer, new_paid_minutes integer, delta_paid_minutes integer, is_changed_hours boolean)
- LANGUAGE plpgsql
-AS $function$
+create or replace function public.weekly_import_apply_phase2(
+  p_import_id uuid,
+  p_system_type text
+)
+returns table (
+  hr_row_id         uuid,
+  external_row_key  text,
+  work_date         date,
+  incoming_code     text,
+  candidate_id      uuid,
+  client_id         uuid,
+  week_ending_date  date,
+  contract_id       uuid,
+  action            text,
+  reason            text,
+  shift_updated     boolean
+)
+language plpgsql
+as $$
 declare
   v_sys text := upper(trim(coalesce(p_system_type,'')));
   v_src public.hr_source_enum;
 begin
-  if p_import_id is null then
-    raise exception 'weekly_import_phase2: import_id is required';
-  end if;
-
   if v_sys not in ('NHSP','HR_WEEKLY') then
-    raise exception 'weekly_import_phase2: invalid p_system_type=% (expected NHSP or HR_WEEKLY)', p_system_type;
+    raise exception 'weekly_import_apply_phase2: invalid p_system_type=% (expected NHSP or HR_WEEKLY)', p_system_type;
   end if;
 
   v_src := case
@@ -21,177 +31,183 @@ begin
   end;
 
   return query
-  with import_hdr as (
-    select
-      hi.id as import_id,
-      hi.client_id as import_client_id
-    from public.hr_imports hi
-    where hi.id = p_import_id
-    limit 1
+  with p2 as (
+    select *
+    from public.weekly_import_phase2(p_import_id, v_sys)
   ),
-  cs_we as (
-    select
-      cs.client_id,
-      cs.week_ending_weekday
-    from import_hdr ih
-    join public.client_settings cs
-      on cs.client_id = ih.import_client_id
-    where cs.effective_from is null or cs.effective_from <= (now() at time zone 'Europe/London')::date
-    order by cs.effective_from desc nulls last, cs.updated_at desc nulls last
-    limit 1
-  ),
-  hr_raw as (
-    select
-      r.id as hr_row_id,
-      r.external_row_key,
-      r.date_local as work_date,
-      nullif(btrim(coalesce(r.assignment_grade_norm,'')), '') as incoming_code,
-      r.candidate_id,
-      r.client_id,
-      r.contract_id,
-      (r.payload_json ->> 'start_utc')::timestamptz as start_utc,
-      (r.payload_json ->> 'end_utc')::timestamptz as end_utc,
 
-      -- ✅ UPDATED: "Actual Break" is authoritative (accept either key), then fall back to booked break.
-      greatest(
-        0,
+  -- Current shift state + informational finance flags (NOT used to block)
+  cur as (
+    select
+      p2r.hr_row_id,
+      p2r.external_row_key,
+      p2r.work_date,
+      p2r.incoming_code,
+      p2r.candidate_id as p2_candidate_id,
+      p2r.client_id    as p2_client_id,
+      p2r.week_ending_date as p2_week_ending_date,
+      p2r.contract_id  as p2_contract_id,
+      p2r.action       as p2_action,
+      p2r.reason       as p2_reason,
+
+      s.id            as shift_id,
+      s.timesheet_id  as existing_timesheet_id,
+      s.candidate_id  as existing_candidate_id,
+      s.client_id     as existing_client_id,
+      s.contract_id   as existing_contract_id,
+      s.week_ending_date as existing_week_ending_date,
+
+      (ts.timesheet_id is not null) as existing_timesheet_exists,
+
+      fin.locked_by_invoice_id as fin_locked_by_invoice_id,
+      fin.paid_at_utc          as fin_paid_at_utc,
+
+      -- Only detach/reassign if mapping differs vs Phase2
+      (
+        (s.candidate_id is distinct from p2r.candidate_id)
+        or (s.client_id  is distinct from p2r.client_id)
+        or (s.contract_id is distinct from p2r.contract_id)
+      ) as needs_reassign,
+
+      -- Ensure week_ending_date is persisted (required by ensure+attach stage)
+      (
+        s.week_ending_date is distinct from p2r.week_ending_date
+      ) as needs_week_ending_update,
+
+      -- Also detach if the shift points at a missing/deleted timesheet row
+      (
+        s.timesheet_id is not null
+        and ts.timesheet_id is null
+      ) as needs_relink_missing_timesheet,
+
+      (
         coalesce(
-          nullif((r.payload_json ->> 'actual_break_mins'), '')::int,
-          nullif((r.payload_json ->> 'actual_break_minutes'), '')::int,
-          nullif((r.payload_json ->> 'break_mins'), '')::int,
-          nullif((r.payload_json ->> 'break_minutes'), '')::int,
-          0
+          (
+            (s.candidate_id is distinct from p2r.candidate_id)
+            or (s.client_id  is distinct from p2r.client_id)
+            or (s.contract_id is distinct from p2r.contract_id)
+          ),
+          false
         )
-      ) as new_break_mins,
-
-      greatest(
-        0,
-        (
-          (extract(epoch from ((r.payload_json ->> 'end_utc')::timestamptz - (r.payload_json ->> 'start_utc')::timestamptz)) / 60)::int
-          - coalesce(
-              nullif((r.payload_json ->> 'actual_break_mins'), '')::int,
-              nullif((r.payload_json ->> 'actual_break_minutes'), '')::int,
-              nullif((r.payload_json ->> 'break_mins'), '')::int,
-              nullif((r.payload_json ->> 'break_minutes'), '')::int,
-              0
-            )
+        or
+        coalesce(
+          (
+            s.timesheet_id is not null
+            and ts.timesheet_id is null
+          ),
+          false
         )
-      ) as new_paid_minutes,
+      ) as needs_detach
 
-      -- week ending derived from client settings weekday (0=Sun) relative to work_date
-      (
-        r.date_local
-        + (
-            (
-              coalesce((select cs_we.week_ending_weekday from cs_we limit 1), 0)
-              - extract(dow from r.date_local)::int + 7
-            ) % 7
-          )
-      )::date as week_ending_date
-
-    from public.hr_rows r
-    join import_hdr ih
-      on ih.import_id = r.import_id
-    where r.import_id = p_import_id
-      and r.external_row_key is not null
-      and r.date_local is not null
-      and (r.payload_json ->> 'start_utc') is not null
-      and (r.payload_json ->> 'end_utc') is not null
-  ),
-  matched as (
-    select
-      hr.hr_row_id,
-      hr.external_row_key,
-      hr.work_date,
-      hr.incoming_code,
-      hr.candidate_id,
-      hr.client_id,
-      hr.week_ending_date,
-      hr.contract_id,
-
-      s.id as shift_id,
-      s.start_utc as old_start_utc,
-      s.end_utc as old_end_utc,
-      coalesce(s.break_mins, 0) as old_break_mins,
-
-      greatest(
-        0,
-        (extract(epoch from (s.end_utc - s.start_utc)) / 60)::int - coalesce(s.break_mins, 0)
-      ) as old_paid_minutes,
-
-      hr.start_utc as new_start_utc,
-      hr.end_utc as new_end_utc,
-      hr.new_break_mins,
-      hr.new_paid_minutes
-
-    from hr_raw hr
+    from p2 p2r
     left join public.nhsp_shifts s
-      on s.external_row_key = hr.external_row_key
-     and s.source_system = v_src
-     and s.cancelled_at_utc is null
+      on s.external_row_key = p2r.external_row_key
+     and s.latest_import_id = p_import_id
+     and s.source_system    = v_src
+    left join public.timesheets ts
+      on ts.timesheet_id = s.timesheet_id
+    left join public.timesheets_financials fin
+      on fin.timesheet_id = s.timesheet_id
+     and fin.is_current   = true
   ),
-  delta as (
-    select
-      m.*,
-      (coalesce(m.new_paid_minutes,0) - coalesce(m.old_paid_minutes,0)) as delta_paid_minutes,
-      (
-        m.shift_id is null
-      ) as is_new,
-      (
-        m.shift_id is not null
-        and coalesce(m.old_start_utc, null) = coalesce(m.new_start_utc, null)
-        and coalesce(m.old_end_utc, null)   = coalesce(m.new_end_utc, null)
-        and coalesce(m.old_break_mins,0)    = coalesce(m.new_break_mins,0)
-      ) as is_noop
-    from matched m
+
+  -- Apply Phase2 mapping into nhsp_shifts:
+  -- POLICY: paid/locked does NOT block truth repair. If Phase2 says OK and mapping differs, detach+overwrite.
+  upd as (
+    update public.nhsp_shifts su
+    set
+      updated_at = now(),
+
+      -- ✅ Persist week_ending_date computed by Phase2 (client_settings-driven)
+      week_ending_date = cur.p2_week_ending_date,
+
+      -- Update mapping keys from Phase2
+      contract_id = cur.p2_contract_id,
+      candidate_id = coalesce(cur.p2_candidate_id, su.candidate_id),
+      client_id    = coalesce(cur.p2_client_id, su.client_id),
+
+      -- Detach if mapping differs OR if timesheet row is missing (deleted), so downstream ensure+attach can relink.
+      timesheet_id = case
+        when coalesce(cur.needs_detach, false) then null
+        else su.timesheet_id
+      end
+
+    from cur
+    where cur.p2_action = 'OK'
+      and cur.p2_contract_id is not null
+      and cur.external_row_key is not null
+      and cur.p2_week_ending_date is not null
+      and su.external_row_key = cur.external_row_key
+      and su.latest_import_id = p_import_id
+      and su.source_system    = v_src
+      and (
+        coalesce(cur.needs_detach,false) = true
+        or su.contract_id is distinct from cur.p2_contract_id
+        or su.candidate_id is distinct from cur.p2_candidate_id
+        or su.client_id is distinct from cur.p2_client_id
+        or su.week_ending_date is distinct from cur.p2_week_ending_date
+      )
+    returning su.external_row_key
   )
+
   select
-    d.hr_row_id,
-    d.external_row_key,
-    d.work_date,
-    d.incoming_code,
-    d.candidate_id,
-    d.client_id,
-    d.week_ending_date,
-    d.contract_id,
+    cur.hr_row_id,
+    cur.external_row_key,
+    cur.work_date,
+    cur.incoming_code,
+    cur.p2_candidate_id as candidate_id,
+    cur.p2_client_id    as client_id,
+    cur.p2_week_ending_date as week_ending_date,
+    cur.p2_contract_id  as contract_id,
 
+    -- No paid/locked blocking in Phase2. Keep Phase2 action as-is.
+    cur.p2_action as action,
+
+    -- Informational reason stitching for detach/week-ending update scenarios (no blocking)
     case
-      when d.external_row_key is null then 'REJECT_MISSING_KEY'
-      when d.candidate_id is null then 'REJECT_NO_CANDIDATE'
-      when d.client_id is null then 'REJECT_NO_CLIENT'
-      when d.contract_id is null then 'REJECT_NO_CONTRACT'
-      when d.work_date is null then 'REJECT_NO_WORK_DATE'
-      when d.week_ending_date is null then 'REJECT_NO_WEEK_ENDING'
-      else 'OK'
-    end as action,
+      when cur.p2_action = 'OK'
+        and (
+          coalesce(cur.needs_detach,false) = true
+          or coalesce(cur.needs_week_ending_update,false) = true
+        )
+        and cur.shift_id is not null
+      then
+        (
+          case
+            when nullif(btrim(coalesce(cur.p2_reason,'')),'') is null then ''
+            else cur.p2_reason || ' '
+          end
+        )
+        ||
+        (
+          case
+            when coalesce(cur.needs_reassign,false) is true and coalesce(cur.needs_relink_missing_timesheet,false) is true
+              then 'Shift mapping changed and the shift was linked to a missing/deleted timesheet; truth was updated and shift detached for relink.'
+            when coalesce(cur.needs_reassign,false) is true
+              then 'Shift mapping changed; truth was updated and shift detached for relink.'
+            when coalesce(cur.needs_relink_missing_timesheet,false) is true
+              then 'Shift was linked to a missing/deleted timesheet; truth was updated and shift detached for relink.'
+            when coalesce(cur.needs_week_ending_update,false) is true
+              then 'Shift week_ending_date was updated from Phase2 to keep weekly attachment deterministic.'
+            else 'Truth was updated.'
+          end
+        )
+        ||
+        (
+          case
+            when (cur.fin_locked_by_invoice_id is not null or cur.fin_paid_at_utc is not null)
+              then ' Issued invoices remain immutable; any financial correction must be represented by standard reversal/adjustment artefacts.'
+            else ''
+          end
+        )
+      else cur.p2_reason
+    end as reason,
 
-    ''::text as reason,
+    (u.external_row_key is not null) as shift_updated
 
-    d.shift_id as matched_shift_id,
-    d.is_new,
-    d.is_noop,
-
-    (not d.is_noop) as is_changed,
-
-    d.old_start_utc,
-    d.old_end_utc,
-    d.old_break_mins,
-    d.old_paid_minutes,
-
-    d.new_start_utc,
-    d.new_end_utc,
-    d.new_break_mins,
-    d.new_paid_minutes,
-
-    d.delta_paid_minutes,
-
-    (
-      d.shift_id is not null
-      and (coalesce(d.delta_paid_minutes,0) <> 0 or coalesce(d.old_break_mins,0) <> coalesce(d.new_break_mins,0))
-    ) as is_changed_hours
-
-  from delta d
-  order by d.work_date, d.external_row_key;
+  from cur
+  left join upd u
+    on u.external_row_key = cur.external_row_key;
 
 end;
-$function$;
+$$;
