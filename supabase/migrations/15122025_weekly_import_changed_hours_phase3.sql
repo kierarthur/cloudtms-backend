@@ -433,6 +433,7 @@ $$;
 -- NOW FILTERED: returns ONLY requires_any_decision=true
 -- FIX: adds contract_self_bill + invoice_id_detected
 -- ---------------------------------------------------------
+
 create or replace function public.weekly_import_changed_hours_phase3(
   p_import_id uuid,
   p_system_type text
@@ -515,9 +516,18 @@ begin
 
       date_trunc('minute', (r.payload_json->>'start_utc')::timestamptz) as new_start_utc,
       date_trunc('minute', (r.payload_json->>'end_utc')::timestamptz)   as new_end_utc,
+
+      -- ✅ FIX: HealthRoster weekly uses Actual Break as authoritative.
+      -- Priority: actual_break_mins / actual_break_minutes -> break_mins / break_minutes -> 0
       case
+        when (r.payload_json ? 'actual_break_mins') and ((r.payload_json->>'actual_break_mins') ~ '^[0-9]+$')
+          then (r.payload_json->>'actual_break_mins')::int
+        when (r.payload_json ? 'actual_break_minutes') and ((r.payload_json->>'actual_break_minutes') ~ '^[0-9]+$')
+          then (r.payload_json->>'actual_break_minutes')::int
         when (r.payload_json ? 'break_mins') and ((r.payload_json->>'break_mins') ~ '^[0-9]+$')
           then (r.payload_json->>'break_mins')::int
+        when (r.payload_json ? 'break_minutes') and ((r.payload_json->>'break_minutes') ~ '^[0-9]+$')
+          then (r.payload_json->>'break_minutes')::int
         else 0
       end as new_break_mins
     from public.hr_rows r
@@ -792,6 +802,8 @@ begin
 
 end;
 $$;
+
+
 
 
 
