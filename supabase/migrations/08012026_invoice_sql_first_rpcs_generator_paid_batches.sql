@@ -5608,7 +5608,8 @@ $function$;
 
 drop function if exists public.invoice_source_rows_collect(uuid, boolean);
 
-create function public.invoice_source_rows_collect(
+
+create or replace function public.invoice_source_rows_collect(
   p_invoice_id uuid,
   p_force_refresh boolean default true
 )
@@ -5675,11 +5676,32 @@ begin
   delete from public.invoice_hr_source_rows r
   where r.invoice_id = p_invoice_id;
 
-  with ts_ids as (
-    select distinct l.timesheet_id
+  with lines as (
+    select
+      l.timesheet_id,
+      l.meta_json
     from public.invoice_lines l
     where l.invoice_id = p_invoice_id
-      and l.timesheet_id is not null
+  ),
+  -- ✅ FIX: derive timesheet_ids from either invoice_lines.timesheet_id OR meta_json.timesheet_id (UUID validated)
+  ts_ids as (
+    select distinct
+      case
+        when ln.timesheet_id is not null then ln.timesheet_id
+        when ln.meta_json is not null
+          and nullif(btrim(coalesce(ln.meta_json->>'timesheet_id','')), '') is not null
+          and nullif(btrim(coalesce(ln.meta_json->>'timesheet_id','')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+        then nullif(btrim(coalesce(ln.meta_json->>'timesheet_id','')), '')::uuid
+        else null
+      end as timesheet_id
+    from lines ln
+    where
+      ln.timesheet_id is not null
+      or (
+        ln.meta_json is not null
+        and nullif(btrim(coalesce(ln.meta_json->>'timesheet_id','')), '') is not null
+        and nullif(btrim(coalesce(ln.meta_json->>'timesheet_id','')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+      )
   ),
   fin as (
     select
@@ -5798,7 +5820,6 @@ begin
 
 end;
 $$;
-
 
 
 
