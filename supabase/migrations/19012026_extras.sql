@@ -1322,6 +1322,8 @@ $$;
 --       (date/work_date) + (start_utc normalized to UTC) + (ref_num)
 --   - Still FAILS CLOSED if keys are ambiguous or missing.
 -- ------------------------------------------------------------
+
+
 create or replace function public.tsfin_repair_merge_segments_locked(
   p_timesheet_id uuid,
   p_new_segments jsonb,
@@ -1423,6 +1425,16 @@ declare
 
   -- helper payload for early returns
   v_ret jsonb;
+
+  -- ✅ NEW: preserve additional/expenses and keep totals consistent
+  v_add_pay numeric := 0;
+  v_add_charge numeric := 0;
+  v_seg_pay_sum numeric := 0;
+  v_seg_charge_sum numeric := 0;
+  v_total_pay numeric := 0;
+  v_total_charge numeric := 0;
+  v_margin numeric := 0;
+  v_exclude boolean := false;
 begin
   -- Load invoice_debug flag (safe even if column not yet present)
   begin
@@ -2436,13 +2448,78 @@ begin
     return v_ret;
   end if;
 
-  -- Update only the segments list + updated_at (do NOT change lock summary fields)
-  update public.timesheets_financials tf
+  -- ✅ NEW: preserve additional/expenses and keep totals consistent with merged segments
+  v_add_pay := 0;
+  v_add_charge := 0;
+
+  begin
+    v_add_pay := coalesce(nullif(btrim(coalesce(v_ib->'additional'->>'pay_ex_vat','')), '')::numeric, 0);
+  exception when others then
+    v_add_pay := 0;
+  end;
+
+  begin
+    v_add_charge := coalesce(nullif(btrim(coalesce(v_ib->'additional'->>'charge_ex_vat','')), '')::numeric, 0);
+  exception when others then
+    v_add_charge := 0;
+  end;
+
+  v_seg_pay_sum := 0;
+  v_seg_charge_sum := 0;
+
+  for e in
+    select value from jsonb_array_elements(v_merged_segments) as t(value)
+  loop
+    if e is null or jsonb_typeof(e) <> 'object' then
+      continue;
+    end if;
+
+    -- segment charge sum (include all segments; negative allowed)
+    begin
+      v_seg_charge_sum := v_seg_charge_sum + coalesce(nullif(btrim(coalesce(e->>'charge_amount','')), '')::numeric, 0);
+    exception when others then
+      null;
+    end;
+
+    -- pay sum respects exclude_from_pay when present/true
+    v_exclude := false;
+    begin
+      v_exclude := coalesce(nullif(btrim(coalesce(e->>'exclude_from_pay','')), '')::boolean, false);
+    exception when others then
+      v_exclude := false;
+    end;
+
+    begin
+      if not v_exclude then
+        v_seg_pay_sum := v_seg_pay_sum + coalesce(nullif(btrim(coalesce(e->>'pay_amount','')), '')::numeric, 0);
+      end if;
+    exception when others then
+      null;
+    end;
+  end loop;
+
+  v_seg_pay_sum := round(coalesce(v_seg_pay_sum, 0), 2);
+  v_seg_charge_sum := round(coalesce(v_seg_charge_sum, 0), 2);
+
+  v_total_pay := round(v_seg_pay_sum + coalesce(v_add_pay, 0), 2);
+  v_total_charge := round(v_seg_charge_sum + coalesce(v_add_charge, 0), 2);
+  v_margin := round(v_total_charge - v_total_pay, 2);
+
+  -- Keep invoice_breakdown_json.totals in sync (do not touch v_ib.additional / other keys)
+  v_new_ib := jsonb_set(v_new_ib, '{totals,total_pay_ex_vat}', to_jsonb(v_total_pay), true);
+  v_new_ib := jsonb_set(v_new_ib, '{totals,total_charge_ex_vat}', to_jsonb(v_total_charge), true);
+  v_new_ib := jsonb_set(v_new_ib, '{totals,margin_ex_vat}', to_jsonb(v_margin), true);
+
+  -- Update segments + totals + columns (do NOT change lock summary fields)
+  update public.timesheets_financials tfu
   set
     invoice_breakdown_json = v_new_ib,
+    total_pay_ex_vat = v_total_pay,
+    total_charge_ex_vat = v_total_charge,
+    margin_ex_vat = v_margin,
     updated_at = now()
-  where tf.id = v_tsfin_id
-    and tf.is_current = true;
+  where tfu.id = v_tsfin_id
+    and tfu.is_current = true;
 
   get diagnostics v_rows_updated = row_count;
 
@@ -2605,6 +2682,7 @@ $$;
 grant execute on function public.tsfin_repair_merge_segments_locked(uuid, jsonb, uuid, text) to service_role;
 
 select pg_notify('pgrst', 'reload schema');
+
 
 
 
