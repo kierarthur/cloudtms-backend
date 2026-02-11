@@ -3393,6 +3393,8 @@ $$;
 --
 -- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
 -- ============================================================
+
+
 create or replace function public.invoice_render_manifest(p_invoice_id uuid)
 returns jsonb
 language plpgsql
@@ -3454,9 +3456,23 @@ begin
     order by l.created_at asc
   ),
   ts_ids as (
-    select distinct timesheet_id
-    from lines
-    where timesheet_id is not null
+    select distinct
+      case
+        when l.timesheet_id is not null then l.timesheet_id
+        when l.meta_json is not null
+          and nullif(btrim(coalesce(l.meta_json->>'timesheet_id','')), '') is not null
+          and nullif(btrim(coalesce(l.meta_json->>'timesheet_id','')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+        then nullif(btrim(coalesce(l.meta_json->>'timesheet_id','')), '')::uuid
+        else null
+      end as timesheet_id
+    from lines l
+    where
+      l.timesheet_id is not null
+      or (
+        l.meta_json is not null
+        and nullif(btrim(coalesce(l.meta_json->>'timesheet_id','')), '') is not null
+        and nullif(btrim(coalesce(l.meta_json->>'timesheet_id','')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+      )
   ),
 
   -- ✅ UPDATED: reference rows joined to candidate display name (for UI display)
@@ -4139,6 +4155,8 @@ exception when others then
   raise;
 end;
 $$;
+
+
 
 
 -- 3.6 Credit note + unlock (needs unredacted JS parity source)
