@@ -362,6 +362,11 @@ end;
 $$;
 
 
+
+
+
+
+
 CREATE OR REPLACE FUNCTION public.hr_weekly_phase3_apply_adjustment_truth(p_import_id uuid, p_selected_external_row_keys text[], p_actor_user_id uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -1624,79 +1629,81 @@ begin
           v_booking_id := 'bk_' || substr(v_hash_hex, 1, 16);
 
      begin
-            insert into public.timesheets(
-              booking_id,
-              version,
-              is_current,
-              status,
-              occupant_key_norm,
-              hospital_norm,
-              ward_norm,
-              job_title_norm,
-              shift_label_norm,
-              week_ending_date,
-              contract_id,
-              sheet_scope,
-              submission_mode,
-              line_type,
-              manual_pdf_r2_key,
-              actual_schedule_json,
-              additional_units_week,
-              additional_units_per_day,
-              day_references_json,
-              qr_status,
-              qr_token,
-              qr_generated_at,
-              qr_scanned_at,
-              qr_scan_info_json,
-              qr_r2_key,
-              qr_payload_json,
-              created_at,
-              updated_at,
-              is_adjustment,
-              parent_timesheet_id,
-              candidate_hint_text,
-              correction_id,
-              correction_kind,
-              adjustment_origin
-            )
-            values (
-              v_booking_id,
-              1,
-              true,
-              'RECEIVED'::public.timesheet_status_enum,
-              lower(coalesce(v_candidate_tms_ref, v_candidate_display_name, v_candidate_id::text)),
-              lower(coalesce(v_contract_display_site, v_client_name, v_client_id::text)),
-              lower(coalesce(v_contract_ward_hint,'contract')),
-              lower(coalesce(v_contract_role,'weekly')),
-              v_shift_label_norm,
-              v_week_ending_date,
-              v_contract_id,
-              v_effective_sheet_scope,
-              v_effective_submission_mode,
-              'HOURS',
+         insert into public.timesheets(
+  booking_id,
+  version,
+  is_current,
+  status,
+  occupant_key_norm,
+  hospital_norm,
+  ward_norm,
+  job_title_norm,
+  shift_label_norm,
+  week_ending_date,
+  contract_id,
+  sheet_scope,
+  submission_mode,
+  line_type,
+  manual_pdf_r2_key,
+  actual_schedule_json,
+  additional_units_week,
+  additional_units_per_day,
+  day_references_json,
+  qr_status,
+  qr_token,
+  qr_generated_at,
+  qr_scanned_at,
+  qr_scan_info_json,
+  qr_r2_key,
+  qr_payload_json,
+  created_at,
+  updated_at,
+  is_adjustment,
+  parent_timesheet_id,
+  candidate_hint_text,
+  correction_id,
+  correction_kind,
+  adjustment_origin
+)
+values (
+  v_booking_id,
+  1,
+  true,
+  'RECEIVED'::public.timesheet_status_enum,
+  lower(coalesce(v_candidate_tms_ref, v_candidate_display_name, v_candidate_id::text)),
+  lower(coalesce(v_contract_display_site, v_client_name, v_client_id::text)),
+  lower(coalesce(v_contract_ward_hint,'contract')),
+  lower(coalesce(v_contract_role,'weekly')),
+  v_shift_label_norm,
+  v_week_ending_date,
+  v_contract_id,
+  v_effective_sheet_scope,
+  v_effective_submission_mode,
+  'HOURS',
 
-              null,
-              v_schedule,
-              '{}'::jsonb,
-              '{}'::jsonb,
-              null,
-              null,
-              null,
-              null,
-              null,
-              null,
-              '{}'::jsonb,
-              v_now,
-              v_now,
-              true,
-              v_base_timesheet_id,
-              v_hint,
-              v_correction_id,
-              v_kind,
-              'IMPORT_CORRECTION'
-            )
-            returning timesheet_id into v_ts_id;
+  null,
+  v_schedule,
+  '{}'::jsonb,
+  '{}'::jsonb,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  '{}'::jsonb,
+  v_now,
+  v_now,
+  true,
+  v_base_timesheet_id,
+  v_hint,
+  v_correction_id,
+  v_kind,
+  'IMPORT_CORRECTION'
+)
+returning timesheet_id into v_ts_id;
+
 
 
           exception when unique_violation then
@@ -2002,8 +2009,6 @@ exception when others then
   raise;
 end;
 $function$;
-
-
 
 
 
