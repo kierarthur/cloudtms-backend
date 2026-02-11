@@ -425,6 +425,14 @@ declare
   -- ✅ NEW: validate segments JSON before writing
   v_ib  jsonb;
   v_bad int;
+
+  -- ✅ NEW: expense component rollup (sum components; fallback to expenses_* only if sum == 0)
+  v_cat_pay numeric;
+  v_cat_charge numeric;
+  v_fallback_exp_pay numeric;
+  v_fallback_exp_charge numeric;
+  v_exp_pay numeric;
+  v_exp_charge numeric;
 begin
   if p_rows is null or jsonb_typeof(p_rows) <> 'array' then
     ok_count := 0;
@@ -486,6 +494,23 @@ begin
       -- Guard + rotate current -> history (invoice-lock protected)
       perform public.tsfin_prepare_write(v_timesheet_id);
       did_prepare := true;
+
+      -- ✅ NEW: compute expense totals (sum components first; fallback to expenses_* only if sum == 0)
+      v_cat_pay :=
+          coalesce(nullif(snap->>'travel_pay_ex_vat','')::numeric, prev.travel_pay_ex_vat, 0)
+        + coalesce(nullif(snap->>'accommodation_pay_ex_vat','')::numeric, prev.accommodation_pay_ex_vat, 0)
+        + coalesce(nullif(snap->>'other_pay_ex_vat','')::numeric, prev.other_pay_ex_vat, 0);
+
+      v_cat_charge :=
+          coalesce(nullif(snap->>'travel_charge_ex_vat','')::numeric, prev.travel_charge_ex_vat, 0)
+        + coalesce(nullif(snap->>'accommodation_charge_ex_vat','')::numeric, prev.accommodation_charge_ex_vat, 0)
+        + coalesce(nullif(snap->>'other_charge_ex_vat','')::numeric, prev.other_charge_ex_vat, 0);
+
+      v_fallback_exp_pay := coalesce(nullif(snap->>'expenses_pay_ex_vat','')::numeric, prev.expenses_pay_ex_vat, 0);
+      v_fallback_exp_charge := coalesce(nullif(snap->>'expenses_charge_ex_vat','')::numeric, prev.expenses_charge_ex_vat, 0);
+
+      v_exp_pay := case when coalesce(v_cat_pay, 0) <> 0 then v_cat_pay else v_fallback_exp_pay end;
+      v_exp_charge := case when coalesce(v_cat_charge, 0) <> 0 then v_cat_charge else v_fallback_exp_charge end;
 
       -- Insert new current snapshot (explicit columns)
       insert into public.timesheets_financials (
@@ -654,23 +679,12 @@ begin
                  'UNASSIGNED'::public.ts_fin_processing_status_enum),
 
         -- expenses_pay_ex_vat:
-        -- prefer explicit total; else sum of category columns; else 0
-        coalesce(
-          nullif(snap->>'expenses_pay_ex_vat','')::numeric,
-          coalesce(nullif(snap->>'travel_pay_ex_vat','')::numeric, prev.travel_pay_ex_vat, 0)
-        + coalesce(nullif(snap->>'accommodation_pay_ex_vat','')::numeric, prev.accommodation_pay_ex_vat, 0)
-        + coalesce(nullif(snap->>'other_pay_ex_vat','')::numeric, prev.other_pay_ex_vat, 0),
-          0
-        ),
+        -- sum category components; fallback to expenses_* only if category sum == 0
+        coalesce(v_exp_pay, 0),
 
         -- expenses_charge_ex_vat:
-        coalesce(
-          nullif(snap->>'expenses_charge_ex_vat','')::numeric,
-          coalesce(nullif(snap->>'travel_charge_ex_vat','')::numeric, prev.travel_charge_ex_vat, 0)
-        + coalesce(nullif(snap->>'accommodation_charge_ex_vat','')::numeric, prev.accommodation_charge_ex_vat, 0)
-        + coalesce(nullif(snap->>'other_charge_ex_vat','')::numeric, prev.other_charge_ex_vat, 0),
-          0
-        ),
+        -- sum category components; fallback to expenses_* only if category sum == 0
+        coalesce(v_exp_charge, 0),
 
         nullif(snap->>'expenses_description',''),
         nullif(snap->>'expenses_evidence_r2_key',''),
@@ -788,4 +802,5 @@ grant execute on function public.tsfin_write_snapshots_and_complete(jsonb) to se
 grant execute on function public.tsfin_write_snapshots_and_complete(jsonb) to authenticated;
 
 select pg_notify('pgrst', 'reload schema');
+
 
