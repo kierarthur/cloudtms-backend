@@ -2010,10 +2010,6 @@ exception when others then
 end;
 $function$;
 
-
-
-
-
 create or replace function public.hr_weekly_apply_transactional(
   p_import_id uuid,
   p_payload jsonb,
@@ -2077,10 +2073,13 @@ declare
   v_validations_upserted int := 0;
   v_mismatched_tsids uuid[] := array[]::uuid[];
 
+  -- ✅ NEW: validation-changed timesheets (MODE_A) that must trigger TSFIN recompute
+  v_validation_changed_timesheet_ids uuid[] := array[]::uuid[];
+
   -- email (MODE_A; transactional log, send post-commit)
   v_email_jobs jsonb := '[]'::jsonb;
 
-  -- affected timesheets for TSFIN drain
+  -- affected timesheets for TSFIN drain (MODE_B + MODE_A validation changes)
   v_affected_timesheet_ids uuid[] := array[]::uuid[];
 
   -- policy A replacement-day
@@ -3115,7 +3114,6 @@ begin
       limit 20
     ) as x;
 
-    -- ✅ FIX: mismatched parentheses (was ')));')
     v_steps := v_steps || jsonb_build_array(jsonb_build_object(
       'step','ENSURE_BASE_WEEKLY_DONE',
       'ensure_pairs_count', v_ensure_pairs_count,
@@ -3146,7 +3144,8 @@ begin
   v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','MODE_A_MIRROR_DONE'));
 
   -- ─────────────────────────────────────────────
-  -- 10) MODE_A weekly validation upserts + email state (unchanged behaviour)
+  -- 10) MODE_A weekly validation upserts + email state
+  --     ✅ NEW: detect which timesheets had meaningful validation changes and enqueue TSFIN for them
   -- ─────────────────────────────────────────────
   select public.hr_weekly_validation_preview(p_import_id := p_import_id)
   into v_weekly_val_payload;
@@ -3193,6 +3192,38 @@ begin
    and gm.week_ending_date = vr.week_ending_date
    and gm.client_id = vr.client_id;
 
+  -- ✅ NEW: compute desired upsert values for MODE_A validations, then detect which rows actually changed
+  create temporary table tmp_val_upsert on commit drop as
+  select
+    vr.timesheet_id,
+    case
+      when vr.overall_status = 'OK' then 'VALIDATION_OK'::public.validation_status_enum
+      else 'VALIDATION_ERROR'::public.validation_status_enum
+    end as new_status,
+    'HEALTHROSTER_WEEKLY'::text as new_reason_code,
+    case when vr.overall_status = 'OK' then v_now else null end as new_validated_at_utc,
+    p_import_id as new_last_source
+  from tmp_val_rows vr
+  join tmp_val_mode vm
+    on vm.timesheet_id = vr.timesheet_id
+  where vm.mode = 'MODE_A'
+    and vr.timesheet_id is not null;
+
+  select coalesce(array_agg(distinct x.timesheet_id order by x.timesheet_id), array[]::uuid[])
+  into v_validation_changed_timesheet_ids
+  from (
+    select u.timesheet_id
+    from tmp_val_upsert u
+    left join public.timesheet_validations tv
+      on tv.timesheet_id = u.timesheet_id
+    where tv.timesheet_id is null
+       or tv.status is distinct from u.new_status
+       or tv.validated_at_utc is distinct from u.new_validated_at_utc
+       or tv.last_source is distinct from u.new_last_source
+       or tv.reason_code is distinct from u.new_reason_code
+  ) as x;
+
+  -- Upsert validations (existing behaviour, now sourced from tmp_val_upsert)
   insert into public.timesheet_validations(
     timesheet_id,
     status,
@@ -3202,19 +3233,13 @@ begin
     updated_at
   )
   select
-    vr.timesheet_id,
-    case
-      when vr.overall_status = 'OK' then 'VALIDATION_OK'::public.validation_status_enum
-      else 'VALIDATION_ERROR'::public.validation_status_enum
-    end,
-    'HEALTHROSTER_WEEKLY',
-    case when vr.overall_status = 'OK' then v_now else null end,
-    p_import_id,
+    u.timesheet_id,
+    u.new_status,
+    u.new_reason_code,
+    u.new_validated_at_utc,
+    u.new_last_source,
     v_now
-  from tmp_val_rows vr
-  join tmp_val_mode vm
-    on vm.timesheet_id = vr.timesheet_id
-  where vm.mode = 'MODE_A'
+  from tmp_val_upsert u
   on conflict (timesheet_id) do update
     set status = excluded.status,
         reason_code = excluded.reason_code,
@@ -3223,6 +3248,13 @@ begin
         updated_at = excluded.updated_at;
 
   get diagnostics v_validations_upserted = row_count;
+
+  -- ✅ NEW: mark validation-changed timesheets as affected for TSFIN drain
+  insert into tmp_aff_ts(timesheet_id)
+  select distinct t.tsid
+  from unnest(coalesce(v_validation_changed_timesheet_ids, array[]::uuid[])) as t(tsid)
+  where t.tsid is not null
+  on conflict do nothing;
 
   select coalesce(array_agg(distinct vr.timesheet_id), array[]::uuid[])
   into v_mismatched_tsids
@@ -3308,6 +3340,7 @@ begin
       'step','MODE_A_VALIDATIONS_DONE',
       'val_rows_count', v_val_rows_count,
       'validations_upserted', v_validations_upserted,
+      'validation_changed_timesheet_ids_count', coalesce(array_length(v_validation_changed_timesheet_ids, 1), 0),
       'mismatched_timesheet_ids_count', coalesce(array_length(v_mismatched_tsids, 1), 0),
       'email_actions_count', v_email_actions_count,
       'email_jobs_count', v_email_jobs_count
@@ -3315,11 +3348,11 @@ begin
   );
 
   -- ─────────────────────────────────────────────
-  -- 11) Compute affected_timesheet_ids (MODE_B only)
+  -- 11) Compute affected_timesheet_ids (MODE_B work + MODE_A validation changes)
+  --     ✅ NEW: always compute from tmp_aff_ts so validation-only changes are included
   -- ─────────────────────────────────────────────
   if (v_mode_b_should_run_phase1 is false) and (v_mode_b_should_run_cancellations is false) then
-    v_affected_timesheet_ids := array[]::uuid[];
-    v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','AFFECTED_TS_SKIPPED_MODE_B_NOOP'));
+    v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','AFFECTED_TS_MODE_B_NOOP'));
   else
     select coalesce(array_agg(k.external_row_key order by k.external_row_key), array[]::text[])
     into v_force_keys_non_invoiced
@@ -3359,45 +3392,50 @@ begin
       and ns.timesheet_id is not null
     on conflict do nothing;
 
-    select coalesce(array_agg(distinct a.timesheet_id order by a.timesheet_id), array[]::uuid[])
-    into v_affected_timesheet_ids
-    from tmp_aff_ts a
-    where a.timesheet_id is not null;
-
-    if array_length(v_affected_timesheet_ids, 1) is not null then
-      perform public.enqueue_ts_financials_priority(v_affected_timesheet_ids, 'CONTEXT_CHANGED'::public.ts_fin_reason_enum);
-    end if;
-
-    if jsonb_array_length(coalesce(v_cancellations_result->'affected_timesheet_ids', '[]'::jsonb)) > 0 then
-      create temporary table tmp_cancel_aff_ts(ts_id uuid primary key) on commit drop;
-
-      insert into tmp_cancel_aff_ts(ts_id)
-      select distinct (x4.value)::uuid
-      from jsonb_array_elements_text(coalesce(v_cancellations_result->'affected_timesheet_ids', '[]'::jsonb)) as x4(value)
-      where nullif(btrim(x4.value), '') is not null
-      on conflict do nothing;
-
-      select count(*)::int
-      into v_cancel_adjustment_count
-      from tmp_cancel_aff_ts cts
-      join public.timesheets tts
-        on tts.timesheet_id = cts.ts_id
-      where tts.is_adjustment is true;
-    else
-      v_cancel_adjustment_count := 0;
-    end if;
-
-    v_correction_timesheets_created_count := (v_phase3_created_count + v_phase3_updated_count + coalesce(v_cancel_adjustment_count, 0));
-
-    v_steps := v_steps || jsonb_build_array(
-      jsonb_build_object(
-        'step','AFFECTED_TS_DONE',
-        'affected_timesheet_ids_count', coalesce(array_length(v_affected_timesheet_ids, 1), 0),
-        'cancel_adjustment_count', v_cancel_adjustment_count,
-        'correction_timesheets_created_count', v_correction_timesheets_created_count
-      )
-    );
+    v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','AFFECTED_TS_MODE_B_COLLECTED'));
   end if;
+
+  -- ✅ NEW: compute final affected list from tmp_aff_ts (includes validation-changed timesheets)
+  select coalesce(array_agg(distinct a.timesheet_id order by a.timesheet_id), array[]::uuid[])
+  into v_affected_timesheet_ids
+  from tmp_aff_ts a
+  where a.timesheet_id is not null;
+
+  if array_length(v_affected_timesheet_ids, 1) is not null then
+    perform public.enqueue_ts_financials_priority(v_affected_timesheet_ids, 'CONTEXT_CHANGED'::public.ts_fin_reason_enum);
+  end if;
+
+  -- cancel adjustment count (unchanged semantics; safe even if MODE_B noop)
+  if jsonb_array_length(coalesce(v_cancellations_result->'affected_timesheet_ids', '[]'::jsonb)) > 0 then
+    create temporary table tmp_cancel_aff_ts(ts_id uuid primary key) on commit drop;
+
+    insert into tmp_cancel_aff_ts(ts_id)
+    select distinct (x4.value)::uuid
+    from jsonb_array_elements_text(coalesce(v_cancellations_result->'affected_timesheet_ids', '[]'::jsonb)) as x4(value)
+    where nullif(btrim(x4.value), '') is not null
+    on conflict do nothing;
+
+    select count(*)::int
+    into v_cancel_adjustment_count
+    from tmp_cancel_aff_ts cts
+    join public.timesheets tts
+      on tts.timesheet_id = cts.ts_id
+    where tts.is_adjustment is true;
+  else
+    v_cancel_adjustment_count := 0;
+  end if;
+
+  v_correction_timesheets_created_count := (v_phase3_created_count + v_phase3_updated_count + coalesce(v_cancel_adjustment_count, 0));
+
+  v_steps := v_steps || jsonb_build_array(
+    jsonb_build_object(
+      'step','AFFECTED_TS_DONE',
+      'affected_timesheet_ids_count', coalesce(array_length(v_affected_timesheet_ids, 1), 0),
+      'validation_changed_timesheet_ids_count', coalesce(array_length(v_validation_changed_timesheet_ids, 1), 0),
+      'cancel_adjustment_count', v_cancel_adjustment_count,
+      'correction_timesheets_created_count', v_correction_timesheets_created_count
+    )
+  );
 
   -- ─────────────────────────────────────────────
   -- 12) Mark import applied (inside transaction)
@@ -3421,6 +3459,7 @@ begin
       'client_id', v_import_client_id::text,
       'val_rows_count', v_val_rows_count,
       'validations_upserted', v_validations_upserted,
+      'validation_changed_timesheet_ids_count', coalesce(array_length(v_validation_changed_timesheet_ids, 1), 0),
       'mismatched_timesheet_ids_count', coalesce(array_length(v_mismatched_tsids, 1), 0),
       'email_actions_count', v_email_actions_count,
       'email_jobs_count', v_email_jobs_count
@@ -3467,10 +3506,12 @@ begin
     'mode_a', jsonb_build_object(
       'mirror', v_mirror_result,
       'validations_upserted', v_validations_upserted,
-      'mismatched_timesheet_ids', to_jsonb(coalesce(v_mismatched_tsids, array[]::uuid[]))
+      'mismatched_timesheet_ids', to_jsonb(coalesce(v_mismatched_tsids, array[]::uuid[])),
+      'validation_affected_timesheet_ids', to_jsonb(coalesce(v_validation_changed_timesheet_ids, array[]::uuid[]))
     ),
     'email_jobs', v_email_jobs,
-    'affected_timesheet_ids', to_jsonb(coalesce(v_affected_timesheet_ids, array[]::uuid[]))
+    'affected_timesheet_ids', to_jsonb(coalesce(v_affected_timesheet_ids, array[]::uuid[])),
+    'validation_affected_timesheet_ids', to_jsonb(coalesce(v_validation_changed_timesheet_ids, array[]::uuid[]))
   );
 
 exception when others then
@@ -3502,6 +3543,377 @@ exception when others then
   raise;
 end;
 $$;
+
+
+create or replace function public.hr_daily_apply_transactional(
+  p_import_id uuid,
+  p_payload jsonb,
+  p_actor_user_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_now timestamptz := now();
+
+  v_src public.hr_source_enum;
+
+  v_payload jsonb := coalesce(p_payload, '{}'::jsonb);
+  v_validation_rows_json jsonb := coalesce(v_payload->'validation_rows', '[]'::jsonb);
+  v_email_actions_json   jsonb := coalesce(v_payload->'email_actions',   '[]'::jsonb);
+
+  v_validations_upserted int := 0;
+  v_timesheets_ref_updated int := 0;
+
+  v_email_logs_upserted int := 0;
+  v_email_jobs jsonb := '[]'::jsonb;
+
+  v_email_selected_count int := 0;
+
+  -- ✅ NEW: TSFIN recompute support (validation changes + reference updates)
+  v_daily_validation_changed_timesheet_ids uuid[] := array[]::uuid[];
+  v_ref_updated_timesheet_ids uuid[] := array[]::uuid[];
+  v_affected_timesheet_ids uuid[] := array[]::uuid[];
+
+begin
+  -- 0) Validate import exists + is HEALTHROSTER_DAILY
+  select hi.source_system
+    into v_src
+  from public.hr_imports hi
+  where hi.id = p_import_id
+  limit 1;
+
+  if v_src is null then
+    raise exception 'hr_daily_apply_transactional: import % not found in hr_imports.', p_import_id;
+  end if;
+
+  if v_src <> 'HEALTHROSTER_DAILY'::public.hr_source_enum then
+    raise exception 'hr_daily_apply_transactional: import % source_system=%; expected HEALTHROSTER_DAILY.', p_import_id, v_src::text;
+  end if;
+
+  -- 1) Validate payload shapes
+  if jsonb_typeof(v_validation_rows_json) <> 'array' then
+    raise exception 'hr_daily_apply_transactional: validation_rows must be a JSON array.';
+  end if;
+
+  if jsonb_typeof(v_email_actions_json) <> 'array' then
+    raise exception 'hr_daily_apply_transactional: email_actions must be a JSON array.';
+  end if;
+
+  -- 2) Normalise validation rows (dedupe per timesheet_id and keep worst-case)
+  create temporary table tmp_val_raw(
+    timesheet_id uuid not null,
+    status_text text null,
+    reason_code text null,
+    hr_request_id text null
+  ) on commit drop;
+
+  insert into tmp_val_raw(timesheet_id, status_text, reason_code, hr_request_id)
+  select
+    nullif(btrim(j.value->>'timesheet_id'), '')::uuid as timesheet_id,
+    nullif(btrim(j.value->>'status'), '') as status_text,
+    nullif(btrim(j.value->>'reason_code'), '') as reason_code,
+    nullif(btrim(j.value->>'hr_request_id'), '') as hr_request_id
+  from jsonb_array_elements(v_validation_rows_json) as j(value)
+  where nullif(btrim(j.value->>'timesheet_id'), '') is not null;
+
+  create temporary table tmp_val_by_ts(
+    timesheet_id uuid primary key,
+    has_error boolean not null,
+    chosen_reason_code text null,
+    chosen_hr_request_id text null
+  ) on commit drop;
+
+  insert into tmp_val_by_ts(timesheet_id, has_error, chosen_reason_code, chosen_hr_request_id)
+  select
+    vr.timesheet_id,
+    bool_or(
+      not (upper(coalesce(vr.status_text, '')) in ('VALIDATION_OK','OK','PASS','VALID'))
+    ) as has_error,
+    case
+      when bool_or(
+        not (upper(coalesce(vr.status_text, '')) in ('VALIDATION_OK','OK','PASS','VALID'))
+      )
+      then
+        min(vr.reason_code) filter (
+          where not (upper(coalesce(vr.status_text, '')) in ('VALIDATION_OK','OK','PASS','VALID'))
+        )
+      else
+        'HEALTHROSTER_DAILY'
+    end as chosen_reason_code,
+    max(vr.hr_request_id) as chosen_hr_request_id
+  from tmp_val_raw vr
+  group by vr.timesheet_id;
+
+  -- ✅ NEW: compute which timesheets will have a meaningful validation row change (before upsert)
+  create temporary table tmp_val_upsert on commit drop as
+  select
+    vt.timesheet_id,
+    case when vt.has_error then 'VALIDATION_ERROR'::public.validation_status_enum else 'VALIDATION_OK'::public.validation_status_enum end as new_status,
+    vt.chosen_reason_code as new_reason_code,
+    case when vt.has_error then null else v_now end as new_validated_at_utc,
+    p_import_id as new_last_source,
+    vt.chosen_hr_request_id as new_hr_request_id
+  from tmp_val_by_ts vt;
+
+  select coalesce(array_agg(distinct x.timesheet_id order by x.timesheet_id), array[]::uuid[])
+  into v_daily_validation_changed_timesheet_ids
+  from (
+    select u.timesheet_id
+    from tmp_val_upsert u
+    left join public.timesheet_validations tv
+      on tv.timesheet_id = u.timesheet_id
+    where tv.timesheet_id is null
+       or tv.status is distinct from u.new_status
+       or tv.validated_at_utc is distinct from u.new_validated_at_utc
+       or tv.last_source is distinct from u.new_last_source
+       or tv.reason_code is distinct from u.new_reason_code
+       or tv.hr_request_id is distinct from u.new_hr_request_id
+  ) as x;
+
+  -- 3) Upsert timesheet_validations (required + transactional)
+  insert into public.timesheet_validations(
+    timesheet_id,
+    status,
+    reason_code,
+    validated_at_utc,
+    last_source,
+    updated_at,
+    hr_request_id,
+    hr_request_source,
+    hr_request_set_by,
+    hr_request_set_at_utc
+  )
+  select
+    u.timesheet_id,
+    u.new_status,
+    u.new_reason_code,
+    u.new_validated_at_utc,
+    u.new_last_source,
+    v_now,
+    u.new_hr_request_id,
+    case when u.new_hr_request_id is null then null else 'IMPORTED'::public.reference_source_enum end,
+    case when u.new_hr_request_id is null then null else p_actor_user_id end,
+    case when u.new_hr_request_id is null then null else v_now end
+  from tmp_val_upsert u
+  on conflict (timesheet_id) do update
+    set status               = excluded.status,
+        reason_code           = excluded.reason_code,
+        validated_at_utc      = excluded.validated_at_utc,
+        last_source           = excluded.last_source,
+        updated_at            = excluded.updated_at,
+        hr_request_id         = excluded.hr_request_id,
+        hr_request_source     = excluded.hr_request_source,
+        hr_request_set_by     = excluded.hr_request_set_by,
+        hr_request_set_at_utc = excluded.hr_request_set_at_utc;
+
+  get diagnostics v_validations_upserted = row_count;
+
+  -- 4) Match existing daily behaviour: when VALIDATION_OK and hr_request_id present, set timesheets.reference_number
+  update public.timesheets ts
+     set reference_number = vt.chosen_hr_request_id,
+         updated_at = v_now
+    from tmp_val_by_ts vt
+   where ts.timesheet_id = vt.timesheet_id
+     and ts.is_current = true
+     and vt.has_error is false
+     and vt.chosen_hr_request_id is not null
+     and (ts.reference_number is distinct from vt.chosen_hr_request_id)
+  returning ts.timesheet_id
+  into v_new_ts_id;
+
+  -- The above "RETURNING into scalar" is not valid for multiple rows, so we collect updated ids explicitly:
+  -- (do this safely and non-ambiguously via a temp table)
+  create temporary table tmp_ref_updated_ids(
+    timesheet_id uuid primary key
+  ) on commit drop;
+
+  insert into tmp_ref_updated_ids(timesheet_id)
+  select ts2.timesheet_id
+  from public.timesheets ts2
+  join tmp_val_by_ts vt2
+    on vt2.timesheet_id = ts2.timesheet_id
+  where ts2.is_current = true
+    and vt2.has_error is false
+    and vt2.chosen_hr_request_id is not null
+    and (ts2.reference_number is distinct from vt2.chosen_hr_request_id);
+
+  -- Now perform the update (again) deterministically based on tmp_ref_updated_ids
+  update public.timesheets tsu
+     set reference_number = vt3.chosen_hr_request_id,
+         updated_at = v_now
+    from tmp_val_by_ts vt3
+   where tsu.timesheet_id = vt3.timesheet_id
+     and tsu.is_current = true
+     and tsu.timesheet_id in (select tri.timesheet_id from tmp_ref_updated_ids tri);
+
+  get diagnostics v_timesheets_ref_updated = row_count;
+
+  select coalesce(array_agg(tri.timesheet_id order by tri.timesheet_id), array[]::uuid[])
+  into v_ref_updated_timesheet_ids
+  from tmp_ref_updated_ids tri;
+
+  -- 5) Email actions: upsert hr_issue_emails (transactional) + return email_jobs
+  create temporary table tmp_email_actions(
+    timesheet_id uuid not null,
+    issue_fingerprint text not null,
+    reason_code text null,
+    hr_row_id uuid null,
+    staff_norm text null,
+    hospital_norm text null,
+    work_date date null
+  ) on commit drop;
+
+  insert into tmp_email_actions(timesheet_id, issue_fingerprint, reason_code, hr_row_id, staff_norm, hospital_norm, work_date)
+  select
+    nullif(btrim(e.value->>'timesheet_id'), '')::uuid as timesheet_id,
+    nullif(btrim(e.value->>'issue_fingerprint'), '') as issue_fingerprint,
+    nullif(btrim(e.value->>'reason_code'), '') as reason_code,
+    nullif(btrim(e.value->>'hr_row_id'), '')::uuid as hr_row_id,
+    nullif(btrim(e.value->>'staff_norm'), '') as staff_norm,
+    nullif(btrim(e.value->>'hospital_norm'), '') as hospital_norm,
+    nullif(btrim(e.value->>'work_date'), '')::date as work_date
+  from jsonb_array_elements(v_email_actions_json) as e(value)
+  where nullif(btrim(e.value->>'timesheet_id'), '') is not null
+    and nullif(btrim(e.value->>'issue_fingerprint'), '') is not null;
+
+  select count(*) into v_email_selected_count from tmp_email_actions;
+
+  create temporary table tmp_email_enriched on commit drop as
+  select
+    ea.timesheet_id,
+    ea.issue_fingerprint,
+    coalesce(nullif(ea.reason_code,''), 'actual_hours_mismatch') as reason_code,
+    ea.hr_row_id,
+    ea.staff_norm,
+    ea.hospital_norm,
+    ea.work_date,
+
+    coalesce(tf.client_id, ct.client_id) as client_id,
+    cli.ts_queries_email as recipient_email,
+
+    exists(
+      select 1
+      from public.hr_issue_emails hie
+      where hie.issue_fingerprint = ea.issue_fingerprint
+      limit 1
+    ) as emailed_already
+  from tmp_email_actions ea
+  left join public.timesheets_financials tf
+    on tf.timesheet_id = ea.timesheet_id
+   and tf.is_current = true
+  left join public.timesheets ts
+    on ts.timesheet_id = ea.timesheet_id
+   and ts.is_current = true
+  left join public.contracts ct
+    on ct.id = ts.contract_id
+  left join public.clients cli
+    on cli.id = coalesce(tf.client_id, ct.client_id);
+
+  insert into public.hr_issue_emails(
+    source_system,
+    import_id,
+    client_id,
+    timesheet_id,
+    hr_row_id,
+    staff_norm,
+    hospital_norm,
+    work_date,
+    reason_code,
+    issue_fingerprint,
+    last_sent_at,
+    created_at,
+    updated_at
+  )
+  select
+    'HEALTHROSTER_DAILY',
+    p_import_id,
+    te.client_id,
+    te.timesheet_id,
+    te.hr_row_id,
+    te.staff_norm,
+    te.hospital_norm,
+    te.work_date,
+    te.reason_code,
+    te.issue_fingerprint,
+    v_now,
+    v_now,
+    v_now
+  from tmp_email_enriched te
+  on conflict (issue_fingerprint) do update
+    set last_sent_at  = excluded.last_sent_at,
+        updated_at    = excluded.updated_at,
+        import_id     = excluded.import_id,
+        client_id     = excluded.client_id,
+        timesheet_id  = excluded.timesheet_id,
+        hr_row_id     = excluded.hr_row_id,
+        staff_norm    = excluded.staff_norm,
+        hospital_norm = excluded.hospital_norm,
+        work_date     = excluded.work_date,
+        reason_code   = excluded.reason_code;
+
+  get diagnostics v_email_logs_upserted = row_count;
+
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'timesheet_id', te.timesheet_id::text,
+        'issue_fingerprint', te.issue_fingerprint,
+        'client_id', case when te.client_id is null then null else te.client_id::text end,
+        'recipient_email', te.recipient_email,
+        'recipient_missing', (te.recipient_email is null or length(btrim(te.recipient_email)) = 0),
+        'email_kind', case when te.emailed_already then 'REEMAIL' else 'EMAIL' end,
+        'reason_code', te.reason_code,
+        'hr_row_id', case when te.hr_row_id is null then null else te.hr_row_id::text end,
+        'work_date', case when te.work_date is null then null else te.work_date::text end
+      )
+      order by te.timesheet_id::text
+    ),
+    '[]'::jsonb
+  )
+  into v_email_jobs
+  from tmp_email_enriched te;
+
+  -- ✅ NEW: build affected_timesheet_ids = (validation changed) ∪ (reference updated)
+  select coalesce(array_agg(distinct a.tsid order by a.tsid), array[]::uuid[])
+  into v_affected_timesheet_ids
+  from (
+    select unnest(coalesce(v_daily_validation_changed_timesheet_ids, array[]::uuid[])) as tsid
+    union
+    select unnest(coalesce(v_ref_updated_timesheet_ids, array[]::uuid[])) as tsid
+  ) as a
+  where a.tsid is not null;
+
+  -- ✅ NEW: enqueue TSFIN priority for affected timesheets (if any)
+  if array_length(v_affected_timesheet_ids, 1) is not null then
+    perform public.enqueue_ts_financials_priority(v_affected_timesheet_ids, 'CONTEXT_CHANGED'::public.ts_fin_reason_enum);
+  end if;
+
+  -- 6) Mark import applied (inside transaction)
+  update public.hr_imports hi2
+     set import_scope = 'HR_DAILY',
+         applied_at = v_now
+   where hi2.id = p_import_id;
+
+  return jsonb_build_object(
+    'import_id', p_import_id,
+    'source_system', v_src::text,
+    'validations_upserted', v_validations_upserted,
+    'timesheets_reference_updated', v_timesheets_ref_updated,
+    'email_actions_received', v_email_selected_count,
+    'email_logs_upserted', v_email_logs_upserted,
+    'email_jobs', v_email_jobs,
+    'affected_timesheet_ids', to_jsonb(coalesce(v_affected_timesheet_ids, array[]::uuid[])),
+    'validation_affected_timesheet_ids', to_jsonb(coalesce(v_daily_validation_changed_timesheet_ids, array[]::uuid[]))
+  );
+end;
+$$;
+
+
+
+
 
 
 
@@ -8164,292 +8576,6 @@ end;
 $$;
 
 
-create or replace function public.hr_daily_apply_transactional(
-  p_import_id uuid,
-  p_payload jsonb,
-  p_actor_user_id uuid
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_now timestamptz := now();
-
-  v_src public.hr_source_enum;
-
-  v_payload jsonb := coalesce(p_payload, '{}'::jsonb);
-  v_validation_rows_json jsonb := coalesce(v_payload->'validation_rows', '[]'::jsonb);
-  v_email_actions_json   jsonb := coalesce(v_payload->'email_actions',   '[]'::jsonb);
-
-  v_validations_upserted int := 0;
-  v_timesheets_ref_updated int := 0;
-
-  v_email_logs_upserted int := 0;
-  v_email_jobs jsonb := '[]'::jsonb;
-
-  v_email_selected_count int := 0;
-
-begin
-  -- 0) Validate import exists + is HEALTHROSTER_DAILY
-  select hi.source_system
-    into v_src
-  from public.hr_imports hi
-  where hi.id = p_import_id
-  limit 1;
-
-  if v_src is null then
-    raise exception 'hr_daily_apply_transactional: import % not found in hr_imports.', p_import_id;
-  end if;
-
-  if v_src <> 'HEALTHROSTER_DAILY'::public.hr_source_enum then
-    raise exception 'hr_daily_apply_transactional: import % source_system=%; expected HEALTHROSTER_DAILY.', p_import_id, v_src::text;
-  end if;
-
-  -- 1) Validate payload shapes
-  if jsonb_typeof(v_validation_rows_json) <> 'array' then
-    raise exception 'hr_daily_apply_transactional: validation_rows must be a JSON array.';
-  end if;
-
-  if jsonb_typeof(v_email_actions_json) <> 'array' then
-    raise exception 'hr_daily_apply_transactional: email_actions must be a JSON array.';
-  end if;
-
-  -- 2) Normalise validation rows (dedupe per timesheet_id and keep worst-case)
-  create temporary table tmp_val_raw(
-    timesheet_id uuid not null,
-    status_text text null,
-    reason_code text null,
-    hr_request_id text null
-  ) on commit drop;
-
-  insert into tmp_val_raw(timesheet_id, status_text, reason_code, hr_request_id)
-  select
-    nullif(btrim(j.value->>'timesheet_id'), '')::uuid as timesheet_id,
-    nullif(btrim(j.value->>'status'), '') as status_text,
-    nullif(btrim(j.value->>'reason_code'), '') as reason_code,
-    nullif(btrim(j.value->>'hr_request_id'), '') as hr_request_id
-  from jsonb_array_elements(v_validation_rows_json) as j(value)
-  where nullif(btrim(j.value->>'timesheet_id'), '') is not null;
-
-  create temporary table tmp_val_by_ts(
-    timesheet_id uuid primary key,
-    has_error boolean not null,
-    chosen_reason_code text null,
-    chosen_hr_request_id text null
-  ) on commit drop;
-
-  insert into tmp_val_by_ts(timesheet_id, has_error, chosen_reason_code, chosen_hr_request_id)
-  select
-    vr.timesheet_id,
-    bool_or(
-      not (upper(coalesce(vr.status_text, '')) in ('VALIDATION_OK','OK','PASS','VALID'))
-    ) as has_error,
-    case
-      when bool_or(
-        not (upper(coalesce(vr.status_text, '')) in ('VALIDATION_OK','OK','PASS','VALID'))
-      )
-      then
-        min(vr.reason_code) filter (
-          where not (upper(coalesce(vr.status_text, '')) in ('VALIDATION_OK','OK','PASS','VALID'))
-        )
-      else
-        'HEALTHROSTER_DAILY'
-    end as chosen_reason_code,
-    max(vr.hr_request_id) as chosen_hr_request_id
-  from tmp_val_raw vr
-  group by vr.timesheet_id;
-
-  -- 3) Upsert timesheet_validations (required + transactional)
-  insert into public.timesheet_validations(
-    timesheet_id,
-    status,
-    reason_code,
-    validated_at_utc,
-    last_source,
-    updated_at,
-    hr_request_id,
-    hr_request_source,
-    hr_request_set_by,
-    hr_request_set_at_utc
-  )
-  select
-    vt.timesheet_id,
-    case when vt.has_error then 'VALIDATION_ERROR'::public.validation_status_enum else 'VALIDATION_OK'::public.validation_status_enum end,
-    vt.chosen_reason_code,
-    case when vt.has_error then null else v_now end,
-    p_import_id,
-    v_now,
-    vt.chosen_hr_request_id,
-    case when vt.chosen_hr_request_id is null then null else 'IMPORTED'::public.reference_source_enum end,
-    case when vt.chosen_hr_request_id is null then null else p_actor_user_id end,
-    case when vt.chosen_hr_request_id is null then null else v_now end
-  from tmp_val_by_ts vt
-  on conflict (timesheet_id) do update
-    set status               = excluded.status,
-        reason_code           = excluded.reason_code,
-        validated_at_utc      = excluded.validated_at_utc,
-        last_source           = excluded.last_source,
-        updated_at            = excluded.updated_at,
-        hr_request_id         = excluded.hr_request_id,
-        hr_request_source     = excluded.hr_request_source,
-        hr_request_set_by     = excluded.hr_request_set_by,
-        hr_request_set_at_utc = excluded.hr_request_set_at_utc;
-
-  get diagnostics v_validations_upserted = row_count;
-
-  -- 4) Match existing daily behaviour: when VALIDATION_OK and hr_request_id present, set timesheets.reference_number
-  update public.timesheets ts
-     set reference_number = vt.chosen_hr_request_id,
-         updated_at = v_now
-    from tmp_val_by_ts vt
-   where ts.timesheet_id = vt.timesheet_id
-     and ts.is_current = true
-     and vt.has_error is false
-     and vt.chosen_hr_request_id is not null
-     and (ts.reference_number is distinct from vt.chosen_hr_request_id);
-
-  get diagnostics v_timesheets_ref_updated = row_count;
-
-  -- 5) Email actions: upsert hr_issue_emails (transactional) + return email_jobs
-  create temporary table tmp_email_actions(
-    timesheet_id uuid not null,
-    issue_fingerprint text not null,
-    reason_code text null,
-    hr_row_id uuid null,
-    staff_norm text null,
-    hospital_norm text null,
-    work_date date null
-  ) on commit drop;
-
-  insert into tmp_email_actions(timesheet_id, issue_fingerprint, reason_code, hr_row_id, staff_norm, hospital_norm, work_date)
-  select
-    nullif(btrim(e.value->>'timesheet_id'), '')::uuid as timesheet_id,
-    nullif(btrim(e.value->>'issue_fingerprint'), '') as issue_fingerprint,
-    nullif(btrim(e.value->>'reason_code'), '') as reason_code,
-    nullif(btrim(e.value->>'hr_row_id'), '')::uuid as hr_row_id,
-    nullif(btrim(e.value->>'staff_norm'), '') as staff_norm,
-    nullif(btrim(e.value->>'hospital_norm'), '') as hospital_norm,
-    nullif(btrim(e.value->>'work_date'), '')::date as work_date
-  from jsonb_array_elements(v_email_actions_json) as e(value)
-  where nullif(btrim(e.value->>'timesheet_id'), '') is not null
-    and nullif(btrim(e.value->>'issue_fingerprint'), '') is not null;
-
-  select count(*) into v_email_selected_count from tmp_email_actions;
-
-  create temporary table tmp_email_enriched on commit drop as
-  select
-    ea.timesheet_id,
-    ea.issue_fingerprint,
-    coalesce(nullif(ea.reason_code,''), 'actual_hours_mismatch') as reason_code,
-    ea.hr_row_id,
-    ea.staff_norm,
-    ea.hospital_norm,
-    ea.work_date,
-
-    coalesce(tf.client_id, ct.client_id) as client_id,
-    cli.ts_queries_email as recipient_email,
-
-    exists(
-      select 1
-      from public.hr_issue_emails hie
-      where hie.issue_fingerprint = ea.issue_fingerprint
-      limit 1
-    ) as emailed_already
-  from tmp_email_actions ea
-  left join public.timesheets_financials tf
-    on tf.timesheet_id = ea.timesheet_id
-   and tf.is_current = true
-  left join public.timesheets ts
-    on ts.timesheet_id = ea.timesheet_id
-   and ts.is_current = true
-  left join public.contracts ct
-    on ct.id = ts.contract_id
-  left join public.clients cli
-    on cli.id = coalesce(tf.client_id, ct.client_id);
-
-  insert into public.hr_issue_emails(
-    source_system,
-    import_id,
-    client_id,
-    timesheet_id,
-    hr_row_id,
-    staff_norm,
-    hospital_norm,
-    work_date,
-    reason_code,
-    issue_fingerprint,
-    last_sent_at,
-    created_at,
-    updated_at
-  )
-  select
-    'HEALTHROSTER_DAILY',
-    p_import_id,
-    te.client_id,
-    te.timesheet_id,
-    te.hr_row_id,
-    te.staff_norm,
-    te.hospital_norm,
-    te.work_date,
-    te.reason_code,
-    te.issue_fingerprint,
-    v_now,
-    v_now,
-    v_now
-  from tmp_email_enriched te
-  on conflict (issue_fingerprint) do update
-    set last_sent_at  = excluded.last_sent_at,
-        updated_at    = excluded.updated_at,
-        import_id     = excluded.import_id,
-        client_id     = excluded.client_id,
-        timesheet_id  = excluded.timesheet_id,
-        hr_row_id     = excluded.hr_row_id,
-        staff_norm    = excluded.staff_norm,
-        hospital_norm = excluded.hospital_norm,
-        work_date     = excluded.work_date,
-        reason_code   = excluded.reason_code;
-
-  get diagnostics v_email_logs_upserted = row_count;
-
-  select coalesce(
-    jsonb_agg(
-      jsonb_build_object(
-        'timesheet_id', te.timesheet_id::text,
-        'issue_fingerprint', te.issue_fingerprint,
-        'client_id', case when te.client_id is null then null else te.client_id::text end,
-        'recipient_email', te.recipient_email,
-        'recipient_missing', (te.recipient_email is null or length(btrim(te.recipient_email)) = 0),
-        'email_kind', case when te.emailed_already then 'REEMAIL' else 'EMAIL' end,
-        'reason_code', te.reason_code,
-        'hr_row_id', case when te.hr_row_id is null then null else te.hr_row_id::text end,
-        'work_date', case when te.work_date is null then null else te.work_date::text end
-      )
-      order by te.timesheet_id::text
-    ),
-    '[]'::jsonb
-  )
-  into v_email_jobs
-  from tmp_email_enriched te;
-
-  -- 6) Mark import applied (inside transaction)
-  update public.hr_imports hi2
-     set import_scope = 'HR_DAILY',
-         applied_at = v_now
-   where hi2.id = p_import_id;
-
-  return jsonb_build_object(
-    'import_id', p_import_id,
-    'source_system', v_src::text,
-    'validations_upserted', v_validations_upserted,
-    'timesheets_reference_updated', v_timesheets_ref_updated,
-    'email_actions_received', v_email_selected_count,
-    'email_logs_upserted', v_email_logs_upserted,
-    'email_jobs', v_email_jobs
-  );
-end;
-$$;
 create or replace function public._imp_debug_audit(
   p_actor_user_id uuid,
   p_action text,
@@ -9105,3 +9231,79 @@ exception when others then
   raise;
 end;
 $$;
+
+
+
+-- ============================================================
+-- CloudTMS: TSFIN wake-up on validation changes (idempotent)
+-- Purpose:
+--   Any INSERT/UPDATE to public.timesheet_validations should enqueue a
+--   priority TSFIN recompute (CONTEXT_CHANGED) for that timesheet_id,
+--   but ONLY when the timesheet is not invoice-locked/issued/paid.
+--
+-- Safe to re-run in migrations:
+--   - CREATE OR REPLACE FUNCTION is idempotent
+--   - DROP TRIGGER IF EXISTS is idempotent
+--   - CREATE TRIGGER recreates deterministically
+-- ============================================================
+
+create or replace function public.trg_tsfin_timesheet_validations_wakeup()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_ts_id uuid;
+  v_skip boolean := false;
+begin
+  v_ts_id := coalesce(new.timesheet_id, old.timesheet_id);
+
+  if v_ts_id is null then
+    return coalesce(new, old);
+  end if;
+
+  -- ------------------------------------------------------------
+  -- Skip if timesheet is invoice-locked (issued/paid etc), or revoked, or missing
+  -- We gate on timesheets_financials.is_current + locked_by_invoice_id
+  -- and also ensure the timesheet exists and is current.
+  -- ------------------------------------------------------------
+  select
+    (
+      tf.timesheet_id is null
+      or tf.is_current is not true
+      or tf.locked_by_invoice_id is not null
+      or ts.timesheet_id is null
+      or ts.is_current is not true
+      or ts.revoked_at is not null
+    ) as should_skip
+  into v_skip
+  from public.timesheets ts
+  left join public.timesheets_financials tf
+    on tf.timesheet_id = ts.timesheet_id
+   and tf.is_current = true
+  where ts.timesheet_id = v_ts_id
+  limit 1;
+
+  if coalesce(v_skip, true) then
+    return coalesce(new, old);
+  end if;
+
+  -- Priority TSFIN enqueue (idempotent on (timesheet_id, reason))
+  perform public.enqueue_ts_financials_priority(
+    array[v_ts_id],
+    'CONTEXT_CHANGED'::public.ts_fin_reason_enum
+  );
+
+  return coalesce(new, old);
+end;
+$$;
+
+drop trigger if exists trg_tsfin_timesheet_validations_wakeup
+  on public.timesheet_validations;
+
+create trigger trg_tsfin_timesheet_validations_wakeup
+after insert or update
+on public.timesheet_validations
+for each row
+execute function public.trg_tsfin_timesheet_validations_wakeup();
