@@ -2606,6 +2606,8 @@ grant execute on function public.tsfin_repair_merge_segments_locked(uuid, jsonb,
 
 select pg_notify('pgrst', 'reload schema');
 
+
+
 create or replace function public.tsfin_update_segments_locked(
   p_timesheet_id uuid,
   p_segment_updates jsonb,
@@ -2642,7 +2644,15 @@ declare
   v_out_segments jsonb := '[]'::jsonb;
 
   v_exclude boolean;
+  v_new_total_pay_segments numeric := 0;
+  v_new_total_charge_segments numeric := 0;
+
+  -- ✅ NEW: preserve "additional/expenses" totals from breakdown.additional
+  v_add_pay numeric := 0;
+  v_add_charge numeric := 0;
+
   v_new_total_pay numeric := 0;
+  v_new_total_charge numeric := 0;
   v_new_margin numeric := 0;
 
   -- validation helpers
@@ -2833,8 +2843,13 @@ begin
     end loop;
   end if;
 
-  -- 4) Apply updates + recompute total_pay_ex_vat / margin_ex_vat
-  v_new_total_pay := 0;
+  -- ✅ NEW: capture "additional" totals so exclude_from_pay does not wipe expense/additional totals
+  v_add_pay := coalesce(nullif(btrim(coalesce(v_breakdown->'additional'->>'pay_ex_vat','')), '')::numeric, 0);
+  v_add_charge := coalesce(nullif(btrim(coalesce(v_breakdown->'additional'->>'charge_ex_vat','')), '')::numeric, 0);
+
+  -- 4) Apply updates + recompute totals (segments pay) WITHOUT losing additional/expenses
+  v_new_total_pay_segments := 0;
+  v_new_total_charge_segments := 0;
   v_out_segments := '[]'::jsonb;
 
   for v_seg in
@@ -2885,11 +2900,19 @@ begin
       end if;
     end if;
 
-    -- recompute pay sum (ignore numeric parse errors)
+    -- recompute segment totals (ignore numeric parse errors)
+    begin
+      v_new_total_charge_segments :=
+        v_new_total_charge_segments
+        + coalesce(nullif(btrim(coalesce(v_seg->>'charge_amount','')), '')::numeric, 0);
+    exception when others then
+      null;
+    end;
+
     begin
       if not v_exclude then
-        v_new_total_pay :=
-          v_new_total_pay
+        v_new_total_pay_segments :=
+          v_new_total_pay_segments
           + coalesce(nullif(btrim(coalesce(v_seg->>'pay_amount','')), '')::numeric, 0);
       end if;
     exception when others then
@@ -2899,15 +2922,27 @@ begin
     v_out_segments := v_out_segments || jsonb_build_array(v_seg);
   end loop;
 
-  v_new_total_pay := round(coalesce(v_new_total_pay, 0), 2);
-  v_new_margin    := round(coalesce(v_charge_ex_vat, 0) - v_new_total_pay, 2);
+  -- ✅ NEW: totals include additional/expenses (do NOT wipe them)
+  v_new_total_pay_segments := round(coalesce(v_new_total_pay_segments, 0), 2);
+  v_new_total_charge_segments := round(coalesce(v_new_total_charge_segments, 0), 2);
 
+  v_new_total_pay := round(v_new_total_pay_segments + coalesce(v_add_pay, 0), 2);
+  v_new_total_charge := round(v_new_total_charge_segments + coalesce(v_add_charge, 0), 2);
+  v_new_margin := round(v_new_total_charge - v_new_total_pay, 2);
+
+  -- update breakdown segments
   v_breakdown := jsonb_set(v_breakdown, '{segments}', v_out_segments, true);
+
+  -- ✅ NEW: keep breakdown.totals in sync (preserve other keys if any)
+  v_breakdown := jsonb_set(v_breakdown, '{totals,total_pay_ex_vat}', to_jsonb(v_new_total_pay), true);
+  v_breakdown := jsonb_set(v_breakdown, '{totals,total_charge_ex_vat}', to_jsonb(v_new_total_charge), true);
+  v_breakdown := jsonb_set(v_breakdown, '{totals,margin_ex_vat}', to_jsonb(v_new_margin), true);
 
   update public.timesheets_financials tfu
   set
     invoice_breakdown_json = v_breakdown,
     total_pay_ex_vat       = v_new_total_pay,
+    total_charge_ex_vat    = v_new_total_charge,
     margin_ex_vat          = v_new_margin,
     updated_at             = v_now
   where tfu.id = v_tf_id
@@ -2917,6 +2952,11 @@ begin
 
 end;
 $$;
+
+
+
+
+
 
 begin;
 
