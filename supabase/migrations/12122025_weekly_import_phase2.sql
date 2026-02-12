@@ -320,40 +320,55 @@ begin
     from in_range_counts w
     left join lateral (
       with maps as (
-        select m.band_match_pattern, 2 as spec
-        from public.assignment_band_mappings m
-        where m.active = true
-          and upper(trim(m.system_type)) = v_sys
-          and lower(trim(m.incoming_code)) = w.code_norm
+        -- ✅ NEW: candidate + client mapping (highest precedence)
+        select abm.band_match_pattern, 3 as spec
+        from public.assignment_band_mappings abm
+        where abm.active = true
+          and upper(trim(abm.system_type)) = v_sys
+          and lower(trim(abm.incoming_code)) = w.code_norm
           and w.candidate_id is not null
-          and m.candidate_id = w.candidate_id
-
-        union all
-        select m.band_match_pattern, 1 as spec
-        from public.assignment_band_mappings m
-        where m.active = true
-          and upper(trim(m.system_type)) = v_sys
-          and lower(trim(m.incoming_code)) = w.code_norm
           and w.client_id is not null
-          and m.candidate_id is null
-          and m.client_id = w.client_id
+          and abm.candidate_id = w.candidate_id
+          and abm.client_id = w.client_id
 
         union all
-        select m.band_match_pattern, 0 as spec
-        from public.assignment_band_mappings m
-        where m.active = true
-          and upper(trim(m.system_type)) = v_sys
-          and lower(trim(m.incoming_code)) = w.code_norm
-          and m.candidate_id is null
-          and m.client_id is null
-          and m.client_id is null
+        -- candidate-only
+        select abm.band_match_pattern, 2 as spec
+        from public.assignment_band_mappings abm
+        where abm.active = true
+          and upper(trim(abm.system_type)) = v_sys
+          and lower(trim(abm.incoming_code)) = w.code_norm
+          and w.candidate_id is not null
+          and abm.candidate_id = w.candidate_id
+          and abm.client_id is null
+
+        union all
+        -- client-only
+        select abm.band_match_pattern, 1 as spec
+        from public.assignment_band_mappings abm
+        where abm.active = true
+          and upper(trim(abm.system_type)) = v_sys
+          and lower(trim(abm.incoming_code)) = w.code_norm
+          and w.client_id is not null
+          and abm.candidate_id is null
+          and abm.client_id = w.client_id
+
+        union all
+        -- global
+        select abm.band_match_pattern, 0 as spec
+        from public.assignment_band_mappings abm
+        where abm.active = true
+          and upper(trim(abm.system_type)) = v_sys
+          and lower(trim(abm.incoming_code)) = w.code_norm
+          and abm.candidate_id is null
+          and abm.client_id is null
       ),
-      mx as (select max(spec) as m from maps)
+      mx as (select max(maps.spec) as m from maps)
       select
-        (select m from mx) as spec,
-        (select array_agg(lower(trim(band_match_pattern)))
-         from maps
-         where spec = (select m from mx)
+        (select mx.m from mx) as spec,
+        (select array_agg(lower(trim(maps2.band_match_pattern)))
+         from maps maps2
+         where maps2.spec = (select mx.m from mx)
         ) as patterns
     ) m on true
   ),
@@ -434,7 +449,7 @@ begin
       when ms.code_norm = '' then 'Missing incoming_code (assignment/grade)'
       when ms.in_range_count = 0 then 'No active contract for candidate/client on this date'
       when ms.band_patterns is null
-        then 'No band mapping rows exist for this incoming_code at candidate/client/global scope'
+        then 'No band mapping rows exist for this incoming_code at candidate+client/candidate/client/global scope'
       when ms.contract_id is null
         then 'No contract band matches incoming_code according to mapping table'
       else ''
@@ -718,36 +733,47 @@ begin
           from in_range_counts w
           left join lateral (
             with maps as (
-              select m.band_match_pattern, 2 as spec
-              from public.assignment_band_mappings m
-              where m.active = true
-                and upper(trim(m.system_type)) = v_sys
-                and lower(trim(m.incoming_code)) = w.code_norm
+              select abm.band_match_pattern, 3 as spec
+              from public.assignment_band_mappings abm
+              where abm.active = true
+                and upper(trim(abm.system_type)) = v_sys
+                and lower(trim(abm.incoming_code)) = w.code_norm
                 and w.candidate_id is not null
-                and m.candidate_id = w.candidate_id
-              union all
-              select m.band_match_pattern, 1 as spec
-              from public.assignment_band_mappings m
-              where m.active = true
-                and upper(trim(m.system_type)) = v_sys
-                and lower(trim(m.incoming_code)) = w.code_norm
                 and w.client_id is not null
-                and m.candidate_id is null
-                and m.client_id = w.client_id
+                and abm.candidate_id = w.candidate_id
+                and abm.client_id = w.client_id
               union all
-              select m.band_match_pattern, 0 as spec
-              from public.assignment_band_mappings m
-              where m.active = true
-                and upper(trim(m.system_type)) = v_sys
-                and lower(trim(m.incoming_code)) = w.code_norm
-                and m.candidate_id is null
-                and m.client_id is null
+              select abm.band_match_pattern, 2 as spec
+              from public.assignment_band_mappings abm
+              where abm.active = true
+                and upper(trim(abm.system_type)) = v_sys
+                and lower(trim(abm.incoming_code)) = w.code_norm
+                and w.candidate_id is not null
+                and abm.candidate_id = w.candidate_id
+                and abm.client_id is null
+              union all
+              select abm.band_match_pattern, 1 as spec
+              from public.assignment_band_mappings abm
+              where abm.active = true
+                and upper(trim(abm.system_type)) = v_sys
+                and lower(trim(abm.incoming_code)) = w.code_norm
+                and w.client_id is not null
+                and abm.candidate_id is null
+                and abm.client_id = w.client_id
+              union all
+              select abm.band_match_pattern, 0 as spec
+              from public.assignment_band_mappings abm
+              where abm.active = true
+                and upper(trim(abm.system_type)) = v_sys
+                and lower(trim(abm.incoming_code)) = w.code_norm
+                and abm.candidate_id is null
+                and abm.client_id is null
             ),
-            mx as (select max(spec) as m from maps)
+            mx as (select max(maps.spec) as m from maps)
             select
-              (select array_agg(lower(trim(band_match_pattern)))
-               from maps
-               where spec = (select m from mx)
+              (select array_agg(lower(trim(maps2.band_match_pattern)))
+               from maps maps2
+               where maps2.spec = (select mx.m from mx)
               ) as patterns
           ) m on true
         ),
