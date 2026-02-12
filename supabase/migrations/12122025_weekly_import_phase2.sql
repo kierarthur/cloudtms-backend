@@ -14,7 +14,7 @@ returns table (
   action            text,
   reason            text,
 
-  -- ✅ NEW: existing-match + diff fields (for preview classification)
+  -- ✅ existing-match + diff fields (for preview classification)
   matched_shift_id     uuid,
   old_start_utc        timestamptz,
   old_end_utc          timestamptz,
@@ -33,7 +33,7 @@ returns table (
   is_changed          boolean
 )
 language plpgsql
-as $$
+as $function$
 declare
   v_sys text := upper(trim(coalesce(p_system_type,'')));
   v_src public.hr_source_enum;
@@ -160,7 +160,6 @@ begin
           nullif(r.assignment_grade_norm, '')
         )
       end as incoming_code_raw
-
     from public.hr_rows r
     join imp
       on imp.id = r.import_id
@@ -189,10 +188,8 @@ begin
         when v_sys = 'NHSP' then coalesce(cli_alias.client_id, cli_name.client_id)
         else imp.hr_client_id
       end as client_id
-
     from raw src
     join imp on true
-
     cross join lateral (
       select
         nullif(lower(trim(coalesce(src.staff_name,''))), '') as staff_lc,
@@ -239,10 +236,7 @@ begin
           )
       )
       select
-        case
-          when count(*) = 1
-            then (array_agg(cid order by cid::text))[1]
-        end as candidate_id
+        case when count(*) = 1 then (array_agg(matches.cid order by matches.cid::text))[1] end as candidate_id
       from matches
     ) cand_exact_unique on (cand_alias.id is null and cand_map.candidate_id is null)
 
@@ -268,10 +262,7 @@ begin
           and regexp_replace(lower(coalesce(cl.name,'')), '[^a-z0-9]+', '', 'g') = n.trust_key
       )
       select
-        case
-          when count(*) = 1
-            then (array_agg(clid order by clid::text))[1]
-        end as client_id
+        case when count(*) = 1 then (array_agg(matches.clid order by matches.clid::text))[1] end as client_id
       from matches
     ) cli_name on (v_sys = 'NHSP' and cli_alias.client_id is null)
   ),
@@ -288,13 +279,12 @@ begin
       )::date as week_ending_date,
 
       lower(trim(coalesce(r.incoming_code_raw,''))) as code_norm
-
     from resolved_ids r
     left join lateral (
-      select cs.week_ending_weekday
-      from public.client_settings cs
-      where cs.client_id = r.client_id
-      order by cs.effective_from desc, cs.created_at desc
+      select cs2.week_ending_weekday
+      from public.client_settings cs2
+      where cs2.client_id = r.client_id
+      order by cs2.effective_from desc, cs2.created_at desc
       limit 1
     ) cs on true
   ),
@@ -312,16 +302,23 @@ begin
         and (c.end_date is null or c.end_date >= w.work_date)
     ) cr on true
   ),
+
+  -- ✅ UPDATED: mapping precedence now supports candidate+client + target_contract_id
   chosen_maps as (
     select
       w.*,
       m.spec as map_spec,
-      m.patterns as band_patterns
+      m.patterns as band_patterns,
+      m.target_contract_id as map_target_contract_id,
+      m.has_map as map_has_any
     from in_range_counts w
     left join lateral (
       with maps as (
-        -- ✅ NEW: candidate + client mapping (highest precedence)
-        select abm.band_match_pattern, 3 as spec
+        -- candidate + client (highest precedence)
+        select
+          abm.band_match_pattern,
+          abm.target_contract_id,
+          3 as spec
         from public.assignment_band_mappings abm
         where abm.active = true
           and upper(trim(abm.system_type)) = v_sys
@@ -333,7 +330,10 @@ begin
 
         union all
         -- candidate-only
-        select abm.band_match_pattern, 2 as spec
+        select
+          abm.band_match_pattern,
+          abm.target_contract_id,
+          2 as spec
         from public.assignment_band_mappings abm
         where abm.active = true
           and upper(trim(abm.system_type)) = v_sys
@@ -344,7 +344,10 @@ begin
 
         union all
         -- client-only
-        select abm.band_match_pattern, 1 as spec
+        select
+          abm.band_match_pattern,
+          abm.target_contract_id,
+          1 as spec
         from public.assignment_band_mappings abm
         where abm.active = true
           and upper(trim(abm.system_type)) = v_sys
@@ -355,7 +358,10 @@ begin
 
         union all
         -- global
-        select abm.band_match_pattern, 0 as spec
+        select
+          abm.band_match_pattern,
+          abm.target_contract_id,
+          0 as spec
         from public.assignment_band_mappings abm
         where abm.active = true
           and upper(trim(abm.system_type)) = v_sys
@@ -363,24 +369,60 @@ begin
           and abm.candidate_id is null
           and abm.client_id is null
       ),
-      mx as (select max(maps.spec) as m from maps)
+      mx as (
+        select max(maps.spec) as m
+        from maps
+      )
       select
-        (select mx.m from mx) as spec,
-        (select array_agg(lower(trim(maps2.band_match_pattern)))
-         from maps maps2
-         where maps2.spec = (select mx.m from mx)
-        ) as patterns
+        mx.m as spec,
+
+        -- all band patterns at the chosen spec (used when not contract-targeted)
+        (select array_agg(lower(trim(m2.band_match_pattern)))
+         from maps m2
+         where m2.spec = mx.m
+        ) as patterns,
+
+        -- choose a single target_contract_id at the chosen spec (deterministic)
+        (select m3.target_contract_id
+         from maps m3
+         where m3.spec = mx.m
+           and m3.target_contract_id is not null
+         order by m3.target_contract_id::text asc
+         limit 1
+        ) as target_contract_id,
+
+        (mx.m is not null) as has_map
+      from mx
     ) m on true
   ),
+
+  -- ✅ UPDATED: choose contract by target_contract_id when present; otherwise by band patterns
   chosen_contract as (
     select
       w.*,
-      cc.contract_id
+      coalesce(tc.contract_id, bc.contract_id) as contract_id,
+      (w.map_target_contract_id is not null and tc.contract_id is null) as target_contract_invalid
     from chosen_maps w
+
+    -- target contract (only if provided)
     left join lateral (
       select c.id as contract_id
       from public.contracts c
-      where c.candidate_id = w.candidate_id
+      where w.map_target_contract_id is not null
+        and c.id = w.map_target_contract_id
+        and c.candidate_id = w.candidate_id
+        and c.client_id    = w.client_id
+        and c.start_date <= w.work_date
+        and (c.end_date is null or c.end_date >= w.work_date)
+      limit 1
+    ) tc on true
+
+    -- band-pattern match (only if no target contract id)
+    left join lateral (
+      select c.id as contract_id
+      from public.contracts c
+      where w.map_target_contract_id is null
+        and c.candidate_id = w.candidate_id
         and c.client_id    = w.client_id
         and c.start_date <= w.work_date
         and (c.end_date is null or c.end_date >= w.work_date)
@@ -392,8 +434,9 @@ begin
         )
       order by c.start_date desc nulls last, c.id desc
       limit 1
-    ) cc on true
+    ) bc on true
   ),
+
   matched_shift as (
     select
       w.*,
@@ -407,7 +450,6 @@ begin
 
       s.timesheet_id                   as old_timesheet_id,
       (t.timesheet_id is not null)     as old_timesheet_exists
-
     from chosen_contract w
     left join public.nhsp_shifts s
       on s.external_row_key = w.external_row_key
@@ -433,7 +475,8 @@ begin
       when ms.client_id is null then 'REJECT_NO_CLIENT'
       when ms.code_norm = '' then 'REJECT_BAD_ROW'
       when ms.in_range_count = 0 then 'REJECT_NO_CONTRACT'
-      when ms.band_patterns is null then 'REJECT_NO_CONTRACT_BAND_MISMATCH'
+      when coalesce(ms.map_has_any,false) is false then 'REJECT_NO_CONTRACT_BAND_MISMATCH'
+      when ms.map_target_contract_id is not null and ms.target_contract_invalid is true then 'REJECT_NO_CONTRACT_BAND_MISMATCH'
       when ms.contract_id is null then 'REJECT_NO_CONTRACT_BAND_MISMATCH'
       else 'OK'
     end as action,
@@ -448,10 +491,12 @@ begin
       when ms.client_id is null then 'No client mapping found'
       when ms.code_norm = '' then 'Missing incoming_code (assignment/grade)'
       when ms.in_range_count = 0 then 'No active contract for candidate/client on this date'
-      when ms.band_patterns is null
-        then 'No band mapping rows exist for this incoming_code at candidate+client/candidate/client/global scope'
+      when coalesce(ms.map_has_any,false) is false
+        then 'No band/contract mapping rows exist for this incoming_code at candidate+client/candidate/client/global scope'
+      when ms.map_target_contract_id is not null and ms.target_contract_invalid is true
+        then 'Mapping points to a contract that is not active for this candidate/client/date (or does not exist)'
       when ms.contract_id is null
-        then 'No contract band matches incoming_code according to mapping table'
+        then 'No contract matches mapping rules (target contract invalid or band pattern did not match any in-range contract)'
       else ''
     end as reason,
 
@@ -501,7 +546,6 @@ begin
         )
       )
     ) as is_changed
-
   from matched_shift ms;
 
   get diagnostics v_rows_out = row_count;
@@ -544,8 +588,6 @@ begin
             ) as trust_raw,
             date_trunc('minute', (r.payload_json ->> 'start_utc')::timestamptz) as new_start_utc,
             date_trunc('minute', (r.payload_json ->> 'end_utc')::timestamptz)   as new_end_utc,
-
-            -- ✅ keep debug aligned with live logic: actual_break_* then break_* then 0
             greatest(
               0,
               coalesce(
@@ -556,7 +598,6 @@ begin
                 0
               )
             ) as new_break_mins,
-
             greatest(
               0,
               (floor(extract(epoch from (
@@ -576,7 +617,6 @@ begin
                 )
               )
             ) as new_paid_minutes,
-
             case
               when v_sys = 'NHSP' then coalesce(
                 nullif((r.payload_json ->> 'assignment_code'), ''),
@@ -660,10 +700,7 @@ begin
                 )
             )
             select
-              case
-                when count(*) = 1
-                  then (array_agg(cid order by cid::text))[1]
-              end as candidate_id
+              case when count(*) = 1 then (array_agg(matches.cid order by matches.cid::text))[1] end as candidate_id
             from matches
           ) cand_exact_unique on (cand_alias.id is null and cand_map.candidate_id is null)
           left join lateral (
@@ -687,10 +724,7 @@ begin
                 and regexp_replace(lower(coalesce(cl.name,'')), '[^a-z0-9]+', '', 'g') = n.trust_key
             )
             select
-              case
-                when count(*) = 1
-                  then (array_agg(clid order by clid::text))[1]
-              end as client_id
+              case when count(*) = 1 then (array_agg(matches.clid order by matches.clid::text))[1] end as client_id
             from matches
           ) cli_name on (v_sys = 'NHSP' and cli_alias.client_id is null)
         ),
@@ -705,10 +739,10 @@ begin
             lower(trim(coalesce(r.incoming_code_raw,''))) as code_norm
           from resolved_ids r
           left join lateral (
-            select cs.week_ending_weekday
-            from public.client_settings cs
-            where cs.client_id = r.client_id
-            order by cs.effective_from desc, cs.created_at desc
+            select cs2.week_ending_weekday
+            from public.client_settings cs2
+            where cs2.client_id = r.client_id
+            order by cs2.effective_from desc, cs2.created_at desc
             limit 1
           ) cs on true
         ),
@@ -729,11 +763,14 @@ begin
         chosen_maps as (
           select
             w.*,
-            m.patterns as band_patterns
+            m.spec as map_spec,
+            m.patterns as band_patterns,
+            m.target_contract_id as map_target_contract_id,
+            m.has_map as map_has_any
           from in_range_counts w
           left join lateral (
             with maps as (
-              select abm.band_match_pattern, 3 as spec
+              select abm.band_match_pattern, abm.target_contract_id, 3 as spec
               from public.assignment_band_mappings abm
               where abm.active = true
                 and upper(trim(abm.system_type)) = v_sys
@@ -742,8 +779,9 @@ begin
                 and w.client_id is not null
                 and abm.candidate_id = w.candidate_id
                 and abm.client_id = w.client_id
+
               union all
-              select abm.band_match_pattern, 2 as spec
+              select abm.band_match_pattern, abm.target_contract_id, 2 as spec
               from public.assignment_band_mappings abm
               where abm.active = true
                 and upper(trim(abm.system_type)) = v_sys
@@ -751,8 +789,9 @@ begin
                 and w.candidate_id is not null
                 and abm.candidate_id = w.candidate_id
                 and abm.client_id is null
+
               union all
-              select abm.band_match_pattern, 1 as spec
+              select abm.band_match_pattern, abm.target_contract_id, 1 as spec
               from public.assignment_band_mappings abm
               where abm.active = true
                 and upper(trim(abm.system_type)) = v_sys
@@ -760,8 +799,9 @@ begin
                 and w.client_id is not null
                 and abm.candidate_id is null
                 and abm.client_id = w.client_id
+
               union all
-              select abm.band_match_pattern, 0 as spec
+              select abm.band_match_pattern, abm.target_contract_id, 0 as spec
               from public.assignment_band_mappings abm
               where abm.active = true
                 and upper(trim(abm.system_type)) = v_sys
@@ -771,21 +811,40 @@ begin
             ),
             mx as (select max(maps.spec) as m from maps)
             select
-              (select array_agg(lower(trim(maps2.band_match_pattern)))
-               from maps maps2
-               where maps2.spec = (select mx.m from mx)
-              ) as patterns
+              mx.m as spec,
+              (select array_agg(lower(trim(m2.band_match_pattern))) from maps m2 where m2.spec = mx.m) as patterns,
+              (select m3.target_contract_id
+               from maps m3
+               where m3.spec = mx.m and m3.target_contract_id is not null
+               order by m3.target_contract_id::text asc
+               limit 1
+              ) as target_contract_id,
+              (mx.m is not null) as has_map
+            from mx
           ) m on true
         ),
         chosen_contract as (
           select
             w.*,
-            cc.contract_id
+            coalesce(tc.contract_id, bc.contract_id) as contract_id,
+            (w.map_target_contract_id is not null and tc.contract_id is null) as target_contract_invalid
           from chosen_maps w
           left join lateral (
             select c.id as contract_id
             from public.contracts c
-            where c.candidate_id = w.candidate_id
+            where w.map_target_contract_id is not null
+              and c.id = w.map_target_contract_id
+              and c.candidate_id = w.candidate_id
+              and c.client_id    = w.client_id
+              and c.start_date <= w.work_date
+              and (c.end_date is null or c.end_date >= w.work_date)
+            limit 1
+          ) tc on true
+          left join lateral (
+            select c.id as contract_id
+            from public.contracts c
+            where w.map_target_contract_id is null
+              and c.candidate_id = w.candidate_id
               and c.client_id    = w.client_id
               and c.start_date <= w.work_date
               and (c.end_date is null or c.end_date >= w.work_date)
@@ -797,7 +856,7 @@ begin
               )
             order by c.start_date desc nulls last, c.id desc
             limit 1
-          ) cc on true
+          ) bc on true
         ),
         matched_shift as (
           select
@@ -832,7 +891,8 @@ begin
             when ms.client_id is null then 'REJECT_NO_CLIENT'
             when ms.code_norm = '' then 'REJECT_BAD_ROW'
             when ms.in_range_count = 0 then 'REJECT_NO_CONTRACT'
-            when ms.band_patterns is null then 'REJECT_NO_CONTRACT_BAND_MISMATCH'
+            when coalesce(ms.map_has_any,false) is false then 'REJECT_NO_CONTRACT_BAND_MISMATCH'
+            when ms.map_target_contract_id is not null and ms.target_contract_invalid is true then 'REJECT_NO_CONTRACT_BAND_MISMATCH'
             when ms.contract_id is null then 'REJECT_NO_CONTRACT_BAND_MISMATCH'
             else 'OK'
           end as action,
@@ -880,7 +940,7 @@ begin
         'ok_noop_rows', count(*) filter (where fr.action = 'OK' and fr.is_noop is true)::int,
         'ok_changed_rows', count(*) filter (where fr.action = 'OK' and fr.is_changed is true)::int,
 
-        -- ✅ NEW debug: attach-needed rows (NHSP) are those that would otherwise be noop but linkage is missing
+        -- attach-needed rows (NHSP) are those that would otherwise be noop but linkage is missing
         'ok_attach_needed_rows',
           count(*) filter (
             where fr.action = 'OK'
@@ -995,4 +1055,4 @@ exception when others then
 
   raise;
 end;
-$$;
+$function$;
