@@ -27005,6 +27005,1106 @@ async function scheduleReinvoiceForShift(env, {
   return { ok: true, warning: bucketWarning };
 }
 
+
+function __validateBandMappingPayload(p, { allowPartial = false, allowCandidateClientScope = false } = {}) {
+  const out = {};
+
+  const system_type = p?.system_type != null ? __upper(p.system_type) : null;
+  const incoming_code = p?.incoming_code != null ? __trim(p.incoming_code) : null;
+  const band_match_pattern = p?.band_match_pattern != null ? __trim(p.band_match_pattern) : null;
+
+  const candidate_id = p?.candidate_id ? String(p.candidate_id) : null;
+  const client_id = p?.client_id ? String(p.client_id) : null;
+
+  const target_contract_id =
+    (p?.target_contract_id != null && String(p.target_contract_id).trim() !== '')
+      ? String(p.target_contract_id).trim()
+      : null;
+
+  if (!allowPartial || p?.system_type != null) {
+    if (!['NHSP', 'HR_WEEKLY'].includes(system_type)) return { error: 'system_type must be NHSP or HR_WEEKLY' };
+    out.system_type = system_type;
+  }
+
+  if (!allowPartial || p?.incoming_code != null) {
+    if (!incoming_code) return { error: 'incoming_code is required' };
+    out.incoming_code = incoming_code;
+  }
+
+  if (!allowPartial || p?.band_match_pattern != null) {
+    if (!band_match_pattern) return { error: 'band_match_pattern is required' };
+    out.band_match_pattern = band_match_pattern;
+  }
+
+  if (p?.candidate_id !== undefined) {
+    if (candidate_id && !__isUuid(candidate_id)) return { error: 'candidate_id must be a uuid' };
+    out.candidate_id = candidate_id || null;
+  }
+
+  if (p?.client_id !== undefined) {
+    if (client_id && !__isUuid(client_id)) return { error: 'client_id must be a uuid' };
+    out.client_id = client_id || null;
+  }
+
+  // ✅ NEW: accept target_contract_id (nullable)
+  if (!allowPartial || p?.target_contract_id !== undefined) {
+    if (target_contract_id && !__isUuid(target_contract_id)) return { error: 'target_contract_id must be a uuid' };
+    out.target_contract_id = target_contract_id || null;
+  }
+
+  // scope rule:
+  // - default: cannot set both
+  // - allowed when allowCandidateClientScope === true (used by the in-context resolver flow)
+  const cand = (out.candidate_id !== undefined ? out.candidate_id : candidate_id) || null;
+  const cli  = (out.client_id !== undefined ? out.client_id : client_id) || null;
+
+  if (cand && cli && !allowCandidateClientScope) {
+    return { error: 'scope invalid: candidate_id and client_id cannot both be set' };
+  }
+
+  if (p?.active !== undefined) out.active = !!p.active;
+  if (p?.notes !== undefined) out.notes = (p.notes == null ? null : String(p.notes));
+
+  // always bump updated_at when writing
+  out.updated_at = new Date().toISOString();
+
+  return { ok: true, value: out };
+}
+
+export async function handleCreateAssignmentBandMapping(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let body;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+
+  // ✅ Gate candidate+client scope explicitly (resolver flow sets one of these flags)
+  const scopeKind = body?.scope_kind != null ? __upper(body.scope_kind) : '';
+  const allowCandidateClientScope =
+    scopeKind === 'CANDIDATE_CLIENT' ||
+    body?.allow_candidate_client_scope === true;
+
+  const v = __validateBandMappingPayload(body || {}, {
+    allowPartial: false,
+    allowCandidateClientScope
+  });
+  if (!v.ok) return withCORS(env, req, badRequest(v.error));
+
+  // ✅ If targeting a contract, require candidate+client scope (contracts are candidate+client scoped)
+  if (v.value?.target_contract_id) {
+    if (!v.value?.candidate_id || !v.value?.client_id) {
+      return withCORS(env, req, badRequest('target_contract_id requires candidate_id and client_id'));
+    }
+  }
+
+  const nowIso = new Date().toISOString();
+  const payload = {
+    ...v.value,
+    created_at: nowIso,
+    updated_at: nowIso,
+    active: (body?.active === undefined ? true : !!body.active)
+  };
+
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/assignment_band_mappings`,
+    {
+      method: 'POST',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation', 'content-type': 'application/json' },
+      body: JSON.stringify([payload])
+    }
+  );
+  const txt = await res.text().catch(() => '');
+  if (!res.ok) return withCORS(env, req, serverError(`Insert failed: ${txt}`));
+
+  const json = txt ? JSON.parse(txt) : [];
+  const row = Array.isArray(json) ? json[0] : json;
+  return withCORS(env, req, ok({ row }));
+}
+
+export async function handleListAssignmentBandMappings(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const url = new URL(req.url);
+  const q = url.searchParams;
+
+  const system_type   = q.get('system_type') ? __upper(q.get('system_type')) : null;
+  const candidate_id  = q.get('candidate_id');
+  const client_id     = q.get('client_id');
+  const incoming_like = q.get('incoming_like'); // optional substring filter
+  const include_inactive = (q.get('include_inactive') === 'true');
+
+  // optional "scope" helper
+  const scope = q.get('scope') ? __upper(q.get('scope')) : null; // GLOBAL|CLIENT|CANDIDATE
+
+  let qs =
+    `${env.SUPABASE_URL}/rest/v1/assignment_band_mappings` +
+    `?select=*` +
+    `&order=system_type.asc,incoming_code.asc,band_match_pattern.asc`;
+
+  if (system_type) qs += `&system_type=eq.${encodeURIComponent(system_type)}`;
+  if (!include_inactive) qs += `&active=eq.true`;
+
+  if (scope === 'GLOBAL') {
+    qs += `&candidate_id=is.null&client_id=is.null`;
+  } else if (scope === 'CANDIDATE') {
+    // ✅ includes BOTH candidate-only AND candidate+client rows
+    if (!candidate_id || !__isUuid(candidate_id)) {
+      return withCORS(env, req, badRequest('candidate_id is required for scope=CANDIDATE'));
+    }
+    qs += `&candidate_id=eq.${encodeURIComponent(candidate_id)}`;
+  } else if (scope === 'CLIENT') {
+    // ✅ client-only (candidate_id must be null) — does NOT include candidate+client
+    if (!client_id || !__isUuid(client_id)) {
+      return withCORS(env, req, badRequest('client_id is required for scope=CLIENT'));
+    }
+    qs += `&candidate_id=is.null&client_id=eq.${encodeURIComponent(client_id)}`;
+  } else {
+    // direct filters (optional; can include candidate+client when both are provided)
+    if (candidate_id) {
+      if (!__isUuid(candidate_id)) return withCORS(env, req, badRequest('candidate_id must be uuid'));
+      qs += `&candidate_id=eq.${encodeURIComponent(candidate_id)}`;
+    }
+    if (client_id) {
+      if (!__isUuid(client_id)) return withCORS(env, req, badRequest('client_id must be uuid'));
+      qs += `&client_id=eq.${encodeURIComponent(client_id)}`;
+    }
+  }
+
+  if (incoming_like) {
+    const pat = String(incoming_like).replace(/[%]/g, '').trim();
+    if (pat) qs += `&incoming_code=ilike.${encodeURIComponent(`*${pat}*`)}`;
+  }
+
+  const { rows } = await sbFetch(env, qs);
+  const outRows = Array.isArray(rows) ? rows : [];
+
+  // ✅ Add candidate_name / client_name for UI (best-effort, no DB changes required)
+  try {
+    const candIds = Array.from(new Set(outRows.map(r => r?.candidate_id).filter(Boolean).map(String)));
+    const cliIds  = Array.from(new Set(outRows.map(r => r?.client_id).filter(Boolean).map(String)));
+
+    const candNameById = new Map();
+    const clientNameById = new Map();
+
+    if (candIds.length) {
+      const inParam = candIds.map(encodeURIComponent).join(',');
+      const { rows: crows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/candidates?id=in.(${inParam})&select=id,display_name`
+      );
+      for (const c of (crows || [])) {
+        const id = c?.id ? String(c.id) : '';
+        if (!id) continue;
+        const nm = String(c?.display_name || '').trim();
+        candNameById.set(id, nm || null);
+      }
+    }
+
+    if (cliIds.length) {
+      const inParam = cliIds.map(encodeURIComponent).join(',');
+      const { rows: clrows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/clients?id=in.(${inParam})&select=id,name`
+      );
+      for (const c of (clrows || [])) {
+        const id = c?.id ? String(c.id) : '';
+        if (!id) continue;
+        const nm = String(c?.name || '').trim();
+        clientNameById.set(id, nm || null);
+      }
+    }
+
+    for (const r of outRows) {
+      const cid = r?.candidate_id ? String(r.candidate_id) : '';
+      const lid = r?.client_id ? String(r.client_id) : '';
+      r.candidate_name = cid ? (candNameById.get(cid) || null) : null;
+      r.client_name = lid ? (clientNameById.get(lid) || null) : null;
+    }
+  } catch {
+    // best-effort enrichment only; never break listing
+  }
+
+  return withCORS(env, req, ok({ rows: outRows }));
+}
+
+export async function handleUpdateAssignmentBandMapping(env, req, id) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!id || !__isUuid(id)) return withCORS(env, req, badRequest('id must be uuid'));
+
+  let body;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+
+  // ✅ Gate candidate+client scope explicitly (resolver flow sets one of these flags)
+  const scopeKind = body?.scope_kind != null ? __upper(body.scope_kind) : '';
+  const allowCandidateClientScope =
+    scopeKind === 'CANDIDATE_CLIENT' ||
+    body?.allow_candidate_client_scope === true;
+
+  // Load current row so scope validation is correct for partial updates
+  let existing = null;
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/assignment_band_mappings?id=eq.${encodeURIComponent(id)}` +
+        `&select=id,candidate_id,client_id,target_contract_id`
+    );
+    existing = (rows && rows[0]) ? rows[0] : null;
+  } catch {
+    existing = null;
+  }
+
+  if (!existing) {
+    const payload = { error: 'not_found', message: 'Mapping not found' };
+    return withCORS(env, req, new Response(JSON.stringify(payload), {
+      status: 404,
+      headers: { 'content-type': 'application/json' }
+    }));
+  }
+
+  const v = __validateBandMappingPayload(body || {}, {
+    allowPartial: true,
+    allowCandidateClientScope
+  });
+  if (!v.ok) return withCORS(env, req, badRequest(v.error));
+
+  const patch = v.value || {};
+
+  // ✅ Enforce scope rules against the *merged* row (existing + patch)
+  const nextCandidateId =
+    (Object.prototype.hasOwnProperty.call(patch, 'candidate_id'))
+      ? (patch.candidate_id || null)
+      : (existing.candidate_id || null);
+
+  const nextClientId =
+    (Object.prototype.hasOwnProperty.call(patch, 'client_id'))
+      ? (patch.client_id || null)
+      : (existing.client_id || null);
+
+  if (nextCandidateId && nextClientId && !allowCandidateClientScope) {
+    return withCORS(env, req, badRequest('scope invalid: candidate_id and client_id cannot both be set'));
+  }
+
+  const nextTargetContractId =
+    (Object.prototype.hasOwnProperty.call(patch, 'target_contract_id'))
+      ? (patch.target_contract_id || null)
+      : (existing.target_contract_id || null);
+
+  if (nextTargetContractId && (!nextCandidateId || !nextClientId)) {
+    return withCORS(env, req, badRequest('target_contract_id requires candidate_id and client_id'));
+  }
+
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/assignment_band_mappings?id=eq.${encodeURIComponent(id)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation', 'content-type': 'application/json' },
+      body: JSON.stringify(patch)
+    }
+  );
+  const txt = await res.text().catch(() => '');
+  if (!res.ok) return withCORS(env, req, serverError(`Update failed: ${txt}`));
+
+  const json = txt ? JSON.parse(txt) : [];
+  const row = Array.isArray(json) ? json[0] : json;
+  return withCORS(env, req, ok({ row }));
+}
+
+async function apiCreateAssignmentBandMapping(payload) {
+  const res = await authFetch(API(`/api/assignment-band-mappings`), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload || {})
+  });
+
+  const txt = await res.text().catch(() => '');
+  if (!res.ok) throw new Error(txt || `Failed to create assignment-band-mapping (${res.status})`);
+
+  let json;
+  try { json = txt ? JSON.parse(txt) : null; } catch { json = null; }
+
+  return __unwrapSingle(json);
+}
+
+async function apiUpdateAssignmentBandMapping(id, patch) {
+  if (!id) throw new Error('Missing id for apiUpdateAssignmentBandMapping');
+  const encId = encodeURIComponent(String(id));
+
+  const res = await authFetch(API(`/api/assignment-band-mappings/${encId}`), {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(patch || {})
+  });
+
+  const txt = await res.text().catch(() => '');
+  if (!res.ok) throw new Error(txt || `Failed to update assignment-band-mapping (${res.status})`);
+
+  let json;
+  try { json = txt ? JSON.parse(txt) : null; } catch { json = null; }
+
+  return __unwrapSingle(json);
+}
+
+function openAssignmentBandMappingsModal(opts) {
+  // Ensure we have a local HTML-escape helper in this closure
+  // (prevents "ReferenceError: enc is not defined")
+  const enc = (typeof escapeHtml === 'function')
+    ? escapeHtml
+    : (x) => String(x || '')
+        .replaceAll('&','&amp;')
+        .replaceAll('<','&lt;')
+        .replaceAll('>','&gt;')
+        .replaceAll('"','&quot;')
+        .replaceAll("'",'&#39;');
+
+  const seed = (opts && typeof opts === 'object') ? opts : {};
+  const initSystem = String(seed.system_type || seed.systemType || 'NHSP').toUpperCase();
+
+  // Weekly-only (per your decision)
+  const SYSTEMS = ['NHSP', 'HR_WEEKLY'];
+
+  const state = {
+    // Filters
+    system_type: SYSTEMS.includes(initSystem) ? initSystem : 'NHSP',
+    scope_filter: 'ANY', // ANY | GLOBAL | CLIENT | CANDIDATE
+    filter_incoming_like: String(seed.incoming_code || seed.incomingCode || '').trim(),
+    filter_candidate_id: seed.candidate_id || seed.candidateId || null,
+    filter_candidate_label: '',
+    filter_client_id: seed.client_id || seed.clientId || null,
+    filter_client_label: '',
+    include_inactive: false,
+
+    // List
+    rows: [],
+    loading: false,
+    error: '',
+
+    // Add form
+    add_scope: (() => {
+      const cid = seed.candidate_id || seed.candidateId || null;
+      const lid = seed.client_id || seed.clientId || null;
+      if (cid) return 'CANDIDATE';
+      if (lid) return 'CLIENT';
+      return 'GLOBAL';
+    })(),
+    add_incoming_code: String(seed.incoming_code || seed.incomingCode || '').trim(),
+    add_band_match_pattern: '',
+    add_notes: '',
+    add_active: true,
+    add_candidate_id: seed.candidate_id || seed.candidateId || null,
+    add_candidate_label: '',
+    add_client_id: seed.client_id || seed.clientId || null,
+    add_client_label: '',
+
+    // Edit form
+    editing: null,
+    edit_band_match_pattern: '',
+    edit_notes: '',
+    edit_active: true
+  };
+
+  const kind = 'import-summary-assignment-band-mappings';
+
+  // ✅ Scope label: do NOT include IDs.
+  const scopeLabelForRow = (r) => {
+    const hasCand = !!r.candidate_id;
+    const hasCli  = !!r.client_id;
+    if (hasCand && hasCli) return 'Candidate+Client';
+    if (hasCand) return 'Candidate';
+    if (hasCli)  return 'Client';
+    return 'Global';
+  };
+
+  const renderTab = () => {
+    const sys = state.system_type;
+
+    const errHtml = state.error
+      ? `<div class="hint" style="color:#ffb4b4;">${enc(state.error)}</div>`
+      : '';
+
+    const editOpen = !!state.editing;
+
+    const addScope = state.add_scope;
+    const showAddCand = (addScope === 'CANDIDATE');
+    const showAddCli  = (addScope === 'CLIENT');
+
+    const filterScope = state.scope_filter;
+    const showFilterCand = (filterScope === 'CANDIDATE');
+    const showFilterCli  = (filterScope === 'CLIENT');
+
+    const listBody = (state.rows && state.rows.length)
+      ? state.rows.map(r => {
+          const id = r.id || '';
+          const incoming = (r.incoming_code || '').toString();
+          const patt = (r.band_match_pattern || '').toString();
+          const notes = (r.notes || '').toString();
+          const active = (r.active !== false);
+
+          const pill    = active ? 'pill-ok' : 'pill-warn';
+          const pillTxt = active ? 'ACTIVE' : 'INACTIVE';
+
+          const hasCand = !!r.candidate_id;
+          const candName = String(r.candidate_name || r.candidate_label || '').trim();
+          const candDisp = hasCand ? (candName || 'Candidate') : '—';
+
+          const scopeTxt = scopeLabelForRow(r);
+
+          return `
+            <tr data-id="${enc(id)}">
+              <td><span class="mini mono">${enc(incoming || '—')}</span></td>
+              <td>
+                <span class="mini" style="white-space:normal;word-break:break-word;display:inline-block;max-width:280px;">
+                  ${enc(patt || '—')}
+                </span>
+              </td>
+              <td>
+                <span class="mini" style="white-space:normal;word-break:break-word;display:inline-block;max-width:260px;">
+                  ${enc(candDisp)}
+                </span>
+              </td>
+              <td><span class="mini">${enc(scopeTxt)}</span></td>
+              <td><span class="pill ${pill}" style="padding:2px 8px;font-size:12px;">${enc(pillTxt)}</span></td>
+              <td>
+                <span class="mini" style="white-space:normal;word-break:break-word;display:inline-block;max-width:380px;">
+                  ${enc(notes || '')}
+                </span>
+              </td>
+              <td>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:flex-start;">
+                  <button type="button" class="btn mini" data-act="abm-edit" data-id="${enc(id)}">Edit</button>
+                  <button type="button" class="btn mini" data-act="abm-toggle" data-id="${enc(id)}">
+                    ${active ? 'Disable' : 'Enable'}
+                  </button>
+                  <button type="button" class="btn mini" data-act="abm-delete" data-id="${enc(id)}">
+                    Remove
+                  </button>
+                </div>
+              </td>
+            </tr>
+          `;
+        }).join('')
+      : `
+        <tr>
+          <td colspan="7"><span class="mini">${state.loading ? 'Loading…' : 'No mappings found for this filter.'}</span></td>
+        </tr>
+      `;
+
+    return `
+      <div id="assignmentBandMappingsModal">
+        <div class="card">
+          <div class="row">
+            <label>Filters</label>
+            <div class="controls" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              <select class="input" id="abm_system" style="max-width:220px;">
+                <option value="NHSP" ${sys==='NHSP'?'selected':''}>NHSP</option>
+                <option value="HR_WEEKLY" ${sys==='HR_WEEKLY'?'selected':''}>HR weekly</option>
+              </select>
+
+              <select class="input" id="abm_scope_filter" style="max-width:200px;">
+                <option value="ANY" ${filterScope==='ANY'?'selected':''}>Any scope</option>
+                <option value="GLOBAL" ${filterScope==='GLOBAL'?'selected':''}>Global only</option>
+                <option value="CLIENT" ${filterScope==='CLIENT'?'selected':''}>Client only</option>
+                <option value="CANDIDATE" ${filterScope==='CANDIDATE'?'selected':''}>Candidate only</option>
+              </select>
+
+              <input class="input" id="abm_incoming_like" type="text"
+                     style="max-width:260px;"
+                     placeholder="Filter by code (e.g. CPN120)…"
+                     value="${enc(state.filter_incoming_like || '')}"/>
+
+              <label class="mini" style="display:flex;gap:6px;align-items:center;">
+                <input type="checkbox" id="abm_include_inactive" ${state.include_inactive ? 'checked' : ''}/>
+                Show inactive
+              </label>
+
+              <button type="button" class="btn" id="abm_refresh" ${state.loading ? 'disabled' : ''}>Refresh</button>
+
+              <span class="mini" style="opacity:.85;">
+                ${state.loading ? 'Loading…' : `${(state.rows||[]).length} row(s)`}
+              </span>
+            </div>
+          </div>
+
+          <div class="row" style="margin-top:6px; display:${(showFilterCand || showFilterCli) ? '' : 'none'};">
+            <label>Scope target</label>
+            <div class="controls" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              <div style="display:${showFilterCand ? '' : 'none'};">
+                <span class="mini">Candidate:</span>
+                <span class="mini mono" id="abm_filter_candidate_label">${enc(state.filter_candidate_label || (state.filter_candidate_id ? 'Selected candidate' : '—'))}</span>
+                <button type="button" class="btn mini" style="margin-left:6px;" data-act="abm-pick-filter-candidate">Pick…</button>
+                <button type="button" class="btn mini" style="margin-left:4px;" data-act="abm-clear-filter-candidate">Clear</button>
+              </div>
+
+              <div style="display:${showFilterCli ? '' : 'none'};">
+                <span class="mini">Client:</span>
+                <span class="mini mono" id="abm_filter_client_label">${enc(state.filter_client_label || (state.filter_client_id ? 'Selected client' : '—'))}</span>
+                <button type="button" class="btn mini" style="margin-left:6px;" data-act="abm-pick-filter-client">Pick…</button>
+                <button type="button" class="btn mini" style="margin-left:4px;" data-act="abm-clear-filter-client">Clear</button>
+              </div>
+
+              <span class="mini" style="opacity:.75;">
+                (Scope filters are optional; they help you narrow the table.)
+              </span>
+            </div>
+          </div>
+
+          ${errHtml}
+        </div>
+
+        <div class="card" style="margin-top:10px;">
+          <div class="row">
+            <label>Add mapping</label>
+            <div class="controls" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;">
+              <div style="min-width:180px;">
+                <div class="mini" style="margin-bottom:4px;">Scope</div>
+                <select class="input" id="abm_add_scope" style="max-width:180px;">
+                  <option value="GLOBAL" ${addScope==='GLOBAL'?'selected':''}>Global</option>
+                  <option value="CLIENT" ${addScope==='CLIENT'?'selected':''}>Client</option>
+                  <option value="CANDIDATE" ${addScope==='CANDIDATE'?'selected':''}>Candidate</option>
+                </select>
+              </div>
+
+              <div style="min-width:220px;flex:1;">
+                <div class="mini" style="margin-bottom:4px;">Incoming code</div>
+                <input class="input" id="abm_add_incoming" type="text"
+                       placeholder="e.g. CPN120"
+                       value="${enc(state.add_incoming_code || '')}"/>
+              </div>
+
+              <div style="min-width:260px;flex:2;">
+                <div class="mini" style="margin-bottom:4px;">Band match pattern</div>
+                <input class="input" id="abm_add_pattern" type="text"
+                       placeholder="e.g. Band 6, CPN, 6"
+                       value="${enc(state.add_band_match_pattern || '')}"/>
+              </div>
+
+              <div style="min-width:260px;flex:2;">
+                <div class="mini" style="margin-bottom:4px;">Notes (optional)</div>
+                <input class="input" id="abm_add_notes" type="text"
+                       placeholder="Optional note…"
+                       value="${enc(state.add_notes || '')}"/>
+              </div>
+
+              <div style="min-width:140px;">
+                <div class="mini" style="margin-bottom:4px;">Active</div>
+                <label class="mini" style="display:flex;gap:6px;align-items:center;">
+                  <input type="checkbox" id="abm_add_active" ${state.add_active ? 'checked' : ''}/>
+                  Active
+                </label>
+              </div>
+
+              <div style="min-width:140px;padding-top:18px;">
+                <button type="button" class="btn btn-primary" id="abm_add_save" ${state.loading ? 'disabled' : ''}>
+                  Add
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="row" style="margin-top:6px; display:${showAddCand ? '' : 'none'};">
+            <label>Candidate</label>
+            <div class="controls" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              <span class="mini mono" id="abm_add_candidate_label">${enc(state.add_candidate_label || (state.add_candidate_id ? 'Selected candidate' : '—'))}</span>
+              <button type="button" class="btn mini" data-act="abm-pick-add-candidate">Pick…</button>
+              <button type="button" class="btn mini" data-act="abm-clear-add-candidate">Clear</button>
+            </div>
+          </div>
+
+          <div class="row" style="margin-top:6px; display:${showAddCli ? '' : 'none'};">
+            <label>Client</label>
+            <div class="controls" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              <span class="mini mono" id="abm_add_client_label">${enc(state.add_client_label || (state.add_client_id ? 'Selected client' : '—'))}</span>
+              <button type="button" class="btn mini" data-act="abm-pick-add-client">Pick…</button>
+              <button type="button" class="btn mini" data-act="abm-clear-add-client">Clear</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:10px; display:${editOpen ? '' : 'none'};" id="abm_edit_card">
+          <div class="row">
+            <label>Edit mapping</label>
+            <div class="controls" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;">
+              <div class="mini" style="width:100%;">
+                Editing ID: <span class="mono" id="abm_edit_id">${enc(state.editing?.id || '')}</span>
+                &nbsp;•&nbsp;
+                Code: <span class="mono">${enc(state.editing?.incoming_code || '')}</span>
+                &nbsp;•&nbsp;
+                Scope: <span class="mono">${enc(state.editing ? scopeLabelForRow(state.editing) : '')}</span>
+              </div>
+
+              <div style="min-width:260px;flex:2;">
+                <div class="mini" style="margin-bottom:4px;">Band match pattern</div>
+                <input class="input" id="abm_edit_pattern" type="text" value="${enc(state.edit_band_match_pattern||'')}" />
+              </div>
+
+              <div style="min-width:260px;flex:2;">
+                <div class="mini" style="margin-bottom:4px;">Notes</div>
+                <input class="input" id="abm_edit_notes" type="text" value="${enc(state.edit_notes||'')}" />
+              </div>
+
+              <div style="min-width:140px;">
+                <div class="mini" style="margin-bottom:4px;">Active</div>
+                <label class="mini" style="display:flex;gap:6px;align-items:center;">
+                  <input type="checkbox" id="abm_edit_active" ${state.edit_active ? 'checked' : ''}/>
+                  Active
+                </label>
+              </div>
+
+              <div style="min-width:220px;padding-top:18px;">
+                <button type="button" class="btn btn-primary" id="abm_edit_save" ${state.loading ? 'disabled' : ''}>Save changes</button>
+                <button type="button" class="btn" id="abm_edit_cancel" style="margin-left:6px;">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ✅ FULL-WIDTH MAPPINGS BOX -->
+        <div class="card" style="margin-top:10px;">
+          <div class="row">
+            <label>Mappings</label>
+            <div class="controls">
+              <div style="
+                max-height: 46vh;
+                overflow: auto;
+                border: 1px solid var(--line);
+                border-radius: 10px;
+              ">
+                <table class="grid" style="table-layout:auto; width:100%;">
+                  <thead>
+                    <tr>
+                      <th style="width:140px;">Incoming code</th>
+                      <th style="width:220px;">Band pattern</th>
+                      <th style="width:260px;">Candidate</th>
+                      <th style="width:160px;">Scope</th>
+                      <th style="width:90px;">Active</th>
+                      <th>Notes</th>
+                      <th style="width:260px;">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="abm_tbody">${listBody}</tbody>
+                </table>
+              </div>
+
+              <div class="hint" style="margin-top:8px;">
+                Precedence: Candidate+Client overrides Candidate overrides Client overrides Global.
+                When target_contract_id is set, it is used as the authoritative match (and must be in-range for the date).
+                Otherwise matching falls back to “contract band contains pattern”.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  };
+
+  const repaint = () => {
+    const fr = window.__getModalFrame?.();
+    if (!fr) return;
+    try { fr.setTab(fr.currentTabKey || 'p'); } catch {}
+    try {
+      const fr2 = window.__getModalFrame?.();
+      if (fr2 && typeof fr2.onReturn === 'function') fr2.onReturn();
+    } catch {}
+  };
+
+  const loadList = async () => {
+    state.loading = true;
+    state.error = '';
+    try {
+      repaint();
+
+      const scope =
+        state.scope_filter === 'ANY' ? null :
+        state.scope_filter;
+
+      const rows = await apiListAssignmentBandMappings({
+        system_type: state.system_type,
+        incoming_like: state.filter_incoming_like || null,
+        scope: scope || null,
+        candidate_id: (state.scope_filter === 'CANDIDATE') ? (state.filter_candidate_id || null) : null,
+        client_id:    (state.scope_filter === 'CLIENT')    ? (state.filter_client_id || null)    : null,
+        include_inactive: state.include_inactive
+      });
+
+      state.rows = Array.isArray(rows) ? rows : [];
+    } catch (e) {
+      state.rows = [];
+      state.error = e?.message || String(e);
+    } finally {
+      state.loading = false;
+      repaint();
+    }
+  };
+
+  const startEdit = (row) => {
+    if (!row) return;
+    state.editing = row;
+    state.edit_band_match_pattern = (row.band_match_pattern || '').toString();
+    state.edit_notes = (row.notes || '').toString();
+    state.edit_active = (row.active !== false);
+    repaint();
+  };
+
+  const cancelEdit = () => {
+    state.editing = null;
+    state.edit_band_match_pattern = '';
+    state.edit_notes = '';
+    state.edit_active = true;
+    repaint();
+  };
+
+  const onReturn = () => {
+    const root = document.getElementById('assignmentBandMappingsModal');
+    if (!root) return;
+
+    // Filters
+    const selSystem = document.getElementById('abm_system');
+    const selScope  = document.getElementById('abm_scope_filter');
+    const inpLike   = document.getElementById('abm_incoming_like');
+    const chkInact  = document.getElementById('abm_include_inactive');
+    const btnRef    = document.getElementById('abm_refresh');
+
+    // Add
+    const addScope  = document.getElementById('abm_add_scope');
+    const addIn     = document.getElementById('abm_add_incoming');
+    const addPat    = document.getElementById('abm_add_pattern');
+    const addNotes  = document.getElementById('abm_add_notes');
+    const addAct    = document.getElementById('abm_add_active');
+    const addSave   = document.getElementById('abm_add_save');
+
+    // Edit
+    const editPat   = document.getElementById('abm_edit_pattern');
+    const editNotes = document.getElementById('abm_edit_notes');
+    const editAct   = document.getElementById('abm_edit_active');
+    const editSave  = document.getElementById('abm_edit_save');
+    const editCancel= document.getElementById('abm_edit_cancel');
+
+    // Wire filter changes
+    if (selSystem && !selSystem.__abmWired) {
+      selSystem.__abmWired = true;
+      selSystem.addEventListener('change', () => {
+        state.system_type = String(selSystem.value || 'NHSP').toUpperCase();
+        cancelEdit();
+        loadList();
+      });
+    }
+    if (selScope && !selScope.__abmWired) {
+      selScope.__abmWired = true;
+      selScope.addEventListener('change', () => {
+        state.scope_filter = String(selScope.value || 'ANY').toUpperCase();
+        if (state.scope_filter !== 'CANDIDATE') { state.filter_candidate_id = null; state.filter_candidate_label = ''; }
+        if (state.scope_filter !== 'CLIENT')    { state.filter_client_id = null; state.filter_client_label = ''; }
+        cancelEdit();
+        repaint();
+      });
+    }
+    if (inpLike && !inpLike.__abmWired) {
+      inpLike.__abmWired = true;
+      inpLike.addEventListener('input', () => { state.filter_incoming_like = String(inpLike.value || ''); });
+      inpLike.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); loadList(); }
+      });
+    }
+    if (chkInact && !chkInact.__abmWired) {
+      chkInact.__abmWired = true;
+      chkInact.addEventListener('change', () => {
+        state.include_inactive = !!chkInact.checked;
+        cancelEdit();
+        loadList();
+      });
+    }
+    if (btnRef && !btnRef.__abmWired) {
+      btnRef.__abmWired = true;
+      btnRef.addEventListener('click', () => loadList());
+    }
+
+    // Wire add fields
+    if (addScope && !addScope.__abmWired) {
+      addScope.__abmWired = true;
+      addScope.addEventListener('change', () => {
+        state.add_scope = String(addScope.value || 'GLOBAL').toUpperCase();
+        if (state.add_scope !== 'CANDIDATE') { state.add_candidate_id = null; state.add_candidate_label = ''; }
+        if (state.add_scope !== 'CLIENT')    { state.add_client_id = null; state.add_client_label = ''; }
+        repaint();
+      });
+    }
+    if (addIn && !addIn.__abmWired) {
+      addIn.__abmWired = true;
+      addIn.addEventListener('input', () => { state.add_incoming_code = String(addIn.value || ''); });
+    }
+    if (addPat && !addPat.__abmWired) {
+      addPat.__abmWired = true;
+      addPat.addEventListener('input', () => { state.add_band_match_pattern = String(addPat.value || ''); });
+    }
+    if (addNotes && !addNotes.__abmWired) {
+      addNotes.__abmWired = true;
+      addNotes.addEventListener('input', () => { state.add_notes = String(addNotes.value || ''); });
+    }
+    if (addAct && !addAct.__abmWired) {
+      addAct.__abmWired = true;
+      addAct.addEventListener('change', () => { state.add_active = !!addAct.checked; });
+    }
+    if (addSave && !addSave.__abmWired) {
+      addSave.__abmWired = true;
+      addSave.addEventListener('click', async () => {
+        const incoming = String(state.add_incoming_code || '').trim();
+        const pattern  = String(state.add_band_match_pattern || '').trim();
+
+        if (!incoming) { alert('Incoming code is required.'); return; }
+        if (!pattern)  { alert('Band match pattern is required.'); return; }
+
+        const scope = String(state.add_scope || 'GLOBAL').toUpperCase();
+        let candidate_id = null;
+        let client_id = null;
+
+        if (scope === 'CANDIDATE') {
+          candidate_id = state.add_candidate_id || null;
+          if (!candidate_id) { alert('Pick a candidate for a candidate-specific rule.'); return; }
+        } else if (scope === 'CLIENT') {
+          client_id = state.add_client_id || null;
+          if (!client_id) { alert('Pick a client for a client-specific rule.'); return; }
+        }
+
+        try {
+          state.loading = true;
+          state.error = '';
+          repaint();
+
+          await apiCreateAssignmentBandMapping({
+            system_type: state.system_type,
+            incoming_code: incoming,
+            candidate_id,
+            client_id,
+            band_match_pattern: pattern,
+            active: !!state.add_active,
+            notes: String(state.add_notes || '').trim() || null
+          });
+
+          window.__toast && window.__toast('Mapping added.');
+
+          state.add_band_match_pattern = '';
+          state.add_notes = '';
+          state.add_active = true;
+
+          await loadList();
+        } catch (e) {
+          state.error = e?.message || String(e);
+          state.loading = false;
+          repaint();
+          alert(state.error);
+        }
+      });
+    }
+
+    // Wire edit fields
+    if (editPat && !editPat.__abmWired) {
+      editPat.__abmWired = true;
+      editPat.addEventListener('input', () => { state.edit_band_match_pattern = String(editPat.value || ''); });
+    }
+    if (editNotes && !editNotes.__abmWired) {
+      editNotes.__abmWired = true;
+      editNotes.addEventListener('input', () => { state.edit_notes = String(editNotes.value || ''); });
+    }
+    if (editAct && !editAct.__abmWired) {
+      editAct.__abmWired = true;
+      editAct.addEventListener('change', () => { state.edit_active = !!editAct.checked; });
+    }
+    if (editSave && !editSave.__abmWired) {
+      editSave.__abmWired = true;
+      editSave.addEventListener('click', async () => {
+        if (!state.editing || !state.editing.id) return;
+        const id = state.editing.id;
+
+        const pattern = String(state.edit_band_match_pattern || '').trim();
+        if (!pattern) { alert('Band match pattern is required.'); return; }
+
+        try {
+          state.loading = true;
+          state.error = '';
+          repaint();
+
+          await apiUpdateAssignmentBandMapping(id, {
+            band_match_pattern: pattern,
+            notes: String(state.edit_notes || '').trim() || null,
+            active: !!state.edit_active
+          });
+
+          window.__toast && window.__toast('Mapping updated.');
+          cancelEdit();
+          await loadList();
+        } catch (e) {
+          state.error = e?.message || String(e);
+          state.loading = false;
+          repaint();
+          alert(state.error);
+        }
+      });
+    }
+    if (editCancel && !editCancel.__abmWired) {
+      editCancel.__abmWired = true;
+      editCancel.addEventListener('click', () => cancelEdit());
+    }
+
+    // Button actions + pickers + row actions
+    if (!root.__abmWiredActions) {
+      root.__abmWiredActions = true;
+      root.addEventListener('click', async (ev) => {
+        const btn = ev.target.closest('button[data-act]');
+        if (!btn) return;
+
+        const act = btn.getAttribute('data-act');
+
+        // Filter pickers
+        if (act === 'abm-pick-filter-candidate') {
+          openCandidatePicker(async ({ id, label }) => {
+            state.filter_candidate_id = id;
+            state.filter_candidate_label = label || '';
+            repaint();
+            await loadList();
+          }, { context: { staffName: 'Filter scope', unit: 'Candidate', importId: seed.import_id || '' } });
+          return;
+        }
+        if (act === 'abm-clear-filter-candidate') {
+          state.filter_candidate_id = null;
+          state.filter_candidate_label = '';
+          repaint();
+          await loadList();
+          return;
+        }
+        if (act === 'abm-pick-filter-client') {
+          openClientPicker(async ({ id, label }) => {
+            state.filter_client_id = id;
+            state.filter_client_label = label || '';
+            repaint();
+            await loadList();
+          }, { context: { staffName: 'Filter scope', unit: 'Client', importId: seed.import_id || '' } });
+          return;
+        }
+        if (act === 'abm-clear-filter-client') {
+          state.filter_client_id = null;
+          state.filter_client_label = '';
+          repaint();
+          await loadList();
+          return;
+        }
+
+        // Add pickers
+        if (act === 'abm-pick-add-candidate') {
+          openCandidatePicker(async ({ id, label }) => {
+            state.add_candidate_id = id;
+            state.add_candidate_label = label || '';
+            repaint();
+          }, { context: { staffName: 'Mapping scope', unit: 'Candidate', importId: seed.import_id || '' } });
+          return;
+        }
+        if (act === 'abm-clear-add-candidate') {
+          state.add_candidate_id = null;
+          state.add_candidate_label = '';
+          repaint();
+          return;
+        }
+        if (act === 'abm-pick-add-client') {
+          openClientPicker(async ({ id, label }) => {
+            state.add_client_id = id;
+            state.add_client_label = label || '';
+            repaint();
+          }, { context: { staffName: 'Mapping scope', unit: 'Client', importId: seed.import_id || '' } });
+          return;
+        }
+        if (act === 'abm-clear-add-client') {
+          state.add_client_id = null;
+          state.add_client_label = '';
+          repaint();
+          return;
+        }
+
+        // Row actions
+        if (act === 'abm-edit') {
+          const id = btn.getAttribute('data-id');
+          const row = (state.rows || []).find(x => String(x.id) === String(id)) || null;
+          startEdit(row);
+          return;
+        }
+
+        if (act === 'abm-toggle') {
+          const id = btn.getAttribute('data-id');
+          const row = (state.rows || []).find(x => String(x.id) === String(id)) || null;
+          if (!row) return;
+
+          const nextActive = !(row.active !== false);
+
+          try {
+            state.loading = true;
+            state.error = '';
+            repaint();
+
+            await apiUpdateAssignmentBandMapping(id, { active: nextActive });
+
+            window.__toast && window.__toast(nextActive ? 'Mapping enabled.' : 'Mapping disabled.');
+            cancelEdit();
+            await loadList();
+          } catch (e) {
+            state.error = e?.message || String(e);
+            state.loading = false;
+            repaint();
+            alert(state.error);
+          }
+          return;
+        }
+
+        if (act === 'abm-delete') {
+          const id = btn.getAttribute('data-id');
+          const ok = window.confirm('Remove this mapping? (It will be deactivated for safety)');
+          if (!ok) return;
+
+          try {
+            state.loading = true;
+            state.error = '';
+            repaint();
+
+            await apiDeleteAssignmentBandMapping(id);
+
+            window.__toast && window.__toast('Mapping removed.');
+            cancelEdit();
+            await loadList();
+          } catch (e) {
+            state.error = e?.message || String(e);
+            state.loading = false;
+            repaint();
+            alert(state.error);
+          }
+          return;
+        }
+      });
+    }
+  };
+
+  showModal(
+    'Weekly Band Mappings',
+    [{ key: 'p', title: 'Mappings' }],
+    () => renderTab(),
+    async () => true,
+    false,
+    onReturn,
+    { kind, noParentGate: true }
+  );
+
+  // Initial wiring + load
+  setTimeout(() => {
+    try {
+      const fr = window.__getModalFrame?.();
+      if (fr && fr.kind === kind && typeof fr.onReturn === 'function' && !fr.__abmInit) {
+        fr.__abmInit = true;
+        fr.onReturn();
+        loadList();
+      }
+    } catch (e) {
+      console.warn('[ASSIGNMENT_BAND_MAPPINGS] init failed', e);
+    }
+  }, 0);
+}
+
 /**
  * applyWeeklyHoursCorrections(env, args)
  *
@@ -69823,281 +70923,7 @@ function __upper(s){ return String(s||'').trim().toUpperCase(); }
 function __trim(s){ return String(s||'').trim(); }
 
 
-function __validateBandMappingPayload(p, { allowPartial = false, allowCandidateClientScope = false } = {}) {
-  const out = {};
 
-  const system_type = p?.system_type != null ? __upper(p.system_type) : null;
-  const incoming_code = p?.incoming_code != null ? __trim(p.incoming_code) : null;
-  const band_match_pattern = p?.band_match_pattern != null ? __trim(p.band_match_pattern) : null;
-
-  const candidate_id = p?.candidate_id ? String(p.candidate_id) : null;
-  const client_id = p?.client_id ? String(p.client_id) : null;
-
-  if (!allowPartial || p?.system_type != null) {
-    if (!['NHSP', 'HR_WEEKLY'].includes(system_type)) return { error: 'system_type must be NHSP or HR_WEEKLY' };
-    out.system_type = system_type;
-  }
-
-  if (!allowPartial || p?.incoming_code != null) {
-    if (!incoming_code) return { error: 'incoming_code is required' };
-    out.incoming_code = incoming_code;
-  }
-
-  if (!allowPartial || p?.band_match_pattern != null) {
-    if (!band_match_pattern) return { error: 'band_match_pattern is required' };
-    out.band_match_pattern = band_match_pattern;
-  }
-
-  if (p?.candidate_id !== undefined) {
-    if (candidate_id && !__isUuid(candidate_id)) return { error: 'candidate_id must be a uuid' };
-    out.candidate_id = candidate_id || null;
-  }
-
-  if (p?.client_id !== undefined) {
-    if (client_id && !__isUuid(client_id)) return { error: 'client_id must be a uuid' };
-    out.client_id = client_id || null;
-  }
-
-  // scope rule:
-  // - default: cannot set both
-  // - allowed when allowCandidateClientScope === true (used by the in-context resolver flow)
-  const cand = (out.candidate_id !== undefined ? out.candidate_id : candidate_id) || null;
-  const cli  = (out.client_id !== undefined ? out.client_id : client_id) || null;
-
-  if (cand && cli && !allowCandidateClientScope) {
-    return { error: 'scope invalid: candidate_id and client_id cannot both be set' };
-  }
-
-  if (p?.active !== undefined) out.active = !!p.active;
-  if (p?.notes !== undefined) out.notes = (p.notes == null ? null : String(p.notes));
-
-  // always bump updated_at when writing
-  out.updated_at = new Date().toISOString();
-
-  return { ok: true, value: out };
-}
-
-export async function handleCreateAssignmentBandMapping(env, req) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  let body;
-  try { body = await parseJSONBody(req); } catch { body = null; }
-
-  // ✅ Gate candidate+client scope explicitly (resolver flow sets one of these flags)
-  const scopeKind = body?.scope_kind != null ? __upper(body.scope_kind) : '';
-  const allowCandidateClientScope =
-    scopeKind === 'CANDIDATE_CLIENT' ||
-    body?.allow_candidate_client_scope === true;
-
-  const v = __validateBandMappingPayload(body || {}, {
-    allowPartial: false,
-    allowCandidateClientScope
-  });
-  if (!v.ok) return withCORS(env, req, badRequest(v.error));
-
-  const nowIso = new Date().toISOString();
-  const payload = {
-    ...v.value,
-    created_at: nowIso,
-    updated_at: nowIso,
-    active: (body?.active === undefined ? true : !!body.active)
-  };
-
-  const res = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/assignment_band_mappings`,
-    {
-      method: 'POST',
-      headers: { ...sbHeaders(env), Prefer: 'return=representation', 'content-type': 'application/json' },
-      body: JSON.stringify([payload])
-    }
-  );
-  const txt = await res.text().catch(() => '');
-  if (!res.ok) return withCORS(env, req, serverError(`Insert failed: ${txt}`));
-
-  const json = txt ? JSON.parse(txt) : [];
-  const row = Array.isArray(json) ? json[0] : json;
-  return withCORS(env, req, ok({ row }));
-}
-
-export async function handleListAssignmentBandMappings(env, req) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  const url = new URL(req.url);
-  const q = url.searchParams;
-
-  const system_type   = q.get('system_type') ? __upper(q.get('system_type')) : null;
-  const candidate_id  = q.get('candidate_id');
-  const client_id     = q.get('client_id');
-  const incoming_like = q.get('incoming_like'); // optional substring filter
-  const include_inactive = (q.get('include_inactive') === 'true');
-
-  // optional "scope" helper
-  const scope = q.get('scope') ? __upper(q.get('scope')) : null; // GLOBAL|CLIENT|CANDIDATE
-
-  let qs =
-    `${env.SUPABASE_URL}/rest/v1/assignment_band_mappings` +
-    `?select=*` +
-    `&order=system_type.asc,incoming_code.asc,band_match_pattern.asc`;
-
-  if (system_type) qs += `&system_type=eq.${encodeURIComponent(system_type)}`;
-  if (!include_inactive) qs += `&active=eq.true`;
-
-  if (scope === 'GLOBAL') {
-    qs += `&candidate_id=is.null&client_id=is.null`;
-  } else if (scope === 'CANDIDATE') {
-    // ✅ includes BOTH candidate-only AND candidate+client rows
-    if (!candidate_id || !__isUuid(candidate_id)) {
-      return withCORS(env, req, badRequest('candidate_id is required for scope=CANDIDATE'));
-    }
-    qs += `&candidate_id=eq.${encodeURIComponent(candidate_id)}`;
-  } else if (scope === 'CLIENT') {
-    // ✅ client-only (candidate_id must be null) — does NOT include candidate+client
-    if (!client_id || !__isUuid(client_id)) {
-      return withCORS(env, req, badRequest('client_id is required for scope=CLIENT'));
-    }
-    qs += `&candidate_id=is.null&client_id=eq.${encodeURIComponent(client_id)}`;
-  } else {
-    // direct filters (optional; can include candidate+client when both are provided)
-    if (candidate_id) {
-      if (!__isUuid(candidate_id)) return withCORS(env, req, badRequest('candidate_id must be uuid'));
-      qs += `&candidate_id=eq.${encodeURIComponent(candidate_id)}`;
-    }
-    if (client_id) {
-      if (!__isUuid(client_id)) return withCORS(env, req, badRequest('client_id must be uuid'));
-      qs += `&client_id=eq.${encodeURIComponent(client_id)}`;
-    }
-  }
-
-  if (incoming_like) {
-    const pat = String(incoming_like).replace(/[%]/g, '').trim();
-    if (pat) qs += `&incoming_code=ilike.${encodeURIComponent(`*${pat}*`)}`;
-  }
-
-  const { rows } = await sbFetch(env, qs);
-  const outRows = Array.isArray(rows) ? rows : [];
-
-  // ✅ Add candidate_name / client_name for UI (no DB changes required)
-  try {
-    const candIds = Array.from(new Set(outRows.map(r => r?.candidate_id).filter(Boolean).map(String)));
-    const cliIds  = Array.from(new Set(outRows.map(r => r?.client_id).filter(Boolean).map(String)));
-
-    const candNameById = new Map();
-    const clientNameById = new Map();
-
-    if (candIds.length) {
-      const inParam = candIds.map(encodeURIComponent).join(',');
-      const { rows: crows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/candidates?id=in.(${inParam})&select=id,display_name`
-      );
-      for (const c of (crows || [])) {
-        const id = c?.id ? String(c.id) : '';
-        if (!id) continue;
-        candNameById.set(id, String(c?.display_name || '').trim());
-      }
-    }
-
-    if (cliIds.length) {
-      const inParam = cliIds.map(encodeURIComponent).join(',');
-      const { rows: clrows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/clients?id=in.(${inParam})&select=id,name`
-      );
-      for (const c of (clrows || [])) {
-        const id = c?.id ? String(c.id) : '';
-        if (!id) continue;
-        clientNameById.set(id, String(c?.name || '').trim());
-      }
-    }
-
-    for (const r of outRows) {
-      const cid = r?.candidate_id ? String(r.candidate_id) : '';
-      const lid = r?.client_id ? String(r.client_id) : '';
-      r.candidate_name = cid ? (candNameById.get(cid) || null) : null;
-      r.client_name = lid ? (clientNameById.get(lid) || null) : null;
-    }
-  } catch {
-    // best-effort enrichment only; never break listing
-  }
-
-  return withCORS(env, req, ok({ rows: outRows }));
-}
-
-export async function handleUpdateAssignmentBandMapping(env, req, id) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-  if (!id || !__isUuid(id)) return withCORS(env, req, badRequest('id must be uuid'));
-
-  let body;
-  try { body = await parseJSONBody(req); } catch { body = null; }
-
-  // ✅ Gate candidate+client scope explicitly (resolver flow sets one of these flags)
-  const scopeKind = body?.scope_kind != null ? __upper(body.scope_kind) : '';
-  const allowCandidateClientScope =
-    scopeKind === 'CANDIDATE_CLIENT' ||
-    body?.allow_candidate_client_scope === true;
-
-  // Load current row so scope validation is correct for partial updates
-  let existing = null;
-  try {
-    const { rows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/assignment_band_mappings?id=eq.${encodeURIComponent(id)}` +
-        `&select=id,candidate_id,client_id`
-    );
-    existing = (rows && rows[0]) ? rows[0] : null;
-  } catch {
-    existing = null;
-  }
-
-  if (!existing) {
-    const payload = { error: 'not_found', message: 'Mapping not found' };
-    return withCORS(env, req, new Response(JSON.stringify(payload), {
-      status: 404,
-      headers: { 'content-type': 'application/json' }
-    }));
-  }
-
-  const v = __validateBandMappingPayload(body || {}, {
-    allowPartial: true,
-    allowCandidateClientScope
-  });
-  if (!v.ok) return withCORS(env, req, badRequest(v.error));
-
-  const patch = v.value || {};
-
-  // ✅ Enforce scope rules against the *merged* row (existing + patch)
-  const nextCandidateId =
-    (Object.prototype.hasOwnProperty.call(patch, 'candidate_id'))
-      ? (patch.candidate_id || null)
-      : (existing.candidate_id || null);
-
-  const nextClientId =
-    (Object.prototype.hasOwnProperty.call(patch, 'client_id'))
-      ? (patch.client_id || null)
-      : (existing.client_id || null);
-
-  if (nextCandidateId && nextClientId && !allowCandidateClientScope) {
-    return withCORS(env, req, badRequest('scope invalid: candidate_id and client_id cannot both be set'));
-  }
-
-  const res = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/assignment_band_mappings?id=eq.${encodeURIComponent(id)}`,
-    {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return=representation', 'content-type': 'application/json' },
-      body: JSON.stringify(patch)
-    }
-  );
-  const txt = await res.text().catch(() => '');
-  if (!res.ok) return withCORS(env, req, serverError(`Update failed: ${txt}`));
-
-  const json = txt ? JSON.parse(txt) : [];
-  const row = Array.isArray(json) ? json[0] : json;
-  return withCORS(env, req, ok({ row }));
-}
 
 
 export async function handleDeleteAssignmentBandMapping(env, req, id) {
