@@ -1795,7 +1795,6 @@ begin
 end;
 $$;
 
-
 CREATE OR REPLACE FUNCTION public.hr_weekly_validation_preview(p_import_id uuid)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -2070,7 +2069,6 @@ begin
     from hr_with_we h
     where h.candidate_id is not null
   ),
-  -- ✅ NEW: authorised-only matching
   ts_matches_raw as (
     select
       tr.candidate_id,
@@ -2090,6 +2088,7 @@ begin
       tmr.candidate_id,
       tmr.candidate_name,
       tmr.week_ending_date,
+      tmr.raw_timesheet_id as raw_timesheet_id,
       case
         when tmr.raw_timesheet_id is null then null::uuid
         when tts.authorised_at_server is null then null::uuid
@@ -2100,7 +2099,7 @@ begin
         when tts.authorised_at_server is null then true
         else false
       end as awaiting_authorisation,
-      tts.contract_id
+      tts.contract_id as contract_id
     from ts_matches_raw tmr
     left join public.timesheets tts
       on tts.timesheet_id = tmr.raw_timesheet_id
@@ -2113,8 +2112,7 @@ begin
       tm.week_ending_date,
       tm.timesheet_id,
       tm.contract_id,
-      t.actual_schedule_json,
-      t.authorised_at_server
+      t.actual_schedule_json
     from ts_matches tm
     join public.timesheets t
       on t.timesheet_id = tm.timesheet_id
@@ -2291,7 +2289,6 @@ begin
       w.timesheet_id, w.work_date, w.worker_entry_index,
       w.start_hhmm, w.end_hhmm, w.start_minute, w.end_minute, w.break_mins
   ),
-  -- ✅ NEW: simplified comparisons for UI (tick/cross list)
   comparisons_worker as (
     select
       tm.candidate_id,
@@ -2331,42 +2328,6 @@ begin
     join ts_matches tm
       on tm.timesheet_id = pc.timesheet_id
   ),
-  comparisons_hr_only as (
-    select
-      tm.candidate_id,
-      tm.candidate_name,
-      tm.week_ending_date,
-      tm.timesheet_id,
-      hf.work_date,
-      (10000 + hf.hr_start_min)::int as sort_key,
-      null::text as ts_start_hhmm,
-      null::text as ts_end_hhmm,
-      null::int as ts_break_mins,
-      hf.hr_start_hhmm as hr_start_hhmm,
-      hf.hr_end_hhmm as hr_end_hhmm,
-      hf.hr_break_mins as hr_break_mins,
-      null::int as start_diff_mins,
-      null::int as end_diff_mins,
-      null::int as break_diff_mins,
-      false as is_match,
-      'HR_ONLY' as match_status
-    from hr_entries_flat hf
-    join ts_matches tm
-      on tm.candidate_id = hf.candidate_id
-     and tm.week_ending_date = hf.week_ending_date
-     and tm.timesheet_id is not null
-    left join pairing_counts pc2
-      on pc2.timesheet_id = tm.timesheet_id
-     and pc2.work_date = hf.work_date
-     and pc2.match_count = 1
-     and pc2.matched_hr_row_id = hf.hr_row_id
-    where pc2.matched_hr_row_id is null
-  ),
-  comparisons_union as (
-    select * from comparisons_worker
-    union all
-    select * from comparisons_hr_only
-  ),
   comparisons_by_ts as (
     select
       cu.candidate_id,
@@ -2389,7 +2350,7 @@ begin
         )
         order by cu.work_date asc, cu.sort_key asc
       ) as comparisons_json
-    from comparisons_union cu
+    from comparisons_worker cu
     group by cu.candidate_id, cu.week_ending_date, cu.timesheet_id
   ),
   day_set as (
@@ -2405,7 +2366,6 @@ begin
      and hdt.week_ending_date = tm.week_ending_date
     where tm.timesheet_id is not null
   ),
-  -- totals per day (ts) (derived from ts_entries_indexed; if none, will be null in eval)
   ts_day_totals2 as (
     select
       t.timesheet_id,
@@ -2413,61 +2373,6 @@ begin
       sum(t.paid_minutes)::int as ts_paid_minutes
     from ts_entries_indexed t
     group by t.timesheet_id, t.work_date
-  ),
-  ts_day_entries as (
-    select
-      t.timesheet_id,
-      t.work_date,
-      jsonb_agg(
-        jsonb_build_object(
-          'worker_entry_index', t.worker_entry_index,
-          'start_hhmm', t.start_hhmm,
-          'end_hhmm', t.end_hhmm,
-          'break_mins', t.break_mins,
-          'start_minute', t.start_minute,
-          'end_minute', t.end_minute,
-          'paid_minutes', t.paid_minutes
-        )
-        order by t.worker_entry_index asc
-      ) as worker_entries_json,
-      count(*)::int as worker_entry_count
-    from ts_entries_indexed t
-    group by t.timesheet_id, t.work_date
-  ),
-  pairings_json as (
-    select
-      pc.timesheet_id,
-      pc.work_date,
-      jsonb_agg(
-        jsonb_build_object(
-          'worker_entry_index', pc.worker_entry_index,
-          'worker_start_hhmm', pc.worker_start_hhmm,
-          'worker_end_hhmm', pc.worker_end_hhmm,
-          'worker_break_mins', pc.worker_break_mins,
-          'match_status', case
-            when pc.match_count = 1 then 'MATCHED'
-            when pc.match_count = 0 then 'UNMATCHED'
-            else 'AMBIGUOUS'
-          end,
-          'hr_start_hhmm', case when pc.match_count = 1 then pc.matched_hr_start_hhmm else null end,
-          'hr_end_hhmm', case when pc.match_count = 1 then pc.matched_hr_end_hhmm else null end,
-          'hr_break_mins', case when pc.match_count = 1 then pc.matched_hr_break_mins else null end,
-          'start_diff_mins', case when pc.match_count = 1 then (pc.worker_start_min - pc.matched_hr_start_min) else null end,
-          'end_diff_mins', case when pc.match_count = 1 then (pc.worker_end_min - pc.matched_hr_end_min) else null end,
-          'break_diff_mins', case when pc.match_count = 1 then (coalesce(pc.worker_break_mins,0) - coalesce(pc.matched_hr_break_mins,0)) else null end
-        )
-        order by pc.worker_entry_index asc
-      ) as pairings,
-      bool_or(pc.match_count <> 1) as has_pairing_ambiguity,
-      bool_or(
-        pc.match_count = 1 and (
-          (pc.worker_start_min - pc.matched_hr_start_min) <> 0
-          or (pc.worker_end_min - pc.matched_hr_end_min) <> 0
-          or (coalesce(pc.worker_break_mins,0) - coalesce(pc.matched_hr_break_mins,0)) <> 0
-        )
-      ) as has_shift_diffs
-    from pairing_counts pc
-    group by pc.timesheet_id, pc.work_date
   ),
   day_eval as (
     select
@@ -2482,21 +2387,8 @@ begin
 
       (coalesce(hdt.hr_paid_minutes,0) - coalesce(tdt.ts_paid_minutes,0)) as delta_minutes,
 
-      hde.hr_entries_json,
-      hde.hr_entry_count,
-
-      tde.worker_entries_json,
-      tde.worker_entry_count,
-
-      pj.pairings,
-      pj.has_pairing_ambiguity,
-      pj.has_shift_diffs,
-
       case
         when (hdt.hr_paid_minutes is distinct from tdt.ts_paid_minutes) then 'FAIL_TOTALS'
-        when coalesce(hde.hr_entry_count,0) <> coalesce(tde.worker_entry_count,0) then 'FAIL_AMBIGUOUS'
-        when coalesce(pj.has_pairing_ambiguity,false) then 'FAIL_AMBIGUOUS'
-        when coalesce(pj.has_shift_diffs,false) then 'FAIL_SHIFT_DETAILS'
         else 'OK'
       end as day_status
     from day_set ds
@@ -2507,16 +2399,6 @@ begin
     left join ts_day_totals2 tdt
       on tdt.timesheet_id = ds.timesheet_id
      and tdt.work_date = ds.work_date
-    left join hr_day_entries hde
-      on hde.candidate_id = ds.candidate_id
-     and hde.week_ending_date = ds.week_ending_date
-     and hde.work_date = ds.work_date
-    left join ts_day_entries tde
-      on tde.timesheet_id = ds.timesheet_id
-     and tde.work_date = ds.work_date
-    left join pairings_json pj
-      on pj.timesheet_id = ds.timesheet_id
-     and pj.work_date = ds.work_date
   ),
   per_ts as (
     select
@@ -2531,10 +2413,7 @@ begin
           'hr_minutes', de.hr_paid_minutes,
           'ts_minutes', de.ts_paid_minutes,
           'delta_minutes', de.delta_minutes,
-          'day_status', de.day_status,
-          'worker_entries', coalesce(de.worker_entries_json, '[]'::jsonb),
-          'hr_entries', coalesce(de.hr_entries_json, '[]'::jsonb),
-          'pairings', coalesce(de.pairings, '[]'::jsonb)
+          'day_status', de.day_status
         )
         order by de.work_date asc
       ) as days_json,
@@ -2542,7 +2421,6 @@ begin
       bool_or(de.day_status <> 'OK') as has_mismatch,
 
       case
-        when bool_or(de.day_status = 'FAIL_AMBIGUOUS') then 'AMBIGUOUS'
         when bool_or(de.day_status <> 'OK') then 'FAIL'
         else 'OK'
       end as overall_status,
@@ -2552,10 +2430,6 @@ begin
         case
           when de.day_status = 'FAIL_TOTALS' then
             (de.work_date::text || ' totals mismatch: HR=' || coalesce(de.hr_paid_minutes,0)::text || ' TS=' || coalesce(de.ts_paid_minutes,0)::text)
-          when de.day_status = 'FAIL_AMBIGUOUS' then
-            (de.work_date::text || ' ambiguous/unmatched shift pairing; totals match but entries cannot be paired 1:1')
-          when de.day_status = 'FAIL_SHIFT_DETAILS' then
-            (de.work_date::text || ' shift detail mismatch (start/end/break differs)')
           else null
         end
       ) filter (where de.day_status <> 'OK') as failure_reasons_json,
@@ -2563,8 +2437,7 @@ begin
       string_agg(
         (
           de.work_date::text || ':' || de.day_status || ':' ||
-          coalesce(de.hr_paid_minutes,0)::text || ',' || coalesce(de.ts_paid_minutes,0)::text || ':' ||
-          coalesce(de.hr_entry_count,0)::text || ',' || coalesce(de.worker_entry_count,0)::text
+          coalesce(de.hr_paid_minutes,0)::text || ',' || coalesce(de.ts_paid_minutes,0)::text
         ),
         ';' order by de.work_date asc
       ) as sig_text
@@ -2621,10 +2494,7 @@ begin
         'emailed_already', wc.emailed_already,
         'can_email', (wc.has_mismatch and wc.timesheet_id is not null and v_recipient_email is not null and length(btrim(v_recipient_email)) > 0),
 
-        -- keep existing shape for backward compatibility
         'days', wc.days_json,
-
-        -- ✅ NEW: simplified comparisons list for UI tick/cross table
         'comparisons', coalesce(wc.comparisons_json, '[]'::jsonb)
       ) as j
     from with_comp wc
@@ -2713,8 +2583,14 @@ begin
   select
     coalesce(arows.rows_json, '[]'::jsonb),
     (select count(*)::int from hr_with_we h where h.candidate_id is null),
-    (select count(*)::int from ts_matches tm where tm.timesheet_id is null and tm.awaiting_authorisation is false and tm.raw_timesheet_id is null),
-    (select count(*)::int from ts_matches tm where tm.awaiting_authorisation is true)
+    (select count(*)::int
+     from ts_matches tm
+     where tm.timesheet_id is null
+       and tm.awaiting_authorisation is false
+       and tm.raw_timesheet_id is null),
+    (select count(*)::int
+     from ts_matches tm
+     where tm.awaiting_authorisation is true)
   into v_rows, v_unmapped_candidates, v_unmatched_timesheets, v_unauthorised_timesheet_triples
   from all_rows_json arows;
 
@@ -2730,11 +2606,10 @@ begin
     -- Backward-compatible key
     'rows', v_rows,
 
-    -- ✅ NEW: UI-friendly alias (the frontend can use preview.validation_groups directly)
+    -- UI-friendly alias
     'validation_groups', v_rows
   );
 end;
 $function$;
-
 
 
