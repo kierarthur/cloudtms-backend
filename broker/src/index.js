@@ -69822,7 +69822,8 @@ function __isUuid(s){
 function __upper(s){ return String(s||'').trim().toUpperCase(); }
 function __trim(s){ return String(s||'').trim(); }
 
-function __validateBandMappingPayload(p, { allowPartial=false } = {}) {
+
+function __validateBandMappingPayload(p, { allowPartial = false, allowCandidateClientScope = false } = {}) {
   const out = {};
 
   const system_type = p?.system_type != null ? __upper(p.system_type) : null;
@@ -69833,7 +69834,7 @@ function __validateBandMappingPayload(p, { allowPartial=false } = {}) {
   const client_id = p?.client_id ? String(p.client_id) : null;
 
   if (!allowPartial || p?.system_type != null) {
-    if (!['NHSP','HR_WEEKLY'].includes(system_type)) return { error: 'system_type must be NHSP or HR_WEEKLY' };
+    if (!['NHSP', 'HR_WEEKLY'].includes(system_type)) return { error: 'system_type must be NHSP or HR_WEEKLY' };
     out.system_type = system_type;
   }
 
@@ -69857,10 +69858,15 @@ function __validateBandMappingPayload(p, { allowPartial=false } = {}) {
     out.client_id = client_id || null;
   }
 
-  // scope rule: cannot set both
+  // scope rule:
+  // - default: cannot set both
+  // - allowed when allowCandidateClientScope === true (used by the in-context resolver flow)
   const cand = (out.candidate_id !== undefined ? out.candidate_id : candidate_id) || null;
   const cli  = (out.client_id !== undefined ? out.client_id : client_id) || null;
-  if (cand && cli) return { error: 'scope invalid: candidate_id and client_id cannot both be set' };
+
+  if (cand && cli && !allowCandidateClientScope) {
+    return { error: 'scope invalid: candidate_id and client_id cannot both be set' };
+  }
 
   if (p?.active !== undefined) out.active = !!p.active;
   if (p?.notes !== undefined) out.notes = (p.notes == null ? null : String(p.notes));
@@ -69869,6 +69875,49 @@ function __validateBandMappingPayload(p, { allowPartial=false } = {}) {
   out.updated_at = new Date().toISOString();
 
   return { ok: true, value: out };
+}
+
+export async function handleCreateAssignmentBandMapping(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let body;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+
+  // ✅ Gate candidate+client scope explicitly (resolver flow sets one of these flags)
+  const scopeKind = body?.scope_kind != null ? __upper(body.scope_kind) : '';
+  const allowCandidateClientScope =
+    scopeKind === 'CANDIDATE_CLIENT' ||
+    body?.allow_candidate_client_scope === true;
+
+  const v = __validateBandMappingPayload(body || {}, {
+    allowPartial: false,
+    allowCandidateClientScope
+  });
+  if (!v.ok) return withCORS(env, req, badRequest(v.error));
+
+  const nowIso = new Date().toISOString();
+  const payload = {
+    ...v.value,
+    created_at: nowIso,
+    updated_at: nowIso,
+    active: (body?.active === undefined ? true : !!body.active)
+  };
+
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/assignment_band_mappings`,
+    {
+      method: 'POST',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation', 'content-type': 'application/json' },
+      body: JSON.stringify([payload])
+    }
+  );
+  const txt = await res.text().catch(() => '');
+  if (!res.ok) return withCORS(env, req, serverError(`Insert failed: ${txt}`));
+
+  const json = txt ? JSON.parse(txt) : [];
+  const row = Array.isArray(json) ? json[0] : json;
+  return withCORS(env, req, ok({ row }));
 }
 
 export async function handleListAssignmentBandMappings(env, req) {
@@ -69898,13 +69947,19 @@ export async function handleListAssignmentBandMappings(env, req) {
   if (scope === 'GLOBAL') {
     qs += `&candidate_id=is.null&client_id=is.null`;
   } else if (scope === 'CANDIDATE') {
-    if (!candidate_id || !__isUuid(candidate_id)) return withCORS(env, req, badRequest('candidate_id is required for scope=CANDIDATE'));
+    // ✅ includes BOTH candidate-only AND candidate+client rows
+    if (!candidate_id || !__isUuid(candidate_id)) {
+      return withCORS(env, req, badRequest('candidate_id is required for scope=CANDIDATE'));
+    }
     qs += `&candidate_id=eq.${encodeURIComponent(candidate_id)}`;
   } else if (scope === 'CLIENT') {
-    if (!client_id || !__isUuid(client_id)) return withCORS(env, req, badRequest('client_id is required for scope=CLIENT'));
+    // ✅ client-only (candidate_id must be null) — does NOT include candidate+client
+    if (!client_id || !__isUuid(client_id)) {
+      return withCORS(env, req, badRequest('client_id is required for scope=CLIENT'));
+    }
     qs += `&candidate_id=is.null&client_id=eq.${encodeURIComponent(client_id)}`;
   } else {
-    // direct filters (optional)
+    // direct filters (optional; can include candidate+client when both are provided)
     if (candidate_id) {
       if (!__isUuid(candidate_id)) return withCORS(env, req, badRequest('candidate_id must be uuid'));
       qs += `&candidate_id=eq.${encodeURIComponent(candidate_id)}`;
@@ -69916,45 +69971,58 @@ export async function handleListAssignmentBandMappings(env, req) {
   }
 
   if (incoming_like) {
-    const pat = String(incoming_like).replace(/[%]/g,'').trim();
+    const pat = String(incoming_like).replace(/[%]/g, '').trim();
     if (pat) qs += `&incoming_code=ilike.${encodeURIComponent(`*${pat}*`)}`;
   }
 
   const { rows } = await sbFetch(env, qs);
-  return withCORS(env, req, ok({ rows: rows || [] }));
-}
+  const outRows = Array.isArray(rows) ? rows : [];
 
-export async function handleCreateAssignmentBandMapping(env, req) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
+  // ✅ Add candidate_name / client_name for UI (no DB changes required)
+  try {
+    const candIds = Array.from(new Set(outRows.map(r => r?.candidate_id).filter(Boolean).map(String)));
+    const cliIds  = Array.from(new Set(outRows.map(r => r?.client_id).filter(Boolean).map(String)));
 
-  let body;
-  try { body = await parseJSONBody(req); } catch { body = null; }
-  const v = __validateBandMappingPayload(body || {}, { allowPartial: false });
-  if (!v.ok) return withCORS(env, req, badRequest(v.error));
+    const candNameById = new Map();
+    const clientNameById = new Map();
 
-  const nowIso = new Date().toISOString();
-  const payload = {
-    ...v.value,
-    created_at: nowIso,
-    updated_at: nowIso,
-    active: (body?.active === undefined ? true : !!body.active)
-  };
-
-  const res = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/assignment_band_mappings`,
-    {
-      method: 'POST',
-      headers: { ...sbHeaders(env), Prefer: 'return=representation', 'content-type': 'application/json' },
-      body: JSON.stringify([payload])
+    if (candIds.length) {
+      const inParam = candIds.map(encodeURIComponent).join(',');
+      const { rows: crows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/candidates?id=in.(${inParam})&select=id,display_name`
+      );
+      for (const c of (crows || [])) {
+        const id = c?.id ? String(c.id) : '';
+        if (!id) continue;
+        candNameById.set(id, String(c?.display_name || '').trim());
+      }
     }
-  );
-  const txt = await res.text().catch(() => '');
-  if (!res.ok) return withCORS(env, req, serverError(`Insert failed: ${txt}`));
 
-  const json = txt ? JSON.parse(txt) : [];
-  const row = Array.isArray(json) ? json[0] : json;
-  return withCORS(env, req, ok({ row }));
+    if (cliIds.length) {
+      const inParam = cliIds.map(encodeURIComponent).join(',');
+      const { rows: clrows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/clients?id=in.(${inParam})&select=id,name`
+      );
+      for (const c of (clrows || [])) {
+        const id = c?.id ? String(c.id) : '';
+        if (!id) continue;
+        clientNameById.set(id, String(c?.name || '').trim());
+      }
+    }
+
+    for (const r of outRows) {
+      const cid = r?.candidate_id ? String(r.candidate_id) : '';
+      const lid = r?.client_id ? String(r.client_id) : '';
+      r.candidate_name = cid ? (candNameById.get(cid) || null) : null;
+      r.client_name = lid ? (clientNameById.get(lid) || null) : null;
+    }
+  } catch {
+    // best-effort enrichment only; never break listing
+  }
+
+  return withCORS(env, req, ok({ rows: outRows }));
 }
 
 export async function handleUpdateAssignmentBandMapping(env, req, id) {
@@ -69965,10 +70033,55 @@ export async function handleUpdateAssignmentBandMapping(env, req, id) {
   let body;
   try { body = await parseJSONBody(req); } catch { body = null; }
 
-  const v = __validateBandMappingPayload(body || {}, { allowPartial: true });
+  // ✅ Gate candidate+client scope explicitly (resolver flow sets one of these flags)
+  const scopeKind = body?.scope_kind != null ? __upper(body.scope_kind) : '';
+  const allowCandidateClientScope =
+    scopeKind === 'CANDIDATE_CLIENT' ||
+    body?.allow_candidate_client_scope === true;
+
+  // Load current row so scope validation is correct for partial updates
+  let existing = null;
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/assignment_band_mappings?id=eq.${encodeURIComponent(id)}` +
+        `&select=id,candidate_id,client_id`
+    );
+    existing = (rows && rows[0]) ? rows[0] : null;
+  } catch {
+    existing = null;
+  }
+
+  if (!existing) {
+    const payload = { error: 'not_found', message: 'Mapping not found' };
+    return withCORS(env, req, new Response(JSON.stringify(payload), {
+      status: 404,
+      headers: { 'content-type': 'application/json' }
+    }));
+  }
+
+  const v = __validateBandMappingPayload(body || {}, {
+    allowPartial: true,
+    allowCandidateClientScope
+  });
   if (!v.ok) return withCORS(env, req, badRequest(v.error));
 
-  const patch = v.value;
+  const patch = v.value || {};
+
+  // ✅ Enforce scope rules against the *merged* row (existing + patch)
+  const nextCandidateId =
+    (Object.prototype.hasOwnProperty.call(patch, 'candidate_id'))
+      ? (patch.candidate_id || null)
+      : (existing.candidate_id || null);
+
+  const nextClientId =
+    (Object.prototype.hasOwnProperty.call(patch, 'client_id'))
+      ? (patch.client_id || null)
+      : (existing.client_id || null);
+
+  if (nextCandidateId && nextClientId && !allowCandidateClientScope) {
+    return withCORS(env, req, badRequest('scope invalid: candidate_id and client_id cannot both be set'));
+  }
 
   const res = await fetch(
     `${env.SUPABASE_URL}/rest/v1/assignment_band_mappings?id=eq.${encodeURIComponent(id)}`,
@@ -69985,6 +70098,7 @@ export async function handleUpdateAssignmentBandMapping(env, req, id) {
   const row = Array.isArray(json) ? json[0] : json;
   return withCORS(env, req, ok({ row }));
 }
+
 
 export async function handleDeleteAssignmentBandMapping(env, req, id) {
   const user = await requireUser(env, req, ['admin']);
