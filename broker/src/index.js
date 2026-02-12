@@ -26450,13 +26450,18 @@ async function enrichTsfinWithHrCrosscheck(env, ts, tsfinRow, effFlagsIn = null,
   };
 
   // ─────────────────────────────────────────────
-  // ✅ HR WEEKLY shifts: use preloaded list if provided; otherwise fallback to REST
+  // ✅ HR WEEKLY shifts:
+  // Treat nhspShiftsIn as authoritative ONLY when it is a non-empty array.
+  // If it is empty, fall back to REST by candidate/client/date range.
   // ─────────────────────────────────────────────
   let hrShifts = [];
 
-  if (Array.isArray(nhspShiftsIn)) {
+  const preloaded = Array.isArray(nhspShiftsIn) ? nhspShiftsIn : null;
+  const hasPreloaded = (preloaded != null) && (preloaded.length > 0);
+
+  if (hasPreloaded) {
     // Filter to this week's HR shifts for this sheet (and force source_system=HEALTHROSTER)
-    hrShifts = nhspShiftsIn.filter(sh => {
+    hrShifts = preloaded.filter(sh => {
       const ss = String(sh?.source_system || '').toUpperCase();
       if (ss !== 'HEALTHROSTER') return false;
       const d = String(sh?.work_date || '').trim();
@@ -26464,7 +26469,7 @@ async function enrichTsfinWithHrCrosscheck(env, ts, tsfinRow, effFlagsIn = null,
       return (d >= weekStart && d <= weekEndY);
     });
   } else {
-    // Fallback (should become rare once caller batches)
+    // Fallback (correct when preloaded list is missing OR empty)
     try {
       const { rows } = await sbFetch(
         env,
@@ -59408,6 +59413,7 @@ async function applyWeeklyHealthRosterCrosscheck(env, { import_id }) {
   return { triples: triplesMap.size, timesheets_checked: timesheetsChecked };
 }
 
+
 async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } = {}) {
   // Local helpers used by both branches
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
@@ -59699,7 +59705,9 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
         const isHrBasis = isHrRoute || (
           basis === 'HEALTHROSTER_SELF_BILL' ||
           basis === 'HEALTHROSTER_SELF_BILL_ADJUSTMENT' ||
-          basis === 'HEALTHROSTER_ADJUSTMENT'
+          basis === 'HEALTHROSTER_ADJUSTMENT' ||
+          basis === 'HEALTHROSTER_WEEKLY' ||
+          basis === 'HEALTHROSTER_WEEKLY_ADJUSTMENT'
         );
 
         weeklyWork.push({
@@ -59844,6 +59852,37 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
     shiftsByTsId = new Map();
   }
 
+  // ✅ NEW: WEEKLY batch-load timesheet_validations so we only apply import refs once HR validation is OK
+  let weeklyValidationByTsId = new Map();
+  try {
+    const weeklyTsIds = [...new Set(
+      weeklyWork.map(w => w?.ts?.timesheet_id).filter(Boolean).map(x => String(x))
+    )];
+
+    if (weeklyTsIds.length) {
+      const inTs = weeklyTsIds.map(enc).join(',');
+      const { rows: vRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheet_validations` +
+          `?timesheet_id=in.(${inTs})` +
+          `&select=timesheet_id,status,reason_code,validated_at_utc,updated_at`
+      );
+
+      for (const vr of (vRows || [])) {
+        const tid = vr?.timesheet_id ? String(vr.timesheet_id) : '';
+        if (!tid) continue;
+        weeklyValidationByTsId.set(tid, {
+          status: vr?.status != null ? String(vr.status) : null,
+          reason_code: vr?.reason_code != null ? String(vr.reason_code) : null,
+          validated_at_utc: vr?.validated_at_utc ?? null,
+          updated_at: vr?.updated_at ?? null
+        });
+      }
+    }
+  } catch {
+    weeklyValidationByTsId = new Map();
+  }
+
   // 6) Resolve rates in one RPC for all DAILY items
   const ratesRows = await rpcTsfinResolveRatesBatch(env, { items: dailyItemsForRates });
   const ratesByK = new Map();
@@ -59897,10 +59936,17 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
       const preloadedShifts = tsid ? (shiftsByTsId.get(tsid) || []) : [];
       const hasImportedShifts = Array.isArray(preloadedShifts) && preloadedShifts.length > 0;
 
+      const val = tsid ? (weeklyValidationByTsId.get(tsid) || null) : null;
+
       const weeklyOptions = {
         policy_override: policySql || null,
         hr_eff_flags: effFlags || null,
         hr_preloaded_shifts: preloadedShifts,
+
+        // ✅ NEW: validation state (so ref_num can be overridden ONLY after validation OK)
+        hr_validation_status: val?.status || null,
+        hr_validation_reason_code: val?.reason_code || null,
+
         outbox_id,
         write_now: false
       };
@@ -60462,6 +60508,9 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
   return { picked: lease.length, ok, fail, write: wr };
 }
 
+
+
+
 async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin, options = {}) {
   const pc = payChargeFromContract(contract);
   const pay = pc?.pay || null;
@@ -60473,6 +60522,10 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
     write_now = false,
     hr_eff_flags = null,
     hr_preloaded_shifts = null,
+
+    // ✅ NEW: HR weekly validation status (controls when we overwrite refs from import)
+    hr_validation_status = null,
+    hr_validation_reason_code = null,
 
     // ✅ allow caller to pass SQL policy (ctx.out_policy) to avoid any REST policy loads
     policy_override = null
@@ -60609,10 +60662,70 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
   const milUnits = round2(asNumberLocal(curFin?.mileage_units ?? 0));
   const milPay   = round2(asNumberLocal(curFin?.mileage_pay_ex_vat ?? 0));
   const milChg   = round2(asNumberLocal(curFin?.mileage_charge_ex_vat ?? 0));
+
   const actualRaw = Array.isArray(ts?.actual_schedule_json) ? ts.actual_schedule_json : [];
   const actualNorm = normaliseScheduleBreakFields(actualRaw);
 
-  // ✅ Preserve ref_num through normalisation (NHSP corrections store ref_num on schedule entries)
+  // ✅ Determine whether we should override segment ref_num from imported HealthRoster shifts.
+  // Rule: only when HR validation is required and the weekly validation status is OK/OVERRIDDEN.
+  const hrValidationRequired =
+    boolishLocal(hr_eff_flags?.client_hr_validation_required) ||
+    boolishLocal(hr_eff_flags?.hr_validation_required_for_invoice) ||
+    false;
+
+  const valStatusU = String(hr_validation_status || '').trim().toUpperCase();
+  const valReasonU = String(hr_validation_reason_code || '').trim().toUpperCase();
+
+  const isValidatedOk =
+    (valStatusU === 'VALIDATION_OK' || valStatusU === 'OVERRIDDEN' || valStatusU === 'OVERRIDE');
+
+  const isWeeklyHrValidation =
+    (!valReasonU) ? true : valReasonU.includes('HEALTHROSTER_WEEKLY');
+
+  const useImportRefs = !!(hrValidationRequired && isValidatedOk && isWeeklyHrValidation);
+
+  // ✅ Build a fast lookup from imported HealthRoster shifts to their ref_num (Request Id)
+  const parseUtcMs = (v) => {
+    if (v == null) return null;
+    let s = String(v).trim();
+    if (!s) return null;
+    // tolerate "YYYY-MM-DD HH:MM:SS+00"
+    if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(s) && !s.includes('T')) {
+      s = s.replace(' ', 'T');
+    }
+    const d = new Date(s);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.getTime();
+  };
+
+  const hrRefByKey = new Map();     // `${date}|${startMs}|${endMs}` -> ref_num
+  const hrListByDate = new Map();   // date -> [{ startMs, endMs, ref_num }]
+  if (useImportRefs && Array.isArray(hr_preloaded_shifts) && hr_preloaded_shifts.length) {
+    for (const sh of hr_preloaded_shifts) {
+      const ss = String(sh?.source_system || '').trim().toUpperCase();
+      if (ss !== 'HEALTHROSTER') continue;
+
+      const d = sh?.work_date ? String(sh.work_date).slice(0, 10) : '';
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) continue;
+
+      const ref = (sh?.ref_num != null) ? String(sh.ref_num).trim() : '';
+      if (!ref) continue;
+
+      const sMs = parseUtcMs(sh?.start_utc);
+      const eMs = parseUtcMs(sh?.end_utc);
+      if (sMs == null || eMs == null) continue;
+
+      const k = `${d}|${sMs}|${eMs}`;
+      if (!hrRefByKey.has(k)) hrRefByKey.set(k, ref);
+
+      if (!hrListByDate.has(d)) hrListByDate.set(d, []);
+      hrListByDate.get(d).push({ startMs: sMs, endMs: eMs, ref_num: ref });
+    }
+
+    // If multiple shifts per date, keep list; we may use "unique-only" fallback below.
+  }
+
+  // ✅ Preserve ref_num through normalisation (candidate-entered refs)
   const actual = (Array.isArray(actualNorm) ? actualNorm : []).map((seg, idx) => {
     if (!seg || typeof seg !== 'object') return seg;
 
@@ -60813,11 +60926,40 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
     const invoice_locked_invoice_id =
       (p && p.invoice_locked_invoice_id != null) ? p.invoice_locked_invoice_id : undefined;
 
-    const segRefNum = (() => {
+    // Candidate-entered ref (kept only if we are NOT overriding from import)
+    const scheduleRef = (() => {
       const v = seg?.ref_num ?? seg?.ref ?? seg?.reference ?? seg?.refNum ?? null;
       const s = (v == null) ? '' : String(v).trim();
       return s ? s : null;
     })();
+
+    // ✅ If validated OK for HR weekly, force ref_num from imported HealthRoster shifts (Request Id)
+    let segRefNum = scheduleRef;
+
+    if (useImportRefs) {
+      const dateYmd = (seg?.date != null) ? String(seg.date).slice(0, 10) : '';
+      const sMs = parseUtcMs(seg?.start_utc || seg?.start_iso || seg?.startUtc || null);
+      const eMs = parseUtcMs(seg?.end_utc || seg?.end_iso || seg?.endUtc || null);
+
+      let hrRef = null;
+
+      if (dateYmd && sMs != null && eMs != null) {
+        const k2 = `${dateYmd}|${sMs}|${eMs}`;
+        hrRef = hrRefByKey.get(k2) || null;
+      }
+
+      // Fallback: if exactly one HR shift exists for that date, use its ref_num
+      if (!hrRef && dateYmd && hrListByDate.has(dateYmd)) {
+        const arr = hrListByDate.get(dateYmd) || [];
+        const uniq = new Set(arr.map(x => String(x.ref_num || '').trim()).filter(Boolean));
+        if (uniq.size === 1) {
+          hrRef = Array.from(uniq)[0];
+        }
+      }
+
+      // After validation, we use the import ref. If no match found, keep it null (do not keep candidate ref).
+      segRefNum = hrRef ? String(hrRef) : null;
+    }
 
     segments.push({
       segment_id: sid,
@@ -60826,7 +60968,7 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
       end_utc: seg.end_utc || seg.end_iso || null,
       break_mins: Number(seg.break_mins ?? seg.break_minutes ?? 0) || 0,
 
-      // ✅ Ensure ref flows into TSFIN segments for correction timesheets
+      // ✅ After validation, this is the import reference number (Request Id). Candidate refs are ignored.
       ref_num: segRefNum,
 
       breaks: Array.isArray(seg.breaks) ? seg.breaks : [],
