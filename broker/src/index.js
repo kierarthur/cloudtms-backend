@@ -34778,6 +34778,487 @@ async function handleHrAutoprocessApply(env, req, importId) {
   }));
 }
 
+async function handleHrRotaValidationApply(env, req, importId) {
+  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!importId) {
+    return withCORS(env, req, badRequest('import_id is required'));
+  }
+
+  let body;
+  try {
+    body = await parseJSONBody(req);
+  } catch {
+    body = null;
+  }
+
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return withCORS(env, req, badRequest('Invalid JSON body'));
+  }
+
+  const send_email_row_ids = Array.isArray(body?.send_email_row_ids)
+    ? body.send_email_row_ids
+    : [];
+  const emailRowIdSet = new Set(send_email_row_ids.map(String));
+
+  const EMAIL_REASON_CODES = new Set([
+    'actual_hours_mismatch',
+    'start_end_mismatch',
+    'break_minutes_mismatch'
+  ]);
+
+  const uniqStrings = (arr) => {
+    const out = [];
+    const seen = new Set();
+    for (const x of (Array.isArray(arr) ? arr : [])) {
+      const s = String(x || '').trim();
+      if (!s) continue;
+      if (seen.has(s)) continue;
+      seen.add(s);
+      out.push(s);
+    }
+    return out;
+  };
+
+  // ✅ Stable across imports: MUST NOT include import_id or hr_row_id
+  const makeIssueFingerprint = (row) => {
+    const reasonCode = String(row.reason_code || '').toLowerCase();
+    const tsId       = row.timesheet_id || '';
+
+    const detail = row.details || row.detail || {};
+    const hrStart = detail.start_local  || detail.hr_start        || '';
+    const hrEnd   = detail.end_local    || detail.hr_end          || '';
+    const hrHours = detail.hr_hours     || detail.hr_actual_hours || detail.hours_worked || '';
+    const tsHours = detail.ts_hours     || detail.ts_total_hours  || '';
+
+    const dateLocal = row.date_local || row.date || row.shift_date || '';
+    const hrRequestId = row.hr_request_id || row.hrRequestId || '';
+
+    const staffNorm = (row.staff_norm || row.staff_name || row.staff_raw || '')
+      .toLowerCase()
+      .trim();
+    const unitNorm  = (row.unit_norm || row.unit || row.hospital_or_trust || row.hospital_norm || '')
+      .toLowerCase()
+      .trim();
+
+    return [
+      'HEALTHROSTER_DAILY',
+      reasonCode,
+      tsId,
+      hrRequestId,
+      staffNorm,
+      unitNorm,
+      dateLocal,
+      hrStart,
+      hrEnd,
+      hrHours,
+      tsHours
+    ].join('|');
+  };
+
+  const unwrapRpcJsonb = (raw, fnName) => {
+    const j = raw;
+    if (Array.isArray(j)) {
+      const row0 = j[0];
+      if (row0 && typeof row0 === 'object' && fnName && Object.prototype.hasOwnProperty.call(row0, fnName)) {
+        return row0[fnName];
+      }
+      return row0;
+    }
+    if (j && typeof j === 'object' && fnName && Object.prototype.hasOwnProperty.call(j, fnName)) {
+      return j[fnName];
+    }
+    return j;
+  };
+
+  if (LOG) {
+    console.log('[HR_DAILY_APPLY]', JSON.stringify({
+      stage: 'start',
+      import_id: importId,
+      send_email_row_ids_count: send_email_row_ids.length
+    }));
+  }
+
+  // 1) Classification is read-only and drives the payload we send to the transactional RPC
+  let classification;
+  try {
+    classification = await classifyHrRotaValidationImport(env, importId);
+  } catch (e) {
+    console.error('[HR_DAILY_APPLY] classify failed', {
+      import_id: importId,
+      err: e?.message || String(e)
+    });
+    return withCORS(
+      env,
+      req,
+      serverError(`Failed to classify HR daily rota import: ${e?.message || e}`)
+    );
+  }
+
+  if (classification?.error) {
+    if (LOG) {
+      console.warn('[HR_DAILY_APPLY]', JSON.stringify({
+        stage: 'classification_error',
+        import_id: importId,
+        error: classification.error
+      }));
+    }
+    // FE expects classification errors in-body (200)
+    return withCORS(env, req, ok(classification));
+  }
+
+  const rows = Array.isArray(classification?.rows) ? classification.rows : [];
+
+  // 2) Build RPC payload (validation_rows + email_actions)
+  const validation_rows = [];
+  const email_actions = [];
+
+  for (const row of rows) {
+    const timesheetId = row?.timesheet_id || null;
+    if (!timesheetId) continue;
+
+    const statusU = String(row?.status || '').toUpperCase();
+    const reasonCodeRaw = String(row?.reason_code || '').toLowerCase();
+
+    const isOk = (statusU === 'VALIDATION_OK' || statusU === 'OK' || statusU === 'PASS' || statusU === 'VALID');
+
+    // Validation rows: one per timesheet_id (RPC may dedupe by timesheet_id)
+    validation_rows.push({
+      timesheet_id: String(timesheetId),
+      status: isOk ? 'VALIDATION_OK' : 'VALIDATION_ERROR',
+      reason_code: isOk ? 'HEALTHROSTER_DAILY' : (reasonCodeRaw || 'actual_hours_mismatch'),
+      hr_request_id: row?.hr_request_id || row?.hrRequestId || null
+    });
+
+    // Email actions: only for selected hr_row_ids, and only for eligible mismatch reason codes
+    const hrRowId = row?.hr_row_id ? String(row.hr_row_id) : null;
+    if (!hrRowId) continue;
+    if (!emailRowIdSet.has(hrRowId)) continue;
+
+    if (isOk) continue;
+    if (!EMAIL_REASON_CODES.has(reasonCodeRaw)) continue;
+
+    const fp = makeIssueFingerprint(row);
+    if (!fp) continue;
+
+    const workDate = row?.date_local || row?.date || row?.shift_date || null;
+    const staffNorm = (row?.staff_norm || row?.staff_name || row?.staff_raw || '')
+      .toLowerCase()
+      .trim() || null;
+    const hospitalNorm = (row?.unit_norm || row?.unit || row?.hospital_or_trust || row?.hospital_norm || '')
+      .toLowerCase()
+      .trim() || null;
+
+    email_actions.push({
+      timesheet_id: String(timesheetId),
+      issue_fingerprint: fp,
+      reason_code: reasonCodeRaw || 'actual_hours_mismatch',
+      hr_row_id: hrRowId,
+      staff_norm: staffNorm,
+      hospital_norm: hospitalNorm,
+      work_date: workDate
+    });
+  }
+
+  // 3) Transactional RPC
+  let rpcPayload;
+  try {
+    const rpcRaw = await sbRpc(env, 'hr_daily_apply_transactional', {
+      p_import_id: importId,
+      p_payload: { validation_rows, email_actions },
+      p_actor_user_id: user.id
+    });
+    rpcPayload = unwrapRpcJsonb(rpcRaw, 'hr_daily_apply_transactional');
+  } catch (e) {
+    console.error('[HR_DAILY_APPLY] hr_daily_apply_transactional failed', {
+      import_id: importId,
+      err: e?.message || String(e)
+    });
+    return withCORS(env, req, serverError(`Daily apply failed: ${e?.message || e}`));
+  }
+
+  if (!rpcPayload || typeof rpcPayload !== 'object') {
+    return withCORS(env, req, serverError('Daily apply returned invalid RPC payload'));
+  }
+
+  const emailJobs = Array.isArray(rpcPayload?.email_jobs) ? rpcPayload.email_jobs : [];
+
+  // ✅ Affected timesheets for TSFIN refresh:
+  // Prefer RPC-returned ids (new contract), but fall back to validation_rows ids so we still refresh today.
+  const affectedFromRpc = Array.isArray(rpcPayload?.affected_timesheet_ids) ? rpcPayload.affected_timesheet_ids : [];
+  const affectedFallback = validation_rows.map(v => v?.timesheet_id).filter(Boolean);
+  const affectedTimesheetIds = uniqStrings([...(affectedFromRpc || []), ...(affectedFallback || [])]);
+
+  // 4) Post-commit best-effort: queue emails (ensure PDF then mail_outbox)
+  let emailsQueued = 0;
+  const emailFailures = [];
+  const seenJobKey = new Set();
+
+  for (const job of emailJobs) {
+    const tsId = job?.timesheet_id ? String(job.timesheet_id).trim() : '';
+    const fp   = job?.issue_fingerprint ? String(job.issue_fingerprint).trim() : '';
+    const recipientEmail = job?.recipient_email ? String(job.recipient_email).trim() : '';
+
+    const jobKey = `${tsId}__${fp}`;
+    if (!tsId || !fp) {
+      emailFailures.push({ timesheet_id: tsId || null, issue_fingerprint: fp || null, reason: 'INVALID_JOB' });
+      continue;
+    }
+    if (seenJobKey.has(jobKey)) continue;
+    seenJobKey.add(jobKey);
+
+    if (!recipientEmail) {
+      emailFailures.push({ timesheet_id: tsId, issue_fingerprint: fp, reason: 'RECIPIENT_MISSING' });
+      continue;
+    }
+
+    let pdfKey = null;
+    try {
+      pdfKey = await ensureTimesheetPdf(env, tsId);
+    } catch (e) {
+      emailFailures.push({ timesheet_id: tsId, issue_fingerprint: fp, reason: 'PDF_GENERATION_FAILED', err: String(e?.message || e) });
+      continue;
+    }
+    if (!pdfKey) {
+      emailFailures.push({ timesheet_id: tsId, issue_fingerprint: fp, reason: 'PDF_MISSING' });
+      continue;
+    }
+
+    const reasonCode = job?.reason_code ? String(job.reason_code) : 'actual_hours_mismatch';
+    const workDate   = job?.work_date ? String(job.work_date) : null;
+
+    const subject = `Timesheet query – HealthRoster daily validation – ${workDate || ''}${workDate ? ' – ' : ''}${tsId}`;
+    const bodyLines = [
+      `Dear Temporary Staffing,`,
+      ``,
+      `Please find the attached timesheet PDF.`,
+      `This email relates to a HealthRoster daily validation mismatch.`,
+      workDate ? `Work date: ${workDate}` : null,
+      `Reason: ${reasonCode}`,
+      `Issue fingerprint: ${fp}`,
+      ``,
+      `Kind regards,`,
+      `CloudTMS`
+    ].filter(Boolean);
+
+    const body_text = bodyLines.join('\n');
+    const body_html = `<p>${bodyLines.map(l => (l === '' ? '<br/>' : l)).join('<br/>')}</p>`;
+
+    try {
+      const res = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
+        method: 'POST',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify({
+          type: 'TSO_FAILURE',
+          to: recipientEmail,
+          cc: null,
+          subject,
+          body_html,
+          body_text,
+          attachments: [{ r2_key: pdfKey, filename: `Timesheet_${tsId}.pdf` }],
+          status: 'QUEUED',
+          reference: `hr_daily_validation:${importId}:${tsId}`,
+          correlation_id: `HR_DAILY_VALIDATION:${importId}:${tsId}:${fp}`,
+          created_by: user?.id || null
+        })
+      });
+
+      if (!res.ok) {
+        const t = await res.text().catch(() => '');
+        throw new Error(t || `mail_outbox ${res.status}`);
+      }
+
+      emailsQueued += 1;
+    } catch (e) {
+      emailFailures.push({ timesheet_id: tsId, issue_fingerprint: fp, reason: 'MAIL_OUTBOX_INSERT_FAILED', err: String(e?.message || e) });
+    }
+  }
+
+  // 5) Post-commit: TSFIN Strategy A drain-to-completion (strict, like weekly)
+  const tsfinDrainStats = {
+    ids: affectedTimesheetIds.length,
+    enqueued: 0,
+    loops: 0,
+    picked: 0,
+    ok: 0,
+    fail: 0,
+    pending_total: 0,
+    pending_ready: 0,
+    pending_next_attempt_at_min: null,
+    done: true
+  };
+
+  const getPendingSummary = async () => {
+    const raw = await sbRpc(env, 'tsfin_outbox_pending_summary', {
+      p_timesheet_ids: affectedTimesheetIds
+    });
+    const payload = unwrapRpcJsonb(raw, 'tsfin_outbox_pending_summary');
+    if (!payload || typeof payload !== 'object') {
+      return { total: null, ready: null, next_attempt_at_min: null, now: null };
+    }
+    return payload;
+  };
+
+  if (affectedTimesheetIds.length) {
+    try {
+      // Ensure everything is enqueued (idempotent; may already be enqueued by SQL)
+      try {
+        const enqRaw = await sbRpc(env, 'enqueue_ts_financials_priority', {
+          _timesheet_ids: affectedTimesheetIds,
+          _reason: 'CONTEXT_CHANGED'
+        });
+        const enqNum = Number(
+          (LOG && (typeof enqRaw === 'number' || typeof enqRaw === 'string'))
+            ? enqRaw
+            : (Array.isArray(enqRaw) ? (enqRaw?.[0]?.enqueue_ts_financials_priority ?? enqRaw?.[0]?.count ?? enqRaw?.[0]?.row_count) : null)
+        );
+        tsfinDrainStats.enqueued = Number.isFinite(enqNum) && enqNum > 0 ? enqNum : affectedTimesheetIds.length;
+      } catch {
+        tsfinDrainStats.enqueued = affectedTimesheetIds.length;
+      }
+
+      const maxLoops = 60;
+      while (tsfinDrainStats.loops < maxLoops) {
+        const res = await runTsfinWorkerOnce(env, {
+          limit: Math.min(50, affectedTimesheetIds.length),
+          onlyTimesheetIds: affectedTimesheetIds
+        });
+
+        tsfinDrainStats.loops += 1;
+        tsfinDrainStats.picked += Number(res?.picked || 0);
+        tsfinDrainStats.ok += Number(res?.ok || 0);
+        tsfinDrainStats.fail += Number(res?.fail || 0);
+
+        const pending = await getPendingSummary();
+        tsfinDrainStats.pending_total = Number(pending?.total ?? 0) || 0;
+        tsfinDrainStats.pending_ready = Number(pending?.ready ?? 0) || 0;
+        tsfinDrainStats.pending_next_attempt_at_min = pending?.next_attempt_at_min ?? null;
+
+        if (tsfinDrainStats.pending_total === 0) break;
+        if (!res || Number(res?.picked || 0) === 0) break;
+      }
+
+      if (tsfinDrainStats.fail > 0) tsfinDrainStats.done = false;
+      if (tsfinDrainStats.pending_total > 0) tsfinDrainStats.done = false;
+      if (tsfinDrainStats.loops >= maxLoops && tsfinDrainStats.pending_total > 0) tsfinDrainStats.done = false;
+
+      if (!tsfinDrainStats.done) {
+        if (LOG) {
+          console.error('[HR_DAILY_APPLY]', JSON.stringify({
+            stage: 'tsfin_drain_failed_strict_after_apply_commit',
+            import_id: importId,
+            stats: tsfinDrainStats
+          }));
+        }
+
+        const retryAfterSeconds = 30;
+        const resp = {
+          error: 'TSFIN_REFRESH_FAILED_AFTER_APPLY',
+          message:
+            'The database apply succeeded, but TSFIN refresh did not complete. No data was rolled back. Please retry TSFIN recompute using the affected_timesheet_ids.',
+          import_id: importId,
+          affected_timesheet_ids: affectedTimesheetIds,
+          tsfin_drain: tsfinDrainStats,
+          retry: {
+            action: 'RETRY_TSFIN_RECOMPUTE',
+            timesheet_ids: affectedTimesheetIds,
+            next_attempt_at_min: tsfinDrainStats.pending_next_attempt_at_min,
+            retry_after_seconds: retryAfterSeconds
+          },
+          apply: rpcPayload
+        };
+
+        return withCORS(env, req, new Response(JSON.stringify(resp), {
+          status: 500,
+          headers: { 'content-type': 'application/json' }
+        }));
+      }
+    } catch (e) {
+      if (LOG) {
+        console.error('[HR_DAILY_APPLY]', JSON.stringify({
+          stage: 'tsfin_drain_exception_strict_after_apply_commit',
+          import_id: importId,
+          err: String(e?.message || e || ''),
+          stats: tsfinDrainStats
+        }));
+      }
+
+      const retryAfterSeconds = 30;
+      const resp = {
+        error: 'TSFIN_REFRESH_EXCEPTION_AFTER_APPLY',
+        message:
+          'The database apply succeeded, but TSFIN refresh raised an exception. No data was rolled back. Please retry TSFIN recompute using the affected_timesheet_ids.',
+        import_id: importId,
+        affected_timesheet_ids: affectedTimesheetIds,
+        tsfin_drain: tsfinDrainStats,
+        retry: {
+          action: 'RETRY_TSFIN_RECOMPUTE',
+          timesheet_ids: affectedTimesheetIds,
+          next_attempt_at_min: tsfinDrainStats.pending_next_attempt_at_min || null,
+          retry_after_seconds: retryAfterSeconds
+        },
+        apply: rpcPayload
+      };
+
+      return withCORS(env, req, new Response(JSON.stringify(resp), {
+        status: 500,
+        headers: { 'content-type': 'application/json' }
+      }));
+    }
+  }
+
+  // 6) Audit best-effort (include tsfin_drain)
+  try {
+    await writeAudit(
+      env,
+      user,
+      'HR_DAILY_APPLY_TRANSACTIONAL_COMPLETED',
+      {
+        import_id: importId,
+        rpc: {
+          validations_upserted: rpcPayload?.validations_upserted ?? null,
+          timesheets_reference_updated: rpcPayload?.timesheets_reference_updated ?? null,
+          email_actions_received: rpcPayload?.email_actions_received ?? null,
+          email_logs_upserted: rpcPayload?.email_logs_upserted ?? null
+        },
+        emails_queued: emailsQueued,
+        email_failures: emailFailures.slice(0, 50),
+        tsfin_drain: tsfinDrainStats
+      },
+      { entity: 'hr_imports', subject_id: importId, req }
+    );
+  } catch (e) {
+    if (LOG) {
+      console.warn('[HR_DAILY_APPLY] audit failed (non-fatal)', {
+        import_id: importId,
+        err: e?.message || String(e)
+      });
+    }
+  }
+
+  if (LOG) {
+    console.log('[HR_DAILY_APPLY]', JSON.stringify({
+      stage: 'completed',
+      import_id: importId,
+      validations_upserted: rpcPayload?.validations_upserted ?? null,
+      emails_queued: emailsQueued,
+      email_failures_count: emailFailures.length,
+      tsfin_drain: tsfinDrainStats
+    }));
+  }
+
+  return withCORS(env, req, ok({
+    import_id: importId,
+    apply: rpcPayload,
+    post_commit: {
+      emails_queued: emailsQueued,
+      email_failures: emailFailures,
+      tsfin_drain: tsfinDrainStats
+    }
+  }));
+}
 
 
 async function findCandidateByImportName(env, staffName, { trustNorm } = {}) {
@@ -46190,8 +46671,6 @@ async function findAuthorisedTimesheet(env, { candidate_id, ymd, start_hhmm, end
   return null;
 }
 
-
-
 async function handleHrRotaResolveMappings(env, req, importId) {
   const enc   = encodeURIComponent;
   const norm  = (s) => String(s || '').trim().toLowerCase();
@@ -46219,6 +46698,11 @@ async function handleHrRotaResolveMappings(env, req, importId) {
     : [];
   const clientAliases = Array.isArray(body?.client_aliases)
     ? body.client_aliases.filter(Boolean)
+    : [];
+
+  // ✅ NEW: role/target mappings (daily) — stored on hr_rows.payload_json so preview+reclassify can use it
+  const roleMappings = Array.isArray(body?.role_mappings)
+    ? body.role_mappings.filter(Boolean)
     : [];
 
   // ─────────────────────────────────────────────────────────────
@@ -46265,6 +46749,93 @@ async function handleHrRotaResolveMappings(env, req, importId) {
       }
     } catch (e) {
       console.warn('[HR_ROTA_RESOLVE] hr_name_mappings upsert exception', {
+        import_id: importId,
+        err: e?.message || String(e)
+      });
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 1b) ✅ NEW: Persist role/target selection for this import by patching hr_rows.payload_json
+  //     NOTE: hr_row_id is import-specific, so this stores the selection for THIS import.
+  //     Durable cross-import role mapping requires a DB table; none exists in current schema.
+  // ─────────────────────────────────────────────────────────────
+  let roleMappingsApplied = 0;
+
+  if (roleMappings.length) {
+    try {
+      // Validate and normalise incoming role mappings
+      const wanted = [];
+      const seen = new Set();
+
+      for (const rm of roleMappings) {
+        if (!rm) continue;
+        const hrRowId = rm.hr_row_id ? String(rm.hr_row_id).trim() : '';
+        const targetId = (rm.target_id || rm.timesheet_target_id || rm.timesheet_id)
+          ? String(rm.target_id || rm.timesheet_target_id || rm.timesheet_id).trim()
+          : '';
+
+        if (!hrRowId || !targetId) continue;
+
+        const k = `${hrRowId}__${targetId}`;
+        if (seen.has(k)) continue;
+        seen.add(k);
+
+        wanted.push({ hrRowId, targetId });
+      }
+
+      if (wanted.length) {
+        const idParam = wanted.map(x => enc(x.hrRowId)).join(',');
+        const { rows: hrRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/hr_rows` +
+            `?import_id=eq.${enc(importId)}` +
+            `&id=in.(${idParam})` +
+            `&select=id,payload_json`
+        );
+
+        const hrMap = new Map((hrRows || []).map(r => [String(r.id), r]));
+
+        for (const it of wanted) {
+          const row = hrMap.get(String(it.hrRowId));
+          if (!row) continue;
+
+          let payload = row.payload_json || {};
+          if (typeof payload === 'string') {
+            try { payload = JSON.parse(payload); } catch { payload = {}; }
+          }
+          if (!payload || typeof payload !== 'object' || Array.isArray(payload)) payload = {};
+
+          // Store selection in payload_json (import-scoped)
+          payload.resolved_timesheet_id = it.targetId;
+          payload.resolved_timesheet_set_at_utc = nowIso;
+          payload.resolved_timesheet_set_by = user?.id || null;
+
+          const patchRes = await fetch(
+            `${env.SUPABASE_URL}/rest/v1/hr_rows?id=eq.${enc(it.hrRowId)}`,
+            {
+              method: 'PATCH',
+              headers: { ...sbHeaders(env), Prefer: 'return-minimal', 'content-type': 'application/json' },
+              body: JSON.stringify({ payload_json: payload })
+            }
+          );
+
+          if (!patchRes.ok) {
+            const err = await patchRes.text().catch(() => '');
+            console.warn('[HR_ROTA_RESOLVE] hr_rows role mapping patch failed', {
+              import_id: importId,
+              hr_row_id: it.hrRowId,
+              target_id: it.targetId,
+              err
+            });
+            continue;
+          }
+
+          roleMappingsApplied += 1;
+        }
+      }
+    } catch (e) {
+      console.warn('[HR_ROTA_RESOLVE] role_mappings persist failed (non-fatal)', {
         import_id: importId,
         err: e?.message || String(e)
       });
@@ -46484,8 +47055,481 @@ async function handleHrRotaResolveMappings(env, req, importId) {
   return withCORS(env, req, ok({
     import_id: importId,
     candidate_mappings_applied: hrNameRows.length,
-    client_aliases_applied: clientAliases.length
+    client_aliases_applied: clientAliases.length,
+    role_mappings_applied: roleMappingsApplied
   }));
+}
+
+async function handleHrRotaValidationPreview(env, req, importId) {
+  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!importId) {
+    return withCORS(env, req, badRequest('import_id is required'));
+  }
+
+  const enc = encodeURIComponent;
+  const norm = (s) => String(s || '').trim().toLowerCase();
+
+  const EMAIL_REASON_CODES = new Set([
+    'actual_hours_mismatch',
+    'start_end_mismatch',
+    'break_minutes_mismatch'
+  ]);
+
+  // ✅ Stable across imports: MUST NOT include import_id or hr_row_id (row IDs change each import)
+  const makeIssueFingerprint = (row) => {
+    const reasonCode = String(row.reason_code || '').toLowerCase();
+    const tsId       = row.timesheet_id || '';
+
+    const detail = row.details || row.detail || {};
+    const hrStart = detail.start_local  || detail.hr_start        || '';
+    const hrEnd   = detail.end_local    || detail.hr_end          || '';
+    const hrHours = detail.hr_hours     || detail.hr_actual_hours || detail.hours_worked || '';
+    const tsHours = detail.ts_hours     || detail.ts_total_hours  || '';
+
+    const dateLocal = row.date_local || row.date || row.shift_date || '';
+    const hrRequestId = row.hr_request_id || row.hrRequestId || '';
+
+    const staffNorm = (row.staff_norm || row.staff_name || row.staff_raw || '')
+      .toLowerCase()
+      .trim();
+    const unitNorm  = (row.unit_norm || row.unit || row.hospital_or_trust || row.hospital_norm || '')
+      .toLowerCase()
+      .trim();
+
+    return [
+      'HEALTHROSTER_DAILY',
+      reasonCode,
+      tsId,
+      hrRequestId,
+      staffNorm,
+      unitNorm,
+      dateLocal,
+      hrStart,
+      hrEnd,
+      hrHours,
+      tsHours
+    ].join('|');
+  };
+
+  const unwrapRpcJsonb = (raw, fnName) => {
+    const j = raw;
+    if (Array.isArray(j)) {
+      const row0 = j[0];
+      if (row0 && typeof row0 === 'object' && fnName && Object.prototype.hasOwnProperty.call(row0, fnName)) {
+        return row0[fnName];
+      }
+      return row0;
+    }
+    if (j && typeof j === 'object' && fnName && Object.prototype.hasOwnProperty.call(j, fnName)) {
+      return j[fnName];
+    }
+    return j;
+  };
+
+  const toYmdFromIso = (isoLike) => {
+    const s = String(isoLike || '');
+    const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (m && m[1]) return m[1];
+    try {
+      const d = new Date(s);
+      if (Number.isNaN(d.getTime())) return null;
+      return d.toISOString().slice(0, 10);
+    } catch {
+      return null;
+    }
+  };
+
+  // caches to avoid per-row fetches
+  const candidateCache = new Map(); // `${staffNorm}|${trustNorm}` -> candidate_id|null
+  const clientCache = new Map();    // trustNorm -> client_id|null
+  const tsCache = new Map();        // candidate_id -> daily timesheets array
+
+  async function resolveCandidateCached(staffRaw, staffNorm, trustNorm) {
+    const k = `${norm(staffNorm || staffRaw)}|${String(trustNorm || '').trim().toLowerCase()}`;
+    if (candidateCache.has(k)) return candidateCache.get(k);
+    let out = null;
+    try {
+      out = await findCandidateByImportName(env, staffRaw || staffNorm, { trustNorm: String(trustNorm || '').trim().toLowerCase() });
+    } catch {
+      out = null;
+    }
+    candidateCache.set(k, out || null);
+    return out || null;
+  }
+
+  async function resolveClientCached(hospRaw) {
+    const trustNorm = norm(hospRaw);
+    if (!trustNorm) return null;
+    if (clientCache.has(trustNorm)) return clientCache.get(trustNorm);
+    let out = null;
+    try {
+      out = await resolveClientId(env, hospRaw);
+    } catch {
+      out = null;
+    }
+    clientCache.set(trustNorm, out || null);
+    return out || null;
+  }
+
+  async function loadDailyTimesheetsForCandidate(candidateId) {
+    if (!candidateId) return [];
+    const k = String(candidateId);
+    if (tsCache.has(k)) return tsCache.get(k);
+
+    let tsRows = [];
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?candidate_id=eq.${enc(candidateId)}` +
+          `&sheet_scope=eq.DAILY` +
+          `&is_current=eq.true` +
+          `&select=timesheet_id,worked_start_iso,hospital_norm,contract_id,job_title_norm,band`
+      );
+      tsRows = rows || [];
+    } catch {
+      tsRows = [];
+    }
+
+    tsCache.set(k, tsRows);
+    return tsRows;
+  }
+
+  try {
+    const result = await classifyHrRotaValidationImport(env, importId);
+    if (result.error) {
+      if (LOG) {
+        console.warn('[HR_DAILY_PREVIEW]', JSON.stringify({
+          import_id: importId,
+          stage: 'classification_error',
+          error: result.error
+        }));
+      }
+      // propagate error in body but still 200 (FE handles it)
+      return withCORS(env, req, ok(result));
+    }
+
+    const rows = Array.isArray(result.rows) ? result.rows : [];
+
+    // ── Load hr_rows payload_json for grade + resolved_timesheet_id (import-scoped) ──
+    const hrRowIds = rows
+      .map(r => (r && r.hr_row_id ? String(r.hr_row_id).trim() : ''))
+      .filter(Boolean);
+
+    const hrMetaById = new Map(); // hr_row_id -> { grade_raw, resolved_timesheet_id }
+    if (hrRowIds.length) {
+      try {
+        const idParam = hrRowIds.map(enc).join(',');
+        const { rows: hrRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/hr_rows` +
+            `?import_id=eq.${enc(importId)}` +
+            `&id=in.(${idParam})` +
+            `&select=id,assignment_grade_norm,payload_json`
+        );
+
+        for (const r of (hrRows || [])) {
+          const id = r?.id ? String(r.id) : '';
+          if (!id) continue;
+
+          let payload = r.payload_json || {};
+          if (typeof payload === 'string') {
+            try { payload = JSON.parse(payload); } catch { payload = {}; }
+          }
+          if (!payload || typeof payload !== 'object' || Array.isArray(payload)) payload = {};
+
+          const grade =
+            r.assignment_grade_norm ||
+            payload.grade_raw ||
+            payload.Request_Grade ||
+            payload.request_grade ||
+            payload.grade ||
+            null;
+
+          const resolvedTs =
+            payload.resolved_timesheet_id ||
+            payload.resolved_target_timesheet_id ||
+            payload.resolved_target_id ||
+            null;
+
+          hrMetaById.set(id, {
+            grade_raw: grade ? String(grade) : null,
+            resolved_timesheet_id: resolvedTs ? String(resolvedTs) : null
+          });
+        }
+      } catch (e) {
+        if (LOG) {
+          console.warn('[HR_DAILY_PREVIEW]', JSON.stringify({
+            stage: 'hr_rows_meta_lookup_failed',
+            import_id: importId,
+            err: e?.message || String(e)
+          }));
+        }
+      }
+    }
+
+    // ── Resolve recipient_email per client_id (clients.ts_queries_email) ─────
+    const clientIdSet = new Set();
+    for (const row of rows) {
+      const cid = row?.client_id ? String(row.client_id) : '';
+      if (cid) clientIdSet.add(cid);
+    }
+
+    const clientToTsQueriesEmail = new Map();
+    if (clientIdSet.size) {
+      try {
+        const ids = Array.from(clientIdSet);
+        const inList = ids.map(enc).join(',');
+        const { rows: cRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/clients` +
+            `?id=in.(${inList})&select=id,ts_queries_email`
+        );
+        for (const c of (cRows || [])) {
+          const id = c?.id ? String(c.id) : '';
+          if (!id) continue;
+          const em = (c?.ts_queries_email != null) ? String(c.ts_queries_email).trim() : '';
+          clientToTsQueriesEmail.set(id, em || null);
+        }
+      } catch (e) {
+        if (LOG) {
+          console.warn('[HR_DAILY_PREVIEW]', JSON.stringify({
+            stage: 'clients_ts_queries_email_lookup_failed',
+            import_id: importId,
+            err: e?.message || String(e)
+          }));
+        }
+      }
+    }
+
+    // ── Precompute fingerprints for rows that *could* ever have an email ─────
+    const fingerprints = [];
+    const rowFingerprints = new Array(rows.length).fill(null);
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const reasonCode = String(row.reason_code || '').toLowerCase();
+      const tsId       = row.timesheet_id || null;
+
+      const canEmailBase =
+        !!tsId &&
+        !!reasonCode &&
+        EMAIL_REASON_CODES.has(reasonCode);
+
+      if (!canEmailBase) {
+        rowFingerprints[i] = null;
+        continue;
+      }
+
+      const fp = makeIssueFingerprint(row);
+      rowFingerprints[i] = fp;
+      if (fp) fingerprints.push(fp);
+    }
+
+    // ── Look up which fingerprints already have an email row ────────────────
+    let alreadySentSet = new Set();
+    if (fingerprints.length) {
+      try {
+        const uniqueFps = Array.from(new Set(fingerprints));
+        const { rows: sentRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/hr_issue_emails` +
+            `?issue_fingerprint=in.(${uniqueFps.map(enc).join(',')})` +
+            `&select=issue_fingerprint`
+        );
+        alreadySentSet = new Set((sentRows || []).map(r => r.issue_fingerprint));
+      } catch (e) {
+        if (LOG) {
+          console.warn('[HR_DAILY_PREVIEW]', JSON.stringify({
+            stage: 'hr_issue_emails_lookup_failed',
+            import_id: importId,
+            err: e?.message || String(e)
+          }));
+        }
+      }
+    }
+
+    const decoratedRows = [];
+    for (let idx = 0; idx < rows.length; idx++) {
+      const row = rows[idx];
+
+      const reasonCode = String(row.reason_code || '').toLowerCase();
+      const tsId       = row.timesheet_id || null;
+      const dateLocal  = row.date_local || row.date || row.shift_date || null;
+
+      // Augment with grade + import-scoped resolved target (if set)
+      const hrid = row?.hr_row_id ? String(row.hr_row_id).trim() : '';
+      const meta = hrid ? (hrMetaById.get(hrid) || null) : null;
+      const grade_raw = meta?.grade_raw || null;
+      const resolved_timesheet_id = meta?.resolved_timesheet_id || null;
+
+      // Resolve candidate/client identifiers for UI + role mapping payload context
+      const staffRaw = row.staff_name || row.staff_raw || '';
+      const staffNorm = row.staff_norm || '';
+      const hospRaw = row.hospital_or_trust || row.unit || row.hospital_norm || '';
+      const trustNorm = row.trust_norm || row.unit_norm || '';
+
+      let candidate_id = row?.candidate_id || null;
+      if (!candidate_id) {
+        candidate_id = await resolveCandidateCached(staffRaw, staffNorm, trustNorm);
+      }
+
+      let client_id = row?.client_id || null;
+      if (!client_id) {
+        client_id = await resolveClientCached(hospRaw);
+      }
+
+      // Build timesheet target options ONLY when the row is ambiguous/unmatched for timesheet selection
+      let role_resolution_required = false;
+      let timesheet_target_options = [];
+
+      if (reasonCode === 'timesheet_not_found_or_ambiguous' && candidate_id && dateLocal) {
+        const tsRows = await loadDailyTimesheetsForCandidate(candidate_id);
+
+        const hospNorm = norm(hospRaw || trustNorm || '');
+        const filtered = [];
+        for (const t of (tsRows || [])) {
+          const ymd = toYmdFromIso(t.worked_start_iso) || null;
+          if (!ymd || ymd !== String(dateLocal).slice(0, 10)) continue;
+
+          if (hospNorm && t.hospital_norm) {
+            const tsHosp = norm(t.hospital_norm);
+            if (tsHosp !== hospNorm) continue;
+          }
+          filtered.push(t);
+        }
+
+        // Only treat as role/target ambiguity when >1 candidate timesheet exists for that date (within hospital scope)
+        if (filtered.length > 1) {
+          // If an import-scoped resolution exists and matches one of the candidates,
+          // collapse options to the single selected target so the UI no longer blocks apply.
+          const matchResolved = resolved_timesheet_id
+            ? filtered.find(x => String(x.timesheet_id) === String(resolved_timesheet_id))
+            : null;
+
+          if (matchResolved) {
+            const labelBits = [];
+            const jt = matchResolved.job_title_norm ? String(matchResolved.job_title_norm).trim() : '';
+            const b  = matchResolved.band ? String(matchResolved.band).trim() : '';
+            if (jt) labelBits.push(jt.toUpperCase());
+            if (b) labelBits.push(b);
+            const lbl = labelBits.length ? labelBits.join(' – ') : String(matchResolved.timesheet_id);
+
+            timesheet_target_options = [{
+              target_id: String(matchResolved.timesheet_id),
+              label: lbl,
+              contract_id: matchResolved.contract_id || null,
+              role: jt ? jt.toUpperCase() : null,
+              band: b || null
+            }];
+
+            role_resolution_required = false;
+          } else {
+            role_resolution_required = true;
+
+            timesheet_target_options = filtered.map(x => {
+              const labelBits = [];
+              const jt = x.job_title_norm ? String(x.job_title_norm).trim() : '';
+              const b  = x.band ? String(x.band).trim() : '';
+              if (jt) labelBits.push(jt.toUpperCase());
+              if (b) labelBits.push(b);
+              const lbl = labelBits.length ? labelBits.join(' – ') : String(x.timesheet_id);
+
+              return {
+                target_id: String(x.timesheet_id),
+                label: lbl,
+                contract_id: x.contract_id || null,
+                role: jt ? jt.toUpperCase() : null,
+                band: b || null
+              };
+            });
+          }
+        }
+      }
+
+      const emailEligible =
+        !!tsId &&
+        !!reasonCode &&
+        EMAIL_REASON_CODES.has(reasonCode);
+
+      const fp = rowFingerprints[idx];
+      const alreadySent = fp ? alreadySentSet.has(fp) : false;
+
+      const recipientEmail = client_id ? (clientToTsQueriesEmail.get(String(client_id)) || null) : null;
+      const recipientMissing = !(recipientEmail && String(recipientEmail).trim());
+      const canEmail =
+        !!fp &&
+        emailEligible &&
+        !recipientMissing;
+
+      decoratedRows.push({
+        ...row,
+
+        // ✅ add identifiers & grade (for daily role/candidate resolve flows)
+        candidate_id: candidate_id || null,
+        client_id: client_id || null,
+        grade_raw: grade_raw || null,
+
+        // ✅ role/target ambiguity support
+        role_resolution_required: !!role_resolution_required,
+        timesheet_target_options: timesheet_target_options,
+        resolved_timesheet_id: resolved_timesheet_id || null,
+
+        // existing email decoration
+        issue_fingerprint: fp || null,
+        recipient_email: recipientEmail || null,
+        recipient_missing: recipientMissing,
+        can_email: canEmail,
+        email_eligible: emailEligible,
+        email_already_sent: alreadySent
+      });
+    }
+
+    if (LOG) {
+      const summary = result.summary || {};
+      const sampleFails = decoratedRows
+        .filter(r => String(r.status || '').toUpperCase() !== 'VALIDATION_OK')
+        .slice(0, 10)
+        .map(r => ({
+          hr_row_id: r.hr_row_id,
+          timesheet_id: r.timesheet_id,
+          status: r.status,
+          reason_code: r.reason_code,
+          role_resolution_required: !!r.role_resolution_required,
+          timesheet_target_options_count: Array.isArray(r.timesheet_target_options) ? r.timesheet_target_options.length : 0,
+          can_email: !!r.can_email,
+          recipient_missing: !!r.recipient_missing
+        }));
+
+      console.log('[HR_DAILY_PREVIEW]', JSON.stringify({
+        import_id: result.import_id,
+        source_system: result.source_system,
+        summary,
+        total_rows: decoratedRows.length,
+        sample_failures: sampleFails
+      }));
+    }
+
+    return withCORS(env, req, ok({
+      import_id: result.import_id,
+      source_system: result.source_system,
+      summary: result.summary,
+      rows: decoratedRows
+    }));
+  } catch (e) {
+    console.error('[HR_ROTA_PREVIEW] error', {
+      import_id: importId,
+      err: e?.message || String(e)
+    });
+    return withCORS(
+      env,
+      req,
+      serverError(`Failed to classify HR daily rota import: ${e?.message || e}`)
+    );
+  }
 }
 
 
@@ -54002,6 +55046,8 @@ async function handleUpdateClientDefault(env, req, id) {
     return withCORS(env, req, serverError('Failed to update client default'));
   }
 }
+
+
 function canonicalizeClientSettingsServer(beforeCs, csInput) {
   const before = (beforeCs && typeof beforeCs === 'object') ? beforeCs : {};
   const in0    = (csInput && typeof csInput === 'object') ? csInput : {};
@@ -54084,6 +55130,17 @@ function canonicalizeClientSettingsServer(beforeCs, csInput) {
   for (const k of BOOL_KEYS) {
     if (Object.prototype.hasOwnProperty.call(in0, k)) out[k] = asBool(in0[k]);
     else if (Object.prototype.hasOwnProperty.call(before, k)) out[k] = asBool(before[k]);
+  }
+
+  // ✅ REQUIRED INVARIANT (server-side, deterministic):
+  // If no_timesheet_required is TRUE, HR validation must be FALSE (validation without timesheets is nonsensical).
+  if (out.no_timesheet_required === true) {
+    out.hr_validation_required = false;
+  }
+
+  // ✅ Safety: NHSP never uses HR validation (even if UI sends garbage)
+  if (out.is_nhsp === true) {
+    out.hr_validation_required = false;
   }
 
   // manual invoices alt email routing
