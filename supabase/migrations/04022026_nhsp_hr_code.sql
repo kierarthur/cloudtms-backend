@@ -2012,6 +2012,8 @@ $function$;
 
 
 
+
+
 create or replace function public.hr_daily_apply_transactional(
   p_import_id uuid,
   p_payload jsonb,
@@ -2183,8 +2185,7 @@ begin
   get diagnostics v_validations_upserted = row_count;
 
   -- 4) Daily behaviour: when VALIDATION_OK and hr_request_id present, set timesheets.reference_number
-  -- ✅ Fix: do NOT use UPDATE ... RETURNING ... INTO (multi-row + undeclared var).
-  -- Instead, collect target ids first, then apply deterministic update once.
+  -- ✅ Fix: collect ids first, then update deterministically, and return affected ids
   create temporary table tmp_ref_updated_ids(
     timesheet_id uuid primary key
   ) on commit drop;
@@ -2374,10 +2375,6 @@ begin
   );
 end;
 $$;
-
-
-
-
 
 
 
