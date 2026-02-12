@@ -136,8 +136,13 @@ declare
   v_ensure_shifts_relinked_invalid_ts_count int := 0;
   v_ensure_remaining_active_detached_count int := 0;
 
+  -- ✅ NEW: MODE_A shift→timesheet linking (fix evidence + HR crosscheck + ref propagation)
+  v_mode_a_shifts_attached_count int := 0;
+  v_mode_a_ts_linked_count int := 0;
+
   v_ensure_sample_pairs jsonb := '[]'::jsonb;
   v_ensure_sample_created_ts_ids jsonb := '[]'::jsonb;
+
 
   -- loop vars for ensure
   v_pair_contract_id uuid;
@@ -1117,7 +1122,7 @@ begin
     ));
   end if;
 
-  -- ─────────────────────────────────────────────
+   -- ─────────────────────────────────────────────
   -- 9) MODE_A mirror ingestion (unchanged)
   -- ─────────────────────────────────────────────
   if array_length(v_mode_a_external_keys, 1) is not null then
@@ -1132,11 +1137,70 @@ begin
   v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','MODE_A_MIRROR_DONE'));
 
   -- ─────────────────────────────────────────────
+  -- ✅ NEW: MODE_A must also link HEALTHROSTER shifts to the base weekly timesheet
+  -- This fixes:
+  --   - Evidence tab "Rows matched = 0"
+  --   - TSFIN HR crosscheck seeing no HR rows (HR_HOURS_MISSING)
+  --   - downstream ref propagation via a stable join key (timesheet_id)
+  -- ─────────────────────────────────────────────
+  create temporary table tmp_mode_a_ts_map(
+    external_row_key text primary key,
+    timesheet_id uuid not null
+  ) on commit drop;
+
+  insert into tmp_mode_a_ts_map(external_row_key, timesheet_id)
+  select distinct
+    p2m.external_row_key,
+    cw0.timesheet_id
+  from tmp_p2_ok_mode p2m
+  join public.contract_weeks cw0
+    on cw0.contract_id = p2m.contract_id
+   and cw0.week_ending_date = p2m.week_ending_date
+   and cw0.is_adjustment is false
+   and coalesce(cw0.additional_seq, 0) = 0
+  where p2m.mode = 'MODE_A'
+    and p2m.external_row_key is not null
+    and cw0.timesheet_id is not null
+  on conflict do nothing;
+
+  select count(*)::int
+  into v_mode_a_ts_linked_count
+  from tmp_mode_a_ts_map mt;
+
+  update public.nhsp_shifts nsu
+     set timesheet_id = mt.timesheet_id,
+         updated_at = v_now
+    from tmp_mode_a_ts_map mt
+   where nsu.source_system = 'HEALTHROSTER'::public.hr_source_enum
+     and nsu.cancelled_at_utc is null
+     and nsu.latest_import_id = p_import_id
+     and nsu.external_row_key = mt.external_row_key
+     and (nsu.timesheet_id is distinct from mt.timesheet_id);
+
+  get diagnostics v_mode_a_shifts_attached_count = row_count;
+
+  -- Ensure TSFIN recompute runs even when validation status itself does not change
+  insert into tmp_aff_ts(timesheet_id)
+  select distinct mt2.timesheet_id
+  from tmp_mode_a_ts_map mt2
+  where mt2.timesheet_id is not null
+  on conflict do nothing;
+
+  v_steps := v_steps || jsonb_build_array(
+    jsonb_build_object(
+      'step','MODE_A_SHIFTS_LINKED',
+      'mode_a_ts_linked_count', v_mode_a_ts_linked_count,
+      'mode_a_shifts_attached_count', v_mode_a_shifts_attached_count
+    )
+  );
+
+  -- ─────────────────────────────────────────────
   -- 10) MODE_A weekly validation upserts + email state
   --     ✅ NEW: detect which timesheets had meaningful validation changes and enqueue TSFIN for them
   -- ─────────────────────────────────────────────
   select public.hr_weekly_validation_preview(p_import_id := p_import_id)
   into v_weekly_val_payload;
+
 
   if v_weekly_val_payload is null or jsonb_typeof(v_weekly_val_payload) <> 'object' then
     raise exception 'hr_weekly_apply_transactional: hr_weekly_validation_preview returned non-object payload.';
