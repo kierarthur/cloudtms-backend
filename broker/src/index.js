@@ -40081,6 +40081,7 @@ async function handleUpdateClient(env, req, clientId) {
     delete csInput.weekly_mode;
     delete csInput.hr_weekly_behaviour;
     delete csInput.__from_ui;
+    delete csInput.ts_queries_email; // never allow this to be treated as client_settings
 
     if ('hr_validation_required' in data)        csInput.hr_validation_required        = !!data.hr_validation_required;
     if ('ts_reference_required' in data)         csInput.ts_reference_required         = !!data.ts_reference_required;
@@ -40188,7 +40189,7 @@ async function handleUpdateClient(env, req, clientId) {
       send_manual_invoices_to_different_email,
       manual_invoices_alt_email_address,
 
-      // ✅ NEW: ensure these never fall into clients table patch
+      // ensure these never fall into clients table patch
       invoice_consolidation_mode,
       reference_number_required_to_issue_invoice,
 
@@ -40196,6 +40197,16 @@ async function handleUpdateClient(env, req, clientId) {
     } = data;
 
     const clientPatch = {};
+
+    // ✅ Explicit clear semantics for ts_queries_email:
+    // - if key present and blank => set NULL (clears the field)
+    // - if key present and non-blank => trimmed string
+    // - if not present => no change
+    if (Object.prototype.hasOwnProperty.call(clientPatchRaw, 'ts_queries_email')) {
+      clientPatch.ts_queries_email = normEmail(clientPatchRaw.ts_queries_email);
+      delete clientPatchRaw.ts_queries_email;
+    }
+
     for (const [k, v] of Object.entries(clientPatchRaw)) {
       if (v === '' || v === undefined) continue;
       clientPatch[k] = v;
@@ -40232,10 +40243,8 @@ async function handleUpdateClient(env, req, clientId) {
     if (Object.keys(csInput).length) {
       const hasBefore = !!beforeCs?.id;
 
-      // Canonicalise server-side
       const canon = canonicalizeClientSettingsServer(beforeCs, csInput);
 
-      // ✅ Ensure new fields survive canonicaliser; never write junk
       if (Object.prototype.hasOwnProperty.call(csInput, 'invoice_consolidation_mode')) {
         const v = normInvoiceConsol(csInput.invoice_consolidation_mode);
         if (v === '__INVALID__') {
@@ -40247,7 +40256,6 @@ async function handleUpdateClient(env, req, clientId) {
         canon.reference_number_required_to_issue_invoice = asBool(csInput.reference_number_required_to_issue_invoice);
       }
 
-      // ✅ VALIDATION: if toggle ON, require email
       if (canon.send_manual_invoices_to_different_email && !canon.manual_invoices_alt_email_address) {
         return withCORS(env, req, badRequest('manual_invoices_alt_email_address is required when send_manual_invoices_to_different_email is true'));
       }
@@ -40258,7 +40266,6 @@ async function handleUpdateClient(env, req, clientId) {
         }
       }
 
-      // ✅ VALIDATION: shift-time rule = either ALL blank or ALL filled
       {
         const filled = TIME_KEYS.filter(k => canon[k] != null && String(canon[k]).trim() !== '');
         if (filled.length > 0 && filled.length < TIME_KEYS.length) {
@@ -40296,47 +40303,45 @@ async function handleUpdateClient(env, req, clientId) {
         }
         const csJson = await csRes.json().catch(() => ({}));
         client_settings_updated = Array.isArray(csJson) ? csJson[0] : csJson;
-   } else {
-  const nowIso = new Date().toISOString();
+      } else {
+        const nowIso = new Date().toISOString();
 
-  const ukTodayYmd = (() => {
-    const parts = new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Europe/London',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    }).formatToParts(new Date(nowIso));
-    const m = {};
-    for (const p of parts) m[p.type] = p.value;
-    return `${m.year}-${m.month}-${m.day}`;
-  })();
+        const ukTodayYmd = (() => {
+          const parts = new Intl.DateTimeFormat('en-GB', {
+            timeZone: 'Europe/London',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+          }).formatToParts(new Date(nowIso));
+          const m = {};
+          for (const p of parts) m[p.type] = p.value;
+          return `${m.year}-${m.month}-${m.day}`;
+        })();
 
-  const insertRow = {
-    client_id: clientId,
-    ...canon,
-    created_at: nowIso,
-    updated_at: nowIso
-  };
-  delete insertRow.id;
+        const insertRow = {
+          client_id: clientId,
+          ...canon,
+          created_at: nowIso,
+          updated_at: nowIso
+        };
+        delete insertRow.id;
 
-  // ✅ Default effective_from only when inserting a new settings row
-  if (!Object.prototype.hasOwnProperty.call(insertRow, 'effective_from') || !String(insertRow.effective_from || '').trim()) {
-    insertRow.effective_from = ukTodayYmd;
-  }
+        if (!Object.prototype.hasOwnProperty.call(insertRow, 'effective_from') || !String(insertRow.effective_from || '').trim()) {
+          insertRow.effective_from = ukTodayYmd;
+        }
 
-  const csRes = await fetch(`${env.SUPABASE_URL}/rest/v1/client_settings`, {
-    method: "POST",
-    headers: { ...sbHeaders(env), "Prefer": "return=representation" },
-    body: JSON.stringify(insertRow)
-  });
-  if (!csRes.ok) {
-    const err = await csRes.text();
-    return withCORS(env, req, badRequest(`Client settings insert failed: ${err}`));
-  }
-  const csJson = await csRes.json().catch(() => ({}));
-  client_settings_updated = Array.isArray(csJson) ? csJson[0] : csJson;
-}
-
+        const csRes = await fetch(`${env.SUPABASE_URL}/rest/v1/client_settings`, {
+          method: "POST",
+          headers: { ...sbHeaders(env), "Prefer": "return=representation" },
+          body: JSON.stringify(insertRow)
+        });
+        if (!csRes.ok) {
+          const err = await csRes.text();
+          return withCORS(env, req, badRequest(`Client settings insert failed: ${err}`));
+        }
+        const csJson = await csRes.json().catch(() => ({}));
+        client_settings_updated = Array.isArray(csJson) ? csJson[0] : csJson;
+      }
 
       const beforeHr      = !!(beforeCs?.hr_validation_required        ?? false);
       const beforeRef     = !!(beforeCs?.ts_reference_required         ?? false);
@@ -40437,7 +40442,6 @@ async function handleCreateClient(env, req) {
     return m ? m[1] : s;
   };
 
-  // Small helper: accept true / "true" / "yes" / "1" / "on"
   const asBool = (v) => {
     if (v === true) return true;
     if (v === false || v == null) return false;
@@ -40451,8 +40455,6 @@ async function handleCreateClient(env, req) {
     return s ? s : null;
   };
 
-  // ✅ NEW: strict canonical invoice consolidation mode (reject unknown; never write junk)
-  // Allowed: NONE | BY_WEEK | ANY_WEEK (UI may send ALL → ANY_WEEK)
   const normInvoiceConsol = (v) => {
     if (v == null) return null;
     const s = String(v).trim().toUpperCase();
@@ -40474,14 +40476,11 @@ async function handleCreateClient(env, req) {
       invoice_reference_required,
       default_submission_mode,
 
-      // NEW: auto-invoice default at client_settings level (can be sent at top level)
       auto_invoice_default,
 
-      // ✅ NEW: invoice settings (can be sent at top level OR inside client_settings)
       invoice_consolidation_mode,
       reference_number_required_to_issue_invoice,
 
-      // NEW flags (can be sent at top level)
       is_nhsp,
       self_bill_no_invoices_sent,
       daily_calc_of_invoices,
@@ -40492,7 +40491,6 @@ async function handleCreateClient(env, req) {
       hr_attach_to_invoice,
       ts_attach_to_invoice,
 
-      // manual adjustment email routing (can be sent at top level)
       send_manual_invoices_to_different_email,
       manual_invoices_alt_email_address,
 
@@ -40501,7 +40499,12 @@ async function handleCreateClient(env, req) {
 
     const nowIso = new Date().toISOString();
 
-const clientRes = await fetch(`${env.SUPABASE_URL}/rest/v1/clients`, {
+    // ✅ Ensure ts_queries_email is clearable and normalised at create time
+    if (Object.prototype.hasOwnProperty.call(clientOnly, 'ts_queries_email')) {
+      clientOnly.ts_queries_email = normEmail(clientOnly.ts_queries_email);
+    }
+
+    const clientRes = await fetch(`${env.SUPABASE_URL}/rest/v1/clients`, {
       method: "POST",
       headers: { ...sbHeaders(env), "Prefer": "return=representation" },
       body: JSON.stringify({ ...clientOnly, created_at: nowIso })
@@ -40513,29 +40516,25 @@ const clientRes = await fetch(`${env.SUPABASE_URL}/rest/v1/clients`, {
     const clientJson = await clientRes.json().catch(() => ({}));
     const client = Array.isArray(clientJson) ? clientJson[0] : clientJson;
 
-    // ✅ FIX: guard against null client_settings (typeof null === 'object')
     const csInput = {
       ...((clientSettingsInput && typeof clientSettingsInput === 'object') ? clientSettingsInput : {}),
     };
 
-    // ✅ Strip UI helper keys that are not DB columns
     delete csInput.weekly_mode;
     delete csInput.hr_weekly_behaviour;
     delete csInput.__from_ui;
+    delete csInput.ts_queries_email;
 
-    // Existing flags → client_settings
     if ('hr_validation_required' in data)        csInput.hr_validation_required        = !!hr_validation_required;
     if ('ts_reference_required' in data)         csInput.ts_reference_required         = !!ts_reference_required;
     if ('pay_reference_required' in data)        csInput.pay_reference_required        = !!pay_reference_required;
     if ('invoice_reference_required' in data)    csInput.invoice_reference_required    = !!invoice_reference_required;
     if ('default_submission_mode' in data)       csInput.default_submission_mode       = default_submission_mode;
 
-    // NEW: auto-invoice default (accept either top-level or inside client_settings)
     if ('auto_invoice_default' in data || 'auto_invoice_default' in csInput) {
       csInput.auto_invoice_default = asBool(csInput.auto_invoice_default ?? auto_invoice_default);
     }
 
-    // ✅ NEW: invoice settings (strict)
     if ('invoice_consolidation_mode' in data || 'invoice_consolidation_mode' in csInput) {
       const v = normInvoiceConsol(csInput.invoice_consolidation_mode ?? invoice_consolidation_mode);
       if (v === '__INVALID__') {
@@ -40549,7 +40548,6 @@ const clientRes = await fetch(`${env.SUPABASE_URL}/rest/v1/clients`, {
         asBool(csInput.reference_number_required_to_issue_invoice ?? reference_number_required_to_issue_invoice);
     }
 
-    // NEW flags (default to false/true as per policy)
     if ('is_nhsp' in data || 'is_nhsp' in csInput) {
       csInput.is_nhsp = asBool(csInput.is_nhsp ?? is_nhsp);
     }
@@ -40566,7 +40564,6 @@ const clientRes = await fetch(`${env.SUPABASE_URL}/rest/v1/clients`, {
       csInput.group_nightsat_sunbh = asBool(csInput.group_nightsat_sunbh ?? group_nightsat_sunbh);
     }
 
-    // NEW HR / attach flags
     if ('requires_hr' in data || 'requires_hr' in csInput) {
       csInput.requires_hr = asBool(csInput.requires_hr ?? requires_hr);
     }
@@ -40580,7 +40577,6 @@ const clientRes = await fetch(`${env.SUPABASE_URL}/rest/v1/clients`, {
       csInput.ts_attach_to_invoice = asBool(csInput.ts_attach_to_invoice ?? ts_attach_to_invoice);
     }
 
-    // ✅ manual adjustment email routing
     if ('send_manual_invoices_to_different_email' in data || 'send_manual_invoices_to_different_email' in csInput) {
       csInput.send_manual_invoices_to_different_email =
         asBool(csInput.send_manual_invoices_to_different_email ?? send_manual_invoices_to_different_email);
@@ -40590,19 +40586,13 @@ const clientRes = await fetch(`${env.SUPABASE_URL}/rest/v1/clients`, {
         normEmail(csInput.manual_invoices_alt_email_address ?? manual_invoices_alt_email_address);
     }
 
-    // ✅ Normalise any provided time keys ('' => null)
     for (const k of TIME_KEYS) {
       if (Object.prototype.hasOwnProperty.call(csInput, k)) {
         csInput[k] = normTime(csInput[k]);
       }
     }
 
-    // Desired "new client" baseline = Manual (None) + all flags false
     const setDefaultBool = (key, val) => {
-      if (!Object.prototype.hasOwnProperty.call(csInput, key)) csInput[key] = val;
-    };
-
-    const setDefaultTextIfMissing = (key, val) => {
       if (!Object.prototype.hasOwnProperty.call(csInput, key)) csInput[key] = val;
     };
 
@@ -40620,18 +40610,11 @@ const clientRes = await fetch(`${env.SUPABASE_URL}/rest/v1/clients`, {
     setDefaultBool('requires_hr', false);
     setDefaultBool('autoprocess_hr', false);
 
-    if (!Object.prototype.hasOwnProperty.call(csInput, 'hr_attach_to_invoice')) {
-      csInput.hr_attach_to_invoice = true;
-    }
-    if (!Object.prototype.hasOwnProperty.call(csInput, 'ts_attach_to_invoice')) {
-      csInput.ts_attach_to_invoice = true;
-    }
+    if (!Object.prototype.hasOwnProperty.call(csInput, 'hr_attach_to_invoice')) csInput.hr_attach_to_invoice = true;
+    if (!Object.prototype.hasOwnProperty.call(csInput, 'ts_attach_to_invoice')) csInput.ts_attach_to_invoice = true;
 
-    if (!Object.prototype.hasOwnProperty.call(csInput, 'auto_invoice_default')) {
-      csInput.auto_invoice_default = false;
-    }
+    if (!Object.prototype.hasOwnProperty.call(csInput, 'auto_invoice_default')) csInput.auto_invoice_default = false;
 
-    // ✅ defaults for new invoice settings
     if (!Object.prototype.hasOwnProperty.call(csInput, 'invoice_consolidation_mode')) {
       csInput.invoice_consolidation_mode = 'NONE';
     } else {
@@ -40652,18 +40635,15 @@ const clientRes = await fetch(`${env.SUPABASE_URL}/rest/v1/clients`, {
       csInput.auto_invoice_default = false;
     }
 
-    // ✅ if manual-invoice toggle off => clear email
     if (!asBool(csInput.send_manual_invoices_to_different_email)) {
       csInput.send_manual_invoices_to_different_email = false;
       csInput.manual_invoices_alt_email_address = null;
     }
 
-    // ✅ VALIDATION: if toggle ON, require email
     if (asBool(csInput.send_manual_invoices_to_different_email) && !csInput.manual_invoices_alt_email_address) {
       return withCORS(env, req, badRequest('manual_invoices_alt_email_address is required when send_manual_invoices_to_different_email is true'));
     }
 
-    // ✅ DEFAULT TIMES ONLY WHEN KEY IS ABSENT (blank/null explicitly provided must stay null)
     const setDefaultTimeIfMissing = (key, val) => {
       if (!Object.prototype.hasOwnProperty.call(csInput, key)) csInput[key] = val;
     };
@@ -40680,9 +40660,7 @@ const clientRes = await fetch(`${env.SUPABASE_URL}/rest/v1/clients`, {
     setDefaultTimeIfMissing('bh_start',  '00:00');
     setDefaultTimeIfMissing('bh_end',    '00:00');
 
-    // ✅ VALIDATION: shift-time rule = either ALL blank or ALL filled
     {
-      // re-normalise in case defaults were applied
       for (const k of TIME_KEYS) {
         if (Object.prototype.hasOwnProperty.call(csInput, k)) {
           csInput[k] = normTime(csInput[k]);
@@ -40695,11 +40673,9 @@ const clientRes = await fetch(`${env.SUPABASE_URL}/rest/v1/clients`, {
       }
     }
 
-    // Week ending day (0..6, default 0/Sun)
     const we = Number(csInput.week_ending_weekday);
     csInput.week_ending_weekday = (Number.isInteger(we) && we>=0 && we<=6) ? we : 0;
 
-    // Default + normalise default_submission_mode
     if (!Object.prototype.hasOwnProperty.call(csInput, 'default_submission_mode')) {
       csInput.default_submission_mode = 'ELECTRONIC';
     }
@@ -40721,7 +40697,6 @@ const clientRes = await fetch(`${env.SUPABASE_URL}/rest/v1/clients`, {
       for (const p of partsEf) efMap[p.type] = p.value;
       const ukTodayYmd = `${efMap.year}-${efMap.month}-${efMap.day}`;
 
-      // ✅ DEFAULT: effective_from = UK-local today if missing/blank
       if (!Object.prototype.hasOwnProperty.call(csInput, 'effective_from') || !String(csInput.effective_from || '').trim()) {
         csInput.effective_from = ukTodayYmd;
       }
@@ -40746,7 +40721,6 @@ const clientRes = await fetch(`${env.SUPABASE_URL}/rest/v1/clients`, {
       client_settings = Array.isArray(csJson) ? csJson[0] : csJson;
     }
 
-
     return withCORS(env, req, ok({ client, client_settings }));
   } catch (e) {
     return withCORS(env, req, serverError("Failed to create client"));
@@ -40760,10 +40734,10 @@ async function handleGetClient(env, req, clientId) {
   if (!user) return withCORS(env, req, unauthorized());
 
   try {
-    // Client
+    // Client (explicit select=* so ts_queries_email etc always present)
     const { rows } = await sbFetch(
       env,
-      `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(clientId)}`
+      `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(clientId)}&select=*&limit=1`
     );
     if (!rows.length) return withCORS(env, req, notFound("Client not found"));
     const client = rows[0];
@@ -40791,11 +40765,11 @@ async function handleGetClient(env, req, clientId) {
           'auto_invoice_default',
           'requires_hr','autoprocess_hr','hr_attach_to_invoice','ts_attach_to_invoice',
 
-          // ✅ NEW: invoicing settings required by UI
+          // invoicing settings required by UI
           'invoice_consolidation_mode',
           'reference_number_required_to_issue_invoice',
 
-          // ✅ NEW: manual adjustment email routing
+          // manual adjustment email routing
           'send_manual_invoices_to_different_email',
           'manual_invoices_alt_email_address',
 
@@ -40811,7 +40785,6 @@ async function handleGetClient(env, req, clientId) {
     return withCORS(env, req, serverError("Failed to fetch client"));
   }
 }
-
 
 /**
  * @openapi
