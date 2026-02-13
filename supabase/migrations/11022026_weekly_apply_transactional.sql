@@ -1,3 +1,4 @@
+
 create or replace function public.hr_weekly_apply_transactional(
   p_import_id uuid,
   p_payload jsonb,
@@ -63,6 +64,9 @@ declare
 
   -- ✅ NEW: validation-changed timesheets (MODE_A) that must trigger TSFIN recompute
   v_validation_changed_timesheet_ids uuid[] := array[]::uuid[];
+
+  -- ✅ NEW: count of ref clears due to missing shifts (MODE_A)
+  v_mode_a_ref_cleared_count int := 0;
 
   -- email (MODE_A; transactional log, send post-commit)
   v_email_jobs jsonb := '[]'::jsonb;
@@ -142,7 +146,6 @@ declare
 
   v_ensure_sample_pairs jsonb := '[]'::jsonb;
   v_ensure_sample_created_ts_ids jsonb := '[]'::jsonb;
-
 
   -- loop vars for ensure
   v_pair_contract_id uuid;
@@ -458,7 +461,6 @@ begin
     );
   else
     -- (UNCHANGED MODE_B PHASE3 / PHASE1 / PHASE1.5 / CANCELLATIONS BLOCKS...)
-    -- NOTE: This section is unchanged from your supplied function; it remains as-is.
 
     -- 4.1) Partition invoiced vs non-invoiced changed-hours keys (selected MODE_B keys only)
     create temporary table tmp_changed_sel on commit drop as
@@ -987,7 +989,6 @@ begin
           updated_at = v_now
         where cw0link.id = v_base_week_id;
 
-        -- ✅ NEW: user-facing audit line for "birth of base weekly timesheet"
         perform public._audit_insert(
           'timesheets',
           v_new_ts_id::text,
@@ -1122,7 +1123,7 @@ begin
     ));
   end if;
 
-   -- ─────────────────────────────────────────────
+  -- ─────────────────────────────────────────────
   -- 9) MODE_A mirror ingestion (unchanged)
   -- ─────────────────────────────────────────────
   if array_length(v_mode_a_external_keys, 1) is not null then
@@ -1136,15 +1137,9 @@ begin
 
   v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','MODE_A_MIRROR_DONE'));
 
-   -- ─────────────────────────────────────────────
+  -- ─────────────────────────────────────────────
   -- ✅ NEW: MODE_A must also link HEALTHROSTER shifts to the base weekly timesheet
-  -- This fixes:
-  --   - Evidence tab "Rows matched = 0"
-  --   - TSFIN HR crosscheck seeing no HR rows (HR_HOURS_MISSING)
-  --   - downstream ref propagation via a stable join key (timesheet_id)
-  --
-  -- ✅ NEW RULE: never change an invoiced/locked shift
-  -- (so do NOT update timesheet_id for invoice-locked rows)
+  -- (unchanged from your post)
   -- ─────────────────────────────────────────────
   create temporary table tmp_mode_a_ts_map(
     external_row_key text primary key,
@@ -1170,7 +1165,6 @@ begin
   into v_mode_a_ts_linked_count
   from tmp_mode_a_ts_map mt;
 
-  -- ✅ NEW: detect invoice-locked shifts so we never mutate them (including timesheet_id)
   create temporary table tmp_mode_a_locked_shift_ids(
     shift_id uuid primary key
   ) on commit drop;
@@ -1215,7 +1209,6 @@ begin
 
   get diagnostics v_mode_a_shifts_attached_count = row_count;
 
-  -- Ensure TSFIN recompute runs even when validation status itself does not change
   insert into tmp_aff_ts(timesheet_id)
   select distinct mt2.timesheet_id
   from tmp_mode_a_ts_map mt2
@@ -1231,14 +1224,12 @@ begin
     )
   );
 
-
   -- ─────────────────────────────────────────────
   -- 10) MODE_A weekly validation upserts + email state
-  --     ✅ NEW: detect which timesheets had meaningful validation changes and enqueue TSFIN for them
+  --     ✅ Option B: tmp_val_mode derives directly from effective route flags
   -- ─────────────────────────────────────────────
   select public.hr_weekly_validation_preview(p_import_id := p_import_id)
   into v_weekly_val_payload;
-
 
   if v_weekly_val_payload is null or jsonb_typeof(v_weekly_val_payload) <> 'object' then
     raise exception 'hr_weekly_apply_transactional: hr_weekly_validation_preview returned non-object payload.';
@@ -1271,18 +1262,134 @@ begin
   into v_val_rows_count
   from tmp_val_rows;
 
+  -- ✅ Option B: classify validation rows by effective HR Mode-A route flags (not by tmp_group_mode)
   create temporary table tmp_val_mode on commit drop as
   select
     vr.timesheet_id,
-    gm.mode
+    case
+      when (
+        coalesce(
+          case
+            when (cval.overrideclientsettings is true and cval.autoprocess_hr is not null)
+              then cval.autoprocess_hr
+            else csval.autoprocess_hr
+          end,
+          false
+        ) is true
+        and coalesce(
+          case
+            when (cval.overrideclientsettings is true and cval.requires_hr is not null)
+              then cval.requires_hr
+            else csval.requires_hr
+          end,
+          false
+        ) is true
+        and coalesce(
+          case
+            when (cval.overrideclientsettings is true and cval.no_timesheet_required is not null)
+              then cval.no_timesheet_required
+            else csval.no_timesheet_required
+          end,
+          false
+        ) is false
+      )
+      then 'MODE_A'
+      else 'MODE_B'
+    end as mode
   from tmp_val_rows vr
-  join tmp_group_mode gm
-    on gm.contract_id = vr.contract_id
-   and gm.candidate_id = vr.candidate_id
-   and gm.week_ending_date = vr.week_ending_date
-   and gm.client_id = vr.client_id;
+  join public.contracts cval
+    on cval.id = vr.contract_id
+  left join lateral (
+    select
+      cs2.autoprocess_hr,
+      cs2.requires_hr,
+      cs2.no_timesheet_required
+    from public.client_settings cs2
+    where cs2.client_id = v_import_client_id
+      and (cs2.effective_from is null or cs2.effective_from <= vr.week_ending_date)
+    order by cs2.effective_from desc nulls last, cs2.updated_at desc nulls last
+    limit 1
+  ) as csval on true;
 
-  -- ✅ NEW: compute desired upsert values for MODE_A validations, then detect which rows actually changed
+  -- ✅ NEW: if shifts are missing from the imported file, clear previously imported reference numbers
+  -- Only on FINALISE (this function), only for MODE_A, and only when NOT invoice-locked.
+  create temporary table tmp_mode_a_missing_ref_clear(
+    timesheet_id uuid not null,
+    work_date date not null,
+    ts_start_hhmm text not null,
+    ts_end_hhmm text not null,
+    ts_break_mins int not null,
+    ref_before text null
+  ) on commit drop;
+
+  insert into tmp_mode_a_missing_ref_clear(timesheet_id, work_date, ts_start_hhmm, ts_end_hhmm, ts_break_mins, ref_before)
+  select distinct
+    nullif(btrim(r.value->>'timesheet_id'), '')::uuid as timesheet_id,
+    nullif(btrim(c.value->>'work_date'), '')::date as work_date,
+    nullif(btrim(c.value->>'timesheet_start'), '') as ts_start_hhmm,
+    nullif(btrim(c.value->>'timesheet_end'), '') as ts_end_hhmm,
+    coalesce(nullif(btrim(c.value->>'timesheet_break_mins'), '')::int, 0) as ts_break_mins,
+    nullif(btrim(c.value->>'ref_before'), '') as ref_before
+  from jsonb_array_elements(v_weekly_val_payload->'rows') as r(value)
+  cross join lateral jsonb_array_elements(coalesce(r.value->'comparisons', '[]'::jsonb)) as c(value)
+  join tmp_val_mode vmc
+    on vmc.timesheet_id = nullif(btrim(r.value->>'timesheet_id'), '')::uuid
+   and vmc.mode = 'MODE_A'
+  where upper(coalesce(c.value->>'match_status','')) = 'UNMATCHED'
+    and (lower(coalesce(c.value->>'invoice_locked','false')) in ('true','1')) is false
+    and nullif(btrim(coalesce(c.value->>'invoice_locked_invoice_id','')), '') is null
+    and nullif(btrim(coalesce(c.value->>'ref_before','')), '') is not null
+    and nullif(btrim(coalesce(c.value->>'timesheet_start','')), '') is not null
+    and nullif(btrim(coalesce(c.value->>'timesheet_end','')), '') is not null
+    and (nullif(btrim(c.value->>'work_date'), '') is not null);
+
+  -- Apply the ref clear on nhsp_shifts (authoritative store for segment refs in TSFIN)
+  update public.nhsp_shifts nsclr
+     set ref_num = null,
+         hr_request_id = null,
+         updated_at = v_now
+    from tmp_mode_a_missing_ref_clear mrc
+    left join public.timesheets_financials tfc
+      on tfc.timesheet_id = mrc.timesheet_id
+     and tfc.is_current = true
+   where nsclr.source_system = 'HEALTHROSTER'::public.hr_source_enum
+     and nsclr.cancelled_at_utc is null
+     and nsclr.timesheet_id = mrc.timesheet_id
+     and nsclr.work_date = mrc.work_date
+     and nsclr.ref_num is not null
+     and nsclr.invoice_id is null
+     and (tfc.timesheet_id is null or (tfc.locked_by_invoice_id is null and tfc.paid_at_utc is null))
+     and to_char((date_trunc('minute', nsclr.start_utc) at time zone 'Europe/London'), 'HH24:MI') = mrc.ts_start_hhmm
+     and to_char((date_trunc('minute', nsclr.end_utc) at time zone 'Europe/London'), 'HH24:MI') = mrc.ts_end_hhmm
+     and coalesce(nsclr.break_mins,0) = coalesce(mrc.ts_break_mins,0)
+     and not exists (
+       select 1
+       from public.timesheets_financials tf_lock
+       cross join lateral jsonb_array_elements(coalesce(tf_lock.invoice_breakdown_json->'segments','[]'::jsonb)) as seg(value)
+       where tf_lock.is_current = true
+         and tf_lock.timesheet_id = nsclr.timesheet_id
+         and nullif(btrim(seg.value->>'nhsp_shift_id'), '') = nsclr.id::text
+         and nullif(btrim(seg.value->>'invoice_locked_invoice_id'), '') is not null
+       limit 1
+     );
+
+  get diagnostics v_mode_a_ref_cleared_count = row_count;
+
+  -- Ensure TSFIN recompute runs if we cleared any refs (even if validation status unchanged)
+  insert into tmp_aff_ts(timesheet_id)
+  select distinct mrc2.timesheet_id
+  from tmp_mode_a_missing_ref_clear mrc2
+  where mrc2.timesheet_id is not null
+  on conflict do nothing;
+
+  v_steps := v_steps || jsonb_build_array(
+    jsonb_build_object(
+      'step','MODE_A_MISSING_SHIFT_REF_CLEARED',
+      'ref_cleared_count', v_mode_a_ref_cleared_count
+    )
+  );
+
+  -- ✅ compute desired upsert values for MODE_A validations, then detect which rows actually changed
   create temporary table tmp_val_upsert on commit drop as
   select
     vr.timesheet_id,
@@ -1313,7 +1420,6 @@ begin
        or tv.reason_code is distinct from u.new_reason_code
   ) as x;
 
-  -- Upsert validations (existing behaviour, now sourced from tmp_val_upsert)
   insert into public.timesheet_validations(
     timesheet_id,
     status,
@@ -1339,7 +1445,6 @@ begin
 
   get diagnostics v_validations_upserted = row_count;
 
-  -- ✅ NEW: mark validation-changed timesheets as affected for TSFIN drain
   insert into tmp_aff_ts(timesheet_id)
   select distinct t.tsid
   from unnest(coalesce(v_validation_changed_timesheet_ids, array[]::uuid[])) as t(tsid)
@@ -1433,13 +1538,14 @@ begin
       'validation_changed_timesheet_ids_count', coalesce(array_length(v_validation_changed_timesheet_ids, 1), 0),
       'mismatched_timesheet_ids_count', coalesce(array_length(v_mismatched_tsids, 1), 0),
       'email_actions_count', v_email_actions_count,
-      'email_jobs_count', v_email_jobs_count
+      'email_jobs_count', v_email_jobs_count,
+      'mode_a_ref_cleared_count', v_mode_a_ref_cleared_count
     )
   );
 
   -- ─────────────────────────────────────────────
   -- 11) Compute affected_timesheet_ids (MODE_B work + MODE_A validation changes)
-  --     ✅ NEW: always compute from tmp_aff_ts so validation-only changes are included
+  --     ✅ always compute from tmp_aff_ts so validation-only changes are included
   -- ─────────────────────────────────────────────
   if (v_mode_b_should_run_phase1 is false) and (v_mode_b_should_run_cancellations is false) then
     v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','AFFECTED_TS_MODE_B_NOOP'));
@@ -1485,7 +1591,6 @@ begin
     v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','AFFECTED_TS_MODE_B_COLLECTED'));
   end if;
 
-  -- ✅ NEW: compute final affected list from tmp_aff_ts (includes validation-changed timesheets)
   select coalesce(array_agg(distinct a.timesheet_id order by a.timesheet_id), array[]::uuid[])
   into v_affected_timesheet_ids
   from tmp_aff_ts a
@@ -1495,7 +1600,6 @@ begin
     perform public.enqueue_ts_financials_priority(v_affected_timesheet_ids, 'CONTEXT_CHANGED'::public.ts_fin_reason_enum);
   end if;
 
-  -- cancel adjustment count (unchanged semantics; safe even if MODE_B noop)
   if jsonb_array_length(coalesce(v_cancellations_result->'affected_timesheet_ids', '[]'::jsonb)) > 0 then
     create temporary table tmp_cancel_aff_ts(ts_id uuid primary key) on commit drop;
 
@@ -1523,7 +1627,8 @@ begin
       'affected_timesheet_ids_count', coalesce(array_length(v_affected_timesheet_ids, 1), 0),
       'validation_changed_timesheet_ids_count', coalesce(array_length(v_validation_changed_timesheet_ids, 1), 0),
       'cancel_adjustment_count', v_cancel_adjustment_count,
-      'correction_timesheets_created_count', v_correction_timesheets_created_count
+      'correction_timesheets_created_count', v_correction_timesheets_created_count,
+      'mode_a_ref_cleared_count', v_mode_a_ref_cleared_count
     )
   );
 
@@ -1552,7 +1657,8 @@ begin
       'validation_changed_timesheet_ids_count', coalesce(array_length(v_validation_changed_timesheet_ids, 1), 0),
       'mismatched_timesheet_ids_count', coalesce(array_length(v_mismatched_tsids, 1), 0),
       'email_actions_count', v_email_actions_count,
-      'email_jobs_count', v_email_jobs_count
+      'email_jobs_count', v_email_jobs_count,
+      'mode_a_ref_cleared_count', v_mode_a_ref_cleared_count
     ),
     'hr_imports',
     p_import_id::text,
@@ -1597,7 +1703,8 @@ begin
       'mirror', v_mirror_result,
       'validations_upserted', v_validations_upserted,
       'mismatched_timesheet_ids', to_jsonb(coalesce(v_mismatched_tsids, array[]::uuid[])),
-      'validation_affected_timesheet_ids', to_jsonb(coalesce(v_validation_changed_timesheet_ids, array[]::uuid[]))
+      'validation_affected_timesheet_ids', to_jsonb(coalesce(v_validation_changed_timesheet_ids, array[]::uuid[])),
+      'mode_a_ref_cleared_count', v_mode_a_ref_cleared_count
     ),
     'email_jobs', v_email_jobs,
     'affected_timesheet_ids', to_jsonb(coalesce(v_affected_timesheet_ids, array[]::uuid[])),
