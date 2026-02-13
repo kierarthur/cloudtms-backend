@@ -1795,6 +1795,8 @@ begin
 end;
 $$;
 
+
+
 CREATE OR REPLACE FUNCTION public.hr_weekly_validation_preview(p_import_id uuid)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -2097,7 +2099,6 @@ begin
     from hr_resolved r
   ),
 
-  -- counts
   unmapped_candidate_rows as (
     select count(*)::int as n
     from hr_with_we h
@@ -2143,10 +2144,6 @@ begin
     where h.candidate_id is not null
   ),
 
-  -- ─────────────────────────────────────────────
-  -- Contract effective flags (Mode-A HR weekly verify scope)
-  -- (contract overrides win only when overrideclientsettings = true)
-  -- ─────────────────────────────────────────────
   contract_effective as (
     select
       c2.id as contract_id,
@@ -2166,10 +2163,6 @@ begin
     where c2.client_id = v_client_id
   ),
 
-  -- ─────────────────────────────────────────────
-  -- Authorised weekly timesheets in scope (HR-relevant ONLY)
-  -- used to show "missing shifts" warnings in the file date range
-  -- ─────────────────────────────────────────────
   ts_universe_raw as (
     select
       t.timesheet_id,
@@ -2195,13 +2188,11 @@ begin
       and ct.client_id = v_client_id
       and t.week_ending_date is not null
       and t.week_ending_date between v_we_min and v_we_max
-      -- HR_WEEKLY validation-only scope (Mode-A)
       and coalesce(ce.eff_autoprocess_hr,false) = true
       and coalesce(ce.eff_requires_hr,false) = true
       and coalesce(ce.eff_no_timesheet_required,false) = false
   ),
 
-  -- separate authorised vs unauthorised (for import candidates)
   ts_matches_raw as (
     select
       tr.candidate_id,
@@ -2262,10 +2253,6 @@ begin
     where tur.authorised_at_server is not null
   ),
 
-  -- parse timesheet schedule entries for universe (restricted to file date range)
-  -- ✅ schedule source fallback:
-  --   1) timesheets.actual_schedule_json when non-empty array
-  --   2) else TSFIN SEGMENTS mode segments[] (invoice_breakdown_json->segments)
   ts_entries_indexed as (
     select
       s.candidate_id,
@@ -2410,7 +2397,6 @@ begin
     group by t.candidate_id, t.candidate_name, t.week_ending_date, t.timesheet_id, t.work_date
   ),
 
-  -- segments lock map (invoice-locked detection + current stored segment ref)
   seg_locks as (
     select
       tf.timesheet_id,
@@ -2454,7 +2440,6 @@ begin
       and (nullif(btrim(s.value->>'date'), '') is not null)
   ),
 
-  -- pairing: each worker entry vs HR import entries by overlap (>=1 minute)
   pairing_counts as (
     select
       te.timesheet_id,
@@ -2490,7 +2475,6 @@ begin
       te.worker_entry_index, te.start_hhmm, te.end_hhmm, te.start_minute, te.end_minute, te.break_mins
   ),
 
-  -- HR-only entries: HR entries not uniquely matched to any worker entry
   comparisons_hr_only as (
     select
       tu.timesheet_id,
@@ -2513,8 +2497,6 @@ begin
       hf.hr_request_id as hr_request_id,
       hf.hr_location as hr_location,
 
-      -- ✅ IMPORTANT: column order must match comparisons_worker:
-      -- time_match (boolean) FIRST, then match_status (text)
       false as time_match,
       'HR_ONLY'::text as match_status,
 
@@ -2583,8 +2565,6 @@ begin
     select * from comparisons_hr_only
   ),
 
-
-  -- existing stored HR shifts for before/after diffs (best-effort; uses overlap)
   comparisons_enriched as (
     select
       cu.timesheet_id,
@@ -2620,7 +2600,6 @@ begin
       prev.prev_end_hhmm,
       prev.prev_break_mins,
 
-      -- computed ref (before/after)
       coalesce(nullif(btrim(sl.seg_ref_num), ''), nullif(btrim(prev.prev_ref_num), '')) as ref_before,
       nullif(btrim(cu.hr_request_id), '') as ref_after
     from comparisons_union cu
@@ -2717,6 +2696,29 @@ begin
           'healthroster_end', ce.hr_end_hhmm,
           'healthroster_break_mins', ce.hr_break_mins,
 
+          -- stable key for FE checkbox state
+          'comparison_key',
+            (
+              ce.work_date::text
+              || '|' || coalesce(ce.ts_start_hhmm,'')
+              || '|' || coalesce(ce.ts_end_hhmm,'')
+              || '|' || coalesce(ce.ts_break_mins,0)::text
+            ),
+
+          -- destructive invalidation flags (missing from import + had prior ref + not invoice locked)
+          'is_destructive_invalidation',
+            (
+              (ce.match_status = 'UNMATCHED')
+              and (nullif(btrim(coalesce(ce.ref_before,'')), '') is not null)
+              and (ce.invoice_locked_invoice_id is null)
+            ),
+          'default_invalidate_checked',
+            (
+              (ce.match_status = 'UNMATCHED')
+              and (nullif(btrim(coalesce(ce.ref_before,'')), '') is not null)
+              and (ce.invoice_locked_invoice_id is null)
+            ),
+
           -- tick/cross for UI:
           -- time match, but if invoiced AND ref changed, treat as NOT match (cannot change invoiced ref)
           'match',
@@ -2766,7 +2768,6 @@ begin
     group by ce.candidate_id, ce.candidate_name, ce.week_ending_date, ce.timesheet_id
   ),
 
-  -- day totals for mismatch detection (covers both "missing HR" and "extra HR")
   day_set as (
     select distinct
       te.timesheet_id,
@@ -2868,7 +2869,6 @@ begin
   final_groups as (
     select
       g.*,
-      -- mismatch if totals mismatch OR any comparison row indicates non-match (including UNMATCHED/HR_ONLY)
       (
         coalesce(g.has_totals_mismatch,false)
         or (
@@ -2990,10 +2990,7 @@ begin
             and length(btrim(v_recipient_email)) > 0
           ),
 
-        -- kept for backward-compat
         'days', coalesce(wes.days_json, '[]'::jsonb),
-
-        -- new UI contract: tick/cross list
         'comparisons', coalesce(wes.comparisons_json, '[]'::jsonb)
       ) as j
     from with_email_state wes
@@ -3110,12 +3107,14 @@ begin
     'unmatched_timesheet_triples', v_unmatched_timesheets,
     'unauthorised_timesheet_triples', v_unauthorised_timesheet_triples,
 
-    -- Backward-compatible key
     'rows', v_rows,
-
-    -- UI-friendly alias
     'validation_groups', v_rows
   );
 end;
 $function$;
+
+
+
+
+
 
