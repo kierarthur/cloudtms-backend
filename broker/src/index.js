@@ -70042,6 +70042,504 @@ async function handleCreateInvoiceTsfinByWeek(env, req) {
 }
 
 
+async function buildNhspWeeklySnapshot(
+  env,
+  ts,
+  contract,
+  shifts,
+  nhspImportId,
+  basis = 'NHSP',
+  getPolicyCached,
+  curFin,
+  options = {}
+) {
+  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+  const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
+
+  const {
+    outbox_id = null,
+    write_now = false,
+    // optional HR enrich inputs (so snapshot contains hr_crosscheck_* before write)
+    hr_eff_flags = null,
+    hr_preloaded_shifts = null,
+
+    // ✅ NEW: allow caller to pass SQL policy (ctx.out_policy) to avoid REST
+    policy_override = null
+  } = (options && typeof options === 'object') ? options : {};
+
+  const hasPolicyOverride = !!(policy_override && typeof policy_override === 'object');
+
+  const pc  = payChargeFromContract(contract);
+  const pay = pc?.pay || null;
+  const chg = pc?.charge || null;
+  const method = pc?.method || contract?.pay_method_snapshot || contract?.pay_method || null;
+
+  if (!pay || !chg) return { ok: false, reason: 'CONTRACT_RATES_MISSING' };
+
+  const candidate_id = contract.candidate_id || null;
+  const client_id    = contract.client_id   || null;
+
+  // ---- Policy helper ----
+  // If policy_override is provided, we do not need getPolicyCached at all.
+  if (!hasPolicyOverride && typeof getPolicyCached !== 'function') {
+    throw new Error('buildNhspWeeklySnapshot: getPolicyCached must be provided (or pass options.policy_override)');
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // ✅ Stable segment identity helpers (NHSP weekly)
+  //
+  // Fixes delayed segment corruption by:
+  // - generating deterministic segment_id from immutable shift attributes (not sh.id)
+  // - preserving per-segment controls by mapping old→new using the same fingerprint
+  //
+  // NOTE: We intentionally do NOT include ref_num in identity (it may be amended later).
+  // ─────────────────────────────────────────────────────────────
+  const _normStr = (v) => (v == null ? '' : String(v).trim());
+  const _normNumInt = (v, d = 0) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : d;
+  };
+
+  // FNV-1a 32-bit hash (deterministic, fast, no async crypto)
+  const _hash32 = (s) => {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 0x01000193);
+    }
+    return (h >>> 0).toString(16).padStart(8, '0');
+  };
+
+  const _stableKeyFromParts = (dateYmd, startUtc, endUtc, breakMins, requestId) => {
+    const d = _normStr(dateYmd);
+    const s = _normStr(startUtc);
+    const e = _normStr(endUtc);
+    const b = _normNumInt(breakMins ?? 0, 0);
+    const r = _normStr(requestId); // optional but stable if present; safe to include
+    // If we have no useful timestamps, return empty => will fall back to legacy segment_id matching only.
+    if (!d && !s && !e) return '';
+    return `d:${d}|s:${s}|e:${e}|b:${b}|r:${r}`;
+  };
+
+  const _stableKeyFromShift = (sh) => {
+    if (!sh || typeof sh !== 'object') return '';
+    const workDate = _normStr(sh.work_date);
+    const startUtc = _normStr(sh.start_utc);
+    const endUtc   = _normStr(sh.end_utc);
+    const breakM   = _normNumInt(sh.break_mins ?? sh.break_minutes ?? 0, 0);
+    const reqId    = _normStr(sh.hr_request_id || sh.request_id || '');
+    return _stableKeyFromParts(workDate, startUtc, endUtc, breakM, reqId);
+  };
+
+  const _stableKeyFromExistingSegment = (s) => {
+    if (!s || typeof s !== 'object') return '';
+    const dateYmd = _normStr(s.date);
+    const startUtc = _normStr(s.start_utc || s.start_iso || '');
+    const endUtc   = _normStr(s.end_utc || s.end_iso || '');
+    const breakM   = _normNumInt(s.break_mins ?? s.break_minutes ?? 0, 0);
+    const reqId    = _normStr(s.request_id || '');
+    return _stableKeyFromParts(dateYmd, startUtc, endUtc, breakM, reqId);
+  };
+
+  const _stableSegId = (tsId, stableKey) => {
+    const k = _normStr(stableKey);
+    if (!k) return `nhsp:${tsId}:unknown`;
+    return `nhsp:${tsId}:${_hash32(k)}`;
+  };
+
+  // ─────────────────────────────────────────────────────────────
+  // Preserve existing TSFIN evidence:
+  // - meta controls for unlocked recompute (exclude_from_pay, invoice_target_week_start)
+  // - FULL locked segment objects (invoice_locked_invoice_id != null/empty) to preserve evidence exactly
+  // ─────────────────────────────────────────────────────────────
+  const preservedByKey = new Map();
+  const preservedByLegacyId = new Map();
+  const preservedByNhspShiftId = new Map();
+  const preservedByExternalRowKey = new Map();
+
+  const lockedSegByKey = new Map();
+  const lockedSegByLegacyId = new Map();
+  const lockedSegByNhspShiftId = new Map();
+  const lockedSegByExternalRowKey = new Map();
+  const lockedSegsAll = [];
+
+  const _isNonEmpty = (v) => nullif(btrim(String(v ?? '')), '') !== null; // uses the same semantics as SQL; see helper below
+  function btrim(s) { return String(s).trim(); }
+  function nullif(a, b) { return (a === b) ? null : a; }
+
+  const _segUniqKey = (s) => {
+    const sid = (s && s.segment_id != null) ? String(s.segment_id).trim() : '';
+    if (sid) return `sid:${sid}`;
+    const nid = (s && s.nhsp_shift_id != null) ? String(s.nhsp_shift_id).trim() : '';
+    if (nid) return `nhsp:${nid}`;
+    const ek  = (s && s.external_row_key != null) ? String(s.external_row_key).trim() : '';
+    if (ek) return `ext:${ek}`;
+    const sk  = _stableKeyFromExistingSegment(s);
+    if (sk) return `stk:${sk}`;
+    return `obj:${btrim(JSON.stringify(s || {})).slice(0, 200)}`;
+  };
+
+  try {
+    const ib = curFin?.invoice_breakdown_json || null;
+    const mode = String(ib?.mode || '').toUpperCase();
+    const segs = Array.isArray(ib?.segments) ? ib.segments : null;
+
+    if (mode === 'SEGMENTS' && segs) {
+      for (const s of segs) {
+        const segment_id = (s && s.segment_id != null) ? String(s.segment_id) : null;
+
+        const invLockRaw = (s && s.invoice_locked_invoice_id != null) ? String(s.invoice_locked_invoice_id) : '';
+        const invLockTrim = btrim(invLockRaw);
+        const isLocked = invLockTrim !== '';
+
+        const meta = {
+          exclude_from_pay:
+            (typeof s.exclude_from_pay === 'boolean') ? s.exclude_from_pay : undefined,
+          invoice_target_week_start:
+            (s.invoice_target_week_start != null) ? String(s.invoice_target_week_start) : undefined,
+          invoice_locked_invoice_id:
+            (invLockTrim !== '') ? invLockTrim : undefined
+        };
+
+        // preserve meta by legacy id if present
+        if (segment_id) preservedByLegacyId.set(segment_id, meta);
+
+        // preserve meta by stable key if we can compute one from stored segment fields
+        const key = _stableKeyFromExistingSegment(s);
+        if (key) preservedByKey.set(key, meta);
+
+        // preserve meta by source identity if present
+        const nhspShiftId = (s && s.nhsp_shift_id != null) ? String(s.nhsp_shift_id).trim() : '';
+        const extKey = (s && s.external_row_key != null) ? String(s.external_row_key).trim() : '';
+        if (nhspShiftId) preservedByNhspShiftId.set(nhspShiftId, meta);
+        if (extKey) preservedByExternalRowKey.set(extKey, meta);
+
+        // FULL locked segment preservation (immutable evidence)
+        if (isLocked) {
+          lockedSegsAll.push(s);
+          if (segment_id) lockedSegByLegacyId.set(segment_id, s);
+          if (key) lockedSegByKey.set(key, s);
+          if (nhspShiftId) lockedSegByNhspShiftId.set(nhspShiftId, s);
+          if (extKey) lockedSegByExternalRowKey.set(extKey, s);
+        }
+      }
+    }
+  } catch {}
+
+  const staleReason = (curFin && curFin.stale_reason != null) ? String(curFin.stale_reason) : '';
+
+  // Allow empty-shift writes ONLY when:
+  // - we have locked segments to carry forward unchanged, OR
+  // - the timesheet was marked stale due to import cancel/detach (so we must be able to clear unlocked evidence)
+  const shiftsArr = Array.isArray(shifts) ? shifts : [];
+  const allowEmptyShiftsWrite = (lockedSegsAll.length > 0) || (staleReason === 'IMPORT_CANCEL_DETACH');
+
+  if (!shiftsArr.length && !allowEmptyShiftsWrite) return { ok: false, reason: 'NO_SHIFTS' };
+
+  // ✅ Policy snapshot: prefer override; else old behaviour (fetch by week-ending/first date)
+  // (Computed here so it is available for ERNI margin without any TDZ/ordering issues.)
+  let policy_snapshot_json = {};
+  if (hasPolicyOverride) {
+    policy_snapshot_json = policy_override;
+  } else {
+    try {
+      const we = (ts && ts.week_ending_date)
+        ? String(ts.week_ending_date)
+        : (shiftsArr?.[0]?.work_date ? String(shiftsArr[0].work_date) : null);
+      policy_snapshot_json = (we && client_id) ? (await getPolicyCached(client_id, we)) : {};
+      if (!policy_snapshot_json || typeof policy_snapshot_json !== 'object') policy_snapshot_json = {};
+    } catch {
+      policy_snapshot_json = {};
+    }
+  }
+
+  // Cache policies by date (only used when no policy_override)
+  const policyByDate = new Map();
+
+  const lockedSegmentsOut = [];
+  const unlockedSegmentsOut = [];
+  const usedLocked = new Set();
+
+  // Build segments: locked evidence unchanged + unlocked recomputed from current truth (shifts)
+  for (const sh of shiftsArr) {
+    const workDate = sh && sh.work_date;
+    if (!workDate || !sh.start_utc || !sh.end_utc) continue;
+
+    // Compute identity keys early so we can preserve locked segments exactly (skip recompute)
+    const stableKey = _stableKeyFromShift(sh);
+    const computed_segment_id = _stableSegId(ts.timesheet_id, stableKey);
+    const legacy_segment_id = (sh && sh.id != null) ? `nhsp:${sh.id}` : null;
+    const nhsp_shift_id = (sh && sh.id != null) ? String(sh.id) : null;
+    const external_row_key = (sh && sh.external_row_key != null) ? String(sh.external_row_key) : null;
+
+    // If this shift corresponds to a LOCKED segment in existing evidence, carry it forward unchanged
+    let lockedMatch = null;
+    if (nhsp_shift_id) lockedMatch = lockedSegByNhspShiftId.get(String(nhsp_shift_id).trim()) || null;
+    if (!lockedMatch && external_row_key) lockedMatch = lockedSegByExternalRowKey.get(String(external_row_key).trim()) || null;
+    if (!lockedMatch && stableKey) lockedMatch = lockedSegByKey.get(stableKey) || null;
+    if (!lockedMatch && legacy_segment_id) lockedMatch = lockedSegByLegacyId.get(legacy_segment_id) || null;
+    if (!lockedMatch) lockedMatch = lockedSegByLegacyId.get(computed_segment_id) || null;
+
+    if (lockedMatch) {
+      const uk = _segUniqKey(lockedMatch);
+      if (!usedLocked.has(uk)) {
+        usedLocked.add(uk);
+        lockedSegmentsOut.push(lockedMatch);
+      }
+      continue;
+    }
+
+    // Unlocked: recompute from truth
+    let policy = null;
+    if (hasPolicyOverride) {
+      policy = policy_override;
+    } else {
+      policy = policyByDate.get(workDate);
+      if (!policy) {
+        policy = await getPolicyCached(client_id, workDate);
+        policyByDate.set(workDate, policy);
+      }
+    }
+
+    let segs = [[sh.start_utc, sh.end_utc]];
+    segs = subtractBreak(segs, null, null, sh.break_mins || 0);
+
+    const hours = classifyMinutes(env, policy, segs);
+
+    const payEx = round2(
+      (hours.hours_day   || 0) * asNumberLocal(pay.day)   +
+      (hours.hours_night || 0) * asNumberLocal(pay.night) +
+      (hours.hours_sat   || 0) * asNumberLocal(pay.sat)   +
+      (hours.hours_sun   || 0) * asNumberLocal(pay.sun)   +
+      (hours.hours_bh    || 0) * asNumberLocal(pay.bh)
+    );
+
+    const chgEx = round2(
+      (hours.hours_day   || 0) * asNumberLocal(chg.day)   +
+      (hours.hours_night || 0) * asNumberLocal(chg.night) +
+      (hours.hours_sat   || 0) * asNumberLocal(chg.sat)   +
+      (hours.hours_sun   || 0) * asNumberLocal(chg.sun)   +
+      (hours.hours_bh    || 0) * asNumberLocal(chg.bh)
+    );
+
+    const preserved =
+      (nhsp_shift_id && preservedByNhspShiftId.get(String(nhsp_shift_id))) ||
+      (external_row_key && preservedByExternalRowKey.get(String(external_row_key))) ||
+      (stableKey && preservedByKey.get(stableKey)) ||
+      (legacy_segment_id && preservedByLegacyId.get(legacy_segment_id)) ||
+      preservedByLegacyId.get(computed_segment_id) ||
+      null;
+
+    const exclude_from_pay =
+      (preserved && typeof preserved.exclude_from_pay === 'boolean') ? preserved.exclude_from_pay : false;
+
+    const invoice_target_week_start =
+      (preserved && preserved.invoice_target_week_start != null) ? preserved.invoice_target_week_start : undefined;
+
+    // IMPORTANT: do NOT inherit invoice_locked_invoice_id onto recomputed unlocked segments;
+    // locked segments are carried forward unchanged above.
+    unlockedSegmentsOut.push({
+      segment_id: computed_segment_id,
+
+      // embed stable source identity into segment JSON
+      nhsp_shift_id: nhsp_shift_id || null,
+      external_row_key: external_row_key || null,
+
+      date: workDate,
+      ward: sh.ward || null,
+      start_utc: sh.start_utc,
+      end_utc: sh.end_utc,
+      break_mins: sh.break_mins || 0,
+
+      hours_day:   hours.hours_day   || 0,
+      hours_night: hours.hours_night || 0,
+      hours_sat:   hours.hours_sat   || 0,
+      hours_sun:   hours.hours_sun   || 0,
+      hours_bh:    hours.hours_bh    || 0,
+
+      pay_amount:    payEx,
+      charge_amount: chgEx,
+
+      exclude_from_pay,
+      ...(invoice_target_week_start != null ? { invoice_target_week_start } : {}),
+
+      // ✅ UPDATED: HealthRoster fallback uses hr_request_id / request_id as ref_num when missing
+      // (does NOT affect segment identity; ref_num intentionally excluded from identity)
+      ref_num: (sh.nhsp_ref_num || sh.ref_num || sh.hr_request_id || sh.request_id || null) || null,
+      request_id: (sh.hr_request_id || sh.request_id || null) || null,
+      held_back_reason: sh.held_back_reason || null,
+      source_system: sh.source_system || null
+    });
+  }
+
+  // Append any LOCKED segments that are not present in current truth (detached/missing)
+  for (const sLocked of lockedSegsAll) {
+    const uk = _segUniqKey(sLocked);
+    if (!usedLocked.has(uk)) {
+      usedLocked.add(uk);
+      lockedSegmentsOut.push(sLocked);
+    }
+  }
+
+  // Final merged evidence: locked (unchanged) + unlocked (recomputed)
+  const segments = lockedSegmentsOut.concat(unlockedSegmentsOut);
+
+  // Recompute totals purely from final segments (locked amounts are taken from locked JSON unchanged)
+  let sumDay = 0, sumNight = 0, sumSat = 0, sumSun = 0, sumBh = 0;
+  let totalPayEx = 0, totalChgEx = 0;
+
+  for (const s of segments) {
+    sumDay   += asNumberLocal(s && s.hours_day);
+    sumNight += asNumberLocal(s && s.hours_night);
+    sumSat   += asNumberLocal(s && s.hours_sat);
+    sumSun   += asNumberLocal(s && s.hours_sun);
+    sumBh    += asNumberLocal(s && s.hours_bh);
+
+    totalPayEx += asNumberLocal(s && s.pay_amount);
+    totalChgEx += asNumberLocal(s && s.charge_amount);
+  }
+
+  totalPayEx = round2(totalPayEx);
+  totalChgEx = round2(totalChgEx);
+
+  // ✅ ERNI-aware margin (policy comes from SQL context via policy_override / policy_snapshot_json)
+  const _polForMargin = (hasPolicyOverride ? policy_override : policy_snapshot_json) || {};
+  const _applyErniTo  = String(_polForMargin?.apply_erni_to || 'PAYE_ONLY').toUpperCase();
+  const _erniPctRaw   = Number(_polForMargin?.erni_pct ?? 0);
+
+  let _erniMult = 1;
+  if (Number.isFinite(_erniPctRaw) && _erniPctRaw > 0) {
+    // supports storing 15 or 0.15
+    const p = _erniPctRaw > 1 ? (_erniPctRaw / 100) : _erniPctRaw;
+    _erniMult = 1 + p;
+  }
+
+  const _payMethodU = String(method || '').toUpperCase();
+  const _erniApplies =
+    (_applyErniTo === 'ALL') ||
+    (_applyErniTo === 'PAYE_ONLY' && _payMethodU === 'PAYE');
+
+  const _payCostEx = round2(_erniApplies ? (totalPayEx * _erniMult) : totalPayEx);
+  const marginEx = round2(totalChgEx - _payCostEx);
+
+  const invoice_breakdown_json = {
+    mode: 'SEGMENTS',
+    segments,
+    totals: { total_pay_ex_vat: totalPayEx, total_charge_ex_vat: totalChgEx, margin_ex_vat: marginEx }
+  };
+
+  const hours_day   = round2(sumDay);
+  const hours_night = round2(sumNight);
+  const hours_sat   = round2(sumSat);
+  const hours_sun   = round2(sumSun);
+  const hours_bh    = round2(sumBh);
+  const total_hours = round2(hours_day + hours_night + hours_sat + hours_sun + hours_bh);
+
+  const pay_wtr_rate_pct_snapshot =
+    (String(method || '').toUpperCase() === 'PAYE')
+      ? (Number.isFinite(Number(policy_snapshot_json?.holiday_pay_pct)) ? Number(policy_snapshot_json.holiday_pay_pct) : null)
+      : null;
+
+  // Policy B gating: bases require authorisation before “ready”
+  const basisU = String(basis || '').toUpperCase();
+  const isAuthoriseGatedBase =
+    (basisU === 'NHSP' ||
+     basisU === 'NHSP_ADJUSTMENT' ||
+     basisU === 'HEALTHROSTER_SELF_BILL' ||
+     basisU === 'HEALTHROSTER_ADJUSTMENT');
+
+  const isAuthorised = !!(ts && ts.authorised_at_server);
+  const processing_status = (isAuthoriseGatedBase && !isAuthorised) ? 'PENDING_AUTH' : 'READY_FOR_INVOICE';
+
+  const snapshot = {
+    timesheet_id: ts.timesheet_id,
+    timesheet_version: ts.version || 1,
+
+    basis,
+    nhsp_import_id: nhspImportId || null,
+
+    occupant_key_norm: ts.occupant_key_norm || null,
+
+    candidate_id,
+    client_id,
+    role: contract.role || null,
+    band: contract.band || null,
+
+    pay_method: method,
+
+    policy_snapshot_json,
+    rate_source_refs_json: { mode: 'CONTRACT_RATES_JSON', contract_id: contract.id || null },
+
+    hours_day,
+    hours_night,
+    hours_sat,
+    hours_sun,
+    hours_bh,
+
+    pay_day:    pay.day   ?? null,
+    pay_night:  pay.night ?? null,
+    pay_sat:    pay.sat   ?? null,
+    pay_sun:    pay.sun   ?? null,
+    pay_bh:     pay.bh    ?? null,
+
+    charge_day:   chg.day   ?? null,
+    charge_night: chg.night ?? null,
+    charge_sat:   chg.sat   ?? null,
+    charge_sun:   chg.sun   ?? null,
+    charge_bh:    chg.bh    ?? null,
+
+    additional_units_json: {},
+    additional_pay_ex_vat: 0,
+    additional_charge_ex_vat: 0,
+    additional_margin_ex_vat: 0,
+
+    total_hours,
+    total_pay_ex_vat: totalPayEx,
+    total_charge_ex_vat: totalChgEx,
+    margin_ex_vat: marginEx, // ERNI-aware for PAYE
+
+    pay_wtr_rate_pct_snapshot,
+
+    candidate_assignment: candidate_id ? 'ASSIGNED' : 'UNASSIGNED',
+    processing_status,
+
+    has_rate_issue: false,
+    has_pay_channel_issue: false,
+
+    invoice_breakdown_json,
+
+    external_source_rows_json: {
+      NHSP_WEEKLY: shiftsArr.map(sh => (sh ? ({
+        date: sh.work_date,
+        source_system: 'NHSP',
+        reference:
+          (sh.nhsp_ref_num || sh.ref_num || (sh.payload_json && (sh.payload_json.ref_num || sh.payload_json.Reference))) || null,
+        nhsp_shift_id: sh.id,
+        raw_row: sh.payload_json || null
+      }) : null)).filter(Boolean)
+    }
+  };
+
+  // Optional: apply HR cross-check enrichment BEFORE write (mutates snapshot)
+  if (typeof enrichTsfinWithHrCrosscheck === 'function') {
+    try {
+      await enrichTsfinWithHrCrosscheck(env, ts, snapshot, hr_eff_flags || null, hr_preloaded_shifts || null);
+    } catch {}
+  }
+
+  // Optional: write through SQL batch writer (single-row)
+  if (write_now) {
+    if (!outbox_id) throw new Error('buildNhspWeeklySnapshot: write_now requires options.outbox_id');
+    const wr = await rpcTsfinWriteSnapshotsAndComplete(env, {
+      rows: [{ outbox_id, timesheet_id: ts.timesheet_id, snapshot }]
+    });
+    return { ok: true, snapshot, write: wr };
+  }
+
+  return { ok: true, snapshot };
+}
+
+
 
 // Self-bill helper: reuse existing invoice for (client, week) if possible,
 // otherwise create a new self-bill invoice header.
