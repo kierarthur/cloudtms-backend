@@ -252,15 +252,32 @@ begin
     ) cand_exact_unique on (cand_alias.id is null and cand_map.candidate_id is null)
   ),
 
-  fin_current as (
+   fin_current as (
     select distinct on (tf.timesheet_id)
       tf.timesheet_id,
       tf.locked_by_invoice_id,
-      tf.paid_at_utc
+      tf.paid_at_utc,
+
+      (
+        case
+          when tf.invoice_breakdown_json is not null
+           and jsonb_typeof(tf.invoice_breakdown_json) = 'object'
+           and upper(coalesce(tf.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+           and jsonb_typeof(tf.invoice_breakdown_json->'segments') = 'array'
+          then exists (
+            select 1
+            from jsonb_array_elements(tf.invoice_breakdown_json->'segments') as seg(seg_obj)
+            where nullif(btrim(coalesce(seg.seg_obj->>'invoice_locked_invoice_id','')), '') is not null
+          )
+          else false
+        end
+      ) as has_any_segment_invoice_lock
+
     from public.timesheets_financials tf
     where tf.is_current = true
     order by tf.timesheet_id, tf.created_at desc
   ),
+
 
   ext_update as (
     update public.hr_rows r
@@ -322,7 +339,6 @@ begin
     returning
       (candidate_id is not null) as mapped_candidate
   ),
-
   upd_src as (
     select
       s.external_row_key,
@@ -343,29 +359,56 @@ begin
 
       fc.locked_by_invoice_id,
       fc.paid_at_utc,
+      coalesce(fc.has_any_segment_invoice_lock, false) as has_any_segment_invoice_lock,
 
       (
         s.timesheet_id is null
         or fc.timesheet_id is null
-        or (fc.locked_by_invoice_id is null and fc.paid_at_utc is null)
+        or (
+          fc.locked_by_invoice_id is null
+          and fc.paid_at_utc is null
+          and coalesce(fc.has_any_segment_invoice_lock, false) = false
+        )
       ) as safe_to_overwrite,
 
       (
         p_force_overwrite_external_row_keys is not null
         and array_length(p_force_overwrite_external_row_keys, 1) is not null
         and s.external_row_key = any(p_force_overwrite_external_row_keys)
+        and (
+          s.timesheet_id is null
+          or fc.timesheet_id is null
+          or (
+            fc.locked_by_invoice_id is null
+            and fc.paid_at_utc is null
+            and coalesce(fc.has_any_segment_invoice_lock, false) = false
+          )
+        )
       ) as force_overwrite,
 
       (
         (
           s.timesheet_id is null
           or fc.timesheet_id is null
-          or (fc.locked_by_invoice_id is null and fc.paid_at_utc is null)
+          or (
+            fc.locked_by_invoice_id is null
+            and fc.paid_at_utc is null
+            and coalesce(fc.has_any_segment_invoice_lock, false) = false
+          )
         )
         or (
           p_force_overwrite_external_row_keys is not null
           and array_length(p_force_overwrite_external_row_keys, 1) is not null
           and s.external_row_key = any(p_force_overwrite_external_row_keys)
+          and (
+            s.timesheet_id is null
+            or fc.timesheet_id is null
+            or (
+              fc.locked_by_invoice_id is null
+              and fc.paid_at_utc is null
+              and coalesce(fc.has_any_segment_invoice_lock, false) = false
+            )
+          )
         )
       ) as should_overwrite_time
 
@@ -382,20 +425,20 @@ begin
       latest_import_id = hr_autoprocess_apply_phase1.import_id,
       source_system    = 'HEALTHROSTER'::hr_source_enum,
 
-      work_date        = u.work_date,
-      ward             = nullif(u.ward, ''),
-      hr_request_id    = u.request_id,
+      work_date        = case when u.safe_to_overwrite then u.work_date else s.work_date end,
+      ward             = case when u.safe_to_overwrite then nullif(u.ward, '') else s.ward end,
+      hr_request_id    = case when u.safe_to_overwrite then u.request_id else s.hr_request_id end,
       ref_num          = case
                            when u.safe_to_overwrite and u.request_id is not null
                              then u.request_id
                            else s.ref_num
                          end,
-      held_back_reason = u.held_back_reason,
+      held_back_reason = case when u.safe_to_overwrite then u.held_back_reason else s.held_back_reason end,
       updated_at       = now(),
 
-      cancelled_at_utc = null,
-      cancelled_by_import_id = null,
-      cancelled_reason = null,
+      cancelled_at_utc = case when u.safe_to_overwrite then null else s.cancelled_at_utc end,
+      cancelled_by_import_id = case when u.safe_to_overwrite then null else s.cancelled_by_import_id end,
+      cancelled_reason = case when u.safe_to_overwrite then null else s.cancelled_reason end,
 
       start_utc        = case when u.should_overwrite_time then u.start_utc else s.start_utc end,
       end_utc          = case when u.should_overwrite_time then u.end_utc   else s.end_utc   end,
@@ -426,6 +469,7 @@ begin
       (u.old_candidate_id is null and u.new_candidate_id is not null and u.safe_to_overwrite) as mapped_candidate
   )
 
+
   select
     coalesce((select count(*) from ins), 0),
     coalesce((select count(*) from upd), 0),
@@ -444,5 +488,6 @@ begin
   );
 end;
 $$;
+
 
 
