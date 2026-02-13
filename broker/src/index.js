@@ -23157,50 +23157,6 @@ async function parseHealthRosterWorkbookIntoHrRows(
 }
 
 
-async function buildNhspWeeklySnapshotCached(
-  env,
-  ts,
-  contract,
-  shifts,
-  nhspImportId,
-  basis = 'NHSP',
-  getPolicyCached,
-  curFin,
-  options = {}
-) {
-  const {
-    outbox_id = null,
-    write_now = false,
-    hr_eff_flags = null,
-    hr_preloaded_shifts = null,
-
-    // ✅ NEW: forward policy_override through to the non-cached builder
-    policy_override = null
-  } = (options && typeof options === 'object') ? options : {};
-
-  // Internally reuse the non-cached builder logic (it already uses getPolicyCached/policy_override).
-  const res = await buildNhspWeeklySnapshot(
-    env,
-    ts,
-    contract,
-    shifts,
-    nhspImportId,
-    basis,
-    getPolicyCached,
-    curFin,
-    {
-      outbox_id,
-      write_now,
-      hr_eff_flags,
-      hr_preloaded_shifts,
-      policy_override
-    }
-  );
-
-  return res;
-}
-
-
 
 // BE FIX: require expected_timesheet_id + resolve to CURRENT; strict 409 payload; write against CURRENT id only
 async function handleManualPayAdjustmentCreate(env, req, timesheetId) {
@@ -25821,6 +25777,7 @@ async function handleHrAutoprocessImport(env, req) {
 // Signature: enrichTsfinWithHrCrosscheck(env, ts, tsfinRow, effFlagsIn = null, nhspShiftsIn = null)
 // ─────────────────────────────────────────────────────────────
 
+
 async function buildNhspWeeklySnapshotCached(
   env,
   ts,
@@ -26166,7 +26123,6 @@ async function enrichTsfinWithHrCrosscheck(env, ts, tsfinRow, effFlagsIn = null,
   L('result', { tsId, clientId, candidateId, weekStart, weekEnd: weekEndY, status, issues: tsfinRow.hr_crosscheck_issues });
   return tsfinRow;
 }
-
 
 
 // ============================================================
