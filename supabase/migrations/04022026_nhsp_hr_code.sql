@@ -95,6 +95,12 @@ declare
 
   v_inserted_count int := 0;
   v_updated_count int := 0;
+
+  -- ✅ NEW: time-match “rekey” counts + locked skips
+  v_rekeyed_count int := 0;
+  v_locked_skip_conflict_count int := 0;
+  v_locked_skip_rekey_count int := 0;
+  v_nochange_skip_count int := 0;
 begin
   -- Validate import exists + is HEALTHROSTER weekly (mirror is only for HR weekly)
   select hi.source_system
@@ -127,6 +133,10 @@ begin
       'eligible_count', 0,
       'inserted_count', 0,
       'updated_count', 0,
+      'rekeyed_count', 0,
+      'locked_skip_conflict_count', 0,
+      'locked_skip_rekey_count', 0,
+      'nochange_skip_count', 0,
       'excluded', '[]'::jsonb
     );
   end if;
@@ -150,7 +160,6 @@ begin
   from tmp_det as d;
 
   -- Collisions: do not overwrite an existing nhsp_shifts row that belongs to a different source_system
-  -- NOTE: cannot combine a column-definition temp table with "AS SELECT", so use CTAS here.
   create temporary table tmp_collisions on commit drop as
   select s.external_row_key
   from public.nhsp_shifts as s
@@ -173,7 +182,12 @@ begin
     where c.external_row_key is null
   ) as x;
 
-  -- Upsert mirror rows (timesheet_id must ALWAYS be NULL)
+  -- Build upsert source rows (HR weekly truth rows)
+  -- ✅ Changes here:
+  --   - break_mins uses actual_break_* first (then break_*)
+  --   - ref_num uses hr_request_id (import reference wins)
+  --   - ward uses unit_raw / payload ward
+  --   - timesheet_id is NULL on insert source (but we will preserve existing on update)
   if array_length(v_eligible_keys, 1) is not null then
     create temporary table tmp_upsert_src on commit drop as
     select
@@ -182,32 +196,71 @@ begin
       d.candidate_id,
       d.client_id,
       d.contract_id,
-      null::uuid as timesheet_id,                          -- LOCKED: must remain NULL
+      null::uuid as timesheet_id,
       d.work_date,
       coalesce(r.unit_raw, nullif(btrim(r.payload_json->>'ward'), ''), null) as ward,
       d.start_utc,
       d.end_utc,
+
       greatest(
         0,
-        case
-          when (r.payload_json ? 'break_mins') and (r.payload_json->>'break_mins') ~ '^[0-9]+$'
-            then (r.payload_json->>'break_mins')::int
-          else 0
-        end
+        coalesce(
+          case
+            when nullif(btrim(coalesce(r.payload_json->>'actual_break_mins','')), '') ~ '^[0-9]+$'
+              then (r.payload_json->>'actual_break_mins')::int
+            else null
+          end,
+          case
+            when nullif(btrim(coalesce(r.payload_json->>'actual_break_minutes','')), '') ~ '^[0-9]+$'
+              then (r.payload_json->>'actual_break_minutes')::int
+            else null
+          end,
+          case
+            when nullif(btrim(coalesce(r.payload_json->>'break_mins','')), '') ~ '^[0-9]+$'
+              then (r.payload_json->>'break_mins')::int
+            else null
+          end,
+          case
+            when nullif(btrim(coalesce(r.payload_json->>'break_minutes','')), '') ~ '^[0-9]+$'
+              then (r.payload_json->>'break_minutes')::int
+            else null
+          end,
+          0
+        )
       ) as break_mins,
+
       greatest(
         0,
         (floor(extract(epoch from (d.end_utc - d.start_utc)) / 60.0))::int
         -
         greatest(
           0,
-          case
-            when (r.payload_json ? 'break_mins') and (r.payload_json->>'break_mins') ~ '^[0-9]+$'
-              then (r.payload_json->>'break_mins')::int
-            else 0
-          end
+          coalesce(
+            case
+              when nullif(btrim(coalesce(r.payload_json->>'actual_break_mins','')), '') ~ '^[0-9]+$'
+                then (r.payload_json->>'actual_break_mins')::int
+              else null
+            end,
+            case
+              when nullif(btrim(coalesce(r.payload_json->>'actual_break_minutes','')), '') ~ '^[0-9]+$'
+                then (r.payload_json->>'actual_break_minutes')::int
+              else null
+            end,
+            case
+              when nullif(btrim(coalesce(r.payload_json->>'break_mins','')), '') ~ '^[0-9]+$'
+                then (r.payload_json->>'break_mins')::int
+              else null
+            end,
+            case
+              when nullif(btrim(coalesce(r.payload_json->>'break_minutes','')), '') ~ '^[0-9]+$'
+                then (r.payload_json->>'break_minutes')::int
+              else null
+            end,
+            0
+          )
         )
       ) as pay_minutes,
+
       null::numeric as pay_amount_snapshot,
       null::numeric as charge_amount_snapshot,
       'PENDING'::text as invoice_status,
@@ -216,13 +269,17 @@ begin
       v_now as created_at,
       v_now as updated_at,
       'HEALTHROSTER'::public.hr_source_enum as source_system,
+
       r.hr_request_id,
       null::text as held_back_reason,
       r.staff_raw as staff_name,
       r.staff_norm as staff_norm,
       nullif(lower(coalesce(r.unit_raw, r.payload_json->>'ward', '')), '') as ward_norm,
       r.assignment_grade_norm as assignment_code,
+
+      -- ✅ import reference wins
       nullif(btrim(r.hr_request_id), '') as ref_num,
+
       d.week_ending_date,
       null::timestamptz as cancelled_at_utc,
       null::uuid as cancelled_by_import_id,
@@ -232,7 +289,170 @@ begin
       on r.import_id = p_import_id
      and r.external_row_key = d.external_row_key
     where d.external_row_key = any(v_eligible_keys);
+  end if;
 
+  -- ------------------------------------------------------------
+  -- ✅ NEW: If Request Id changes, external_row_key changes.
+  -- Prevent duplicates by matching existing HEALTHROSTER shifts by:
+  --   (candidate_id, client_id, work_date, start_utc minute, end_utc minute)
+  -- and “rekeying” the existing row to the new external_row_key,
+  -- BUT NEVER if invoice-locked/invoiced.
+  -- ------------------------------------------------------------
+  if array_length(v_eligible_keys, 1) is not null then
+    create temporary table tmp_time_match on commit drop as
+    select
+      src.external_row_key as incoming_external_row_key,
+      src.candidate_id as candidate_id,
+      src.client_id as client_id,
+      src.work_date as work_date,
+      date_trunc('minute', src.start_utc) as inc_start_utc_min,
+      date_trunc('minute', src.end_utc) as inc_end_utc_min,
+
+      s.id as existing_shift_id,
+      s.external_row_key as existing_external_row_key,
+      s.source_system as existing_source_system,
+      s.timesheet_id as existing_timesheet_id,
+      s.invoice_id as existing_invoice_id,
+
+      -- invoice-locked check:
+      (
+        s.invoice_id is not null
+        or exists (
+          select 1
+          from public.timesheets_financials tf
+          cross join lateral jsonb_array_elements(coalesce(tf.invoice_breakdown_json->'segments','[]'::jsonb)) as seg(value)
+          where tf.is_current = true
+            and tf.timesheet_id = s.timesheet_id
+            and nullif(btrim(seg.value->>'nhsp_shift_id'), '') = s.id::text
+            and nullif(btrim(seg.value->>'invoice_locked_invoice_id'), '') is not null
+          limit 1
+        )
+      ) as existing_is_locked,
+
+      -- does the incoming external_row_key already exist?
+      exists (
+        select 1
+        from public.nhsp_shifts s2
+        where s2.external_row_key = src.external_row_key
+        limit 1
+      ) as incoming_key_exists
+
+    from tmp_upsert_src src
+    join public.nhsp_shifts s
+      on s.source_system = 'HEALTHROSTER'::public.hr_source_enum
+     and s.cancelled_at_utc is null
+     and s.candidate_id = src.candidate_id
+     and s.client_id = src.client_id
+     and s.work_date = src.work_date
+     and date_trunc('minute', s.start_utc) = date_trunc('minute', src.start_utc)
+     and date_trunc('minute', s.end_utc) = date_trunc('minute', src.end_utc)
+    where src.external_row_key is not null
+      and src.candidate_id is not null
+      and src.client_id is not null
+      and src.work_date is not null
+      and src.start_utc is not null
+      and src.end_utc is not null
+      and s.external_row_key is not null
+      and s.external_row_key <> src.external_row_key;
+
+    -- locked skips for rekey
+    select count(*)::int
+    into v_locked_skip_rekey_count
+    from tmp_time_match tm
+    where tm.existing_is_locked is true;
+
+    -- apply rekeys where safe (not locked, no existing incoming key, and existing is HEALTHROSTER)
+    with rekey_rows as (
+      select distinct on (tm.incoming_external_row_key)
+        tm.incoming_external_row_key,
+        tm.existing_shift_id
+      from tmp_time_match tm
+      where tm.existing_is_locked is false
+        and tm.incoming_key_exists is false
+        and tm.existing_source_system = 'HEALTHROSTER'::public.hr_source_enum
+      order by tm.incoming_external_row_key, tm.existing_shift_id
+    ),
+    rekey_upd as (
+      update public.nhsp_shifts s3
+         set external_row_key = src3.external_row_key,
+             latest_import_id = p_import_id,
+             candidate_id = src3.candidate_id,
+             client_id = src3.client_id,
+             contract_id = src3.contract_id,
+             work_date = src3.work_date,
+             ward = src3.ward,
+             start_utc = src3.start_utc,
+             end_utc = src3.end_utc,
+             break_mins = src3.break_mins,
+             pay_minutes = src3.pay_minutes,
+             hr_request_id = src3.hr_request_id,
+             ref_num = src3.ref_num,
+             staff_name = src3.staff_name,
+             staff_norm = src3.staff_norm,
+             ward_norm = src3.ward_norm,
+             assignment_code = src3.assignment_code,
+             week_ending_date = src3.week_ending_date,
+             updated_at = v_now
+        from rekey_rows rk
+        join tmp_upsert_src src3
+          on src3.external_row_key = rk.incoming_external_row_key
+       where s3.id = rk.existing_shift_id
+         and s3.source_system = 'HEALTHROSTER'::public.hr_source_enum
+         and s3.cancelled_at_utc is null
+      returning s3.id
+    )
+    select count(*)::int
+    into v_rekeyed_count
+    from rekey_upd;
+
+  end if;
+
+  -- ------------------------------------------------------------
+  -- ✅ NEW: skip updates when the existing row (by external_row_key) is invoiced/locked
+  -- ------------------------------------------------------------
+  create temporary table tmp_locked_conflicts(
+    external_row_key text primary key
+  ) on commit drop;
+
+  insert into tmp_locked_conflicts(external_row_key)
+  select distinct src.external_row_key
+  from tmp_upsert_src src
+  join public.nhsp_shifts s
+    on s.external_row_key = src.external_row_key
+   and s.source_system = 'HEALTHROSTER'::public.hr_source_enum
+  where
+    (
+      s.invoice_id is not null
+      or exists (
+        select 1
+        from public.timesheets_financials tf
+        cross join lateral jsonb_array_elements(coalesce(tf.invoice_breakdown_json->'segments','[]'::jsonb)) as seg(value)
+        where tf.is_current = true
+          and tf.timesheet_id = s.timesheet_id
+          and nullif(btrim(seg.value->>'nhsp_shift_id'), '') = s.id::text
+          and nullif(btrim(seg.value->>'invoice_locked_invoice_id'), '') is not null
+        limit 1
+      )
+    )
+  on conflict do nothing;
+
+  select count(*)::int
+  into v_locked_skip_conflict_count
+  from tmp_locked_conflicts;
+
+  -- Filter final upsert source: exclude locked-conflict keys
+  create temporary table tmp_upsert_final on commit drop as
+  select src.*
+  from tmp_upsert_src src
+  left join tmp_locked_conflicts lc
+    on lc.external_row_key = src.external_row_key
+  where lc.external_row_key is null;
+
+  -- Upsert mirror rows
+  -- ✅ Changes:
+  --   - preserve existing timesheet_id (do NOT clear)
+  --   - do NOT write if nothing materially changed (nochange skip)
+  if exists (select 1 from tmp_upsert_final) then
     with up as (
       insert into public.nhsp_shifts(
         external_row_key,
@@ -299,35 +519,71 @@ begin
         s.cancelled_at_utc,
         s.cancelled_by_import_id,
         s.cancelled_reason
-      from tmp_upsert_src as s
+      from tmp_upsert_final as s
       on conflict (external_row_key) do update
-        set latest_import_id = excluded.latest_import_id,
-            candidate_id = excluded.candidate_id,
-            client_id = excluded.client_id,
-            contract_id = excluded.contract_id,
-            work_date = excluded.work_date,
-            ward = excluded.ward,
-            start_utc = excluded.start_utc,
-            end_utc = excluded.end_utc,
-            break_mins = excluded.break_mins,
-            pay_minutes = excluded.pay_minutes,
-            hr_request_id = excluded.hr_request_id,
-            ref_num = excluded.ref_num,
-            staff_name = excluded.staff_name,
-            staff_norm = excluded.staff_norm,
-            ward_norm = excluded.ward_norm,
-            assignment_code = excluded.assignment_code,
-            week_ending_date = excluded.week_ending_date,
-            source_system = 'HEALTHROSTER'::public.hr_source_enum,
-            timesheet_id = null,                            -- LOCKED: must remain NULL
-            updated_at = excluded.updated_at
-      returning (xmax = 0) as inserted_flag
+        set
+          candidate_id = excluded.candidate_id,
+          client_id = excluded.client_id,
+          contract_id = excluded.contract_id,
+          work_date = excluded.work_date,
+          ward = excluded.ward,
+          start_utc = excluded.start_utc,
+          end_utc = excluded.end_utc,
+          break_mins = excluded.break_mins,
+          pay_minutes = excluded.pay_minutes,
+          hr_request_id = excluded.hr_request_id,
+          ref_num = excluded.ref_num,
+          staff_name = excluded.staff_name,
+          staff_norm = excluded.staff_norm,
+          ward_norm = excluded.ward_norm,
+          assignment_code = excluded.assignment_code,
+          week_ending_date = excluded.week_ending_date,
+          source_system = 'HEALTHROSTER'::public.hr_source_enum,
+
+          -- ✅ CRITICAL: never clear linkages that were created elsewhere
+          timesheet_id = public.nhsp_shifts.timesheet_id,
+
+          -- only touch latest_import_id / updated_at when something actually changed (below)
+          latest_import_id = public.nhsp_shifts.latest_import_id,
+          updated_at = public.nhsp_shifts.updated_at
+      where
+        (
+          public.nhsp_shifts.candidate_id is distinct from excluded.candidate_id
+          or public.nhsp_shifts.client_id is distinct from excluded.client_id
+          or public.nhsp_shifts.contract_id is distinct from excluded.contract_id
+          or public.nhsp_shifts.work_date is distinct from excluded.work_date
+          or public.nhsp_shifts.ward is distinct from excluded.ward
+          or date_trunc('minute', public.nhsp_shifts.start_utc) is distinct from date_trunc('minute', excluded.start_utc)
+          or date_trunc('minute', public.nhsp_shifts.end_utc) is distinct from date_trunc('minute', excluded.end_utc)
+          or coalesce(public.nhsp_shifts.break_mins,0) is distinct from coalesce(excluded.break_mins,0)
+          or coalesce(public.nhsp_shifts.pay_minutes,0) is distinct from coalesce(excluded.pay_minutes,0)
+          or public.nhsp_shifts.hr_request_id is distinct from excluded.hr_request_id
+          or public.nhsp_shifts.ref_num is distinct from excluded.ref_num
+          or public.nhsp_shifts.staff_name is distinct from excluded.staff_name
+          or public.nhsp_shifts.staff_norm is distinct from excluded.staff_norm
+          or public.nhsp_shifts.ward_norm is distinct from excluded.ward_norm
+          or public.nhsp_shifts.assignment_code is distinct from excluded.assignment_code
+          or public.nhsp_shifts.week_ending_date is distinct from excluded.week_ending_date
+        )
+      returning
+        (xmax = 0) as inserted_flag,
+        (xmax <> 0) as updated_flag
+    ),
+    counts as (
+      select
+        count(*) filter (where up.inserted_flag) as ins_n,
+        count(*) filter (where up.updated_flag) as upd_n
+      from up
     )
     select
-      count(*) filter (where up.inserted_flag),
-      count(*) filter (where not up.inserted_flag)
+      coalesce(counts.ins_n,0)::int,
+      coalesce(counts.upd_n,0)::int
     into v_inserted_count, v_updated_count
-    from up;
+    from counts;
+
+    -- nochange skips = final_upsert rows - (inserted + updated)
+    select greatest(0, (select count(*) from tmp_upsert_final) - coalesce(v_inserted_count,0) - coalesce(v_updated_count,0))::int
+    into v_nochange_skip_count;
   end if;
 
   return jsonb_build_object(
@@ -335,15 +591,22 @@ begin
     'requested_count', coalesce(array_length(v_requested_keys, 1), 0),
     'deterministic_count', coalesce(array_length(v_det_keys, 1), 0),
     'eligible_count', coalesce(array_length(v_eligible_keys, 1), 0),
+
     'inserted_count', v_inserted_count,
     'updated_count', v_updated_count,
+
+    'rekeyed_count', v_rekeyed_count,
+    'locked_skip_conflict_count', v_locked_skip_conflict_count,
+    'locked_skip_rekey_count', v_locked_skip_rekey_count,
+    'nochange_skip_count', v_nochange_skip_count,
+
     'excluded', (
       select coalesce(
         jsonb_agg(jsonb_build_object('external_row_key', e.external_row_key, 'reason', e.reason) order by e.external_row_key),
         '[]'::jsonb
       )
       from (
-        -- Requested but not deterministic (ambiguous / excluded)
+        -- Requested but not deterministic
         select rk.external_row_key, 'NOT_DETERMINISTIC'::text as reason
         from tmp_req_keys as rk
         left join (select distinct d.external_row_key from tmp_det as d) as dk
@@ -355,13 +618,24 @@ begin
         -- Deterministic but collision with existing non-HEALTHROSTER shift
         select c.external_row_key, 'EXISTS_NON_HEALTHROSTER'::text as reason
         from tmp_collisions as c
+
+        union all
+
+        -- Locked conflict on same external_row_key
+        select lc.external_row_key, 'LOCKED_INVOICED_EXISTING_KEY'::text as reason
+        from tmp_locked_conflicts as lc
+
+        union all
+
+        -- Locked time-match that prevented rekey (report under incoming key)
+        select tm2.incoming_external_row_key as external_row_key, 'LOCKED_INVOICED_TIME_MATCH'::text as reason
+        from tmp_time_match tm2
+        where tm2.existing_is_locked is true
       ) as e
     )
   );
 end;
 $$;
-
-
 
 
 
