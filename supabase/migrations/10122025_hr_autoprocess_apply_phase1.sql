@@ -44,6 +44,9 @@ declare
   v_created           int := 0;
   v_updated           int := 0;
   v_mapped_candidates int := 0;
+
+  -- ✅ NEW: count of rows we refused to touch because the matched shift is invoice/paid locked
+  v_skipped_locked    int := 0;
 begin
   ----------------------------------------------------------------
   -- Sanity: import must exist and be HEALTHROSTER
@@ -51,7 +54,7 @@ begin
   perform 1
   from public.hr_imports hi
   where hi.id = hr_autoprocess_apply_phase1.import_id
-    and hi.source_system = 'HEALTHROSTER'::hr_source_enum;
+    and hi.source_system = 'HEALTHROSTER'::public.hr_source_enum;
 
   if not found then
     raise exception 'hr_autoprocess_apply_phase1: import % not found or not HEALTHROSTER', import_id;
@@ -81,7 +84,7 @@ begin
 
       -- ✅ Break minutes priority:
       --  1) payload actual_break_mins / actual_break_minutes
-      --  2) payload break_mins / break_minutes (canonical/fallback)
+      --  2) payload break_mins / break_minutes
       --  3) 0
       greatest(
         0,
@@ -122,8 +125,8 @@ begin
       ) as finalized_raw,
 
       -- ✅ Request id priority:
-      --  1) hr_rows.hr_request_id (canonical column used elsewhere)
-      --  2) payload_json.request_id (fallback)
+      --  1) hr_rows.hr_request_id
+      --  2) payload_json.request_id
       coalesce(
         nullif(btrim(coalesce(r.hr_request_id,'')), ''),
         nullif((r.payload_json ->> 'request_id'), '')
@@ -136,6 +139,7 @@ begin
       and (r.payload_json ->> 'start_utc') is not null
       and (r.payload_json ->> 'end_utc')   is not null
   ),
+
   normed as (
     select
       s.hr_row_id,
@@ -150,8 +154,9 @@ begin
       s.break_mins,
       s.request_id,
 
-      case when coalesce(trim(s.finalized_raw), '') = '' then 'NO_FINALISED_DATE'
-           else null
+      case
+        when coalesce(trim(s.finalized_raw), '') = '' then 'NO_FINALISED_DATE'
+        else null
       end as held_back_reason,
 
       coalesce(
@@ -190,7 +195,7 @@ begin
       )
   ),
 
-  resolved as (
+  resolved_base as (
     select
       n.*,
       coalesce(
@@ -252,40 +257,62 @@ begin
     ) cand_exact_unique on (cand_alias.id is null and cand_map.candidate_id is null)
   ),
 
-   fin_current as (
+    -- ✅ NEW: if Request ID changes but the shift overlaps the existing one, reuse the existing external_row_key
+  match_existing as (
+    select
+      x.hr_row_id,
+      x.external_row_key as existing_external_row_key
+    from (
+      select
+        rb.hr_row_id,
+        s2.external_row_key,
+        row_number() over (
+          partition by rb.hr_row_id
+          order by s2.updated_at desc nulls last, s2.created_at desc nulls last, s2.id desc
+        ) as rn
+      from resolved_base rb
+      join public.nhsp_shifts s2
+        on s2.source_system = 'HEALTHROSTER'::public.hr_source_enum
+       and s2.client_id = rb.client_id
+       and rb.candidate_id is not null
+       and s2.candidate_id = rb.candidate_id
+       and s2.work_date = rb.work_date
+       and rb.start_utc is not null
+       and rb.end_utc is not null
+       and s2.start_utc is not null
+       and s2.end_utc is not null
+       and (least(s2.end_utc, rb.end_utc) - greatest(s2.start_utc, rb.start_utc)) >= interval '1 minute'
+    ) as x
+    where x.rn = 1
+  ),
+
+  resolved as (
+    select
+      rb.*,
+      coalesce(me.existing_external_row_key, rb.external_row_key) as external_row_key_eff
+    from resolved_base rb
+    left join match_existing me
+      on me.hr_row_id = rb.hr_row_id
+  ),
+
+  fin_current as (
     select distinct on (tf.timesheet_id)
       tf.timesheet_id,
       tf.locked_by_invoice_id,
       tf.paid_at_utc,
-
-      (
-        case
-          when tf.invoice_breakdown_json is not null
-           and jsonb_typeof(tf.invoice_breakdown_json) = 'object'
-           and upper(coalesce(tf.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
-           and jsonb_typeof(tf.invoice_breakdown_json->'segments') = 'array'
-          then exists (
-            select 1
-            from jsonb_array_elements(tf.invoice_breakdown_json->'segments') as seg(seg_obj)
-            where nullif(btrim(coalesce(seg.seg_obj->>'invoice_locked_invoice_id','')), '') is not null
-          )
-          else false
-        end
-      ) as has_any_segment_invoice_lock
-
+      tf.invoice_breakdown_json
     from public.timesheets_financials tf
     where tf.is_current = true
     order by tf.timesheet_id, tf.created_at desc
   ),
 
-
   ext_update as (
     update public.hr_rows r
-    set external_row_key = res.external_row_key
+    set external_row_key = res.external_row_key_eff
     from resolved res
     where r.id = res.hr_row_id
-      and res.external_row_key is not null
-      and r.external_row_key is distinct from res.external_row_key
+      and res.external_row_key_eff is not null
+      and r.external_row_key is distinct from res.external_row_key_eff
     returning 1
   ),
 
@@ -309,9 +336,9 @@ begin
       updated_at
     )
     select
-      r.external_row_key,
+      r.external_row_key_eff,
       hr_autoprocess_apply_phase1.import_id,
-      'HEALTHROSTER'::hr_source_enum,
+      'HEALTHROSTER'::public.hr_source_enum,
       r.work_date,
       nullif(r.ward, ''),
       r.start_utc,
@@ -330,18 +357,21 @@ begin
       now(),
       now()
     from resolved r
-    where r.external_row_key is not null
+    where r.external_row_key_eff is not null
       and not exists (
         select 1
         from public.nhsp_shifts s
-        where s.external_row_key = r.external_row_key
+        where s.external_row_key = r.external_row_key_eff
       )
     returning
       (candidate_id is not null) as mapped_candidate
   ),
+
   upd_src as (
     select
       s.external_row_key,
+      s.id as nhsp_shift_id,
+      s.invoice_id as shift_invoice_id,
       s.timesheet_id,
 
       s.candidate_id as old_candidate_id,
@@ -359,135 +389,132 @@ begin
 
       fc.locked_by_invoice_id,
       fc.paid_at_utc,
-      coalesce(fc.has_any_segment_invoice_lock, false) as has_any_segment_invoice_lock,
+      fc.invoice_breakdown_json,
 
       (
-        s.timesheet_id is null
-        or fc.timesheet_id is null
-        or (
-          fc.locked_by_invoice_id is null
-          and fc.paid_at_utc is null
-          and coalesce(fc.has_any_segment_invoice_lock, false) = false
+        fc.invoice_breakdown_json is not null
+        and jsonb_typeof(fc.invoice_breakdown_json) = 'object'
+        and upper(coalesce(fc.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+        and jsonb_typeof(fc.invoice_breakdown_json->'segments') = 'array'
+        and exists (
+          select 1
+          from jsonb_array_elements(fc.invoice_breakdown_json->'segments') as seg(seg_obj)
+          where nullif(btrim(coalesce(seg.seg_obj->>'nhsp_shift_id','')), '') = s.id::text
+            and nullif(btrim(coalesce(seg.seg_obj->>'invoice_locked_invoice_id','')), '') is not null
         )
-      ) as safe_to_overwrite,
+      ) as is_segment_locked,
 
       (
-        p_force_overwrite_external_row_keys is not null
-        and array_length(p_force_overwrite_external_row_keys, 1) is not null
-        and s.external_row_key = any(p_force_overwrite_external_row_keys)
-        and (
-          s.timesheet_id is null
-          or fc.timesheet_id is null
-          or (
-            fc.locked_by_invoice_id is null
-            and fc.paid_at_utc is null
-            and coalesce(fc.has_any_segment_invoice_lock, false) = false
+        s.invoice_id is not null
+        or fc.locked_by_invoice_id is not null
+        or fc.paid_at_utc is not null
+        or (
+          fc.invoice_breakdown_json is not null
+          and jsonb_typeof(fc.invoice_breakdown_json) = 'object'
+          and upper(coalesce(fc.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+          and jsonb_typeof(fc.invoice_breakdown_json->'segments') = 'array'
+          and exists (
+            select 1
+            from jsonb_array_elements(fc.invoice_breakdown_json->'segments') as seg2(seg_obj)
+            where nullif(btrim(coalesce(seg2.seg_obj->>'nhsp_shift_id','')), '') = s.id::text
+              and nullif(btrim(coalesce(seg2.seg_obj->>'invoice_locked_invoice_id','')), '') is not null
           )
         )
-      ) as force_overwrite,
+      ) as is_invoice_locked,
 
       (
-        (
-          s.timesheet_id is null
-          or fc.timesheet_id is null
+        not (
+          s.invoice_id is not null
+          or fc.locked_by_invoice_id is not null
+          or fc.paid_at_utc is not null
           or (
-            fc.locked_by_invoice_id is null
-            and fc.paid_at_utc is null
-            and coalesce(fc.has_any_segment_invoice_lock, false) = false
-          )
-        )
-        or (
-          p_force_overwrite_external_row_keys is not null
-          and array_length(p_force_overwrite_external_row_keys, 1) is not null
-          and s.external_row_key = any(p_force_overwrite_external_row_keys)
-          and (
-            s.timesheet_id is null
-            or fc.timesheet_id is null
-            or (
-              fc.locked_by_invoice_id is null
-              and fc.paid_at_utc is null
-              and coalesce(fc.has_any_segment_invoice_lock, false) = false
+            fc.invoice_breakdown_json is not null
+            and jsonb_typeof(fc.invoice_breakdown_json) = 'object'
+            and upper(coalesce(fc.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+            and jsonb_typeof(fc.invoice_breakdown_json->'segments') = 'array'
+            and exists (
+              select 1
+              from jsonb_array_elements(fc.invoice_breakdown_json->'segments') as seg3(seg_obj)
+              where nullif(btrim(coalesce(seg3.seg_obj->>'nhsp_shift_id','')), '') = s.id::text
+                and nullif(btrim(coalesce(seg3.seg_obj->>'invoice_locked_invoice_id','')), '') is not null
             )
           )
         )
-      ) as should_overwrite_time
+      ) as safe_to_overwrite
 
     from public.nhsp_shifts s
     join resolved r
-      on r.external_row_key = s.external_row_key
+      on r.external_row_key_eff = s.external_row_key
     left join fin_current fc
       on fc.timesheet_id = s.timesheet_id
+    where s.source_system = 'HEALTHROSTER'::public.hr_source_enum
   ),
 
   upd as (
     update public.nhsp_shifts s
     set
       latest_import_id = hr_autoprocess_apply_phase1.import_id,
-      source_system    = 'HEALTHROSTER'::hr_source_enum,
+      source_system    = 'HEALTHROSTER'::public.hr_source_enum,
 
-      work_date        = case when u.safe_to_overwrite then u.work_date else s.work_date end,
-      ward             = case when u.safe_to_overwrite then nullif(u.ward, '') else s.ward end,
-      hr_request_id    = case when u.safe_to_overwrite then u.request_id else s.hr_request_id end,
+      work_date        = u.work_date,
+      ward             = nullif(u.ward, ''),
+      hr_request_id    = u.request_id,
       ref_num          = case
-                           when u.safe_to_overwrite and u.request_id is not null
-                             then u.request_id
+                           when u.request_id is not null then u.request_id
                            else s.ref_num
                          end,
-      held_back_reason = case when u.safe_to_overwrite then u.held_back_reason else s.held_back_reason end,
+      held_back_reason = u.held_back_reason,
       updated_at       = now(),
 
-      cancelled_at_utc = case when u.safe_to_overwrite then null else s.cancelled_at_utc end,
-      cancelled_by_import_id = case when u.safe_to_overwrite then null else s.cancelled_by_import_id end,
-      cancelled_reason = case when u.safe_to_overwrite then null else s.cancelled_reason end,
+      cancelled_at_utc = null,
+      cancelled_by_import_id = null,
+      cancelled_reason = null,
 
-      start_utc        = case when u.should_overwrite_time then u.start_utc else s.start_utc end,
-      end_utc          = case when u.should_overwrite_time then u.end_utc   else s.end_utc   end,
-      break_mins       = case when u.should_overwrite_time then coalesce(u.break_mins, 0) else s.break_mins end,
-      pay_minutes      = case when u.should_overwrite_time then
-                           greatest(
-                             0,
-                             (extract(epoch from (u.end_utc - u.start_utc)) / 60)::int
-                             - coalesce(u.break_mins, 0)
-                           )
-                         else s.pay_minutes
-                         end,
+      start_utc        = u.start_utc,
+      end_utc          = u.end_utc,
+      break_mins       = coalesce(u.break_mins, 0),
+      pay_minutes      = greatest(
+                           0,
+                           (extract(epoch from (u.end_utc - u.start_utc)) / 60)::int
+                           - coalesce(u.break_mins, 0)
+                         ),
 
       client_id        = case
-                           when u.new_client_id is not null and u.safe_to_overwrite
-                             then u.new_client_id
+                           when u.new_client_id is not null then u.new_client_id
                            else s.client_id
                          end,
 
       candidate_id     = case
-                           when u.new_candidate_id is not null and u.safe_to_overwrite
-                             then u.new_candidate_id
+                           when u.new_candidate_id is not null then u.new_candidate_id
                            else s.candidate_id
                          end
     from upd_src u
     where s.external_row_key = u.external_row_key
+      and u.safe_to_overwrite is true
     returning
       (u.old_candidate_id is null and u.new_candidate_id is not null and u.safe_to_overwrite) as mapped_candidate
   )
-
 
   select
     coalesce((select count(*) from ins), 0),
     coalesce((select count(*) from upd), 0),
     coalesce((select count(*) from ins where mapped_candidate), 0)
-      + coalesce((select count(*) from upd where mapped_candidate), 0)
+      + coalesce((select count(*) from upd where mapped_candidate), 0),
+    coalesce((select count(*) from upd_src where is_invoice_locked is true), 0)
   into
     v_created,
     v_updated,
-    v_mapped_candidates;
+    v_mapped_candidates,
+    v_skipped_locked;
 
   return jsonb_build_object(
-    'import_id',         import_id,
-    'shifts_created',    v_created,
-    'shifts_updated',    v_updated,
-    'mapped_candidates', v_mapped_candidates
+    'import_id',             import_id,
+    'shifts_created',        v_created,
+    'shifts_updated',        v_updated,
+    'mapped_candidates',     v_mapped_candidates,
+    'skipped_locked_shifts', v_skipped_locked
   );
 end;
 $$;
-
 
 
