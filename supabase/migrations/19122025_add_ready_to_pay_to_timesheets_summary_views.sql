@@ -65,6 +65,8 @@ CREATE INDEX IF NOT EXISTS idx_timesheet_evidence_timesheet_kind
 -- ✅ ONLY CHANGE: APPEND a new boolean column at the END of the view output:
 --     hr_validation_required_for_invoice
 -- ============================================================
+
+
 CREATE OR REPLACE VIEW public.v_timesheets_summary_base AS
 WITH latest_tsfin AS (
   SELECT DISTINCT ON (tf.timesheet_id)
@@ -504,12 +506,34 @@ with_issues AS (
                   ) ||
                   CASE WHEN ar.pay_on_hold THEN ARRAY['On hold'::text] ELSE ARRAY[]::text[] END
                 ) ||
+                -- ✅ SUPPRESS HR crosscheck UI issues when HR validation is required for invoice (Option A)
                 CASE
-                  WHEN ar.hr_crosscheck_status = 'HOURS_MISMATCH_HR'::text OR ar.hr_crosscheck_issues && ARRAY['HOURS_MISMATCH_HR'::text]
+                  WHEN NOT (
+                    ar.timesheet_id IS NOT NULL
+                    AND COALESCE(ar.client_hr_validation_required, false) = true
+                    AND COALESCE(ar.client_no_timesheet_required, false) = false
+                    AND COALESCE(ar.total_hours, 0::numeric) > 0::numeric
+                  )
+                  AND (
+                    ar.hr_crosscheck_status = 'HOURS_MISMATCH_HR'::text
+                    OR ar.hr_crosscheck_issues && ARRAY['HOURS_MISMATCH_HR'::text]
+                  )
                     THEN ARRAY['Hours mismatch HR'::text]
-                  ELSE ARRAY[]::text[] END
+                  ELSE ARRAY[]::text[]
+                END
               ) ||
-              CASE WHEN ar.hr_crosscheck_issues && ARRAY['HR_HOURS_MISSING'::text] THEN ARRAY['HR hours missing'::text] ELSE ARRAY[]::text[] END
+              -- ✅ SUPPRESS HR crosscheck UI issues when HR validation is required for invoice (Option A)
+              CASE
+                WHEN NOT (
+                  ar.timesheet_id IS NOT NULL
+                  AND COALESCE(ar.client_hr_validation_required, false) = true
+                  AND COALESCE(ar.client_no_timesheet_required, false) = false
+                  AND COALESCE(ar.total_hours, 0::numeric) > 0::numeric
+                )
+                AND (ar.hr_crosscheck_issues && ARRAY['HR_HOURS_MISSING'::text])
+                  THEN ARRAY['HR hours missing'::text]
+                ELSE ARRAY[]::text[]
+              END
             ) ||
             CASE WHEN ar.hr_crosscheck_issues && ARRAY['DUPLICATE_CONTRACTS'::text] THEN ARRAY['Duplicate contracts'::text] ELSE ARRAY[]::text[] END
           ) ||
@@ -694,12 +718,21 @@ with_issues AS (
         THEN ARRAY['Reference'::text]
       ELSE ARRAY[]::text[]
     END ||
+    -- ✅ Validation-framework issue labels (pending/failed). No TSFIN HR crosscheck surfaced when required.
     CASE
       WHEN ar.timesheet_id IS NOT NULL
-        AND ar.client_hr_validation_required
+        AND COALESCE(ar.client_hr_validation_required, false) = true
+        AND COALESCE(ar.client_no_timesheet_required, false) = false
+        AND COALESCE(ar.total_hours, 0::numeric) > 0::numeric
+        AND ar.validation_status IS NULL
+        THEN ARRAY['Awaiting validation'::text]
+      WHEN ar.timesheet_id IS NOT NULL
+        AND COALESCE(ar.client_hr_validation_required, false) = true
+        AND COALESCE(ar.client_no_timesheet_required, false) = false
+        AND COALESCE(ar.total_hours, 0::numeric) > 0::numeric
         AND ar.validation_status IS NOT NULL
         AND (ar.validation_status <> ALL (ARRAY['VALIDATION_OK'::validation_status_enum, 'OVERRIDDEN'::validation_status_enum]))
-        THEN ARRAY['Validation'::text]
+        THEN ARRAY['Validation failed'::text]
       ELSE ARRAY[]::text[]
     END ||
     CASE
@@ -707,7 +740,7 @@ with_issues AS (
         AND ar.client_requires_hr
         AND NOT ar.client_autoprocess_hr
         AND ar.authorised_at_server IS NULL
-THEN ARRAY['Authorisation'::text]
+        THEN ARRAY['Authorisation'::text]
       ELSE ARRAY[]::text[]
     END AS issue_codes
 
@@ -941,8 +974,24 @@ SELECT
       ]
     )
   )
-  OR (hr_crosscheck_status IS NOT NULL AND hr_crosscheck_status <> 'OK')
-  OR (hr_crosscheck_issues && ARRAY['DUPLICATE_CONTRACTS'])
+  OR (
+    NOT (
+      wi.timesheet_id IS NOT NULL
+      AND COALESCE(wi.client_hr_validation_required, false) = true
+      AND COALESCE(wi.client_no_timesheet_required, false) = false
+      AND COALESCE(wi.total_hours, 0::numeric) > 0::numeric
+    )
+    AND (hr_crosscheck_status IS NOT NULL AND hr_crosscheck_status <> 'OK')
+  )
+  OR (
+    NOT (
+      wi.timesheet_id IS NOT NULL
+      AND COALESCE(wi.client_hr_validation_required, false) = true
+      AND COALESCE(wi.client_no_timesheet_required, false) = false
+      AND COALESCE(wi.total_hours, 0::numeric) > 0::numeric
+    )
+    AND (hr_crosscheck_issues && ARRAY['DUPLICATE_CONTRACTS'])
+  )
   OR (ic.issue_codes_final IS NOT NULL AND array_length(ic.issue_codes_final, 1) > 0) AS needs_attention,
 
   client_autoprocess_hr,
@@ -1214,6 +1263,9 @@ LEFT JOIN LATERAL (
   ORDER BY tf.created_at DESC
   LIMIT 1
 ) seg ON true;
+
+
+
 
 -- ============================================================
 -- UPDATE VIEW: public.v_timesheets_summary
