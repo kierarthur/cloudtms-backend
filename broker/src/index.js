@@ -11078,7 +11078,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       contractWeek = null;
     }
 
-    // ✅ NEW: adjustment detection used to hard-block convert actions
+    // ✅ adjustment detection used to hard-block convert actions
     const isAdjustment = !!(ts?.is_adjustment || contractWeek?.is_adjustment);
 
     // Current TSFIN snapshot (current TSFIN row keyed to current timesheet_id)
@@ -11096,7 +11096,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // ✅ NEW: Repair-on-open for corrupt SEGMENTS snapshots
+    // ✅ Repair-on-open for corrupt SEGMENTS snapshots
     // If TSFIN has invalid segment elements, enqueue priority + run worker once for this timesheet,
     // then re-fetch TSFIN before returning details.
     // ─────────────────────────────────────────────────────────────
@@ -11163,6 +11163,9 @@ async function handleTimesheetDetails(env, req, timesheetId) {
 
     const effective = summaryRow ? {
       route_type: summaryRow.route_type ?? null,
+      // ✅ NEW: backend-derived display label (Manual Adjustment / NHS Adjustment / Weekly Manual / etc.)
+      route_display: summaryRow.route_display ?? null,
+
       summary_stage: summaryRow.summary_stage ?? null,
 
       client_requires_hr: summaryRow.client_requires_hr,
@@ -11178,6 +11181,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       issue_codes: summaryRow.issue_codes
     } : {
       route_type: null,
+      route_display: null,
       summary_stage: null,
 
       client_requires_hr: undefined,
@@ -11340,7 +11344,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       } catch {}
     }
 
-    // ✅ UPDATED: adjustment sheets cannot be converted/restored to QR/Electronic
+    // ✅ adjustment sheets cannot be converted/restored to QR/Electronic
     if (isAdjustment) {
       canRestoreQrPending = false;
       canRestoreQrSigned = false;
@@ -11386,9 +11390,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
         ? invoiceBreakdown.segments
         : [];
 
-    // ✅ NEW: invoice_no_by_invoice_id (segment-aware)
-    // - includes whole-timesheet locked_by_invoice_id
-    // - plus any segment.invoice_locked_invoice_id
+    // ✅ invoice_no_by_invoice_id (segment-aware)
     const invoice_no_by_invoice_id = (() => Object.create(null))();
     try {
       const isUuid = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(s || '').trim());
@@ -11408,7 +11410,6 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       if (allIds.length) {
         const chunkSize = 200;
 
-        // Primary: invoices table (expects id + invoice_no)
         let lookedUp = false;
         try {
           for (let i = 0; i < allIds.length; i += chunkSize) {
@@ -11431,7 +11432,6 @@ async function handleTimesheetDetails(env, req, timesheetId) {
           lookedUp = false;
         }
 
-        // Fallback: try v_invoices_summary (if invoices table select fails)
         if (!lookedUp) {
           try {
             for (let i = 0; i < allIds.length; i += chunkSize) {
@@ -11449,14 +11449,10 @@ async function handleTimesheetDetails(env, req, timesheetId) {
                 if (id && no) invoice_no_by_invoice_id[id] = no;
               }
             }
-          } catch {
-            // final fallback: leave map empty (do not fail timesheet details)
-          }
+          } catch {}
         }
       }
-    } catch {
-      // leave empty
-    }
+    } catch {}
 
     const action_flags = {
       can_restore_qr_pending: (!isHardLocked) && canRestoreQrPending,
@@ -11470,7 +11466,6 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       is_manual_only: isManualOnly,
       qr_scenario: qrScenario,
 
-      // ✅ include so FE can hide conversion actions decisively
       is_adjustment: isAdjustment,
 
       locked_by_invoice: isLockedByInvoice,
@@ -11491,18 +11486,21 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       isSegmentsMode,
       segments,
 
-      // ✅ NEW (for FE “Invoiced – <invoice_no>” rendering)
       invoice_no_by_invoice_id,
 
       validations,
       shifts,
 
-      effective, // ✅ contract-resolved effective flags
+      effective,
 
       // backwards-compatible echoes
       ready_to_pay: !!effective.ready_to_pay,
       summary_stage: effective.summary_stage || null,
       route_type: effective.route_type || null,
+
+      // ✅ NEW: backend-derived display label (single UI field)
+      route_display: effective.route_display || null,
+
       issue_codes: Array.isArray(effective.issue_codes) ? effective.issue_codes : [],
 
       sheet_scope: ts.sheet_scope || null,
@@ -25828,7 +25826,6 @@ async function buildNhspWeeklySnapshotCached(
 
   return res;
 }
-
 async function enrichTsfinWithHrCrosscheck(env, ts, tsfinRow, effFlagsIn = null, nhspShiftsIn = null) {
   const LOG = true;
   const L   = (...a) => { if (LOG) console.log('[TSFIN][HR_XCHECK]', ...a); };
@@ -25876,11 +25873,11 @@ async function enrichTsfinWithHrCrosscheck(env, ts, tsfinRow, effFlagsIn = null,
     tsfinRow.hr_crosscheck_status = null;
     tsfinRow.hr_crosscheck_issues = null;
 
-    const ext = (tsfinRow.external_source_rows_json && typeof tsfinRow.external_source_rows_json === 'object')
+    const ext0 = (tsfinRow.external_source_rows_json && typeof tsfinRow.external_source_rows_json === 'object')
       ? JSON.parse(JSON.stringify(tsfinRow.external_source_rows_json))
       : {};
-    if (ext && ext.HR_WEEKLY) delete ext.HR_WEEKLY;
-    tsfinRow.external_source_rows_json = ext;
+    if (ext0 && ext0.HR_WEEKLY) delete ext0.HR_WEEKLY;
+    tsfinRow.external_source_rows_json = ext0;
 
     return tsfinRow;
   }
@@ -25962,6 +25959,39 @@ async function enrichTsfinWithHrCrosscheck(env, ts, tsfinRow, effFlagsIn = null,
   };
 
   // ─────────────────────────────────────────────
+  // ✅ Validation framework rule:
+  // If validation is OK/OVERRIDDEN, never allow mismatch.
+  // Best-effort: use effFlags if present; else fetch latest validation.
+  // ─────────────────────────────────────────────
+  const totalHours = Number(tsfinRow?.total_hours || 0) || 0;
+  const hrValidationRequiredForInvoice =
+    boolish(effFlags?.hr_validation_required_for_invoice) ||
+    (boolish(effFlags?.client_hr_validation_required) && !noTimesheetRequired && totalHours > 0);
+
+  let validationStatus = null;
+  const effVal = (effFlags && (effFlags.validation_status || effFlags.timesheet_validation_status || effFlags.validation)) ? (
+    effFlags.validation_status || effFlags.timesheet_validation_status || effFlags.validation
+  ) : null;
+  if (effVal != null) validationStatus = String(effVal).trim().toUpperCase() || null;
+
+  if (hrValidationRequiredForInvoice && !validationStatus) {
+    try {
+      const { rows: vRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheet_validations` +
+          `?timesheet_id=eq.${enc(tsId)}` +
+          `&select=timesheet_id,status,updated_at` +
+          `&order=updated_at.desc` +
+          `&limit=1`
+      );
+      const v0 = (vRows && vRows[0]) ? vRows[0] : null;
+      if (v0 && v0.status != null) validationStatus = String(v0.status).trim().toUpperCase() || null;
+    } catch {}
+  }
+
+  const validationOk = (validationStatus === 'VALIDATION_OK' || validationStatus === 'OVERRIDDEN');
+
+  // ─────────────────────────────────────────────
   // ✅ HR WEEKLY shifts:
   // Treat nhspShiftsIn as authoritative ONLY when it is a non-empty array.
   // If it is empty, fall back to REST by candidate/client/date range.
@@ -26034,12 +26064,43 @@ async function enrichTsfinWithHrCrosscheck(env, ts, tsfinRow, effFlagsIn = null,
     }
   }
 
-  // Timesheet schedule (weekly): can be multiple segments per day
-  const tsSchedule = Array.isArray(ts?.actual_schedule_json)
-    ? ts.actual_schedule_json
-    : (ts?.actual_schedule_json
-        ? (() => { try { return JSON.parse(ts.actual_schedule_json); } catch { return []; } })()
-        : []);
+  // ─────────────────────────────────────────────
+  // ✅ Timesheet schedule source (effective schedule rules):
+  //  1) timesheets.actual_schedule_json if non-empty
+  //  2) else if TSFIN is SEGMENTS mode, derive from tsfinRow.invoice_breakdown_json.segments
+  // ─────────────────────────────────────────────
+  let tsSchedule = [];
+  {
+    const raw = ts?.actual_schedule_json;
+    const parsed = Array.isArray(raw)
+      ? raw
+      : (raw ? (() => { try { return JSON.parse(raw); } catch { return []; } })() : []);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      tsSchedule = parsed;
+    } else {
+      // Fallback to TSFIN SEGMENTS
+      let ib = tsfinRow?.invoice_breakdown_json || null;
+      if (ib && typeof ib === 'string') {
+        try { ib = JSON.parse(ib); } catch { ib = null; }
+      }
+      const mode = ib && typeof ib === 'object' ? String(ib.mode || ib?.mode || ib?.['mode'] || '').toUpperCase() : '';
+      const segs = (ib && typeof ib === 'object' && Array.isArray(ib.segments)) ? ib.segments : [];
+      if (mode === 'SEGMENTS' && segs.length > 0) {
+        tsSchedule = segs.map(s => ({
+          date: s?.date || s?.work_date || null,
+          start_utc: s?.start_utc || null,
+          end_utc: s?.end_utc || null,
+          start: s?.start || null,
+          end: s?.end || null,
+          break_minutes: (s?.break_minutes != null ? s.break_minutes : null),
+          break_mins: (s?.break_mins != null ? s.break_mins : null),
+          breaks: Array.isArray(s?.breaks) ? s.breaks : null,
+          break_start: s?.break_start || null,
+          break_end: s?.break_end || null
+        }));
+      }
+    }
+  }
 
   const tsPaidByDate = {};
 
@@ -26105,6 +26166,11 @@ async function enrichTsfinWithHrCrosscheck(env, ts, tsfinRow, effFlagsIn = null,
     }
   }
 
+  // ✅ Validation OK/OVERRIDDEN must never show mismatch
+  if (hrValidationRequiredForInvoice && validationOk) {
+    issuesSet.clear();
+  }
+
   const status =
     issuesSet.size === 0 ? 'OK'
     : (issuesSet.has('HR_HOURS_MISSING') ? 'HR_HOURS_MISSING' : 'HOURS_MISMATCH_HR');
@@ -26120,7 +26186,7 @@ async function enrichTsfinWithHrCrosscheck(env, ts, tsfinRow, effFlagsIn = null,
   tsfinRow.hr_crosscheck_issues = issuesSet.size ? Array.from(issuesSet) : null;
   tsfinRow.external_source_rows_json = ext;
 
-  L('result', { tsId, clientId, candidateId, weekStart, weekEnd: weekEndY, status, issues: tsfinRow.hr_crosscheck_issues });
+  L('result', { tsId, clientId, candidateId, weekStart, weekEnd: weekEndY, status, issues: tsfinRow.hr_crosscheck_issues, validationStatus });
   return tsfinRow;
 }
 
@@ -28217,7 +28283,7 @@ async function handleTimesheetsSummary(env, req) {
   const clientId    = q('client_id');
   const candidateId = q('candidate_id');
 
-  // ✅ NEW: id/ids selection support (for summaryFetchCanonicalRow)
+  // ✅ id/ids selection support (for summaryFetchCanonicalRow)
   const idExprRaw = q('id');   // accepts uuid OR "in.(uuid1,uuid2,...)"
   const idsCsvRaw = q('ids');  // accepts "uuid1,uuid2,..."
 
@@ -28251,7 +28317,7 @@ async function handleTimesheetsSummary(env, req) {
 
   const hasIdFilter = idList.length > 0;
 
-  // ✅ NEW: canonical Tools Stage filter token (from v_timesheets_summary.tools_stage)
+  // ✅ Tools Stage filter token (from v_timesheets_summary.tools_stage)
   const toolsStageRaw = q('tools_stage');
   const toolsStageUp  = toolsStageRaw ? String(toolsStageRaw).toUpperCase() : null;
 
@@ -28269,7 +28335,7 @@ async function handleTimesheetsSummary(env, req) {
   const isAdjusted    = q('is_adjusted');    // adjusted checkbox
   const isQr          = q('is_qr');          // legacy route checkbox
 
-  // ✅ NEW: Issues dropdown (main summary controls)
+  // ✅ Issues dropdown (main summary controls)
   const issuesFilterRaw = q('issues_filter');
   const issuesFilterUp  = issuesFilterRaw ? String(issuesFilterRaw).toUpperCase() : null;
 
@@ -28293,7 +28359,6 @@ async function handleTimesheetsSummary(env, req) {
     client_name:               'client_name',
     candidate_name:            'candidate_name',
 
-    // NEW: stage/signal columns
     tools_stage:               'tools_stage',
     processing_status:         'processing_status_display',
     processing_status_display: 'processing_status_display',
@@ -28314,13 +28379,11 @@ async function handleTimesheetsSummary(env, req) {
   const orderCol = allowedSort[orderByParam] || defaultOrderCol;
   const orderDir = (orderDirParam === 'asc') ? 'asc' : 'desc';
 
-  // Helper: apply Issues filter to the PostgREST query
   const applyIssuesFilter = (apiIn, tokenUp) => {
     let api = apiIn;
     const tok = tokenUp ? String(tokenUp).toUpperCase() : null;
     if (!tok || tok === 'ALL') return api;
 
-    // PostgREST array-contains helper for text[]
     const cs1 = (val) => `cs.{${enc(val)}}`;
 
     switch (tok) {
@@ -28387,7 +28450,6 @@ async function handleTimesheetsSummary(env, req) {
         api += `&qr_scanned_at=is.null`;
         return api;
 
-      // ✅ FIX: Refs PDF invalid issue filter
       case 'REFS_PDF_INVALID':
         api += `&issue_codes=${cs1('Refs - Timesheet PDF invalid')}`;
         return api;
@@ -28397,7 +28459,6 @@ async function handleTimesheetsSummary(env, req) {
     }
   };
 
-  // Resolve the effective issues filter
   let effectiveIssues = issuesFilterUp;
   if ((!effectiveIssues || effectiveIssues === 'ALL') && statusCodeUp && statusCodeUp !== 'ALL') {
     if (statusCodeUp === 'NO_MATCH_ID') effectiveIssues = 'NO_MATCH_ID';
@@ -28415,6 +28476,7 @@ async function handleTimesheetsSummary(env, req) {
     `?select=` + [
       '*',
       'route_type',
+      'route_display', // ✅ NEW: ensure it’s included explicitly
       'client_no_timesheet_required',
       'client_autoprocess_hr',
       'client_is_nhsp',
@@ -28430,7 +28492,6 @@ async function handleTimesheetsSummary(env, req) {
     ].join(',') +
     `&limit=${effLimit}&offset=${effOffset}`;
 
-  // ✅ id/ids filter (matches either timesheet_id OR contract_week_id)
   if (hasIdFilter) {
     if (idList.length === 1) {
       const one = idList[0];
@@ -28444,12 +28505,10 @@ async function handleTimesheetsSummary(env, req) {
   if (clientId)    api += `&client_id=eq.${enc(clientId)}`;
   if (candidateId) api += `&candidate_id=eq.${enc(candidateId)}`;
 
-  // ✅ Tools Stage filtering
   if (toolsStageUp && toolsStageUp !== 'ALL') {
     api += `&tools_stage=eq.${enc(toolsStageUp)}`;
   }
 
-  // Route handling (aggregated)
   if (routeType && routeType !== 'ALL') {
     if (routeType === 'ELECTRONIC') {
       api += `&route_type=in.(DAILY_ELECTRONIC,WEEKLY_ELECTRONIC)`;
@@ -28481,10 +28540,8 @@ async function handleTimesheetsSummary(env, req) {
 
   if (hrIssue) api += `&hr_crosscheck_issues=cs.{${enc(hrIssue)}}`;
 
-  // Issues filter
   api = applyIssuesFilter(api, effectiveIssues);
 
-  // Ordering (only meaningful for list pages; harmless for id-filter calls)
   if (orderByParam && allowedSort[orderByParam]) {
     api += `&order=${enc(orderCol)}.${orderDir},client_name.asc,candidate_name.asc`;
   } else {
@@ -28497,6 +28554,7 @@ async function handleTimesheetsSummary(env, req) {
     const outRows = (rows || []).map(r => {
       const o = { ...(r || {}) };
       if (!Object.prototype.hasOwnProperty.call(o, 'route_type')) o.route_type = null;
+      if (!Object.prototype.hasOwnProperty.call(o, 'route_display')) o.route_display = null; // ✅ NEW
       if (!Object.prototype.hasOwnProperty.call(o, 'client_no_timesheet_required')) o.client_no_timesheet_required = null;
       if (!Object.prototype.hasOwnProperty.call(o, 'client_autoprocess_hr')) o.client_autoprocess_hr = null;
       if (!Object.prototype.hasOwnProperty.call(o, 'client_is_nhsp')) o.client_is_nhsp = null;
@@ -28511,7 +28569,6 @@ async function handleTimesheetsSummary(env, req) {
 
     if (includeTotals) {
       if (hasIdFilter) {
-        // Local totals (no RPC) for id/ids mode
         let paySum = 0;
         let marginSum = 0;
         for (const r of outRows) {
@@ -34290,7 +34347,7 @@ async function handleHrAutoprocessPreview(env, req, importId) {
         env,
         `${env.SUPABASE_URL}/rest/v1/client_settings` +
           `?client_id=eq.${enc(imp.client_id)}` +
-          `&select=client_id,effective_from,no_timesheet_required,autoprocess_hr,updated_at` +
+          `&select=client_id,effective_from,no_timesheet_required,autoprocess_hr,requires_hr,updated_at` +
           `&order=effective_from.desc.nullslast,updated_at.desc.nullslast`
       );
       clientSettingsRows = Array.isArray(csRows) ? csRows : [];
@@ -34307,7 +34364,7 @@ async function handleHrAutoprocessPreview(env, req, importId) {
           env,
           `${env.SUPABASE_URL}/rest/v1/contracts` +
             `?id=in.(${idChunk.map(enc).join(',')})` +
-            `&select=id,overrideclientsettings,no_timesheet_required,autoprocess_hr`
+            `&select=id,overrideclientsettings,no_timesheet_required,autoprocess_hr,requires_hr`
         );
         for (const c of (cRows || [])) {
           if (c && c.id) contractById.set(String(c.id), c);
@@ -34317,17 +34374,38 @@ async function handleHrAutoprocessPreview(env, req, importId) {
       }
     }
 
-    const evalEffectiveNoTimesheetRequired = (contract_id, weekEndingYmd) => {
+    const evalEffectiveHrRouteFlags = (contract_id, weekEndingYmd) => {
       const cs = pickEffectiveClientSettingsRow(clientSettingsRows, weekEndingYmd) || {};
-      const csNoTs = boolish(cs.no_timesheet_required);
+      const csNoTs = boolish(cs?.no_timesheet_required);
+      const csAuto = boolish(cs?.autoprocess_hr);
+      const csReq = boolish(cs?.requires_hr);
+
       const c = contract_id ? (contractById.get(String(contract_id)) || null) : null;
+      const hasOverride = (c && c.overrideclientsettings === true);
 
       const effNoTs =
-        (c && c.overrideclientsettings === true && c.no_timesheet_required != null)
+        (hasOverride && c.no_timesheet_required != null)
           ? boolish(c.no_timesheet_required)
           : csNoTs;
 
-      return effNoTs;
+      const effAuto =
+        (hasOverride && c.autoprocess_hr != null)
+          ? boolish(c.autoprocess_hr)
+          : csAuto;
+
+      const effReq =
+        (hasOverride && c.requires_hr != null)
+          ? boolish(c.requires_hr)
+          : csReq;
+
+      return { effNoTs, effAuto, effReq };
+    };
+
+    const evalGroupMode = (contract_id, weekEndingYmd) => {
+      const { effNoTs, effAuto, effReq } = evalEffectiveHrRouteFlags(contract_id, weekEndingYmd);
+      if (effNoTs === true) return 'MODE_B';
+      if (effAuto === true && effReq === true && effNoTs === false) return 'MODE_A';
+      return 'OTHER';
     };
 
     // 5) Build per-group mode map (per candidate/week/contract group)
@@ -34345,10 +34423,9 @@ async function handleHrAutoprocessPreview(env, req, importId) {
       }
     }
 
-    const modeByGroupId = new Map(); // gid -> 'MODE_A'|'MODE_B'
+    const modeByGroupId = new Map(); // gid -> 'MODE_A'|'MODE_B'|'OTHER'
     for (const [gid, gi] of groupInfoById.entries()) {
-      const effNoTs = evalEffectiveNoTimesheetRequired(gi.contract_id, gi.week_ending_date);
-      const mode = (effNoTs === true) ? 'MODE_B' : 'MODE_A';
+      const mode = evalGroupMode(gi.contract_id, gi.week_ending_date);
       modeByGroupId.set(gid, mode);
     }
 
@@ -34424,14 +34501,17 @@ async function handleHrAutoprocessPreview(env, req, importId) {
       const co  = r?.contract_id ? String(r.contract_id) : null;
       if (!cid || !we) continue;
 
-      const gid = (co ? `grp:${co}:${we}:${cid}` : null);
-
-      if (!gid) {
+      // If contract_id missing, keep row (e.g. MISSING_TIMESHEET rows emitted by SQL preview)
+      if (!co) {
         validation_groups.push({ ...r, mode: 'MODE_A' });
         continue;
       }
 
-      if (modeAGroupIds.has(gid)) {
+      const { effNoTs, effAuto, effReq } = evalEffectiveHrRouteFlags(co, we);
+      const isModeA = (effAuto === true && effReq === true && effNoTs === false);
+
+      // ✅ NEW: include any validation row that falls under Mode-A HR weekly verify
+      if (isModeA) {
         validation_groups.push({ ...r, mode: 'MODE_A' });
       }
     }
@@ -34981,7 +35061,6 @@ async function handleHrAutoprocessPreview(env, req, importId) {
   }
 }
 
-
 async function handleHrAutoprocessApply(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
@@ -34999,6 +35078,8 @@ async function handleHrAutoprocessApply(env, req, importId) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return withCORS(env, req, badRequest('Invalid JSON body'));
   }
+
+  const boolish = (v) => (v === true || v === 'true' || v === 1 || v === '1');
 
   const unwrapRpcJsonb = (raw, fnName) => {
     const j = raw;
@@ -35080,6 +35161,14 @@ async function handleHrAutoprocessApply(env, req, importId) {
     }))
     .filter(a => !!(a.timesheet_id && a.issue_fingerprint));
 
+  // ✅ Include-missing-shifts flag (passed through to DB apply RPC; frontend sets this)
+  const includeMissingShifts =
+    boolish(body.include_missing_shifts) ||
+    boolish(body.includeMissingShifts) ||
+    boolish(body.include_missing) ||
+    boolish(body.includeMissing) ||
+    false;
+
   // ✅ Important: Mode A-only apply MUST be allowed even when selected_action_ids is empty.
   // We always call the transactional RPC; it decides what work (Mode A vs Mode B) applies.
 
@@ -35089,6 +35178,7 @@ async function handleHrAutoprocessApply(env, req, importId) {
     selected_action_ids_count: selectedActionIds.length,
     selected_actions_count: selectedActions.length,
     email_actions_count: emailActions.length,
+    include_missing_shifts: includeMissingShifts,
     decisions_keys_count: Object.keys(decisions || {}).length
   });
 
@@ -35103,7 +35193,8 @@ async function handleHrAutoprocessApply(env, req, importId) {
         selected_action_ids: selectedActionIds,
         selected_actions: selectedActions,
         decisions,
-        email_actions: emailActions
+        email_actions: emailActions,
+        include_missing_shifts: includeMissingShifts
       },
       p_actor_user_id: user.id
     });
@@ -63531,7 +63622,7 @@ async function handleTsfinMarkReady(env, req) {
       env,
       `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
         `?timesheet_id=in.(${idsParam})` +
-        `&select=timesheet_id,client_requires_hr,client_autoprocess_hr,client_no_timesheet_required` +
+        `&select=timesheet_id,client_requires_hr,client_autoprocess_hr,client_no_timesheet_required,hr_validation_required_for_invoice` +
         `&limit=10000`
     );
     for (const r of effRows || []) {
@@ -63633,6 +63724,9 @@ async function handleTsfinMarkReady(env, req) {
     const autoprocessHr = boolish(eff.client_autoprocess_hr);
     const noTsReq       = boolish(eff.client_no_timesheet_required);
 
+    // ✅ Option A: if validation framework is required before invoicing, HR crosscheck must NOT gate readiness
+    const hrValidationRequiredForInvoice = boolish(eff.hr_validation_required_for_invoice);
+
     const tsMeta = tsMetaMap.get(id) || {};
 
     // 1) HR Validation gating
@@ -63648,7 +63742,8 @@ async function handleTsfinMarkReady(env, req) {
     }
 
     // 1c) HR cross-check gate
-    if (requiresHr) {
+    // ✅ FIX (Option A): do NOT enforce HR crosscheck when hr_validation_required_for_invoice is true
+    if (requiresHr && !hrValidationRequiredForInvoice) {
       const hrStatus = (row.hr_crosscheck_status || '').toString().toUpperCase() || null;
       const hrIssues = Array.isArray(row.hr_crosscheck_issues) ? row.hr_crosscheck_issues : [];
       if (hrStatus && hrStatus !== 'OK') { blocked.push({ id, reason: 'hr_crosscheck_failed' }); continue; }
@@ -64382,6 +64477,7 @@ async function handleCreateInvoiceExpenses(env, req) {
 // Creates an ADDITIONAL contract_week row (is_adjustment=true, submission_mode_snapshot='MANUAL')
 // AND immediately creates a real MANUAL WEEKLY timesheet (line_type='HOURS') with an empty schedule,
 // plus an initial TSFIN snapshot (zero hours; ready for expenses patching).
+
 async function handleContractWeekCreateAdditionalWeeklyAdjustment(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -64476,9 +64572,6 @@ async function handleContractWeekCreateAdditionalWeeklyAdjustment(env, req, week
     week_ending_date: newWeek.week_ending_date,
     contract_id: contract.id,
 
-    // ✅ REMOVED: contract_week_id (column does not exist in timesheets)
-    // Link is via contract_weeks.timesheet_id patch below.
-
     submission_mode: 'MANUAL',
     sheet_scope: 'WEEKLY',
 
@@ -64492,6 +64585,9 @@ async function handleContractWeekCreateAdditionalWeeklyAdjustment(env, req, week
     day_references_json: null,
 
     is_adjustment: true,
+
+    // ✅ NEW: marks this as USER-CREATED manual adjustment (drives route_display + stream rules)
+    adjustment_origin: 'MANUAL_ADJUSTMENT',
 
     created_at: now,
     updated_at: now
@@ -64625,6 +64721,11 @@ async function handleContractWeekCreateAdditionalWeeklyAdjustment(env, req, week
     timesheet_id: ts.timesheet_id
   }));
 }
+
+
+
+
+
 async function handleContractsCount(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -64716,7 +64817,7 @@ async function handleTimesheetCreateAdditionalDailyManual(env, req, timesheetId)
     return withCORS(env, req, badRequest('Timesheet is not DAILY; additional daily manual only applies to DAILY sheets'));
   }
 
-  // ✅ NEW: parent linkage for adjustments (stable relationship to the original timesheet id)
+  // ✅ parent linkage for adjustments (stable relationship to the original timesheet id)
   const parent_timesheet_id = String(orig.timesheet_id || timesheetId || '').trim() || null;
 
   // Load original TSFIN snapshot (best-effort) to preserve policy/rates context
@@ -64733,7 +64834,6 @@ async function handleTimesheetCreateAdditionalDailyManual(env, req, timesheetId)
     origFin = null;
   }
 
-  // Determine date_of_shift (YYYY-MM-DD) for booking hash
   const toYmdFromIso = (iso) => {
     if (!iso) return null;
     try {
@@ -64742,7 +64842,6 @@ async function handleTimesheetCreateAdditionalDailyManual(env, req, timesheetId)
         return p?.ymd || null;
       }
     } catch {}
-    // Fallback: take first 10 chars if already "YYYY-MM-DD..."
     const s = String(iso || '');
     const ymd = s.slice(0, 10);
     return /^\d{4}-\d{2}-\d{2}$/.test(ymd) ? ymd : null;
@@ -64757,20 +64856,17 @@ async function handleTimesheetCreateAdditionalDailyManual(env, req, timesheetId)
     return withCORS(env, req, badRequest('Cannot infer shift date for additional daily adjustment timesheet'));
   }
 
-  // Unique shift label (UUID-based, per your decision)
   const uuid = (() => {
     try {
       if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
     } catch {}
-    // fallback (should not be needed in Workers, but avoids hard failure)
     return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   })();
 
   const shiftLabel = `daily-adjustment-${uuid}`;
 
-  // booking_id must be unique per adjustment (shift_label participates in the hash)
   const booking_id = await makeBookingId(
-    orig.occupant_key_norm || null,   // candidate_id input (stable key; may be CID... string)
+    orig.occupant_key_norm || null,
     dateOfShiftYmd,
     orig.hospital_norm || null,
     orig.ward_norm || null,
@@ -64780,15 +64876,11 @@ async function handleTimesheetCreateAdditionalDailyManual(env, req, timesheetId)
 
   const now = nowIso();
 
-  // Create the new DAILY MANUAL adjustment timesheet
-  // - preserve context fields (occupant/client hints/scheduled) but keep worked/break blank
-  // - make it clearly distinguishable via shift_label_norm + is_adjustment
   const tsInsert = [{
     booking_id,
     version: 1,
     is_current: true,
 
-    // Status for a newly created admin/manual sheet
     status: 'RECEIVED',
 
     occupant_key_norm: orig.occupant_key_norm || null,
@@ -64796,14 +64888,11 @@ async function handleTimesheetCreateAdditionalDailyManual(env, req, timesheetId)
     ward_norm: orig.ward_norm || null,
     job_title_norm: orig.job_title_norm || null,
 
-    // label shown in UI; keep it distinct
     shift_label_norm: String(shiftLabel).toLowerCase(),
 
-    // Keep scheduled context (helps display the correct shift date/period)
     scheduled_start_iso: orig.scheduled_start_iso || null,
     scheduled_end_iso: orig.scheduled_end_iso || null,
 
-    // ✅ REQUIRED BY BRIEF: blank worked/break fields (no hours)
     worked_start_iso: null,
     worked_end_iso: null,
     break_start_iso: null,
@@ -64811,37 +64900,32 @@ async function handleTimesheetCreateAdditionalDailyManual(env, req, timesheetId)
     break_minutes: null,
     worked_minutes: null,
 
-    // Keep week context
     week_ending_date: orig.week_ending_date || null,
 
-    // Copy optional descriptive fields (safe; helps UI + troubleshooting)
     band: orig.band ?? null,
     candidate_hint_text: orig.candidate_hint_text ?? null,
 
-    // Daily timesheets are not contract-driven (copy if present)
     contract_id: orig.contract_id || null,
 
-    // ✅ REQUIRED BY BRIEF
     submission_mode: 'MANUAL',
     sheet_scope: 'DAILY',
     line_type: 'HOURS',
     is_adjustment: true,
 
-    // ✅ NEW: parent linkage
+    // ✅ NEW: marks this as USER-CREATED manual adjustment (drives route_display + stream rules)
+    adjustment_origin: 'MANUAL_ADJUSTMENT',
+
     parent_timesheet_id,
 
-    // No signatures/evidence on creation
     authorised_at_server: null,
     r2_nurse_key: null,
     r2_auth_key: null,
     img_sha256_nurse: null,
     img_sha256_auth: null,
 
-    // No manual PDF yet
     manual_pdf_r2_key: null,
     manual_pdf_rotation_degrees: 0,
 
-    // No QR state on manual adjustment by default
     qr_token: null,
     qr_status: null,
     qr_payload_json: {},
@@ -64854,15 +64938,12 @@ async function handleTimesheetCreateAdditionalDailyManual(env, req, timesheetId)
     qr_signed_hash: null,
     qr_signed_at_utc: null,
 
-    // No day references (daily has schedule_json/ISO fields)
     day_references_json: null,
     actual_schedule_json: null,
 
-    // additional units not used on DAILY; keep empty for safety
     additional_units_week: {},
     additional_units_per_day: {},
 
-    // Give a fresh idempotency key
     idempotency_key: uuid,
 
     created_at: now,
@@ -64881,7 +64962,6 @@ async function handleTimesheetCreateAdditionalDailyManual(env, req, timesheetId)
 
   // ─────────────────────────────────────────────────────────────
   // Create initial TSFIN snapshot (0 hours, preserve policy/rates context)
-  // ✅ UPDATED: initialise mileage rates with contract-first then (origFin if present) then finance-window defaults then candidate/client fallback
   // ─────────────────────────────────────────────────────────────
   const parseMaybeJson = (v) => {
     if (v == null) return null;
@@ -64924,7 +65004,6 @@ async function handleTimesheetCreateAdditionalDailyManual(env, req, timesheetId)
   const candidateAssignment =
     candidateIdForSnap ? 'ASSIGNED' : 'UNASSIGNED';
 
-  // Best-effort: load contract for contract-first mileage rates (if contract_id exists)
   let contract = null;
   try {
     const cid = createdTs?.contract_id || orig?.contract_id || null;
@@ -64935,7 +65014,6 @@ async function handleTimesheetCreateAdditionalDailyManual(env, req, timesheetId)
     contract = null;
   }
 
-  // Finance window defaults for the shift date (date-linked)
   let fin = null;
   try {
     const fwRows = await sbRpc(env, 'settings_finance_pick', { p_date: dateOfShiftYmd || null });
@@ -64945,7 +65023,6 @@ async function handleTimesheetCreateAdditionalDailyManual(env, req, timesheetId)
     fin = null;
   }
 
-  // Candidate/client fallback (pay from candidate, charge from client)
   let candRow = null;
   let clientRow = null;
   try {
@@ -65005,14 +65082,12 @@ async function handleTimesheetCreateAdditionalDailyManual(env, req, timesheetId)
 
     pay_method: payMethod,
 
-    // ✅ preserve policy + rates context (never null)
     policy_snapshot_json: policySnap,
     rate_source_refs_json: {
       ...(rateRefs && typeof rateRefs === 'object' ? rateRefs : {}),
       mileage_rate_source
     },
 
-    // zero hours
     hours_day: 0,
     hours_night: 0,
     hours_sat: 0,
@@ -65041,7 +65116,6 @@ async function handleTimesheetCreateAdditionalDailyManual(env, req, timesheetId)
     additional_charge_ex_vat: 0,
     additional_margin_ex_vat: 0,
 
-    // start empty; FE patches these via /tsfin/expenses and /tsfin/mileage
     expenses_pay_ex_vat: 0,
     expenses_charge_ex_vat: 0,
     expenses_description: null,
@@ -65052,7 +65126,6 @@ async function handleTimesheetCreateAdditionalDailyManual(env, req, timesheetId)
     mileage_pay_ex_vat: 0,
     mileage_charge_ex_vat: 0,
 
-    // ✅ UPDATED: initialise rates
     mileage_pay_rate,
     mileage_charge_rate,
 
@@ -65061,7 +65134,6 @@ async function handleTimesheetCreateAdditionalDailyManual(env, req, timesheetId)
 
     candidate_assignment: candidateAssignment,
 
-    // New adjustment sheet starts unauthorised
     processing_status: 'PENDING_AUTH',
 
     has_rate_issue: false,
@@ -65100,7 +65172,6 @@ async function handleTimesheetCreateAdditionalDailyManual(env, req, timesheetId)
     parent_timesheet_id
   }));
 }
-
 
 
 // ---------------------------
