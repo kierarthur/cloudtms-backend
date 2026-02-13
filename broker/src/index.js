@@ -35120,6 +35120,27 @@ async function handleHrAutoprocessApply(env, req, importId) {
     return s || '';
   };
 
+  // ✅ Format YYYY-MM-DD → "Mon 1 Sep 2026" (Europe/London)
+  const fmtNiceDate = (ymd) => {
+    const s = safeYmd(ymd);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return s || '—';
+    const d = new Date(`${s}T00:00:00Z`);
+    if (Number.isNaN(d.getTime())) return s;
+    try {
+      // Use en-GB with Europe/London to match UK conventions
+      // weekday short + day numeric + month short + year numeric
+      return new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/London',
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+      }).format(d);
+    } catch {
+      return s;
+    }
+  };
+
   // Inputs (new contract)
   const selectedActionIdsIn = Array.isArray(body.selected_action_ids) ? body.selected_action_ids : [];
   const selectedActionIds = uniqStrings(selectedActionIdsIn);
@@ -35178,7 +35199,7 @@ async function handleHrAutoprocessApply(env, req, importId) {
     boolish(body.includeMissing) ||
     false;
 
-  // ✅ NEW: destructive invalidation actions (checkbox-driven)
+  // ✅ Destructive invalidation actions (checkbox-driven)
   // Expected shape: [{ timesheet_id, comparison_key, invalidate }]
   const invalidationActionsIn = Array.isArray(body.invalidation_actions) ? body.invalidation_actions : [];
   const invalidationActions = invalidationActionsIn
@@ -35245,62 +35266,88 @@ async function handleHrAutoprocessApply(env, req, importId) {
 
   // ─────────────────────────────────────────────
   // 2) Post-commit: queue emails best-effort
-  //    ✅ NEW: consolidated email (one per recipient) when email_jobs contains items[]
+  //    ✅ consolidated email (one per recipient) when email_jobs contains items[]
   // ─────────────────────────────────────────────
   let emailsQueued = 0;
   const emailFailures = [];
 
+  // ✅ Agency name from settings_defaults (single row)
+  let agencyName = 'CloudTMS';
+  try {
+    const { rows: defRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=agency_name&limit=1`
+    );
+    const nm = defRows?.[0]?.agency_name;
+    const cleaned = (nm == null) ? '' : String(nm).trim();
+    if (cleaned) agencyName = cleaned;
+  } catch {
+    // keep default
+  }
+
   const buildEmailHtmlTable = (items) => {
     const rows = Array.isArray(items) ? items : [];
+
     const head = `
       <tr>
-        <th style="text-align:left;padding:6px 8px;border:1px solid #ddd;">Candidate</th>
-        <th style="text-align:left;padding:6px 8px;border:1px solid #ddd;">W/E</th>
-        <th style="text-align:left;padding:6px 8px;border:1px solid #ddd;">Date</th>
-        <th style="text-align:left;padding:6px 8px;border:1px solid #ddd;">Timesheet</th>
-        <th style="text-align:left;padding:6px 8px;border:1px solid #ddd;">HealthRoster</th>
-        <th style="text-align:left;padding:6px 8px;border:1px solid #ddd;">Status</th>
-        <th style="text-align:left;padding:6px 8px;border:1px solid #ddd;">Ref before</th>
-        <th style="text-align:left;padding:6px 8px;border:1px solid #ddd;">Ref after</th>
-        <th style="text-align:left;padding:6px 8px;border:1px solid #ddd;">Invoice locked</th>
+        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">Candidate</th>
+        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">W/E</th>
+        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">Date</th>
+        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">Timesheet</th>
+        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">HealthRoster</th>
+        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">Status</th>
+        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">Reference No.</th>
       </tr>
     `;
+
     const body = rows.map((it) => {
-      const cand = escapeHtml(String(it?.candidate_name || '') || '—');
-      const we = escapeHtml(safeYmd(it?.week_ending_date) || '—');
-      const wd = escapeHtml(safeYmd(it?.work_date) || '—');
+      const cand = escapeHtml(String(it?.candidate_name || it?.candidate || '') || '—');
+
+      const weNice = escapeHtml(fmtNiceDate(it?.week_ending_date) || '—');
+      const wdNice = escapeHtml(fmtNiceDate(it?.work_date) || '—');
 
       const tsTxt =
         `${String(it?.timesheet_start || '—')} → ${String(it?.timesheet_end || '—')}` +
         ` (break ${it?.timesheet_break_mins == null ? '—' : String(it.timesheet_break_mins)})`;
 
-      const hrTxt =
-        `${String(it?.healthroster_start || '—')} → ${String(it?.healthroster_end || '—')}` +
-        ` (break ${it?.healthroster_break_mins == null ? '—' : String(it.healthroster_break_mins)})`;
+      const hrStart = String(it?.healthroster_start || '').trim();
+      const hrEnd = String(it?.healthroster_end || '').trim();
 
-      const ms = escapeHtml(String(it?.match_status || '—'));
-      const rb = escapeHtml(String(it?.ref_before || '') || '—');
-      const ra = escapeHtml(String(it?.ref_after || '') || '—');
-      const locked = (it?.invoice_locked === true) ? 'YES' : 'NO';
+      const hrTxt = (!hrStart || !hrEnd)
+        ? 'Missing in Healthroster - please add'
+        : (
+            `${hrStart} → ${hrEnd}` +
+            ` (break ${it?.healthroster_break_mins == null ? '—' : String(it.healthroster_break_mins)})`
+          );
+
+      const ms = escapeHtml(String(it?.match_status || it?.status || '—'));
+
+      // Reference No. = "ref after" (or pre-normalized field)
+      const refAfterRaw = (it?.reference_no != null)
+        ? String(it.reference_no)
+        : (it?.ref_after != null)
+          ? String(it.ref_after)
+          : (it?.ref != null)
+            ? String(it.ref)
+            : '';
+      const refNo = escapeHtml((String(refAfterRaw || '').trim()) || 'N/A');
 
       return `
         <tr>
-          <td style="padding:6px 8px;border:1px solid #ddd;">${cand}</td>
-          <td style="padding:6px 8px;border:1px solid #ddd;">${we}</td>
-          <td style="padding:6px 8px;border:1px solid #ddd;">${wd}</td>
-          <td style="padding:6px 8px;border:1px solid #ddd;">${escapeHtml(tsTxt)}</td>
-          <td style="padding:6px 8px;border:1px solid #ddd;">${escapeHtml(hrTxt)}</td>
-          <td style="padding:6px 8px;border:1px solid #ddd;">${ms}</td>
-          <td style="padding:6px 8px;border:1px solid #ddd;">${rb}</td>
-          <td style="padding:6px 8px;border:1px solid #ddd;">${ra}</td>
-          <td style="padding:6px 8px;border:1px solid #ddd;">${escapeHtml(locked)}</td>
+          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;">${cand}</td>
+          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;white-space:nowrap;">${weNice}</td>
+          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;white-space:nowrap;">${wdNice}</td>
+          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;">${escapeHtml(tsTxt)}</td>
+          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;">${escapeHtml(hrTxt)}</td>
+          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;white-space:nowrap;">${ms}</td>
+          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;white-space:nowrap;">${refNo}</td>
         </tr>
       `;
     }).join('\n');
 
     return `
       <div style="overflow:auto;">
-        <table style="border-collapse:collapse;width:100%;font-family:Arial,sans-serif;font-size:12px;">
+        <table style="border-collapse:collapse;width:100%;font-family:Arial,sans-serif;font-size:13px;">
           <thead>${head}</thead>
           <tbody>${body}</tbody>
         </table>
@@ -35308,7 +35355,6 @@ async function handleHrAutoprocessApply(env, req, importId) {
     `;
   };
 
-  // Consolidated mode if emailJobs contains {items:[...], attachment_timesheet_ids:[...], recipient_email:...}
   const hasConsolidatedEmailJobs =
     emailJobs.length > 0 &&
     emailJobs.some(j => j && typeof j === 'object' && Array.isArray(j.items) && Array.isArray(j.attachment_timesheet_ids));
@@ -35358,21 +35404,22 @@ async function handleHrAutoprocessApply(env, req, importId) {
       const tableHtml = buildEmailHtmlTable(items);
 
       const bodyText = [
-        `Dear Temporary Staffing,`,
-        ``,
-        `Please find attached the weekly timesheet PDF(s).`,
-        `The table below lists shifts that do not currently validate against the latest HealthRoster import and may need amending.`,
-        ``,
-        `Kind regards,`,
-        `CloudTMS`
+        'Dear Team,',
+        '',
+        'Please find attached timesheets which needs come corrections on Healthroster. Details of the corrections are below.',
+        'Please kindly confirm once actioned.',
+        `Many thanks,`,
+        agencyName
       ].join('\n');
 
       const bodyHtml = `
-        <p>Dear Temporary Staffing,</p>
-        <p>Please find attached the weekly timesheet PDF(s).</p>
-        <p>The table below lists shifts that do not currently validate against the latest HealthRoster import and may need amending.</p>
-        ${tableHtml}
-        <p>Kind regards,<br/>CloudTMS</p>
+        <div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.45;color:#111;">
+          <p style="margin:0 0 10px 0;"><strong>Dear Team,</strong></p>
+          <p style="margin:0 0 10px 0;">Please find attached timesheets which needs come corrections on Healthroster. Details of the corrections are below.</p>
+          <p style="margin:0 0 14px 0;">Please kindly confirm once actioned.</p>
+          ${tableHtml}
+          <p style="margin:14px 0 0 0;">Many thanks,<br/><strong>${escapeHtml(agencyName)}</strong></p>
+        </div>
       `;
 
       try {
@@ -35404,7 +35451,7 @@ async function handleHrAutoprocessApply(env, req, importId) {
       }
     }
   } else {
-    // Backward-compatible: per-timesheet email jobs
+    // Backward-compatible: per-timesheet email jobs (kept as-is)
     for (const job of emailJobs) {
       const tsId = job?.timesheet_id ? String(job.timesheet_id).trim() : '';
       const fp = job?.issue_fingerprint ? String(job.issue_fingerprint).trim() : '';
@@ -35455,7 +35502,7 @@ async function handleHrAutoprocessApply(env, req, importId) {
         `CloudTMS`
       ].filter(Boolean).join('\n');
 
-      const bodyHtml = `<p>${bodyText.split('\n').map(l => (l === '' ? '<br/>' : escapeHtml(l))).join('<br/>')}</p>`;
+      const bodyHtml = `<p style="font-family:Arial,sans-serif;font-size:14px;line-height:1.45;">${bodyText.split('\n').map(l => (l === '' ? '<br/>' : escapeHtml(l))).join('<br/>')}</p>`;
 
       try {
         const insert = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
@@ -35549,7 +35596,10 @@ async function handleHrAutoprocessApply(env, req, importId) {
         tsfinDrainStats.pending_ready = Number(pending?.ready ?? 0) || 0;
         tsfinDrainStats.pending_next_attempt_at_min = pending?.next_attempt_at_min ?? null;
 
+        // Definitive done condition: no outbox rows remain for these ids.
         if (tsfinDrainStats.pending_total === 0) break;
+
+        // No work picked but rows remain => leased/scheduled elsewhere; cannot claim fresh.
         if (!res || Number(res?.picked || 0) === 0) break;
       }
 
