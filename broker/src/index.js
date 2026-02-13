@@ -35061,6 +35061,7 @@ async function handleHrAutoprocessPreview(env, req, importId) {
   }
 }
 
+
 async function handleHrAutoprocessApply(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
@@ -35109,6 +35110,16 @@ async function handleHrAutoprocessApply(env, req, importId) {
     return out;
   };
 
+  const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+
+  const safeYmd = (v) => {
+    const s = String(v || '').trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    return s || '';
+  };
+
   // Inputs (new contract)
   const selectedActionIdsIn = Array.isArray(body.selected_action_ids) ? body.selected_action_ids : [];
   const selectedActionIds = uniqStrings(selectedActionIdsIn);
@@ -35119,7 +35130,6 @@ async function handleHrAutoprocessApply(env, req, importId) {
     .map(x => ({ ...x }));
 
   // Legacy cancellation_actions support: allow shift_id → CANCEL:<shift_id> (explicit shift IDs only)
-  // This is not inference; shift_id is provided explicitly.
   const cancellationActionsIn = Array.isArray(body.cancellation_actions) ? body.cancellation_actions : [];
   for (const a of cancellationActionsIn) {
     const sid = a && a.shift_id ? String(a.shift_id).trim() : '';
@@ -35129,7 +35139,6 @@ async function handleHrAutoprocessApply(env, req, importId) {
   }
 
   // Legacy selected_group_ids is NOT supported in apply anymore (no Worker-side expansion).
-  // We fail fast so we never silently no-op.
   const legacyGroupIds = Array.isArray(body.selected_group_ids) ? uniqStrings(body.selected_group_ids) : [];
   const hasLegacyGroupIdsOnly =
     legacyGroupIds.length > 0 &&
@@ -35161,7 +35170,7 @@ async function handleHrAutoprocessApply(env, req, importId) {
     }))
     .filter(a => !!(a.timesheet_id && a.issue_fingerprint));
 
-  // ✅ Include-missing-shifts flag (passed through to DB apply RPC; frontend sets this)
+  // ✅ Include-missing-shifts flag
   const includeMissingShifts =
     boolish(body.include_missing_shifts) ||
     boolish(body.includeMissingShifts) ||
@@ -35169,8 +35178,17 @@ async function handleHrAutoprocessApply(env, req, importId) {
     boolish(body.includeMissing) ||
     false;
 
-  // ✅ Important: Mode A-only apply MUST be allowed even when selected_action_ids is empty.
-  // We always call the transactional RPC; it decides what work (Mode A vs Mode B) applies.
+  // ✅ NEW: destructive invalidation actions (checkbox-driven)
+  // Expected shape: [{ timesheet_id, comparison_key, invalidate }]
+  const invalidationActionsIn = Array.isArray(body.invalidation_actions) ? body.invalidation_actions : [];
+  const invalidationActions = invalidationActionsIn
+    .filter(x => x && typeof x === 'object' && !Array.isArray(x))
+    .map(x => ({
+      timesheet_id: x?.timesheet_id ? String(x.timesheet_id).trim() : null,
+      comparison_key: x?.comparison_key ? String(x.comparison_key).trim() : null,
+      invalidate: (x?.invalidate === false || x?.invalidate === 'false' || x?.invalidate === 0 || x?.invalidate === '0') ? false : true
+    }))
+    .filter(x => !!(x.timesheet_id && x.comparison_key));
 
   logInfo({
     stage: 'start',
@@ -35178,12 +35196,13 @@ async function handleHrAutoprocessApply(env, req, importId) {
     selected_action_ids_count: selectedActionIds.length,
     selected_actions_count: selectedActions.length,
     email_actions_count: emailActions.length,
+    invalidation_actions_count: invalidationActions.length,
     include_missing_shifts: includeMissingShifts,
     decisions_keys_count: Object.keys(decisions || {}).length
   });
 
   // ─────────────────────────────────────────────
-  // 1) Single transactional DB apply RPC (ALL required DB writes)
+  // 1) Single transactional DB apply RPC
   // ─────────────────────────────────────────────
   let applyPayload;
   try {
@@ -35194,7 +35213,8 @@ async function handleHrAutoprocessApply(env, req, importId) {
         selected_actions: selectedActions,
         decisions,
         email_actions: emailActions,
-        include_missing_shifts: includeMissingShifts
+        include_missing_shifts: includeMissingShifts,
+        invalidation_actions: invalidationActions
       },
       p_actor_user_id: user.id
     });
@@ -35216,8 +35236,6 @@ async function handleHrAutoprocessApply(env, req, importId) {
   const emailJobs = Array.isArray(applyPayload.email_jobs) ? applyPayload.email_jobs : [];
 
   // ✅ TSFIN drain must include validation-changed timesheets as well.
-  // The RPC should already include these in affected_timesheet_ids, but we union defensively so
-  // older RPC payload shapes cannot cause "Validation OK but HR Hours Missing".
   const affectedBase = Array.isArray(applyPayload.affected_timesheet_ids) ? applyPayload.affected_timesheet_ids : [];
   const affectedValTop = Array.isArray(applyPayload.validation_affected_timesheet_ids) ? applyPayload.validation_affected_timesheet_ids : [];
   const affectedValModeA = Array.isArray(applyPayload?.mode_a?.validation_affected_timesheet_ids)
@@ -35226,95 +35244,251 @@ async function handleHrAutoprocessApply(env, req, importId) {
   const affectedTimesheetIds = uniqStrings([...(affectedBase || []), ...(affectedValTop || []), ...(affectedValModeA || [])]);
 
   // ─────────────────────────────────────────────
-  // 2) Post-commit: queue emails best-effort (PDF ensure + mail_outbox insert)
+  // 2) Post-commit: queue emails best-effort
+  //    ✅ NEW: consolidated email (one per recipient) when email_jobs contains items[]
   // ─────────────────────────────────────────────
   let emailsQueued = 0;
   const emailFailures = [];
 
-  for (const job of emailJobs) {
-    const tsId = job?.timesheet_id ? String(job.timesheet_id).trim() : '';
-    const fp = job?.issue_fingerprint ? String(job.issue_fingerprint).trim() : '';
-    const recipientFromJob = job?.recipient_email ? String(job.recipient_email).trim() : '';
+  const buildEmailHtmlTable = (items) => {
+    const rows = Array.isArray(items) ? items : [];
+    const head = `
+      <tr>
+        <th style="text-align:left;padding:6px 8px;border:1px solid #ddd;">Candidate</th>
+        <th style="text-align:left;padding:6px 8px;border:1px solid #ddd;">W/E</th>
+        <th style="text-align:left;padding:6px 8px;border:1px solid #ddd;">Date</th>
+        <th style="text-align:left;padding:6px 8px;border:1px solid #ddd;">Timesheet</th>
+        <th style="text-align:left;padding:6px 8px;border:1px solid #ddd;">HealthRoster</th>
+        <th style="text-align:left;padding:6px 8px;border:1px solid #ddd;">Status</th>
+        <th style="text-align:left;padding:6px 8px;border:1px solid #ddd;">Ref before</th>
+        <th style="text-align:left;padding:6px 8px;border:1px solid #ddd;">Ref after</th>
+        <th style="text-align:left;padding:6px 8px;border:1px solid #ddd;">Invoice locked</th>
+      </tr>
+    `;
+    const body = rows.map((it) => {
+      const cand = escapeHtml(String(it?.candidate_name || '') || '—');
+      const we = escapeHtml(safeYmd(it?.week_ending_date) || '—');
+      const wd = escapeHtml(safeYmd(it?.work_date) || '—');
 
-    if (!tsId || !fp) {
-      emailFailures.push({ timesheet_id: tsId || null, issue_fingerprint: fp || null, reason: 'INVALID_JOB' });
-      continue;
-    }
+      const tsTxt =
+        `${String(it?.timesheet_start || '—')} → ${String(it?.timesheet_end || '—')}` +
+        ` (break ${it?.timesheet_break_mins == null ? '—' : String(it.timesheet_break_mins)})`;
 
-    let recipientEmail = recipientFromJob || null;
-    if (!recipientEmail) {
+      const hrTxt =
+        `${String(it?.healthroster_start || '—')} → ${String(it?.healthroster_end || '—')}` +
+        ` (break ${it?.healthroster_break_mins == null ? '—' : String(it.healthroster_break_mins)})`;
+
+      const ms = escapeHtml(String(it?.match_status || '—'));
+      const rb = escapeHtml(String(it?.ref_before || '') || '—');
+      const ra = escapeHtml(String(it?.ref_after || '') || '—');
+      const locked = (it?.invoice_locked === true) ? 'YES' : 'NO';
+
+      return `
+        <tr>
+          <td style="padding:6px 8px;border:1px solid #ddd;">${cand}</td>
+          <td style="padding:6px 8px;border:1px solid #ddd;">${we}</td>
+          <td style="padding:6px 8px;border:1px solid #ddd;">${wd}</td>
+          <td style="padding:6px 8px;border:1px solid #ddd;">${escapeHtml(tsTxt)}</td>
+          <td style="padding:6px 8px;border:1px solid #ddd;">${escapeHtml(hrTxt)}</td>
+          <td style="padding:6px 8px;border:1px solid #ddd;">${ms}</td>
+          <td style="padding:6px 8px;border:1px solid #ddd;">${rb}</td>
+          <td style="padding:6px 8px;border:1px solid #ddd;">${ra}</td>
+          <td style="padding:6px 8px;border:1px solid #ddd;">${escapeHtml(locked)}</td>
+        </tr>
+      `;
+    }).join('\n');
+
+    return `
+      <div style="overflow:auto;">
+        <table style="border-collapse:collapse;width:100%;font-family:Arial,sans-serif;font-size:12px;">
+          <thead>${head}</thead>
+          <tbody>${body}</tbody>
+        </table>
+      </div>
+    `;
+  };
+
+  // Consolidated mode if emailJobs contains {items:[...], attachment_timesheet_ids:[...], recipient_email:...}
+  const hasConsolidatedEmailJobs =
+    emailJobs.length > 0 &&
+    emailJobs.some(j => j && typeof j === 'object' && Array.isArray(j.items) && Array.isArray(j.attachment_timesheet_ids));
+
+  if (hasConsolidatedEmailJobs) {
+    for (const job of emailJobs) {
+      const recipientFromJob = job?.recipient_email ? String(job.recipient_email).trim() : '';
+      const items = Array.isArray(job?.items) ? job.items : [];
+      const attachIds = Array.isArray(job?.attachment_timesheet_ids) ? job.attachment_timesheet_ids : [];
+
+      if (!recipientFromJob) {
+        emailFailures.push({ reason: 'NO_TS_QUERIES_EMAIL', recipient_email: null });
+        continue;
+      }
+
+      if (!items.length || !attachIds.length) {
+        emailFailures.push({ reason: 'EMPTY_EMAIL_JOB', recipient_email: recipientFromJob });
+        continue;
+      }
+
+      // Ensure all PDFs
+      const attachments = [];
+      for (const tsIdRaw of attachIds) {
+        const tsId = String(tsIdRaw || '').trim();
+        if (!tsId) continue;
+
+        let pdfKey = null;
+        try {
+          pdfKey = await ensureTimesheetPdf(env, tsId);
+        } catch (e) {
+          emailFailures.push({ reason: 'PDF_GENERATION_FAILED', recipient_email: recipientFromJob, timesheet_id: tsId, err: String(e?.message || e) });
+          continue;
+        }
+        if (!pdfKey) {
+          emailFailures.push({ reason: 'PDF_MISSING', recipient_email: recipientFromJob, timesheet_id: tsId });
+          continue;
+        }
+        attachments.push({ r2_key: pdfKey, filename: `Timesheet_${tsId}.pdf` });
+      }
+
+      if (!attachments.length) {
+        emailFailures.push({ reason: 'NO_ATTACHMENTS', recipient_email: recipientFromJob });
+        continue;
+      }
+
+      const subject = `HealthRoster weekly validation – shifts to amend`;
+      const tableHtml = buildEmailHtmlTable(items);
+
+      const bodyText = [
+        `Dear Temporary Staffing,`,
+        ``,
+        `Please find attached the weekly timesheet PDF(s).`,
+        `The table below lists shifts that do not currently validate against the latest HealthRoster import and may need amending.`,
+        ``,
+        `Kind regards,`,
+        `CloudTMS`
+      ].join('\n');
+
+      const bodyHtml = `
+        <p>Dear Temporary Staffing,</p>
+        <p>Please find attached the weekly timesheet PDF(s).</p>
+        <p>The table below lists shifts that do not currently validate against the latest HealthRoster import and may need amending.</p>
+        ${tableHtml}
+        <p>Kind regards,<br/>CloudTMS</p>
+      `;
+
       try {
-        const tgt = await resolveTsoRecipientForTimesheet(env, { timesheet_id: tsId, booking_id: null });
-        recipientEmail = tgt?.to ? String(tgt.to).trim() : null;
-      } catch {
-        recipientEmail = null;
+        const insert = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
+          method: 'POST',
+          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+          body: JSON.stringify({
+            type: 'TSO_FAILURE',
+            to: recipientFromJob,
+            cc: null,
+            subject,
+            body_html: bodyHtml,
+            body_text: bodyText,
+            attachments,
+            status: 'QUEUED',
+            reference: `hr_weekly_validation:${importId}:consolidated`,
+            created_by: user?.id || null
+          })
+        });
+
+        if (!insert.ok) {
+          const t = await insert.text().catch(() => '');
+          throw new Error(t || `mail_outbox ${insert.status}`);
+        }
+
+        emailsQueued += 1;
+      } catch (e) {
+        emailFailures.push({ reason: 'MAIL_OUTBOX_INSERT_FAILED', recipient_email: recipientFromJob, err: String(e?.message || e) });
       }
     }
+  } else {
+    // Backward-compatible: per-timesheet email jobs
+    for (const job of emailJobs) {
+      const tsId = job?.timesheet_id ? String(job.timesheet_id).trim() : '';
+      const fp = job?.issue_fingerprint ? String(job.issue_fingerprint).trim() : '';
+      const recipientFromJob = job?.recipient_email ? String(job.recipient_email).trim() : '';
 
-    if (!recipientEmail) {
-      emailFailures.push({ timesheet_id: tsId, issue_fingerprint: fp, reason: 'NO_TS_QUERIES_EMAIL' });
-      continue;
-    }
-
-    let pdfKey = null;
-    try {
-      pdfKey = await ensureTimesheetPdf(env, tsId);
-    } catch (e) {
-      emailFailures.push({ timesheet_id: tsId, issue_fingerprint: fp, reason: 'PDF_GENERATION_FAILED', err: String(e?.message || e) });
-      continue;
-    }
-
-    if (!pdfKey) {
-      emailFailures.push({ timesheet_id: tsId, issue_fingerprint: fp, reason: 'PDF_MISSING' });
-      continue;
-    }
-
-    const subject = `Timesheet query – weekly validation – ${tsId}`;
-    const bodyText = [
-      `Dear Temporary Staffing,`,
-      ``,
-      `Please find the attached weekly timesheet PDF.`,
-      `This email relates to a HealthRoster weekly validation mismatch.`,
-      fp ? `Issue fingerprint: ${fp}` : null,
-      ``,
-      `Kind regards,`,
-      `CloudTMS`
-    ].filter(Boolean).join('\n');
-
-    const bodyHtml = `<p>${bodyText.split('\n').map(l => (l === '' ? '<br/>' : l)).join('<br/>')}</p>`;
-
-    try {
-      const insert = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
-        method: 'POST',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify({
-          type: 'TSO_FAILURE',
-          to: recipientEmail,
-          cc: null,
-          subject,
-          body_html: bodyHtml,
-          body_text: bodyText,
-          attachments: [{ r2_key: pdfKey, filename: `Timesheet_${tsId}.pdf` }],
-          status: 'QUEUED',
-          reference: `hr_weekly_validation:${importId}:${tsId}:${fp}`,
-          created_by: user?.id || null
-        })
-      });
-
-      if (!insert.ok) {
-        const t = await insert.text().catch(() => '');
-        throw new Error(t || `mail_outbox ${insert.status}`);
+      if (!tsId || !fp) {
+        emailFailures.push({ timesheet_id: tsId || null, issue_fingerprint: fp || null, reason: 'INVALID_JOB' });
+        continue;
       }
 
-      emailsQueued += 1;
-    } catch (e) {
-      emailFailures.push({ timesheet_id: tsId, issue_fingerprint: fp, reason: 'MAIL_OUTBOX_INSERT_FAILED', err: String(e?.message || e) });
+      let recipientEmail = recipientFromJob || null;
+      if (!recipientEmail) {
+        try {
+          const tgt = await resolveTsoRecipientForTimesheet(env, { timesheet_id: tsId, booking_id: null });
+          recipientEmail = tgt?.to ? String(tgt.to).trim() : null;
+        } catch {
+          recipientEmail = null;
+        }
+      }
+
+      if (!recipientEmail) {
+        emailFailures.push({ timesheet_id: tsId, issue_fingerprint: fp, reason: 'NO_TS_QUERIES_EMAIL' });
+        continue;
+      }
+
+      let pdfKey = null;
+      try {
+        pdfKey = await ensureTimesheetPdf(env, tsId);
+      } catch (e) {
+        emailFailures.push({ timesheet_id: tsId, issue_fingerprint: fp, reason: 'PDF_GENERATION_FAILED', err: String(e?.message || e) });
+        continue;
+      }
+
+      if (!pdfKey) {
+        emailFailures.push({ timesheet_id: tsId, issue_fingerprint: fp, reason: 'PDF_MISSING' });
+        continue;
+      }
+
+      const subject = `Timesheet query – weekly validation – ${tsId}`;
+      const bodyText = [
+        `Dear Temporary Staffing,`,
+        ``,
+        `Please find the attached weekly timesheet PDF.`,
+        `This email relates to a HealthRoster weekly validation mismatch.`,
+        fp ? `Issue fingerprint: ${fp}` : null,
+        ``,
+        `Kind regards,`,
+        `CloudTMS`
+      ].filter(Boolean).join('\n');
+
+      const bodyHtml = `<p>${bodyText.split('\n').map(l => (l === '' ? '<br/>' : escapeHtml(l))).join('<br/>')}</p>`;
+
+      try {
+        const insert = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
+          method: 'POST',
+          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+          body: JSON.stringify({
+            type: 'TSO_FAILURE',
+            to: recipientEmail,
+            cc: null,
+            subject,
+            body_html: bodyHtml,
+            body_text: bodyText,
+            attachments: [{ r2_key: pdfKey, filename: `Timesheet_${tsId}.pdf` }],
+            status: 'QUEUED',
+            reference: `hr_weekly_validation:${importId}:${tsId}:${fp}`,
+            created_by: user?.id || null
+          })
+        });
+
+        if (!insert.ok) {
+          const t = await insert.text().catch(() => '');
+          throw new Error(t || `mail_outbox ${insert.status}`);
+        }
+
+        emailsQueued += 1;
+      } catch (e) {
+        emailFailures.push({ timesheet_id: tsId, issue_fingerprint: fp, reason: 'MAIL_OUTBOX_INSERT_FAILED', err: String(e?.message || e) });
+      }
     }
   }
 
   // ─────────────────────────────────────────────
   // 3) Post-commit: TSFIN Strategy A drain-to-completion (hard requirement)
-  //    Fix: Use definitive outbox pending check + return explicit "apply succeeded but TSFIN refresh failed"
   // ─────────────────────────────────────────────
   const tsfinDrainStats = {
     ids: affectedTimesheetIds.length,
@@ -35375,10 +35549,7 @@ async function handleHrAutoprocessApply(env, req, importId) {
         tsfinDrainStats.pending_ready = Number(pending?.ready ?? 0) || 0;
         tsfinDrainStats.pending_next_attempt_at_min = pending?.next_attempt_at_min ?? null;
 
-        // Definitive done condition: no outbox rows remain for these ids.
         if (tsfinDrainStats.pending_total === 0) break;
-
-        // No work picked but rows remain => leased/scheduled elsewhere; cannot claim fresh.
         if (!res || Number(res?.picked || 0) === 0) break;
       }
 
