@@ -1136,12 +1136,15 @@ begin
 
   v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','MODE_A_MIRROR_DONE'));
 
-  -- ─────────────────────────────────────────────
+   -- ─────────────────────────────────────────────
   -- ✅ NEW: MODE_A must also link HEALTHROSTER shifts to the base weekly timesheet
   -- This fixes:
   --   - Evidence tab "Rows matched = 0"
   --   - TSFIN HR crosscheck seeing no HR rows (HR_HOURS_MISSING)
   --   - downstream ref propagation via a stable join key (timesheet_id)
+  --
+  -- ✅ NEW RULE: never change an invoiced/locked shift
+  -- (so do NOT update timesheet_id for invoice-locked rows)
   -- ─────────────────────────────────────────────
   create temporary table tmp_mode_a_ts_map(
     external_row_key text primary key,
@@ -1167,6 +1170,34 @@ begin
   into v_mode_a_ts_linked_count
   from tmp_mode_a_ts_map mt;
 
+  -- ✅ NEW: detect invoice-locked shifts so we never mutate them (including timesheet_id)
+  create temporary table tmp_mode_a_locked_shift_ids(
+    shift_id uuid primary key
+  ) on commit drop;
+
+  insert into tmp_mode_a_locked_shift_ids(shift_id)
+  select distinct ns_lock.id as shift_id
+  from public.nhsp_shifts ns_lock
+  join tmp_mode_a_ts_map mt_lock
+    on mt_lock.external_row_key = ns_lock.external_row_key
+  where ns_lock.source_system = 'HEALTHROSTER'::public.hr_source_enum
+    and ns_lock.cancelled_at_utc is null
+    and ns_lock.latest_import_id = p_import_id
+    and (
+      ns_lock.invoice_id is not null
+      or exists (
+        select 1
+        from public.timesheets_financials tf_lock
+        cross join lateral jsonb_array_elements(coalesce(tf_lock.invoice_breakdown_json->'segments','[]'::jsonb)) as seg_lock(value)
+        where tf_lock.is_current = true
+          and tf_lock.timesheet_id = ns_lock.timesheet_id
+          and nullif(btrim(seg_lock.value->>'nhsp_shift_id'), '') = ns_lock.id::text
+          and nullif(btrim(seg_lock.value->>'invoice_locked_invoice_id'), '') is not null
+        limit 1
+      )
+    )
+  on conflict do nothing;
+
   update public.nhsp_shifts nsu
      set timesheet_id = mt.timesheet_id,
          updated_at = v_now
@@ -1175,7 +1206,12 @@ begin
      and nsu.cancelled_at_utc is null
      and nsu.latest_import_id = p_import_id
      and nsu.external_row_key = mt.external_row_key
-     and (nsu.timesheet_id is distinct from mt.timesheet_id);
+     and (nsu.timesheet_id is distinct from mt.timesheet_id)
+     and not exists (
+       select 1
+       from tmp_mode_a_locked_shift_ids l
+       where l.shift_id = nsu.id
+     );
 
   get diagnostics v_mode_a_shifts_attached_count = row_count;
 
@@ -1190,9 +1226,11 @@ begin
     jsonb_build_object(
       'step','MODE_A_SHIFTS_LINKED',
       'mode_a_ts_linked_count', v_mode_a_ts_linked_count,
-      'mode_a_shifts_attached_count', v_mode_a_shifts_attached_count
+      'mode_a_shifts_attached_count', v_mode_a_shifts_attached_count,
+      'mode_a_locked_shift_count', (select count(*)::int from tmp_mode_a_locked_shift_ids)
     )
   );
+
 
   -- ─────────────────────────────────────────────
   -- 10) MODE_A weekly validation upserts + email state
