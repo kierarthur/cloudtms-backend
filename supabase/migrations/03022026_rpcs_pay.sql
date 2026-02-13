@@ -1811,8 +1811,14 @@ declare
   v_unmapped_candidates int := 0;
   v_unmatched_timesheets int := 0;
 
-  -- ✅ NEW: unauthorised timesheets (excluded from validation matches)
+  -- unauthorised timesheets (excluded from validation matches)
   v_unauthorised_timesheet_triples int := 0;
+
+  -- import file date range (drives missing-shifts warnings)
+  v_file_date_min date := null;
+  v_file_date_max date := null;
+  v_we_min date := null;
+  v_we_max date := null;
 begin
   if p_import_id is null then
     raise exception 'hr_weekly_validation_preview: import_id is required';
@@ -1836,8 +1842,7 @@ begin
     raise exception 'hr_weekly_validation_preview: import % is not HEALTHROSTER (source_system=%)', p_import_id, v_import.source_system;
   end if;
 
-  -- ✅ UPDATED (locked policy): allow running weekly validation before apply sets import_scope.
-  -- Only reject if import_scope is explicitly set to a different value.
+  -- allow running weekly validation before apply sets import_scope. only reject if import_scope is explicitly different.
   if v_import.import_scope is not null and upper(coalesce(v_import.import_scope::text,'')) <> 'HR_WEEKLY' then
     raise exception 'hr_weekly_validation_preview: import % is not HR_WEEKLY (import_scope=%)', p_import_id, v_import.import_scope;
   end if;
@@ -1862,24 +1867,75 @@ begin
   where c.id = v_client_id
   limit 1;
 
-  with hr_raw as (
+  -- Import file date range (drives "missing shifts" warnings)
+  select
+    min(r2.date_local)::date,
+    max(r2.date_local)::date
+  into
+    v_file_date_min,
+    v_file_date_max
+  from public.hr_rows r2
+  where r2.import_id = p_import_id
+    and r2.date_local is not null;
+
+  if v_file_date_min is null or v_file_date_max is null then
+    return jsonb_build_object(
+      'import_id', p_import_id::text,
+      'client_id', v_client_id::text,
+      'week_ending_weekday', v_we_dow,
+      'recipient_email', v_recipient_email,
+      'file_date_min', null,
+      'file_date_max', null,
+      'unmapped_candidate_rows', 0,
+      'unmatched_timesheet_triples', 0,
+      'unauthorised_timesheet_triples', 0,
+      'rows', '[]'::jsonb,
+      'validation_groups', '[]'::jsonb
+    );
+  end if;
+
+  -- derive inclusive week-ending bounds for selecting authorised timesheets in scope
+  v_we_min :=
+    (v_file_date_min
+      + (((v_we_dow - extract(dow from v_file_date_min)::int + 7) % 7))::int
+    )::date;
+
+  v_we_max :=
+    (v_file_date_max
+      + (((v_we_dow - extract(dow from v_file_date_max)::int + 7) % 7))::int
+    )::date;
+
+  with
+  -- ─────────────────────────────────────────────
+  -- HR import rows in this file (for comparisons + candidate resolution)
+  -- ─────────────────────────────────────────────
+  hr_raw as (
     select
       r.id as hr_row_id,
       r.external_row_key,
+      r.date_local as date_local,
       nullif(btrim(coalesce(r.payload_json->>'staff_name','')), '') as staff_name_payload,
       nullif(btrim(coalesce(r.staff_raw,'')), '') as staff_raw,
       nullif(btrim(coalesce(r.staff_norm,'')), '') as staff_norm_col,
+      nullif(btrim(coalesce(r.hr_request_id,'')), '') as hr_request_id_text,
+      nullif(btrim(coalesce(r.payload_json->>'request_id','')), '') as hr_request_id_payload,
+      nullif(btrim(coalesce(r.payload_json->>'ward','')), '') as ward_payload,
+      nullif(btrim(coalesce(r.payload_json->>'unit','')), '') as unit_payload,
+      nullif(btrim(coalesce(r.unit_raw,'')), '') as unit_raw,
       (r.payload_json->>'start_utc')::timestamptz as start_utc_raw,
       (r.payload_json->>'end_utc')::timestamptz as end_utc_raw,
       coalesce(
+        nullif(r.payload_json->>'actual_break_mins','')::int,
+        nullif(r.payload_json->>'actual_break_minutes','')::int,
         nullif(r.payload_json->>'break_mins','')::int,
         nullif(r.payload_json->>'break_minutes','')::int,
-        nullif(r.payload_json->>'actual_break_minutes','')::int,
         0
       ) as break_mins
     from public.hr_rows r
     where r.import_id = p_import_id
       and r.external_row_key is not null
+      and r.date_local is not null
+      and r.date_local between v_file_date_min and v_file_date_max
       and (r.payload_json->>'start_utc') is not null
       and (r.payload_json->>'end_utc') is not null
   ),
@@ -1887,33 +1943,23 @@ begin
     select
       h.hr_row_id,
       h.external_row_key,
+      h.date_local as work_date,
       coalesce(h.staff_name_payload, h.staff_raw, h.staff_norm_col) as staff_name,
       nullif(lower(trim(coalesce(coalesce(h.staff_name_payload, h.staff_raw, h.staff_norm_col), ''))), '') as staff_norm,
       nullif(regexp_replace(lower(coalesce(coalesce(h.staff_name_payload, h.staff_raw, h.staff_norm_col), '')), '[^a-z0-9]+', '', 'g'), '') as staff_norm2,
+      coalesce(nullif(h.hr_request_id_text,''), nullif(h.hr_request_id_payload,'')) as hr_request_id,
+      coalesce(nullif(h.ward_payload,''), nullif(h.unit_payload,''), nullif(h.unit_raw,'')) as hr_location,
       date_trunc('minute', h.start_utc_raw) as start_utc,
       date_trunc('minute', h.end_utc_raw) as end_utc,
-      coalesce(h.break_mins, 0) as break_mins,
-      ((date_trunc('minute', h.start_utc_raw) at time zone 'Europe/London')::date) as work_date
+      greatest(coalesce(h.break_mins, 0), 0)::int as break_mins
     from hr_raw h
   ),
   hr_resolved as (
     select
       n.*,
-
-      coalesce(
-        cand_alias.id,
-        cand_map.candidate_id,
-        cand_exact_unique.cid
-      ) as candidate_id,
-
-      coalesce(
-        cand_alias.display_name,
-        cand_map.display_name,
-        cand_exact_unique.cname
-      ) as candidate_name
-
+      coalesce(cand_alias.id, cand_map.candidate_id, cand_exact_unique.cid) as candidate_id,
+      coalesce(cand_alias.display_name, cand_map.display_name, cand_exact_unique.cname) as candidate_name
     from hr_normed n
-
     left join lateral (
       select c.id, c.display_name
       from public.candidates c
@@ -1925,7 +1971,6 @@ begin
         )
       limit 1
     ) cand_alias on true
-
     left join lateral (
       select hm.candidate_id, c.display_name
       from public.hr_name_mappings hm
@@ -1940,12 +1985,9 @@ begin
       order by hm.created_at desc
       limit 1
     ) cand_map on cand_alias.id is null
-
     left join lateral (
       with matches as (
-        select
-          c.id as cid,
-          c.display_name as cname
+        select c.id as cid, c.display_name as cname
         from public.candidates c
         where c.active = true
           and n.staff_norm2 is not null
@@ -1963,18 +2005,25 @@ begin
   ),
   hr_with_we as (
     select
-      r.*,
+      r.candidate_id,
+      r.candidate_name,
+      r.work_date,
       (
         r.work_date
-        + (
-            (v_we_dow - extract(dow from r.work_date)::int + 7) % 7
-          )
+        + (((v_we_dow - extract(dow from r.work_date)::int + 7) % 7))::int
       )::date as week_ending_date,
+
+      r.hr_row_id,
+      r.hr_request_id,
+      r.hr_location,
+
       to_char((r.start_utc at time zone 'Europe/London'), 'HH24:MI') as hr_start_hhmm,
       to_char((r.end_utc at time zone 'Europe/London'), 'HH24:MI') as hr_end_hhmm,
+
       (substring(to_char((r.start_utc at time zone 'Europe/London'), 'HH24:MI'),1,2)::int * 60
         + substring(to_char((r.start_utc at time zone 'Europe/London'), 'HH24:MI'),4,2)::int
       ) as hr_start_min,
+
       (
         case
           when (
@@ -1996,6 +2045,9 @@ begin
             )
         end
       ) as hr_end_min,
+
+      r.break_mins as hr_break_mins,
+
       greatest(
         0,
         (
@@ -2027,8 +2079,35 @@ begin
           - coalesce(r.break_mins,0)
         )::int
       ) as hr_paid_minutes
+
     from hr_resolved r
   ),
+
+  -- counts
+  unmapped_candidate_rows as (
+    select count(*)::int as n
+    from hr_with_we h
+    where h.candidate_id is null
+  ),
+
+  hr_entries_flat as (
+    select
+      h.candidate_id,
+      h.candidate_name,
+      h.week_ending_date,
+      h.work_date,
+      h.hr_row_id,
+      h.hr_request_id,
+      h.hr_location,
+      h.hr_start_hhmm,
+      h.hr_end_hhmm,
+      h.hr_start_min,
+      h.hr_end_min,
+      h.hr_break_mins
+    from hr_with_we h
+    where h.candidate_id is not null
+  ),
+
   hr_day_totals as (
     select
       h.candidate_id,
@@ -2040,27 +2119,7 @@ begin
     where h.candidate_id is not null
     group by h.candidate_id, h.candidate_name, h.week_ending_date, h.work_date
   ),
-  hr_day_entries as (
-    select
-      h.candidate_id,
-      h.week_ending_date,
-      h.work_date,
-      jsonb_agg(
-        jsonb_build_object(
-          'hr_row_id', h.hr_row_id::text,
-          'start_hhmm', h.hr_start_hhmm,
-          'end_hhmm', h.hr_end_hhmm,
-          'break_mins', h.break_mins,
-          'start_minute', h.hr_start_min,
-          'end_minute', h.hr_end_min
-        )
-        order by h.hr_start_min asc, h.hr_end_min asc, h.hr_row_id::text
-      ) as hr_entries_json,
-      count(*)::int as hr_entry_count
-    from hr_with_we h
-    where h.candidate_id is not null
-    group by h.candidate_id, h.week_ending_date, h.work_date
-  ),
+
   hr_triples as (
     select distinct
       h.candidate_id,
@@ -2069,6 +2128,33 @@ begin
     from hr_with_we h
     where h.candidate_id is not null
   ),
+
+  -- ─────────────────────────────────────────────
+  -- Authorised weekly timesheets in scope (ALL candidates, not just those in import)
+  -- used to show "missing shifts" warnings in the file date range
+  -- ─────────────────────────────────────────────
+  ts_universe_raw as (
+    select
+      t.timesheet_id,
+      t.week_ending_date,
+      t.contract_id,
+      ct.candidate_id,
+      cand.display_name as candidate_name,
+      t.actual_schedule_json,
+      t.authorised_at_server
+    from public.timesheets t
+    join public.contracts ct
+      on ct.id = t.contract_id
+    join public.candidates cand
+      on cand.id = ct.candidate_id
+    where t.is_current = true
+      and t.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum
+      and ct.client_id = v_client_id
+      and t.week_ending_date is not null
+      and t.week_ending_date between v_we_min and v_we_max
+  ),
+
+  -- separate authorised vs unauthorised (for import candidates)
   ts_matches_raw as (
     select
       tr.candidate_id,
@@ -2105,19 +2191,20 @@ begin
       on tts.timesheet_id = tmr.raw_timesheet_id
      and tts.is_current = true
   ),
-  ts_schedule as (
+
+  ts_universe as (
     select
-      tm.candidate_id,
-      tm.candidate_name,
-      tm.week_ending_date,
-      tm.timesheet_id,
-      tm.contract_id,
-      t.actual_schedule_json
-    from ts_matches tm
-    join public.timesheets t
-      on t.timesheet_id = tm.timesheet_id
-     and t.is_current = true
+      tur.timesheet_id,
+      tur.week_ending_date,
+      tur.contract_id,
+      tur.candidate_id,
+      tur.candidate_name,
+      tur.actual_schedule_json
+    from ts_universe_raw tur
+    where tur.authorised_at_server is not null
   ),
+
+  -- parse timesheet schedule entries for universe (restricted to file date range)
   ts_entries_indexed as (
     select
       s.candidate_id,
@@ -2130,9 +2217,8 @@ begin
       d.start_minute,
       d.end_minute,
       d.break_mins,
-      greatest(0, (d.end_minute - d.start_minute - d.break_mins))::int as paid_minutes,
       row_number() over (partition by s.timesheet_id, d.work_date order by d.start_minute asc, d.end_minute asc) as worker_entry_index
-    from ts_schedule s
+    from ts_universe s
     cross join lateral (
       select
         outx.work_date as work_date,
@@ -2230,150 +2316,400 @@ begin
           greatest(coalesce(base.break_mins,0),0) as break_mins
       ) outx
       where outx.work_date is not null
+        and outx.work_date between v_file_date_min and v_file_date_max
         and outx.start_minute is not null
         and outx.end_minute is not null
     ) d
   ),
+
   ts_day_totals as (
     select
       t.candidate_id,
+      t.candidate_name,
       t.week_ending_date,
       t.timesheet_id,
       t.work_date,
-      sum(t.paid_minutes)::int as ts_paid_minutes
+      sum(greatest(0,(t.end_minute - t.start_minute - coalesce(t.break_mins,0))))::int as ts_paid_minutes
     from ts_entries_indexed t
-    group by t.candidate_id, t.week_ending_date, t.timesheet_id, t.work_date
+    group by t.candidate_id, t.candidate_name, t.week_ending_date, t.timesheet_id, t.work_date
   ),
-  hr_entries_flat as (
+
+  -- segments lock map (invoice-locked detection + current stored segment ref)
+  seg_locks as (
     select
-      h.candidate_id,
-      h.week_ending_date,
-      h.work_date,
-      h.hr_row_id,
-      h.hr_start_hhmm,
-      h.hr_end_hhmm,
-      h.hr_start_min,
-      h.hr_end_min,
-      h.break_mins as hr_break_mins
-    from hr_with_we h
-    where h.candidate_id is not null
+      tf.timesheet_id,
+      (nullif(btrim(s.value->>'date'), ''))::date as work_date,
+      (substring(to_char(((s.value->>'start_utc')::timestamptz at time zone 'Europe/London'),'HH24:MI'),1,2)::int*60
+        + substring(to_char(((s.value->>'start_utc')::timestamptz at time zone 'Europe/London'),'HH24:MI'),4,2)::int
+      ) as seg_start_min,
+      (
+        case
+          when (
+            (substring(to_char(((s.value->>'end_utc')::timestamptz at time zone 'Europe/London'),'HH24:MI'),1,2)::int*60
+             + substring(to_char(((s.value->>'end_utc')::timestamptz at time zone 'Europe/London'),'HH24:MI'),4,2)::int
+            )
+            <=
+            (substring(to_char(((s.value->>'start_utc')::timestamptz at time zone 'Europe/London'),'HH24:MI'),1,2)::int*60
+             + substring(to_char(((s.value->>'start_utc')::timestamptz at time zone 'Europe/London'),'HH24:MI'),4,2)::int
+            )
+          )
+          then
+            (substring(to_char(((s.value->>'end_utc')::timestamptz at time zone 'Europe/London'),'HH24:MI'),1,2)::int*60
+             + substring(to_char(((s.value->>'end_utc')::timestamptz at time zone 'Europe/London'),'HH24:MI'),4,2)::int
+            ) + 1440
+          else
+            (substring(to_char(((s.value->>'end_utc')::timestamptz at time zone 'Europe/London'),'HH24:MI'),1,2)::int*60
+             + substring(to_char(((s.value->>'end_utc')::timestamptz at time zone 'Europe/London'),'HH24:MI'),4,2)::int
+            )
+        end
+      ) as seg_end_min,
+      nullif(btrim(s.value->>'invoice_locked_invoice_id'), '') as invoice_locked_invoice_id,
+      nullif(btrim(s.value->>'ref_num'), '') as seg_ref_num
+    from public.timesheets_financials tf
+    join ts_universe tu
+      on tu.timesheet_id = tf.timesheet_id
+    cross join lateral jsonb_array_elements(coalesce(tf.invoice_breakdown_json->'segments','[]'::jsonb)) as s(value)
+    where tf.is_current = true
+      and jsonb_typeof(tf.invoice_breakdown_json) = 'object'
+      and jsonb_typeof(tf.invoice_breakdown_json->'segments') = 'array'
+      and (s.value ? 'date')
+      and (s.value ? 'start_utc')
+      and (s.value ? 'end_utc')
+      and (nullif(btrim(s.value->>'date'), '') is not null)
   ),
+
+  -- pairing: each worker entry vs HR import entries by overlap (>=1 minute)
   pairing_counts as (
     select
-      w.timesheet_id,
-      w.work_date,
-      w.worker_entry_index,
-      w.start_hhmm as worker_start_hhmm,
-      w.end_hhmm as worker_end_hhmm,
-      w.start_minute as worker_start_min,
-      w.end_minute as worker_end_min,
-      w.break_mins as worker_break_mins,
+      te.timesheet_id,
+      te.candidate_id,
+      te.candidate_name,
+      te.week_ending_date,
+      te.work_date,
+      te.worker_entry_index,
+      te.start_hhmm as ts_start_hhmm,
+      te.end_hhmm as ts_end_hhmm,
+      te.start_minute as ts_start_min,
+      te.end_minute as ts_end_min,
+      te.break_mins as ts_break_mins,
 
-      count(h.hr_row_id)::int as match_count,
+      count(hf.hr_row_id)::int as match_count,
 
-      case when count(h.hr_row_id) = 1 then (array_agg(h.hr_row_id order by h.hr_row_id::text))[1] end as matched_hr_row_id,
-      case when count(h.hr_row_id) = 1 then (array_agg(h.hr_start_hhmm order by h.hr_row_id::text))[1] end as matched_hr_start_hhmm,
-      case when count(h.hr_row_id) = 1 then (array_agg(h.hr_end_hhmm order by h.hr_row_id::text))[1] end as matched_hr_end_hhmm,
-      case when count(h.hr_row_id) = 1 then (array_agg(h.hr_start_min order by h.hr_row_id::text))[1] end as matched_hr_start_min,
-      case when count(h.hr_row_id) = 1 then (array_agg(h.hr_end_min order by h.hr_row_id::text))[1] end as matched_hr_end_min,
-      case when count(h.hr_row_id) = 1 then (array_agg(h.hr_break_mins order by h.hr_row_id::text))[1] end as matched_hr_break_mins
-    from ts_entries_indexed w
-    join ts_matches tm
-      on tm.timesheet_id = w.timesheet_id
-    left join hr_entries_flat h
-      on h.candidate_id = tm.candidate_id
-     and h.week_ending_date = tm.week_ending_date
-     and h.work_date = w.work_date
-     and (least(w.end_minute, h.hr_end_min) - greatest(w.start_minute, h.hr_start_min)) >= 1
+      case when count(hf.hr_row_id) = 1 then (array_agg(hf.hr_row_id order by hf.hr_row_id::text))[1] end as matched_hr_row_id,
+      case when count(hf.hr_row_id) = 1 then (array_agg(hf.hr_start_hhmm order by hf.hr_row_id::text))[1] end as matched_hr_start_hhmm,
+      case when count(hf.hr_row_id) = 1 then (array_agg(hf.hr_end_hhmm order by hf.hr_row_id::text))[1] end as matched_hr_end_hhmm,
+      case when count(hf.hr_row_id) = 1 then (array_agg(hf.hr_start_min order by hf.hr_row_id::text))[1] end as matched_hr_start_min,
+      case when count(hf.hr_row_id) = 1 then (array_agg(hf.hr_end_min order by hf.hr_row_id::text))[1] end as matched_hr_end_min,
+      case when count(hf.hr_row_id) = 1 then (array_agg(hf.hr_break_mins order by hf.hr_row_id::text))[1] end as matched_hr_break_mins,
+      case when count(hf.hr_row_id) = 1 then (array_agg(hf.hr_request_id order by hf.hr_row_id::text))[1] end as matched_hr_request_id,
+      case when count(hf.hr_row_id) = 1 then (array_agg(hf.hr_location order by hf.hr_row_id::text))[1] end as matched_hr_location
+    from ts_entries_indexed te
+    left join hr_entries_flat hf
+      on hf.candidate_id = te.candidate_id
+     and hf.week_ending_date = te.week_ending_date
+     and hf.work_date = te.work_date
+     and (least(te.end_minute, hf.hr_end_min) - greatest(te.start_minute, hf.hr_start_min)) >= 1
     group by
-      w.timesheet_id, w.work_date, w.worker_entry_index,
-      w.start_hhmm, w.end_hhmm, w.start_minute, w.end_minute, w.break_mins
+      te.timesheet_id, te.candidate_id, te.candidate_name, te.week_ending_date, te.work_date,
+      te.worker_entry_index, te.start_hhmm, te.end_hhmm, te.start_minute, te.end_minute, te.break_mins
   ),
+
+  -- HR-only entries: HR entries not uniquely matched to any worker entry
+  comparisons_hr_only as (
+    select
+      tu.timesheet_id,
+      tu.candidate_id,
+      tu.candidate_name,
+      tu.week_ending_date,
+      hf.work_date,
+
+      null::text as ts_start_hhmm,
+      null::text as ts_end_hhmm,
+      null::int as ts_start_min,
+      null::int as ts_end_min,
+      null::int as ts_break_mins,
+
+      hf.hr_start_hhmm as hr_start_hhmm,
+      hf.hr_end_hhmm as hr_end_hhmm,
+      hf.hr_start_min as hr_start_min,
+      hf.hr_end_min as hr_end_min,
+      hf.hr_break_mins as hr_break_mins,
+      hf.hr_request_id as hr_request_id,
+      hf.hr_location as hr_location,
+
+      'HR_ONLY'::text as match_status,
+      false as time_match,
+      100000 + hf.hr_start_min as sort_key
+    from hr_entries_flat hf
+    join ts_universe tu
+      on tu.candidate_id = hf.candidate_id
+     and tu.week_ending_date = hf.week_ending_date
+    left join pairing_counts pc
+      on pc.timesheet_id = tu.timesheet_id
+     and pc.work_date = hf.work_date
+     and pc.match_count = 1
+     and pc.matched_hr_row_id = hf.hr_row_id
+    where pc.matched_hr_row_id is null
+  ),
+
   comparisons_worker as (
     select
-      tm.candidate_id,
-      tm.candidate_name,
-      tm.week_ending_date,
       pc.timesheet_id,
+      pc.candidate_id,
+      pc.candidate_name,
+      pc.week_ending_date,
       pc.work_date,
-      pc.worker_entry_index as sort_key,
-      pc.worker_start_hhmm as ts_start_hhmm,
-      pc.worker_end_hhmm as ts_end_hhmm,
-      pc.worker_break_mins as ts_break_mins,
+
+      pc.ts_start_hhmm,
+      pc.ts_end_hhmm,
+      pc.ts_start_min,
+      pc.ts_end_min,
+      pc.ts_break_mins,
+
       case when pc.match_count = 1 then pc.matched_hr_start_hhmm else null end as hr_start_hhmm,
       case when pc.match_count = 1 then pc.matched_hr_end_hhmm else null end as hr_end_hhmm,
+      case when pc.match_count = 1 then pc.matched_hr_start_min else null end as hr_start_min,
+      case when pc.match_count = 1 then pc.matched_hr_end_min else null end as hr_end_min,
       case when pc.match_count = 1 then pc.matched_hr_break_mins else null end as hr_break_mins,
-      case when pc.match_count = 1 then (pc.worker_start_min - pc.matched_hr_start_min) else null end as start_diff_mins,
-      case when pc.match_count = 1 then (pc.worker_end_min - pc.matched_hr_end_min) else null end as end_diff_mins,
-      case when pc.match_count = 1 then (coalesce(pc.worker_break_mins,0) - coalesce(pc.matched_hr_break_mins,0)) else null end as break_diff_mins,
+      case when pc.match_count = 1 then pc.matched_hr_request_id else null end as hr_request_id,
+      case when pc.match_count = 1 then pc.matched_hr_location else null end as hr_location,
+
       case
         when pc.match_count = 1
-         and (pc.worker_start_min - pc.matched_hr_start_min) = 0
-         and (pc.worker_end_min - pc.matched_hr_end_min) = 0
-         and (coalesce(pc.worker_break_mins,0) - coalesce(pc.matched_hr_break_mins,0)) = 0
+         and (pc.ts_start_min - pc.matched_hr_start_min) = 0
+         and (pc.ts_end_min - pc.matched_hr_end_min) = 0
+         and (coalesce(pc.ts_break_mins,0) - coalesce(pc.matched_hr_break_mins,0)) = 0
         then true
         else false
-      end as is_match,
+      end as time_match,
+
       case
         when pc.match_count = 1
-         and (pc.worker_start_min - pc.matched_hr_start_min) = 0
-         and (pc.worker_end_min - pc.matched_hr_end_min) = 0
-         and (coalesce(pc.worker_break_mins,0) - coalesce(pc.matched_hr_break_mins,0)) = 0
+         and (pc.ts_start_min - pc.matched_hr_start_min) = 0
+         and (pc.ts_end_min - pc.matched_hr_end_min) = 0
+         and (coalesce(pc.ts_break_mins,0) - coalesce(pc.matched_hr_break_mins,0)) = 0
         then 'MATCH'
         when pc.match_count = 1 then 'MISMATCH'
         when pc.match_count = 0 then 'UNMATCHED'
         else 'AMBIGUOUS'
-      end as match_status
+      end as match_status,
+
+      pc.worker_entry_index as sort_key
     from pairing_counts pc
-    join ts_matches tm
-      on tm.timesheet_id = pc.timesheet_id
   ),
-  comparisons_by_ts as (
+
+  comparisons_union as (
+    select * from comparisons_worker
+    union all
+    select * from comparisons_hr_only
+  ),
+
+  -- existing stored HR shifts for before/after diffs (best-effort; uses overlap)
+  comparisons_enriched as (
     select
-      cu.candidate_id,
-      cu.week_ending_date,
       cu.timesheet_id,
+      cu.candidate_id,
+      cu.candidate_name,
+      cu.week_ending_date,
+      cu.work_date,
+
+      cu.ts_start_hhmm,
+      cu.ts_end_hhmm,
+      cu.ts_start_min,
+      cu.ts_end_min,
+      cu.ts_break_mins,
+
+      cu.hr_start_hhmm,
+      cu.hr_end_hhmm,
+      cu.hr_start_min,
+      cu.hr_end_min,
+      cu.hr_break_mins,
+      cu.hr_request_id,
+      cu.hr_location,
+
+      cu.match_status,
+      cu.time_match,
+      cu.sort_key,
+
+      sl.invoice_locked_invoice_id,
+      sl.seg_ref_num,
+
+      prev.prev_ref_num,
+      prev.prev_location,
+      prev.prev_start_hhmm,
+      prev.prev_end_hhmm,
+      prev.prev_break_mins,
+
+      -- computed ref (before/after)
+      coalesce(nullif(btrim(sl.seg_ref_num), ''), nullif(btrim(prev.prev_ref_num), '')) as ref_before,
+      nullif(btrim(cu.hr_request_id), '') as ref_after
+    from comparisons_union cu
+    left join seg_locks sl
+      on sl.timesheet_id = cu.timesheet_id
+     and sl.work_date = cu.work_date
+     and sl.seg_start_min = cu.ts_start_min
+     and sl.seg_end_min = cu.ts_end_min
+    left join lateral (
+      select
+        ns.ref_num as prev_ref_num,
+        ns.ward as prev_location,
+        to_char((date_trunc('minute', ns.start_utc) at time zone 'Europe/London'), 'HH24:MI') as prev_start_hhmm,
+        to_char((date_trunc('minute', ns.end_utc) at time zone 'Europe/London'), 'HH24:MI') as prev_end_hhmm,
+        coalesce(ns.break_mins,0)::int as prev_break_mins
+      from public.nhsp_shifts ns
+      cross join lateral (
+        select
+          (substring(to_char((date_trunc('minute', ns.start_utc) at time zone 'Europe/London'),'HH24:MI'),1,2)::int * 60
+            + substring(to_char((date_trunc('minute', ns.start_utc) at time zone 'Europe/London'),'HH24:MI'),4,2)::int
+          ) as ns_start_min,
+          (
+            case
+              when (
+                (substring(to_char((date_trunc('minute', ns.end_utc) at time zone 'Europe/London'),'HH24:MI'),1,2)::int * 60
+                 + substring(to_char((date_trunc('minute', ns.end_utc) at time zone 'Europe/London'),'HH24:MI'),4,2)::int
+                )
+                <=
+                (substring(to_char((date_trunc('minute', ns.start_utc) at time zone 'Europe/London'),'HH24:MI'),1,2)::int * 60
+                 + substring(to_char((date_trunc('minute', ns.start_utc) at time zone 'Europe/London'),'HH24:MI'),4,2)::int
+                )
+              )
+              then
+                (substring(to_char((date_trunc('minute', ns.end_utc) at time zone 'Europe/London'),'HH24:MI'),1,2)::int * 60
+                 + substring(to_char((date_trunc('minute', ns.end_utc) at time zone 'Europe/London'),'HH24:MI'),4,2)::int
+                ) + 1440
+              else
+                (substring(to_char((date_trunc('minute', ns.end_utc) at time zone 'Europe/London'),'HH24:MI'),1,2)::int * 60
+                 + substring(to_char((date_trunc('minute', ns.end_utc) at time zone 'Europe/London'),'HH24:MI'),4,2)::int
+                )
+            end
+          ) as ns_end_min
+      ) nsm
+      cross join lateral (
+        select
+          case when cu.hr_start_min is not null then cu.hr_start_min else cu.ts_start_min end as win_start_min,
+          case when cu.hr_end_min is not null then cu.hr_end_min else cu.ts_end_min end as win_end_min
+      ) win
+      where ns.source_system = 'HEALTHROSTER'::public.hr_source_enum
+        and ns.client_id = v_client_id
+        and ns.cancelled_at_utc is null
+        and ns.candidate_id = cu.candidate_id
+        and ns.work_date = cu.work_date
+        and win.win_start_min is not null
+        and win.win_end_min is not null
+        and (least(nsm.ns_end_min, win.win_end_min) - greatest(nsm.ns_start_min, win.win_start_min)) >= 1
+      order by
+        (case when (nsm.ns_start_min = win.win_start_min and nsm.ns_end_min = win.win_end_min) then 1 else 0 end) desc,
+        (least(nsm.ns_end_min, win.win_end_min) - greatest(nsm.ns_start_min, win.win_start_min)) desc,
+        ns.updated_at desc nulls last,
+        ns.id desc
+      limit 1
+    ) prev on true
+  ),
+
+  comparisons_by_group as (
+    select
+      ce.candidate_id,
+      ce.candidate_name,
+      ce.week_ending_date,
+      ce.timesheet_id,
+
+      bool_or(ce.invoice_locked_invoice_id is not null) as any_invoice_locked,
+
+      bool_or(
+        (ce.invoice_locked_invoice_id is not null)
+        and (coalesce(ce.ref_before,'') <> coalesce(ce.ref_after,''))
+      ) as any_locked_ref_change,
+
+      bool_or(
+        (ce.invoice_locked_invoice_id is not null)
+        and (ce.match_status <> 'MATCH')
+      ) as any_locked_time_mismatch,
+
       jsonb_agg(
         jsonb_build_object(
-          'work_date', cu.work_date::text,
-          'timesheet_start', cu.ts_start_hhmm,
-          'timesheet_end', cu.ts_end_hhmm,
-          'timesheet_break_mins', cu.ts_break_mins,
-          'healthroster_start', cu.hr_start_hhmm,
-          'healthroster_end', cu.hr_end_hhmm,
-          'healthroster_break_mins', cu.hr_break_mins,
-          'match', cu.is_match,
-          'match_status', cu.match_status,
-          'start_diff_mins', cu.start_diff_mins,
-          'end_diff_mins', cu.end_diff_mins,
-          'break_diff_mins', cu.break_diff_mins
+          'work_date', ce.work_date::text,
+
+          'timesheet_start', ce.ts_start_hhmm,
+          'timesheet_end', ce.ts_end_hhmm,
+          'timesheet_break_mins', ce.ts_break_mins,
+
+          'healthroster_start', ce.hr_start_hhmm,
+          'healthroster_end', ce.hr_end_hhmm,
+          'healthroster_break_mins', ce.hr_break_mins,
+
+          -- tick/cross for UI:
+          -- time match, but if invoiced AND ref changed, treat as NOT match (cannot change invoiced ref)
+          'match',
+            (
+              ce.time_match
+              and not (
+                ce.invoice_locked_invoice_id is not null
+                and coalesce(ce.ref_before,'') <> coalesce(ce.ref_after,'')
+              )
+            ),
+          'time_match', ce.time_match,
+          'match_status', ce.match_status,
+
+          'invoice_locked', (ce.invoice_locked_invoice_id is not null),
+          'invoice_locked_invoice_id', ce.invoice_locked_invoice_id,
+
+          -- before/after diffs
+          'ref_before', nullif(btrim(ce.ref_before), ''),
+          'ref_after', nullif(btrim(ce.ref_after), ''),
+          'ref_changed',
+            (
+              nullif(btrim(ce.ref_before), '') is not null
+              and nullif(btrim(ce.ref_after), '') is not null
+              and btrim(ce.ref_before) <> btrim(ce.ref_after)
+            ),
+
+          'location_before', nullif(btrim(ce.prev_location), ''),
+          'location_after', nullif(btrim(ce.hr_location), ''),
+
+          'times_before',
+            jsonb_build_object(
+              'start', ce.prev_start_hhmm,
+              'end', ce.prev_end_hhmm,
+              'break_mins', ce.prev_break_mins
+            ),
+
+          'times_after',
+            jsonb_build_object(
+              'start', ce.hr_start_hhmm,
+              'end', ce.hr_end_hhmm,
+              'break_mins', ce.hr_break_mins
+            )
         )
-        order by cu.work_date asc, cu.sort_key asc
+        order by ce.work_date asc, ce.sort_key asc
       ) as comparisons_json
-    from comparisons_worker cu
-    group by cu.candidate_id, cu.week_ending_date, cu.timesheet_id
+    from comparisons_enriched ce
+    group by ce.candidate_id, ce.candidate_name, ce.week_ending_date, ce.timesheet_id
   ),
+
+  -- day totals for mismatch detection (covers both "missing HR" and "extra HR")
   day_set as (
     select distinct
-      tm.timesheet_id,
-      tm.candidate_id,
-      tm.candidate_name,
-      tm.week_ending_date,
-      hdt.work_date
-    from ts_matches tm
-    join hr_day_totals hdt
-      on hdt.candidate_id = tm.candidate_id
-     and hdt.week_ending_date = tm.week_ending_date
-    where tm.timesheet_id is not null
+      te.timesheet_id,
+      te.candidate_id,
+      te.candidate_name,
+      te.week_ending_date,
+      te.work_date
+    from ts_entries_indexed te
+
+    union
+
+    select distinct
+      tu.timesheet_id,
+      hf.candidate_id,
+      hf.candidate_name,
+      hf.week_ending_date,
+      hf.work_date
+    from hr_entries_flat hf
+    join ts_universe tu
+      on tu.candidate_id = hf.candidate_id
+     and tu.week_ending_date = hf.week_ending_date
   ),
-  ts_day_totals2 as (
-    select
-      t.timesheet_id,
-      t.work_date,
-      sum(t.paid_minutes)::int as ts_paid_minutes
-    from ts_entries_indexed t
-    group by t.timesheet_id, t.work_date
-  ),
+
   day_eval as (
     select
       ds.timesheet_id,
@@ -2381,12 +2717,9 @@ begin
       ds.candidate_name,
       ds.week_ending_date,
       ds.work_date,
-
       hdt.hr_paid_minutes,
       tdt.ts_paid_minutes,
-
       (coalesce(hdt.hr_paid_minutes,0) - coalesce(tdt.ts_paid_minutes,0)) as delta_minutes,
-
       case
         when (hdt.hr_paid_minutes is distinct from tdt.ts_paid_minutes) then 'FAIL_TOTALS'
         else 'OK'
@@ -2396,10 +2729,11 @@ begin
       on hdt.candidate_id = ds.candidate_id
      and hdt.week_ending_date = ds.week_ending_date
      and hdt.work_date = ds.work_date
-    left join ts_day_totals2 tdt
+    left join ts_day_totals tdt
       on tdt.timesheet_id = ds.timesheet_id
      and tdt.work_date = ds.work_date
   ),
+
   per_ts as (
     select
       de.candidate_id,
@@ -2418,21 +2752,7 @@ begin
         order by de.work_date asc
       ) as days_json,
 
-      bool_or(de.day_status <> 'OK') as has_mismatch,
-
-      case
-        when bool_or(de.day_status <> 'OK') then 'FAIL'
-        else 'OK'
-      end as overall_status,
-
-      jsonb_agg(
-        distinct
-        case
-          when de.day_status = 'FAIL_TOTALS' then
-            (de.work_date::text || ' totals mismatch: HR=' || coalesce(de.hr_paid_minutes,0)::text || ' TS=' || coalesce(de.ts_paid_minutes,0)::text)
-          else null
-        end
-      ) filter (where de.day_status <> 'OK') as failure_reasons_json,
+      bool_or(de.day_status <> 'OK') as has_totals_mismatch,
 
       string_agg(
         (
@@ -2441,67 +2761,167 @@ begin
         ),
         ';' order by de.work_date asc
       ) as sig_text
-
     from day_eval de
     group by de.candidate_id, de.candidate_name, de.week_ending_date, de.timesheet_id
   ),
+
+  grouped as (
+    select
+      p.candidate_id,
+      p.candidate_name,
+      p.week_ending_date,
+      p.timesheet_id,
+      p.days_json,
+      p.has_totals_mismatch,
+      p.sig_text,
+      cbg.comparisons_json,
+      coalesce(cbg.any_invoice_locked,false) as any_invoice_locked,
+      coalesce(cbg.any_locked_ref_change,false) as any_locked_ref_change,
+      coalesce(cbg.any_locked_time_mismatch,false) as any_locked_time_mismatch
+    from per_ts p
+    left join comparisons_by_group cbg
+      on cbg.candidate_id = p.candidate_id
+     and cbg.week_ending_date = p.week_ending_date
+     and cbg.timesheet_id = p.timesheet_id
+  ),
+
+  final_groups as (
+    select
+      g.*,
+      -- mismatch if totals mismatch OR any comparison row indicates non-match (including UNMATCHED/HR_ONLY)
+      (
+        coalesce(g.has_totals_mismatch,false)
+        or (
+          g.comparisons_json is not null
+          and jsonb_typeof(g.comparisons_json) = 'array'
+          and exists (
+            select 1
+            from jsonb_array_elements(g.comparisons_json) as cx(value)
+            where coalesce((cx.value->>'match')::boolean,false) is false
+          )
+        )
+      ) as has_mismatch,
+
+      case
+        when (
+          coalesce(g.any_invoice_locked,false)
+          and (coalesce(g.any_locked_ref_change,false) or coalesce(g.any_locked_time_mismatch,false))
+        ) then 'FAIL'
+        when (
+          coalesce(g.has_totals_mismatch,false)
+          or (
+            g.comparisons_json is not null
+            and jsonb_typeof(g.comparisons_json) = 'array'
+            and exists (
+              select 1
+              from jsonb_array_elements(g.comparisons_json) as cx2(value)
+              where coalesce((cx2.value->>'match')::boolean,false) is false
+            )
+          )
+        ) then 'FAIL'
+        else 'OK'
+      end as overall_status
+    from grouped g
+  ),
+
   with_fp as (
     select
-      p.*,
+      fg.*,
       case
-        when p.has_mismatch and p.timesheet_id is not null then
-          ('HEALTHROSTER_WEEKLY|validation|' || p.timesheet_id::text || '|' || p.week_ending_date::text || '|' || p.overall_status || '|' || coalesce(p.sig_text,''))
+        when fg.has_mismatch and fg.timesheet_id is not null then
+          ('HEALTHROSTER_WEEKLY|validation|' || fg.timesheet_id::text || '|' || fg.week_ending_date::text || '|' || fg.overall_status || '|' || coalesce(fg.sig_text,''))
         else null
       end as issue_fingerprint
-    from per_ts p
+    from final_groups fg
   ),
-  with_sent as (
+
+  with_email_state as (
     select
-      w.*,
+      wf.*,
       (e.issue_fingerprint is not null) as emailed_already
-    from with_fp w
+    from with_fp wf
     left join public.hr_issue_emails e
-      on e.issue_fingerprint = w.issue_fingerprint
+      on e.issue_fingerprint = wf.issue_fingerprint
   ),
-  with_comp as (
-    select
-      ws.*,
-      cb.comparisons_json
-    from with_sent ws
-    left join comparisons_by_ts cb
-      on cb.timesheet_id = ws.timesheet_id
-     and cb.candidate_id = ws.candidate_id
-     and cb.week_ending_date = ws.week_ending_date
-  ),
+
   real_rows as (
     select
       jsonb_build_object(
         'client_id', v_client_id::text,
         'recipient_email', v_recipient_email,
 
-        'candidate_id', wc.candidate_id::text,
-        'candidate_name', wc.candidate_name,
-        'week_ending_date', wc.week_ending_date::text,
-        'timesheet_id', wc.timesheet_id::text,
+        'candidate_id', wes.candidate_id::text,
+        'candidate_name', wes.candidate_name,
+        'week_ending_date', wes.week_ending_date::text,
+        'timesheet_id', wes.timesheet_id::text,
 
         'contract_id', case when tts.contract_id is null then null else tts.contract_id::text end,
 
-        'overall_status', wc.overall_status,
-        'has_mismatch', wc.has_mismatch,
-        'failure_reasons', coalesce(wc.failure_reasons_json, '[]'::jsonb),
+        'overall_status', wes.overall_status,
+        'has_mismatch', wes.has_mismatch,
 
-        'issue_fingerprint', wc.issue_fingerprint,
-        'emailed_already', wc.emailed_already,
-        'can_email', (wc.has_mismatch and wc.timesheet_id is not null and v_recipient_email is not null and length(btrim(v_recipient_email)) > 0),
+        'failure_reasons',
+          (
+            case
+              when wes.has_mismatch is false then '[]'::jsonb
+              else
+                (
+                  jsonb_build_array(
+                    case
+                      when wes.any_invoice_locked and (wes.any_locked_ref_change or wes.any_locked_time_mismatch)
+                        then 'Warning: an invoiced/locked shift differs from this import. You must not change an invoiced shift.'
+                      else null
+                    end,
+                    case
+                      when wes.has_totals_mismatch then 'Totals mismatch within import date range.'
+                      else null
+                    end
+                  )
+                  ||
+                  coalesce(
+                    (
+                      select jsonb_agg(
+                        distinct
+                        case
+                          when (cx.value->>'match_status') = 'UNMATCHED' then 'Missing from import: timesheet shift not found in HealthRoster file.'
+                          when (cx.value->>'match_status') = 'HR_ONLY' then 'HealthRoster has a shift not present on the timesheet.'
+                          when (cx.value->>'match_status') = 'AMBIGUOUS' then 'Ambiguous overlap: shift cannot be paired 1:1.'
+                          when (cx.value->>'match_status') = 'MISMATCH' then 'Shift detail mismatch (start/end/break differs).'
+                          else null
+                        end
+                      )
+                      from jsonb_array_elements(coalesce(wes.comparisons_json,'[]'::jsonb)) as cx(value)
+                      where coalesce(cx.value->>'match_status','') <> 'MATCH'
+                    ),
+                    '[]'::jsonb
+                  )
+                )
+            end
+          ),
 
-        'days', wc.days_json,
-        'comparisons', coalesce(wc.comparisons_json, '[]'::jsonb)
+        'issue_fingerprint', wes.issue_fingerprint,
+        'emailed_already', wes.emailed_already,
+        'can_email',
+          (
+            wes.has_mismatch
+            and wes.timesheet_id is not null
+            and wes.issue_fingerprint is not null
+            and v_recipient_email is not null
+            and length(btrim(v_recipient_email)) > 0
+          ),
+
+        -- kept for backward-compat
+        'days', coalesce(wes.days_json, '[]'::jsonb),
+
+        -- new UI contract: tick/cross list
+        'comparisons', coalesce(wes.comparisons_json, '[]'::jsonb)
       ) as j
-    from with_comp wc
+    from with_email_state wes
     left join public.timesheets tts
-      on tts.timesheet_id = wc.timesheet_id
+      on tts.timesheet_id = wes.timesheet_id
      and tts.is_current = true
   ),
+
   awaiting_auth_rows as (
     select
       jsonb_build_object(
@@ -2529,6 +2949,7 @@ begin
     from ts_matches tm
     where tm.awaiting_authorisation is true
   ),
+
   missing_ts_rows as (
     select
       jsonb_build_object(
@@ -2569,6 +2990,7 @@ begin
         and tm2.awaiting_authorisation is true
     )
   ),
+
   all_rows_json as (
     select
       jsonb_agg(r.j order by (r.j->>'week_ending_date')::date asc, (r.j->>'candidate_name') nulls last) as rows_json
@@ -2580,9 +3002,10 @@ begin
       select mr.j from missing_ts_rows mr
     ) as r
   )
+
   select
     coalesce(arows.rows_json, '[]'::jsonb),
-    (select count(*)::int from hr_with_we h where h.candidate_id is null),
+    (select n from unmapped_candidate_rows),
     (select count(*)::int
      from ts_matches tm
      where tm.timesheet_id is null
@@ -2599,6 +3022,10 @@ begin
     'client_id', v_client_id::text,
     'week_ending_weekday', v_we_dow,
     'recipient_email', v_recipient_email,
+
+    'file_date_min', v_file_date_min::text,
+    'file_date_max', v_file_date_max::text,
+
     'unmapped_candidate_rows', v_unmapped_candidates,
     'unmatched_timesheet_triples', v_unmatched_timesheets,
     'unauthorised_timesheet_triples', v_unauthorised_timesheet_triples,
@@ -2611,5 +3038,6 @@ begin
   );
 end;
 $function$;
+
 
 
