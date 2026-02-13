@@ -1215,9 +1215,17 @@ LEFT JOIN LATERAL (
   LIMIT 1
 ) seg ON true;
 
+-- ============================================================
+-- UPDATE VIEW: public.v_timesheets_summary
+-- FIXES:
+--  - Keep existing column order (so CREATE OR REPLACE is allowed)
+--  - Fix is_adjustment / is_adjusted to use timesheets.is_adjustment (ts2)
+-- ADDS:
+--  - route_display (APPENDED AT END ONLY)
+-- ============================================================
 
-CREATE OR REPLACE VIEW public.v_timesheets_summary AS
-SELECT
+create or replace view public.v_timesheets_summary as
+select
   v.timesheet_id,
   v.timesheet_status,
   v.week_ending_date,
@@ -1252,11 +1260,18 @@ SELECT
   v.contract_week_ending_date,
   v.contract_week_status,
   v.additional_seq,
-  v.is_adjustment,
+
+  -- ✅ FIX (same column name, same position): prefer timesheets.is_adjustment
+  coalesce(ts2.is_adjustment, v.is_adjustment, false) as is_adjustment,
+
   v.qr_status,
   v.pay_adjustment_count,
   v.has_pay_adjustments,
-  v.is_adjusted,
+
+  -- ✅ FIX (same column name, same position): keep is_adjusted consistent
+  (coalesce(ts2.is_adjustment, v.is_adjustment, false) = true)
+    or coalesce(v.has_pay_adjustments, false) as is_adjusted,
+
   v.is_qr,
   v.needs_attention,
   v.client_autoprocess_hr,
@@ -1268,7 +1283,7 @@ SELECT
   v.issue_codes,
 
   -- contract_id kept in same position (resolved for DAILY too)
-  COALESCE(ts2.contract_id, cw.contract_id) AS contract_id,
+  coalesce(ts2.contract_id, cw.contract_id) as contract_id,
 
   v.client_requires_hr,
   v.client_no_timesheet_required,
@@ -1282,10 +1297,8 @@ SELECT
   v.require_reference_to_pay,
   v.require_reference_to_invoice,
 
-  -- existing last column in your view
   v.candidate_hint_text,
 
-  -- existing appended columns (already in your view)
   v.expenses_pay_ex_vat,
   v.expenses_description,
   v.mileage_units,
@@ -1293,7 +1306,6 @@ SELECT
   v.mileage_charge_rate,
   v.mileage_pay_ex_vat,
 
-  -- existing appended columns
   v.travel_pay_ex_vat,
   v.travel_charge_ex_vat,
   v.accommodation_pay_ex_vat,
@@ -1301,32 +1313,63 @@ SELECT
   v.other_pay_ex_vat,
   v.other_charge_ex_vat,
 
-  -- ✅ NEW (APPENDED AT END): distinguish drafted vs issued/paid invoice
-  CASE
-    WHEN v.locked_by_invoice_id IS NULL THEN NULL
-    WHEN inv.id IS NULL THEN 'INVOICED_NOT_ISSUED'
-    WHEN inv.status IN ('ISSUED'::public.invoice_status_enum, 'PAID'::public.invoice_status_enum) THEN 'INVOICED_ISSUED'
-    ELSE 'INVOICED_NOT_ISSUED'
-  END AS invoice_issue_stage,
+  -- existing appended column
+  case
+    when v.locked_by_invoice_id is null then null
+    when inv.id is null then 'INVOICED_NOT_ISSUED'
+    when inv.status in ('ISSUED'::public.invoice_status_enum, 'PAID'::public.invoice_status_enum) then 'INVOICED_ISSUED'
+    else 'INVOICED_NOT_ISSUED'
+  end as invoice_issue_stage,
 
   v.invoice_segments_total,
   v.invoice_segments_locked,
   v.invoice_segments_unlocked,
   v.invoice_segment_stage,
 
-  -- ✅ NEW (APPENDED AT END): canonical Tools Stage + display label + invoice-paid flag
   v.tools_stage,
   v.processing_status_display,
   v.invoice_is_paid,
 
-  -- ✅ NEW (APPENDED AT END): reference blockers for UI badges
   v.refs_block_invoicing,
   v.refs_block_issuing_invoices,
-  v.refs_block_invoice_and_issuing
-FROM public.v_timesheets_summary_base v
-LEFT JOIN public.contract_weeks cw ON cw.id = v.contract_week_id
-LEFT JOIN public.timesheets ts2 ON ts2.timesheet_id = v.timesheet_id
-LEFT JOIN public.invoices inv ON inv.id = v.locked_by_invoice_id;
+  v.refs_block_invoice_and_issuing,
+
+  -- ✅ NEW (APPENDED AT END ONLY): route_display (safe to add now)
+  case
+    when coalesce(ts2.is_adjustment, v.is_adjustment, false) = true then
+      case
+        when upper(coalesce(ts2.adjustment_origin, '')) = 'MANUAL_ADJUSTMENT' then 'Manual Adjustment'
+        when upper(coalesce(ts2.adjustment_origin, '')) like 'IMPORT_%'
+          or ts2.correction_kind is not null
+          or ts2.correction_id is not null
+          then 'NHS Adjustment'
+        else
+          -- Back-compat for historical manual adjustments where adjustment_origin is NULL
+          'Manual Adjustment'
+      end
+    else
+      case
+        when v.route_type = 'DAILY_ELECTRONIC' then 'Daily Electronic'
+        when v.route_type = 'DAILY_MANUAL' then 'Daily Manual'
+        when v.route_type = 'WEEKLY_ELECTRONIC' then 'Weekly Electronic'
+        when v.route_type = 'WEEKLY_MANUAL' then 'Weekly Manual'
+        when v.route_type = 'WEEKLY_NHSP' then 'Weekly NHSP'
+        when v.route_type = 'WEEKLY_NHSP_ADJUSTMENT' then 'Weekly NHSP'
+        when v.route_type = 'WEEKLY_HEALTHROSTER' then 'Weekly HealthRoster'
+        else 'Unknown'
+      end
+  end as route_display
+
+from public.v_timesheets_summary_base v
+left join public.contract_weeks cw
+  on cw.id = v.contract_week_id
+left join public.timesheets ts2
+  on ts2.timesheet_id = v.timesheet_id
+left join public.invoices inv
+  on inv.id = v.locked_by_invoice_id
+;
+
+select pg_notify('pgrst', 'reload schema');
 
 
 GRANT SELECT ON public.v_timesheets_summary_base TO service_role;
