@@ -2437,8 +2437,11 @@ begin
       hf.hr_request_id as hr_request_id,
       hf.hr_location as hr_location,
 
-      'HR_ONLY'::text as match_status,
+      -- ✅ IMPORTANT: column order must match comparisons_worker:
+      -- time_match (boolean) FIRST, then match_status (text)
       false as time_match,
+      'HR_ONLY'::text as match_status,
+
       100000 + hf.hr_start_min as sort_key
     from hr_entries_flat hf
     join ts_universe tu
@@ -2503,6 +2506,7 @@ begin
     union all
     select * from comparisons_hr_only
   ),
+
 
   -- existing stored HR shifts for before/after diffs (best-effort; uses overlap)
   comparisons_enriched as (
