@@ -1394,7 +1394,7 @@ select
         when upper(coalesce(ts2.adjustment_origin, '')) like 'IMPORT_%'
           or ts2.correction_kind is not null
           or ts2.correction_id is not null
-          then 'NHS Adjustment'
+          then 'NHSP Adjustment'
         else
           -- Back-compat for historical manual adjustments where adjustment_origin is NULL
           'Manual Adjustment'
