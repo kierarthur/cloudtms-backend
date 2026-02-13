@@ -1804,7 +1804,13 @@ AS $function$
 declare
   v_import record;
   v_client_id uuid;
+
+  -- client settings snapshot (latest)
   v_we_dow int := 0;
+  v_cs_autoprocess_hr boolean := false;
+  v_cs_requires_hr boolean := false;
+  v_cs_no_timesheet_required boolean := false;
+
   v_recipient_email text;
 
   v_rows jsonb := '[]'::jsonb;
@@ -1852,9 +1858,17 @@ begin
     raise exception 'hr_weekly_validation_preview: import % has no client_id', p_import_id;
   end if;
 
-  -- Resolve client week-ending weekday (fallback 0 = Sunday)
-  select coalesce(cs.week_ending_weekday, 0)::int
-  into v_we_dow
+  -- Resolve client settings snapshot (latest): week-ending weekday + HR flags
+  select
+    coalesce(cs.week_ending_weekday, 0)::int,
+    coalesce(cs.autoprocess_hr, false),
+    coalesce(cs.requires_hr, false),
+    coalesce(cs.no_timesheet_required, false)
+  into
+    v_we_dow,
+    v_cs_autoprocess_hr,
+    v_cs_requires_hr,
+    v_cs_no_timesheet_required
   from public.client_settings cs
   where cs.client_id = v_client_id
   order by cs.effective_from desc nulls last, cs.created_at desc
@@ -2130,7 +2144,30 @@ begin
   ),
 
   -- ─────────────────────────────────────────────
-  -- Authorised weekly timesheets in scope (ALL candidates, not just those in import)
+  -- Contract effective flags (Mode-A HR weekly verify scope)
+  -- (contract overrides win only when overrideclientsettings = true)
+  -- ─────────────────────────────────────────────
+  contract_effective as (
+    select
+      c2.id as contract_id,
+      coalesce(
+        case when coalesce(c2.overrideclientsettings,false) then c2.autoprocess_hr else v_cs_autoprocess_hr end,
+        false
+      ) as eff_autoprocess_hr,
+      coalesce(
+        case when coalesce(c2.overrideclientsettings,false) then c2.requires_hr else v_cs_requires_hr end,
+        false
+      ) as eff_requires_hr,
+      coalesce(
+        case when coalesce(c2.overrideclientsettings,false) then c2.no_timesheet_required else v_cs_no_timesheet_required end,
+        false
+      ) as eff_no_timesheet_required
+    from public.contracts c2
+    where c2.client_id = v_client_id
+  ),
+
+  -- ─────────────────────────────────────────────
+  -- Authorised weekly timesheets in scope (HR-relevant ONLY)
   -- used to show "missing shifts" warnings in the file date range
   -- ─────────────────────────────────────────────
   ts_universe_raw as (
@@ -2141,17 +2178,27 @@ begin
       ct.candidate_id,
       cand.display_name as candidate_name,
       t.actual_schedule_json,
-      t.authorised_at_server
+      t.authorised_at_server,
+      tfu.invoice_breakdown_json as tsfin_invoice_breakdown_json
     from public.timesheets t
     join public.contracts ct
       on ct.id = t.contract_id
-    join public.candidates cand
+    join contract_effective ce
+      on ce.contract_id = ct.id
+    left join public.candidates cand
       on cand.id = ct.candidate_id
+    left join public.timesheets_financials tfu
+      on tfu.timesheet_id = t.timesheet_id
+     and tfu.is_current = true
     where t.is_current = true
       and t.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum
       and ct.client_id = v_client_id
       and t.week_ending_date is not null
       and t.week_ending_date between v_we_min and v_we_max
+      -- HR_WEEKLY validation-only scope (Mode-A)
+      and coalesce(ce.eff_autoprocess_hr,false) = true
+      and coalesce(ce.eff_requires_hr,false) = true
+      and coalesce(ce.eff_no_timesheet_required,false) = false
   ),
 
   -- separate authorised vs unauthorised (for import candidates)
@@ -2177,19 +2224,29 @@ begin
       tmr.raw_timesheet_id as raw_timesheet_id,
       case
         when tmr.raw_timesheet_id is null then null::uuid
+        when ce2.contract_id is null then null::uuid
         when tts.authorised_at_server is null then null::uuid
         else tmr.raw_timesheet_id
       end as timesheet_id,
       case
         when tmr.raw_timesheet_id is null then false
+        when ce2.contract_id is null then false
         when tts.authorised_at_server is null then true
         else false
       end as awaiting_authorisation,
-      tts.contract_id as contract_id
+      case
+        when ce2.contract_id is null then null::uuid
+        else tts.contract_id
+      end as contract_id
     from ts_matches_raw tmr
     left join public.timesheets tts
       on tts.timesheet_id = tmr.raw_timesheet_id
      and tts.is_current = true
+    left join contract_effective ce2
+      on ce2.contract_id = tts.contract_id
+     and coalesce(ce2.eff_autoprocess_hr,false) = true
+     and coalesce(ce2.eff_requires_hr,false) = true
+     and coalesce(ce2.eff_no_timesheet_required,false) = false
   ),
 
   ts_universe as (
@@ -2199,12 +2256,16 @@ begin
       tur.contract_id,
       tur.candidate_id,
       tur.candidate_name,
-      tur.actual_schedule_json
+      tur.actual_schedule_json,
+      tur.tsfin_invoice_breakdown_json
     from ts_universe_raw tur
     where tur.authorised_at_server is not null
   ),
 
   -- parse timesheet schedule entries for universe (restricted to file date range)
+  -- ✅ schedule source fallback:
+  --   1) timesheets.actual_schedule_json when non-empty array
+  --   2) else TSFIN SEGMENTS mode segments[] (invoice_breakdown_json->segments)
   ts_entries_indexed as (
     select
       s.candidate_id,
@@ -2282,7 +2343,22 @@ begin
                 )
             else 0
           end as break_mins
-        from jsonb_array_elements(coalesce(s.actual_schedule_json, '[]'::jsonb)) as e(elem)
+        from jsonb_array_elements(
+          case
+            when s.actual_schedule_json is not null
+             and jsonb_typeof(s.actual_schedule_json) = 'array'
+             and jsonb_array_length(s.actual_schedule_json) > 0
+            then s.actual_schedule_json
+
+            when s.tsfin_invoice_breakdown_json is not null
+             and jsonb_typeof(s.tsfin_invoice_breakdown_json) = 'object'
+             and upper(coalesce(s.tsfin_invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+             and jsonb_typeof(s.tsfin_invoice_breakdown_json->'segments') = 'array'
+            then s.tsfin_invoice_breakdown_json->'segments'
+
+            else '[]'::jsonb
+          end
+        ) as e(elem)
       ) base
       cross join lateral (
         select
@@ -3042,6 +3118,4 @@ begin
   );
 end;
 $function$;
-
-
 
