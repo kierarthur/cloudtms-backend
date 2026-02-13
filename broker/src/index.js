@@ -44580,6 +44580,7 @@ async function handleClientsGet(env, req, clientId) {
   if (!client) return withCORS(env, req, notFound('Client not found'));
 
   // Also return the latest client_settings
+  // ✅ FIX: include invoice_consolidation_mode + reference_number_required_to_issue_invoice so UI can populate them
   const { rows: csRows } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/client_settings` +
@@ -44603,9 +44604,13 @@ async function handleClientsGet(env, req, clientId) {
           'hr_attach_to_invoice',
           'ts_attach_to_invoice',
 
-          // ✅ NEW: manual adjustment email routing
+          // ✅ manual adjustment email routing
           'send_manual_invoices_to_different_email',
           'manual_invoices_alt_email_address',
+
+          // ✅ NEW: invoice settings (DB-backed)
+          'invoice_consolidation_mode',
+          'reference_number_required_to_issue_invoice',
 
           'effective_from',
           'timezone_id',
