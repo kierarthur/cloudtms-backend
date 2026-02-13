@@ -610,6 +610,7 @@ $$;
 --  4) Fix BY_WEEK + consolidation NONE + SELF_BILL: avoid using FOUND with an unassigned record (v_invoice)
 -- Generated: 2026-02-10
 
+
 CREATE OR REPLACE FUNCTION public.invoice_generate_from_outbox_batch(p_outbox_ids uuid[], p_actor_user_id uuid)
  RETURNS TABLE(outbox_id uuid, ok boolean, invoice_ids uuid[], warnings jsonb)
  LANGUAGE plpgsql
@@ -3424,10 +3425,25 @@ limit 1;
             insert into pg_temp._inv_groups(stream_mode, week_ending_date, ts_ids, entries)
             select
               case
-                -- ✅ Adjustment timesheets inherit stream from their parent timesheet (NHSP/HR self-bill)
+                -- ✅ Stream rule for adjustments:
+                -- - Manual adjustments must always be NORMAL (never self-bill).
+                -- - Only IMPORT/system adjustments may inherit self-bill stream from their parent.
                 when coalesce(ts.is_adjustment, false) = true
-                 and ts.parent_timesheet_id is not null
-                 and ptf.timesheet_id is not null
+                  and not (
+                    upper(coalesce(ts.adjustment_origin, '')) like 'IMPORT_%'
+                    or ts.correction_kind is not null
+                    or ts.correction_id is not null
+                  )
+                then 'NORMAL'
+
+                when coalesce(ts.is_adjustment, false) = true
+                  and (
+                    upper(coalesce(ts.adjustment_origin, '')) like 'IMPORT_%'
+                    or ts.correction_kind is not null
+                    or ts.correction_id is not null
+                  )
+                  and ts.parent_timesheet_id is not null
+                  and ptf.timesheet_id is not null
                 then
                   case
                     when upper(coalesce(ptf.basis::text, '')) in (
@@ -3438,14 +3454,17 @@ limit 1;
                     ) then 'SELF_BILL'
                     else 'NORMAL'
                   end
-                -- default: classify by this timesheet's own basis
-                when upper(coalesce(tf.basis::text, '')) in (
-                  'NHSP',
-                  'NHSP_ADJUSTMENT',
-                  'HEALTHROSTER_SELF_BILL',
-                  'HEALTHROSTER_ADJUSTMENT'
-                ) then 'SELF_BILL'
-                else 'NORMAL'
+
+                else
+                  case
+                    when upper(coalesce(tf.basis::text, '')) in (
+                      'NHSP',
+                      'NHSP_ADJUSTMENT',
+                      'HEALTHROSTER_SELF_BILL',
+                      'HEALTHROSTER_ADJUSTMENT'
+                    ) then 'SELF_BILL'
+                    else 'NORMAL'
+                  end
               end as stream_mode,
               ts.week_ending_date::date as week_ending_date,
               array[u.tid]::uuid[] as ts_ids,
@@ -3472,7 +3491,7 @@ limit 1;
             with e as (
               select
                 (x.value->>'timesheet_id')::uuid as timesheet_id,
-                upper(coalesce(x.value->>'basis','')) as basis,
+                nullif(x.value->>'basis','')::public.timesheet_fin_basis_enum as basis,
                 x.value as entry
               from jsonb_array_elements(v_entries_all) as x(value)
               where nullif(coalesce(x.value->>'timesheet_id',''), '') is not null
@@ -3511,6 +3530,21 @@ limit 1;
               )
                 and t.is_adjustment is true
                 and t.parent_timesheet_id is not null
+                and (
+                  upper(coalesce(t.adjustment_origin, '')) like 'IMPORT_%'
+                  or t.correction_kind is not null
+                  or t.correction_id is not null
+                )
+                and (
+                  upper(coalesce(t.adjustment_origin, '')) like 'IMPORT_%'
+                  or t.correction_kind is not null
+                  or t.correction_id is not null
+                )
+                and (
+                  upper(coalesce(t.adjustment_origin, '')) like 'IMPORT_%'
+                  or t.correction_kind is not null
+                  or t.correction_id is not null
+                )
               order by t.timesheet_id, t.is_current desc, t.updated_at desc nulls last
             ),
             e2 as (
@@ -3518,24 +3552,36 @@ limit 1;
                 e.entry,
                 e.timesheet_id,
                 ts.week_ending_date,
-                coalesce(
-                  adj.parent_stream_mode,
-                  case
-                    when e.basis in (
-                      'NHSP',
-                      'NHSP_ADJUSTMENT',
-                      'HEALTHROSTER_SELF_BILL',
-                      'HEALTHROSTER_ADJUSTMENT'
-                    ) then 'SELF_BILL'
-                    else 'NORMAL'
-                  end
-                ) as stream_mode
+                case
+                  when coalesce(tcur.is_adjustment, false) = true
+                    and not (
+                      upper(coalesce(tcur.adjustment_origin, '')) like 'IMPORT_%'
+                      or tcur.correction_kind is not null
+                      or tcur.correction_id is not null
+                    )
+                    then 'NORMAL'
+                  else coalesce(
+                    adj.parent_stream_mode,
+                    case
+                      when e.basis in (
+                        'NHSP'::public.timesheet_fin_basis_enum,
+                        'NHSP_ADJUSTMENT'::public.timesheet_fin_basis_enum,
+                        'HEALTHROSTER_SELF_BILL'::public.timesheet_fin_basis_enum,
+                        'HEALTHROSTER_ADJUSTMENT'::public.timesheet_fin_basis_enum
+                      ) then 'SELF_BILL'
+                      else 'NORMAL'
+                    end
+                  )
+                end as stream_mode
               from e
               left join ts
                 on ts.timesheet_id = e.timesheet_id
+              left join public.timesheets tcur
+                on tcur.timesheet_id = e.timesheet_id
               left join adj
                 on adj.timesheet_id = e.timesheet_id
             )
+
             insert into pg_temp._inv_groups(stream_mode, week_ending_date, ts_ids, entries)
             select
               e2.stream_mode,
@@ -3552,7 +3598,7 @@ limit 1;
             with e as (
               select
                 (x.value->>'timesheet_id')::uuid as timesheet_id,
-                upper(coalesce(x.value->>'basis','')) as basis,
+                nullif(x.value->>'basis','')::public.timesheet_fin_basis_enum as basis,
                 x.value as entry
               from jsonb_array_elements(v_entries_all) as x(value)
               where nullif(coalesce(x.value->>'timesheet_id',''), '') is not null
@@ -3581,28 +3627,45 @@ limit 1;
               )
                 and t.is_adjustment is true
                 and t.parent_timesheet_id is not null
+                and (
+                  upper(coalesce(t.adjustment_origin, '')) like 'IMPORT_%'
+                  or t.correction_kind is not null
+                  or t.correction_id is not null
+                )
               order by t.timesheet_id, t.is_current desc, t.updated_at desc nulls last
             ),
             e2 as (
               select
                 e.entry,
                 e.timesheet_id,
-                coalesce(
-                  adj.parent_stream_mode,
-                  case
-                    when e.basis in (
-                      'NHSP',
-                      'NHSP_ADJUSTMENT',
-                      'HEALTHROSTER_SELF_BILL',
-                      'HEALTHROSTER_ADJUSTMENT'
-                    ) then 'SELF_BILL'
-                    else 'NORMAL'
-                  end
-                ) as stream_mode
+                case
+                  when coalesce(tcur.is_adjustment, false) = true
+                    and not (
+                      upper(coalesce(tcur.adjustment_origin, '')) like 'IMPORT_%'
+                      or tcur.correction_kind is not null
+                      or tcur.correction_id is not null
+                    )
+                    then 'NORMAL'
+                  else coalesce(
+                    adj.parent_stream_mode,
+                    case
+                      when e.basis in (
+                        'NHSP'::public.timesheet_fin_basis_enum,
+                        'NHSP_ADJUSTMENT'::public.timesheet_fin_basis_enum,
+                        'HEALTHROSTER_SELF_BILL'::public.timesheet_fin_basis_enum,
+                        'HEALTHROSTER_ADJUSTMENT'::public.timesheet_fin_basis_enum
+                      ) then 'SELF_BILL'
+                      else 'NORMAL'
+                    end
+                  )
+                end as stream_mode
               from e
+              left join public.timesheets tcur
+                on tcur.timesheet_id = e.timesheet_id
               left join adj
                 on adj.timesheet_id = e.timesheet_id
             )
+
             insert into pg_temp._inv_groups(stream_mode, week_ending_date, ts_ids, entries)
             select
               e2.stream_mode,
@@ -3755,7 +3818,9 @@ limit 1;
                   if found then
                     v_created := false;
                     v_invoice_id := v_invoice.id;
-                    v_outbox_invoice_ids := array_append(v_outbox_invoice_ids, v_invoice_id);
+                    if not (v_invoice_id = any(v_outbox_invoice_ids)) then
+                      v_outbox_invoice_ids := array_append(v_outbox_invoice_ids, v_invoice_id);
+                    end if;
                     if v_invoice_debug then
                       v_dbg_reused_invoice_id := v_invoice_id;
                     end if;
@@ -3959,6 +4024,7 @@ v_created := true;
 
           else
             -- Normal BY_WEEK invoice
+            if v_invoice_id is null then
                      v_header := jsonb_build_object(
               'client_id', v_client_id::text,
               'client_name', v_client.name,
@@ -4018,8 +4084,11 @@ v_created := true;
             returning id into v_invoice_id;
 
       -- record invoice for this outbox job
-      v_outbox_invoice_ids := array_append(v_outbox_invoice_ids, v_invoice_id);
-v_created := true;
+      if not (v_invoice_id = any(v_outbox_invoice_ids)) then
+        v_outbox_invoice_ids := array_append(v_outbox_invoice_ids, v_invoice_id);
+      end if;
+      v_created := true;
+            end if;
           end if;
 
       -- Track what THIS run actually inserted (so we can audit per-run delta)
@@ -5599,6 +5668,7 @@ where id = v_outbox_id;
   end if;
 end;
 $function$;
+
 
 
 -- FIX: you cannot change the RETURNS TABLE shape of an existing function with CREATE OR REPLACE.
