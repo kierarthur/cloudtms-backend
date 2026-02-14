@@ -1066,3 +1066,373 @@ after insert or update of invoice_breakdown_json
 on public.timesheets_financials
 for each row
 execute function public.trg_tsfin_enqueue_tspdf_on_refs_change();
+
+
+
+-- ============================================================
+-- (26) NEW: public.timesheet_doc_flags_batch(p_timesheet_ids uuid[])
+-- Batch doc/refs flags for QR reissue + electronic regen decisions.
+--
+-- Returns one row per CURRENT timesheet in p_timesheet_ids.
+--
+-- Rules:
+--  - current_refs_sig is canonical: public.timesheet_pdf_reference_sig(timesheet_id)
+--  - issued-but-unsigned:
+--      qr_status='PENDING' AND qr_token present AND qr_generated_at present
+--      AND no signed markers (qr_scanned_at IS NULL AND qr_signed_hash blank/NULL)
+--  - qr_refs_changed:
+--      issued-but-unsigned AND (qr_sent_refs_sig is NULL/blank OR qr_sent_refs_sig <> current_refs_sig)
+--  - electronic_refs_changed:
+--      submission_mode='ELECTRONIC' AND generated_pdf_at_utc present
+--      AND (generated_pdf_refs_sig is NULL/blank OR generated_pdf_refs_sig <> current_refs_sig)
+-- ============================================================
+
+create or replace function public.timesheet_doc_flags_batch(
+  p_timesheet_ids uuid[]
+)
+returns table (
+  timesheet_id uuid,
+  candidate_id uuid,
+  candidate_name text,
+  client_id uuid,
+  client_name text,
+  sheet_scope text,
+  week_ending_date date,
+
+  qr_status text,
+  qr_token text,
+  qr_generated_at timestamptz,
+  qr_scanned_at timestamptz,
+  qr_signed_hash text,
+
+  current_refs_sig text,
+  qr_sent_refs_sig text,
+  generated_pdf_refs_sig text,
+
+  qr_refs_changed boolean,
+  electronic_refs_changed boolean
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+with wanted as (
+  select distinct unnest(p_timesheet_ids) as timesheet_id
+  where p_timesheet_ids is not null
+),
+t as (
+  select
+    ts.timesheet_id,
+    ts.sheet_scope,
+    ts.submission_mode,
+    ts.week_ending_date,
+    ts.contract_id,
+
+    ts.qr_status,
+    ts.qr_token,
+    ts.qr_generated_at,
+    ts.qr_scanned_at,
+    ts.qr_signed_hash,
+
+    ts.qr_sent_refs_sig,
+    ts.generated_pdf_at_utc,
+    ts.generated_pdf_refs_sig,
+
+    ts.occupant_key_norm,
+    ts.hospital_norm
+  from wanted w
+  join public.timesheets ts
+    on ts.timesheet_id = w.timesheet_id
+   and ts.is_current = true
+),
+tf as (
+  select
+    tf0.timesheet_id,
+    tf0.candidate_id,
+    tf0.client_id
+  from public.timesheets_financials tf0
+  join wanted w
+    on w.timesheet_id = tf0.timesheet_id
+  where tf0.is_current = true
+),
+ct as (
+  select
+    t0.timesheet_id,
+    ct0.candidate_id as contract_candidate_id,
+    ct0.client_id as contract_client_id
+  from t t0
+  left join public.contracts ct0
+    on ct0.id = t0.contract_id
+),
+vs as (
+  select
+    v.timesheet_id,
+    v.candidate_id as vs_candidate_id,
+    v.client_id as vs_client_id,
+    v.candidate_name as vs_candidate_name,
+    v.client_name as vs_client_name
+  from t
+  left join public.v_timesheets_summary v
+    on v.timesheet_id = t.timesheet_id
+),
+ids as (
+  select
+    t1.timesheet_id,
+    coalesce(vs1.vs_candidate_id, tf1.candidate_id, ct1.contract_candidate_id) as eff_candidate_id,
+    coalesce(vs1.vs_client_id,    tf1.client_id,    ct1.contract_client_id)    as eff_client_id,
+    vs1.vs_candidate_name,
+    vs1.vs_client_name
+  from t t1
+  left join vs vs1
+    on vs1.timesheet_id = t1.timesheet_id
+  left join tf tf1
+    on tf1.timesheet_id = t1.timesheet_id
+  left join ct ct1
+    on ct1.timesheet_id = t1.timesheet_id
+),
+cand as (
+  select c0.id, c0.display_name
+  from public.candidates c0
+),
+cli as (
+  select cl0.id, cl0.name
+  from public.clients cl0
+),
+sig as (
+  select
+    t2.timesheet_id,
+    public.timesheet_pdf_reference_sig(t2.timesheet_id) as current_refs_sig
+  from t t2
+)
+select
+  t3.timesheet_id,
+
+  ids2.eff_candidate_id as candidate_id,
+  coalesce(ids2.vs_candidate_name, c2.display_name, t3.occupant_key_norm) as candidate_name,
+
+  ids2.eff_client_id as client_id,
+  coalesce(ids2.vs_client_name, cl2.name, t3.hospital_norm) as client_name,
+
+  t3.sheet_scope::text as sheet_scope,
+  t3.week_ending_date as week_ending_date,
+
+  t3.qr_status::text as qr_status,
+  nullif(btrim(coalesce(t3.qr_token, '')), '') as qr_token,
+  t3.qr_generated_at,
+  t3.qr_scanned_at,
+  nullif(btrim(coalesce(t3.qr_signed_hash, '')), '') as qr_signed_hash,
+
+  s3.current_refs_sig as current_refs_sig,
+  nullif(btrim(coalesce(t3.qr_sent_refs_sig, '')), '') as qr_sent_refs_sig,
+  nullif(btrim(coalesce(t3.generated_pdf_refs_sig, '')), '') as generated_pdf_refs_sig,
+
+  (
+    -- qr_refs_changed (issued-but-unsigned + sig differs OR missing baseline)
+    upper(coalesce(t3.qr_status::text, '')) = 'PENDING'
+    and nullif(btrim(coalesce(t3.qr_token, '')), '') is not null
+    and t3.qr_generated_at is not null
+    and t3.qr_scanned_at is null
+    and nullif(btrim(coalesce(t3.qr_signed_hash, '')), '') is null
+    and (
+      nullif(btrim(coalesce(t3.qr_sent_refs_sig, '')), '') is null
+      or nullif(btrim(coalesce(t3.qr_sent_refs_sig, '')), '') is distinct from s3.current_refs_sig
+    )
+  ) as qr_refs_changed,
+
+  (
+    -- electronic_refs_changed (baseline exists + sig differs OR missing baseline sig)
+    upper(coalesce(t3.submission_mode::text, '')) = 'ELECTRONIC'
+    and t3.generated_pdf_at_utc is not null
+    and (
+      nullif(btrim(coalesce(t3.generated_pdf_refs_sig, '')), '') is null
+      or nullif(btrim(coalesce(t3.generated_pdf_refs_sig, '')), '') is distinct from s3.current_refs_sig
+    )
+  ) as electronic_refs_changed
+from t t3
+left join ids ids2
+  on ids2.timesheet_id = t3.timesheet_id
+left join cand c2
+  on c2.id = ids2.eff_candidate_id
+left join cli cl2
+  on cl2.id = ids2.eff_client_id
+join sig s3
+  on s3.timesheet_id = t3.timesheet_id
+order by t3.timesheet_id;
+$$;
+-- ============================================================
+-- (27) NEW: public.tspdf_enqueue_one / public.tspdf_enqueue_many
+-- Clean enqueue primitives for TS PDF outbox.
+--
+-- Behaviour:
+--  - Inserts/Upserts into public.ts_pdfs_outbox with:
+--      timesheet_id, reason, attempt_count=0, next_attempt_at=NULL, last_error=NULL,
+--      prefer_generated, force_regen, created_at=now()
+--  - ON CONFLICT (timesheet_id, reason) resets attempt_count/next_attempt_at/last_error
+--    and updates flags (OR semantics so flags are never accidentally cleared).
+--  - If p_force_regen=true:
+--      delete ALL existing outbox rows for that timesheet_id first (avoid duplicates),
+--      then enqueue a single FORCE_REGEN row.
+-- ============================================================
+
+create or replace function public.tspdf_enqueue_one(
+  p_timesheet_id uuid,
+  p_force_regen boolean default false,
+  p_prefer_generated boolean default true,
+  p_reason public.ts_pdf_reason_enum default null
+)
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_now timestamptz := now();
+  v_reason public.ts_pdf_reason_enum;
+  v_updated int := 0;
+  v_inserted int := 0;
+begin
+  if p_timesheet_id is null then
+    return 0;
+  end if;
+
+  -- Resolve reason:
+  -- - Force regen always uses FORCE_REGEN (single-row semantics)
+  -- - Else caller can provide explicit reason, otherwise READY_FOR_INVOICE
+  if coalesce(p_force_regen, false) is true then
+    v_reason := 'FORCE_REGEN'::public.ts_pdf_reason_enum;
+  else
+    v_reason := coalesce(p_reason, 'READY_FOR_INVOICE'::public.ts_pdf_reason_enum);
+  end if;
+
+  -- FORCE: ensure we don't leave redundant rows behind for this timesheet
+  if coalesce(p_force_regen, false) is true then
+    delete from public.ts_pdfs_outbox o
+    where o.timesheet_id = p_timesheet_id;
+
+    insert into public.ts_pdfs_outbox(
+      timesheet_id,
+      reason,
+      attempt_count,
+      next_attempt_at,
+      last_error,
+      prefer_generated,
+      force_regen,
+      created_at
+    )
+    values (
+      p_timesheet_id,
+      v_reason,
+      0,
+      null,
+      null,
+      coalesce(p_prefer_generated, true),
+      true,
+      v_now
+    )
+    on conflict (timesheet_id, reason)
+    do update
+      set attempt_count    = 0,
+          next_attempt_at  = null,
+          last_error       = null,
+          prefer_generated = public.ts_pdfs_outbox.prefer_generated or excluded.prefer_generated,
+          force_regen      = true;
+
+    return 1;
+  end if;
+
+  -- NON-FORCE:
+  -- If ANY job exists for this timesheet (READY and/or FORCE),
+  -- bump/reset them to run asap and clear errors (idempotent).
+  update public.ts_pdfs_outbox o
+     set attempt_count    = 0,
+         next_attempt_at  = null,
+         last_error       = null,
+         prefer_generated = o.prefer_generated or coalesce(p_prefer_generated, false),
+         force_regen      = o.force_regen
+   where o.timesheet_id = p_timesheet_id;
+
+  get diagnostics v_updated = row_count;
+
+  if coalesce(v_updated, 0) > 0 then
+    return v_updated;
+  end if;
+
+  -- No job exists yet: create one row (reason defaults to READY_FOR_INVOICE unless provided)
+  insert into public.ts_pdfs_outbox(
+    timesheet_id,
+    reason,
+    attempt_count,
+    next_attempt_at,
+    last_error,
+    prefer_generated,
+    force_regen,
+    created_at
+  )
+  values (
+    p_timesheet_id,
+    v_reason,
+    0,
+    null,
+    null,
+    coalesce(p_prefer_generated, false),
+    false,
+    v_now
+  )
+  on conflict (timesheet_id, reason)
+  do update
+    set attempt_count    = 0,
+        next_attempt_at  = null,
+        last_error       = null,
+        prefer_generated = public.ts_pdfs_outbox.prefer_generated or excluded.prefer_generated,
+        force_regen      = public.ts_pdfs_outbox.force_regen or excluded.force_regen;
+
+  get diagnostics v_inserted = row_count;
+  return coalesce(v_inserted, 0);
+end;
+$$;
+
+
+
+create or replace function public.tspdf_enqueue_many(
+  p_timesheet_ids uuid[],
+  p_force_regen boolean default false,
+  p_prefer_generated boolean default true,
+  p_reason public.ts_pdf_reason_enum default null,
+  p_limit int default 500
+)
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_lim int := greatest(1, least(coalesce(p_limit, 500), 5000));
+  v_count int := 0;
+  v_i int := 0;
+  v_id uuid;
+begin
+  if p_timesheet_ids is null or coalesce(array_length(p_timesheet_ids, 1), 0) = 0 then
+    return 0;
+  end if;
+
+  foreach v_id in array p_timesheet_ids loop
+    exit when v_i >= v_lim;
+    v_i := v_i + 1;
+
+    if v_id is null then
+      continue;
+    end if;
+
+    v_count := v_count + public.tspdf_enqueue_one(
+      p_timesheet_id := v_id,
+      p_force_regen := coalesce(p_force_regen, false),
+      p_prefer_generated := coalesce(p_prefer_generated, true),
+      p_reason := p_reason
+    );
+  end loop;
+
+  return v_count;
+end;
+$$;
+
