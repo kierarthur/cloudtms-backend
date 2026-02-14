@@ -1819,7 +1819,7 @@ declare
   v_unmapped_candidates int := 0;
   v_unmatched_timesheets int := 0;
 
-  -- unauthorised timesheets (excluded from validation matches)
+  -- unauthorised timesheets (included in validation matches; counted for reporting)
   v_unauthorised_timesheet_triples int := 0;
 
   -- import file date range (drives missing-shifts warnings)
@@ -1910,7 +1910,7 @@ begin
     );
   end if;
 
-  -- derive inclusive week-ending bounds for selecting authorised timesheets in scope
+  -- derive inclusive week-ending bounds for selecting weekly timesheets in scope
   v_we_min :=
     (v_file_date_min
       + (((v_we_dow - extract(dow from v_file_date_min)::int + 7) % 7))::int
@@ -2216,7 +2216,6 @@ begin
       case
         when tmr.raw_timesheet_id is null then null::uuid
         when ce2.contract_id is null then null::uuid
-        when tts.authorised_at_server is null then null::uuid
         else tmr.raw_timesheet_id
       end as timesheet_id,
       case
@@ -2250,7 +2249,6 @@ begin
       tur.actual_schedule_json,
       tur.tsfin_invoice_breakdown_json
     from ts_universe_raw tur
-    where tur.authorised_at_server is not null
   ),
 
   ts_entries_indexed as (
@@ -2999,34 +2997,6 @@ begin
      and tts.is_current = true
   ),
 
-  awaiting_auth_rows as (
-    select
-      jsonb_build_object(
-        'client_id', v_client_id::text,
-        'recipient_email', v_recipient_email,
-
-        'candidate_id', tm.candidate_id::text,
-        'candidate_name', tm.candidate_name,
-        'week_ending_date', tm.week_ending_date::text,
-        'timesheet_id', null,
-
-        'contract_id', case when tm.contract_id is null then null else tm.contract_id::text end,
-
-        'overall_status', 'AWAITING_AUTHORISATION',
-        'has_mismatch', true,
-        'failure_reasons', jsonb_build_array('Awaiting authorisation: timesheet is not authorised yet.'),
-
-        'issue_fingerprint', null,
-        'emailed_already', false,
-        'can_email', false,
-
-        'days', '[]'::jsonb,
-        'comparisons', '[]'::jsonb
-      ) as j
-    from ts_matches tm
-    where tm.awaiting_authorisation is true
-  ),
-
   missing_ts_rows as (
     select
       jsonb_build_object(
@@ -3042,7 +3012,7 @@ begin
 
         'overall_status', 'MISSING_TIMESHEET',
         'has_mismatch', true,
-        'failure_reasons', jsonb_build_array('No authorised weekly timesheet found for this candidate/week.'),
+        'failure_reasons', jsonb_build_array('No weekly timesheet found for this candidate/week in HR validation scope.'),
 
         'issue_fingerprint', null,
         'emailed_already', false,
@@ -3059,13 +3029,6 @@ begin
         and tm.week_ending_date = tr.week_ending_date
         and tm.timesheet_id is not null
     )
-    and not exists (
-      select 1
-      from ts_matches tm2
-      where tm2.candidate_id = tr.candidate_id
-        and tm2.week_ending_date = tr.week_ending_date
-        and tm2.awaiting_authorisation is true
-    )
   ),
 
   all_rows_json as (
@@ -3073,8 +3036,6 @@ begin
       jsonb_agg(r.j order by (r.j->>'week_ending_date')::date asc, (r.j->>'candidate_name') nulls last) as rows_json
     from (
       select rr.j from real_rows rr
-      union all
-      select ar.j from awaiting_auth_rows ar
       union all
       select mr.j from missing_ts_rows mr
     ) as r
@@ -3085,9 +3046,7 @@ begin
     (select n from unmapped_candidate_rows),
     (select count(*)::int
      from ts_matches tm
-     where tm.timesheet_id is null
-       and tm.awaiting_authorisation is false
-       and tm.raw_timesheet_id is null),
+     where tm.raw_timesheet_id is null),
     (select count(*)::int
      from ts_matches tm
      where tm.awaiting_authorisation is true)
@@ -3112,7 +3071,6 @@ begin
   );
 end;
 $function$;
-
 
 
 
