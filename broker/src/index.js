@@ -2975,7 +2975,6 @@ async function handleInvoicePdfDrain(env, req) {
   }));
 }
 
-
 async function renderTimesheetPDFGeneratedAndSave(env, timesheetId, preload = null) {
   const bucket = env.R2_BUCKET || env.R2;
   if (!bucket?.get || !bucket?.put) throw new Error("Storage not configured");
@@ -3422,34 +3421,32 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId, preload = nu
     // ---------- DB LOAD ----------
     // preload shape expected (optional):
     // { ts, summary, contract, client, candidate, fin, def }
-  const P = (preload && typeof preload === "object") ? preload : null;
-const preloadMode = !!P;
+    const P = (preload && typeof preload === "object") ? preload : null;
+    const preloadMode = !!P;
 
-let ts = P?.ts || null;
-let summary = P?.summary || null;
-let contract = P?.contract || null;
-let client = P?.client || null;
-let cand = P?.candidate || null;
-let fin = P?.fin || null;
-let def = P?.def || null;
+    let ts = P?.ts || null;
+    let summary = P?.summary || null;
+    let contract = P?.contract || null;
+    let client = P?.client || null;
+    let cand = P?.candidate || null;
+    let fin = P?.fin || null;
+    let def = P?.def || null;
 
-
-   // 1) Timesheet row (CURRENT)
-if (!ts) {
-  if (preloadMode) throw new Error("Preload missing ts (queued mode must pass ts)");
-  L("DB.LOAD.timesheets", {});
-  const { rows: tsRows } = await sbFetch(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${encodeURIComponent(timesheetId)}` +
-      `&is_current=eq.true` +
-      `&select=*` +
-      `&limit=1`
-  );
-  ts = tsRows?.[0];
-}
-if (!ts) throw new Error("Timesheet not found");
-
+    // 1) Timesheet row (CURRENT)
+    if (!ts) {
+      if (preloadMode) throw new Error("Preload missing ts (queued mode must pass ts)");
+      L("DB.LOAD.timesheets", {});
+      const { rows: tsRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?timesheet_id=eq.${encodeURIComponent(timesheetId)}` +
+          `&is_current=eq.true` +
+          `&select=*` +
+          `&limit=1`
+      );
+      ts = tsRows?.[0];
+    }
+    if (!ts) throw new Error("Timesheet not found");
 
     const sheetScope = String(ts.sheet_scope || "").toUpperCase();
     const isDaily = (sheetScope === "DAILY");
@@ -3464,136 +3461,126 @@ if (!ts) throw new Error("Timesheet not found");
       has_qr_payload: !!ts.qr_payload_json
     });
 
-  // AFTER (only query v_timesheets_summary when needed)
-//
-// Rule:
-// - If we already have a contract_id on the timesheet AND we are only going to use contract-based data,
-//   we skip the view.
-// - We fetch the view when contract_id is missing (DAILY) OR when we need a fallback for any key fields.
-// Only DAILY (no contract) needs v_timesheets_summary.
-// Weekly should remain contract-driven and not touch the view here.
-const needsSummary = !summary && !ts.contract_id;
-if (needsSummary) {
-  if (preloadMode) {
-    throw new Error("Preload missing summary for DAILY timesheet (queued mode must pass out_summary)");
-  }
-  try {
-    L("DB.LOAD.v_timesheets_summary", { reason: "daily_no_contract" });
-    summary = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
-        `?timesheet_id=eq.${encodeURIComponent(ts.timesheet_id)}` +
-        `&select=timesheet_id,candidate_id,client_id,candidate_name,client_name,contract_id` +
-        `&limit=1`
-    );
-  } catch {
-    summary = null;
-  }
-}
+    // AFTER (only query v_timesheets_summary when needed)
+    //
+    // Rule:
+    // - If we already have a contract_id on the timesheet AND we are only going to use contract-based data,
+    //   we skip the view.
+    // - We fetch the view when contract_id is missing (DAILY) OR when we need a fallback for any key fields.
+    // Only DAILY (no contract) needs v_timesheets_summary.
+    // Weekly should remain contract-driven and not touch the view here.
+    const needsSummary = !summary && !ts.contract_id;
+    if (needsSummary) {
+      if (preloadMode) {
+        throw new Error("Preload missing summary for DAILY timesheet (queued mode must pass out_summary)");
+      }
+      try {
+        L("DB.LOAD.v_timesheets_summary", { reason: "daily_no_contract" });
+        summary = await sbGetOne(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
+            `?timesheet_id=eq.${encodeURIComponent(ts.timesheet_id)}` +
+            `&select=timesheet_id,candidate_id,client_id,candidate_name,client_name,contract_id` +
+            `&limit=1`
+        );
+      } catch {
+        summary = null;
+      }
+    }
 
+    // 3) TSFIN row (optional, used for additional units + SEGMENTS truth)
+    if (!fin) {
+      if (preloadMode) {
+        fin = null; // queued mode must pass fin if it needs it
+      } else {
+        L("DB.LOAD.tsfin", {});
+        fin = await sbGetOne(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+            `?timesheet_id=eq.${encodeURIComponent(ts.timesheet_id)}` +
+            `&is_current=eq.true` +
+            `&select=*` +
+            `&limit=1`
+        ).catch(() => null);
+      }
+    }
 
-
-
-
-
- // 3) TSFIN row (optional, used for additional units + possible fallback data)
-if (!fin) {
-  if (preloadMode) {
-    fin = null; // queued mode must pass fin if it needs it
-  } else {
-    L("DB.LOAD.tsfin", {});
-    fin = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-        `?timesheet_id=eq.${encodeURIComponent(ts.timesheet_id)}` +
-        `&is_current=eq.true` +
-        `&select=*` +
-        `&limit=1`
-    ).catch(() => null);
-  }
-}
-
-
-  // 4) Contract (weekly may have it; daily normally not)
-const contractIdEff = ts.contract_id || summary?.contract_id || null;
-if (!contract && contractIdEff) {
-  if (preloadMode) {
-    contract = null; // queued mode must pass contract if required
-  } else {
-    L("DB.LOAD.contract", { contract_id: contractIdEff });
-    contract = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${encodeURIComponent(contractIdEff)}&select=*`
-    ).catch(() => null);
-  }
-}
-
+    // 4) Contract (weekly may have it; daily normally not)
+    const contractIdEff = ts.contract_id || summary?.contract_id || null;
+    if (!contract && contractIdEff) {
+      if (preloadMode) {
+        contract = null; // queued mode must pass contract if required
+      } else {
+        L("DB.LOAD.contract", { contract_id: contractIdEff });
+        contract = await sbGetOne(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${encodeURIComponent(contractIdEff)}&select=*`
+        ).catch(() => null);
+      }
+    }
 
     // 5) Resolve effective candidate/client IDs (DAILY uses summary; WEEKLY uses contract but summary works too)
     const effCandidateId = contract?.candidate_id || summary?.candidate_id || null;
     const effClientId    = contract?.client_id    || summary?.client_id    || null;
 
- if (!client && effClientId) {
-  if (preloadMode) {
-    client = null; // queued mode must pass client if required
-  } else {
-    L("DB.LOAD.client", { client_id: effClientId });
-    client = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(effClientId)}&select=*`
-    ).catch(() => null);
-  }
-}
+    if (!client && effClientId) {
+      if (preloadMode) {
+        client = null; // queued mode must pass client if required
+      } else {
+        L("DB.LOAD.client", { client_id: effClientId });
+        client = await sbGetOne(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(effClientId)}&select=*`
+        ).catch(() => null);
+      }
+    }
 
-if (!cand && effCandidateId) {
-  if (preloadMode) {
-    cand = null; // queued mode must pass candidate if required
-  } else {
-    L("DB.LOAD.candidate", { candidate_id: effCandidateId });
-    cand = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(effCandidateId)}&select=*`
-    ).catch(() => null);
-  }
-}
-
+    if (!cand && effCandidateId) {
+      if (preloadMode) {
+        cand = null; // queued mode must pass candidate if required
+      } else {
+        L("DB.LOAD.candidate", { candidate_id: effCandidateId });
+        cand = await sbGetOne(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${encodeURIComponent(effCandidateId)}&select=*`
+        ).catch(() => null);
+      }
+    }
 
     // 6) settings_defaults (NON-FINANCE ONLY — do not select *)
-if (!def) {
-  if (preloadMode) {
-    throw new Error("Preload missing def (queued mode must pass out_def as def)");
-  }
-  L("DB.LOAD.settings_defaults", {});
-  def = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=` +
-      [
-        "agency_name",
-        "agency_logo",
-        "timesheet_header_json",
-        "timesheet_footer_json",
-        "temporary_worker_declaration_json",
-        "client_declaration_json"
-      ].join(",")
-  ).catch(() => null);
-} // ✅ CLOSE the if-block
+    if (!def) {
+      if (preloadMode) {
+        throw new Error("Preload missing def (queued mode must pass out_def as def)");
+      }
+      L("DB.LOAD.settings_defaults", {});
+      def = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=` +
+          [
+            "agency_name",
+            "agency_logo",
+            "timesheet_header_json",
+            "timesheet_footer_json",
+            "temporary_worker_declaration_json",
+            "client_declaration_json"
+          ].join(",")
+      ).catch(() => null);
+    } // ✅ CLOSE the if-block
 
+    const agencyName = def?.agency_name ? String(def.agency_name) : "ARMS";
+    const agencyLogoKey = def?.agency_logo ? String(def.agency_logo).trim() : null;
 
-const agencyName = def?.agency_name ? String(def.agency_name) : "ARMS";
-const agencyLogoKey = def?.agency_logo ? String(def.agency_logo).trim() : null;
+    const headerJson = def?.timesheet_header_json ?? null;
+    const footerJson = def?.timesheet_footer_json ?? null;
 
-const headerJson = def?.timesheet_header_json ?? null;
-const footerJson = def?.timesheet_footer_json ?? null;
+    // Declarations: TEXT + JSON fallback (TEXT cols don't exist in your DB)
+    const tempDeclText = null;
+    const clientDeclText = null;
+    const tempDeclJson = def?.temporary_worker_declaration_json ?? null;
+    const clientDeclJson = def?.client_declaration_json ?? null;
 
-// Declarations: TEXT + JSON fallback (TEXT cols don't exist in your DB)
-const tempDeclText = null;
-const clientDeclText = null;
-const tempDeclJson = def?.temporary_worker_declaration_json ?? null;
-const clientDeclJson = def?.client_declaration_json ?? null;
-
-const tempDeclSpec = buildDeclSpec("Temporary Worker Declaration", tempDeclText, tempDeclJson);
-const clientDeclSpec = buildDeclSpec("Client Declaration", clientDeclText, clientDeclJson);
-
+    const tempDeclSpec = buildDeclSpec("Temporary Worker Declaration", tempDeclText, tempDeclJson);
+    const clientDeclSpec = buildDeclSpec("Client Declaration", clientDeclText, clientDeclJson);
 
     // Candidate/client fallbacks for DAILY (no contract)
     const hint = parseJsonMaybe(ts?.candidate_hint_text) || null;
@@ -3618,114 +3605,114 @@ const clientDeclSpec = buildDeclSpec("Client Declaration", clientDeclText, clien
     const resolvedClientName =
       safeStr(client?.name || summary?.client_name || ts?.hospital_norm || "").trim();
 
-const resolvedRole =
-  safeStr(contract?.role || ts?.job_title_norm || "").trim();
+    const resolvedRole =
+      safeStr(contract?.role || ts?.job_title_norm || "").trim();
 
-const resolvedSiteWard =
-  safeStr(contract?.display_site || ts?.ward_norm || ts?.hospital_norm || "").trim();
+    const resolvedSiteWard =
+      safeStr(contract?.display_site || ts?.ward_norm || ts?.hospital_norm || "").trim();
 
-const resolvedBandText =
-  safeStr(contract?.band || ts?.band || "").trim();
+    const resolvedBandText =
+      safeStr(contract?.band || ts?.band || "").trim();
 
+    // ---------- SCHEDULE (weekly or synth daily) ----------
+    let schedule = Array.isArray(ts.actual_schedule_json) ? ts.actual_schedule_json : [];
 
-  // ---------- SCHEDULE (weekly or synth daily) ----------
-let schedule = Array.isArray(ts.actual_schedule_json) ? ts.actual_schedule_json : [];
+    const workedYmd = isDaily ? isoToLocalYmd(ts.worked_start_iso) : "";
+    const workedStartHHMM = isDaily ? isoToLocalHHMM(ts.worked_start_iso) : "";
+    const workedEndHHMM   = isDaily ? isoToLocalHHMM(ts.worked_end_iso)   : "";
 
-const workedYmd = isDaily ? isoToLocalYmd(ts.worked_start_iso) : "";
-const workedStartHHMM = isDaily ? isoToLocalHHMM(ts.worked_start_iso) : "";
-const workedEndHHMM   = isDaily ? isoToLocalHHMM(ts.worked_end_iso)   : "";
-
-let weekEndingYmd = safeStr(ts.week_ending_date).slice(0, 10);
-if (isDaily) {
-  const computed = nextSundayYmd(workedYmd);
-  weekEndingYmd = computed || weekEndingYmd || "";
-}
-
-if (isDaily && (!Array.isArray(schedule) || schedule.length === 0)) {
-  const seg = {
-    date: workedYmd || "",
-    start: workedStartHHMM || "",
-    end: workedEndHHMM || "",
-    start_utc: ts.worked_start_iso || null,
-    end_utc: ts.worked_end_iso || null,
-
-    // ✅ Daily mapping fix: ensure Booking Ref column prints the timesheet reference_number
-    ref_num: safeStr(ts.reference_number || "").trim()
-  };
-
-  if (ts.break_start_iso && ts.break_end_iso) {
-    const bs = isoToLocalHHMM(ts.break_start_iso);
-    const be = isoToLocalHHMM(ts.break_end_iso);
-    if (bs && be) {
-      seg.break_start = bs;
-      seg.break_end = be;
-      seg.breaks = [{ start: bs, end: be }];
+    let weekEndingYmd = safeStr(ts.week_ending_date).slice(0, 10);
+    if (isDaily) {
+      const computed = nextSundayYmd(workedYmd);
+      weekEndingYmd = computed || weekEndingYmd || "";
     }
-  }
-  if (seg.breaks == null && ts.break_minutes != null) {
-    seg.break_minutes = Number(ts.break_minutes) || 0;
-  }
 
-  schedule = [seg];
-  L("DAILY.SYNTHESIZED", { workedYmd, weekEndingYmd });
-}
+    if (isDaily && (!Array.isArray(schedule) || schedule.length === 0)) {
+      const seg = {
+        date: workedYmd || "",
+        start: workedStartHHMM || "",
+        end: workedEndHHMM || "",
+        start_utc: ts.worked_start_iso || null,
+        end_utc: ts.worked_end_iso || null,
 
-// ✅ SEGMENTS-mode fallback (robustness):
-// If schedule is empty AND TSFIN indicates SEGMENTS, build schedule from invoice_breakdown_json.segments
-if (!isDaily && (!Array.isArray(schedule) || schedule.length === 0)) {
-  const ibj = (fin && typeof fin.invoice_breakdown_json === "object" && fin.invoice_breakdown_json)
-    ? fin.invoice_breakdown_json
-    : null;
-
-  const mode = safeStr(ibj?.mode || "").toUpperCase();
-  const segs = Array.isArray(ibj?.segments) ? ibj.segments : [];
-
-  if (mode === "SEGMENTS" && segs.length > 0) {
-    schedule = segs.map((s) => {
-      const startUtc = s?.start_utc || null;
-      const endUtc   = s?.end_utc || null;
-
-      const ymd =
-        safeStr(s?.date).slice(0, 10) ||
-        (startUtc ? isoToLocalYmd(startUtc) : "");
-
-      const startHH = startUtc ? isoToLocalHHMM(startUtc) : "";
-      const endHH   = endUtc ? isoToLocalHHMM(endUtc) : "";
-
-      const sidRaw = safeStr(s?.segment_id || "").trim();
-      const sid = sidRaw || ((startUtc && endUtc) ? (`SE:${safeStr(startUtc)}|${safeStr(endUtc)}`) : "");
-
-      const out = {
-        date: ymd || "",
-        start: startHH || "",
-        end: endHH || "",
-        start_utc: startUtc,
-        end_utc: endUtc,
-
-        // booking ref source in SEGMENTS mode
-        ref_num: safeStr(s?.ref_num || "").trim(),
-
-        // stable segment identity when present
-        segment_id: sid || null
+        // ✅ Daily mapping: Booking Ref column prints timesheets.reference_number
+        ref_num: safeStr(ts.reference_number || "").trim()
       };
 
-      // Optional break fields if present on TSFIN segments
-      if (s?.break_start && s?.break_end) {
-        out.break_start = safeStr(s.break_start);
-        out.break_end = safeStr(s.break_end);
-        out.breaks = [{ start: safeStr(s.break_start), end: safeStr(s.break_end) }];
-      } else if (s?.break_minutes != null) {
-        out.break_minutes = Number(s.break_minutes) || 0;
+      if (ts.break_start_iso && ts.break_end_iso) {
+        const bs = isoToLocalHHMM(ts.break_start_iso);
+        const be = isoToLocalHHMM(ts.break_end_iso);
+        if (bs && be) {
+          seg.break_start = bs;
+          seg.break_end = be;
+          seg.breaks = [{ start: bs, end: be }];
+        }
+      }
+      if (seg.breaks == null && ts.break_minutes != null) {
+        seg.break_minutes = Number(ts.break_minutes) || 0;
       }
 
-      return out;
-    });
+      schedule = [seg];
+      L("DAILY.SYNTHESIZED", { workedYmd, weekEndingYmd });
+    }
 
-    L("SEGMENTS.SCHEDULE_FALLBACK", { segments: schedule.length });
-  }
-}
+    // ✅ SEGMENTS-mode preference:
+    // If TSFIN indicates SEGMENTS and segments exist, build schedule FROM TSFIN segments
+    // (even if timesheets.actual_schedule_json is non-empty). This ensures Booking Ref column
+    // and generated_pdf_refs_sig match canonical reference truth.
+    if (!isDaily) {
+      const ibj = (fin && typeof fin.invoice_breakdown_json === "object" && fin.invoice_breakdown_json)
+        ? fin.invoice_breakdown_json
+        : null;
 
+      const tfMode = safeStr(ibj?.mode || "").toUpperCase();
+      const segs = Array.isArray(ibj?.segments) ? ibj.segments : [];
 
+      if (tfMode === "SEGMENTS" && segs.length > 0) {
+        schedule = segs.map((s) => {
+          const startUtc = s?.start_utc || null;
+          const endUtc   = s?.end_utc || null;
+
+          const ymd =
+            safeStr(s?.date).slice(0, 10) ||
+            (startUtc ? isoToLocalYmd(startUtc) : "");
+
+          const startHH = startUtc ? isoToLocalHHMM(startUtc) : "";
+          const endHH   = endUtc ? isoToLocalHHMM(endUtc) : "";
+
+          // ✅ match canonical reference row model: segment_id or SE:<start>|<end>
+          const sidRaw = safeStr(s?.segment_id || "").trim();
+          const sid = sidRaw || ((startUtc && endUtc) ? (`SE:${safeStr(startUtc)}|${safeStr(endUtc)}`) : "");
+
+          const out = {
+            date: ymd || "",
+            start: startHH || "",
+            end: endHH || "",
+            start_utc: startUtc,
+            end_utc: endUtc,
+
+            // booking ref source in SEGMENTS mode (invoice truth)
+            ref_num: safeStr(s?.ref_num || "").trim(),
+
+            // stable segment identity when present
+            segment_id: sid || null
+          };
+
+          // Optional break fields if present on TSFIN segments
+          if (s?.break_start && s?.break_end) {
+            out.break_start = safeStr(s.break_start);
+            out.break_end = safeStr(s.break_end);
+            out.breaks = [{ start: safeStr(s.break_start), end: safeStr(s.break_end) }];
+          } else if (s?.break_minutes != null) {
+            out.break_minutes = Number(s.break_minutes) || 0;
+          }
+
+          return out;
+        });
+
+        L("SEGMENTS.SCHEDULE_FROM_TSFINSNAPSHOT", { segments: schedule.length });
+      }
+    }
 
     const weekEndingDayName = weekdayName(weekEndingYmd);
     const weekDates = buildWeekDates(weekEndingYmd);
@@ -3973,56 +3960,55 @@ if (!isDaily && (!Array.isArray(schedule) || schedule.length === 0)) {
     const headerTop = M + LAY.headerTopPad;
     const logoBox = { x: contentX, y: headerTop, w: LAY.logoW, h: LAY.logoH };
 
-  // Draw logo (no border) — prefer preload cache, fallback to R2
-if (agencyLogoKey) {
-  try {
-    const P = (preload && typeof preload === "object") ? preload : null;
+    // Draw logo (no border) — prefer preload cache, fallback to R2
+    if (agencyLogoKey) {
+      try {
+        const P = (preload && typeof preload === "object") ? preload : null;
 
-    let bytesU8 = null;
-    let ct = "";
+        let bytesU8 = null;
+        let ct = "";
 
-    // 1) Use cached logo bytes (from queue worker) if present
-    if (P?.logo_bytes_u8 && (P.logo_bytes_u8 instanceof Uint8Array) && P.logo_bytes_u8.length > 0) {
-      bytesU8 = P.logo_bytes_u8;
-      ct = String(P.logo_content_type || "").toLowerCase();
-    } else {
-      // 2) Fallback: fetch from R2 as before
-      const key = normalizeKey(agencyLogoKey);
-      const obj = await bucket.get(key);
-      if (obj) {
-        bytesU8 = new Uint8Array(await new Response(obj.body).arrayBuffer());
-        ct = String(obj.httpMetadata?.contentType || "").toLowerCase();
+        // 1) Use cached logo bytes (from queue worker) if present
+        if (P?.logo_bytes_u8 && (P.logo_bytes_u8 instanceof Uint8Array) && P.logo_bytes_u8.length > 0) {
+          bytesU8 = P.logo_bytes_u8;
+          ct = String(P.logo_content_type || "").toLowerCase();
+        } else {
+          // 2) Fallback: fetch from R2 as before
+          const key = normalizeKey(agencyLogoKey);
+          const obj = await bucket.get(key);
+          if (obj) {
+            bytesU8 = new Uint8Array(await new Response(obj.body).arrayBuffer());
+            ct = String(obj.httpMetadata?.contentType || "").toLowerCase();
+          }
+        }
+
+        const MAX_LOGO_BYTES = 250_000;
+        if (bytesU8 && bytesU8.length <= MAX_LOGO_BYTES) {
+          const keyForExt = normalizeKey(agencyLogoKey);
+          const isPng = ct.includes("png") || keyForExt.toLowerCase().endsWith(".png");
+          const img = isPng ? await pdfDoc.embedPng(bytesU8) : await pdfDoc.embedJpg(bytesU8);
+
+          const pad = 0.8;
+          const maxW = logoBox.w - pad * 2;
+          const maxH = logoBox.h - pad * 2;
+          const scale = Math.min(maxW / img.width, maxH / img.height);
+
+          const w = img.width * scale;
+          const h = img.height * scale;
+          const x = logoBox.x + (logoBox.w - w) / 2;
+          const yImg = logoBox.y + (logoBox.h - h) / 2;
+
+          page.drawImage(img, {
+            x: mmToPt(x),
+            y: mmToPt(yFromTop(yImg + h)),
+            width: mmToPt(w),
+            height: mmToPt(h)
+          });
+        }
+      } catch (e) {
+        L("LOGO.FAIL", { err: e?.message || String(e) });
       }
     }
-
-    const MAX_LOGO_BYTES = 250_000;
-    if (bytesU8 && bytesU8.length <= MAX_LOGO_BYTES) {
-      const keyForExt = normalizeKey(agencyLogoKey);
-      const isPng = ct.includes("png") || keyForExt.toLowerCase().endsWith(".png");
-      const img = isPng ? await pdfDoc.embedPng(bytesU8) : await pdfDoc.embedJpg(bytesU8);
-
-      const pad = 0.8;
-      const maxW = logoBox.w - pad * 2;
-      const maxH = logoBox.h - pad * 2;
-      const scale = Math.min(maxW / img.width, maxH / img.height);
-
-      const w = img.width * scale;
-      const h = img.height * scale;
-      const x = logoBox.x + (logoBox.w - w) / 2;
-      const yImg = logoBox.y + (logoBox.h - h) / 2;
-
-      page.drawImage(img, {
-        x: mmToPt(x),
-        y: mmToPt(yFromTop(yImg + h)),
-        width: mmToPt(w),
-        height: mmToPt(h)
-      });
-    }
-  } catch (e) {
-    L("LOGO.FAIL", { err: e?.message || String(e) });
-  }
-}
-
 
     // Header right line: TIMESHEET | Time Sheet No | Week ending  (single line, top-right)
     const tsNo = timesheetNumber8(ts.timesheet_id);
@@ -4056,10 +4042,9 @@ if (agencyLogoKey) {
     drawCenteredText(page, fontBold, "Temporary Worker Details", nurseBox.x, nurseBox.y + 4.2, nurseBox.w, LAY.detailsTitleSize);
     drawCenteredText(page, fontBold, "Client Details", clientBox.x, clientBox.y + 4.2, clientBox.w, LAY.detailsTitleSize);
 
- const surname   = safeStr(resolvedSurname).trim().toUpperCase();
-const firstName = safeStr(resolvedFirstName).trim().toUpperCase();
-const role      = safeStr(resolvedRole).trim().toUpperCase();
-
+    const surname   = safeStr(resolvedSurname).trim().toUpperCase();
+    const firstName = safeStr(resolvedFirstName).trim().toUpperCase();
+    const role      = safeStr(resolvedRole).trim().toUpperCase();
 
     const clientName = safeStr(resolvedClientName);
     const siteWard = safeStr(resolvedSiteWard);
@@ -4168,12 +4153,11 @@ const role      = safeStr(resolvedRole).trim().toUpperCase();
 
     const idealLineH = (totalLinesVisible > 0) ? (bodyMaxH / totalLinesVisible) : bodyMaxH;
 
-    // Never force lineH above idealLineH (that’s what can push declarations off-page).
-    // Let it get as small as needed to preserve the layout blocks below.
+    // Never force lineH above idealLineH
     const lineH = Math.min(10.5, idealLineH);
 
-    // Dynamic schedule text baseline offset so lines NEVER collide with text
-    const textPad = Math.max(0.12, lineH * 0.10); // keep baseline safely inside the row
+    // Dynamic schedule text baseline offset
+    const textPad = Math.max(0.12, lineH * 0.10);
     const textOffset = Math.min(
       LAY.tsLineTextOffset,
       lineH * 0.72,
@@ -4260,7 +4244,7 @@ const role      = safeStr(resolvedRole).trim().toUpperCase();
         const b = getBreakDisplay(seg);
         const ph = computePaidHours(seg);
 
-        // Booking ref: strictly per shift
+        // Booking ref: per shift
         const ref =
           safeStr(seg?.ref_num || "").trim() ||
           safeStr(seg?.booking_ref || "").trim() ||
@@ -4300,7 +4284,7 @@ const role      = safeStr(resolvedRole).trim().toUpperCase();
       const addlBox = { x: contentX, y: yAfterTable, w: contentW, h: ADDL_H };
       drawRect(page, addlBox.x, addlBox.y, addlBox.w, addlBox.h, { lineWidth: 0.45 });
 
-      // Title gets its own line ABOVE the column headers (guaranteed separation)
+      // Title gets its own line ABOVE the column headers
       const addlTitleY = addlBox.y + Math.min(2.8, LAY.addlHeaderH * 0.45);
       const addlColsY  = addlBox.y + (LAY.addlHeaderH - 1.4);
 
@@ -4332,7 +4316,6 @@ const role      = safeStr(resolvedRole).trim().toUpperCase();
         ax += aW[i];
       }
 
-      // No (+N more): show as many as fit silently
       const maxRows = Math.max(0, Math.floor((addlBox.h - LAY.addlHeaderH) / LAY.addlRowH));
       const rowsToShow = additionalRows.slice(0, maxRows);
 
@@ -4374,52 +4357,49 @@ const role      = safeStr(resolvedRole).trim().toUpperCase();
     const declBodyBottomReserve = LAY.declSigReserve;
     const maxBodyH = leftDecl.h - declBodyTopPad - declBodyBottomReserve;
 
-   const renderDecl = (box, spec) => {
-  const maxW = box.w - 4;
-  const baseText = safeStr(spec.bodyText);
-  if (!baseText.trim()) return null;
+    const renderDecl = (box, spec) => {
+      const maxW = box.w - 4;
+      const baseText = safeStr(spec.bodyText);
+      if (!baseText.trim()) return null;
 
-  let fontSize = Number(spec.font_size) || 7.0;
-  let lineH = Number(spec.line_height_mm) || 3.35;
+      let fontSize = Number(spec.font_size) || 7.0;
+      let lineH = Number(spec.line_height_mm) || 3.35;
 
-  if (isTight) {
-    fontSize = Math.min(fontSize, 6.6);
-    lineH = Math.min(lineH, LAY.headerLineH);
-  }
+      if (isTight) {
+        fontSize = Math.min(fontSize, 6.6);
+        lineH = Math.min(lineH, LAY.headerLineH);
+      }
 
-  for (let attempt = 0; attempt < 4; attempt++) {
-    const lines = wrapText(font, baseText, fontSize, maxW);
-    const neededH = lines.length * lineH;
-    if (neededH <= maxBodyH) {
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const lines = wrapText(font, baseText, fontSize, maxW);
+        const neededH = lines.length * lineH;
+        if (neededH <= maxBodyH) {
+          let yT = box.y + declBodyTopPad;
+          for (const ln of lines) {
+            if (yT > box.y + box.h - declBodyBottomReserve - 0.5) break;
+            drawText(page, font, ln, box.x + 2, yT, fontSize, { maxWidth: maxW });
+            yT += lineH;
+          }
+          return (yT > (box.y + declBodyTopPad)) ? (yT - lineH) : (box.y + declBodyTopPad);
+        }
+        fontSize = Math.max(5.8, fontSize - 0.4);
+        lineH = Math.max(2.4, lineH - 0.15);
+      }
+
+      // last resort: clip silently (no "+N more")
+      const lines = wrapText(font, baseText, 5.8, maxW);
+      const maxLines = Math.max(1, Math.floor(maxBodyH / 2.4));
       let yT = box.y + declBodyTopPad;
- for (const ln of lines) {
-  if (yT > box.y + box.h - declBodyBottomReserve - 0.5) break;
-  drawText(page, font, ln, box.x + 2, yT, fontSize, { maxWidth: maxW });
-  yT += lineH;
-}
-return (yT > (box.y + declBodyTopPad)) ? (yT - lineH) : (box.y + declBodyTopPad);
+      for (const ln of lines.slice(0, maxLines)) {
+        drawText(page, font, ln, box.x + 2, yT, 5.8, { maxWidth: maxW });
+        yT += 2.4;
+      }
+      return (yT > (box.y + declBodyTopPad)) ? (yT - 2.4) : (box.y + declBodyTopPad);
+    };
 
-    }
-    fontSize = Math.max(5.8, fontSize - 0.4);
-    lineH = Math.max(2.4, lineH - 0.15);
-  }
-
-  // last resort: clip silently (no "+N more")
-  const lines = wrapText(font, baseText, 5.8, maxW);
-  const maxLines = Math.max(1, Math.floor(maxBodyH / 2.4));
-  let yT = box.y + declBodyTopPad;
-for (const ln of lines.slice(0, maxLines)) {
-  drawText(page, font, ln, box.x + 2, yT, 5.8, { maxWidth: maxW });
-  yT += 2.4;
-}
-return (yT > (box.y + declBodyTopPad)) ? (yT - 2.4) : (box.y + declBodyTopPad);
-
-};
-
-// ✅ capture where the declaration text ended (so signatures can use unused whitespace)
-const lastDeclBodyEndYLeft  = renderDecl(leftDecl, tempDeclSpec);
-const lastDeclBodyEndYRight = renderDecl(rightDecl, clientDeclSpec);
-
+    // ✅ capture where the declaration text ended (so signatures can use unused whitespace)
+    const lastDeclBodyEndYLeft  = renderDecl(leftDecl, tempDeclSpec);
+    const lastDeclBodyEndYRight = renderDecl(rightDecl, clientDeclSpec);
 
     // Signature lines (fixed inside each box)
     const sigY = leftDecl.y + leftDecl.h - 6.5;
@@ -4442,47 +4422,42 @@ const lastDeclBodyEndYRight = renderDecl(rightDecl, clientDeclSpec);
       if (submissionMode === "ELECTRONIC") {
         const authDate = fmtDmy(String(ts.authorised_at_server || "").slice(0, 10));
 
-const sigMaxH = 18.0; // ✅ allow larger signatures when whitespace exists
-const sigLiftMm = 0.6; // "few pixels" ≈ 0.6mm
+        const sigMaxH = 18.0;
+        const sigLiftMm = 0.6;
+        const sigTextPad = 0.8;
 
-// ✅ Use where the declaration body actually ended (if known), otherwise allow using the full body area.
-// This avoids the ~5–6mm trap caused by (leftDecl.h - declBodyBottomReserve).
-const sigTextPad = 0.8;
+        const sigReserveTopLeft =
+          (typeof lastDeclBodyEndYLeft === 'number')
+            ? (lastDeclBodyEndYLeft + sigTextPad)
+            : (leftDecl.y + declBodyTopPad);
 
-const sigReserveTopLeft =
-  (typeof lastDeclBodyEndYLeft === 'number')
-    ? (lastDeclBodyEndYLeft + sigTextPad)
-    : (leftDecl.y + declBodyTopPad);
+        const sigReserveTopRight =
+          (typeof lastDeclBodyEndYRight === 'number')
+            ? (lastDeclBodyEndYRight + sigTextPad)
+            : (rightDecl.y + declBodyTopPad);
 
-const sigReserveTopRight =
-  (typeof lastDeclBodyEndYRight === 'number')
-    ? (lastDeclBodyEndYRight + sigTextPad)
-    : (rightDecl.y + declBodyTopPad);
+        const nurseSigBottom  = sigY  - sigLiftMm;
+        const clientSigBottom = sigY2 - sigLiftMm;
 
-// We anchor the BOTTOM of the image to the signature LINE (minus lift)
-const nurseSigBottom  = sigY  - sigLiftMm;
-const clientSigBottom = sigY2 - sigLiftMm;
+        const nurseAvailH  = Math.max(2.0, nurseSigBottom  - sigReserveTopLeft);
+        const clientAvailH = Math.max(2.0, clientSigBottom - sigReserveTopRight);
 
-// Height can now use *real whitespace*, not just the small reserved strip
-const nurseAvailH  = Math.max(2.0, nurseSigBottom  - sigReserveTopLeft);
-const clientAvailH = Math.max(2.0, clientSigBottom - sigReserveTopRight);
+        const nurseSigH  = Math.min(sigMaxH, nurseAvailH);
+        const clientSigH = Math.min(sigMaxH, clientAvailH);
 
-const nurseSigH  = Math.min(sigMaxH, nurseAvailH);
-const clientSigH = Math.min(sigMaxH, clientAvailH);
+        const nurseSigTopY  = Math.max(leftDecl.y + 2.0,  nurseSigBottom  - nurseSigH);
+        const clientSigTopY = Math.max(rightDecl.y + 2.0, clientSigBottom - clientSigH);
 
-// Top computed from bottom - height (bottom stays on the signature line)
-const nurseSigTopY  = Math.max(leftDecl.y + 2.0,  nurseSigBottom  - nurseSigH);
-const clientSigTopY = Math.max(rightDecl.y + 2.0, clientSigBottom - clientSigH);
-
-const nurseSigBox  = { x: leftDecl.x + 2,  y: nurseSigTopY,  w: sigLineW,  h: nurseSigH };
-const clientSigBox = { x: rightDecl.x + 2, y: clientSigTopY, w: sigLineW2, h: clientSigH };
-
+        const nurseSigBox  = { x: leftDecl.x + 2,  y: nurseSigTopY,  w: sigLineW,  h: nurseSigH };
+        const clientSigBox = { x: rightDecl.x + 2, y: clientSigTopY, w: sigLineW2, h: clientSigH };
 
         await drawSignatureKeyInBox(bucket, page, pdfDoc, ts.r2_nurse_key, nurseSigBox, PAGE_H);
         await drawSignatureKeyInBox(bucket, page, pdfDoc, ts.r2_auth_key, clientSigBox, PAGE_H);
 
         if (authDate) {
-          const datePad = 0.6;
+          const dateLabelSize = 7.0;
+          const dateLabelWmm  = ptToMm(font.widthOfTextAtSize("Date", dateLabelSize));
+          const gapAfterLabel = 1.2;
 
           const dateX1 = leftDecl.x + 2 + sigLineW + 4;
           const dateW1 = (leftDecl.x + leftDecl.w - 2) - dateX1;
@@ -4490,18 +4465,13 @@ const clientSigBox = { x: rightDecl.x + 2, y: clientSigTopY, w: sigLineW2, h: cl
           const dateX2 = rightDecl.x + 2 + sigLineW2 + 4;
           const dateW2 = (rightDecl.x + rightDecl.w - 2) - dateX2;
 
-   const dateLabelSize = 7.0; // you draw "Date" at 7.0
-const dateLabelWmm  = ptToMm(font.widthOfTextAtSize("Date", dateLabelSize));
-const gapAfterLabel = 1.2; // mm
+          const dateTextX1 = dateX1 + dateLabelWmm + gapAfterLabel;
+          const dateTextW1 = Math.max(1, (dateX1 + dateW1) - dateTextX1 - 0.6);
+          drawTextFit(page, font, authDate, dateTextX1, sigY - 1.2, dateTextW1, 6.6, 4.8);
 
-const dateTextX1 = dateX1 + dateLabelWmm + gapAfterLabel;
-const dateTextW1 = Math.max(1, (dateX1 + dateW1) - dateTextX1 - 0.6);
-drawTextFit(page, font, authDate, dateTextX1, sigY - 1.2, dateTextW1, 6.6, 4.8);
-
-const dateTextX2 = dateX2 + dateLabelWmm + gapAfterLabel;
-const dateTextW2 = Math.max(1, (dateX2 + dateW2) - dateTextX2 - 0.6);
-drawTextFit(page, font, authDate, dateTextX2, sigY2 - 1.2, dateTextW2, 6.6, 4.8);
-
+          const dateTextX2 = dateX2 + dateLabelWmm + gapAfterLabel;
+          const dateTextW2 = Math.max(1, (dateX2 + dateW2) - dateTextX2 - 0.6);
+          drawTextFit(page, font, authDate, dateTextX2, sigY2 - 1.2, dateTextW2, 6.6, 4.8);
         }
       }
     } catch (e) {
@@ -4546,105 +4516,106 @@ drawTextFit(page, font, authDate, dateTextX2, sigY2 - 1.2, dateTextW2, 6.6, 4.8)
 
     await bucket.put(outKey, outBytes, { httpMetadata: { contentType: "application/pdf" } });
 
-   // ---------- Persist refs used in GENERATED PDF ----------
-// Store exactly what is printed in the "Booking Ref" column (per shift), but persist as:
-//   - snapshot: ordered [{ row_key, current_reference }]
-//   - sig: sha256 over raw string "row_key=ref||row_key=ref..."
-try {
-  const refRows = [];
+    // ---------- Persist canonical refs used for GENERATED PDF ----------
+    // ✅ FIX: generated_pdf_refs_* must match the canonical DB reference model:
+    // - snapshot from public.timesheet_pdf_reference_rows(p_timesheet_id)
+    // - sig from public.timesheet_pdf_reference_sig(p_timesheet_id)
+    // This ensures SEGMENTS-mode refs match TSFIN truth and regen logic is stable.
+    try {
+      const asArray = (v) => {
+        if (v == null) return [];
+        if (Array.isArray(v)) return v;
+        if (v && typeof v === "object" && Array.isArray(v.data)) return v.data;
+        if (v && typeof v === "object" && Array.isArray(v.rows)) return v.rows;
+        return [v];
+      };
 
-  const scopeUpper = String(ts?.sheet_scope || "").toUpperCase();
+      const unwrapScalar = (v, fnName) => {
+        if (v == null) return null;
+        if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") return String(v);
+        if (v && typeof v === "object" && !Array.isArray(v) && Object.prototype.hasOwnProperty.call(v, "data")) {
+          return unwrapScalar(v.data, fnName);
+        }
+        if (Array.isArray(v)) {
+          if (v.length === 0) return null;
+          const o = v[0];
+          if (typeof o === "string" || typeof o === "number" || typeof o === "boolean") return String(o);
+          if (o && typeof o === "object") {
+            if (fnName && Object.prototype.hasOwnProperty.call(o, fnName)) return o[fnName] == null ? null : String(o[fnName]);
+            const ks = Object.keys(o);
+            if (ks.length === 1) return o[ks[0]] == null ? null : String(o[ks[0]]);
+          }
+          return null;
+        }
+        if (v && typeof v === "object") {
+          if (fnName && Object.prototype.hasOwnProperty.call(v, fnName)) return v[fnName] == null ? null : String(v[fnName]);
+          const ks = Object.keys(v);
+          if (ks.length === 1) return v[ks[0]] == null ? null : String(v[ks[0]]);
+        }
+        return null;
+      };
 
-  if (scopeUpper === "DAILY") {
-    // DAILY canonical row_key mirrors SQL: TIMESHEET target, blank segment_id
-    const dayYmd =
-      safeStr(workedYmd).slice(0, 10) ||
-      safeStr(isoToLocalYmd(ts?.worked_start_iso)).slice(0, 10) ||
-      safeStr(isoToLocalYmd(ts?.scheduled_start_iso)).slice(0, 10) ||
-      safeStr(ts?.week_ending_date).slice(0, 10) ||
-      "";
+      const tsIdEff = safeStr(ts?.timesheet_id || timesheetId);
 
-    const startUtc = safeStr(ts?.worked_start_iso || ts?.scheduled_start_iso || "");
-    const endUtc   = safeStr(ts?.worked_end_iso   || ts?.scheduled_end_iso   || "");
+      const rowsRes = await sbRpc(env, "timesheet_pdf_reference_rows", { p_timesheet_id: tsIdEff });
+      const rowsArr = asArray(rowsRes);
 
-    const rowKey =
-      `${safeStr(ts?.timesheet_id || timesheetId)}|TIMESHEET||${dayYmd}|${startUtc}|${endUtc}`;
+      const refRows = [];
+      for (const r of rowsArr) {
+        const rowKey = safeStr(r?.row_key || r?.rowKey).trim();
+        if (!rowKey) continue;
+        const refVal = (r && (r.current_reference ?? r.currentReference)) ?? null;
+        refRows.push({ row_key: rowKey, current_reference: (refVal == null ? null : String(refVal)) });
+      }
 
-    const refVal = safeStr(ts?.reference_number || "").trim();
+      refRows.sort((a, b) => safeStr(a.row_key).localeCompare(safeStr(b.row_key)));
 
-    refRows.push({ row_key: rowKey, current_reference: refVal });
-  } else {
-    // WEEKLY/SEGMENT rows: per shift line, stable segment_id when present else ts:<id>:<idx>
-    const src = Array.isArray(schedule) ? schedule : [];
+      let refsSig = null;
+      try {
+        const sigRes = await sbRpc(env, "timesheet_pdf_reference_sig", { p_timesheet_id: tsIdEff });
+        const sig = unwrapScalar(sigRes, "timesheet_pdf_reference_sig");
+        refsSig = (sig && safeStr(sig).trim()) ? safeStr(sig).trim() : null;
+      } catch {
+        refsSig = null;
+      }
 
-    for (let i = 0; i < src.length; i++) {
-      const seg = src[i];
-      const t = getSegTimes(seg);
-      if (!t.start || !t.end) continue;
+      if (!refsSig) {
+        const rawSig = refRows
+          .map(r => `${safeStr(r.row_key)}=${safeStr(r.current_reference)}`)
+          .join("||");
+        refsSig = await sha256Hex(rawSig);
+      }
 
-      const ymd = safeStr(seg?.date).slice(0, 10);
+      const nowIso = new Date().toISOString();
 
-      const segId =
-        safeStr(seg?.segment_id || "").trim() ||
-        `ts:${safeStr(ts?.timesheet_id || timesheetId)}:${i}`;
+      await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?timesheet_id=eq.${encodeURIComponent(tsIdEff)}` +
+          `&is_current=eq.true`,
+        {
+          method: "PATCH",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify({
+            generated_pdf_refs_snapshot_json: refRows,
+            generated_pdf_refs_sig: refsSig,
+            generated_pdf_refs_captured_at_utc: nowIso,
 
-      const startUtc = safeStr(seg?.start_utc || "");
-      const endUtc   = safeStr(seg?.end_utc || "");
+            // ✅ keep generated_pdf_at_utc in sync for non-worker renders
+            generated_pdf_at_utc: nowIso
 
-      const rowKey =
-        `${safeStr(ts?.timesheet_id || timesheetId)}|SEGMENT|${segId}|${ymd}|${startUtc}|${endUtc}`;
+            // ❌ DO NOT touch updated_at here (PDF bookkeeping must not mutate business updated_at)
+          })
+        }
+      );
 
-      const refVal =
-        safeStr(seg?.ref_num || "").trim() ||
-        safeStr(seg?.booking_ref || "").trim() ||
-        "";
-
-      refRows.push({ row_key: rowKey, current_reference: refVal });
+      L("PDF.REFS_SAVED", { sig: refsSig, refs_count: refRows.length });
+    } catch (e) {
+      L("PDF.REFS_SAVE_FAIL_NONFATAL", { err: e?.message || String(e) });
     }
-  }
-
-  // Deterministic order
-  refRows.sort((a, b) => safeStr(a.row_key).localeCompare(safeStr(b.row_key)));
-
-  // Canonical raw signature string (matches SQL manifest model)
-  const rawSig = refRows
-    .map(r => `${safeStr(r.row_key)}=${safeStr(r.current_reference)}`)
-    .join("||");
-
-  const refsSig = await sha256Hex(rawSig);
-  const nowIso = new Date().toISOString();
-
-  await sbFetch(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${encodeURIComponent(timesheetId)}` +
-      `&is_current=eq.true`,
-    {
-      method: "PATCH",
-      headers: { Prefer: "return=minimal" },
-      body: JSON.stringify({
-        generated_pdf_refs_snapshot_json: refRows,
-        generated_pdf_refs_sig: refsSig,
-        generated_pdf_refs_captured_at_utc: nowIso,
-
-        // ✅ keep generated_pdf_at_utc in sync for non-worker renders
-        generated_pdf_at_utc: nowIso
-
-        // ❌ DO NOT touch updated_at here (PDF bookkeeping must not mutate business updated_at)
-      })
-    }
-  );
-
-  L("PDF.REFS_SAVED", { sig: refsSig, refs_count: refRows.length });
-} catch (e) {
-  L("PDF.REFS_SAVE_FAIL_NONFATAL", { err: e?.message || String(e) });
-}
-
 
     L("DONE", { outKey, ms: Date.now() - T0 });
     return outKey;
-
-
   } catch (e) {
     L("FAIL", { err: e?.message || String(e), ms: Date.now() - T0 });
     throw e;
@@ -4652,133 +4623,6 @@ try {
 }
 
 
-async function renderTimesheetPDFAndSave(env, timesheetId, opts) {
-  const bucket = env.R2_BUCKET || env.R2;
-  if (!bucket?.get || !bucket?.put) throw new Error("Storage not configured");
-
-  const T0 = Date.now();
-  const LOGP = `[TS_PDF][${timesheetId}]`;
-  const L = (step, obj) => { try { console.log(`${LOGP} ${step}`, obj || {}); } catch {} };
-
-  const force_regen =
-    !!(opts && typeof opts === "object" && opts.force_regen);
-
-  L("START", { timesheetId, force_regen });
-
-  // Load TS row (CURRENT VERSION ONLY)
-  let ts = null;
-  try {
-    const { rows: tsRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=eq.${encodeURIComponent(timesheetId)}` +
-        `&is_current=eq.true` +
-        `&select=timesheet_id,qr_token,qr_status,qr_payload_json` +
-        `&limit=1`
-    );
-    ts = tsRows?.[0] || null;
-  } catch (e) {
-    L("DB.FAIL", { err: e?.message || String(e) });
-    throw e;
-  }
-
-  if (!ts) {
-    L("DB.MISS", {});
-    throw new Error("Timesheet not found");
-  }
-
-  const outKey = normalizeKey(`docs-pdf/timesheets/ts_${timesheetId}.pdf`);
-
-  const qrStatus = String(ts.qr_status || "").toUpperCase();
-
-  // payload could be object, stringified JSON, null
-  let payloadObj = null;
-  const payloadType = (ts.qr_payload_json === null) ? "null" : typeof ts.qr_payload_json;
-
-  if (ts.qr_payload_json && typeof ts.qr_payload_json === "object") {
-    payloadObj = ts.qr_payload_json;
-  } else if (typeof ts.qr_payload_json === "string") {
-    try {
-      payloadObj = JSON.parse(ts.qr_payload_json);
-    } catch (e) {
-      payloadObj = null;
-      L("PAYLOAD.PARSE_FAIL", { err: e?.message || String(e) });
-    }
-  }
-
-  const payloadTok = payloadObj && typeof payloadObj === "object"
-    ? String(payloadObj.tok || "").trim()
-    : "";
-
-  const qrToken = String(ts.qr_token || "").trim();
-  const hasAnyTok = !!(payloadTok || qrToken);
-
-  // ✅ Correct notion of “needs QR printable”
-  // We treat *any* PENDING QR as needing QR PDF behaviour, but we REQUIRE a token to avoid emailing blank/invalid QR.
-  const qrPending = (qrStatus === "PENDING");
-
-  if (qrPending && !hasAnyTok) {
-    L("DECIDE.ERROR", { qrStatus, payloadType, qrToken_present: !!qrToken, payloadTok_present: !!payloadTok });
-    throw new Error("QR is PENDING but no token found in qr_payload_json.tok or timesheets.qr_token");
-  }
-
-  // Policy:
-  // - If force_regen: ALWAYS render (skip cache checks)
-  // - Else if NOT pending: reuse cached PDF if it exists
-  // - Else if pending: render (safe for reissue; guarantees current QR is embedded)
-  let exists = false;
-  let action = "RENDER";
-
-  if (force_regen) {
-    action = "RENDER";
-    L("DECIDE", {
-      outKey,
-      qrStatus,
-      payloadType,
-      payloadTok_present: !!payloadTok,
-      qrToken_present: !!qrToken,
-      r2Exists: null,
-      action,
-      force_regen: true
-    });
-  } else {
-    // Check cache existence (only when not forcing regeneration)
-    try {
-      exists = await r2Exists(env, outKey);
-    } catch (e) {
-      L("R2.EXISTS_FAIL", { outKey, err: e?.message || String(e) });
-      exists = false;
-    }
-
-    action = (!qrPending && exists) ? "REUSE" : "RENDER";
-
-    L("DECIDE", {
-      outKey,
-      qrStatus,
-      payloadType,
-      payloadTok_present: !!payloadTok,
-      qrToken_present: !!qrToken,
-      r2Exists: exists,
-      action,
-      force_regen: false
-    });
-  }
-
-  if (action === "REUSE") {
-    L("REUSE", { outKey, ms: Date.now() - T0 });
-    return outKey;
-  }
-
-  // Render (overwrite if exists)
-  try {
-    const key = await renderTimesheetPDFGeneratedAndSave(env, timesheetId);
-    L("RENDER.OK", { outKey: key, ms: Date.now() - T0 });
-    return key;
-  } catch (e) {
-    L("RENDER.FAIL", { err: e?.message || String(e), ms: Date.now() - T0 });
-    throw e;
-  }
-}
 
 async function ensureTimesheetPdf(env, timesheetId, opts) {
   const enc = encodeURIComponent;
@@ -14908,6 +14752,533 @@ async function rebuildWeeklyTsfinForTimesheet(env, timesheetId, contract) {
   return { ok: true, mode: 'AGGREGATE_FALLBACK' };
 }
 
+async function handleTimesheetQrResendEmail(env, req, timesheetId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
+
+  // ✅ Guarded write: require expected_timesheet_id
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+
+  // ✅ stale-safe resolve
+  const resolved = await resolveTimesheetToCurrent(env, timesheetId);
+  if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
+  const currentTimesheetId = resolved.current_timesheet_id;
+
+  // ✅ Guard mismatch → 409 TIMESHEET_MOVED
+  if (String(expected) !== String(currentTimesheetId)) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetId }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
+
+  const cleanKey = (k) => String(k || '').replace(/^\/+/, '').trim();
+
+  const patchTimesheetCurrentOrThrow = async (patchBody, label) => {
+    const url =
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true`;
+
+    const r = await fetch(url, {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+      body: JSON.stringify(patchBody)
+    });
+
+    if (!r.ok) {
+      const t = await r.text().catch(() => '');
+      throw new Error(`[QR_RESEND] timesheet patch failed (${label}): ${r.status} ${t}`);
+    }
+  };
+
+  // Load current timesheet
+  let ts = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=*` +
+      `&limit=1`
+  );
+  if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
+
+  const scope = String(ts.sheet_scope || '').toUpperCase();
+
+  let qrStatus = String(ts.qr_status || '').toUpperCase();
+  let hasToken = !!(ts.qr_token && String(ts.qr_token).trim());
+  let hasGeneratedAt = !!ts.qr_generated_at;
+  let scannedAt = ts.qr_scanned_at || null;
+
+  // ✅ NEW: never allow resend/reissue if signed markers exist
+  const hasSignedMarkers =
+    !!ts.qr_scanned_at ||
+    !!(ts.qr_signed_hash && String(ts.qr_signed_hash).trim());
+  if (hasSignedMarkers) {
+    return withCORS(env, req, badRequest('Cannot resend/reissue: timesheet already has signed markers'));
+  }
+
+  if (qrStatus === 'EXPIRED') {
+    return withCORS(env, req, badRequest('QR is expired; reissue required'));
+  }
+  if (qrStatus !== 'PENDING') {
+    return withCORS(env, req, badRequest(`QR send not allowed (qr_status=${qrStatus || 'NULL'})`));
+  }
+
+  // Internal state classification (NOT user-facing)
+  const awaitingSignatureUpload = (hasToken && hasGeneratedAt && !scannedAt); // issued, not scanned
+  const notYetIssued = (!scannedAt && (!hasToken || !hasGeneratedAt));       // no token/gen
+
+  if (!notYetIssued && !awaitingSignatureUpload) {
+    return withCORS(env, req, badRequest('QR send not allowed in current state'));
+  }
+
+  // ✅ Must have hours before sending
+  const hasHoursForSend = (() => {
+    if (scope === 'WEEKLY') {
+      const arr = Array.isArray(ts.actual_schedule_json) ? ts.actual_schedule_json : [];
+      return arr.some(seg => {
+        if (!seg || typeof seg !== 'object') return false;
+        const s = String(seg.start || '').trim();
+        const e = String(seg.end || '').trim();
+        return !!(s && e);
+      });
+    }
+    const ws = ts.worked_start_iso ? String(ts.worked_start_iso).trim() : '';
+    const we = ts.worked_end_iso   ? String(ts.worked_end_iso).trim()   : '';
+    return !!(ws && we);
+  })();
+
+  if (!hasHoursForSend) {
+    return withCORS(env, req, badRequest('Cannot send: no hours recorded yet'));
+  }
+
+  // Resolve contract + candidate email first
+  if (!ts.contract_id) {
+    return withCORS(env, req, badRequest('Cannot send: timesheet.contract_id is missing'));
+  }
+
+  const contract = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contracts` +
+      `?id=eq.${enc(ts.contract_id)}` +
+      `&select=id,candidate_id,client_id` +
+      `&limit=1`
+  );
+  if (!contract) return withCORS(env, req, badRequest('Cannot send: contract not found'));
+
+  const cand = contract.candidate_id
+    ? await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=eq.${enc(contract.candidate_id)}` +
+          `&select=id,display_name,email` +
+          `&limit=1`
+      )
+    : null;
+
+  const toEmail = cand?.email ? String(cand.email).trim() : null;
+  if (!toEmail) return withCORS(env, req, badRequest('Candidate email not found'));
+
+  // TSFIN defence-in-depth
+  try {
+    const fin = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&is_current=eq.true` +
+        `&select=id,processing_status,locked_by_invoice_id,paid_at_utc` +
+        `&limit=1`
+    );
+
+    if (fin && (fin.locked_by_invoice_id || fin.paid_at_utc)) {
+      return withCORS(env, req, badRequest('Cannot send: timesheet is invoiced/locked or paid'));
+    }
+
+    if (fin && String(fin.processing_status || '').toUpperCase() !== 'AWAITING_MANUAL_SIGNATURE') {
+      const nowFix = nowIso();
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+          body: JSON.stringify({
+            processing_status: 'AWAITING_MANUAL_SIGNATURE',
+            updated_at: nowFix
+          })
+        }
+      ).catch(() => {});
+    }
+  } catch {}
+
+  const dateLabel =
+    (scope === 'WEEKLY')
+      ? (ts.week_ending_date || '')
+      : (ts.worked_start_iso ? String(ts.worked_start_iso).slice(0, 10) : '');
+
+  // ------------------------------------------------------------
+  // Hash: compute current printable-content hash (hours/layout content)
+  // ------------------------------------------------------------
+  const stableClone = (v) => {
+    if (Array.isArray(v)) return v.map(stableClone);
+    if (v && typeof v === 'object') {
+      const out = {};
+      for (const k of Object.keys(v).sort()) out[k] = stableClone(v[k]);
+      return out;
+    }
+    return v;
+  };
+
+  const hashObj = {
+    sheet_scope: scope || null,
+    week_ending_date: ts.week_ending_date || null,
+    worked_start_iso: ts.worked_start_iso || null,
+    worked_end_iso: ts.worked_end_iso || null,
+    break_start_iso: ts.break_start_iso || null,
+    break_end_iso: ts.break_end_iso || null,
+    break_minutes: (ts.break_minutes != null ? ts.break_minutes : null),
+    reference_number: ts.reference_number || null,
+    day_references_json: ts.day_references_json || null,
+    actual_schedule_json: ts.actual_schedule_json || null,
+    additional_units_week: ts.additional_units_week || null,
+    additional_units_per_day: ts.additional_units_per_day || null
+  };
+
+  let current_hash = null;
+  try {
+    current_hash = await sha256Hex(JSON.stringify(stableClone(hashObj)));
+  } catch (e) {
+    return withCORS(env, req, serverError(`Failed to compute QR content hash: ${e?.message || e}`));
+  }
+
+  const prev_last_sent_hash = (ts.qr_last_sent_hash != null) ? String(ts.qr_last_sent_hash) : '';
+  const hasPrevHash = !!String(prev_last_sent_hash || '').trim();
+  const canResendSameHours = hasPrevHash && (String(prev_last_sent_hash) === String(current_hash));
+
+  // ------------------------------------------------------------
+  // ✅ NEW: refs change detection uses canonical SQL reference sig
+  // This is the required "refs changed => reissue" behaviour (SEGMENTS-safe)
+  // ------------------------------------------------------------
+  const unwrapScalar = (v, fnName) => {
+    if (v == null) return null;
+    if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return String(v);
+    if (v && typeof v === 'object' && !Array.isArray(v) && Object.prototype.hasOwnProperty.call(v, 'data')) {
+      return unwrapScalar(v.data, fnName);
+    }
+    if (Array.isArray(v)) {
+      if (v.length === 0) return null;
+      const o = v[0];
+      if (typeof o === 'string' || typeof o === 'number' || typeof o === 'boolean') return String(o);
+      if (o && typeof o === 'object') {
+        if (fnName && Object.prototype.hasOwnProperty.call(o, fnName)) return o[fnName] == null ? null : String(o[fnName]);
+        const ks = Object.keys(o);
+        if (ks.length === 1) return o[ks[0]] == null ? null : String(o[ks[0]]);
+      }
+      return null;
+    }
+    if (v && typeof v === 'object') {
+      if (fnName && Object.prototype.hasOwnProperty.call(v, fnName)) return v[fnName] == null ? null : String(v[fnName]);
+      const ks = Object.keys(v);
+      if (ks.length === 1) return v[ks[0]] == null ? null : String(v[ks[0]]);
+    }
+    return null;
+  };
+
+  let current_refs_sig = null;
+  try {
+    const sigRes = await sbRpc(env, 'timesheet_pdf_reference_sig', { p_timesheet_id: currentTimesheetId });
+    const sig = unwrapScalar(sigRes, 'timesheet_pdf_reference_sig');
+    current_refs_sig = (sig && String(sig).trim()) ? String(sig).trim() : null;
+  } catch {
+    current_refs_sig = null; // non-fatal
+  }
+
+  const prev_refs_sig = (ts.qr_sent_refs_sig != null) ? String(ts.qr_sent_refs_sig).trim() : '';
+  const hasPrevRefsSig = !!prev_refs_sig;
+
+  const mustReissueBecauseHoursChanged =
+    awaitingSignatureUpload && hasPrevHash && !canResendSameHours;
+
+  const mustReissueBecauseNoBaselineHash =
+    awaitingSignatureUpload && !hasPrevHash;
+
+  // ✅ NEW: reference-change driven reissue (prevents signing old copy)
+  const mustReissueBecauseRefsChanged =
+    awaitingSignatureUpload &&
+    hasPrevRefsSig &&
+    !!current_refs_sig &&
+    (prev_refs_sig !== current_refs_sig);
+
+  const mustReissueBecauseNoBaselineRefsSig =
+    awaitingSignatureUpload &&
+    !hasPrevRefsSig &&
+    !!current_refs_sig;
+
+  let result = null; // 'NEW_ISSUED' | 'RESENT' | 'REISSUED'
+
+  // ------------------------------------------------------------
+  // If we need a new token: create it + persist token/gen properly
+  // ------------------------------------------------------------
+  let qrTokenToUse = (ts.qr_token && String(ts.qr_token).trim()) ? String(ts.qr_token).trim() : null;
+  let qr_r2_key = ts.qr_r2_key || null;
+
+  // ✅ NEW: remember old QR key so we can delete it if we reissue and successfully repoint
+  const oldQrKey = ts.qr_r2_key ? cleanKey(ts.qr_r2_key) : null;
+
+  if (
+    notYetIssued ||
+    mustReissueBecauseHoursChanged ||
+    mustReissueBecauseNoBaselineHash ||
+    mustReissueBecauseRefsChanged ||
+    mustReissueBecauseNoBaselineRefsSig
+  ) {
+    const now2 = nowIso();
+
+    let qrToken;
+    try {
+      qrToken = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+        ? crypto.randomUUID()
+        : `${currentTimesheetId}:${Date.now()}`;
+    } catch {
+      qrToken = `${currentTimesheetId}:${Date.now()}`;
+    }
+
+    // Store TSQ1 payload on current row
+    let qrRes = null;
+    try {
+      qrRes = await generateAndStoreTimesheetQr(env, {
+        timesheet_id: currentTimesheetId,
+        contract_week_id: null,
+        contract_id: contract.id,
+        candidate_id: contract.candidate_id || null,
+        client_id: contract.client_id || null,
+        week_ending_ymd: (scope === 'WEEKLY') ? (ts.week_ending_date || null) : (dateLabel || null),
+        qr_token: qrToken
+      });
+    } catch (e) {
+      return withCORS(env, req, serverError(`Failed to generate QR: ${e?.message || e}`));
+    }
+
+    qrTokenToUse = qrToken;
+    qr_r2_key = qrRes?.qr_r2_key || null;
+
+    try {
+      await patchTimesheetCurrentOrThrow({
+        qr_token: qrToken,
+        qr_status: 'PENDING',
+        qr_generated_at: now2,
+        qr_scanned_at: null,
+        qr_scan_info_json: null,
+        qr_r2_key: qr_r2_key || null,
+        updated_at: now2
+      }, 'issue_token');
+    } catch (e) {
+      return withCORS(env, req, serverError(e?.message || 'Failed to persist QR token'));
+    }
+
+    // ✅ NEW: delete old QR image key now that we replaced it (best-effort)
+    try {
+      const bucket = env.R2_BUCKET || env.R2;
+      const newQrKey = qr_r2_key ? cleanKey(qr_r2_key) : null;
+      if (bucket && typeof bucket.delete === 'function' && oldQrKey && newQrKey && oldQrKey !== newQrKey) {
+        await bucket.delete(oldQrKey).catch(() => {});
+      }
+    } catch {
+      // non-fatal
+    }
+
+    result = notYetIssued ? 'NEW_ISSUED' : 'REISSUED';
+
+    // Reload so any subsequent logic sees the issued state
+    ts = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&is_current=eq.true` +
+        `&select=*` +
+        `&limit=1`
+    );
+  } else {
+    result = 'RESENT';
+  }
+
+  // ✅ Ensure we have a GENERATED printable PDF to attach
+  let pdfKey = null;
+  try {
+    pdfKey = await renderTimesheetPDFAndSave(env, currentTimesheetId);
+  } catch (e) {
+    return withCORS(env, req, serverError('Failed to prepare timesheet PDF for send'));
+  }
+  if (!pdfKey) return withCORS(env, req, serverError('No PDF available to send'));
+
+  // ✅ OPTIONAL: ensure manual_pdf_r2_key points to the generated PDF if blank (materialises evidence)
+  try {
+    const patchUrl =
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&or=(manual_pdf_r2_key.is.null,manual_pdf_r2_key.eq.)`;
+
+    await fetch(
+      patchUrl,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify({
+          manual_pdf_r2_key: pdfKey,
+          updated_at: nowIso()
+        })
+      }
+    ).catch(() => {});
+  } catch {
+    // non-fatal
+  }
+
+  const subject =
+    (scope === 'WEEKLY')
+      ? `Weekly QR timesheet – week ending ${dateLabel || '(unknown)'}`
+      : `Daily QR timesheet – ${dateLabel || '(unknown date)'}`;
+
+  const lines = [
+    `Please print the attached timesheet, ask the ward manager to sign it,`,
+    `and then upload the signed copy via the app.`,
+    ``,
+    ...(dateLabel ? [`Date: ${dateLabel}`] : []),
+    `Timesheet ID: ${currentTimesheetId}`
+  ];
+  const body_text = lines.join('\n');
+  const body_html = `<p>${lines.map(l => (l === '' ? '<br/>' : l)).join('<br/>')}</p>`;
+
+  const insert = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
+    method: 'POST',
+    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+    body: JSON.stringify({
+      type: 'TIMESHEET_QR',
+      to: toEmail,
+      cc: null,
+      subject,
+      body_html,
+      body_text,
+      attachments: [{ r2_key: pdfKey, filename: `Timesheet_${dateLabel || currentTimesheetId}.pdf` }],
+      status: 'QUEUED',
+      reference: `timesheet_qr:${String(result || 'send').toLowerCase()}:${currentTimesheetId}`,
+      created_by: user?.id || null
+    })
+  });
+
+  if (!insert.ok) {
+    const t = await insert.text().catch(() => '');
+    return withCORS(env, req, serverError(`Failed to queue QR email: ${t}`));
+  }
+
+  // Persist last-sent hash + timestamp (non-fatal)
+  // ✅ FIX: qr_sent_refs_* derived from canonical SQL reference rows/sig (SEGMENTS-safe; does NOT rely on schedule)
+  const nowSent = nowIso();
+  try {
+    const asArray = (v) => {
+      if (v == null) return [];
+      if (Array.isArray(v)) return v;
+      if (v && typeof v === 'object' && Array.isArray(v.data)) return v.data;
+      if (v && typeof v === 'object' && Array.isArray(v.rows)) return v.rows;
+      return [v];
+    };
+
+    const rowsRes = await sbRpc(env, 'timesheet_pdf_reference_rows', { p_timesheet_id: currentTimesheetId });
+    const rowsArr = asArray(rowsRes);
+
+    const qrRefsRows = [];
+    for (const r of rowsArr) {
+      const rowKey = String(r?.row_key || r?.rowKey || '').trim();
+      if (!rowKey) continue;
+      const refVal = (r && (r.current_reference ?? r.currentReference)) ?? null;
+      qrRefsRows.push({ row_key: rowKey, current_reference: (refVal == null ? null : String(refVal)) });
+    }
+
+    qrRefsRows.sort((a, b) => String(a.row_key).localeCompare(String(b.row_key)));
+
+    let qrSentRefsSig = null;
+    try {
+      const sigRes = await sbRpc(env, 'timesheet_pdf_reference_sig', { p_timesheet_id: currentTimesheetId });
+      const sig = unwrapScalar(sigRes, 'timesheet_pdf_reference_sig');
+      qrSentRefsSig = (sig && String(sig).trim()) ? String(sig).trim() : null;
+    } catch {
+      qrSentRefsSig = null;
+    }
+
+    if (!qrSentRefsSig) {
+      const rawSig = qrRefsRows
+        .map(r => `${String(r.row_key)}=${String(r.current_reference ?? '')}`)
+        .join('||');
+      qrSentRefsSig = await sha256Hex(rawSig);
+    }
+
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&is_current=eq.true`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify({
+          qr_last_sent_hash: current_hash,
+          qr_last_sent_at_utc: nowSent,
+
+          qr_sent_refs_snapshot_json: qrRefsRows,
+          qr_sent_refs_sig: qrSentRefsSig,
+          qr_sent_refs_captured_at_utc: nowSent,
+
+          updated_at: nowSent
+        })
+      }
+    ).catch(() => {});
+  } catch {}
+
+  // Audit
+  try {
+    await writeAudit(
+      env,
+      user,
+      'QR_RESENT',
+      {
+        timesheet_id: currentTimesheetId,
+        pdf_r2_key: pdfKey,
+        to: toEmail,
+        result,
+        current_hash,
+        prev_last_sent_hash: prev_last_sent_hash || null,
+        qr_token_written: !!(qrTokenToUse && String(qrTokenToUse).trim())
+      },
+      { entity: 'timesheets', subject_id: currentTimesheetId, req }
+    );
+  } catch {}
+
+  return withCORS(env, req, ok({
+    queued: true,
+    result, // 'NEW_ISSUED' | 'RESENT' | 'REISSUED'
+    timesheet_id: currentTimesheetId,
+    current_timesheet_id: currentTimesheetId,
+    requested_timesheet_id: resolved.requested_timesheet_id || timesheetId,
+    was_stale: !!resolved.was_stale,
+
+    pdf_key: pdfKey,
+
+    // Action hints for UI
+    qr_can_resend_same_hours: true,
+    current_hash,
+    qr_last_sent_hash: current_hash
+  }));
+}
+
 async function handleTimesheetsSubmitWeekly(env, req) {
   // Public / broker: submit weekly timesheet (ELECTRONIC or QR intent)
   const enc = encodeURIComponent;
@@ -15638,7 +16009,7 @@ async function handleTimesheetsSubmitWeekly(env, req) {
     });
     qr_r2_key = qrRes?.qr_r2_key || null;
 
-    // Patch QR fields on the timesheet (⚠️ DO NOT include is_qr — it is not a column on timesheets)
+    // Patch QR fields on the timesheet
     const qrPatchRes = await fetch(
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
         `?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
@@ -15651,7 +16022,6 @@ async function handleTimesheetsSubmitWeekly(env, req) {
           qr_generated_at: now,
           qr_scanned_at: null,
           qr_scan_info_json: null,
-          // qr_payload_json left as set by generateAndStoreTimesheetQr
           qr_r2_key: qr_r2_key || null,
           updated_at: now
         })
@@ -15741,112 +16111,119 @@ async function handleTimesheetsSubmitWeekly(env, req) {
       });
     }
 
-   // ✅ UPDATED: when the email is queued, compute + persist last-sent hash AND QR refs snapshot (per-shift booking refs)
-// ✅ FIX: qr_sent_refs_sig now uses the canonical SQL-style signature:
-//   raw_sig = "row_key=ref||row_key=ref..." (ordered by row_key), sha256(raw_sig)
-if (emailQueued) {
-  try {
-    const stableClone = (v) => {
-      if (Array.isArray(v)) return v.map(stableClone);
-      if (v && typeof v === 'object') {
-        const out = {};
-        for (const k of Object.keys(v).sort()) out[k] = stableClone(v[k]);
-        return out;
+    // ✅ UPDATED: when the email is queued, compute + persist last-sent hash AND QR refs snapshot
+    // ✅ FIX: qr_sent_refs_* now uses canonical DB reference rows/sig (SEGMENTS-safe; does NOT rely on schedule)
+    if (emailQueued) {
+      try {
+        const stableClone = (v) => {
+          if (Array.isArray(v)) return v.map(stableClone);
+          if (v && typeof v === 'object') {
+            const out = {};
+            for (const k of Object.keys(v).sort()) out[k] = stableClone(v[k]);
+            return out;
+          }
+          return v;
+        };
+
+        const hashObj = {
+          sheet_scope: 'WEEKLY',
+          week_ending_date: cw.week_ending_date || null,
+          actual_schedule_json: actual_schedule_json || null,
+          reference_number: ts.reference_number || null,
+          day_references_json: ts.day_references_json || null,
+          additional_units_week: unitsWeek || {},
+          additional_units_per_day: unitsPerDay || {}
+        };
+
+        const current_hash = await sha256Hex(JSON.stringify(stableClone(hashObj)));
+        const sentAt = nowIso();
+
+        const unwrapScalar = (v, fnName) => {
+          if (v == null) return null;
+          if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return String(v);
+          if (v && typeof v === 'object' && !Array.isArray(v) && Object.prototype.hasOwnProperty.call(v, 'data')) {
+            return unwrapScalar(v.data, fnName);
+          }
+          if (Array.isArray(v)) {
+            if (v.length === 0) return null;
+            const o = v[0];
+            if (typeof o === 'string' || typeof o === 'number' || typeof o === 'boolean') return String(o);
+            if (o && typeof o === 'object') {
+              if (fnName && Object.prototype.hasOwnProperty.call(o, fnName)) return o[fnName] == null ? null : String(o[fnName]);
+              const ks = Object.keys(o);
+              if (ks.length === 1) return o[ks[0]] == null ? null : String(o[ks[0]]);
+            }
+            return null;
+          }
+          if (v && typeof v === 'object') {
+            if (fnName && Object.prototype.hasOwnProperty.call(v, fnName)) return v[fnName] == null ? null : String(v[fnName]);
+            const ks = Object.keys(v);
+            if (ks.length === 1) return v[ks[0]] == null ? null : String(v[ks[0]]);
+          }
+          return null;
+        };
+
+        const asArray = (v) => {
+          if (v == null) return [];
+          if (Array.isArray(v)) return v;
+          if (v && typeof v === 'object' && Array.isArray(v.data)) return v.data;
+          if (v && typeof v === 'object' && Array.isArray(v.rows)) return v.rows;
+          return [v];
+        };
+
+        const rowsRes = await sbRpc(env, 'timesheet_pdf_reference_rows', { p_timesheet_id: ts.timesheet_id });
+        const rowsArr = asArray(rowsRes);
+
+        const qrRefsRows = [];
+        for (const r of rowsArr) {
+          const rowKey = String(r?.row_key || r?.rowKey || '').trim();
+          if (!rowKey) continue;
+          const refVal = (r && (r.current_reference ?? r.currentReference)) ?? null;
+          qrRefsRows.push({ row_key: rowKey, current_reference: (refVal == null ? null : String(refVal)) });
+        }
+        qrRefsRows.sort((a, b) => String(a.row_key).localeCompare(String(b.row_key)));
+
+        let qrSentRefsSig = null;
+        try {
+          const sigRes = await sbRpc(env, 'timesheet_pdf_reference_sig', { p_timesheet_id: ts.timesheet_id });
+          const sig = unwrapScalar(sigRes, 'timesheet_pdf_reference_sig');
+          qrSentRefsSig = (sig && String(sig).trim()) ? String(sig).trim() : null;
+        } catch {
+          qrSentRefsSig = null;
+        }
+
+        if (!qrSentRefsSig) {
+          const rawSig = qrRefsRows
+            .map(r => `${String(r.row_key)}=${String(r.current_reference ?? '')}`)
+            .join('||');
+          qrSentRefsSig = await sha256Hex(rawSig);
+        }
+
+        await fetch(
+          `${env.SUPABASE_URL}/rest/v1/timesheets` +
+            `?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
+          {
+            method: 'PATCH',
+            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+            body: JSON.stringify({
+              qr_last_sent_hash: current_hash,
+              qr_last_sent_at_utc: sentAt,
+
+              qr_sent_refs_snapshot_json: qrRefsRows,
+              qr_sent_refs_sig: qrSentRefsSig,
+              qr_sent_refs_captured_at_utc: sentAt,
+
+              updated_at: sentAt
+            })
+          }
+        ).catch(() => {});
+      } catch (e) {
+        console.warn('[WEEKLY_QR][SUBMIT] failed to persist qr_last_sent_* (non-fatal)', {
+          timesheet_id: ts.timesheet_id,
+          err: e?.message || String(e)
+        });
       }
-      return v;
-    };
-
-    const hashObj = {
-      sheet_scope: 'WEEKLY',
-      week_ending_date: cw.week_ending_date || null,
-      actual_schedule_json: actual_schedule_json || null,
-      reference_number: ts.reference_number || null,
-      day_references_json: ts.day_references_json || null,
-      additional_units_week: unitsWeek || {},
-      additional_units_per_day: unitsPerDay || {}
-    };
-
-    const current_hash = await sha256Hex(JSON.stringify(stableClone(hashObj)));
-    const sentAt = nowIso();
-
-    // QR refs for WEEKLY = per-shift booking refs (the same field the PDF prints in "Booking Ref")
-    // Snapshot shape for DB: ordered list of { row_key, current_reference }.
-    const sched = Array.isArray(ts.actual_schedule_json)
-      ? ts.actual_schedule_json
-      : (Array.isArray(actual_schedule_json) ? actual_schedule_json : []);
-
-    const qrRefsRows = [];
-    for (let i = 0; i < sched.length; i++) {
-      const seg = sched[i];
-      if (!seg || typeof seg !== 'object') continue;
-
-      const sLocal = String(seg.start || '').trim();
-      const eLocal = String(seg.end || '').trim();
-      const sUtc = String(seg.start_utc || '').trim();
-      const eUtc = String(seg.end_utc || '').trim();
-
-      const hasLocal = !!(sLocal && eLocal);
-      const hasUtc = !!(sUtc && eUtc);
-      if (!hasLocal && !hasUtc) continue;
-
-      const dayYmd = String(seg.date || '').trim();
-
-      // ✅ Match SQL row model: prefer seg.segment_id, else stable fallback ts:<id>:<idx>
-      const segIdRaw = String(seg.segment_id || '').trim();
-      const segmentId = segIdRaw || `ts:${ts.timesheet_id}:${i}`;
-
-      const ref = String(
-        (seg.ref_num != null ? seg.ref_num : (seg.booking_ref != null ? seg.booking_ref : '')) || ''
-      ).trim();
-
-      const row_key =
-        String(ts.timesheet_id) +
-        '|SEGMENT' +
-        '|' + segmentId +
-        '|' + (dayYmd || '') +
-        '|' + (sUtc || '') +
-        '|' + (eUtc || '');
-
-      qrRefsRows.push({ row_key, current_reference: ref });
     }
-
-    qrRefsRows.sort((a, b) => String(a.row_key).localeCompare(String(b.row_key)));
-
-    const qrRefsSnapshot = stableClone(qrRefsRows);
-
-    // ✅ Canonical raw signature string (matches SQL manifest model)
-    const rawSig = qrRefsRows
-      .map(r => `${String(r.row_key)}=${String(r.current_reference ?? '')}`)
-      .join('||');
-
-    const qrSentRefsSig = await sha256Hex(rawSig);
-
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
-      {
-        method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify({
-          qr_last_sent_hash: current_hash,
-          qr_last_sent_at_utc: sentAt,
-
-          qr_sent_refs_snapshot_json: qrRefsSnapshot,
-          qr_sent_refs_sig: qrSentRefsSig,
-          qr_sent_refs_captured_at_utc: sentAt,
-
-          updated_at: sentAt
-        })
-      }
-    ).catch(() => {});
-  } catch (e) {
-    console.warn('[WEEKLY_QR][SUBMIT] failed to persist qr_last_sent_* (non-fatal)', {
-      timesheet_id: ts.timesheet_id,
-      err: e?.message || String(e)
-    });
-  }
-}
-
 
     // ✅ audit: QR issued (includes pdf key)
     try {
@@ -15878,6 +16255,7 @@ if (emailQueued) {
     email_queued: wantsQR ? !!emailQueued : null
   }));
 }
+
 
 // ─────────────────────────────────────────────────────────────
 // NEW HELPER: purge superseded (non-current) timesheet artifacts
@@ -34883,7 +35261,6 @@ async function handleHrAutoprocessPreview(env, req, importId) {
   }
 }
 
-
 async function handleHrAutoprocessApply(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
@@ -35005,13 +35382,7 @@ async function handleHrAutoprocessApply(env, req, importId) {
       ? body.decisions
       : {};
 
-  // ✅ Mode A email actions
-  // Updated: allow per-selection alternative recipient email (even when can_email=false).
-  // Accepted shapes (frontend may vary):
-  // - { timesheet_id, issue_fingerprint }
-  // - { timesheet_id, issue_fingerprint, recipient_email_override }
-  // - { timesheet_id, issue_fingerprint, alternative_email }
-  // - { timesheet_id, issue_fingerprint, alt_email }
+  // ✅ Mode A email actions (alt email overrides)
   const emailActionsIn = Array.isArray(body.email_actions)
     ? body.email_actions
     : (Array.isArray(body.send_email_actions) ? body.send_email_actions : []);
@@ -35022,17 +35393,19 @@ async function handleHrAutoprocessApply(env, req, importId) {
       const fp   = a?.issue_fingerprint ? String(a.issue_fingerprint).trim() : null;
 
       const alt =
-        normEmail(a?.recipient_email_override) ||
-        normEmail(a?.alternative_email) ||
         normEmail(a?.alt_email) ||
+        normEmail(a?.alternative_email) ||
+        normEmail(a?.alt_recipient_email) ||
+        normEmail(a?.to_email) ||
+        normEmail(a?.toEmail) ||
+        normEmail(a?.recipient_email_override) ||
         normEmail(a?.override_email) ||
         '';
 
-      // Send alt email to DB so RPC can use it to split email_jobs/items
       return {
         timesheet_id: tsId,
         issue_fingerprint: fp,
-        recipient_email_override: alt || null
+        ...(alt ? { alt_email: alt } : {})
       };
     })
     .filter(a => !!(a.timesheet_id && a.issue_fingerprint));
@@ -35046,7 +35419,6 @@ async function handleHrAutoprocessApply(env, req, importId) {
     false;
 
   // ✅ Destructive invalidation actions (checkbox-driven)
-  // Expected shape: [{ timesheet_id, comparison_key, invalidate }]
   const invalidationActionsIn = Array.isArray(body.invalidation_actions) ? body.invalidation_actions : [];
   const invalidationActions = invalidationActionsIn
     .filter(x => x && typeof x === 'object' && !Array.isArray(x))
@@ -35057,6 +35429,14 @@ async function handleHrAutoprocessApply(env, req, importId) {
     }))
     .filter(x => !!(x.timesheet_id && x.comparison_key));
 
+  // Optional: allow caller to request explicit tspdf enqueue for electronic refs-changed
+  const enqueueTspdfRegen =
+    boolish(body.enqueue_tspdf_regen) ||
+    boolish(body.enqueueTspdfRegen) ||
+    boolish(body.enqueue_pdf_regen) ||
+    boolish(body.enqueuePdfRegen) ||
+    false;
+
   logInfo({
     stage: 'start',
     import_id: importId,
@@ -35065,7 +35445,8 @@ async function handleHrAutoprocessApply(env, req, importId) {
     email_actions_count: emailActions.length,
     invalidation_actions_count: invalidationActions.length,
     include_missing_shifts: includeMissingShifts,
-    decisions_keys_count: Object.keys(decisions || {}).length
+    decisions_keys_count: Object.keys(decisions || {}).length,
+    enqueue_tspdf_regen: enqueueTspdfRegen
   });
 
   // ─────────────────────────────────────────────
@@ -35079,7 +35460,7 @@ async function handleHrAutoprocessApply(env, req, importId) {
         selected_action_ids: selectedActionIds,
         selected_actions: selectedActions,
         decisions,
-        email_actions: emailActions,                 // ✅ now contains recipient_email_override when provided
+        email_actions: emailActions,
         include_missing_shifts: includeMissingShifts,
         invalidation_actions: invalidationActions
       },
@@ -35102,17 +35483,28 @@ async function handleHrAutoprocessApply(env, req, importId) {
 
   const emailJobs = Array.isArray(applyPayload.email_jobs) ? applyPayload.email_jobs : [];
 
-  // ✅ TSFIN drain must include validation-changed timesheets as well.
+  // ✅ TSFIN drain: include affected + validation-affected + ref-updated (top-level + mode_a)
   const affectedBase = Array.isArray(applyPayload.affected_timesheet_ids) ? applyPayload.affected_timesheet_ids : [];
   const affectedValTop = Array.isArray(applyPayload.validation_affected_timesheet_ids) ? applyPayload.validation_affected_timesheet_ids : [];
   const affectedValModeA = Array.isArray(applyPayload?.mode_a?.validation_affected_timesheet_ids)
     ? applyPayload.mode_a.validation_affected_timesheet_ids
     : [];
-  const affectedTimesheetIds = uniqStrings([...(affectedBase || []), ...(affectedValTop || []), ...(affectedValModeA || [])]);
+
+  const affectedRefTop = Array.isArray(applyPayload.ref_updated_timesheet_ids) ? applyPayload.ref_updated_timesheet_ids : [];
+  const affectedRefModeA = Array.isArray(applyPayload?.mode_a?.ref_updated_timesheet_ids)
+    ? applyPayload.mode_a.ref_updated_timesheet_ids
+    : [];
+
+  const affectedTimesheetIds = uniqStrings([
+    ...(affectedBase || []),
+    ...(affectedValTop || []),
+    ...(affectedValModeA || []),
+    ...(affectedRefTop || []),
+    ...(affectedRefModeA || [])
+  ]);
 
   // ─────────────────────────────────────────────
-  // 2) Post-commit: queue emails best-effort
-  //    ✅ consolidated email (one per recipient) based on email_jobs items + overrides
+  // 2) Post-commit: queue emails best-effort (group by recipient)
   // ─────────────────────────────────────────────
   let emailsQueued = 0;
   const emailFailures = [];
@@ -35127,9 +35519,7 @@ async function handleHrAutoprocessApply(env, req, importId) {
     const nm = defRows?.[0]?.agency_name;
     const cleaned = (nm == null) ? '' : String(nm).trim();
     if (cleaned) agencyName = cleaned;
-  } catch {
-    // keep default
-  }
+  } catch {}
 
   const buildEmailHtmlTable = (items) => {
     const rows = Array.isArray(items) ? items : [];
@@ -35168,7 +35558,6 @@ async function handleHrAutoprocessApply(env, req, importId) {
 
       const ms = escapeHtml(String(it?.match_status || it?.status || '—'));
 
-      // Reference No. = "ref after" (or pre-normalized field)
       const refAfterRaw = (it?.reference_no != null)
         ? String(it.reference_no)
         : (it?.ref_after != null)
@@ -35201,21 +35590,15 @@ async function handleHrAutoprocessApply(env, req, importId) {
     `;
   };
 
-  // ✅ Consolidated email send:
-  // We group by recipient email using:
-  //   item.recipient_email_override (preferred) →
-  //   job.recipient_email →
-  //   item.recipient_email
-  //
-  // This ensures:
-  // - ticking one does not send all
-  // - alternative email can be used even when can_email=false / recipient missing
-  // - different alt emails produce separate emails with only relevant attachments/items
+  // Group recipient resolution:
+  // Prefer item alt/override fields, else job.recipient_email, else item.recipient_email
   const extractRecipientForItem = (job, item) => {
     const a =
-      normEmail(item?.recipient_email_override) ||
-      normEmail(item?.alternative_email) ||
       normEmail(item?.alt_email) ||
+      normEmail(item?.alternative_email) ||
+      normEmail(item?.alt_recipient_email) ||
+      normEmail(item?.recipient_email_override) ||
+      normEmail(item?.override_email) ||
       '';
     if (a) return a;
 
@@ -35247,8 +35630,6 @@ async function handleHrAutoprocessApply(env, req, importId) {
 
     for (const job of jobsArr) {
       const items = Array.isArray(job?.items) ? job.items : [];
-
-      // If there are no items, skip (nothing to send)
       if (!items.length) continue;
 
       for (const it0 of items) {
@@ -35270,7 +35651,6 @@ async function handleHrAutoprocessApply(env, req, importId) {
 
   const grouped = groupEmailWork();
 
-  // Send one email per recipient group
   for (const [recipientEmail, pack] of grouped.entries()) {
     const items = Array.isArray(pack?.items) ? pack.items : [];
     const tsIds = (pack?.tsIds instanceof Set) ? Array.from(pack.tsIds) : [];
@@ -35281,7 +35661,6 @@ async function handleHrAutoprocessApply(env, req, importId) {
       continue;
     }
 
-    // Ensure all PDFs (only for the relevant timesheets)
     const attachments = [];
     for (const tsIdRaw of tsIds) {
       const tsId = String(tsIdRaw || '').trim();
@@ -35391,7 +35770,6 @@ async function handleHrAutoprocessApply(env, req, importId) {
 
   if (affectedTimesheetIds.length) {
     try {
-      // Ensure everything is enqueued (idempotent; DB already enqueued, but we guarantee here too)
       try {
         const enqRaw = await sbRpc(env, 'enqueue_ts_financials_priority', {
           _timesheet_ids: affectedTimesheetIds,
@@ -35424,10 +35802,7 @@ async function handleHrAutoprocessApply(env, req, importId) {
         tsfinDrainStats.pending_ready = Number(pending?.ready ?? 0) || 0;
         tsfinDrainStats.pending_next_attempt_at_min = pending?.next_attempt_at_min ?? null;
 
-        // Definitive done condition: no outbox rows remain for these ids.
         if (tsfinDrainStats.pending_total === 0) break;
-
-        // No work picked but rows remain => leased/scheduled elsewhere; cannot claim fresh.
         if (!res || Number(res?.picked || 0) === 0) break;
       }
 
@@ -35497,6 +35872,76 @@ async function handleHrAutoprocessApply(env, req, importId) {
   }
 
   // ─────────────────────────────────────────────
+  // 3.5) Post-TSFIN: detect QR reissue candidates + optional tspdf enqueue
+  // ─────────────────────────────────────────────
+  let qrReissueCandidates = [];
+  let docFlagsRows = [];
+  let tspdfEnqueued = 0;
+  let tspdfTargetCount = 0;
+
+  if (affectedTimesheetIds.length) {
+    try {
+      const flagsRaw = await sbRpc(env, 'timesheet_doc_flags_batch', {
+        p_timesheet_ids: affectedTimesheetIds
+      });
+
+      docFlagsRows = Array.isArray(flagsRaw) ? flagsRaw : [];
+      qrReissueCandidates = docFlagsRows
+        .filter(r => r && (r.qr_refs_changed === true || r.qr_refs_changed === 'true' || r.qr_refs_changed === 1 || r.qr_refs_changed === '1'))
+        .map(r => ({
+          timesheet_id: String(r.timesheet_id || '').trim() || null,
+          candidate_id: r.candidate_id || null,
+          candidate_name: (r.candidate_name != null ? String(r.candidate_name) : null),
+          client_id: r.client_id || null,
+          client_name: (r.client_name != null ? String(r.client_name) : null),
+          sheet_scope: (r.sheet_scope != null ? String(r.sheet_scope) : null),
+          week_ending_date: (r.week_ending_date != null ? String(r.week_ending_date).slice(0, 10) : null),
+          qr_status: (r.qr_status != null ? String(r.qr_status) : null),
+          current_refs_sig: (r.current_refs_sig != null ? String(r.current_refs_sig) : null),
+          qr_sent_refs_sig: (r.qr_sent_refs_sig != null ? String(r.qr_sent_refs_sig) : null),
+          generated_pdf_refs_sig: (r.generated_pdf_refs_sig != null ? String(r.generated_pdf_refs_sig) : null)
+        }))
+        .filter(x => !!x.timesheet_id);
+
+      if (enqueueTspdfRegen) {
+        const elecIds = uniqStrings(
+          docFlagsRows
+            .filter(r => r && (r.electronic_refs_changed === true || r.electronic_refs_changed === 'true' || r.electronic_refs_changed === 1 || r.electronic_refs_changed === '1'))
+            .map(r => r.timesheet_id)
+        );
+
+        tspdfTargetCount = elecIds.length;
+
+        if (elecIds.length) {
+          const enqRaw = await sbRpc(env, 'tspdf_enqueue_many', {
+            p_timesheet_ids: elecIds,
+            p_force_regen: true,
+            p_prefer_generated: true,
+            p_reason: null,
+            p_limit: 500
+          });
+
+          const enqNum =
+            (typeof enqRaw === 'number' || typeof enqRaw === 'string')
+              ? Number(enqRaw)
+              : (Array.isArray(enqRaw) ? Number(enqRaw?.[0]?.tspdf_enqueue_many ?? enqRaw?.[0]?.count ?? enqRaw?.[0]?.row_count) : NaN);
+
+          tspdfEnqueued = (Number.isFinite(enqNum) ? enqNum : 0);
+        }
+      }
+    } catch (e) {
+      logWarn({
+        stage: 'doc_flags_batch_failed_non_fatal',
+        import_id: importId,
+        err: String(e?.message || e || '')
+      });
+      qrReissueCandidates = [];
+      tspdfEnqueued = 0;
+      tspdfTargetCount = 0;
+    }
+  }
+
+  // ─────────────────────────────────────────────
   // 4) Post-commit: audit best-effort
   // ─────────────────────────────────────────────
   try {
@@ -35510,7 +35955,10 @@ async function handleHrAutoprocessApply(env, req, importId) {
         mode_b: applyPayload?.mode_b || null,
         emails_queued: emailsQueued,
         email_failures: emailFailures.slice(0, 50),
-        tsfin_drain: tsfinDrainStats
+        tsfin_drain: tsfinDrainStats,
+        qr_reissue_candidates_count: qrReissueCandidates.length,
+        tspdf_enqueued: tspdfEnqueued,
+        tspdf_target_count: tspdfTargetCount
       },
       { entity: 'hr_imports', subject_id: importId, req }
     );
@@ -35528,6 +35976,8 @@ async function handleHrAutoprocessApply(env, req, importId) {
   return withCORS(env, req, ok({
     import_id: importId,
     apply: applyPayload,
+    qr_reissue_candidates: qrReissueCandidates,
+    tspdf_regen: enqueueTspdfRegen ? { target_count: tspdfTargetCount, enqueued: tspdfEnqueued } : { target_count: 0, enqueued: 0 },
     post_commit: {
       emails_queued: emailsQueued,
       email_failures: emailFailures,
@@ -35536,6 +35986,461 @@ async function handleHrAutoprocessApply(env, req, importId) {
   }));
 }
 
+
+async function handleHrWeeklyQrReissueBatch(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let body;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return withCORS(env, req, badRequest('Invalid JSON body'));
+  }
+
+  const uniqStrings = (arr) => {
+    const out = [];
+    const seen = new Set();
+    for (const x of (Array.isArray(arr) ? arr : [])) {
+      const s = String(x || '').trim();
+      if (!s) continue;
+      if (seen.has(s)) continue;
+      seen.add(s);
+      out.push(s);
+    }
+    return out;
+  };
+
+  const asBool = (v) => (v === true || v === 'true' || v === 1 || v === '1');
+
+  const unwrapScalar = (raw, fnName) => {
+    if (raw == null) return null;
+    if (typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean') return String(raw);
+    if (Array.isArray(raw)) {
+      if (!raw.length) return null;
+      const o = raw[0];
+      if (typeof o === 'string' || typeof o === 'number' || typeof o === 'boolean') return String(o);
+      if (o && typeof o === 'object') {
+        if (fnName && Object.prototype.hasOwnProperty.call(o, fnName)) return o[fnName] == null ? null : String(o[fnName]);
+        const ks = Object.keys(o);
+        if (ks.length === 1) return o[ks[0]] == null ? null : String(o[ks[0]]);
+      }
+      return null;
+    }
+    if (raw && typeof raw === 'object') {
+      if (fnName && Object.prototype.hasOwnProperty.call(raw, fnName)) return raw[fnName] == null ? null : String(raw[fnName]);
+      const ks = Object.keys(raw);
+      if (ks.length === 1) return raw[ks[0]] == null ? null : String(raw[ks[0]]);
+    }
+    return null;
+  };
+
+  const stableClone = (v) => {
+    if (Array.isArray(v)) return v.map(stableClone);
+    if (v && typeof v === 'object') {
+      const out = {};
+      for (const k of Object.keys(v).sort()) out[k] = stableClone(v[k]);
+      return out;
+    }
+    return v;
+  };
+
+  const nowSent = () => (typeof nowIso === 'function' ? nowIso() : new Date().toISOString());
+
+  const cleanKey = (k) => String(k || '').replace(/^\/+/, '').trim();
+
+  const timesheetIds = uniqStrings(body.timesheet_ids || body.timesheetIds || []);
+  if (!timesheetIds.length) {
+    return withCORS(env, req, badRequest('timesheet_ids[] is required'));
+  }
+
+  const results = [];
+
+  for (const requestedId of timesheetIds) {
+    const out = {
+      requested_timesheet_id: requestedId,
+      current_timesheet_id: null,
+      ok: false,
+      error: null
+    };
+
+    try {
+      // stale-safe resolve
+      const resolved = await resolveTimesheetToCurrent(env, requestedId);
+      if (!resolved || !resolved.current_timesheet_id) {
+        out.error = 'TIMESHEET_NOT_FOUND';
+        results.push(out);
+        continue;
+      }
+      const tsid = String(resolved.current_timesheet_id);
+      out.current_timesheet_id = tsid;
+
+      // Load current timesheet
+      let ts = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?timesheet_id=eq.${encodeURIComponent(tsid)}` +
+          `&is_current=eq.true` +
+          `&select=*` +
+          `&limit=1`
+      );
+      if (!ts) {
+        out.error = 'TIMESHEET_NOT_FOUND';
+        results.push(out);
+        continue;
+      }
+
+      // Block if signed markers exist
+      const hasSignedMarkers =
+        !!ts.qr_scanned_at ||
+        !!(ts.qr_signed_hash && String(ts.qr_signed_hash).trim());
+      if (hasSignedMarkers) {
+        out.error = 'QR_ALREADY_SIGNED';
+        results.push(out);
+        continue;
+      }
+
+      // Must be issued-but-unsigned (PENDING + token + generated_at)
+      const qrStatus = String(ts.qr_status || '').toUpperCase();
+      const hasToken = !!(ts.qr_token && String(ts.qr_token).trim());
+      const hasGen = !!ts.qr_generated_at;
+
+      if (qrStatus !== 'PENDING' || !hasToken || !hasGen) {
+        out.error = 'QR_NOT_ISSUED_PENDING';
+        results.push(out);
+        continue;
+      }
+
+      // TSFIN lock check
+      const fin = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=eq.${encodeURIComponent(tsid)}` +
+          `&is_current=eq.true` +
+          `&select=id,locked_by_invoice_id,paid_at_utc,invoice_breakdown_json,client_id,candidate_id` +
+          `&limit=1`
+      ).catch(() => null);
+
+      if (fin && (fin.locked_by_invoice_id || fin.paid_at_utc)) {
+        out.error = 'TIMESHEET_LOCKED_OR_PAID';
+        results.push(out);
+        continue;
+      }
+
+      const scope = String(ts.sheet_scope || '').toUpperCase();
+
+      // Must have hours before sending:
+      const hasHoursForSend = (() => {
+        if (scope === 'WEEKLY') {
+          const sched = Array.isArray(ts.actual_schedule_json) ? ts.actual_schedule_json : [];
+          const hasSchedHours = sched.some(seg => {
+            if (!seg || typeof seg !== 'object') return false;
+            const s = String(seg.start || '').trim();
+            const e = String(seg.end || '').trim();
+            return !!(s && e);
+          });
+
+          const ibj = (fin && fin.invoice_breakdown_json && typeof fin.invoice_breakdown_json === 'object') ? fin.invoice_breakdown_json : null;
+          const mode = String(ibj?.mode || '').toUpperCase();
+          const segs = Array.isArray(ibj?.segments) ? ibj.segments : [];
+          const hasSegEvidence = (mode === 'SEGMENTS' && segs.length > 0);
+
+          return hasSchedHours || hasSegEvidence;
+        }
+
+        const ws = ts.worked_start_iso ? String(ts.worked_start_iso).trim() : '';
+        const we = ts.worked_end_iso   ? String(ts.worked_end_iso).trim()   : '';
+        return !!(ws && we);
+      })();
+
+      if (!hasHoursForSend) {
+        out.error = 'NO_HOURS_RECORDED';
+        results.push(out);
+        continue;
+      }
+
+      // Resolve candidate + email (contract preferred, fallback to TSFIN candidate_id)
+      let candidateId = null;
+      let clientId = null;
+
+      if (ts.contract_id) {
+        const contract = await sbGetOne(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/contracts` +
+            `?id=eq.${encodeURIComponent(ts.contract_id)}` +
+            `&select=id,candidate_id,client_id` +
+            `&limit=1`
+        ).catch(() => null);
+
+        candidateId = contract?.candidate_id || null;
+        clientId = contract?.client_id || null;
+      }
+
+      if (!candidateId && fin?.candidate_id) candidateId = fin.candidate_id;
+      if (!clientId && fin?.client_id) clientId = fin.client_id;
+
+      if (!candidateId) {
+        out.error = 'CANDIDATE_NOT_FOUND';
+        results.push(out);
+        continue;
+      }
+
+      const cand = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=eq.${encodeURIComponent(candidateId)}` +
+          `&select=id,display_name,email` +
+          `&limit=1`
+      ).catch(() => null);
+
+      const toEmail = (cand?.email ? String(cand.email).trim() : '');
+      if (!toEmail) {
+        out.error = 'CANDIDATE_EMAIL_MISSING';
+        results.push(out);
+        continue;
+      }
+
+      // Compute "content hash" baseline (hours/schedule/etc) like resend handler, so future resends work
+      const hashObj = {
+        sheet_scope: scope || null,
+        week_ending_date: ts.week_ending_date || null,
+        worked_start_iso: ts.worked_start_iso || null,
+        worked_end_iso: ts.worked_end_iso || null,
+        break_start_iso: ts.break_start_iso || null,
+        break_end_iso: ts.break_end_iso || null,
+        break_minutes: (ts.break_minutes != null ? ts.break_minutes : null),
+        reference_number: ts.reference_number || null,
+        day_references_json: ts.day_references_json || null,
+        actual_schedule_json: ts.actual_schedule_json || null,
+        additional_units_week: ts.additional_units_week || null,
+        additional_units_per_day: ts.additional_units_per_day || null
+      };
+
+      let current_hash = null;
+      try {
+        current_hash = await sha256Hex(JSON.stringify(stableClone(hashObj)));
+      } catch {
+        current_hash = null;
+      }
+
+      // Force reissue: new token + new QR image
+      const oldQrKey = ts.qr_r2_key ? cleanKey(ts.qr_r2_key) : null;
+
+      let newToken;
+      try {
+        newToken = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+          ? crypto.randomUUID()
+          : `${tsid}:${Date.now()}`;
+      } catch {
+        newToken = `${tsid}:${Date.now()}`;
+      }
+
+      // Generate/store QR (also produces qr_r2_key)
+      const qrRes = await generateAndStoreTimesheetQr(env, {
+        timesheet_id: tsid,
+        contract_week_id: null,
+        contract_id: ts.contract_id || null,
+        candidate_id: candidateId,
+        client_id: clientId,
+        week_ending_ymd: (scope === 'WEEKLY')
+          ? (ts.week_ending_date || null)
+          : (ts.worked_start_iso ? String(ts.worked_start_iso).slice(0, 10) : null),
+        qr_token: newToken
+      });
+
+      const newQrKey = qrRes?.qr_r2_key || null;
+
+      // Patch timesheet QR metadata (current row)
+      const patchUrl =
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${encodeURIComponent(tsid)}` +
+        `&is_current=eq.true`;
+
+      const nowIsoSent = nowSent();
+
+      const patchResp = await fetch(patchUrl, {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify({
+          qr_token: newToken,
+          qr_status: 'PENDING',
+          qr_generated_at: nowIsoSent,
+          qr_scanned_at: null,
+          qr_scan_info_json: null,
+          qr_r2_key: newQrKey || null,
+          updated_at: nowIsoSent
+        })
+      });
+
+      if (!patchResp.ok) {
+        const t = await patchResp.text().catch(() => '');
+        throw new Error(`QR_PATCH_FAILED ${patchResp.status} ${t}`);
+      }
+
+      // Best-effort delete old QR image if replaced
+      try {
+        const bucket = env.R2_BUCKET || env.R2;
+        const newQrKeyClean = newQrKey ? cleanKey(newQrKey) : null;
+        if (bucket && typeof bucket.delete === 'function' && oldQrKey && newQrKeyClean && oldQrKey !== newQrKeyClean) {
+          await bucket.delete(oldQrKey).catch(() => {});
+        }
+      } catch {}
+
+      // Render PDF with forced regen (so the new QR is embedded)
+      const pdfKey = await renderTimesheetPDFAndSave(env, tsid, { force_regen: true });
+
+      if (!pdfKey) throw new Error('PDF_GENERATION_FAILED');
+
+      // Materialise manual_pdf_r2_key if blank (best-effort)
+      try {
+        const patchUrl2 =
+          `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?timesheet_id=eq.${encodeURIComponent(tsid)}` +
+          `&is_current=eq.true` +
+          `&or=(manual_pdf_r2_key.is.null,manual_pdf_r2_key.eq.)`;
+
+        await fetch(patchUrl2, {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+          body: JSON.stringify({
+            manual_pdf_r2_key: pdfKey,
+            updated_at: nowIsoSent
+          })
+        }).catch(() => {});
+      } catch {}
+
+      const dateLabel =
+        (scope === 'WEEKLY')
+          ? (ts.week_ending_date || '')
+          : (ts.worked_start_iso ? String(ts.worked_start_iso).slice(0, 10) : '');
+
+      const subject =
+        (scope === 'WEEKLY')
+          ? `Weekly QR timesheet – week ending ${dateLabel || '(unknown)'}`
+          : `Daily QR timesheet – ${dateLabel || '(unknown date)'}`;
+
+      const lines = [
+        `Please print the attached timesheet, ask the ward manager to sign it,`,
+        `and then upload the signed copy via the app.`,
+        ``,
+        ...(dateLabel ? [`Date: ${dateLabel}`] : []),
+        `Timesheet ID: ${tsid}`
+      ];
+      const body_text = lines.join('\n');
+      const body_html = `<p>${lines.map(l => (l === '' ? '<br/>' : escapeHtml(l))).join('<br/>')}</p>`;
+
+      // Queue email
+      const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
+        method: 'POST',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        body: JSON.stringify({
+          type: 'TIMESHEET_QR',
+          to: toEmail,
+          cc: null,
+          subject,
+          body_html,
+          body_text,
+          attachments: [{ r2_key: pdfKey, filename: `Timesheet_${dateLabel || tsid}.pdf` }],
+          status: 'QUEUED',
+          reference: `timesheet_qr:reissue_batch:${tsid}`,
+          created_by: user?.id || null
+        })
+      });
+
+      if (!ins.ok) {
+        const t = await ins.text().catch(() => '');
+        throw new Error(`MAIL_OUTBOX_INSERT_FAILED ${ins.status} ${t}`);
+      }
+
+      // Persist qr_sent_refs_* from canonical DB refs at send time
+      let refRows = [];
+      let sigVal = null;
+
+      try {
+        const rowsRaw = await sbRpc(env, 'timesheet_pdf_reference_rows', { p_timesheet_id: tsid });
+        const rowsArr = Array.isArray(rowsRaw) ? rowsRaw : [];
+        refRows = rowsArr
+          .map(r => ({
+            row_key: (r && r.row_key != null) ? String(r.row_key) : '',
+            current_reference: (r && r.current_reference != null) ? String(r.current_reference) : ''
+          }))
+          .filter(r => !!String(r.row_key || '').trim())
+          .sort((a, b) => String(a.row_key).localeCompare(String(b.row_key)));
+
+        const sigRaw = await sbRpc(env, 'timesheet_pdf_reference_sig', { p_timesheet_id: tsid });
+        sigVal = unwrapScalar(sigRaw, 'timesheet_pdf_reference_sig');
+        sigVal = (sigVal && String(sigVal).trim()) ? String(sigVal).trim() : null;
+
+        if (!sigVal) {
+          const rawSig = refRows.map(r => `${String(r.row_key)}=${String(r.current_reference ?? '')}`).join('||');
+          sigVal = await sha256Hex(rawSig);
+        }
+      } catch (e) {
+        // If refs capture fails, do not fail the reissue; but mark error in response.
+        sigVal = null;
+      }
+
+      // Update last-sent tracking + refs sigs
+      try {
+        const patchRefs = await fetch(
+          `${env.SUPABASE_URL}/rest/v1/timesheets` +
+            `?timesheet_id=eq.${encodeURIComponent(tsid)}` +
+            `&is_current=eq.true`,
+          {
+            method: 'PATCH',
+            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+            body: JSON.stringify({
+              ...(current_hash ? { qr_last_sent_hash: current_hash } : {}),
+              qr_last_sent_at_utc: nowIsoSent,
+
+              ...(sigVal ? {
+                qr_sent_refs_snapshot_json: refRows,
+                qr_sent_refs_sig: sigVal,
+                qr_sent_refs_captured_at_utc: nowIsoSent
+              } : {}),
+
+              updated_at: nowIsoSent
+            })
+          }
+        ).catch(() => null);
+
+        void patchRefs;
+      } catch {}
+
+      // Audit (best-effort)
+      try {
+        await writeAudit(
+          env,
+          user,
+          'QR_REISSUED_BATCH',
+          {
+            timesheet_id: tsid,
+            to: toEmail,
+            pdf_r2_key: pdfKey,
+            qr_r2_key: newQrKey || null
+          },
+          { entity: 'timesheets', subject_id: tsid, req }
+        );
+      } catch {}
+
+      out.ok = true;
+      results.push(out);
+    } catch (e) {
+      out.error = String(e?.message || e || 'UNKNOWN_ERROR');
+      results.push(out);
+    }
+  }
+
+  const okCount = results.filter(r => r && r.ok === true).length;
+  const failCount = results.length - okCount;
+
+  return withCORS(env, req, ok({
+    ok: true,
+    requested_count: timesheetIds.length,
+    ok_count: okCount,
+    fail_count: failCount,
+    results
+  }));
+}
 
 async function handleHrRotaValidationApply(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
@@ -61839,7 +62744,179 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
 }
 
 
+async function renderTimesheetPDFAndSave(env, timesheetId, opts) {
+  const bucket = env.R2_BUCKET || env.R2;
+  if (!bucket?.get || !bucket?.put) throw new Error("Storage not configured");
 
+  const T0 = Date.now();
+  const LOGP = `[TS_PDF][${timesheetId}]`;
+  const L = (step, obj) => { try { console.log(`${LOGP} ${step}`, obj || {}); } catch {} };
+
+  const force_regen =
+    !!(opts && typeof opts === "object" && opts.force_regen);
+
+  L("START", { timesheetId, force_regen });
+
+  // Load TS row (CURRENT VERSION ONLY)
+  let ts = null;
+  try {
+    const { rows: tsRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${encodeURIComponent(timesheetId)}` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,qr_token,qr_status,qr_payload_json,generated_pdf_refs_sig` +
+        `&limit=1`
+    );
+    ts = tsRows?.[0] || null;
+  } catch (e) {
+    L("DB.FAIL", { err: e?.message || String(e) });
+    throw e;
+  }
+
+  if (!ts) {
+    L("DB.MISS", {});
+    throw new Error("Timesheet not found");
+  }
+
+  const outKey = normalizeKey(`docs-pdf/timesheets/ts_${timesheetId}.pdf`);
+
+  const qrStatus = String(ts.qr_status || "").toUpperCase();
+
+  // payload could be object, stringified JSON, null
+  let payloadObj = null;
+  const payloadType = (ts.qr_payload_json === null) ? "null" : typeof ts.qr_payload_json;
+
+  if (ts.qr_payload_json && typeof ts.qr_payload_json === "object") {
+    payloadObj = ts.qr_payload_json;
+  } else if (typeof ts.qr_payload_json === "string") {
+    try {
+      payloadObj = JSON.parse(ts.qr_payload_json);
+    } catch (e) {
+      payloadObj = null;
+      L("PAYLOAD.PARSE_FAIL", { err: e?.message || String(e) });
+    }
+  }
+
+  const payloadTok = payloadObj && typeof payloadObj === "object"
+    ? String(payloadObj.tok || "").trim()
+    : "";
+
+  const qrToken = String(ts.qr_token || "").trim();
+  const hasAnyTok = !!(payloadTok || qrToken);
+
+  // ✅ Correct notion of “needs QR printable”
+  // We treat *any* PENDING QR as needing QR PDF behaviour, but we REQUIRE a token to avoid emailing blank/invalid QR.
+  const qrPending = (qrStatus === "PENDING");
+
+  if (qrPending && !hasAnyTok) {
+    L("DECIDE.ERROR", { qrStatus, payloadType, qrToken_present: !!qrToken, payloadTok_present: !!payloadTok });
+    throw new Error("QR is PENDING but no token found in qr_payload_json.tok or timesheets.qr_token");
+  }
+
+  // ✅ NEW: For non-QR renders, do not reuse cached PDF if references have changed.
+  // This uses the canonical DB signature (timesheet_pdf_reference_sig) vs timesheets.generated_pdf_refs_sig.
+  const unwrapScalar = (v, fnName) => {
+    if (v == null) return null;
+    if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") return String(v);
+    if (v && typeof v === "object" && !Array.isArray(v) && Object.prototype.hasOwnProperty.call(v, "data")) {
+      return unwrapScalar(v.data, fnName);
+    }
+    if (Array.isArray(v)) {
+      if (v.length === 0) return null;
+      const o = v[0];
+      if (typeof o === "string" || typeof o === "number" || typeof o === "boolean") return String(o);
+      if (o && typeof o === "object") {
+        if (fnName && Object.prototype.hasOwnProperty.call(o, fnName)) return o[fnName] == null ? null : String(o[fnName]);
+        const ks = Object.keys(o);
+        if (ks.length === 1) return o[ks[0]] == null ? null : String(o[ks[0]]);
+      }
+      return null;
+    }
+    if (v && typeof v === "object") {
+      if (fnName && Object.prototype.hasOwnProperty.call(v, fnName)) return v[fnName] == null ? null : String(v[fnName]);
+      const ks = Object.keys(v);
+      if (ks.length === 1) return v[ks[0]] == null ? null : String(v[ks[0]]);
+    }
+    return null;
+  };
+
+  let exists = false;
+  let action = "RENDER";
+  let current_refs_sig = null;
+  const prev_generated_refs_sig = (ts.generated_pdf_refs_sig != null) ? String(ts.generated_pdf_refs_sig).trim() : "";
+
+  if (force_regen) {
+    action = "RENDER";
+    L("DECIDE", {
+      outKey,
+      qrStatus,
+      payloadType,
+      payloadTok_present: !!payloadTok,
+      qrToken_present: !!qrToken,
+      r2Exists: null,
+      action,
+      force_regen: true
+    });
+  } else {
+    // Check cache existence (only when not forcing regeneration)
+    try {
+      exists = await r2Exists(env, outKey);
+    } catch (e) {
+      L("R2.EXISTS_FAIL", { outKey, err: e?.message || String(e) });
+      exists = false;
+    }
+
+    // Compute current refs sig only when we might otherwise reuse.
+    // (Skip if pending QR: we always render to ensure the QR is embedded.)
+    let needsRegenRefs = false;
+    if (!qrPending && exists) {
+      try {
+        const sigRes = await sbRpc(env, "timesheet_pdf_reference_sig", { p_timesheet_id: timesheetId });
+        const sig = unwrapScalar(sigRes, "timesheet_pdf_reference_sig");
+        current_refs_sig = (sig && String(sig).trim()) ? String(sig).trim() : null;
+      } catch {
+        current_refs_sig = null;
+      }
+
+      if (current_refs_sig) {
+        if (!prev_generated_refs_sig) needsRegenRefs = true;
+        else needsRegenRefs = (prev_generated_refs_sig !== current_refs_sig);
+      }
+    }
+
+    action = (!qrPending && exists && !needsRegenRefs) ? "REUSE" : "RENDER";
+
+    L("DECIDE", {
+      outKey,
+      qrStatus,
+      payloadType,
+      payloadTok_present: !!payloadTok,
+      qrToken_present: !!qrToken,
+      r2Exists: exists,
+      action,
+      force_regen: false,
+      generated_pdf_refs_sig: prev_generated_refs_sig || null,
+      current_refs_sig: current_refs_sig || null,
+      needs_regen_refs: (action === "RENDER" && !qrPending && exists) ? true : false
+    });
+  }
+
+  if (action === "REUSE") {
+    L("REUSE", { outKey, ms: Date.now() - T0 });
+    return outKey;
+  }
+
+  // Render (overwrite if exists)
+  try {
+    const key = await renderTimesheetPDFGeneratedAndSave(env, timesheetId);
+    L("RENDER.OK", { outKey: key, ms: Date.now() - T0 });
+    return key;
+  } catch (e) {
+    L("RENDER.FAIL", { err: e?.message || String(e), ms: Date.now() - T0 });
+    throw e;
+  }
+}
 
 async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin, options = {}) {
   const pc = payChargeFromContract(contract);
@@ -61925,9 +63002,6 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
 
   // ─────────────────────────────────────────────────────────────
   // ✅ Reversal handling for correction timesheets (locked policy)
-  // - reversal is expressed by timesheets.correction_kind
-  // - minutes/schedule remain non-negative
-  // - segment bucket quantities/amounts and snapshot totals are signed
   // ─────────────────────────────────────────────────────────────
   const corrKindU = String(ts?.correction_kind || '').trim().toUpperCase();
   const adjOriginU = String(ts?.adjustment_origin || '').trim().toUpperCase();
@@ -61936,7 +63010,6 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
   const sign = isReversal ? -1 : 1;
 
   // ✅ Basis normalisation for correction timesheets:
-  // ensure import corrections follow the parent stream (NHSP/HR) so invoicing consolidates correctly.
   const boolishLocal = (v) => {
     if (v === true) return true;
     if (v === false) return false;
@@ -61961,29 +63034,24 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
 
     if (!isCorrection) return cur;
 
-    // If the route is NHSP, corrections must stay in NHSP stream for consolidation.
     if (isNhspRoute) {
       if (curU === 'NHSP' || curU === 'NHSP_ADJUSTMENT') return cur;
       return 'NHSP_ADJUSTMENT';
     }
 
-    // If the route is HealthRoster weekly, corrections must stay in HR stream for consolidation.
     if (isHrRoute) {
       if (curU.startsWith('HEALTHROSTER')) return cur;
       return 'HEALTHROSTER_ADJUSTMENT';
     }
 
-    // Default: preserve existing basis (e.g., pure CONTRACT_WEEKLY corrections).
     return cur;
   })();
 
-  // ✅ POLICY B helper (HR-create/no-timesheet-required only)
   const basisU = String(effective_basis || 'CONTRACT_WEEKLY').toUpperCase();
   const isHrCreateNoTs =
     (basisU === 'HEALTHROSTER_SELF_BILL' || basisU === 'HEALTHROSTER_ADJUSTMENT');
 
   const isAuthorised = !!(ts && ts.authorised_at_server);
-  // ✅ GLOBAL RULE: never allow weekly to be READY_* unless authorised
   const processing_status = (!isAuthorised) ? 'PENDING_AUTH' : 'READY_FOR_INVOICE';
 
   // ✅ preserve expenses/mileage (+ units) from current snapshot (curFin)
@@ -61997,7 +63065,6 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
   const actualNorm = normaliseScheduleBreakFields(actualRaw);
 
   // ✅ Determine whether we should override segment ref_num from imported HealthRoster shifts.
-  // Rule: only when HR validation is required and the weekly validation status is OK/OVERRIDDEN.
   const hrValidationRequired =
     boolishLocal(hr_eff_flags?.client_hr_validation_required) ||
     boolishLocal(hr_eff_flags?.hr_validation_required_for_invoice) ||
@@ -62014,12 +63081,10 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
 
   const useImportRefs = !!(hrValidationRequired && isValidatedOk && isWeeklyHrValidation);
 
-  // ✅ Build a fast lookup from imported HealthRoster shifts to their ref_num (Request Id)
   const parseUtcMs = (v) => {
     if (v == null) return null;
     let s = String(v).trim();
     if (!s) return null;
-    // tolerate "YYYY-MM-DD HH:MM:SS+00"
     if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(s) && !s.includes('T')) {
       s = s.replace(' ', 'T');
     }
@@ -62028,6 +63093,7 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
     return d.getTime();
   };
 
+  // ✅ Build a fast lookup from imported HealthRoster shifts to their ref_num (Request Id)
   const hrRefByKey = new Map();     // `${date}|${startMs}|${endMs}` -> ref_num
   const hrListByDate = new Map();   // date -> [{ startMs, endMs, ref_num }]
   if (useImportRefs && Array.isArray(hr_preloaded_shifts) && hr_preloaded_shifts.length) {
@@ -62051,8 +63117,6 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
       if (!hrListByDate.has(d)) hrListByDate.set(d, []);
       hrListByDate.get(d).push({ startMs: sMs, endMs: eMs, ref_num: ref });
     }
-
-    // If multiple shifts per date, keep list; we may use "unique-only" fallback below.
   }
 
   // ✅ Preserve ref_num through normalisation (candidate-entered refs)
@@ -62075,13 +63139,11 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
   });
 
   if (!actual.length) {
-    // Prefer SQL policy snapshot if provided (keeps weekly aligned with SQL-first design)
     let policy_snapshot_json = {};
     if (policy_override && typeof policy_override === 'object') {
       policy_snapshot_json = policy_override;
     }
 
-    // totals include preserved expenses/mileage even if there is no schedule
     const base_pay_ex_vat = 0;
     const base_charge_ex_vat = 0;
     const addl_pay_ex_vat = 0;
@@ -62178,8 +63240,10 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
     return { ok: true, snapshot };
   }
 
-  // Preserve per-segment controls if we have an existing SEGMENTS snapshot
-  const preserved = new Map();
+  // ✅ Preserve locked segment evidence immutability (non-correction only)
+  // Build lookup from existing snapshot segments. If invoice_locked_invoice_id is present, keep the entire segment object.
+  const preserved = new Map(); // stableKey -> { is_locked, seg_obj, exclude_from_pay, invoice_target_week_start, invoice_locked_invoice_id }
+  const preservedLockedByTime = new Map(); // `${date}|${startMs}|${endMs}` -> seg_obj
   try {
     const ib = curFin?.invoice_breakdown_json || null;
     const mode = String(ib?.mode || '').toUpperCase();
@@ -62188,11 +63252,27 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
       for (const s of segs) {
         const key = _stableSegKey(s);
         if (!key) continue;
+
+        const invLockRaw = (s && s.invoice_locked_invoice_id != null) ? String(s.invoice_locked_invoice_id).trim() : '';
+        const isLocked = !!invLockRaw;
+
         preserved.set(key, {
+          is_locked: isLocked,
+          seg_obj: (isLocked ? s : null),
           exclude_from_pay: (typeof s.exclude_from_pay === 'boolean') ? s.exclude_from_pay : undefined,
           invoice_target_week_start: (s.invoice_target_week_start != null) ? String(s.invoice_target_week_start) : undefined,
-          invoice_locked_invoice_id: (s.invoice_locked_invoice_id != null) ? String(s.invoice_locked_invoice_id) : undefined
+          invoice_locked_invoice_id: (invLockRaw ? invLockRaw : undefined)
         });
+
+        if (isLocked) {
+          const d = (s?.date != null) ? String(s.date).slice(0, 10) : '';
+          const sMs = parseUtcMs(s?.start_utc || s?.startUtc || null);
+          const eMs = parseUtcMs(s?.end_utc || s?.endUtc || null);
+          if (d && sMs != null && eMs != null) {
+            const k2 = `${d}|${sMs}|${eMs}`;
+            if (!preservedLockedByTime.has(k2)) preservedLockedByTime.set(k2, s);
+          }
+        }
       }
     }
   } catch {}
@@ -62201,8 +63281,59 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
   let sumDay = 0, sumNight = 0, sumSat = 0, sumSun = 0, sumBh = 0;
   let sumPay = 0, sumChg = 0;
 
+  const seenLockedKeys = new Set();
+
   for (let i = 0; i < actual.length; i++) {
     const seg = actual[i] || {};
+
+    const key = _stableSegKey(seg);
+
+    // If this corresponds to an invoice-locked segment, preserve evidence as-is (immutability), non-correction only.
+    if (!isCorrection) {
+      const p0 = preserved.get(key) || null;
+
+      let lockedSegObj = (p0 && p0.is_locked && p0.seg_obj) ? p0.seg_obj : null;
+
+      // Fallback match by date+start+end (ignores break differences)
+      if (!lockedSegObj) {
+        const d = (seg?.date != null) ? String(seg.date).slice(0, 10) : '';
+        const sMs = parseUtcMs(seg?.start_utc || seg?.start_iso || seg?.startUtc || null);
+        const eMs = parseUtcMs(seg?.end_utc || seg?.end_iso || seg?.endUtc || null);
+        if (d && sMs != null && eMs != null) {
+          const k2 = `${d}|${sMs}|${eMs}`;
+          lockedSegObj = preservedLockedByTime.get(k2) || null;
+          if (lockedSegObj) {
+            const key2 = _stableSegKey(lockedSegObj);
+            if (key2) seenLockedKeys.add(key2);
+          }
+        }
+      }
+
+      if (lockedSegObj && typeof lockedSegObj === 'object') {
+        // Keep locked segment immutable
+        segments.push(lockedSegObj);
+
+        const hDay   = asNumberLocal(lockedSegObj.hours_day);
+        const hNight = asNumberLocal(lockedSegObj.hours_night);
+        const hSat   = asNumberLocal(lockedSegObj.hours_sat);
+        const hSun   = asNumberLocal(lockedSegObj.hours_sun);
+        const hBh    = asNumberLocal(lockedSegObj.hours_bh);
+
+        sumDay += hDay; sumNight += hNight; sumSat += hSat; sumSun += hSun; sumBh += hBh;
+
+        const excludeFromPay = !!lockedSegObj.exclude_from_pay;
+        const payAmt = asNumberLocal(lockedSegObj.pay_amount);
+        const chgAmt = asNumberLocal(lockedSegObj.charge_amount);
+
+        if (!excludeFromPay) sumPay += payAmt;
+        sumChg += chgAmt;
+
+        const keyLocked = _stableSegKey(lockedSegObj);
+        if (keyLocked) seenLockedKeys.add(keyLocked);
+
+        continue;
+      }
+    }
 
     const mins = await resolveBucketsFromSchedule(env, contract, [seg], policy_override);
 
@@ -62242,7 +63373,6 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
     sumPay += payEx;
     sumChg += chgEx;
 
-    const key = _stableSegKey(seg);
     const sid = _stableSegId(ts.timesheet_id, key);
 
     const p = preserved.get(key) || null;
@@ -62287,7 +63417,7 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
         }
       }
 
-      // After validation, we use the import ref. If no match found, keep it null (do not keep candidate ref).
+      // After validation, use the import ref. If no match found, keep it null.
       segRefNum = hrRef ? String(hrRef) : null;
     }
 
@@ -62298,29 +63428,56 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
       end_utc: seg.end_utc || seg.end_iso || null,
       break_mins: Number(seg.break_mins ?? seg.break_minutes ?? 0) || 0,
 
-      // ✅ After validation, this is the import reference number (Request Id). Candidate refs are ignored.
       ref_num: segRefNum,
 
       breaks: Array.isArray(seg.breaks) ? seg.breaks : [],
 
-      // ✅ signed bucket quantities
       hours_day: hDay,
       hours_night: hNight,
       hours_sat: hSat,
       hours_sun: hSun,
       hours_bh: hBh,
 
-      // ✅ signed amounts
       pay_amount: payEx,
       charge_amount: chgEx,
 
-      // ✅ reversal marker for downstream consumers
       is_reversal: isReversal,
 
       exclude_from_pay,
       ...(invoice_target_week_start != null ? { invoice_target_week_start } : {}),
       ...(invoice_locked_invoice_id != null ? { invoice_locked_invoice_id } : {})
     });
+  }
+
+  // Ensure we never drop invoice-locked segments that are not present in schedule (immutability), non-correction only
+  if (!isCorrection) {
+    try {
+      for (const [, p] of preserved.entries()) {
+        if (!p || !p.is_locked || !p.seg_obj) continue;
+        const k = _stableSegKey(p.seg_obj);
+        if (!k) continue;
+        if (seenLockedKeys.has(k)) continue;
+
+        segments.push(p.seg_obj);
+
+        const hDay   = asNumberLocal(p.seg_obj.hours_day);
+        const hNight = asNumberLocal(p.seg_obj.hours_night);
+        const hSat   = asNumberLocal(p.seg_obj.hours_sat);
+        const hSun   = asNumberLocal(p.seg_obj.hours_sun);
+        const hBh    = asNumberLocal(p.seg_obj.hours_bh);
+
+        sumDay += hDay; sumNight += hNight; sumSat += hSat; sumSun += hSun; sumBh += hBh;
+
+        const excludeFromPay = !!p.seg_obj.exclude_from_pay;
+        const payAmt = asNumberLocal(p.seg_obj.pay_amount);
+        const chgAmt = asNumberLocal(p.seg_obj.charge_amount);
+
+        if (!excludeFromPay) sumPay += payAmt;
+        sumChg += chgAmt;
+
+        seenLockedKeys.add(k);
+      }
+    } catch {}
   }
 
   const hours = {
@@ -62343,11 +63500,9 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
   const addlChg = round2(addlChgRaw * sign);
   const addlMar = round2(addlMarRaw * sign);
 
-  // Core totals (signed for reversal correction artefacts)
   const core_total_pay_ex_vat = round2(round2(sumPay) + addlPay);
   const core_total_charge_ex_vat = round2(round2(sumChg) + addlChg);
 
-  // Totals include preserved expenses/mileage (unchanged preservation rule)
   const total_pay_ex_vat = round2(core_total_pay_ex_vat + expPay + milPay);
   const total_charge_ex_vat = round2(core_total_charge_ex_vat + expChg + milChg);
 
@@ -62484,6 +63639,10 @@ async function rebuildFromExistingSegmentsEvidence(env, ts, cw, contract, curFin
     hr_eff_flags = null,
     hr_preloaded_shifts = null,
 
+    // ✅ NEW: HR weekly validation status (controls when we overwrite refs from import)
+    hr_validation_status = null,
+    hr_validation_reason_code = null,
+
     // ✅ allow caller to pass SQL policy (ctx.out_policy) to avoid REST
     policy_override = null
   } = (options && typeof options === 'object') ? options : {};
@@ -62494,14 +63653,71 @@ async function rebuildFromExistingSegmentsEvidence(env, ts, cw, contract, curFin
   const method = pc?.method || contract.pay_method_snapshot || null;
   if (!pay || !chg) throw new Error('CONTRACT_RATES_MISSING');
 
-  // ✅ POLICY B helper (HR-create/no-timesheet-required only)
-  const basisU = String(curFin?.basis || 'CONTRACT_WEEKLY').toUpperCase();
-  const isHrCreateNoTs =
-    (basisU === 'HEALTHROSTER_SELF_BILL' || basisU === 'HEALTHROSTER_ADJUSTMENT');
-
-  const isAuthorised = !!(ts && ts.authorised_at_server);
   // ✅ GLOBAL RULE: never allow weekly to be READY_* unless authorised
+  const isAuthorised = !!(ts && ts.authorised_at_server);
   const processing_status = (!isAuthorised) ? 'PENDING_AUTH' : 'READY_FOR_INVOICE';
+
+  // ✅ Determine whether we should override segment ref_num from imported HealthRoster shifts.
+  const boolishLocal = (v) => {
+    if (v === true) return true;
+    if (v === false) return false;
+    if (v == null) return false;
+    const s = String(v).trim().toLowerCase();
+    return (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on' || s === 't');
+  };
+
+  const hrValidationRequired =
+    boolishLocal(hr_eff_flags?.client_hr_validation_required) ||
+    boolishLocal(hr_eff_flags?.hr_validation_required_for_invoice) ||
+    false;
+
+  const valStatusU = String(hr_validation_status || '').trim().toUpperCase();
+  const valReasonU = String(hr_validation_reason_code || '').trim().toUpperCase();
+
+  const isValidatedOk =
+    (valStatusU === 'VALIDATION_OK' || valStatusU === 'OVERRIDDEN' || valStatusU === 'OVERRIDE');
+
+  const isWeeklyHrValidation =
+    (!valReasonU) ? true : valReasonU.includes('HEALTHROSTER_WEEKLY');
+
+  const useImportRefs = !!(hrValidationRequired && isValidatedOk && isWeeklyHrValidation);
+
+  const parseUtcMs = (v) => {
+    if (v == null) return null;
+    let s = String(v).trim();
+    if (!s) return null;
+    if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(s) && !s.includes('T')) {
+      s = s.replace(' ', 'T');
+    }
+    const d = new Date(s);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.getTime();
+  };
+
+  const hrRefByKey = new Map();   // `${date}|${startMs}|${endMs}` -> ref_num
+  const hrListByDate = new Map(); // date -> [{startMs,endMs,ref_num}]
+  if (useImportRefs && Array.isArray(hr_preloaded_shifts) && hr_preloaded_shifts.length) {
+    for (const sh of hr_preloaded_shifts) {
+      const ss = String(sh?.source_system || '').trim().toUpperCase();
+      if (ss !== 'HEALTHROSTER') continue;
+
+      const d = sh?.work_date ? String(sh.work_date).slice(0, 10) : '';
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) continue;
+
+      const ref = (sh?.ref_num != null) ? String(sh.ref_num).trim() : '';
+      if (!ref) continue;
+
+      const sMs = parseUtcMs(sh?.start_utc);
+      const eMs = parseUtcMs(sh?.end_utc);
+      if (sMs == null || eMs == null) continue;
+
+      const k = `${d}|${sMs}|${eMs}`;
+      if (!hrRefByKey.has(k)) hrRefByKey.set(k, ref);
+
+      if (!hrListByDate.has(d)) hrListByDate.set(d, []);
+      hrListByDate.get(d).push({ startMs: sMs, endMs: eMs, ref_num: ref });
+    }
+  }
 
   // ✅ Policy snapshot: prefer SQL policy_override; fallback to getPolicyCached only if missing
   let policy_snapshot_json = {};
@@ -62565,7 +63781,6 @@ async function rebuildFromExistingSegmentsEvidence(env, ts, cw, contract, curFin
     const invLock = trimStr(s.invoice_locked_invoice_id);
     const isLocked = invLock !== '';
 
-    // Optional: if we cannot rebuild unlocked truth (import cancel/detach), drop unlocked segments entirely.
     if (dropUnlockedBecauseCantRebuildTruth && !isLocked) {
       continue;
     }
@@ -62581,7 +63796,7 @@ async function rebuildFromExistingSegmentsEvidence(env, ts, cw, contract, curFin
     const excludeFromPay = !!s.exclude_from_pay;
 
     if (isLocked) {
-      // ✅ Locked segment evidence is immutable: do NOT recalc, keep segment unchanged.
+      // ✅ Locked segment evidence is immutable: do NOT change ref_num or amounts.
       const payExLocked = asNumberLocal(s.pay_amount);
       const chgExLocked = asNumberLocal(s.charge_amount);
 
@@ -62612,8 +63827,31 @@ async function rebuildFromExistingSegmentsEvidence(env, ts, cw, contract, curFin
     if (!excludeFromPay) segPaySum += payEx;
     segChgSum += chgEx;
 
+    // ✅ Import ref propagation (unlocked only)
+    let nextRefNum = (s.ref_num != null) ? String(s.ref_num).trim() : '';
+    if (useImportRefs) {
+      const dateYmd = (s?.date != null) ? String(s.date).slice(0, 10) : '';
+      const sMs = parseUtcMs(s?.start_utc || s?.startUtc || null);
+      const eMs = parseUtcMs(s?.end_utc || s?.endUtc || null);
+
+      let hrRef = null;
+      if (dateYmd && sMs != null && eMs != null) {
+        const k2 = `${dateYmd}|${sMs}|${eMs}`;
+        hrRef = hrRefByKey.get(k2) || null;
+      }
+
+      if (!hrRef && dateYmd && hrListByDate.has(dateYmd)) {
+        const arr = hrListByDate.get(dateYmd) || [];
+        const uniq = new Set(arr.map(x => String(x.ref_num || '').trim()).filter(Boolean));
+        if (uniq.size === 1) hrRef = Array.from(uniq)[0];
+      }
+
+      nextRefNum = hrRef ? String(hrRef) : '';
+    }
+
     nextSegments.push({
       ...s,
+      ref_num: nextRefNum ? nextRefNum : null,
       pay_amount: payEx,
       charge_amount: chgEx
     });
@@ -62642,13 +63880,12 @@ async function rebuildFromExistingSegmentsEvidence(env, ts, cw, contract, curFin
 
   const payMethodU = String(method || '').toUpperCase();
 
-  // PAYE only (apply_erni_to does NOT override pay method)
   const erniApplies =
     (payMethodU === 'PAYE') &&
     (applyTo === 'ALL' || applyTo === 'PAYE_ONLY');
 
-  const wagePay = round2(segPaySum + addlPay);      // wage pay only
-  const reimbPay = round2(expPayEff + milPay);      // reimbursements only (never ERNI)
+  const wagePay = round2(segPaySum + addlPay);
+  const reimbPay = round2(expPayEff + milPay);
 
   const wageCost = round2(erniApplies ? (wagePay * erniMult) : wagePay);
   const payCostEx = round2(wageCost + reimbPay);
@@ -62667,7 +63904,6 @@ async function rebuildFromExistingSegmentsEvidence(env, ts, cw, contract, curFin
   const hours_bh    = round2(sumBh);
   const total_hours = round2(hours_day + hours_night + hours_sat + hours_sun + hours_bh);
 
-  // Preserve units object if it exists in prior breakdown.additional.units, else use current additional_units_json
   const priorUnits =
     (ib && typeof ib === 'object' && ib.additional && typeof ib.additional === 'object' && ib.additional.units && typeof ib.additional.units === 'object')
       ? ib.additional.units
@@ -62697,18 +63933,15 @@ async function rebuildFromExistingSegmentsEvidence(env, ts, cw, contract, curFin
     pay_day: pay.day, pay_night: pay.night, pay_sat: pay.sat, pay_sun: pay.sun, pay_bh: pay.bh,
     charge_day: chg.day, charge_night: chg.night, charge_sat: chg.sat, charge_sun: chg.sun, charge_bh: chg.bh,
 
-    // Preserve wage-like additional (not combined)
     additional_units_json: addlUnitsJson,
     additional_pay_ex_vat: addlPay,
     additional_charge_ex_vat: addlChg,
     additional_margin_ex_vat: addlMar,
 
-    // Totals include additional + expenses + mileage
     total_pay_ex_vat: totalPayEx,
     total_charge_ex_vat: totalChgEx,
     margin_ex_vat: marginEx,
 
-    // Preserve expense + mileage fields (with Option A rollup for expenses totals)
     expenses_pay_ex_vat: expPayEff,
     expenses_charge_ex_vat: expChgEff,
     expenses_description: curFin?.expenses_description ?? null,
@@ -62766,6 +63999,7 @@ async function rebuildFromExistingSegmentsEvidence(env, ts, cw, contract, curFin
 
   return { ok: true, snapshot };
 }
+
 
 async function tsfinTargetedDrainNow(env, {
   timesheetIds = [],
@@ -66472,7 +67706,6 @@ async function handleContractsUnplanRanges(env, req, contractId) {
   }
 }
 
-
 async function handleContractWeekGeneratePrintable(env, req, weekId) {
   const enc = encodeURIComponent;
   const cleanKey = (k) => String(k || '').replace(/^\/+/, '').trim();
@@ -66548,11 +67781,7 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
     try {
       validateScheduleStructure(actual_schedule_json);
     } catch (e) {
-      return withCORS(
-        env,
-        req,
-        badRequest(e?.message || 'Invalid schedule: overlapping shifts or invalid break windows.')
-      );
+      return withCORS(env, req, badRequest(e?.message || 'Invalid schedule: overlapping shifts or invalid break windows.'));
     }
 
     try {
@@ -66620,15 +67849,14 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
     }
   } catch {}
 
- let bhSet = new Set();
-try {
-  const pol = await loadPolicy(env, contract.client_id || null, cw.week_ending_date);
-  const bhList = Array.isArray(pol?.bh_list) ? pol.bh_list : [];
-  bhSet = new Set(bhList.map(String));
-} catch {
-  bhSet = new Set();
-}
-
+  let bhSet = new Set();
+  try {
+    const pol = await loadPolicy(env, contract.client_id || null, cw.week_ending_date);
+    const bhList = Array.isArray(pol?.bh_list) ? pol.bh_list : [];
+    bhSet = new Set(bhList.map(String));
+  } catch {
+    bhSet = new Set();
+  }
 
   const isBH = (ymd) => bhSet.has(ymd);
 
@@ -67042,6 +68270,120 @@ try {
     console.warn('[QR_WEEKLY][GENERATE] mail queue failed (non-fatal)', e?.message || e);
   }
 
+  // ✅ NEW: persist qr_last_sent_* and qr_sent_refs_* using canonical DB reference rows/sig (SEGMENTS-safe)
+  if (emailQueued) {
+    try {
+      const stableClone = (v) => {
+        if (Array.isArray(v)) return v.map(stableClone);
+        if (v && typeof v === 'object') {
+          const out = {};
+          for (const k of Object.keys(v).sort()) out[k] = stableClone(v[k]);
+          return out;
+        }
+        return v;
+      };
+
+      const unwrapScalar = (v, fnName) => {
+        if (v == null) return null;
+        if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return String(v);
+        if (v && typeof v === 'object' && !Array.isArray(v) && Object.prototype.hasOwnProperty.call(v, 'data')) {
+          return unwrapScalar(v.data, fnName);
+        }
+        if (Array.isArray(v)) {
+          if (v.length === 0) return null;
+          const o = v[0];
+          if (typeof o === 'string' || typeof o === 'number' || typeof o === 'boolean') return String(o);
+          if (o && typeof o === 'object') {
+            if (fnName && Object.prototype.hasOwnProperty.call(o, fnName)) return o[fnName] == null ? null : String(o[fnName]);
+            const ks = Object.keys(o);
+            if (ks.length === 1) return o[ks[0]] == null ? null : String(o[ks[0]]);
+          }
+          return null;
+        }
+        if (v && typeof v === 'object') {
+          if (fnName && Object.prototype.hasOwnProperty.call(v, fnName)) return v[fnName] == null ? null : String(v[fnName]);
+          const ks = Object.keys(v);
+          if (ks.length === 1) return v[ks[0]] == null ? null : String(v[ks[0]]);
+        }
+        return null;
+      };
+
+      const asArray = (v) => {
+        if (v == null) return [];
+        if (Array.isArray(v)) return v;
+        if (v && typeof v === 'object' && Array.isArray(v.data)) return v.data;
+        if (v && typeof v === 'object' && Array.isArray(v.rows)) return v.rows;
+        return [v];
+      };
+
+      const sentAt = nowIso();
+
+      // keep the content-hash model consistent with other QR send paths
+      const hashObj = {
+        sheet_scope: 'WEEKLY',
+        week_ending_date: cw.week_ending_date || null,
+        actual_schedule_json: Array.isArray(actual_schedule_json) ? actual_schedule_json : (ts.actual_schedule_json || null),
+        reference_number: ts.reference_number || null,
+        day_references_json: ts.day_references_json || null,
+        additional_units_week: unitsWeek || {},
+        additional_units_per_day: unitsPerDay || {}
+      };
+      const current_hash = await sha256Hex(JSON.stringify(stableClone(hashObj)));
+
+      const rowsRes = await sbRpc(env, 'timesheet_pdf_reference_rows', { p_timesheet_id: ts.timesheet_id });
+      const rowsArr = asArray(rowsRes);
+
+      const qrRefsRows = [];
+      for (const r of rowsArr) {
+        const rowKey = String(r?.row_key || r?.rowKey || '').trim();
+        if (!rowKey) continue;
+        const refVal = (r && (r.current_reference ?? r.currentReference)) ?? null;
+        qrRefsRows.push({ row_key: rowKey, current_reference: (refVal == null ? null : String(refVal)) });
+      }
+      qrRefsRows.sort((a, b) => String(a.row_key).localeCompare(String(b.row_key)));
+
+      let qrSentRefsSig = null;
+      try {
+        const sigRes = await sbRpc(env, 'timesheet_pdf_reference_sig', { p_timesheet_id: ts.timesheet_id });
+        const sig = unwrapScalar(sigRes, 'timesheet_pdf_reference_sig');
+        qrSentRefsSig = (sig && String(sig).trim()) ? String(sig).trim() : null;
+      } catch {
+        qrSentRefsSig = null;
+      }
+
+      if (!qrSentRefsSig) {
+        const rawSig = qrRefsRows
+          .map(r => `${String(r.row_key)}=${String(r.current_reference ?? '')}`)
+          .join('||');
+        qrSentRefsSig = await sha256Hex(rawSig);
+      }
+
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+          body: JSON.stringify({
+            qr_last_sent_hash: current_hash,
+            qr_last_sent_at_utc: sentAt,
+
+            qr_sent_refs_snapshot_json: qrRefsRows,
+            qr_sent_refs_sig: qrSentRefsSig,
+            qr_sent_refs_captured_at_utc: sentAt,
+
+            updated_at: sentAt
+          })
+        }
+      ).catch(() => {});
+    } catch (e) {
+      console.warn('[QR_WEEKLY][GENERATE] failed to persist qr_last_sent_* / qr_sent_refs_* (non-fatal)', {
+        timesheet_id: ts.timesheet_id,
+        err: e?.message || String(e)
+      });
+    }
+  }
+
   // Audit
   try {
     await writeAudit(
@@ -67074,6 +68416,7 @@ try {
     email_queued: emailQueued
   }));
 }
+
 
 async function handleTimesheetBucketPreview(env, req) {
   const enc    = encodeURIComponent;
@@ -67680,510 +69023,6 @@ async function generateAndStoreTimesheetQr(env, {
   }
 
   return { qrText, qr_r2_key: null };
-}
-async function handleTimesheetQrResendEmail(env, req, timesheetId) {
-  const enc = encodeURIComponent;
-
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-  if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
-
-  // ✅ Guarded write: require expected_timesheet_id
-  let body = null;
-  try { body = await parseJSONBody(req); } catch { body = null; }
-  const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
-  if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
-
-  // ✅ stale-safe resolve
-  const resolved = await resolveTimesheetToCurrent(env, timesheetId);
-  if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
-  const currentTimesheetId = resolved.current_timesheet_id;
-
-  // ✅ Guard mismatch → 409 TIMESHEET_MOVED
-  if (String(expected) !== String(currentTimesheetId)) {
-    return withCORS(
-      env,
-      req,
-      new Response(
-        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetId }),
-        { status: 409, headers: { 'Content-Type': 'application/json' } }
-      )
-    );
-  }
-
-  const cleanKey = (k) => String(k || '').replace(/^\/+/, '').trim();
-
-  const patchTimesheetCurrentOrThrow = async (patchBody, label) => {
-    const url =
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-      `&is_current=eq.true`;
-
-    const r = await fetch(url, {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-      body: JSON.stringify(patchBody)
-    });
-
-    if (!r.ok) {
-      const t = await r.text().catch(() => '');
-      throw new Error(`[QR_RESEND] timesheet patch failed (${label}): ${r.status} ${t}`);
-    }
-  };
-
-  // Load current timesheet
-  let ts = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-      `&is_current=eq.true` +
-      `&select=*` +
-      `&limit=1`
-  );
-  if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
-
-  const scope = String(ts.sheet_scope || '').toUpperCase();
-
-  let qrStatus = String(ts.qr_status || '').toUpperCase();
-  let hasToken = !!(ts.qr_token && String(ts.qr_token).trim());
-  let hasGeneratedAt = !!ts.qr_generated_at;
-  let scannedAt = ts.qr_scanned_at || null;
-
-  // ✅ NEW: never allow resend/reissue if signed markers exist
-  const hasSignedMarkers =
-    !!ts.qr_scanned_at ||
-    !!(ts.qr_signed_hash && String(ts.qr_signed_hash).trim());
-  if (hasSignedMarkers) {
-    return withCORS(env, req, badRequest('Cannot resend/reissue: timesheet already has signed markers'));
-  }
-
-  if (qrStatus === 'EXPIRED') {
-    return withCORS(env, req, badRequest('QR is expired; reissue required'));
-  }
-  if (qrStatus !== 'PENDING') {
-    return withCORS(env, req, badRequest(`QR send not allowed (qr_status=${qrStatus || 'NULL'})`));
-  }
-
-  // Internal state classification (NOT user-facing)
-  const awaitingSignatureUpload = (hasToken && hasGeneratedAt && !scannedAt); // issued, not scanned
-  const notYetIssued = (!scannedAt && (!hasToken || !hasGeneratedAt));       // no token/gen
-
-  if (!notYetIssued && !awaitingSignatureUpload) {
-    return withCORS(env, req, badRequest('QR send not allowed in current state'));
-  }
-
-  // ✅ Must have hours before sending
-  const hasHoursForSend = (() => {
-    if (scope === 'WEEKLY') {
-      const arr = Array.isArray(ts.actual_schedule_json) ? ts.actual_schedule_json : [];
-      return arr.some(seg => {
-        if (!seg || typeof seg !== 'object') return false;
-        const s = String(seg.start || '').trim();
-        const e = String(seg.end || '').trim();
-        return !!(s && e);
-      });
-    }
-    const ws = ts.worked_start_iso ? String(ts.worked_start_iso).trim() : '';
-    const we = ts.worked_end_iso   ? String(ts.worked_end_iso).trim()   : '';
-    return !!(ws && we);
-  })();
-
-  if (!hasHoursForSend) {
-    return withCORS(env, req, badRequest('Cannot send: no hours recorded yet'));
-  }
-
-  // Resolve contract + candidate email first
-  if (!ts.contract_id) {
-    return withCORS(env, req, badRequest('Cannot send: timesheet.contract_id is missing'));
-  }
-
-  const contract = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/contracts` +
-      `?id=eq.${enc(ts.contract_id)}` +
-      `&select=id,candidate_id,client_id` +
-      `&limit=1`
-  );
-  if (!contract) return withCORS(env, req, badRequest('Cannot send: contract not found'));
-
-  const cand = contract.candidate_id
-    ? await sbGetOne(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/candidates` +
-          `?id=eq.${enc(contract.candidate_id)}` +
-          `&select=id,display_name,email` +
-          `&limit=1`
-      )
-    : null;
-
-  const toEmail = cand?.email ? String(cand.email).trim() : null;
-  if (!toEmail) return withCORS(env, req, badRequest('Candidate email not found'));
-
-  // TSFIN defence-in-depth
-  try {
-    const fin = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-        `&is_current=eq.true` +
-        `&select=id,processing_status,locked_by_invoice_id,paid_at_utc` +
-        `&limit=1`
-    );
-
-    if (fin && (fin.locked_by_invoice_id || fin.paid_at_utc)) {
-      return withCORS(env, req, badRequest('Cannot send: timesheet is invoiced/locked or paid'));
-    }
-
-    if (fin && String(fin.processing_status || '').toUpperCase() !== 'AWAITING_MANUAL_SIGNATURE') {
-      const nowFix = nowIso();
-      await fetch(
-        `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
-        {
-          method: 'PATCH',
-          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-          body: JSON.stringify({
-            processing_status: 'AWAITING_MANUAL_SIGNATURE',
-            updated_at: nowFix
-          })
-        }
-      ).catch(() => {});
-    }
-  } catch {}
-
-  const dateLabel =
-    (scope === 'WEEKLY')
-      ? (ts.week_ending_date || '')
-      : (ts.worked_start_iso ? String(ts.worked_start_iso).slice(0, 10) : '');
-
-  // ------------------------------------------------------------
-  // Hash: compute current printable-content hash
-  // ------------------------------------------------------------
-  const stableClone = (v) => {
-    if (Array.isArray(v)) return v.map(stableClone);
-    if (v && typeof v === 'object') {
-      const out = {};
-      for (const k of Object.keys(v).sort()) out[k] = stableClone(v[k]);
-      return out;
-    }
-    return v;
-  };
-
-  const hashObj = {
-    sheet_scope: scope || null,
-    week_ending_date: ts.week_ending_date || null,
-    worked_start_iso: ts.worked_start_iso || null,
-    worked_end_iso: ts.worked_end_iso || null,
-    break_start_iso: ts.break_start_iso || null,
-    break_end_iso: ts.break_end_iso || null,
-    break_minutes: (ts.break_minutes != null ? ts.break_minutes : null),
-    reference_number: ts.reference_number || null,
-    day_references_json: ts.day_references_json || null,
-    actual_schedule_json: ts.actual_schedule_json || null,
-    additional_units_week: ts.additional_units_week || null,
-    additional_units_per_day: ts.additional_units_per_day || null
-  };
-
-  let current_hash = null;
-  try {
-    current_hash = await sha256Hex(JSON.stringify(stableClone(hashObj)));
-  } catch (e) {
-    return withCORS(env, req, serverError(`Failed to compute QR content hash: ${e?.message || e}`));
-  }
-
-  const prev_last_sent_hash = (ts.qr_last_sent_hash != null) ? String(ts.qr_last_sent_hash) : '';
-  const hasPrevHash = !!String(prev_last_sent_hash || '').trim();
-  const canResendSameHours = hasPrevHash && (String(prev_last_sent_hash) === String(current_hash));
-
-  const mustReissueBecauseHoursChanged =
-    awaitingSignatureUpload && hasPrevHash && !canResendSameHours;
-
-  const mustReissueBecauseNoBaselineHash =
-    awaitingSignatureUpload && !hasPrevHash;
-
-  let result = null; // 'NEW_ISSUED' | 'RESENT' | 'REISSUED'
-
-  // ------------------------------------------------------------
-  // If we need a new token: create it + persist token/gen properly
-  // ------------------------------------------------------------
-  let qrTokenToUse = (ts.qr_token && String(ts.qr_token).trim()) ? String(ts.qr_token).trim() : null;
-  let qr_r2_key = ts.qr_r2_key || null;
-
-  // ✅ NEW: remember old QR key so we can delete it if we reissue and successfully repoint
-  const oldQrKey = ts.qr_r2_key ? cleanKey(ts.qr_r2_key) : null;
-
-  if (notYetIssued || mustReissueBecauseHoursChanged || mustReissueBecauseNoBaselineHash) {
-    const now2 = nowIso();
-
-    let qrToken;
-    try {
-      qrToken = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
-        ? crypto.randomUUID()
-        : `${currentTimesheetId}:${Date.now()}`;
-    } catch {
-      qrToken = `${currentTimesheetId}:${Date.now()}`;
-    }
-
-    // Store TSQ1 payload on current row
-    let qrRes = null;
-    try {
-      qrRes = await generateAndStoreTimesheetQr(env, {
-        timesheet_id: currentTimesheetId,
-        contract_week_id: null,
-        contract_id: contract.id,
-        candidate_id: contract.candidate_id || null,
-        client_id: contract.client_id || null,
-        week_ending_ymd: (scope === 'WEEKLY') ? (ts.week_ending_date || null) : (dateLabel || null),
-        qr_token: qrToken
-      });
-    } catch (e) {
-      return withCORS(env, req, serverError(`Failed to generate QR: ${e?.message || e}`));
-    }
-
-    qrTokenToUse = qrToken;
-    qr_r2_key = qrRes?.qr_r2_key || null;
-
-    try {
-      await patchTimesheetCurrentOrThrow({
-        qr_token: qrToken,
-        qr_status: 'PENDING',
-        qr_generated_at: now2,
-        qr_scanned_at: null,
-        qr_scan_info_json: null,
-        qr_r2_key: qr_r2_key || null,
-        updated_at: now2
-      }, 'issue_token');
-    } catch (e) {
-      return withCORS(env, req, serverError(e?.message || 'Failed to persist QR token'));
-    }
-
-    // ✅ NEW: delete old QR image key now that we replaced it (best-effort)
-    try {
-      const bucket = env.R2_BUCKET || env.R2;
-      const newQrKey = qr_r2_key ? cleanKey(qr_r2_key) : null;
-      if (bucket && typeof bucket.delete === 'function' && oldQrKey && newQrKey && oldQrKey !== newQrKey) {
-        await bucket.delete(oldQrKey).catch(() => {});
-      }
-    } catch {
-      // non-fatal
-    }
-
-    result = notYetIssued ? 'NEW_ISSUED' : 'REISSUED';
-
-    // Reload so any subsequent logic sees the issued state
-    ts = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-        `&is_current=eq.true` +
-        `&select=*` +
-        `&limit=1`
-    );
-  } else {
-    result = 'RESENT';
-  }
-
-  // ✅ Ensure we have a GENERATED printable PDF to attach
-  let pdfKey = null;
-  try {
-    pdfKey = await renderTimesheetPDFAndSave(env, currentTimesheetId);
-  } catch (e) {
-    return withCORS(env, req, serverError('Failed to prepare timesheet PDF for send'));
-  }
-  if (!pdfKey) return withCORS(env, req, serverError('No PDF available to send'));
-
-  // ✅ OPTIONAL: ensure manual_pdf_r2_key points to the generated PDF if blank (materialises evidence)
-  try {
-    const patchUrl =
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-      `&is_current=eq.true` +
-      `&or=(manual_pdf_r2_key.is.null,manual_pdf_r2_key.eq.)`;
-
-    await fetch(
-      patchUrl,
-      {
-        method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify({
-          manual_pdf_r2_key: pdfKey,
-          updated_at: nowIso()
-        })
-      }
-    ).catch(() => {});
-  } catch {
-    // non-fatal
-  }
-
-  const subject =
-    (scope === 'WEEKLY')
-      ? `Weekly QR timesheet – week ending ${dateLabel || '(unknown)'}`
-      : `Daily QR timesheet – ${dateLabel || '(unknown date)'}`;
-
-  const lines = [
-    `Please print the attached timesheet, ask the ward manager to sign it,`,
-    `and then upload the signed copy via the app.`,
-    ``,
-    ...(dateLabel ? [`Date: ${dateLabel}`] : []),
-    `Timesheet ID: ${currentTimesheetId}`
-  ];
-  const body_text = lines.join('\n');
-  const body_html = `<p>${lines.map(l => (l === '' ? '<br/>' : l)).join('<br/>')}</p>`;
-
-  const insert = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
-    method: 'POST',
-    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-    body: JSON.stringify({
-      type: 'TIMESHEET_QR',
-      to: toEmail,
-      cc: null,
-      subject,
-      body_html,
-      body_text,
-      attachments: [{ r2_key: pdfKey, filename: `Timesheet_${dateLabel || currentTimesheetId}.pdf` }],
-      status: 'QUEUED',
-      reference: `timesheet_qr:${String(result || 'send').toLowerCase()}:${currentTimesheetId}`,
-      created_by: user?.id || null
-    })
-  });
-
-  if (!insert.ok) {
-    const t = await insert.text().catch(() => '');
-    return withCORS(env, req, serverError(`Failed to queue QR email: ${t}`));
-  }
-
- // Persist last-sent hash + timestamp (non-fatal if migration not present)
-// ✅ FIX: qr_sent_refs_* now uses canonical row_key/raw_sig signature model (matches SQL manifest)
-const nowSent = nowIso();
-try {
-  const tsIdStr = String(currentTimesheetId);
-  const scopeUpper = String(scope || '').toUpperCase();
-
-  const qrRefsRows = [];
-
-  if (scopeUpper === 'DAILY') {
-    // DAILY: single TIMESHEET row, derived from worked/scheduled window
-    const dayYmd = (() => {
-      try {
-        if (typeof toLocalParts === 'function') {
-          const iso0 = ts?.worked_start_iso || ts?.scheduled_start_iso || null;
-          const p = iso0 ? toLocalParts(iso0, null) : null;
-          if (p && p.ymd) return String(p.ymd);
-        }
-      } catch {}
-      const isoFallback = String(ts?.worked_start_iso || ts?.scheduled_start_iso || '').slice(0, 10);
-      return isoFallback || String(ts?.week_ending_date || '').slice(0, 10) || '';
-    })();
-
-    const startUtc = String(ts?.worked_start_iso || ts?.scheduled_start_iso || '');
-    const endUtc   = String(ts?.worked_end_iso   || ts?.scheduled_end_iso   || '');
-
-    const rowKey = `${tsIdStr}|TIMESHEET||${dayYmd}|${startUtc}|${endUtc}`;
-    const refVal = String(ts?.reference_number || '').trim();
-
-    qrRefsRows.push({ row_key: rowKey, current_reference: refVal });
-  } else {
-    // WEEKLY: per-shift booking refs from schedule rows
-    const sched = Array.isArray(ts?.actual_schedule_json) ? ts.actual_schedule_json : [];
-
-    for (let i = 0; i < sched.length; i++) {
-      const seg = sched[i];
-      if (!seg || typeof seg !== 'object') continue;
-
-      const sLocal = String(seg.start || '').trim();
-      const eLocal = String(seg.end || '').trim();
-      const sUtc = String(seg.start_utc || '').trim();
-      const eUtc = String(seg.end_utc || '').trim();
-
-      const hasLocal = !!(sLocal && eLocal);
-      const hasUtc = !!(sUtc && eUtc);
-      if (!hasLocal && !hasUtc) continue;
-
-      const dayYmd = String(seg.date || '').trim();
-
-      // ✅ Match SQL row model: prefer seg.segment_id, else stable fallback ts:<id>:<idx>
-      const segIdRaw = String(seg.segment_id || '').trim();
-      const segmentId = segIdRaw || `ts:${tsIdStr}:${i}`;
-
-      const refVal =
-        String((seg.ref_num != null ? seg.ref_num : (seg.booking_ref != null ? seg.booking_ref : '')) || '').trim();
-
-      const rowKey =
-        tsIdStr +
-        '|SEGMENT' +
-        '|' + segmentId +
-        '|' + (dayYmd || '') +
-        '|' + (sUtc || '') +
-        '|' + (eUtc || '');
-
-      qrRefsRows.push({ row_key: rowKey, current_reference: refVal });
-    }
-  }
-
-  qrRefsRows.sort((a, b) => String(a.row_key).localeCompare(String(b.row_key)));
-
-  // Deterministic raw signature string (matches SQL manifest model)
-  const rawSig = qrRefsRows
-    .map(r => `${String(r.row_key)}=${String(r.current_reference ?? '')}`)
-    .join('||');
-
-  const qrSentRefsSig = await sha256Hex(rawSig);
-
-  await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-      `&is_current=eq.true`,
-    {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-      body: JSON.stringify({
-        qr_last_sent_hash: current_hash,
-        qr_last_sent_at_utc: nowSent,
-
-        qr_sent_refs_snapshot_json: qrRefsRows,
-        qr_sent_refs_sig: qrSentRefsSig,
-        qr_sent_refs_captured_at_utc: nowSent,
-
-        updated_at: nowSent
-      })
-    }
-  ).catch(() => {});
-} catch {}
-
-
-  // Audit
-  try {
-    await writeAudit(
-      env,
-      user,
-      'QR_RESENT',
-      {
-        timesheet_id: currentTimesheetId,
-        pdf_r2_key: pdfKey,
-        to: toEmail,
-        result,
-        current_hash,
-        prev_last_sent_hash: prev_last_sent_hash || null,
-        qr_token_written: !!(qrTokenToUse && String(qrTokenToUse).trim())
-      },
-      { entity: 'timesheets', subject_id: currentTimesheetId, req }
-    );
-  } catch {}
-
-  return withCORS(env, req, ok({
-    queued: true,
-    result, // 'NEW_ISSUED' | 'RESENT' | 'REISSUED'
-    timesheet_id: currentTimesheetId,
-    current_timesheet_id: currentTimesheetId,
-    requested_timesheet_id: resolved.requested_timesheet_id || timesheetId,
-    was_stale: !!resolved.was_stale,
-
-    pdf_key: pdfKey,
-
-    // Action hints for UI
-    qr_can_resend_same_hours: true,
-    current_hash,
-    qr_last_sent_hash: current_hash
-  }));
 }
 
 async function handleTimesheetQrRestore(env, req, timesheetId) {
@@ -70433,7 +71272,6 @@ async function handleCreateInvoiceTsfinByWeek(env, req) {
   });
 }
 
-
 async function buildNhspWeeklySnapshot(
   env,
   ts,
@@ -70455,8 +71293,12 @@ async function buildNhspWeeklySnapshot(
     hr_eff_flags = null,
     hr_preloaded_shifts = null,
 
-    // ✅ NEW: allow caller to pass SQL policy (ctx.out_policy) to avoid REST
-    policy_override = null
+    // ✅ allow caller to pass SQL policy (ctx.out_policy) to avoid REST
+    policy_override = null,
+
+    // ✅ NEW: validation state (so ref_num can be overridden ONLY after validation OK)
+    hr_validation_status = null,
+    hr_validation_reason_code = null
   } = (options && typeof options === 'object') ? options : {};
 
   const hasPolicyOverride = !!(policy_override && typeof policy_override === 'object');
@@ -70540,6 +71382,73 @@ async function buildNhspWeeklySnapshot(
   };
 
   // ─────────────────────────────────────────────────────────────
+  // ✅ HR import ref override (only after validation OK/OVERRIDDEN)
+  // Applies when HR validation is required and the validation context is weekly HR.
+  // ─────────────────────────────────────────────────────────────
+  const boolishLocal = (v) => {
+    if (v === true) return true;
+    if (v === false) return false;
+    if (v == null) return false;
+    const s = String(v).trim().toLowerCase();
+    return (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on' || s === 't');
+  };
+
+  const hrValidationRequired =
+    boolishLocal(hr_eff_flags?.client_hr_validation_required) ||
+    boolishLocal(hr_eff_flags?.hr_validation_required_for_invoice) ||
+    false;
+
+  const valStatusU = String(hr_validation_status || '').trim().toUpperCase();
+  const valReasonU = String(hr_validation_reason_code || '').trim().toUpperCase();
+
+  const isValidatedOk =
+    (valStatusU === 'VALIDATION_OK' || valStatusU === 'OVERRIDDEN' || valStatusU === 'OVERRIDE');
+
+  const isWeeklyHrValidation =
+    (!valReasonU) ? true : valReasonU.includes('HEALTHROSTER_WEEKLY');
+
+  const useImportRefs = !!(hrValidationRequired && isValidatedOk && isWeeklyHrValidation);
+
+  const parseUtcMs = (v) => {
+    if (v == null) return null;
+    let s = String(v).trim();
+    if (!s) return null;
+    // tolerate "YYYY-MM-DD HH:MM:SS+00"
+    if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(s) && !s.includes('T')) {
+      s = s.replace(' ', 'T');
+    }
+    const d = new Date(s);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.getTime();
+  };
+
+  // `${date}|${startMs}|${endMs}` -> ref_num
+  const hrRefByKey = new Map();
+  const hrListByDate = new Map();
+  if (useImportRefs && Array.isArray(hr_preloaded_shifts) && hr_preloaded_shifts.length) {
+    for (const sh of hr_preloaded_shifts) {
+      const ss = String(sh?.source_system || '').trim().toUpperCase();
+      if (ss !== 'HEALTHROSTER') continue;
+
+      const d = sh?.work_date ? String(sh.work_date).slice(0, 10) : '';
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) continue;
+
+      const ref = (sh?.ref_num != null) ? String(sh.ref_num).trim() : '';
+      if (!ref) continue;
+
+      const sMs = parseUtcMs(sh?.start_utc);
+      const eMs = parseUtcMs(sh?.end_utc);
+      if (sMs == null || eMs == null) continue;
+
+      const k = `${d}|${sMs}|${eMs}`;
+      if (!hrRefByKey.has(k)) hrRefByKey.set(k, ref);
+
+      if (!hrListByDate.has(d)) hrListByDate.set(d, []);
+      hrListByDate.get(d).push({ startMs: sMs, endMs: eMs, ref_num: ref });
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
   // Preserve existing TSFIN evidence:
   // - meta controls for unlocked recompute (exclude_from_pay, invoice_target_week_start)
   // - FULL locked segment objects (invoice_locked_invoice_id != null/empty) to preserve evidence exactly
@@ -70555,7 +71464,6 @@ async function buildNhspWeeklySnapshot(
   const lockedSegByExternalRowKey = new Map();
   const lockedSegsAll = [];
 
-  const _isNonEmpty = (v) => nullif(btrim(String(v ?? '')), '') !== null; // uses the same semantics as SQL; see helper below
   function btrim(s) { return String(s).trim(); }
   function nullif(a, b) { return (a === b) ? null : a; }
 
@@ -70593,20 +71501,16 @@ async function buildNhspWeeklySnapshot(
             (invLockTrim !== '') ? invLockTrim : undefined
         };
 
-        // preserve meta by legacy id if present
         if (segment_id) preservedByLegacyId.set(segment_id, meta);
 
-        // preserve meta by stable key if we can compute one from stored segment fields
         const key = _stableKeyFromExistingSegment(s);
         if (key) preservedByKey.set(key, meta);
 
-        // preserve meta by source identity if present
         const nhspShiftId = (s && s.nhsp_shift_id != null) ? String(s.nhsp_shift_id).trim() : '';
         const extKey = (s && s.external_row_key != null) ? String(s.external_row_key).trim() : '';
         if (nhspShiftId) preservedByNhspShiftId.set(nhspShiftId, meta);
         if (extKey) preservedByExternalRowKey.set(extKey, meta);
 
-        // FULL locked segment preservation (immutable evidence)
         if (isLocked) {
           lockedSegsAll.push(s);
           if (segment_id) lockedSegByLegacyId.set(segment_id, s);
@@ -70620,16 +71524,12 @@ async function buildNhspWeeklySnapshot(
 
   const staleReason = (curFin && curFin.stale_reason != null) ? String(curFin.stale_reason) : '';
 
-  // Allow empty-shift writes ONLY when:
-  // - we have locked segments to carry forward unchanged, OR
-  // - the timesheet was marked stale due to import cancel/detach (so we must be able to clear unlocked evidence)
   const shiftsArr = Array.isArray(shifts) ? shifts : [];
   const allowEmptyShiftsWrite = (lockedSegsAll.length > 0) || (staleReason === 'IMPORT_CANCEL_DETACH');
 
   if (!shiftsArr.length && !allowEmptyShiftsWrite) return { ok: false, reason: 'NO_SHIFTS' };
 
   // ✅ Policy snapshot: prefer override; else old behaviour (fetch by week-ending/first date)
-  // (Computed here so it is available for ERNI margin without any TDZ/ordering issues.)
   let policy_snapshot_json = {};
   if (hasPolicyOverride) {
     policy_snapshot_json = policy_override;
@@ -70657,7 +71557,6 @@ async function buildNhspWeeklySnapshot(
     const workDate = sh && sh.work_date;
     if (!workDate || !sh.start_utc || !sh.end_utc) continue;
 
-    // Compute identity keys early so we can preserve locked segments exactly (skip recompute)
     const stableKey = _stableKeyFromShift(sh);
     const computed_segment_id = _stableSegId(ts.timesheet_id, stableKey);
     const legacy_segment_id = (sh && sh.id != null) ? `nhsp:${sh.id}` : null;
@@ -70728,8 +71627,38 @@ async function buildNhspWeeklySnapshot(
     const invoice_target_week_start =
       (preserved && preserved.invoice_target_week_start != null) ? preserved.invoice_target_week_start : undefined;
 
-    // IMPORTANT: do NOT inherit invoice_locked_invoice_id onto recomputed unlocked segments;
-    // locked segments are carried forward unchanged above.
+    // ✅ Base ref: NHSP-provided reference (or existing shift ref) — never from schedule.
+    const baseRef =
+      _normStr(sh.nhsp_ref_num || sh.ref_num || '') || null;
+
+    // ✅ If validated OK for HR weekly, override with imported HealthRoster Request Id when matched.
+    let segRefNum = baseRef;
+
+    if (useImportRefs) {
+      const dateYmd = String(workDate).slice(0, 10);
+      const sMs = parseUtcMs(sh?.start_utc);
+      const eMs = parseUtcMs(sh?.end_utc);
+
+      let hrRef = null;
+
+      if (dateYmd && sMs != null && eMs != null) {
+        const k2 = `${dateYmd}|${sMs}|${eMs}`;
+        hrRef = hrRefByKey.get(k2) || null;
+      }
+
+      // Fallback: if exactly one HR shift exists for that date, use its ref_num
+      if (!hrRef && dateYmd && hrListByDate.has(dateYmd)) {
+        const arr = hrListByDate.get(dateYmd) || [];
+        const uniq = new Set(arr.map(x => String(x.ref_num || '').trim()).filter(Boolean));
+        if (uniq.size === 1) {
+          hrRef = Array.from(uniq)[0];
+        }
+      }
+
+      // After validation, use import ref only; if no match, leave null (do not inject non-import refs).
+      segRefNum = hrRef ? String(hrRef) : null;
+    }
+
     unlockedSegmentsOut.push({
       segment_id: computed_segment_id,
 
@@ -70755,10 +71684,12 @@ async function buildNhspWeeklySnapshot(
       exclude_from_pay,
       ...(invoice_target_week_start != null ? { invoice_target_week_start } : {}),
 
-      // ✅ UPDATED: HealthRoster fallback uses hr_request_id / request_id as ref_num when missing
-      // (does NOT affect segment identity; ref_num intentionally excluded from identity)
-      ref_num: (sh.nhsp_ref_num || sh.ref_num || sh.hr_request_id || sh.request_id || null) || null,
+      // ✅ ref_num: canonical for invoice + PDF + QR
+      ref_num: segRefNum,
+
+      // request_id kept as source metadata only
       request_id: (sh.hr_request_id || sh.request_id || null) || null,
+
       held_back_reason: sh.held_back_reason || null,
       source_system: sh.source_system || null
     });
@@ -70801,7 +71732,6 @@ async function buildNhspWeeklySnapshot(
 
   let _erniMult = 1;
   if (Number.isFinite(_erniPctRaw) && _erniPctRaw > 0) {
-    // supports storing 15 or 0.15
     const p = _erniPctRaw > 1 ? (_erniPctRaw / 100) : _erniPctRaw;
     _erniMult = 1 + p;
   }
@@ -72114,6 +73044,10 @@ if (req.method === 'GET' && p === '/api/healthroster/autoprocess/clients') {
           return handleHrAutoprocessApply(env, req, hrAuto.import_id);
         }
       }
+// HR Weekly: QR reissue batch (post-apply modal confirm)
+if (req.method === 'POST' && p === '/api/healthroster/weekly/qr-reissue-batch') {
+  return handleHrWeeklyQrReissueBatch(env, req);
+}
 
       if (req.method === 'POST' && p === '/api/hr/tso-failure-email')        return handleQueueTsoFailureEmail(env, req);
 
