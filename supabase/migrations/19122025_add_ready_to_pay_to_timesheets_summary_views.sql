@@ -67,6 +67,7 @@ CREATE INDEX IF NOT EXISTS idx_timesheet_evidence_timesheet_kind
 -- ============================================================
 
 
+
 CREATE OR REPLACE VIEW public.v_timesheets_summary_base AS
 WITH latest_tsfin AS (
   SELECT DISTINCT ON (tf.timesheet_id)
@@ -742,6 +743,23 @@ with_issues AS (
         AND ar.authorised_at_server IS NULL
         THEN ARRAY['Authorisation'::text]
       ELSE ARRAY[]::text[]
+    END ||
+    -- ✅ NEW: Awaiting signed QR timesheet (hours received; issued proof exists; not scanned yet)
+    CASE
+      WHEN ar.timesheet_id IS NOT NULL
+        AND ar.qr_status = 'PENDING'::timesheet_qr_status_enum
+        AND (
+          (
+            ar.qr_token IS NOT NULL
+            AND length(btrim(ar.qr_token)) > 0
+            AND ar.qr_generated_at IS NOT NULL
+          )
+          OR ar.qr_last_sent_hash IS NOT NULL
+        )
+        AND ar.qr_scanned_at IS NULL
+        AND COALESCE(ar.total_hours, 0::numeric) > 0::numeric
+        THEN ARRAY['Awaiting signed QR timesheet'::text]
+      ELSE ARRAY[]::text[]
     END AS issue_codes
 
   FROM all_rows ar
@@ -1121,6 +1139,10 @@ SELECT
         OR NOT (COALESCE(client_requires_hr,false) = true AND COALESCE(client_autoprocess_hr,false) = false)
       )
     ) THEN 'Authorised for Invoicing'
+    WHEN (
+      timesheet_id IS NOT NULL
+      AND ic.issue_codes_final @> ARRAY['Awaiting signed QR timesheet'::text]
+    ) THEN 'Awaiting signed QR timesheet'
     ELSE 'Processing Delayed'
   END AS processing_status_display,
 
@@ -1264,16 +1286,8 @@ LEFT JOIN LATERAL (
   LIMIT 1
 ) seg ON true;
 
-
-
-
 -- ============================================================
 -- UPDATE VIEW: public.v_timesheets_summary
--- FIXES:
---  - Keep existing column order (so CREATE OR REPLACE is allowed)
---  - Fix is_adjustment / is_adjusted to use timesheets.is_adjustment (ts2)
--- ADDS:
---  - route_display (APPENDED AT END ONLY)
 -- ============================================================
 
 create or replace view public.v_timesheets_summary as
@@ -1423,11 +1437,11 @@ left join public.invoices inv
 
 select pg_notify('pgrst', 'reload schema');
 
-
 GRANT SELECT ON public.v_timesheets_summary_base TO service_role;
 GRANT SELECT ON public.v_timesheets_summary      TO service_role;
 GRANT SELECT ON public.v_timesheets_summary_base TO authenticated;
 GRANT SELECT ON public.v_timesheets_summary      TO authenticated;
+
 
 
 -- ============================================================
