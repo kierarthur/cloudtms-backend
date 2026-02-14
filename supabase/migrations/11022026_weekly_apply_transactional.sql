@@ -1,13 +1,9 @@
-create or replace function public.hr_weekly_apply_transactional(
-  p_import_id uuid,
-  p_payload jsonb,
-  p_actor_user_id uuid
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
+CREATE OR REPLACE FUNCTION public.hr_weekly_apply_transactional(p_import_id uuid, p_payload jsonb, p_actor_user_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
 declare
   v_now timestamptz := now();
 
@@ -70,6 +66,13 @@ declare
 
   -- ✅ NEW: count of ref clears due to missing shifts (MODE_A)
   v_mode_a_ref_cleared_count int := 0;
+
+  -- ✅ NEW: count of ref sets due to matched shifts (MODE_A)
+  v_mode_a_ref_set_count int := 0;
+
+  -- ✅ NEW: timesheets whose reference truth changed (for post-apply QR reissue + regen)
+  v_ref_updated_timesheet_ids uuid[] := array[]::uuid[];
+  v_ref_updated_timesheet_ids_count int := 0;
 
   -- ✅ NEW: consolidated email jobs + items
   v_email_jobs jsonb := '[]'::jsonb;
@@ -307,6 +310,12 @@ begin
   -- ─────────────────────────────────────────────
   drop table if exists pg_temp.tmp_aff_ts;
   create temporary table tmp_aff_ts(
+    timesheet_id uuid primary key
+  ) on commit drop;
+
+  -- ✅ NEW: reference-updated timesheets (used for QR reissue + regen decisions)
+  drop table if exists pg_temp.tmp_ref_updated_ts;
+  create temporary table tmp_ref_updated_ts(
     timesheet_id uuid primary key
   ) on commit drop;
 
@@ -965,7 +974,14 @@ begin
     )
   on conflict (timesheet_id, comparison_key) do nothing;
 
-  update public.nhsp_shifts nsclr
+  -- ✅ Capture exact timesheets whose refs were cleared (for post-apply QR reissue + regen)
+  drop table if exists pg_temp.tmp_mode_a_ref_clear_upd;
+  create temporary table tmp_mode_a_ref_clear_upd(
+    timesheet_id uuid not null
+  ) on commit drop;
+
+  with upd as (
+update public.nhsp_shifts nsclr
      set ref_num = null,
          hr_request_id = null,
          updated_at = v_now
@@ -992,9 +1008,27 @@ begin
          and nullif(btrim(seg.value->>'nhsp_shift_id'), '') = nsclr.id::text
          and nullif(btrim(seg.value->>'invoice_locked_invoice_id'), '') is not null
        limit 1
-     );
+     )
+    returning nsclr.timesheet_id
+  )
+  insert into tmp_mode_a_ref_clear_upd(timesheet_id)
+  select upd.timesheet_id
+  from upd
+  where upd.timesheet_id is not null;
 
   get diagnostics v_mode_a_ref_cleared_count = row_count;
+
+  insert into tmp_ref_updated_ts(timesheet_id)
+  select distinct u.timesheet_id
+  from tmp_mode_a_ref_clear_upd u
+  where u.timesheet_id is not null
+  on conflict do nothing;
+
+  insert into tmp_aff_ts(timesheet_id)
+  select distinct u2.timesheet_id
+  from tmp_mode_a_ref_clear_upd u2
+  where u2.timesheet_id is not null
+  on conflict do nothing;
 
   insert into tmp_aff_ts(timesheet_id)
   select distinct mrc2.timesheet_id
@@ -1010,15 +1044,123 @@ begin
     )
   );
 
+  -- ─────────────────────────────────────────────
+  -- ✅ MODE_A matched ref propagation (Request Id / booking reference)
+  -- Only apply when validation is OK/OVERRIDDEN (per rules).
+  -- Writes ref_num + hr_request_id into nhsp_shifts for matched rows, skipping invoice-locked evidence.
+  -- ─────────────────────────────────────────────
+  drop table if exists pg_temp.tmp_mode_a_ref_set;
+  create temporary table tmp_mode_a_ref_set(
+    timesheet_id uuid not null,
+    comparison_key text not null,
+    work_date date not null,
+    ts_start_hhmm text not null,
+    ts_end_hhmm text not null,
+    ts_break_mins int not null,
+    ref_after text not null,
+    primary key (timesheet_id, comparison_key)
+  ) on commit drop;
+
+  insert into tmp_mode_a_ref_set(timesheet_id, comparison_key, work_date, ts_start_hhmm, ts_end_hhmm, ts_break_mins, ref_after)
+  select distinct
+    vrm.timesheet_id,
+    nullif(btrim(coalesce(cx2.value->>'comparison_key','')), '') as comparison_key,
+    nullif(btrim(cx2.value->>'work_date'), '')::date as work_date,
+    nullif(btrim(cx2.value->>'timesheet_start'), '') as ts_start_hhmm,
+    nullif(btrim(cx2.value->>'timesheet_end'), '') as ts_end_hhmm,
+    coalesce(nullif(btrim(cx2.value->>'timesheet_break_mins'), '')::int, 0) as ts_break_mins,
+    nullif(btrim(coalesce(cx2.value->>'ref_after','')), '') as ref_after
+  from tmp_val_rows vrm
+  join tmp_val_mode vmm
+    on vmm.timesheet_id = vrm.timesheet_id
+   and vmm.mode = 'MODE_A'
+  cross join lateral jsonb_array_elements(coalesce(vrm.row_json->'comparisons', '[]'::jsonb)) as cx2(value)
+  where vrm.timesheet_id is not null
+    and vrm.overall_status in ('OK','PASS','VALIDATION_OK','OVERRIDDEN','OVERRIDE')
+    and (
+      upper(coalesce(cx2.value->>'match_status','')) in ('MATCH','MATCHED','OK','PASS')
+      or (lower(coalesce(cx2.value->>'match','false')) in ('true','1'))
+    )
+    and nullif(btrim(coalesce(cx2.value->>'ref_after','')), '') is not null
+    and nullif(btrim(coalesce(cx2.value->>'timesheet_start','')), '') is not null
+    and nullif(btrim(coalesce(cx2.value->>'timesheet_end','')), '') is not null
+    and nullif(btrim(coalesce(cx2.value->>'work_date','')), '') is not null
+  on conflict (timesheet_id, comparison_key) do nothing;
+
+  drop table if exists pg_temp.tmp_mode_a_ref_set_upd;
+  create temporary table tmp_mode_a_ref_set_upd(
+    timesheet_id uuid not null
+  ) on commit drop;
+
+  with upd as (
+    update public.nhsp_shifts nsset
+       set ref_num = mrs.ref_after,
+           hr_request_id = mrs.ref_after,
+           updated_at = v_now
+      from tmp_mode_a_ref_set mrs
+      left join public.timesheets_financials tfm
+        on tfm.timesheet_id = mrs.timesheet_id
+       and tfm.is_current = true
+     where nsset.source_system = 'HEALTHROSTER'::public.hr_source_enum
+       and nsset.cancelled_at_utc is null
+       and nsset.timesheet_id = mrs.timesheet_id
+       and nsset.work_date = mrs.work_date
+       and nsset.invoice_id is null
+       and (tfm.timesheet_id is null or (tfm.locked_by_invoice_id is null and tfm.paid_at_utc is null))
+       and to_char((date_trunc('minute', nsset.start_utc) at time zone 'Europe/London'), 'HH24:MI') = mrs.ts_start_hhmm
+       and to_char((date_trunc('minute', nsset.end_utc) at time zone 'Europe/London'), 'HH24:MI') = mrs.ts_end_hhmm
+       and coalesce(nsset.break_mins,0) = coalesce(mrs.ts_break_mins,0)
+       and (
+         nsset.ref_num is distinct from mrs.ref_after
+         or nsset.hr_request_id is distinct from mrs.ref_after
+       )
+       and not exists (
+         select 1
+         from public.timesheets_financials tf_lock2
+         cross join lateral jsonb_array_elements(coalesce(tf_lock2.invoice_breakdown_json->'segments','[]'::jsonb)) as seg2(value)
+         where tf_lock2.is_current = true
+           and tf_lock2.timesheet_id = nsset.timesheet_id
+           and nullif(btrim(seg2.value->>'nhsp_shift_id'), '') = nsset.id::text
+           and nullif(btrim(seg2.value->>'invoice_locked_invoice_id'), '') is not null
+         limit 1
+       )
+    returning nsset.timesheet_id
+  )
+  insert into tmp_mode_a_ref_set_upd(timesheet_id)
+  select upd.timesheet_id
+  from upd
+  where upd.timesheet_id is not null;
+
+  get diagnostics v_mode_a_ref_set_count = row_count;
+
+  insert into tmp_ref_updated_ts(timesheet_id)
+  select distinct u.timesheet_id
+  from tmp_mode_a_ref_set_upd u
+  where u.timesheet_id is not null
+  on conflict do nothing;
+
+  insert into tmp_aff_ts(timesheet_id)
+  select distinct u2.timesheet_id
+  from tmp_mode_a_ref_set_upd u2
+  where u2.timesheet_id is not null
+  on conflict do nothing;
+
+  v_steps := v_steps || jsonb_build_array(
+    jsonb_build_object(
+      'step','MODE_A_MATCHED_REF_SET',
+      'ref_set_count', v_mode_a_ref_set_count
+    )
+  );
+
   create temporary table tmp_val_upsert on commit drop as
   select
     vr.timesheet_id,
     case
-      when vr.overall_status = 'OK' then 'VALIDATION_OK'::public.validation_status_enum
+      when vr.overall_status in ('OK','PASS','VALIDATION_OK','OVERRIDDEN','OVERRIDE') then 'VALIDATION_OK'::public.validation_status_enum
       else 'VALIDATION_ERROR'::public.validation_status_enum
     end as new_status,
     'HEALTHROSTER_WEEKLY'::text as new_reason_code,
-    case when vr.overall_status = 'OK' then v_now else null end as new_validated_at_utc,
+    case when vr.overall_status in ('OK','PASS','VALIDATION_OK','OVERRIDDEN','OVERRIDE') then v_now else null end as new_validated_at_utc,
     p_import_id as new_last_source
   from tmp_val_rows vr
   join tmp_val_mode vm
@@ -1085,8 +1227,6 @@ begin
   --    email_actions[] rows are selection-driven (tick respected).
   --    Effective recipient is:
   --      coalesce(alternative_email, vr.recipient_email)
-  --    This allows emailing even when vr.recipient_email is null (can_email=false),
-  --    as long as alternative_email is provided.
   -- ─────────────────────────────────────────────
   create temporary table tmp_email_actions on commit drop as
   select
@@ -1272,6 +1412,16 @@ begin
   );
 
   -- ─────────────────────────────────────────────
+  -- ✅ Compute ref_updated_timesheet_ids (for post-apply QR reissue + tspdf regen decisions)
+  -- ─────────────────────────────────────────────
+  select coalesce(array_agg(distinct rts.timesheet_id order by rts.timesheet_id), array[]::uuid[])
+  into v_ref_updated_timesheet_ids
+  from tmp_ref_updated_ts rts
+  where rts.timesheet_id is not null;
+
+  v_ref_updated_timesheet_ids_count := coalesce(array_length(v_ref_updated_timesheet_ids, 1), 0);
+
+  -- ─────────────────────────────────────────────
   -- 11) Compute affected_timesheet_ids (MODE_B work + MODE_A validation changes)
   -- ─────────────────────────────────────────────
   select coalesce(array_agg(distinct a.timesheet_id order by a.timesheet_id), array[]::uuid[])
@@ -1310,6 +1460,8 @@ begin
       'email_actions_count', v_email_actions_count,
       'email_jobs_count', v_email_jobs_count,
       'mode_a_ref_cleared_count', v_mode_a_ref_cleared_count,
+      'mode_a_ref_set_count', v_mode_a_ref_set_count,
+      'ref_updated_timesheet_ids_count', v_ref_updated_timesheet_ids_count,
       'invalidation_actions_count', v_invalidation_actions_count
     ),
     'hr_imports',
@@ -1356,11 +1508,14 @@ begin
       'validations_upserted', v_validations_upserted,
       'mismatched_timesheet_ids', to_jsonb(coalesce(v_mismatched_tsids, array[]::uuid[])),
       'validation_affected_timesheet_ids', to_jsonb(coalesce(v_validation_changed_timesheet_ids, array[]::uuid[])),
-      'mode_a_ref_cleared_count', v_mode_a_ref_cleared_count
+      'mode_a_ref_cleared_count', v_mode_a_ref_cleared_count,
+      'mode_a_ref_set_count', v_mode_a_ref_set_count,
+      'ref_updated_timesheet_ids', to_jsonb(coalesce(v_ref_updated_timesheet_ids, array[]::uuid[]))
     ),
     'email_jobs', v_email_jobs,
     'affected_timesheet_ids', to_jsonb(coalesce(v_affected_timesheet_ids, array[]::uuid[])),
-    'validation_affected_timesheet_ids', to_jsonb(coalesce(v_validation_changed_timesheet_ids, array[]::uuid[]))
+    'validation_affected_timesheet_ids', to_jsonb(coalesce(v_validation_changed_timesheet_ids, array[]::uuid[])),
+    'ref_updated_timesheet_ids', to_jsonb(coalesce(v_ref_updated_timesheet_ids, array[]::uuid[]))
   );
 
 exception when others then
@@ -1391,4 +1546,4 @@ exception when others then
 
   raise;
 end;
-$$;
+$function$;
