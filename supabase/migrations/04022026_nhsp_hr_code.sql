@@ -2288,6 +2288,8 @@ $function$;
 
 
 
+
+
 create or replace function public.hr_daily_apply_transactional(
   p_import_id uuid,
   p_payload jsonb,
@@ -2458,8 +2460,10 @@ begin
 
   get diagnostics v_validations_upserted = row_count;
 
-  -- 4) Daily behaviour: when VALIDATION_OK and hr_request_id present, set timesheets.reference_number
-  -- ✅ Fix: collect ids first, then update deterministically, and return affected ids
+  -- 4) DAILY reference truth:
+  -- When VALIDATION_OK and chosen_hr_request_id present, set timesheets.reference_number
+  -- ✅ Must NOT update invoiced/paid/locked timesheets
+  -- ✅ Must only touch DAILY timesheets
   create temporary table tmp_ref_updated_ids(
     timesheet_id uuid primary key
   ) on commit drop;
@@ -2469,21 +2473,25 @@ begin
   from public.timesheets ts2
   join tmp_val_by_ts vt2
     on vt2.timesheet_id = ts2.timesheet_id
+  left join public.timesheets_financials tf2
+    on tf2.timesheet_id = ts2.timesheet_id
+   and tf2.is_current = true
   where ts2.is_current = true
+    and upper(coalesce(ts2.sheet_scope::text, '')) = 'DAILY'
     and vt2.has_error is false
     and vt2.chosen_hr_request_id is not null
-    and (ts2.reference_number is distinct from vt2.chosen_hr_request_id);
+    and (ts2.reference_number is distinct from vt2.chosen_hr_request_id)
+    and (tf2.timesheet_id is null or (tf2.locked_by_invoice_id is null and tf2.paid_at_utc is null));
 
   update public.timesheets tsu
      set reference_number = vt3.chosen_hr_request_id,
          updated_at = v_now
     from tmp_val_by_ts vt3
+    join tmp_ref_updated_ids tri
+      on tri.timesheet_id = vt3.timesheet_id
    where tsu.timesheet_id = vt3.timesheet_id
      and tsu.is_current = true
-     and tsu.timesheet_id in (
-       select tri.timesheet_id
-       from tmp_ref_updated_ids tri
-     );
+     and upper(coalesce(tsu.sheet_scope::text, '')) = 'DAILY';
 
   get diagnostics v_timesheets_ref_updated = row_count;
 
@@ -2641,6 +2649,7 @@ begin
     'source_system', v_src::text,
     'validations_upserted', v_validations_upserted,
     'timesheets_reference_updated', v_timesheets_ref_updated,
+    'ref_updated_timesheet_ids', to_jsonb(coalesce(v_ref_updated_timesheet_ids, array[]::uuid[])),
     'email_actions_received', v_email_selected_count,
     'email_logs_upserted', v_email_logs_upserted,
     'email_jobs', v_email_jobs,
