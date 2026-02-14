@@ -845,3 +845,224 @@ on public.timesheets
 for each row
 execute function public.trg_timesheets_enqueue_pdf_regen_on_refs_change();
 
+-- ============================================================
+-- (25) NEW: TSFIN trigger → enqueue TS PDF regen when SEGMENTS refs change
+-- Fires on INSERT/UPDATE of invoice_breakdown_json on timesheets_financials.
+-- Queues ts_pdfs_outbox FORCE_REGEN when:
+--   - timesheet is current + ELECTRONIC
+--   - generated_pdf_at_utc exists (baseline exists)
+--   - canonical refs sig differs from timesheets.generated_pdf_refs_sig
+-- Idempotent via ON CONFLICT (timesheet_id, reason).
+-- ============================================================
+
+create or replace function public.trg_tsfin_enqueue_tspdf_on_refs_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_timesheet_id uuid := null;
+
+  v_ts record;
+
+  v_current_sig text := null;
+
+  v_contract_id uuid := null;
+  v_client_id uuid := null;
+
+  v_overrideclientsettings boolean := false;
+  v_no_timesheet_required boolean := false;
+  v_is_nhsp boolean := false;
+
+  v_as_of_date date := null;
+begin
+  -- Only for current TSFIN rows
+  if coalesce(new.is_current, false) is not true then
+    return new;
+  end if;
+
+  -- Avoid work if UPDATE didn't actually change the JSON
+  if tg_op = 'UPDATE' then
+    if new.invoice_breakdown_json is not distinct from old.invoice_breakdown_json then
+      return new;
+    end if;
+  end if;
+
+  v_timesheet_id := new.timesheet_id;
+  if v_timesheet_id is null then
+    return new;
+  end if;
+
+  -- Load current timesheet row (needed for submission_mode + baseline + gating)
+  select
+    ts.timesheet_id,
+    ts.is_current,
+    ts.revoked_at,
+    ts.submission_mode,
+    ts.manual_pdf_r2_key,
+    ts.generated_pdf_at_utc,
+    ts.generated_pdf_refs_sig,
+    ts.contract_id,
+    ts.week_ending_date,
+    ts.worked_start_iso,
+    ts.scheduled_start_iso
+  into v_ts
+  from public.timesheets ts
+  where ts.timesheet_id = v_timesheet_id
+    and ts.is_current = true
+  limit 1;
+
+  if not found then
+    return new;
+  end if;
+
+  -- Ignore revoked
+  if v_ts.revoked_at is not null then
+    return new;
+  end if;
+
+  -- ELECTRONIC only
+  if upper(coalesce(v_ts.submission_mode::text, '')) <> 'ELECTRONIC' then
+    return new;
+  end if;
+
+  -- Manual override means we don't own the generated PDF
+  if v_ts.manual_pdf_r2_key is not null then
+    return new;
+  end if;
+
+  -- If no baseline exists, do nothing (match your spec)
+  if v_ts.generated_pdf_at_utc is null then
+    return new;
+  end if;
+
+  -- Determine as-of date for effective client_settings lookup
+  v_as_of_date := coalesce(
+    v_ts.week_ending_date,
+    ((v_ts.worked_start_iso at time zone 'Europe/London')::date),
+    ((v_ts.scheduled_start_iso at time zone 'Europe/London')::date),
+    (now() at time zone 'Europe/London')::date
+  );
+
+  -- ------------------------------------------------------------
+  -- Exclusion: do not enqueue when timesheet PDF is not required
+  -- (NHSP / no_timesheet_required), respecting contract overrides.
+  -- Mirrors the timesheets trigger precedence.
+  -- ------------------------------------------------------------
+  v_contract_id := v_ts.contract_id;
+
+  if v_contract_id is null then
+    select cw.contract_id
+      into v_contract_id
+    from public.contract_weeks cw
+    where cw.timesheet_id = v_timesheet_id
+    limit 1;
+  end if;
+
+  if v_contract_id is not null then
+    select
+      coalesce(ct.overrideclientsettings, false),
+      coalesce(ct.no_timesheet_required, false),
+      coalesce(ct.is_nhsp, false),
+      ct.client_id
+    into
+      v_overrideclientsettings,
+      v_no_timesheet_required,
+      v_is_nhsp,
+      v_client_id
+    from public.contracts ct
+    where ct.id = v_contract_id
+    limit 1;
+
+    if coalesce(v_overrideclientsettings, false) = true then
+      if coalesce(v_no_timesheet_required, false) = true
+         or coalesce(v_is_nhsp, false) = true
+      then
+        return new;
+      end if;
+    end if;
+  end if;
+
+  -- If overrideclientsettings is FALSE, use effective client_settings row
+  if coalesce(v_overrideclientsettings, false) = false then
+    -- Prefer contract client_id, else TSFIN client_id
+    if v_client_id is null then
+      v_client_id := new.client_id;
+    end if;
+
+    if v_client_id is not null then
+      select
+        coalesce(csx.no_timesheet_required, false),
+        coalesce(csx.is_nhsp, false)
+      into
+        v_no_timesheet_required,
+        v_is_nhsp
+      from public.client_settings csx
+      where csx.client_id = v_client_id
+        and (csx.effective_from is null or csx.effective_from <= v_as_of_date)
+      order by csx.effective_from desc nulls last,
+               csx.updated_at desc nulls last,
+               csx.created_at desc nulls last
+      limit 1;
+
+      if coalesce(v_no_timesheet_required, false) = true
+         or coalesce(v_is_nhsp, false) = true
+      then
+        return new;
+      end if;
+    end if;
+  end if;
+
+  -- Compute canonical sig (SEGMENTS-aware)
+  v_current_sig := public.timesheet_pdf_reference_sig(v_timesheet_id);
+  if v_current_sig is null then
+    return new;
+  end if;
+
+  -- Enqueue FORCE_REGEN when missing/mismatched
+  if v_ts.generated_pdf_refs_sig is null or v_ts.generated_pdf_refs_sig <> v_current_sig then
+    insert into public.ts_pdfs_outbox(
+      timesheet_id,
+      reason,
+      attempt_count,
+      next_attempt_at,
+      last_error,
+      prefer_generated,
+      force_regen,
+      created_at
+    )
+    values (
+      v_timesheet_id,
+      'FORCE_REGEN'::public.ts_pdf_reason_enum,
+      0,
+      null,
+      null,
+      true,
+      true,
+      now()
+    )
+    on conflict (timesheet_id, reason)
+    do update
+      set attempt_count    = 0,
+          next_attempt_at  = null,
+          last_error       = null,
+          prefer_generated = true,
+          force_regen      = true;
+  end if;
+
+  return new;
+end;
+$$;
+
+-- ============================================================
+-- Trigger: enqueue regen when TSFIN invoice_breakdown_json changes
+-- ============================================================
+drop trigger if exists trg_tsfin_enqueue_tspdf_on_refs_change
+  on public.timesheets_financials;
+
+create trigger trg_tsfin_enqueue_tspdf_on_refs_change
+after insert or update of invoice_breakdown_json
+on public.timesheets_financials
+for each row
+execute function public.trg_tsfin_enqueue_tspdf_on_refs_change();
