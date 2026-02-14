@@ -13752,198 +13752,6 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
 
 
 // DELETE /api/timesheets/:id/evidence/:evidence_id
-async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
-  const enc = encodeURIComponent;
-
-  // Auth: admin only
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-  if (!tsId) return withCORS(env, req, badRequest('timesheet_id is required'));
-  if (!evidenceId) return withCORS(env, req, badRequest('evidence_id is required'));
-
-  // ✅ Guarded write (DELETE with JSON body)
-  let body = null;
-  try { body = await parseJSONBody(req); } catch { body = null; }
-  const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
-  if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
-
-  // ✅ Rotation-safe resolve
-  const resolved = await resolveTimesheetToCurrent(env, tsId);
-  if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
-  const currentTsId = resolved.current_timesheet_id;
-
-  // ✅ Guard mismatch → 409 TIMESHEET_MOVED
-  if (String(expected) !== String(currentTsId)) {
-    return withCORS(
-      env,
-      req,
-      new Response(
-        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTsId }),
-        { status: 409, headers: { 'Content-Type': 'application/json' } }
-      )
-    );
-  }
-
-  // Local R2 delete helper (so deletion actually cleans up storage even if global r2Delete is absent)
-  const r2DeleteLocal = async (key) => {
-    const bucket = env.R2_BUCKET || env.R2;
-    if (!bucket || typeof bucket.delete !== 'function') {
-      throw new Error('Storage not configured (expected env.R2 or env.R2_BUCKET with delete())');
-    }
-    const k = String(key || '').replace(/^\/+/, '').trim();
-    if (!k) return false;
-    await bucket.delete(k);
-    return true;
-  };
-
-  try {
-    // ✅ Block evidence delete if invoiced/paid (match QR scan rule)
-    try {
-      const fin = await sbGetOne(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?timesheet_id=eq.${enc(currentTsId)}` +
-          `&is_current=eq.true` +
-          `&select=locked_by_invoice_id,paid_at_utc` +
-          `&limit=1`
-      );
-      if (fin && (fin.locked_by_invoice_id || fin.paid_at_utc)) {
-        return withCORS(env, req, badRequest('Timesheet already invoiced or paid; cannot delete evidence'));
-      }
-    } catch (e) {
-      return withCORS(env, req, serverError(`Failed to validate timesheet financial lock state: ${e?.message || e}`));
-    }
-
-    // Ensure evidence row exists and belongs to this timesheet
-    const { rows: evRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
-        `?id=eq.${enc(evidenceId)}` +
-        `&timesheet_id=eq.${enc(currentTsId)}` +
-        `&select=id,storage_key,kind,display_name` +
-        `&limit=1`
-    );
-    const ev = evRows?.[0] || null;
-    if (!ev) return withCORS(env, req, notFound('Evidence not found for this timesheet'));
-
-    // Load minimal TS context for audit + optional cleanup of pointers
-    let tsMeta = null;
-    try {
-      const { rows: tsRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/timesheets` +
-          `?timesheet_id=eq.${enc(currentTsId)}` +
-          `&is_current=eq.true` +
-          `&select=timesheet_id,contract_id,week_ending_date,sheet_scope,submission_mode,manual_pdf_r2_key,manual_pdf_rotation_degrees,generated_pdf_at_utc` +
-          `&limit=1`
-      );
-      tsMeta = tsRows?.[0] || null;
-    } catch {}
-
-    const storageKeyRaw = ev.storage_key || null;
-    const storageKeyForR2 = storageKeyRaw ? String(storageKeyRaw).trim().replace(/^\/+/, '') : null;
-
-    // 1) Best-effort delete from R2 (this deletes the actual file object)
-    try {
-      if (storageKeyForR2) {
-        await r2DeleteLocal(storageKeyForR2);
-      }
-    } catch (e) {
-      console.warn('[handleTimesheetEvidenceDelete] R2 delete failed (non-fatal)', {
-        storage_key: storageKeyForR2,
-        err: e?.message || String(e)
-      });
-    }
-
-    // 2) Delete DB evidence row (timesheet_evidence)
-    const delRes = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(evidenceId)}`,
-      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return-minimal' } }
-    );
-
-    if (!delRes.ok) {
-      const t = await delRes.text().catch(() => '');
-      return withCORS(env, req, serverError(`Failed to delete timesheet evidence: ${t}`));
-    }
-
-    // 3) Optional: also clear any timesheet pointer fields that reference the same key
-    //    (prevents the timesheet record pointing at a deleted object).
-    //    This is still a single REST call, not a loop.
-    try {
-      const patches = {};
-
-      const mk = tsMeta?.manual_pdf_r2_key ? String(tsMeta.manual_pdf_r2_key).replace(/^\/+/, '').trim() : '';
-      const sk = storageKeyForR2 ? String(storageKeyForR2).trim() : '';
-
-      // If the deleted file was also the manual scan pointer, clear it
-      if (mk && sk && mk === sk) {
-        patches.manual_pdf_r2_key = null;
-        patches.manual_pdf_rotation_degrees = 0;
-      }
-
-      // If the deleted file was the system-generated PDF key, clear the generated flag
-      const generatedKey = `docs-pdf/timesheets/ts_${currentTsId}.pdf`;
-      if (sk && sk === generatedKey) {
-        patches.generated_pdf_at_utc = null;
-      }
-
-      if (Object.keys(patches).length) {
-        const updRes = await fetch(
-          `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTsId)}&is_current=eq.true`,
-          {
-            method: 'PATCH',
-            headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-            body: JSON.stringify(patches)
-          }
-        );
-
-        if (!updRes.ok) {
-          const txt = await updRes.text().catch(() => '');
-          console.warn('[handleTimesheetEvidenceDelete] timesheets pointer cleanup failed (non-fatal)', {
-            timesheet_id: currentTsId,
-            patches,
-            err: txt
-          });
-        }
-      }
-    } catch (e) {
-      console.warn('[handleTimesheetEvidenceDelete] pointer cleanup failed (non-fatal)', {
-        timesheet_id: currentTsId,
-        err: e?.message || String(e)
-      });
-    }
-
-    // Audit
-    try {
-      await writeAudit(
-        env,
-        user,
-        'TIMESHEET_EVIDENCE_REMOVED',
-        {
-          timesheet_id: currentTsId,
-          evidence_id: evidenceId,
-          kind: ev.kind || null,
-          display_name: ev.display_name || null,
-          storage_key: storageKeyRaw,
-          contract_id: tsMeta?.contract_id || null,
-          week_ending_date: tsMeta?.week_ending_date || null,
-          sheet_scope: tsMeta?.sheet_scope || null,
-          submission_mode: tsMeta?.submission_mode || null
-        },
-        { entity: 'timesheets', subject_id: currentTsId, req }
-      );
-    } catch {}
-
-    return withCORS(env, req, ok({
-      ok: true,
-      requested_timesheet_id: resolved.requested_timesheet_id || tsId,
-      current_timesheet_id: currentTsId,
-      was_stale: !!resolved.was_stale
-    }));
-  } catch (e) {
-    return withCORS(env, req, serverError(`Failed to delete timesheet evidence: ${e?.message || e}`));
-  }
-}
 
 async function handleTimesheetReplaceManualPdf(env, req, timesheetId) {
   const enc = encodeURIComponent;
@@ -41750,7 +41558,7 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
         `?timesheet_id=eq.${enc(currentTsId)}` +
         `&is_current=eq.true` +
-        `&select=timesheet_id,contract_id,week_ending_date,sheet_scope,submission_mode` +
+        `&select=timesheet_id,contract_id,week_ending_date,sheet_scope,submission_mode,manual_pdf_r2_key` +
         `&limit=1`
     );
     const ts = tsRows?.[0] || null;
@@ -41797,6 +41605,33 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
       row = Array.isArray(json) ? json[0] : json;
     } catch {
       row = null;
+    }
+
+    // ✅ NEW: if this evidence is a TIMESHEET, set timesheets.manual_pdf_r2_key to this storage_key
+    if (String(kind).toUpperCase() === 'TIMESHEET') {
+      try {
+        const updRes = await fetch(
+          `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTsId)}&is_current=eq.true`,
+          {
+            method: 'PATCH',
+            headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+            body: JSON.stringify({ manual_pdf_r2_key: storageKey })
+          }
+        );
+        if (!updRes.ok) {
+          const t2 = await updRes.text().catch(() => '');
+          console.warn('[handleTimesheetEvidenceAdd] manual_pdf_r2_key update failed (non-fatal)', {
+            timesheet_id: currentTsId,
+            storage_key: storageKey,
+            err: t2
+          });
+        }
+      } catch (e) {
+        console.warn('[handleTimesheetEvidenceAdd] manual_pdf_r2_key update exception (non-fatal)', {
+          timesheet_id: currentTsId,
+          err: e?.message || String(e)
+        });
+      }
     }
 
     try {
@@ -41908,6 +41743,7 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
       return withCORS(env, req, serverError(`Failed to validate timesheet financial lock state: ${e?.message || e}`));
     }
 
+    // Load evidence row
     const { rows: evRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
@@ -41921,7 +41757,10 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
     if (!ev) return withCORS(env, req, notFound('Evidence not found for this timesheet'));
 
     const oldKind = ev.kind != null ? String(ev.kind) : '';
-    if (String(oldKind) === String(newKind)) {
+    const oldKindU = String(oldKind || '').toUpperCase();
+    const newKindU = String(newKind || '').toUpperCase();
+
+    if (oldKindU === newKindU) {
       return withCORS(env, req, ok({
         ok: true,
         requested_timesheet_id: resolved.requested_timesheet_id || tsId,
@@ -41931,6 +41770,7 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
       }));
     }
 
+    // Patch evidence kind
     const patchRes = await fetch(
       `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(evidenceId)}`,
       {
@@ -41951,6 +41791,76 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
       updated = Array.isArray(json) ? json[0] : json;
     } catch {
       updated = null;
+    }
+
+    // ✅ NEW: maintain timesheets.manual_pdf_r2_key based on TIMESHEET kind transitions
+    // - If changing TO TIMESHEET: set manual_pdf_r2_key to this evidence's storage_key
+    // - If changing FROM TIMESHEET: clear manual_pdf_r2_key only if it matches this evidence's storage_key
+    try {
+      const storageKey = (ev.storage_key != null) ? String(ev.storage_key).trim().replace(/^\/+/, '') : '';
+      if (storageKey) {
+        // Load current manual_pdf_r2_key once (minimal select)
+        let tsRow = null;
+        try {
+          const { rows: tsRows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/timesheets` +
+              `?timesheet_id=eq.${enc(currentTsId)}` +
+              `&is_current=eq.true` +
+              `&select=manual_pdf_r2_key` +
+              `&limit=1`
+          );
+          tsRow = tsRows?.[0] || null;
+        } catch {
+          tsRow = null;
+        }
+
+        const curMk = (tsRow?.manual_pdf_r2_key != null) ? String(tsRow.manual_pdf_r2_key).trim().replace(/^\/+/, '') : '';
+
+        if (newKindU === 'TIMESHEET') {
+          const updRes = await fetch(
+            `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTsId)}&is_current=eq.true`,
+            {
+              method: 'PATCH',
+              headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+              body: JSON.stringify({ manual_pdf_r2_key: storageKey })
+            }
+          );
+          if (!updRes.ok) {
+            const t2 = await updRes.text().catch(() => '');
+            console.warn('[handleTimesheetEvidenceUpdateKind] set manual_pdf_r2_key failed (non-fatal)', {
+              timesheet_id: currentTsId,
+              storage_key: storageKey,
+              err: t2
+            });
+          }
+        } else if (oldKindU === 'TIMESHEET') {
+          // Only clear if pointer currently equals this evidence file
+          if (curMk && curMk === storageKey) {
+            const updRes = await fetch(
+              `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTsId)}&is_current=eq.true`,
+              {
+                method: 'PATCH',
+                headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+                body: JSON.stringify({ manual_pdf_r2_key: null })
+              }
+            );
+            if (!updRes.ok) {
+              const t2 = await updRes.text().catch(() => '');
+              console.warn('[handleTimesheetEvidenceUpdateKind] clear manual_pdf_r2_key failed (non-fatal)', {
+                timesheet_id: currentTsId,
+                err: t2
+              });
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[handleTimesheetEvidenceUpdateKind] manual_pdf_r2_key transition handling failed (non-fatal)', {
+        timesheet_id: currentTsId,
+        evidence_id: evidenceId,
+        err: e?.message || String(e)
+      });
     }
 
     try {
@@ -41979,6 +41889,197 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
     }));
   } catch (e) {
     return withCORS(env, req, serverError(`Failed to update evidence kind: ${e?.message || e}`));
+  }
+}
+
+async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
+  const enc = encodeURIComponent;
+
+  // Auth: admin only
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!tsId) return withCORS(env, req, badRequest('timesheet_id is required'));
+  if (!evidenceId) return withCORS(env, req, badRequest('evidence_id is required'));
+
+  // ✅ Guarded write (DELETE with JSON body)
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+
+  // ✅ Rotation-safe resolve
+  const resolved = await resolveTimesheetToCurrent(env, tsId);
+  if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
+  const currentTsId = resolved.current_timesheet_id;
+
+  // ✅ Guard mismatch → 409 TIMESHEET_MOVED
+  if (String(expected) !== String(currentTsId)) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTsId }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
+
+  // Local R2 delete helper (so deletion actually cleans up storage even if global r2Delete is absent)
+  const r2DeleteLocal = async (key) => {
+    const bucket = env.R2_BUCKET || env.R2;
+    if (!bucket || typeof bucket.delete !== 'function') {
+      throw new Error('Storage not configured (expected env.R2 or env.R2_BUCKET with delete())');
+    }
+    const k = String(key || '').replace(/^\/+/, '').trim();
+    if (!k) return false;
+    await bucket.delete(k);
+    return true;
+  };
+
+  try {
+    // ✅ Block evidence delete if invoiced/paid (match QR scan rule)
+    try {
+      const fin = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=eq.${enc(currentTsId)}` +
+          `&is_current=eq.true` +
+          `&select=locked_by_invoice_id,paid_at_utc` +
+          `&limit=1`
+      );
+      if (fin && (fin.locked_by_invoice_id || fin.paid_at_utc)) {
+        return withCORS(env, req, badRequest('Timesheet already invoiced or paid; cannot delete evidence'));
+      }
+    } catch (e) {
+      return withCORS(env, req, serverError(`Failed to validate timesheet financial lock state: ${e?.message || e}`));
+    }
+
+    // Ensure evidence row exists and belongs to this timesheet
+    const { rows: evRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
+        `?id=eq.${enc(evidenceId)}` +
+        `&timesheet_id=eq.${enc(currentTsId)}` +
+        `&select=id,storage_key,kind,display_name` +
+        `&limit=1`
+    );
+    const ev = evRows?.[0] || null;
+    if (!ev) return withCORS(env, req, notFound('Evidence not found for this timesheet'));
+
+    // Load minimal TS context for audit + optional cleanup of pointers
+    let tsMeta = null;
+    try {
+      const { rows: tsRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?timesheet_id=eq.${enc(currentTsId)}` +
+          `&is_current=eq.true` +
+          `&select=timesheet_id,contract_id,week_ending_date,sheet_scope,submission_mode,manual_pdf_r2_key,manual_pdf_rotation_degrees,generated_pdf_at_utc` +
+          `&limit=1`
+      );
+      tsMeta = tsRows?.[0] || null;
+    } catch {}
+
+    const storageKeyRaw = ev.storage_key || null;
+    const storageKeyForR2 = storageKeyRaw ? String(storageKeyRaw).trim().replace(/^\/+/, '') : null;
+
+    // 1) Best-effort delete from R2 (this deletes the actual file object)
+    try {
+      if (storageKeyForR2) {
+        await r2DeleteLocal(storageKeyForR2);
+      }
+    } catch (e) {
+      console.warn('[handleTimesheetEvidenceDelete] R2 delete failed (non-fatal)', {
+        storage_key: storageKeyForR2,
+        err: e?.message || String(e)
+      });
+    }
+
+    // 2) Delete DB evidence row (timesheet_evidence)
+    const delRes = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(evidenceId)}`,
+      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return-minimal' } }
+    );
+
+    if (!delRes.ok) {
+      const t = await delRes.text().catch(() => '');
+      return withCORS(env, req, serverError(`Failed to delete timesheet evidence: ${t}`));
+    }
+
+    // 3) ✅ NEW: If deleted evidence is kind=TIMESHEET and it matches manual_pdf_r2_key, clear it.
+    //    Also keep the existing “generated pdf” cleanup safeguard.
+    try {
+      const patches = {};
+
+      const mk = tsMeta?.manual_pdf_r2_key ? String(tsMeta.manual_pdf_r2_key).replace(/^\/+/, '').trim() : '';
+      const sk = storageKeyForR2 ? String(storageKeyForR2).trim() : '';
+      const evKindU = String(ev.kind || '').toUpperCase();
+
+      if (evKindU === 'TIMESHEET' && mk && sk && mk === sk) {
+        patches.manual_pdf_r2_key = null;
+        patches.manual_pdf_rotation_degrees = 0;
+      }
+
+      const generatedKey = `docs-pdf/timesheets/ts_${currentTsId}.pdf`;
+      if (sk && sk === generatedKey) {
+        patches.generated_pdf_at_utc = null;
+      }
+
+      if (Object.keys(patches).length) {
+        const updRes = await fetch(
+          `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTsId)}&is_current=eq.true`,
+          {
+            method: 'PATCH',
+            headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+            body: JSON.stringify(patches)
+          }
+        );
+
+        if (!updRes.ok) {
+          const txt2 = await updRes.text().catch(() => '');
+          console.warn('[handleTimesheetEvidenceDelete] timesheets pointer cleanup failed (non-fatal)', {
+            timesheet_id: currentTsId,
+            patches,
+            err: txt2
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('[handleTimesheetEvidenceDelete] pointer cleanup failed (non-fatal)', {
+        timesheet_id: currentTsId,
+        err: e?.message || String(e)
+      });
+    }
+
+    // Audit
+    try {
+      await writeAudit(
+        env,
+        user,
+        'TIMESHEET_EVIDENCE_REMOVED',
+        {
+          timesheet_id: currentTsId,
+          evidence_id: evidenceId,
+          kind: ev.kind || null,
+          display_name: ev.display_name || null,
+          storage_key: storageKeyRaw,
+          contract_id: tsMeta?.contract_id || null,
+          week_ending_date: tsMeta?.week_ending_date || null,
+          sheet_scope: tsMeta?.sheet_scope || null,
+          submission_mode: tsMeta?.submission_mode || null
+        },
+        { entity: 'timesheets', subject_id: currentTsId, req }
+      );
+    } catch {}
+
+    return withCORS(env, req, ok({
+      ok: true,
+      requested_timesheet_id: resolved.requested_timesheet_id || tsId,
+      current_timesheet_id: currentTsId,
+      was_stale: !!resolved.was_stale
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError(`Failed to delete timesheet evidence: ${e?.message || e}`));
   }
 }
 
