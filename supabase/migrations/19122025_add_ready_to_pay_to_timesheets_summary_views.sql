@@ -1707,3 +1707,162 @@ GRANT SELECT ON public.v_timesheets_details TO authenticated;
 -- Ensure PostgREST sees new columns immediately after commit
 SELECT pg_notify('pgrst', 'reload schema');
 
+CREATE OR REPLACE FUNCTION public.timesheets_invalidate_prevalidation_on_change()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+declare
+  v_tv_status public.validation_status_enum;
+  v_tv_pre_validated boolean;
+  v_tv_hr_request_id text;
+  v_tv_hr_request_source public.reference_source_enum;
+
+  v_changed boolean := false;
+
+  -- DAILY change flags
+  v_daily_changed_worked boolean := false;
+  v_daily_changed_break boolean := false;
+  v_daily_changed_refnum boolean := false;
+  v_daily_changed_dayrefs boolean := false;
+
+  -- WEEKLY change flags
+  v_weekly_changed_sched boolean := false;
+  v_weekly_changed_refnum boolean := false;
+  v_weekly_changed_dayrefs boolean := false;
+  v_weekly_changed_units_week boolean := false;
+  v_weekly_changed_units_per_day boolean := false;
+
+  v_ignore_daily_ref_autoset boolean := false;
+begin
+  if tg_op <> 'UPDATE' then
+    return new;
+  end if;
+
+  -- Only apply to current row updates
+  if coalesce(new.is_current, false) is not true then
+    return new;
+  end if;
+
+  -- If the old row was not current, do not invalidate (avoid version-rotation noise)
+  if coalesce(old.is_current, false) is not true then
+    return new;
+  end if;
+
+  -- Load current validation row (if any)
+  select
+    tv.status,
+    coalesce(tv.pre_validated, false),
+    tv.hr_request_id,
+    tv.hr_request_source
+  into
+    v_tv_status,
+    v_tv_pre_validated,
+    v_tv_hr_request_id,
+    v_tv_hr_request_source
+  from public.timesheet_validations tv
+  where tv.timesheet_id = new.timesheet_id
+  limit 1;
+
+  if not found then
+    return new;
+  end if;
+
+  -- Only invalidate when validation was previously "good" OR pre_validated was set
+  if not (
+    v_tv_pre_validated is true
+    or v_tv_status = 'VALIDATION_OK'::public.validation_status_enum
+    or v_tv_status = 'OVERRIDDEN'::public.validation_status_enum
+  ) then
+    return new;
+  end if;
+
+  -- ─────────────────────────────────────────────
+  -- Determine whether validation-relevant truth changed
+  -- ─────────────────────────────────────────────
+  if new.sheet_scope = 'DAILY'::public.timesheet_scope_enum then
+    v_daily_changed_worked :=
+      (new.worked_start_iso is distinct from old.worked_start_iso)
+      or (new.worked_end_iso is distinct from old.worked_end_iso);
+
+    v_daily_changed_break :=
+      (new.break_start_iso is distinct from old.break_start_iso)
+      or (new.break_end_iso is distinct from old.break_end_iso)
+      or (new.break_minutes is distinct from old.break_minutes);
+
+    v_daily_changed_refnum :=
+      (new.reference_number is distinct from old.reference_number);
+
+    v_daily_changed_dayrefs :=
+      (new.day_references_json is distinct from old.day_references_json);
+
+    -- Special-case: DAILY reference_number auto-set to imported HR request id
+    -- Do NOT invalidate if the ONLY relevant change is reference_number and it matches the imported hr_request_id.
+    if v_daily_changed_refnum is true
+       and v_daily_changed_worked is false
+       and v_daily_changed_break is false
+       and v_daily_changed_dayrefs is false
+       and v_tv_hr_request_source = 'IMPORTED'::public.reference_source_enum
+       and v_tv_hr_request_id is not null
+       and new.reference_number is not distinct from v_tv_hr_request_id
+    then
+      v_ignore_daily_ref_autoset := true;
+    end if;
+
+    v_changed :=
+      (v_daily_changed_worked or v_daily_changed_break or v_daily_changed_dayrefs or v_daily_changed_refnum)
+      and v_ignore_daily_ref_autoset is false;
+
+  elsif new.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum then
+    v_weekly_changed_sched :=
+      (new.actual_schedule_json is distinct from old.actual_schedule_json);
+
+    v_weekly_changed_refnum :=
+      (new.reference_number is distinct from old.reference_number);
+
+    v_weekly_changed_dayrefs :=
+      (new.day_references_json is distinct from old.day_references_json);
+
+    v_weekly_changed_units_week :=
+      (new.additional_units_week is distinct from old.additional_units_week);
+
+    v_weekly_changed_units_per_day :=
+      (new.additional_units_per_day is distinct from old.additional_units_per_day);
+
+    v_changed :=
+      v_weekly_changed_sched
+      or v_weekly_changed_refnum
+      or v_weekly_changed_dayrefs
+      or v_weekly_changed_units_week
+      or v_weekly_changed_units_per_day;
+  else
+    return new;
+  end if;
+
+  if v_changed is not true then
+    return new;
+  end if;
+
+  -- ─────────────────────────────────────────────
+  -- Invalidate pre-validation + force re-validation
+  -- ─────────────────────────────────────────────
+  update public.timesheet_validations tvu
+     set status = 'PENDING'::public.validation_status_enum,
+         pre_validated = false,
+         validated_at_utc = null,
+         reason_code = 'TIMESHEET_CHANGED',
+         updated_at = now()
+   where tvu.timesheet_id = new.timesheet_id;
+
+  return new;
+end;
+$function$;
+
+DROP TRIGGER IF EXISTS trg_timesheets_invalidate_prevalidation_on_change
+ON public.timesheets;
+
+CREATE TRIGGER trg_timesheets_invalidate_prevalidation_on_change
+AFTER UPDATE ON public.timesheets
+FOR EACH ROW
+EXECUTE FUNCTION public.timesheets_invalidate_prevalidation_on_change();
