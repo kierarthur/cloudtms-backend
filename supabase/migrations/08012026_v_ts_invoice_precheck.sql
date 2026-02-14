@@ -66,6 +66,13 @@ select
   ) as require_reference_to_invoice,
 
   case
+    -- ✅ NEW: QR unsigned gating (block invoicing until signed QR uploaded)
+    when ts.qr_status = 'PENDING'::timesheet_qr_status_enum
+     and ts.qr_token is not null
+     and ts.qr_generated_at is not null
+     and ts.qr_scanned_at is null
+      then 'BLOCK_QR_UNSIGNED'::text
+
     -- PDF gating (client-led) — ✅ overrideclientsettings applied for ts_attach_to_invoice
     when coalesce(
            case when c.overrideclientsettings then c.ts_attach_to_invoice end,
