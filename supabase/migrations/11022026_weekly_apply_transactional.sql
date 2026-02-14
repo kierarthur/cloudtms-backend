@@ -826,9 +826,6 @@ begin
 
   -- ─────────────────────────────────────────────
   -- 10) MODE_A weekly validation upserts + email state
-  --     ✅ Option B: tmp_val_mode derives directly from effective route flags
-  --     ✅ NEW: invalidation_actions controls ref clearing
-  --     ✅ NEW: email_jobs are grouped by effective recipient (alt email overrides default)
   -- ─────────────────────────────────────────────
   select public.hr_weekly_validation_preview(p_import_id := p_import_id)
   into v_weekly_val_payload;
@@ -981,34 +978,34 @@ begin
   ) on commit drop;
 
   with upd as (
-update public.nhsp_shifts nsclr
-     set ref_num = null,
-         hr_request_id = null,
-         updated_at = v_now
-    from tmp_mode_a_missing_ref_clear mrc
-    left join public.timesheets_financials tfc
-      on tfc.timesheet_id = mrc.timesheet_id
-     and tfc.is_current = true
-   where nsclr.source_system = 'HEALTHROSTER'::public.hr_source_enum
-     and nsclr.cancelled_at_utc is null
-     and nsclr.timesheet_id = mrc.timesheet_id
-     and nsclr.work_date = mrc.work_date
-     and nsclr.ref_num is not null
-     and nsclr.invoice_id is null
-     and (tfc.timesheet_id is null or (tfc.locked_by_invoice_id is null and tfc.paid_at_utc is null))
-     and to_char((date_trunc('minute', nsclr.start_utc) at time zone 'Europe/London'), 'HH24:MI') = mrc.ts_start_hhmm
-     and to_char((date_trunc('minute', nsclr.end_utc) at time zone 'Europe/London'), 'HH24:MI') = mrc.ts_end_hhmm
-     and coalesce(nsclr.break_mins,0) = coalesce(mrc.ts_break_mins,0)
-     and not exists (
-       select 1
-       from public.timesheets_financials tf_lock
-       cross join lateral jsonb_array_elements(coalesce(tf_lock.invoice_breakdown_json->'segments','[]'::jsonb)) as seg(value)
-       where tf_lock.is_current = true
-         and tf_lock.timesheet_id = nsclr.timesheet_id
-         and nullif(btrim(seg.value->>'nhsp_shift_id'), '') = nsclr.id::text
-         and nullif(btrim(seg.value->>'invoice_locked_invoice_id'), '') is not null
-       limit 1
-     )
+    update public.nhsp_shifts nsclr
+       set ref_num = null,
+           hr_request_id = null,
+           updated_at = v_now
+      from tmp_mode_a_missing_ref_clear mrc
+      left join public.timesheets_financials tfc
+        on tfc.timesheet_id = mrc.timesheet_id
+       and tfc.is_current = true
+     where nsclr.source_system = 'HEALTHROSTER'::public.hr_source_enum
+       and nsclr.cancelled_at_utc is null
+       and nsclr.timesheet_id = mrc.timesheet_id
+       and nsclr.work_date = mrc.work_date
+       and nsclr.ref_num is not null
+       and nsclr.invoice_id is null
+       and (tfc.timesheet_id is null or (tfc.locked_by_invoice_id is null and tfc.paid_at_utc is null))
+       and to_char((date_trunc('minute', nsclr.start_utc) at time zone 'Europe/London'), 'HH24:MI') = mrc.ts_start_hhmm
+       and to_char((date_trunc('minute', nsclr.end_utc) at time zone 'Europe/London'), 'HH24:MI') = mrc.ts_end_hhmm
+       and coalesce(nsclr.break_mins,0) = coalesce(mrc.ts_break_mins,0)
+       and not exists (
+         select 1
+         from public.timesheets_financials tf_lock
+         cross join lateral jsonb_array_elements(coalesce(tf_lock.invoice_breakdown_json->'segments','[]'::jsonb)) as seg(value)
+         where tf_lock.is_current = true
+           and tf_lock.timesheet_id = nsclr.timesheet_id
+           and nullif(btrim(seg.value->>'nhsp_shift_id'), '') = nsclr.id::text
+           and nullif(btrim(seg.value->>'invoice_locked_invoice_id'), '') is not null
+         limit 1
+       )
     returning nsclr.timesheet_id
   )
   insert into tmp_mode_a_ref_clear_upd(timesheet_id)
@@ -1046,8 +1043,6 @@ update public.nhsp_shifts nsclr
 
   -- ─────────────────────────────────────────────
   -- ✅ MODE_A matched ref propagation (Request Id / booking reference)
-  -- Only apply when validation is OK/OVERRIDDEN (per rules).
-  -- Writes ref_num + hr_request_id into nhsp_shifts for matched rows, skipping invoice-locked evidence.
   -- ─────────────────────────────────────────────
   drop table if exists pg_temp.tmp_mode_a_ref_set;
   create temporary table tmp_mode_a_ref_set(
@@ -1152,6 +1147,12 @@ update public.nhsp_shifts nsclr
     )
   );
 
+  -- ─────────────────────────────────────────────
+  -- ✅ UPDATED: tmp_val_upsert now computes new_pre_validated
+  --   new_pre_validated = true when:
+  --     - validation result is OK/OVERRIDDEN (=> new_status VALIDATION_OK)
+  --     - AND timesheet is NOT authorised yet (timesheets.authorised_at_server IS NULL)
+  -- ─────────────────────────────────────────────
   create temporary table tmp_val_upsert on commit drop as
   select
     vr.timesheet_id,
@@ -1161,13 +1162,24 @@ update public.nhsp_shifts nsclr
     end as new_status,
     'HEALTHROSTER_WEEKLY'::text as new_reason_code,
     case when vr.overall_status in ('OK','PASS','VALIDATION_OK','OVERRIDDEN','OVERRIDE') then v_now else null end as new_validated_at_utc,
-    p_import_id as new_last_source
+    p_import_id as new_last_source,
+    case
+      when vr.overall_status in ('OK','PASS','VALIDATION_OK','OVERRIDDEN','OVERRIDE')
+       and tva.timesheet_id is not null
+       and tva.authorised_at_server is null
+      then true
+      else false
+    end as new_pre_validated
   from tmp_val_rows vr
   join tmp_val_mode vm
     on vm.timesheet_id = vr.timesheet_id
+  left join public.timesheets tva
+    on tva.timesheet_id = vr.timesheet_id
+   and tva.is_current = true
   where vm.mode = 'MODE_A'
     and vr.timesheet_id is not null;
 
+  -- ✅ UPDATED: include pre_validated changes as "validation_changed"
   select coalesce(array_agg(distinct x.timesheet_id order by x.timesheet_id), array[]::uuid[])
   into v_validation_changed_timesheet_ids
   from (
@@ -1180,14 +1192,17 @@ update public.nhsp_shifts nsclr
        or tv.validated_at_utc is distinct from u.new_validated_at_utc
        or tv.last_source is distinct from u.new_last_source
        or tv.reason_code is distinct from u.new_reason_code
+       or tv.pre_validated is distinct from u.new_pre_validated
   ) as x;
 
+  -- ✅ UPDATED: insert/upsert includes pre_validated
   insert into public.timesheet_validations(
     timesheet_id,
     status,
     reason_code,
     validated_at_utc,
     last_source,
+    pre_validated,
     updated_at
   )
   select
@@ -1196,6 +1211,7 @@ update public.nhsp_shifts nsclr
     u.new_reason_code,
     u.new_validated_at_utc,
     u.new_last_source,
+    u.new_pre_validated,
     v_now
   from tmp_val_upsert u
   on conflict (timesheet_id) do update
@@ -1203,6 +1219,7 @@ update public.nhsp_shifts nsclr
         reason_code = excluded.reason_code,
         validated_at_utc = excluded.validated_at_utc,
         last_source = excluded.last_source,
+        pre_validated = excluded.pre_validated,
         updated_at = excluded.updated_at;
 
   get diagnostics v_validations_upserted = row_count;
@@ -1224,9 +1241,6 @@ update public.nhsp_shifts nsclr
 
   -- ─────────────────────────────────────────────
   -- ✅ Email actions: allow Alternative Email override per selected mismatch
-  --    email_actions[] rows are selection-driven (tick respected).
-  --    Effective recipient is:
-  --      coalesce(alternative_email, vr.recipient_email)
   -- ─────────────────────────────────────────────
   create temporary table tmp_email_actions on commit drop as
   select
@@ -1321,82 +1335,81 @@ update public.nhsp_shifts nsclr
   cross join lateral jsonb_array_elements(coalesce(ej.row_json->'comparisons','[]'::jsonb)) as cx(value)
   where coalesce((cx.value->>'match')::boolean,false) is false;
 
- create temporary table tmp_email_jobs on commit drop as
-select
-  ej.effective_recipient_email as recipient_email,
-  (count(*) filter (where ej.emailed_already is true))::int as reemail_count,
-  (count(*) filter (where ej.emailed_already is false))::int as email_count
-from tmp_email_join ej
-group by ej.effective_recipient_email;
+  create temporary table tmp_email_jobs on commit drop as
+  select
+    ej.effective_recipient_email as recipient_email,
+    (count(*) filter (where ej.emailed_already is true))::int as reemail_count,
+    (count(*) filter (where ej.emailed_already is false))::int as email_count
+  from tmp_email_join ej
+  group by ej.effective_recipient_email;
 
-select coalesce(
-  jsonb_agg(
-    jsonb_build_object(
-      'recipient_email', tj.recipient_email,
-      'email_kind',
-        (case
-          when tj.recipient_email is null then 'NONE'
-          when tj.reemail_count > 0 and tj.email_count = 0 then 'REEMAIL'
-          when tj.reemail_count = 0 and tj.email_count > 0 then 'EMAIL'
-          when tj.reemail_count > 0 and tj.email_count > 0 then 'MIXED'
-          else 'EMAIL'
-        end),
-      'issue_fingerprints',
-        coalesce(
-          (
-            select to_jsonb(array_agg(distinct ej2.issue_fingerprint order by ej2.issue_fingerprint))
-            from tmp_email_join ej2
-            where ej2.effective_recipient_email = tj.recipient_email
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'recipient_email', tj.recipient_email,
+        'email_kind',
+          (case
+            when tj.recipient_email is null then 'NONE'
+            when tj.reemail_count > 0 and tj.email_count = 0 then 'REEMAIL'
+            when tj.reemail_count = 0 and tj.email_count > 0 then 'EMAIL'
+            when tj.reemail_count > 0 and tj.email_count > 0 then 'MIXED'
+            else 'EMAIL'
+          end),
+        'issue_fingerprints',
+          coalesce(
+            (
+              select to_jsonb(array_agg(distinct ej2.issue_fingerprint order by ej2.issue_fingerprint))
+              from tmp_email_join ej2
+              where ej2.effective_recipient_email = tj.recipient_email
+            ),
+            '[]'::jsonb
           ),
-          '[]'::jsonb
-        ),
-      'attachment_timesheet_ids',
-        coalesce(
-          (
-            select to_jsonb(array_agg(distinct ej3.timesheet_id::text order by ej3.timesheet_id::text))
-            from tmp_email_join ej3
-            where ej3.effective_recipient_email = tj.recipient_email
+        'attachment_timesheet_ids',
+          coalesce(
+            (
+              select to_jsonb(array_agg(distinct ej3.timesheet_id::text order by ej3.timesheet_id::text))
+              from tmp_email_join ej3
+              where ej3.effective_recipient_email = tj.recipient_email
+            ),
+            '[]'::jsonb
           ),
-          '[]'::jsonb
-        ),
-      'items',
-        coalesce(
-          (
-            select jsonb_agg(
-              jsonb_build_object(
-                'timesheet_id', ti.timesheet_id::text,
-                'issue_fingerprint', ti.issue_fingerprint,
-                'candidate_name', ti.candidate_name,
-                'week_ending_date', ti.week_ending_date::text,
-                'work_date', ti.work_date::text,
-                'timesheet_start', ti.timesheet_start,
-                'timesheet_end', ti.timesheet_end,
-                'timesheet_break_mins', ti.timesheet_break_mins,
-                'healthroster_start', ti.healthroster_start,
-                'healthroster_end', ti.healthroster_end,
-                'healthroster_break_mins', ti.healthroster_break_mins,
-                'match_status', ti.match_status,
-                'ref_before', ti.ref_before,
-                'ref_after', ti.ref_after,
-                'invoice_locked', ti.invoice_locked,
-                'invoice_locked_invoice_id', ti.invoice_locked_invoice_id,
-                'comparison_key', ti.comparison_key
+        'items',
+          coalesce(
+            (
+              select jsonb_agg(
+                jsonb_build_object(
+                  'timesheet_id', ti.timesheet_id::text,
+                  'issue_fingerprint', ti.issue_fingerprint,
+                  'candidate_name', ti.candidate_name,
+                  'week_ending_date', ti.week_ending_date::text,
+                  'work_date', ti.work_date::text,
+                  'timesheet_start', ti.timesheet_start,
+                  'timesheet_end', ti.timesheet_end,
+                  'timesheet_break_mins', ti.timesheet_break_mins,
+                  'healthroster_start', ti.healthroster_start,
+                  'healthroster_end', ti.healthroster_end,
+                  'healthroster_break_mins', ti.healthroster_break_mins,
+                  'match_status', ti.match_status,
+                  'ref_before', ti.ref_before,
+                  'ref_after', ti.ref_after,
+                  'invoice_locked', ti.invoice_locked,
+                  'invoice_locked_invoice_id', ti.invoice_locked_invoice_id,
+                  'comparison_key', ti.comparison_key
+                )
+                order by ti.candidate_name nulls last, ti.work_date asc, ti.timesheet_start nulls last
               )
-              order by ti.candidate_name nulls last, ti.work_date asc, ti.timesheet_start nulls last
-            )
-            from tmp_email_items ti
-            where ti.recipient_email = tj.recipient_email
-          ),
-          '[]'::jsonb
-        )
-    )
-    order by tj.recipient_email nulls last
-  ),
-  '[]'::jsonb
-)
-into v_email_jobs
-from tmp_email_jobs tj;
-
+              from tmp_email_items ti
+              where ti.recipient_email = tj.recipient_email
+            ),
+            '[]'::jsonb
+          )
+      )
+      order by tj.recipient_email nulls last
+    ),
+    '[]'::jsonb
+  )
+  into v_email_jobs
+  from tmp_email_jobs tj;
 
   v_email_jobs_count := jsonb_array_length(coalesce(v_email_jobs, '[]'::jsonb));
 
