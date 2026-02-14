@@ -44626,7 +44626,6 @@ async function handleTimesheetResolveClient(env, req, timesheetId) {
   }
 }
 
-
 async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
   const enc = encodeURIComponent;
   const cleanKey = (k) => String(k || '').replace(/^\/+/, '').trim();
@@ -44974,33 +44973,76 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
       ).catch(() => null);
 
       // ✅ UPDATED: capture refs snapshot/signature at the moment the QR email is actually queued
-      // Canonical model matches SQL manifest:
+      // Canonical model (SQL):
       //   - snapshot: ordered [{ row_key, current_reference }]
-      //   - sig: sha256 over "row_key=ref||row_key=ref..."
+      //   - sig: public.timesheet_pdf_reference_sig(p_timesheet_id)
       if (ins && ins.ok) {
         try {
-          const tsIdStr = String(currentTimesheetId);
+          const unwrapScalar = (v, fnName) => {
+            if (v == null) return null;
+            if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return String(v);
+            if (v && typeof v === 'object' && !Array.isArray(v) && Object.prototype.hasOwnProperty.call(v, 'data')) {
+              return unwrapScalar(v.data, fnName);
+            }
+            if (Array.isArray(v)) {
+              if (v.length === 0) return null;
+              const o = v[0];
+              if (typeof o === 'string' || typeof o === 'number' || typeof o === 'boolean') return String(o);
+              if (o && typeof o === 'object') {
+                if (fnName && Object.prototype.hasOwnProperty.call(o, fnName)) return o[fnName] == null ? null : String(o[fnName]);
+                const ks = Object.keys(o);
+                if (ks.length === 1) return o[ks[0]] == null ? null : String(o[ks[0]]);
+              }
+              return null;
+            }
+            if (v && typeof v === 'object') {
+              if (fnName && Object.prototype.hasOwnProperty.call(v, fnName)) return v[fnName] == null ? null : String(v[fnName]);
+              const ks = Object.keys(v);
+              if (ks.length === 1) return v[ks[0]] == null ? null : String(v[ks[0]]);
+            }
+            return null;
+          };
 
-          const dayYmd =
-            (workedDateYmd ? String(workedDateYmd).slice(0, 10) : '') ||
-            (ts.worked_start_iso ? String(ts.worked_start_iso).slice(0, 10) : '') ||
-            (ts.scheduled_start_iso ? String(ts.scheduled_start_iso).slice(0, 10) : '') ||
-            (ts.week_ending_date ? String(ts.week_ending_date).slice(0, 10) : '') ||
-            '';
+          const asArray = (v) => {
+            if (v == null) return [];
+            if (Array.isArray(v)) return v;
+            if (v && typeof v === 'object' && Array.isArray(v.data)) return v.data;
+            if (v && typeof v === 'object' && Array.isArray(v.rows)) return v.rows;
+            return [v];
+          };
 
-          const startUtc = String(ts.worked_start_iso || ts.scheduled_start_iso || '');
-          const endUtc   = String(ts.worked_end_iso   || ts.scheduled_end_iso   || '');
-
-          // DAILY row_key mirrors SQL: timesheet_id|TIMESHEET||day_ymd|start_utc|end_utc
-          const rowKey = `${tsIdStr}|TIMESHEET||${dayYmd}|${startUtc}|${endUtc}`;
-
-          const refVal = String(ts.reference_number || '').trim();
-          const refRows = [{ row_key: rowKey, current_reference: refVal }];
-
-          // Deterministic raw signature string
-          const rawSig = `${rowKey}=${refVal}`;
-          const refsSig = await sha256Hex(rawSig);
           const capAt = nowIso();
+
+          // Canonical snapshot rows
+          const rowsRes = await sbRpc(env, 'timesheet_pdf_reference_rows', { p_timesheet_id: currentTimesheetId });
+          const rowsArr = asArray(rowsRes);
+
+          const refRows = [];
+          for (const r of rowsArr) {
+            const rowKey = String(r?.row_key || r?.rowKey || '').trim();
+            if (!rowKey) continue;
+            const refVal = (r && (r.current_reference ?? r.currentReference)) ?? null;
+            refRows.push({ row_key: rowKey, current_reference: (refVal == null ? null : String(refVal)) });
+          }
+          refRows.sort((a, b) => String(a.row_key).localeCompare(String(b.row_key)));
+
+          // Canonical signature
+          let refsSig = null;
+          try {
+            const sigRes = await sbRpc(env, 'timesheet_pdf_reference_sig', { p_timesheet_id: currentTimesheetId });
+            const sig = unwrapScalar(sigRes, 'timesheet_pdf_reference_sig');
+            refsSig = (sig && String(sig).trim()) ? String(sig).trim() : null;
+          } catch {
+            refsSig = null;
+          }
+
+          // Defensive fallback: match SQL rawSig join rules (row_key=ref||...)
+          if (!refsSig) {
+            const rawSig = refRows
+              .map(r => `${String(r.row_key)}=${String(r.current_reference ?? '')}`)
+              .join('||');
+            refsSig = await sha256Hex(rawSig);
+          }
 
           await fetch(
             `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -45067,7 +45109,6 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
     pdf_key: pdfKey || null
   }));
 }
-
 
 
 
