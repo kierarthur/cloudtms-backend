@@ -661,6 +661,7 @@ $$;
 -- and force render with force_regen=true.
 -- ============================================================
 
+
 create or replace function public.trg_timesheets_enqueue_pdf_regen_on_refs_change()
 returns trigger
 language plpgsql
@@ -686,6 +687,14 @@ begin
 
   -- Ignore revoked
   if new.revoked_at is not null then
+    return new;
+  end if;
+
+  -- ✅ Signed QR evidence is immutable: never enqueue regen for signed markers
+  if new.qr_scanned_at is not null
+     or new.qr_signed_hash is not null
+     or new.qr_signed_at_utc is not null
+  then
     return new;
   end if;
 
@@ -827,34 +836,6 @@ end;
 $$;
 
 
--- ============================================================
--- Trigger: fire when fields that affect printed refs can change
--- ============================================================
-drop trigger if exists trg_timesheets_enqueue_pdf_regen_on_refs_change
-  on public.timesheets;
-
-create trigger trg_timesheets_enqueue_pdf_regen_on_refs_change
-after update of
-  reference_number,
-  actual_schedule_json,
-  worked_start_iso,
-  worked_end_iso,
-  scheduled_start_iso,
-  scheduled_end_iso
-on public.timesheets
-for each row
-execute function public.trg_timesheets_enqueue_pdf_regen_on_refs_change();
-
--- ============================================================
--- (25) NEW: TSFIN trigger → enqueue TS PDF regen when SEGMENTS refs change
--- Fires on INSERT/UPDATE of invoice_breakdown_json on timesheets_financials.
--- Queues ts_pdfs_outbox FORCE_REGEN when:
---   - timesheet is current + ELECTRONIC
---   - generated_pdf_at_utc exists (baseline exists)
---   - canonical refs sig differs from timesheets.generated_pdf_refs_sig
--- Idempotent via ON CONFLICT (timesheet_id, reason).
--- ============================================================
-
 create or replace function public.trg_tsfin_enqueue_tspdf_on_refs_change()
 returns trigger
 language plpgsql
@@ -906,7 +887,10 @@ begin
     ts.contract_id,
     ts.week_ending_date,
     ts.worked_start_iso,
-    ts.scheduled_start_iso
+    ts.scheduled_start_iso,
+    ts.qr_scanned_at,
+    ts.qr_signed_hash,
+    ts.qr_signed_at_utc
   into v_ts
   from public.timesheets ts
   where ts.timesheet_id = v_timesheet_id
@@ -919,6 +903,14 @@ begin
 
   -- Ignore revoked
   if v_ts.revoked_at is not null then
+    return new;
+  end if;
+
+  -- ✅ Signed QR evidence is immutable: never enqueue regen for signed markers
+  if v_ts.qr_scanned_at is not null
+     or v_ts.qr_signed_hash is not null
+     or v_ts.qr_signed_at_utc is not null
+  then
     return new;
   end if;
 
@@ -1054,6 +1046,9 @@ begin
   return new;
 end;
 $$;
+
+
+
 
 -- ============================================================
 -- Trigger: enqueue regen when TSFIN invoice_breakdown_json changes
