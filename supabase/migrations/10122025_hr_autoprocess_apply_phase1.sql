@@ -31,6 +31,8 @@
 -- - Phase-1 does NOT reattach timesheets; timesheet_id is not modified here.
 --
 -- NOTE: selected_group_ids remains unused (row-level selection is enforced by skip/force lists).
+
+
 create or replace function public.hr_autoprocess_apply_phase1(
   import_id uuid,
   selected_group_ids text[] default null,
@@ -124,12 +126,12 @@ begin
         nullif((r.payload_json ->> 'finalised_date'), '')
       ) as finalized_raw,
 
-      -- ✅ Request id priority:
+      -- ✅ Request id priority (trimmed + blank->NULL):
       --  1) hr_rows.hr_request_id
       --  2) payload_json.request_id
       coalesce(
         nullif(btrim(coalesce(r.hr_request_id,'')), ''),
-        nullif((r.payload_json ->> 'request_id'), '')
+        nullif(btrim(coalesce(r.payload_json ->> 'request_id','')), '')
       ) as request_id
     from public.hr_rows r
     join public.hr_imports hi
@@ -152,7 +154,9 @@ begin
       s.start_utc,
       s.end_utc,
       s.break_mins,
-      s.request_id,
+
+      -- ✅ ensure request_id is always trimmed and blank->NULL
+      nullif(btrim(coalesce(s.request_id,'')), '') as request_id,
 
       case
         when coalesce(trim(s.finalized_raw), '') = '' then 'NO_FINALISED_DATE'
@@ -257,7 +261,7 @@ begin
     ) cand_exact_unique on (cand_alias.id is null and cand_map.candidate_id is null)
   ),
 
-    -- ✅ NEW: if Request ID changes but the shift overlaps the existing one, reuse the existing external_row_key
+  -- ✅ NEW: if Request ID changes but the shift overlaps the existing one, reuse the existing external_row_key
   match_existing as (
     select
       x.hr_row_id,
@@ -458,11 +462,11 @@ begin
 
       work_date        = u.work_date,
       ward             = nullif(u.ward, ''),
-      hr_request_id    = u.request_id,
-      ref_num          = case
-                           when u.request_id is not null then u.request_id
-                           else s.ref_num
-                         end,
+
+      -- ✅ Do not clear request/ref if the new row has no request_id (preserve existing truth)
+      hr_request_id    = case when u.request_id is not null then u.request_id else s.hr_request_id end,
+      ref_num          = case when u.request_id is not null then u.request_id else s.ref_num end,
+
       held_back_reason = u.held_back_reason,
       updated_at       = now(),
 
