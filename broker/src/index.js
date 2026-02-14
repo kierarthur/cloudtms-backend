@@ -34949,8 +34949,6 @@ async function handleHrAutoprocessApply(env, req, importId) {
     const d = new Date(`${s}T00:00:00Z`);
     if (Number.isNaN(d.getTime())) return s;
     try {
-      // Use en-GB with Europe/London to match UK conventions
-      // weekday short + day numeric + month short + year numeric
       return new Intl.DateTimeFormat('en-GB', {
         timeZone: 'Europe/London',
         weekday: 'short',
@@ -34961,6 +34959,11 @@ async function handleHrAutoprocessApply(env, req, importId) {
     } catch {
       return s;
     }
+  };
+
+  const normEmail = (v) => {
+    const s = String(v ?? '').trim();
+    return s ? s : '';
   };
 
   // Inputs (new contract)
@@ -35002,15 +35005,36 @@ async function handleHrAutoprocessApply(env, req, importId) {
       ? body.decisions
       : {};
 
-  // Mode A email actions
+  // ✅ Mode A email actions
+  // Updated: allow per-selection alternative recipient email (even when can_email=false).
+  // Accepted shapes (frontend may vary):
+  // - { timesheet_id, issue_fingerprint }
+  // - { timesheet_id, issue_fingerprint, recipient_email_override }
+  // - { timesheet_id, issue_fingerprint, alternative_email }
+  // - { timesheet_id, issue_fingerprint, alt_email }
   const emailActionsIn = Array.isArray(body.email_actions)
     ? body.email_actions
     : (Array.isArray(body.send_email_actions) ? body.send_email_actions : []);
+
   const emailActions = (emailActionsIn || [])
-    .map(a => ({
-      timesheet_id: a?.timesheet_id ? String(a.timesheet_id).trim() : null,
-      issue_fingerprint: a?.issue_fingerprint ? String(a.issue_fingerprint).trim() : null
-    }))
+    .map(a => {
+      const tsId = a?.timesheet_id ? String(a.timesheet_id).trim() : null;
+      const fp   = a?.issue_fingerprint ? String(a.issue_fingerprint).trim() : null;
+
+      const alt =
+        normEmail(a?.recipient_email_override) ||
+        normEmail(a?.alternative_email) ||
+        normEmail(a?.alt_email) ||
+        normEmail(a?.override_email) ||
+        '';
+
+      // Send alt email to DB so RPC can use it to split email_jobs/items
+      return {
+        timesheet_id: tsId,
+        issue_fingerprint: fp,
+        recipient_email_override: alt || null
+      };
+    })
     .filter(a => !!(a.timesheet_id && a.issue_fingerprint));
 
   // ✅ Include-missing-shifts flag
@@ -35055,7 +35079,7 @@ async function handleHrAutoprocessApply(env, req, importId) {
         selected_action_ids: selectedActionIds,
         selected_actions: selectedActions,
         decisions,
-        email_actions: emailActions,
+        email_actions: emailActions,                 // ✅ now contains recipient_email_override when provided
         include_missing_shifts: includeMissingShifts,
         invalidation_actions: invalidationActions
       },
@@ -35088,7 +35112,7 @@ async function handleHrAutoprocessApply(env, req, importId) {
 
   // ─────────────────────────────────────────────
   // 2) Post-commit: queue emails best-effort
-  //    ✅ consolidated email (one per recipient) when email_jobs contains items[]
+  //    ✅ consolidated email (one per recipient) based on email_jobs items + overrides
   // ─────────────────────────────────────────────
   let emailsQueued = 0;
   const emailFailures = [];
@@ -35177,182 +35201,164 @@ async function handleHrAutoprocessApply(env, req, importId) {
     `;
   };
 
-  const hasConsolidatedEmailJobs =
-    emailJobs.length > 0 &&
-    emailJobs.some(j => j && typeof j === 'object' && Array.isArray(j.items) && Array.isArray(j.attachment_timesheet_ids));
+  // ✅ Consolidated email send:
+  // We group by recipient email using:
+  //   item.recipient_email_override (preferred) →
+  //   job.recipient_email →
+  //   item.recipient_email
+  //
+  // This ensures:
+  // - ticking one does not send all
+  // - alternative email can be used even when can_email=false / recipient missing
+  // - different alt emails produce separate emails with only relevant attachments/items
+  const extractRecipientForItem = (job, item) => {
+    const a =
+      normEmail(item?.recipient_email_override) ||
+      normEmail(item?.alternative_email) ||
+      normEmail(item?.alt_email) ||
+      '';
+    if (a) return a;
 
-  if (hasConsolidatedEmailJobs) {
-    for (const job of emailJobs) {
-      const recipientFromJob = job?.recipient_email ? String(job.recipient_email).trim() : '';
+    const j = normEmail(job?.recipient_email);
+    if (j) return j;
+
+    const i = normEmail(item?.recipient_email);
+    return i || '';
+  };
+
+  const groupEmailWork = () => {
+    const groups = new Map(); // email -> { items: [], tsIds:Set<string> }
+
+    const addToGroup = (email, item) => {
+      const k = normEmail(email);
+      if (!k) return false;
+
+      const cur = groups.get(k) || { items: [], tsIds: new Set() };
+      cur.items.push(item);
+
+      const tsId = String(item?.timesheet_id || '').trim();
+      if (tsId) cur.tsIds.add(tsId);
+
+      groups.set(k, cur);
+      return true;
+    };
+
+    const jobsArr = Array.isArray(emailJobs) ? emailJobs : [];
+
+    for (const job of jobsArr) {
       const items = Array.isArray(job?.items) ? job.items : [];
-      const attachIds = Array.isArray(job?.attachment_timesheet_ids) ? job.attachment_timesheet_ids : [];
 
-      if (!recipientFromJob) {
-        emailFailures.push({ reason: 'NO_TS_QUERIES_EMAIL', recipient_email: null });
-        continue;
-      }
+      // If there are no items, skip (nothing to send)
+      if (!items.length) continue;
 
-      if (!items.length || !attachIds.length) {
-        emailFailures.push({ reason: 'EMPTY_EMAIL_JOB', recipient_email: recipientFromJob });
-        continue;
-      }
-
-      // Ensure all PDFs
-      const attachments = [];
-      for (const tsIdRaw of attachIds) {
-        const tsId = String(tsIdRaw || '').trim();
-        if (!tsId) continue;
-
-        let pdfKey = null;
-        try {
-          pdfKey = await ensureTimesheetPdf(env, tsId);
-        } catch (e) {
-          emailFailures.push({ reason: 'PDF_GENERATION_FAILED', recipient_email: recipientFromJob, timesheet_id: tsId, err: String(e?.message || e) });
-          continue;
+      for (const it0 of items) {
+        const it = (it0 && typeof it0 === 'object') ? it0 : {};
+        const recip = extractRecipientForItem(job, it);
+        const ok = addToGroup(recip, it);
+        if (!ok) {
+          emailFailures.push({
+            reason: 'NO_RECIPIENT_EMAIL',
+            recipient_email: null,
+            timesheet_id: it?.timesheet_id ? String(it.timesheet_id) : null
+          });
         }
-        if (!pdfKey) {
-          emailFailures.push({ reason: 'PDF_MISSING', recipient_email: recipientFromJob, timesheet_id: tsId });
-          continue;
-        }
-        attachments.push({ r2_key: pdfKey, filename: `Timesheet_${tsId}.pdf` });
-      }
-
-      if (!attachments.length) {
-        emailFailures.push({ reason: 'NO_ATTACHMENTS', recipient_email: recipientFromJob });
-        continue;
-      }
-
-      const subject = `HealthRoster weekly validation – shifts to amend`;
-      const tableHtml = buildEmailHtmlTable(items);
-
-      const bodyText = [
-        'Dear Team,',
-        '',
-        'Please find attached timesheets which needs come corrections on Healthroster. Details of the corrections are below.',
-        'Please kindly confirm once actioned.',
-        `Many thanks,`,
-        agencyName
-      ].join('\n');
-
-      const bodyHtml = `
-        <div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.45;color:#111;">
-          <p style="margin:0 0 10px 0;"><strong>Dear Team,</strong></p>
-          <p style="margin:0 0 10px 0;">Please find attached timesheets which needs come corrections on Healthroster. Details of the corrections are below.</p>
-          <p style="margin:0 0 14px 0;">Please kindly confirm once actioned.</p>
-          ${tableHtml}
-          <p style="margin:14px 0 0 0;">Many thanks,<br/><strong>${escapeHtml(agencyName)}</strong></p>
-        </div>
-      `;
-
-      try {
-        const insert = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
-          method: 'POST',
-          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-          body: JSON.stringify({
-            type: 'TSO_FAILURE',
-            to: recipientFromJob,
-            cc: null,
-            subject,
-            body_html: bodyHtml,
-            body_text: bodyText,
-            attachments,
-            status: 'QUEUED',
-            reference: `hr_weekly_validation:${importId}:consolidated`,
-            created_by: user?.id || null
-          })
-        });
-
-        if (!insert.ok) {
-          const t = await insert.text().catch(() => '');
-          throw new Error(t || `mail_outbox ${insert.status}`);
-        }
-
-        emailsQueued += 1;
-      } catch (e) {
-        emailFailures.push({ reason: 'MAIL_OUTBOX_INSERT_FAILED', recipient_email: recipientFromJob, err: String(e?.message || e) });
       }
     }
-  } else {
-    // Backward-compatible: per-timesheet email jobs (kept as-is)
-    for (const job of emailJobs) {
-      const tsId = job?.timesheet_id ? String(job.timesheet_id).trim() : '';
-      const fp = job?.issue_fingerprint ? String(job.issue_fingerprint).trim() : '';
-      const recipientFromJob = job?.recipient_email ? String(job.recipient_email).trim() : '';
 
-      if (!tsId || !fp) {
-        emailFailures.push({ timesheet_id: tsId || null, issue_fingerprint: fp || null, reason: 'INVALID_JOB' });
-        continue;
-      }
+    return groups;
+  };
 
-      let recipientEmail = recipientFromJob || null;
-      if (!recipientEmail) {
-        try {
-          const tgt = await resolveTsoRecipientForTimesheet(env, { timesheet_id: tsId, booking_id: null });
-          recipientEmail = tgt?.to ? String(tgt.to).trim() : null;
-        } catch {
-          recipientEmail = null;
-        }
-      }
+  const grouped = groupEmailWork();
 
-      if (!recipientEmail) {
-        emailFailures.push({ timesheet_id: tsId, issue_fingerprint: fp, reason: 'NO_TS_QUERIES_EMAIL' });
-        continue;
-      }
+  // Send one email per recipient group
+  for (const [recipientEmail, pack] of grouped.entries()) {
+    const items = Array.isArray(pack?.items) ? pack.items : [];
+    const tsIds = (pack?.tsIds instanceof Set) ? Array.from(pack.tsIds) : [];
+
+    if (!recipientEmail) continue;
+    if (!items.length || !tsIds.length) {
+      emailFailures.push({ reason: 'EMPTY_EMAIL_GROUP', recipient_email: recipientEmail });
+      continue;
+    }
+
+    // Ensure all PDFs (only for the relevant timesheets)
+    const attachments = [];
+    for (const tsIdRaw of tsIds) {
+      const tsId = String(tsIdRaw || '').trim();
+      if (!tsId) continue;
 
       let pdfKey = null;
       try {
         pdfKey = await ensureTimesheetPdf(env, tsId);
       } catch (e) {
-        emailFailures.push({ timesheet_id: tsId, issue_fingerprint: fp, reason: 'PDF_GENERATION_FAILED', err: String(e?.message || e) });
-        continue;
-      }
-
-      if (!pdfKey) {
-        emailFailures.push({ timesheet_id: tsId, issue_fingerprint: fp, reason: 'PDF_MISSING' });
-        continue;
-      }
-
-      const subject = `Timesheet query – weekly validation – ${tsId}`;
-      const bodyText = [
-        `Dear Temporary Staffing,`,
-        ``,
-        `Please find the attached weekly timesheet PDF.`,
-        `This email relates to a HealthRoster weekly validation mismatch.`,
-        fp ? `Issue fingerprint: ${fp}` : null,
-        ``,
-        `Kind regards,`,
-        `CloudTMS`
-      ].filter(Boolean).join('\n');
-
-      const bodyHtml = `<p style="font-family:Arial,sans-serif;font-size:14px;line-height:1.45;">${bodyText.split('\n').map(l => (l === '' ? '<br/>' : escapeHtml(l))).join('<br/>')}</p>`;
-
-      try {
-        const insert = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
-          method: 'POST',
-          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-          body: JSON.stringify({
-            type: 'TSO_FAILURE',
-            to: recipientEmail,
-            cc: null,
-            subject,
-            body_html: bodyHtml,
-            body_text: bodyText,
-            attachments: [{ r2_key: pdfKey, filename: `Timesheet_${tsId}.pdf` }],
-            status: 'QUEUED',
-            reference: `hr_weekly_validation:${importId}:${tsId}:${fp}`,
-            created_by: user?.id || null
-          })
+        emailFailures.push({
+          reason: 'PDF_GENERATION_FAILED',
+          recipient_email: recipientEmail,
+          timesheet_id: tsId,
+          err: String(e?.message || e)
         });
-
-        if (!insert.ok) {
-          const t = await insert.text().catch(() => '');
-          throw new Error(t || `mail_outbox ${insert.status}`);
-        }
-
-        emailsQueued += 1;
-      } catch (e) {
-        emailFailures.push({ timesheet_id: tsId, issue_fingerprint: fp, reason: 'MAIL_OUTBOX_INSERT_FAILED', err: String(e?.message || e) });
+        continue;
       }
+      if (!pdfKey) {
+        emailFailures.push({ reason: 'PDF_MISSING', recipient_email: recipientEmail, timesheet_id: tsId });
+        continue;
+      }
+      attachments.push({ r2_key: pdfKey, filename: `Timesheet_${tsId}.pdf` });
+    }
+
+    if (!attachments.length) {
+      emailFailures.push({ reason: 'NO_ATTACHMENTS', recipient_email: recipientEmail });
+      continue;
+    }
+
+    const subject = `HealthRoster weekly validation – shifts to amend`;
+    const tableHtml = buildEmailHtmlTable(items);
+
+    const bodyText = [
+      'Dear Team,',
+      '',
+      'Please find attached timesheets which needs come corrections on Healthroster. Details of the corrections are below.',
+      'Please kindly confirm once actioned.',
+      'Many thanks,',
+      agencyName
+    ].join('\n');
+
+    const bodyHtml = `
+      <div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.45;color:#111;">
+        <p style="margin:0 0 10px 0;"><strong>Dear Team,</strong></p>
+        <p style="margin:0 0 10px 0;">Please find attached timesheets which needs come corrections on Healthroster. Details of the corrections are below.</p>
+        <p style="margin:0 0 14px 0;">Please kindly confirm once actioned.</p>
+        ${tableHtml}
+        <p style="margin:14px 0 0 0;">Many thanks,<br/><strong>${escapeHtml(agencyName)}</strong></p>
+      </div>
+    `;
+
+    try {
+      const insert = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
+        method: 'POST',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify({
+          type: 'TSO_FAILURE',
+          to: recipientEmail,
+          cc: null,
+          subject,
+          body_html: bodyHtml,
+          body_text: bodyText,
+          attachments,
+          status: 'QUEUED',
+          reference: `hr_weekly_validation:${importId}:consolidated:${recipientEmail}`,
+          created_by: user?.id || null
+        })
+      });
+
+      if (!insert.ok) {
+        const t = await insert.text().catch(() => '');
+        throw new Error(t || `mail_outbox ${insert.status}`);
+      }
+
+      emailsQueued += 1;
+    } catch (e) {
+      emailFailures.push({ reason: 'MAIL_OUTBOX_INSERT_FAILED', recipient_email: recipientEmail, err: String(e?.message || e) });
     }
   }
 
@@ -35529,6 +35535,7 @@ async function handleHrAutoprocessApply(env, req, importId) {
     }
   }));
 }
+
 
 async function handleHrRotaValidationApply(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
