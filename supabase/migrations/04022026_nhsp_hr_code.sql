@@ -2286,10 +2286,6 @@ $function$;
 
 
 
-
-
-
-
 create or replace function public.hr_daily_apply_transactional(
   p_import_id uuid,
   p_payload jsonb,
@@ -2393,6 +2389,7 @@ begin
   group by vr.timesheet_id;
 
   -- ✅ compute which timesheets will have a meaningful validation row change (before upsert)
+  -- ✅ UPDATED: compute new_pre_validated (true only when OK and timesheet not authorised yet)
   create temporary table tmp_val_upsert on commit drop as
   select
     vt.timesheet_id,
@@ -2404,8 +2401,18 @@ begin
     vt.chosen_reason_code as new_reason_code,
     case when vt.has_error then null else v_now end as new_validated_at_utc,
     p_import_id as new_last_source,
-    vt.chosen_hr_request_id as new_hr_request_id
-  from tmp_val_by_ts vt;
+    vt.chosen_hr_request_id as new_hr_request_id,
+    case
+      when vt.has_error is false
+       and tsu.timesheet_id is not null
+       and tsu.authorised_at_server is null
+      then true
+      else false
+    end as new_pre_validated
+  from tmp_val_by_ts vt
+  left join public.timesheets tsu
+    on tsu.timesheet_id = vt.timesheet_id
+   and tsu.is_current = true;
 
   select coalesce(array_agg(distinct x.timesheet_id order by x.timesheet_id), array[]::uuid[])
   into v_daily_validation_changed_timesheet_ids
@@ -2420,15 +2427,18 @@ begin
        or tv.last_source is distinct from u.new_last_source
        or tv.reason_code is distinct from u.new_reason_code
        or tv.hr_request_id is distinct from u.new_hr_request_id
+       or tv.pre_validated is distinct from u.new_pre_validated
   ) as x;
 
   -- 3) Upsert timesheet_validations (required + transactional)
+  -- ✅ UPDATED: include pre_validated
   insert into public.timesheet_validations(
     timesheet_id,
     status,
     reason_code,
     validated_at_utc,
     last_source,
+    pre_validated,
     updated_at,
     hr_request_id,
     hr_request_source,
@@ -2441,6 +2451,7 @@ begin
     u.new_reason_code,
     u.new_validated_at_utc,
     u.new_last_source,
+    u.new_pre_validated,
     v_now,
     u.new_hr_request_id,
     case when u.new_hr_request_id is null then null else 'IMPORTED'::public.reference_source_enum end,
@@ -2452,6 +2463,7 @@ begin
         reason_code           = excluded.reason_code,
         validated_at_utc      = excluded.validated_at_utc,
         last_source           = excluded.last_source,
+        pre_validated         = excluded.pre_validated,
         updated_at            = excluded.updated_at,
         hr_request_id         = excluded.hr_request_id,
         hr_request_source     = excluded.hr_request_source,
@@ -2658,6 +2670,12 @@ begin
   );
 end;
 $$;
+
+
+
+
+
+
 
 
 
