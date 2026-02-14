@@ -660,6 +660,7 @@ $$;
 --  - attempt_count=0, next_attempt_at=null, last_error=null
 -- and force render with force_regen=true.
 -- ============================================================
+
 create or replace function public.trg_timesheets_enqueue_pdf_regen_on_refs_change()
 returns trigger
 language plpgsql
@@ -675,6 +676,8 @@ declare
   v_overrideclientsettings boolean := false;
   v_no_timesheet_required boolean := false;
   v_is_nhsp boolean := false;
+
+  v_as_of_date date := null;
 begin
   -- CURRENT only
   if coalesce(new.is_current, false) is not true then
@@ -701,13 +704,13 @@ begin
     return new;
   end if;
 
-  -- ------------------------------------------------------------
-  -- Exclusion: do not enqueue when timesheet PDF is not required
-  -- (NHSP / no_timesheet_required), respecting contract overrides.
-  -- Mirrors precedence used in your summary view logic:
-  --   if contracts.overrideclientsettings then use contract snapshot
-  --   else use aggregated client_settings flags.
-  -- ------------------------------------------------------------
+  -- Determine an "as-of" date for client_settings effective_from resolution
+  v_as_of_date := coalesce(
+    new.week_ending_date,
+    ((new.worked_start_iso at time zone 'Europe/London')::date),
+    ((new.scheduled_start_iso at time zone 'Europe/London')::date),
+    (now() at time zone 'Europe/London')::date
+  );
 
   -- Resolve contract_id (timesheets.contract_id or from contract_weeks)
   v_contract_id := new.contract_id;
@@ -720,6 +723,7 @@ begin
     limit 1;
   end if;
 
+  -- Contract override path (only when overrideclientsettings=true)
   if v_contract_id is not null then
     select
       coalesce(ct.overrideclientsettings, false),
@@ -744,7 +748,7 @@ begin
     end if;
   end if;
 
-  -- If not overridden by contract settings, check client_settings flags
+  -- If overrideclientsettings is FALSE, use the effective client_settings row (NOT bool_or across history)
   if coalesce(v_overrideclientsettings, false) = false then
     -- If client_id still unknown, fall back to current TSFIN client_id
     if v_client_id is null then
@@ -759,13 +763,18 @@ begin
 
     if v_client_id is not null then
       select
-        coalesce(bool_or(cs.no_timesheet_required), false),
-        coalesce(bool_or(cs.is_nhsp), false)
+        coalesce(csx.no_timesheet_required, false),
+        coalesce(csx.is_nhsp, false)
       into
         v_no_timesheet_required,
         v_is_nhsp
-      from public.client_settings cs
-      where cs.client_id = v_client_id;
+      from public.client_settings csx
+      where csx.client_id = v_client_id
+        and (csx.effective_from is null or csx.effective_from <= v_as_of_date)
+      order by csx.effective_from desc nulls last,
+               csx.updated_at desc nulls last,
+               csx.created_at desc nulls last
+      limit 1;
 
       if coalesce(v_no_timesheet_required, false) = true
          or coalesce(v_is_nhsp, false) = true
@@ -775,7 +784,7 @@ begin
     end if;
   end if;
 
-  -- Compute current canonical sig (matches invoice_render_manifest hashing model)
+  -- Compute current canonical sig
   v_current_sig := public.timesheet_pdf_reference_sig(new.timesheet_id);
 
   if v_current_sig is null then
