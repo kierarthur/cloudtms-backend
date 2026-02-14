@@ -1,4 +1,3 @@
-
 create or replace function public.hr_weekly_apply_transactional(
   p_import_id uuid,
   p_payload jsonb,
@@ -472,9 +471,6 @@ begin
     );
   else
     -- (UNCHANGED MODE_B PHASE3 / PHASE1 / PHASE1.5 / CANCELLATIONS BLOCKS...)
-    -- NOTE: This section is unchanged from your supplied function; it remains as-is.
-
-    -- 4.1) Partition invoiced vs non-invoiced changed-hours keys (selected MODE_B keys only)
     create temporary table tmp_changed_sel on commit drop as
     select
       ch.external_row_key,
@@ -505,7 +501,6 @@ begin
       )
     );
 
-    -- 4.2) Policy A replacement-day enforcement (MODE_B only)
     create temporary table tmp_selected_replacement_keys(
       candidate_id uuid,
       client_id uuid,
@@ -586,7 +581,6 @@ begin
 
     v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','POLICY_A_OK'));
 
-    -- 4.3) Phase3 (invoiced changed keys)
     if v_mode_b_should_run_phase3 then
       select public.hr_weekly_phase3_apply_adjustment_truth(
         p_import_id := p_import_id,
@@ -610,7 +604,6 @@ begin
       )
     );
 
-    -- 4.4) Phase1 + Phase1.5
     if v_mode_b_should_run_phase1 then
       select public.hr_autoprocess_apply_phase1(
         import_id := p_import_id,
@@ -673,7 +666,6 @@ begin
       )
     );
 
-    -- 4.5) Cancellations
     if v_mode_b_should_run_cancellations then
       create temporary table tmp_cancel_meta on commit drop as
       select
@@ -721,7 +713,6 @@ begin
     v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','CANCELLATIONS_DONE'));
 
     -- (ENSURE BLOCK continues unchanged in your function...)
-    -- NOTE: Your supplied function continues with the ENSURE loop and inserts into tmp_aff_ts; keep as-is.
   end if;
 
   -- ─────────────────────────────────────────────
@@ -828,7 +819,7 @@ begin
   -- 10) MODE_A weekly validation upserts + email state
   --     ✅ Option B: tmp_val_mode derives directly from effective route flags
   --     ✅ NEW: invalidation_actions controls ref clearing
-  --     ✅ NEW: email_jobs is consolidated and table-ready
+  --     ✅ NEW: email_jobs are grouped by effective recipient (alt email overrides default)
   -- ─────────────────────────────────────────────
   select public.hr_weekly_validation_preview(p_import_id := p_import_id)
   into v_weekly_val_payload;
@@ -841,7 +832,6 @@ begin
     raise exception 'hr_weekly_apply_transactional: hr_weekly_validation_preview payload missing rows array.';
   end if;
 
-  -- ✅ store full row json for later table-building
   create temporary table tmp_val_rows on commit drop as
   select
     nullif(btrim(r.value->>'timesheet_id'), '')::uuid as timesheet_id,
@@ -914,7 +904,6 @@ begin
     limit 1
   ) as csval on true;
 
-  -- ✅ NEW: invalidation selection (comparison_key -> invalidate boolean)
   create temporary table tmp_invalidation_actions(
     timesheet_id uuid not null,
     comparison_key text not null,
@@ -935,8 +924,6 @@ begin
       set invalidate = excluded.invalidate;
   end if;
 
-  -- ✅ NEW: collect destructive invalidations (UNMATCHED + ref_before + not invoice_locked),
-  -- but ONLY clear refs where user has invalidate=true when invalidation_actions are provided.
   create temporary table tmp_mode_a_missing_ref_clear(
     timesheet_id uuid not null,
     comparison_key text not null,
@@ -1093,10 +1080,28 @@ begin
     and vr.has_mismatch is true
     and vr.timesheet_id is not null;
 
+  -- ─────────────────────────────────────────────
+  -- ✅ Email actions: allow Alternative Email override per selected mismatch
+  --    email_actions[] rows are selection-driven (tick respected).
+  --    Effective recipient is:
+  --      coalesce(alternative_email, vr.recipient_email)
+  --    This allows emailing even when vr.recipient_email is null (can_email=false),
+  --    as long as alternative_email is provided.
+  -- ─────────────────────────────────────────────
   create temporary table tmp_email_actions on commit drop as
   select
     nullif(btrim(a.value->>'timesheet_id'), '')::uuid as timesheet_id,
-    nullif(btrim(a.value->>'issue_fingerprint'), '') as issue_fingerprint
+    nullif(btrim(a.value->>'issue_fingerprint'), '') as issue_fingerprint,
+    nullif(
+      btrim(
+        coalesce(
+          a.value->>'alternative_email',
+          a.value->>'alt_email',
+          a.value->>'alt_recipient_email'
+        )
+      ),
+      ''
+    ) as alternative_email
   from jsonb_array_elements(v_email_actions) as a(value)
   where nullif(btrim(a.value->>'timesheet_id'), '') is not null
     and nullif(btrim(a.value->>'issue_fingerprint'), '') is not null;
@@ -1107,6 +1112,8 @@ begin
     ea.issue_fingerprint,
     vr.client_id,
     vr.recipient_email,
+    ea.alternative_email,
+    coalesce(ea.alternative_email, vr.recipient_email) as effective_recipient_email,
     vr.emailed_already,
     vr.candidate_id,
     vr.contract_id,
@@ -1118,7 +1125,8 @@ begin
    and vr.issue_fingerprint = ea.issue_fingerprint
   join tmp_val_mode vm
     on vm.timesheet_id = vr.timesheet_id
-  where vm.mode = 'MODE_A';
+  where vm.mode = 'MODE_A'
+    and coalesce(ea.alternative_email, vr.recipient_email) is not null;
 
   insert into public.hr_issue_emails(
     source_system,
@@ -1149,10 +1157,9 @@ begin
         client_id = excluded.client_id,
         timesheet_id = excluded.timesheet_id;
 
-  -- ✅ Build consolidated email payload with table-ready items + attachments list
   create temporary table tmp_email_items on commit drop as
   select
-    ej.recipient_email as recipient_email,
+    ej.effective_recipient_email as recipient_email,
     ej.timesheet_id as timesheet_id,
     ej.issue_fingerprint as issue_fingerprint,
     nullif(btrim(coalesce(ej.row_json->>'candidate_name','')), '') as candidate_name,
@@ -1174,57 +1181,76 @@ begin
   cross join lateral jsonb_array_elements(coalesce(ej.row_json->'comparisons','[]'::jsonb)) as cx(value)
   where coalesce((cx.value->>'match')::boolean,false) is false;
 
-  -- consolidated email_kind
-  create temporary table tmp_email_summary on commit drop as
+  create temporary table tmp_email_jobs on commit drop as
   select
-    nullif(btrim(coalesce(max(ej.recipient_email),'')), '') as recipient_email,
+    ej.effective_recipient_email as recipient_email,
     (count(*) filter (where ej.emailed_already is true))::int as reemail_count,
     (count(*) filter (where ej.emailed_already is false))::int as email_count
-  from tmp_email_join ej;
+  from tmp_email_join ej
+  group by ej.effective_recipient_email;
 
   select coalesce(
-    jsonb_build_array(
+    jsonb_agg(
       jsonb_build_object(
-        'recipient_email', (select recipient_email from tmp_email_summary),
+        'recipient_email', tj.recipient_email,
         'email_kind',
           (case
-            when (select recipient_email from tmp_email_summary) is null then 'NONE'
-            when (select reemail_count from tmp_email_summary) > 0 and (select email_count from tmp_email_summary) = 0 then 'REEMAIL'
-            when (select reemail_count from tmp_email_summary) = 0 and (select email_count from tmp_email_summary) > 0 then 'EMAIL'
-            when (select reemail_count from tmp_email_summary) > 0 and (select email_count from tmp_email_summary) > 0 then 'MIXED'
+            when tj.recipient_email is null then 'NONE'
+            when tj.reemail_count > 0 and tj.email_count = 0 then 'REEMAIL'
+            when tj.reemail_count = 0 and tj.email_count > 0 then 'EMAIL'
+            when tj.reemail_count > 0 and tj.email_count > 0 then 'MIXED'
             else 'EMAIL'
           end),
         'issue_fingerprints',
-          coalesce((select to_jsonb(array_agg(distinct ej2.issue_fingerprint order by ej2.issue_fingerprint))
-                    from tmp_email_join ej2), '[]'::jsonb),
+          coalesce(
+            (
+              select to_jsonb(array_agg(distinct ej2.issue_fingerprint order by ej2.issue_fingerprint))
+              from tmp_email_join ej2
+              where ej2.effective_recipient_email = tj.recipient_email
+            ),
+            '[]'::jsonb
+          ),
         'attachment_timesheet_ids',
-          coalesce((select to_jsonb(array_agg(distinct ej3.timesheet_id::text order by ej3.timesheet_id::text))
-                    from tmp_email_join ej3), '[]'::jsonb),
+          coalesce(
+            (
+              select to_jsonb(array_agg(distinct ej3.timesheet_id::text order by ej3.timesheet_id::text))
+              from tmp_email_join ej3
+              where ej3.effective_recipient_email = tj.recipient_email
+            ),
+            '[]'::jsonb
+          ),
         'items',
-          coalesce((select jsonb_agg(
-                      jsonb_build_object(
-                        'timesheet_id', ti.timesheet_id::text,
-                        'issue_fingerprint', ti.issue_fingerprint,
-                        'candidate_name', ti.candidate_name,
-                        'week_ending_date', ti.week_ending_date::text,
-                        'work_date', ti.work_date::text,
-                        'timesheet_start', ti.timesheet_start,
-                        'timesheet_end', ti.timesheet_end,
-                        'timesheet_break_mins', ti.timesheet_break_mins,
-                        'healthroster_start', ti.healthroster_start,
-                        'healthroster_end', ti.healthroster_end,
-                        'healthroster_break_mins', ti.healthroster_break_mins,
-                        'match_status', ti.match_status,
-                        'ref_before', ti.ref_before,
-                        'ref_after', ti.ref_after,
-                        'invoice_locked', ti.invoice_locked,
-                        'invoice_locked_invoice_id', ti.invoice_locked_invoice_id,
-                        'comparison_key', ti.comparison_key
-                      )
-                    order by ti.candidate_name nulls last, ti.work_date asc, ti.timesheet_start nulls last
-                    )
-                    from tmp_email_items ti), '[]'::jsonb)
+          coalesce(
+            (
+              select jsonb_agg(
+                jsonb_build_object(
+                  'timesheet_id', ti.timesheet_id::text,
+                  'issue_fingerprint', ti.issue_fingerprint,
+                  'candidate_name', ti.candidate_name,
+                  'week_ending_date', ti.week_ending_date::text,
+                  'work_date', ti.work_date::text,
+                  'timesheet_start', ti.timesheet_start,
+                  'timesheet_end', ti.timesheet_end,
+                  'timesheet_break_mins', ti.timesheet_break_mins,
+                  'healthroster_start', ti.healthroster_start,
+                  'healthroster_end', ti.healthroster_end,
+                  'healthroster_break_mins', ti.healthroster_break_mins,
+                  'match_status', ti.match_status,
+                  'ref_before', ti.ref_before,
+                  'ref_after', ti.ref_after,
+                  'invoice_locked', ti.invoice_locked,
+                  'invoice_locked_invoice_id', ti.invoice_locked_invoice_id,
+                  'comparison_key', ti.comparison_key
+                )
+                order by ti.candidate_name nulls last, ti.work_date asc, ti.timesheet_start nulls last
+              )
+              from tmp_email_items ti
+              where ti.recipient_email = tj.recipient_email
+            ),
+            '[]'::jsonb
+          )
       )
+      order by tj.recipient_email nulls last
     ),
     '[]'::jsonb
   )
@@ -1247,10 +1273,7 @@ begin
 
   -- ─────────────────────────────────────────────
   -- 11) Compute affected_timesheet_ids (MODE_B work + MODE_A validation changes)
-  --     ✅ always compute from tmp_aff_ts so validation-only changes are included
   -- ─────────────────────────────────────────────
-  -- NOTE: Keep your existing affected-timesheets collection logic here unchanged.
-  -- Ensure final list comes from tmp_aff_ts (as in your current version).
   select coalesce(array_agg(distinct a.timesheet_id order by a.timesheet_id), array[]::uuid[])
   into v_affected_timesheet_ids
   from tmp_aff_ts a
@@ -1369,4 +1392,3 @@ exception when others then
   raise;
 end;
 $$;
-
