@@ -13658,7 +13658,10 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
       if (hintObj) collectImportIdsFromObject(hintObj, importIds);
     } catch {}
 
-    // 2C.5) Render IMPORT_TABLE system evidence items (unchanged contract)
+    // 2C.5) Render IMPORT_TABLE system evidence items
+    // ✅ CHANGE: return BOTH evidence type and filename.
+    // - display_name becomes the evidence type label (so UI "Evidence Type" column is correct)
+    // - filename is returned separately (for UI to show filename in a dedicated column or viewer)
     if (importIds.size) {
       try {
         const idParam = Array.from(importIds).map(enc).join(',');
@@ -13682,11 +13685,22 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
 
           const uploadedAt = r.uploaded_at_utc || null;
 
+          const fileName = (r.filename != null) ? String(r.filename).trim() : '';
+          const typeLabel = `${kindLabel} import`;
+
           systemEvidence.push({
             id: `SYS:${kindLabel}:${importId || 'UNKNOWN'}`,
             timesheet_id: currentTsId,
+
+            // evidence type (machine)
             kind: kindLabel,
-            display_name: r.filename || kindLabel,
+
+            // evidence type (human) — shown in UI as Evidence Type
+            display_name: typeLabel,
+
+            // ✅ NEW: filename returned separately for UI (do not overload display_name)
+            filename: fileName || null,
+
             storage_key: r.file_r2_key,
             download_storage_key: r.file_r2_key,
             created_at: uploadedAt,
