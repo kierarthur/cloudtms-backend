@@ -1321,80 +1321,82 @@ update public.nhsp_shifts nsclr
   cross join lateral jsonb_array_elements(coalesce(ej.row_json->'comparisons','[]'::jsonb)) as cx(value)
   where coalesce((cx.value->>'match')::boolean,false) is false;
 
-  create temporary table tmp_email_jobs on commit drop as
-  select
-    ej.effective_recipient_email as recipient_email,
-    (count(*) filter (where ej.emailed_already is true))::int as reemail_count,
-    (count(*) filter (where ej.emailed_already is false))::int as email_count
-  from tmp_email_join ej
-  group by ej.effective_recipient_email;
+ create temporary table tmp_email_jobs on commit drop as
+select
+  ej.effective_recipient_email as recipient_email,
+  (count(*) filter (where ej.emailed_already is true))::int as reemail_count,
+  (count(*) filter (where ej.emailed_already is false))::int as email_count
+from tmp_email_join ej
+group by ej.effective_recipient_email;
 
-  select coalesce(
-    jsonb_agg(
-      jsonb_build_object(
-        'recipient_email', tj.recipient_email,
-        'email_kind',
-          (case
-            when tj.recipient_email is null then 'NONE'
-            when tj.reemail_count > 0 and tj.email_count = 0 then 'REEMAIL'
-            when tj.reemail_count = 0 and tj.email_count > 0 then 'EMAIL'
-            when tj.reemail_count > 0 and tj.email_count > 0 then 'MIXED'
-            else 'EMAIL'
-          end),
-        'issue_fingerprints',
-          coalesce(
-            (
-              select to_jsonb(array_agg(distinct ej2.issue_fingerprint order by ej2.issue_fingerprint))
-              from tmp_email_join ej2
-              where ej2.effective_recipient_email = tj.recipient_email
-            ),
-            '[]'::jsonb
+select coalesce(
+  jsonb_agg(
+    jsonb_build_object(
+      'recipient_email', tj.recipient_email,
+      'email_kind',
+        (case
+          when tj.recipient_email is null then 'NONE'
+          when tj.reemail_count > 0 and tj.email_count = 0 then 'REEMAIL'
+          when tj.reemail_count = 0 and tj.email_count > 0 then 'EMAIL'
+          when tj.reemail_count > 0 and tj.email_count > 0 then 'MIXED'
+          else 'EMAIL'
+        end),
+      'issue_fingerprints',
+        coalesce(
+          (
+            select to_jsonb(array_agg(distinct ej2.issue_fingerprint order by ej2.issue_fingerprint))
+            from tmp_email_join ej2
+            where ej2.effective_recipient_email = tj.recipient_email
           ),
-        'attachment_timesheet_ids',
-          coalesce(
-            (
-              select to_jsonb(array_agg(distinct ej3.timesheet_id::text order by ej3.timesheet_id::text))
-              from tmp_email_join ej3
-              where ej3.effective_recipient_email = tj.recipient_email
-            ),
-            '[]'::jsonb
+          '[]'::jsonb
+        ),
+      'attachment_timesheet_ids',
+        coalesce(
+          (
+            select to_jsonb(array_agg(distinct ej3.timesheet_id::text order by ej3.timesheet_id::text))
+            from tmp_email_join ej3
+            where ej3.effective_recipient_email = tj.recipient_email
           ),
-        'items',
-          coalesce(
-            (
-              select jsonb_agg(
-                jsonb_build_object(
-                  'timesheet_id', ti.timesheet_id::text,
-                  'issue_fingerprint', ti.issue_fingerprint,
-                  'candidate_name', ti.candidate_name,
-                  'week_ending_date', ti.week_ending_date::text,
-                  'work_date', ti.work_date::text,
-                  'timesheet_start', ti.timesheet_start,
-                  'timesheet_end', ti.timesheet_end,
-                  'timesheet_break_mins', ti.timesheet_break_mins,
-                  'healthroster_start', ti.healthroster_start,
-                  'healthroster_end', ti.healthroster_end,
-                  'healthroster_break_mins', ti.healthroster_break_mins,
-                  'match_status', ti.match_status,
-                  'ref_before', ti.ref_before,
-                  'ref_after', ti.ref_after,
-                  'invoice_locked', ti.invoice_locked,
-                  'invoice_locked_invoice_id', ti.invoice_locked_invoice_id,
-                  'comparison_key', ti.comparison_key
-                )
-                order by ti.candidate_name nulls last, ti.work_date asc, ti.timesheet_start nulls last
+          '[]'::jsonb
+        ),
+      'items',
+        coalesce(
+          (
+            select jsonb_agg(
+              jsonb_build_object(
+                'timesheet_id', ti.timesheet_id::text,
+                'issue_fingerprint', ti.issue_fingerprint,
+                'candidate_name', ti.candidate_name,
+                'week_ending_date', ti.week_ending_date::text,
+                'work_date', ti.work_date::text,
+                'timesheet_start', ti.timesheet_start,
+                'timesheet_end', ti.timesheet_end,
+                'timesheet_break_mins', ti.timesheet_break_mins,
+                'healthroster_start', ti.healthroster_start,
+                'healthroster_end', ti.healthroster_end,
+                'healthroster_break_mins', ti.healthroster_break_mins,
+                'match_status', ti.match_status,
+                'ref_before', ti.ref_before,
+                'ref_after', ti.ref_after,
+                'invoice_locked', ti.invoice_locked,
+                'invoice_locked_invoice_id', ti.invoice_locked_invoice_id,
+                'comparison_key', ti.comparison_key
               )
-              from tmp_email_items ti
-              where ti.recipient_email = tj.recipient_email
-            ),
-            '[]'::jsonb
-          )
-      )
-      order by tj.recipient_email nulls last
-    ),
-    '[]'::jsonb
-  )
-  into v_email_jobs;
+              order by ti.candidate_name nulls last, ti.work_date asc, ti.timesheet_start nulls last
+            )
+            from tmp_email_items ti
+            where ti.recipient_email = tj.recipient_email
+          ),
+          '[]'::jsonb
+        )
+    )
+    order by tj.recipient_email nulls last
+  ),
+  '[]'::jsonb
+)
+into v_email_jobs
+from tmp_email_jobs tj;
+
 
   v_email_jobs_count := jsonb_array_length(coalesce(v_email_jobs, '[]'::jsonb));
 
