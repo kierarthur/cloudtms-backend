@@ -37,6 +37,8 @@ $$;
 
 
 
+
+
 create or replace function public.tsfin_load_context_batch(p_timesheet_ids uuid[])
 returns table (
   effective_timesheet_id uuid,
@@ -165,7 +167,19 @@ base as (
 
       'pay_method',                    v.pay_method,
       'processing_status',             v.processing_status,
-      'authorised_at_server',          v.authorised_at_server
+      'authorised_at_server',          v.authorised_at_server,
+
+      -- ✅ NEW: computed here (because v_timesheets_summary does not expose hr_validation_required_for_invoice)
+      'hr_validation_required_for_invoice',
+        (
+          v.timesheet_id is not null
+          and coalesce(v.client_hr_validation_required, false) = true
+          and coalesce(v.client_no_timesheet_required, false) = false
+          and coalesce(v.total_hours, tf.total_hours, 0::numeric) > 0::numeric
+        ),
+
+      -- ✅ NEW: pass through validation status for TSFIN recompute gating
+      'validation_status', v.validation_status
     ) as out_effective_flags,
 
     cs as cs_row,
