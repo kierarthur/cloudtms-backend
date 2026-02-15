@@ -66,10 +66,13 @@ select
   ) as require_reference_to_invoice,
 
   case
-    -- ✅ NEW: QR unsigned gating (block invoicing until signed QR uploaded)
+    -- ✅ UPDATED: QR unsigned gating (block invoicing until signed QR uploaded)
+    -- issued_proof := (qr_token + qr_generated_at) OR (qr_last_sent_hash IS NOT NULL)
     when ts.qr_status = 'PENDING'::timesheet_qr_status_enum
-     and ts.qr_token is not null
-     and ts.qr_generated_at is not null
+     and (
+       (ts.qr_token is not null and ts.qr_generated_at is not null)
+       or (ts.qr_last_sent_hash is not null)
+     )
      and ts.qr_scanned_at is null
       then 'BLOCK_QR_UNSIGNED'::text
 
