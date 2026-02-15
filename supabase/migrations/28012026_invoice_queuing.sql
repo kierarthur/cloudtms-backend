@@ -1,3 +1,327 @@
+
+CREATE OR REPLACE FUNCTION public.trg_timesheets_enqueue_pdf_regen_on_refs_change()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_contract_id uuid := null;
+  v_client_id uuid := null;
+
+  v_overrideclientsettings boolean := false;
+  v_no_timesheet_required boolean := false;
+  v_is_nhsp boolean := false;
+
+  v_as_of_date date := null;
+begin
+  -- CURRENT only
+  if coalesce(new.is_current, false) is not true then
+    return new;
+  end if;
+
+  -- Ignore revoked
+  if new.revoked_at is not null then
+    return new;
+  end if;
+
+  -- ✅ Signed QR evidence is immutable: never enqueue regen for signed markers
+  if new.qr_scanned_at is not null
+     or new.qr_signed_hash is not null
+     or new.qr_signed_at_utc is not null
+  then
+    return new;
+  end if;
+
+  -- ELECTRONIC only (generated PDF path)
+  if upper(coalesce(new.submission_mode::text, '')) <> 'ELECTRONIC' then
+    return new;
+  end if;
+
+  -- Manual PDF overrides mean we don't own the canonical generated PDF
+  if new.manual_pdf_r2_key is not null then
+    return new;
+  end if;
+
+  -- If no generated PDF baseline exists, do nothing (per spec)
+  if new.generated_pdf_at_utc is null then
+    return new;
+  end if;
+
+  -- Determine an "as-of" date for client_settings effective_from resolution
+  v_as_of_date := coalesce(
+    new.week_ending_date,
+    ((new.worked_start_iso at time zone 'Europe/London')::date),
+    ((new.scheduled_start_iso at time zone 'Europe/London')::date),
+    (now() at time zone 'Europe/London')::date
+  );
+
+  -- Resolve contract_id (timesheets.contract_id or from contract_weeks)
+  v_contract_id := new.contract_id;
+
+  if v_contract_id is null then
+    select cw.contract_id
+      into v_contract_id
+    from public.contract_weeks cw
+    where cw.timesheet_id = new.timesheet_id
+    limit 1;
+  end if;
+
+  -- Contract override path (only when overrideclientsettings=true)
+  if v_contract_id is not null then
+    select
+      coalesce(ct.overrideclientsettings, false),
+      coalesce(ct.no_timesheet_required, false),
+      coalesce(ct.is_nhsp, false),
+      ct.client_id
+    into
+      v_overrideclientsettings,
+      v_no_timesheet_required,
+      v_is_nhsp,
+      v_client_id
+    from public.contracts ct
+    where ct.id = v_contract_id
+    limit 1;
+
+    if coalesce(v_overrideclientsettings, false) = true then
+      if coalesce(v_no_timesheet_required, false) = true
+         or coalesce(v_is_nhsp, false) = true
+      then
+        return new;
+      end if;
+    end if;
+  end if;
+
+  -- If overrideclientsettings is FALSE, use the effective client_settings row (NOT bool_or across history)
+  if coalesce(v_overrideclientsettings, false) = false then
+    -- If client_id still unknown, fall back to current TSFIN client_id
+    if v_client_id is null then
+      select tf.client_id
+        into v_client_id
+      from public.timesheets_financials tf
+      where tf.timesheet_id = new.timesheet_id
+        and tf.is_current = true
+      order by tf.created_at desc
+      limit 1;
+    end if;
+
+    if v_client_id is not null then
+      select
+        coalesce(csx.no_timesheet_required, false),
+        coalesce(csx.is_nhsp, false)
+      into
+        v_no_timesheet_required,
+        v_is_nhsp
+      from public.client_settings csx
+      where csx.client_id = v_client_id
+        and (csx.effective_from is null or csx.effective_from <= v_as_of_date)
+      order by csx.effective_from desc nulls last,
+               csx.updated_at desc nulls last,
+               csx.created_at desc nulls last
+      limit 1;
+
+      if coalesce(v_no_timesheet_required, false) = true
+         or coalesce(v_is_nhsp, false) = true
+      then
+        return new;
+      end if;
+    end if;
+  end if;
+
+  -- ✅ Enqueue-only (regen-check): no signature computation or dirty comparison in-trigger
+  perform public.tspdf_enqueue_one(
+    p_timesheet_id := new.timesheet_id,
+    p_force_regen := false,
+    p_prefer_generated := true,
+    p_reason := 'READY_FOR_INVOICE'::public.ts_pdf_reason_enum
+  );
+
+  return new;
+end;
+$function$;
+
+
+
+CREATE OR REPLACE FUNCTION public.trg_tsfin_enqueue_tspdf_on_refs_change()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_timesheet_id uuid := null;
+
+  v_ts record;
+
+  v_contract_id uuid := null;
+  v_client_id uuid := null;
+
+  v_overrideclientsettings boolean := false;
+  v_no_timesheet_required boolean := false;
+  v_is_nhsp boolean := false;
+
+  v_as_of_date date := null;
+begin
+  -- Only for current TSFIN rows
+  if coalesce(new.is_current, false) is not true then
+    return new;
+  end if;
+
+  -- Avoid work if UPDATE didn't actually change the JSON (defence-in-depth)
+  if tg_op = 'UPDATE' then
+    if new.invoice_breakdown_json is not distinct from old.invoice_breakdown_json then
+      return new;
+    end if;
+  end if;
+
+  v_timesheet_id := new.timesheet_id;
+  if v_timesheet_id is null then
+    return new;
+  end if;
+
+  -- Load current timesheet row (needed for submission_mode + baseline + gating)
+  select
+    ts.timesheet_id,
+    ts.is_current,
+    ts.revoked_at,
+    ts.submission_mode,
+    ts.manual_pdf_r2_key,
+    ts.generated_pdf_at_utc,
+    ts.contract_id,
+    ts.week_ending_date,
+    ts.worked_start_iso,
+    ts.scheduled_start_iso,
+    ts.qr_scanned_at,
+    ts.qr_signed_hash,
+    ts.qr_signed_at_utc
+  into v_ts
+  from public.timesheets ts
+  where ts.timesheet_id = v_timesheet_id
+    and ts.is_current = true
+  limit 1;
+
+  if not found then
+    return new;
+  end if;
+
+  -- Ignore revoked
+  if v_ts.revoked_at is not null then
+    return new;
+  end if;
+
+  -- ✅ Signed QR evidence is immutable: never enqueue regen for signed markers
+  if v_ts.qr_scanned_at is not null
+     or v_ts.qr_signed_hash is not null
+     or v_ts.qr_signed_at_utc is not null
+  then
+    return new;
+  end if;
+
+  -- ELECTRONIC only
+  if upper(coalesce(v_ts.submission_mode::text, '')) <> 'ELECTRONIC' then
+    return new;
+  end if;
+
+  -- Manual override means we don't own the generated PDF
+  if v_ts.manual_pdf_r2_key is not null then
+    return new;
+  end if;
+
+  -- If no baseline exists, do nothing (match spec)
+  if v_ts.generated_pdf_at_utc is null then
+    return new;
+  end if;
+
+  -- Determine as-of date for effective client_settings lookup
+  v_as_of_date := coalesce(
+    v_ts.week_ending_date,
+    ((v_ts.worked_start_iso at time zone 'Europe/London')::date),
+    ((v_ts.scheduled_start_iso at time zone 'Europe/London')::date),
+    (now() at time zone 'Europe/London')::date
+  );
+
+  -- ------------------------------------------------------------
+  -- Exclusion: do not enqueue when timesheet PDF is not required
+  -- (NHSP / no_timesheet_required), respecting contract overrides.
+  -- Mirrors the timesheets trigger precedence.
+  -- ------------------------------------------------------------
+  v_contract_id := v_ts.contract_id;
+
+  if v_contract_id is null then
+    select cw.contract_id
+      into v_contract_id
+    from public.contract_weeks cw
+    where cw.timesheet_id = v_timesheet_id
+    limit 1;
+  end if;
+
+  if v_contract_id is not null then
+    select
+      coalesce(ct.overrideclientsettings, false),
+      coalesce(ct.no_timesheet_required, false),
+      coalesce(ct.is_nhsp, false),
+      ct.client_id
+    into
+      v_overrideclientsettings,
+      v_no_timesheet_required,
+      v_is_nhsp,
+      v_client_id
+    from public.contracts ct
+    where ct.id = v_contract_id
+    limit 1;
+
+    if coalesce(v_overrideclientsettings, false) = true then
+      if coalesce(v_no_timesheet_required, false) = true
+         or coalesce(v_is_nhsp, false) = true
+      then
+        return new;
+      end if;
+    end if;
+  end if;
+
+  -- If overrideclientsettings is FALSE, use effective client_settings row
+  if coalesce(v_overrideclientsettings, false) = false then
+    -- Prefer contract client_id, else TSFIN client_id
+    if v_client_id is null then
+      v_client_id := new.client_id;
+    end if;
+
+    if v_client_id is not null then
+      select
+        coalesce(csx.no_timesheet_required, false),
+        coalesce(csx.is_nhsp, false)
+      into
+        v_no_timesheet_required,
+        v_is_nhsp
+      from public.client_settings csx
+      where csx.client_id = v_client_id
+        and (csx.effective_from is null or csx.effective_from <= v_as_of_date)
+      order by csx.effective_from desc nulls last,
+               csx.updated_at desc nulls last,
+               csx.created_at desc nulls last
+      limit 1;
+
+      if coalesce(v_no_timesheet_required, false) = true
+         or coalesce(v_is_nhsp, false) = true
+      then
+        return new;
+      end if;
+    end if;
+  end if;
+
+  -- ✅ Enqueue-only (regen-check): no signature computation or dirty comparison in-trigger
+  perform public.tspdf_enqueue_one(
+    p_timesheet_id := v_timesheet_id,
+    p_force_regen := false,
+    p_prefer_generated := true,
+    p_reason := 'READY_FOR_INVOICE'::public.ts_pdf_reason_enum
+  );
+
+  return new;
+end;
+$function$;
+
+
 -- ============================================================
 -- INVOICE PDF Outbox — DB objects (mirror TS PDF outbox pattern)
 -- ============================================================
