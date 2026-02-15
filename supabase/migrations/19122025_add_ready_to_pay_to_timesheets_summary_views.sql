@@ -1074,11 +1074,11 @@ SELECT
     ELSE 'PARTIALLY_INVOICED'
   END AS invoice_segment_stage,
 
-  -- ✅ NEW (APPENDED AT END): canonical Tools Stage (pipeline) — 5 mutually exclusive states
+  -- ✅ FIX: Tools Stage must respect TSFIN.processing_status (PENDING_AUTH must not appear as authorised)
   CASE
-    WHEN timesheet_id IS NULL THEN 'UNPROCESSED'
+    WHEN wi.timesheet_id IS NULL THEN 'UNPROCESSED'
     WHEN (
-      locked_by_invoice_id IS NOT NULL
+      wi.locked_by_invoice_id IS NOT NULL
       OR COALESCE(seg.seg_locked,0) > 0
       OR (
         seg.seg_total IS NOT NULL
@@ -1086,29 +1086,30 @@ SELECT
       )
     ) THEN 'INVOICED'
     WHEN (
-      timesheet_id IS NOT NULL
-      AND COALESCE(client_requires_hr,false) = true
-      AND COALESCE(client_autoprocess_hr,false) = false
-      AND authorised_at_server IS NULL
-      AND array_length(ic.issue_codes_final, 1) = 1
-      AND ic.issue_codes_final @> ARRAY['Authorisation'::text]
+      wi.timesheet_id IS NOT NULL
+      AND wi.authorised_at_server IS NULL
+      AND (
+        wi.processing_status = 'PENDING_AUTH'::ts_fin_processing_status_enum
+        OR (
+          COALESCE(wi.client_requires_hr,false) = true
+          AND COALESCE(wi.client_autoprocess_hr,false) = false
+          AND array_length(ic.issue_codes_final, 1) = 1
+          AND ic.issue_codes_final @> ARRAY['Authorisation'::text]
+        )
+      )
     ) THEN 'AWAITING_AUTHORISATION'
     WHEN (
-      timesheet_id IS NOT NULL
-      AND COALESCE(array_length(ic.issue_codes_final, 1), 0) = 0
-      AND (
-        authorised_at_server IS NOT NULL
-        OR NOT (COALESCE(client_requires_hr,false) = true AND COALESCE(client_autoprocess_hr,false) = false)
-      )
+      wi.timesheet_id IS NOT NULL
+      AND wi.processing_status = 'READY_FOR_INVOICE'::ts_fin_processing_status_enum
     ) THEN 'AUTHORISED_FOR_INVOICING'
     ELSE 'PROCESSING_DELAYED'
   END AS tools_stage,
 
-  -- ✅ NEW (APPENDED AT END): user-facing Processing Status label (derived from Tools Stage, not TSFIN.processing_status)
+  -- ✅ FIX: Processing Status label must not show "Authorised for Invoicing" while TSFIN=PENDING_AUTH
   CASE
-    WHEN timesheet_id IS NULL THEN 'Unprocessed'
+    WHEN wi.timesheet_id IS NULL THEN 'Unprocessed'
     WHEN (
-      locked_by_invoice_id IS NOT NULL
+      wi.locked_by_invoice_id IS NOT NULL
       OR COALESCE(seg.seg_locked,0) > 0
       OR (
         seg.seg_total IS NOT NULL
@@ -1124,25 +1125,26 @@ SELECT
       END
     )
     WHEN (
-      timesheet_id IS NOT NULL
-      AND COALESCE(client_requires_hr,false) = true
-      AND COALESCE(client_autoprocess_hr,false) = false
-      AND authorised_at_server IS NULL
-      AND array_length(ic.issue_codes_final, 1) = 1
-      AND ic.issue_codes_final @> ARRAY['Authorisation'::text]
-    ) THEN 'Awaiting Authorisation'
-    WHEN (
-      timesheet_id IS NOT NULL
-      AND COALESCE(array_length(ic.issue_codes_final, 1), 0) = 0
-      AND (
-        authorised_at_server IS NOT NULL
-        OR NOT (COALESCE(client_requires_hr,false) = true AND COALESCE(client_autoprocess_hr,false) = false)
-      )
-    ) THEN 'Authorised for Invoicing'
-    WHEN (
-      timesheet_id IS NOT NULL
+      wi.timesheet_id IS NOT NULL
       AND ic.issue_codes_final @> ARRAY['Awaiting signed QR timesheet'::text]
     ) THEN 'Awaiting signed QR timesheet'
+    WHEN (
+      wi.timesheet_id IS NOT NULL
+      AND wi.authorised_at_server IS NULL
+      AND (
+        wi.processing_status = 'PENDING_AUTH'::ts_fin_processing_status_enum
+        OR (
+          COALESCE(wi.client_requires_hr,false) = true
+          AND COALESCE(wi.client_autoprocess_hr,false) = false
+          AND array_length(ic.issue_codes_final, 1) = 1
+          AND ic.issue_codes_final @> ARRAY['Authorisation'::text]
+        )
+      )
+    ) THEN 'Awaiting Authorisation'
+    WHEN (
+      wi.timesheet_id IS NOT NULL
+      AND wi.processing_status = 'READY_FOR_INVOICE'::ts_fin_processing_status_enum
+    ) THEN 'Authorised for Invoicing'
     ELSE 'Processing Delayed'
   END AS processing_status_display,
 
@@ -1285,7 +1287,6 @@ LEFT JOIN LATERAL (
   ORDER BY tf.created_at DESC
   LIMIT 1
 ) seg ON true;
-
 
 
 -- ============================================================
