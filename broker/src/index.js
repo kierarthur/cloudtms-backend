@@ -2578,175 +2578,6 @@ async function rpcTspdfWorkFailBulk(env, { fails = [] } = {}) {
 // - tspdf_work_success_bulk(p_ids)
 // - tspdf_work_fail_bulk(p_rows)
 // ─────────────────────────────────────────────────────────────
-async function runTsPdfWorkerOnce(env, { limit = 5, enqueueFirst = true, enqueueLimit = 500 } = {}) {
-  const report = {
-    enqueued: 0,
-    picked: 0,
-    reused: 0,
-    rendered: 0,
-    ok: 0,
-    failed: 0
-  };
-
-  // 0) Optional enqueue (cheap, SQL-side filtering)
-  if (enqueueFirst) {
-    try {
-      const enqRes = await rpcTspdfEnqueueReadyForInvoice(env, { limit: enqueueLimit });
-      report.enqueued =
-        (typeof enqRes === "number") ? enqRes :
-        (typeof enqRes?.data === "number") ? enqRes.data :
-        (typeof enqRes?.rows?.[0] === "number") ? enqRes.rows[0] :
-        (typeof enqRes?.rows?.[0]?.tspdf_enqueue_ready_for_invoice === "number") ? enqRes.rows[0].tspdf_enqueue_ready_for_invoice :
-        0;
-    } catch {
-      report.enqueued = 0;
-    }
-  }
-
-  // 1) Dequeue a batch
-  const leased = await rpcTspdfDequeueBatchIds(env, { limit });
-  report.picked = leased.length;
-  if (leased.length === 0) return report;
-
-  // 2) Batch load PDF render context
-  const timesheetIds = leased.map(r => String(r.timesheet_id)).filter(Boolean);
-  const ctxRows = await rpcTimesheetPdfLoadContextBatch(env, { timesheetIds });
-
-  // Map timesheet_id -> ctx row
-  const ctxByTsId = new Map();
-  for (const row of ctxRows) {
-    const id = String(row?.timesheet_id || "");
-    if (id) ctxByTsId.set(id, row);
-  }
-
-  // 2b) Cache agency logo bytes ONCE per invocation (avoid 1x R2 GET per timesheet)
-  const bucket = env.R2_BUCKET || env.R2;
-  let cachedLogoKeyRaw = null;
-  let cachedLogoBytesU8 = null;
-  let cachedLogoContentType = null;
-
-  try {
-    if (bucket?.get) {
-      const def0 = ctxRows?.[0]?.out_def ?? null;
-      let defObj = def0;
-      if (typeof defObj === "string") {
-        try { defObj = JSON.parse(defObj); } catch { defObj = null; }
-      }
-
-      const logoKeyRaw = defObj?.agency_logo ? String(defObj.agency_logo).trim() : null;
-      const logoKey = logoKeyRaw ? normalizeKey(logoKeyRaw) : null;
-
-      if (logoKey) {
-        const obj = await bucket.get(logoKey).catch(() => null);
-        if (obj) {
-          const bytesU8 = new Uint8Array(await new Response(obj.body).arrayBuffer());
-
-          // match your renderer’s safety cap
-          const MAX_LOGO_BYTES = 250_000;
-          if (bytesU8.length <= MAX_LOGO_BYTES) {
-            const ct = String(obj.httpMetadata?.contentType || "").toLowerCase();
-            cachedLogoKeyRaw = logoKeyRaw;
-            cachedLogoBytesU8 = bytesU8;
-
-            // content-type fallback from extension if metadata missing
-            cachedLogoContentType =
-              ct ||
-              (logoKey.toLowerCase().endsWith(".png") ? "image/png" :
-               logoKey.toLowerCase().endsWith(".jpg") || logoKey.toLowerCase().endsWith(".jpeg") ? "image/jpeg" :
-               "application/octet-stream");
-          }
-        }
-      }
-    }
-  } catch {
-    cachedLogoKeyRaw = null;
-    cachedLogoBytesU8 = null;
-    cachedLogoContentType = null;
-  }
-
-  const okOutboxIds = [];
-  const fails = [];
-
-  // 3) For each leased outbox row: reuse (DB-flag) or render
-  for (const job of leased) {
-    const outboxId = job?.outbox_id ? String(job.outbox_id) : null;
-    const tsId = job?.timesheet_id ? String(job.timesheet_id) : null;
-    const forceRegen = !!job?.force_regen;
-
-    if (!outboxId || !tsId) {
-      fails.push({ outbox_id: outboxId || null, error: "Missing outbox_id or timesheet_id" });
-      continue;
-    }
-
-    try {
-      const ctx = ctxByTsId.get(tsId) || null;
-      if (!ctx) throw new Error("Missing batch context for timesheet_id");
-
-         // ✅ Avoid per-timesheet R2 head(): trust DB flag on timesheets row
-      // Reuse only if we also have a stored refs signature; if signature is missing,
-      // render once to backfill generated_pdf_refs_* fields.
-      const alreadyGeneratedAt = ctx?.out_ts?.generated_pdf_at_utc || null;
-      const alreadyRefsSigRaw = ctx?.out_ts?.generated_pdf_refs_sig || null;
-      const hasRefsSig = !!String(alreadyRefsSigRaw || '').trim();
-
-      if (!forceRegen && alreadyGeneratedAt && hasRefsSig) {
-        report.reused++;
-        okOutboxIds.push(outboxId);
-        continue;
-      }
-
-      const preload = {
-        ts: ctx.out_ts || null,
-        summary: ctx.out_summary || null,
-        contract: ctx.out_contract || null,
-        client: ctx.out_client || null,
-        candidate: ctx.out_candidate || null,
-        fin: ctx.out_fin || null,
-        def: ctx.out_def || null,
-
-        // cached logo (renderer can use these to avoid bucket.get per timesheet)
-        logo_key: cachedLogoKeyRaw,
-        logo_bytes_u8: cachedLogoBytesU8,
-        logo_content_type: cachedLogoContentType
-      };
-
-      await renderTimesheetPDFGeneratedAndSave(env, tsId, preload);
-
-      report.rendered++;
-      okOutboxIds.push(outboxId);
-    } catch (e) {
-      fails.push({
-        outbox_id: outboxId,
-        error: e?.message || String(e || "Unknown error")
-      });
-    }
-  }
-
-  // 4) Bulk ACKs
-  if (okOutboxIds.length > 0) {
-    try {
-      await rpcTspdfWorkSuccessBulk(env, { outboxIds: okOutboxIds });
-      report.ok += okOutboxIds.length;
-    } catch {
-      // If ack fails, treat as failure (rows will retry later due to next_attempt_at)
-      report.failed += okOutboxIds.length;
-    }
-  }
-
-  if (fails.length > 0) {
-    try {
-      await rpcTspdfWorkFailBulk(env, { fails });
-      report.failed += fails.length;
-    } catch {
-      // If fail-ack fails, rows will retry later due to next_attempt_at already set on dequeue
-      report.failed += fails.length;
-    }
-  }
-
-  return report;
-}
-
-
 
 
 // ─────────────────────────────────────────────────────────────
@@ -4623,48 +4454,6 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId, preload = nu
 }
 
 
-
-async function ensureTimesheetPdf(env, timesheetId, opts) {
-  const enc = encodeURIComponent;
-
-  const force_regen = !!(opts && typeof opts === 'object' && opts.force_regen);
-  const prefer_generated = !!(opts && typeof opts === 'object' && opts.prefer_generated);
-
-  // Always look at CURRENT VERSION ONLY
-  const ts = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(timesheetId)}` +
-      `&is_current=eq.true` +
-      `&select=manual_pdf_r2_key,qr_token,qr_status,qr_payload_json` +
-      `&limit=1`
-  );
-
-  // If QR is pending and payload exists, we MUST return the generated printable PDF (not a manual scan),
-  // because the QR is part of the printable.
-  const needsQrPrintable =
-    String(ts?.qr_status || "").toUpperCase() === "PENDING" &&
-    ts?.qr_payload_json && typeof ts.qr_payload_json === "object";
-
-  // ✅ Force-regenerate / prefer-generated / QR-printable path:
-  // - force_regen must bypass REUSE logic (handled by renderTimesheetPDFAndSave)
-  // - prefer_generated must bypass manual_pdf_r2_key
-  if (force_regen || prefer_generated || needsQrPrintable) {
-    return await renderTimesheetPDFAndSave(env, timesheetId, { force_regen });
-  }
-
-  // Prefer a manual uploaded PDF when present (scanned evidence path)
-  if (ts?.manual_pdf_r2_key) {
-    const mk = normalizeKey(ts.manual_pdf_r2_key);
-    if (await r2Exists(env, mk)) return mk;
-  }
-
-  const key = normalizeKey(`docs-pdf/timesheets/ts_${timesheetId}.pdf`);
-  if (await r2Exists(env, key)) return key;
-
-  // Otherwise generate the system PDF
-  return await renderTimesheetPDFAndSave(env, timesheetId, { force_regen: false });
-}
 
 
 
@@ -10604,216 +10393,6 @@ async function handleTimesheetPdf(env, req, timesheetId) {
 // BE FIX: expected guard + resolve CW-linked timesheet to CURRENT before mutating TS/TSFIN; strict 409 payload
 
 
-async function handleContractWeekManualAuthorise(env, req, weekId) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  const enc = encodeURIComponent;
-
-  let body = null;
-  try { body = await parseJSONBody(req); } catch { body = null; }
-
-  const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
-  if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
-
-  const boolish = (v) => {
-    if (v === true) return true;
-    if (v === false) return false;
-    if (v == null) return false;
-    const s = String(v).trim().toLowerCase();
-    return (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on');
-  };
-
-  const cw = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=id,contract_id,timesheet_id`
-  );
-  if (!cw?.timesheet_id) return withCORS(env, req, badRequest('No timesheet linked to this week'));
-
-  // Resolve + guard
-  const resolved = await resolveTimesheetToCurrent(env, cw.timesheet_id);
-  const currentTimesheetId = resolved?.current_timesheet_id ? String(resolved.current_timesheet_id) : '';
-  if (!currentTimesheetId) return withCORS(env, req, notFound('Timesheet not found'));
-
-  if (String(expected) !== String(currentTimesheetId)) {
-    return withCORS(
-      env,
-      req,
-      new Response(JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetId }), {
-        status: 409,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    );
-  }
-
-  const now = nowIso();
-
-  // Load CURRENT TS + TSFIN (include basis)
-  const tsBefore = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-      `&is_current=eq.true` +
-      `&select=timesheet_id,contract_id,authorised_at_server,submission_mode,sheet_scope,version,status`
-  ).catch(() => null);
-
-  const { rows: finRows } = await sbFetch(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-      `&is_current=eq.true` +
-      `&select=id,client_id,basis,processing_status,locked_by_invoice_id,paid_at_utc`
-  );
-  const fin = finRows?.[0] || null;
-
-  const finBeforeStatus = String(fin?.processing_status || '').toUpperCase();
-  let finAfterStatus = fin?.processing_status || null;
-
-  if (fin) {
-    const ps = finBeforeStatus;
-
-    // Guard for QR print/sign flow
-    if (ps === 'QR_PENDING_SIGNATURE' || ps === 'AWAITING_QR_SIGNATURE') {
-      return withCORS(env, req, badRequest('Timesheet is awaiting QR/manual signature; cannot authorise yet'));
-    }
-
-    if (fin.locked_by_invoice_id || fin.paid_at_utc) {
-      return withCORS(env, req, badRequest('Cannot authorise: timesheet is locked or paid'));
-    }
-
-    // Policy B bases: authorise must unlock invoicing directly
-    const basisU = String(fin?.basis || '').toUpperCase();
-    const forceReadyForInvoice =
-      (basisU === 'NHSP' ||
-       basisU === 'NHSP_ADJUSTMENT' ||
-       basisU === 'HEALTHROSTER_SELF_BILL' ||
-       basisU === 'HEALTHROSTER_ADJUSTMENT');
-
-    let requiresHr = false;
-
-    if (!forceReadyForInvoice) {
-      // Prefer v_timesheets_summary effective flag
-      let eff = null;
-      try {
-        const { rows: eRows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
-            `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-            `&select=client_requires_hr` +
-            `&limit=1`
-        );
-        eff = eRows?.[0] || null;
-      } catch {}
-
-      if (eff && Object.prototype.hasOwnProperty.call(eff, 'client_requires_hr')) {
-        requiresHr = boolish(eff.client_requires_hr);
-      } else {
-        // Fallback: contract column if non-null; else client_settings
-        let contractRequires = null;
-        try {
-          const contractId = (cw.contract_id || tsBefore?.contract_id) ? String(cw.contract_id || tsBefore.contract_id) : '';
-          if (contractId) {
-            const c = await sbGetOne(
-              env,
-              `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=requires_hr&limit=1`
-            );
-            if (c && Object.prototype.hasOwnProperty.call(c, 'requires_hr') && c.requires_hr !== null) {
-              contractRequires = !!c.requires_hr;
-            }
-          }
-        } catch {}
-
-        if (contractRequires != null) {
-          requiresHr = !!contractRequires;
-        } else if (fin.client_id) {
-          const { rows: csRows } = await sbFetch(
-            env,
-            `${env.SUPABASE_URL}/rest/v1/client_settings` +
-              `?client_id=eq.${enc(fin.client_id)}` +
-              `&select=requires_hr` +
-              `&order=effective_from.desc&limit=1`
-          );
-          requiresHr = !!csRows?.[0]?.requires_hr;
-        }
-      }
-    }
-
-    let newStatus = fin.processing_status;
-    if (ps === 'PENDING_AUTH' || ps === 'READY_FOR_HR') {
-      newStatus = forceReadyForInvoice
-        ? 'READY_FOR_INVOICE'
-        : (requiresHr ? 'READY_FOR_HR' : 'READY_FOR_INVOICE');
-    }
-    finAfterStatus = newStatus;
-
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}&is_current=eq.true`,
-      {
-        method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify({
-          processing_status: newStatus,
-          authorised_by_user_id: user.id,
-          authorised_at_utc: now,
-          updated_at: now
-        })
-      }
-    ).catch(() => {});
-  }
-
-  // Stamp timesheet as authorised (CURRENT only)
-  await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
-    {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-      body: JSON.stringify({ authorised_at_server: now, updated_at: now })
-    }
-  ).catch(() => {});
-
-  // Update week status → AUTHORISED
-  await fetch(
-    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`,
-    {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-      body: JSON.stringify({ status: 'AUTHORISED', updated_at: now })
-    }
-  ).catch(() => {});
-
-  // Audit
-  try {
-    const wasAlreadyAuthorised = !!(tsBefore && tsBefore.authorised_at_server);
-    const didPromoteStatus = !!(finAfterStatus && String(finBeforeStatus || '') !== String(finAfterStatus || ''));
-
-    if (!wasAlreadyAuthorised || didPromoteStatus) {
-      await writeAudit(
-        env,
-        user,
-        'TIMESHEET_AUTHORISED',
-        {
-          timesheet_id: currentTimesheetId,
-          contract_week_id: weekId,
-          authorised_at_utc: now,
-          tsfin_processing_status_before: finBeforeStatus || null,
-          tsfin_processing_status_after: finAfterStatus ? String(finAfterStatus).toUpperCase() : null
-        },
-        {
-          entity: 'timesheets',
-          subject_id: currentTimesheetId,
-          req,
-          before: {
-            authorised_at_server: tsBefore?.authorised_at_server || null,
-            tsfin_processing_status: finBeforeStatus || null
-          },
-          reason: didPromoteStatus ? 'PROMOTED_TSFIN_STATUS' : 'STAMPED_AUTHORISE'
-        }
-      );
-    }
-  } catch {}
-
-  return withCORS(env, req, ok({ authorised: true, timesheet_id: currentTimesheetId }));
-}
 
 
 
@@ -53654,34 +53233,91 @@ const pdfMargins = {
       evidence_other_count: otherEvidenceRows.length
     });
 
-    // Timesheet IDs from invoice lines
-    step = 'COLLECT_TS_IDS';
-    const tsIds = [...new Set(lineRows.map(r => r?.timesheet_id).filter(Boolean).map(String))];
-    log('log', 'timesheets_collected', { ts_ids: tsIds.length });
+// Timesheet IDs from invoice lines
+step = 'COLLECT_TS_IDS';
+const tsIds = [...new Set(lineRows.map(r => r?.timesheet_id).filter(Boolean).map(String))];
+log('log', 'timesheets_collected', { ts_ids: tsIds.length });
 
-    // ✅ Regen ELECTRONIC timesheet PDFs before attaching if manifest says refs changed
-    const regenToRun = (regenTimesheetIds || []).filter(tsid => tsIds.includes(String(tsid)));
-    if (regenToRun.length) {
-      step = 'REGEN_ELECTRONIC_TS_PDFS';
-      log('log', 'regen_timesheets_start', { count: regenToRun.length, ts_ids: regenToRun });
+// ✅ NEW: Ensure ALL attached ELECTRONIC timesheet PDFs are clean before attaching.
+// - Not only manifest-flagged ones.
+// - Determine ELECTRONIC by timesheets.submission_mode === 'ELECTRONIC' AND manual_pdf_r2_key IS NULL.
+// - If manifest indicates a regen is required, force_regen=true; otherwise force_regen=false (dirty-check in renderer decides).
+if (tsAttach && tsIds.length) {
+  step = 'ENSURE_ELECTRONIC_TS_PDFS_BEFORE_ATTACH';
 
-      for (const tsId of regenToRun) {
-        try {
-          await ensureTimesheetPdf(env, tsId, { force_regen: true, prefer_generated: true });
-        } catch (eRegen) {
-          log('error', 'regen_timesheet_failed', {
-            timesheet_id: String(tsId),
-            err_name: eRegen?.name || null,
-            err_message: eRegen?.message || String(eRegen || ''),
-            err_stack: eRegen?.stack || null
-          });
-        }
-      }
+  const regenSet = new Set((regenTimesheetIds || []).map(x => String(x || '').trim()).filter(Boolean));
+  const tsInfoById = new Map();
 
-      log('log', 'regen_timesheets_done', { count: regenToRun.length });
+  // Batch load minimal TS fields needed to identify ELECTRONIC safely
+  const chunkSize = 200;
+  for (let i = 0; i < tsIds.length; i += chunkSize) {
+    const chunk = tsIds.slice(i, i + chunkSize);
+    const { rows: tsRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?is_current=eq.true` +
+        `&select=timesheet_id,submission_mode,manual_pdf_r2_key` +
+        `&timesheet_id=in.(${chunk.map(enc).join(',')})`
+    );
+    for (const r of (tsRows || [])) {
+      const id = (r?.timesheet_id != null) ? String(r.timesheet_id).trim() : '';
+      if (!id) continue;
+      tsInfoById.set(id, r);
+    }
+  }
+
+  const ensureFailures = [];
+
+  for (const tsId of tsIds) {
+    const row = tsInfoById.get(String(tsId)) || null;
+    if (!row) {
+      // If we can't classify it, we must NOT attach a potentially stale PDF
+      ensureFailures.push({
+        timesheet_id: String(tsId),
+        error: 'Missing timesheet row (cannot verify submission_mode/manual_pdf_r2_key)'
+      });
+      continue;
     }
 
-    const docsKeys = tsIds.map(tsId => normalizeKey(`docs-pdf/timesheets/ts_${tsId}.pdf`));
+    const mode = String(row?.submission_mode || '').toUpperCase();
+    const manualKey = (row?.manual_pdf_r2_key != null) ? String(row.manual_pdf_r2_key).trim() : '';
+    const isElectronic = (mode === 'ELECTRONIC') && !manualKey;
+
+    if (!isElectronic) continue;
+
+    const forceNow = regenSet.has(String(tsId));
+
+    try {
+      // prefer_generated is NOT needed here because manual_pdf_r2_key is verified null for ELECTRONIC.
+      await ensureTimesheetPdf(env, tsId, { force_regen: forceNow });
+    } catch (eEnsure) {
+      ensureFailures.push({
+        timesheet_id: String(tsId),
+        error: eEnsure?.message || String(eEnsure || 'Failed to ensure timesheet PDF')
+      });
+    }
+  }
+
+  if (ensureFailures.length) {
+    log('error', 'ensure_electronic_ts_pdfs_failed', {
+      count: ensureFailures.length,
+      failures: ensureFailures
+    });
+
+    return {
+      ok: false,
+      error: `Invoice render failed: could not prepare ${ensureFailures.length} electronic timesheet PDF(s) for attachment.`
+    };
+  }
+
+  log('log', 'ensure_electronic_ts_pdfs_ok', {
+    ts_ids: tsIds.length,
+    forced_regen_count: (regenTimesheetIds || []).length
+  });
+}
+
+const docsKeys = tsIds.map(tsId => normalizeKey(`docs-pdf/timesheets/ts_${tsId}.pdf`));
+
 
     const manualKeyByTsId = new Map();
     for (const l of lineRows) {
@@ -59709,6 +59345,483 @@ async function handleFileUpload(env, req, url) {
   return withCORS(env, req, ok({ ok: true, key, etag: putRes?.etag, size: actualLen || undefined }));
 }
 
+async function ensureTimesheetPdf(env, timesheetId, opts) {
+  const enc = encodeURIComponent;
+
+  const force_regen = !!(opts && typeof opts === 'object' && opts.force_regen);
+  const prefer_generated = !!(opts && typeof opts === 'object' && opts.prefer_generated);
+
+  // Always look at CURRENT VERSION ONLY
+  const ts = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(timesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=manual_pdf_r2_key,qr_token,qr_status,qr_payload_json,qr_scanned_at,qr_signed_hash,qr_signed_at_utc` +
+      `&limit=1`
+  );
+
+  if (!ts) throw new Error("Timesheet not found");
+
+  // ------------------------------------------------------------------
+  // ✅ HARD GUARD: Signed QR must NEVER be regenerated / overwritten
+  // Signed markers: qr_scanned_at OR qr_signed_hash OR qr_signed_at_utc
+  // ------------------------------------------------------------------
+  const signedHash = (ts?.qr_signed_hash != null) ? String(ts.qr_signed_hash).trim() : "";
+  const hasSignedMarkers =
+    !!ts?.qr_scanned_at ||
+    !!ts?.qr_signed_at_utc ||
+    !!signedHash;
+
+  if (hasSignedMarkers) {
+    // Prefer the stored manual key if present (typically points to the canonical key for QR scans)
+    if (ts?.manual_pdf_r2_key) {
+      const mk = normalizeKey(ts.manual_pdf_r2_key);
+      if (await r2Exists(env, mk)) return mk;
+    }
+
+    // Fall back to the canonical key if it exists
+    const outKey = normalizeKey(`docs-pdf/timesheets/ts_${timesheetId}.pdf`);
+    if (await r2Exists(env, outKey)) return outKey;
+
+    // Never regenerate signed evidence
+    throw new Error("Signed QR timesheet PDF missing from storage");
+  }
+
+  // ------------------------------------------------------------------
+  // QR pending printable detection (must embed QR)
+  // Require a token (either in qr_payload_json.tok or qr_token)
+  // ------------------------------------------------------------------
+  const qrStatus = String(ts?.qr_status || "").toUpperCase();
+
+  let payloadObj = null;
+  if (ts.qr_payload_json && typeof ts.qr_payload_json === "object") {
+    payloadObj = ts.qr_payload_json;
+  } else if (typeof ts.qr_payload_json === "string") {
+    try { payloadObj = JSON.parse(ts.qr_payload_json); } catch { payloadObj = null; }
+  }
+
+  const payloadTok = (payloadObj && typeof payloadObj === "object")
+    ? String(payloadObj.tok || "").trim()
+    : "";
+
+  const qrToken = String(ts?.qr_token || "").trim();
+  const hasAnyTok = !!(payloadTok || qrToken);
+
+  const needsQrPrintable = (qrStatus === "PENDING") && hasAnyTok;
+
+  if ((qrStatus === "PENDING") && !hasAnyTok) {
+    throw new Error("QR is PENDING but no token found in qr_payload_json.tok or timesheets.qr_token");
+  }
+
+  // ✅ Force-regenerate / prefer-generated / QR-printable path:
+  // - force_regen must bypass REUSE logic (handled by renderTimesheetPDFAndSave)
+  // - prefer_generated must bypass manual_pdf_r2_key
+  if (force_regen || prefer_generated || needsQrPrintable) {
+    return await renderTimesheetPDFAndSave(env, timesheetId, { force_regen });
+  }
+
+  // Prefer a manual uploaded PDF when present (scanned evidence path)
+  if (ts?.manual_pdf_r2_key) {
+    const mk = normalizeKey(ts.manual_pdf_r2_key);
+    if (await r2Exists(env, mk)) return mk;
+  }
+
+  // ✅ CRITICAL FIX: Never short-circuit on R2 existence here.
+  // Always route through dirty-aware logic (it will REUSE if clean, RENDER if dirty/missing).
+  return await renderTimesheetPDFAndSave(env, timesheetId, { force_regen: false });
+}
+
+
+async function renderTimesheetPDFAndSave(env, timesheetId, opts) {
+  const bucket = env.R2_BUCKET || env.R2;
+  if (!bucket?.get || !bucket?.put) throw new Error("Storage not configured");
+
+  const T0 = Date.now();
+  const LOGP = `[TS_PDF][${timesheetId}]`;
+  const L = (step, obj) => { try { console.log(`${LOGP} ${step}`, obj || {}); } catch {} };
+
+  const force_regen =
+    !!(opts && typeof opts === "object" && opts.force_regen);
+
+  L("START", { timesheetId, force_regen });
+
+  // Load TS row (CURRENT VERSION ONLY)
+  let ts = null;
+  try {
+    const { rows: tsRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${encodeURIComponent(timesheetId)}` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,manual_pdf_r2_key,qr_token,qr_status,qr_payload_json,qr_scanned_at,qr_signed_hash,qr_signed_at_utc,generated_pdf_refs_sig` +
+        `&limit=1`
+    );
+    ts = tsRows?.[0] || null;
+  } catch (e) {
+    L("DB.FAIL", { err: e?.message || String(e) });
+    throw e;
+  }
+
+  if (!ts) {
+    L("DB.MISS", {});
+    throw new Error("Timesheet not found");
+  }
+
+  const outKey = normalizeKey(`docs-pdf/timesheets/ts_${timesheetId}.pdf`);
+
+  // ------------------------------------------------------------------
+  // ✅ HARD GUARD: Signed QR must NEVER be regenerated / overwritten
+  // ------------------------------------------------------------------
+  const signedHash = (ts?.qr_signed_hash != null) ? String(ts.qr_signed_hash).trim() : "";
+  const hasSignedMarkers =
+    !!ts?.qr_scanned_at ||
+    !!ts?.qr_signed_at_utc ||
+    !!signedHash;
+
+  if (hasSignedMarkers) {
+    // Prefer the stored manual key if present (typically points to the canonical key for QR scans)
+    if (ts?.manual_pdf_r2_key) {
+      const mk = normalizeKey(ts.manual_pdf_r2_key);
+      try {
+        if (await r2Exists(env, mk)) {
+          L("SIGNED.SKIP", { reason: "signed_qr_manual_key", key: mk, ms: Date.now() - T0 });
+          return mk;
+        }
+      } catch {}
+    }
+
+    // Otherwise, return canonical key if present (do NOT render)
+    try {
+      if (await r2Exists(env, outKey)) {
+        L("SIGNED.SKIP", { reason: "signed_qr_canonical_key", key: outKey, ms: Date.now() - T0 });
+        return outKey;
+      }
+    } catch {}
+
+    L("SIGNED.MISS", { outKey, ms: Date.now() - T0 });
+    throw new Error("Signed QR timesheet PDF missing from storage");
+  }
+
+  const qrStatus = String(ts.qr_status || "").toUpperCase();
+
+  // payload could be object, stringified JSON, null
+  let payloadObj = null;
+  const payloadType = (ts.qr_payload_json === null) ? "null" : typeof ts.qr_payload_json;
+
+  if (ts.qr_payload_json && typeof ts.qr_payload_json === "object") {
+    payloadObj = ts.qr_payload_json;
+  } else if (typeof ts.qr_payload_json === "string") {
+    try {
+      payloadObj = JSON.parse(ts.qr_payload_json);
+    } catch (e) {
+      payloadObj = null;
+      L("PAYLOAD.PARSE_FAIL", { err: e?.message || String(e) });
+    }
+  }
+
+  const payloadTok = payloadObj && typeof payloadObj === "object"
+    ? String(payloadObj.tok || "").trim()
+    : "";
+
+  const qrToken = String(ts.qr_token || "").trim();
+  const hasAnyTok = !!(payloadTok || qrToken);
+
+  // ✅ Correct notion of “needs QR printable”
+  // We treat *any* PENDING QR as needing QR PDF behaviour, but we REQUIRE a token to avoid emailing blank/invalid QR.
+  const qrPending = (qrStatus === "PENDING");
+
+  if (qrPending && !hasAnyTok) {
+    L("DECIDE.ERROR", { qrStatus, payloadType, qrToken_present: !!qrToken, payloadTok_present: !!payloadTok });
+    throw new Error("QR is PENDING but no token found in qr_payload_json.tok or timesheets.qr_token");
+  }
+
+  // ✅ NEW: For non-QR renders, do not reuse cached PDF if references have changed.
+  // This uses the canonical DB signature (timesheet_pdf_reference_sig) vs timesheets.generated_pdf_refs_sig.
+  const unwrapScalar = (v, fnName) => {
+    if (v == null) return null;
+    if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") return String(v);
+    if (v && typeof v === "object" && !Array.isArray(v) && Object.prototype.hasOwnProperty.call(v, "data")) {
+      return unwrapScalar(v.data, fnName);
+    }
+    if (Array.isArray(v)) {
+      if (v.length === 0) return null;
+      const o = v[0];
+      if (typeof o === "string" || typeof o === "number" || typeof o === "boolean") return String(o);
+      if (o && typeof o === "object") {
+        if (fnName && Object.prototype.hasOwnProperty.call(o, fnName)) return o[fnName] == null ? null : String(o[fnName]);
+        const ks = Object.keys(o);
+        if (ks.length === 1) return o[ks[0]] == null ? null : String(o[ks[0]]);
+      }
+      return null;
+    }
+    if (v && typeof v === "object") {
+      if (fnName && Object.prototype.hasOwnProperty.call(v, fnName)) return v[fnName] == null ? null : String(v[fnName]);
+      const ks = Object.keys(v);
+      if (ks.length === 1) return v[ks[0]] == null ? null : String(v[ks[0]]);
+    }
+    return null;
+  };
+
+  let exists = false;
+  let action = "RENDER";
+  let current_refs_sig = null;
+  const prev_generated_refs_sig = (ts.generated_pdf_refs_sig != null) ? String(ts.generated_pdf_refs_sig).trim() : "";
+
+  if (force_regen) {
+    action = "RENDER";
+    L("DECIDE", {
+      outKey,
+      qrStatus,
+      payloadType,
+      payloadTok_present: !!payloadTok,
+      qrToken_present: !!qrToken,
+      r2Exists: null,
+      action,
+      force_regen: true
+    });
+  } else {
+    // Check cache existence (only when not forcing regeneration)
+    try {
+      exists = await r2Exists(env, outKey);
+    } catch (e) {
+      L("R2.EXISTS_FAIL", { outKey, err: e?.message || String(e) });
+      exists = false;
+    }
+
+    // Compute current refs sig only when we might otherwise reuse.
+    // (Skip if pending QR: we always render to ensure the QR is embedded.)
+    let needsRegenRefs = false;
+    if (!qrPending && exists) {
+      try {
+        const sigRes = await sbRpc(env, "timesheet_pdf_reference_sig", { p_timesheet_id: timesheetId });
+        const sig = unwrapScalar(sigRes, "timesheet_pdf_reference_sig");
+        current_refs_sig = (sig && String(sig).trim()) ? String(sig).trim() : null;
+      } catch {
+        current_refs_sig = null;
+      }
+
+      if (current_refs_sig) {
+        if (!prev_generated_refs_sig) needsRegenRefs = true;
+        else needsRegenRefs = (prev_generated_refs_sig !== current_refs_sig);
+      }
+    }
+
+    action = (!qrPending && exists && !needsRegenRefs) ? "REUSE" : "RENDER";
+
+    L("DECIDE", {
+      outKey,
+      qrStatus,
+      payloadType,
+      payloadTok_present: !!payloadTok,
+      qrToken_present: !!qrToken,
+      r2Exists: exists,
+      action,
+      force_regen: false,
+      generated_pdf_refs_sig: prev_generated_refs_sig || null,
+      current_refs_sig: current_refs_sig || null,
+      needs_regen_refs: (action === "RENDER" && !qrPending && exists) ? true : false
+    });
+  }
+
+  if (action === "REUSE") {
+    L("REUSE", { outKey, ms: Date.now() - T0 });
+    return outKey;
+  }
+
+  // Render (overwrite if exists)
+  try {
+    const key = await renderTimesheetPDFGeneratedAndSave(env, timesheetId);
+    L("RENDER.OK", { outKey: key, ms: Date.now() - T0 });
+    return key;
+  } catch (e) {
+    L("RENDER.FAIL", { err: e?.message || String(e), ms: Date.now() - T0 });
+    throw e;
+  }
+}
+
+
+async function runTsPdfWorkerOnce(env, { limit = 5, enqueueFirst = true, enqueueLimit = 500 } = {}) {
+  const report = {
+    enqueued: 0,
+    picked: 0,
+    reused: 0,
+    rendered: 0,
+    ok: 0,
+    failed: 0
+  };
+
+  // 0) Optional enqueue (cheap, SQL-side filtering)
+  if (enqueueFirst) {
+    try {
+      const enqRes = await rpcTspdfEnqueueReadyForInvoice(env, { limit: enqueueLimit });
+      report.enqueued =
+        (typeof enqRes === "number") ? enqRes :
+        (typeof enqRes?.data === "number") ? enqRes.data :
+        (typeof enqRes?.rows?.[0] === "number") ? enqRes.rows[0] :
+        (typeof enqRes?.rows?.[0]?.tspdf_enqueue_ready_for_invoice === "number") ? enqRes.rows[0].tspdf_enqueue_ready_for_invoice :
+        0;
+    } catch {
+      report.enqueued = 0;
+    }
+  }
+
+  // 1) Dequeue a batch
+  const leased = await rpcTspdfDequeueBatchIds(env, { limit });
+  report.picked = leased.length;
+  if (leased.length === 0) return report;
+
+  // 2) Batch load PDF render context
+  const timesheetIds = leased.map(r => String(r.timesheet_id)).filter(Boolean);
+  const ctxRows = await rpcTimesheetPdfLoadContextBatch(env, { timesheetIds });
+
+  // Map timesheet_id -> ctx row
+  const ctxByTsId = new Map();
+  for (const row of ctxRows) {
+    const id = String(row?.timesheet_id || "");
+    if (id) ctxByTsId.set(id, row);
+  }
+
+  // 2b) Cache agency logo bytes ONCE per invocation (avoid 1x R2 GET per timesheet)
+  const bucket = env.R2_BUCKET || env.R2;
+  let cachedLogoKeyRaw = null;
+  let cachedLogoBytesU8 = null;
+  let cachedLogoContentType = null;
+
+  try {
+    if (bucket?.get) {
+      const def0 = ctxRows?.[0]?.out_def ?? null;
+      let defObj = def0;
+      if (typeof defObj === "string") {
+        try { defObj = JSON.parse(defObj); } catch { defObj = null; }
+      }
+
+      const logoKeyRaw = defObj?.agency_logo ? String(defObj.agency_logo).trim() : null;
+      const logoKey = logoKeyRaw ? normalizeKey(logoKeyRaw) : null;
+
+      if (logoKey) {
+        const obj = await bucket.get(logoKey).catch(() => null);
+        if (obj) {
+          const bytesU8 = new Uint8Array(await new Response(obj.body).arrayBuffer());
+
+          // match your renderer’s safety cap
+          const MAX_LOGO_BYTES = 250_000;
+          if (bytesU8.length <= MAX_LOGO_BYTES) {
+            const ct = String(obj.httpMetadata?.contentType || "").toLowerCase();
+            cachedLogoKeyRaw = logoKeyRaw;
+            cachedLogoBytesU8 = bytesU8;
+
+            // content-type fallback from extension if metadata missing
+            cachedLogoContentType =
+              ct ||
+              (logoKey.toLowerCase().endsWith(".png") ? "image/png" :
+               logoKey.toLowerCase().endsWith(".jpg") || logoKey.toLowerCase().endsWith(".jpeg") ? "image/jpeg" :
+               "application/octet-stream");
+          }
+        }
+      }
+    }
+  } catch {
+    cachedLogoKeyRaw = null;
+    cachedLogoBytesU8 = null;
+    cachedLogoContentType = null;
+  }
+
+  const okOutboxIds = [];
+  const fails = [];
+
+  // 3) For each leased outbox row: reuse (DB-flag) or render
+  for (const job of leased) {
+    const outboxId = job?.outbox_id ? String(job.outbox_id) : null;
+    const tsId = job?.timesheet_id ? String(job.timesheet_id) : null;
+    const forceRegen = !!job?.force_regen;
+
+    if (!outboxId || !tsId) {
+      fails.push({ outbox_id: outboxId || null, error: "Missing outbox_id or timesheet_id" });
+      continue;
+    }
+
+    try {
+      const ctx = ctxByTsId.get(tsId) || null;
+      if (!ctx) throw new Error("Missing batch context for timesheet_id");
+
+      // ✅ HARD GUARD: Signed QR must NEVER be regenerated / overwritten (drain safely)
+      const tsRow = ctx?.out_ts || null;
+      const signedHash = (tsRow?.qr_signed_hash != null) ? String(tsRow.qr_signed_hash).trim() : "";
+      const hasSignedMarkers =
+        !!tsRow?.qr_scanned_at ||
+        !!tsRow?.qr_signed_at_utc ||
+        !!signedHash;
+
+      if (hasSignedMarkers) {
+        report.reused++;
+        okOutboxIds.push(outboxId);
+        continue;
+      }
+
+      // ✅ Avoid per-timesheet R2 head(): trust DB flag on timesheets row
+      // Reuse only if we also have a stored refs signature; if signature is missing,
+      // render once to backfill generated_pdf_refs_* fields.
+      const alreadyGeneratedAt = tsRow?.generated_pdf_at_utc || null;
+      const alreadyRefsSigRaw = tsRow?.generated_pdf_refs_sig || null;
+      const hasRefsSig = !!String(alreadyRefsSigRaw || '').trim();
+
+      if (!forceRegen && alreadyGeneratedAt && hasRefsSig) {
+        report.reused++;
+        okOutboxIds.push(outboxId);
+        continue;
+      }
+
+      const preload = {
+        ts: ctx.out_ts || null,
+        summary: ctx.out_summary || null,
+        contract: ctx.out_contract || null,
+        client: ctx.out_client || null,
+        candidate: ctx.out_candidate || null,
+        fin: ctx.out_fin || null,
+        def: ctx.out_def || null,
+
+        // cached logo (renderer can use these to avoid bucket.get per timesheet)
+        logo_key: cachedLogoKeyRaw,
+        logo_bytes_u8: cachedLogoBytesU8,
+        logo_content_type: cachedLogoContentType
+      };
+
+      await renderTimesheetPDFGeneratedAndSave(env, tsId, preload);
+
+      report.rendered++;
+      okOutboxIds.push(outboxId);
+    } catch (e) {
+      fails.push({
+        outbox_id: outboxId,
+        error: e?.message || String(e || "Unknown error")
+      });
+    }
+  }
+
+  // 4) Bulk ACKs
+  if (okOutboxIds.length > 0) {
+    try {
+      await rpcTspdfWorkSuccessBulk(env, { outboxIds: okOutboxIds });
+      report.ok += okOutboxIds.length;
+    } catch {
+      // If ack fails, treat as failure (rows will retry later due to next_attempt_at)
+      report.failed += okOutboxIds.length;
+    }
+  }
+
+  if (fails.length > 0) {
+    try {
+      await rpcTspdfWorkFailBulk(env, { fails });
+      report.failed += fails.length;
+    } catch {
+      // If fail-ack fails, rows will retry later due to next_attempt_at already set on dequeue
+      report.failed += fails.length;
+    }
+  }
+
+  return report;
+}
 
 async function handleFilePresignDownload(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -59737,6 +59850,17 @@ async function handleFilePresignDownload(env, req) {
   key = key.replace(/^\/+/, '');
   if (!key) return withCORS(env, req, badRequest("key is required"));
 
+  // ✅ DEFENCE-IN-DEPTH: canonical timesheet PDF keys must be dirty-safe
+  const m = key.match(/^docs-pdf\/timesheets\/ts_([0-9a-fA-F-]{36})\.pdf$/);
+  if (m && m[1]) {
+    try {
+      // ✅ IMPORTANT: do NOT pass prefer_generated here (must respect manual PDFs)
+      await ensureTimesheetPdf(env, m[1]);
+    } catch (e) {
+      return withCORS(env, req, serverError(`Failed to prepare timesheet PDF: ${e?.message || String(e)}`));
+    }
+  }
+
   const head = await r2Head(env, key);
   if (!head) return withCORS(env, req, notFound("File not found"));
 
@@ -59761,6 +59885,7 @@ async function handleFilePresignDownload(env, req) {
     expires_at: new Date(exp * 1000).toISOString()
   }));
 }
+
 
 async function handleFileDownload(env, req, url) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
@@ -59829,6 +59954,24 @@ async function handleFileDownload(env, req, url) {
     return withCORS(env, req, unauthorized("Token mismatch"));
   }
 
+  // ✅ DEFENCE-IN-DEPTH: canonical timesheet PDF keys must be dirty-safe (even for already-issued tokens)
+  const m = key.match(/^docs-pdf\/timesheets\/ts_([0-9a-fA-F-]{36})\.pdf$/);
+  if (m && m[1]) {
+    try {
+      // ✅ IMPORTANT: do NOT pass prefer_generated here (must respect manual PDFs)
+      await ensureTimesheetPdf(env, m[1]);
+    } catch (e) {
+      if (LOG) {
+        console.warn('[FILES_DOWNLOAD]', JSON.stringify({
+          stage: 'tspdf_prepare_fail',
+          key,
+          err: e?.message || String(e)
+        }));
+      }
+      return withCORS(env, req, serverError(`Failed to prepare timesheet PDF: ${e?.message || String(e)}`));
+    }
+  }
+
   const obj = await r2Get(env, key);
   if (!obj) {
     if (LOG) {
@@ -59856,7 +59999,6 @@ async function handleFileDownload(env, req, url) {
 
   return withCORS(env, req, new Response(obj.body, { status: 200, headers }));
 }
-
 
 
 // ---------------------- Health ----------------------
@@ -62036,7 +62178,7 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
         outbox_id: primaryOutboxId,
         extra_outbox_ids: outboxIds.filter(x => x !== primaryOutboxId),
         ts,
-        curFin, // ✅ NEW: allow no-op compare for daily too
+        curFin, // ✅ allow no-op compare for daily too
         ctx,
         policy,
         candidate,
@@ -62466,7 +62608,7 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
     }
   }
 
-  // --- DAILY snapshots (unchanged, except no-op write optimisation) ---
+  // --- DAILY snapshots (UPDATED: uses batch fields hr_validation_required_for_invoice + validation_status; no per-timesheet queries) ---
   for (const w of dailyWork) {
     const { effId, outbox_id, ts, policy, candidate, candidate_id, client_id, isAuthorised, curFin } = w;
 
@@ -62513,10 +62655,33 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
       );
 
       const effFlags = w.ctx?.out_effective_flags || null;
-      const requiresHr =
-        (effFlags && Object.prototype.hasOwnProperty.call(effFlags, 'client_requires_hr'))
-          ? boolish(effFlags.client_requires_hr)
+
+      // ✅ NEW: authoritative invoice gating inputs from batch context (no REST)
+      const hrValidationRequiredForInvoice =
+        effFlags && Object.prototype.hasOwnProperty.call(effFlags, 'hr_validation_required_for_invoice')
+          ? boolish(effFlags.hr_validation_required_for_invoice)
           : false;
+
+      const validationStatusU =
+        (effFlags && Object.prototype.hasOwnProperty.call(effFlags, 'validation_status') && effFlags.validation_status != null)
+          ? String(effFlags.validation_status).toUpperCase()
+          : '';
+
+      const validationOk = (validationStatusU === 'VALIDATION_OK' || validationStatusU === 'OVERRIDDEN');
+      const mustHoldForHrValidation = (hrValidationRequiredForInvoice && !validationOk);
+
+      // ✅ NEW: unsigned QR truth model (priority over unauthorised)
+      const qrStatusU = String(ts?.qr_status || '').toUpperCase();
+      const qrToken = (ts?.qr_token != null) ? String(ts.qr_token).trim() : '';
+      const hasQrIssuedProof = (
+        ((qrToken && !!ts?.qr_generated_at) === true) ||
+        ((ts?.qr_last_sent_hash != null) && String(ts.qr_last_sent_hash).trim() !== '')
+      );
+      const qrAwaitingSignatureUpload = (
+        qrStatusU === 'PENDING' &&
+        hasQrIssuedProof &&
+        !ts?.qr_scanned_at
+      );
 
       const pay_method =
         String(candidate?.pay_method || '').toUpperCase() === 'PAYE' ? 'PAYE'
@@ -62542,6 +62707,7 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
       let hasRateIssue = false;
       let hasPayChannelIssue = false;
 
+      // Hard blockers first, then authoritative status ladder:
       if (!candidate_id) {
         processing_status = "UNASSIGNED";
       } else if (!client_id) {
@@ -62549,17 +62715,18 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
       } else if (missingRates) {
         processing_status = "RATE_MISSING";
         hasRateIssue = true;
+        hasPayChannelIssue = !!payChannelBad;
       } else if (payChannelBad) {
         processing_status = "PAY_CHANNEL_MISSING";
         hasPayChannelIssue = true;
-      } else if (requiresHr) {
+      } else if (qrAwaitingSignatureUpload) {
+        processing_status = "AWAITING_MANUAL_SIGNATURE";
+      } else if (!isAuthorised) {
+        processing_status = "PENDING_AUTH";
+      } else if (mustHoldForHrValidation) {
         processing_status = "READY_FOR_HR";
       } else {
         processing_status = "READY_FOR_INVOICE";
-      }
-
-      if (!isAuthorised && (processing_status === "READY_FOR_HR" || processing_status === "READY_FOR_INVOICE")) {
-        processing_status = "PENDING_AUTH";
       }
 
       const total_pay_ex_vat = round2(
@@ -62785,178 +62952,1010 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
 }
 
 
-async function renderTimesheetPDFAndSave(env, timesheetId, opts) {
-  const bucket = env.R2_BUCKET || env.R2;
-  if (!bucket?.get || !bucket?.put) throw new Error("Storage not configured");
+async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
+  const enc = encodeURIComponent;
 
-  const T0 = Date.now();
-  const LOGP = `[TS_PDF][${timesheetId}]`;
-  const L = (step, obj) => { try { console.log(`${LOGP} ${step}`, obj || {}); } catch {} };
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
 
-  const force_regen =
-    !!(opts && typeof opts === "object" && opts.force_regen);
+  let body;
+  try { body = await parseJSONBody(req); }
+  catch { return withCORS(env, req, badRequest('Invalid JSON')); }
 
-  L("START", { timesheetId, force_regen });
+  const expectedTimesheetId = body?.expected_timesheet_id || null;
+  const guard = await guardCurrentTimesheetWrite(env, req, timesheetId, expectedTimesheetId);
+  if (!guard.ok) return guard.res;
 
-  // Load TS row (CURRENT VERSION ONLY)
-  let ts = null;
-  try {
-    const { rows: tsRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=eq.${encodeURIComponent(timesheetId)}` +
-        `&is_current=eq.true` +
-        `&select=timesheet_id,qr_token,qr_status,qr_payload_json,generated_pdf_refs_sig` +
-        `&limit=1`
-    );
-    ts = tsRows?.[0] || null;
-  } catch (e) {
-    L("DB.FAIL", { err: e?.message || String(e) });
-    throw e;
-  }
+  const currentTimesheetId = guard.resolved.current_timesheet_id;
+  const now = nowIso();
 
-  if (!ts) {
-    L("DB.MISS", {});
-    throw new Error("Timesheet not found");
-  }
+  const warnings = [];
 
-  const outKey = normalizeKey(`docs-pdf/timesheets/ts_${timesheetId}.pdf`);
-
-  const qrStatus = String(ts.qr_status || "").toUpperCase();
-
-  // payload could be object, stringified JSON, null
-  let payloadObj = null;
-  const payloadType = (ts.qr_payload_json === null) ? "null" : typeof ts.qr_payload_json;
-
-  if (ts.qr_payload_json && typeof ts.qr_payload_json === "object") {
-    payloadObj = ts.qr_payload_json;
-  } else if (typeof ts.qr_payload_json === "string") {
-    try {
-      payloadObj = JSON.parse(ts.qr_payload_json);
-    } catch (e) {
-      payloadObj = null;
-      L("PAYLOAD.PARSE_FAIL", { err: e?.message || String(e) });
-    }
-  }
-
-  const payloadTok = payloadObj && typeof payloadObj === "object"
-    ? String(payloadObj.tok || "").trim()
-    : "";
-
-  const qrToken = String(ts.qr_token || "").trim();
-  const hasAnyTok = !!(payloadTok || qrToken);
-
-  // ✅ Correct notion of “needs QR printable”
-  // We treat *any* PENDING QR as needing QR PDF behaviour, but we REQUIRE a token to avoid emailing blank/invalid QR.
-  const qrPending = (qrStatus === "PENDING");
-
-  if (qrPending && !hasAnyTok) {
-    L("DECIDE.ERROR", { qrStatus, payloadType, qrToken_present: !!qrToken, payloadTok_present: !!payloadTok });
-    throw new Error("QR is PENDING but no token found in qr_payload_json.tok or timesheets.qr_token");
-  }
-
-  // ✅ NEW: For non-QR renders, do not reuse cached PDF if references have changed.
-  // This uses the canonical DB signature (timesheet_pdf_reference_sig) vs timesheets.generated_pdf_refs_sig.
-  const unwrapScalar = (v, fnName) => {
-    if (v == null) return null;
-    if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") return String(v);
-    if (v && typeof v === "object" && !Array.isArray(v) && Object.prototype.hasOwnProperty.call(v, "data")) {
-      return unwrapScalar(v.data, fnName);
-    }
-    if (Array.isArray(v)) {
-      if (v.length === 0) return null;
-      const o = v[0];
-      if (typeof o === "string" || typeof o === "number" || typeof o === "boolean") return String(o);
-      if (o && typeof o === "object") {
-        if (fnName && Object.prototype.hasOwnProperty.call(o, fnName)) return o[fnName] == null ? null : String(o[fnName]);
-        const ks = Object.keys(o);
-        if (ks.length === 1) return o[ks[0]] == null ? null : String(o[ks[0]]);
-      }
-      return null;
-    }
-    if (v && typeof v === "object") {
-      if (fnName && Object.prototype.hasOwnProperty.call(v, fnName)) return v[fnName] == null ? null : String(v[fnName]);
-      const ks = Object.keys(v);
-      if (ks.length === 1) return v[ks[0]] == null ? null : String(v[ks[0]]);
-    }
-    return null;
+  const boolish = (v) => {
+    if (v === true) return true;
+    if (v === false) return false;
+    if (v == null) return false;
+    const s = String(v).trim().toLowerCase();
+    return (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on');
   };
 
-  let exists = false;
-  let action = "RENDER";
-  let current_refs_sig = null;
-  const prev_generated_refs_sig = (ts.generated_pdf_refs_sig != null) ? String(ts.generated_pdf_refs_sig).trim() : "";
-
-  if (force_regen) {
-    action = "RENDER";
-    L("DECIDE", {
-      outKey,
-      qrStatus,
-      payloadType,
-      payloadTok_present: !!payloadTok,
-      qrToken_present: !!qrToken,
-      r2Exists: null,
-      action,
-      force_regen: true
-    });
-  } else {
-    // Check cache existence (only when not forcing regeneration)
+  const hasAnySegmentInvoiceLock = (tf) => {
     try {
-      exists = await r2Exists(env, outKey);
-    } catch (e) {
-      L("R2.EXISTS_FAIL", { outKey, err: e?.message || String(e) });
-      exists = false;
+      const ib = tf?.invoice_breakdown_json;
+      if (!ib || typeof ib !== 'object') return false;
+      const mode = String(ib?.mode || '').toUpperCase();
+      if (mode !== 'SEGMENTS') return false;
+      const segs = Array.isArray(ib?.segments) ? ib.segments : [];
+      return segs.some(s => {
+        const v = s?.invoice_locked_invoice_id;
+        return v != null && String(v).trim() !== '';
+      });
+    } catch {
+      return false;
     }
+  };
 
-    // Compute current refs sig only when we might otherwise reuse.
-    // (Skip if pending QR: we always render to ensure the QR is embedded.)
-    let needsRegenRefs = false;
-    if (!qrPending && exists) {
-      try {
-        const sigRes = await sbRpc(env, "timesheet_pdf_reference_sig", { p_timesheet_id: timesheetId });
-        const sig = unwrapScalar(sigRes, "timesheet_pdf_reference_sig");
-        current_refs_sig = (sig && String(sig).trim()) ? String(sig).trim() : null;
-      } catch {
-        current_refs_sig = null;
-      }
+  // Load current TS + TSFIN
+  const tsBefore = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=` +
+        [
+          'timesheet_id',
+          'contract_id',
+          'authorised_at_server',
+          'submission_mode',
+          'sheet_scope',
+          'week_ending_date',
+          'worked_start_iso',
+          'worked_end_iso',
+          'break_start_iso',
+          'break_end_iso',
+          'break_minutes',
+          'reference_number',
+          'day_references_json',
+          'actual_schedule_json',
+          'additional_units_week',
+          'additional_units_per_day',
+          'qr_status',
+          'qr_token',
+          'qr_generated_at',
+          'qr_last_sent_hash',
+          'qr_signed_hash',
+          'qr_signed_at_utc',
+          'qr_scanned_at',
+          'version',
+          'status'
+        ].join(','),
+  ).catch(() => null);
 
-      if (current_refs_sig) {
-        if (!prev_generated_refs_sig) needsRegenRefs = true;
-        else needsRegenRefs = (prev_generated_refs_sig !== current_refs_sig);
-      }
-    }
+  const { rows: finRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=id,client_id,basis,processing_status,locked_by_invoice_id,paid_at_utc,invoice_breakdown_json` +
+      `&limit=1`
+  );
+  const fin = finRows?.[0] || null;
 
-    action = (!qrPending && exists && !needsRegenRefs) ? "REUSE" : "RENDER";
+  const finBeforeStatus = String(fin?.processing_status || '').toUpperCase();
+  let finAfterStatus = fin?.processing_status || null;
 
-    L("DECIDE", {
-      outKey,
-      qrStatus,
-      payloadType,
-      payloadTok_present: !!payloadTok,
-      qrToken_present: !!qrToken,
-      r2Exists: exists,
-      action,
-      force_regen: false,
-      generated_pdf_refs_sig: prev_generated_refs_sig || null,
-      current_refs_sig: current_refs_sig || null,
-      needs_regen_refs: (action === "RENDER" && !qrPending && exists) ? true : false
-    });
+  if (!fin) {
+    return withCORS(env, req, badRequest('Cannot authorise: no financial snapshot exists for this timesheet'));
   }
 
-  if (action === "REUSE") {
-    L("REUSE", { outKey, ms: Date.now() - T0 });
-    return outKey;
+  if (fin.locked_by_invoice_id || fin.paid_at_utc || hasAnySegmentInvoiceLock(fin)) {
+    return withCORS(env, req, badRequest('Cannot authorise: timesheet is locked or paid'));
   }
 
-  // Render (overwrite if exists)
+  const qrStatusU = String(tsBefore?.qr_status || '').toUpperCase();
+  const qrToken = (tsBefore?.qr_token != null) ? String(tsBefore.qr_token).trim() : '';
+  const hasQrIssuedProof = (
+    ((qrToken && !!tsBefore?.qr_generated_at) === true) ||
+    ((tsBefore?.qr_last_sent_hash != null) && String(tsBefore.qr_last_sent_hash).trim() !== '')
+  );
+  const qrAwaitingSignatureUpload = (
+    qrStatusU === 'PENDING' &&
+    hasQrIssuedProof &&
+    !tsBefore?.qr_scanned_at
+  );
+
+  // ✅ NEW RULE: unsigned QR cannot be authorised
+  if (qrAwaitingSignatureUpload || finBeforeStatus === 'AWAITING_MANUAL_SIGNATURE') {
+    return withCORS(env, req, badRequest('Cannot authorise: awaiting signed QR timesheet'));
+  }
+
+  // Signed QR stale check (unchanged)
   try {
-    const key = await renderTimesheetPDFGeneratedAndSave(env, timesheetId);
-    L("RENDER.OK", { outKey: key, ms: Date.now() - T0 });
-    return key;
+    const signedHash = (tsBefore?.qr_signed_hash != null) ? String(tsBefore.qr_signed_hash).trim() : '';
+    const hasSignedHash = !!signedHash;
+
+    if (hasSignedHash) {
+      const scope = String(tsBefore?.sheet_scope || '').toUpperCase();
+
+      const stableClone = (v) => {
+        if (Array.isArray(v)) return v.map(stableClone);
+        if (v && typeof v === 'object') {
+          const out = {};
+          for (const k of Object.keys(v).sort()) out[k] = stableClone(v[k]);
+          return out;
+        }
+        return v;
+      };
+
+      const currentObj = (scope === 'WEEKLY')
+        ? {
+            sheet_scope: 'WEEKLY',
+            week_ending_date: tsBefore?.week_ending_date || null,
+            actual_schedule_json: tsBefore?.actual_schedule_json || null,
+            reference_number: tsBefore?.reference_number || null,
+            day_references_json: tsBefore?.day_references_json || null,
+            additional_units_week: tsBefore?.additional_units_week || {},
+            additional_units_per_day: tsBefore?.additional_units_per_day || {}
+          }
+        : {
+            sheet_scope: 'DAILY',
+            worked_start_iso: tsBefore?.worked_start_iso || null,
+            worked_end_iso: tsBefore?.worked_end_iso || null,
+            break_start_iso: tsBefore?.break_start_iso || null,
+            break_end_iso: tsBefore?.break_end_iso || null,
+            break_minutes: (tsBefore?.break_minutes != null ? tsBefore.break_minutes : null),
+            reference_number: tsBefore?.reference_number || null,
+            day_references_json: tsBefore?.day_references_json || null
+          };
+
+      const currentHash = await sha256Hex(JSON.stringify(stableClone(currentObj)));
+
+      if (String(currentHash) !== String(signedHash)) {
+        return withCORS(env, req, badRequest('Cannot authorise: signed QR timesheet no longer matches current hours (revoke and request resubmission)'));
+      }
+    }
   } catch (e) {
-    L("RENDER.FAIL", { err: e?.message || String(e), ms: Date.now() - T0 });
-    throw e;
+    return withCORS(env, req, serverError(`Failed to validate QR signed hash: ${e?.message || e}`));
   }
+
+  // Stamp timesheet authorised (best effort)
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify({ authorised_at_server: now, updated_at: now })
+    }
+  ).catch(() => {});
+
+  const basisU = String(fin?.basis || '').toUpperCase();
+  const forceReadyForInvoice =
+    (basisU === 'NHSP' ||
+     basisU === 'NHSP_ADJUSTMENT' ||
+     basisU === 'HEALTHROSTER_SELF_BILL' ||
+     basisU === 'HEALTHROSTER_ADJUSTMENT');
+
+  // Fetch policy switch + validation status from v_timesheets_summary_base
+  let eff = null;
+  try {
+    const { rows: eRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary_base` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&select=client_requires_hr,hr_validation_required_for_invoice,validation_status` +
+        `&limit=1`
+    );
+    eff = eRows?.[0] || null;
+  } catch {
+    eff = null;
+  }
+
+  // Fetch pre_validated from timesheet_validations (separate fetch; view may not expose it)
+  let validationPreValidated = false;
+  try {
+    const { rows: pvRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheet_validations` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&select=pre_validated` +
+        `&limit=1`
+    );
+    validationPreValidated = boolish(pvRows?.[0]?.pre_validated);
+  } catch {
+    validationPreValidated = false;
+  }
+
+  const requiresHr = eff ? boolish(eff.client_requires_hr) : false;
+
+  const hrValidationRequiredForInvoice = eff ? boolish(eff.hr_validation_required_for_invoice) : false;
+  const validationStatus = (eff?.validation_status != null) ? String(eff.validation_status).toUpperCase() : '';
+  const validationOk = (validationStatus === 'VALIDATION_OK' || validationStatus === 'OVERRIDDEN');
+
+  // ✅ HR validation requirement blocks READY_FOR_INVOICE until OK/OVERRIDDEN
+  const mustHoldForHrValidation = (hrValidationRequiredForInvoice && !validationOk);
+
+  let newStatus = fin.processing_status;
+  const ps = finBeforeStatus;
+
+  if (ps === 'PENDING_AUTH' || ps === 'READY_FOR_HR') {
+    if (mustHoldForHrValidation) {
+      newStatus = 'READY_FOR_HR';
+    } else {
+      // ✅ Pre-validated + OK => straight to READY_FOR_INVOICE (even if requiresHr)
+      const preValidatedFastTrack = (validationPreValidated && validationOk);
+
+      newStatus = forceReadyForInvoice
+        ? 'READY_FOR_INVOICE'
+        : (preValidatedFastTrack ? 'READY_FOR_INVOICE' : (requiresHr ? 'READY_FOR_HR' : 'READY_FOR_INVOICE'));
+    }
+  }
+
+  finAfterStatus = newStatus;
+
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        processing_status: newStatus,
+        authorised_by_user_id: user.id,
+        authorised_at_utc: now,
+        updated_at: now
+      })
+    }
+  ).catch(() => {});
+
+  // Audit (kept)
+  try {
+    const wasAlreadyAuthorised = !!(tsBefore && tsBefore.authorised_at_server);
+    const didPromoteStatus = String(finBeforeStatus || '') !== String(finAfterStatus || '').toUpperCase();
+
+    if (!wasAlreadyAuthorised || didPromoteStatus) {
+      await writeAudit(
+        env,
+        user,
+        'TIMESHEET_AUTHORISED',
+        {
+          timesheet_id: currentTimesheetId,
+          authorised_at_utc: now,
+          tsfin_processing_status_before: finBeforeStatus || null,
+          tsfin_processing_status_after: finAfterStatus ? String(finAfterStatus).toUpperCase() : null,
+          hr_validation_required_for_invoice: hrValidationRequiredForInvoice,
+          validation_status: validationStatus || null,
+          validation_pre_validated: validationPreValidated,
+          warnings: warnings.length ? warnings : null
+        },
+        {
+          entity: 'timesheets',
+          subject_id: currentTimesheetId,
+          req,
+          before: {
+            authorised_at_server: tsBefore?.authorised_at_server || null,
+            tsfin_processing_status: finBeforeStatus || null
+          },
+          reason: didPromoteStatus ? 'PROMOTED_TSFIN_STATUS' : 'STAMPED_AUTHORISE'
+        }
+      );
+    }
+  } catch {}
+
+  return withCORS(env, req, ok({
+    authorised: true,
+    tsfin_updated: true,
+    processing_status: newStatus,
+    warnings,
+    booking_id: guard.resolved.booking_id || null,
+    requested_timesheet_id: guard.resolved.requested_timesheet_id || timesheetId,
+    current_timesheet_id: currentTimesheetId,
+    current_version: guard.resolved.current_version ?? null,
+    was_stale: !!guard.resolved.was_stale
+  }));
+}
+
+
+async function handleContractWeekManualAuthorise(env, req, weekId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const enc = encodeURIComponent;
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+
+  const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+  if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+
+  const warnings = [];
+
+  const boolish = (v) => {
+    if (v === true) return true;
+    if (v === false) return false;
+    if (v == null) return false;
+    const s = String(v).trim().toLowerCase();
+    return (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on');
+  };
+
+  const cw = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=id,contract_id,timesheet_id`
+  );
+  if (!cw?.timesheet_id) return withCORS(env, req, badRequest('No timesheet linked to this week'));
+
+  // Resolve + guard
+  const resolved = await resolveTimesheetToCurrent(env, cw.timesheet_id);
+  const currentTimesheetId = resolved?.current_timesheet_id ? String(resolved.current_timesheet_id) : '';
+  if (!currentTimesheetId) return withCORS(env, req, notFound('Timesheet not found'));
+
+  if (String(expected) !== String(currentTimesheetId)) {
+    return withCORS(
+      env,
+      req,
+      new Response(JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetId }), {
+        status: 409,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+  }
+
+  const now = nowIso();
+
+  // Load CURRENT TS + TSFIN (include QR fields for unsigned gating)
+  const tsBefore = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=timesheet_id,contract_id,authorised_at_server,submission_mode,sheet_scope,version,status,qr_status,qr_token,qr_generated_at,qr_last_sent_hash,qr_scanned_at`
+  ).catch(() => null);
+
+  const { rows: finRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=id,client_id,basis,processing_status,locked_by_invoice_id,paid_at_utc`
+  );
+  const fin = finRows?.[0] || null;
+
+  const finBeforeStatus = String(fin?.processing_status || '').toUpperCase();
+  let finAfterStatus = fin?.processing_status || null;
+
+  const qrStatusU = String(tsBefore?.qr_status || '').toUpperCase();
+  const qrToken = (tsBefore?.qr_token != null) ? String(tsBefore.qr_token).trim() : '';
+  const hasQrIssuedProof = (
+    ((qrToken && !!tsBefore?.qr_generated_at) === true) ||
+    ((tsBefore?.qr_last_sent_hash != null) && String(tsBefore.qr_last_sent_hash).trim() !== '')
+  );
+  const qrAwaitingSignatureUpload = (
+    qrStatusU === 'PENDING' &&
+    hasQrIssuedProof &&
+    !tsBefore?.qr_scanned_at
+  );
+
+  // ✅ NEW RULE: unsigned QR cannot be authorised
+  if (qrAwaitingSignatureUpload || finBeforeStatus === 'AWAITING_MANUAL_SIGNATURE') {
+    return withCORS(env, req, badRequest('Cannot authorise: awaiting signed QR timesheet'));
+  }
+
+  if (fin) {
+    const ps = finBeforeStatus;
+
+    if (fin.locked_by_invoice_id || fin.paid_at_utc) {
+      return withCORS(env, req, badRequest('Cannot authorise: timesheet is locked or paid'));
+    }
+
+    // Policy B bases: authorise must unlock invoicing directly (unless HR validation hold)
+    const basisU = String(fin?.basis || '').toUpperCase();
+    const forceReadyForInvoice =
+      (basisU === 'NHSP' ||
+       basisU === 'NHSP_ADJUSTMENT' ||
+       basisU === 'HEALTHROSTER_SELF_BILL' ||
+       basisU === 'HEALTHROSTER_ADJUSTMENT');
+
+    // Effective flags from v_timesheets_summary_base (required for validation gating)
+    let eff = null;
+    try {
+      const { rows: eRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary_base` +
+          `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+          `&select=client_requires_hr,hr_validation_required_for_invoice,validation_status` +
+          `&limit=1`
+      );
+      eff = eRows?.[0] || null;
+    } catch {
+      eff = null;
+    }
+
+    // pre_validated from timesheet_validations
+    let validationPreValidated = false;
+    try {
+      const { rows: pvRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheet_validations` +
+          `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+          `&select=pre_validated` +
+          `&limit=1`
+      );
+      validationPreValidated = boolish(pvRows?.[0]?.pre_validated);
+    } catch {
+      validationPreValidated = false;
+    }
+
+    const requiresHr = eff ? boolish(eff.client_requires_hr) : false;
+
+    const hrValidationRequiredForInvoice = eff ? boolish(eff.hr_validation_required_for_invoice) : false;
+    const validationStatus = (eff?.validation_status != null) ? String(eff.validation_status).toUpperCase() : '';
+    const validationOk = (validationStatus === 'VALIDATION_OK' || validationStatus === 'OVERRIDDEN');
+    const mustHoldForHrValidation = (hrValidationRequiredForInvoice && !validationOk);
+
+    let newStatus = fin.processing_status;
+
+    if (ps === 'PENDING_AUTH' || ps === 'READY_FOR_HR') {
+      if (mustHoldForHrValidation) {
+        newStatus = 'READY_FOR_HR';
+      } else {
+        const preValidatedFastTrack = (validationPreValidated && validationOk);
+        newStatus = forceReadyForInvoice
+          ? 'READY_FOR_INVOICE'
+          : (preValidatedFastTrack ? 'READY_FOR_INVOICE' : (requiresHr ? 'READY_FOR_HR' : 'READY_FOR_INVOICE'));
+      }
+    }
+
+    finAfterStatus = newStatus;
+
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}&is_current=eq.true`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify({
+          processing_status: newStatus,
+          authorised_by_user_id: user.id,
+          authorised_at_utc: now,
+          updated_at: now
+        })
+      }
+    ).catch(() => {});
+  }
+
+  // Stamp timesheet as authorised (CURRENT only)
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+      body: JSON.stringify({ authorised_at_server: now, updated_at: now })
+    }
+  ).catch(() => {});
+
+  // Update week status → AUTHORISED
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+      body: JSON.stringify({ status: 'AUTHORISED', updated_at: now })
+    }
+  ).catch(() => {});
+
+  // Audit
+  try {
+    const wasAlreadyAuthorised = !!(tsBefore && tsBefore.authorised_at_server);
+    const didPromoteStatus = !!(finAfterStatus && String(finBeforeStatus || '') !== String(finAfterStatus || ''));
+
+    if (!wasAlreadyAuthorised || didPromoteStatus) {
+      await writeAudit(
+        env,
+        user,
+        'TIMESHEET_AUTHORISED',
+        {
+          timesheet_id: currentTimesheetId,
+          contract_week_id: weekId,
+          authorised_at_utc: now,
+          tsfin_processing_status_before: finBeforeStatus || null,
+          tsfin_processing_status_after: finAfterStatus ? String(finAfterStatus).toUpperCase() : null,
+          warnings: warnings.length ? warnings : null
+        },
+        {
+          entity: 'timesheets',
+          subject_id: currentTimesheetId,
+          req,
+          before: {
+            authorised_at_server: tsBefore?.authorised_at_server || null,
+            tsfin_processing_status: finBeforeStatus || null
+          },
+          reason: didPromoteStatus ? 'PROMOTED_TSFIN_STATUS' : 'STAMPED_AUTHORISE'
+        }
+      );
+    }
+  } catch {}
+
+  return withCORS(env, req, ok({ authorised: true, timesheet_id: currentTimesheetId, warnings }));
+}
+
+
+async function handleTimesheetQrScan(env, req) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let body;
+  try {
+    body = await parseJSONBody(req);
+  } catch {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const qrText = String(body?.qr_text || '').trim();
+  const image_r2_key_raw = body?.image_r2_key ? String(body.image_r2_key) : '';
+
+  if (!qrText) {
+    return withCORS(env, req, badRequest('qr_text is required'));
+  }
+
+  // ✅ For signed acceptance, we require the uploaded scan key.
+  // This endpoint is the “signed upload/scan acceptance” endpoint.
+  const cleanKey = (k) => String(k || '').replace(/^\/+/, '').trim();
+  const image_r2_key = cleanKey(image_r2_key_raw);
+  if (!image_r2_key) {
+    return withCORS(env, req, badRequest('image_r2_key is required'));
+  }
+
+  try {
+    console.log('[QR][SCAN] incoming', {
+      preview: qrText.slice(0, 64) + (qrText.length > 64 ? '…' : '')
+    });
+  } catch {}
+
+  // 1) Verify signature + parse payload
+  const verification = await verifyTsq1(qrText, env);
+  if (!verification?.ok) {
+    return withCORS(env, req, badRequest(`Invalid QR: ${verification?.reason || 'UNKNOWN'}`));
+  }
+
+  const p = verification.payload || {};
+  const payloadToken = (p && typeof p.tok === 'string') ? p.tok.trim() : '';
+
+  // ✅ New minimal TSQ1 payload is { v, tok } only
+  if (!payloadToken) {
+    return withCORS(env, req, badRequest('Invalid QR: missing tok'));
+  }
+
+  // 2) Resolve timesheet by token (NOT by timesheet_id in payload anymore)
+  const ts = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?qr_token=eq.${enc(payloadToken)}` +
+      `&is_current=eq.true` +
+      `&select=*` +
+      `&limit=1`
+  );
+
+  if (!ts) {
+    return withCORS(env, req, notFound('Timesheet not found for QR token'));
+  }
+
+  const sheetScope = String(ts.sheet_scope || '').toUpperCase();
+  const wasAuthorisedAlready = !!ts.authorised_at_server;
+
+  const qrStatusNow = String(ts.qr_status || '').toUpperCase();
+  if (qrStatusNow !== 'PENDING') {
+    if (qrStatusNow === 'USED')      return withCORS(env, req, badRequest('QR already used'));
+    if (qrStatusNow === 'CANCELLED') return withCORS(env, req, badRequest('QR cancelled; a new QR must be issued'));
+    if (qrStatusNow === 'EXPIRED')   return withCORS(env, req, badRequest('QR expired; a new QR must be issued'));
+    return withCORS(env, req, badRequest(`QR invalid state (qr_status=${qrStatusNow || 'NULL'})`));
+  }
+
+  // 3) Token enforcement (reissue invalidation)
+  const tsToken = ts.qr_token ? String(ts.qr_token) : '';
+  if (!tsToken) {
+    return withCORS(env, req, badRequest('Timesheet has no active QR token; cannot accept scan'));
+  }
+  if (String(payloadToken) !== String(tsToken)) {
+    return withCORS(env, req, badRequest('QR token is no longer valid for this timesheet'));
+  }
+
+  const now = nowIso();
+
+  // Helpers for stable hashing (shared basis across send/resend/evidence)
+  const stableClone = (v) => {
+    if (Array.isArray(v)) return v.map(stableClone);
+    if (v && typeof v === 'object') {
+      const out = {};
+      for (const k of Object.keys(v).sort()) out[k] = stableClone(v[k]);
+      return out;
+    }
+    return v;
+  };
+
+  const computeCurrentHash = async (sheetScopeU, tsRow, finRow) => {
+    if (sheetScopeU === 'WEEKLY') {
+      const obj = {
+        sheet_scope: 'WEEKLY',
+        week_ending_date: tsRow.week_ending_date || null,
+        actual_schedule_json: tsRow.actual_schedule_json || null,
+        reference_number: tsRow.reference_number || null,
+        day_references_json: tsRow.day_references_json || null,
+        additional_units_week: tsRow.additional_units_week || {},
+        additional_units_per_day: tsRow.additional_units_per_day || {}
+      };
+      return await sha256Hex(JSON.stringify(stableClone(obj)));
+    }
+
+    // DAILY
+    const obj = {
+      sheet_scope: 'DAILY',
+      worked_start_iso: tsRow.worked_start_iso || null,
+      worked_end_iso: tsRow.worked_end_iso || null,
+      break_start_iso: tsRow.break_start_iso || null,
+      break_end_iso: tsRow.break_end_iso || null,
+      break_minutes: (tsRow.break_minutes != null ? tsRow.break_minutes : null),
+      reference_number: tsRow.reference_number || null,
+      day_references_json: tsRow.day_references_json || null
+    };
+    return await sha256Hex(JSON.stringify(stableClone(obj)));
+  };
+
+  // ✅ Canonical deterministic PDF key (the “one PDF only” rule)
+  const canonicalPdfKey = cleanKey(`docs-pdf/timesheets/ts_${ts.timesheet_id}.pdf`);
+
+  // ✅ Step A: Copy the uploaded signed scan OVER the canonical key (overwrite).
+  // Do NOT patch DB if this fails.
+  try {
+    await r2CopyOverwrite(env, image_r2_key, canonicalPdfKey);
+  } catch (e) {
+    console.warn('[QR][SCAN] failed to copy signed scan to canonical key', {
+      timesheet_id: ts.timesheet_id,
+      from: image_r2_key,
+      to: canonicalPdfKey,
+      err: e?.message || String(e)
+    });
+    return withCORS(env, req, serverError(`Failed to store signed scan: ${e?.message || e}`));
+  }
+
+  // Helper to resolve next TSFIN status when scan completes
+  const computeNextStatusAfterScan = async (tsId) => {
+    if (!wasAuthorisedAlready) return 'PENDING_AUTH';
+
+    // If authorised already, promote to READY_FOR_INVOICE unless HR validation requires hold
+    let eff = null;
+    try {
+      const { rows: eRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary_base` +
+          `?timesheet_id=eq.${enc(tsId)}` +
+          `&select=hr_validation_required_for_invoice,validation_status` +
+          `&limit=1`
+      );
+      eff = eRows?.[0] || null;
+    } catch {
+      eff = null;
+    }
+
+    const boolishLocal = (v) => {
+      if (v === true) return true;
+      if (v === false) return false;
+      if (v == null) return false;
+      const s = String(v).trim().toLowerCase();
+      return (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on');
+    };
+
+    const hrValidationRequiredForInvoice = eff ? boolishLocal(eff.hr_validation_required_for_invoice) : false;
+    const validationStatus = (eff?.validation_status != null) ? String(eff.validation_status).toUpperCase() : '';
+    const validationOk = (validationStatus === 'VALIDATION_OK' || validationStatus === 'OVERRIDDEN');
+
+    if (hrValidationRequiredForInvoice && !validationOk) return 'READY_FOR_HR';
+    return 'READY_FOR_INVOICE';
+  };
+
+  // ─────────────────────────────────────────────────────────────
+  // WEEKLY
+  // ─────────────────────────────────────────────────────────────
+  if (sheetScope === 'WEEKLY') {
+    const cw = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+        `?timesheet_id=eq.${enc(ts.timesheet_id)}` +
+        `&select=*` +
+        `&limit=1`
+    ).catch(() => null);
+
+    const contract = ts.contract_id
+      ? await sbGetOne(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/contracts` +
+            `?id=eq.${enc(ts.contract_id)}` +
+            `&select=*` +
+            `&limit=1`
+        )
+      : null;
+
+    if (!contract) return withCORS(env, req, notFound('Contract not found for QR'));
+
+    const fin = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?timesheet_id=eq.${enc(ts.timesheet_id)}` +
+        `&is_current=eq.true` +
+        `&select=*`
+    );
+    if (!fin) return withCORS(env, req, serverError('No financial snapshot for timesheet'));
+
+    if (fin.locked_by_invoice_id || fin.paid_at_utc) {
+      return withCORS(env, req, badRequest('Timesheet already invoiced or paid; cannot process QR scan'));
+    }
+
+    const finStatus = String(fin.processing_status || '').toUpperCase();
+    if (finStatus !== 'AWAITING_MANUAL_SIGNATURE') {
+      return withCORS(
+        env,
+        req,
+        badRequest(`Unexpected processing_status=${fin.processing_status}; expected AWAITING_MANUAL_SIGNATURE`)
+      );
+    }
+
+    // ✅ Compute signed hash at acceptance time
+    let signedHash = null;
+    try {
+      signedHash = await computeCurrentHash('WEEKLY', ts, fin);
+    } catch (e) {
+      return withCORS(env, req, serverError(`Failed to compute signed hash: ${e?.message || e}`));
+    }
+
+    // ✅ Patch timesheet: point manual_pdf_r2_key to the CANONICAL key (not image_r2_key)
+    const tsPatch = {
+      qr_status: 'USED',
+      qr_scanned_at: now,
+      qr_signed_hash: signedHash,
+      qr_signed_at_utc: now,
+      manual_pdf_r2_key: canonicalPdfKey,
+      qr_scan_info_json: {
+        kind: 'WEEKLY_QR_TIMESHEET',
+        payload: p,
+        original_image_r2_key: image_r2_key,
+        canonical_pdf_r2_key: canonicalPdfKey
+      },
+      updated_at: now
+    };
+
+    const tsRes = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify(tsPatch)
+      }
+    );
+
+    if (!tsRes.ok) {
+      const t = await tsRes.text().catch(() => '');
+      return withCORS(env, req, serverError(`Failed to patch timesheet after QR scan: ${t}`));
+    }
+
+    const nextStatus = await computeNextStatusAfterScan(ts.timesheet_id);
+
+    const finRes = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify({ processing_status: nextStatus, updated_at: now })
+      }
+    );
+
+    if (!finRes.ok) {
+      const t = await finRes.text().catch(() => '');
+      return withCORS(env, req, serverError(`Failed to update TSFIN after QR scan: ${t}`));
+    }
+
+    // ✅ Best-effort delete original uploaded key (only if it differs from canonical)
+    try {
+      const bucket = env.R2_BUCKET || env.R2;
+      if (bucket && typeof bucket.delete === 'function' && image_r2_key !== canonicalPdfKey) {
+        await bucket.delete(image_r2_key);
+      }
+    } catch (e) {
+      console.warn('[QR_WEEKLY][SCAN] delete original image key failed (non-fatal)', {
+        timesheet_id: ts.timesheet_id,
+        original_image_r2_key: image_r2_key,
+        err: e?.message || String(e)
+      });
+    }
+
+    try {
+      await writeAudit(
+        env,
+        user,
+        'WEEKLY_QR_SCANNED',
+        {
+          timesheet_id: ts.timesheet_id,
+          contract_week_id: cw?.id || null,
+          contract_id: contract.id,
+          qr_text: qrText,
+          qr_payload: p,
+
+          // record both keys explicitly
+          original_image_r2_key: image_r2_key,
+          canonical_pdf_r2_key: canonicalPdfKey,
+
+          processing_status_from: fin.processing_status,
+          processing_status_to: nextStatus,
+          qr_signed_hash: signedHash
+        },
+        { entity: 'timesheets', subject_id: ts.timesheet_id, req }
+      );
+    } catch (e) {
+      console.warn('[QR_WEEKLY][SCAN] audit failed', e?.message || e);
+    }
+
+    return withCORS(env, req, ok({
+      timesheet_id: ts.timesheet_id,
+      contract_week_id: cw?.id || null,
+      contract_id: contract.id,
+      candidate_id: contract.candidate_id || null,
+      client_id: contract.client_id || null,
+      week_ending_date: cw?.week_ending_date || ts.week_ending_date || null,
+      sheet_scope: 'WEEKLY',
+      processing_status: nextStatus,
+      qr_status: 'USED',
+
+      // keep old field for caller compatibility
+      image_r2_key,
+
+      // new: explicit canonical key
+      canonical_pdf_r2_key: canonicalPdfKey
+    }));
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // DAILY
+  // ─────────────────────────────────────────────────────────────
+  if (sheetScope === 'DAILY') {
+    const fin = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?timesheet_id=eq.${enc(ts.timesheet_id)}` +
+        `&is_current=eq.true` +
+        `&select=*`
+    );
+    if (!fin) return withCORS(env, req, serverError('No financial snapshot for timesheet'));
+
+    if (fin.locked_by_invoice_id || fin.paid_at_utc) {
+      return withCORS(env, req, badRequest('Timesheet already invoiced or paid; cannot process QR scan'));
+    }
+
+    const finStatus = String(fin.processing_status || '').toUpperCase();
+    if (finStatus !== 'AWAITING_MANUAL_SIGNATURE') {
+      return withCORS(
+        env,
+        req,
+        badRequest(`Unexpected processing_status=${fin.processing_status}; expected AWAITING_MANUAL_SIGNATURE`)
+      );
+    }
+
+    // ✅ Compute signed hash at acceptance time
+    let signedHash = null;
+    try {
+      signedHash = await computeCurrentHash('DAILY', ts, fin);
+    } catch (e) {
+      return withCORS(env, req, serverError(`Failed to compute signed hash: ${e?.message || e}`));
+    }
+
+    // ✅ Patch timesheet: point manual_pdf_r2_key to the CANONICAL key (not image_r2_key)
+    const tsPatch = {
+      qr_status: 'USED',
+      qr_scanned_at: now,
+      updated_at: now,
+      qr_signed_hash: signedHash,
+      qr_signed_at_utc: now,
+      manual_pdf_r2_key: canonicalPdfKey,
+      qr_scan_info_json: {
+        kind: 'DAILY_QR_TIMESHEET',
+        payload: p,
+        original_image_r2_key: image_r2_key,
+        canonical_pdf_r2_key: canonicalPdfKey
+      }
+    };
+
+    const tsRes = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify(tsPatch)
+      }
+    );
+
+    if (!tsRes.ok) {
+      const t = await tsRes.text().catch(() => '');
+      return withCORS(env, req, serverError(`Failed to patch timesheet after QR scan: ${t}`));
+    }
+
+    const nextStatus = await computeNextStatusAfterScan(ts.timesheet_id);
+
+    const finRes = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify({ processing_status: nextStatus, updated_at: now })
+      }
+    );
+
+    if (!finRes.ok) {
+      const t = await finRes.text().catch(() => '');
+      return withCORS(env, req, serverError(`Failed to update TSFIN after QR scan: ${t}`));
+    }
+
+    // ✅ Best-effort delete original uploaded key (only if it differs from canonical)
+    try {
+      const bucket = env.R2_BUCKET || env.R2;
+      if (bucket && typeof bucket.delete === 'function' && image_r2_key !== canonicalPdfKey) {
+        await bucket.delete(image_r2_key);
+      }
+    } catch (e) {
+      console.warn('[QR_DAILY][SCAN] delete original image key failed (non-fatal)', {
+        timesheet_id: ts.timesheet_id,
+        original_image_r2_key: image_r2_key,
+        err: e?.message || String(e)
+      });
+    }
+
+    let contract = null;
+    if (ts.contract_id) {
+      try {
+        contract = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(ts.contract_id)}&select=*`);
+      } catch {
+        contract = null;
+      }
+    }
+
+    try {
+      await writeAudit(
+        env,
+        user,
+        'DAILY_QR_SCANNED',
+        {
+          timesheet_id: ts.timesheet_id,
+          contract_id: contract?.id || ts.contract_id || null,
+          qr_text: qrText,
+          qr_payload: p,
+
+          // record both keys explicitly
+          original_image_r2_key: image_r2_key,
+          canonical_pdf_r2_key: canonicalPdfKey,
+
+          processing_status_from: fin.processing_status,
+          processing_status_to: nextStatus,
+          qr_signed_hash: signedHash
+        },
+        { entity: 'timesheets', subject_id: ts.timesheet_id, req }
+      );
+    } catch (e) {
+      console.warn('[QR_DAILY][SCAN] audit failed', e?.message || e);
+    }
+
+    return withCORS(env, req, ok({
+      timesheet_id: ts.timesheet_id,
+      contract_id: contract?.id || ts.contract_id || null,
+      candidate_id: contract?.candidate_id || null,
+      client_id: contract?.client_id || null,
+      sheet_scope: 'DAILY',
+      processing_status: nextStatus,
+      qr_status: 'USED',
+
+      // keep old field for caller compatibility
+      image_r2_key,
+
+      // new: explicit canonical key
+      canonical_pdf_r2_key: canonicalPdfKey
+    }));
+  }
+
+  return withCORS(env, req, badRequest('QR mismatch: unsupported sheet_scope for QR'));
 }
 
 async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin, options = {}) {
@@ -63093,7 +64092,21 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
     (basisU === 'HEALTHROSTER_SELF_BILL' || basisU === 'HEALTHROSTER_ADJUSTMENT');
 
   const isAuthorised = !!(ts && ts.authorised_at_server);
-  const processing_status = (!isAuthorised) ? 'PENDING_AUTH' : 'READY_FOR_INVOICE';
+
+  // ✅ QR unsigned gating (must block invoicing even if authorised)
+  const qrStatusU = String(ts?.qr_status || '').trim().toUpperCase();
+  const qrToken = (ts?.qr_token != null) ? String(ts.qr_token).trim() : '';
+  const hasQrIssuedProof = (
+    ((qrToken && !!ts?.qr_generated_at) === true) ||
+    ((ts?.qr_last_sent_hash != null) && String(ts.qr_last_sent_hash).trim() !== '')
+  );
+  const qrAwaitingSignatureUpload =
+    (qrStatusU === 'PENDING' && hasQrIssuedProof && !ts?.qr_scanned_at);
+
+  // ✅ initial status (may be refined below after validation flags are evaluated)
+  let processing_status = (qrAwaitingSignatureUpload)
+    ? 'AWAITING_MANUAL_SIGNATURE'
+    : ((!isAuthorised) ? 'PENDING_AUTH' : 'READY_FOR_INVOICE');
 
   // ✅ preserve expenses/mileage (+ units) from current snapshot (curFin)
   const expPay   = round2(asNumberLocal(curFin?.expenses_pay_ex_vat ?? 0));
@@ -63121,6 +64134,21 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
     (!valReasonU) ? true : valReasonU.includes('HEALTHROSTER_WEEKLY');
 
   const useImportRefs = !!(hrValidationRequired && isValidatedOk && isWeeklyHrValidation);
+
+  // ✅ NEW: processing_status priority:
+  // 1) QR awaiting signature => AWAITING_MANUAL_SIGNATURE (even if authorised)
+  // 2) Not authorised => PENDING_AUTH
+  // 3) HR validation required for invoice and NOT OK/OVERRIDDEN => READY_FOR_HR
+  // 4) Else => READY_FOR_INVOICE
+  if (qrAwaitingSignatureUpload) {
+    processing_status = 'AWAITING_MANUAL_SIGNATURE';
+  } else if (!isAuthorised) {
+    processing_status = 'PENDING_AUTH';
+  } else if (hrValidationRequired && !isValidatedOk && isWeeklyHrValidation) {
+    processing_status = 'READY_FOR_HR';
+  } else {
+    processing_status = 'READY_FOR_INVOICE';
+  }
 
   const parseUtcMs = (v) => {
     if (v == null) return null;
@@ -63661,6 +64689,7 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
 
   return { ok: true, snapshot };
 }
+
 
 async function rebuildFromExistingSegmentsEvidence(env, ts, cw, contract, curFin, options = {}) {
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
@@ -64498,7 +65527,6 @@ async function handleTimesheetGetDailyAdjustments(env, req, timesheetId) {
 // Build TSFIN snapshot for DAILY timesheets (app/self-reported).
 // Adds WRANGLER logging when: (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true)
 
-
 async function buildDailySnapshot(env, ts) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
   const L = (...a) => { if (LOG) console.log('[TSFIN][DAILY][buildDailySnapshot]', ...a); };
@@ -64597,6 +65625,15 @@ async function buildDailySnapshot(env, ts) {
   // Classify into day/night/sat/sun/bh hours
   const hours = classifyMinutes(env, policy, segments);
   L('classified hours', hours);
+
+  // Precompute hours total (hours-only; expenses/mileage excluded)
+  const totalHoursWorked = round2(
+    (hours.hours_day || 0) +
+    (hours.hours_night || 0) +
+    (hours.hours_sat || 0) +
+    (hours.hours_sun || 0) +
+    (hours.hours_bh || 0)
+  );
 
   // ---------- Role + band canonicalisation (DAILY) ----------
   const norm = (s) => String(s || "").trim();
@@ -64706,7 +65743,7 @@ async function buildDailySnapshot(env, ts) {
 
   const rates = await resolveRates(env, {
     candidate_id: candidate_id,
-    client_id,
+    client_id: client_id,
     role: roleForRates || null,
     band: bandForRates || null,
     dateYmd: workedDateYmd,
@@ -64775,7 +65812,6 @@ async function buildDailySnapshot(env, ts) {
     L('resolveEffectivePayChannel error -> payChannelBad=true', { err: String(e?.message || e) });
   }
 
-  // ✅ Contract/effective requires_hr (NOT policy.requires_hr)
   const boolish = (v) => {
     if (v === true) return true;
     if (v === false) return false;
@@ -64784,29 +65820,67 @@ async function buildDailySnapshot(env, ts) {
     return (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on');
   };
 
-  let requiresHr = null;
+  // ✅ NEW: Load HR validation gating + validation status (authoritative for READY_FOR_INVOICE)
+  let clientHrValidationRequired = false;
+  let clientNoTimesheetRequired = false;
+  let validationStatusU = '';
   try {
     if (ts?.timesheet_id) {
       const { rows: eRows } = await sbFetch(
         env,
-        `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
+        `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary_base` +
           `?timesheet_id=eq.${encodeURIComponent(ts.timesheet_id)}` +
-          `&select=client_requires_hr` +
+          `&select=client_hr_validation_required,client_no_timesheet_required,validation_status` +
           `&limit=1`
       );
       const eff = eRows?.[0] || null;
-      if (eff && Object.prototype.hasOwnProperty.call(eff, 'client_requires_hr')) {
-        requiresHr = boolish(eff.client_requires_hr);
-      }
+      clientHrValidationRequired = eff ? boolish(eff.client_hr_validation_required) : false;
+      clientNoTimesheetRequired = eff ? boolish(eff.client_no_timesheet_required) : false;
+      validationStatusU = (eff?.validation_status != null) ? String(eff.validation_status).toUpperCase() : '';
     }
   } catch {
-    requiresHr = null;
+    clientHrValidationRequired = false;
+    clientNoTimesheetRequired = false;
+    validationStatusU = '';
   }
-  if (requiresHr == null) requiresHr = !!policy?.requires_hr;
 
-  L('requiresHr resolved', { requiresHr });
+  const validationOk = (validationStatusU === 'VALIDATION_OK' || validationStatusU === 'OVERRIDDEN');
+
+  // hr_validation_required_for_invoice (mirror the view rule but use computed hours)
+  const hrValidationRequiredForInvoice =
+    (clientHrValidationRequired === true) &&
+    (clientNoTimesheetRequired === false) &&
+    (totalHoursWorked > 0);
+
+  const mustHoldForHrValidation = (hrValidationRequiredForInvoice && !validationOk);
+
+  L('hr validation gating', {
+    clientHrValidationRequired,
+    clientNoTimesheetRequired,
+    totalHoursWorked,
+    hrValidationRequiredForInvoice,
+    validationStatusU,
+    validationOk,
+    mustHoldForHrValidation
+  });
+
+  // ✅ Unsigned QR truth model for TSFIN status priority
+  const qrStatusU = String(ts?.qr_status || '').toUpperCase();
+  const qrToken = (ts?.qr_token != null) ? String(ts.qr_token).trim() : '';
+  const hasQrIssuedProof = (
+    ((qrToken && !!ts?.qr_generated_at) === true) ||
+    ((ts?.qr_last_sent_hash != null) && String(ts.qr_last_sent_hash).trim() !== '')
+  );
+  const qrAwaitingSignatureUpload = (
+    qrStatusU === 'PENDING' &&
+    hasQrIssuedProof &&
+    !ts?.qr_scanned_at
+  );
+
+  const isAuthorised = !!ts?.authorised_at_server;
 
   // ── ID-first ladder + issue flags ──
+  // Hard blockers still win; otherwise apply the authoritative invoice-status ladder.
   let processing_status;
   let hasRateIssue       = false;
   let hasPayChannelIssue = false;
@@ -64823,7 +65897,15 @@ async function buildDailySnapshot(env, ts) {
     processing_status   = "PAY_CHANNEL_MISSING";
     hasRateIssue        = false;
     hasPayChannelIssue  = true;
-  } else if (requiresHr) {
+  } else if (qrAwaitingSignatureUpload) {
+    processing_status   = "AWAITING_MANUAL_SIGNATURE";
+    hasRateIssue        = false;
+    hasPayChannelIssue  = false;
+  } else if (!isAuthorised) {
+    processing_status   = "PENDING_AUTH";
+    hasRateIssue        = false;
+    hasPayChannelIssue  = false;
+  } else if (mustHoldForHrValidation) {
     processing_status   = "READY_FOR_HR";
     hasRateIssue        = false;
     hasPayChannelIssue  = false;
@@ -64833,7 +65915,13 @@ async function buildDailySnapshot(env, ts) {
     hasPayChannelIssue  = false;
   }
 
-  L('processing ladder result', { processing_status, hasRateIssue, hasPayChannelIssue });
+  L('processing ladder result', {
+    processing_status,
+    hasRateIssue,
+    hasPayChannelIssue,
+    qrAwaitingSignatureUpload,
+    isAuthorised
+  });
 
   const pay = rates.pay || { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
   const charge = rates.charge || { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
@@ -64952,13 +66040,7 @@ async function buildDailySnapshot(env, ts) {
     charge_sun:   rates.charge?.sun   ?? null,
     charge_bh:    rates.charge?.bh    ?? null,
 
-    total_hours: round2(
-      hours.hours_day +
-      hours.hours_night +
-      hours.hours_sat +
-      hours.hours_sun +
-      hours.hours_bh
-    ),
+    total_hours: totalHoursWorked,
 
     // ✅ totals include preserved expenses/mileage
     total_pay_ex_vat,
@@ -65197,7 +66279,7 @@ async function handleTsfinMarkReady(env, req) {
   );
   const tsfinById = new Map((tsfinRows || []).map(r => [r.timesheet_id, r]));
 
-  // Timesheet metadata (include contract_id because effective flags are contract-resolved)
+  // Timesheet metadata (include QR fields for unsigned gating)
   const tsMetaMap = new Map();
   {
     const { rows: tsRows } = await sbFetch(
@@ -65205,20 +66287,30 @@ async function handleTsfinMarkReady(env, req) {
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
         `?select=timesheet_id,contract_id,reference_number,authorised_at_server,submission_mode,` +
         `sheet_scope,day_references_json,actual_schedule_json,` +
-        `r2_nurse_key,r2_auth_key,manual_pdf_r2_key` +
+        `r2_nurse_key,r2_auth_key,manual_pdf_r2_key,` +
+        `qr_status,qr_token,qr_generated_at,qr_last_sent_hash,qr_scanned_at` +
         `&timesheet_id=in.(${idsParam})`
     );
     for (const t of tsRows || []) tsMetaMap.set(t.timesheet_id, t);
   }
 
-  // ✅ Effective flags (contract-resolved) per timesheet (single source of truth)
+  // ✅ Effective flags + validation_status from v_timesheets_summary_base (single source of truth for this endpoint)
+  // NOTE: v_timesheets_summary does NOT reliably include hr_validation_required_for_invoice.
   const effByTsId = new Map();
   {
     const { rows: effRows } = await sbFetch(
       env,
-      `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
+      `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary_base` +
         `?timesheet_id=in.(${idsParam})` +
-        `&select=timesheet_id,client_requires_hr,client_autoprocess_hr,client_no_timesheet_required,hr_validation_required_for_invoice` +
+        `&select=` +
+          [
+            'timesheet_id',
+            'client_requires_hr',
+            'client_autoprocess_hr',
+            'client_no_timesheet_required',
+            'hr_validation_required_for_invoice',
+            'validation_status'
+          ].join(',') +
         `&limit=10000`
     );
     for (const r of effRows || []) {
@@ -65234,30 +66326,7 @@ async function handleTsfinMarkReady(env, req) {
     return (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on');
   };
 
-  // Determine which timesheets need HR validation
-  const idsNeedingHr = ids.filter(id => {
-    const eff = effByTsId.get(id);
-    return eff ? boolish(eff.client_requires_hr) : false;
-  });
-
-  // Latest validation per TS (only those needing HR)
-  const latestById = new Map();
   const OK = new Set(['VALIDATION_OK', 'OVERRIDDEN']);
-
-  if (idsNeedingHr.length) {
-    const valParam = idsNeedingHr.map(encodeURIComponent).join(',');
-    const valUrl =
-      `${env.SUPABASE_URL}/rest/v1/timesheet_validations` +
-      `?select=timesheet_id,status,updated_at` +
-      `&timesheet_id=in.(${valParam})` +
-      `&order=timesheet_id.asc,updated_at.desc` +
-      `&limit=10000`;
-
-    const { rows: allVals } = await sbFetch(env, valUrl);
-    for (const v of allVals || []) {
-      if (!latestById.has(v.timesheet_id)) latestById.set(v.timesheet_id, v);
-    }
-  }
 
   // Evidence counts via timesheet_evidence
   const evidenceCountByTsId = new Map();
@@ -65312,7 +66381,7 @@ async function handleTsfinMarkReady(env, req) {
     if (!row) { blocked.push({ id, reason: 'tsfin_missing_or_locked' }); continue; }
     if (row.processing_status !== 'READY_FOR_HR') { blocked.push({ id, reason: `bad_status_${row.processing_status}` }); continue; }
 
-    // ✅ Effective contract-resolved flags for this timesheet
+    // ✅ Effective flags for this timesheet
     const eff = effByTsId.get(id) || null;
     if (!eff) { blocked.push({ id, reason: 'effective_flags_missing' }); continue; }
 
@@ -65320,15 +66389,34 @@ async function handleTsfinMarkReady(env, req) {
     const autoprocessHr = boolish(eff.client_autoprocess_hr);
     const noTsReq       = boolish(eff.client_no_timesheet_required);
 
-    // ✅ Option A: if validation framework is required before invoicing, HR crosscheck must NOT gate readiness
+    // ✅ NEW: block promotion if HR validation required for invoice and validation not OK/OVERRIDDEN
     const hrValidationRequiredForInvoice = boolish(eff.hr_validation_required_for_invoice);
+    const validationStatusU = (eff?.validation_status != null) ? String(eff.validation_status).toUpperCase() : '';
+    const validationOk = OK.has(validationStatusU);
+
+    if (hrValidationRequiredForInvoice && !validationOk) {
+      blocked.push({ id, reason: 'validation_not_ok' });
+      continue;
+    }
 
     const tsMeta = tsMetaMap.get(id) || {};
 
-    // 1) HR Validation gating
-    if (requiresHr) {
-      const v = latestById.get(id);
-      if (!v || !OK.has(v.status)) { blocked.push({ id, reason: 'validation_not_ok' }); continue; }
+    // ✅ NEW: block promotion if unsigned QR (defence-in-depth; TSFIN should already be AWAITING_MANUAL_SIGNATURE)
+    const qrStatusU = String(tsMeta?.qr_status || '').toUpperCase();
+    const qrToken = (tsMeta?.qr_token != null) ? String(tsMeta.qr_token).trim() : '';
+    const hasQrIssuedProof = (
+      ((qrToken && !!tsMeta?.qr_generated_at) === true) ||
+      ((tsMeta?.qr_last_sent_hash != null) && String(tsMeta.qr_last_sent_hash).trim() !== '')
+    );
+    const qrAwaitingSignatureUpload = (
+      qrStatusU === 'PENDING' &&
+      hasQrIssuedProof &&
+      !tsMeta?.qr_scanned_at
+    );
+
+    if (qrAwaitingSignatureUpload) {
+      blocked.push({ id, reason: 'qr_unsigned_invoice_blocked' });
+      continue;
     }
 
     // 1b) Authorisation gating when autoprocess_hr = false
@@ -65338,7 +66426,7 @@ async function handleTsfinMarkReady(env, req) {
     }
 
     // 1c) HR cross-check gate
-    // ✅ FIX (Option A): do NOT enforce HR crosscheck when hr_validation_required_for_invoice is true
+    // ✅ Option A: do NOT enforce HR crosscheck when hr_validation_required_for_invoice is true
     if (requiresHr && !hrValidationRequiredForInvoice) {
       const hrStatus = (row.hr_crosscheck_status || '').toString().toUpperCase() || null;
       const hrIssues = Array.isArray(row.hr_crosscheck_issues) ? row.hr_crosscheck_issues : [];
@@ -65384,7 +66472,7 @@ async function handleTsfinMarkReady(env, req) {
 
   if (!eligibleIds.length) {
     return badRequest(
-      'No timesheets are eligible to mark READY_FOR_INVOICE (validation/evidence/pay-channel/reference/timesheet/authorisation/HR rules failed).'
+      'No timesheets are eligible to mark READY_FOR_INVOICE (validation/evidence/pay-channel/reference/timesheet/authorisation/HR/QR rules failed).'
     );
   }
 
@@ -69609,266 +70697,6 @@ async function handleTimesheetAuditFeed(env, req, timesheetId) {
   return withCORS(env, req, ok({ items: rows || [] }));
 }
 
-async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
-  const enc = encodeURIComponent;
-
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  let body;
-  try { body = await parseJSONBody(req); }
-  catch { return withCORS(env, req, badRequest('Invalid JSON')); }
-
-  const expectedTimesheetId = body?.expected_timesheet_id || null;
-  const guard = await guardCurrentTimesheetWrite(env, req, timesheetId, expectedTimesheetId);
-  if (!guard.ok) return guard.res;
-
-  const currentTimesheetId = guard.resolved.current_timesheet_id;
-  const now = nowIso();
-
-  const boolish = (v) => {
-    if (v === true) return true;
-    if (v === false) return false;
-    if (v == null) return false;
-    const s = String(v).trim().toLowerCase();
-    return (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on');
-  };
-
-  const hasAnySegmentInvoiceLock = (tf) => {
-    try {
-      const ib = tf?.invoice_breakdown_json;
-      if (!ib || typeof ib !== 'object') return false;
-      const mode = String(ib?.mode || '').toUpperCase();
-      if (mode !== 'SEGMENTS') return false;
-      const segs = Array.isArray(ib?.segments) ? ib.segments : [];
-      return segs.some(s => {
-        const v = s?.invoice_locked_invoice_id;
-        return v != null && String(v).trim() !== '';
-      });
-    } catch {
-      return false;
-    }
-  };
-
-  // Load current TS + TSFIN
-  const tsBefore = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-      `&is_current=eq.true` +
-      `&select=` +
-        [
-          'timesheet_id',
-          'contract_id',
-          'authorised_at_server',
-          'submission_mode',
-          'sheet_scope',
-          'week_ending_date',
-          'worked_start_iso',
-          'worked_end_iso',
-          'break_start_iso',
-          'break_end_iso',
-          'break_minutes',
-          'reference_number',
-          'day_references_json',
-          'actual_schedule_json',
-          'additional_units_week',
-          'additional_units_per_day',
-          'qr_status',
-          'qr_signed_hash',
-          'qr_signed_at_utc',
-          'qr_scanned_at',
-          'version',
-          'status'
-        ].join(','),
-  ).catch(() => null);
-
-  const { rows: finRows } = await sbFetch(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-      `&is_current=eq.true` +
-      `&select=id,client_id,basis,processing_status,locked_by_invoice_id,paid_at_utc,invoice_breakdown_json` +
-      `&limit=1`
-  );
-  const fin = finRows?.[0] || null;
-
-  const finBeforeStatus = String(fin?.processing_status || '').toUpperCase();
-  let finAfterStatus = fin?.processing_status || null;
-
-  if (!fin) {
-    return withCORS(env, req, badRequest('Cannot authorise: no financial snapshot exists for this timesheet'));
-  }
-
-  if (fin.locked_by_invoice_id || fin.paid_at_utc || hasAnySegmentInvoiceLock(fin)) {
-    return withCORS(env, req, badRequest('Cannot authorise: timesheet is locked or paid'));
-  }
-
-  if (finBeforeStatus === 'AWAITING_MANUAL_SIGNATURE') {
-    return withCORS(env, req, badRequest('Cannot authorise: QR timesheet is awaiting signature'));
-  }
-
-  // Signed QR stale check (unchanged)
-  try {
-    const signedHash = (tsBefore?.qr_signed_hash != null) ? String(tsBefore.qr_signed_hash).trim() : '';
-    const hasSignedHash = !!signedHash;
-
-    if (hasSignedHash) {
-      const scope = String(tsBefore?.sheet_scope || '').toUpperCase();
-
-      const stableClone = (v) => {
-        if (Array.isArray(v)) return v.map(stableClone);
-        if (v && typeof v === 'object') {
-          const out = {};
-          for (const k of Object.keys(v).sort()) out[k] = stableClone(v[k]);
-          return out;
-        }
-        return v;
-      };
-
-      const currentObj = (scope === 'WEEKLY')
-        ? {
-            sheet_scope: 'WEEKLY',
-            week_ending_date: tsBefore?.week_ending_date || null,
-            actual_schedule_json: tsBefore?.actual_schedule_json || null,
-            reference_number: tsBefore?.reference_number || null,
-            day_references_json: tsBefore?.day_references_json || null,
-            additional_units_week: tsBefore?.additional_units_week || {},
-            additional_units_per_day: tsBefore?.additional_units_per_day || {}
-          }
-        : {
-            sheet_scope: 'DAILY',
-            worked_start_iso: tsBefore?.worked_start_iso || null,
-            worked_end_iso: tsBefore?.worked_end_iso || null,
-            break_start_iso: tsBefore?.break_start_iso || null,
-            break_end_iso: tsBefore?.break_end_iso || null,
-            break_minutes: (tsBefore?.break_minutes != null ? tsBefore.break_minutes : null),
-            reference_number: tsBefore?.reference_number || null,
-            day_references_json: tsBefore?.day_references_json || null
-          };
-
-      const currentHash = await sha256Hex(JSON.stringify(stableClone(currentObj)));
-
-      if (String(currentHash) !== String(signedHash)) {
-        return withCORS(env, req, badRequest('Cannot authorise: signed QR timesheet no longer matches current hours (revoke and request resubmission)'));
-      }
-    }
-  } catch (e) {
-    return withCORS(env, req, serverError(`Failed to validate QR signed hash: ${e?.message || e}`));
-  }
-
-  // Stamp timesheet authorised (best effort)
-  await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
-    {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-      body: JSON.stringify({ authorised_at_server: now, updated_at: now })
-    }
-  ).catch(() => {});
-
-  const basisU = String(fin?.basis || '').toUpperCase();
-  const forceReadyForInvoice =
-    (basisU === 'NHSP' ||
-     basisU === 'NHSP_ADJUSTMENT' ||
-     basisU === 'HEALTHROSTER_SELF_BILL' ||
-     basisU === 'HEALTHROSTER_ADJUSTMENT');
-
-  // Fetch policy switch + validation status from v_timesheets_summary_base
-  let eff = null;
-  try {
-    const { rows: eRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary_base` +
-        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-        `&select=client_requires_hr,hr_validation_required_for_invoice,validation_status` +
-        `&limit=1`
-    );
-    eff = eRows?.[0] || null;
-  } catch {
-    eff = null;
-  }
-
-  const requiresHr = eff ? boolish(eff.client_requires_hr) : false;
-
-  const hrValidationRequiredForInvoice = eff ? boolish(eff.hr_validation_required_for_invoice) : false;
-  const validationStatus = (eff?.validation_status != null) ? String(eff.validation_status).toUpperCase() : '';
-  const validationOk = (validationStatus === 'VALIDATION_OK' || validationStatus === 'OVERRIDDEN');
-
-  // ✅ NEW gating: HR validation requirement blocks READY_FOR_INVOICE until OK/OVERRIDDEN
-  const mustHoldForHrValidation = (hrValidationRequiredForInvoice && !validationOk);
-
-  let newStatus = fin.processing_status;
-  const ps = finBeforeStatus;
-  if (ps === 'PENDING_AUTH' || ps === 'READY_FOR_HR') {
-    if (mustHoldForHrValidation) {
-      newStatus = 'READY_FOR_HR';
-    } else {
-      newStatus = forceReadyForInvoice
-        ? 'READY_FOR_INVOICE'
-        : (requiresHr ? 'READY_FOR_HR' : 'READY_FOR_INVOICE');
-    }
-  }
-  finAfterStatus = newStatus;
-
-  await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
-    {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-      body: JSON.stringify({
-        processing_status: newStatus,
-        authorised_by_user_id: user.id,
-        authorised_at_utc: now,
-        updated_at: now
-      })
-    }
-  ).catch(() => {});
-
-  // Audit (kept)
-  try {
-    const wasAlreadyAuthorised = !!(tsBefore && tsBefore.authorised_at_server);
-    const didPromoteStatus = String(finBeforeStatus || '') !== String(finAfterStatus || '').toUpperCase();
-
-    if (!wasAlreadyAuthorised || didPromoteStatus) {
-      await writeAudit(
-        env,
-        user,
-        'TIMESHEET_AUTHORISED',
-        {
-          timesheet_id: currentTimesheetId,
-          authorised_at_utc: now,
-          tsfin_processing_status_before: finBeforeStatus || null,
-          tsfin_processing_status_after: finAfterStatus ? String(finAfterStatus).toUpperCase() : null,
-          hr_validation_required_for_invoice: hrValidationRequiredForInvoice,
-          validation_status: validationStatus || null
-        },
-        {
-          entity: 'timesheets',
-          subject_id: currentTimesheetId,
-          req,
-          before: {
-            authorised_at_server: tsBefore?.authorised_at_server || null,
-            tsfin_processing_status: finBeforeStatus || null
-          },
-          reason: didPromoteStatus ? 'PROMOTED_TSFIN_STATUS' : 'STAMPED_AUTHORISE'
-        }
-      );
-    }
-  } catch {}
-
-  return withCORS(env, req, ok({
-    authorised: true,
-    tsfin_updated: true,
-    processing_status: newStatus,
-    booking_id: guard.resolved.booking_id || null,
-    requested_timesheet_id: guard.resolved.requested_timesheet_id || timesheetId,
-    current_timesheet_id: currentTimesheetId,
-    current_version: guard.resolved.current_version ?? null,
-    was_stale: !!guard.resolved.was_stale
-  }));
-}
-
 
 async function loadWeeklyContext(env, ts) {
   const enc = encodeURIComponent; // ✅ define here so global move is safe
@@ -69898,447 +70726,6 @@ async function loadWeeklyContext(env, ts) {
 }
 
 
-async function handleTimesheetQrScan(env, req) {
-  const enc = encodeURIComponent;
-
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  let body;
-  try {
-    body = await parseJSONBody(req);
-  } catch {
-    return withCORS(env, req, badRequest('Invalid JSON'));
-  }
-
-  const qrText = String(body?.qr_text || '').trim();
-  const image_r2_key_raw = body?.image_r2_key ? String(body.image_r2_key) : '';
-
-  if (!qrText) {
-    return withCORS(env, req, badRequest('qr_text is required'));
-  }
-
-  // ✅ For signed acceptance, we require the uploaded scan key.
-  // This endpoint is the “signed upload/scan acceptance” endpoint.
-  const cleanKey = (k) => String(k || '').replace(/^\/+/, '').trim();
-  const image_r2_key = cleanKey(image_r2_key_raw);
-  if (!image_r2_key) {
-    return withCORS(env, req, badRequest('image_r2_key is required'));
-  }
-
-  try {
-    console.log('[QR][SCAN] incoming', {
-      preview: qrText.slice(0, 64) + (qrText.length > 64 ? '…' : '')
-    });
-  } catch {}
-
-  // 1) Verify signature + parse payload
-  const verification = await verifyTsq1(qrText, env);
-  if (!verification?.ok) {
-    return withCORS(env, req, badRequest(`Invalid QR: ${verification?.reason || 'UNKNOWN'}`));
-  }
-
-  const p = verification.payload || {};
-  const payloadToken = (p && typeof p.tok === 'string') ? p.tok.trim() : '';
-
-  // ✅ New minimal TSQ1 payload is { v, tok } only
-  if (!payloadToken) {
-    return withCORS(env, req, badRequest('Invalid QR: missing tok'));
-  }
-
-  // 2) Resolve timesheet by token (NOT by timesheet_id in payload anymore)
-  const ts = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?qr_token=eq.${enc(payloadToken)}` +
-      `&is_current=eq.true` +
-      `&select=*` +
-      `&limit=1`
-  );
-
-  if (!ts) {
-    return withCORS(env, req, notFound('Timesheet not found for QR token'));
-  }
-
-  const sheetScope = String(ts.sheet_scope || '').toUpperCase();
-
-  const qrStatusNow = String(ts.qr_status || '').toUpperCase();
-  if (qrStatusNow !== 'PENDING') {
-    if (qrStatusNow === 'USED')      return withCORS(env, req, badRequest('QR already used'));
-    if (qrStatusNow === 'CANCELLED') return withCORS(env, req, badRequest('QR cancelled; a new QR must be issued'));
-    if (qrStatusNow === 'EXPIRED')   return withCORS(env, req, badRequest('QR expired; a new QR must be issued'));
-    return withCORS(env, req, badRequest(`QR invalid state (qr_status=${qrStatusNow || 'NULL'})`));
-  }
-
-  // 3) Token enforcement (reissue invalidation)
-  const tsToken = ts.qr_token ? String(ts.qr_token) : '';
-  if (!tsToken) {
-    return withCORS(env, req, badRequest('Timesheet has no active QR token; cannot accept scan'));
-  }
-  if (String(payloadToken) !== String(tsToken)) {
-    return withCORS(env, req, badRequest('QR token is no longer valid for this timesheet'));
-  }
-
-  const now = nowIso();
-
-  // Helpers for stable hashing (shared basis across send/resend/evidence)
-  const stableClone = (v) => {
-    if (Array.isArray(v)) return v.map(stableClone);
-    if (v && typeof v === 'object') {
-      const out = {};
-      for (const k of Object.keys(v).sort()) out[k] = stableClone(v[k]);
-      return out;
-    }
-    return v;
-  };
-
-  const computeCurrentHash = async (sheetScopeU, tsRow, finRow) => {
-    if (sheetScopeU === 'WEEKLY') {
-      const obj = {
-        sheet_scope: 'WEEKLY',
-        week_ending_date: tsRow.week_ending_date || null,
-        actual_schedule_json: tsRow.actual_schedule_json || null,
-        reference_number: tsRow.reference_number || null,
-        day_references_json: tsRow.day_references_json || null,
-        additional_units_week: tsRow.additional_units_week || {},
-        additional_units_per_day: tsRow.additional_units_per_day || {}
-      };
-      return await sha256Hex(JSON.stringify(stableClone(obj)));
-    }
-
-    // DAILY
-    const obj = {
-      sheet_scope: 'DAILY',
-      worked_start_iso: tsRow.worked_start_iso || null,
-      worked_end_iso: tsRow.worked_end_iso || null,
-      break_start_iso: tsRow.break_start_iso || null,
-      break_end_iso: tsRow.break_end_iso || null,
-      break_minutes: (tsRow.break_minutes != null ? tsRow.break_minutes : null),
-      reference_number: tsRow.reference_number || null,
-      day_references_json: tsRow.day_references_json || null
-    };
-    return await sha256Hex(JSON.stringify(stableClone(obj)));
-  };
-
-  // ✅ Canonical deterministic PDF key (the “one PDF only” rule)
-  const canonicalPdfKey = cleanKey(`docs-pdf/timesheets/ts_${ts.timesheet_id}.pdf`);
-
-  // ✅ Step A: Copy the uploaded signed scan OVER the canonical key (overwrite).
-  // Do NOT patch DB if this fails.
-  try {
-    await r2CopyOverwrite(env, image_r2_key, canonicalPdfKey);
-  } catch (e) {
-    console.warn('[QR][SCAN] failed to copy signed scan to canonical key', {
-      timesheet_id: ts.timesheet_id,
-      from: image_r2_key,
-      to: canonicalPdfKey,
-      err: e?.message || String(e)
-    });
-    return withCORS(env, req, serverError(`Failed to store signed scan: ${e?.message || e}`));
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // WEEKLY
-  // ─────────────────────────────────────────────────────────────
-  if (sheetScope === 'WEEKLY') {
-    const cw = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-        `?timesheet_id=eq.${enc(ts.timesheet_id)}` +
-        `&select=*` +
-        `&limit=1`
-    ).catch(() => null);
-
-    const contract = ts.contract_id
-      ? await sbGetOne(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/contracts` +
-            `?id=eq.${enc(ts.contract_id)}` +
-            `&select=*` +
-            `&limit=1`
-        )
-      : null;
-
-    if (!contract) return withCORS(env, req, notFound('Contract not found for QR'));
-
-    const fin = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-        `?timesheet_id=eq.${enc(ts.timesheet_id)}` +
-        `&is_current=eq.true` +
-        `&select=*`
-    );
-    if (!fin) return withCORS(env, req, serverError('No financial snapshot for timesheet'));
-
-    if (fin.locked_by_invoice_id || fin.paid_at_utc) {
-      return withCORS(env, req, badRequest('Timesheet already invoiced or paid; cannot process QR scan'));
-    }
-
-    const finStatus = String(fin.processing_status || '').toUpperCase();
-    if (finStatus !== 'AWAITING_MANUAL_SIGNATURE') {
-      return withCORS(
-        env,
-        req,
-        badRequest(`Unexpected processing_status=${fin.processing_status}; expected AWAITING_MANUAL_SIGNATURE`)
-      );
-    }
-
-    // ✅ Compute signed hash at acceptance time
-    let signedHash = null;
-    try {
-      signedHash = await computeCurrentHash('WEEKLY', ts, fin);
-    } catch (e) {
-      return withCORS(env, req, serverError(`Failed to compute signed hash: ${e?.message || e}`));
-    }
-
-    // ✅ Patch timesheet: point manual_pdf_r2_key to the CANONICAL key (not image_r2_key)
-    const tsPatch = {
-      qr_status: 'USED',
-      qr_scanned_at: now,
-      qr_signed_hash: signedHash,
-      qr_signed_at_utc: now,
-      manual_pdf_r2_key: canonicalPdfKey,
-      qr_scan_info_json: {
-        kind: 'WEEKLY_QR_TIMESHEET',
-        payload: p,
-        original_image_r2_key: image_r2_key,
-        canonical_pdf_r2_key: canonicalPdfKey
-      },
-      updated_at: now
-    };
-
-    const tsRes = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
-      {
-        method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify(tsPatch)
-      }
-    );
-
-    if (!tsRes.ok) {
-      const t = await tsRes.text().catch(() => '');
-      return withCORS(env, req, serverError(`Failed to patch timesheet after QR scan: ${t}`));
-    }
-
-    const finRes = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
-      {
-        method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify({ processing_status: 'PENDING_AUTH', updated_at: now })
-      }
-    );
-
-    if (!finRes.ok) {
-      const t = await finRes.text().catch(() => '');
-      return withCORS(env, req, serverError(`Failed to update TSFIN after QR scan: ${t}`));
-    }
-
-    // ✅ Best-effort delete original uploaded key (only if it differs from canonical)
-    try {
-      const bucket = env.R2_BUCKET || env.R2;
-      if (bucket && typeof bucket.delete === 'function' && image_r2_key !== canonicalPdfKey) {
-        await bucket.delete(image_r2_key);
-      }
-    } catch (e) {
-      console.warn('[QR_WEEKLY][SCAN] delete original image key failed (non-fatal)', {
-        timesheet_id: ts.timesheet_id,
-        original_image_r2_key: image_r2_key,
-        err: e?.message || String(e)
-      });
-    }
-
-    try {
-      await writeAudit(
-        env,
-        user,
-        'WEEKLY_QR_SCANNED',
-        {
-          timesheet_id: ts.timesheet_id,
-          contract_week_id: cw?.id || null,
-          contract_id: contract.id,
-          qr_text: qrText,
-          qr_payload: p,
-
-          // record both keys explicitly
-          original_image_r2_key: image_r2_key,
-          canonical_pdf_r2_key: canonicalPdfKey,
-
-          processing_status_from: fin.processing_status,
-          processing_status_to: 'PENDING_AUTH',
-          qr_signed_hash: signedHash
-        },
-        { entity: 'timesheets', subject_id: ts.timesheet_id, req }
-      );
-    } catch (e) {
-      console.warn('[QR_WEEKLY][SCAN] audit failed', e?.message || e);
-    }
-
-    return withCORS(env, req, ok({
-      timesheet_id: ts.timesheet_id,
-      contract_week_id: cw?.id || null,
-      contract_id: contract.id,
-      candidate_id: contract.candidate_id || null,
-      client_id: contract.client_id || null,
-      week_ending_date: cw?.week_ending_date || ts.week_ending_date || null,
-      sheet_scope: 'WEEKLY',
-      processing_status: 'PENDING_AUTH',
-      qr_status: 'USED',
-
-      // keep old field for caller compatibility
-      image_r2_key,
-
-      // new: explicit canonical key
-      canonical_pdf_r2_key: canonicalPdfKey
-    }));
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // DAILY
-  // ─────────────────────────────────────────────────────────────
-  if (sheetScope === 'DAILY') {
-    const fin = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-        `?timesheet_id=eq.${enc(ts.timesheet_id)}` +
-        `&is_current=eq.true` +
-        `&select=*`
-    );
-    if (!fin) return withCORS(env, req, serverError('No financial snapshot for timesheet'));
-
-    if (fin.locked_by_invoice_id || fin.paid_at_utc) {
-      return withCORS(env, req, badRequest('Timesheet already invoiced or paid; cannot process QR scan'));
-    }
-
-    const finStatus = String(fin.processing_status || '').toUpperCase();
-    if (finStatus !== 'AWAITING_MANUAL_SIGNATURE') {
-      return withCORS(
-        env,
-        req,
-        badRequest(`Unexpected processing_status=${fin.processing_status}; expected AWAITING_MANUAL_SIGNATURE`)
-      );
-    }
-
-    // ✅ Compute signed hash at acceptance time
-    let signedHash = null;
-    try {
-      signedHash = await computeCurrentHash('DAILY', ts, fin);
-    } catch (e) {
-      return withCORS(env, req, serverError(`Failed to compute signed hash: ${e?.message || e}`));
-    }
-
-    // ✅ Patch timesheet: point manual_pdf_r2_key to the CANONICAL key (not image_r2_key)
-    const tsPatch = {
-      qr_status: 'USED',
-      qr_scanned_at: now,
-      updated_at: now,
-      qr_signed_hash: signedHash,
-      qr_signed_at_utc: now,
-      manual_pdf_r2_key: canonicalPdfKey,
-      qr_scan_info_json: {
-        kind: 'DAILY_QR_TIMESHEET',
-        payload: p,
-        original_image_r2_key: image_r2_key,
-        canonical_pdf_r2_key: canonicalPdfKey
-      }
-    };
-
-    const tsRes = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
-      {
-        method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify(tsPatch)
-      }
-    );
-
-    if (!tsRes.ok) {
-      const t = await tsRes.text().catch(() => '');
-      return withCORS(env, req, serverError(`Failed to patch timesheet after QR scan: ${t}`));
-    }
-
-    const finRes = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(fin.id)}`,
-      {
-        method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify({ processing_status: 'PENDING_AUTH', updated_at: now })
-      }
-    );
-
-    if (!finRes.ok) {
-      const t = await finRes.text().catch(() => '');
-      return withCORS(env, req, serverError(`Failed to update TSFIN after QR scan: ${t}`));
-    }
-
-    // ✅ Best-effort delete original uploaded key (only if it differs from canonical)
-    try {
-      const bucket = env.R2_BUCKET || env.R2;
-      if (bucket && typeof bucket.delete === 'function' && image_r2_key !== canonicalPdfKey) {
-        await bucket.delete(image_r2_key);
-      }
-    } catch (e) {
-      console.warn('[QR_DAILY][SCAN] delete original image key failed (non-fatal)', {
-        timesheet_id: ts.timesheet_id,
-        original_image_r2_key: image_r2_key,
-        err: e?.message || String(e)
-      });
-    }
-
-    let contract = null;
-    if (ts.contract_id) {
-      try {
-        contract = await sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(ts.contract_id)}&select=*`);
-      } catch {
-        contract = null;
-      }
-    }
-
-    try {
-      await writeAudit(
-        env,
-        user,
-        'DAILY_QR_SCANNED',
-        {
-          timesheet_id: ts.timesheet_id,
-          contract_id: contract?.id || ts.contract_id || null,
-          qr_text: qrText,
-          qr_payload: p,
-
-          // record both keys explicitly
-          original_image_r2_key: image_r2_key,
-          canonical_pdf_r2_key: canonicalPdfKey,
-
-          processing_status_from: fin.processing_status,
-          processing_status_to: 'PENDING_AUTH',
-          qr_signed_hash: signedHash
-        },
-        { entity: 'timesheets', subject_id: ts.timesheet_id, req }
-      );
-    } catch (e) {
-      console.warn('[QR_DAILY][SCAN] audit failed', e?.message || e);
-    }
-
-    return withCORS(env, req, ok({
-      timesheet_id: ts.timesheet_id,
-      contract_id: contract?.id || ts.contract_id || null,
-      candidate_id: contract?.candidate_id || null,
-      client_id: contract?.client_id || null,
-      sheet_scope: 'DAILY',
-      processing_status: 'PENDING_AUTH',
-      qr_status: 'USED',
-
-      // keep old field for caller compatibility
-      image_r2_key,
-
-      // new: explicit canonical key
-      canonical_pdf_r2_key: canonicalPdfKey
-    }));
-  }
-
-  return withCORS(env, req, badRequest('QR mismatch: unsupported sheet_scope for QR'));
-}
 async function handleTimesheetDeletePreview(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
