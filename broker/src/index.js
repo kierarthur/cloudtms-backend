@@ -12977,6 +12977,49 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
 
     // 2B) ✅ Split: Authorisation evidence vs Electronic signatures evidence
 
+    // Resolve the authorising actor from audit_events -> tms_users (best effort)
+    let auth_actor_user_id = null;
+    let auth_actor_display = null;
+
+    try {
+      const { rows: aeRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/audit_events` +
+          `?object_type=eq.timesheets` +
+          `&object_id_text=eq.${enc(currentTsId)}` +
+          `&action=eq.TIMESHEET_AUTHORISED` +
+          `&select=actor_user_id,actor_display,ts_utc` +
+          `&order=ts_utc.desc` +
+          `&limit=1`
+      );
+
+      const ae = (aeRows && aeRows.length) ? aeRows[0] : null;
+      const uid = ae && ae.actor_user_id ? String(ae.actor_user_id).trim() : '';
+      if (uid) auth_actor_user_id = uid;
+
+      const ad = ae && ae.actor_display != null ? String(ae.actor_display).trim() : '';
+      if (ad) auth_actor_display = ad;
+    } catch {
+      auth_actor_user_id = null;
+      auth_actor_display = null;
+    }
+
+    if (auth_actor_user_id) {
+      try {
+        const u = await sbGetOne(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/tms_users` +
+            `?id=eq.${enc(auth_actor_user_id)}` +
+            `&select=id,display_name` +
+            `&limit=1`
+        );
+        const dn = (u && u.display_name != null) ? String(u.display_name).trim() : '';
+        if (dn) auth_actor_display = dn;
+      } catch {
+        // keep existing auth_actor_display
+      }
+    }
+
     // 2B.1) Authorisation marker (truthful, even for MANUAL timesheets)
     const authorisedAt = ts?.authorised_at_server || null;
     if (authorisedAt) {
@@ -12993,6 +13036,9 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
         preview_mode: 'AUTHORISATION',
         is_primary: false,
         meta_json: {
+          actor_user_id: auth_actor_user_id,
+          actor_display: auth_actor_display,
+
           booking_id: ts?.booking_id || null,
           version: (ts?.version != null ? Number(ts.version) : null),
 
@@ -13116,8 +13162,6 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
 
     // 2C.5) Render IMPORT_TABLE system evidence items
     // ✅ CHANGE: return BOTH evidence type and filename.
-    // - display_name becomes the evidence type label (so UI "Evidence Type" column is correct)
-    // - filename is returned separately (for UI to show filename in a dedicated column or viewer)
     if (importIds.size) {
       try {
         const idParam = Array.from(importIds).map(enc).join(',');
@@ -13147,16 +13191,9 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
           systemEvidence.push({
             id: `SYS:${kindLabel}:${importId || 'UNKNOWN'}`,
             timesheet_id: currentTsId,
-
-            // evidence type (machine)
             kind: kindLabel,
-
-            // evidence type (human) — shown in UI as Evidence Type
             display_name: typeLabel,
-
-            // ✅ NEW: filename returned separately for UI (do not overload display_name)
             filename: fileName || null,
-
             storage_key: r.file_r2_key,
             download_storage_key: r.file_r2_key,
             created_at: uploadedAt,
@@ -13197,6 +13234,7 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
     return withCORS(env, req, serverError(`Failed to list timesheet evidence: ${e?.message || e}`));
   }
 }
+
 
 
 // POST /api/timesheets/:id/evidence
@@ -62983,8 +63021,6 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
 
   return { picked: lease.length, ok, fail, write: wr };
 }
-
-
 async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -63100,6 +63136,24 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
   // ✅ NEW RULE: unsigned QR cannot be authorised
   if (qrAwaitingSignatureUpload || finBeforeStatus === 'AWAITING_MANUAL_SIGNATURE') {
     return withCORS(env, req, badRequest('Cannot authorise: awaiting signed QR timesheet'));
+  }
+
+  // ✅ NEW: warn if invoice-precheck is blocked by missing timesheet PDF/evidence
+  // (not a blocker to authorise; invoicing will be blocked until evidence is attached)
+  try {
+    const { rows: pRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/v_ts_invoice_precheck` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&select=precheck_status` +
+        `&limit=1`
+    );
+    const ps = (pRows?.[0]?.precheck_status != null) ? String(pRows[0].precheck_status).trim().toUpperCase() : '';
+    if (ps === 'BLOCK_NO_PDF') {
+      warnings.push('NO_TIMESHEET_EVIDENCE_INVOICE_BLOCKED');
+    }
+  } catch {
+    // non-fatal
   }
 
   // Signed QR stale check (unchanged)
@@ -63369,6 +63423,24 @@ async function handleContractWeekManualAuthorise(env, req, weekId) {
   // ✅ NEW RULE: unsigned QR cannot be authorised
   if (qrAwaitingSignatureUpload || finBeforeStatus === 'AWAITING_MANUAL_SIGNATURE') {
     return withCORS(env, req, badRequest('Cannot authorise: awaiting signed QR timesheet'));
+  }
+
+  // ✅ NEW: warn if invoice-precheck is blocked by missing timesheet PDF/evidence
+  // (not a blocker to authorise; invoicing will be blocked until evidence is attached)
+  try {
+    const { rows: pRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/v_ts_invoice_precheck` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&select=precheck_status` +
+        `&limit=1`
+    );
+    const ps0 = (pRows?.[0]?.precheck_status != null) ? String(pRows[0].precheck_status).trim().toUpperCase() : '';
+    if (ps0 === 'BLOCK_NO_PDF') {
+      warnings.push('NO_TIMESHEET_EVIDENCE_INVOICE_BLOCKED');
+    }
+  } catch {
+    // non-fatal
   }
 
   if (fin) {
@@ -73295,6 +73367,11 @@ if (req.method === 'POST' && p === '/api/assignment-band-mappings')   return han
   const m = matchPath(p, '/api/assignment-band-mappings/:id');
   if (m && req.method === 'PATCH')                                    return handleUpdateAssignmentBandMapping(env, req, m.id);
   if (m && req.method === 'DELETE')                                   return handleDeleteAssignmentBandMapping(env, req, m.id);
+}
+// NEW: Timesheet unauthorise (guarded write)
+{
+  const m = matchPath(p, '/api/timesheets/:id/unauthorise');
+  if (m && req.method === 'POST') return handleTimesheetUnauthorise(env, req, m.id);
 }
 
 // NEW: Import column aliases (Grade/Assignment header name config)
