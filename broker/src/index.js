@@ -64062,7 +64062,6 @@ async function handleTimesheetQrScan(env, req) {
 
   return withCORS(env, req, badRequest('QR mismatch: unsupported sheet_scope for QR'));
 }
-
 async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin, options = {}) {
   const pc = payChargeFromContract(contract);
   const pay = pc?.pay || null;
@@ -64121,15 +64120,18 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
 
     const date = _normStr(segObj.date);
 
+    // ✅ IMPORTANT: prefer local start/end first (keeps stable IDs aligned to schedule JSON)
     const start =
+      _normStr(segObj.start) ||
       _normStr(segObj.start_utc) ||
       _normStr(segObj.start_iso) ||
-      _normStr(segObj.start);
+      _normStr(segObj.startUtc);
 
     const end =
+      _normStr(segObj.end) ||
       _normStr(segObj.end_utc) ||
       _normStr(segObj.end_iso) ||
-      _normStr(segObj.end);
+      _normStr(segObj.endUtc);
 
     const breakMins = _normNumInt(segObj.break_mins ?? segObj.break_minutes ?? 0, 0);
 
@@ -64143,6 +64145,83 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
     const k = _normStr(segKey);
     if (!k) return `ts:${tsId}:unknown`;
     return `ts:${tsId}:${_hash32(k)}`;
+  };
+
+  // ─────────────────────────────────────────────────────────────
+  // ✅ Local-time → UTC ISO helpers (Europe/London DST-safe, 2-pass)
+  // We need these so SEGMENTS rows have start_utc/end_utc populated.
+  // ─────────────────────────────────────────────────────────────
+  const _addDaysYmd = (ymd, addDays) => {
+    const s = String(ymd || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+    const [yy, mm, dd] = s.split('-').map(Number);
+    const dt = new Date(Date.UTC(yy, mm - 1, dd));
+    dt.setUTCDate(dt.getUTCDate() + Number(addDays || 0));
+    return dt.toISOString().slice(0, 10);
+  };
+
+  const _tzParts = (dateObj, tzId) => {
+    const fmt = new Intl.DateTimeFormat('en-GB', {
+      timeZone: tzId,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+    const parts = fmt.formatToParts(dateObj);
+    const m = {};
+    for (const p of parts) m[p.type] = p.value;
+    return {
+      y: Number(m.year),
+      mo: Number(m.month),
+      d: Number(m.day),
+      h: Number(m.hour),
+      mi: Number(m.minute)
+    };
+  };
+
+  const _localYmdHmToUtcIso = (ymd, hhmm, tzId) => {
+    const sY = String(ymd || '').slice(0, 10);
+    const sT = String(hhmm || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(sY)) return null;
+    const m = sT.match(/^(\d{2}):(\d{2})/);
+    if (!m) return null;
+
+    const [yy, mm, dd] = sY.split('-').map(Number);
+    const hh = Number(m[1]);
+    const mi = Number(m[2]);
+
+    // desired local components treated as UTC (initial reference)
+    const desiredAsUtcMs = Date.UTC(yy, mm - 1, dd, hh, mi, 0, 0);
+
+    // pass 1: get offset at the guessed UTC time
+    const guess1 = new Date(desiredAsUtcMs);
+    const p1 = _tzParts(guess1, tzId);
+    const asUtcOfParts1 = Date.UTC(p1.y, p1.mo - 1, p1.d, p1.h, p1.mi, 0, 0);
+    const offsetMs1 = asUtcOfParts1 - guess1.getTime();
+    const utcMs1 = desiredAsUtcMs - offsetMs1;
+
+    // pass 2: refine offset at the refined UTC time (DST boundary safety)
+    const guess2 = new Date(utcMs1);
+    const p2 = _tzParts(guess2, tzId);
+    const asUtcOfParts2 = Date.UTC(p2.y, p2.mo - 1, p2.d, p2.h, p2.mi, 0, 0);
+    const offsetMs2 = asUtcOfParts2 - guess2.getTime();
+    const utcMs2 = desiredAsUtcMs - offsetMs2;
+
+    return new Date(utcMs2).toISOString();
+  };
+
+  const _pickTzId = () => {
+    try {
+      const tz = (policy_override && typeof policy_override === 'object')
+        ? String(policy_override.timezone_id || '').trim()
+        : '';
+      return tz || 'Europe/London';
+    } catch {
+      return 'Europe/London';
+    }
   };
 
   // ─────────────────────────────────────────────────────────────
@@ -64415,28 +64494,36 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
   }
 
   // ✅ Preserve locked segment evidence immutability (non-correction only)
-  // Build lookup from existing snapshot segments. If invoice_locked_invoice_id is present, keep the entire segment object.
-  const preserved = new Map(); // stableKey -> { is_locked, seg_obj, exclude_from_pay, invoice_target_week_start, invoice_locked_invoice_id }
+  // Build lookups from existing snapshot segments.
+  const preserved = new Map(); // stableKey -> { ... }
+  const preservedBySegId = new Map(); // segment_id -> { ... }  ✅ (critical for legacy rows missing start/end fields)
   const preservedLockedByTime = new Map(); // `${date}|${startMs}|${endMs}` -> seg_obj
+
   try {
     const ib = curFin?.invoice_breakdown_json || null;
     const mode = String(ib?.mode || '').toUpperCase();
     const segs = Array.isArray(ib?.segments) ? ib.segments : null;
+
     if (mode === 'SEGMENTS' && segs) {
       for (const s of segs) {
-        const key = _stableSegKey(s);
-        if (!key) continue;
+        if (!s || typeof s !== 'object') continue;
 
-        const invLockRaw = (s && s.invoice_locked_invoice_id != null) ? String(s.invoice_locked_invoice_id).trim() : '';
+        const segId0 = _normStr(s.segment_id);
+        const key = _stableSegKey(s);
+
+        const invLockRaw = (s.invoice_locked_invoice_id != null) ? String(s.invoice_locked_invoice_id).trim() : '';
         const isLocked = !!invLockRaw;
 
-        preserved.set(key, {
+        const meta = {
           is_locked: isLocked,
           seg_obj: (isLocked ? s : null),
           exclude_from_pay: (typeof s.exclude_from_pay === 'boolean') ? s.exclude_from_pay : undefined,
           invoice_target_week_start: (s.invoice_target_week_start != null) ? String(s.invoice_target_week_start) : undefined,
           invoice_locked_invoice_id: (invLockRaw ? invLockRaw : undefined)
-        });
+        };
+
+        if (key) preserved.set(key, meta);
+        if (segId0) preservedBySegId.set(segId0, meta);
 
         if (isLocked) {
           const d = (s?.date != null) ? String(s.date).slice(0, 10) : '';
@@ -64457,14 +64544,20 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
 
   const seenLockedKeys = new Set();
 
+  const tzId = _pickTzId();
+
   for (let i = 0; i < actual.length; i++) {
     const seg = actual[i] || {};
 
     const key = _stableSegKey(seg);
+    const sid = _stableSegId(ts.timesheet_id, key);
 
     // If this corresponds to an invoice-locked segment, preserve evidence as-is (immutability), non-correction only.
     if (!isCorrection) {
-      const p0 = preserved.get(key) || null;
+      // ✅ First try: match by segment_id (robust even if old rows missed start/end fields)
+      const pById = preservedBySegId.get(sid) || null;
+      const pByKey = preserved.get(key) || null;
+      const p0 = pById || pByKey;
 
       let lockedSegObj = (p0 && p0.is_locked && p0.seg_obj) ? p0.seg_obj : null;
 
@@ -64547,9 +64640,9 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
     sumPay += payEx;
     sumChg += chgEx;
 
-    const sid = _stableSegId(ts.timesheet_id, key);
-
-    const p = preserved.get(key) || null;
+    // ✅ Preserve metadata from existing segments:
+    // prefer by segment_id, then fallback to by stable key
+    const p = preservedBySegId.get(sid) || preserved.get(key) || null;
 
     const exclude_from_pay =
       (p && typeof p.exclude_from_pay === 'boolean') ? p.exclude_from_pay : false;
@@ -64595,11 +64688,41 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
       segRefNum = hrRef ? String(hrRef) : null;
     }
 
+    // ✅ Populate BOTH local start/end and UTC ISO start_utc/end_utc (fixes blank QR PDFs + stable preservation)
+    const dateYmd0 = (seg?.date != null) ? String(seg.date).slice(0, 10) : '';
+    const startLocal = (seg?.start != null) ? String(seg.start).trim() : '';
+    const endLocal = (seg?.end != null) ? String(seg.end).trim() : '';
+    const overnight = !!seg?.overnight;
+
+    const startUtcIso =
+      (dateYmd0 && startLocal)
+        ? _localYmdHmToUtcIso(dateYmd0, startLocal, tzId)
+        : null;
+
+    const endDateYmd =
+      (dateYmd0 && overnight)
+        ? (_addDaysYmd(dateYmd0, 1) || dateYmd0)
+        : dateYmd0;
+
+    const endUtcIso =
+      (endDateYmd && endLocal)
+        ? _localYmdHmToUtcIso(endDateYmd, endLocal, tzId)
+        : null;
+
     segments.push({
       segment_id: sid,
+
       date: seg.date || null,
-      start_utc: seg.start_utc || seg.start_iso || null,
-      end_utc: seg.end_utc || seg.end_iso || null,
+
+      // ✅ local clock times (for stability + display)
+      start: startLocal || null,
+      end: endLocal || null,
+      overnight: overnight,
+
+      // ✅ UTC ISO timestamps (for PDF reference rows + evidence matching)
+      start_utc: startUtcIso,
+      end_utc: endUtcIso,
+
       break_mins: Number(seg.break_mins ?? seg.break_minutes ?? 0) || 0,
 
       ref_num: segRefNum,
