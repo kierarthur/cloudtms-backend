@@ -12642,7 +12642,6 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
     };
 
     // common patterns (new + legacy)
-    // Top-level possibilities
     tryAdd(obj.import_id);
     tryAdd(obj.evidence_import_id);
     tryAdd(obj.trigger_import_id);
@@ -12650,7 +12649,6 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
     tryAdd(obj.new_import_id);
     tryAdd(obj.base_import_id);
 
-    // Nested structures we use in hints
     if (obj.import_correction && typeof obj.import_correction === 'object') {
       tryAdd(obj.import_correction.import_id);
       tryAdd(obj.import_correction.evidence_import_id);
@@ -12893,7 +12891,7 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
     });
 
     // ─────────────────────────────────────────────────────────────
-    // 2) System evidence rows (QR + Imports + Electronic signatures + Generated PDF)
+    // 2) System evidence rows (QR + Imports + Authorisation + Electronic signatures + Generated PDF)
     // ─────────────────────────────────────────────────────────────
     const systemEvidence = [];
 
@@ -12977,25 +12975,60 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
       });
     }
 
-    // 2B) Electronic signatures system evidence (no new storage)
-    const hasSig =
-      !!(ts && (
-        (ts.authorised_at_server) ||
-        (ts.r2_nurse_key && String(ts.r2_nurse_key).trim()) ||
-        (ts.r2_auth_key  && String(ts.r2_auth_key).trim())
-      ));
+    // 2B) ✅ Split: Authorisation evidence vs Electronic signatures evidence
 
-    if (hasSig) {
-      const sigAt = ts?.authorised_at_server || null;
+    // 2B.1) Authorisation marker (truthful, even for MANUAL timesheets)
+    const authorisedAt = ts?.authorised_at_server || null;
+    if (authorisedAt) {
+      systemEvidence.push({
+        id: `SYS:AUTHORISATION:${currentTsId}`,
+        timesheet_id: currentTsId,
+        kind: 'AUTHORISATION',
+        display_name: 'Timesheet authorised (System)',
+        storage_key: null,
+        created_at: authorisedAt,
+        uploaded_at_utc: authorisedAt,
+        system: true,
+        can_delete: false,
+        preview_mode: 'AUTHORISATION',
+        is_primary: false,
+        meta_json: {
+          booking_id: ts?.booking_id || null,
+          version: (ts?.version != null ? Number(ts.version) : null),
 
+          authorised_at_server: authorisedAt,
+          auth_name: ts?.auth_name || null,
+          auth_job_title: ts?.auth_job_title || null,
+
+          sheet_scope: ts?.sheet_scope || null,
+          week_ending_date: ts?.week_ending_date || null,
+          reference_number: ts?.reference_number || null,
+
+          worked_start_iso: ts?.worked_start_iso || null,
+          worked_end_iso: ts?.worked_end_iso || null,
+          break_start_iso: ts?.break_start_iso || null,
+          break_end_iso: ts?.break_end_iso || null,
+          break_minutes: (ts?.break_minutes != null ? ts.break_minutes : null),
+
+          actual_schedule_json: (ts?.actual_schedule_json != null ? ts.actual_schedule_json : null)
+        }
+      });
+    }
+
+    // 2B.2) Electronic signatures (ONLY when there are actual signature artefacts)
+    const nurseKey = (ts?.r2_nurse_key && String(ts.r2_nurse_key).trim()) ? String(ts.r2_nurse_key).trim() : null;
+    const authKey  = (ts?.r2_auth_key  && String(ts.r2_auth_key).trim())  ? String(ts.r2_auth_key).trim()  : null;
+    const hasSignatureArtefacts = !!(nurseKey || authKey);
+
+    if (hasSignatureArtefacts) {
       systemEvidence.push({
         id: `SYS:ELECTRONIC_SIGNATURES:${currentTsId}`,
         timesheet_id: currentTsId,
         kind: 'ELECTRONIC_SIGNATURES',
-        display_name: 'Electronic submission evidence',
+        display_name: 'Electronic signatures',
         storage_key: null,
-        created_at: sigAt,
-        uploaded_at_utc: sigAt,
+        created_at: authorisedAt,
+        uploaded_at_utc: authorisedAt,
         system: true,
         can_delete: false,
         preview_mode: 'SIGNATURES',
@@ -13004,12 +13037,12 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
           booking_id: ts?.booking_id || null,
           version: (ts?.version != null ? Number(ts.version) : null),
 
-          authorised_at_server: ts?.authorised_at_server || null,
+          authorised_at_server: authorisedAt,
           auth_name: ts?.auth_name || null,
           auth_job_title: ts?.auth_job_title || null,
 
-          r2_nurse_key: (ts?.r2_nurse_key && String(ts.r2_nurse_key).trim()) ? String(ts.r2_nurse_key).trim() : null,
-          r2_auth_key:  (ts?.r2_auth_key  && String(ts.r2_auth_key).trim())  ? String(ts.r2_auth_key).trim()  : null,
+          r2_nurse_key: nurseKey,
+          r2_auth_key: authKey,
 
           sheet_scope: ts?.sheet_scope || null,
           week_ending_date: ts?.week_ending_date || null,
