@@ -725,14 +725,14 @@ with_issues AS (
         AND COALESCE(ar.client_hr_validation_required, false) = true
         AND COALESCE(ar.client_no_timesheet_required, false) = false
         AND COALESCE(ar.total_hours, 0::numeric) > 0::numeric
-        AND ar.validation_status IS NULL
+        AND (ar.validation_status IS NULL OR ar.validation_status = 'PENDING'::validation_status_enum)
         THEN ARRAY['Awaiting validation'::text]
       WHEN ar.timesheet_id IS NOT NULL
         AND COALESCE(ar.client_hr_validation_required, false) = true
         AND COALESCE(ar.client_no_timesheet_required, false) = false
         AND COALESCE(ar.total_hours, 0::numeric) > 0::numeric
         AND ar.validation_status IS NOT NULL
-        AND (ar.validation_status <> ALL (ARRAY['VALIDATION_OK'::validation_status_enum, 'OVERRIDDEN'::validation_status_enum]))
+        AND (ar.validation_status <> ALL (ARRAY['VALIDATION_OK'::validation_status_enum, 'OVERRIDDEN'::validation_status_enum, 'PENDING'::validation_status_enum]))
         THEN ARRAY['Validation failed'::text]
       ELSE ARRAY[]::text[]
     END ||
@@ -1285,6 +1285,8 @@ LEFT JOIN LATERAL (
   ORDER BY tf.created_at DESC
   LIMIT 1
 ) seg ON true;
+
+
 
 -- ============================================================
 -- UPDATE VIEW: public.v_timesheets_summary
