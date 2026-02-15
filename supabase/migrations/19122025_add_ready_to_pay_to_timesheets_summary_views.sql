@@ -67,7 +67,6 @@ CREATE INDEX IF NOT EXISTS idx_timesheet_evidence_timesheet_kind
 -- ============================================================
 
 
-
 CREATE OR REPLACE VIEW public.v_timesheets_summary_base AS
 WITH latest_tsfin AS (
   SELECT DISTINCT ON (tf.timesheet_id)
@@ -803,22 +802,6 @@ SELECT
     AND COALESCE(has_rate_issue, false) = false
     AND COALESCE(has_pay_channel_issue, false) = false
     AND (
-      (
-        UPPER(COALESCE(cand_pay_method, '')) = 'PAYE'
-        AND cand_sort_code IS NOT NULL AND length(btrim(cand_sort_code)) > 0
-        AND cand_account_number IS NOT NULL AND length(btrim(cand_account_number)) > 0
-        AND cand_account_holder IS NOT NULL AND length(btrim(cand_account_holder)) > 0
-      )
-      OR
-      (
-        UPPER(COALESCE(cand_pay_method, '')) = 'UMBRELLA'
-        AND COALESCE(umb_enabled, false) = true
-        AND umb_name IS NOT NULL AND length(btrim(umb_name)) > 0
-        AND umb_sort_code IS NOT NULL AND length(btrim(umb_sort_code)) > 0
-        AND umb_account_number IS NOT NULL AND length(btrim(umb_account_number)) > 0
-      )
-    )
-    AND (
       COALESCE(require_reference_to_pay, false) = false
       OR COALESCE(total_hours, 0::numeric) <= 0::numeric
       OR (
@@ -1173,28 +1156,61 @@ LEFT JOIN LATERAL (
 LEFT JOIN LATERAL (
   SELECT
     (
-      CASE
-        WHEN wi.timesheet_id IS NOT NULL
-          AND (
-            pc.precheck_status = 'BLOCK_NO_REFERENCE'
-            OR (COALESCE(wi.issue_codes, ARRAY[]::text[]) @> ARRAY['Reference'::text])
-          )
-          AND COALESCE(pc.issue_missing_reference, false) = true
-          THEN ARRAY['Refs (Invoice and Issue Blocked)'::text]
-        WHEN wi.timesheet_id IS NOT NULL
-          AND (
-            pc.precheck_status = 'BLOCK_NO_REFERENCE'
-            OR (COALESCE(wi.issue_codes, ARRAY[]::text[]) @> ARRAY['Reference'::text])
-          )
-          THEN ARRAY['Refs (Invoicing Blocked)'::text]
-        WHEN wi.timesheet_id IS NOT NULL
-          AND COALESCE(pc.issue_missing_reference, false) = true
-          THEN ARRAY['Refs (Issue Invoice Blocked)'::text]
-        ELSE ARRAY[]::text[]
-      END
+      -- ------------------------------------------------------------------
+      -- Invoice reference blockers (UI-friendly)
+      --   - If can't invoice, do NOT show "send invoice blocked"
+      --   - Suppress ref blockers when HR validation is required and NOT OK
+      -- ------------------------------------------------------------------
+      (
+        CASE
+          WHEN wi.timesheet_id IS NOT NULL
+            AND (
+              wi.timesheet_id IS NOT NULL
+              AND COALESCE(wi.client_hr_validation_required, false) = true
+              AND COALESCE(wi.client_no_timesheet_required, false) = false
+              AND COALESCE(wi.total_hours, 0::numeric) > 0::numeric
+            )
+            AND NOT (
+              wi.validation_status = 'VALIDATION_OK'::validation_status_enum
+              OR wi.validation_status = 'OVERRIDDEN'::validation_status_enum
+            )
+          THEN ARRAY[]::text[]
+          WHEN wi.timesheet_id IS NOT NULL
+            AND pc.precheck_status = 'BLOCK_NO_REFERENCE'
+          THEN ARRAY['Refs - Can''t invoice'::text]
+          WHEN wi.timesheet_id IS NOT NULL
+            AND COALESCE(pc.issue_missing_reference, false) = true
+          THEN ARRAY['Refs - Send Invoice will be blocked'::text]
+          ELSE ARRAY[]::text[]
+        END
+      )
       ||
-      array_remove(COALESCE(wi.issue_codes, ARRAY[]::text[]), 'Reference'::text)
+      -- ------------------------------------------------------------------
+      -- Timesheet PDF/evidence invoice blocker
+      -- Replace legacy "Timesheet evidence" label with "Timesheet evidence missing"
+      -- when invoicing is blocked by precheck BLOCK_NO_PDF
+      -- ------------------------------------------------------------------
+      (
+        CASE
+          WHEN wi.timesheet_id IS NOT NULL
+            AND pc.precheck_status = 'BLOCK_NO_PDF'
+          THEN ARRAY['Timesheet evidence missing'::text]
+          ELSE ARRAY[]::text[]
+        END
+      )
       ||
+      -- ------------------------------------------------------------------
+      -- Keep all other issues, but remove legacy "Reference" and "Timesheet evidence"
+      -- (we replace them above with invoice-aligned labels)
+      -- ------------------------------------------------------------------
+      array_remove(
+        array_remove(COALESCE(wi.issue_codes, ARRAY[]::text[]), 'Reference'::text),
+        'Timesheet evidence'::text
+      )
+      ||
+      -- ------------------------------------------------------------------
+      -- Refs/PDF baseline invalid (unchanged)
+      -- ------------------------------------------------------------------
       (
         CASE
           WHEN wi.timesheet_id IS NOT NULL
