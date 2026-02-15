@@ -420,8 +420,6 @@ begin
 
   -- ------------------------------------------------------------
   -- A) SEGMENTS mode (NHSP/HR/etc): derive SEGMENT rows from TSFIN segments
-  -- (timesheet-level, not invoice-scoped)
-  -- Mirrors invoice_reference_rows SEGMENTS extraction (but without invoice lock filtering).
   -- ------------------------------------------------------------
   if v_tf_mode = 'SEGMENTS'
      and jsonb_typeof(v_segments_json) = 'array'
@@ -443,7 +441,6 @@ begin
       start_utc := nullif(btrim(coalesce(r_seg.seg->>'start_utc','')), '');
       end_utc := nullif(btrim(coalesce(r_seg.seg->>'end_utc','')), '');
 
-      -- Fallback: derive day_ymd from start_utc (Europe/London) if missing
       if day_ymd is null and start_utc is not null then
         begin
           day_ymd := (((start_utc::timestamptz) at time zone 'Europe/London')::date)::text;
@@ -455,7 +452,6 @@ begin
       v_seg_id_local := nullif(btrim(coalesce(r_seg.seg->>'segment_id','')), '');
       segment_id := v_seg_id_local;
 
-      -- Fallback: if segment_id missing, produce stable identifier from start/end (as in invoice_reference_rows)
       if segment_id is null and start_utc is not null and end_utc is not null then
         segment_id := 'SE:' || start_utc || '|' || end_utc;
       end if;
@@ -473,7 +469,6 @@ begin
       return next;
     end loop;
 
-    -- If we emitted at least one segment row, we are done.
     if v_emitted > 0 then
       return;
     end if;
@@ -481,9 +476,6 @@ begin
 
   -- ------------------------------------------------------------
   -- B) WEEKLY schedule-based rows from timesheets.actual_schedule_json
-  -- Mirrors the segment row identity pattern used in invoice_reference_rows:
-  --   - segment_id: use seg.segment_id if present, else ts:<timesheet_id>:<idx>
-  --   - uses stored start_utc/end_utc if present
   -- ------------------------------------------------------------
   if r_ts.ts_sheet_scope::text = 'WEEKLY'
      and jsonb_typeof(v_sched_json) = 'array'
@@ -502,7 +494,6 @@ begin
       start_utc := nullif(btrim(coalesce(r_seg.seg->>'start_utc','')), '');
       end_utc   := nullif(btrim(coalesce(r_seg.seg->>'end_utc','')), '');
 
-      -- Require a usable time window (either local start/end OR utc start/end)
       if (v_start_local is null or v_end_local is null)
          and (start_utc is null or end_utc is null)
       then
@@ -516,7 +507,6 @@ begin
       submission_mode := r_ts.ts_submission_mode::text;
       ref_target := 'SEGMENT';
 
-      -- Prefer explicit segment_id from the object; else stable index-based id (as in invoice_reference_rows)
       segment_id := nullif(btrim(coalesce(r_seg.seg->>'segment_id','')), '');
       if segment_id is null then
         segment_id := ('ts:' || r_ts.ts_id::text || ':' || v_idx::text);
@@ -524,7 +514,6 @@ begin
 
       day_ymd := nullif(btrim(coalesce(r_seg.seg->>'date','')), '');
 
-      -- Fallback: derive day_ymd from start_utc (Europe/London) if missing
       if day_ymd is null and start_utc is not null then
         begin
           day_ymd := (((start_utc::timestamptz) at time zone 'Europe/London')::date)::text;
@@ -533,7 +522,6 @@ begin
         end;
       end if;
 
-      -- Booking Ref: prefer ref_num, else booking_ref
       current_reference :=
         nullif(btrim(coalesce(r_seg.seg->>'ref_num','')), '');
       if current_reference is null then
@@ -551,7 +539,6 @@ begin
       return next;
     end loop;
 
-    -- If we emitted at least one schedule row, we are done.
     if v_emitted > 0 then
       return;
     end if;
@@ -559,8 +546,6 @@ begin
 
   -- ------------------------------------------------------------
   -- C) DAILY (or any fallback): single timesheet-level reference row
-  -- Mirrors invoice_reference_rows fallback branch exactly.
-  -- ✅ FIX: start_utc/end_utc use JSON timestamptz rendering (stable ISO) instead of timestamptz::text
   -- ------------------------------------------------------------
   timesheet_id := r_ts.ts_id;
   sheet_scope := r_ts.ts_sheet_scope::text;
@@ -602,14 +587,6 @@ $$;
 
 -- ============================================================
 -- CloudTMS: public.timesheet_pdf_reference_sig(p_timesheet_id)
--- Canonical sha256 signature for current reference rows.
---
--- Signature algorithm:
---   raw_sig = string_agg(row_key || '=' || coalesce(current_reference,''), '||' ORDER BY row_key)
---   sig     = encode(extensions.digest(raw_sig,'sha256'),'hex')
---
--- Depends on: public.timesheet_pdf_reference_rows(uuid)
---             (must expose columns: row_key, current_reference)
 -- ============================================================
 create or replace function public.timesheet_pdf_reference_sig(
   p_timesheet_id uuid
@@ -651,16 +628,7 @@ end;
 $$;
 
 -- ============================================================
--- CloudTMS: trigger function
--- Enqueue FORCE_REGEN when ELECTRONIC generated-PDF refs baseline exists
--- and the stored generated_pdf_refs_sig is missing or mismatched.
---
--- IMPORTANT: Do NOT enqueue for routes that do not require a timesheet PDF
--- (e.g. NHSP) or when client/contract is flagged no_timesheet_required.
---
--- Note: ts_pdfs_outbox has no "status"; we reset backoff by:
---  - attempt_count=0, next_attempt_at=null, last_error=null
--- and force render with force_regen=true.
+-- Trigger: timesheets → enqueue regen when refs truth changes
 -- ============================================================
 
 DROP TRIGGER IF EXISTS trg_timesheets_enqueue_pdf_regen_on_refs_change ON public.timesheets;
@@ -693,13 +661,14 @@ WHEN (
 )
 EXECUTE FUNCTION public.trg_timesheets_enqueue_pdf_regen_on_refs_change();
 
-
-
-
-
--- Replace the existing combined trigger with two precise triggers
+-- ============================================================
+-- Triggers: TSFIN → enqueue regen when invoice_breakdown_json changes
+-- (FIX: drop both AI/AU triggers too, otherwise reruns fail)
+-- ============================================================
 
 DROP TRIGGER IF EXISTS trg_tsfin_enqueue_tspdf_on_refs_change ON public.timesheets_financials;
+DROP TRIGGER IF EXISTS trg_tsfin_enqueue_tspdf_on_refs_change_ai ON public.timesheets_financials;
+DROP TRIGGER IF EXISTS trg_tsfin_enqueue_tspdf_on_refs_change_au ON public.timesheets_financials;
 
 -- INSERT: new current TSFIN rows
 CREATE TRIGGER trg_tsfin_enqueue_tspdf_on_refs_change_ai
@@ -718,24 +687,8 @@ WHEN (
 )
 EXECUTE FUNCTION public.trg_tsfin_enqueue_tspdf_on_refs_change();
 
-
-
 -- ============================================================
 -- (26) NEW: public.timesheet_doc_flags_batch(p_timesheet_ids uuid[])
--- Batch doc/refs flags for QR reissue + electronic regen decisions.
---
--- Returns one row per CURRENT timesheet in p_timesheet_ids.
---
--- Rules:
---  - current_refs_sig is canonical: public.timesheet_pdf_reference_sig(timesheet_id)
---  - issued-but-unsigned:
---      qr_status='PENDING' AND qr_token present AND qr_generated_at present
---      AND no signed markers (qr_scanned_at IS NULL AND qr_signed_hash blank/NULL)
---  - qr_refs_changed:
---      issued-but-unsigned AND (qr_sent_refs_sig is NULL/blank OR qr_sent_refs_sig <> current_refs_sig)
---  - electronic_refs_changed:
---      submission_mode='ELECTRONIC' AND generated_pdf_at_utc present
---      AND (generated_pdf_refs_sig is NULL/blank OR generated_pdf_refs_sig <> current_refs_sig)
 -- ============================================================
 
 create or replace function public.timesheet_doc_flags_batch(
@@ -879,7 +832,6 @@ select
   nullif(btrim(coalesce(t3.generated_pdf_refs_sig, '')), '') as generated_pdf_refs_sig,
 
   (
-    -- qr_refs_changed (issued-but-unsigned + sig differs OR missing baseline)
     upper(coalesce(t3.qr_status::text, '')) = 'PENDING'
     and nullif(btrim(coalesce(t3.qr_token, '')), '') is not null
     and t3.qr_generated_at is not null
@@ -892,7 +844,6 @@ select
   ) as qr_refs_changed,
 
   (
-    -- electronic_refs_changed (baseline exists + sig differs OR missing baseline sig)
     upper(coalesce(t3.submission_mode::text, '')) = 'ELECTRONIC'
     and t3.generated_pdf_at_utc is not null
     and (
@@ -914,7 +865,6 @@ $$;
 
 -- ============================================================
 -- (27) NEW: public.tspdf_enqueue_one / public.tspdf_enqueue_many
--- Clean enqueue primitives for TS PDF outbox.
 -- ============================================================
 
 create or replace function public.tspdf_enqueue_one(
@@ -938,16 +888,12 @@ begin
     return 0;
   end if;
 
-  -- Resolve reason:
-  -- - Force regen always uses FORCE_REGEN (single-row semantics)
-  -- - Else caller can provide explicit reason, otherwise READY_FOR_INVOICE
   if coalesce(p_force_regen, false) is true then
     v_reason := 'FORCE_REGEN'::public.ts_pdf_reason_enum;
   else
     v_reason := coalesce(p_reason, 'READY_FOR_INVOICE'::public.ts_pdf_reason_enum);
   end if;
 
-  -- FORCE: ensure we don't leave redundant rows behind for this timesheet
   if coalesce(p_force_regen, false) is true then
     delete from public.ts_pdfs_outbox o
     where o.timesheet_id = p_timesheet_id;
@@ -983,9 +929,6 @@ begin
     return 1;
   end if;
 
-  -- NON-FORCE:
-  -- If ANY job exists for this timesheet (READY and/or FORCE),
-  -- bump/reset them to run asap and clear errors (idempotent).
   update public.ts_pdfs_outbox o
      set attempt_count    = 0,
          next_attempt_at  = null,
@@ -1000,7 +943,6 @@ begin
     return v_updated;
   end if;
 
-  -- No job exists yet: create one row (reason defaults to READY_FOR_INVOICE unless provided)
   insert into public.ts_pdfs_outbox(
     timesheet_id,
     reason,
@@ -1083,7 +1025,6 @@ DROP TRIGGER IF EXISTS trg_timesheets_invalidate_prevalidation_on_change ON publ
 
 CREATE TRIGGER trg_timesheets_invalidate_prevalidation_on_change
 AFTER UPDATE OF
-  -- DAILY truth
   worked_start_iso,
   worked_end_iso,
   break_start_iso,
@@ -1091,8 +1032,6 @@ AFTER UPDATE OF
   break_minutes,
   reference_number,
   day_references_json,
-
-  -- WEEKLY truth
   actual_schedule_json,
   additional_units_week,
   additional_units_per_day
