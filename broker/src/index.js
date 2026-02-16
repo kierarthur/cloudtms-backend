@@ -22524,7 +22524,6 @@ async function handleImportHrRotaParse(env, req) {
   }));
 }
 
-
 async function parseHealthRosterWorkbookIntoHrRows(
   env,
   { import_id, file_key, client_id, tz = 'Europe/London' }
@@ -22759,6 +22758,47 @@ async function parseHealthRosterWorkbookIntoHrRows(
     return null;
   }
 
+  function parseActualHoursToNumber(v) {
+    if (v === '' || v == null) return null;
+
+    if (typeof v === 'number') {
+      const n = v;
+      if (!Number.isFinite(n)) return null;
+      // Excel often stores "11:30" as fraction-of-day (0.4791666...)
+      if (n > 0 && n < 1) return n * 24;
+      return n;
+    }
+
+    const s = String(v).trim();
+    if (!s) return null;
+
+    const m = s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if (m) {
+      const hh = Number(m[1]);
+      const mm = Number(m[2]);
+      if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+      return hh + (mm / 60);
+    }
+
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function computeShiftMinutes(startHhmm, endHhmm) {
+    if (!startHhmm || !endHhmm) return null;
+    const m1 = String(startHhmm).match(/^(\d{1,2}):(\d{2})$/);
+    const m2 = String(endHhmm).match(/^(\d{1,2}):(\d{2})$/);
+    if (!m1 || !m2) return null;
+    const sh = Number(m1[1]), sm = Number(m1[2]);
+    const eh = Number(m2[1]), em = Number(m2[2]);
+    if (!Number.isFinite(sh) || !Number.isFinite(sm) || !Number.isFinite(eh) || !Number.isFinite(em)) return null;
+    const startM = sh * 60 + sm;
+    const endM0  = eh * 60 + em;
+    let diff = endM0 - startM;
+    if (diff <= 0) diff += 24 * 60;
+    return diff;
+  }
+
   function localToUtcIso(ymd, hhmm, tzName, addDays = 0) {
     if (!ymd || !hhmm) return null;
     const [Y, M, D] = ymd.split('-').map(n => Number(n));
@@ -22854,8 +22894,11 @@ async function parseHealthRosterWorkbookIntoHrRows(
       if (idx >= 0) return idx;
     }
 
-    const idx2 = (hdrRow || []).findIndex(cell => fallbackMatcher(String(cell || '').toLowerCase()));
-    return idx2 >= 0 ? idx2 : fallbackIdx;
+    if (typeof fallbackMatcher === 'function') {
+      const idx2 = (hdrRow || []).findIndex(cell => fallbackMatcher(String(cell || '').toLowerCase()));
+      return idx2 >= 0 ? idx2 : fallbackIdx;
+    }
+    return fallbackIdx;
   };
 
   const findColByAliasesFn =
@@ -22863,24 +22906,60 @@ async function parseHealthRosterWorkbookIntoHrRows(
       ? findColByAliases
       : findColByAliasesLocal;
 
-  // Load grade column aliases (once) depending on branch
-  let gradeAliases = [];
-  try {
-    if (typeof getImportColumnAliasesCached === 'function') {
-      const sys = (importSourceSystem === 'HEALTHROSTER_DAILY') ? 'HR_DAILY' : 'HR_WEEKLY';
-      gradeAliases = await getImportColumnAliasesCached(env, sys, 'GRADE');
+  // ─────────────────────────────────────────────────────────────
+  // NEW: Load ALL relevant column aliases once (alias-first, fallback to current matchers)
+  //   - Daily must NEVER use From/To (even if user mistakenly adds them)
+  // ─────────────────────────────────────────────────────────────
+  const aliasSys = (importSourceSystem === 'HEALTHROSTER_DAILY') ? 'HR_DAILY' : 'HR_WEEKLY';
+
+  const aliasKeys = [
+    'REQUEST_ID',
+    'DATE',
+    'STAFF',
+    'UNIT',
+    'GRADE',
+    'START',
+    'END',
+    'BREAK',
+    'ACTUAL_HOURS',
+    'BOOKED_HOURS',
+    'RATE',
+    'BOOKED_BREAK',
+    'ACTUAL_BREAK',
+    'FINALISED_DATE',
+    'SUBMITTED_DATE',
+    'TIMESHEET_REASON',
+    'SKILL',
+    'AGENCY'
+  ];
+
+  const aliasesByKey = {};
+  for (const k of aliasKeys) aliasesByKey[k] = [];
+
+  if (typeof getImportColumnAliasesCached === 'function') {
+    for (const k of aliasKeys) {
+      try {
+        const arr = await getImportColumnAliasesCached(env, aliasSys, k);
+        aliasesByKey[k] = Array.isArray(arr) ? arr : [];
+      } catch {
+        aliasesByKey[k] = [];
+      }
     }
-  } catch (e) {
-    if (LOG) {
-      console.warn('[HR_PARSE]', JSON.stringify({
-        stage: 'grade_alias_load_failed',
-        import_id,
-        source_system: importSourceSystem,
-        err: e?.message || String(e)
-      }));
-    }
-    gradeAliases = [];
   }
+
+  const scrubDailyStartEndAliases = (arr, mode) => {
+    const a = Array.isArray(arr) ? arr : [];
+    if (mode !== 'DAILY') return a;
+
+    // Never allow planned From/To to influence DAILY parsing
+    return a.filter(x => {
+      const s = String(x || '').trim().toLowerCase();
+      if (!s) return false;
+      if (s.includes('from')) return false;
+      if (s === 'to' || s.includes(' to ')) return false;
+      return true;
+    });
+  };
 
   let rows_total   = 0;
   let rows_parsed  = 0;
@@ -22892,18 +22971,86 @@ async function parseHealthRosterWorkbookIntoHrRows(
   // DAILY ROTA
   // ─────────────────────────────────────────────────────────────
   if (importSourceSystem === 'HEALTHROSTER_DAILY') {
-    const reqIdIdx       = findCol(-1, h => h.includes('request') && h.includes('id'));
-    const dateIdx        = findCol(-1, h => h.includes('date'));
-    const staffIdx       = findCol(-1, h => h.includes('staff') || h.includes('worker') || h.includes('name'));
-    const unitIdx        = findCol(-1, h => h.includes('unit') || h.includes('ward') || h.includes('location'));
+    const reqIdIdx = findColByAliasesFn(
+      headerRow,
+      aliasesByKey.REQUEST_ID,
+      -1,
+      h => (h.includes('request') && h.includes('id')) || (h === 'request id') || (h === 'requestid') || (h === 'req id')
+    );
 
-    const gradeIdx       = findColByAliasesFn(headerRow, gradeAliases, -1, h => h.includes('grade'));
+    const dateIdx = findColByAliasesFn(
+      headerRow,
+      aliasesByKey.DATE,
+      -1,
+      h => h.includes('date')
+    );
 
-    const startIdx       = findCol(-1, h => h.includes('start') || h.includes('from'));
-    const endIdx         = findCol(-1, h => h.includes('end') || h.includes('finish') || h.includes('to'));
-    const actualHoursIdx = findCol(-1, h => h.includes('actual') && h.includes('hour'));
-    const bookedHoursIdx = findCol(-1, h => h.includes('booked') && h.includes('hour'));
-    const rateIdx        = findCol(-1, h => h === 'rate' || h.includes('rate'));
+    const staffIdx = findColByAliasesFn(
+      headerRow,
+      aliasesByKey.STAFF,
+      -1,
+      h => h.includes('staff') || h.includes('worker') || (h === 'name') || h.includes('staff name')
+    );
+
+    const unitIdx = findColByAliasesFn(
+      headerRow,
+      aliasesByKey.UNIT,
+      -1,
+      h => h.includes('unit') || h.includes('ward') || h.includes('location') || h.includes('dept') || h.includes('department')
+    );
+
+    const gradeIdx = findColByAliasesFn(
+      headerRow,
+      aliasesByKey.GRADE,
+      -1,
+      h => h.includes('grade') || (h.includes('request') && h.includes('grade')) || h.includes('band')
+    );
+
+    // DAILY: aliases scrubbed to NEVER match From/To
+    const dailyStartAliases = scrubDailyStartEndAliases(aliasesByKey.START, 'DAILY');
+    const dailyEndAliases   = scrubDailyStartEndAliases(aliasesByKey.END, 'DAILY');
+
+    const startIdx = findColByAliasesFn(
+      headerRow,
+      dailyStartAliases,
+      -1,
+      h => h.includes('start') // DO NOT match "from"
+    );
+
+    const endIdx = findColByAliasesFn(
+      headerRow,
+      dailyEndAliases,
+      -1,
+      h => h.includes('end') || h.includes('finish') // DO NOT match "to"
+    );
+
+    const breakIdx = findColByAliasesFn(
+      headerRow,
+      aliasesByKey.BREAK,
+      -1,
+      h => h.includes('break')
+    );
+
+    const actualHoursIdx = findColByAliasesFn(
+      headerRow,
+      aliasesByKey.ACTUAL_HOURS,
+      -1,
+      h => (h.includes('actual') && h.includes('hour')) || (h === 'hours') || (h.includes('hours') && h.includes('worked'))
+    );
+
+    const bookedHoursIdx = findColByAliasesFn(
+      headerRow,
+      aliasesByKey.BOOKED_HOURS,
+      -1,
+      h => h.includes('booked') && h.includes('hour')
+    );
+
+    const rateIdx = findColByAliasesFn(
+      headerRow,
+      aliasesByKey.RATE,
+      -1,
+      h => h === 'rate' || h.includes('rate')
+    );
 
     if (LOG) {
       console.log('[HR_PARSE_DAILY_COLUMNS]', JSON.stringify({
@@ -22915,9 +23062,11 @@ async function parseHealthRosterWorkbookIntoHrRows(
         gradeIdx,
         startIdx,
         endIdx,
+        breakIdx,
         actualHoursIdx,
         bookedHoursIdx,
-        rateIdx
+        rateIdx,
+        aliasSys
       }));
     }
 
@@ -22935,7 +23084,10 @@ async function parseHealthRosterWorkbookIntoHrRows(
 
       const rawStart  = startIdx       >= 0 ? row[startIdx]       : null;
       const rawEnd    = endIdx         >= 0 ? row[endIdx]         : null;
+
+      const rawBreak  = breakIdx       >= 0 ? row[breakIdx]       : null;
       const rawActual = actualHoursIdx >= 0 ? row[actualHoursIdx] : null;
+
       const rawBooked = bookedHoursIdx >= 0 ? row[bookedHoursIdx] : null;
       const rawRate   = rateIdx        >= 0 ? row[rateIdx]        : null;
 
@@ -22955,14 +23107,29 @@ async function parseHealthRosterWorkbookIntoHrRows(
         continue;
       }
 
+      // Parse hours + break in a canonical way (so downstream can remain unchanged)
+      const actualHoursNum = parseActualHoursToNumber(rawActual);
       let hoursWorked = null;
-      if (typeof rawActual === 'number') {
-        hoursWorked = rawActual;
+      if (actualHoursNum != null) {
+        hoursWorked = actualHoursNum;
       } else if (rawActual !== '' && rawActual != null) {
         const s = String(rawActual).trim();
-        const n = Number(s);
-        if (Number.isFinite(n)) hoursWorked = n;
-        else hoursWorked = s;
+        if (s) hoursWorked = s;
+      }
+
+      const breakFromFile = excelBreakToMinutes(rawBreak);
+
+      let breakMinutes = breakFromFile;
+      if (breakMinutes == null) {
+        // Derive break only if we have numeric actual hours
+        const shiftMins = computeShiftMinutes(startHhmm, endHhmm);
+        if (shiftMins != null && actualHoursNum != null) {
+          const paidMins = Math.round(actualHoursNum * 60);
+          const b = shiftMins - paidMins;
+          breakMinutes = Math.max(0, b);
+        } else {
+          breakMinutes = null;
+        }
       }
 
       const staffNorm = staffRaw.toLowerCase();
@@ -22972,7 +23139,7 @@ async function parseHealthRosterWorkbookIntoHrRows(
         dateYmd,
         staffNorm,
         unitNorm,
-        clientIdNorm,                 // ✅ always present
+        clientIdNorm,
         requestId
       ];
       const external_row_key = normalizeKeyParts(keyParts);
@@ -22994,7 +23161,13 @@ async function parseHealthRosterWorkbookIntoHrRows(
       fullRow.staff_name        = staffRaw;
       fullRow.unit              = unitRaw;
       fullRow.grade_raw         = gradeRaw;
-      fullRow.actual_hours      = hoursWorked;
+
+      // Canonical hours/break fields (so downstream does not need to derive)
+      fullRow.actual_hours      = (typeof hoursWorked === 'number') ? hoursWorked : (actualHoursNum != null ? actualHoursNum : null);
+      fullRow.hours_worked      = (typeof hoursWorked === 'number') ? hoursWorked : null;
+      fullRow.break_minutes     = (breakMinutes == null ? null : breakMinutes);
+      fullRow.break_mins        = (breakMinutes == null ? null : breakMinutes);
+
       fullRow.booked_hours      = rawBooked;
       fullRow.rate              = rawRate;
       fullRow.raw_columns       = raw_columns;
@@ -23009,14 +23182,14 @@ async function parseHealthRosterWorkbookIntoHrRows(
         end_time_local: endHhmm,
         staff_norm: staffNorm || '',
         role_type: roleType,
-        unit_raw: unitRaw || null,            // ✅ for candidate mapping consistency
-        unit_hint: null,                      // ✅ stable key always present
+        unit_raw: unitRaw || null,
+        unit_hint: null,
         agency_raw: 'HEALTHROSTER_DAILY',
         external_row_key,
         payload_json: fullRow,
         staff_raw: staffRaw || null,
-        assignment_grade_norm: gradeNorm,     // ✅ incoming_grade_norm source
-        hours_worked: typeof hoursWorked === 'number' ? hoursWorked : null
+        assignment_grade_norm: gradeNorm,
+        hours_worked: (typeof hoursWorked === 'number') ? hoursWorked : null
       });
 
       rows_parsed++;
@@ -23027,21 +23200,83 @@ async function parseHealthRosterWorkbookIntoHrRows(
     // WEEKLY HEALTHROSTER (autoprocess)
     // ─────────────────────────────────────────────────────────────
 
-    const requestColIdx   = findCol(0,  h => h.includes('request'));
-    const staffColIdx     = findCol(1,  h => h.includes('staff') || h.includes('name'));
-    const dateColIdx      = findCol(4,  h => h.includes('date'));
-    const wardColIdx      = findCol(5,  h => h.includes('unit') || h.includes('ward') || h.includes('location'));
+    const requestColIdx = findColByAliasesFn(
+      headerRow,
+      aliasesByKey.REQUEST_ID,
+      0,
+      h => h.includes('request')
+    );
 
-    const gradeColIdx     = findColByAliasesFn(headerRow, gradeAliases, -1, h => h.includes('grade'));
+    const staffColIdx = findColByAliasesFn(
+      headerRow,
+      aliasesByKey.STAFF,
+      1,
+      h => h.includes('staff') || h.includes('name')
+    );
 
-    const startColIdx     = findCol(10, h => h.includes('start'));
-    const endColIdx       = findCol(11, h => h.includes('end') || h.includes('finish'));
+    const dateColIdx = findColByAliasesFn(
+      headerRow,
+      aliasesByKey.DATE,
+      4,
+      h => h.includes('date')
+    );
 
-    const bookedBreakColIdx = findCol(9,  h => h === 'break' || (h.includes('break') && !h.includes('actual')));
-    const actualBreakColIdx = findCol(12, h => h.includes('actual') && h.includes('break'));
+    const wardColIdx = findColByAliasesFn(
+      headerRow,
+      aliasesByKey.UNIT,
+      5,
+      h => h.includes('unit') || h.includes('ward') || h.includes('location')
+    );
 
-    const hoursColIdx     = findCol(13, h => h.includes('hours') && h.includes('actual'));
-    const finalisedColIdx = findCol(15, h => h.includes('finalis') || h.includes('finaliz'));
+    const gradeColIdx = findColByAliasesFn(
+      headerRow,
+      aliasesByKey.GRADE,
+      -1,
+      h => h.includes('grade') || (h.includes('request') && h.includes('grade')) || h.includes('band')
+    );
+
+    // Weekly keeps historical behaviour (allows From/To if present and configured)
+    const startColIdx = findColByAliasesFn(
+      headerRow,
+      aliasesByKey.START,
+      10,
+      h => h.includes('start') || h.includes('from')
+    );
+
+    const endColIdx = findColByAliasesFn(
+      headerRow,
+      aliasesByKey.END,
+      11,
+      h => h.includes('end') || h.includes('finish') || h.includes('to')
+    );
+
+    const bookedBreakColIdx = findColByAliasesFn(
+      headerRow,
+      aliasesByKey.BOOKED_BREAK.length ? aliasesByKey.BOOKED_BREAK : aliasesByKey.BREAK,
+      9,
+      h => h === 'break' || (h.includes('break') && !h.includes('actual'))
+    );
+
+    const actualBreakColIdx = findColByAliasesFn(
+      headerRow,
+      aliasesByKey.ACTUAL_BREAK,
+      12,
+      h => h.includes('actual') && h.includes('break')
+    );
+
+    const hoursColIdx = findColByAliasesFn(
+      headerRow,
+      aliasesByKey.ACTUAL_HOURS,
+      13,
+      h => (h.includes('hours') && h.includes('actual')) || (h.includes('actual') && h.includes('hour'))
+    );
+
+    const finalisedColIdx = findColByAliasesFn(
+      headerRow,
+      aliasesByKey.FINALISED_DATE,
+      15,
+      h => h.includes('finalis') || h.includes('finaliz')
+    );
 
     if (LOG) {
       console.log('[HR_PARSE_WEEKLY_COLUMNS]', JSON.stringify({
@@ -23056,7 +23291,8 @@ async function parseHealthRosterWorkbookIntoHrRows(
         bookedBreakColIdx,
         actualBreakColIdx,
         hoursColIdx,
-        finalisedColIdx
+        finalisedColIdx,
+        aliasSys
       }));
     }
 
@@ -23065,15 +23301,15 @@ async function parseHealthRosterWorkbookIntoHrRows(
       if (!row || row.length === 0) continue;
       rows_total++;
 
-      const rawRequest   = row[requestColIdx];
-      const rawName      = row[staffColIdx];
-      const rawDate      = row[dateColIdx];
-      const rawWard      = row[wardColIdx];
+      const rawRequest   = requestColIdx >= 0 ? row[requestColIdx] : null;
+      const rawName      = staffColIdx   >= 0 ? row[staffColIdx]   : null;
+      const rawDate      = dateColIdx    >= 0 ? row[dateColIdx]    : null;
+      const rawWard      = wardColIdx    >= 0 ? row[wardColIdx]    : null;
 
       const rawGrade     = gradeColIdx >= 0 ? row[gradeColIdx] : null;
 
-      const rawStart     = row[startColIdx];
-      const rawEnd       = row[endColIdx];
+      const rawStart     = startColIdx >= 0 ? row[startColIdx] : null;
+      const rawEnd       = endColIdx   >= 0 ? row[endColIdx]   : null;
 
       const rawBookedBreak = bookedBreakColIdx >= 0 ? row[bookedBreakColIdx] : null;
       const rawActualBreak = actualBreakColIdx >= 0 ? row[actualBreakColIdx] : null;
@@ -23108,8 +23344,8 @@ async function parseHealthRosterWorkbookIntoHrRows(
       const [sh, sm] = startHhmm.split(':').map(Number);
       const [eh, em] = endHhmm.split(':').map(Number);
       const startMins = sh * 60 + sm;
-      const endMins   = eh * 60 + em;
-      const addDaysForEnd = endMins <= startMins ? 1 : 0;
+      const endMins0  = eh * 60 + em;
+      const addDaysForEnd = endMins0 <= startMins ? 1 : 0;
 
       const startUtcIso = localToUtcIso(workDateYmd, startHhmm, tz, 0);
       const endUtcIso   = localToUtcIso(workDateYmd, endHhmm, tz, addDaysForEnd);
@@ -23119,10 +23355,10 @@ async function parseHealthRosterWorkbookIntoHrRows(
         continue;
       }
 
+      const hoursNum = parseActualHoursToNumber(rawHours);
       let hoursWorked = null;
-      if (typeof rawHours === 'number') {
-        hoursWorked = rawHours;
-      } else if (rawHours !== '' && rawHours != null) {
+      if (hoursNum != null) hoursWorked = hoursNum;
+      else if (rawHours !== '' && rawHours != null) {
         const hs = String(rawHours).trim();
         if (hs) hoursWorked = hs;
       }
@@ -23149,6 +23385,7 @@ async function parseHealthRosterWorkbookIntoHrRows(
         actual_break_mins: (actualBreakMins != null ? actualBreakMins : null),
         start_utc: startUtcIso,
         end_utc: endUtcIso,
+        actual_hours: (typeof hoursWorked === 'number') ? hoursWorked : (hoursNum != null ? hoursNum : null),
         hours_worked: hoursWorked,
         finalized_date: finalised,
         raw_columns
@@ -23171,7 +23408,7 @@ async function parseHealthRosterWorkbookIntoHrRows(
         payload_json,
         staff_raw: staffName || null,
         assignment_grade_norm: gradeNorm,
-        hours_worked: typeof hoursWorked === 'number' ? hoursWorked : null
+        hours_worked: (typeof hoursWorked === 'number') ? hoursWorked : null
       });
 
       rows_parsed++;
@@ -23209,6 +23446,7 @@ async function parseHealthRosterWorkbookIntoHrRows(
       stage: 'completed',
       import_id,
       source_system: importSourceSystem,
+      alias_system: aliasSys,
       rows_total,
       rows_parsed,
       rows_skipped
@@ -23224,7 +23462,6 @@ async function parseHealthRosterWorkbookIntoHrRows(
     header_columns
   };
 }
-
 
 
 // BE FIX: require expected_timesheet_id + resolve to CURRENT; strict 409 payload; write against CURRENT id only
