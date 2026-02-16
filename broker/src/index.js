@@ -30783,32 +30783,76 @@ async function classifyHrRotaRow(env, hrRow, context) {
   }
 
   async function getDailyTimesheetsForCandidateCached(candidateId) {
-    if (!candidateId) return [];
-    if (context.timesheetsByCand.has(candidateId)) {
-      return context.timesheetsByCand.get(candidateId);
-    }
-    let tsRows = [];
-    try {
-      const { rows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/timesheets` +
-          `?candidate_id=eq.${enc(candidateId)}` +
-          `&sheet_scope=eq.DAILY` +
-          `&is_current=eq.true` +
-          `&select=timesheet_id,worked_start_iso,hospital_norm,contract_id,job_title_norm,band`
-      );
-      tsRows = rows || [];
-    } catch (e) {
-      console.warn('[HR_ROTA_CLASSIFY] timesheets lookup failed (non-fatal)', {
-        import_id: importId,
-        candidate_id: candidateId,
-        err: e?.message || String(e)
-      });
-      tsRows = [];
-    }
-    context.timesheetsByCand.set(candidateId, tsRows);
-    return tsRows;
+  if (!candidateId) return [];
+  if (context.timesheetsByCand.has(candidateId)) {
+    return context.timesheetsByCand.get(candidateId);
   }
+
+  let tsRows = [];
+  try {
+    // ✅ Use v_timesheets_daily_match so we can carry TSFIN state:
+    // processing_status, locked_by_invoice_id, paid_at_utc (needed for email gating + invalidation safety)
+    // This view is already filtered to tf.is_current=true, t.is_current=true, and sheet_scope='DAILY'.
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/v_timesheets_daily_match` +
+        `?candidate_id=eq.${enc(candidateId)}` +
+        `&select=` +
+          [
+            'timesheet_id',
+            'client_id',
+            'sheet_scope',
+
+            'worked_start_iso',
+            'worked_end_iso',
+            'break_minutes',
+            'worked_minutes',
+
+            'hospital_norm',
+            'ward_norm',
+            'job_title_norm',
+            'shift_label_norm',
+
+            'reference_number',
+
+            // TSFIN snapshot fields from view
+            'processing_status',
+            'locked_by_invoice_id',
+            'paid_at_utc',
+            'tsfin_role',
+            'tsfin_band',
+
+            // Timesheet-side band/status from view
+            'timesheet_band',
+            'timesheet_status',
+
+            // Helpful for stable identity if needed elsewhere
+            'booking_id',
+            'timesheet_version',
+            'timesheet_row_version'
+          ].join(',') +
+        `&order=worked_start_iso.asc`
+    );
+
+    // Keep legacy shape compatibility where possible
+    tsRows = (rows || []).map((r0) => {
+      const r = (r0 && typeof r0 === 'object') ? { ...r0 } : {};
+      if (r.band == null && r.timesheet_band != null) r.band = r.timesheet_band; // legacy callers expect .band
+      if (r.contract_id === undefined) r.contract_id = null; // legacy callers expected this field from /timesheets
+      return r;
+    });
+  } catch (e) {
+    console.warn('[HR_ROTA_CLASSIFY] timesheets lookup failed (non-fatal)', {
+      import_id: importId,
+      candidate_id: candidateId,
+      err: e?.message || String(e)
+    });
+    tsRows = [];
+  }
+
+  context.timesheetsByCand.set(candidateId, tsRows);
+  return tsRows;
+}
 
   // extract HR row fields
   const hrRowId       = hrRow.id;
@@ -34349,6 +34393,13 @@ async function handleHrAutoprocessPreview(env, req, importId) {
   // ✅ UUID guard for safe id-based querying
   const isUuid = (v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v || '').trim());
 
+  // ✅ "Timesheet not confirmed ⇒ cannot email Temp Staffing"
+  const isBlockedForTsoEmail = (processing_status) => {
+    const s = String(processing_status || '').trim().toUpperCase();
+    if (!s) return true; // safe default
+    return (s === 'PENDING_AUTH' || s === 'AWAITING_MANUAL_SIGNATURE');
+  };
+
   try {
     // Load import header (client_id / source_system checks)
     const { rows: impRows } = await sbFetch(
@@ -34581,7 +34632,7 @@ async function handleHrAutoprocessPreview(env, req, importId) {
       const { effNoTs, effAuto, effReq } = evalEffectiveHrRouteFlags(co, we);
       const isModeA = (effAuto === true && effReq === true && effNoTs === false);
 
-      // ✅ NEW: include any validation row that falls under Mode-A HR weekly verify
+      // ✅ include any validation row that falls under Mode-A HR weekly verify
       if (isModeA) {
         validation_groups.push({ ...r, mode: 'MODE_A' });
       }
@@ -34606,6 +34657,62 @@ async function handleHrAutoprocessPreview(env, req, importId) {
         can_email: false,
         days: []
       });
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // ✅ NEW: Weekly Mode-A email gating by timesheet confirmation state
+    // (QR unsigned / manual unauthorised etc) => disable email + surface warning
+    // ─────────────────────────────────────────────────────────────
+    const mismatchTsIds = uniq(
+      (validation_groups || [])
+        .filter(g => g && (g.timesheet_id != null) && boolish(g.has_mismatch))
+        .map(g => String(g.timesheet_id || '').trim())
+        .filter(Boolean)
+    );
+
+    const procByTimesheetId = new Map();
+    if (mismatchTsIds.length) {
+      for (const idChunk of chunk(mismatchTsIds, 150)) {
+        try {
+          const { rows: tfRows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+              `?is_current=eq.true` +
+              `&timesheet_id=in.(${idChunk.map(enc).join(',')})` +
+              `&select=timesheet_id,processing_status`
+          );
+          for (const tf of (tfRows || [])) {
+            const tsId = tf?.timesheet_id ? String(tf.timesheet_id).trim() : '';
+            if (!tsId) continue;
+            if (!procByTimesheetId.has(tsId)) {
+              procByTimesheetId.set(tsId, tf?.processing_status ?? null);
+            }
+          }
+        } catch {
+          // non-fatal; safe default below blocks if status missing
+        }
+      }
+    }
+
+    for (let i = 0; i < validation_groups.length; i++) {
+      const g = validation_groups[i];
+      const tsId = g?.timesheet_id ? String(g.timesheet_id).trim() : '';
+      if (!tsId) continue;
+      if (!boolish(g?.has_mismatch)) continue;
+
+      const ps = procByTimesheetId.has(tsId) ? procByTimesheetId.get(tsId) : null;
+      if (!isBlockedForTsoEmail(ps)) continue;
+
+      const fr0 = Array.isArray(g?.failure_reasons) ? g.failure_reasons : [];
+      const fr = fr0.slice();
+      fr.push('Email blocked: timesheet is not confirmed (awaiting authorisation/signature).');
+
+      validation_groups[i] = {
+        ...g,
+        failure_reasons: fr,
+        issue_fingerprint: null,
+        can_email: false
+      };
     }
 
     const clsGroups = Array.isArray(cls?.groups)
@@ -35055,7 +35162,7 @@ async function handleHrAutoprocessPreview(env, req, importId) {
 
     const cancellationsComputable = !!(hrRowsFetchOk && minWd && maxWd);
 
-    // ✅ NEW: explicit mode summary for FE (prevents "actions count == 0" ambiguity)
+    // ✅ explicit mode summary for FE (prevents "actions count == 0" ambiguity)
     const hasModeA = Array.isArray(validation_groups) && validation_groups.length > 0;
     const hasModeB = Array.isArray(action_groups) && action_groups.length > 0;
     const mode_summary = (hasModeA && hasModeB) ? 'MIXED' : (hasModeA ? 'MODE_A_ONLY' : 'MODE_B_ONLY');
@@ -35084,10 +35191,10 @@ async function handleHrAutoprocessPreview(env, req, importId) {
       import_id: String(importId),
       client_id: String(imp.client_id),
 
-      // ✅ NEW: explicit mode for UI
+      // ✅ explicit mode for UI
       mode_summary,
 
-      // ✅ NEW: expose classification output at top level for the summary modal
+      // ✅ expose classification output at top level for the summary modal
       rows: Array.isArray(cls?.rows) ? cls.rows : [],
       summary: cls?.summary || null,
 
@@ -35152,6 +35259,13 @@ async function handleHrAutoprocessApply(env, req, importId) {
 
   const boolish = (v) => (v === true || v === 'true' || v === 1 || v === '1');
 
+  // ✅ "Timesheet not confirmed ⇒ cannot email Temp Staffing"
+  const isBlockedForTsoEmail = (processing_status) => {
+    const s = String(processing_status || '').trim().toUpperCase();
+    if (!s) return true; // safe default
+    return (s === 'PENDING_AUTH' || s === 'AWAITING_MANUAL_SIGNATURE');
+  };
+
   const unwrapRpcJsonb = (raw, fnName) => {
     const j = raw;
     if (Array.isArray(j)) {
@@ -35177,6 +35291,12 @@ async function handleHrAutoprocessApply(env, req, importId) {
       seen.add(s);
       out.push(s);
     }
+    return out;
+  };
+
+  const chunk = (arr, n) => {
+    const out = [];
+    for (let i = 0; i < (arr || []).length; i += n) out.push(arr.slice(i, i + n));
     return out;
   };
 
@@ -35279,7 +35399,7 @@ async function handleHrAutoprocessApply(env, req, importId) {
         ...(alt ? { alt_email: alt } : {})
       };
     })
-    .filter(a => !!(a.timesheet_id && a.issue_fingerprint));
+    .filter(a => !!(a.timesheet_id && a.issue_fingerprint)); // ✅ defensive: ignore missing fingerprint
 
   // ✅ Include-missing-shifts flag
   const includeMissingShifts =
@@ -35319,6 +35439,50 @@ async function handleHrAutoprocessApply(env, req, importId) {
     decisions_keys_count: Object.keys(decisions || {}).length,
     enqueue_tspdf_regen: enqueueTspdfRegen
   });
+
+  // ─────────────────────────────────────────────
+  // ✅ NEW: Server-side enforcement — block Mode-A emails for unconfirmed timesheets
+  // ─────────────────────────────────────────────
+  if (emailActions.length) {
+    const tsIds = uniqStrings(emailActions.map(a => a?.timesheet_id).filter(Boolean));
+    const procByTs = new Map();
+
+    if (tsIds.length) {
+      for (const idChunk of chunk(tsIds, 150)) {
+        try {
+          const { rows: tfRows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+              `?is_current=eq.true` +
+              `&timesheet_id=in.(${idChunk.map(enc).join(',')})` +
+              `&select=timesheet_id,processing_status`
+          );
+          for (const tf of (tfRows || [])) {
+            const tsId = tf?.timesheet_id ? String(tf.timesheet_id).trim() : '';
+            if (!tsId) continue;
+            if (!procByTs.has(tsId)) procByTs.set(tsId, tf?.processing_status ?? null);
+          }
+        } catch {
+          // non-fatal; safe default below blocks if status missing
+        }
+      }
+    }
+
+    const blockedIds = [];
+    for (const tsId of tsIds) {
+      const ps = procByTs.has(tsId) ? procByTs.get(tsId) : null;
+      if (isBlockedForTsoEmail(ps)) blockedIds.push(tsId);
+    }
+
+    if (blockedIds.length) {
+      return withCORS(env, req, badRequest(JSON.stringify({
+        error: 'HR_WEEKLY_EMAIL_BLOCKED_UNCONFIRMED_TIMESHEET',
+        message: 'Cannot email Temporary Staffing because one or more selected timesheets are not confirmed (awaiting authorisation/signature).',
+        import_id: importId,
+        blocked_timesheet_ids: blockedIds
+      })));
+    }
+  }
 
   // ─────────────────────────────────────────────
   // 1) Single transactional DB apply RPC
@@ -35738,7 +35902,7 @@ async function handleHrAutoprocessApply(env, req, importId) {
       return withCORS(env, req, new Response(JSON.stringify(resp), {
         status: 500,
         headers: { 'content-type': 'application/json' }
-      }));
+        }));
     }
   }
 
@@ -36516,8 +36680,13 @@ async function classifyHrRotaValidationImport(env, importId) {
   // ─────────────────────────────────────────────────────────────
   // CACHES to avoid per-row subrequests
   // ─────────────────────────────────────────────────────────────
-  const candidateByNameTrustCache = new Map(); // `${staffNorm}|${trustNorm}` -> candidate_id|null
-  const timesheetsByCandClientCache = new Map(); // `${candidate_id}|${client_id}` -> [v_timesheets_daily_match rows...]
+  const candidateByNameTrustCache = new Map();      // `${staffNorm}|${trustNorm}` -> candidate_id|null
+  const timesheetsByCandClientCache = new Map();    // `${candidate_id}|${client_id}` -> [v_timesheets_daily_match rows...]
+
+  // For missing-shift synthesis + reasonable UI labels
+  const candidateMetaById = new Map();              // candidate_id -> { staffRaw, staffNorm, trustRaw, trustNorm }
+  const candidateIdsResolved = new Set();           // candidate_ids that appear in this import and resolved
+  const matchedTimesheetIds = new Set();            // timesheet_ids that were matched to an HR row
 
   async function resolveCandidateByNameTrustCached(staffRaw, staffNorm, trustNorm) {
     const nameKey = `${staffNorm || norm(staffRaw)}|${trustNorm || ''}`;
@@ -36573,11 +36742,15 @@ async function classifyHrRotaValidationImport(env, importId) {
         timesheet_id: t.timesheet_id || null,
         worked_start_local: sp?.hhmm || null,
         worked_end_local: ep?.hhmm || null,
+        break_minutes: (t.break_minutes == null ? null : t.break_minutes),
         hospital_norm: t.hospital_norm || null,
         ward_norm: t.ward_norm || null,
         job_title_norm: t.job_title_norm || null,
+        shift_label_norm: t.shift_label_norm || null,
         band: t.timesheet_band || t.tsfin_band || null,
-        reference_number: t.reference_number || null
+        reference_number: t.reference_number || null,
+        processing_status: t.processing_status || null,
+        sheet_scope: t.sheet_scope || null
       });
     }
     return out.filter(x => !!x.timesheet_id);
@@ -36604,16 +36777,27 @@ async function classifyHrRotaValidationImport(env, importId) {
               'worked_end_iso',
               'break_minutes',
               'worked_minutes',
+
+              // ✅ Needed for "timesheet not confirmed ⇒ no email"
+              'processing_status',
+
+              // ✅ Helpful + explicitly requested
+              'sheet_scope',
+
+              // ✅ Needed for invalidation safety + display
               'paid_at_utc',
               'locked_by_invoice_id',
+              'reference_number',
+
+              // existing display fields
               'hospital_norm',
               'ward_norm',
-              'reference_number',
               'job_title_norm',
               'shift_label_norm',
               'tsfin_role',
               'tsfin_band',
-              'timesheet_status'
+              'timesheet_status',
+              'timesheet_band'
             ].join(',')
       );
       tsRows = rows || [];
@@ -36695,6 +36879,24 @@ async function classifyHrRotaValidationImport(env, importId) {
     };
   }
 
+  // Determine import date range for missing-shift synthesis
+  const dateList = [];
+  for (const hr of hrRows) {
+    const d = hr?.date_local ? String(hr.date_local).trim() : '';
+    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) dateList.push(d);
+  }
+  dateList.sort();
+  const fileDateMin = dateList.length ? dateList[0] : null;
+  const fileDateMax = dateList.length ? dateList[dateList.length - 1] : null;
+
+  // Email-eligible mismatch reasons (daily parity with weekly + missing_from_import)
+  const EMAIL_REASON_CODES = new Set([
+    'actual_hours_mismatch',
+    'start_end_mismatch',
+    'break_minutes_mismatch',
+    'missing_from_import'
+  ]);
+
   // ─────────────────────────────────────────────────────────────
   // 3) Per-row classification, with cached lookups
   // ─────────────────────────────────────────────────────────────
@@ -36741,6 +36943,9 @@ async function classifyHrRotaValidationImport(env, importId) {
       source_system: 'HEALTHROSTER_DAILY',
       client_id: importClientId,
 
+      // set once resolved
+      candidate_id: null,
+
       hr_request_id: hrRequestId,
 
       staff_name: staffRaw || null,
@@ -36760,6 +36965,7 @@ async function classifyHrRotaValidationImport(env, importId) {
       timesheet_target_ambiguous: false,
       timesheet_target_options: [],
 
+      tsfin_processing_status: null,
       tsfin_paid_at_utc: null,
       tsfin_locked_by_invoice_id: null,
       tsfin_is_paid: false,
@@ -36778,9 +36984,15 @@ async function classifyHrRotaValidationImport(env, importId) {
 
     // Candidate resolution remains as-is (name + trust norm)
     const candidateId = await resolveCandidateByNameTrustCached(staffRaw, staffNorm, trustNorm);
-
     const candidateMissing = !candidateId;
     const dateMissing = !dateLocal;
+
+    if (candidateId) {
+      candidateIdsResolved.add(candidateId);
+      if (!candidateMetaById.has(candidateId)) {
+        candidateMetaById.set(candidateId, { staffRaw, staffNorm, trustRaw, trustNorm });
+      }
+    }
 
     if (candidateMissing || dateMissing) {
       unmatchedCount++;
@@ -36788,6 +37000,7 @@ async function classifyHrRotaValidationImport(env, importId) {
       byReason[reasonKey] = (byReason[reasonKey] || 0) + 1;
       results.push({
         ...baseResult,
+        candidate_id: candidateId || null,
         status: 'UNMATCHED',
         reason_code: reasonKey
       });
@@ -36811,6 +37024,7 @@ async function classifyHrRotaValidationImport(env, importId) {
       byReason['timesheet_not_found_or_ambiguous'] = (byReason['timesheet_not_found_or_ambiguous'] || 0) + 1;
       results.push({
         ...baseResult,
+        candidate_id: candidateId,
         status: 'UNMATCHED',
         reason_code: 'timesheet_not_found_or_ambiguous'
       });
@@ -36841,6 +37055,7 @@ async function classifyHrRotaValidationImport(env, importId) {
           byReason['timesheet_not_found_or_ambiguous'] = (byReason['timesheet_not_found_or_ambiguous'] || 0) + 1;
           results.push({
             ...baseResult,
+            candidate_id: candidateId,
             status: 'UNMATCHED',
             reason_code: 'timesheet_not_found_or_ambiguous',
             timesheet_target_ambiguous: true,
@@ -36873,6 +37088,7 @@ async function classifyHrRotaValidationImport(env, importId) {
           byReason['timesheet_not_found_or_ambiguous'] = (byReason['timesheet_not_found_or_ambiguous'] || 0) + 1;
           results.push({
             ...baseResult,
+            candidate_id: candidateId,
             status: 'UNMATCHED',
             reason_code: 'timesheet_not_found_or_ambiguous',
             timesheet_target_ambiguous: true,
@@ -36890,6 +37106,7 @@ async function classifyHrRotaValidationImport(env, importId) {
           byReason['timesheet_not_found_or_ambiguous'] = (byReason['timesheet_not_found_or_ambiguous'] || 0) + 1;
           results.push({
             ...baseResult,
+            candidate_id: candidateId,
             status: 'UNMATCHED',
             reason_code: 'timesheet_not_found_or_ambiguous',
             timesheet_target_ambiguous: true,
@@ -36908,11 +37125,15 @@ async function classifyHrRotaValidationImport(env, importId) {
       byReason['timesheet_not_found_or_ambiguous'] = (byReason['timesheet_not_found_or_ambiguous'] || 0) + 1;
       results.push({
         ...baseResult,
+        candidate_id: candidateId,
         status: 'UNMATCHED',
         reason_code: 'timesheet_not_found_or_ambiguous'
       });
       continue;
     }
+
+    // Mark as matched (even if later validation fails / grade mapping required)
+    matchedTimesheetIds.add(String(timesheetId));
 
     // Grade → roleForRates (durable mapping first inside mapRequestGradeToRole)
     let roleForRates = null;
@@ -36968,22 +37189,24 @@ async function classifyHrRotaValidationImport(env, importId) {
 
     const ok = !!validationRes.ok;
     const reasonCode = validationRes.reason_code || null;
+
     const canEmail =
       !!timesheetId &&
       !!reasonCode &&
-      ['actual_hours_mismatch', 'start_end_mismatch', 'break_minutes_mismatch'].includes(
-        String(reasonCode).toLowerCase()
-      );
+      EMAIL_REASON_CODES.has(String(reasonCode).toLowerCase());
 
     const tsfinPaidAt = chosenTs?.paid_at_utc || null;
     const tsfinInvId  = chosenTs?.locked_by_invoice_id || null;
+    const tsfinProcStatus = chosenTs?.processing_status || null;
 
     const resRow = {
       ...baseResult,
+      candidate_id: candidateId,
       timesheet_id: timesheetId,
 
       grade_mapping_required: gradeMappingRequired,
 
+      tsfin_processing_status: tsfinProcStatus,
       tsfin_paid_at_utc: tsfinPaidAt,
       tsfin_locked_by_invoice_id: tsfinInvId,
       tsfin_is_paid: !!tsfinPaidAt,
@@ -37018,6 +37241,117 @@ async function classifyHrRotaValidationImport(env, importId) {
     }
 
     results.push(resRow);
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 4) ✅ Missing-shift synthesis (timesheet exists but HR row missing)
+  // ─────────────────────────────────────────────────────────────
+  // This is DAILY parity with weekly Mode A "Missing from import" comparisons.
+  // IMPORTANT:
+  //  - status MUST be FAILED (NOT UNMATCHED) so Apply isn't blocked
+  //  - details.match_status MUST be UNMATCHED
+  //  - include ref_before/ref_after and TS details for destructive invalidation UI
+  if (fileDateMin && fileDateMax && candidateIdsResolved.size) {
+    for (const candidateId of Array.from(candidateIdsResolved)) {
+      let tsRows = [];
+      try {
+        tsRows = await getDailyTimesheetsForCandidateClientCached(candidateId, importClientId);
+      } catch {
+        tsRows = [];
+      }
+
+      const meta = candidateMetaById.get(candidateId) || null;
+
+      for (const t of (tsRows || [])) {
+        const tsid = t?.timesheet_id ? String(t.timesheet_id).trim() : '';
+        if (!tsid) continue;
+        if (matchedTimesheetIds.has(tsid)) continue;
+
+        const sp = safeLocalPartsFromIso(t.worked_start_iso);
+        const ep = safeLocalPartsFromIso(t.worked_end_iso);
+        const tsDate = sp?.ymd || null;
+        if (!tsDate) continue;
+
+        // Only consider timesheets within the import's date window
+        if (tsDate < fileDateMin || tsDate > fileDateMax) continue;
+
+        // Only synthesize when there is a reference to clear (matches weekly destructive invalidation semantics)
+        const refBefore = (t.reference_number != null) ? String(t.reference_number).trim() : '';
+        if (!refBefore) continue;
+
+        const tsStart = sp?.hhmm || null;
+        const tsEnd = ep?.hhmm || null;
+        const tsBreak = (t.break_minutes == null ? null : t.break_minutes);
+        const tsWorkedMins = (t.worked_minutes == null ? null : t.worked_minutes);
+
+        const tsfinPaidAt = t?.paid_at_utc || null;
+        const tsfinInvId  = t?.locked_by_invoice_id || null;
+        const tsfinProcStatus = t?.processing_status || null;
+
+        failedCount++;
+        byReason['missing_from_import'] = (byReason['missing_from_import'] || 0) + 1;
+
+        results.push({
+          hr_row_id: null,
+          import_id: importId,
+          source_system: 'HEALTHROSTER_DAILY',
+          client_id: importClientId,
+
+          candidate_id: candidateId,
+
+          // Preserve the existing ref as hr_request_id to avoid unintended clearing unless invalidated
+          hr_request_id: refBefore || null,
+
+          staff_name: meta?.staffRaw ? String(meta.staffRaw) : null,
+          staff_norm: meta?.staffNorm ? String(meta.staffNorm) : null,
+
+          hospital_or_trust: meta?.trustRaw ? String(meta.trustRaw) : null,
+          trust_norm: meta?.trustNorm ? String(meta.trustNorm) : null,
+
+          date_local: tsDate,
+          start_local: null,
+          end_local: null,
+
+          incoming_grade_norm: null,
+          grade_mapping_required: false,
+
+          timesheet_id: tsid,
+          timesheet_target_ambiguous: false,
+          timesheet_target_options: [],
+
+          tsfin_processing_status: tsfinProcStatus,
+          tsfin_paid_at_utc: tsfinPaidAt,
+          tsfin_locked_by_invoice_id: tsfinInvId,
+          tsfin_is_paid: !!tsfinPaidAt,
+          tsfin_is_invoiced: !!tsfinInvId,
+          tsfin_invoice_id_detected: tsfinInvId,
+
+          status: 'FAILED',
+          reason_code: 'missing_from_import',
+
+          // Weekly treats missing-from-import as mismatch (emailable unless later blocked by confirmation rule)
+          can_email: true,
+
+          details: {
+            match_status: 'UNMATCHED',
+
+            // No HR times for this synthetic row
+            start_local: null,
+            end_local: null,
+
+            // Timesheet details for UI + comparison key construction
+            timesheet_start: tsStart,
+            timesheet_end: tsEnd,
+            ts_break_mins: (tsBreak == null ? null : tsBreak),
+            timesheet_break_mins: (tsBreak == null ? null : tsBreak),
+            worked_minutes: (tsWorkedMins == null ? null : tsWorkedMins),
+
+            ref_before: refBefore,
+            ref_after: ''
+          }
+        });
+      }
+    }
   }
 
   const summary = {
@@ -37339,6 +37673,7 @@ async function handleHrRotaResolveMappings(env, req, importId) {
     grade_role_mappings_applied: gradeRoleMappingsApplied
   }));
 }
+
 async function handleHrRotaValidationPreview(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
@@ -37351,11 +37686,20 @@ async function handleHrRotaValidationPreview(env, req, importId) {
   const enc = encodeURIComponent;
   const norm = (s) => String(s || '').trim().toLowerCase();
 
+  // ✅ Daily parity: include missing_from_import as mismatch (emailable unless blocked by confirmation rule)
   const EMAIL_REASON_CODES = new Set([
     'actual_hours_mismatch',
     'start_end_mismatch',
-    'break_minutes_mismatch'
+    'break_minutes_mismatch',
+    'missing_from_import'
   ]);
+
+  // ✅ "Timesheet not confirmed ⇒ cannot email Temp Staffing"
+  const isBlockedForTsoEmail = (processing_status) => {
+    const s = String(processing_status || '').trim().toUpperCase();
+    if (!s) return true; // safe default: unknown status => block
+    return (s === 'PENDING_AUTH' || s === 'AWAITING_MANUAL_SIGNATURE');
+  };
 
   // ✅ Stable across imports: MUST NOT include import_id or hr_row_id (row IDs change each import)
   const makeIssueFingerprint = (row) => {
@@ -37553,7 +37897,10 @@ async function handleHrRotaValidationPreview(env, req, importId) {
         statusU !== 'VALIDATION_OK' &&
         EMAIL_REASON_CODES.has(reasonCode);
 
-      if (!emailEligible) {
+      // ✅ Block emails for unconfirmed timesheets (safe-default if status missing)
+      const blockedForEmail = emailEligible && isBlockedForTsoEmail(row?.tsfin_processing_status);
+
+      if (!emailEligible || blockedForEmail) {
         rowFingerprints[i] = null;
         continue;
       }
@@ -37616,11 +37963,23 @@ async function handleHrRotaValidationPreview(env, req, importId) {
         statusU !== 'VALIDATION_OK' &&
         EMAIL_REASON_CODES.has(reasonCode);
 
-      const fp = rowFingerprints[idx];
+      const blockedForEmail = emailEligible && isBlockedForTsoEmail(row?.tsfin_processing_status);
+
+      // If blocked, we intentionally DO NOT expose a fingerprint (disables UI selection cleanly).
+      const fp = blockedForEmail ? null : rowFingerprints[idx];
       const alreadySent = fp ? alreadySentSet.has(fp) : false;
 
       // Default can_email means "default recipient available"; UI can still send with alternative_email
       const canEmailDefault = !!fp && emailEligible && !recipientMissingDefault;
+
+      const baseDetails = (row.details && typeof row.details === 'object' && !Array.isArray(row.details)) ? row.details : {};
+      const emailBlockedReason = blockedForEmail
+        ? 'Email blocked: timesheet is not confirmed (awaiting authorisation/signature).'
+        : null;
+
+      const detailsOut = blockedForEmail
+        ? { ...baseDetails, email_blocked_reason: emailBlockedReason }
+        : baseDetails;
 
       decoratedRows.push({
         ...row,
@@ -37651,9 +38010,13 @@ async function handleHrRotaValidationPreview(env, req, importId) {
         issue_fingerprint: fp || null,
         recipient_email: recipientEmailDefault || null,
         recipient_missing: recipientMissingDefault,
-        email_eligible: emailEligible,
+        email_eligible: (emailEligible && !blockedForEmail),
         email_already_sent: alreadySent,
-        can_email: canEmailDefault
+        can_email: (canEmailDefault && !blockedForEmail),
+
+        // ✅ surface warning for UI (adapter reads from details.email_blocked_reason)
+        email_blocked_reason: emailBlockedReason || null,
+        details: detailsOut
       });
     }
 
@@ -37671,7 +38034,9 @@ async function handleHrRotaValidationPreview(env, req, importId) {
           timesheet_target_ambiguous: !!r.timesheet_target_ambiguous,
           timesheet_target_options_count: Array.isArray(r.timesheet_target_options) ? r.timesheet_target_options.length : 0,
           can_email: !!r.can_email,
-          recipient_missing: !!r.recipient_missing
+          recipient_missing: !!r.recipient_missing,
+          tsfin_processing_status: r.tsfin_processing_status || null,
+          email_blocked: !!r.email_blocked_reason
         }));
 
       console.log('[HR_DAILY_PREVIEW]', JSON.stringify({
@@ -37702,7 +38067,6 @@ async function handleHrRotaValidationPreview(env, req, importId) {
   }
 }
 
-
 async function handleHrRotaValidationApply(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
@@ -37727,11 +38091,20 @@ async function handleHrRotaValidationApply(env, req, importId) {
   const requestEmailActions = Array.isArray(body?.email_actions) ? body.email_actions : [];
   const requestInvalidationActions = Array.isArray(body?.invalidation_actions) ? body.invalidation_actions : [];
 
+  // ✅ Daily parity: include missing_from_import as mismatch (emailable unless blocked by confirmation rule)
   const EMAIL_REASON_CODES = new Set([
     'actual_hours_mismatch',
     'start_end_mismatch',
-    'break_minutes_mismatch'
+    'break_minutes_mismatch',
+    'missing_from_import'
   ]);
+
+  // ✅ "Timesheet not confirmed ⇒ cannot email Temp Staffing"
+  const isBlockedForTsoEmail = (processing_status) => {
+    const s = String(processing_status || '').trim().toUpperCase();
+    if (!s) return true; // safe default
+    return (s === 'PENDING_AUTH' || s === 'AWAITING_MANUAL_SIGNATURE');
+  };
 
   const uniqStrings = (arr) => {
     const out = [];
@@ -37838,6 +38211,7 @@ async function handleHrRotaValidationApply(env, req, importId) {
     const statusU = String(row?.status || '').toUpperCase();
     const reasonC = String(row?.reason_code || '').toLowerCase();
 
+    // NOTE: missing_from_import rows are FAILED (not UNMATCHED), so they do not block apply.
     if (statusU === 'UNMATCHED') hasUnmatched = true;
 
     if (reasonC === 'candidate_unresolved') gateReasons.candidate_unresolved = (gateReasons.candidate_unresolved || 0) + 1;
@@ -37862,11 +38236,17 @@ async function handleHrRotaValidationApply(env, req, importId) {
   const email_actions = [];
 
   const rowByHrRowId = new Map();
+  const rowByTimesheetId = new Map();
+
   for (const row of rows) {
     const hrid = row?.hr_row_id ? String(row.hr_row_id).trim() : '';
     if (hrid) rowByHrRowId.set(hrid, row);
+
+    const tsid = row?.timesheet_id ? String(row.timesheet_id).trim() : '';
+    if (tsid && !rowByTimesheetId.has(tsid)) rowByTimesheetId.set(tsid, row);
   }
 
+  // ✅ Include ALL classified rows with timesheet_id (including synthetic missing_from_import rows)
   for (const row of rows) {
     const timesheetId = row?.timesheet_id || null;
     if (!timesheetId) continue;
@@ -37879,23 +38259,41 @@ async function handleHrRotaValidationApply(env, req, importId) {
     validation_rows.push({
       timesheet_id: String(timesheetId),
       status: isOk ? 'VALIDATION_OK' : 'VALIDATION_ERROR',
-      reason_code: isOk ? 'HEALTHROSTER_DAILY' : (reasonCodeRaw || 'actual_hours_mismatch'),
+      reason_code: isOk ? 'HEALTHROSTER_DAILY' : (reasonCodeRaw || 'validation_failed'),
+      // For missing_from_import, classification provides hr_request_id as the existing ref_before
       hr_request_id: row?.hr_request_id || row?.hrRequestId || null
     });
   }
+
+  // ✅ Pre-validate email_actions against "timesheet confirmed" gate (server-side enforcement)
+  const blockedTimesheetIds = new Set();
 
   // Email actions come from request; we enrich from classification rows and recompute fingerprints if missing.
   for (const a of requestEmailActions) {
     if (!a || typeof a !== 'object') continue;
 
     const hrRowId = a.hr_row_id ? String(a.hr_row_id).trim() : '';
-    const baseRow = hrRowId ? (rowByHrRowId.get(hrRowId) || null) : null;
-
-    const timesheetId = (a.timesheet_id != null && String(a.timesheet_id).trim())
+    const timesheetIdFromReq = (a.timesheet_id != null && String(a.timesheet_id).trim())
       ? String(a.timesheet_id).trim()
-      : (baseRow?.timesheet_id ? String(baseRow.timesheet_id).trim() : '');
+      : '';
 
+    const baseRow =
+      (hrRowId ? (rowByHrRowId.get(hrRowId) || null) : null) ||
+      (timesheetIdFromReq ? (rowByTimesheetId.get(timesheetIdFromReq) || null) : null);
+
+    const timesheetId = (timesheetIdFromReq || (baseRow?.timesheet_id ? String(baseRow.timesheet_id).trim() : ''));
     if (!timesheetId) continue;
+
+    // Determine processing status (safe default if missing)
+    const procStatus =
+      baseRow?.tsfin_processing_status ??
+      baseRow?.processing_status ??
+      null;
+
+    if (isBlockedForTsoEmail(procStatus)) {
+      blockedTimesheetIds.add(timesheetId);
+      continue;
+    }
 
     const reasonCode = String(a.reason_code || baseRow?.reason_code || '').toLowerCase();
     if (!EMAIL_REASON_CODES.has(reasonCode)) continue;
@@ -37926,6 +38324,15 @@ async function handleHrRotaValidationApply(env, req, importId) {
       work_date: workDate,
       alternative_email: alternativeEmail
     });
+  }
+
+  if (blockedTimesheetIds.size) {
+    return withCORS(env, req, badRequest(JSON.stringify({
+      error: 'HR_DAILY_EMAIL_BLOCKED_UNCONFIRMED_TIMESHEET',
+      message: 'Cannot email Temporary Staffing because one or more selected timesheets are not confirmed (awaiting authorisation/signature).',
+      import_id: importId,
+      blocked_timesheet_ids: Array.from(blockedTimesheetIds)
+    })));
   }
 
   // Invalidation actions pass straight through; RPC validates shape
@@ -37983,6 +38390,14 @@ async function handleHrRotaValidationApply(env, req, importId) {
     if (seenJobKey.has(jobKey)) continue;
     seenJobKey.add(jobKey);
 
+    // ✅ Additional safety (should already be prevented above)
+    const baseRow = rowByTimesheetId.get(tsId) || null;
+    const procStatus = baseRow?.tsfin_processing_status ?? baseRow?.processing_status ?? null;
+    if (isBlockedForTsoEmail(procStatus)) {
+      emailFailures.push({ timesheet_id: tsId, issue_fingerprint: fp, reason: 'EMAIL_BLOCKED_UNCONFIRMED_TIMESHEET' });
+      continue;
+    }
+
     if (!recipientEmail) {
       emailFailures.push({ timesheet_id: tsId, issue_fingerprint: fp, reason: 'RECIPIENT_MISSING' });
       continue;
@@ -38000,7 +38415,7 @@ async function handleHrRotaValidationApply(env, req, importId) {
       continue;
     }
 
-    const reasonCode = job?.reason_code ? String(job.reason_code) : 'actual_hours_mismatch';
+    const reasonCode = job?.reason_code ? String(job.reason_code) : 'validation_mismatch';
     const workDate   = job?.work_date ? String(job.work_date) : null;
 
     const subject = `Timesheet query – HealthRoster daily validation – ${workDate || ''}${workDate ? ' – ' : ''}${tsId}`;
@@ -38233,6 +38648,7 @@ async function handleHrRotaValidationApply(env, req, importId) {
     }
   }));
 }
+
 
 
 async function findCandidateByImportName(env, staffName, { trustNorm } = {}) {
@@ -45581,6 +45997,241 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
 
 
 
+async function enqueueHrMismatchEmail(env, { timesheet_id, importId, row }) {
+  const enc = encodeURIComponent;
+
+  if (!timesheet_id) return;
+
+  // ✅ Last-line enforcement: do NOT email Temp Staffing if the timesheet is not confirmed
+  // Safe-default: if status is missing/unavailable, block.
+  const isBlockedForTsoEmail = (processing_status) => {
+    const s = String(processing_status || '').trim().toUpperCase();
+    if (!s) return true;
+    return (s === 'PENDING_AUTH' || s === 'AWAITING_MANUAL_SIGNATURE');
+  };
+
+  try {
+    const { rows: tfRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?timesheet_id=eq.${enc(timesheet_id)}` +
+        `&is_current=eq.true` +
+        `&select=processing_status` +
+        `&limit=1`
+    );
+    const ps = tfRows?.[0]?.processing_status ?? null;
+
+    if (isBlockedForTsoEmail(ps)) {
+      const psTxt = String(ps || '').trim() || 'UNKNOWN';
+      throw new Error(
+        `Email blocked: timesheet is not confirmed (awaiting authorisation/signature). ` +
+        `processing_status=${psTxt} timesheet_id=${String(timesheet_id)}`
+      );
+    }
+  } catch (e) {
+    // If the failure was the explicit block error above, rethrow.
+    // Otherwise: safe-default block (do not send) with a clear message.
+    const msg = String(e?.message || e || '');
+    if (msg && msg.toLowerCase().includes('email blocked:')) {
+      throw e;
+    }
+    throw new Error(
+      `Email blocked: cannot determine timesheet confirmation status (safe default). ` +
+      `timesheet_id=${String(timesheet_id)} err=${msg || 'unknown'}`
+    );
+  }
+
+  // 1) Ensure there is a PDF for this timesheet
+  let pdfKey = null;
+  try {
+    pdfKey = await ensureTimesheetPdf(env, timesheet_id);
+  } catch (e) {
+    console.warn('[HR_ROTA_EMAIL] ensureTimesheetPdf failed', {
+      timesheet_id,
+      err: e?.message || String(e)
+    });
+  }
+  if (!pdfKey) {
+    throw new Error('Failed to ensure timesheet PDF for mismatch email');
+  }
+
+  // 2) Resolve TSO / Temporary Staffing recipient
+  let recipientEmail = null;
+  let resolvedClientId = null;
+  try {
+    const tgt = await resolveTsoRecipientForTimesheet(env, {
+      timesheet_id,
+      booking_id: row?.hr_request_id || null
+    });
+    recipientEmail = tgt?.to ? String(tgt.to).trim() : null;
+    resolvedClientId = tgt?.client_id ? String(tgt.client_id) : null;
+  } catch (e) {
+    console.warn('[HR_ROTA_EMAIL] resolveTsoRecipientForTimesheet failed', {
+      timesheet_id,
+      err: e?.message || String(e)
+    });
+  }
+
+  if (!recipientEmail) {
+    throw new Error('No Temporary Staffing email (ts_queries_email) resolved for this timesheet');
+  }
+
+  // 3) Compose subject/body
+  const staffName  = row?.staff_name || row?.payload_json?.staff_name || 'Agency worker';
+  const dateLocal  = row?.date_local || row?.payload_json?.date_local || 'Unknown date';
+  const hrRequestId = row?.hr_request_id || row?.payload_json?.request_id || null;
+  const reasonCode  = row?.reason_code || 'actual_hours_mismatch';
+
+  const detail = row?.details || {};
+  const hrStart = detail.start_local  || detail.hr_start        || 'N/A';
+  const hrEnd   = detail.end_local    || detail.hr_end          || 'N/A';
+  const hrHours = detail.hr_hours     || detail.hr_actual_hours || detail.hours_worked || 'N/A';
+  const tsHours = detail.ts_hours     || detail.ts_total_hours  || 'N/A';
+
+  const subject = `Timesheet hours mismatch – ${staffName} – ${dateLocal} – ${hrRequestId || 'no HR ref'}`;
+
+  const lines = [
+    `Dear Temporary Staffing,`,
+    ``,
+    `Please can you amend the hours on HealthRoster for the attached agency shift.`,
+    ``,
+    `Staff: ${staffName}`,
+    `Date: ${dateLocal}`,
+    `HR Request ID: ${hrRequestId || '(not provided)'}`,
+    ``,
+    `HealthRoster shows:`,
+    `  Start: ${hrStart}`,
+    `  End:   ${hrEnd}`,
+    `  Actual Hours: ${hrHours}`,
+    ``,
+    `Signed timesheet attached shows:`,
+    `  Actual Hours: ${tsHours}`,
+    ``,
+    `Once amended, please kindly confirm.`,
+    ``,
+    `Kind regards,`,
+    `CloudTMS`
+  ];
+
+  const body_text = lines.join('\n');
+  const body_html = `<p>${lines.map(l => (l === '' ? '<br/>' : l)).join('<br/>')}</p>`;
+
+  // 4) Insert into mail_outbox (using existing schema)
+  const mailPayload = [{
+    to: recipientEmail,
+    subject,
+    body_text,
+    body_html,
+    attachments: [{
+      r2_key: pdfKey,
+      filename: `Timesheet_${timesheet_id}.pdf`
+    }],
+    type: 'TSO_FAILURE',
+    reference: hrRequestId || null,
+    correlation_id: `HR_DAILY_MISMATCH:${timesheet_id}:${hrRequestId || ''}`
+  }];
+
+  try {
+    const res = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/mail_outbox`,
+      {
+        method: 'POST',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify(mailPayload)
+      }
+    );
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      console.error('[HR_ROTA_EMAIL] mail_outbox insert failed', {
+        timesheet_id,
+        import_id: importId,
+        error: txt
+      });
+      throw new Error(`Failed to queue mismatch email: ${txt}`);
+    }
+  } catch (e) {
+    console.error('[HR_ROTA_EMAIL] mail_outbox insert error', {
+      timesheet_id,
+      import_id: importId,
+      err: e?.message || String(e)
+    });
+    throw e;
+  }
+
+  // 4.1) Best-effort: update hr_issue_emails last_sent_at via UPSERT (Email/Re-email behavior)
+  // NOTE: This is best-effort and must not throw (email already queued successfully).
+  try {
+    const reasonLower = String(reasonCode || '').toLowerCase();
+    const staffNorm = (row?.staff_norm || row?.staff_name || row?.staff_raw || '').toLowerCase().trim() || null;
+    const unitNorm  = (row?.unit_norm || row?.unit || row?.hospital_or_trust || row?.hospital_norm || '').toLowerCase().trim() || null;
+
+    // Stable fingerprint (no import_id, no hr_row_id)
+    const fp = [
+      'HEALTHROSTER_DAILY',
+      reasonLower,
+      String(timesheet_id || ''),
+      String(hrRequestId || ''),
+      staffNorm || '',
+      unitNorm || '',
+      String(dateLocal || ''),
+      String(hrStart || ''),
+      String(hrEnd || ''),
+      String(hrHours || ''),
+      String(tsHours || '')
+    ].join('|');
+
+    const nowIso = new Date().toISOString();
+
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/hr_issue_emails?on_conflict=issue_fingerprint`,
+      {
+        method: 'POST',
+        headers: { ...sbHeaders(env), Prefer: 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify({
+          source_system: 'HEALTHROSTER_DAILY',
+          import_id: importId || null,
+          client_id: row?.client_id || resolvedClientId || null,
+          timesheet_id,
+          hr_row_id: row?.hr_row_id || null,
+          staff_norm: staffNorm,
+          hospital_norm: unitNorm,
+          work_date: row?.date_local || row?.date || row?.shift_date || null,
+          reason_code: reasonLower || 'actual_hours_mismatch',
+          issue_fingerprint: fp,
+          last_sent_at: nowIso
+        })
+      }
+    ).catch(() => {});
+  } catch {
+    // swallow
+  }
+
+  // 5) Audit (best-effort)
+  try {
+    await writeAudit(
+      env,
+      null, // system / worker context; no interactive user
+      'HR_DAILY_MISMATCH_EMAIL_QUEUED',
+      {
+        import_id: importId,
+        timesheet_id,
+        hr_row_id: row?.hr_row_id || null,
+        hr_request_id: hrRequestId,
+        recipient_email: recipientEmail,
+        reason_code: reasonCode,
+        pdf_key: pdfKey
+      },
+      { entity: 'timesheets', subject_id: timesheet_id, req: null }
+    );
+  } catch (e) {
+    console.warn('[HR_ROTA_EMAIL] audit failed', {
+      timesheet_id,
+      import_id: importId,
+      err: e?.message || String(e)
+    });
+  }
+}
+
 async function handleHrRotaQueueTsoEmail(env, req) {
   const enc = encodeURIComponent;
 
@@ -45606,6 +46257,37 @@ async function handleHrRotaQueueTsoEmail(env, req) {
 
   if (!timesheetId) {
     return withCORS(env, req, badRequest('timesheet_id is required'));
+  }
+
+  // ✅ Confirmation gate: block if timesheet is not confirmed
+  const isBlockedForTsoEmail = (processing_status) => {
+    const s = String(processing_status || '').trim().toUpperCase();
+    if (!s) return true; // safe default
+    return (s === 'PENDING_AUTH' || s === 'AWAITING_MANUAL_SIGNATURE');
+  };
+
+  try {
+    const { rows: tfRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?timesheet_id=eq.${enc(timesheetId)}` +
+        `&is_current=eq.true` +
+        `&select=processing_status` +
+        `&limit=1`
+    );
+    const ps = tfRows?.[0]?.processing_status ?? null;
+
+    if (isBlockedForTsoEmail(ps)) {
+      const psTxt = String(ps || '').trim() || 'UNKNOWN';
+      return withCORS(env, req, badRequest(
+        `Email blocked: timesheet is not confirmed (awaiting authorisation/signature). processing_status=${psTxt}`
+      ));
+    }
+  } catch (e) {
+    const msg = String(e?.message || e || '');
+    return withCORS(env, req, badRequest(
+      `Email blocked: cannot determine timesheet confirmation status (safe default). err=${msg || 'unknown'}`
+    ));
   }
 
   // 0) Load agency name from settings_defaults (fallback to CloudTMS)
@@ -45803,206 +46485,6 @@ async function handleHrRotaQueueTsoEmail(env, req) {
   }));
 }
 
-
-
-
-
-
-async function enqueueHrMismatchEmail(env, { timesheet_id, importId, row }) {
-  const enc = encodeURIComponent;
-
-  if (!timesheet_id) return;
-
-  // 1) Ensure there is a PDF for this timesheet
-  let pdfKey = null;
-  try {
-    pdfKey = await ensureTimesheetPdf(env, timesheet_id);
-  } catch (e) {
-    console.warn('[HR_ROTA_EMAIL] ensureTimesheetPdf failed', {
-      timesheet_id,
-      err: e?.message || String(e)
-    });
-  }
-  if (!pdfKey) {
-    throw new Error('Failed to ensure timesheet PDF for mismatch email');
-  }
-
-  // 2) Resolve TSO / Temporary Staffing recipient
-  let recipientEmail = null;
-  let resolvedClientId = null;
-  try {
-    const tgt = await resolveTsoRecipientForTimesheet(env, {
-      timesheet_id,
-      booking_id: row?.hr_request_id || null
-    });
-    recipientEmail = tgt?.to ? String(tgt.to).trim() : null;
-    resolvedClientId = tgt?.client_id ? String(tgt.client_id) : null;
-  } catch (e) {
-    console.warn('[HR_ROTA_EMAIL] resolveTsoRecipientForTimesheet failed', {
-      timesheet_id,
-      err: e?.message || String(e)
-    });
-  }
-
-  if (!recipientEmail) {
-    throw new Error('No Temporary Staffing email (ts_queries_email) resolved for this timesheet');
-  }
-
-  // 3) Compose subject/body
-  const staffName  = row?.staff_name || row?.payload_json?.staff_name || 'Agency worker';
-  const dateLocal  = row?.date_local || row?.payload_json?.date_local || 'Unknown date';
-  const hrRequestId = row?.hr_request_id || row?.payload_json?.request_id || null;
-  const reasonCode  = row?.reason_code || 'actual_hours_mismatch';
-
-  const detail = row?.details || {};
-  const hrStart = detail.start_local  || detail.hr_start        || 'N/A';
-  const hrEnd   = detail.end_local    || detail.hr_end          || 'N/A';
-  const hrHours = detail.hr_hours     || detail.hr_actual_hours || detail.hours_worked || 'N/A';
-  const tsHours = detail.ts_hours     || detail.ts_total_hours  || 'N/A';
-
-  const subject = `Timesheet hours mismatch – ${staffName} – ${dateLocal} – ${hrRequestId || 'no HR ref'}`;
-
-  const lines = [
-    `Dear Temporary Staffing,`,
-    ``,
-    `Please can you amend the hours on HealthRoster for the attached agency shift.`,
-    ``,
-    `Staff: ${staffName}`,
-    `Date: ${dateLocal}`,
-    `HR Request ID: ${hrRequestId || '(not provided)'}`,
-    ``,
-    `HealthRoster shows:`,
-    `  Start: ${hrStart}`,
-    `  End:   ${hrEnd}`,
-    `  Actual Hours: ${hrHours}`,
-    ``,
-    `Signed timesheet attached shows:`,
-    `  Actual Hours: ${tsHours}`,
-    ``,
-    `Once amended, please kindly confirm.`,
-    ``,
-    `Kind regards,`,
-    `CloudTMS`
-  ];
-
-  const body_text = lines.join('\n');
-  const body_html = `<p>${lines.map(l => (l === '' ? '<br/>' : l)).join('<br/>')}</p>`;
-
-  // 4) Insert into mail_outbox (using existing schema)
-  const mailPayload = [{
-    to: recipientEmail,
-    subject,
-    body_text,
-    body_html,
-    attachments: [{
-      r2_key: pdfKey,
-      filename: `Timesheet_${timesheet_id}.pdf`
-    }],
-    type: 'TSO_FAILURE',
-    reference: hrRequestId || null,
-    correlation_id: `HR_DAILY_MISMATCH:${timesheet_id}:${hrRequestId || ''}`
-  }];
-
-  try {
-    const res = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/mail_outbox`,
-      {
-        method: 'POST',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify(mailPayload)
-      }
-    );
-    if (!res.ok) {
-      const txt = await res.text().catch(() => '');
-      console.error('[HR_ROTA_EMAIL] mail_outbox insert failed', {
-        timesheet_id,
-        import_id: importId,
-        error: txt
-      });
-      throw new Error(`Failed to queue mismatch email: ${txt}`);
-    }
-  } catch (e) {
-    console.error('[HR_ROTA_EMAIL] mail_outbox insert error', {
-      timesheet_id,
-      import_id: importId,
-      err: e?.message || String(e)
-    });
-    throw e;
-  }
-
-  // 4.1) Best-effort: update hr_issue_emails last_sent_at via UPSERT (Email/Re-email behavior)
-  // NOTE: This is best-effort and must not throw (email already queued successfully).
-  try {
-    const reasonLower = String(reasonCode || '').toLowerCase();
-    const staffNorm = (row?.staff_norm || row?.staff_name || row?.staff_raw || '').toLowerCase().trim() || null;
-    const unitNorm  = (row?.unit_norm || row?.unit || row?.hospital_or_trust || row?.hospital_norm || '').toLowerCase().trim() || null;
-
-    // Stable fingerprint (no import_id, no hr_row_id)
-    const fp = [
-      'HEALTHROSTER_DAILY',
-      reasonLower,
-      String(timesheet_id || ''),
-      String(hrRequestId || ''),
-      staffNorm || '',
-      unitNorm || '',
-      String(dateLocal || ''),
-      String(hrStart || ''),
-      String(hrEnd || ''),
-      String(hrHours || ''),
-      String(tsHours || '')
-    ].join('|');
-
-    const nowIso = new Date().toISOString();
-
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/hr_issue_emails?on_conflict=issue_fingerprint`,
-      {
-        method: 'POST',
-        headers: { ...sbHeaders(env), Prefer: 'resolution=merge-duplicates,return=minimal' },
-        body: JSON.stringify({
-          source_system: 'HEALTHROSTER_DAILY',
-          import_id: importId || null,
-          client_id: row?.client_id || resolvedClientId || null,
-          timesheet_id,
-          hr_row_id: row?.hr_row_id || null,
-          staff_norm: staffNorm,
-          hospital_norm: unitNorm,
-          work_date: row?.date_local || row?.date || row?.shift_date || null,
-          reason_code: reasonLower || 'actual_hours_mismatch',
-          issue_fingerprint: fp,
-          last_sent_at: nowIso
-        })
-      }
-    ).catch(() => {});
-  } catch {
-    // swallow
-  }
-
-  // 5) Audit (best-effort)
-  try {
-    await writeAudit(
-      env,
-      null, // system / worker context; no interactive user
-      'HR_DAILY_MISMATCH_EMAIL_QUEUED',
-      {
-        import_id: importId,
-        timesheet_id,
-        hr_row_id: row?.hr_row_id || null,
-        hr_request_id: hrRequestId,
-        recipient_email: recipientEmail,
-        reason_code: reasonCode,
-        pdf_key: pdfKey
-      },
-      { entity: 'timesheets', subject_id: timesheet_id, req: null }
-    );
-  } catch (e) {
-    console.warn('[HR_ROTA_EMAIL] audit failed', {
-      timesheet_id,
-      import_id: importId,
-      err: e?.message || String(e)
-    });
-  }
-}
 
 
 
