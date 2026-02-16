@@ -38610,6 +38610,8 @@ async function handleHrRotaValidationPreview(env, req, importId) {
     return withCORS(env, req, serverError(`Failed to classify HR daily rota import: ${e?.message || e}`));
   }
 }
+
+
 async function handleHrRotaValidationApply(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
@@ -38820,13 +38822,24 @@ async function handleHrRotaValidationApply(env, req, importId) {
 
     const isOk = (statusU === 'VALIDATION_OK' || statusU === 'OK' || statusU === 'PASS' || statusU === 'VALID');
 
-    validation_rows.push({
+    // ✅ NEW: include hr_row_id when present (real file rows); omit for synthetic rows
+    const hrRowId = (row?.hr_row_id != null && String(row.hr_row_id).trim())
+      ? String(row.hr_row_id).trim()
+      : '';
+
+    const vrow = {
       timesheet_id: String(timesheetId),
       status: isOk ? 'VALIDATION_OK' : 'VALIDATION_ERROR',
       reason_code: isOk ? 'HEALTHROSTER_DAILY' : (reasonCodeRaw || 'validation_failed'),
       // For missing_from_import, classification provides hr_request_id as the existing ref_before
       hr_request_id: row?.hr_request_id || row?.hrRequestId || null
-    });
+    };
+
+    if (hrRowId) {
+      vrow.hr_row_id = hrRowId;
+    }
+
+    validation_rows.push(vrow);
   }
 
   // ✅ Pre-validate email_actions against:
@@ -39496,6 +39509,8 @@ async function handleHrRotaValidationApply(env, req, importId) {
     }
   }));
 }
+
+
 
 async function handleHrRotaQueueTsoEmail(env, req) {
   const enc = encodeURIComponent;
@@ -52773,7 +52788,6 @@ async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, o
       ''
     );
   }
-
 function buildHrReportHTML(inv, header, hrRows) {
   const safe = (v) => (v == null ? '' : String(v));
   const h = header || {};
@@ -52790,6 +52804,53 @@ function buildHrReportHTML(inv, header, hrRows) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+
+  const pad2 = (n) => String(n).padStart(2, '0');
+
+  const toNum = (v) => {
+    if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+    const s = String(v ?? '').trim();
+    if (!s) return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  // Excel time fraction / serial date-time -> HH:MM
+  // - If v is 0..2 => treat as day-fraction (durations up to 48h supported)
+  // - If v is a typical Excel serial date (~20000..90000) => use fractional part for time-of-day
+  // - If v already looks like HH:MM(/:SS) => normalise to HH:MM
+  const excelToHHMM = (v) => {
+    const n = toNum(v);
+    if (n == null) {
+      const s = String(v ?? '').trim();
+      if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(s)) {
+        const parts = s.split(':');
+        const hh = pad2(Number(parts[0]) || 0);
+        const mm = pad2(Number(parts[1]) || 0);
+        return `${hh}:${mm}`;
+      }
+      return safe(v);
+    }
+
+    let frac = null;
+
+    // fraction-of-day (common)
+    if (n >= 0 && n <= 2) {
+      frac = n;
+    } else if (n > 2 && n < 90000) {
+      // serial date-time -> time fraction
+      frac = n - Math.floor(n);
+    }
+
+    if (frac == null || frac < 0) return safe(v);
+
+    const mins = Math.round(frac * 1440);
+    const hh = Math.floor(mins / 60);
+    const mm = mins % 60;
+    return `${pad2(hh)}:${pad2(mm)}`;
+  };
+
+  const normH = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
 
   const tables = [];
 
@@ -52844,6 +52905,47 @@ function buildHrReportHTML(inv, header, hrRows) {
     return firstRow && typeof firstRow === 'object' ? Object.keys(firstRow).length : 0;
   };
 
+  const buildColumnMeta = (hdrRows, hdrCols, colCount, rows) => {
+    const hdrRowsArr = Array.isArray(hdrRows) ? hdrRows : [];
+    const hdrColsArr = Array.isArray(hdrCols) ? hdrCols : [];
+
+    const labelAt = (i) => {
+      for (let r = hdrRowsArr.length - 1; r >= 0; r--) {
+        const row = hdrRowsArr[r];
+        if (!Array.isArray(row)) continue;
+        const v = (i < row.length) ? String(row[i] ?? '').trim() : '';
+        if (v) return v;
+      }
+      if (i < hdrColsArr.length) {
+        const v2 = String(hdrColsArr[i] ?? '').trim();
+        if (v2) return v2;
+      }
+      const firstWithRaw = (Array.isArray(rows) ? rows : []).find(rr => Array.isArray(rr?.raw_columns));
+      if (firstWithRaw && colCount > 0) return `Column ${i + 1}`;
+      return '';
+    };
+
+    const meta = [];
+    for (let i = 0; i < colCount; i++) {
+      const label = labelAt(i);
+      const hn = normH(label);
+
+      let kind = 'text';
+
+      // ✅ Requested: treat From/To/Start/End as time columns
+      if (
+        hn === 'from' || hn === 'to' || hn === 'start' || hn === 'end' ||
+        hn === 'from time' || hn === 'to time' || hn === 'start time' || hn === 'end time' ||
+        hn.endsWith(' from') || hn.endsWith(' to') || hn.endsWith(' start') || hn.endsWith(' end')
+      ) {
+        kind = 'time';
+      }
+
+      meta.push({ label, hn, kind });
+    }
+    return meta;
+  };
+
   const renderThead = (hdrRows, hdrCols, colCount, rows) => {
     if (Array.isArray(hdrRows) && hdrRows.length) {
       const trs = hdrRows.map(rowArr => {
@@ -52877,7 +52979,7 @@ function buildHrReportHTML(inv, header, hrRows) {
     return `<thead><tr>${cells}</tr></thead>`;
   };
 
-  const renderTbody = (rows, colCount) => {
+  const renderTbody = (rows, colCount, colMeta) => {
     const bodyRows = (Array.isArray(rows) ? rows : []).map(r => {
       // Canonical: render from raw_columns if present
       const arr = Array.isArray(r?.raw_columns)
@@ -52887,8 +52989,14 @@ function buildHrReportHTML(inv, header, hrRows) {
       if (arr) {
         const cells = [];
         for (let i = 0; i < colCount; i++) {
-          const v = (i < arr.length) ? arr[i] : '';
-          cells.push(`<td>${esc(v)}</td>`);
+          const v0 = (i < arr.length) ? arr[i] : '';
+          const kind = (colMeta && colMeta[i] && colMeta[i].kind) ? colMeta[i].kind : 'text';
+
+          let out = '';
+          if (kind === 'time') out = excelToHHMM(v0);
+          else out = safe(v0);
+
+          cells.push(`<td>${esc(out)}</td>`);
         }
         return `<tr>${cells.join('')}</tr>`;
       }
@@ -52917,8 +53025,9 @@ function buildHrReportHTML(inv, header, hrRows) {
 
     if (rows.length === 0) return '';
 
+    const colMeta = buildColumnMeta(hdrRows, hdrCols, colCount, rows);
     const theadHtml = renderThead(hdrRows, hdrCols, colCount, rows);
-    const tbodyHtml = renderTbody(rows, colCount);
+    const tbodyHtml = renderTbody(rows, colCount, colMeta);
 
     return `${sep}
       <table class="hr">
@@ -52938,6 +53047,8 @@ function buildHrReportHTML(inv, header, hrRows) {
   <meta charset="utf-8" />
   <title>HealthRoster Report</title>
   <style>
+    @page { size: A4 landscape; }
+
     body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 11px; margin: 24px; }
     h1 { font-size: 18px; margin-bottom: 4px; }
     h2 { font-size: 13px; margin-top: 4px; margin-bottom: 12px; }
@@ -52969,6 +53080,7 @@ function buildHrReportHTML(inv, header, hrRows) {
 </html>
   `;
 }
+
 
 function buildNhspReportHTML(inv, header, nhspData) {
   const safe = (v) => (v == null ? '' : String(v));
@@ -54748,7 +54860,7 @@ const docsKeys = tsIds.map(tsId => normalizeKey(`docs-pdf/timesheets/ts_${tsId}.
       }
       return { ok: false, error: `Invoice render failed: missing required artefacts (${missing.length}).` };
     }
-    // Build HR rows/html (outside browser)
+     // Build HR rows/html (outside browser)
     step = 'BUILD_HR_REPORT';
     let hrHtml = null;
     if (hrAllowed) {
@@ -54756,7 +54868,8 @@ const docsKeys = tsIds.map(tsId => normalizeKey(`docs-pdf/timesheets/ts_${tsId}.
 
       if (hrCacheRowsEffective.length) {
         for (const r of hrCacheRowsEffective) {
-          if (String(r.source_system || '').toUpperCase() !== 'HEALTHROSTER') continue;
+          const ssU = String(r.source_system || '').toUpperCase();
+          if (ssU !== 'HEALTHROSTER' && ssU !== 'HEALTHROSTER_DAILY') continue;
 
           const rows = Array.isArray(r.rows_json) ? r.rows_json : [];
           if (!rows.length) continue;
@@ -54788,6 +54901,7 @@ const docsKeys = tsIds.map(tsId => normalizeKey(`docs-pdf/timesheets/ts_${tsId}.
     } else {
       log('log', 'hr_skipped_not_allowed', { requires_hr: requiresHr, hr_attach_to_invoice: hrAttach });
     }
+
     // Build NHSP tables/html (outside browser)
     step = 'BUILD_NHSP_REPORT';
     let nhspHtml = null;
@@ -54862,7 +54976,7 @@ const docsKeys = tsIds.map(tsId => normalizeKey(`docs-pdf/timesheets/ts_${tsId}.
         }
       }
 
-      // HR PDF (only if allowed and rows exist)
+        // HR PDF (only if allowed and rows exist)
       if (hrHtml) {
         const page = await browser.newPage();
         attachPageDebug(page, 'hr');
@@ -54876,6 +54990,7 @@ const docsKeys = tsIds.map(tsId => normalizeKey(`docs-pdf/timesheets/ts_${tsId}.
           log('log', 'hr_pdf_start');
           const pdfArrayBuffer = await page.pdf({
             format: 'a4',
+            landscape: true,
             printBackground: true,
             margin: { top: 24, right: 24, bottom: 24, left: 24 }
           });
