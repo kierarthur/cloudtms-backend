@@ -5679,6 +5679,7 @@ $function$;
 drop function if exists public.invoice_source_rows_collect(uuid, boolean);
 
 
+
 create or replace function public.invoice_source_rows_collect(
   p_invoice_id uuid,
   p_force_refresh boolean default true
@@ -5803,16 +5804,57 @@ begin
       )
       and sg.nhsp_shift_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
   ),
-  useful as (
+
+  -- Shift-based evidence (NHSP + weekly HealthRoster via nhsp_shifts)
+  useful_shift as (
     select
       upper(coalesce(s.source_system::text,'UNKNOWN')) as source_system,
       s.latest_import_id as import_id,
-      s.external_row_key
+      s.external_row_key as external_row_key
     from public.nhsp_shifts s
     where s.id in (select sh.shift_id from shift_ids sh)
       and s.latest_import_id is not null
       and s.external_row_key is not null
   ),
+
+  -- ✅ NEW: Daily HealthRoster evidence (HEALTHROSTER_DAILY) via resolved_timesheet_id linkage on hr_rows.payload_json
+  -- Included only when HR attachments are allowed by policy (same as weekly HEALTHROSTER).
+  useful_daily as (
+    select
+      'HEALTHROSTER_DAILY'::text as source_system,
+      hr.import_id as import_id,
+      hr.external_row_key as external_row_key
+    from public.hr_rows hr
+    join public.hr_imports hi
+      on hi.id = hr.import_id
+    where v_hr_allowed = true
+      and hi.source_system = 'HEALTHROSTER_DAILY'::public.hr_source_enum
+      and hr.import_id is not null
+      and hr.external_row_key is not null
+      and (hr.payload_json->>'resolved_timesheet_id') in (
+        select t.timesheet_id::text
+        from ts_ids t
+        where t.timesheet_id is not null
+      )
+  ),
+
+  -- Unified evidence set
+  useful as (
+    select
+      us.source_system,
+      us.import_id,
+      us.external_row_key
+    from useful_shift us
+
+    union all
+
+    select
+      ud.source_system,
+      ud.import_id,
+      ud.external_row_key
+    from useful_daily ud
+  ),
+
   grouped as (
     select
       u.source_system,
