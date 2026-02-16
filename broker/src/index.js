@@ -44597,7 +44597,6 @@ async function resolveTimesheetToCurrent(env, timesheet_id) {
 
 
 
-
 async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRates }) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
   const L = (...a) => { if (LOG) console.log('[TSFIN][DAILY][validateDailyRotaRowAgainstTimesheet]', ...a); };
@@ -44671,8 +44670,35 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
     return Number.isFinite(num) ? num : null;
   };
 
-  const hrStartLocal = parseHhmm(hrRow?.start_time_local || hrRow?.payload_json?.start_local);
-  const hrEndLocal   = parseHhmm(hrRow?.end_time_local   || hrRow?.payload_json?.end_local);
+  const parseBreakMinutes = (v) => {
+    if (v == null || v === '') return null;
+    if (typeof v === 'number') {
+      if (!Number.isFinite(v)) return null;
+      if (v >= 0 && v <= 600) return Math.round(v);
+      // support Excel day-fraction formats (rare, but safe)
+      if (v > 0 && v < 1) {
+        const mins = Math.round(v * 24 * 60);
+        if (mins >= 0 && mins <= 600) return mins;
+      }
+      return null;
+    }
+    const s = String(v).trim();
+    if (!s) return null;
+    const m = s.match(/^\s*([0-9]+)\s*(mins?|minutes?)?\s*$/i);
+    if (m && m[1]) {
+      const n = Number(m[1]);
+      if (Number.isFinite(n) && n >= 0 && n <= 600) return Math.round(n);
+    }
+    const num = Number(s);
+    if (Number.isFinite(num) && num >= 0 && num <= 600) return Math.round(num);
+    return null;
+  };
+
+  // ─────────────────────────────────────────────────────────────
+  // HR / Rota parsing
+  // ─────────────────────────────────────────────────────────────
+  const hrStartLocal = parseHhmm(hrRow?.start_time_local || hrRow?.payload_json?.start_local || hrRow?.payload_json?.start_time_local);
+  const hrEndLocal   = parseHhmm(hrRow?.end_time_local   || hrRow?.payload_json?.end_local   || hrRow?.payload_json?.end_time_local);
 
   const hrStartMin = hhmmToMinutes(hrStartLocal);
   const hrEndMin   = hhmmToMinutes(hrEndLocal);
@@ -44697,20 +44723,39 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
     breakMinutesRota = Math.max(0, shiftMinutes - paidMinutesRota);
   }
 
+  // If rota hours are not provided, try to use explicit break minutes from file (common in HR exports).
+  const breakMinutesRotaExplicit =
+    parseBreakMinutes(hrRow?.payload_json?.break_minutes) ??
+    parseBreakMinutes(hrRow?.payload_json?.breakMinutes) ??
+    parseBreakMinutes(hrRow?.payload_json?.BreakMinutes) ??
+    parseBreakMinutes(hrRow?.payload_json?.Break) ??
+    parseBreakMinutes(hrRow?.payload_json?.['Actual Break']) ??
+    parseBreakMinutes(hrRow?.payload_json?.ActualBreak) ??
+    null;
+
+  const breakMinutesRotaForDisplay =
+    (breakMinutesRota != null ? breakMinutesRota : breakMinutesRotaExplicit);
+
   L('rota parsed', {
     hr_start_local: hrStartLocal,
     hr_end_local: hrEndLocal,
     shift_minutes: shiftMinutes,
     actual_hours: actualHoursRota,
-    break_minutes: breakMinutesRota
+    break_minutes: breakMinutesRotaForDisplay
   });
 
+  // ─────────────────────────────────────────────────────────────
   // Timesheet time derivation
+  // ─────────────────────────────────────────────────────────────
   const tsStartIso = ts.worked_start_iso || null;
   const tsEndIso   = ts.worked_end_iso   || null;
+
   let tsStartMin = null;
   let tsEndMin   = null;
   let tsShiftMin = null;
+
+  let tsStartLocal = null;
+  let tsEndLocal = null;
 
   if (tsStartIso && tsEndIso) {
     try {
@@ -44718,8 +44763,13 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
       const partsEnd   = toLocalParts(tsEndIso, null);
       const sHm = partsStart && partsStart.hm ? partsStart.hm : tsStartIso.slice(11, 16);
       const eHm = partsEnd   && partsEnd.hm   ? partsEnd.hm   : tsEndIso.slice(11, 16);
-      tsStartMin = hhmmToMinutes(sHm);
-      tsEndMin   = hhmmToMinutes(eHm);
+
+      tsStartLocal = parseHhmm(sHm) || null;
+      tsEndLocal   = parseHhmm(eHm) || null;
+
+      tsStartMin = hhmmToMinutes(tsStartLocal);
+      tsEndMin   = hhmmToMinutes(tsEndLocal);
+
       if (tsStartMin != null && tsEndMin != null) {
         tsShiftMin = tsEndMin - tsStartMin;
         if (tsShiftMin <= 0) tsShiftMin += 24 * 60;
@@ -44759,14 +44809,28 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
     breakMinutesTs = b > 0 ? b : 0;
   }
 
+  const refBefore =
+    (ts.reference_number != null && String(ts.reference_number).trim())
+      ? String(ts.reference_number).trim()
+      : null;
+
+  const refAfter =
+    (hrRequestId != null && String(hrRequestId).trim())
+      ? String(hrRequestId).trim()
+      : null;
+
   L('timesheet/tsfin derived', {
     ts_start_iso: tsStartIso,
     ts_end_iso: tsEndIso,
+    ts_start_local: tsStartLocal,
+    ts_end_local: tsEndLocal,
     ts_shift_minutes: tsShiftMin,
     ts_break_minutes: breakMinutesTs,
     tsfin_total_hours: totalHoursTsfin,
     tsfin_candidate_id: tsfin?.candidate_id || null,
-    tsfin_client_id: tsfin?.client_id || null
+    tsfin_client_id: tsfin?.client_id || null,
+    ref_before: refBefore,
+    ref_after: refAfter
   });
 
   let reason = null;
@@ -44780,8 +44844,8 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
   }
 
   // 2) Break minutes mismatch
-  if (reason == null && breakMinutesRota != null && breakMinutesTs != null) {
-    const diffBreak = Math.abs(breakMinutesRota - breakMinutesTs);
+  if (reason == null && breakMinutesRotaForDisplay != null && breakMinutesTs != null) {
+    const diffBreak = Math.abs(breakMinutesRotaForDisplay - breakMinutesTs);
     if (diffBreak > 5) reason = 'break_minutes_mismatch';
     L('check breaks', { diffBreak, reason });
   }
@@ -44884,19 +44948,58 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
     }
   }
 
+  // ✅ IMPORTANT: detail must contain the keys expected by the weekly Mode-A renderer.
+  // - HR side: detail.start_local / detail.end_local / detail.healthroster_break_mins
+  // - TS side: detail.timesheet_start / detail.timesheet_end / detail.timesheet_break_mins
+  // Also keep existing fields for downstream email/diagnostics.
+  const matchStatus = reason ? 'MISMATCH' : 'MATCH';
+
   const detail = {
+    // identity
     hr_request_id: hrRequestId,
     date_local: dateLocal,
+
+    // match status used by adapter/renderers
+    match_status: matchStatus,
+
+    // HR (HealthRoster) — keys the UI reads
+    start_local: hrStartLocal,
+    end_local: hrEndLocal,
+    healthroster_start: hrStartLocal,
+    healthroster_end: hrEndLocal,
+    healthroster_break_mins: breakMinutesRotaForDisplay,
+
+    // Back-compat HR aliases used elsewhere
     hr_start_local: hrStartLocal,
     hr_end_local: hrEndLocal,
+    hr_start: hrStartLocal,
+    hr_end: hrEndLocal,
     hr_shift_minutes: shiftMinutes,
     hr_actual_hours: actualHoursRota,
-    hr_break_minutes: breakMinutesRota,
-    ts_worked_start_iso: tsStartIso,
-    ts_worked_end_iso: tsEndIso,
+    hr_hours: actualHoursRota,
+    hours_worked: actualHoursRota,
+    hr_break_minutes: breakMinutesRotaForDisplay,
+    hr_break_mins: breakMinutesRotaForDisplay,
+
+    // Timesheet — keys the UI reads
+    timesheet_start: tsStartLocal,
+    timesheet_end: tsEndLocal,
+    timesheet_break_mins: breakMinutesTs,
+
+    // Back-compat TS aliases / diagnostics
+    ts_start_local: tsStartLocal,
+    ts_end_local: tsEndLocal,
     ts_shift_minutes: tsShiftMin,
     ts_break_minutes: breakMinutesTs,
-    ts_total_hours: totalHoursTsfin
+    ts_break_mins: breakMinutesTs,
+    ts_total_hours: totalHoursTsfin,
+    ts_hours: totalHoursTsfin,
+    ts_worked_start_iso: tsStartIso,
+    ts_worked_end_iso: tsEndIso,
+
+    // References (useful for UI and for invoice-lock semantics elsewhere)
+    ref_before: refBefore || '',
+    ref_after: refAfter || ''
   };
 
   if (!reason) {
@@ -44907,7 +45010,6 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
   L('EXIT FAIL', { reason, detail });
   return { ok: false, reason_code: reason, hr_request_id: hrRequestId, detail };
 }
-
 
 
 
