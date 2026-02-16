@@ -43,8 +43,8 @@ as $$
   ),
   use_id as (
     select
-      (select req.requested_timesheet_id from req) as requested_timesheet_id,
-      (select cur.current_timesheet_id from cur)   as current_timesheet_id
+      (select r.requested_timesheet_id from req r) as requested_timesheet_id,
+      (select c.current_timesheet_id  from cur c) as current_timesheet_id
   ),
 
   -- Existing evidence source: attached shifts (unchanged)
@@ -66,7 +66,25 @@ as $$
       )
   ),
 
-  -- NEW evidence source: schedule entries (correction timesheets)
+  -- ✅ NEW evidence source: Daily HealthRoster rows linked by payload_json.resolved_timesheet_id
+  -- Only DAILY imports are included here (HEALTHROSTER_DAILY).
+  daily as (
+    select
+      hr.import_id         as import_id,
+      hr.external_row_key  as external_row_key,
+      'HEALTHROSTER_DAILY'::text as source_system_hint
+    from public.hr_rows hr
+    join public.hr_imports hi
+      on hi.id = hr.import_id
+    where hi.source_system = 'HEALTHROSTER_DAILY'::public.hr_source_enum
+      and hr.import_id is not null
+      and hr.external_row_key is not null
+      and (hr.payload_json->>'resolved_timesheet_id') = (select u.current_timesheet_id::text from use_id u)
+      and (p_import_id is null or hr.import_id = p_import_id)
+      and (p_shift_id is null)  -- shift_id filter only applies to shift-based evidence sources
+  ),
+
+  -- Existing evidence source: schedule entries (correction timesheets)
   -- Extract (import_id, external_row_key) pairs from timesheets.actual_schedule_json
   sched_raw as (
     select
@@ -109,13 +127,21 @@ as $$
       and (p_shift_id is null or sk.shift_id = p_shift_id)
   ),
 
-  -- Combine evidence keys from both sources and de-dupe by (import_id, external_row_key)
+  -- Combine evidence keys from all sources and de-dupe by (import_id, external_row_key)
   keys_union as (
     select
       sh0.import_id as import_id,
       sh0.external_row_key as external_row_key,
       sh0.source_system::text as source_system_hint
     from sh sh0
+
+    union all
+
+    select
+      d0.import_id as import_id,
+      d0.external_row_key as external_row_key,
+      d0.source_system_hint as source_system_hint
+    from daily d0
 
     union all
 
@@ -204,4 +230,3 @@ as $$
     on r.import_id = i.import_id
   order by i.source_system, i.uploaded_at_utc nulls last, i.import_id;
 $$;
-
