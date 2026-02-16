@@ -36762,10 +36762,10 @@ async function classifyHrRotaValidationImport(env, importId) {
   // ─────────────────────────────────────────────────────────────
   const candidateByNameTrustCache = new Map();      // `${staffNorm}|${trustNorm}` -> candidate_id|null
   const timesheetsByCandClientCache = new Map();    // `${candidate_id}|${client_id}` -> [v_timesheets_daily_match rows...]
+  const timesheetsByClientDateCache = new Map();    // `${client_id}|${dateMin}|${dateMax}` -> [v_timesheets_daily_match rows...]
 
-  // For missing-shift synthesis + reasonable UI labels
+  // For reasonable UI labels
   const candidateMetaById = new Map();              // candidate_id -> { staffRaw, staffNorm, trustRaw, trustNorm }
-  const candidateIdsResolved = new Set();           // candidate_ids that appear in this import and resolved
   const matchedTimesheetIds = new Set();            // timesheet_ids that were matched to an HR row
 
   async function resolveCandidateByNameTrustCached(staffRaw, staffNorm, trustNorm) {
@@ -36813,6 +36813,22 @@ async function classifyHrRotaValidationImport(env, importId) {
     return null;
   }
 
+  function nextDayYmd(ymd) {
+    const s = String(ymd || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+    try {
+      const dt = new Date(`${s}T00:00:00Z`);
+      if (Number.isNaN(dt.getTime())) return null;
+      dt.setUTCDate(dt.getUTCDate() + 1);
+      const yyyy = dt.getUTCFullYear();
+      const mm = String(dt.getUTCMonth() + 1).padStart(2, '0');
+      const dd = String(dt.getUTCDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    } catch {
+      return null;
+    }
+  }
+
   function buildTimesheetTargetOptions(tsRows) {
     const out = [];
     for (const t of (tsRows || [])) {
@@ -36853,6 +36869,9 @@ async function classifyHrRotaValidationImport(env, importId) {
           `&select=` +
             [
               'timesheet_id',
+              'candidate_id',
+              'client_id',
+
               'worked_start_iso',
               'worked_end_iso',
               'break_minutes',
@@ -36893,6 +36912,84 @@ async function classifyHrRotaValidationImport(env, importId) {
 
     timesheetsByCandClientCache.set(key, tsRows);
     return tsRows;
+  }
+
+  async function getDailyTimesheetsForClientDateRangeCached(clientId, dateMinYmd, dateMaxYmd) {
+    const cli = String(clientId || '').trim();
+    const dMin = String(dateMinYmd || '').trim();
+    const dMax = String(dateMaxYmd || '').trim();
+    if (!cli || !/^\d{4}-\d{2}-\d{2}$/.test(dMin) || !/^\d{4}-\d{2}-\d{2}$/.test(dMax)) return [];
+
+    const key = `${cli}|${dMin}|${dMax}`;
+    if (timesheetsByClientDateCache.has(key)) return timesheetsByClientDateCache.get(key);
+
+    const nextMax = nextDayYmd(dMax);
+    // Narrow by UTC start range (safe for UK dates; still filter by local ymd below).
+    const startUtc = `${dMin}T00:00:00Z`;
+    const endUtc = `${nextMax || dMax}T00:00:00Z`;
+
+    let tsRows = [];
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/v_timesheets_daily_match` +
+          `?client_id=eq.${enc(cli)}` +
+          `&sheet_scope=eq.DAILY` +
+          `&worked_start_iso=gte.${enc(startUtc)}` +
+          `&worked_start_iso=lt.${enc(endUtc)}` +
+          `&select=` +
+            [
+              'timesheet_id',
+              'candidate_id',
+              'client_id',
+
+              'worked_start_iso',
+              'worked_end_iso',
+              'break_minutes',
+              'worked_minutes',
+
+              'processing_status',
+              'sheet_scope',
+
+              'paid_at_utc',
+              'locked_by_invoice_id',
+              'reference_number',
+
+              'hospital_norm',
+              'ward_norm',
+              'job_title_norm',
+              'shift_label_norm',
+              'tsfin_role',
+              'tsfin_band',
+              'timesheet_status',
+              'timesheet_band'
+            ].join(',') +
+          `&order=worked_start_iso.asc`
+      );
+      tsRows = rows || [];
+    } catch (e) {
+      console.warn('[HR_ROTA_CLASSIFY] v_timesheets_daily_match client-date lookup failed (non-fatal)', {
+        import_id: importId,
+        client_id: cli,
+        date_min: dMin,
+        date_max: dMax,
+        err: e?.message || String(e)
+      });
+      tsRows = [];
+    }
+
+    // Final safety filter: enforce local ymd within [dMin, dMax]
+    const filtered = [];
+    for (const t of (tsRows || [])) {
+      const sp = safeLocalPartsFromIso(t?.worked_start_iso);
+      const y = sp?.ymd || null;
+      if (!y) continue;
+      if (y < dMin || y > dMax) continue;
+      filtered.push(t);
+    }
+
+    timesheetsByClientDateCache.set(key, filtered);
+    return filtered;
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -37023,7 +37120,6 @@ async function classifyHrRotaValidationImport(env, importId) {
       source_system: 'HEALTHROSTER_DAILY',
       client_id: importClientId,
 
-      // set once resolved
       candidate_id: null,
 
       hr_request_id: hrRequestId,
@@ -37062,13 +37158,12 @@ async function classifyHrRotaValidationImport(env, importId) {
       }
     };
 
-    // Candidate resolution remains as-is (name + trust norm)
+    // Candidate resolution (name + trust norm)
     const candidateId = await resolveCandidateByNameTrustCached(staffRaw, staffNorm, trustNorm);
     const candidateMissing = !candidateId;
     const dateMissing = !dateLocal;
 
     if (candidateId) {
-      candidateIdsResolved.add(candidateId);
       if (!candidateMetaById.has(candidateId)) {
         candidateMetaById.set(candidateId, { staffRaw, staffNorm, trustRaw, trustNorm });
       }
@@ -37324,113 +37419,145 @@ async function classifyHrRotaValidationImport(env, importId) {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // 4) ✅ Missing-shift synthesis (timesheet exists but HR row missing)
+  // 4) ✅ Missing-shift synthesis (client-wide; NOT limited to candidates in the file)
   // ─────────────────────────────────────────────────────────────
-  // This is DAILY parity with weekly Mode A "Missing from import" comparisons.
-  // IMPORTANT:
-  //  - status MUST be FAILED (NOT UNMATCHED) so Apply isn't blocked
-  //  - details.match_status MUST be UNMATCHED
-  //  - include ref_before/ref_after and TS details for destructive invalidation UI
-  if (fileDateMin && fileDateMax && candidateIdsResolved.size) {
-    for (const candidateId of Array.from(candidateIdsResolved)) {
-      let tsRows = [];
-      try {
-        tsRows = await getDailyTimesheetsForCandidateClientCached(candidateId, importClientId);
-      } catch {
-        tsRows = [];
+  // This fixes your current bug: you were only synthesizing missing shifts for candidate_ids
+  // resolved from HR rows, so workers not present in the file (e.g. Kier) were never emitted.
+  //
+  // DAILY parity target:
+  // - compare ALL DAILY timesheets for (client_id, fileDateMin..fileDateMax)
+  // - emit a synthetic row for each timesheet_id not matched by any HR row
+  // - status MUST be FAILED (NOT UNMATCHED) so Apply isn't blocked
+  // - details.match_status MUST be UNMATCHED
+  // - include ref_before/ref_after + ts timings for UI
+  if (fileDateMin && fileDateMax) {
+    const clientTsRows = await getDailyTimesheetsForClientDateRangeCached(importClientId, fileDateMin, fileDateMax);
+
+    // candidate display names for nicer UI (best-effort)
+    const missingCandidateIds = new Set();
+    for (const t of (clientTsRows || [])) {
+      const tsid = t?.timesheet_id ? String(t.timesheet_id).trim() : '';
+      if (!tsid) continue;
+      if (matchedTimesheetIds.has(tsid)) continue;
+
+      const cid = t?.candidate_id ? String(t.candidate_id).trim() : '';
+      if (cid) missingCandidateIds.add(cid);
+    }
+
+    const candidateNameById = new Map();
+    if (missingCandidateIds.size) {
+      const all = Array.from(missingCandidateIds);
+      for (let i = 0; i < all.length; i += 150) {
+        const chunkIds = all.slice(i, i + 150);
+        try {
+          const { rows: cRows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/candidates` +
+              `?id=in.(${chunkIds.map(enc).join(',')})` +
+              `&select=id,display_name`
+          );
+          for (const c of (cRows || [])) {
+            const id = c?.id ? String(c.id).trim() : '';
+            if (!id) continue;
+            const nm = (c?.display_name != null) ? String(c.display_name).trim() : '';
+            if (nm) candidateNameById.set(id, nm);
+          }
+        } catch {
+          // best-effort only
+        }
       }
+    }
 
-      const meta = candidateMetaById.get(candidateId) || null;
+    for (const t of (clientTsRows || [])) {
+      const tsid = t?.timesheet_id ? String(t.timesheet_id).trim() : '';
+      if (!tsid) continue;
+      if (matchedTimesheetIds.has(tsid)) continue;
 
-      for (const t of (tsRows || [])) {
-        const tsid = t?.timesheet_id ? String(t.timesheet_id).trim() : '';
-        if (!tsid) continue;
-        if (matchedTimesheetIds.has(tsid)) continue;
+      const sp = safeLocalPartsFromIso(t.worked_start_iso);
+      const ep = safeLocalPartsFromIso(t.worked_end_iso);
+      const tsDate = sp?.ymd || null;
+      if (!tsDate) continue;
 
-        const sp = safeLocalPartsFromIso(t.worked_start_iso);
-        const ep = safeLocalPartsFromIso(t.worked_end_iso);
-        const tsDate = sp?.ymd || null;
-        if (!tsDate) continue;
+      // Must be inside file window (defensive; should already be filtered)
+      if (tsDate < fileDateMin || tsDate > fileDateMax) continue;
 
-        // Only consider timesheets within the import's date window
-        if (tsDate < fileDateMin || tsDate > fileDateMax) continue;
+      const candidateId = t?.candidate_id ? String(t.candidate_id).trim() : null;
+      const candidateName = (candidateId && candidateNameById.has(candidateId)) ? candidateNameById.get(candidateId) : null;
 
-        // Only synthesize when there is a reference to clear (matches weekly destructive invalidation semantics)
-        const refBefore = (t.reference_number != null) ? String(t.reference_number).trim() : '';
-        if (!refBefore) continue;
+      const refBefore = (t.reference_number != null) ? String(t.reference_number).trim() : '';
+      const tsStart = sp?.hhmm || null;
+      const tsEnd = ep?.hhmm || null;
+      const tsBreak = (t.break_minutes == null ? null : t.break_minutes);
+      const tsWorkedMins = (t.worked_minutes == null ? null : t.worked_minutes);
 
-        const tsStart = sp?.hhmm || null;
-        const tsEnd = ep?.hhmm || null;
-        const tsBreak = (t.break_minutes == null ? null : t.break_minutes);
-        const tsWorkedMins = (t.worked_minutes == null ? null : t.worked_minutes);
+      const tsfinPaidAt = t?.paid_at_utc || null;
+      const tsfinInvId  = t?.locked_by_invoice_id || null;
+      const tsfinProcStatus = t?.processing_status || null;
 
-        const tsfinPaidAt = t?.paid_at_utc || null;
-        const tsfinInvId  = t?.locked_by_invoice_id || null;
-        const tsfinProcStatus = t?.processing_status || null;
+      total++;
+      failedCount++;
+      byReason['missing_from_import'] = (byReason['missing_from_import'] || 0) + 1;
 
-        failedCount++;
-        byReason['missing_from_import'] = (byReason['missing_from_import'] || 0) + 1;
+      results.push({
+        hr_row_id: null,
+        import_id: importId,
+        source_system: 'HEALTHROSTER_DAILY',
+        client_id: importClientId,
 
-        results.push({
-          hr_row_id: null,
-          import_id: importId,
-          source_system: 'HEALTHROSTER_DAILY',
-          client_id: importClientId,
+        candidate_id: candidateId,
 
-          candidate_id: candidateId,
+        // Keep the existing ref visible for invalidation logic (apply only clears when invalidation_action is ticked)
+        hr_request_id: refBefore || null,
 
-          // Preserve the existing ref as hr_request_id to avoid unintended clearing unless invalidated
-          hr_request_id: refBefore || null,
+        staff_name: candidateName || null,
+        staff_norm: candidateName ? norm(candidateName) : null,
 
-          staff_name: meta?.staffRaw ? String(meta.staffRaw) : null,
-          staff_norm: meta?.staffNorm ? String(meta.staffNorm) : null,
+        // Use timesheet hospital_norm as "trust" label (daily view uses this to render context)
+        hospital_or_trust: (t.hospital_norm != null ? String(t.hospital_norm) : null),
+        trust_norm: (t.hospital_norm != null ? String(t.hospital_norm) : null),
 
-          hospital_or_trust: meta?.trustRaw ? String(meta.trustRaw) : null,
-          trust_norm: meta?.trustNorm ? String(meta.trustNorm) : null,
+        date_local: tsDate,
+        start_local: null,
+        end_local: null,
 
-          date_local: tsDate,
+        incoming_grade_norm: null,
+        grade_mapping_required: false,
+
+        timesheet_id: tsid,
+        timesheet_target_ambiguous: false,
+        timesheet_target_options: [],
+
+        tsfin_processing_status: tsfinProcStatus,
+        tsfin_paid_at_utc: tsfinPaidAt,
+        tsfin_locked_by_invoice_id: tsfinInvId,
+        tsfin_is_paid: !!tsfinPaidAt,
+        tsfin_is_invoiced: !!tsfinInvId,
+        tsfin_invoice_id_detected: tsfinInvId,
+
+        status: 'FAILED',
+        reason_code: 'missing_from_import',
+
+        // Weekly parity: missing-from-import behaves like mismatch (preview/apply will still block if unconfirmed/invoiced)
+        can_email: true,
+
+        details: {
+          match_status: 'UNMATCHED',
+
+          // No HR times for this synthetic row
           start_local: null,
           end_local: null,
 
-          incoming_grade_norm: null,
-          grade_mapping_required: false,
+          // Timesheet details for UI + comparison key construction
+          timesheet_start: tsStart,
+          timesheet_end: tsEnd,
+          timesheet_break_mins: (tsBreak == null ? null : tsBreak),
+          ts_break_mins: (tsBreak == null ? null : tsBreak),
+          worked_minutes: (tsWorkedMins == null ? null : tsWorkedMins),
 
-          timesheet_id: tsid,
-          timesheet_target_ambiguous: false,
-          timesheet_target_options: [],
-
-          tsfin_processing_status: tsfinProcStatus,
-          tsfin_paid_at_utc: tsfinPaidAt,
-          tsfin_locked_by_invoice_id: tsfinInvId,
-          tsfin_is_paid: !!tsfinPaidAt,
-          tsfin_is_invoiced: !!tsfinInvId,
-          tsfin_invoice_id_detected: tsfinInvId,
-
-          status: 'FAILED',
-          reason_code: 'missing_from_import',
-
-          // Weekly treats missing-from-import as mismatch (emailable unless later blocked by confirmation rule)
-          can_email: true,
-
-          details: {
-            match_status: 'UNMATCHED',
-
-            // No HR times for this synthetic row
-            start_local: null,
-            end_local: null,
-
-            // Timesheet details for UI + comparison key construction
-            timesheet_start: tsStart,
-            timesheet_end: tsEnd,
-            ts_break_mins: (tsBreak == null ? null : tsBreak),
-            timesheet_break_mins: (tsBreak == null ? null : tsBreak),
-            worked_minutes: (tsWorkedMins == null ? null : tsWorkedMins),
-
-            ref_before: refBefore,
-            ref_after: ''
-          }
-        });
-      }
+          ref_before: refBefore,
+          ref_after: ''
+        }
+      });
     }
   }
 
@@ -37449,7 +37576,6 @@ async function classifyHrRotaValidationImport(env, importId) {
     rows: results
   };
 }
-
 
 async function handleHrRotaResolveMappings(env, req, importId) {
   const enc   = encodeURIComponent;
@@ -38179,7 +38305,6 @@ async function handleHrRotaValidationPreview(env, req, importId) {
     return withCORS(env, req, serverError(`Failed to classify HR daily rota import: ${e?.message || e}`));
   }
 }
-
 async function handleHrRotaValidationApply(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
@@ -38524,9 +38649,149 @@ async function handleHrRotaValidationApply(env, req, importId) {
   const affectedFallback = validation_rows.map(v => v?.timesheet_id).filter(Boolean);
   const affectedTimesheetIds = uniqStrings([...(affectedFromRpc || []), ...(affectedFallback || [])]);
 
-  // 5) Post-commit best-effort: queue emails (ensure PDF then mail_outbox)
+  // 5) Post-commit best-effort: queue emails (WEEKLY-style consolidated format)
   let emailsQueued = 0;
   const emailFailures = [];
+
+  // Agency name from settings_defaults (single row)
+  let agencyName = 'CloudTMS';
+  try {
+    const { rows: defRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=agency_name&limit=1`
+    );
+    const nm = defRows?.[0]?.agency_name;
+    const cleaned = (nm == null) ? '' : String(nm).trim();
+    if (cleaned) agencyName = cleaned;
+  } catch {}
+
+  const safeYmd = (v) => {
+    const s = String(v || '').trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    if (/^\d{4}-\d{2}-\d{2}/.test(s) && s.length >= 10) return s.slice(0, 10);
+    return s || '';
+  };
+
+  const fmtNiceDate = (ymd) => {
+    const s = safeYmd(ymd);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return s || '—';
+    const d = new Date(`${s}T00:00:00Z`);
+    if (Number.isNaN(d.getTime())) return s;
+    try {
+      return new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/London',
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+      }).format(d);
+    } catch {
+      return s;
+    }
+  };
+
+  const safeLocalHmFromIso = (iso) => {
+    const s = String(iso || '').trim();
+    if (!s) return '';
+    try {
+      if (typeof toLocalParts === 'function') {
+        const p = toLocalParts(s, null);
+        const hm = p && (p.hm || p.hhmm || p.hhmm_local || p.hhmmLocal) ? String(p.hm || p.hhmm || p.hhmm_local || p.hhmmLocal) : '';
+        if (hm && /^\d{2}:\d{2}$/.test(hm)) return hm;
+      }
+    } catch {}
+    // fallback: "YYYY-MM-DD HH:MM:SS+00" or ISO string
+    const hm2 = s.length >= 16 ? s.slice(11, 16) : '';
+    return (hm2 && /^\d{2}:\d{2}$/.test(hm2)) ? hm2 : '';
+  };
+
+  const weekEndingSundayYmd = (ymd) => {
+    const s = safeYmd(ymd);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return '';
+    const [Y, M, D] = s.split('-').map(n => Number(n));
+    if (!Number.isFinite(Y) || !Number.isFinite(M) || !Number.isFinite(D)) return '';
+    const dt = new Date(Date.UTC(Y, M - 1, D));
+    const dow = dt.getUTCDay(); // 0=Sun..6=Sat
+    const add = (7 - dow) % 7;
+    dt.setUTCDate(dt.getUTCDate() + add);
+    const yyyy = dt.getUTCFullYear();
+    const mm = String(dt.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(dt.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+
+  const buildEmailHtmlTable = (items) => {
+    const rows2 = Array.isArray(items) ? items : [];
+
+    const head = `
+      <tr>
+        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">Candidate</th>
+        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">W/E</th>
+        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">Date</th>
+        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">Timesheet</th>
+        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">HealthRoster</th>
+        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">Status</th>
+        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">Reference No.</th>
+      </tr>
+    `;
+
+    const body = rows2.map((it) => {
+      const cand = escapeHtml(String(it?.candidate_name || '') || '—');
+
+      const weNice = escapeHtml(fmtNiceDate(it?.week_ending_date) || '—');
+      const wdNice = escapeHtml(fmtNiceDate(it?.work_date) || '—');
+
+      const tsTxt =
+        `${String(it?.timesheet_start || '—')} → ${String(it?.timesheet_end || '—')}` +
+        ` (break ${it?.timesheet_break_mins == null ? '—' : String(it.timesheet_break_mins)})`;
+
+      const hrStart = String(it?.healthroster_start || '').trim();
+      const hrEnd = String(it?.healthroster_end || '').trim();
+
+      const hrTxt = (!hrStart || !hrEnd)
+        ? 'Missing in Healthroster - please add'
+        : (
+            `${hrStart} → ${hrEnd}` +
+            ` (break ${it?.healthroster_break_mins == null ? '—' : String(it.healthroster_break_mins)})`
+          );
+
+      const ms = escapeHtml(String(it?.match_status || it?.status || '—'));
+
+      const refAfterRaw =
+        (it?.reference_no != null) ? String(it.reference_no) :
+        (it?.ref_after != null) ? String(it.ref_after) :
+        (it?.ref != null) ? String(it.ref) :
+        '';
+      const refNo = escapeHtml((String(refAfterRaw || '').trim()) || 'N/A');
+
+      return `
+        <tr>
+          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;">${cand}</td>
+          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;white-space:nowrap;">${weNice}</td>
+          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;white-space:nowrap;">${wdNice}</td>
+          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;">${escapeHtml(tsTxt)}</td>
+          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;">${escapeHtml(hrTxt)}</td>
+          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;white-space:nowrap;">${ms}</td>
+          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;white-space:nowrap;">${refNo}</td>
+        </tr>
+      `;
+    }).join('\n');
+
+    return `
+      <div style="overflow:auto;">
+        <table style="border-collapse:collapse;width:100%;font-family:Arial,sans-serif;font-size:13px;">
+          <thead>${head}</thead>
+          <tbody>${body}</tbody>
+        </table>
+      </div>
+    `;
+  };
+
+  const groups = new Map(); // recipientEmail -> { items: [], tsIds:Set<string>, fps:Set<string> }
   const seenJobKey = new Set();
 
   for (const job of emailJobs) {
@@ -38542,7 +38807,6 @@ async function handleHrRotaValidationApply(env, req, importId) {
     if (seenJobKey.has(jobKey)) continue;
     seenJobKey.add(jobKey);
 
-    // ✅ Additional safety (should already be prevented above)
     const baseRow = rowByTimesheetId.get(tsId) || null;
 
     if (baseRow && isInvoiceLockedOrPaid(baseRow)) {
@@ -38561,43 +38825,162 @@ async function handleHrRotaValidationApply(env, req, importId) {
       continue;
     }
 
-    let pdfKey = null;
-    try {
-      pdfKey = await ensureTimesheetPdf(env, tsId);
-    } catch (e) {
-      emailFailures.push({ timesheet_id: tsId, issue_fingerprint: fp, reason: 'PDF_GENERATION_FAILED', err: String(e?.message || e) });
+    // Build a weekly-style table item (best-effort)
+    const detail = (baseRow && typeof baseRow.details === 'object' && baseRow.details && !Array.isArray(baseRow.details)) ? baseRow.details : {};
+
+    const workDate =
+      String(job?.work_date || baseRow?.date_local || baseRow?.work_date || baseRow?.date || baseRow?.shift_date || '').trim() ||
+      null;
+
+    const weekEnding =
+      (baseRow && (baseRow.week_ending_date || baseRow.weekEndingDate)) ? String(baseRow.week_ending_date || baseRow.weekEndingDate) :
+      (workDate ? weekEndingSundayYmd(workDate) : '');
+
+    const tsStartIso = detail.ts_worked_start_iso || detail.tsWorkedStartIso || baseRow?.worked_start_iso || baseRow?.ts_worked_start_iso || null;
+    const tsEndIso   = detail.ts_worked_end_iso   || detail.tsWorkedEndIso   || baseRow?.worked_end_iso   || baseRow?.ts_worked_end_iso   || null;
+
+    const tsStart = safeLocalHmFromIso(tsStartIso) || '';
+    const tsEnd = safeLocalHmFromIso(tsEndIso) || '';
+
+    const tsBreak =
+      (detail.ts_break_minutes != null ? Number(detail.ts_break_minutes) :
+       detail.ts_break_mins != null ? Number(detail.ts_break_mins) :
+       detail.timesheet_break_mins != null ? Number(detail.timesheet_break_mins) :
+       baseRow?.break_minutes != null ? Number(baseRow.break_minutes) : null);
+
+    const hrStart =
+      String(
+        detail.hr_start_local ||
+        detail.start_local ||
+        detail.hr_start ||
+        baseRow?.start_local ||
+        baseRow?.start_time_local ||
+        ''
+      ).trim();
+
+    const hrEnd =
+      String(
+        detail.hr_end_local ||
+        detail.end_local ||
+        detail.hr_end ||
+        baseRow?.end_local ||
+        baseRow?.end_time_local ||
+        ''
+      ).trim();
+
+    const hrBreak =
+      (detail.hr_break_minutes != null ? Number(detail.hr_break_minutes) :
+       detail.hr_break_mins != null ? Number(detail.hr_break_mins) :
+       detail.healthroster_break_mins != null ? Number(detail.healthroster_break_mins) :
+       baseRow?.hours_worked != null ? null : null);
+
+    const candidateName =
+      String(baseRow?.staff_name || baseRow?.staff_raw || baseRow?.staff_norm || job?.candidate_name || '').trim() || '—';
+
+    const refNo =
+      String(
+        baseRow?.reference_number ||
+        detail.ref_after ||
+        detail.refAfter ||
+        detail.ref_before ||
+        detail.refBefore ||
+        ''
+      ).trim() || null;
+
+    const matchStatus =
+      String(detail.match_status || detail.matchStatus || '').trim() ||
+      (String(baseRow?.reason_code || job?.reason_code || '').trim() ? String(baseRow?.reason_code || job?.reason_code).trim() : 'MISMATCH');
+
+    const item = {
+      candidate_name: candidateName,
+      week_ending_date: weekEnding || null,
+      work_date: workDate || null,
+
+      timesheet_id: tsId,
+      timesheet_start: tsStart || '—',
+      timesheet_end: tsEnd || '—',
+      timesheet_break_mins: (tsBreak == null || Number.isNaN(tsBreak)) ? null : tsBreak,
+
+      healthroster_start: hrStart || null,
+      healthroster_end: hrEnd || null,
+      healthroster_break_mins: (hrBreak == null || Number.isNaN(hrBreak)) ? null : hrBreak,
+
+      match_status: String(matchStatus || '').replace(/_/g, ' ').toUpperCase(),
+      reference_no: refNo || null
+    };
+
+    const cur = groups.get(recipientEmail) || { items: [], tsIds: new Set(), fps: new Set() };
+    cur.items.push(item);
+    cur.tsIds.add(tsId);
+    cur.fps.add(fp);
+    groups.set(recipientEmail, cur);
+  }
+
+  for (const [recipientEmail, pack] of groups.entries()) {
+    const items = Array.isArray(pack?.items) ? pack.items : [];
+    const tsIds = (pack?.tsIds instanceof Set) ? Array.from(pack.tsIds) : [];
+
+    if (!recipientEmail || !items.length || !tsIds.length) {
+      emailFailures.push({ reason: 'EMPTY_EMAIL_GROUP', recipient_email: recipientEmail || null });
       continue;
     }
-    if (!pdfKey) {
-      emailFailures.push({ timesheet_id: tsId, issue_fingerprint: fp, reason: 'PDF_MISSING' });
+
+    const attachments = [];
+    for (const tsIdRaw of tsIds) {
+      const tsId = String(tsIdRaw || '').trim();
+      if (!tsId) continue;
+
+      let pdfKey = null;
+      try {
+        pdfKey = await ensureTimesheetPdf(env, tsId);
+      } catch (e) {
+        emailFailures.push({
+          reason: 'PDF_GENERATION_FAILED',
+          recipient_email: recipientEmail,
+          timesheet_id: tsId,
+          err: String(e?.message || e)
+        });
+        continue;
+      }
+      if (!pdfKey) {
+        emailFailures.push({ reason: 'PDF_MISSING', recipient_email: recipientEmail, timesheet_id: tsId });
+        continue;
+      }
+      attachments.push({ r2_key: pdfKey, filename: `Timesheet_${tsId}.pdf` });
+    }
+
+    if (!attachments.length) {
+      emailFailures.push({ reason: 'NO_ATTACHMENTS', recipient_email: recipientEmail });
       continue;
     }
 
-    const reasonCode = job?.reason_code ? String(job.reason_code) : 'validation_mismatch';
-    const workDate   = job?.work_date ? String(job.work_date) : null;
+    const subject = `HealthRoster daily validation – shifts to amend`;
+    const tableHtml = buildEmailHtmlTable(items);
 
-    const subject = `Timesheet query – HealthRoster daily validation – ${workDate || ''}${workDate ? ' – ' : ''}${tsId}`;
-    const bodyLines = [
-      `Dear Temporary Staffing,`,
-      ``,
-      `Please find the attached timesheet PDF.`,
-      `This email relates to a HealthRoster daily validation mismatch.`,
-      workDate ? `Work date: ${workDate}` : null,
-      `Reason: ${reasonCode}`,
-      `Issue fingerprint: ${fp}`,
-      ``,
-      `Kind regards,`,
-      `CloudTMS`
-    ].filter(Boolean);
+    const bodyText = [
+      'Dear Team,',
+      '',
+      'Please find attached timesheets which needs come corrections on Healthroster. Details of the corrections are below.',
+      'Please kindly confirm once actioned.',
+      'Many thanks,',
+      agencyName
+    ].join('\n');
 
-    const body_text = bodyLines.join('\n');
-    const body_html = `<p>${bodyLines.map(l => (l === '' ? '<br/>' : l)).join('<br/>')}</p>`;
-
-    // ✅ Replace correlation_id with reference (mail_outbox has no correlation_id column)
-    const outboxReference = `HR_DAILY_VALIDATION:${importId}:${tsId}:${fp}`;
+    const bodyHtml = `
+      <div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.45;color:#111;">
+        <p style="margin:0 0 10px 0;"><strong>Dear Team,</strong></p>
+        <p style="margin:0 0 10px 0;">Please find attached timesheets which needs come corrections on Healthroster. Details of the corrections are below.</p>
+        <p style="margin:0 0 14px 0;">Please kindly confirm once actioned.</p>
+        ${tableHtml}
+        <p style="margin:14px 0 0 0;">Many thanks,<br/><strong>${escapeHtml(agencyName)}</strong></p>
+      </div>
+    `;
 
     try {
-      const res = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
+      // ✅ Use reference (no correlation_id column in mail_outbox)
+      const outboxReference = `hr_daily_validation:${importId}:consolidated:${recipientEmail}`;
+
+      const insert = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
         method: 'POST',
         headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
         body: JSON.stringify({
@@ -38605,23 +38988,23 @@ async function handleHrRotaValidationApply(env, req, importId) {
           to: recipientEmail,
           cc: null,
           subject,
-          body_html,
-          body_text,
-          attachments: [{ r2_key: pdfKey, filename: `Timesheet_${tsId}.pdf` }],
+          body_html: bodyHtml,
+          body_text: bodyText,
+          attachments,
           status: 'QUEUED',
           reference: outboxReference,
           created_by: user?.id || null
         })
       });
 
-      if (!res.ok) {
-        const t = await res.text().catch(() => '');
-        throw new Error(t || `mail_outbox ${res.status}`);
+      if (!insert.ok) {
+        const t = await insert.text().catch(() => '');
+        throw new Error(t || `mail_outbox ${insert.status}`);
       }
 
       emailsQueued += 1;
     } catch (e) {
-      emailFailures.push({ timesheet_id: tsId, issue_fingerprint: fp, reason: 'MAIL_OUTBOX_INSERT_FAILED', err: String(e?.message || e) });
+      emailFailures.push({ reason: 'MAIL_OUTBOX_INSERT_FAILED', recipient_email: recipientEmail, err: String(e?.message || e) });
     }
   }
 
@@ -38807,266 +39190,6 @@ async function handleHrRotaValidationApply(env, req, importId) {
       tsfin_drain: tsfinDrainStats
     }
   }));
-}
-
-async function enqueueHrMismatchEmail(env, { timesheet_id, importId, row }) {
-  const enc = encodeURIComponent;
-
-  if (!timesheet_id) return;
-
-  // ✅ Last-line enforcement: do NOT email Temp Staffing if:
-  //  - timesheet is not confirmed (safe-default: missing status blocks)
-  //  - timesheet is invoice-locked / invoiced (locked_by_invoice_id not null)
-  //  - timesheet is paid (paid_at_utc not null)
-  const isBlockedForTsoEmail = (processing_status) => {
-    const s = String(processing_status || '').trim().toUpperCase();
-    if (!s) return true;
-    return (s === 'PENDING_AUTH' || s === 'AWAITING_MANUAL_SIGNATURE');
-  };
-
-  const isInvoiceLockedOrPaid = (locked_by_invoice_id, paid_at_utc) => {
-    const invId = (locked_by_invoice_id != null && String(locked_by_invoice_id).trim())
-      ? String(locked_by_invoice_id).trim()
-      : '';
-    const paidAt = (paid_at_utc != null && String(paid_at_utc).trim())
-      ? String(paid_at_utc).trim()
-      : '';
-    return !!(invId || paidAt);
-  };
-
-  try {
-    const { rows: tfRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-        `?timesheet_id=eq.${enc(timesheet_id)}` +
-        `&is_current=eq.true` +
-        `&select=processing_status,locked_by_invoice_id,paid_at_utc` +
-        `&limit=1`
-    );
-
-    const ps = tfRows?.[0]?.processing_status ?? null;
-    const lockedByInvoiceId = tfRows?.[0]?.locked_by_invoice_id ?? null;
-    const paidAtUtc = tfRows?.[0]?.paid_at_utc ?? null;
-
-    if (isInvoiceLockedOrPaid(lockedByInvoiceId, paidAtUtc)) {
-      const invTxt = (lockedByInvoiceId != null && String(lockedByInvoiceId).trim()) ? String(lockedByInvoiceId).trim() : '';
-      const paidTxt = (paidAtUtc != null && String(paidAtUtc).trim()) ? String(paidAtUtc).trim() : '';
-      const why = invTxt
-        ? `Email blocked: timesheet is invoice-locked / invoiced (invoice_id=${invTxt}). Informative only.`
-        : `Email blocked: timesheet is paid (paid_at_utc=${paidTxt || 'UNKNOWN'}). Informative only.`;
-      throw new Error(`${why} timesheet_id=${String(timesheet_id)}`);
-    }
-
-    if (isBlockedForTsoEmail(ps)) {
-      const psTxt = String(ps || '').trim() || 'UNKNOWN';
-      throw new Error(
-        `Email blocked: timesheet is not confirmed (awaiting authorisation/signature). ` +
-        `processing_status=${psTxt} timesheet_id=${String(timesheet_id)}`
-      );
-    }
-  } catch (e) {
-    const msg = String(e?.message || e || '');
-    if (msg && msg.toLowerCase().includes('email blocked:')) {
-      throw e;
-    }
-    throw new Error(
-      `Email blocked: cannot determine timesheet status (safe default). ` +
-      `timesheet_id=${String(timesheet_id)} err=${msg || 'unknown'}`
-    );
-  }
-
-  // 1) Ensure there is a PDF for this timesheet
-  let pdfKey = null;
-  try {
-    pdfKey = await ensureTimesheetPdf(env, timesheet_id);
-  } catch (e) {
-    console.warn('[HR_ROTA_EMAIL] ensureTimesheetPdf failed', {
-      timesheet_id,
-      err: e?.message || String(e)
-    });
-  }
-  if (!pdfKey) {
-    throw new Error('Failed to ensure timesheet PDF for mismatch email');
-  }
-
-  // 2) Resolve TSO / Temporary Staffing recipient
-  let recipientEmail = null;
-  let resolvedClientId = null;
-  try {
-    const tgt = await resolveTsoRecipientForTimesheet(env, {
-      timesheet_id,
-      booking_id: row?.hr_request_id || null
-    });
-    recipientEmail = tgt?.to ? String(tgt.to).trim() : null;
-    resolvedClientId = tgt?.client_id ? String(tgt.client_id) : null;
-  } catch (e) {
-    console.warn('[HR_ROTA_EMAIL] resolveTsoRecipientForTimesheet failed', {
-      timesheet_id,
-      err: e?.message || String(e)
-    });
-  }
-
-  if (!recipientEmail) {
-    throw new Error('No Temporary Staffing email (ts_queries_email) resolved for this timesheet');
-  }
-
-  // 3) Compose subject/body
-  const staffName  = row?.staff_name || row?.payload_json?.staff_name || 'Agency worker';
-  const dateLocal  = row?.date_local || row?.payload_json?.date_local || 'Unknown date';
-  const hrRequestId = row?.hr_request_id || row?.payload_json?.request_id || null;
-  const reasonCode  = row?.reason_code || 'actual_hours_mismatch';
-
-  const detail = row?.details || {};
-  const hrStart = detail.start_local  || detail.hr_start        || 'N/A';
-  const hrEnd   = detail.end_local    || detail.hr_end          || 'N/A';
-  const hrHours = detail.hr_hours     || detail.hr_actual_hours || detail.hours_worked || 'N/A';
-  const tsHours = detail.ts_hours     || detail.ts_total_hours  || 'N/A';
-
-  const subject = `Timesheet hours mismatch – ${staffName} – ${dateLocal} – ${hrRequestId || 'no HR ref'}`;
-
-  const lines = [
-    `Dear Temporary Staffing,`,
-    ``,
-    `Please can you amend the hours on HealthRoster for the attached agency shift.`,
-    ``,
-    `Staff: ${staffName}`,
-    `Date: ${dateLocal}`,
-    `HR Request ID: ${hrRequestId || '(not provided)'}`,
-    ``,
-    `HealthRoster shows:`,
-    `  Start: ${hrStart}`,
-    `  End:   ${hrEnd}`,
-    `  Actual Hours: ${hrHours}`,
-    ``,
-    `Signed timesheet attached shows:`,
-    `  Actual Hours: ${tsHours}`,
-    ``,
-    `Once amended, please kindly confirm.`,
-    ``,
-    `Kind regards,`,
-    `CloudTMS`
-  ];
-
-  const body_text = lines.join('\n');
-  const body_html = `<p>${lines.map(l => (l === '' ? '<br/>' : l)).join('<br/>')}</p>`;
-
-  // ✅ Replace correlation_id with reference (mail_outbox has no correlation_id column)
-  const outboxReference = `HR_DAILY_MISMATCH:${timesheet_id}:${hrRequestId || ''}`;
-
-  // 4) Insert into mail_outbox (using existing schema)
-  const mailPayload = [{
-    to: recipientEmail,
-    subject,
-    body_text,
-    body_html,
-    attachments: [{
-      r2_key: pdfKey,
-      filename: `Timesheet_${timesheet_id}.pdf`
-    }],
-    type: 'TSO_FAILURE',
-    reference: outboxReference
-  }];
-
-  try {
-    const res = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/mail_outbox`,
-      {
-        method: 'POST',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify(mailPayload)
-      }
-    );
-    if (!res.ok) {
-      const txt = await res.text().catch(() => '');
-      console.error('[HR_ROTA_EMAIL] mail_outbox insert failed', {
-        timesheet_id,
-        import_id: importId,
-        error: txt
-      });
-      throw new Error(`Failed to queue mismatch email: ${txt}`);
-    }
-  } catch (e) {
-    console.error('[HR_ROTA_EMAIL] mail_outbox insert error', {
-      timesheet_id,
-      import_id: importId,
-      err: e?.message || String(e)
-    });
-    throw e;
-  }
-
-  // 4.1) Best-effort: update hr_issue_emails last_sent_at via UPSERT (Email/Re-email behavior)
-  // NOTE: This is best-effort and must not throw (email already queued successfully).
-  try {
-    const reasonLower = String(reasonCode || '').toLowerCase();
-    const staffNorm = (row?.staff_norm || row?.staff_name || row?.staff_raw || '').toLowerCase().trim() || null;
-    const unitNorm  = (row?.unit_norm || row?.unit || row?.hospital_or_trust || row?.hospital_norm || '').toLowerCase().trim() || null;
-
-    // Stable fingerprint (no import_id, no hr_row_id)
-    const fp = [
-      'HEALTHROSTER_DAILY',
-      reasonLower,
-      String(timesheet_id || ''),
-      String(hrRequestId || ''),
-      staffNorm || '',
-      unitNorm || '',
-      String(dateLocal || ''),
-      String(hrStart || ''),
-      String(hrEnd || ''),
-      String(hrHours || ''),
-      String(tsHours || '')
-    ].join('|');
-
-    const nowIso = new Date().toISOString();
-
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/hr_issue_emails?on_conflict=issue_fingerprint`,
-      {
-        method: 'POST',
-        headers: { ...sbHeaders(env), Prefer: 'resolution=merge-duplicates,return-minimal' },
-        body: JSON.stringify({
-          source_system: 'HEALTHROSTER_DAILY',
-          import_id: importId || null,
-          client_id: row?.client_id || resolvedClientId || null,
-          timesheet_id,
-          hr_row_id: row?.hr_row_id || null,
-          staff_norm: staffNorm,
-          hospital_norm: unitNorm,
-          work_date: row?.date_local || row?.date || row?.shift_date || null,
-          reason_code: reasonLower || 'actual_hours_mismatch',
-          issue_fingerprint: fp,
-          last_sent_at: nowIso
-        })
-      }
-    ).catch(() => {});
-  } catch {
-    // swallow
-  }
-
-  // 5) Audit (best-effort)
-  try {
-    await writeAudit(
-      env,
-      null, // system / worker context; no interactive user
-      'HR_DAILY_MISMATCH_EMAIL_QUEUED',
-      {
-        import_id: importId,
-        timesheet_id,
-        hr_row_id: row?.hr_row_id || null,
-        hr_request_id: hrRequestId,
-        recipient_email: recipientEmail,
-        reason_code: reasonCode,
-        pdf_key: pdfKey,
-        reference: outboxReference
-      },
-      { entity: 'timesheets', subject_id: timesheet_id, req: null }
-    );
-  } catch (e) {
-    console.warn('[HR_ROTA_EMAIL] audit failed', {
-      timesheet_id,
-      import_id: importId,
-      err: e?.message || String(e)
-    });
-  }
 }
 
 async function handleHrRotaQueueTsoEmail(env, req) {
