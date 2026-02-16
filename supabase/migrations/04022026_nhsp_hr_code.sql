@@ -2360,17 +2360,49 @@ begin
     timesheet_id uuid not null,
     status_text text null,
     reason_code text null,
-    hr_request_id text null
+    hr_request_id text null,
+    -- ✅ NEW: allow apply payload to carry the matched hr_rows.id for stable evidence linkage
+    hr_row_id uuid null
   ) on commit drop;
 
-  insert into tmp_val_raw(timesheet_id, status_text, reason_code, hr_request_id)
+  insert into tmp_val_raw(timesheet_id, status_text, reason_code, hr_request_id, hr_row_id)
   select
     nullif(btrim(j.value->>'timesheet_id'), '')::uuid as timesheet_id,
     nullif(btrim(j.value->>'status'), '') as status_text,
     nullif(btrim(j.value->>'reason_code'), '') as reason_code,
-    nullif(btrim(j.value->>'hr_request_id'), '') as hr_request_id
+    nullif(btrim(j.value->>'hr_request_id'), '') as hr_request_id,
+    nullif(btrim(j.value->>'hr_row_id'), '')::uuid as hr_row_id
   from jsonb_array_elements(v_validation_rows_json) as j(value)
   where nullif(btrim(j.value->>'timesheet_id'), '') is not null;
+
+  -- ✅ NEW: stamp matched REAL hr_rows rows with resolved_timesheet_id (evidence linkage)
+  -- Only rows that carry hr_row_id are stamped; synthetic "missing_from_import" rows have no hr_row_id.
+  create temporary table tmp_hr_row_links(
+    hr_row_id uuid primary key,
+    timesheet_id uuid not null
+  ) on commit drop;
+
+  insert into tmp_hr_row_links(hr_row_id, timesheet_id)
+  select distinct
+    vr.hr_row_id,
+    vr.timesheet_id
+  from tmp_val_raw vr
+  where vr.hr_row_id is not null
+    and vr.timesheet_id is not null
+  on conflict (hr_row_id) do update
+    set timesheet_id = excluded.timesheet_id;
+
+  update public.hr_rows hrl
+     set payload_json = jsonb_set(
+       coalesce(hrl.payload_json, '{}'::jsonb),
+       '{resolved_timesheet_id}',
+       to_jsonb(lk.timesheet_id::text),
+       true
+     )
+    from tmp_hr_row_links lk
+   where hrl.id = lk.hr_row_id
+     and hrl.import_id = p_import_id
+     and (hrl.payload_json->>'resolved_timesheet_id') is distinct from lk.timesheet_id::text;
 
   create temporary table tmp_val_by_ts(
     timesheet_id uuid primary key,
@@ -2817,6 +2849,8 @@ begin
   );
 end;
 $$;
+
+
 
 
 
