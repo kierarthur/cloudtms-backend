@@ -34301,1725 +34301,6 @@ async function handleNhspImport(env, req) {
     return withCORS(env, req, serverError("Failed to create NHSP import"));
   }
 }
-async function handleHrAutoprocessPreview(env, req, importId) {
-  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
-  const enc = encodeURIComponent;
-
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  if (!importId) {
-    return withCORS(env, req, badRequest('import_id is required'));
-  }
-
-  const boolish = (v) => (v === true || v === 'true' || v === 1 || v === '1');
-
-  const fmtDurationFromMinutes = (minsAbs) => {
-    const m0 = Math.max(0, Math.floor(Number(minsAbs) || 0));
-    const h = Math.floor(m0 / 60);
-    const m = m0 % 60;
-
-    const hrPart = h > 0 ? `${h} hr${h === 1 ? '' : 's'}` : '';
-    const minPart = m > 0 ? `${m} min${m === 1 ? '' : 's'}` : '';
-
-    if (hrPart && minPart) return `${hrPart} ${minPart}`;
-    if (hrPart) return hrPart;
-    return minPart || '0 mins';
-  };
-
-  const fmtDeltaReasonText = (deltaMinutes) => {
-    const d = Math.trunc(Number(deltaMinutes) || 0);
-    if (d > 0) return `Hours increased (${fmtDurationFromMinutes(d)})`;
-    if (d < 0) return `Hours decreased (${fmtDurationFromMinutes(Math.abs(d))})`;
-    return 'Shift details changed';
-  };
-
-  const asYmd = (v) => {
-    if (!v) return null;
-    if (typeof v === 'string') {
-      const s = v.trim();
-      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-      if (s.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
-    }
-    try {
-      const d = new Date(v);
-      if (Number.isNaN(d.getTime())) return null;
-      const yyyy = d.getUTCFullYear();
-      const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-      const dd = String(d.getUTCDate()).padStart(2, '0');
-      return `${yyyy}-${mm}-${dd}`;
-    } catch {
-      return null;
-    }
-  };
-
-  const pickEffectiveClientSettingsRow = (rows, targetYmd) => {
-    const ymd = asYmd(targetYmd);
-    const arr = Array.isArray(rows) ? rows : [];
-    for (const r of arr) {
-      const ef = asYmd(r?.effective_from);
-      if (!ef) return r;
-      if (ymd && ef <= ymd) return r;
-    }
-    return arr[0] || null;
-  };
-
-  const unwrapRpcJsonb = (raw, fnName) => {
-    const j = raw;
-    if (Array.isArray(j)) {
-      const row0 = j[0];
-      if (row0 && typeof row0 === 'object' && fnName && Object.prototype.hasOwnProperty.call(row0, fnName)) {
-        return row0[fnName];
-      }
-      return row0;
-    }
-    if (j && typeof j === 'object' && fnName && Object.prototype.hasOwnProperty.call(j, fnName)) {
-      return j[fnName];
-    }
-    return j;
-  };
-
-  const chunk = (arr, n) => {
-    const out = [];
-    for (let i = 0; i < (arr || []).length; i += n) out.push(arr.slice(i, i + n));
-    return out;
-  };
-
-  const uniq = (arr) => Array.from(new Set((arr || []).filter(Boolean)));
-
-  // ✅ Identity-key normaliser: trim + collapse whitespace + lower
-  const normKey = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
-
-  // ✅ UUID guard for safe id-based querying
-  const isUuid = (v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v || '').trim());
-
-  // ✅ "Timesheet not confirmed ⇒ cannot email Temp Staffing"
-  const isBlockedForTsoEmail = (processing_status) => {
-    const s = String(processing_status || '').trim().toUpperCase();
-    if (!s) return true; // safe default
-    return (s === 'PENDING_AUTH' || s === 'AWAITING_MANUAL_SIGNATURE');
-  };
-
-  try {
-    // Load import header (client_id / source_system checks)
-    const { rows: impRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/hr_imports` +
-        `?id=eq.${enc(importId)}` +
-        `&select=id,source_system,import_scope,client_id&limit=1`
-    );
-    const imp = impRows?.[0] || null;
-    if (!imp) return withCORS(env, req, notFound(`HealthRoster import ${importId} not found`));
-    if (String(imp.source_system || '').toUpperCase() !== 'HEALTHROSTER') {
-      return withCORS(env, req, badRequest(`Import ${importId} has source_system=${imp.source_system}, expected HEALTHROSTER`));
-    }
-    if (!imp.client_id) return withCORS(env, req, badRequest(`Import ${importId} is missing client_id`));
-
-    // 1) Get truth-import classification (Mode B UI needs this)
-    const cls = await classifyWeeklyImportRows(env, importId, { source_system: 'HEALTHROSTER' });
-
-    if (cls?.error === 'import_not_found') {
-      if (LOG) console.warn('[HR_WEEKLY_PREVIEW]', JSON.stringify({ import_id: importId, error: 'import_not_found' }));
-      return withCORS(env, req, notFound(`HealthRoster import ${importId} not found`));
-    }
-    if (cls?.error === 'source_system_mismatch') {
-      if (LOG) {
-        console.warn('[HR_WEEKLY_PREVIEW]', JSON.stringify({
-          import_id: importId,
-          error: 'source_system_mismatch',
-          actual_source_system: cls.actual_source_system
-        }));
-      }
-      return withCORS(env, req, badRequest(
-        `Import ${importId} has source_system=${cls.actual_source_system}, expected HEALTHROSTER`
-      ));
-    }
-
-    // 2) Get phase2 mapping (candidate_id/client_id/work_date/week_ending/contract_id per external_row_key)
-    // ✅ Now includes diff fields and flags (matched_shift_id, old/new, delta_paid_minutes, is_new/is_noop/is_changed)
-    let p2 = [];
-    try {
-      const res = await fetch(
-        `${env.SUPABASE_URL}/rest/v1/rpc/weekly_import_phase2`,
-        {
-          method: 'POST',
-          headers: { ...sbHeaders(env), 'content-type': 'application/json' },
-          body: JSON.stringify({ p_import_id: importId, p_system_type: 'HR_WEEKLY' })
-        }
-      );
-      const txt = await res.text().catch(() => '');
-      if (!res.ok) throw new Error(txt || `weekly_import_phase2 ${res.status}`);
-      const j = txt ? JSON.parse(txt) : null;
-      p2 = Array.isArray(j) ? j : [];
-    } catch (e) {
-      if (LOG) {
-        console.warn('[HR_WEEKLY_PREVIEW]', JSON.stringify({
-          import_id: importId,
-          stage: 'weekly_import_phase2_failed_non_fatal',
-          err: e?.message || String(e)
-        }));
-      }
-      p2 = [];
-    }
-
-    // 3) Load client_settings history for precedence evaluation
-    let clientSettingsRows = [];
-    try {
-      const { rows: csRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/client_settings` +
-          `?client_id=eq.${enc(imp.client_id)}` +
-          `&select=client_id,effective_from,no_timesheet_required,autoprocess_hr,requires_hr,updated_at` +
-          `&order=effective_from.desc.nullslast,updated_at.desc.nullslast`
-      );
-      clientSettingsRows = Array.isArray(csRows) ? csRows : [];
-    } catch {
-      clientSettingsRows = [];
-    }
-
-    // 4) Load involved contracts (override fields exist and are enforced in DB)
-    const contractIds = uniq(p2.map(r => r?.contract_id ? String(r.contract_id) : null).filter(Boolean));
-    const contractById = new Map();
-    for (const idChunk of chunk(contractIds, 150)) {
-      try {
-        const { rows: cRows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/contracts` +
-            `?id=in.(${idChunk.map(enc).join(',')})` +
-            `&select=id,overrideclientsettings,no_timesheet_required,autoprocess_hr,requires_hr`
-        );
-        for (const c of (cRows || [])) {
-          if (c && c.id) contractById.set(String(c.id), c);
-        }
-      } catch {
-        // ignore
-      }
-    }
-
-    const evalEffectiveHrRouteFlags = (contract_id, weekEndingYmd) => {
-      const cs = pickEffectiveClientSettingsRow(clientSettingsRows, weekEndingYmd) || {};
-      const csNoTs = boolish(cs?.no_timesheet_required);
-      const csAuto = boolish(cs?.autoprocess_hr);
-      const csReq = boolish(cs?.requires_hr);
-
-      const c = contract_id ? (contractById.get(String(contract_id)) || null) : null;
-      const hasOverride = (c && c.overrideclientsettings === true);
-
-      const effNoTs =
-        (hasOverride && c.no_timesheet_required != null)
-          ? boolish(c.no_timesheet_required)
-          : csNoTs;
-
-      const effAuto =
-        (hasOverride && c.autoprocess_hr != null)
-          ? boolish(c.autoprocess_hr)
-          : csAuto;
-
-      const effReq =
-        (hasOverride && c.requires_hr != null)
-          ? boolish(c.requires_hr)
-          : csReq;
-
-      return { effNoTs, effAuto, effReq };
-    };
-
-    const evalGroupMode = (contract_id, weekEndingYmd) => {
-      const { effNoTs, effAuto, effReq } = evalEffectiveHrRouteFlags(contract_id, weekEndingYmd);
-      if (effNoTs === true) return 'MODE_B';
-      if (effAuto === true && effReq === true && effNoTs === false) return 'MODE_A';
-      return 'OTHER';
-    };
-
-    // 5) Build per-group mode map (per candidate/week/contract group)
-    const groupInfoById = new Map(); // groupId -> {candidate_id, client_id, contract_id, week_ending_date}
-    for (const r of p2) {
-      if (!r || String(r.action || '').toUpperCase() !== 'OK') continue;
-      const candidate_id = r.candidate_id ? String(r.candidate_id) : null;
-      const client_id = r.client_id ? String(r.client_id) : null;
-      const contract_id = r.contract_id ? String(r.contract_id) : null;
-      const we = r.week_ending_date ? String(r.week_ending_date) : null;
-      if (!candidate_id || !client_id || !contract_id || !we) continue;
-      const gid = `grp:${contract_id}:${we}:${candidate_id}`;
-      if (!groupInfoById.has(gid)) {
-        groupInfoById.set(gid, { candidate_id, client_id, contract_id, week_ending_date: we });
-      }
-    }
-
-    const modeByGroupId = new Map(); // gid -> 'MODE_A'|'MODE_B'|'OTHER'
-    for (const [gid, gi] of groupInfoById.entries()) {
-      const mode = evalGroupMode(gi.contract_id, gi.week_ending_date);
-      modeByGroupId.set(gid, mode);
-    }
-
-    const modeAGroupIds = new Set([...modeByGroupId.entries()].filter(([,m]) => m === 'MODE_A').map(([gid]) => gid));
-    const modeBGroupIds = new Set([...modeByGroupId.entries()].filter(([,m]) => m === 'MODE_B').map(([gid]) => gid));
-
-    // 6) Load weekly validation preview (Mode A rows)
-    let weeklyValPayload = null;
-    try {
-      const res = await fetch(
-        `${env.SUPABASE_URL}/rest/v1/rpc/hr_weekly_validation_preview`,
-        {
-          method: 'POST',
-          headers: { ...sbHeaders(env), 'content-type': 'application/json' },
-          body: JSON.stringify({ p_import_id: importId })
-        }
-      );
-      const txt = await res.text().catch(() => '');
-      if (!res.ok) throw new Error(txt || `hr_weekly_validation_preview ${res.status}`);
-      const j = txt ? JSON.parse(txt) : null;
-      weeklyValPayload = unwrapRpcJsonb(j, 'hr_weekly_validation_preview');
-    } catch (e) {
-      return withCORS(env, req, serverError(`Weekly validation preview failed: ${e?.message || e}`));
-    }
-
-    const weeklyValRows = Array.isArray(weeklyValPayload?.rows) ? weeklyValPayload.rows : [];
-
-    // 7) Build validation_groups (Mode A) and action_groups (Mode B)
-    const valRowByKey = new Map();
-    for (const r of weeklyValRows) {
-      const cid = r?.candidate_id ? String(r.candidate_id) : null;
-      const we  = r?.week_ending_date ? String(r.week_ending_date) : null;
-      const co  = r?.contract_id ? String(r.contract_id) : null;
-      if (!cid || !we) continue;
-      const k = `${cid}|${we}|${co || ''}`;
-      if (!valRowByKey.has(k)) valRowByKey.set(k, r);
-    }
-
-    const missingTriples = [];
-    for (const gid of modeAGroupIds) {
-      const gi = groupInfoById.get(gid);
-      if (!gi) continue;
-      const k = `${gi.candidate_id}|${gi.week_ending_date}|${gi.contract_id || ''}`;
-      const k2 = `${gi.candidate_id}|${gi.week_ending_date}|`;
-      if (!valRowByKey.has(k) && !valRowByKey.has(k2)) {
-        missingTriples.push({ gid, ...gi });
-      }
-    }
-
-    const missingCandNameById = new Map();
-    if (missingTriples.length) {
-      const candIds = uniq(missingTriples.map(x => x.candidate_id).filter(Boolean));
-      for (const idChunk of chunk(candIds, 150)) {
-        try {
-          const { rows: cRows } = await sbFetch(
-            env,
-            `${env.SUPABASE_URL}/rest/v1/candidates` +
-              `?id=in.(${idChunk.map(enc).join(',')})&select=id,display_name`
-          );
-          for (const c of (cRows || [])) {
-            if (c && c.id) missingCandNameById.set(String(c.id), String(c.display_name || '').trim());
-          }
-        } catch {
-          // ignore
-        }
-      }
-    }
-
-    const validation_groups = [];
-    for (const r of weeklyValRows) {
-      const cid = r?.candidate_id ? String(r.candidate_id) : null;
-      const we  = r?.week_ending_date ? String(r.week_ending_date) : null;
-      const co  = r?.contract_id ? String(r.contract_id) : null;
-      if (!cid || !we) continue;
-
-      // If contract_id missing, keep row (e.g. MISSING_TIMESHEET rows emitted by SQL preview)
-      if (!co) {
-        validation_groups.push({ ...r, mode: 'MODE_A' });
-        continue;
-      }
-
-      const { effNoTs, effAuto, effReq } = evalEffectiveHrRouteFlags(co, we);
-      const isModeA = (effAuto === true && effReq === true && effNoTs === false);
-
-      // ✅ include any validation row that falls under Mode-A HR weekly verify
-      if (isModeA) {
-        validation_groups.push({ ...r, mode: 'MODE_A' });
-      }
-    }
-
-    for (const mt of missingTriples) {
-      const candName = missingCandNameById.get(mt.candidate_id) || null;
-      validation_groups.push({
-        mode: 'MODE_A',
-        client_id: String(mt.client_id),
-        recipient_email: weeklyValPayload?.recipient_email || null,
-        candidate_id: String(mt.candidate_id),
-        candidate_name: candName,
-        week_ending_date: String(mt.week_ending_date),
-        timesheet_id: null,
-        contract_id: mt.contract_id ? String(mt.contract_id) : null,
-        overall_status: 'MISSING_TIMESHEET',
-        has_mismatch: true,
-        failure_reasons: ['Missing weekly timesheet for this HR import week.'],
-        issue_fingerprint: null,
-        emailed_already: false,
-        can_email: false,
-        days: []
-      });
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // ✅ NEW: Weekly Mode-A email gating by timesheet confirmation state
-    // (QR unsigned / manual unauthorised etc) => disable email + surface warning
-    // ─────────────────────────────────────────────────────────────
-    const mismatchTsIds = uniq(
-      (validation_groups || [])
-        .filter(g => g && (g.timesheet_id != null) && boolish(g.has_mismatch))
-        .map(g => String(g.timesheet_id || '').trim())
-        .filter(Boolean)
-    );
-
-    const procByTimesheetId = new Map();
-    if (mismatchTsIds.length) {
-      for (const idChunk of chunk(mismatchTsIds, 150)) {
-        try {
-          const { rows: tfRows } = await sbFetch(
-            env,
-            `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-              `?is_current=eq.true` +
-              `&timesheet_id=in.(${idChunk.map(enc).join(',')})` +
-              `&select=timesheet_id,processing_status`
-          );
-          for (const tf of (tfRows || [])) {
-            const tsId = tf?.timesheet_id ? String(tf.timesheet_id).trim() : '';
-            if (!tsId) continue;
-            if (!procByTimesheetId.has(tsId)) {
-              procByTimesheetId.set(tsId, tf?.processing_status ?? null);
-            }
-          }
-        } catch {
-          // non-fatal; safe default below blocks if status missing
-        }
-      }
-    }
-
-    for (let i = 0; i < validation_groups.length; i++) {
-      const g = validation_groups[i];
-      const tsId = g?.timesheet_id ? String(g.timesheet_id).trim() : '';
-      if (!tsId) continue;
-      if (!boolish(g?.has_mismatch)) continue;
-
-      const ps = procByTimesheetId.has(tsId) ? procByTimesheetId.get(tsId) : null;
-      if (!isBlockedForTsoEmail(ps)) continue;
-
-      const fr0 = Array.isArray(g?.failure_reasons) ? g.failure_reasons : [];
-      const fr = fr0.slice();
-      fr.push('Email blocked: timesheet is not confirmed (awaiting authorisation/signature).');
-
-      validation_groups[i] = {
-        ...g,
-        failure_reasons: fr,
-        issue_fingerprint: null,
-        can_email: false
-      };
-    }
-
-    const clsGroups = Array.isArray(cls?.groups)
-      ? cls.groups
-      : (Array.isArray(cls?.rows) ? cls.rows.filter(r => r && r.level === 'group') : []);
-
-    const action_groups = [];
-    for (const g of clsGroups) {
-      const pid = g?.preview_group_id ? String(g.preview_group_id) : null;
-      if (!pid) continue;
-      if (modeBGroupIds.has(pid)) action_groups.push({ ...g, mode: 'MODE_B' });
-    }
-
-    // 8) Build Mode B actions[] for apply (changes only) + auto-apply list (new shifts)
-    const actions = [];
-    const auto_apply_action_ids = [];
-
-    let hiddenNewCount = 0;
-    let hiddenNoopCount = 0;
-    let shownChangedCount = 0;
-
-    const p2OkRows = p2.filter(r => r && String(r.action || '').toUpperCase() === 'OK');
-
-    const p2ByExternalKey = new Map();
-    for (const r of p2OkRows) {
-      const ext = r?.external_row_key ? String(r.external_row_key) : null;
-      if (!ext) continue;
-      if (!p2ByExternalKey.has(ext)) p2ByExternalKey.set(ext, r);
-    }
-
-    const modeBExternalKeys = [];
-    const extToActionIndex = new Map(); // ext -> visible action index (changed rows only)
-
-    // ✅ New: matched_shift_id map for safe replacement-day detection (id-based)
-    const modeBMatchedShiftIds = [];
-    const p2ByShiftId = new Map(); // shift_id (uuid) -> p2 row
-
-    for (const r of p2OkRows) {
-      const cid = r?.candidate_id ? String(r.candidate_id) : null;
-      const cli = r?.client_id ? String(r.client_id) : null;
-      const wd  = r?.work_date ? String(r.work_date) : null;
-      const co  = r?.contract_id ? String(r.contract_id) : null;
-      const we  = r?.week_ending_date ? String(r.week_ending_date) : null;
-      const ext = r?.external_row_key ? String(r.external_row_key) : null;
-      if (!cid || !cli || !wd || !co || !we || !ext) continue;
-
-      const gid = `grp:${co}:${we}:${cid}`;
-      if (!modeBGroupIds.has(gid)) continue;
-
-      modeBExternalKeys.push(ext);
-
-      const matchedShiftIdRaw = r?.matched_shift_id ? String(r.matched_shift_id) : '';
-      const matchedShiftId = isUuid(matchedShiftIdRaw) ? matchedShiftIdRaw : null;
-
-      // keep existing semantics for "new" detection, but use uuid-safe ids for lookups
-      const isNew = boolish(r?.is_new) || !matchedShiftId;
-      const isNoop = boolish(r?.is_noop);
-      const isChanged = boolish(r?.is_changed);
-
-      if (matchedShiftId) {
-        p2ByShiftId.set(matchedShiftId, r);
-        modeBMatchedShiftIds.push(matchedShiftId);
-      }
-
-      if (isNew) {
-        auto_apply_action_ids.push(`ROW:${ext}`);
-        hiddenNewCount += 1;
-        continue;
-      }
-
-      if (isNoop && !isChanged) {
-        hiddenNoopCount += 1;
-        continue;
-      }
-
-      // Existing changed shift → show
-      const delta = Number(r?.delta_paid_minutes);
-      const reasonText = fmtDeltaReasonText(delta);
-
-      const newPaid = (r?.new_paid_minutes != null) ? Number(r.new_paid_minutes) : null;
-      const oldPaid = (r?.old_paid_minutes != null) ? Number(r.old_paid_minutes) : null;
-
-      const rowAction = {
-        action_id: `ROW:${ext}`,
-        action_kind: 'SHIFT_CHANGED',
-        external_row_key: ext,
-        shift_id: matchedShiftIdRaw ? String(matchedShiftIdRaw) : null,
-        reason: (delta > 0 ? 'HOURS_INCREASED' : (delta < 0 ? 'HOURS_DECREASED' : 'SHIFT_DETAILS_CHANGED')),
-        reason_text: reasonText,
-        candidate_id: cid,
-        client_id: cli,
-        contract_id: co,
-        week_ending_date: we,
-        work_date: wd,
-        replacement_day_key: null,
-        is_new_shift: false,
-        is_cancellation: false,
-        is_red: true,
-        default_checked: false,
-        label: 'Update existing shift',
-        details: {
-          old_start_utc: r?.old_start_utc || null,
-          old_end_utc: r?.old_end_utc || null,
-          old_break_mins: (r?.old_break_mins != null ? Number(r.old_break_mins) : null),
-          old_paid_minutes: (oldPaid != null && Number.isFinite(oldPaid)) ? oldPaid : null,
-          old_hours_display: (oldPaid != null && Number.isFinite(oldPaid)) ? fmtDurationFromMinutes(oldPaid) : null,
-
-          new_start_utc: r?.new_start_utc || null,
-          new_end_utc: r?.new_end_utc || null,
-          new_break_mins: (r?.new_break_mins != null ? Number(r.new_break_mins) : null),
-          new_paid_minutes: (newPaid != null && Number.isFinite(newPaid)) ? newPaid : null,
-          new_hours_display: (newPaid != null && Number.isFinite(newPaid)) ? fmtDurationFromMinutes(newPaid) : null,
-
-          delta_paid_minutes: Number.isFinite(delta) ? Math.trunc(delta) : null,
-          delta_display: Number.isFinite(delta) ? fmtDurationFromMinutes(Math.abs(delta)) : null
-        }
-      };
-
-      actions.push(rowAction);
-      extToActionIndex.set(ext, actions.length - 1);
-      shownChangedCount += 1;
-    }
-
-    const modeBExternalKeysUniq = uniq(modeBExternalKeys);
-    const modeBMatchedShiftIdsUniq = uniq(modeBMatchedShiftIds);
-
-    // ─────────────────────────────────────────────────────────────
-    // Build file request-id set (identity key = Request ID) + file date range
-    //   - from hr_rows.hr_request_id OR payload_json.request_id
-    // ─────────────────────────────────────────────────────────────
-    const fetchHrRowsPaged = async () => {
-      const pageSize = 1000;
-      let offset = 0;
-      let total = null;
-      let all = [];
-
-      while (true) {
-        const url =
-          `${env.SUPABASE_URL}/rest/v1/hr_rows` +
-          `?import_id=eq.${enc(importId)}` +
-          `&select=id,date_local,hr_request_id,payload_json` +
-          `&order=id.asc` +
-          `&limit=${pageSize}` +
-          `&offset=${offset}`;
-
-        const { rows: pageRows, total: t } = await sbFetch(env, url, offset === 0);
-        if (offset === 0 && typeof t === 'number') total = t;
-
-        if (Array.isArray(pageRows) && pageRows.length) all = all.concat(pageRows);
-
-        offset += pageSize;
-
-        if (!pageRows || pageRows.length < pageSize) break;
-        if (total != null && all.length >= total) break;
-
-        if (offset > 200000) break;
-      }
-
-      return all;
-    };
-
-    let hrRows = [];
-    let hrRowsFetchOk = false;
-    try {
-      hrRows = await fetchHrRowsPaged();
-      hrRowsFetchOk = true;
-    } catch (e) {
-      if (LOG) {
-        console.warn('[HR_WEEKLY_PREVIEW]', JSON.stringify({
-          import_id: importId,
-          stage: 'hr_rows_fetch_failed',
-          err: e?.message || String(e)
-        }));
-      }
-      hrRows = [];
-      hrRowsFetchOk = false;
-    }
-
-    // file_date_min/max grounded in file truth
-    let minWd = null;
-    let maxWd = null;
-
-    const fileRequestSet = new Set();
-    for (const r of (hrRows || [])) {
-      const d = r?.date_local ? String(r.date_local) : null;
-      if (d) {
-        if (!minWd || d < minWd) minWd = d;
-        if (!maxWd || d > maxWd) maxWd = d;
-      }
-
-      const payload = r?.payload_json || {};
-      const rawReq = (r?.hr_request_id != null ? String(r.hr_request_id) : '') || (payload?.request_id != null ? String(payload.request_id) : '');
-      const reqNorm = normKey(rawReq);
-      if (reqNorm) fileRequestSet.add(reqNorm);
-    }
-
-    // fallback to p2 OK work_date if hr_rows not available
-    if (!minWd || !maxWd) {
-      for (const r of p2OkRows) {
-        const wd = r?.work_date ? String(r.work_date) : null;
-        if (!wd) continue;
-        if (!minWd || wd < minWd) minWd = wd;
-        if (!maxWd || wd > maxWd) maxWd = wd;
-      }
-    }
-
-    // ─────────────────────────────────────────────
-    // Replacement-day detection:
-    // ✅ FIX: DO NOT query nhsp_shifts by external_row_key=in.(...)
-    // Instead, fetch existing shifts by id=in.(matched_shift_id...) (UUID-safe).
-    // Compare existingShift.work_date vs phase2Row.work_date.
-    // ─────────────────────────────────────────────
-    const replacementDayKeys = new Set(); // `${candidate_id}|${client_id}|${old_work_date}`
-
-    if (modeBMatchedShiftIdsUniq.length) {
-      for (const idChunk of chunk(modeBMatchedShiftIdsUniq, 150)) {
-        const { rows: sRows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
-            `?id=in.(${idChunk.map(enc).join(',')})` +
-            `&source_system=eq.HEALTHROSTER` +
-            `&client_id=eq.${enc(imp.client_id)}` +
-            `&select=id,external_row_key,candidate_id,client_id,work_date,cancelled_at_utc`
-        );
-
-        for (const sh of (sRows || [])) {
-          if (!sh || !sh.id || !sh.work_date) continue;
-          if (sh.cancelled_at_utc) continue;
-
-          const sid = String(sh.id);
-          const p2r = p2ByShiftId.get(sid);
-          if (!p2r) continue;
-
-          const importWd = p2r?.work_date ? String(p2r.work_date) : null;
-          const oldWd = sh.work_date ? String(sh.work_date) : null;
-          if (!importWd || !oldWd) continue;
-
-          if (oldWd !== importWd) {
-            const cid = sh.candidate_id ? String(sh.candidate_id) : (p2r.candidate_id ? String(p2r.candidate_id) : null);
-            const cli = sh.client_id ? String(sh.client_id) : (p2r.client_id ? String(p2r.client_id) : null);
-            const ext = p2r.external_row_key ? String(p2r.external_row_key) : (sh.external_row_key ? String(sh.external_row_key) : null);
-            if (!cid || !cli || !ext) continue;
-
-            const repKey = `${cid}|${cli}|${oldWd}`;
-            replacementDayKeys.add(repKey);
-
-            // Mark visible ROW action if present; otherwise ensure truth alignment
-            const truthIdx = extToActionIndex.get(ext);
-            if (typeof truthIdx === 'number' && truthIdx >= 0 && actions[truthIdx]) {
-              actions[truthIdx] = {
-                ...actions[truthIdx],
-                is_new_shift: true,
-                replacement_day_key: repKey
-              };
-            } else {
-              auto_apply_action_ids.push(`ROW:${ext}`);
-            }
-          }
-        }
-      }
-    }
-
-    const cancelShiftIdSet = new Set();
-
-    if (replacementDayKeys.size && minWd && maxWd) {
-      for (const repKey of replacementDayKeys) {
-        const [cid, cli, oldWd] = String(repKey).split('|');
-        if (!cid || !cli || !oldWd) continue;
-
-        if (oldWd < minWd || oldWd > maxWd) continue;
-
-        // Guard B already implicit for HR: cli must match import client id
-        if (String(cli) !== String(imp.client_id)) continue;
-
-        const { rows: sRows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
-            `?source_system=eq.HEALTHROSTER` +
-            `&client_id=eq.${enc(imp.client_id)}` +
-            `&cancelled_at_utc=is.null` +
-            `&timesheet_id=not.is.null` +
-            `&candidate_id=eq.${enc(cid)}` +
-            `&client_id=eq.${enc(cli)}` +
-            `&work_date=eq.${enc(oldWd)}` +
-            `&select=id,candidate_id,client_id,work_date,hr_request_id,timesheet_id`
-        );
-
-        for (const sh of (sRows || [])) {
-          const sid = sh?.id ? String(sh.id) : null;
-          if (!sid) continue;
-          if (cancelShiftIdSet.has(sid)) continue;
-
-          const reqRaw = sh?.hr_request_id != null ? String(sh.hr_request_id) : '';
-          const reqNorm = normKey(reqRaw);
-          if (!reqNorm) continue; // Guard A: request id must exist
-
-          // If request id still present in file, not missing => do not cancel
-          if (fileRequestSet.has(reqNorm)) continue;
-
-          cancelShiftIdSet.add(sid);
-
-          actions.push({
-            action_id: `CANCEL:${sid}`,
-            action_kind: 'SHIFT_CANCEL',
-            shift_id: sid,
-            external_row_key: null,
-
-            reason: 'REPLACEMENT_DAY',
-            reason_text: 'Replacement day cancellation',
-
-            candidate_id: String(sh.candidate_id),
-            client_id: String(sh.client_id),
-
-            contract_id: null,
-            week_ending_date: null,
-            work_date: String(sh.work_date),
-
-            replacement_day_key: repKey,
-
-            is_new_shift: false,
-            is_cancellation: true,
-            is_red: true,
-            default_checked: false,
-            label: 'Cancel shift',
-            details: { cancel_kind: 'REPLACEMENT_DAY' }
-          });
-        }
-      }
-    }
-
-    // ─────────────────────────────────────────────
-    // Missing-from-import cancellations (identity-key scan)
-    // ─────────────────────────────────────────────
-    if (minWd && maxWd) {
-      const { rows: sRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
-          `?source_system=eq.HEALTHROSTER` +
-          `&client_id=eq.${enc(imp.client_id)}` +
-          `&cancelled_at_utc=is.null` +
-          `&timesheet_id=not.is.null` +
-          `&work_date=gte.${enc(minWd)}` +
-          `&work_date=lte.${enc(maxWd)}` +
-          `&select=id,candidate_id,client_id,work_date,hr_request_id,timesheet_id`
-      );
-
-      for (const sh of (sRows || [])) {
-        if (!sh || !sh.id || !sh.candidate_id || !sh.client_id || !sh.work_date) continue;
-
-        const sid = String(sh.id);
-        if (cancelShiftIdSet.has(sid)) continue;
-
-        const reqRaw = sh?.hr_request_id != null ? String(sh.hr_request_id) : '';
-        const reqNorm = normKey(reqRaw);
-        if (!reqNorm) continue; // Guard A
-
-        if (fileRequestSet.has(reqNorm)) continue; // present in file => not missing
-
-        cancelShiftIdSet.add(sid);
-
-        const cid = String(sh.candidate_id);
-        const cli = String(sh.client_id);
-        const wd = String(sh.work_date);
-        const dayKey = `${cid}|${cli}|${wd}`;
-
-        actions.push({
-          action_id: `CANCEL:${sid}`,
-          action_kind: 'SHIFT_CANCEL',
-          shift_id: sid,
-          external_row_key: null,
-
-          reason: 'MISSING_FROM_IMPORT',
-          reason_text: 'Missing from import',
-
-          candidate_id: cid,
-          client_id: cli,
-
-          contract_id: null,
-          week_ending_date: null,
-          work_date: wd,
-
-          replacement_day_key: dayKey,
-
-          is_new_shift: false,
-          is_cancellation: true,
-          is_red: true,
-          default_checked: false,
-          label: 'Cancel shift',
-          details: { cancel_kind: 'MISSING_FROM_IMPORT' }
-        });
-      }
-    }
-
-    // De-dupe auto-apply list
-    const autoUniq = uniq((auto_apply_action_ids || []).map(String).filter(Boolean));
-
-    // Enrich actions with candidate/client display names (user-friendly UI)
-    const candidateIdSet = new Set();
-    for (const a of (actions || [])) {
-      const cid = a?.candidate_id ? String(a.candidate_id) : '';
-      if (cid) candidateIdSet.add(cid);
-    }
-
-    const candMetaById = new Map();
-    if (candidateIdSet.size) {
-      for (const idChunk of chunk(Array.from(candidateIdSet), 150)) {
-        try {
-          const { rows: cRows } = await sbFetch(
-            env,
-            `${env.SUPABASE_URL}/rest/v1/candidates` +
-              `?id=in.(${idChunk.map(enc).join(',')})&select=id,display_name,tms_ref`
-          );
-          for (const c of (cRows || [])) {
-            const id = c?.id ? String(c.id) : '';
-            if (!id) continue;
-            const nm = c?.display_name != null ? String(c.display_name).trim() : '';
-            const ref = c?.tms_ref != null ? String(c.tms_ref).trim() : '';
-            candMetaById.set(id, { display_name: (nm || null), tms_ref: (ref || null) });
-          }
-        } catch {}
-      }
-    }
-
-    let clientName = null;
-    try {
-      const { rows: cliRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${enc(String(imp.client_id))}&select=id,name&limit=1`
-      );
-      const row0 = cliRows && cliRows[0] ? cliRows[0] : null;
-      if (row0 && row0.name != null) clientName = String(row0.name).trim() || null;
-    } catch {
-      clientName = null;
-    }
-
-    for (let i = 0; i < actions.length; i++) {
-      const a = actions[i];
-      const cid = a?.candidate_id ? String(a.candidate_id) : '';
-      const cm = cid ? (candMetaById.get(cid) || null) : null;
-      actions[i] = {
-        ...a,
-        candidate_name: cm ? (cm.display_name || null) : null,
-        candidate_tms_ref: cm ? (cm.tms_ref || null) : null,
-        client_name: clientName
-      };
-    }
-
-    const cancellationsComputable = !!(hrRowsFetchOk && minWd && maxWd);
-
-    // ✅ explicit mode summary for FE (prevents "actions count == 0" ambiguity)
-    const hasModeA = Array.isArray(validation_groups) && validation_groups.length > 0;
-    const hasModeB = Array.isArray(action_groups) && action_groups.length > 0;
-    const mode_summary = (hasModeA && hasModeB) ? 'MIXED' : (hasModeA ? 'MODE_A_ONLY' : 'MODE_B_ONLY');
-
-    if (LOG) {
-      console.log('[HR_WEEKLY_PREVIEW]', JSON.stringify({
-        import_id: importId,
-        client_id: String(imp.client_id),
-        mode_summary,
-        validation_groups: validation_groups.length,
-        action_groups: action_groups.length,
-        actions_total: actions.length,
-        actions_changed_rows: shownChangedCount,
-        actions_cancel: actions.filter(a => a && a.action_kind === 'SHIFT_CANCEL').length,
-        auto_apply_new_rows: autoUniq.length,
-        hidden_noop_rows: hiddenNoopCount,
-        hr_rows_loaded: (hrRows || []).length,
-        file_date_min: minWd,
-        file_date_max: maxWd,
-        cancellations_computable: cancellationsComputable,
-        file_request_keys_count: fileRequestSet.size
-      }));
-    }
-
-    return withCORS(env, req, ok({
-      import_id: String(importId),
-      client_id: String(imp.client_id),
-
-      // ✅ explicit mode for UI
-      mode_summary,
-
-      // ✅ expose classification output at top level for the summary modal
-      rows: Array.isArray(cls?.rows) ? cls.rows : [],
-      summary: cls?.summary || null,
-
-      validation_groups,
-      action_groups,
-
-      // ✅ Visible actions: ONLY changed existing shifts + cancellations
-      actions,
-
-      // ✅ Hidden auto-applied rows (NEW shifts)
-      auto_apply_action_ids: autoUniq,
-
-      validation_meta: {
-        recipient_email: weeklyValPayload?.recipient_email || null,
-        unmatched_timesheet_triples: weeklyValPayload?.unmatched_timesheet_triples ?? null,
-        unmapped_candidate_rows: weeklyValPayload?.unmapped_candidate_rows ?? null
-      },
-
-      truth_meta: {
-        summary: cls?.summary || null,
-        options: cls?.options || null,
-        cancellations_computable: cancellationsComputable,
-        file_date_min: minWd || null,
-        file_date_max: maxWd || null,
-        hr_rows_loaded: (hrRows || []).length,
-
-        // helpful counts for UI/debug
-        hidden_new_rows: hiddenNewCount,
-        hidden_noop_rows: hiddenNoopCount
-      }
-    }));
-
-  } catch (e) {
-    if (LOG) {
-      console.error('[HR_WEEKLY_PREVIEW]', JSON.stringify({
-        import_id: importId,
-        stage: 'unexpected_error',
-        error: e?.message || String(e)
-      }));
-    }
-    return withCORS(env, req, serverError(`HealthRoster preview failed: ${e?.message || e}`));
-  }
-}
-
-async function handleHrAutoprocessApply(env, req, importId) {
-  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
-
-  // ---- logging helpers (ALL logging is gated by LOG) ----
-  const logInfo  = (obj) => { if (LOG) console.log('[HR_AUTOPROC_APPLY]', JSON.stringify(obj)); };
-  const logWarn  = (obj) => { if (LOG) console.warn('[HR_AUTOPROC_APPLY]', JSON.stringify(obj)); };
-  const logError = (obj) => { if (LOG) console.error('[HR_AUTOPROC_APPLY]', JSON.stringify(obj)); };
-
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-  if (!importId) return withCORS(env, req, badRequest('import_id is required'));
-
-  let body;
-  try { body = await parseJSONBody(req); } catch { body = null; }
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    return withCORS(env, req, badRequest('Invalid JSON body'));
-  }
-
-  const boolish = (v) => (v === true || v === 'true' || v === 1 || v === '1');
-
-  // ✅ "Timesheet not confirmed ⇒ cannot email Temp Staffing"
-  const isBlockedForTsoEmail = (processing_status) => {
-    const s = String(processing_status || '').trim().toUpperCase();
-    if (!s) return true; // safe default
-    return (s === 'PENDING_AUTH' || s === 'AWAITING_MANUAL_SIGNATURE');
-  };
-
-  const unwrapRpcJsonb = (raw, fnName) => {
-    const j = raw;
-    if (Array.isArray(j)) {
-      const row0 = j[0];
-      if (row0 && typeof row0 === 'object' && fnName && Object.prototype.hasOwnProperty.call(row0, fnName)) {
-        return row0[fnName];
-      }
-      return row0;
-    }
-    if (j && typeof j === 'object' && fnName && Object.prototype.hasOwnProperty.call(j, fnName)) {
-      return j[fnName];
-    }
-    return j;
-  };
-
-  const uniqStrings = (arr) => {
-    const out = [];
-    const seen = new Set();
-    for (const x of (Array.isArray(arr) ? arr : [])) {
-      const s = String(x || '').trim();
-      if (!s) continue;
-      if (seen.has(s)) continue;
-      seen.add(s);
-      out.push(s);
-    }
-    return out;
-  };
-
-  const chunk = (arr, n) => {
-    const out = [];
-    for (let i = 0; i < (arr || []).length; i += n) out.push(arr.slice(i, i + n));
-    return out;
-  };
-
-  const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
-    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-  }[c]));
-
-  const safeYmd = (v) => {
-    const s = String(v || '').trim();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-    return s || '';
-  };
-
-  // ✅ Format YYYY-MM-DD → "Mon 1 Sep 2026" (Europe/London)
-  const fmtNiceDate = (ymd) => {
-    const s = safeYmd(ymd);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return s || '—';
-    const d = new Date(`${s}T00:00:00Z`);
-    if (Number.isNaN(d.getTime())) return s;
-    try {
-      return new Intl.DateTimeFormat('en-GB', {
-        timeZone: 'Europe/London',
-        weekday: 'short',
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric'
-      }).format(d);
-    } catch {
-      return s;
-    }
-  };
-
-  const normEmail = (v) => {
-    const s = String(v ?? '').trim();
-    return s ? s : '';
-  };
-
-  // Inputs (new contract)
-  const selectedActionIdsIn = Array.isArray(body.selected_action_ids) ? body.selected_action_ids : [];
-  const selectedActionIds = uniqStrings(selectedActionIdsIn);
-
-  const selectedActionsIn = Array.isArray(body.selected_actions) ? body.selected_actions : [];
-  const selectedActions = selectedActionsIn
-    .filter(x => x && typeof x === 'object' && !Array.isArray(x))
-    .map(x => ({ ...x }));
-
-  // Legacy cancellation_actions support: allow shift_id → CANCEL:<shift_id> (explicit shift IDs only)
-  const cancellationActionsIn = Array.isArray(body.cancellation_actions) ? body.cancellation_actions : [];
-  for (const a of cancellationActionsIn) {
-    const sid = a && a.shift_id ? String(a.shift_id).trim() : '';
-    if (!sid) continue;
-    const aid = `CANCEL:${sid}`;
-    if (!selectedActionIds.includes(aid)) selectedActionIds.push(aid);
-  }
-
-  // Legacy selected_group_ids is NOT supported in apply anymore (no Worker-side expansion).
-  const legacyGroupIds = Array.isArray(body.selected_group_ids) ? uniqStrings(body.selected_group_ids) : [];
-  const hasLegacyGroupIdsOnly =
-    legacyGroupIds.length > 0 &&
-    selectedActionIds.length === 0 &&
-    selectedActions.length === 0;
-
-  if (hasLegacyGroupIdsOnly) {
-    return withCORS(
-      env,
-      req,
-      badRequest('Apply now requires action-level selection (selected_action_ids with ROW:/CANCEL:). Update the frontend; selected_group_ids is no longer accepted for apply.')
-    );
-  }
-
-  // Decisions map (Phase 3)
-  const decisions =
-    (body.decisions && typeof body.decisions === 'object' && !Array.isArray(body.decisions))
-      ? body.decisions
-      : {};
-
-  // ✅ Mode A email actions (alt email overrides)
-  const emailActionsIn = Array.isArray(body.email_actions)
-    ? body.email_actions
-    : (Array.isArray(body.send_email_actions) ? body.send_email_actions : []);
-
-  const emailActions = (emailActionsIn || [])
-    .map(a => {
-      const tsId = a?.timesheet_id ? String(a.timesheet_id).trim() : null;
-      const fp   = a?.issue_fingerprint ? String(a.issue_fingerprint).trim() : null;
-
-      const alt =
-        normEmail(a?.alt_email) ||
-        normEmail(a?.alternative_email) ||
-        normEmail(a?.alt_recipient_email) ||
-        normEmail(a?.to_email) ||
-        normEmail(a?.toEmail) ||
-        normEmail(a?.recipient_email_override) ||
-        normEmail(a?.override_email) ||
-        '';
-
-      return {
-        timesheet_id: tsId,
-        issue_fingerprint: fp,
-        ...(alt ? { alt_email: alt } : {})
-      };
-    })
-    .filter(a => !!(a.timesheet_id && a.issue_fingerprint)); // ✅ defensive: ignore missing fingerprint
-
-  // ✅ Include-missing-shifts flag
-  const includeMissingShifts =
-    boolish(body.include_missing_shifts) ||
-    boolish(body.includeMissingShifts) ||
-    boolish(body.include_missing) ||
-    boolish(body.includeMissing) ||
-    false;
-
-  // ✅ Destructive invalidation actions (checkbox-driven)
-  const invalidationActionsIn = Array.isArray(body.invalidation_actions) ? body.invalidation_actions : [];
-  const invalidationActions = invalidationActionsIn
-    .filter(x => x && typeof x === 'object' && !Array.isArray(x))
-    .map(x => ({
-      timesheet_id: x?.timesheet_id ? String(x.timesheet_id).trim() : null,
-      comparison_key: x?.comparison_key ? String(x.comparison_key).trim() : null,
-      invalidate: (x?.invalidate === false || x?.invalidate === 'false' || x?.invalidate === 0 || x?.invalidate === '0') ? false : true
-    }))
-    .filter(x => !!(x.timesheet_id && x.comparison_key));
-
-  // Optional: allow caller to request explicit tspdf enqueue for electronic refs-changed
-  const enqueueTspdfRegen =
-    boolish(body.enqueue_tspdf_regen) ||
-    boolish(body.enqueueTspdfRegen) ||
-    boolish(body.enqueue_pdf_regen) ||
-    boolish(body.enqueuePdfRegen) ||
-    false;
-
-  logInfo({
-    stage: 'start',
-    import_id: importId,
-    selected_action_ids_count: selectedActionIds.length,
-    selected_actions_count: selectedActions.length,
-    email_actions_count: emailActions.length,
-    invalidation_actions_count: invalidationActions.length,
-    include_missing_shifts: includeMissingShifts,
-    decisions_keys_count: Object.keys(decisions || {}).length,
-    enqueue_tspdf_regen: enqueueTspdfRegen
-  });
-
-  // ─────────────────────────────────────────────
-  // ✅ NEW: Server-side enforcement — block Mode-A emails for unconfirmed timesheets
-  // ─────────────────────────────────────────────
-  if (emailActions.length) {
-    const tsIds = uniqStrings(emailActions.map(a => a?.timesheet_id).filter(Boolean));
-    const procByTs = new Map();
-
-    if (tsIds.length) {
-      for (const idChunk of chunk(tsIds, 150)) {
-        try {
-          const { rows: tfRows } = await sbFetch(
-            env,
-            `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-              `?is_current=eq.true` +
-              `&timesheet_id=in.(${idChunk.map(enc).join(',')})` +
-              `&select=timesheet_id,processing_status`
-          );
-          for (const tf of (tfRows || [])) {
-            const tsId = tf?.timesheet_id ? String(tf.timesheet_id).trim() : '';
-            if (!tsId) continue;
-            if (!procByTs.has(tsId)) procByTs.set(tsId, tf?.processing_status ?? null);
-          }
-        } catch {
-          // non-fatal; safe default below blocks if status missing
-        }
-      }
-    }
-
-    const blockedIds = [];
-    for (const tsId of tsIds) {
-      const ps = procByTs.has(tsId) ? procByTs.get(tsId) : null;
-      if (isBlockedForTsoEmail(ps)) blockedIds.push(tsId);
-    }
-
-    if (blockedIds.length) {
-      return withCORS(env, req, badRequest(JSON.stringify({
-        error: 'HR_WEEKLY_EMAIL_BLOCKED_UNCONFIRMED_TIMESHEET',
-        message: 'Cannot email Temporary Staffing because one or more selected timesheets are not confirmed (awaiting authorisation/signature).',
-        import_id: importId,
-        blocked_timesheet_ids: blockedIds
-      })));
-    }
-  }
-
-  // ─────────────────────────────────────────────
-  // 1) Single transactional DB apply RPC
-  // ─────────────────────────────────────────────
-  let applyPayload;
-  try {
-    const rpcRaw = await sbRpc(env, 'hr_weekly_apply_transactional', {
-      p_import_id: importId,
-      p_payload: {
-        selected_action_ids: selectedActionIds,
-        selected_actions: selectedActions,
-        decisions,
-        email_actions: emailActions,
-        include_missing_shifts: includeMissingShifts,
-        invalidation_actions: invalidationActions
-      },
-      p_actor_user_id: user.id
-    });
-
-    applyPayload = unwrapRpcJsonb(rpcRaw, 'hr_weekly_apply_transactional');
-  } catch (e) {
-    logError({
-      stage: 'apply_rpc_failed',
-      import_id: importId,
-      err: String(e?.message || e || '')
-    });
-    return withCORS(env, req, serverError(`HR weekly apply failed: ${e?.message || String(e)}`));
-  }
-
-  if (!applyPayload || typeof applyPayload !== 'object') {
-    return withCORS(env, req, serverError('HR weekly apply returned invalid payload'));
-  }
-
-  const emailJobs = Array.isArray(applyPayload.email_jobs) ? applyPayload.email_jobs : [];
-
-  // ✅ TSFIN drain: include affected + validation-affected + ref-updated (top-level + mode_a)
-  const affectedBase = Array.isArray(applyPayload.affected_timesheet_ids) ? applyPayload.affected_timesheet_ids : [];
-  const affectedValTop = Array.isArray(applyPayload.validation_affected_timesheet_ids) ? applyPayload.validation_affected_timesheet_ids : [];
-  const affectedValModeA = Array.isArray(applyPayload?.mode_a?.validation_affected_timesheet_ids)
-    ? applyPayload.mode_a.validation_affected_timesheet_ids
-    : [];
-
-  const affectedRefTop = Array.isArray(applyPayload.ref_updated_timesheet_ids) ? applyPayload.ref_updated_timesheet_ids : [];
-  const affectedRefModeA = Array.isArray(applyPayload?.mode_a?.ref_updated_timesheet_ids)
-    ? applyPayload.mode_a.ref_updated_timesheet_ids
-    : [];
-
-  const affectedTimesheetIds = uniqStrings([
-    ...(affectedBase || []),
-    ...(affectedValTop || []),
-    ...(affectedValModeA || []),
-    ...(affectedRefTop || []),
-    ...(affectedRefModeA || [])
-  ]);
-
-  // ─────────────────────────────────────────────
-  // 2) Post-commit: queue emails best-effort (group by recipient)
-  // ─────────────────────────────────────────────
-  let emailsQueued = 0;
-  const emailFailures = [];
-
-  // ✅ Agency name from settings_defaults (single row)
-  let agencyName = 'CloudTMS';
-  try {
-    const { rows: defRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=agency_name&limit=1`
-    );
-    const nm = defRows?.[0]?.agency_name;
-    const cleaned = (nm == null) ? '' : String(nm).trim();
-    if (cleaned) agencyName = cleaned;
-  } catch {}
-
-  const buildEmailHtmlTable = (items) => {
-    const rows = Array.isArray(items) ? items : [];
-
-    const head = `
-      <tr>
-        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">Candidate</th>
-        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">W/E</th>
-        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">Date</th>
-        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">Timesheet</th>
-        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">HealthRoster</th>
-        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">Status</th>
-        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">Reference No.</th>
-      </tr>
-    `;
-
-    const body = rows.map((it) => {
-      const cand = escapeHtml(String(it?.candidate_name || it?.candidate || '') || '—');
-
-      const weNice = escapeHtml(fmtNiceDate(it?.week_ending_date) || '—');
-      const wdNice = escapeHtml(fmtNiceDate(it?.work_date) || '—');
-
-      const tsTxt =
-        `${String(it?.timesheet_start || '—')} → ${String(it?.timesheet_end || '—')}` +
-        ` (break ${it?.timesheet_break_mins == null ? '—' : String(it.timesheet_break_mins)})`;
-
-      const hrStart = String(it?.healthroster_start || '').trim();
-      const hrEnd = String(it?.healthroster_end || '').trim();
-
-      const hrTxt = (!hrStart || !hrEnd)
-        ? 'Missing in Healthroster - please add'
-        : (
-            `${hrStart} → ${hrEnd}` +
-            ` (break ${it?.healthroster_break_mins == null ? '—' : String(it.healthroster_break_mins)})`
-          );
-
-      const ms = escapeHtml(String(it?.match_status || it?.status || '—'));
-
-      const refAfterRaw = (it?.reference_no != null)
-        ? String(it.reference_no)
-        : (it?.ref_after != null)
-          ? String(it.ref_after)
-          : (it?.ref != null)
-            ? String(it.ref)
-            : '';
-      const refNo = escapeHtml((String(refAfterRaw || '').trim()) || 'N/A');
-
-      return `
-        <tr>
-          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;">${cand}</td>
-          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;white-space:nowrap;">${weNice}</td>
-          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;white-space:nowrap;">${wdNice}</td>
-          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;">${escapeHtml(tsTxt)}</td>
-          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;">${escapeHtml(hrTxt)}</td>
-          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;white-space:nowrap;">${ms}</td>
-          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;white-space:nowrap;">${refNo}</td>
-        </tr>
-      `;
-    }).join('\n');
-
-    return `
-      <div style="overflow:auto;">
-        <table style="border-collapse:collapse;width:100%;font-family:Arial,sans-serif;font-size:13px;">
-          <thead>${head}</thead>
-          <tbody>${body}</tbody>
-        </table>
-      </div>
-    `;
-  };
-
-  // Group recipient resolution:
-  // Prefer item alt/override fields, else job.recipient_email, else item.recipient_email
-  const extractRecipientForItem = (job, item) => {
-    const a =
-      normEmail(item?.alt_email) ||
-      normEmail(item?.alternative_email) ||
-      normEmail(item?.alt_recipient_email) ||
-      normEmail(item?.recipient_email_override) ||
-      normEmail(item?.override_email) ||
-      '';
-    if (a) return a;
-
-    const j = normEmail(job?.recipient_email);
-    if (j) return j;
-
-    const i = normEmail(item?.recipient_email);
-    return i || '';
-  };
-
-  const groupEmailWork = () => {
-    const groups = new Map(); // email -> { items: [], tsIds:Set<string> }
-
-    const addToGroup = (email, item) => {
-      const k = normEmail(email);
-      if (!k) return false;
-
-      const cur = groups.get(k) || { items: [], tsIds: new Set() };
-      cur.items.push(item);
-
-      const tsId = String(item?.timesheet_id || '').trim();
-      if (tsId) cur.tsIds.add(tsId);
-
-      groups.set(k, cur);
-      return true;
-    };
-
-    const jobsArr = Array.isArray(emailJobs) ? emailJobs : [];
-
-    for (const job of jobsArr) {
-      const items = Array.isArray(job?.items) ? job.items : [];
-      if (!items.length) continue;
-
-      for (const it0 of items) {
-        const it = (it0 && typeof it0 === 'object') ? it0 : {};
-        const recip = extractRecipientForItem(job, it);
-        const ok = addToGroup(recip, it);
-        if (!ok) {
-          emailFailures.push({
-            reason: 'NO_RECIPIENT_EMAIL',
-            recipient_email: null,
-            timesheet_id: it?.timesheet_id ? String(it.timesheet_id) : null
-          });
-        }
-      }
-    }
-
-    return groups;
-  };
-
-  const grouped = groupEmailWork();
-
-  for (const [recipientEmail, pack] of grouped.entries()) {
-    const items = Array.isArray(pack?.items) ? pack.items : [];
-    const tsIds = (pack?.tsIds instanceof Set) ? Array.from(pack.tsIds) : [];
-
-    if (!recipientEmail) continue;
-    if (!items.length || !tsIds.length) {
-      emailFailures.push({ reason: 'EMPTY_EMAIL_GROUP', recipient_email: recipientEmail });
-      continue;
-    }
-
-    const attachments = [];
-    for (const tsIdRaw of tsIds) {
-      const tsId = String(tsIdRaw || '').trim();
-      if (!tsId) continue;
-
-      let pdfKey = null;
-      try {
-        pdfKey = await ensureTimesheetPdf(env, tsId);
-      } catch (e) {
-        emailFailures.push({
-          reason: 'PDF_GENERATION_FAILED',
-          recipient_email: recipientEmail,
-          timesheet_id: tsId,
-          err: String(e?.message || e)
-        });
-        continue;
-      }
-      if (!pdfKey) {
-        emailFailures.push({ reason: 'PDF_MISSING', recipient_email: recipientEmail, timesheet_id: tsId });
-        continue;
-      }
-      attachments.push({ r2_key: pdfKey, filename: `Timesheet_${tsId}.pdf` });
-    }
-
-    if (!attachments.length) {
-      emailFailures.push({ reason: 'NO_ATTACHMENTS', recipient_email: recipientEmail });
-      continue;
-    }
-
-    const subject = `HealthRoster weekly validation – shifts to amend`;
-    const tableHtml = buildEmailHtmlTable(items);
-
-    const bodyText = [
-      'Dear Team,',
-      '',
-      'Please find attached timesheets which needs come corrections on Healthroster. Details of the corrections are below.',
-      'Please kindly confirm once actioned.',
-      'Many thanks,',
-      agencyName
-    ].join('\n');
-
-    const bodyHtml = `
-      <div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.45;color:#111;">
-        <p style="margin:0 0 10px 0;"><strong>Dear Team,</strong></p>
-        <p style="margin:0 0 10px 0;">Please find attached timesheets which needs come corrections on Healthroster. Details of the corrections are below.</p>
-        <p style="margin:0 0 14px 0;">Please kindly confirm once actioned.</p>
-        ${tableHtml}
-        <p style="margin:14px 0 0 0;">Many thanks,<br/><strong>${escapeHtml(agencyName)}</strong></p>
-      </div>
-    `;
-
-    try {
-      const insert = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
-        method: 'POST',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify({
-          type: 'TSO_FAILURE',
-          to: recipientEmail,
-          cc: null,
-          subject,
-          body_html: bodyHtml,
-          body_text: bodyText,
-          attachments,
-          status: 'QUEUED',
-          reference: `hr_weekly_validation:${importId}:consolidated:${recipientEmail}`,
-          created_by: user?.id || null
-        })
-      });
-
-      if (!insert.ok) {
-        const t = await insert.text().catch(() => '');
-        throw new Error(t || `mail_outbox ${insert.status}`);
-      }
-
-      emailsQueued += 1;
-    } catch (e) {
-      emailFailures.push({ reason: 'MAIL_OUTBOX_INSERT_FAILED', recipient_email: recipientEmail, err: String(e?.message || e) });
-    }
-  }
-
-  // ─────────────────────────────────────────────
-  // 3) Post-commit: TSFIN Strategy A drain-to-completion (hard requirement)
-  // ─────────────────────────────────────────────
-  const tsfinDrainStats = {
-    ids: affectedTimesheetIds.length,
-    enqueued: 0,
-    loops: 0,
-    picked: 0,
-    ok: 0,
-    fail: 0,
-    pending_total: 0,
-    pending_ready: 0,
-    pending_next_attempt_at_min: null,
-    done: true
-  };
-
-  const getPendingSummary = async () => {
-    const raw = await sbRpc(env, 'tsfin_outbox_pending_summary', {
-      p_timesheet_ids: affectedTimesheetIds
-    });
-    const payload = unwrapRpcJsonb(raw, 'tsfin_outbox_pending_summary');
-    if (!payload || typeof payload !== 'object') {
-      return { total: null, ready: null, next_attempt_at_min: null, now: null };
-    }
-    return payload;
-  };
-
-  if (affectedTimesheetIds.length) {
-    try {
-      try {
-        const enqRaw = await sbRpc(env, 'enqueue_ts_financials_priority', {
-          _timesheet_ids: affectedTimesheetIds,
-          _reason: 'CONTEXT_CHANGED'
-        });
-        const enqNum = Number(
-          (typeof enqRaw === 'number' || typeof enqRaw === 'string')
-            ? enqRaw
-            : (Array.isArray(enqRaw) ? (enqRaw?.[0]?.enqueue_ts_financials_priority ?? enqRaw?.[0]?.count ?? enqRaw?.[0]?.row_count) : null)
-        );
-        tsfinDrainStats.enqueued = Number.isFinite(enqNum) && enqNum > 0 ? enqNum : affectedTimesheetIds.length;
-      } catch {
-        tsfinDrainStats.enqueued = affectedTimesheetIds.length;
-      }
-
-      const maxLoops = 60;
-      while (tsfinDrainStats.loops < maxLoops) {
-        const res = await runTsfinWorkerOnce(env, {
-          limit: Math.min(50, affectedTimesheetIds.length),
-          onlyTimesheetIds: affectedTimesheetIds
-        });
-
-        tsfinDrainStats.loops += 1;
-        tsfinDrainStats.picked += Number(res?.picked || 0);
-        tsfinDrainStats.ok += Number(res?.ok || 0);
-        tsfinDrainStats.fail += Number(res?.fail || 0);
-
-        const pending = await getPendingSummary();
-        tsfinDrainStats.pending_total = Number(pending?.total ?? 0) || 0;
-        tsfinDrainStats.pending_ready = Number(pending?.ready ?? 0) || 0;
-        tsfinDrainStats.pending_next_attempt_at_min = pending?.next_attempt_at_min ?? null;
-
-        if (tsfinDrainStats.pending_total === 0) break;
-        if (!res || Number(res?.picked || 0) === 0) break;
-      }
-
-      if (tsfinDrainStats.fail > 0) tsfinDrainStats.done = false;
-      if (tsfinDrainStats.pending_total > 0) tsfinDrainStats.done = false;
-      if (tsfinDrainStats.loops >= maxLoops && tsfinDrainStats.pending_total > 0) tsfinDrainStats.done = false;
-
-      if (!tsfinDrainStats.done) {
-        logError({
-          stage: 'tsfin_drain_failed_strict_after_apply_commit',
-          import_id: importId,
-          stats: tsfinDrainStats
-        });
-
-        const retryAfterSeconds = 30;
-        const resp = {
-          error: 'TSFIN_REFRESH_FAILED_AFTER_APPLY',
-          message:
-            'The database apply succeeded, but TSFIN refresh did not complete. No data was rolled back. Please retry TSFIN recompute using the affected_timesheet_ids.',
-          import_id: importId,
-          affected_timesheet_ids: affectedTimesheetIds,
-          tsfin_drain: tsfinDrainStats,
-          retry: {
-            action: 'RETRY_TSFIN_RECOMPUTE',
-            timesheet_ids: affectedTimesheetIds,
-            next_attempt_at_min: tsfinDrainStats.pending_next_attempt_at_min,
-            retry_after_seconds: retryAfterSeconds
-          },
-          apply: applyPayload
-        };
-
-        return withCORS(env, req, new Response(JSON.stringify(resp), {
-          status: 500,
-          headers: { 'content-type': 'application/json' }
-        }));
-      }
-    } catch (e) {
-      logError({
-        stage: 'tsfin_drain_exception_strict_after_apply_commit',
-        import_id: importId,
-        err: String(e?.message || e || ''),
-        stats: tsfinDrainStats
-      });
-
-      const retryAfterSeconds = 30;
-      const resp = {
-        error: 'TSFIN_REFRESH_EXCEPTION_AFTER_APPLY',
-        message:
-          'The database apply succeeded, but TSFIN refresh raised an exception. No data was rolled back. Please retry TSFIN recompute using the affected_timesheet_ids.',
-        import_id: importId,
-        affected_timesheet_ids: affectedTimesheetIds,
-        tsfin_drain: tsfinDrainStats,
-        retry: {
-          action: 'RETRY_TSFIN_RECOMPUTE',
-          timesheet_ids: affectedTimesheetIds,
-          next_attempt_at_min: tsfinDrainStats.pending_next_attempt_at_min || null,
-          retry_after_seconds: retryAfterSeconds
-        },
-        apply: applyPayload
-      };
-
-      return withCORS(env, req, new Response(JSON.stringify(resp), {
-        status: 500,
-        headers: { 'content-type': 'application/json' }
-        }));
-    }
-  }
-
-  // ─────────────────────────────────────────────
-  // 3.5) Post-TSFIN: detect QR reissue candidates + optional tspdf enqueue
-  // ─────────────────────────────────────────────
-  let qrReissueCandidates = [];
-  let docFlagsRows = [];
-  let tspdfEnqueued = 0;
-  let tspdfTargetCount = 0;
-
-  if (affectedTimesheetIds.length) {
-    try {
-      const flagsRaw = await sbRpc(env, 'timesheet_doc_flags_batch', {
-        p_timesheet_ids: affectedTimesheetIds
-      });
-
-      docFlagsRows = Array.isArray(flagsRaw) ? flagsRaw : [];
-      qrReissueCandidates = docFlagsRows
-        .filter(r => r && (r.qr_refs_changed === true || r.qr_refs_changed === 'true' || r.qr_refs_changed === 1 || r.qr_refs_changed === '1'))
-        .map(r => ({
-          timesheet_id: String(r.timesheet_id || '').trim() || null,
-          candidate_id: r.candidate_id || null,
-          candidate_name: (r.candidate_name != null ? String(r.candidate_name) : null),
-          client_id: r.client_id || null,
-          client_name: (r.client_name != null ? String(r.client_name) : null),
-          sheet_scope: (r.sheet_scope != null ? String(r.sheet_scope) : null),
-          week_ending_date: (r.week_ending_date != null ? String(r.week_ending_date).slice(0, 10) : null),
-          qr_status: (r.qr_status != null ? String(r.qr_status) : null),
-          current_refs_sig: (r.current_refs_sig != null ? String(r.current_refs_sig) : null),
-          qr_sent_refs_sig: (r.qr_sent_refs_sig != null ? String(r.qr_sent_refs_sig) : null),
-          generated_pdf_refs_sig: (r.generated_pdf_refs_sig != null ? String(r.generated_pdf_refs_sig) : null)
-        }))
-        .filter(x => !!x.timesheet_id);
-
-      if (enqueueTspdfRegen) {
-        const elecIds = uniqStrings(
-          docFlagsRows
-            .filter(r => r && (r.electronic_refs_changed === true || r.electronic_refs_changed === 'true' || r.electronic_refs_changed === 1 || r.electronic_refs_changed === '1'))
-            .map(r => r.timesheet_id)
-        );
-
-        tspdfTargetCount = elecIds.length;
-
-        if (elecIds.length) {
-          const enqRaw = await sbRpc(env, 'tspdf_enqueue_many', {
-            p_timesheet_ids: elecIds,
-            p_force_regen: true,
-            p_prefer_generated: true,
-            p_reason: null,
-            p_limit: 500
-          });
-
-          const enqNum =
-            (typeof enqRaw === 'number' || typeof enqRaw === 'string')
-              ? Number(enqRaw)
-              : (Array.isArray(enqRaw) ? Number(enqRaw?.[0]?.tspdf_enqueue_many ?? enqRaw?.[0]?.count ?? enqRaw?.[0]?.row_count) : NaN);
-
-          tspdfEnqueued = (Number.isFinite(enqNum) ? enqNum : 0);
-        }
-      }
-    } catch (e) {
-      logWarn({
-        stage: 'doc_flags_batch_failed_non_fatal',
-        import_id: importId,
-        err: String(e?.message || e || '')
-      });
-      qrReissueCandidates = [];
-      tspdfEnqueued = 0;
-      tspdfTargetCount = 0;
-    }
-  }
-
-  // ─────────────────────────────────────────────
-  // 4) Post-commit: audit best-effort
-  // ─────────────────────────────────────────────
-  try {
-    await writeAudit(
-      env,
-      user,
-      'HR_WEEKLY_APPLY_TRANSACTIONAL_COMPLETED',
-      {
-        import_id: importId,
-        mode_a: applyPayload?.mode_a || null,
-        mode_b: applyPayload?.mode_b || null,
-        emails_queued: emailsQueued,
-        email_failures: emailFailures.slice(0, 50),
-        tsfin_drain: tsfinDrainStats,
-        qr_reissue_candidates_count: qrReissueCandidates.length,
-        tspdf_enqueued: tspdfEnqueued,
-        tspdf_target_count: tspdfTargetCount
-      },
-      { entity: 'hr_imports', subject_id: importId, req }
-    );
-  } catch (e) {
-    logWarn({
-      stage: 'writeAudit_failed_non_fatal',
-      import_id: importId,
-      err: String(e?.message || e || '')
-    });
-  }
-
-  // ─────────────────────────────────────────────
-  // 5) Response
-  // ─────────────────────────────────────────────
-  return withCORS(env, req, ok({
-    import_id: importId,
-    apply: applyPayload,
-    qr_reissue_candidates: qrReissueCandidates,
-    tspdf_regen: enqueueTspdfRegen ? { target_count: tspdfTargetCount, enqueued: tspdfEnqueued } : { target_count: 0, enqueued: 0 },
-    post_commit: {
-      emails_queued: emailsQueued,
-      email_failures: emailFailures,
-      tsfin_drain: tsfinDrainStats
-    }
-  }));
-}
 
 
 async function handleHrWeeklyQrReissueBatch(env, req) {
@@ -37674,6 +35955,7 @@ async function handleHrRotaResolveMappings(env, req, importId) {
   }));
 }
 
+
 async function handleHrRotaValidationPreview(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
@@ -37686,7 +35968,7 @@ async function handleHrRotaValidationPreview(env, req, importId) {
   const enc = encodeURIComponent;
   const norm = (s) => String(s || '').trim().toLowerCase();
 
-  // ✅ Daily parity: include missing_from_import as mismatch (emailable unless blocked by confirmation rule)
+  // ✅ Daily parity: include missing_from_import as mismatch (emailable unless blocked by confirmation/invoice-lock rules)
   const EMAIL_REASON_CODES = new Set([
     'actual_hours_mismatch',
     'start_end_mismatch',
@@ -37699,6 +35981,32 @@ async function handleHrRotaValidationPreview(env, req, importId) {
     const s = String(processing_status || '').trim().toUpperCase();
     if (!s) return true; // safe default: unknown status => block
     return (s === 'PENDING_AUTH' || s === 'AWAITING_MANUAL_SIGNATURE');
+  };
+
+  // ✅ "Invoice-locked / paid ⇒ informative only (no email action allowed)"
+  const isInvoiceLockedOrPaid = (row) => {
+    const invId = (row?.tsfin_locked_by_invoice_id != null && String(row.tsfin_locked_by_invoice_id).trim())
+      ? String(row.tsfin_locked_by_invoice_id).trim()
+      : '';
+    const paidAt = (row?.tsfin_paid_at_utc != null && String(row.tsfin_paid_at_utc).trim())
+      ? String(row.tsfin_paid_at_utc).trim()
+      : '';
+    const isPaid = (row?.tsfin_is_paid === true) || !!paidAt;
+    const isInvoiced = (row?.tsfin_is_invoiced === true) || !!invId;
+    return !!(isPaid || isInvoiced);
+  };
+
+  const emailBlockedReasonForRow = (row) => {
+    const invId = (row?.tsfin_locked_by_invoice_id != null && String(row.tsfin_locked_by_invoice_id).trim())
+      ? String(row.tsfin_locked_by_invoice_id).trim()
+      : '';
+    const paidAt = (row?.tsfin_paid_at_utc != null && String(row.tsfin_paid_at_utc).trim())
+      ? String(row.tsfin_paid_at_utc).trim()
+      : '';
+
+    if (invId) return `Email blocked: timesheet is invoice-locked / invoiced (invoice_id=${invId}). Informative only.`;
+    if (paidAt) return `Email blocked: timesheet is paid. Informative only.`;
+    return 'Email blocked: timesheet is not confirmed (awaiting authorisation/signature).';
   };
 
   // ✅ Stable across imports: MUST NOT include import_id or hr_row_id (row IDs change each import)
@@ -37897,8 +36205,12 @@ async function handleHrRotaValidationPreview(env, req, importId) {
         statusU !== 'VALIDATION_OK' &&
         EMAIL_REASON_CODES.has(reasonCode);
 
-      // ✅ Block emails for unconfirmed timesheets (safe-default if status missing)
-      const blockedForEmail = emailEligible && isBlockedForTsoEmail(row?.tsfin_processing_status);
+      // ✅ Block emails for:
+      //   (A) invoice-locked/paid => informative only
+      //   (B) unconfirmed status (safe-default if missing)
+      const blockedForEmail =
+        emailEligible &&
+        (isInvoiceLockedOrPaid(row) || isBlockedForTsoEmail(row?.tsfin_processing_status));
 
       if (!emailEligible || blockedForEmail) {
         rowFingerprints[i] = null;
@@ -37963,7 +36275,9 @@ async function handleHrRotaValidationPreview(env, req, importId) {
         statusU !== 'VALIDATION_OK' &&
         EMAIL_REASON_CODES.has(reasonCode);
 
-      const blockedForEmail = emailEligible && isBlockedForTsoEmail(row?.tsfin_processing_status);
+      const blockedForEmail =
+        emailEligible &&
+        (isInvoiceLockedOrPaid(row) || isBlockedForTsoEmail(row?.tsfin_processing_status));
 
       // If blocked, we intentionally DO NOT expose a fingerprint (disables UI selection cleanly).
       const fp = blockedForEmail ? null : rowFingerprints[idx];
@@ -37973,9 +36287,7 @@ async function handleHrRotaValidationPreview(env, req, importId) {
       const canEmailDefault = !!fp && emailEligible && !recipientMissingDefault;
 
       const baseDetails = (row.details && typeof row.details === 'object' && !Array.isArray(row.details)) ? row.details : {};
-      const emailBlockedReason = blockedForEmail
-        ? 'Email blocked: timesheet is not confirmed (awaiting authorisation/signature).'
-        : null;
+      const emailBlockedReason = blockedForEmail ? emailBlockedReasonForRow(row) : null;
 
       const detailsOut = blockedForEmail
         ? { ...baseDetails, email_blocked_reason: emailBlockedReason }
@@ -38036,6 +36348,8 @@ async function handleHrRotaValidationPreview(env, req, importId) {
           can_email: !!r.can_email,
           recipient_missing: !!r.recipient_missing,
           tsfin_processing_status: r.tsfin_processing_status || null,
+          tsfin_locked_by_invoice_id: r.tsfin_locked_by_invoice_id || null,
+          tsfin_paid_at_utc: r.tsfin_paid_at_utc || null,
           email_blocked: !!r.email_blocked_reason
         }));
 
@@ -38067,6 +36381,7 @@ async function handleHrRotaValidationPreview(env, req, importId) {
   }
 }
 
+
 async function handleHrRotaValidationApply(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
@@ -38091,7 +36406,7 @@ async function handleHrRotaValidationApply(env, req, importId) {
   const requestEmailActions = Array.isArray(body?.email_actions) ? body.email_actions : [];
   const requestInvalidationActions = Array.isArray(body?.invalidation_actions) ? body.invalidation_actions : [];
 
-  // ✅ Daily parity: include missing_from_import as mismatch (emailable unless blocked by confirmation rule)
+  // ✅ Daily parity: include missing_from_import as mismatch (emailable unless blocked by confirmation/invoice-lock rule)
   const EMAIL_REASON_CODES = new Set([
     'actual_hours_mismatch',
     'start_end_mismatch',
@@ -38104,6 +36419,27 @@ async function handleHrRotaValidationApply(env, req, importId) {
     const s = String(processing_status || '').trim().toUpperCase();
     if (!s) return true; // safe default
     return (s === 'PENDING_AUTH' || s === 'AWAITING_MANUAL_SIGNATURE');
+  };
+
+  // ✅ "Invoice-locked / paid ⇒ informative only (no email allowed)"
+  const isInvoiceLockedOrPaid = (row) => {
+    const invId =
+      (row?.tsfin_locked_by_invoice_id != null && String(row.tsfin_locked_by_invoice_id).trim())
+        ? String(row.tsfin_locked_by_invoice_id).trim()
+        : (row?.locked_by_invoice_id != null && String(row.locked_by_invoice_id).trim())
+          ? String(row.locked_by_invoice_id).trim()
+          : '';
+    const paidAt =
+      (row?.tsfin_paid_at_utc != null && String(row.tsfin_paid_at_utc).trim())
+        ? String(row.tsfin_paid_at_utc).trim()
+        : (row?.paid_at_utc != null && String(row.paid_at_utc).trim())
+          ? String(row.paid_at_utc).trim()
+          : '';
+
+    const isPaid = (row?.tsfin_is_paid === true) || !!paidAt;
+    const isInvoiced = (row?.tsfin_is_invoiced === true) || !!invId;
+
+    return !!(isPaid || isInvoiced);
   };
 
   const uniqStrings = (arr) => {
@@ -38265,8 +36601,11 @@ async function handleHrRotaValidationApply(env, req, importId) {
     });
   }
 
-  // ✅ Pre-validate email_actions against "timesheet confirmed" gate (server-side enforcement)
-  const blockedTimesheetIds = new Set();
+  // ✅ Pre-validate email_actions against:
+  //   (A) invoice-locked/paid (informative only)  <-- NEW
+  //   (B) not confirmed gate (existing)
+  const blockedInvoicedTimesheetIds = new Set();
+  const blockedUnconfirmedTimesheetIds = new Set();
 
   // Email actions come from request; we enrich from classification rows and recompute fingerprints if missing.
   for (const a of requestEmailActions) {
@@ -38284,6 +36623,12 @@ async function handleHrRotaValidationApply(env, req, importId) {
     const timesheetId = (timesheetIdFromReq || (baseRow?.timesheet_id ? String(baseRow.timesheet_id).trim() : ''));
     if (!timesheetId) continue;
 
+    // ✅ NEW: invoice-locked/paid => reject
+    if (baseRow && isInvoiceLockedOrPaid(baseRow)) {
+      blockedInvoicedTimesheetIds.add(timesheetId);
+      continue;
+    }
+
     // Determine processing status (safe default if missing)
     const procStatus =
       baseRow?.tsfin_processing_status ??
@@ -38291,7 +36636,7 @@ async function handleHrRotaValidationApply(env, req, importId) {
       null;
 
     if (isBlockedForTsoEmail(procStatus)) {
-      blockedTimesheetIds.add(timesheetId);
+      blockedUnconfirmedTimesheetIds.add(timesheetId);
       continue;
     }
 
@@ -38326,12 +36671,21 @@ async function handleHrRotaValidationApply(env, req, importId) {
     });
   }
 
-  if (blockedTimesheetIds.size) {
+  if (blockedInvoicedTimesheetIds.size) {
+    return withCORS(env, req, badRequest(JSON.stringify({
+      error: 'HR_DAILY_EMAIL_BLOCKED_INVOICED_TIMESHEET',
+      message: 'Cannot email Temporary Staffing because one or more selected timesheets are invoice-locked / invoiced or paid (informative only).',
+      import_id: importId,
+      blocked_timesheet_ids: Array.from(blockedInvoicedTimesheetIds)
+    })));
+  }
+
+  if (blockedUnconfirmedTimesheetIds.size) {
     return withCORS(env, req, badRequest(JSON.stringify({
       error: 'HR_DAILY_EMAIL_BLOCKED_UNCONFIRMED_TIMESHEET',
       message: 'Cannot email Temporary Staffing because one or more selected timesheets are not confirmed (awaiting authorisation/signature).',
       import_id: importId,
-      blocked_timesheet_ids: Array.from(blockedTimesheetIds)
+      blocked_timesheet_ids: Array.from(blockedUnconfirmedTimesheetIds)
     })));
   }
 
@@ -38392,6 +36746,12 @@ async function handleHrRotaValidationApply(env, req, importId) {
 
     // ✅ Additional safety (should already be prevented above)
     const baseRow = rowByTimesheetId.get(tsId) || null;
+
+    if (baseRow && isInvoiceLockedOrPaid(baseRow)) {
+      emailFailures.push({ timesheet_id: tsId, issue_fingerprint: fp, reason: 'EMAIL_BLOCKED_INVOICED_TIMESHEET' });
+      continue;
+    }
+
     const procStatus = baseRow?.tsfin_processing_status ?? baseRow?.processing_status ?? null;
     if (isBlockedForTsoEmail(procStatus)) {
       emailFailures.push({ timesheet_id: tsId, issue_fingerprint: fp, reason: 'EMAIL_BLOCKED_UNCONFIRMED_TIMESHEET' });
@@ -38578,16 +36938,16 @@ async function handleHrRotaValidationApply(env, req, importId) {
         error: 'TSFIN_REFRESH_EXCEPTION_AFTER_APPLY',
         message:
           'The database apply succeeded, but TSFIN refresh raised an exception. No data was rolled back. Please retry TSFIN recompute using the affected_timesheet_ids.',
-        import_id: importId,
-        affected_timesheet_ids: affectedTimesheetIds,
-        tsfin_drain: tsfinDrainStats,
-        retry: {
-          action: 'RETRY_TSFIN_RECOMPUTE',
-          timesheet_ids: affectedTimesheetIds,
-          next_attempt_at_min: tsfinDrainStats.pending_next_attempt_at_min || null,
-          retry_after_seconds: retryAfterSeconds
-        },
-        apply: rpcPayload
+          import_id: importId,
+          affected_timesheet_ids: affectedTimesheetIds,
+          tsfin_drain: tsfinDrainStats,
+          retry: {
+            action: 'RETRY_TSFIN_RECOMPUTE',
+            timesheet_ids: affectedTimesheetIds,
+            next_attempt_at_min: tsfinDrainStats.pending_next_attempt_at_min || null,
+            retry_after_seconds: retryAfterSeconds
+          },
+          apply: rpcPayload
       };
 
       return withCORS(env, req, new Response(JSON.stringify(resp), {
@@ -38648,7 +37008,6 @@ async function handleHrRotaValidationApply(env, req, importId) {
     }
   }));
 }
-
 
 
 async function findCandidateByImportName(env, staffName, { trustNorm } = {}) {
@@ -46097,19 +44456,29 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
   }));
 }
 
-
-
 async function enqueueHrMismatchEmail(env, { timesheet_id, importId, row }) {
   const enc = encodeURIComponent;
 
   if (!timesheet_id) return;
 
-  // ✅ Last-line enforcement: do NOT email Temp Staffing if the timesheet is not confirmed
-  // Safe-default: if status is missing/unavailable, block.
+  // ✅ Last-line enforcement: do NOT email Temp Staffing if:
+  //  - timesheet is not confirmed (safe-default: missing status blocks)
+  //  - timesheet is invoice-locked / invoiced (locked_by_invoice_id not null)
+  //  - timesheet is paid (paid_at_utc not null)
   const isBlockedForTsoEmail = (processing_status) => {
     const s = String(processing_status || '').trim().toUpperCase();
     if (!s) return true;
     return (s === 'PENDING_AUTH' || s === 'AWAITING_MANUAL_SIGNATURE');
+  };
+
+  const isInvoiceLockedOrPaid = (locked_by_invoice_id, paid_at_utc) => {
+    const invId = (locked_by_invoice_id != null && String(locked_by_invoice_id).trim())
+      ? String(locked_by_invoice_id).trim()
+      : '';
+    const paidAt = (paid_at_utc != null && String(paid_at_utc).trim())
+      ? String(paid_at_utc).trim()
+      : '';
+    return !!(invId || paidAt);
   };
 
   try {
@@ -46118,10 +44487,22 @@ async function enqueueHrMismatchEmail(env, { timesheet_id, importId, row }) {
       `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
         `?timesheet_id=eq.${enc(timesheet_id)}` +
         `&is_current=eq.true` +
-        `&select=processing_status` +
+        `&select=processing_status,locked_by_invoice_id,paid_at_utc` +
         `&limit=1`
     );
+
     const ps = tfRows?.[0]?.processing_status ?? null;
+    const lockedByInvoiceId = tfRows?.[0]?.locked_by_invoice_id ?? null;
+    const paidAtUtc = tfRows?.[0]?.paid_at_utc ?? null;
+
+    if (isInvoiceLockedOrPaid(lockedByInvoiceId, paidAtUtc)) {
+      const invTxt = (lockedByInvoiceId != null && String(lockedByInvoiceId).trim()) ? String(lockedByInvoiceId).trim() : '';
+      const paidTxt = (paidAtUtc != null && String(paidAtUtc).trim()) ? String(paidAtUtc).trim() : '';
+      const why = invTxt
+        ? `Email blocked: timesheet is invoice-locked / invoiced (invoice_id=${invTxt}). Informative only.`
+        : `Email blocked: timesheet is paid (paid_at_utc=${paidTxt || 'UNKNOWN'}). Informative only.`;
+      throw new Error(`${why} timesheet_id=${String(timesheet_id)}`);
+    }
 
     if (isBlockedForTsoEmail(ps)) {
       const psTxt = String(ps || '').trim() || 'UNKNOWN';
@@ -46131,14 +44512,14 @@ async function enqueueHrMismatchEmail(env, { timesheet_id, importId, row }) {
       );
     }
   } catch (e) {
-    // If the failure was the explicit block error above, rethrow.
+    // If the failure was an explicit block error above, rethrow.
     // Otherwise: safe-default block (do not send) with a clear message.
     const msg = String(e?.message || e || '');
     if (msg && msg.toLowerCase().includes('email blocked:')) {
       throw e;
     }
     throw new Error(
-      `Email blocked: cannot determine timesheet confirmation status (safe default). ` +
+      `Email blocked: cannot determine timesheet status (safe default). ` +
       `timesheet_id=${String(timesheet_id)} err=${msg || 'unknown'}`
     );
   }
@@ -46361,11 +44742,21 @@ async function handleHrRotaQueueTsoEmail(env, req) {
     return withCORS(env, req, badRequest('timesheet_id is required'));
   }
 
-  // ✅ Confirmation gate: block if timesheet is not confirmed
+  // ✅ Confirmation gate + invoice/paid gate (manual endpoint must enforce too)
   const isBlockedForTsoEmail = (processing_status) => {
     const s = String(processing_status || '').trim().toUpperCase();
     if (!s) return true; // safe default
     return (s === 'PENDING_AUTH' || s === 'AWAITING_MANUAL_SIGNATURE');
+  };
+
+  const isInvoiceLockedOrPaid = (locked_by_invoice_id, paid_at_utc) => {
+    const invId = (locked_by_invoice_id != null && String(locked_by_invoice_id).trim())
+      ? String(locked_by_invoice_id).trim()
+      : '';
+    const paidAt = (paid_at_utc != null && String(paid_at_utc).trim())
+      ? String(paid_at_utc).trim()
+      : '';
+    return !!(invId || paidAt);
   };
 
   try {
@@ -46374,10 +44765,22 @@ async function handleHrRotaQueueTsoEmail(env, req) {
       `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
         `?timesheet_id=eq.${enc(timesheetId)}` +
         `&is_current=eq.true` +
-        `&select=processing_status` +
+        `&select=processing_status,locked_by_invoice_id,paid_at_utc` +
         `&limit=1`
     );
+
     const ps = tfRows?.[0]?.processing_status ?? null;
+    const lockedByInvoiceId = tfRows?.[0]?.locked_by_invoice_id ?? null;
+    const paidAtUtc = tfRows?.[0]?.paid_at_utc ?? null;
+
+    if (isInvoiceLockedOrPaid(lockedByInvoiceId, paidAtUtc)) {
+      const invTxt = (lockedByInvoiceId != null && String(lockedByInvoiceId).trim()) ? String(lockedByInvoiceId).trim() : '';
+      const paidTxt = (paidAtUtc != null && String(paidAtUtc).trim()) ? String(paidAtUtc).trim() : '';
+      const why = invTxt
+        ? `Email blocked: timesheet is invoice-locked / invoiced (invoice_id=${invTxt}). Informative only.`
+        : `Email blocked: timesheet is paid (paid_at_utc=${paidTxt || 'UNKNOWN'}). Informative only.`;
+      return withCORS(env, req, badRequest(why));
+    }
 
     if (isBlockedForTsoEmail(ps)) {
       const psTxt = String(ps || '').trim() || 'UNKNOWN';
@@ -46388,7 +44791,7 @@ async function handleHrRotaQueueTsoEmail(env, req) {
   } catch (e) {
     const msg = String(e?.message || e || '');
     return withCORS(env, req, badRequest(
-      `Email blocked: cannot determine timesheet confirmation status (safe default). err=${msg || 'unknown'}`
+      `Email blocked: cannot determine timesheet status (safe default). err=${msg || 'unknown'}`
     ));
   }
 
@@ -46586,7 +44989,6 @@ async function handleHrRotaQueueTsoEmail(env, req) {
     recipient_email: recipientEmail
   }));
 }
-
 
 
 
