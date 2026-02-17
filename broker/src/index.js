@@ -3101,22 +3101,47 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId, preload = nu
     return minutesToWordsUpper(Math.round(h * 60));
   };
 
-  const getSegTimes = (seg) => {
-    if (!seg || typeof seg !== "object") return { start: "", end: "" };
-    if (typeof seg.start === "string" && typeof seg.end === "string") return { start: seg.start, end: seg.end };
+ const TZ = "Europe/London";
 
-    if (seg.start_utc && seg.end_utc) {
-      try {
-        if (typeof toLocalParts === "function") {
-          const a = toLocalParts(seg.start_utc, null);
-          const b = toLocalParts(seg.end_utc, null);
-          return { start: a?.hhmm || "", end: b?.hhmm || "" };
-        }
-      } catch {}
-      return { start: safeStr(seg.start_utc).slice(11, 16), end: safeStr(seg.end_utc).slice(11, 16) };
+const _isoToLondonHHMM = (iso) => {
+  const s = safeStr(iso);
+  if (!s) return "";
+  try {
+    if (typeof toLocalParts === "function") {
+      const p = toLocalParts(s, TZ);
+      if (p?.hhmm) return String(p.hhmm);
     }
-    return { start: "", end: "" };
-  };
+  } catch {}
+  try {
+    const d = new Date(s);
+    if (Number.isNaN(d.getTime())) return "";
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: TZ,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false
+    }).formatToParts(d);
+    const hh = parts.find(x => x.type === "hour")?.value || "";
+    const mm = parts.find(x => x.type === "minute")?.value || "";
+    const out = `${hh}:${mm}`;
+    return (/^\d{2}:\d{2}$/.test(out)) ? out : "";
+  } catch {}
+  return "";
+};
+
+const getSegTimes = (seg) => {
+  if (!seg || typeof seg !== "object") return { start: "", end: "" };
+  if (typeof seg.start === "string" && typeof seg.end === "string") return { start: seg.start, end: seg.end };
+
+  if (seg.start_utc && seg.end_utc) {
+    return {
+      start: _isoToLondonHHMM(seg.start_utc),
+      end: _isoToLondonHHMM(seg.end_utc)
+    };
+  }
+  return { start: "", end: "" };
+};
+
 
   // Break rule: if break_start+break_end exist, show both; else if break_minutes, show "30mins" in Break Start.
   const getBreakDisplay = (seg) => {
@@ -3380,29 +3405,61 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId, preload = nu
   };
 
   // Local helpers for DAILY synthesis
-  const isoToLocalYmd = (iso) => {
-    const s = safeStr(iso);
-    if (!s) return "";
-    try {
-      if (typeof toLocalParts === "function") {
-        const p = toLocalParts(s, null);
-        if (p?.ymd) return String(p.ymd);
-      }
-    } catch {}
-    return s.slice(0, 10);
-  };
+ const TZ = "Europe/London";
 
-  const isoToLocalHHMM = (iso) => {
-    const s = safeStr(iso);
-    if (!s) return "";
-    try {
-      if (typeof toLocalParts === "function") {
-        const p = toLocalParts(s, null);
-        if (p?.hhmm) return String(p.hhmm);
-      }
-    } catch {}
-    return s.slice(11, 16);
-  };
+const isoToLocalYmd = (iso) => {
+  const s = safeStr(iso);
+  if (!s) return "";
+  try {
+    if (typeof toLocalParts === "function") {
+      const p = toLocalParts(s, TZ);
+      if (p?.ymd) return String(p.ymd);
+    }
+  } catch {}
+  try {
+    const d = new Date(s);
+    if (Number.isNaN(d.getTime())) return "";
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: TZ,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }).formatToParts(d);
+    const yy = parts.find(x => x.type === "year")?.value || "";
+    const mm = parts.find(x => x.type === "month")?.value || "";
+    const dd = parts.find(x => x.type === "day")?.value || "";
+    const out = `${yy}-${mm}-${dd}`;
+    return (/^\d{4}-\d{2}-\d{2}$/.test(out)) ? out : "";
+  } catch {}
+  return safeStr(s).slice(0, 10);
+};
+
+const isoToLocalHHMM = (iso) => {
+  const s = safeStr(iso);
+  if (!s) return "";
+  try {
+    if (typeof toLocalParts === "function") {
+      const p = toLocalParts(s, TZ);
+      if (p?.hhmm) return String(p.hhmm);
+    }
+  } catch {}
+  try {
+    const d = new Date(s);
+    if (Number.isNaN(d.getTime())) return "";
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: TZ,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false
+    }).formatToParts(d);
+    const hh = parts.find(x => x.type === "hour")?.value || "";
+    const mm = parts.find(x => x.type === "minute")?.value || "";
+    const out = `${hh}:${mm}`;
+    return (/^\d{2}:\d{2}$/.test(out)) ? out : "";
+  } catch {}
+  return safeStr(s).slice(11, 16);
+};
+
 
   try {
     // ---------- DB LOAD ----------
@@ -3685,14 +3742,18 @@ async function renderTimesheetPDFGeneratedAndSave(env, timesheetId, preload = nu
             segment_id: sid || null
           };
 
-          // Optional break fields if present on TSFIN segments
-          if (s?.break_start && s?.break_end) {
-            out.break_start = safeStr(s.break_start);
-            out.break_end = safeStr(s.break_end);
-            out.breaks = [{ start: safeStr(s.break_start), end: safeStr(s.break_end) }];
-          } else if (s?.break_minutes != null) {
-            out.break_minutes = Number(s.break_minutes) || 0;
-          }
+      // Optional break fields if present on TSFIN segments
+if (s?.break_start && s?.break_end) {
+  out.break_start = safeStr(s.break_start);
+  out.break_end = safeStr(s.break_end);
+  out.breaks = [{ start: safeStr(s.break_start), end: safeStr(s.break_end) }];
+} else if (s?.break_minutes != null) {
+  out.break_minutes = Number(s.break_minutes) || 0;
+} else if (s?.break_mins != null) {
+  // ✅ TSFIN segments use break_mins (minutes-only). Preserve it so getBreakDisplay/computePaidMinutes work.
+  out.break_mins = Number(s.break_mins) || 0;
+}
+
 
           return out;
         });
