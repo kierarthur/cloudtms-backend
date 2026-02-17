@@ -2,11 +2,12 @@
 # CloudTMS - Wrangler config
 # Safe for test + prod from one repo
 # =========================
-
+#
 # IMPORTANT:
-# - Use `wrangler deploy --env test` for test
-# - Use `wrangler deploy --env production` for live
-# - Default (no --env) deploys to a harmless local name
+# - Deploy TEST with:        npx wrangler deploy --env test
+# - Deploy PRODUCTION with:  npx wrangler deploy --env production
+# - Default (no --env) deploys to a harmless local name (cloudtms-local)
+#
 
 name = "cloudtms-local"
 main = "broker/src/index.js"
@@ -21,7 +22,7 @@ binding = "BROWSER"
 # Default vars (LOCAL ONLY)
 # =========================
 [vars]
-# Safe defaults for local/dev. Override via env.* below for real deploys.
+# Safe defaults for local/dev. Real deploys should always use --env.
 SUPABASE_URL = "https://yakevhtttcsljosbdpov.supabase.co"
 ALLOWED_ORIGINS = "http://localhost:3000,https://kierarthur.github.io"
 COOKIE_SAME_SITE = "None"
@@ -39,17 +40,6 @@ PUBLIC_DOWNLOAD_BASE_URL = "http://localhost:3000/api/files/download"
 INVOICE_STATIONERY_BUCKET = "test-cloudtms"
 INVOICE_STATIONERY_KEY = "Assets/Stationery/Letterhead/A4/Letterhead_v1@300dpi.png"
 TIMESHEET_TEMPLATE_KEY = "Assets/Stationery/Timesheet/Blank Timesheet.pdf"
-
-# Local-only bindings (optional). Most people won't deploy without --env anyway.
-# If you do local deploys, set these to local/dev resources as needed.
-# [[r2_buckets]]
-# binding = "R2"
-# bucket_name = "test-cloudtms"
-#
-# [[kv_namespaces]]
-# binding = "SESSIONS"
-# id = "PUT_LOCAL_SESSIONS_KV_ID_HERE"
-# preview_id = "PUT_LOCAL_SESSIONS_KV_PREVIEW_ID_HERE"
 
 # =========================
 # Triggers (LOCAL ONLY)
@@ -95,11 +85,10 @@ TIMESHEET_TEMPLATE_KEY = "Assets/Stationery/Timesheet/Blank Timesheet.pdf"
 binding = "R2"
 bucket_name = "test-cloudtms"
 
-# IMPORTANT: create a dedicated KV namespace for test sessions and paste IDs here
 [[env.test.kv_namespaces]]
 binding = "SESSIONS"
-id = "PUT_TEST_SESSIONS_KV_ID_HERE"
-preview_id = "PUT_TEST_SESSIONS_KV_PREVIEW_ID_HERE"
+id = "8f53829c670d45e7b99166cd989199b4"
+preview_id = "8f53829c670d45e7b99166cd989199b4"
 
 [env.test.triggers]
 # If you want test to behave exactly like live, keep the same crons.
