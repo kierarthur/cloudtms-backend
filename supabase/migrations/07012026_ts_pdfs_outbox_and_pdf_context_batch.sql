@@ -49,6 +49,7 @@ create index if not exists idx_ts_pdfs_outbox_due
 -- Enqueue ELECTRONIC timesheets that are READY_FOR_INVOICE and
 -- have no manual scanned PDF (manual/QR evidence path)
 -- ------------------------------------------------------------
+
 create or replace function public.tspdf_enqueue_ready_for_invoice(p_limit int default 500)
 returns int
 language plpgsql
@@ -58,31 +59,112 @@ declare
   v_lim int := greatest(1, least(coalesce(p_limit, 500), 2000));
 begin
   with eligible as (
-    select t.timesheet_id
+    select
+      t.timesheet_id,
+      t.generated_pdf_at_utc,
+      nullif(btrim(coalesce(t.generated_pdf_refs_sig,'')), '') as prev_refs_sig,
+      sig.cur_refs_sig,
+      o.id as existing_outbox_id,
+      coalesce(o.force_regen, false) as existing_force_regen,
+      (
+        nullif(btrim(coalesce(t.generated_pdf_refs_sig,'')), '') is not null
+        and sig.cur_refs_sig is not null
+        and nullif(btrim(coalesce(t.generated_pdf_refs_sig,'')), '') <> sig.cur_refs_sig
+      ) as refs_sig_mismatch
     from public.timesheets t
     join public.timesheets_financials tf
       on tf.timesheet_id = t.timesheet_id
      and tf.is_current = true
+    left join public.ts_pdfs_outbox o
+      on o.timesheet_id = t.timesheet_id
+     and o.reason = 'READY_FOR_INVOICE'::public.ts_pdf_reason_enum
+    left join lateral (
+      select
+        case
+          when nullif(btrim(coalesce(t.generated_pdf_refs_sig,'')), '') is not null
+            then public.timesheet_pdf_reference_sig(t.timesheet_id)
+          else null::text
+        end as cur_refs_sig
+    ) sig on true
     where t.is_current = true
       and t.revoked_at is null
       and t.submission_mode::text = 'ELECTRONIC'
       and t.manual_pdf_r2_key is null
-      and (
-        t.generated_pdf_at_utc is null
-        or t.generated_pdf_refs_sig is null
-      )
       and t.r2_nurse_key is not null
       and t.r2_auth_key  is not null
       and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
       and tf.locked_by_invoice_id is null
+      and (
+        t.generated_pdf_at_utc is null
+        or t.generated_pdf_refs_sig is null
+        or (
+          nullif(btrim(coalesce(t.generated_pdf_refs_sig,'')), '') is not null
+          and sig.cur_refs_sig is not null
+          and nullif(btrim(coalesce(t.generated_pdf_refs_sig,'')), '') <> sig.cur_refs_sig
+        )
+      )
     order by t.updated_at desc nulls last
     limit v_lim
   ),
-  ins as (
-    insert into public.ts_pdfs_outbox(timesheet_id, reason)
-    select e.timesheet_id, 'READY_FOR_INVOICE'::public.ts_pdf_reason_enum
+  to_enqueue as (
+    select
+      e.timesheet_id,
+      (e.refs_sig_mismatch is true) as force_regen
     from eligible e
-    on conflict (timesheet_id, reason) do nothing
+    where
+      (
+        -- No existing READY_FOR_INVOICE outbox row: enqueue when dirty/missing OR refs mismatch.
+        e.existing_outbox_id is null
+      )
+      or
+      (
+        -- Existing outbox row present: only upgrade to force_regen on first detection of mismatch.
+        e.existing_outbox_id is not null
+        and e.refs_sig_mismatch is true
+        and e.existing_force_regen is not true
+      )
+  ),
+  ins as (
+    insert into public.ts_pdfs_outbox(
+      timesheet_id,
+      reason,
+      attempt_count,
+      next_attempt_at,
+      last_error,
+      prefer_generated,
+      force_regen,
+      created_at
+    )
+    select
+      te.timesheet_id,
+      'READY_FOR_INVOICE'::public.ts_pdf_reason_enum,
+      0,
+      null,
+      null,
+      false,
+      te.force_regen,
+      now()
+    from to_enqueue te
+    on conflict (timesheet_id, reason)
+    do update
+      set attempt_count   = case
+                              when public.ts_pdfs_outbox.force_regen is false and excluded.force_regen is true
+                                then 0
+                              else public.ts_pdfs_outbox.attempt_count
+                            end,
+          next_attempt_at = case
+                              when public.ts_pdfs_outbox.force_regen is false and excluded.force_regen is true
+                                then null
+                              else public.ts_pdfs_outbox.next_attempt_at
+                            end,
+          last_error      = case
+                              when public.ts_pdfs_outbox.force_regen is false and excluded.force_regen is true
+                                then null
+                              else public.ts_pdfs_outbox.last_error
+                            end,
+          prefer_generated = public.ts_pdfs_outbox.prefer_generated or excluded.prefer_generated,
+          force_regen      = public.ts_pdfs_outbox.force_regen or excluded.force_regen
+      where public.ts_pdfs_outbox.force_regen is false and excluded.force_regen is true
     returning 1
   )
   select count(*) into v_ins from ins;
@@ -90,6 +172,9 @@ begin
   return v_ins;
 end;
 $$;
+
+
+
 
 
 
