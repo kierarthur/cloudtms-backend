@@ -832,6 +832,21 @@ async function loadSettingsDefaults(env) {
       return parseFn(v, dflt);
     };
 
+    const _clamp = (n, lo, hi) => {
+      const x = Number(n);
+      if (!Number.isFinite(x)) return null;
+      const y = Math.trunc(x);
+      if (y < lo) return lo;
+      if (y > hi) return hi;
+      return y;
+    };
+
+    const _asPosIntClamped = (v, dflt, hi = 5000) => {
+      const n = _asPosInt(v, dflt);
+      const c = _clamp(n, 0, hi);
+      return (c == null) ? dflt : c;
+    };
+
     const invpdfEffective = {
       mode: invpdfMode,
 
@@ -879,6 +894,131 @@ async function loadSettingsDefaults(env) {
     // Expose invpdf config
     importConfig.invpdf = invpdfCfg0;
     importConfig.invpdf_effective = invpdfEffective;
+
+    // ─────────────────────────────────────────────────────────────
+    // ✅ NEW: inv (invoice/autoinvoice worker throttles) under cfg.inv
+    // Supports:
+    //  - cfg.inv as object OR JSON string
+    //  - cfg.inv.mode = 'free'|'paid'
+    //  - optional cfg.inv.free / cfg.inv.paid tier objects
+    // Exposes: importConfig.inv_effective (tier-resolved)
+    // Notes:
+    //  - Clamp to [0..5000] to avoid self-DoS
+    //  - If missing, fall back to env defaults if present, else sane tier defaults
+    // ─────────────────────────────────────────────────────────────
+    const invCfgRaw0 = cfg.inv;
+    const invCfg0 = (typeof invCfgRaw0 === 'object' && invCfgRaw0 !== null)
+      ? invCfgRaw0
+      : (_safeJsonParseMaybe(invCfgRaw0, {}) || {});
+
+    const invModeRaw = String(invCfg0.mode || invCfg0.plan || invCfg0.tier || 'free').trim().toLowerCase();
+    const invMode = (invModeRaw === 'paid') ? 'paid' : 'free';
+
+    const invFreeRaw = invCfg0.free;
+    const invPaidRaw = invCfg0.paid;
+
+    const invFree = (typeof invFreeRaw === 'object' && invFreeRaw !== null)
+      ? invFreeRaw
+      : (_safeJsonParseMaybe(invFreeRaw, {}) || {});
+
+    const invPaid = (typeof invPaidRaw === 'object' && invPaidRaw !== null)
+      ? invPaidRaw
+      : (_safeJsonParseMaybe(invPaidRaw, {}) || {});
+
+    const invTier = (invMode === 'paid') ? invPaid : invFree;
+
+    const invEffective = {
+      mode: invMode,
+      autoinvoice: {
+        enqueue_group_limit: _asPosIntClamped(
+          (invTier.autoinvoice && invTier.autoinvoice.enqueue_group_limit !== undefined)
+            ? invTier.autoinvoice.enqueue_group_limit
+            : (invCfg0.autoinvoice && invCfg0.autoinvoice.enqueue_group_limit !== undefined ? invCfg0.autoinvoice.enqueue_group_limit : env.AUTO_INVOICE_ENQUEUE_LIMIT),
+          (invMode === 'paid' ? 50 : 10),
+          5000
+        )
+      },
+      worker: {
+        max_batches: _asPosIntClamped(
+          (invTier.worker && invTier.worker.max_batches !== undefined)
+            ? invTier.worker.max_batches
+            : (invCfg0.worker && invCfg0.worker.max_batches !== undefined ? invCfg0.worker.max_batches : env.INVOICE_MAX_BATCHES),
+          (invMode === 'paid' ? 5 : 1),
+          5000
+        ),
+        dequeue_limit: _asPosIntClamped(
+          (invTier.worker && invTier.worker.dequeue_limit !== undefined)
+            ? invTier.worker.dequeue_limit
+            : (invCfg0.worker && invCfg0.worker.dequeue_limit !== undefined ? invCfg0.worker.dequeue_limit : env.INVOICE_DEQUEUE_LIMIT),
+          (invMode === 'paid' ? 25 : 10),
+          5000
+        )
+      }
+    };
+
+    importConfig.inv = invCfg0;
+    importConfig.inv_effective = invEffective;
+
+    // ─────────────────────────────────────────────────────────────
+    // ✅ NEW: tspdf (timesheet pdf worker throttles) under cfg.tspdf
+    // Supports:
+    //  - cfg.tspdf as object OR JSON string
+    //  - cfg.tspdf.mode = 'free'|'paid'
+    //  - optional cfg.tspdf.free / cfg.tspdf.paid tier objects
+    //  - cfg.tspdf.regen_on_ref_change (bool) (tier may override if provided)
+    // Exposes: importConfig.tspdf_effective (tier-resolved)
+    // Notes:
+    //  - Clamp to [0..5000] to avoid self-DoS
+    //  - If missing, fall back to env defaults if present, else sane tier defaults
+    // ─────────────────────────────────────────────────────────────
+    const tspdfCfgRaw0 = cfg.tspdf;
+    const tspdfCfg0 = (typeof tspdfCfgRaw0 === 'object' && tspdfCfgRaw0 !== null)
+      ? tspdfCfgRaw0
+      : (_safeJsonParseMaybe(tspdfCfgRaw0, {}) || {});
+
+    const tspdfModeRaw = String(tspdfCfg0.mode || tspdfCfg0.plan || tspdfCfg0.tier || 'free').trim().toLowerCase();
+    const tspdfMode = (tspdfModeRaw === 'paid') ? 'paid' : 'free';
+
+    const tspdfFreeRaw = tspdfCfg0.free;
+    const tspdfPaidRaw = tspdfCfg0.paid;
+
+    const tspdfFree = (typeof tspdfFreeRaw === 'object' && tspdfFreeRaw !== null)
+      ? tspdfFreeRaw
+      : (_safeJsonParseMaybe(tspdfFreeRaw, {}) || {});
+
+    const tspdfPaid = (typeof tspdfPaidRaw === 'object' && tspdfPaidRaw !== null)
+      ? tspdfPaidRaw
+      : (_safeJsonParseMaybe(tspdfPaidRaw, {}) || {});
+
+    const tspdfTier = (tspdfMode === 'paid') ? tspdfPaid : tspdfFree;
+
+    const tspdfEffective = {
+      mode: tspdfMode,
+      enqueue_limit: _asPosIntClamped(
+        (tspdfTier.enqueue_limit !== undefined) ? tspdfTier.enqueue_limit : (tspdfCfg0.enqueue_limit !== undefined ? tspdfCfg0.enqueue_limit : env.TSPDF_ENQUEUE_LIMIT),
+        (tspdfMode === 'paid' ? 1000 : 200),
+        5000
+      ),
+      max_batches: _asPosIntClamped(
+        (tspdfTier.max_batches !== undefined) ? tspdfTier.max_batches : (tspdfCfg0.max_batches !== undefined ? tspdfCfg0.max_batches : env.TSPDF_MAX_BATCHES),
+        (tspdfMode === 'paid' ? 3 : 1),
+        5000
+      ),
+      dequeue_limit: _asPosIntClamped(
+        (tspdfTier.dequeue_limit !== undefined) ? tspdfTier.dequeue_limit : (tspdfCfg0.dequeue_limit !== undefined ? tspdfCfg0.dequeue_limit : env.TSPDF_DEQUEUE_LIMIT),
+        (tspdfMode === 'paid' ? 20 : 5),
+        5000
+      ),
+      regen_on_ref_change: (() => {
+        const tierVal = (tspdfTier.regen_on_ref_change !== undefined) ? tspdfTier.regen_on_ref_change : undefined;
+        const topVal = tspdfCfg0.regen_on_ref_change;
+        const chosen = (tierVal !== undefined) ? tierVal : topVal;
+        return _asBool(chosen, true);
+      })()
+    };
+
+    importConfig.tspdf = tspdfCfg0;
+    importConfig.tspdf_effective = tspdfEffective;
 
     // ✅ NEW: finance email settings (db-driven)
     const financeEmail = row.finance_email ? String(row.finance_email).trim() : null;
@@ -955,6 +1095,22 @@ async function loadSettingsDefaults(env) {
           email_worker_can_render: false,
           cooldown_ms: 4000,
           retry_backoff_ms: [2000, 5000, 15000]
+        },
+
+        // ✅ NEW fallbacks
+        inv: {},
+        inv_effective: {
+          mode: 'free',
+          autoinvoice: { enqueue_group_limit: 10 },
+          worker: { max_batches: 1, dequeue_limit: 10 }
+        },
+        tspdf: {},
+        tspdf_effective: {
+          mode: 'free',
+          enqueue_limit: 200,
+          max_batches: 1,
+          dequeue_limit: 5,
+          regen_on_ref_change: true
         }
       },
 
@@ -28999,8 +29155,6 @@ async function handleTimesheetsSummary(env, req) {
     return withCORS(env, req, serverError(`Failed to fetch timesheets summary: ${e?.message || e}`));
   }
 }
-
-
 async function handleHrAutoprocessPreview(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
   const enc = encodeURIComponent;
@@ -29157,6 +29311,93 @@ async function handleHrAutoprocessPreview(env, req, importId) {
       return withCORS(env, req, badRequest(
         `Import ${importId} has source_system=${cls.actual_source_system}, expected HEALTHROSTER`
       ));
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // ✅ Mode-A gating: resolve-first.
+    // If unresolved blockers exist, return resolve-only payload and DO NOT
+    // compute Mode-A mismatch/missing/email sections (no hr_weekly_validation_preview call).
+    // ─────────────────────────────────────────────────────────────
+    const previewRows0 = Array.isArray(cls?.rows) ? cls.rows : [];
+    let gateCand = 0, gateGrade = 0, gateTarget = 0, gateUnmatched = 0, gateOther = 0;
+
+    for (const r0 of previewRows0) {
+      const actU = String(
+        r0?.action || r0?.resolution_status || r0?.resolutionStatus || r0?.status || ''
+      ).trim().toUpperCase();
+      const rcL = String(r0?.reason_code || r0?.reasonCode || '').trim().toLowerCase();
+      const stU = String(r0?.status || '').trim().toUpperCase();
+
+      if (stU === 'UNMATCHED') gateUnmatched += 1;
+
+      if (actU === 'REJECT_NO_CANDIDATE' || rcL === 'candidate_unresolved') gateCand += 1;
+      else if (actU === 'REJECT_NO_CONTRACT_BAND_MISMATCH' || rcL === 'grade_mapping_required') gateGrade += 1;
+      else if (r0?.timesheet_target_ambiguous === true || rcL === 'timesheet_not_found_or_ambiguous' || rcL === 'timesheet_target_ambiguous') gateTarget += 1;
+      else if (actU === 'REJECT_NO_CONTRACT' || actU === 'REJECT_NO_CLIENT') gateTarget += 1;
+      else if (actU.startsWith('REJECT_')) gateOther += 1;
+    }
+
+    const requires_resolve = (gateCand + gateGrade + gateTarget + gateUnmatched + gateOther) > 0;
+
+    if (requires_resolve) {
+      const resolve_summary = {
+        candidate_unresolved: gateCand,
+        grade_mapping_required: gateGrade,
+        timesheet_target_ambiguous: gateTarget,
+        unmatched: gateUnmatched,
+        other_rejects: gateOther,
+        total: gateCand + gateGrade + gateTarget + gateUnmatched + gateOther
+      };
+
+      if (LOG) {
+        console.log('[HR_WEEKLY_PREVIEW]', JSON.stringify({
+          import_id: importId,
+          client_id: String(imp.client_id),
+          stage: 'resolve_gate_early_return',
+          resolve_summary
+        }));
+      }
+
+      return withCORS(env, req, ok({
+        import_id: String(importId),
+        client_id: String(imp.client_id),
+
+        // Force Mode-A-only so FE always wires validation resolve UI (no drift)
+        mode_summary: 'MODE_A_ONLY',
+
+        // Resolve-first contract for FE
+        requires_resolve: true,
+        resolve_summary,
+
+        // Resolve UI inputs
+        rows: previewRows0,
+        summary: cls?.summary || null,
+
+        // Suppressed sections until resolves are complete
+        validation_groups: [],
+        action_groups: [],
+        actions: [],
+        auto_apply_action_ids: [],
+
+        // Weekly validation payload not computed yet (suppressed)
+        validation_meta: {
+          recipient_email: null,
+          unmatched_timesheet_triples: null,
+          unmapped_candidate_rows: null
+        },
+
+        // Truth meta: minimal; date range + cancellations computed only once resolves are complete
+        truth_meta: {
+          summary: cls?.summary || null,
+          options: cls?.options || null,
+          cancellations_computable: false,
+          file_date_min: null,
+          file_date_max: null,
+          hr_rows_loaded: 0,
+          hidden_new_rows: 0,
+          hidden_noop_rows: 0
+        }
+      }));
     }
 
     // 2) Get phase2 mapping (candidate_id/client_id/work_date/week_ending/contract_id per external_row_key)
@@ -29430,10 +29671,10 @@ async function handleHrAutoprocessPreview(env, req, importId) {
       if (!tsId) continue;
       if (!boolish(g?.has_mismatch)) continue;
 
-      const meta = tfMetaByTimesheetId.has(tsId) ? tfMetaByTimesheetId.get(tsId) : null;
-      const ps = meta ? meta.processing_status : null;
-      const inv = meta ? meta.locked_by_invoice_id : null;
-      const paid = meta ? meta.paid_at_utc : null;
+      const meta0 = tfMetaByTimesheetId.has(tsId) ? tfMetaByTimesheetId.get(tsId) : null;
+      const ps = meta0 ? meta0.processing_status : null;
+      const inv = meta0 ? meta0.locked_by_invoice_id : null;
+      const paid = meta0 ? meta0.paid_at_utc : null;
 
       const blockedByInvoice = isInvoiceLockedOrPaid(inv, paid);
       const blockedByConfirm = (!blockedByInvoice && isBlockedForTsoEmail(ps));
@@ -30168,13 +30409,35 @@ async function handleHrAutoprocessApply(env, req, importId) {
     }))
     .filter(x => !!(x.timesheet_id && x.comparison_key));
 
-  // Optional: allow caller to request explicit tspdf enqueue for electronic refs-changed
-  const enqueueTspdfRegen =
-    boolish(body.enqueue_tspdf_regen) ||
-    boolish(body.enqueueTspdfRegen) ||
-    boolish(body.enqueue_pdf_regen) ||
-    boolish(body.enqueuePdfRegen) ||
-    false;
+  // ─────────────────────────────────────────────
+  // ✅ Config-driven default for enqueue_tspdf_regen:
+  //   - If request explicitly provides a flag (even false), honour it.
+  //   - Otherwise default to settings.importConfig.tspdf_effective.regen_on_ref_change (recommended default true).
+  // ─────────────────────────────────────────────
+  const hasEnqueueTspdfKey =
+    Object.prototype.hasOwnProperty.call(body, 'enqueue_tspdf_regen') ||
+    Object.prototype.hasOwnProperty.call(body, 'enqueueTspdfRegen') ||
+    Object.prototype.hasOwnProperty.call(body, 'enqueue_pdf_regen') ||
+    Object.prototype.hasOwnProperty.call(body, 'enqueuePdfRegen');
+
+  let enqueueTspdfRegenDefault = true;
+  try {
+    const s = await loadSettingsDefaults(env);
+    const v = s?.importConfig?.tspdf_effective?.regen_on_ref_change;
+    if (v === true || v === false) enqueueTspdfRegenDefault = v;
+  } catch {
+    enqueueTspdfRegenDefault = true;
+  }
+
+  const enqueueTspdfRegen = hasEnqueueTspdfKey
+    ? (
+        boolish(body.enqueue_tspdf_regen) ||
+        boolish(body.enqueueTspdfRegen) ||
+        boolish(body.enqueue_pdf_regen) ||
+        boolish(body.enqueuePdfRegen) ||
+        false
+      )
+    : enqueueTspdfRegenDefault;
 
   logInfo({
     stage: 'start',
@@ -30185,7 +30448,8 @@ async function handleHrAutoprocessApply(env, req, importId) {
     invalidation_actions_count: invalidationActions.length,
     include_missing_shifts: includeMissingShifts,
     decisions_keys_count: Object.keys(decisions || {}).length,
-    enqueue_tspdf_regen: enqueueTspdfRegen
+    enqueue_tspdf_regen: enqueueTspdfRegen,
+    enqueue_tspdf_regen_source: hasEnqueueTspdfKey ? 'REQUEST' : 'SETTINGS_DEFAULTS'
   });
 
   // ─────────────────────────────────────────────
@@ -30798,6 +31062,7 @@ async function handleHrAutoprocessApply(env, req, importId) {
     }
   }));
 }
+
 
 
 async function handleHrAutoprocessClients(env, req) {
@@ -38185,7 +38450,6 @@ async function handleHrRotaResolveMappings(env, req, importId) {
   }));
 }
 
-
 async function handleHrRotaValidationPreview(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
@@ -38204,6 +38468,14 @@ async function handleHrRotaValidationPreview(env, req, importId) {
     'start_end_mismatch',
     'break_minutes_mismatch',
     'missing_from_import'
+  ]);
+
+  // ✅ Resolve-gate reason codes (must resolve before any mismatch/missing/email sections are shown)
+  const RESOLVE_REASON_CODES = new Set([
+    'candidate_unresolved',
+    'grade_mapping_required',
+    'timesheet_not_found_or_ambiguous',
+    'timesheet_target_ambiguous'
   ]);
 
   // ✅ "Timesheet not confirmed ⇒ cannot email Temp Staffing"
@@ -38420,12 +38692,170 @@ async function handleHrRotaValidationPreview(env, req, importId) {
       }
     }
 
+    // Decorate rows (resolve-relevant fields first), and compute resolve gates BEFORE any mismatch/email work.
+    const decoratedCoreRows = [];
+    const recipientMissingDefault = !(recipientEmailDefault && String(recipientEmailDefault).trim());
+
+    let gateCand = 0;
+    let gateGrade = 0;
+    let gateTarget = 0;
+    let gateUnmatched = 0;
+    let gateOtherReject = 0;
+
+    for (let idx = 0; idx < rows.length; idx++) {
+      const row = rows[idx];
+
+      const reasonCodeL = String(row?.reason_code || '').trim().toLowerCase();
+      const statusU = String(row?.status || '').trim().toUpperCase();
+      const actionU = String(row?.action || row?.resolution_status || row?.resolutionStatus || '').trim().toUpperCase();
+
+      const hrid = row?.hr_row_id ? String(row.hr_row_id).trim() : '';
+      const meta = hrid ? (hrMetaById.get(hrid) || null) : null;
+
+      const grade_raw = meta?.grade_raw || null;
+      const resolved_timesheet_id = meta?.resolved_timesheet_id || null;
+
+      const staffRaw = row?.staff_name || row?.staff_raw || '';
+      const staffNorm = row?.staff_norm || '';
+      const trustNorm = row?.trust_norm || '';
+
+      let candidate_id = row?.candidate_id || null;
+      if (!candidate_id) {
+        candidate_id = await resolveCandidateCached(staffRaw, staffNorm, trustNorm);
+      }
+
+      const grade_mapping_required = !!row?.grade_mapping_required;
+      const timesheet_target_ambiguous = !!row?.timesheet_target_ambiguous;
+
+      // Resolve gates (post candidate resolve attempt)
+      const candUnresolved = !candidate_id || reasonCodeL === 'candidate_unresolved' || actionU === 'REJECT_NO_CANDIDATE';
+      const gradeGate = grade_mapping_required || reasonCodeL === 'grade_mapping_required' || actionU === 'REJECT_NO_CONTRACT_BAND_MISMATCH';
+      const targetGate =
+        timesheet_target_ambiguous ||
+        RESOLVE_REASON_CODES.has(reasonCodeL) && (reasonCodeL === 'timesheet_not_found_or_ambiguous' || reasonCodeL === 'timesheet_target_ambiguous') ||
+        actionU === 'REJECT_NO_CONTRACT' ||
+        actionU === 'REJECT_NO_CLIENT';
+
+      const unmatchedGate = (statusU === 'UNMATCHED');
+
+      if (candUnresolved) gateCand += 1;
+      if (gradeGate) gateGrade += 1;
+      if (targetGate) gateTarget += 1;
+      if (unmatchedGate) gateUnmatched += 1;
+      if (actionU.startsWith('REJECT_') && !(candUnresolved || gradeGate || targetGate)) gateOtherReject += 1;
+
+      const baseDetails = (row?.details && typeof row.details === 'object' && !Array.isArray(row.details)) ? row.details : {};
+
+      decoratedCoreRows.push({
+        ...row,
+
+        // import-scoped client context (single client)
+        client_id: importClientId,
+        client_name: clientName || null,
+
+        // candidate for resolve UI
+        candidate_id: candidate_id || null,
+
+        // grade for grade→role resolve UI
+        grade_raw: grade_raw || null,
+
+        // timesheet target selection hooks
+        resolved_timesheet_id: resolved_timesheet_id || null,
+        timesheet_target_ambiguous: !!timesheet_target_ambiguous,
+        timesheet_target_options: Array.isArray(row?.timesheet_target_options) ? row.timesheet_target_options : [],
+
+        // keep legacy field name used by existing FE (until FE is updated)
+        role_resolution_required: !!timesheet_target_ambiguous,
+
+        // grade mapping hooks
+        incoming_grade_norm: row?.incoming_grade_norm || null,
+        grade_mapping_required: !!grade_mapping_required,
+
+        // default recipient context (even in gated mode; email is suppressed via flags below)
+        recipient_email: recipientEmailDefault || null,
+        recipient_missing: recipientMissingDefault,
+
+        // keep details
+        details: baseDetails
+      });
+    }
+
+    const requires_resolve = (gateCand + gateGrade + gateTarget + gateUnmatched + gateOtherReject) > 0;
+    const resolve_summary = {
+      candidate_unresolved: gateCand,
+      grade_mapping_required: gateGrade,
+      timesheet_target_ambiguous: gateTarget,
+      unmatched: gateUnmatched,
+      other_rejects: gateOtherReject,
+      total: gateCand + gateGrade + gateTarget + gateUnmatched + gateOtherReject
+    };
+
+    // If gated: suppress mismatches/missing/email sections
+    if (requires_resolve) {
+      const resolveOnlyRows = decoratedCoreRows.filter((r) => {
+        const reasonL = String(r?.reason_code || '').trim().toLowerCase();
+        const actU = String(r?.action || r?.resolution_status || r?.resolutionStatus || '').trim().toUpperCase();
+        const stU = String(r?.status || '').trim().toUpperCase();
+
+        // Exclude synthesized "missing_from_import" entirely while gated
+        if (reasonL === 'missing_from_import') return false;
+
+        // Include anything that looks like a resolve blocker
+        if (stU === 'UNMATCHED') return true;
+        if (RESOLVE_REASON_CODES.has(reasonL)) return true;
+        if (r?.grade_mapping_required === true) return true;
+        if (r?.timesheet_target_ambiguous === true) return true;
+        if (!r?.candidate_id) return true;
+        if (actU.startsWith('REJECT_')) return true;
+
+        return false;
+      });
+
+      const rowsOut = (resolveOnlyRows.length ? resolveOnlyRows : decoratedCoreRows)
+        .map((r) => ({
+          ...r,
+          // Suppress mismatch/email UI generation:
+          issue_fingerprint: null,
+          email_eligible: false,
+          email_already_sent: false,
+          can_email: false,
+          email_blocked_reason: null
+        }));
+
+      if (LOG) {
+        const summary = result.summary || {};
+        console.log('[HR_DAILY_PREVIEW]', JSON.stringify({
+          import_id: result.import_id,
+          source_system: result.source_system,
+          client_id: importClientId,
+          client_name: clientName || null,
+          stage: 'resolve_gate',
+          resolve_summary,
+          summary,
+          total_rows_returned: rowsOut.length
+        }));
+      }
+
+      return withCORS(env, req, ok({
+        import_id: result.import_id,
+        source_system: result.source_system,
+        client_id: importClientId,
+        client_name: clientName || null,
+        summary: result.summary,
+        requires_resolve: true,
+        resolve_summary,
+        rows: rowsOut
+      }));
+    }
+
+    // Not gated: proceed with mismatch/email decoration (including missing_from_import) exactly as before.
+
     // Precompute fingerprints for rows that could ever have an email
     const fingerprints = [];
-    const rowFingerprints = new Array(rows.length).fill(null);
+    const rowFingerprints = new Array(decoratedCoreRows.length).fill(null);
 
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
+    for (let i = 0; i < decoratedCoreRows.length; i++) {
+      const row = decoratedCoreRows[i];
       const reasonCode = String(row?.reason_code || '').toLowerCase();
       const tsId       = row?.timesheet_id || null;
       const statusU    = String(row?.status || '').toUpperCase();
@@ -38476,29 +38906,13 @@ async function handleHrRotaValidationPreview(env, req, importId) {
     }
 
     const decoratedRows = [];
-    const recipientMissingDefault = !(recipientEmailDefault && String(recipientEmailDefault).trim());
 
-    for (let idx = 0; idx < rows.length; idx++) {
-      const row = rows[idx];
+    for (let idx = 0; idx < decoratedCoreRows.length; idx++) {
+      const row = decoratedCoreRows[idx];
 
       const reasonCode = String(row?.reason_code || '').toLowerCase();
       const tsId       = row?.timesheet_id || null;
       const statusU    = String(row?.status || '').toUpperCase();
-
-      const hrid = row?.hr_row_id ? String(row.hr_row_id).trim() : '';
-      const meta = hrid ? (hrMetaById.get(hrid) || null) : null;
-
-      const grade_raw = meta?.grade_raw || null;
-      const resolved_timesheet_id = meta?.resolved_timesheet_id || null;
-
-      const staffRaw = row.staff_name || row.staff_raw || '';
-      const staffNorm = row.staff_norm || '';
-      const trustNorm = row.trust_norm || '';
-
-      let candidate_id = row?.candidate_id || null;
-      if (!candidate_id) {
-        candidate_id = await resolveCandidateCached(staffRaw, staffNorm, trustNorm);
-      }
 
       const emailEligible =
         !!tsId &&
@@ -38514,11 +38928,11 @@ async function handleHrRotaValidationPreview(env, req, importId) {
       const alreadySent = fp ? alreadySentSet.has(fp) : false;
 
       // Default can_email means "default recipient available"; UI can still send with alternative_email
-      const canEmailDefault = !!fp && emailEligible && !recipientMissingDefault;
+      const canEmailDefault = !!fp && emailEligible && !(row?.recipient_missing === true);
 
-      const baseDetails = (row.details && typeof row.details === 'object' && !Array.isArray(row.details)) ? row.details : {};
       const emailBlockedReason = blockedForEmail ? emailBlockedReasonForRow(row) : null;
 
+      const baseDetails = (row?.details && typeof row.details === 'object' && !Array.isArray(row.details)) ? row.details : {};
       const detailsOut = blockedForEmail
         ? { ...baseDetails, email_blocked_reason: emailBlockedReason }
         : baseDetails;
@@ -38526,37 +38940,13 @@ async function handleHrRotaValidationPreview(env, req, importId) {
       decoratedRows.push({
         ...row,
 
-        // import-scoped client context (single client)
-        client_id: importClientId,
-        client_name: clientName || null,
-
-        // candidate for resolve UI
-        candidate_id: candidate_id || null,
-
-        // grade for grade→role resolve UI
-        grade_raw: grade_raw || null,
-
-        // timesheet target selection hooks
-        resolved_timesheet_id: resolved_timesheet_id || null,
-        timesheet_target_ambiguous: !!row.timesheet_target_ambiguous,
-        timesheet_target_options: Array.isArray(row.timesheet_target_options) ? row.timesheet_target_options : [],
-
-        // keep legacy field name used by existing FE (until FE is updated)
-        role_resolution_required: !!row.timesheet_target_ambiguous,
-
-        // grade mapping hooks
-        incoming_grade_norm: row.incoming_grade_norm || null,
-        grade_mapping_required: !!row.grade_mapping_required,
-
         // email decoration
         issue_fingerprint: fp || null,
-        recipient_email: recipientEmailDefault || null,
-        recipient_missing: recipientMissingDefault,
         email_eligible: (emailEligible && !blockedForEmail),
         email_already_sent: alreadySent,
         can_email: (canEmailDefault && !blockedForEmail),
 
-        // ✅ surface warning for UI (adapter reads from details.email_blocked_reason)
+        // surface warning for UI (adapter reads from details.email_blocked_reason)
         email_blocked_reason: emailBlockedReason || null,
         details: detailsOut
       });
@@ -38589,6 +38979,8 @@ async function handleHrRotaValidationPreview(env, req, importId) {
         client_id: importClientId,
         client_name: clientName || null,
         summary,
+        requires_resolve: false,
+        resolve_summary,
         total_rows: decoratedRows.length,
         sample_failures: sampleFails
       }));
@@ -38600,6 +38992,8 @@ async function handleHrRotaValidationPreview(env, req, importId) {
       client_id: importClientId,
       client_name: clientName || null,
       summary: result.summary,
+      requires_resolve: false,
+      resolve_summary,
       rows: decoratedRows
     }));
   } catch (e) {
@@ -38610,7 +39004,6 @@ async function handleHrRotaValidationPreview(env, req, importId) {
     return withCORS(env, req, serverError(`Failed to classify HR daily rota import: ${e?.message || e}`));
   }
 }
-
 
 async function handleHrRotaValidationApply(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
@@ -38631,6 +39024,8 @@ async function handleHrRotaValidationApply(env, req, importId) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return withCORS(env, req, badRequest('Invalid JSON body'));
   }
+
+  const boolish = (v) => (v === true || v === 'true' || v === 1 || v === '1');
 
   // ✅ New contract (no backward compat): email_actions[] + invalidation_actions[]
   const requestEmailActions = Array.isArray(body?.email_actions) ? body.email_actions : [];
@@ -38735,12 +39130,44 @@ async function handleHrRotaValidationApply(env, req, importId) {
     return j;
   };
 
+  // ─────────────────────────────────────────────
+  // ✅ Config-driven default for enqueue_tspdf_regen (daily apply parity with weekly):
+  //   - If request explicitly provides a flag (even false), honour it.
+  //   - Otherwise default to settings.importConfig.tspdf_effective.regen_on_ref_change (recommended default true).
+  // ─────────────────────────────────────────────
+  const hasEnqueueTspdfKey =
+    Object.prototype.hasOwnProperty.call(body, 'enqueue_tspdf_regen') ||
+    Object.prototype.hasOwnProperty.call(body, 'enqueueTspdfRegen') ||
+    Object.prototype.hasOwnProperty.call(body, 'enqueue_pdf_regen') ||
+    Object.prototype.hasOwnProperty.call(body, 'enqueuePdfRegen');
+
+  let enqueueTspdfRegenDefault = true;
+  try {
+    const s = await loadSettingsDefaults(env);
+    const v = s?.importConfig?.tspdf_effective?.regen_on_ref_change;
+    if (v === true || v === false) enqueueTspdfRegenDefault = v;
+  } catch {
+    enqueueTspdfRegenDefault = true;
+  }
+
+  const enqueueTspdfRegen = hasEnqueueTspdfKey
+    ? (
+        boolish(body.enqueue_tspdf_regen) ||
+        boolish(body.enqueueTspdfRegen) ||
+        boolish(body.enqueue_pdf_regen) ||
+        boolish(body.enqueuePdfRegen) ||
+        false
+      )
+    : enqueueTspdfRegenDefault;
+
   if (LOG) {
     console.log('[HR_DAILY_APPLY]', JSON.stringify({
       stage: 'start',
       import_id: importId,
       email_actions_count: requestEmailActions.length,
-      invalidation_actions_count: requestInvalidationActions.length
+      invalidation_actions_count: requestInvalidationActions.length,
+      enqueue_tspdf_regen: enqueueTspdfRegen,
+      enqueue_tspdf_regen_source: hasEnqueueTspdfKey ? 'REQUEST' : 'SETTINGS_DEFAULTS'
     }));
   }
 
@@ -39018,7 +39445,6 @@ async function handleHrRotaValidationApply(env, req, importId) {
         if (hm && /^\d{2}:\d{2}$/.test(hm)) return hm;
       }
     } catch {}
-    // fallback: "YYYY-MM-DD HH:MM:SS+00" or ISO string
     const hm2 = s.length >= 16 ? s.slice(11, 16) : '';
     return (hm2 && /^\d{2}:\d{2}$/.test(hm2)) ? hm2 : '';
   };
@@ -39454,11 +39880,62 @@ async function handleHrRotaValidationApply(env, req, importId) {
       return withCORS(env, req, new Response(JSON.stringify(resp), {
         status: 500,
         headers: { 'content-type': 'application/json' }
-      }));
+        }));
     }
   }
 
-  // 7) Audit best-effort (include tsfin_drain)
+  // ─────────────────────────────────────────────
+  // ✅ 6.5) Post-TSFIN: config-driven tspdf enqueue for electronic refs-changed
+  // (clears "Refs – Timesheet PDF invalid" quickly without user opening PDF)
+  // ─────────────────────────────────────────────
+  let tspdfEnqueued = 0;
+  let tspdfTargetCount = 0;
+
+  if (enqueueTspdfRegen && affectedTimesheetIds.length) {
+    try {
+      const flagsRaw = await sbRpc(env, 'timesheet_doc_flags_batch', {
+        p_timesheet_ids: affectedTimesheetIds
+      });
+
+      const docFlagsRows = Array.isArray(flagsRaw) ? flagsRaw : (flagsRaw?.data || []);
+      const elecIds = uniqStrings(
+        (docFlagsRows || [])
+          .filter(r => r && (r.electronic_refs_changed === true || r.electronic_refs_changed === 'true' || r.electronic_refs_changed === 1 || r.electronic_refs_changed === '1'))
+          .map(r => r.timesheet_id)
+      );
+
+      tspdfTargetCount = elecIds.length;
+
+      if (elecIds.length) {
+        const enqRaw = await sbRpc(env, 'tspdf_enqueue_many', {
+          p_timesheet_ids: elecIds,
+          p_force_regen: true,
+          p_prefer_generated: true,
+          p_reason: null,
+          p_limit: 500
+        });
+
+        const enqNum =
+          (typeof enqRaw === 'number' || typeof enqRaw === 'string')
+            ? Number(enqRaw)
+            : (Array.isArray(enqRaw) ? Number(enqRaw?.[0]?.tspdf_enqueue_many ?? enqRaw?.[0]?.count ?? enqRaw?.[0]?.row_count) : NaN);
+
+        tspdfEnqueued = (Number.isFinite(enqNum) ? enqNum : 0);
+      }
+    } catch (e) {
+      if (LOG) {
+        console.warn('[HR_DAILY_APPLY]', JSON.stringify({
+          stage: 'tspdf_enqueue_failed_non_fatal',
+          import_id: importId,
+          err: String(e?.message || e || '')
+        }));
+      }
+      tspdfEnqueued = 0;
+      tspdfTargetCount = 0;
+    }
+  }
+
+  // 7) Audit best-effort (include tsfin_drain + tspdf regen)
   try {
     await writeAudit(
       env,
@@ -39475,7 +39952,10 @@ async function handleHrRotaValidationApply(env, req, importId) {
         },
         emails_queued: emailsQueued,
         email_failures: emailFailures.slice(0, 50),
-        tsfin_drain: tsfinDrainStats
+        tsfin_drain: tsfinDrainStats,
+        enqueue_tspdf_regen: enqueueTspdfRegen,
+        tspdf_enqueued: tspdfEnqueued,
+        tspdf_target_count: tspdfTargetCount
       },
       { entity: 'hr_imports', subject_id: importId, req }
     );
@@ -39495,13 +39975,17 @@ async function handleHrRotaValidationApply(env, req, importId) {
       validations_upserted: rpcPayload?.validations_upserted ?? null,
       emails_queued: emailsQueued,
       email_failures_count: emailFailures.length,
-      tsfin_drain: tsfinDrainStats
+      tsfin_drain: tsfinDrainStats,
+      enqueue_tspdf_regen: enqueueTspdfRegen,
+      tspdf_enqueued: tspdfEnqueued,
+      tspdf_target_count: tspdfTargetCount
     }));
   }
 
   return withCORS(env, req, ok({
     import_id: importId,
     apply: rpcPayload,
+    tspdf_regen: enqueueTspdfRegen ? { target_count: tspdfTargetCount, enqueued: tspdfEnqueued } : { target_count: 0, enqueued: 0 },
     post_commit: {
       emails_queued: emailsQueued,
       email_failures: emailFailures,
@@ -50839,32 +51323,100 @@ async function handleInvoiceBatchGenerateConfirm(env, req) {
 
   const getInvoiceWeekStartFromHeader = (header) => {
     if (!header || typeof header !== 'object') return null;
-    const meta = (header.meta && typeof header.meta === 'object') ? header.meta : null;
+    const meta0 = (header.meta && typeof header.meta === 'object') ? header.meta : null;
     const v =
-      (meta && (meta.invoice_week_start || meta.invoiceWeekStart || meta.week_start || meta.weekStart)) ||
+      (meta0 && (meta0.invoice_week_start || meta0.invoiceWeekStart || meta0.week_start || meta0.weekStart)) ||
       header.invoice_week_start ||
       header.invoiceWeekStart ||
       null;
     return parseYmd(v);
   };
 
+  const uuidLike = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(s || '').trim());
+
   // Optional meta to store on the outbox payload
   const meta = {
-    source: 'BATCH_UI',
+    source: 'UI_BATCH_CONFIRM',
     requested_by_user_id: user?.id || null,
     requested_at_utc: nowIso(),
   };
 
-  try {
-    // 1) Enqueue selected BY_WEEK jobs (1 RPC)
-    const enq = await sbRpc(env, 'invoice_outbox_enqueue_by_week_selected', {
-      p_rows: rows,
-      p_actor_user_id: user?.id || null,
-      p_allow_early: allowEarly,
-      p_meta: meta
-    });
+  const unwrapUuidRpc = (rpcRes, fnName) => {
+    if (rpcRes == null) return null;
+    if (typeof rpcRes === 'string' && uuidLike(rpcRes)) return rpcRes;
 
-    const enqRows = Array.isArray(enq) ? enq : (enq?.data || []);
+    if (rpcRes && typeof rpcRes === 'object' && !Array.isArray(rpcRes) && Object.prototype.hasOwnProperty.call(rpcRes, 'data')) {
+      return unwrapUuidRpc(rpcRes.data, fnName);
+    }
+
+    if (Array.isArray(rpcRes)) {
+      if (!rpcRes.length) return null;
+      const o = rpcRes[0];
+      if (o && typeof o === 'object') {
+        if (fnName && Object.prototype.hasOwnProperty.call(o, fnName) && uuidLike(o[fnName])) return String(o[fnName]);
+        // sometimes PostgREST can return [{id:...}]
+        if (Object.prototype.hasOwnProperty.call(o, 'id') && uuidLike(o.id)) return String(o.id);
+      }
+      return null;
+    }
+
+    if (rpcRes && typeof rpcRes === 'object') {
+      if (fnName && Object.prototype.hasOwnProperty.call(rpcRes, fnName) && uuidLike(rpcRes[fnName])) return String(rpcRes[fnName]);
+      if (Object.prototype.hasOwnProperty.call(rpcRes, 'id') && uuidLike(rpcRes.id)) return String(rpcRes.id);
+    }
+
+    return null;
+  };
+
+  try {
+    // 1) Enqueue selected BY_WEEK jobs via canonical gate (per-row; no selector RPC)
+    const enqRows = [];
+
+    for (const r of rows) {
+      if (!r || typeof r !== 'object') {
+        return withCORS(env, req, badRequest('rows[] elements must be objects'));
+      }
+
+      const clientIdRaw = String(r.client_id || '').trim();
+      const weekStartRaw = String(r.invoice_week_start || '').slice(0, 10);
+      const weekStart = parseYmd(weekStartRaw);
+
+      if (!uuidLike(clientIdRaw)) {
+        return withCORS(env, req, badRequest('row.client_id invalid'));
+      }
+      if (!weekStart) {
+        return withCORS(env, req, badRequest('row.invoice_week_start invalid (expected YYYY-MM-DD)'));
+      }
+
+      const idsRaw = Array.isArray(r.timesheet_ids) ? r.timesheet_ids : [];
+      const ids = Array.from(new Set(idsRaw.map(String).map(s => s.trim()).filter(uuidLike)));
+      if (!ids.length) {
+        return withCORS(env, req, badRequest('row.timesheet_ids[] is required'));
+      }
+
+      const outboxRpc = await sbRpc(env, 'invoice_outbox_enqueue_by_week', {
+        p_client_id: clientIdRaw,
+        p_invoice_week_start: weekStart,
+        p_actor_user_id: user?.id || null,
+        p_allow_early: allowEarly,
+        p_meta: meta,
+        p_timesheet_ids: ids,
+        p_auto_invoice_only: false
+      });
+
+      const outboxId = unwrapUuidRpc(outboxRpc, 'invoice_outbox_enqueue_by_week');
+      if (!outboxId) {
+        return withCORS(env, req, serverError('Enqueue RPC returned no outbox_id'));
+      }
+
+      enqRows.push({
+        client_id: clientIdRaw,
+        invoice_week_start: weekStart,
+        outbox_id: outboxId,
+        action: 'ENQUEUED'
+      });
+    }
+
     const outboxIds = Array.from(new Set(enqRows.map(r => r?.outbox_id).filter(Boolean)));
 
     if (!outboxIds.length) {
@@ -50887,7 +51439,7 @@ async function handleInvoiceBatchGenerateConfirm(env, req) {
     });
 
     const genRows = Array.isArray(gen) ? gen : (gen?.data || []);
-    const genByOutbox = new Map(genRows.map(r => [String(r?.outbox_id || ''), r]));
+    const genByOutbox = new Map(genRows.map(x => [String(x?.outbox_id || ''), x]));
 
     // Build job summary grouped by client/week from enqueue result
     const jobs = enqRows.map(j => {
@@ -50905,7 +51457,7 @@ async function handleInvoiceBatchGenerateConfirm(env, req) {
       };
     });
 
-    // ✅ 3.2: flatten invoice_ids and warnings arrays for UI navigation & debug
+    // 3.2: flatten invoice_ids and warnings arrays for UI navigation & debug
     const allInvoices = [];
     const allWarnings = [];
     for (const r of jobs) {
@@ -50919,7 +51471,7 @@ async function handleInvoiceBatchGenerateConfirm(env, req) {
 
     const uniqueInvoices = Array.from(new Set(allInvoices.map(String))).filter(Boolean);
 
-    // ✅ 3.3: Enrich with display-ready invoice fields (one bulk fetch + optional 2 more bulk fetches)
+    // 3.3: Enrich with display-ready invoice fields (one bulk fetch + optional 2 more bulk fetches)
     const invoiceDisplayById = new Map();
     const candidateNamesByInvoiceId = new Map();
 
@@ -50956,6 +51508,7 @@ async function handleInvoiceBatchGenerateConfirm(env, req) {
       // 3.3b) Bulk fetch invoice_lines (invoice_id + timesheet_id) for candidate derivation
       const tsIds = new Set();
       const tsIdsByInvoice = new Map(); // invoice_id -> Set(timesheet_id)
+
       for (const idChunk of chunk(uniqueInvoices, 200)) {
         const { rows: lineRows } = await sbFetch(
           env,
@@ -50979,6 +51532,7 @@ async function handleInvoiceBatchGenerateConfirm(env, req) {
       // 3.3c) Bulk fetch candidate_name from v_timesheets_summary_base for those timesheet_ids
       const candByTs = new Map(); // timesheet_id -> candidate_name
       const tsIdsArr = Array.from(tsIds);
+
       for (const idChunk of chunk(tsIdsArr, 200)) {
         const { rows: sRows } = await sbFetch(
           env,
@@ -51014,12 +51568,9 @@ async function handleInvoiceBatchGenerateConfirm(env, req) {
         const iid = invIdRaw != null ? String(invIdRaw) : '';
         if (!iid) continue;
         const prev = diagByInvoiceId.get(iid) || { ok: true, warnings: [], outbox_ids: [], enqueue_actions: [], client_id: null, invoice_week_start: null };
-        // ok should be false if ANY job for this invoice reports ok=false
         prev.ok = prev.ok && !!j.ok;
-        // warnings
         if (Array.isArray(j.warnings)) prev.warnings.push(...j.warnings);
         else if (j.warnings) prev.warnings.push(j.warnings);
-        // ids/actions
         if (j.outbox_id) prev.outbox_ids.push(j.outbox_id);
         if (j.enqueue_action) prev.enqueue_actions.push(j.enqueue_action);
         if (!prev.client_id && j.client_id) prev.client_id = j.client_id;
@@ -51030,7 +51581,6 @@ async function handleInvoiceBatchGenerateConfirm(env, req) {
     for (const [iid, d] of diagByInvoiceId.entries()) {
       d.outbox_ids = Array.from(new Set((d.outbox_ids || []).map(String).filter(Boolean)));
       d.enqueue_actions = Array.from(new Set((d.enqueue_actions || []).map(String).filter(Boolean)));
-      // keep warnings as-is (can include duplicates; UI may want full list)
     }
 
     const results_invoices = uniqueInvoices.map((iid) => {
@@ -51065,8 +51615,6 @@ async function handleInvoiceBatchGenerateConfirm(env, req) {
       warnings: allWarnings,
       jobs,
       generated_rows: genRows,
-
-      // ✅ Display-ready rows for the frontend batch results modal
       results_invoices
     }));
   } catch (e) {
@@ -57649,12 +58197,12 @@ async function enqueueTsfinRecomputeForClient(env, client_id) {
 // Finds READY_FOR_INVOICE snapshots for contracts with auto_invoice=true,
 // groups by client, creates HOURS-only invoices and immediately issues them.
 
-
 async function runAutoInvoiceCycle(env) {
   try {
-    const invMaxBatches   = parseInt(env.INVOICE_MAX_BATCHES || '10', 10);
-    const invBatchSize    = parseInt(env.INVOICE_BATCH_SIZE  || '10', 10);
-    const invEnqLimit     = parseInt(env.INVOICE_ENQUEUE_LIMIT || '500', 10);
+    // ENV defaults (may be overridden by DB-driven inv_effective)
+    let invMaxBatches   = parseInt(env.INVOICE_MAX_BATCHES || '10', 10);
+    let invBatchSize    = parseInt(env.INVOICE_BATCH_SIZE  || '10', 10);
+    let groupEnqLimit   = parseInt(env.INVOICE_ENQUEUE_LIMIT || '500', 10);
 
     // Optional: allow caller to bypass enqueue step (default true)
     const invEnqueueFirst = String(env.INVOICE_ENQUEUE_FIRST || 'true').toLowerCase() !== 'false';
@@ -57664,15 +58212,92 @@ async function runAutoInvoiceCycle(env) {
       ? String(env.INVOICE_ACTOR_USER_ID).trim()
       : null;
 
+    const _rowsLocal = (v) => {
+      if (Array.isArray(v)) return v;
+      if (v && Array.isArray(v.rows)) return v.rows;
+      if (v && Array.isArray(v.data)) return v.data;
+      return [];
+    };
+
+    const _clampInt = (n, lo, hi, dflt) => {
+      const x = Number(n);
+      if (!Number.isFinite(x)) return dflt;
+      const y = Math.trunc(x);
+      if (y < lo) return lo;
+      if (y > hi) return hi;
+      return y;
+    };
+
+    // DB-driven throttles (import_config_json.inv_effective), with safe fallbacks
+    try {
+      const s = await loadSettingsDefaults(env);
+      const invCfg = (s && s.importConfig && s.importConfig.inv_effective && typeof s.importConfig.inv_effective === 'object')
+        ? s.importConfig.inv_effective
+        : null;
+
+      if (invCfg) {
+        invMaxBatches = _clampInt(invCfg.worker?.max_batches, 1, 50, invMaxBatches);
+        invBatchSize  = _clampInt(invCfg.worker?.dequeue_limit, 1, 500, invBatchSize);
+        groupEnqLimit = _clampInt(invCfg.autoinvoice?.enqueue_group_limit, 1, 5000, groupEnqLimit);
+      }
+    } catch {
+      // ignore; keep env defaults
+    }
+
+    const enqueueAutoInvoiceGroupsOnce = async () => {
+      const runId = (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function')
+        ? globalThis.crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+      let groups = [];
+      try {
+        const gRes = await sbRpc(env, 'invoice_autoinvoice_candidate_groups', { p_limit: groupEnqLimit });
+        groups = _rowsLocal(gRes);
+      } catch (e) {
+        console.warn('[runAutoInvoiceCycle] invoice_autoinvoice_candidate_groups failed:', e?.message || e);
+        groups = [];
+      }
+
+      if (!groups.length) return;
+
+      for (const g of groups) {
+        const clientId = g?.client_id ? String(g.client_id) : null;
+        const weekStart = g?.invoice_week_start ? String(g.invoice_week_start) : null;
+        if (!clientId || !weekStart) continue;
+
+        try {
+          await sbRpc(env, 'invoice_outbox_enqueue_by_week', {
+            p_client_id: clientId,
+            p_invoice_week_start: weekStart,
+            p_actor_user_id: invActorUserId,
+            p_allow_early: false,            // ✅ enforced: auto-invoice never allow-early
+            p_meta: {
+              source: 'AUTO_INVOICE_CYCLE',
+              run_id: runId,
+              run_at_utc: new Date().toISOString()
+            },
+            p_timesheet_ids: null,           // ✅ cohort mode: canonical gate selects eligible ids
+            p_auto_invoice_only: true        // ✅ auto-invoice only
+          });
+        } catch (e) {
+          console.warn('[runAutoInvoiceCycle] invoice_outbox_enqueue_by_week failed:', {
+            client_id: clientId,
+            invoice_week_start: weekStart,
+            err: e?.message || String(e)
+          });
+        }
+      }
+    };
+
     for (let i = 0; i < invMaxBatches; i++) {
-      // 1) enqueue auto-invoice jobs (cron-safe, client-led defaults, includes v_ts_invoice_precheck gating)
+      // 1) enqueue auto-invoice work using canonical gate (no selector RPC; no allow-early)
       if (invEnqueueFirst) {
-        await sbRpc(env, 'invoice_enqueue_ready_for_invoice', { p_limit: invEnqLimit });
+        await enqueueAutoInvoiceGroupsOnce();
       }
 
       // 2) dequeue
       const dq = await sbRpc(env, 'invoice_dequeue_batch_ids', { p_limit: invBatchSize });
-      const jobs = Array.isArray(dq) ? dq : (dq?.data || []);
+      const jobs = _rowsLocal(dq);
       if (!jobs.length) break;
 
       const outboxIds = jobs.map(r => r?.outbox_id).filter(Boolean);
@@ -57683,6 +58308,8 @@ async function runAutoInvoiceCycle(env) {
         p_outbox_ids: outboxIds,
         p_actor_user_id: invActorUserId
       });
+
+      if (jobs.length < invBatchSize) break;
     }
   } catch (e) {
     console.warn('runAutoInvoiceCycle failed:', e?.message || e);
@@ -75767,15 +76394,14 @@ async scheduled(event, env, ctx) {
 
   const emailBatchLimit = parseInt(env.EMAIL_DRAIN_LIMIT_DEFAULT || '10', 10);
 
-  // TS PDF worker controls (existing)
-  const tsPdfMaxBatches = parseInt(env.TSPDF_MAX_BATCHES || '5', 10);
-  const tsPdfBatchSize  = parseInt(env.TSPDF_BATCH_SIZE  || '5', 10);
-  const tsPdfEnqLimit   = parseInt(env.TSPDF_ENQUEUE_LIMIT || '500', 10);
+  // TS PDF worker controls (existing ENV defaults; may be overridden by DB config)
+  let tsPdfMaxBatches = parseInt(env.TSPDF_MAX_BATCHES || '5', 10);
+  let tsPdfBatchSize  = parseInt(env.TSPDF_BATCH_SIZE  || '5', 10);
+  let tsPdfEnqLimit   = parseInt(env.TSPDF_ENQUEUE_LIMIT || '500', 10);
 
-  // Invoice SQL worker controls (existing)
-  const invMaxBatches   = parseInt(env.INVOICE_MAX_BATCHES || '10', 10);
-  const invBatchSize    = parseInt(env.INVOICE_BATCH_SIZE  || '10', 10);
-  const invEnqLimit     = parseInt(env.INVOICE_ENQUEUE_LIMIT || '500', 10);
+  // Invoice SQL worker controls (existing ENV defaults; may be overridden by DB config)
+  let invMaxBatches   = parseInt(env.INVOICE_MAX_BATCHES || '10', 10);
+  let invBatchSize    = parseInt(env.INVOICE_BATCH_SIZE  || '10', 10);
   const invEnqueueFirst = String(env.INVOICE_ENQUEUE_FIRST || 'true').toLowerCase() !== 'false';
 
   // Actor for audit (optional; SQL audit will fall back to "CloudTMS server" if null)
@@ -75788,6 +76414,22 @@ async scheduled(event, env, ctx) {
   // - "* * * * *"   => invpdf drain only (keeps BR usage smooth on free plan)
   const cronExpr = (event && typeof event.cron === 'string') ? event.cron : '';
   const isInvpdfMinuteCron = (cronExpr === '* * * * *');
+
+  const _rowsLocal = (v) => {
+    if (Array.isArray(v)) return v;
+    if (v && Array.isArray(v.rows)) return v.rows;
+    if (v && Array.isArray(v.data)) return v.data;
+    return [];
+  };
+
+  const _clampInt = (n, lo, hi, dflt) => {
+    const x = Number(n);
+    if (!Number.isFinite(x)) return dflt;
+    const y = Math.trunc(x);
+    if (y < lo) return lo;
+    if (y > hi) return hi;
+    return y;
+  };
 
   // Determine invpdf limits from settings_defaults.import_config_json.invpdf_effective
   const getInvpdfLimits = async () => {
@@ -75803,25 +76445,32 @@ async scheduled(event, env, ctx) {
 
     const mode = String(invpdf?.mode || 'free').trim().toLowerCase() === 'paid' ? 'paid' : 'free';
 
+    // Support BOTH:
+    // - new shape: invpdf_effective.dequeue_limit / enqueue_sweep_limit
+    // - legacy shape: dequeue_limit_free/paid, enqueue_limit_free/paid
     const dequeueLimit = (() => {
-      const k = (mode === 'paid') ? invpdf?.dequeue_limit_paid : invpdf?.dequeue_limit_free;
-      const n = Number(k);
-      const v = Number.isFinite(n) ? Math.trunc(n) : (mode === 'paid' ? 5 : 1);
-      return Math.max(1, Math.min(v, 50));
+      const kNew = invpdf?.dequeue_limit;
+      const kLegacy = (mode === 'paid') ? invpdf?.dequeue_limit_paid : invpdf?.dequeue_limit_free;
+      const chosen = (kNew !== undefined) ? kNew : kLegacy;
+      const v = _clampInt(chosen, 1, 50, (mode === 'paid' ? 5 : 1));
+      return v;
     })();
 
     const enqueueLimit = (() => {
-      const k = (mode === 'paid') ? invpdf?.enqueue_limit_paid : invpdf?.enqueue_limit_free;
-      const n = Number(k);
-      const v = Number.isFinite(n) ? Math.trunc(n) : (mode === 'paid' ? 2000 : 500);
-      return Math.max(1, Math.min(v, 20000));
+      const kNew = invpdf?.enqueue_sweep_limit;
+      const kLegacy = (mode === 'paid') ? invpdf?.enqueue_limit_paid : invpdf?.enqueue_limit_free;
+      const chosen = (kNew !== undefined) ? kNew : kLegacy;
+      const v = _clampInt(chosen, 1, 20000, (mode === 'paid' ? 2000 : 500));
+      return v;
     })();
 
+    // Optional: if not present, keep existing defaults
     const maxBatchesInvpdf = (() => {
-      const k = (mode === 'paid') ? invpdf?.max_batches_paid : invpdf?.max_batches_free;
-      const n = Number(k);
-      const v = Number.isFinite(n) ? Math.trunc(n) : (mode === 'paid' ? 3 : 1);
-      return Math.max(1, Math.min(v, 20));
+      const kNew = invpdf?.max_batches;
+      const kLegacy = (mode === 'paid') ? invpdf?.max_batches_paid : invpdf?.max_batches_free;
+      const chosen = (kNew !== undefined) ? kNew : kLegacy;
+      const v = _clampInt(chosen, 1, 20, (mode === 'paid' ? 3 : 1));
+      return v;
     })();
 
     const enqueueFirst = (invpdf?.enqueue_before_drain !== false);
@@ -75844,7 +76493,7 @@ async scheduled(event, env, ctx) {
 
     for (let b = 0; b < lim.maxBatchesInvpdf; b++) {
       const dq = await sbRpc(env, 'invpdf_dequeue_batch_ids', { p_limit: lim.dequeueLimit });
-      const jobs = Array.isArray(dq) ? dq : (dq?.data || []);
+      const jobs = _rowsLocal(dq);
       if (!jobs.length) break;
 
       const successIds = [];
@@ -75905,6 +76554,34 @@ async scheduled(event, env, ctx) {
       return;
     }
 
+    // Load DB-driven throttles once (cached by loadSettingsDefaults)
+    let settings = null;
+    try {
+      settings = await loadSettingsDefaults(env);
+    } catch {
+      settings = null;
+    }
+
+    const invCfg = (settings && settings.importConfig && settings.importConfig.inv_effective && typeof settings.importConfig.inv_effective === 'object')
+      ? settings.importConfig.inv_effective
+      : null;
+
+    const tspdfCfg = (settings && settings.importConfig && settings.importConfig.tspdf_effective && typeof settings.importConfig.tspdf_effective === 'object')
+      ? settings.importConfig.tspdf_effective
+      : null;
+
+    // Apply DB-configured limits (with safe clamps + env fallback)
+    if (tspdfCfg) {
+      tsPdfMaxBatches = _clampInt(tspdfCfg.max_batches, 1, 20, tsPdfMaxBatches);
+      tsPdfBatchSize  = _clampInt(tspdfCfg.dequeue_limit, 1, 200, tsPdfBatchSize);   // DB dequeue RPC clamps at 200
+      tsPdfEnqLimit   = _clampInt(tspdfCfg.enqueue_limit, 1, 2000, tsPdfEnqLimit);   // enqueue RPC clamps at 2000
+    }
+
+    if (invCfg) {
+      invMaxBatches = _clampInt(invCfg.worker?.max_batches, 1, 50, invMaxBatches);
+      invBatchSize  = _clampInt(invCfg.worker?.dequeue_limit, 1, 500, invBatchSize); // DB dequeue RPC clamps at 500
+    }
+
     // 5-minute cron: full pipeline
     try {
       for (let i = 0; i < maxBatches; i++) {
@@ -75916,11 +76593,12 @@ async scheduled(event, env, ctx) {
     }
 
     // TS PDF worker drain (after TSFIN, before invoices)
+    // Uses DB-configured tspdf limits and updated tspdf_enqueue_ready_for_invoice logic (incl refs-sig mismatch + force_regen).
     try {
       for (let i = 0; i < tsPdfMaxBatches; i++) {
         const res = await runTsPdfWorkerOnce(env, {
           limit: tsPdfBatchSize,
-          enqueueFirst: true,
+          enqueueFirst: (i === 0),
           enqueueLimit: tsPdfEnqLimit
         });
         if (!res || res.picked === 0) break;
@@ -75929,19 +76607,70 @@ async scheduled(event, env, ctx) {
       console.warn('[scheduled] TS PDF worker failed:', e?.message || e);
     }
 
+    // Invoice enqueue (canonical): derive candidate groups then enqueue via invoice_outbox_enqueue_by_week (auto-invoice only).
+    // NOTE: Cron never allow-early, so allow_early is always false here.
+    const enqueueAutoInvoiceGroupsOnce = async () => {
+      const groupLimit = _clampInt(invCfg?.autoinvoice?.enqueue_group_limit, 1, 5000, 50);
+
+      const runId = (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function')
+        ? globalThis.crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+      let groups = [];
+      try {
+        const gRes = await sbRpc(env, 'invoice_autoinvoice_candidate_groups', { p_limit: groupLimit });
+        groups = _rowsLocal(gRes);
+      } catch (e) {
+        console.warn('[scheduled] invoice_autoinvoice_candidate_groups failed:', e?.message || e);
+        groups = [];
+      }
+
+      if (!groups.length) return;
+
+      for (const g of groups) {
+        const clientId = g?.client_id ? String(g.client_id) : null;
+        const weekStart = g?.invoice_week_start ? String(g.invoice_week_start) : null;
+        if (!clientId || !weekStart) continue;
+
+        try {
+          await sbRpc(env, 'invoice_outbox_enqueue_by_week', {
+            p_client_id: clientId,
+            p_invoice_week_start: weekStart,
+            p_actor_user_id: invActorUserId,
+            p_allow_early: false,
+            p_meta: {
+              source: 'CRON_AUTO_INVOICE',
+              run_id: runId,
+              cron: cronExpr || null,
+              run_at_utc: new Date().toISOString()
+            },
+            p_timesheet_ids: null,
+            p_auto_invoice_only: true
+          });
+        } catch (e) {
+          // Skip-on-error: one bad group must not kill the whole cron tick.
+          console.warn('[scheduled] invoice_outbox_enqueue_by_week failed:', {
+            client_id: clientId,
+            invoice_week_start: weekStart,
+            err: e?.message || String(e)
+          });
+        }
+      }
+    };
+
     // Invoice SQL-first drain (minimal Supabase subrequests)
     try {
-      for (let i = 0; i < invMaxBatches; i++) {
-        if (invEnqueueFirst) {
-          try {
-            await sbRpc(env, 'invoice_enqueue_auto_invoice_ready', { p_limit: invEnqLimit });
-          } catch (e) {
-            console.warn('[scheduled] invoice_enqueue_auto_invoice_ready failed:', e?.message || e);
-          }
+      if (invEnqueueFirst) {
+        try {
+          await enqueueAutoInvoiceGroupsOnce();
+        } catch (e) {
+          console.warn('[scheduled] canonical auto-invoice enqueue failed:', e?.message || e);
         }
+      }
 
+      for (let i = 0; i < invMaxBatches; i++) {
         const dq = await sbRpc(env, 'invoice_dequeue_batch_ids', { p_limit: invBatchSize });
-        const jobs = Array.isArray(dq) ? dq : (dq?.data || []);
+        const jobs = _rowsLocal(dq);
         if (!jobs.length) break;
 
         const outboxIds = jobs.map(r => r?.outbox_id).filter(Boolean);
@@ -75951,6 +76680,8 @@ async scheduled(event, env, ctx) {
           p_outbox_ids: outboxIds,
           p_actor_user_id: invActorUserId
         });
+
+        if (jobs.length < invBatchSize) break;
       }
     } catch (e) {
       console.warn('[scheduled] Invoice SQL worker failed:', e?.message || e);
@@ -75971,6 +76702,7 @@ async scheduled(event, env, ctx) {
     }
   })());
 }
+
 
 
 };
