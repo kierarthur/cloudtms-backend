@@ -21,6 +21,9 @@
 -- Requires: public.v_ts_invoice_precheck has column has_timesheet_evidence_pdf.
 -- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
 -- ============================================================
+
+
+
 create or replace function public.invoice_autoinvoice_candidate_groups(
   p_limit int default 5000
 )
@@ -66,9 +69,18 @@ auto_ok as (
     b.client_id,
     b.week_ending_date,
     b.natural_week_start,
-    b.invoice_breakdown_json
+    b.invoice_breakdown_json,
+    b.contract_id,
+    c.auto_invoice as contract_auto_invoice,
+    cs.auto_invoice_default as client_auto_invoice_default,
+    (
+      case
+        when b.contract_id is not null then coalesce(c.auto_invoice, cs.auto_invoice_default, false)
+        else coalesce(cs.auto_invoice_default, false)
+      end
+    ) as auto_invoice_effective
   from base b
-  join public.contracts c
+  left join public.contracts c
     on c.id = b.contract_id
   left join lateral (
     select cs0.auto_invoice_default
@@ -79,7 +91,12 @@ auto_ok as (
     order by cs0.effective_from desc nulls last
     limit 1
   ) cs on true
-  where coalesce(c.auto_invoice, cs.auto_invoice_default, false) = true
+  where (
+    case
+      when b.contract_id is not null then coalesce(c.auto_invoice, cs.auto_invoice_default, false)
+      else coalesce(cs.auto_invoice_default, false)
+    end
+  ) = true
 ),
 
 groups_from_nonseg as (
@@ -184,6 +201,8 @@ order by
   f.client_id::text asc
 limit greatest(0, least(coalesce(p_limit, 5000), 20000));
 $$;
+
+
 
 create or replace function public.invoice_batch_generate_candidates(
   p_allow_early boolean default false,
