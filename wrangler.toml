@@ -22,7 +22,7 @@ binding = "BROWSER"
 # Default vars (LOCAL ONLY)
 # =========================
 [vars]
-# Safe defaults for local/dev. Real deploys should always use --env.
+# Safe defaultss for local/dev. Real deploys should always use --env.
 SUPABASE_URL = "https://yakevhtttcsljosbdpov.supabase.co"
 ALLOWED_ORIGINS = "http://localhost:3000,https://kierarthur.github.io"
 COOKIE_SAME_SITE = "None"
