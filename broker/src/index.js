@@ -3404,8 +3404,7 @@ const getSegTimes = (seg) => {
     drawRect(page, box.x, box.y, box.w, box.h, { lineWidth: 0.35, borderColor: rgb(0,0,0) });
   };
 
-  // Local helpers for DAILY synthesis
- const TZ = "Europe/London";
+ 
 
 const isoToLocalYmd = (iso) => {
   const s = safeStr(iso);
