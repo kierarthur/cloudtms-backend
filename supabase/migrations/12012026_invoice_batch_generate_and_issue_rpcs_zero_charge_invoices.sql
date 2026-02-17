@@ -21,6 +21,169 @@
 -- Requires: public.v_ts_invoice_precheck has column has_timesheet_evidence_pdf.
 -- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
 -- ============================================================
+create or replace function public.invoice_autoinvoice_candidate_groups(
+  p_limit int default 5000
+)
+returns table (
+  client_id uuid,
+  invoice_week_start date
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+with anchor as (
+  select (now() at time zone 'Europe/London')::date as anchor_ymd
+),
+
+base as (
+  select
+    tf.timesheet_id,
+    tf.client_id,
+    ts.week_ending_date::date as week_ending_date,
+    (ts.week_ending_date::date - interval '6 days')::date as natural_week_start,
+    tf.invoice_breakdown_json,
+    coalesce(ts.contract_id, cw.contract_id) as contract_id
+  from public.timesheets_financials tf
+  join public.timesheets ts
+    on ts.timesheet_id = tf.timesheet_id
+   and ts.is_current = true
+  left join public.contract_weeks cw
+    on cw.timesheet_id = tf.timesheet_id
+  where tf.is_current = true
+    and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
+    and tf.locked_by_invoice_id is null
+    and tf.paid_at_utc is null
+    and ts.revoked_at is null
+    and tf.client_id is not null
+    and ts.week_ending_date is not null
+),
+
+auto_ok as (
+  select
+    b.timesheet_id,
+    b.client_id,
+    b.week_ending_date,
+    b.natural_week_start,
+    b.invoice_breakdown_json
+  from base b
+  join public.contracts c
+    on c.id = b.contract_id
+  left join lateral (
+    select cs0.auto_invoice_default
+    from public.client_settings cs0
+    cross join anchor a
+    where cs0.client_id = b.client_id
+      and (cs0.effective_from <= a.anchor_ymd or cs0.effective_from is null)
+    order by cs0.effective_from desc nulls last
+    limit 1
+  ) cs on true
+  where coalesce(c.auto_invoice, cs.auto_invoice_default, false) = true
+),
+
+groups_from_nonseg as (
+  select
+    aok.client_id,
+    aok.natural_week_start as invoice_week_start
+  from auto_ok aok
+  cross join anchor a
+  where coalesce(aok.invoice_breakdown_json->>'mode','') <> 'SEGMENTS'
+    and aok.week_ending_date < a.anchor_ymd
+),
+
+groups_from_seg_empty as (
+  select
+    aok.client_id,
+    aok.natural_week_start as invoice_week_start
+  from auto_ok aok
+  cross join anchor a
+  where coalesce(aok.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
+    and jsonb_typeof(aok.invoice_breakdown_json->'segments') = 'array'
+    and jsonb_array_length(aok.invoice_breakdown_json->'segments') = 0
+    and aok.week_ending_date < a.anchor_ymd
+),
+
+groups_from_segments as (
+  select distinct
+    aok.client_id,
+    coalesce(seg_t.tgt_start, aok.natural_week_start) as invoice_week_start
+  from auto_ok aok
+  cross join anchor a
+  cross join lateral jsonb_array_elements(
+    case
+      when jsonb_typeof(aok.invoice_breakdown_json->'segments') = 'array' then aok.invoice_breakdown_json->'segments'
+      else '[]'::jsonb
+    end
+  ) seg
+  cross join lateral (
+    select
+      case
+        when nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '') ~ '^\d{4}-\d{2}-\d{2}$'
+          then nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date
+        else null::date
+      end as tgt_start
+  ) seg_t
+  where coalesce(aok.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
+    and jsonb_typeof(seg) = 'object'
+    and nullif(btrim(coalesce(seg->>'segment_id','')), '') is not null
+    and nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') is null
+    and (
+      -- DELAYED segment: target differs from natural; only include once target week start reached (<= today)
+      (
+        seg_t.tgt_start is not null
+        and seg_t.tgt_start <> aok.natural_week_start
+        and seg_t.tgt_start <= a.anchor_ymd
+      )
+      or
+      -- NON-DELAYED segment: week must have ended (cron never allow-early)
+      (
+        (seg_t.tgt_start is null or seg_t.tgt_start = aok.natural_week_start)
+        and aok.week_ending_date < a.anchor_ymd
+      )
+    )
+),
+
+all_groups as (
+  select * from groups_from_nonseg
+  union
+  select * from groups_from_seg_empty
+  union
+  select * from groups_from_segments
+),
+
+dedup as (
+  select distinct
+    g.client_id,
+    g.invoice_week_start
+  from all_groups g
+  where g.client_id is not null
+    and g.invoice_week_start is not null
+),
+
+filtered as (
+  select
+    d.client_id,
+    d.invoice_week_start
+  from dedup d
+  where not exists (
+    select 1
+    from public.invoice_jobs_outbox o
+    where o.kind = 'BY_WEEK'
+      and (o.payload->>'client_id') = d.client_id::text
+      and (o.payload->>'invoice_week_start') = d.invoice_week_start::text
+  )
+)
+
+select
+  f.client_id,
+  f.invoice_week_start
+from filtered f
+order by
+  f.invoice_week_start asc,
+  f.client_id::text asc
+limit greatest(0, least(coalesce(p_limit, 5000), 20000));
+$$;
 
 create or replace function public.invoice_batch_generate_candidates(
   p_allow_early boolean default false,
