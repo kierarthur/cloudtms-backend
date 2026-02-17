@@ -1,0 +1,18 @@
+name: Only allow test -> main
+
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, reopened, synchronize, edited]
+
+jobs:
+  enforce:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Block PRs not from test
+        run: |
+          echo "Head branch: ${{ github.event.pull_request.head.ref }}"
+          if [ "${{ github.event.pull_request.head.ref }}" != "test" ]; then
+            echo "ERROR: Only pull requests from branch 'test' can be merged into 'main'."
+            exit 1
+          fi
