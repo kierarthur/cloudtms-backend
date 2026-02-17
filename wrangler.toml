@@ -9,7 +9,7 @@
 # - Default (no --env) deploys to a harmless local name (cloudtms-local)
 #
 
-name = "cloudtms-local"
+name = "test-cloudtms-backend"
 main = "broker/src/index.js"
 compatibility_date = "2025-10-13"
 compatibility_flags = ["nodejs_compat"]
