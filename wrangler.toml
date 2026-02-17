@@ -1,9 +1,112 @@
-name = "cloudtms"
+# =========================
+# CloudTMS - Wrangler config
+# Safe for test + prod from one repo - hello world
+# =========================
+#
+# IMPORTANT:
+# - Deploy TEST with:        npx wrangler deploy --env test
+# - Deploy PRODUCTION with:  npx wrangler deploy --env production
+# - Default (no --env) deploys to a harmless local name (cloudtms-local)
+#
+
+name = "cloudtms-local"
 main = "broker/src/index.js"
 compatibility_date = "2025-10-13"
 compatibility_flags = ["nodejs_compat"]
 
+# Enable Workers Browser Rendering (shared)
+[browser]
+binding = "BROWSER"
+
+# =========================
+# Default vars (LOCAL ONLY)
+# =========================
 [vars]
+# Safe defaults for local/dev. Real deploys should always use --env.
+SUPABASE_URL = "https://yakevhtttcsljosbdpov.supabase.co"
+ALLOWED_ORIGINS = "http://localhost:3000,https://kierarthur.github.io"
+COOKIE_SAME_SITE = "None"
+PRESIGN_EXPIRES_SECONDS = "600"
+UPLOAD_MAX_BYTES = "300000"
+BREAK_EXPECTED_MINUTES = "60"
+UK_TZ_SKEW_MS = "180000"
+TSFIN_MAX_BATCHES = "10"
+TSFIN_BATCH_SIZE = "50"
+
+EMAIL_DRAIN_LIMIT_DEFAULT = "10"
+EMAIL_MAX_PAYLOAD_BYTES = "18874368"
+PUBLIC_DOWNLOAD_BASE_URL = "http://localhost:3000/api/files/download"
+
+INVOICE_STATIONERY_BUCKET = "test-cloudtms"
+INVOICE_STATIONERY_KEY = "Assets/Stationery/Letterhead/A4/Letterhead_v1@300dpi.png"
+TIMESHEET_TEMPLATE_KEY = "Assets/Stationery/Timesheet/Blank Timesheet.pdf"
+
+# =========================
+# Triggers (LOCAL ONLY)
+# =========================
+[triggers]
+# Keep empty locally unless you intentionally want crons in a dev deploy.
+crons = []
+
+# =========================
+# Observability (shared)
+# =========================
+[observability.logs]
+enabled = true
+invocation_logs = true
+head_sampling_rate = 1
+
+# ============================================================
+# TEST environment (test worker + test DB + test bucket + CORS)
+# ============================================================
+[env.test]
+name = "test-cloudtms-backend"
+
+[env.test.vars]
+SUPABASE_URL = "https://yakevhtttcsljosbdpov.supabase.co"
+ALLOWED_ORIGINS = "https://testmode.arthur-rai.co.uk,https://kierarthur.github.io"
+COOKIE_SAME_SITE = "None"
+PRESIGN_EXPIRES_SECONDS = "600"
+UPLOAD_MAX_BYTES = "300000"
+BREAK_EXPECTED_MINUTES = "60"
+UK_TZ_SKEW_MS = "180000"
+TSFIN_MAX_BATCHES = "10"
+TSFIN_BATCH_SIZE = "50"
+
+EMAIL_DRAIN_LIMIT_DEFAULT = "10"
+EMAIL_MAX_PAYLOAD_BYTES = "18874368"
+PUBLIC_DOWNLOAD_BASE_URL = "https://testmode.arthur-rai.co.uk/api/files/download"
+
+INVOICE_STATIONERY_BUCKET = "test-cloudtms"
+INVOICE_STATIONERY_KEY = "Assets/Stationery/Letterhead/A4/Letterhead_v1@300dpi.png"
+TIMESHEET_TEMPLATE_KEY = "Assets/Stationery/Timesheet/Blank Timesheet.pdf"
+
+[[env.test.r2_buckets]]
+binding = "R2"
+bucket_name = "test-cloudtms"
+
+[[env.test.kv_namespaces]]
+binding = "SESSIONS"
+id = "8f53829c670d45e7b99166cd989199b4"
+preview_id = "8f53829c670d45e7b99166cd989199b4"
+
+[env.test.triggers]
+# If you want test to behave exactly like live, keep the same crons.
+# If you'd rather not run background tasks in test, set crons = [].
+crons = ["*/5 * * * *", "* * * * *"]
+
+[env.test.observability.logs]
+enabled = true
+invocation_logs = true
+head_sampling_rate = 1
+
+# ============================================
+# PRODUCTION environment (live worker + live DB)
+# ============================================
+[env.production]
+name = "cloudtms"
+
+[env.production.vars]
 SUPABASE_URL = "https://zojgukxyyklcyjbyyqlz.supabase.co"
 ALLOWED_ORIGINS = "https://cloudtms.arthur-rai.co.uk,https://kierarthur.github.io"
 COOKIE_SAME_SITE = "None"
@@ -14,46 +117,27 @@ UK_TZ_SKEW_MS = "180000"
 TSFIN_MAX_BATCHES = "10"
 TSFIN_BATCH_SIZE = "50"
 
-# === Email / Outbox broker ===
 EMAIL_DRAIN_LIMIT_DEFAULT = "10"
 EMAIL_MAX_PAYLOAD_BYTES = "18874368"
 PUBLIC_DOWNLOAD_BASE_URL = "https://cloudtms.arthur-rai.co.uk/api/files/download"
 
-# === Invoicing stationery ===
 INVOICE_STATIONERY_BUCKET = "timesheets-signatures"
-# Use the PNG you uploaded (A4, full-bleed). Keep exact path/casing.
 INVOICE_STATIONERY_KEY = "Assets/Stationery/Letterhead/A4/Letterhead_v1@300dpi.png"
-
-# New for TS rendering
 TIMESHEET_TEMPLATE_KEY = "Assets/Stationery/Timesheet/Blank Timesheet.pdf"
 
-[[r2_buckets]]
+[[env.production.r2_buckets]]
 binding = "R2"
 bucket_name = "timesheets-signatures"
 
-[[kv_namespaces]]
+[[env.production.kv_namespaces]]
 binding = "SESSIONS"
 id = "3102e18c46b841d2b55918c1ae054491"
 preview_id = "6b8fb70351db4cac91583a9cc6c2074b"
 
-# Enable Workers Browser Rendering
-[browser]
-binding = "BROWSER"
+[env.production.triggers]
+crons = ["*/5 * * * *", "* * * * *"]
 
-[triggers]
-crons = ["*/5 * * * *", "* * * * *"]  # every 5 minutes + every minute (invpdf drain cron)
-
-# =========================
-# Workers Logs (Observability)
-# =========================
-# Dev/preview: log EVERYTHING with CF's invocation logs
-[observability.logs]
-enabled = true
-invocation_logs = true
-head_sampling_rate = 1     # 100% while debugging
-
-# Production: still on, but sample to reduce noise; bump to 1.0 when chasing a bug
 [env.production.observability.logs]
 enabled = true
 invocation_logs = true
-head_sampling_rate = 0.25  # 25% to start; adjust as needed
+head_sampling_rate = 0.25
