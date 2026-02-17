@@ -256,28 +256,14 @@ $$;
 
 
 
-
-
-
-
-
--- ============================================================
--- CloudTMS: invoice_outbox_enqueue_hours(p_timesheet_ids, p_actor_user_id, p_meta)
--- NEW (manual/front-end enqueue HOURS)
---
--- Inserts a single HOURS job with payload.timesheet_ids = [uuid...]
--- Optional p_meta (if JSON object) is merged into payload (top-level).
--- Stores actor_user_id into payload for downstream use if desired.
---
--- Idempotent: uses payload.timesheet_ids_sig to avoid duplicates.
--- Returns the outbox_id (existing or newly inserted).
--- ============================================================
 create or replace function public.invoice_outbox_enqueue_by_week(
   p_client_id uuid,
   p_invoice_week_start date,
   p_actor_user_id uuid,
   p_allow_early boolean default false,
-  p_meta jsonb default null
+  p_meta jsonb default '{}'::jsonb,
+  p_timesheet_ids uuid[] default null,
+  p_auto_invoice_only boolean default false
 )
 returns uuid
 language plpgsql
@@ -294,6 +280,11 @@ declare
 
   v_has_due boolean := false;
 
+  -- selection handling
+  v_in_ids uuid[] := null;
+  v_ok_ids uuid[] := null;
+  v_sig text := null;
+
   -- ======================================================
   -- DEBUG (optional): single audit row per RPC call
   -- ======================================================
@@ -303,15 +294,9 @@ declare
   v_dbg_seg_due_count int := null;
   v_dbg_nonseg_due_sample jsonb := '[]'::jsonb;
   v_dbg_seg_due_sample jsonb := '[]'::jsonb;
-  v_dbg_existing_outbox_id uuid := null;
-  v_dbg_new_outbox_id uuid := null;
-
-  -- extra breakdown (why NOT due)
-  v_dbg_nonseg_any_count int := null;
-  v_dbg_nonseg_fail_sample jsonb := '[]'::jsonb;
-  v_dbg_seg_any_count int := null;
-  v_dbg_seg_fail_sample jsonb := '[]'::jsonb;
-  v_dbg_seg_delayed_not_due_count int := null;
+  v_dbg_input_ids_count int := null;
+  v_dbg_ok_ids_count int := null;
+  v_dbg_ok_ids_sig text := null;
 
 begin
   -- Load invoice_debug flag (safe even if column not yet present)
@@ -334,428 +319,207 @@ begin
   end if;
 
   -- ------------------------------------------------------------
-  -- ✅ Due/invoiceable existence check (prevents preview/enqueue mismatch)
-  -- Implements the confirmed rules:
-  --   - allow_early applies to SEGMENTS + NON-SEGMENTS week-ending gate
-  --   - allow_early does NOT override delayed segments
-  --   - delayed segments eligible only once delay date reached (target week start <= today)
-  --   - SEGMENTS-empty (expense-only) is invoiceable when ANY expense/mileage/additional-charge evidence exists,
-  --     even if total_charge_ex_vat is accidentally 0 (defensive fallback).
-  --
-  -- ✅ HR validation gating:
-  --   If hr_validation_required_for_invoice is true, validation_status must be VALIDATION_OK or OVERRIDDEN.
-  --   NULL validation_status is treated as blocked when required.
+  -- Selection-mode input normalisation (UI-selected subset)
   -- ------------------------------------------------------------
-  select exists (
-    -- NON-SEGMENTS (or SEGMENTS-empty treated as NON-SEGMENTS): invoice week is natural week
-    select 1
-    from public.timesheets_financials tf
-    join public.timesheets ts
-      on ts.timesheet_id = tf.timesheet_id
-     and ts.is_current = true
-    join public.v_ts_invoice_precheck pc
-      on pc.timesheet_id = tf.timesheet_id
-    left join public.v_timesheets_summary_base vts
-      on vts.timesheet_id = tf.timesheet_id
-    where tf.is_current = true
-      and tf.client_id = p_client_id
-      and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
-      and tf.locked_by_invoice_id is null
-      and ts.revoked_at is null
-      and upper(coalesce(pc.precheck_status,'')) = 'OK'
+  if p_timesheet_ids is not null then
+    select array_agg(q.x order by q.x::text)
+    into v_in_ids
+    from (
+      select distinct unnest(p_timesheet_ids) as x
+    ) q
+    where q.x is not null;
 
-      -- ✅ HR validation gate
-      and not (
-        coalesce(vts.hr_validation_required_for_invoice, false)
-        and vts.validation_status is distinct from 'VALIDATION_OK'::public.validation_status_enum
-        and vts.validation_status is distinct from 'OVERRIDDEN'::public.validation_status_enum
-      )
+    if v_in_ids is null or coalesce(array_length(v_in_ids, 1), 0) = 0 then
+      raise exception 'timesheet_ids[] required';
+    end if;
 
-      and (
-        coalesce(tf.invoice_breakdown_json->>'mode','') <> 'SEGMENTS'
-        or (
-          coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
-          and jsonb_typeof(tf.invoice_breakdown_json->'segments') = 'array'
-          and jsonb_array_length(tf.invoice_breakdown_json->'segments') = 0
-          and (
-               coalesce(tf.total_charge_ex_vat,0)::numeric <> 0
-            or coalesce(tf.expenses_charge_ex_vat,0)::numeric <> 0
-            or coalesce(tf.travel_charge_ex_vat,0)::numeric <> 0
-            or coalesce(tf.accommodation_charge_ex_vat,0)::numeric <> 0
-            or coalesce(tf.other_charge_ex_vat,0)::numeric <> 0
-            or coalesce(tf.mileage_charge_ex_vat,0)::numeric <> 0
-            or (
-              case
-                when nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '') is null then 0::numeric
-                when nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
-                  then (nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '')::numeric)
-                else 0::numeric
-              end
-            ) <> 0
+    v_dbg_input_ids_count := coalesce(array_length(v_in_ids, 1), 0);
+  end if;
+
+  -- ------------------------------------------------------------
+  -- ✅ Canonical eligibility resolution (returns deterministic timesheet_ids)
+  -- Rules enforced (matches brief):
+  --   - HR validation gate (required => VALIDATION_OK/OVERRIDDEN only; NULL blocked)
+  --   - allow_early applies only to non-delayed items
+  --   - delayed segments never early (target week start <= today only)
+  --   - segments-empty treated as invoiceable if any charge evidence exists (defensive)
+  --   - precheck must be OK (includes "expense-only no ref needed" behaviour)
+  --   - optional UI selection filter (p_timesheet_ids)
+  --   - optional auto-invoice-only filter (coalesce(contract.auto_invoice, client_settings.auto_invoice_default, false)=true)
+  -- ------------------------------------------------------------
+  select array_agg(q.timesheet_id order by q.timesheet_id::text)
+  into v_ok_ids
+  from (
+    select distinct x.timesheet_id
+    from (
+      -- NON-SEGMENTS (or SEGMENTS-empty treated as NON-SEGMENTS): natural invoice week
+      select tf.timesheet_id
+      from public.timesheets_financials tf
+      join public.timesheets ts
+        on ts.timesheet_id = tf.timesheet_id
+       and ts.is_current = true
+      join public.v_ts_invoice_precheck pc
+        on pc.timesheet_id = tf.timesheet_id
+      left join public.v_timesheets_summary_base vts
+        on vts.timesheet_id = tf.timesheet_id
+
+      -- auto-invoice context (only applied if p_auto_invoice_only=true)
+      left join public.contract_weeks cw
+        on cw.timesheet_id = tf.timesheet_id
+      left join public.contracts c
+        on c.id = coalesce(ts.contract_id, cw.contract_id)
+      left join lateral (
+        select cs0.auto_invoice_default
+        from public.client_settings cs0
+        where cs0.client_id = tf.client_id
+          and (cs0.effective_from <= v_london_today or cs0.effective_from is null)
+        order by cs0.effective_from desc nulls last
+        limit 1
+      ) cs on true
+
+      where tf.is_current = true
+        and tf.client_id = p_client_id
+        and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
+        and tf.locked_by_invoice_id is null
+        and ts.revoked_at is null
+        and upper(coalesce(pc.precheck_status,'')) = 'OK'
+
+        -- ✅ optional selection filter
+        and (v_in_ids is null or tf.timesheet_id = any(v_in_ids))
+
+        -- ✅ auto-invoice filter (when enabled)
+        and (
+          p_auto_invoice_only is not true
+          or coalesce(c.auto_invoice, cs.auto_invoice_default, false) = true
+        )
+
+        -- ✅ HR validation gate
+        and not (
+          coalesce(vts.hr_validation_required_for_invoice, false)
+          and vts.validation_status is distinct from 'VALIDATION_OK'::public.validation_status_enum
+          and vts.validation_status is distinct from 'OVERRIDDEN'::public.validation_status_enum
+        )
+
+        and (
+          coalesce(tf.invoice_breakdown_json->>'mode','') <> 'SEGMENTS'
+          or (
+            coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
+            and jsonb_typeof(tf.invoice_breakdown_json->'segments') = 'array'
+            and jsonb_array_length(tf.invoice_breakdown_json->'segments') = 0
+            and (
+                 coalesce(tf.total_charge_ex_vat,0)::numeric <> 0
+              or coalesce(tf.expenses_charge_ex_vat,0)::numeric <> 0
+              or coalesce(tf.travel_charge_ex_vat,0)::numeric <> 0
+              or coalesce(tf.accommodation_charge_ex_vat,0)::numeric <> 0
+              or coalesce(tf.other_charge_ex_vat,0)::numeric <> 0
+              or coalesce(tf.mileage_charge_ex_vat,0)::numeric <> 0
+              or (
+                case
+                  when nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '') is null then 0::numeric
+                  when nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+                    then (nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '')::numeric)
+                  else 0::numeric
+                end
+              ) <> 0
+            )
           )
         )
-      )
-      and (ts.week_ending_date::date - 6) = p_invoice_week_start
-      and (p_allow_early = true or ts.week_ending_date::date < v_london_today)
+        and (ts.week_ending_date::date - 6) = p_invoice_week_start
+        and (p_allow_early = true or ts.week_ending_date::date < v_london_today)
 
-    union all
+      union all
 
-    -- SEGMENTS mode: segment-level eligibility for this invoice week
-    select 1
-    from public.timesheets_financials tf
-    join public.timesheets ts
-      on ts.timesheet_id = tf.timesheet_id
-     and ts.is_current = true
-    join public.v_ts_invoice_precheck pc
-      on pc.timesheet_id = tf.timesheet_id
-    left join public.v_timesheets_summary_base vts
-      on vts.timesheet_id = tf.timesheet_id
-    cross join lateral jsonb_array_elements(coalesce(tf.invoice_breakdown_json->'segments','[]'::jsonb)) seg
-    where tf.is_current = true
-      and tf.client_id = p_client_id
-      and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
-      and tf.locked_by_invoice_id is null
-      and ts.revoked_at is null
-      and upper(coalesce(pc.precheck_status,'')) = 'OK'
+      -- SEGMENTS mode: timesheet eligible if it has ≥1 eligible segment for this invoice week
+      select tf.timesheet_id
+      from public.timesheets_financials tf
+      join public.timesheets ts
+        on ts.timesheet_id = tf.timesheet_id
+       and ts.is_current = true
+      join public.v_ts_invoice_precheck pc
+        on pc.timesheet_id = tf.timesheet_id
+      left join public.v_timesheets_summary_base vts
+        on vts.timesheet_id = tf.timesheet_id
 
-      -- ✅ HR validation gate
-      and not (
-        coalesce(vts.hr_validation_required_for_invoice, false)
-        and vts.validation_status is distinct from 'VALIDATION_OK'::public.validation_status_enum
-        and vts.validation_status is distinct from 'OVERRIDDEN'::public.validation_status_enum
-      )
+      -- auto-invoice context (only applied if p_auto_invoice_only=true)
+      left join public.contract_weeks cw
+        on cw.timesheet_id = tf.timesheet_id
+      left join public.contracts c
+        on c.id = coalesce(ts.contract_id, cw.contract_id)
+      left join lateral (
+        select cs0.auto_invoice_default
+        from public.client_settings cs0
+        where cs0.client_id = tf.client_id
+          and (cs0.effective_from <= v_london_today or cs0.effective_from is null)
+        order by cs0.effective_from desc nulls last
+        limit 1
+      ) cs on true
 
-      and coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
-      and jsonb_typeof(seg) = 'object'
-      and nullif(btrim(coalesce(seg->>'segment_id','')), '') is not null
-      and nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') is null
+      cross join lateral jsonb_array_elements(
+        case
+          when jsonb_typeof(tf.invoice_breakdown_json->'segments') = 'array' then tf.invoice_breakdown_json->'segments'
+          else '[]'::jsonb
+        end
+      ) seg
 
-      -- segment belongs to this invoice_week_start (target week, else natural week)
-      and coalesce(
-            nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date,
-            (ts.week_ending_date::date - 6)
-          ) = p_invoice_week_start
+      where tf.is_current = true
+        and tf.client_id = p_client_id
+        and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
+        and tf.locked_by_invoice_id is null
+        and ts.revoked_at is null
+        and upper(coalesce(pc.precheck_status,'')) = 'OK'
 
-      and (
-        -- DELAYED segment:
-        -- invoice_target_week_start differs from natural week start
-        -- eligibility depends ONLY on delay reaching (<= today), NOT allow_early
-        (
-          nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '') is not null
-          and nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date <> (ts.week_ending_date::date - 6)
-          and nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date <= v_london_today
+        -- ✅ optional selection filter
+        and (v_in_ids is null or tf.timesheet_id = any(v_in_ids))
+
+        -- ✅ auto-invoice filter (when enabled)
+        and (
+          p_auto_invoice_only is not true
+          or coalesce(c.auto_invoice, cs.auto_invoice_default, false) = true
         )
-        or
-        -- NON-DELAYED segment:
-        -- (target is null OR equals natural week start)
-        -- eligibility uses timesheet week-ending gate with allow_early
-        (
+
+        -- ✅ HR validation gate
+        and not (
+          coalesce(vts.hr_validation_required_for_invoice, false)
+          and vts.validation_status is distinct from 'VALIDATION_OK'::public.validation_status_enum
+          and vts.validation_status is distinct from 'OVERRIDDEN'::public.validation_status_enum
+        )
+
+        and coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
+        and jsonb_typeof(seg) = 'object'
+        and nullif(btrim(coalesce(seg->>'segment_id','')), '') is not null
+        and nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') is null
+
+        -- segment belongs to this invoice_week_start (target week, else natural week start)
+        and coalesce(
+              nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date,
+              (ts.week_ending_date::date - 6)
+            ) = p_invoice_week_start
+
+        and (
+          -- DELAYED segment: eligible only when delay has arrived (<= today), never by allow_early
           (
-            nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '') is null
-            or nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date = (ts.week_ending_date::date - 6)
+            nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '') is not null
+            and nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date <> (ts.week_ending_date::date - 6)
+            and nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date <= v_london_today
           )
-          and (p_allow_early = true or ts.week_ending_date::date < v_london_today)
+          or
+          -- NON-DELAYED segment: week gate applies; allow_early can override
+          (
+            (
+              nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '') is null
+              or nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date = (ts.week_ending_date::date - 6)
+            )
+            and (p_allow_early = true or ts.week_ending_date::date < v_london_today)
+          )
         )
-      )
-    limit 1
-  ) into v_has_due;
+    ) x
+    where x.timesheet_id is not null
+  ) q;
 
-  -- DEBUG: capture due breakdown (no effect unless enabled)
+  v_has_due := (v_ok_ids is not null and coalesce(array_length(v_ok_ids, 1), 0) > 0);
+
   if v_invoice_debug then
-    begin
-      -- NON-SEGMENTS (or segments mode with empty segments array but invoiceable via totals/expenses/mileage/additional)
-      select
-        count(*)::int,
-        coalesce(jsonb_agg(s) filter (where s.rn <= 25), '[]'::jsonb)
-      into
-        v_dbg_nonseg_due_count,
-        v_dbg_nonseg_due_sample
-      from (
-        select
-          tf.timesheet_id::text as timesheet_id,
-          ts.week_ending_date::date as week_ending_date,
-          tf.processing_status::text as processing_status,
-          pc.precheck_status as precheck_status,
-          coalesce(tf.invoice_breakdown_json->>'mode','') as invoice_mode,
-          coalesce(tf.total_charge_ex_vat,0)::numeric as total_charge_ex_vat,
-          coalesce(tf.expenses_charge_ex_vat,0)::numeric as expenses_charge_ex_vat,
-          coalesce(tf.travel_charge_ex_vat,0)::numeric as travel_charge_ex_vat,
-          coalesce(tf.accommodation_charge_ex_vat,0)::numeric as accommodation_charge_ex_vat,
-          coalesce(tf.other_charge_ex_vat,0)::numeric as other_charge_ex_vat,
-          coalesce(tf.mileage_charge_ex_vat,0)::numeric as mileage_charge_ex_vat,
-          coalesce(vts.hr_validation_required_for_invoice, false) as hr_validation_required_for_invoice,
-          vts.validation_status::text as validation_status,
-          case
-            when nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '') is null then 0::numeric
-            when nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
-              then (nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '')::numeric)
-            else 0::numeric
-          end as additional_charge_ex_vat,
-          row_number() over (order by ts.updated_at desc nulls last) as rn
-        from public.timesheets_financials tf
-        join public.timesheets ts
-          on ts.timesheet_id = tf.timesheet_id
-         and ts.is_current = true
-        join public.v_ts_invoice_precheck pc
-          on pc.timesheet_id = tf.timesheet_id
-        left join public.v_timesheets_summary_base vts
-          on vts.timesheet_id = tf.timesheet_id
-        where tf.is_current = true
-          and tf.client_id = p_client_id
-          and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
-          and tf.locked_by_invoice_id is null
-          and ts.revoked_at is null
-          and upper(coalesce(pc.precheck_status,'')) = 'OK'
-
-          -- ✅ HR validation gate (mirror v_has_due)
-          and not (
-            coalesce(vts.hr_validation_required_for_invoice, false)
-            and vts.validation_status is distinct from 'VALIDATION_OK'::public.validation_status_enum
-            and vts.validation_status is distinct from 'OVERRIDDEN'::public.validation_status_enum
-          )
-
-          and (ts.week_ending_date::date - 6) = p_invoice_week_start
-          and (p_allow_early = true or ts.week_ending_date::date < v_london_today)
-          and (
-            coalesce(tf.invoice_breakdown_json->>'mode','') <> 'SEGMENTS'
-            or (
-              coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
-              and jsonb_typeof(tf.invoice_breakdown_json->'segments') = 'array'
-              and jsonb_array_length(tf.invoice_breakdown_json->'segments') = 0
-              and (
-                   coalesce(tf.total_charge_ex_vat,0)::numeric <> 0
-                or coalesce(tf.expenses_charge_ex_vat,0)::numeric <> 0
-                or coalesce(tf.travel_charge_ex_vat,0)::numeric <> 0
-                or coalesce(tf.accommodation_charge_ex_vat,0)::numeric <> 0
-                or coalesce(tf.other_charge_ex_vat,0)::numeric <> 0
-                or coalesce(tf.mileage_charge_ex_vat,0)::numeric <> 0
-                or (
-                  case
-                    when nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '') is null then 0::numeric
-                    when nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
-                      then (nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '')::numeric)
-                    else 0::numeric
-                  end
-                ) <> 0
-              )
-            )
-          )
-      ) s;
-
-      -- SEGMENTS mode (segment-level eligibility)
-      select
-        count(*)::int,
-        coalesce(jsonb_agg(s) filter (where s.rn <= 25), '[]'::jsonb)
-      into
-        v_dbg_seg_due_count,
-        v_dbg_seg_due_sample
-      from (
-        select
-          tf.timesheet_id::text as timesheet_id,
-          ts.week_ending_date::date as week_ending_date,
-          nullif(btrim(coalesce(seg_el.value->>'invoice_target_week_start','')), '') as invoice_target_week_start,
-          nullif(btrim(coalesce(seg_el.value->>'invoice_locked_invoice_id','')), '') as invoice_locked_invoice_id,
-          coalesce(seg_el.value->>'segment_type','') as segment_type,
-          coalesce(seg_el.value->>'label','') as label,
-          coalesce(seg_el.value->>'charge_ex_vat','') as charge_ex_vat,
-          coalesce(vts.hr_validation_required_for_invoice, false) as hr_validation_required_for_invoice,
-          vts.validation_status::text as validation_status,
-          row_number() over (order by ts.updated_at desc nulls last) as rn
-        from public.timesheets_financials tf
-        join public.timesheets ts
-          on ts.timesheet_id = tf.timesheet_id
-         and ts.is_current = true
-        join public.v_ts_invoice_precheck pc
-          on pc.timesheet_id = tf.timesheet_id
-        left join public.v_timesheets_summary_base vts
-          on vts.timesheet_id = tf.timesheet_id
-        cross join lateral jsonb_array_elements(coalesce(tf.invoice_breakdown_json->'segments','[]'::jsonb)) seg_el(value)
-        where tf.is_current = true
-          and tf.client_id = p_client_id
-          and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
-          and tf.locked_by_invoice_id is null
-          and ts.revoked_at is null
-          and upper(coalesce(pc.precheck_status,'')) = 'OK'
-
-          -- ✅ HR validation gate (mirror v_has_due)
-          and not (
-            coalesce(vts.hr_validation_required_for_invoice, false)
-            and vts.validation_status is distinct from 'VALIDATION_OK'::public.validation_status_enum
-            and vts.validation_status is distinct from 'OVERRIDDEN'::public.validation_status_enum
-          )
-
-          and coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
-          and jsonb_typeof(seg_el.value) = 'object'
-          and nullif(btrim(coalesce(seg_el.value->>'segment_id','')), '') is not null
-          and nullif(btrim(coalesce(seg_el.value->>'invoice_locked_invoice_id','')), '') is null
-          and coalesce(
-                nullif(btrim(coalesce(seg_el.value->>'invoice_target_week_start','')), '')::date,
-                (ts.week_ending_date::date - 6)
-              ) = p_invoice_week_start
-          and (
-            (
-              nullif(btrim(coalesce(seg_el.value->>'invoice_target_week_start','')), '') is not null
-              and nullif(btrim(coalesce(seg_el.value->>'invoice_target_week_start','')), '')::date <> (ts.week_ending_date::date - 6)
-              and nullif(btrim(coalesce(seg_el.value->>'invoice_target_week_start','')), '')::date <= v_london_today
-            )
-            or
-            (
-              (
-                nullif(btrim(coalesce(seg_el.value->>'invoice_target_week_start','')), '') is null
-                or nullif(btrim(coalesce(seg_el.value->>'invoice_target_week_start','')), '')::date = (ts.week_ending_date::date - 6)
-              )
-              and (p_allow_early = true or ts.week_ending_date::date < v_london_today)
-            )
-          )
-      ) s;
-
-      -- Breakdown: candidates for this client/week that are NOT due (helps explain why v_has_due=false)
-      -- NON-SEGMENTS candidates (natural week start = invoice_week_start)
-      select
-        count(*)::int,
-        coalesce(jsonb_agg(s) filter (where s.rn <= 25), '[]'::jsonb)
-      into
-        v_dbg_nonseg_any_count,
-        v_dbg_nonseg_fail_sample
-      from (
-        select
-          tf.timesheet_id::text as timesheet_id,
-          ts.week_ending_date::date as week_ending_date,
-          tf.processing_status::text as processing_status,
-          (tf.locked_by_invoice_id is not null) as locked_by_invoice,
-          (ts.revoked_at is not null) as revoked,
-          pc.precheck_status as precheck_status,
-          coalesce(tf.invoice_breakdown_json->>'mode','') as invoice_mode,
-          jsonb_typeof(tf.invoice_breakdown_json->'segments') as segments_type,
-          coalesce(tf.total_charge_ex_vat,0)::numeric as total_charge_ex_vat,
-          coalesce(tf.expenses_charge_ex_vat,0)::numeric as expenses_charge_ex_vat,
-          coalesce(tf.travel_charge_ex_vat,0)::numeric as travel_charge_ex_vat,
-          coalesce(tf.accommodation_charge_ex_vat,0)::numeric as accommodation_charge_ex_vat,
-          coalesce(tf.other_charge_ex_vat,0)::numeric as other_charge_ex_vat,
-          coalesce(tf.mileage_charge_ex_vat,0)::numeric as mileage_charge_ex_vat,
-          coalesce(vts.hr_validation_required_for_invoice, false) as hr_validation_required_for_invoice,
-          vts.validation_status::text as validation_status,
-          case
-            when nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '') is null then 0::numeric
-            when nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
-              then (nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '')::numeric)
-            else 0::numeric
-          end as additional_charge_ex_vat,
-          case
-            when tf.processing_status <> 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum then 'NOT_READY_FOR_INVOICE'
-            when tf.locked_by_invoice_id is not null then 'LOCKED_BY_INVOICE'
-            when ts.revoked_at is not null then 'REVOKED'
-            when upper(coalesce(pc.precheck_status,'')) <> 'OK' then 'PRECHECK_NOT_OK'
-            when (
-              coalesce(vts.hr_validation_required_for_invoice, false)
-              and vts.validation_status is distinct from 'VALIDATION_OK'::public.validation_status_enum
-              and vts.validation_status is distinct from 'OVERRIDDEN'::public.validation_status_enum
-            ) then 'HR_VALIDATION_BLOCKED'
-            when (p_allow_early is not true) and (ts.week_ending_date::date >= v_london_today) then 'WEEK_NOT_PASSED'
-            when (
-              (coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
-               and jsonb_typeof(tf.invoice_breakdown_json->'segments') = 'array'
-               and jsonb_array_length(tf.invoice_breakdown_json->'segments') = 0)
-              and (
-                   coalesce(tf.total_charge_ex_vat,0)::numeric = 0
-               and coalesce(tf.expenses_charge_ex_vat,0)::numeric = 0
-               and coalesce(tf.travel_charge_ex_vat,0)::numeric = 0
-               and coalesce(tf.accommodation_charge_ex_vat,0)::numeric = 0
-               and coalesce(tf.other_charge_ex_vat,0)::numeric = 0
-               and coalesce(tf.mileage_charge_ex_vat,0)::numeric = 0
-               and (
-                 case
-                   when nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '') is null then 0::numeric
-                   when nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
-                     then (nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '')::numeric)
-                   else 0::numeric
-                 end
-               ) = 0
-              )
-            ) then 'SEGMENTS_EMPTY_AND_ZERO_TOTAL'
-            else 'OTHER'
-          end as fail_reason,
-          row_number() over (order by ts.updated_at desc nulls last) as rn
-        from public.timesheets_financials tf
-        join public.timesheets ts
-          on ts.timesheet_id = tf.timesheet_id
-         and ts.is_current = true
-        join public.v_ts_invoice_precheck pc
-          on pc.timesheet_id = tf.timesheet_id
-        left join public.v_timesheets_summary_base vts
-          on vts.timesheet_id = tf.timesheet_id
-        where tf.is_current = true
-          and tf.client_id = p_client_id
-          and (ts.week_ending_date::date - 6) = p_invoice_week_start
-      ) s;
-
-      -- SEGMENTS candidates for this invoice_week_start (segment-level), including delayed-not-due reasons
-      select
-        count(*)::int,
-        coalesce(jsonb_agg(s) filter (where s.rn <= 25), '[]'::jsonb),
-        count(*) filter (where s.fail_reason = 'DELAYED_NOT_DUE')::int
-      into
-        v_dbg_seg_any_count,
-        v_dbg_seg_fail_sample,
-        v_dbg_seg_delayed_not_due_count
-      from (
-        select
-          tf.timesheet_id::text as timesheet_id,
-          ts.week_ending_date::date as week_ending_date,
-          nullif(btrim(coalesce(seg_el.value->>'invoice_target_week_start','')), '') as invoice_target_week_start,
-          nullif(btrim(coalesce(seg_el.value->>'invoice_locked_invoice_id','')), '') as invoice_locked_invoice_id,
-          coalesce(seg_el.value->>'segment_type','') as segment_type,
-          coalesce(seg_el.value->>'label','') as label,
-          coalesce(seg_el.value->>'charge_ex_vat','') as charge_ex_vat,
-          coalesce(vts.hr_validation_required_for_invoice, false) as hr_validation_required_for_invoice,
-          vts.validation_status::text as validation_status,
-          case
-            when tf.processing_status <> 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum then 'NOT_READY_FOR_INVOICE'
-            when tf.locked_by_invoice_id is not null then 'LOCKED_BY_INVOICE'
-            when ts.revoked_at is not null then 'REVOKED'
-            when upper(coalesce(pc.precheck_status,'')) <> 'OK' then 'PRECHECK_NOT_OK'
-            when (
-              coalesce(vts.hr_validation_required_for_invoice, false)
-              and vts.validation_status is distinct from 'VALIDATION_OK'::public.validation_status_enum
-              and vts.validation_status is distinct from 'OVERRIDDEN'::public.validation_status_enum
-            ) then 'HR_VALIDATION_BLOCKED'
-            when nullif(btrim(coalesce(seg_el.value->>'invoice_locked_invoice_id','')), '') is not null then 'SEGMENT_LOCKED'
-            when (
-              nullif(btrim(coalesce(seg_el.value->>'invoice_target_week_start','')), '') is not null
-              and nullif(btrim(coalesce(seg_el.value->>'invoice_target_week_start','')), '')::date <> (ts.week_ending_date::date - 6)
-              and nullif(btrim(coalesce(seg_el.value->>'invoice_target_week_start','')), '')::date > v_london_today
-            ) then 'DELAYED_NOT_DUE'
-            when (
-              (nullif(btrim(coalesce(seg_el.value->>'invoice_target_week_start','')), '') is null
-               or nullif(btrim(coalesce(seg_el.value->>'invoice_target_week_start','')), '')::date = (ts.week_ending_date::date - 6))
-              and (p_allow_early is not true)
-              and (ts.week_ending_date::date >= v_london_today)
-            ) then 'WEEK_NOT_PASSED'
-            else 'OTHER'
-          end as fail_reason,
-          row_number() over (order by ts.updated_at desc nulls last) as rn
-        from public.timesheets_financials tf
-        join public.timesheets ts
-          on ts.timesheet_id = tf.timesheet_id
-         and ts.is_current = true
-        join public.v_ts_invoice_precheck pc
-          on pc.timesheet_id = tf.timesheet_id
-        left join public.v_timesheets_summary_base vts
-          on vts.timesheet_id = tf.timesheet_id
-        cross join lateral jsonb_array_elements(coalesce(tf.invoice_breakdown_json->'segments','[]'::jsonb)) seg_el(value)
-        where tf.is_current = true
-          and tf.client_id = p_client_id
-          and coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
-          and jsonb_typeof(seg_el.value) = 'object'
-          and nullif(btrim(coalesce(seg_el.value->>'segment_id','')), '') is not null
-          and coalesce(
-                nullif(btrim(coalesce(seg_el.value->>'invoice_target_week_start','')), '')::date,
-                (ts.week_ending_date::date - 6)
-              ) = p_invoice_week_start
-      ) s;
-    exception when others then
-      null;
-    end;
+    v_dbg_ok_ids_count := coalesce(array_length(v_ok_ids, 1), 0);
   end if;
 
   if not v_has_due then
@@ -773,16 +537,9 @@ begin
               'week_ending', v_week_end::text,
               'london_today', v_london_today::text,
               'allow_early', coalesce(p_allow_early,false),
-              'has_due', v_has_due,
-              'nonseg_due_count', v_dbg_nonseg_due_count,
-              'seg_due_count', v_dbg_seg_due_count,
-              'nonseg_due_sample', v_dbg_nonseg_due_sample,
-              'seg_due_sample', v_dbg_seg_due_sample,
-              'nonseg_any_count', v_dbg_nonseg_any_count,
-              'seg_any_count', v_dbg_seg_any_count,
-              'seg_delayed_not_due_count', v_dbg_seg_delayed_not_due_count,
-              'nonseg_fail_sample', v_dbg_nonseg_fail_sample,
-              'seg_fail_sample', v_dbg_seg_fail_sample,
+              'auto_invoice_only', coalesce(p_auto_invoice_only,false),
+              'input_ids_count', v_dbg_input_ids_count,
+              'ok_ids_count', v_dbg_ok_ids_count,
               'run_started_at_utc', public._inv_iso_utc(v_dbg_run_started),
               'run_finished_at_utc', public._inv_iso_utc(now())
             ),
@@ -796,6 +553,7 @@ begin
           null;
         end;
       end if;
+
       raise exception 'Week ending % has not passed (London today=%). Use allow_early to override.', v_week_end, v_london_today;
     end if;
 
@@ -811,16 +569,9 @@ begin
             'week_ending', v_week_end::text,
             'london_today', v_london_today::text,
             'allow_early', coalesce(p_allow_early,false),
-            'has_due', v_has_due,
-            'nonseg_due_count', v_dbg_nonseg_due_count,
-            'seg_due_count', v_dbg_seg_due_count,
-            'nonseg_due_sample', v_dbg_nonseg_due_sample,
-            'seg_due_sample', v_dbg_seg_due_sample,
-            'nonseg_any_count', v_dbg_nonseg_any_count,
-            'seg_any_count', v_dbg_seg_any_count,
-            'seg_delayed_not_due_count', v_dbg_seg_delayed_not_due_count,
-            'nonseg_fail_sample', v_dbg_nonseg_fail_sample,
-            'seg_fail_sample', v_dbg_seg_fail_sample,
+            'auto_invoice_only', coalesce(p_auto_invoice_only,false),
+            'input_ids_count', v_dbg_input_ids_count,
+            'ok_ids_count', v_dbg_ok_ids_count,
             'run_started_at_utc', public._inv_iso_utc(v_dbg_run_started),
             'run_finished_at_utc', public._inv_iso_utc(now())
           ),
@@ -834,14 +585,97 @@ begin
         null;
       end;
     end if;
-    raise exception 'No invoiceable timesheets/segments for client=% and invoice_week_start=%', p_client_id, p_invoice_week_start;
+
+    raise exception 'No eligible timesheets/segments for client=% and invoice_week_start=%', p_client_id, p_invoice_week_start;
   end if;
 
-  -- Build payload
+  -- Strict selection parity: if user supplied ids, all must be eligible for this client/week/run.
+  if v_in_ids is not null then
+    if coalesce(array_length(v_ok_ids, 1), 0) <> coalesce(array_length(v_in_ids, 1), 0) then
+      raise exception 'Some selected timesheets are not eligible or do not match client/week (client=% invoice_week_start=%)', p_client_id, p_invoice_week_start;
+    end if;
+  end if;
+
+  -- Deterministic signature for idempotency / traceability
+  v_sig := md5(array_to_string(v_ok_ids::text[], '|'));
+  if v_invoice_debug then
+    v_dbg_ok_ids_sig := v_sig;
+  end if;
+
+  -- Optional DEBUG: lightweight due breakdown samples (only when invoice_debug)
+  if v_invoice_debug then
+    begin
+      -- NON-SEGMENTS-like eligible sample (subset)
+      select
+        count(*)::int,
+        coalesce(jsonb_agg(s) filter (where s.rn <= 25), '[]'::jsonb)
+      into
+        v_dbg_nonseg_due_count,
+        v_dbg_nonseg_due_sample
+      from (
+        select
+          tf.timesheet_id::text as timesheet_id,
+          ts.week_ending_date::date as week_ending_date,
+          coalesce(tf.invoice_breakdown_json->>'mode','') as invoice_mode,
+          row_number() over (order by ts.updated_at desc nulls last) as rn
+        from public.timesheets_financials tf
+        join public.timesheets ts
+          on ts.timesheet_id = tf.timesheet_id
+         and ts.is_current = true
+        where tf.is_current = true
+          and tf.timesheet_id = any(v_ok_ids)
+          and (
+            coalesce(tf.invoice_breakdown_json->>'mode','') <> 'SEGMENTS'
+            or (
+              coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
+              and jsonb_typeof(tf.invoice_breakdown_json->'segments') = 'array'
+              and jsonb_array_length(tf.invoice_breakdown_json->'segments') = 0
+            )
+          )
+      ) s;
+
+      -- SEGMENTS eligible sample (segment-level sample; subset)
+      select
+        count(*)::int,
+        coalesce(jsonb_agg(s) filter (where s.rn <= 25), '[]'::jsonb)
+      into
+        v_dbg_seg_due_count,
+        v_dbg_seg_due_sample
+      from (
+        select
+          tf.timesheet_id::text as timesheet_id,
+          ts.week_ending_date::date as week_ending_date,
+          nullif(btrim(coalesce(seg_el.value->>'invoice_target_week_start','')), '') as invoice_target_week_start,
+          coalesce(seg_el.value->>'label','') as label,
+          row_number() over (order by ts.updated_at desc nulls last) as rn
+        from public.timesheets_financials tf
+        join public.timesheets ts
+          on ts.timesheet_id = tf.timesheet_id
+         and ts.is_current = true
+        cross join lateral jsonb_array_elements(
+          case
+            when jsonb_typeof(tf.invoice_breakdown_json->'segments') = 'array' then tf.invoice_breakdown_json->'segments'
+            else '[]'::jsonb
+          end
+        ) seg_el(value)
+        where tf.is_current = true
+          and tf.timesheet_id = any(v_ok_ids)
+          and coalesce(tf.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
+          and jsonb_typeof(seg_el.value) = 'object'
+      ) s;
+    exception when others then
+      null;
+    end;
+  end if;
+
+  -- Build payload (canonical + deterministic)
   v_payload := jsonb_build_object(
     'client_id', p_client_id::text,
     'invoice_week_start', p_invoice_week_start::text,
-    'allow_early', coalesce(p_allow_early, false)
+    'allow_early', coalesce(p_allow_early, false),
+    'timesheet_ids', to_jsonb(v_ok_ids),
+    'timesheet_ids_sig', v_sig,
+    'auto_invoice_only', coalesce(p_auto_invoice_only, false)
   );
 
   if p_actor_user_id is not null then
@@ -857,7 +691,6 @@ begin
   end if;
 
   -- ✅ Concurrency guard: serialize enqueue per (client_id, invoice_week_start)
-  -- Prevents duplicate BY_WEEK outbox rows from concurrent check+insert races.
   perform pg_advisory_xact_lock(
     hashtext(p_client_id::text),
     (p_invoice_week_start - date '2000-01-01')::int
@@ -874,7 +707,6 @@ begin
   limit 1;
 
   if v_existing is not null then
-    -- Merge allow_early/actor/meta into existing payload so subsequent calls are consistent
     update public.invoice_jobs_outbox o
     set payload = coalesce(o.payload, '{}'::jsonb) || v_payload
     where o.id = v_existing;
@@ -892,11 +724,15 @@ begin
             'week_ending', v_week_end::text,
             'london_today', v_london_today::text,
             'allow_early', coalesce(p_allow_early,false),
-            'has_due', v_has_due,
+            'auto_invoice_only', coalesce(p_auto_invoice_only,false),
+            'input_ids_count', v_dbg_input_ids_count,
+            'ok_ids_count', v_dbg_ok_ids_count,
+            'ok_ids_sig', v_dbg_ok_ids_sig,
             'nonseg_due_count', v_dbg_nonseg_due_count,
             'seg_due_count', v_dbg_seg_due_count,
-            'existing_outbox_id', v_existing::text,
-            'payload_merge', v_payload
+            'nonseg_due_sample', v_dbg_nonseg_due_sample,
+            'seg_due_sample', v_dbg_seg_due_sample,
+            'existing_outbox_id', v_existing::text
           ),
           'invoice_jobs_outbox',
           v_existing::text,
@@ -929,11 +765,15 @@ begin
           'week_ending', v_week_end::text,
           'london_today', v_london_today::text,
           'allow_early', coalesce(p_allow_early,false),
-          'has_due', v_has_due,
+          'auto_invoice_only', coalesce(p_auto_invoice_only,false),
+          'input_ids_count', v_dbg_input_ids_count,
+          'ok_ids_count', v_dbg_ok_ids_count,
+          'ok_ids_sig', v_dbg_ok_ids_sig,
           'nonseg_due_count', v_dbg_nonseg_due_count,
           'seg_due_count', v_dbg_seg_due_count,
-          'new_outbox_id', v_new::text,
-          'payload', v_payload
+          'nonseg_due_sample', v_dbg_nonseg_due_sample,
+          'seg_due_sample', v_dbg_seg_due_sample,
+          'new_outbox_id', v_new::text
         ),
         'invoice_jobs_outbox',
         v_new::text,
@@ -949,6 +789,31 @@ begin
   return v_new;
 end;
 $$;
+
+
+
+
+
+
+
+
+-- ============================================================
+-- CloudTMS: invoice_outbox_enqueue_hours(p_timesheet_ids, p_actor_user_id, p_meta)
+-- NEW (manual/front-end enqueue HOURS)
+--
+-- Inserts a single HOURS job with payload.timesheet_ids = [uuid...]
+-- Optional p_meta (if JSON object) is merged into payload (top-level).
+-- Stores actor_user_id into payload for downstream use if desired.
+--
+-- Idempotent: uses payload.timesheet_ids_sig to avoid duplicates.
+-- Returns the outbox_id (existing or newly inserted).
+-- ============================================================
+
+
+
+
+
+
 
 create or replace function public.invoice_outbox_enqueue_hours(
   p_timesheet_ids uuid[],
