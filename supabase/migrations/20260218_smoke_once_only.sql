@@ -4,3 +4,4 @@ create table if not exists public.migration_smoke_once_only (
 );
 
 insert into public.migration_smoke_once_only default values;
+insert into public.migration_smoke_once_only default values;
