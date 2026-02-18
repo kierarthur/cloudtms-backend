@@ -1,0 +1,36 @@
+name: Branch direction guard
+
+on:
+  pull_request:
+    # IMPORTANT: this filter is on the BASE branch (target branch)
+    branches: [ "main", "test" ]
+
+permissions:
+  contents: read
+
+jobs:
+  source_branch_gate:
+    name: source-branch-gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce allowed PR directions
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="${{ github.base_ref }}"
+          HEAD="${{ github.head_ref }}"
+          echo "PR base=$BASE head=$HEAD"
+
+          # main must ONLY accept PRs from test
+          if [[ "$BASE" == "main" && "$HEAD" != "test" ]]; then
+            echo "❌ Blocked: main only accepts pull requests from the 'test' branch."
+            exit 1
+          fi
+
+          # Optional: block main -> test PRs explicitly
+          if [[ "$BASE" == "test" && "$HEAD" == "main" ]]; then
+            echo "❌ Blocked: do not merge 'main' into 'test'."
+            exit 1
+          fi
+
+          echo "✅ OK"
