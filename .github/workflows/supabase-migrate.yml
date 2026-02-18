@@ -39,6 +39,9 @@ jobs:
           MIG_DIR="supabase/migrations"
           REP_DIR="supabase/repeatable"
 
+          test -d "$MIG_DIR" || { echo "Missing $MIG_DIR"; exit 1; }
+          test -d "$REP_DIR" || { echo "Missing $REP_DIR"; exit 1; }
+
           echo "Running on branch: $GITHUB_REF_NAME"
 
           # 1) Ensure ledger exists
@@ -64,39 +67,42 @@ jobs:
           echo "Existing public tables (excluding ledger): ${EXISTING_PUBLIC_TABLES}"
           echo "Ledger rows: ${LEDGER_COUNT}"
 
-          # Helper: apply a SQL file
           apply_file () {
             local f="$1"
             psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -f "$f"
           }
 
-          # Helper: record a migration as applied (by basename)
+          record_name () {
+            local name="$1"
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -c \
+              "insert into public.schema_migrations(filename) values ('$name') on conflict (filename) do nothing;"
+          }
+
           record_migration () {
             local f="$1"
             local base
             base="$(basename "$f")"
-            psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -c \
-              "insert into public.schema_migrations(filename) values ('$base') on conflict (filename) do nothing;"
+            record_name "$base"
           }
 
+          # Gather migration files
+          shopt -s nullglob
+          MIG_FILES=( "$MIG_DIR"/*.sql )
+          IFS=$'\n' MIG_FILES_SORTED=( $(printf "%s\n" "${MIG_FILES[@]}" | sort) )
+          unset IFS
+
           # 3) Bootstrap mode:
-          # If DB is already populated AND ledger empty, mark all current migration files as applied
-          # (prevents re-running historical files on live/test restores).
+          # If DB is already populated AND ledger empty, mark all current migration files as applied (no replay)
+          # AND also write a sentinel so future runs go NORMAL even if there were no files at bootstrap time.
           if [[ "${LEDGER_COUNT}" == "0" && "${EXISTING_PUBLIC_TABLES}" != "0" ]]; then
-            echo "BOOTSTRAP: DB already populated; marking all existing migrations as applied (no replay)."
-            shopt -s nullglob
-            MIG_FILES=( "$MIG_DIR"/*.sql )
-            for f in "${MIG_FILES[@]}"; do
+            echo "BOOTSTRAP: DB already populated; marking existing migrations as applied (no replay)."
+            for f in "${MIG_FILES_SORTED[@]}"; do
               record_migration "$f"
             done
+            record_name "__BOOTSTRAPPED__"
           else
             # 4) Normal mode: apply only migrations not in ledger
             echo "NORMAL: applying new one-time migrations (if any)."
-            shopt -s nullglob
-            MIG_FILES=( "$MIG_DIR"/*.sql )
-            IFS=$'\n' MIG_FILES_SORTED=( $(printf "%s\n" "${MIG_FILES[@]}" | sort) )
-            unset IFS
-
             for f in "${MIG_FILES_SORTED[@]}"; do
               base="$(basename "$f")"
               already=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -tAc \
@@ -113,7 +119,6 @@ jobs:
 
           # 5) Always apply repeatables (functions/views) every run
           echo "Applying repeatables (always)."
-          shopt -s nullglob
           REP_FILES=( "$REP_DIR"/*.sql )
           IFS=$'\n' REP_FILES_SORTED=( $(printf "%s\n" "${REP_FILES[@]}" | sort) )
           unset IFS
