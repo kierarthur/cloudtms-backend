@@ -1,5 +1,5 @@
 /**
- * CloudTMS Broker (Cloudflare Worker) — Auth + Timesheets API (no Google Sheets)
+ * CloudTMS Broker (Cloudflare Worker) — Auth + Timesheets API (no Google Sheets) HELLO WORLD
  *
  * Endpoints:
  *  - POST   /auth/login
