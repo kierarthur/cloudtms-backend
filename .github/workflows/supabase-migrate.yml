@@ -1,37 +1,131 @@
-name: Supabase Migrations
+name: Supabase Migrate (safe)
 
 on:
   push:
-    branches: [ main ]  # if your default branch is 'main'
+    branches: [ "main", "test" ]
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/repeatable/**"
+      - ".github/workflows/supabase-migrate.yml"
+  workflow_dispatch: {}
 
 jobs:
   migrate:
     runs-on: ubuntu-latest
 
+    env:
+      # main -> live DB, test -> test DB
+      DB_URL: ${{ github.ref_name == 'main' && secrets.SUPABASE_DB_URL || secrets.SUPABASE_DB_URL_TEST }}
+
     steps:
-      - name: Check out repo
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install psql client
+      - name: Install psql
         run: |
           sudo apt-get update
           sudo apt-get install -y postgresql-client
 
-      - name: Run migrations against Supabase
-        env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      - name: Apply migrations + repeatables
+        shell: bash
         run: |
-          echo "Using DB URL: $SUPABASE_DB_URL"
-          if [ ! -d "supabase/migrations" ]; then
-            echo "No supabase/migrations directory found, skipping."
-            exit 0
+          set -euo pipefail
+
+          if [[ -z "${DB_URL:-}" ]]; then
+            echo "DB_URL is not set. Check GitHub secrets."
+            exit 1
           fi
 
-          for f in supabase/migrations/*.sql; do
-            if [ -f "$f" ]; then
-              echo "Applying migration: $f"
-              psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f "$f"
-            fi
+          MIG_DIR="supabase/migrations"
+          REP_DIR="supabase/repeatable"
+
+          test -d "$MIG_DIR" || { echo "Missing $MIG_DIR"; exit 1; }
+          test -d "$REP_DIR" || { echo "Missing $REP_DIR"; exit 1; }
+
+          echo "Running on branch: $GITHUB_REF_NAME"
+
+          # 1) Ensure ledger exists
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q <<'SQL'
+          create table if not exists public.schema_migrations (
+            filename text primary key,
+            applied_at timestamptz not null default now()
+          );
+          SQL
+
+          # 2) Detect whether DB already has schema (bootstrap guard)
+          EXISTING_PUBLIC_TABLES=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -tAc "
+            select count(*)
+            from pg_catalog.pg_tables
+            where schemaname = 'public'
+              and tablename <> 'schema_migrations'
+          " | tr -d '[:space:]')
+
+          LEDGER_COUNT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -tAc "
+            select count(*) from public.schema_migrations
+          " | tr -d '[:space:]')
+
+          echo "Existing public tables (excluding ledger): ${EXISTING_PUBLIC_TABLES}"
+          echo "Ledger rows: ${LEDGER_COUNT}"
+
+          apply_file () {
+            local f="$1"
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -f "$f"
+          }
+
+          record_name () {
+            local name="$1"
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -c \
+              "insert into public.schema_migrations(filename) values ('$name') on conflict (filename) do nothing;"
+          }
+
+          record_migration () {
+            local f="$1"
+            local base
+            base="$(basename "$f")"
+            record_name "$base"
+          }
+
+          # Gather migration files
+          shopt -s nullglob
+          MIG_FILES=( "$MIG_DIR"/*.sql )
+          IFS=$'\n' MIG_FILES_SORTED=( $(printf "%s\n" "${MIG_FILES[@]}" | sort) )
+          unset IFS
+
+          # 3) Bootstrap mode:
+          # If DB is already populated AND ledger empty, mark all current migration files as applied (no replay)
+          # AND also write a sentinel so future runs go NORMAL even if there were no files at bootstrap time.
+          if [[ "${LEDGER_COUNT}" == "0" && "${EXISTING_PUBLIC_TABLES}" != "0" ]]; then
+            echo "BOOTSTRAP: DB already populated; marking existing migrations as applied (no replay)."
+            for f in "${MIG_FILES_SORTED[@]}"; do
+              record_migration "$f"
+            done
+            record_name "__BOOTSTRAPPED__"
+          else
+            # 4) Normal mode: apply only migrations not in ledger
+            echo "NORMAL: applying new one-time migrations (if any)."
+            for f in "${MIG_FILES_SORTED[@]}"; do
+              base="$(basename "$f")"
+              already=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -tAc \
+                "select 1 from public.schema_migrations where filename = '$base' limit 1;" | tr -d '[:space:]')
+              if [[ "$already" == "1" ]]; then
+                echo "SKIP migration: $base"
+              else
+                echo "APPLY migration: $base"
+                apply_file "$f"
+                record_migration "$f"
+              fi
+            done
+          fi
+
+          # 5) Always apply repeatables (functions/views) every run
+          echo "Applying repeatables (always)."
+          REP_FILES=( "$REP_DIR"/*.sql )
+          IFS=$'\n' REP_FILES_SORTED=( $(printf "%s\n" "${REP_FILES[@]}" | sort) )
+          unset IFS
+
+          for f in "${REP_FILES_SORTED[@]}"; do
+            echo "APPLY repeatable: $(basename "$f")"
+            apply_file "$f"
           done
 
-          echo "All migrations applied."
+          echo "Done."
