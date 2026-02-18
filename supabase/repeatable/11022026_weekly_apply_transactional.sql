@@ -1,3 +1,4 @@
+
 CREATE OR REPLACE FUNCTION public.hr_weekly_apply_transactional(p_import_id uuid, p_payload jsonb, p_actor_user_id uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -958,7 +959,7 @@ begin
   left join tmp_invalidation_actions ia
     on ia.timesheet_id = vr.timesheet_id
    and ia.comparison_key = nullif(btrim(coalesce(cx.value->>'comparison_key','')), '')
-  where upper(coalesce(cx.value->>'match_status','')) = 'UNMATCHED'
+  where upper(coalesce(cx.value->>'match_status','')) in ('UNMATCHED','MISMATCH')
     and (lower(coalesce(cx.value->>'invoice_locked','false')) in ('true','1')) is false
     and nullif(btrim(coalesce(cx.value->>'invoice_locked_invoice_id','')), '') is null
     and nullif(btrim(coalesce(cx.value->>'ref_before','')), '') is not null
@@ -1071,7 +1072,6 @@ begin
    and vmm.mode = 'MODE_A'
   cross join lateral jsonb_array_elements(coalesce(vrm.row_json->'comparisons', '[]'::jsonb)) as cx2(value)
   where vrm.timesheet_id is not null
-    and vrm.overall_status in ('OK','PASS','VALIDATION_OK','OVERRIDDEN','OVERRIDE')
     and (
       upper(coalesce(cx2.value->>'match_status','')) in ('MATCH','MATCHED','OK','PASS')
       or (lower(coalesce(cx2.value->>'match','false')) in ('true','1'))
