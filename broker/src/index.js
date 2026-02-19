@@ -47879,6 +47879,49 @@ async function handleGetHospital(env, req, clientId, hospitalId) {
     return withCORS(env, req, serverError("Failed to fetch client hospital"));
   }
 }
+
+async function handleClientEHistory(env, req, clientId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const enc = encodeURIComponent;
+
+  try {
+    // Legacy contract rate lines (flat) filtered by client_id
+    // View definition includes: candidate_name (cand.display_name), start/end, job_title,
+    // pay_method, label, pay_rate, margin, charge_rate, line_no, etc.
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/v_legacy_contract_rate_lines_flat` +
+        `?client_id=eq.${enc(clientId)}` +
+        `&select=` +
+          [
+            'candidate_id',
+            'candidate_name',
+            'start_date',
+            'end_date',
+            'job_title',
+            'pay_method',
+            'label',
+            'pay_rate',
+            'margin',
+            'charge_rate',
+            'line_no'
+          ].join(',') +
+        `&order=start_date.desc,end_date.desc,line_no.asc`
+    );
+
+    return withCORS(env, req, ok({ rows: Array.isArray(rows) ? rows : [] }));
+  } catch (e) {
+    console.error('handleClientEHistory failed', {
+      client_id: clientId,
+      err: e?.message || String(e)
+    });
+    return withCORS(env, req, serverError('Failed to fetch client e-history'));
+  }
+}
+
+
 async function handleCandidatesGet(env, req, candidateId) {
   const enc = encodeURIComponent;
 
