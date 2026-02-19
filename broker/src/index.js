@@ -8187,7 +8187,43 @@ async function handleCandidateCalendar(env, req, candidateId) {
     return withCORS(env, req, serverError('candidate calendar failed'));
   }
 }
+async function handleCandidateEHistory(env, req, candidateId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
 
+  const enc = encodeURIComponent;
+
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/v_legacy_contract_rate_lines_flat` +
+        `?candidate_id=eq.${enc(candidateId)}` +
+        `&select=` +
+          [
+            'client_id',
+            'client_name',
+            'start_date',
+            'end_date',
+            'job_title',
+            'pay_method',
+            'label',
+            'pay_rate',
+            'margin',
+            'charge_rate',
+            'line_no'
+          ].join(',') +
+        `&order=start_date.desc,end_date.desc,line_no.asc`
+    );
+
+    return withCORS(env, req, ok({ rows: Array.isArray(rows) ? rows : [] }));
+  } catch (e) {
+    console.error('handleCandidateEHistory failed', {
+      candidate_id: candidateId,
+      err: e?.message || String(e)
+    });
+    return withCORS(env, req, serverError('Failed to fetch candidate e-history'));
+  }
+}
 async function handleContractsSkipWeeks(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
