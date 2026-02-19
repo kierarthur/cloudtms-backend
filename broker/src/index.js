@@ -6798,9 +6798,12 @@ async function handleContractsUpdate(env, req, contractId) {
 // === Strict full-replace (PUT) ===
 
 // === Strict full-replace (PUT /api/contracts/:id) ===
+
 async function handleContractsReplace(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+
+  const enc = encodeURIComponent;
 
   let body;
   try { body = await parseJSONBody(req); }
@@ -6898,7 +6901,7 @@ async function handleContractsReplace(env, req, contractId) {
     return sorted;
   };
 
-  // ✅ UPDATED: start_date/end_date/default_submission_mode are no longer required (backend authoritative / FE may omit)
+  // start_date/end_date/default_submission_mode are no longer required (backend authoritative / FE may omit)
   const requiredKeys = ['client_id','pay_method_snapshot','week_ending_weekday_snapshot','rates_json'];
   const missing = requiredKeys.filter(k => !(k in body));
   if (missing.length) return withCORS(env, req, badRequest(`Missing required fields: ${missing.join(', ')}`));
@@ -6922,14 +6925,12 @@ async function handleContractsReplace(env, req, contractId) {
     return clampBool(v, fallbackBool);
   };
 
-  // ✅ NEW: overrideclientsettings (effective value for this write)
+  // overrideclientsettings (effective value for this write)
   const hasOverrideClientSettings = Object.prototype.hasOwnProperty.call(body, 'overrideclientsettings');
   const overrideclientsettings = hasOverrideClientSettings
     ? clampBool(body.overrideclientsettings, !!current.overrideclientsettings)
     : !!current.overrideclientsettings;
 
-  // ✅ UPDATED: validate/normalise incoming default_submission_mode (if present)
-  // but do NOT treat it as a change unless overrideclientsettings=true AND it would actually change stored value.
   const parseDefaultSubmissionMode = (raw) => {
     const s = (raw == null) ? '' : String(raw).trim().toUpperCase();
     if (!s || s === 'INHERIT') return null;
@@ -6965,7 +6966,7 @@ async function handleContractsReplace(env, req, contractId) {
     }
   }
 
-  // ✅ Validate default_submission_mode early if present (even if we might ignore it)
+  // Validate default_submission_mode early if present
   let desiredDefaultSubmissionMode = current.default_submission_mode ?? null;
   if ('default_submission_mode' in body) {
     const parsed = parseDefaultSubmissionMode(body.default_submission_mode);
@@ -6974,6 +6975,11 @@ async function handleContractsReplace(env, req, contractId) {
     }
     desiredDefaultSubmissionMode = parsed;
   }
+
+  // ---- detect attempted week-ending change (used for safe blocking under submitted TS) ----
+  const curWewNum = Number(current.week_ending_weekday_snapshot ?? 0);
+  const bodyWewNum = ('week_ending_weekday_snapshot' in body) ? Number(body.week_ending_weekday_snapshot) : curWewNum;
+  const attemptedWeekdayChange = ('week_ending_weekday_snapshot' in body) && (Number.isFinite(bodyWewNum)) && (bodyWewNum !== curWewNum);
 
   if (hasSubmitted) {
     // Treat omitted fields as “no change” (defensive)
@@ -7014,8 +7020,12 @@ async function handleContractsReplace(env, req, contractId) {
       return withCORS(env, req, badRequest('Cannot change overrideclientsettings after timesheets have been submitted'));
     }
 
-    // ✅ FIX: only block default_submission_mode when overrideclientsettings=true AND it would actually change stored value.
-    // If overrideclientsettings=false, treat it as INHERIT (ignored for behaviour) and do not error.
+    // Block changing week-ending day once real TS exist (explicit and safe)
+    if (attemptedWeekdayChange) {
+      return withCORS(env, req, badRequest('Cannot change week_ending_weekday_snapshot after timesheets have been submitted'));
+    }
+
+    // Only block default_submission_mode when overrideclientsettings=true AND it would actually change stored value.
     if ('default_submission_mode' in body && overrideclientsettings === true) {
       const curDsm = current.default_submission_mode ?? null;
       const nextDsm = desiredDefaultSubmissionMode ?? null;
@@ -7025,11 +7035,7 @@ async function handleContractsReplace(env, req, contractId) {
     }
   }
 
-  // ✅ IMPORTANT:
-  // - If overrideclientsettings=true → store desiredDefaultSubmissionMode (can be null to clear).
-  // - If overrideclientsettings=false:
-  //     - When NO submitted TS: enforce NULL (align to brief / cleans legacy).
-  //     - When submitted TS exist: preserve whatever is currently stored to avoid “changing settings” on old legacy rows.
+  // Storage rules for default_submission_mode
   let default_submission_mode_to_store = null;
   if (overrideclientsettings === true) {
     default_submission_mode_to_store = desiredDefaultSubmissionMode ?? null;
@@ -7040,11 +7046,10 @@ async function handleContractsReplace(env, req, contractId) {
   const extraWarnings = [];
   let wew;
 
-  if (hasSubmitted || hasWeeks) {
+  // ✅ UPDATED: only “freeze” week-ending when submitted TS exist.
+  // If not submitted, allow change (even if weeks exist) and regenerate weeks safely later.
+  if (hasSubmitted) {
     wew = Number(current.week_ending_weekday_snapshot ?? 0);
-    if ('week_ending_weekday_snapshot' in body && Number(body.week_ending_weekday_snapshot) !== wew) {
-      extraWarnings.push('Week-ending day change ignored because weeks/timesheets exist.');
-    }
   } else {
     if ('week_ending_weekday_snapshot' in body) {
       const cand = Number(body.week_ending_weekday_snapshot);
@@ -7140,7 +7145,6 @@ async function handleContractsReplace(env, req, contractId) {
 
     pay_method_snapshot: String(body.pay_method_snapshot||current.pay_method_snapshot).toUpperCase(),
 
-    // ✅ IMPORTANT: storage is gated by overrideclientsettings + hasSubmitted legacy preservation
     default_submission_mode: default_submission_mode_to_store,
 
     week_ending_weekday_snapshot: wew,
@@ -7213,7 +7217,6 @@ async function handleContractsReplace(env, req, contractId) {
       if (desired !== cur) changed.push(k);
     }
 
-    // include overrideclientsettings / default_submission_mode
     if (overrideclientsettings !== !!current.overrideclientsettings) changed.push('overrideclientsettings');
     if ((current.default_submission_mode ?? null) !== (patch.default_submission_mode ?? null)) changed.push('default_submission_mode');
 
@@ -7257,14 +7260,14 @@ async function handleContractsReplace(env, req, contractId) {
   if (!res.ok) return withCORS(env, req, serverError(await res.text()));
   let updated = (await res.json().catch(()=>[]))[0];
 
-  const windowChanged =
-    (('start_date' in body) && toYmd(body.start_date) !== (current.start_date || '')) ||
-    (('end_date'   in body) && toYmd(body.end_date)   !== (current.end_date   || ''));
+  // ✅ windowChanged should reflect effective stored window (based on newStart/newEnd vs current)
+  const windowChanged = (String(newStart || '') !== String(current.start_date || '')) ||
+                        (String(newEnd   || '') !== String(current.end_date   || ''));
 
-  const weekdayChanged =
-    (('week_ending_weekday_snapshot' in body) &&
-     Number(body.week_ending_weekday_snapshot) !== Number(current.week_ending_weekday_snapshot ?? body.week_ending_weekday_snapshot));
+  // ✅ weekdayChanged should reflect effective stored week ending (based on computed wew vs current)
+  const weekdayChanged = Number(wew) !== Number(current.week_ending_weekday_snapshot ?? 0);
 
+  // Keep existing “delete out of range” logic only for rows with timesheet_id IS NULL
   if (windowChanged) {
     const del = await fetch(
       `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&timesheet_id=is.null&or=(week_ending_date.lt.${enc(newStart)},week_ending_date.gt.${enc(newEnd)})`,
@@ -7273,11 +7276,34 @@ async function handleContractsReplace(env, req, contractId) {
     try { await del.arrayBuffer(); } catch {}
   }
 
-  if ((windowChanged || weekdayChanged) && !hasSubmitted && !body.skip_generate_weeks) {
-    try {
-      await handleContractsGenerateWeeks(env, req, contractId);
-    } catch (e) {
-      try { console.warn('[CONTRACTS][REPLACE] regenerate weeks failed', { contractId, error: e?.message || String(e) }); } catch {}
+  // ✅ UPDATED week generation rules:
+  // - If windowChanged and !skip_generate_weeks: ALWAYS generate missing weeks (even if hasSubmitted).
+  // - If weekdayChanged and !skip_generate_weeks:
+  //     - if hasSubmitted: already blocked above; defensively skip here.
+  //     - else: delete all draft weeks (timesheet_id IS NULL) then regenerate under new weekday.
+  if (!body.skip_generate_weeks) {
+    if (weekdayChanged) {
+      if (!hasSubmitted) {
+        // Delete all draft weeks so regeneration doesn't duplicate old weekday structure
+        const delAllDraft = await fetch(
+          `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&timesheet_id=is.null`,
+          { method:'DELETE', headers: { ...sbHeaders(env), 'Prefer':'return-minimal' } }
+        );
+        try { await delAllDraft.arrayBuffer(); } catch {}
+
+        try {
+          await handleContractsGenerateWeeks(env, req, contractId);
+        } catch (e) {
+          try { console.warn('[CONTRACTS][REPLACE] regenerate weeks (weekdayChanged) failed', { contractId, error: e?.message || String(e) }); } catch {}
+        }
+      }
+    } else if (windowChanged) {
+      // Always add missing weeks on date-window change (even if submitted TS exist)
+      try {
+        await handleContractsGenerateWeeks(env, req, contractId);
+      } catch (e) {
+        try { console.warn('[CONTRACTS][REPLACE] generate weeks (windowChanged) failed', { contractId, error: e?.message || String(e) }); } catch {}
+      }
     }
   }
 
@@ -7340,8 +7366,6 @@ async function handleContractsReplace(env, req, contractId) {
   const warnings = Array.isArray(warnings0) ? [...warnings0, ...extraWarnings] : [...extraWarnings];
   return withCORS(env, req, ok({ contract: updated, warnings }));
 }
-
-
 async function handleContractsDuplicate(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -39838,15 +39862,20 @@ async function handleSearchInvoices(env, req) {
 // SEARCH — Clients (richer filters + csv/print)
 // ───────────────────────────────────────────────────────────────────────────────
 
- async function handleSearchClients(env, req) {
+async function handleSearchClients(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+
+  const enc = encodeURIComponent;
 
   const urlObj = new URL(req.url);
   const q = (k) => urlObj.searchParams.get(k);
   const page     = Math.max(1, parseInt(q('page') || '1', 10));
   const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
   const format   = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
+
+  // ✅ NEW: include_count support
+  const includeCount = String(q('include_count') || 'false').toLowerCase() === 'true';
 
   // Sorting
   const orderByParam = (q('order_by') || '').toLowerCase();
@@ -39920,11 +39949,16 @@ async function handleSearchInvoices(env, req) {
   if (updatedTo)    url += `&updated_at=lte.${enc(updatedTo)}`;
 
   let rows = [];
+  let total = undefined;
   try {
-    ({ rows } = await sbFetch(env, url));
+    const res = await sbFetch(env, url, includeCount);
+    rows = res?.rows || [];
+    total = res?.total;
   } catch (err) {
     return withCORS(env, req, ok({ error: String(err?.message || err), rows: [], page, page_size: pageSize, count: 0 }));
   }
+
+  const respCount = includeCount ? (typeof total === 'number' ? total : (rows?.length || 0)) : (rows?.length || 0);
 
   if (format === 'csv') {
     const header = [
@@ -39960,7 +39994,7 @@ async function handleSearchInvoices(env, req) {
         r.updated_at || ''
       ]));
     }
-    return withCORS(env, req, ok({ csv: out.join('\n'), count: rows?.length || 0, page, page_size: pageSize }));
+    return withCORS(env, req, ok({ csv: out.join('\n'), count: respCount, page, page_size: pageSize }));
   }
 
   if (format === 'print') {
@@ -39993,25 +40027,29 @@ async function handleSearchInvoices(env, req) {
           <tbody>${rowsHtml}</tbody>
         </table>
       </div>`;
-    return withCORS(env, req, ok({ html, count: rows?.length || 0, page, page_size: pageSize }));
+    return withCORS(env, req, ok({ html, count: respCount, page, page_size: pageSize }));
   }
 
-  return withCORS(env, req, ok({ rows, page, page_size: pageSize, count: rows?.length || 0 }));
+  return withCORS(env, req, ok({ rows, page, page_size: pageSize, count: respCount }));
 }
-
 
 // ───────────────────────────────────────────────────────────────────────────────
 // SEARCH — Umbrellas (richer filters + csv/print)
 // ───────────────────────────────────────────────────────────────────────────────
- async function handleSearchUmbrellas(env, req) {
+async function handleSearchUmbrellas(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+
+  const enc = encodeURIComponent;
 
   const urlObj = new URL(req.url);
   const q = (k) => urlObj.searchParams.get(k);
   const page     = Math.max(1, parseInt(q('page') || '1', 10));
   const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
   const format   = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
+
+  // ✅ NEW: include_count support
+  const includeCount = String(q('include_count') || 'false').toLowerCase() === 'true';
 
   // Sorting
   const orderByParam = (q('order_by') || '').toLowerCase();
@@ -40069,11 +40107,16 @@ async function handleSearchInvoices(env, req) {
   if (createdTo)   url += `&created_at=lte.${enc(createdTo)}`;
 
   let rows = [];
+  let total = undefined;
   try {
-    ({ rows } = await sbFetch(env, url));
+    const res = await sbFetch(env, url, includeCount);
+    rows = res?.rows || [];
+    total = res?.total;
   } catch (err) {
     return withCORS(env, req, ok({ error: String(err?.message || err), rows: [], page, page_size: pageSize, count: 0 }));
   }
+
+  const respCount = includeCount ? (typeof total === 'number' ? total : (rows?.length || 0)) : (rows?.length || 0);
 
   if (format === 'csv') {
     const header = ['UmbrellaId','Name','Enabled','VATChargeable','Bank','SortCode','AccountNumber','CreatedAt'];
@@ -40090,7 +40133,7 @@ async function handleSearchInvoices(env, req) {
         r.created_at || ''
       ]));
     }
-    return withCORS(env, req, ok({ csv: out.join('\n'), count: rows?.length || 0, page, page_size: pageSize }));
+    return withCORS(env, req, ok({ csv: out.join('\n'), count: respCount, page, page_size: pageSize }));
   }
 
   if (format === 'print') {
@@ -40115,10 +40158,10 @@ async function handleSearchInvoices(env, req) {
           <tbody>${rowsHtml}</tbody>
         </table>
       </div>`;
-    return withCORS(env, req, ok({ html, count: rows?.length || 0, page, page_size: pageSize }));
+    return withCORS(env, req, ok({ html, count: respCount, page, page_size: pageSize }));
   }
 
-  return withCORS(env, req, ok({ rows, page, page_size: pageSize, count: rows?.length || 0 }));
+  return withCORS(env, req, ok({ rows, page, page_size: pageSize, count: respCount }));
 }
 
 
@@ -44802,15 +44845,19 @@ async function handleCreateClient(env, req) {
 
 
 // 1) GET /api/clients/:id  (full client + latest client_settings)
+
+
 async function handleGetClient(env, req, clientId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+
+  const enc = encodeURIComponent;
 
   try {
     // Client (explicit select=* so ts_queries_email etc always present)
     const { rows } = await sbFetch(
       env,
-      `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(clientId)}&select=*&limit=1`
+      `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${enc(clientId)}&select=*&limit=1`
     );
     if (!rows.length) return withCORS(env, req, notFound("Client not found"));
     const client = rows[0];
@@ -44819,7 +44866,7 @@ async function handleGetClient(env, req, clientId) {
     const { rows: csRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/client_settings` +
-      `?client_id=eq.${encodeURIComponent(clientId)}` +
+      `?client_id=eq.${enc(clientId)}` +
       `&select=` +
         [
           'id','client_id',
@@ -44853,8 +44900,32 @@ async function handleGetClient(env, req, clientId) {
 
     const client_settings = csRows?.[0] || null;
 
-    return withCORS(env, req, ok({ client, client_settings }));
-  } catch {
+    // has_e_history (client-level) for Client modal E-History tab enablement
+    let has_e_history = false;
+    try {
+      // Option B: smaller existence check via v_legacy_client_candidates
+      const { rows: histRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/v_legacy_client_candidates` +
+          `?client_id=eq.${enc(clientId)}` +
+          `&select=client_id` +
+          `&limit=1`
+      );
+      has_e_history = Array.isArray(histRows) && histRows.length > 0;
+    } catch (e) {
+      console.error('handleGetClient: legacy history existence check failed', {
+        client_id: clientId,
+        err: e?.message || String(e)
+      });
+      has_e_history = false;
+    }
+
+    return withCORS(env, req, ok({ client, client_settings, has_e_history }));
+  } catch (e) {
+    console.error('handleGetClient failed', {
+      client_id: clientId,
+      err: e?.message || String(e)
+    });
     return withCORS(env, req, serverError("Failed to fetch client"));
   }
 }
@@ -48311,9 +48382,11 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
 // Add pass-through support for PostgREST 'id=in.(...)' filter
 // ======================================
 
- async function handleSearchCandidates(env, req) {
+async function handleSearchCandidates(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+
+  const enc = encodeURIComponent;
 
   const urlObj = new URL(req.url);
   const q  = (k) => urlObj.searchParams.get(k);
@@ -48322,6 +48395,9 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
   const page     = Math.max(1, parseInt(q('page') || '1', 10));
   const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
   const format   = (q('format') || 'json').toLowerCase();
+
+  // ✅ NEW: include_count support (exact totals for pagination)
+  const includeCount = String(q('include_count') || 'false').toLowerCase() === 'true';
 
   // Sorting
   const orderByParam  = (q('order_by') || '').toLowerCase();
@@ -48355,8 +48431,8 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
   const createdTo   = q('created_to');
 
   // New job-title filters
-  const jobTitleContainsAll   = q('job_title_contains');            // all job titles
-  const primaryJobTitleContains = q('primary_job_title_contains');  // primary only
+  const jobTitleContainsAll     = q('job_title_contains');            // all job titles
+  const primaryJobTitleContains = q('primary_job_title_contains');    // primary only
 
   // New professional registration filters
   const profRegNumber = q('prof_reg_number');
@@ -48402,18 +48478,76 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
   rolesAny = Array.from(new Set(rolesAny.map(s => s.toUpperCase())));
   rolesAll = Array.from(new Set(rolesAll.map(s => s.toUpperCase())));
 
-  // Use the summary view and return the FULL row to keep grid prefs + CSV happy
+  // ✅ NEW: Working-status filter (Candidates Tools dropdown)
+  const workStatus = String(q('work_status') || '').trim().toUpperCase(); // ALL|CURRENT|RECENT|NOT
+  const recentMonthsRaw = q('recent_months');
+  const recentMonths =
+    Number.isFinite(parseInt(recentMonthsRaw || '', 10))
+      ? Math.max(1, Math.min(120, parseInt(recentMonthsRaw, 10)))
+      : 3;
+
+  // ---- local date helpers for cutoff (Europe/London day anchor) ----
+  const londonYMDNow = () => {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/London',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).formatToParts(new Date());
+    const get = (type) => (parts.find(p => p.type === type)?.value || '');
+    return `${get('year')}-${get('month')}-${get('day')}`;
+  };
+
+  const subtractMonthsYMD = (ymd, months) => {
+    const y0 = Number(String(ymd).slice(0, 4));
+    const m0 = Number(String(ymd).slice(5, 7));
+    const d0 = Number(String(ymd).slice(8, 10));
+    const mm = Math.max(0, Math.trunc(Number(months) || 0));
+
+    let total = (y0 * 12 + (m0 - 1)) - mm;
+    let y1 = Math.floor(total / 12);
+    let m1 = total % 12;
+    if (m1 < 0) { m1 += 12; y1 -= 1; }
+
+    const daysInTargetMonth = new Date(Date.UTC(y1, m1 + 1, 0)).getUTCDate();
+    const d1 = Math.min(d0, daysInTargetMonth);
+
+    return `${String(y1).padStart(4,'0')}-${String(m1+1).padStart(2,'0')}-${String(d1).padStart(2,'0')}`;
+  };
+
+  const cutoffYMD = (workStatus === 'RECENT' || workStatus === 'NOT')
+    ? subtractMonthsYMD(londonYMDNow(), recentMonths)
+    : null;
+
+  // ✅ Use activity view so work-status filters are fast + server-side
   let url =
-    `${env.SUPABASE_URL}/rest/v1/candidates_summary` +
+    `${env.SUPABASE_URL}/rest/v1/candidates_summary_activity` +
     `?select=*` +
     `&order=${enc(orderCol)}.${orderDir}` +
     `&limit=${pageSize}&offset=${(page - 1) * pageSize}`;
 
-  // Free-text: search name, email, and all job titles
-  // (NB: roles_any OR below will overwrite this or-clause if both are used)
+  // --- OR handling (free-text / roles_any / NOT-working null-vs-lt cutoff) ---
+  // We must keep a single `or=` param. If we need (A OR B) AND (D OR E),
+  // we expand to OR of AND terms: or=(and(A,D),and(A,E),and(B,D),and(B,E))
+  let orParts = null; // array of raw PostgREST predicate strings (already encoded where needed)
+
+  // Free-text OR group: search name/email/job titles
   if (text) {
     const esc = enc(text);
-    url += `&or=(display_name.ilike.*${esc}*,email.ilike.*${esc}*,job_titles_display.ilike.*${esc}*)`;
+    orParts = [
+      `display_name.ilike.*${esc}*`,
+      `email.ilike.*${esc}*`,
+      `job_titles_display.ilike.*${esc}*`
+    ];
+  }
+
+  // Care Package Roles – roles_any (OR). Note: this will overwrite any existing `or=` (e.g. free-text) – preserving prior semantics.
+  if (rolesAny.length) {
+    const parts = rolesAny.map(code => {
+      const val = enc(JSON.stringify([{ code }]));
+      return `roles.cs.${val}`;
+    });
+    orParts = parts;
   }
 
   // Basic name / contact / pay filters
@@ -48480,18 +48614,43 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
     }
   }
 
-  // Care Package Roles – roles_any (OR). Note: this will overwrite any existing `or=` (e.g. free-text)
-  if (rolesAny.length) {
-    const parts = rolesAny.map(code => {
-      const val = enc(JSON.stringify([{ code }]));
-      return `roles.cs.${val}`;
-    });
-    url += `&or=(${parts.join(',')})`;
+  // ✅ Work status filters (fast server-side via candidates_summary_activity)
+  if (workStatus === 'CURRENT') {
+    url += `&is_currently_working=eq.true`;
+  } else if (workStatus === 'RECENT') {
+    // Must be NOT currently working, and last timesheet within cutoff
+    url += `&is_currently_working=eq.false`;
+    if (cutoffYMD) url += `&last_timesheet_week_ending=gte.${enc(cutoffYMD)}`;
+  } else if (workStatus === 'NOT') {
+    // Must be NOT currently working, and (last_ts is null OR last_ts < cutoff)
+    url += `&is_currently_working=eq.false`;
+    const d1 = `last_timesheet_week_ending.is.null`;
+    const d2 = cutoffYMD ? `last_timesheet_week_ending.lt.${enc(cutoffYMD)}` : `last_timesheet_week_ending.is.null`;
+
+    if (Array.isArray(orParts) && orParts.length) {
+      const combined = [];
+      for (const p of orParts) {
+        combined.push(`and(${p},${d1})`);
+        combined.push(`and(${p},${d2})`);
+      }
+      orParts = combined;
+    } else {
+      orParts = [d1, d2];
+    }
+  }
+
+  // Apply OR (if any) once at the end (single or= param)
+  if (Array.isArray(orParts) && orParts.length) {
+    url += `&or=(${orParts.join(',')})`;
   }
 
   let rows = [];
+  let total = undefined;
+
   try {
-    ({ rows } = await sbFetch(env, url));
+    const res = await sbFetch(env, url, includeCount);
+    rows = res?.rows || [];
+    total = res?.total;
   } catch (err) {
     return withCORS(env, req, ok({
       error: String(err?.message || err),
@@ -48501,6 +48660,8 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
       count: 0
     }));
   }
+
+  const respCount = includeCount ? (typeof total === 'number' ? total : (rows?.length || 0)) : (rows?.length || 0);
 
   // CSV : keep rota roles vs job titles separate
   if (format === 'csv') {
@@ -48535,13 +48696,13 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
     }
     return withCORS(env, req, ok({
       csv: out.join('\n'),
-      count: rows?.length || 0,
+      count: respCount,
       page,
       page_size: pageSize
     }));
   }
 
-  // Print HTML 
+  // Print HTML
   if (format === 'print') {
     const rowsHtml = (rows || []).map(r => `
       <tr>
@@ -48564,7 +48725,7 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
       </div>`;
     return withCORS(env, req, ok({
       html,
-      count: rows?.length || 0,
+      count: respCount,
       page,
       page_size: pageSize
     }));
@@ -48575,7 +48736,7 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
     rows,
     page,
     page_size: pageSize,
-    count: rows?.length || 0
+    count: respCount
   }));
 }
 
@@ -49752,13 +49913,48 @@ return withCORS(env, req, ok({
     return withCORS(env, req, serverError("Failed to update candidate"));
   }
 }
-
-
-
 async function handleGetCandidate(env, req, candidateId) {
   const enc  = encodeURIComponent;
   const user = await requireUser(env, req, ['admin']);
-  if (!user) return unauthorized();
+  if (!user) return withCORS(env, req, unauthorized());
+
+  // ---- local helpers (kept inside function for safety + no external deps) ----
+  const londonYMDNow = () => {
+    // Build YYYY-MM-DD in Europe/London reliably (no DST bugs)
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/London',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).formatToParts(new Date());
+
+    const get = (type) => (parts.find(p => p.type === type)?.value || '');
+    const y = get('year');
+    const m = get('month');
+    const d = get('day');
+    return `${y}-${m}-${d}`;
+  };
+
+  const subtractMonthsYMD = (ymd, months) => {
+    // ymd is YYYY-MM-DD. Subtract calendar months with end-of-month clamping.
+    const y0 = Number(String(ymd).slice(0, 4));
+    const m0 = Number(String(ymd).slice(5, 7));
+    const d0 = Number(String(ymd).slice(8, 10));
+    const mm = Math.max(0, Math.trunc(Number(months) || 0));
+
+    let total = (y0 * 12 + (m0 - 1)) - mm;
+    let y1 = Math.floor(total / 12);
+    let m1 = total % 12;
+    if (m1 < 0) { m1 += 12; y1 -= 1; } // defensive
+
+    const daysInTargetMonth = new Date(Date.UTC(y1, m1 + 1, 0)).getUTCDate();
+    const d1 = Math.min(d0, daysInTargetMonth);
+
+    const yy = String(y1).padStart(4, '0');
+    const mo = String(m1 + 1).padStart(2, '0');
+    const dd = String(d1).padStart(2, '0');
+    return `${yy}-${mo}-${dd}`;
+  };
 
   try {
     // Fetch candidate
@@ -49806,7 +50002,7 @@ async function handleGetCandidate(env, req, candidateId) {
       umbrella
     });
 
-    // NEW: fetch hr_name_mappings aliases for this candidate
+    // fetch hr_name_mappings aliases for this candidate
     let hr_aliases = [];
     try {
       const { rows: aliasRows } = await sbFetch(
@@ -49824,6 +50020,70 @@ async function handleGetCandidate(env, req, candidateId) {
       hr_aliases = [];
     }
 
+    // ---------------------------------------------------------------------
+    // has_e_history (existence check via v_legacy_candidate_contract_summary)
+    // ---------------------------------------------------------------------
+    let has_e_history = false;
+    try {
+      const { rows: histRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/v_legacy_candidate_contract_summary` +
+          `?candidate_id=eq.${enc(candidateId)}` +
+          `&select=candidate_id` +
+          `&limit=1`
+      );
+      has_e_history = Array.isArray(histRows) && histRows.length > 0;
+    } catch (e) {
+      console.error('handleGetCandidate: legacy history existence check failed', {
+        candidate_id: candidateId,
+        err: e?.message || String(e)
+      });
+      has_e_history = false;
+    }
+
+    // ---------------------------------------------------------------------
+    // work_status (via candidate_activity_rollup)
+    // ---------------------------------------------------------------------
+    const RECENT_MONTHS_DEFAULT = 3;
+
+    let is_currently_working = false;
+    let last_timesheet_week_ending = null;
+
+    try {
+      const { rows: actRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/candidate_activity_rollup` +
+          `?candidate_id=eq.${enc(candidateId)}` +
+          `&select=is_currently_working,last_timesheet_week_ending` +
+          `&limit=1`
+      );
+
+      const act = Array.isArray(actRows) ? actRows[0] : null;
+      is_currently_working = !!(act && act.is_currently_working);
+      last_timesheet_week_ending = (act && act.last_timesheet_week_ending) ? String(act.last_timesheet_week_ending) : null;
+    } catch (e) {
+      console.error('handleGetCandidate: candidate_activity_rollup lookup failed', {
+        candidate_id: candidateId,
+        err: e?.message || String(e)
+      });
+      is_currently_working = false;
+      last_timesheet_week_ending = null;
+    }
+
+    const anchorYMD = londonYMDNow();
+    const cutoffYMD = subtractMonthsYMD(anchorYMD, RECENT_MONTHS_DEFAULT);
+
+    const is_recently_worked =
+      (!is_currently_working) &&
+      !!last_timesheet_week_ending &&
+      (String(last_timesheet_week_ending) >= String(cutoffYMD));
+
+    const work_status = {
+      is_currently_working: !!is_currently_working,
+      is_recently_worked: !!is_recently_worked,
+      last_timesheet_week_ending: last_timesheet_week_ending
+    };
+
     return withCORS(
       env,
       req,
@@ -49831,12 +50091,115 @@ async function handleGetCandidate(env, req, candidateId) {
         candidate,
         effective_pay_channel,
         job_titles,
-        hr_aliases
+        hr_aliases,
+        has_e_history,
+        work_status
       })
     );
   } catch (e) {
     console.error('handleGetCandidate failed', e);
     return withCORS(env, req, serverError("Failed to fetch candidate"));
+  }
+}
+
+
+async function handleChangesPing(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  // Accept POST as intended; if other methods hit this handler, still respond safely.
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+
+  let lastSeen = {};
+  try {
+    if (body && typeof body === 'object') {
+      if (body.last_seen && typeof body.last_seen === 'object' && !Array.isArray(body.last_seen)) {
+        lastSeen = body.last_seen;
+      } else if (body.lastSeen && typeof body.lastSeen === 'object' && !Array.isArray(body.lastSeen)) {
+        // minor back-compat
+        lastSeen = body.lastSeen;
+      } else {
+        lastSeen = {};
+      }
+    }
+  } catch {
+    lastSeen = {};
+  }
+
+  try {
+    // RPC returns jsonb: { server_utc, seqs, changed }
+    const rpcRes = await sbRpc(env, 'rpc_changes_ping', { p_last_seen: lastSeen });
+
+    // Defensive unwrap for any unexpected PostgREST shapes
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'rpc_changes_ping')) {
+        payload = payload.rpc_changes_ping;
+      }
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
+  } catch (e) {
+    console.error('[CHANGES_PING] rpc_changes_ping failed', {
+      err: e?.message || String(e),
+      status: e?.status,
+      body: e?.body
+    });
+    return withCORS(env, req, serverError('Failed to ping changes'));
+  }
+}
+
+async function handleRolesGlobal(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  // Small in-memory cache (worker instance) to make repeated opens instant.
+  // TTL default: 10 minutes (within your requested 5–15 min window).
+  const TTL_MS = 10 * 60 * 1000;
+
+  try {
+    const g = (typeof globalThis !== 'undefined') ? globalThis : {};
+    g.__ROLES_GLOBAL_CACHE__ = g.__ROLES_GLOBAL_CACHE__ || { ts: 0, roles: [] };
+
+    const cache = g.__ROLES_GLOBAL_CACHE__;
+    const now = Date.now();
+
+    if (Array.isArray(cache.roles) && cache.roles.length && (now - (cache.ts || 0) < TTL_MS)) {
+      return withCORS(env, req, ok({ roles: cache.roles }));
+    }
+
+    // Source of truth: enabled client defaults view (already excludes disabled rows)
+    // Keep it single request; dedupe in JS.
+    const limit = 100000; // safe upper bound; roles are few but windows may be many
+    const url =
+      `${env.SUPABASE_URL}/rest/v1/v_rates_client_defaults_enabled` +
+      `?select=role` +
+      `&role=is.not.null` +
+      `&order=role.asc` +
+      `&limit=${limit}`;
+
+    const { rows } = await sbFetch(env, url);
+
+    const set = new Set();
+    for (const r of (rows || [])) {
+      const s = String(r?.role || '').trim();
+      if (!s) continue;
+      set.add(s);
+    }
+
+    const roles = Array.from(set).sort((a, b) => a.localeCompare(b));
+
+    cache.ts = now;
+    cache.roles = roles;
+
+    return withCORS(env, req, ok({ roles }));
+  } catch (e) {
+    console.error('[ROLES_GLOBAL] failed', { err: e?.message || String(e) });
+    return withCORS(env, req, serverError('Failed to load global roles'));
   }
 }
 
