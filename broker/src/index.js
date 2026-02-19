@@ -75905,6 +75905,41 @@ if (req.method === 'POST' && p === '/api/job-titles')                 return han
       if (req.method === 'GET' && p === '/api/rates/candidate-overrides/by-client') {
         return handleListOverridesByClient(env, req);
       }
+// ─────────────────────────────────────────────────────────────────────────────
+// Global “changes heartbeat” (multi-user freshness)
+// ─────────────────────────────────────────────────────────────────────────────
+if (req.method === 'POST' && p === '/api/changes/ping') {
+  return handleChangesPing(env, req);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Global roles list (Tools → Search modal)
+// ─────────────────────────────────────────────────────────────────────────────
+if (req.method === 'GET' && p === '/api/roles/global') {
+  return handleRolesGlobal(env, req);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Candidate E-History (legacy contract history rows)
+// IMPORTANT: place BEFORE any generic `/api/candidates/:candidate_id` route.
+// ─────────────────────────────────────────────────────────────────────────────
+{
+  const candHist = matchPath(p, '/api/candidates/:candidate_id/e-history');
+  if (candHist && req.method === 'GET') {
+    return handleCandidateEHistory(env, req, candHist.candidate_id);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Client E-History (legacy contract history rows)
+// IMPORTANT: place BEFORE any generic `/api/clients/:client_id` route.
+// ─────────────────────────────────────────────────────────────────────────────
+{
+  const cliHist = matchPath(p, '/api/clients/:client_id/e-history');
+  if (cliHist && req.method === 'GET') {
+    return handleClientEHistory(env, req, cliHist.client_id);
+  }
+}
 
       // HealthRoster
       if (req.method === 'POST' && p === '/api/healthroster/import')        return handleHRImport(env, req);
