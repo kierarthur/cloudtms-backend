@@ -75806,14 +75806,11 @@ if (req.method === 'POST' && p === '/api/job-titles')                 return han
   if (clientAlias && req.method === 'DELETE') {
     return handleClientAliasesDelete(env, req, clientAlias.id);
   }
+}{
+  const client = matchPath(p, '/api/clients/:id');
+  if (client && req.method === 'GET')                                 return handleGetClient(env, req, client.id);   // enriched: { client, client_settings, has_e_history }
+  if (client && req.method === 'PUT')                                 return handleUpdateClient(env, req, client.id);
 }
-
-      {
-        const client = matchPath(p, '/api/clients/:id');
-        if (client && req.method === 'GET')                                 return handleClientsGet(env, req, client.id);   // base row for pickers
-        if (client && req.method === 'PUT')                                 return handleUpdateClient(env, req, client.id);
-      }
-
       // Client Hospitals
       {
         const chList = matchPath(p, '/api/clients/:client_id/hospitals');
