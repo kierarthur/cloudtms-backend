@@ -40114,19 +40114,19 @@ async function handleSearchUmbrellas(env, req) {
 
   // ✅ Expanded allow-list (must only include real columns)
   const allowedSort = {
-    name:                          'name',
-    enabled:                       'enabled',
-    vat_chargeable:                'vat_chargeable',
-    remittance_email:              'remittance_email',
-    bank_name:                     'bank_name',
-    sort_code:                     'sort_code',
-    account_number:                'account_number',
-    created_at:                    'created_at',
-    updated_at:                    'updated_at',
-    postcode:                      'postcode',
-    town_city:                     'town_city',
-    company_number:                'company_number',
-    revolut_counterparty_id:       'revolut_counterparty_id',
+    name:                           'name',
+    enabled:                        'enabled',
+    vat_chargeable:                 'vat_chargeable',
+    remittance_email:               'remittance_email',
+    bank_name:                      'bank_name',
+    sort_code:                      'sort_code',
+    account_number:                 'account_number',
+    created_at:                     'created_at',
+    updated_at:                     'updated_at',
+    postcode:                       'postcode',
+    town_city:                      'town_city',
+    company_number:                 'company_number',
+    revolut_counterparty_id:        'revolut_counterparty_id',
     revolut_counterparty_account_id:'revolut_counterparty_account_id'
   };
 
@@ -40146,8 +40146,8 @@ async function handleSearchUmbrellas(env, req) {
   }
 
   // Expanded filters to match FE
-  // ✅ Accept both q= and name= as the "umbrella name contains" filter (robust to UI variations)
-  const text          = q('q') || q('name'); // name partial
+  // ✅ Accept both q= and name= as the "umbrella name contains" filter
+  const text          = q('q') || q('name'); // free-text
   const bankName      = q('bank_name');
   const sortCode      = q('sort_code');
   const accountNo     = q('account_number');
@@ -40157,13 +40157,18 @@ async function handleSearchUmbrellas(env, req) {
   const createdTo     = q('created_to');
 
   let url = `${env.SUPABASE_URL}/rest/v1/umbrellas` +
-            // ✅ IMPORTANT: return full row-shape so grid column prefs can't "lose" fields when FE switches summary to search()
             `?select=*` +
             `&order=${enc(orderCol)}.${orderDir}` +
             `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
 
   if (idFilterExpr) url += `&id=${enc(idFilterExpr)}`;
-  if (text)      url += `&name=ilike.*${enc(text)}*`;
+
+  // ✅ Free-text should match BOTH name and remittance_email (so typing email also finds the umbrella)
+  if (text) {
+    const esc = enc(text);
+    url += `&or=(name.ilike.*${esc}*,remittance_email.ilike.*${esc}*)`;
+  }
+
   if (bankName)  url += `&bank_name=ilike.*${enc(bankName)}*`;
   if (sortCode)  url += `&sort_code=ilike.*${enc(sortCode)}*`;
   if (accountNo) url += `&account_number=ilike.*${enc(accountNo)}*`;
