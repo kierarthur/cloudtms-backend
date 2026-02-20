@@ -5026,56 +5026,7 @@ async function handleContractsCreate(env, req) {
   const required = ['client_id','start_date','end_date','pay_method_snapshot'];
   for (const k of required) if (!body[k]) return withCORS(env, req, badRequest(`${k} is required`));
 
-  const normaliseAdditionalRates = (raw) => {
-    if (!raw) return null;
-    const arr = Array.isArray(raw) ? raw : [];
-    const out = [];
-    const seen = new Set();
-    const ALLOWED = new Set(['ONE_PER_WEEK','ONE_PER_DAY','WEEKENDS_AND_BH_ONLY','WEEKDAYS_EXCL_BH_ONLY']);
-
-    const ensureCode = (code, idx) => {
-      const c = String(code || '').toUpperCase();
-      if (/^EX[1-5]$/.test(c)) return c;
-      return `EX${idx + 1}`;
-    };
-
-    arr.slice(0, 5).forEach((row, idx) => {
-      if (!row || typeof row !== 'object') return;
-      const code = ensureCode(row.code, idx);
-      if (seen.has(code)) return;
-      seen.add(code);
-
-      let bucketName = (row.bucket_name || '').trim();
-      const unitName   = (row.unit_name != null && String(row.unit_name).trim())
-        ? String(row.unit_name).trim()
-        : null;
-
-      let freq = String(row.frequency || 'ONE_PER_WEEK').toUpperCase();
-      if (!ALLOWED.has(freq)) freq = 'ONE_PER_WEEK';
-
-      let pay    = (row.pay_rate    !== undefined && row.pay_rate    !== null) ? Number(row.pay_rate)    : null;
-      let charge = (row.charge_rate !== undefined && row.charge_rate !== null) ? Number(row.charge_rate) : null;
-      if (pay != null && (!Number.isFinite(pay) || pay < 0)) pay = null;
-      if (charge != null && (!Number.isFinite(charge) || charge < 0)) charge = null;
-
-      const hasAny = bucketName || pay != null || charge != null || unitName;
-      if (!hasAny) return;
-
-      // ✅ Ensure bucket_name is never blank for a persisted row
-      if (!bucketName) bucketName = code;
-
-      out.push({
-        code,
-        bucket_name: bucketName,
-        unit_name: unitName,
-        frequency: freq,
-        pay_rate: pay,
-        charge_rate: charge
-      });
-    });
-
-    return out.length ? out : null;
-  };
+  // ✅ normaliseAdditionalRates is now module-level (shared by create/update/replace/clone)
 
   // ✅ NEW: overrideclientsettings (default false)
   const hasOverrideClientSettings = Object.prototype.hasOwnProperty.call(body, 'overrideclientsettings');
@@ -6245,61 +6196,12 @@ async function handleContractsUpdate(env, req, contractId) {
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets?contract_id=eq.${enc(contractId)}&select=timesheet_id&limit=1`
   ));
-
   const hasWeeks = !!(await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&select=id&limit=1`
   ));
 
-  const normaliseAdditionalRates = (raw) => {
-    if (!raw) return null;
-    const arr = Array.isArray(raw) ? raw : [];
-    const out = [];
-    const seen = new Set();
-    const ALLOWED = new Set(['ONE_PER_WEEK','ONE_PER_DAY','WEEKENDS_AND_BH_ONLY','WEEKDAYS_EXCL_BH_ONLY']);
-
-    const ensureCode = (code, idx) => {
-      const c = String(code || '').toUpperCase();
-      if (/^EX[1-5]$/.test(c)) return c;
-      return `EX${idx + 1}`;
-    };
-
-    arr.slice(0, 5).forEach((row, idx) => {
-      if (!row || typeof row !== 'object') return;
-      const code = ensureCode(row.code, idx);
-      if (seen.has(code)) return;
-      seen.add(code);
-
-      let bucketName = (row.bucket_name || '').trim();
-      const unitName   = (row.unit_name != null && String(row.unit_name).trim())
-        ? String(row.unit_name).trim()
-        : null;
-
-      let freq = String(row.frequency || 'ONE_PER_WEEK').toUpperCase();
-      if (!ALLOWED.has(freq)) freq = 'ONE_PER_WEEK';
-
-      let pay    = (row.pay_rate    !== undefined && row.pay_rate    !== null) ? Number(row.pay_rate)    : null;
-      let charge = (row.charge_rate !== undefined && row.charge_rate !== null) ? Number(row.charge_rate) : null;
-      if (pay != null && (!Number.isFinite(pay) || pay < 0)) pay = null;
-      if (charge != null && (!Number.isFinite(charge) || charge < 0)) charge = null;
-
-      const hasAny = bucketName || pay != null || charge != null || unitName;
-      if (!hasAny) return;
-
-      if (!bucketName) bucketName = code;
-
-      out.push({
-        code,
-        bucket_name: bucketName,
-        unit_name: unitName,
-        frequency: freq,
-        pay_rate: pay,
-        charge_rate: charge
-      });
-    });
-
-    return out.length ? out : null;
-  };
+  // ✅ normaliseAdditionalRates is now module-level (shared by create/update/replace/clone)
 
   let schedulePatch = {};
   if ('std_schedule_json' in body) {
@@ -6827,56 +6729,7 @@ async function handleContractsReplace(env, req, contractId) {
     `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&select=id&limit=1`
   ));
 
-  const normaliseAdditionalRates = (raw) => {
-    if (!raw) return null;
-    const arr = Array.isArray(raw) ? raw : [];
-    const out = [];
-    const seen = new Set();
-    const ALLOWED = new Set(['ONE_PER_WEEK','ONE_PER_DAY','WEEKENDS_AND_BH_ONLY','WEEKDAYS_EXCL_BH_ONLY']);
-
-    const ensureCode = (code, idx) => {
-      const c = String(code || '').toUpperCase();
-      if (/^EX[1-5]$/.test(c)) return c;
-      return `EX${idx + 1}`;
-    };
-
-    arr.slice(0, 5).forEach((row, idx) => {
-      if (!row || typeof row !== 'object') return;
-      const code = ensureCode(row.code, idx);
-      if (seen.has(code)) return;
-      seen.add(code);
-
-      let bucketName = (row.bucket_name || '').trim();
-      const unitName   = (row.unit_name != null && String(row.unit_name).trim())
-        ? String(row.unit_name).trim()
-        : null;
-
-      let freq = String(row.frequency || 'ONE_PER_WEEK').toUpperCase();
-      if (!ALLOWED.has(freq)) freq = 'ONE_PER_WEEK';
-
-      let pay    = (row.pay_rate    !== undefined && row.pay_rate    !== null) ? Number(row.pay_rate)    : null;
-      let charge = (row.charge_rate !== undefined && row.charge_rate !== null) ? Number(row.charge_rate) : null;
-      if (pay != null && (!Number.isFinite(pay) || pay < 0)) pay = null;
-      if (charge != null && (!Number.isFinite(charge) || charge < 0)) charge = null;
-
-      const hasAny = bucketName || pay != null || charge != null || unitName;
-      if (!hasAny) return;
-
-      if (!bucketName) bucketName = code;
-
-      out.push({
-        code,
-        bucket_name: bucketName,
-        unit_name: unitName,
-        frequency: freq,
-        pay_rate: pay,
-        charge_rate: charge
-      });
-    });
-
-    out.sort((a, b) => String(a.code).localeCompare(String(b.code)));
-    return out.length ? out : null;
-  };
+  // ✅ normaliseAdditionalRates is now module-level (shared by create/update/replace/clone)
 
   const normaliseRatesForCompare = (rawRates, payMethodSnapshot) => {
     const r = (rawRates && typeof rawRates === 'object') ? rawRates : {};
@@ -57397,7 +57250,7 @@ async function cloneContractForRatesChange(env, contract, overrides = {}) {
       ? ov.bucket_labels_json
       : (contract.bucket_labels_json || null)),
 
-     // 🔹 NEW: configurable additional per-unit buckets (EX1–EX5)
+      // 🔹 NEW: configurable additional per-unit buckets (EX1–EX5)
     // ✅ If caller supplies overrides.additional_rates_json, it MUST be normalised
     //    to the same shape/rules as Contracts Create/Update/Replace.
     additional_rates_json: (Object.prototype.hasOwnProperty.call(ov, 'additional_rates_json')
@@ -57445,6 +57298,57 @@ async function cloneContractForRatesChange(env, contract, overrides = {}) {
   return row;
 }
 
+const normaliseAdditionalRates = (raw) => {
+  if (!raw) return null;
+  const arr = Array.isArray(raw) ? raw : [];
+  const out = [];
+  const seen = new Set();
+  const ALLOWED = new Set(['ONE_PER_WEEK','ONE_PER_DAY','WEEKENDS_AND_BH_ONLY','WEEKDAYS_EXCL_BH_ONLY']);
+
+  const ensureCode = (code, idx) => {
+    const c = String(code || '').toUpperCase();
+    if (/^EX[1-5]$/.test(c)) return c;
+    return `EX${idx + 1}`;
+  };
+
+  arr.slice(0, 5).forEach((row, idx) => {
+    if (!row || typeof row !== 'object') return;
+    const code = ensureCode(row.code, idx);
+    if (seen.has(code)) return;
+    seen.add(code);
+
+    let bucketName = (row.bucket_name || '').trim();
+    const unitName   = (row.unit_name != null && String(row.unit_name).trim())
+      ? String(row.unit_name).trim()
+      : null;
+
+    let freq = String(row.frequency || 'ONE_PER_WEEK').toUpperCase();
+    if (!ALLOWED.has(freq)) freq = 'ONE_PER_WEEK';
+
+    let pay    = (row.pay_rate    !== undefined && row.pay_rate    !== null) ? Number(row.pay_rate)    : null;
+    let charge = (row.charge_rate !== undefined && row.charge_rate !== null) ? Number(row.charge_rate) : null;
+    if (pay != null && (!Number.isFinite(pay) || pay < 0)) pay = null;
+    if (charge != null && (!Number.isFinite(charge) || charge < 0)) charge = null;
+
+    const hasAny = bucketName || pay != null || charge != null || unitName;
+    if (!hasAny) return;
+
+    // ✅ Ensure bucket_name is never blank for a persisted row
+    if (!bucketName) bucketName = code;
+
+    out.push({
+      code,
+      bucket_name: bucketName,
+      unit_name: unitName,
+      frequency: freq,
+      pay_rate: pay,
+      charge_rate: charge
+    });
+  });
+
+  out.sort((a, b) => String(a.code).localeCompare(String(b.code)));
+  return out.length ? out : null;
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper: findOutstandingWeeksForContract
