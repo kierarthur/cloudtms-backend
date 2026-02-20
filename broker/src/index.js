@@ -743,7 +743,7 @@ async function loadSettingsDefaults(env) {
     const { rows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/settings_defaults` +
-        `?select=timezone_id,import_config_json,finance_email,finance_email_settings,max_attachments_per_email` +
+        `?select=timezone_id,import_config_json,finance_email,finance_email_settings,max_attachments_per_email,system_email,system_emails` +
         `&id=eq.1` +
         `&limit=1`
     );
@@ -782,236 +782,79 @@ async function loadSettingsDefaults(env) {
       useRatesBatchRpc: _asBool(tsfinCfg.use_rates_batch_rpc, true),
     };
 
-    // ─────────────────────────────────────────────────────────────
-    // ✅ NEW: invpdf knobs (nested under cfg.invpdf)
-    // Supports:
-    //  - cfg.invpdf as object OR JSON string
-    //  - cfg.invpdf.mode = 'free'|'paid'
-    //  - optional cfg.invpdf.free / cfg.invpdf.paid tier objects
-    //  - legacy keys: dequeue_limit_free/paid, enqueue_limit_free/paid at top-level invpdf
-    // Exposes: importConfig.invpdf_effective (tier-resolved)
-    // ─────────────────────────────────────────────────────────────
-    const invpdfCfgRaw0 = cfg.invpdf;
-    const invpdfCfg0 = (typeof invpdfCfgRaw0 === 'object' && invpdfCfgRaw0 !== null)
-      ? invpdfCfgRaw0
-      : (_safeJsonParseMaybe(invpdfCfgRaw0, {}) || {});
+    // --- invpdf knobs (existing in your file) ---
+    const invpdfCfgRaw = cfg.invpdf;
+    const invpdfCfg0 = (typeof invpdfCfgRaw === 'object' && invpdfCfgRaw !== null)
+      ? invpdfCfgRaw
+      : (_safeJsonParseMaybe(invpdfCfgRaw, {}) || {});
 
-    const invpdfModeRaw = String(invpdfCfg0.mode || invpdfCfg0.plan || invpdfCfg0.tier || 'free').trim().toLowerCase();
+    const invpdfModeRaw = String(invpdfCfg0.mode || '').trim().toLowerCase();
     const invpdfMode = (invpdfModeRaw === 'paid') ? 'paid' : 'free';
-
-    const invpdfFreeRaw = invpdfCfg0.free;
-    const invpdfPaidRaw = invpdfCfg0.paid;
-
-    const invpdfFree = (typeof invpdfFreeRaw === 'object' && invpdfFreeRaw !== null)
-      ? invpdfFreeRaw
-      : (_safeJsonParseMaybe(invpdfFreeRaw, {}) || {});
-
-    const invpdfPaid = (typeof invpdfPaidRaw === 'object' && invpdfPaidRaw !== null)
-      ? invpdfPaidRaw
-      : (_safeJsonParseMaybe(invpdfPaidRaw, {}) || {});
-
-    const invpdfTier = (invpdfMode === 'paid') ? invpdfPaid : invpdfFree;
-
-    const _asIntArray = (v, dflt) => {
-      if (Array.isArray(v)) {
-        const out = [];
-        for (const x of v) {
-          const n = Number(x);
-          if (Number.isFinite(n) && n >= 0) out.push(Math.trunc(n));
-        }
-        return out.length ? out : dflt;
-      }
-      // JSON string?
-      const parsed = _safeJsonParseMaybe(v, null);
-      if (Array.isArray(parsed)) return _asIntArray(parsed, dflt);
-      return dflt;
-    };
-
-    const _tierOr = (tierVal, topVal, parseFn, dflt) => {
-      const v = (tierVal !== undefined) ? tierVal : topVal;
-      return parseFn(v, dflt);
-    };
-
-    const _clamp = (n, lo, hi) => {
-      const x = Number(n);
-      if (!Number.isFinite(x)) return null;
-      const y = Math.trunc(x);
-      if (y < lo) return lo;
-      if (y > hi) return hi;
-      return y;
-    };
-
-    const _asPosIntClamped = (v, dflt, hi = 5000) => {
-      const n = _asPosInt(v, dflt);
-      const c = _clamp(n, 0, hi);
-      return (c == null) ? dflt : c;
-    };
 
     const invpdfEffective = {
       mode: invpdfMode,
 
-      // Behaviour toggles (tier can override)
-      queue_on_issue: _tierOr(invpdfTier.queue_on_issue, invpdfCfg0.queue_on_issue, _asBool, true),
-      queue_on_batch_issue: _tierOr(invpdfTier.queue_on_batch_issue, invpdfCfg0.queue_on_batch_issue, _asBool, true),
-      queue_on_render: _tierOr(invpdfTier.queue_on_render, invpdfCfg0.queue_on_render, _asBool, true),
-      queue_on_email: _tierOr(invpdfTier.queue_on_email, invpdfCfg0.queue_on_email, _asBool, true),
+      queue_on_issue: _asBool(invpdfCfg0.queue_on_issue, true),
+      queue_on_batch_issue: _asBool(invpdfCfg0.queue_on_batch_issue, true),
+      queue_on_render: _asBool(invpdfCfg0.queue_on_render, true),
+      queue_on_email: _asBool(invpdfCfg0.queue_on_email, true),
 
-      // Handler-side cap (tier can override)
-      max_enqueue_per_call: _tierOr(invpdfTier.max_enqueue_per_call, invpdfCfg0.max_enqueue_per_call, _asPosInt, 500),
+      max_enqueue_per_call: _asPosInt(invpdfCfg0.max_enqueue_per_call, 500),
 
-      // Worker knobs (tier can override). We support both:
-      //  - invpdf.{free|paid}.dequeue_limit / enqueue_sweep_limit
-      //  - legacy invpdf.dequeue_limit_free/paid and invpdf.enqueue_limit_free/paid
-      dequeue_limit: (() => {
-        const legacy = (invpdfMode === 'paid')
-          ? invpdfCfg0.dequeue_limit_paid
-          : invpdfCfg0.dequeue_limit_free;
-        return _tierOr(invpdfTier.dequeue_limit, legacy, _asPosInt, (invpdfMode === 'paid' ? 5 : 1));
-      })(),
+      // NEW shape supports dequeue_limit + enqueue_sweep_limit
+      dequeue_limit: _asPosInt(invpdfCfg0.dequeue_limit, (invpdfMode === 'paid' ? 5 : 1)),
+      enqueue_sweep_limit: _asPosInt(invpdfCfg0.enqueue_sweep_limit, 500),
 
-      enqueue_sweep_limit: (() => {
-        const legacy = (invpdfMode === 'paid')
-          ? invpdfCfg0.enqueue_limit_paid
-          : invpdfCfg0.enqueue_limit_free;
-        return _tierOr(invpdfTier.enqueue_sweep_limit, legacy, _asPosInt, (invpdfMode === 'paid' ? 2000 : 500));
-      })(),
+      allow_inline_render: _asBool(invpdfCfg0.allow_inline_render, false),
+      email_worker_can_render: _asBool(invpdfCfg0.email_worker_can_render, false),
 
-      // Optional toggles for paid-mode behaviour
-      allow_inline_render: _tierOr(invpdfTier.allow_inline_render, invpdfCfg0.allow_inline_render, _asBool, (invpdfMode === 'paid')),
-      email_worker_can_render: _tierOr(invpdfTier.email_worker_can_render, invpdfCfg0.email_worker_can_render, _asBool, false),
-
-      // Backoff/cooldown (used by withBrowser / worker). Tier can override.
-      cooldown_ms: _tierOr(invpdfTier.cooldown_ms, invpdfCfg0.cooldown_ms, _asPosInt, (invpdfMode === 'paid' ? 1500 : 4000)),
-      retry_backoff_ms: (() => {
-        const dflt = (invpdfMode === 'paid') ? [500, 1500, 3000] : [2000, 5000, 15000];
-        const tierVal = (invpdfTier.retry_backoff_ms !== undefined) ? invpdfTier.retry_backoff_ms : undefined;
-        const topVal = invpdfCfg0.retry_backoff_ms;
-        const chosen = (tierVal !== undefined) ? tierVal : topVal;
-        return _asIntArray(chosen, dflt);
-      })(),
+      cooldown_ms: _asPosInt(invpdfCfg0.cooldown_ms, 4000),
+      retry_backoff_ms: Array.isArray(invpdfCfg0.retry_backoff_ms) ? invpdfCfg0.retry_backoff_ms : [2000, 5000, 15000]
     };
 
-    // Expose invpdf config
     importConfig.invpdf = invpdfCfg0;
     importConfig.invpdf_effective = invpdfEffective;
 
-    // ─────────────────────────────────────────────────────────────
-    // ✅ NEW: inv (invoice/autoinvoice worker throttles) under cfg.inv
-    // Supports:
-    //  - cfg.inv as object OR JSON string
-    //  - cfg.inv.mode = 'free'|'paid'
-    //  - optional cfg.inv.free / cfg.inv.paid tier objects
-    // Exposes: importConfig.inv_effective (tier-resolved)
-    // Notes:
-    //  - Clamp to [0..5000] to avoid self-DoS
-    //  - If missing, fall back to env defaults if present, else sane tier defaults
-    // ─────────────────────────────────────────────────────────────
-    const invCfgRaw0 = cfg.inv;
-    const invCfg0 = (typeof invCfgRaw0 === 'object' && invCfgRaw0 !== null)
-      ? invCfgRaw0
-      : (_safeJsonParseMaybe(invCfgRaw0, {}) || {});
+    // --- inv knobs (existing in your file) ---
+    const invCfgRaw = cfg.inv;
+    const invCfg0 = (typeof invCfgRaw === 'object' && invCfgRaw !== null)
+      ? invCfgRaw
+      : (_safeJsonParseMaybe(invCfgRaw, {}) || {});
 
-    const invModeRaw = String(invCfg0.mode || invCfg0.plan || invCfg0.tier || 'free').trim().toLowerCase();
+    const invModeRaw = String(invCfg0.mode || '').trim().toLowerCase();
     const invMode = (invModeRaw === 'paid') ? 'paid' : 'free';
-
-    const invFreeRaw = invCfg0.free;
-    const invPaidRaw = invCfg0.paid;
-
-    const invFree = (typeof invFreeRaw === 'object' && invFreeRaw !== null)
-      ? invFreeRaw
-      : (_safeJsonParseMaybe(invFreeRaw, {}) || {});
-
-    const invPaid = (typeof invPaidRaw === 'object' && invPaidRaw !== null)
-      ? invPaidRaw
-      : (_safeJsonParseMaybe(invPaidRaw, {}) || {});
-
-    const invTier = (invMode === 'paid') ? invPaid : invFree;
 
     const invEffective = {
       mode: invMode,
       autoinvoice: {
-        enqueue_group_limit: _asPosIntClamped(
-          (invTier.autoinvoice && invTier.autoinvoice.enqueue_group_limit !== undefined)
-            ? invTier.autoinvoice.enqueue_group_limit
-            : (invCfg0.autoinvoice && invCfg0.autoinvoice.enqueue_group_limit !== undefined ? invCfg0.autoinvoice.enqueue_group_limit : env.AUTO_INVOICE_ENQUEUE_LIMIT),
-          (invMode === 'paid' ? 50 : 10),
-          5000
-        )
+        enqueue_group_limit: _asPosInt(invCfg0?.autoinvoice?.enqueue_group_limit, 10),
       },
       worker: {
-        max_batches: _asPosIntClamped(
-          (invTier.worker && invTier.worker.max_batches !== undefined)
-            ? invTier.worker.max_batches
-            : (invCfg0.worker && invCfg0.worker.max_batches !== undefined ? invCfg0.worker.max_batches : env.INVOICE_MAX_BATCHES),
-          (invMode === 'paid' ? 5 : 1),
-          5000
-        ),
-        dequeue_limit: _asPosIntClamped(
-          (invTier.worker && invTier.worker.dequeue_limit !== undefined)
-            ? invTier.worker.dequeue_limit
-            : (invCfg0.worker && invCfg0.worker.dequeue_limit !== undefined ? invCfg0.worker.dequeue_limit : env.INVOICE_DEQUEUE_LIMIT),
-          (invMode === 'paid' ? 25 : 10),
-          5000
-        )
+        max_batches: _asPosInt(invCfg0?.worker?.max_batches, 1),
+        dequeue_limit: _asPosInt(invCfg0?.worker?.dequeue_limit, 10),
       }
     };
 
     importConfig.inv = invCfg0;
     importConfig.inv_effective = invEffective;
 
-    // ─────────────────────────────────────────────────────────────
-    // ✅ NEW: tspdf (timesheet pdf worker throttles) under cfg.tspdf
-    // Supports:
-    //  - cfg.tspdf as object OR JSON string
-    //  - cfg.tspdf.mode = 'free'|'paid'
-    //  - optional cfg.tspdf.free / cfg.tspdf.paid tier objects
-    //  - cfg.tspdf.regen_on_ref_change (bool) (tier may override if provided)
-    // Exposes: importConfig.tspdf_effective (tier-resolved)
-    // Notes:
-    //  - Clamp to [0..5000] to avoid self-DoS
-    //  - If missing, fall back to env defaults if present, else sane tier defaults
-    // ─────────────────────────────────────────────────────────────
-    const tspdfCfgRaw0 = cfg.tspdf;
-    const tspdfCfg0 = (typeof tspdfCfgRaw0 === 'object' && tspdfCfgRaw0 !== null)
-      ? tspdfCfgRaw0
-      : (_safeJsonParseMaybe(tspdfCfgRaw0, {}) || {});
+    // --- tspdf knobs (existing in your file) ---
+    const tspdfCfgRaw = cfg.tspdf;
+    const tspdfCfg0 = (typeof tspdfCfgRaw === 'object' && tspdfCfgRaw !== null)
+      ? tspdfCfgRaw
+      : (_safeJsonParseMaybe(tspdfCfgRaw, {}) || {});
 
-    const tspdfModeRaw = String(tspdfCfg0.mode || tspdfCfg0.plan || tspdfCfg0.tier || 'free').trim().toLowerCase();
+    const tspdfModeRaw = String(tspdfCfg0.mode || '').trim().toLowerCase();
     const tspdfMode = (tspdfModeRaw === 'paid') ? 'paid' : 'free';
-
-    const tspdfFreeRaw = tspdfCfg0.free;
-    const tspdfPaidRaw = tspdfCfg0.paid;
-
-    const tspdfFree = (typeof tspdfFreeRaw === 'object' && tspdfFreeRaw !== null)
-      ? tspdfFreeRaw
-      : (_safeJsonParseMaybe(tspdfFreeRaw, {}) || {});
-
-    const tspdfPaid = (typeof tspdfPaidRaw === 'object' && tspdfPaidRaw !== null)
-      ? tspdfPaidRaw
-      : (_safeJsonParseMaybe(tspdfPaidRaw, {}) || {});
-
-    const tspdfTier = (tspdfMode === 'paid') ? tspdfPaid : tspdfFree;
 
     const tspdfEffective = {
       mode: tspdfMode,
-      enqueue_limit: _asPosIntClamped(
-        (tspdfTier.enqueue_limit !== undefined) ? tspdfTier.enqueue_limit : (tspdfCfg0.enqueue_limit !== undefined ? tspdfCfg0.enqueue_limit : env.TSPDF_ENQUEUE_LIMIT),
-        (tspdfMode === 'paid' ? 1000 : 200),
-        5000
-      ),
-      max_batches: _asPosIntClamped(
-        (tspdfTier.max_batches !== undefined) ? tspdfTier.max_batches : (tspdfCfg0.max_batches !== undefined ? tspdfCfg0.max_batches : env.TSPDF_MAX_BATCHES),
-        (tspdfMode === 'paid' ? 3 : 1),
-        5000
-      ),
-      dequeue_limit: _asPosIntClamped(
-        (tspdfTier.dequeue_limit !== undefined) ? tspdfTier.dequeue_limit : (tspdfCfg0.dequeue_limit !== undefined ? tspdfCfg0.dequeue_limit : env.TSPDF_DEQUEUE_LIMIT),
-        (tspdfMode === 'paid' ? 20 : 5),
-        5000
-      ),
+      enqueue_limit: _asPosInt(tspdfCfg0.enqueue_limit, 200),
+      max_batches: _asPosInt(tspdfCfg0.max_batches, 1),
+      dequeue_limit: _asPosInt(tspdfCfg0.dequeue_limit, 5),
       regen_on_ref_change: (() => {
-        const tierVal = (tspdfTier.regen_on_ref_change !== undefined) ? tspdfTier.regen_on_ref_change : undefined;
         const topVal = tspdfCfg0.regen_on_ref_change;
+        const tierVal = (tspdfMode === 'paid') ? tspdfCfg0.regen_on_ref_change_paid : tspdfCfg0.regen_on_ref_change_free;
         const chosen = (tierVal !== undefined) ? tierVal : topVal;
         return _asBool(chosen, true);
       })()
@@ -1020,6 +863,35 @@ async function loadSettingsDefaults(env) {
     importConfig.tspdf = tspdfCfg0;
     importConfig.tspdf_effective = tspdfEffective;
 
+    // ✅ NEW: auth policy settings (db-driven; stored under import_config_json.auth)
+    const authCfgRaw = cfg.auth;
+    const authCfg0 = (typeof authCfgRaw === 'object' && authCfgRaw !== null)
+      ? authCfgRaw
+      : (_safeJsonParseMaybe(authCfgRaw, {}) || {});
+
+    const tfaEnabled = _asBool(authCfg0.tfa_enabled, true);
+    const tfaCodeTtl = _asPosInt(authCfg0.tfa_code_ttl_seconds, 300);
+    const tfaTrustWin = _asPosInt(authCfg0.tfa_trust_window_seconds, 8 * 60 * 60);
+    const tfaMaxAttempts = _asPosInt(authCfg0.tfa_max_attempts, 10);
+    const tfaResendCooldown = _asPosInt(authCfg0.tfa_resend_cooldown_seconds, 30);
+    const tfaMaxResends = _asPosInt(authCfg0.tfa_max_resends, 5);
+
+    const idleLogout = _asPosInt(authCfg0.idle_logout_seconds, 2 * 60 * 60);
+    let idleWarn = _asPosInt(authCfg0.idle_warning_seconds, 5 * 60);
+    if (idleWarn >= idleLogout) idleWarn = Math.max(1, Math.min(300, idleLogout - 1));
+
+    importConfig.auth = authCfg0;
+    importConfig.auth_effective = {
+      tfa_enabled: tfaEnabled,
+      tfa_code_ttl_seconds: tfaCodeTtl,
+      tfa_trust_window_seconds: tfaTrustWin,
+      tfa_max_attempts: tfaMaxAttempts,
+      tfa_resend_cooldown_seconds: tfaResendCooldown,
+      tfa_max_resends: tfaMaxResends,
+      idle_logout_seconds: idleLogout,
+      idle_warning_seconds: idleWarn
+    };
+
     // ✅ NEW: finance email settings (db-driven)
     const financeEmail = row.finance_email ? String(row.finance_email).trim() : null;
 
@@ -1027,6 +899,14 @@ async function loadSettingsDefaults(env) {
     const financeEmailSettings = (typeof fesRaw === 'object' && fesRaw !== null)
       ? fesRaw
       : (_safeJsonParseMaybe(fesRaw, {}) || {});
+
+    // ✅ NEW: system email settings (db-driven)
+    const systemEmail = row.system_email ? String(row.system_email).trim() : null;
+
+    const sesRaw = row.system_emails;
+    const systemEmailSettings = (typeof sesRaw === 'object' && sesRaw !== null)
+      ? sesRaw
+      : (_safeJsonParseMaybe(sesRaw, {}) || {});
 
     const maxAttachments = (() => {
       const n = Number(row.max_attachments_per_email);
@@ -1041,6 +921,8 @@ async function loadSettingsDefaults(env) {
       // ✅ NEW (cached)
       finance_email: financeEmail,
       finance_email_settings: financeEmailSettings,
+      system_email: systemEmail,
+      system_emails: systemEmailSettings,
       max_attachments_per_email: maxAttachments
     };
 
@@ -1053,6 +935,7 @@ async function loadSettingsDefaults(env) {
         timezone_id: timezoneId,
         importConfig,
         finance_email: financeEmail,
+        system_email: systemEmail,
         max_attachments_per_email: maxAttachments
       }));
     }
@@ -1111,18 +994,563 @@ async function loadSettingsDefaults(env) {
           max_batches: 1,
           dequeue_limit: 5,
           regen_on_ref_change: true
+        },
+        auth: {},
+        auth_effective: {
+          tfa_enabled: true,
+          tfa_code_ttl_seconds: 300,
+          tfa_trust_window_seconds: 28800,
+          tfa_max_attempts: 10,
+          tfa_resend_cooldown_seconds: 30,
+          tfa_max_resends: 5,
+          idle_logout_seconds: 7200,
+          idle_warning_seconds: 300
         }
       },
 
       // ✅ NEW fallbacks
       finance_email: null,
       finance_email_settings: {},
+      system_email: null,
+      system_emails: {},
       max_attachments_per_email: 30
     };
 
     __SETTINGS_DEFAULTS_CACHE = { ts: Date.now(), value: out };
     return out;
   }
+}
+
+async function postToPowerAutomate(env, payload, channel = 'finance') {
+  const ch = (String(channel || 'finance').trim().toLowerCase() === 'system') ? 'system' : 'finance';
+
+  // Primary source (cached via loadSettingsDefaults):
+  // - finance: settings_defaults.finance_email_settings.webhook_url
+  // - system:  settings_defaults.system_emails.webhook_url
+  let url = null;
+  let extraHeaders = null;
+
+  try {
+    const s = await loadSettingsDefaults(env);
+
+    const cfg = (ch === 'system') ? s?.system_emails : s?.finance_email_settings;
+    if (cfg && typeof cfg === 'object') {
+      const u = (typeof cfg.webhook_url === 'string') ? cfg.webhook_url.trim() : '';
+      if (u) url = u;
+
+      // optional: allow a headers object
+      if (cfg.headers && typeof cfg.headers === 'object') extraHeaders = cfg.headers;
+    }
+  } catch {}
+
+  // Fallback: env
+  if (!url) {
+    if (ch === 'system' && isNonEmptyString(env.POWER_AUTOMATE_SYSTEM_EMAIL_WEBHOOK_URL)) {
+      url = env.POWER_AUTOMATE_SYSTEM_EMAIL_WEBHOOK_URL;
+    } else {
+      url = env.POWER_AUTOMATE_EMAIL_WEBHOOK_URL;
+    }
+  }
+
+  if (!isNonEmptyString(url)) {
+    const which =
+      (ch === 'system')
+        ? 'settings_defaults.system_emails.webhook_url or env.POWER_AUTOMATE_SYSTEM_EMAIL_WEBHOOK_URL'
+        : 'settings_defaults.finance_email_settings.webhook_url or env.POWER_AUTOMATE_EMAIL_WEBHOOK_URL';
+
+    return { ok: false, status: 0, body: `Power Automate webhook URL not configured (${which})` };
+  }
+
+  const headers = { 'Content-Type': 'application/json' };
+  if (extraHeaders && typeof extraHeaders === 'object') {
+    for (const [k, v] of Object.entries(extraHeaders)) {
+      if (typeof k === 'string' && k.trim() && v != null) headers[k] = String(v);
+    }
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(payload),
+  });
+
+  let body;
+  try { body = await res.text(); } catch { body = ''; }
+
+  const ok = res.ok;
+
+  let provider_message_id = undefined;
+  try {
+    const j = JSON.parse(body);
+    provider_message_id = j.provider_message_id || j.id || j.messageId || undefined;
+  } catch {}
+
+  return { ok, status: res.status, body, provider_message_id };
+}
+
+async function handleAuthLogin(env, req) {
+  const pre = preflightIfNeeded(env, req); if (pre) return pre;
+  const body = await parseJSONBody(req);
+  if (!body) return badRequest('invalid_json');
+
+  const email = String((body.email||'')).trim().toLowerCase();
+  const pw    = String(body.password||'');
+  if (!email || !pw) return badRequest('email_and_password_required');
+
+  const user = await sbGetUserByEmail(env, email);
+  if (!user || user.is_active !== true) return unauthorized('Invalid credentials');
+
+  const okPw = await pbkdf2Verify(pw, user.password_hash || '');
+  if (!okPw) return unauthorized('Invalid credentials');
+
+  // Load auth policy (db-driven via settings_defaults.import_config_json.auth)
+  let authEffective = null;
+  try {
+    const s = await loadSettingsDefaults(env);
+    authEffective = (s && s.importConfig && s.importConfig.auth_effective && typeof s.importConfig.auth_effective === 'object')
+      ? s.importConfig.auth_effective
+      : null;
+  } catch {
+    authEffective = null;
+  }
+
+  const tfaEnabled = (authEffective && typeof authEffective.tfa_enabled === 'boolean')
+    ? authEffective.tfa_enabled === true
+    : true;
+
+  const tfaCodeTtlSec = (authEffective && Number.isFinite(Number(authEffective.tfa_code_ttl_seconds)))
+    ? Math.max(30, Math.trunc(Number(authEffective.tfa_code_ttl_seconds)))
+    : 300;
+
+  const trustWindowSec = (authEffective && Number.isFinite(Number(authEffective.tfa_trust_window_seconds)))
+    ? Math.max(60, Math.trunc(Number(authEffective.tfa_trust_window_seconds)))
+    : (8 * 60 * 60);
+
+  const idleLogoutSec = (authEffective && Number.isFinite(Number(authEffective.idle_logout_seconds)))
+    ? Math.max(60, Math.trunc(Number(authEffective.idle_logout_seconds)))
+    : (2 * 60 * 60);
+
+  const idleWarnSec = (() => {
+    const v = (authEffective && Number.isFinite(Number(authEffective.idle_warning_seconds)))
+      ? Math.max(1, Math.trunc(Number(authEffective.idle_warning_seconds)))
+      : (5 * 60);
+    return (v >= idleLogoutSec) ? Math.max(1, Math.min(300, idleLogoutSec - 1)) : v;
+  })();
+
+  const policy = {
+    idle_logout_seconds: idleLogoutSec,
+    idle_warning_seconds: idleWarnSec
+  };
+
+  const getClientIp = (req0) => {
+    const h = req0.headers;
+    const cf = h.get('cf-connecting-ip');
+    if (cf && String(cf).trim()) return String(cf).trim();
+
+    const xff = h.get('x-forwarded-for');
+    if (xff && String(xff).trim()) {
+      const first = String(xff).split(',')[0];
+      if (first && String(first).trim()) return String(first).trim();
+    }
+
+    const xr = h.get('x-real-ip');
+    if (xr && String(xr).trim()) return String(xr).trim();
+
+    return null;
+  };
+
+  const ip = getClientIp(req);
+  const ipKey = (ip && String(ip).trim()) ? String(ip).trim() : 'UNKNOWN';
+
+  // 2FA gate: require unless trusted within window on same IP
+  if (tfaEnabled) {
+    let trusted = false;
+
+    try {
+      const enc = encodeURIComponent;
+      const trustUrl =
+        `${env.SUPABASE_URL}/rest/v1/tms_user_2fa_trust` +
+        `?user_id=eq.${enc(user.id)}` +
+        `&ip_address=eq.${enc(ipKey)}` +
+        `&select=verified_at_utc` +
+        `&order=verified_at_utc.desc` +
+        `&limit=1`;
+
+      const tr = await fetch(trustUrl, { headers: sbAuthHeaders(env) });
+      if (tr.ok) {
+        const arr = await tr.json().catch(() => []);
+        const row = Array.isArray(arr) ? arr[0] : null;
+        const vAt = row && row.verified_at_utc ? String(row.verified_at_utc) : '';
+        if (vAt) {
+          const t = new Date(vAt).getTime();
+          if (Number.isFinite(t) && t >= (Date.now() - (trustWindowSec * 1000))) {
+            trusted = true;
+          }
+        }
+      }
+    } catch {
+      trusted = false;
+    }
+
+    if (!trusted) {
+      // Create 2FA challenge + send code email immediately (SYSTEM channel)
+
+      const nowIso = new Date().toISOString();
+      const expiresAtIso = new Date(Date.now() + (tfaCodeTtlSec * 1000)).toISOString();
+
+      // Generate code + salted hash
+      const rnd = crypto.getRandomValues(new Uint32Array(1))[0] >>> 0;
+      const code = String(rnd % 1000000).padStart(6, '0');
+
+      const salt = bufToBase64Url(crypto.getRandomValues(new Uint8Array(16)));
+      const code_hash = await sha256Hex(`${salt}:${code}`);
+
+      // Insert challenge row (expects public.tms_login_2fa_challenges)
+      let challengeId = null;
+      try {
+        const insUrl = `${env.SUPABASE_URL}/rest/v1/tms_login_2fa_challenges`;
+        const insRes = await fetch(insUrl, {
+          method: 'POST',
+          headers: { ...sbAuthHeaders(env), Prefer: 'return=representation' },
+          body: JSON.stringify({
+            user_id: user.id,
+            ip_address: ipKey,
+            code_salt: salt,
+            code_hash,
+            expires_at_utc: expiresAtIso
+          })
+        });
+
+        if (!insRes.ok) {
+          const txt = await insRes.text().catch(() => '');
+          return serverError(`2FA challenge insert failed (${insRes.status}) ${txt || ''}`.trim());
+        }
+
+        const j = await insRes.json().catch(() => []);
+        const row = Array.isArray(j) ? j[0] : j;
+        challengeId = row && row.id ? String(row.id) : null;
+      } catch (e) {
+        return serverError(`2FA challenge insert error: ${e?.message || e}`);
+      }
+
+      if (!challengeId) {
+        return serverError('2FA challenge id missing after insert');
+      }
+
+      // Resolve system replyTo email (optional)
+      let replyTo = null;
+      try {
+        const s = await loadSettingsDefaults(env);
+        if (s && s.system_email && String(s.system_email).trim()) replyTo = String(s.system_email).trim();
+      } catch {}
+
+      // Send code email via SYSTEM webhook
+      const mins = Math.max(1, Math.round(tfaCodeTtlSec / 60));
+      const subject = 'CloudTMS sign-in verification code';
+      const bodyText =
+        `Your CloudTMS verification code is: ${code}\n\n` +
+        `It expires in ${mins} minute${mins === 1 ? '' : 's'}.\n\n` +
+        `If you did not request this code, you can ignore this email.`;
+
+      const htmlBody =
+        `<p>Your CloudTMS verification code is:</p>` +
+        `<p style="font-size:22px;font-weight:700;letter-spacing:2px;">${code}</p>` +
+        `<p>This code expires in ${mins} minute${mins === 1 ? '' : 's'}.</p>` +
+        `<p>If you did not request this code, you can ignore this email.</p>`;
+
+      const emailPayload = {
+        to: String(user.email || email).trim(),
+        subject,
+        htmlBody,
+        body: bodyText,
+        attachmentsV2: [],
+        metadata: { kind: '2FA', user_id: String(user.id), challenge_id: String(challengeId), ip: ipKey, issued_at_utc: nowIso }
+      };
+      if (replyTo) emailPayload.replyTo = replyTo;
+
+      const pa = await postToPowerAutomate(env, emailPayload, 'system');
+      if (!pa || pa.ok !== true) {
+        // Best-effort: delete the challenge so we don't accumulate unusable rows
+        try {
+          const enc = encodeURIComponent;
+          await fetch(
+            `${env.SUPABASE_URL}/rest/v1/tms_login_2fa_challenges?id=eq.${enc(challengeId)}`,
+            { method: 'DELETE', headers: sbAuthHeaders(env) }
+          ).catch(() => {});
+        } catch {}
+
+        return serverError(`2FA email send failed (${pa?.status || 0}) ${pa?.body || ''}`.trim());
+      }
+
+      return new Response(JSON.stringify({
+        ok: true,
+        tfa_required: true,
+        challenge_id: challengeId,
+        expires_in: tfaCodeTtlSec,
+        policy
+      }), { status: 200, headers: JSON_HEADERS });
+    }
+
+    // Best-effort: touch trust row last_used_at_utc (non-fatal)
+    try {
+      const enc = encodeURIComponent;
+      const nowIso = new Date().toISOString();
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/tms_user_2fa_trust?user_id=eq.${enc(user.id)}&ip_address=eq.${enc(ipKey)}`,
+        {
+          method: 'PATCH',
+          headers: { ...sbAuthHeaders(env), Prefer: 'return=minimal' },
+          body: JSON.stringify({ last_used_at_utc: nowIso })
+        }
+      ).catch(() => {});
+    } catch {}
+  }
+
+  // Create KV session + tokens (login complete)
+  const sid = bufToBase64Url(crypto.getRandomValues(new Uint8Array(16)));
+  const sv  = user.session_version|0 || 1;
+  const refresh = await mintRefreshToken(env, { sid, sv });
+  const access  = await mintAccessToken(env, { user_id: user.id, email: user.email, role: user.role, sv, sid });
+
+  await kvPutSession(env, sid, { user_id: user.id, sv, exp: refresh.exp }, refreshTtl(env));
+
+  const headers = new Headers(JSON_HEADERS);
+  setCookie(headers, cookieName(env), refresh.token, {
+    maxAgeSec: refreshTtl(env),
+    domain: env.COOKIE_DOMAIN || undefined,
+    sameSite: pickCookieSameSite(env),
+    secure: true,
+    httpOnly: true,
+    path: '/'
+  });
+
+  // ✅ Best-effort: stamp last_login_at_utc (only after login fully completes)
+  try {
+    const nowIso = new Date().toISOString();
+    const url = `${env.SUPABASE_URL}/rest/v1/${AUTH.USERS_TABLE}?id=eq.${encodeURIComponent(user.id)}`;
+    await fetch(url, {
+      method: 'PATCH',
+      headers: { ...sbAuthHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        last_login_at_utc: nowIso,
+        updated_at: nowIso
+      })
+    }).catch(() => {});
+  } catch (_) {
+    // ignore: never block login on telemetry update
+  }
+
+  return new Response(JSON.stringify({
+    ok: true,
+    access_token: access.token,
+    expires_in: accessTtl(env),
+    user: { id: user.id, email: user.email, role: user.role },
+    policy
+  }), { status: 200, headers });
+}
+
+async function handleAuthRefresh(env, req) {
+  const pre = preflightIfNeeded(env, req); if (pre) return pre;
+  const cookies = parseCookies(req);
+  const raw = cookies[cookieName(env)];
+  if (!raw) return unauthorized('No refresh cookie');
+
+  const ver = await verifyToken(sessionSecret(env), raw);
+  if (!ver.ok) return unauthorized('Invalid refresh token');
+  const { typ, sid, sv, exp } = ver.payload || {};
+  if (typ !== 'refresh' || !sid) return unauthorized('Invalid refresh claims');
+  if ((exp|0) <= Math.floor(Date.now()/1000)) return unauthorized('Refresh expired');
+
+  const sess = await kvGetSession(env, sid);
+  if (!sess) return unauthorized('Session not found');
+
+  // Check session_version still valid
+  const user = await sbGetUserById(env, sess.user_id);
+  if (!user || user.is_active !== true) return unauthorized('User disabled');
+  if ((user.session_version|0) !== (sv|0)) {
+    await kvDelSession(env, sid);
+    return unauthorized('Session version changed');
+  }
+
+  const access = await mintAccessToken(env, {
+    user_id: user.id, email: user.email, role: user.role, sv, sid
+  });
+
+  // Load policy so FE always stays in sync with DB
+  let policy = { idle_logout_seconds: 7200, idle_warning_seconds: 300 };
+  try {
+    const s = await loadSettingsDefaults(env);
+    const ae = (s && s.importConfig && s.importConfig.auth_effective && typeof s.importConfig.auth_effective === 'object')
+      ? s.importConfig.auth_effective
+      : null;
+
+    if (ae) {
+      const idleLogoutSec = Number.isFinite(Number(ae.idle_logout_seconds)) ? Math.max(60, Math.trunc(Number(ae.idle_logout_seconds))) : 7200;
+      const idleWarnSec0 = Number.isFinite(Number(ae.idle_warning_seconds)) ? Math.max(1, Math.trunc(Number(ae.idle_warning_seconds))) : 300;
+      const idleWarnSec = (idleWarnSec0 >= idleLogoutSec) ? Math.max(1, Math.min(300, idleLogoutSec - 1)) : idleWarnSec0;
+      policy = { idle_logout_seconds: idleLogoutSec, idle_warning_seconds: idleWarnSec };
+    }
+  } catch {}
+
+  const headers = new Headers(JSON_HEADERS);
+  // Optional: rotate refresh if near expiry (<3d)
+  const secondsLeft = exp - Math.floor(Date.now()/1000);
+  if (secondsLeft < (3*24*60*60)) {
+    const next = await mintRefreshToken(env, { sid, sv });
+    await kvPutSession(env, sid, { user_id: user.id, sv, exp: next.exp }, refreshTtl(env));
+    setCookie(headers, cookieName(env), next.token, {
+      maxAgeSec: refreshTtl(env),
+      domain: env.COOKIE_DOMAIN || undefined,
+      sameSite: pickCookieSameSite(env),
+      secure: true, httpOnly: true, path:'/'
+    });
+  }
+
+  return new Response(JSON.stringify({
+    access_token: access.token,
+    expires_in: accessTtl(env),
+    user: { id: user.id, email: user.email, role: user.role },
+    policy
+  }), { status: 200, headers });
+}
+
+async function handleAuthForgot(env, req) {
+  const pre = preflightIfNeeded(env, req); if (pre) return pre;
+  const body = await parseJSONBody(req);
+  if (!body) return badRequest('invalid_json');
+  const email = String((body.email||'')).trim().toLowerCase();
+  if (!email) return badRequest('email_required');
+
+  const user = await sbGetUserByEmail(env, email);
+  if (user && user.is_active === true) {
+    let token = null;
+    try {
+      token = await sbInsertResetToken(env, user.id, resetTtl(env));
+    } catch (e) {
+      // Privacy-safe: never leak existence; but do log for server ops
+      console.warn('[AUTH][FORGOT] failed to create reset token', e?.message || e);
+      return ok({ ok:true });
+    }
+
+    // Build reset link (prefer browser Origin / Referer so it opens the frontend)
+    let base = null;
+    try {
+      const origin = req.headers.get('origin');
+      if (origin && String(origin).trim()) base = String(origin).trim();
+    } catch {}
+
+    if (!base) {
+      try {
+        const ref = req.headers.get('referer');
+        if (ref && String(ref).trim()) {
+          base = new URL(String(ref).trim()).origin;
+        }
+      } catch {}
+    }
+
+    if (!base) {
+      // Optional env fallbacks if you set them (not required for browser calls)
+      const cand = [
+        env.PUBLIC_APP_BASE_URL,
+        env.PUBLIC_FRONTEND_BASE_URL,
+        env.PUBLIC_SITE_URL
+      ].filter((x) => isNonEmptyString(x));
+      if (cand.length) base = String(cand[0]).trim();
+    }
+
+    if (base) {
+      let link = null;
+      try {
+        const u = new URL(base);
+        u.pathname = '/';
+        u.searchParams.set('k', token);
+        link = u.toString();
+      } catch {
+        link = null;
+      }
+
+      if (link) {
+        // Resolve system replyTo email (optional)
+        let replyTo = null;
+        try {
+          const s = await loadSettingsDefaults(env);
+          if (s && s.system_email && String(s.system_email).trim()) replyTo = String(s.system_email).trim();
+        } catch {}
+
+        const subject = 'CloudTMS password reset';
+        const bodyText =
+          `You requested a password reset for CloudTMS.\n\n` +
+          `Click the link below to set a new password:\n${link}\n\n` +
+          `If you did not request this, you can ignore this email.`;
+
+        const htmlBody =
+          `<p>You requested a password reset for CloudTMS.</p>` +
+          `<p><a href="${link}">Click here to set a new password</a></p>` +
+          `<p>If you did not request this, you can ignore this email.</p>`;
+
+        const emailPayload = {
+          to: String(email).trim(),
+          subject,
+          htmlBody,
+          body: bodyText,
+          attachmentsV2: [],
+          metadata: { kind: 'PASSWORD_RESET', user_id: String(user.id), issued_at_utc: new Date().toISOString() }
+        };
+        if (replyTo) emailPayload.replyTo = replyTo;
+
+        // Privacy-safe: best-effort send (do not leak existence via error)
+        try {
+          const pa = await postToPowerAutomate(env, emailPayload, 'system');
+          if (!pa || pa.ok !== true) {
+            console.warn('[AUTH][FORGOT] PowerAutomate send failed', pa?.status, pa?.body);
+          }
+        } catch (e) {
+          console.warn('[AUTH][FORGOT] PowerAutomate send error', e?.message || e);
+        }
+      }
+    }
+  }
+
+  return ok({ ok:true }); // privacy-safe
+}
+
+async function handleAuthReset(env, req) {
+  const pre = preflightIfNeeded(env, req); if (pre) return pre;
+  const body = await parseJSONBody(req);
+  if (!body) return badRequest('invalid_json');
+
+  const token = String(body.token||'');
+  const newPw = String(body.new_password||'');
+  if (!token || !newPw) return badRequest('token_and_new_password_required');
+
+  const strong = newPw.length>=8 && /[a-z]/.test(newPw) && /[A-Z]/.test(newPw) && /[0-9]/.test(newPw);
+  if (!strong) return new Response(JSON.stringify({ ok:false, error:'WEAK_PASSWORD' }), { status:400, headers: JSON_HEADERS });
+
+  const consumed = await sbConsumeResetToken(env, token);
+  if (!consumed.ok) return new Response(JSON.stringify({ ok:false, error: consumed.error }), { status:400, headers: JSON_HEADERS });
+
+  const hash = await pbkdf2Hash(newPw);
+  await sbUpdateUserPassword(env, consumed.user_id, hash);
+
+  // ✅ After password reset, clear any 2FA trust for this user (forces fresh 2FA next login)
+  try {
+    const enc = encodeURIComponent;
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/tms_user_2fa_trust?user_id=eq.${enc(consumed.user_id)}`,
+      { method: 'DELETE', headers: sbAuthHeaders(env) }
+    ).catch(() => {});
+  } catch {}
+
+  // Optional: invalidate any outstanding challenges
+  try {
+    const enc = encodeURIComponent;
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/tms_login_2fa_challenges?user_id=eq.${enc(consumed.user_id)}`,
+      { method: 'DELETE', headers: sbAuthHeaders(env) }
+    ).catch(() => {});
+  } catch {}
+
+  return ok({ ok:true });
 }
 
 // ============================================================================
@@ -1144,90 +1572,6 @@ async function loadSettingsDefaults(env) {
 // - Adds finance_windows[] from RPC settings_finance_list() in the same response
 //   (no new GET endpoint needed for FE; single extra RPC call)
 // ============================================================================
-async function handleGetSettings(env, req) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return unauthorized('Unauthorized');
-
-  try {
-    const select =
-      [
-        'id',
-
-        // Agency branding
-        'agency_name',
-        'agency_logo',
-
-        // Timesheet PDF text blocks
-        'timesheet_header_json',
-        'timesheet_footer_json',
-
-        // Global shift patterns + timezone
-        'timezone_id',
-        'day_start','day_end',
-        'night_start','night_end',
-        'sat_start','sat_end',
-        'sun_start','sun_end',
-        'bh_start','bh_end',
-
-        // BH calendar config
-        'bh_source','bh_list','bh_feed_url',
-
-        // Global policy flags
-        'ts_reference_required',
-
-        // ✅ Adaptability config
-        'import_config_json',
-
-        // Bank details still live on settings_defaults
-        'bank_name','bank_sort_code','bank_account_number','vat_registration_number',
-
-        // ✅ NEW: Finance email settings (global)
-        'finance_email',
-        'finance_email_settings',
-        'max_attachments_per_email'
-      ].join(',');
-
-    const { rows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=${select}`
-    );
-
-    // Finance windows list (new) — SQL-first RPC, single call
-    let finance_windows = [];
-    try {
-      const fw = await sbRpc(env, 'settings_finance_list', {});
-      finance_windows = Array.isArray(fw) ? fw : [];
-    } catch {
-      finance_windows = [];
-    }
-
-    if (!rows.length) {
-      const { rows: alt } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/settings_defaults?select=${select}&limit=1`
-      );
-      if (!alt.length) return notFound("settings_defaults not found");
-
-      const s2 = { ...alt[0] };
-      delete s2.id;
-
-      return withCORS(env, req, ok({
-        settings: s2,
-        finance_windows
-      }));
-    }
-
-    const settings = { ...rows[0] };
-    delete settings.id;
-
-    return withCORS(env, req, ok({
-      settings,
-      finance_windows
-    }));
-  } catch (e) {
-    return withCORS(env, req, serverError("Failed to fetch settings_defaults"));
-  }
-}
 
 // ============================================================================
 // UPDATE SETTINGS (UPDATED - OPTION A):
@@ -1235,123 +1579,7 @@ async function handleGetSettings(env, req) {
 // - Keeps existing behaviour for non-finance fields (timezone, buckets, BH list, bank, import_config_json, etc.)
 // - Finance windows are managed via the new handler below
 // ============================================================================
-async function handleUpdateSettings(env, req) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return unauthorized('Unauthorized');
 
-  const data = await parseJSONBody(req);
-  if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
-
-  const allowed = [
-    'timezone_id',
-    'day_start','day_end','night_start','night_end',
-    'sat_start','sat_end','sun_start','sun_end',
-    'bh_start','bh_end',
-    'bh_source','bh_list','bh_feed_url',
-
-    'bank_name','bank_sort_code','bank_account_number','vat_registration_number',
-    'ts_reference_required',
-
-    // ✅ Adaptability config
-    'import_config_json',
-
-    // ✅ NEW: global finance email settings
-    'finance_email',
-    'finance_email_settings',
-    'max_attachments_per_email'
-  ];
-
-  const payload = { updated_at: new Date().toISOString() };
-
-  for (const k of allowed) {
-    if (!(k in data)) continue;
-
-    if (k === 'import_config_json') {
-      const raw = data.import_config_json;
-      let parsed = null;
-
-      if (raw && typeof raw === 'object') {
-        parsed = raw;
-      } else if (typeof raw === 'string') {
-        parsed = _safeJsonParseMaybe(raw, null);
-      } else if (raw == null) {
-        parsed = {};
-      }
-
-      if (!parsed || typeof parsed !== 'object') {
-        return withCORS(env, req, badRequest("import_config_json must be a JSON object (or a JSON string that parses to an object)."));
-      }
-
-      payload.import_config_json = parsed;
-      continue;
-    }
-
-    if (k === 'finance_email_settings') {
-      const raw = data.finance_email_settings;
-      let parsed = null;
-
-      if (raw && typeof raw === 'object') {
-        parsed = raw;
-      } else if (typeof raw === 'string') {
-        parsed = _safeJsonParseMaybe(raw, null);
-      } else if (raw == null) {
-        parsed = {};
-      }
-
-      if (!parsed || typeof parsed !== 'object') {
-        return withCORS(env, req, badRequest("finance_email_settings must be a JSON object (or a JSON string that parses to an object)."));
-      }
-
-      payload.finance_email_settings = parsed;
-      continue;
-    }
-
-    if (k === 'max_attachments_per_email') {
-      const n = Number(data.max_attachments_per_email);
-      const v = Number.isFinite(n) ? Math.trunc(n) : NaN;
-
-      if (!(v >= 1 && v <= 100)) {
-        return withCORS(env, req, badRequest("max_attachments_per_email must be an integer between 1 and 100."));
-      }
-
-      payload.max_attachments_per_email = v;
-      continue;
-    }
-
-    if (k === 'finance_email') {
-      const v = (data.finance_email == null) ? null : String(data.finance_email).trim();
-      payload.finance_email = v && v.length ? v : null;
-      continue;
-    }
-
-    // Normal field passthrough
-    payload[k] = data[k];
-  }
-
-  try {
-    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1`, {
-      method: "PATCH",
-      headers: { ...sbHeaders(env), "Prefer": "return=representation" },
-      body: JSON.stringify(payload)
-    });
-
-    if (!res.ok) {
-      const err = await res.text();
-      return withCORS(env, req, badRequest(`Update failed: ${err}`));
-    }
-
-    const json = await res.json().catch(() => ({}));
-    const settings = Array.isArray(json) ? json[0] : json;
-    delete settings.id;
-
-    // Bust TTL cache so next loadSettingsDefaults fetches fresh values
-    __SETTINGS_DEFAULTS_CACHE = { ts: 0, value: null };
-
-    return withCORS(env, req, ok({ settings }));
-  } catch {
-    return withCORS(env, req, serverError("Failed to update settings_defaults"));
-  }
-}
 
 // ============================================================================
 // NEW HANDLER (OPTION A): Finance windows CRUD (global VAT/ERNI/Holiday Pay)
@@ -6570,9 +6798,12 @@ async function handleContractsUpdate(env, req, contractId) {
 // === Strict full-replace (PUT) ===
 
 // === Strict full-replace (PUT /api/contracts/:id) ===
+
 async function handleContractsReplace(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+
+  const enc = encodeURIComponent;
 
   let body;
   try { body = await parseJSONBody(req); }
@@ -6670,7 +6901,7 @@ async function handleContractsReplace(env, req, contractId) {
     return sorted;
   };
 
-  // ✅ UPDATED: start_date/end_date/default_submission_mode are no longer required (backend authoritative / FE may omit)
+  // start_date/end_date/default_submission_mode are no longer required (backend authoritative / FE may omit)
   const requiredKeys = ['client_id','pay_method_snapshot','week_ending_weekday_snapshot','rates_json'];
   const missing = requiredKeys.filter(k => !(k in body));
   if (missing.length) return withCORS(env, req, badRequest(`Missing required fields: ${missing.join(', ')}`));
@@ -6694,14 +6925,12 @@ async function handleContractsReplace(env, req, contractId) {
     return clampBool(v, fallbackBool);
   };
 
-  // ✅ NEW: overrideclientsettings (effective value for this write)
+  // overrideclientsettings (effective value for this write)
   const hasOverrideClientSettings = Object.prototype.hasOwnProperty.call(body, 'overrideclientsettings');
   const overrideclientsettings = hasOverrideClientSettings
     ? clampBool(body.overrideclientsettings, !!current.overrideclientsettings)
     : !!current.overrideclientsettings;
 
-  // ✅ UPDATED: validate/normalise incoming default_submission_mode (if present)
-  // but do NOT treat it as a change unless overrideclientsettings=true AND it would actually change stored value.
   const parseDefaultSubmissionMode = (raw) => {
     const s = (raw == null) ? '' : String(raw).trim().toUpperCase();
     if (!s || s === 'INHERIT') return null;
@@ -6737,7 +6966,7 @@ async function handleContractsReplace(env, req, contractId) {
     }
   }
 
-  // ✅ Validate default_submission_mode early if present (even if we might ignore it)
+  // Validate default_submission_mode early if present
   let desiredDefaultSubmissionMode = current.default_submission_mode ?? null;
   if ('default_submission_mode' in body) {
     const parsed = parseDefaultSubmissionMode(body.default_submission_mode);
@@ -6746,6 +6975,11 @@ async function handleContractsReplace(env, req, contractId) {
     }
     desiredDefaultSubmissionMode = parsed;
   }
+
+  // ---- detect attempted week-ending change (used for safe blocking under submitted TS) ----
+  const curWewNum = Number(current.week_ending_weekday_snapshot ?? 0);
+  const bodyWewNum = ('week_ending_weekday_snapshot' in body) ? Number(body.week_ending_weekday_snapshot) : curWewNum;
+  const attemptedWeekdayChange = ('week_ending_weekday_snapshot' in body) && (Number.isFinite(bodyWewNum)) && (bodyWewNum !== curWewNum);
 
   if (hasSubmitted) {
     // Treat omitted fields as “no change” (defensive)
@@ -6786,8 +7020,12 @@ async function handleContractsReplace(env, req, contractId) {
       return withCORS(env, req, badRequest('Cannot change overrideclientsettings after timesheets have been submitted'));
     }
 
-    // ✅ FIX: only block default_submission_mode when overrideclientsettings=true AND it would actually change stored value.
-    // If overrideclientsettings=false, treat it as INHERIT (ignored for behaviour) and do not error.
+    // Block changing week-ending day once real TS exist (explicit and safe)
+    if (attemptedWeekdayChange) {
+      return withCORS(env, req, badRequest('Cannot change week_ending_weekday_snapshot after timesheets have been submitted'));
+    }
+
+    // Only block default_submission_mode when overrideclientsettings=true AND it would actually change stored value.
     if ('default_submission_mode' in body && overrideclientsettings === true) {
       const curDsm = current.default_submission_mode ?? null;
       const nextDsm = desiredDefaultSubmissionMode ?? null;
@@ -6797,11 +7035,7 @@ async function handleContractsReplace(env, req, contractId) {
     }
   }
 
-  // ✅ IMPORTANT:
-  // - If overrideclientsettings=true → store desiredDefaultSubmissionMode (can be null to clear).
-  // - If overrideclientsettings=false:
-  //     - When NO submitted TS: enforce NULL (align to brief / cleans legacy).
-  //     - When submitted TS exist: preserve whatever is currently stored to avoid “changing settings” on old legacy rows.
+  // Storage rules for default_submission_mode
   let default_submission_mode_to_store = null;
   if (overrideclientsettings === true) {
     default_submission_mode_to_store = desiredDefaultSubmissionMode ?? null;
@@ -6812,11 +7046,10 @@ async function handleContractsReplace(env, req, contractId) {
   const extraWarnings = [];
   let wew;
 
-  if (hasSubmitted || hasWeeks) {
+  // ✅ UPDATED: only “freeze” week-ending when submitted TS exist.
+  // If not submitted, allow change (even if weeks exist) and regenerate weeks safely later.
+  if (hasSubmitted) {
     wew = Number(current.week_ending_weekday_snapshot ?? 0);
-    if ('week_ending_weekday_snapshot' in body && Number(body.week_ending_weekday_snapshot) !== wew) {
-      extraWarnings.push('Week-ending day change ignored because weeks/timesheets exist.');
-    }
   } else {
     if ('week_ending_weekday_snapshot' in body) {
       const cand = Number(body.week_ending_weekday_snapshot);
@@ -6912,7 +7145,6 @@ async function handleContractsReplace(env, req, contractId) {
 
     pay_method_snapshot: String(body.pay_method_snapshot||current.pay_method_snapshot).toUpperCase(),
 
-    // ✅ IMPORTANT: storage is gated by overrideclientsettings + hasSubmitted legacy preservation
     default_submission_mode: default_submission_mode_to_store,
 
     week_ending_weekday_snapshot: wew,
@@ -6985,7 +7217,6 @@ async function handleContractsReplace(env, req, contractId) {
       if (desired !== cur) changed.push(k);
     }
 
-    // include overrideclientsettings / default_submission_mode
     if (overrideclientsettings !== !!current.overrideclientsettings) changed.push('overrideclientsettings');
     if ((current.default_submission_mode ?? null) !== (patch.default_submission_mode ?? null)) changed.push('default_submission_mode');
 
@@ -7029,14 +7260,14 @@ async function handleContractsReplace(env, req, contractId) {
   if (!res.ok) return withCORS(env, req, serverError(await res.text()));
   let updated = (await res.json().catch(()=>[]))[0];
 
-  const windowChanged =
-    (('start_date' in body) && toYmd(body.start_date) !== (current.start_date || '')) ||
-    (('end_date'   in body) && toYmd(body.end_date)   !== (current.end_date   || ''));
+  // ✅ windowChanged should reflect effective stored window (based on newStart/newEnd vs current)
+  const windowChanged = (String(newStart || '') !== String(current.start_date || '')) ||
+                        (String(newEnd   || '') !== String(current.end_date   || ''));
 
-  const weekdayChanged =
-    (('week_ending_weekday_snapshot' in body) &&
-     Number(body.week_ending_weekday_snapshot) !== Number(current.week_ending_weekday_snapshot ?? body.week_ending_weekday_snapshot));
+  // ✅ weekdayChanged should reflect effective stored week ending (based on computed wew vs current)
+  const weekdayChanged = Number(wew) !== Number(current.week_ending_weekday_snapshot ?? 0);
 
+  // Keep existing “delete out of range” logic only for rows with timesheet_id IS NULL
   if (windowChanged) {
     const del = await fetch(
       `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&timesheet_id=is.null&or=(week_ending_date.lt.${enc(newStart)},week_ending_date.gt.${enc(newEnd)})`,
@@ -7045,11 +7276,34 @@ async function handleContractsReplace(env, req, contractId) {
     try { await del.arrayBuffer(); } catch {}
   }
 
-  if ((windowChanged || weekdayChanged) && !hasSubmitted && !body.skip_generate_weeks) {
-    try {
-      await handleContractsGenerateWeeks(env, req, contractId);
-    } catch (e) {
-      try { console.warn('[CONTRACTS][REPLACE] regenerate weeks failed', { contractId, error: e?.message || String(e) }); } catch {}
+  // ✅ UPDATED week generation rules:
+  // - If windowChanged and !skip_generate_weeks: ALWAYS generate missing weeks (even if hasSubmitted).
+  // - If weekdayChanged and !skip_generate_weeks:
+  //     - if hasSubmitted: already blocked above; defensively skip here.
+  //     - else: delete all draft weeks (timesheet_id IS NULL) then regenerate under new weekday.
+  if (!body.skip_generate_weeks) {
+    if (weekdayChanged) {
+      if (!hasSubmitted) {
+        // Delete all draft weeks so regeneration doesn't duplicate old weekday structure
+        const delAllDraft = await fetch(
+          `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&timesheet_id=is.null`,
+          { method:'DELETE', headers: { ...sbHeaders(env), 'Prefer':'return-minimal' } }
+        );
+        try { await delAllDraft.arrayBuffer(); } catch {}
+
+        try {
+          await handleContractsGenerateWeeks(env, req, contractId);
+        } catch (e) {
+          try { console.warn('[CONTRACTS][REPLACE] regenerate weeks (weekdayChanged) failed', { contractId, error: e?.message || String(e) }); } catch {}
+        }
+      }
+    } else if (windowChanged) {
+      // Always add missing weeks on date-window change (even if submitted TS exist)
+      try {
+        await handleContractsGenerateWeeks(env, req, contractId);
+      } catch (e) {
+        try { console.warn('[CONTRACTS][REPLACE] generate weeks (windowChanged) failed', { contractId, error: e?.message || String(e) }); } catch {}
+      }
     }
   }
 
@@ -7112,8 +7366,6 @@ async function handleContractsReplace(env, req, contractId) {
   const warnings = Array.isArray(warnings0) ? [...warnings0, ...extraWarnings] : [...extraWarnings];
   return withCORS(env, req, ok({ contract: updated, warnings }));
 }
-
-
 async function handleContractsDuplicate(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -7935,7 +8187,43 @@ async function handleCandidateCalendar(env, req, candidateId) {
     return withCORS(env, req, serverError('candidate calendar failed'));
   }
 }
+async function handleCandidateEHistory(env, req, candidateId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
 
+  const enc = encodeURIComponent;
+
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/v_legacy_contract_rate_lines_flat` +
+        `?candidate_id=eq.${enc(candidateId)}` +
+        `&select=` +
+          [
+            'client_id',
+            'client_name',
+            'start_date',
+            'end_date',
+            'job_title',
+            'pay_method',
+            'label',
+            'pay_rate',
+            'margin',
+            'charge_rate',
+            'line_no'
+          ].join(',') +
+        `&order=start_date.desc,end_date.desc,line_no.asc`
+    );
+
+    return withCORS(env, req, ok({ rows: Array.isArray(rows) ? rows : [] }));
+  } catch (e) {
+    console.error('handleCandidateEHistory failed', {
+      candidate_id: candidateId,
+      err: e?.message || String(e)
+    });
+    return withCORS(env, req, serverError('Failed to fetch candidate e-history'));
+  }
+}
 async function handleContractsSkipWeeks(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -12258,6 +12546,22 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   }
   const bookingId = String(resolved.booking_id);
 
+  // ✅ Determine submission_mode_snapshot to restore on the reopened planned week.
+  // Prefer CURRENT timesheet submission_mode (before deletion), else fall back to existing CW snapshot, else MANUAL.
+  let reopenSnapshot = '';
+  try {
+    const tsRow = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true&select=submission_mode`
+    );
+    const sm = tsRow?.submission_mode != null ? String(tsRow.submission_mode).trim().toUpperCase() : '';
+    if (sm) reopenSnapshot = sm;
+  } catch {}
+  if (!reopenSnapshot) {
+    reopenSnapshot = (cw.submission_mode_snapshot != null ? String(cw.submission_mode_snapshot).trim().toUpperCase() : '') || 'MANUAL';
+  }
+  if (reopenSnapshot !== 'ELECTRONIC') reopenSnapshot = 'MANUAL';
+
   // Fetch all timesheet_ids in this booking_id series
   const { rows: tsRowsAll } = await sbFetch(
     env,
@@ -12305,7 +12609,7 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     ).catch(() => {});
   }
 
-  // Reset week to OPEN
+  // Reset week to OPEN (+ restore snapshot mode)
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`,
     {
@@ -12314,6 +12618,7 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
       body: JSON.stringify({
         timesheet_id: null,
         status: 'OPEN',
+        submission_mode_snapshot: reopenSnapshot,
         updated_at: nowIso()
       })
     }
@@ -12325,7 +12630,7 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
       env,
       user,
       'CONTRACT_WEEK_TIMESHEET_DELETED',
-      { contract_week_id: weekId, booking_id: bookingId, timesheet_id: currentTimesheetId },
+      { contract_week_id: weekId, booking_id: bookingId, timesheet_id: currentTimesheetId, reopened_submission_mode_snapshot: reopenSnapshot },
       { entity: 'contract_weeks', subject_id: weekId, req }
     );
   } catch {}
@@ -12336,7 +12641,8 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     booking_id: bookingId,
     requested_timesheet_id: cw.timesheet_id,
     current_timesheet_id: currentTimesheetId,
-    was_stale: !!resolved?.was_stale
+    was_stale: !!resolved?.was_stale,
+    reopened_submission_mode_snapshot: reopenSnapshot
   }));
 }
 
@@ -29215,6 +29521,8 @@ async function handleTimesheetsSummary(env, req) {
     return withCORS(env, req, serverError(`Failed to fetch timesheets summary: ${e?.message || e}`));
   }
 }
+
+
 async function handleHrAutoprocessPreview(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
   const enc = encodeURIComponent;
@@ -29332,10 +29640,15 @@ async function handleHrAutoprocessPreview(env, req, importId) {
     const paidAt = (paid_at_utc != null && String(paid_at_utc).trim())
       ? String(paid_at_utc).trim()
       : '';
+
     if (invId) return `Email blocked: timesheet is invoice-locked / invoiced (invoice_id=${invId}). Informative only.`;
     if (paidAt) return `Email blocked: timesheet is paid. Informative only.`;
-    const ps = String(processing_status || '').trim().toUpperCase() || 'UNKNOWN';
-    return `Email blocked: timesheet is not confirmed (awaiting authorisation/signature). processing_status=${ps}.`;
+
+    const ps = String(processing_status || '').trim().toUpperCase();
+    if (ps === 'PENDING_AUTH') return 'Timesheet not authorized yet - cannot email temporary staffing';
+    if (ps === 'AWAITING_MANUAL_SIGNATURE') return 'Signed timesheet not yet received from worker - cannot email temporary staffing';
+
+    return 'Email blocked: timesheet is not confirmed (awaiting authorisation/signature).';
   };
 
   try {
@@ -29741,13 +30054,16 @@ async function handleHrAutoprocessPreview(env, req, importId) {
 
       if (!blockedByInvoice && !blockedByConfirm) continue;
 
+      const reasonText = blockedReasonText(inv, paid, ps);
+
       const fr0 = Array.isArray(g?.failure_reasons) ? g.failure_reasons : [];
       const fr = fr0.slice();
-      fr.push(blockedReasonText(inv, paid, ps));
+      fr.push(reasonText);
 
       validation_groups[i] = {
         ...g,
         failure_reasons: fr,
+        email_blocked_reason: reasonText,
         issue_fingerprint: null,
         can_email: false
       };
@@ -30277,851 +30593,567 @@ async function handleHrAutoprocessPreview(env, req, importId) {
   }
 }
 
-async function handleHrAutoprocessApply(env, req, importId) {
+async function handleHrRotaValidationPreview(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
-
-  // ---- logging helpers (ALL logging is gated by LOG) ----
-  const logInfo  = (obj) => { if (LOG) console.log('[HR_AUTOPROC_APPLY]', JSON.stringify(obj)); };
-  const logWarn  = (obj) => { if (LOG) console.warn('[HR_AUTOPROC_APPLY]', JSON.stringify(obj)); };
-  const logError = (obj) => { if (LOG) console.error('[HR_AUTOPROC_APPLY]', JSON.stringify(obj)); };
 
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
-  if (!importId) return withCORS(env, req, badRequest('import_id is required'));
-
-  let body;
-  try { body = await parseJSONBody(req); } catch { body = null; }
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    return withCORS(env, req, badRequest('Invalid JSON body'));
+  if (!importId) {
+    return withCORS(env, req, badRequest('import_id is required'));
   }
 
-  const boolish = (v) => (v === true || v === 'true' || v === 1 || v === '1');
+  const enc = encodeURIComponent;
+  const norm = (s) => String(s || '').trim().toLowerCase();
+
+  // ✅ Daily parity: include missing_from_import as mismatch (emailable unless blocked by confirmation/invoice-lock rules)
+  const EMAIL_REASON_CODES = new Set([
+    'actual_hours_mismatch',
+    'start_end_mismatch',
+    'break_minutes_mismatch',
+    'missing_from_import'
+  ]);
+
+  // ✅ Resolve-gate reason codes (must resolve before any mismatch/missing/email sections are shown)
+  const RESOLVE_REASON_CODES = new Set([
+    'candidate_unresolved',
+    'grade_mapping_required',
+    'timesheet_not_found_or_ambiguous',
+    'timesheet_target_ambiguous'
+  ]);
 
   // ✅ "Timesheet not confirmed ⇒ cannot email Temp Staffing"
   const isBlockedForTsoEmail = (processing_status) => {
     const s = String(processing_status || '').trim().toUpperCase();
-    if (!s) return true; // safe default
+    if (!s) return true; // safe default: unknown status => block
     return (s === 'PENDING_AUTH' || s === 'AWAITING_MANUAL_SIGNATURE');
   };
 
-  // ✅ "Invoice-locked / paid ⇒ informative only (no email allowed)"
-  const isInvoiceLockedOrPaid = (locked_by_invoice_id, paid_at_utc) => {
-    const invId = (locked_by_invoice_id != null && String(locked_by_invoice_id).trim())
-      ? String(locked_by_invoice_id).trim()
+  // ✅ "Invoice-locked / paid ⇒ informative only (no email action allowed)"
+  const isInvoiceLockedOrPaid = (row) => {
+    const invId = (row?.tsfin_locked_by_invoice_id != null && String(row.tsfin_locked_by_invoice_id).trim())
+      ? String(row.tsfin_locked_by_invoice_id).trim()
       : '';
-    const paidAt = (paid_at_utc != null && String(paid_at_utc).trim())
-      ? String(paid_at_utc).trim()
+    const paidAt = (row?.tsfin_paid_at_utc != null && String(row.tsfin_paid_at_utc).trim())
+      ? String(row.tsfin_paid_at_utc).trim()
       : '';
-    return !!(invId || paidAt);
+    const isPaid = (row?.tsfin_is_paid === true) || !!paidAt;
+    const isInvoiced = (row?.tsfin_is_invoiced === true) || !!invId;
+    return !!(isPaid || isInvoiced);
   };
 
-  const unwrapRpcJsonb = (raw, fnName) => {
-    const j = raw;
-    if (Array.isArray(j)) {
-      const row0 = j[0];
-      if (row0 && typeof row0 === 'object' && fnName && Object.prototype.hasOwnProperty.call(row0, fnName)) {
-        return row0[fnName];
-      }
-      return row0;
-    }
-    if (j && typeof j === 'object' && fnName && Object.prototype.hasOwnProperty.call(j, fnName)) {
-      return j[fnName];
-    }
-    return j;
+  const emailBlockedReasonForRow = (row) => {
+    const invId = (row?.tsfin_locked_by_invoice_id != null && String(row.tsfin_locked_by_invoice_id).trim())
+      ? String(row.tsfin_locked_by_invoice_id).trim()
+      : '';
+    const paidAt = (row?.tsfin_paid_at_utc != null && String(row.tsfin_paid_at_utc).trim())
+      ? String(row.tsfin_paid_at_utc).trim()
+      : '';
+
+    if (invId) return `Email blocked: timesheet is invoice-locked / invoiced (invoice_id=${invId}). Informative only.`;
+    if (paidAt) return `Email blocked: timesheet is paid. Informative only.`;
+
+    const ps = String(row?.tsfin_processing_status || '').trim().toUpperCase();
+    if (ps === 'PENDING_AUTH') return 'Timesheet not authorized yet - cannot email temporary staffing';
+    if (ps === 'AWAITING_MANUAL_SIGNATURE') return 'Signed timesheet not yet received from worker - cannot email temporary staffing';
+
+    return 'Email blocked: timesheet is not confirmed (awaiting authorisation/signature).';
   };
 
-  const uniqStrings = (arr) => {
-    const out = [];
-    const seen = new Set();
-    for (const x of (Array.isArray(arr) ? arr : [])) {
-      const s = String(x || '').trim();
-      if (!s) continue;
-      if (seen.has(s)) continue;
-      seen.add(s);
-      out.push(s);
-    }
-    return out;
+  // ✅ Stable across imports: MUST NOT include import_id or hr_row_id (row IDs change each import)
+  const makeIssueFingerprint = (row) => {
+    const reasonCode = String(row.reason_code || '').toLowerCase();
+    const tsId       = row.timesheet_id || '';
+
+    const detail = row.details || row.detail || {};
+    const hrStart = detail.start_local  || detail.hr_start        || row.start_local || '';
+    const hrEnd   = detail.end_local    || detail.hr_end          || row.end_local   || '';
+    const hrHours = detail.hr_hours     || detail.hr_actual_hours || detail.hours_worked || '';
+    const tsHours = detail.ts_hours     || detail.ts_total_hours  || '';
+
+    const dateLocal = row.date_local || row.date || row.shift_date || '';
+    const hrRequestId = row.hr_request_id || row.hrRequestId || '';
+
+    const staffNorm = (row.staff_norm || row.staff_name || row.staff_raw || '')
+      .toLowerCase()
+      .trim();
+    const unitNorm  = (row.trust_norm || row.unit_norm || row.unit || row.hospital_or_trust || row.hospital_norm || '')
+      .toLowerCase()
+      .trim();
+
+    return [
+      'HEALTHROSTER_DAILY',
+      reasonCode,
+      tsId,
+      hrRequestId,
+      staffNorm,
+      unitNorm,
+      dateLocal,
+      hrStart,
+      hrEnd,
+      hrHours,
+      tsHours
+    ].join('|');
   };
 
-  const chunk = (arr, n) => {
-    const out = [];
-    for (let i = 0; i < (arr || []).length; i += n) out.push(arr.slice(i, i + n));
-    return out;
-  };
+  // caches to avoid per-row fetches
+  const candidateCache = new Map(); // `${staffNorm}|${trustNorm}` -> candidate_id|null
 
-  const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
-    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-  }[c]));
-
-  const safeYmd = (v) => {
-    const s = String(v || '').trim();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-    return s || '';
-  };
-
-  // ✅ Format YYYY-MM-DD → "Mon 1 Sep 2026" (Europe/London)
-  const fmtNiceDate = (ymd) => {
-    const s = safeYmd(ymd);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return s || '—';
-    const d = new Date(`${s}T00:00:00Z`);
-    if (Number.isNaN(d.getTime())) return s;
+  async function resolveCandidateCached(staffRaw, staffNorm, trustNorm) {
+    const k = `${norm(staffNorm || staffRaw)}|${String(trustNorm || '').trim().toLowerCase()}`;
+    if (candidateCache.has(k)) return candidateCache.get(k);
+    let out = null;
     try {
-      return new Intl.DateTimeFormat('en-GB', {
-        timeZone: 'Europe/London',
-        weekday: 'short',
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric'
-      }).format(d);
+      out = await findCandidateByImportName(env, staffRaw || staffNorm, { trustNorm: String(trustNorm || '').trim().toLowerCase() });
     } catch {
-      return s;
+      out = null;
     }
-  };
-
-  const normEmail = (v) => {
-    const s = String(v ?? '').trim();
-    return s ? s : '';
-  };
-
-  // Inputs (new contract)
-  const selectedActionIdsIn = Array.isArray(body.selected_action_ids) ? body.selected_action_ids : [];
-  const selectedActionIds = uniqStrings(selectedActionIdsIn);
-
-  const selectedActionsIn = Array.isArray(body.selected_actions) ? body.selected_actions : [];
-  const selectedActions = selectedActionsIn
-    .filter(x => x && typeof x === 'object' && !Array.isArray(x))
-    .map(x => ({ ...x }));
-
-  // Legacy cancellation_actions support: allow shift_id → CANCEL:<shift_id> (explicit shift IDs only)
-  const cancellationActionsIn = Array.isArray(body.cancellation_actions) ? body.cancellation_actions : [];
-  for (const a of cancellationActionsIn) {
-    const sid = a && a.shift_id ? String(a.shift_id).trim() : '';
-    if (!sid) continue;
-    const aid = `CANCEL:${sid}`;
-    if (!selectedActionIds.includes(aid)) selectedActionIds.push(aid);
+    candidateCache.set(k, out || null);
+    return out || null;
   }
 
-  // Legacy selected_group_ids is NOT supported in apply anymore (no Worker-side expansion).
-  const legacyGroupIds = Array.isArray(body.selected_group_ids) ? uniqStrings(body.selected_group_ids) : [];
-  const hasLegacyGroupIdsOnly =
-    legacyGroupIds.length > 0 &&
-    selectedActionIds.length === 0 &&
-    selectedActions.length === 0;
-
-  if (hasLegacyGroupIdsOnly) {
-    return withCORS(
+  try {
+    // Load import (authoritative client_id)
+    const { rows: impRows } = await sbFetch(
       env,
-      req,
-      badRequest('Apply now requires action-level selection (selected_action_ids with ROW:/CANCEL:). Update the frontend; selected_group_ids is no longer accepted for apply.')
+      `${env.SUPABASE_URL}/rest/v1/hr_imports` +
+        `?id=eq.${enc(importId)}` +
+        `&select=id,source_system,client_id` +
+        `&limit=1`
     );
-  }
-
-  // Decisions map (Phase 3)
-  const decisions =
-    (body.decisions && typeof body.decisions === 'object' && !Array.isArray(body.decisions))
-      ? body.decisions
-      : {};
-
-  // ✅ Mode A email actions (alt email overrides)
-  const emailActionsIn = Array.isArray(body.email_actions)
-    ? body.email_actions
-    : (Array.isArray(body.send_email_actions) ? body.send_email_actions : []);
-
-  const emailActions = (emailActionsIn || [])
-    .map(a => {
-      const tsId = a?.timesheet_id ? String(a.timesheet_id).trim() : null;
-      const fp   = a?.issue_fingerprint ? String(a.issue_fingerprint).trim() : null;
-
-      const alt =
-        normEmail(a?.alt_email) ||
-        normEmail(a?.alternative_email) ||
-        normEmail(a?.alt_recipient_email) ||
-        normEmail(a?.to_email) ||
-        normEmail(a?.toEmail) ||
-        normEmail(a?.recipient_email_override) ||
-        normEmail(a?.override_email) ||
-        '';
-
-      return {
-        timesheet_id: tsId,
-        issue_fingerprint: fp,
-        ...(alt ? { alt_email: alt } : {})
-      };
-    })
-    .filter(a => !!(a.timesheet_id && a.issue_fingerprint)); // ✅ defensive: ignore missing fingerprint
-
-  // ✅ Include-missing-shifts flag
-  const includeMissingShifts =
-    boolish(body.include_missing_shifts) ||
-    boolish(body.includeMissingShifts) ||
-    boolish(body.include_missing) ||
-    boolish(body.includeMissing) ||
-    false;
-
-  // ✅ Destructive invalidation actions (checkbox-driven)
-  const invalidationActionsIn = Array.isArray(body.invalidation_actions) ? body.invalidation_actions : [];
-  const invalidationActions = invalidationActionsIn
-    .filter(x => x && typeof x === 'object' && !Array.isArray(x))
-    .map(x => ({
-      timesheet_id: x?.timesheet_id ? String(x.timesheet_id).trim() : null,
-      comparison_key: x?.comparison_key ? String(x.comparison_key).trim() : null,
-      invalidate: (x?.invalidate === false || x?.invalidate === 'false' || x?.invalidate === 0 || x?.invalidate === '0') ? false : true
-    }))
-    .filter(x => !!(x.timesheet_id && x.comparison_key));
-
-  // ─────────────────────────────────────────────
-  // ✅ Config-driven default for enqueue_tspdf_regen:
-  //   - If request explicitly provides a flag (even false), honour it.
-  //   - Otherwise default to settings.importConfig.tspdf_effective.regen_on_ref_change (recommended default true).
-  // ─────────────────────────────────────────────
-  const hasEnqueueTspdfKey =
-    Object.prototype.hasOwnProperty.call(body, 'enqueue_tspdf_regen') ||
-    Object.prototype.hasOwnProperty.call(body, 'enqueueTspdfRegen') ||
-    Object.prototype.hasOwnProperty.call(body, 'enqueue_pdf_regen') ||
-    Object.prototype.hasOwnProperty.call(body, 'enqueuePdfRegen');
-
-  let enqueueTspdfRegenDefault = true;
-  try {
-    const s = await loadSettingsDefaults(env);
-    const v = s?.importConfig?.tspdf_effective?.regen_on_ref_change;
-    if (v === true || v === false) enqueueTspdfRegenDefault = v;
-  } catch {
-    enqueueTspdfRegenDefault = true;
-  }
-
-  const enqueueTspdfRegen = hasEnqueueTspdfKey
-    ? (
-        boolish(body.enqueue_tspdf_regen) ||
-        boolish(body.enqueueTspdfRegen) ||
-        boolish(body.enqueue_pdf_regen) ||
-        boolish(body.enqueuePdfRegen) ||
-        false
-      )
-    : enqueueTspdfRegenDefault;
-
-  logInfo({
-    stage: 'start',
-    import_id: importId,
-    selected_action_ids_count: selectedActionIds.length,
-    selected_actions_count: selectedActions.length,
-    email_actions_count: emailActions.length,
-    invalidation_actions_count: invalidationActions.length,
-    include_missing_shifts: includeMissingShifts,
-    decisions_keys_count: Object.keys(decisions || {}).length,
-    enqueue_tspdf_regen: enqueueTspdfRegen,
-    enqueue_tspdf_regen_source: hasEnqueueTspdfKey ? 'REQUEST' : 'SETTINGS_DEFAULTS'
-  });
-
-  // ─────────────────────────────────────────────
-  // ✅ Server-side enforcement — block Mode-A emails for:
-  //   - unconfirmed timesheets
-  //   - invoice-locked/paid (informative only)
-  // ─────────────────────────────────────────────
-  if (emailActions.length) {
-    const tsIds = uniqStrings(emailActions.map(a => a?.timesheet_id).filter(Boolean));
-    const metaByTs = new Map();
-
-    if (tsIds.length) {
-      for (const idChunk of chunk(tsIds, 150)) {
-        try {
-          const { rows: tfRows } = await sbFetch(
-            env,
-            `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-              `?is_current=eq.true` +
-              `&timesheet_id=in.(${idChunk.map(enc).join(',')})` +
-              `&select=timesheet_id,processing_status,locked_by_invoice_id,paid_at_utc`
-          );
-          for (const tf of (tfRows || [])) {
-            const tsId = tf?.timesheet_id ? String(tf.timesheet_id).trim() : '';
-            if (!tsId) continue;
-            if (!metaByTs.has(tsId)) {
-              metaByTs.set(tsId, {
-                processing_status: tf?.processing_status ?? null,
-                locked_by_invoice_id: tf?.locked_by_invoice_id ?? null,
-                paid_at_utc: tf?.paid_at_utc ?? null
-              });
-            }
-          }
-        } catch {
-          // non-fatal; safe default below blocks if status missing
-        }
-      }
-    }
-
-    const blockedInvoiced = [];
-    const blockedUnconfirmed = [];
-
-    for (const tsId of tsIds) {
-      const meta = metaByTs.has(tsId) ? metaByTs.get(tsId) : null;
-      const ps = meta ? meta.processing_status : null;
-      const inv = meta ? meta.locked_by_invoice_id : null;
-      const paid = meta ? meta.paid_at_utc : null;
-
-      if (isInvoiceLockedOrPaid(inv, paid)) {
-        blockedInvoiced.push(tsId);
-        continue;
-      }
-      if (isBlockedForTsoEmail(ps)) {
-        blockedUnconfirmed.push(tsId);
-        continue;
-      }
-    }
-
-    if (blockedInvoiced.length) {
-      return withCORS(env, req, badRequest(JSON.stringify({
-        error: 'HR_WEEKLY_EMAIL_BLOCKED_INVOICED_TIMESHEET',
-        message: 'Cannot email Temporary Staffing because one or more selected timesheets are invoice-locked / invoiced or paid (informative only).',
+    const imp = impRows?.[0] || null;
+    const src = String(imp?.source_system || '').toUpperCase();
+    if (!imp || !imp.id) {
+      return withCORS(env, req, ok({
         import_id: importId,
-        blocked_timesheet_ids: blockedInvoiced
-      })));
-    }
-
-    if (blockedUnconfirmed.length) {
-      return withCORS(env, req, badRequest(JSON.stringify({
-        error: 'HR_WEEKLY_EMAIL_BLOCKED_UNCONFIRMED_TIMESHEET',
-        message: 'Cannot email Temporary Staffing because one or more selected timesheets are not confirmed (awaiting authorisation/signature).',
-        import_id: importId,
-        blocked_timesheet_ids: blockedUnconfirmed
-      })));
-    }
-  }
-
-  // ─────────────────────────────────────────────
-  // 1) Single transactional DB apply RPC
-  // ─────────────────────────────────────────────
-  let applyPayload;
-  try {
-    const rpcRaw = await sbRpc(env, 'hr_weekly_apply_transactional', {
-      p_import_id: importId,
-      p_payload: {
-        selected_action_ids: selectedActionIds,
-        selected_actions: selectedActions,
-        decisions,
-        email_actions: emailActions,
-        include_missing_shifts: includeMissingShifts,
-        invalidation_actions: invalidationActions
-      },
-      p_actor_user_id: user.id
-    });
-
-    applyPayload = unwrapRpcJsonb(rpcRaw, 'hr_weekly_apply_transactional');
-  } catch (e) {
-    logError({
-      stage: 'apply_rpc_failed',
-      import_id: importId,
-      err: String(e?.message || e || '')
-    });
-    return withCORS(env, req, serverError(`HR weekly apply failed: ${e?.message || String(e)}`));
-  }
-
-  if (!applyPayload || typeof applyPayload !== 'object') {
-    return withCORS(env, req, serverError('HR weekly apply returned invalid payload'));
-  }
-
-  const emailJobs = Array.isArray(applyPayload.email_jobs) ? applyPayload.email_jobs : [];
-
-  // ✅ TSFIN drain: include affected + validation-affected + ref-updated (top-level + mode_a)
-  const affectedBase = Array.isArray(applyPayload.affected_timesheet_ids) ? applyPayload.affected_timesheet_ids : [];
-  const affectedValTop = Array.isArray(applyPayload.validation_affected_timesheet_ids) ? applyPayload.validation_affected_timesheet_ids : [];
-  const affectedValModeA = Array.isArray(applyPayload?.mode_a?.validation_affected_timesheet_ids)
-    ? applyPayload.mode_a.validation_affected_timesheet_ids
-    : [];
-
-  const affectedRefTop = Array.isArray(applyPayload.ref_updated_timesheet_ids) ? applyPayload.ref_updated_timesheet_ids : [];
-  const affectedRefModeA = Array.isArray(applyPayload?.mode_a?.ref_updated_timesheet_ids)
-    ? applyPayload.mode_a.ref_updated_timesheet_ids
-    : [];
-
-  const affectedTimesheetIds = uniqStrings([
-    ...(affectedBase || []),
-    ...(affectedValTop || []),
-    ...(affectedValModeA || []),
-    ...(affectedRefTop || []),
-    ...(affectedRefModeA || [])
-  ]);
-
-  // ─────────────────────────────────────────────
-  // 2) Post-commit: queue emails best-effort (group by recipient)
-  // ─────────────────────────────────────────────
-  let emailsQueued = 0;
-  const emailFailures = [];
-
-  // ✅ Agency name from settings_defaults (single row)
-  let agencyName = 'CloudTMS';
-  try {
-    const { rows: defRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=agency_name&limit=1`
-    );
-    const nm = defRows?.[0]?.agency_name;
-    const cleaned = (nm == null) ? '' : String(nm).trim();
-    if (cleaned) agencyName = cleaned;
-  } catch {}
-
-  const buildEmailHtmlTable = (items) => {
-    const rows = Array.isArray(items) ? items : [];
-
-    const head = `
-      <tr>
-        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">Candidate</th>
-        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">W/E</th>
-        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">Date</th>
-        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">Timesheet</th>
-        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">HealthRoster</th>
-        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">Status</th>
-        <th style="text-align:left;padding:8px 10px;border:1px solid #d9d9d9;background:#f3f3f3;">Reference No.</th>
-      </tr>
-    `;
-
-    const body = rows.map((it) => {
-      const cand = escapeHtml(String(it?.candidate_name || it?.candidate || '') || '—');
-
-      const weNice = escapeHtml(fmtNiceDate(it?.week_ending_date) || '—');
-      const wdNice = escapeHtml(fmtNiceDate(it?.work_date) || '—');
-
-      const tsTxt =
-        `${String(it?.timesheet_start || '—')} → ${String(it?.timesheet_end || '—')}` +
-        ` (break ${it?.timesheet_break_mins == null ? '—' : String(it.timesheet_break_mins)})`;
-
-      const hrStart = String(it?.healthroster_start || '').trim();
-      const hrEnd = String(it?.healthroster_end || '').trim();
-
-      const hrTxt = (!hrStart || !hrEnd)
-        ? 'Missing in Healthroster - please add'
-        : (
-            `${hrStart} → ${hrEnd}` +
-            ` (break ${it?.healthroster_break_mins == null ? '—' : String(it.healthroster_break_mins)})`
-          );
-
-      const ms = escapeHtml(String(it?.match_status || it?.status || '—'));
-
-      const refAfterRaw = (it?.reference_no != null)
-        ? String(it.reference_no)
-        : (it?.ref_after != null)
-          ? String(it.ref_after)
-          : (it?.ref != null)
-            ? String(it.ref)
-            : '';
-      const refNo = escapeHtml((String(refAfterRaw || '').trim()) || 'N/A');
-
-      return `
-        <tr>
-          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;">${cand}</td>
-          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;white-space:nowrap;">${weNice}</td>
-          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;white-space:nowrap;">${wdNice}</td>
-          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;">${escapeHtml(tsTxt)}</td>
-          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;">${escapeHtml(hrTxt)}</td>
-          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;white-space:nowrap;">${ms}</td>
-          <td style="padding:8px 10px;border:1px solid #d9d9d9;vertical-align:top;white-space:nowrap;">${refNo}</td>
-        </tr>
-      `;
-    }).join('\n');
-
-    return `
-      <div style="overflow:auto;">
-        <table style="border-collapse:collapse;width:100%;font-family:Arial,sans-serif;font-size:13px;">
-          <thead>${head}</thead>
-          <tbody>${body}</tbody>
-        </table>
-      </div>
-    `;
-  };
-
-  // Group recipient resolution:
-  // Prefer item alt/override fields, else job.recipient_email, else item.recipient_email
-  const extractRecipientForItem = (job, item) => {
-    const a =
-      normEmail(item?.alt_email) ||
-      normEmail(item?.alternative_email) ||
-      normEmail(item?.alt_recipient_email) ||
-      normEmail(item?.recipient_email_override) ||
-      normEmail(item?.override_email) ||
-      '';
-    if (a) return a;
-
-    const j = normEmail(job?.recipient_email);
-    if (j) return j;
-
-    const i = normEmail(item?.recipient_email);
-    return i || '';
-  };
-
-  const groupEmailWork = () => {
-    const groups = new Map(); // email -> { items: [], tsIds:Set<string> }
-
-    const addToGroup = (email, item) => {
-      const k = normEmail(email);
-      if (!k) return false;
-
-      const cur = groups.get(k) || { items: [], tsIds: new Set() };
-      cur.items.push(item);
-
-      const tsId = String(item?.timesheet_id || '').trim();
-      if (tsId) cur.tsIds.add(tsId);
-
-      groups.set(k, cur);
-      return true;
-    };
-
-    const jobsArr = Array.isArray(emailJobs) ? emailJobs : [];
-
-    for (const job of jobsArr) {
-      const items = Array.isArray(job?.items) ? job.items : [];
-      if (!items.length) continue;
-
-      for (const it0 of items) {
-        const it = (it0 && typeof it0 === 'object') ? it0 : {};
-        const recip = extractRecipientForItem(job, it);
-        const ok = addToGroup(recip, it);
-        if (!ok) {
-          emailFailures.push({
-            reason: 'NO_RECIPIENT_EMAIL',
-            recipient_email: null,
-            timesheet_id: it?.timesheet_id ? String(it.timesheet_id) : null
-          });
-        }
-      }
-    }
-
-    return groups;
-  };
-
-  const grouped = groupEmailWork();
-
-  for (const [recipientEmail, pack] of grouped.entries()) {
-    const items = Array.isArray(pack?.items) ? pack.items : [];
-    const tsIds = (pack?.tsIds instanceof Set) ? Array.from(pack.tsIds) : [];
-
-    if (!recipientEmail) continue;
-    if (!items.length || !tsIds.length) {
-      emailFailures.push({ reason: 'EMPTY_EMAIL_GROUP', recipient_email: recipientEmail });
-      continue;
-    }
-
-    const attachments = [];
-    for (const tsIdRaw of tsIds) {
-      const tsId = String(tsIdRaw || '').trim();
-      if (!tsId) continue;
-
-      let pdfKey = null;
-      try {
-        pdfKey = await ensureTimesheetPdf(env, tsId);
-      } catch (e) {
-        emailFailures.push({
-          reason: 'PDF_GENERATION_FAILED',
-          recipient_email: recipientEmail,
-          timesheet_id: tsId,
-          err: String(e?.message || e)
-        });
-        continue;
-      }
-      if (!pdfKey) {
-        emailFailures.push({ reason: 'PDF_MISSING', recipient_email: recipientEmail, timesheet_id: tsId });
-        continue;
-      }
-      attachments.push({ r2_key: pdfKey, filename: `Timesheet_${tsId}.pdf` });
-    }
-
-    if (!attachments.length) {
-      emailFailures.push({ reason: 'NO_ATTACHMENTS', recipient_email: recipientEmail });
-      continue;
-    }
-
-    const subject = `HealthRoster weekly validation – shifts to amend`;
-    const tableHtml = buildEmailHtmlTable(items);
-
-    const bodyText = [
-      'Dear Team,',
-      '',
-      'Please find attached timesheets which needs come corrections on Healthroster. Details of the corrections are below.',
-      'Please kindly confirm once actioned.',
-      'Many thanks,',
-      agencyName
-    ].join('\n');
-
-    const bodyHtml = `
-      <div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.45;color:#111;">
-        <p style="margin:0 0 10px 0;"><strong>Dear Team,</strong></p>
-        <p style="margin:0 0 10px 0;">Please find attached timesheets which needs come corrections on Healthroster. Details of the corrections are below.</p>
-        <p style="margin:0 0 14px 0;">Please kindly confirm once actioned.</p>
-        ${tableHtml}
-        <p style="margin:14px 0 0 0;">Many thanks,<br/><strong>${escapeHtml(agencyName)}</strong></p>
-      </div>
-    `;
-
-    try {
-      const insert = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
-        method: 'POST',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify({
-          type: 'TSO_FAILURE',
-          to: recipientEmail,
-          cc: null,
-          subject,
-          body_html: bodyHtml,
-          body_text: bodyText,
-          attachments,
-          status: 'QUEUED',
-          reference: `hr_weekly_validation:${importId}:consolidated:${recipientEmail}`,
-          created_by: user?.id || null
-        })
-      });
-
-      if (!insert.ok) {
-        const t = await insert.text().catch(() => '');
-        throw new Error(t || `mail_outbox ${insert.status}`);
-      }
-
-      emailsQueued += 1;
-    } catch (e) {
-      emailFailures.push({ reason: 'MAIL_OUTBOX_INSERT_FAILED', recipient_email: recipientEmail, err: String(e?.message || e) });
-    }
-  }
-
-  // ─────────────────────────────────────────────
-  // 3) Post-commit: TSFIN Strategy A drain-to-completion (hard requirement)
-  // ─────────────────────────────────────────────
-  const tsfinDrainStats = {
-    ids: affectedTimesheetIds.length,
-    enqueued: 0,
-    loops: 0,
-    picked: 0,
-    ok: 0,
-    fail: 0,
-    pending_total: 0,
-    pending_ready: 0,
-    pending_next_attempt_at_min: null,
-    done: true
-  };
-
-  const getPendingSummary = async () => {
-    const raw = await sbRpc(env, 'tsfin_outbox_pending_summary', {
-      p_timesheet_ids: affectedTimesheetIds
-    });
-    const payload = unwrapRpcJsonb(raw, 'tsfin_outbox_pending_summary');
-    if (!payload || typeof payload !== 'object') {
-      return { total: null, ready: null, next_attempt_at_min: null, now: null };
-    }
-    return payload;
-  };
-
-  if (affectedTimesheetIds.length) {
-    try {
-      try {
-        const enqRaw = await sbRpc(env, 'enqueue_ts_financials_priority', {
-          _timesheet_ids: affectedTimesheetIds,
-          _reason: 'CONTEXT_CHANGED'
-        });
-        const enqNum = Number(
-          (typeof enqRaw === 'number' || typeof enqRaw === 'string')
-            ? enqRaw
-            : (Array.isArray(enqRaw) ? (enqRaw?.[0]?.enqueue_ts_financials_priority ?? enqRaw?.[0]?.count ?? enqRaw?.[0]?.row_count) : null)
-        );
-        tsfinDrainStats.enqueued = Number.isFinite(enqNum) && enqNum > 0 ? enqNum : affectedTimesheetIds.length;
-      } catch {
-        tsfinDrainStats.enqueued = affectedTimesheetIds.length;
-      }
-
-      const maxLoops = 60;
-      while (tsfinDrainStats.loops < maxLoops) {
-        const res = await runTsfinWorkerOnce(env, {
-          limit: Math.min(50, affectedTimesheetIds.length),
-          onlyTimesheetIds: affectedTimesheetIds
-        });
-
-        tsfinDrainStats.loops += 1;
-        tsfinDrainStats.picked += Number(res?.picked || 0);
-        tsfinDrainStats.ok += Number(res?.ok || 0);
-        tsfinDrainStats.fail += Number(res?.fail || 0);
-
-        const pending = await getPendingSummary();
-        tsfinDrainStats.pending_total = Number(pending?.total ?? 0) || 0;
-        tsfinDrainStats.pending_ready = Number(pending?.ready ?? 0) || 0;
-        tsfinDrainStats.pending_next_attempt_at_min = pending?.next_attempt_at_min ?? null;
-
-        if (tsfinDrainStats.pending_total === 0) break;
-        if (!res || Number(res?.picked || 0) === 0) break;
-      }
-
-      if (tsfinDrainStats.fail > 0) tsfinDrainStats.done = false;
-      if (tsfinDrainStats.pending_total > 0) tsfinDrainStats.done = false;
-      if (tsfinDrainStats.loops >= maxLoops && tsfinDrainStats.pending_total > 0) tsfinDrainStats.done = false;
-
-      if (!tsfinDrainStats.done) {
-        logError({
-          stage: 'tsfin_drain_failed_strict_after_apply_commit',
-          import_id: importId,
-          stats: tsfinDrainStats
-        });
-
-        const retryAfterSeconds = 30;
-        const resp = {
-          error: 'TSFIN_REFRESH_FAILED_AFTER_APPLY',
-          message:
-            'The database apply succeeded, but TSFIN refresh did not complete. No data was rolled back. Please retry TSFIN recompute using the affected_timesheet_ids.',
-          import_id: importId,
-          affected_timesheet_ids: affectedTimesheetIds,
-          tsfin_drain: tsfinDrainStats,
-          retry: {
-            action: 'RETRY_TSFIN_RECOMPUTE',
-            timesheet_ids: affectedTimesheetIds,
-            next_attempt_at_min: tsfinDrainStats.pending_next_attempt_at_min,
-            retry_after_seconds: retryAfterSeconds
-          },
-          apply: applyPayload
-        };
-
-        return withCORS(env, req, new Response(JSON.stringify(resp), {
-          status: 500,
-          headers: { 'content-type': 'application/json' }
-        }));
-      }
-    } catch (e) {
-      logError({
-        stage: 'tsfin_drain_exception_strict_after_apply_commit',
-        import_id: importId,
-        err: String(e?.message || e || ''),
-        stats: tsfinDrainStats
-      });
-
-      const retryAfterSeconds = 30;
-      const resp = {
-        error: 'TSFIN_REFRESH_EXCEPTION_AFTER_APPLY',
-        message:
-          'The database apply succeeded, but TSFIN refresh raised an exception. No data was rolled back. Please retry TSFIN recompute using the affected_timesheet_ids.',
-        import_id: importId,
-        affected_timesheet_ids: affectedTimesheetIds,
-        tsfin_drain: tsfinDrainStats,
-        retry: {
-          action: 'RETRY_TSFIN_RECOMPUTE',
-          timesheet_ids: affectedTimesheetIds,
-          next_attempt_at_min: tsfinDrainStats.pending_next_attempt_at_min || null,
-          retry_after_seconds: retryAfterSeconds
-        },
-        apply: applyPayload
-      };
-
-      return withCORS(env, req, new Response(JSON.stringify(resp), {
-        status: 500,
-        headers: { 'content-type': 'application/json' }
+        source_system: null,
+        error: 'import_not_found',
+        summary: { total_rows: 0 },
+        rows: []
       }));
     }
-  }
+    if (src !== 'HEALTHROSTER_DAILY') {
+      return withCORS(env, req, ok({
+        import_id: importId,
+        source_system: src,
+        error: 'source_system_mismatch',
+        summary: { total_rows: 0 },
+        rows: []
+      }));
+    }
 
-  // ─────────────────────────────────────────────
-  // 3.5) Post-TSFIN: detect QR reissue candidates + optional tspdf enqueue
-  // ─────────────────────────────────────────────
-  let qrReissueCandidates = [];
-  let docFlagsRows = [];
-  let tspdfEnqueued = 0;
-  let tspdfTargetCount = 0;
+    const importClientId = imp.client_id ? String(imp.client_id).trim() : '';
+    if (!importClientId) {
+      return withCORS(env, req, ok({
+        import_id: importId,
+        source_system: 'HEALTHROSTER_DAILY',
+        error: 'client_missing_on_import',
+        summary: { total_rows: 0 },
+        rows: []
+      }));
+    }
 
-  if (affectedTimesheetIds.length) {
+    // Get default recipient + client name (single-client import)
+    let clientName = null;
+    let recipientEmailDefault = null;
     try {
-      const flagsRaw = await sbRpc(env, 'timesheet_doc_flags_batch', {
-        p_timesheet_ids: affectedTimesheetIds
-      });
+      const { rows: cRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/clients` +
+          `?id=eq.${enc(importClientId)}` +
+          `&select=id,name,ts_queries_email` +
+          `&limit=1`
+      );
+      const c0 = cRows?.[0] || null;
+      clientName = c0?.name != null ? String(c0.name) : null;
+      const em = c0?.ts_queries_email != null ? String(c0.ts_queries_email).trim() : '';
+      recipientEmailDefault = em || null;
+    } catch {}
 
-      docFlagsRows = Array.isArray(flagsRaw) ? flagsRaw : [];
-      qrReissueCandidates = docFlagsRows
-        .filter(r => r && (r.qr_refs_changed === true || r.qr_refs_changed === 'true' || r.qr_refs_changed === 1 || r.qr_refs_changed === '1'))
-        .map(r => ({
-          timesheet_id: String(r.timesheet_id || '').trim() || null,
-          candidate_id: r.candidate_id || null,
-          candidate_name: (r.candidate_name != null ? String(r.candidate_name) : null),
-          client_id: r.client_id || null,
-          client_name: (r.client_name != null ? String(r.client_name) : null),
-          sheet_scope: (r.sheet_scope != null ? String(r.sheet_scope) : null),
-          week_ending_date: (r.week_ending_date != null ? String(r.week_ending_date).slice(0, 10) : null),
-          qr_status: (r.qr_status != null ? String(r.qr_status) : null),
-          current_refs_sig: (r.current_refs_sig != null ? String(r.current_refs_sig) : null),
-          qr_sent_refs_sig: (r.qr_sent_refs_sig != null ? String(r.qr_sent_refs_sig) : null),
-          generated_pdf_refs_sig: (r.generated_pdf_refs_sig != null ? String(r.generated_pdf_refs_sig) : null)
-        }))
-        .filter(x => !!x.timesheet_id);
+    const result = await classifyHrRotaValidationImport(env, importId);
+    if (result.error) {
+      if (LOG) {
+        console.warn('[HR_DAILY_PREVIEW]', JSON.stringify({
+          import_id: importId,
+          stage: 'classification_error',
+          error: result.error
+        }));
+      }
+      return withCORS(env, req, ok(result));
+    }
 
-      if (enqueueTspdfRegen) {
-        const elecIds = uniqStrings(
-          docFlagsRows
-            .filter(r => r && (r.electronic_refs_changed === true || r.electronic_refs_changed === 'true' || r.electronic_refs_changed === 1 || r.electronic_refs_changed === '1'))
-            .map(r => r.timesheet_id)
+    const rows = Array.isArray(result.rows) ? result.rows : [];
+
+    // Load hr_rows payload_json for grade_raw + resolved_timesheet_id (import-scoped)
+    const hrRowIds = rows
+      .map(r => (r && r.hr_row_id ? String(r.hr_row_id).trim() : ''))
+      .filter(Boolean);
+
+    const hrMetaById = new Map(); // hr_row_id -> { grade_raw, resolved_timesheet_id }
+    if (hrRowIds.length) {
+      try {
+        const idParam = hrRowIds.map(enc).join(',');
+        const { rows: hrRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/hr_rows` +
+            `?import_id=eq.${enc(importId)}` +
+            `&id=in.(${idParam})` +
+            `&select=id,assignment_grade_norm,payload_json`
         );
 
-        tspdfTargetCount = elecIds.length;
+        for (const r of (hrRows || [])) {
+          const id = r?.id ? String(r.id) : '';
+          if (!id) continue;
 
-        if (elecIds.length) {
-          const enqRaw = await sbRpc(env, 'tspdf_enqueue_many', {
-            p_timesheet_ids: elecIds,
-            p_force_regen: true,
-            p_prefer_generated: true,
-            p_reason: null,
-            p_limit: 500
+          let payload = r.payload_json || {};
+          if (typeof payload === 'string') {
+            try { payload = JSON.parse(payload); } catch { payload = {}; }
+          }
+          if (!payload || typeof payload !== 'object' || Array.isArray(payload)) payload = {};
+
+          const grade =
+            r.assignment_grade_norm ||
+            payload.grade_raw ||
+            payload.Request_Grade ||
+            payload.request_grade ||
+            payload.grade ||
+            null;
+
+          const resolvedTs =
+            payload.resolved_timesheet_id ||
+            payload.resolved_target_timesheet_id ||
+            payload.resolved_target_id ||
+            null;
+
+          hrMetaById.set(id, {
+            grade_raw: grade ? String(grade) : null,
+            resolved_timesheet_id: resolvedTs ? String(resolvedTs) : null
           });
-
-          const enqNum =
-            (typeof enqRaw === 'number' || typeof enqRaw === 'string')
-              ? Number(enqRaw)
-              : (Array.isArray(enqRaw) ? Number(enqRaw?.[0]?.tspdf_enqueue_many ?? enqRaw?.[0]?.count ?? enqRaw?.[0]?.row_count) : NaN);
-
-          tspdfEnqueued = (Number.isFinite(enqNum) ? enqNum : 0);
+        }
+      } catch (e) {
+        if (LOG) {
+          console.warn('[HR_DAILY_PREVIEW]', JSON.stringify({
+            stage: 'hr_rows_meta_lookup_failed',
+            import_id: importId,
+            err: e?.message || String(e)
+          }));
         }
       }
-    } catch (e) {
-      logWarn({
-        stage: 'doc_flags_batch_failed_non_fatal',
-        import_id: importId,
-        err: String(e?.message || e || '')
+    }
+
+    // Decorate rows (resolve-relevant fields first), and compute resolve gates BEFORE any mismatch/email work.
+    const decoratedCoreRows = [];
+    const recipientMissingDefault = !(recipientEmailDefault && String(recipientEmailDefault).trim());
+
+    let gateCand = 0;
+    let gateGrade = 0;
+    let gateTarget = 0;
+    let gateUnmatched = 0;
+    let gateOtherReject = 0;
+
+    for (let idx = 0; idx < rows.length; idx++) {
+      const row = rows[idx];
+
+      const reasonCodeL = String(row?.reason_code || '').trim().toLowerCase();
+      const statusU = String(row?.status || '').trim().toUpperCase();
+      const actionU = String(row?.action || row?.resolution_status || row?.resolutionStatus || '').trim().toUpperCase();
+
+      const hrid = row?.hr_row_id ? String(row.hr_row_id).trim() : '';
+      const meta = hrid ? (hrMetaById.get(hrid) || null) : null;
+
+      const grade_raw = meta?.grade_raw || null;
+      const resolved_timesheet_id = meta?.resolved_timesheet_id || null;
+
+      const staffRaw = row?.staff_name || row?.staff_raw || '';
+      const staffNorm = row?.staff_norm || '';
+      const trustNorm = row?.trust_norm || '';
+
+      let candidate_id = row?.candidate_id || null;
+      if (!candidate_id) {
+        candidate_id = await resolveCandidateCached(staffRaw, staffNorm, trustNorm);
+      }
+
+      const grade_mapping_required = !!row?.grade_mapping_required;
+      const timesheet_target_ambiguous = !!row?.timesheet_target_ambiguous;
+
+      // Resolve gates (post candidate resolve attempt)
+      const candUnresolved = !candidate_id || reasonCodeL === 'candidate_unresolved' || actionU === 'REJECT_NO_CANDIDATE';
+      const gradeGate = grade_mapping_required || reasonCodeL === 'grade_mapping_required' || actionU === 'REJECT_NO_CONTRACT_BAND_MISMATCH';
+      const targetGate =
+        timesheet_target_ambiguous ||
+        RESOLVE_REASON_CODES.has(reasonCodeL) && (reasonCodeL === 'timesheet_not_found_or_ambiguous' || reasonCodeL === 'timesheet_target_ambiguous') ||
+        actionU === 'REJECT_NO_CONTRACT' ||
+        actionU === 'REJECT_NO_CLIENT';
+
+      const unmatchedGate = (statusU === 'UNMATCHED');
+
+      if (candUnresolved) gateCand += 1;
+      if (gradeGate) gateGrade += 1;
+      if (targetGate) gateTarget += 1;
+      if (unmatchedGate) gateUnmatched += 1;
+      if (actionU.startsWith('REJECT_') && !(candUnresolved || gradeGate || targetGate)) gateOtherReject += 1;
+
+      const baseDetails = (row?.details && typeof row.details === 'object' && !Array.isArray(row.details)) ? row.details : {};
+
+      decoratedCoreRows.push({
+        ...row,
+
+        // import-scoped client context (single client)
+        client_id: importClientId,
+        client_name: clientName || null,
+
+        // candidate for resolve UI
+        candidate_id: candidate_id || null,
+
+        // grade for grade→role resolve UI
+        grade_raw: grade_raw || null,
+
+        // timesheet target selection hooks
+        resolved_timesheet_id: resolved_timesheet_id || null,
+        timesheet_target_ambiguous: !!timesheet_target_ambiguous,
+        timesheet_target_options: Array.isArray(row?.timesheet_target_options) ? row.timesheet_target_options : [],
+
+        // keep legacy field name used by existing FE (until FE is updated)
+        role_resolution_required: !!timesheet_target_ambiguous,
+
+        // grade mapping hooks
+        incoming_grade_norm: row?.incoming_grade_norm || null,
+        grade_mapping_required: !!grade_mapping_required,
+
+        // default recipient context (even in gated mode; email is suppressed via flags below)
+        recipient_email: recipientEmailDefault || null,
+        recipient_missing: recipientMissingDefault,
+
+        // keep details
+        details: baseDetails
       });
-      qrReissueCandidates = [];
-      tspdfEnqueued = 0;
-      tspdfTargetCount = 0;
     }
-  }
 
-  // ─────────────────────────────────────────────
-  // 4) Post-commit: audit best-effort
-  // ─────────────────────────────────────────────
-  try {
-    await writeAudit(
-      env,
-      user,
-      'HR_WEEKLY_APPLY_TRANSACTIONAL_COMPLETED',
-      {
-        import_id: importId,
-        mode_a: applyPayload?.mode_a || null,
-        mode_b: applyPayload?.mode_b || null,
-        emails_queued: emailsQueued,
-        email_failures: emailFailures.slice(0, 50),
-        tsfin_drain: tsfinDrainStats,
-        qr_reissue_candidates_count: qrReissueCandidates.length,
-        tspdf_enqueued: tspdfEnqueued,
-        tspdf_target_count: tspdfTargetCount
-      },
-      { entity: 'hr_imports', subject_id: importId, req }
-    );
+    const requires_resolve = (gateCand + gateGrade + gateTarget + gateUnmatched + gateOtherReject) > 0;
+    const resolve_summary = {
+      candidate_unresolved: gateCand,
+      grade_mapping_required: gateGrade,
+      timesheet_target_ambiguous: gateTarget,
+      unmatched: gateUnmatched,
+      other_rejects: gateOtherReject,
+      total: gateCand + gateGrade + gateTarget + gateUnmatched + gateOtherReject
+    };
+
+    // If gated: suppress mismatches/missing/email sections
+    if (requires_resolve) {
+      const resolveOnlyRows = decoratedCoreRows.filter((r) => {
+        const reasonL = String(r?.reason_code || '').trim().toLowerCase();
+        const actU = String(r?.action || r?.resolution_status || r?.resolutionStatus || '').trim().toUpperCase();
+        const stU = String(r?.status || '').trim().toUpperCase();
+
+        // Exclude synthesized "missing_from_import" entirely while gated
+        if (reasonL === 'missing_from_import') return false;
+
+        // Include anything that looks like a resolve blocker
+        if (stU === 'UNMATCHED') return true;
+        if (RESOLVE_REASON_CODES.has(reasonL)) return true;
+        if (r?.grade_mapping_required === true) return true;
+        if (r?.timesheet_target_ambiguous === true) return true;
+        if (!r?.candidate_id) return true;
+        if (actU.startsWith('REJECT_')) return true;
+
+        return false;
+      });
+
+      const rowsOut = (resolveOnlyRows.length ? resolveOnlyRows : decoratedCoreRows)
+        .map((r) => ({
+          ...r,
+          // Suppress mismatch/email UI generation:
+          issue_fingerprint: null,
+          email_eligible: false,
+          email_already_sent: false,
+          can_email: false,
+          email_blocked_reason: null
+        }));
+
+      if (LOG) {
+        const summary = result.summary || {};
+        console.log('[HR_DAILY_PREVIEW]', JSON.stringify({
+          import_id: result.import_id,
+          source_system: result.source_system,
+          client_id: importClientId,
+          client_name: clientName || null,
+          stage: 'resolve_gate',
+          resolve_summary,
+          summary,
+          total_rows_returned: rowsOut.length
+        }));
+      }
+
+      return withCORS(env, req, ok({
+        import_id: result.import_id,
+        source_system: result.source_system,
+        client_id: importClientId,
+        client_name: clientName || null,
+        summary: result.summary,
+        requires_resolve: true,
+        resolve_summary,
+        rows: rowsOut
+      }));
+    }
+
+    // Not gated: proceed with mismatch/email decoration (including missing_from_import) exactly as before.
+
+    // Precompute fingerprints for rows that could ever have an email
+    const fingerprints = [];
+    const rowFingerprints = new Array(decoratedCoreRows.length).fill(null);
+
+    for (let i = 0; i < decoratedCoreRows.length; i++) {
+      const row = decoratedCoreRows[i];
+      const reasonCode = String(row?.reason_code || '').toLowerCase();
+      const tsId       = row?.timesheet_id || null;
+      const statusU    = String(row?.status || '').toUpperCase();
+
+      const emailEligible =
+        !!tsId &&
+        statusU !== 'VALIDATION_OK' &&
+        EMAIL_REASON_CODES.has(reasonCode);
+
+      // ✅ Block emails for:
+      //   (A) invoice-locked/paid => informative only
+      //   (B) unconfirmed status (safe-default if missing)
+      const blockedForEmail =
+        emailEligible &&
+        (isInvoiceLockedOrPaid(row) || isBlockedForTsoEmail(row?.tsfin_processing_status));
+
+      if (!emailEligible || blockedForEmail) {
+        rowFingerprints[i] = null;
+        continue;
+      }
+
+      const fp = makeIssueFingerprint(row);
+      rowFingerprints[i] = fp;
+      if (fp) fingerprints.push(fp);
+    }
+
+    // Look up which fingerprints already have an email row
+    let alreadySentSet = new Set();
+    if (fingerprints.length) {
+      try {
+        const uniqueFps = Array.from(new Set(fingerprints));
+        const { rows: sentRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/hr_issue_emails` +
+            `?issue_fingerprint=in.(${uniqueFps.map(enc).join(',')})` +
+            `&select=issue_fingerprint`
+        );
+        alreadySentSet = new Set((sentRows || []).map(r => r.issue_fingerprint));
+      } catch (e) {
+        if (LOG) {
+          console.warn('[HR_DAILY_PREVIEW]', JSON.stringify({
+            stage: 'hr_issue_emails_lookup_failed',
+            import_id: importId,
+            err: e?.message || String(e)
+          }));
+        }
+      }
+    }
+
+    const decoratedRows = [];
+
+    for (let idx = 0; idx < decoratedCoreRows.length; idx++) {
+      const row = decoratedCoreRows[idx];
+
+      const reasonCode = String(row?.reason_code || '').toLowerCase();
+      const tsId       = row?.timesheet_id || null;
+      const statusU    = String(row?.status || '').toUpperCase();
+
+      const emailEligible =
+        !!tsId &&
+        statusU !== 'VALIDATION_OK' &&
+        EMAIL_REASON_CODES.has(reasonCode);
+
+      const blockedForEmail =
+        emailEligible &&
+        (isInvoiceLockedOrPaid(row) || isBlockedForTsoEmail(row?.tsfin_processing_status));
+
+      // If blocked, we intentionally DO NOT expose a fingerprint (disables UI selection cleanly).
+      const fp = blockedForEmail ? null : rowFingerprints[idx];
+      const alreadySent = fp ? alreadySentSet.has(fp) : false;
+
+      // Default can_email means "default recipient available"; UI can still send with alternative_email
+      const canEmailDefault = !!fp && emailEligible && !(row?.recipient_missing === true);
+
+      const emailBlockedReason = blockedForEmail ? emailBlockedReasonForRow(row) : null;
+
+      const baseDetails = (row?.details && typeof row.details === 'object' && !Array.isArray(row.details)) ? row.details : {};
+      const detailsOut = blockedForEmail
+        ? { ...baseDetails, email_blocked_reason: emailBlockedReason }
+        : baseDetails;
+
+      decoratedRows.push({
+        ...row,
+
+        // email decoration
+        issue_fingerprint: fp || null,
+        email_eligible: (emailEligible && !blockedForEmail),
+        email_already_sent: alreadySent,
+        can_email: (canEmailDefault && !blockedForEmail),
+
+        // surface warning for UI (adapter reads from details.email_blocked_reason)
+        email_blocked_reason: emailBlockedReason || null,
+        details: detailsOut
+      });
+    }
+
+    if (LOG) {
+      const summary = result.summary || {};
+      const sampleFails = decoratedRows
+        .filter(r => String(r.status || '').toUpperCase() !== 'VALIDATION_OK')
+        .slice(0, 10)
+        .map(r => ({
+          hr_row_id: r.hr_row_id,
+          timesheet_id: r.timesheet_id,
+          status: r.status,
+          reason_code: r.reason_code,
+          grade_mapping_required: !!r.grade_mapping_required,
+          timesheet_target_ambiguous: !!r.timesheet_target_ambiguous,
+          timesheet_target_options_count: Array.isArray(r.timesheet_target_options) ? r.timesheet_target_options.length : 0,
+          can_email: !!r.can_email,
+          recipient_missing: !!r.recipient_missing,
+          tsfin_processing_status: r.tsfin_processing_status || null,
+          tsfin_locked_by_invoice_id: r.tsfin_locked_by_invoice_id || null,
+          tsfin_paid_at_utc: r.tsfin_paid_at_utc || null,
+          email_blocked: !!r.email_blocked_reason
+        }));
+
+      console.log('[HR_DAILY_PREVIEW]', JSON.stringify({
+        import_id: result.import_id,
+        source_system: result.source_system,
+        client_id: importClientId,
+        client_name: clientName || null,
+        summary,
+        requires_resolve: false,
+        resolve_summary,
+        total_rows: decoratedRows.length,
+        sample_failures: sampleFails
+      }));
+    }
+
+    return withCORS(env, req, ok({
+      import_id: result.import_id,
+      source_system: result.source_system,
+      client_id: importClientId,
+      client_name: clientName || null,
+      summary: result.summary,
+      requires_resolve: false,
+      resolve_summary,
+      rows: decoratedRows
+    }));
   } catch (e) {
-    logWarn({
-      stage: 'writeAudit_failed_non_fatal',
+    console.error('[HR_ROTA_PREVIEW] error', {
       import_id: importId,
-      err: String(e?.message || e || '')
+      err: e?.message || String(e)
     });
+    return withCORS(env, req, serverError(`Failed to classify HR daily rota import: ${e?.message || e}`));
   }
-
-  // ─────────────────────────────────────────────
-  // 5) Response
-  // ─────────────────────────────────────────────
-  return withCORS(env, req, ok({
-    import_id: importId,
-    apply: applyPayload,
-    qr_reissue_candidates: qrReissueCandidates,
-    tspdf_regen: enqueueTspdfRegen ? { target_count: tspdfTargetCount, enqueued: tspdfEnqueued } : { target_count: 0, enqueued: 0 },
-    post_commit: {
-      emails_queued: emailsQueued,
-      email_failures: emailFailures,
-      tsfin_drain: tsfinDrainStats
-    }
-  }));
 }
+
+
 
 
 
@@ -38510,594 +38542,27 @@ async function handleHrRotaResolveMappings(env, req, importId) {
   }));
 }
 
-async function handleHrRotaValidationPreview(env, req, importId) {
+
+
+async function handleHrAutoprocessApply(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
+
+  // ---- logging helpers (ALL logging is gated by LOG) ----
+  const logInfo  = (obj) => { if (LOG) console.log('[HR_AUTOPROC_APPLY]', JSON.stringify(obj)); };
+  const logWarn  = (obj) => { if (LOG) console.warn('[HR_AUTOPROC_APPLY]', JSON.stringify(obj)); };
+  const logError = (obj) => { if (LOG) console.error('[HR_AUTOPROC_APPLY]', JSON.stringify(obj)); };
 
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
-  if (!importId) {
-    return withCORS(env, req, badRequest('import_id is required'));
-  }
-
-  const enc = encodeURIComponent;
-  const norm = (s) => String(s || '').trim().toLowerCase();
-
-  // ✅ Daily parity: include missing_from_import as mismatch (emailable unless blocked by confirmation/invoice-lock rules)
-  const EMAIL_REASON_CODES = new Set([
-    'actual_hours_mismatch',
-    'start_end_mismatch',
-    'break_minutes_mismatch',
-    'missing_from_import'
-  ]);
-
-  // ✅ Resolve-gate reason codes (must resolve before any mismatch/missing/email sections are shown)
-  const RESOLVE_REASON_CODES = new Set([
-    'candidate_unresolved',
-    'grade_mapping_required',
-    'timesheet_not_found_or_ambiguous',
-    'timesheet_target_ambiguous'
-  ]);
-
-  // ✅ "Timesheet not confirmed ⇒ cannot email Temp Staffing"
-  const isBlockedForTsoEmail = (processing_status) => {
-    const s = String(processing_status || '').trim().toUpperCase();
-    if (!s) return true; // safe default: unknown status => block
-    return (s === 'PENDING_AUTH' || s === 'AWAITING_MANUAL_SIGNATURE');
-  };
-
-  // ✅ "Invoice-locked / paid ⇒ informative only (no email action allowed)"
-  const isInvoiceLockedOrPaid = (row) => {
-    const invId = (row?.tsfin_locked_by_invoice_id != null && String(row.tsfin_locked_by_invoice_id).trim())
-      ? String(row.tsfin_locked_by_invoice_id).trim()
-      : '';
-    const paidAt = (row?.tsfin_paid_at_utc != null && String(row.tsfin_paid_at_utc).trim())
-      ? String(row.tsfin_paid_at_utc).trim()
-      : '';
-    const isPaid = (row?.tsfin_is_paid === true) || !!paidAt;
-    const isInvoiced = (row?.tsfin_is_invoiced === true) || !!invId;
-    return !!(isPaid || isInvoiced);
-  };
-
-  const emailBlockedReasonForRow = (row) => {
-    const invId = (row?.tsfin_locked_by_invoice_id != null && String(row.tsfin_locked_by_invoice_id).trim())
-      ? String(row.tsfin_locked_by_invoice_id).trim()
-      : '';
-    const paidAt = (row?.tsfin_paid_at_utc != null && String(row.tsfin_paid_at_utc).trim())
-      ? String(row.tsfin_paid_at_utc).trim()
-      : '';
-
-    if (invId) return `Email blocked: timesheet is invoice-locked / invoiced (invoice_id=${invId}). Informative only.`;
-    if (paidAt) return `Email blocked: timesheet is paid. Informative only.`;
-    return 'Email blocked: timesheet is not confirmed (awaiting authorisation/signature).';
-  };
-
-  // ✅ Stable across imports: MUST NOT include import_id or hr_row_id (row IDs change each import)
-  const makeIssueFingerprint = (row) => {
-    const reasonCode = String(row.reason_code || '').toLowerCase();
-    const tsId       = row.timesheet_id || '';
-
-    const detail = row.details || row.detail || {};
-    const hrStart = detail.start_local  || detail.hr_start        || row.start_local || '';
-    const hrEnd   = detail.end_local    || detail.hr_end          || row.end_local   || '';
-    const hrHours = detail.hr_hours     || detail.hr_actual_hours || detail.hours_worked || '';
-    const tsHours = detail.ts_hours     || detail.ts_total_hours  || '';
-
-    const dateLocal = row.date_local || row.date || row.shift_date || '';
-    const hrRequestId = row.hr_request_id || row.hrRequestId || '';
-
-    const staffNorm = (row.staff_norm || row.staff_name || row.staff_raw || '')
-      .toLowerCase()
-      .trim();
-    const unitNorm  = (row.trust_norm || row.unit_norm || row.unit || row.hospital_or_trust || row.hospital_norm || '')
-      .toLowerCase()
-      .trim();
-
-    return [
-      'HEALTHROSTER_DAILY',
-      reasonCode,
-      tsId,
-      hrRequestId,
-      staffNorm,
-      unitNorm,
-      dateLocal,
-      hrStart,
-      hrEnd,
-      hrHours,
-      tsHours
-    ].join('|');
-  };
-
-  // caches to avoid per-row fetches
-  const candidateCache = new Map(); // `${staffNorm}|${trustNorm}` -> candidate_id|null
-
-  async function resolveCandidateCached(staffRaw, staffNorm, trustNorm) {
-    const k = `${norm(staffNorm || staffRaw)}|${String(trustNorm || '').trim().toLowerCase()}`;
-    if (candidateCache.has(k)) return candidateCache.get(k);
-    let out = null;
-    try {
-      out = await findCandidateByImportName(env, staffRaw || staffNorm, { trustNorm: String(trustNorm || '').trim().toLowerCase() });
-    } catch {
-      out = null;
-    }
-    candidateCache.set(k, out || null);
-    return out || null;
-  }
-
-  try {
-    // Load import (authoritative client_id)
-    const { rows: impRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/hr_imports` +
-        `?id=eq.${enc(importId)}` +
-        `&select=id,source_system,client_id` +
-        `&limit=1`
-    );
-    const imp = impRows?.[0] || null;
-    const src = String(imp?.source_system || '').toUpperCase();
-    if (!imp || !imp.id) {
-      return withCORS(env, req, ok({
-        import_id: importId,
-        source_system: null,
-        error: 'import_not_found',
-        summary: { total_rows: 0 },
-        rows: []
-      }));
-    }
-    if (src !== 'HEALTHROSTER_DAILY') {
-      return withCORS(env, req, ok({
-        import_id: importId,
-        source_system: src,
-        error: 'source_system_mismatch',
-        summary: { total_rows: 0 },
-        rows: []
-      }));
-    }
-
-    const importClientId = imp.client_id ? String(imp.client_id).trim() : '';
-    if (!importClientId) {
-      return withCORS(env, req, ok({
-        import_id: importId,
-        source_system: 'HEALTHROSTER_DAILY',
-        error: 'client_missing_on_import',
-        summary: { total_rows: 0 },
-        rows: []
-      }));
-    }
-
-    // Get default recipient + client name (single-client import)
-    let clientName = null;
-    let recipientEmailDefault = null;
-    try {
-      const { rows: cRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/clients` +
-          `?id=eq.${enc(importClientId)}` +
-          `&select=id,name,ts_queries_email` +
-          `&limit=1`
-      );
-      const c0 = cRows?.[0] || null;
-      clientName = c0?.name != null ? String(c0.name) : null;
-      const em = c0?.ts_queries_email != null ? String(c0.ts_queries_email).trim() : '';
-      recipientEmailDefault = em || null;
-    } catch {}
-
-    const result = await classifyHrRotaValidationImport(env, importId);
-    if (result.error) {
-      if (LOG) {
-        console.warn('[HR_DAILY_PREVIEW]', JSON.stringify({
-          import_id: importId,
-          stage: 'classification_error',
-          error: result.error
-        }));
-      }
-      return withCORS(env, req, ok(result));
-    }
-
-    const rows = Array.isArray(result.rows) ? result.rows : [];
-
-    // Load hr_rows payload_json for grade_raw + resolved_timesheet_id (import-scoped)
-    const hrRowIds = rows
-      .map(r => (r && r.hr_row_id ? String(r.hr_row_id).trim() : ''))
-      .filter(Boolean);
-
-    const hrMetaById = new Map(); // hr_row_id -> { grade_raw, resolved_timesheet_id }
-    if (hrRowIds.length) {
-      try {
-        const idParam = hrRowIds.map(enc).join(',');
-        const { rows: hrRows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/hr_rows` +
-            `?import_id=eq.${enc(importId)}` +
-            `&id=in.(${idParam})` +
-            `&select=id,assignment_grade_norm,payload_json`
-        );
-
-        for (const r of (hrRows || [])) {
-          const id = r?.id ? String(r.id) : '';
-          if (!id) continue;
-
-          let payload = r.payload_json || {};
-          if (typeof payload === 'string') {
-            try { payload = JSON.parse(payload); } catch { payload = {}; }
-          }
-          if (!payload || typeof payload !== 'object' || Array.isArray(payload)) payload = {};
-
-          const grade =
-            r.assignment_grade_norm ||
-            payload.grade_raw ||
-            payload.Request_Grade ||
-            payload.request_grade ||
-            payload.grade ||
-            null;
-
-          const resolvedTs =
-            payload.resolved_timesheet_id ||
-            payload.resolved_target_timesheet_id ||
-            payload.resolved_target_id ||
-            null;
-
-          hrMetaById.set(id, {
-            grade_raw: grade ? String(grade) : null,
-            resolved_timesheet_id: resolvedTs ? String(resolvedTs) : null
-          });
-        }
-      } catch (e) {
-        if (LOG) {
-          console.warn('[HR_DAILY_PREVIEW]', JSON.stringify({
-            stage: 'hr_rows_meta_lookup_failed',
-            import_id: importId,
-            err: e?.message || String(e)
-          }));
-        }
-      }
-    }
-
-    // Decorate rows (resolve-relevant fields first), and compute resolve gates BEFORE any mismatch/email work.
-    const decoratedCoreRows = [];
-    const recipientMissingDefault = !(recipientEmailDefault && String(recipientEmailDefault).trim());
-
-    let gateCand = 0;
-    let gateGrade = 0;
-    let gateTarget = 0;
-    let gateUnmatched = 0;
-    let gateOtherReject = 0;
-
-    for (let idx = 0; idx < rows.length; idx++) {
-      const row = rows[idx];
-
-      const reasonCodeL = String(row?.reason_code || '').trim().toLowerCase();
-      const statusU = String(row?.status || '').trim().toUpperCase();
-      const actionU = String(row?.action || row?.resolution_status || row?.resolutionStatus || '').trim().toUpperCase();
-
-      const hrid = row?.hr_row_id ? String(row.hr_row_id).trim() : '';
-      const meta = hrid ? (hrMetaById.get(hrid) || null) : null;
-
-      const grade_raw = meta?.grade_raw || null;
-      const resolved_timesheet_id = meta?.resolved_timesheet_id || null;
-
-      const staffRaw = row?.staff_name || row?.staff_raw || '';
-      const staffNorm = row?.staff_norm || '';
-      const trustNorm = row?.trust_norm || '';
-
-      let candidate_id = row?.candidate_id || null;
-      if (!candidate_id) {
-        candidate_id = await resolveCandidateCached(staffRaw, staffNorm, trustNorm);
-      }
-
-      const grade_mapping_required = !!row?.grade_mapping_required;
-      const timesheet_target_ambiguous = !!row?.timesheet_target_ambiguous;
-
-      // Resolve gates (post candidate resolve attempt)
-      const candUnresolved = !candidate_id || reasonCodeL === 'candidate_unresolved' || actionU === 'REJECT_NO_CANDIDATE';
-      const gradeGate = grade_mapping_required || reasonCodeL === 'grade_mapping_required' || actionU === 'REJECT_NO_CONTRACT_BAND_MISMATCH';
-      const targetGate =
-        timesheet_target_ambiguous ||
-        RESOLVE_REASON_CODES.has(reasonCodeL) && (reasonCodeL === 'timesheet_not_found_or_ambiguous' || reasonCodeL === 'timesheet_target_ambiguous') ||
-        actionU === 'REJECT_NO_CONTRACT' ||
-        actionU === 'REJECT_NO_CLIENT';
-
-      const unmatchedGate = (statusU === 'UNMATCHED');
-
-      if (candUnresolved) gateCand += 1;
-      if (gradeGate) gateGrade += 1;
-      if (targetGate) gateTarget += 1;
-      if (unmatchedGate) gateUnmatched += 1;
-      if (actionU.startsWith('REJECT_') && !(candUnresolved || gradeGate || targetGate)) gateOtherReject += 1;
-
-      const baseDetails = (row?.details && typeof row.details === 'object' && !Array.isArray(row.details)) ? row.details : {};
-
-      decoratedCoreRows.push({
-        ...row,
-
-        // import-scoped client context (single client)
-        client_id: importClientId,
-        client_name: clientName || null,
-
-        // candidate for resolve UI
-        candidate_id: candidate_id || null,
-
-        // grade for grade→role resolve UI
-        grade_raw: grade_raw || null,
-
-        // timesheet target selection hooks
-        resolved_timesheet_id: resolved_timesheet_id || null,
-        timesheet_target_ambiguous: !!timesheet_target_ambiguous,
-        timesheet_target_options: Array.isArray(row?.timesheet_target_options) ? row.timesheet_target_options : [],
-
-        // keep legacy field name used by existing FE (until FE is updated)
-        role_resolution_required: !!timesheet_target_ambiguous,
-
-        // grade mapping hooks
-        incoming_grade_norm: row?.incoming_grade_norm || null,
-        grade_mapping_required: !!grade_mapping_required,
-
-        // default recipient context (even in gated mode; email is suppressed via flags below)
-        recipient_email: recipientEmailDefault || null,
-        recipient_missing: recipientMissingDefault,
-
-        // keep details
-        details: baseDetails
-      });
-    }
-
-    const requires_resolve = (gateCand + gateGrade + gateTarget + gateUnmatched + gateOtherReject) > 0;
-    const resolve_summary = {
-      candidate_unresolved: gateCand,
-      grade_mapping_required: gateGrade,
-      timesheet_target_ambiguous: gateTarget,
-      unmatched: gateUnmatched,
-      other_rejects: gateOtherReject,
-      total: gateCand + gateGrade + gateTarget + gateUnmatched + gateOtherReject
-    };
-
-    // If gated: suppress mismatches/missing/email sections
-    if (requires_resolve) {
-      const resolveOnlyRows = decoratedCoreRows.filter((r) => {
-        const reasonL = String(r?.reason_code || '').trim().toLowerCase();
-        const actU = String(r?.action || r?.resolution_status || r?.resolutionStatus || '').trim().toUpperCase();
-        const stU = String(r?.status || '').trim().toUpperCase();
-
-        // Exclude synthesized "missing_from_import" entirely while gated
-        if (reasonL === 'missing_from_import') return false;
-
-        // Include anything that looks like a resolve blocker
-        if (stU === 'UNMATCHED') return true;
-        if (RESOLVE_REASON_CODES.has(reasonL)) return true;
-        if (r?.grade_mapping_required === true) return true;
-        if (r?.timesheet_target_ambiguous === true) return true;
-        if (!r?.candidate_id) return true;
-        if (actU.startsWith('REJECT_')) return true;
-
-        return false;
-      });
-
-      const rowsOut = (resolveOnlyRows.length ? resolveOnlyRows : decoratedCoreRows)
-        .map((r) => ({
-          ...r,
-          // Suppress mismatch/email UI generation:
-          issue_fingerprint: null,
-          email_eligible: false,
-          email_already_sent: false,
-          can_email: false,
-          email_blocked_reason: null
-        }));
-
-      if (LOG) {
-        const summary = result.summary || {};
-        console.log('[HR_DAILY_PREVIEW]', JSON.stringify({
-          import_id: result.import_id,
-          source_system: result.source_system,
-          client_id: importClientId,
-          client_name: clientName || null,
-          stage: 'resolve_gate',
-          resolve_summary,
-          summary,
-          total_rows_returned: rowsOut.length
-        }));
-      }
-
-      return withCORS(env, req, ok({
-        import_id: result.import_id,
-        source_system: result.source_system,
-        client_id: importClientId,
-        client_name: clientName || null,
-        summary: result.summary,
-        requires_resolve: true,
-        resolve_summary,
-        rows: rowsOut
-      }));
-    }
-
-    // Not gated: proceed with mismatch/email decoration (including missing_from_import) exactly as before.
-
-    // Precompute fingerprints for rows that could ever have an email
-    const fingerprints = [];
-    const rowFingerprints = new Array(decoratedCoreRows.length).fill(null);
-
-    for (let i = 0; i < decoratedCoreRows.length; i++) {
-      const row = decoratedCoreRows[i];
-      const reasonCode = String(row?.reason_code || '').toLowerCase();
-      const tsId       = row?.timesheet_id || null;
-      const statusU    = String(row?.status || '').toUpperCase();
-
-      const emailEligible =
-        !!tsId &&
-        statusU !== 'VALIDATION_OK' &&
-        EMAIL_REASON_CODES.has(reasonCode);
-
-      // ✅ Block emails for:
-      //   (A) invoice-locked/paid => informative only
-      //   (B) unconfirmed status (safe-default if missing)
-      const blockedForEmail =
-        emailEligible &&
-        (isInvoiceLockedOrPaid(row) || isBlockedForTsoEmail(row?.tsfin_processing_status));
-
-      if (!emailEligible || blockedForEmail) {
-        rowFingerprints[i] = null;
-        continue;
-      }
-
-      const fp = makeIssueFingerprint(row);
-      rowFingerprints[i] = fp;
-      if (fp) fingerprints.push(fp);
-    }
-
-    // Look up which fingerprints already have an email row
-    let alreadySentSet = new Set();
-    if (fingerprints.length) {
-      try {
-        const uniqueFps = Array.from(new Set(fingerprints));
-        const { rows: sentRows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/hr_issue_emails` +
-            `?issue_fingerprint=in.(${uniqueFps.map(enc).join(',')})` +
-            `&select=issue_fingerprint`
-        );
-        alreadySentSet = new Set((sentRows || []).map(r => r.issue_fingerprint));
-      } catch (e) {
-        if (LOG) {
-          console.warn('[HR_DAILY_PREVIEW]', JSON.stringify({
-            stage: 'hr_issue_emails_lookup_failed',
-            import_id: importId,
-            err: e?.message || String(e)
-          }));
-        }
-      }
-    }
-
-    const decoratedRows = [];
-
-    for (let idx = 0; idx < decoratedCoreRows.length; idx++) {
-      const row = decoratedCoreRows[idx];
-
-      const reasonCode = String(row?.reason_code || '').toLowerCase();
-      const tsId       = row?.timesheet_id || null;
-      const statusU    = String(row?.status || '').toUpperCase();
-
-      const emailEligible =
-        !!tsId &&
-        statusU !== 'VALIDATION_OK' &&
-        EMAIL_REASON_CODES.has(reasonCode);
-
-      const blockedForEmail =
-        emailEligible &&
-        (isInvoiceLockedOrPaid(row) || isBlockedForTsoEmail(row?.tsfin_processing_status));
-
-      // If blocked, we intentionally DO NOT expose a fingerprint (disables UI selection cleanly).
-      const fp = blockedForEmail ? null : rowFingerprints[idx];
-      const alreadySent = fp ? alreadySentSet.has(fp) : false;
-
-      // Default can_email means "default recipient available"; UI can still send with alternative_email
-      const canEmailDefault = !!fp && emailEligible && !(row?.recipient_missing === true);
-
-      const emailBlockedReason = blockedForEmail ? emailBlockedReasonForRow(row) : null;
-
-      const baseDetails = (row?.details && typeof row.details === 'object' && !Array.isArray(row.details)) ? row.details : {};
-      const detailsOut = blockedForEmail
-        ? { ...baseDetails, email_blocked_reason: emailBlockedReason }
-        : baseDetails;
-
-      decoratedRows.push({
-        ...row,
-
-        // email decoration
-        issue_fingerprint: fp || null,
-        email_eligible: (emailEligible && !blockedForEmail),
-        email_already_sent: alreadySent,
-        can_email: (canEmailDefault && !blockedForEmail),
-
-        // surface warning for UI (adapter reads from details.email_blocked_reason)
-        email_blocked_reason: emailBlockedReason || null,
-        details: detailsOut
-      });
-    }
-
-    if (LOG) {
-      const summary = result.summary || {};
-      const sampleFails = decoratedRows
-        .filter(r => String(r.status || '').toUpperCase() !== 'VALIDATION_OK')
-        .slice(0, 10)
-        .map(r => ({
-          hr_row_id: r.hr_row_id,
-          timesheet_id: r.timesheet_id,
-          status: r.status,
-          reason_code: r.reason_code,
-          grade_mapping_required: !!r.grade_mapping_required,
-          timesheet_target_ambiguous: !!r.timesheet_target_ambiguous,
-          timesheet_target_options_count: Array.isArray(r.timesheet_target_options) ? r.timesheet_target_options.length : 0,
-          can_email: !!r.can_email,
-          recipient_missing: !!r.recipient_missing,
-          tsfin_processing_status: r.tsfin_processing_status || null,
-          tsfin_locked_by_invoice_id: r.tsfin_locked_by_invoice_id || null,
-          tsfin_paid_at_utc: r.tsfin_paid_at_utc || null,
-          email_blocked: !!r.email_blocked_reason
-        }));
-
-      console.log('[HR_DAILY_PREVIEW]', JSON.stringify({
-        import_id: result.import_id,
-        source_system: result.source_system,
-        client_id: importClientId,
-        client_name: clientName || null,
-        summary,
-        requires_resolve: false,
-        resolve_summary,
-        total_rows: decoratedRows.length,
-        sample_failures: sampleFails
-      }));
-    }
-
-    return withCORS(env, req, ok({
-      import_id: result.import_id,
-      source_system: result.source_system,
-      client_id: importClientId,
-      client_name: clientName || null,
-      summary: result.summary,
-      requires_resolve: false,
-      resolve_summary,
-      rows: decoratedRows
-    }));
-  } catch (e) {
-    console.error('[HR_ROTA_PREVIEW] error', {
-      import_id: importId,
-      err: e?.message || String(e)
-    });
-    return withCORS(env, req, serverError(`Failed to classify HR daily rota import: ${e?.message || e}`));
-  }
-}
-
-async function handleHrRotaValidationApply(env, req, importId) {
-  const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
-
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-  if (!importId) {
-    return withCORS(env, req, badRequest('import_id is required'));
-  }
+  if (!importId) return withCORS(env, req, badRequest('import_id is required'));
 
   let body;
-  try {
-    body = await parseJSONBody(req);
-  } catch {
-    body = null;
-  }
-
+  try { body = await parseJSONBody(req); } catch { body = null; }
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return withCORS(env, req, badRequest('Invalid JSON body'));
   }
 
   const boolish = (v) => (v === true || v === 'true' || v === 1 || v === '1');
-
-  // ✅ New contract (no backward compat): email_actions[] + invalidation_actions[]
-  const requestEmailActions = Array.isArray(body?.email_actions) ? body.email_actions : [];
-  const requestInvalidationActions = Array.isArray(body?.invalidation_actions) ? body.invalidation_actions : [];
-
-  // ✅ Daily parity: include missing_from_import as mismatch (emailable unless blocked by confirmation/invoice-lock rule)
-  const EMAIL_REASON_CODES = new Set([
-    'actual_hours_mismatch',
-    'start_end_mismatch',
-    'break_minutes_mismatch',
-    'missing_from_import'
-  ]);
 
   // ✅ "Timesheet not confirmed ⇒ cannot email Temp Staffing"
   const isBlockedForTsoEmail = (processing_status) => {
@@ -39106,73 +38571,23 @@ async function handleHrRotaValidationApply(env, req, importId) {
     return (s === 'PENDING_AUTH' || s === 'AWAITING_MANUAL_SIGNATURE');
   };
 
+  // ✅ Unconfirmed block reason (UI-parity wording)
+  const unconfirmedEmailBlockText = (processing_status) => {
+    const s = String(processing_status || '').trim().toUpperCase();
+    if (s === 'PENDING_AUTH') return 'Timesheet not authorized yet - cannot email temporary staffing';
+    if (s === 'AWAITING_MANUAL_SIGNATURE') return 'Signed timesheet not yet received from worker - cannot email temporary staffing';
+    return 'Email blocked: timesheet is not confirmed (awaiting authorisation/signature).';
+  };
+
   // ✅ "Invoice-locked / paid ⇒ informative only (no email allowed)"
-  const isInvoiceLockedOrPaid = (row) => {
-    const invId =
-      (row?.tsfin_locked_by_invoice_id != null && String(row.tsfin_locked_by_invoice_id).trim())
-        ? String(row.tsfin_locked_by_invoice_id).trim()
-        : (row?.locked_by_invoice_id != null && String(row.locked_by_invoice_id).trim())
-          ? String(row.locked_by_invoice_id).trim()
-          : '';
-    const paidAt =
-      (row?.tsfin_paid_at_utc != null && String(row.tsfin_paid_at_utc).trim())
-        ? String(row.tsfin_paid_at_utc).trim()
-        : (row?.paid_at_utc != null && String(row.paid_at_utc).trim())
-          ? String(row.paid_at_utc).trim()
-          : '';
-
-    const isPaid = (row?.tsfin_is_paid === true) || !!paidAt;
-    const isInvoiced = (row?.tsfin_is_invoiced === true) || !!invId;
-
-    return !!(isPaid || isInvoiced);
-  };
-
-  const uniqStrings = (arr) => {
-    const out = [];
-    const seen = new Set();
-    for (const x of (Array.isArray(arr) ? arr : [])) {
-      const s = String(x || '').trim();
-      if (!s) continue;
-      if (seen.has(s)) continue;
-      seen.add(s);
-      out.push(s);
-    }
-    return out;
-  };
-
-  const makeIssueFingerprint = (row) => {
-    const reasonCode = String(row.reason_code || '').toLowerCase();
-    const tsId       = row.timesheet_id || '';
-
-    const detail = row.details || row.detail || {};
-    const hrStart = detail.start_local  || detail.hr_start        || row.start_local || '';
-    const hrEnd   = detail.end_local    || detail.hr_end          || row.end_local   || '';
-    const hrHours = detail.hr_hours     || detail.hr_actual_hours || detail.hours_worked || '';
-    const tsHours = detail.ts_hours     || detail.ts_total_hours  || '';
-
-    const dateLocal = row.date_local || row.date || row.shift_date || '';
-    const hrRequestId = row.hr_request_id || row.hrRequestId || '';
-
-    const staffNorm = (row.staff_norm || row.staff_name || row.staff_raw || '')
-      .toLowerCase()
-      .trim();
-    const unitNorm  = (row.trust_norm || row.unit_norm || row.unit || row.hospital_or_trust || row.hospital_norm || '')
-      .toLowerCase()
-      .trim();
-
-    return [
-      'HEALTHROSTER_DAILY',
-      reasonCode,
-      tsId,
-      hrRequestId,
-      staffNorm,
-      unitNorm,
-      dateLocal,
-      hrStart,
-      hrEnd,
-      hrHours,
-      tsHours
-    ].join('|');
+  const isInvoiceLockedOrPaid = (locked_by_invoice_id, paid_at_utc) => {
+    const invId = (locked_by_invoice_id != null && String(locked_by_invoice_id).trim())
+      ? String(locked_by_invoice_id).trim()
+      : '';
+    const paidAt = (paid_at_utc != null && String(paid_at_utc).trim())
+      ? String(paid_at_utc).trim()
+      : '';
+    return !!(invId || paidAt);
   };
 
   const unwrapRpcJsonb = (raw, fnName) => {
@@ -39190,8 +38605,147 @@ async function handleHrRotaValidationApply(env, req, importId) {
     return j;
   };
 
+  const uniqStrings = (arr) => {
+    const out = [];
+    const seen = new Set();
+    for (const x of (Array.isArray(arr) ? arr : [])) {
+      const s = String(x || '').trim();
+      if (!s) continue;
+      if (seen.has(s)) continue;
+      seen.add(s);
+      out.push(s);
+    }
+    return out;
+  };
+
+  const chunk = (arr, n) => {
+    const out = [];
+    for (let i = 0; i < (arr || []).length; i += n) out.push(arr.slice(i, i + n));
+    return out;
+  };
+
+  const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+
+  const safeYmd = (v) => {
+    const s = String(v || '').trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    return s || '';
+  };
+
+  // ✅ Format YYYY-MM-DD → "Mon 1 Sep 2026" (Europe/London)
+  const fmtNiceDate = (ymd) => {
+    const s = safeYmd(ymd);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return s || '—';
+    const d = new Date(`${s}T00:00:00Z`);
+    if (Number.isNaN(d.getTime())) return s;
+    try {
+      return new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/London',
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+      }).format(d);
+    } catch {
+      return s;
+    }
+  };
+
+  const normEmail = (v) => {
+    const s = String(v ?? '').trim();
+    return s ? s : '';
+  };
+
+  // Inputs (new contract)
+  const selectedActionIdsIn = Array.isArray(body.selected_action_ids) ? body.selected_action_ids : [];
+  const selectedActionIds = uniqStrings(selectedActionIdsIn);
+
+  const selectedActionsIn = Array.isArray(body.selected_actions) ? body.selected_actions : [];
+  const selectedActions = selectedActionsIn
+    .filter(x => x && typeof x === 'object' && !Array.isArray(x))
+    .map(x => ({ ...x }));
+
+  // Legacy cancellation_actions support: allow shift_id → CANCEL:<shift_id> (explicit shift IDs only)
+  const cancellationActionsIn = Array.isArray(body.cancellation_actions) ? body.cancellation_actions : [];
+  for (const a of cancellationActionsIn) {
+    const sid = a && a.shift_id ? String(a.shift_id).trim() : '';
+    if (!sid) continue;
+    const aid = `CANCEL:${sid}`;
+    if (!selectedActionIds.includes(aid)) selectedActionIds.push(aid);
+  }
+
+  // Legacy selected_group_ids is NOT supported in apply anymore (no Worker-side expansion).
+  const legacyGroupIds = Array.isArray(body.selected_group_ids) ? uniqStrings(body.selected_group_ids) : [];
+  const hasLegacyGroupIdsOnly =
+    legacyGroupIds.length > 0 &&
+    selectedActionIds.length === 0 &&
+    selectedActions.length === 0;
+
+  if (hasLegacyGroupIdsOnly) {
+    return withCORS(
+      env,
+      req,
+      badRequest('Apply now requires action-level selection (selected_action_ids with ROW:/CANCEL:). Update the frontend; selected_group_ids is no longer accepted for apply.')
+    );
+  }
+
+  // Decisions map (Phase 3)
+  const decisions =
+    (body.decisions && typeof body.decisions === 'object' && !Array.isArray(body.decisions))
+      ? body.decisions
+      : {};
+
+  // ✅ Mode A email actions (alt email overrides)
+  const emailActionsIn = Array.isArray(body.email_actions)
+    ? body.email_actions
+    : (Array.isArray(body.send_email_actions) ? body.send_email_actions : []);
+
+  const emailActions = (emailActionsIn || [])
+    .map(a => {
+      const tsId = a?.timesheet_id ? String(a.timesheet_id).trim() : null;
+      const fp   = a?.issue_fingerprint ? String(a.issue_fingerprint).trim() : null;
+
+      const alt =
+        normEmail(a?.alt_email) ||
+        normEmail(a?.alternative_email) ||
+        normEmail(a?.alt_recipient_email) ||
+        normEmail(a?.to_email) ||
+        normEmail(a?.toEmail) ||
+        normEmail(a?.recipient_email_override) ||
+        normEmail(a?.override_email) ||
+        '';
+
+      return {
+        timesheet_id: tsId,
+        issue_fingerprint: fp,
+        ...(alt ? { alt_email: alt } : {})
+      };
+    })
+    .filter(a => !!(a.timesheet_id && a.issue_fingerprint)); // ✅ defensive: ignore missing fingerprint
+
+  // ✅ Include-missing-shifts flag
+  const includeMissingShifts =
+    boolish(body.include_missing_shifts) ||
+    boolish(body.includeMissingShifts) ||
+    boolish(body.include_missing) ||
+    boolish(body.includeMissing) ||
+    false;
+
+  // ✅ Destructive invalidation actions (checkbox-driven)
+  const invalidationActionsIn = Array.isArray(body.invalidation_actions) ? body.invalidation_actions : [];
+  const invalidationActions = invalidationActionsIn
+    .filter(x => x && typeof x === 'object' && !Array.isArray(x))
+    .map(x => ({
+      timesheet_id: x?.timesheet_id ? String(x.timesheet_id).trim() : null,
+      comparison_key: x?.comparison_key ? String(x.comparison_key).trim() : null,
+      invalidate: (x?.invalidate === false || x?.invalidate === 'false' || x?.invalidate === 0 || x?.invalidate === '0') ? false : true
+    }))
+    .filter(x => !!(x.timesheet_id && x.comparison_key));
+
   // ─────────────────────────────────────────────
-  // ✅ Config-driven default for enqueue_tspdf_regen (daily apply parity with weekly):
+  // ✅ Config-driven default for enqueue_tspdf_regen:
   //   - If request explicitly provides a flag (even false), honour it.
   //   - Otherwise default to settings.importConfig.tspdf_effective.regen_on_ref_change (recommended default true).
   // ─────────────────────────────────────────────
@@ -39220,245 +38774,159 @@ async function handleHrRotaValidationApply(env, req, importId) {
       )
     : enqueueTspdfRegenDefault;
 
-  if (LOG) {
-    console.log('[HR_DAILY_APPLY]', JSON.stringify({
-      stage: 'start',
-      import_id: importId,
-      email_actions_count: requestEmailActions.length,
-      invalidation_actions_count: requestInvalidationActions.length,
-      enqueue_tspdf_regen: enqueueTspdfRegen,
-      enqueue_tspdf_regen_source: hasEnqueueTspdfKey ? 'REQUEST' : 'SETTINGS_DEFAULTS'
-    }));
-  }
+  logInfo({
+    stage: 'start',
+    import_id: importId,
+    selected_action_ids_count: selectedActionIds.length,
+    selected_actions_count: selectedActions.length,
+    email_actions_count: emailActions.length,
+    invalidation_actions_count: invalidationActions.length,
+    include_missing_shifts: includeMissingShifts,
+    decisions_keys_count: Object.keys(decisions || {}).length,
+    enqueue_tspdf_regen: enqueueTspdfRegen,
+    enqueue_tspdf_regen_source: hasEnqueueTspdfKey ? 'REQUEST' : 'SETTINGS_DEFAULTS'
+  });
 
-  // 1) Classification drives the payload we send to the transactional RPC
-  let classification;
-  try {
-    classification = await classifyHrRotaValidationImport(env, importId);
-  } catch (e) {
-    console.error('[HR_DAILY_APPLY] classify failed', {
-      import_id: importId,
-      err: e?.message || String(e)
-    });
-    return withCORS(env, req, serverError(`Failed to classify HR daily rota import: ${e?.message || e}`));
-  }
+  // ─────────────────────────────────────────────
+  // ✅ Server-side enforcement — block Mode-A emails for:
+  //   - unconfirmed timesheets
+  //   - invoice-locked/paid (informative only)
+  // ─────────────────────────────────────────────
+  if (emailActions.length) {
+    const tsIds = uniqStrings(emailActions.map(a => a?.timesheet_id).filter(Boolean));
+    const metaByTs = new Map();
 
-  if (classification?.error) {
-    if (LOG) {
-      console.warn('[HR_DAILY_APPLY]', JSON.stringify({
-        stage: 'classification_error',
-        import_id: importId,
-        error: classification.error
-      }));
-    }
-    return withCORS(env, req, ok(classification));
-  }
-
-  const rows = Array.isArray(classification?.rows) ? classification.rows : [];
-
-  // 2) Server-side gating (Mode A)
-  const gateReasons = {};
-  let hasUnmatched = false;
-
-  for (const row of rows) {
-    const statusU = String(row?.status || '').toUpperCase();
-    const reasonC = String(row?.reason_code || '').toLowerCase();
-
-    // NOTE: missing_from_import rows are FAILED (not UNMATCHED), so they do not block apply.
-    if (statusU === 'UNMATCHED') hasUnmatched = true;
-
-    if (reasonC === 'candidate_unresolved') gateReasons.candidate_unresolved = (gateReasons.candidate_unresolved || 0) + 1;
-    if (reasonC === 'grade_mapping_required' || row?.grade_mapping_required) gateReasons.grade_mapping_required = (gateReasons.grade_mapping_required || 0) + 1;
-    if (row?.timesheet_target_ambiguous) gateReasons.timesheet_target_ambiguous = (gateReasons.timesheet_target_ambiguous || 0) + 1;
-  }
-
-  if (hasUnmatched || gateReasons.candidate_unresolved || gateReasons.grade_mapping_required || gateReasons.timesheet_target_ambiguous) {
-    return withCORS(env, req, badRequest(JSON.stringify({
-      error: 'HR_DAILY_APPLY_BLOCKED',
-      message: 'Cannot apply daily HR validation while unresolved rows remain (Mode A).',
-      import_id: importId,
-      gates: {
-        has_unmatched_rows: !!hasUnmatched,
-        ...gateReasons
+    if (tsIds.length) {
+      for (const idChunk of chunk(tsIds, 150)) {
+        try {
+          const { rows: tfRows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+              `?is_current=eq.true` +
+              `&timesheet_id=in.(${idChunk.map(encodeURIComponent).join(',')})` +
+              `&select=timesheet_id,processing_status,locked_by_invoice_id,paid_at_utc`
+          );
+          for (const tf of (tfRows || [])) {
+            const tsId = tf?.timesheet_id ? String(tf.timesheet_id).trim() : '';
+            if (!tsId) continue;
+            if (!metaByTs.has(tsId)) {
+              metaByTs.set(tsId, {
+                processing_status: tf?.processing_status ?? null,
+                locked_by_invoice_id: tf?.locked_by_invoice_id ?? null,
+                paid_at_utc: tf?.paid_at_utc ?? null
+              });
+            }
+          }
+        } catch {
+          // non-fatal; safe default below blocks if status missing
+        }
       }
-    })));
-  }
-
-  // 3) Build RPC payload (validation_rows + email_actions + invalidation_actions)
-  const validation_rows = [];
-  const email_actions = [];
-
-  const rowByHrRowId = new Map();
-  const rowByTimesheetId = new Map();
-
-  for (const row of rows) {
-    const hrid = row?.hr_row_id ? String(row.hr_row_id).trim() : '';
-    if (hrid) rowByHrRowId.set(hrid, row);
-
-    const tsid = row?.timesheet_id ? String(row.timesheet_id).trim() : '';
-    if (tsid && !rowByTimesheetId.has(tsid)) rowByTimesheetId.set(tsid, row);
-  }
-
-  // ✅ Include ALL classified rows with timesheet_id (including synthetic missing_from_import rows)
-  for (const row of rows) {
-    const timesheetId = row?.timesheet_id || null;
-    if (!timesheetId) continue;
-
-    const statusU = String(row?.status || '').toUpperCase();
-    const reasonCodeRaw = String(row?.reason_code || '').toLowerCase();
-
-    const isOk = (statusU === 'VALIDATION_OK' || statusU === 'OK' || statusU === 'PASS' || statusU === 'VALID');
-
-    // ✅ NEW: include hr_row_id when present (real file rows); omit for synthetic rows
-    const hrRowId = (row?.hr_row_id != null && String(row.hr_row_id).trim())
-      ? String(row.hr_row_id).trim()
-      : '';
-
-    const vrow = {
-      timesheet_id: String(timesheetId),
-      status: isOk ? 'VALIDATION_OK' : 'VALIDATION_ERROR',
-      reason_code: isOk ? 'HEALTHROSTER_DAILY' : (reasonCodeRaw || 'validation_failed'),
-      // For missing_from_import, classification provides hr_request_id as the existing ref_before
-      hr_request_id: row?.hr_request_id || row?.hrRequestId || null
-    };
-
-    if (hrRowId) {
-      vrow.hr_row_id = hrRowId;
     }
 
-    validation_rows.push(vrow);
-  }
+    const blockedInvoiced = [];
+    const blockedUnconfirmed = [];
 
-  // ✅ Pre-validate email_actions against:
-  //   (A) invoice-locked/paid (informative only)
-  //   (B) not confirmed gate
-  const blockedInvoicedTimesheetIds = new Set();
-  const blockedUnconfirmedTimesheetIds = new Set();
+    for (const tsId of tsIds) {
+      const meta = metaByTs.has(tsId) ? metaByTs.get(tsId) : null;
+      const ps = meta ? meta.processing_status : null;
+      const inv = meta ? meta.locked_by_invoice_id : null;
+      const paid = meta ? meta.paid_at_utc : null;
 
-  // Email actions come from request; we enrich from classification rows and recompute fingerprints if missing.
-  for (const a of requestEmailActions) {
-    if (!a || typeof a !== 'object') continue;
-
-    const hrRowId = a.hr_row_id ? String(a.hr_row_id).trim() : '';
-    const timesheetIdFromReq = (a.timesheet_id != null && String(a.timesheet_id).trim())
-      ? String(a.timesheet_id).trim()
-      : '';
-
-    const baseRow =
-      (hrRowId ? (rowByHrRowId.get(hrRowId) || null) : null) ||
-      (timesheetIdFromReq ? (rowByTimesheetId.get(timesheetIdFromReq) || null) : null);
-
-    const timesheetId = (timesheetIdFromReq || (baseRow?.timesheet_id ? String(baseRow.timesheet_id).trim() : ''));
-    if (!timesheetId) continue;
-
-    // invoice-locked/paid => reject
-    if (baseRow && isInvoiceLockedOrPaid(baseRow)) {
-      blockedInvoicedTimesheetIds.add(timesheetId);
-      continue;
+      if (isInvoiceLockedOrPaid(inv, paid)) {
+        blockedInvoiced.push(tsId);
+        continue;
+      }
+      if (isBlockedForTsoEmail(ps)) {
+        blockedUnconfirmed.push({
+          timesheet_id: tsId,
+          processing_status: (ps != null ? String(ps) : null),
+          email_blocked_reason: unconfirmedEmailBlockText(ps)
+        });
+        continue;
+      }
     }
 
-    // Determine processing status (safe default if missing)
-    const procStatus =
-      baseRow?.tsfin_processing_status ??
-      baseRow?.processing_status ??
-      null;
-
-    if (isBlockedForTsoEmail(procStatus)) {
-      blockedUnconfirmedTimesheetIds.add(timesheetId);
-      continue;
+    if (blockedInvoiced.length) {
+      return withCORS(env, req, badRequest(JSON.stringify({
+        error: 'HR_WEEKLY_EMAIL_BLOCKED_INVOICED_TIMESHEET',
+        message: 'Cannot email Temporary Staffing because one or more selected timesheets are invoice-locked / invoiced or paid (informative only).',
+        import_id: importId,
+        blocked_timesheet_ids: blockedInvoiced
+      })));
     }
 
-    const reasonCode = String(a.reason_code || baseRow?.reason_code || '').toLowerCase();
-    if (!EMAIL_REASON_CODES.has(reasonCode)) continue;
-
-    const fp = (a.issue_fingerprint != null && String(a.issue_fingerprint).trim())
-      ? String(a.issue_fingerprint).trim()
-      : (baseRow ? makeIssueFingerprint(baseRow) : '');
-
-    if (!fp) continue;
-
-    const alternativeEmail =
-      (a.alternative_email != null && String(a.alternative_email).trim()) ? String(a.alternative_email).trim() :
-      (a.alt_email != null && String(a.alt_email).trim()) ? String(a.alt_email).trim() :
-      (a.alt_recipient_email != null && String(a.alt_recipient_email).trim()) ? String(a.alt_recipient_email).trim() :
-      null;
-
-    const staffNorm = (String(a.staff_norm || baseRow?.staff_norm || baseRow?.staff_name || baseRow?.staff_raw || '')).toLowerCase().trim() || null;
-    const hospitalNorm = (String(a.hospital_norm || baseRow?.trust_norm || baseRow?.unit_norm || baseRow?.unit || baseRow?.hospital_or_trust || '')).toLowerCase().trim() || null;
-    const workDate = a.work_date || baseRow?.date_local || baseRow?.date || baseRow?.shift_date || null;
-
-    email_actions.push({
-      timesheet_id: String(timesheetId),
-      issue_fingerprint: fp,
-      reason_code: reasonCode,
-      hr_row_id: hrRowId || null,
-      staff_norm: staffNorm,
-      hospital_norm: hospitalNorm,
-      work_date: workDate,
-      alternative_email: alternativeEmail
-    });
+    if (blockedUnconfirmed.length) {
+      return withCORS(env, req, badRequest(JSON.stringify({
+        error: 'HR_WEEKLY_EMAIL_BLOCKED_UNCONFIRMED_TIMESHEET',
+        message: 'Cannot email Temporary Staffing because one or more selected timesheets are not confirmed. See blocked_timesheets for the specific reason per timesheet.',
+        import_id: importId,
+        blocked_timesheet_ids: blockedUnconfirmed.map(x => x.timesheet_id),
+        blocked_timesheets: blockedUnconfirmed
+      })));
+    }
   }
 
-  if (blockedInvoicedTimesheetIds.size) {
-    return withCORS(env, req, badRequest(JSON.stringify({
-      error: 'HR_DAILY_EMAIL_BLOCKED_INVOICED_TIMESHEET',
-      message: 'Cannot email Temporary Staffing because one or more selected timesheets are invoice-locked / invoiced or paid (informative only).',
-      import_id: importId,
-      blocked_timesheet_ids: Array.from(blockedInvoicedTimesheetIds)
-    })));
-  }
-
-  if (blockedUnconfirmedTimesheetIds.size) {
-    return withCORS(env, req, badRequest(JSON.stringify({
-      error: 'HR_DAILY_EMAIL_BLOCKED_UNCONFIRMED_TIMESHEET',
-      message: 'Cannot email Temporary Staffing because one or more selected timesheets are not confirmed (awaiting authorisation/signature).',
-      import_id: importId,
-      blocked_timesheet_ids: Array.from(blockedUnconfirmedTimesheetIds)
-    })));
-  }
-
-  // Invalidation actions pass straight through; RPC validates shape
-  const invalidation_actions = requestInvalidationActions
-    .filter(x => x && typeof x === 'object')
-    .map(x => ({
-      timesheet_id: x.timesheet_id != null ? String(x.timesheet_id).trim() : null,
-      comparison_key: x.comparison_key != null ? String(x.comparison_key).trim() : null,
-      invalidate: (x.invalidate === false || String(x.invalidate).toLowerCase() === 'false') ? false : true
-    }))
-    .filter(x => !!x.timesheet_id && !!x.comparison_key);
-
-  // 4) Transactional RPC
-  let rpcPayload;
+  // ─────────────────────────────────────────────
+  // 1) Single transactional DB apply RPC
+  // ─────────────────────────────────────────────
+  let applyPayload;
   try {
-    const rpcRaw = await sbRpc(env, 'hr_daily_apply_transactional', {
+    const rpcRaw = await sbRpc(env, 'hr_weekly_apply_transactional', {
       p_import_id: importId,
-      p_payload: { validation_rows, email_actions, invalidation_actions },
+      p_payload: {
+        selected_action_ids: selectedActionIds,
+        selected_actions: selectedActions,
+        decisions,
+        email_actions: emailActions,
+        include_missing_shifts: includeMissingShifts,
+        invalidation_actions: invalidationActions
+      },
       p_actor_user_id: user.id
     });
-    rpcPayload = unwrapRpcJsonb(rpcRaw, 'hr_daily_apply_transactional');
+
+    applyPayload = unwrapRpcJsonb(rpcRaw, 'hr_weekly_apply_transactional');
   } catch (e) {
-    console.error('[HR_DAILY_APPLY] hr_daily_apply_transactional failed', {
+    logError({
+      stage: 'apply_rpc_failed',
       import_id: importId,
-      err: e?.message || String(e)
+      err: String(e?.message || e || '')
     });
-    return withCORS(env, req, serverError(`Daily apply failed: ${e?.message || e}`));
+    return withCORS(env, req, serverError(`HR weekly apply failed: ${e?.message || String(e)}`));
   }
 
-  if (!rpcPayload || typeof rpcPayload !== 'object') {
-    return withCORS(env, req, serverError('Daily apply returned invalid RPC payload'));
+  if (!applyPayload || typeof applyPayload !== 'object') {
+    return withCORS(env, req, serverError('HR weekly apply returned invalid payload'));
   }
 
-  const emailJobs = Array.isArray(rpcPayload?.email_jobs) ? rpcPayload.email_jobs : [];
+  const emailJobs = Array.isArray(applyPayload.email_jobs) ? applyPayload.email_jobs : [];
 
-  const affectedFromRpc = Array.isArray(rpcPayload?.affected_timesheet_ids) ? rpcPayload.affected_timesheet_ids : [];
-  const affectedFallback = validation_rows.map(v => v?.timesheet_id).filter(Boolean);
-  const affectedTimesheetIds = uniqStrings([...(affectedFromRpc || []), ...(affectedFallback || [])]);
+  // ✅ TSFIN drain: include affected + validation-affected + ref-updated (top-level + mode_a)
+  const affectedBase = Array.isArray(applyPayload.affected_timesheet_ids) ? applyPayload.affected_timesheet_ids : [];
+  const affectedValTop = Array.isArray(applyPayload.validation_affected_timesheet_ids) ? applyPayload.validation_affected_timesheet_ids : [];
+  const affectedValModeA = Array.isArray(applyPayload?.mode_a?.validation_affected_timesheet_ids)
+    ? applyPayload.mode_a.validation_affected_timesheet_ids
+    : [];
 
-  // 5) Post-commit best-effort: queue emails (WEEKLY-style consolidated format)
+  const affectedRefTop = Array.isArray(applyPayload.ref_updated_timesheet_ids) ? applyPayload.ref_updated_timesheet_ids : [];
+  const affectedRefModeA = Array.isArray(applyPayload?.mode_a?.ref_updated_timesheet_ids)
+    ? applyPayload.mode_a.ref_updated_timesheet_ids
+    : [];
+
+  const affectedTimesheetIds = uniqStrings([
+    ...(affectedBase || []),
+    ...(affectedValTop || []),
+    ...(affectedValModeA || []),
+    ...(affectedRefTop || []),
+    ...(affectedRefModeA || [])
+  ]);
+
+  // ─────────────────────────────────────────────
+  // 2) Post-commit: queue emails best-effort (group by recipient)
+  // ─────────────────────────────────────────────
   let emailsQueued = 0;
   const emailFailures = [];
 
-  // Agency name from settings_defaults (single row)
+  // ✅ Agency name from settings_defaults (single row)
   let agencyName = 'CloudTMS';
   try {
     const { rows: defRows } = await sbFetch(
@@ -39470,66 +38938,8 @@ async function handleHrRotaValidationApply(env, req, importId) {
     if (cleaned) agencyName = cleaned;
   } catch {}
 
-  const safeYmd = (v) => {
-    const s = String(v || '').trim();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-    if (/^\d{4}-\d{2}-\d{2}/.test(s) && s.length >= 10) return s.slice(0, 10);
-    return s || '';
-  };
-
-  const fmtNiceDate = (ymd) => {
-    const s = safeYmd(ymd);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return s || '—';
-    const d = new Date(`${s}T00:00:00Z`);
-    if (Number.isNaN(d.getTime())) return s;
-    try {
-      return new Intl.DateTimeFormat('en-GB', {
-        timeZone: 'Europe/London',
-        weekday: 'short',
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric'
-      }).format(d);
-    } catch {
-      return s;
-    }
-  };
-
-  const safeLocalHmFromIso = (iso) => {
-    const s = String(iso || '').trim();
-    if (!s) return '';
-    try {
-      if (typeof toLocalParts === 'function') {
-        const p = toLocalParts(s, null);
-        const hm = p && (p.hm || p.hhmm || p.hhmm_local || p.hhmmLocal) ? String(p.hm || p.hhmm || p.hhmm_local || p.hhmmLocal) : '';
-        if (hm && /^\d{2}:\d{2}$/.test(hm)) return hm;
-      }
-    } catch {}
-    const hm2 = s.length >= 16 ? s.slice(11, 16) : '';
-    return (hm2 && /^\d{2}:\d{2}$/.test(hm2)) ? hm2 : '';
-  };
-
-  const weekEndingSundayYmd = (ymd) => {
-    const s = safeYmd(ymd);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return '';
-    const [Y, M, D] = s.split('-').map(n => Number(n));
-    if (!Number.isFinite(Y) || !Number.isFinite(M) || !Number.isFinite(D)) return '';
-    const dt = new Date(Date.UTC(Y, M - 1, D));
-    const dow = dt.getUTCDay(); // 0=Sun..6=Sat
-    const add = (7 - dow) % 7;
-    dt.setUTCDate(dt.getUTCDate() + add);
-    const yyyy = dt.getUTCFullYear();
-    const mm = String(dt.getUTCMonth() + 1).padStart(2, '0');
-    const dd = String(dt.getUTCDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
-  };
-
-  const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
-    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-  }[c]));
-
   const buildEmailHtmlTable = (items) => {
-    const rows2 = Array.isArray(items) ? items : [];
+    const rows = Array.isArray(items) ? items : [];
 
     const head = `
       <tr>
@@ -39543,8 +38953,8 @@ async function handleHrRotaValidationApply(env, req, importId) {
       </tr>
     `;
 
-    const body = rows2.map((it) => {
-      const cand = escapeHtml(String(it?.candidate_name || '') || '—');
+    const body = rows.map((it) => {
+      const cand = escapeHtml(String(it?.candidate_name || it?.candidate || '') || '—');
 
       const weNice = escapeHtml(fmtNiceDate(it?.week_ending_date) || '—');
       const wdNice = escapeHtml(fmtNiceDate(it?.work_date) || '—');
@@ -39565,11 +38975,13 @@ async function handleHrRotaValidationApply(env, req, importId) {
 
       const ms = escapeHtml(String(it?.match_status || it?.status || '—'));
 
-      const refAfterRaw =
-        (it?.reference_no != null) ? String(it.reference_no) :
-        (it?.ref_after != null) ? String(it.ref_after) :
-        (it?.ref != null) ? String(it.ref) :
-        '';
+      const refAfterRaw = (it?.reference_no != null)
+        ? String(it.reference_no)
+        : (it?.ref_after != null)
+          ? String(it.ref_after)
+          : (it?.ref != null)
+            ? String(it.ref)
+            : '';
       const refNo = escapeHtml((String(refAfterRaw || '').trim()) || 'N/A');
 
       return `
@@ -39595,137 +39007,74 @@ async function handleHrRotaValidationApply(env, req, importId) {
     `;
   };
 
-  const groups = new Map(); // recipientEmail -> { items: [], tsIds:Set<string>, fps:Set<string> }
-  const seenJobKey = new Set();
+  // Group recipient resolution:
+  // Prefer item alt/override fields, else job.recipient_email, else item.recipient_email
+  const extractRecipientForItem = (job, item) => {
+    const a =
+      normEmail(item?.alt_email) ||
+      normEmail(item?.alternative_email) ||
+      normEmail(item?.alt_recipient_email) ||
+      normEmail(item?.recipient_email_override) ||
+      normEmail(item?.override_email) ||
+      '';
+    if (a) return a;
 
-  for (const job of emailJobs) {
-    const tsId = job?.timesheet_id ? String(job.timesheet_id).trim() : '';
-    const fp   = job?.issue_fingerprint ? String(job.issue_fingerprint).trim() : '';
-    const recipientEmail = job?.recipient_email ? String(job.recipient_email).trim() : '';
+    const j = normEmail(job?.recipient_email);
+    if (j) return j;
 
-    const jobKey = `${tsId}__${fp}`;
-    if (!tsId || !fp) {
-      emailFailures.push({ timesheet_id: tsId || null, issue_fingerprint: fp || null, reason: 'INVALID_JOB' });
-      continue;
-    }
-    if (seenJobKey.has(jobKey)) continue;
-    seenJobKey.add(jobKey);
+    const i = normEmail(item?.recipient_email);
+    return i || '';
+  };
 
-    const baseRow = rowByTimesheetId.get(tsId) || null;
+  const groupEmailWork = () => {
+    const groups = new Map(); // email -> { items: [], tsIds:Set<string> }
 
-    if (baseRow && isInvoiceLockedOrPaid(baseRow)) {
-      emailFailures.push({ timesheet_id: tsId, issue_fingerprint: fp, reason: 'EMAIL_BLOCKED_INVOICED_TIMESHEET' });
-      continue;
-    }
+    const addToGroup = (email, item) => {
+      const k = normEmail(email);
+      if (!k) return false;
 
-    const procStatus = baseRow?.tsfin_processing_status ?? baseRow?.processing_status ?? null;
-    if (isBlockedForTsoEmail(procStatus)) {
-      emailFailures.push({ timesheet_id: tsId, issue_fingerprint: fp, reason: 'EMAIL_BLOCKED_UNCONFIRMED_TIMESHEET' });
-      continue;
-    }
+      const cur = groups.get(k) || { items: [], tsIds: new Set() };
+      cur.items.push(item);
 
-    if (!recipientEmail) {
-      emailFailures.push({ timesheet_id: tsId, issue_fingerprint: fp, reason: 'RECIPIENT_MISSING' });
-      continue;
-    }
+      const tsId = String(item?.timesheet_id || '').trim();
+      if (tsId) cur.tsIds.add(tsId);
 
-    // Build a weekly-style table item (best-effort)
-    const detail = (baseRow && typeof baseRow.details === 'object' && baseRow.details && !Array.isArray(baseRow.details)) ? baseRow.details : {};
-
-    const workDate =
-      String(job?.work_date || baseRow?.date_local || baseRow?.work_date || baseRow?.date || baseRow?.shift_date || '').trim() ||
-      null;
-
-    const weekEnding =
-      (baseRow && (baseRow.week_ending_date || baseRow.weekEndingDate)) ? String(baseRow.week_ending_date || baseRow.weekEndingDate) :
-      (workDate ? weekEndingSundayYmd(workDate) : '');
-
-    const tsStartIso = detail.ts_worked_start_iso || detail.tsWorkedStartIso || baseRow?.worked_start_iso || baseRow?.ts_worked_start_iso || null;
-    const tsEndIso   = detail.ts_worked_end_iso   || detail.tsWorkedEndIso   || baseRow?.worked_end_iso   || baseRow?.ts_worked_end_iso   || null;
-
-    const tsStart = safeLocalHmFromIso(tsStartIso) || '';
-    const tsEnd = safeLocalHmFromIso(tsEndIso) || '';
-
-    const tsBreak =
-      (detail.ts_break_minutes != null ? Number(detail.ts_break_minutes) :
-       detail.ts_break_mins != null ? Number(detail.ts_break_mins) :
-       detail.timesheet_break_mins != null ? Number(detail.timesheet_break_mins) :
-       baseRow?.break_minutes != null ? Number(baseRow.break_minutes) : null);
-
-    const hrStart =
-      String(
-        detail.hr_start_local ||
-        detail.start_local ||
-        detail.hr_start ||
-        baseRow?.start_local ||
-        baseRow?.start_time_local ||
-        ''
-      ).trim();
-
-    const hrEnd =
-      String(
-        detail.hr_end_local ||
-        detail.end_local ||
-        detail.hr_end ||
-        baseRow?.end_local ||
-        baseRow?.end_time_local ||
-        ''
-      ).trim();
-
-    const hrBreak =
-      (detail.hr_break_minutes != null ? Number(detail.hr_break_minutes) :
-       detail.hr_break_mins != null ? Number(detail.hr_break_mins) :
-       detail.healthroster_break_mins != null ? Number(detail.healthroster_break_mins) :
-       baseRow?.hours_worked != null ? null : null);
-
-    const candidateName =
-      String(baseRow?.staff_name || baseRow?.staff_raw || baseRow?.staff_norm || job?.candidate_name || '').trim() || '—';
-
-    const refNo =
-      String(
-        baseRow?.reference_number ||
-        detail.ref_after ||
-        detail.refAfter ||
-        detail.ref_before ||
-        detail.refBefore ||
-        ''
-      ).trim() || null;
-
-    const matchStatus =
-      String(detail.match_status || detail.matchStatus || '').trim() ||
-      (String(baseRow?.reason_code || job?.reason_code || '').trim() ? String(baseRow?.reason_code || job?.reason_code).trim() : 'MISMATCH');
-
-    const item = {
-      candidate_name: candidateName,
-      week_ending_date: weekEnding || null,
-      work_date: workDate || null,
-
-      timesheet_id: tsId,
-      timesheet_start: tsStart || '—',
-      timesheet_end: tsEnd || '—',
-      timesheet_break_mins: (tsBreak == null || Number.isNaN(tsBreak)) ? null : tsBreak,
-
-      healthroster_start: hrStart || null,
-      healthroster_end: hrEnd || null,
-      healthroster_break_mins: (hrBreak == null || Number.isNaN(hrBreak)) ? null : hrBreak,
-
-      match_status: String(matchStatus || '').replace(/_/g, ' ').toUpperCase(),
-      reference_no: refNo || null
+      groups.set(k, cur);
+      return true;
     };
 
-    const cur = groups.get(recipientEmail) || { items: [], tsIds: new Set(), fps: new Set() };
-    cur.items.push(item);
-    cur.tsIds.add(tsId);
-    cur.fps.add(fp);
-    groups.set(recipientEmail, cur);
-  }
+    const jobsArr = Array.isArray(emailJobs) ? emailJobs : [];
 
-  for (const [recipientEmail, pack] of groups.entries()) {
+    for (const job of jobsArr) {
+      const items = Array.isArray(job?.items) ? job.items : [];
+      if (!items.length) continue;
+
+      for (const it0 of items) {
+        const it = (it0 && typeof it0 === 'object') ? it0 : {};
+        const recip = extractRecipientForItem(job, it);
+        const ok = addToGroup(recip, it);
+        if (!ok) {
+          emailFailures.push({
+            reason: 'NO_RECIPIENT_EMAIL',
+            recipient_email: null,
+            timesheet_id: it?.timesheet_id ? String(it.timesheet_id) : null
+          });
+        }
+      }
+    }
+
+    return groups;
+  };
+
+  const grouped = groupEmailWork();
+
+  for (const [recipientEmail, pack] of grouped.entries()) {
     const items = Array.isArray(pack?.items) ? pack.items : [];
     const tsIds = (pack?.tsIds instanceof Set) ? Array.from(pack.tsIds) : [];
 
-    if (!recipientEmail || !items.length || !tsIds.length) {
-      emailFailures.push({ reason: 'EMPTY_EMAIL_GROUP', recipient_email: recipientEmail || null });
+    if (!recipientEmail) continue;
+    if (!items.length || !tsIds.length) {
+      emailFailures.push({ reason: 'EMPTY_EMAIL_GROUP', recipient_email: recipientEmail });
       continue;
     }
 
@@ -39758,7 +39107,7 @@ async function handleHrRotaValidationApply(env, req, importId) {
       continue;
     }
 
-    const subject = `HealthRoster daily validation – shifts to amend`;
+    const subject = `HealthRoster weekly validation – shifts to amend`;
     const tableHtml = buildEmailHtmlTable(items);
 
     const bodyText = [
@@ -39781,9 +39130,6 @@ async function handleHrRotaValidationApply(env, req, importId) {
     `;
 
     try {
-      // ✅ Use reference (no correlation_id column in mail_outbox)
-      const outboxReference = `hr_daily_validation:${importId}:consolidated:${recipientEmail}`;
-
       const insert = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
         method: 'POST',
         headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
@@ -39796,7 +39142,7 @@ async function handleHrRotaValidationApply(env, req, importId) {
           body_text: bodyText,
           attachments,
           status: 'QUEUED',
-          reference: outboxReference,
+          reference: `hr_weekly_validation:${importId}:consolidated:${recipientEmail}`,
           created_by: user?.id || null
         })
       });
@@ -39812,7 +39158,9 @@ async function handleHrRotaValidationApply(env, req, importId) {
     }
   }
 
-  // 6) Post-commit: TSFIN Strategy A drain-to-completion (strict)
+  // ─────────────────────────────────────────────
+  // 3) Post-commit: TSFIN Strategy A drain-to-completion (hard requirement)
+  // ─────────────────────────────────────────────
   const tsfinDrainStats = {
     ids: affectedTimesheetIds.length,
     enqueued: 0,
@@ -39845,7 +39193,7 @@ async function handleHrRotaValidationApply(env, req, importId) {
           _reason: 'CONTEXT_CHANGED'
         });
         const enqNum = Number(
-          (LOG && (typeof enqRaw === 'number' || typeof enqRaw === 'string'))
+          (typeof enqRaw === 'number' || typeof enqRaw === 'string')
             ? enqRaw
             : (Array.isArray(enqRaw) ? (enqRaw?.[0]?.enqueue_ts_financials_priority ?? enqRaw?.[0]?.count ?? enqRaw?.[0]?.row_count) : null)
         );
@@ -39880,13 +39228,11 @@ async function handleHrRotaValidationApply(env, req, importId) {
       if (tsfinDrainStats.loops >= maxLoops && tsfinDrainStats.pending_total > 0) tsfinDrainStats.done = false;
 
       if (!tsfinDrainStats.done) {
-        if (LOG) {
-          console.error('[HR_DAILY_APPLY]', JSON.stringify({
-            stage: 'tsfin_drain_failed_strict_after_apply_commit',
-            import_id: importId,
-            stats: tsfinDrainStats
-          }));
-        }
+        logError({
+          stage: 'tsfin_drain_failed_strict_after_apply_commit',
+          import_id: importId,
+          stats: tsfinDrainStats
+        });
 
         const retryAfterSeconds = 30;
         const resp = {
@@ -39902,7 +39248,7 @@ async function handleHrRotaValidationApply(env, req, importId) {
             next_attempt_at_min: tsfinDrainStats.pending_next_attempt_at_min,
             retry_after_seconds: retryAfterSeconds
           },
-          apply: rpcPayload
+          apply: applyPayload
         };
 
         return withCORS(env, req, new Response(JSON.stringify(resp), {
@@ -39911,14 +39257,12 @@ async function handleHrRotaValidationApply(env, req, importId) {
         }));
       }
     } catch (e) {
-      if (LOG) {
-        console.error('[HR_DAILY_APPLY]', JSON.stringify({
-          stage: 'tsfin_drain_exception_strict_after_apply_commit',
-          import_id: importId,
-          err: String(e?.message || e || ''),
-          stats: tsfinDrainStats
-        }));
-      }
+      logError({
+        stage: 'tsfin_drain_exception_strict_after_apply_commit',
+        import_id: importId,
+        err: String(e?.message || e || ''),
+        stats: tsfinDrainStats
+      });
 
       const retryAfterSeconds = 30;
       const resp = {
@@ -39934,117 +39278,122 @@ async function handleHrRotaValidationApply(env, req, importId) {
           next_attempt_at_min: tsfinDrainStats.pending_next_attempt_at_min || null,
           retry_after_seconds: retryAfterSeconds
         },
-        apply: rpcPayload
+        apply: applyPayload
       };
 
       return withCORS(env, req, new Response(JSON.stringify(resp), {
         status: 500,
         headers: { 'content-type': 'application/json' }
-        }));
+      }));
     }
   }
 
   // ─────────────────────────────────────────────
-  // ✅ 6.5) Post-TSFIN: config-driven tspdf enqueue for electronic refs-changed
-  // (clears "Refs – Timesheet PDF invalid" quickly without user opening PDF)
+  // 3.5) Post-TSFIN: detect QR reissue candidates + optional tspdf enqueue
   // ─────────────────────────────────────────────
+  let qrReissueCandidates = [];
+  let docFlagsRows = [];
   let tspdfEnqueued = 0;
   let tspdfTargetCount = 0;
 
-  if (enqueueTspdfRegen && affectedTimesheetIds.length) {
+  if (affectedTimesheetIds.length) {
     try {
       const flagsRaw = await sbRpc(env, 'timesheet_doc_flags_batch', {
         p_timesheet_ids: affectedTimesheetIds
       });
 
-      const docFlagsRows = Array.isArray(flagsRaw) ? flagsRaw : (flagsRaw?.data || []);
-      const elecIds = uniqStrings(
-        (docFlagsRows || [])
-          .filter(r => r && (r.electronic_refs_changed === true || r.electronic_refs_changed === 'true' || r.electronic_refs_changed === 1 || r.electronic_refs_changed === '1'))
-          .map(r => r.timesheet_id)
-      );
+      docFlagsRows = Array.isArray(flagsRaw) ? flagsRaw : [];
+      qrReissueCandidates = docFlagsRows
+        .filter(r => r && (r.qr_refs_changed === true || r.qr_refs_changed === 'true' || r.qr_refs_changed === 1 || r.qr_refs_changed === '1'))
+        .map(r => ({
+          timesheet_id: String(r.timesheet_id || '').trim() || null,
+          candidate_id: r.candidate_id || null,
+          candidate_name: (r.candidate_name != null ? String(r.candidate_name) : null),
+          client_id: r.client_id || null,
+          client_name: (r.client_name != null ? String(r.client_name) : null),
+          sheet_scope: (r.sheet_scope != null ? String(r.sheet_scope) : null),
+          week_ending_date: (r.week_ending_date != null ? String(r.week_ending_date).slice(0, 10) : null),
+          qr_status: (r.qr_status != null ? String(r.qr_status) : null),
+          current_refs_sig: (r.current_refs_sig != null ? String(r.current_refs_sig) : null),
+          qr_sent_refs_sig: (r.qr_sent_refs_sig != null ? String(r.qr_sent_refs_sig) : null),
+          generated_pdf_refs_sig: (r.generated_pdf_refs_sig != null ? String(r.generated_pdf_refs_sig) : null)
+        }))
+        .filter(x => !!x.timesheet_id);
 
-      tspdfTargetCount = elecIds.length;
+      if (enqueueTspdfRegen) {
+        const elecIds = uniqStrings(
+          docFlagsRows
+            .filter(r => r && (r.electronic_refs_changed === true || r.electronic_refs_changed === 'true' || r.electronic_refs_changed === 1 || r.electronic_refs_changed === '1'))
+            .map(r => r.timesheet_id)
+        );
 
-      if (elecIds.length) {
-        const enqRaw = await sbRpc(env, 'tspdf_enqueue_many', {
-          p_timesheet_ids: elecIds,
-          p_force_regen: true,
-          p_prefer_generated: true,
-          p_reason: null,
-          p_limit: 500
-        });
+        tspdfTargetCount = elecIds.length;
 
-        const enqNum =
-          (typeof enqRaw === 'number' || typeof enqRaw === 'string')
-            ? Number(enqRaw)
-            : (Array.isArray(enqRaw) ? Number(enqRaw?.[0]?.tspdf_enqueue_many ?? enqRaw?.[0]?.count ?? enqRaw?.[0]?.row_count) : NaN);
+        if (elecIds.length) {
+          const enqRaw = await sbRpc(env, 'tspdf_enqueue_many', {
+            p_timesheet_ids: elecIds,
+            p_force_regen: true,
+            p_prefer_generated: true,
+            p_reason: null,
+            p_limit: 500
+          });
 
-        tspdfEnqueued = (Number.isFinite(enqNum) ? enqNum : 0);
+          const enqNum =
+            (typeof enqRaw === 'number' || typeof enqRaw === 'string')
+              ? Number(enqRaw)
+              : (Array.isArray(enqRaw) ? Number(enqRaw?.[0]?.tspdf_enqueue_many ?? enqRaw?.[0]?.count ?? enqRaw?.[0]?.row_count) : NaN);
+
+          tspdfEnqueued = (Number.isFinite(enqNum) ? enqNum : 0);
+        }
       }
     } catch (e) {
-      if (LOG) {
-        console.warn('[HR_DAILY_APPLY]', JSON.stringify({
-          stage: 'tspdf_enqueue_failed_non_fatal',
-          import_id: importId,
-          err: String(e?.message || e || '')
-        }));
-      }
+      logWarn({
+        stage: 'doc_flags_batch_failed_non_fatal',
+        import_id: importId,
+        err: String(e?.message || e || '')
+      });
+      qrReissueCandidates = [];
       tspdfEnqueued = 0;
       tspdfTargetCount = 0;
     }
   }
 
-  // 7) Audit best-effort (include tsfin_drain + tspdf regen)
+  // ─────────────────────────────────────────────
+  // 4) Post-commit: audit best-effort
+  // ─────────────────────────────────────────────
   try {
     await writeAudit(
       env,
       user,
-      'HR_DAILY_APPLY_TRANSACTIONAL_COMPLETED',
+      'HR_WEEKLY_APPLY_TRANSACTIONAL_COMPLETED',
       {
         import_id: importId,
-        rpc: {
-          validations_upserted: rpcPayload?.validations_upserted ?? null,
-          timesheets_reference_updated: rpcPayload?.timesheets_reference_updated ?? null,
-          timesheets_reference_cleared: rpcPayload?.timesheets_reference_cleared ?? null,
-          email_actions_received: rpcPayload?.email_actions_received ?? null,
-          email_logs_upserted: rpcPayload?.email_logs_upserted ?? null
-        },
+        mode_a: applyPayload?.mode_a || null,
+        mode_b: applyPayload?.mode_b || null,
         emails_queued: emailsQueued,
         email_failures: emailFailures.slice(0, 50),
         tsfin_drain: tsfinDrainStats,
-        enqueue_tspdf_regen: enqueueTspdfRegen,
+        qr_reissue_candidates_count: qrReissueCandidates.length,
         tspdf_enqueued: tspdfEnqueued,
         tspdf_target_count: tspdfTargetCount
       },
       { entity: 'hr_imports', subject_id: importId, req }
     );
   } catch (e) {
-    if (LOG) {
-      console.warn('[HR_DAILY_APPLY] audit failed (non-fatal)', {
-        import_id: importId,
-        err: e?.message || String(e)
-      });
-    }
-  }
-
-  if (LOG) {
-    console.log('[HR_DAILY_APPLY]', JSON.stringify({
-      stage: 'completed',
+    logWarn({
+      stage: 'writeAudit_failed_non_fatal',
       import_id: importId,
-      validations_upserted: rpcPayload?.validations_upserted ?? null,
-      emails_queued: emailsQueued,
-      email_failures_count: emailFailures.length,
-      tsfin_drain: tsfinDrainStats,
-      enqueue_tspdf_regen: enqueueTspdfRegen,
-      tspdf_enqueued: tspdfEnqueued,
-      tspdf_target_count: tspdfTargetCount
-    }));
+      err: String(e?.message || e || '')
+    });
   }
 
+  // ─────────────────────────────────────────────
+  // 5) Response
+  // ─────────────────────────────────────────────
   return withCORS(env, req, ok({
     import_id: importId,
-    apply: rpcPayload,
+    apply: applyPayload,
+    qr_reissue_candidates: qrReissueCandidates,
     tspdf_regen: enqueueTspdfRegen ? { target_count: tspdfTargetCount, enqueued: tspdfEnqueued } : { target_count: 0, enqueued: 0 },
     post_commit: {
       emails_queued: emailsQueued,
@@ -40549,9 +39898,11 @@ async function handleSearchInvoices(env, req) {
 // SEARCH — Clients (richer filters + csv/print)
 // ───────────────────────────────────────────────────────────────────────────────
 
- async function handleSearchClients(env, req) {
+async function handleSearchClients(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+
+  const enc = encodeURIComponent;
 
   const urlObj = new URL(req.url);
   const q = (k) => urlObj.searchParams.get(k);
@@ -40559,20 +39910,42 @@ async function handleSearchInvoices(env, req) {
   const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
   const format   = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
 
+  // ✅ include_count support
+  const includeCount = String(q('include_count') || 'false').toLowerCase() === 'true';
+
   // Sorting
-  const orderByParam = (q('order_by') || '').toLowerCase();
+  const orderByParam  = (q('order_by') || '').toLowerCase();
   const orderDirParam = (q('order_dir') || '').toLowerCase();
 
+  // ✅ Expanded allow-list (must only include real columns)
   const allowedSort = {
     name:                  'name',
     cli_ref:               'cli_ref',
+    invoice_address:       'invoice_address',
     primary_invoice_email: 'primary_invoice_email',
     ap_phone:              'ap_phone',
     vat_chargeable:        'vat_chargeable',
     payment_terms_days:    'payment_terms_days',
+    mileage_charge_rate:   'mileage_charge_rate',
+    ts_queries_email:      'ts_queries_email',
     created_at:            'created_at',
-    updated_at:            'updated_at'
+    updated_at:            'updated_at',
+    rev:                   'rev',
+
+    // ✅ NEW: client site details + site contact fields
+    client_address:        'client_address',
+    contact_title:         'contact_title',
+    contact_known_as:      'contact_known_as',
+    contact_forename:      'contact_forename',
+    contact_surname:       'contact_surname',
+    contact_job_title:     'contact_job_title',
+    contact_tel:           'contact_tel',
+    contact_mobile:        'contact_mobile',
+    contact_email:         'contact_email',
+    website:               'website',
+    notes:                 'notes'
   };
+
   const defaultOrderCol = 'name';
   const orderCol = allowedSort[orderByParam] || defaultOrderCol;
   const orderDir = (orderDirParam === 'desc') ? 'desc' : 'asc';
@@ -40589,7 +39962,8 @@ async function handleSearchInvoices(env, req) {
   }
 
   // Filters expanded to match FE
-  const text          = q('q'); // name partial
+  // ✅ Accept both q= and name= as the "client name contains" filter (Advanced Search currently sends name=)
+  const text          = q('q') || q('name'); // name partial
   const cliRef        = q('cli_ref');
   const primaryEmail  = q('primary_invoice_email');
   const invoiceAddr   = q('invoice_address');
@@ -40606,7 +39980,8 @@ async function handleSearchInvoices(env, req) {
 
   let url =
     `${env.SUPABASE_URL}/rest/v1/clients` +
-    `?select=id,cli_ref,name,invoice_address,primary_invoice_email,ap_phone,vat_chargeable,payment_terms_days,mileage_charge_rate,ts_queries_email,created_at,updated_at` +
+    // ✅ IMPORTANT: return full row-shape so grid column prefs can't "lose" fields when FE switches summary to search()
+    `?select=*` +
     `&order=${enc(orderCol)}.${orderDir}` +
     `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
 
@@ -40631,11 +40006,16 @@ async function handleSearchInvoices(env, req) {
   if (updatedTo)    url += `&updated_at=lte.${enc(updatedTo)}`;
 
   let rows = [];
+  let total = undefined;
   try {
-    ({ rows } = await sbFetch(env, url));
+    const res = await sbFetch(env, url, includeCount);
+    rows = res?.rows || [];
+    total = res?.total;
   } catch (err) {
     return withCORS(env, req, ok({ error: String(err?.message || err), rows: [], page, page_size: pageSize, count: 0 }));
   }
+
+  const respCount = includeCount ? (typeof total === 'number' ? total : (rows?.length || 0)) : (rows?.length || 0);
 
   if (format === 'csv') {
     const header = [
@@ -40671,7 +40051,7 @@ async function handleSearchInvoices(env, req) {
         r.updated_at || ''
       ]));
     }
-    return withCORS(env, req, ok({ csv: out.join('\n'), count: rows?.length || 0, page, page_size: pageSize }));
+    return withCORS(env, req, ok({ csv: out.join('\n'), count: respCount, page, page_size: pageSize }));
   }
 
   if (format === 'print') {
@@ -40704,19 +40084,20 @@ async function handleSearchInvoices(env, req) {
           <tbody>${rowsHtml}</tbody>
         </table>
       </div>`;
-    return withCORS(env, req, ok({ html, count: rows?.length || 0, page, page_size: pageSize }));
+    return withCORS(env, req, ok({ html, count: respCount, page, page_size: pageSize }));
   }
 
-  return withCORS(env, req, ok({ rows, page, page_size: pageSize, count: rows?.length || 0 }));
+  return withCORS(env, req, ok({ rows, page, page_size: pageSize, count: respCount }));
 }
-
-
 // ───────────────────────────────────────────────────────────────────────────────
 // SEARCH — Umbrellas (richer filters + csv/print)
 // ───────────────────────────────────────────────────────────────────────────────
- async function handleSearchUmbrellas(env, req) {
+
+async function handleSearchUmbrellas(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+
+  const enc = encodeURIComponent;
 
   const urlObj = new URL(req.url);
   const q = (k) => urlObj.searchParams.get(k);
@@ -40724,19 +40105,31 @@ async function handleSearchInvoices(env, req) {
   const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
   const format   = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
 
+  // ✅ include_count support
+  const includeCount = String(q('include_count') || 'false').toLowerCase() === 'true';
+
   // Sorting
-  const orderByParam = (q('order_by') || '').toLowerCase();
+  const orderByParam  = (q('order_by') || '').toLowerCase();
   const orderDirParam = (q('order_dir') || '').toLowerCase();
 
+  // ✅ Expanded allow-list (must only include real columns)
   const allowedSort = {
-    name:           'name',
-    enabled:        'enabled',
-    vat_chargeable: 'vat_chargeable',
-    bank_name:      'bank_name',
-    sort_code:      'sort_code',
-    account_number: 'account_number',
-    created_at:     'created_at'
+    name:                           'name',
+    enabled:                        'enabled',
+    vat_chargeable:                 'vat_chargeable',
+    remittance_email:               'remittance_email',
+    bank_name:                      'bank_name',
+    sort_code:                      'sort_code',
+    account_number:                 'account_number',
+    created_at:                     'created_at',
+    updated_at:                     'updated_at',
+    postcode:                       'postcode',
+    town_city:                      'town_city',
+    company_number:                 'company_number',
+    revolut_counterparty_id:        'revolut_counterparty_id',
+    revolut_counterparty_account_id:'revolut_counterparty_account_id'
   };
+
   const defaultOrderCol = 'name';
   const orderCol = allowedSort[orderByParam] || defaultOrderCol;
   const orderDir = (orderDirParam === 'desc') ? 'desc' : 'asc';
@@ -40753,7 +40146,8 @@ async function handleSearchInvoices(env, req) {
   }
 
   // Expanded filters to match FE
-  const text          = q('q'); // name partial
+  // ✅ Accept both q= and name= as the "umbrella name contains" filter
+  const text          = q('q') || q('name'); // free-text
   const bankName      = q('bank_name');
   const sortCode      = q('sort_code');
   const accountNo     = q('account_number');
@@ -40763,12 +40157,18 @@ async function handleSearchInvoices(env, req) {
   const createdTo     = q('created_to');
 
   let url = `${env.SUPABASE_URL}/rest/v1/umbrellas` +
-            `?select=id,name,vat_chargeable,enabled,bank_name,sort_code,account_number,created_at` +
+            `?select=*` +
             `&order=${enc(orderCol)}.${orderDir}` +
             `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
 
   if (idFilterExpr) url += `&id=${enc(idFilterExpr)}`;
-  if (text)      url += `&name=ilike.*${enc(text)}*`;
+
+  // ✅ Free-text should match BOTH name and remittance_email (so typing email also finds the umbrella)
+  if (text) {
+    const esc = enc(text);
+    url += `&or=(name.ilike.*${esc}*,remittance_email.ilike.*${esc}*)`;
+  }
+
   if (bankName)  url += `&bank_name=ilike.*${enc(bankName)}*`;
   if (sortCode)  url += `&sort_code=ilike.*${enc(sortCode)}*`;
   if (accountNo) url += `&account_number=ilike.*${enc(accountNo)}*`;
@@ -40780,11 +40180,16 @@ async function handleSearchInvoices(env, req) {
   if (createdTo)   url += `&created_at=lte.${enc(createdTo)}`;
 
   let rows = [];
+  let total = undefined;
   try {
-    ({ rows } = await sbFetch(env, url));
+    const res = await sbFetch(env, url, includeCount);
+    rows = res?.rows || [];
+    total = res?.total;
   } catch (err) {
     return withCORS(env, req, ok({ error: String(err?.message || err), rows: [], page, page_size: pageSize, count: 0 }));
   }
+
+  const respCount = includeCount ? (typeof total === 'number' ? total : (rows?.length || 0)) : (rows?.length || 0);
 
   if (format === 'csv') {
     const header = ['UmbrellaId','Name','Enabled','VATChargeable','Bank','SortCode','AccountNumber','CreatedAt'];
@@ -40801,7 +40206,7 @@ async function handleSearchInvoices(env, req) {
         r.created_at || ''
       ]));
     }
-    return withCORS(env, req, ok({ csv: out.join('\n'), count: rows?.length || 0, page, page_size: pageSize }));
+    return withCORS(env, req, ok({ csv: out.join('\n'), count: respCount, page, page_size: pageSize }));
   }
 
   if (format === 'print') {
@@ -40826,14 +40231,11 @@ async function handleSearchInvoices(env, req) {
           <tbody>${rowsHtml}</tbody>
         </table>
       </div>`;
-    return withCORS(env, req, ok({ html, count: rows?.length || 0, page, page_size: pageSize }));
+    return withCORS(env, req, ok({ html, count: respCount, page, page_size: pageSize }));
   }
 
-  return withCORS(env, req, ok({ rows, page, page_size: pageSize, count: rows?.length || 0 }));
+  return withCORS(env, req, ok({ rows, page, page_size: pageSize, count: respCount }));
 }
-
-
-
 async function buildHealthRosterPdf(env, invoiceId) {
   // Placeholder implementation:
   //
@@ -41184,56 +40586,6 @@ function base64FromArrayBuffer(buf) {
 // ------------------------------
 // Provider integration (Power Automate)
 // ------------------------------
-async function postToPowerAutomate(env, payload) {
-  // Primary source: settings_defaults.finance_email_settings.webhook_url (cached via loadSettingsDefaults)
-  let url = null;
-  let extraHeaders = null;
-
-  try {
-    const s = await loadSettingsDefaults(env);
-    const fes = s?.finance_email_settings;
-    if (fes && typeof fes === 'object') {
-      const u = (typeof fes.webhook_url === 'string') ? fes.webhook_url.trim() : '';
-      if (u) url = u;
-
-      // optional: allow a headers object (e.g. future auth headers)
-      if (fes.headers && typeof fes.headers === 'object') extraHeaders = fes.headers;
-    }
-  } catch {}
-
-  // Fallback: env
-  if (!url) url = env.POWER_AUTOMATE_EMAIL_WEBHOOK_URL;
-
-  if (!isNonEmptyString(url)) {
-    return { ok: false, status: 0, body: 'Power Automate webhook URL not configured (settings_defaults.finance_email_settings.webhook_url or env.POWER_AUTOMATE_EMAIL_WEBHOOK_URL)' };
-  }
-
-  const headers = { 'Content-Type': 'application/json' };
-  if (extraHeaders && typeof extraHeaders === 'object') {
-    for (const [k, v] of Object.entries(extraHeaders)) {
-      if (typeof k === 'string' && k.trim() && v != null) headers[k] = String(v);
-    }
-  }
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(payload),
-  });
-
-  let body;
-  try { body = await res.text(); } catch { body = ''; }
-
-  const ok = res.ok;
-
-  let provider_message_id = undefined;
-  try {
-    const j = JSON.parse(body);
-    provider_message_id = j.provider_message_id || j.id || j.messageId || undefined;
-  } catch {}
-
-  return { ok, status: res.status, body, provider_message_id };
-}
 
 // ------------------------------
 // Attachments
@@ -43056,16 +42408,797 @@ async function sbGetUserById(env, id) {
   const json = await res.json().catch(()=>[]);
   return Array.isArray(json) && json[0] ? json[0] : null;
 }
+
 async function sbUpdateUserPassword(env, user_id, newHash) {
   const url = `${env.SUPABASE_URL}/rest/v1/${AUTH.USERS_TABLE}?id=eq.${encodeURIComponent(user_id)}`;
-  const res = await fetch(url, { method:'PATCH', headers: { ...sbAuthHeaders(env), 'Prefer':'return=representation' }, body: JSON.stringify({ password_hash: newHash }) });
+
+  // Update password hash
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: { ...sbAuthHeaders(env), 'Prefer': 'return=representation' },
+    body: JSON.stringify({ password_hash: newHash })
+  });
   if (!res.ok) throw new Error(`password update failed ${res.status}`);
+
   // bump session_version:
   const current = await sbGetUserById(env, user_id);
-  const svRes = await fetch(url, { method:'PATCH', headers: { ...sbAuthHeaders(env), 'Prefer':'return=representation' }, body: JSON.stringify({ session_version: (current.session_version|0) + 1 }) });
+  const nextSv = (current && Number.isFinite(Number(current.session_version)))
+    ? (Math.trunc(Number(current.session_version)) + 1)
+    : 2;
+
+  const svRes = await fetch(url, {
+    method: 'PATCH',
+    headers: { ...sbAuthHeaders(env), 'Prefer': 'return=representation' },
+    body: JSON.stringify({ session_version: nextSv })
+  });
   if (!svRes.ok) throw new Error(`session_version bump failed ${svRes.status}`);
-  const j = await svRes.json().catch(()=>[]);
-  return Array.isArray(j) && j[0] ? j[0] : null;
+
+  const j = await svRes.json().catch(() => []);
+  const updated = Array.isArray(j) && j[0] ? j[0] : null;
+
+  // ✅ Clear 2FA trust + challenges (strict; migrations required)
+  const enc = encodeURIComponent;
+
+  const delTrust = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/tms_user_2fa_trust?user_id=eq.${enc(user_id)}`,
+    { method: 'DELETE', headers: sbAuthHeaders(env) }
+  );
+  if (!delTrust.ok) {
+    const t = await delTrust.text().catch(() => '');
+    throw new Error(`2FA trust delete failed (${delTrust.status}) ${t || ''}`.trim());
+  }
+
+  const delChallenges = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/tms_login_2fa_challenges?user_id=eq.${enc(user_id)}`,
+    { method: 'DELETE', headers: sbAuthHeaders(env) }
+  );
+  if (!delChallenges.ok) {
+    const t = await delChallenges.text().catch(() => '');
+    throw new Error(`2FA challenges delete failed (${delChallenges.status}) ${t || ''}`.trim());
+  }
+
+  return updated;
+}
+
+async function handleGetSettings(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return unauthorized('Unauthorized');
+
+  try {
+    const select =
+      [
+        'id',
+
+        // Agency branding
+        'agency_name',
+        'agency_logo',
+
+        // Timesheet PDF text blocks
+        'timesheet_header_json',
+        'timesheet_footer_json',
+
+        // Global shift patterns + timezone
+        'timezone_id',
+        'day_start','day_end',
+        'night_start','night_end',
+        'sat_start','sat_end',
+        'sun_start','sun_end',
+        'bh_start','bh_end',
+
+        // BH calendar config
+        'bh_source','bh_list','bh_feed_url',
+
+        // Global policy flags
+        'ts_reference_required',
+
+        // ✅ Adaptability config
+        'import_config_json',
+
+        // Bank details still live on settings_defaults
+        'bank_name','bank_sort_code','bank_account_number','vat_registration_number',
+
+        // Email settings (global)
+        'finance_email',
+        'finance_email_settings',
+        'system_email',
+        'system_emails',
+        'max_attachments_per_email'
+      ].join(',');
+
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=${select}`
+    );
+
+    // Finance windows list (new) — SQL-first RPC, single call
+    let finance_windows = [];
+    try {
+      const fw = await sbRpc(env, 'settings_finance_list', {});
+      finance_windows = Array.isArray(fw) ? fw : [];
+    } catch {
+      finance_windows = [];
+    }
+
+    const src = (rows && rows.length)
+      ? rows
+      : (await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/settings_defaults?select=${select}&limit=1`)).rows;
+
+    if (!src || !src.length) return notFound("settings_defaults not found");
+
+    const settings = { ...src[0] };
+    delete settings.id;
+
+    // ✅ Redact webhook URLs (do not expose secrets)
+    const redactWebhook = (obj) => {
+      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+      const out = { ...obj };
+      const wasSet = (typeof out.webhook_url === 'string') && out.webhook_url.trim().length > 0;
+      if ('webhook_url' in out) out.webhook_url = '';
+      delete out.webhook_url_redacted;
+      out.webhook_url_set = !!wasSet;
+      return out;
+    };
+
+    settings.finance_email_settings = redactWebhook(settings.finance_email_settings);
+    settings.system_emails = redactWebhook(settings.system_emails);
+
+    return withCORS(env, req, ok({
+      settings,
+      finance_windows
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError("Failed to fetch settings_defaults"));
+  }
+}
+
+async function handleUpdateSettings(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return unauthorized('Unauthorized');
+
+  const data = await parseJSONBody(req);
+  if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
+
+  const allowed = [
+    'timezone_id',
+    'day_start','day_end','night_start','night_end',
+    'sat_start','sat_end','sun_start','sun_end',
+    'bh_start','bh_end',
+    'bh_source','bh_list','bh_feed_url',
+
+    'bank_name','bank_sort_code','bank_account_number','vat_registration_number',
+    'ts_reference_required',
+
+    // ✅ Adaptability config
+    'import_config_json',
+
+    // Email settings
+    'finance_email',
+    'finance_email_settings',
+    'system_email',
+    'system_emails',
+    'max_attachments_per_email'
+  ];
+
+  const payload = { updated_at: new Date().toISOString() };
+
+  // If we need to merge webhook_url without exposing it, fetch current values once
+  const needsWebhookMerge = ('finance_email_settings' in data) || ('system_emails' in data);
+  let currentEmailSettings = null;
+
+  if (needsWebhookMerge) {
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=finance_email_settings,system_emails`
+      );
+      currentEmailSettings = (rows && rows[0]) ? rows[0] : { finance_email_settings: {}, system_emails: {} };
+    } catch {
+      currentEmailSettings = { finance_email_settings: {}, system_emails: {} };
+    }
+  }
+
+  const mergeWebhookSettings = (existingRaw, incomingRaw) => {
+    const existing = (existingRaw && typeof existingRaw === 'object' && !Array.isArray(existingRaw)) ? existingRaw : {};
+    const incoming = (incomingRaw && typeof incomingRaw === 'object' && !Array.isArray(incomingRaw)) ? incomingRaw : {};
+
+    // strip non-persisted UI hints
+    const cleanIncoming = { ...incoming };
+    delete cleanIncoming.webhook_url_set;
+    delete cleanIncoming.webhook_url_redacted;
+
+    const out = { ...existing };
+
+    // headers: if present in incoming, replace (allow null to clear)
+    if ('headers' in cleanIncoming) {
+      const h = cleanIncoming.headers;
+      if (h == null) out.headers = {};
+      else if (typeof h === 'object' && !Array.isArray(h)) out.headers = h;
+      else throw new Error('invalid_headers');
+    }
+
+    // webhook_url: only overwrite when a non-empty real value is supplied
+    if ('webhook_url' in cleanIncoming) {
+      const w = cleanIncoming.webhook_url;
+      if (w == null) {
+        // keep existing
+      } else if (typeof w === 'string') {
+        const v = w.trim();
+        if (v && v !== '[REDACTED]') out.webhook_url = v;
+      } else {
+        throw new Error('invalid_webhook_url');
+      }
+    }
+
+    return out;
+  };
+
+  for (const k of allowed) {
+    if (!(k in data)) continue;
+
+    if (k === 'import_config_json') {
+      const raw = data.import_config_json;
+      let parsed = null;
+
+      if (raw && typeof raw === 'object') {
+        parsed = raw;
+      } else if (typeof raw === 'string') {
+        parsed = _safeJsonParseMaybe(raw, null);
+      } else if (raw == null) {
+        parsed = {};
+      }
+
+      if (!parsed || typeof parsed !== 'object') {
+        return withCORS(env, req, badRequest("import_config_json must be a JSON object (or a JSON string that parses to an object)."));
+      }
+
+      payload.import_config_json = parsed;
+      continue;
+    }
+
+    if (k === 'finance_email_settings') {
+      const raw = data.finance_email_settings;
+      let parsed = null;
+
+      if (raw && typeof raw === 'object') parsed = raw;
+      else if (typeof raw === 'string') parsed = _safeJsonParseMaybe(raw, null);
+      else if (raw == null) parsed = {};
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return withCORS(env, req, badRequest("finance_email_settings must be a JSON object (or a JSON string that parses to an object)."));
+      }
+
+      try {
+        payload.finance_email_settings = mergeWebhookSettings(currentEmailSettings?.finance_email_settings, parsed);
+      } catch (e) {
+        const msg = (String(e?.message || e) === 'invalid_headers') ? 'finance_email_settings.headers must be an object' :
+                    (String(e?.message || e) === 'invalid_webhook_url') ? 'finance_email_settings.webhook_url must be a string' :
+                    'finance_email_settings invalid';
+        return withCORS(env, req, badRequest(msg));
+      }
+      continue;
+    }
+
+    if (k === 'system_emails') {
+      const raw = data.system_emails;
+      let parsed = null;
+
+      if (raw && typeof raw === 'object') parsed = raw;
+      else if (typeof raw === 'string') parsed = _safeJsonParseMaybe(raw, null);
+      else if (raw == null) parsed = {};
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return withCORS(env, req, badRequest("system_emails must be a JSON object (or a JSON string that parses to an object)."));
+      }
+
+      try {
+        payload.system_emails = mergeWebhookSettings(currentEmailSettings?.system_emails, parsed);
+      } catch (e) {
+        const msg = (String(e?.message || e) === 'invalid_headers') ? 'system_emails.headers must be an object' :
+                    (String(e?.message || e) === 'invalid_webhook_url') ? 'system_emails.webhook_url must be a string' :
+                    'system_emails invalid';
+        return withCORS(env, req, badRequest(msg));
+      }
+      continue;
+    }
+
+    if (k === 'max_attachments_per_email') {
+      const n = Number(data.max_attachments_per_email);
+      const v = Number.isFinite(n) ? Math.trunc(n) : NaN;
+
+      if (!(v >= 1 && v <= 100)) {
+        return withCORS(env, req, badRequest("max_attachments_per_email must be an integer between 1 and 100."));
+      }
+
+      payload.max_attachments_per_email = v;
+      continue;
+    }
+
+    if (k === 'finance_email') {
+      const v = (data.finance_email == null) ? null : String(data.finance_email).trim();
+      payload.finance_email = v && v.length ? v : null;
+      continue;
+    }
+
+    if (k === 'system_email') {
+      const v0 = (data.system_email == null) ? null : String(data.system_email).trim();
+      if (v0 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v0)) {
+        return withCORS(env, req, badRequest('invalid_system_email'));
+      }
+      payload.system_email = v0 && v0.length ? v0 : null;
+      continue;
+    }
+
+    // Normal field passthrough
+    payload[k] = data[k];
+  }
+
+  try {
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1`, {
+      method: "PATCH",
+      headers: { ...sbHeaders(env), "Prefer": "return=representation" },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      return withCORS(env, req, badRequest(`Update failed: ${err}`));
+    }
+
+    const json = await res.json().catch(() => ({}));
+    const settings = Array.isArray(json) ? json[0] : json;
+    delete settings.id;
+
+    // Bust TTL cache so next loadSettingsDefaults fetches fresh values
+    __SETTINGS_DEFAULTS_CACHE = { ts: 0, value: null };
+
+    // Redact webhook URLs in response
+    const redactWebhook = (obj) => {
+      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+      const out = { ...obj };
+      const wasSet = (typeof out.webhook_url === 'string') && out.webhook_url.trim().length > 0;
+      if ('webhook_url' in out) out.webhook_url = '';
+      delete out.webhook_url_redacted;
+      out.webhook_url_set = !!wasSet;
+      return out;
+    };
+    settings.finance_email_settings = redactWebhook(settings.finance_email_settings);
+    settings.system_emails = redactWebhook(settings.system_emails);
+
+    return withCORS(env, req, ok({ settings }));
+  } catch {
+    return withCORS(env, req, serverError("Failed to update settings_defaults"));
+  }
+}
+
+
+function getClientIp(req) {
+  const h = req && req.headers;
+  if (!h || typeof h.get !== 'function') return null;
+
+  const cf = h.get('cf-connecting-ip');
+  if (cf && String(cf).trim()) return String(cf).trim();
+
+  const xff = h.get('x-forwarded-for');
+  if (xff && String(xff).trim()) {
+    const first = String(xff).split(',')[0];
+    if (first && String(first).trim()) return String(first).trim();
+  }
+
+  const xr = h.get('x-real-ip');
+  if (xr && String(xr).trim()) return String(xr).trim();
+
+  return null;
+}
+
+function genSixDigitCode() {
+  const rnd = crypto.getRandomValues(new Uint32Array(1))[0] >>> 0;
+  return String(rnd % 1000000).padStart(6, '0');
+}
+
+async function hash2faCode(codeSalt, code) {
+  return sha256Hex(`${String(codeSalt || '')}:${String(code || '')}`);
+}
+
+function timingSafeEqualStr(a, b) {
+  const sa = String(a ?? '');
+  const sb = String(b ?? '');
+  if (sa.length !== sb.length) return false;
+  let diff = 0;
+  for (let i = 0; i < sa.length; i++) diff |= (sa.charCodeAt(i) ^ sb.charCodeAt(i));
+  return diff === 0;
+}
+
+// --- 2FA challenge helpers ---
+async function sbInsert2faChallenge(env, { user_id, ip_address, code_salt, code_hash, expires_at_utc }) {
+  const url = `${env.SUPABASE_URL}/rest/v1/tms_login_2fa_challenges`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { ...sbAuthHeaders(env), Prefer: 'return=representation' },
+    body: JSON.stringify({
+      user_id: String(user_id),
+      ip_address: String(ip_address),
+      code_salt: String(code_salt),
+      code_hash: String(code_hash),
+      expires_at_utc: String(expires_at_utc)
+    })
+  });
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    throw new Error(`2FA challenge insert failed (${res.status}) ${t || ''}`.trim());
+  }
+  const arr = await res.json().catch(() => []);
+  const row = Array.isArray(arr) ? arr[0] : arr;
+  const id = row && row.id ? String(row.id) : null;
+  if (!id) throw new Error('2FA challenge insert returned no id');
+  return id;
+}
+
+async function sbGet2faChallengeById(env, challengeId) {
+  const enc = encodeURIComponent;
+  const url =
+    `${env.SUPABASE_URL}/rest/v1/tms_login_2fa_challenges` +
+    `?id=eq.${enc(challengeId)}` +
+    `&select=id,user_id,ip_address,code_salt,code_hash,expires_at_utc,used_at_utc,attempt_count,resend_count,last_sent_at_utc`;
+  const res = await fetch(url, { headers: sbAuthHeaders(env) });
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    throw new Error(`2FA challenge read failed (${res.status}) ${t || ''}`.trim());
+  }
+  const arr = await res.json().catch(() => []);
+  return Array.isArray(arr) && arr[0] ? arr[0] : null;
+}
+
+async function sbPatch2faChallengeById(env, challengeId, patch) {
+  const enc = encodeURIComponent;
+  const url = `${env.SUPABASE_URL}/rest/v1/tms_login_2fa_challenges?id=eq.${enc(challengeId)}`;
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: { ...sbAuthHeaders(env), Prefer: 'return=representation' },
+    body: JSON.stringify(patch || {})
+  });
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    throw new Error(`2FA challenge update failed (${res.status}) ${t || ''}`.trim());
+  }
+  const arr = await res.json().catch(() => []);
+  return Array.isArray(arr) && arr[0] ? arr[0] : null;
+}
+
+// --- 2FA trust helpers ---
+async function sbGet2faTrustByUserIp(env, userId, ipAddress) {
+  const enc = encodeURIComponent;
+  const url =
+    `${env.SUPABASE_URL}/rest/v1/tms_user_2fa_trust` +
+    `?user_id=eq.${enc(userId)}` +
+    `&ip_address=eq.${enc(ipAddress)}` +
+    `&select=id,user_id,ip_address,verified_at_utc,last_used_at_utc,updated_at` +
+    `&limit=1`;
+  const res = await fetch(url, { headers: sbAuthHeaders(env) });
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    throw new Error(`2FA trust read failed (${res.status}) ${t || ''}`.trim());
+  }
+  const arr = await res.json().catch(() => []);
+  return Array.isArray(arr) && arr[0] ? arr[0] : null;
+}
+
+async function sbUpsert2faTrust(env, userId, ipAddress, { verifiedAtIso = null, lastUsedAtIso = null } = {}) {
+  const url =
+    `${env.SUPABASE_URL}/rest/v1/tms_user_2fa_trust` +
+    `?on_conflict=user_id,ip_address`;
+  const nowIso = new Date().toISOString();
+  const row = {
+    user_id: String(userId),
+    ip_address: String(ipAddress),
+    verified_at_utc: verifiedAtIso || nowIso,
+    updated_at: nowIso
+  };
+  if (lastUsedAtIso) row.last_used_at_utc = String(lastUsedAtIso);
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { ...sbAuthHeaders(env), Prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify(row)
+  });
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    throw new Error(`2FA trust upsert failed (${res.status}) ${t || ''}`.trim());
+  }
+  return true;
+}
+
+
+// ====================== NEW BACKEND HANDLERS ======================
+
+async function handleAuth2faVerify(env, req) {
+  const pre = preflightIfNeeded(env, req); if (pre) return pre;
+
+  const body = await parseJSONBody(req);
+  if (!body) return badRequest('invalid_json');
+
+  const challengeId = String(body.challenge_id || body.challengeId || '').trim();
+  const code = String(body.code || '').trim();
+
+  if (!challengeId) return badRequest('challenge_id_required');
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(challengeId)) {
+    return badRequest('invalid_challenge_id');
+  }
+  if (!/^\d{6}$/.test(code)) return badRequest('invalid_code_format');
+
+  // Load auth policy
+  let authEffective = null;
+  try {
+    const s = await loadSettingsDefaults(env);
+    authEffective = (s && s.importConfig && s.importConfig.auth_effective && typeof s.importConfig.auth_effective === 'object')
+      ? s.importConfig.auth_effective
+      : null;
+  } catch { authEffective = null; }
+
+  const tfaMaxAttempts = (authEffective && Number.isFinite(Number(authEffective.tfa_max_attempts)))
+    ? Math.max(1, Math.trunc(Number(authEffective.tfa_max_attempts)))
+    : 10;
+
+  const idleLogoutSec = (authEffective && Number.isFinite(Number(authEffective.idle_logout_seconds)))
+    ? Math.max(60, Math.trunc(Number(authEffective.idle_logout_seconds)))
+    : (2 * 60 * 60);
+
+  const idleWarnSec = (() => {
+    const v = (authEffective && Number.isFinite(Number(authEffective.idle_warning_seconds)))
+      ? Math.max(1, Math.trunc(Number(authEffective.idle_warning_seconds)))
+      : (5 * 60);
+    return (v >= idleLogoutSec) ? Math.max(1, Math.min(300, idleLogoutSec - 1)) : v;
+  })();
+
+  const policy = { idle_logout_seconds: idleLogoutSec, idle_warning_seconds: idleWarnSec };
+
+  const ip = getClientIp(req);
+  const ipKey = (ip && String(ip).trim()) ? String(ip).trim() : 'UNKNOWN';
+
+  let ch;
+  try {
+    ch = await sbGet2faChallengeById(env, challengeId);
+  } catch (e) {
+    return serverError(e?.message || String(e));
+  }
+
+  if (!ch) return badRequest('invalid_challenge');
+
+  // Same IP enforcement
+  if (String(ch.ip_address || '').trim() !== ipKey) {
+    return unauthorized('Invalid code');
+  }
+
+  if (ch.used_at_utc) return badRequest('invalid_or_expired_code');
+
+  const expMs = Date.parse(String(ch.expires_at_utc || ''));
+  if (!Number.isFinite(expMs) || expMs < Date.now()) return badRequest('invalid_or_expired_code');
+
+  const attempts = Number(ch.attempt_count ?? 0) || 0;
+  if (attempts >= tfaMaxAttempts) return badRequest('max_attempts_exceeded');
+
+  // Verify hash
+  let wantHash = '';
+  try {
+    wantHash = await hash2faCode(ch.code_salt, code);
+  } catch (e) {
+    return serverError(`2FA hash failed: ${e?.message || e}`);
+  }
+
+  const storedHash = String(ch.code_hash || '');
+  const match = timingSafeEqualStr(storedHash, wantHash);
+
+  if (!match) {
+    // increment attempt_count
+    try {
+      await sbPatch2faChallengeById(env, challengeId, { attempt_count: attempts + 1 });
+    } catch (e) {
+      return serverError(e?.message || String(e));
+    }
+    return unauthorized('Invalid code');
+  }
+
+  const nowIso = new Date().toISOString();
+
+  // Mark challenge used
+  try {
+    await sbPatch2faChallengeById(env, challengeId, { used_at_utc: nowIso });
+  } catch (e) {
+    return serverError(e?.message || String(e));
+  }
+
+  // Upsert trust row (same IP)
+  try {
+    await sbUpsert2faTrust(env, ch.user_id, ipKey, { verifiedAtIso: nowIso, lastUsedAtIso: nowIso });
+  } catch (e) {
+    return serverError(e?.message || String(e));
+  }
+
+  // Issue tokens + refresh cookie
+  const user = await sbGetUserById(env, ch.user_id);
+  if (!user || user.is_active !== true) return unauthorized('Unauthorized');
+
+  const sid = bufToBase64Url(crypto.getRandomValues(new Uint8Array(16)));
+  const sv = user.session_version | 0 || 1;
+
+  const refresh = await mintRefreshToken(env, { sid, sv });
+  const access = await mintAccessToken(env, { user_id: user.id, email: user.email, role: user.role, sv, sid });
+
+  await kvPutSession(env, sid, { user_id: user.id, sv, exp: refresh.exp }, refreshTtl(env));
+
+  const headers = new Headers(JSON_HEADERS);
+  setCookie(headers, cookieName(env), refresh.token, {
+    maxAgeSec: refreshTtl(env),
+    domain: env.COOKIE_DOMAIN || undefined,
+    sameSite: pickCookieSameSite(env),
+    secure: true,
+    httpOnly: true,
+    path: '/'
+  });
+
+  // Best-effort: stamp last_login_at_utc (login complete)
+  try {
+    const url = `${env.SUPABASE_URL}/rest/v1/${AUTH.USERS_TABLE}?id=eq.${encodeURIComponent(user.id)}`;
+    await fetch(url, {
+      method: 'PATCH',
+      headers: { ...sbAuthHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify({ last_login_at_utc: nowIso, updated_at: nowIso })
+    }).catch(() => {});
+  } catch {}
+
+  return new Response(JSON.stringify({
+    ok: true,
+    access_token: access.token,
+    expires_in: accessTtl(env),
+    user: { id: user.id, email: user.email, role: user.role },
+    policy
+  }), { status: 200, headers });
+}
+
+async function handleAuth2faResend(env, req) {
+  const pre = preflightIfNeeded(env, req); if (pre) return pre;
+
+  const body = await parseJSONBody(req);
+  if (!body) return badRequest('invalid_json');
+
+  const challengeId = String(body.challenge_id || body.challengeId || '').trim();
+  if (!challengeId) return badRequest('challenge_id_required');
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(challengeId)) {
+    return badRequest('invalid_challenge_id');
+  }
+
+  // Load auth policy
+  let authEffective = null;
+  try {
+    const s = await loadSettingsDefaults(env);
+    authEffective = (s && s.importConfig && s.importConfig.auth_effective && typeof s.importConfig.auth_effective === 'object')
+      ? s.importConfig.auth_effective
+      : null;
+  } catch { authEffective = null; }
+
+  const tfaCodeTtlSec = (authEffective && Number.isFinite(Number(authEffective.tfa_code_ttl_seconds)))
+    ? Math.max(30, Math.trunc(Number(authEffective.tfa_code_ttl_seconds)))
+    : 300;
+
+  const resendCooldownSec = (authEffective && Number.isFinite(Number(authEffective.tfa_resend_cooldown_seconds)))
+    ? Math.max(0, Math.trunc(Number(authEffective.tfa_resend_cooldown_seconds)))
+    : 30;
+
+  const maxResends = (authEffective && Number.isFinite(Number(authEffective.tfa_max_resends)))
+    ? Math.max(0, Math.trunc(Number(authEffective.tfa_max_resends)))
+    : 5;
+
+  const ip = getClientIp(req);
+  const ipKey = (ip && String(ip).trim()) ? String(ip).trim() : 'UNKNOWN';
+
+  let ch;
+  try {
+    ch = await sbGet2faChallengeById(env, challengeId);
+  } catch (e) {
+    return serverError(e?.message || String(e));
+  }
+
+  if (!ch) return badRequest('invalid_challenge');
+
+  // Same IP enforcement
+  if (String(ch.ip_address || '').trim() !== ipKey) {
+    return unauthorized('Invalid challenge');
+  }
+
+  if (ch.used_at_utc) return badRequest('invalid_challenge');
+
+  const resendCount = Number(ch.resend_count ?? 0) || 0;
+  if (resendCount >= maxResends) return badRequest('max_resends_exceeded');
+
+  const lastSentMs = Date.parse(String(ch.last_sent_at_utc || ''));
+  if (Number.isFinite(lastSentMs) && resendCooldownSec > 0) {
+    const ageSec = (Date.now() - lastSentMs) / 1000;
+    if (ageSec < resendCooldownSec) {
+      return badRequest('resend_cooldown', { retry_after_seconds: Math.ceil(resendCooldownSec - ageSec) });
+    }
+  }
+
+  const user = await sbGetUserById(env, ch.user_id);
+  if (!user || user.is_active !== true) return badRequest('invalid_challenge');
+
+  const nowIso = new Date().toISOString();
+  const expiresAtIso = new Date(Date.now() + (tfaCodeTtlSec * 1000)).toISOString();
+
+  const newCode = genSixDigitCode();
+  const newSalt = bufToBase64Url(crypto.getRandomValues(new Uint8Array(16)));
+  const newHash = await hash2faCode(newSalt, newCode);
+
+  // Patch challenge with new code, but keep a rollback snapshot
+  const rollback = {
+    code_salt: ch.code_salt,
+    code_hash: ch.code_hash,
+    expires_at_utc: ch.expires_at_utc,
+    attempt_count: Number(ch.attempt_count ?? 0) || 0,
+    resend_count: resendCount,
+    last_sent_at_utc: ch.last_sent_at_utc
+  };
+
+  try {
+    await sbPatch2faChallengeById(env, challengeId, {
+      code_salt: newSalt,
+      code_hash: newHash,
+      expires_at_utc: expiresAtIso,
+      attempt_count: 0,
+      resend_count: resendCount + 1,
+      last_sent_at_utc: nowIso
+    });
+  } catch (e) {
+    return serverError(e?.message || String(e));
+  }
+
+  // Resolve replyTo (optional)
+  let replyTo = null;
+  try {
+    const s = await loadSettingsDefaults(env);
+    if (s && s.system_email && String(s.system_email).trim()) replyTo = String(s.system_email).trim();
+  } catch {}
+
+  const mins = Math.max(1, Math.round(tfaCodeTtlSec / 60));
+  const subject = 'CloudTMS sign-in verification code';
+  const bodyText =
+    `Your CloudTMS verification code is: ${newCode}\n\n` +
+    `It expires in ${mins} minute${mins === 1 ? '' : 's'}.\n\n` +
+    `If you did not request this code, you can ignore this email.`;
+
+  const htmlBody =
+    `<p>Your CloudTMS verification code is:</p>` +
+    `<p style="font-size:22px;font-weight:700;letter-spacing:2px;">${newCode}</p>` +
+    `<p>This code expires in ${mins} minute${mins === 1 ? '' : 's'}.</p>` +
+    `<p>If you did not request this code, you can ignore this email.</p>`;
+
+  const emailPayload = {
+    to: String(user.email || '').trim(),
+    subject,
+    htmlBody,
+    body: bodyText,
+    attachmentsV2: [],
+    metadata: { kind: '2FA_RESEND', user_id: String(user.id), challenge_id: String(challengeId), ip: ipKey, issued_at_utc: nowIso }
+  };
+  if (replyTo) emailPayload.replyTo = replyTo;
+
+  let pa;
+  try {
+    pa = await postToPowerAutomate(env, emailPayload, 'system');
+  } catch (e) {
+    pa = { ok: false, status: 0, body: e?.message || String(e) };
+  }
+
+  if (!pa || pa.ok !== true) {
+    // Roll back challenge update so user isn't stuck behind cooldown for an email they didn't receive
+    try {
+      await sbPatch2faChallengeById(env, challengeId, rollback);
+    } catch {}
+    return serverError(`2FA email send failed (${pa?.status || 0}) ${pa?.body || ''}`.trim());
+  }
+
+  return new Response(JSON.stringify({
+    ok: true,
+    challenge_id: challengeId,
+    expires_in: tfaCodeTtlSec,
+    resend_cooldown_seconds: resendCooldownSec
+  }), { status: 200, headers: JSON_HEADERS });
 }
 async function sbInsertResetToken(env, user_id, ttlSec) {
   const token = bufToBase64Url(crypto.getRandomValues(new Uint8Array(32)));
@@ -43144,110 +43277,6 @@ async function kvDelSession(env, sid) {
 }
 
 // â”€â”€ Auth handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-async function handleAuthLogin(env, req) {
-  const pre = preflightIfNeeded(env, req); if (pre) return pre;
-  const body = await parseJSONBody(req);
-  if (!body) return badRequest('invalid_json');
-
-  const email = String((body.email||'')).trim().toLowerCase();
-  const pw    = String(body.password||'');
-  if (!email || !pw) return badRequest('email_and_password_required');
-
-  const user = await sbGetUserByEmail(env, email);
-  if (!user || user.is_active !== true) return unauthorized('Invalid credentials');
-
-  const okPw = await pbkdf2Verify(pw, user.password_hash || '');
-  if (!okPw) return unauthorized('Invalid credentials');
-
-  // ✅ Best-effort: stamp last_login_at_utc (non-fatal if column not deployed yet)
-  try {
-    const nowIso = new Date().toISOString();
-    const url = `${env.SUPABASE_URL}/rest/v1/${AUTH.USERS_TABLE}?id=eq.${encodeURIComponent(user.id)}`;
-    await fetch(url, {
-      method: 'PATCH',
-      headers: { ...sbAuthHeaders(env), Prefer: 'return=minimal' },
-      body: JSON.stringify({
-        last_login_at_utc: nowIso,
-        updated_at: nowIso
-      })
-    }).catch(() => {});
-  } catch (_) {
-    // ignore: never block login on telemetry update
-  }
-
-  // Create KV session + tokens
-  const sid = bufToBase64Url(crypto.getRandomValues(new Uint8Array(16)));
-  const sv  = user.session_version|0 || 1;
-  const refresh = await mintRefreshToken(env, { sid, sv });
-  const access  = await mintAccessToken(env, { user_id: user.id, email: user.email, role: user.role, sv, sid });
-
-  await kvPutSession(env, sid, { user_id: user.id, sv, exp: refresh.exp }, refreshTtl(env));
-
-  const headers = new Headers(JSON_HEADERS);
-  setCookie(headers, cookieName(env), refresh.token, {
-    maxAgeSec: refreshTtl(env),
-    domain: env.COOKIE_DOMAIN || undefined,
-    sameSite: pickCookieSameSite(env),
-    secure: true,
-    httpOnly: true,
-    path: '/'
-  });
-
-  return new Response(JSON.stringify({
-    ok: true,
-    access_token: access.token,
-    expires_in: accessTtl(env),
-    user: { id: user.id, email: user.email, role: user.role }
-  }), { status: 200, headers });
-}
-
-async function handleAuthRefresh(env, req) {
-  const pre = preflightIfNeeded(env, req); if (pre) return pre;
-  const cookies = parseCookies(req);
-  const raw = cookies[cookieName(env)];
-  if (!raw) return unauthorized('No refresh cookie');
-
-  const ver = await verifyToken(sessionSecret(env), raw);
-  if (!ver.ok) return unauthorized('Invalid refresh token');
-  const { typ, sid, sv, exp } = ver.payload || {};
-  if (typ !== 'refresh' || !sid) return unauthorized('Invalid refresh claims');
-  if ((exp|0) <= Math.floor(Date.now()/1000)) return unauthorized('Refresh expired');
-
-  const sess = await kvGetSession(env, sid);
-  if (!sess) return unauthorized('Session not found');
-
-  // Check session_version still valid
-  const user = await sbGetUserById(env, sess.user_id);
-  if (!user || user.is_active !== true) return unauthorized('User disabled');
-  if ((user.session_version|0) !== (sv|0)) {
-    await kvDelSession(env, sid);
-    return unauthorized('Session version changed');
-  }
-
-  const access = await mintAccessToken(env, {
-    user_id: user.id, email: user.email, role: user.role, sv, sid
-  });
-
-  const headers = new Headers(JSON_HEADERS);
-  // Optional: rotate refresh if near expiry (<3d)
-  const secondsLeft = exp - Math.floor(Date.now()/1000);
-  if (secondsLeft < (3*24*60*60)) {
-    const next = await mintRefreshToken(env, { sid, sv });
-    await kvPutSession(env, sid, { user_id: user.id, sv, exp: next.exp }, refreshTtl(env));
-    setCookie(headers, cookieName(env), next.token, {
-      maxAgeSec: refreshTtl(env),
-      domain: env.COOKIE_DOMAIN || undefined,
-      sameSite: pickCookieSameSite(env),
-      secure: true, httpOnly: true, path:'/'
-    });
-  }
-
-  return new Response(JSON.stringify({
-    access_token: access.token,
-    expires_in: accessTtl(env),
-    user: { id: user.id, email: user.email, role: user.role }
-  }), { status: 200, headers });
-}
 
 async function handleAuthLogout(env, req) {
   const pre = preflightIfNeeded(env, req); if (pre) return pre;
@@ -43264,42 +43293,6 @@ async function handleAuthLogout(env, req) {
     maxAgeSec: 0, domain: env.COOKIE_DOMAIN || undefined, sameSite: pickCookieSameSite(env), secure:true, httpOnly:true, path:'/'
   });
   return new Response(JSON.stringify({ ok:true }), { status:200, headers });
-}
-
-async function handleAuthForgot(env, req) {
-  const pre = preflightIfNeeded(env, req); if (pre) return pre;
-  const body = await parseJSONBody(req);
-  if (!body) return badRequest('invalid_json');
-  const email = String((body.email||'')).trim().toLowerCase();
-  if (!email) return badRequest('email_required');
-
-  const user = await sbGetUserByEmail(env, email);
-  if (user && user.is_active === true) {
-    await sbInsertResetToken(env, user.id, resetTtl(env));
-    // Send email via your mailer with a link containing ?k=<token> (not implemented here)
-  }
-  return ok({ ok:true }); // privacy-safe
-}
-
-async function handleAuthReset(env, req) {
-  const pre = preflightIfNeeded(env, req); if (pre) return pre;
-  const body = await parseJSONBody(req);
-  if (!body) return badRequest('invalid_json');
-
-  const token = String(body.token||'');
-  const newPw = String(body.new_password||'');
-  if (!token || !newPw) return badRequest('token_and_new_password_required');
-
-  const strong = newPw.length>=8 && /[a-z]/.test(newPw) && /[A-Z]/.test(newPw) && /[0-9]/.test(newPw);
-  if (!strong) return new Response(JSON.stringify({ ok:false, error:'WEAK_PASSWORD' }), { status:400, headers: JSON_HEADERS });
-
-  const consumed = await sbConsumeResetToken(env, token);
-  if (!consumed.ok) return new Response(JSON.stringify({ ok:false, error: consumed.error }), { status:400, headers: JSON_HEADERS });
-
-  const hash = await pbkdf2Hash(newPw);
-  await sbUpdateUserPassword(env, consumed.user_id, hash);
-
-  return ok({ ok:true });
 }
 
 // ---------------------- UK timezone check ----------------------
@@ -44922,15 +44915,19 @@ async function handleCreateClient(env, req) {
 
 
 // 1) GET /api/clients/:id  (full client + latest client_settings)
+
+
 async function handleGetClient(env, req, clientId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+
+  const enc = encodeURIComponent;
 
   try {
     // Client (explicit select=* so ts_queries_email etc always present)
     const { rows } = await sbFetch(
       env,
-      `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(clientId)}&select=*&limit=1`
+      `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${enc(clientId)}&select=*&limit=1`
     );
     if (!rows.length) return withCORS(env, req, notFound("Client not found"));
     const client = rows[0];
@@ -44939,7 +44936,7 @@ async function handleGetClient(env, req, clientId) {
     const { rows: csRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/client_settings` +
-      `?client_id=eq.${encodeURIComponent(clientId)}` +
+      `?client_id=eq.${enc(clientId)}` +
       `&select=` +
         [
           'id','client_id',
@@ -44973,8 +44970,32 @@ async function handleGetClient(env, req, clientId) {
 
     const client_settings = csRows?.[0] || null;
 
-    return withCORS(env, req, ok({ client, client_settings }));
-  } catch {
+    // has_e_history (client-level) for Client modal E-History tab enablement
+    let has_e_history = false;
+    try {
+      // Option B: smaller existence check via v_legacy_client_candidates
+      const { rows: histRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/v_legacy_client_candidates` +
+          `?client_id=eq.${enc(clientId)}` +
+          `&select=client_id` +
+          `&limit=1`
+      );
+      has_e_history = Array.isArray(histRows) && histRows.length > 0;
+    } catch (e) {
+      console.error('handleGetClient: legacy history existence check failed', {
+        client_id: clientId,
+        err: e?.message || String(e)
+      });
+      has_e_history = false;
+    }
+
+    return withCORS(env, req, ok({ client, client_settings, has_e_history }));
+  } catch (e) {
+    console.error('handleGetClient failed', {
+      client_id: clientId,
+      err: e?.message || String(e)
+    });
     return withCORS(env, req, serverError("Failed to fetch client"));
   }
 }
@@ -47892,6 +47913,49 @@ async function handleGetHospital(env, req, clientId, hospitalId) {
     return withCORS(env, req, serverError("Failed to fetch client hospital"));
   }
 }
+
+async function handleClientEHistory(env, req, clientId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const enc = encodeURIComponent;
+
+  try {
+    // Legacy contract rate lines (flat) filtered by client_id
+    // View definition includes: candidate_name (cand.display_name), start/end, job_title,
+    // pay_method, label, pay_rate, margin, charge_rate, line_no, etc.
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/v_legacy_contract_rate_lines_flat` +
+        `?client_id=eq.${enc(clientId)}` +
+        `&select=` +
+          [
+            'candidate_id',
+            'candidate_name',
+            'start_date',
+            'end_date',
+            'job_title',
+            'pay_method',
+            'label',
+            'pay_rate',
+            'margin',
+            'charge_rate',
+            'line_no'
+          ].join(',') +
+        `&order=start_date.desc,end_date.desc,line_no.asc`
+    );
+
+    return withCORS(env, req, ok({ rows: Array.isArray(rows) ? rows : [] }));
+  } catch (e) {
+    console.error('handleClientEHistory failed', {
+      client_id: clientId,
+      err: e?.message || String(e)
+    });
+    return withCORS(env, req, serverError('Failed to fetch client e-history'));
+  }
+}
+
+
 async function handleCandidatesGet(env, req, candidateId) {
   const enc = encodeURIComponent;
 
@@ -48431,9 +48495,11 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
 // Add pass-through support for PostgREST 'id=in.(...)' filter
 // ======================================
 
- async function handleSearchCandidates(env, req) {
+async function handleSearchCandidates(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+
+  const enc = encodeURIComponent;
 
   const urlObj = new URL(req.url);
   const q  = (k) => urlObj.searchParams.get(k);
@@ -48442,6 +48508,9 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
   const page     = Math.max(1, parseInt(q('page') || '1', 10));
   const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
   const format   = (q('format') || 'json').toLowerCase();
+
+  // ✅ include_count support (exact totals for pagination)
+  const includeCount = String(q('include_count') || 'false').toLowerCase() === 'true';
 
   // Sorting
   const orderByParam  = (q('order_by') || '').toLowerCase();
@@ -48475,8 +48544,8 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
   const createdTo   = q('created_to');
 
   // New job-title filters
-  const jobTitleContainsAll   = q('job_title_contains');            // all job titles
-  const primaryJobTitleContains = q('primary_job_title_contains');  // primary only
+  const jobTitleContainsAll     = q('job_title_contains');            // all job titles
+  const primaryJobTitleContains = q('primary_job_title_contains');    // primary only
 
   // New professional registration filters
   const profRegNumber = q('prof_reg_number');
@@ -48516,24 +48585,83 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
   }
 
   // Optional simple free-text
-  const rawQ = q('q');
+  // ✅ Accept both q= and name= as free-text (robust to UI variations)
+  const rawQ = q('q') || q('name');
   let text = rawQ ? String(rawQ || '').trim() : null;
 
   rolesAny = Array.from(new Set(rolesAny.map(s => s.toUpperCase())));
   rolesAll = Array.from(new Set(rolesAll.map(s => s.toUpperCase())));
 
-  // Use the summary view and return the FULL row to keep grid prefs + CSV happy
+  // ✅ Working-status filter (Candidates Tools dropdown)
+  const workStatus = String(q('work_status') || '').trim().toUpperCase(); // ALL|CURRENT|RECENT|NOT
+  const recentMonthsRaw = q('recent_months');
+  const recentMonths =
+    Number.isFinite(parseInt(recentMonthsRaw || '', 10))
+      ? Math.max(1, Math.min(120, parseInt(recentMonthsRaw, 10)))
+      : 3;
+
+  // ---- local date helpers for cutoff (Europe/London day anchor) ----
+  const londonYMDNow = () => {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/London',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).formatToParts(new Date());
+    const get = (type) => (parts.find(p => p.type === type)?.value || '');
+    return `${get('year')}-${get('month')}-${get('day')}`;
+  };
+
+  const subtractMonthsYMD = (ymd, months) => {
+    const y0 = Number(String(ymd).slice(0, 4));
+    const m0 = Number(String(ymd).slice(5, 7));
+    const d0 = Number(String(ymd).slice(8, 10));
+    const mm = Math.max(0, Math.trunc(Number(months) || 0));
+
+    let total = (y0 * 12 + (m0 - 1)) - mm;
+    let y1 = Math.floor(total / 12);
+    let m1 = total % 12;
+    if (m1 < 0) { m1 += 12; y1 -= 1; }
+
+    const daysInTargetMonth = new Date(Date.UTC(y1, m1 + 1, 0)).getUTCDate();
+    const d1 = Math.min(d0, daysInTargetMonth);
+
+    return `${String(y1).padStart(4,'0')}-${String(m1+1).padStart(2,'0')}-${String(d1).padStart(2,'0')}`;
+  };
+
+  const cutoffYMD = (workStatus === 'RECENT' || workStatus === 'NOT')
+    ? subtractMonthsYMD(londonYMDNow(), recentMonths)
+    : null;
+
+  // ✅ Use activity view so work-status filters are fast + server-side
   let url =
-    `${env.SUPABASE_URL}/rest/v1/candidates_summary` +
+    `${env.SUPABASE_URL}/rest/v1/candidates_summary_activity` +
     `?select=*` +
     `&order=${enc(orderCol)}.${orderDir}` +
     `&limit=${pageSize}&offset=${(page - 1) * pageSize}`;
 
-  // Free-text: search name, email, and all job titles
-  // (NB: roles_any OR below will overwrite this or-clause if both are used)
+  // --- OR handling (free-text / roles_any / NOT-working null-vs-lt cutoff) ---
+  // We must keep a single `or=` param. If we need (A OR B) AND (D OR E),
+  // we expand to OR of AND terms: or=(and(A,D),and(A,E),and(B,D),and(B,E))
+  let orParts = null; // array of raw PostgREST predicate strings (already encoded where needed)
+
+  // Free-text OR group: search name/email/job titles
   if (text) {
     const esc = enc(text);
-    url += `&or=(display_name.ilike.*${esc}*,email.ilike.*${esc}*,job_titles_display.ilike.*${esc}*)`;
+    orParts = [
+      `display_name.ilike.*${esc}*`,
+      `email.ilike.*${esc}*`,
+      `job_titles_display.ilike.*${esc}*`
+    ];
+  }
+
+  // Care Package Roles – roles_any (OR). Note: this will overwrite any existing `or=` (e.g. free-text) – preserving prior semantics.
+  if (rolesAny.length) {
+    const parts = rolesAny.map(code => {
+      const val = enc(JSON.stringify([{ code }]));
+      return `roles.cs.${val}`;
+    });
+    orParts = parts;
   }
 
   // Basic name / contact / pay filters
@@ -48600,18 +48728,43 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
     }
   }
 
-  // Care Package Roles – roles_any (OR). Note: this will overwrite any existing `or=` (e.g. free-text)
-  if (rolesAny.length) {
-    const parts = rolesAny.map(code => {
-      const val = enc(JSON.stringify([{ code }]));
-      return `roles.cs.${val}`;
-    });
-    url += `&or=(${parts.join(',')})`;
+  // ✅ Work status filters (fast server-side via candidates_summary_activity)
+  if (workStatus === 'CURRENT') {
+    url += `&is_currently_working=eq.true`;
+  } else if (workStatus === 'RECENT') {
+    // Must be NOT currently working, and last timesheet within cutoff
+    url += `&is_currently_working=eq.false`;
+    if (cutoffYMD) url += `&last_timesheet_week_ending=gte.${enc(cutoffYMD)}`;
+  } else if (workStatus === 'NOT') {
+    // Must be NOT currently working, and (last_ts is null OR last_ts < cutoff)
+    url += `&is_currently_working=eq.false`;
+    const d1 = `last_timesheet_week_ending.is.null`;
+    const d2 = cutoffYMD ? `last_timesheet_week_ending.lt.${enc(cutoffYMD)}` : `last_timesheet_week_ending.is.null`;
+
+    if (Array.isArray(orParts) && orParts.length) {
+      const combined = [];
+      for (const p of orParts) {
+        combined.push(`and(${p},${d1})`);
+        combined.push(`and(${p},${d2})`);
+      }
+      orParts = combined;
+    } else {
+      orParts = [d1, d2];
+    }
+  }
+
+  // Apply OR (if any) once at the end (single or= param)
+  if (Array.isArray(orParts) && orParts.length) {
+    url += `&or=(${orParts.join(',')})`;
   }
 
   let rows = [];
+  let total = undefined;
+
   try {
-    ({ rows } = await sbFetch(env, url));
+    const res = await sbFetch(env, url, includeCount);
+    rows = res?.rows || [];
+    total = res?.total;
   } catch (err) {
     return withCORS(env, req, ok({
       error: String(err?.message || err),
@@ -48621,6 +48774,8 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
       count: 0
     }));
   }
+
+  const respCount = includeCount ? (typeof total === 'number' ? total : (rows?.length || 0)) : (rows?.length || 0);
 
   // CSV : keep rota roles vs job titles separate
   if (format === 'csv') {
@@ -48655,13 +48810,13 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
     }
     return withCORS(env, req, ok({
       csv: out.join('\n'),
-      count: rows?.length || 0,
+      count: respCount,
       page,
       page_size: pageSize
     }));
   }
 
-  // Print HTML 
+  // Print HTML
   if (format === 'print') {
     const rowsHtml = (rows || []).map(r => `
       <tr>
@@ -48684,7 +48839,7 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
       </div>`;
     return withCORS(env, req, ok({
       html,
-      count: rows?.length || 0,
+      count: respCount,
       page,
       page_size: pageSize
     }));
@@ -48695,7 +48850,7 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
     rows,
     page,
     page_size: pageSize,
-    count: rows?.length || 0
+    count: respCount
   }));
 }
 
@@ -49872,13 +50027,48 @@ return withCORS(env, req, ok({
     return withCORS(env, req, serverError("Failed to update candidate"));
   }
 }
-
-
-
 async function handleGetCandidate(env, req, candidateId) {
   const enc  = encodeURIComponent;
   const user = await requireUser(env, req, ['admin']);
-  if (!user) return unauthorized();
+  if (!user) return withCORS(env, req, unauthorized());
+
+  // ---- local helpers (kept inside function for safety + no external deps) ----
+  const londonYMDNow = () => {
+    // Build YYYY-MM-DD in Europe/London reliably (no DST bugs)
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/London',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).formatToParts(new Date());
+
+    const get = (type) => (parts.find(p => p.type === type)?.value || '');
+    const y = get('year');
+    const m = get('month');
+    const d = get('day');
+    return `${y}-${m}-${d}`;
+  };
+
+  const subtractMonthsYMD = (ymd, months) => {
+    // ymd is YYYY-MM-DD. Subtract calendar months with end-of-month clamping.
+    const y0 = Number(String(ymd).slice(0, 4));
+    const m0 = Number(String(ymd).slice(5, 7));
+    const d0 = Number(String(ymd).slice(8, 10));
+    const mm = Math.max(0, Math.trunc(Number(months) || 0));
+
+    let total = (y0 * 12 + (m0 - 1)) - mm;
+    let y1 = Math.floor(total / 12);
+    let m1 = total % 12;
+    if (m1 < 0) { m1 += 12; y1 -= 1; } // defensive
+
+    const daysInTargetMonth = new Date(Date.UTC(y1, m1 + 1, 0)).getUTCDate();
+    const d1 = Math.min(d0, daysInTargetMonth);
+
+    const yy = String(y1).padStart(4, '0');
+    const mo = String(m1 + 1).padStart(2, '0');
+    const dd = String(d1).padStart(2, '0');
+    return `${yy}-${mo}-${dd}`;
+  };
 
   try {
     // Fetch candidate
@@ -49926,7 +50116,7 @@ async function handleGetCandidate(env, req, candidateId) {
       umbrella
     });
 
-    // NEW: fetch hr_name_mappings aliases for this candidate
+    // fetch hr_name_mappings aliases for this candidate
     let hr_aliases = [];
     try {
       const { rows: aliasRows } = await sbFetch(
@@ -49944,6 +50134,70 @@ async function handleGetCandidate(env, req, candidateId) {
       hr_aliases = [];
     }
 
+    // ---------------------------------------------------------------------
+    // has_e_history (existence check via v_legacy_candidate_contract_summary)
+    // ---------------------------------------------------------------------
+    let has_e_history = false;
+    try {
+      const { rows: histRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/v_legacy_candidate_contract_summary` +
+          `?candidate_id=eq.${enc(candidateId)}` +
+          `&select=candidate_id` +
+          `&limit=1`
+      );
+      has_e_history = Array.isArray(histRows) && histRows.length > 0;
+    } catch (e) {
+      console.error('handleGetCandidate: legacy history existence check failed', {
+        candidate_id: candidateId,
+        err: e?.message || String(e)
+      });
+      has_e_history = false;
+    }
+
+    // ---------------------------------------------------------------------
+    // work_status (via candidate_activity_rollup)
+    // ---------------------------------------------------------------------
+    const RECENT_MONTHS_DEFAULT = 3;
+
+    let is_currently_working = false;
+    let last_timesheet_week_ending = null;
+
+    try {
+      const { rows: actRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/candidate_activity_rollup` +
+          `?candidate_id=eq.${enc(candidateId)}` +
+          `&select=is_currently_working,last_timesheet_week_ending` +
+          `&limit=1`
+      );
+
+      const act = Array.isArray(actRows) ? actRows[0] : null;
+      is_currently_working = !!(act && act.is_currently_working);
+      last_timesheet_week_ending = (act && act.last_timesheet_week_ending) ? String(act.last_timesheet_week_ending) : null;
+    } catch (e) {
+      console.error('handleGetCandidate: candidate_activity_rollup lookup failed', {
+        candidate_id: candidateId,
+        err: e?.message || String(e)
+      });
+      is_currently_working = false;
+      last_timesheet_week_ending = null;
+    }
+
+    const anchorYMD = londonYMDNow();
+    const cutoffYMD = subtractMonthsYMD(anchorYMD, RECENT_MONTHS_DEFAULT);
+
+    const is_recently_worked =
+      (!is_currently_working) &&
+      !!last_timesheet_week_ending &&
+      (String(last_timesheet_week_ending) >= String(cutoffYMD));
+
+    const work_status = {
+      is_currently_working: !!is_currently_working,
+      is_recently_worked: !!is_recently_worked,
+      last_timesheet_week_ending: last_timesheet_week_ending
+    };
+
     return withCORS(
       env,
       req,
@@ -49951,12 +50205,115 @@ async function handleGetCandidate(env, req, candidateId) {
         candidate,
         effective_pay_channel,
         job_titles,
-        hr_aliases
+        hr_aliases,
+        has_e_history,
+        work_status
       })
     );
   } catch (e) {
     console.error('handleGetCandidate failed', e);
     return withCORS(env, req, serverError("Failed to fetch candidate"));
+  }
+}
+
+
+async function handleChangesPing(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  // Accept POST as intended; if other methods hit this handler, still respond safely.
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+
+  let lastSeen = {};
+  try {
+    if (body && typeof body === 'object') {
+      if (body.last_seen && typeof body.last_seen === 'object' && !Array.isArray(body.last_seen)) {
+        lastSeen = body.last_seen;
+      } else if (body.lastSeen && typeof body.lastSeen === 'object' && !Array.isArray(body.lastSeen)) {
+        // minor back-compat
+        lastSeen = body.lastSeen;
+      } else {
+        lastSeen = {};
+      }
+    }
+  } catch {
+    lastSeen = {};
+  }
+
+  try {
+    // RPC returns jsonb: { server_utc, seqs, changed }
+    const rpcRes = await sbRpc(env, 'rpc_changes_ping', { p_last_seen: lastSeen });
+
+    // Defensive unwrap for any unexpected PostgREST shapes
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'rpc_changes_ping')) {
+        payload = payload.rpc_changes_ping;
+      }
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
+  } catch (e) {
+    console.error('[CHANGES_PING] rpc_changes_ping failed', {
+      err: e?.message || String(e),
+      status: e?.status,
+      body: e?.body
+    });
+    return withCORS(env, req, serverError('Failed to ping changes'));
+  }
+}
+
+async function handleRolesGlobal(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  // Small in-memory cache (worker instance) to make repeated opens instant.
+  // TTL default: 10 minutes (within your requested 5–15 min window).
+  const TTL_MS = 10 * 60 * 1000;
+
+  try {
+    const g = (typeof globalThis !== 'undefined') ? globalThis : {};
+    g.__ROLES_GLOBAL_CACHE__ = g.__ROLES_GLOBAL_CACHE__ || { ts: 0, roles: [] };
+
+    const cache = g.__ROLES_GLOBAL_CACHE__;
+    const now = Date.now();
+
+    if (Array.isArray(cache.roles) && cache.roles.length && (now - (cache.ts || 0) < TTL_MS)) {
+      return withCORS(env, req, ok({ roles: cache.roles }));
+    }
+
+    // Source of truth: enabled client defaults view (already excludes disabled rows)
+    // Keep it single request; dedupe in JS.
+    const limit = 100000; // safe upper bound; roles are few but windows may be many
+    const url =
+      `${env.SUPABASE_URL}/rest/v1/v_rates_client_defaults_enabled` +
+      `?select=role` +
+      `&role=is.not.null` +
+      `&order=role.asc` +
+      `&limit=${limit}`;
+
+    const { rows } = await sbFetch(env, url);
+
+    const set = new Set();
+    for (const r of (rows || [])) {
+      const s = String(r?.role || '').trim();
+      if (!s) continue;
+      set.add(s);
+    }
+
+    const roles = Array.from(set).sort((a, b) => a.localeCompare(b));
+
+    cache.ts = now;
+    cache.roles = roles;
+
+    return withCORS(env, req, ok({ roles }));
+  } catch (e) {
+    console.error('[ROLES_GLOBAL] failed', { err: e?.message || String(e) });
+    return withCORS(env, req, serverError('Failed to load global roles'));
   }
 }
 
@@ -62156,8 +62513,9 @@ function isBSTLocal(ymdStr) {
 
 function toLocalParts(iso, tz) {
   // For Europe/London only; treat other tz as UTC fallback.
+  const tzEff = (tz == null || String(tz).trim() === '') ? 'Europe/London' : String(tz).trim();
   const inYmd = ymd(iso);
-  const offset = (tz === 'Europe/London' && isBSTLocal(inYmd)) ? 1 : 0; // hours ahead of UTC
+  const offset = (tzEff === 'Europe/London' && isBSTLocal(inYmd)) ? 1 : 0; // hours ahead of UTC
   const d = new Date(iso);
   let hh = d.getUTCHours() + offset;
   let mm = d.getUTCMinutes();
@@ -62171,9 +62529,22 @@ function toLocalParts(iso, tz) {
     y = dt.getUTCFullYear(); m = dt.getUTCMonth() + 1; da = dt.getUTCDate();
   }
   const ymdStr = `${y}-${String(m).padStart(2, '0')}-${String(da).padStart(2, '0')}`;
-  return { ymd: ymdStr, hh, mm };
-}
 
+  const hhStr = String(hh).padStart(2, '0');
+  const mmStr = String(mm).padStart(2, '0');
+  const hhmm = `${hhStr}:${mmStr}`;
+
+  return {
+    ymd: ymdStr,
+    hh,
+    mm,
+    hm: hhmm,
+    hhmm: hhmm,
+    hhmm_local: hhmm,
+    hm_local: hhmm,
+    tz: tzEff
+  };
+}
 // ---------------------------
 // Supabase helpers (RPC + REST)
 // ---------------------------
@@ -75513,14 +75884,11 @@ if (req.method === 'POST' && p === '/api/job-titles')                 return han
   if (clientAlias && req.method === 'DELETE') {
     return handleClientAliasesDelete(env, req, clientAlias.id);
   }
+}{
+  const client = matchPath(p, '/api/clients/:id');
+  if (client && req.method === 'GET')                                 return handleGetClient(env, req, client.id);   // enriched: { client, client_settings, has_e_history }
+  if (client && req.method === 'PUT')                                 return handleUpdateClient(env, req, client.id);
 }
-
-      {
-        const client = matchPath(p, '/api/clients/:id');
-        if (client && req.method === 'GET')                                 return handleClientsGet(env, req, client.id);   // base row for pickers
-        if (client && req.method === 'PUT')                                 return handleUpdateClient(env, req, client.id);
-      }
-
       // Client Hospitals
       {
         const chList = matchPath(p, '/api/clients/:client_id/hospitals');
@@ -75648,6 +76016,41 @@ if (req.method === 'POST' && p === '/api/job-titles')                 return han
       if (req.method === 'GET' && p === '/api/rates/candidate-overrides/by-client') {
         return handleListOverridesByClient(env, req);
       }
+// ─────────────────────────────────────────────────────────────────────────────
+// Global “changes heartbeat” (multi-user freshness)
+// ─────────────────────────────────────────────────────────────────────────────
+if (req.method === 'POST' && p === '/api/changes/ping') {
+  return handleChangesPing(env, req);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Global roles list (Tools → Search modal)
+// ─────────────────────────────────────────────────────────────────────────────
+if (req.method === 'GET' && p === '/api/roles/global') {
+  return handleRolesGlobal(env, req);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Candidate E-History (legacy contract history rows)
+// IMPORTANT: place BEFORE any generic `/api/candidates/:candidate_id` route.
+// ─────────────────────────────────────────────────────────────────────────────
+{
+  const candHist = matchPath(p, '/api/candidates/:candidate_id/e-history');
+  if (candHist && req.method === 'GET') {
+    return handleCandidateEHistory(env, req, candHist.candidate_id);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Client E-History (legacy contract history rows)
+// IMPORTANT: place BEFORE any generic `/api/clients/:client_id` route.
+// ─────────────────────────────────────────────────────────────────────────────
+{
+  const cliHist = matchPath(p, '/api/clients/:client_id/e-history');
+  if (cliHist && req.method === 'GET') {
+    return handleClientEHistory(env, req, cliHist.client_id);
+  }
+}
 
       // HealthRoster
       if (req.method === 'POST' && p === '/api/healthroster/import')        return handleHRImport(env, req);
@@ -76303,6 +76706,14 @@ if (req.method === 'GET' && p === '/api/contracts/count') return handleContracts
 {
   const m = matchPath(p, '/api/timesheets/:id/daily-qr-printable');
   if (m && req.method === 'POST') return handleTimesheetDailyQrPrintable(env, req, m.id);
+}
+
+// Auth 2FA
+if (req.method === 'POST' && p === '/auth/2fa/verify') {
+  return withCORS(env, req, await handleAuth2faVerify(env, req));
+}
+if (req.method === 'POST' && p === '/auth/2fa/resend') {
+  return withCORS(env, req, await handleAuth2faResend(env, req));
 }
 
       // NEW: daily manual upsert (edit daily manual hours + QR hints)

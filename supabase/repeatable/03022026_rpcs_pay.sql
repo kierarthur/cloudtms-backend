@@ -1795,8 +1795,6 @@ begin
 end;
 $$;
 
-
-
 CREATE OR REPLACE FUNCTION public.hr_weekly_validation_preview(p_import_id uuid)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -2703,16 +2701,16 @@ begin
               || '|' || coalesce(ce.ts_break_mins,0)::text
             ),
 
-          -- destructive invalidation flags (missing from import + had prior ref + not invoice locked)
+          -- destructive invalidation flags (missing from import OR mismatched + had prior ref + not invoice locked)
           'is_destructive_invalidation',
             (
-              (ce.match_status = 'UNMATCHED')
+              (ce.match_status in ('UNMATCHED','MISMATCH'))
               and (nullif(btrim(coalesce(ce.ref_before,'')), '') is not null)
               and (ce.invoice_locked_invoice_id is null)
             ),
           'default_invalidate_checked',
             (
-              (ce.match_status = 'UNMATCHED')
+              (ce.match_status in ('UNMATCHED','MISMATCH'))
               and (nullif(btrim(coalesce(ce.ref_before,'')), '') is not null)
               and (ce.invoice_locked_invoice_id is null)
             ),
@@ -3071,8 +3069,6 @@ begin
   );
 end;
 $function$;
-
-
 
 
 

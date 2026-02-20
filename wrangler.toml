@@ -1,6 +1,6 @@
 # =========================
 # CloudTMS - Wrangler config
-# Safe for test + prod from one repo - hello worldss
+# Safe for test + prod from one repo - hello worldssss
 # =========================
 #
 # IMPORTANT:
@@ -62,6 +62,10 @@ head_sampling_rate = 1
 [env.test]
 name = "test-cloudtms-backend"
 
+# FIX: ensure Browser Rendering binding exists in the test environment
+[env.test.browser]
+binding = "BROWSER"
+
 [env.test.vars]
 SUPABASE_URL = "https://yakevhtttcsljosbdpov.supabase.co"
 ALLOWED_ORIGINS = "https://testmode.arthur-rai.co.uk,https://kierarthur.github.io"
@@ -105,6 +109,10 @@ head_sampling_rate = 1
 # ============================================
 [env.production]
 name = "cloudtms"
+
+# FIX: ensure Browser Rendering binding exists in the production environment
+[env.production.browser]
+binding = "BROWSER"
 
 [env.production.vars]
 SUPABASE_URL = "https://zojgukxyyklcyjbyyqlz.supabase.co"
