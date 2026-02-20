@@ -39910,23 +39910,42 @@ async function handleSearchClients(env, req) {
   const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
   const format   = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
 
-  // ✅ NEW: include_count support
+  // ✅ include_count support
   const includeCount = String(q('include_count') || 'false').toLowerCase() === 'true';
 
   // Sorting
-  const orderByParam = (q('order_by') || '').toLowerCase();
+  const orderByParam  = (q('order_by') || '').toLowerCase();
   const orderDirParam = (q('order_dir') || '').toLowerCase();
 
+  // ✅ Expanded allow-list (must only include real columns)
   const allowedSort = {
     name:                  'name',
     cli_ref:               'cli_ref',
+    invoice_address:       'invoice_address',
     primary_invoice_email: 'primary_invoice_email',
     ap_phone:              'ap_phone',
     vat_chargeable:        'vat_chargeable',
     payment_terms_days:    'payment_terms_days',
+    mileage_charge_rate:   'mileage_charge_rate',
+    ts_queries_email:      'ts_queries_email',
     created_at:            'created_at',
-    updated_at:            'updated_at'
+    updated_at:            'updated_at',
+    rev:                   'rev',
+
+    // ✅ NEW: client site details + site contact fields
+    client_address:        'client_address',
+    contact_title:         'contact_title',
+    contact_known_as:      'contact_known_as',
+    contact_forename:      'contact_forename',
+    contact_surname:       'contact_surname',
+    contact_job_title:     'contact_job_title',
+    contact_tel:           'contact_tel',
+    contact_mobile:        'contact_mobile',
+    contact_email:         'contact_email',
+    website:               'website',
+    notes:                 'notes'
   };
+
   const defaultOrderCol = 'name';
   const orderCol = allowedSort[orderByParam] || defaultOrderCol;
   const orderDir = (orderDirParam === 'desc') ? 'desc' : 'asc';
@@ -39960,7 +39979,8 @@ async function handleSearchClients(env, req) {
 
   let url =
     `${env.SUPABASE_URL}/rest/v1/clients` +
-    `?select=id,cli_ref,name,invoice_address,primary_invoice_email,ap_phone,vat_chargeable,payment_terms_days,mileage_charge_rate,ts_queries_email,created_at,updated_at` +
+    // ✅ IMPORTANT: return full row-shape so grid column prefs can't "lose" fields when FE switches summary to search()
+    `?select=*` +
     `&order=${enc(orderCol)}.${orderDir}` +
     `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
 
@@ -40068,10 +40088,10 @@ async function handleSearchClients(env, req) {
 
   return withCORS(env, req, ok({ rows, page, page_size: pageSize, count: respCount }));
 }
-
 // ───────────────────────────────────────────────────────────────────────────────
 // SEARCH — Umbrellas (richer filters + csv/print)
 // ───────────────────────────────────────────────────────────────────────────────
+
 async function handleSearchUmbrellas(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -40084,22 +40104,31 @@ async function handleSearchUmbrellas(env, req) {
   const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
   const format   = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
 
-  // ✅ NEW: include_count support
+  // ✅ include_count support
   const includeCount = String(q('include_count') || 'false').toLowerCase() === 'true';
 
   // Sorting
-  const orderByParam = (q('order_by') || '').toLowerCase();
+  const orderByParam  = (q('order_by') || '').toLowerCase();
   const orderDirParam = (q('order_dir') || '').toLowerCase();
 
+  // ✅ Expanded allow-list (must only include real columns)
   const allowedSort = {
-    name:           'name',
-    enabled:        'enabled',
-    vat_chargeable: 'vat_chargeable',
-    bank_name:      'bank_name',
-    sort_code:      'sort_code',
-    account_number: 'account_number',
-    created_at:     'created_at'
+    name:                         'name',
+    enabled:                      'enabled',
+    vat_chargeable:               'vat_chargeable',
+    remittance_email:             'remittance_email',
+    bank_name:                    'bank_name',
+    sort_code:                    'sort_code',
+    account_number:               'account_number',
+    created_at:                   'created_at',
+    updated_at:                   'updated_at',
+    postcode:                     'postcode',
+    town_city:                    'town_city',
+    company_number:               'company_number',
+    revolut_counterparty_id:      'revolut_counterparty_id',
+    revolut_counterparty_account_id:'revolut_counterparty_account_id'
   };
+
   const defaultOrderCol = 'name';
   const orderCol = allowedSort[orderByParam] || defaultOrderCol;
   const orderDir = (orderDirParam === 'desc') ? 'desc' : 'asc';
@@ -40126,7 +40155,8 @@ async function handleSearchUmbrellas(env, req) {
   const createdTo     = q('created_to');
 
   let url = `${env.SUPABASE_URL}/rest/v1/umbrellas` +
-            `?select=id,name,vat_chargeable,enabled,bank_name,sort_code,account_number,created_at` +
+            // ✅ IMPORTANT: return full row-shape so grid column prefs can't "lose" fields when FE switches summary to search()
+            `?select=*` +
             `&order=${enc(orderCol)}.${orderDir}` +
             `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
 
@@ -40199,8 +40229,6 @@ async function handleSearchUmbrellas(env, req) {
 
   return withCORS(env, req, ok({ rows, page, page_size: pageSize, count: respCount }));
 }
-
-
 
 async function buildHealthRosterPdf(env, invoiceId) {
   // Placeholder implementation:
