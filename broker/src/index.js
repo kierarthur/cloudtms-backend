@@ -39962,7 +39962,8 @@ async function handleSearchClients(env, req) {
   }
 
   // Filters expanded to match FE
-  const text          = q('q'); // name partial
+  // ✅ Accept both q= and name= as the "client name contains" filter (Advanced Search currently sends name=)
+  const text          = q('q') || q('name'); // name partial
   const cliRef        = q('cli_ref');
   const primaryEmail  = q('primary_invoice_email');
   const invoiceAddr   = q('invoice_address');
@@ -40113,19 +40114,19 @@ async function handleSearchUmbrellas(env, req) {
 
   // ✅ Expanded allow-list (must only include real columns)
   const allowedSort = {
-    name:                         'name',
-    enabled:                      'enabled',
-    vat_chargeable:               'vat_chargeable',
-    remittance_email:             'remittance_email',
-    bank_name:                    'bank_name',
-    sort_code:                    'sort_code',
-    account_number:               'account_number',
-    created_at:                   'created_at',
-    updated_at:                   'updated_at',
-    postcode:                     'postcode',
-    town_city:                    'town_city',
-    company_number:               'company_number',
-    revolut_counterparty_id:      'revolut_counterparty_id',
+    name:                          'name',
+    enabled:                       'enabled',
+    vat_chargeable:                'vat_chargeable',
+    remittance_email:              'remittance_email',
+    bank_name:                     'bank_name',
+    sort_code:                     'sort_code',
+    account_number:                'account_number',
+    created_at:                    'created_at',
+    updated_at:                    'updated_at',
+    postcode:                      'postcode',
+    town_city:                     'town_city',
+    company_number:                'company_number',
+    revolut_counterparty_id:       'revolut_counterparty_id',
     revolut_counterparty_account_id:'revolut_counterparty_account_id'
   };
 
@@ -40145,7 +40146,8 @@ async function handleSearchUmbrellas(env, req) {
   }
 
   // Expanded filters to match FE
-  const text          = q('q'); // name partial
+  // ✅ Accept both q= and name= as the "umbrella name contains" filter (robust to UI variations)
+  const text          = q('q') || q('name'); // name partial
   const bankName      = q('bank_name');
   const sortCode      = q('sort_code');
   const accountNo     = q('account_number');
@@ -40229,7 +40231,6 @@ async function handleSearchUmbrellas(env, req) {
 
   return withCORS(env, req, ok({ rows, page, page_size: pageSize, count: respCount }));
 }
-
 async function buildHealthRosterPdf(env, invoiceId) {
   // Placeholder implementation:
   //
@@ -48503,7 +48504,7 @@ async function handleSearchCandidates(env, req) {
   const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
   const format   = (q('format') || 'json').toLowerCase();
 
-  // ✅ NEW: include_count support (exact totals for pagination)
+  // ✅ include_count support (exact totals for pagination)
   const includeCount = String(q('include_count') || 'false').toLowerCase() === 'true';
 
   // Sorting
@@ -48579,13 +48580,14 @@ async function handleSearchCandidates(env, req) {
   }
 
   // Optional simple free-text
-  const rawQ = q('q');
+  // ✅ Accept both q= and name= as free-text (robust to UI variations)
+  const rawQ = q('q') || q('name');
   let text = rawQ ? String(rawQ || '').trim() : null;
 
   rolesAny = Array.from(new Set(rolesAny.map(s => s.toUpperCase())));
   rolesAll = Array.from(new Set(rolesAll.map(s => s.toUpperCase())));
 
-  // ✅ NEW: Working-status filter (Candidates Tools dropdown)
+  // ✅ Working-status filter (Candidates Tools dropdown)
   const workStatus = String(q('work_status') || '').trim().toUpperCase(); // ALL|CURRENT|RECENT|NOT
   const recentMonthsRaw = q('recent_months');
   const recentMonths =
