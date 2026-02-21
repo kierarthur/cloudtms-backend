@@ -5396,8 +5396,7 @@ async function handleContractsCreate(env, req) {
 // ──────────────────────────────────────────────────────────────────────────────
 // handleContractsList — enriched with candidate/client names and relationship-aware free-text filtering
 // (joins based on FK: contracts.candidate_id → candidates.id, contracts.client_id → clients.id)  :contentReference[oaicite:0]{index=0}
-
- async function handleContractsList(env, req) {
+async function handleContractsList(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -5493,16 +5492,27 @@ async function handleContractsCreate(env, req) {
     filters.push(`auto_invoice=eq.${encQ(String(clampBool(q('auto_invoice'))))}`);
   }
 
-  // Free text across related names + role
+  // Free text across related names + role (+ band when numeric)
+  // ✅ FIX: PostgREST logic-tree requires ilike.*term* (NOT %term%) and must be parseable inside or=(...)
   if (q('q')) {
-    const like = `%${q('q')}%`;
-    filters.push(
-      `or=(client.name.ilike.${encQ(like)},` +
-      `candidate.display_name.ilike.${encQ(like)},` +
-      `candidate.first_name.ilike.${encQ(like)},` +
-      `candidate.last_name.ilike.${encQ(like)},` +
-      `role.ilike.${encQ(like)})`
-    );
+    const raw = String(q('q') || '').trim();
+    if (raw) {
+      const like = `*${raw}*`; // PostgREST wildcard format
+      const orTerms = [
+        `client.name.ilike.${encQ(like)}`,
+        `candidate.display_name.ilike.${encQ(like)}`,
+        `candidate.first_name.ilike.${encQ(like)}`,
+        `candidate.last_name.ilike.${encQ(like)}`,
+        `role.ilike.${encQ(like)}`
+      ];
+
+      // ✅ Band quick-search support when q is a simple integer
+      if (/^\d+$/.test(raw)) {
+        orTerms.push(`band.eq.${encQ(raw)}`);
+      }
+
+      filters.push(`or=(${orTerms.join(',')})`);
+    }
   }
 
   // default_submission_mode (accept alias submission_mode)
@@ -5657,7 +5667,6 @@ async function handleContractsCreate(env, req) {
 
   return withCORS(env, req, ok(out));
 }
-
 // BACKEND — handleUserGridPrefsGet
  async function handleUserGridPrefsGet(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -29034,6 +29043,12 @@ async function handleTimesheetsSummary(env, req) {
   const clientId    = q('client_id');
   const candidateId = q('candidate_id');
 
+  // ✅ NEW: free-text quick search support (q= or name=)
+  // Intended for the "quick search" bar so Timesheets can filter by:
+  // candidate_name OR client_name OR booking_id OR occupant_key_norm OR hospital_norm
+  const rawTextQ = q('q') || q('name');
+  const textQ = rawTextQ ? String(rawTextQ || '').trim() : null;
+
   // ✅ id/ids selection support (for summaryFetchCanonicalRow)
   const idExprRaw = q('id');   // accepts uuid OR "in.(uuid1,uuid2,...)"
   const idsCsvRaw = q('ids');  // accepts "uuid1,uuid2,..."
@@ -29130,67 +29145,98 @@ async function handleTimesheetsSummary(env, req) {
   const orderCol = allowedSort[orderByParam] || defaultOrderCol;
   const orderDir = (orderDirParam === 'asc') ? 'asc' : 'desc';
 
+  // ✅ NEW: single-or support (merge multiple OR groups safely)
+  // groups = [ [A,B], [D,E] ] means (A OR B) AND (D OR E)
+  // expressed as or=(and(A,D),and(A,E),and(B,D),and(B,E))
+  const mergeOrGroupsToOrParam = (groups) => {
+    const g = Array.isArray(groups) ? groups.filter(x => Array.isArray(x) && x.length) : [];
+    if (!g.length) return null;
+
+    let acc = null; // array of predicate strings
+    for (const group of g) {
+      const clean = group.map(s => String(s || '').trim()).filter(Boolean);
+      if (!clean.length) continue;
+
+      if (!acc) {
+        acc = clean.slice();
+        continue;
+      }
+
+      const combined = [];
+      for (const a of acc) {
+        for (const b of clean) {
+          combined.push(`and(${a},${b})`);
+        }
+      }
+      acc = combined;
+    }
+
+    if (!acc || !acc.length) return null;
+    return `(${acc.join(',')})`;
+  };
+
+  // ✅ REWORKED: issues filter now returns extra OR group when needed (NO_MATCH_ID)
   const applyIssuesFilter = (apiIn, tokenUp) => {
     let api = apiIn;
     const tok = tokenUp ? String(tokenUp).toUpperCase() : null;
-    if (!tok || tok === 'ALL') return api;
+    if (!tok || tok === 'ALL') return { api, orGroup: null };
 
     const cs1 = (val) => `cs.{${enc(val)}}`;
 
     switch (tok) {
       case 'NO_MATCH_ID':
-        api += `&or=${enc('(candidate_id.is.null,client_id.is.null)')}`;
-        return api;
+        // (candidate_id is null OR client_id is null)
+        return { api, orGroup: ['candidate_id.is.null', 'client_id.is.null'] };
 
       case 'RATE_MISSING':
         api += `&issue_codes=${cs1('Rate')}`;
-        return api;
+        return { api, orGroup: null };
 
       case 'PAY_CHAN_MISS':
       case 'PAY_CHANNEL_MISSING':
         api += `&issue_codes=${cs1('Pay channel')}`;
-        return api;
+        return { api, orGroup: null };
 
       case 'AWAITING_HR_VALIDATION':
       case 'AWAITING_HR_VALIDATION_REQUIRED':
         api += `&issue_codes=${cs1('HR validation')}`;
-        return api;
+        return { api, orGroup: null };
 
       case 'HR_HOURS_MISMATCH':
       case 'HOURS_MISMATCH_HR':
         api += `&issue_codes=${cs1('Hours mismatch HR')}`;
-        return api;
+        return { api, orGroup: null };
 
       case 'HR_HOURS_MISSING':
         api += `&issue_codes=${cs1('HR hours missing')}`;
-        return api;
+        return { api, orGroup: null };
 
       case 'DUPLICATE_CONTRACTS':
         api += `&issue_codes=${cs1('Duplicate contracts')}`;
-        return api;
+        return { api, orGroup: null };
 
       case 'REFERENCE_MISSING':
         api += `&issue_codes=${cs1('Reference')}`;
-        return api;
+        return { api, orGroup: null };
 
       case 'VALIDATION':
         api += `&issue_codes=${cs1('Validation')}`;
-        return api;
+        return { api, orGroup: null };
 
       case 'AUTHORISATION':
         api += `&issue_codes=${cs1('Authorisation')}`;
-        return api;
+        return { api, orGroup: null };
 
       case 'ON_HOLD':
         api += `&issue_codes=${cs1('On hold')}`;
-        return api;
+        return { api, orGroup: null };
 
       case 'QR_NOT_ISSUED':
         api += `&timesheet_id=is.not.null`;
         api += `&qr_status=eq.PENDING`;
         api += `&qr_token=is.null`;
         api += `&qr_generated_at=is.null`;
-        return api;
+        return { api, orGroup: null };
 
       case 'QR_AWAITING_SIGNATURE':
       case 'QR_ISSUED_AWAITING_SIGNATURE':
@@ -29199,14 +29245,14 @@ async function handleTimesheetsSummary(env, req) {
         api += `&qr_token=is.not.null`;
         api += `&qr_generated_at=is.not.null`;
         api += `&qr_scanned_at=is.null`;
-        return api;
+        return { api, orGroup: null };
 
       case 'REFS_PDF_INVALID':
         api += `&issue_codes=${cs1('Refs - Timesheet PDF invalid')}`;
-        return api;
+        return { api, orGroup: null };
 
       default:
-        return api;
+        return { api, orGroup: null };
     }
   };
 
@@ -29227,7 +29273,7 @@ async function handleTimesheetsSummary(env, req) {
     `?select=` + [
       '*',
       'route_type',
-      'route_display', // ✅ NEW: ensure it’s included explicitly
+      'route_display',
       'client_no_timesheet_required',
       'client_autoprocess_hr',
       'client_is_nhsp',
@@ -29243,14 +29289,34 @@ async function handleTimesheetsSummary(env, req) {
     ].join(',') +
     `&limit=${effLimit}&offset=${effOffset}`;
 
+  // ✅ Collect OR groups then apply as a single `or=(...)` at the end
+  const orGroups = [];
+
+  // (timesheet_id == X OR contract_week_id == X) — selection/canonical row support
   if (hasIdFilter) {
     if (idList.length === 1) {
-      const one = idList[0];
-      api += `&or=${enc(`(timesheet_id.eq.${one},contract_week_id.eq.${one})`)}`;
+      const one = String(idList[0]);
+      orGroups.push([`timesheet_id.eq.${one}`, `contract_week_id.eq.${one}`]);
     } else {
-      const csv = idList.join(',');
-      api += `&or=${enc(`(timesheet_id.in.(${csv}),contract_week_id.in.(${csv}))`)}`;
+      const csv = idList.map(String).join(',');
+      orGroups.push([`timesheet_id.in.(${csv})`, `contract_week_id.in.(${csv})`]);
     }
+  }
+
+  // ✅ NEW: free-text quick search OR group (only when provided)
+  if (textQ) {
+    // Use ilike.*...* patterns for broad "contains" matching on summary-view text fields
+    // (works for names + ids + norms).
+    const t = String(textQ);
+    const pat = `*${t}*`;
+
+    orGroups.push([
+      `candidate_name.ilike.${pat}`,
+      `client_name.ilike.${pat}`,
+      `booking_id.ilike.${pat}`,
+      `occupant_key_norm.ilike.${pat}`,
+      `hospital_norm.ilike.${pat}`
+    ]);
   }
 
   if (clientId)    api += `&client_id=eq.${enc(clientId)}`;
@@ -29291,7 +29357,18 @@ async function handleTimesheetsSummary(env, req) {
 
   if (hrIssue) api += `&hr_crosscheck_issues=cs.{${enc(hrIssue)}}`;
 
-  api = applyIssuesFilter(api, effectiveIssues);
+  // Issues filter (may contribute a second OR-group in NO_MATCH_ID case)
+  const issuesApplied = applyIssuesFilter(api, effectiveIssues);
+  api = issuesApplied.api;
+  if (issuesApplied.orGroup && Array.isArray(issuesApplied.orGroup) && issuesApplied.orGroup.length) {
+    orGroups.push(issuesApplied.orGroup);
+  }
+
+  // ✅ Apply the single merged `or=` param once (if needed)
+  const orExpr = mergeOrGroupsToOrParam(orGroups);
+  if (orExpr) {
+    api += `&or=${enc(orExpr)}`;
+  }
 
   if (orderByParam && allowedSort[orderByParam]) {
     api += `&order=${enc(orderCol)}.${orderDir},client_name.asc,candidate_name.asc`;
@@ -29305,7 +29382,7 @@ async function handleTimesheetsSummary(env, req) {
     const outRows = (rows || []).map(r => {
       const o = { ...(r || {}) };
       if (!Object.prototype.hasOwnProperty.call(o, 'route_type')) o.route_type = null;
-      if (!Object.prototype.hasOwnProperty.call(o, 'route_display')) o.route_display = null; // ✅ NEW
+      if (!Object.prototype.hasOwnProperty.call(o, 'route_display')) o.route_display = null;
       if (!Object.prototype.hasOwnProperty.call(o, 'client_no_timesheet_required')) o.client_no_timesheet_required = null;
       if (!Object.prototype.hasOwnProperty.call(o, 'client_autoprocess_hr')) o.client_autoprocess_hr = null;
       if (!Object.prototype.hasOwnProperty.call(o, 'client_is_nhsp')) o.client_is_nhsp = null;
@@ -29374,7 +29451,6 @@ async function handleTimesheetsSummary(env, req) {
     return withCORS(env, req, serverError(`Failed to fetch timesheets summary: ${e?.message || e}`));
   }
 }
-
 
 async function handleHrAutoprocessPreview(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
@@ -39967,20 +40043,20 @@ async function handleSearchUmbrellas(env, req) {
 
   // ✅ Expanded allow-list (must only include real columns)
   const allowedSort = {
-    name:                           'name',
-    enabled:                        'enabled',
-    vat_chargeable:                 'vat_chargeable',
-    remittance_email:               'remittance_email',
-    bank_name:                      'bank_name',
-    sort_code:                      'sort_code',
-    account_number:                 'account_number',
-    created_at:                     'created_at',
-    updated_at:                     'updated_at',
-    postcode:                       'postcode',
-    town_city:                      'town_city',
-    company_number:                 'company_number',
-    revolut_counterparty_id:        'revolut_counterparty_id',
-    revolut_counterparty_account_id:'revolut_counterparty_account_id'
+    name:                            'name',
+    enabled:                         'enabled',
+    vat_chargeable:                  'vat_chargeable',
+    remittance_email:                'remittance_email',
+    bank_name:                       'bank_name',
+    sort_code:                       'sort_code',
+    account_number:                  'account_number',
+    created_at:                      'created_at',
+    updated_at:                      'updated_at',
+    postcode:                        'postcode',
+    town_city:                       'town_city',
+    company_number:                  'company_number',
+    revolut_counterparty_id:         'revolut_counterparty_id',
+    revolut_counterparty_account_id: 'revolut_counterparty_account_id'
   };
 
   const defaultOrderCol = 'name';
@@ -40009,17 +40085,22 @@ async function handleSearchUmbrellas(env, req) {
   const createdFrom   = q('created_from');
   const createdTo     = q('created_to');
 
-  let url = `${env.SUPABASE_URL}/rest/v1/umbrellas` +
-            `?select=*` +
-            `&order=${enc(orderCol)}.${orderDir}` +
-            `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
+  let url =
+    `${env.SUPABASE_URL}/rest/v1/umbrellas` +
+    `?select=*` +
+    `&order=${enc(orderCol)}.${orderDir}` +
+    `&limit=${pageSize}&offset=${(page - 1) * pageSize}`;
 
   if (idFilterExpr) url += `&id=${enc(idFilterExpr)}`;
 
-  // ✅ Free-text should match BOTH name and remittance_email (so typing email also finds the umbrella)
+  // ✅ Free-text should match BOTH name and remittance_email
+  // ✅ IMPORTANT: encode the ENTIRE PostgREST logic expression once (prevents PGRST100 parse errors)
   if (text) {
-    const esc = enc(text);
-    url += `&or=(name.ilike.*${esc}*,remittance_email.ilike.*${esc}*)`;
+    const raw = String(text || '').trim();
+    if (raw) {
+      const expr = `(name.ilike.*${raw}*,remittance_email.ilike.*${raw}*)`;
+      url += `&or=${enc(expr)}`;
+    }
   }
 
   if (bankName)  url += `&bank_name=ilike.*${enc(bankName)}*`;
@@ -40039,10 +40120,19 @@ async function handleSearchUmbrellas(env, req) {
     rows = res?.rows || [];
     total = res?.total;
   } catch (err) {
-    return withCORS(env, req, ok({ error: String(err?.message || err), rows: [], page, page_size: pageSize, count: 0 }));
+    return withCORS(env, req, ok({
+      error: String(err?.message || err),
+      rows: [],
+      page,
+      page_size: pageSize,
+      count: 0
+    }));
   }
 
-  const respCount = includeCount ? (typeof total === 'number' ? total : (rows?.length || 0)) : (rows?.length || 0);
+  const respCount =
+    includeCount
+      ? (typeof total === 'number' ? total : (rows?.length || 0))
+      : (rows?.length || 0);
 
   if (format === 'csv') {
     const header = ['UmbrellaId','Name','Enabled','VATChargeable','Bank','SortCode','AccountNumber','CreatedAt'];
@@ -40059,7 +40149,12 @@ async function handleSearchUmbrellas(env, req) {
         r.created_at || ''
       ]));
     }
-    return withCORS(env, req, ok({ csv: out.join('\n'), count: respCount, page, page_size: pageSize }));
+    return withCORS(env, req, ok({
+      csv: out.join('\n'),
+      count: respCount,
+      page,
+      page_size: pageSize
+    }));
   }
 
   if (format === 'print') {
@@ -40084,10 +40179,20 @@ async function handleSearchUmbrellas(env, req) {
           <tbody>${rowsHtml}</tbody>
         </table>
       </div>`;
-    return withCORS(env, req, ok({ html, count: respCount, page, page_size: pageSize }));
+    return withCORS(env, req, ok({
+      html,
+      count: respCount,
+      page,
+      page_size: pageSize
+    }));
   }
 
-  return withCORS(env, req, ok({ rows, page, page_size: pageSize, count: respCount }));
+  return withCORS(env, req, ok({
+    rows,
+    page,
+    page_size: pageSize,
+    count: respCount
+  }));
 }
 async function buildHealthRosterPdf(env, invoiceId) {
   // Placeholder implementation:
@@ -48061,12 +48166,26 @@ async function handleDeleteHospital(env, req, clientId, hospitalId) {
  *       - bearerAuth: []
  */
 
- async function handleListUmbrellas(env, req) {
+async function handleListUmbrellas(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
   const params = new URL(req.url).searchParams;
   const includeCount = params.get('include_count') === 'true';
+
+  // ✅ NEW: enabled filter (supports enabled=true|false)
+  const enabledRaw = params.get('enabled');
+  const enabledNorm = (enabledRaw == null) ? '' : String(enabledRaw).trim().toLowerCase();
+  const hasEnabled =
+    (enabledNorm === 'true'  || enabledNorm === '1' || enabledNorm === 'yes' || enabledNorm === 'y' || enabledNorm === 'on') ||
+    (enabledNorm === 'false' || enabledNorm === '0' || enabledNorm === 'no'  || enabledNorm === 'n' || enabledNorm === 'off');
+
+  const enabledBool =
+    (enabledNorm === 'true'  || enabledNorm === '1' || enabledNorm === 'yes' || enabledNorm === 'y' || enabledNorm === 'on')
+      ? true
+      : (enabledNorm === 'false' || enabledNorm === '0' || enabledNorm === 'no' || enabledNorm === 'n' || enabledNorm === 'off')
+        ? false
+        : null;
 
   // Prefer page/page_size; fall back to limit/offset
   const pageRaw      = parseInt(params.get('page') || '1', 10);
@@ -48085,6 +48204,11 @@ async function handleDeleteHospital(env, req, clientId, hospitalId) {
   url.searchParams.set('limit',  String(limit));
   url.searchParams.set('offset', String(offset));
 
+  // ✅ Apply filter to Supabase REST (public.umbrellas.enabled boolean column)
+  if (hasEnabled && enabledBool !== null) {
+    url.searchParams.set('enabled', enabledBool ? 'eq.true' : 'eq.false');
+  }
+
   try {
     const { rows, total } = await sbFetch(env, url.toString(), includeCount);
     const resp = includeCount ? { items: rows, count: total ?? undefined } : { items: rows };
@@ -48093,8 +48217,6 @@ async function handleDeleteHospital(env, req, clientId, hospitalId) {
     return withCORS(env, req, serverError('Failed to list umbrellas'));
   }
 }
-
-
 
 async function handleCreateUmbrella(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -48378,8 +48500,12 @@ async function handleSearchCandidates(env, req) {
     pay_method:   'pay_method',
     active:       'active',
     created_at:   'created_at',
-    // you can add 'primary_job_title' or 'job_titles_display' here later if you
-    // want direct sort buttons on those
+
+    // ✅ NEW: TMS Ref sorting (numeric-safe)
+    // UI can send order_by=tms_ref (or tms_ref_num).
+    // When order_by=tms_ref, we apply a compound order: tms_ref_num then tms_ref.
+    tms_ref:      '__tms_ref',
+    tms_ref_num:  'tms_ref_num'
   };
 
   const defaultOrderCol = 'display_name';
@@ -48448,8 +48574,11 @@ async function handleSearchCandidates(env, req) {
   // ✅ Working-status filter (Candidates Tools dropdown)
   const workStatus = String(q('work_status') || '').trim().toUpperCase(); // ALL|CURRENT|RECENT|NOT
   const recentMonthsRaw = q('recent_months');
+
+  const recentAll = (workStatus === 'RECENT') && (String(recentMonthsRaw || '').trim().toUpperCase() === 'ALL');
+
   const recentMonths =
-    Number.isFinite(parseInt(recentMonthsRaw || '', 10))
+    (!recentAll && Number.isFinite(parseInt(recentMonthsRaw || '', 10)))
       ? Math.max(1, Math.min(120, parseInt(recentMonthsRaw, 10)))
       : 3;
 
@@ -48482,33 +48611,44 @@ async function handleSearchCandidates(env, req) {
     return `${String(y1).padStart(4,'0')}-${String(m1+1).padStart(2,'0')}-${String(d1).padStart(2,'0')}`;
   };
 
-  const cutoffYMD = (workStatus === 'RECENT' || workStatus === 'NOT')
+  const cutoffYMD = ((workStatus === 'RECENT' && !recentAll) || workStatus === 'NOT')
     ? subtractMonthsYMD(londonYMDNow(), recentMonths)
     : null;
 
   // ✅ Use activity view so work-status filters are fast + server-side
+  // ✅ ORDER: support compound sort for TMS Ref (tms_ref_num then tms_ref)
+  const orderExpr =
+    (orderCol === '__tms_ref')
+      ? `${enc('tms_ref_num')}.${orderDir},${enc('tms_ref')}.${orderDir}`
+      : `${enc(orderCol)}.${orderDir}`;
+
   let url =
     `${env.SUPABASE_URL}/rest/v1/candidates_summary_activity` +
     `?select=*` +
-    `&order=${enc(orderCol)}.${orderDir}` +
+    `&order=${orderExpr}` +
     `&limit=${pageSize}&offset=${(page - 1) * pageSize}`;
 
-  // --- OR handling (free-text / roles_any / NOT-working null-vs-lt cutoff) ---
+  // --- OR handling (free-text / roles_any / RECENT/NOT OR groups) ---
   // We must keep a single `or=` param. If we need (A OR B) AND (D OR E),
   // we expand to OR of AND terms: or=(and(A,D),and(A,E),and(B,D),and(B,E))
   let orParts = null; // array of raw PostgREST predicate strings (already encoded where needed)
 
-  // Free-text OR group: search name/email/job titles
+  // Free-text OR group: search first/surname/display/email/phone/tms_ref/job titles
   if (text) {
     const esc = enc(text);
     orParts = [
+      `first_name.ilike.*${esc}*`,
+      `last_name.ilike.*${esc}*`,
       `display_name.ilike.*${esc}*`,
       `email.ilike.*${esc}*`,
+      `phone.ilike.*${esc}*`,
+      `tms_ref.ilike.*${esc}*`,
       `job_titles_display.ilike.*${esc}*`
     ];
   }
 
-  // Care Package Roles – roles_any (OR). Note: this will overwrite any existing `or=` (e.g. free-text) – preserving prior semantics.
+  // Care Package Roles – roles_any (OR).
+  // Note: preserves prior behaviour (roles_any becomes the OR group if provided).
   if (rolesAny.length) {
     const parts = rolesAny.map(code => {
       const val = enc(JSON.stringify([{ code }]));
@@ -48584,10 +48724,35 @@ async function handleSearchCandidates(env, req) {
   // ✅ Work status filters (fast server-side via candidates_summary_activity)
   if (workStatus === 'CURRENT') {
     url += `&is_currently_working=eq.true`;
+
   } else if (workStatus === 'RECENT') {
-    // Must be NOT currently working, and last timesheet within cutoff
-    url += `&is_currently_working=eq.false`;
-    if (cutoffYMD) url += `&last_timesheet_week_ending=gte.${enc(cutoffYMD)}`;
+    // ✅ UPDATED: RECENT/Previously worked includes CURRENT workers too.
+    //
+    // If recent_months=ALL:
+    //   is_currently_working = true
+    //   OR (is_currently_working = false AND last_timesheet_week_ending IS NOT NULL)
+    //
+    // Else:
+    //   is_currently_working = true
+    //   OR (is_currently_working = false AND last_timesheet_week_ending >= cutoff)
+    const d1 = `is_currently_working.eq.true`;
+    const d2 = recentAll
+      ? `and(is_currently_working.eq.false,last_timesheet_week_ending.is.not.null)`
+      : (cutoffYMD
+          ? `and(is_currently_working.eq.false,last_timesheet_week_ending.gte.${enc(cutoffYMD)})`
+          : `is_currently_working.eq.true`);
+
+    if (Array.isArray(orParts) && orParts.length) {
+      const combined = [];
+      for (const p of orParts) {
+        combined.push(`and(${p},${d1})`);
+        combined.push(`and(${p},${d2})`);
+      }
+      orParts = combined;
+    } else {
+      orParts = [d1, d2];
+    }
+
   } else if (workStatus === 'NOT') {
     // Must be NOT currently working, and (last_ts is null OR last_ts < cutoff)
     url += `&is_currently_working=eq.false`;
@@ -48706,7 +48871,6 @@ async function handleSearchCandidates(env, req) {
     count: respCount
   }));
 }
-
  async function handleListCandidates(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -49038,7 +49202,7 @@ async function handleSearchCandidates(env, req) {
 }
 
 // ======================= NEW: Job title delete ==========================
- async function handleDeleteJobTitle(env, req, jobTitleId) {
+async function handleDeleteJobTitle(env, req, jobTitleId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
@@ -49046,56 +49210,77 @@ async function handleSearchCandidates(env, req) {
     return withCORS(env, req, badRequest('Missing job title id'));
   }
 
+  const enc = encodeURIComponent;
+
+  const pickErrMsg = (err) => {
+    try {
+      if (err && typeof err === 'object') {
+        if (err.json && typeof err.json === 'object') {
+          if (err.json.message) return String(err.json.message || '');
+          if (err.json.error) return String(err.json.error || '');
+        }
+        if (typeof err.body === 'string' && err.body.trim()) {
+          try {
+            const j = JSON.parse(err.body);
+            if (j && typeof j === 'object') {
+              if (j.message) return String(j.message || '');
+              if (j.error) return String(j.error || '');
+            }
+          } catch {}
+          return String(err.body || '');
+        }
+        if (typeof err.message === 'string' && err.message.trim()) {
+          const m = String(err.message || '');
+          const idx = m.indexOf(':');
+          const tail = (idx >= 0) ? m.slice(idx + 1).trim() : m.trim();
+          if (tail) {
+            try {
+              const j = JSON.parse(tail);
+              if (j && typeof j === 'object') {
+                if (j.message) return String(j.message || '');
+                if (j.error) return String(j.error || '');
+              }
+            } catch {}
+          }
+          return m;
+        }
+      }
+    } catch {}
+    return '';
+  };
+
   try {
-    // 1) Check for children
-    const childUrl =
-      `${env.SUPABASE_URL}/rest/v1/default_job_titles` +
-      `?select=id&parent_id=eq.${enc(jobTitleId)}&limit=1`;
-    const { rows: children } = await sbFetch(env, childUrl);
-    if (children && children.length > 0) {
-      return withCORS(
-        env,
-        req,
-        badRequest('Cannot delete: this job title has child nodes. Re-parent or delete children first.')
-      );
-    }
+    const payload = {
+      p_job_title_id: jobTitleId,
+      p_actor_user_id: user.id,
+      p_reason: null
+    };
 
-    // 2) Check for candidate references via candidate_job_titles
-    const usageUrl =
-      `${env.SUPABASE_URL}/rest/v1/candidate_job_titles` +
-      `?select=candidate_id&job_title_id=eq.${enc(jobTitleId)}&limit=200`;
-    const { rows: used } = await sbFetch(env, usageUrl);
-    const candidateIds = Array.from(new Set((used || []).map(r => r.candidate_id).filter(Boolean)));
-    if (candidateIds.length) {
-      // Do not delete; surface a structured "in use" error envelope
-      return withCORS(env, req, ok({
-        error: 'JOB_TITLE_IN_USE',
-        message: `This role is assigned to ${candidateIds.length} candidates.`,
-        candidate_ids: candidateIds
-      }));
-    }
+    const rpc = await sbRpc(env, 'job_titles_delete_apply', payload);
 
-    // 3) Hard delete (no usage)
-    const delUrl =
-      `${env.SUPABASE_URL}/rest/v1/default_job_titles` +
-      `?id=eq.${enc(jobTitleId)}`;
-    const { raw } = await sbFetch(env, delUrl, {
-      method: 'DELETE',
-      headers: { Prefer: 'return=minimal' }
-    });
-
-    if (!raw.ok && raw.status !== 204) {
-      console.error('job_title hard delete non-OK', raw.status);
-      return withCORS(env, req, serverError('job_title_delete_failed'));
-    }
-
-    return withCORS(env, req, ok({ deleted: true }));
+    // Keep response flexible; RPC returns { deleted:true, kind:'role'|'category', id:'...' }
+    return withCORS(env, req, ok(rpc && typeof rpc === 'object' ? rpc : { deleted: true, id: String(jobTitleId) }));
   } catch (err) {
-    console.error('handleDeleteJobTitle failed', err);
+    const msgRaw = pickErrMsg(err);
+
+    const msg = String(msgRaw || '').trim();
+
+    // Required user-facing messages (surface exactly)
+    if (msg.includes('Candidates have been assigned to this role.')) {
+      return withCORS(env, req, badRequest(msg));
+    }
+    if (msg.includes('Candidates have been assigned to roles in this category.')) {
+      return withCORS(env, req, badRequest(msg));
+    }
+
+    if (msg.includes('Job title not found')) {
+      return withCORS(env, req, badRequest('Job title not found'));
+    }
+
+    console.error('handleDeleteJobTitle failed', { jobTitleId: enc(jobTitleId), msg, err });
     return withCORS(env, req, serverError('job_title_delete_failed'));
   }
 }
-
 
 // ======================= NEW: Postcode lookup (EasyPostcodes) ==========================
  async function handlePostcodeLookup(env, req) {
@@ -52840,9 +53025,9 @@ async function handleListInvoices(env, req) {
   const clientId    = sp.get('client_id') || null;
 
   const statusParams = sp.getAll('status').map(s => (s || '').trim()).filter(Boolean);
-  const q = (sp.get('q') || '').trim(); // partial invoice_no
+  const q = (sp.get('q') || '').trim(); // free-text for quick search (invoice no / client / candidate via RPC)
 
-  // ✅ NEW: ids filter (comma-separated OR repeated ids params)
+  // ✅ ids filter (comma-separated OR repeated ids params)
   const idsParams = sp.getAll('ids').map(s => String(s || '').trim()).filter(Boolean);
   const idsCsv = idsParams.length ? idsParams.join(',') : '';
 
@@ -52970,7 +53155,12 @@ async function handleListInvoices(env, req) {
   }
 
   if (clientId) urlBase += `&client_id=eq.${enc(clientId)}`;
-  if (q) urlBase += `&invoice_no=ilike.*${enc(q)}*`;
+
+  // NOTE:
+  // - We intentionally do NOT apply `invoice_no ilike` here for q.
+  // - Instead, q is expanded via invoice_quicksearch_ids RPC, which can match:
+  //   invoice_no, client name, candidate name (via invoice_lines->v_timesheets_summary).
+  // - The resulting IDs are applied as an id filter (and intersected with other filters).
 
   if (issuedFrom) urlBase += `&issued_at_utc=gte.${enc(issuedFrom)}`;
   if (issuedTo)   urlBase += `&issued_at_utc=lte.${enc(issuedTo)}`;
@@ -53028,8 +53218,47 @@ async function handleListInvoices(env, req) {
     }
   }
 
-  // ✅ Combine week-ending derived ids with explicit ids filter (intersection if both present)
+  // ✅ Expand q (free-text) -> invoice ids via RPC, then intersect with other ID filters
+  let quickQIdFilter = null;
+  if (q) {
+    try {
+      const rpcRes = await sbRpc(env, 'invoice_quicksearch_ids', {
+        p_q: q,
+        p_limit: 20000
+      });
+
+      const rpcRows = Array.isArray(rpcRes)
+        ? rpcRes
+        : (rpcRes && Array.isArray(rpcRes.rows)) ? rpcRes.rows
+        : (rpcRes && Array.isArray(rpcRes.data)) ? rpcRes.data
+        : [];
+
+      const ids = [];
+      const seen = new Set();
+      for (const r of (rpcRows || [])) {
+        const id = r?.invoice_id ? String(r.invoice_id) : (r?.id ? String(r.id) : null);
+        if (!id) continue;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        ids.push(id);
+      }
+
+      if (!ids.length) {
+        const empty = { items: [], page: page ?? undefined, page_size: pageSize ?? undefined, limit, offset };
+        if (includeCount) empty.count = 0;
+        if (includeTotals) empty.totals = { count_all: 0, subtotal_ex_vat_sum: 0, total_inc_vat_sum: 0, margin_ex_vat_sum: 0 };
+        return withCORS(env, req, ok(empty));
+      }
+
+      quickQIdFilter = ids;
+    } catch (e) {
+      return withCORS(env, req, serverError(`Failed invoice quick-search RPC: ${e?.message || e}`));
+    }
+  }
+
+  // ✅ Combine (intersection where applicable)
   let finalIdFilter = null;
+
   if (invoiceIdFilter && idsFilter) {
     const s = new Set(idsFilter);
     finalIdFilter = invoiceIdFilter.filter(x => s.has(String(x)));
@@ -53037,6 +53266,15 @@ async function handleListInvoices(env, req) {
     finalIdFilter = invoiceIdFilter;
   } else if (idsFilter) {
     finalIdFilter = idsFilter;
+  }
+
+  if (quickQIdFilter) {
+    if (finalIdFilter) {
+      const s = new Set(finalIdFilter.map(String));
+      finalIdFilter = quickQIdFilter.filter(x => s.has(String(x)));
+    } else {
+      finalIdFilter = quickQIdFilter;
+    }
   }
 
   if (finalIdFilter && !finalIdFilter.length) {
@@ -53060,7 +53298,7 @@ async function handleListInvoices(env, req) {
     const f = {};
     if (clientId) f.client_id = clientId;
     if (statusParams && statusParams.length) f.status = statusParams;
-    if (q) f.q = q;
+    if (q) f.q = q; // keep for totals RPC (server-side parity)
     if (issuedFrom) f.issued_from = issuedFrom;
     if (issuedTo) f.issued_to = issuedTo;
     if (dueFrom) f.due_from = dueFrom;
@@ -53077,7 +53315,7 @@ async function handleListInvoices(env, req) {
       ? { items: rows || [], count: total ?? undefined, page: page ?? undefined, page_size: pageSize ?? undefined, limit, offset }
       : { items: rows || [], page: page ?? undefined, page_size: pageSize ?? undefined, limit, offset };
 
-    // ✅ 3.7 totals
+    // totals
     if (includeTotals) {
       if (!finalIdFilter) {
         // no id filter => can use SQL totals RPC directly
@@ -53098,7 +53336,6 @@ async function handleListInvoices(env, req) {
 
           // Re-apply same filters that were applied to list (except paging)
           if (clientId) invFetchUrl += `&client_id=eq.${enc(clientId)}`;
-          if (q) invFetchUrl += `&invoice_no=ilike.*${enc(q)}*`;
           if (issuedFrom) invFetchUrl += `&issued_at_utc=gte.${enc(issuedFrom)}`;
           if (issuedTo)   invFetchUrl += `&issued_at_utc=lte.${enc(issuedTo)}`;
           if (dueFrom) invFetchUrl += `&due_at_utc=gte.${enc(dueFrom)}`;
@@ -53159,7 +53396,6 @@ async function handleListInvoices(env, req) {
     return withCORS(env, req, serverError(`Failed to list invoices: ${e?.message || e}`));
   }
 }
-
 
 // New: one-email-per-candidate remittance composer + queue + audit
 
@@ -57661,8 +57897,7 @@ async function collectOutstandingWeeksByContract(env, contractIds, cutoffYmd = n
 // Endpoint: GET /api/candidates/:id/pay-method-change-preview
 // Preview which contracts would be affected by PAYE↔UMBRELLA flip.
 // ─────────────────────────────────────────────────────────────────────────────
-
- async function handleCandidatePayMethodChangePreview(env, req, candidateId) {
+async function handleCandidatePayMethodChangePreview(env, req, candidateId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
   if (!candidateId) return withCORS(env, req, badRequest('candidate_id required'));
@@ -57675,11 +57910,11 @@ async function collectOutstandingWeeksByContract(env, contractIds, cutoffYmd = n
     return withCORS(env, req, badRequest('new_method must be PAYE or UMBRELLA'));
   }
 
-  // Load candidate and normalise originalMethod
+  // Load candidate (include umbrella_id so preview can surface blockers deterministically)
   const cand = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/candidates` +
-    `?id=eq.${enc(candidateId)}&select=id,pay_method`
+    `?id=eq.${enc(candidateId)}&select=id,pay_method,umbrella_id`
   );
   if (!cand) {
     return withCORS(env, req, notFound('Candidate not found'));
@@ -57693,12 +57928,33 @@ async function collectOutstandingWeeksByContract(env, contractIds, cutoffYmd = n
     return withCORS(env, req, badRequest('Candidate already has this pay method'));
   }
 
-  const contracts = await collectOutstandingWeeklyContractsForCandidate(env, candidateId, newMethod, originalMethod);
+  const blockers = [];
+  if (newMethod === 'UMBRELLA' && !cand.umbrella_id) {
+    blockers.push({
+      code: 'MISSING_UMBRELLA_ID',
+      message: 'Candidate must have an umbrella_id before moving to UMBRELLA'
+    });
+  }
+
+  // Read-only contract summaries (authoritative outstanding-week rule lives in helper)
+  const contractsRaw = await collectOutstandingWeeklyContractsForCandidate(env, candidateId, newMethod, originalMethod);
+  const contracts = (contractsRaw || []).map(c => {
+    const firstWe = c?.first_outstanding_we || null;
+    const successorStart = firstWe ? addDays(firstWe, -6) : null;
+    return {
+      ...c,
+      successor_start: successorStart
+    };
+  });
+
+  const can_apply = blockers.length === 0;
 
   return withCORS(env, req, ok({
     candidate_id: cand.id,
     original_method: originalMethod,
     new_method: newMethod,
+    can_apply,
+    blockers,
     contracts
   }));
 }
@@ -57706,13 +57962,12 @@ async function collectOutstandingWeeksByContract(env, contractIds, cutoffYmd = n
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Endpoint: POST /api/candidates/:id/pay-method-change
-// Perform PAYE↔UMBRELLA flip across all relevant weekly contracts:
-//   • For each affected contract: create successor with new pay_method_snapshot
-//     and recomputed per-bucket pay so margin stays the same.
-//   • Migrate outstanding weeks + timesheets.
-//   • Update candidate.pay_method (and umbrella_id if desired).
+// ✅ NEW BEHAVIOUR (atomic):
+// - Build a deterministic migration plan
+// - Call DB RPC: candidate_pay_method_change_apply(...)
+// - No direct PATCH/INSERT/DELETE to contracts/contract_weeks/timesheets/candidates here
 // ─────────────────────────────────────────────────────────────────────────────
- async function handleCandidatePayMethodChange(env, req, candidateId) {
+async function handleCandidatePayMethodChange(env, req, candidateId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
   if (!candidateId) return withCORS(env, req, badRequest('candidate_id required'));
@@ -57745,9 +58000,7 @@ async function collectOutstandingWeeksByContract(env, contractIds, cutoffYmd = n
     `${env.SUPABASE_URL}/rest/v1/candidates` +
     `?id=eq.${enc(candidateId)}&select=id,pay_method,umbrella_id`
   );
-  if (!cand) {
-    return withCORS(env, req, notFound('Candidate not found'));
-  }
+  if (!cand) return withCORS(env, req, notFound('Candidate not found'));
 
   const originalMethod = String(cand.pay_method || '').toUpperCase() || null;
   if (!originalMethod || (originalMethod !== 'PAYE' && originalMethod !== 'UMBRELLA')) {
@@ -57757,541 +58010,145 @@ async function collectOutstandingWeeksByContract(env, contractIds, cutoffYmd = n
     return withCORS(env, req, badRequest('Candidate already has this pay method'));
   }
 
-  // When moving TO umbrella, ensure an umbrella_id exists
+  // When moving TO umbrella, ensure an umbrella_id exists (same rule as preview/RPC)
   if (newMethod === 'UMBRELLA' && !cand.umbrella_id) {
     return withCORS(env, req, badRequest('Candidate must have an umbrella_id before moving to UMBRELLA'));
   }
 
-  // -------- Load all relevant contracts in one go --------
-  const conUrl =
-    `${env.SUPABASE_URL}/rest/v1/contracts` +
-    `?candidate_id=eq.${enc(candidateId)}` +
-    `&pay_method_snapshot=eq.${enc(originalMethod)}` +
-    `&select=*`;
+  // -------- Preview-contracts (read-only) to derive successor_start deterministically --------
+  let summaries = await collectOutstandingWeeklyContractsForCandidate(env, candidateId, newMethod, originalMethod);
+  summaries = Array.isArray(summaries) ? summaries : [];
 
-  const { rows: conRows } = await sbFetch(env, conUrl);
-  const allContracts = Array.isArray(conRows) ? conRows : [];
-  if (!allContracts.length && !contractIdSet) {
-    // No contracts at all with this snapshot → pure candidate flip
-    try {
-      const patch = {
-        pay_method: newMethod,
-        updated_at: nowIso()
-      };
-      if (newMethod === 'PAYE') patch.umbrella_id = null;
-      await fetch(
-        `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(candidateId)}`,
-        {
-          method: 'PATCH',
-          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-          body: JSON.stringify(patch)
-        }
-      );
-    } catch (e) {
-      return withCORS(env, req, badRequest(`Failed to update candidate pay_method: ${e?.message || e}`));
-    }
-
-    return withCORS(env, req, ok({
-      candidate_id: cand.id,
-      original_method: originalMethod,
-      new_method: newMethod,
-      old_contract_ids: [],
-      new_contract_ids: [],
-      affected_timesheet_ids: [],
-      summary: { contracts_changed: 0, weeks_migrated: 0 }
-    }));
-  }
-
-  let selectedContracts = allContracts;
   if (contractIdSet) {
-    selectedContracts = allContracts.filter(c => c && c.id && contractIdSet.has(String(c.id)));
+    summaries = summaries.filter(s => s && s.contract_id && contractIdSet.has(String(s.contract_id)));
   }
 
-  if (!selectedContracts.length) {
-    // User asked for specific contract_ids but none match or have this snapshot
-    try {
-      const patch = {
-        pay_method: newMethod,
-        updated_at: nowIso()
-      };
-      if (newMethod === 'PAYE') patch.umbrella_id = null;
-      await fetch(
-        `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(candidateId)}`,
-        {
-          method: 'PATCH',
-          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-          body: JSON.stringify(patch)
-        }
-      );
-    } catch (e) {
-      return withCORS(env, req, badRequest(`Failed to update candidate pay_method: ${e?.message || e}`));
-    }
+  // If nothing is outstanding, we can still flip pay_method atomically via RPC with empty plan
+  const contractIds = Array.from(new Set(summaries.map(s => String(s.contract_id)).filter(Boolean)));
 
-    return withCORS(env, req, ok({
-      candidate_id: cand.id,
-      original_method: originalMethod,
-      new_method: newMethod,
-      old_contract_ids: [],
-      new_contract_ids: [],
-      affected_timesheet_ids: [],
-      summary: { contracts_changed: 0, weeks_migrated: 0 }
-    }));
+  // -------- Load full contract rows for rate computation (rates_json + additional_rates_json) --------
+  let fullContracts = [];
+  if (contractIds.length) {
+    const inList = contractIds.map(enc).join(',');
+    const conUrl =
+      `${env.SUPABASE_URL}/rest/v1/contracts` +
+      `?id=in.(${inList})` +
+      `&select=id,client_id,candidate_id,pay_method_snapshot,start_date,end_date,rates_json,additional_rates_json,std_schedule_json,std_hours_json`;
+    const { rows: conRows } = await sbFetch(env, conUrl);
+    fullContracts = Array.isArray(conRows) ? conRows : [];
   }
 
-  const idsToLoad = Array.from(new Set(selectedContracts.map(c => String(c.id)).filter(Boolean)));
+  const byId = new Map(fullContracts.map(r => [String(r.id), r]));
 
-  // -------- Bulk outstanding weeks for all selected contracts --------
-  const outstandingByContract = await collectOutstandingWeeksByContract(env, idsToLoad, null);
+  // -------- Build plan for RPC --------
+  const plan = [];
 
-  // If no contracts have outstanding weeks, behave like pure candidate flip
-  const anyOutstanding = idsToLoad.some(id => {
-    const arr = outstandingByContract.get(String(id));
-    return arr && arr.length;
-  });
+  // Helper: compute ERNI multiplier (anchored to today London via loadFinanceGlobals)
+  const finance = await loadFinanceGlobals(env, null);
+  let erniPct = (finance && finance.erni_pct != null) ? Number(finance.erni_pct) : 0;
+  if (!Number.isFinite(erniPct)) erniPct = 0;
+  if (erniPct > 1) erniPct = erniPct / 100; // support 13.8 vs 0.138 semantics
+  const erniMult = 1 + erniPct;
 
-  if (!anyOutstanding) {
-    try {
-      const patch = {
-        pay_method: newMethod,
-        updated_at: nowIso()
-      };
-      if (newMethod === 'PAYE') patch.umbrella_id = null;
-      await fetch(
-        `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(candidateId)}`,
-        {
-          method: 'PATCH',
-          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-          body: JSON.stringify(patch)
-        }
-      );
-    } catch (e) {
-      return withCORS(env, req, badRequest(`Failed to update candidate pay_method: ${e?.message || e}`));
-    }
-
-    return withCORS(env, req, ok({
-      candidate_id: cand.id,
-      original_method: originalMethod,
-      new_method: newMethod,
-      old_contract_ids: [],
-      new_contract_ids: [],
-      affected_timesheet_ids: [],
-      summary: { contracts_changed: 0, weeks_migrated: 0 }
-    }));
-  }
-
-  const oldContractIds = [];
-  const newContractIds = [];
-  const allTsIds = [];
-  const migrationErrors = [];  // track any contracts that failed migration
-  let totalWeeksMigrated = 0;
-
-  // Local helper to compute new pay for one bucket preserving margin
-  function computeNewPayBucket(charge, payOld, oldMethod, newMethod, erniMult) {
+  // Helper: compute new pay for a single bucket preserving margin
+  const computeNewPayBucket = (charge, payOld, oldM, newM) => {
     if (charge == null || payOld == null) return null;
     const ch = Number(charge);
     const po = Number(payOld);
     if (!Number.isFinite(ch) || !Number.isFinite(po)) return null;
 
     let margin;
-    if (oldMethod === 'PAYE') {
-      margin = ch - po * erniMult;
-    } else {
-      margin = ch - po;
-    }
+    if (oldM === 'PAYE') margin = ch - po * erniMult;
+    else margin = ch - po;
 
-    if (newMethod === 'PAYE') {
-      return (ch - margin) / erniMult;
-    }
-    // newMethod === 'UMBRELLA'
-    return ch - margin;
-  }
-
-    // ERNI cache (global, from finance windows)
-  // key: `ERNI__${anchorYmd}` -> erniMult
-  const erniCache = new Map();
-
-  const londonTodayYmd = () => {
-    try {
-      const s = new Intl.DateTimeFormat('en-GB', {
-        timeZone: 'Europe/London',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      }).format(new Date());
-      const [dd, mm, yyyy] = s.split('/');
-      return `${yyyy}-${mm}-${dd}`;
-    } catch {
-      // fallback (server TZ); best-effort only
-      const d = new Date();
-      const yyyy = d.getFullYear();
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const dd = String(d.getDate()).padStart(2, '0');
-      return `${yyyy}-${mm}-${dd}`;
-    }
+    if (newM === 'PAYE') return (ch - margin) / erniMult;
+    return ch - margin; // UMBRELLA
   };
 
-  async function getErniMultiplierForClient(env, clientId, activeYmd) {
-    // For this operation, ERNI should reflect “today” (when we are changing the contracts),
-    // not the historical shift/work date.
-    const anchorYmd = londonTodayYmd();
-
-    const key = `ERNI__${anchorYmd}`;
-    if (erniCache.has(key)) return erniCache.get(key);
-
-    let mult = 1;
-
-    try {
-      const res = await fetch(
-        `${env.SUPABASE_URL}/rest/v1/rpc/settings_finance_pick`,
-        {
-          method: 'POST',
-          headers: { ...sbHeaders(env), 'content-type': 'application/json' },
-          body: JSON.stringify({ p_date: anchorYmd })
-        }
-      );
-
-      const txt = await res.text().catch(() => '');
-      if (!res.ok) throw new Error(txt || `settings_finance_pick failed (${res.status})`);
-
-      const j = txt ? JSON.parse(txt) : null;
-      const row = Array.isArray(j) ? j[0] : j;
-
-      let pct = row && row.erni_pct != null ? Number(row.erni_pct) : 0;
-
-      // Support "15" vs "0.15" semantics
-      if (!Number.isFinite(pct)) pct = 0;
-      if (pct > 1) pct = pct / 100;
-
-      mult = 1 + pct;
-      if (!Number.isFinite(mult) || mult <= 0) mult = 1;
-
-    } catch (e) {
-      try { console.warn('[PAY-METHOD-CHANGE] getErniMultiplierForClient: fell back to 1', e?.message || e); } catch {}
-      mult = 1;
+  const pruneRatesForMethod = (ratesObj, method) => {
+    const keepPrefixes =
+      method === 'PAYE'     ? ['paye_', 'charge_'] :
+      method === 'UMBRELLA' ? ['umb_',  'charge_'] :
+                              ['charge_'];
+    const out = {};
+    for (const [k, v] of Object.entries(ratesObj || {})) {
+      if (keepPrefixes.some(pre => k.startsWith(pre))) out[k] = v;
     }
+    return out;
+  };
 
-    erniCache.set(key, mult);
-    return mult;
+  for (const s of summaries) {
+    const contractId = String(s.contract_id || '');
+    const firstWe = s.first_outstanding_we || null;
+    const successorStart = firstWe ? addDays(firstWe, -6) : null;
+    if (!contractId || !successorStart) continue;
+
+    const contract = byId.get(contractId) || null;
+    if (!contract) continue;
+
+    const oldM = String(contract.pay_method_snapshot || '').toUpperCase();
+    if (oldM !== originalMethod) continue;
+
+    // Compute new_rates_json using the provided helper (deterministic)
+    const baseRates = await computeBucketRatesPreservingMargin(env, originalMethod, newMethod, contract.rates_json);
+
+    // Ensure only new method buckets + charge_*
+    const newRates = pruneRatesForMethod(baseRates, newMethod);
+
+    // Reprice additional_rates_json (EX1–EX5 rows) preserving margin per-unit
+    let extrasRaw = contract.additional_rates_json || null;
+    if (typeof extrasRaw === 'string') {
+      try { extrasRaw = JSON.parse(extrasRaw); } catch { extrasRaw = null; }
+    }
+    const extrasArr = Array.isArray(extrasRaw) ? extrasRaw : [];
+
+    const newAdditionalRates = extrasArr.map(cfg => {
+      if (!cfg || typeof cfg !== 'object') return cfg;
+
+      const ch = cfg.charge_rate;
+      const po = cfg.pay_rate;
+      if (ch == null || po == null) return cfg;
+
+      const pn = computeNewPayBucket(ch, po, originalMethod, newMethod);
+      if (pn == null || !Number.isFinite(pn)) return cfg;
+
+      const rounded = +(+pn).toFixed(2);
+      return { ...cfg, pay_rate: rounded };
+    });
+
+    plan.push({
+      contract_id: contractId,
+      successor_start: successorStart,
+      new_rates_json: newRates,
+      new_additional_rates_json: newAdditionalRates
+    });
   }
 
-
-  // -------- Process each selected contract --------
-  for (const contract of selectedContracts) {
-    if (!contract || !contract.id) continue;
-    const contractIdStr = String(contract.id);
-
-    const oldMethod = String(contract.pay_method_snapshot || '').toUpperCase();
-    if (oldMethod !== originalMethod) {
-      // It might have been changed in the meantime; skip to be safe.
-      continue;
-    }
-
-    const outstandingWeeks = outstandingByContract.get(contractIdStr) || [];
-    if (!outstandingWeeks.length) continue;
-
-    let contractHadError = false;
-    let contractMigratedWeeks = 0;
-    let successor = null;
-
-    try {
-      // Earliest outstanding WE, start date = WE − 6 days
-      const weDates = outstandingWeeks
-        .map(w => w.week_ending_date)
-        .filter(Boolean)
-        .sort();
-      const earliestWe = weDates[0];
-      const successorStart = addDays(earliestWe, -6);
-
-           // Compute ERNI multiplier from finance windows (effective “today”)
-      const erniMult = await getErniMultiplierForClient(env, contract.client_id, earliestWe);
-
-
-      // Parse rates_json
-      let rj = contract.rates_json || {};
-      if (typeof rj === 'string') {
-        try { rj = JSON.parse(rj); } catch { rj = {}; }
-      }
-      if (!rj || typeof rj !== 'object') rj = {};
-
-      const buckets = ['day', 'night', 'sat', 'sun', 'bh'];
-
-      const charge = {
-        day:   rj.charge_day   ?? null,
-        night: rj.charge_night ?? null,
-        sat:   rj.charge_sat   ?? null,
-        sun:   rj.charge_sun   ?? null,
-        bh:    rj.charge_bh    ?? null
-      };
-
-      const payOld = (oldMethod === 'PAYE')
-        ? {
-            day:   rj.paye_day   ?? null,
-            night: rj.paye_night ?? null,
-            sat:   rj.paye_sat   ?? null,
-            sun:   rj.paye_sun   ?? null,
-            bh:    rj.paye_bh    ?? null
-          }
-        : {
-            day:   rj.umb_day   ?? null,
-            night: rj.umb_night ?? null,
-            sat:   rj.umb_sat   ?? null,
-            sun:   rj.umb_sun   ?? null,
-            bh:    rj.umb_bh    ?? null
-          };
-
-      // Build successor rates_json by copying existing and overwriting only
-      // the pay buckets for the new method where we can compute margin.
-      let newRates = { ...rj };
-
-      for (const b of buckets) {
-        const ch = charge[b];
-        const po = payOld[b];
-        const pn = computeNewPayBucket(ch, po, oldMethod, newMethod, erniMult);
-        if (pn == null || !Number.isFinite(pn)) continue;
-
-        const rounded = +(+pn).toFixed(2);
-        if (newMethod === 'PAYE') {
-          newRates[`paye_${b}`] = rounded;
-        } else {
-          newRates[`umb_${b}`] = rounded;
-        }
-      }
-
-      // Prune incompatible buckets: keep only new method + charge_*
-      const keepPrefixes =
-        newMethod === 'PAYE'     ? ['paye_', 'charge_'] :
-        newMethod === 'UMBRELLA' ? ['umb_',  'charge_'] :
-                                   ['charge_'];
-      const cleanedRates = {};
-      for (const [key, val] of Object.entries(newRates)) {
-        if (keepPrefixes.some(pre => key.startsWith(pre))) {
-          cleanedRates[key] = val;
-        }
-      }
-      newRates = cleanedRates;
-
-      // 🔹 NEW: reprice additional_rates_json per-unit pay to preserve margin
-      let extrasRaw = contract.additional_rates_json || null;
-      if (typeof extrasRaw === 'string') {
-        try { extrasRaw = JSON.parse(extrasRaw); } catch { extrasRaw = null; }
-      }
-      const extrasArr = Array.isArray(extrasRaw) ? extrasRaw : [];
-      const newAdditionalRates = extrasArr.map((cfg) => {
-        if (!cfg || typeof cfg !== 'object') return cfg;
-        const ch = cfg.charge_rate;
-        const po = cfg.pay_rate;
-        if (ch == null || po == null) return cfg; // nothing to do
-
-        const pn = computeNewPayBucket(ch, po, oldMethod, newMethod, erniMult);
-        if (pn == null || !Number.isFinite(pn)) return cfg; // keep original pay_rate if we can't compute
-
-        const rounded = +(+pn).toFixed(2);
-        return {
-          ...cfg,
-          pay_rate: rounded
-        };
-      });
-
-      // Prepare overrides for successor
-      const overrides = {
-        start_date: successorStart,
-        end_date: contract.end_date,
-        pay_method_snapshot: newMethod,
-        rates_json: newRates,
-        std_schedule_json: contract.std_schedule_json || null,
-        std_hours_json: contract.std_hours_json || null,
-        // carry repriced additional buckets into successor
-        additional_rates_json: newAdditionalRates.length ? newAdditionalRates : (extrasArr.length ? extrasArr : null)
-      };
-
-      // Create successor contract
-      try {
-        successor = await cloneContractForRatesChange(env, contract, overrides);
-      } catch (e) {
-        contractHadError = true;
-        try { console.warn('[PAY-METHOD-CHANGE] cloneContractForRatesChange failed', contract.id, e); } catch {}
-      }
-
-      if (!successor || !successor.id) {
-        contractHadError = true;
-      }
-
-      // NEW: adjust old contract dates to wrap around kept weeks with TS
-      let newStartDate = contract.start_date;
-      let newEndDate = contract.end_date;
-
-      if (!contractHadError) {
-        let allWeeks = [];
-        try {
-          const { rows: cwRows } = await sbFetch(
-            env,
-            `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-            `?contract_id=eq.${enc(contract.id)}` +
-            `&select=id,week_ending_date,timesheet_id`
-          );
-          allWeeks = Array.isArray(cwRows) ? cwRows : (cwRows ? [cwRows] : []);
-        } catch (e) {
-          try { console.warn('[PAY-METHOD-CHANGE] load contract_weeks failed', contract.id, e); } catch {}
-          allWeeks = [];
-        }
-
-        // Weeks being moved (outstanding)
-        const moveSet = new Set(
-          (outstandingWeeks || [])
-            .map(w => w && w.id)
-            .filter(Boolean)
-            .map(String)
-        );
-
-        // Weeks kept on the old contract
-        const keptWeeks = (allWeeks || []).filter(w => {
-          const wid = w && w.id ? String(w.id) : null;
-          return wid && !moveSet.has(wid);
-        });
-
-        // Kept weeks that actually have timesheets
-        const keptWithTimesheet = keptWeeks.filter(w => w && w.timesheet_id);
-
-        if (keptWithTimesheet.length) {
-          // Wrap old contract strictly around the kept TS weeks
-          let firstWe = keptWithTimesheet[0].week_ending_date;
-          let lastWe  = keptWithTimesheet[0].week_ending_date;
-          for (const w of keptWithTimesheet) {
-            if (w.week_ending_date < firstWe) firstWe = w.week_ending_date;
-            if (w.week_ending_date > lastWe)  lastWe  = w.week_ending_date;
-          }
-
-          let wrappedStart = addDays(firstWe, -6); // first day of earliest kept week
-          let wrappedEnd   = lastWe;               // last day (week_ending) of latest kept week
-
-          // Clamp so we never move outside the original contract window
-          if (wrappedStart < contract.start_date) wrappedStart = contract.start_date;
-          if (wrappedEnd   > contract.end_date)   wrappedEnd   = contract.end_date;
-
-          newStartDate = wrappedStart;
-          newEndDate   = wrappedEnd;
-        } else {
-          // No kept TS weeks → fall back to old behaviour (end before successor)
-          let truncatedEnd = addDays(successorStart, -1);
-          if (truncatedEnd < contract.start_date) truncatedEnd = contract.start_date;
-          newEndDate = truncatedEnd;
-          // newStartDate remains contract.start_date
-        }
-
-        try {
-          const patch = {};
-          if (newStartDate !== contract.start_date) patch.start_date = newStartDate;
-          if (newEndDate   !== contract.end_date)   patch.end_date   = newEndDate;
-          if (Object.keys(patch).length) {
-            patch.updated_at = nowIso();
-            await fetch(
-              `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contract.id)}`,
-              {
-                method: 'PATCH',
-                headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-                body: JSON.stringify(patch)
-              }
-            );
-          }
-        } catch (e) {
-          contractHadError = true;
-          try { console.warn('[PAY-METHOD-CHANGE] update original contract dates failed', contract.id, e); } catch {}
-        }
-      }
-
-      // Move outstanding weeks + timesheets
-      if (!contractHadError) {
-        try {
-          const mig = await migrateOutstandingWeeksToNewContract(env, contract.id, successor.id, outstandingWeeks);
-          contractMigratedWeeks = (mig.week_ids || []).length;
-          totalWeeksMigrated   += contractMigratedWeeks;
-          for (const tsid of (mig.timesheet_ids || [])) {
-            allTsIds.push(tsid);
-          }
-        } catch (e) {
-          contractHadError = true;
-          try { console.warn('[PAY-METHOD-CHANGE] migrateOutstandingWeeksToNewContract failed', contract.id, e); } catch {}
-        }
-      }
-
-      // Prune any future weeks beyond newEndDate without TS (non-fatal if fails)
-      if (!contractHadError) {
-        try {
-          await fetch(
-            `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-            `?contract_id=eq.${enc(contract.id)}` +
-            `&week_ending_date=gt.${enc(newEndDate)}` +
-            `&timesheet_id=is.null`,
-            {
-              method: 'DELETE',
-              headers: { ...sbHeaders(env), Prefer: 'return-minimal' }
-            }
-          );
-        } catch (e) {
-          try { console.warn('[PAY-METHOD-CHANGE] prune future empty weeks failed', contract.id, e); } catch {}
-        }
-      }
-    } catch (e) {
-      contractHadError = true;
-      try { console.warn('[PAY-METHOD-CHANGE] unexpected error during contract migration', contract.id, e); } catch {}
-    }
-
-    if (contractHadError) {
-      migrationErrors.push(contractIdStr);
-      continue;
-    }
-
-    // Only record contracts that actually migrated at least one week
-    if (successor && successor.id && contractMigratedWeeks > 0) {
-      oldContractIds.push(contract.id);
-      newContractIds.push(successor.id);
-    }
-  }
-
-  const uniqueTsIds = Array.from(new Set(allTsIds.map(String)));
-
-  // If any contract failed migration, DO NOT flip candidate pay_method
-  if (migrationErrors.length > 0) {
-    return withCORS(env, req, badRequest(
-      `Failed to update all contracts for pay-method change. ` +
-      `Contracts with errors: ${migrationErrors.join(', ')}`
-    ));
-  }
-
-  // -------- Update candidate.pay_method (and umbrella_id if required) --------
+  // -------- Call atomic DB RPC --------
   try {
-    const patch = {
-      pay_method: newMethod,
-      updated_at: nowIso()
-    };
-    if (newMethod === 'PAYE') {
-      patch.umbrella_id = null;
-    }
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(candidateId)}`,
-      {
-        method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify(patch)
-      }
-    );
-  } catch (e) {
-    return withCORS(env, req, badRequest(`Failed to update candidate pay_method: ${e?.message || e}`));
-  }
+    const actorUserId = user?.id || null;
 
-  return withCORS(env, req, ok({
-    candidate_id: cand.id,
-    original_method: originalMethod,
-    new_method: newMethod,
-    old_contract_ids: oldContractIds,
-    new_contract_ids: newContractIds,
-    affected_timesheet_ids: uniqueTsIds,
-    summary: {
-      contracts_changed: newContractIds.length,
-      weeks_migrated: totalWeeksMigrated
+    const rows = await sbRpc(env, 'candidate_pay_method_change_apply', {
+      p_candidate_id: cand.id,
+      p_new_method: newMethod,
+      p_plan: plan,
+      p_actor_user_id: actorUserId,
+      p_reason: 'PAY_METHOD_CHANGE'
+    });
+
+    const out = Array.isArray(rows) ? (rows[0] || null) : rows;
+    if (!out) {
+      return withCORS(env, req, serverError('Pay-method change RPC returned no result'));
     }
-  }));
+
+    return withCORS(env, req, ok(out));
+  } catch (e) {
+    // Any RPC error implies NO CHANGES were committed (atomic rollback)
+    return withCORS(env, req, badRequest(`Pay-method change failed: ${e?.message || e}`));
+  }
 }
+
+
 async function computeBucketRatesPreservingMargin(env, oldMethod, newMethod, oldRates) {
   const srcMethod = String(oldMethod || '').toUpperCase();
   const dstMethod = String(newMethod || '').toUpperCase();
@@ -58311,10 +58168,10 @@ async function computeBucketRatesPreservingMargin(env, oldMethod, newMethod, old
   // ─────────────────────────────────────────────────────────────
   let erniMult = 1;
   try {
-    const fin = await loadFinanceGlobals(env, null); // null => "today" in Europe/London on DB side
+    const fin = await loadFinanceGlobals(env, null); // null => explicit "today London" in helper
     let pct = fin && fin.erni_pct != null ? Number(fin.erni_pct) : 0;
 
-    // Support 15 vs 0.15 semantics like elsewhere:
+    // Support "15" vs "0.15" semantics like elsewhere:
     // if > 1 we treat as a percentage (e.g. 15 → 0.15)
     if (!Number.isFinite(pct)) pct = 0;
     if (pct > 1) pct = pct / 100;
@@ -58386,7 +58243,6 @@ async function computeBucketRatesPreservingMargin(env, oldMethod, newMethod, old
 
   return out;
 }
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper: computeBucketRatesPreservingMargin
 // Given an existing rates_json and a PAYE↔UMBRELLA flip, compute new pay buckets
@@ -72437,6 +72293,155 @@ function normaliseScheduleBreakFields(schedule = []) {
   });
 }
 
+async function handleCandidateDeleteEligibility(env, req, candidateId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const id = candidateId ? String(candidateId).trim() : '';
+  if (!id) return withCORS(env, req, badRequest('candidate_id is required'));
+
+  try {
+    const rpcRes = await sbRpc(env, 'candidate_delete_eligibility', {
+      p_candidate_id: id
+    });
+
+    const payload =
+      (Array.isArray(rpcRes) && rpcRes.length) ? rpcRes[0] :
+      (rpcRes && typeof rpcRes === 'object' && Array.isArray(rpcRes.data) && rpcRes.data.length) ? rpcRes.data[0] :
+      (rpcRes && typeof rpcRes === 'object' && rpcRes.data && !Array.isArray(rpcRes.data)) ? rpcRes.data :
+      rpcRes;
+
+    return withCORS(env, req, ok(payload || {}));
+  } catch (e) {
+    const msg = (e && e.message) ? String(e.message) : String(e || 'Eligibility check failed');
+    return withCORS(env, req, serverError(`Failed candidate delete eligibility: ${msg}`));
+  }
+}
+
+
+async function handleCandidateDeleteApply(env, req, candidateId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const id = candidateId ? String(candidateId).trim() : '';
+  if (!id) return withCORS(env, req, badRequest('candidate_id is required'));
+
+  const actorUserId = user?.id ? String(user.id).trim() : '';
+  if (!actorUserId) return withCORS(env, req, serverError('Authenticated user id missing'));
+
+  // Optional: accept {"reason":"..."} in DELETE body (safe if absent/invalid)
+  let reason = null;
+  try {
+    if (req && req.headers) {
+      const ct = String(req.headers.get('content-type') || '').toLowerCase();
+      if (ct.includes('application/json')) {
+        const body = await parseJSONBody(req);
+        if (body && typeof body === 'object' && body.reason != null) {
+          const r = String(body.reason || '').trim();
+          reason = r ? r : null;
+        }
+      }
+    }
+  } catch {
+    reason = null;
+  }
+
+  try {
+    const rpcRes = await sbRpc(env, 'candidate_delete_apply', {
+      p_candidate_id: id,
+      p_actor_user_id: actorUserId,
+      p_reason: reason
+    });
+
+    const payload =
+      (Array.isArray(rpcRes) && rpcRes.length) ? rpcRes[0] :
+      (rpcRes && typeof rpcRes === 'object' && Array.isArray(rpcRes.data) && rpcRes.data.length) ? rpcRes.data[0] :
+      (rpcRes && typeof rpcRes === 'object' && rpcRes.data && !Array.isArray(rpcRes.data)) ? rpcRes.data :
+      rpcRes;
+
+    return withCORS(env, req, ok(payload || {}));
+  } catch (e) {
+    const msg = (e && e.message) ? String(e.message) : String(e || 'Delete failed');
+    return withCORS(env, req, serverError(`Failed candidate delete: ${msg}`));
+  }
+}
+
+
+async function handleClientDeleteEligibility(env, req, clientId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const id = clientId ? String(clientId).trim() : '';
+  if (!id) return withCORS(env, req, badRequest('client_id is required'));
+
+  try {
+    const rpcRes = await sbRpc(env, 'client_delete_eligibility', {
+      p_client_id: id
+    });
+
+    const payload =
+      (Array.isArray(rpcRes) && rpcRes.length) ? rpcRes[0] :
+      (rpcRes && typeof rpcRes === 'object' && Array.isArray(rpcRes.data) && rpcRes.data.length) ? rpcRes.data[0] :
+      (rpcRes && typeof rpcRes === 'object' && rpcRes.data && !Array.isArray(rpcRes.data)) ? rpcRes.data :
+      rpcRes;
+
+    return withCORS(env, req, ok(payload || {}));
+  } catch (e) {
+    const msg = (e && e.message) ? String(e.message) : String(e || 'Eligibility check failed');
+    return withCORS(env, req, serverError(`Failed client delete eligibility: ${msg}`));
+  }
+}
+
+
+async function handleClientDeleteApply(env, req, clientId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const id = clientId ? String(clientId).trim() : '';
+  if (!id) return withCORS(env, req, badRequest('client_id is required'));
+
+  const actorUserId = user?.id ? String(user.id).trim() : '';
+  if (!actorUserId) return withCORS(env, req, serverError('Authenticated user id missing'));
+
+  // Optional: accept {"reason":"..."} in DELETE body (safe if absent/invalid)
+  let reason = null;
+  try {
+    if (req && req.headers) {
+      const ct = String(req.headers.get('content-type') || '').toLowerCase();
+      if (ct.includes('application/json')) {
+        const body = await parseJSONBody(req);
+        if (body && typeof body === 'object' && body.reason != null) {
+          const r = String(body.reason || '').trim();
+          reason = r ? r : null;
+        }
+      }
+    }
+  } catch {
+    reason = null;
+  }
+
+  try {
+    const rpcRes = await sbRpc(env, 'client_delete_apply', {
+      p_client_id: id,
+      p_actor_user_id: actorUserId,
+      p_reason: reason
+    });
+
+    const payload =
+      (Array.isArray(rpcRes) && rpcRes.length) ? rpcRes[0] :
+      (rpcRes && typeof rpcRes === 'object' && Array.isArray(rpcRes.data) && rpcRes.data.length) ? rpcRes.data[0] :
+      (rpcRes && typeof rpcRes === 'object' && rpcRes.data && !Array.isArray(rpcRes.data)) ? rpcRes.data :
+      rpcRes;
+
+    return withCORS(env, req, ok(payload || {}));
+  } catch (e) {
+    const msg = (e && e.message) ? String(e.message) : String(e || 'Delete failed');
+    return withCORS(env, req, serverError(`Failed client delete: ${msg}`));
+  }
+}
+
+
+
 // ─────────────────────────────────────────────────────────────
 // QR helpers (TSQ1 payload + HMAC + PNG generation + store)
 // ─────────────────────────────────────────────────────────────
@@ -76633,6 +76638,43 @@ if (req.method === 'POST' && p === '/auth/2fa/resend') {
         const m = matchPath(p, '/api/timesheets/:id/replace-manual-pdf');
         if (m && req.method === 'POST') return handleTimesheetReplaceManualPdf(env, req, m.id);
       }
+
+// ====================== ROUTERS (add inside fetch router) ======================
+
+// Candidate delete eligibility: GET /api/candidates/:id/delete-eligibility
+{
+  const m = matchPath(p, '/api/candidates/:id/delete-eligibility');
+  if (m && req.method === 'GET') {
+    return handleCandidateDeleteEligibility(env, req, m.id);
+  }
+}
+
+// Candidate delete apply: DELETE /api/candidates/:id
+// IMPORTANT: this must be placed BEFORE any existing generic '/api/candidates/:candidate_id' route (GET/PUT) to avoid conflicts.
+{
+  const m = matchPath(p, '/api/candidates/:id');
+  if (m && req.method === 'DELETE') {
+    return handleCandidateDeleteApply(env, req, m.id);
+  }
+}
+
+// Client delete eligibility: GET /api/clients/:id/delete-eligibility
+{
+  const m = matchPath(p, '/api/clients/:id/delete-eligibility');
+  if (m && req.method === 'GET') {
+    return handleClientDeleteEligibility(env, req, m.id);
+  }
+}
+
+// Client delete apply: DELETE /api/clients/:id
+// IMPORTANT: this must be placed BEFORE any existing generic '/api/clients/:client_id' route (GET/PUT) to avoid conflicts.
+{
+  const m = matchPath(p, '/api/clients/:id');
+  if (m && req.method === 'DELETE') {
+    return handleClientDeleteApply(env, req, m.id);
+  }
+}
+
 
       // =============================================================================
       // NEW ROUTES — Manual Timesheet Queue
