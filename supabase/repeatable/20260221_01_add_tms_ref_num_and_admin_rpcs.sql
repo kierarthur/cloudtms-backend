@@ -768,3 +768,46 @@ BEGIN
   RETURN jsonb_build_object('deleted', true, 'kind', 'category', 'id', p_job_title_id::text);
 END;
 $function$;
+
+create or replace function public.invoice_quicksearch_ids(
+  p_q text,
+  p_limit integer default 20000
+)
+returns table(invoice_id uuid)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select s.invoice_id
+  from (
+    select distinct on (i.id)
+      i.id as invoice_id,
+      coalesce(i.issued_at_utc, i.created_at) as sort_ts,
+      i.invoice_no as sort_no
+    from public.invoices as i
+    left join public.clients as c
+      on c.id = i.client_id
+    left join public.invoice_lines as il
+      on il.invoice_id = i.id
+    left join public.v_timesheets_summary as vts
+      on vts.timesheet_id = il.timesheet_id
+    where
+      p_q is not null
+      and btrim(p_q) <> ''
+      and (
+        i.invoice_no ilike ('%' || p_q || '%')
+        or c.name ilike ('%' || p_q || '%')
+        or vts.candidate_name ilike ('%' || p_q || '%')
+      )
+    -- DISTINCT ON requires i.id first in ORDER BY; after that we pick the “best” row per invoice
+    order by
+      i.id,
+      coalesce(i.issued_at_utc, i.created_at) desc nulls last,
+      i.invoice_no desc
+  ) as s
+  order by
+    s.sort_ts desc nulls last,
+    s.sort_no desc
+  limit greatest(1, least(coalesce(p_limit, 20000), 20000));
+$$;
