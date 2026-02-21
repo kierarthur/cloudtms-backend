@@ -32,6 +32,8 @@ DECLARE
   v_keep_max_we date;
   v_new_old_end date;
 
+  v_old_timesheets_remaining integer := 0;
+
   v_contract_before jsonb;
   v_contract_after jsonb;
 
@@ -127,7 +129,12 @@ BEGIN
       RAISE EXCEPTION 'Contract % has no outstanding weeks to migrate', v_contract_id;
     END IF;
 
+    -- ✅ FIX: expected successor_start is the later of:
+    --   (earliest_outstanding_we - 6) AND old_contract.start_date
     v_expected_successor_start := (v_expected_earliest_we - 6);
+    IF v_expected_successor_start < v_old_contract_start THEN
+      v_expected_successor_start := v_old_contract_start;
+    END IF;
 
     IF v_expected_successor_start <> v_successor_start THEN
       RAISE EXCEPTION
@@ -144,7 +151,7 @@ BEGIN
       'successor_start', v_successor_start::text
     );
 
-    -- Create successor contract: copy ALL 38 columns except overrides
+    -- Create successor contract: copy ALL columns except overrides
     INSERT INTO public.contracts (
       candidate_id,
       client_id,
@@ -303,6 +310,11 @@ BEGIN
       v_new_old_end := v_keep_max_we;
     END IF;
 
+    -- ✅ FIX: never allow old end_date to precede old start_date
+    IF v_new_old_end < v_old_contract_start THEN
+      v_new_old_end := v_old_contract_start;
+    END IF;
+
     UPDATE public.contracts ct_old
     SET end_date = v_new_old_end,
         updated_at = now()
@@ -314,13 +326,21 @@ BEGIN
       AND cw_del.timesheet_id IS NULL
       AND cw_del.week_ending_date > v_new_old_end;
 
+    -- Remaining timesheets on OLD contract after migration (for UI delete-old prompt)
+    SELECT COUNT(1)
+      INTO v_old_timesheets_remaining
+    FROM public.timesheets t_rem
+    WHERE t_rem.contract_id = v_contract_id
+      AND t_rem.is_current = true;
+
     -- Audit contract migration
     v_contract_after := jsonb_build_object(
       'old_contract_id', v_contract_id::text,
       'new_contract_id', v_new_contract_id::text,
       'successor_start', v_successor_start::text,
       'moved_timesheet_ids', to_jsonb(COALESCE(v_moved_timesheet_ids, ARRAY[]::uuid[])),
-      'old_contract_new_end_date', v_new_old_end::text
+      'old_contract_new_end_date', v_new_old_end::text,
+      'old_contract_timesheets_remaining', v_old_timesheets_remaining
     );
 
     PERFORM public._audit_insert(
@@ -342,7 +362,9 @@ BEGIN
         'new_contract_id', v_new_contract_id::text,
         'successor_start', v_successor_start::text,
         'moved_timesheet_ids', to_jsonb(COALESCE(v_moved_timesheet_ids, ARRAY[]::uuid[])),
-        'old_contract_new_end_date', v_new_old_end::text
+        'old_contract_new_end_date', v_new_old_end::text,
+        'old_contract_timesheets_remaining', v_old_timesheets_remaining,
+        'old_contract_can_delete', (v_old_timesheets_remaining = 0)
       ),
       true
     );
@@ -374,6 +396,7 @@ BEGIN
   RETURN v_result;
 END;
 $function$;
+
 
 
 -- =========================================================
