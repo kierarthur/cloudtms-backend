@@ -5396,6 +5396,7 @@ async function handleContractsCreate(env, req) {
 // ──────────────────────────────────────────────────────────────────────────────
 // handleContractsList — enriched with candidate/client names and relationship-aware free-text filtering
 // (joins based on FK: contracts.candidate_id → candidates.id, contracts.client_id → clients.id)  :contentReference[oaicite:0]{index=0}
+
 async function handleContractsList(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -5475,11 +5476,13 @@ async function handleContractsList(env, req) {
   // Name-only filters (separate from free-text q)
   if (q('candidate_name')) {
     const like = `*${q('candidate_name')}*`;
-    filters.push(`candidate.display_name=ilike.${encQ(like)}`);
+    // ✅ FIX: filter via relationship path (NOT alias prefix)
+    filters.push(`candidates.display_name=ilike.${encQ(like)}`);
   }
   if (q('client_name')) {
     const like = `*${q('client_name')}*`;
-    filters.push(`client.name=ilike.${encQ(like)}`);
+    // ✅ FIX: filter via relationship path (NOT alias prefix)
+    filters.push(`clients.name=ilike.${encQ(like)}`);
   }
 
   if (q('active_on')) {
@@ -5499,10 +5502,11 @@ async function handleContractsList(env, req) {
     if (raw) {
       const like = `*${raw}*`; // PostgREST wildcard format
       const orTerms = [
-        `client.name.ilike.${encQ(like)}`,
-        `candidate.display_name.ilike.${encQ(like)}`,
-        `candidate.first_name.ilike.${encQ(like)}`,
-        `candidate.last_name.ilike.${encQ(like)}`,
+        // ✅ FIX: relationship paths (NOT alias prefixes)
+        `clients.name.ilike.${encQ(like)}`,
+        `candidates.display_name.ilike.${encQ(like)}`,
+        `candidates.first_name.ilike.${encQ(like)}`,
+        `candidates.last_name.ilike.${encQ(like)}`,
         `role.ilike.${encQ(like)}`
       ];
 
@@ -5667,6 +5671,9 @@ async function handleContractsList(env, req) {
 
   return withCORS(env, req, ok(out));
 }
+
+
+
 // BACKEND — handleUserGridPrefsGet
  async function handleUserGridPrefsGet(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -48737,7 +48744,7 @@ async function handleSearchCandidates(env, req) {
     //   OR (is_currently_working = false AND last_timesheet_week_ending >= cutoff)
     const d1 = `is_currently_working.eq.true`;
     const d2 = recentAll
-      ? `and(is_currently_working.eq.false,last_timesheet_week_ending.is.not.null)`
+      ? `and(is_currently_working.eq.false,last_timesheet_week_ending.not.is.null)`
       : (cutoffYMD
           ? `and(is_currently_working.eq.false,last_timesheet_week_ending.gte.${enc(cutoffYMD)})`
           : `is_currently_working.eq.true`);
@@ -48784,13 +48791,22 @@ async function handleSearchCandidates(env, req) {
     rows = res?.rows || [];
     total = res?.total;
   } catch (err) {
-    return withCORS(env, req, ok({
-      error: String(err?.message || err),
-      rows: [],
-      page,
-      page_size: pageSize,
-      count: 0
-    }));
+    const msg = String(err?.message || err || 'Supabase fetch failed');
+
+    // ✅ FIX: do NOT mask Supabase errors as 200 + empty rows (prevents UI getting "stuck")
+    // If the underlying failure is a 400 (bad filters/order), return 400; otherwise 500.
+    if (/\b400\b/.test(msg)) {
+      return withCORS(
+        env,
+        req,
+        badRequest(
+          `Supabase fetch failed: ${msg}`,
+          { order_by: (orderByParam || null), order_dir: orderDir, url }
+        )
+      );
+    }
+
+    return withCORS(env, req, serverError(`Supabase fetch failed: ${msg}`));
   }
 
   const respCount = includeCount ? (typeof total === 'number' ? total : (rows?.length || 0)) : (rows?.length || 0);
@@ -48871,6 +48887,7 @@ async function handleSearchCandidates(env, req) {
     count: respCount
   }));
 }
+
  async function handleListCandidates(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -57897,6 +57914,7 @@ async function collectOutstandingWeeksByContract(env, contractIds, cutoffYmd = n
 // Endpoint: GET /api/candidates/:id/pay-method-change-preview
 // Preview which contracts would be affected by PAYE↔UMBRELLA flip.
 // ─────────────────────────────────────────────────────────────────────────────
+
 async function handleCandidatePayMethodChangePreview(env, req, candidateId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
@@ -57904,7 +57922,7 @@ async function handleCandidatePayMethodChangePreview(env, req, candidateId) {
 
   const urlObj = new URL(req.url);
   const rawNew = (urlObj.searchParams.get('new_method') || '').toUpperCase();
-  const newMethod = rawNew === 'PAYE' || rawNew === 'UMBRELLA' ? rawNew : null;
+  const newMethod = (rawNew === 'PAYE' || rawNew === 'UMBRELLA') ? rawNew : null;
 
   if (!newMethod) {
     return withCORS(env, req, badRequest('new_method must be PAYE or UMBRELLA'));
@@ -57938,11 +57956,19 @@ async function handleCandidatePayMethodChangePreview(env, req, candidateId) {
 
   // Read-only contract summaries (authoritative outstanding-week rule lives in helper)
   const contractsRaw = await collectOutstandingWeeklyContractsForCandidate(env, candidateId, newMethod, originalMethod);
+
+  // ✅ FIX: successor_start must not precede the contract’s true start_date (mid-week starts)
   const contracts = (contractsRaw || []).map(c => {
     const firstWe = c?.first_outstanding_we || null;
-    const successorStart = firstWe ? addDays(firstWe, -6) : null;
+    const conStart = c?.start_date ? String(c.start_date).slice(0, 10) : null;
+
+    const weekStart = firstWe ? addDays(firstWe, -6) : null;
+
+    let successorStart = weekStart;
+    if (successorStart && conStart && successorStart < conStart) successorStart = conStart;
+
     return {
-      ...c,
+      ...(c || {}),
       successor_start: successorStart
     };
   });
@@ -57958,8 +57984,6 @@ async function handleCandidatePayMethodChangePreview(env, req, candidateId) {
     contracts
   }));
 }
-
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Endpoint: POST /api/candidates/:id/pay-method-change
 // ✅ NEW BEHAVIOUR (atomic):
@@ -57981,7 +58005,7 @@ async function handleCandidatePayMethodChange(env, req, candidateId) {
   }
 
   const rawNew = String(body?.new_method || '').toUpperCase();
-  const newMethod = rawNew === 'PAYE' || rawNew === 'UMBRELLA' ? rawNew : null;
+  const newMethod = (rawNew === 'PAYE' || rawNew === 'UMBRELLA') ? rawNew : null;
 
   if (!newMethod) {
     return withCORS(env, req, badRequest('new_method must be PAYE or UMBRELLA'));
@@ -57990,7 +58014,7 @@ async function handleCandidatePayMethodChange(env, req, candidateId) {
   const contractIdsFilter = Array.isArray(body?.contract_ids)
     ? Array.from(new Set(body.contract_ids.map(String).filter(Boolean)))
     : null;
-  const contractIdSet = contractIdsFilter && contractIdsFilter.length
+  const contractIdSet = (contractIdsFilter && contractIdsFilter.length)
     ? new Set(contractIdsFilter)
     : null;
 
@@ -58077,17 +58101,25 @@ async function handleCandidatePayMethodChange(env, req, candidateId) {
     return out;
   };
 
+  // ✅ FIX: successor_start must not precede the contract’s true start_date (mid-week starts)
   for (const s of summaries) {
-    const contractId = String(s.contract_id || '');
-    const firstWe = s.first_outstanding_we || null;
-    const successorStart = firstWe ? addDays(firstWe, -6) : null;
-    if (!contractId || !successorStart) continue;
+    const contractId = String(s?.contract_id || '');
+    const firstWe = s?.first_outstanding_we || null;
+    if (!contractId || !firstWe) continue;
 
     const contract = byId.get(contractId) || null;
     if (!contract) continue;
 
     const oldM = String(contract.pay_method_snapshot || '').toUpperCase();
     if (oldM !== originalMethod) continue;
+
+    const weekStart = addDays(firstWe, -6);
+    const conStart = contract.start_date ? String(contract.start_date).slice(0, 10) : null;
+
+    let successorStart = weekStart;
+    if (successorStart && conStart && successorStart < conStart) successorStart = conStart;
+
+    if (!successorStart) continue;
 
     // Compute new_rates_json using the provided helper (deterministic)
     const baseRates = await computeBucketRatesPreservingMargin(env, originalMethod, newMethod, contract.rates_json);
@@ -58125,6 +58157,7 @@ async function handleCandidatePayMethodChange(env, req, candidateId) {
   }
 
   // -------- Call atomic DB RPC --------
+  let out;
   try {
     const actorUserId = user?.id || null;
 
@@ -58136,18 +58169,77 @@ async function handleCandidatePayMethodChange(env, req, candidateId) {
       p_reason: 'PAY_METHOD_CHANGE'
     });
 
-    const out = Array.isArray(rows) ? (rows[0] || null) : rows;
+    out = Array.isArray(rows) ? (rows[0] || null) : rows;
     if (!out) {
       return withCORS(env, req, serverError('Pay-method change RPC returned no result'));
     }
-
-    return withCORS(env, req, ok(out));
   } catch (e) {
     // Any RPC error implies NO CHANGES were committed (atomic rollback)
     return withCORS(env, req, badRequest(`Pay-method change failed: ${e?.message || e}`));
   }
-}
 
+  // ✅ FIX: after pay-method split, ensure planned_schedule_json exists for new contract weeks (do not overwrite non-null)
+  try {
+    const migrations = Array.isArray(out?.migrations) ? out.migrations : [];
+    const newIds = Array.from(new Set(migrations.map(m => String(m?.new_contract_id || '')).filter(Boolean)));
+
+    for (const newContractId of newIds) {
+      // Ensure any missing weeks get generated (this writes planned schedules for newly inserted weeks)
+      try {
+        await handleContractsGenerateWeeks(env, req, newContractId);
+      } catch {}
+
+      // Load contract for schedule template + window clamp
+      const c = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(newContractId)}` +
+        `&select=id,start_date,end_date,week_ending_weekday_snapshot,std_schedule_json,client_id,overrideclientsettings,default_submission_mode`
+      );
+      if (!c) continue;
+
+      const wew = Number(c.week_ending_weekday_snapshot || 0);
+
+      const endWE = computeWeekEndingInclusive(c.end_date, wew);
+
+      // Fetch weeks that are missing planned schedules (planned week only; never touch weeks with a timesheet)
+      const { rows: missingWeeks } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+        `?contract_id=eq.${enc(newContractId)}` +
+        `&timesheet_id=is.null` +
+        `&planned_schedule_json=is.null` +
+        `&select=id,week_ending_date,additional_seq`
+      );
+
+      const toPatch = Array.isArray(missingWeeks) ? missingWeeks : [];
+      for (const w of toPatch) {
+        if (!w?.id || !w?.week_ending_date) continue;
+
+        let planned_schedule_json = null;
+        try {
+          const raw = buildPlannedScheduleFromTemplate(c.std_schedule_json || null, w.week_ending_date);
+          planned_schedule_json = clampPlannedToWindow(raw, w.week_ending_date, wew, c.start_date, endWE, c.end_date);
+          if (isEmptyPlanned(planned_schedule_json)) planned_schedule_json = null;
+        } catch {
+          planned_schedule_json = null;
+        }
+
+        if (!planned_schedule_json) continue;
+
+        await fetch(
+          `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(w.id)}`,
+          {
+            method: 'PATCH',
+            headers: { ...sbHeaders(env), 'Prefer': 'return-minimal' },
+            body: JSON.stringify({ planned_schedule_json, updated_at: nowIso() })
+          }
+        ).catch(() => {});
+      }
+    }
+  } catch {}
+
+  return withCORS(env, req, ok(out));
+}
 
 async function computeBucketRatesPreservingMargin(env, oldMethod, newMethod, oldRates) {
   const srcMethod = String(oldMethod || '').toUpperCase();
