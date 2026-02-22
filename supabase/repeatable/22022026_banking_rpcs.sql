@@ -465,3 +465,115 @@ begin
 end;
 $function$;
 
+
+CREATE OR REPLACE FUNCTION public.bank_payee_map_upsert(
+  p_provider text,
+  p_env text,
+  p_entity_kind text,
+  p_entity_id uuid,
+  p_bank_details_hash text,
+  p_payee_id text,
+  p_payee_account_id text,
+  p_meta_json jsonb,
+  p_actor_user_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+declare
+  v_provider text := upper(btrim(coalesce(p_provider,'')));
+  v_env text := upper(btrim(coalesce(p_env,'')));
+  v_kind text := upper(btrim(coalesce(p_entity_kind,'')));
+
+  v_hash text := nullif(btrim(coalesce(p_bank_details_hash,'')), '');
+  v_payee_id text := nullif(btrim(coalesce(p_payee_id,'')), '');
+  v_payee_account_id text := nullif(btrim(coalesce(p_payee_account_id,'')), '');
+
+  v_now timestamptz := now();
+
+  v_row public.bank_payee_map%rowtype;
+begin
+  if v_provider = '' then
+    raise exception '%', jsonb_build_object('error','PROVIDER_REQUIRED')::text;
+  end if;
+
+  if v_env = '' then
+    raise exception '%', jsonb_build_object('error','ENV_REQUIRED')::text;
+  end if;
+
+  if v_kind not in ('CANDIDATE','UMBRELLA') then
+    raise exception '%', jsonb_build_object('error','INVALID_ENTITY_KIND','expected','CANDIDATE|UMBRELLA')::text;
+  end if;
+
+  if p_entity_id is null then
+    raise exception '%', jsonb_build_object('error','ENTITY_ID_REQUIRED')::text;
+  end if;
+
+  if v_hash is null then
+    raise exception '%', jsonb_build_object('error','BANK_DETAILS_HASH_REQUIRED')::text;
+  end if;
+
+  if v_payee_id is null then
+    raise exception '%', jsonb_build_object('error','PAYEE_ID_REQUIRED')::text;
+  end if;
+
+  insert into public.bank_payee_map (
+    rail_provider,
+    rail_env,
+    entity_kind,
+    entity_id,
+    bank_details_hash,
+    payee_id,
+    payee_account_id,
+    meta_json,
+    created_at_utc,
+    updated_at_utc
+  )
+  values (
+    v_provider,
+    v_env,
+    v_kind,
+    p_entity_id,
+    v_hash,
+    v_payee_id,
+    v_payee_account_id,
+    p_meta_json,
+    v_now,
+    v_now
+  )
+  on conflict (rail_provider, rail_env, entity_kind, entity_id, bank_details_hash)
+  do update set
+    payee_id = excluded.payee_id,
+    payee_account_id = excluded.payee_account_id,
+    meta_json = excluded.meta_json,
+    updated_at_utc = v_now;
+
+  select bpm.*
+  into v_row
+  from public.bank_payee_map bpm
+  where bpm.rail_provider = v_provider
+    and bpm.rail_env = v_env
+    and bpm.entity_kind = v_kind
+    and bpm.entity_id = p_entity_id
+    and bpm.bank_details_hash = v_hash
+  limit 1;
+
+  return jsonb_build_object(
+    'ok', true,
+    'row', jsonb_build_object(
+      'rail_provider', v_row.rail_provider,
+      'rail_env', v_row.rail_env,
+      'entity_kind', v_row.entity_kind,
+      'entity_id', v_row.entity_id::text,
+      'bank_details_hash', v_row.bank_details_hash,
+      'payee_id', v_row.payee_id,
+      'payee_account_id', v_row.payee_account_id,
+      'meta_json', v_row.meta_json,
+      'created_at_utc', v_row.created_at_utc,
+      'updated_at_utc', v_row.updated_at_utc
+    )
+  );
+end;
+$function$;
