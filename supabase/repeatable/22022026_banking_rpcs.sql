@@ -1910,6 +1910,749 @@ begin
 end;
 $$;
 
+create or replace function public.pay_remittance_build(
+  p_pay_batch_id uuid,
+  p_scope text default 'ALL'
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_scope text := upper(btrim(coalesce(p_scope, 'ALL')));
+  v_batch record;
+
+  v_jobs_umb jsonb := '[]'::jsonb;
+  v_jobs_paye jsonb := '[]'::jsonb;
+begin
+  if p_pay_batch_id is null then
+    raise exception 'pay_remittance_build: pay_batch_id is required';
+  end if;
+
+  if v_scope not in ('ALL','PAYE','UMBRELLA') then
+    raise exception 'pay_remittance_build: invalid scope "%". Expected ALL|PAYE|UMBRELLA.', v_scope;
+  end if;
+
+  select
+    pb.id,
+    pb.pay_date,
+    pb.status,
+    pb.bulk_reference,
+    pb.banking_system_snapshot,
+    pb.external_paye_system_snapshot
+  into v_batch
+  from public.pay_batches pb
+  where pb.id = p_pay_batch_id;
+
+  if v_batch.id is null then
+    raise exception 'pay_remittance_build: pay batch % not found.', p_pay_batch_id;
+  end if;
+
+  -- ============================================================
+  -- Umbrella remittance jobs (recipient = umbrella; per-candidate breakdown)
+  -- Uses ONLY batch artifacts:
+  --  - pay_bank_transfers (COMPLETED in-scope)
+  --  - pay_batch_items (in-scope)
+  --  - pay_batch_candidates (display metadata)
+  -- Plus read-only enrichment from:
+  --  - candidates, umbrellas, timesheets
+  -- ============================================================
+  if v_scope in ('ALL','UMBRELLA') then
+    with umb_transfers as (
+      select
+        pbt.id as transfer_id,
+        pbt.pay_batch_id,
+        pbt.candidate_id,
+        pbt.umbrella_id,
+        pbt.pay_channel,
+        pbt.amount,
+        pbt.currency,
+        pbt.status,
+        pbt.payment_reference,
+        pbt.completed_at_utc
+      from public.pay_bank_transfers pbt
+      where pbt.pay_batch_id = p_pay_batch_id
+        and pbt.pay_channel = 'UMBRELLA'
+        and pbt.status = 'COMPLETED'
+        and pbt.umbrella_id is not null
+        and pbt.candidate_id is not null
+    ),
+    umb_groups as (
+      select
+        ut.umbrella_id,
+        max(u.name) as umbrella_name,
+        max(u.remittance_email) as remittance_email,
+        jsonb_agg(
+          jsonb_build_object(
+            'transfer_id', ut.transfer_id::text,
+            'completed_at_utc', case when ut.completed_at_utc is null then null else ut.completed_at_utc::text end,
+            'candidate', jsonb_build_object(
+              'candidate_id', c.id::text,
+              'tms_ref', c.tms_ref,
+              'display_name', c.display_name,
+              'email', c.email
+            ),
+            'transfer', jsonb_build_object(
+              'pay_channel', ut.pay_channel,
+              'amount', ut.amount,
+              'currency', ut.currency,
+              'status', ut.status,
+              'payment_reference', ut.payment_reference
+            ),
+            'items', coalesce((
+              select jsonb_agg(
+                jsonb_build_object(
+                  'item_id', pbi.id::text,
+                  'item_type', pbi.item_type,
+                  'description', pbi.description,
+                  'timesheet_id', case when pbi.timesheet_id is null then null else pbi.timesheet_id::text end,
+                  'segment_key', pbi.segment_key,
+                  'source_ref', pbi.source_ref,
+                  'amount_ex_vat', pbi.amount_ex_vat,
+                  'amount_vat', pbi.amount_vat,
+                  'amount_inc_vat', pbi.amount_inc_vat,
+                  'pay_channel', pbi.pay_channel,
+                  'timesheet', case
+                    when pbi.timesheet_id is null then null
+                    else jsonb_build_object(
+                      'week_ending_date', case when ts.week_ending_date is null then null else ts.week_ending_date::text end,
+                      'reference_number', ts.reference_number,
+                      'worked_start_iso', ts.worked_start_iso,
+                      'worked_end_iso', ts.worked_end_iso,
+                      'break_minutes', ts.break_minutes,
+                      'worked_minutes', ts.worked_minutes
+                    )
+                  end
+                )
+                order by pbi.timesheet_id nulls last, pbi.id
+              )
+              from public.pay_batch_candidates pbc
+              join public.pay_batch_items pbi
+                on pbi.pay_batch_candidate_id = pbc.id
+              left join public.timesheets ts
+                on ts.timesheet_id = pbi.timesheet_id
+               and ts.is_current = true
+              where pbc.pay_batch_id = p_pay_batch_id
+                and pbc.candidate_id = c.id
+                and pbi.pay_channel = 'UMBRELLA'
+            ), '[]'::jsonb),
+            'totals', jsonb_build_object(
+              'items_total_inc_vat', coalesce((
+                select round(coalesce(sum(coalesce(pbi2.amount_inc_vat,0)),0),2)
+                from public.pay_batch_candidates pbc2
+                join public.pay_batch_items pbi2
+                  on pbi2.pay_batch_candidate_id = pbc2.id
+                where pbc2.pay_batch_id = p_pay_batch_id
+                  and pbc2.candidate_id = c.id
+                  and pbi2.pay_channel = 'UMBRELLA'
+                  and pbi2.item_type <> 'DEBT_CREATED'
+              ), 0),
+              'items_total_ex_vat', coalesce((
+                select round(coalesce(sum(coalesce(pbi3.amount_ex_vat,0)),0),2)
+                from public.pay_batch_candidates pbc3
+                join public.pay_batch_items pbi3
+                  on pbi3.pay_batch_candidate_id = pbc3.id
+                where pbc3.pay_batch_id = p_pay_batch_id
+                  and pbc3.candidate_id = c.id
+                  and pbi3.pay_channel = 'UMBRELLA'
+                  and pbi3.item_type <> 'DEBT_CREATED'
+              ), 0),
+              'debt_created_total', coalesce((
+                select round(coalesce(sum(coalesce(pbi4.amount_inc_vat,0)),0),2)
+                from public.pay_batch_candidates pbc4
+                join public.pay_batch_items pbi4
+                  on pbi4.pay_batch_candidate_id = pbc4.id
+                where pbc4.pay_batch_id = p_pay_batch_id
+                  and pbc4.candidate_id = c.id
+                  and pbi4.pay_channel = 'UMBRELLA'
+                  and pbi4.item_type = 'DEBT_CREATED'
+              ), 0)
+            )
+          )
+          order by c.display_name nulls last, c.tms_ref nulls last, c.id
+        ) as candidate_transfers_json,
+        round(coalesce(sum(ut.amount),0),2) as umbrella_total_amount
+      from umb_transfers ut
+      join public.umbrellas u
+        on u.id = ut.umbrella_id
+      join public.candidates c
+        on c.id = ut.candidate_id
+      group by ut.umbrella_id
+    )
+    select coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'job_kind', 'UMBRELLA_REMITTANCE',
+          'pay_batch_id', v_batch.id::text,
+          'scope', 'UMBRELLA',
+          'pay_date', case when v_batch.pay_date is null then null else v_batch.pay_date::text end,
+          'bulk_reference', v_batch.bulk_reference,
+          'recipient', jsonb_build_object(
+            'entity_kind', 'UMBRELLA',
+            'umbrella_id', ug.umbrella_id::text,
+            'name', ug.umbrella_name,
+            'remittance_email', ug.remittance_email
+          ),
+          'summary', jsonb_build_object(
+            'total_amount', ug.umbrella_total_amount,
+            'currency', 'GBP',
+            'transfer_count', jsonb_array_length(coalesce(ug.candidate_transfers_json,'[]'::jsonb))
+          ),
+          'candidates', coalesce(ug.candidate_transfers_json,'[]'::jsonb)
+        )
+        order by ug.umbrella_name nulls last, ug.umbrella_id
+      ),
+      '[]'::jsonb
+    )
+    into v_jobs_umb
+    from umb_groups ug;
+  end if;
+
+  -- ============================================================
+  -- PAYE remittance jobs (recipient = candidate)
+  -- Uses ONLY batch artifacts + read-only enrichment
+  -- ============================================================
+  if v_scope in ('ALL','PAYE') then
+    with paye_transfers as (
+      select
+        pbt.id as transfer_id,
+        pbt.pay_batch_id,
+        pbt.candidate_id,
+        pbt.pay_channel,
+        pbt.amount,
+        pbt.currency,
+        pbt.status,
+        pbt.payment_reference,
+        pbt.completed_at_utc
+      from public.pay_bank_transfers pbt
+      where pbt.pay_batch_id = p_pay_batch_id
+        and pbt.pay_channel = 'PAYE'
+        and pbt.status = 'COMPLETED'
+        and pbt.candidate_id is not null
+    ),
+    paye_groups as (
+      select
+        pt.candidate_id,
+        max(c.tms_ref) as tms_ref,
+        max(c.display_name) as display_name,
+        max(c.email) as email,
+        round(coalesce(sum(pt.amount),0),2) as total_amount,
+        jsonb_agg(
+          jsonb_build_object(
+            'transfer_id', pt.transfer_id::text,
+            'completed_at_utc', case when pt.completed_at_utc is null then null else pt.completed_at_utc::text end,
+            'transfer', jsonb_build_object(
+              'pay_channel', pt.pay_channel,
+              'amount', pt.amount,
+              'currency', pt.currency,
+              'status', pt.status,
+              'payment_reference', pt.payment_reference
+            )
+          )
+          order by pt.transfer_id
+        ) as transfers_json
+      from paye_transfers pt
+      join public.candidates c
+        on c.id = pt.candidate_id
+      group by pt.candidate_id
+    )
+    select coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'job_kind', 'PAYE_REMITTANCE',
+          'pay_batch_id', v_batch.id::text,
+          'scope', 'PAYE',
+          'pay_date', case when v_batch.pay_date is null then null else v_batch.pay_date::text end,
+          'bulk_reference', v_batch.bulk_reference,
+          'recipient', jsonb_build_object(
+            'entity_kind', 'CANDIDATE',
+            'candidate_id', pg.candidate_id::text,
+            'tms_ref', pg.tms_ref,
+            'display_name', pg.display_name,
+            'email', pg.email
+          ),
+          'summary', jsonb_build_object(
+            'total_amount', pg.total_amount,
+            'currency', 'GBP'
+          ),
+          'net_input', coalesce((
+            select jsonb_build_object(
+              'source', pni.source,
+              'net_amount', pni.net_amount,
+              'imported_at_utc', case when pni.imported_at_utc is null then null else pni.imported_at_utc::text end,
+              'file_name', pni.file_name
+            )
+            from public.pay_batch_candidates pbc
+            join public.pay_batch_paye_net_inputs pni
+              on pni.pay_batch_candidate_id = pbc.id
+            where pbc.pay_batch_id = p_pay_batch_id
+              and pbc.candidate_id = pg.candidate_id
+            order by pni.imported_at_utc desc
+            limit 1
+          ), null),
+          'items', coalesce((
+            select jsonb_agg(
+              jsonb_build_object(
+                'item_id', pbi.id::text,
+                'item_type', pbi.item_type,
+                'description', pbi.description,
+                'timesheet_id', case when pbi.timesheet_id is null then null else pbi.timesheet_id::text end,
+                'segment_key', pbi.segment_key,
+                'source_ref', pbi.source_ref,
+                'amount_ex_vat', pbi.amount_ex_vat,
+                'amount_vat', pbi.amount_vat,
+                'amount_inc_vat', pbi.amount_inc_vat,
+                'pay_channel', pbi.pay_channel,
+                'timesheet', case
+                  when pbi.timesheet_id is null then null
+                  else jsonb_build_object(
+                    'week_ending_date', case when ts.week_ending_date is null then null else ts.week_ending_date::text end,
+                    'reference_number', ts.reference_number,
+                    'worked_start_iso', ts.worked_start_iso,
+                    'worked_end_iso', ts.worked_end_iso,
+                    'break_minutes', ts.break_minutes,
+                    'worked_minutes', ts.worked_minutes
+                  )
+                end
+              )
+              order by pbi.timesheet_id nulls last, pbi.id
+            )
+            from public.pay_batch_candidates pbcx
+            join public.pay_batch_items pbix
+              on pbix.pay_batch_candidate_id = pbcx.id
+            left join public.timesheets ts
+              on ts.timesheet_id = pbix.timesheet_id
+             and ts.is_current = true
+            where pbcx.pay_batch_id = p_pay_batch_id
+              and pbcx.candidate_id = pg.candidate_id
+              and pbix.pay_channel = 'PAYE'
+          ), '[]'::jsonb),
+          'transfers', coalesce(pg.transfers_json,'[]'::jsonb)
+        )
+        order by pg.display_name nulls last, pg.tms_ref nulls last, pg.candidate_id
+      ),
+      '[]'::jsonb
+    )
+    into v_jobs_paye
+    from paye_groups pg;
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'pay_batch_id', v_batch.id::text,
+    'scope', v_scope,
+    'pay_date', case when v_batch.pay_date is null then null else v_batch.pay_date::text end,
+    'bulk_reference', v_batch.bulk_reference,
+    'jobs', (coalesce(v_jobs_umb,'[]'::jsonb) || coalesce(v_jobs_paye,'[]'::jsonb))
+  );
+end;
+$$;
+
+
+create or replace function public.pay_remittance_mark_sent(
+  p_pay_batch_id uuid,
+  p_scope text,
+  p_results_json jsonb,
+  p_actor_user_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_scope text := upper(btrim(coalesce(p_scope, 'ALL')));
+  v_exists boolean := false;
+  v_audit_id uuid;
+begin
+  if p_pay_batch_id is null then
+    raise exception 'pay_remittance_mark_sent: pay_batch_id is required';
+  end if;
+
+  if v_scope not in ('ALL','PAYE','UMBRELLA') then
+    raise exception 'pay_remittance_mark_sent: invalid scope "%". Expected ALL|PAYE|UMBRELLA.', v_scope;
+  end if;
+
+  select exists(
+    select 1
+    from public.pay_batches pb
+    where pb.id = p_pay_batch_id
+  )
+  into v_exists;
+
+  if v_exists is false then
+    raise exception 'pay_remittance_mark_sent: pay batch % not found.', p_pay_batch_id;
+  end if;
+
+  insert into public.audit_events(
+    actor_user_id,
+    object_type,
+    object_id_text,
+    action,
+    before_json,
+    after_json,
+    reason
+  )
+  values (
+    p_actor_user_id,
+    'pay_batch',
+    p_pay_batch_id::text,
+    'PAY_REMITTANCE_SENT',
+    null,
+    jsonb_build_object(
+      'pay_batch_id', p_pay_batch_id::text,
+      'scope', v_scope,
+      'results', coalesce(p_results_json, 'null'::jsonb)
+    ),
+    'remittance_mark_sent'
+  )
+  returning id into v_audit_id;
+
+  return jsonb_build_object(
+    'ok', true,
+    'pay_batch_id', p_pay_batch_id::text,
+    'scope', v_scope,
+    'audit_event_id', v_audit_id::text
+  );
+end;
+$$;
+
+
+create or replace function public.pay_reconcile_external_payment(
+  p_actor_user_id uuid,
+  p_payload_json jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_pay_date date;
+  v_note text;
+
+  v_settings record;
+  v_batch_id uuid;
+
+  v_timesheet_ids uuid[] := array[]::uuid[];
+  v_dup jsonb := '[]'::jsonb;
+  v_missing jsonb := '[]'::jsonb;
+
+  v_now timestamptz := now();
+
+  v_ts record;
+  v_snapshot jsonb;
+  v_signature text;
+
+  v_timesheet_count int := 0;
+  v_candidate_count int := 0;
+begin
+  if p_payload_json is null or jsonb_typeof(p_payload_json) <> 'object' then
+    raise exception 'pay_reconcile_external_payment: payload_json must be an object';
+  end if;
+
+  if nullif(btrim(coalesce(p_payload_json->>'pay_date','')), '') is null then
+    raise exception 'pay_reconcile_external_payment: payload.pay_date is required (YYYY-MM-DD)';
+  end if;
+
+  begin
+    v_pay_date := (p_payload_json->>'pay_date')::date;
+  exception when others then
+    raise exception 'pay_reconcile_external_payment: payload.pay_date is not a valid date (YYYY-MM-DD)';
+  end;
+
+  v_note := nullif(btrim(coalesce(p_payload_json->>'note','')), '');
+
+  if jsonb_typeof(p_payload_json->'timesheet_ids') <> 'array' then
+    raise exception 'pay_reconcile_external_payment: payload.timesheet_ids must be an array of UUID strings';
+  end if;
+
+  select coalesce(array_agg((x::text)::uuid), array[]::uuid[])
+  into v_timesheet_ids
+  from jsonb_array_elements_text(p_payload_json->'timesheet_ids') x;
+
+  if array_length(v_timesheet_ids, 1) is null or array_length(v_timesheet_ids, 1) = 0 then
+    raise exception 'pay_reconcile_external_payment: payload.timesheet_ids must not be empty';
+  end if;
+
+  -- Duplicates guard
+  select coalesce(jsonb_agg(d.ts_id::text), '[]'::jsonb)
+  into v_dup
+  from (
+    select t.ts_id
+    from (
+      select unnest(v_timesheet_ids) as ts_id
+    ) t
+    group by t.ts_id
+    having count(*) > 1
+  ) d;
+
+  if jsonb_array_length(v_dup) > 0 then
+    raise exception 'pay_reconcile_external_payment: duplicate timesheet_ids %', v_dup::text;
+  end if;
+
+  -- Validate settings exist (for snapshot fields required by pay_batches checks)
+  select
+    sd.banking_system,
+    sd.external_paye_system
+  into v_settings
+  from public.settings_defaults sd
+  where sd.id = 1
+  limit 1;
+
+  if v_settings.banking_system is null or v_settings.external_paye_system is null then
+    raise exception 'pay_reconcile_external_payment: settings_defaults missing banking_system/external_paye_system';
+  end if;
+
+  -- Validate timesheets exist and are current
+  select coalesce(jsonb_agg(m.ts_id::text), '[]'::jsonb)
+  into v_missing
+  from (
+    select u.ts_id
+    from (select unnest(v_timesheet_ids) as ts_id) u
+    left join public.timesheets ts
+      on ts.timesheet_id = u.ts_id
+     and ts.is_current = true
+    where ts.timesheet_id is null
+  ) m;
+
+  if jsonb_array_length(v_missing) > 0 then
+    raise exception 'pay_reconcile_external_payment: timesheet(s) not found or not current %', v_missing::text;
+  end if;
+
+  -- Create a settled batch for audit/history linkage
+  insert into public.pay_batches(
+    pay_date,
+    created_at_utc,
+    created_by_user_id,
+    status,
+    banking_system_snapshot,
+    external_paye_system_snapshot
+  )
+  values (
+    v_pay_date,
+    v_now,
+    p_actor_user_id,
+    'SETTLED',
+    v_settings.banking_system,
+    v_settings.external_paye_system
+  )
+  returning id into v_batch_id;
+
+  -- Create pay_batch_candidates (for history drill-down)
+  insert into public.pay_batch_candidates(
+    pay_batch_id,
+    candidate_id,
+    candidate_tms_ref,
+    candidate_display_name,
+    settled_at_utc,
+    settled_via,
+    settled_note
+  )
+  select
+    v_batch_id,
+    c.id,
+    c.tms_ref,
+    c.display_name,
+    v_now,
+    'EXTERNAL_RECONCILE',
+    v_note
+  from public.timesheets_financials tf
+  join public.timesheets ts
+    on ts.timesheet_id = tf.timesheet_id
+   and ts.is_current = true
+  join public.candidates c
+    on c.id = tf.candidate_id
+  where tf.is_current = true
+    and tf.timesheet_id = any(v_timesheet_ids)
+  group by c.id, c.tms_ref, c.display_name;
+
+  get diagnostics v_candidate_count = row_count;
+
+  -- For each timesheet: build CURRENT snapshot and write to pay_state + history
+  for v_ts in
+    select
+      tf.timesheet_id,
+      tf.candidate_id,
+      upper(coalesce(tf.pay_method,'')) as pay_method,
+      tf.total_pay_ex_vat,
+      tf.expenses_pay_ex_vat,
+      tf.travel_pay_ex_vat,
+      tf.accommodation_pay_ex_vat,
+      tf.other_pay_ex_vat,
+      tf.mileage_pay_ex_vat,
+      tf.invoice_breakdown_json,
+      ts.reference_number
+    from public.timesheets_financials tf
+    join public.timesheets ts
+      on ts.timesheet_id = tf.timesheet_id
+     and ts.is_current = true
+    where tf.is_current = true
+      and tf.timesheet_id = any(v_timesheet_ids)
+  loop
+    -- Build segments snapshot (mirrors pay_preview "current" shape)
+    v_snapshot := jsonb_build_object(
+      'segments',
+        case
+          when v_ts.invoice_breakdown_json is not null
+           and jsonb_typeof(v_ts.invoice_breakdown_json) = 'object'
+           and upper(coalesce(v_ts.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+           and jsonb_typeof(v_ts.invoice_breakdown_json->'segments') = 'array'
+          then (
+            select coalesce(jsonb_agg(
+              jsonb_build_object(
+                'segment_id', nullif(btrim(coalesce(seg->>'segment_id','')), ''),
+                'pay_amount', round(coalesce(nullif(seg->>'pay_amount','')::numeric,0),2),
+                'exclude_from_pay', coalesce(nullif(seg->>'exclude_from_pay','')::boolean,false),
+                'ref_num', nullif(btrim(coalesce(seg->>'ref_num','')), '')
+              )
+            ), '[]'::jsonb)
+            from jsonb_array_elements(v_ts.invoice_breakdown_json->'segments') seg
+            where seg is not null and jsonb_typeof(seg)='object'
+          )
+          else jsonb_build_array(
+            jsonb_build_object(
+              'segment_id', ('ts:' || v_ts.timesheet_id::text),
+              'pay_amount', round(coalesce(v_ts.total_pay_ex_vat,0),2),
+              'exclude_from_pay', false,
+              'ref_num', nullif(btrim(coalesce(v_ts.reference_number,'')), '')
+            )
+          )
+        end,
+      'adjustments', coalesce((
+        select jsonb_agg(
+          jsonb_build_object(
+            'id', a.id::text,
+            'delta_pay_ex_vat', round(coalesce(a.delta_pay_ex_vat,0),2)
+          )
+          order by a.created_at nulls last, a.id
+        )
+        from public.ts_pay_adjustments a
+        where a.as_advance = false
+          and a.timesheet_id = v_ts.timesheet_id
+      ), '[]'::jsonb),
+      'additional_pay_ex_vat',
+        case
+          when v_ts.invoice_breakdown_json is not null
+           and jsonb_typeof(v_ts.invoice_breakdown_json)='object'
+           and upper(coalesce(v_ts.invoice_breakdown_json->>'mode',''))='SEGMENTS'
+          then round(coalesce(nullif(v_ts.invoice_breakdown_json #>> '{additional,pay_ex_vat}','')::numeric,0),2)
+          else 0::numeric
+        end,
+      'expenses', jsonb_build_object(
+        'expenses_pay_ex_vat', round(coalesce(v_ts.expenses_pay_ex_vat,0),2),
+        'travel_pay_ex_vat', round(coalesce(v_ts.travel_pay_ex_vat,0),2),
+        'accommodation_pay_ex_vat', round(coalesce(v_ts.accommodation_pay_ex_vat,0),2),
+        'other_pay_ex_vat', round(coalesce(v_ts.other_pay_ex_vat,0),2),
+        'mileage_pay_ex_vat', round(coalesce(v_ts.mileage_pay_ex_vat,0),2)
+      ),
+      'reconciled_external', true,
+      'reconciled_pay_batch_id', v_batch_id::text,
+      'reconciled_at_utc', v_now::text
+    );
+
+    v_signature := md5(v_snapshot::text);
+
+    insert into public.timesheet_pay_state(
+      timesheet_id,
+      last_settled_snapshot_json,
+      last_settled_signature,
+      last_settled_pay_batch_id,
+      last_settled_at_utc
+    )
+    values (
+      v_ts.timesheet_id,
+      v_snapshot,
+      v_signature,
+      v_batch_id,
+      v_now
+    )
+    on conflict (timesheet_id)
+    do update set
+      last_settled_snapshot_json = excluded.last_settled_snapshot_json,
+      last_settled_signature = excluded.last_settled_signature,
+      last_settled_pay_batch_id = excluded.last_settled_pay_batch_id,
+      last_settled_at_utc = excluded.last_settled_at_utc;
+
+    insert into public.timesheet_pay_state_history(
+      timesheet_id,
+      pay_batch_id,
+      settled_at_utc,
+      snapshot_json,
+      signature
+    )
+    values (
+      v_ts.timesheet_id,
+      v_batch_id,
+      v_now,
+      v_snapshot,
+      v_signature
+    );
+
+    insert into public.audit_events(
+      actor_user_id,
+      object_type,
+      object_id_text,
+      action,
+      before_json,
+      after_json,
+      reason
+    )
+    values (
+      p_actor_user_id,
+      'timesheet',
+      v_ts.timesheet_id::text,
+      'PAY_EXTERNAL_RECONCILE',
+      null,
+      jsonb_build_object(
+        'pay_batch_id', v_batch_id::text,
+        'pay_date', v_pay_date::text,
+        'timesheet_id', v_ts.timesheet_id::text,
+        'candidate_id', v_ts.candidate_id::text,
+        'pay_method', v_ts.pay_method
+      ),
+      v_note
+    );
+
+    v_timesheet_count := v_timesheet_count + 1;
+  end loop;
+
+  -- Batch-level audit
+  insert into public.audit_events(
+    actor_user_id,
+    object_type,
+    object_id_text,
+    action,
+    before_json,
+    after_json,
+    reason
+  )
+  values (
+    p_actor_user_id,
+    'pay_batch',
+    v_batch_id::text,
+    'PAY_EXTERNAL_RECONCILE_BATCH',
+    null,
+    jsonb_build_object(
+      'pay_batch_id', v_batch_id::text,
+      'pay_date', v_pay_date::text,
+      'timesheet_ids', (select jsonb_agg(t::text) from unnest(v_timesheet_ids) t),
+      'note', v_note
+    ),
+    v_note
+  );
+
+  return jsonb_build_object(
+    'ok', true,
+    'pay_batch_id', v_batch_id::text,
+    'pay_date', v_pay_date::text,
+    'settled_timesheet_count', v_timesheet_count,
+    'candidate_count', v_candidate_count
+  );
+end;
+$$;
+
 
 
 
