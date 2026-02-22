@@ -1253,7 +1253,6 @@ begin
 end;
 $$;
 
-
 create or replace function public.pay_settle_rail(
   p_pay_batch_id uuid,
   p_settlement_json jsonb,
@@ -1288,6 +1287,9 @@ declare
   v_old_next date;
   v_new_next date;
   v_total_taken numeric;
+
+  v_linked_transfer_ct int := 0;
+  v_has_pos_net boolean := false;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_settle_rail: pay_batch_id is required';
@@ -1386,6 +1388,33 @@ begin
   where pbt.id = t.transfer_id
     and pbt.pay_batch_id = p_pay_batch_id;
 
+  -- =========================================================
+  -- A5 HARDENING (batch consistency guard):
+  -- If any candidate has positive frozen net_bank_amount, there must be at least one linked payable transfer.
+  -- (Covers "deleted transfers" and "cleared pay_bank_transfer_id links" bad states.)
+  -- =========================================================
+  select count(distinct pbi_chk.pay_bank_transfer_id)::int
+  into v_linked_transfer_ct
+  from public.pay_batch_items pbi_chk
+  join public.pay_batch_candidates pbc_chk
+    on pbc_chk.id = pbi_chk.pay_batch_candidate_id
+  where pbc_chk.pay_batch_id = p_pay_batch_id
+    and pbi_chk.item_type <> 'DEBT_CREATED'
+    and pbi_chk.pay_bank_transfer_id is not null;
+
+  select exists (
+    select 1
+    from public.pay_batch_candidates pbc_pos
+    where pbc_pos.pay_batch_id = p_pay_batch_id
+      and coalesce(pbc_pos.net_bank_amount,0) > 0
+    limit 1
+  )
+  into v_has_pos_net;
+
+  if v_linked_transfer_ct = 0 and v_has_pos_net then
+    raise exception 'STATE_INCONSISTENT: positive net_bank_amount but no transfers';
+  end if;
+
   create temp table if not exists _tmp_newly_settled_candidates (
     candidate_id uuid primary key
   ) on commit drop;
@@ -1422,8 +1451,8 @@ begin
      and pbc2.candidate_id = ct.candidate_id
     where (coalesce(pbc2.settled_at_utc, null) is null)
       and (
-        ct.total_transfers = 0
-        or ct.total_transfers = ct.completed_transfers
+        (ct.total_transfers = 0 and coalesce(pbc2.net_bank_amount,0) <= 0)
+        or (ct.total_transfers > 0 and ct.total_transfers = ct.completed_transfers)
       )
   )
   insert into _tmp_newly_settled_candidates(candidate_id)
@@ -1802,8 +1831,6 @@ begin
   );
 end;
 $$;
-
-
 create or replace function public.pay_settle_manual_confirm(
   p_pay_batch_id uuid,
   p_scope text,
@@ -2318,7 +2345,6 @@ begin
 end;
 $$;
 
-
 create or replace function public.pay_reconcile_external_payment(
   p_actor_user_id uuid,
   p_payload_json jsonb
@@ -2331,6 +2357,7 @@ as $$
 declare
   v_pay_date date;
   v_note text;
+  v_payment_reference text;
 
   v_settings record;
   v_batch_id uuid;
@@ -2363,6 +2390,22 @@ begin
   end;
 
   v_note := nullif(btrim(coalesce(p_payload_json->>'note','')), '');
+
+  v_payment_reference := nullif(
+    btrim(
+      coalesce(
+        p_payload_json->>'payment_reference',
+        p_payload_json->>'bulk_reference',
+        p_payload_json->>'bank_reference',
+        ''
+      )
+    ),
+    ''
+  );
+
+  if v_payment_reference is null then
+    raise exception 'pay_reconcile_external_payment: payload.payment_reference is required';
+  end if;
 
   if jsonb_typeof(p_payload_json->'timesheet_ids') <> 'array' then
     raise exception 'pay_reconcile_external_payment: payload.timesheet_ids must be an array of UUID strings';
@@ -2428,7 +2471,10 @@ begin
     created_by_user_id,
     status,
     banking_system_snapshot,
-    external_paye_system_snapshot
+    external_paye_system_snapshot,
+    rail_provider_snapshot,
+    rail_env_snapshot,
+    bulk_reference
   )
   values (
     v_pay_date,
@@ -2436,7 +2482,10 @@ begin
     p_actor_user_id,
     'SETTLED',
     v_settings.banking_system,
-    v_settings.external_paye_system
+    v_settings.external_paye_system,
+    'EXTERNAL',
+    'EXTERNAL',
+    v_payment_reference
   )
   returning id into v_batch_id;
 
@@ -2446,6 +2495,7 @@ begin
     candidate_id,
     candidate_tms_ref,
     candidate_display_name,
+    settlement_status,
     settled_at_utc,
     settled_via,
     settled_note
@@ -2455,6 +2505,7 @@ begin
     c.id,
     c.tms_ref,
     c.display_name,
+    'SETTLED',
     v_now,
     'EXTERNAL_RECONCILE',
     v_note
@@ -2470,7 +2521,7 @@ begin
 
   get diagnostics v_candidate_count = row_count;
 
-  -- For each timesheet: build CURRENT snapshot and write to pay_state + history
+  -- For each timesheet: build CURRENT snapshot and write to pay_state + history (+ pay_batch_timesheet_snapshots)
   for v_ts in
     select
       tf.timesheet_id,
@@ -2549,10 +2600,31 @@ begin
       ),
       'reconciled_external', true,
       'reconciled_pay_batch_id', v_batch_id::text,
-      'reconciled_at_utc', v_now::text
+      'reconciled_at_utc', v_now::text,
+      'external_payment_reference', v_payment_reference
     );
 
     v_signature := md5(v_snapshot::text);
+
+    -- Optional but strong: write pay_batch_timesheet_snapshots for full batch artefact auditability
+    insert into public.pay_batch_timesheet_snapshots(
+      pay_batch_id,
+      timesheet_id,
+      candidate_id,
+      pay_channel,
+      base_snapshot_json,
+      target_snapshot_json,
+      signature
+    )
+    values (
+      v_batch_id,
+      v_ts.timesheet_id,
+      v_ts.candidate_id,
+      case when v_ts.pay_method = 'PAYE' then 'PAYE' else 'UMBRELLA' end,
+      v_snapshot,
+      v_snapshot,
+      v_signature
+    );
 
     insert into public.timesheet_pay_state(
       timesheet_id,
@@ -2610,7 +2682,8 @@ begin
         'pay_date', v_pay_date::text,
         'timesheet_id', v_ts.timesheet_id::text,
         'candidate_id', v_ts.candidate_id::text,
-        'pay_method', v_ts.pay_method
+        'pay_method', v_ts.pay_method,
+        'payment_reference', v_payment_reference
       ),
       v_note
     );
@@ -2637,6 +2710,7 @@ begin
     jsonb_build_object(
       'pay_batch_id', v_batch_id::text,
       'pay_date', v_pay_date::text,
+      'payment_reference', v_payment_reference,
       'timesheet_ids', (select jsonb_agg(t::text) from unnest(v_timesheet_ids) t),
       'note', v_note
     ),
@@ -2647,13 +2721,12 @@ begin
     'ok', true,
     'pay_batch_id', v_batch_id::text,
     'pay_date', v_pay_date::text,
+    'payment_reference', v_payment_reference,
     'settled_timesheet_count', v_timesheet_count,
     'candidate_count', v_candidate_count
   );
 end;
 $$;
-
-
 
 
 
