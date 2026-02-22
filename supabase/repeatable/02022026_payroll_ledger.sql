@@ -4703,12 +4703,20 @@ begin
         'status', pb.status,
         'banking_system_snapshot', pb.banking_system_snapshot,
         'external_paye_system_snapshot', pb.external_paye_system_snapshot,
-        'revolut_draft_id', pb.revolut_draft_id,
+
+        -- Rail-generic scheduling/execution fields
+        'rail_provider_snapshot', pb.rail_provider_snapshot,
+        'rail_env_snapshot', pb.rail_env_snapshot,
+        'schedule_kind', pb.schedule_kind,
+        'scheduled_at_utc', pb.scheduled_at_utc,
+        'executing_started_at_utc', pb.executing_started_at_utc,
+        'last_status_checked_at_utc', pb.last_status_checked_at_utc,
+
         'monzo_confirmed_at_utc', pb.monzo_confirmed_at_utc,
         'total_bank_out', pb.total_bank_out,
         'total_debt_created', pb.total_debt_created,
 
-        -- NEW: bulk payment reference fields
+        -- Bulk payment reference fields
         'bulk_ref_num', pb.bulk_ref_num,
         'bulk_ref_date', case when pb.bulk_ref_date is null then null else pb.bulk_ref_date::text end,
         'bulk_reference', pb.bulk_reference
@@ -4736,7 +4744,6 @@ begin
 end;
 $$;
 
-
 create or replace function public.pay_batch_get(p_pay_batch_id uuid)
 returns jsonb
 language plpgsql
@@ -4760,7 +4767,7 @@ begin
   where pb.id = p_pay_batch_id
   limit 1;
 
-  if v_batch.id is null then
+  if not found then
     raise exception 'pay_batch not found';
   end if;
 
@@ -4783,7 +4790,7 @@ begin
         'settled_via', pbc.settled_via,
         'settled_note', pbc.settled_note,
 
-        -- NEW: latest PAYE net input summary
+        -- Latest PAYE net input summary
         'paye_net_amount', ni.net_amount,
         'paye_net_source', ni.source,
         'paye_net_imported_at_utc', ni.imported_at_utc,
@@ -4808,7 +4815,7 @@ begin
   ) ni on true
   where pbc.pay_batch_id = p_pay_batch_id;
 
-  -- Transfers + snapshot fields + payment reference
+  -- Transfers + snapshot fields + rail-generic fields
   select coalesce(
     jsonb_agg(
       jsonb_build_object(
@@ -4819,17 +4826,28 @@ begin
         'amount', pbt.amount,
         'currency', pbt.currency,
         'status', pbt.status,
-        'revolut_transaction_id', pbt.revolut_transaction_id,
-        'revolut_state', pbt.revolut_state,
 
-        -- NEW: snapshot fields
+        -- Rail-generic equivalents
+        'rail_provider', pbt.rail_provider,
+        'rail_env', pbt.rail_env,
+        'request_id', pbt.request_id,
+        'rail_tx_id', pbt.rail_tx_id,
+        'rail_state', pbt.rail_state,
+        'rail_meta_json', pbt.rail_meta_json,
+
+        -- Snapshot bank fields
         'payment_reference', pbt.payment_reference,
         'payee_name', pbt.payee_name,
         'sort_code', pbt.sort_code,
         'account_number', pbt.account_number,
         'account_type', pbt.account_type,
-        'revolut_counterparty_id', pbt.revolut_counterparty_id,
-        'revolut_counterparty_account_id', pbt.revolut_counterparty_account_id,
+        'bank_details_hash_snapshot', pbt.bank_details_hash_snapshot,
+
+        -- Drilldown/grouping fields
+        'transfer_group_key', pbt.transfer_group_key,
+        'grouping_mode_used', pbt.grouping_mode_used,
+        'week_ending_bucket', case when pbt.week_ending_bucket is null then null else pbt.week_ending_bucket::text end,
+
         'created_at_utc', pbt.created_at_utc,
         'completed_at_utc', pbt.completed_at_utc,
         'failed_reason', pbt.failed_reason
@@ -4881,10 +4899,16 @@ begin
       'external_paye_system_snapshot', v_batch.external_paye_system_snapshot,
       'monzo_confirmed_at_utc', v_batch.monzo_confirmed_at_utc,
       'monzo_confirmed_by_user_id', case when v_batch.monzo_confirmed_by_user_id is null then null else v_batch.monzo_confirmed_by_user_id::text end,
-      'revolut_draft_id', v_batch.revolut_draft_id,
       'last_status_checked_at_utc', v_batch.last_status_checked_at_utc,
 
-      -- NEW: bulk payment reference fields
+      -- Rail-generic scheduling/execution fields
+      'rail_provider_snapshot', v_batch.rail_provider_snapshot,
+      'rail_env_snapshot', v_batch.rail_env_snapshot,
+      'schedule_kind', v_batch.schedule_kind,
+      'scheduled_at_utc', v_batch.scheduled_at_utc,
+      'executing_started_at_utc', v_batch.executing_started_at_utc,
+
+      -- Bulk payment reference fields
       'bulk_ref_num', v_batch.bulk_ref_num,
       'bulk_ref_date', case when v_batch.bulk_ref_date is null then null else v_batch.bulk_ref_date::text end,
       'bulk_reference', v_batch.bulk_reference
@@ -4895,5 +4919,7 @@ begin
   );
 end;
 $$;
+
+
 
 
