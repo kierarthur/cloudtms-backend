@@ -2728,6 +2728,241 @@ begin
 end;
 $$;
 
+create or replace function public.pay_batches_claim_due_scheduled(
+  p_limit int,
+  p_now_utc timestamptz
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_limit int := greatest(1, least(coalesce(p_limit,50), 500));
+  v_now timestamptz := now();
+  v_cutoff timestamptz := coalesce(p_now_utc, v_now);
+
+  v_claimed jsonb := '[]'::jsonb;
+  v_claimed_count int := 0;
+begin
+  with claim as (
+    select
+      pb.id,
+      pb.rail_provider_snapshot,
+      pb.rail_env_snapshot,
+      pb.schedule_kind,
+      pb.scheduled_at_utc,
+      pb.funding_account_ref
+    from public.pay_batches pb
+    where upper(coalesce(pb.status,'')) = 'SCHEDULED'
+      and pb.scheduled_at_utc is not null
+      and pb.scheduled_at_utc <= v_cutoff
+    order by pb.scheduled_at_utc asc, pb.id asc
+    for update skip locked
+    limit v_limit
+  ),
+  upd as (
+    update public.pay_batches pb2
+    set
+      status = 'EXECUTING',
+      executing_started_at_utc = coalesce(pb2.executing_started_at_utc, v_now)
+    from claim c
+    where pb2.id = c.id
+    returning
+      pb2.id,
+      pb2.rail_provider_snapshot,
+      pb2.rail_env_snapshot,
+      pb2.schedule_kind,
+      pb2.scheduled_at_utc,
+      pb2.funding_account_ref,
+      pb2.executing_started_at_utc
+  )
+  select
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'pay_batch_id', u.id::text,
+          'rail_provider_snapshot', u.rail_provider_snapshot,
+          'rail_env_snapshot', u.rail_env_snapshot,
+          'schedule_kind', u.schedule_kind,
+          'scheduled_at_utc', u.scheduled_at_utc,
+          'funding_account_ref', u.funding_account_ref,
+          'executing_started_at_utc', u.executing_started_at_utc
+        )
+        order by u.scheduled_at_utc asc nulls last, u.id
+      ),
+      '[]'::jsonb
+    ),
+    count(*)::int
+  into v_claimed, v_claimed_count
+  from upd u;
+
+  return jsonb_build_object(
+    'ok', true,
+    'server_utc', v_now,
+    'cutoff_utc', v_cutoff,
+    'limit', v_limit,
+    'claimed_count', v_claimed_count,
+    'claimed', v_claimed
+  );
+end;
+$$;
+
+
+create or replace function public.pay_bank_transfers_apply_rail_updates(
+  p_pay_batch_id uuid,
+  p_updates jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_now timestamptz := now();
+
+  v_updated_count int := 0;
+  v_input_count int := 0;
+
+  v_missing jsonb := '[]'::jsonb;
+  v_duplicates jsonb := '[]'::jsonb;
+begin
+  if p_pay_batch_id is null then
+    raise exception 'pay_bank_transfers_apply_rail_updates: pay_batch_id is required';
+  end if;
+
+  if p_updates is null or jsonb_typeof(p_updates) <> 'array' then
+    raise exception 'pay_bank_transfers_apply_rail_updates: updates must be a JSON array';
+  end if;
+
+  create temp table if not exists _tmp_pbt_updates (
+    transfer_id uuid not null,
+    status text not null,
+    rail_tx_id text null,
+    rail_state text null,
+    rail_meta_json jsonb null,
+    failed_reason text null,
+    completed_at_utc timestamptz null
+  ) on commit drop;
+
+  delete from _tmp_pbt_updates;
+
+  insert into _tmp_pbt_updates(
+    transfer_id,
+    status,
+    rail_tx_id,
+    rail_state,
+    rail_meta_json,
+    failed_reason,
+    completed_at_utc
+  )
+  select
+    nullif(btrim(coalesce(e->>'transfer_id','')),'')::uuid as transfer_id,
+    upper(btrim(coalesce(e->>'status',''))) as status,
+    nullif(btrim(coalesce(e->>'rail_tx_id','')),'') as rail_tx_id,
+    nullif(btrim(coalesce(e->>'rail_state','')),'') as rail_state,
+    case
+      when (e ? 'rail_meta_json') and jsonb_typeof(e->'rail_meta_json') in ('object','array','string','number','boolean','null')
+        then e->'rail_meta_json'
+      else null
+    end as rail_meta_json,
+    nullif(btrim(coalesce(e->>'failed_reason','')),'') as failed_reason,
+    nullif(btrim(coalesce(e->>'completed_at_utc','')),'')::timestamptz as completed_at_utc
+  from jsonb_array_elements(p_updates) e
+  where e is not null and jsonb_typeof(e) = 'object';
+
+  select count(*)::int
+  into v_input_count
+  from _tmp_pbt_updates t;
+
+  if v_input_count = 0 then
+    return jsonb_build_object(
+      'ok', true,
+      'pay_batch_id', p_pay_batch_id::text,
+      'server_utc', v_now,
+      'input_count', 0,
+      'updated_count', 0,
+      'missing_transfer_ids', '[]'::jsonb
+    );
+  end if;
+
+  if exists (select 1 from _tmp_pbt_updates t where t.transfer_id is null limit 1) then
+    raise exception 'pay_bank_transfers_apply_rail_updates: updates contains an invalid or missing transfer_id';
+  end if;
+
+  if exists (
+    select 1
+    from _tmp_pbt_updates t
+    where t.status not in ('PENDING','COMPLETED','FAILED','BLOCKED')
+    limit 1
+  ) then
+    raise exception 'pay_bank_transfers_apply_rail_updates: invalid status in updates (allowed: PENDING|COMPLETED|FAILED|BLOCKED)';
+  end if;
+
+  select coalesce(jsonb_agg(d.transfer_id::text order by d.transfer_id), '[]'::jsonb)
+  into v_duplicates
+  from (
+    select t.transfer_id
+    from _tmp_pbt_updates t
+    group by t.transfer_id
+    having count(*) > 1
+  ) d;
+
+  if jsonb_array_length(v_duplicates) > 0 then
+    raise exception 'pay_bank_transfers_apply_rail_updates: duplicate transfer_id values %', v_duplicates::text;
+  end if;
+
+  select coalesce(
+    jsonb_agg(t.transfer_id::text order by t.transfer_id),
+    '[]'::jsonb
+  )
+  into v_missing
+  from _tmp_pbt_updates t
+  left join public.pay_bank_transfers pbt_chk
+    on pbt_chk.id = t.transfer_id
+   and pbt_chk.pay_batch_id = p_pay_batch_id
+  where pbt_chk.id is null;
+
+  update public.pay_bank_transfers pbt
+  set
+    status = t.status,
+    rail_tx_id = coalesce(t.rail_tx_id, pbt.rail_tx_id),
+    rail_state = coalesce(t.rail_state, pbt.rail_state),
+    rail_meta_json = case
+      when t.rail_meta_json is null then pbt.rail_meta_json
+      when pbt.rail_meta_json is null then t.rail_meta_json
+      else (pbt.rail_meta_json || t.rail_meta_json)
+    end,
+    completed_at_utc = case
+      when t.status = 'COMPLETED' then coalesce(t.completed_at_utc, pbt.completed_at_utc, v_now)
+      when t.status = 'FAILED' then coalesce(t.completed_at_utc, pbt.completed_at_utc)
+      else pbt.completed_at_utc
+    end,
+    failed_reason = case
+      when t.status = 'FAILED' then coalesce(nullif(btrim(coalesce(t.failed_reason,'')), ''), pbt.failed_reason, nullif(btrim(coalesce(t.rail_state,'')), ''))
+      else pbt.failed_reason
+    end
+  from _tmp_pbt_updates t
+  where pbt.id = t.transfer_id
+    and pbt.pay_batch_id = p_pay_batch_id;
+
+  get diagnostics v_updated_count = row_count;
+
+  update public.pay_batches pb
+  set last_status_checked_at_utc = v_now
+  where pb.id = p_pay_batch_id;
+
+  return jsonb_build_object(
+    'ok', true,
+    'pay_batch_id', p_pay_batch_id::text,
+    'server_utc', v_now,
+    'input_count', v_input_count,
+    'updated_count', v_updated_count,
+    'missing_transfer_ids', v_missing
+  );
+end;
+$$;
+
 
 
 
