@@ -4024,6 +4024,7 @@ $$;
 -- =========================================================
 -- A4.9 pay_batches_list / pay_batch_get
 -- =========================================================
+
 create or replace function public.pay_execute_bank(
   p_pay_batch_id uuid,
   p_pay_channel_scope text,
@@ -4325,25 +4326,25 @@ begin
     select
       'UMBRELLA'::text as pay_channel,
       pbc.candidate_id,
-      umb_id as umbrella_id,
-      wk_end as week_ending_bucket,
-      round(greatest(sum_amt,0),2) as amount,
+      g.umb_id as umbrella_id,
+      g.wk_end as week_ending_bucket,
+      round(greatest(g.sum_amt,0),2) as amount,
       'GBP'::text as currency,
 
       case
-        when (umb_id is null) then 'BLOCKED'
+        when (g.umb_id is null) then 'BLOCKED'
         when (sc_norm is null or acct_norm is null or payee_nm is null) then 'BLOCKED'
         else 'PENDING'
       end as status,
 
       case
-        when (umb_id is null) then 'BLOCKED_UMBRELLA_MISSING'
+        when (g.umb_id is null) then 'BLOCKED_UMBRELLA_MISSING'
         when (sc_norm is null or acct_norm is null or payee_nm is null) then 'BLOCKED_BANK_DETAILS'
         else null
       end as rail_state,
 
       case
-        when (umb_id is null) then
+        when (g.umb_id is null) then
           jsonb_build_object('reason_code','UMBRELLA_MISSING')
         when (sc_norm is null or acct_norm is null or payee_nm is null) then
           jsonb_build_object(
@@ -4370,14 +4371,16 @@ begin
       payee_nm as payee_name,
       sc_norm as sort_code,
       acct_norm as account_number,
-      coalesce(nullif(btrim(u.account_type),''), 'Business') as account_type,
+
+      -- ✅ FIX (A3): umbrellas table has no account_type column; snapshot is always Business
+      'Business'::text as account_type,
 
       u.bank_details_hash as bank_details_hash_snapshot,
 
-      case when umb_id is null then 'CANDIDATE' else 'UMBRELLA' end as payee_entity_kind,
-      case when umb_id is null then pbc.candidate_id else umb_id end as payee_entity_id,
+      case when g.umb_id is null then 'CANDIDATE' else 'UMBRELLA' end as payee_entity_kind,
+      case when g.umb_id is null then pbc.candidate_id else g.umb_id end as payee_entity_id,
 
-      (pbc.candidate_id::text || '|' || wk_end::text) as transfer_group_key,
+      (pbc.candidate_id::text || '|' || g.wk_end::text) as transfer_group_key,
       'CANDIDATE_WEEK'::text as grouping_mode_used
     from (
       select
@@ -4414,16 +4417,7 @@ begin
           else null
         end as sc_norm,
         nullif(regexp_replace(coalesce(u.account_number,''), '[^0-9]', '', 'g'), '') as acct_norm
-    ) b on true
-    cross join lateral (
-      select
-        g.wk_end as wk_end,
-        g.umb_id as umb_id,
-        g.sum_amt as sum_amt,
-        b.payee_nm as payee_nm,
-        b.sc_norm as sc_norm,
-        b.acct_norm as acct_norm
-    ) x;
+    ) b on true;
   end if;
 
   -- Clear old item→transfer links for this scope (rebuild coherently)
@@ -4670,6 +4664,9 @@ begin
   );
 end;
 $$;
+
+
+
 
 create or replace function public.pay_batches_list(
   p_limit int default 50,
