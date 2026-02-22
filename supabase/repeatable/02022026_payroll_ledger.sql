@@ -174,6 +174,7 @@ $$;
 -- =========================================================
 -- A4.3 pay_set_paye_net_from_sage(p_pay_batch_id, p_csv_raw, p_actor_user_id, p_source_filename)
 -- =========================================================
+
 create or replace function public.pay_set_paye_net_from_sage(
   p_pay_batch_id uuid,
   p_csv_raw text,
@@ -197,11 +198,13 @@ declare
   net_col int := 0;
 
   works text;
+  works_norm text;
   net_raw text;
   net_amt numeric;
 
   dup_check jsonb := '[]'::jsonb;
   unknown_check jsonb := '[]'::jsonb;
+  ambig_check jsonb := '[]'::jsonb;
 
 begin
   if p_pay_batch_id is null then
@@ -247,6 +250,7 @@ begin
   -- Parse rows after header
   create temp table if not exists _tmp_sage_net (
     works_number text,
+    works_norm text,
     net_amount numeric
   ) on commit drop;
 
@@ -265,6 +269,11 @@ begin
 
     if lower(works) = 'totals' then
       continue; -- ignore Totals row
+    end if;
+
+    works_norm := upper(regexp_replace(btrim(coalesce(works,'')), '\s+', '', 'g'));
+    if works_norm = '' then
+      continue;
     end if;
 
     net_raw := public._pay_csv_trim_field(case when net_col <= array_length(v_fields,1) then v_fields[net_col] else null end);
@@ -286,17 +295,17 @@ begin
       raise exception 'SAGE_IMPORT_INVALID: Net Pay negative for Works Number %', works;
     end if;
 
-    insert into _tmp_sage_net(works_number, net_amount)
-    values (works, round(net_amt,2));
+    insert into _tmp_sage_net(works_number, works_norm, net_amount)
+    values (works, works_norm, round(net_amt,2));
   end loop;
 
-  -- Validate duplicates
-  select coalesce(jsonb_agg(t.works_number), '[]'::jsonb)
+  -- Validate duplicates (normalized)
+  select coalesce(jsonb_agg(t.works_norm), '[]'::jsonb)
   into dup_check
   from (
-    select works_number
+    select works_norm
     from _tmp_sage_net
-    group by works_number
+    group by works_norm
     having count(*) > 1
   ) t;
 
@@ -304,63 +313,108 @@ begin
     raise exception 'SAGE_IMPORT_INVALID: duplicate Works Number(s) %', dup_check::text;
   end if;
 
-  -- Validate mapping to candidates in this batch (works number == candidates.tms_ref exact after trim)
+  -- Build PAYE candidate key map for this batch:
+  -- Works Number matches candidate_tms_ref/tms_ref OR candidate.ni_number (normalized: uppercase, remove spaces)
   create temp table if not exists _tmp_batch_paye (
     candidate_id uuid,
     pay_batch_candidate_id uuid,
-    tms_ref text
+    tms_ref_norm text,
+    ni_norm text
   ) on commit drop;
 
   delete from _tmp_batch_paye;
 
-  insert into _tmp_batch_paye(candidate_id, pay_batch_candidate_id, tms_ref)
+  insert into _tmp_batch_paye(candidate_id, pay_batch_candidate_id, tms_ref_norm, ni_norm)
   select
     pbc.candidate_id,
     pbc.id,
-    btrim(coalesce(pbc.candidate_tms_ref, c.tms_ref, '')) as tms_ref
+    upper(regexp_replace(btrim(coalesce(pbc.candidate_tms_ref, c.tms_ref, '')), '\s+', '', 'g')) as tms_ref_norm,
+    upper(regexp_replace(btrim(coalesce(c.ni_number, '')), '\s+', '', 'g')) as ni_norm
   from public.pay_batch_candidates pbc
   join public.candidates c on c.id = pbc.candidate_id
   where pbc.pay_batch_id = p_pay_batch_id
     and pbc.paye_state is not null;
 
-  -- Unknown works numbers
+  -- Unknown works numbers (no match by TMS ref or NI)
   select coalesce(jsonb_agg(s.works_number), '[]'::jsonb)
   into unknown_check
   from _tmp_sage_net s
   left join _tmp_batch_paye bp
-    on bp.tms_ref = btrim(s.works_number)
+    on (bp.tms_ref_norm is not null and bp.tms_ref_norm <> '' and bp.tms_ref_norm = s.works_norm)
+    or (bp.ni_norm is not null and bp.ni_norm <> '' and bp.ni_norm = s.works_norm)
   where bp.candidate_id is null;
 
   if jsonb_array_length(unknown_check) > 0 then
     raise exception 'SAGE_IMPORT_INVALID: Works Number(s) not found in batch candidates %', unknown_check::text;
   end if;
 
-  -- Apply (no partial): replace prior SAGE_IMPORT rows for this batch’s PAYE candidates
+  -- Ambiguous works numbers (one works_norm matches multiple batch candidates)
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'works_number', a.works_norm,
+        'candidate_ids', a.candidate_ids
+      )
+    ),
+    '[]'::jsonb
+  )
+  into ambig_check
+  from (
+    select
+      s.works_norm,
+      jsonb_agg(distinct bp.candidate_id::text order by bp.candidate_id::text) as candidate_ids,
+      count(distinct bp.candidate_id) as cnt
+    from _tmp_sage_net s
+    join _tmp_batch_paye bp
+      on (bp.tms_ref_norm is not null and bp.tms_ref_norm <> '' and bp.tms_ref_norm = s.works_norm)
+      or (bp.ni_norm is not null and bp.ni_norm <> '' and bp.ni_norm = s.works_norm)
+    group by s.works_norm
+    having count(distinct bp.candidate_id) > 1
+  ) a;
+
+  if jsonb_array_length(ambig_check) > 0 then
+    raise exception 'SAGE_IMPORT_INVALID: ambiguous Works Number(s) %', ambig_check::text;
+  end if;
+
+  -- Apply (no partial deletes outside this batch): replace prior SAGE_IMPORT rows for this batch’s PAYE candidates
   delete from public.pay_batch_paye_net_inputs pni
   using public.pay_batch_candidates pbc
   where pni.pay_batch_candidate_id = pbc.id
     and pbc.pay_batch_id = p_pay_batch_id
     and pni.source = 'SAGE_IMPORT';
 
+  with matched as (
+    select
+      bp.pay_batch_candidate_id,
+      s.net_amount
+    from _tmp_sage_net s
+    join _tmp_batch_paye bp
+      on (bp.tms_ref_norm is not null and bp.tms_ref_norm <> '' and bp.tms_ref_norm = s.works_norm)
+      or (bp.ni_norm is not null and bp.ni_norm <> '' and bp.ni_norm = s.works_norm)
+  )
   insert into public.pay_batch_paye_net_inputs(
     pay_batch_candidate_id, source, net_amount, imported_at_utc, file_name, file_hash
   )
-  select
-    bp.pay_batch_candidate_id,
+  select distinct
+    m.pay_batch_candidate_id,
     'SAGE_IMPORT',
-    s.net_amount,
+    m.net_amount,
     now(),
     p_source_filename,
     null
-  from _tmp_sage_net s
-  join _tmp_batch_paye bp
-    on bp.tms_ref = btrim(s.works_number);
+  from matched m;
 
-  -- Set PAYE state READY
+  -- Set PAYE state READY only for PAYE candidates that now have at least one net input row
   update public.pay_batch_candidates pbc
   set paye_state = 'READY'
   where pbc.pay_batch_id = p_pay_batch_id
-    and pbc.paye_state is not null;
+    and pbc.paye_state is not null
+    and exists (
+      select 1
+      from public.pay_batch_paye_net_inputs pni
+      where pni.pay_batch_candidate_id = pbc.id
+      limit 1
+    );
 
   return jsonb_build_object('ok', true, 'pay_batch_id', p_pay_batch_id::text, 'source', 'SAGE_IMPORT');
 end;
@@ -369,6 +423,7 @@ $$;
 -- =========================================================
 -- A4.4 pay_set_paye_net_manual(p_pay_batch_id, p_entries_json, p_actor_user_id)
 -- =========================================================
+
 create or replace function public.pay_set_paye_net_manual(
   p_pay_batch_id uuid,
   p_entries_json jsonb,
@@ -382,6 +437,7 @@ as $$
 declare
   v_entries jsonb := coalesce(p_entries_json, '[]'::jsonb);
   v_dup jsonb;
+  v_ambig jsonb;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_batch_id is required';
@@ -397,16 +453,21 @@ begin
 
   create temp table if not exists _tmp_manual_net (
     candidate_id uuid,
-    tms_ref text,
+    works_raw text,
+    works_norm text,
     net_amount numeric
   ) on commit drop;
 
   delete from _tmp_manual_net;
 
-  insert into _tmp_manual_net(candidate_id, tms_ref, net_amount)
+  insert into _tmp_manual_net(candidate_id, works_raw, works_norm, net_amount)
   select
     nullif(e->>'candidate_id','')::uuid as candidate_id,
-    nullif(btrim(e->>'tms_ref'), '') as tms_ref,
+    nullif(btrim(e->>'tms_ref'), '') as works_raw,
+    case
+      when nullif(btrim(e->>'tms_ref'), '') is null then null
+      else upper(regexp_replace(btrim(e->>'tms_ref'), '\s+', '', 'g'))
+    end as works_norm,
     round(coalesce(nullif(e->>'net_amount','')::numeric, 0),2) as net_amount
   from jsonb_array_elements(v_entries) e
   where e is not null and jsonb_typeof(e)='object';
@@ -416,13 +477,13 @@ begin
     raise exception 'MANUAL_NET_INVALID: net_amount must be non-negative';
   end if;
 
-  -- Validate duplicates (by candidate_id or tms_ref)
+  -- Validate duplicates (by candidate_id or normalized works key)
   select coalesce(jsonb_agg(x), '[]'::jsonb)
   into v_dup
   from (
-    select to_jsonb(coalesce(candidate_id::text, tms_ref)) as x
+    select to_jsonb(coalesce(candidate_id::text, works_norm)) as x
     from _tmp_manual_net
-    group by coalesce(candidate_id::text, tms_ref)
+    group by coalesce(candidate_id::text, works_norm)
     having count(*) > 1
   ) d;
 
@@ -430,24 +491,70 @@ begin
     raise exception 'MANUAL_NET_INVALID: duplicate entries %', v_dup::text;
   end if;
 
-  -- Resolve candidates in this batch
+  -- Resolve batch PAYE candidates (tms_ref OR ni_number)
   create temp table if not exists _tmp_batch_paye2 (
     pay_batch_candidate_id uuid,
     candidate_id uuid,
-    tms_ref text
+    tms_ref_norm text,
+    ni_norm text
   ) on commit drop;
 
   delete from _tmp_batch_paye2;
 
-  insert into _tmp_batch_paye2(pay_batch_candidate_id, candidate_id, tms_ref)
+  insert into _tmp_batch_paye2(pay_batch_candidate_id, candidate_id, tms_ref_norm, ni_norm)
   select
     pbc.id,
     pbc.candidate_id,
-    btrim(coalesce(pbc.candidate_tms_ref, c.tms_ref, '')) as tms_ref
+    upper(regexp_replace(btrim(coalesce(pbc.candidate_tms_ref, c.tms_ref, '')), '\s+', '', 'g')) as tms_ref_norm,
+    upper(regexp_replace(btrim(coalesce(c.ni_number, '')), '\s+', '', 'g')) as ni_norm
   from public.pay_batch_candidates pbc
   join public.candidates c on c.id = pbc.candidate_id
   where pbc.pay_batch_id = p_pay_batch_id
     and pbc.paye_state is not null;
+
+  -- Hard validation: every entry must identify a candidate either by candidate_id OR works_norm
+  if exists (
+    select 1
+    from _tmp_manual_net mn
+    where mn.candidate_id is null
+      and (mn.works_norm is null or mn.works_norm = '')
+    limit 1
+  ) then
+    raise exception 'MANUAL_NET_INVALID: each entry must include candidate_id or tms_ref/NI (Works Number)';
+  end if;
+
+  -- Ambiguity: works_norm matches multiple candidates in the batch
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'works_number', a.works_norm,
+        'candidate_ids', a.candidate_ids
+      )
+    ),
+    '[]'::jsonb
+  )
+  into v_ambig
+  from (
+    select
+      mn.works_norm,
+      jsonb_agg(distinct bp.candidate_id::text order by bp.candidate_id::text) as candidate_ids,
+      count(distinct bp.candidate_id) as cnt
+    from _tmp_manual_net mn
+    join _tmp_batch_paye2 bp
+      on mn.candidate_id is null
+     and mn.works_norm is not null
+     and mn.works_norm <> ''
+     and (
+       (bp.tms_ref_norm is not null and bp.tms_ref_norm <> '' and bp.tms_ref_norm = mn.works_norm)
+       or (bp.ni_norm is not null and bp.ni_norm <> '' and bp.ni_norm = mn.works_norm)
+     )
+    group by mn.works_norm
+    having count(distinct bp.candidate_id) > 1
+  ) a;
+
+  if jsonb_array_length(v_ambig) > 0 then
+    raise exception 'MANUAL_NET_INVALID: ambiguous Works Number(s) %', v_ambig::text;
+  end if;
 
   -- Validate that each entry matches a batch PAYE candidate
   if exists (
@@ -455,12 +562,52 @@ begin
     from _tmp_manual_net mn
     left join _tmp_batch_paye2 bp
       on (mn.candidate_id is not null and bp.candidate_id = mn.candidate_id)
-      or (mn.candidate_id is null and mn.tms_ref is not null and bp.tms_ref = mn.tms_ref)
+      or (
+        mn.candidate_id is null
+        and mn.works_norm is not null
+        and mn.works_norm <> ''
+        and (
+          (bp.tms_ref_norm is not null and bp.tms_ref_norm <> '' and bp.tms_ref_norm = mn.works_norm)
+          or (bp.ni_norm is not null and bp.ni_norm <> '' and bp.ni_norm = mn.works_norm)
+        )
+      )
     where bp.pay_batch_candidate_id is null
     limit 1
   ) then
     raise exception 'MANUAL_NET_INVALID: entry candidate not found in pay batch PAYE candidates';
   end if;
+
+  create temp table if not exists _tmp_manual_match (
+    pay_batch_candidate_id uuid,
+    net_amount numeric
+  ) on commit drop;
+
+  delete from _tmp_manual_match;
+
+  -- candidate_id path
+  insert into _tmp_manual_match(pay_batch_candidate_id, net_amount)
+  select
+    bp.pay_batch_candidate_id,
+    mn.net_amount
+  from _tmp_manual_net mn
+  join _tmp_batch_paye2 bp
+    on mn.candidate_id is not null
+   and bp.candidate_id = mn.candidate_id;
+
+  -- works_norm path (tms_ref OR NI)
+  insert into _tmp_manual_match(pay_batch_candidate_id, net_amount)
+  select
+    bp.pay_batch_candidate_id,
+    mn.net_amount
+  from _tmp_manual_net mn
+  join _tmp_batch_paye2 bp
+    on mn.candidate_id is null
+   and mn.works_norm is not null
+   and mn.works_norm <> ''
+   and (
+     (bp.tms_ref_norm is not null and bp.tms_ref_norm <> '' and bp.tms_ref_norm = mn.works_norm)
+     or (bp.ni_norm is not null and bp.ni_norm <> '' and bp.ni_norm = mn.works_norm)
+   );
 
   -- Apply: replace prior MANUAL_ENTRY rows for those candidates
   delete from public.pay_batch_paye_net_inputs pni
@@ -472,26 +619,29 @@ begin
     pay_batch_candidate_id, source, net_amount, imported_at_utc, file_name, file_hash
   )
   select
-    bp.pay_batch_candidate_id,
+    mm.pay_batch_candidate_id,
     'MANUAL_ENTRY',
-    mn.net_amount,
+    mm.net_amount,
     now(),
     null,
     null
-  from _tmp_manual_net mn
-  join _tmp_batch_paye2 bp
-    on (mn.candidate_id is not null and bp.candidate_id = mn.candidate_id)
-    or (mn.candidate_id is null and mn.tms_ref is not null and bp.tms_ref = mn.tms_ref);
+  from _tmp_manual_match mm;
 
+  -- Set PAYE state READY only for PAYE candidates that now have at least one net input row
   update public.pay_batch_candidates pbc
   set paye_state = 'READY'
   where pbc.pay_batch_id = p_pay_batch_id
-    and pbc.paye_state is not null;
+    and pbc.paye_state is not null
+    and exists (
+      select 1
+      from public.pay_batch_paye_net_inputs pni
+      where pni.pay_batch_candidate_id = pbc.id
+      limit 1
+    );
 
   return jsonb_build_object('ok', true, 'pay_batch_id', p_pay_batch_id::text, 'source', 'MANUAL_ENTRY');
 end;
 $$;
-
 
 commit;
 
@@ -796,7 +946,6 @@ begin;
 -- =========================================================
 
 
-
 create or replace function public.pay_preview(p_pay_date date, p_actor_user_id uuid)
 returns jsonb
 language plpgsql
@@ -808,6 +957,16 @@ declare
 
   v_vat_rate_pct numeric;
   v_erni_pct numeric;
+
+  -- ✅ Settings (rail defaults + scheduling defaults)
+  v_rail_provider_default text;
+  v_rail_env_default text;
+  v_rail_supports_scheduling boolean;
+  v_rail_supports_name_check boolean;
+  v_rail_supports_auto_execute boolean;
+  v_default_schedule_umbrella_local text;
+  v_default_schedule_paye_local text;
+  v_funds_warning_hours_json jsonb;
 
   v_paye jsonb := '[]'::jsonb;
   v_nonpaye jsonb := '[]'::jsonb;
@@ -840,6 +999,33 @@ begin
     raise exception 'No finance window found for pay_date %', p_pay_date;
   end if;
 
+  -- ✅ Load rail/scheduling defaults for UI (single-row settings table)
+  select
+    sd.rail_provider_default,
+    sd.rail_env_default,
+    sd.rail_supports_scheduling,
+    sd.rail_supports_name_check,
+    sd.rail_supports_auto_execute,
+    sd.default_schedule_umbrella_local,
+    sd.default_schedule_paye_local,
+    sd.funds_warning_hours_json
+  into
+    v_rail_provider_default,
+    v_rail_env_default,
+    v_rail_supports_scheduling,
+    v_rail_supports_name_check,
+    v_rail_supports_auto_execute,
+    v_default_schedule_umbrella_local,
+    v_default_schedule_paye_local,
+    v_funds_warning_hours_json
+  from public.settings_defaults sd
+  order by sd.id asc
+  limit 1;
+
+  if v_rail_provider_default is null or v_rail_env_default is null then
+    raise exception 'settings_defaults missing or not populated';
+  end if;
+
   with active_snoozes as (
     select
       s.id as snooze_id,
@@ -868,6 +1054,9 @@ begin
       c.tms_ref as cand_tms_ref,
       c.display_name as cand_display_name,
       c.umbrella_id as cand_umbrella_id,
+
+      -- ✅ Bank readiness (candidate)
+      c.bank_details_hash as cand_bank_hash,
 
       ts.authorised_at_server,
       ts.contract_id,
@@ -914,7 +1103,9 @@ begin
     select
       u.id as umbrella_id,
       coalesce(u.enabled,false) as umb_enabled,
-      coalesce(u.vat_chargeable,false) as vat_chargeable
+      coalesce(u.vat_chargeable,false) as vat_chargeable,
+      -- ✅ Bank readiness (umbrella)
+      u.bank_details_hash as umb_bank_hash
     from public.umbrellas u
   ),
   adj as (
@@ -938,11 +1129,13 @@ begin
       e.cand_tms_ref,
       e.cand_display_name,
       e.cand_umbrella_id,
+      e.cand_bank_hash,
       e.reference_number,
       e.require_reference_to_pay,
 
       coalesce(um.vat_chargeable,false) as umb_vat_chargeable,
       coalesce(um.umb_enabled,false) as umb_enabled,
+      um.umb_bank_hash,
 
       -- ✅ segments include ref_num (key = ref_num)
       case
@@ -1017,6 +1210,10 @@ begin
       t.umb_enabled,
       t.umb_vat_chargeable,
       t.require_reference_to_pay,
+
+      -- ✅ bank readiness propagation
+      t.cand_bank_hash,
+      t.umb_bank_hash,
 
       coalesce(t.last_settled_snapshot_json, '{}'::jsonb) as base_json,
 
@@ -1228,6 +1425,10 @@ begin
       b.umb_enabled,
       b.umb_vat_chargeable,
 
+      -- ✅ bank readiness propagation
+      b.cand_bank_hash,
+      b.umb_bank_hash,
+
       coalesce(
         (
           select jsonb_agg(
@@ -1304,6 +1505,12 @@ begin
       max(d.cand_umbrella_id) as cand_umbrella_id,
       bool_or(d.umb_enabled) as umb_enabled,
       bool_or(d.umb_vat_chargeable) as umb_vat_chargeable,
+
+      -- ✅ bank readiness rollups
+      bool_or(d.cand_bank_hash is not null and btrim(d.cand_bank_hash) <> '') as candidate_has_bank_details,
+      max(d.cand_bank_hash) as candidate_bank_hash,
+      bool_or(d.umb_bank_hash is not null and btrim(d.umb_bank_hash) <> '') as umbrella_has_bank_details,
+      max(d.umb_bank_hash) as umbrella_bank_hash,
 
       bool_or(
         d.ts_pay_method <> d.cand_pay_method
@@ -1406,21 +1613,32 @@ begin
     from do_not_pay_items di
     group by di.candidate_id
   ),
+  -- ✅ Loan catch-up (Option A): include ALL schedule entries week_start <= v_week_start and amount < 0
   loan_due as (
     select
       pa.candidate_id,
+      round(
+        sum(
+          abs(coalesce(nullif(e->>'amount','')::numeric,0))
+        ),
+        2
+      ) as loan_due_total,
       jsonb_agg(
         jsonb_build_object(
           'advance_id', pa.id::text,
+          'week_start', (nullif(e->>'week_start','')::date)::text,
+          'due_amount', round(abs(coalesce(nullif(e->>'amount','')::numeric,0)),2),
           'reason', pa.reason::text,
+          -- legacy alias (kept to avoid breaking any existing consumer)
           'scheduled_amount', round(abs(coalesce(nullif(e->>'amount','')::numeric,0)),2)
         )
-        order by pa.next_due_week_start nulls last, pa.created_at asc, pa.id
-      ) as due_entries
+        order by (nullif(e->>'week_start','')::date) asc nulls last, pa.created_at asc, pa.id
+      ) as loan_due_entries
     from public.pay_advances pa
     join lateral jsonb_array_elements(coalesce(pa.schedule_json,'[]'::jsonb)) e on true
     where pa.status::text = 'ACTIVE'
-      and nullif(e->>'week_start','')::date = v_week_start
+      and nullif(e->>'week_start','') is not null
+      and (nullif(e->>'week_start','')::date) <= v_week_start
       and coalesce(nullif(e->>'amount','')::numeric,0) < 0
     group by pa.candidate_id
   ),
@@ -1440,7 +1658,16 @@ begin
       cr.timesheets_itemisation,
       coalesce(bc.blocked_count,0) as blocked_count,
       coalesce(dpc.do_not_pay_count,0) as do_not_pay_count,
-      coalesce(ld.due_entries,'[]'::jsonb) as due_entries
+
+      -- ✅ bank readiness
+      cr.candidate_has_bank_details,
+      cr.candidate_bank_hash,
+      cr.umbrella_has_bank_details,
+      cr.umbrella_bank_hash,
+
+      -- ✅ loan catch-up
+      coalesce(ld.loan_due_total,0) as loan_due_total,
+      coalesce(ld.loan_due_entries,'[]'::jsonb) as loan_due_entries
     from candidate_rollup cr
     left join blocked_counts bc on bc.candidate_id = cr.candidate_id
     left join do_not_pay_counts dpc on dpc.candidate_id = cr.candidate_id
@@ -1459,6 +1686,13 @@ begin
             'umbrella_id', case when ce.cand_umbrella_id is null then null else ce.cand_umbrella_id::text end,
             'umbrella_enabled', ce.umb_enabled,
             'umbrella_vat_chargeable', ce.umb_vat_chargeable,
+
+            -- ✅ bank readiness summary
+            'candidate_has_bank_details', ce.candidate_has_bank_details,
+            'candidate_bank_hash', ce.candidate_bank_hash,
+            'umbrella_has_bank_details', null,
+            'umbrella_bank_hash', null,
+
             'blocked_count', ce.blocked_count,
             'do_not_pay_count', ce.do_not_pay_count,
             'has_any_delta',
@@ -1483,8 +1717,9 @@ begin
             ),
             'loan', jsonb_build_object(
               'pay_week_start', v_week_start::text,
-              'due_entries', ce.due_entries,
-              'cap_fields', jsonb_build_object('min_take_home', null, 'max_deduction', null)
+              'loan_due_total', ce.loan_due_total,
+              'loan_due_entries', ce.loan_due_entries,
+              'cap_fields', jsonb_build_object('min_take_home', 0, 'max_deduction', null)
             ),
             'computed_net_bank_amount_non_mismatch', null,
             'itemisation', ce.timesheets_itemisation
@@ -1508,6 +1743,13 @@ begin
             'umbrella_id', case when ce.cand_umbrella_id is null then null else ce.cand_umbrella_id::text end,
             'umbrella_enabled', ce.umb_enabled,
             'umbrella_vat_chargeable', ce.umb_vat_chargeable,
+
+            -- ✅ bank readiness summary
+            'candidate_has_bank_details', ce.candidate_has_bank_details,
+            'candidate_bank_hash', ce.candidate_bank_hash,
+            'umbrella_has_bank_details', case when ce.cand_pay_method <> 'PAYE' then ce.umbrella_has_bank_details else null end,
+            'umbrella_bank_hash', case when ce.cand_pay_method <> 'PAYE' then ce.umbrella_bank_hash else null end,
+
             'blocked_count', ce.blocked_count,
             'do_not_pay_count', ce.do_not_pay_count,
             'has_any_delta',
@@ -1532,8 +1774,9 @@ begin
             ),
             'loan', jsonb_build_object(
               'pay_week_start', v_week_start::text,
-              'due_entries', ce.due_entries,
-              'cap_fields', jsonb_build_object('min_take_home', null, 'max_deduction', null)
+              'loan_due_total', ce.loan_due_total,
+              'loan_due_entries', ce.loan_due_entries,
+              'cap_fields', jsonb_build_object('min_take_home', 0, 'max_deduction', null)
             ),
             'computed_net_bank_amount_non_mismatch',
               (public._pay_umbrella_vat_calc(ce.non_mismatch_total_ex, v_vat_rate_pct, ce.umb_vat_chargeable)->>'inc')::numeric,
@@ -1624,6 +1867,20 @@ begin
       'vat_rate_pct', v_vat_rate_pct,
       'erni_pct', v_erni_pct
     ),
+    'settings', jsonb_build_object(
+      'rail', jsonb_build_object(
+        'provider_default', v_rail_provider_default,
+        'env_default', v_rail_env_default,
+        'supports_scheduling', v_rail_supports_scheduling,
+        'supports_name_check', v_rail_supports_name_check,
+        'supports_auto_execute', v_rail_supports_auto_execute
+      ),
+      'schedule_defaults', jsonb_build_object(
+        'umbrella_local', v_default_schedule_umbrella_local,
+        'paye_local', v_default_schedule_paye_local
+      ),
+      'funds_warning_hours_json', v_funds_warning_hours_json
+    ),
     'paye_candidates', v_paye,
     'non_paye_payees', v_nonpaye,
     'blocked_items', v_blocked,
@@ -1632,8 +1889,6 @@ begin
   );
 end;
 $$;
-
-
 
 
 -- =========================================================
@@ -1647,7 +1902,6 @@ $$;
 -- =========================================================
 
 begin;
-
 create or replace function public.pay_create_draft_batch(
   p_pay_date date,
   p_actor_user_id uuid,
@@ -1724,7 +1978,9 @@ begin
 
   select
     sd.banking_system,
-    sd.external_paye_system
+    sd.external_paye_system,
+    sd.rail_provider_default,
+    sd.rail_env_default
   into v_settings
   from public.settings_defaults sd
   where sd.id = 1
@@ -1732,6 +1988,10 @@ begin
 
   if v_settings.banking_system is null or v_settings.external_paye_system is null then
     raise exception 'settings_defaults missing banking_system/external_paye_system';
+  end if;
+
+  if v_settings.rail_provider_default is null or v_settings.rail_env_default is null then
+    raise exception 'settings_defaults missing rail_provider_default/rail_env_default';
   end if;
 
   if jsonb_typeof(p_preview_decisions_json->'candidate_ids') = 'array' then
@@ -1814,7 +2074,9 @@ begin
     created_by_user_id,
     status,
     banking_system_snapshot,
-    external_paye_system_snapshot
+    external_paye_system_snapshot,
+    rail_provider_snapshot,
+    rail_env_snapshot
   )
   values (
     p_pay_date,
@@ -1822,7 +2084,9 @@ begin
     p_actor_user_id,
     'DRAFT',
     v_settings.banking_system,
-    v_settings.external_paye_system
+    v_settings.external_paye_system,
+    v_settings.rail_provider_default,
+    v_settings.rail_env_default
   )
   returning id into v_batch_id;
 
@@ -2352,7 +2616,7 @@ begin
     raise exception 'DOUBLE_PAY_BLOCK: items already reserved in batches %', v_reserved::text;
   end if;
 
-  -- Apply loan repayments (in-function loop; no DO)
+  -- Apply loan repayments (catch-up: include overdue weeks <= v_week_start; oldest-first)
   for v_rec in
     select
       pbc.id as pay_batch_candidate_id,
@@ -2406,14 +2670,16 @@ begin
     for v_adv in
       select
         pa.id as advance_id,
+        nullif(x->>'week_start','')::date as due_week_start,
         abs(coalesce(nullif(x->>'amount','')::numeric,0)) as due_amt
       from public.pay_advances pa
       join lateral jsonb_array_elements(coalesce(pa.schedule_json,'[]'::jsonb)) x on true
       where pa.candidate_id = v_rec.candidate_id
         and pa.status::text = 'ACTIVE'
-        and nullif(x->>'week_start','')::date = v_week_start
+        and nullif(x->>'week_start','')::date is not null
+        and nullif(x->>'week_start','')::date <= v_week_start
         and coalesce(nullif(x->>'amount','')::numeric,0) < 0
-      order by pa.next_due_week_start nulls last, pa.created_at asc, pa.id
+      order by nullif(x->>'week_start','')::date asc, pa.created_at asc, pa.id
     loop
       v_sched_amt := round(coalesce(v_adv.due_amt,0),2);
       if v_sched_amt <= 0 then
@@ -2435,7 +2701,8 @@ begin
           amount_vat,
           amount_inc_vat,
           pay_channel,
-          umbrella_id
+          umbrella_id,
+          repayment_week_start
         )
         values (
           v_pbci,
@@ -2448,7 +2715,8 @@ begin
           0,
           -v_take_amt,
           v_cand_pm,
-          case when v_cand_pm = 'UMBRELLA' then v_cand_umb else null end
+          case when v_cand_pm = 'UMBRELLA' then v_cand_umb else null end,
+          v_adv.due_week_start
         );
 
         v_remaining := round(v_remaining - v_take_amt,2);
@@ -2560,17 +2828,261 @@ begin
   where pbc.pay_batch_id = v_batch_id
     and c.id = pbc.candidate_id;
 
+  -- Create frozen timesheet snapshots for settlement baselines (do NOT advance blocked segments)
+  with touched_ts as (
+    select distinct pbi.timesheet_id
+    from public.pay_batch_items pbi
+    join public.pay_batch_candidates pbc
+      on pbc.id = pbi.pay_batch_candidate_id
+    where pbc.pay_batch_id = v_batch_id
+      and pbi.timesheet_id is not null
+  ),
+  ts_channel as (
+    select
+      pbi.timesheet_id,
+      max(pbi.pay_channel) as pay_channel_used
+    from public.pay_batch_items pbi
+    join public.pay_batch_candidates pbc
+      on pbc.id = pbi.pay_batch_candidate_id
+    where pbc.pay_batch_id = v_batch_id
+      and pbi.timesheet_id is not null
+      and pbi.pay_channel in ('PAYE','UMBRELLA')
+    group by pbi.timesheet_id
+  ),
+  tf0 as (
+    select
+      tf.timesheet_id,
+      tf.candidate_id,
+      tf.client_id,
+      ts.contract_id,
+      ts.reference_number,
+      tf.invoice_breakdown_json,
+      round(coalesce(tf.total_pay_ex_vat,0),2) as total_pay_ex_vat,
+      round(coalesce(tf.expenses_pay_ex_vat,0),2) as expenses_pay_ex_vat,
+      round(coalesce(tf.travel_pay_ex_vat,0),2) as travel_pay_ex_vat,
+      round(coalesce(tf.accommodation_pay_ex_vat,0),2) as accommodation_pay_ex_vat,
+      round(coalesce(tf.other_pay_ex_vat,0),2) as other_pay_ex_vat,
+      round(coalesce(tf.mileage_pay_ex_vat,0),2) as mileage_pay_ex_vat,
+      coalesce(
+        case when ct.overrideclientsettings then ct.require_reference_to_pay end,
+        cs.pay_reference_required,
+        false
+      ) as require_reference_to_pay,
+      coalesce(tps.last_settled_snapshot_json, '{}'::jsonb) as base_json
+    from public.timesheets_financials tf
+    join touched_ts t on t.timesheet_id = tf.timesheet_id
+    join public.timesheets ts
+      on ts.timesheet_id = tf.timesheet_id
+     and ts.is_current = true
+    left join public.contracts ct
+      on ct.id = ts.contract_id
+    left join public.client_settings cs
+      on cs.client_id = tf.client_id
+    left join public.timesheet_pay_state tps
+      on tps.timesheet_id = tf.timesheet_id
+    where tf.is_current = true
+  ),
+  cur0 as (
+    select
+      t.*,
+      case
+        when t.invoice_breakdown_json is not null
+         and jsonb_typeof(t.invoice_breakdown_json)='object'
+         and upper(coalesce(t.invoice_breakdown_json->>'mode',''))='SEGMENTS'
+         and jsonb_typeof(t.invoice_breakdown_json->'segments')='array'
+        then (
+          select coalesce(jsonb_agg(
+            jsonb_build_object(
+              'segment_id', nullif(btrim(coalesce(seg->>'segment_id','')),''),
+              'pay_amount', round(coalesce(nullif(seg->>'pay_amount','')::numeric,0),2),
+              'exclude_from_pay', coalesce(nullif(seg->>'exclude_from_pay','')::boolean,false),
+              'ref_num', nullif(btrim(coalesce(seg->>'ref_num','')),'')
+            )
+          ), '[]'::jsonb)
+          from jsonb_array_elements(t.invoice_breakdown_json->'segments') seg
+          where seg is not null and jsonb_typeof(seg)='object'
+        )
+        else jsonb_build_array(
+          jsonb_build_object(
+            'segment_id', ('ts:' || t.timesheet_id::text),
+            'pay_amount', round(coalesce(t.total_pay_ex_vat,0),2),
+            'exclude_from_pay', false,
+            'ref_num', nullif(btrim(coalesce(t.reference_number,'')), '')
+          )
+        )
+      end as cur_segments,
+      case
+        when t.invoice_breakdown_json is not null
+         and jsonb_typeof(t.invoice_breakdown_json)='object'
+         and upper(coalesce(t.invoice_breakdown_json->>'mode',''))='SEGMENTS'
+        then round(coalesce(nullif(t.invoice_breakdown_json #>> '{additional,pay_ex_vat}','')::numeric,0),2)
+        else 0::numeric
+      end as cur_additional
+    from tf0 t
+  ),
+  seg_ids as (
+    select
+      c.timesheet_id,
+      nullif(btrim(coalesce(s->>'segment_id','')),'') as segment_id
+    from cur0 c
+    join lateral jsonb_array_elements(coalesce(c.cur_segments,'[]'::jsonb)) s on true
+    where s is not null and jsonb_typeof(s)='object'
+    union
+    select
+      c.timesheet_id,
+      nullif(btrim(coalesce(s->>'segment_id','')),'') as segment_id
+    from cur0 c
+    join lateral jsonb_array_elements(coalesce(c.base_json->'segments','[]'::jsonb)) s on true
+    where s is not null and jsonb_typeof(s)='object'
+  ),
+  seg_calc as (
+    select
+      c.timesheet_id,
+      c.candidate_id,
+      c.require_reference_to_pay,
+      i.segment_id,
+
+      coalesce(cur.pay_amount, 0)::numeric(12,2) as cur_pay_amount,
+      coalesce(cur.exclude_from_pay, false) as cur_exclude_from_pay,
+      cur.ref_num as cur_ref_num,
+
+      coalesce(bas.pay_amount, 0)::numeric(12,2) as bas_pay_amount,
+      coalesce(bas.exclude_from_pay, false) as bas_exclude_from_pay,
+
+      (case when coalesce(cur.exclude_from_pay,false) then 0 else coalesce(cur.pay_amount,0) end)::numeric(12,2) as cur_payable,
+      (case when coalesce(bas.exclude_from_pay,false) then 0 else coalesce(bas.pay_amount,0) end)::numeric(12,2) as bas_payable,
+
+      round(
+        (case when coalesce(cur.exclude_from_pay,false) then 0 else coalesce(cur.pay_amount,0) end)
+        -
+        (case when coalesce(bas.exclude_from_pay,false) then 0 else coalesce(bas.pay_amount,0) end),
+        2
+      ) as raw_delta_ex,
+
+      (
+        c.require_reference_to_pay = true
+        and coalesce(cur.exclude_from_pay,false) = false
+        and nullif(btrim(coalesce(cur.ref_num,'')),'') is null
+        and round(
+              (case when coalesce(cur.exclude_from_pay,false) then 0 else coalesce(cur.pay_amount,0) end)
+              -
+              (case when coalesce(bas.exclude_from_pay,false) then 0 else coalesce(bas.pay_amount,0) end),
+              2
+            ) > 0
+      ) as is_blocked
+    from cur0 c
+    join (select distinct timesheet_id, segment_id from seg_ids where segment_id is not null) i
+      on i.timesheet_id = c.timesheet_id
+    left join lateral (
+      select
+        round(coalesce(nullif(s->>'pay_amount','')::numeric,0),2) as pay_amount,
+        coalesce(nullif(s->>'exclude_from_pay','')::boolean,false) as exclude_from_pay,
+        nullif(btrim(coalesce(s->>'ref_num','')),'') as ref_num
+      from jsonb_array_elements(coalesce(c.cur_segments,'[]'::jsonb)) s
+      where s is not null and jsonb_typeof(s)='object'
+        and nullif(btrim(coalesce(s->>'segment_id','')),'') = i.segment_id
+      limit 1
+    ) cur on true
+    left join lateral (
+      select
+        round(coalesce(nullif(s->>'pay_amount','')::numeric,0),2) as pay_amount,
+        coalesce(nullif(s->>'exclude_from_pay','')::boolean,false) as exclude_from_pay
+      from jsonb_array_elements(coalesce(c.base_json->'segments','[]'::jsonb)) s
+      where s is not null and jsonb_typeof(s)='object'
+        and nullif(btrim(coalesce(s->>'segment_id','')),'') = i.segment_id
+      limit 1
+    ) bas on true
+  ),
+  new_segments as (
+    select
+      sc.timesheet_id,
+      jsonb_agg(
+        jsonb_build_object(
+          'segment_id', sc.segment_id,
+          'pay_amount', case when sc.is_blocked then sc.bas_pay_amount else sc.cur_pay_amount end,
+          'exclude_from_pay', case when sc.is_blocked then sc.bas_exclude_from_pay else sc.cur_exclude_from_pay end,
+          'ref_num', sc.cur_ref_num
+        )
+        order by sc.segment_id
+      ) as segments_json
+    from seg_calc sc
+    group by sc.timesheet_id
+  ),
+  new_adjustments as (
+    select
+      c.timesheet_id,
+      coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'id', a.id::text,
+            'delta_pay_ex_vat', round(coalesce(a.delta_pay_ex_vat,0),2)
+          )
+          order by a.id
+        ),
+        '[]'::jsonb
+      ) as adjustments_json
+    from cur0 c
+    left join public.ts_pay_adjustments a
+      on a.timesheet_id = c.timesheet_id
+     and a.as_advance = false
+    group by c.timesheet_id
+  ),
+  snap as (
+    select
+      c.timesheet_id,
+      c.candidate_id,
+      coalesce(c.base_json, '{}'::jsonb) as base_snapshot_json,
+      jsonb_build_object(
+        'segments', coalesce(ns.segments_json, '[]'::jsonb),
+        'additional_pay_ex_vat', round(coalesce(c.cur_additional,0),2),
+        'expenses', jsonb_build_object(
+          'expenses_pay_ex_vat', round(coalesce(c.expenses_pay_ex_vat,0),2),
+          'travel_pay_ex_vat', round(coalesce(c.travel_pay_ex_vat,0),2),
+          'accommodation_pay_ex_vat', round(coalesce(c.accommodation_pay_ex_vat,0),2),
+          'other_pay_ex_vat', round(coalesce(c.other_pay_ex_vat,0),2),
+          'mileage_pay_ex_vat', round(coalesce(c.mileage_pay_ex_vat,0),2)
+        ),
+        'adjustments', coalesce(na.adjustments_json, '[]'::jsonb)
+      ) as target_snapshot_json
+    from cur0 c
+    left join new_segments ns on ns.timesheet_id = c.timesheet_id
+    left join new_adjustments na on na.timesheet_id = c.timesheet_id
+  )
+  insert into public.pay_batch_timesheet_snapshots(
+    pay_batch_id,
+    timesheet_id,
+    candidate_id,
+    pay_channel,
+    base_snapshot_json,
+    target_snapshot_json,
+    signature,
+    created_at_utc
+  )
+  select
+    v_batch_id,
+    s.timesheet_id,
+    s.candidate_id,
+    tc.pay_channel_used,
+    s.base_snapshot_json,
+    s.target_snapshot_json,
+    encode(digest(convert_to(s.target_snapshot_json::text,'utf8'), 'sha256'), 'hex'),
+    now()
+  from snap s
+  join ts_channel tc
+    on tc.timesheet_id = s.timesheet_id;
+
   return jsonb_build_object(
     'ok', true,
     'pay_batch_id', v_batch_id::text,
     'pay_date', p_pay_date::text,
     'pay_week_start', v_week_start::text,
     'banking_system_snapshot', v_settings.banking_system,
-    'external_paye_system_snapshot', v_settings.external_paye_system
+    'external_paye_system_snapshot', v_settings.external_paye_system,
+    'rail_provider_snapshot', v_settings.rail_provider_default,
+    'rail_env_snapshot', v_settings.rail_env_default
   );
 end;
 $$;
-
 commit;
 
 begin;
@@ -4103,7 +4615,6 @@ $$;
 -- =========================================================
 -- A4.9 pay_batches_list / pay_batch_get
 -- =========================================================
-
 create or replace function public.pay_execute_bank(
   p_pay_batch_id uuid,
   p_pay_channel_scope text,
@@ -4122,9 +4633,20 @@ declare
   v_bulk_ref_date date;
   v_bulk_reference text;
 
-  v_missing int := 0;
+  v_provider text;
+  v_env text;
+
+  v_tax_year_start date;
+  v_tax_week int;
+
+  v_pay_week_start date;
+  v_pay_week_end date;
+
+  v_pending_count int := 0;
+  v_blocked_count int := 0;
 
   v_transfers jsonb := '[]'::jsonb;
+  v_blocked_reasons jsonb := '[]'::jsonb;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_batch_id is required';
@@ -4142,7 +4664,9 @@ begin
     pb.external_paye_system_snapshot,
     pb.bulk_ref_num,
     pb.bulk_ref_date,
-    pb.bulk_reference
+    pb.bulk_reference,
+    pb.rail_provider_snapshot,
+    pb.rail_env_snapshot
   into v_batch
   from public.pay_batches pb
   where pb.id = p_pay_batch_id
@@ -4151,9 +4675,17 @@ begin
   if v_batch.id is null then
     raise exception 'pay_batch not found';
   end if;
-  if v_batch.status <> 'DRAFT' then
-    raise exception 'pay_batch must be DRAFT to execute (current=%)', v_batch.status;
+
+  if v_batch.status not in ('DRAFT','READY','PARTIAL','WAITING_BANK_CONFIRM','DRAFT_CREATED') then
+    raise exception 'pay_batch status not valid for execute (current=%)', v_batch.status;
   end if;
+
+  if v_batch.pay_date is null then
+    raise exception 'pay_batch pay_date is required';
+  end if;
+
+  v_provider := upper(coalesce(v_batch.rail_provider_snapshot, 'CSV'));
+  v_env := upper(coalesce(v_batch.rail_env_snapshot, 'PROD'));
 
   -- Allocate bulk reference ONCE per batch (digits-only canonical)
   if v_batch.bulk_reference is null then
@@ -4184,15 +4716,26 @@ begin
     v_bulk_reference := v_batch.bulk_reference;
   end if;
 
+  -- PAYE tax-week number (week 1 starts 6 April)
+  v_tax_year_start := make_date(extract(year from v_batch.pay_date)::int, 4, 6);
+  if v_batch.pay_date < v_tax_year_start then
+    v_tax_year_start := make_date((extract(year from v_batch.pay_date)::int) - 1, 4, 6);
+  end if;
+  v_tax_week := ((v_batch.pay_date - v_tax_year_start) / 7) + 1;
+  if v_tax_week < 1 then v_tax_week := 1; end if;
+
+  -- Bucket for non-timesheet items (loan repayments etc.)
+  v_pay_week_start := public._pay_week_start_monday(v_batch.pay_date);
+  v_pay_week_end := (v_pay_week_start + 6);
+
   -- Validate PAYE net inputs if PAYE is being executed
   if v_scope in ('PAYE','ALL') then
-    -- Ensure every PAYE candidate in this batch is READY and has a net input
     if exists (
       select 1
-      from public.pay_batch_candidates pbc
-      where pbc.pay_batch_id = p_pay_batch_id
-        and pbc.paye_state is not null
-        and pbc.paye_state <> 'READY'
+      from public.pay_batch_candidates pbc_chk
+      where pbc_chk.pay_batch_id = p_pay_batch_id
+        and pbc_chk.paye_state is not null
+        and pbc_chk.paye_state <> 'READY'
       limit 1
     ) then
       raise exception 'PAYE_NOT_READY: some PAYE candidates are not READY';
@@ -4200,72 +4743,123 @@ begin
 
     if exists (
       select 1
-      from public.pay_batch_candidates pbc
+      from public.pay_batch_candidates pbc_chk2
       left join lateral (
-        select pni.net_amount
-        from public.pay_batch_paye_net_inputs pni
-        where pni.pay_batch_candidate_id = pbc.id
-        order by pni.imported_at_utc desc
+        select pni_chk.net_amount
+        from public.pay_batch_paye_net_inputs pni_chk
+        where pni_chk.pay_batch_candidate_id = pbc_chk2.id
+        order by pni_chk.imported_at_utc desc
         limit 1
-      ) ni on true
-      where pbc.pay_batch_id = p_pay_batch_id
-        and pbc.paye_state is not null
-        and ni.net_amount is null
+      ) ni_chk on true
+      where pbc_chk2.pay_batch_id = p_pay_batch_id
+        and pbc_chk2.paye_state is not null
+        and ni_chk.net_amount is null
       limit 1
     ) then
       raise exception 'PAYE_NET_MISSING: missing net pay for one or more PAYE candidates';
     end if;
+  end if;
 
-    -- Create pay_bank_transfers for PAYE
-    insert into public.pay_bank_transfers(
-      pay_batch_id,
+  -- Temp staging for transfer groups (idempotent within transaction)
+  create temp table if not exists _tmp_pay_transfer_groups (
+    pay_channel text not null,
+    candidate_id uuid not null,
+    umbrella_id uuid null,
+    week_ending_bucket date null,
+    amount numeric not null,
+    currency text not null,
+    status text not null,
+    rail_state text null,
+    rail_meta_json jsonb null,
+    payment_reference text null,
+    payee_name text null,
+    sort_code text null,
+    account_number text null,
+    account_type text null,
+    bank_details_hash_snapshot text null,
+    payee_entity_kind text not null,
+    payee_entity_id uuid null,
+    transfer_group_key text not null,
+    grouping_mode_used text null
+  ) on commit drop;
+
+  delete from _tmp_pay_transfer_groups;
+
+  -- =========================================================
+  -- PAYE groups: candidate_id only (one transfer per candidate)
+  -- =========================================================
+  if v_scope in ('PAYE','ALL') then
+    insert into _tmp_pay_transfer_groups(
+      pay_channel,
       candidate_id,
       umbrella_id,
-      pay_channel,
+      week_ending_bucket,
       amount,
       currency,
       status,
+      rail_state,
+      rail_meta_json,
       payment_reference,
       payee_name,
       sort_code,
       account_number,
       account_type,
-      revolut_counterparty_id,
-      revolut_counterparty_account_id
+      bank_details_hash_snapshot,
+      payee_entity_kind,
+      payee_entity_id,
+      transfer_group_key,
+      grouping_mode_used
     )
     select
-      p_pay_batch_id,
+      'PAYE'::text as pay_channel,
       pbc.candidate_id,
-      null,
-      'PAYE',
-      round(ni.net_amount, 2),
-      'GBP',
-      'PENDING',
+      null::uuid as umbrella_id,
+      null::date as week_ending_bucket,
+      round(ni.net_amount, 2) as amount,
+      'GBP'::text as currency,
 
-      -- payment_reference (keep simple; candidate display name preferred)
-      nullif(btrim(coalesce(c.display_name, concat_ws(' ', c.first_name, c.last_name))), ''),
-
-      -- payee_name (account holder preferred)
-      nullif(btrim(coalesce(c.account_holder, c.display_name, concat_ws(' ', c.first_name, c.last_name))), ''),
-
-      -- sort_code normalised to NN-NN-NN when possible
       case
-        when length(regexp_replace(coalesce(c.sort_code,''), '[^0-9]', '', 'g')) = 6 then
-          substr(regexp_replace(coalesce(c.sort_code,''), '[^0-9]', '', 'g'), 1, 2) || '-' ||
-          substr(regexp_replace(coalesce(c.sort_code,''), '[^0-9]', '', 'g'), 3, 2) || '-' ||
-          substr(regexp_replace(coalesce(c.sort_code,''), '[^0-9]', '', 'g'), 5, 2)
+        when (sc_norm is null or acct_norm is null or payee_nm is null) then 'BLOCKED'
+        else 'PENDING'
+      end as status,
+
+      case
+        when (sc_norm is null or acct_norm is null or payee_nm is null) then 'BLOCKED_BANK_DETAILS'
         else null
-      end,
+      end as rail_state,
 
-      -- account_number digits only (preserves leading zeros)
-      nullif(regexp_replace(coalesce(c.account_number,''), '[^0-9]', '', 'g'), ''),
+      case
+        when (sc_norm is null or acct_norm is null or payee_nm is null) then
+          jsonb_build_object(
+            'reason_code', 'BANK_DETAILS_MISSING',
+            'missing', (
+              select jsonb_agg(x.m)
+              from (
+                select 'sort_code'::text as m where sc_norm is null
+                union all
+                select 'account_number'::text where acct_norm is null
+                union all
+                select 'payee_name'::text where payee_nm is null
+              ) x
+            )
+          )
+        else null
+      end as rail_meta_json,
 
-      'Personal',
+      ('Pay - week ' || v_tax_week::text) as payment_reference,
 
-      -- Revolut snapshot (only required in REVOLUT_API mode; safe to store always)
-      c.revolut_counterparty_id,
-      c.revolut_counterparty_account_id
+      payee_nm as payee_name,
+      sc_norm as sort_code,
+      acct_norm as account_number,
+      'Personal'::text as account_type,
 
+      c.bank_details_hash as bank_details_hash_snapshot,
+
+      'CANDIDATE'::text as payee_entity_kind,
+      pbc.candidate_id as payee_entity_id,
+
+      (pbc.candidate_id::text) as transfer_group_key,
+      'CANDIDATE'::text as grouping_mode_used
     from public.pay_batch_candidates pbc
     join public.candidates c
       on c.id = pbc.candidate_id
@@ -4276,144 +4870,347 @@ begin
       order by pni.imported_at_utc desc
       limit 1
     ) ni on true
+    join lateral (
+      select
+        nullif(btrim(coalesce(c.account_holder, c.display_name, concat_ws(' ', c.first_name, c.last_name))), '') as payee_nm,
+        case
+          when length(regexp_replace(coalesce(c.sort_code,''), '[^0-9]', '', 'g')) = 6 then
+            substr(regexp_replace(coalesce(c.sort_code,''), '[^0-9]', '', 'g'), 1, 2) || '-' ||
+            substr(regexp_replace(coalesce(c.sort_code,''), '[^0-9]', '', 'g'), 3, 2) || '-' ||
+            substr(regexp_replace(coalesce(c.sort_code,''), '[^0-9]', '', 'g'), 5, 2)
+          else null
+        end as sc_norm,
+        nullif(regexp_replace(coalesce(c.account_number,''), '[^0-9]', '', 'g'), '') as acct_norm
+    ) b on true
     where pbc.pay_batch_id = p_pay_batch_id
       and pbc.paye_state is not null
       and round(coalesce(ni.net_amount,0),2) > 0;
   end if;
 
-  -- Create umbrella transfers if UMBRELLA is being executed
+  -- =========================================================
+  -- UMBRELLA groups: candidate_id + week_ending_bucket (default)
+  -- Payee is umbrella (funds go to umbrella)
+  -- =========================================================
   if v_scope in ('UMBRELLA','ALL') then
-    insert into public.pay_bank_transfers(
-      pay_batch_id,
+    insert into _tmp_pay_transfer_groups(
+      pay_channel,
       candidate_id,
       umbrella_id,
-      pay_channel,
+      week_ending_bucket,
       amount,
       currency,
       status,
+      rail_state,
+      rail_meta_json,
       payment_reference,
       payee_name,
       sort_code,
       account_number,
       account_type,
-      revolut_counterparty_id,
-      revolut_counterparty_account_id
+      bank_details_hash_snapshot,
+      payee_entity_kind,
+      payee_entity_id,
+      transfer_group_key,
+      grouping_mode_used
     )
     select
-      p_pay_batch_id,
+      'UMBRELLA'::text as pay_channel,
       pbc.candidate_id,
-      c.umbrella_id,
-      'UMBRELLA',
-      round(greatest(coalesce(sum(pbi.amount_inc_vat),0),0),2),
-      'GBP',
-      'PENDING',
+      umb_id as umbrella_id,
+      wk_end as week_ending_bucket,
+      round(greatest(sum_amt,0),2) as amount,
+      'GBP'::text as currency,
 
-      -- REQUIRED RULE: "Surname FirstName" truncated to 18 characters (crop end first)
+      case
+        when (umb_id is null) then 'BLOCKED'
+        when (sc_norm is null or acct_norm is null or payee_nm is null) then 'BLOCKED'
+        else 'PENDING'
+      end as status,
+
+      case
+        when (umb_id is null) then 'BLOCKED_UMBRELLA_MISSING'
+        when (sc_norm is null or acct_norm is null or payee_nm is null) then 'BLOCKED_BANK_DETAILS'
+        else null
+      end as rail_state,
+
+      case
+        when (umb_id is null) then
+          jsonb_build_object('reason_code','UMBRELLA_MISSING')
+        when (sc_norm is null or acct_norm is null or payee_nm is null) then
+          jsonb_build_object(
+            'reason_code', 'BANK_DETAILS_MISSING',
+            'missing', (
+              select jsonb_agg(x.m)
+              from (
+                select 'sort_code'::text as m where sc_norm is null
+                union all
+                select 'account_number'::text where acct_norm is null
+                union all
+                select 'payee_name'::text where payee_nm is null
+              ) x
+            )
+          )
+        else null
+      end as rail_meta_json,
+
       left(
         btrim(concat_ws(' ', nullif(btrim(c.last_name),''), nullif(btrim(c.first_name),''))),
         18
-      ),
+      ) as payment_reference,
 
-      -- payee_name from umbrella (account_holder preferred, else name)
-      nullif(btrim(coalesce(u.account_holder, u.name)), ''),
+      payee_nm as payee_name,
+      sc_norm as sort_code,
+      acct_norm as account_number,
+      coalesce(nullif(btrim(u.account_type),''), 'Business') as account_type,
 
-      -- sort_code normalised to NN-NN-NN when possible
-      case
-        when length(regexp_replace(coalesce(u.sort_code,''), '[^0-9]', '', 'g')) = 6 then
-          substr(regexp_replace(coalesce(u.sort_code,''), '[^0-9]', '', 'g'), 1, 2) || '-' ||
-          substr(regexp_replace(coalesce(u.sort_code,''), '[^0-9]', '', 'g'), 3, 2) || '-' ||
-          substr(regexp_replace(coalesce(u.sort_code,''), '[^0-9]', '', 'g'), 5, 2)
-        else null
-      end,
+      u.bank_details_hash as bank_details_hash_snapshot,
 
-      -- account_number digits only (preserves leading zeros)
-      nullif(regexp_replace(coalesce(u.account_number,''), '[^0-9]', '', 'g'), ''),
+      case when umb_id is null then 'CANDIDATE' else 'UMBRELLA' end as payee_entity_kind,
+      case when umb_id is null then pbc.candidate_id else umb_id end as payee_entity_id,
 
-      'Business',
-
-      -- Revolut snapshot (required in REVOLUT_API mode)
-      u.revolut_counterparty_id,
-      u.revolut_counterparty_account_id
-
-    from public.pay_batch_candidates pbc
+      (pbc.candidate_id::text || '|' || wk_end::text) as transfer_group_key,
+      'CANDIDATE_WEEK'::text as grouping_mode_used
+    from (
+      select
+        pbc0.id as pay_batch_candidate_id,
+        pbc0.candidate_id,
+        coalesce(vts.week_ending_date, v_pay_week_end) as wk_end,
+        max(pbi0.umbrella_id) as umb_id,
+        sum(coalesce(pbi0.amount_inc_vat,0)) as sum_amt
+      from public.pay_batch_candidates pbc0
+      join public.pay_batch_items pbi0
+        on pbi0.pay_batch_candidate_id = pbc0.id
+       and pbi0.pay_channel = 'UMBRELLA'
+       and pbi0.item_type <> 'DEBT_CREATED'
+      left join public.v_timesheets_summary_base vts
+        on vts.timesheet_id = pbi0.timesheet_id
+      where pbc0.pay_batch_id = p_pay_batch_id
+      group by pbc0.id, pbc0.candidate_id, coalesce(vts.week_ending_date, v_pay_week_end)
+      having round(greatest(sum(coalesce(pbi0.amount_inc_vat,0)),0),2) > 0
+    ) g
+    join public.pay_batch_candidates pbc
+      on pbc.id = g.pay_batch_candidate_id
     join public.candidates c
       on c.id = pbc.candidate_id
-    join public.umbrellas u
-      on u.id = c.umbrella_id
-    join public.pay_batch_items pbi
-      on pbi.pay_batch_candidate_id = pbc.id
-     and pbi.pay_channel = 'UMBRELLA'
-     and pbi.item_type <> 'DEBT_CREATED'
-    where pbc.pay_batch_id = p_pay_batch_id
-      and c.umbrella_id is not null
-    group by
-      pbc.candidate_id,
-      c.umbrella_id,
-      c.first_name,
-      c.last_name,
-      u.account_holder,
-      u.name,
-      u.sort_code,
-      u.account_number,
-      u.revolut_counterparty_id,
-      u.revolut_counterparty_account_id
-    having round(greatest(coalesce(sum(pbi.amount_inc_vat),0),0),2) > 0;
+    left join public.umbrellas u
+      on u.id = g.umb_id
+    join lateral (
+      select
+        nullif(btrim(coalesce(u.name,'')), '') as payee_nm,
+        case
+          when length(regexp_replace(coalesce(u.sort_code,''), '[^0-9]', '', 'g')) = 6 then
+            substr(regexp_replace(coalesce(u.sort_code,''), '[^0-9]', '', 'g'), 1, 2) || '-' ||
+            substr(regexp_replace(coalesce(u.sort_code,''), '[^0-9]', '', 'g'), 3, 2) || '-' ||
+            substr(regexp_replace(coalesce(u.sort_code,''), '[^0-9]', '', 'g'), 5, 2)
+          else null
+        end as sc_norm,
+        nullif(regexp_replace(coalesce(u.account_number,''), '[^0-9]', '', 'g'), '') as acct_norm
+    ) b on true
+    cross join lateral (
+      select
+        g.wk_end as wk_end,
+        g.umb_id as umb_id,
+        g.sum_amt as sum_amt,
+        b.payee_nm as payee_nm,
+        b.sc_norm as sc_norm,
+        b.acct_norm as acct_norm
+    ) x;
   end if;
 
-  -- Validate required snapshot fields based on banking system
-  if v_batch.banking_system_snapshot in ('MONZO_CSV','REVOLUT_CSV') then
-    select count(*)::int
-    into v_missing
-    from public.pay_bank_transfers pbt_chk
-    where pbt_chk.pay_batch_id = p_pay_batch_id
-      and (v_scope = 'ALL' or pbt_chk.pay_channel = v_scope)
-      and pbt_chk.status = 'PENDING'
-      and (
-        pbt_chk.payment_reference is null
-        or pbt_chk.payee_name is null
-        or pbt_chk.sort_code is null
-        or pbt_chk.account_number is null
-        or pbt_chk.account_type is null
-      );
-
-    if v_missing > 0 then
-      raise exception 'BANK_DETAILS_MISSING: % transfer(s) missing payment_reference/payee_name/sort_code/account_number/account_type', v_missing;
-    end if;
+  -- Clear old item→transfer links for this scope (rebuild coherently)
+  if v_scope in ('PAYE','ALL') then
+    update public.pay_batch_items pbi_clr
+    set pay_bank_transfer_id = null
+    from public.pay_batch_candidates pbc_clr
+    where pbi_clr.pay_batch_candidate_id = pbc_clr.id
+      and pbc_clr.pay_batch_id = p_pay_batch_id
+      and pbi_clr.pay_channel = 'PAYE'
+      and pbi_clr.item_type <> 'DEBT_CREATED';
   end if;
 
-  if v_batch.banking_system_snapshot = 'REVOLUT_API' then
-    select count(*)::int
-    into v_missing
-    from public.pay_bank_transfers pbt_rv
-    where pbt_rv.pay_batch_id = p_pay_batch_id
-      and (v_scope = 'ALL' or pbt_rv.pay_channel = v_scope)
-      and pbt_rv.status = 'PENDING'
-      and (
-        pbt_rv.revolut_counterparty_id is null
-        or pbt_rv.revolut_counterparty_account_id is null
-      );
-
-    if v_missing > 0 then
-      raise exception 'REVOLUT_COUNTERPARTY_MISSING: % transfer(s) missing revolut_counterparty_id/revolut_counterparty_account_id', v_missing;
-    end if;
+  if v_scope in ('UMBRELLA','ALL') then
+    update public.pay_batch_items pbi_clr2
+    set pay_bank_transfer_id = null
+    from public.pay_batch_candidates pbc_clr2
+    where pbi_clr2.pay_batch_candidate_id = pbc_clr2.id
+      and pbc_clr2.pay_batch_id = p_pay_batch_id
+      and pbi_clr2.pay_channel = 'UMBRELLA'
+      and pbi_clr2.item_type <> 'DEBT_CREATED';
   end if;
 
-  -- Update batch status based on banking system snapshot
+  -- Upsert transfers (idempotent by (pay_batch_id, pay_channel, transfer_group_key))
+  insert into public.pay_bank_transfers(
+    pay_batch_id,
+    candidate_id,
+    umbrella_id,
+    pay_channel,
+    amount,
+    currency,
+    status,
+    payment_reference,
+    payee_name,
+    sort_code,
+    account_number,
+    account_type,
+    rail_provider,
+    rail_env,
+    request_id,
+    rail_tx_id,
+    rail_state,
+    rail_meta_json,
+    bank_details_hash_snapshot,
+    payee_entity_kind,
+    payee_entity_id,
+    transfer_group_key,
+    grouping_mode_used,
+    week_ending_bucket
+  )
+  select
+    p_pay_batch_id,
+    g.candidate_id,
+    g.umbrella_id,
+    g.pay_channel,
+    g.amount,
+    g.currency,
+    g.status,
+    g.payment_reference,
+    g.payee_name,
+    g.sort_code,
+    g.account_number,
+    g.account_type,
+    v_provider,
+    v_env,
+    null::text as request_id,
+    null::text as rail_tx_id,
+    g.rail_state,
+    g.rail_meta_json,
+    g.bank_details_hash_snapshot,
+    g.payee_entity_kind,
+    g.payee_entity_id,
+    g.transfer_group_key,
+    g.grouping_mode_used,
+    g.week_ending_bucket
+  from _tmp_pay_transfer_groups g
+  where (v_scope = 'ALL' or g.pay_channel = v_scope)
+  on conflict (pay_batch_id, pay_channel, transfer_group_key)
+  do update set
+    candidate_id = excluded.candidate_id,
+    umbrella_id = excluded.umbrella_id,
+    amount = excluded.amount,
+    currency = excluded.currency,
+    status = excluded.status,
+    payment_reference = excluded.payment_reference,
+    payee_name = excluded.payee_name,
+    sort_code = excluded.sort_code,
+    account_number = excluded.account_number,
+    account_type = excluded.account_type,
+    rail_provider = excluded.rail_provider,
+    rail_env = excluded.rail_env,
+    rail_state = excluded.rail_state,
+    rail_meta_json = excluded.rail_meta_json,
+    bank_details_hash_snapshot = excluded.bank_details_hash_snapshot,
+    payee_entity_kind = excluded.payee_entity_kind,
+    payee_entity_id = excluded.payee_entity_id,
+    grouping_mode_used = excluded.grouping_mode_used,
+    week_ending_bucket = excluded.week_ending_bucket
+  where public.pay_bank_transfers.status in ('PENDING','BLOCKED','FAILED');
+
+  -- Ensure request_id is populated and stable (default to id::text)
+  update public.pay_bank_transfers pbt_req
+  set request_id = coalesce(nullif(pbt_req.request_id,''), pbt_req.id::text)
+  where pbt_req.pay_batch_id = p_pay_batch_id
+    and (v_scope = 'ALL' or pbt_req.pay_channel = v_scope)
+    and (pbt_req.request_id is null or pbt_req.request_id = '');
+
+  -- Link items → transfers
+  if v_scope in ('PAYE','ALL') then
+    update public.pay_batch_items pbi_l
+    set pay_bank_transfer_id = pbt_l.id
+    from public.pay_batch_candidates pbc_l
+    join public.pay_bank_transfers pbt_l
+      on pbt_l.pay_batch_id = p_pay_batch_id
+     and pbt_l.pay_channel = 'PAYE'
+     and pbt_l.candidate_id = pbc_l.candidate_id
+     and pbt_l.transfer_group_key = (pbc_l.candidate_id::text)
+    where pbi_l.pay_batch_candidate_id = pbc_l.id
+      and pbc_l.pay_batch_id = p_pay_batch_id
+      and pbi_l.pay_channel = 'PAYE'
+      and pbi_l.item_type <> 'DEBT_CREATED';
+  end if;
+
+  if v_scope in ('UMBRELLA','ALL') then
+    update public.pay_batch_items pbi_u
+    set pay_bank_transfer_id = pbt_u.id
+    from public.pay_batch_candidates pbc_u
+    left join public.v_timesheets_summary_base vts_u
+      on vts_u.timesheet_id = pbi_u.timesheet_id
+    join public.pay_bank_transfers pbt_u
+      on pbt_u.pay_batch_id = p_pay_batch_id
+     and pbt_u.pay_channel = 'UMBRELLA'
+     and pbt_u.candidate_id = pbc_u.candidate_id
+     and pbt_u.week_ending_bucket = coalesce(vts_u.week_ending_date, v_pay_week_end)
+    where pbi_u.pay_batch_candidate_id = pbc_u.id
+      and pbc_u.pay_batch_id = p_pay_batch_id
+      and pbi_u.pay_channel = 'UMBRELLA'
+      and pbi_u.item_type <> 'DEBT_CREATED';
+  end if;
+
+  -- Counts for UI
+  select count(*)::int
+  into v_pending_count
+  from public.pay_bank_transfers pbt_cnt
+  where pbt_cnt.pay_batch_id = p_pay_batch_id
+    and (v_scope = 'ALL' or pbt_cnt.pay_channel = v_scope)
+    and pbt_cnt.status = 'PENDING';
+
+  select count(*)::int
+  into v_blocked_count
+  from public.pay_bank_transfers pbt_cnt2
+  where pbt_cnt2.pay_batch_id = p_pay_batch_id
+    and (v_scope = 'ALL' or pbt_cnt2.pay_channel = v_scope)
+    and pbt_cnt2.status = 'BLOCKED';
+
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'id', pbt_blk.id::text,
+        'pay_channel', pbt_blk.pay_channel,
+        'candidate_id', pbt_blk.candidate_id::text,
+        'umbrella_id', case when pbt_blk.umbrella_id is null then null else pbt_blk.umbrella_id::text end,
+        'transfer_group_key', pbt_blk.transfer_group_key,
+        'week_ending_bucket', case when pbt_blk.week_ending_bucket is null then null else pbt_blk.week_ending_bucket::text end,
+        'rail_state', pbt_blk.rail_state,
+        'rail_meta_json', pbt_blk.rail_meta_json
+      )
+      order by pbt_blk.pay_channel, pbt_blk.candidate_id, pbt_blk.id
+    ),
+    '[]'::jsonb
+  )
+  into v_blocked_reasons
+  from public.pay_bank_transfers pbt_blk
+  where pbt_blk.pay_batch_id = p_pay_batch_id
+    and (v_scope = 'ALL' or pbt_blk.pay_channel = v_scope)
+    and pbt_blk.status = 'BLOCKED';
+
+  -- Batch status update (rail-aware)
   update public.pay_batches pb3
   set status = case
-    when pb3.banking_system_snapshot in ('MONZO_CSV','REVOLUT_CSV') then 'WAITING_BANK_CONFIRM'
-    when pb3.banking_system_snapshot = 'REVOLUT_API' then 'DRAFT_CREATED'
-    else 'WAITING_BANK_CONFIRM'
+    when v_provider = 'CSV' then
+      case when v_pending_count > 0 then 'WAITING_BANK_CONFIRM' else 'PARTIAL' end
+    when v_provider = 'REVOLUT' then
+      case when v_pending_count > 0 then 'READY' else 'PARTIAL' end
+    else
+      case when v_pending_count > 0 then 'WAITING_BANK_CONFIRM' else 'PARTIAL' end
   end
   where pb3.id = p_pay_batch_id;
 
-  -- Return created transfers for this execution (including snapshot fields)
+  -- Return transfers (including snapshot fields)
   select coalesce(
     jsonb_agg(
       jsonb_build_object(
         'id', pbt.id::text,
         'pay_batch_id', pbt.pay_batch_id::text,
-        'candidate_id', case when pbt.candidate_id is null then null else pbt.candidate_id::text end,
+        'candidate_id', pbt.candidate_id::text,
         'umbrella_id', case when pbt.umbrella_id is null then null else pbt.umbrella_id::text end,
         'pay_channel', pbt.pay_channel,
         'amount', pbt.amount,
@@ -4424,10 +5221,20 @@ begin
         'sort_code', pbt.sort_code,
         'account_number', pbt.account_number,
         'account_type', pbt.account_type,
-        'revolut_counterparty_id', pbt.revolut_counterparty_id,
-        'revolut_counterparty_account_id', pbt.revolut_counterparty_account_id
+        'rail_provider', pbt.rail_provider,
+        'rail_env', pbt.rail_env,
+        'request_id', pbt.request_id,
+        'rail_tx_id', pbt.rail_tx_id,
+        'rail_state', pbt.rail_state,
+        'rail_meta_json', pbt.rail_meta_json,
+        'bank_details_hash_snapshot', pbt.bank_details_hash_snapshot,
+        'payee_entity_kind', pbt.payee_entity_kind,
+        'payee_entity_id', case when pbt.payee_entity_id is null then null else pbt.payee_entity_id::text end,
+        'transfer_group_key', pbt.transfer_group_key,
+        'grouping_mode_used', pbt.grouping_mode_used,
+        'week_ending_bucket', case when pbt.week_ending_bucket is null then null else pbt.week_ending_bucket::text end
       )
-      order by pbt.pay_channel, pbt.amount desc, pbt.id
+      order by pbt.pay_channel, pbt.week_ending_bucket nulls last, pbt.amount desc, pbt.id
     ),
     '[]'::jsonb
   )
@@ -4440,16 +5247,20 @@ begin
     'ok', true,
     'pay_batch_id', p_pay_batch_id::text,
     'status', (select pb4.status from public.pay_batches pb4 where pb4.id = p_pay_batch_id),
+    'rail_provider_snapshot', v_provider,
+    'rail_env_snapshot', v_env,
     'banking_system_snapshot', v_batch.banking_system_snapshot,
     'external_paye_system_snapshot', v_batch.external_paye_system_snapshot,
     'bulk_ref_num', v_bulk_ref_num,
     'bulk_ref_date', case when v_bulk_ref_date is null then null else v_bulk_ref_date::text end,
     'bulk_reference', v_bulk_reference,
+    'pending_count', v_pending_count,
+    'blocked_count', v_blocked_count,
+    'blocked', v_blocked_reasons,
     'transfers', v_transfers
   );
 end;
 $$;
-
 
 create or replace function public.pay_batches_list(
   p_limit int default 50,
