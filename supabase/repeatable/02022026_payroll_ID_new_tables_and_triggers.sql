@@ -529,7 +529,12 @@ begin
 end;
 $$;
 
-create or replace function public.id_consolidation_balance_now(p_actor_user_id uuid)
+
+create or replace function public.id_consolidation_balance_now(
+  p_actor_user_id uuid,
+  p_bank_upload_code text,
+  p_note text default null
+)
 returns jsonb
 language plpgsql
 security definer
@@ -545,7 +550,17 @@ declare
   v_total_inc numeric(12,2) := 0;
 
   v_lines jsonb := '[]'::jsonb;
+
+  v_bank_upload_code text;
+  v_note text;
 begin
+  v_bank_upload_code := nullif(btrim(coalesce(p_bank_upload_code,'')), '');
+  v_note := nullif(btrim(coalesce(p_note,'')), '');
+
+  if v_bank_upload_code is null then
+    raise exception 'BANK_UPLOAD_CODE_REQUIRED';
+  end if;
+
   if to_regclass('public.id_ref_seq') is null then
     raise exception 'ID_REF_SEQ_MISSING';
   end if;
@@ -680,7 +695,10 @@ begin
     created_by_user_id,
     total_delta_ex_vat,
     total_delta_vat,
-    total_delta_inc_vat
+    total_delta_inc_vat,
+    bank_upload_code,
+    bank_uploaded_at_utc,
+    note
   )
   values (
     v_id_ref,
@@ -688,7 +706,10 @@ begin
     p_actor_user_id,
     v_total_ex,
     v_total_vat,
-    v_total_inc
+    v_total_inc,
+    v_bank_upload_code,
+    v_created_at,
+    v_note
   );
 
   -- Insert run lines (only if there are any)
@@ -737,6 +758,9 @@ begin
   return jsonb_build_object(
     'id_ref', v_id_ref,
     'created_at_utc', v_created_at,
+    'bank_upload_code', v_bank_upload_code,
+    'bank_uploaded_at_utc', v_created_at,
+    'note', v_note,
     'total_delta_ex_vat', v_total_ex,
     'total_delta_vat', v_total_vat,
     'total_delta_inc_vat', v_total_inc,
@@ -778,7 +802,10 @@ begin
           'created_by_user_id', case when r.created_by_user_id is null then null else r.created_by_user_id::text end,
           'total_delta_ex_vat', r.total_delta_ex_vat,
           'total_delta_vat', r.total_delta_vat,
-          'total_delta_inc_vat', r.total_delta_inc_vat
+          'total_delta_inc_vat', r.total_delta_inc_vat,
+          'bank_upload_code', r.bank_upload_code,
+          'bank_uploaded_at_utc', r.bank_uploaded_at_utc,
+          'note', r.note
         )
         order by r.created_at_utc desc, r.id_ref desc
       ),
@@ -800,6 +827,9 @@ begin
   );
 end;
 $$;
+
+
+
 
 
 create or replace function public.id_consolidation_run_get(p_id_ref text)
