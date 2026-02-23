@@ -8454,6 +8454,85 @@ async function handleContractsCloneAndExtend(env, req, contractId) {
   }
 }
 
+async function handleBankingRailAccountsList(env, req, user) {
+  try {
+    // Resolve provider/env from settings_defaults (default), but allow ?provider= override
+    const url = new URL(req.url);
+    const providerOverrideRaw = String(url.searchParams.get('provider') || '').trim().toUpperCase();
+    const providerOverride = (providerOverrideRaw === 'REV') ? 'REVOLUT' : providerOverrideRaw;
+
+    const select = ['rail_provider_default', 'rail_env_default'].join(',');
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=${select}&limit=1`
+    );
+
+    const sd = (rows && rows[0]) ? rows[0] : null;
+    if (!sd) return withCORS(env, req, notFound('settings_defaults not found'));
+
+    const providerDefault = String(sd.rail_provider_default || 'CSV').trim().toUpperCase();
+    const railEnvDefault = String(sd.rail_env_default || 'PROD').trim().toUpperCase();
+
+    const provider = providerOverride ? providerOverride : providerDefault;
+
+    // Validate provider override is actually supported by the adapter registry
+    const provList = getRailAdapter('__LIST__');
+    const supported = Array.isArray(provList) ? provList.map(x => String(x || '').trim().toUpperCase()) : [];
+    if (providerOverride && !supported.includes(providerOverride)) {
+      return withCORS(env, req, badRequest('UNKNOWN_RAIL_PROVIDER'));
+    }
+
+    const adapter = getRailAdapter(provider);
+    if (!adapter) return withCORS(env, req, badRequest('UNKNOWN_RAIL_PROVIDER'));
+
+    if (typeof adapter.listFundingAccounts !== 'function') {
+      return withCORS(env, req, badRequest('ACCOUNTS_LIST_NOT_SUPPORTED_FOR_THIS_RAIL'));
+    }
+
+    // Generic availability gate via adapter.capabilities()
+    if (typeof adapter.capabilities === 'function') {
+      let caps = null;
+      try {
+        caps = await adapter.capabilities(env);
+      } catch (e) {
+        const msg = (e && e.message) ? String(e.message) : String(e || 'RAIL_CAPABILITIES_FAILED');
+        return withCORS(env, req, badRequest(msg));
+      }
+
+      if (caps && typeof caps === 'object' && caps.available === false) {
+        const reason = (caps.reason && String(caps.reason).trim()) ? String(caps.reason).trim() : 'RAIL_NOT_CONFIGURED';
+        return withCORS(env, req, badRequest(reason));
+      }
+    }
+
+    // NOTE: rail_env_default is the DB env snapshot / partition key.
+    // The actual Revolut environment is determined by the Worker credentials/base URL.
+    const listed = await adapter.listFundingAccounts(env, { rail_env: railEnvDefault });
+
+    const accountsRaw = (listed && typeof listed === 'object' && Array.isArray(listed.accounts)) ? listed.accounts : [];
+    const accounts = accountsRaw.map(a => ({
+      account_id: (a && a.account_id !== undefined && a.account_id !== null) ? String(a.account_id).trim() : null,
+      currency: (a && a.currency !== undefined && a.currency !== null) ? String(a.currency).trim().toUpperCase() : null,
+      available_balance: (a && a.available_balance !== undefined && a.available_balance !== null && Number.isFinite(Number(a.available_balance)))
+        ? Number(a.available_balance)
+        : null,
+      label: (a && a.label !== undefined && a.label !== null) ? (String(a.label).trim() || null) : null
+    })).filter(x => x.account_id);
+
+    return withCORS(env, req, ok({
+      ok: true,
+      provider,
+      rail_env_default: railEnvDefault,
+      note: 'rail_env_default is the DB env snapshot/partition key; actual API environment depends on Worker credentials/base URL.',
+      accounts,
+      server_utc: new Date().toISOString()
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+
 async function handleBankingIdPreview(env, req, user) {
   try {
     const rpcRes = await sbRpc(env, 'id_consolidation_preview', {});
@@ -8586,8 +8665,6 @@ async function handleBankingIdBalanceNow(env, req, user) {
 
 
 
-
-
 async function handleBankingPayBatchManualConfirm(env, req, payBatchId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -8608,15 +8685,36 @@ async function handleBankingPayBatchManualConfirm(env, req, payBatchId) {
   }
 
   try {
-    const out = await sbRpc(env, 'pay_settle_manual_confirm', {
-      p_pay_batch_id: payBatchId,
-      p_scope: scope,
-      p_bank_confirm_ref: bankConfirmRef,
-      p_actor_user_id: user.id
-    });
+    // Resolve provider from batch snapshot and delegate to adapter.confirmManual(...)
+    const batchRes = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: String(payBatchId) });
+
+    let batchPayload = batchRes;
+    try {
+      if (Array.isArray(batchRes) && batchRes.length === 1 && batchRes[0] && typeof batchRes[0] === 'object') batchPayload = batchRes[0];
+      if (batchPayload && typeof batchPayload === 'object' && Object.prototype.hasOwnProperty.call(batchPayload, 'pay_batch_get')) {
+        batchPayload = batchPayload.pay_batch_get;
+      }
+    } catch {}
+
+    const batchObj = (batchPayload && typeof batchPayload === 'object') ? (batchPayload.batch || null) : null;
+    const provider = String(batchObj?.rail_provider_snapshot || 'CSV').toUpperCase();
+
+    const adapter = getRailAdapter(provider);
+    if (!adapter || typeof adapter.confirmManual !== 'function') {
+      return withCORS(env, req, badRequest('MANUAL_CONFIRM_NOT_SUPPORTED_FOR_THIS_RAIL'));
+    }
+
+    const out = await adapter.confirmManual(env, String(payBatchId), {
+      scope,
+      bank_confirm_ref: bankConfirmRef
+    }, user.id);
+
     return withCORS(env, req, ok(out));
   } catch (e) {
     const msg = (e && e.message) ? String(e.message) : String(e || 'SETTLE_FAILED');
+    if (msg.includes('CSV-only') || msg.includes('CSV_ONLY') || msg.includes('not supported') || msg.includes('NOT_SUPPORTED')) {
+      return withCORS(env, req, badRequest('MANUAL_CONFIRM_NOT_SUPPORTED_FOR_THIS_RAIL'));
+    }
     return withCORS(env, req, serverError(msg));
   }
 }
@@ -8895,7 +8993,6 @@ async function handleBankingPayReconcileExternal(env, req) {
   }
 }
 
-
 async function handleBankingCapabilities(env, req, user) {
   try {
     const select = [
@@ -8906,7 +9003,8 @@ async function handleBankingCapabilities(env, req, user) {
       'rail_supports_auto_execute',
       'default_schedule_umbrella_local',
       'default_schedule_paye_local',
-      'funds_warning_hours_json'
+      'funds_warning_hours_json',
+      'rail_default_funding_account_ref'
     ].join(',');
 
     const { rows } = await sbFetch(
@@ -8932,33 +9030,60 @@ async function handleBankingCapabilities(env, req, user) {
         ? sd.funds_warning_hours_json
         : [24, 12];
 
-    // Adapter "available" (feature-gate): Revolut requires worker secrets to exist.
-    const revolutAvailable =
-      !!(env.REVOLUT_API_BASE && String(env.REVOLUT_API_BASE).trim()) &&
-      !!(env.REVOLUT_CLIENT_ID && String(env.REVOLUT_CLIENT_ID).trim()) &&
-      !!(env.REVOLUT_REFRESH_TOKEN && String(env.REVOLUT_REFRESH_TOKEN).trim()) &&
-      !!(env.REVOLUT_PRIVATE_KEY_PKCS8_B64 && String(env.REVOLUT_PRIVATE_KEY_PKCS8_B64).trim());
+    const rail_default_funding_account_ref =
+      (sd.rail_default_funding_account_ref === null || sd.rail_default_funding_account_ref === undefined)
+        ? null
+        : (String(sd.rail_default_funding_account_ref).trim() || null);
 
-    const copAvailable = revolutAvailable && rail_supports_name_check;
+    // Build rails list by iterating the adapter registry (single source of truth).
+    const providers = getRailAdapter('__LIST__');
+    const rails = [];
 
-    const rails = [
-      {
-        rail_provider: 'REVOLUT',
-        rail_kind: 'API',
-        available: revolutAvailable,
-        supports_scheduling: revolutAvailable && rail_supports_scheduling,
-        supports_name_check: copAvailable,
-        supports_auto_execute: revolutAvailable && rail_supports_auto_execute
-      },
-      {
-        rail_provider: 'CSV',
-        rail_kind: 'MANUAL',
-        available: true,
-        supports_scheduling: false,
-        supports_name_check: false,
-        supports_auto_execute: false
+    let revolutCaps = null;
+
+    for (const prov of (Array.isArray(providers) ? providers : [])) {
+      const adapter = getRailAdapter(prov);
+      if (!adapter || typeof adapter.capabilities !== 'function') continue;
+
+      let caps = null;
+      try {
+        caps = await adapter.capabilities(env);
+      } catch (e) {
+        caps = {
+          provider: String(prov || '').toUpperCase(),
+          available: false,
+          reason: (e && e.message) ? String(e.message) : 'CAPABILITIES_FAILED',
+          supports_scheduling: false,
+          supports_name_check: false,
+          supports_auto_execute: false,
+          api_base: null
+        };
       }
-    ];
+
+      const providerName = String(caps?.provider || adapter.railProvider || prov || '').toUpperCase() || String(prov || '').toUpperCase();
+      const railKind = String(adapter.railKind || (caps?.api_base ? 'API' : 'MANUAL')).toUpperCase();
+
+      // Effective supports: adapter intrinsic support AND global settings toggles.
+      const available = (caps && caps.available === true);
+      const supports_scheduling = available && !!caps.supports_scheduling && rail_supports_scheduling;
+      const supports_name_check = available && !!caps.supports_name_check && rail_supports_name_check;
+      const supports_auto_execute = available && !!caps.supports_auto_execute && rail_supports_auto_execute;
+
+      if (providerName === 'REVOLUT') revolutCaps = { available, supports_name_check };
+
+      rails.push({
+        rail_provider: providerName,
+        rail_kind: railKind,
+        available,
+        reason: (caps && caps.reason) ? caps.reason : null,
+        supports_scheduling,
+        supports_name_check,
+        supports_auto_execute,
+        api_base: (caps && caps.api_base) ? caps.api_base : null
+      });
+    }
+
+    const copAvailable = !!(revolutCaps && revolutCaps.available && revolutCaps.supports_name_check);
 
     return withCORS(env, req, ok({
       ok: true,
@@ -8974,6 +9099,9 @@ async function handleBankingCapabilities(env, req, user) {
       default_schedule_paye_local,
 
       funds_warning_hours_json,
+
+      // ✅ C: default funding account UI preselect
+      rail_default_funding_account_ref,
 
       rails,
 
@@ -9140,12 +9268,6 @@ async function handleBankingPayBatchPrepare(env, req, user, payBatchId) {
     const provider = String(batchObj?.rail_provider_snapshot || 'CSV').toUpperCase();
     const envSnap  = String(batchObj?.rail_env_snapshot || 'PROD').toUpperCase();
 
-    const revolutAvailable =
-      !!(env.REVOLUT_API_BASE && String(env.REVOLUT_API_BASE).trim()) &&
-      !!(env.REVOLUT_CLIENT_ID && String(env.REVOLUT_CLIENT_ID).trim()) &&
-      !!(env.REVOLUT_REFRESH_TOKEN && String(env.REVOLUT_REFRESH_TOKEN).trim()) &&
-      !!(env.REVOLUT_PRIVATE_KEY_PKCS8_B64 && String(env.REVOLUT_PRIVATE_KEY_PKCS8_B64).trim());
-
     // Apply optional name-check overrides BEFORE prepare
     const overrides = Array.isArray(body.name_check_overrides) ? body.name_check_overrides : [];
     for (const o of overrides) {
@@ -9174,15 +9296,28 @@ async function handleBankingPayBatchPrepare(env, req, user, payBatchId) {
       });
     }
 
-    // Rail-aware behaviour: adapter.prepareBatch(batchId, actor)
-    // Current adapter availability gates:
-    if (provider === 'REVOLUT' && !revolutAvailable) {
-      return withCORS(env, req, badRequest('REVOLUT_NOT_CONFIGURED'));
+    // ✅ Rail-aware behaviour: adapter.prepareBatch(batchId, actor)
+    const adapter = getRailAdapter(provider);
+    if (!adapter) {
+      return withCORS(env, req, badRequest('UNKNOWN_RAIL_PROVIDER'));
     }
 
-    // ✅ NEW: Perform rail adapter prepare to do name-check + payee-map, so schedule can proceed.
+    // ✅ Generic availability gate via adapter.capabilities() (no provider-specific checks here)
     try {
-      const adapter = getRailAdapter(provider);
+      if (adapter && typeof adapter.capabilities === 'function') {
+        const caps = await adapter.capabilities(env);
+        if (caps && typeof caps === 'object' && caps.available === false) {
+          const reason = (caps.reason && String(caps.reason).trim()) ? String(caps.reason).trim() : 'RAIL_NOT_CONFIGURED';
+          return withCORS(env, req, badRequest(reason));
+        }
+      }
+    } catch (e) {
+      const msg = (e && e.message) ? String(e.message) : String(e || 'RAIL_CAPABILITIES_FAILED');
+      return withCORS(env, req, badRequest(msg));
+    }
+
+    // ✅ Perform rail adapter prepare to do name-check + payee-map, so schedule can proceed.
+    try {
       if (adapter && typeof adapter.prepareBatch === 'function') {
         await adapter.prepareBatch(env, id, user.id);
       }
@@ -9209,6 +9344,9 @@ async function handleBankingPayBatchPrepare(env, req, user, payBatchId) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
+
+
 
 async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
@@ -9260,7 +9398,7 @@ async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
   }
 
   try {
-    // Revolut-only scheduling: validate provider snapshot on the batch
+    // Determine provider from batch snapshot
     const batchRes = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
 
     let batchPayload = batchRes;
@@ -9274,28 +9412,35 @@ async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
     const batchObj = (batchPayload && typeof batchPayload === 'object') ? (batchPayload.batch || null) : null;
     const provider = String(batchObj?.rail_provider_snapshot || 'CSV').toUpperCase();
 
-    if (provider !== 'REVOLUT') {
+    const adapter = getRailAdapter(provider);
+    if (!adapter) {
+      return withCORS(env, req, badRequest('UNKNOWN_RAIL_PROVIDER'));
+    }
+
+    // ✅ Generic availability gate via adapter.capabilities()
+    try {
+      if (adapter && typeof adapter.capabilities === 'function') {
+        const caps = await adapter.capabilities(env);
+        if (caps && typeof caps === 'object' && caps.available === false) {
+          const reason = (caps.reason && String(caps.reason).trim()) ? String(caps.reason).trim() : 'RAIL_NOT_CONFIGURED';
+          return withCORS(env, req, badRequest(reason));
+        }
+      }
+    } catch (e) {
+      const msg = (e && e.message) ? String(e.message) : String(e || 'RAIL_CAPABILITIES_FAILED');
+      return withCORS(env, req, badRequest(msg));
+    }
+
+    if (!adapter || typeof adapter.scheduleBatch !== 'function') {
       return withCORS(env, req, badRequest('SCHEDULING_NOT_SUPPORTED_FOR_THIS_RAIL'));
     }
 
-    const revolutAvailable =
-      !!(env.REVOLUT_API_BASE && String(env.REVOLUT_API_BASE).trim()) &&
-      !!(env.REVOLUT_CLIENT_ID && String(env.REVOLUT_CLIENT_ID).trim()) &&
-      !!(env.REVOLUT_REFRESH_TOKEN && String(env.REVOLUT_REFRESH_TOKEN).trim()) &&
-      !!(env.REVOLUT_PRIVATE_KEY_PKCS8_B64 && String(env.REVOLUT_PRIVATE_KEY_PKCS8_B64).trim());
-
-    if (!revolutAvailable) {
-      return withCORS(env, req, badRequest('REVOLUT_NOT_CONFIGURED'));
-    }
-
-    const rpcRes = await sbRpc(env, 'pay_batch_schedule', {
-      p_pay_batch_id: id,
-      p_schedule_kind: scheduleKind,
-      p_scheduled_at_utc: scheduledAtUtc,
-      p_funding_account_ref: fundingAccountRef,
-      p_warning_hours_json: warningHoursJson,
-      p_actor_user_id: user.id
-    });
+    const rpcRes = await adapter.scheduleBatch(env, id, {
+      schedule_kind: scheduleKind,
+      scheduled_at_utc: scheduledAtUtc,
+      funding_account_ref: fundingAccountRef,
+      warning_hours_json: warningHoursJson
+    }, user.id);
 
     let payload = rpcRes;
     try {
@@ -9308,7 +9453,11 @@ async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
     // Option A: return “scheduled” and let cron execute within 1 minute.
     return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
   } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e)));
+    const msg = (e && e.message) ? String(e.message) : String(e || 'SCHEDULE_FAILED');
+    if (msg.includes('not supported') || msg.includes('NOT_SUPPORTED') || msg.includes('scheduleBatch not supported')) {
+      return withCORS(env, req, badRequest('SCHEDULING_NOT_SUPPORTED_FOR_THIS_RAIL'));
+    }
+    return withCORS(env, req, serverError(msg));
   }
 }
 
@@ -9344,6 +9493,7 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
 async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -9353,10 +9503,25 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
   const scope = (scopeRaw === 'PAYE' || scopeRaw === 'UMBRELLA' || scopeRaw === 'ALL') ? scopeRaw : 'ALL';
 
   try {
-    const csvText = await sbRpc(env, 'pay_export_bank_csv', {
-      p_pay_batch_id: id,
-      p_scope: scope
-    });
+    // Resolve provider from batch snapshot; CSV export is only valid for manual rails.
+    const batchRes = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
+
+    let batchPayload = batchRes;
+    try {
+      if (Array.isArray(batchRes) && batchRes.length === 1 && batchRes[0] && typeof batchRes[0] === 'object') batchPayload = batchRes[0];
+      if (batchPayload && typeof batchPayload === 'object' && Object.prototype.hasOwnProperty.call(batchPayload, 'pay_batch_get')) {
+        batchPayload = batchPayload.pay_batch_get;
+      }
+    } catch {}
+
+    const batchObj = (batchPayload && typeof batchPayload === 'object') ? (batchPayload.batch || null) : null;
+    const provider = String(batchObj?.rail_provider_snapshot || 'CSV').toUpperCase();
+
+    if (provider !== 'CSV') {
+      return withCORS(env, req, badRequest('EXPORT_NOT_SUPPORTED_FOR_THIS_RAIL'));
+    }
+
+    const csvText = await csvAdapter_export(env, id, scope, user && user.id ? user.id : null);
 
     const txt = (csvText === null || csvText === undefined) ? '' : String(csvText);
 
@@ -9373,6 +9538,7 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
 async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -9404,23 +9570,24 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
       return withCORS(env, req, ok(batchPayload && typeof batchPayload === 'object' ? batchPayload : {}));
     }
 
-    // REVOLUT (and any API rail): poll the rail provider via adapter (authoritative),
-    // which applies rail status updates AND settles via pay_settle_rail safely.
-    if (provider === 'REVOLUT') {
-      const revolutAvailable =
-        !!(env.REVOLUT_API_BASE && String(env.REVOLUT_API_BASE).trim()) &&
-        !!(env.REVOLUT_CLIENT_ID && String(env.REVOLUT_CLIENT_ID).trim()) &&
-        !!(env.REVOLUT_REFRESH_TOKEN && String(env.REVOLUT_REFRESH_TOKEN).trim()) &&
-        !!(env.REVOLUT_PRIVATE_KEY_PKCS8_B64 && String(env.REVOLUT_PRIVATE_KEY_PKCS8_B64).trim());
-
-      if (!revolutAvailable) {
-        return withCORS(env, req, badRequest('REVOLUT_NOT_CONFIGURED'));
-      }
-    }
-
+    // Any non-manual rail: delegate polling/settlement to adapter.
     const adapter = getRailAdapter(provider);
     if (!adapter || typeof adapter.pollBatch !== 'function') {
       return withCORS(env, req, badRequest('POLL_NOT_SUPPORTED_FOR_THIS_RAIL'));
+    }
+
+    // ✅ Generic availability gate via adapter.capabilities() (no provider-specific checks here)
+    try {
+      if (adapter && typeof adapter.capabilities === 'function') {
+        const caps = await adapter.capabilities(env);
+        if (caps && typeof caps === 'object' && caps.available === false) {
+          const reason = (caps.reason && String(caps.reason).trim()) ? String(caps.reason).trim() : 'RAIL_NOT_CONFIGURED';
+          return withCORS(env, req, badRequest(reason));
+        }
+      }
+    } catch (e) {
+      const msg = (e && e.message) ? String(e.message) : String(e || 'RAIL_CAPABILITIES_FAILED');
+      return withCORS(env, req, badRequest(msg));
     }
 
     const polled = await adapter.pollBatch(env, id, user.id);
@@ -9429,7 +9596,6 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
-
 
 async function handleContractsCalendar(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
@@ -43304,6 +43470,9 @@ async function handleGetSettings(env, req) {
         // Bank details still live on settings_defaults
         'bank_name','bank_sort_code','bank_account_number','vat_registration_number',
 
+        // ✅ Banking rail defaults (for UI preselect)
+        'rail_default_funding_account_ref',
+
         // Email settings (global)
         'finance_email',
         'finance_email_settings',
@@ -43378,6 +43547,9 @@ async function handleUpdateSettings(env, req) {
     // ✅ Adaptability config
     'import_config_json',
 
+    // ✅ Banking rail default (UI preselect only; batches still store funding_account_ref on the batch)
+    'rail_default_funding_account_ref',
+
     // Email settings
     'finance_email',
     'finance_email_settings',
@@ -43390,17 +43562,43 @@ async function handleUpdateSettings(env, req) {
 
   // If we need to merge webhook_url without exposing it, fetch current values once
   const needsWebhookMerge = ('finance_email_settings' in data) || ('system_emails' in data);
-  let currentEmailSettings = null;
 
-  if (needsWebhookMerge) {
+  // If we need to validate default funding account ref, fetch rail defaults once
+  const needsRailFundingValidation = ('rail_default_funding_account_ref' in data);
+
+  let currentEmailSettings = null;
+  let currentRailDefaults = null;
+
+  if (needsWebhookMerge || needsRailFundingValidation) {
     try {
+      const selParts = [];
+      if (needsWebhookMerge) selParts.push('finance_email_settings', 'system_emails');
+      if (needsRailFundingValidation) selParts.push('rail_provider_default', 'rail_env_default');
+      const sel = selParts.join(',');
+
       const { rows } = await sbFetch(
         env,
-        `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=finance_email_settings,system_emails`
+        `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=${sel}`
       );
-      currentEmailSettings = (rows && rows[0]) ? rows[0] : { finance_email_settings: {}, system_emails: {} };
+
+      const row0 = (rows && rows[0]) ? rows[0] : {};
+
+      if (needsWebhookMerge) {
+        currentEmailSettings = {
+          finance_email_settings: row0.finance_email_settings || {},
+          system_emails: row0.system_emails || {}
+        };
+      }
+
+      if (needsRailFundingValidation) {
+        currentRailDefaults = {
+          rail_provider_default: row0.rail_provider_default,
+          rail_env_default: row0.rail_env_default
+        };
+      }
     } catch {
-      currentEmailSettings = { finance_email_settings: {}, system_emails: {} };
+      if (needsWebhookMerge) currentEmailSettings = { finance_email_settings: {}, system_emails: {} };
+      if (needsRailFundingValidation) currentRailDefaults = { rail_provider_default: null, rail_env_default: null };
     }
   }
 
@@ -43533,6 +43731,50 @@ async function handleUpdateSettings(env, req) {
       continue;
     }
 
+    if (k === 'rail_default_funding_account_ref') {
+      const v0 = (data.rail_default_funding_account_ref === null || data.rail_default_funding_account_ref === undefined)
+        ? null
+        : (String(data.rail_default_funding_account_ref).trim() || null);
+
+      // Allow clearing
+      if (v0 == null) {
+        payload.rail_default_funding_account_ref = null;
+        continue;
+      }
+
+      // Validate against current rail adapter
+      const provider = String(currentRailDefaults?.rail_provider_default || 'CSV').trim().toUpperCase();
+      const railEnv = String(currentRailDefaults?.rail_env_default || 'PROD').trim().toUpperCase();
+
+      const adapter = getRailAdapter(provider);
+      if (!adapter || typeof adapter.validateFundingAccountRef !== 'function') {
+        return withCORS(env, req, badRequest('FUNDING_ACCOUNT_REF_NOT_SUPPORTED_FOR_THIS_RAIL'));
+      }
+
+      let vres = null;
+      try {
+        vres = await adapter.validateFundingAccountRef(env, { rail_env: railEnv, funding_account_ref: v0 });
+      } catch (e) {
+        const msg = (e && e.message) ? String(e.message) : String(e || 'FUNDING_ACCOUNT_VALIDATE_FAILED');
+        return withCORS(env, req, badRequest(msg));
+      }
+
+      const valid = !!(vres && typeof vres === 'object' && vres.valid === true);
+      if (!valid) {
+        const reason = (vres && typeof vres === 'object' && vres.reason) ? String(vres.reason) : 'FUNDING_ACCOUNT_REF_INVALID';
+        return withCORS(env, req, badRequest(reason));
+      }
+
+      const acct = (vres && typeof vres === 'object') ? (vres.account || null) : null;
+      const ccy = (acct && acct.currency !== undefined && acct.currency !== null) ? String(acct.currency).trim().toUpperCase() : null;
+      if (ccy && ccy !== 'GBP') {
+        return withCORS(env, req, badRequest('FUNDING_ACCOUNT_REF_MUST_BE_GBP'));
+      }
+
+      payload.rail_default_funding_account_ref = v0;
+      continue;
+    }
+
     // Normal field passthrough
     payload[k] = data[k];
   }
@@ -43574,7 +43816,6 @@ async function handleUpdateSettings(env, req) {
     return withCORS(env, req, serverError("Failed to update settings_defaults"));
   }
 }
-
 
 function getClientIp(req) {
   const h = req && req.headers;
@@ -72890,647 +73131,748 @@ async function handleClientDeleteApply(env, req, clientId) {
     return withCORS(env, req, serverError(`Failed client delete: ${msg}`));
   }
 }
+
+
 function getRailAdapter(provider) {
-  const p0 = String(provider || '').trim().toUpperCase();
+  // -----------------------------
+  // Single source of truth registry
+  // -----------------------------
+  if (!getRailAdapter.__RAIL_REGISTRY || typeof getRailAdapter.__RAIL_REGISTRY !== 'object') {
+    getRailAdapter.__RAIL_REGISTRY = {
+      REVOLUT: () => ({
+        railProvider: 'REVOLUT',
+        railKind: 'API',
 
-  // Normalise common aliases (defensive)
-  const p = (p0 === 'REV' ? 'REVOLUT' : p0);
+        async capabilities(env) {
+          const hasClientId = !!(env && env.REVOLUT_CLIENT_ID && String(env.REVOLUT_CLIENT_ID).trim());
+          const hasRefresh  = !!(env && env.REVOLUT_REFRESH_TOKEN && String(env.REVOLUT_REFRESH_TOKEN).trim());
+          const hasKey      = !!(env && env.REVOLUT_PRIVATE_KEY_PKCS8_B64 && String(env.REVOLUT_PRIVATE_KEY_PKCS8_B64).trim());
+          const hasBase     = !!(env && env.REVOLUT_API_BASE && String(env.REVOLUT_API_BASE).trim());
 
-  if (p === 'REVOLUT') {
-    return {
-      railProvider: 'REVOLUT',
+          let available = false;
+          let reason = null;
 
-      async capabilities(env) {
-        const hasClientId = !!(env && env.REVOLUT_CLIENT_ID && String(env.REVOLUT_CLIENT_ID).trim());
-        const hasRefresh  = !!(env && env.REVOLUT_REFRESH_TOKEN && String(env.REVOLUT_REFRESH_TOKEN).trim());
-        const hasKey      = !!(env && env.REVOLUT_PRIVATE_KEY_PKCS8_B64 && String(env.REVOLUT_PRIVATE_KEY_PKCS8_B64).trim());
-        const hasBase     = !!(env && env.REVOLUT_API_BASE && String(env.REVOLUT_API_BASE).trim());
-
-        let available = false;
-        let reason = null;
-
-        if (!hasClientId || !hasRefresh || !hasKey) {
-          available = false;
-          reason = 'MISSING_REVOLUT_SECRETS';
-        } else {
-          // Try minting an access token as the definitive availability check (cached).
-          try {
-            await revolutAuth_getAccessToken(env);
-            available = true;
-          } catch (e) {
+          if (!hasClientId || !hasRefresh || !hasKey) {
             available = false;
-            reason = (e && e.message) ? String(e.message) : 'REVOLUT_TOKEN_FAILED';
+            reason = 'MISSING_REVOLUT_SECRETS';
+          } else {
+            // Try minting an access token as the definitive availability check (cached).
+            try {
+              await revolutAuth_getAccessToken(env);
+              available = true;
+            } catch (e) {
+              available = false;
+              reason = (e && e.message) ? String(e.message) : 'REVOLUT_TOKEN_FAILED';
+            }
           }
-        }
 
-        return {
-          provider: 'REVOLUT',
-          available,
-          reason,
-          supports_scheduling: true,
-          supports_name_check: true,
-          supports_auto_execute: true,
-          api_base: hasBase ? String(env.REVOLUT_API_BASE) : null
-        };
-      },
+          return {
+            provider: 'REVOLUT',
+            available,
+            reason,
+            supports_scheduling: true,
+            supports_name_check: true,
+            supports_auto_execute: true,
+            api_base: hasBase ? String(env.REVOLUT_API_BASE) : null
+          };
+        },
 
-      async prepareBatch(env, batchId, actorUserId) {
-        if (!batchId) throw new Error('prepareBatch: batchId required');
-        if (!actorUserId) throw new Error('prepareBatch: actorUserId required');
+        async listFundingAccounts(env, { rail_env } = {}) {
+          // Returns normalized list of funding accounts for the current Worker env.
+          // rail_env is accepted for signature symmetry, but API environment is driven by Worker credentials/base URL.
+          const token = await revolutAuth_getAccessToken(env);
+          const accs = await revolutAccounts_list(env, token);
 
-        // 1) Ask DB what payees/transfers exist + whether name-check/payee-map are required.
-        const prep0 = await sbRpc(env, 'pay_batch_prepare', {
-          p_pay_batch_id: String(batchId),
-          p_actor_user_id: String(actorUserId)
-        });
+          const accounts = [];
+          for (const a of (accs || [])) {
+            if (!a || typeof a !== 'object') continue;
 
-        if (!prep0 || prep0.ok !== true) {
-          // sbRpc already throws on non-2xx, but keep defensive
-          throw new Error('prepareBatch: pay_batch_prepare failed');
-        }
+            const accountId =
+              (a.id !== undefined && a.id !== null) ? String(a.id).trim()
+              : (a.account_id !== undefined && a.account_id !== null) ? String(a.account_id).trim()
+              : '';
 
-        const rail = (prep0.rail && typeof prep0.rail === 'object') ? prep0.rail : {};
-        const needNameCheck = !!rail.need_name_check;
-        const requiresPayeeMap = !!rail.requires_payee_map;
+            if (!accountId) continue;
 
-        // ✅ Determine rail env snapshot (must not be hard-coded to PROD)
-        let railEnv = 'PROD';
-        try {
-          const a = (rail && (rail.env_snapshot || rail.rail_env_snapshot || rail.env)) ? String(rail.env_snapshot || rail.rail_env_snapshot || rail.env).trim() : '';
-          railEnv = a ? a.toUpperCase() : railEnv;
-        } catch {}
-        if (!railEnv || railEnv === 'UNDEFINED' || railEnv === 'NULL') railEnv = 'PROD';
-        if (railEnv === 'SANDBOX' || railEnv === 'PROD') {
-          // ok
-        } else {
-          // If DB returns something else, keep as-is but normalized.
-          railEnv = String(railEnv).toUpperCase();
-        }
+            const currency =
+              (a.currency !== undefined && a.currency !== null) ? String(a.currency).trim().toUpperCase()
+              : (a.ccy !== undefined && a.ccy !== null) ? String(a.ccy).trim().toUpperCase()
+              : null;
 
-        // If rail env snapshot was not present in pay_batch_prepare, fetch from pay_batch_get as fallback.
-        if (!railEnv || railEnv === 'PROD' && !(rail && (rail.env_snapshot || rail.rail_env_snapshot || rail.env))) {
+            const available =
+              (a.available_balance !== undefined && a.available_balance !== null) ? Number(a.available_balance)
+              : (a.available !== undefined && a.available !== null) ? Number(a.available)
+              : (a.balance !== undefined && a.balance !== null) ? Number(a.balance)
+              : null;
+
+            const balance =
+              (a.balance !== undefined && a.balance !== null) ? Number(a.balance)
+              : null;
+
+            const label =
+              (a.name !== undefined && a.name !== null) ? String(a.name).trim()
+              : (a.label !== undefined && a.label !== null) ? String(a.label).trim()
+              : (a.description !== undefined && a.description !== null) ? String(a.description).trim()
+              : null;
+
+            accounts.push({
+              account_id: accountId,
+              currency: currency || null,
+              available_balance: Number.isFinite(available) ? available : null,
+              balance: Number.isFinite(balance) ? balance : null,
+              label: label || null
+            });
+          }
+
+          return {
+            ok: true,
+            provider: 'REVOLUT',
+            rail_env: (rail_env === undefined || rail_env === null) ? null : String(rail_env).trim().toUpperCase(),
+            accounts
+          };
+        },
+
+        async validateFundingAccountRef(env, { rail_env, funding_account_ref } = {}) {
+          const ref = (funding_account_ref === undefined || funding_account_ref === null) ? '' : String(funding_account_ref).trim();
+          if (!ref) {
+            return { ok: true, valid: false, reason: 'FUNDING_ACCOUNT_REF_REQUIRED', account: null };
+          }
+
+          const listed = await this.listFundingAccounts(env, { rail_env });
+          const accounts = (listed && Array.isArray(listed.accounts)) ? listed.accounts : [];
+          const match = accounts.find(a => a && String(a.account_id || '').trim() === ref) || null;
+
+          if (!match) {
+            return { ok: true, valid: false, reason: 'FUNDING_ACCOUNT_REF_NOT_FOUND', account: null };
+          }
+
+          return { ok: true, valid: true, reason: null, account: match };
+        },
+
+        async prepareBatch(env, batchId, actorUserId) {
+          if (!batchId) throw new Error('prepareBatch: batchId required');
+          if (!actorUserId) throw new Error('prepareBatch: actorUserId required');
+
+          // 1) Ask DB what payees/transfers exist + whether name-check/payee-map are required.
+          const prep0 = await sbRpc(env, 'pay_batch_prepare', {
+            p_pay_batch_id: String(batchId),
+            p_actor_user_id: String(actorUserId)
+          });
+
+          if (!prep0 || prep0.ok !== true) {
+            // sbRpc already throws on non-2xx, but keep defensive
+            throw new Error('prepareBatch: pay_batch_prepare failed');
+          }
+
+          const rail = (prep0.rail && typeof prep0.rail === 'object') ? prep0.rail : {};
+          const needNameCheck = !!rail.need_name_check;
+          const requiresPayeeMap = !!rail.requires_payee_map;
+
+          // ✅ Determine rail env snapshot (must not be hard-coded to PROD)
+          let railEnv = 'PROD';
           try {
-            const bg0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: String(batchId) });
-            const bgBatch = (bg0 && typeof bg0 === 'object') ? (bg0.batch || null) : null;
-            const bEnv = bgBatch && bgBatch.rail_env_snapshot ? String(bgBatch.rail_env_snapshot).trim() : '';
-            if (bEnv) railEnv = bEnv.toUpperCase();
-          } catch {
-            // keep default PROD
+            const a = (rail && (rail.env_snapshot || rail.rail_env_snapshot || rail.env)) ? String(rail.env_snapshot || rail.rail_env_snapshot || rail.env).trim() : '';
+            railEnv = a ? a.toUpperCase() : railEnv;
+          } catch {}
+          if (!railEnv || railEnv === 'UNDEFINED' || railEnv === 'NULL') railEnv = 'PROD';
+          if (railEnv === 'SANDBOX' || railEnv === 'PROD') {
+            // ok
+          } else {
+            // If DB returns something else, keep as-is but normalized.
+            railEnv = String(railEnv).toUpperCase();
           }
-        }
 
-        const payees = Array.isArray(prep0.payees) ? prep0.payees : [];
-        if (!payees.length) return { ok: true, did_work: false, payees_processed: 0 };
+          // If rail env snapshot was not present in pay_batch_prepare, fetch from pay_batch_get as fallback.
+          if (!railEnv || railEnv === 'PROD' && !(rail && (rail.env_snapshot || rail.rail_env_snapshot || rail.env))) {
+            try {
+              const bg0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: String(batchId) });
+              const bgBatch = (bg0 && typeof bg0 === 'object') ? (bg0.batch || null) : null;
+              const bEnv = bgBatch && bgBatch.rail_env_snapshot ? String(bgBatch.rail_env_snapshot).trim() : '';
+              if (bEnv) railEnv = bEnv.toUpperCase();
+            } catch {
+              // keep default PROD
+            }
+          }
 
-        let didWork = false;
-        let processed = 0;
+          const payees = Array.isArray(prep0.payees) ? prep0.payees : [];
+          if (!payees.length) return { ok: true, did_work: false, payees_processed: 0 };
 
-        // 2) For each payee, perform missing/required operations (name-check + payee-map).
-        for (const pe of payees) {
-          const kind = String(pe?.payee_entity_kind || '').trim().toUpperCase();
-          const idText = String(pe?.payee_entity_id || '').trim();
-          const bankHash = String(pe?.bank_details_hash || '').trim();
+          let didWork = false;
+          let processed = 0;
 
-          if (!kind || !idText) continue;
+          // 2) For each payee, perform missing/required operations (name-check + payee-map).
+          for (const pe of payees) {
+            const kind = String(pe?.payee_entity_kind || '').trim().toUpperCase();
+            const idText = String(pe?.payee_entity_id || '').trim();
+            const bankHash = String(pe?.bank_details_hash || '').trim();
 
-          // Skip if DB already declares missing bank details blocker.
-          const blockers = Array.isArray(pe?.blockers) ? pe.blockers.map(x => String(x || '').toUpperCase()) : [];
-          if (blockers.includes('BLOCKED_BANK_DETAILS')) continue;
+            if (!kind || !idText) continue;
 
-          const transfers = Array.isArray(pe?.transfers) ? pe.transfers : [];
-          const t0 = transfers.length ? transfers[0] : null;
+            // Skip if DB already declares missing bank details blocker.
+            const blockers = Array.isArray(pe?.blockers) ? pe.blockers.map(x => String(x || '').toUpperCase()) : [];
+            if (blockers.includes('BLOCKED_BANK_DETAILS')) continue;
 
-          // We rely on execute-bank snapshot fields (already normalised in DB).
-          const payeeName = String(t0?.payee_name || '').trim();
-          const sortCode = String(t0?.sort_code || '').trim();
-          const accountNo = String(t0?.account_number || '').trim();
-          const accountType = String(t0?.account_type || '').trim() || (kind === 'UMBRELLA' ? 'Business' : 'Personal');
+            const transfers = Array.isArray(pe?.transfers) ? pe.transfers : [];
+            const t0 = transfers.length ? transfers[0] : null;
 
-          // Name-check (CoP): only if required, and not overridden, and not already PASS.
-          if (needNameCheck) {
-            const nc = (pe?.name_check && typeof pe.name_check === 'object') ? pe.name_check : {};
-            const status = String(nc.status || 'UNVERIFIED').toUpperCase();
-            const hasOverride = (nc.has_override === true);
+            // We rely on execute-bank snapshot fields (already normalised in DB).
+            const payeeName = String(t0?.payee_name || '').trim();
+            const sortCode = String(t0?.sort_code || '').trim();
+            const accountNo = String(t0?.account_number || '').trim();
+            const accountType = String(t0?.account_type || '').trim() || (kind === 'UMBRELLA' ? 'Business' : 'Personal');
 
-            if (!hasOverride && status !== 'PASS') {
-              try {
-                const token = await revolutAuth_getAccessToken(env);
-                const ncRes = await revolutNameCheck_perform(env, token, {
-                  payee_name: payeeName,
-                  sort_code: sortCode,
-                  account_number: accountNo,
-                  account_type: accountType
-                });
+            // Name-check (CoP): only if required, and not overridden, and not already PASS.
+            if (needNameCheck) {
+              const nc = (pe?.name_check && typeof pe.name_check === 'object') ? pe.name_check : {};
+              const status = String(nc.status || 'UNVERIFIED').toUpperCase();
+              const hasOverride = (nc.has_override === true);
 
-                // Persist result into DB (rail-generic name-check record)
-                await sbRpc(env, 'bank_name_check_record_result', {
-                  p_provider: 'REVOLUT',
-                  p_env: railEnv,
-                  p_entity_kind: kind,
-                  p_entity_id: idText,
-                  p_bank_details_hash: bankHash,
-                  p_status: ncRes.status,
-                  p_result_json: ncRes.result_json,
-                  p_checked_at_utc: ncRes.checked_at_utc,
-                  p_actor_user_id: String(actorUserId)
-                });
+              if (!hasOverride && status !== 'PASS') {
+                try {
+                  const token = await revolutAuth_getAccessToken(env);
+                  const ncRes = await revolutNameCheck_perform(env, token, {
+                    payee_name: payeeName,
+                    sort_code: sortCode,
+                    account_number: accountNo,
+                    account_type: accountType
+                  });
 
-                didWork = true;
-              } catch (e) {
-                // If CoP is not enabled, record UNAVAILABLE (policy gate happens in UI/backend).
-                const msg = (e && e.message) ? String(e.message) : '';
-                const is404 = msg.includes('REVOLUT_COP_UNAVAILABLE_404');
-                if (is404) {
+                  // Persist result into DB (rail-generic name-check record)
                   await sbRpc(env, 'bank_name_check_record_result', {
                     p_provider: 'REVOLUT',
                     p_env: railEnv,
                     p_entity_kind: kind,
                     p_entity_id: idText,
                     p_bank_details_hash: bankHash,
-                    p_status: 'UNAVAILABLE',
-                    p_result_json: { error: 'COP_NOT_ENABLED', detail: msg || null },
-                    p_checked_at_utc: new Date().toISOString(),
+                    p_status: ncRes.status,
+                    p_result_json: ncRes.result_json,
+                    p_checked_at_utc: ncRes.checked_at_utc,
                     p_actor_user_id: String(actorUserId)
                   });
+
                   didWork = true;
-                } else {
-                  throw e;
+                } catch (e) {
+                  // If CoP is not enabled, record UNAVAILABLE (policy gate happens in UI/backend).
+                  const msg = (e && e.message) ? String(e.message) : '';
+                  const is404 = msg.includes('REVOLUT_COP_UNAVAILABLE_404');
+                  if (is404) {
+                    await sbRpc(env, 'bank_name_check_record_result', {
+                      p_provider: 'REVOLUT',
+                      p_env: railEnv,
+                      p_entity_kind: kind,
+                      p_entity_id: idText,
+                      p_bank_details_hash: bankHash,
+                      p_status: 'UNAVAILABLE',
+                      p_result_json: { error: 'COP_NOT_ENABLED', detail: msg || null },
+                      p_checked_at_utc: new Date().toISOString(),
+                      p_actor_user_id: String(actorUserId)
+                    });
+                    didWork = true;
+                  } else {
+                    throw e;
+                  }
                 }
               }
             }
-          }
 
-          // Payee map (counterparty): only if required and not present.
-          if (requiresPayeeMap) {
-            const pm = (pe?.payee_map && typeof pe.payee_map === 'object') ? pe.payee_map : {};
-            const present = (pm.present === true);
+            // Payee map (counterparty): only if required and not present.
+            if (requiresPayeeMap) {
+              const pm = (pe?.payee_map && typeof pe.payee_map === 'object') ? pe.payee_map : {};
+              const present = (pm.present === true);
 
-            if (!present) {
-              const token = await revolutAuth_getAccessToken(env);
-              await revolutCounterparty_ensureMapped(env, token, {
-                rail_env: railEnv,
-                actor_user_id: String(actorUserId),
-                entity_kind: kind,
-                entity_id: idText,
-                bank_details_hash: bankHash,
-                bank_fields: {
-                  payee_name: payeeName,
-                  sort_code: sortCode,
-                  account_number: accountNo,
-                  account_type: accountType
-                }
-              });
-              didWork = true;
+              if (!present) {
+                const token = await revolutAuth_getAccessToken(env);
+                await revolutCounterparty_ensureMapped(env, token, {
+                  rail_env: railEnv,
+                  actor_user_id: String(actorUserId),
+                  entity_kind: kind,
+                  entity_id: idText,
+                  bank_details_hash: bankHash,
+                  bank_fields: {
+                    payee_name: payeeName,
+                    sort_code: sortCode,
+                    account_number: accountNo,
+                    account_type: accountType
+                  }
+                });
+                didWork = true;
+              }
             }
+
+            processed += 1;
           }
 
-          processed += 1;
-        }
+          return { ok: true, did_work: didWork, payees_processed: processed };
+        },
 
-        return { ok: true, did_work: didWork, payees_processed: processed };
-      },
+        async scheduleBatch(env, batchId, payload, actorUserId) {
+          // Scheduling is DB-driven (pay_batch_schedule). The adapter wrapper is kept for symmetry.
+          if (!batchId) throw new Error('scheduleBatch: batchId required');
+          if (!actorUserId) throw new Error('scheduleBatch: actorUserId required');
+          if (!payload || typeof payload !== 'object') throw new Error('scheduleBatch: payload required');
 
-      async scheduleBatch(env, batchId, payload, actorUserId) {
-        // Scheduling is DB-driven (pay_batch_schedule). The adapter wrapper is kept for symmetry.
-        if (!batchId) throw new Error('scheduleBatch: batchId required');
-        if (!actorUserId) throw new Error('scheduleBatch: actorUserId required');
-        if (!payload || typeof payload !== 'object') throw new Error('scheduleBatch: payload required');
+          const scheduleKindRaw = String(payload.schedule_kind || '').trim().toUpperCase();
+          const scheduleKind =
+            (scheduleKindRaw === 'AT_TIME')
+              ? 'SCHEDULED'
+              : scheduleKindRaw;
 
-        const scheduleKindRaw = String(payload.schedule_kind || '').trim().toUpperCase();
-        const scheduleKind =
-          (scheduleKindRaw === 'AT_TIME')
-            ? 'SCHEDULED'
-            : scheduleKindRaw;
+          const scheduledAtUtcIn = payload.scheduled_at_utc ? String(payload.scheduled_at_utc).trim() : null;
+          if (scheduleKind !== 'IMMEDIATE' && scheduleKind !== 'SCHEDULED') {
+            throw new Error('scheduleBatch: schedule_kind must be IMMEDIATE or SCHEDULED (legacy AT_TIME accepted)');
+          }
+          if (scheduleKind === 'SCHEDULED' && !scheduledAtUtcIn) {
+            throw new Error('scheduleBatch: scheduled_at_utc is required when schedule_kind=SCHEDULED (or legacy AT_TIME)');
+          }
 
-        const scheduledAtUtcIn = payload.scheduled_at_utc ? String(payload.scheduled_at_utc).trim() : null;
-        if (scheduleKind !== 'IMMEDIATE' && scheduleKind !== 'SCHEDULED') {
-          throw new Error('scheduleBatch: schedule_kind must be IMMEDIATE or SCHEDULED (legacy AT_TIME accepted)');
-        }
-        if (scheduleKind === 'SCHEDULED' && !scheduledAtUtcIn) {
-          throw new Error('scheduleBatch: scheduled_at_utc is required when schedule_kind=SCHEDULED (or legacy AT_TIME)');
-        }
+          const scheduledAtUtc = (scheduleKind === 'SCHEDULED') ? scheduledAtUtcIn : null;
 
-        const scheduledAtUtc = (scheduleKind === 'SCHEDULED') ? scheduledAtUtcIn : null;
+          const fundingAccountRef = payload.funding_account_ref ? String(payload.funding_account_ref).trim() : null;
 
-        const fundingAccountRef = payload.funding_account_ref ? String(payload.funding_account_ref).trim() : null;
+          // DB expects a JSON array (or null to use defaults). If not an array, pass null.
+          const warningHoursJson = Array.isArray(payload.warning_hours_json) ? payload.warning_hours_json : null;
 
-        // DB expects a JSON array (or null to use defaults). If not an array, pass null.
-        const warningHoursJson = Array.isArray(payload.warning_hours_json) ? payload.warning_hours_json : null;
-
-        return sbRpc(env, 'pay_batch_schedule', {
-          p_pay_batch_id: String(batchId),
-          p_schedule_kind: scheduleKind,
-          p_scheduled_at_utc: scheduledAtUtc,
-          p_funding_account_ref: fundingAccountRef,
-          p_warning_hours_json: warningHoursJson,
-          p_actor_user_id: String(actorUserId)
-        });
-      },
-
-      async executeDueBatches(env, { nowUtc, limit, claimedRows, actorUserId, perBatchSubmitLimit } = {}) {
-        const nowIso = nowUtc ? String(nowUtc) : new Date().toISOString();
-
-        const lim = Number.isFinite(Number(limit)) ? Math.max(1, Math.min(500, Math.trunc(Number(limit)))) : 25;
-
-        const perBatchLim = (() => {
-          const n = Number(perBatchSubmitLimit);
-          if (!Number.isFinite(n)) return 500;
-          return Math.max(1, Math.min(2000, Math.trunc(n)));
-        })();
-
-        const actor = (() => {
-          const a = (actorUserId && String(actorUserId).trim()) ? String(actorUserId).trim() : '';
-          if (a) return a;
-
-          const aa = (env && env.PAY_ACTOR_USER_ID && String(env.PAY_ACTOR_USER_ID).trim()) ? String(env.PAY_ACTOR_USER_ID).trim() : '';
-          const bb = (env && env.INVOICE_ACTOR_USER_ID && String(env.INVOICE_ACTOR_USER_ID).trim()) ? String(env.INVOICE_ACTOR_USER_ID).trim() : '';
-          const cc = (env && env.TSFIN_ACTOR_USER_ID && String(env.TSFIN_ACTOR_USER_ID).trim()) ? String(env.TSFIN_ACTOR_USER_ID).trim() : '';
-          const chosen = aa || bb || cc;
-          if (!chosen) throw new Error('BANKING_CRON_ACTOR_USER_ID_MISSING');
-          return chosen;
-        })();
-
-        const out = {
-          ok: true,
-          claimed: 0,
-          batches: [],
-          blocked_funds: [],
-          submitted: [],
-          warnings: [],
-          errors: []
-        };
-
-        let rows = [];
-        if (Array.isArray(claimedRows) && claimedRows.length) {
-          rows = claimedRows;
-        } else {
-          const claimRes = await sbRpc(env, 'pay_batches_claim_due_scheduled', {
-            p_limit: lim,
-            p_now_utc: nowIso
+          return sbRpc(env, 'pay_batch_schedule', {
+            p_pay_batch_id: String(batchId),
+            p_schedule_kind: scheduleKind,
+            p_scheduled_at_utc: scheduledAtUtc,
+            p_funding_account_ref: fundingAccountRef,
+            p_warning_hours_json: warningHoursJson,
+            p_actor_user_id: String(actorUserId)
           });
+        },
 
-          let claimPayload = claimRes;
-          try {
-            if (Array.isArray(claimRes) && claimRes.length === 1 && claimRes[0] && typeof claimRes[0] === 'object') claimPayload = claimRes[0];
-            if (claimPayload && typeof claimPayload === 'object' && Object.prototype.hasOwnProperty.call(claimPayload, 'pay_batches_claim_due_scheduled')) {
-              claimPayload = claimPayload.pay_batches_claim_due_scheduled;
-            }
-          } catch {}
+        async executeDueBatches(env, { nowUtc, limit, claimedRows, actorUserId, perBatchSubmitLimit } = {}) {
+          const nowIso = nowUtc ? String(nowUtc) : new Date().toISOString();
 
-          rows =
-            (claimPayload && Array.isArray(claimPayload.claimed))
-              ? claimPayload.claimed
-              : (Array.isArray(claimPayload) ? claimPayload : []);
-        }
+          const lim = Number.isFinite(Number(limit)) ? Math.max(1, Math.min(500, Math.trunc(Number(limit)))) : 25;
 
-        out.claimed = rows.length;
-        out.batches = rows;
+          const perBatchLim = (() => {
+            const n = Number(perBatchSubmitLimit);
+            if (!Number.isFinite(n)) return 500;
+            return Math.max(1, Math.min(2000, Math.trunc(n)));
+          })();
 
-        if (!rows.length) return out;
+          const actor = (() => {
+            const a = (actorUserId && String(actorUserId).trim()) ? String(actorUserId).trim() : '';
+            if (a) return a;
 
-        const token = await revolutAuth_getAccessToken(env);
+            const aa = (env && env.PAY_ACTOR_USER_ID && String(env.PAY_ACTOR_USER_ID).trim()) ? String(env.PAY_ACTOR_USER_ID).trim() : '';
+            const bb = (env && env.INVOICE_ACTOR_USER_ID && String(env.INVOICE_ACTOR_USER_ID).trim()) ? String(env.INVOICE_ACTOR_USER_ID).trim() : '';
+            const cc = (env && env.TSFIN_ACTOR_USER_ID && String(env.TSFIN_ACTOR_USER_ID).trim()) ? String(env.TSFIN_ACTOR_USER_ID).trim() : '';
+            const chosen = aa || bb || cc;
+            if (!chosen) throw new Error('BANKING_CRON_ACTOR_USER_ID_MISSING');
+            return chosen;
+          })();
 
-        const _asNum = (v) => {
-          if (v === null || v === undefined) return null;
-          if (typeof v === 'number' && Number.isFinite(v)) return v;
-          if (typeof v === 'string') {
-            const n = Number(v);
-            if (Number.isFinite(n)) return n;
-          }
-          if (typeof v === 'object') {
-            if (v.amount !== undefined) return _asNum(v.amount);
-          }
-          return null;
-        };
-
-        const _parseAvailable = (acct) => {
-          if (!acct) return null;
-          const a = _asNum(acct.available_balance);
-          if (a !== null) return a;
-          const b = _asNum(acct.balance);
-          if (b !== null) return b;
-          return null;
-        };
-
-        const _sumRequired = (trs) => {
-          let total = 0;
-          for (const t of trs || []) {
-            const n = Number(t && t.amount);
-            if (Number.isFinite(n)) total += n;
-          }
-          return Math.round(total * 100) / 100;
-        };
-
-        const _patchBatchFundsCheck = async (payBatchId, fundsCheckJson) => {
-          try {
-            const q = new URLSearchParams();
-            q.set('select', 'id');
-            q.set('id', `eq.${String(payBatchId)}`);
-            const url = `${env.SUPABASE_URL}/rest/v1/pay_batches?${q.toString()}`;
-            await sbFetch(env, url, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-              body: JSON.stringify({
-                last_funds_check_at_utc: nowIso,
-                last_funds_check_json: fundsCheckJson
-              })
-            });
-          } catch {
-            // ignore best-effort patch failures
-          }
-        };
-
-        // Execute transfers for each claimed batch (idempotent by request_id).
-        for (const b of rows) {
-          const batchId = String(b?.pay_batch_id || b?.id || '').trim();
-          if (!batchId) continue;
-
-          // Fetch transfers via DB for authoritative snapshot fields
-          const bg = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: batchId });
-          const transfers = Array.isArray(bg?.transfers) ? bg.transfers : [];
-          const bgBatch = (bg && typeof bg === 'object') ? (bg.batch || null) : null;
-
-          const railEnv = String(b?.rail_env_snapshot || b?.rail_env || bgBatch?.rail_env_snapshot || 'PROD').trim().toUpperCase() || 'PROD';
-          const fundingRef = String(b?.funding_account_ref || bgBatch?.funding_account_ref || '').trim();
-
-          if (!fundingRef) {
-            out.errors.push({ code: 'SCHEDULED_BATCH_MISSING_FUNDING_ACCOUNT_REF', pay_batch_id: batchId });
-            continue;
-          }
-
-          const toSubmit = (transfers || []).filter(t => {
-            const status = String(t?.status || '').toUpperCase();
-            if (status !== 'PENDING') return false;
-
-            const railTxId = t?.rail_tx_id ? String(t.rail_tx_id).trim() : '';
-            if (railTxId) return false;
-
-            const amt = Number(t?.amount || 0);
-            const ccy = String(t?.currency || 'GBP').toUpperCase();
-            return Number.isFinite(amt) && amt > 0 && ccy === 'GBP';
-          }).slice(0, perBatchLim);
-
-          // Funds check for NEW submissions only
-          const required = _sumRequired(toSubmit);
-
-          let available = null;
-          try {
-            const accs = await revolutAccounts_list(env, token);
-            const match = (accs || []).find(a => a && String(a.id || '').trim() === fundingRef);
-            available = _parseAvailable(match);
-
-            if (available === null) {
-              throw new Error('REVOLUT_FUNDING_ACCOUNT_BALANCE_UNAVAILABLE');
-            }
-          } catch (e) {
-            out.errors.push({
-              code: 'FUNDS_CHECK_FAILED',
-              pay_batch_id: batchId,
-              error: (e && e.message) ? String(e.message) : String(e || 'unknown')
-            });
-            continue;
-          }
-
-          const sufficient = (available + 1e-9) >= required;
-
-          const fundsCheckJson = {
-            checked_at_utc: nowIso,
-            rail_provider: 'REVOLUT',
-            rail_env: railEnv,
-            funding_account_ref: fundingRef,
-            required_gbp: required,
-            available_gbp: available,
-            sufficient: sufficient
+          const out = {
+            ok: true,
+            claimed: 0,
+            batches: [],
+            blocked_funds: [],
+            submitted: [],
+            warnings: [],
+            errors: []
           };
 
-          await _patchBatchFundsCheck(batchId, fundsCheckJson);
+          let rows = [];
+          if (Array.isArray(claimedRows) && claimedRows.length) {
+            rows = claimedRows;
+          } else {
+            const claimRes = await sbRpc(env, 'pay_batches_claim_due_scheduled', {
+              p_limit: lim,
+              p_now_utc: nowIso
+            });
 
-          if (!sufficient) {
+            let claimPayload = claimRes;
             try {
-              await sbRpc(env, 'pay_batch_mark_blocked_funds', {
-                p_pay_batch_id: batchId,
-                p_actor_user_id: actor,
-                p_funds_check_json: fundsCheckJson
+              if (Array.isArray(claimRes) && claimRes.length === 1 && claimRes[0] && typeof claimRes[0] === 'object') claimPayload = claimRes[0];
+              if (claimPayload && typeof claimPayload === 'object' && Object.prototype.hasOwnProperty.call(claimPayload, 'pay_batches_claim_due_scheduled')) {
+                claimPayload = claimPayload.pay_batches_claim_due_scheduled;
+              }
+            } catch {}
+
+            rows =
+              (claimPayload && Array.isArray(claimPayload.claimed))
+                ? claimPayload.claimed
+                : (Array.isArray(claimPayload) ? claimPayload : []);
+          }
+
+          out.claimed = rows.length;
+          out.batches = rows;
+
+          if (!rows.length) return out;
+
+          const token = await revolutAuth_getAccessToken(env);
+
+          const _asNum = (v) => {
+            if (v === null || v === undefined) return null;
+            if (typeof v === 'number' && Number.isFinite(v)) return v;
+            if (typeof v === 'string') {
+              const n = Number(v);
+              if (Number.isFinite(n)) return n;
+            }
+            if (typeof v === 'object') {
+              if (v.amount !== undefined) return _asNum(v.amount);
+            }
+            return null;
+          };
+
+          const _parseAvailable = (acct) => {
+            if (!acct) return null;
+            const a = _asNum(acct.available_balance);
+            if (a !== null) return a;
+            const b = _asNum(acct.balance);
+            if (b !== null) return b;
+            return null;
+          };
+
+          const _sumRequired = (trs) => {
+            let total = 0;
+            for (const t of trs || []) {
+              const n = Number(t && t.amount);
+              if (Number.isFinite(n)) total += n;
+            }
+            return Math.round(total * 100) / 100;
+          };
+
+          const _patchBatchFundsCheck = async (payBatchId, fundsCheckJson) => {
+            try {
+              const q = new URLSearchParams();
+              q.set('select', 'id');
+              q.set('id', `eq.${String(payBatchId)}`);
+              const url = `${env.SUPABASE_URL}/rest/v1/pay_batches?${q.toString()}`;
+              await sbFetch(env, url, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+                body: JSON.stringify({
+                  last_funds_check_at_utc: nowIso,
+                  last_funds_check_json: fundsCheckJson
+                })
               });
-              out.blocked_funds.push({ pay_batch_id: batchId, required_gbp: required, available_gbp: available });
+            } catch {
+              // ignore best-effort patch failures
+            }
+          };
+
+          // Execute transfers for each claimed batch (idempotent by request_id).
+          for (const b of rows) {
+            const batchId = String(b?.pay_batch_id || b?.id || '').trim();
+            if (!batchId) continue;
+
+            // Fetch transfers via DB for authoritative snapshot fields
+            const bg = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: batchId });
+            const transfers = Array.isArray(bg?.transfers) ? bg.transfers : [];
+            const bgBatch = (bg && typeof bg === 'object') ? (bg.batch || null) : null;
+
+            const railEnv = String(b?.rail_env_snapshot || b?.rail_env || bgBatch?.rail_env_snapshot || 'PROD').trim().toUpperCase() || 'PROD';
+            const fundingRef = String(b?.funding_account_ref || bgBatch?.funding_account_ref || '').trim();
+
+            if (!fundingRef) {
+              out.errors.push({ code: 'SCHEDULED_BATCH_MISSING_FUNDING_ACCOUNT_REF', pay_batch_id: batchId });
+              continue;
+            }
+
+            const toSubmit = (transfers || []).filter(t => {
+              const status = String(t?.status || '').toUpperCase();
+              if (status !== 'PENDING') return false;
+
+              const railTxId = t?.rail_tx_id ? String(t.rail_tx_id).trim() : '';
+              if (railTxId) return false;
+
+              const amt = Number(t?.amount || 0);
+              const ccy = String(t?.currency || 'GBP').toUpperCase();
+              return Number.isFinite(amt) && amt > 0 && ccy === 'GBP';
+            }).slice(0, perBatchLim);
+
+            // Funds check for NEW submissions only
+            const required = _sumRequired(toSubmit);
+
+            let available = null;
+            try {
+              const accs = await revolutAccounts_list(env, token);
+              const match = (accs || []).find(a => a && String(a.id || '').trim() === fundingRef);
+              available = _parseAvailable(match);
+
+              if (available === null) {
+                throw new Error('REVOLUT_FUNDING_ACCOUNT_BALANCE_UNAVAILABLE');
+              }
             } catch (e) {
               out.errors.push({
-                code: 'MARK_BLOCKED_FUNDS_FAILED',
+                code: 'FUNDS_CHECK_FAILED',
                 pay_batch_id: batchId,
                 error: (e && e.message) ? String(e.message) : String(e || 'unknown')
               });
+              continue;
             }
-            continue;
+
+            const sufficient = (available + 1e-9) >= required;
+
+            const fundsCheckJson = {
+              checked_at_utc: nowIso,
+              rail_provider: 'REVOLUT',
+              rail_env: railEnv,
+              funding_account_ref: fundingRef,
+              required_gbp: required,
+              available_gbp: available,
+              sufficient: sufficient
+            };
+
+            await _patchBatchFundsCheck(batchId, fundsCheckJson);
+
+            if (!sufficient) {
+              try {
+                await sbRpc(env, 'pay_batch_mark_blocked_funds', {
+                  p_pay_batch_id: batchId,
+                  p_actor_user_id: actor,
+                  p_funds_check_json: fundsCheckJson
+                });
+                out.blocked_funds.push({ pay_batch_id: batchId, required_gbp: required, available_gbp: available });
+              } catch (e) {
+                out.errors.push({
+                  code: 'MARK_BLOCKED_FUNDS_FAILED',
+                  pay_batch_id: batchId,
+                  error: (e && e.message) ? String(e.message) : String(e || 'unknown')
+                });
+              }
+              continue;
+            }
+
+            if (!toSubmit.length) {
+              out.submitted.push({ pay_batch_id: batchId, submitted_count: 0, updates_applied: 0 });
+              continue;
+            }
+
+            const updates = [];
+
+            for (const t of toSubmit) {
+              const transferId = String(t?.id || '').trim();
+              if (!transferId) continue;
+
+              const requestId = String(t?.request_id || '').trim() || transferId;
+
+              try {
+                const entityKind = String(t?.payee_entity_kind || '').trim().toUpperCase();
+                const entityId = t?.payee_entity_id ? String(t.payee_entity_id).trim() : '';
+                const bankHash = t?.bank_details_hash_snapshot ? String(t.bank_details_hash_snapshot).trim() : '';
+
+                const map = await revolutCounterparty_ensureMapped(env, token, {
+                  rail_env: railEnv,
+                  actor_user_id: actor,
+                  entity_kind: entityKind,
+                  entity_id: entityId,
+                  bank_details_hash: bankHash,
+                  bank_fields: {
+                    payee_name: String(t?.payee_name || '').trim(),
+                    sort_code: String(t?.sort_code || '').trim(),
+                    account_number: String(t?.account_number || '').trim(),
+                    account_type: String(t?.account_type || '').trim()
+                  }
+                });
+
+                const payRes = await revolutPayment_create(env, token, {
+                  request_id: requestId,
+                  source_account_id: fundingRef,
+                  counterparty_id: map.payee_id,
+                  counterparty_account_id: map.payee_account_id || null,
+                  amount: Number(t?.amount || 0),
+                  currency: String(t?.currency || 'GBP').toUpperCase(),
+                  reference: String(t?.payment_reference || '').trim()
+                });
+
+                updates.push({
+                  transfer_id: transferId,
+                  status: 'PENDING',
+                  rail_tx_id: payRes.rail_tx_id,
+                  rail_state: payRes.rail_state,
+                  rail_meta_json: payRes.rail_meta_json,
+                  failed_reason: null,
+                  completed_at_utc: null
+                });
+              } catch (e) {
+                const msg = (e && e.message) ? String(e.message) : String(e || 'unknown');
+                updates.push({
+                  transfer_id: transferId,
+                  status: 'PENDING',
+                  rail_state: `CREATE_ERROR:${msg}`.slice(0, 500),
+                  rail_meta_json: { kind: 'REVOLUT_CREATE_ERROR', at_utc: nowIso, error: msg },
+                  failed_reason: null,
+                  completed_at_utc: null
+                });
+              }
+            }
+
+            if (updates.length) {
+              try {
+                await sbRpc(env, 'pay_bank_transfers_apply_rail_updates', {
+                  p_pay_batch_id: batchId,
+                  p_updates: updates
+                });
+                out.submitted.push({
+                  pay_batch_id: batchId,
+                  submitted_count: toSubmit.length,
+                  updates_applied: updates.length
+                });
+              } catch (e) {
+                out.errors.push({
+                  code: 'APPLY_UPDATES_FAILED',
+                  pay_batch_id: batchId,
+                  error: (e && e.message) ? String(e.message) : String(e || 'unknown')
+                });
+              }
+            } else {
+              out.submitted.push({ pay_batch_id: batchId, submitted_count: 0, updates_applied: 0 });
+            }
           }
 
-          if (!toSubmit.length) {
-            out.submitted.push({ pay_batch_id: batchId, submitted_count: 0, updates_applied: 0 });
-            continue;
-          }
+          return out;
+        },
+
+        async pollBatch(env, batchId, actorUserId) {
+          if (!batchId) throw new Error('pollBatch: batchId required');
+          if (!actorUserId) throw new Error('pollBatch: actorUserId required');
+
+          const bg = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: String(batchId) });
+          const transfers = Array.isArray(bg?.transfers) ? bg.transfers : [];
+          if (!transfers.length) return { ok: true, pay_batch_id: String(batchId), polled: 0, settled: null };
+
+          const token = await revolutAuth_getAccessToken(env);
 
           const updates = [];
+          for (const t of transfers) {
+            const st = String(t?.status || '').toUpperCase();
+            if (st !== 'PENDING') continue;
 
-          for (const t of toSubmit) {
-            const transferId = String(t?.id || '').trim();
-            if (!transferId) continue;
+            const reqId = String(t?.request_id || '').trim();
+            if (!reqId) continue;
 
-            const requestId = String(t?.request_id || '').trim() || transferId;
+            const polled = await revolutPayment_poll(env, token, { request_id: reqId });
 
-            try {
-              const entityKind = String(t?.payee_entity_kind || '').trim().toUpperCase();
-              const entityId = t?.payee_entity_id ? String(t.payee_entity_id).trim() : '';
-              const bankHash = t?.bank_details_hash_snapshot ? String(t.bank_details_hash_snapshot).trim() : '';
-
-              const map = await revolutCounterparty_ensureMapped(env, token, {
-                rail_env: railEnv,
-                actor_user_id: actor,
-                entity_kind: entityKind,
-                entity_id: entityId,
-                bank_details_hash: bankHash,
-                bank_fields: {
-                  payee_name: String(t?.payee_name || '').trim(),
-                  sort_code: String(t?.sort_code || '').trim(),
-                  account_number: String(t?.account_number || '').trim(),
-                  account_type: String(t?.account_type || '').trim()
-                }
-              });
-
-              const payRes = await revolutPayment_create(env, token, {
-                request_id: requestId,
-                source_account_id: fundingRef,
-                counterparty_id: map.payee_id,
-                counterparty_account_id: map.payee_account_id || null,
-                amount: Number(t?.amount || 0),
-                currency: String(t?.currency || 'GBP').toUpperCase(),
-                reference: String(t?.payment_reference || '').trim()
-              });
-
-              updates.push({
-                transfer_id: transferId,
-                status: 'PENDING',
-                rail_tx_id: payRes.rail_tx_id,
-                rail_state: payRes.rail_state,
-                rail_meta_json: payRes.rail_meta_json,
-                failed_reason: null,
-                completed_at_utc: null
-              });
-            } catch (e) {
-              const msg = (e && e.message) ? String(e.message) : String(e || 'unknown');
-              updates.push({
-                transfer_id: transferId,
-                status: 'PENDING',
-                rail_state: `CREATE_ERROR:${msg}`.slice(0, 500),
-                rail_meta_json: { kind: 'REVOLUT_CREATE_ERROR', at_utc: nowIso, error: msg },
-                failed_reason: null,
-                completed_at_utc: null
-              });
-            }
+            updates.push({
+              transfer_id: String(t?.id || '').trim(),
+              status: polled.status,
+              rail_tx_id: polled.rail_tx_id || null,
+              rail_state: polled.rail_state || null,
+              rail_meta_json: polled.rail_meta_json || null
+            });
           }
 
-          if (updates.length) {
-            try {
-              await sbRpc(env, 'pay_bank_transfers_apply_rail_updates', {
-                p_pay_batch_id: batchId,
-                p_updates: updates
-              });
-              out.submitted.push({
-                pay_batch_id: batchId,
-                submitted_count: toSubmit.length,
-                updates_applied: updates.length
-              });
-            } catch (e) {
-              out.errors.push({
-                code: 'APPLY_UPDATES_FAILED',
-                pay_batch_id: batchId,
-                error: (e && e.message) ? String(e.message) : String(e || 'unknown')
-              });
-            }
-          } else {
-            out.submitted.push({ pay_batch_id: batchId, submitted_count: 0, updates_applied: 0 });
+          if (!updates.length) {
+            return { ok: true, pay_batch_id: String(batchId), polled: 0, settled: null };
           }
+
+          // Use DB rail-generic settle to update transfers AND settle snapshots safely.
+          const settled = await sbRpc(env, 'pay_settle_rail', {
+            p_pay_batch_id: String(batchId),
+            p_settlement_json: updates,
+            p_actor_user_id: String(actorUserId)
+          });
+
+          return { ok: true, pay_batch_id: String(batchId), polled: updates.length, settled };
+        },
+
+        async confirmManual() {
+          throw new Error('REVOLUT_ADAPTER: confirmManual is CSV-only');
         }
+      }),
 
-        return out;
-      },
+      CSV: () => ({
+        railProvider: 'CSV',
+        railKind: 'MANUAL',
 
-      async pollBatch(env, batchId, actorUserId) {
-        if (!batchId) throw new Error('pollBatch: batchId required');
-        if (!actorUserId) throw new Error('pollBatch: actorUserId required');
+        async capabilities(env) {
+          return {
+            provider: 'CSV',
+            available: true,
+            reason: null,
+            supports_scheduling: false,
+            supports_name_check: false,
+            supports_auto_execute: false,
+            api_base: null
+          };
+        },
 
-        const bg = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: String(batchId) });
-        const transfers = Array.isArray(bg?.transfers) ? bg.transfers : [];
-        if (!transfers.length) return { ok: true, pay_batch_id: String(batchId), polled: 0, settled: null };
+        async listFundingAccounts(env, { rail_env } = {}) {
+          return {
+            ok: true,
+            provider: 'CSV',
+            rail_env: (rail_env === undefined || rail_env === null) ? null : String(rail_env).trim().toUpperCase(),
+            accounts: []
+          };
+        },
 
-        const token = await revolutAuth_getAccessToken(env);
+        async validateFundingAccountRef(env, { rail_env, funding_account_ref } = {}) {
+          const ref = (funding_account_ref === undefined || funding_account_ref === null) ? '' : String(funding_account_ref).trim();
+          if (!ref) {
+            return { ok: true, valid: false, reason: 'FUNDING_ACCOUNT_REF_REQUIRED', account: null };
+          }
+          return { ok: true, valid: false, reason: 'CSV_HAS_NO_FUNDING_ACCOUNTS', account: null };
+        },
 
-        const updates = [];
-        for (const t of transfers) {
-          const st = String(t?.status || '').toUpperCase();
-          if (st !== 'PENDING') continue;
+        async prepareBatch() {
+          // CSV has no external prepare step
+          return { ok: true, did_work: false, payees_processed: 0 };
+        },
 
-          const reqId = String(t?.request_id || '').trim();
-          if (!reqId) continue;
+        async scheduleBatch() {
+          throw new Error('CSV_ADAPTER: scheduleBatch not supported');
+        },
 
-          const polled = await revolutPayment_poll(env, token, { request_id: reqId });
+        async executeDueBatches(env, { nowUtc, limit, claimedRows, actorUserId, perBatchSubmitLimit } = {}) {
+          const nowIso = nowUtc ? String(nowUtc) : new Date().toISOString();
+          const lim = Number.isFinite(Number(limit)) ? Math.max(1, Math.min(500, Math.trunc(Number(limit)))) : 25;
 
-          updates.push({
-            transfer_id: String(t?.id || '').trim(),
-            status: polled.status,
-            rail_tx_id: polled.rail_tx_id || null,
-            rail_state: polled.rail_state || null,
-            rail_meta_json: polled.rail_meta_json || null
+          const rows = (Array.isArray(claimedRows) && claimedRows.length) ? claimedRows : [];
+
+          return {
+            ok: true,
+            now_utc: nowIso,
+            claimed: rows.length ? rows.length : Math.min(0, lim),
+            batches: rows,
+            blocked_funds: [],
+            submitted: [],
+            warnings: [],
+            errors: []
+          };
+        },
+
+        async pollBatch(env, batchId, actorUserId) {
+          // CSV polling is effectively a no-op (settlement is manual-confirm)
+          if (!batchId) throw new Error('pollBatch: batchId required');
+          if (!actorUserId) throw new Error('pollBatch: actorUserId required');
+          return { ok: true, pay_batch_id: String(batchId), polled: 0, settled: null };
+        },
+
+        async confirmManual(env, batchId, payload, actorUserId) {
+          if (!batchId) throw new Error('confirmManual: batchId required');
+          if (!actorUserId) throw new Error('confirmManual: actorUserId required');
+          if (!payload || typeof payload !== 'object') throw new Error('confirmManual: payload required');
+
+          const scope = String(payload.scope || 'ALL').trim();
+          const bankConfirmRef = String(payload.bank_confirm_ref || '').trim();
+          if (!bankConfirmRef) throw new Error('confirmManual: bank_confirm_ref required');
+
+          return sbRpc(env, 'pay_settle_manual_confirm', {
+            p_pay_batch_id: String(batchId),
+            p_scope: scope,
+            p_bank_confirm_ref: bankConfirmRef,
+            p_actor_user_id: String(actorUserId)
           });
         }
-
-        if (!updates.length) {
-          return { ok: true, pay_batch_id: String(batchId), polled: 0, settled: null };
-        }
-
-        // Use DB rail-generic settle to update transfers AND settle snapshots safely.
-        const settled = await sbRpc(env, 'pay_settle_rail', {
-          p_pay_batch_id: String(batchId),
-          p_settlement_json: updates,
-          p_actor_user_id: String(actorUserId)
-        });
-
-        return { ok: true, pay_batch_id: String(batchId), polled: updates.length, settled };
-      },
-
-      async confirmManual() {
-        throw new Error('REVOLUT_ADAPTER: confirmManual is CSV-only');
-      }
+      })
     };
   }
 
-  // Default rail: CSV (manual)
-  return {
-    railProvider: 'CSV',
+  const p0 = String(provider || '').trim().toUpperCase();
+  const p = (p0 === 'REV' ? 'REVOLUT' : p0);
 
-    async capabilities(env) {
-      return {
-        provider: 'CSV',
-        available: true,
-        reason: null,
-        supports_scheduling: false,
-        supports_name_check: false,
-        supports_auto_execute: false,
-        api_base: null
-      };
-    },
+  // Registry helpers (used by other codepaths)
+  if (p === '__REGISTRY__') return getRailAdapter.__RAIL_REGISTRY;
+  if (p === '__LIST__') return Object.keys(getRailAdapter.__RAIL_REGISTRY);
 
-    async prepareBatch() {
-      // CSV has no external prepare step
-      return { ok: true, did_work: false, payees_processed: 0 };
-    },
-
-    async scheduleBatch() {
-      throw new Error('CSV_ADAPTER: scheduleBatch not supported');
-    },
-
-    async executeDueBatches(env, { nowUtc, limit, claimedRows, actorUserId, perBatchSubmitLimit } = {}) {
-      const nowIso = nowUtc ? String(nowUtc) : new Date().toISOString();
-      const lim = Number.isFinite(Number(limit)) ? Math.max(1, Math.min(500, Math.trunc(Number(limit)))) : 25;
-
-      const rows = (Array.isArray(claimedRows) && claimedRows.length) ? claimedRows : [];
-
-      return {
-        ok: true,
-        now_utc: nowIso,
-        claimed: rows.length ? rows.length : Math.min(0, lim),
-        batches: rows,
-        blocked_funds: [],
-        submitted: [],
-        warnings: [],
-        errors: []
-      };
-    },
-
-    async pollBatch(env, batchId, actorUserId) {
-      // CSV polling is effectively a no-op (settlement is manual-confirm)
-      if (!batchId) throw new Error('pollBatch: batchId required');
-      if (!actorUserId) throw new Error('pollBatch: actorUserId required');
-      return { ok: true, pay_batch_id: String(batchId), polled: 0, settled: null };
-    },
-
-    async confirmManual(env, batchId, payload, actorUserId) {
-      if (!batchId) throw new Error('confirmManual: batchId required');
-      if (!actorUserId) throw new Error('confirmManual: actorUserId required');
-      if (!payload || typeof payload !== 'object') throw new Error('confirmManual: payload required');
-
-      const scope = String(payload.scope || 'ALL').trim();
-      const bankConfirmRef = String(payload.bank_confirm_ref || '').trim();
-      if (!bankConfirmRef) throw new Error('confirmManual: bank_confirm_ref required');
-
-      return sbRpc(env, 'pay_settle_manual_confirm', {
-        p_pay_batch_id: String(batchId),
-        p_scope: scope,
-        p_bank_confirm_ref: bankConfirmRef,
-        p_actor_user_id: String(actorUserId)
-      });
-    }
-  };
+  const mk = getRailAdapter.__RAIL_REGISTRY[p] || getRailAdapter.__RAIL_REGISTRY.CSV;
+  return mk();
 }
-
 
 async function revolutAuth_getAccessToken(env) {
   const cacheKey = '__REVOLUT_TOKEN_CACHE__';
@@ -77531,6 +77873,13 @@ if (req.method === 'GET' && p === '/api/banking/id/preview') {
   return handleBankingIdPreview(env, req, user);
 }
 
+  // ✅ NEW: list rail funding accounts (for default funding account selection)
+  // Optional query: ?provider=REVOLUT (defaults to settings_defaults.rail_provider_default)
+  if (req.method === 'GET' && p === '/api/banking/rail/accounts') {
+    return handleBankingRailAccountsList(env, req, user);
+  }
+
+ 
 // GET /api/banking/id/runs?limit=&offset=
 if (req.method === 'GET' && p === '/api/banking/id/runs') {
   return handleBankingIdRunsList(env, req, user);
