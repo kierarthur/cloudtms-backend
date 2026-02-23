@@ -4665,9 +4665,6 @@ begin
 end;
 $$;
 
-
-
-
 create or replace function public.pay_batches_list(
   p_limit int default 50,
   p_offset int default 0,
@@ -4709,7 +4706,13 @@ begin
         'executing_started_at_utc', pb.executing_started_at_utc,
         'last_status_checked_at_utc', pb.last_status_checked_at_utc,
 
+        -- Neutral (rail-generic) manual confirm aliases (keep legacy keys too)
+        'manual_confirmed_at_utc', pb.monzo_confirmed_at_utc,
+        'manual_confirmed_by_user_id', case when pb.monzo_confirmed_by_user_id is null then null else pb.monzo_confirmed_by_user_id::text end,
+
         'monzo_confirmed_at_utc', pb.monzo_confirmed_at_utc,
+        'monzo_confirmed_by_user_id', case when pb.monzo_confirmed_by_user_id is null then null else pb.monzo_confirmed_by_user_id::text end,
+
         'total_bank_out', pb.total_bank_out,
         'total_debt_created', pb.total_debt_created,
 
@@ -4740,6 +4743,7 @@ begin
   );
 end;
 $$;
+
 
 create or replace function public.pay_batch_get(p_pay_batch_id uuid)
 returns jsonb
@@ -4894,8 +4898,14 @@ begin
       'status', v_batch.status,
       'banking_system_snapshot', v_batch.banking_system_snapshot,
       'external_paye_system_snapshot', v_batch.external_paye_system_snapshot,
+
+      -- Neutral (rail-generic) manual confirm aliases (keep legacy keys too)
+      'manual_confirmed_at_utc', v_batch.monzo_confirmed_at_utc,
+      'manual_confirmed_by_user_id', case when v_batch.monzo_confirmed_by_user_id is null then null else v_batch.monzo_confirmed_by_user_id::text end,
+
       'monzo_confirmed_at_utc', v_batch.monzo_confirmed_at_utc,
       'monzo_confirmed_by_user_id', case when v_batch.monzo_confirmed_by_user_id is null then null else v_batch.monzo_confirmed_by_user_id::text end,
+
       'last_status_checked_at_utc', v_batch.last_status_checked_at_utc,
 
       -- Rail-generic scheduling/execution fields
@@ -4916,7 +4926,5 @@ begin
   );
 end;
 $$;
-
-
 
 
