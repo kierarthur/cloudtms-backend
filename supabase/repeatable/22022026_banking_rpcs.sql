@@ -2793,6 +2793,8 @@ begin
 end;
 $$;
 
+
+
 create or replace function public.pay_batches_claim_due_scheduled(
   p_limit int,
   p_now_utc timestamptz
@@ -2822,6 +2824,7 @@ begin
     where upper(coalesce(pb.status,'')) = 'SCHEDULED'
       and pb.scheduled_at_utc is not null
       and pb.scheduled_at_utc <= v_cutoff
+      and nullif(btrim(coalesce(pb.funding_account_ref,'')), '') is not null
     order by pb.scheduled_at_utc asc, pb.id asc
     for update skip locked
     limit v_limit
@@ -2872,7 +2875,6 @@ begin
   );
 end;
 $$;
-
 
 create or replace function public.pay_bank_transfers_apply_rail_updates(
   p_pay_batch_id uuid,
