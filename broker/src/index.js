@@ -58218,6 +58218,88 @@ async function migrateOutstandingWeeksToNewContract(env, originalId, newId, week
   return { week_ids: weekIds, timesheet_ids: tsIds };
 }
 
+
+async function collectOutstandingWeeklyContractsForCandidate(env, candidateId, newMethod, originalMethod) {
+  if (!candidateId) return [];
+
+  const orig = (originalMethod || '').toUpperCase();
+  const target = (newMethod || '').toUpperCase();
+
+  if (!orig || (orig !== 'PAYE' && orig !== 'UMBRELLA')) return [];
+  if (!target || (target !== 'PAYE' && target !== 'UMBRELLA')) return [];
+
+  // 1) Load contracts for this candidate with pay_method_snapshot = originalMethod
+  const url =
+    `${env.SUPABASE_URL}/rest/v1/contracts` +
+    `?candidate_id=eq.${enc(candidateId)}` +
+    `&pay_method_snapshot=eq.${enc(orig)}` +
+    `&select=id,client_id,role,band,start_date,end_date,pay_method_snapshot`;
+
+  const { rows: conRows } = await sbFetch(env, url);
+  const contracts = Array.isArray(conRows) ? conRows : [];
+  if (!contracts.length) return [];
+
+  const contractIds = contracts.map(c => c && c.id).filter(Boolean).map(String);
+  if (!contractIds.length) return [];
+
+  // 2) Bulk outstanding weeks for these contracts
+  const outstandingByContract = await collectOutstandingWeeksByContract(env, contractIds, null);
+
+  const summaries = [];
+  const clientIds = new Set();
+
+  for (const c of contracts) {
+    if (!c || !c.id) continue;
+    const cid = String(c.id);
+    const weeks = outstandingByContract.get(cid) || [];
+    if (!weeks.length) continue;
+
+    const dates = weeks
+      .map(w => w.week_ending_date)
+      .filter(Boolean)
+      .sort();
+    if (!dates.length) continue;
+
+    clientIds.add(c.client_id);
+
+    summaries.push({
+      contract_id: c.id,
+      client_id: c.client_id || null,
+      client_name: null, // filled in below
+      role: c.role || null,
+      band: c.band ?? null,
+      date_range: { start_date: c.start_date || null, end_date: c.end_date || null },
+      pay_method_snapshot: c.pay_method_snapshot || null,
+      outstanding_weeks: weeks.length,
+      first_outstanding_we: dates[0],
+      last_outstanding_we: dates[dates.length - 1]
+    });
+  }
+
+  if (!summaries.length) return [];
+
+  // 3) Load client names in one go
+  if (clientIds.size) {
+    const idsList = Array.from(clientIds).filter(Boolean).map(String);
+    if (idsList.length) {
+      const clientsUrl =
+        `${env.SUPABASE_URL}/rest/v1/clients` +
+        `?id=in.(${idsList.map(enc).join(',')})` +
+        `&select=id,name`;
+      const { rows: cliRows } = await sbFetch(env, clientsUrl);
+      const byId = new Map((cliRows || []).map(r => [String(r.id), r.name || null]));
+
+      for (const s of summaries) {
+        if (s.client_id) {
+          s.client_name = byId.get(String(s.client_id)) || null;
+        }
+      }
+    }
+  }
+
+  return summaries;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper: collectOutstandingWeeklyContractsForCandidate
 // Used by both preview + mutate handlers for PAYE↔UMBRELLA flips.
