@@ -13,6 +13,9 @@ declare
   v_supports_auto_execute boolean;
 
   v_supports_csv_confirm boolean;
+
+  -- ✅ C: include default funding account in capabilities output
+  v_rail_default_funding_account_ref text;
 begin
   -- settings_defaults is expected to have a single row; do not assume an id column.
   select
@@ -20,13 +23,15 @@ begin
     sd.rail_env_default,
     sd.rail_supports_scheduling,
     sd.rail_supports_name_check,
-    sd.rail_supports_auto_execute
+    sd.rail_supports_auto_execute,
+    sd.rail_default_funding_account_ref
   into
     v_provider,
     v_env,
     v_supports_scheduling,
     v_supports_name_check,
-    v_supports_auto_execute
+    v_supports_auto_execute,
+    v_rail_default_funding_account_ref
   from public.settings_defaults sd
   limit 1;
 
@@ -47,11 +52,13 @@ begin
     'supports_name_check', v_supports_name_check,
     'supports_auto_execute', v_supports_auto_execute,
     'supports_csv_confirm', v_supports_csv_confirm,
-    'requires_manual_bank_confirm', v_supports_csv_confirm
+    'requires_manual_bank_confirm', v_supports_csv_confirm,
+
+    -- ✅ C: surface saved default so UI can preselect consistently
+    'rail_default_funding_account_ref', v_rail_default_funding_account_ref
   );
 end;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public.bank_name_check_record_result(
