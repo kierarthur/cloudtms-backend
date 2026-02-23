@@ -4055,6 +4055,8 @@ declare
   v_pending_count int := 0;
   v_blocked_count int := 0;
 
+  v_auto_execute boolean := false;
+
   v_transfers jsonb := '[]'::jsonb;
   v_blocked_reasons jsonb := '[]'::jsonb;
 begin
@@ -4595,15 +4597,20 @@ begin
     and (v_scope = 'ALL' or pbt_blk.pay_channel = v_scope)
     and pbt_blk.status = 'BLOCKED';
 
-  -- Batch status update (rail-aware)
+  -- ✅ FIX (B-safe): determine READY vs WAITING_BANK_CONFIRM from rail capability, not provider string
+  select coalesce(sd.rail_supports_auto_execute, false)
+  into v_auto_execute
+  from public.settings_defaults sd
+  where sd.id = 1
+  limit 1;
+
+  -- Batch status update (rail-aware via capability)
   update public.pay_batches pb3
   set status = case
-    when v_provider = 'CSV' then
-      case when v_pending_count > 0 then 'WAITING_BANK_CONFIRM' else 'PARTIAL' end
-    when v_provider = 'REVOLUT' then
-      case when v_pending_count > 0 then 'READY' else 'PARTIAL' end
+    when v_pending_count > 0 then
+      case when coalesce(v_auto_execute,false) = true then 'READY' else 'WAITING_BANK_CONFIRM' end
     else
-      case when v_pending_count > 0 then 'WAITING_BANK_CONFIRM' else 'PARTIAL' end
+      'PARTIAL'
   end
   where pb3.id = p_pay_batch_id;
 
@@ -4664,6 +4671,7 @@ begin
   );
 end;
 $$;
+
 
 create or replace function public.pay_batches_list(
   p_limit int default 50,
